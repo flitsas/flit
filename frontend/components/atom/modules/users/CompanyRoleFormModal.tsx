@@ -1,7 +1,7 @@
 "use client";
 
 // HU #13443 (Feature #13437, Épica #12750) — Alta, edición y consulta de un rol propio de la compañía.
-// - create: código (no editable después), nombre, descripción, producto y permisos.
+// - create: nombre, descripción, producto y permisos (HU #13666: el código interno lo genera el servidor).
 // - edit: nombre, descripción y permisos de un rol propio.
 // - view: rol global de FLIT, solo lectura (la compañía puede asignarlo, no cambiarlo).
 // El selector solo ofrece los permisos que el caller puede otorgar (GET /roles/grantable-permissions) y, dentro
@@ -45,7 +45,6 @@ const PRODUCT_LABEL: Record<string, string> = {
   comparendos: "Comparendos",
   diagnostico: "Diagnóstico",
 };
-const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.-]{1,49}$/;
 
 /**
  * HU #13666: nombre del módulo tal como en el Panel SA (lo trae la API). Si una API anterior no lo envía, se usa el
@@ -81,7 +80,6 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
   const [loadError, setLoadError] = useState<string | null>(null);
   const [grantable, setGrantable] = useState<GrantablePermission[]>([]);
   const [detail, setDetail] = useState<TenantRoleDetail | null>(null);
-  const [code, setCode] = useState(role?.code ?? "");
   const [name, setName] = useState(role?.name ?? "");
   const [description, setDescription] = useState(role?.description ?? "");
   const [productCode, setProductCode] = useState(role?.productCode ?? "tramites");
@@ -89,7 +87,7 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Aviso de un campo de «Datos del rol»: va debajo del campo, visible aunque la lista de permisos sea larga.
-  const [fieldError, setFieldError] = useState<{ field: "code" | "name"; message: string } | null>(null);
+  const [fieldError, setFieldError] = useState<{ field: "name"; message: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -162,17 +160,6 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
     if (readOnly) return;
     setError(null);
     setFieldError(null);
-    if (creating && !CODE_PATTERN.test(code.trim())) {
-      document.getElementById("company-role-code")?.focus();
-      setFieldError({
-        field: "code",
-        message:
-        code.trim()
-          ? "Usa solo letras, números, punto, guion o guion bajo (de 2 a 50)."
-          : "Escribe un código para el rol.",
-      });
-      return;
-    }
     if (!name.trim()) {
       document.getElementById("company-role-name")?.focus();
       setFieldError({ field: "name", message: "Escribe un nombre para el rol." });
@@ -183,8 +170,8 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
     setBusy(true);
     try {
       if (creating) {
+        // HU #13666: sin `code`; el servidor lo genera a partir del nombre.
         await createTenantRole({
-          code: code.trim(),
           name: name.trim(),
           description: description.trim() || null,
           productCode,
@@ -297,7 +284,7 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
     ? "Rol propio de tu compañía. Solo puedes darle permisos que tú tienes."
     : readOnly
       ? "Rol global de FLIT: lo puedes asignar a tus usuarios, pero no cambiarlo."
-      : "El código no se puede cambiar.";
+      : "Cambia el nombre, la descripción o los permisos del rol.";
 
   return (
     <Modal
@@ -347,36 +334,7 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
           <RoleEditorSections
             data={
               <div className="flex flex-col gap-4">
-                {/* HU #13666: un rol de FLIT (solo lectura) no muestra su código interno; el del rol propio lo escribió la compañía. */}
-                {!readOnly && (
-                <label className={LABEL_CLS}>
-                  Código
-                  <input
-                    id="company-role-code"
-                    value={code}
-                    onChange={(e) => {
-                      setCode(e.target.value);
-                      if (fieldError?.field === "code") setFieldError(null);
-                    }}
-                    disabled={!creating}
-                    maxLength={50}
-                    autoComplete="off"
-                    spellCheck={false}
-                    className={`${INPUT_CLS} font-mono`}
-                    aria-describedby="company-role-code-hint"
-                  />
-                  {creating && (
-                    <span id="company-role-code-hint" className={HINT_CLS}>
-                      Identificador interno, p. ej. contador_senior. No se puede cambiar después.
-                    </span>
-                  )}
-                  {fieldError?.field === "code" && (
-                    <span role="alert" className="mt-1 block text-xs font-semibold text-[#C2410C]">
-                      {fieldError.message}
-                    </span>
-                  )}
-                </label>
-                )}
+                {/* HU #13666: sin campo «Código» al crear, editar ni consultar; el servidor lo genera del nombre. */}
                 <label className={LABEL_CLS}>
                   Nombre
                   <input

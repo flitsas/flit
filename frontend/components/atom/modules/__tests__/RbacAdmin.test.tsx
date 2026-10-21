@@ -102,18 +102,18 @@ describe("RbacAdmin — pestaña Roles del sistema (HU #10509)", () => {
     );
 
     await user.click(screen.getByRole("button", { name: /nuevo rol/i }));
-    await user.type(await screen.findByLabelText(/código/i), "NUEVO");
-    await user.type(screen.getByLabelText(/^nombre/i), "Rol Nuevo");
+    await user.type(await screen.findByLabelText(/^nombre/i), "Rol Nuevo");
     // HU #10664 AC2 — hay que marcar al menos un permiso; si no, el formulario se bloquea.
     await user.click(await screen.findByRole("checkbox", { name: /leer trámites/i }));
     await user.click(screen.getByRole("button", { name: /^crear rol$/i }));
 
+    // HU #13653: el payload no lleva `code`; el servidor lo genera a partir del nombre.
     await waitFor(() => expect(createRole).toHaveBeenCalledWith({
       targetEntityType: "COMPANY",
-      code: "NUEVO",
       name: "Rol Nuevo",
       description: undefined,
     }));
+    expect(createRole.mock.calls[0][0]).not.toHaveProperty("code");
     await waitFor(() => expect(setRolePermissions).toHaveBeenCalledWith("role-new", ["perm-1"]));
     expect(await screen.findByText("Rol Nuevo")).toBeInTheDocument();
   });
@@ -124,8 +124,7 @@ describe("RbacAdmin — pestaña Roles del sistema (HU #10509)", () => {
     await screen.findByRole("tab", { name: "Compañía" });
 
     await user.click(screen.getByRole("button", { name: /nuevo rol/i }));
-    await user.type(await screen.findByLabelText(/código/i), "SINPERM");
-    await user.type(screen.getByLabelText(/^nombre/i), "Sin permisos");
+    await user.type(await screen.findByLabelText(/^nombre/i), "Sin permisos");
     await user.click(screen.getByRole("button", { name: /^crear rol$/i }));
 
     expect(await screen.findByText(/al menos un permiso/i)).toBeInTheDocument();
@@ -144,7 +143,11 @@ describe("RbacAdmin — pestaña Roles del sistema (HU #10509)", () => {
     // Sin tipos de servicio en el catálogo no hay sección «Tipos de servicio».
     expect(within(dialog).getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual(["Datos del rol", "Módulos"]);
 
-    await user.type(within(dialog).getByLabelText(/código/i), "SIN_NOMBRE");
+    // HU #13653: «Nuevo rol» ya no pide el código: solo tipo de entidad, nombre y descripción.
+    expect(within(dialog).queryByLabelText(/código/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/identificador interno/i)).not.toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/tipo de entidad/i)).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/^descripción/i)).toBeInTheDocument();
     await user.click(within(dialog).getByRole("checkbox", { name: /leer trámites/i }));
     await user.click(within(dialog).getByRole("button", { name: /^crear rol$/i }));
 

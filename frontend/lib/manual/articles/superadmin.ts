@@ -370,7 +370,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
           },
           {
             variant: "info",
-            text: "El editor de un rol es una sola lista, en este orden: «Datos del rol» (solo al crear: código, tipo de entidad, nombre y descripción), «Módulos» y «Tipos de servicio». «Crear rol» y «Guardar permisos» guardan todo; si falta el código o el nombre, ves el aviso y el cursor queda en ese campo. Sin tipos de servicio en el catálogo solo ves la lista de módulos.",
+            text: "El editor de un rol es una sola lista, en este orden: «Datos del rol» (solo al crear: tipo de entidad, nombre y descripción), «Módulos» y «Tipos de servicio». No se escribe ningún código: la plataforma asigna uno interno a partir del nombre. «Crear rol» y «Guardar permisos» guardan todo; si falta el nombre, ves el aviso debajo del campo y el cursor queda allí. Sin tipos de servicio en el catálogo solo ves la lista de módulos.",
           },
           {
             variant: "info",

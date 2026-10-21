@@ -84,7 +84,7 @@ async function openCreate() {
   const onSaved = vi.fn();
   render(<CompanyRoleFormModal mode={{ kind: "create" }} onClose={vi.fn()} onSaved={onSaved} />);
   const dialog = await screen.findByRole("dialog");
-  await within(dialog).findByLabelText(/^código/i);
+  await within(dialog).findByLabelText(/^nombre/i);
   return { ue, dialog, onSaved };
 }
 
@@ -142,7 +142,6 @@ describe("CompanyRoleFormModal — par Ver / Crear por tipo de servicio (HU #136
 
   it("el payload al crear no lleva «Crear» sin su «Ver»", async () => {
     const { ue, dialog, onSaved } = await openCreate();
-    await ue.type(within(dialog).getByLabelText(/^código/i), "auditor_ext");
     await ue.type(within(dialog).getByLabelText(/^nombre/i), "Auditor externo");
     // Marca Ver + Crear de Otros trámites y luego quita Ver; marca Ver + Crear de Matrículas.
     await ue.click(within(dialog).getByRole("checkbox", { name: "Ver — Trámites: Otros trámites" }));
@@ -187,7 +186,6 @@ describe("CompanyRoleFormModal — par Ver / Crear por tipo de servicio (HU #136
 
   it("HU #13653: sin nombre avisa y lleva el foco al campo; «Crear rol» guarda toda la lista", async () => {
     const { ue, dialog } = await openCreate();
-    await ue.type(within(dialog).getByLabelText(/^código/i), "auditor_ext");
     await ue.click(within(dialog).getByRole("checkbox", { name: "Ver — Trámites: Matrículas" }));
     await ue.click(within(dialog).getByRole("button", { name: /crear rol/i }));
 
@@ -206,7 +204,6 @@ describe("CompanyRoleFormModal — par Ver / Crear por tipo de servicio (HU #136
       new ApiError(400, "bad request", { code: "FAMILY_CREATE_REQUIRES_READ", permissions: ["traspasos.create"] }),
     );
     const { ue, dialog } = await openCreate();
-    await ue.type(within(dialog).getByLabelText(/^código/i), "auditor_ext");
     await ue.type(within(dialog).getByLabelText(/^nombre/i), "Auditor externo");
     await ue.click(within(dialog).getByRole("button", { name: /crear rol/i }));
 
@@ -218,18 +215,39 @@ describe("CompanyRoleFormModal — par Ver / Crear por tipo de servicio (HU #136
   });
 });
 
-describe("Nuevo rol — avisos del código en lenguaje claro", () => {
-  it("sin código pide escribirlo; con un código inválido explica qué se admite; no crea nada", async () => {
+describe("Rol de la compañía — sin campo «Código» (HU #13666)", () => {
+  it("al crear no pide código: el payload no lo lleva y el servidor lo genera del nombre", async () => {
+    const { ue, dialog, onSaved } = await openCreate();
+    expect(within(dialog).queryByLabelText(/código/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/identificador interno/i)).not.toBeInTheDocument();
+
+    await ue.type(within(dialog).getByLabelText(/^nombre/i), "Auditor externo");
+    await ue.click(within(dialog).getByRole("button", { name: /crear rol/i }));
+
+    await waitFor(() => expect(createTenantRole).toHaveBeenCalledTimes(1));
+    const body = vi.mocked(createTenantRole).mock.calls[0][0];
+    expect(body).not.toHaveProperty("code");
+    expect(body.name).toBe("Auditor externo");
+    expect(onSaved).toHaveBeenCalled();
+  });
+
+  it("sin nombre solo avisa del nombre, debajo del campo, y no crea nada", async () => {
     const { ue, dialog } = await openCreate();
 
     await ue.click(within(dialog).getByRole("button", { name: /crear rol/i }));
-    expect(await within(dialog).findByText("Escribe un código para el rol.")).toBeInTheDocument();
 
-    await ue.type(within(dialog).getByLabelText(/^código/i), "a");
-    await ue.click(within(dialog).getByRole("button", { name: /crear rol/i }));
-    expect(
-      await within(dialog).findByText("Usa solo letras, números, punto, guion o guion bajo (de 2 a 50)."),
-    ).toBeInTheDocument();
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Escribe un nombre para el rol.");
+    expect(within(dialog).queryByText(/código/i)).not.toBeInTheDocument();
     expect(createTenantRole).not.toHaveBeenCalled();
+  });
+
+  it("al editar un rol propio tampoco se muestra el código", async () => {
+    render(<CompanyRoleFormModal mode={{ kind: "edit", role: own }} onClose={vi.fn()} onSaved={vi.fn()} />);
+    const dialog = await screen.findByRole("dialog");
+    await within(dialog).findByLabelText(/^nombre/i);
+
+    expect(within(dialog).queryByLabelText(/código/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("contador")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/el código no se puede cambiar/i)).not.toBeInTheDocument();
   });
 });

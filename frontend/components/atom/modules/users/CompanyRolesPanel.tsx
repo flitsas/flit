@@ -23,7 +23,8 @@ import { deleteTenantRole, getRoles, type TenantRole } from "@/lib/api/security"
 import { CompanyRoleFormModal, type CompanyRoleFormMode } from "./CompanyRoleFormModal";
 import { companyRoleErrorMessage } from "./companyRoleErrors";
 
-const COLUMNS = ["Código", "Nombre", "Tipo", "Permisos", "Acciones"];
+// HU #13666: sin columna «Código»; el código del rol es un identificador interno que genera el servidor.
+const COLUMNS = ["Nombre", "Tipo", "Permisos", "Acciones"];
 
 /** Un rol es propio de la compañía si trae `tenantId`; sin él es del catálogo global de FLIT. */
 export function isOwnRole(role: TenantRole): boolean {
@@ -114,11 +115,7 @@ export function CompanyRolesPanel({ onChanged }: { onChanged?: () => void } = {}
             <tbody>
               {pg.paginar(roles).map((r) => (
                 <tr key={r.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
-                  <td className="rounded-l-xl border-y border-l px-4 py-3 font-mono opacity-80" style={{ borderColor: "#DFE5ED" }}>
-                    {/* HU #13666: el código del rol propio lo escribió la compañía; el de un rol FLIT es interno y no se muestra. */}
-                    {isOwnRole(r) ? r.code : <span aria-label="Sin código">—</span>}
-                  </td>
-                  <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                  <td className="rounded-l-xl border-y border-l px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
                     <span className="block font-semibold">{r.name}</span>
                     {r.description && <span className="block opacity-70">{r.description}</span>}
                   </td>
@@ -218,7 +215,6 @@ function DeleteCompanyRoleDialog({
       icon={Trash2}
       iconBg="#FF4E00"
       title="Eliminar rol"
-      description={role.code}
     >
       <div className="space-y-3.5">
         <p className="text-sm">

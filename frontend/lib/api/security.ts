@@ -82,7 +82,8 @@ export interface TenantRoleDetail {
 }
 
 export interface NewTenantRole {
-  code: string;
+  /** HU #13666: opcional y la pantalla no lo envía; el servidor lo genera a partir del nombre. */
+  code?: string;
   name: string;
   description?: string | null;
   productCode?: string;

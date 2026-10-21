@@ -633,7 +633,6 @@ function CreateRoleModal({
   onClose: () => void;
   onCreated: (targetEntityType: RoleTargetEntityType) => void;
 }) {
-  const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [targetEntityType, setTargetEntityType] = useState<RoleTargetEntityType>("COMPANY");
@@ -643,7 +642,7 @@ function CreateRoleModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Aviso de un campo de «Datos del rol»: va debajo del campo, visible aunque la lista de permisos sea larga.
-  const [fieldError, setFieldError] = useState<{ field: "code" | "name"; message: string } | null>(null);
+  const [fieldError, setFieldError] = useState<{ field: "name"; message: string } | null>(null);
 
   // HU #13666: «crear exige ver» — apagar «Ver» apaga también «Crear» de ese tipo de servicio.
   function toggle(id: string) {
@@ -662,12 +661,10 @@ function CreateRoleModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!code.trim() || !name.trim()) {
-      // Lleva el foco al primer campo que falta (están arriba de la misma lista).
-      document.getElementById(!code.trim() ? "role-code" : "role-name")?.focus();
-      setFieldError(!code.trim()
-        ? { field: "code", message: "Escribe un código para el rol." }
-        : { field: "name", message: "Escribe un nombre para el rol." });
+    if (!name.trim()) {
+      // Lleva el foco al campo que falta (está arriba de la misma lista).
+      document.getElementById("role-name")?.focus();
+      setFieldError({ field: "name", message: "Escribe un nombre para el rol." });
       return;
     }
     // Si se cambió el tipo a Compañía tras marcar permisos OT, esos ya no se ven y no se envían.
@@ -680,9 +677,9 @@ function CreateRoleModal({
     setBusy(true);
     setError(null);
     try {
+      // HU #13653: el código del rol lo genera el servidor a partir del nombre (identificador interno).
       const { id } = await superadminClient.createRole({
         targetEntityType,
-        code: code.trim(),
         name: name.trim(),
         description: description.trim() || undefined,
       });
@@ -693,7 +690,7 @@ function CreateRoleModal({
       setError(
         isFamilyCreateRequiresReadError(err)
           ? FAMILY_CREATE_REQUIRES_READ_MESSAGE
-          : msg.includes("ROLE_CODE_DUPLICATE") ? "Este código ya existe para este tipo de entidad." : "Error al crear el rol.",
+          : msg.includes("ROLE_CODE_DUPLICATE") ? "No se pudo crear el rol. Intenta de nuevo." : "Error al crear el rol.",
       );
       setBusy(false);
     }
@@ -706,25 +703,19 @@ function CreateRoleModal({
         <RoleEditorSections
           data={
             <div className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label htmlFor="role-code" className="text-xs font-semibold block mb-1">Código *</label>
-                  <input id="role-code" value={code} onChange={(e) => { setCode(e.target.value); if (fieldError?.field === "code") setFieldError(null); }} placeholder="supervisor_tramites" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]" />
-                  {fieldError?.field === "code" && <span role="alert" className="mt-1 block text-xs font-semibold text-[#C2410C]">{fieldError.message}</span>}
-                </div>
-                <div>
-                  <label htmlFor="role-target-type" className="text-xs font-semibold block mb-1">Tipo de entidad *</label>
-                  <select
-                    id="role-target-type"
-                    required
-                    value={targetEntityType}
-                    onChange={(e) => setTargetEntityType(e.target.value as RoleTargetEntityType)}
-                    className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
-                  >
-                    <option value="COMPANY">Compañía</option>
-                    <option value="TRANSIT_OFFICE">Organismo de Tránsito</option>
-                  </select>
-                </div>
+              {/* HU #13653: sin campo «Código»; el identificador interno lo genera el servidor a partir del nombre. */}
+              <div>
+                <label htmlFor="role-target-type" className="text-xs font-semibold block mb-1">Tipo de entidad *</label>
+                <select
+                  id="role-target-type"
+                  required
+                  value={targetEntityType}
+                  onChange={(e) => setTargetEntityType(e.target.value as RoleTargetEntityType)}
+                  className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-[#557EFF]"
+                >
+                  <option value="COMPANY">Compañía</option>
+                  <option value="TRANSIT_OFFICE">Organismo de Tránsito</option>
+                </select>
               </div>
               <div>
                 <label htmlFor="role-name" className="text-xs font-semibold block mb-1">Nombre *</label>

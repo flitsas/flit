@@ -8,11 +8,11 @@ const MESSAGES: Record<string, string> = {
   PERMISSION_MODULE_NOT_ENABLED: "Hay permisos de un módulo que no está habilitado para tu compañía. Quítalos e inténtalo de nuevo.",
   PERMISSION_NOT_HELD: "Solo puedes otorgar permisos que tú mismo tienes. Quita los que no te corresponden.",
   PERMISSION_NOT_FOUND: "Alguno de los permisos ya no existe. Cierra la ventana y vuelve a abrirla.",
-  INVALID_ROLE_INPUT: "El código (2 a 50 caracteres: letras, números, punto, guion o guion bajo) y el nombre (hasta 100) son obligatorios.",
+  INVALID_ROLE_INPUT: "Escribe un nombre para el rol (hasta 100 caracteres).",
   INVALID_TARGET_ENTITY_TYPE: "Una compañía solo puede crear roles de compañía.",
   INVALID_ROLE_PRODUCT: "El producto del rol no es válido.",
   ROLE_PERMISSION_PRODUCT_MISMATCH: "Un rol solo puede incluir permisos de su mismo producto.",
-  ROLE_CODE_DUPLICATE: "Ya existe un rol con ese código en tu compañía o en el catálogo de FLIT. Usa otro.",
+  ROLE_CODE_DUPLICATE: "No se pudo crear el rol. Intenta de nuevo.",
   ROLE_HAS_ACTIVE_USERS: "El rol está asignado a usuarios. Cámbialos de rol antes de eliminarlo.",
   ROLE_READ_ONLY: "Los roles globales de FLIT son de solo lectura.",
   // HU #13666: «Crear» de un tipo de servicio sin su «Ver» (mismo texto que el Panel SA).
