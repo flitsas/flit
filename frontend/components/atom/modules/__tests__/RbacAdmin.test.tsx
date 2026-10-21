@@ -103,8 +103,6 @@ describe("RbacAdmin — pestaña Roles del sistema (HU #10509)", () => {
     await user.type(await screen.findByLabelText(/código/i), "NUEVO");
     await user.type(screen.getByLabelText(/^nombre/i), "Rol Nuevo");
     // HU #10664 AC2 — hay que marcar al menos un permiso; si no, el formulario se bloquea.
-    // HU #13653: los permisos viven en la pestaña «Módulos» del editor.
-    await user.click(screen.getByRole("tab", { name: "Módulos" }));
     await user.click(await screen.findByRole("checkbox", { name: /leer trámites/i }));
     await user.click(screen.getByRole("button", { name: /^crear rol$/i }));
 
@@ -132,23 +130,24 @@ describe("RbacAdmin — pestaña Roles del sistema (HU #10509)", () => {
     expect(createRole).not.toHaveBeenCalled();
   });
 
-  it("HU #13653: el editor separa «Datos del rol | Módulos»; sin nombre vuelve a «Datos del rol» con un aviso", async () => {
+  it("HU #13653: el editor es una sola lista «Datos del rol» → «Módulos»; sin nombre avisa y lleva el foco al campo", async () => {
     const user = userEvent.setup();
     await openRolesTab();
     await screen.findByRole("tab", { name: "Compañía" });
 
     await user.click(screen.getByRole("button", { name: /nuevo rol/i }));
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByRole("tab", { name: "Datos del rol" })).toHaveAttribute("aria-selected", "true");
-    // Sin tipos de servicio en el catálogo no hay pestaña «Tipos de servicio».
-    expect(within(dialog).queryByRole("tab", { name: "Tipos de servicio" })).not.toBeInTheDocument();
+    await within(dialog).findByRole("checkbox", { name: /leer trámites/i });
+    expect(within(dialog).queryByRole("tablist")).not.toBeInTheDocument();
+    // Sin tipos de servicio en el catálogo no hay sección «Tipos de servicio».
+    expect(within(dialog).getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual(["Datos del rol", "Módulos"]);
 
-    await user.click(within(dialog).getByRole("tab", { name: "Módulos" }));
-    await user.click(await within(dialog).findByRole("checkbox", { name: /leer trámites/i }));
+    await user.type(within(dialog).getByLabelText(/código/i), "SIN_NOMBRE");
+    await user.click(within(dialog).getByRole("checkbox", { name: /leer trámites/i }));
     await user.click(within(dialog).getByRole("button", { name: /^crear rol$/i }));
 
     expect(await within(dialog).findByText("Escribe el código y el nombre del rol.")).toBeInTheDocument();
-    expect(within(dialog).getByRole("tab", { name: "Datos del rol" })).toHaveAttribute("aria-selected", "true");
+    expect(within(dialog).getByLabelText(/^nombre/i)).toHaveFocus();
     expect(createRole).not.toHaveBeenCalled();
   });
 

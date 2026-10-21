@@ -39,10 +39,32 @@ export function familyModuleName(moduleCode: string): string | null {
 
 /**
  * HU #13653: ¿es un módulo de tipo de servicio (Matrículas, Traspasos, Otros trámites)? Los editores de permisos los
- * muestran en su propia pestaña «Tipos de servicio», separados de los demás módulos.
+ * muestran en su propia sección «Tipos de servicio», separados de los demás módulos.
  */
 export function isServiceTypeModule(m: { code: string; actions: readonly SlugAction[] }): boolean {
   return familyModuleName(m.code) !== null || findFamilyPair(m.actions) !== null;
+}
+
+const FAMILY_MODULE_ORDER = Object.keys(FAMILY_MODULE_NAMES);
+
+/** Posición del tipo de servicio (Matrículas, Traspasos, Otros trámites); los que no se reconocen, al final. */
+function serviceTypeRank(m: { code: string; actions: readonly SlugAction[] }): number {
+  const byCode = FAMILY_MODULE_ORDER.indexOf(m.code);
+  if (byCode >= 0) return byCode;
+  const pair = findFamilyPair(m.actions);
+  const byPair = pair ? FAMILY_SLUG_PAIRS.findIndex((p) => p.read === pair.read.slug) : -1;
+  return byPair >= 0 ? byPair : FAMILY_MODULE_ORDER.length;
+}
+
+/**
+ * HU #13653: los tipos de servicio siempre en el mismo orden en todas partes: Matrículas, Traspasos, Otros trámites.
+ * Orden estable: los no reconocidos conservan el orden de llegada, al final.
+ */
+export function sortServiceTypeModules<M extends { code: string; actions: readonly SlugAction[] }>(list: readonly M[]): M[] {
+  return list
+    .map((m, i) => ({ m, i, r: serviceTypeRank(m) }))
+    .sort((a, b) => a.r - b.r || a.i - b.i)
+    .map((x) => x.m);
 }
 
 /** El par Ver / Crear de una familia dentro de las acciones de un módulo, o `null` si el módulo no es de familia. */

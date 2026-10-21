@@ -21,8 +21,8 @@ import {
 } from "@/lib/api/permission-overrides";
 import { buildModuleViews, outOfCapOverrideIds, withOverrideActions, type ActionView, type ModuleView, type PermissionOrigin } from "@/lib/permissions/modulePermissions";
 import { formatFechaHora } from "@/lib/format/date";
-import { findFamilyPair, isServiceTypeModule } from "@/lib/permissions/familyPairs";
-import { SectionTabs } from "@/components/atom/SectionTabs";
+import { findFamilyPair, isServiceTypeModule, sortServiceTypeModules } from "@/lib/permissions/familyPairs";
+import { RoleEditorSections } from "./RoleEditorSections";
 import { FamilyPairRows } from "./FamilyPairRows";
 import {
   OUT_OF_CAP_LABEL,
@@ -212,7 +212,6 @@ export function ModulePermissionsSection({
   // HU #13653 (AC3): aviso de vigencia tras guardar (FC-3) y permiso PII a la espera de confirmación (AC2).
   const [vigencia, setVigencia] = useState<string | null>(null);
   const [pendingPii, setPendingPii] = useState<ActionView | null>(null);
-  const [subTab, setSubTab] = useState<"modulos" | "tipos">("modulos");
 
   // El tenant solo viaja para el Super Admin; los demás administradores usan el de su JWT.
   const tenantParam = mode === "superadmin" ? tenantId : undefined;
@@ -364,9 +363,9 @@ export function ModulePermissionsSection({
 
   const controlsOff = readOnly || busy;
 
-  // HU #13653: los tipos de servicio (Matrículas, Traspasos, Otros trámites) van en su propia pestaña.
+  // HU #13653: los tipos de servicio van en su propia sección, siempre en el orden Matrículas, Traspasos, Otros trámites.
   const moduleViews = views.filter((v) => !isServiceTypeModule(v));
-  const serviceViews = views.filter(isServiceTypeModule);
+  const serviceViews = sortServiceTypeModules(views.filter(isServiceTypeModule));
 
   const renderModule = (m: ModuleView) => (
     <li key={m.id} className="rounded-xl border border-[#DFE5ED] p-3 dark:border-white/15" data-testid={`module-${m.code}`}>
@@ -527,26 +526,13 @@ export function ModulePermissionsSection({
         emptyMessage="No hay permisos que se puedan configurar individualmente para este usuario."
       >
         {serviceViews.length === 0 || moduleViews.length === 0 ? (
-          <ul className="flex flex-col gap-3">{views.map(renderModule)}</ul>
+          <ul className="flex flex-col gap-3">{[...moduleViews, ...serviceViews].map(renderModule)}</ul>
         ) : (
-          // Sub-pestañas «Módulos | Tipos de servicio» con el mismo componente que Mandatos. Solo aparecen cuando la ficha
-          // tiene las dos clases; si no (p. ej. la del Admin OT, sin tipos de servicio), se ve la lista sola.
-          <SectionTabs
-            ariaLabel="Permisos por módulo y por tipo de servicio"
-            active={subTab}
-            onChange={setSubTab}
-            tabs={[
-              {
-                id: "modulos",
-                label: "Módulos",
-                content: <ul className="flex flex-col gap-3">{moduleViews.map(renderModule)}</ul>,
-              },
-              {
-                id: "tipos",
-                label: "Tipos de servicio",
-                content: <ul className="flex flex-col gap-3">{serviceViews.map(renderModule)}</ul>,
-              },
-            ]}
+          // Una sola lista: «Módulos» y luego «Tipos de servicio». Si la ficha tiene una sola clase (p. ej. la del
+          // organismo, sin tipos de servicio), se ve la lista sola, sin título.
+          <RoleEditorSections
+            modules={<ul className="flex flex-col gap-3">{moduleViews.map(renderModule)}</ul>}
+            services={<ul className="flex flex-col gap-3">{serviceViews.map(renderModule)}</ul>}
           />
         )}
       </UiStateBoundary>

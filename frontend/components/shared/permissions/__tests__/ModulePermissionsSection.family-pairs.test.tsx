@@ -66,39 +66,42 @@ beforeEach(() => {
   setRole(["mat-r", "mat-c"]);
 });
 
-// Solo hay tipos de servicio en este catálogo: la ficha los lista sin pestañas (HU #13653).
+// Solo hay tipos de servicio en este catálogo: la ficha los lista sola, sin pestañas ni títulos (HU #13653).
 async function renderSection() {
   render(<ModulePermissionsSection userId="u1" tenantId="t1" mode="superadmin" roleIds={["r1"]} />);
   await screen.findByTestId("module-tramites-matriculas");
   expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Tipos de servicio" })).not.toBeInTheDocument();
 }
 
-describe("ModulePermissionsSection — sub-pestañas «Módulos | Tipos de servicio» (HU #13653)", () => {
+describe("ModulePermissionsSection — una sola lista «Módulos» → «Tipos de servicio» (HU #13653)", () => {
   const inicio = { id: "m-ini", code: "dashboard", name: "Inicio", sortOrder: -1, actions: [{ id: "ini-r", slug: "dashboard.read", name: "Ver inicio" }] };
 
-  it("separa los módulos de los tipos de servicio; «Módulos» abre primero", async () => {
-    vi.mocked(getAccessibleModules).mockResolvedValue([inicio, ...modules]);
+  it("muestra los módulos y luego los tipos de servicio (Matrículas, Traspasos, Otros trámites), todo visible y sin pestañas", async () => {
+    // La API los trae en otro orden: la ficha siempre los muestra Matrículas, Traspasos, Otros trámites.
+    vi.mocked(getAccessibleModules).mockResolvedValue([modules[2], inicio, modules[1], modules[0]]);
     vi.mocked(listGrantablePermissions).mockResolvedValue([
       { id: "ini-r", slug: "dashboard.read", name: "Ver inicio", moduleCode: "dashboard", productCode: "tramites" },
       ...grantable,
     ]);
     render(<ModulePermissionsSection userId="u1" tenantId="t1" mode="superadmin" roleIds={["r1"]} />);
 
-    const modulos = await screen.findByRole("tab", { name: "Módulos" });
-    expect(modulos).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("switch", { name: "Ver inicio, módulo Inicio" })).toBeVisible();
-    expect(screen.getByTestId("module-tramites-matriculas")).not.toBeVisible();
-
-    await userEvent.click(screen.getByRole("tab", { name: "Tipos de servicio" }));
+    expect(await screen.findByRole("switch", { name: "Ver inicio, módulo Inicio" })).toBeVisible();
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 3, name: /^(Módulos|Tipos de servicio)$/ }).map((h) => h.textContent)).toEqual([
+      "Módulos",
+      "Tipos de servicio",
+    ]);
     expect(screen.getByTestId("module-tramites-matriculas")).toBeVisible();
-    expect(screen.getByTestId("module-dashboard")).not.toBeVisible();
-
-    // Teclado: flecha izquierda vuelve a «Módulos».
-    await userEvent.keyboard("{ArrowLeft}");
-    expect(screen.getByRole("tab", { name: "Módulos" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getAllByTestId(/^module-/).map((el) => el.dataset.testid)).toEqual([
+      "module-dashboard",
+      "module-tramites-matriculas",
+      "module-tramites-traspasos",
+      "module-tramites-otros",
+    ]);
   });
 
-  it("sin tipos de servicio (p. ej. la ficha del organismo) no hay pestañas, solo la lista", async () => {
+  it("sin tipos de servicio (p. ej. la ficha del organismo) no hay pestañas ni títulos, solo la lista", async () => {
     vi.mocked(getAccessibleModules).mockResolvedValue([inicio, ...modules]);
     vi.mocked(listGrantablePermissions).mockResolvedValue([
       { id: "ini-r", slug: "dashboard.read", name: "Ver inicio", moduleCode: "dashboard", productCode: "tramites" },
@@ -110,6 +113,7 @@ describe("ModulePermissionsSection — sub-pestañas «Módulos | Tipos de servi
 
     expect(await screen.findByRole("switch", { name: "Ver inicio, módulo Inicio" })).toBeVisible();
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Módulos" })).not.toBeInTheDocument();
   });
 });
 

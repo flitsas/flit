@@ -13,12 +13,13 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader2, Shield } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { FamilyPairCheckboxes } from "@/components/shared/permissions/FamilyPairCheckboxes";
-import { RoleEditorTabs, type RoleEditorTabId } from "@/components/shared/permissions/RoleEditorTabs";
+import { RoleEditorSections } from "@/components/shared/permissions/RoleEditorSections";
 import {
   familyModuleName,
   findFamilyPair,
   isServiceTypeModule,
   normalizeFamilyPairs,
+  sortServiceTypeModules,
   toggleRolePermission,
 } from "@/lib/permissions/familyPairs";
 import {
@@ -87,7 +88,6 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<RoleEditorTabId>("datos");
 
   useEffect(() => {
     let cancelled = false;
@@ -160,12 +160,12 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
     if (readOnly) return;
     setError(null);
     if (creating && !CODE_PATTERN.test(code.trim())) {
-      setTab("datos");
+      document.getElementById("company-role-code")?.focus();
       setError("El código admite de 2 a 50 caracteres: letras, números, punto, guion o guion bajo.");
       return;
     }
     if (!name.trim()) {
-      setTab("datos");
+      document.getElementById("company-role-name")?.focus();
       setError("El nombre es obligatorio.");
       return;
     }
@@ -194,8 +194,13 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
     }
   }
 
-  // HU #13653: «Datos del rol | Módulos | Tipos de servicio». Los tipos de servicio solo van aparte si hay de las dos clases.
-  const serviceModules = byModule.filter(([moduleCode, perms]) => isServiceTypeModule({ code: moduleCode, actions: perms }));
+  // HU #13653: una sola lista «Datos del rol» → «Módulos» → «Tipos de servicio». Los tipos de servicio solo van aparte
+  // si hay de las dos clases, y siempre en el orden Matrículas, Traspasos, Otros trámites.
+  const serviceModules = sortServiceTypeModules(
+    byModule
+      .map(([moduleCode, perms]) => ({ code: moduleCode, actions: perms }))
+      .filter(isServiceTypeModule),
+  ).map((m): [string, GrantablePermission[]] => [m.code, m.actions]);
   const regularModules = byModule.filter(([moduleCode, perms]) => !isServiceTypeModule({ code: moduleCode, actions: perms }));
   const hasBoth = !readOnly && serviceModules.length > 0 && regularModules.length > 0;
 
@@ -253,7 +258,8 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
 
   const permissionsFieldset = (entries: [string, GrantablePermission[]][], legend: string) => (
     <fieldset className="flex flex-col gap-3">
-      <legend className="mb-1 text-sm font-semibold text-[#162744] dark:text-white">
+      {/* Con los títulos de sección, la leyenda solo se ve en el rol de solo lectura (lleva el total). */}
+      <legend className={readOnly ? "mb-1 text-sm font-semibold text-[#162744] dark:text-white" : "sr-only"}>
         {legend}
         {readOnly && detail ? ` (${detail.permissions.length})` : ""}
       </legend>
@@ -329,9 +335,7 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
         </p>
       ) : (
         <form id="company-role-form" onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-          <RoleEditorTabs
-            active={tab}
-            onChange={setTab}
+          <RoleEditorSections
             data={
               <div className="flex flex-col gap-4">
                 {/* HU #13666: un rol de FLIT (solo lectura) no muestra su código interno; el del rol propio lo escribió la compañía. */}
@@ -339,6 +343,7 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
                 <label className={LABEL_CLS}>
                   Código
                   <input
+                    id="company-role-code"
                     value={code}
                     onChange={(e) => setCode(e.target.value)}
                     disabled={!creating}
@@ -358,6 +363,7 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
                 <label className={LABEL_CLS}>
                   Nombre
                   <input
+                    id="company-role-name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     disabled={readOnly}
@@ -398,7 +404,7 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
                 )}
               </div>
             }
-            modules={permissionsFieldset(readOnly || !hasBoth ? byModule : regularModules, "Permisos")}
+            modules={permissionsFieldset(readOnly || !hasBoth ? [...regularModules, ...serviceModules] : regularModules, "Permisos")}
             services={hasBoth ? permissionsFieldset(serviceModules, "Permisos por tipo de servicio") : null}
           />
 

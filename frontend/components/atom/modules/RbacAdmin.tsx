@@ -19,7 +19,7 @@ import { activeTone } from "@/components/atom/statusTones";
 import { ToastProvider, useToast } from "@/components/admin/Toast";
 import { ModuleTitle } from "./ModuleTitle";
 import { FamilyPairCheckboxes } from "@/components/shared/permissions/FamilyPairCheckboxes";
-import { RoleEditorTabs, type RoleEditorTabId } from "@/components/shared/permissions/RoleEditorTabs";
+import { RoleEditorSections } from "@/components/shared/permissions/RoleEditorSections";
 import { SectionTabs } from "@/components/atom/SectionTabs";
 import { modulesForRoleTarget } from "@/lib/permissions/otModules";
 import {
@@ -28,6 +28,7 @@ import {
   isFamilyCreateRequiresReadError,
   isServiceTypeModule,
   normalizeFamilyPairs,
+  sortServiceTypeModules,
   toggleRolePermission,
 } from "@/lib/permissions/familyPairs";
 import { digitsOnly } from "@/lib/format/currency";
@@ -561,7 +562,7 @@ function ModulePermissionsChecklist({
     return <p className="text-xs text-center py-6 opacity-60">No hay módulos con permisos disponibles.</p>;
   }
   return (
-    <div className="space-y-4 max-h-64 overflow-y-auto pr-1">
+    <div className="space-y-4">
       {modules.map((m) => {
         const allSelected = m.actions.length > 0 && m.actions.every((a) => selected.has(a.id));
         const someSelected = m.actions.some((a) => selected.has(a.id));
@@ -608,17 +609,17 @@ function ModulePermissionsChecklist({
 }
 
 /**
- * HU #13653: reparte el catálogo en «Módulos» y «Tipos de servicio» para RoleEditorTabs. Mientras carga, o si no hay
- * tipos de servicio, solo hay la lista de módulos (sin pestañas).
+ * HU #13653: reparte el catálogo en las secciones «Módulos» y «Tipos de servicio» (RoleEditorSections), con los tipos
+ * de servicio en el orden Matrículas, Traspasos, Otros trámites. Mientras carga, o si hay una sola clase, una sola lista.
  */
-function permissionTabs(
+function permissionSections(
   modules: AccessibleModule[],
   modulesLoading: boolean,
   selected: Set<string>,
   onToggle: (id: string) => void,
   onToggleModule: (m: AccessibleModule) => void,
 ) {
-  const services = modules.filter(isServiceTypeModule);
+  const services = sortServiceTypeModules(modules.filter(isServiceTypeModule));
   const regular = modules.filter((m) => !isServiceTypeModule(m));
   const checklist = (list: AccessibleModule[]) => (
     <ModulePermissionsChecklist
@@ -629,7 +630,7 @@ function permissionTabs(
       onToggleModule={onToggleModule}
     />
   );
-  // Una sola clase de módulos (o aún cargando): una sola lista, sin pestaña vacía.
+  // Una sola clase de módulos (o aún cargando): una sola lista, sin sección vacía.
   if (modulesLoading || services.length === 0 || regular.length === 0) return { modules: checklist(modules), services: null };
   return { modules: checklist(regular), services: checklist(services) };
 }
@@ -665,8 +666,6 @@ function CreateRoleModal({
   const [description, setDescription] = useState("");
   const [targetEntityType, setTargetEntityType] = useState<RoleTargetEntityType>("COMPANY");
   const { modules, loading: modulesLoading } = useModulesCatalog("tramites", targetEntityType);
-  // HU #13653: «Datos del rol | Módulos | Tipos de servicio». El botón «Crear rol» queda fuera y guarda todo.
-  const [tab, setTab] = useState<RoleEditorTabId>("datos");
   const catalogIds = useMemo(() => new Set(modules.flatMap((m) => m.actions.map((a) => a.id))), [modules]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -689,9 +688,9 @@ function CreateRoleModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    // Los campos viven en la pestaña «Datos del rol»: si falta alguno se vuelve a ella con el aviso.
     if (!code.trim() || !name.trim()) {
-      setTab("datos");
+      // Lleva el foco al primer campo que falta (están arriba de la misma lista).
+      document.getElementById(!code.trim() ? "role-code" : "role-name")?.focus();
       setError("Escribe el código y el nombre del rol.");
       return;
     }
@@ -727,9 +726,8 @@ function CreateRoleModal({
   return (
     <Modal open onClose={onClose} busy={busy} size="md" title="Nuevo rol" titleClassName="text-lg font-bold text-[#162744] dark:text-white">
       <form onSubmit={handleSubmit} className="space-y-3" noValidate>
-        <RoleEditorTabs
-          active={tab}
-          onChange={setTab}
+        {/* HU #13653: una sola lista «Datos del rol» → «Módulos» → «Tipos de servicio»; «Crear rol» guarda todo. */}
+        <RoleEditorSections
           data={
             <div className="space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -761,7 +759,7 @@ function CreateRoleModal({
               </div>
             </div>
           }
-          {...permissionTabs(modules, modulesLoading, selected, toggle, toggleModule)}
+          {...permissionSections(modules, modulesLoading, selected, toggle, toggleModule)}
         />
         {error && <p role="alert" className="text-xs py-2 px-3 rounded-xl font-medium" style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}>{error}</p>}
         <button type="submit" disabled={busy} className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60" style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}>
@@ -785,8 +783,6 @@ function EditRolePermissionsModal({
   const [loadingCurrent, setLoadingCurrent] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // HU #13653: «Módulos | Tipos de servicio» (sin tipos de servicio, solo la lista).
-  const [tab, setTab] = useState<RoleEditorTabId>("modulos");
 
   useEffect(() => {
     let cancelled = false;
@@ -853,11 +849,9 @@ function EditRolePermissionsModal({
         {loadingCurrent ? (
           <div className="py-10 text-center text-sm opacity-60">Cargando permisos actuales…</div>
         ) : (
-          <RoleEditorTabs
-            active={tab}
-            onChange={setTab}
-            ariaLabel="Permisos del rol"
-            {...permissionTabs(modules, modulesLoading, selected, toggle, toggleModule)}
+          // HU #13653: «Módulos» → «Tipos de servicio» en una sola lista (sin tipos de servicio, solo la lista).
+          <RoleEditorSections
+            {...permissionSections(modules, modulesLoading, selected, toggle, toggleModule)}
           />
         )}
         {foreignCount > 0 && (

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findFamilyPair, familyRole, isFamilyCreateRequiresReadError, isServiceTypeModule, normalizeFamilyPairs, toggleRolePermission } from "../familyPairs";
+import { findFamilyPair, familyRole, isFamilyCreateRequiresReadError, isServiceTypeModule, normalizeFamilyPairs, sortServiceTypeModules, toggleRolePermission } from "../familyPairs";
 
 const modules = [
   { actions: [{ id: "r", slug: "matriculas.read" }, { id: "c", slug: "matriculas.create" }] },
@@ -39,5 +39,17 @@ describe("isServiceTypeModule (HU #13653)", () => {
   it("reconoce los módulos de tipo de servicio por código o por su par Ver / Crear", () => {
     expect(isServiceTypeModule({ code: "tramites-matriculas", actions: [] })).toBe(true);
     expect(isServiceTypeModule({ code: "dashboard", actions: [{ id: "a", slug: "dashboard.read" }] })).toBe(false);
+  });
+});
+
+describe("sortServiceTypeModules (HU #13653)", () => {
+  it("ordena siempre Matrículas, Traspasos, Otros trámites; lo no reconocido va al final", () => {
+    const list = [
+      { code: "tramites-otros", actions: [] },
+      { code: "x", actions: [] },
+      { code: "tramites-traspasos", actions: [] },
+      { code: "m", actions: [{ id: "r", slug: "matriculas.read" }, { id: "c", slug: "matriculas.create" }] },
+    ];
+    expect(sortServiceTypeModules(list).map((m) => m.code)).toEqual(["m", "tramites-traspasos", "tramites-otros", "x"]);
   });
 });

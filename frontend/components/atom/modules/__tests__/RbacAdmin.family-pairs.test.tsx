@@ -99,12 +99,15 @@ describe("RbacAdmin — Ver / Crear por tipo de servicio (HU #13666)", () => {
   });
 });
 
-describe("RbacAdmin — editor de permisos en sub-pestañas (HU #13653)", () => {
-  it("con módulos y tipos de servicio separa «Módulos | Tipos de servicio» y «Guardar permisos» guarda ambos", async () => {
+describe("RbacAdmin — editor de permisos en una sola lista (HU #13653)", () => {
+  it("lista «Módulos» y luego «Tipos de servicio» (Matrículas, Traspasos, Otros trámites), sin pestañas; «Guardar permisos» guarda ambos", async () => {
     const base = await vi.mocked(getAccessibleModules)("tramites");
+    // La API los trae desordenados: la vista siempre los muestra Matrículas, Traspasos, Otros trámites.
     vi.mocked(getAccessibleModules).mockResolvedValue([
       { id: "md", code: "dashboard", name: "Inicio", sortOrder: 0, actions: [{ id: "ini-r", slug: "dashboard.read", name: "Ver inicio" }] },
-      ...base,
+      base[2],
+      base[0],
+      base[1],
     ]);
     const user = userEvent.setup();
     render(<RbacAdmin />);
@@ -112,12 +115,14 @@ describe("RbacAdmin — editor de permisos en sub-pestañas (HU #13653)", () => 
     await user.click(await screen.findByRole("button", { name: /editar permisos de supervisor/i }));
     const dialog = await screen.findByRole("dialog");
 
-    const modulos = await within(dialog).findByRole("tab", { name: "Módulos" });
-    expect(modulos).toHaveAttribute("aria-selected", "true");
-    expect(within(dialog).queryByRole("tab", { name: "Datos del rol" })).not.toBeInTheDocument();
-    await user.click(await within(dialog).findByRole("checkbox", { name: "Ver inicio" }));
+    await within(dialog).findByRole("checkbox", { name: "Ver inicio" });
+    expect(within(dialog).queryByRole("tablist")).not.toBeInTheDocument();
+    expect(within(dialog).getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual(["Módulos", "Tipos de servicio"]);
+    expect(
+      within(dialog).getAllByRole("checkbox", { name: /^Ver — / }).map((c) => c.getAttribute("aria-label")),
+    ).toEqual(["Ver — Trámites: Matrículas", "Ver — Trámites: Traspasos", "Ver — Trámites: Otros trámites"]);
 
-    await user.click(within(dialog).getByRole("tab", { name: "Tipos de servicio" }));
+    await user.click(within(dialog).getByRole("checkbox", { name: "Ver inicio" }));
     await user.click(within(dialog).getByRole("checkbox", { name: "Ver — Trámites: Traspasos" }));
     await user.click(within(dialog).getByRole("button", { name: /guardar permisos/i }));
 
