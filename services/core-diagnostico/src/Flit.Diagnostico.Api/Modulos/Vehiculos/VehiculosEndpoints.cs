@@ -12,8 +12,12 @@ namespace Flit.Diagnostico.Api.Modulos.Vehiculos;
 /// <c>POST /diagnosticos/{id}/carga/validar-filas</c> y <c>POST /diagnosticos/{id}/vehiculos</c> (HU #13751, F02-H5, plan
 /// §6.1, MOD02), con el permiso <c>diagnostico.diagnosticos.crear</c> y solo con la cabecera en CREADO (409); una cabecera
 /// de otra compañía responde 404. validar-filas revalida las filas corregidas con el mismo análisis de la carga
-/// (<see cref="AnalizadorCarga"/>) y devuelve el mismo resumen sin escribir nada. La confirmación la hace
-/// <see cref="ServicioConfirmacionVehiculos"/> (201). Los logs solo llevan conteos.
+/// (<see cref="AnalizadorCarga"/>) y devuelve el mismo resumen sin escribir nada. La confirmación recibe un multipart con el
+/// MISMO archivo del análisis (<see cref="CargaEndpoints.CampoArchivo"/>, mismas reglas y topes: 413/415/422) y el JSON de
+/// <see cref="LoteDesdeArchivo.CampoCorrecciones"/> (decisión del usuario 2026-10-21 «Reenviar el archivo»: el análisis
+/// enmascara el documento del locatario y solo el archivo lo trae completo, R-3); el lote lo arma
+/// <see cref="LoteDesdeArchivo"/> y lo confirma <see cref="ServicioConfirmacionVehiculos"/> (201). El documento nunca vuelve
+/// completo en la respuesta. Los logs solo llevan conteos.
 /// </summary>
 internal static partial class VehiculosEndpoints
 {
@@ -23,7 +27,7 @@ internal static partial class VehiculosEndpoints
     public static void Map(RouteGroupBuilder api)
     {
         api.MapPost(RutaValidarFilas, ValidarFilas).RequirePermiso(Permisos.DiagnosticosCrear).WithName("ValidarFilasCargaDiagnostico");
-        api.MapPost(RutaVehiculos, Confirmar).RequirePermiso(Permisos.DiagnosticosCrear).WithName("ConfirmarVehiculosDiagnostico");
+        api.MapPost(RutaVehiculos, Confirmar).RequirePermiso(Permisos.DiagnosticosCrear).DisableAntiforgery().WithName("ConfirmarVehiculosDiagnostico");
     }
 
     private static async Task<IResult> ValidarFilas(
@@ -46,9 +50,28 @@ internal static partial class VehiculosEndpoints
         return Results.Ok(resumen);
     }
 
-    private static async Task<IResult> Confirmar(Guid id, ConfirmacionVehiculosDto cuerpo, ServicioConfirmacionVehiculos servicio, CancellationToken ct)
+    private static async Task<IResult> Confirmar(
+        Guid id, HttpRequest peticion, DiagnosticoDb db, UsuarioActual usuario, IConfiguration configuracion, ServicioConfirmacionVehiculos servicio,
+        CancellationToken ct)
     {
-        var capturados = (cuerpo?.Vehiculos ?? []).Select(f => f?.ComoCapturado() ?? new(null, null, null)).ToList();
+        // 404 y 409 antes de leer el archivo, como la carga; el servicio lo vuelve a comprobar dentro de su transacción.
+        usuario.EmpresaPropia();
+        var cabecera = await db.Set<CabeceraDiagnostico>().AsNoTracking().SingleOrDefaultAsync(c => c.Id == id, ct).ConfigureAwait(false)
+            ?? throw ReglaException.NoEncontrado("El diagnóstico");
+        if (cabecera.Estado != EstadoDiagnostico.Creado)
+            throw ReglaException.Conflicto(ServicioCabecera.CodigoNoEditable, "El diagnóstico ya no está en CREADO: no admite confirmar vehículos.");
+
+        var (tabla, formulario) = await CargaEndpoints.LeerArchivoAsync(peticion, configuracion, ct).ConfigureAwait(false);
+        var correcciones = formulario[LoteDesdeArchivo.CampoCorrecciones];
+        if (correcciones.Count > 1)
+        {
+            throw new ReglaException(LoteDesdeArchivo.CodigoCorreccionesInvalidas, "Envíe las correcciones en un solo campo «correcciones».")
+            {
+                Campo = LoteDesdeArchivo.CampoCorrecciones,
+            };
+        }
+
+        var capturados = LoteDesdeArchivo.Capturados(tabla, LoteDesdeArchivo.LeerCorrecciones(correcciones.ToString()));
         var confirmacion = await servicio.ConfirmarAsync(id, capturados, ct).ConfigureAwait(false);
         var resultado = confirmacion.Resultado;
         var porOrden = confirmacion.Vehiculos.ToDictionary(v => v.Orden);

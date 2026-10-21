@@ -84,6 +84,8 @@ public sealed class LogsEnMemoria : ILoggerProvider
 /// <summary>Ayudas de las pruebas de validar-filas y confirmación (HU #13751).</summary>
 internal static class Lotes
 {
+    private static readonly string[] ColumnasCsv = ["identificador", "tipo_documento_locatario", "documento_locatario"];
+
     public static string RutaValidar(Guid id) => $"{Cabeceras.Ruta}/{id}/carga/validar-filas";
 
     public static string RutaVehiculos(Guid id) => $"{Cabeceras.Ruta}/{id}/vehiculos";
@@ -105,8 +107,37 @@ internal static class Lotes
     public static StringContent CuerpoDeFilas(string propiedad, IEnumerable<Dictionary<string, object?>> filas) =>
         new(JsonSerializer.Serialize(new Dictionary<string, object?> { [propiedad] = filas.ToList() }), System.Text.Encoding.UTF8, "application/json");
 
+    /// <summary>
+    /// Confirma el lote con el contrato multipart (HU #13751, decisión «Reenviar el archivo»): las filas se escriben en un
+    /// .csv con el encabezado de la plantilla y se envían en <c>archivo</c>, sin correcciones.
+    /// </summary>
     public static Task<HttpResponseMessage> ConfirmarAsync(HttpClient cliente, Guid id, IEnumerable<Dictionary<string, object?>> filas, CancellationToken ct) =>
-        cliente.PostAsync(RutaVehiculos(id), CuerpoDeFilas("vehiculos", filas), ct);
+        ConfirmarArchivoAsync(cliente, id, Csv(filas), "carga.csv", null, ct);
+
+    /// <summary>POST /vehiculos en multipart: el archivo en <c>archivo</c> y, si se da, el JSON de <c>correcciones</c>.</summary>
+    public static async Task<HttpResponseMessage> ConfirmarArchivoAsync(
+        HttpClient cliente, Guid id, byte[] archivo, string nombre, string? correcciones, CancellationToken ct)
+    {
+        using var contenido = new MultipartFormDataContent();
+        var parte = new ByteArrayContent(archivo);
+        parte.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+        contenido.Add(parte, "archivo", nombre);
+        if (correcciones is not null)
+            contenido.Add(new StringContent(correcciones, System.Text.Encoding.UTF8, "application/json"), "correcciones");
+        return await cliente.PostAsync(RutaVehiculos(id), contenido, ct);
+    }
+
+    /// <summary>.csv con el encabezado de la plantilla, separado por punto y coma; una línea por fila (null es celda vacía).</summary>
+    public static byte[] Csv(IEnumerable<Dictionary<string, object?>> filas)
+    {
+        var lineas = new List<string> { "Identificador_Vehiculo;Tipo_Documento_Locatario;Documento_Locatario" };
+        lineas.AddRange(filas.Select(f => string.Join(';',
+            ColumnasCsv.Select(c => Celda(f.GetValueOrDefault(c) as string)))));
+        return System.Text.Encoding.UTF8.GetBytes(string.Join("\n", lineas) + "\n");
+    }
+
+    private static string Celda(string? valor) =>
+        valor is null ? string.Empty : valor.Contains(';') || valor.Contains('"') ? $"\"{valor.Replace("\"", "\"\"")}\"" : valor;
 
     public static Task<HttpResponseMessage> ValidarAsync(HttpClient cliente, Guid id, IEnumerable<Dictionary<string, object?>> filas, CancellationToken ct) =>
         cliente.PostAsync(RutaValidar(id), CuerpoDeFilas("filas", filas), ct);

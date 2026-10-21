@@ -5,8 +5,8 @@ using Flit.Diagnostico.Domain.Vehiculos;
 namespace Flit.Diagnostico.Api.Modulos.Vehiculos;
 
 /// <summary>
-/// Una fila capturada (HU #13751), igual en validar-filas y en la confirmación: el identificador y, opcional, el documento
-/// del locatario. <c>fila</c> es el número de fila del archivo para devolverlo en el resumen. Es una clase (no un record)
+/// Una fila capturada de validar-filas (HU #13751): el identificador y, opcional, el documento del locatario. La
+/// confirmación ya no recibe filas en JSON: reenvía el archivo (<see cref="LoteDesdeArchivo"/>). <c>fila</c> es el número de fila del archivo para devolverlo en el resumen. Es una clase (no un record)
 /// para que ningún <c>ToString</c> automático lleve el documento a un log.
 /// </summary>
 public sealed class FilaCapturadaDto
@@ -22,8 +22,6 @@ public sealed class FilaCapturadaDto
 
     [JsonPropertyName("documento_locatario")]
     public string? DocumentoLocatario { get; init; }
-
-    public VehiculoCapturado ComoCapturado() => new(Identificador, TipoDocumentoLocatario, DocumentoLocatario);
 }
 
 /// <summary>Cuerpo de <c>POST /diagnosticos/{id}/carga/validar-filas</c>.</summary>
@@ -31,13 +29,6 @@ public sealed class FilasAValidarDto
 {
     [JsonPropertyName("filas")]
     public IReadOnlyList<FilaCapturadaDto>? Filas { get; init; }
-}
-
-/// <summary>Cuerpo de <c>POST /diagnosticos/{id}/vehiculos</c>.</summary>
-public sealed class ConfirmacionVehiculosDto
-{
-    [JsonPropertyName("vehiculos")]
-    public IReadOnlyList<FilaCapturadaDto>? Vehiculos { get; init; }
 }
 
 /// <summary>

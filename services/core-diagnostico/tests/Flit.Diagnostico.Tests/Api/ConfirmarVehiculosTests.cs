@@ -104,9 +104,9 @@ public sealed class ConfirmarVehiculosTests
 
         var invalidos = await Lotes.ConfirmarAsync(cliente, id, [Lotes.Fila("MAL"), Lotes.Fila("AB1234567"), Lotes.Fila(null)], ct);
         var vacio = await Lotes.ConfirmarAsync(cliente, id, [], ct);
-        var sinPropiedad = await cliente.PostAsync(Lotes.RutaVehiculos(id), Cuerpo("{}"), ct);
 
-        foreach (var respuesta in new[] { invalidos, vacio, sinPropiedad })
+        // Contrato multipart (decisión «Reenviar el archivo»): un archivo solo con el encabezado es el lote vacío.
+        foreach (var respuesta in new[] { invalidos, vacio })
         {
             var texto = await respuesta.Content.ReadAsStringAsync(ct);
             respuesta.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, texto);

@@ -543,29 +543,31 @@ paths:
       summary: Confirma los vehículos del lote (solo los válidos) y los entrega al motor de consultas
       description: >
         Permiso diagnostico.diagnosticos.crear (HU #13751, F02-H5, F02-C4/C9/C10/C11/C13/C14). Solo con la cabecera en
-        CREADO y sin vehículos confirmados antes. El servidor revalida todo lo recibido con la regla de la carga (no confía
-        en el cliente): descarta los inválidos (también los identificadores de más de 8 caracteres de placa o 17 de VIN
+        CREADO y sin vehículos confirmados antes. Multipart con el MISMO archivo del análisis (`archivo`, mismas reglas y
+        topes que POST /diagnosticos/{id}/carga) y, opcional, `correcciones` (decisión del usuario 2026-10-21 «Reenviar el
+        archivo»: el análisis devuelve el documento del locatario enmascarado y solo el archivo lo trae completo, R-3). El
+        servidor re-analiza el archivo, aplica las correcciones por número de fila (un campo ausente conserva el del archivo)
+        y revalida todo con la regla de la carga (no confía en el cliente; un archivo distinto del analizado también se
+        revalida entero): descarta los inválidos (también los identificadores de más de 8 caracteres de placa o 17 de VIN
         después de limpiar, nunca recortados) y los duplicados (gana el primero). Sin ningún válido, o con más válidos que
         limite_vehiculos_lote de la copia de configuración, responde 422 y no guarda nada. En una sola transacción guarda
-        los válidos en el orden recibido, cifra el documento del locatario declarado (origen DECLARADO_CLIENTE; nunca en
+        los válidos en el orden del archivo, cifra el documento completo del locatario declarado (origen DECLARADO_CLIENTE; nunca en
         logs ni eventos), deja el estimado de consultas en la cabecera y entrega la lista limpia al motor de consultas
         (en D1 la entrega no hace nada; #13719 crea las celdas y pasa el lote a EN_PROCESO). No cambia el estado de la
         cabecera. La respuesta trae estimado_consultas solo con estimado_consultas = ANTES_DE_LANZAR.
       requestBody:
         required: true
         content:
-          application/json:
+          multipart/form-data:
             schema:
               $ref: "#/components/schemas/ConfirmacionVehiculos"
       responses:
         "201":
-          description: Vehículos confirmados.
+          description: Vehículos confirmados (documento del locatario enmascarado «****» y los 4 últimos).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ResultadoConfirmacion"
-        "400":
-          description: Cuerpo que no es JSON válido.
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -588,10 +590,28 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorRegla"
+        "413":
+          description: "`code` = ARCHIVO_DEMASIADO_GRANDE: el archivo supera Diagnostico:Carga:TamanoMaximoBytes (5 MB por defecto)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "415":
+          description: >
+            `code` = FORMATO_NO_ADMITIDO (otra extensión, o un .csv que es zip, PDF u OLE2) o ARCHIVO_ILEGIBLE (.xlsx dañado
+            o .csv que no es UTF-8).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
         "422":
           description: >
-            `campo` = vehiculos. `code` = SIN_VALIDOS (ningún vehículo válido o lista vacía) o LIMITE_SUPERADO (los válidos
-            superan limite_vehiculos_lote; el mensaje trae ambos números). No se guarda nada.
+            No se guarda nada. `campo` = vehiculos: `code` = SIN_VALIDOS (ningún vehículo válido o archivo sin filas) o
+            LIMITE_SUPERADO (los válidos superan limite_vehiculos_lote; el mensaje trae ambos números). `campo` = archivo:
+            ARCHIVO_REQUERIDO (sin archivo, vacío o cuerpo que no es multipart). FORMATO_XLS_NO_ADMITIDO (.xls).
+            `campo` = Identificador_Vehiculo: COLUMNA_REQUERIDA. `campo` = correcciones: CORRECCIONES_INVALIDAS (JSON mal
+            formado, no es una lista, sin `fila` entera, fila repetida, fila que el archivo no tiene o un valor que no es
+            texto ni null).
           content:
             application/json:
               schema:
@@ -1339,7 +1359,7 @@ components:
       properties:
         fila:
           type: integer
-          description: Número de fila del archivo (solo para el resumen de validar-filas).
+          description: Número de fila del archivo (para el resumen de validar-filas).
         identificador:
           type: string
           nullable: true
@@ -1363,11 +1383,41 @@ components:
 
     ConfirmacionVehiculos:
       type: object
+      description: Multipart de POST /diagnosticos/{id}/vehiculos (HU #13751, «Reenviar el archivo»).
+      required: [archivo]
       properties:
-        vehiculos:
-          type: array
-          items:
-            $ref: "#/components/schemas/FilaCapturada"
+        archivo:
+          type: string
+          format: binary
+          description: "@pii:high El MISMO .xlsx o .csv enviado a POST /diagnosticos/{id}/carga."
+        correcciones:
+          type: string
+          description: >
+            JSON (texto del campo del formulario) con una lista de CorreccionFila; vacío o ausente es sin correcciones.
+            Ejemplo: [{"fila": 2, "identificador": "ABC123"}, {"fila": 5, "tipo_documento_locatario": "CC", "documento_locatario": "1020304050"}]
+
+    CorreccionFila:
+      type: object
+      description: >
+        Corrección de una fila del archivo (va dentro del JSON de `correcciones`). `fila` es el número de fila del análisis
+        (encabezado en la fila 1). Un campo ausente conserva el valor del archivo; con null o vacío lo deja vacío. No envíe
+        el documento enmascarado del análisis («****…»): es inválido y la fila se descarta; omita el campo para conservar
+        el del archivo.
+      required: [fila]
+      properties:
+        fila:
+          type: integer
+        identificador:
+          type: string
+          nullable: true
+        tipo_documento_locatario:
+          type: string
+          nullable: true
+          description: CC, CE, NIT, PAS o TI.
+        documento_locatario:
+          type: string
+          nullable: true
+          description: "@pii:high Número completo del documento; se guarda cifrado y nunca vuelve en claro."
 
     ResultadoConfirmacion:
       type: object

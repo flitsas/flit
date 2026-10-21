@@ -44,8 +44,25 @@ internal static partial class CargaEndpoints
         if (cabecera.Estado != EstadoDiagnostico.Creado)
             throw ReglaException.Conflicto(ServicioCabecera.CodigoNoEditable, "El diagnóstico ya no está en CREADO: no admite una carga nueva.");
 
-        var archivo = peticion.HasFormContentType ? (await peticion.ReadFormAsync(ct).ConfigureAwait(false)).Files.GetFile(CampoArchivo) : null;
-        if (archivo is null || archivo.Length == 0)
+        var (tabla, _) = await LeerArchivoAsync(peticion, configuracion, ct).ConfigureAwait(false);
+        var resumen = AnalizadorCarga.Analizar(tabla, Parametros(cabecera));
+        var registro = logs.CreateLogger(typeof(CargaEndpoints).FullName!);
+        CargaAnalizada(registro, cabecera.Id, resumen.TotalFilas, resumen.Validos, resumen.Erroneos, resumen.Duplicados);
+        return Results.Ok(resumen);
+    }
+
+    /// <summary>
+    /// Lee el archivo del multipart (campo <see cref="CampoArchivo"/>) con las reglas de la carga: sin archivo 422
+    /// <see cref="CodigoArchivoRequerido"/>, por encima de <see cref="ClaveTamanoMaximo"/> 413 y el formato de
+    /// <see cref="FormatoCarga"/> (.xls 422, otro 415). También lo usa la confirmación del lote (HU #13751, «Reenviar el
+    /// archivo»), que necesita además el resto del formulario.
+    /// </summary>
+    internal static async Task<(TablaCarga Tabla, IFormCollection Formulario)> LeerArchivoAsync(
+        HttpRequest peticion, IConfiguration configuracion, CancellationToken ct)
+    {
+        var formulario = peticion.HasFormContentType ? await peticion.ReadFormAsync(ct).ConfigureAwait(false) : null;
+        var archivo = formulario?.Files.GetFile(CampoArchivo);
+        if (formulario is null || archivo is null || archivo.Length == 0)
             throw new ReglaException(CodigoArchivoRequerido, $"Adjunte el archivo de carga (.xlsx o .csv) en el campo «{CampoArchivo}».") { Campo = CampoArchivo };
         var maximo = configuracion.GetValue(ClaveTamanoMaximo, TamanoMaximoPorDefecto);
         if (archivo.Length > maximo)
@@ -62,10 +79,7 @@ internal static partial class CargaEndpoints
             contenido = copia.ToArray();
         }
 
-        var resumen = AnalizadorCarga.Analizar(FormatoCarga.Leer(archivo.FileName, contenido), Parametros(cabecera));
-        var registro = logs.CreateLogger(typeof(CargaEndpoints).FullName!);
-        CargaAnalizada(registro, cabecera.Id, resumen.TotalFilas, resumen.Validos, resumen.Erroneos, resumen.Duplicados);
-        return Results.Ok(resumen);
+        return (FormatoCarga.Leer(archivo.FileName, contenido), formulario);
     }
 
     /// <summary>

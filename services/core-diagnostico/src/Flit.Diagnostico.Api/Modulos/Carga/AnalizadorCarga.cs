@@ -39,14 +39,7 @@ internal static class AnalizadorCarga
     {
         ArgumentNullException.ThrowIfNull(tabla);
         ArgumentNullException.ThrowIfNull(parametros);
-        var columnaIdentificador = Indice(tabla.Encabezados, PlantillaCarga.ColumnaIdentificador)
-            ?? throw new Plataforma.ReglaException(CodigoColumnaRequerida,
-                $"El archivo no tiene la columna {PlantillaCarga.ColumnaIdentificador} en la primera fila: use la plantilla.")
-            {
-                Campo = PlantillaCarga.ColumnaIdentificador,
-            };
-        var columnaTipo = Indice(tabla.Encabezados, PlantillaCarga.ColumnaTipoDocumento);
-        var columnaDocumento = Indice(tabla.Encabezados, PlantillaCarga.ColumnaDocumento);
+        var (columnaIdentificador, columnaTipo, columnaDocumento) = Columnas(tabla);
 
         var filas = new List<FilaEnCurso>();
         var porIdentificador = new Dictionary<string, FilaEnCurso>(StringComparer.Ordinal);
@@ -88,6 +81,27 @@ internal static class AnalizadorCarga
             parametros.LimiteVehiculosLote, superaLimite, avisos, resultado, estimado);
     }
 
+    /// <summary>
+    /// Posición de las columnas de la plantilla en el encabezado (sin distinguir mayúsculas ni espacios de los extremos); sin
+    /// <see cref="PlantillaCarga.ColumnaIdentificador"/> es 422 <see cref="CodigoColumnaRequerida"/>. La usan el análisis y la
+    /// confirmación del lote desde el archivo (HU #13751).
+    /// </summary>
+    internal static (int Identificador, int? Tipo, int? Documento) Columnas(TablaCarga tabla)
+    {
+        ArgumentNullException.ThrowIfNull(tabla);
+        var identificador = Indice(tabla.Encabezados, PlantillaCarga.ColumnaIdentificador)
+            ?? throw new Plataforma.ReglaException(CodigoColumnaRequerida,
+                $"El archivo no tiene la columna {PlantillaCarga.ColumnaIdentificador} en la primera fila: use la plantilla.")
+            {
+                Campo = PlantillaCarga.ColumnaIdentificador,
+            };
+        return (identificador, Indice(tabla.Encabezados, PlantillaCarga.ColumnaTipoDocumento), Indice(tabla.Encabezados, PlantillaCarga.ColumnaDocumento));
+    }
+
+    /// <summary>Celda de una columna de la fila; null si la columna no existe o la fila es más corta.</summary>
+    internal static string? Celda(FilaLeida fila, int? columna) =>
+        columna is { } c && c < fila.Celdas.Count ? fila.Celdas[c] : null;
+
     /// <summary>Documento de persona enmascarado (como Comparendos, RN-011): <c>****</c> y los 4 últimos caracteres.</summary>
     public static string Enmascarar(string numero)
     {
@@ -98,8 +112,8 @@ internal static class AnalizadorCarga
     private static FilaEnCurso Analizar(FilaLeida leida, int columnaIdentificador, int? columnaTipo, int? columnaDocumento)
     {
         var original = Celda(leida, columnaIdentificador) ?? string.Empty;
-        var tipoCrudo = columnaTipo is { } t ? Celda(leida, t) : null;
-        var documentoCrudo = columnaDocumento is { } d ? Celda(leida, d) : null;
+        var tipoCrudo = Celda(leida, columnaTipo);
+        var documentoCrudo = Celda(leida, columnaDocumento);
 
         // La regla de la fila es la del dominio (HU #13751): la misma de validar-filas, la confirmación y la captura Express.
         var fila = ValidadorFilaVehiculo.Validar(original, tipoCrudo, documentoCrudo);
@@ -121,8 +135,6 @@ internal static class AnalizadorCarga
         CampoFilaVehiculo.Documento => PlantillaCarga.ColumnaDocumento,
         _ => PlantillaCarga.ColumnaIdentificador,
     };
-
-    private static string? Celda(FilaLeida fila, int columna) => columna < fila.Celdas.Count ? fila.Celdas[columna] : null;
 
     /// <summary>Columna por nombre, sin distinguir mayúsculas ni espacios de los extremos; null si no está.</summary>
     private static int? Indice(IReadOnlyList<string?> encabezados, string nombre)
