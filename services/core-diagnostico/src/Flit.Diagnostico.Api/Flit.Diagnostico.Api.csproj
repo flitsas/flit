@@ -16,6 +16,8 @@
     <ProjectReference Include="..\..\..\core-api\src\Flit.Platform.Sdk\Flit.Platform.Sdk.csproj" />
     <ProjectReference Include="..\Flit.Diagnostico.Domain\Flit.Diagnostico.Domain.csproj" />
     <ProjectReference Include="..\Flit.Diagnostico.Grpc.Contracts\Flit.Diagnostico.Grpc.Contracts.csproj" />
+    <!-- HU #13726: suscripción por petición (ObtenerProductosHabilitados de Identidad). -->
+    <ProjectReference Include="..\..\..\core-identity\src\Flit.Identidad.Grpc.Contracts\Flit.Identidad.Grpc.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

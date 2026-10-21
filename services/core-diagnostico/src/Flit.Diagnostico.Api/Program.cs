@@ -47,6 +47,7 @@ public static class Program
         builder.Services.AddDbContext<DiagnosticoDb>(o => DiagnosticoDb.Configure(o, connectionString));
         builder.Services.AddFlitPlatformAuthentication(builder.Configuration);
         builder.Services.AddAutorizacionDiagnostico();
+        builder.Services.AddSuscripcionDiagnostico(builder.Configuration);
         builder.Services.AddFlitGrpcServer();
         builder.Services.AddFlitOutbox<DiagnosticoDb>(builder.Configuration);
         builder.Services.AddExceptionHandler<ManejadorReglas>();
@@ -78,6 +79,8 @@ public static class Program
         app.UseFlitCorrelationId();
         app.UseAuthentication();
         app.UseAuthorization();
+        // HU #13726: toda ruta de negocio verifica la suscripción de la compañía del token (fail-closed); /health* queda fuera.
+        app.UseGuardSuscripcion(Prefijo);
 
         app.MapGet("/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();
         app.MapGet("/health/ready", async (DiagnosticoDb db, CancellationToken ct) =>

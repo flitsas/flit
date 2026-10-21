@@ -10,7 +10,10 @@ info:
     diagnostico.<modulo>.<accion> (§6.2) y se registran con el manifiesto del producto
     (PUT /api/v1/platform/products/diagnostico/manifest, ver platform.v1.yaml). Diagnóstico no publica
     rutas para crear o modificar compañías, usuarios, roles ni suscripciones (R-4). Los errores de
-    regla responden { code, error } con un code estable.
+    regla responden { code, error } con un code estable. Toda ruta bajo /api/v1/diagnostico pasa por el
+    guard de suscripción (HU #13726): si la compañía del token no tiene Diagnóstico activo, o no se puede
+    verificar con Identidad (fail-closed), responde 403 con code PRODUCTO_NO_HABILITADO. /health y
+    /health/ready no pasan por el guard.
   license:
     name: Propietario FLIT
     url: https://flitsas.com
@@ -36,8 +39,8 @@ paths:
       summary: Sesión del usuario en Diagnóstico
       description: >
         Usuario, compañía, roles, permisos de Diagnóstico y capacidades, todo leído del token (HU #13724).
-        Cualquier usuario autenticado del producto (política diagnostico.usuario); un token de servicio
-        recibe 403. No acepta parámetros: si llega un parámetro o la cabecera X-Flit-Tenant-Id con otra
+        Usuario del producto (política diagnostico.usuario): al menos un permiso diagnostico.* o SuperAdmin;
+        un token de servicio o un rol de otro producto sin permisos de Diagnóstico recibe 403 (HU #13726). No acepta parámetros: si llega un parámetro o la cabecera X-Flit-Tenant-Id con otra
         compañía, se ignora. `permisos` solo trae slugs diagnostico.* (el token también lleva los de
         plataforma). Las capacidades del backoffice FLIT exigen además tenant_type=FLIT (D-16).
       responses:
@@ -50,7 +53,9 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
-          description: Token de servicio, o usuario sin compañía (`code` = SIN_EMPRESA).
+          description: >
+            Token de servicio o usuario sin permisos de Diagnóstico; usuario sin compañía (`code` = SIN_EMPRESA);
+            compañía sin Diagnóstico activo o suscripción no verificable (`code` = PRODUCTO_NO_HABILITADO).
           content:
             application/json:
               schema:

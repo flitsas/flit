@@ -32,7 +32,10 @@ internal sealed class PermisoRequeridoHandler : AuthorizationHandler<PermisoRequ
 
 public static class AutorizacionExtensions
 {
-    /// <summary>Cualquier usuario autenticado del producto (nunca un token de servicio).</summary>
+    /// <summary>
+    /// Usuario del producto: autenticado, nunca un token de servicio, y con al menos un permiso de Diagnóstico (o
+    /// SuperAdmin). Un rol de otro producto, sin permisos <c>diagnostico.*</c>, no abre la sesión (HU #13726, R-12).
+    /// </summary>
     public const string PoliticaUsuario = "diagnostico.usuario";
 
     public static IServiceCollection AddAutorizacionDiagnostico(this IServiceCollection services)
@@ -41,14 +44,26 @@ public static class AutorizacionExtensions
         services.AddHttpContextAccessor();
         services.AddScoped<UsuarioActual>();
         services.AddAuthorizationBuilder()
-            .AddPolicy(PoliticaUsuario, p => p.RequireAuthenticatedUser().RequireAssertion(c => !PlatformPrincipal.IsService(c.User)));
+            .AddPolicy(PoliticaUsuario, p => p.RequireAuthenticatedUser().RequireAssertion(c =>
+                !PlatformPrincipal.IsService(c.User)
+                && (PlatformPrincipal.IsSuperAdmin(c.User) || c.User.FindAll("permissions").Any(claim => EsDelManifiesto(claim.Value)))));
         return services;
     }
 
-    /// <summary>Exige el permiso del manifiesto (o ser SuperAdmin).</summary>
+    /// <summary>
+    /// Exige el permiso del manifiesto (o ser SuperAdmin). Solo acepta slugs de <see cref="Permisos.Todos"/>: una ruta de
+    /// Diagnóstico no puede quedar protegida con un permiso de otro producto (HU #13726); otro slug falla al mapear.
+    /// </summary>
     public static TBuilder RequirePermiso<TBuilder>(this TBuilder builder, string slug)
-        where TBuilder : IEndpointConventionBuilder =>
-        builder.RequireAuthorization(p => p.RequireAuthenticatedUser().AddRequirements(new PermisoRequerido(slug)));
+        where TBuilder : IEndpointConventionBuilder
+    {
+        if (!EsDelManifiesto(slug))
+            throw new ArgumentException($"'{slug}' no es un permiso del manifiesto de Diagnóstico (diagnostico.*).", nameof(slug));
+        return builder.RequireAuthorization(p => p.RequireAuthenticatedUser().AddRequirements(new PermisoRequerido(slug)));
+    }
+
+    private static bool EsDelManifiesto(string? slug) =>
+        slug is not null && Permisos.Todos.Contains(slug, StringComparer.OrdinalIgnoreCase);
 }
 
 /// <summary>

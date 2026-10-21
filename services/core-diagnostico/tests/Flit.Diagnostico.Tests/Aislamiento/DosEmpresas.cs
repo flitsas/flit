@@ -1,4 +1,5 @@
 using Flit.Diagnostico.Api.Persistence;
+using Flit.Diagnostico.Api.Plataforma;
 using Flit.Diagnostico.Tests.Api;
 using Flit.Platform.Sdk.Tenancy;
 using Microsoft.EntityFrameworkCore;
@@ -39,7 +40,8 @@ public sealed class EmpresaDePrueba(ApiDePrueba api, Guid id)
 
     public Guid Id { get; } = id;
 
-    public string Token => _token ??= api.Token(empresa: Id);
+    /// <summary>Token de un usuario del producto: con un permiso de Diagnóstico, sin el cual no hay sesión (HU #13726).</summary>
+    public string Token => _token ??= api.Token(empresa: Id, permisos: [Permisos.DiagnosticosVer]);
 
     public HttpClient Cliente() => api.Cliente(Token);
 

@@ -4,6 +4,8 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Flit.Diagnostico.Api;
+using Flit.Diagnostico.Api.Plataforma;
+using Flit.Diagnostico.Tests.Plataforma;
 using Flit.Platform.Sdk.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -40,9 +42,20 @@ public sealed class ApiDePrueba : IAsyncDisposable
     public const string BaseInalcanzable = "Host=127.0.0.1;Port=1;Database=diagnostico_ausente;Username=nadie;Password=nada;Timeout=2";
 
     private readonly RsaSecurityKey _llave = new(RSA.Create(2048)) { KeyId = "prueba-diagnostico" };
+    private readonly Action<WebApplicationBuilder>? _configurar;
     private bool _baseCreada;
 
-    private ApiDePrueba(string baseDeDatos) => BaseDeDatos = baseDeDatos;
+    private ApiDePrueba(string baseDeDatos, Action<WebApplicationBuilder>? configurar)
+    {
+        BaseDeDatos = baseDeDatos;
+        _configurar = configurar;
+    }
+
+    /// <summary>
+    /// Suscripción de prueba (HU #13726): toda compañía con Diagnóstico activo salvo que la prueba la apague. Para probar
+    /// la implementación real, <c>configurar</c> quita este registro o pone otro.
+    /// </summary>
+    public ProductosHabilitadosFijo Productos { get; } = new();
 
     /// <summary>Motivo para omitir la prueba (sin Postgres en local); null si la API está arriba.</summary>
     public string? Omitir { get; private set; }
@@ -53,7 +66,7 @@ public sealed class ApiDePrueba : IAsyncDisposable
     public string BaseDeDatos { get; }
 
     /// <summary>Crea una base efímera, arranca la API y aplica sus migraciones como al arrancar.</summary>
-    public static async Task<ApiDePrueba> ConBaseAsync(Action<WebApplication>? mapear = null, Func<string, string?>? entorno = null)
+    public static async Task<ApiDePrueba> ConBaseAsync(Action<WebApplication>? mapear = null, Func<string, string?>? entorno = null, Action<WebApplicationBuilder>? configurar = null)
     {
         entorno ??= Environment.GetEnvironmentVariable;
         var enCi = string.Equals(entorno("CI"), "true", StringComparison.OrdinalIgnoreCase);
@@ -62,7 +75,7 @@ public sealed class ApiDePrueba : IAsyncDisposable
             throw new InvalidOperationException(
                 "CI=true sin ConnectionStrings__Core: en CI las pruebas de integración no se omiten. Configure el Postgres del job.");
         server ??= $"Host=127.0.0.1;Port=5432;Username={Environment.UserName}";
-        var api = new ApiDePrueba(new NpgsqlConnectionStringBuilder(server) { Database = $"flit_dgn_{Guid.NewGuid():N}"[..30] }.ConnectionString);
+        var api = new ApiDePrueba(new NpgsqlConnectionStringBuilder(server) { Database = $"flit_dgn_{Guid.NewGuid():N}"[..30] }.ConnectionString, configurar);
         try
         {
             await using var admin = new NpgsqlConnection(new NpgsqlConnectionStringBuilder(server) { Database = "postgres" }.ConnectionString);
@@ -85,9 +98,9 @@ public sealed class ApiDePrueba : IAsyncDisposable
     }
 
     /// <summary>Arranca la API con la base inalcanzable y sin migrar.</summary>
-    public static async Task<ApiDePrueba> SinBaseAsync(Action<WebApplication>? mapear = null)
+    public static async Task<ApiDePrueba> SinBaseAsync(Action<WebApplication>? mapear = null, Action<WebApplicationBuilder>? configurar = null)
     {
-        var api = new ApiDePrueba(BaseInalcanzable);
+        var api = new ApiDePrueba(BaseInalcanzable, configurar);
         api.App = api.Construir();
         mapear?.Invoke(api.App);
         await api.App.StartAsync();
@@ -168,6 +181,8 @@ public sealed class ApiDePrueba : IAsyncDisposable
         b.WebHost.UseTestServer();
         b.Configuration.AddInMemoryCollection(Configuracion(BaseDeDatos));
         b.Services.AddHttpClient(PlatformAuthenticationExtensions.JwksHttpClientName).ConfigurePrimaryHttpMessageHandler(() => new Jwks(_llave));
+        b.Services.AddSingleton<IProductosHabilitados>(Productos);
+        _configurar?.Invoke(b);
     });
 
     private sealed class Jwks(RsaSecurityKey key) : HttpMessageHandler
