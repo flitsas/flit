@@ -22,4 +22,8 @@ describe("nombreExpress (F01-C10)", () => {
     expect(nombre).toBe("Express 1HGBH41JXMN109186 05/01/2026");
     expect(nombre.length).toBeLessThanOrEqual(NOMBRE_MAXIMO);
   });
+
+  it("usa la normalización de fieldRules (como el servidor): sin guiones ni símbolos", () => {
+    expect(nombreExpress("abc-123", new Date("2026-10-21T15:30:00Z"))).toBe("Express ABC123 21/10/2026");
+  });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { ArrowRight } from "lucide-react";
 import type { Configuracion } from "@/lib/configuracion";
 import type { CabeceraEntrada } from "@/lib/diagnosticos/api";
@@ -18,6 +18,8 @@ export interface ParametrizacionCompactaProps {
   fecha?: Date;
   /** Deshabilita los campos mientras quien lo usa envía la cabecera (Express, #13718). */
   ocupado?: boolean;
+  /** Campos propios de quien la usa, dentro del formulario y antes de Continuar (documento del locatario, #13755). */
+  children?: ReactNode;
 }
 
 /**
@@ -25,7 +27,7 @@ export interface ParametrizacionCompactaProps {
  * con nombreExpress(identificador, fecha), es editable y sigue siendo obligatorio; alcance y modo con las mismas reglas
  * del formulario completo. No llama a la API de la cabecera: entrega la cabecera validada a quien la lanza.
  */
-export function ParametrizacionCompacta({ identificador, configuracion, onContinuar, fecha, ocupado = false }: ParametrizacionCompactaProps) {
+export function ParametrizacionCompacta({ identificador, configuracion, onContinuar, fecha, ocupado = false, children }: ParametrizacionCompactaProps) {
   const [nombreInicial] = useState(() => nombreExpress(identificador, fecha ?? new Date()));
   const p = useParametrizacion(configuracion, nombreInicial);
   const formRef = useRef<HTMLFormElement>(null);
@@ -68,6 +70,7 @@ export function ParametrizacionCompacta({ identificador, configuracion, onContin
         disabled={ocupado}
         compacta
       />
+      {children}
       <div className="flex justify-end">
         <button type="submit" disabled={ocupado} className={BOTON_PRIMARIO_CLS}>
           Continuar

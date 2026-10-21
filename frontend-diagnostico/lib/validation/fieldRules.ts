@@ -28,6 +28,12 @@ const limpiarVin = (v: string): string => v.toUpperCase().replace(/[^A-HJ-NPR-Z0
 /** Mayúsculas y solo alfanumérico, sin cortar. */
 const limpiarPlaca = (v: string): string => v.toUpperCase().replace(/[^A-Z0-9]/g, "");
 
+/**
+ * Limpieza visible de un identificador mientras se escribe (captura express, HU #13755): mayúsculas y solo A-Z y 0-9,
+ * SIN recortar, para que una entrada demasiado larga se vea entera y `validarLongitudIdentificador` la rechace.
+ */
+export const limpiarIdentificador = (v: string | null | undefined): string => limpiarPlaca(v ?? "");
+
 /** Igual que Trámites: deja solo el charset válido de VIN, en mayúsculas y tope de 17. */
 export const sanitizeVin = (v: string): string => limpiarVin(v).slice(0, LONGITUD_MAXIMA_VIN);
 
