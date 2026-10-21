@@ -66,7 +66,7 @@ function Editor({ inicial, onCerrar, onGuardado }: { inicial: Edicion; onCerrar:
       const body = { texto, proveedor: "ANTHROPIC", modelo };
       if (inicial.id) await apiFetch(`/admin/ocr/prompts/${inicial.id}`, { method: "PUT", body });
       else await apiFetch("/admin/ocr/prompts", { method: "POST", body });
-      toast.show(inicial.id ? "Versión actualizada." : "Versión creada. Pruébala antes de publicarla.", "success");
+      toast.show(inicial.id ? "Versión actualizada." : "Versión creada. Evalúala antes de publicarla.", "success");
       onGuardado();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo guardar.");

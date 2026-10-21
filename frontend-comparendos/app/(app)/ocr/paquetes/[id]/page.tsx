@@ -16,7 +16,7 @@ import { BOTON_PELIGRO_CLS, BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_
 import { apiFetch } from "@/lib/api";
 import { formatoFechaHora } from "@/lib/format/date";
 import { P } from "@/lib/nav";
-import { ESTADO_DOCUMENTO, ESTADO_PAQUETE, ESTADOS_DOCUMENTO, ETIQUETA_CAMPO, FUENTE_DUPLICADO, hayEnCurso, TIPO_FALLO } from "@/lib/ocr";
+import { ESTADO_DOCUMENTO, ESTADO_PAQUETE, ESTADOS_DOCUMENTO, ETIQUETA_CAMPO, FUENTE_DUPLICADO, hayEnCurso, motivoFallo, TIPO_FALLO } from "@/lib/ocr";
 import { tienePermiso } from "@/lib/sesion";
 import { useCarga } from "@/lib/useCarga";
 
@@ -221,7 +221,7 @@ function Detalle({ id }: { id: string }) {
               header: "Faltantes / motivo",
               render: (d) =>
                 d.estado === "Fallido" ? (
-                  <span className="text-[#B42318]">{(d.tipoFallo && TIPO_FALLO[d.tipoFallo]) ?? d.mensajeError ?? "Falló"}</span>
+                  <span className="text-[#B42318]" title={d.tipoFallo ? TIPO_FALLO[d.tipoFallo] : undefined}>{motivoFallo(d.tipoFallo, d.mensajeError)}</span>
                 ) : d.estado === "Duplicado" ? (
                   <span className="text-[#6D28D9]">{(d.fuenteDuplicado && FUENTE_DUPLICADO[d.fuenteDuplicado]) ?? "Ya existe"}</span>
                 ) : d.camposFaltantes.length ? (

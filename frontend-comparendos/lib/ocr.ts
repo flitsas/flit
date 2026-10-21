@@ -99,6 +99,15 @@ export const TIPO_FALLO: Record<string, string> = {
   ArchivoInvalido: "Archivo inválido",
 };
 
+/**
+ * Motivo de un documento fallido (HU #13787, B12-7): primero el mensaje que guardó el servidor (por ejemplo «respuesta
+ * cortada»), que es el real; la etiqueta del tipo solo cuando no hay mensaje.
+ */
+export function motivoFallo(tipo: string | null | undefined, mensaje: string | null | undefined): string {
+  if (mensaje && mensaje.trim()) return mensaje.trim();
+  return (tipo && TIPO_FALLO[tipo]) || "Falló";
+}
+
 export const FUENTE_DUPLICADO: Record<string, string> = {
   SIMIT: "SIMIT",
   MUNICIPAL: "Fuente municipal",
