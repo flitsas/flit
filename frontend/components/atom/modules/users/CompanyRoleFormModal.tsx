@@ -161,7 +161,11 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
     setError(null);
     if (creating && !CODE_PATTERN.test(code.trim())) {
       document.getElementById("company-role-code")?.focus();
-      setError("El código admite de 2 a 50 caracteres: letras, números, punto, guion o guion bajo.");
+      setError(
+        code.trim()
+          ? "Usa solo letras, números, punto, guion o guion bajo (de 2 a 50)."
+          : "Escribe un código para el rol.",
+      );
       return;
     }
     if (!name.trim()) {

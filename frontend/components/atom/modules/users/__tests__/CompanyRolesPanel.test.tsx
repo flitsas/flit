@@ -301,7 +301,7 @@ describe("CompanyRolesPanel — crear, editar y eliminar (AC1)", () => {
     await ue.type(within(dialog).getByLabelText(/^nombre/i), "X");
     await ue.click(within(dialog).getByRole("button", { name: /crear rol/i }));
 
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent(/de 2 a 50 caracteres/i);
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(/usa solo letras, números, punto, guion o guion bajo \(de 2 a 50\)/i);
     expect(createTenantRole).not.toHaveBeenCalled();
   });
 

@@ -217,3 +217,19 @@ describe("CompanyRoleFormModal — par Ver / Crear por tipo de servicio (HU #136
     expect(alert).not.toHaveTextContent(/traspasos\.create|FAMILY_CREATE_REQUIRES_READ/);
   });
 });
+
+describe("Nuevo rol — avisos del código en lenguaje claro", () => {
+  it("sin código pide escribirlo; con un código inválido explica qué se admite; no crea nada", async () => {
+    const { ue, dialog } = await openCreate();
+
+    await ue.click(within(dialog).getByRole("button", { name: /crear rol/i }));
+    expect(await within(dialog).findByText("Escribe un código para el rol.")).toBeInTheDocument();
+
+    await ue.type(within(dialog).getByLabelText(/^código/i), "a");
+    await ue.click(within(dialog).getByRole("button", { name: /crear rol/i }));
+    expect(
+      await within(dialog).findByText("Usa solo letras, números, punto, guion o guion bajo (de 2 a 50)."),
+    ).toBeInTheDocument();
+    expect(createTenantRole).not.toHaveBeenCalled();
+  });
+});

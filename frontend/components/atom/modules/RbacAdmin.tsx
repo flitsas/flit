@@ -417,7 +417,6 @@ function RolesTabContent() {
             render: (r) => (
               <div className="min-w-0">
                 <p className="font-semibold truncate">{r.name}</p>
-                <p className="font-mono text-[10px] opacity-60">{r.code}</p>
               </div>
             ),
           },
