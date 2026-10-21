@@ -98,8 +98,9 @@ export function validarFilas(id: string, filas: FilaCapturada[], signal?: AbortS
 }
 
 /**
- * POST /diagnosticos/{id}/vehiculos: confirma el lote → 201. Multipart con el MISMO archivo del análisis («archivo») y,
- * si hay, las correcciones por fila («correcciones», texto JSON); el servidor re-analiza, aplica y descarta lo inválido.
+ * POST /diagnosticos/{id}/vehiculos: confirma el lote → 202 y el lote queda EN_PROCESO (las consultas corren en segundo
+ * plano, HU #13727). Multipart con el MISMO archivo del análisis («archivo») y, si hay, las correcciones por fila
+ * («correcciones», texto JSON); el servidor re-analiza, aplica y descarta lo inválido.
  */
 export function confirmarVehiculos(id: string, archivo: File, correcciones: CorreccionFila[]): Promise<ResultadoConfirmacion> {
   const cuerpo = new FormData();

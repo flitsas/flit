@@ -13,7 +13,7 @@ export function expressCreado(cambios: Partial<ExpressCreado> = {}): ExpressCrea
     nombre: "Express ABC123 21/10/2026",
     modo: "SIMPLE",
     es_express: true,
-    estado: "CREADO",
+    estado: "EN_PROCESO",
     creado_en: "2026-10-21T15:30:00Z",
     vehiculo: {
       id: "00000000-0000-7000-8000-00000000f001",

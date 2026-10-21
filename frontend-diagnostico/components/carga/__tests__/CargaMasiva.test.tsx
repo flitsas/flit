@@ -75,7 +75,7 @@ describe("/diagnosticos/{id}/carga — los cuatro estados", () => {
   });
 });
 
-const CONFIRMADO = () => Response.json({ diagnostico_id: ID, confirmados: 2, invalidos: 0, duplicados: 0, limite_vehiculos_lote: 500, vehiculos: [] }, { status: 201 });
+const CONFIRMADO = () => Response.json({ diagnostico_id: ID, confirmados: 2, invalidos: 0, duplicados: 0, limite_vehiculos_lote: 500, vehiculos: [] }, { status: 202 });
 
 /** validar-filas simulado: la fila enviada vuelve válida con su número. */
 const revalidaValida = (init?: RequestInit) => {
@@ -84,6 +84,16 @@ const revalidaValida = (init?: RequestInit) => {
 };
 
 describe("/diagnosticos/{id}/carga — continuar solo con los válidos (AC 5, reenviando el archivo)", () => {
+  it("con el 202 de la confirmación (lote EN_PROCESO, HU #13727) navega al tablero igual que antes", async () => {
+    expect(CONFIRMADO().status).toBe(202);
+    await montar({ [`POST ${ruta("/carga")}`]: () => Response.json(resumen()), [`POST ${ruta("/vehiculos")}`]: CONFIRMADO });
+    await subir();
+    await screen.findByRole("region", { name: "Resumen de validación" });
+    fireEvent.click(continuar());
+    await waitFor(() => expect(navegacion.push).toHaveBeenCalledWith(`/diagnosticos/${ID}`));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("corrige una fila, reenvía el MISMO archivo con la corrección y navega al tablero del diagnóstico", async () => {
     const api = await montar({
       [`POST ${ruta("/carga")}`]: () => Response.json(resumen()),

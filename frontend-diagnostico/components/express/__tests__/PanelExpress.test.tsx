@@ -164,6 +164,17 @@ describe("PanelExpress — estimado antes de lanzar (AC 6)", () => {
 });
 
 describe("PanelExpress — lanzamiento y errores (AC 1)", () => {
+  it("201 con estado EN_PROCESO (HU #13727): navega a /diagnosticos/{id} igual que antes", async () => {
+    const creado = creadoOk();
+    expect(creado.status).toBe(201);
+    expect(((await creado.json()) as { estado: string }).estado).toBe("EN_PROCESO");
+    montar();
+    await nombre();
+    continuar();
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith(`/diagnosticos/${ID_EXPRESS}`));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("201: navega a /diagnosticos/{id} con la cabecera y el identificador", async () => {
     const { api } = montar();
     await nombre();
