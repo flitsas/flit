@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useEffectEvent, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { Settings } from "lucide-react";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { SuiteShell, type NavCatalog, type ShellUser } from "@flit/shell/SuiteShell";
@@ -28,8 +29,21 @@ export function useSesion(): EstadoSesion {
   return useContext(SesionContext);
 }
 
-// El catálogo del dock crece con los módulos del producto (diagnósticos, configuración...); hoy solo existe el inicio.
-const NAV: NavCatalog = { sections: [], items: [] };
+// El catálogo del dock crece con los módulos del producto. La pantalla 10 (HU #13744) la ve quien puede leer la
+// configuración de su compañía o editar contratos desde el backoffice FLIT; la API vuelve a exigir cada permiso.
+const NAV: NavCatalog = {
+  sections: [{ id: "ajustes", label: "Ajustes", icon: Settings, side: "right" }],
+  items: [
+    {
+      key: "configuracion",
+      label: "Configuración",
+      href: "/configuracion",
+      section: "ajustes",
+      icon: Settings,
+      permission: ["diagnostico.configuracion.ver", "diagnostico.configuracion.contrato.editar"],
+    },
+  ],
+};
 
 /** Código de la 403 cuando la API niega el acceso sin decir por qué (usuario sin ningún permiso diagnostico.*). */
 const SIN_PERMISOS = "SIN_PERMISOS_DIAGNOSTICO";

@@ -46,7 +46,9 @@ describe("sin formulario propio", () => {
     for (const archivo of archivos) {
       const codigo = readFileSync(archivo, "utf8");
       expect(codigo, archivo).not.toMatch(/type=["']password["']/);
-      expect(codigo, archivo).not.toMatch(/<input\b/);
+      // Los campos de la pantalla 10 (HU #13744) son de configuración, no de credenciales: el resto de la app sigue sin
+      // ningún <input>.
+      if (!archivo.includes(join("components", "configuracion"))) expect(codigo, archivo).not.toMatch(/<input\b/);
       expect(codigo, archivo).not.toMatch(/autoComplete=["'](username|current-password)["']/);
     }
   });
