@@ -1,10 +1,10 @@
-# ADR-0072: Diagnóstico aísla por empresa con un filtro global de EF y una prueba de fuga por endpoint
+# ADR-0072: Diagnóstico aísla por empresa con un filtro global de EF, una prueba de fuga por endpoint y una regla propia de schema
 
 **Fecha**: 2026-10-21
 **Status**: Propuesto
 **Deciders**: Líder Técnico FLIT (aceptación exclusiva humana, regla FLIT 15). Redactado durante la implementación de la HU #13722.
 **Tags**: arquitectura, backend, datos, seguridad, multi-tenant
-**Épica / Feature / HU**: #12881 / #13715 / #13722 (F00.1-H2), ampliado en #13736 (configuración por compañía) · **Plan**: `docs/diagnosticos/plan-implementacion-diagnostico-vehicular-v2.md` §4 (b), §5, RD-3
+**Épica / Feature / HU**: #12881 / #13715 / #13722 (F00.1-H2), ampliado en #13736 (configuración por compañía) y #13738 (cabecera e historial de estados), y convertido en regla general del schema `diagnostico` para D1 y D2 · **Plan**: `docs/diagnosticos/plan-implementacion-diagnostico-vehicular-v2.md` §4 (b), §5, RD-3
 
 ## Contexto
 
@@ -13,7 +13,16 @@ comparten la misma base. En el repo ya hubo fugas por un filtro olvidado: el ais
 `FORCE ROW LEVEL SECURITY` con la app como dueña de las tablas. Comparendos filtra a mano con `Where(TenantId)` en cada
 consulta. El backoffice FLIT necesita leer entre empresas (D-16), pero solo de forma acotada y auditada (ADR-0069).
 
+El checklist de datos (`.claude/skills/db-schema-validator/checklist-validacion-schema.md`) está pensado para `core-api`:
+columnas genéricas `created_*`/`updated_*`/`deleted_*`, `row_version` con trigger, `audit_log` común y FK con `ON UPDATE`
+explícito. Ese modelo no encaja con un servicio que no tiene `audit_log`, no borra nada (R-18) y lleva su propia
+auditoría de negocio. Justificar las mismas desviaciones tabla por tabla en cada migración no escala: D1 y D2 añaden
+vehículos, celdas, intentos, dictámenes, derivaciones y evidencias (plan §5). Por eso este ADR fija una **regla general
+del schema `diagnostico`** y deja las excepciones por tabla solo para lo que se salga de ella.
+
 ## Decisión
+
+### Parte 1: aislamiento por empresa
 
 1. **Filtro global (B2).** Toda entidad de negocio implementa `IEntidadDeEmpresa` (`TenantId`). `TenantFilter.Aplicar`
    le pone por convención un `HasQueryFilter` con la empresa del token (`IPlatformTenantAccessor`, vía
@@ -23,7 +32,8 @@ consulta. El backoffice FLIT necesita leer entre empresas (D-16), pero solo de f
    (`EscrituraEntreEmpresasException`). Sin empresa en el token no se escribe nada.
 3. **Lectura entre empresas.** Solo en `/backoffice/*`, con `IgnoreQueryFilters()`, la empresa explícita en `?empresa=` y
    una fila en `diagnostico.lecturas_backoffice` (F00.1-H5, patrón ADR-0069). `IgnoreQueryFilters()` no aparece en ningún
-   otro módulo, y una prueba de arquitectura lo vigila (F00.1-H5).
+   otro módulo, y una prueba de arquitectura lo vigila (F00.1-H5). La **escritura** del backoffice sobre otra empresa no
+   está decidida: ver «Pendiente: vía de escritura del backoffice».
 4. **Pruebas obligatorias** en `tests/Flit.Diagnostico.Tests/Aislamiento/`:
    - `EntidadesConTenantTests` falla si una entidad mapeada que no es del SDK no implementa `IEntidadDeEmpresa` o no tiene el filtro.
    - `FugaEntreEmpresasTests` enumera los GET registrados (`EndpointDataSource`), salvo `/health*` y `/backoffice/*`. Si un
@@ -31,79 +41,162 @@ consulta. El backoffice FLIT necesita leer entre empresas (D-16), pero solo de f
      Postgres, ninguna respuesta con el token de A contiene identificadores de B.
 5. **CI no omite.** Con `CI=true`, el fixture falla si falta `ConnectionStrings__Core` o si Postgres no responde.
 
+### Parte 2: regla del schema `diagnostico` frente al checklist de datos
+
+Toda tabla del schema con `tenant_id` pertenece a una de dos clases, y solo a una.
+
+**(a) Entidades de negocio** (estado mutable: `configuracion_empresa`, `diagnosticos`, y en D1/D2 `vehiculos`,
+`consultas`, `dictamenes`, `derivaciones`, `evidencias`).
+
+- **Concurrencia con `xmin`** mapeada con `IsRowVersion()`, en lugar de `row_version` + trigger `BEFORE UPDATE` (A16, B8).
+  `xmin` es la columna de sistema que Postgres cambia en cada `UPDATE`, también los que llegan por SQL crudo, sin
+  columna ni trigger que mantener. La comparación es por igualdad, así que el desbordamiento de 32 bits no afecta, y
+  `VACUUM FREEZE` no reescribe `xmin` desde Postgres 9.4. B8 se cumple en lo funcional.
+- **Autoría propia del dominio**, en lugar de `created_*`/`updated_*` genéricos (A5). Cada tabla guarda quién y cuándo
+  con columnas que nombran el hecho de negocio (`usuario_creador_id`/`creado_en`, `contrato_actualizado_por/en`,
+  `operativa_actualizada_por/en`, `usuario_override_id`/`override_en`, `canjeado_en`…), en `timestamptz` y con el usuario
+  como seudónimo (`claim sub`, comentario `@pii:low`). Un `updated_*` único mezclaría hechos con dueños distintos. Cuando
+  la historia de un cambio importa, la lleva un historial de la clase (b), no un trigger.
+- **Sin borrado lógico** (A5, A6). No hay `deleted_at/by`: el producto no tiene flujo de baja ni retención ni purga
+  (R-18). Lo que deja de valer se marca con su propio estado de negocio (`vigente`, `estado`, `cerrado_en`), y las FK con
+  `RESTRICT` impiden además el borrado físico de filas con historia.
+- **Sin triggers de auditoría genéricos** (A16). El schema no tiene `audit_log` (es otro servicio y otra base). La
+  auditoría la dan los historiales de la clase (b) y las columnas de autoría.
+
+**(b) Historiales y auditorías** (`lecturas_backoffice`, `cambios_contrato`, `historial_estado_diagnostico`, y en D2
+`intentos_consulta`).
+
+- **Solo inserción.** No llevan `updated_*`, `deleted_*`, `row_version`/`xmin` ni trigger de `audit_log` (A5, A6, A16):
+  son ellas mismas el registro. Sus columnas de actor e instante (`usuario_id`, `fecha`/`en`/`inicio`) cumplen el papel
+  de `created_by/at`; el actor es nulo solo cuando el hecho lo produce el procesador.
+- La entidad expone solo `init` (salvo `TenantId`, que asigna `ValidarEscritura`) y el código no las modifica ni las borra.
+  Hoy la base **no** lo impide: ver «Pendiente: solo inserción».
+
+**(c) FK internas** (entre tablas del schema).
+
+- **Preferiblemente compuestas con `tenant_id`**: la hija apunta a `(tenant_id, <padre>_id)` y el padre expone
+  `uq_<tabla>_tenant_id UNIQUE (tenant_id, id)` (en EF, `HasPrincipalKey(x => new { x.TenantId, x.Id })`). Así la fila y su
+  padre son de la misma empresa también ante SQL crudo, que el filtro global no cubre. La FK simple solo vale cuando la
+  clave del padre ya es `tenant_id` (caso `cambios_contrato` → `configuracion_empresa`). El DDL de referencia del plan §5
+  dibuja FK simples en `vehiculos`, `consultas`, `intentos_consulta`, `dictamenes` y `derivaciones`; al materializarlas,
+  el `database-agent` las crea compuestas o las justifica como excepción en este ADR.
+- **`ON UPDATE` implícito (`NO ACTION`)** (A8). EF Core no modela `ON UPDATE` y no lo emite. Es correcto porque las claves
+  referenciadas son inmutables: `id` es uuid v7 generado por la aplicación (`ValueGeneratedNever`, sin setter público) y
+  `tenant_id` no se reasigna (`ValidarEscritura` rechaza el cambio). Si alguien la cambiara por SQL crudo, `NO ACTION`
+  rechaza el cambio; en una FK no diferible, `NO ACTION` y `RESTRICT` solo se distinguen en el momento de la comprobación.
+- **`ON DELETE` explícito.** `RESTRICT` por defecto, y siempre que la hija sea un historial o auditoría (b): `CASCADE`
+  reescribiría la historia. `CASCADE` solo se admite para una hija de composición pura de una entidad (a), sin valor de
+  auditoría propio, y debe figurar en la tabla de aplicabilidad. Hoy ninguna tabla lo usa.
+
+**(d) Criterios para que una tabla nueva quede cubierta sin tocar este ADR.** Una tabla con `tenant_id` queda cubierta
+si cumple todos; si falla uno, la migración no se mergea sin una excepción escrita en la sección de excepciones por tabla.
+
+1. `tenant_id uuid NOT NULL`, la entidad implementa `IEntidadDeEmpresa` y `EntidadesConTenantTests` pasa.
+2. Pertenece a una sola clase, (a) o (b), y el comentario de la tabla lo dice (las de (b) terminan en «Solo inserción.»).
+3. Clase (a): `xmin` con `IsRowVersion()`; autoría con columnas del dominio en `timestamptz`; sin `deleted_*`; sin triggers.
+4. Clase (b): sin token de concurrencia, sin columnas de edición ni borrado, con actor e instante; entidad con `init`.
+5. Toda columna `<tabla>_id` que apunte a una tabla del schema tiene FK, compuesta con `tenant_id` según (c), con
+   `ON DELETE` explícito y sin `ON UPDATE` emitido.
+6. PK `id uuid` v7 generada por la aplicación (`ValueGeneratedNever`), salvo relación 1:1 con la empresa (PK `tenant_id`).
+7. Nombres en `snake_case` y en español según el plan §5; enumeraciones cerradas con `CHECK`; `jsonb` (nunca `json`) con
+   `CHECK` de forma (`jsonb_typeof`); PII con comentario `@pii:*` y documentos cifrados (plan §9.3).
+8. Si un GET la expone, su escenario está en `EscenariosDeFuga.Todos`.
+
+**Fuera de la regla:** las tablas sin `tenant_id` (catálogos globales del plan §5: `reglas_dictamen`, `organismos`,
+`departamentos_impuesto`) y las del SDK (outbox, inbox, historial de migraciones). Las primeras necesitan su propia
+justificación al materializarse, porque `EntidadesConTenantTests` las rechazaría.
+
+### Aplicabilidad a las tablas existentes
+
+| Tabla | HU · migración | Clase | Concurrencia | Autoría | FK internas | Excepciones particulares |
+|-------|----------------|-------|--------------|---------|-------------|--------------------------|
+| `lecturas_backoffice` | #13722 · `D0_AislamientoYAuditoria` | (b) | — | `usuario_id`, `fecha` | Ninguna (`empresa_consultada` es otra empresa, sin FK) | `tenant_id` es la empresa **del lector** (FLIT), no la consultada |
+| `configuracion_empresa` | #13736 · `D1_ConfiguracionEmpresa` | (a) | `xmin` | `contrato_actualizado_por/en`, `operativa_actualizada_por/en` | — | A3: PK `tenant_id`; A2: nombre en singular |
+| `cambios_contrato` | #13736 · `D1_ConfiguracionEmpresa` | (b) | — | `usuario_id`, `fecha` | `tenant_id` → `configuracion_empresa(tenant_id)`, `RESTRICT` (simple, válida por (c)) | A13: `valor_anterior`/`valor_nuevo` en `jsonb` |
+| `diagnosticos` | #13738 · `D1_CabeceraDiagnostico` | (a) | `xmin` | `usuario_creador_id`, `creado_en`, `cerrado_en`; transiciones en el historial | — (expone `uq_diagnosticos_tenant_id`) | Ninguna |
+| `historial_estado_diagnostico` | #13738 · `D1_CabeceraDiagnostico` | (b) | — | `usuario_id` (nulo si fue el procesador), `en` | `(tenant_id, diagnostico_id)` → `diagnosticos(tenant_id, id)`, `RESTRICT` | Ninguna |
+
+### Excepciones por tabla
+
+- **`configuracion_empresa`, A3 (PK `tenant_id`, no `id uuid`).** La relación con la empresa es 1:1 por definición (plan
+  §5: «una fila por compañía»). La unicidad la da la propia clave, el filtro global coincide con la PK y la lectura es
+  una búsqueda por clave. Un `id` sustituto no lo referencia nadie: `cambios_contrato` apunta a la empresa, no a la fila.
+- **`configuracion_empresa`, A2 (singular).** Sigue el plan §5; el singular expresa que hay una fila por empresa.
+- **`configuracion_empresa`, autoría por nivel.** Tiene dos dueños con permisos distintos (D-04): el contractual lo edita
+  el backoffice FLIT y el operativo el admin de la compañía. La fila nace con los DEFAULT de la base, el primer cambio
+  contractual queda en `cambios_contrato` y los operativos conservan solo el último autor y momento (plan §5). Si el LT
+  exige historial operativo, la vía es ampliar `cambios_contrato` con una columna `nivel`, no un trigger genérico.
+- **`cambios_contrato`, A4 (FK local, no a `identity.tenants`).** `identity.tenants` está en otra base; la FK local
+  garantiza lo que sí puede: no se audita un cambio de una configuración que no existe.
+- **`cambios_contrato`, A13 (`jsonb`).** Los campos auditados tienen tipos distintos (arreglo de fuentes, entero,
+  booleano); `jsonb` guarda cada valor con su tipo. `valor_anterior` es nulo solo cuando no había valor.
+
 ## Alternativas consideradas
+
+### Para el aislamiento
 
 - **B1, filtro manual (como Comparendos).** Es simple, pero basta un olvido para que haya una fuga. Se descarta.
 - **B3, RLS con `FORCE ROW LEVEL SECURITY` y un rol de app que no sea dueño.** Defiende incluso ante SQL crudo. Pero exige
   otro usuario de base y `SET app.tenant` en cada conexión, choca con el pool y complica las migraciones. Queda como
   endurecimiento futuro de la plataforma.
 
-## Tradeoff aceptado y excepciones al checklist de datos
+### Para la forma de las tablas
+
+- **C1, aplicar el checklist tal cual:** `id` sustituto en todas, `created_*`/`updated_*`/`deleted_*`/`row_version` con su
+  trigger. Cumple la letra de A3, A5, A6 y A16, pero añade claves que nadie usa, un `updated_*` que mezcla hechos con
+  dueños distintos, un borrado lógico sin flujo que lo dispare (R-18) y columnas de edición en tablas que no se editan.
+  Se descarta.
+- **C2, `ON UPDATE` explícito con SQL crudo en cada migración** (`ALTER TABLE … DROP CONSTRAINT` y volver a crearla con
+  `ON UPDATE RESTRICT`). Cumple A8 a la letra, pero el modelo de EF y el `ModelSnapshot` dejan de describir la base: un
+  cambio futuro de la FK generaría una migración que la vuelve a crear sin la cláusula. El beneficio es nulo porque las
+  claves no cambian. Se descarta; si la plataforma lo exige, la vía es un `IMigrationsSqlGenerator` propio que emita la
+  cláusula en todas las FK del servicio, no un parche por migración.
+- **C3, excepciones tabla por tabla** (lo que hacía este ADR hasta #13736). Es explícito, pero cada tabla de D1/D2 repite
+  la misma justificación y obliga a reabrir el ADR en cada migración. Se descarta en favor de C4.
+- **C4, la opción elegida:** regla general por clase de tabla (a)/(b), FK según (c) y criterios (d), con excepciones
+  solo para lo que se salga. Mantiene el modelo de EF como fuente de verdad del esquema y deja la integridad en CHECKs y
+  FK con `RESTRICT`.
+
+## Tradeoff aceptado
 
 - El filtro **no cubre SQL crudo**. Por eso `FromSql`/`ExecuteSql` sobre tablas de negocio tienen que filtrar por `tenant_id`
-  de forma explícita, y el code review lo revisa.
+  de forma explícita, y el code review lo revisa. Las FK compuestas de (c) cierran el hueco en la integridad entre tablas.
 - Los **jobs sin usuario** (cola de D2, consumidores del bus) no tienen token. Deben fijar la empresa de forma explícita
   con su propio `IPlatformTenantAccessor` en el scope; si no lo hacen, no ven ni escriben nada.
 - **Sin RLS (A10) y sin FK a `identity.tenants` (A4):** la empresa vive en otro servicio y en otra base. El aislamiento lo
-  dan el filtro, la validación al guardar y la prueba de fuga.
-- **`lecturas_backoffice`** es auditoría de solo inserción. No lleva `updated_*`, `deleted_*` ni `row_version` (A5, A6,
-  A16) ni trigger de `audit_log`, porque es ella misma la auditoría. El nombre en español sigue el modelo del plan §5,
-  igual que el resto del esquema `diagnostico`.
+  dan el filtro, la validación al guardar, las FK compuestas y la prueba de fuga.
+- El `db-schema-validator` seguirá marcando A5, A6, A8 y A16 en este schema; una tabla que cumpla (d) se valida contra
+  esta regla y no requiere excepción nueva.
 
-## Excepciones al checklist en `configuracion_empresa` y `cambios_contrato` (HU #13736)
-
-Migración `D1_ConfiguracionEmpresa` (`20261021083622`); mapeo en `Persistence/Configuraciones/ConfiguracionEmpresaConfig.cs`
-y `CambioContratoConfig.cs`. El DDL sigue el plan §5 (D-04 = b, R-2, R-11b, R-18). Ambas entidades implementan
-`IEntidadDeEmpresa`, así que el filtro global y `ValidarEscritura` las cubren igual que al resto (por eso A4 y A10 quedan
-cubiertos por la sección anterior y no se repiten aquí).
-
-### `diagnostico.configuracion_empresa`
-
-| Ítem | Desviación | Justificación |
-|------|------------|---------------|
-| A3 | La PK es `tenant_id`, no `id uuid` | La relación con la empresa es 1:1 por definición (plan §5: «una fila por compañía»). Con `tenant_id` como PK la unicidad la da la propia clave, el filtro global coincide con la PK y la lectura es una búsqueda por clave. Un `id` sustituto no lo referencia nadie: `cambios_contrato` apunta a la empresa, no a la fila. |
-| A5 | Sin `created_at/by` ni `updated_at/by` genéricos | La tabla tiene dos dueños con permisos distintos (D-04): el contractual lo edita el backoffice FLIT y el operativo el admin de la compañía. Un único `updated_*` borraría quién cambió qué nivel; por eso hay `contrato_actualizado_por/en` y `operativa_actualizada_por/en`. La creación no es un evento de negocio: la fila nace con los DEFAULT de la base, y el primer cambio contractual queda en `cambios_contrato`. |
-| A5, A6 | Sin `deleted_at/by` (sin borrado lógico) | No hay flujo de baja: la configuración vive lo que vive la empresa y no tiene retención ni purga (R-18). Un borrado lógico obligaría a filtrar `deleted_at` en una tabla con exactamente una fila viva por clave, y la FK `ON DELETE RESTRICT` desde `cambios_contrato` impide además el borrado físico de una configuración auditada. |
-| A5, A16, B8 | Concurrencia con `xmin` en vez de `row_version` + trigger `BEFORE UPDATE` | `xmin` es la columna de sistema que Postgres cambia en cada `UPDATE`, también los que llegan por SQL crudo, sin columna ni trigger que mantener. Npgsql la mapea con `IsRowVersion()`, que la marca como token de concurrencia: B8 se cumple en lo funcional. La comparación es por igualdad, así que el desbordamiento de 32 bits no afecta, y `VACUUM FREEZE` no reescribe `xmin` desde Postgres 9.4. |
-| A16 | Sin trigger de `audit_log` | El esquema `diagnostico` no tiene tabla `audit_log` (es otro servicio y otra base). Los cambios contractuales, que son los que fijan alcance y cobro, quedan con valor anterior y nuevo en `cambios_contrato`. Los operativos son preferencias de la compañía y conservan solo el último autor y momento (plan §5). Si el LT exige historial operativo, la vía es ampliar `cambios_contrato` con una columna `nivel`, no un trigger genérico. |
-| A2 | Nombre en singular y en español | Sigue el modelo del plan §5, como el resto del esquema; el singular expresa que hay una fila por empresa. |
-
-### `diagnostico.cambios_contrato`
-
-| Ítem | Desviación | Justificación |
-|------|------------|---------------|
-| A4 | FK a `configuracion_empresa(tenant_id)`, no a `identity.tenants` | `identity.tenants` está en otra base. La FK local garantiza lo que sí puede: no se audita un cambio de una configuración que no existe. |
-| A5, A6, A16 | Sin `updated_*`, `deleted_*`, `row_version` ni trigger de `audit_log` | Igual que `lecturas_backoffice`: es auditoría de solo inserción y ella misma es el registro. `usuario_id` y `fecha` cumplen el papel de `created_by/at`. |
-| A13 | `valor_anterior` y `valor_nuevo` en `jsonb` | Los campos auditados tienen tipos distintos (arreglo de fuentes, entero, booleano). `jsonb` guarda cada valor con su tipo sin una columna por campo; A13 prohíbe `json`, no `jsonb`. `valor_anterior` es nulo solo cuando no había valor. |
-| A8 | `ON DELETE RESTRICT` explícito; `ON UPDATE` implícito (`NO ACTION`) | EF Core no modela `ON UPDATE` y no lo emite. El efecto es el correcto: la clave referenciada es la empresa, que es inmutable (`ValueGeneratedNever`, nunca se reasigna), y si alguien intentara cambiarla con SQL crudo, `NO ACTION` rechaza el cambio. Para una FK no diferible, `NO ACTION` y `RESTRICT` solo se distinguen en el momento de la comprobación. `CASCADE` sería incorrecto: reescribiría la historia auditada. `RESTRICT` en el borrado hace lo mismo con el borrado: una configuración con auditoría no se puede eliminar. |
-
-### Alternativas consideradas para estas tablas
-
-- **C1, aplicar el checklist tal cual:** `id` sustituto con `uq_configuracion_empresa_tenant`, columnas `created_*`/`updated_*`/
-  `deleted_*`/`row_version` con su trigger. Cumple la letra de A3, A5, A6 y A16, pero añade una clave que nadie usa, un
-  `updated_*` que mezcla los dos niveles de D-04 y un borrado lógico sin flujo que lo dispare. Se descarta.
-- **C2, `ON UPDATE` explícito con SQL crudo en la migración** (`ALTER TABLE … DROP CONSTRAINT` y volver a crearla con
-  `ON UPDATE RESTRICT`). Cumple A8 a la letra, pero el modelo de EF y el `ModelSnapshot` dejan de describir la base: un
-  cambio futuro de la FK generaría una migración que la vuelve a crear sin la cláusula. El beneficio es nulo porque la
-  clave no cambia. Se descarta; si la plataforma lo exige, la vía es un `IMigrationsSqlGenerator` propio que emita la
-  cláusula en todas las FK del servicio, no un parche en una migración.
-- **C3, la opción elegida:** el modelo del plan §5 con las desviaciones documentadas arriba. Mantiene el modelo de EF como
-  la fuente de verdad del esquema y deja la integridad en CHECKs de la base (subconjunto, límite positivo, códigos
-  válidos) y en la FK con `RESTRICT`.
+## Pendientes (no decididos)
 
 ### Pendiente: «solo inserción» no está garantizado por la base
 
-`cambios_contrato` y `lecturas_backoffice` son de solo inserción por convención del código; nada en la base impide un
-`UPDATE` o un `DELETE`, y la aplicación es dueña de las tablas (sin RLS, sección anterior). Esta parte **no se justifica**:
-para una tabla de auditoría la garantía tiene que estar en la base. El cambio propuesto, con precedente en el repo
-(trigger de inmutabilidad de `procedure_instance_field_values`), es un trigger `BEFORE UPDATE OR DELETE` que lance
-excepción en las dos tablas (`tr_cambios_contrato_solo_insercion`, `tr_lecturas_backoffice_solo_insercion`), creado por
-`migrationBuilder.Sql` en una migración nueva del `database-agent`, con prueba de integración que intente ambos comandos.
+Las tablas de la clase (b) son de solo inserción por convención del código; nada en la base impide un `UPDATE` o un
+`DELETE`, y la aplicación es dueña de las tablas (sin RLS). Esta parte **no se justifica**: para una tabla de auditoría la
+garantía tiene que estar en la base. El cambio propuesto, con precedente en el repo (trigger de inmutabilidad de
+`procedure_instance_field_values`), es un trigger `BEFORE UPDATE OR DELETE` que lance excepción en cada tabla de la clase
+(b) (`tr_<tabla>_solo_insercion`: hoy `lecturas_backoffice`, `cambios_contrato` e `historial_estado_diagnostico`; en D2
+`intentos_consulta`), creado por `migrationBuilder.Sql` en una migración nueva del `database-agent`, con prueba de
+integración que intente ambos comandos. **Propuesta pendiente de decisión del usuario.** Si se acepta, pasa a ser el
+criterio 4 bis de (d).
+
+### Pendiente: vía de escritura del backoffice
+
+El backoffice FLIT tiene permisos que escriben datos de otra empresa (`ConfiguracionContratoEditar`, `ConsultasLlenar`,
+`DictamenOverride`), pero `ValidarEscritura` rechaza toda fila de otra empresa y el punto 3 solo abre la lectura. Falta
+decidir la vía: por ejemplo, un ámbito explícito de escritura en `/backoffice/*` que fije la empresa de `?empresa=` y deje
+rastro en la auditoría de la clase (b) correspondiente, frente a delegarla a un rpc de la propia empresa. No se decide
+aquí; hasta entonces, ningún endpoint de backoffice escribe entre empresas.
 
 ## Consecuencias
 
 - Una consulta nueva queda filtrada sin que nadie tenga que acordarse.
 - Cada GET nuevo de D1/D2 tiene que registrar una línea en `EscenariosDeFuga.Todos`; si no, la suite falla.
+- Cada migración nueva del schema se revisa contra los criterios (d) y se añade una fila a la tabla de aplicabilidad;
+  solo lo que no cumpla abre una excepción por tabla.
+- `database-agent`: al materializar `vehiculos`, `consultas`, `intentos_consulta`, `dictamenes` y `derivaciones`, expone
+  `uq_<tabla>_tenant_id` en los padres y crea las FK compuestas.
 - Comparendos podría migrar a este patrón, pero esa deuda queda fuera de este ADR.
 
 ## ADRs relacionados
