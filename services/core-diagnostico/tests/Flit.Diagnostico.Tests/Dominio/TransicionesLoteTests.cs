@@ -25,8 +25,24 @@ public sealed class TransicionesLoteTests
         TransicionesLote.Permitida(EstadoDiagnostico.Creado, EstadoDiagnostico.EnProceso, DisparadorEstado.Auto).Should().BeTrue();
     }
 
+    // HU #13746 (F03-H8, R-8) — un lote cerrado (COMPLETADO o INCOMPLETO) vuelve a EN_PROCESO al reprocesar, con disparador
+    // REPROCESO; por otro disparador no se reabre.
+    [Theory]
+    [InlineData(EstadoDiagnostico.Completado)]
+    [InlineData(EstadoDiagnostico.Incompleto)]
+    public void Completado_e_Incompleto_pasan_a_EnProceso_por_reproceso(EstadoDiagnostico cerrado)
+    {
+        var transicion = TransicionesLote.Transicionar(cerrado, EstadoDiagnostico.EnProceso, DisparadorEstado.Reproceso);
+
+        transicion.Should().Be(new TransicionLote(cerrado, EstadoDiagnostico.EnProceso, DisparadorEstado.Reproceso));
+        TransicionesLote.Permitida(cerrado, EstadoDiagnostico.EnProceso, DisparadorEstado.Auto).Should().BeFalse("solo el reproceso (o el llenado manual, D3) reabre un lote cerrado");
+        TransicionesLote.Permitida(cerrado, EstadoDiagnostico.EnProceso, DisparadorEstado.CierrePanel).Should().BeFalse();
+    }
+
     // Lo que la tabla no tiene se rechaza: volver a CREADO, saltar a COMPLETADO, otro disparador o quedarse donde está.
     [Theory]
+    [InlineData(EstadoDiagnostico.EnProceso, EstadoDiagnostico.EnProceso, DisparadorEstado.Reproceso)]
+    [InlineData(EstadoDiagnostico.Creado, EstadoDiagnostico.EnProceso, DisparadorEstado.Reproceso)]
     [InlineData(EstadoDiagnostico.EnProceso, EstadoDiagnostico.Creado, DisparadorEstado.Auto)]
     [InlineData(EstadoDiagnostico.Creado, EstadoDiagnostico.Completado, DisparadorEstado.Auto)]
     [InlineData(EstadoDiagnostico.Creado, EstadoDiagnostico.EnProceso, DisparadorEstado.Manual)]

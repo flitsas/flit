@@ -776,6 +776,61 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorRegla"
 
+  /api/v1/diagnostico/consultas/{cid}/reprocesar:
+    parameters:
+      - name: cid
+        in: path
+        required: true
+        description: Id de la celda (diagnostico.consultas).
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Tablero]
+      operationId: reprocesarConsulta
+      summary: Reprocesa una celda en ERROR repitiendo la consulta real
+      description: >
+        HU #13746 (F03-H8, R-1, R-8, plan §6.1 fila 03). Permiso diagnostico.consultas.reprocesar (admin de la compañía;
+        el usuario del producto recibe 403). Sin cuerpo: lo que venga se ignora y nunca se escriben datos de resultado.
+        La celda vuelve a PENDIENTE con intentos_auto=0 y sube version_tablero (el sondeo de la grilla la ve volver a
+        gris); el procesador repite la consulta real, sin reutilizar el dato del mismo día, y el intento queda con
+        disparador=REPROCESO y el usuario del token. Si el lote estaba COMPLETADO o INCOMPLETO vuelve a EN_PROCESO, sin
+        cerrado_en, con una fila del historial disparador=REPROCESO y el usuario; al terminar, el recalculador fija el
+        estado final (COMPLETADO con historial AUTO si todo quedó bien). Las celdas COMPLETADO no se tocan. Al reprocesar
+        la RUNT de un vehículo y terminar en OK, sus celdas BLOQUEADA_POR_RUNT vuelven a PENDIENTE en la misma
+        transacción (pasando por las reglas de no aplica) y corren con disparador=REPROCESO y el mismo usuario; si la RUNT
+        vuelve a fallar, siguen en ERROR.
+      responses:
+        "202":
+          description: La celda quedó en cola para repetir la consulta real.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReprocesoConsulta"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.consultas.reprocesar; sin compañía (`code` = SIN_EMPRESA) o sin usuario (`code` = SIN_USUARIO); compañía sin Diagnóstico activo (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: "`code` = NO_ENCONTRADO: la celda no existe, es de otra compañía o su lote (con PROPIOS) es de otro usuario."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "409":
+          description: >
+            No es reprocesable y nada cambia: `code` = CELDA_NO_EN_ERROR (la celda no está en ERROR),
+            CELDA_BLOQUEADA_POR_RUNT (tipo_error=BLOQUEADA_POR_RUNT y la RUNT del vehículo no está COMPLETADO: se
+            reprocesa la RUNT) o CELDA_MODIFICADA (la celda cambió mientras se pedía: volver a leer la grilla).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
   /api/v1/diagnostico/express:
     post:
       tags: [Express]
@@ -1968,6 +2023,27 @@ components:
         cerrado_en:
           type: string
           format: date-time
+
+    ReprocesoConsulta:
+      type: object
+      required: [id, diagnostico_id, estado, estado_lote, version]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id de la celda.
+        diagnostico_id:
+          type: string
+          format: uuid
+        estado:
+          type: string
+          enum: [PENDIENTE]
+        estado_lote:
+          $ref: "#/components/schemas/EstadoDiagnostico"
+        version:
+          type: integer
+          format: int64
+          description: version_tablero del lote tras el reproceso (la celda la lleva para el sondeo ?desde=).
 
     HistorialLote:
       type: object

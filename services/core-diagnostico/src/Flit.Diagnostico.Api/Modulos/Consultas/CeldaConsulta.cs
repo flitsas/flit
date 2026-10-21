@@ -59,6 +59,13 @@ public sealed class CeldaConsulta : IEntidadDeEmpresa
     /// <summary>Intentos automáticos hechos (reintentos de errores transitorios, D-12).</summary>
     public int IntentosAuto { get; set; }
 
+    /// <summary>
+    /// Usuario del reproceso pendiente (HU #13746, R-1): la siguiente ejecución de la celda deja su intento con
+    /// <c>disparador=REPROCESO</c> y este usuario, y no reutiliza el dato del mismo día. El escritor lo limpia al cerrar la
+    /// ejecución; null si la celda no espera un reproceso. Solo con la celda en PENDIENTE o EN_CURSO.
+    /// </summary>
+    public Guid? ReprocesoUsuarioId { get; set; }
+
     /// <summary>Último cambio de la celda.</summary>
     public DateTimeOffset ActualizadoEn { get; set; }
 

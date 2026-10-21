@@ -8,7 +8,8 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// Intento auditable de cada ejecución de una celda (HU #13737, F03-H6, F03-C11, R-1): una fila de solo inserción en
 /// <c>diagnostico.intentos_consulta</c> con lote, vehículo, celda, identificador consultado (placa o VIN; nunca un documento),
 /// fuente, servicio que respondió, inicio y fin, estado SUCCESS|ERROR, tipo y mensaje de error, transacción del proveedor,
-/// <c>disparador=AUTO</c> y <c>usuario_id</c> nulo. El procesador lo inserta en la MISMA transacción que cierra la celda
+/// <c>disparador=AUTO</c> y <c>usuario_id</c> nulo, o <c>disparador=REPROCESO</c> con el usuario si la ejecución es un reproceso
+/// (<see cref="CeldaTomada.ReprocesoUsuarioId"/>, HU #13746, R-1). El procesador lo inserta en la MISMA transacción que cierra la celda
 /// (<see cref="EscritorCeldas"/>); si el lease se perdió y la celda no se cierra, lo guarda solo (<see cref="GuardarSoloAsync"/>):
 /// la llamada se hizo y queda auditada. Una ejecución que devuelve N/A no llamó a ninguna fuente y no deja intento. Escribe con
 /// el contexto de la empresa de la celda (<c>TenantFilter.ValidarEscritura</c>). La reutilización del mismo día (HU #13739, D-10)
@@ -47,7 +48,7 @@ internal static class RegistroIntentos
             Fuente = celda.Fuente,
             IdentificadorConsultado = Recortar(datos?.Identificador, LargoIdentificador),
             Servicio = datos?.Servicio,
-            Disparador = DisparadorIntento.Auto,
+            Disparador = celda.ReprocesoUsuarioId is null ? DisparadorIntento.Auto : DisparadorIntento.Reproceso,
             Inicio = inicio,
             Fin = fin < inicio ? inicio : fin,
             Estado = exito ? ResultadoIntento.Success : ResultadoIntento.Error,
@@ -55,7 +56,7 @@ internal static class RegistroIntentos
             MensajeError = exito ? null : Recortar(datos?.MensajeError, LargoMensaje),
             TransaccionProveedorId = Recortar(datos?.TransaccionProveedorId, LargoTransaccion),
             DesdeCache = exito && resultado.ReutilizadaDeId is not null,
-            UsuarioId = null,
+            UsuarioId = celda.ReprocesoUsuarioId,
         };
     }
 

@@ -369,6 +369,11 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasColumnName("payload")
                         .HasComment("@pii:medium Resultado normalizado de la fuente (objeto JSON), nunca el crudo del proveedor (R-13); sin documentos en claro.");
 
+                    b.Property<Guid?>("ReprocesoUsuarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reproceso_usuario_id")
+                        .HasComment("@pii:low Usuario del reproceso pendiente (claim sub, HU #13746, R-1): la siguiente ejecución deja su intento con disparador REPROCESO y este usuario; null si no hay reproceso pendiente.");
+
                     b.Property<Guid?>("ReutilizadaDeId")
                         .HasColumnType("uuid")
                         .HasColumnName("reutilizada_de_id")
@@ -445,6 +450,8 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                             t.HasCheckConstraint("ck_consultas_origen", "origen IS NULL OR origen IN ('API', 'MANUAL')");
 
                             t.HasCheckConstraint("ck_consultas_payload_objeto", "payload IS NULL OR jsonb_typeof(payload) = 'object'");
+
+                            t.HasCheckConstraint("ck_consultas_reproceso_usuario", "reproceso_usuario_id IS NULL OR estado IN ('PENDIENTE', 'EN_CURSO')");
 
                             t.HasCheckConstraint("ck_consultas_tipo_error", "tipo_error IS NULL OR estado = 'ERROR'");
 

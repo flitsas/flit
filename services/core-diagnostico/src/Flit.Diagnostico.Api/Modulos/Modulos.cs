@@ -95,6 +95,7 @@ public static class Modulos
         Vehiculos.VehiculosEndpoints.Map(api);
         Express.ExpressEndpoints.Map(api);
         Tablero.EndpointsTablero.Map(api);
+        Consultas.EndpointsReproceso.Map(api);
         api.MapFallback(() => Results.NotFound());
         return api;
     }

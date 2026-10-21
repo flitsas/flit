@@ -16,7 +16,8 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// bloqueo de sus demás celdas, HU #13730) y el intento auditable (HU #13737) se aplican en esa misma transacción: o queda todo o
 /// no queda nada. Un reintento (HU #13737) deja la celda en PENDIENTE con <c>disponible_desde</c> del backoff e
 /// <c>intentos_auto</c> + 1. Una celda que reutiliza el dato del mismo día (HU #13739, D-10) se cierra por este mismo camino, con
-/// <c>reutilizada_de_id</c>: sube la versión del tablero y dispara los mismos efectos que una llamada real.
+/// <c>reutilizada_de_id</c>: sube la versión del tablero y dispara los mismos efectos que una llamada real. El cierre limpia el
+/// reproceso pendiente de la celda (HU #13746): ya quedó en el intento de esta ejecución.
 /// </summary>
 internal sealed class EscritorCeldas(DiagnosticoDb db, TimeProvider reloj)
 {
@@ -53,6 +54,8 @@ internal sealed class EscritorCeldas(DiagnosticoDb db, TimeProvider reloj)
             // HU #13739 (D-10): la celda que copió el dato del mismo día apunta a la original.
             celda.ReutilizadaDeId = resultado.Estado == EstadoCelda.Completado ? resultado.ReutilizadaDeId : null;
             celda.LeaseHasta = null;
+            // HU #13746: el reproceso se consumió en esta ejecución; un reintento posterior es del procesador (AUTO).
+            celda.ReprocesoUsuarioId = null;
             celda.ActualizadoEn = reloj.GetUtcNow();
             celda.VersionTablero = version;
             if (reintento)

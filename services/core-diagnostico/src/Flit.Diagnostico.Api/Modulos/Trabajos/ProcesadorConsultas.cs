@@ -19,7 +19,7 @@ namespace Flit.Diagnostico.Api.Modulos.Trabajos;
 /// o bloquea sus demás celdas en la misma transacción (HU #13730), y tras toda celda terminal <see cref="RecalculadorEstado"/>
 /// recalcula el estado global del lote en esa misma transacción (HU #13743). Antes de llamar al ejecutor, <see cref="ReutilizacionMismoDia"/>
 /// copia el dato de hoy de la misma compañía, placa y fuente si existe (HU #13739, D-10): no se llama a la fuente y la celda se
-/// cierra por el mismo camino, con su intento <c>desde_cache=true</c>. Si hay más de un ejecutor para una fuente, gana el primero
+/// cierra por el mismo camino, con su intento <c>desde_cache=true</c>; un reproceso (HU #13746) no reutiliza: repite la consulta real. Si hay más de un ejecutor para una fuente, gana el primero
 /// registrado. Los logs llevan ids, fuente y tipo de error, nunca datos de la fuente.
 /// </summary>
 internal sealed partial class ProcesadorConsultas(
@@ -62,7 +62,10 @@ internal sealed partial class ProcesadorConsultas(
         {
             // HU #13739 (D-10): si la misma compañía ya tiene hoy el dato de esa placa y fuente, se copia sin llamar ni consumir.
             var contexto = new ContextoCelda(celda, db);
-            var reutilizado = await ReutilizacionMismoDia.BuscarAsync(contexto, inicio, ct).ConfigureAwait(false);
+            // HU #13746 (R-1): el reproceso repite la consulta real, nunca copia el dato de hoy.
+            var reutilizado = celda.ReprocesoUsuarioId is null
+                ? await ReutilizacionMismoDia.BuscarAsync(contexto, inicio, ct).ConfigureAwait(false)
+                : null;
             if (reutilizado is not null)
                 Reutilizada(log, celda.Id, celda.Fuente, reutilizado.ReutilizadaDeId!.Value);
             resultado = reutilizado ?? await ejecutor.EjecutarAsync(contexto, ct).ConfigureAwait(false);

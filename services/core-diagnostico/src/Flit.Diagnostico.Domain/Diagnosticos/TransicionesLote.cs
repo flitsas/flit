@@ -9,7 +9,9 @@ public sealed record TransicionLote(EstadoDiagnostico Anterior, EstadoDiagnostic
 /// <summary>
 /// Máquina de estados del lote (plan §3.5, R-8, HU #13727): qué transiciones existen y con qué disparador. Esta HU implementa
 /// <c>CREADO → EN_PROCESO</c> con <see cref="DisparadorEstado.Auto"/> (al encolar los vehículos); HU #13743 suma
-/// <c>EN_PROCESO → COMPLETADO</c> (AUTO) y <c>EN_PROCESO → INCOMPLETO</c> (CIERRE_PANEL); el reproceso lo suma su HU a <see cref="Tabla"/>. Una transición que no está en la tabla lanza.
+/// <c>EN_PROCESO → COMPLETADO</c> (AUTO) y <c>EN_PROCESO → INCOMPLETO</c> (CIERRE_PANEL); HU #13746 suma la vuelta de un lote
+/// cerrado (<c>COMPLETADO</c> o <c>INCOMPLETO</c>) a <c>EN_PROCESO</c> con <see cref="DisparadorEstado.Reproceso"/> (R-8). Una
+/// transición que no está en la tabla lanza.
 /// </summary>
 public static class TransicionesLote
 {
@@ -19,6 +21,9 @@ public static class TransicionesLote
         // HU #13743: todas las celdas aplicables en COMPLETADO o NA (EstadoGlobalLote) y el cierre del panel con ERROR.
         new(EstadoDiagnostico.EnProceso, EstadoDiagnostico.Completado, DisparadorEstado.Auto),
         new(EstadoDiagnostico.EnProceso, EstadoDiagnostico.Incompleto, DisparadorEstado.CierrePanel),
+        // HU #13746 (R-8): reprocesar una celda reabre el lote cerrado; al terminar, el recalculador fija el estado final.
+        new(EstadoDiagnostico.Completado, EstadoDiagnostico.EnProceso, DisparadorEstado.Reproceso),
+        new(EstadoDiagnostico.Incompleto, EstadoDiagnostico.EnProceso, DisparadorEstado.Reproceso),
     ];
 
     /// <summary>true si el lote puede pasar de <paramref name="de"/> a <paramref name="a"/> con <paramref name="por"/>.</summary>

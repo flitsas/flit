@@ -32,6 +32,8 @@ internal sealed class ConsultaConfig : IEntityTypeConfiguration<CeldaConsulta>
             t.HasCheckConstraint("ck_consultas_payload_objeto", "payload IS NULL OR jsonb_typeof(payload) = 'object'");
             t.HasCheckConstraint("ck_consultas_intentos_auto", "intentos_auto >= 0");
             t.HasCheckConstraint("ck_consultas_tipo_error", $"tipo_error IS NULL OR estado = '{CodigosDeEnum.Codigo(EstadoCelda.Error)}'");
+            // HU #13746: el reproceso pendiente solo existe mientras la celda espera o se ejecuta.
+            t.HasCheckConstraint("ck_consultas_reproceso_usuario", $"reproceso_usuario_id IS NULL OR estado IN ({enCola})");
         });
         builder.HasKey(x => x.Id).HasName("pk_consultas");
         builder.HasAlternateKey(x => new { x.TenantId, x.Id }).HasName("uq_consultas_tenant_id");
@@ -67,6 +69,8 @@ internal sealed class ConsultaConfig : IEntityTypeConfiguration<CeldaConsulta>
         builder.Property(x => x.IntentosAuto)
             .HasDefaultValue(0).ValueGeneratedNever()
             .HasComment("Cola: intentos automáticos hechos (reintentos de errores transitorios, D-12).");
+        builder.Property(x => x.ReprocesoUsuarioId)
+            .HasComment("@pii:low Usuario del reproceso pendiente (claim sub, HU #13746, R-1): la siguiente ejecución deja su intento con disparador REPROCESO y este usuario; null si no hay reproceso pendiente.");
         builder.Property(x => x.ActualizadoEn).HasComment("Último cambio de la celda (timestamptz).");
         builder.Property(x => x.VersionTablero).HasComment("Versión del tablero del lote en el último cambio (polling ?desde=).");
         builder.Property(x => x.DiagnosticoId).Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
