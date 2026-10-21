@@ -629,38 +629,49 @@ CREATE TABLE diagnostico.configuracion_empresa (
 -- fuentes_por_defecto, para que el CHECK nunca bloquee el cambio contractual.
 -- Sin retención ni purga (R-18): no hay retencion_dias, retencion_dias_max ni job de purga.
 
--- Cabecera (MOD01)
+-- Cabecera (MOD01). Materializada en la HU #13738 (migración D1_CabeceraDiagnostico); los códigos salen de los enums del dominio
 CREATE TABLE diagnostico.diagnosticos (
-  id                   uuid PRIMARY KEY,
+  id                   uuid PRIMARY KEY,                -- uuid v7 de la aplicación
   tenant_id            uuid NOT NULL,
   nombre               varchar(150) NOT NULL,
   modo                 varchar(16) NOT NULL CHECK (modo IN ('SIMPLE','CON_ANALISIS')),
   tipo_tramite_codigo  varchar(64) NULL,               -- código de tramites.procedure_types
   es_express           boolean NOT NULL DEFAULT false,
-  alcance              jsonb NOT NULL,                 -- fuentes; RUNT siempre
-  configuracion        jsonb NOT NULL,                 -- copia inmutable al guardar
+  alcance              jsonb NOT NULL,                 -- fuentes; RUNT siempre (ck_diagnosticos_alcance_valido)
+  configuracion        jsonb NOT NULL,                 -- copia inmutable al guardar (objeto)
+  estimado_consultas   jsonb NULL,                     -- estimado por fuente al confirmar (R-11), objeto; lo compara el detalle del lote (#13720)
   estado               varchar(16) NOT NULL CHECK (estado IN ('CREADO','EN_PROCESO','COMPLETADO','INCOMPLETO')),
   version_tablero      bigint NOT NULL DEFAULT 0,       -- sube con cada cambio de celda (polling ?desde=)
   usuario_creador_id   uuid NOT NULL,
-  creado_en            timestamptz NOT NULL,
+  creado_en            timestamptz NOT NULL,            -- instante; el corte del día en hora Colombia (D-10) se calcula al leer
   cerrado_en           timestamptz NULL,
-  CONSTRAINT ck_tipo_con_analisis CHECK (modo = 'SIMPLE' OR tipo_tramite_codigo IS NOT NULL)
+  CONSTRAINT uq_diagnosticos_tenant_id UNIQUE (tenant_id, id),  -- sostiene la FK compuesta del historial
+  CONSTRAINT ck_tipo_con_analisis CHECK (modo = 'SIMPLE' OR tipo_tramite_codigo IS NOT NULL),
+  CONSTRAINT ck_diagnosticos_alcance_valido CHECK (jsonb_typeof(alcance) = 'array'
+    AND alcance <@ '["RUNT","RUNT_PROPIETARIO","RUNT_LOCATARIO","SIMIT_VEHICULO","SIMIT_PROPIETARIO","SIMIT_LOCATARIO","AVALUO","IMPUESTO_DEPARTAMENTAL"]'
+    AND alcance @> '["RUNT"]'),
+  CONSTRAINT ck_diagnosticos_configuracion_objeto CHECK (jsonb_typeof(configuracion) = 'object'),
+  CONSTRAINT ck_diagnosticos_estimado_consultas_objeto CHECK (estimado_consultas IS NULL OR jsonb_typeof(estimado_consultas) = 'object')
 );
 CREATE INDEX ix_diag_tenant_creado ON diagnostico.diagnosticos (tenant_id, creado_en DESC);
--- modo CON_ANALISIS es el plan comercial «Con Análisis IA» (R-2)
+-- modo CON_ANALISIS es el plan comercial «Con Análisis IA» (R-2). Concurrencia optimista con xmin.
+-- Modo, tipo de trámite, express, alcance, configuración, creador y creado_en no cambian tras guardar (EF lo rechaza).
 
 -- Historial de estados del lote (R-8). Solo inserción
 CREATE TABLE diagnostico.historial_estado_diagnostico (
   id               uuid PRIMARY KEY,
   tenant_id        uuid NOT NULL,
-  diagnostico_id   uuid NOT NULL REFERENCES diagnostico.diagnosticos(id),
-  estado_anterior  varchar(16) NULL,                  -- nulo en la creación
+  diagnostico_id   uuid NOT NULL,
+  estado_anterior  varchar(16) NULL CHECK (estado_anterior IN ('CREADO','EN_PROCESO','COMPLETADO','INCOMPLETO')),  -- nulo en la creación
   estado_nuevo     varchar(16) NOT NULL CHECK (estado_nuevo IN ('CREADO','EN_PROCESO','COMPLETADO','INCOMPLETO')),
   disparador       varchar(16) NOT NULL CHECK (disparador IN ('AUTO','CIERRE_PANEL','REPROCESO','MANUAL')),
   usuario_id       uuid NULL,                         -- nulo cuando lo dispara el procesador
-  en               timestamptz NOT NULL
+  en               timestamptz NOT NULL,
+  -- FK compuesta: la fila y su lote son de la misma empresa, también por SQL directo (HU #13738)
+  CONSTRAINT fk_historial_estado_diagnostico_diagnosticos FOREIGN KEY (tenant_id, diagnostico_id)
+    REFERENCES diagnostico.diagnosticos (tenant_id, id) ON DELETE RESTRICT
 );
-CREATE INDEX ix_historial_diagnostico ON diagnostico.historial_estado_diagnostico (diagnostico_id, en);
+CREATE INDEX ix_historial_diagnostico ON diagnostico.historial_estado_diagnostico (tenant_id, diagnostico_id, en);
 
 -- Vehículo del diagnóstico (MOD02 + datos RUNT)
 CREATE TABLE diagnostico.vehiculos (

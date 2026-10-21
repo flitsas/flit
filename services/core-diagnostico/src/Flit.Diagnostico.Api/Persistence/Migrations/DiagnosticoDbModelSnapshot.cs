@@ -224,6 +224,188 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Diagnosticos.CabeceraDiagnostico", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasComment("uuid v7 generado por la aplicación.");
+
+                    b.Property<string>("Alcance")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("alcance")
+                        .HasComment("Fuentes a consultar (arreglo de códigos de Fuente); RUNT siempre.");
+
+                    b.Property<DateTimeOffset?>("CerradoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("cerrado_en")
+                        .HasComment("Instante de cierre (COMPLETADO o INCOMPLETO); null mientras sigue abierto.");
+
+                    b.Property<string>("Configuracion")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("configuracion")
+                        .HasComment("Copia inmutable de la configuración de la compañía al guardar.");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en")
+                        .HasComment("Instante de creación (timestamptz).");
+
+                    b.Property<bool>("EsExpress")
+                        .HasColumnType("boolean")
+                        .HasColumnName("es_express")
+                        .HasDefaultValueSql("false")
+                        .HasComment("Creado por la captura express.");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("estado")
+                        .HasComment("Estado del lote: CREADO, EN_PROCESO, COMPLETADO o INCOMPLETO (plan §3.5).");
+
+                    b.Property<string>("EstimadoConsultas")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("estimado_consultas")
+                        .HasComment("Estimado de consultas por fuente al confirmar (R-11); null hasta confirmar.");
+
+                    b.Property<string>("Modo")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("modo")
+                        .HasComment("Plan comercial: SIMPLE o CON_ANALISIS (Con Análisis IA, R-2).");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("nombre")
+                        .HasComment("Nombre del lote dado por el usuario.");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id")
+                        .HasComment("Empresa dueña del lote.");
+
+                    b.Property<string>("TipoTramiteCodigo")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("tipo_tramite_codigo")
+                        .HasComment("Código de tramites.procedure_types; obligatorio en CON_ANALISIS.");
+
+                    b.Property<Guid>("UsuarioCreadorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("usuario_creador_id")
+                        .HasComment("@pii:low Usuario que creó el lote (claim sub, seudónimo).");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<long>("VersionTablero")
+                        .HasColumnType("bigint")
+                        .HasColumnName("version_tablero")
+                        .HasDefaultValueSql("0")
+                        .HasComment("Sube con cada cambio de celda; polling del tablero (?desde=).");
+
+                    b.HasKey("Id")
+                        .HasName("pk_diagnosticos");
+
+                    b.HasAlternateKey("TenantId", "Id")
+                        .HasName("uq_diagnosticos_tenant_id");
+
+                    b.HasIndex("TenantId", "CreadoEn")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_diag_tenant_creado");
+
+                    b.ToTable("diagnosticos", "diagnostico", t =>
+                        {
+                            t.HasComment("Cabecera del diagnóstico (MOD01, HU #13738): lote con su alcance y su configuración inmutables.");
+
+                            t.HasCheckConstraint("ck_diagnosticos_alcance_valido", "jsonb_typeof(alcance) = 'array' AND alcance <@ '[\"RUNT\",\"RUNT_PROPIETARIO\",\"RUNT_LOCATARIO\",\"SIMIT_VEHICULO\",\"SIMIT_PROPIETARIO\",\"SIMIT_LOCATARIO\",\"AVALUO\",\"IMPUESTO_DEPARTAMENTAL\"]'::jsonb AND alcance @> '[\"RUNT\"]'::jsonb");
+
+                            t.HasCheckConstraint("ck_diagnosticos_configuracion_objeto", "jsonb_typeof(configuracion) = 'object'");
+
+                            t.HasCheckConstraint("ck_diagnosticos_estado", "estado IN ('CREADO', 'EN_PROCESO', 'COMPLETADO', 'INCOMPLETO')");
+
+                            t.HasCheckConstraint("ck_diagnosticos_estimado_consultas_objeto", "estimado_consultas IS NULL OR jsonb_typeof(estimado_consultas) = 'object'");
+
+                            t.HasCheckConstraint("ck_diagnosticos_modo", "modo IN ('SIMPLE', 'CON_ANALISIS')");
+
+                            t.HasCheckConstraint("ck_tipo_con_analisis", "modo = 'SIMPLE' OR tipo_tramite_codigo IS NOT NULL");
+                        });
+                });
+
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Diagnosticos.HistorialEstadoDiagnostico", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasComment("uuid v7 generado por la aplicación.");
+
+                    b.Property<Guid>("DiagnosticoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("diagnostico_id")
+                        .HasComment("Cabecera del lote.");
+
+                    b.Property<string>("Disparador")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("disparador")
+                        .HasComment("AUTO, CIERRE_PANEL, REPROCESO o MANUAL.");
+
+                    b.Property<DateTimeOffset>("En")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("en")
+                        .HasComment("Instante de la transición (timestamptz).");
+
+                    b.Property<string>("EstadoAnterior")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("estado_anterior")
+                        .HasComment("Estado de partida; null en la creación.");
+
+                    b.Property<string>("EstadoNuevo")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("estado_nuevo")
+                        .HasComment("Estado de llegada.");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id")
+                        .HasComment("Empresa dueña del lote (la misma de la cabecera).");
+
+                    b.Property<Guid?>("UsuarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("usuario_id")
+                        .HasComment("@pii:low Usuario que lo provocó (claim sub, seudónimo); null si fue el procesador.");
+
+                    b.HasKey("Id")
+                        .HasName("pk_historial_estado_diagnostico");
+
+                    b.HasIndex("TenantId", "DiagnosticoId", "En")
+                        .HasDatabaseName("ix_historial_diagnostico");
+
+                    b.ToTable("historial_estado_diagnostico", "diagnostico", t =>
+                        {
+                            t.HasComment("Transiciones de estado del lote (R-8, HU #13738). Solo inserción.");
+
+                            t.HasCheckConstraint("ck_historial_estado_diagnostico_disparador", "disparador IN ('AUTO', 'CIERRE_PANEL', 'REPROCESO', 'MANUAL')");
+
+                            t.HasCheckConstraint("ck_historial_estado_diagnostico_estado_anterior", "estado_anterior IS NULL OR estado_anterior IN ('CREADO', 'EN_PROCESO', 'COMPLETADO', 'INCOMPLETO')");
+
+                            t.HasCheckConstraint("ck_historial_estado_diagnostico_estado_nuevo", "estado_nuevo IN ('CREADO', 'EN_PROCESO', 'COMPLETADO', 'INCOMPLETO')");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Platform.Sdk.Messaging.InboxMessage", b =>
                 {
                     b.Property<Guid>("EventId")
@@ -309,6 +491,17 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_cambios_contrato_configuracion_empresa");
+                });
+
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Diagnosticos.HistorialEstadoDiagnostico", b =>
+                {
+                    b.HasOne("Flit.Diagnostico.Api.Modulos.Diagnosticos.CabeceraDiagnostico", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "DiagnosticoId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_historial_estado_diagnostico_diagnosticos");
                 });
 #pragma warning restore 612, 618
         }
