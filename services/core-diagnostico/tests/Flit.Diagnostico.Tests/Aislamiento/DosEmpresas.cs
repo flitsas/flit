@@ -42,9 +42,10 @@ public sealed class EmpresaDePrueba(ApiDePrueba api, Guid id)
 
     /// <summary>
     /// Token de un usuario del producto con los permisos de lectura de Diagnóstico (sin ellos no hay sesión, HU #13726); cada
-    /// GET exige el suyo (<c>diagnosticos.ver</c>, <c>configuracion.ver</c> desde la HU #13741).
+    /// GET exige el suyo (<c>diagnosticos.ver</c>, <c>configuracion.ver</c> desde la HU #13741, <c>diagnosticos.crear</c>
+    /// para <c>/tipos-tramite</c> desde la HU #13742).
     /// </summary>
-    public string Token => _token ??= api.Token(empresa: Id, permisos: [Permisos.DiagnosticosVer, Permisos.ConfiguracionVer]);
+    public string Token => _token ??= api.Token(empresa: Id, permisos: [Permisos.DiagnosticosVer, Permisos.ConfiguracionVer, Permisos.DiagnosticosCrear]);
 
     public HttpClient Cliente() => api.Cliente(Token);
 

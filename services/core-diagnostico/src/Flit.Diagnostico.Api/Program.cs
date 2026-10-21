@@ -53,6 +53,8 @@ public static class Program
         builder.Services.AddSingleton<Modulos.Configuracion.DisponibilidadFuentes>();
         builder.Services.AddScoped<Modulos.Configuracion.ServicioConfiguracion>();
         builder.Services.AddSuscripcionDiagnostico(builder.Configuration);
+        // HU #13742: catálogo de tipos de trámite por el gRPC de catálogos de core-api (token de svc-diagnostico).
+        Modulos.Catalogos.TiposTramiteEndpoints.AddCatalogoTiposTramite(builder.Services, builder.Configuration);
         builder.Services.AddFlitGrpcServer();
         builder.Services.AddFlitOutbox<DiagnosticoDb>(builder.Configuration);
         builder.Services.AddExceptionHandler<ManejadorReglas>();

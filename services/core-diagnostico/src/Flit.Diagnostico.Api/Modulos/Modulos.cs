@@ -14,6 +14,7 @@ public static class Modulos
         Sesion.SesionEndpoints.Map(api);
         Configuracion.ConfiguracionEndpoints.Map(api);
         Backoffice.BackofficeEndpoints.Map(api);
+        Catalogos.TiposTramiteEndpoints.Map(api);
         api.MapFallback(() => Results.NotFound());
         return api;
     }

@@ -4,7 +4,10 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Flit.Diagnostico.Api;
+using Flit.Diagnostico.Api.Modulos.Catalogos;
 using Flit.Diagnostico.Api.Plataforma;
+using Flit.Diagnostico.Domain.Catalogos;
+using Flit.Diagnostico.Tests.Catalogos;
 using Flit.Diagnostico.Tests.Plataforma;
 using Flit.Platform.Sdk.Authentication;
 using Microsoft.AspNetCore.Builder;
@@ -56,6 +59,12 @@ public sealed class ApiDePrueba : IAsyncDisposable
     /// la implementación real, <c>configurar</c> quita este registro o pone otro.
     /// </summary>
     public ProductosHabilitadosFijo Productos { get; } = new();
+
+    /// <summary>
+    /// Doble del cliente gRPC de catálogos de Trámites (HU #13742): el servicio lo consume por el adaptador real
+    /// <see cref="CatalogoTiposTramiteGrpc"/> (reintentos, caché, filtro), sin core-api.
+    /// </summary>
+    public CatalogosFalso Catalogos { get; } = new();
 
     /// <summary>Motivo para omitir la prueba (sin Postgres en local); null si la API está arriba.</summary>
     public string? Omitir { get; private set; }
@@ -182,6 +191,8 @@ public sealed class ApiDePrueba : IAsyncDisposable
         b.Configuration.AddInMemoryCollection(Configuracion(BaseDeDatos));
         b.Services.AddHttpClient(PlatformAuthenticationExtensions.JwksHttpClientName).ConfigurePrimaryHttpMessageHandler(() => new Jwks(_llave));
         b.Services.AddSingleton<IProductosHabilitados>(Productos);
+        b.Services.AddSingleton<Flit.Tramites.Grpc.V1.CatalogosService.CatalogosServiceClient>(Catalogos);
+        b.Services.AddScoped<ICatalogoTiposTramite, CatalogoTiposTramiteGrpc>();
         _configurar?.Invoke(b);
     });
 

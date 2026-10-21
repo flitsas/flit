@@ -1,4 +1,5 @@
 using Flit.Diagnostico.Api;
+using Flit.Diagnostico.Api.Modulos.Catalogos;
 using Flit.Diagnostico.Api.Modulos.Comun;
 using Flit.Diagnostico.Api.Modulos.Configuracion;
 using Flit.Diagnostico.Api.Persistence;
@@ -10,8 +11,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Diagnostico.Tests.Aislamiento;
 
-/// <summary>Lo que una empresa sembró para un escenario: la URL a leer y los identificadores que solo ella puede ver.</summary>
-public sealed record Sembrado(string Url, IReadOnlyList<string> Identificadores);
+/// <summary>
+/// Lo que una empresa sembró para un escenario: la URL a leer y los identificadores que su lectura devuelve. Lo que no debe
+/// cruzar a la otra empresa son <see cref="Exclusivos"/> si se dan (un catálogo global devuelve lo mismo a todas: lo
+/// exclusivo de la empresa es su id), o los mismos <see cref="Identificadores"/>.
+/// </summary>
+public sealed record Sembrado(string Url, IReadOnlyList<string> Identificadores, IReadOnlyList<string>? Exclusivos = null)
+{
+    public IReadOnlyList<string> QueNoCruzan => Exclusivos ?? Identificadores;
+}
 
 /// <summary>Cómo sembrar datos de una empresa para un GET y qué identificadores no deben cruzar a la otra.</summary>
 public sealed record EscenarioDeFuga(string Ruta, Func<EmpresaDePrueba, CancellationToken, Task<Sembrado>> Sembrar)
@@ -63,12 +71,20 @@ public static class EscenariosDeFuga
     /// </summary>
     public const string RutaConfiguracion = Program.Prefijo + ConfiguracionEndpoints.Ruta;
 
+    /// <summary>
+    /// Tipos de trámite (HU #13742): catálogo global de Trámites, igual para toda compañía. A debe recibir el catálogo y
+    /// ninguna respuesta lleva el id de B (ni de ninguna compañía).
+    /// </summary>
+    public const string RutaTiposTramite = Program.Prefijo + TiposTramiteEndpoints.Ruta;
+
     public static IReadOnlyList<EscenarioDeFuga> Todos { get; } =
     [
         EscenarioDeFuga.Con(RutaSonda, _ => new LecturaBackoffice { EmpresaConsultada = Guid.NewGuid(), UsuarioId = Guid.NewGuid(), Ruta = "/sonda" }, l => l.Id),
         new EscenarioDeFuga(RutaSesion, (empresa, _) =>
             Task.FromResult(new Sembrado($"{RutaSesion}?empresa={empresa.Id}", [empresa.Id.ToString()]))),
         EscenarioDeFuga.Con(RutaConfiguracion, _ => new ConfiguracionEmpresa { OperativaActualizadaPor = Guid.NewGuid() }, c => c.OperativaActualizadaPor!.Value),
+        new EscenarioDeFuga(RutaTiposTramite, (empresa, _) =>
+            Task.FromResult(new Sembrado(RutaTiposTramite, ["TRASPASO_STANDARD"], Exclusivos: [empresa.Id.ToString()]))),
     ];
 
     public static EscenarioDeFuga Buscar(string ruta) => Todos.Single(e => e.Ruta == ruta);

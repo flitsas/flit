@@ -44,10 +44,10 @@ public sealed class FugaEntreEmpresasTests
         var cuerpoPropio = await propia.Content.ReadAsStringAsync(ct);
         propia.StatusCode.Should().Be(HttpStatusCode.OK, $"A lee su propio {ruta}");
         cuerpoPropio.Should().ContainAll(deA.Identificadores, "sin los datos propios la prueba de fuga no prueba nada");
-        cuerpoPropio.Should().NotContainAny(deB.Identificadores, $"{ruta} con el token de A no devuelve nada de B");
+        cuerpoPropio.Should().NotContainAny(deB.QueNoCruzan, $"{ruta} con el token de A no devuelve nada de B");
 
         var ajena = await empresas.A.Cliente().GetAsync(deB.Url, ct);
-        (await ajena.Content.ReadAsStringAsync(ct)).Should().NotContainAny(deB.Identificadores,
+        (await ajena.Content.ReadAsStringAsync(ct)).Should().NotContainAny(deB.QueNoCruzan,
             $"{deB.Url} con el token de A no devuelve nada de B");
     }
 

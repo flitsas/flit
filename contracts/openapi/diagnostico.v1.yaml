@@ -35,6 +35,8 @@ tags:
       Configuración de Diagnóstico en dos niveles (D-04, HU #13741): el contractual lo edita solo el backoffice
       FLIT y el operativo el admin de la compañía. Los valores son los códigos de la base (RUNT, EMPRESA,
       NO_MOSTRAR...) y los campos van en snake_case.
+  - name: Catalogos
+    description: Catálogos de la plataforma que Diagnóstico ofrece (tipos de trámite de Trámites).
   - name: Backoffice
     description: >
       Lectura entre compañías del backoffice FLIT (D-16, ADR-0073): permiso diagnostico.backoffice.ver y
@@ -140,6 +142,51 @@ paths:
                 $ref: "#/components/schemas/ErrorRegla"
         "422":
           description: VALOR_FUERA_DE_CONJUNTO, POR_DEFECTO_FUERA_DE_HABILITADAS o VALOR_INVALIDO.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/tipos-tramite:
+    get:
+      tags: [Catalogos]
+      operationId: listarTiposTramiteDiagnostico
+      summary: Tipos de trámite de la etapa (modo Con Análisis IA)
+      description: >
+        Permiso diagnostico.diagnosticos.crear (HU #13742). Proxy del rpc ListarTiposTramite de
+        flit.tramites.v1.CatalogosService (core-api, token de servicio svc-diagnostico con scope
+        platform.tramites.catalogos). Solo los tipos publicados cuyo código está en la lista blanca
+        Diagnostico:TiposTramite:Habilitados (TRASPASO_STANDARD, TRASPASO_UNILATERAL,
+        TRASPASO_TRANSFERENCIA_DE_DOMINIO), filtrados por código y nunca por nombre, en el orden de la
+        publicación. Catálogo global, igual para toda compañía. La última respuesta correcta se guarda 5
+        minutos; con esa copia vigente no se llama al rpc. Si el rpc falla con Unavailable o DeadlineExceeded
+        se reintenta 2 veces (200 ms y 600 ms, 3 s por llamada); PermissionDenied y Unauthenticated no se
+        reintentan. fuentesObligatorias llega vacía en D1 (R-17, hasta el catálogo de reglas de D6).
+      responses:
+        "200":
+          description: Tipos de trámite de la etapa.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TiposTramite"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.diagnosticos.crear; sin compañía (`code` = SIN_EMPRESA); compañía sin Diagnóstico activo (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "503":
+          description: >
+            `code` = CATALOGO_NO_DISPONIBLE: Trámites no respondió tras los reintentos (o rechazó al cliente de
+            servicio) y no hay copia vigente. No se devuelve ninguna lista fija ni una copia vencida.
+          headers:
+            Retry-After:
+              description: Segundos antes de reintentar.
+              schema:
+                type: integer
+                example: 30
           content:
             application/json:
               schema:
@@ -538,6 +585,36 @@ components:
           type: boolean
       example:
         limite_vehiculos_lote: 200
+
+    TiposTramite:
+      type: object
+      required: [tipos]
+      properties:
+        tipos:
+          type: array
+          items:
+            $ref: "#/components/schemas/TipoTramite"
+
+    TipoTramite:
+      type: object
+      required: [codigo, nombre, familia, fuentesObligatorias]
+      properties:
+        codigo:
+          type: string
+          description: Código estable del tipo en Trámites.
+          example: TRASPASO_STANDARD
+        nombre:
+          type: string
+          example: TRASPASO
+        familia:
+          type: string
+          description: MATRICULAS, TRASPASO u OTROS.
+          example: TRASPASO
+        fuentesObligatorias:
+          type: array
+          description: Fuentes que el tipo exige en el alcance (códigos RUNT, SIMIT_VEHICULO...). Vacía en D1.
+          items:
+            type: string
 
     ErrorRegla:
       type: object

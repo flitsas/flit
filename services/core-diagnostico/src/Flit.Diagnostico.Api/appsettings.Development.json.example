@@ -7,6 +7,11 @@
     // La misma base de core-api; el servicio usa su esquema propio «diagnostico» y lo migra al arrancar.
     "Servicio": "Host=127.0.0.1;Port=5432;Database=CAMBIAR;Username=CAMBIAR;Password=CAMBIAR"
   },
+  "Diagnostico": {
+    // Catálogo de tipos de trámite (HU #13742): gRPC de core-api con Ict__GrpcPort=8082 (docs/suite/local.md). Sin esta
+    // dirección GET /tipos-tramite responde 503: no hay lista de respaldo.
+    "Tramites": { "Address": "http://127.0.0.1:8082" }
+  },
   "Platform": {
     "Auth": {
       "JwksUri": "http://127.0.0.1:4003/.well-known/jwks.json",
