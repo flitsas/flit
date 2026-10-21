@@ -6,13 +6,23 @@ import { FileSpreadsheet, RotateCcw } from "lucide-react";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { useSesion } from "@/components/DiagnosticoShell";
 import { ApiError } from "@/lib/api";
-import { accesoNegado, confirmarVehiculos, type FilaCapturada, type FilaResumen, type ResumenValidacion as Resumen } from "@/lib/carga/api";
+import {
+  accesoNegado,
+  confirmarVehiculos,
+  esDocumentoEnmascarado,
+  type CorreccionFila,
+  type FilaCapturada,
+  type FilaResumen,
+  type ResumenValidacion as Resumen,
+} from "@/lib/carga/api";
 import { BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { ResumenValidacion } from "./ResumenValidacion";
 import { SubidaArchivo } from "./SubidaArchivo";
 import { TABLA_FILAS_ID, TablaFilasCorregibles } from "./TablaFilasCorregibles";
 
 interface Analisis {
+  /** El archivo analizado, solo en memoria: la confirmación lo reenvía (trae el documento del locatario completo). */
+  archivo: File;
   /** Resumen original de la carga (duplicados, límite, estimado). */
   resumen: Resumen;
   /** Estado vigente de cada fila, con las revalidadas encima. */
@@ -41,23 +51,37 @@ export function resumenVigente({ resumen, filas }: Pick<Analisis, "resumen" | "f
   };
 }
 
-/** Vehículos a confirmar: solo las filas válidas, en el orden del archivo. El documento viaja solo si se escribió. */
-export function vehiculosAConfirmar({ filas, capturadas }: Pick<Analisis, "filas" | "capturadas">): FilaCapturada[] {
-  return filas
-    .filter((f) => f.valida)
-    .map((f) => {
-      const c = capturadas.get(f.fila);
-      return {
-        identificador: c?.identificador ?? f.identificador,
-        tipo_documento_locatario: c?.tipo_documento_locatario ?? null,
-        documento_locatario: c?.documento_locatario ?? null,
-      };
-    });
+const ERRORES_DE_DOCUMENTO: readonly string[] = ["Tipo_Documento_Locatario", "Documento_Locatario"];
+
+/**
+ * Correcciones de la confirmación: una por fila corregida que quedó válida, en el orden del archivo. El identificador
+ * viaja si cambió. El documento: el reescrito viaja completo; si no se reescribió y el archivo lo traía con error, se
+ * vacía (es lo que validó validar-filas); si no, se omite y el servidor conserva el del archivo. Nunca el enmascarado.
+ */
+export function correccionesAConfirmar({ filas, capturadas, erroneas }: Pick<Analisis, "filas" | "capturadas" | "erroneas">): CorreccionFila[] {
+  const originales = new Map(erroneas.map((f) => [f.fila, f]));
+  return filas.flatMap((f) => {
+    const c = capturadas.get(f.fila);
+    const original = originales.get(f.fila);
+    if (!f.valida || !c || !original) return [];
+    const correccion: CorreccionFila = { fila: f.fila };
+    if (c.identificador !== original.identificador) correccion.identificador = c.identificador;
+    const documento = esDocumentoEnmascarado(c.documento_locatario) ? null : c.documento_locatario;
+    if (documento) {
+      correccion.tipo_documento_locatario = c.tipo_documento_locatario;
+      correccion.documento_locatario = documento;
+    } else if (original.errores.some((e) => ERRORES_DE_DOCUMENTO.includes(e.campo))) {
+      correccion.tipo_documento_locatario = null;
+      correccion.documento_locatario = null;
+    }
+    return Object.keys(correccion).length > 1 ? [correccion] : [];
+  });
 }
 
 /**
  * Carga masiva de un diagnóstico (HU #13754, F02-H7): subida del archivo, Resumen de Validación, corrección en sitio de
- * las filas erróneas y «Continuar solo con los válidos», que confirma con POST /diagnosticos/{id}/vehiculos y navega al
+ * las filas erróneas y «Continuar solo con los válidos», que confirma con POST /diagnosticos/{id}/vehiculos (reenvía el
+ * MISMO archivo, conservado solo en memoria, con las correcciones) y navega al
  * tablero /diagnosticos/{id}. Cuatro estados: vacío (sin archivo), cargando (analizando), error (rechazo con su motivo o
  * Reintentar) y lleno (resumen y tabla). Un 403 de sesión lleva a la página 403, como el shell.
  */
@@ -70,9 +94,10 @@ export function CargaMasiva({ diagnosticoId }: { diagnosticoId: string }) {
 
   const irA403 = (code: string) => router.replace(`/403?code=${encodeURIComponent(code)}`);
 
-  function alResumen(resumen: Resumen) {
+  function alResumen(resumen: Resumen, archivo: File) {
     setConfirmacion({ tipo: "inactivo" });
     setAnalisis((previo) => ({
+      archivo,
       resumen,
       filas: resumen.filas,
       capturadas: new Map(),
@@ -101,7 +126,7 @@ export function CargaMasiva({ diagnosticoId }: { diagnosticoId: string }) {
     if (!analisis) return;
     setConfirmacion({ tipo: "confirmando" });
     try {
-      await confirmarVehiculos(diagnosticoId, vehiculosAConfirmar(analisis));
+      await confirmarVehiculos(diagnosticoId, analisis.archivo, correccionesAConfirmar(analisis));
       router.push(`/diagnosticos/${encodeURIComponent(diagnosticoId)}`);
     } catch (e) {
       const code = accesoNegado(e);
@@ -130,16 +155,9 @@ export function CargaMasiva({ diagnosticoId }: { diagnosticoId: string }) {
     );
   } else {
     const vigente = resumenVigente(analisis);
-    const sinDocumento = analisis.filas.filter((f) => f.valida && f.documento_locatario && !analisis.capturadas.get(f.fila)?.documento_locatario).length;
     contenido = (
       <>
         <ResumenValidacion resumen={vigente} onCorregir={corregir} onContinuar={() => void continuar()} confirmando={confirmacion.tipo === "confirmando"} />
-        {sinDocumento > 0 && (
-          <InlineAlert tone="info">
-            {sinDocumento === 1 ? "1 vehículo válido se confirmará" : `${sinDocumento} vehículos válidos se confirmarán`} sin el documento del locatario: el
-            archivo lo trae enmascarado y la pantalla no lo puede reenviar.
-          </InlineAlert>
-        )}
         {confirmacion.tipo === "error" && (
           <InlineAlert
             tone="error"

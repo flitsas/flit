@@ -10,7 +10,8 @@ import { AYUDA_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, FOCO_CLS } from 
 
 export interface SubidaArchivoProps {
   diagnosticoId: string;
-  onResumen: (resumen: ResumenValidacion) => void;
+  /** El resumen y el archivo analizado: quien monta lo conserva en memoria para reenviarlo al confirmar. */
+  onResumen: (resumen: ResumenValidacion, archivo: File) => void;
   /** 403 de sesión (SIN_EMPRESA, PRODUCTO_NO_HABILITADO): quien monta decide (la página lleva a /403). */
   onAccesoNegado?: (code: string) => void;
 }
@@ -40,7 +41,7 @@ export function SubidaArchivo({ diagnosticoId, onResumen, onAccesoNegado }: Subi
     try {
       const resumen = await analizarCarga(diagnosticoId, archivo);
       setEstado({ tipo: "inactivo" });
-      onResumen(resumen);
+      onResumen(resumen, archivo);
     } catch (e) {
       const code = accesoNegado(e);
       if (code && onAccesoNegado) {

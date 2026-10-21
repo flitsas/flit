@@ -52,3 +52,16 @@ export function archivo(nombre: string, tipo = "application/octet-stream"): File
 }
 
 export const ruta = (sufijo: string) => `/diagnosticos/${ID}${sufijo}`;
+
+/** Multipart enviado en una llamada al fetch simulado (la confirmación reenvía el archivo, HU #13754 «Reenviar el archivo»). */
+export function formularioDe(llamada: unknown[]): FormData {
+  const body = (llamada[1] as RequestInit | undefined)?.body;
+  if (!(body instanceof FormData)) throw new Error("La llamada no envió multipart/form-data.");
+  return body;
+}
+
+/** Correcciones del multipart de la confirmación ya parseadas, o undefined si el campo no viaja. */
+export function correccionesDe(llamada: unknown[]): unknown {
+  const texto = formularioDe(llamada).get("correcciones");
+  return texto === null ? undefined : JSON.parse(String(texto));
+}

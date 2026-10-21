@@ -31,11 +31,20 @@ describe("SubidaArchivo — selector y plantilla", () => {
     const api = simularApi({ [`POST ${ruta("/carga")}`]: () => Response.json(resumen()) });
     const { onResumen } = montar();
     subir(archivo("flota.csv", "text/csv"));
-    await waitFor(() => expect(onResumen).toHaveBeenCalledWith(expect.objectContaining({ validos: 2, erroneos: 1, duplicados: 1 })));
+    await waitFor(() => expect(onResumen).toHaveBeenCalledWith(expect.objectContaining({ validos: 2, erroneos: 1, duplicados: 1 }), expect.any(File)));
     const [llamada] = llamadas(api, "POST", ruta("/carga"));
     const body = (llamada[1] as RequestInit).body as FormData;
     expect(body).toBeInstanceOf(FormData);
     expect((body.get("archivo") as File).name).toBe("flota.csv");
+  });
+
+  it("entrega también el mismo archivo con el resumen, para reenviarlo al confirmar", async () => {
+    simularApi({ [`POST ${ruta("/carga")}`]: () => Response.json(resumen()) });
+    const { onResumen } = montar();
+    const elegido = archivo("flota.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    subir(elegido);
+    await waitFor(() => expect(onResumen).toHaveBeenCalled());
+    expect(onResumen.mock.calls[0][1]).toBe(elegido);
   });
 });
 

@@ -78,7 +78,8 @@ const mensajes = (errores: ErrorFila[], campos: ErrorFila["campo"][]) =>
  * Tabla de filas erróneas editable (HU #13754, F02-C9): cada fila se corrige en sitio; al dejar de escribir 300 ms se
  * valida en pantalla con fieldRules y, si pasa, se revalida con POST /diagnosticos/{id}/carga/validar-filas (el servidor
  * manda) y la fila cambia de estado. El documento del locatario se muestra enmascarado y rotulado «Declarado por el
- * cliente»; para corregirlo hay que volver a escribirlo, y ese valor no se guarda en el navegador.
+ * cliente»; vacío se conserva el del archivo (la confirmación lo reenvía) y, para corregirlo, se vuelve a escribir: ese
+ * valor no se guarda en el navegador.
  */
 export function TablaFilasCorregibles({ diagnosticoId, filas, onFilaRevalidada, onAccesoNegado }: TablaFilasCorregiblesProps) {
   const [ediciones, setEdiciones] = useState<Map<number, Edicion>>(() => new Map(filas.map((f) => [f.fila, edicionDe(f)])));
@@ -172,6 +173,7 @@ export function TablaFilasCorregibles({ diagnosticoId, filas, onFilaRevalidada, 
               const n = e.resumen.fila;
               const errorId = e.errorLocal ?? (mensajes(e.resumen.errores, ["Identificador_Vehiculo"]) || null);
               const errorDoc = mensajes(e.resumen.errores, ["Tipo_Documento_Locatario", "Documento_Locatario"]) || null;
+              const docConError = original.errores.some((x) => x.campo !== "Identificador_Vehiculo");
               const idError = `fila-${n}-error-id`;
               const idDoc = `fila-${n}-error-doc`;
               return (
@@ -219,7 +221,7 @@ export function TablaFilasCorregibles({ diagnosticoId, filas, onFilaRevalidada, 
                       aria-invalid={errorDoc ? true : undefined}
                       aria-describedby={errorDoc ? idDoc : undefined}
                       autoComplete="off"
-                      placeholder={e.resumen.documento_locatario ? "Vuelve a escribirlo" : "Opcional"}
+                      placeholder={original.documento_locatario ? (docConError ? "Vuelve a escribirlo" : "Vacío conserva el del archivo") : "Opcional"}
                       className={`${CAMPO_CLS} ${CAMPO_INVALIDO_CLS}`}
                     />
                     <div className="mt-1">
