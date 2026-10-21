@@ -230,7 +230,8 @@ public static class RuntGarantiasMobiliarias
     /// null, <c>runt_nombre_acreedor</c> con el primer acreedor o null, y <c>runt_gravamenes</c> con el
     /// JSON normalizado o <c>"[]"</c>. HU #13776: también <c>runt_prendario</c> (null) y
     /// <c>runt_limitaciones_propiedad</c> (<c>"[]"</c>), que Kyverum y Verifik no traen: si un trámite
-    /// se consultó antes por Intempo, la re-consulta no deja vivo el dato viejo en la señal. El upsert de la consulta solo inserta o actualiza: sin escribir la
+    /// se consultó antes por Intempo, la re-consulta no deja vivo el dato viejo en la señal.
+    /// El upsert de la consulta solo inserta o actualiza: sin escribir la
     /// clave, el detalle de una consulta anterior sobrevivía y <see cref="RuntGravamenSignal"/> lo seguía
     /// contando aunque el RUNT ya no reportara nada.
     /// </summary>

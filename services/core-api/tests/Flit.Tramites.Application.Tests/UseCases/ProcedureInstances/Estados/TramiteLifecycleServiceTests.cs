@@ -1057,6 +1057,54 @@ public sealed class TramiteLifecycleServiceTests
         });
 
     /// <summary>
+    /// HU #13776 (O1 de revisión) — gate R10 del traspaso con el check <c>gravamenes</c> de Intempo en
+    /// <c>unknown</c> (banderas vacías, sin detalle ni limitaciones): preparar NO exige decisión de
+    /// prenda, porque <c>HasGravamenWarn</c> solo reconoce <c>warn</c>/<c>fail</c>. El control con
+    /// <c>warn</c> prueba que, en el mismo cableado y sin decisión, el gate sí bloquea.
+    /// <para>Uso de ejemplo: <c>TransitionAsync(new TramiteTransitionCommand(id, tenant, "preparado", …))</c>
+    /// con el snapshot en <c>unknown</c> devuelve <c>Success = true</c>.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("unknown", true)]
+    [InlineData("warn", false)]
+    public async Task Preparar_TraspasoSinDecision_SoloExigePrendaSiGravamenesEnWarn(string status, bool avanza)
+    {
+        var otId = Guid.NewGuid();
+        var i = WireTraspaso(TramiteEstado.Borrador, otId, DateTimeOffset.UtcNow, conDocumentoPrenda: false);
+        i.PreflightSnapshots.Add(new ProcedureInstancePreflightSnapshot
+        {
+            Id = Guid.NewGuid(),
+            TenantId = i.TenantId,
+            ProcedureInstanceId = i.Id,
+            Overall = status,
+            Checks = $$"""[{"key":"gravamenes","label":"Gravámenes","status":"{{status}}","source":"intempo","message":null,"details":[]}]""",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        _prendaPolicy
+            .IsRequiredAsync(i.TenantId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .Returns(false);
+        var sut = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(null));
+
+        var outcome = await sut.TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        if (avanza)
+        {
+            outcome.Success.Should().BeTrue(outcome.ErrorCode);
+            i.Status.Should().Be(TramiteEstado.Preparado);
+        }
+        else
+        {
+            outcome.Success.Should().BeFalse();
+            outcome.ErrorCode.Should().Be(TramiteEstadoErrores.PrendaDecisionRequerida);
+        }
+    }
+
+    /// <summary>
     /// AC7 — Traspaso con <c>omitir</c>, preflight de gravámenes en <c>warn</c> y OT con certificado
     /// opcional: el gate R10 del traspaso acepta <c>omitir</c> sin documento ni acreedor. El control
     /// (<c>decision = null</c>) prueba que el semáforo en warn sí activa el gate en este cableado.
