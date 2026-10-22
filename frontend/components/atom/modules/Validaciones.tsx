@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   Bell,
   CheckCircle2,
+  CalendarX,
   ChevronDown,
   Clock,
   Copy,
@@ -92,6 +93,7 @@ import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, hasPermission, isSuperAdmin } from '@/lib/auth/jwt';
 import { useToast } from '@/components/admin/Toast';
 import { ADMIN_TRAMITE_PERMISSIONS } from '@/lib/tramites/admin-tramite-permissions';
+import { VencerIdentidadModal } from '@/components/operacion/VencerIdentidadModal';
 import { ReenviarValidacionIdentidadModal } from '@/components/operacion/ReenviarValidacionIdentidadModal';
 import type {
   BiometricEstado,
@@ -540,6 +542,8 @@ function ValidacionesLista({
   // de este módulo (D12); este abre el modal completo de `AdminTramiteAcciones` con selector de
   // validación + correo, reutilizado tal cual.
   const [adminReenviarRow, setAdminReenviarRow] = useState<TenantBiometricValidation | null>(null);
+  // HU #13825 — fila cuya identidad se va a vencer (modal de confirmación).
+  const [vencerRow, setVencerRow] = useState<TenantBiometricValidation | null>(null);
 
   // Tick ligero para refrescar la etiqueta "disponible en N min" sin depender de una acción del
   // usuario. No es una fuente de datos — solo fuerza el recálculo del cooldown en pantalla.
@@ -1348,6 +1352,8 @@ function ValidacionesLista({
               openForTenant(row.tenantId);
               setAdminReenviarRow(row);
             }}
+            canVencer={isFlitAdmin}
+            onVencerClick={(row) => setVencerRow(row)}
           />
 
           {/* HU #12707 (AC9) — pie de Trámites: «Filas por página» + navegación numerada. Bug #13055:
@@ -1524,6 +1530,13 @@ function ValidacionesLista({
         />
       )}
       </>)}
+      {vencerRow && (
+        <VencerIdentidadModal
+          row={vencerRow}
+          onClose={() => setVencerRow(null)}
+          onVencida={() => void load(appliedRef.current, { background: true })}
+        />
+      )}
     </div>
   );
 }
@@ -2095,6 +2108,8 @@ function PersonasTable({
   onNewFor,
   canAdminReenviar,
   onAdminReenviarClick,
+  canVencer,
+  onVencerClick,
 }: {
   rows: TenantBiometricPerson[];
   columns: readonly IdentidadColumnKey[];
@@ -2117,6 +2132,9 @@ function PersonasTable({
   /** HU #12164 (AC1) — permiso `AdminTramiteReenviarValidacion`: gatea "Reenviar" en filas de trámite. */
   canAdminReenviar: boolean;
   onAdminReenviarClick: (row: TenantBiometricValidation) => void;
+  /** HU #13825 — «Vencer»: solo Super Admin. */
+  canVencer: boolean;
+  onVencerClick: (row: TenantBiometricValidation) => void;
 }) {
   const byLatestId = new Map(rows.map((r) => [r.latestValidationId, r]));
   const mapped: TenantBiometricValidation[] = rows.map((p) => ({
@@ -2171,6 +2189,8 @@ function PersonasTable({
       onNewFor={onNewFor}
       canAdminReenviar={canAdminReenviar}
       onAdminReenviarClick={onAdminReenviarClick}
+      canVencer={canVencer}
+      onVencerClick={onVencerClick}
     />
   );
 }
@@ -2191,6 +2211,8 @@ function ValidacionesTable({
   onNewFor,
   canAdminReenviar,
   onAdminReenviarClick,
+  canVencer,
+  onVencerClick,
 }: {
   rows: TenantBiometricValidation[];
   columns: readonly IdentidadColumnKey[];
@@ -2206,6 +2228,9 @@ function ValidacionesTable({
   onNewFor: (row: TenantBiometricValidation) => void;
   canAdminReenviar: boolean;
   onAdminReenviarClick: (row: TenantBiometricValidation) => void;
+  /** HU #13825 — «Vencer»: solo Super Admin. */
+  canVencer: boolean;
+  onVencerClick: (row: TenantBiometricValidation) => void;
 }) {
   const anchos = anchosColumnas(columns);
   // Ancho mínimo proporcional a las columnas visibles: con pocas no fuerza scroll horizontal.
@@ -2262,6 +2287,8 @@ function ValidacionesTable({
               onNewFor={onNewFor}
               canAdminReenviar={canAdminReenviar}
               onAdminReenviarClick={onAdminReenviarClick}
+              canVencer={canVencer}
+              onVencerClick={onVencerClick}
             />
           ))}
         </tbody>
@@ -2285,6 +2312,8 @@ function ValidacionRow({
   onNewFor,
   canAdminReenviar,
   onAdminReenviarClick,
+  canVencer,
+  onVencerClick,
 }: {
   row: TenantBiometricValidation;
   columns: readonly IdentidadColumnKey[];
@@ -2301,6 +2330,9 @@ function ValidacionRow({
   onNewFor: (row: TenantBiometricValidation) => void;
   canAdminReenviar: boolean;
   onAdminReenviarClick: (row: TenantBiometricValidation) => void;
+  /** HU #13825 — «Vencer»: solo Super Admin. */
+  canVencer: boolean;
+  onVencerClick: (row: TenantBiometricValidation) => void;
 }) {
   const [copied, setCopied] = useState(false);
   // Estado EFECTIVO: una validación no aprobada con el enlace vencido se lee "Expirado" aunque el
@@ -2492,6 +2524,17 @@ function ValidacionRow({
       onSelect: () => onResendClick(r),
       disabled: resendDisabledReason !== null,
       disabledReason: resendDisabledReason ?? undefined,
+    });
+  }
+
+  // HU #13825 (AC1/AC4) — «Vencer» solo Super Admin y solo en identidades APROBADAS y VIGENTES
+  // (vigencia > 0 días); la identidad de un mandatario no se vence desde este módulo.
+  if (canVencer && isApproved && !esMandatario && r.daysRemaining != null && r.daysRemaining > 0) {
+    actionItems.push({
+      key: 'vencer',
+      label: 'Vencer',
+      icon: CalendarX,
+      onSelect: () => onVencerClick(r),
     });
   }
 
