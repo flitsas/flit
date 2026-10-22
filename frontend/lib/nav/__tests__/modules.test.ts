@@ -10,16 +10,13 @@ import {
   UNIVERSAL_MODULE_IDS,
 } from "../modules";
 
+/** Claims mínimos de un usuario con sesión (HU #13649: el menú se decide con claims + catálogo RBAC). */
+const claims = (over: Record<string, unknown> = {}) => ({ sub: "u1", roles: [], permissions: [], ...over });
+const superAdminClaims = claims({ roles: [{ code: "SuperAdmin" }] });
+const otAdminClaims = claims({ roles: [{ code: "ot_admin" }], entity_type: "TRANSIT_OFFICE" });
+
 describe("nav/modules — resolveNavigableModuleIds", () => {
-  const base = {
-    accessibleCodes: [] as string[],
-    isSuperAdmin: false,
-    isOtAdmin: false,
-    canReadLogQx: false,
-    canReadIctLogs: false,
-    canReadIctTrazabilidad: false,
-    canReadIctReportes: false,
-  };
+  const base = { accessibleCodes: [] as string[], claims: claims() };
 
   it("incluye 'ayuda' aunque RBAC no la conceda", () => {
     const valid = resolveNavigableModuleIds({
@@ -74,17 +71,18 @@ describe("nav/modules — resolveNavigableModuleIds", () => {
   it("auditoria / log-qx / ict-logs solo con claims del dock", () => {
     expect(resolveNavigableModuleIds(base)).not.toContain("auditoria");
     expect(
-      resolveNavigableModuleIds({ ...base, isSuperAdmin: true }),
+      resolveNavigableModuleIds({ ...base, claims: superAdminClaims }),
     ).toEqual(expect.arrayContaining(["rbac", "auditoria", "dashboard", "ayuda"]));
     expect(
-      resolveNavigableModuleIds({ ...base, canReadLogQx: true }),
+      resolveNavigableModuleIds({ ...base, claims: claims({ permissions: ["logqx.read"] }) }),
     ).toContain("log-qx");
     // Bug #13445: cada espacio de ICT con su gate (Log solo SuperAdmin; Trazabilidad y Reportes por su permiso).
-    const soloLog = resolveNavigableModuleIds({ ...base, canReadIctLogs: true });
+    const soloLog = resolveNavigableModuleIds({ ...base, claims: superAdminClaims });
     expect(soloLog).toContain("ict-logs");
-    expect(soloLog).not.toContain("ict-reportes");
-    expect(soloLog).not.toContain("ict-trazabilidad");
-    const adminCompany = resolveNavigableModuleIds({ ...base, canReadIctTrazabilidad: true, canReadIctReportes: true });
+    const adminCompany = resolveNavigableModuleIds({
+      ...base,
+      claims: claims({ permissions: ["ict.trazabilidad.read", "ict.reportes.read"] }),
+    });
     expect(adminCompany).toEqual(expect.arrayContaining(["ict-reportes", "ict-trazabilidad"]));
     expect(adminCompany).not.toContain("ict-logs");
     // Y sin el permiso no se cuela ninguno.
@@ -97,7 +95,7 @@ describe("nav/modules — resolveNavigableModuleIds", () => {
   it("OT admin omite SPA homónimas del hub (otAdminSpaOmit)", () => {
     const valid = resolveNavigableModuleIds({
       ...base,
-      isOtAdmin: true,
+      claims: otAdminClaims,
       accessibleCodes: ["tramites", "reportes", "usuarios", "validaciones"],
     });
     expect(valid).not.toContain("tramites");
@@ -108,7 +106,7 @@ describe("nav/modules — resolveNavigableModuleIds", () => {
   });
 
   it("no incluye rutas /admin en el catálogo ?m=", () => {
-    const valid = resolveNavigableModuleIds({ ...base, isSuperAdmin: true });
+    const valid = resolveNavigableModuleIds({ ...base, claims: superAdminClaims });
     expect(valid.every((id) => !id.startsWith("admin"))).toBe(true);
   });
 

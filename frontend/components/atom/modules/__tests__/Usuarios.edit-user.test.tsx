@@ -7,6 +7,7 @@ import userEvent from "@testing-library/user-event";
 import { Usuarios } from "../Usuarios";
 import { getUsers, updateUser } from "@/lib/api/security";
 import type { TenantUser } from "@/lib/api/security";
+import { chooseRowAction, rowActionNames } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 
 vi.mock("@/hooks/usePermissions", () => ({
   usePermissions: () => ({
@@ -75,12 +76,14 @@ describe("Usuarios — botón Editar (#10622)", () => {
 
   it("AC4: no muestra el botón Editar para un usuario con estado Pendiente", async () => {
     vi.mocked(getUsers).mockResolvedValue([pendingUser]);
+    const user = userEvent.setup();
     render(<Usuarios />);
 
     await screen.findByText("Invitado Sin Cuenta");
-    expect(
-      screen.queryByRole("button", { name: /editar usuario invitado sin cuenta/i }),
-    ).not.toBeInTheDocument();
+    // HU #13653: las acciones viven en el menú «Acciones» de la fila.
+    expect(await rowActionNames(user, "Invitado Sin Cuenta")).not.toContainEqual(
+      expect.stringMatching(/editar usuario/i),
+    );
   });
 
   it("AC1: abre el modal prellenado con nombre y correo al hacer clic en Editar de un usuario activo", async () => {
@@ -89,7 +92,7 @@ describe("Usuarios — botón Editar (#10622)", () => {
     render(<Usuarios />);
 
     await screen.findByText("Ana Torres");
-    await user.click(screen.getByRole("button", { name: /editar usuario ana torres/i }));
+    await chooseRowAction(user, "Ana Torres", /editar usuario ana torres/i);
 
     expect(await screen.findByLabelText(/nombre completo/i)).toHaveValue("Ana Torres");
     expect(screen.getByLabelText(/correo electrónico/i)).toHaveValue("ana@flit.local");
@@ -102,7 +105,7 @@ describe("Usuarios — botón Editar (#10622)", () => {
     render(<Usuarios />);
 
     await screen.findByText("Ana Torres");
-    await user.click(screen.getByRole("button", { name: /editar usuario ana torres/i }));
+    await chooseRowAction(user, "Ana Torres", /editar usuario ana torres/i);
 
     const nameInput = await screen.findByLabelText(/nombre completo/i);
     await user.clear(nameInput);

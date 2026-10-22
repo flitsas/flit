@@ -2,9 +2,17 @@
 // colores y etiquetas para que ningún componente use HEX sueltos: la paleta es la
 // misma que el resto del shell FLIT (Dashboard, UiStateBoundary).
 import type { AnalyticsCategory } from "@/lib/api/types";
+import type { ProcedureFamily } from "@/lib/api/types/procedure-parametrization";
 
 /** Orden estable en el que se pintan las categorías (RF01). "otros" cierra como catch-all. */
 export const CATEGORY_ORDER: readonly AnalyticsCategory[] = ["matriculas", "traspasos", "otros"];
+
+/** Familia del tipo de trámite detrás de cada categoría (HU #13665: Ver por familia oculta su tarjeta y su serie). */
+export const CATEGORY_FAMILY: Record<AnalyticsCategory, ProcedureFamily> = {
+  matriculas: "MATRICULAS",
+  traspasos: "TRASPASO",
+  otros: "OTROS",
+};
 
 /** Etiqueta legible + color de marca por categoría de trámite. */
 export const CATEGORY_META: Record<AnalyticsCategory, { label: string; color: string }> = {

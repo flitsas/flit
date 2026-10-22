@@ -56,7 +56,7 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
     }
 
     [Fact]
-    public async Task Invite_AsSuperAdmin_TargetingTransitOfficeId_ResolvesOtAdminRole_Returns201()
+    public async Task Invite_AsSuperAdmin_TargetingTransitOfficeId_WithOtAdminRole_Returns201()
     {
         var token = MintToken("SuperAdmin", Guid.NewGuid(), _superAdminUserId);
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -64,7 +64,7 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         var email = $"superadmin-invite-{Guid.NewGuid():N}@flit.local";
         var response = await _client.PostAsJsonAsync(
             $"/api/v1/admin/ot/users/invite?transitOfficeId={_transitOfficeId}",
-            new { email, fullName = "Primer AdminOT" },
+            new { email, fullName = "Primer AdminOT", roleIds = new[] { _roleId } },
             TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -85,7 +85,7 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         var email = $"ot-admin-invite-{Guid.NewGuid():N}@flit.local";
         var response = await _client.PostAsJsonAsync(
             "/api/v1/admin/ot/users/invite",
-            new { email, fullName = "Colaborador OT" },
+            new { email, fullName = "Colaborador OT", roleIds = new[] { _roleId } },
             TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -108,7 +108,7 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         var email = $"ot-spoof-invite-{Guid.NewGuid():N}@flit.local";
         var response = await _client.PostAsJsonAsync(
             $"/api/v1/admin/ot/users/invite?transitOfficeId={foreignOfficeId}",
-            new { email, fullName = "Colaborador propio" },
+            new { email, fullName = "Colaborador propio", roleIds = new[] { _roleId } },
             TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -131,6 +131,32 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
             TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    // HU #13655 — el rol es obligatorio también para el Admin OT y el Super Admin: sin rol ya no se asigna
+    // Administrador OT por defecto, responde 400 ROLE_REQUIRED y no se crea la invitación.
+    [Theory]
+    [InlineData("ot_admin")]
+    [InlineData("SuperAdmin")]
+    public async Task Invite_WithoutRole_Returns400RoleRequired_AndCreatesNoInvitation(string role)
+    {
+        var token = role == "SuperAdmin"
+            ? MintToken("SuperAdmin", Guid.NewGuid(), _superAdminUserId)
+            : MintToken("ot_admin", _otTenantId, _otAdminUserId);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var email = $"sin-rol-{Guid.NewGuid():N}@flit.local";
+        var response = await _client.PostAsJsonAsync(
+            $"/api/v1/admin/ot/users/invite?transitOfficeId={_transitOfficeId}",
+            new { email, fullName = "Sin rol" },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().Contain("ROLE_REQUIRED");
+
+        await using var db = CreateDbContext();
+        (await db.UserInvitations.AsNoTracking()
+            .AnyAsync(i => i.Email == email, TestContext.Current.CancellationToken)).Should().BeFalse();
     }
 
     [Fact]
@@ -554,7 +580,7 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         var email = $"ot-cancel-invite-{Guid.NewGuid():N}@flit.local";
         var inviteResponse = await _client.PostAsJsonAsync(
             "/api/v1/admin/ot/users/invite",
-            new { email, fullName = "Colaborador a cancelar" },
+            new { email, fullName = "Colaborador a cancelar", roleIds = new[] { _roleId } },
             TestContext.Current.CancellationToken);
         inviteResponse.StatusCode.Should().Be(HttpStatusCode.Created);
 
@@ -582,7 +608,7 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         // El email queda disponible para una nueva invitación (la cancelada no cuenta como pending).
         var reInviteResponse = await _client.PostAsJsonAsync(
             "/api/v1/admin/ot/users/invite",
-            new { email, fullName = "Colaborador a cancelar" },
+            new { email, fullName = "Colaborador a cancelar", roleIds = new[] { _roleId } },
             TestContext.Current.CancellationToken);
         reInviteResponse.StatusCode.Should().Be(HttpStatusCode.Created);
     }
@@ -597,7 +623,7 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         var email = $"ot-cancel-twice-{Guid.NewGuid():N}@flit.local";
         await _client.PostAsJsonAsync(
             "/api/v1/admin/ot/users/invite",
-            new { email, fullName = "Cancelar Dos Veces OT" },
+            new { email, fullName = "Cancelar Dos Veces OT", roleIds = new[] { _roleId } },
             TestContext.Current.CancellationToken);
 
         Guid invitationId;
@@ -641,7 +667,7 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         var email = $"ot-list-cancelled-{Guid.NewGuid():N}@flit.local";
         await _client.PostAsJsonAsync(
             "/api/v1/admin/ot/users/invite",
-            new { email, fullName = "Cancelada en el listado" },
+            new { email, fullName = "Cancelada en el listado", roleIds = new[] { _roleId } },
             TestContext.Current.CancellationToken);
 
         Guid invitationId;
@@ -674,7 +700,7 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         var email = $"ot-reactivate-{Guid.NewGuid():N}@flit.local";
         await _client.PostAsJsonAsync(
             "/api/v1/admin/ot/users/invite",
-            new { email, fullName = "Reactivar OT" },
+            new { email, fullName = "Reactivar OT", roleIds = new[] { _roleId } },
             TestContext.Current.CancellationToken);
 
         Guid invitationId;
@@ -713,7 +739,7 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         var email = $"ot-reactivate-pending-{Guid.NewGuid():N}@flit.local";
         await _client.PostAsJsonAsync(
             "/api/v1/admin/ot/users/invite",
-            new { email, fullName = "Sigue pendiente" },
+            new { email, fullName = "Sigue pendiente", roleIds = new[] { _roleId } },
             TestContext.Current.CancellationToken);
 
         await using var db = CreateDbContext();
@@ -1274,7 +1300,7 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
 
         var inviteResponse = await _client.PostAsJsonAsync(
             "/api/v1/admin/ot/users/invite",
-            new { email = collaboratorEmail, fullName = "Reintento de invitación" },
+            new { email = collaboratorEmail, fullName = "Reintento de invitación", roleIds = new[] { _roleId } },
             TestContext.Current.CancellationToken);
 
         inviteResponse.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -1293,7 +1319,7 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
 
         var inviteResponse = await _client.PostAsJsonAsync(
             "/api/v1/admin/ot/users/invite",
-            new { email = pendingEmail, fullName = "Invitación duplicada" },
+            new { email = pendingEmail, fullName = "Invitación duplicada", roleIds = new[] { _roleId } },
             TestContext.Current.CancellationToken);
 
         inviteResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
@@ -1322,7 +1348,7 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
 
         var inviteResponse = await _client.PostAsJsonAsync(
             "/api/v1/admin/ot/users/invite",
-            new { email = collaboratorEmail, fullName = "Ya tiene cuenta activa" },
+            new { email = collaboratorEmail, fullName = "Ya tiene cuenta activa", roleIds = new[] { _roleId } },
             TestContext.Current.CancellationToken);
 
         inviteResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);

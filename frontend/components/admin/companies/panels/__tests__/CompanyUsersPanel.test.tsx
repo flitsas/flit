@@ -2,6 +2,8 @@
 // módulo Usuarios y el hub OT (HU #11551 — AC4: columnas Perfil y Rol separadas en las tres).
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { findRowAction } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 import { CompanyUsersPanel } from "../CompanyUsersPanel";
 import { getUsers } from "@/lib/api/security";
 
@@ -58,8 +60,9 @@ describe("CompanyUsersPanel — tabla con columnas Perfil y Rol separadas (AC4)"
     expect(within(encabezado).getByText("Rol")).toBeInTheDocument();
     expect(within(fila).getByText("Gestor · Admin")).toBeInTheDocument();
     expect(within(fila).getByText("Administrador de Compañía")).toBeInTheDocument();
+    // HU #13653: las acciones de la fila viven en su menú «Acciones».
     expect(
-      within(fila).getByRole("button", { name: /editar usuario hugo vélez/i }),
+      await findRowAction(userEvent.setup(), "Hugo Vélez", /editar usuario hugo vélez/i, within(fila)),
     ).toBeInTheDocument();
   });
 });

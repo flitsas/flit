@@ -86,7 +86,9 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
     IProcedureTypeRepository? typeRepo = null,
     // ADR-0051 Decisión 5 — best-effort, opcional: los tests que no lo inyectan simplemente no
     // sincronizan (comportamiento previo a esta pieza).
-    SyncSellerActorFromConsultationsHandler? sellerSyncHandler = null)
+    SyncSellerActorFromConsultationsHandler? sellerSyncHandler = null,
+    // HU #13664 — Crear por familia: se valida antes de gastar el preview o tocar el RUNT.
+    IProcedureFamilyPermissionGate? familyPermissions = null)
 {
     // HU #10970 — mismo modo por ambiente que el resto del flujo. Sin inyectar ⇒ bloqueo duro.
     private readonly TramiteValidationPolicy _validationPolicy =
@@ -119,6 +121,10 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
             : ProcedureFamilyCodes.FromCodeOrLegacyModalidad(request.Modalidad);
         if (modalidad is null)
             return (null, "modalidad_not_available", null, null);
+
+        // HU #13664 — Crear por familia (AND con tramites.create de la ruta); sin exigencia activa siempre pasa.
+        if (familyPermissions is not null && !familyPermissions.CanCreate(modalidad.Value))
+            return (null, "family_permission_denied", null, null);
 
         // Qué identificador exige el trámite lo declara el tipo (`entryMode`), no la familia: es la
         // diferencia entre pedir el VIN de un vehículo sin placa y la placa de uno ya matriculado.

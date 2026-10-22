@@ -36,6 +36,14 @@ public interface IRoleRepository
     /// </summary>
     Task<bool> CodeTakenForTenantAsync(Guid tenantId, string code, CancellationToken ct);
 
+    /// <summary>
+    /// HU #13653: codes vigentes (en minúsculas) que empiezan por <paramref name="prefix"/> y chocarían con un rol nuevo
+    /// en el ámbito real de unicidad de <c>security.roles</c>. Con <paramref name="tenantId"/>: los globales (cualquier tipo
+    /// de entidad) y los propios del tenant. Sin tenant (rol global): los globales del mismo tipo de entidad y los de
+    /// cualquier tenant (el disparador <c>tr_roles_tenant_code_not_global</c> los compara). Los borrados no cuentan.
+    /// </summary>
+    Task<IReadOnlyList<string>> FindTakenCodesAsync(Guid? tenantId, string targetEntityType, string prefix, CancellationToken ct);
+
     /// <summary>Cambia nombre y descripción de un rol propio del tenant.</summary>
     Task UpdateDetailsAsync(Guid roleId, string name, string? description, CancellationToken ct);
 
@@ -52,8 +60,11 @@ public interface IRoleRepository
     Task<IReadOnlyList<PermissionInfo>> ListGrantablePermissionsAsync(IReadOnlyCollection<string> productCodes, CancellationToken ct);
 }
 
-/// <summary>Un permiso con el producto de su módulo (HU #13441).</summary>
-public sealed record PermissionInfo(Guid Id, string Slug, string Name, string ModuleCode, string ProductCode);
+/// <summary>
+/// Un permiso con el producto de su módulo (HU #13441). HU #13666: <paramref name="ModuleName"/> es el nombre legible del
+/// módulo (el mismo del Panel SA), para que la compañía no vea códigos internos al armar un rol.
+/// </summary>
+public sealed record PermissionInfo(Guid Id, string Slug, string Name, string ModuleCode, string ProductCode, string ModuleName = "");
 
 public sealed record CreateRoleData(
     string TargetEntityType,

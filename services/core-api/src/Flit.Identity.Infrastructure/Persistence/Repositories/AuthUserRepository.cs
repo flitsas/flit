@@ -1,6 +1,7 @@
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Domain.Auth;
+using Flit.Modules.Security.Domain.PermissionOverrides;
 using Flit.Modules.Security.Domain.UserRoles;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,6 +9,12 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 
 public sealed class AuthUserRepository(IIdentityDb db, IUserRoleAssignmentRepository userRoleAssignmentRepository) : IAuthUserRepository
 {
+    private const string PlatformProduct = "plataforma";
+
+    private const string SuperAdminRole = "SuperAdmin";
+
+    private readonly EffectivePermissionOverrideReader _overrides = new(db);
+
     public async Task<UserAuthSnapshot?> FindByEmailAsync(string email, CancellationToken cancellationToken)
     {
         var normalizedEmail = email.Trim().ToLowerInvariant();
@@ -101,6 +108,18 @@ public sealed class AuthUserRepository(IIdentityDb db, IUserRoleAssignmentReposi
             .DistinctBy(r => r.Id)
             .ToList();
 
+        // HU #13643 — permisos efectivos = rol + allow - deny del tenant del token, con los allow filtrados por los
+        // productos habilitados (FB-3: producto > usuario > rol). El SuperAdmin no admite overrides. Una consulta de
+        // overrides por emisión; la de productos solo si hay algún allow fuera de plataforma (que siempre está encendida).
+        IReadOnlyList<EffectivePermissionOverride> overrides = activeRoles.Any(r => string.Equals(r.Code, SuperAdminRole, StringComparison.OrdinalIgnoreCase))
+            ? []
+            : await _overrides.ListActiveAsync(tenantId.Value, user.Id, cancellationToken);
+        IReadOnlySet<string> enabledProducts = overrides.Any(o => o.Effect == PermissionEffects.Allow && o.ProductCode != PlatformProduct)
+            ? await _overrides.EnabledProductsAsync(tenantId.Value, cancellationToken)
+            : new HashSet<string>(StringComparer.Ordinal);
+        IReadOnlyList<string> effectivePermissions = EffectivePermissionsCalculator.Compute(
+            permissionSlugs, overrides, p => p == PlatformProduct || enabledProducts.Contains(p));
+
         return new UserAuthSnapshot
         {
             UserId = user.Id,
@@ -116,7 +135,8 @@ public sealed class AuthUserRepository(IIdentityDb db, IUserRoleAssignmentReposi
             IsGroupParent = isGroupParent,
             ActiveRoles = activeRoles,
             TotalAssignedRolesCount = totalAssignedRolesCount,
-            PermissionSlugs = permissionSlugs,
+            PermissionSlugs = effectivePermissions,
+            PermissionOverrides = overrides,
             IsTemporarilySuspended = isSuspended,
         };
     }

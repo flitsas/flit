@@ -32,6 +32,7 @@ import { useMostrarLoteDescarga } from '@/components/shared/LoteDescargaTracker'
 import type { LoteConsolidados, TipoDocumentoLote } from '@/lib/api/types-consolidado-lotes';
 import { consolidadoLotesClient } from '@/lib/api/consolidado-lotes-client';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useFamilyAccess } from '@/hooks/useFamilyAccess';
 import {
   ETIQUETA_CLIENTE_HIJO,
   ETIQUETA_CLIENTE_PROPIO,
@@ -284,7 +285,7 @@ function IdentidadChip({ chip, ayuda, tipId }: { chip: Chip; ayuda: string; tipI
         <span
           id={tipId}
           role="tooltip"
-          className="absolute left-0 top-full z-30 mt-1.5 w-64 rounded-xl border bg-white p-2.5 text-left text-xs leading-snug text-flit-primary shadow-lg dark:bg-[#162744] dark:text-white/90"
+          className="absolute left-0 top-full z-30 mt-1.5 w-64 rounded-xl border bg-white p-2.5 text-left text-xs leading-snug text-flit-primary shadow-lg dark:bg-flit-primary dark:text-white/90"
           style={{ borderColor: '#DFE5ED' }}
         >
           {ayuda}
@@ -364,6 +365,9 @@ interface TramitesTableProps {
 
 export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: TramitesTableProps) {
   const router = useRouter();
+  // HU #13665 — Ver / Crear por familia: pestañas visibles y botón «Nuevo trámite».
+  const familyAccess = useFamilyAccess();
+  const puedeCrearAlguna = familyAccess.creatable.length > 0;
   const [items, setItems] = useState<InstanceSummary[]>([]);
   /** Conteo por estado del UNIVERSO filtrado — lo sirve el backend, no se deriva de `items`. */
   const [estadoCounts, setEstadoCounts] = useState<Record<string, number>>({});
@@ -1401,6 +1405,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
         {/* flit-tramites-chrome: tabs + filtros ANTES de KPIs */}
         <TramitesListToolbar
           modalidad={modalidad}
+          familias={familyAccess.readable}
           onModalidadChange={handleModalidadChange}
           onRefresh={handleRefresh}
           loading={loading}
@@ -1486,7 +1491,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                 </button>
               }
               bulkUploadAction={
-                onBulkUpload ? (
+                onBulkUpload && puedeCrearAlguna ? (
                   <button
                     type="button"
                     onClick={() => onBulkUpload()}
@@ -1544,6 +1549,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
               />
             </div>
           ) : null}
+          {puedeCrearAlguna ? (
           <button
             type="button"
             onClick={() => onNewTramite?.()}
@@ -1562,6 +1568,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
               trámite
             </span>
           </button>
+          ) : null}
         </div>
 
         {hayCambios && !loading ? <AvisoHayCambios onActualizar={() => void load()} /> : null}
@@ -1771,7 +1778,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
           aria-labelledby="procesar-plate-title"
         >
           <div
-            className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#162744]"
+            className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-flit-primary"
             style={{ border: '1px solid #DFE5ED' }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1972,7 +1979,7 @@ function SortableHeaderCell({
           ref={panelRef}
           role="menu"
           aria-label={`Ordenar por, en ${column.label}`}
-          className="absolute left-0 top-full z-50 mt-1.5 w-[18rem] overflow-hidden rounded-xl border border-[#DFE5ED] bg-white normal-case shadow-xl dark:border-white/10 dark:bg-[#162744]"
+          className="absolute left-0 top-full z-50 mt-1.5 w-[18rem] overflow-hidden rounded-xl border border-[#DFE5ED] bg-white normal-case shadow-xl dark:border-white/10 dark:bg-flit-primary"
         >
           <p className="border-b border-[#EEF2F7] px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#7B8794] dark:border-white/10 dark:text-white/50">
             Ordenar por
@@ -2957,7 +2964,7 @@ function TramiteRow({
               <div
                 role="dialog"
                 aria-label={`Detalle de rechazo de ${item.referenceNumber}`}
-                className="absolute left-0 top-full z-20 mt-1 w-72 rounded-xl border bg-white p-3 shadow-lg dark:bg-[#162744]"
+                className="absolute left-0 top-full z-20 mt-1 w-72 rounded-xl border bg-white p-3 shadow-lg dark:bg-flit-primary"
                 style={{ borderColor: 'rgba(255,78,0,0.28)' }}
                 onClick={(e) => e.stopPropagation()}
               >
@@ -3015,7 +3022,7 @@ function TramiteRow({
             Solo se pinta si no hay revocatoria activa (ver `muestraPausado` — uno a la vez). */}
         {muestraPausado ? (
           <span
-            className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-flit-primary/20 bg-[#162744]/[0.06] px-2 py-0.5 text-xs font-semibold text-flit-primary/70 dark:border-white/20 dark:bg-white/10 dark:text-white/70"
+            className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-flit-primary/20 bg-flit-primary/[0.06] px-2 py-0.5 text-xs font-semibold text-flit-primary/70 dark:border-white/20 dark:bg-white/10 dark:text-white/70"
             title={item.pausedObservation ?? 'Trámite pausado'}
             aria-label={
               item.pausedObservation
@@ -3179,7 +3186,7 @@ function TramiteRow({
   return (
     <tr
       onClick={handleOpen}
-      className={`group cursor-pointer bg-white text-xs dark:bg-[#162744] ${TABLA_ROW_HOVER_CLS}`}
+      className={`group cursor-pointer bg-white text-xs dark:bg-flit-primary ${TABLA_ROW_HOVER_CLS}`}
     >
       {/* ICT — checkbox de selección solo si la tabla reservó la pista (hay borradores ICT). Como
           <tr> no admite border-radius, el borde/radio de "tarjeta" vive en cada <td>. */}
@@ -3233,7 +3240,7 @@ function TramiteRow({
         <ActionsMenu
           ariaLabel={`Acciones del trámite ${item.referenceNumber}`}
           items={actionItems}
-          className="bg-white dark:bg-[#162744]"
+          className="bg-white dark:bg-flit-primary"
           attention={puedeEnviarAlOt}
           attentionHint="Pendiente por enviar al OT: la placa ya está asignada"
         />
@@ -3246,7 +3253,7 @@ function TramiteRow({
         onClose={() => setConfirmPauseOpen(false)}
         title="Trámite pausado"
         icon={Pause}
-        iconBg="#162744"
+        iconBg="var(--color-flit-primary)"
         description={`Trámite ${item.referenceNumber}`}
         size="sm"
       >
@@ -3258,7 +3265,7 @@ function TramiteRow({
           <button
             type="button"
             onClick={() => setConfirmPauseOpen(false)}
-            className="rounded-full border border-[#DFE5ED] px-4 py-1.5 text-xs font-semibold text-flit-primary transition hover:bg-[#162744]/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/20 dark:text-white"
+            className="rounded-full border border-[#DFE5ED] px-4 py-1.5 text-xs font-semibold text-flit-primary transition hover:bg-flit-primary/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/20 dark:text-white"
           >
             Cancelar
           </button>

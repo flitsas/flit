@@ -97,7 +97,7 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
             // la carga real, más adelante— reflejen el tamaño de verdad de lo que se pidió.
             tenantIds = NarrowByCompania(tenantIds, definition.Condiciones);
 
-            var universo = await UniversoQuery(tenantIds, definition)
+            var universo = await UniversoQuery(tenantIds, definition, request.AllowedFamilies)
                 .CountAsync(cancellationToken)
                 .ConfigureAwait(false);
 
@@ -107,7 +107,7 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
             }
         }
 
-        var rows = await LoadRowsAsync(tenantIds, definition, cancellationToken).ConfigureAwait(false);
+        var rows = await LoadRowsAsync(tenantIds, definition, request.AllowedFamilies, cancellationToken).ConfigureAwait(false);
 
         var condiciones = definition.Condiciones
             .Select(c => (Condition: c, Predicate: Engine.BuildPredicate(c)))
@@ -160,11 +160,19 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
     /// <see cref="LoadRowsAsync"/> — las dos tienen que estar de acuerdo en qué es «el universo», o
     /// el conteo podría decir que sí cabe y la carga real traer algo distinto.
     /// </summary>
-    private IQueryable<ProcedureInstance> UniversoQuery(IReadOnlyList<Guid> tenantIds, QueryDefinition definition)
+    private IQueryable<ProcedureInstance> UniversoQuery(
+        IReadOnlyList<Guid> tenantIds, QueryDefinition definition, IReadOnlyList<string>? allowedFamilies)
     {
         var query = _context.ProcedureInstances
             .AsNoTracking()
             .Where(p => p.DeletedAt == null && tenantIds.Contains(p.TenantId));
+
+        if (allowedFamilies is not null)
+        {
+            // HU #13664 — Ver por familia: la familia vive en el tipo (ADR-0050); vacío = ningún trámite.
+            var familias = allowedFamilies.Select(f => f.Trim().ToUpperInvariant()).ToList();
+            query = query.Where(p => p.ProcedureType != null && familias.Contains(p.ProcedureType.Family.ToUpper()));
+        }
 
         var identificador = definition.Condiciones.FirstOrDefault(c =>
             c.Operator == QueryOperator.EsAlguno && CompanyQueryFieldCatalog.IsIdentifier(c.FieldId));
@@ -223,9 +231,10 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
     private async Task<List<CompanyRow>> LoadRowsAsync(
         IReadOnlyList<Guid> tenantIds,
         QueryDefinition definition,
+        IReadOnlyList<string>? allowedFamilies,
         CancellationToken cancellationToken)
     {
-        var instances = await UniversoQuery(tenantIds, definition)
+        var instances = await UniversoQuery(tenantIds, definition, allowedFamilies)
             .Select(p => new InstanceRow(
                 p.Id,
                 p.TenantId,

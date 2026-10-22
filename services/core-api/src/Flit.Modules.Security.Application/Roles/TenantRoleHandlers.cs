@@ -48,9 +48,11 @@ public sealed partial class CreateTenantRoleHandler(IRoleRepository repository)
         if (!string.Equals(command.TargetEntityType, "COMPANY", StringComparison.Ordinal))
             throw new InvalidTargetEntityTypeException();
 
+        // HU #13666: el code es opcional (se genera del nombre); si llega, se valida y se respeta como antes.
         var code = command.Code?.Trim() ?? string.Empty;
+        var generateCode = code.Length == 0;
         var name = command.Name?.Trim() ?? string.Empty;
-        if (!CodePattern().IsMatch(code) || name.Length is 0 or > 100)
+        if ((!generateCode && !CodePattern().IsMatch(code)) || name.Length is 0 or > 100)
             throw new InvalidRoleInputException();
 
         if (!ProductCodes.All.Contains(command.ProductCode, StringComparer.Ordinal))
@@ -61,7 +63,8 @@ public sealed partial class CreateTenantRoleHandler(IRoleRepository repository)
             throw new PrivilegeCeilingException(PrivilegeCeilingCodes.PlatformOnly, [command.ProductCode]);
 
         // admin_<producto> es de sistema aunque todavía no exista la fila global (el espejo de AdminCompany lo crea).
-        if (ProductCodes.All.Any(p => string.Equals(code, "admin_" + p, StringComparison.OrdinalIgnoreCase)))
+        var reserved = ProductCodes.All.Select(p => "admin_" + p).ToList();
+        if (!generateCode && reserved.Any(r => string.Equals(code, r, StringComparison.OrdinalIgnoreCase)))
             throw new RoleCodeDuplicateException();
 
         var enabled = await repository.GetEnabledProductCodesAsync(command.TenantId, ct);
@@ -70,13 +73,25 @@ public sealed partial class CreateTenantRoleHandler(IRoleRepository repository)
 
         var permissionIds = command.PermissionIds.Distinct().ToList();
         await EnforceAsync(repository, command.ProductCode, permissionIds, command.CallerPermissions, enabled, ct);
+        // HU #13664 AC1: un rol nuevo no puede nacer con «Crear» de una familia sin su «Ver».
+        permissionIds = [.. await FamilyPermissionGuard.ApplyAsync(repository, [], permissionIds, ct)];
 
-        if (await repository.CodeTakenForTenantAsync(command.TenantId, code, ct))
-            throw new RoleCodeDuplicateException();
+        CreateRoleData Build(string roleCode) =>
+            new("COMPANY", roleCode, name, command.Description?.Trim(), command.ProductCode, command.TenantId);
 
-        var id = await repository.CreateAsync(
-            new CreateRoleData("COMPANY", code, name, command.Description?.Trim(), command.ProductCode, command.TenantId),
-            ct);
+        Guid id;
+        if (generateCode)
+        {
+            // Unicidad en el servidor: globales (cualquier tipo) + propios del tenant, sin admin_<producto>; reintenta ante 23505.
+            id = await RoleCodeGenerator.CreateWithGeneratedCodeAsync(
+                repository, command.TenantId, "COMPANY", name, reserved, Build, ct);
+        }
+        else
+        {
+            if (await repository.CodeTakenForTenantAsync(command.TenantId, code, ct))
+                throw new RoleCodeDuplicateException();
+            id = await repository.CreateAsync(Build(code), ct);
+        }
         if (permissionIds.Count > 0)
             await repository.SetPermissionsAsync(id, permissionIds, ct);
         return id;
@@ -117,7 +132,10 @@ public sealed class SetTenantRolePermissionsHandler(IRoleRepository repository)
         var added = permissionIds.Where(id => !current.Contains(id)).ToList();
         await CreateTenantRoleHandler.EnforceAsync(repository, role.ProductCode, added, command.CallerPermissions, enabled, ct);
 
-        await repository.SetPermissionsAsync(command.RoleId, permissionIds, ct);
+        // HU #13664 AC1: «crear exige ver»; quitar «Ver» retira también su «Crear».
+        var finalIds = await FamilyPermissionGuard.ApplyAsync(
+            repository, role.Permissions.Select(x => x.Slug), permissionIds, ct);
+        await repository.SetPermissionsAsync(command.RoleId, finalIds, ct);
         return (await repository.GetByIdAsync(command.RoleId, ct))!;
     }
 

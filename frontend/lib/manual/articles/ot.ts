@@ -260,18 +260,23 @@ export const OT_ARTICLES: ManualArticle[] = [
       "usuarios ot",
       "invitar",
       "rol ot_admin",
+      "gestor ot",
       "gestionar usuarios organismo",
       "suspender",
       "acceso denegado",
       "cancelar invitacion",
+      "permisos por modulo",
+      "permisos individuales",
+      "fuera de tu tope",
+      "auditoria de permisos",
     ],
-    summary: "Invitar y administrar cuentas del perfil OT. Solo el administrador del organismo entra aquí.",
+    summary: "Invitar y administrar cuentas del perfil OT (Administrador OT y Gestor OT) y ajustar sus permisos.",
     blocks: [
       {
         id: "alcance",
         title: "1. Alcance",
         paragraphs: [
-          "Usuarios, en el dock del hub, es exclusivo del administrador del organismo (rol ot_admin): invita, edita y cancela invitaciones de las cuentas de tu Organismo de Tránsito. Un operador que intente abrir esta pantalla recibe acceso denegado.",
+          "Usuarios, en el dock del hub, es del Administrador OT: invita, edita y cancela invitaciones de las cuentas de tu Organismo de Tránsito. Un Gestor OT solo la ve si el administrador le habilita el módulo Usuarios, y aun así no invita administradores ni cambia roles.",
           "No administra usuarios de compañías cliente; eso corresponde al AdminCompany de cada tenant.",
         ],
       },
@@ -281,14 +286,48 @@ export const OT_ARTICLES: ManualArticle[] = [
         paragraphs: [],
         bullets: [
           "Dock → Usuarios (hub OT).",
-          "Completa correo y rol. El invitado recibe enlace para activar cuenta.",
+          "Completa nombre, correo y rol. El rol es obligatorio, también para el administrador: hasta que lo eliges, «Enviar invitación» queda deshabilitado y ves «Elige el rol de la persona.». El invitado recibe un enlace para activar su cuenta.",
+          "Elige «Gestor OT» para quien solo opera la bandeja de trámites; «Administrador OT» para quien administra el organismo. Puedes cambiar entre los dos desde «Acciones» → «Editar usuario» en su fila.",
           "Verifica que el correo sea institucional del OT cuando la política lo exija.",
-          "Una invitación pendiente se puede cancelar o reenviar desde la misma fila.",
+          "Una invitación pendiente se reenvía con el ícono «Reenviar invitación» de su fila y se cancela desde «Acciones» → «Cancelar invitación».",
+          "Al cambiar el rol de una persona desde «Editar usuario», si tiene permisos individuales el sistema te avisa cuántos se eliminarán («Este usuario tiene 3 permisos individuales que se eliminarán al cambiar su rol.»). El rol solo cambia si confirmas con «Cambiar rol»; «Mantener rol actual» no cambia nada.",
+        ],
+      },
+      {
+        id: "permisos-modulo",
+        title: "3. Permisos por módulo de una persona",
+        paragraphs: [
+          "Además del rol, puedes ajustar los permisos de una persona de tu organismo sin cambiarle el rol. En su fila abre «Acciones» y elige «Permisos por módulo»: cada módulo y cada acción muestra su origen: «Heredado del rol», «Individual» (un permiso que se le dio o quitó solo a esa persona) o «Parcial».",
+        ],
+        bullets: [
+          "1. Dock → Usuarios; en la fila de la persona abre «Acciones» y elige «Permisos por módulo».",
+          "2. Activa o desactiva una acción con su interruptor, o usa «Habilitar módulo» y «Denegar módulo» para todo el módulo.",
+          "3. «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo.",
+          "Un Gestor OT entra con la bandeja de trámites y el Inicio. Para que use otro módulo (por ejemplo Documentos o Mandatos), habilítaselo aquí; aparece en su dock al volver a ingresar.",
+          "Aquí solo ves los módulos del organismo.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Los permisos de otro administrador, y los tuyos, solo se pueden ver: la pantalla aparece en solo lectura con el aviso «Solo el Super Admin puede modificar los permisos de un administrador.». Si la persona no tiene rol de administrador, los controles están habilitados.",
+          },
+          {
+            variant: "warning",
+            text: "Solo puedes dar permisos que tú mismo tienes (tu tope). Lo que queda fuera de tu tope aparece deshabilitado, y «Habilitar módulo» solo aplica las acciones dentro de tu tope. Si la persona ya tiene un permiso fuera de tu tope que dio otro administrador, verás «Fuera de tu tope»: puedes quitarlo, pero no volver a otorgarlo.",
+          },
+        ],
+      },
+      {
+        id: "auditoria-permisos",
+        title: "4. Auditoría de permisos",
+        paragraphs: [
+          "Usuarios tiene dos pestañas: «Usuarios» (la tabla de personas y el botón «Invitar usuario») y «Auditoría de permisos», con el registro de cada cambio de permisos individuales hecho en tu organismo: fecha y hora (DD/MM/AAAA HH:mm), el administrador que lo hizo, la persona afectada, el permiso, la acción (otorgó, denegó, volvió al rol) y el valor antes y después. La pestaña «Usuarios» te devuelve a la tabla.",
+          "Solo ves los registros de las personas de tu organismo. Puedes filtrar por usuario y por administrador; no hay filtro de compañía porque siempre es el tuyo. Si el servicio no responde, verás un aviso de error con el botón «Reintentar».",
         ],
       },
       {
         id: "seguridad",
-        title: "3. Seguridad",
+        title: "5. Seguridad",
         paragraphs: [
           "Suspender temporalmente, desactivar indefinidamente, eliminar o restaurar una cuenta ya no lo hace el organismo: son acciones exclusivas del equipo FLIT (Super Admin). Tú, como administrador del organismo, invitas, editas datos y cancelas invitaciones pendientes; para lo demás, escala el caso a FLIT.",
         ],

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using Flit.Modules.Security.Application.Products;
 using Flit.Modules.Security.Domain.Auth;
+using Flit.Modules.Security.Domain.PermissionOverrides;
 using Microsoft.IdentityModel.JsonWebTokens;
 using OpenIddict.Abstractions;
 using static OpenIddict.Abstractions.OpenIddictConstants;
@@ -86,6 +87,12 @@ public sealed class OidcPrincipalFactory(IAuthUserRepository users, IProductAcce
                 roles = roles.Concat(platform.Roles.Where(p => roles.All(r => r.Id != p.Id))).ToList();
                 permissions = permissions.Union(platform.Permissions, StringComparer.Ordinal).ToList();
             }
+
+            // HU #13643 — permisos individuales del tenant del token, con el mismo calculador del JWT heredado:
+            // producto > usuario > rol. Aquí el producto del token ya se verificó encendido y plataforma siempre lo
+            // está; un allow de cualquier otro producto no entra en este token.
+            permissions = EffectivePermissionsCalculator.Compute(
+                permissions, user.PermissionOverrides, p => p == ProductCodes.Plataforma || p == product);
         }
 
         var identity = NewIdentity();

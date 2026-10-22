@@ -26,7 +26,7 @@ public sealed class GetTopProducersHandlerTests
     public async Task HandleAsync_RangoValido_DevuelveItemsConLimite()
     {
         var top = new List<TopProducerDto> { new(Guid.NewGuid(), "Ana", 10, 4, 1) };
-        _repo.GetTopProducersAsync(Tenant, From, To, 5, Ct).Returns(top);
+        _repo.GetTopProducersAsync(Tenant, From, To, 5, null, Ct).Returns(top);
 
         var (items, error) = await new GetTopProducersHandler(_repo)
             .HandleAsync(new GetTopProducersQuery(Tenant, From, To, 5), Ct);
@@ -38,7 +38,7 @@ public sealed class GetTopProducersHandlerTests
     [Fact] // Edge: limit <= 0 cae al default (5)
     public async Task HandleAsync_LimitCero_UsaDefault5()
     {
-        _repo.GetTopProducersAsync(Tenant, From, To, GetTopProducersHandler.DefaultLimit, Ct)
+        _repo.GetTopProducersAsync(Tenant, From, To, GetTopProducersHandler.DefaultLimit, null, Ct)
             .Returns(new List<TopProducerDto>());
 
         var (_, error) = await new GetTopProducersHandler(_repo)
@@ -46,20 +46,20 @@ public sealed class GetTopProducersHandlerTests
 
         error.Should().BeNull();
         await _repo.Received(1).GetTopProducersAsync(
-            Tenant, From, To, GetTopProducersHandler.DefaultLimit, Ct);
+            Tenant, From, To, GetTopProducersHandler.DefaultLimit, null, Ct);
     }
 
     [Fact] // Edge: limit por encima del tope se acota a MaxLimit
     public async Task HandleAsync_LimitExcesivo_SeAcotaAlMax()
     {
-        _repo.GetTopProducersAsync(Tenant, From, To, GetTopProducersHandler.MaxLimit, Ct)
+        _repo.GetTopProducersAsync(Tenant, From, To, GetTopProducersHandler.MaxLimit, null, Ct)
             .Returns(new List<TopProducerDto>());
 
         await new GetTopProducersHandler(_repo)
             .HandleAsync(new GetTopProducersQuery(Tenant, From, To, 9999), Ct);
 
         await _repo.Received(1).GetTopProducersAsync(
-            Tenant, From, To, GetTopProducersHandler.MaxLimit, Ct);
+            Tenant, From, To, GetTopProducersHandler.MaxLimit, null, Ct);
     }
 
     [Fact] // AC4 — edge case: from posterior a to → invalid_range y no consulta el repo

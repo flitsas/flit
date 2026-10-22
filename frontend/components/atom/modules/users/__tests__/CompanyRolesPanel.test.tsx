@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CompanyRolesPanel } from "../CompanyRolesPanel";
+import { chooseRowAction, rowActionNames } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 import { ApiError } from "@/lib/api/types";
 import {
   createTenantRole,
@@ -115,6 +116,52 @@ describe("CompanyRolesPanel — estados (AC4)", () => {
   });
 });
 
+describe("CompanyRolesPanel — sin códigos internos (HU #13666)", () => {
+  it("la tabla no tiene columna Código ni muestra el código de ningún rol (propio o de FLIT)", async () => {
+    vi.mocked(getRoles).mockResolvedValue([{ ...global_, code: "AdminCompany", name: "Administrador de compañía" }, own]);
+    render(<CompanyRolesPanel />);
+    await screen.findByText("Contador");
+
+    const table = screen.getByRole("table", { name: "Roles de la compañía" });
+    expect(within(table).getAllByRole("columnheader").map((h) => h.textContent)).toEqual([
+      "Nombre",
+      "Tipo",
+      "Permisos",
+      "Acciones",
+    ]);
+    expect(screen.getByText("Administrador de compañía")).toBeInTheDocument();
+    expect(screen.queryByText("contador")).not.toBeInTheDocument();
+    expect(screen.queryByText("AdminCompany")).not.toBeInTheDocument();
+  });
+
+  it("el editor muestra el nombre del módulo y del permiso, nunca el código", async () => {
+    vi.mocked(getGrantablePermissions).mockResolvedValue([
+      { id: "p1", slug: "dashboard.read", name: "Ver inicio", moduleCode: "dashboard", productCode: "tramites", moduleName: "Inicio" },
+      {
+        id: "p2",
+        slug: "consolidado-masivo.download",
+        name: "Descargar consolidados",
+        moduleCode: "consolidado-masivo",
+        productCode: "tramites",
+        moduleName: "Descarga masiva de consolidados",
+      },
+    ]);
+    const ue = userEvent.setup();
+    render(<CompanyRolesPanel />);
+    await screen.findByText("Contador");
+
+    await ue.click(screen.getByRole("button", { name: /nuevo rol/i }));
+    const dialog = await screen.findByRole("dialog");
+
+    expect(await within(dialog).findByText("Descarga masiva de consolidados")).toBeInTheDocument();
+    expect(within(dialog).getByText("Inicio")).toBeInTheDocument();
+    expect(within(dialog).getByText("Descargar consolidados")).toBeInTheDocument();
+    for (const raw of ["dashboard.read", "consolidado-masivo.download", "Consolidado-Masivo", "consolidado-masivo"]) {
+      expect(within(dialog).queryByText(raw)).not.toBeInTheDocument();
+    }
+  });
+});
+
 describe("CompanyRolesPanel — roles globales (AC1)", () => {
   it("el rol global solo se puede ver: sin editar ni eliminar, y el modal es de solo lectura", async () => {
     vi.mocked(getTenantRole).mockResolvedValue({ ...detail, id: "g1", code: "Radicador", name: "Radicador", tenantId: null });
@@ -122,12 +169,16 @@ describe("CompanyRolesPanel — roles globales (AC1)", () => {
     render(<CompanyRolesPanel />);
     await screen.findByText("Contador");
 
-    expect(screen.queryByRole("button", { name: /editar radicador/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /eliminar radicador/i })).not.toBeInTheDocument();
-    await ue.click(screen.getByRole("button", { name: /ver permisos de radicador/i }));
+    // HU #13653: las acciones viven en el menú «Acciones» de la fila; el rol global solo ofrece «Ver permisos».
+    expect(await rowActionNames(ue, "Radicador")).toEqual(["Ver permisos de Radicador"]);
+    expect(await rowActionNames(ue, "Contador")).toEqual(["Editar Contador", "Eliminar Contador"]);
+    await chooseRowAction(ue, "Radicador", /ver permisos de radicador/i);
 
     const dialog = await screen.findByRole("dialog");
-    expect(await within(dialog).findByText("tramites.read")).toBeInTheDocument();
+    // HU #13666: solo el nombre del permiso, sin el código interno; y sin el código del rol FLIT.
+    expect(await within(dialog).findByText("Ver trámites")).toBeVisible();
+    expect(within(dialog).queryByText("tramites.read")).not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText(/^código/i)).not.toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: /guardar/i })).not.toBeInTheDocument();
     expect(within(dialog).queryByRole("checkbox")).not.toBeInTheDocument();
     expect(getGrantablePermissions).not.toHaveBeenCalled();
@@ -143,20 +194,20 @@ describe("CompanyRolesPanel — crear, editar y eliminar (AC1)", () => {
 
     await ue.click(screen.getByRole("button", { name: /nuevo rol/i }));
     const dialog = await screen.findByRole("dialog");
-    await ue.type(await within(dialog).findByLabelText(/^código/i), "auditor_ext");
-    await ue.type(within(dialog).getByLabelText(/^nombre/i), "Auditor externo");
+    await ue.type(await within(dialog).findByLabelText(/^nombre/i), "Auditor externo");
     await ue.click(within(dialog).getByRole("checkbox", { name: /ver trámites/i }));
     await ue.click(within(dialog).getByRole("button", { name: /crear rol/i }));
 
     await waitFor(() =>
       expect(createTenantRole).toHaveBeenCalledWith({
-        code: "auditor_ext",
         name: "Auditor externo",
         description: null,
         productCode: "tramites",
         permissionIds: ["p1"],
       }),
     );
+    // HU #13666: el payload no lleva `code`; el servidor lo genera a partir del nombre.
+    expect(vi.mocked(createTenantRole).mock.calls[0][0]).not.toHaveProperty("code");
     await waitFor(() => expect(getRoles).toHaveBeenCalledTimes(2));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
@@ -173,6 +224,7 @@ describe("CompanyRolesPanel — crear, editar y eliminar (AC1)", () => {
     expect(within(dialog).getByRole("checkbox", { name: /crear trámites/i })).toBeInTheDocument();
     // Comparendos es otro producto: un rol no mezcla productos.
     expect(within(dialog).queryByRole("checkbox", { name: /ver comparendos/i })).not.toBeInTheDocument();
+    // El producto se elige en «Datos del rol», arriba de la misma lista.
     expect(within(dialog).getByRole("combobox", { name: /producto/i })).toBeInTheDocument();
   });
 
@@ -186,8 +238,7 @@ describe("CompanyRolesPanel — crear, editar y eliminar (AC1)", () => {
 
     await ue.click(screen.getByRole("button", { name: /nuevo rol/i }));
     const dialog = await screen.findByRole("dialog");
-    await ue.type(await within(dialog).findByLabelText(/^código/i), "auditor_ext");
-    await ue.type(within(dialog).getByLabelText(/^nombre/i), "Auditor externo");
+    await ue.type(await within(dialog).findByLabelText(/^nombre/i), "Auditor externo");
     await ue.click(within(dialog).getByRole("button", { name: /crear rol/i }));
 
     expect(await within(dialog).findByRole("alert")).toHaveTextContent(/solo puedes otorgar permisos que tú mismo tienes/i);
@@ -221,8 +272,7 @@ describe("CompanyRolesPanel — crear, editar y eliminar (AC1)", () => {
 
     await ue.click(screen.getByRole("button", { name: /nuevo rol/i }));
     const dialog = await screen.findByRole("dialog");
-    await ue.type(await within(dialog).findByLabelText(/^código/i), "auditor_ext");
-    await ue.type(within(dialog).getByLabelText(/^nombre/i), "Auditor externo");
+    await ue.type(await within(dialog).findByLabelText(/^nombre/i), "Auditor externo");
     await ue.click(within(dialog).getByRole("button", { name: /crear rol/i }));
 
     expect(await within(dialog).findByRole("alert")).toHaveTextContent(/permisos de plataforma, que solo gestiona FLIT/i);
@@ -236,8 +286,7 @@ describe("CompanyRolesPanel — crear, editar y eliminar (AC1)", () => {
 
     await ue.click(screen.getByRole("button", { name: /nuevo rol/i }));
     const dialog = await screen.findByRole("dialog");
-    await ue.type(await within(dialog).findByLabelText(/^código/i), "auditor_ext");
-    await ue.type(within(dialog).getByLabelText(/^nombre/i), "Auditor externo");
+    await ue.type(await within(dialog).findByLabelText(/^nombre/i), "Auditor externo");
     await ue.click(within(dialog).getByRole("button", { name: /crear rol/i }));
 
     const alert = await within(dialog).findByRole("alert");
@@ -245,18 +294,18 @@ describe("CompanyRolesPanel — crear, editar y eliminar (AC1)", () => {
     expect(alert).not.toHaveTextContent(/administrador de la compañía/i);
   });
 
-  it("valida el código antes de llamar a la API", async () => {
+  it("HU #13666: «Nuevo rol» no pide código; sin nombre avisa y no llama a la API", async () => {
     const ue = userEvent.setup();
     render(<CompanyRolesPanel />);
     await screen.findByText("Contador");
 
     await ue.click(screen.getByRole("button", { name: /nuevo rol/i }));
     const dialog = await screen.findByRole("dialog");
-    await ue.type(await within(dialog).findByLabelText(/^código/i), "con espacio");
-    await ue.type(within(dialog).getByLabelText(/^nombre/i), "X");
+    await within(dialog).findByLabelText(/^nombre/i);
+    expect(within(dialog).queryByLabelText(/código/i)).not.toBeInTheDocument();
     await ue.click(within(dialog).getByRole("button", { name: /crear rol/i }));
 
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent(/de 2 a 50 caracteres/i);
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Escribe un nombre para el rol.");
     expect(createTenantRole).not.toHaveBeenCalled();
   });
 
@@ -267,13 +316,14 @@ describe("CompanyRolesPanel — crear, editar y eliminar (AC1)", () => {
     render(<CompanyRolesPanel />);
     await screen.findByText("Contador");
 
-    await ue.click(screen.getByRole("button", { name: /editar contador/i }));
+    await chooseRowAction(ue, "Contador", /editar contador/i);
     const dialog = await screen.findByRole("dialog");
     const nombre = await within(dialog).findByLabelText(/^nombre/i);
-    expect(within(dialog).getByLabelText(/^código/i)).toBeDisabled();
-    expect(within(dialog).getByRole("checkbox", { name: /ver trámites/i })).toBeChecked();
+    // HU #13666: al editar tampoco se muestra el código del rol.
+    expect(within(dialog).queryByLabelText(/código/i)).not.toBeInTheDocument();
     await ue.clear(nombre);
     await ue.type(nombre, "Contador senior");
+    expect(within(dialog).getByRole("checkbox", { name: /ver trámites/i })).toBeChecked();
     await ue.click(within(dialog).getByRole("checkbox", { name: /crear trámites/i }));
     await ue.click(within(dialog).getByRole("button", { name: /guardar cambios/i }));
 
@@ -291,12 +341,11 @@ describe("CompanyRolesPanel — crear, editar y eliminar (AC1)", () => {
 
     await ue.click(screen.getByRole("button", { name: /nuevo rol/i }));
     let dialog = await screen.findByRole("dialog");
-    await ue.type(await within(dialog).findByLabelText(/^código/i), "auditor_ext");
-    await ue.type(within(dialog).getByLabelText(/^nombre/i), "Auditor externo");
+    await ue.type(await within(dialog).findByLabelText(/^nombre/i), "Auditor externo");
     await ue.click(within(dialog).getByRole("button", { name: /crear rol/i }));
     await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
 
-    await ue.click(screen.getByRole("button", { name: /eliminar contador/i }));
+    await chooseRowAction(ue, "Contador", /eliminar contador/i);
     dialog = await screen.findByRole("dialog");
     await ue.click(within(dialog).getByRole("button", { name: /^eliminar$/i }));
     await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(2));
@@ -308,7 +357,7 @@ describe("CompanyRolesPanel — crear, editar y eliminar (AC1)", () => {
     render(<CompanyRolesPanel />);
     await screen.findByText("Contador");
 
-    await ue.click(screen.getByRole("button", { name: /eliminar contador/i }));
+    await chooseRowAction(ue, "Contador", /eliminar contador/i);
     const dialog = await screen.findByRole("dialog");
     await ue.click(within(dialog).getByRole("button", { name: /^eliminar$/i }));
 
@@ -322,7 +371,7 @@ describe("CompanyRolesPanel — crear, editar y eliminar (AC1)", () => {
     render(<CompanyRolesPanel />);
     await screen.findByText("Contador");
 
-    await ue.click(screen.getByRole("button", { name: /eliminar contador/i }));
+    await chooseRowAction(ue, "Contador", /eliminar contador/i);
     const dialog = await screen.findByRole("dialog");
     await ue.click(within(dialog).getByRole("button", { name: /^eliminar$/i }));
 

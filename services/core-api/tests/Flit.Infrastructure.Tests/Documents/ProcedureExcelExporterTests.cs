@@ -23,17 +23,17 @@ public sealed class ProcedureExcelExporterTests
     /// <summary>Repo en memoria: empuja las filas dadas al callback de streaming del exporter.</summary>
     private sealed class FakeRepo(IReadOnlyList<ProcedureDetailDto> rows) : IAnalyticsReadRepository
     {
-        public Task<IReadOnlyList<CategoryMetricsDto>> GetOverviewAsync(Guid? t, DateOnly? f, DateOnly? to, CancellationToken ct = default) =>
+        public Task<IReadOnlyList<CategoryMetricsDto>> GetOverviewAsync(Guid? t, DateOnly? f, DateOnly? to, IReadOnlyList<string>? fam = null, CancellationToken ct = default) =>
             throw new NotSupportedException();
-        public Task<IReadOnlyList<TopProducerDto>> GetTopProducersAsync(Guid? t, DateOnly f, DateOnly to, int limit, CancellationToken ct = default) =>
+        public Task<IReadOnlyList<TopProducerDto>> GetTopProducersAsync(Guid? t, DateOnly f, DateOnly to, int limit, IReadOnlyList<string>? fam = null, CancellationToken ct = default) =>
             throw new NotSupportedException();
-        public Task<IReadOnlyList<MonthlyTrendPointDto>> GetMonthlyTrendAsync(Guid? t, DateOnly f, DateOnly to, CancellationToken ct = default) =>
+        public Task<IReadOnlyList<MonthlyTrendPointDto>> GetMonthlyTrendAsync(Guid? t, DateOnly f, DateOnly to, IReadOnlyList<string>? fam = null, CancellationToken ct = default) =>
             throw new NotSupportedException();
-        public Task<ProcedureDetailsPageDto> GetProcedureDetailsAsync(Guid t, DateOnly f, DateOnly to, string? c, string? s, int page, int pageSize, CancellationToken ct = default) =>
+        public Task<ProcedureDetailsPageDto> GetProcedureDetailsAsync(Guid t, DateOnly f, DateOnly to, string? c, string? s, int page, int pageSize, IReadOnlyList<string>? fam = null, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
         public async Task ExportProcedureDetailsAsync(Guid t, DateOnly f, DateOnly to, string? c, string? s,
-            Func<ProcedureDetailDto, CancellationToken, Task> onRowAsync, CancellationToken ct = default)
+            Func<ProcedureDetailDto, CancellationToken, Task> onRowAsync, IReadOnlyList<string>? fam = null, CancellationToken ct = default)
         {
             foreach (var row in rows)
                 await onRowAsync(row, ct);

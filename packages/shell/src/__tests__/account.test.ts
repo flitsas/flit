@@ -24,6 +24,7 @@ describe("nombre del rol en la barra", () => {
     expect(suiteRoleLabel(["SuperAdmin"])).toBe("Super Admin");
     expect(suiteRoleLabel(["Radicador", "AdminCompany"])).toBe("Admin de Compañía");
     expect(suiteRoleLabel(["ot_admin"])).toBe("Admin OT");
+    expect(suiteRoleLabel(["gestor_tramites_ot"])).toBe("Gestor OT");
   });
 
   it("cualquier otro tal cual, y sin roles «Usuario»", () => {

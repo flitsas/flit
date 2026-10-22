@@ -9,6 +9,7 @@ import { ToastProvider } from "@/components/admin/Toast";
 import { OtUsersSection } from "../OtUsersSection";
 import type { OtUserItem } from "@/lib/api/admin-ot-security";
 import { ApiError } from "@/lib/api/types";
+import { chooseRowAction, findRowAction } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 
 vi.mock("@/lib/api/admin-ot-security", () => ({
   fetchOtUsers: vi.fn(),
@@ -18,6 +19,16 @@ vi.mock("@/lib/api/admin-ot-security", () => ({
   updateOtUser: vi.fn(),
   deleteOtUser: vi.fn(),
   resendOtInvitation: vi.fn(),
+}));
+
+// El Super Admin lee el catálogo de roles de organismo de tránsito para elegir el rol del invitado.
+vi.mock("@/lib/api/superadmin-client", () => ({
+  superadminClient: {
+    listRoles: vi.fn().mockResolvedValue([
+      { id: "role-ot-admin", code: "ot_admin", name: "Administrador OT", description: null, isSystem: true, isActive: true, permissionCount: 8, createdAt: "" },
+      { id: "role-gestor", code: "gestor_ot", name: "Gestor OT", description: null, isSystem: true, isActive: true, permissionCount: 2, createdAt: "" },
+    ]),
+  },
 }));
 
 // Bloquear/desactivar/reactivar es EXCLUSIVO de SuperAdmin, así que este flujo (suspender/
@@ -67,6 +78,14 @@ const suspendedUser: OtUserItem = {
   isSuspended: true,
   rowVersion: 5,
 };
+
+async function fillInvite(user: ReturnType<typeof userEvent.setup>) {
+  const dialog = await screen.findByRole("dialog");
+  await user.type(within(dialog).getByLabelText(/Nombre completo/i), "Nuevo Colaborador");
+  await user.type(within(dialog).getByLabelText(/Correo electrónico/i), "nuevo@transito.gov.co");
+  await user.click(await within(dialog).findByRole("radio", { name: "Administrador OT" }));
+  await user.click(within(dialog).getByRole("button", { name: /Enviar invitación/i }));
+}
 
 function renderSection() {
   return render(
@@ -129,12 +148,14 @@ describe("OtUsersSection — refactor adminOT", () => {
     // Esta sección vive dentro de un organismo: el perfil de fila es siempre OT.
     expect(within(fila).getByText("OT · Admin")).toBeInTheDocument();
     expect(within(fila).getByText("Admin OT")).toBeInTheDocument();
+    // HU #13653: las acciones de la fila viven en su menú «Acciones».
     expect(
-      within(fila).getByRole("button", { name: /editar usuario laura garcía/i }),
+      await findRowAction(userEvent.setup(), "Laura García", /editar usuario laura garcía/i, within(fila)),
     ).toBeInTheDocument();
   });
 
-  it("invita a un usuario nuevo sin marcar rol: el backend asigna ot_admin", async () => {
+  // HU #13655: el rol es obligatorio para todos, también para el Super Admin y el Admin OT.
+  it("el rol es obligatorio: sin elegirlo no se envía y no hay rol por defecto", async () => {
     vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser] });
     vi.mocked(inviteOtUser).mockResolvedValue({
       invitationId: "inv-1",
@@ -146,18 +167,45 @@ describe("OtUsersSection — refactor adminOT", () => {
     await screen.findByText("Laura García");
 
     await user.click(screen.getByRole("button", { name: /Invitar usuario/i }));
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText(/Nombre completo/i), "Nuevo Colaborador");
+    await user.type(within(dialog).getByLabelText(/Correo electrónico/i), "nuevo@transito.gov.co");
 
-    await user.type(screen.getByLabelText(/Nombre completo/i), "Nuevo Colaborador");
-    await user.type(screen.getByLabelText(/Correo electrónico/i), "nuevo@transito.gov.co");
-    await user.click(screen.getByRole("button", { name: /Enviar invitación/i }));
+    const adminRadio = await within(dialog).findByRole("radio", { name: "Administrador OT" });
+    expect(adminRadio).not.toBeChecked();
+    expect(within(dialog).getByText("Elige el rol de la persona.")).toBeInTheDocument();
+    expect(within(dialog).queryByText(/Sin selección se asigna/i)).not.toBeInTheDocument();
+    const enviar = within(dialog).getByRole("button", { name: /Enviar invitación/i });
+    expect(enviar).toBeDisabled();
+    await user.click(enviar);
+    expect(inviteOtUser).not.toHaveBeenCalled();
+
+    await user.click(within(dialog).getByRole("radio", { name: "Gestor OT" }));
+    expect(within(dialog).queryByText("Elige el rol de la persona.")).not.toBeInTheDocument();
+    await user.click(enviar);
 
     await waitFor(() =>
       expect(inviteOtUser).toHaveBeenCalledWith(
-        // roleIds ausente = sin selección explícita: el backend conserva ot_admin.
-        { email: "nuevo@transito.gov.co", fullName: "Nuevo Colaborador", roleIds: undefined },
+        { email: "nuevo@transito.gov.co", fullName: "Nuevo Colaborador", roleIds: ["role-gestor"] },
         { transitOfficeId: "ot-1" },
       ),
     );
+  });
+
+  it("si la API responde ROLE_REQUIRED, muestra el mensaje claro", async () => {
+    vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser] });
+    vi.mocked(inviteOtUser).mockRejectedValue(
+      new ApiError(400, "Bad Request", { error: "ROLE_REQUIRED", message: "Elige el rol de la persona." }),
+    );
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByText("Laura García");
+
+    await user.click(screen.getByRole("button", { name: /Invitar usuario/i }));
+    await fillInvite(user);
+
+    expect(await screen.findAllByText("Elige el rol de la persona.")).not.toHaveLength(0);
+    expect(screen.queryByText(/No se pudo enviar la invitación/i)).not.toBeInTheDocument();
   });
 
   it("suspende temporalmente a un usuario activo", async () => {
@@ -167,7 +215,7 @@ describe("OtUsersSection — refactor adminOT", () => {
     renderSection();
     await screen.findByText("Laura García");
 
-    await user.click(screen.getByRole("button", { name: /Suspender temporalmente a Laura García/i }));
+    await chooseRowAction(user, "Laura García", /Suspender temporalmente a Laura García/i);
     await user.type(screen.getByLabelText(/Motivo/i), "Incumplimiento");
     await user.click(screen.getByRole("button", { name: /^Suspender usuario$/i }));
 
@@ -184,7 +232,7 @@ describe("OtUsersSection — refactor adminOT", () => {
     renderSection();
     await screen.findByText("Laura García");
 
-    await user.click(screen.getByRole("button", { name: /Desactivar indefinidamente a Laura García/i }));
+    await chooseRowAction(user, "Laura García", /Desactivar indefinidamente a Laura García/i);
     expect(screen.queryByLabelText(/Suspendido hasta/i)).not.toBeInTheDocument();
     await user.type(screen.getByLabelText(/Motivo/i), "Incumplimiento grave");
     await user.click(screen.getByRole("button", { name: /^Desactivar usuario$/i }));
@@ -206,7 +254,7 @@ describe("OtUsersSection — refactor adminOT", () => {
     renderSection();
     await screen.findByText("Laura García");
 
-    await user.click(screen.getByRole("button", { name: /Suspender temporalmente a Laura García/i }));
+    await chooseRowAction(user, "Laura García", /Suspender temporalmente a Laura García/i);
     await user.type(screen.getByLabelText(/Motivo/i), "Incumplimiento");
     await user.click(screen.getByRole("button", { name: /^Suspender usuario$/i }));
 
@@ -222,7 +270,7 @@ describe("OtUsersSection — refactor adminOT", () => {
     renderSection();
     await screen.findByText("Carlos Pérez");
 
-    await user.click(screen.getByRole("button", { name: /Reactivar usuario Carlos Pérez/i }));
+    await chooseRowAction(user, "Carlos Pérez", /Reactivar usuario Carlos Pérez/i);
     await waitFor(() =>
       expect(unsuspendOtUser).toHaveBeenCalledWith("u-2", { transitOfficeId: "ot-1" }),
     );
@@ -242,9 +290,7 @@ describe("OtUsersSection — refactor adminOT", () => {
     await screen.findByText("Laura García");
 
     await user.click(screen.getByRole("button", { name: /Invitar usuario/i }));
-    await user.type(screen.getByLabelText(/Nombre completo/i), "Nuevo Colaborador");
-    await user.type(screen.getByLabelText(/Correo electrónico/i), "nuevo@transito.gov.co");
-    await user.click(screen.getByRole("button", { name: /Enviar invitación/i }));
+    await fillInvite(user);
 
     expect(
       await screen.findByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
@@ -261,9 +307,7 @@ describe("OtUsersSection — refactor adminOT", () => {
     await screen.findByText("Laura García");
 
     await user.click(screen.getByRole("button", { name: /Invitar usuario/i }));
-    await user.type(screen.getByLabelText(/Nombre completo/i), "Nuevo Colaborador");
-    await user.type(screen.getByLabelText(/Correo electrónico/i), "nuevo@transito.gov.co");
-    await user.click(screen.getByRole("button", { name: /Enviar invitación/i }));
+    await fillInvite(user);
 
     expect(
       await screen.findByText(/no se pudo completar la invitación por un conflicto/i),
@@ -285,9 +329,7 @@ describe("OtUsersSection — refactor adminOT", () => {
     await screen.findByText("Laura García");
 
     await user.click(screen.getByRole("button", { name: /Invitar usuario/i }));
-    await user.type(screen.getByLabelText(/Nombre completo/i), "Nuevo Colaborador");
-    await user.type(screen.getByLabelText(/Correo electrónico/i), "nuevo@transito.gov.co");
-    await user.click(screen.getByRole("button", { name: /Enviar invitación/i }));
+    await fillInvite(user);
 
     expect(
       await screen.findByText(/no se pudo completar la invitación por un conflicto/i),
