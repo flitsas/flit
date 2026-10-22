@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   // HU #12164 — reenvío administrativo de validación de identidad (mismo mecanismo del Dashboard).
   listBiometricExpediente: vi.fn(),
   adminReenviarValidacionIdentidad: vi.fn(),
+  vencerIdentidad: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -47,6 +48,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
     simulateBiometric: mocks.simulateBiometric,
     listBiometricExpediente: mocks.listBiometricExpediente,
     adminReenviarValidacionIdentidad: mocks.adminReenviarValidacionIdentidad,
+    vencerIdentidad: mocks.vencerIdentidad,
   },
   setActiveTramitesTenant: mocks.setActiveTramitesTenant,
   TramitesApiError: class TramitesApiError extends Error {
@@ -102,6 +104,7 @@ vi.mock('@/lib/auth/jwt', () => ({
   hasPermission: (...args: unknown[]) => mocks.hasPermission(...args),
 }));
 
+import { TramitesApiError } from '@/lib/api/tramites-client';
 import { ToastProvider } from '@/components/admin/Toast';
 import { Validaciones } from '@/components/atom/modules/Validaciones';
 
@@ -1783,5 +1786,169 @@ describe('Validaciones — proceso de identidad (HU #11007/#11008)', () => {
     expect(await screen.findByText('Prevalidación')).toBeInTheDocument();
     expect(screen.queryByLabelText(/trámites asociados|otros trámites vinculados/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Trámites:/i)).not.toBeInTheDocument();
+  });
+});
+
+// ── HU #13825 — «Vencer» identidad aprobada y vigente (solo Super Admin) ─────────────────────────
+describe('HU #13825 — Vencer una identidad aprobada y vigente', () => {
+  const RESULTADO_BASE = {
+    validationId: 'v-1',
+    tenantId: 'tenant-a',
+    procedureInstanceId: 'inst-1',
+    vencidaAt: '2026-10-22T10:00:00Z',
+    borradoresAfectados: 1,
+    enlaceEnviado: true,
+    nuevaValidacionId: 'v-9',
+    tramiteBorradorId: 'inst-9',
+    tramiteBorradorReferencia: 'TRM-2026-000009',
+    enlaceCaptura: 'https://kyverum.local/captura/abc',
+    enCola: false,
+    motivoSinEnlace: null,
+  };
+
+  async function abrirAcciones(row: TenantBiometricValidation = ROW_APROBADA) {
+    const user = userEvent.setup();
+    mocks.listTenantBiometricPersons.mockResolvedValue(personsResponse([row]));
+    renderValidaciones();
+    await screen.findByText(row.name);
+    await user.click(screen.getByRole('button', { name: /acciones de validación/i }));
+    return user;
+  }
+
+  async function abrirModalVencer() {
+    mocks.isSuperAdmin.mockReturnValue(true);
+    const user = await abrirAcciones();
+    await user.click(screen.getByRole('menuitem', { name: /^vencer$/i }));
+    const dialog = await screen.findByRole('dialog', { name: /vencer identidad/i });
+    return { user, dialog };
+  }
+
+  it('AC1: el Super Admin ve «Vencer» en una identidad aprobada y vigente', async () => {
+    mocks.isSuperAdmin.mockReturnValue(true);
+    await abrirAcciones();
+    expect(screen.getByRole('menuitem', { name: /^vencer$/i })).toBeInTheDocument();
+  });
+
+  it('AC1: un rol de compañía no ve «Vencer» aunque la identidad esté aprobada y vigente', async () => {
+    mocks.isSuperAdmin.mockReturnValue(false);
+    mocks.hasPermission.mockReturnValue(true);
+    await abrirAcciones();
+    expect(screen.queryByRole('menuitem', { name: /^vencer$/i })).not.toBeInTheDocument();
+  });
+
+  it('AC1: no se ofrece en validaciones que no están aprobadas', async () => {
+    mocks.isSuperAdmin.mockReturnValue(true);
+    await abrirAcciones(ROW_EN_PROCESO);
+    expect(screen.queryByRole('menuitem', { name: /^vencer$/i })).not.toBeInTheDocument();
+  });
+
+  it('AC4: no se ofrece en una identidad aprobada ya vencida', async () => {
+    mocks.isSuperAdmin.mockReturnValue(true);
+    await abrirAcciones({ ...ROW_APROBADA, daysRemaining: 0 });
+    expect(screen.queryByRole('menuitem', { name: /^vencer$/i })).not.toBeInTheDocument();
+  });
+
+  it('AC2: pide confirmación, vence, muestra el enlace y permite copiarlo', async () => {
+    mocks.vencerIdentidad.mockResolvedValue(RESULTADO_BASE);
+    const { user, dialog } = await abrirModalVencer();
+    expect(within(dialog).getByText(/los ya radicados\s+conservan su firma/i)).toBeInTheDocument();
+    expect(mocks.vencerIdentidad).not.toHaveBeenCalled();
+    const llamadasAntes = mocks.listTenantBiometricPersons.mock.calls.length;
+
+    await user.click(within(dialog).getByRole('button', { name: 'Vencer identidad' }));
+
+    await waitFor(() => expect(mocks.vencerIdentidad).toHaveBeenCalledWith('v-1'));
+    expect(
+      await within(dialog).findByText(
+        'La identidad quedó vencida. Se envió un enlace nuevo para que la persona la vuelva a hacer.',
+      ),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Enlace nuevo')).toHaveValue('https://kyverum.local/captura/abc');
+    // La grilla se refresca tras vencer.
+    await waitFor(() =>
+      expect(mocks.listTenantBiometricPersons.mock.calls.length).toBeGreaterThan(llamadasAntes),
+    );
+
+    await user.click(within(dialog).getByRole('button', { name: 'Copiar enlace' }));
+    expect(await within(dialog).findByText('Enlace copiado.')).toBeInTheDocument();
+    expect(await navigator.clipboard.readText()).toBe('https://kyverum.local/captura/abc');
+  });
+
+  it('AC2: con el proveedor mock el enlace relativo se vuelve absoluto', async () => {
+    mocks.vencerIdentidad.mockResolvedValue({ ...RESULTADO_BASE, enlaceCaptura: '/biometric/tok123' });
+    const { user, dialog } = await abrirModalVencer();
+    await user.click(within(dialog).getByRole('button', { name: 'Vencer identidad' }));
+    expect(await within(dialog).findByLabelText('Enlace nuevo')).toHaveValue(
+      `${window.location.origin}/biometric/tok123`,
+    );
+  });
+
+  it('AC2: si el envío quedó en cola lo dice y no muestra enlace', async () => {
+    mocks.vencerIdentidad.mockResolvedValue({
+      ...RESULTADO_BASE,
+      enlaceEnviado: false,
+      enlaceCaptura: null,
+      enCola: true,
+      motivoSinEnlace: 'proveedor_no_disponible',
+    });
+    const { user, dialog } = await abrirModalVencer();
+    await user.click(within(dialog).getByRole('button', { name: 'Vencer identidad' }));
+    expect(await within(dialog).findByText(/quedó en cola y se reintentará/i)).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText('Enlace nuevo')).not.toBeInTheDocument();
+  });
+
+  it('AC3: sin trámites en borrador vence y avisa que no se envió enlace', async () => {
+    mocks.vencerIdentidad.mockResolvedValue({
+      ...RESULTADO_BASE,
+      borradoresAfectados: 0,
+      enlaceEnviado: false,
+      enlaceCaptura: null,
+      nuevaValidacionId: null,
+      tramiteBorradorId: null,
+      motivoSinEnlace: 'sin_borradores',
+    });
+    const { user, dialog } = await abrirModalVencer();
+    await user.click(within(dialog).getByRole('button', { name: 'Vencer identidad' }));
+    expect(
+      await within(dialog).findByText(
+        'La identidad quedó vencida. No hay trámites en borrador que la necesiten, no se envió enlace.',
+      ),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: 'Copiar enlace' })).not.toBeInTheDocument();
+  });
+
+  it('AC3: si el enlace no salió por el proveedor, queda vencida y explica el motivo', async () => {
+    mocks.vencerIdentidad.mockResolvedValue({
+      ...RESULTADO_BASE,
+      enlaceEnviado: false,
+      enlaceCaptura: null,
+      motivoSinEnlace: 'validacion_en_curso',
+    });
+    const { user, dialog } = await abrirModalVencer();
+    await user.click(within(dialog).getByRole('button', { name: 'Vencer identidad' }));
+    expect(
+      await within(dialog).findByText(/quedó vencida, pero el enlace nuevo no salió: la persona ya tiene/i),
+    ).toBeInTheDocument();
+  });
+
+  it('AC4: el 409 muestra el mensaje en el modal sin cerrarlo', async () => {
+    mocks.vencerIdentidad.mockRejectedValue(
+      new TramitesApiError(409, 'otro texto', { title: 'no_aprobada_vigente' }),
+    );
+    const { user, dialog } = await abrirModalVencer();
+    await user.click(within(dialog).getByRole('button', { name: 'Vencer identidad' }));
+    expect(
+      await within(dialog).findByText('Esta validación no está aprobada y vigente. No hay nada que vencer.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: /vencer identidad/i })).toBeInTheDocument();
+  });
+
+  it('Cancelar cierra el modal sin llamar al backend', async () => {
+    const { user, dialog } = await abrirModalVencer();
+    await user.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /vencer identidad/i })).not.toBeInTheDocument(),
+    );
+    expect(mocks.vencerIdentidad).not.toHaveBeenCalled();
   });
 });
