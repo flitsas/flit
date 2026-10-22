@@ -28,6 +28,8 @@ const mocks = vi.hoisted(() => ({
   // HU #12164 — reenvío administrativo de validación de identidad (mismo mecanismo del Dashboard).
   listBiometricExpediente: vi.fn(),
   adminReenviarValidacionIdentidad: vi.fn(),
+  adminReenviarValidacionesLote: vi.fn(),
+  adminListValidacionesReenviables: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -47,6 +49,8 @@ vi.mock('@/lib/api/tramites-client', () => ({
     simulateBiometric: mocks.simulateBiometric,
     listBiometricExpediente: mocks.listBiometricExpediente,
     adminReenviarValidacionIdentidad: mocks.adminReenviarValidacionIdentidad,
+    adminReenviarValidacionesLote: mocks.adminReenviarValidacionesLote,
+    adminListValidacionesReenviables: mocks.adminListValidacionesReenviables,
   },
   setActiveTramitesTenant: mocks.setActiveTramitesTenant,
   TramitesApiError: class TramitesApiError extends Error {
@@ -1475,28 +1479,20 @@ describe('HU #12164 — reenvío administrativo de una validación de trámite (
     linkExpiresAt: null,
   };
 
-  const EXPEDIENTE_UNA_VALIDACION = {
-    validations: [
+  const REENVIABLES_UNA_PERSONA = {
+    personas: [
       {
-        id: 'v-4',
+        validationId: 'v-4',
         partyRole: 'vendedor',
+        ordinal: 1,
         name: 'Carlos Vendedor',
-        documentType: 'CC',
-        documentNumber: '5566',
         email: 'carlos.vendedor@correo.co',
         status: 'enviado',
-        intentos: 0,
-        maxIntentos: 3,
-        score: null,
-        expiresAt: '2026-09-09T00:00:00Z',
-        validatedAt: null,
-        expired: false,
-        provider: 'kyverum',
         captureUrl: null,
+        captureExpiresAt: null,
+        esFlujoManual: false,
       },
     ],
-    firmaBaulPartes: [],
-    firmaBaulActores: [],
   };
 
   async function abrirAccionesFila(row: TenantBiometricValidation) {
@@ -1517,36 +1513,47 @@ describe('HU #12164 — reenvío administrativo de una validación de trámite (
 
   it('AC1: con el permiso, ofrece "Reenviar" (igual que el Dashboard) y llama al endpoint administrativo', async () => {
     mocks.hasPermission.mockReturnValue(true);
-    mocks.listBiometricExpediente.mockResolvedValue(EXPEDIENTE_UNA_VALIDACION);
-    mocks.adminReenviarValidacionIdentidad.mockResolvedValue({
-      validation: {},
-      captureUrl: 'https://kyverum.local/x',
-      emailActualizado: false,
-      queued: false,
+    mocks.adminListValidacionesReenviables.mockResolvedValue(REENVIABLES_UNA_PERSONA);
+    mocks.adminReenviarValidacionesLote.mockResolvedValue({
+      items: [
+        {
+          validationId: 'v-4',
+          ok: true,
+          queued: false,
+          captureUrl: 'https://kyverum.local/x',
+          emailActualizado: false,
+          email: 'carlos.vendedor@correo.co',
+          error: null,
+          mensaje: null,
+        },
+      ],
     });
 
     const user = await abrirAccionesFila(ROW_PENDIENTE_TRAMITE);
     await user.click(screen.getByRole('menuitem', { name: /^reenviar$/i }));
 
     const dialog = await screen.findByRole('dialog', { name: /reenviar validación de identidad/i });
-    // Una sola validación (la fila ya la identificó vía `initialValidationId`): sin selector.
-    expect(within(dialog).queryByLabelText('Validación a reenviar')).not.toBeInTheDocument();
-    // Pero sí se ve a qué correo se reenviará.
+    // La fila ya identificó la validación vía `initialValidationId`: llega marcada.
+    expect(
+      await within(dialog).findByRole('checkbox', { name: 'Vendedor · Carlos Vendedor' }),
+    ).toBeChecked();
+    // Y se ve a qué correo se reenviará.
     expect(within(dialog).getByText('carlos.vendedor@correo.co')).toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: 'Reenviar' }));
 
     await waitFor(() =>
-      expect(mocks.adminReenviarValidacionIdentidad).toHaveBeenCalledWith(
+      expect(mocks.adminReenviarValidacionesLote).toHaveBeenCalledWith(
         'inst-3',
-        'v-4',
-        null,
+        [{ validationId: 'v-4', email: null }],
         undefined,
       ),
     );
     // No es el mecanismo standalone ni el de "lanzar validación nueva": ninguno de los dos se toca.
     expect(mocks.resendPrevalidacion).not.toHaveBeenCalled();
     expect(mocks.iniciarBiometric).not.toHaveBeenCalled();
-    expect(await screen.findByText('Validación de identidad reenviada.')).toBeInTheDocument();
+    expect(await within(dialog).findByText('Validación de identidad reenviada.')).toBeInTheDocument();
+    // HU #13822 — el modal no se cierra tras reenviar: muestra el enlace nuevo.
+    expect(within(dialog).getByRole('button', { name: 'Copiar enlace' })).toBeInTheDocument();
   });
 
   /**
@@ -1567,7 +1574,7 @@ describe('HU #12164 — reenvío administrativo de una validación de trámite (
 
   it('AC2: el correo es opcional, pero si se escribe debe tener formato válido para habilitar "Reenviar"', async () => {
     mocks.hasPermission.mockReturnValue(true);
-    mocks.listBiometricExpediente.mockResolvedValue(EXPEDIENTE_UNA_VALIDACION);
+    mocks.adminListValidacionesReenviables.mockResolvedValue(REENVIABLES_UNA_PERSONA);
 
     const user = await abrirAccionesFila(ROW_PENDIENTE_TRAMITE);
     await user.click(screen.getByRole('menuitem', { name: /^reenviar$/i }));

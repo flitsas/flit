@@ -607,10 +607,12 @@ export interface ProcedureInstanceEvent {
   newAssignedToEmail?: string | null;
   newAssignedToCompania?: string | null;
   // reenvio_validacion_admin
-  partyRole?: BiometricParte | null;
+  partyRole?: BiometricParte | 'locatario' | null;
   emailActualizado?: boolean | null;
   /** Correo en claro (a pedido del producto): el admin necesita ver la dirección exacta reenviada. */
   correoDestino?: string | null;
+  /** HU #13822 — correo previo cuando el reenvío lo cambió (null/ausente si no cambió). */
+  correoAnterior?: string | null;
   /** Compañía de quien ejecutó el evento (ya nombrado en `createdByName`). */
   createdByCompania?: string | null;
   // revocatoria_solicitada (HU #12575, Feature #12565) — payload de RequestRevocationHandler

@@ -746,7 +746,7 @@ export function useAdminTramiteAcciones({
       disabledReason:
         esAprobado || esAnulado
           ? 'La identidad ya no es accionable en este estado del trámite.'
-          : 'La identidad de este trámite ya está aprobada: no hay nada que reenviar.',
+          : 'Comprador y vendedor ya firmaron. No hay a quién reenviar.',
       onSelect: () => setReenviarOpen(true),
     });
   }
