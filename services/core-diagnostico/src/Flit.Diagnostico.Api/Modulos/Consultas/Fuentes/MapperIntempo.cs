@@ -5,7 +5,8 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 /// <summary>
 /// Mapper del producto para la respuesta de Intempo (HU #13725, H-INT): el DTO de core-api solo mapea
 /// <c>propietariosActuales</c>; este hidrata además <c>locatarios[]</c> de cada propietario, <c>lessee[]</c> y
-/// <c>tipoPropiedad</c>/<c>detallePropiedad</c>. Toma solo tipo y número de documento: los nombres (<c>nombreCompleto</c>,
+/// <c>tipoPropiedad</c>/<c>detallePropiedad</c> y, para el avalúo (HU #13795), marca, línea, modelo, cilindraje,
+/// <c>tipoCombustible</c> y pasajeros de <c>informacionGeneral</c>. Toma solo tipo y número de documento: los nombres (<c>nombreCompleto</c>,
 /// <c>nombreRazonSocial</c>, <c>names</c>) nunca salen de aquí. Una respuesta que no es JSON, que no trae
 /// <c>informacionGeneral</c> o cuyo <c>codigoResultado</c> no es «Exitoso» es <see cref="TipoErrorFuente.RespuestaInvalida"/>.
 /// </summary>
@@ -60,7 +61,16 @@ public static class MapperIntempo
                 Propietarios: propietarios,
                 Locatarios: locatarios,
                 ServicioQueResolvio: servicioQueResolvio,
-                IdTransaccion: Texto(raiz, "codigoUUID")));
+                IdTransaccion: Texto(raiz, "codigoUUID"))
+            {
+                // HU #13795: datos técnicos del bien para el avalúo comercial.
+                Marca = Texto(general, "marca"),
+                Linea = Texto(general, "linea"),
+                Modelo = Entero(general, "modelo"),
+                Cilindraje = Entero(general, "cilindraje"),
+                Combustible = Texto(general, "tipoCombustible"),
+                Pasajeros = Entero(general, "pasajeros") ?? Entero(general, "pasajerosSentados") ?? Entero(general, "capacidadPasajeros"),
+            });
         }
     }
 
@@ -125,6 +135,15 @@ public static class MapperIntempo
             _ => null,
         };
         return string.IsNullOrWhiteSpace(texto) ? null : texto.Trim();
+    }
+
+    /// <summary>Entero positivo de un escalar (texto o número, admite «1598.0»); null si no viene o no es un número.</summary>
+    private static int? Entero(JsonElement objeto, string clave)
+    {
+        var texto = Texto(objeto, clave);
+        if (texto is null || !decimal.TryParse(texto, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var valor))
+            return null;
+        return valor is > 0 and <= int.MaxValue ? (int)valor : null;
     }
 
     private static ResultadoRunt Invalida(string motivo) => ResultadoRunt.Fallo(TipoErrorFuente.RespuestaInvalida, $"RUNT (Intempo): {motivo}.");

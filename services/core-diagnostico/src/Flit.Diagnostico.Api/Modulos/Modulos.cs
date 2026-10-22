@@ -38,6 +38,8 @@ public static class Modulos
         services.AddAdaptador<IFuenteRues, FuenteRuesReal, FuenteRuesSimulada, FuenteRuesNoConectada>(seleccion);
         // HU #13793: SIMIT por placa (SIMIT_VEHICULO); F05-H5 lo reutiliza por documento (SIMIT_PROPIETARIO/LOCATARIO).
         services.AddAdaptador<IFuenteSimit, FuenteSimitReal, FuenteSimitSimulada, FuenteSimitNoConectada>(seleccion);
+        // HU #13795: avalúo comercial (AVALUO) con los datos técnicos que dejó el RUNT.
+        services.AddAdaptador<IFuenteAvaluo, FuenteAvaluoReal, FuenteAvaluoSimulada, FuenteAvaluoNoConectada>(seleccion);
         if (seleccion.ModoDe(Domain.Consultas.Fuente.Runt) == ModoAdaptador.Simulado)
             services.TryAddSingleton<IFuenteRunt, FuenteRuntIntempoSimulada>();
         else
@@ -71,6 +73,8 @@ public static class Modulos
             ActivatorUtilities.CreateInstance<Consultas.EjecutorCeldaRuntPersona>(sp, Domain.Consultas.Fuente.RuntLocatario));
         // HU #13793: la celda SIMIT_VEHICULO (por la placa definitiva del RUNT).
         services.AddScoped<Consultas.IEjecutorCelda, Consultas.EjecutorCeldaSimitVehiculo>();
+        // HU #13795: la celda AVALUO (placa y VIN del RUNT con modelo, cilindraje, combustible y pasajeros).
+        services.AddScoped<Consultas.IEjecutorCelda, Consultas.EjecutorCeldaAvaluo>();
         // HU #13733: las fuentes con ejecutor son las únicas que se pueden habilitar o pedir (TryAdd: las pruebas ponen su doble).
         services.TryAddSingleton<Consultas.IRegistroAdaptadores, Consultas.RegistroAdaptadores>();
         services.AddSingleton<Consultas.FuentesDisponibles>();

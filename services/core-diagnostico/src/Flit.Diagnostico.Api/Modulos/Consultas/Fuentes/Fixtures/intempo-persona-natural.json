@@ -11,6 +11,9 @@
     "marca": "MARCA PRUEBA",
     "linea": "LINEA PRUEBA",
     "modelo": "2020",
+    "cilindraje": "1598",
+    "tipoCombustible": "GASOLINA",
+    "pasajeros": "5",
     "organismoTransito": "SECRETARIA DE TRANSITO DE PRUEBA"
   },
   "propietariosActuales": [

@@ -1991,7 +1991,9 @@ components:
             Solo con estado ERROR: código del tipo de error de la fuente o BLOQUEADA_POR_RUNT. En las celdas de persona
             (RUNT_PROPIETARIO, RUNT_LOCATARIO; HU #13792), PERSONAS_CON_ERROR si falló al menos una persona y no todas por
             la misma causa (si fallan todas por la misma, esa causa); lo que sí respondió se conserva. En SIMIT_VEHICULO
-            (HU #13793), SIN_PLACA si el vehículo no tiene placa tras el RUNT (definitivo, sin consulta ni consumo).
+            (HU #13793), SIN_PLACA si el vehículo no tiene placa tras el RUNT (definitivo, sin consulta ni consumo). En AVALUO
+            (HU #13795), SIN_IDENTIFICADOR si no tiene placa ni VIN tras el RUNT (definitivo); un avalúo sin valor en ninguna
+            fuente NO es error: la celda queda COMPLETADO con sin_valor_comercial=true y no se reprocesa.
           example: TIMEOUT
         dato_obtenido_en:
           type: string

@@ -37,7 +37,9 @@ public sealed record PropietarioRunt(string TipoDocumento, string NumeroDocument
 
 /// <summary>
 /// El vehículo tal como lo reporta el RUNT, normalizado por el producto. <see cref="Locatarios"/> es la unión, sin repetir,
-/// de <c>lessee[]</c> y de los <c>locatarios[]</c> de cada propietario.
+/// de <c>lessee[]</c> y de los <c>locatarios[]</c> de cada propietario. Los datos técnicos del bien (HU #13795: marca, línea,
+/// modelo, cilindraje, combustible y pasajeros) son opcionales: los usa el avalúo comercial y van a
+/// <c>datos_consolidados.vehiculo</c>; nulos si el RUNT no los trae.
 /// </summary>
 public sealed record VehiculoRunt(
     string? Placa,
@@ -48,7 +50,23 @@ public sealed record VehiculoRunt(
     IReadOnlyList<PropietarioRunt> Propietarios,
     IReadOnlyList<LocatarioRunt> Locatarios,
     string ServicioQueResolvio,
-    string? IdTransaccion);
+    string? IdTransaccion)
+{
+    public string? Marca { get; init; }
+
+    public string? Linea { get; init; }
+
+    /// <summary>Año modelo.</summary>
+    public int? Modelo { get; init; }
+
+    /// <summary>Cilindraje en c.c.</summary>
+    public int? Cilindraje { get; init; }
+
+    public string? Combustible { get; init; }
+
+    /// <summary>Capacidad de pasajeros.</summary>
+    public int? Pasajeros { get; init; }
+}
 
 /// <summary>Resultado de <see cref="IFuenteRunt.ConsultarVehiculoAsync"/>: el vehículo o un error tipado, nunca los dos.</summary>
 public sealed record ResultadoRunt

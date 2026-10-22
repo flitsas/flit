@@ -145,14 +145,14 @@ public sealed class FuentesSinAdaptadorTests
     }
 
     // El registro real del servicio: tienen adaptador RUNT (HU #13730), desde HU #13792 RUNT_PROPIETARIO y RUNT_LOCATARIO y,
-    // desde HU #13793, SIMIT_VEHICULO.
+    // desde HU #13793, SIMIT_VEHICULO y, desde HU #13795, AVALUO.
     [Fact]
-    public async Task Tienen_adaptador_RUNT_las_celdas_RUNT_de_persona_y_SIMIT_VEHICULO()
+    public async Task Tienen_adaptador_RUNT_las_celdas_RUNT_de_persona_SIMIT_VEHICULO_y_AVALUO()
     {
         await using var api = await ArrancarAsync();
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var registro = api.App.Services.GetRequiredService<IRegistroAdaptadores>();
-        Enum.GetValues<Fuente>().Where(registro.TieneAdaptador).Should().Equal(Fuente.Runt, Fuente.RuntPropietario, Fuente.RuntLocatario, Fuente.SimitVehiculo);
+        Enum.GetValues<Fuente>().Where(registro.TieneAdaptador).Should().Equal(Fuente.Runt, Fuente.RuntPropietario, Fuente.RuntLocatario, Fuente.SimitVehiculo, Fuente.Avaluo);
     }
 
     /// <summary>API con el registro de adaptadores real (sin el doble de <see cref="ApiDePrueba"/>).</summary>

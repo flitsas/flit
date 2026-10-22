@@ -119,7 +119,10 @@ internal sealed partial class EjecutorCeldaRunt(
         locatarios = runt.Locatarios.Count,
     }, Json);
 
-    /// <summary><c>datos_consolidados</c> con la clave <c>vehiculo</c> del RUNT; conserva lo que hayan dejado otras fuentes.</summary>
+    /// <summary>
+    /// <c>datos_consolidados</c> con la clave <c>vehiculo</c> del RUNT (con los datos técnicos del bien, HU #13795); conserva lo
+    /// que hayan dejado otras fuentes.
+    /// </summary>
     private static string Consolidar(string actual, VehiculoRunt runt, string? placa, string? vin)
     {
         var raiz = (string.IsNullOrWhiteSpace(actual) ? null : JsonNode.Parse(actual) as JsonObject) ?? [];
@@ -131,6 +134,13 @@ internal sealed partial class EjecutorCeldaRunt(
             ["clase"] = runt.Clase,
             ["organismo"] = runt.Organismo,
             ["tipo_propiedad"] = runt.Propietarios.Count > 0 ? CodigosDeEnum.Codigo(runt.Propietarios[0].TipoPropiedad) : null,
+            // HU #13795: datos técnicos del bien (los lee el avalúo comercial); nulos si el RUNT no los trae.
+            ["marca"] = runt.Marca,
+            ["linea"] = runt.Linea,
+            ["modelo"] = runt.Modelo,
+            ["cilindraje"] = runt.Cilindraje,
+            ["combustible"] = runt.Combustible,
+            ["pasajeros"] = runt.Pasajeros,
         };
         return raiz.ToJsonString();
     }
