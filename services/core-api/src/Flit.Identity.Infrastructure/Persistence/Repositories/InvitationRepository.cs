@@ -7,10 +7,14 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 
 public sealed class InvitationRepository(IIdentityDb db) : IInvitationRepository
 {
-    public Task<bool> ExistsPendingAsync(Guid tenantId, string email, CancellationToken cancellationToken) =>
-        db.UserInvitations.AnyAsync(
-            x => x.TenantId == tenantId && x.Email == email && x.Status == "pending",
+    public Task<bool> ExistsPendingAsync(string email, CancellationToken cancellationToken)
+    {
+        // HU #13811: global, sin filtrar por compañía (antes era única por tenant).
+        var normalizedEmail = EmailNormalizer.Normalize(email);
+        return db.UserInvitations.AnyAsync(
+            x => x.Email == normalizedEmail && x.Status == "pending",
             cancellationToken);
+    }
 
     public Task<bool> UserExistsWithEmailAsync(string email, CancellationToken cancellationToken)
     {
@@ -65,7 +69,17 @@ public sealed class InvitationRepository(IIdentityDb db) : IInvitationRepository
             });
         }
 
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (IsPendingUniqueViolation(ex))
+        {
+            // HU #13811 — red de la carrera: dos compañías invitan el mismo correo a la vez; el handler ya
+            // pre-valida con ExistsPendingAsync y uq_user_invitations_email_pending decide al segundo.
+            db.ChangeTracker.Clear();
+            throw new InvitationAlreadyPendingException();
+        }
 
         return entity.Id;
     }

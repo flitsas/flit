@@ -51,7 +51,7 @@ public sealed partial class ReactivateInvitationHandler(
         // (uq_users_email es parcial por deleted_at IS NULL) — reactivar crea, al activarse,
         // una fila de usuario nueva y el historial de la eliminada queda intacto.
         var hasPending = await invitationRepository.ExistsPendingAsync(
-            invitation.TenantId, invitation.Email, cancellationToken);
+            invitation.Email, cancellationToken);
         if (hasPending)
             throw new InvitationAlreadyPendingException();
 

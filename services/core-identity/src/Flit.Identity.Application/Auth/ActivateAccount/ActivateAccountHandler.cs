@@ -63,20 +63,39 @@ public sealed partial class ActivateAccountHandler(
             throw new WeakPasswordException();
         }
 
+        // HU #13811 — entre la invitación y la activación pudo quedar vivo otro usuario con el mismo correo
+        // (otra compañía lo invitó y ya activó). Se revalida aquí; la carrera la cubre uq_users_email.
+        if (await invitationRepository.UserExistsWithEmailAsync(invitation.Email, cancellationToken).ConfigureAwait(false))
+        {
+            await AuditAsync(invitation, AuditVocabulary.Results.Failure, "email_in_use", cancellationToken)
+                .ConfigureAwait(false);
+            throw new UserAlreadyExistsException();
+        }
+
         var passwordHash = passwordHasher.Hash(command.Password);
         var activatedAt = DateTimeOffset.UtcNow;
 
-        await userActivationRepository.ActivateAsync(
-            new ActivationData(
-                invitation.InvitationId,
-                invitation.Email,
-                invitation.FullName,
-                passwordHash,
-                invitation.TenantId,
-                invitation.RoleIds,
-                invitation.InvitedBy,
-                activatedAt),
-            cancellationToken);
+        try
+        {
+            await userActivationRepository.ActivateAsync(
+                new ActivationData(
+                    invitation.InvitationId,
+                    invitation.Email,
+                    invitation.FullName,
+                    passwordHash,
+                    invitation.TenantId,
+                    invitation.RoleIds,
+                    invitation.InvitedBy,
+                    activatedAt),
+                cancellationToken);
+        }
+        catch (UserAlreadyExistsException)
+        {
+            // HU #13811 — el repositorio tradujo el 23505 de uq_users_email (activación concurrente).
+            await AuditAsync(invitation, AuditVocabulary.Results.Failure, "email_in_use", cancellationToken)
+                .ConfigureAwait(false);
+            throw;
+        }
 
         await AuditAsync(invitation, AuditVocabulary.Results.Success, null, cancellationToken).ConfigureAwait(false);
 
