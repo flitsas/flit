@@ -76,7 +76,7 @@ public sealed class HU13810NormalizacionCorreoTests
             new CreateInvitationCommand(TenantId, " Juan@X.com ", "Juan", [RoleId], CallerId), CancellationToken.None);
 
         result.Email.Should().Be("juan@x.com");
-        await repo.Received(1).ExistsPendingAsync(TenantId, "juan@x.com", Arg.Any<CancellationToken>());
+        await repo.Received(1).ExistsPendingAsync("juan@x.com", Arg.Any<CancellationToken>());
         await repo.Received(1).UserExistsWithEmailAsync("juan@x.com", Arg.Any<CancellationToken>());
         await repo.Received(1).CreateAsync(Arg.Is<UserInvitationData>(d => d.Email == "juan@x.com"), Arg.Any<CancellationToken>());
     }

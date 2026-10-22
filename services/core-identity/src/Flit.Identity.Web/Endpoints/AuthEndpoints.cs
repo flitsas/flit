@@ -229,6 +229,14 @@ public static class AuthEndpoints
                     new ErrorResponse("WEAK_PASSWORD", "La contraseña no cumple los requisitos mínimos."),
                     statusCode: StatusCodes.Status400BadRequest);
             }
+            catch (UserAlreadyExistsException)
+            {
+                // HU #13811 — el correo ya lo usa otra cuenta viva (revalidación o carrera): 409 con el código
+                // y mensaje únicos de conflicto de correo, nunca 500.
+                return Results.Json(
+                    new ErrorResponse(EmailConflict.Code, EmailConflict.Message),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
         });
 
         // HU #10616 AC3 — expone TODOS los roles activos (roleId + roleCode de cada uno) y el

@@ -41,7 +41,7 @@ public sealed partial class CreateInvitationHandler(
         }
 
         var hasPending = await invitationRepository.ExistsPendingAsync(
-            command.TenantId, email, cancellationToken);
+            email, cancellationToken);
         if (hasPending)
             throw new InvitationAlreadyPendingException();
 
