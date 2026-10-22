@@ -521,6 +521,21 @@ describe('HU #12163 — Reenviar validación de identidad', () => {
     expect(mocks.adminListValidacionesReenviables).not.toHaveBeenCalled();
   });
 
+  // Épica #13817 — la matrícula tiene un solo actor (el comprador): el motivo no nombra al vendedor.
+  it('AC6: en matrícula el motivo habla solo del comprador', async () => {
+    mocks.listInstances.mockResolvedValue([
+      makeInstance({ modalidad: 'MATRICULAS', identityValidationStatus: 'aprobado' }),
+    ]);
+    renderTable();
+    await screen.findByText('P0001');
+    await abrirAcciones();
+
+    expect(screen.getByRole('menuitem', { name: 'Reenviar validación' })).toHaveAttribute(
+      'title',
+      'El comprador ya firmó. No hay a quién reenviar.',
+    );
+  });
+
   it('sobre un trámite Anulado, "Reenviar validación" está deshabilitada', async () => {
     mocks.listInstances.mockResolvedValue([makeInstance({ estado: 'anulado' })]);
     renderTable();

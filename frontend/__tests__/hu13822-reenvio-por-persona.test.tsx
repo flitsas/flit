@@ -16,7 +16,10 @@ vi.mock('@/lib/api/tramites-client', () => ({
   tramitesClient: mocks,
 }));
 
-import { ReenviarValidacionIdentidadModal } from '@/components/operacion/ReenviarValidacionIdentidadModal';
+import {
+  ReenviarValidacionIdentidadModal,
+  mensajeTodosFirmaron,
+} from '@/components/operacion/ReenviarValidacionIdentidadModal';
 
 function persona(over: Record<string, unknown> = {}) {
   return {
@@ -303,14 +306,28 @@ describe('HU #13822 — reenvío por persona', () => {
     expect(screen.queryByRole('button', { name: 'Copiar enlace' })).not.toBeInTheDocument();
   });
 
-  it('AC6: sin personas pendientes muestra «Comprador y vendedor ya firmaron. No hay a quién reenviar.»', async () => {
+  it('AC6: sin personas pendientes y sin familia conocida usa el texto genérico', async () => {
     mocks.adminListValidacionesReenviables.mockResolvedValue({ personas: [] });
     renderModal();
 
     expect(
-      await screen.findByText('Comprador y vendedor ya firmaron. No hay a quién reenviar.'),
+      await screen.findByText('Todas las personas del trámite ya firmaron. No hay a quién reenviar.'),
     ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Reenviar' })).not.toBeInTheDocument();
+  });
+
+  it('AC6: el mensaje de «ya firmaron» nombra solo las partes que el trámite tiene', () => {
+    expect(mensajeTodosFirmaron('MATRICULAS')).toBe('El comprador ya firmó. No hay a quién reenviar.');
+    expect(mensajeTodosFirmaron('OTROS')).toBe('El comprador ya firmó. No hay a quién reenviar.');
+    expect(mensajeTodosFirmaron('TRASPASO')).toBe(
+      'Comprador y vendedor ya firmaron. No hay a quién reenviar.',
+    );
+    expect(mensajeTodosFirmaron('TRASPASO', 'TRASPASO_UNILATERAL')).toBe(
+      'El vendedor ya firmó. No hay a quién reenviar.',
+    );
+    expect(mensajeTodosFirmaron(null)).toBe(
+      'Todas las personas del trámite ya firmaron. No hay a quién reenviar.',
+    );
   });
 
   it('persona en flujo manual: deshabilitada y con el aviso, sin permitir marcarla', async () => {

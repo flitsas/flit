@@ -46,7 +46,21 @@ export const PARTE_LABEL: Record<string, string> = {
   locatario: 'Locatario',
 };
 
-export const MSG_TODOS_FIRMARON = 'Comprador y vendedor ya firmaron. No hay a quién reenviar.';
+/** Sin familia conocida (p. ej. desde Validaciones de Identidad, que no navega por trámite). */
+export const MSG_TODOS_FIRMARON = 'Todas las personas del trámite ya firmaron. No hay a quién reenviar.';
+
+/**
+ * «Ya firmaron todos» dicho con las partes que ese trámite tiene: una matrícula (y los demás trámites
+ * de la familia OTROS) solo tiene comprador, el traspaso tiene comprador y vendedor, y el traspaso
+ * unilateral solo valida al vendedor (ADR-0051). Nombrar una parte que el trámite no tiene confunde.
+ */
+export function mensajeTodosFirmaron(modalidad?: string | null, tipoCodigo?: string | null): string {
+  if (tipoCodigo === 'TRASPASO_UNILATERAL') return 'El vendedor ya firmó. No hay a quién reenviar.';
+  if (modalidad === 'TRASPASO') return 'Comprador y vendedor ya firmaron. No hay a quién reenviar.';
+  if (modalidad === 'MATRICULAS' || modalidad === 'OTROS')
+    return 'El comprador ya firmó. No hay a quién reenviar.';
+  return MSG_TODOS_FIRMARON;
+}
 const MSG_EN_COLA =
   'El reenvío quedó en cola: el proveedor tuvo una falla transitoria y se reintentará automáticamente.';
 const MSG_REENVIADA = 'Validación de identidad reenviada.';
@@ -188,6 +202,8 @@ export interface ReenviarValidacionIdentidadModalProps {
    * entre las personas sin firmar, el modal lo indica con un aviso en vez de fallar.
    */
   initialValidationId?: string;
+  /** Texto del estado vacío según las partes del trámite (ver `mensajeTodosFirmaron`). */
+  mensajeVacio?: string;
   onSuccess: (message: string) => void;
   onError: (message: string) => void;
 }
@@ -200,6 +216,7 @@ export function ReenviarValidacionIdentidadModal({
   referenceNumber,
   tenantId,
   initialValidationId,
+  mensajeVacio = MSG_TODOS_FIRMARON,
   onSuccess,
   onError,
 }: ReenviarValidacionIdentidadModalProps) {
@@ -353,7 +370,7 @@ export function ReenviarValidacionIdentidadModal({
             onReintentar={() => setReloadKey((k) => k + 1)}
           />
         ) : null}
-        {mostrarVacio ? <SeccionVacia mensaje={MSG_TODOS_FIRMARON} /> : null}
+        {mostrarVacio ? <SeccionVacia mensaje={mensajeVacio} /> : null}
 
         {mostrarLista ? (
           <div className="space-y-3">
