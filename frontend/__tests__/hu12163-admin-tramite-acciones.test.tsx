@@ -37,6 +37,8 @@ const mocks = vi.hoisted(() => ({
   adminCambiarEstado: vi.fn(),
   adminAnular: vi.fn(),
   adminReenviarValidacionIdentidad: vi.fn(),
+  adminReenviarValidacionesLote: vi.fn(),
+  adminListValidacionesReenviables: vi.fn(),
   adminReasignarGestor: vi.fn(),
   adminListGestoresDisponibles: vi.fn(),
 }));
@@ -431,9 +433,9 @@ describe('HU #12163 — Reenviar validación de identidad', () => {
     setToken(['AdminTramiteReenviarValidacion']);
   });
 
-  it('sin validaciones registradas muestra el estado vacío (no ofrece reenviar)', async () => {
+  it('AC6: sin personas pendientes de firma muestra el estado vacío (no ofrece reenviar)', async () => {
     mocks.listInstances.mockResolvedValue([makeInstance()]);
-    mocks.listBiometricExpediente.mockResolvedValue({ validations: [], firmaBaulPartes: [] });
+    mocks.adminListValidacionesReenviables.mockResolvedValue({ personas: [] });
     renderTable();
     await screen.findByText('P0001');
     await abrirAcciones();
@@ -441,40 +443,41 @@ describe('HU #12163 — Reenviar validación de identidad', () => {
 
     const dialog = await screen.findByRole('dialog', { name: /Reenviar validación/ });
     expect(
-      await within(dialog).findByText('Este trámite no tiene validaciones de identidad registradas.'),
+      await within(dialog).findByText('Comprador y vendedor ya firmaron. No hay a quién reenviar.'),
     ).toBeInTheDocument();
     expect(within(dialog).queryByRole('button', { name: 'Reenviar' })).not.toBeInTheDocument();
   });
 
-  it('con una validación disponible, reenvía y muestra el resultado', async () => {
+  it('AC2: con una sola persona sin firmar la muestra marcada y reenvía en un clic', async () => {
     mocks.listInstances.mockResolvedValue([makeInstance()]);
-    mocks.listBiometricExpediente.mockResolvedValue({
-      validations: [
+    mocks.adminListValidacionesReenviables.mockResolvedValue({
+      personas: [
         {
-          id: 'val-1',
+          validationId: 'val-1',
           partyRole: 'comprador',
+          ordinal: 1,
           name: 'Juan Pérez',
-          documentType: 'CC',
-          documentNumber: '123',
           email: 'juan@example.com',
-          status: 'entregado',
-          intentos: 1,
-          maxIntentos: 3,
-          score: null,
-          expiresAt: '2026-09-09T00:00:00Z',
-          validatedAt: null,
-          expired: false,
-          provider: 'kyverum',
+          status: 'enviado',
           captureUrl: null,
+          captureExpiresAt: null,
+          esFlujoManual: false,
         },
       ],
-      firmaBaulPartes: [],
     });
-    mocks.adminReenviarValidacionIdentidad.mockResolvedValue({
-      validation: {},
-      captureUrl: 'https://kyverum.local/x',
-      emailActualizado: false,
-      queued: false,
+    mocks.adminReenviarValidacionesLote.mockResolvedValue({
+      items: [
+        {
+          validationId: 'val-1',
+          ok: true,
+          queued: false,
+          captureUrl: 'https://kyverum.local/x',
+          emailActualizado: false,
+          email: 'juan@example.com',
+          error: null,
+          mensaje: null,
+        },
+      ],
     });
     renderTable();
     await screen.findByText('P0001');
@@ -482,81 +485,25 @@ describe('HU #12163 — Reenviar validación de identidad', () => {
     await userEvent.click(screen.getByRole('menuitem', { name: 'Reenviar validación' }));
 
     const dialog = await screen.findByRole('dialog', { name: /Reenviar validación/ });
-    // Con una sola validación (no traspaso) no hay nada que elegir: sin selector, se reenvía directo.
-    expect(within(dialog).queryByLabelText('Validación a reenviar')).not.toBeInTheDocument();
-    // Pero sí se ve a qué correo se reenviará.
-    expect(within(dialog).getByText(/Correo registrado:/)).toBeInTheDocument();
+    expect(
+      await within(dialog).findByRole('checkbox', { name: 'Comprador · Juan Pérez' }),
+    ).toBeChecked();
     expect(within(dialog).getByText('juan@example.com')).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Reenviar' }));
 
-    expect(mocks.adminReenviarValidacionIdentidad).toHaveBeenCalledWith(
+    expect(mocks.adminReenviarValidacionesLote).toHaveBeenCalledWith(
       'inst-0001',
-      'val-1',
-      null,
+      [{ validationId: 'val-1', email: null }],
       undefined,
     );
-    expect(await screen.findByText('Validación de identidad reenviada.')).toBeInTheDocument();
-  });
-
-  it('en traspaso (2 validaciones) sí muestra el selector, con rol y nombre completos', async () => {
-    mocks.listInstances.mockResolvedValue([makeInstance()]);
-    mocks.listBiometricExpediente.mockResolvedValue({
-      validations: [
-        {
-          id: 'val-vendedor',
-          partyRole: 'vendedor',
-          name: 'Ana Gómez',
-          documentType: 'CC',
-          documentNumber: '111',
-          email: 'ana@example.com',
-          status: 'entregado',
-          intentos: 1,
-          maxIntentos: 3,
-          score: null,
-          expiresAt: '2026-09-09T00:00:00Z',
-          validatedAt: null,
-          expired: false,
-          provider: 'kyverum',
-          captureUrl: null,
-        },
-        {
-          id: 'val-comprador',
-          partyRole: 'comprador',
-          name: 'Juan Pérez',
-          documentType: 'CC',
-          documentNumber: '123',
-          email: 'juan@example.com',
-          status: 'entregado',
-          intentos: 1,
-          maxIntentos: 3,
-          score: null,
-          expiresAt: '2026-09-09T00:00:00Z',
-          validatedAt: null,
-          expired: false,
-          provider: 'kyverum',
-          captureUrl: null,
-        },
-      ],
-      firmaBaulPartes: [],
-    });
-    renderTable();
-    await screen.findByText('P0001');
-    await abrirAcciones();
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Reenviar validación' }));
-
-    const dialog = await screen.findByRole('dialog', { name: /Reenviar validación/ });
-    const select = await within(dialog).findByLabelText('Validación a reenviar');
-    // Rol + nombre completos, sin el correo (lo que causaba el recorte visual reportado).
-    expect(within(select).getByRole('option', { name: 'Vendedor · Ana Gómez' })).toBeInTheDocument();
-    expect(within(select).getByRole('option', { name: 'Comprador · Juan Pérez' })).toBeInTheDocument();
-    expect(within(dialog).getByText(/Correo registrado:/)).toBeInTheDocument();
+    expect(await within(dialog).findByText('Validación de identidad reenviada.')).toBeInTheDocument();
   });
 
   // Verificación en vivo del Bug #12376 destapó este gap: un trámite con identidad ya `aprobado`
   // (incluida la reusada de otro trámite, HU #10350) ofrecía "Reenviar validación" igual, y el
   // backend respondía con un error confuso (IdentidadAprobada o incluso NoEncontrado cuando la
   // validación pertenece a OTRO trámite). El frontend ahora lo deshabilita antes de intentarlo.
-  it('con identidad ya aprobada, "Reenviar validación" está deshabilitada', async () => {
+  it('AC6: con identidad ya aprobada (todos firmaron), "Reenviar validación" está deshabilitada', async () => {
     mocks.listInstances.mockResolvedValue([
       makeInstance({ identityValidationStatus: 'aprobado' }),
     ]);
@@ -568,10 +515,10 @@ describe('HU #12163 — Reenviar validación de identidad', () => {
     expect(item).toBeDisabled();
     expect(item).toHaveAttribute(
       'title',
-      'La identidad de este trámite ya está aprobada: no hay nada que reenviar.',
+      'Comprador y vendedor ya firmaron. No hay a quién reenviar.',
     );
     await userEvent.click(item);
-    expect(mocks.listBiometricExpediente).not.toHaveBeenCalled();
+    expect(mocks.adminListValidacionesReenviables).not.toHaveBeenCalled();
   });
 
   it('sobre un trámite Anulado, "Reenviar validación" está deshabilitada', async () => {

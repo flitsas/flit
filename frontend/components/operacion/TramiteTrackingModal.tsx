@@ -281,6 +281,7 @@ interface ItemLinea {
 const PARTE_LABEL: Record<string, string> = {
   vendedor: 'Vendedor',
   comprador: 'Comprador',
+  locatario: 'Locatario',
 };
 
 /**
@@ -356,9 +357,11 @@ function eventoALinea(e: ProcedureInstanceEvent, index: number): ItemLinea {
   const parte = e.partyRole ? PARTE_LABEL[e.partyRole] ?? e.partyRole : null;
   // Correo en claro (a pedido del producto): el admin necesita ver la dirección exacta reenviada.
   const correo = e.correoDestino || '—';
-  const reenvio = e.emailActualizado
-    ? 'Reenviado a un correo distinto del registrado'
-    : 'Reenviado al correo actual';
+  const reenvio = e.correoAnterior?.trim()
+    ? `Correo actualizado: ${e.correoAnterior.trim()} → ${correo}`
+    : e.emailActualizado
+      ? 'Reenviado a un correo distinto del registrado'
+      : 'Reenviado al correo actual';
   return {
     key,
     kind: 'evento',
