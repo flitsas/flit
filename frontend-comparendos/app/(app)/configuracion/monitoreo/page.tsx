@@ -62,6 +62,8 @@ function Nits({ empresa, puedeGestionar }: { empresa: string | null; puedeGestio
   const pg = usePaginacion(25);
   const lista = useCarga(`nits:${empresa}:${buscar}`, (signal) => apiFetch<Nit[]>("/monitoreo/nits", { signal, query: { empresa, buscar } }));
   const filas = lista.datos ?? [];
+  // HU #13844: la columna solo tiene sentido si la empresa tiene consulta automática del conductor en algún NIT.
+  const conAutomatica = filas.some((n) => n.consultaAutomatica);
 
   const crear = async () => {
     setOcupado(true);
@@ -106,6 +108,12 @@ function Nits({ empresa, puedeGestionar }: { empresa: string | null; puedeGestio
           </button>
         )}
       </div>
+      {conAutomatica && (
+        <p className="text-[11px] text-[#5B6B82] dark:text-slate-300">
+          Conductor «Automático»: el sistema busca quién tenía el vehículo en la fecha de la infracción. «Manual»: el
+          conductor se asigna a mano. Si necesitas cambiarlo, solicítalo a FLIT.
+        </p>
+      )}
       <DataTable
         ariaLabel="NITs monitoreados"
         rows={pg.paginar(filas)}
@@ -122,6 +130,17 @@ function Nits({ empresa, puedeGestionar }: { empresa: string | null; puedeGestio
           { key: "estado", header: "Estado", render: (n) => <StatusBadge label={n.activo ? "Activo" : "Inactivo"} tone={activeTone(n.activo)} /> },
           { key: "creado", header: "Registrado", render: (n) => formatoFecha(n.creadoEn) },
           { key: "activos", header: "Comparendos activos", align: "right", render: (n) => n.comparendosActivos.toLocaleString("es-CO") },
+          ...(conAutomatica
+            ? [
+                {
+                  key: "conductor",
+                  header: "Conductor",
+                  render: (n: Nit) => (
+                    <StatusBadge label={n.consultaAutomatica ? "Automático" : "Manual"} tone={n.consultaAutomatica ? "info" : "neutral"} />
+                  ),
+                },
+              ]
+            : []),
           {
             key: "historial",
             header: "",

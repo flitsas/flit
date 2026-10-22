@@ -70,6 +70,8 @@ export interface Nit {
   comparendosActivos: number;
   /** HU #13712: el conductor de sus comparendos se consulta en la API de contratos. Solo lo cambia el SuperAdmin. */
   consultaContratoApi: boolean;
+  /** HU #13844: lo que de verdad pasa con el conductor (integración de la empresa + consulta encendida + casilla del NIT). */
+  consultaAutomatica: boolean;
 }
 
 export interface PlacaMonitoreada {
