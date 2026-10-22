@@ -53,9 +53,47 @@ test.describe("tablero del lote", () => {
     await expect(runt.getByText("Completada")).toBeVisible();
     expect(recargas).toBe(0);
 
-    // AC4: el usuario sin rol admin no ve ningún botón de acción en la grilla.
-    await expect(grilla.getByRole("button")).toHaveCount(0);
+    // AC4: el usuario sin rol admin no ve ningún botón de acción en la grilla (desde HU #13801 cada semáforo es un botón
+    // «Ver detalle de …», que no es una acción sobre la celda).
+    await expect(grilla.getByRole("button", { name: /reprocesar/i })).toHaveCount(0);
     // AC6: ningún indicador de dato manual.
     await expect(grilla.getByText(/manual/i)).toHaveCount(0);
+  });
+
+  test("HU #13801 AC1: clic en el semáforo verde de SIMIT vehículo abre el detalle con sus comparendos", async ({ page }) => {
+    test.skip(!process.env.E2E_USUARIO || !process.env.E2E_CLAVE, "Faltan E2E_USUARIO / E2E_CLAVE");
+    await entrar(page, process.env.E2E_USUARIO!, process.env.E2E_CLAVE!);
+
+    await page.getByLabel(/placa o vin/i).fill(PLACA);
+    await page.getByRole("button", { name: "Diagnosticar" }).click();
+    await page.getByRole("button", { name: "Lanzar diagnóstico" }).click();
+    await page.waitForURL(/\/diagnosticos\/[0-9a-f-]{36}$/i);
+
+    const grilla = page.getByRole("table", { name: /semáforo de consultas/i });
+    await expect(grilla).toBeVisible();
+    test.skip((await grilla.getByRole("columnheader", { name: "SIMIT vehículo" }).count()) === 0, "El Express de este ambiente no incluye SIMIT vehículo");
+
+    // Con la simulación encendida, SIMIT del vehículo termina en verde (COMPLETADO) sin recargar.
+    const semaforo = grilla.getByRole("button", { name: new RegExp(`^Ver detalle de SIMIT vehículo de ${PLACA}`) });
+    await expect(semaforo).toHaveAccessibleName(/Completada$/, { timeout: 60_000 });
+
+    // Se abre con el teclado: Enter sobre el semáforo enfocado.
+    await semaforo.focus();
+    await page.keyboard.press("Enter");
+    const dialogo = page.getByRole("dialog", { name: `SIMIT vehículo · ${PLACA}` });
+    await expect(dialogo).toBeVisible();
+    await expect(dialogo.getByText(/^Dato del \d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/)).toBeVisible();
+    await expect(dialogo.getByText(/^\d+ comparendos?$/)).toBeVisible();
+    // Comparendos con valor y estado, o el vacío explícito si la simulación no trae ninguno.
+    const tabla = dialogo.getByRole("table", { name: /comparendos/i });
+    if (await tabla.count()) await expect(tabla.getByRole("columnheader", { name: "Valor" })).toBeVisible();
+    else await expect(dialogo.getByText("Sin comparendos registrados.")).toBeVisible();
+    // AC5: nada que delate un dato manual.
+    await expect(dialogo.getByText(/manual/i)).toHaveCount(0);
+
+    // Escape cierra y el foco vuelve al semáforo.
+    await page.keyboard.press("Escape");
+    await expect(dialogo).toHaveCount(0);
+    await expect(semaforo).toBeFocused();
   });
 });

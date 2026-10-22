@@ -1,9 +1,12 @@
 "use client";
 
+import { useState, type ReactNode } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { nombreFuente, type Fuente } from "@/lib/configuracion";
 import type { CeldaGrilla, ColumnasGrilla, FilaVehiculo, Grilla } from "@/lib/tablero/api";
+import type { CargadorDetalle } from "@/lib/tablero/detalle";
 import { CeldaSemaforo, type CeldaSemaforoProps } from "./CeldaSemaforo";
+import { DetalleCelda } from "./DetalleCelda";
 
 const GRUPOS: ReadonlyArray<{ clave: keyof ColumnasGrilla; nombre: string }> = [
   { clave: "por_vehiculo", nombre: "Por vehículo" },
@@ -21,6 +24,16 @@ export interface GrillaSemaforosProps extends Pick<CeldaSemaforoProps, "onReproc
   grilla: Grilla;
   /** Capacidad `reprocesarConsultas` de la sesión (admin): solo entonces hay «Reprocesar» en las celdas rojas. */
   puedeReprocesar: boolean;
+  /** Cargador del detalle de la celda; el backoffice (F06-H5) pasa el suyo con `?empresa=`. Por defecto, el de la compañía. */
+  cargarDetalle?: CargadorDetalle;
+  /** Acciones extra al pie del detalle (p. ej. «Llenar a mano» en el backoffice). */
+  accionesDetalle?: (celda: CeldaGrilla, vehiculo: FilaVehiculo) => ReactNode;
+}
+
+interface Seleccion {
+  celda: CeldaGrilla;
+  vehiculo: FilaVehiculo;
+  disparador: HTMLElement;
 }
 
 function EncabezadoVehiculo({ vehiculo, total }: { vehiculo: FilaVehiculo; total: number }) {
@@ -45,9 +58,11 @@ function EncabezadoVehiculo({ vehiculo, total }: { vehiculo: FilaVehiculo; total
 /**
  * Grilla vehículo × fuente del tablero (HU #13748, F04-C1/C2/C8/C9/C10/C11): una fila por vehículo con su avance (terminado
  * apenas todas sus celdas están en verde o N/A, sin esperar a los demás) y columnas agrupadas Por vehículo, Por propietario y
- * Por locatario según el alcance del lote. El usuario no ve acciones; el admin, «Reprocesar» solo en las rojas.
+ * Por locatario según el alcance del lote. El usuario no ve acciones; el admin, «Reprocesar» solo en las rojas. Cada
+ * semáforo abre el detalle de su celda (HU #13801).
  */
-export function GrillaSemaforos({ grilla, puedeReprocesar, onReprocesada, onErrorReproceso }: GrillaSemaforosProps) {
+export function GrillaSemaforos({ grilla, puedeReprocesar, onReprocesada, onErrorReproceso, cargarDetalle, accionesDetalle }: GrillaSemaforosProps) {
+  const [seleccion, setSeleccion] = useState<Seleccion | null>(null);
   const grupos = GRUPOS.map((g) => ({ ...g, fuentes: grilla.columnas[g.clave] ?? [] })).filter((g) => g.fuentes.length > 0);
   const fuentes: Fuente[] = grupos.flatMap((g) => g.fuentes);
 
@@ -88,6 +103,7 @@ export function GrillaSemaforos({ grilla, puedeReprocesar, onReprocesada, onErro
                     puedeReprocesar={puedeReprocesar}
                     onReprocesada={onReprocesada}
                     onErrorReproceso={onErrorReproceso}
+                    onAbrirDetalle={(celda, disparador) => setSeleccion({ celda, vehiculo: v, disparador })}
                   />
                 ))}
               </tr>
@@ -95,6 +111,20 @@ export function GrillaSemaforos({ grilla, puedeReprocesar, onReprocesada, onErro
           })}
         </tbody>
       </table>
+      {seleccion && (
+        <DetalleCelda
+          key={seleccion.celda.id}
+          loteId={grilla.id}
+          vehiculoId={seleccion.vehiculo.id}
+          fuente={seleccion.celda.fuente}
+          nombreFuente={nombreFuente(seleccion.celda.fuente)}
+          identificador={seleccion.vehiculo.identificador}
+          cargar={cargarDetalle}
+          acciones={accionesDetalle?.(seleccion.celda, seleccion.vehiculo)}
+          devolverFocoA={seleccion.disparador}
+          onClose={() => setSeleccion(null)}
+        />
+      )}
     </div>
   );
 }

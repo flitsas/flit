@@ -22,6 +22,10 @@ const celdaDe = (container: HTMLElement, id: string) => {
 
 const chipDe = (td: HTMLElement) => td.querySelector<HTMLElement>("[data-tono]")!;
 
+/** Botones de acción: todos menos el semáforo, que desde HU #13801 es un botón «Ver detalle de …» que abre el detalle. */
+const accionesDe = (raiz: Pick<typeof screen, "queryAllByRole"> = screen) =>
+  raiz.queryAllByRole("button").filter((b) => !/^Ver detalle de /.test(b.getAttribute("aria-label") ?? ""));
+
 describe("GrillaSemaforos — AC1: filas, columnas agrupadas, color y motivo", () => {
   it("una fila por vehículo con su identificador como encabezado de fila", () => {
     pintar();
@@ -106,22 +110,22 @@ describe("GrillaSemaforos — AC4 (negativo): el usuario sin rol admin no ve acc
   it("con celdas rojas no aparece ningún botón", () => {
     pintar(loteTerminadoConErrores(), false);
     expect(screen.getAllByText("Error").length).toBeGreaterThan(0);
-    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    expect(accionesDe()).toHaveLength(0);
   });
 });
 
 describe("GrillaSemaforos — AC5: el admin ve «Reprocesar» solo en las rojas", () => {
   it("un botón por celda roja reprocesable, con nombre accesible de fuente y vehículo", () => {
     pintar(grilla(), true);
-    const botones = screen.getAllByRole("button");
+    const botones = accionesDe();
     expect(botones).toHaveLength(1);
     expect(botones[0]).toHaveAccessibleName("Reprocesar SIMIT propietario de TST002");
   });
 
   it("la celda bloqueada por un RUNT en error no se reprocesa sola: dice por qué y no lleva botón", () => {
     const { container } = pintar(loteTerminadoConErrores(), true);
-    expect(screen.getAllByRole("button")).toHaveLength(1);
-    expect(screen.getByRole("button")).toHaveAccessibleName("Reprocesar RUNT vehículo de TST004");
+    expect(accionesDe()).toHaveLength(1);
+    expect(accionesDe()[0]).toHaveAccessibleName("Reprocesar RUNT vehículo de TST004");
     expect(celdaDe(container, "celda-4-impuesto_departamental")).toHaveTextContent("Espera al RUNT del vehículo");
   });
 

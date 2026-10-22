@@ -123,7 +123,9 @@ describe("/diagnosticos/{id} — AC2: se actualiza sola sin recargar", () => {
 describe("/diagnosticos/{id} — AC4/AC5: acciones por perfil", () => {
   it("AC4: el usuario sin capacidad de reprocesar no ve botones en la grilla", async () => {
     await montar({ [GRILLA]: () => Response.json(loteTerminadoConErrores({ estado: "INCOMPLETO" })) });
-    expect(within(screen.getByRole("table")).queryAllByRole("button")).toHaveLength(0);
+    // Desde HU #13801 cada semáforo es un botón «Ver detalle de …»; acciones (Reprocesar) no hay ninguna.
+    const botones = within(screen.getByRole("table")).queryAllByRole("button");
+    expect(botones.filter((b) => !/^Ver detalle de /.test(b.getAttribute("aria-label") ?? ""))).toHaveLength(0);
   });
 
   it("AC5: el admin reprocesa una roja de un lote INCOMPLETO: la celda vuelve a gris, el lote a EN_PROCESO y el sondeo se reanuda", async () => {
