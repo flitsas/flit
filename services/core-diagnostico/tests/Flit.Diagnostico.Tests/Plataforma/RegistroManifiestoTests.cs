@@ -75,7 +75,8 @@ public sealed class RegistroManifiestoTests
         var gateway = new Grabador(n => n <= 3
             ? throw new HttpRequestException("gateway caído (doble de prueba)")
             : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}") });
-        await using var app = Construir(identidad, gateway, esperaInicialMs: 100);
+        var reloj = new RelojQueAnotaEsperas();
+        await using var app = Construir(identidad, gateway, esperaInicialMs: 100, reloj);
 
         await app.StartAsync(ct);
         await gateway.Llamada(2).WaitAsync(TimeSpan.FromSeconds(15), ct);
@@ -85,11 +86,17 @@ public sealed class RegistroManifiestoTests
         salud.StatusCode.Should().Be(HttpStatusCode.OK, "con la plataforma caída el servicio sigue atendiendo");
         app.Lifetime.ApplicationStopping.IsCancellationRequested.Should().BeFalse("un fallo del registro no tumba el host");
         gateway.Llamadas.Should().HaveCount(4, "tres fallos y el cuarto intento registra; no reintenta tras el éxito");
+        // HU #13826: la secuencia creciente se comprueba en las esperas que el servicio pidió al reloj (deterministas),
+        // no comparando entre sí los huecos del reloj real, que bajo carga de CPU se inflan y rompían la comparación.
+        reloj.Esperas.Should().Equal(
+            [TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(200), TimeSpan.FromMilliseconds(400)],
+            "cada espera es SiguienteEspera de la anterior: el doble, partiendo de la inicial");
+        // Y la espera pedida se cumple de verdad: el hueco real entre intentos nunca es menor (la carga solo lo alarga).
         var marcas = gateway.Llamadas.Select(l => l.Marca).ToList();
-        var esperas = marcas.Zip(marcas.Skip(1), (a, b) => b - a).ToList();
-        esperas[0].Should().BeGreaterThanOrEqualTo(TimeSpan.FromMilliseconds(90));
-        esperas[1].Should().BeGreaterThanOrEqualTo(TimeSpan.FromMilliseconds(190)).And.BeGreaterThan(esperas[0]);
-        esperas[2].Should().BeGreaterThanOrEqualTo(TimeSpan.FromMilliseconds(390)).And.BeGreaterThan(esperas[1]);
+        var huecos = marcas.Zip(marcas.Skip(1), (a, b) => b - a).ToList();
+        huecos[0].Should().BeGreaterThanOrEqualTo(TimeSpan.FromMilliseconds(90));
+        huecos[1].Should().BeGreaterThanOrEqualTo(TimeSpan.FromMilliseconds(190));
+        huecos[2].Should().BeGreaterThanOrEqualTo(TimeSpan.FromMilliseconds(390));
         RegistroManifiesto.SiguienteEspera(TimeSpan.FromSeconds(5)).Should().Be(TimeSpan.FromSeconds(10));
         RegistroManifiesto.SiguienteEspera(TimeSpan.FromSeconds(200)).Should().Be(TimeSpan.FromMinutes(5), "la espera tiene techo");
     }
@@ -99,7 +106,7 @@ public sealed class RegistroManifiestoTests
         Content = new StringContent(JsonSerializer.Serialize(new { access_token = TokenDeServicio, expires_in = 300 }), Encoding.UTF8, "application/json"),
     };
 
-    private static WebApplication Construir(Grabador identidad, Grabador gateway, int? esperaInicialMs) => Program.Build([], b =>
+    private static WebApplication Construir(Grabador identidad, Grabador gateway, int? esperaInicialMs, TimeProvider? reloj = null) => Program.Build([], b =>
     {
         b.WebHost.UseTestServer();
         var configuracion = ApiDePrueba.Configuracion(ApiDePrueba.BaseInalcanzable);
@@ -109,7 +116,27 @@ public sealed class RegistroManifiestoTests
         b.Configuration.AddInMemoryCollection(configuracion);
         b.Services.AddHttpClient(ServiceTokenProvider.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => identidad);
         b.Services.AddHttpClient(RegistroManifiesto.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway);
+        if (reloj is not null)
+            b.Services.AddSingleton(reloj);
     });
+
+    /// <summary>
+    /// Reloj real que anota cada espera de un solo disparo que se le pide (<c>Task.Delay(espera, reloj, ct)</c>), HU #13826:
+    /// la prueba compara la secuencia pedida en vez de los huecos del reloj de pared.
+    /// </summary>
+    private sealed class RelojQueAnotaEsperas : TimeProvider
+    {
+        private readonly ConcurrentQueue<TimeSpan> _esperas = new();
+
+        public IReadOnlyList<TimeSpan> Esperas => [.. _esperas];
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            if (period == Timeout.InfiniteTimeSpan && dueTime > TimeSpan.Zero)
+                _esperas.Enqueue(dueTime);
+            return System.CreateTimer(callback, state, dueTime, period);
+        }
+    }
 
     private sealed record Llamado(HttpMethod Metodo, Uri? Url, string? Autorizacion, string Cuerpo, TimeSpan Marca);
 

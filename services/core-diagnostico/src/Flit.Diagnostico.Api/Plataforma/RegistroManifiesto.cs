@@ -11,11 +11,14 @@ namespace Flit.Diagnostico.Api.Plataforma;
 /// <c>platform.manifest</c>). Es idempotente y la plataforma no borra nada. Si la plataforma no responde, reintenta con
 /// espera creciente (<see cref="SiguienteEspera"/>) sin tumbar el servicio. Sin <c>Diagnostico:Plataforma:GatewayUrl</c>
 /// no hace nada. Un 4xx definitivo (manifiesto inválido o en conflicto) se registra en el log y no se reintenta.
+/// La espera entre intentos usa el reloj inyectado (<see cref="TimeProvider"/>, HU #13826) para que la secuencia pedida
+/// se pueda comprobar sin depender del reloj real.
 /// </summary>
 internal sealed partial class RegistroManifiesto(
     IHttpClientFactory http,
     ServiceTokenProvider tokens,
     IConfiguration configuration,
+    TimeProvider reloj,
     ILogger<RegistroManifiesto> logger) : BackgroundService
 {
     public const string HttpClientName = "diagnostico-plataforma";
@@ -78,7 +81,7 @@ internal sealed partial class RegistroManifiesto(
                 LogReintento(logger, espera.TotalSeconds.ToString("0.###", CultureInfo.InvariantCulture), ex.Message);
             }
 
-            await Task.Delay(espera, stoppingToken).ConfigureAwait(false);
+            await Task.Delay(espera, reloj, stoppingToken).ConfigureAwait(false);
             espera = SiguienteEspera(espera);
         }
     }
