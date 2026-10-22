@@ -496,10 +496,13 @@ public sealed class RunPreflightPreviewHandler(
         {
             // Todavía no hay actores capturados (llegan en pasos posteriores): los checks quedan en
             // `unknown`, exactamente como hoy en la primera corrida del preflight del paso 1.
+            // Preview sin instancia aún: InstanceId vacío; TenantId sí (core-consultas exige empresa).
             await RunPreflightHandler.RunSimitAsync(
-                registry, checks, providersUsed, "simit_comprador", "SIMIT comprador", null, tenantOverride, ct);
+                registry, checks, providersUsed, "simit_comprador", "SIMIT comprador", null,
+                Guid.Empty, request.TenantId, tenantOverride, ct);
             await RunPreflightHandler.RunSimitAsync(
-                registry, checks, providersUsed, "simit_vendedor", "SIMIT vendedor", null, tenantOverride, ct);
+                registry, checks, providersUsed, "simit_vendedor", "SIMIT vendedor", null,
+                Guid.Empty, request.TenantId, tenantOverride, ct);
         }
 
         RunPreflightHandler.AplicarPoliticaDeBloqueo(checks, blockingRules);
