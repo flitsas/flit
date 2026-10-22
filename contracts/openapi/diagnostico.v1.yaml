@@ -58,6 +58,11 @@ tags:
     description: >
       Diagnóstico Express de un solo vehículo (MOD02, HU #13753): cabecera y vehículo en una transacción, con las mismas
       reglas de la cabecera y de la confirmación, y el estimado de vista previa. Campos en snake_case y códigos de la base.
+  - name: Reportes
+    description: >
+      Evidencias de la compañía (MOD07, F07): PDF corporativo de un vehículo (HU #13848) con el membrete FLIT. Permiso
+      diagnostico.reportes.descargar y la visibilidad de la grilla. Nunca origen, usuario manual, proveedor, transacción ni
+      documentos completos (R-20).
   - name: Backoffice
     description: >
       Lectura entre compañías del backoffice FLIT (D-16, ADR-0073): permiso diagnostico.backoffice.ver y
@@ -1026,6 +1031,81 @@ paths:
           description: >
             `code` = NO_ENCONTRADO: el lote no existe, es de otra compañía o (con PROPIOS) de otro usuario; el vehículo no es
             de ese lote; o el vehículo no tiene celda de esa fuente.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/diagnosticos/{id}/vehiculos/{vid}/pdf:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote (cabecera).
+        schema:
+          type: string
+          format: uuid
+      - name: vid
+        in: path
+        required: true
+        description: Id del vehículo del lote (el de la grilla).
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Reportes]
+      operationId: descargarPdfVehiculo
+      summary: PDF corporativo de un vehículo
+      description: >
+        HU #13848 (F07-H3, F07-C1..C4/C8..C11). Permiso diagnostico.reportes.descargar y la misma visibilidad que la grilla.
+        Se emite si el vehículo terminó (todas sus celdas en COMPLETADO o N/A) aunque el lote siga EN_PROCESO, o si el lote está
+        INCOMPLETO con todas sus celdas cerradas: la fuente en ERROR sale «consulta no disponible», sin código de error ni causa
+        (Q7). Encabezado con ID del diagnóstico, nombre del lote, empresa (claim company_name), creador («No disponible» si
+        Identidad no responde), fecha y hora de creación (hora Colombia), tipo de análisis («Diagnóstico Simple» o «Diagnóstico
+        Con Análisis IA — TRÁMITE») e identificación; una sección por fuente del alcance en el orden de la grilla (SIMIT con hasta
+        100 comparendos y «y N más»; avalúo con valor sugerido o «sin valor comercial»; personas con «****» + 4 últimos y el
+        rótulo «Declarado por el cliente»; N/A con su motivo); pie con «Generado el …» y «Página X de Y». Sin origen, usuario
+        manual, proveedor ni transacción (R-20): una celda llenada a mano produce el mismo texto que una de API. Mientras no
+        cambie ninguna entrada (celdas, versión del tablero, nombres del encabezado, documentos enmascarados), la descarga
+        devuelve los mismos bytes ya guardados; si cambió, genera un PDF nuevo e invalida el anterior (se conserva).
+      responses:
+        "200":
+          description: El PDF del vehículo.
+          headers:
+            Content-Disposition:
+              description: attachment; filename=diagnostico-{8 primeros caracteres del id}-{placa o VIN}.pdf
+              schema:
+                type: string
+            Cache-Control:
+              description: no-store
+              schema:
+                type: string
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >
+            Sin diagnostico.reportes.descargar (sin cuerpo); sin compañía (`code` = SIN_EMPRESA); compañía sin Diagnóstico activo
+            (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: >
+            `code` = NO_ENCONTRADO: el lote no existe, es de otra compañía o (con PROPIOS) de otro usuario; o el vehículo no es
+            de ese lote. El cuerpo no trae datos del lote.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "409":
+          description: >
+            `code` = VEHICULO_NO_TERMINADO: el vehículo todavía tiene consultas sin terminar y el lote no está INCOMPLETO.
           content:
             application/json:
               schema:

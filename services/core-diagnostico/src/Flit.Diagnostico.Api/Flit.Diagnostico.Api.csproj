@@ -31,6 +31,8 @@
     <!-- HU #13749: plantilla y lectura del .xlsx de carga (la misma librería y el mismo pin de System.IO.Packaging de core-api y Comparendos). -->
     <PackageReference Include="DocumentFormat.OpenXml" />
     <PackageReference Include="System.IO.Packaging" />
+    <!-- HU #13848: PDF corporativo del vehículo; versión central de core-api (2024.12.3), licencia Community en PdfVehiculo. -->
+    <PackageReference Include="QuestPDF" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
@@ -40,6 +42,16 @@
   <!-- HU #13725: respuestas inventadas de Intempo para la fuente RUNT simulada (sin PII; rango ficticio en FixturesSinPiiTests). -->
   <ItemGroup>
     <EmbeddedResource Include="Modulos\Consultas\Fuentes\Fixtures\intempo-*.json" LogicalName="$(RootNamespace).Fixtures.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!--
+    HU #13848: marca FLIT copiada de services/core-api/src/Flit.Infrastructure/Documents/Branding/ (membrete de hoja en SVG y
+    Poppins Regular/Medium/Bold con su licencia OFL), sin referenciar Flit.Infrastructure. Nombres lógicos fijos para BrandingAssets.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="Modulos\Reportes\Marca\Assets\*.svg" LogicalName="$(RootNamespace).Marca.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Modulos\Reportes\Marca\Assets\*.ttf" LogicalName="$(RootNamespace).Marca.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Modulos\Reportes\Marca\Assets\OFL-LICENSE.txt" LogicalName="$(RootNamespace).Marca.%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

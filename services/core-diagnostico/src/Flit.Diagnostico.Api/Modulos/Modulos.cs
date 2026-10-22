@@ -111,6 +111,8 @@ public static class Modulos
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<Reportes.ServicioEvidencias>();
         services.AddScoped<Reportes.LectorContenidoReporte>();
+        // HU #13848: PDF corporativo del vehículo (contenido de F07-H2 + huella y registro de F07-H1).
+        services.AddScoped<Reportes.DescargaPdfVehiculo>();
         return services;
     }
 
@@ -128,6 +130,7 @@ public static class Modulos
         Express.ExpressEndpoints.Map(api);
         Tablero.EndpointsTablero.Map(api);
         Consultas.EndpointsReproceso.Map(api);
+        Reportes.ReportesEndpoints.Map(api);
         api.MapFallback(() => Results.NotFound());
         return api;
     }

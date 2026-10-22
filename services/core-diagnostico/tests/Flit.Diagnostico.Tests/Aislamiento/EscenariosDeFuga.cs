@@ -24,9 +24,22 @@ public sealed record Sembrado(string Url, IReadOnlyList<string> Identificadores,
     public IReadOnlyList<string> QueNoCruzan => Exclusivos ?? Identificadores;
 }
 
-/// <summary>Cómo sembrar datos de una empresa para un GET y qué identificadores no deben cruzar a la otra.</summary>
-public sealed record EscenarioDeFuga(string Ruta, Func<EmpresaDePrueba, CancellationToken, Task<Sembrado>> Sembrar)
+/// <summary>
+/// Cómo sembrar datos de una empresa para un GET y qué identificadores no deben cruzar a la otra. <see cref="LeerTexto"/> (HU #13848)
+/// lee el cuerpo de una respuesta binaria como texto (el texto extraído del PDF, las celdas del Excel); sin él, el cuerpo tal cual.
+/// </summary>
+public sealed record EscenarioDeFuga(
+    string Ruta,
+    Func<EmpresaDePrueba, CancellationToken, Task<Sembrado>> Sembrar,
+    Func<HttpResponseMessage, CancellationToken, Task<string>>? LeerTexto = null)
 {
+    /// <summary>El cuerpo de <paramref name="respuesta"/> como texto, con <see cref="LeerTexto"/> si el escenario lo trae.</summary>
+    public Task<string> TextoAsync(HttpResponseMessage respuesta, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(respuesta);
+        return LeerTexto is { } leer ? leer(respuesta, ct) : respuesta.Content.ReadAsStringAsync(ct);
+    }
+
     /// <summary>
     /// Forma corta: siembra una entidad de la empresa (su <c>TenantId</c> lo pone el guardado) y la URL es <see cref="Ruta"/>
     /// con <c>{id}</c> reemplazado por <paramref name="id"/> de esa entidad. Identificadores: ese id y el de la empresa.
@@ -107,6 +120,13 @@ public static class EscenariosDeFuga
     /// </summary>
     public const string RutaListado = Program.Prefijo + global::Flit.Diagnostico.Api.Modulos.Diagnosticos.DiagnosticosEndpoints.Ruta;
 
+    /// <summary>
+    /// PDF corporativo de un vehículo (HU #13848): cada empresa siembra un lote con un vehículo terminado; el texto extraído del PDF
+    /// (<see cref="Reportes.PdfDePrueba.TextoAsync"/>) trae el ID del diagnóstico, y con el token de A el PDF de B responde 404 sin
+    /// nada de B.
+    /// </summary>
+    public const string RutaPdfVehiculo = Program.Prefijo + global::Flit.Diagnostico.Api.Modulos.Reportes.ReportesEndpoints.RutaPdfVehiculo;
+
     public static IReadOnlyList<EscenarioDeFuga> Todos { get; } =
     [
         EscenarioDeFuga.Con(RutaSonda, _ => new LecturaBackoffice { EmpresaConsultada = Guid.NewGuid(), UsuarioId = Guid.NewGuid(), Ruta = "/sonda" }, l => l.Id),
@@ -139,6 +159,13 @@ public static class EscenariosDeFuga
             var lote = await Tablero.Tablero.SembrarAsync(empresa, ct, nombre: "Lote del listado", vehiculos: [new("TST904", [new(Fuente.Runt, EstadoCelda.Completado, 1)])]);
             return new Sembrado(RutaListado, [lote.Id.ToString()]);
         }),
+        new EscenarioDeFuga(RutaPdfVehiculo, async (empresa, ct) =>
+        {
+            var lote = await Tablero.Tablero.SembrarAsync(empresa, ct, nombre: "Lote del PDF", vehiculos: [new("TST905", [new(Fuente.Runt, EstadoCelda.Pendiente, 1)])]);
+            await Tablero.Tablero.PayloadAsync(empresa, lote.Celdas.Single(),
+                """{"placa":"TST905","clase":"AUTOMOVIL","propietarios":[],"locatarios":0}""", ct);
+            return new Sembrado(Reportes.PdfDePrueba.Ruta(lote.Id, lote.Vehiculos.Single().Id), [lote.Id.ToString()]);
+        }, Reportes.PdfDePrueba.TextoAsync),
     ];
 
     public static EscenarioDeFuga Buscar(string ruta) => Todos.Single(e => e.Ruta == ruta);
