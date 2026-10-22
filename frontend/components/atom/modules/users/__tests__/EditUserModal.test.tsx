@@ -77,7 +77,7 @@ describe("EditUserModal (#10622)", () => {
     await ue.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      /el correo utilizado ya se encuentra asociado a otra cuenta/i,
+      /el usuario ya se encuentra previamente creado/i,
     );
     // No se pierde lo escrito.
     expect(screen.getByLabelText(/nombre completo/i)).toHaveValue("Laura G.");
@@ -96,7 +96,7 @@ describe("EditUserModal (#10622)", () => {
     await ue.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      /el correo utilizado ya se encuentra asociado a otra cuenta/i,
+      /el usuario ya se encuentra previamente creado/i,
     );
   });
 
@@ -117,7 +117,7 @@ describe("EditUserModal (#10622)", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert).not.toHaveTextContent(
-      /el correo utilizado ya se encuentra asociado a otra cuenta/i,
+      /el usuario ya se encuentra previamente creado/i,
     );
     expect(alert).toHaveTextContent(/modificado por otra persona/i);
   });

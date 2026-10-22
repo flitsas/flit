@@ -14,5 +14,5 @@ public static class EmailConflict
 {
     public const string Code = "EMAIL_ALREADY_IN_USE";
 
-    public const string Message = "El correo utilizado ya se encuentra asociado a otra cuenta";
+    public const string Message = "El usuario ya se encuentra previamente creado";
 }

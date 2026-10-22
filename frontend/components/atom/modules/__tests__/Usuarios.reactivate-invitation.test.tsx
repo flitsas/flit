@@ -138,7 +138,7 @@ describe("Usuarios — invitación cancelada, estado vivo y reversible (#11552, 
     await user.click(button);
 
     expect(
-      await screen.findByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
+      await screen.findByText(/el usuario ya se encuentra previamente creado/i),
     ).toBeInTheDocument();
     // El estado sigue "Cancelada" — no se refresca en error.
     expect(screen.getByRole("status", { name: /^Estado: Cancelada$/i })).toBeInTheDocument();
@@ -158,7 +158,7 @@ describe("Usuarios — invitación cancelada, estado vivo y reversible (#11552, 
     await user.click(button);
 
     expect(
-      screen.queryByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
+      screen.queryByText(/el usuario ya se encuentra previamente creado/i),
     ).not.toBeInTheDocument();
     expect(
       await screen.findByText(/no se pudo reactivar la invitación por un conflicto/i),
