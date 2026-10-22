@@ -31,7 +31,7 @@ internal sealed record PayloadPersonas(IReadOnlyList<ResultadoPorPersona> Person
 
 /// <summary>
 /// Base común de las cuatro celdas de persona (HU #13792, F05-C5, F05-C10, decisión Q1 y decisión 2 del gate): RUNT_PROPIETARIO
-/// y RUNT_LOCATARIO (<see cref="EjecutorCeldaRuntPersona"/>) y, en F05-H5, SIMIT_PROPIETARIO y SIMIT_LOCATARIO. La subclase solo
+/// y RUNT_LOCATARIO (<see cref="EjecutorCeldaRuntPersona"/>) y SIMIT_PROPIETARIO y SIMIT_LOCATARIO (<see cref="EjecutorCeldaSimitPersona"/>, HU #13794). La subclase solo
 /// dice su <see cref="Fuente"/> y cómo consulta a una persona (<see cref="ConsultarAsync"/>); el patrón vive aquí:
 /// <list type="number">
 /// <item>Lee las personas del rol en <c>personas_vehiculo</c> (<see cref="DocumentosVehiculo.PersonasDelVehiculoAsync"/>, filtro
@@ -57,7 +57,7 @@ internal sealed record PayloadPersonas(IReadOnlyList<ResultadoPorPersona> Person
 /// {
 ///     public override Fuente Fuente => fuente;
 ///     protected override async Task&lt;ConsultaPersona&gt; ConsultarAsync(Guid empresa, DocumentoPersona doc, CancellationToken ct) =&gt;
-///         ConsultaPersona.De("SIMIT", await simit.ConsultarAsync(empresa, doc, ct));
+///         ConsultaPersona.De("SIMIT", await simit.ConsultarAsync(empresa, SolicitudSimit.PorDocumento(doc), ct));
 /// }
 /// </code>
 /// </example>

@@ -799,9 +799,9 @@ paths:
         estado final (COMPLETADO con historial AUTO si todo quedó bien). Las celdas COMPLETADO no se tocan. Al reprocesar
         la RUNT de un vehículo y terminar en OK, sus celdas BLOQUEADA_POR_RUNT vuelven a PENDIENTE en la misma
         transacción (pasando por las reglas de no aplica) y corren con disparador=REPROCESO y el mismo usuario; si la RUNT
-        vuelve a fallar, siguen en ERROR. En una celda de persona (RUNT_PROPIETARIO, RUNT_LOCATARIO; HU #13792) solo se
-        vuelve a consultar a las personas que quedaron en ERROR: las que respondieron conservan su resultado y no se
-        vuelven a consumir.
+        vuelve a fallar, siguen en ERROR. En una celda de persona (RUNT_PROPIETARIO, RUNT_LOCATARIO, HU #13792;
+        SIMIT_PROPIETARIO, SIMIT_LOCATARIO, HU #13794) solo se vuelve a consultar a las personas que quedaron en
+        ERROR: las que respondieron conservan su resultado y no se vuelven a consumir.
       responses:
         "202":
           description: La celda quedó en cola para repetir la consulta real.
@@ -1295,7 +1295,7 @@ components:
           maxLength: 17
           description: >
             Placa o VIN consultado; null si la consulta es por persona (nunca un documento). Las celdas de persona
-            (HU #13792) dejan un intento por cada persona consultada.
+            (HU #13792, #13794) dejan un intento por cada persona consultada.
         disparador:
           type: string
           enum: [AUTO, REPROCESO, MANUAL]
@@ -1989,7 +1989,7 @@ components:
           nullable: true
           description: >
             Solo con estado ERROR: código del tipo de error de la fuente o BLOQUEADA_POR_RUNT. En las celdas de persona
-            (RUNT_PROPIETARIO, RUNT_LOCATARIO; HU #13792), PERSONAS_CON_ERROR si falló al menos una persona y no todas por
+            (RUNT_PROPIETARIO, RUNT_LOCATARIO, HU #13792; SIMIT_PROPIETARIO, SIMIT_LOCATARIO, HU #13794), PERSONAS_CON_ERROR si falló al menos una persona y no todas por
             la misma causa (si fallan todas por la misma, esa causa); lo que sí respondió se conserva. En SIMIT_VEHICULO
             (HU #13793), SIN_PLACA si el vehículo no tiene placa tras el RUNT (definitivo, sin consulta ni consumo). En AVALUO
             (HU #13795), SIN_IDENTIFICADOR si no tiene placa ni VIN tras el RUNT (definitivo); un avalúo sin valor en ninguna

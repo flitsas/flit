@@ -50,8 +50,8 @@ public sealed record SolicitudSimit
 /// (lo decide core-consultas con la configuración de la empresa). Devuelve <see cref="ResultadoSimit"/> (semáforo, cantidad y
 /// número, fecha, valor, estado y organismo de cada comparendo) o el error tipado. Implementaciones: <see cref="FuenteSimitReal"/>,
 /// <see cref="FuenteSimitSimulada"/> (LOCAL o DEV) y <see cref="FuenteSimitNoConectada"/>, elegidas por
-/// <see cref="SeleccionAdaptadores"/>. Lo usan <see cref="EjecutorCeldaSimitVehiculo"/> (por placa) y, en F05-H5, el ejecutor de
-/// SIMIT por persona sobre <see cref="EjecutorPorPersonas"/> (por documento).
+/// <see cref="SeleccionAdaptadores"/>. Lo usan <see cref="EjecutorCeldaSimitVehiculo"/> (por placa) y
+/// <see cref="EjecutorCeldaSimitPersona"/> (HU #13794, por documento de cada persona).
 /// </summary>
 /// <example>
 /// <code>

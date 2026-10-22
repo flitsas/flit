@@ -7,7 +7,7 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 /// SIMIT real (HU #13793, F05-C1): <c>ConsultasService.ConsultarMultas</c> de core-consultas por <see cref="ClienteConsultas"/>
 /// (token de servicio, deadline y la empresa en <c>x-flit-tenant-id</c>). Por placa envía solo <c>placa</c> (sin documento y
 /// con <c>tipo_persona</c> sin especificar: core-consultas decide el proveedor con la configuración de la empresa); por persona
-/// (F05-H5) envía <c>documento</c> y <c>tipo_persona</c> JURIDICA para NIT o NATURAL en otro caso. Normaliza con
+/// (HU #13794, <see cref="EjecutorCeldaSimitPersona"/>) envía <c>documento</c> y <c>tipo_persona</c> JURIDICA para NIT o NATURAL en otro caso. Normaliza con
 /// <see cref="ResultadoSimit.Normalizar"/> (nunca datos del infractor ni respuesta cruda); un error gRPC o un proveedor caído
 /// llegan traducidos por <see cref="TraductorErroresConsultas"/>.
 /// </summary>

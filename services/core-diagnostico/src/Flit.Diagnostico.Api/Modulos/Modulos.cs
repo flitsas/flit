@@ -54,7 +54,8 @@ public static class Modulos
     /// <summary>
     /// Motor de consultas (HU #13727, ADR a): el encolador real (TryAdd, para que las pruebas pongan su doble antes), la cola,
     /// el ejecutor de la celda RUNT (HU #13730; un ejecutor de la misma fuente registrado antes, el doble de una prueba, lo reemplaza)
-    /// y los de RUNT_PROPIETARIO y RUNT_LOCATARIO (HU #13792),
+    /// los de RUNT_PROPIETARIO y RUNT_LOCATARIO (HU #13792), SIMIT_VEHICULO (HU #13793), SIMIT_PROPIETARIO y SIMIT_LOCATARIO
+    /// (HU #13794) y AVALUO (HU #13795),
     /// el registro de adaptadores y el catálogo de fuentes disponibles que de él se deriva (HU #13733), el procesador
     /// y su configuración <see cref="Trabajos.OpcionesProcesador"/> validada al arrancar, y la de reintentos
     /// <see cref="Consultas.OpcionesConsultas"/> (HU #13737), también validada al arrancar. El trabajador en segundo
@@ -73,6 +74,11 @@ public static class Modulos
             ActivatorUtilities.CreateInstance<Consultas.EjecutorCeldaRuntPersona>(sp, Domain.Consultas.Fuente.RuntLocatario));
         // HU #13793: la celda SIMIT_VEHICULO (por la placa definitiva del RUNT).
         services.AddScoped<Consultas.IEjecutorCelda, Consultas.EjecutorCeldaSimitVehiculo>();
+        // HU #13794: las celdas SIMIT de persona (una instancia por fuente; por documento de cada propietario o locatario).
+        services.AddScoped<Consultas.IEjecutorCelda>(sp =>
+            ActivatorUtilities.CreateInstance<Consultas.EjecutorCeldaSimitPersona>(sp, Domain.Consultas.Fuente.SimitPropietario));
+        services.AddScoped<Consultas.IEjecutorCelda>(sp =>
+            ActivatorUtilities.CreateInstance<Consultas.EjecutorCeldaSimitPersona>(sp, Domain.Consultas.Fuente.SimitLocatario));
         // HU #13795: la celda AVALUO (placa y VIN del RUNT con modelo, cilindraje, combustible y pasajeros).
         services.AddScoped<Consultas.IEjecutorCelda, Consultas.EjecutorCeldaAvaluo>();
         // HU #13733: las fuentes con ejecutor son las únicas que se pueden habilitar o pedir (TryAdd: las pruebas ponen su doble).
