@@ -1,3 +1,4 @@
+using Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Flit.Diagnostico.Api.Modulos;
@@ -18,33 +19,28 @@ public static class Modulos
     /// </summary>
     public const string ClaveAmbiente = "Diagnostico:Ambiente";
 
-    private static readonly string[] AmbientesConSimulacion = ["LOCAL", "DEV"];
-
     /// <summary>
-    /// Fuentes de consulta (HU #13725): la RUNT del vehículo es la no conectada salvo que se pida la simulación de forma
-    /// explícita, y solo en LOCAL o DEV; en otro ambiente (o sin <see cref="ClaveAmbiente"/>) el servicio no arranca. No mira
+    /// Fuentes de consulta (HU #13725, HU #13791): <see cref="Consultas.Fuentes.SeleccionAdaptadores"/> elige al arrancar el
+    /// adaptador de todas las fuentes (simulado solo en LOCAL o DEV, real con <c>Diagnostico:Consultas:Address</c>, no conectado
+    /// en otro caso; con una configuración inválida el servicio no arranca) y queda registrada como singleton. RUNT conserva su
+    /// regla: simulada con la simulación y no conectada en otro caso. Con adaptadores reales se registra el cliente gRPC de
+    /// core-consultas (<see cref="Consultas.Fuentes.ClienteConsultas"/>); si no, ninguna llamada sale del servicio. Cada puerto de
+    /// fuente se registra con <c>services.AddAdaptador&lt;IPuerto, Real, Simulado, NoConectado&gt;(seleccion)</c>. No mira
     /// <c>IHostEnvironment</c>. Usa TryAdd para que las pruebas puedan poner su doble antes.
     /// </summary>
     public static IServiceCollection AddFuentesConsultas(this IServiceCollection services, IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
-        if (!configuration.GetValue(ClaveSimulacionHabilitada, false))
-        {
-            services.TryAddSingleton<Consultas.Fuentes.IFuenteRunt, Consultas.Fuentes.FuenteRuntNoConectada>();
-            return services;
-        }
+        var seleccion = SeleccionAdaptadores.Desde(configuration);
+        services.AddSingleton(seleccion);
+        if (seleccion.ModoDe(Domain.Consultas.Fuente.Runt) == ModoAdaptador.Simulado)
+            services.TryAddSingleton<IFuenteRunt, FuenteRuntIntempoSimulada>();
+        else
+            services.TryAddSingleton<IFuenteRunt, FuenteRuntNoConectada>();
 
-        var ambiente = configuration[ClaveAmbiente]?.Trim();
-        if (!AmbientesConSimulacion.Contains(ambiente, StringComparer.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                $"core-{ServicioSettings.Codigo} no puede arrancar: {Variable(ClaveSimulacionHabilitada)}=true solo se admite con " +
-                $"{Variable(ClaveAmbiente)}=DEV o LOCAL (valor actual: «{(string.IsNullOrEmpty(ambiente) ? "sin definir" : ambiente)}»). " +
-                $"En QA y PDN quite {Variable(ClaveSimulacionHabilitada)}: la fuente RUNT es la no conectada hasta C-PER. " +
-                "Ver services/core-diagnostico/README.md.");
-        }
+        if (seleccion.Modo == ModoAdaptador.Real)
+            services.AddClienteConsultas(configuration, seleccion);
 
-        services.TryAddSingleton<Consultas.Fuentes.IFuenteRunt, Consultas.Fuentes.FuenteRuntIntempoSimulada>();
         return services;
     }
 
@@ -79,8 +75,6 @@ public static class Modulos
             services.AddHostedService<Trabajos.TrabajadorConsultas>();
         return services;
     }
-
-    private static string Variable(string clave) => clave.Replace(":", "__", StringComparison.Ordinal);
 
     public static RouteGroupBuilder MapModulosDiagnostico(this WebApplication app, string prefijo)
     {

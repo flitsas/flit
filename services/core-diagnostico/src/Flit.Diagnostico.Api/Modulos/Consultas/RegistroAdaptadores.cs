@@ -9,12 +9,19 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 public interface IRegistroAdaptadores
 {
     bool TieneAdaptador(Fuente fuente);
+
+    /// <summary>
+    /// Verdadero si el adaptador de la fuente es el no conectado (HU #13791): aunque tenga ejecutor, no se ofrece. Por defecto
+    /// false (un doble que da toda fuente por adaptada la da también por conectada).
+    /// </summary>
+    bool EsNoConectada(Fuente fuente) => false;
 }
 
 /// <summary>
 /// Registro real: las fuentes con un <see cref="IEjecutorCelda"/> registrado, que son las mismas que toma el procesador de la
 /// cola (en D2 solo RUNT, <see cref="EjecutorCeldaRunt"/>). Los ejecutores son scoped, así que el conjunto se calcula una
-/// vez, en un ámbito propio, la primera vez que se consulta (el contenedor no cambia después de arrancar).
+/// vez, en un ámbito propio, la primera vez que se consulta (el contenedor no cambia después de arrancar). Si una fuente es no
+/// conectada lo dice <see cref="Fuentes.SeleccionAdaptadores"/> (HU #13791).
 /// </summary>
 /// <example>
 /// <code>
@@ -22,7 +29,7 @@ public interface IRegistroAdaptadores
 /// registro.TieneAdaptador(Fuente.SimitVehiculo) // false en D2
 /// </code>
 /// </example>
-internal sealed class RegistroAdaptadores(IServiceScopeFactory scopes) : IRegistroAdaptadores
+internal sealed class RegistroAdaptadores(IServiceScopeFactory scopes, Fuentes.SeleccionAdaptadores seleccion) : IRegistroAdaptadores
 {
     private readonly Lazy<IReadOnlySet<Fuente>> _fuentes = new(() =>
     {
@@ -31,4 +38,6 @@ internal sealed class RegistroAdaptadores(IServiceScopeFactory scopes) : IRegist
     });
 
     public bool TieneAdaptador(Fuente fuente) => _fuentes.Value.Contains(fuente);
+
+    public bool EsNoConectada(Fuente fuente) => seleccion.EsNoConectada(fuente);
 }

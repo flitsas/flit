@@ -62,6 +62,8 @@ tres ambientes corren como `Development`.
 |---|---|---|
 | `Diagnostico__Simulacion__Habilitada` | `false` | `true` usa la fuente simulada de Intempo (fixtures inventados en `Modulos/Consultas/Fuentes/Fixtures/`). Con `false` responde la fuente **no conectada**: error definitivo `NoConectado`, sin datos ni llamadas a proveedores. |
 | `Diagnostico__Ambiente` | vacío | `LOCAL`, `DEV`, `QA` o `PDN`. La simulación solo se admite con `LOCAL` o `DEV`; con otro valor, o vacío, el servicio **no arranca**. |
+| `Diagnostico__Consultas__Address` | vacío | URL gRPC de core-consultas (p. ej. `http://core-consultas:8084`). Sin simulación y con dirección, las fuentes de core-consultas (RUNT persona, RUES, SIMIT, avalúo; HU #13791) usan el adaptador **real** con el token de `svc-diagnostico` y el scope `platform.consultas`. Vacía: **no conectadas** y no se ofrecen (422 `FUENTE_NO_DISPONIBLE`). Un valor que no es URL impide arrancar. La simulación manda sobre la dirección. |
+| `Diagnostico__Consultas__DeadlineSegundos` | `90` | Deadline de cada llamada a core-consultas; debe ser mayor que 0. |
 
 En QA y PDN no se define `Diagnostico__Simulacion__Habilitada` hasta que llegue el adaptador real sobre core-consultas (C-PER).
 La simulación es determinista por el último carácter de la placa o del VIN: 1 persona natural, 2 NIT, 3 leasing con

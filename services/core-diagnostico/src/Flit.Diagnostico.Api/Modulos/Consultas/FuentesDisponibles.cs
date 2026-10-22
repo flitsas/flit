@@ -5,7 +5,8 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 
 /// <summary>
 /// Catálogo de fuentes disponibles (HU #13733, F03-C8, F03-C9, F03-C15): una fuente está disponible si tiene adaptador
-/// (<see cref="IRegistroAdaptadores"/>) y, para <see cref="Fuente.ImpuestoDepartamental"/>, además si
+/// (<see cref="IRegistroAdaptadores"/>), si ese adaptador no es el no conectado (HU #13791, F05-C2: sin simulación ni
+/// <c>Diagnostico:Consultas:Address</c> las fuentes de core-consultas no se ofrecen; RUNT conserva su regla) y, para <see cref="Fuente.ImpuestoDepartamental"/>, además si
 /// <c>Diagnostico:Fuentes:ImpuestoDisponible=true</c> (<see cref="DisponibilidadFuentes"/>; ausente equivale a false). Lo
 /// consultan el contrato del backoffice (<see cref="ServicioConfiguracion.AplicarContrato"/>) y la creación y edición de la
 /// cabecera (<c>ServicioCabecera</c>): habilitar o pedir una fuente no disponible responde 422 <c>FUENTE_NO_DISPONIBLE</c>.
@@ -18,5 +19,6 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// </example>
 public sealed class FuentesDisponibles(IRegistroAdaptadores registro, DisponibilidadFuentes bandera)
 {
-    public bool Disponible(Fuente fuente) => registro.TieneAdaptador(fuente) && bandera.Disponible(fuente);
+    public bool Disponible(Fuente fuente) =>
+        registro.TieneAdaptador(fuente) && !registro.EsNoConectada(fuente) && bandera.Disponible(fuente);
 }

@@ -55,11 +55,20 @@ public sealed class FuentesSinAdaptadorTests
     }
 
     // AC5 — con un adaptador registrado para la fuente, el mismo contrato se guarda (la guardia mira el registro, no una lista fija).
+    // Desde HU #13791 el adaptador además debe estar conectado: aquí la simulación en DEV (sin ella, SIMIT es no conectada).
     [Fact]
     public async Task Contrato_con_fuente_con_adaptador_se_guarda()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var api = await ArrancarAsync(b => new EjecutorFuenteDePrueba(Fuente.SimitVehiculo, new ConcurrentQueue<string>()).Registrar(b.Services));
+        await using var api = await ArrancarAsync(b =>
+        {
+            b.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [Flit.Diagnostico.Api.Modulos.Modulos.ClaveSimulacionHabilitada] = "true",
+                [Flit.Diagnostico.Api.Modulos.Modulos.ClaveAmbiente] = "DEV",
+            });
+            new EjecutorFuenteDePrueba(Fuente.SimitVehiculo, new ConcurrentQueue<string>()).Registrar(b.Services);
+        });
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresas = DosEmpresas.En(api);
         await SembrarAsync(empresas.B, new ConfiguracionEmpresa(), ct);
