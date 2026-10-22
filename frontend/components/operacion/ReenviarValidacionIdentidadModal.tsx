@@ -191,6 +191,18 @@ export function ReenviarValidacionIdentidadModal({
   const [resultados, setResultados] = useState<AdminReenviarLoteItemResult[] | null>(null);
   const [copia, setCopia] = useState<{ id: string; ok: boolean } | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // AC4 — el aviso de éxito se entrega al CERRAR, no al reenviar: el padre (AdminTramiteAcciones)
+  // responde a onSuccess recargando el listado, y esa recarga desmonta la fila con este modal
+  // adentro, que se cerraba antes de que el usuario viera el resultado y copiara el enlace.
+  const [avisoPendiente, setAvisoPendiente] = useState<string | null>(null);
+
+  const cerrar = () => {
+    if (avisoPendiente) {
+      onSuccess(avisoPendiente);
+      setAvisoPendiente(null);
+    }
+    onClose();
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -268,7 +280,7 @@ export function ReenviarValidacionIdentidadModal({
       setCopia(null);
       const oks = items.filter((i) => i.ok);
       if (oks.length > 0) {
-        onSuccess(oks.every((i) => i.queued) ? MSG_EN_COLA : MSG_REENVIADA);
+        setAvisoPendiente(oks.every((i) => i.queued) ? MSG_EN_COLA : MSG_REENVIADA);
       } else {
         onError('No se pudo reenviar la validación de identidad.');
       }
@@ -297,7 +309,7 @@ export function ReenviarValidacionIdentidadModal({
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={cerrar}
       title="Reenviar validación de identidad"
       titleClassName="text-base font-bold text-flit-brand"
       icon={Send}
@@ -408,7 +420,7 @@ export function ReenviarValidacionIdentidadModal({
             {submitError ? <InlineAlert tone="error">{submitError}</InlineAlert> : null}
 
             <div className="flex gap-3 pt-1">
-              <SecondaryButton className="flex-1" onClick={onClose} disabled={busy}>
+              <SecondaryButton className="flex-1" onClick={cerrar} disabled={busy}>
                 Cancelar
               </SecondaryButton>
               <PrimaryButton
@@ -478,7 +490,7 @@ export function ReenviarValidacionIdentidadModal({
                   Volver a la lista
                 </SecondaryButton>
               ) : null}
-              <PrimaryButton className="flex-1" onClick={onClose}>
+              <PrimaryButton className="flex-1" onClick={cerrar}>
                 Cerrar
               </PrimaryButton>
             </div>

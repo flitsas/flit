@@ -212,11 +212,29 @@ describe('HU #13822 — reenvío por persona', () => {
 
     expect(await screen.findByText('Validación de identidad reenviada.')).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
-    expect(onSuccess).toHaveBeenCalledWith('Validación de identidad reenviada.');
+    // El padre recarga el listado en onSuccess y esa recarga desmonta la fila con el modal:
+    // el aviso solo puede salir al cerrar (validación en navegador, épica #13817).
+    expect(onSuccess).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: 'Copiar enlace' }));
     expect(writeText).toHaveBeenCalledWith('https://kyverum.local/nuevo');
     expect(await screen.findByText('Enlace copiado.')).toBeInTheDocument();
+
+    const botonesCerrar = screen.getAllByRole('button', { name: 'Cerrar' });
+    await user.click(botonesCerrar[botonesCerrar.length - 1]!);
+    expect(onSuccess).toHaveBeenCalledWith('Validación de identidad reenviada.');
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC4: cerrar sin haber reenviado no avisa éxito ni recarga el listado', async () => {
+    const user = setupUser();
+    mocks.adminListValidacionesReenviables.mockResolvedValue({ personas: [persona()] });
+    renderModal();
+
+    await user.click(await screen.findByRole('button', { name: 'Cancelar' }));
+
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('AC5: resultado parcial dice para quién salió y para quién no, con el mensaje', async () => {
