@@ -375,6 +375,39 @@ public sealed class IngestaTests(ApiConFuente api) : IClassFixture<ApiConFuente>
         (await super.PostAsJsonAsync("/api/v1/comparendos/admin/ingesta/ejecutar", new { canal = "MunicipalPlaca", empresaId = empresa }, ct)).StatusCode.Should().Be(HttpStatusCode.Accepted);
         (await api.EnDbAsync(db => db.AuditoriasConfiguracion.AnyAsync(a => a.Accion == "EJECUTAR_MANUAL" && a.TenantId == empresa, ct))).Should().BeTrue();
     }
+
+    [Fact]
+    public async Task HU13815_EjecutarAMano_SoloSuperAdmin_YQuedaComoUltimaEjecucion()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = Guid.NewGuid(); // sin configuración: el reintento corre y no encuentra nada que hacer
+        await api.EnDbAsync(db => db.TrabajosProgramados.Where(t => t.Tipo == TipoTrabajo.ReintentoContraventor)
+            .ExecuteUpdateAsync(u => u.SetProperty(t => t.UltimaEjecucionEn, (DateTimeOffset?)null), ct));
+        var ruta = $"/api/v1/comparendos/admin/ingesta/trabajos/ReintentoContraventor/ejecutar?empresaId={empresa}";
+
+        (await api.Cliente(new UsuarioDePrueba(empresa, [Permisos.MonitoreoGestionar])).PostAsync(ruta, null, ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await api.EnDbAsync(db => db.AuditoriasConfiguracion.AnyAsync(a => a.Accion == "EJECUTAR_MANUAL" && a.TenantId == empresa, ct))).Should().BeFalse();
+
+        (await api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [], SuperAdmin: true)).PostAsync(ruta, null, ct)).StatusCode.Should().Be(HttpStatusCode.Accepted);
+        // En las pruebas los trabajos en segundo plano están apagados: se toma la solicitud de la cola y se procesa aquí.
+        var cola = api.App.Services.GetRequiredService<Flit.Comparendos.Api.Modulos.Trabajos.ColaTrabajos>();
+        Flit.Comparendos.Api.Modulos.Trabajos.SolicitudTrabajo? solicitud = null;
+        await foreach (var s in cola.LeerAsync(ct))
+        {
+            if (s.Tipo == TipoTrabajo.ReintentoContraventor && s.TenantId == empresa)
+            {
+                solicitud = s;
+                break;
+            }
+        }
+
+        solicitud!.Disparo.Should().Be(Disparo.Manual);
+        var procesador = ActivatorUtilities.CreateInstance<Flit.Comparendos.Api.Modulos.Trabajos.ProcesadorTrabajos>(api.App.Services);
+        await procesador.ProcesarAsync(solicitud, ct);
+        var ultima = await api.EnDbAsync(db => db.TrabajosProgramados.Where(t => t.Tipo == TipoTrabajo.ReintentoContraventor).Select(t => t.UltimaEjecucionEn).SingleAsync(ct));
+        ultima.Should().NotBeNull("al terminar, la ejecución manual se ve en la tabla como la última");
+    }
 }
 
 /// <summary>HU #13460 — el programador encola cada trabajo una sola vez por minuto aunque revisen dos réplicas.</summary>
