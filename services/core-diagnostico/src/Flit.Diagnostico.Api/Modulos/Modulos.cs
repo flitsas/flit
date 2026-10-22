@@ -110,6 +110,7 @@ public static class Modulos
         Infraestructura.Archivos.AlmacenArchivosExtensions.AddAlmacenArchivos(services, configuration);
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<Reportes.ServicioEvidencias>();
+        services.AddScoped<Reportes.LectorContenidoReporte>();
         return services;
     }
 

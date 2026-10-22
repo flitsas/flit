@@ -39,8 +39,6 @@ internal sealed class DetalleCelda(DiagnosticoDb db, UsuarioActual usuario, IPro
     /// <summary>Estado de una persona sin dato en la celda (pendiente, en curso, N/A o aún no consultada).</summary>
     public const string SinResultado = "SIN_RESULTADO";
 
-    private static readonly JsonSerializerOptions Json = new();
-
     public async Task<DetalleCeldaDto> ObtenerAsync(Guid id, Guid vehiculoId, string fuente, CancellationToken ct)
     {
         if (!CodigosDeEnum.TryLeer<Fuente>(fuente, out var codigo))
@@ -58,7 +56,7 @@ internal sealed class DetalleCelda(DiagnosticoDb db, UsuarioActual usuario, IPro
         if (EjecutorPorPersonas.EsPorPersona(codigo))
             personas = await PersonasAsync(cabecera.TenantId, vehiculoId, codigo, conDato ? celda.Payload : null, ct).ConfigureAwait(false);
         else if (celda.Estado == EstadoCelda.Completado)
-            resultado = ResultadoVehiculo(codigo, celda.Payload);
+            resultado = ProyectorDetalleCelda.ResultadoVehiculo(codigo, celda.Payload);
 
         return new DetalleCeldaDto(
             celda.Id, vehiculoId, CodigosDeEnum.Codigo(codigo), CodigosDeEnum.Codigo(celda.Estado),
@@ -70,19 +68,41 @@ internal sealed class DetalleCelda(DiagnosticoDb db, UsuarioActual usuario, IPro
     private async Task<IReadOnlyList<PersonaDetalleDto>> PersonasAsync(Guid empresa, Guid vehiculoId, Fuente fuente, string? payload, CancellationToken ct)
     {
         var filas = await DocumentosVehiculo.PersonasDelVehiculoAsync(db, empresa, vehiculoId, ct, EjecutorPorPersonas.RolDe(fuente)).ConfigureAwait(false);
+        return ProyectorDetalleCelda.Personas(filas, payload, protector);
+    }
+}
+
+/// <summary>
+/// Proyección cerrada del dato de una celda (HU #13798), compartida por el detalle de celda y el contenido de los reportes
+/// (HU #13847, <c>LectorContenidoReporte</c>): el resultado de una fuente del vehículo leído del payload a un tipo propio y las
+/// personas de una fuente de persona con el documento enmascarado. Lo que el payload traiga de más (proveedor, transacción,
+/// crudo, nombres) no pasa porque los tipos no lo tienen. El documento se descifra solo para enmascararlo y no sale de aquí.
+/// </summary>
+internal static class ProyectorDetalleCelda
+{
+    private static readonly JsonSerializerOptions Json = new();
+
+    /// <summary>
+    /// Las personas <paramref name="filas"/> (ya del rol de la fuente, en orden) con su resultado del payload de la celda
+    /// (<paramref name="payload"/> null si la celda aún no tiene dato: todas <see cref="DetalleCelda.SinResultado"/>).
+    /// </summary>
+    public static IReadOnlyList<PersonaDetalleDto> Personas(IEnumerable<PersonaVehiculo> filas, string? payload, IProtectorDocumentoPersona protector)
+    {
+        ArgumentNullException.ThrowIfNull(filas);
+        ArgumentNullException.ThrowIfNull(protector);
         var resultados = EjecutorPorPersonas.Leer(payload)?.Personas.GroupBy(p => p.PersonaId).ToDictionary(g => g.Key, g => g.First()) ?? [];
         return [.. filas.Select(p =>
         {
             var leido = resultados.GetValueOrDefault(p.Id);
             return new PersonaDetalleDto(
-                p.Orden, CodigosDeEnum.Codigo(p.Rol), p.DocTipo, Enmascarado(p.DocCifrado), p.Origen == OrigenDocumento.DeclaradoCliente,
-                leido?.Consulta, leido?.Estado ?? SinResultado, leido?.TipoError, leido?.ConsultadoEn,
+                p.Orden, CodigosDeEnum.Codigo(p.Rol), p.DocTipo, Enmascarado(protector, p.DocCifrado), p.Origen == OrigenDocumento.DeclaradoCliente,
+                leido?.Consulta, leido?.Estado ?? DetalleCelda.SinResultado, leido?.TipoError, leido?.ConsultadoEn,
                 leido is { Estado: EjecutorPorPersonas.EstadoOk, Resultado: { } r } ? ResultadoPersona(leido.Consulta, r) : null);
         })];
     }
 
     /// <summary>El documento descifrado solo para enmascararlo; si no se puede descifrar, solo la máscara.</summary>
-    private string Enmascarado(byte[] cifrado)
+    private static string Enmascarado(IProtectorDocumentoPersona protector, byte[] cifrado)
     {
         try
         {
@@ -94,7 +114,8 @@ internal sealed class DetalleCelda(DiagnosticoDb db, UsuarioActual usuario, IPro
         }
     }
 
-    private static ResultadoDetalleDto? ResultadoVehiculo(Fuente fuente, string? payload)
+    /// <summary>El resultado de una fuente del vehículo (RUNT, SIMIT_VEHICULO, AVALUO) leído del payload; null si no se puede leer.</summary>
+    public static ResultadoDetalleDto? ResultadoVehiculo(Fuente fuente, string? payload)
     {
         if (string.IsNullOrWhiteSpace(payload))
             return null;
@@ -141,14 +162,14 @@ internal sealed class DetalleCelda(DiagnosticoDb db, UsuarioActual usuario, IPro
     private static ResultadoAvaluoDetalle? Avaluo(JsonElement e) =>
         e.ValueKind == JsonValueKind.Object && e.Deserialize<ResultadoAvaluoDetalle>(Json) is { } r ? r with { Fuentes = r.Fuentes ?? [] } : null;
 
-    /// <summary>SIMIT con como mucho <see cref="TopeComparendos"/> comparendos; el corte lo calcula el detalle, no el payload.</summary>
+    /// <summary>SIMIT con como mucho <see cref="DetalleCelda.TopeComparendos"/> comparendos; el corte lo calcula el detalle, no el payload.</summary>
     private static ResultadoSimitDetalle? Simit(JsonElement e)
     {
         if (e.ValueKind != JsonValueKind.Object || e.Deserialize<ResultadoSimitDetalle>(Json) is not { } r)
             return null;
         var comparendos = r.Comparendos ?? [];
-        return comparendos.Count > TopeComparendos
-            ? r with { Comparendos = [.. comparendos.Take(TopeComparendos)], ComparendosTruncados = true }
+        return comparendos.Count > DetalleCelda.TopeComparendos
+            ? r with { Comparendos = [.. comparendos.Take(DetalleCelda.TopeComparendos)], ComparendosTruncados = true }
             : r with { Comparendos = comparendos, ComparendosTruncados = false };
     }
 }
