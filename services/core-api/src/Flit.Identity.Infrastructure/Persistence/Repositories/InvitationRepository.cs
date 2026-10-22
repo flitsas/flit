@@ -209,14 +209,14 @@ public sealed class InvitationRepository(IIdentityDb db) : IInvitationRepository
         {
             // Red de la condición de carrera: el handler ya pre-valida con ExistsPendingAsync,
             // pero entre esa lectura y este UPDATE otra invitación pudo volverse "pending" para
-            // el mismo (tenant, email) — uq_user_invitations_tenant_email_pending revienta con
+            // el mismo correo — uq_user_invitations_email_pending (HU #13809) revienta con
             // 23505 y se traduce a la misma excepción de dominio que el chequeo previo.
             db.Entry(entity).State = EntityState.Unchanged;
             throw new InvitationAlreadyPendingException();
         }
     }
 
-    private const string PendingUniqueIndex = "uq_user_invitations_tenant_email_pending";
+    private const string PendingUniqueIndex = "uq_user_invitations_email_pending";
 
     private static bool IsPendingUniqueViolation(DbUpdateException ex) =>
         ex.InnerException is PostgresException pg
