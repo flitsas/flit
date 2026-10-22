@@ -48,7 +48,8 @@ public static class GuardSuscripcionExtensions
     /// <summary>
     /// Con <see cref="IdentidadAddressKey"/>: Identidad por gRPC (scope <c>platform.identidad.read</c>, plazo 5 s). Sin
     /// ella: ninguna compañía tiene Diagnóstico, salvo <see cref="SimularSuscripcionKey"/>=true explícito. Un registro
-    /// previo de <see cref="IProductosHabilitados"/> (pruebas) se respeta.
+    /// previo de <see cref="IProductosHabilitados"/> (pruebas) se respeta. El mismo cliente resuelve el nombre de los
+    /// usuarios (<see cref="IResolutorNombresUsuario"/>, HU #13845); sin Identidad, respaldo fijo «No disponible».
     /// </summary>
     public static IServiceCollection AddSuscripcionDiagnostico(this IServiceCollection services, IConfiguration configuration)
     {
@@ -59,10 +60,12 @@ public static class GuardSuscripcionExtensions
             services.AddFlitGrpcClient<Flit.Identidad.Grpc.V1.IdentidadService.IdentidadServiceClient>(
                 configuration, new Uri(identidad), "platform.identidad.read", o => o.Deadline = TimeSpan.FromSeconds(5));
             services.TryAddSingleton<IProductosHabilitados, ProductosHabilitadosIdentidad>();
+            services.TryAddSingleton<IResolutorNombresUsuario, ResolutorNombresUsuario>();
         }
         else
         {
             services.TryAddSingleton<IProductosHabilitados>(new ProductosSinIdentidad(configuration.GetValue(SimularSuscripcionKey, false)));
+            services.TryAddSingleton<IResolutorNombresUsuario, ResolutorNombresSinIdentidad>();
         }
 
         return services;

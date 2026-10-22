@@ -57,6 +57,8 @@ public static class Program
         Modulos.Catalogos.TiposTramiteEndpoints.AddCatalogoTiposTramite(builder.Services, builder.Configuration);
         // HU #13750: crear y editar la cabecera del diagnóstico.
         builder.Services.AddScoped<Modulos.Diagnosticos.ServicioCabecera>();
+        // HU #13845: listado de diagnósticos de la compañía con filtros, visibilidad y nombre del creador.
+        Modulos.Diagnosticos.DiagnosticosEndpoints.AddListadoDiagnosticos(builder.Services);
         // HU #13751: Data Protection con el anillo en la base cifrado con el certificado de la configuración (fail-closed),
         // confirmación de los vehículos del lote.
         builder.Services.AddProteccionDocumentos(builder.Configuration);

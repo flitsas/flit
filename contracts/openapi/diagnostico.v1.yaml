@@ -214,6 +214,98 @@ paths:
                 $ref: "#/components/schemas/ErrorRegla"
 
   /api/v1/diagnostico/diagnosticos:
+    get:
+      tags: [Diagnosticos]
+      operationId: listarDiagnosticos
+      summary: Lotes de la compañía del token con filtros y visibilidad por usuario
+      description: >
+        Permiso diagnostico.diagnosticos.ver (HU #13845, F08-H1). Solo lotes de la compañía del token (nunca un parámetro),
+        con la misma visibilidad que la lectura individual del tablero (AccesoLote): visibilidad_usuario EMPRESA (o sin
+        configurar) ve todos los de la compañía; PROPIOS, solo los que creó el usuario; el admin de la compañía
+        (diagnostico.configuracion.editar) ve todos. Orden creado_en desc e id desc, paginado. Fechas en días de Colombia
+        (UTC-5), desde y hasta inclusivos. Sin filtro de estado aparecen también los lotes sin lanzar (estado CREADO,
+        rótulo «Sin lanzar» en la interfaz); no se puede filtrar por CREADO. nombre filtra por «contiene» sin distinguir
+        mayúsculas (% y _ son literales). tipo_tramite es null en SIMPLE; su nombre sale del catálogo de tipos de trámite
+        y, si el código ya no está publicado o el catálogo no responde, es el código. usuario_creador.nombre lo da
+        Identidad (ObtenerUsuario, caché de 10 min); si no responde o no conoce al usuario, «No disponible» (la respuesta
+        sigue siendo 200). No trae configuración, alcance ni documentos.
+      parameters:
+        - name: desde
+          in: query
+          required: false
+          description: Primer día (AAAA-MM-DD, hora Colombia), inclusivo.
+          schema:
+            type: string
+            format: date
+            example: "2026-10-01"
+        - name: hasta
+          in: query
+          required: false
+          description: Último día (AAAA-MM-DD, hora Colombia), inclusivo; no puede ser anterior a desde.
+          schema:
+            type: string
+            format: date
+            example: "2026-10-22"
+        - name: modo
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/ModoDiagnostico"
+        - name: estado
+          in: query
+          required: false
+          description: Estado del lote; CREADO no es filtrable (los lotes sin lanzar salen solo sin este filtro).
+          schema:
+            type: string
+            enum: [EN_PROCESO, COMPLETADO, INCOMPLETO]
+        - name: nombre
+          in: query
+          required: false
+          description: Texto que contiene el nombre del lote, sin distinguir mayúsculas.
+          schema:
+            type: string
+            maxLength: 100
+        - name: pagina
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: tamano
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+      responses:
+        "200":
+          description: Página de lotes visibles para el usuario.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListaDiagnosticos"
+        "400":
+          description: >
+            `code` = RANGO_INVALIDO (`campo` = hasta: hasta anterior a desde); FILTRO_INVALIDO (`campo` = desde o hasta si
+            no es AAAA-MM-DD, modo o estado si el código es desconocido, en minúsculas o CREADO, nombre si pasa de 100
+            caracteres); PAGINACION_INVALIDA (`campo` = pagina o tamano: no entero, pagina < 1 o tamano fuera de 1..100).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+              example:
+                code: RANGO_INVALIDO
+                error: hasta no puede ser anterior a desde.
+                campo: hasta
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >
+            Sin diagnostico.diagnosticos.ver (sin cuerpo); sin compañía (`code` = SIN_EMPRESA) o compañía sin Diagnóstico
+            activo (`code` = PRODUCTO_NO_HABILITADO).
     post:
       tags: [Diagnosticos]
       operationId: crearDiagnostico
@@ -2668,6 +2760,79 @@ components:
         en:
           type: string
           format: date-time
+
+    ListaDiagnosticos:
+      type: object
+      description: Página de lotes de la compañía del token visibles para el usuario (HU #13845).
+      required: [pagina, tamano, total, diagnosticos]
+      properties:
+        pagina:
+          type: integer
+        tamano:
+          type: integer
+        total:
+          type: integer
+          description: Lotes visibles que cumplen los filtros (todas las páginas).
+        diagnosticos:
+          type: array
+          items:
+            $ref: "#/components/schemas/DiagnosticoListado"
+      example:
+        pagina: 1
+        tamano: 25
+        total: 2
+        diagnosticos:
+          - id: 0199f3a1-2222-7000-8000-000000000002
+            nombre: Flota octubre
+            creado_en: "2026-10-22T14:00:00+00:00"
+            modo: CON_ANALISIS
+            tipo_tramite: { codigo: TRASPASO_STANDARD, nombre: TRASPASO }
+            estado: EN_PROCESO
+            usuario_creador: { id: 5f0c7a2e-1b2c-4d3e-8f90-0a1b2c3d4e5f, nombre: Ana Prueba }
+          - id: 0199f3a1-1111-7000-8000-000000000001
+            nombre: Lote sin lanzar
+            creado_en: "2026-10-21T13:00:00+00:00"
+            modo: SIMPLE
+            tipo_tramite: null
+            estado: CREADO
+            usuario_creador: { id: 6a1d8b3f-2c3d-4e5f-9a01-1b2c3d4e5f60, nombre: No disponible }
+
+    DiagnosticoListado:
+      type: object
+      required: [id, nombre, creado_en, modo, tipo_tramite, estado, usuario_creador]
+      properties:
+        id:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+        creado_en:
+          type: string
+          format: date-time
+        modo:
+          $ref: "#/components/schemas/ModoDiagnostico"
+        tipo_tramite:
+          type: object
+          nullable: true
+          description: null en SIMPLE; el nombre es el código si el tipo ya no está publicado.
+          required: [codigo, nombre]
+          properties:
+            codigo:
+              type: string
+            nombre:
+              type: string
+        estado:
+          $ref: "#/components/schemas/EstadoDiagnostico"
+        usuario_creador:
+          type: object
+          required: [id, nombre]
+          properties:
+            id:
+              type: string
+              format: uuid
+            nombre:
+              type: string
+              description: Nombre visible según Identidad; «No disponible» si no se pudo resolver.
 
     ListaDiagnosticosBackoffice:
       type: object

@@ -101,6 +101,12 @@ public static class EscenariosDeFuga
     /// </summary>
     public const string RutaDetalleCelda = Program.Prefijo + EndpointsTablero.RutaDetalleCelda;
 
+    /// <summary>
+    /// Listado de diagnósticos de la compañía (HU #13845): cada empresa siembra un lote; el listado de A trae el id de su lote
+    /// y nunca el de B (la URL es la misma para las dos: la compañía sale del token).
+    /// </summary>
+    public const string RutaListado = Program.Prefijo + global::Flit.Diagnostico.Api.Modulos.Diagnosticos.DiagnosticosEndpoints.Ruta;
+
     public static IReadOnlyList<EscenarioDeFuga> Todos { get; } =
     [
         EscenarioDeFuga.Con(RutaSonda, _ => new LecturaBackoffice { EmpresaConsultada = Guid.NewGuid(), UsuarioId = Guid.NewGuid(), Ruta = "/sonda" }, l => l.Id),
@@ -127,6 +133,11 @@ public static class EscenariosDeFuga
             var celda = await Tablero.Tablero.PayloadAsync(empresa, lote.Celdas.Single(),
                 """{"placa":"TST903","clase":"AUTOMOVIL","propietarios":[],"locatarios":0}""", ct);
             return new Sembrado(Tablero.Tablero.RutaDetalle(lote.Id, celda.VehiculoId, "RUNT"), [celda.Id.ToString(), celda.VehiculoId.ToString()]);
+        }),
+        new EscenarioDeFuga(RutaListado, async (empresa, ct) =>
+        {
+            var lote = await Tablero.Tablero.SembrarAsync(empresa, ct, nombre: "Lote del listado", vehiculos: [new("TST904", [new(Fuente.Runt, EstadoCelda.Completado, 1)])]);
+            return new Sembrado(RutaListado, [lote.Id.ToString()]);
         }),
     ];
 

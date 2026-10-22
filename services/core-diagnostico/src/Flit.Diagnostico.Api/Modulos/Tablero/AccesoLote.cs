@@ -21,13 +21,33 @@ internal static class AccesoLote
     public static async Task<CabeceraDiagnostico> LeerVisibleAsync(DiagnosticoDb db, UsuarioActual usuario, Guid id, bool seguir, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
+        var consulta = (await VisiblesAsync(db.Set<CabeceraDiagnostico>(), db, usuario, ct).ConfigureAwait(false)).Where(c => c.Id == id);
+        return await (seguir ? consulta : consulta.AsNoTracking()).SingleOrDefaultAsync(ct).ConfigureAwait(false)
+            ?? throw ReglaException.NoEncontrado("El diagnóstico");
+    }
+
+    /// <summary>
+    /// Los lotes de <paramref name="cabeceras"/> que el usuario puede ver (HU #13845): la MISMA regla para el listado de
+    /// <c>GET /diagnosticos</c> y para la lectura individual de <see cref="LeerVisibleAsync"/>, que la usa. La compañía la pone
+    /// el filtro global de <c>TenantFilter</c>; el admin de la compañía ve todos; con <c>PROPIOS</c> los demás solo los que
+    /// crearon; sin fila de configuración, <c>EMPRESA</c>. 403 <c>SIN_EMPRESA</c> si el token no trae compañía.
+    /// </summary>
+    public static async Task<IQueryable<CabeceraDiagnostico>> VisiblesAsync(
+        IQueryable<CabeceraDiagnostico> cabeceras, DiagnosticoDb db, UsuarioActual usuario, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(cabeceras);
+        ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(usuario);
         usuario.EmpresaPropia();
-        var consulta = db.Set<CabeceraDiagnostico>().Where(c => c.Id == id);
-        var cabecera = await (seguir ? consulta : consulta.AsNoTracking()).SingleOrDefaultAsync(ct).ConfigureAwait(false);
-        if (cabecera is null || !await PuedeVerAsync(db, usuario, cabecera, ct).ConfigureAwait(false))
-            throw ReglaException.NoEncontrado("El diagnóstico");
-        return cabecera;
+        if (EsAdminDeLaCompania(usuario))
+            return cabeceras;
+        var visibilidad = await db.Set<ConfiguracionEmpresa>().AsNoTracking()
+            .Select(c => (VisibilidadUsuario?)c.VisibilidadUsuario)
+            .SingleOrDefaultAsync(ct).ConfigureAwait(false);
+        if ((visibilidad ?? VisibilidadUsuario.Empresa) == VisibilidadUsuario.Empresa)
+            return cabeceras;
+        var propio = usuario.Id;
+        return cabeceras.Where(c => c.UsuarioCreadorId == propio);
     }
 
     /// <summary>El admin de la compañía ve todos los lotes de su empresa sin importar la visibilidad (§6.2).</summary>
@@ -35,15 +55,5 @@ internal static class AccesoLote
     {
         ArgumentNullException.ThrowIfNull(usuario);
         return usuario.Tiene(Permisos.ConfiguracionEditar);
-    }
-
-    private static async Task<bool> PuedeVerAsync(DiagnosticoDb db, UsuarioActual usuario, CabeceraDiagnostico cabecera, CancellationToken ct)
-    {
-        if (cabecera.UsuarioCreadorId == usuario.Id || EsAdminDeLaCompania(usuario))
-            return true;
-        var visibilidad = await db.Set<ConfiguracionEmpresa>().AsNoTracking()
-            .Select(c => (VisibilidadUsuario?)c.VisibilidadUsuario)
-            .SingleOrDefaultAsync(ct).ConfigureAwait(false);
-        return (visibilidad ?? VisibilidadUsuario.Empresa) == VisibilidadUsuario.Empresa;
     }
 }
