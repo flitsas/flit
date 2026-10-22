@@ -490,6 +490,42 @@ describe('TramiteDetalleModal — sub-estado de revocatoria (HU #12575)', () => 
     // El hito de estado "Aprobado" del historial sigue pintándose: el evento se AGREGA, no reemplaza.
     expect(screen.getAllByText('Aprobado').length).toBeGreaterThan(0);
   });
+
+  it('Bug #13780 — la línea de tiempo incluye el rechazo de la revocatoria', async () => {
+    const user = userEvent.setup();
+    vi.mocked(tramitesClient.getInstance).mockResolvedValue({
+      statusHistory: [
+        { fromStatus: 'entregado', toStatus: 'aprobado', changedAt: '2026-04-20T11:00:00Z', reason: null },
+      ],
+      fieldValues: [],
+      actors: [],
+      events: [
+        {
+          tipo: 'revocatoria_solicitada',
+          createdAt: '2026-05-01T10:00:00Z',
+          createdByName: 'Ana Administradora',
+          revocationAttemptNumber: 1,
+          revocationReason: 'Placa entregada con datos incorrectos',
+        },
+        {
+          tipo: 'revocatoria_rechazada',
+          createdAt: '2026-05-02T15:00:00Z',
+          createdByName: 'Otto Organismo',
+          revocationAttemptNumber: 1,
+          revocationDecisionReason: 'El soporte no acredita el error',
+        },
+      ],
+    } as never);
+    render(
+      <TramiteDetalleModal open instanceId="inst-1" item={APROBADO} onClose={() => undefined} />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Línea de Tiempo del Trámite' }));
+    expect(await screen.findByText('Revocatoria rechazada · Intento 1')).toBeInTheDocument();
+    expect(screen.getByText('El soporte no acredita el error')).toBeInTheDocument();
+    expect(screen.getByText('Solicitud de revocatoria · Intento 1')).toBeInTheDocument();
+    expect(screen.getAllByText('Aprobado').length).toBeGreaterThan(0);
+  });
 });
 
 /**
