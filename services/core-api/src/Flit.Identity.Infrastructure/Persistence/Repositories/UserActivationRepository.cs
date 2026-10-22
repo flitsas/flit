@@ -1,6 +1,8 @@
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Modules.Security.Domain.Auth;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
@@ -55,6 +57,24 @@ public sealed class UserActivationRepository(IIdentityDb db) : IUserActivationRe
             invitation.UpdatedAt = data.ActivatedAt;
         }
 
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (IsLiveEmailUniqueViolation(ex))
+        {
+            // HU #13811 — red de la carrera: el handler ya revalida con UserExistsWithEmailAsync, pero dos
+            // activaciones simultáneas del mismo correo chocan aquí. Nada se guardó (SaveChanges es atómico);
+            // se descarta lo rastreado para no arrastrarlo y se responde 409 en vez de 500.
+            db.ChangeTracker.Clear();
+            throw new UserAlreadyExistsException();
+        }
     }
+
+    private const string LiveEmailUniqueIndex = "uq_users_email";
+
+    private static bool IsLiveEmailUniqueViolation(DbUpdateException ex) =>
+        ex.InnerException is PostgresException pg
+        && pg.SqlState == PostgresErrorCodes.UniqueViolation
+        && pg.ConstraintName == LiveEmailUniqueIndex;
 }

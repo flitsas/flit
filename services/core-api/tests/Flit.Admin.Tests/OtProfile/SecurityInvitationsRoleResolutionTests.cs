@@ -115,7 +115,7 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
         var body = await response.Content.ReadFromJsonAsync<SecurityErrorBody>(
             cancellationToken: TestContext.Current.CancellationToken);
         body!.Code.Should().Be("EMAIL_ALREADY_IN_USE");
-        body.Message.Should().Be("El correo utilizado ya se encuentra asociado a otra cuenta");
+        body.Message.Should().Be("El usuario ya se encuentra previamente creado");
     }
 
     // HU #11550 AC2 / HU #11580 AC1-AC2 — invitar por la ruta de Security con el correo de una
@@ -134,7 +134,7 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
         var body = await response.Content.ReadFromJsonAsync<SecurityErrorBody>(
             cancellationToken: TestContext.Current.CancellationToken);
         body!.Code.Should().Be("EMAIL_ALREADY_IN_USE");
-        body.Message.Should().Be("El correo utilizado ya se encuentra asociado a otra cuenta");
+        body.Message.Should().Be("El usuario ya se encuentra previamente creado");
     }
 
     // HU #10625 AC1 — SuperAdmin puede reenviar CUALQUIER invitación del sistema (sin
@@ -593,7 +593,7 @@ public sealed class SecurityInvitationsRoleResolutionTests : IClassFixture<WebAp
         bodyActive.Should().BeEquivalentTo(bodyPending);
 
         bodyPending!.Code.Should().Be("EMAIL_ALREADY_IN_USE");
-        bodyPending.Message.Should().Be("El correo utilizado ya se encuentra asociado a otra cuenta");
+        bodyPending.Message.Should().Be("El usuario ya se encuentra previamente creado");
     }
 
     // Bug #13194 (P6) — el correo de una cuenta ELIMINADA (soft-delete) ya no bloquea la reinvitación:

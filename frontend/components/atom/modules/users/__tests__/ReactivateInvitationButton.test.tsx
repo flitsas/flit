@@ -53,7 +53,7 @@ describe("ReactivateInvitationButton", () => {
     await user.click(screen.getByRole("button", { name: "Reactivar invitación a Caro Díaz" }));
 
     const message = await screen.findByRole("alert");
-    expect(message).toHaveTextContent("El correo utilizado ya se encuentra asociado a otra cuenta");
+    expect(message).toHaveTextContent("El usuario ya se encuentra previamente creado");
     expect(message).toHaveAttribute("aria-live", "assertive");
   });
 
@@ -69,7 +69,7 @@ describe("ReactivateInvitationButton", () => {
     await user.click(screen.getByRole("button", { name: "Reactivar invitación a Dani Soto" }));
 
     expect(
-      await screen.findByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
+      await screen.findByText(/el usuario ya se encuentra previamente creado/i),
     ).toBeInTheDocument();
   });
 
@@ -89,7 +89,7 @@ describe("ReactivateInvitationButton", () => {
 
     const message = await screen.findByRole("alert");
     expect(message).not.toHaveTextContent(
-      "El correo utilizado ya se encuentra asociado a otra cuenta",
+      "El usuario ya se encuentra previamente creado",
     );
     expect(message).toHaveTextContent(/no se pudo reactivar la invitación por un conflicto/i);
   });

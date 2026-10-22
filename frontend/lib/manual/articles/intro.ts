@@ -191,6 +191,8 @@ export const INTRO_ARTICLES: ManualArticle[] = [
       "recuperar contraseña",
       "restablecer contraseña",
       "activar invitación",
+      "usuario ya creado",
+      "correo duplicado",
       "activar cuenta",
       "cambiar contraseña",
       "cerrar sesión",
@@ -233,6 +235,7 @@ export const INTRO_ARTICLES: ManualArticle[] = [
         paragraphs: [
           "Cuando el administrador de tu compañía (o el equipo FLIT) crea tu usuario, te llega un correo con un enlace de activación. Ese enlace te lleva a la pantalla «Activa tu cuenta», donde defines tu contraseña por primera vez.",
           "Con eso queda lista tu cuenta y puedes iniciar sesión de inmediato con tu correo y la contraseña que acabas de definir.",
+          "Si al activar ves «El usuario ya se encuentra previamente creado», tu correo ya tiene una cuenta en FLIT: inicia sesión con ella (o recupera la contraseña desde «¿Olvidó su contraseña?») en lugar de activar la invitación.",
         ],
       },
       {
@@ -270,6 +273,7 @@ export const INTRO_ARTICLES: ManualArticle[] = [
         paragraphs: [],
         bullets: [
           "No me llega el correo de recuperación o de invitación: revisa la carpeta de spam o correo no deseado antes de pedir uno nuevo.",
+          "Al iniciar sesión no importa si escribes tu correo con mayúsculas o con espacios al inicio o al final: la plataforma lo reconoce igual.",
           "El enlace de recuperación o de activación ya venció: pide uno nuevo (recuperación desde «¿Olvidó su contraseña?»; invitación, pídele al administrador que te la reenvíe).",
           "Mi cuenta está bloqueada temporalmente: verás el aviso «Tu cuenta está bloqueada temporalmente». Contacta al administrador de tu compañía para que la reactive.",
           "Mi usuario está suspendido: no podrás iniciar sesión aunque la contraseña sea correcta; solo el administrador de tu compañía puede reactivarlo.",

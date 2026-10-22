@@ -51,9 +51,11 @@ public sealed class UserManagementRepository(FlitDbContext db) : IUserManagement
     {
         // Bug #13194: uq_users_email es parcial (deleted_at IS NULL) — solo un usuario vivo
         // ocupa el correo; la cuenta eliminada conserva su historial sin bloquearlo.
+        // HU #13810: igualdad exacta sobre la forma canónica (ILIKE trataba "_" y "%" como comodines).
+        var normalizedEmail = EmailNormalizer.Normalize(email);
         return await db.Users
             .AsNoTracking()
-            .Where(u => u.DeletedAt == null && EF.Functions.ILike(u.Email, email))
+            .Where(u => u.DeletedAt == null && u.Email == normalizedEmail)
             .Select(u => new ExistingUserByEmail(u.Id))
             .FirstOrDefaultAsync(ct);
     }

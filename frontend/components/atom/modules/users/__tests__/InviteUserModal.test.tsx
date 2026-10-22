@@ -194,7 +194,7 @@ describe("InviteUserModal — SuperAdmin", () => {
     await user.click(screen.getByRole("button", { name: /enviar instrucciones/i }));
 
     expect(
-      await screen.findByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
+      await screen.findByText(/el usuario ya se encuentra previamente creado/i),
     ).toBeInTheDocument();
   });
 
@@ -216,7 +216,7 @@ describe("InviteUserModal — SuperAdmin", () => {
     await user.click(screen.getByRole("button", { name: /enviar instrucciones/i }));
 
     expect(
-      await screen.findByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
+      await screen.findByText(/el usuario ya se encuentra previamente creado/i),
     ).toBeInTheDocument();
   });
 
@@ -238,7 +238,7 @@ describe("InviteUserModal — SuperAdmin", () => {
       await screen.findByText(/no se pudo completar la invitación por un conflicto/i),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
+      screen.queryByText(/el usuario ya se encuentra previamente creado/i),
     ).not.toBeInTheDocument();
   });
 
@@ -268,7 +268,7 @@ describe("InviteUserModal — SuperAdmin", () => {
       await screen.findByText(/no se pudo completar la invitación por un conflicto/i),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText(/el correo utilizado ya se encuentra asociado a otra cuenta/i),
+      screen.queryByText(/el usuario ya se encuentra previamente creado/i),
     ).not.toBeInTheDocument();
   });
 });
