@@ -33,7 +33,8 @@ namespace Flit.Diagnostico.Tests.Configuracion;
 /// </example>
 public sealed class FuentesSinAdaptadorTests
 {
-    // AC5 (F03-C8) — el backoffice habilita SIMIT_VEHICULO, que en D2 no tiene adaptador: 422 y el contrato no cambia.
+    // AC5 (F03-C8) — el backoffice habilita SIMIT_VEHICULO, que aquí no está disponible (en D2 no tenía adaptador; desde HU
+    // #13793 lo tiene, pero sin simulación ni dirección de core-consultas es no conectado): 422 y el contrato no cambia.
     [Fact]
     public async Task Contrato_con_fuente_sin_adaptador_responde_422()
     {
@@ -80,7 +81,7 @@ public sealed class FuentesSinAdaptadorTests
         (await LeerAsync(api, empresas.B.Id, ct)).FuentesHabilitadas.Should().Equal(Fuente.Runt, Fuente.SimitVehiculo);
     }
 
-    // AC5 — la compañía tiene SIMIT_VEHICULO habilitada de antes, pero sin adaptador pedirla al crear el diagnóstico es 422.
+    // AC5 — la compañía tiene SIMIT_VEHICULO habilitada de antes, pero no disponible (no conectada): pedirla al crear es 422.
     [Fact]
     public async Task Crear_diagnostico_con_fuente_sin_adaptador_responde_422()
     {
@@ -143,14 +144,15 @@ public sealed class FuentesSinAdaptadorTests
         new FuentesDisponibles(conImpuesto, conBandera).Disponible(Fuente.SimitVehiculo).Should().BeFalse();
     }
 
-    // El registro real del servicio: tienen adaptador RUNT (HU #13730) y, desde HU #13792, RUNT_PROPIETARIO y RUNT_LOCATARIO.
+    // El registro real del servicio: tienen adaptador RUNT (HU #13730), desde HU #13792 RUNT_PROPIETARIO y RUNT_LOCATARIO y,
+    // desde HU #13793, SIMIT_VEHICULO.
     [Fact]
-    public async Task Tienen_adaptador_RUNT_y_las_celdas_RUNT_de_persona()
+    public async Task Tienen_adaptador_RUNT_las_celdas_RUNT_de_persona_y_SIMIT_VEHICULO()
     {
         await using var api = await ArrancarAsync();
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var registro = api.App.Services.GetRequiredService<IRegistroAdaptadores>();
-        Enum.GetValues<Fuente>().Where(registro.TieneAdaptador).Should().Equal(Fuente.Runt, Fuente.RuntPropietario, Fuente.RuntLocatario);
+        Enum.GetValues<Fuente>().Where(registro.TieneAdaptador).Should().Equal(Fuente.Runt, Fuente.RuntPropietario, Fuente.RuntLocatario, Fuente.SimitVehiculo);
     }
 
     /// <summary>API con el registro de adaptadores real (sin el doble de <see cref="ApiDePrueba"/>).</summary>

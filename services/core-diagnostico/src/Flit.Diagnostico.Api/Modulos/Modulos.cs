@@ -36,6 +36,8 @@ public static class Modulos
         // HU #13792: RUNT persona (persona natural) y RUES (persona con NIT) de las celdas RUNT_PROPIETARIO y RUNT_LOCATARIO.
         services.AddAdaptador<IFuenteRuntPersona, FuenteRuntPersonaReal, FuenteRuntPersonaSimulada, FuenteRuntPersonaNoConectada>(seleccion);
         services.AddAdaptador<IFuenteRues, FuenteRuesReal, FuenteRuesSimulada, FuenteRuesNoConectada>(seleccion);
+        // HU #13793: SIMIT por placa (SIMIT_VEHICULO); F05-H5 lo reutiliza por documento (SIMIT_PROPIETARIO/LOCATARIO).
+        services.AddAdaptador<IFuenteSimit, FuenteSimitReal, FuenteSimitSimulada, FuenteSimitNoConectada>(seleccion);
         if (seleccion.ModoDe(Domain.Consultas.Fuente.Runt) == ModoAdaptador.Simulado)
             services.TryAddSingleton<IFuenteRunt, FuenteRuntIntempoSimulada>();
         else
@@ -67,6 +69,8 @@ public static class Modulos
             ActivatorUtilities.CreateInstance<Consultas.EjecutorCeldaRuntPersona>(sp, Domain.Consultas.Fuente.RuntPropietario));
         services.AddScoped<Consultas.IEjecutorCelda>(sp =>
             ActivatorUtilities.CreateInstance<Consultas.EjecutorCeldaRuntPersona>(sp, Domain.Consultas.Fuente.RuntLocatario));
+        // HU #13793: la celda SIMIT_VEHICULO (por la placa definitiva del RUNT).
+        services.AddScoped<Consultas.IEjecutorCelda, Consultas.EjecutorCeldaSimitVehiculo>();
         // HU #13733: las fuentes con ejecutor son las únicas que se pueden habilitar o pedir (TryAdd: las pruebas ponen su doble).
         services.TryAddSingleton<Consultas.IRegistroAdaptadores, Consultas.RegistroAdaptadores>();
         services.AddSingleton<Consultas.FuentesDisponibles>();
