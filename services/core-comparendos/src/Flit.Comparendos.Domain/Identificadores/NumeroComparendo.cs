@@ -16,4 +16,16 @@ public static class NumeroComparendo
         var limpio = new string(texto.Trim().Where(char.IsAsciiLetterOrDigit).Select(char.ToUpperInvariant).ToArray());
         return limpio.Length is > 0 and <= LargoMaximo ? limpio : null;
     }
+
+    /// <summary>
+    /// HU #13829 (hallazgo B12-4): el OCR a veces lee un dígito de más o de menos en los números nacionales de 20. Se
+    /// avisa solo con 19 o 21 dígitos: hay números reales de 13 (formato viejo de Bogotá) y con letras de prefijo.
+    /// </summary>
+    public static string? AvisoDeLectura(string? texto)
+    {
+        var digitos = texto?.Count(char.IsAsciiDigit) ?? 0;
+        return digitos is 19 or 21
+            ? $"El número tiene {digitos} dígitos y los comparendos nacionales tienen 20: compáralo con el documento."
+            : null;
+    }
 }
