@@ -13,7 +13,8 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// Ejecutor de la celda RUNT (HU #13730, F03-C4/F03-C5, MOD03 paso 1): consulta <see cref="IFuenteRunt"/> con el identificador
 /// normalizado del vehículo (por placa, sin documento, Intempo; por VIN, la cadena normal) y, con el cierre de la celda y en su
 /// misma transacción, guarda en <c>vehiculos</c> la placa definitiva, el VIN, el servicio, el organismo,
-/// <c>runt_consultado_en</c>, <c>datos_consolidados</c> y los documentos cifrados (<see cref="DocumentosVehiculo"/>). La celda
+/// <c>runt_consultado_en</c>, <c>datos_consolidados</c> y los documentos cifrados (<see cref="DocumentosVehiculo"/>), y en
+/// <c>personas_vehiculo</c> todos los propietarios y locatarios (HU #13790). La celda
 /// guarda el resultado normalizado SIN documentos ni nombres (<c>payload</c> es <c>@pii:medium</c>) y
 /// <c>dato_obtenido_en</c>. Un error de la fuente devuelve ERROR con el código de <see cref="TipoErrorFuente"/>; el procesador
 /// reintenta los transitorios (HU #13737). Cada salida lleva los <see cref="DatosIntento"/> del intento auditable: placa o VIN
@@ -85,6 +86,9 @@ internal sealed partial class EjecutorCeldaRunt(
             guardado.RuntConsultadoEn = ahora;
             guardado.DatosConsolidados = Consolidar(guardado.DatosConsolidados, runt, placa, vin);
             DocumentosVehiculo.Aplicar(guardado, runt, protector);
+            // HU #13790: todos los propietarios y locatarios, cifrados, en la misma transacción de cierre.
+            await DocumentosVehiculo.RegistrarPersonasAsync(db, guardado, DocumentosVehiculo.Personas(guardado, runt, protector, ahora), token)
+                .ConfigureAwait(false);
         }) with
         { Intento = new DatosIntento(identificador.Valor, servicio, runt.IdTransaccion, null) };
     }

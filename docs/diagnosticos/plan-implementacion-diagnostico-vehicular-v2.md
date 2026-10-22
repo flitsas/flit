@@ -790,6 +790,7 @@ CREATE TABLE diagnostico.intentos_consulta (
   transaccion_proveedor_id varchar(128) NULL,
   desde_cache              boolean NOT NULL DEFAULT false,
   usuario_id               uuid NULL,
+  persona_id               uuid NULL,                 -- persona consultada en las fuentes por persona (HU #13790, D3_PersonasVehiculo); null por vehículo
   CONSTRAINT ck_intentos_consulta_tipo_error CHECK (estado = 'ERROR' OR tipo_error IS NULL),  -- HU #13737
   CONSTRAINT ck_intentos_consulta_fin CHECK (fin >= inicio),                                    -- HU #13737
   CONSTRAINT fk_intentos_consulta_consultas FOREIGN KEY (tenant_id, consulta_id)
@@ -797,12 +798,36 @@ CREATE TABLE diagnostico.intentos_consulta (
   CONSTRAINT fk_intentos_consulta_vehiculos FOREIGN KEY (tenant_id, vehiculo_id)
     REFERENCES diagnostico.vehiculos (tenant_id, id) ON DELETE RESTRICT,
   CONSTRAINT fk_intentos_consulta_diagnosticos FOREIGN KEY (tenant_id, diagnostico_id)
-    REFERENCES diagnostico.diagnosticos (tenant_id, id) ON DELETE RESTRICT
+    REFERENCES diagnostico.diagnosticos (tenant_id, id) ON DELETE RESTRICT,
+  CONSTRAINT fk_intentos_consulta_personas_vehiculo FOREIGN KEY (tenant_id, persona_id)
+    REFERENCES diagnostico.personas_vehiculo (tenant_id, id) ON DELETE RESTRICT       -- HU #13790
 );
 CREATE INDEX ix_intentos_consulta_celda ON diagnostico.intentos_consulta (tenant_id, consulta_id, inicio);
 CREATE INDEX ix_intentos_consulta_vehiculo ON diagnostico.intentos_consulta (tenant_id, vehiculo_id);
 CREATE INDEX ix_intentos_consulta_diagnostico ON diagnostico.intentos_consulta (tenant_id, diagnostico_id);
 CREATE INDEX ix_intentos_metricas ON diagnostico.intentos_consulta (tenant_id, fuente, servicio, inicio);
+CREATE INDEX ix_intentos_consulta_persona ON diagnostico.intentos_consulta (tenant_id, persona_id);   -- HU #13790
+
+-- Personas del vehículo (HU #13790, F05-C3, decisión Q1, D3_PersonasVehiculo). Clase (a) de ADR-0072. Todos los propietarios y
+-- locatarios del RUNT (o el locatario declarado si el proveedor no trae ninguno), escritos una sola vez en la transacción que
+-- cierra la celda RUNT o copiados tal cual al reutilizar el RUNT del mismo día. Sin nombres. Las columnas propietario_doc_* y
+-- locatario_doc_* de vehiculos se conservan (D2, respaldo del declarado).
+CREATE TABLE diagnostico.personas_vehiculo (
+  id          uuid PRIMARY KEY,                        -- uuid v7 de la aplicación
+  tenant_id   uuid NOT NULL,
+  vehiculo_id uuid NOT NULL,
+  rol         varchar(16) NOT NULL CHECK (rol IN ('PROPIETARIO','LOCATARIO')),
+  orden       int NOT NULL CHECK (orden >= 1),          -- 1, 2, 3… dentro del rol, en el orden del proveedor
+  doc_tipo    varchar(8) NOT NULL,
+  doc_cifrado bytea NOT NULL,                            -- @pii:high (Data Protection, HU #13751)
+  origen      varchar(20) NOT NULL CHECK (origen IN ('DECLARADO_CLIENTE','PROVEEDOR')),
+  creado_en   timestamptz NOT NULL,
+  CONSTRAINT uq_personas_vehiculo_tenant_id UNIQUE (tenant_id, id),
+  CONSTRAINT ck_personas_vehiculo_declarado_solo_locatario CHECK (origen = 'PROVEEDOR' OR rol = 'LOCATARIO'),
+  CONSTRAINT fk_personas_vehiculo_vehiculos FOREIGN KEY (tenant_id, vehiculo_id)
+    REFERENCES diagnostico.vehiculos (tenant_id, id) ON DELETE RESTRICT
+);   -- concurrencia con xmin; sin borrado lógico
+CREATE UNIQUE INDEX ux_personas_vehiculo_rol_orden ON diagnostico.personas_vehiculo (tenant_id, vehiculo_id, rol, orden);
 
 -- Catálogo de reglas del dictamen (decisión g)
 CREATE TABLE diagnostico.reglas_dictamen (

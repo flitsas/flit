@@ -12,7 +12,7 @@ namespace Flit.Diagnostico.Api.Persistence.Configuraciones;
 /// clase (b) de ADR-0072: sin columnas de edición, borrado lógico ni token de concurrencia. Las FK a la celda, al vehículo y
 /// al lote son compuestas por empresa y <c>RESTRICT</c> (un historial no se borra en cascada). Cada índice empieza por
 /// <c>tenant_id</c> y cubre su FK. HU #13737 suma el identificador consultado y dos CHECK de coherencia (un SUCCESS sin tipo de
-/// error; fin no anterior al inicio).
+/// error; fin no anterior al inicio). HU #13790 suma <c>persona_id</c> (FK compuesta RESTRICT a <c>personas_vehiculo</c>).
 /// </summary>
 internal sealed class IntentoConsultaConfig : IEntityTypeConfiguration<IntentoConsulta>
 {
@@ -54,6 +54,7 @@ internal sealed class IntentoConsultaConfig : IEntityTypeConfiguration<IntentoCo
             .HasDefaultValue(false).ValueGeneratedNever()
             .HasComment("El dato salió de la reutilización del mismo día (D-10), sin consumo.");
         builder.Property(x => x.UsuarioId).HasComment("@pii:low Usuario del reproceso o del manual (claim sub); null si fue el procesador.");
+        builder.Property(x => x.PersonaId).HasComment("Persona del vehículo consultada (HU #13790); null si la fuente es por vehículo.");
 
         builder.HasOne<CeldaConsulta>().WithMany()
             .HasForeignKey(x => new { x.TenantId, x.ConsultaId })
@@ -70,10 +71,17 @@ internal sealed class IntentoConsultaConfig : IEntityTypeConfiguration<IntentoCo
             .HasPrincipalKey(x => new { x.TenantId, x.Id })
             .HasConstraintName("fk_intentos_consulta_diagnosticos")
             .OnDelete(DeleteBehavior.Restrict);
+        // HU #13790: cada intento por persona queda ligado a su persona, de la misma empresa.
+        builder.HasOne<PersonaVehiculo>().WithMany()
+            .HasForeignKey(x => new { x.TenantId, x.PersonaId })
+            .HasPrincipalKey(x => new { x.TenantId, x.Id })
+            .HasConstraintName("fk_intentos_consulta_personas_vehiculo")
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(x => new { x.TenantId, x.ConsultaId, x.Inicio }).HasDatabaseName("ix_intentos_consulta_celda");
         builder.HasIndex(x => new { x.TenantId, x.VehiculoId }).HasDatabaseName("ix_intentos_consulta_vehiculo");
         builder.HasIndex(x => new { x.TenantId, x.DiagnosticoId }).HasDatabaseName("ix_intentos_consulta_diagnostico");
+        builder.HasIndex(x => new { x.TenantId, x.PersonaId }).HasDatabaseName("ix_intentos_consulta_persona");
         // Métricas y alertas de integración por fuente y servicio (plan §10).
         builder.HasIndex(x => new { x.TenantId, x.Fuente, x.Servicio, x.Inicio }).HasDatabaseName("ix_intentos_metricas");
     }

@@ -524,6 +524,11 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasColumnName("mensaje_error")
                         .HasComment("@pii:low Mensaje de error de la fuente; sin documentos en claro.");
 
+                    b.Property<Guid?>("PersonaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("persona_id")
+                        .HasComment("Persona del vehículo consultada (HU #13790); null si la fuente es por vehículo.");
+
                     b.Property<string>("Servicio")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
@@ -563,6 +568,9 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                     b.HasIndex("TenantId", "DiagnosticoId")
                         .HasDatabaseName("ix_intentos_consulta_diagnostico");
 
+                    b.HasIndex("TenantId", "PersonaId")
+                        .HasDatabaseName("ix_intentos_consulta_persona");
+
                     b.HasIndex("TenantId", "VehiculoId")
                         .HasDatabaseName("ix_intentos_consulta_vehiculo");
 
@@ -587,6 +595,90 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                             t.HasCheckConstraint("ck_intentos_consulta_servicio", "servicio IS NULL OR servicio IN ('VERIFIK', 'KYVERUM', 'INTEMPO', 'SMARTCLOUD', 'FASECOLDA', 'MERCADOLIBRE', 'BASEGRAVABLE', 'SCRAPING', 'FLITFINES', 'OTRO')");
 
                             t.HasCheckConstraint("ck_intentos_consulta_tipo_error", "estado = 'ERROR' OR tipo_error IS NULL");
+                        });
+                });
+
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Consultas.PersonaVehiculo", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasComment("uuid v7 generado por la aplicación.");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en")
+                        .HasComment("Instante en que se registró (cierre de la celda RUNT).");
+
+                    b.Property<byte[]>("DocCifrado")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("doc_cifrado")
+                        .HasComment("@pii:high Número de documento cifrado con Data Protection (HU #13751). El nombre no se guarda.");
+
+                    b.Property<string>("DocTipo")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("doc_tipo")
+                        .HasComment("Tipo de documento (CC, CE, NIT, PAS, TI).");
+
+                    b.Property<int>("Orden")
+                        .HasColumnType("integer")
+                        .HasColumnName("orden")
+                        .HasComment("Posición dentro del rol, desde 1, en el orden del proveedor.");
+
+                    b.Property<string>("Origen")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("origen")
+                        .HasComment("PROVEEDOR (RUNT) o DECLARADO_CLIENTE (locatario declarado cuando el proveedor no trae ninguno).");
+
+                    b.Property<string>("Rol")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("rol")
+                        .HasComment("PROPIETARIO o LOCATARIO.");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id")
+                        .HasComment("Empresa dueña del vehículo.");
+
+                    b.Property<Guid>("VehiculoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("vehiculo_id")
+                        .HasComment("Vehículo al que pertenece la persona.");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_personas_vehiculo");
+
+                    b.HasAlternateKey("TenantId", "Id")
+                        .HasName("uq_personas_vehiculo_tenant_id");
+
+                    b.HasIndex("TenantId", "VehiculoId", "Rol", "Orden")
+                        .IsUnique()
+                        .HasDatabaseName("ux_personas_vehiculo_rol_orden");
+
+                    b.ToTable("personas_vehiculo", "diagnostico", t =>
+                        {
+                            t.HasComment("Propietarios y locatarios del vehículo con documento cifrado y sin nombres (HU #13790, F05-C3).");
+
+                            t.HasCheckConstraint("ck_personas_vehiculo_declarado_solo_locatario", "origen = 'PROVEEDOR' OR rol = 'LOCATARIO'");
+
+                            t.HasCheckConstraint("ck_personas_vehiculo_orden", "orden >= 1");
+
+                            t.HasCheckConstraint("ck_personas_vehiculo_origen", "origen IN ('DECLARADO_CLIENTE', 'PROVEEDOR')");
+
+                            t.HasCheckConstraint("ck_personas_vehiculo_rol", "rol IN ('PROPIETARIO', 'LOCATARIO')");
                         });
                 });
 
@@ -1100,6 +1192,13 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_intentos_consulta_diagnosticos");
 
+                    b.HasOne("Flit.Diagnostico.Api.Modulos.Consultas.PersonaVehiculo", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "PersonaId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_intentos_consulta_personas_vehiculo");
+
                     b.HasOne("Flit.Diagnostico.Api.Modulos.Vehiculos.VehiculoDiagnostico", null)
                         .WithMany()
                         .HasForeignKey("TenantId", "VehiculoId")
@@ -1107,6 +1206,17 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_intentos_consulta_vehiculos");
+                });
+
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Consultas.PersonaVehiculo", b =>
+                {
+                    b.HasOne("Flit.Diagnostico.Api.Modulos.Vehiculos.VehiculoDiagnostico", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "VehiculoId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_personas_vehiculo_vehiculos");
                 });
 
             modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Diagnosticos.HistorialEstadoDiagnostico", b =>

@@ -363,12 +363,12 @@ public sealed partial class EsquemaD2Tests
             "diagnostico.organismos pk_organismos", "diagnostico.departamentos_impuesto pk_departamentos_impuesto",
         ]);
 
-        // Toda FK nueva es RESTRICT (confdeltype 'r').
+        // Toda FK nueva es RESTRICT (confdeltype 'r'). Siete desde D3: intentos_consulta.persona_id (HU #13790, EsquemaD3Tests).
         (await ListarAsync(
                 conexion,
                 "SELECT conname || ' ' || confdeltype::text FROM pg_constraint WHERE contype = 'f' AND conrelid::regclass::text IN ('diagnostico.consultas', 'diagnostico.intentos_consulta')",
                 ct))
-            .Should().HaveCount(6).And.OnlyContain(f => f.EndsWith(" r", StringComparison.Ordinal));
+            .Should().HaveCount(7).And.OnlyContain(f => f.EndsWith(" r", StringComparison.Ordinal));
 
         var indices = await ListarAsync(conexion, "SELECT indexname || ' ' || indexdef FROM pg_indexes WHERE schemaname = 'diagnostico'", ct);
         indices.Should().Contain(i => i.StartsWith("ix_cola ", StringComparison.Ordinal) && i.Contains("(disponible_desde)", StringComparison.Ordinal)

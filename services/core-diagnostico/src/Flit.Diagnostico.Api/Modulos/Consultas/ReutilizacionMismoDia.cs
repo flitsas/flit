@@ -13,7 +13,8 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// su resultado normalizado y su <c>dato_obtenido_en</c>, apunta a ella con <c>reutilizada_de_id</c> y se cierra por el camino
 /// normal (<see cref="EscritorCeldas"/>: sube la versión del tablero, libera las demás celdas si es RUNT y recalcula el estado
 /// del lote), con un intento <c>desde_cache=true</c> y sin llamar a la fuente ni consumir. En RUNT copia además los datos del
-/// vehículo y los documentos cifrados (<see cref="DocumentosVehiculo.Copiar"/>, sin descifrar).
+/// vehículo, los documentos cifrados (<see cref="DocumentosVehiculo.Copiar"/>, sin descifrar) y las personas del vehículo de
+/// origen (<see cref="DocumentosVehiculo.CopiarPersonas"/>, HU #13790).
 /// <para>
 /// Reglas: la búsqueda filtra por <c>tenant_id</c> de forma EXPLÍCITA, además del filtro global del contexto de la celda (el
 /// procesador corre fuera de una petición), y la FK compuesta <c>fk_consultas_consultas_reutilizada_de</c> impide apuntar a una
@@ -77,6 +78,10 @@ internal static class ReutilizacionMismoDia
             {
                 var destino = await dbCierre.Set<VehiculoDiagnostico>().SingleAsync(v => v.Id == celda.VehiculoId, token).ConfigureAwait(false);
                 CopiarDatosRunt(destino, deVehiculo, original.DatoObtenidoEn);
+                // HU #13790 (AC3): las personas del vehículo de origen, con el mismo cifrado.
+                var deOrigen = await DocumentosVehiculo.PersonasDelVehiculoAsync(dbCierre, empresa, deVehiculo.Id, token).ConfigureAwait(false);
+                var copia = DocumentosVehiculo.CopiarPersonas(destino, deVehiculo, deOrigen, ahora);
+                await DocumentosVehiculo.RegistrarPersonasAsync(dbCierre, destino, copia, token).ConfigureAwait(false);
             })
             : null;
         return new ResultadoCelda(EstadoCelda.Completado, original.Payload, null, OrigenCelda.Api, original.DatoObtenidoEn, null, efectos)

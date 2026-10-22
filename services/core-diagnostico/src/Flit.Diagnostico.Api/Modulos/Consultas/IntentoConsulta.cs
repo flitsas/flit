@@ -53,4 +53,10 @@ public sealed class IntentoConsulta : IEntidadDeEmpresa
 
     /// <summary>Usuario del reproceso o del manual; null cuando lo dispara el procesador.</summary>
     public Guid? UsuarioId { get; init; }
+
+    /// <summary>
+    /// Persona del vehículo consultada (<see cref="PersonaVehiculo"/>, HU #13790): una por intento en las fuentes por persona;
+    /// null en las fuentes por vehículo.
+    /// </summary>
+    public Guid? PersonaId { get; init; }
 }
