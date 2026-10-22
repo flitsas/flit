@@ -7369,6 +7369,50 @@ paths:
           description: Validación de identidad no encontrada.
         "409":
           description: "flujo_manual_no_activo (la validación no espera captura: ni manual_activo ni rechazado con motivo)."
+  /api/v1/tramites/biometric-validations/{id}/vencer:
+    post:
+      operationId: vencerIdentidad
+      tags: [Tramites, Identidad]
+      summary: Vencer una identidad aprobada y vigente (solo Super Admin) — HU #13824, Épica #13817
+      description: >
+        Termina AHORA la vigencia de una validación de identidad aprobada y vigente (trámite o prevalidación standalone):
+        `validUntil` pasa a ser el instante del vencimiento; la fila, el certificado y el estado `aprobado` se conservan.
+        Los trámites EN BORRADOR que usaban esa identidad quedan sin firmar para esa persona (deben revalidar para radicar);
+        los trámites que ya NO están en borrador conservan su firma hasta el fin de vigencia que la identidad tenía antes.
+        En el mismo paso abre una validación NUEVA en el trámite en borrador más reciente que usaba la identidad (se identifica
+        por el documento del sujeto: el actor, o su representante legal) y la envía con el mismo inicio de validación del
+        trámite (Kyverum o mock); `enlaceCaptura` trae el enlace para copiar. Sin borradores que la usen, vence igual y no
+        envía nada (`enlaceEnviado` false, `motivoSinEnlace` = `sin_borradores`). Si el inicio de la validación nueva falla
+        (`validacion_en_curso`, `proveedor_error`, `proveedor_no_disponible`, `datos_incompletos`, `actor_requerido`…) la
+        identidad queda vencida de todos modos y el motivo viaja en `motivoSinEnlace`. Si el proveedor estaba caído y la
+        validación quedó encolada, `enCola` es true y aún no hay enlace. Queda en el tracking del trámite
+        (`vencimiento_identidad_admin`) y en la bitácora técnica de identidad (`vencida_admin`, correo y documento
+        enmascarados). Solo Super Admin (rol + permiso `identidad.validaciones.vencer`, que ningún rol de compañía trae); el
+        tenant sale de la fila (NO se usa X-Tenant-Id).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Identidad vencida; trae el resultado del envío de la validación nueva (si la hubo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VencerIdentidadResult"
+        "401":
+          description: Sin sesión.
+        "403":
+          description: El usuario no es Super Admin (rol de compañía, aunque tenga el permiso asignado).
+        "404":
+          description: Validación de identidad no encontrada.
+        "409":
+          description: "no_aprobada_vigente — «Esta validación no está aprobada y vigente. No hay nada que vencer.»"
+        "422":
+          description: "fuera_de_alcance — la identidad de un mandatario no se vence desde este módulo."
   /api/v1/tramites/biometric-validations/{id}/manual-detail:
     get:
       operationId: getManualIdentityValidationDetail
@@ -18628,6 +18672,25 @@ components:
             Origen de la validación (HU #13285). `mandatario` = fila con MandateSignerId (se conserva);
             `representante_legal` = prevalidación standalone de persona jurídica.
         emailEnviado: { type: boolean, description: false si el correo con el enlace no salió (titular sin correo o fallo de envío); el Super Admin puede regenerar el enlace. }
+    VencerIdentidadResult:
+      type: object
+      description: Resultado de vencer una identidad aprobada y vigente (HU #13824).
+      properties:
+        validationId: { type: string, format: uuid, description: "La validación vencida (se conserva la fila)." }
+        tenantId: { type: string, format: uuid }
+        procedureInstanceId: { type: string, format: uuid, nullable: true, description: "Trámite dueño de la validación; null si es una prevalidación standalone." }
+        vencidaAt: { type: string, format: date-time, description: "Instante del vencimiento (igual al nuevo validUntil)." }
+        borradoresAfectados: { type: integer, description: "Trámites en borrador del tenant que usaban esa identidad y quedan sin firmar para esa persona." }
+        enlaceEnviado: { type: boolean, description: "true si se abrió una validación nueva y se envió el enlace (también cuando quedó encolada)." }
+        nuevaValidacionId: { type: string, format: uuid, nullable: true }
+        tramiteBorradorId: { type: string, format: uuid, nullable: true, description: "Trámite en borrador más reciente que usaba la identidad (destino de la validación nueva)." }
+        tramiteBorradorReferencia: { type: string, nullable: true, description: "Número de referencia del trámite destino." }
+        enlaceCaptura: { type: string, nullable: true, description: "Enlace para copiar (URL de captura del proveedor o ruta /biometric/{token} con el proveedor mock). Null si no se envió o quedó encolada." }
+        enCola: { type: boolean, description: "true si el proveedor estaba caído y la validación quedó en pendiente_envio (el worker la enviará)." }
+        motivoSinEnlace:
+          type: string
+          nullable: true
+          description: Por qué no se envió enlace. `sin_borradores` (ningún trámite en borrador la usaba), `validacion_en_curso`, `proveedor_error`, `proveedor_no_disponible`, `datos_incompletos`, `actor_requerido`, etc.
     RegenerarEnlaceManualResult:
       type: object
       description: Estado resultante de regenerar el enlace de captura manual (HU #13287). No incluye el token del enlace.

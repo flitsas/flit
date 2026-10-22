@@ -85,6 +85,14 @@ internal sealed class ProcedureInstanceBiometricValidationConfiguration
         // al leer. (Antes era mantenida por un trigger; se quitó para no meter lógica en la BD.)
         builder.Property(x => x.ValidUntil).HasColumnName("valid_until");
 
+        // HU #13824 — vencimiento manual por Super Admin: instante y fin de vigencia previo (DDL 151). Los trámites ya fuera de
+        // borrador conservan su firma hasta ese fin previo (BiometricRules.EsAprobadaVigenteParaTramite).
+        builder.Property(x => x.ExpiredManuallyAt).HasColumnName("expired_manually_at");
+        builder.Property(x => x.ValidUntilPrevious).HasColumnName("valid_until_previous");
+        builder.HasIndex(x => x.TenantId)
+            .HasDatabaseName("ix_biometric_validations_expired_manually")
+            .HasFilter("expired_manually_at IS NOT NULL");
+
         builder.HasIndex(x => x.KyverumVerificationId)
             .IsUnique()
             .HasDatabaseName("uq_procedure_instance_biometric_validations_kyverum_verification_id")

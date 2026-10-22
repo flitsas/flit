@@ -278,6 +278,7 @@ public static class DependencyInjection
         // HU #13284/#13287 (Épica #13202) — activar el flujo manual de identidad y regenerar su enlace (Super Admin). El
         // notificador del enlace (IManualCaptureLinkNotifier, correo al titular) se registra en Infraestructura.
         services.AddScoped<ActivarIdentidadManualHandler>();
+        services.AddScoped<VencerIdentidadHandler>();
         services.AddScoped<RegenerarEnlaceManualHandler>();
         // HU #13298/#13299 (Feature #13282 C) — aprobar y rechazar la revisión manual (Super Admin).
         services.AddScoped<AprobarValidacionManualHandler>();
