@@ -1,4 +1,6 @@
 using System.Text.Json.Serialization;
+using Flit.Diagnostico.Api.Persistence.Configuraciones;
+using Flit.Diagnostico.Domain.Estimacion;
 
 namespace Flit.Diagnostico.Api.Modulos.Carga;
 
@@ -47,7 +49,17 @@ public sealed record ErrorFilaDto(
     [property: JsonPropertyName("code")] string Code,
     [property: JsonPropertyName("mensaje")] string Mensaje);
 
-/// <summary>Consultas previstas de una fuente del alcance (código de la base), HU #13747.</summary>
+/// <summary>
+/// Consultas previstas de una fuente del alcance (código de la base), HU #13747. <c>minimo=true</c> (HU #13796, Q7) marca las
+/// fuentes de persona antes de lanzar: las personas aún no se conocen y el número es «al menos N» (uno por vehículo;
+/// locatario, uno por vehículo con documento declarado). Las fuentes del vehículo siempre llevan <c>minimo=false</c>.
+/// </summary>
 public sealed record EstimadoFuenteDto(
     [property: JsonPropertyName("fuente")] string Fuente,
-    [property: JsonPropertyName("consultas")] int Consultas);
+    [property: JsonPropertyName("consultas")] int Consultas,
+    [property: JsonPropertyName("minimo")] bool Minimo)
+{
+    /// <summary>El DTO de un estimado del dominio.</summary>
+    internal static EstimadoFuenteDto De(EstimadoPorFuente estimado) =>
+        new(CodigosDeEnum.Codigo(estimado.Fuente), estimado.Consultas, estimado.Minimo);
+}

@@ -80,7 +80,7 @@ internal static partial class VehiculosEndpoints
             porOrden[v.Orden].Id, v.Orden, v.IdentificadorOriginal, v.IdentificadorNorm, CodigosDeEnum.Codigo(v.Tipo), v.TipoDocumentoLocatario,
             v.DocumentoLocatario is null ? null : AnalizadorCarga.Enmascarar(v.DocumentoLocatario))).ToList();
         var estimado = confirmacion.MostrarEstimado
-            ? resultado.Estimado.Select(e => new EstimadoFuenteDto(CodigosDeEnum.Codigo(e.Fuente), e.Consultas)).ToList()
+            ? resultado.Estimado.Select(EstimadoFuenteDto.De).ToList()
             : null;
         return Results.Json(
             new ResultadoConfirmacionDto(

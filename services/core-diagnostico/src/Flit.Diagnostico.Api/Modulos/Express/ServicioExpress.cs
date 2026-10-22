@@ -88,7 +88,7 @@ internal sealed partial class ServicioExpress(
             return new EstimadoExpressDto(false, null);
 
         var estimado = EstimadorConsultas.Estimar(alcance.Fuentes, [new VehiculoAEstimar(true, documento.Presente)]);
-        return new EstimadoExpressDto(true, [.. estimado.Select(e => new EstimadoFuenteDto(CodigosDeEnum.Codigo(e.Fuente), e.Consultas))]);
+        return new EstimadoExpressDto(true, [.. estimado.Select(EstimadoFuenteDto.De)]);
     }
 
     /// <summary>«Express &lt;identificador normalizado&gt; &lt;dd/mm/aaaa&gt;» con el día en la hora de Colombia.</summary>

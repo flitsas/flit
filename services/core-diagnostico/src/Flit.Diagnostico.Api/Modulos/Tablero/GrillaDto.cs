@@ -56,9 +56,12 @@ public sealed record CeldaGrillaDto(
 
 /// <summary>
 /// Estimado por fuente (calculador de HU #13747) frente a las consultas consumidas: intentos con <c>desde_cache=false</c>
-/// (las reutilizadas del mismo día no cuentan, D-10) y sin los de llenado manual.
+/// (las reutilizadas del mismo día no cuentan, D-10) y sin los de llenado manual. En las fuentes de persona (HU #13796) las
+/// estimadas son las personas registradas del rol y lo consumido, un intento por persona; <c>minimo=true</c> solo si algún
+/// vehículo del lote no tiene personas registradas (lote anterior a D3 o RUNT sin respuesta) y ahí cuenta uno por vehículo.
 /// </summary>
 public sealed record EstimadoVsConsumidoDto(
     [property: JsonPropertyName("fuente")] string Fuente,
     [property: JsonPropertyName("estimadas")] int Estimadas,
-    [property: JsonPropertyName("consumidas")] int Consumidas);
+    [property: JsonPropertyName("consumidas")] int Consumidas,
+    [property: JsonPropertyName("minimo")] bool Minimo);

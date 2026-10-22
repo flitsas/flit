@@ -21,7 +21,9 @@ namespace Flit.Diagnostico.Api.Modulos.Tablero;
 /// la compañía del token) y la visibilidad de <see cref="AccesoLote"/>. Nunca proyecta el origen, el usuario manual, el
 /// payload ni los documentos (R-20). Con <c>estimado_consultas=AL_FINALIZAR</c> en la copia de configuración del lote y el lote
 /// cerrado (COMPLETADO o INCOMPLETO), agrega el estimado de <see cref="EstimadorConsultas"/> (HU #13747) frente a lo consumido:
-/// intentos con <c>desde_cache=false</c> que no son de llenado manual.
+/// intentos con <c>desde_cache=false</c> que no son de llenado manual. Las fuentes de persona (HU #13796) se estiman con las
+/// filas de <c>personas_vehiculo</c> de los vehículos del lote, por rol y solo de la compañía del lote; lo consumido ya es un
+/// intento por persona (<c>intentos_consulta.persona_id</c>).
 /// </summary>
 internal sealed class ConsultaGrilla(DiagnosticoDb db, UsuarioActual usuario)
 {
@@ -75,16 +77,28 @@ internal sealed class ConsultaGrilla(DiagnosticoDb db, UsuarioActual usuario)
 
         var vehiculos = await db.Set<VehiculoDiagnostico>().AsNoTracking()
             .Where(v => v.DiagnosticoId == cabecera.Id)
-            .Select(v => v.LocatarioDocOrigen == OrigenDocumento.DeclaradoCliente || v.LocatarioDeclaradoDocCifrado != null)
+            .Select(v => new { v.Id, ConLocatario = v.LocatarioDocOrigen == OrigenDocumento.DeclaradoCliente || v.LocatarioDeclaradoDocCifrado != null })
             .ToListAsync(ct).ConfigureAwait(false);
-        var estimado = EstimadorConsultas.Estimar(cabecera.Alcance, vehiculos.Select(conLocatario => new VehiculoAEstimar(true, conLocatario)));
+        var personas = (await db.Set<PersonaVehiculo>().AsNoTracking()
+                .Where(p => p.TenantId == cabecera.TenantId
+                    && db.Set<VehiculoDiagnostico>().Any(v => v.Id == p.VehiculoId && v.DiagnosticoId == cabecera.Id))
+                .GroupBy(p => new { p.VehiculoId, p.Rol })
+                .Select(g => new { g.Key.VehiculoId, g.Key.Rol, Personas = g.Count() })
+                .ToListAsync(ct).ConfigureAwait(false))
+            .ToLookup(x => x.VehiculoId);
+        var estimado = EstimadorConsultas.Estimar(cabecera.Alcance, vehiculos.Select(v => new VehiculoAEstimar(true, v.ConLocatario,
+            personas.Contains(v.Id)
+                ? new PersonasRegistradas(
+                    personas[v.Id].Where(x => x.Rol == RolPersona.Propietario).Sum(x => x.Personas),
+                    personas[v.Id].Where(x => x.Rol == RolPersona.Locatario).Sum(x => x.Personas))
+                : null)));
         var consumidas = (await db.Set<IntentoConsulta>().AsNoTracking()
                 .Where(i => i.DiagnosticoId == cabecera.Id && !i.DesdeCache && i.Disparador != DisparadorIntento.Manual)
                 .GroupBy(i => i.Fuente)
                 .Select(g => new { Fuente = g.Key, Consultas = g.Count() })
                 .ToListAsync(ct).ConfigureAwait(false))
             .ToDictionary(x => x.Fuente, x => x.Consultas);
-        return [.. estimado.Select(e => new EstimadoVsConsumidoDto(CodigosDeEnum.Codigo(e.Fuente), e.Consultas, consumidas.GetValueOrDefault(e.Fuente)))];
+        return [.. estimado.Select(e => new EstimadoVsConsumidoDto(CodigosDeEnum.Codigo(e.Fuente), e.Consultas, consumidas.GetValueOrDefault(e.Fuente), e.Minimo))];
     }
 
     /// <summary><c>estimado_consultas</c> de la copia de configuración guardada en la cabecera; sin él, <c>NO_MOSTRAR</c>.</summary>

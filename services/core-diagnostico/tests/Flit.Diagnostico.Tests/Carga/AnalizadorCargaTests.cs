@@ -137,7 +137,8 @@ public sealed class AnalizadorCargaTests
         var con = AnalizadorCarga.Analizar(tabla, new([Fuente.Runt, Fuente.SimitLocatario], 500, MostrarEstimado: true));
         var sin = AnalizadorCarga.Analizar(tabla, new([Fuente.Runt, Fuente.SimitLocatario], 500, MostrarEstimado: false));
 
-        con.EstimadoConsultas.Should().Equal(new EstimadoFuenteDto("RUNT", 2), new EstimadoFuenteDto("SIMIT_LOCATARIO", 1));
+        // #13796: SIMIT_LOCATARIO es fuente de persona y antes de lanzar su número es un mínimo.
+        con.EstimadoConsultas.Should().Equal(new EstimadoFuenteDto("RUNT", 2, Minimo: false), new EstimadoFuenteDto("SIMIT_LOCATARIO", 1, Minimo: true));
         sin.EstimadoConsultas.Should().BeNull();
     }
 

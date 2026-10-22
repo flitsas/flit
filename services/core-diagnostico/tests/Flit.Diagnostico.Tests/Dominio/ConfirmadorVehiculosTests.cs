@@ -61,7 +61,7 @@ public sealed class ConfirmadorVehiculosTests
         var resultado = ConfirmadorVehiculos.Confirmar(
             [new("ABC123", "CC", "1020304050"), new("XYZ987", null, null), new("MAL", "CC", "1")], [Fuente.Runt, Fuente.RuntLocatario], 500);
 
-        resultado.Estimado.Should().Equal(new EstimadoPorFuente(Fuente.Runt, 2), new EstimadoPorFuente(Fuente.RuntLocatario, 1));
+        resultado.Estimado.Should().Equal(new EstimadoPorFuente(Fuente.Runt, 2), new EstimadoPorFuente(Fuente.RuntLocatario, 1, Minimo: true));
     }
 
     [Fact]

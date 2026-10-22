@@ -31,7 +31,7 @@ internal static class ExpressEndpoints
             vehiculo.Id, vehiculo.Orden, validado.IdentificadorOriginal, validado.IdentificadorNorm, CodigosDeEnum.Codigo(validado.Tipo),
             validado.TipoDocumentoLocatario, validado.DocumentoLocatario is null ? null : AnalizadorCarga.Enmascarar(validado.DocumentoLocatario));
         var estimado = confirmacion.MostrarEstimado
-            ? confirmacion.Resultado.Estimado.Select(e => new EstimadoFuenteDto(CodigosDeEnum.Codigo(e.Fuente), e.Consultas)).ToList()
+            ? confirmacion.Resultado.Estimado.Select(EstimadoFuenteDto.De).ToList()
             : null;
         return Results.Json(
             new ExpressCreadoDto(

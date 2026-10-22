@@ -1689,12 +1689,24 @@ components:
 
     EstimadoFuente:
       type: object
-      required: [fuente, consultas]
+      description: >-
+        Consultas previstas de una fuente del alcance (HU #13747). Lo usan el resumen de carga, la confirmación de
+        vehículos, Express y la vista previa de Express. Las fuentes de persona (RUNT_PROPIETARIO, RUNT_LOCATARIO,
+        SIMIT_PROPIETARIO, SIMIT_LOCATARIO) consultan una vez por persona, que antes de lanzar aún no se conocen: su
+        número es un mínimo de uno por vehículo (locatario, uno por vehículo con documento declarado) y llevan
+        `minimo=true`, para rotularlo «al menos N» (HU #13796, Q7).
+      required: [fuente, consultas, minimo]
       properties:
         fuente:
           $ref: "#/components/schemas/Fuente"
         consultas:
           type: integer
+        minimo:
+          type: boolean
+          description: >-
+            true si `consultas` es un mínimo («al menos N»): fuente de persona con algún vehículo válido cuyas personas
+            aún no se conocen. Siempre false en las fuentes del vehículo y en un lote sin vehículos válidos.
+      example: { fuente: SIMIT_PROPIETARIO, consultas: 10, minimo: true }
 
     FilaCapturada:
       type: object
@@ -2010,16 +2022,26 @@ components:
 
     EstimadoVsConsumido:
       type: object
-      required: [fuente, estimadas, consumidas]
+      required: [fuente, estimadas, consumidas, minimo]
       properties:
         fuente:
           $ref: "#/components/schemas/Fuente"
         estimadas:
           type: integer
-          description: Estimado de la fuente (vehículos menos N/A previsibles, HU #13747).
+          description: >-
+            Estimado de la fuente (vehículos menos N/A previsibles, HU #13747). En las fuentes de persona, las personas
+            registradas del rol en los vehículos del lote (personas_vehiculo, HU #13796).
         consumidas:
           type: integer
-          description: Intentos con desde_cache=false, sin los de llenado manual.
+          description: >-
+            Intentos con desde_cache=false, sin los de llenado manual. En las fuentes de persona hay un intento por
+            persona (cada reintento real también consume).
+        minimo:
+          type: boolean
+          description: >-
+            true solo si la fuente es de persona y algún vehículo del lote no tiene personas registradas (lote anterior a
+            D3 o RUNT sin respuesta): ese vehículo cuenta uno, y el estimado es «al menos N».
+      example: { fuente: RUNT_PROPIETARIO, estimadas: 3, consumidas: 3, minimo: false }
 
     CierrePanel:
       type: object

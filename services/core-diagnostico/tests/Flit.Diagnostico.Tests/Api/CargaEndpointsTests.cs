@@ -310,6 +310,29 @@ public sealed class CargaEndpointsTests
         JsonDocument.Parse(sinEstimadoTexto).RootElement.TryGetProperty("estimado_consultas", out _).Should().BeFalse(sinEstimadoTexto);
     }
 
+    // HU #13796 AC1 (F05-C13, Q7) — con ANTES_DE_LANZAR y 10 vehículos, SIMIT_PROPIETARIO muestra 10 con minimo=true (las
+    // personas aún no se conocen) y SIMIT_VEHICULO 10 con minimo=false.
+    [Fact]
+    public async Task Antes_de_lanzar_las_fuentes_de_persona_marcan_minimo()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var (cliente, id) = await LoteAsync(api, new ConfiguracionEmpresa
+        {
+            FuentesHabilitadas = [Fuente.Runt, Fuente.SimitVehiculo, Fuente.SimitPropietario],
+            EstimadoConsultas = EstimadoConsultas.AntesDeLanzar,
+        }, ct, porVehiculo: ["RUNT", "SIMIT_VEHICULO"], porPropietario: ["SIMIT_PROPIETARIO"]);
+
+        var respuesta = await SubirAsync(cliente, id, Csv(Placas(10)), "diez.csv", ct);
+
+        var texto = await respuesta.Content.ReadAsStringAsync(ct);
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK, texto);
+        JsonDocument.Parse(texto).RootElement.GetProperty("estimado_consultas").EnumerateArray()
+            .Select(e => $"{e.GetProperty("fuente").GetString()} {e.GetProperty("consultas").GetInt32()} {e.GetProperty("minimo").GetBoolean()}")
+            .Should().Equal(["RUNT 10 False", "SIMIT_VEHICULO 10 False", "SIMIT_PROPIETARIO 10 True"]);
+    }
+
     // Escenario 11 (F02-C15, meta supuesta pendiente del PO) — 500 filas en menos de 5 s.
     [Fact]
     public async Task Quinientas_filas_se_analizan_en_menos_de_5_segundos()
@@ -407,13 +430,13 @@ public sealed class CargaEndpointsTests
     /// <summary>Siembra la configuración de la compañía y crea una cabecera SIMPLE en CREADO con RUNT (y el locatario dado).</summary>
     private static async Task<(HttpClient Cliente, Guid Id)> LoteAsync(
         ApiDePrueba api, ConfiguracionEmpresa configuracion, CancellationToken ct, EmpresaDePrueba? empresa = null, string[]? porLocatario = null,
-        bool crearConfiguracion = true)
+        bool crearConfiguracion = true, string[]? porVehiculo = null, string[]? porPropietario = null)
     {
         empresa ??= DosEmpresas.En(api).A;
         if (crearConfiguracion)
             await SembrarAsync(empresa, configuracion, ct);
         var cliente = api.Cliente(Cabeceras.TokenUsuario(api, empresa.Id));
-        var creada = await cliente.PostAsync(Cabeceras.Ruta, Cuerpo(Cabeceras.Json("Lote de carga", "SIMPLE", null, ["RUNT"], porLocatario: porLocatario)), ct);
+        var creada = await cliente.PostAsync(Cabeceras.Ruta, Cuerpo(Cabeceras.Json("Lote de carga", "SIMPLE", null, porVehiculo ?? ["RUNT"], porPropietario, porLocatario)), ct);
         creada.StatusCode.Should().Be(HttpStatusCode.Created, await creada.Content.ReadAsStringAsync(ct));
         return (cliente, (await creada.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("id").GetGuid());
     }

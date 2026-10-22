@@ -73,7 +73,7 @@ internal static class AnalizadorCarga
 
         var estimado = parametros.MostrarEstimado
             ? EstimadorConsultas.Estimar(parametros.Alcance, filas.Where(f => f.Dto.Valida).Select(f => new VehiculoAEstimar(true, f.ConDocumento)))
-                .Select(e => new EstimadoFuenteDto(CodigosDeEnum.Codigo(e.Fuente), e.Consultas)).ToList()
+                .Select(EstimadoFuenteDto.De).ToList()
             : null;
 
         return new ResumenValidacionDto(

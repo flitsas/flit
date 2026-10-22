@@ -8,6 +8,9 @@ namespace Flit.Diagnostico.Tests.Dominio;
 /// <summary>
 /// HU #13747 (F01-H3, R-11) — el estimado de consultas por fuente es «vehículos válidos menos N/A previsibles», en número de
 /// consultas y nunca en pesos. En D1 los N/A previsibles son RUNT_LOCATARIO y SIMIT_LOCATARIO sin documento de locatario.
+/// HU #13796 (F05-H7, F05-C13, Q7) — las fuentes de persona (RUNT_/SIMIT_ PROPIETARIO y LOCATARIO) cuentan una consulta por
+/// persona: antes de lanzar, sin personas conocidas, son un mínimo de uno por vehículo (<c>Minimo=true</c>); al finalizar,
+/// las personas registradas por rol.
 /// </summary>
 /// <example>
 /// <code>
@@ -39,28 +42,29 @@ public sealed class EstimadorConsultasTests
     {
         var estimado = EstimadorConsultas.Estimar([fuente, Fuente.Runt], Lote(conLocatario: 6, sinLocatario: 4));
 
-        estimado.Should().Equal(new EstimadoPorFuente(fuente, 6), new EstimadoPorFuente(Fuente.Runt, 10));
+        // #13796: las de locatario son fuentes de persona y, sin personas conocidas, el número es un mínimo.
+        estimado.Should().Equal(new EstimadoPorFuente(fuente, 6, Minimo: true), new EstimadoPorFuente(Fuente.Runt, 10));
     }
 
-    // Las fuentes que no son de locatario no restan N/A en D1.
+    // Las fuentes que no son de locatario no restan N/A en D1. Las de propietario son de persona: mínimo (#13796).
     [Theory]
-    [InlineData(Fuente.Runt)]
-    [InlineData(Fuente.RuntPropietario)]
-    [InlineData(Fuente.SimitVehiculo)]
-    [InlineData(Fuente.SimitPropietario)]
-    [InlineData(Fuente.Avaluo)]
-    [InlineData(Fuente.ImpuestoDepartamental)]
-    public void Las_fuentes_que_no_son_de_locatario_cuentan_todos_los_validos(Fuente fuente)
+    [InlineData(Fuente.Runt, false)]
+    [InlineData(Fuente.RuntPropietario, true)]
+    [InlineData(Fuente.SimitVehiculo, false)]
+    [InlineData(Fuente.SimitPropietario, true)]
+    [InlineData(Fuente.Avaluo, false)]
+    [InlineData(Fuente.ImpuestoDepartamental, false)]
+    public void Las_fuentes_que_no_son_de_locatario_cuentan_todos_los_validos(Fuente fuente, bool minimo)
     {
         EstimadorConsultas.Estimar([fuente], Lote(conLocatario: 6, sinLocatario: 4))
-            .Should().Equal(new EstimadoPorFuente(fuente, 10));
+            .Should().Equal(new EstimadoPorFuente(fuente, 10, minimo));
     }
 
     [Fact]
     public void Los_vehiculos_invalidos_no_cuentan_en_ninguna_fuente()
     {
         EstimadorConsultas.Estimar([Fuente.Runt, Fuente.RuntLocatario], Lote(conLocatario: 2, sinLocatario: 1, invalidos: 5))
-            .Should().Equal(new EstimadoPorFuente(Fuente.Runt, 3), new EstimadoPorFuente(Fuente.RuntLocatario, 2));
+            .Should().Equal(new EstimadoPorFuente(Fuente.Runt, 3), new EstimadoPorFuente(Fuente.RuntLocatario, 2, Minimo: true));
     }
 
     [Fact]
@@ -83,7 +87,7 @@ public sealed class EstimadorConsultasTests
         EstimadorConsultas.Estimar([], Lote(conLocatario: 1, sinLocatario: 1)).Should().BeEmpty();
     }
 
-    // Contrato: el resultado no expone montos, solo la fuente y el número de consultas.
+    // Contrato: el resultado no expone montos, solo la fuente, el número de consultas y si es un mínimo (#13796).
     [Fact]
     public void El_resultado_no_expone_montos_solo_fuente_y_numero_de_consultas()
     {
@@ -93,7 +97,60 @@ public sealed class EstimadorConsultasTests
         {
             [nameof(EstimadoPorFuente.Fuente)] = typeof(Fuente),
             [nameof(EstimadoPorFuente.Consultas)] = typeof(int),
+            [nameof(EstimadoPorFuente.Minimo)] = typeof(bool),
         });
+    }
+
+    // HU #13796 AC1 (F05-C13, Q7) — antes de lanzar las personas no se conocen: las fuentes de persona son un mínimo de uno
+    // por vehículo (locatario: uno por vehículo con documento declarado) con Minimo=true; las del vehículo, sin esa marca.
+    [Fact]
+    public void Antes_de_lanzar_fuentes_de_persona_son_minimo_uno_por_vehiculo()
+    {
+        Fuente[] alcance = [Fuente.SimitVehiculo, Fuente.SimitPropietario, Fuente.RuntPropietario, Fuente.RuntLocatario, Fuente.SimitLocatario];
+
+        EstimadorConsultas.Estimar(alcance, Lote(conLocatario: 4, sinLocatario: 6)).Should().Equal(
+            new EstimadoPorFuente(Fuente.SimitVehiculo, 10),
+            new EstimadoPorFuente(Fuente.SimitPropietario, 10, Minimo: true),
+            new EstimadoPorFuente(Fuente.RuntPropietario, 10, Minimo: true),
+            new EstimadoPorFuente(Fuente.RuntLocatario, 4, Minimo: true),
+            new EstimadoPorFuente(Fuente.SimitLocatario, 4, Minimo: true));
+    }
+
+    // HU #13796 AC2 (F05-C13) — al finalizar, con las personas registradas, las fuentes de persona cuentan una consulta por
+    // persona del rol (un vehículo de tres propietarios suma 3) y ya no son un mínimo.
+    [Fact]
+    public void Al_finalizar_cuenta_las_personas_por_rol()
+    {
+        VehiculoAEstimar[] vehiculos =
+        [
+            new(true, false, new PersonasRegistradas(Propietarios: 3, Locatarios: 0)),
+            new(true, true, new PersonasRegistradas(Propietarios: 1, Locatarios: 2)),
+            new(false, true, new PersonasRegistradas(Propietarios: 9, Locatarios: 9)),
+        ];
+
+        EstimadorConsultas.Estimar([Fuente.Runt, Fuente.RuntPropietario, Fuente.SimitPropietario, Fuente.RuntLocatario, Fuente.SimitLocatario], vehiculos)
+            .Should().Equal(
+                new EstimadoPorFuente(Fuente.Runt, 2),
+                new EstimadoPorFuente(Fuente.RuntPropietario, 4),
+                new EstimadoPorFuente(Fuente.SimitPropietario, 4),
+                new EstimadoPorFuente(Fuente.RuntLocatario, 2),
+                new EstimadoPorFuente(Fuente.SimitLocatario, 2));
+    }
+
+    // HU #13796 — un vehículo sin personas registradas (lote anterior a D3 o RUNT sin respuesta) conserva el mínimo de uno
+    // por vehículo, y la fuente sigue marcada como mínimo.
+    [Fact]
+    public void Al_finalizar_un_vehiculo_sin_personas_registradas_conserva_el_minimo()
+    {
+        VehiculoAEstimar[] vehiculos =
+        [
+            new(true, false, new PersonasRegistradas(Propietarios: 3, Locatarios: 0)),
+            new(true, true),
+        ];
+
+        EstimadorConsultas.Estimar([Fuente.RuntPropietario, Fuente.RuntLocatario], vehiculos).Should().Equal(
+            new EstimadoPorFuente(Fuente.RuntPropietario, 4, Minimo: true),
+            new EstimadoPorFuente(Fuente.RuntLocatario, 1, Minimo: true));
     }
 
     [Fact]
