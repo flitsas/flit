@@ -23,7 +23,8 @@ public sealed partial class CreateInvitationHandler(
         CreateInvitationCommand command,
         CancellationToken cancellationToken)
     {
-        var email = command.Email?.Trim() ?? string.Empty;
+        // HU #13810 — se valida y se guarda la forma canónica (sin espacios, en minúsculas).
+        var email = EmailNormalizer.Normalize(command.Email);
 
         // AC5 — seleccionar al menos un rol es OBLIGATORIO al invitar (ya no se permite
         // "sin rol asignado").

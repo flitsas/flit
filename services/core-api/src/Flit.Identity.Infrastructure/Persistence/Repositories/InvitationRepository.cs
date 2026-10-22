@@ -12,8 +12,12 @@ public sealed class InvitationRepository(IIdentityDb db) : IInvitationRepository
             x => x.TenantId == tenantId && x.Email == email && x.Status == "pending",
             cancellationToken);
 
-    public Task<bool> UserExistsWithEmailAsync(string email, CancellationToken cancellationToken) =>
-        db.Users.AnyAsync(u => u.Email == email && u.DeletedAt == null, cancellationToken);
+    public Task<bool> UserExistsWithEmailAsync(string email, CancellationToken cancellationToken)
+    {
+        // HU #13810: la base solo guarda la forma canónica (DDL 149); se compara contra ella.
+        var normalizedEmail = EmailNormalizer.Normalize(email);
+        return db.Users.AnyAsync(u => u.Email == normalizedEmail && u.DeletedAt == null, cancellationToken);
+    }
 
     public Task<bool> RoleExistsInTenantAsync(Guid tenantId, Guid roleId, CancellationToken cancellationToken)
     {

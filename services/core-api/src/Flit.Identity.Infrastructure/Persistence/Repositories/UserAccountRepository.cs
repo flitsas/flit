@@ -7,13 +7,13 @@ public sealed class UserAccountRepository(IIdentityDb db) : IUserAccountReposito
 {
     public async Task<PasswordRecoveryUser?> FindActiveByEmailAsync(string email, CancellationToken cancellationToken)
     {
-        var normalizedEmail = email.Trim().ToLowerInvariant();
+        var normalizedEmail = EmailNormalizer.Normalize(email);
 
         var user = await db.Users
             .AsNoTracking()
             .Where(u => u.DeletedAt == null
                         && u.Status == "active"
-                        && EF.Functions.ILike(u.Email, normalizedEmail))
+                        && u.Email == normalizedEmail)
             .Select(u => new { u.Id, u.Email, u.DisplayName })
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -33,13 +33,13 @@ public sealed class UserAccountRepository(IIdentityDb db) : IUserAccountReposito
 
     public async Task<AdminTargetUser?> FindActiveTargetByEmailAsync(string email, CancellationToken cancellationToken)
     {
-        var normalizedEmail = email.Trim().ToLowerInvariant();
+        var normalizedEmail = EmailNormalizer.Normalize(email);
 
         var user = await db.Users
             .AsNoTracking()
             .Where(u => u.DeletedAt == null
                         && u.Status == "active"
-                        && EF.Functions.ILike(u.Email, normalizedEmail))
+                        && u.Email == normalizedEmail)
             .Select(u => new { u.Id, u.Email, u.DisplayName })
             .FirstOrDefaultAsync(cancellationToken);
 
