@@ -331,6 +331,10 @@ public sealed class FuentesComparendosTests : IAsyncLifetime
     [InlineData("05/03/2025", "2025-03-05")]
     [InlineData("2025-03-05 00:00:00.0", "2025-03-05")]
     [InlineData("31 de Febrero de 2025", null)]
+    [InlineData("01/01/2000", null)]
+    [InlineData("2000-01-01T00:00:00", null)]
+    [InlineData("1 de Enero de 2000", null)]
+    [InlineData("02/01/2000", "2000-01-02")]
     [InlineData("ayer", null)]
     public void S9_FechasDeLasFuentes(string texto, string? esperada) => Fuente.Fecha(texto).Should().Be(esperada);
 

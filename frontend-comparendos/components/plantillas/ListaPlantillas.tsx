@@ -4,7 +4,7 @@ import { useState } from "react";
 import { DataTable, StatusBadge } from "@flit/ui";
 import { ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
 import { apiFetch } from "@/lib/api";
-import { opciones, TIPO_PLANTILLA } from "@/lib/etiquetas";
+import { opciones, TIPO_PLANTILLA, TIPOS_PLANTILLA_SIN_USO } from "@/lib/etiquetas";
 import { formatoFecha } from "@/lib/format/date";
 import type { PlantillaResumen } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
@@ -32,7 +32,7 @@ export function ListaPlantillas({ onElegir, recarga = 0 }: { onElegir: (p: Plant
           Tipo
           <select className={INPUT_CLS} value={tipo} onChange={(e) => setTipo(e.target.value)}>
             <option value="">Todos</option>
-            {opciones(TIPO_PLANTILLA).map((o) => (
+            {opciones(TIPO_PLANTILLA).filter((o) => !TIPOS_PLANTILLA_SIN_USO.has(o.valor)).map((o) => (
               <option key={o.valor} value={o.valor}>
                 {o.texto}
               </option>
