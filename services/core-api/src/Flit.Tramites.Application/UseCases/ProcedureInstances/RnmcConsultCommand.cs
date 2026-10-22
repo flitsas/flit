@@ -62,12 +62,12 @@ public sealed class RunRnmcConsultHandler(
         if (rnmcApplies)
         {
             var comprador = ActorOf(instance, "comprador");
-            await RunRnmcForActorAsync(checks, "comprador", comprador, fieldValues, ct);
+            await RunRnmcForActorAsync(checks, "comprador", comprador, instance.Id, tenantId, fieldValues, ct);
 
             if (modalidad == ProcedureFamily.Traspaso)
             {
                 var vendedor = ActorOf(instance, "vendedor");
-                await RunRnmcForActorAsync(checks, "vendedor", vendedor, fieldValues, ct);
+                await RunRnmcForActorAsync(checks, "vendedor", vendedor, instance.Id, tenantId, fieldValues, ct);
             }
         }
 
@@ -92,6 +92,8 @@ public sealed class RunRnmcConsultHandler(
         List<PreflightCheckDto> checks,
         string role,
         ActorRef? actor,
+        Guid instanceId,
+        Guid tenantId,
         Dictionary<string, string?> fieldValues,
         CancellationToken ct)
     {
@@ -116,7 +118,8 @@ public sealed class RunRnmcConsultHandler(
 
         try
         {
-            var ctx = new ConsultationContext(Guid.Empty, Guid.Empty, provider.Key, fv);
+            // Tras HU #13348 RNMC va a core-consultas: TenantId vacío → InvalidArgument (x-flit-tenant-id).
+            var ctx = new ConsultationContext(instanceId, tenantId, provider.Key, fv);
             var result = await provider.ConsultAsync(ctx, ct);
             foreach (var c in result.Checks)
                 checks.Add(new PreflightCheckDto($"{keyPrefix}_{c.Key}", c.Label, c.Status, c.Source, c.Message));
