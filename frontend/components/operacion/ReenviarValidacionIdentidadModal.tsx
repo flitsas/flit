@@ -128,8 +128,18 @@ function SecondaryButton({
   );
 }
 
+/**
+ * Kyverum devuelve una URL absoluta, pero el proveedor simulado (y el enlace propio de FLIT) devuelve una
+ * ruta relativa (`/api/v1/public/biometric/{token}`): copiada así no le sirve a quien la recibe por chat o
+ * correo. Se completa con el origen de la app, que es el que sirve esa ruta.
+ */
+export function enlaceAbsoluto(url: string): string {
+  if (/^https?:\/\//i.test(url) || typeof window === 'undefined') return url;
+  return new URL(url, window.location.origin).toString();
+}
+
 function CopiarEnlace({
-  url,
+  url: urlOriginal,
   copiado,
   onCopiar,
 }: {
@@ -137,8 +147,20 @@ function CopiarEnlace({
   copiado: boolean | null;
   onCopiar: (url: string) => void;
 }) {
+  const url = enlaceAbsoluto(urlOriginal);
   return (
-    <div className="flex items-center gap-3">
+    <div className="space-y-1">
+      {/* Mismo patrón que el panel de éxito de la prevalidación: el enlace se ve completo y se puede abrir. */}
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Abrir enlace de captura"
+        className="block break-all text-xs text-flit-brand underline-offset-2 hover:underline"
+      >
+        {url}
+      </a>
+      <div className="flex items-center gap-3">
       <button type="button" onClick={() => onCopiar(url)} className={LINK_BTN_CLS}>
         <Copy className="h-3.5 w-3.5" aria-hidden="true" />
         Copiar enlace
@@ -147,6 +169,7 @@ function CopiarEnlace({
         {copiado === true ? <span style={{ color: GREEN }}>Enlace copiado.</span> : null}
         {copiado === false ? <span style={{ color: RED }}>No se pudo copiar el enlace.</span> : null}
       </span>
+      </div>
     </div>
   );
 }
