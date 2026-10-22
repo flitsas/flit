@@ -1728,7 +1728,6 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnName("nombres");
 
                     b.Property<string>("NumeroDocumento")
-                        .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("numero_documento");
@@ -1759,7 +1758,6 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnName("tipo_contrato");
 
                     b.Property<string>("TipoDocumento")
-                        .IsRequired()
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)")
                         .HasColumnName("tipo_documento");
@@ -2497,6 +2495,10 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     b.Property<Guid?>("ActualizadoPor")
                         .HasColumnType("uuid")
                         .HasColumnName("actualizado_por");
+
+                    b.Property<bool>("ConsultaContratoApi")
+                        .HasColumnType("boolean")
+                        .HasColumnName("consulta_contrato_api");
 
                     b.Property<DateTimeOffset>("CreadoEn")
                         .HasColumnType("timestamp with time zone")

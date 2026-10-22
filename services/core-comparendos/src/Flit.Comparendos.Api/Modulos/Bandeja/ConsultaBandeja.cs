@@ -279,6 +279,7 @@ public sealed class ConsultaBandeja(ComparendosDb db, CalendarioService calendar
             "SinContraventor" => q.Where(c => c.Activo && c.Contraventor == null
                 && (db.ConfiguracionesEmpresa.Any(e => e.TenantId == c.TenantId && e.TipoIntegracionConductor == TipoIntegracionConductor.Manual)
                     || !db.ConfiguracionesEmpresa.Any(e => e.TenantId == c.TenantId)
+                    || c.EstadoConsultaContraventor == EstadoConsultaContraventor.NoAplica
                     || c.EstadoConsultaContraventor == EstadoConsultaContraventor.NoEncontrado
                     || c.EstadoConsultaContraventor == EstadoConsultaContraventor.Error)),
             "RechazadosOt" => q.Where(c => c.Activo && c.EstadoCambioContraventor == EstadoCambioContraventor.RechazadoOt),

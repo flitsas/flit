@@ -413,14 +413,12 @@ public sealed class ServicioOcr(
             FuentePrincipal = null,
             ArchivoEvidenciaId = doc.ArchivoId,
             EstadoCambioContraventor = config.AllowsContravenerChange ? EstadoCambioContraventor.SinSolicitar : EstadoCambioContraventor.NoAplica,
-            EstadoConsultaContraventor = config.TipoIntegracionConductor == TipoIntegracionConductor.ApiRenting && config.AllowsContravenerConsultation
-                ? EstadoConsultaContraventor.Pendiente
-                : EstadoConsultaContraventor.NoAplica,
             CreadoEn = ahora,
             UltimoEventoEn = ahora,
         };
         Reconciliador.AplicarCampos(c, item);
         await AsociarMonitoreoAsync(c, ct).ConfigureAwait(false);
+        c.EstadoConsultaContraventor = await Contraventor.ConsultaPorApi.EstadoInicialAsync(db, config, c, ct).ConfigureAwait(false);
         c.OrganismoTransitoId = await mapeador.MapearAsync(item.Secretaria, ct, c.NumeroNormalizado).ConfigureAwait(false);
         Plazos.Recalcular(c, await calendario.MotorAsync(ct).ConfigureAwait(false), ahora);
         db.Comparendos.Add(c);
@@ -452,12 +450,8 @@ public sealed class ServicioOcr(
     /// </summary>
     private async Task AsociarMonitoreoAsync(Comparendo c, CancellationToken ct)
     {
-        if (Nit.Separar(c.NumeroDocumentoInfractor)?.Base is { } numero)
+        if (Contraventor.ConsultaPorApi.CandidatosNit(c.NumeroDocumentoInfractor) is { Count: > 0 } candidatos)
         {
-            // El dígito de verificación a veces viene pegado («8110117798»): si el último es el DV correcto, también vale sin él.
-            var candidatos = new List<string> { numero };
-            if (numero.Length > 1 && Nit.DigitoVerificacion(numero[..^1]) == numero[^1] - '0')
-                candidatos.Add(numero[..^1]);
             var nit = await db.IdentificacionesMonitoreadas.AsNoTracking()
                 .Where(n => n.TenantId == c.TenantId && n.Activo && candidatos.Contains(n.NumeroBase))
                 .OrderBy(n => n.TipoDocumento == c.TipoDocumentoInfractor ? 0 : 1)

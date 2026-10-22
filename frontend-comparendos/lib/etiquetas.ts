@@ -209,6 +209,12 @@ export const TIPO_PLANTILLA: Record<string, string> = {
   CorreoReporteMensual: "Correo: reporte mensual",
 };
 
+/**
+ * HU #13786 (B14-2): tipos que existen en el modelo pero no tienen plantilla ni los usa el código (esos correos se arman
+ * fijos). No se ofrecen en el filtro de plantillas.
+ */
+export const TIPOS_PLANTILLA_SIN_USO = new Set(["CorreoAlertaFallo", "CorreoReporteSemanal", "CorreoReporteMensual"]);
+
 /** Las plantillas de correo se ven como HTML; las demás son documentos PDF. */
 export const esPlantillaDeCorreo = (tipo: string) => tipo.startsWith("Correo");
 

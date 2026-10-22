@@ -720,7 +720,10 @@ export function TramiteDetalleModal({
                       // Bug #12376, defecto 4 — la reasignación de gestor no es un cambio de estado,
                       // pero sí pertenece al historial general del trámite. HU #12575 (AC2) — la
                       // solicitud de revocatoria tampoco cambia el status principal (ADR-0022) y se
-                      // agrega aquí por la misma razón. `mergeTimelineNodesByTimestamp` (y no un simple
+                      // agrega aquí por la misma razón. Bug #13780 — la decisión (aprobada o
+                      // rechazada) tampoco cambia el estado cuando el organismo rechaza, y el
+                      // mapper ya sabe pintarla: sin estos dos tipos el rechazo no aparecía en
+                      // esta línea de tiempo. `mergeTimelineNodesByTimestamp` (y no un simple
                       // spread) porque concatenar dos listas ya ordenadas NO ordena la unión: una
                       // solicitud de revocatoria ocurre siempre ANTES de que el status pase a
                       // 'revocado', pero como es un evento aparte vivía en la segunda lista y salía
@@ -729,7 +732,11 @@ export function TramiteDetalleModal({
                         mapStatusHistoryToTimelineNodes(detail?.statusHistory ?? []),
                         mapEventsToTimelineNodes(
                           (detail?.events ?? []).filter(
-                            (e) => e.tipo === 'reasignar_gestor_admin' || e.tipo === 'revocatoria_solicitada',
+                            (e) =>
+                              e.tipo === 'reasignar_gestor_admin' ||
+                              e.tipo === 'revocatoria_solicitada' ||
+                              e.tipo === 'revocatoria_aprobada' ||
+                              e.tipo === 'revocatoria_rechazada',
                           ),
                         ),
                       )}

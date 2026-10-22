@@ -37,21 +37,21 @@ vi.mock('@/lib/api/tramites-client', () => ({
 
 const client = vi.mocked(tramitesClient);
 
-// CF-06 (HU #10881) — «Omitir prenda» no puede convivir con un organismo que exige el certificado:
-// con el override activo, elegir `omitir` satisfacía los dos gates y dejaba la regla del OT evadible
-// (Feature #13110: la excepción de Matrícula Inicial la resuelve el servidor con `prendaOmitAllowed`).
-describe('traspasoDecisions — "omitir" y el override del organismo', () => {
-  it('no ofrece "omitir" cuando el OT exige el certificado de prenda', () => {
-    expect(traspasoDecisions(true)).not.toContain('omitir');
+// HU #13778 — «Omitir prenda» lo decide solo el servidor (`prendaOmitAllowed`): CF-06 (HU #10881)
+// ya no aplica y la política del OT (certificado obligatorio u opcional) no interviene.
+describe('traspasoDecisions — "omitir" según prendaOmitAllowed', () => {
+  it('no ofrece "omitir" sin prendaOmitAllowed=true', () => {
+    expect(traspasoDecisions(false)).not.toContain('omitir');
+    expect(traspasoDecisions()).not.toContain('omitir');
   });
 
-  it('con el opt-out del OT vigente, "omitir" sigue disponible', () => {
-    expect(traspasoDecisions(false)).toContain('omitir');
+  it('con prendaOmitAllowed=true, "omitir" está disponible', () => {
+    expect(traspasoDecisions(true)).toContain('omitir');
   });
 
   it('las decisiones que gestionan la prenda se ofrecen en ambos casos', () => {
-    for (const documentRequired of [true, false]) {
-      expect(traspasoDecisions(documentRequired)).toEqual(
+    for (const omitAllowed of [true, false, undefined]) {
+      expect(traspasoDecisions(omitAllowed)).toEqual(
         expect.arrayContaining(['solicitar', 'registrar', 'levantar']),
       );
     }
@@ -521,7 +521,7 @@ describe('PrendaForm — validación de acreedor obligatorio (HU #11594)', () =>
       <PrendaForm
         instanceId="abc"
         modalidad="traspaso"
-        decisions={traspasoDecisions(false)}
+        decisions={traspasoDecisions(true)}
         embeddedInWizard
       />,
     );
@@ -541,7 +541,7 @@ describe('PrendaForm — validación de acreedor obligatorio (HU #11594)', () =>
         ref={ref}
         instanceId="abc"
         modalidad="traspaso"
-        decisions={traspasoDecisions(false)}
+        decisions={traspasoDecisions(true)}
         embeddedInWizard
       />,
     );
@@ -1443,7 +1443,7 @@ describe('PrendaForm — acción complementaria (ADR-0055, HU #12130)', () => {
 
 // HU #13112 (Feature #13110) — «Omitir prenda» con ayuda y acreedor deshabilitado.
 // Uso de ejemplo: <PrendaForm instanceId="i" omitAllowed /> en matrícula ofrece
-// registrar / sin prenda / omitir; en traspaso la lista la resuelve traspasoDecisions(doc, omitAllowed).
+// registrar / sin prenda / omitir; en traspaso la lista la resuelve traspasoDecisions(omitAllowed).
 describe('HU #13112 — Omitir prenda', () => {
   const AYUDA =
     'La prenda seguirá vigente en el RUNT. El trámite se radicará sin inscribirla ni levantarla.';
@@ -1492,13 +1492,13 @@ describe('HU #13112 — Omitir prenda', () => {
   });
 
   it('AC2 — traspaso con omitAllowed=false no ofrece «Omitir prenda» aunque el OT tenga el certificado opcional', async () => {
-    expect(traspasoDecisions(false, false)).not.toContain('omitir');
+    expect(traspasoDecisions(false)).not.toContain('omitir');
     render(
       <PrendaForm
         instanceId="t1"
         modalidad="traspaso"
         documentRequired={false}
-        decisions={traspasoDecisions(false, false)}
+        decisions={traspasoDecisions(false)}
         omitAllowed={false}
       />,
     );
@@ -1508,13 +1508,12 @@ describe('HU #13112 — Omitir prenda', () => {
     expect(screen.queryByRole('option', { name: 'Omitir prenda' })).not.toBeInTheDocument();
   });
 
-  it('AC2 — con omitAllowed=true el servidor manda sobre documentRequired en traspaso', () => {
-    expect(traspasoDecisions(true, true)).toContain('omitir');
+  it('AC2 — con omitAllowed=true el servidor manda en traspaso', () => {
+    expect(traspasoDecisions(true)).toContain('omitir');
   });
 
-  it('AC3 — omitAllowed undefined: traspaso aplica !documentRequired (comportamiento de develop)', () => {
-    expect(traspasoDecisions(true, undefined)).not.toContain('omitir');
-    expect(traspasoDecisions(false, undefined)).toContain('omitir');
+  it('AC3 (invertido por HU #13778) — omitAllowed undefined: traspaso NO ofrece omitir, sin fallback a la política', () => {
+    expect(traspasoDecisions(undefined)).not.toContain('omitir');
   });
 
   it('AC3 — omitAllowed undefined: matrícula no ofrece «Omitir prenda»', async () => {
@@ -1546,7 +1545,7 @@ describe('HU #13112 — Omitir prenda', () => {
         instanceId="t1"
         modalidad="traspaso"
         documentRequired={false}
-        decisions={traspasoDecisions(false, true)}
+        decisions={traspasoDecisions(true)}
       />,
     );
     await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
@@ -1696,7 +1695,7 @@ describe('HU #13112 — Omitir prenda', () => {
         instanceId="t1"
         modalidad="traspaso"
         documentRequired={false}
-        decisions={traspasoDecisions(false, true)}
+        decisions={traspasoDecisions(true)}
       />,
     );
     await waitFor(() => expect(client.getInstance).toHaveBeenCalled());
@@ -1873,7 +1872,7 @@ describe('Bug #13203 — garantía mobiliaria con shape crudo del RUNT (entidad/
 // Bug #13240 — cambiar a una decisión que ya no exige documento dejaba el PDF de prenda en el
 // trámite. El servidor lo retira al guardar (PUT prenda); el formulario debe (1) releer los adjuntos
 // tras guardar para que el retirado desaparezca sin recargar y (2) avisar ANTES de guardar.
-// Uso de ejemplo: <PrendaForm ref={ref} instanceId="abc" decisions={traspasoDecisions(false)} />
+// Uso de ejemplo: <PrendaForm ref={ref} instanceId="abc" decisions={traspasoDecisions(true)} />
 describe('Bug #13240 — adjuntos de prenda de la decisión anterior', () => {
   const AVISO = 'Al guardar, se retirará el documento de prenda adjuntado para la decisión anterior.';
   const adjunto = (tipo: string) => ({
@@ -1906,7 +1905,7 @@ describe('Bug #13240 — adjuntos de prenda de la decisión anterior', () => {
   const renderTraspaso = () => {
     const ref = createRef<PrendaFormHandle>();
     render(
-      <PrendaForm ref={ref} instanceId="abc" decisions={traspasoDecisions(false)} embeddedInWizard />,
+      <PrendaForm ref={ref} instanceId="abc" decisions={traspasoDecisions(true)} embeddedInWizard />,
     );
     return ref;
   };

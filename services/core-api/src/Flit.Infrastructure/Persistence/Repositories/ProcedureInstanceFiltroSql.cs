@@ -329,6 +329,8 @@ internal static class ProcedureInstanceFiltroSql
     private const string RuntPrendasKey = RuntGravamenSignal.PrendasKey;
     private const string RuntGravamenesKey = RuntGravamenSignal.GravamenesKey;
     private const string RuntDetalleKey = RuntGravamenSignal.DetalleKey;
+    private const string RuntPrendarioKey = RuntGravamenSignal.PrendarioKey;
+    private const string RuntLimitacionesKey = RuntGravamenSignal.LimitacionesKey;
 
     /// <summary>
     /// Bug #13445 — <c>runt_gravamenes</c> que NO cuentan como garantía en SQL: el array vacío que
@@ -364,6 +366,11 @@ internal static class ProcedureInstanceFiltroSql
     /// un array con ítems vacíos (<c>[{}]</c>) o un <c>value_text</c> ilegible, donde el SQL marca y
     /// el ícono no. La comparación de clave es exacta (las claves se escriben con las constantes de
     /// <see cref="RuntGravamenSignal"/>), mientras el dominio la hace sin distinguir mayúsculas.</para>
+    ///
+    /// <para>HU #13776 — la señal única suma el dato prendario (<c>runt_prendario</c>, bandera EXACTA como
+    /// las otras dos) y las limitaciones a la propiedad (<c>runt_limitaciones_propiedad</c>, con la MISMA
+    /// aproximación que el detalle: los mappers escriben <c>[]</c> sin limitaciones; un array de elementos
+    /// vacíos marca en SQL y no en el ícono).</para>
     /// </remarks>
     // CA1866 pide StartsWith(char), pero Npgsql 10 NO traduce esa sobrecarga (el filtro devolvía 500,
     // Bug #13445 revisión DB H1). Esto es un árbol de expresión que se traduce a SQL, no código que se
@@ -376,10 +383,10 @@ internal static class ProcedureInstanceFiltroSql
                 && p.Decision != PrendaDecision.SinPrenda
                 && p.Decision != PrendaDecision.Omitir)
             || x.FieldValues.Any(fv =>
-                ((fv.FieldKey == RuntPrendasKey || fv.FieldKey == RuntGravamenesKey)
+                ((fv.FieldKey == RuntPrendasKey || fv.FieldKey == RuntGravamenesKey || fv.FieldKey == RuntPrendarioKey)
                     && fv.ValueText != null
                     && RuntValoresAfirmativos.Contains(fv.ValueText.Trim().ToUpper()))
-                || (fv.FieldKey == RuntDetalleKey
+                || ((fv.FieldKey == RuntDetalleKey || fv.FieldKey == RuntLimitacionesKey)
                     && ((fv.ValueJson != null
                             && fv.ValueJson != RuntDetalleArrayVacio
                             && fv.ValueJson != RuntDetalleObjetoVacio

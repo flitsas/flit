@@ -174,9 +174,9 @@ public static class PrendaGate
     /// para impedir. <c>prenda_decision_requerida</c> es accionable y satisfacible (tomar la decisión
     /// siempre está a mano), a diferencia del documento imposible que motivó el cambio de arriba.</para>
     ///
-    /// <para>Y si un OT necesita el certificado sí o sí ante un gravamen, lo que corresponde es no
-    /// ofrecer <c>omitir</c> en ese trámite —decidirlo al elegir—, no aceptar la elección y bloquear
-    /// después con una exigencia imposible.</para>
+    /// <para>HU #13777 (Bug #13768) — <c>omitir</c> se admite en todo tipo con dimensión de prenda,
+    /// también con el OT que exige el certificado: este override no lo bloquea (no pide documento), y
+    /// la elección ya no se restringe por la política del OT al registrarla.</para>
     /// </summary>
     public static string? EvaluateOtOverride(
         bool otRequiereDocumentoPrenda,

@@ -19,6 +19,10 @@ service FuentesComparendosService {
 
   // Proveedores conocidos, los canales que atienden y si están conectados en este ambiente.
   rpc ListarProveedoresComparendos(ListarProveedoresComparendosRequest) returns (ListarProveedoresComparendosResponse);
+
+  // Conductor que tenía el vehículo en una fecha según la API de contratos de la gestora (HU #13712; hoy solo Renting).
+  // FAILED_PRECONDITION si el proveedor no está conectado en el ambiente; INVALID_ARGUMENT si falta la placa o la fecha.
+  rpc ConsultarContratoConductor(ConsultarContratoConductorRequest) returns (ConsultarContratoConductorResponse);
 }
 
 enum CanalComparendos {
@@ -128,4 +132,49 @@ message ProveedorComparendos {
   bool conectado = 4;
   // Por qué no está conectado (por ejemplo «falta el contrato de SmartCloud»).
   optional string motivo = 5;
+}
+
+message ConsultarContratoConductorRequest {
+  // Clave del proveedor de contratos: renting.
+  string proveedor = 1;
+  string placa = 2;
+  // Fecha de la infracción, AAAA-MM-DD.
+  string fecha = 3;
+  // Referencia opaca de quien consulta (por ejemplo el id del comparendo). Solo trazabilidad.
+  string referencia = 4;
+}
+
+enum ResultadoContratoConductor {
+  RESULTADO_CONTRATO_CONDUCTOR_UNSPECIFIED = 0;
+  RESULTADO_CONTRATO_CONDUCTOR_ENCONTRADO = 1;
+  // La API respondió bien y no hay contrato para la placa en esa fecha: se asigna a mano.
+  RESULTADO_CONTRATO_CONDUCTOR_NO_ENCONTRADO = 2;
+  // Todo lo demás: se reintenta, nunca se lee como «no encontrado».
+  RESULTADO_CONTRATO_CONDUCTOR_ERROR = 3;
+}
+
+// Lo que no trae la API va ausente. Tipo de documento como sigla (CC, CE, NIT, ...).
+message ConductorDeContrato {
+  optional string tipo_documento = 1;
+  optional string numero_documento = 2;
+  optional string nombres = 3;
+  optional string correo = 4;
+  optional string telefono = 5;
+  optional string direccion = 6;
+  optional string ciudad = 7;
+  optional string sucursal = 8;
+  optional string tipo_contrato = 9;
+}
+
+// Sin respuesta cruda a propósito: el contrato trae datos personales de clientes reales.
+message ConsultarContratoConductorResponse {
+  string proveedor = 1;
+  ResultadoContratoConductor resultado = 2;
+  ConductorDeContrato conductor = 3;
+  TipoErrorFuente tipo_error = 4;
+  optional string mensaje_error = 5;
+  optional int32 http_status = 6;
+  int32 duracion_ms = 7;
+  // El correo es el buzón de pruebas y no hay teléfono: el ambiente no tiene permitido el contacto real.
+  bool contacto_desviado = 8;
 }

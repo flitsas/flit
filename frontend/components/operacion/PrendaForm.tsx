@@ -111,19 +111,15 @@ const RUNT_SIN_GRAVAMEN_AVISO: Record<RuntAvisoGravamenVariant, { titulo: string
 };
 
 /**
- * Decisiones que ofrece el traspaso (R10, HU #10598).
+ * Decisiones que ofrece el selector (traspaso y todo tipo que entra por placa; R10, HU #10598).
  *
- * CF-06 (HU #10881): «Omitir prenda» desaparece cuando el organismo exige el certificado de prenda,
- * porque ahí no es una elección del gestor sino una regla del OT. Desde el Feature #13110 la regla
- * la resuelve el servidor (`prendaOmitAllowed`): `omitAllowed` la trae y manda. Si el servidor aún
- * no envía el campo (`undefined`), se aplica el criterio previo `!documentRequired` — solo
- * compatibilidad, se retira cuando el campo sea estable.
+ * HU #13778 (Feature #13110): «Omitir prenda» la decide solo el servidor (`prendaOmitAllowed`,
+ * `true` siempre que la decisión de prenda aplique). La política del OT —certificado obligatorio u
+ * opcional— ya no interviene: CF-06 (HU #10881) quedó retirado y sin el campo (`undefined`) o con
+ * `false` no se ofrece omitir.
  */
-export function traspasoDecisions(
-  documentRequired: boolean,
-  omitAllowed?: boolean,
-): PrendaDecision[] {
-  return (omitAllowed ?? !documentRequired)
+export function traspasoDecisions(omitAllowed?: boolean): PrendaDecision[] {
+  return omitAllowed === true
     ? ['solicitar', 'registrar', 'levantar', 'omitir']
     : ['solicitar', 'registrar', 'levantar'];
 }
@@ -164,6 +160,12 @@ interface Props {
    * informativa y, si no hay decisión guardada, sugiere "registrar" precargando acreedor/NIT.
    */
   runtHasGravamen?: boolean;
+  /**
+   * HU #13778 — señal única de gravamen del servidor (`runtReportaGravamen` del GET /wizard). Cuando
+   * llega, manda sobre `runtHasGravamen` (pre-vuelo) para el aviso y el resumen RUNT; ausente
+   * (`undefined`, servidor previo) se conserva el pre-vuelo.
+   */
+  runtReportaGravamen?: boolean;
   /** Mensaje opcional del check RUNT (detalle). */
   runtGravamenMessage?: string | null;
   /**
@@ -211,8 +213,9 @@ interface Props {
    */
   onDocumentGateChange?: (ready: boolean) => void;
   /**
-   * Feature #13110 — `prendaOmitAllowed` del GET /wizard. En matrícula (lista por defecto) ofrece
-   * «Omitir prenda» solo con `true`. En traspaso la lista ya llega resuelta por `traspasoDecisions`.
+   * Feature #13110 / HU #13778 — `prendaOmitAllowed` del GET /wizard. En matrícula (lista por
+   * defecto) ofrece «Omitir prenda» solo con `true`, sin importar `documentRequired`. En el selector
+   * la lista ya llega resuelta por `traspasoDecisions(omitAllowed)`.
    */
   omitAllowed?: boolean;
 }
@@ -313,17 +316,37 @@ export function runtGarantiaTieneDatos(item: RuntGravamenItem): boolean {
  * afirmativa o hay al menos una garantía con datos (el RUNT puede contestar «NO»/«NO» y traer la
  * garantía mobiliaria); si no, la bandera tal cual. Solo presentación: el field_value no cambia.
  */
-function senalRuntPrenda(bandera: string, hayGarantiaConDatos: boolean): string | null {
-  if (hayGarantiaConDatos || esBanderaRuntAfirmativa(bandera)) return 'SI';
+function senalRuntPrenda(
+  bandera: string,
+  hayGarantiaConDatos: boolean,
+  runtReportaGravamen = false,
+): string | null {
+  if (runtReportaGravamen || hayGarantiaConDatos || esBanderaRuntAfirmativa(bandera)) return 'SI';
   return bandera || null;
 }
 
-export function buildRuntPrendaSummary(fields: FieldValue[]): RuntPrendaSummary {
+/**
+ * Resumen RUNT del panel de prenda. HU #13778 (Bug #13768 punto 2): con `runtReportaGravamen` del
+ * servidor en `true` (prenda, gravamen, garantía RNGM, `runt_prendario` o limitaciones «a favor de»)
+ * «Tiene prendas» y «Tiene gravámenes» se muestran `SI` aunque las banderas digan otra cosa.
+ */
+export function buildRuntPrendaSummary(
+  fields: FieldValue[],
+  runtReportaGravamen = false,
+): RuntPrendaSummary {
   const items = parseRuntGravamenesJson(byJson(fields, 'runt_gravamenes'));
   const hayGarantiaConDatos = items.some(runtGarantiaTieneDatos);
   return {
-    tieneGravamenes: senalRuntPrenda(byKey(fields, 'runt_tiene_gravamenes'), hayGarantiaConDatos),
-    tienePrendas: senalRuntPrenda(byKey(fields, 'runt_tiene_prendas'), hayGarantiaConDatos),
+    tieneGravamenes: senalRuntPrenda(
+      byKey(fields, 'runt_tiene_gravamenes'),
+      hayGarantiaConDatos,
+      runtReportaGravamen,
+    ),
+    tienePrendas: senalRuntPrenda(
+      byKey(fields, 'runt_tiene_prendas'),
+      hayGarantiaConDatos,
+      runtReportaGravamen,
+    ),
     prendario: byKey(fields, 'runt_prendario') || null,
     nombreAcreedor: byKey(fields, 'runt_nombre_acreedor') || null,
     items,
@@ -391,7 +414,8 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
     onSaved,
     hideHeader = false,
     embeddedInWizard = false,
-    runtHasGravamen = false,
+    runtHasGravamen: runtHasGravamenPreflight = false,
+    runtReportaGravamen,
     runtGravamenMessage = null,
     runtGravamenChecked = false,
     runtAvisoVariant = null,
@@ -404,6 +428,8 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
   },
   ref,
 ) {
+  /** HU #13778 — la señal del servidor manda; sin ella, el check `gravamenes` del pre-vuelo. */
+  const runtHasGravamen = runtReportaGravamen ?? runtHasGravamenPreflight;
   const decisions =
     decisionsProp ?? (omitAllowed === true ? MATRICULA_DECISIONS_CON_OMITIR : MATRICULA_DECISIONS);
   /**
@@ -916,7 +942,12 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
   };
 
   const showRuntPanel = runtHasGravamen;
-  const summary = runtSummary ?? { items: [] as RuntGravamenItem[] };
+  const summaryBase = runtSummary ?? { items: [] as RuntGravamenItem[] };
+  // HU #13778 — con la señal del servidor, «Tiene prendas/gravámenes» en SI (solo presentación).
+  const summary: RuntPrendaSummary =
+    runtReportaGravamen === true
+      ? { ...summaryBase, tieneGravamenes: 'SI', tienePrendas: 'SI' }
+      : summaryBase;
   const showDetailRows = hasRuntDetail(summary);
 
   return (

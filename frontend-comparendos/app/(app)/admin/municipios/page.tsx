@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { Plus } from "lucide-react";
-import { DataTable, StatusBadge, activeTone } from "@flit/ui";
+import { DataTable, Modal, StatusBadge, activeTone } from "@flit/ui";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { SelectorOrganismo } from "@/components/SelectorOrganismo";
 import { useToast } from "@/components/Toast";
-import { BOTON_PRIMARIO_CLS, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
+import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
 import { apiFetch } from "@/lib/api";
 import type { Municipio } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
@@ -19,6 +19,9 @@ export default function Municipios() {
   const [nombre, setNombre] = useState("");
   const [ot, setOt] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  // HU #13786 (B14-3): desactivar un municipio afecta a todas las empresas; se confirma antes.
+  const [confirmar, setConfirmar] = useState<Municipio | null>(null);
+  const [cambiando, setCambiando] = useState(false);
 
   const crear = async () => {
     setOcupado(true);
@@ -36,11 +39,16 @@ export default function Municipios() {
   };
 
   const alternar = async (m: Municipio) => {
+    setCambiando(true);
     try {
       await apiFetch(`/admin/municipios/${m.id}`, { method: "PATCH", body: { activo: !m.activo } });
+      setConfirmar(null);
       lista.recargar();
+      toast.show(`${m.nombre}: ${m.activo ? "desactivado" : "activado"}.`, "success");
     } catch (e) {
       toast.show(e instanceof Error ? e.message : "No se pudo cambiar.", "error");
+    } finally {
+      setCambiando(false);
     }
   };
 
@@ -84,13 +92,34 @@ export default function Municipios() {
               header: "",
               align: "right",
               render: (m) => (
-                <button type="button" className="text-xs font-semibold text-[#3B4FD6] hover:underline" onClick={() => alternar(m)}>
+                <button type="button" className="text-xs font-semibold text-[#3B4FD6] hover:underline" onClick={() => (m.activo ? setConfirmar(m) : alternar(m))}>
                   {m.activo ? "Desactivar" : "Activar"}
                 </button>
               ),
             },
           ]}
         />
+        {confirmar && (
+          <Modal
+            open
+            onClose={() => setConfirmar(null)}
+            busy={cambiando}
+            title={`¿Desactivar ${confirmar.nombre}?`}
+            description="Deja de consultarse en la fuente municipal para todas las empresas, no solo para una. Los comparendos que ya entraron no se borran."
+            footer={
+              <div className="flex justify-end gap-2">
+                <button type="button" className={controlCls(false)} onClick={() => setConfirmar(null)}>
+                  Cancelar
+                </button>
+                <button type="button" className={BOTON_PRIMARIO_CLS} disabled={cambiando} onClick={() => alternar(confirmar)}>
+                  {cambiando ? "Desactivando…" : "Sí, desactivar"}
+                </button>
+              </div>
+            }
+          >
+            <p className="text-sm">Puedes volver a activarlo cuando quieras.</p>
+          </Modal>
+        )}
       </section>
     </Requiere>
   );

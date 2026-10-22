@@ -110,7 +110,7 @@ public static class DetalleEndpoints
             c.Gestionado,
             contraventor = c.Contraventor is { } k ? new
             {
-                tipoDocumento = k.TipoDocumento.ToString(), k.NumeroDocumento, k.Nombres, k.Correo, k.Telefono, k.Direccion, k.Ciudad, k.Sucursal, k.TipoContrato,
+                tipoDocumento = k.TipoDocumento?.ToString(), k.NumeroDocumento, documentoPendiente = k.NumeroDocumento is null, k.Nombres, k.Correo, k.Telefono, k.Direccion, k.Ciudad, k.Sucursal, k.TipoContrato,
                 origen = k.Origen.ToString(), k.CreadoEn,
             } : null,
             historialContraventor = historial,

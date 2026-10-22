@@ -11,6 +11,7 @@ import {
   etiquetaEvaluacion,
   hayEnCurso,
   MAXIMO_BYTES,
+  motivoFallo,
   progreso,
   resumenEvaluacion,
   valorInicial,
@@ -134,5 +135,16 @@ describe("evaluación del prompt", () => {
     ];
     expect(versionAnterior(vs)?.id).toBe("2");
     expect(versionAnterior([vs[0], vs[3]])).toBeNull();
+  });
+});
+
+describe("motivo de un documento fallido (HU #13787, B12-7)", () => {
+  it("muestra el mensaje real del servidor antes que la etiqueta del tipo", () => {
+    expect(motivoFallo("Ilegible", "La respuesta del modelo llegó cortada")).toBe("La respuesta del modelo llegó cortada");
+  });
+
+  it("sin mensaje, usa la etiqueta del tipo; sin nada, «Falló»", () => {
+    expect(motivoFallo("Timeout", null)).toBe("El proveedor no respondió a tiempo");
+    expect(motivoFallo(null, "  ")).toBe("Falló");
   });
 });

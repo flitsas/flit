@@ -1480,12 +1480,18 @@ export interface WizardState {
    */
   prendaDocumentRequired?: boolean;
   /**
-   * Feature #13110 — el servidor resuelve si se ofrece «Omitir prenda»: hay gravamen RUNT y la
-   * familia lo admite (Matrícula Inicial siempre; Traspaso y el resto solo con el certificado de
-   * prenda opcional en el OT, CF-06). El front no replica la regla: solo lee este booleano.
-   * Ausente ⇒ compatibilidad con clientes previos (traspaso: `!prendaDocumentRequired`; matrícula: no).
+   * Feature #13110 / HU #13778 — el servidor resuelve si se ofrece «Omitir prenda»: `true` siempre
+   * que la decisión de prenda aplique (gravamen RUNT o tipo prendario), sin importar familia ni
+   * política del OT. El front no replica la regla: solo lee este booleano. Ausente o `false` ⇒ no se
+   * ofrece.
    */
   prendaOmitAllowed?: boolean;
+  /**
+   * HU #13778 — señal única de gravamen del servidor: prenda, gravamen, garantía RNGM,
+   * `runt_prendario` o limitaciones a la propiedad «a favor de». Gobierna el aviso de gravamen y el
+   * resumen RUNT del paso de prenda. Ausente ⇒ el front usa el check `gravamenes` del pre-vuelo.
+   */
+  runtReportaGravamen?: boolean;
 }
 
 // ── Datos comerciales (traspaso) — GET/PUT /instances/{id}/commercial ──

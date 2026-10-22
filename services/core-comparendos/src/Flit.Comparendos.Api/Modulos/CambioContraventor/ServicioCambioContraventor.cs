@@ -61,6 +61,8 @@ public sealed class ServicioCambioContraventor(
             new("SIN_COBRO", "El comparendo no está en cobro coactivo", !c.EnCobroCoactivo),
             new("PROPIETARIO", "El propietario del vehículo es la empresa o uno de sus NITs", propietarioEsDeLaEmpresa),
             new("CONDUCTOR", "El comparendo tiene conductor asignado", c.Contraventor is not null),
+            // HU #13712: el que trae la API de contratos llega sin documento; el formato al OT lo necesita.
+            new("DOCUMENTO_CONDUCTOR", "El conductor tiene tipo y número de documento", c.Contraventor?.NumeroDocumento is not null),
             new("CEDULA", "Está cargada la cédula del conductor", documentos.Contains(TipoDocumentoSoporte.Cedula)),
             new("LICENCIA", "Está cargada la licencia de conducción", documentos.Contains(TipoDocumentoSoporte.Licencia)),
             new("ESTADO", "No hay una solicitud en curso ni aceptada", c.EstadoCambioContraventor is EstadoCambioContraventor.SinSolicitar or EstadoCambioContraventor.RechazadoOt),
@@ -141,7 +143,7 @@ public sealed class ServicioCambioContraventor(
             NumeroIntento = intento,
             OrganismoTransitoId = ot.Id,
             RepresentanteLegalId = rl?.Id,
-            ContraventorSnapshot = JsonSerializer.Serialize(new { c.Contraventor!.Nombres, tipoDocumento = c.Contraventor.TipoDocumento.ToString(), c.Contraventor.NumeroDocumento, c.Contraventor.Correo }, Json),
+            ContraventorSnapshot = JsonSerializer.Serialize(new { c.Contraventor!.Nombres, tipoDocumento = c.Contraventor.TipoDocumento?.ToString(), c.Contraventor.NumeroDocumento, c.Contraventor.Correo }, Json),
             FormatoArchivoId = formatoId,
             ComunicacionId = enviados[0].Id,
             SolicitadoPor = actor.UsuarioId ?? Guid.Empty,

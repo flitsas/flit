@@ -127,6 +127,8 @@ app.UseMiddleware<LecturasSuperAdmin>();
         var db = scope.ServiceProvider.GetRequiredService<ComparendosDb>();
         await db.Database.MigrateAsync().ConfigureAwait(false);
         await Semillas.Semillas.SembrarAsync(db, scope.ServiceProvider.GetRequiredService<TimeProvider>(), CancellationToken.None).ConfigureAwait(false);
+        await Modulos.Comparendos.CorreccionFechaVacia.AplicarAsync(db, scope.ServiceProvider.GetRequiredService<Modulos.Calendario.CalendarioService>(),
+            scope.ServiceProvider.GetRequiredService<Modulos.Comparendos.Timeline>(), scope.ServiceProvider.GetRequiredService<Reloj>(), CancellationToken.None).ConfigureAwait(false);
     }
 
     /// <summary>Tokens de servicio de svc-comparendos (mismo registro que hace el SDK para sus clientes gRPC).</summary>

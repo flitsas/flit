@@ -39,7 +39,9 @@ internal static class ConsultasRemoto
         // HU #13346/#13348: las consultas de Trámites van a core-consultas. Deadline amplio: una consulta al RUNT con su
         // respaldo puede tardar decenas de segundos. Las cadenas globales (Consultations:DefaultChains) solo sirven
         // para mostrar la configuración: la cadena la ejecuta Consultas.
-        var deadline = TimeSpan.FromSeconds(configuration.GetValue("Consultas:Remoto:DeadlineSegundos", 90));
+        // HU #13762: alineado con timeouts HTTP de proveedores (120s). Env: Consultas__Remoto__DeadlineSegundos
+        // / CONSULTAS_REMOTO_DEADLINE_SEGUNDOS. Default 180 para no cortar la cadena gRPC antes del HttpClient.
+        var deadline = TimeSpan.FromSeconds(configuration.GetValue("Consultas:Remoto:DeadlineSegundos", 180));
         services.AddFlitGrpcClient<ConsultasService.ConsultasServiceClient>(configuration, uri, "platform.consultas", o => o.Deadline = deadline);
         services.Configure<ConsultationChainOptions>(o => configuration.GetSection(ConsultationChainOptions.SectionName).Bind(o));
         services.AddScoped<ConsultasRemotasCliente>();
