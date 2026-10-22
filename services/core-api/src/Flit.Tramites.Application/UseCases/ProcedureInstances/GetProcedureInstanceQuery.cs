@@ -79,7 +79,10 @@ public sealed record ProcedureInstanceEventDto(
     // revocatoria_aprobada / revocatoria_rechazada (HU #12576/#12577, Feature #12565) — motivo de la
     // DECISIÓN del OT, distinto de RevocationReason (que es el motivo original del gestor al pedirla).
     // Ambos tipos reutilizan RevocationAttemptNumber de arriba.
-    string? RevocationDecisionReason = null);
+    string? RevocationDecisionReason = null,
+    // reenvio_validacion_admin (HU #13821) — correo que tenía la persona antes de corregirlo en el reenvío
+    // (null si no cambió), para que el tracking muestre «anterior → nuevo». En claro, igual que CorreoDestino.
+    string? CorreoAnterior = null);
 
 /// <summary>
 /// HU #12575 (Feature #12565, AC1) — sub-estado ACTIVO de revocatoria sobre un trámite
@@ -519,12 +522,16 @@ public sealed class GetProcedureInstanceHandler(
             var correo = payload.TryGetProperty("correo_destino", out var cd) && cd.ValueKind == JsonValueKind.String
                 ? cd.GetString()
                 : null;
+            var correoAnterior = payload.TryGetProperty("correo_anterior", out var cp) && cp.ValueKind == JsonValueKind.String
+                ? cp.GetString()
+                : null;
             return new ProcedureInstanceEventDto(
                 e.Tipo, e.CreatedAt, createdByName,
                 PartyRole: partyRole,
                 EmailActualizado: emailActualizado,
                 CorreoDestino: correo,
-                CreatedByCompania: createdByCompania);
+                CreatedByCompania: createdByCompania,
+                CorreoAnterior: correoAnterior);
         }).ToList();
     }
 
