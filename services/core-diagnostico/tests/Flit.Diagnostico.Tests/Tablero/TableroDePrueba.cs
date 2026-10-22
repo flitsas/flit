@@ -8,6 +8,7 @@ using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Diagnosticos;
 using Flit.Diagnostico.Domain.Vehiculos;
 using Flit.Diagnostico.Tests.Aislamiento;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
 
 namespace Flit.Diagnostico.Tests.Tablero;
@@ -46,6 +47,33 @@ internal static class Tablero
     public static string RutaCierrePanel(Guid id) => $"{Program.Prefijo}{DiagnosticosEndpoints.Ruta}/{id}/cerrar-panel";
 
     public static string RutaHistorial(Guid id) => $"{Program.Prefijo}{DiagnosticosEndpoints.Ruta}/{id}/historial";
+
+    /// <summary>Detalle de una celda (HU #13798): <c>/diagnosticos/{id}/vehiculos/{vid}/consultas/{fuente}</c>.</summary>
+    public static string RutaDetalle(Guid id, Guid vehiculo, string fuente) =>
+        $"{Program.Prefijo}{DiagnosticosEndpoints.Ruta}/{id}/vehiculos/{vehiculo}/consultas/{fuente}";
+
+    /// <summary>
+    /// Deja la celda con el estado y el payload dados (HU #13798): COMPLETADO con origen API, o MANUAL con un usuario de
+    /// backoffice si <paramref name="manual"/>; ERROR con <paramref name="tipoError"/>.
+    /// </summary>
+    public static async Task<CeldaConsulta> PayloadAsync(
+        EmpresaDePrueba empresa, CeldaConsulta celda, string? payload, CancellationToken ct,
+        EstadoCelda estado = EstadoCelda.Completado, string? tipoError = null, bool manual = false)
+    {
+        ArgumentNullException.ThrowIfNull(empresa);
+        ArgumentNullException.ThrowIfNull(celda);
+        await using var db = empresa.Db();
+        var guardada = await db.Set<CeldaConsulta>().SingleAsync(c => c.Id == celda.Id, ct);
+        guardada.Estado = estado;
+        guardada.Payload = payload;
+        guardada.TipoError = estado == EstadoCelda.Error ? tipoError ?? "TIMEOUT" : null;
+        guardada.MotivoNa = estado == EstadoCelda.Na ? MotivoNa.SinDocumentoLocatario : null;
+        guardada.Origen = payload is null ? null : manual ? OrigenCelda.Manual : OrigenCelda.Api;
+        guardada.UsuarioManualId = manual ? Guid.NewGuid() : null;
+        guardada.DatoObtenidoEn = payload is null ? null : DateTimeOffset.UtcNow.AddMinutes(-3);
+        await db.SaveChangesAsync(ct);
+        return guardada;
+    }
 
     /// <summary>Usuario (claim <c>sub</c>) de un token de prueba.</summary>
     public static Guid Usuario(string token) => Guid.Parse(new JsonWebTokenHandler().ReadJsonWebToken(token).Subject);

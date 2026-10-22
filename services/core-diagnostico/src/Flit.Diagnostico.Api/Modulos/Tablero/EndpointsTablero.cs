@@ -11,7 +11,10 @@ namespace Flit.Diagnostico.Api.Modulos.Tablero;
 /// <c>desde</c> es 0 (todo); negativo, 400 <c>DESDE_INVALIDO</c>.</item>
 /// <item><c>POST /diagnosticos/{id}/cerrar-panel</c>: EN_PROCESO con ERROR → INCOMPLETO (<see cref="CierrePanel"/>); si no
 /// procede, 409.</item>
-/// <item><c>GET /diagnosticos/{id}/historial</c>: transiciones del lote (<see cref="HistorialLote"/>).</item>
+/// <item><c>GET /diagnosticos/{id}/historial</c>: transiciones del lote (<see cref="HistorialLote"/>); el llenado manual se
+/// presenta como <c>AUTO</c> y sin usuario (HU #13798, Q5).</item>
+/// <item><c>GET /diagnosticos/{id}/vehiculos/{vid}/consultas/{fuente}</c>: detalle normalizado de una celda con los documentos
+/// de persona enmascarados (<see cref="DetalleCelda"/>, HU #13798).</item>
 /// </list>
 /// Ningún endpoint edita el estado a mano: COMPLETADO lo pone el procesador (<see cref="RecalculadorEstado"/>).
 /// </summary>
@@ -20,6 +23,7 @@ internal static class EndpointsTablero
     public const string RutaGrilla = DiagnosticosEndpoints.Ruta + "/{id:guid}/grilla";
     public const string RutaCierrePanel = DiagnosticosEndpoints.Ruta + "/{id:guid}/cerrar-panel";
     public const string RutaHistorial = DiagnosticosEndpoints.Ruta + "/{id:guid}/historial";
+    public const string RutaDetalleCelda = DiagnosticosEndpoints.Ruta + "/{id:guid}/vehiculos/{vid:guid}/consultas/{fuente}";
 
     public static void Map(RouteGroupBuilder api)
     {
@@ -27,6 +31,7 @@ internal static class EndpointsTablero
         api.MapGet(RutaGrilla, Grilla).RequirePermiso(Permisos.DiagnosticosVer).WithName("ObtenerGrillaDiagnostico");
         api.MapPost(RutaCierrePanel, Cerrar).RequirePermiso(Permisos.DiagnosticosVer).WithName("CerrarPanelDiagnostico");
         api.MapGet(RutaHistorial, Historial).RequirePermiso(Permisos.DiagnosticosVer).WithName("ObtenerHistorialDiagnostico");
+        api.MapGet(RutaDetalleCelda, Detalle).RequirePermiso(Permisos.DiagnosticosVer).WithName("ObtenerDetalleCelda");
     }
 
     public static IServiceCollection AddTablero(this IServiceCollection services)
@@ -34,6 +39,7 @@ internal static class EndpointsTablero
         services.AddScoped<ConsultaGrilla>();
         services.AddScoped<CierrePanel>();
         services.AddScoped<HistorialLote>();
+        services.AddScoped<DetalleCelda>();
         return services;
     }
 
@@ -45,4 +51,7 @@ internal static class EndpointsTablero
 
     private static async Task<IResult> Historial(Guid id, HistorialLote historial, CancellationToken ct) =>
         Results.Ok(await historial.ObtenerAsync(id, ct).ConfigureAwait(false));
+
+    private static async Task<IResult> Detalle(Guid id, Guid vid, string fuente, DetalleCelda detalle, CancellationToken ct) =>
+        Results.Ok(await detalle.ObtenerAsync(id, vid, fuente, ct).ConfigureAwait(false));
 }

@@ -753,7 +753,8 @@ paths:
       description: >
         HU #13743 (F04-C7, R-8). Permiso diagnostico.diagnosticos.ver, misma visibilidad que la grilla. Transiciones de
         diagnostico.historial_estado_diagnostico (solo inserción), de la más antigua a la más reciente: anterior (null en
-        la creación), nuevo, disparador, usuario (null si fue el procesador) y fecha.
+        la creación), nuevo, disparador, usuario (null si fue el procesador) y fecha. Vista de la compañía (HU #13798,
+        decisión Q5): una transición MANUAL (llenado del backoffice) llega como AUTO y con usuario_id null.
       responses:
         "200":
           description: Estado actual y transiciones del lote.
@@ -771,6 +772,168 @@ paths:
                 $ref: "#/components/schemas/ErrorRegla"
         "404":
           description: "`code` = NO_ENCONTRADO: no existe, es de otra compañía o (con PROPIOS) de otro usuario."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/diagnosticos/{id}/vehiculos/{vid}/consultas/{fuente}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote (cabecera).
+        schema:
+          type: string
+          format: uuid
+      - name: vid
+        in: path
+        required: true
+        description: Id del vehículo del lote (el de la grilla).
+        schema:
+          type: string
+          format: uuid
+      - name: fuente
+        in: path
+        required: true
+        description: Código de la fuente de la celda.
+        schema:
+          $ref: "#/components/schemas/Fuente"
+    get:
+      tags: [Tablero]
+      operationId: obtenerDetalleCelda
+      summary: Detalle normalizado de una celda
+      description: >
+        HU #13798 (F06-H1, F06-C1..C4/C12). Permiso diagnostico.diagnosticos.ver, misma visibilidad que la grilla. Devuelve
+        el resultado normalizado de la celda en un DTO propio y cerrado: nunca origen, usuario manual, proveedor, transacción,
+        payload, nombres ni documentos completos; una celda llenada a mano y una consultada por API tienen las mismas claves.
+        Todas las claves van siempre (null si no aplican). Fuentes del vehículo (RUNT, SIMIT_VEHICULO, AVALUO): `resultado`
+        solo con la celda COMPLETADO y `personas` null. Fuentes de persona (RUNT_PROPIETARIO, RUNT_LOCATARIO,
+        SIMIT_PROPIETARIO, SIMIT_LOCATARIO): `resultado` null y `personas` con una entrada por persona del rol (vacía si el
+        vehículo no tiene personas de ese rol), con el documento como `****` más los cuatro últimos caracteres alfanuméricos.
+        Una celda ERROR PERSONAS_CON_ERROR trae el resultado de las personas que sí respondieron. SIMIT trae como mucho 100
+        comparendos por resultado (`comparendos_truncados=true` si había más; `cantidad_comparendos` es el total).
+        IMPUESTO_DEPARTAMENTAL no tiene adaptador: `resultado` y `personas` null.
+      responses:
+        "200":
+          description: Detalle de la celda.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DetalleCelda"
+              examples:
+                runt:
+                  summary: RUNT del vehículo
+                  value:
+                    id: 01a1647a-4975-7c17-97ae-f10bc09287ad
+                    vehiculo_id: 01a1647a-4975-7574-933e-133cadd1ea42
+                    fuente: RUNT
+                    estado: COMPLETADO
+                    motivo_na: null
+                    tipo_error: null
+                    dato_obtenido_en: "2026-10-22T15:00:00+00:00"
+                    reutilizada: false
+                    resultado:
+                      placa: TST401
+                      vin: 9ZZPRUEBA00000401
+                      servicio: PARTICULAR
+                      clase: AUTOMOVIL
+                      organismo: STRIA PRUEBA
+                      propietarios:
+                        - { tipo_documento: C, tipo_propiedad: PROPIA }
+                      locatarios: 0
+                    personas: null
+                simitVehiculo:
+                  summary: SIMIT del vehículo
+                  value:
+                    id: 01a1647a-4975-7c17-97ae-f10bc09287ae
+                    vehiculo_id: 01a1647a-4975-7574-933e-133cadd1ea42
+                    fuente: SIMIT_VEHICULO
+                    estado: COMPLETADO
+                    motivo_na: null
+                    tipo_error: null
+                    dato_obtenido_en: "2026-10-22T15:00:00+00:00"
+                    reutilizada: false
+                    resultado:
+                      semaforo: ROJO
+                      cantidad_comparendos: 1
+                      comparendos:
+                        - { numero: C-0001, fecha: "2026-01-02", valor: "500000", estado: PENDIENTE, organismo: ORGANISMO PRUEBA }
+                      comparendos_truncados: false
+                    personas: null
+                avaluoSinValor:
+                  summary: AVALUO sin valor comercial
+                  value:
+                    id: 01a1647a-4975-7c17-97ae-f10bc09287af
+                    vehiculo_id: 01a1647a-4975-7574-933e-133cadd1ea42
+                    fuente: AVALUO
+                    estado: COMPLETADO
+                    motivo_na: null
+                    tipo_error: null
+                    dato_obtenido_en: "2026-10-22T15:00:00+00:00"
+                    reutilizada: false
+                    resultado:
+                      sin_valor_comercial: true
+                      valor_sugerido: null
+                      fuente_principal: null
+                      fuentes:
+                        - { fuente: fasecolda, estado: SIN_DATOS, valor: null, muestras: null, fecha: "2026-10-22" }
+                    personas: null
+                runtPropietario:
+                  summary: RUNT_PROPIETARIO con un natural en OK y un NIT (RUES) en error
+                  value:
+                    id: 01a1647a-4975-7c17-97ae-f10bc09287b0
+                    vehiculo_id: 01a1647a-4975-7574-933e-133cadd1ea42
+                    fuente: RUNT_PROPIETARIO
+                    estado: ERROR
+                    motivo_na: null
+                    tipo_error: PERSONAS_CON_ERROR
+                    dato_obtenido_en: null
+                    reutilizada: false
+                    resultado: null
+                    personas:
+                      - orden: 1
+                        rol: PROPIETARIO
+                        tipo_documento: C
+                        documento_enmascarado: "****1222"
+                        declarado_por_cliente: false
+                        consulta: RUNT_PERSONA
+                        estado: OK
+                        tipo_error: null
+                        consultado_en: "2026-10-22T15:00:00+00:00"
+                        resultado:
+                          inscrito: true
+                          estado_conductor: ACTIVO
+                          licencias:
+                            - { categoria: B1, estado: VIGENTE, vigente_hasta: "2030-01-01" }
+                      - orden: 2
+                        rol: PROPIETARIO
+                        tipo_documento: NIT
+                        documento_enmascarado: "****4567"
+                        declarado_por_cliente: false
+                        consulta: RUES
+                        estado: ERROR
+                        tipo_error: TIMEOUT
+                        consultado_en: null
+                        resultado: null
+        "400":
+          description: "`code` = FUENTE_INVALIDA (`campo` = fuente): el código de fuente no existe."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.diagnosticos.ver; sin compañía (`code` = SIN_EMPRESA); compañía sin Diagnóstico activo (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: >
+            `code` = NO_ENCONTRADO: el lote no existe, es de otra compañía o (con PROPIOS) de otro usuario; el vehículo no es
+            de ese lote; o el vehículo no tiene celda de esa fuente.
           content:
             application/json:
               schema:
@@ -2103,15 +2266,189 @@ components:
           $ref: "#/components/schemas/EstadoDiagnostico"
         disparador:
           type: string
-          enum: [AUTO, CIERRE_PANEL, REPROCESO, MANUAL]
+          enum: [AUTO, CIERRE_PANEL, REPROCESO]
+          description: El llenado manual (MANUAL) se presenta a la compañía como AUTO (HU #13798, Q5); el backoffice ve el real.
         usuario_id:
           type: string
           format: uuid
           nullable: true
-          description: Usuario que la provocó; null si fue el procesador.
+          description: Usuario que la provocó; null si fue el procesador o el llenado manual.
         en:
           type: string
           format: date-time
+
+    DetalleCelda:
+      type: object
+      description: >
+        Detalle de una celda (HU #13798). DTO cerrado: sin origen, usuario manual, proveedor, transacción, payload,
+        nombres ni documentos completos (R-20). Todas las claves van siempre.
+      required: [id, vehiculo_id, fuente, estado, motivo_na, tipo_error, dato_obtenido_en, reutilizada, resultado, personas]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id de la celda (el mismo de la grilla).
+        vehiculo_id:
+          type: string
+          format: uuid
+        fuente:
+          $ref: "#/components/schemas/Fuente"
+        estado:
+          type: string
+          enum: [PENDIENTE, EN_CURSO, COMPLETADO, ERROR, NA]
+        motivo_na:
+          type: string
+          nullable: true
+          description: "Solo con estado NA: SERVICIO_PUBLICO, DEPARTAMENTO_NO_SOPORTADO o SIN_DOCUMENTO_LOCATARIO."
+        tipo_error:
+          type: string
+          nullable: true
+          description: Solo con estado ERROR; mismos códigos que CeldaGrilla.tipo_error.
+        dato_obtenido_en:
+          type: string
+          format: date-time
+          nullable: true
+        reutilizada:
+          type: boolean
+        resultado:
+          nullable: true
+          description: Solo en RUNT, SIMIT_VEHICULO y AVALUO con la celda COMPLETADO; el tipo depende de `fuente`.
+          oneOf:
+            - $ref: "#/components/schemas/ResultadoRuntDetalle"
+            - $ref: "#/components/schemas/ResultadoSimitDetalle"
+            - $ref: "#/components/schemas/ResultadoAvaluoDetalle"
+        personas:
+          type: array
+          nullable: true
+          description: Solo en las fuentes de persona (null en las demás); una entrada por persona del rol, en orden.
+          items:
+            $ref: "#/components/schemas/PersonaDetalle"
+
+    PersonaDetalle:
+      type: object
+      required: [orden, rol, tipo_documento, documento_enmascarado, declarado_por_cliente, consulta, estado, tipo_error, consultado_en, resultado]
+      properties:
+        orden:
+          type: integer
+          description: Posición dentro del rol, desde 1.
+        rol:
+          type: string
+          enum: [PROPIETARIO, LOCATARIO]
+        tipo_documento:
+          type: string
+          example: C
+        documento_enmascarado:
+          type: string
+          description: "`****` más los cuatro últimos caracteres alfanuméricos; solo `****` si el documento tiene cuatro o menos."
+          example: "****5678"
+        declarado_por_cliente:
+          type: boolean
+          description: El documento lo declaró el cliente en la captura (locatario declarado), no el RUNT.
+        consulta:
+          type: string
+          nullable: true
+          enum: [RUNT_PERSONA, RUES, SIMIT]
+          description: Qué se consultó para esta persona (RUES si es NIT, decisión Q2); null sin resultado.
+        estado:
+          type: string
+          enum: [OK, ERROR, SIN_RESULTADO]
+          description: SIN_RESULTADO si la celda aún no tiene dato de esta persona (pendiente, en curso o N/A).
+        tipo_error:
+          type: string
+          nullable: true
+        consultado_en:
+          type: string
+          format: date-time
+          nullable: true
+        resultado:
+          nullable: true
+          description: Solo con estado OK; RUNT_PERSONA, RUES o SIMIT según `consulta`.
+          oneOf:
+            - $ref: "#/components/schemas/ResultadoRuntPersonaDetalle"
+            - $ref: "#/components/schemas/ResultadoRuesDetalle"
+            - $ref: "#/components/schemas/ResultadoSimitDetalle"
+
+    ResultadoRuntDetalle:
+      type: object
+      required: [placa, vin, servicio, clase, organismo, propietarios, locatarios]
+      properties:
+        placa: { type: string, nullable: true }
+        vin: { type: string, nullable: true }
+        servicio: { type: string, nullable: true, description: "Servicio del vehículo (PARTICULAR, PUBLICO...), no el proveedor." }
+        clase: { type: string, nullable: true }
+        organismo: { type: string, nullable: true }
+        propietarios:
+          type: array
+          items:
+            type: object
+            required: [tipo_documento, tipo_propiedad]
+            properties:
+              tipo_documento: { type: string, nullable: true }
+              tipo_propiedad: { type: string, nullable: true }
+        locatarios: { type: integer }
+
+    ResultadoSimitDetalle:
+      type: object
+      required: [semaforo, cantidad_comparendos, comparendos, comparendos_truncados]
+      properties:
+        semaforo: { type: string, nullable: true, enum: [VERDE, AMARILLO, ROJO] }
+        cantidad_comparendos: { type: integer, description: "Total de comparendos (aunque la lista se corte)." }
+        comparendos:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            required: [numero, fecha, valor, estado, organismo]
+            properties:
+              numero: { type: string, nullable: true }
+              fecha: { type: string, nullable: true, example: "2026-01-02" }
+              valor: { type: string, nullable: true, description: "Texto decimal en pesos.", example: "500000" }
+              estado: { type: string, nullable: true }
+              organismo: { type: string, nullable: true }
+        comparendos_truncados: { type: boolean, description: "true si había más de 100 comparendos." }
+
+    ResultadoAvaluoDetalle:
+      type: object
+      required: [sin_valor_comercial, valor_sugerido, fuente_principal, fuentes]
+      properties:
+        sin_valor_comercial: { type: boolean, description: "Ninguna fuente con valor: mostrar «sin valor comercial» (Q4 = b)." }
+        valor_sugerido: { type: integer, format: int64, nullable: true, description: "Pesos colombianos." }
+        fuente_principal: { type: string, nullable: true, enum: [fasecolda, mercado_libre, base_gravable] }
+        fuentes:
+          type: array
+          items:
+            type: object
+            required: [fuente, estado, valor, muestras, fecha]
+            properties:
+              fuente: { type: string, nullable: true, example: fasecolda }
+              estado: { type: string, nullable: true, enum: [OK, SIN_DATOS, ERROR] }
+              valor: { type: integer, format: int64, nullable: true }
+              muestras: { type: integer, nullable: true }
+              fecha: { type: string, nullable: true, example: "2026-10-22" }
+
+    ResultadoRuntPersonaDetalle:
+      type: object
+      required: [inscrito, estado_conductor, licencias]
+      properties:
+        inscrito: { type: boolean }
+        estado_conductor: { type: string, nullable: true }
+        licencias:
+          type: array
+          items:
+            type: object
+            required: [categoria, estado, vigente_hasta]
+            properties:
+              categoria: { type: string, nullable: true }
+              estado: { type: string, nullable: true }
+              vigente_hasta: { type: string, nullable: true }
+
+    ResultadoRuesDetalle:
+      type: object
+      required: [encontrada, estado_matricula, ultima_renovacion]
+      properties:
+        encontrada: { type: boolean }
+        estado_matricula: { type: string, nullable: true }
+        ultima_renovacion: { type: string, nullable: true }
 
     ErrorRegla:
       type: object

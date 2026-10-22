@@ -95,6 +95,12 @@ public static class EscenariosDeFuga
     /// <summary>Historial de estados del lote (HU #13743): devuelve el id del lote; el de B responde 404 al token de A.</summary>
     public const string RutaHistorial = Program.Prefijo + EndpointsTablero.RutaHistorial;
 
+    /// <summary>
+    /// Detalle de una celda (HU #13798): cada empresa siembra un lote con la celda RUNT completada; el detalle devuelve el id
+    /// de la celda y el del vehículo, y con el token de A la URL de B responde 404 sin nada de B.
+    /// </summary>
+    public const string RutaDetalleCelda = Program.Prefijo + EndpointsTablero.RutaDetalleCelda;
+
     public static IReadOnlyList<EscenarioDeFuga> Todos { get; } =
     [
         EscenarioDeFuga.Con(RutaSonda, _ => new LecturaBackoffice { EmpresaConsultada = Guid.NewGuid(), UsuarioId = Guid.NewGuid(), Ruta = "/sonda" }, l => l.Id),
@@ -114,6 +120,13 @@ public static class EscenariosDeFuga
         {
             var lote = await Tablero.Tablero.SembrarAsync(empresa, ct, vehiculos: [new("TST902", [new(Fuente.Runt, EstadoCelda.Completado, 1)])]);
             return new Sembrado(Tablero.Tablero.RutaHistorial(lote.Id), [lote.Id.ToString()]);
+        }),
+        new EscenarioDeFuga(RutaDetalleCelda, async (empresa, ct) =>
+        {
+            var lote = await Tablero.Tablero.SembrarAsync(empresa, ct, vehiculos: [new("TST903", [new(Fuente.Runt, EstadoCelda.Completado, 1)])]);
+            var celda = await Tablero.Tablero.PayloadAsync(empresa, lote.Celdas.Single(),
+                """{"placa":"TST903","clase":"AUTOMOVIL","propietarios":[],"locatarios":0}""", ct);
+            return new Sembrado(Tablero.Tablero.RutaDetalle(lote.Id, celda.VehiculoId, "RUNT"), [celda.Id.ToString(), celda.VehiculoId.ToString()]);
         }),
     ];
 
