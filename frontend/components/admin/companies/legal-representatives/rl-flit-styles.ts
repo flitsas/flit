@@ -14,9 +14,9 @@ export const RL_COLOR = {
   /** color.text.muted */
   muted: "#7D8798",
   /** Admin brand blue (≈ brand.blue #4F74C9 del prototipo) */
-  brand: "#557EFF",
+  brand: "var(--color-flit-brand)",
   /** Admin cyan (≈ brand.cyan #4FD4CC) */
-  cyan: "#00DBD5",
+  cyan: "var(--color-flit-tech)",
   /** color.background.tableHeader */
   tableHeader: "#F4F6FA",
   /** color.border.soft */
@@ -44,7 +44,7 @@ export const RL_COLOR = {
 
 export const RL_GRADIENT = {
   /** CTA primario — patrón admin FLIT */
-  primary: "linear-gradient(135deg, #557EFF 0%, #00DBD5 100%)",
+  primary: "linear-gradient(135deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%)",
   /** CTA peligro — tokens danger */
   danger: "linear-gradient(90deg, #F05A35 0%, #E43D30 100%)",
 } as const;
@@ -60,7 +60,7 @@ export const rlDangerCtaClass =
 export const rlDangerCtaStyle = { background: RL_GRADIENT.danger } as const;
 
 export const rlGhostBrandClass =
-  "inline-flex items-center justify-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-50";
+  "inline-flex items-center justify-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50";
 
 export const rlGhostBrandStyle = {
   color: RL_COLOR.brand,
@@ -68,7 +68,7 @@ export const rlGhostBrandStyle = {
 } as const;
 
 export const rlIconActionClass =
-  "inline-flex items-center justify-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold disabled:opacity-60";
+  "inline-flex items-center justify-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold disabled:opacity-60";
 
 export const rlDangerGhostStyle = {
   color: RL_COLOR.danger,
@@ -97,4 +97,4 @@ export const rlTextDangerActionStyle = {
 } as const;
 
 export const RL_INPUT_CLS =
-  "w-full rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF] border-[#DDE5F0]";
+  "w-full rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand/30 border-[#DDE5F0]";

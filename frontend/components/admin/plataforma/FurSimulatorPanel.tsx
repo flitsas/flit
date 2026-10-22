@@ -557,7 +557,7 @@ export function FurSimulatorPanel() {
               disabled={!canSimulate || previewLoading}
               aria-busy={previewLoading}
               className="w-full rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-              style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
             >
               Simular FUR
             </button>
@@ -575,7 +575,7 @@ export function FurSimulatorPanel() {
               disabled={previewLoading}
               aria-busy={previewLoading}
               onClick={() => void simulateFillAll(btn.format)}
-              className="w-full rounded-xl border border-[#557EFF] bg-white px-4 py-2.5 text-sm font-semibold text-[#557EFF] disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#00DBD5] dark:bg-transparent dark:text-[#00DBD5]"
+              className="w-full rounded-xl border border-flit-brand bg-white px-4 py-2.5 text-sm font-semibold text-flit-brand disabled:cursor-not-allowed disabled:opacity-50 dark:border-flit-tech dark:bg-transparent dark:text-flit-tech"
             >
               {btn.label}
             </button>

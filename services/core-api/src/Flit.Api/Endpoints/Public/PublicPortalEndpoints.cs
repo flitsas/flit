@@ -1,4 +1,5 @@
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Domain.ExternalSync;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -71,6 +72,11 @@ internal static class PublicPortalEndpoints
                 "invalid_mime" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Tipo MIME no permitido (use pdf/jpeg/png/webp)."),
                 "file_too_large" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El archivo excede el tamaño máximo permitido para este documento."),
                 "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El trámite ya no admite cambios."),
+                ExternalAttachmentRules.BlockedCode => Results.Problem(
+                    statusCode: 409,
+                    title: "Conflict",
+                    detail: "Este documento ya fue cargado y no se puede reemplazar.",
+                    extensions: new Dictionary<string, object?> { ["error"] = ExternalAttachmentRules.BlockedCode }),
                 _ => Results.Ok(result),
             };
         }).WithName("UploadPublicPortalDocument").AllowAnonymous().DisableAntiforgery();

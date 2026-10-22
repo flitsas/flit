@@ -28,6 +28,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- HU #13263 — PDF sintético (~3 MB, sin datos reales) del envío de adjuntos del cliente externo. -->
+    <Content Include="Tramites\Fixtures\*.pdf" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />

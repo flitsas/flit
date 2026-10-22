@@ -97,7 +97,7 @@ export function PrimaryButton({
       onClick={onClick}
       disabled={disabled}
       className="rounded-xl px-4 py-2 text-xs font-semibold text-white transition disabled:opacity-60"
-      style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+      style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
     >
       {children}
     </button>
@@ -105,7 +105,7 @@ export function PrimaryButton({
 }
 
 export const FIELD_CLS =
-  "rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF] disabled:opacity-60";
+  "rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-flit-brand disabled:opacity-60";
 
 // El formateo vive en `./format`, que no es un módulo de cliente: lo importan las definiciones de
 // columnas, que son ficheros de datos y no componentes.

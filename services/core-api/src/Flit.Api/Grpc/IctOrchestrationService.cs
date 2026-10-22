@@ -575,9 +575,42 @@ public sealed class IctOrchestrationService(
             return (null, "vehicle_consultation_mismatch");
 
         // M-1 — defensa en profundidad: del snapshot recibido solo pasan claves de vehículo (lista blanca).
-        return PreflightVehicleSnapshotJson.TryDeserialize(precomputed.SnapshotJson, out var snapshot)
-            ? (snapshot!.SoloClavesDeVehiculo(), null)
-            : (null, "vehicle_consultation_invalid");
+        if (!TryLeerSnapshot(precomputed.SnapshotJson, out var snapshot))
+            return (null, "vehicle_consultation_invalid");
+        var filtrado = snapshot!.SoloClavesDeVehiculo();
+        // Sin nada de vehículo tras la lista blanca, es como si no hubiera consulta (core-ict no la filtra).
+        return filtrado.HydratedFields.Count > 0 || filtrado.Checks.Any(c => c.Status is not ("unknown" or "error"))
+            ? (filtrado, null)
+            : (null, "vehicle_consultation_missing");
+    }
+
+    /// <summary>
+    /// Bug #13304 + HU #13348 — el snapshot que guarda core-ict es, desde el corte, el <c>ResultadoConsulta</c> de
+    /// core-consultas en JSON (ICT consulta directo a Consultas); se convierte con el mismo mapeo que la consulta en
+    /// proceso. Los guardados antes del despliegue (vigencia de horas) traen el formato <see cref="PreflightVehicleSnapshot"/>
+    /// que producía core-api: se siguen aceptando. Mismos topes de tamaño en los dos.
+    /// </summary>
+    internal static bool TryLeerSnapshot(string? json, out PreflightVehicleSnapshot? snapshot)
+    {
+        if (PreflightVehicleSnapshotJson.TryDeserialize(json, out snapshot))
+            return true;
+
+        snapshot = null;
+        if (string.IsNullOrWhiteSpace(json) || System.Text.Encoding.UTF8.GetByteCount(json) > PreflightVehicleSnapshotJson.MaxSnapshotBytes)
+            return false;
+        try
+        {
+            var resultado = new Google.Protobuf.JsonParser(Google.Protobuf.JsonParser.Settings.Default.WithRecursionLimit(PreflightVehicleSnapshotJson.MaxDepth))
+                .Parse<Flit.Consultas.Grpc.V1.ResultadoConsulta>(json);
+            if (string.IsNullOrEmpty(resultado.Proveedor))
+                return false;
+            snapshot = PreflightVehicleSnapshot.FromConsultation(Flit.Consultas.Grpc.Mapping.ResultadoConsultaMapper.FromProto(resultado));
+            return true;
+        }
+        catch (Exception ex) when (ex is Google.Protobuf.InvalidProtocolBufferException or Google.Protobuf.InvalidJsonException or FormatException)
+        {
+            return false;
+        }
     }
 
     private static bool MismoIdentificador(string? consultado, string? delBorrador)

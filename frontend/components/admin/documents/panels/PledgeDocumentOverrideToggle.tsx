@@ -93,16 +93,18 @@ export function PledgeDocumentOverrideToggle({ transitOfficeId }: PledgeDocument
       skeletonRows={3}
     >
       <div className="space-y-3" data-testid="ot-prenda-optional-by-company">
-        <p className="text-[11px] opacity-70">
+        {/* HU #12883 AC1 — piso tipográfico: 11px es desviación bloqueante del guardián de diseño. */}
+        <p className="text-xs opacity-70">
           Por defecto el documento de prenda es obligatorio. Activa el check para que deje de
           exigirse en esa compañía.
         </p>
-        <ul className="space-y-2">
+        <ul className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
           {rows.map((row) => (
             <li key={row.tenantId} className="rounded-xl border px-3 py-2">
               <ToggleSwitch
                 id={`prenda-optional-${row.tenantId}`}
-                label={`${row.tenantName} — Prenda opcional`}
+                label={row.tenantName}
+                description="Prenda opcional"
                 checked={row.documentOptional}
                 disabled={pendingTenantId === row.tenantId}
                 onChange={(checked) => void handleToggle(row.tenantId, checked)}

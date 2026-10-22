@@ -26,17 +26,17 @@ namespace Flit.Api.Middleware;
 public sealed class TenantEnforcementMiddleware(RequestDelegate next)
 {
     /// <summary>Clave en <see cref="HttpContext.Items"/> del tenant resuelto (Guid? — null = todos).</summary>
-    public const string TenantItemKey = "tramites.tenantId";
+    public const string TenantItemKey = TenantRequestItems.Tenant;
 
     /// <summary>Clave en <see cref="HttpContext.Items"/> de si el caller es SuperAdmin (bool).</summary>
-    public const string SuperAdminItemKey = "tramites.isSuperAdmin";
+    public const string SuperAdminItemKey = TenantRequestItems.SuperAdmin;
 
     /// <summary>
     /// Clave en <see cref="HttpContext.Items"/> del <see cref="TenantScope"/> de la petición (HU #12321).
     /// Canal NUEVO y paralelo: <see cref="TenantItemKey"/> y <see cref="SuperAdminItemKey"/> conservan
     /// exactamente el mismo valor que antes; un endpoint que ignore el scope devuelve lo mismo.
     /// </summary>
-    public const string TenantScopeItemKey = "tramites.tenantScope";
+    public const string TenantScopeItemKey = TenantRequestItems.TenantScope;
 
     private const string TenantHeader = "X-Tenant-Id";
 
@@ -169,9 +169,12 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         // cliente — un caller podía editar el correo (PII) o gastar reenvíos de OTRA compañía. Mismo bug
         // y mismo fix que ya se aplicó a identity-validation más abajo.
         new("/api/v1/tramites/biometric-validations", RouteMatch.Prefix),
-        // Feature #10587 — placas disponibles para el wizard (Flujo A): el endpoint resuelve el tenant
-        // desde http.Items (que puebla este middleware). Sin esto devolvía 403 al radicador de la compañía
-        // aunque el JWT trae tenant_id (el middleware no lo scopeaba). Se impone el tenant desde el token.
+        // HU #12853 (Feature #12846, Épica #12751) — ambas rutas bajo este prefijo responden 410 Gone
+        // (DeprecatedPlatePreassignEndpoints) y ya NO leen el tenant de http.Items. La entrada se
+        // conserva a propósito: sigue exigiendo autenticación (401) ANTES de llegar al endpoint, mismo
+        // gate que el resto del runtime de trámites — un caller no autenticado no debe distinguir por
+        // el código de estado si la ruta existe o no. Antes (Feature #10587): placas disponibles para
+        // el wizard (Flujo A), retirado por HU #12853.
         new("/api/v1/tramites/plate-preassign", RouteMatch.Prefix),
         // Colas de dead-letter de validación de identidad (stuck/requeue): el tenant se impone desde el
         // JWT igual que el resto del runtime; sin esto el endpoint confiaba en el header crudo del cliente
@@ -193,6 +196,10 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         // de arquitectura las cubre. Fuera de aquí ScopeFromItems sería null y la policy de cabeza
         // (GroupHeadReadFilter) respondería 403 siempre — un olvido produce «no ve», nunca una fuga.
         new("/api/v1/tramites/network", RouteMatch.Prefix),
+        // HU #12922 (Épica #12718, ADR-0060) — DR. FLIT: el tope diario del chat se cuenta por tenant y
+        // usuario. Si el tenant saliera del header crudo, un company-user conseguiría cupo nuevo cambiando
+        // X-Tenant-Id. Prefix para cubrir también los casos de soporte (/support-cases, Feature #12915).
+        new("/api/v1/dr-flit", RouteMatch.Prefix),
         // HU #12361 (Feature #12257) — el cliente HIJO consulta quién accedió a sus datos
         // (/network-access-audit/mine): el tenant sale de aquí (tramites.tenantId), nunca del caller.
         // Prefijo distinto de /network (StartsWithSegments compara segmentos completos): entrada propia.
@@ -254,6 +261,11 @@ public sealed class TenantEnforcementMiddleware(RequestDelegate next)
         // el endpoint confiaría en el X-Tenant-Id crudo del cliente (mismo defecto de fondo que Bug
         // #12554/#12558/#12564).
         new("/api/v1/tramites/revocation-requests", RouteMatch.Exact),
+        // Épica #13216 (HU #13374, ADR-0070 A4.1) — lote de descarga masiva de consolidados. BLOQUEANTE de
+        // seguridad: fuera de esta lista RequestTenantResolver.FromItems devuelve (null, false) y el lote de un
+        // Gestor abarcaría TODAS las compañías. El origen (tramites / superadmin) también sale de aquí
+        // (IsSuperAdmin), nunca del cuerpo. Prefix: cubre la creación y cualquier ruta hija futura.
+        new("/api/v1/tramites/consolidados", RouteMatch.Prefix),
     ];
 
     /// <summary>Endpoints runtime tenant-scoped (excluye parametrización y portal público).</summary>

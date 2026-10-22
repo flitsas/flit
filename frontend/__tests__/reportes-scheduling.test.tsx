@@ -181,7 +181,7 @@ describe("SchedulingPanel — alertas", () => {
     expect(eventRow).toHaveTextContent("Rechazo OT alto");
     expect(eventRow).toHaveTextContent("31.2");
     expect(eventRow).toHaveTextContent("Sí"); // notificada
-    expect(within(history).getByText(/página 1 de 1/i)).toBeInTheDocument();
+    expect(within(history).getByText(/Mostrando 1–1 de 1/)).toBeInTheDocument();
     expect(mocks.fetchAlertEvents).toHaveBeenCalledWith(
       expect.objectContaining({ page: 1, pageSize: 10 }),
     );

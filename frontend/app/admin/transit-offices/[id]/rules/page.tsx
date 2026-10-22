@@ -22,7 +22,7 @@ function OtRulesPageInner() {
       activeTab="rules"
       moduleTitle="Administración OT — Motor de reglas"
     >
-      <RulesSection />
+      <RulesSection transitOfficeId={params.id} />
     </OtHubLayout>
   );
 }

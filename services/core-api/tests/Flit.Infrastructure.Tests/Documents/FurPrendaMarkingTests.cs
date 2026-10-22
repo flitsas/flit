@@ -137,4 +137,31 @@ public sealed class FurPrendaMarkingTests
         campos["alert_data_code_4"].Text.Should().Be("X");
         campos["alert_data_code_5"].Text.Should().Be("FONDEICON");
     }
+
+    /// <summary>
+    /// HU #13777 — riesgo aceptado: prenda base con decisión <c>omitir</c>. La casilla del propio tipo
+    /// sale (la pone la tabla 1), pero el numeral 20 queda vacío: sin LIM. PROPIEDAD, OTRO ni A FAVOR DE.
+    /// </summary>
+    [Theory]
+    [InlineData("PRENDA_INSCRIPCION", "requested_process_11", "requested_process_12")]
+    [InlineData("LEVANTAMIENTO_PRENDA", "requested_process_12", "requested_process_11")]
+    public void PrendaBase_ConOmitir_MarcaLaCasillaDelTipoYDejaElNumeral20Vacio(
+        string code, string casillaDelTipo, string casillaContraria)
+    {
+        var marking = PrendaDecision.ToFurMarking(PrendaDecision.Omitir);
+        var data = Data(marking, FurTemplateFormat.Automotor) with
+        {
+            TipologiaCodigo = code,
+            Modalidad = "OTROS",
+        };
+
+        var campos = FurFieldMapper.Map(data);
+
+        marking.Should().Be(FurPrendaMarking.Ninguna);
+        campos[casillaDelTipo].Text.Should().Be("X");
+        campos[casillaContraria].Text.Should().Be("");
+        campos["alert_data_code_2"].Text.Should().BeEmpty();
+        campos["alert_data_code_4"].Text.Should().BeEmpty();
+        campos["alert_data_code_5"].Text.Should().BeEmpty();
+    }
 }

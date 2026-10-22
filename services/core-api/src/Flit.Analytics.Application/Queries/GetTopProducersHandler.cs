@@ -7,7 +7,11 @@ namespace Flit.Analytics.Application.Queries;
 /// Consulta del Top de productividad por tenant y rango (HU #10243, AC3).
 /// <see cref="TenantId"/> null = vista global de todas las compañías (solo SuperAdmin).
 /// </summary>
-public sealed record GetTopProducersQuery(Guid? TenantId, DateOnly From, DateOnly To, int Limit);
+public sealed record GetTopProducersQuery(Guid? TenantId, DateOnly From, DateOnly To, int Limit)
+{
+    /// <summary>HU #13664 — Ver por familia: códigos visibles (<c>ProcedureFamilyCodes</c>); <c>null</c> = sin restricción.</summary>
+    public IReadOnlyList<string>? AllowedFamilies { get; init; }
+}
 
 /// <summary>
 /// Valida el rango, acota el límite y devuelve el ranking de radicadores por <c>submitted_count</c>.
@@ -26,7 +30,7 @@ public sealed class GetTopProducersHandler(IAnalyticsReadRepository repo)
             return (null, "invalid_range");
 
         var limit = query.Limit <= 0 ? DefaultLimit : Math.Min(query.Limit, MaxLimit);
-        var items = await repo.GetTopProducersAsync(query.TenantId, query.From, query.To, limit, ct);
+        var items = await repo.GetTopProducersAsync(query.TenantId, query.From, query.To, limit, query.AllowedFamilies, ct);
         return (items, null);
     }
 }

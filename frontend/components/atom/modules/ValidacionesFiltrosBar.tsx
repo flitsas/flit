@@ -96,7 +96,7 @@ function IdentityFiltroPopover({
               <button
                 type="button"
                 onClick={() => setEditando(null)}
-                className="mb-2 inline-flex items-center gap-1 text-xs font-semibold text-[#557EFF] hover:underline"
+                className="mb-2 inline-flex items-center gap-1 text-xs font-semibold text-flit-brand hover:underline"
               >
                 ← Volver a los filtros
               </button>
@@ -114,7 +114,7 @@ function IdentityFiltroPopover({
                   {condiciones.map((c) => (
                     <span
                       key={c.fieldId}
-                      className="inline-flex items-center gap-1 rounded-full border border-[#557EFF]/40 bg-[#557EFF]/10 py-1 pl-3 pr-1 text-xs font-semibold text-[#3355CC] dark:text-[#9DB5FF]"
+                      className="inline-flex items-center gap-1 rounded-full border border-flit-brand/40 bg-flit-brand/10 py-1 pl-3 pr-1 text-xs font-semibold text-[#3355CC] dark:text-[#9DB5FF]"
                     >
                       <button
                         type="button"
@@ -141,7 +141,7 @@ function IdentityFiltroPopover({
                     <button
                       type="button"
                       onClick={() => setEditando(f)}
-                      className="w-full rounded-lg px-2 py-2 text-left text-xs font-semibold text-[#162744] transition hover:bg-[#EEF5FF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:text-white dark:hover:bg-white/10"
+                      className="w-full rounded-lg px-2 py-2 text-left text-xs font-semibold text-flit-primary transition hover:bg-[#EEF5FF] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:text-white dark:hover:bg-white/10"
                     >
                       {f.label}
                     </button>
@@ -162,7 +162,7 @@ function IdentityFiltroPopover({
                   close();
                 }}
                 disabled={condiciones.length === 0 && aplicadasCount === 0}
-                className="rounded-xl border border-[#FF4E00] px-3 py-2 text-xs font-semibold text-[#C2410C] transition hover:bg-[#FF4E00]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-xl border border-[#FF4E00] px-3 py-2 text-xs font-semibold text-[#C2410C] transition hover:bg-[#FF4E00]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Empezar de cero
               </button>
@@ -172,7 +172,7 @@ function IdentityFiltroPopover({
                   onAplicar();
                   close();
                 }}
-                className="rounded-xl px-3 py-2 text-xs font-semibold text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+                className="rounded-xl px-3 py-2 text-xs font-semibold text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
                 style={{ background: WIZARD_CTA_GRADIENT }}
               >
                 Aplicar
@@ -311,7 +311,7 @@ export function IdentityFilterEditor({
         <button
           type="button"
           onClick={aplicar}
-          className="rounded-xl px-3 py-2 text-xs font-semibold text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+          className="rounded-xl px-3 py-2 text-xs font-semibold text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
           style={{ background: WIZARD_CTA_GRADIENT }}
         >
           Agregar filtro
@@ -363,7 +363,7 @@ export function ValidacionesFiltrosBar({
       {scopeSelector}
       <div className="relative w-64 shrink-0">
         <Search
-          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#557EFF]"
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-flit-brand"
           aria-hidden="true"
         />
         <input

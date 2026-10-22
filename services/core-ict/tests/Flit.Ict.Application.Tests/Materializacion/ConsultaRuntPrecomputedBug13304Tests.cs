@@ -338,25 +338,37 @@ public sealed class ConsultaRuntPrecomputedBug13304Tests
         VehicleSnapshotColumn.ForQuery(queryType, "ABC123", string.Empty, vehicle: null).Should().BeNull();
 
     [Fact]
-    public void ClienteConsulta_MapeaLosCampos9a12()
+    public void ClienteConsulta_GuardaElResultadoDeConsultasComoSnapshot_ConSuProveedorYTipo()
     {
-        var consultedAt = Ahora.AddMinutes(-1);
-        var reply = new ConsultationReply
+        // HU #13348: ICT consulta directo a core-consultas; el snapshot es su ResultadoConsulta en JSON.
+        var resultado = new Flit.Consultas.Grpc.V1.ResultadoConsulta
         {
-            VehicleSnapshotJson = SnapshotJson,
-            ConsultedAt = Timestamp.FromDateTimeOffset(consultedAt),
-            Provider = "kyverum_runt",
-            ConsultationKind = "VehicleVin",
+            Proveedor = "kyverum_runt",
+            Chequeos = { new Flit.Consultas.Grpc.V1.Chequeo { Clave = "soat", Estado = Flit.Consultas.Grpc.V1.EstadoChequeo.Ok } },
+            Campos = { new Flit.Consultas.Grpc.V1.Campo { Clave = "vehicle_year", ValorTexto = "2019" } },
         };
+        var antes = DateTimeOffset.UtcNow;
 
-        var vehicle = IctGrpcConsultationClient.MapVehicle(reply);
+        var vehicle = ConsultasConsultationClient.Snapshot("VIN", resultado);
 
         vehicle.Should().NotBeNull();
-        vehicle!.SnapshotJson.Should().Be(SnapshotJson);
-        vehicle.ConsultedAt.Should().Be(consultedAt);
+        Flit.Consultas.Grpc.V1.ResultadoConsulta.Parser.ParseJson(vehicle!.SnapshotJson).Should().Be(resultado);
+        vehicle.ConsultedAt.Should().BeOnOrAfter(antes);
         vehicle.Provider.Should().Be("kyverum_runt");
-        vehicle.Kind.Should().Be("VehicleVin");
-        IctGrpcConsultationClient.MapVehicle(new ConsultationReply()).Should().BeNull();
+        vehicle.Kind.Should().Be(VehicleConsultationSnapshot.KindVin);
+        ConsultasConsultationClient.Snapshot("VEHICLE", resultado)!.Kind.Should().Be(VehicleConsultationSnapshot.KindPlate);
+    }
+
+    [Fact]
+    public void ClienteConsulta_SiLaCadenaNoRespondio_NoHaySnapshot()
+    {
+        var sinRespuesta = new Flit.Consultas.Grpc.V1.ResultadoConsulta
+        {
+            Proveedor = "kyverum_runt",
+            Chequeos = { new Flit.Consultas.Grpc.V1.Chequeo { Clave = "soat", Estado = Flit.Consultas.Grpc.V1.EstadoChequeo.Error } },
+        };
+
+        ConsultasConsultationClient.Snapshot("VEHICLE", sinRespuesta).Should().BeNull();
     }
 
     [Fact]

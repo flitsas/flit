@@ -1,7 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CheckCircle2, Clock, Copy, RefreshCw, ShieldAlert, ShieldCheck } from "lucide-react";
+import { Check, CheckCircle2, Clock, Copy, RefreshCw, ShieldAlert, ShieldCheck } from "lucide-react";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { RowActions } from "@/components/atom/RowActions";
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from "@/components/atom/table-styles";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
   cooldownSecondsFromError,
@@ -32,7 +40,7 @@ export interface DomainStatusPanelProps {
 
 const STATUS_META: Record<TenantDomainStatus, { label: string; Icon: typeof Clock; color: string }> = {
   pending: { label: "Pendiente de comprobación", Icon: Clock, color: "#F9AC00" },
-  verified: { label: "Comprobado", Icon: ShieldCheck, color: "#557EFF" },
+  verified: { label: "Comprobado", Icon: ShieldCheck, color: "var(--color-flit-brand)" },
   active: { label: "Activo", Icon: CheckCircle2, color: "#8CC63F" },
   failed: { label: "Comprobación fallida", Icon: ShieldAlert, color: "#FF4E00" },
 };
@@ -147,6 +155,9 @@ export function DomainStatusPanel({ mode, tenantId, onLoaded, reloadToken }: Dom
 
   return (
     <div>
+      {status === "loading" ? (
+        <CarLoaderModal label="Cargando estado del dominio…" />
+      ) : (
       <UiStateBoundary
         status={status}
         onRetry={() => void load()}
@@ -166,7 +177,7 @@ export function DomainStatusPanel({ mode, tenantId, onLoaded, reloadToken }: Dom
               onClick={() => void handleVerify()}
               disabled={verifying || (cooldownSeconds !== null && cooldownSeconds > 0)}
               className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-              style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
             >
               <RefreshCw className={verifying ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} aria-hidden />
               {verifying
@@ -188,6 +199,7 @@ export function DomainStatusPanel({ mode, tenantId, onLoaded, reloadToken }: Dom
           </div>
         )}
       </UiStateBoundary>
+      )}
     </div>
   );
 }
@@ -204,7 +216,7 @@ function DomainStatusBody({ domain }: { domain: TenantDomainResponse }) {
   return (
     <div className="rounded-xl border p-4" style={{ borderColor: "#DFE5ED" }}>
       <p className="text-xs font-semibold opacity-70">Dominio</p>
-      <p data-testid="domain-host" className="mb-2 font-mono text-sm font-semibold" style={{ color: "#162744" }}>
+      <p data-testid="domain-host" className="mb-2 font-mono text-sm font-semibold" style={{ color: "var(--color-flit-primary)" }}>
         {domain.host}
       </p>
 
@@ -242,17 +254,22 @@ function DnsInstructions({
 }) {
   return (
     <div className="mt-4">
-      <h3 className="mb-2 text-xs font-semibold" style={{ color: "#162744" }}>
+      <h3 className="mb-2 text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }}>
         Registros DNS que debes crear
       </h3>
-      <div className="overflow-x-auto rounded-xl border" style={{ borderColor: "#DFE5ED" }}>
-        <table className="w-full text-left text-xs">
+      {/* Bug #13055 — tabla homologada con el modelo de trámites (fija: registros DNS, sin paginar) */}
+      <div className="overflow-x-auto">
+        <table
+          aria-label="Registros DNS que debes crear"
+          className="text-left text-xs"
+          style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
+        >
           <thead>
-            <tr className="bg-[#F4F7FC] dark:bg-white/5">
-              <th className="px-3 py-2 font-semibold">Tipo</th>
-              <th className="px-3 py-2 font-semibold">Nombre</th>
-              <th className="px-3 py-2 font-semibold">Valor</th>
-              <th className="px-3 py-2 font-semibold">
+            <tr>
+              <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>Tipo</th>
+              <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>Nombre</th>
+              <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>Valor</th>
+              <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl text-right`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
                 <span className="sr-only">Acciones</span>
               </th>
             </tr>
@@ -268,12 +285,13 @@ function DnsInstructions({
 }
 
 function DnsRow({ type, name, value }: { type: string; name: string; value: string }) {
+  const border = { borderColor: "#DFE5ED" };
   return (
-    <tr className="border-t" style={{ borderColor: "#DFE5ED" }}>
-      <td className="px-3 py-2 font-semibold">{type}</td>
-      <td className="max-w-[220px] truncate px-3 py-2 font-mono">{name}</td>
-      <td className="max-w-[260px] truncate px-3 py-2 font-mono">{value}</td>
-      <td className="px-3 py-2">
+    <tr className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+      <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold" style={border}>{type}</td>
+      <td className="max-w-[220px] truncate border-y px-4 py-3 font-mono" style={border}>{name}</td>
+      <td className="max-w-[260px] truncate border-y px-4 py-3 font-mono" style={border}>{value}</td>
+      <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={border}>
         <CopyButton value={value} label={`Copiar valor del registro ${type}`} />
       </td>
     </tr>
@@ -299,16 +317,16 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => void copy()}
-        className="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold"
-        style={{ borderColor: "#557EFF", color: "#557EFF" }}
-        aria-label={label}
-      >
-        <Copy className="h-3 w-3" aria-hidden />
-        {copied ? "Copiado" : "Copiar"}
-      </button>
+      <RowActions
+        actions={[
+          {
+            icon: copied ? Check : Copy,
+            label,
+            onClick: () => void copy(),
+            tone: "primary",
+          },
+        ]}
+      />
       <span className="sr-only" role="status" aria-live="polite">
         {copied ? "Valor copiado al portapapeles." : ""}
       </span>

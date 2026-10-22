@@ -2,6 +2,7 @@ using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Analytics;
 using Flit.Infrastructure.Persistence.Entities.Catalogs;
 using Flit.Infrastructure.Persistence.Entities.Identity;
+using Flit.Infrastructure.Persistence.Entities.Integrations;
 using Flit.Infrastructure.Persistence.Entities.Quipux;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Infrastructure.Persistence.Entities.Tramites;
@@ -10,13 +11,24 @@ using Flit.Modules.Quipux.Domain.Trazabilidad;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.RevocationRequests;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
+using Flit.Platform.Sdk.Messaging;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace Flit.Infrastructure.Persistence;
 
 public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
-    : DbContext(options), IDataProtectionKeyContext
+    : DbContext(options), IDataProtectionKeyContext, IIdentityDb
 {
+    // Epic #13217 (HU #13231): en core-api, los repositorios de identidad usan este mismo contexto vía IIdentityDb.
+    DbSet<Entities.Admin.NotificationDeliveryLogEntity> IIdentityDb.NotificationDeliveryLogs => NotificationDeliveryLogs;
+
+    /// <summary>
+    /// HU #12797 (F2) — acciones diferidas al fin de la transacción ambiente gestionada (borrados del
+    /// reemplazo seguro del consolidado, bitácora de fallos). No es un mapeo: EF no lo toca.
+    /// </summary>
+    internal AccionesPostTransaccion AccionesPostTransaccion { get; } = new();
+
     public DbSet<Tenant> Tenants => Set<Tenant>();
 
     // HU #12323 (ADR-0057) — interruptores globales de la jerarquía y bitácora append-only del
@@ -115,9 +127,19 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<MandateSignerRepresentedCompany> MandateSignerRepresentedCompanies =>
         Set<MandateSignerRepresentedCompany>();
 
+    /// <summary>HU #13177 — compañías de FLIT (por tenant) a las que se asocia cada mandatario, por organismo.</summary>
+    public DbSet<MandateSignerAssociatedCompany> MandateSignerAssociatedCompanies =>
+        Set<MandateSignerAssociatedCompany>();
+
     // ── Admin OT — configuración de mandato por OT (ADR-0036, HU #10912) ───────────
     public DbSet<TransitOfficeMandateConfigEntity> TransitOfficeMandateConfigs =>
         Set<TransitOfficeMandateConfigEntity>();
+
+    /// <summary>Personalización por formato de contrato de mandato (HU #13169).</summary>
+    public DbSet<MandateFormatSettingEntity> MandateFormatSettings => Set<MandateFormatSettingEntity>();
+
+    /// <summary>Versiones inmutables de la plantilla de cada formato (HU #13169).</summary>
+    public DbSet<MandateFormatVersionEntity> MandateFormatVersions => Set<MandateFormatVersionEntity>();
 
     /// <summary>Tipo de mandato (3) por compañía gestora × OT.</summary>
     public DbSet<CompanyOtMandateRuleEntity> CompanyOtMandateRules =>
@@ -158,10 +180,6 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<ActiveNetworkDomainView> ActiveNetworkDomains => Set<ActiveNetworkDomainView>();
 
-    // ── Admin Compañías — validación de identidad administrativa desacoplada (HU #10907, ADR-0034) ──
-    public DbSet<AdminIdentityValidationEntity> AdminIdentityValidations =>
-        Set<AdminIdentityValidationEntity>();
-
     public DbSet<TransitOffice> TransitOffices => Set<TransitOffice>();
 
     public DbSet<VehicleColor> VehicleColors => Set<VehicleColor>();
@@ -188,6 +206,11 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     // Preferencias de UI por usuario (base compartida: elegir columnas visibles en tablas).
     public DbSet<UserUiPreferenceEntity> UserUiPreferences => Set<UserUiPreferenceEntity>();
+
+    // Permisos individuales por usuario y su bitácora append-only (HU #13642, ADR-0073).
+    public DbSet<UserPermissionOverrideEntity> UserPermissionOverrides => Set<UserPermissionOverrideEntity>();
+
+    public DbSet<UserPermissionAuditEntity> UserPermissionAudits => Set<UserPermissionAuditEntity>();
 
     // Consultas que cada usuario del organismo arma y guarda sobre los trámites.
     public DbSet<OtSavedQueryEntity> OtSavedQueries => Set<OtSavedQueryEntity>();
@@ -225,6 +248,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<DocumentType> DocumentTypes => Set<DocumentType>();
 
     public DbSet<Banner> Banners => Set<Banner>();
+
+    /// <summary>HU #13084 — clientes de integración externos (<c>integrations.external_clients</c>).</summary>
+    public DbSet<ExternalClient> ExternalClients => Set<ExternalClient>();
 
     public DbSet<ProcedureDocumentRequirement> ProcedureDocumentRequirements => Set<ProcedureDocumentRequirement>();
 
@@ -284,6 +310,19 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
         Set<Flit.Tramites.Domain.Entities.BulkTramites.BulkTramitesBatch>();
     public DbSet<Flit.Tramites.Domain.Entities.BulkTramites.BulkTramitesBatchRow> BulkTramitesBatchRows =>
         Set<Flit.Tramites.Domain.Entities.BulkTramites.BulkTramitesBatchRow>();
+
+    // Trámites — motor de lotes de descarga masiva de consolidados (HU #13367, Feature #13306, ADR-0070)
+    public DbSet<Flit.Tramites.Domain.Entities.ConsolidadoLotes.ConsolidadoExportSettings> ConsolidadoExportSettings =>
+        Set<Flit.Tramites.Domain.Entities.ConsolidadoLotes.ConsolidadoExportSettings>();
+    public DbSet<Flit.Tramites.Domain.Entities.ConsolidadoLotes.ConsolidadoExportBatch> ConsolidadoExportBatches =>
+        Set<Flit.Tramites.Domain.Entities.ConsolidadoLotes.ConsolidadoExportBatch>();
+
+    // HU #13368: partes, ítems y auditoría append-only del lote (Ley 1581). La auditoría solo se inserta.
+    public DbSet<Flit.Tramites.Domain.Entities.ConsolidadoLotes.ConsolidadoExportBatchPart> ConsolidadoExportBatchParts =>
+        Set<Flit.Tramites.Domain.Entities.ConsolidadoLotes.ConsolidadoExportBatchPart>();
+    public DbSet<Flit.Tramites.Domain.Entities.ConsolidadoLotes.ConsolidadoExportBatchItem> ConsolidadoExportBatchItems =>
+        Set<Flit.Tramites.Domain.Entities.ConsolidadoLotes.ConsolidadoExportBatchItem>();
+    public DbSet<ConsolidadoExportAuditEntry> ConsolidadoExportAuditEntries => Set<ConsolidadoExportAuditEntry>();
 
     // Trámites — cola de despachos de correo al cambio de estado (HU #11461, ADR-0045)
     public DbSet<ProcedureStateChangeEmailDispatch> ProcedureStateChangeEmailDispatches =>
@@ -375,6 +414,16 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     internal DbSet<Entities.Admin.NotificationTestSettingsRow> NotificationTestSettings =>
         Set<Entities.Admin.NotificationTestSettingsRow>();
 
+    // Feature #13508 (Épica #13272) — configuración multi-proveedor IA por herramienta (global SuperAdmin).
+    internal DbSet<Entities.Admin.AiToolProviderSettingsRow> AiToolProviderSettings =>
+        Set<Entities.Admin.AiToolProviderSettingsRow>();
+
+    internal DbSet<Entities.Admin.AiProviderTransitionRow> AiProviderTransitions =>
+        Set<Entities.Admin.AiProviderTransitionRow>();
+
+    internal DbSet<Entities.Admin.AiFailoverAlertRow> AiFailoverAlerts =>
+        Set<Entities.Admin.AiFailoverAlertRow>();
+
     // Bitácora append-only de intentos de envío de notificación (HU #11363, esquema de la
     // HU #11357). tenant_id NOT NULL en BD — ver NotificationDeliveryLoggingEmailSender.
     internal DbSet<Entities.Admin.NotificationDeliveryLogEntity> NotificationDeliveryLogs =>
@@ -395,6 +444,16 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(FlitDbContext).Assembly);
+        // Epic #13217 (HU #13231): las tablas de identidad viven en su propia librería, compartida con core-identity.
+        modelBuilder.ApplyConfigurationsFromAssembly(IdentityPersistence.Assembly);
+
+        // HU #12990 (FLIT Suite A-05): almacenes del servidor OIDC del hub (OpenIddict) en identity.oidc_*.
+        Configurations.Identity.OidcModel.Map(modelBuilder);
+
+        // HU #13350 (Epic #13316): outbox del SDK para los eventos que Trámites publica en flit.tramites.
+        modelBuilder.AddFlitOutbox("tramites");
+        // HU #13351: bandeja de entrada de los eventos que Trámites consume (avisos de Kyverum desde Consultas).
+        modelBuilder.AddFlitInbox("tramites");
     }
 
     // ── Vigencia del expediente consolidado (Feature #10701 / HU #10860) ─────────────────────
@@ -403,6 +462,16 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // (y tests) que construye el contexto a mano: así no se puede saltar. El PORQUÉ de cada decisión
     // —qué cuenta como cambio, y por qué el UPDATE va en un segundo save— está en
     // ConsolidadoVigenciaTracker.
+    //
+    // Bug #13055 — además encola la regeneración anticipada de los consolidados. La cola se toma del
+    // contenedor de la aplicación (el que registró el contexto con AddDbContext): un contexto armado a
+    // mano en tests no tiene contenedor, la cola sale null y no se encola nada.
+    private Flit.Tramites.Application.UseCases.ProcedureInstances.IConsolidadoRegeneracionQueue? RegeneracionQueue() =>
+        this.GetService<IDbContextOptions>()
+            .FindExtension<CoreOptionsExtension>()
+            ?.ApplicationServiceProvider
+            ?.GetService(typeof(Flit.Tramites.Application.UseCases.ProcedureInstances.IConsolidadoRegeneracionQueue))
+            as Flit.Tramites.Application.UseCases.ProcedureInstances.IConsolidadoRegeneracionQueue;
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
@@ -417,6 +486,10 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
             // Bug #13194 — el trigger subió row_version: sin releerlo, el siguiente save del contexto falla.
             ConsolidadoVigenciaTracker.AvanzarRowVersion(this, tocadas);
         }
+
+        ConsolidadoVigenciaTracker
+            .EncolarRegeneracionAsync(this, RegeneracionQueue(), candidatas, CancellationToken.None)
+            .GetAwaiter().GetResult();
 
         return afectadas;
     }
@@ -437,6 +510,10 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
             // Bug #13194 — el trigger subió row_version: sin releerlo, el siguiente save del contexto falla.
             ConsolidadoVigenciaTracker.AvanzarRowVersion(this, tocadas);
         }
+
+        await ConsolidadoVigenciaTracker
+            .EncolarRegeneracionAsync(this, RegeneracionQueue(), candidatas, cancellationToken)
+            .ConfigureAwait(false);
 
         // El número de filas que se devuelve es el del save del LLAMADOR: las marcas de vigencia son
         // contabilidad interna del consolidado y no deben alterar un conteo del que ya depende código

@@ -12,10 +12,13 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 /// </summary>
 internal sealed class DetailedReportReadRepository : IDetailedReportReadRepository
 {
+    // HU #13664 — Ver por familia (ver AnalyticsFamilyFilter): alias local para el barrido de interpolación SQL.
+    private const string FamilyByDetailView = AnalyticsFamilyFilter.ByDetailView;
+
     // Los saltos de línea inicial y final son OBLIGATORIOS: este fragmento se concatena con las
     // proyecciones (SELECT …) y las cláusulas finales (ORDER BY / GROUP BY). Sin ellos, los raw
     // strings adyacentes se pegan (p. ej. "v.transfer_type" + "FROM …") y Postgres lanza 42601.
-    private const string BaseFrom = "\n" + """
+    private const string BaseFrom = "\n" + $"""
         FROM analytics.v_procedure_detail_report v
         WHERE v.tenant_id = @tenant
           AND v.created_at::date BETWEEN @from AND @to
@@ -28,6 +31,7 @@ internal sealed class DetailedReportReadRepository : IDetailedReportReadReposito
           AND (@personName::text IS NULL OR v.person_full_name ILIKE '%' || @personName::text || '%')
           AND (@hasTransformation::boolean IS NULL OR v.has_transformation = @hasTransformation::boolean)
           AND (@isLeasing::boolean IS NULL OR v.is_leasing = @isLeasing::boolean)
+          AND {FamilyByDetailView}
         """ + "\n";
 
     private readonly FlitDbContext _context;
@@ -177,6 +181,7 @@ internal sealed class DetailedReportReadRepository : IDetailedReportReadReposito
         AddParam(cmd, "personName", (object?)filter.PersonName ?? DBNull.Value);
         AddParam(cmd, "hasTransformation", filter.HasTransformation.HasValue ? filter.HasTransformation.Value : DBNull.Value);
         AddParam(cmd, "isLeasing", filter.IsLeasing.HasValue ? filter.IsLeasing.Value : DBNull.Value);
+        AnalyticsFamilyFilter.AddParam(cmd, filter.AllowedFamilies);
     }
 
     private async Task<T> ExecuteWithTenantAsync<T>(

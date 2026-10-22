@@ -15,7 +15,7 @@ import {
 } from '@/components/operacion/RevocationRequestsFiltersBar';
 import { RevocationRequestsTable } from '@/components/operacion/RevocationRequestsTable';
 
-const TAKE = 20;
+
 
 const FILTROS_VACIOS: RevocationRequestsFiltersValue = {
   requestedFrom: '',
@@ -40,6 +40,8 @@ export default function RevocatoriasPage() {
 
   const [filtros, setFiltros] = useState<RevocationRequestsFiltersValue>(FILTROS_VACIOS);
   const [skip, setSkip] = useState(0);
+  // Bug #13055 — «Filas por página» como en trámites: el tamaño es estado y arranca en 10.
+  const [take, setTake] = useState(10);
   const [status, setStatus] = useState<UiStatus>('loading');
   const [items, setItems] = useState<RevocationRequestListItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -73,7 +75,7 @@ export default function RevocatoriasPage() {
           requestedTo: filtros.requestedTo || undefined,
           transitOfficeId: filtros.transitOfficeId || undefined,
           skip,
-          take: TAKE,
+          take,
         })
         .then((res) => {
           if (signal.aborted) return;
@@ -86,7 +88,7 @@ export default function RevocatoriasPage() {
           setStatus('error');
         });
     },
-    [filtros, skip],
+    [filtros, skip, take],
   );
 
   useEffect(() => {
@@ -110,7 +112,7 @@ export default function RevocatoriasPage() {
         <ModuleTitle title="Revocatorias" />
         <div
           role="alert"
-          className="rounded-2xl border border-[#DFE5ED] bg-white p-6 text-sm text-[#162744] dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+          className="rounded-2xl border border-[#DFE5ED] bg-white p-6 text-sm text-flit-primary dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
         >
           Solo el Administrador de la compañía puede ver las solicitudes de revocatoria.
         </div>
@@ -145,7 +147,11 @@ export default function RevocatoriasPage() {
           items={items}
           total={total}
           skip={skip}
-          take={TAKE}
+          take={take}
+          onTakeChange={(t) => {
+            setTake(t);
+            setSkip(0);
+          }}
           onPageChange={setSkip}
           onView={(item) => router.push(`/tramites/${item.procedureInstanceId}`)}
         />

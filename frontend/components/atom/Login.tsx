@@ -5,6 +5,7 @@ import Link from "next/link";
 import { loginUser } from "@/lib/api/auth";
 import { rememberEmail, storeToken } from "@/lib/auth/session";
 import { BrandLogo } from "@/components/brand/BrandLogo";
+import { FLIT_PRIVACY_POLICY_URL } from "@/lib/brand/types";
 import { ShieldAlert, Lock, Mail, User as UserIcon, ExternalLink } from "lucide-react";
 
 /**
@@ -151,7 +152,9 @@ export function Login({
           <BrandLogo variant="white" className="max-w-[280px] md:max-w-[360px] w-full h-auto object-contain" />
         </div>
         <a
-          href="#"
+          href={FLIT_PRIVACY_POLICY_URL}
+          target="_blank"
+          rel="noopener noreferrer"
           className="absolute bottom-0 left-0 right-0 mb-6 text-center text-xs text-white/70 hover:text-white transition z-10"
         >
           Políticas de Privacidad y Términos de Uso
@@ -205,7 +208,7 @@ export function Login({
           ) : networkRedirect ? (
             <div
               className="rounded-xl border p-5 flex gap-3 animate-fade-in"
-              style={{ borderColor: "var(--color-flit-brand)", background: "rgba(85,126,255,0.06)" }}
+              style={{ borderColor: "var(--color-flit-brand)", background: "color-mix(in srgb, var(--color-flit-brand) 6%, transparent)" }}
               role="alert"
               aria-live="assertive"
             >

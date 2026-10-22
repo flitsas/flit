@@ -56,9 +56,9 @@ export function PortalParticipant({ token }: Props) {
       <div className={CARD} role="status">
         <div
           className="h-14 w-14 mx-auto rounded-full grid place-items-center mb-3"
-          style={{ background: 'rgba(0,219,213,0.15)' }}
+          style={{ background: 'color-mix(in srgb, var(--color-flit-tech) 15%, transparent)' }}
         >
-          <Check className="h-7 w-7" style={{ color: '#00DBD5' }} />
+          <Check className="h-7 w-7" style={{ color: 'var(--color-flit-tech)' }} />
         </div>
         <h1 className="text-lg font-bold text-center">¡Listo!</h1>
         <p className="text-sm opacity-70 text-center mt-1">
@@ -198,7 +198,7 @@ function ConsentGate({
         onClick={() => void handleAccept()}
         disabled={!accepted || submitting}
         className="w-full py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
-        style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+        style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
       >
         {submitting ? 'Registrando…' : 'Aceptar y continuar'}
       </button>
@@ -306,7 +306,7 @@ function DocumentosTask({
               </div>
               <label
                 className="rounded-xl border px-3 py-1.5 text-[11px] font-semibold shrink-0 cursor-pointer"
-                style={{ borderColor: '#557EFF', color: '#557EFF' }}
+                style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
               >
                 {uploadingTipo === d.tipo ? 'Subiendo…' : d.subido ? 'Reemplazar' : 'Subir'}
                 <input
@@ -424,7 +424,7 @@ function FirmaTask({ token, onRefresh }: { token: string; onRefresh: () => void 
               target="_blank"
               rel="noreferrer"
               className="text-[11px] underline"
-              style={{ color: '#557EFF' }}
+              style={{ color: 'var(--color-flit-brand)' }}
             >
               Abrir enlace de firma
             </a>
@@ -435,7 +435,7 @@ function FirmaTask({ token, onRefresh }: { token: string; onRefresh: () => void 
               onClick={() => void handleSimular()}
               disabled={busy}
               className="px-4 py-1.5 rounded-xl text-[11px] font-semibold border disabled:opacity-50"
-              style={{ borderColor: '#557EFF', color: '#557EFF' }}
+              style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
             >
               {busy ? 'Firmando…' : 'Simular firma (DEV)'}
             </button>
@@ -481,7 +481,7 @@ function FinalizarTask({
         onClick={() => void handleFinalizar()}
         disabled={busy}
         className="w-full mt-3 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50 flex items-center justify-center gap-2"
-        style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+        style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
       >
         <FileText className="h-4 w-4" aria-hidden="true" />
         {busy ? 'Finalizando…' : 'Finalizar mi parte'}

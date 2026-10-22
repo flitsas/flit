@@ -100,7 +100,7 @@ export function CancelInvitationDialog({
         </p>
         <p
           className="rounded-lg px-3 py-2 text-[11px] font-medium"
-          style={{ background: "rgba(85,126,255,0.08)", color: "#557EFF" }}
+          style={{ background: "color-mix(in srgb, var(--color-flit-brand) 8%, transparent)", color: "var(--color-flit-brand)" }}
         >
           Esta acción es distinta de <strong>Eliminar usuario</strong>: todavía no existe ninguna
           cuenta creada, solo se anula la invitación pendiente.

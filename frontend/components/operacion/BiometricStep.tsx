@@ -17,7 +17,12 @@ import { InlineAlert } from '@/components/atom/InlineAlert';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { WizardCardHeader } from './wizard-atoms';
 import { WizardAccordion } from './WizardAccordion';
-import { WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
+import {
+  WIZARD_BTN_BRAND,
+  WIZARD_BTN_BRAND_OUTLINE,
+  WIZARD_BTN_SOLID,
+  WIZARD_CARD,
+} from './wizard-field-styles';
 import { useWizardFocusTrap } from './use-wizard-focus-trap';
 import { motivoDeParte, presentarMotivoNoEnvio } from './envio-validacion-motivos';
 import { INLINE_ALERT_TONES } from '@/components/atom/InlineAlert';
@@ -38,6 +43,7 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 
 import { formatFechaHora } from '@/lib/format/date';
+import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
 interface Props {
 
   instanceId: string | null;
@@ -131,6 +137,8 @@ const ESTADO_LABEL: Record<BiometricEstado, string> = {
   expirado: 'Expirado',
   pendiente_envio: 'Pendiente de envío',
   error_envio: 'Error de envío',
+  manual_activo: MANUAL_ESTADO_META.manual_activo.label,
+  pendiente_revision_manual: MANUAL_ESTADO_META.pendiente_revision_manual.label,
 };
 
 const ESTADO_TONE: Record<BiometricEstado, StatusTone> = {
@@ -141,6 +149,8 @@ const ESTADO_TONE: Record<BiometricEstado, StatusTone> = {
   expirado: 'neutral',
   pendiente_envio: 'info',
   error_envio: 'danger',
+  manual_activo: MANUAL_ESTADO_META.manual_activo.tone,
+  pendiente_revision_manual: MANUAL_ESTADO_META.pendiente_revision_manual.tone,
 };
 
 /**
@@ -377,21 +387,15 @@ export function BiometricStep({
   // Paso Identidad: título + subtítulo en card propia; partes = acordeones separados.
   const pagePanel = Boolean(heading);
 
-  // Feature 05 (rediseño) — la rejilla de partes es de dos columnas SOLO cuando hay dos partes
-  // (traspaso: vendedor + comprador); con una sola (matrícula inicial) se queda en una columna para
-  // no dejar una mitad de tarjeta vacía.
-  const gridClass = partes.length > 1 ? 'lg:grid-cols-2' : '';
+  // HU #12729 (D.3) — el esqueleto de carga conserva rejilla a dos columnas desde `md` cuando hay
+  // dos partes (traspaso); la rejilla real vive dentro de cada `ParteBlock` (firma/QR).
+  const gridClass = partes.length > 1 ? 'md:grid-cols-2' : '';
 
   const partesContent = initialLoading ? (
     <BiometricSkeleton partes={partes} gridClass={gridClass} />
   ) : (
-    // Feature 05 (rediseño) — cada parte ahora trae DOS tarjetas (firma + biométrica, ver
-    // `ParteBlock`), así que la rejilla exterior deja de repartir partes en columnas: cada bloque va
-    // a ancho completo y apilado, con su propio encabezado de rol para no confundir vendedor y
-    // comprador cuando hay dos (traspaso).
-    // Paso Validación (prototipo AccordionRow + ValidacionCard): cuando !embedded, cada parte es
-    // un acordeón desplegable separado con badge de estado en la cabecera.
-    <div className="space-y-4">
+    // Cada tarjeta de validación ocupa media pantalla y fluye en horizontal (2 columnas desde md).
+    <div className={`grid grid-cols-1 items-stretch gap-4 ${gridClass}`}>
       {partes.map((parte) => {
         // ADR-0053 (Múltiple Propietario) — un lado puede traer 1..4 actores. `actorsOrderedByOrdinal`
         // es la MISMA función que usan las pantallas de solo lectura (FirmaFurStep, TramiteDetalleActores):
@@ -418,18 +422,19 @@ export function BiometricStep({
             : entriesDelLado;
 
         return (
-          <div key={parte} role="group" aria-label={`Biométrica ${PARTE_LABEL[parte]}`}>
-            <div className="space-y-4">
+          <div key={parte} role="group" aria-label={`Biométrica ${PARTE_LABEL[parte]}`} className="contents">
               {/*
                * HU #11666 — `motivosNoEnvio` es y sigue siendo POR LADO (el backend lo calcula así,
                * `EnvioValidacionBloqueoRules` no distingue copropietarios dentro de un mismo rol —
                * ver comentario de `EnvioValidacionMotivo`). Se pinta UNA sola vez por lado, no
                * repetido por cada actor: repetirlo por actor sería mentir precisión que el dato no
                * tiene. Vive fuera de cada acordeón de actor para que no dependa de cuál esté
-               * expandido.
+               * expandido. En la rejilla de dos columnas ocupa la fila completa.
                */}
               {motivoLado && (
-                <MotivoNoEnvioAviso parte={parte} motivo={motivoLado} onIrAActores={onIrAActores} />
+                <div className={gridClass ? 'md:col-span-2' : undefined}>
+                  <MotivoNoEnvioAviso parte={parte} motivo={motivoLado} onIrAActores={onIrAActores} />
+                </div>
               )}
               {entries.map(({ item: actor, ordinal }) => {
                 // Correlación por `ordinal` (fallback a documento en filas históricas sin ordinal) —
@@ -482,11 +487,12 @@ export function BiometricStep({
                 );
 
                 return (
-                  <div key={`${parte}-${ordinal}`}>
+                  <div key={`${parte}-${ordinal}`} className="h-full min-w-0">
                     {!embedded ? (
                       <WizardAccordion
                         title={titulo}
                         defaultOpen
+                        className="h-full"
                         badge={<StatusBadge label={badge.label} tone={badge.tone} />}
                       >
                         {inner}
@@ -497,7 +503,6 @@ export function BiometricStep({
                   </div>
                 );
               })}
-            </div>
           </div>
         );
       })}
@@ -526,9 +531,9 @@ export function BiometricStep({
       {!hideIntro && (
         <div
           className={`${WIZARD_CARD}`}
-          style={{ borderLeft: '3px solid #557EFF' }}
+          style={{ borderLeft: '3px solid var(--color-flit-brand)' }}
         >
-          <p className="text-xs font-semibold" style={{ color: '#557EFF' }}>
+          <p className="text-xs font-semibold" style={{ color: 'var(--color-flit-brand)' }}>
             La validación se inicia automáticamente al continuar
           </p>
           <p className="mt-1 text-xs opacity-70">
@@ -630,48 +635,55 @@ function ParteBlock({
   const sigNombre = info?.nombre ?? PARTE_LABEL[parte];
 
   // Un solo método visible: baúl → solo firma electrónica (sin bitácora Kyverum);
-  // identidad/biométrica → solo panel de validación + un disclosure de trazabilidad.
+  // identidad/biométrica → panel de validación + trazabilidad a ancho completo debajo (HU #12729).
   if (vaultCovered) {
     return (
-      <div className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
-        <p className="mb-3 text-xs font-bold" style={{ color: '#1A2B4C' }}>
-          Método de Firma
-        </p>
-        <div
-          className="flex items-center justify-center rounded-xl border p-5 text-center"
-          style={{ borderColor: '#DFE5ED', background: '#EEF5FF' }}
-        >
-          <div>
-            <p
-              className="text-[11px] font-medium uppercase tracking-wide"
-              style={{ color: '#59677D' }}
-            >
-              Firma electrónica
+      <div className="space-y-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
+            <p className="mb-3 text-xs font-bold" style={{ color: '#1A2B4C' }}>
+              Método de Firma
             </p>
-            <p
-              className="mt-2 select-none text-2xl font-semibold italic"
-              style={{ color: '#1A2B4C' }}
-            >
-              {sigNombre}
-            </p>
-            <div className="mt-2">
-              <StatusBadge label={sigBadge.label} tone={sigBadge.tone} />
-            </div>
+            <VaultCoveredView />
             {sigDetalle ? <p className="mt-2 text-xs opacity-70">{sigDetalle}</p> : null}
           </div>
-        </div>
-        <div className="mt-3">
-          <VaultCoveredView />
+          <div
+            className="flex items-center justify-center rounded-xl border p-5 text-center"
+            style={{ borderColor: '#DFE5ED', background: '#EEF5FF' }}
+          >
+            <div>
+              <p
+                className="text-[11px] font-medium uppercase tracking-wide"
+                style={{ color: '#59677D' }}
+              >
+                Firma electrónica
+              </p>
+              <p
+                className="mt-2 select-none text-2xl font-semibold italic"
+                style={{ color: '#1A2B4C' }}
+              >
+                {sigNombre}
+              </p>
+              <div className="mt-2">
+                <StatusBadge label={sigBadge.label} tone={sigBadge.tone} />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
+  const showCaptureSide =
+    validation?.status === 'en_proceso' &&
+    !!validation.captureUrl &&
+    !validation.expired;
+
   const actionView =
     estado === 'aprobado' ? (
       <VerifiedView validation={validation!} />
-    ) : estado === 'en_proceso' && validation?.captureUrl && !validation.expired ? (
-      <KyverumPendingView validation={validation} instanceId={instanceId} onChanged={onChanged} />
+    ) : showCaptureSide ? (
+      <KyverumPendingIntro validation={validation!} instanceId={instanceId} onChanged={onChanged} />
     ) : estado === 'rechazado' || estado === 'expirado' || validation?.expired ? (
       <RejectedView
         validation={validation!}
@@ -710,32 +722,41 @@ function ParteBlock({
     );
 
   return (
-    <div className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
-      <p className="text-xs font-bold" style={{ color: '#1A2B4C' }}>
-        Datos de Identificación
-      </p>
-      {info && (
-        <>
-          <p className="mt-2 text-xs font-semibold" style={{ color: '#1A2B4C' }}>
-            {info.nombre} — {PARTE_LABEL[parte]}
-            {multipleOwners ? ` ${ordinal}` : ''}
+    <div className="space-y-3">
+      <div className={`grid grid-cols-1 gap-4 ${showCaptureSide ? 'md:grid-cols-2' : ''}`}>
+        <div className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
+          <p className="text-xs font-bold" style={{ color: '#1A2B4C' }}>
+            Datos de Identificación
           </p>
-          <p className="mt-0.5 text-xs opacity-70">{info.documentoLine}</p>
-        </>
-      )}
-      <div className="mt-4">
-        <p
-          className="text-[11px] font-medium uppercase tracking-wide"
-          style={{ color: '#59677D' }}
-        >
-          Estado Biométrico
-        </p>
-        <div className="mt-2">
-          <StatusBadge label={bioBadge.label} tone={bioBadge.tone} />
+          {info && (
+            <>
+              <p className="mt-2 text-xs font-semibold" style={{ color: '#1A2B4C' }}>
+                {info.nombre} — {PARTE_LABEL[parte]}
+                {multipleOwners ? ` ${ordinal}` : ''}
+              </p>
+              <p className="mt-0.5 text-xs opacity-70">{info.documentoLine}</p>
+            </>
+          )}
+          <div className="mt-4">
+            <p
+              className="text-[11px] font-medium uppercase tracking-wide"
+              style={{ color: '#59677D' }}
+            >
+              Estado Biométrico
+            </p>
+            <div className="mt-2">
+              <StatusBadge label={bioBadge.label} tone={bioBadge.tone} />
+            </div>
+          </div>
+          <div className="mt-3">{actionView}</div>
         </div>
+        {showCaptureSide && validation ? (
+          <div className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
+            <KyverumCapturePanel validation={validation} />
+          </div>
+        ) : null}
       </div>
-      <div className="mt-3">{actionView}</div>
-      <HistorialValidaciones historial={historial} vigenteId={validation?.id ?? null} />
+      <ParteTrazabilidadSection historial={historial} vigenteId={validation?.id ?? null} />
     </div>
   );
 }
@@ -857,7 +878,11 @@ function MotivoNoEnvioAviso({
  * — mock no genera eventos de auditoría. Se omite por completo si la parte aún no tiene ninguna
  * validación (estado vacío, cubierto por `StartAction`).
  */
-function HistorialValidaciones({
+/**
+ * HU #12729 (D.3) — trazabilidad a ancho completo debajo de la tarjeta de la parte, plegada por
+ * defecto. Antes vivía dentro de la tarjeta de identidad.
+ */
+function ParteTrazabilidadSection({
   historial,
   vigenteId,
 }: {
@@ -927,8 +952,8 @@ function TrazabilidadDisclosure({ children }: { children: ReactNode }) {
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-controls={panelId}
-        className="flex items-center gap-1.5 rounded-lg text-xs font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
-        style={{ color: '#557EFF' }}
+        className="flex items-center gap-1.5 rounded-lg text-xs font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+        style={{ color: 'var(--color-flit-brand)' }}
       >
         Ver trazabilidad de validación
         <ChevronDown
@@ -954,19 +979,19 @@ function VaultCoveredView() {
   return (
     <div
       className="flex items-center gap-3 rounded-xl p-3"
-      style={{ background: 'rgba(85,126,255,0.10)', border: '1px solid rgba(85,126,255,0.35)' }}
+      style={{ background: 'color-mix(in srgb, var(--color-flit-brand) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--color-flit-brand) 35%, transparent)' }}
       role="status"
       aria-live="polite"
     >
       <span
         className="flex h-9 w-9 items-center justify-center rounded-full shrink-0"
-        style={{ background: '#557EFF', color: 'white' }}
+        style={{ background: 'var(--color-flit-brand)', color: 'white' }}
         aria-hidden
       >
         <FileSignature className="h-5 w-5" />
       </span>
       <div className="space-y-0.5">
-        <p className="text-xs font-bold" style={{ color: '#557EFF' }}>
+        <p className="text-xs font-bold" style={{ color: 'var(--color-flit-brand)' }}>
           Firma electrónica (baúl)
         </p>
         <p className="text-xs opacity-70">
@@ -998,12 +1023,8 @@ function VerifiedView({ validation: v }: { validation: BiometricValidation }) {
   );
 }
 
-/**
- * Validación Kyverum en curso: el enlace de captura ya se envió por correo al cliente. Se muestra
- * también aquí (link copiable + QR) para que el gestor pueda reenviarlo/mostrarlo si el correo no
- * llega. El estado se actualiza solo (polling) cuando llegue el webhook.
- */
-function KyverumPendingView({
+/** Columna izquierda cuando Kyverum está en curso con enlace de captura (HU #12729). */
+function KyverumPendingIntro({
   validation: v,
   instanceId,
   onChanged,
@@ -1012,30 +1033,15 @@ function KyverumPendingView({
   instanceId: string | null;
   onChanged: () => void;
 }) {
-  const [copied, setCopied] = useState(false);
-  const captureUrl = v.captureUrl!;
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard?.writeText(captureUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* clipboard no disponible: el gestor puede copiar el link manualmente */
-    }
-  };
-
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <RefreshCw className="h-3.5 w-3.5 animate-spin" style={{ color: '#557EFF' }} aria-hidden />
-        <p className="text-xs font-semibold" style={{ color: '#557EFF' }}>
+        <RefreshCw className="h-3.5 w-3.5 animate-spin" style={{ color: 'var(--color-flit-brand)' }} aria-hidden />
+        <p className="text-xs font-semibold" style={{ color: 'var(--color-flit-brand)' }}>
           Esperando validación de {v.name}
         </p>
       </div>
 
-      {/* Un intento no pasó pero la validación SIGUE abierta (Kyverum permite reintentar): se informa el motivo
-          real y que el cliente puede volver a intentar en su móvil, sin marcar la validación como rechazada. */}
       {v.ultimoIntentoMotivo && (
         <InlineAlert tone="warning" title={`Intento ${v.intentos} de ${v.maxIntentos} no pasó.`}>
           {v.ultimoIntentoMotivo}{' '}
@@ -1046,52 +1052,65 @@ function KyverumPendingView({
       )}
 
       <p className="text-xs opacity-70">
-        Enviamos el enlace de captura al correo del cliente ({v.email}). También puedes compartirlo:
+        Enviamos el enlace de captura al correo del cliente ({v.email}). También puedes compartirlo
+        desde el panel de captura.
       </p>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="rounded-xl border bg-white p-2">
-          <QRCodeSVG value={captureUrl} size={120} aria-label="Código QR del enlace de captura" />
-        </div>
-        <div className="min-w-0 flex-1 space-y-2">
-          {/* AC2: CTA explícito para abrir la captura en una pestaña nueva (target=_blank, rel=noopener). */}
-          <a
-            href={captureUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex w-fit items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-            style={{ background: WIZARD_CTA_GRADIENT }}
-          >
-            <ExternalLink className="h-3 w-3" aria-hidden />
-            Abrir captura Kyverum
-          </a>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void copy()}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-              style={{ borderColor: '#557EFF', color: '#557EFF' }}
-              aria-label="Copiar enlace de captura"
-            >
-              <Copy className="h-3 w-3" aria-hidden />
-              {copied ? 'Copiado' : 'Copiar enlace'}
-            </button>
-          </div>
-          {/* El enlace literal queda como referencia (también se envió al correo del cliente). */}
-          <a
-            href={captureUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block truncate text-xs underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-            style={{ color: '#557EFF' }}
-            title={captureUrl}
-          >
-            {captureUrl}
-          </a>
-        </div>
-      </div>
-
       <ReconcileAction instanceId={instanceId} validationId={v.id} onReconciled={onChanged} />
+    </div>
+  );
+}
+
+/** Columna derecha: QR + acciones de captura Kyverum (HU #12729). */
+function KyverumCapturePanel({ validation: v }: { validation: BiometricValidation }) {
+  const [copied, setCopied] = useState(false);
+  const captureUrl = v.captureUrl!;
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard?.writeText(captureUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard no disponible */
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <div className="rounded-xl border bg-white p-2 dark:bg-[#162744]">
+        <QRCodeSVG value={captureUrl} size={120} aria-label="Código QR del enlace de captura" />
+      </div>
+      <a
+        href={captureUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`${WIZARD_BTN_BRAND} inline-flex items-center gap-1.5 px-3 py-1.5`}
+        style={{ background: WIZARD_BTN_SOLID }}
+      >
+        <ExternalLink className="h-3 w-3" aria-hidden />
+        Abrir captura Kyverum
+      </a>
+      <button
+        type="button"
+        onClick={() => void copy()}
+        className={WIZARD_BTN_BRAND_OUTLINE}
+        style={{ borderColor: WIZARD_BTN_SOLID, color: WIZARD_BTN_SOLID }}
+        aria-label="Copiar enlace de captura"
+      >
+        <Copy className="h-3 w-3" aria-hidden />
+        {copied ? 'Copiado' : 'Copiar enlace'}
+      </button>
+      <a
+        href={captureUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block max-w-full truncate text-xs underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+        style={{ color: WIZARD_BTN_SOLID }}
+        title={captureUrl}
+      >
+        {captureUrl}
+      </a>
     </div>
   );
 }
@@ -1152,7 +1171,7 @@ function ReconcileAction({
         onClick={() => void handleReconcile()}
         disabled={submitting || !instanceId}
         className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-        style={{ borderColor: '#557EFF', color: '#557EFF' }}
+        style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
         aria-label="Actualizar estado de la validación consultando al proveedor"
       >
         <RotateCcw className={`h-3 w-3 ${submitting ? 'animate-spin' : ''}`} aria-hidden />
@@ -1251,8 +1270,8 @@ function SentPendingView({
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <RefreshCw className="h-3.5 w-3.5" style={{ color: '#557EFF' }} aria-hidden />
-        <p className="text-xs font-semibold" style={{ color: '#557EFF' }}>
+        <RefreshCw className="h-3.5 w-3.5" style={{ color: 'var(--color-flit-brand)' }} aria-hidden />
+        <p className="text-xs font-semibold" style={{ color: 'var(--color-flit-brand)' }}>
           {headline} de {v.name}
         </p>
       </div>
@@ -1439,10 +1458,14 @@ function StartAction({
           disabled={submitting || !instanceId}
           className={
             variant === 'secondary'
-              ? 'flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2'
-              : 'rounded-xl px-3 py-2 text-xs font-semibold text-white disabled:opacity-50'
+              ? WIZARD_BTN_BRAND_OUTLINE
+              : `${WIZARD_BTN_BRAND} inline-flex items-center gap-1.5`
           }
-          style={variant === 'secondary' ? { borderColor: '#557EFF', color: '#557EFF' } : { background: WIZARD_CTA_GRADIENT }}
+          style={
+            variant === 'secondary'
+              ? { borderColor: WIZARD_BTN_SOLID, color: WIZARD_BTN_SOLID }
+              : { background: WIZARD_BTN_SOLID }
+          }
         >
           {buttonLabel}
         </button>
@@ -1452,7 +1475,7 @@ function StartAction({
           ref={confirmDialogRef}
           tabIndex={-1}
           className="rounded-xl border p-3 text-xs outline-none focus:ring-0"
-          style={{ borderColor: '#557EFF' }}
+          style={{ borderColor: 'var(--color-flit-brand)' }}
           role="alertdialog"
           aria-modal="true"
           aria-label="Confirmar envío de validación"
@@ -1467,8 +1490,8 @@ function StartAction({
             </button>
             <button
               type="button"
-              className="rounded-lg px-2 py-1 font-semibold text-white disabled:opacity-50"
-              style={{ background: WIZARD_CTA_GRADIENT }}
+              className={`${WIZARD_BTN_BRAND} px-2 py-1 disabled:opacity-50`}
+              style={{ background: WIZARD_BTN_SOLID }}
               onClick={() => void doStart()}
               disabled={submitting}
             >

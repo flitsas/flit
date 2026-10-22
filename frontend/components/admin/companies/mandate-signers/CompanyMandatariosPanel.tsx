@@ -1,27 +1,79 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { FileText, Pencil, RotateCcw, Send, Trash2, UserX } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { Pagination } from "@/components/atom/Pagination";
+import { RowActions } from "@/components/atom/RowActions";
+import { SearchInput } from "@/components/atom/SearchInput";
+import { usePaginacion } from "@/components/atom/usePaginacion";
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from "@/components/atom/table-styles";
 import {
   createCompanyMandateSigner,
+  deleteCompanyMandateSigner,
+  fetchCompanyMandateSignerImpact,
   fetchCompanyMandateSigners,
   fetchCompanyTransitOffices,
-  fetchRepresentedCompanies,
   inactivateCompanyMandateSigner,
   reactivateCompanyMandateSigner,
+  reconcileCompanyMandateSignerIdentity,
+  resendCompanyMandateSignerIdentity,
   updateCompanyMandateSigner,
   type CompanyMandateSignerInput,
   type CompanyTransitOfficeOption,
-  type RepresentedCompanyOption,
   type MandateSigner,
 } from "@/lib/api/admin-mandate-signers";
+import { getToken } from "@/lib/api/client";
+import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { formatDocumentWithType } from "@/lib/display/document-number";
 import {
   motivoSinFirma,
   organismosSinMedioDeFirma,
 } from "@/lib/plataforma/mandatario-firma";
+import { etiquetaModelo, modeloDe } from "@/lib/plataforma/mandatario-vigencia";
+import {
+  puedeCrearMandatarios,
+  puedeEditarMandatario,
+  puedeEliminarMandatario,
+  tieneCandadoDelOrganismo,
+} from "@/lib/plataforma/mandatario-permisos";
+import {
+  mensajeErrorAccion,
+  mensajeResultadoBaja,
+  mensajeResultadoReactivar,
+  type AccionBaja,
+} from "@/lib/plataforma/mandatario-baja";
+import {
+  mensajeErrorReenvio,
+  mensajeReenvio,
+  mensajeValidacionTrasGuardar,
+  presentarValidacion,
+  puedeReenviarValidacion,
+  requiereValidacionPropia,
+  sincronizarValidacionesEnCurso,
+} from "@/lib/plataforma/mandatario-validacion";
+import { useSincronizarValidacionesEnCurso } from "@/lib/plataforma/useSincronizarValidacionesEnCurso";
+import { StatusBadge } from "@/components/atom/StatusBadge";
+import {
+  rlOutlinedActionClass,
+  rlOutlinedActionStyle,
+  rlPrimaryCtaClass,
+  rlPrimaryCtaStyle,
+} from "../legal-representatives/rl-flit-styles";
 import { CompanyMandatarioForm } from "./CompanyMandatarioForm";
+import { FormatosContratoModal } from "./FormatosContratoModal";
+import { MandatarioBajaDialog } from "./MandatarioBajaDialog";
+import { MandatarioCandado } from "./MandatarioCandado";
+import { MandatarioOrganismos } from "./MandatarioOrganismos";
+import type { FuenteAsociadas } from "./MandatarioCompaniasAsociadas";
+import { MandatarioVigenciaBadge } from "./MandatarioVigenciaBadge";
 
 /**
  * HU #11202 — mandatarios gestionados desde el configurador de la COMPAÑÍA.
@@ -39,31 +91,41 @@ export function CompanyMandatariosPanel({
 }) {
   const { show } = useToast();
   const [status, setStatus] = useState<UiStatus>("loading");
+  // Bug #13055 — paginación en cliente con filas por página, como el listado de trámites.
+  const pg = usePaginacion();
   const [signers, setSigners] = useState<MandateSigner[]>([]);
   const [offices, setOffices] = useState<CompanyTransitOfficeOption[]>([]);
-  const [companies, setCompanies] = useState<RepresentedCompanyOption[]>([]);
   const [formOpen, setFormOpen] = useState(false);
+  const [formatosOpen, setFormatosOpen] = useState(false);
   const [editing, setEditing] = useState<MandateSigner | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // HU #13140 — diálogo de confirmación previa para desactivar o eliminar.
+  const [baja, setBaja] = useState<{ signer: MandateSigner; accion: AccionBaja } | null>(null);
+  // HU #13139 — el Gestor/Radicador no ve crear, editar ni eliminar.
+  const [canCreate] = useState(() => puedeCrearMandatarios(decodeJwtPayload(getToken())));
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
       setStatus("loading");
       try {
-        const [signerList, officeList, companyList] = await Promise.all([
+        const [signerList, officeList] = await Promise.all([
           fetchCompanyMandateSigners(tenantId, signal, networkHeadId),
           fetchCompanyTransitOffices(tenantId, signal, networkHeadId),
-          // Best-effort: sin empresas el formulario sigue funcionando y el mandatario aplica a todas,
-          // que es el comportamiento por defecto.
-          fetchRepresentedCompanies(tenantId, signal, networkHeadId).catch(() => []),
         ]);
         if (signal?.aborted) {
           return;
         }
         setSigners(signerList);
         setOffices(officeList);
-        setCompanies(companyList);
         setStatus(signerList.length === 0 ? "empty" : "ready");
+        // Como la pantalla de espera del trámite: si alguna validación en curso ya se resolvió y el aviso
+        // del proveedor no llegó, la consulta la actualiza y se recarga la lista.
+        const cambio = await sincronizarValidacionesEnCurso(signerList, (s) =>
+          reconcileCompanyMandateSignerIdentity(tenantId, s.id, networkHeadId),
+        );
+        if (cambio && !signal?.aborted) {
+          setSigners(await fetchCompanyMandateSigners(tenantId, signal, networkHeadId));
+        }
       } catch {
         if (!signal?.aborted) {
           setStatus("error");
@@ -80,6 +142,14 @@ export function CompanyMandatariosPanel({
     return () => controller.abort();
   }, [load]);
 
+  // Mientras la lista está abierta, las validaciones en curso se siguen consultando solas.
+  useSincronizarValidacionesEnCurso(
+    signers,
+    (s) => reconcileCompanyMandateSignerIdentity(tenantId, s.id, networkHeadId),
+    // Solo la lista, sin el cargador: el cambio llega mientras el gestor está mirando.
+    () => void fetchCompanyMandateSigners(tenantId, undefined, networkHeadId).then(setSigners, () => undefined),
+  );
+
   const officeNameById = useMemo(
     () => new Map(offices.map((o) => [o.transitOfficeId, o.name])),
     [offices],
@@ -91,24 +161,48 @@ export function CompanyMandatariosPanel({
       : await createCompanyMandateSigner(tenantId, input, networkHeadId);
     setFormOpen(false);
     setEditing(null);
-    show(editing ? "Mandatario actualizado." : "Mandatario registrado.", "success");
+    const base = editing ? "Mandatario actualizado." : "Mandatario registrado.";
+    const validacion = mensajeValidacionTrasGuardar(saved, input.email);
+    show(validacion ? `${base} ${validacion}` : base, saved.identity === "failed" ? "error" : "success");
     await load();
     return saved;
   };
 
-  const handleToggleActivo = async (signer: MandateSigner) => {
+  // HU #13140 — la baja (desactivar o eliminar) la confirma el diálogo, que ya consultó el impacto.
+  const ejecutarBaja = async (signer: MandateSigner, accion: AccionBaja, confirmarImpacto: boolean) => {
+    const outcome =
+      accion === "eliminar"
+        ? await deleteCompanyMandateSigner(tenantId, signer.id, confirmarImpacto, networkHeadId)
+        : await inactivateCompanyMandateSigner(tenantId, signer.id, networkHeadId);
+    show(mensajeResultadoBaja(signer.fullName, accion, outcome), "success");
+    await load();
+  };
+
+  const handleReactivar = async (signer: MandateSigner) => {
     setBusyId(signer.id);
     try {
-      if (signer.isActive) {
-        await inactivateCompanyMandateSigner(tenantId, signer.id, networkHeadId);
-        show(`${signer.fullName} quedó inactivo.`, "success");
-      } else {
-        await reactivateCompanyMandateSigner(tenantId, signer.id, networkHeadId);
-        show(`${signer.fullName} vuelve a estar activo.`, "success");
-      }
+      const result = await reactivateCompanyMandateSigner(tenantId, signer.id, networkHeadId);
+      show(mensajeResultadoReactivar(signer.fullName, result), "success");
       await load();
-    } catch {
-      show("No se pudo cambiar el estado del mandatario.", "error");
+    } catch (err) {
+      show(mensajeErrorAccion(err), "error");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // HU #13248 — «Reenviar validación»: la ficha y la fila usan la misma llamada.
+  const reenviarValidacion = (signer: MandateSigner) =>
+    resendCompanyMandateSignerIdentity(tenantId, signer.id, networkHeadId);
+
+  const handleReenviarFila = async (signer: MandateSigner) => {
+    setBusyId(signer.id);
+    try {
+      const result = await reenviarValidacion(signer);
+      show(mensajeReenvio(result, signer.email), "success");
+      await load();
+    } catch (err) {
+      show(mensajeErrorReenvio(err), "error");
     } finally {
       setBusyId(null);
     }
@@ -122,16 +216,37 @@ export function CompanyMandatariosPanel({
   /**
    * HU #11717 — organismos donde el mandatario está habilitado pero no podría firmar. Se calcula con
    * la misma regla que impone el backend al parametrizar, para que la consola no diga una cosa y el
-   * guardado otra.
+   * guardado otra. Solo aplica a la Persona natural: la jurídica y el formato en blanco no firman.
    */
   const sinFirmaPorSigner = (signer: MandateSigner) =>
-    organismosSinMedioDeFirma(
-      signer.transitOfficeIds ?? [],
-      signer.physicalSignatureOfficeIds ?? [],
-      signer,
+    modeloDe(signer) === "natural" && signer.isActive
+      ? organismosSinMedioDeFirma(signer.transitOfficeIds ?? [], signer)
+      : [];
+
+  // Búsqueda en cliente por nombre o documento (sin puntos ni espacios); la paginación va DESPUÉS.
+  const [search, setSearch] = useState("");
+  const normaliza = (v: string) => v.toLowerCase().replace(/[\s.\-]/g, "");
+  const filtrados = useMemo(() => {
+    const q = normaliza(search.trim());
+    if (!q) return signers;
+    return signers.filter(
+      (x) => normaliza(x.fullName).includes(q) || normaliza(x.documentNumber ?? "").includes(q),
     );
+  }, [signers, search]);
+  const sinValidar = signers.filter(
+    (x) => x.isActive && requiereValidacionPropia(x) && x.identityStatus !== "valid",
+  ).length;
 
   const sinOrganismos = offices.length === 0;
+  const conFormato = offices.some((o) => o.formatName);
+
+  // HU #13181 — lista de compañías asociables según el perfil: el Super Admin busca entre todas (por
+  // la ruta del organismo); el Admin de Compañía ve solo sus hijas.
+  const [esSuperAdmin] = useState(() => isSuperAdmin(decodeJwtPayload(getToken())));
+  const asociadas: FuenteAsociadas | undefined =
+    esSuperAdmin && offices[0]
+      ? { modo: "ot", transitOfficeId: offices[0].transitOfficeId }
+      : undefined;
 
   return (
     <div className="space-y-4">
@@ -146,18 +261,42 @@ export function CompanyMandatariosPanel({
         </p>
       )}
 
-      <div className="flex justify-end">
-        <button
-          type="button"
-          className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-          style={{ background: "#557EFF" }}
-          onClick={openCreate}
-          disabled={sinOrganismos}
-        >
-          Nuevo mandatario
-        </button>
-      </div>
+      {(conFormato || canCreate) && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {conFormato ? (
+            <button
+              type="button"
+              className={rlOutlinedActionClass}
+              style={rlOutlinedActionStyle}
+              onClick={() => setFormatosOpen(true)}
+            >
+              <FileText className="h-4 w-4" aria-hidden />
+              Formatos de contrato
+            </button>
+          ) : (
+            <span />
+          )}
+          {canCreate && (
+            <button
+              type="button"
+              className={rlPrimaryCtaClass}
+              style={rlPrimaryCtaStyle}
+              onClick={openCreate}
+              disabled={sinOrganismos}
+            >
+              Nuevo mandatario
+            </button>
+          )}
+        </div>
+      )}
 
+      {formatosOpen && <FormatosContratoModal offices={offices} onClose={() => setFormatosOpen(false)} />}
+
+      {/* Bug #13055 — tabla homologada con la de Trámites: loader del carrito, cabecera y filas de
+          table-styles y acciones con RowActions (antes: gris genérico y botones de texto). */}
+      {status === "loading" ? (
+        <CarLoaderModal label="Cargando mandatarios…" />
+      ) : (
       <UiStateBoundary
         status={status}
         emptyMessage="Esta compañía no tiene mandatarios registrados."
@@ -165,94 +304,230 @@ export function CompanyMandatariosPanel({
         onRetry={() => void load()}
         skeletonRows={4}
       >
+        <div className="flex flex-wrap items-center gap-3">
+          <SearchInput
+            value={search}
+            onChange={(v) => {
+              setSearch(v);
+              pg.setPage(1);
+            }}
+            label="Buscar mandatarios"
+            placeholder="Buscar por nombre o documento…"
+            className="max-w-md flex-1"
+          />
+          <p className="text-xs text-[#59677D] dark:text-white/70" data-testid="mandatarios-resumen">
+            {signers.length} {signers.length === 1 ? "mandatario" : "mandatarios"}
+            {sinValidar > 0 ? ` · ${sinValidar} sin validación aprobada` : ""}
+          </p>
+        </div>
+
+        {filtrados.length === 0 ? (
+          <p className="py-10 text-center text-sm opacity-60" role="status">
+            Ningún mandatario coincide con la búsqueda.
+          </p>
+        ) : (
+        <>
         <div className="overflow-x-auto">
-          <table className="w-full border-separate border-spacing-y-2 text-xs">
+          <table
+            className="text-xs"
+            style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
+          >
+            <caption className="sr-only">Mandatarios de la compañía</caption>
             <thead>
-              <tr className="text-left text-[10px] font-semibold uppercase text-foreground">
-                <th className="rounded-l-xl bg-muted px-4 py-2.5">Mandatario</th>
-                <th className="bg-muted px-4 py-2.5">Documento</th>
-                <th className="bg-muted px-4 py-2.5">Organismos</th>
-                <th className="rounded-r-xl bg-muted px-4 py-2.5 text-right">Acciones</th>
+              <tr>
+                <th
+                  scope="col"
+                  className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`}
+                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                >
+                  Mandatario
+                </th>
+                <th
+                  scope="col"
+                  className={`${TABLA_HEADER_CELL_CLS}`}
+                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                >
+                  Documento
+                </th>
+                <th
+                  scope="col"
+                  className={`${TABLA_HEADER_CELL_CLS}`}
+                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                >
+                  Modelo
+                </th>
+                <th
+                  scope="col"
+                  className={`${TABLA_HEADER_CELL_CLS}`}
+                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                >
+                  Vigencia
+                </th>
+                <th
+                  scope="col"
+                  className={`${TABLA_HEADER_CELL_CLS}`}
+                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                >
+                  Validación
+                </th>
+                <th
+                  scope="col"
+                  className={`${TABLA_HEADER_CELL_CLS}`}
+                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                >
+                  Organismos
+                </th>
+                <th
+                  scope="col"
+                  className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl text-right`}
+                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                >
+                  Acciones
+                </th>
               </tr>
             </thead>
             <tbody>
-              {signers.map((signer) => (
-                <tr key={signer.id} className="bg-card">
-                  <td className={`rounded-l-xl border-y border-l px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`}>
+              {pg.paginar(filtrados).map((signer) => {
+                // HU #13139 — candado: lo configuró el organismo y este actor no lo puede tocar.
+                const candado = tieneCandadoDelOrganismo(signer);
+                const puedeEditar = canCreate && puedeEditarMandatario(signer);
+                return (
+                <tr
+                  key={signer.id}
+                  className={`${candado ? "bg-[#EEF1F5] dark:bg-white/5" : "bg-white dark:bg-[#0B0F14]"} ${TABLA_ROW_HOVER_CLS}`}
+                  data-candado={candado ? "true" : undefined}
+                >
+                  <td className={`rounded-l-xl border-y border-l px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`} style={{ borderColor: "#DFE5ED" }}>
                     <span className="font-semibold">{signer.fullName}</span>
-                    {!signer.isActive && (
-                      <span className="ml-2 inline-block rounded-full border bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                        Inactivo
-                      </span>
-                    )}
+                    {candado && <MandatarioCandado />}
                   </td>
-                  <td className={`border-y px-4 py-3 font-mono ${signer.isActive ? "" : "opacity-60"}`}>
+                  <td className={`border-y px-4 py-3 font-mono ${signer.isActive ? "" : "opacity-60"}`} style={{ borderColor: "#DFE5ED" }}>
                     {formatDocumentWithType(signer.documentType, signer.documentNumber)}
                   </td>
-                  <td className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`}>
-                    {(signer.transitOfficeIds ?? []).length === 0
-                      ? "—"
-                      : (signer.transitOfficeIds ?? [])
-                          .map((id) => officeNameById.get(id) ?? id)
-                          .join(", ")}
-                    {/* HU #11717 — se SEÑALA, no se inhabilita: los trámites en curso siguen
-                        emitiendo su mandato como hoy. Los organismos de firma física quedan fuera,
-                        porque ahí la línea en blanco es el resultado correcto. */}
-                    {sinFirmaPorSigner(signer).length > 0 && (
-                      <div
-                        className="mt-1 text-[11px] leading-tight"
-                        style={{ color: "#E5484D" }}
-                        title={motivoSinFirma(signer)}
-                      >
-                        No puede firmar en{" "}
-                        {sinFirmaPorSigner(signer)
-                          .map((id) => officeNameById.get(id) ?? id)
-                          .join(", ")}
-                        : {motivoSinFirma(signer).toLowerCase()}
-                      </div>
+                  <td className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`} style={{ borderColor: "#DFE5ED" }}>
+                    {etiquetaModelo(signer)}
+                  </td>
+                  <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                    <MandatarioVigenciaBadge signer={signer} />
+                  </td>
+                  <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }} data-testid="mandatario-validacion-celda">
+                    {requiereValidacionPropia(signer) ? (
+                      <StatusBadge
+                        tone={presentarValidacion(signer.identityStatus).tone}
+                        label={presentarValidacion(signer.identityStatus).texto}
+                        ariaLabel={`Validación: ${presentarValidacion(signer.identityStatus).texto}`}
+                      />
+                    ) : (
+                      <span aria-label="No aplica">—</span>
                     )}
                   </td>
-                  <td className="rounded-r-xl border-y border-r px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      className="mr-3 text-[11px] font-semibold"
-                      style={{ color: "#557EFF" }}
-                      onClick={() => {
-                        setEditing(signer);
-                        setFormOpen(true);
-                      }}
-                    >
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      className="text-[11px] font-semibold disabled:opacity-50"
-                      style={{ color: signer.isActive ? "#E5484D" : "#8CC63F" }}
-                      onClick={() => void handleToggleActivo(signer)}
-                      disabled={busyId === signer.id}
-                    >
-                      {signer.isActive ? "Inactivar" : "Reactivar"}
-                    </button>
+                  <td className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`} style={{ borderColor: "#DFE5ED" }}>
+                    <MandatarioOrganismos
+                      signerName={signer.fullName}
+                      ids={signer.transitOfficeIds ?? []}
+                      nombrePorId={officeNameById}
+                      sinFirmaIds={sinFirmaPorSigner(signer)}
+                      motivo={motivoSinFirma(signer)}
+                    />
+                  </td>
+                  <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "#DFE5ED" }}>
+                    <RowActions
+                      actions={!puedeEditar ? [] : [
+                        {
+                          icon: Pencil,
+                          label: `Editar mandatario ${signer.fullName}`,
+                          onClick: () => {
+                            setEditing(signer);
+                            setFormOpen(true);
+                          },
+                          tone: "primary",
+                        },
+                        ...(puedeReenviarValidacion(signer)
+                          ? [
+                              {
+                                icon: Send,
+                                label: `Reenviar validación a ${signer.fullName}`,
+                                onClick: () => void handleReenviarFila(signer),
+                                disabled: busyId === signer.id,
+                              },
+                            ]
+                          : []),
+                        signer.isActive
+                          ? {
+                              icon: UserX,
+                              label: `Desactivar mandatario ${signer.fullName}`,
+                              onClick: () => setBaja({ signer, accion: "desactivar" }),
+                              tone: "danger",
+                              disabled: busyId === signer.id,
+                            }
+                          : {
+                              icon: RotateCcw,
+                              label: `Reactivar mandatario ${signer.fullName}`,
+                              onClick: () => void handleReactivar(signer),
+                              disabled: busyId === signer.id,
+                            },
+                        ...(puedeEliminarMandatario(signer)
+                          ? [
+                              {
+                                icon: Trash2,
+                                label: `Eliminar mandatario ${signer.fullName}`,
+                                onClick: () => setBaja({ signer, accion: "eliminar" }),
+                                tone: "danger" as const,
+                                disabled: busyId === signer.id,
+                              },
+                            ]
+                          : []),
+                      ]}
+                    />
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          page={pg.page}
+          pageSize={pg.pageSize}
+          totalCount={filtrados.length}
+          onPageChange={pg.setPage}
+          onPageSizeChange={pg.setPageSize}
+          noun="mandatarios"
+        />
+        </>
+        )}
       </UiStateBoundary>
+      )}
+
+      {baja && (
+        <MandatarioBajaDialog
+          signer={baja.signer}
+          accion={baja.accion}
+          loadImpact={(signal) =>
+            fetchCompanyMandateSignerImpact(tenantId, baja.signer.id, signal, networkHeadId)
+          }
+          onConfirm={(confirmar) => ejecutarBaja(baja.signer, baja.accion, confirmar)}
+          onClose={() => setBaja(null)}
+          officeLabel={(id) => officeNameById.get(id) ?? "un organismo"}
+          companyLabel={(id) => (id === tenantId ? "Esta compañía" : "Otra compañía de la red")}
+        />
+      )}
 
       {formOpen && (
         <CompanyMandatarioForm
           tenantId={tenantId}
           networkHeadId={networkHeadId}
           offices={offices}
-          companies={companies}
+          asociadas={asociadas}
+          ownerCompanyIds={[tenantId]}
           editing={editing}
           onCancel={() => {
             setFormOpen(false);
             setEditing(null);
           }}
           onSubmit={handleSubmit}
+          onResend={reenviarValidacion}
         />
       )}
     </div>

@@ -99,7 +99,8 @@ describe("AdminTransitOfficesPage — refactor adminOT", () => {
       transitOfficeId: "office-1",
       legalName: OFFICE.name,
       taxId: OFFICE.code,
-      code: OFFICE.code,
+      // HU #13607 — el código lo asigna el servidor.
+      code: "COMP-0042",
       estadoActivo: true,
     });
 
@@ -113,7 +114,6 @@ describe("AdminTransitOfficesPage — refactor adminOT", () => {
         transitOfficeId: "office-1",
         legalName: OFFICE.name,
         taxId: "11001",
-        code: "11001",
       }),
     );
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();

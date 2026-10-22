@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+package flit.consultas.v1;
+
+option csharp_namespace = "Flit.Consultas.Grpc.V1";
+
+// Lo que el proveedor certificó, en vocabulario canónico (CertificationBundle de Trámites, ADR-0041). Cada
+// valor lleva lo interpretado y el texto crudo del proveedor, para no perder nada que no se pudo interpretar.
+message Certificaciones {
+  repeated CertificacionSoat soat = 1;
+  repeated CertificacionRtm rtm = 2;
+  repeated MatriculaMercantil matriculas_mercantiles = 3;
+  HechosMatriculaVehiculo vehiculo = 4;
+}
+
+message CertificacionSoat {
+  ValorCertificado numero_poliza = 1;
+  ValorCertificado aseguradora = 2;
+  FechaCertificada expedicion = 3;
+  FechaCertificada vigente_desde = 4;
+  FechaCertificada vigente_hasta = 5;
+  EstadoVigencia estado = 6;
+}
+
+message CertificacionRtm {
+  ValorCertificado numero_certificado = 1;
+  ValorCertificado cda = 2;
+  FechaCertificada expedicion = 3;
+  FechaCertificada vigente_desde = 4;
+  FechaCertificada vigente_hasta = 5;
+  EstadoVigencia estado = 6;
+  ValorCertificado tipo_revision = 7;
+}
+
+message MatriculaMercantil {
+  ValorCertificado nit = 1;
+  ValorCertificado razon_social = 2;
+  ValorCertificado numero_matricula = 3;
+  EstadoVigencia estado = 4;
+  FechaCertificada matriculada_en = 5;
+  FechaCertificada renovada_en = 6;
+  ValorCertificado camara_comercio = 7;
+  ValorCertificado categoria = 8;
+  ValorCertificado direccion = 9;
+  ValorCertificado ciudad = 10;
+  repeated RepresentanteLegal representantes_legales = 11;
+}
+
+message RepresentanteLegal {
+  ValorCertificado nombre = 1;
+  ValorCertificado tipo_documento = 2;
+  ValorCertificado numero_documento = 3;
+  ValorCertificado cargo = 4;
+  ValorCertificado facultades = 5;
+}
+
+message HechosMatriculaVehiculo {
+  FechaCertificada fecha_matricula = 1;
+}
+
+// Valor de texto o numérico: interpretado (vacío si no se pudo) y crudo.
+message ValorCertificado {
+  optional string valor = 1;
+  optional string crudo = 2;
+}
+
+// Fecha: AAAA-MM-DD interpretada (vacía si no se pudo) y el texto crudo.
+message FechaCertificada {
+  optional string valor = 1;
+  optional string crudo = 2;
+}
+
+message EstadoVigencia {
+  Vigencia valor = 1;
+  optional string crudo = 2;
+}
+
+enum Vigencia {
+  VIGENCIA_UNSPECIFIED = 0;
+  VIGENCIA_VIGENTE = 1;
+  VIGENCIA_VENCIDO = 2;
+  VIGENCIA_NO_APLICA = 3;
+}

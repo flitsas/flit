@@ -1,4 +1,5 @@
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.ExternalSync;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Domain.Repositories;
@@ -195,6 +196,10 @@ public sealed class EnviarAlOtHandler(
             string.Equals(f.FieldKey, key, StringComparison.OrdinalIgnoreCase));
         if (existing is not null)
         {
+            // HU #13264 — la marca de pago puesta por FLITO no la desmarca el gestor al enviar al OT.
+            if (ExternalAttachmentRules.IsProtectedFlitoMark(existing.FieldKey, existing.Source))
+                return;
+
             existing.ValueText = text;
             existing.Source = "user";
             existing.UpdatedAt = now;

@@ -1,3 +1,5 @@
+using Flit.Admin.Application.Consolidados;
+
 namespace Flit.Admin.Application.Companies.LegalRepresentatives.UpdateLegalRepresentative;
 
 /// <summary>
@@ -9,19 +11,27 @@ namespace Flit.Admin.Application.Companies.LegalRepresentatives.UpdateLegalRepre
 public sealed class UpdateLegalRepresentativeHandler
 {
     private readonly LegalRepresentativeWriter _writer;
+    private readonly IConsolidadoInvalidacionMasiva? _invalidacion;
 
-    public UpdateLegalRepresentativeHandler(LegalRepresentativeWriter writer)
+    /// <param name="invalidacion">
+    /// HU #12789 — invalida en bloque los consolidados de la compañía. Opcional para no romper a los
+    /// llamadores que no lo necesitan; en DI siempre se inyecta.
+    /// </param>
+    public UpdateLegalRepresentativeHandler(
+        LegalRepresentativeWriter writer,
+        IConsolidadoInvalidacionMasiva? invalidacion = null)
     {
         _writer = writer ?? throw new ArgumentNullException(nameof(writer));
+        _invalidacion = invalidacion;
     }
 
-    public Task<LegalRepresentativeWriteResult> HandleAsync(
+    public async Task<LegalRepresentativeWriteResult> HandleAsync(
         UpdateLegalRepresentativeCommand command,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        return _writer.WriteAsync(
+        var result = await _writer.WriteAsync(
             new LegalRepresentativeWriteInput(
                 command.TenantId,
                 command.Id,
@@ -44,6 +54,15 @@ public sealed class UpdateLegalRepresentativeHandler
                 command.ActorBy,
                 command.Companies,
                 command.SignatureVaultId),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
+
+        // HU #12789 AC2 — el RL (y la escritura que se le resuelve) entra al expediente: los
+        // consolidados en curso de la compañía quedan invalidados. Solo si el guardado prosperó.
+        if (result.IsValid && _invalidacion is not null)
+        {
+            await _invalidacion.InvalidarPorCompaniaAsync(command.TenantId, cancellationToken).ConfigureAwait(false);
+        }
+
+        return result;
     }
 }

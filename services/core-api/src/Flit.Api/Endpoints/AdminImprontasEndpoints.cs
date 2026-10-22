@@ -30,6 +30,7 @@ public static class AdminImprontasEndpoints
                 + "del historial de improntas generadas (admin.impronta_generations), ordenado por fecha "
                 + "de creación descendente. Vista global cross-tenant (sin RLS, ADR-0022): no re-expone el "
                 + "PDF, solo metadata. Requiere SuperAdmin.")
+            .RequireModulePermission("improntas.read")
             .Produces<ListImprontasResult>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
@@ -37,6 +38,7 @@ public static class AdminImprontasEndpoints
         group.MapPost("/generate", GenerateAsync)
             .WithName("AdminImprontasGenerate")
             .WithSummary("Genera, persiste y entrega el PDF del Certificado de Improntas Digitales")
+            .RequireModulePermission("improntas.generate")
             .Produces(StatusCodes.Status200OK, contentType: "application/pdf")
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)
@@ -48,6 +50,7 @@ public static class AdminImprontasEndpoints
         group.MapPost("/firmas/backfill", BackfillFirmaImprontaManualAsync)
             .WithName("AdminImprontasFirmasBackfill")
             .WithSummary("Firma la impronta manual de trámites entregados/aprobados que aún no la tienen")
+            .RequireModulePermission("improntas.generate")
             .Produces<BackfillFirmaImprontaManualResult>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);

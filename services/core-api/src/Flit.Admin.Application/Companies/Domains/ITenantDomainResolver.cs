@@ -5,11 +5,15 @@ namespace Flit.Admin.Application.Companies.Domains;
 /// red" — equivale al dominio de FLIT — para host desconocido, pendiente, fallido, de una cabeza
 /// inactiva o ante cualquier fallo del resolutor (fail-closed, nunca una red distinta).
 /// </summary>
-public readonly record struct NetworkResolution(bool IsNetwork, Guid? HeadTenantId)
+/// <remarks>
+/// HU #12968: <see cref="ProductCode"/> es el producto del dominio (<c>admin.tenant_domains.purpose</c>):
+/// <c>plataforma</c> para el dominio <c>HUB</c> de la red, o el código del producto.
+/// </remarks>
+public readonly record struct NetworkResolution(bool IsNetwork, Guid? HeadTenantId, string ProductCode = "plataforma")
 {
     public static NetworkResolution None { get; } = new(false, null);
 
-    public static NetworkResolution Head(Guid headTenantId) => new(true, headTenantId);
+    public static NetworkResolution Head(Guid headTenantId, string productCode = "plataforma") => new(true, headTenantId, productCode);
 }
 
 /// <summary>

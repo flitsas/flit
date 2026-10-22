@@ -1,12 +1,13 @@
 // Resolución de módulos SPA navegables por `?m=` — misma regla que el dock (invariante dock ≡ URL).
 import type { ModuleId } from "@/components/atom/Shell";
+import { isOtUser, type JwtPayload } from "@/lib/auth/jwt";
+import { canAccessModule } from "./module-access";
 
 /** Catálogo conocido de ids SPA (referencia / tests). No autoriza por sí solo. */
 export const ALL_MODULE_IDS: ModuleId[] = [
   "dashboard",
   "tramites",
   "reportes",
-  "reportes-detallados",
   "validaciones",
   "historial-placa",
   "usuarios",
@@ -26,7 +27,6 @@ export const ALL_MODULE_IDS: ModuleId[] = [
 export const SPA_DOCK_MODULE_IDS: readonly ModuleId[] = [
   "tramites",
   "reportes",
-  "reportes-detallados",
   "validaciones",
   // HU #12194 — gate RBAC puro: solo aparece si `historial-placa` viene en accessibleCodes.
   "historial-placa",
@@ -42,9 +42,21 @@ export const SPA_DOCK_MODULE_IDS: readonly ModuleId[] = [
 export const OT_ADMIN_SPA_OMIT: ReadonlySet<string> = new Set([
   "tramites",
   "reportes",
-  "reportes-detallados",
   "usuarios",
 ]);
+
+/**
+ * HU #13582 (Épica #13271) — ids `?m=` retirados que aún llegan por marcadores o enlaces viejos, con su
+ * dirección nueva. Se redirige antes del gate de permisos: es la nueva dirección la que decide el acceso.
+ */
+export const LEGACY_MODULE_REDIRECTS: Readonly<Record<string, string>> = {
+  "reportes-detallados": "/?m=reportes&reportesTab=detallados",
+};
+
+/** Dirección nueva para un `?m=` retirado, o null si el id no está retirado. */
+export function legacyModuleRedirect(raw: string | null): string | null {
+  return raw ? (LEGACY_MODULE_REDIRECTS[raw] ?? null) : null;
+}
 
 /**
  * Único módulo universal de navegación: soporte real para cualquier usuario.
@@ -54,72 +66,53 @@ export const OT_ADMIN_SPA_OMIT: ReadonlySet<string> = new Set([
 export const UNIVERSAL_MODULE_IDS: ModuleId[] = ["ayuda"];
 
 export type NavigableModulesContext = {
-  accessibleCodes: readonly string[];
-  isSuperAdmin: boolean;
-  isOtAdmin: boolean;
-  canReadLogQx: boolean;
-  /** Log ICT: solo SuperAdmin (Bug #13445). */
-  canReadIctLogs: boolean;
-  /** Trazabilidad ICT: `ict.trazabilidad.read` o SuperAdmin. */
-  canReadIctTrazabilidad: boolean;
-  /** Reportes ICT: `ict.reportes.read` o SuperAdmin. */
-  canReadIctReportes: boolean;
+  /** Códigos de `GET /api/v1/security/modules`; `null`/vacío = catálogo sin cargar (deny-by-default). */
+  accessibleCodes: readonly string[] | null;
+  /** Claims del token (permisos efectivos, ADR-0073). `null` = ilegibles ⇒ solo inicio y ayuda. */
+  claims: JwtPayload | null;
 };
 
+/** Orden estable de los ids navegables (el del dock). */
+const NAVIGABLE_ORDER: readonly ModuleId[] = [
+  "dashboard",
+  ...SPA_DOCK_MODULE_IDS,
+  "rbac",
+  "auditoria",
+  "log-qx",
+  "ict-logs",
+  "ict-reportes",
+  "ict-trazabilidad",
+];
+
 /**
- * Fuente única: ids navegables por `?m=` = exactamente lo que el dock mostraría
- * para el mismo contexto (RBAC codes + claims + reglas OT + ayuda).
- * Deny-by-default: `accessibleCodes=[]` NO abre el catálogo completo.
+ * Fuente única: ids navegables por `?m=` = exactamente lo que el dock mostraría para el mismo contexto. Cada id se
+ * decide con su requisito en `MODULE_ACCESS` (ADR-0074, `module-access.ts`); aquí no hay reglas propias, solo la
+ * excepción de Admin OT (sus pestañas del hub reemplazan a las SPA homónimas).
+ * Deny-by-default: sin claims o con el catálogo sin cargar NO se abre nada protegido; solo Inicio y Ayuda.
  * `/admin/*` no entra en este catálogo.
  */
 export function resolveNavigableModuleIds(ctx: NavigableModulesContext): ModuleId[] {
-  const ids = new Set<ModuleId>();
+  const subject = { claims: ctx.claims, accessibleCodes: ctx.accessibleCodes };
+  const otUser = isOtUser(ctx.claims);
 
-  // FAB Inicio — siempre disponible en la SPA.
-  ids.add("dashboard");
-
-  for (const id of SPA_DOCK_MODULE_IDS) {
-    const allowedByRbac = id === "ayuda" || ctx.accessibleCodes.includes(id);
-    if (!allowedByRbac) continue;
-    if (ctx.isOtAdmin && OT_ADMIN_SPA_OMIT.has(id)) continue;
-    ids.add(id);
-  }
-
-  // SuperAdmin: mismas entradas SPA del bloque isSuperAdmin en Shell (no rutas /admin).
-  if (ctx.isSuperAdmin) {
-    ids.add("rbac");
-    ids.add("auditoria");
-  }
-
-  if (ctx.canReadLogQx) {
-    ids.add("log-qx");
-  }
-
-  // ICT (Bug #13445, D10): cada espacio con su gate. Log ICT es solo del SuperAdmin; Reportes y Trazabilidad
-  // van por su permiso propio (ict.reportes.read / ict.trazabilidad.read), que el Admin Company tiene.
-  if (ctx.canReadIctLogs) ids.add("ict-logs");
-  if (ctx.canReadIctReportes) ids.add("ict-reportes");
-  if (ctx.canReadIctTrazabilidad) ids.add("ict-trazabilidad");
-
-  return Array.from(ids);
+  return NAVIGABLE_ORDER.filter((id) => {
+    // Inicio (FAB) y Ayuda: siempre disponibles en la SPA, incluso antes de que carguen los permisos.
+    if (id === "dashboard" || UNIVERSAL_MODULE_IDS.includes(id)) return true;
+    if (otUser && OT_ADMIN_SPA_OMIT.has(id)) return false;
+    return canAccessModule(subject, id);
+  });
 }
 
 /**
  * Compatibilidad: RBAC codes + ayuda, sin claims.
  * Preferir `resolveNavigableModuleIds` cuando haya JWT/claims disponibles.
- * Deny-by-default: lista vacía → solo dashboard + ayuda.
+ * Deny-by-default: sin claims → solo dashboard + ayuda.
  */
 export function buildValidModules(accessibleCodes: ModuleId[]): ModuleId[] {
-  return resolveNavigableModuleIds({
-    accessibleCodes,
-    isSuperAdmin: false,
-    isOtAdmin: false,
-    canReadLogQx: false,
-    canReadIctLogs: false,
-    canReadIctTrazabilidad: false,
-    canReadIctReportes: false,
-  });
+  return resolveNavigableModuleIds({ accessibleCodes, claims: null });
 }
+
+
 
 /**
  * Normaliza `?m=` a un módulo válido.

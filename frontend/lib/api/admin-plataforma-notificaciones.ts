@@ -15,7 +15,7 @@ const buzonPruebasBase = "/api/v1/admin/plataforma/notificaciones/buzon-pruebas"
 export interface NotificationTemplateItem {
   id: string;
   name: string;
-  /** `"Security"`, `"Analytics"` o `"Tramites"` según el catálogo del backend. */
+  /** `"Security"`, `"Analytics"`, `"Tramites"` o `"Identidad"` según el catálogo del backend. */
   module: string;
   triggers: string[];
 }

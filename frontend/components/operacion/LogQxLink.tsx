@@ -54,7 +54,7 @@ export function LogQxLink({ instanceId }: { instanceId: string }) {
       // `border` a secas, no `border-[#DFE5ED]`: el token `--border` ya ES ese gris de marca en
       // claro y pasa a white/10 en oscuro (HU #10492). Fijar el hex dejaba una línea clara
       // flotando en modo oscuro, que es justo lo que esa HU vino a arreglar.
-      className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[13px] font-semibold text-[#557EFF] hover:bg-[#557EFF]/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+      className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[13px] font-semibold text-flit-brand hover:bg-flit-brand/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
     >
       <Radar className="h-4 w-4" aria-hidden="true" /> Ver LOG QX
     </Link>

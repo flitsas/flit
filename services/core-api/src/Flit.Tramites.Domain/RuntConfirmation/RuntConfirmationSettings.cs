@@ -78,15 +78,3 @@ public sealed class RuntConfirmationSettings
 }
 
 public sealed record RuntConfirmationSettingsError(string Field, string Message);
-
-/// <summary>Proveedores admitidos para la corrida. Mismas keys que los proveedores de consulta del wizard.</summary>
-public static class RuntConfirmationProviderKeys
-{
-    public const string Kyverum = "kyverum_runt";
-    public const string Verifik = "verifik";
-
-    public static readonly IReadOnlyList<string> All = [Kyverum, Verifik];
-
-    public static bool IsValid(string? value) =>
-        value is not null && All.Contains(value, StringComparer.Ordinal);
-}

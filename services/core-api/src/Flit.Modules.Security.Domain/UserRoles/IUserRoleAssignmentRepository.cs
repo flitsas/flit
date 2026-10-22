@@ -33,6 +33,12 @@ public interface IUserRoleAssignmentRepository
     /// <summary>Todas las asignaciones ACTIVAS del usuario en el tenant (modelo aditivo multi-rol, HU #10506).</summary>
     Task<IReadOnlyList<UserRoleAssignmentSnapshot>> GetActiveAssignmentsAsync(Guid userId, Guid tenantId, CancellationToken ct);
 
+    /// <summary>
+    /// <c>product_code</c> del rol (activo o no), o <c>null</c> si el rol no existe. Lo usa la purga de permisos individuales al
+    /// quitar un rol (HU #13646), que debe funcionar también con roles ya desactivados.
+    /// </summary>
+    Task<string?> GetRoleProductCodeAsync(Guid roleId, CancellationToken ct);
+
     Task SoftDeleteAssignmentAsync(Guid assignmentId, Guid deletedBy, CancellationToken ct);
 
     Task<Guid> CreateAssignmentAsync(AssignRoleData data, CancellationToken ct);
@@ -42,4 +48,6 @@ public sealed record AssignRoleData(Guid TenantId, Guid UserId, Guid RoleId, Gui
 
 public sealed record UserRoleAssignmentSnapshot(Guid Id, Guid UserId, Guid RoleId);
 
-public sealed record RoleForAssignmentSnapshot(Guid Id, string TargetEntityType);
+/// <param name="TenantId">HU #13441: <c>null</c> = rol global; con valor = rol propio de esa compañía.</param>
+/// <param name="ProductCode">HU #13646: producto del rol; define qué permisos individuales se purgan al asignarlo.</param>
+public sealed record RoleForAssignmentSnapshot(Guid Id, string TargetEntityType, Guid? TenantId = null, string? ProductCode = null);

@@ -28,6 +28,16 @@ public sealed class SuperAdminForbiddenResultHandler : IAuthorizationMiddlewareR
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(authorizeResult);
 
+        // HU #13081 — rutas externas (esquema ExternalClient): el pase es válido pero no trae el permiso.
+        // Mismo formato que el resto de errores externos (problem+json con code), contrato v3.1 §3.
+        if (authorizeResult.Forbidden && !context.Response.HasStarted
+            && policy.AuthenticationSchemes.Contains(ExternalClientAuthorization.Scheme))
+        {
+            await ExternalProblem.WriteAsync(context, StatusCodes.Status403Forbidden, "insufficient_scope",
+                "El pase no tiene el permiso que exige este recurso.", context.RequestAborted).ConfigureAwait(false);
+            return;
+        }
+
         if (authorizeResult.Forbidden && !context.Response.HasStarted)
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
@@ -64,6 +74,21 @@ public sealed class SuperAdminForbiddenResultHandler : IAuthorizationMiddlewareR
 
     private static string ResolveForbiddenMessage(AuthorizationPolicy policy)
     {
+        // HU #12859 (Feature #12848, Épica #12751) — document-precedence combina la OtModulePolicy
+        // del grupo con OtAdminOrSuperAdminPolicy propia del endpoint (mismo patrón que
+        // SuperAdminPolicy sobre Reglas/Requisitos, HU #12855). Se prioriza el mensaje de la policy
+        // más específica SOLO cuando está presente; el resto de endpoints (que nunca la agregan)
+        // no cambian de mensaje.
+        if (policy.Requirements.OfType<OtAdminOrSuperAdminRequirement>().Any())
+        {
+            return AdminAuthorization.OtAdminOrSuperAdminForbiddenMessage;
+        }
+
+        if (policy.Requirements.OfType<OtModuleRequirement>().Any())
+        {
+            return AdminAuthorization.OtModuleForbiddenMessage;
+        }
+
         var roles = policy.Requirements
             .OfType<RolesAuthorizationRequirement>()
             .SelectMany(r => r.AllowedRoles)

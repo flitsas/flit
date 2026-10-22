@@ -29,6 +29,8 @@ export interface BannerListTableProps {
   page: number;
   pageSize: number;
   onPageChange: (page: number) => void;
+  /** Filas por página (Bug #13055). */
+  onPageSizeChange?: (pageSize: number) => void;
   onEdit: (banner: Banner) => void;
   onDelete: (banner: Banner) => void;
 }
@@ -49,6 +51,7 @@ export function BannerListTable({
   page,
   pageSize,
   onPageChange,
+  onPageSizeChange,
   onEdit,
   onDelete,
 }: BannerListTableProps) {
@@ -153,8 +156,8 @@ export function BannerListTable({
                         rel="noopener noreferrer"
                         aria-label={`Abrir el enlace del banner ${b.name}`}
                         title={b.linkUrl}
-                        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition hover:bg-[#557EFF]/10"
-                        style={{ color: "#557EFF" }}
+                        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition hover:bg-flit-brand/10"
+                        style={{ color: "var(--color-flit-brand)" }}
                       >
                         <ExternalLink className="h-3.5 w-3.5" />
                       </a>
@@ -196,7 +199,7 @@ export function BannerListTable({
         </table>
       </div>
 
-      <Pagination page={page} pageSize={pageSize} totalCount={totalCount} onPageChange={onPageChange} className="mt-auto" />
+      <Pagination page={page} pageSize={pageSize} totalCount={totalCount} onPageChange={onPageChange} onPageSizeChange={onPageSizeChange} className="mt-auto" />
 
       <Modal
         open={preview !== null}

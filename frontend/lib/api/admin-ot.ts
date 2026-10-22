@@ -1,8 +1,16 @@
 // Cliente tipado de la API admin OT (HU #10215–#10220).
 import { API_BASE_URL, apiFetch, friendlyErrorMessage, getToken } from "./client";
+import { sessionAwareBase } from "@/lib/api/base-url";
 import { downloadFile } from "./download";
 import { ApiError } from "./types";
 import type { QueryField } from "./queries";
+import { aErrorDeLote } from "./consolidado-lotes-client";
+import type { CrearLoteConsolidadosRequest, LoteConsolidados } from "./types-consolidado-lotes";
+import type {
+  ConsolidadoEntregaParams,
+  ConsolidadoEntregaResult,
+  GenerarConsolidadoResult,
+} from "./types/procedure-runtime";
 import type {
   CreateOtWebhookRequest,
   CreateOtDocumentTagRequest,
@@ -53,8 +61,20 @@ export function fetchOtProfile(
   });
 }
 
-export function updateOtProfile(body: UpdateOtProfileRequest): Promise<OtProfile> {
-  return apiFetch<OtProfile>(`${base}/profile`, { method: "PATCH", body });
+/**
+ * HU #12854 (backend) / HU #12856 — Super Admin debe pasar `scope.transitOfficeId` para no
+ * escribir por accidente en su propio tenant "fantasma" en vez del organismo que administra
+ * (mismo patrón que `fetchOtRequirements`/`updateOtRequirements`).
+ */
+export function updateOtProfile(
+  body: UpdateOtProfileRequest,
+  scope?: OtApiScope,
+): Promise<OtProfile> {
+  return apiFetch<OtProfile>(`${base}/profile`, {
+    method: "PATCH",
+    body,
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+  });
 }
 
 export function fetchOtRequirements(
@@ -78,11 +98,17 @@ export function updateOtRequirements(
   });
 }
 
+/** HU #12854 (backend) / HU #12856 — mismo scope de Super Admin que `updateOtProfile`. */
 export function updateOtFeatureFlag(
   id: string,
   body: UpdateOtFeatureFlagRequest,
+  scope?: OtApiScope,
 ): Promise<OtFeatureFlag> {
-  return apiFetch<OtFeatureFlag>(`${base}/feature-flags/${id}`, { method: "PATCH", body });
+  return apiFetch<OtFeatureFlag>(`${base}/feature-flags/${id}`, {
+    method: "PATCH",
+    body,
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+  });
 }
 
 export function fetchOtClientProcedures(
@@ -137,6 +163,39 @@ export function searchOtClientProcedures(
     query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
     signal,
   });
+}
+
+/**
+ * HU #13394 (Feature #13308, contrato de #13391) — cuerpo de `POST /consolidados/lotes` de la
+ * bandeja: siempre el consolidado MAESTRO y la selección de `useSeleccionLote` sobre el filtro de la
+ * bandeja sin orden ni página (o los ids marcados).
+ */
+export type CrearLoteConsolidadosOtRequest = Omit<
+  CrearLoteConsolidadosRequest<OtClientProceduresParams>,
+  "tipoDocumento"
+> & { tipoDocumento: "consolidado_maestro" };
+
+/**
+ * HU #13394 — crea el lote de descarga masiva de consolidados maestros desde la bandeja (202). El
+ * SuperAdmin manda `?transitOfficeId` (CF-10); el ot_admin lo trae del token y el servidor lo
+ * ignora. Lanza `ConsolidadoLotesApiError` (409 `lote_activo` con su id, 422, 403, 503, red) para
+ * que la confirmación compartida (#13381) lo interprete igual que en el Gestor.
+ */
+export async function crearLoteConsolidadosOt(
+  body: CrearLoteConsolidadosOtRequest,
+  signal?: AbortSignal,
+  scope?: OtApiScope,
+): Promise<LoteConsolidados> {
+  try {
+    return await apiFetch<LoteConsolidados>(`${base}/consolidados/lotes`, {
+      method: "POST",
+      body,
+      query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+      signal,
+    });
+  } catch (err) {
+    throw aErrorDeLote(err);
+  }
 }
 
 /**
@@ -371,7 +430,7 @@ export async function adjuntarOtLicenciaTransito(
   ocrData?: Record<string, unknown> | null,
 ): Promise<AdjuntarLtResult> {
   const origin =
-    API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+    sessionAwareBase(API_BASE_URL) || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
   const url = new URL(`${base}/client-procedures/${id}/attachments`, origin);
   if (scope?.transitOfficeId) {
     url.searchParams.set("transitOfficeId", scope.transitOfficeId);
@@ -448,16 +507,37 @@ export function generarOtConsolidadoMaestro(
   id: string,
   scope?: OtApiScope,
   force = false,
-): Promise<{
-  document: { attachmentId: string; tipo: string; filename: string; sha256: string };
-  regenerado: boolean;
-}> {
+): Promise<GenerarConsolidadoResult> {
   return apiFetch(`${base}/client-procedures/${id}/consolidado-maestro`, {
     method: "POST",
     query: {
       ...(scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : {}),
       // Solo se manda cuando se fuerza: omitido es el camino normal (ver el comentario del endpoint).
       ...(force ? { force: true } : {}),
+    },
+  });
+}
+
+/**
+ * HU #12785/#12787 — ruta de ENTREGA del consolidado de un trámite de cliente OT:
+ * `GET /admin/ot/client-procedures/{id}/consolidado/entrega` (maestro por defecto). Reconstruye
+ * solo si la bandera de vigencia está abajo; en estado final sirve el definitivo
+ * (`definitivoPorEstadoFinal: true`); un OT en modo Quipux read-only que no puede generar recibe el
+ * adjunto tal cual (`modo: "solo_lectura"`). `soloLectura=true` sirve el adjunto sin mirar la
+ * bandera (404 `consolidado_no_generado` si no existe). Devuelve metadatos: el PDF se baja por
+ * `/documents/{attachmentId}/download` o `preview-url`. Parámetros omitidos no viajan.
+ */
+export function entregarOtConsolidado(
+  id: string,
+  scope?: OtApiScope,
+  params: ConsolidadoEntregaParams = {},
+): Promise<ConsolidadoEntregaResult> {
+  return apiFetch<ConsolidadoEntregaResult>(`${base}/client-procedures/${id}/consolidado/entrega`, {
+    query: {
+      ...(scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : {}),
+      ...(params.tipo ? { tipo: params.tipo } : {}),
+      ...(params.force ? { force: true } : {}),
+      ...(params.soloLectura ? { soloLectura: true } : {}),
     },
   });
 }
@@ -481,45 +561,93 @@ export function fetchOtApiLogs(
   return apiFetch<OtApiLogsPagedResult>(`${base}/api-logs`, { query: { ...params }, signal });
 }
 
-export function fetchOtRules(signal?: AbortSignal): Promise<OtRulesListResult> {
-  return apiFetch<OtRulesListResult>(`${base}/rules`, { signal });
+/**
+ * HU #12854 (backend) / HU #12856 — Reglas resuelve el organismo por `?transitOfficeId` cuando
+ * el caller es Super Admin (mismo patrón que Requisitos). `scope` omitido conserva el
+ * comportamiento vigente de `ot_admin` (su propio tenant).
+ */
+export function fetchOtRules(signal?: AbortSignal, scope?: OtApiScope): Promise<OtRulesListResult> {
+  return apiFetch<OtRulesListResult>(`${base}/rules`, {
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+    signal,
+  });
 }
 
-export function createOtRule(body: CreateOtRuleRequest): Promise<OtRule> {
-  return apiFetch<OtRule>(`${base}/rules`, { method: "POST", body });
+export function createOtRule(body: CreateOtRuleRequest, scope?: OtApiScope): Promise<OtRule> {
+  return apiFetch<OtRule>(`${base}/rules`, {
+    method: "POST",
+    body,
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+  });
 }
 
-export function updateOtRule(id: string, body: UpdateOtRuleRequest): Promise<OtRule> {
-  return apiFetch<OtRule>(`${base}/rules/${id}`, { method: "PATCH", body });
+export function updateOtRule(
+  id: string,
+  body: UpdateOtRuleRequest,
+  scope?: OtApiScope,
+): Promise<OtRule> {
+  return apiFetch<OtRule>(`${base}/rules/${id}`, {
+    method: "PATCH",
+    body,
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+  });
 }
 
+/**
+ * HU #12861 (Feature #12848) / HU-C1 (backend) — Prelación resuelve el organismo por
+ * `?transitOfficeId` cuando el caller es Super Admin (mismo patrón que Requisitos/Reglas).
+ * `scope` omitido conserva el comportamiento vigente de `ot_admin` (su propio tenant).
+ */
 export function fetchOtDocumentPrecedence(
   procedureTypeId: string,
   signal?: AbortSignal,
+  scope?: OtApiScope,
 ): Promise<OtDocumentPrecedenceListResult> {
   return apiFetch<OtDocumentPrecedenceListResult>(`${base}/document-precedence`, {
-    query: { procedureTypeId },
+    query: {
+      procedureTypeId,
+      ...(scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : {}),
+    },
     signal,
   });
 }
 
 export function updateOtDocumentPrecedence(
   body: UpdateOtDocumentPrecedenceRequest,
+  scope?: OtApiScope,
 ): Promise<OtDocumentPrecedenceListResult> {
   return apiFetch<OtDocumentPrecedenceListResult>(`${base}/document-precedence`, {
     method: "PATCH",
     body,
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
   });
 }
 
-export function fetchOtDocumentTags(signal?: AbortSignal): Promise<OtDocumentTagsListResult> {
-  return apiFetch<OtDocumentTagsListResult>(`${base}/document-tags`, { signal });
+/** HU #12861 (Feature #12848) / HU-C1 (backend) — mismo scope de Super Admin que Prelación. */
+export function fetchOtDocumentTags(
+  signal?: AbortSignal,
+  scope?: OtApiScope,
+): Promise<OtDocumentTagsListResult> {
+  return apiFetch<OtDocumentTagsListResult>(`${base}/document-tags`, {
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+    signal,
+  });
 }
 
-export function createOtDocumentTag(body: CreateOtDocumentTagRequest): Promise<OtDocumentTag> {
-  return apiFetch<OtDocumentTag>(`${base}/document-tags`, { method: "POST", body });
+export function createOtDocumentTag(
+  body: CreateOtDocumentTagRequest,
+  scope?: OtApiScope,
+): Promise<OtDocumentTag> {
+  return apiFetch<OtDocumentTag>(`${base}/document-tags`, {
+    method: "POST",
+    body,
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+  });
 }
 
-export function deleteOtDocumentTag(id: string): Promise<void> {
-  return apiFetch<void>(`${base}/document-tags/${id}`, { method: "DELETE" });
+export function deleteOtDocumentTag(id: string, scope?: OtApiScope): Promise<void> {
+  return apiFetch<void>(`${base}/document-tags/${id}`, {
+    method: "DELETE",
+    query: scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : undefined,
+  });
 }

@@ -46,9 +46,6 @@ internal sealed class CompanyWriteRepository : ICompanyWriteRepository
             ?? Flit.Admin.Application.Companies.Branding.NullBrandingCacheInvalidator.Instance;
     }
 
-    public Task<bool> CodeExistsAsync(string code, CancellationToken cancellationToken = default) =>
-        _context.Tenants.AsNoTracking().AnyAsync(t => t.Code == code, cancellationToken);
-
     public Task<bool> TaxIdExistsAsync(string taxId, CancellationToken cancellationToken = default) =>
         _context.Tenants.AsNoTracking().AnyAsync(t => t.TaxId == taxId, cancellationToken);
 
@@ -70,7 +67,8 @@ internal sealed class CompanyWriteRepository : ICompanyWriteRepository
         var entity = new Tenant
         {
             Id = tenantId,
-            Code = company.Code,
+            // HU #13605 — sin Code: Postgres asigna el consecutivo COMP-XXXX (TenantConfiguration) y el SaveChanges
+            // lo trae de vuelta para la proyección.
             LegalName = company.LegalName,
             TaxId = company.TaxId,
             TenantType = company.TenantType,
@@ -262,6 +260,7 @@ internal sealed class CompanyWriteRepository : ICompanyWriteRepository
             RazonSocial = entity.LegalName,
             Code = entity.Code,
             TenantType = entity.TenantType,
+            ParentTenantId = entity.ParentTenantId,
             IsTransitOffice = isOt,
             EstadoActivo = entity.IsActive,
             FechaCreacion = entity.CreatedAt,

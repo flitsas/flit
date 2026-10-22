@@ -1,6 +1,6 @@
 # Inventario de marca — HU #12415
 
-Generado: 2026-09-15T23:06:45.540Z · regenerar con `pnpm brand:inventory` (frontend/scripts/brand-color-inventory.mjs).
+Generado: 2026-09-28T16:34:53.431Z · regenerar con `pnpm brand:inventory` (frontend/scripts/brand-color-inventory.mjs).
 
 Inventario **cerrado**: script de solo lectura, no modifica ningún componente ni estilo de producto (AC5). El saneamiento es HU #12420.
 
@@ -9,8 +9,8 @@ Inventario **cerrado**: script de solo lectura, no modifica ningún componente n
 | Ámbito | Archivos con hex de marca | Apariciones de marca |
 |---|---|---|
 | Dentro del alcance | 1 | 2 |
-| Fuera del alcance | 379 | 3006 |
-| **Total** | — | **3008** |
+| Fuera del alcance | 373 | 3042 |
+| **Total** | — | **3044** |
 
 Metodología: directorios `app, components, lib`, extensiones `.ts, .tsx, .js, .jsx, .css, .svg`, excluyendo `node_modules, .next, __tests__`. Conteo repositorio-completo con metodología propia (ver comentario junto a SCAN_DIRS); no reproduce literalmente la cifra de referencia citada en el AC2 de la HU.
 
@@ -50,25 +50,18 @@ Marca: 0 · Neutro: 1 · Estado: 0
 
 ## Superficie: Cabecera y menú (`cabecera-menu`)
 
-Marca: 0 · Neutro: 9 · Estado: 1
+Marca: 0 · Neutro: 2 · Estado: 0
 
 | Archivo | Existe |
 |---|---|
 | `components/atom/Shell.tsx` | sí |
-| `components/atom/dock/DockDesktop.tsx` | sí |
+| `../packages/shell/src/SuiteShell.tsx` | sí |
+| `../packages/shell/src/dock/Dock.tsx` | sí |
 
 | Archivo | Línea | Hex | Clasificación |
 |---|---|---|---|
-| `components/atom/Shell.tsx` | 588 | `#05060A` | neutro |
-| `components/atom/Shell.tsx` | 589 | `#FFFFFF` | neutro |
-| `components/atom/Shell.tsx` | 651 | `#0B0F14` | neutro |
-| `components/atom/Shell.tsx` | 651 | `#FFFFFF` | neutro |
-| `components/atom/Shell.tsx` | 654 | `#FFFFFF` | neutro |
-| `components/atom/Shell.tsx` | 783 | `#ffffff` | neutro |
-| `components/atom/dock/DockDesktop.tsx` | 135 | `#ffffff` | neutro |
-| `components/atom/dock/DockDesktop.tsx` | 156 | `#ffffff` | neutro |
-| `components/atom/dock/DockDesktop.tsx` | 180 | `#ffffff` | neutro |
-| `components/atom/dock/DockDesktop.tsx` | 204 | `#4F74C9` | estado |
+| `../packages/shell/src/SuiteShell.tsx` | 95 | `#05060A` | neutro |
+| `../packages/shell/src/SuiteShell.tsx` | 163 | `#05060A` | neutro |
 
 ## Superficie: Icono y título de la pestaña (`pestana`)
 

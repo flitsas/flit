@@ -37,20 +37,21 @@ vi.mock('@/lib/api/tramites-client', () => ({
 
 const client = vi.mocked(tramitesClient);
 
-// CF-06 (HU #10881) — "asumo el riesgo" no puede convivir con un organismo que exige el certificado:
-// con el override activo, elegir `omitir` satisfacía los dos gates y dejaba la regla del OT evadible.
-describe('traspasoDecisions — "omitir" y el override del organismo', () => {
-  it('no ofrece "omitir" cuando el OT exige el certificado de prenda', () => {
-    expect(traspasoDecisions(true)).not.toContain('omitir');
+// HU #13778 — «Omitir prenda» lo decide solo el servidor (`prendaOmitAllowed`): CF-06 (HU #10881)
+// ya no aplica y la política del OT (certificado obligatorio u opcional) no interviene.
+describe('traspasoDecisions — "omitir" según prendaOmitAllowed', () => {
+  it('no ofrece "omitir" sin prendaOmitAllowed=true', () => {
+    expect(traspasoDecisions(false)).not.toContain('omitir');
+    expect(traspasoDecisions()).not.toContain('omitir');
   });
 
-  it('con el opt-out del OT vigente, "omitir" sigue disponible', () => {
-    expect(traspasoDecisions(false)).toContain('omitir');
+  it('con prendaOmitAllowed=true, "omitir" está disponible', () => {
+    expect(traspasoDecisions(true)).toContain('omitir');
   });
 
   it('las decisiones que gestionan la prenda se ofrecen en ambos casos', () => {
-    for (const documentRequired of [true, false]) {
-      expect(traspasoDecisions(documentRequired)).toEqual(
+    for (const omitAllowed of [true, false, undefined]) {
+      expect(traspasoDecisions(omitAllowed)).toEqual(
         expect.arrayContaining(['solicitar', 'registrar', 'levantar']),
       );
     }
@@ -96,7 +97,7 @@ describe('PrendaForm (matrícula, R4)', () => {
     expect(screen.getByLabelText('Acreedor (beneficiario)', { exact: false })).toBeInTheDocument();
     expect(screen.getByLabelText('Documento de soporte de prenda')).toBeInTheDocument();
     expect(screen.getByText('Certificado / registro de prenda')).toBeInTheDocument();
-    expect(screen.getByText(/Obligatorio/i)).toBeInTheDocument();
+    expect(screen.getByText(/Por cargar/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Adjuntar/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/Subir Certificado/i)).toBeInTheDocument();
     await waitFor(() => expect(client.getAttachments).toHaveBeenCalled());
@@ -186,9 +187,31 @@ describe('PrendaForm (matrícula, R4)', () => {
     expect(select.tagName).toBe('SELECT');
     expect(screen.getByRole('option', { name: 'Registrar prenda' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Levantar gravamen' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: /Continuar sin gestionar/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Omitir prenda' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Sí' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'No' })).not.toBeInTheDocument();
+  });
+
+  it('HU #12727 — traspaso: decisión, acreedor y certificado comparten grilla md:grid-cols-3', async () => {
+    const { container } = render(
+      <PrendaForm
+        instanceId="abc"
+        modalidad="traspaso"
+        decisions={['solicitar', 'registrar', 'levantar', 'omitir']}
+        embeddedInWizard
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    fireEvent.change(screen.getByLabelText('¿Al vehículo se le asociará una prenda?'), {
+      target: { value: 'registrar' },
+    });
+
+    const grid = container.querySelector('.md\\:grid-cols-3');
+    expect(grid).toBeTruthy();
+    expect(within(grid as HTMLElement).getByLabelText('Acreedor (beneficiario)')).toBeInTheDocument();
+    expect(within(grid as HTMLElement).getByLabelText('Documento de soporte de prenda')).toBeInTheDocument();
+    expect((grid as HTMLElement).querySelector('.md\\:col-span-3')).toBeNull();
   });
 
   it('en traspaso, al elegir registrar muestra acreedor', async () => {
@@ -210,7 +233,8 @@ describe('PrendaForm (matrícula, R4)', () => {
     expect(screen.getByLabelText(/documento del acreedor/i)).toBeInTheDocument();
   });
 
-  it('en traspaso, con omitir no muestra acreedor ni carga de certificado', async () => {
+  it('en traspaso, con omitir el acreedor queda visible, vacío y deshabilitado, sin carga de certificado', async () => {
+    // HU #13112 (AC5) — antes el acreedor se ocultaba con omitir; ahora se muestra deshabilitado.
     render(
       <PrendaForm
         instanceId="abc"
@@ -225,7 +249,13 @@ describe('PrendaForm (matrícula, R4)', () => {
       target: { value: 'omitir' },
     });
 
-    expect(screen.queryByLabelText('Acreedor (beneficiario)')).not.toBeInTheDocument();
+    const nombre = screen.getByLabelText('Acreedor (beneficiario)');
+    const doc = screen.getByLabelText(/documento del acreedor/i);
+    for (const input of [nombre, doc]) {
+      expect(input).toBeVisible();
+      expect(input).toHaveValue('');
+      expect(input).toBeDisabled();
+    }
     expect(screen.queryByLabelText('Documento de soporte de prenda')).not.toBeInTheDocument();
   });
 
@@ -332,7 +362,9 @@ describe('PrendaForm — validación de acreedor obligatorio (HU #11594)', () =>
     );
     await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Solicitar constitución de prenda' }));
+    fireEvent.change(screen.getByLabelText('¿Al vehículo se le asociará una prenda?'), {
+      target: { value: 'solicitar' },
+    });
     fireEvent.change(screen.getByLabelText('Acreedor (beneficiario)', { exact: false }), {
       target: { value: 'Banco ABC' },
     });
@@ -401,9 +433,9 @@ describe('PrendaForm — validación de acreedor obligatorio (HU #11594)', () =>
     );
     await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
 
-    fireEvent.click(
-      screen.getByRole('radio', { name: 'Continuar sin gestionar (asumo el riesgo)' }),
-    );
+    fireEvent.change(screen.getByLabelText('¿Al vehículo se le asociará una prenda?'), {
+      target: { value: 'omitir' },
+    });
 
     const ok = await ref.current!.save();
     expect(ok).toBe(true);
@@ -489,7 +521,7 @@ describe('PrendaForm — validación de acreedor obligatorio (HU #11594)', () =>
       <PrendaForm
         instanceId="abc"
         modalidad="traspaso"
-        decisions={traspasoDecisions(false)}
+        decisions={traspasoDecisions(true)}
         embeddedInWizard
       />,
     );
@@ -509,7 +541,7 @@ describe('PrendaForm — validación de acreedor obligatorio (HU #11594)', () =>
         ref={ref}
         instanceId="abc"
         modalidad="traspaso"
-        decisions={traspasoDecisions(false)}
+        decisions={traspasoDecisions(true)}
         embeddedInWizard
       />,
     );
@@ -663,7 +695,7 @@ describe('PrendaForm — decisión fija del tipo (familia OTROS)', () => {
     render(<PrendaForm instanceId="i1" decisions={['levantar']} embeddedInWizard />);
     await screen.findByText(/Este trámite es/);
 
-    expect(screen.queryByText('Continuar sin gestionar (asumo el riesgo)')).not.toBeInTheDocument();
+    expect(screen.queryByText('Omitir prenda')).not.toBeInTheDocument();
     expect(screen.queryByText('Sin prenda')).not.toBeInTheDocument();
     expect(screen.queryByText('Registrar prenda')).not.toBeInTheDocument();
   });
@@ -1409,6 +1441,315 @@ describe('PrendaForm — acción complementaria (ADR-0055, HU #12130)', () => {
   });
 });
 
+// HU #13112 (Feature #13110) — «Omitir prenda» con ayuda y acreedor deshabilitado.
+// Uso de ejemplo: <PrendaForm instanceId="i" omitAllowed /> en matrícula ofrece
+// registrar / sin prenda / omitir; en traspaso la lista la resuelve traspasoDecisions(omitAllowed).
+describe('HU #13112 — Omitir prenda', () => {
+  const AYUDA =
+    'La prenda seguirá vigente en el RUNT. El trámite se radicará sin inscribirla ni levantarla.';
+
+  const RUNT_CON_ACREEDOR = {
+    fieldValues: [
+      {
+        formFieldId: '',
+        fieldKey: 'runt_gravamenes',
+        valueText: null,
+        valueJson: JSON.stringify([
+          { nombreAcreedor: 'BANCO RUNT SA', numeroDocumentoAcreedor: '900123456' },
+        ]),
+        source: 'consultation',
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    client.getPrenda.mockReset();
+    client.getPrenda.mockResolvedValue([]);
+    client.getInstance.mockReset();
+    client.getInstance.mockResolvedValue({ fieldValues: [] } as never);
+    client.putPrenda.mockClear();
+  });
+
+  it('AC1 — matrícula con omitAllowed=true ofrece las tres opciones en el mismo segmentado', async () => {
+    render(<PrendaForm instanceId="m1" omitAllowed runtHasGravamen />);
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    const grupo = screen.getByRole('group', { name: '¿Al vehículo se le asociará una prenda?' });
+    const botones = within(grupo).getAllByRole('button').map((b) => b.textContent);
+    expect(botones).toEqual(['Registrar prenda', 'Sin prenda', 'Omitir prenda']);
+    // Mismo nivel visual: no se degrada a <select> ni se separa del grupo.
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+  });
+
+  it('AC2 — matrícula con omitAllowed=false solo ofrece registrar y sin prenda (igual que develop)', async () => {
+    render(<PrendaForm instanceId="m1" omitAllowed={false} />);
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    expect(screen.getByRole('button', { name: 'Registrar prenda' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sin prenda' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Omitir prenda' })).not.toBeInTheDocument();
+    expect(screen.queryByText(AYUDA, { exact: false })).not.toBeInTheDocument();
+  });
+
+  it('AC2 — traspaso con omitAllowed=false no ofrece «Omitir prenda» aunque el OT tenga el certificado opcional', async () => {
+    expect(traspasoDecisions(false)).not.toContain('omitir');
+    render(
+      <PrendaForm
+        instanceId="t1"
+        modalidad="traspaso"
+        documentRequired={false}
+        decisions={traspasoDecisions(false)}
+        omitAllowed={false}
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    expect(screen.getByRole('option', { name: 'Registrar prenda' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Omitir prenda' })).not.toBeInTheDocument();
+  });
+
+  it('AC2 — con omitAllowed=true el servidor manda en traspaso', () => {
+    expect(traspasoDecisions(true)).toContain('omitir');
+  });
+
+  it('AC3 (invertido por HU #13778) — omitAllowed undefined: traspaso NO ofrece omitir, sin fallback a la política', () => {
+    expect(traspasoDecisions(undefined)).not.toContain('omitir');
+  });
+
+  it('AC3 — omitAllowed undefined: matrícula no ofrece «Omitir prenda»', async () => {
+    render(<PrendaForm instanceId="m1" runtHasGravamen />);
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    expect(screen.getByRole('button', { name: 'Registrar prenda' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Omitir prenda' })).not.toBeInTheDocument();
+  });
+
+  it('AC4 — el texto de ayuda aparece bajo la opción, en tono informativo (sin role alert ni estilo de error)', async () => {
+    render(<PrendaForm instanceId="m1" omitAllowed runtHasGravamen />);
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    const ayuda = screen.getByText(AYUDA, { exact: false });
+    const parrafo = ayuda.closest('p') as HTMLElement;
+    expect(parrafo).toHaveAttribute('id', 'prenda-omitir-ayuda');
+    expect(parrafo.className).toContain('text-[#59677D]');
+    expect(parrafo.className).toContain('dark:text-white/70');
+    expect(parrafo).not.toHaveAttribute('role');
+    expect(parrafo.closest('[role="alert"]')).toBeNull();
+    // Permanente: visible aunque la opción aún no esté elegida.
+    expect(screen.getByRole('button', { name: 'Omitir prenda' })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('AC4 — en traspaso el select describe la ayuda (aria-describedby)', async () => {
+    render(
+      <PrendaForm
+        instanceId="t1"
+        modalidad="traspaso"
+        documentRequired={false}
+        decisions={traspasoDecisions(true)}
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    const select = screen.getByLabelText('¿Al vehículo se le asociará una prenda?');
+    expect(select).toHaveAttribute('aria-describedby', 'prenda-omitir-ayuda');
+    expect(screen.getByText(AYUDA, { exact: false })).toBeInTheDocument();
+  });
+
+  it('AC5 — con la precarga RUNT, elegir omitir vacía y deshabilita el acreedor sin zona de adjunto', async () => {
+    client.getInstance.mockResolvedValue(RUNT_CON_ACREEDOR as never);
+    render(<PrendaForm instanceId="m1" omitAllowed runtHasGravamen />);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Acreedor (beneficiario)', { exact: false })).toHaveValue('BANCO RUNT SA'),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Omitir prenda' }));
+
+    const nombre = screen.getByLabelText('Acreedor (beneficiario)', { exact: false });
+    const doc = screen.getByLabelText('NIT / documento del acreedor', { exact: false });
+    for (const input of [nombre, doc]) {
+      expect(input).toBeVisible();
+      expect(input).toHaveValue('');
+      expect(input).toBeDisabled();
+      expect(input.className).toContain('text-[#59677D]');
+      expect(input).not.toBeRequired();
+    }
+    expect(screen.queryByLabelText('Documento de soporte de prenda')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Adjuntar/i })).not.toBeInTheDocument();
+  });
+
+  it('AC5 — la solicitud con omitir no envía datos del acreedor', async () => {
+    client.getInstance.mockResolvedValue(RUNT_CON_ACREEDOR as never);
+    const ref = createRef<PrendaFormHandle>();
+    render(<PrendaForm ref={ref} instanceId="m1" omitAllowed runtHasGravamen embeddedInWizard />);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Acreedor (beneficiario)', { exact: false })).toHaveValue('BANCO RUNT SA'),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Omitir prenda' }));
+    expect(await ref.current!.save()).toBe(true);
+
+    expect(client.putPrenda).toHaveBeenCalledWith('m1', {
+      decision: 'omitir',
+      acreedorNombre: null,
+      acreedorDocumento: null,
+      levantamientoEntidad: null,
+    });
+  });
+
+  it('AC5 — un omitir guardado con acreedor residual se rehidrata vacío y deshabilitado', async () => {
+    client.getInstance.mockResolvedValue(RUNT_CON_ACREEDOR as never);
+    client.getPrenda.mockResolvedValue([
+      {
+        id: 'p-omitir',
+        decision: 'omitir',
+        estado: 'vigente',
+        acreedorNombre: 'RESIDUAL SA',
+        acreedorDocumento: '800111222',
+        levantamientoEntidad: 'NOTARIA RESIDUAL',
+        createdAt: '2026-09-29T00:00:00Z',
+      },
+    ] as never);
+    render(<PrendaForm instanceId="m1" omitAllowed runtHasGravamen />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Omitir prenda' })).toHaveAttribute('aria-pressed', 'true'),
+    );
+    const nombre = screen.getByLabelText('Acreedor (beneficiario)', { exact: false });
+    expect(nombre).toHaveValue('');
+    expect(nombre).toBeDisabled();
+    // Security (revisión PR #481): la entidad residual tampoco se muestra ni se envía.
+    expect(screen.queryByDisplayValue('NOTARIA RESIDUAL')).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue('RESIDUAL SA')).not.toBeInTheDocument();
+  });
+
+  it('AC5 — al guardar un omitir rehidratado con fila residual no envía acreedor ni entidad', async () => {
+    const ref = createRef<PrendaFormHandle>();
+    client.getPrenda.mockResolvedValue([
+      {
+        id: 'p-omitir',
+        decision: 'omitir',
+        estado: 'vigente',
+        acreedorNombre: 'RESIDUAL SA',
+        acreedorDocumento: '800111222',
+        levantamientoEntidad: 'NOTARIA RESIDUAL',
+        createdAt: '2026-09-29T00:00:00Z',
+      },
+    ] as never);
+    render(<PrendaForm ref={ref} instanceId="m1" omitAllowed runtHasGravamen embeddedInWizard />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Omitir prenda' })).toHaveAttribute('aria-pressed', 'true'),
+    );
+
+    expect(await ref.current!.save()).toBe(true);
+    expect(client.putPrenda).toHaveBeenCalledWith('m1', {
+      decision: 'omitir',
+      acreedorNombre: null,
+      acreedorDocumento: null,
+      levantamientoEntidad: null,
+    });
+  });
+
+  it('AC4 — en matrícula el grupo segmentado se describe con la ayuda (aria-describedby)', async () => {
+    render(<PrendaForm instanceId="m1" omitAllowed runtHasGravamen />);
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    const grupo = screen.getByRole('group', { name: '¿Al vehículo se le asociará una prenda?' });
+    expect(grupo).toHaveAttribute('aria-describedby', 'prenda-omitir-ayuda');
+    expect(document.getElementById('prenda-omitir-ayuda')).toHaveTextContent(
+      'La prenda seguirá vigente en el RUNT.',
+    );
+  });
+
+  it('AC4 — sin omitir ofrecido el grupo no apunta a una ayuda inexistente', async () => {
+    render(<PrendaForm instanceId="m1" omitAllowed={false} />);
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    const grupo = screen.getByRole('group', { name: '¿Al vehículo se le asociará una prenda?' });
+    expect(grupo).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('AC6 — al cambiar de omitir a registrar vuelve la precarga del RUNT y los campos se rehabilitan', async () => {
+    client.getInstance.mockResolvedValue(RUNT_CON_ACREEDOR as never);
+    render(<PrendaForm instanceId="m1" omitAllowed runtHasGravamen />);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Acreedor (beneficiario)', { exact: false })).toHaveValue('BANCO RUNT SA'),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Omitir prenda' }));
+    expect(screen.getByLabelText('Acreedor (beneficiario)', { exact: false })).toHaveValue('');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar prenda' }));
+
+    const nombre = screen.getByLabelText('Acreedor (beneficiario)', { exact: false });
+    const doc = screen.getByLabelText('NIT / documento del acreedor', { exact: false });
+    expect(nombre).toHaveValue('BANCO RUNT SA');
+    expect(doc).toHaveValue('900123456');
+    expect(nombre).toBeEnabled();
+    expect(doc).toBeEnabled();
+  });
+
+  it('AC6 — en traspaso, de omitir a levantar también restaura la precarga', async () => {
+    client.getInstance.mockResolvedValue(RUNT_CON_ACREEDOR as never);
+    render(
+      <PrendaForm
+        instanceId="t1"
+        modalidad="traspaso"
+        documentRequired={false}
+        decisions={traspasoDecisions(true)}
+      />,
+    );
+    await waitFor(() => expect(client.getInstance).toHaveBeenCalled());
+    const select = screen.getByLabelText('¿Al vehículo se le asociará una prenda?');
+
+    fireEvent.change(select, { target: { value: 'omitir' } });
+    expect(screen.getByLabelText('Acreedor (beneficiario)')).toHaveValue('');
+    fireEvent.change(select, { target: { value: 'levantar' } });
+    expect(screen.getByLabelText('Acreedor (beneficiario)')).toHaveValue('BANCO RUNT SA');
+  });
+
+  it('AC7 — omitir guarda sin adjunto ni justificación y deja el gate de documento en true', async () => {
+    const onGate = vi.fn();
+    const ref = createRef<PrendaFormHandle>();
+    render(
+      <PrendaForm
+        ref={ref}
+        instanceId="m1"
+        omitAllowed
+        runtHasGravamen
+        documentRequired
+        embeddedInWizard
+        onDocumentGateChange={onGate}
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Omitir prenda' }));
+    await waitFor(() => expect(onGate).toHaveBeenLastCalledWith(true));
+
+    expect(await ref.current!.save()).toBe(true);
+    expect(client.putPrenda).toHaveBeenCalledTimes(1);
+    expect(client.putPrenda).toHaveBeenCalledWith('m1', expect.objectContaining({ decision: 'omitir' }));
+    expect(screen.queryByLabelText('Documento de soporte de prenda')).not.toBeInTheDocument();
+    // Sin error de validación (el único role=alert es el aviso RUNT, que no bloquea).
+    expect(screen.queryByRole('button', { name: 'Descartar error' })).not.toBeInTheDocument();
+  });
+
+  it('AC9 — elegir omitir no altera el resto de la sección (sin permisos extra ni campos nuevos)', async () => {
+    // Sin gravamen sugerido: arranca en «Sin prenda» (sin adjunto), así la comparación es limpia.
+    render(<PrendaForm instanceId="m1" omitAllowed />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Sin prenda' })).toHaveAttribute('aria-pressed', 'true'),
+    );
+    const antes = screen.getAllByRole('button').map((b) => b.textContent);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Omitir prenda' }));
+
+    const despues = screen.getAllByRole('button').map((b) => b.textContent);
+    expect(despues).toEqual(antes);
+    expect(screen.queryByLabelText('Entidad ante la que se levantó', { exact: false })).not.toBeInTheDocument();
+  });
+});
+
 /**
  * Bug #13203 — el RUNT real (Kyverum y Verifik) entrega cada garantía mobiliaria con claves
  * `entidad`/`numeroDocumentoEntidad`/`tipoDocumentoEntidad`/`fechaRegistro`. Con Verifik ese array
@@ -1525,6 +1866,151 @@ describe('Bug #13203 — garantía mobiliaria con shape crudo del RUNT (entidad/
     });
     expect(screen.getByRole('button', { name: 'Sin prenda' })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByLabelText('Acreedor (beneficiario)', { exact: false })).toHaveValue('');
+  });
+});
+
+// Bug #13240 — cambiar a una decisión que ya no exige documento dejaba el PDF de prenda en el
+// trámite. El servidor lo retira al guardar (PUT prenda); el formulario debe (1) releer los adjuntos
+// tras guardar para que el retirado desaparezca sin recargar y (2) avisar ANTES de guardar.
+// Uso de ejemplo: <PrendaForm ref={ref} instanceId="abc" decisions={traspasoDecisions(true)} />
+describe('Bug #13240 — adjuntos de prenda de la decisión anterior', () => {
+  const AVISO = 'Al guardar, se retirará el documento de prenda adjuntado para la decisión anterior.';
+  const adjunto = (tipo: string) => ({
+    id: `att-${tipo}`,
+    tipo,
+    filename: `${tipo}.pdf`,
+    mimetype: 'application/pdf',
+    sizeBytes: 1024,
+    sha256: 'abc123',
+    source: 'user',
+    uploadedAt: '2026-10-01T00:00:00Z',
+  });
+  const vigente = (decision: string) => ({
+    id: 'p1',
+    decision,
+    estado: 'vigente',
+    acreedorNombre: 'BANCO FICTICIO S.A.',
+    acreedorDocumento: '900000001',
+    levantamientoEntidad: null,
+    createdAt: '2026-10-01T00:00:00Z',
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    client.getInstance.mockResolvedValue({ fieldValues: [] } as never);
+    client.getChecklist.mockResolvedValue({ items: [], faltanObligatorios: 0, completo: true } as never);
+    client.putPrenda.mockResolvedValue(vigente('omitir') as never);
+  });
+
+  const renderTraspaso = () => {
+    const ref = createRef<PrendaFormHandle>();
+    render(
+      <PrendaForm ref={ref} instanceId="abc" decisions={traspasoDecisions(true)} embeddedInWizard />,
+    );
+    return ref;
+  };
+
+  const elegir = async (value: string) => {
+    const select = await screen.findByLabelText('¿Al vehículo se le asociará una prenda?');
+    fireEvent.change(select, { target: { value } });
+    return select;
+  };
+
+  it('a) tras guardar una decisión distinta se vuelven a pedir los adjuntos y el PDF retirado desaparece', async () => {
+    client.getPrenda.mockResolvedValue([vigente('registrar')] as never);
+    client.getAttachments.mockResolvedValue([adjunto('prenda_registro')] as never);
+    const ref = renderTraspaso();
+    await waitFor(() =>
+      expect(screen.getByLabelText('¿Al vehículo se le asociará una prenda?')).toHaveValue('registrar'),
+    );
+    await elegir('omitir');
+    expect(await screen.findByText(AVISO)).toBeInTheDocument();
+
+    const antes = client.getAttachments.mock.calls.length;
+    // El servidor ya retiró el adjunto: la siguiente lectura llega vacía.
+    client.getAttachments.mockResolvedValue([] as never);
+    const ok = await ref.current!.save();
+
+    expect(ok).toBe(true);
+    await waitFor(() => expect(client.getAttachments.mock.calls.length).toBeGreaterThan(antes));
+    await waitFor(() => expect(screen.queryByText(AVISO)).not.toBeInTheDocument());
+    // El frontend NO borra por su cuenta: la fuente de verdad es el PUT.
+    expect(client.deleteAttachment).not.toHaveBeenCalled();
+  });
+
+  it('a) con una decisión que sigue exigiendo documento, guardar refresca también la carga del certificado', async () => {
+    client.getPrenda.mockResolvedValue([vigente('registrar')] as never);
+    client.getAttachments.mockResolvedValue([adjunto('prenda_registro')] as never);
+    client.putPrenda.mockResolvedValue(vigente('registrar') as never);
+    const ref = renderTraspaso();
+    await screen.findByLabelText('Documento de soporte de prenda');
+    await waitFor(() => expect(client.getAttachments).toHaveBeenCalled());
+    const antes = client.getAttachments.mock.calls.length;
+
+    const ok = await ref.current!.save();
+
+    expect(ok).toBe(true);
+    // PrendaForm + PrendaDocumentUpload releen: al menos dos lecturas nuevas.
+    await waitFor(() => expect(client.getAttachments.mock.calls.length).toBeGreaterThanOrEqual(antes + 2));
+  });
+
+  it('b) aviso visible, como estado accesible y asociado al selector, cuando la nueva decisión no exige el adjunto', async () => {
+    client.getPrenda.mockResolvedValue([vigente('registrar')] as never);
+    client.getAttachments.mockResolvedValue([adjunto('prenda_registro')] as never);
+    renderTraspaso();
+    await waitFor(() =>
+      expect(screen.getByLabelText('¿Al vehículo se le asociará una prenda?')).toHaveValue('registrar'),
+    );
+    expect(screen.queryByText(AVISO)).not.toBeInTheDocument();
+
+    const select = await elegir('levantar');
+    const aviso = await screen.findByText(AVISO);
+    const status = aviso.closest('[role="status"]');
+    expect(status).not.toBeNull();
+    expect(status!.id).toBeTruthy();
+    expect(select.getAttribute('aria-describedby') ?? '').toContain(status!.id);
+  });
+
+  it('b) matrícula: de «Registrar prenda» a «Sin prenda» con certificado adjunto muestra el aviso', async () => {
+    client.getPrenda.mockResolvedValue([vigente('registrar')] as never);
+    client.getAttachments.mockResolvedValue([adjunto('prenda_registro')] as never);
+    render(<PrendaForm instanceId="abc" />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Registrar prenda' })).toHaveAttribute('aria-pressed', 'true'),
+    );
+    await waitFor(() => expect(client.getAttachments).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sin prenda' }));
+
+    expect(await screen.findByText(AVISO)).toBeInTheDocument();
+  });
+
+  it('c) sin adjunto de prenda no hay aviso al cambiar de decisión', async () => {
+    client.getPrenda.mockResolvedValue([vigente('registrar')] as never);
+    client.getAttachments.mockResolvedValue([adjunto('soat')] as never);
+    renderTraspaso();
+    await waitFor(() =>
+      expect(screen.getByLabelText('¿Al vehículo se le asociará una prenda?')).toHaveValue('registrar'),
+    );
+    await waitFor(() => expect(client.getAttachments).toHaveBeenCalled());
+
+    await elegir('omitir');
+
+    expect(screen.queryByText(AVISO)).not.toBeInTheDocument();
+  });
+
+  it('c) sin aviso si la nueva decisión exige el mismo tipo ya adjunto', async () => {
+    client.getPrenda.mockResolvedValue([vigente('registrar')] as never);
+    client.getAttachments.mockResolvedValue([adjunto('prenda_solicitud')] as never);
+    renderTraspaso();
+    await waitFor(() =>
+      expect(screen.getByLabelText('¿Al vehículo se le asociará una prenda?')).toHaveValue('registrar'),
+    );
+    await waitFor(() => expect(client.getAttachments).toHaveBeenCalled());
+
+    await elegir('solicitar');
+    // Volver al tipo exigido retira el aviso.
+    expect(screen.queryByText(AVISO)).not.toBeInTheDocument();
   });
 });
 

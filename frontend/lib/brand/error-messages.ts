@@ -17,9 +17,9 @@ export const BRANDING_ERROR_MESSAGES: Record<string, string> = {
   BRANDING_NAME_LENGTH: "El nombre de la plataforma debe tener entre 2 y 40 caracteres.",
   BRANDING_NAME_MARKUP: "El nombre de la plataforma no puede contener etiquetas ni código.",
   BRANDING_COLOR_FORMAT: "El color debe tener el formato #RRGGBB.",
-  BRANDING_CONTRAST_TOO_LOW: "El contraste entre el color de texto y el color principal es insuficiente para publicar (mínimo 4.5:1).",
+  BRANDING_CONTRAST_TOO_LOW: "Con estos colores el texto de los botones no se leería bien. Usa «Ajustar automáticamente» o elige otra combinación; no se guardó ningún cambio.",
   BRANDING_LOGO_NOT_FOUND: "El logotipo indicado no existe o no pertenece a esta compañía.",
-  BRANDING_LOGO_FORMAT: "El logotipo debe ser PNG, JPEG o WebP.",
+  BRANDING_LOGO_FORMAT: "El logotipo debe ser PNG o JPEG.",
   BRANDING_LOGO_TOO_LARGE: "El logotipo pesa más de 512 KB. Reduce el tamaño del archivo.",
   BRANDING_LOGO_DIMENSIONS: "El logotipo debe medir entre 120x40 y 2000x2000 píxeles.",
 };

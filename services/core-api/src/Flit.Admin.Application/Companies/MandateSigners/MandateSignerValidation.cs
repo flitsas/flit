@@ -21,10 +21,10 @@ internal static class MandateSignerValidation
     public const string DocumentoRequeridoMessage = "El número de documento es obligatorio.";
 
     public const string SinCompaniasMessage =
-        "Debe asignar al menos una compañía al mandatario.";
+        "Elige al menos una compañía para el mandatario.";
 
     public const string ExclusividadClienteOtMessage =
-        "Ya existe un mandatario para esta empresa en este organismo.";
+        "Ya existe un mandatario para esta empresa en este organismo. Desactiva o edita el actual antes de registrar otro.";
 
     /// <summary>
     /// Valida datos básicos + OT operable. Devuelve el tenant del OT si es operable, junto a
@@ -34,7 +34,9 @@ internal static class MandateSignerValidation
         TransitOfficeOperationalStatusItem? otStatus,
         string? fullName,
         string? documentNumber,
-        IReadOnlyList<Guid> companyTenantIds)
+        IReadOnlyList<Guid> companyTenantIds,
+        bool documentRequired = true,
+        bool requireCompanies = true)
     {
         var errors = new List<MandateSignerValidationError>();
 
@@ -43,13 +45,15 @@ internal static class MandateSignerValidation
             errors.Add(new MandateSignerValidationError("fullName", NombreRequeridoMessage, null));
         }
 
-        if (string.IsNullOrWhiteSpace(documentNumber))
+        if (documentRequired && string.IsNullOrWhiteSpace(documentNumber))
         {
             // No se adjunta el valor: es PII.
             errors.Add(new MandateSignerValidationError("documentNumber", DocumentoRequeridoMessage, null));
         }
 
-        if (companyTenantIds is null || companyTenantIds.Count == 0)
+        // El alta del organismo puede quedar sin compañía propietaria: las asociadas son opcionales y
+        // el mandatario se asigna después. La ruta de la compañía sigue exigiendo la suya.
+        if (requireCompanies && (companyTenantIds is null || companyTenantIds.Count == 0))
         {
             errors.Add(new MandateSignerValidationError("companyTenantIds", SinCompaniasMessage, null));
         }
@@ -77,24 +81,42 @@ internal static class MandateSignerValidation
         IReadOnlyList<Guid> requestedCompanyIds,
         IReadOnlyList<OtCompanyOption> otCompanies,
         IReadOnlyList<MandateSignerCompanyResolution> activeResolutions,
-        Guid? currentSignerId)
+        Guid? currentSignerId,
+        string configuredByScope = "organismo",
+        IReadOnlySet<Guid>? validCompanyIds = null)
     {
+        // HU #13195 — un activo por compañía, organismo y GRUPO DE ORIGEN (organismo+super_admin | compania).
+        var actorGroup = GroupOf(configuredByScope);
         var companyById = otCompanies.ToDictionary(c => c.CompanyTenantId);
 
         foreach (var companyId in requestedCompanyIds.Distinct())
         {
             // RF33: la compañía debe tener grant habilitado y estar activa en el OT.
-            if (!companyById.TryGetValue(companyId, out var company) || !company.IsEnabled || !company.IsActive)
+            // HU #13182b: con <paramref name="validCompanyIds"/> (OT / Super Admin) basta con que sea una compañía activa.
+            var invalida = validCompanyIds is not null
+                ? !validCompanyIds.Contains(companyId)
+                : !companyById.TryGetValue(companyId, out var company) || !company.IsEnabled || !company.IsActive;
+            if (invalida)
             {
                 errors.Add(new MandateSignerValidationError(
                     "companyTenantIds",
-                    "La compañía no está habilitada o está inactiva en el organismo de tránsito.",
+                    "Esta compañía no puede registrar mandatarios en este organismo: no lo tiene habilitado o está inactiva.",
                     companyId.ToString()));
             }
 
+            // Al editar, el mandatario conserva el grupo de origen de su vínculo vigente (HU #13195c); el
+            // origen del actor solo cuenta para vínculos nuevos.
+            var originGroup = currentSignerId is { } current
+                ? activeResolutions
+                    .Where(r => r.CompanyTenantId == companyId && r.MandateSignerId == current)
+                    .Select(r => GroupOf(r.OriginGroup))
+                    .DefaultIfEmpty(actorGroup)
+                    .First()
+                : actorGroup;
             var taken = activeResolutions.FirstOrDefault(r =>
                 r.CompanyTenantId == companyId
-                && r.MandateSignerId != currentSignerId);
+                && r.MandateSignerId != currentSignerId
+                && GroupOf(r.OriginGroup) == originGroup);
             if (taken is not null)
             {
                 errors.Add(new MandateSignerValidationError(
@@ -105,17 +127,6 @@ internal static class MandateSignerValidation
         }
     }
 
-    /// <summary>
-    /// Compañías a validar en un organismo: las del puente por OT, o las del comando si no hay puente.
-    /// </summary>
-    public static IReadOnlyList<Guid> CompaniesForOffice(
-        IReadOnlyList<MandateSignerOfficeCompanies>? officeCompanies,
-        Guid transitOfficeId,
-        IReadOnlyList<Guid> fallbackCompanyIds)
-    {
-        var match = officeCompanies?.FirstOrDefault(o => o.TransitOfficeId == transitOfficeId);
-        if (match is null || match.RepresentedCompanyIds.Count == 0)
-            return fallbackCompanyIds;
-        return match.RepresentedCompanyIds;
-    }
+    private static string GroupOf(string? scope) =>
+        string.Equals(scope, "compania", StringComparison.OrdinalIgnoreCase) ? "compania" : "organismo";
 }

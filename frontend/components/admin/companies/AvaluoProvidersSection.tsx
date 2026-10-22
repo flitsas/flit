@@ -1,5 +1,6 @@
 "use client";
 
+import { ClampedText, FIELD_CLASS, FIELD_LABEL, HELP_TEXT, OptionCard } from "./ConfigUi";
 import {
   AVALUO_BASE_PROVIDER,
   AVALUO_PROVIDERS,
@@ -39,66 +40,38 @@ export function AvaluoProvidersSection({
   const primaryOptions = AVALUO_PROVIDERS.filter((p) => form.avaluoEnabled.includes(p.value));
 
   return (
-    <fieldset className="rounded-2xl border p-4">
-      <legend className="px-1 text-xs font-semibold">Proveedores de avalúos</legend>
-      <p className="mb-3 max-w-md text-[11px] opacity-60">
-        Fuentes que sugieren el valor comercial del vehículo en el paso de datos comerciales del
-        traspaso. Fasecolda viene activo por defecto; puedes habilitar fuentes adicionales y elegir
-        cuál se sugiere primero.
-      </p>
+    <div className="space-y-4">
+      <ClampedText text="Fuentes que sugieren el valor comercial del vehículo en el paso de datos comerciales del traspaso. Fasecolda viene activo por defecto; puedes habilitar fuentes adicionales y elegir cuál se sugiere primero." />
 
-      <div className="flex flex-col gap-2">
-        {AVALUO_PROVIDERS.map((provider) => {
-          const checked = form.avaluoEnabled.includes(provider.value);
-          const inputId = `avaluo-${provider.value}`;
-          return (
-            <label
-              key={provider.value}
-              htmlFor={inputId}
-              className="flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2 text-xs"
-              style={{ borderColor: configError ? "#FF4E00" : "#DFE5ED" }}
-            >
-              <input
-                id={inputId}
-                type="checkbox"
-                checked={checked}
-                disabled={provider.locked}
-                onChange={(e) => toggle(provider.value, e.target.checked)}
-                className="mt-0.5 h-4 w-4 accent-[#557EFF] disabled:opacity-60"
-              />
-              <span className="min-w-0">
-                <span className="flex items-center gap-2 font-semibold">
-                  {provider.label}
-                  {provider.locked && (
-                    <span className="rounded-full bg-black/5 px-2 py-0.5 text-[10px] font-medium opacity-70 dark:bg-white/10">
-                      Base
-                    </span>
-                  )}
-                </span>
-                {provider.hint && (
-                  <span className="block text-[11px] opacity-50">{provider.hint}</span>
-                )}
-              </span>
-            </label>
-          );
-        })}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {AVALUO_PROVIDERS.map((provider) => (
+          <OptionCard
+            key={provider.value}
+            type="checkbox"
+            label={provider.label}
+            description={provider.hint}
+            checked={form.avaluoEnabled.includes(provider.value)}
+            locked={Boolean(provider.locked)}
+            onChange={(on) => toggle(provider.value, on)}
+          />
+        ))}
       </div>
 
       {configError && (
-        <p className="mt-1 text-[11px] font-medium" style={{ color: "#FF4E00" }} role="alert">
+        <p className="text-xs font-medium" style={{ color: "#FF4E00" }} role="alert">
           {configError}
         </p>
       )}
 
-      <div className="mt-4 max-w-xs">
-        <label htmlFor="avaluoPrimary" className="mb-1 block text-xs font-semibold">
+      <div className="max-w-xs">
+        <label htmlFor="avaluoPrimary" className={FIELD_LABEL}>
           Proveedor sugerido por defecto
         </label>
         <select
           id="avaluoPrimary"
           value={form.avaluoPrimary}
           onChange={(e) => onChange({ avaluoPrimary: e.target.value })}
-          className="w-full rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF]"
+          className={FIELD_CLASS}
           style={{ borderColor: "#DFE5ED" }}
         >
           {primaryOptions.map((option) => (
@@ -107,10 +80,10 @@ export function AvaluoProvidersSection({
             </option>
           ))}
         </select>
-        <p className="mt-1 text-[11px] opacity-60">
+        <p className={`mt-1 ${HELP_TEXT}`}>
           Valor que se propone primero cuando hay varias fuentes disponibles.
         </p>
       </div>
-    </fieldset>
+    </div>
   );
 }

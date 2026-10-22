@@ -9,9 +9,9 @@ const ROWS = [
 ];
 
 const estadoColor = (e: string) => {
-  if (e === "Aprobado") return { bg: "rgba(0,219,213,0.12)", color: "#00a39f", border: "rgba(0,219,213,0.3)" };
+  if (e === "Aprobado") return { bg: "color-mix(in srgb, var(--color-flit-tech) 12%, transparent)", color: "#00a39f", border: "color-mix(in srgb, var(--color-flit-tech) 30%, transparent)" };
   if (e === "Borrador") return { bg: "rgba(100,116,139,0.12)", color: "#475569", border: "rgba(100,116,139,0.3)" };
-  if (e === "Enviado") return { bg: "rgba(85,126,255,0.12)", color: "#557eff", border: "rgba(85,126,255,0.3)" };
+  if (e === "Enviado") return { bg: "color-mix(in srgb, var(--color-flit-brand) 12%, transparent)", color: "var(--color-flit-brand)", border: "color-mix(in srgb, var(--color-flit-brand) 30%, transparent)" };
   return { bg: "rgba(245,158,11,0.12)", color: "#b45309", border: "rgba(245,158,11,0.3)" };
 };
 
@@ -22,10 +22,10 @@ export function DashboardGrid({ onNewTramite }: { onNewTramite: () => void }) {
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { l: "Trámites Activos", v: "248", d: "+12 hoy", c: "#557eff" },
-          { l: "Aprobados (mes)", v: "1,842", d: "+8.4%", c: "#00dbd5" },
+          { l: "Trámites Activos", v: "248", d: "+12 hoy", c: "var(--color-flit-brand)" },
+          { l: "Aprobados (mes)", v: "1,842", d: "+8.4%", c: "var(--color-flit-tech)" },
           { l: "Bloqueos RUNT", v: "37", d: "Atención", c: "#ff4e00" },
-          { l: "Tenants Conectados", v: "16", d: "Multi-tenant OK", c: "#557eff" },
+          { l: "Tenants Conectados", v: "16", d: "Multi-tenant OK", c: "var(--color-flit-brand)" },
         ].map((k) => (
           <div key={k.l} className="glass rounded-2xl p-4">
             <p className="text-xs text-slate-500">{k.l}</p>
@@ -44,7 +44,7 @@ export function DashboardGrid({ onNewTramite }: { onNewTramite: () => void }) {
         <button
           onClick={onNewTramite}
           className="rounded-2xl px-5 py-3 text-sm font-semibold text-white flex items-center gap-2"
-          style={{ background: "linear-gradient(135deg,#557eff,#3b5bdb)", boxShadow: "0 10px 30px -10px rgba(85,126,255,0.6)" }}
+          style={{ background: "linear-gradient(135deg,var(--color-flit-brand),#3b5bdb)", boxShadow: "0 10px 30px -10px color-mix(in srgb, var(--color-flit-brand) 60%, transparent)" }}
         >
           Iniciar Nuevo Traspaso Vehicular Avanzado
         </button>
@@ -57,7 +57,7 @@ export function DashboardGrid({ onNewTramite }: { onNewTramite: () => void }) {
             {/* Header bar */}
             <div
               className="grid items-center text-[11px] uppercase tracking-wider font-semibold rounded-xl px-4 py-3"
-              style={{ background: "#dfe5ed", color: "#162744", gridTemplateColumns: "1.4fr 1.2fr 1.3fr 1.2fr 0.9fr 1fr 0.9fr 0.8fr" }}
+              style={{ background: "#dfe5ed", color: "var(--color-flit-primary)", gridTemplateColumns: "1.4fr 1.2fr 1.3fr 1.2fr 0.9fr 1fr 0.9fr 0.8fr" }}
             >
               <div>ID Compuesto</div>
               <div>Trámite</div>
@@ -77,28 +77,28 @@ export function DashboardGrid({ onNewTramite }: { onNewTramite: () => void }) {
                     key={r.id}
                     onMouseEnter={() => setHover(r.id)}
                     onMouseLeave={() => setHover(null)}
-                    className="grid items-center bg-white dark:bg-[#162744] rounded-xl px-4 py-3 text-sm shadow-[0_2px_8px_rgba(22,39,68,0.05)] hover:shadow-[0_8px_24px_rgba(85,126,255,0.18)] transition relative"
+                    className="grid items-center bg-white dark:bg-[#162744] rounded-xl px-4 py-3 text-sm shadow-[0_2px_8px_rgba(22,39,68,0.05)] hover:shadow-[0_8px_24px_color-mix(in_srgb,var(--color-flit-brand)_18%,transparent)] transition relative"
                     style={{ gridTemplateColumns: "1.4fr 1.2fr 1.3fr 1.2fr 0.9fr 1fr 0.9fr 0.8fr" }}
                   >
-                    <div className="font-mono text-xs text-[#162744] dark:text-white truncate">{r.id}</div>
-                    <div className="text-[#162744] dark:text-white/90 truncate">{r.tipo}</div>
-                    <div className="text-[#162744] dark:text-white/90 truncate">{r.prop}</div>
-                    <div className="text-[#162744]/80 dark:text-white/70 truncate">{r.tenant}</div>
-                    <div className="font-mono text-xs text-[#162744]/70 dark:text-white/60">{r.fecha}</div>
-                    <div className="text-[#162744]/80 dark:text-white/70 truncate">{r.ot}</div>
+                    <div className="font-mono text-xs text-flit-primary dark:text-white truncate">{r.id}</div>
+                    <div className="text-flit-primary dark:text-white/90 truncate">{r.tipo}</div>
+                    <div className="text-flit-primary dark:text-white/90 truncate">{r.prop}</div>
+                    <div className="text-flit-primary/80 dark:text-white/70 truncate">{r.tenant}</div>
+                    <div className="font-mono text-xs text-flit-primary/70 dark:text-white/60">{r.fecha}</div>
+                    <div className="text-flit-primary/80 dark:text-white/70 truncate">{r.ot}</div>
                     <div>
                       <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap" style={{ background: c.bg, color: c.color, borderColor: c.border }}>{r.estado}</span>
                     </div>
                     <div className="flex items-center justify-end gap-1">
-                      <button className="p-1.5 rounded-lg hover:bg-[#eef5ff] dark:hover:bg-white/10"><Eye className="h-4 w-4" style={{ color: "#557eff" }} /></button>
-                      <button className="p-1.5 rounded-lg hover:bg-[#eef5ff] dark:hover:bg-white/10"><MoreVertical className="h-4 w-4 text-[#162744]/60 dark:text-white/60" /></button>
+                      <button className="p-1.5 rounded-lg hover:bg-[#eef5ff] dark:hover:bg-white/10"><Eye className="h-4 w-4" style={{ color: "var(--color-flit-brand)" }} /></button>
+                      <button className="p-1.5 rounded-lg hover:bg-[#eef5ff] dark:hover:bg-white/10"><MoreVertical className="h-4 w-4 text-flit-primary/60 dark:text-white/60" /></button>
                     </div>
                     {hover === r.id && (
                       <div className="absolute right-4 top-12 z-20 bg-white dark:bg-[#162744] border border-[#dfe5ed] dark:border-white/10 rounded-xl p-1 w-56 max-w-[80vw] shadow-xl">
-                        <button className="w-full flex items-center gap-2 px-3 py-2 text-xs rounded-lg hover:bg-[#eef5ff] dark:hover:bg-white/10 text-[#162744] dark:text-white"><Ban className="h-3.5 w-3.5" style={{ color: "#ff4e00" }} /> Solicitud de anulación</button>
-                        <button className="w-full flex items-center gap-2 px-3 py-2 text-xs rounded-lg hover:bg-[#eef5ff] dark:hover:bg-white/10 text-[#162744] dark:text-white"><RefreshCw className="h-3.5 w-3.5" style={{ color: "#557eff" }} /> Cambio de estado manual</button>
-                        <button className="w-full flex items-center gap-2 px-3 py-2 text-xs rounded-lg hover:bg-[#eef5ff] dark:hover:bg-white/10 text-[#162744] dark:text-white"><Eraser className="h-3.5 w-3.5" style={{ color: "#00dbd5" }} /> Limpiar consolidado</button>
-                        <div className="px-3 py-1.5 text-[10px] font-mono text-[#162744]/50 dark:text-white/50 border-t border-[#dfe5ed] dark:border-white/10 mt-1">tramites.admin.maestro ✓</div>
+                        <button className="w-full flex items-center gap-2 px-3 py-2 text-xs rounded-lg hover:bg-[#eef5ff] dark:hover:bg-white/10 text-flit-primary dark:text-white"><Ban className="h-3.5 w-3.5" style={{ color: "#ff4e00" }} /> Solicitud de anulación</button>
+                        <button className="w-full flex items-center gap-2 px-3 py-2 text-xs rounded-lg hover:bg-[#eef5ff] dark:hover:bg-white/10 text-flit-primary dark:text-white"><RefreshCw className="h-3.5 w-3.5" style={{ color: "var(--color-flit-brand)" }} /> Cambio de estado manual</button>
+                        <button className="w-full flex items-center gap-2 px-3 py-2 text-xs rounded-lg hover:bg-[#eef5ff] dark:hover:bg-white/10 text-flit-primary dark:text-white"><Eraser className="h-3.5 w-3.5" style={{ color: "var(--color-flit-tech)" }} /> Limpiar consolidado</button>
+                        <div className="px-3 py-1.5 text-[10px] font-mono text-flit-primary/50 dark:text-white/50 border-t border-[#dfe5ed] dark:border-white/10 mt-1">tramites.admin.maestro ✓</div>
                       </div>
                     )}
                   </div>

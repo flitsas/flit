@@ -11,8 +11,10 @@
 // HU #12242 — el carrusel de bienvenida del gestor deja de anunciar mensajes de relleno
 // hardcodeados y pasa a mostrar, después del slide fijo, los banners Activos que configura el
 // Administrador (endpoint público `GET /api/v1/public/banners/active`).
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { ActiveModulesResponse, AnalyticsOverviewResponse } from "@/lib/api/types";
@@ -111,7 +113,7 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
     render(<Dashboard onNewTramite={noop} />);
 
     await waitFor(() => expect(mocks.fetchActiveModules).toHaveBeenCalled());
-    expect(await screen.findByText("Total Trámites")).toBeInTheDocument();
+    expect(await screen.findByText("Total trámites")).toBeInTheDocument();
     // "Matrículas"/"Traspasos" también aparecen en la leyenda del gráfico de tendencia.
     expect(screen.getAllByText("Matrículas").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Traspasos").length).toBeGreaterThan(0);
@@ -127,7 +129,7 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
     expect(screen.queryByText("Tu compañía no tiene módulos adicionales activados.")).not.toBeInTheDocument();
   });
 
-  it("BUG12588: mapea Otros Trámites y capitaliza los estados en la Distribución General (vocabulario ADR-0022)", async () => {
+  it("Bug #13055 (revierte D3 de HU #12725): «Otros Trámites» vuelve como KPI y se capitalizan los estados en Distribución General", async () => {
     render(<Dashboard onNewTramite={noop} />);
 
     await waitFor(() => expect(mocks.fetchActiveModules).toHaveBeenCalled());
@@ -214,7 +216,7 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
     render(<Dashboard onNewTramite={noop} />);
 
     // El resto de secciones (independientes) sigue operativo.
-    expect(await screen.findByText("Total Trámites")).toBeInTheDocument();
+    expect(await screen.findByText("Total trámites")).toBeInTheDocument();
     expect(await screen.findByText("Distribución General de Trámites")).toBeInTheDocument();
     expect(await screen.findByText("Validaciones Biométricas")).toBeInTheDocument();
     expect(await screen.findByText("Seguimiento operativo")).toBeInTheDocument();
@@ -233,7 +235,7 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
 
     render(<Dashboard onNewTramite={noop} />);
 
-    expect(await screen.findByText("Total Trámites")).toBeInTheDocument();
+    expect(await screen.findByText("Total trámites")).toBeInTheDocument();
     await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
     expect(mocks.listTenantBiometricValidations).not.toHaveBeenCalled();
     expect(screen.queryByText("Validaciones Biométricas")).not.toBeInTheDocument();
@@ -250,7 +252,7 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
 
     render(<Dashboard onNewTramite={noop} />);
 
-    expect(await screen.findByText("Total Trámites")).toBeInTheDocument();
+    expect(await screen.findByText("Total trámites")).toBeInTheDocument();
     await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
     expect(mocks.listTenantBiometricValidations).not.toHaveBeenCalled();
   });
@@ -261,7 +263,7 @@ describe("Dashboard — HU #12253 módulos activos por tenant", () => {
 
     render(<Dashboard onNewTramite={noop} />);
 
-    expect(await screen.findByText("Total Trámites")).toBeInTheDocument();
+    expect(await screen.findByText("Total trámites")).toBeInTheDocument();
     await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
 
     // Para este endpoint (sin vista global) un tenantId vacío respondería 400 del backend —
@@ -372,7 +374,7 @@ describe("Dashboard — carrusel de bienvenida con banners Activos (HU #12242)",
     await waitFor(() => expect(mocks.getActiveBanners).toHaveBeenCalled());
     expect(screen.getAllByRole("button", { name: /^Slide \d/ })).toHaveLength(1);
     // El resto del dashboard (KPIs) se sigue viendo con normalidad.
-    expect(await screen.findByText("Total Trámites")).toBeInTheDocument();
+    expect(await screen.findByText("Total trámites")).toBeInTheDocument();
   });
 
   it("AC3 — si la imagen de un banner no carga, ese slide se retira sin romper el carrusel", async () => {
@@ -524,19 +526,23 @@ describe("Dashboard — BUG #12588 rango de fechas por defecto", () => {
     expect(params.createdTo).toBeUndefined();
   });
 
-  it("los inputs de fecha arrancan vacíos", async () => {
+  it("el selector de rango arranca vacío (HU #12724)", async () => {
     render(<Dashboard onNewTramite={noop} />);
 
-    expect(await screen.findByLabelText(/Desde/i)).toHaveValue("");
-    expect(screen.getByLabelText(/Hasta/i)).toHaveValue("");
+    expect(
+      await screen.findByRole("button", { name: /Rango de fechas: Seleccionar rango/i }),
+    ).toBeInTheDocument();
   });
 
-  it("al poner una fecha, sí se acota: el filtro sigue disponible", async () => {
+  it("al aplicar una sola fecha, sí se acota: el filtro sigue disponible", async () => {
     const user = userEvent.setup();
     render(<Dashboard onNewTramite={noop} />);
     await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
 
-    await user.type(await screen.findByLabelText(/Desde/i), "2026-09-01");
+    await user.click(screen.getByRole("button", { name: /Rango de fechas/i }));
+    const dialog = await screen.findByRole("dialog", { name: "Elegir rango de fechas" });
+    await user.click(within(dialog).getByTestId("day-2026-09-01"));
+    await user.click(within(dialog).getByTestId("date-range-apply"));
 
     await waitFor(() => {
       const ultima = mocks.fetchAnalyticsOverview.mock.calls.at(-1)![0];
@@ -546,20 +552,25 @@ describe("Dashboard — BUG #12588 rango de fechas por defecto", () => {
     expect(mocks.fetchAnalyticsOverview.mock.calls.at(-1)![0].to).toBeFalsy();
   });
 
-  it("«Todo el periodo» devuelve a la vista sin acotar y queda deshabilitado ahí", async () => {
+  it("Limpiar en el picker devuelve a la vista sin acotar (HU #12724 / #12725)", async () => {
     const user = userEvent.setup();
     render(<Dashboard onNewTramite={noop} />);
 
-    const limpiar = await screen.findByRole("button", { name: /Todo el periodo/i });
-    // Ya se está mostrando todo al abrir: no hay nada que limpiar.
-    expect(limpiar).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: /Rango de fechas/i }));
+    let dialog = await screen.findByRole("dialog", { name: "Elegir rango de fechas" });
+    await user.click(within(dialog).getByTestId("day-2026-09-01"));
+    await user.click(within(dialog).getByTestId("date-range-apply"));
+    await waitFor(() => {
+      expect(mocks.fetchAnalyticsOverview.mock.calls.at(-1)![0].from).toBe("2026-09-01");
+    });
 
-    await user.type(await screen.findByLabelText(/Desde/i), "2026-09-01");
-    await waitFor(() => expect(limpiar).not.toBeDisabled());
+    await user.click(screen.getByRole("button", { name: /Rango de fechas/i }));
+    dialog = await screen.findByRole("dialog", { name: "Elegir rango de fechas" });
+    await user.click(within(dialog).getByTestId("date-range-clear"));
 
-    await user.click(limpiar);
-
-    expect(await screen.findByLabelText(/Desde/i)).toHaveValue("");
+    expect(
+      await screen.findByRole("button", { name: /Rango de fechas: Seleccionar rango/i }),
+    ).toBeInTheDocument();
     await waitFor(() => {
       expect(mocks.fetchAnalyticsOverview.mock.calls.at(-1)![0].from).toBeFalsy();
     });
@@ -585,7 +596,7 @@ describe("Dashboard — rótulos de las tarjetas KPI", () => {
     mocks.getActiveBanners.mockResolvedValue([]);
   });
 
-  it.each(["Total Trámites", "Matrículas", "Traspasos", "Otros Trámites", "Completados"])(
+  it.each(["Total trámites", "Matrículas", "Traspasos", "Otros Trámites", "Completados"])(
     "«%s» se renderiza completo, sin recortar",
     async (label) => {
       render(<Dashboard onNewTramite={noop} />);
@@ -602,7 +613,7 @@ describe("Dashboard — rótulos de las tarjetas KPI", () => {
   it("el rótulo respeta el piso tipográfico de 12px de la línea base", async () => {
     render(<Dashboard onNewTramite={noop} />);
 
-    const rotulo = await screen.findByText("Total Trámites");
+    const rotulo = await screen.findByText("Total trámites");
     expect(rotulo).toHaveClass("text-xs");
     expect(rotulo.className).not.toMatch(/text-\[1[01]px\]/);
   });
@@ -613,5 +624,119 @@ describe("Dashboard — rótulos de las tarjetas KPI", () => {
     const cifra = await screen.findByText("7");
     expect(cifra).toHaveClass("tabular-nums");
     expect(cifra).not.toHaveClass("truncate");
+  });
+});
+
+// ── HU #12725 — banner alto estándar, filtros en fila, KPIs 2×2 (B.1 / D3) ───
+
+describe("Dashboard — HU #12725 layout hero y KPIs 2×2", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getToken.mockReturnValue("token");
+    mocks.decodeJwtPayload.mockReturnValue({ display_name: "Ana", email: "ana@flit.io", permissions: ["dashboard.read"] });
+    mocks.isSuperAdmin.mockReturnValue(false);
+    mocks.fetchAnalyticsOverview.mockResolvedValue(FULL_OVERVIEW);
+    mocks.fetchMonthlyTrend.mockResolvedValue(TREND);
+    mocks.listTenantBiometricValidations.mockResolvedValue(BIOMETRIC_EMPTY);
+    mocks.fetchActiveModules.mockResolvedValue(NONE_ADDITIONAL);
+    mocks.fetchAllCompanies.mockResolvedValue([]);
+    mocks.getActiveBanners.mockResolvedValue([]);
+  });
+
+  it("AC1 — banner y columna derecha comparten min-height del token --dashboard-hero-h", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+
+    const banner = await screen.findByTestId("dashboard-hero-banner");
+    const column = screen.getByTestId("dashboard-hero-column");
+    expect(banner.className).toContain("min-h-[var(--dashboard-hero-h)]");
+    expect(column.className).toContain("min-h-[var(--dashboard-hero-h)]");
+    expect(banner.style.minHeight).toBe("");
+  });
+
+  it("AC2 — SuperAdmin ve DateRangePicker y CompanySelector en la misma fila de filtros", async () => {
+    mocks.isSuperAdmin.mockReturnValue(true);
+    mocks.fetchAllCompanies.mockResolvedValue([
+      { id: "c1", razonSocial: "Acme SA", nit: "900" },
+    ]);
+
+    render(<Dashboard onNewTramite={noop} />);
+
+    const filterRow = await screen.findByTestId("dashboard-filter-row");
+    expect(within(filterRow).getByTestId("date-range-picker")).toBeInTheDocument();
+    expect(within(filterRow).getByRole("combobox", { name: /Compañía/i })).toBeInTheDocument();
+    expect(filterRow.className).toMatch(/grid-cols-2/);
+  });
+
+  it("AC3 (Bug #13055) — KPIs en 3 columnas con «Otros Trámites» de vuelta", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+
+    const grid = await screen.findByTestId("dashboard-kpi-grid");
+    expect(grid.className).toContain("grid-cols-3");
+    expect(within(grid).getByText("Total trámites")).toBeInTheDocument();
+    expect(within(grid).getByText("Matrículas")).toBeInTheDocument();
+    expect(within(grid).getByText("Traspasos")).toBeInTheDocument();
+    expect(within(grid).getByText("Otros Trámites")).toBeInTheDocument();
+    expect(within(grid).getByText("Completados")).toBeInTheDocument();
+    // Total incluye todas las categorías (5+2+0 = 7 en FULL_OVERVIEW).
+    expect(within(grid).getByText("7")).toBeInTheDocument();
+  });
+
+  it("AC4 — el slide de bienvenida recorta título y cuerpo con line-clamp", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+
+    const banner = await screen.findByTestId("dashboard-hero-banner");
+    const title = within(banner).getByRole("heading", { name: /Hola,/i });
+    expect(title).toHaveClass("line-clamp-2");
+    const body = within(banner).getByText(/Tienes 7 trámites|Tus procesos y validaciones/i);
+    expect(body).toHaveClass("line-clamp-3");
+  });
+
+  it("AC5 — el token --dashboard-hero-h está definido en globals.css (:root)", () => {
+    const css = readFileSync(resolve(__dirname, "../../../../app/globals.css"), "utf8");
+    expect(css).toMatch(/--dashboard-hero-h:\s*260px/);
+  });
+
+  // Edge / contrato adicionales (mapeo ADO AC1–AC5; los `it` anteriores usan numeración histórica del PR)
+
+  it("AC1 edge — no declara minHeight inline de 220px (alto vía token CSS)", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+    const banner = await screen.findByTestId("dashboard-hero-banner");
+    expect(banner.getAttribute("style") ?? "").not.toMatch(/minHeight|min-height/i);
+    expect(banner.className).not.toMatch(/min-h-\[220px\]/);
+  });
+
+  it("AC3 contrato — fila de filtros siempre incluye DateRangePicker; KPI grid queda debajo", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+    const filterRow = await screen.findByTestId("dashboard-filter-row");
+    const kpiGrid = screen.getByTestId("dashboard-kpi-grid");
+    expect(within(filterRow).getByTestId("date-range-picker")).toBeInTheDocument();
+    expect(filterRow.compareDocumentPosition(kpiGrid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("AC4 contrato (Bug #13055) — exactamente 5 tarjetas KPI en el grid, «Otros» incluida", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+    const grid = await screen.findByTestId("dashboard-kpi-grid");
+    const cards = grid.querySelectorAll(":scope > div");
+    expect(cards).toHaveLength(5);
+  });
+
+  it("AC5 contrato — layout apila en mobile (grid-cols-1) y items-stretch; dark tokens en KPI", async () => {
+    render(<Dashboard onNewTramite={noop} />);
+    const banner = await screen.findByTestId("dashboard-hero-banner");
+    const heroRow = banner.parentElement;
+    expect(heroRow?.className).toMatch(/grid-cols-1/);
+    expect(heroRow?.className).toMatch(/md:grid-cols-3/);
+    expect(heroRow?.className).toMatch(/items-stretch/);
+    const grid = screen.getByTestId("dashboard-kpi-grid");
+    const firstCard = grid.querySelector(":scope > div");
+    expect(firstCard?.className).toMatch(/dark:bg-\[#0B0F14\]/);
+  });
+
+  it("AC5 edge — bannerAmbientGradient y useDominantColor siguen exportados sin cambio de firma", async () => {
+    const mod = await import("@/hooks/useDominantColor");
+    expect(typeof mod.bannerAmbientGradient).toBe("function");
+    expect(typeof mod.useDominantColor).toBe("function");
+    expect(mod.bannerAmbientGradient(null)).toMatch(/linear-gradient/i);
+    expect(mod.bannerAmbientGradient("85,126,255")).toMatch(/radial-gradient|rgb\(85,\s*126,\s*255\)/i);
   });
 });

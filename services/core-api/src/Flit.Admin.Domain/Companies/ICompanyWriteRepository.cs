@@ -8,9 +8,6 @@ namespace Flit.Admin.Domain.Companies;
 /// </summary>
 public interface ICompanyWriteRepository
 {
-    /// <summary>Indica si ya existe una compañía con ese <c>code</c> (único en BD).</summary>
-    Task<bool> CodeExistsAsync(string code, CancellationToken cancellationToken = default);
-
     /// <summary>
     /// ¿Ya existe una compañía con ese NIT? El NIT identifica a la empresa ante el Estado, así que dos
     /// tenants con el mismo NIT son la misma empresa duplicada: aparecen dos veces —y con la misma razón

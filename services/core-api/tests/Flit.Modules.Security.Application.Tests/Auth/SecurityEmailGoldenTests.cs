@@ -58,7 +58,7 @@ public sealed class SecurityEmailGoldenTests
         tokenGen.Generate().Returns(new GeneratedToken(RawToken, "hash-golden"));
         repo.CreateAsync(Arg.Any<UserInvitationData>(), Arg.Any<CancellationToken>()).Returns(Guid.NewGuid());
         repo.RoleExistsInTenantAsync(tenantId, Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(true);
-        repo.ExistsPendingAsync(tenantId, Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
+        repo.ExistsPendingAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
 
         var urlBaseResolver = Substitute.For<INetworkUrlBaseResolver>();
         urlBaseResolver

@@ -60,14 +60,16 @@ describe("la superficie del hub del organismo", () => {
     expect(superficie.className).not.toMatch(/rounded-2xl|border/);
   });
 
-  it("conserva el panel blanco para el resto de módulos del hub", () => {
+  it("HU #12731 — el hub OT usa superficie plana por defecto en todos los módulos", () => {
     render(
       <OtHubLayout transitOfficeId="ot-1" activeTab="rules" moduleTitle="Reglas">
         <p>contenido</p>
       </OtHubLayout>,
     );
 
-    expect(screen.getByTestId("ot-hub-superficie").className).toMatch(/bg-card/);
+    const superficie = screen.getByTestId("ot-hub-superficie");
+    expect(superficie).toHaveAttribute("data-surface", "plano");
+    expect(superficie.className).not.toMatch(/bg-card/);
   });
 });
 

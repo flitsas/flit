@@ -8,8 +8,9 @@ import { fetchTransitOffices } from "@/lib/api/admin-companies";
 import { fetchOtProfile } from "@/lib/api/admin-ot";
 import { fetchTransitOfficesOperationalStatus } from "@/lib/api/admin-transit-office-tenants";
 import { getToken } from "@/lib/api/client";
-import { decodeJwtPayload, isOtAdmin, isSuperAdmin } from "@/lib/auth/jwt";
+import { decodeJwtPayload, isOtUser, isSuperAdmin } from "@/lib/auth/jwt";
 import { OtTabBar } from "@/components/admin/transit-offices/OtTabBar";
+import { ADMIN_BACK_LINK_CLS } from "@/components/admin/admin-ui-styles";
 import {
   OT_HUB_TABS,
   otHubListPath,
@@ -35,6 +36,8 @@ export interface OtHubLayoutProps {
    * empresa gestora se monta sobre el fondo y por eso allí sí se distinguen.</p>
    */
   surface?: "panel" | "plano";
+  /** Dato del módulo que vive dentro de la tarjeta del título (p. ej. el formato de contrato). */
+  titleRight?: ReactNode;
   children: ReactNode;
 }
 
@@ -43,7 +46,8 @@ export function OtHubLayout({
   transitOfficeId,
   activeTab,
   moduleTitle,
-  surface = "panel",
+  surface = "plano",
+  titleRight,
   children,
 }: OtHubLayoutProps) {
   const router = useRouter();
@@ -59,7 +63,7 @@ export function OtHubLayout({
   useEffect(() => {
     const payload = decodeJwtPayload(getToken());
     const superAdmin = isSuperAdmin(payload);
-    const otAdmin = isOtAdmin(payload);
+    const otAdmin = isOtUser(payload);
     // Admin OT: sin pestañas (viven en el dock). SuperAdmin conserva la barra.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setShowTabBar(superAdmin);
@@ -128,15 +132,14 @@ export function OtHubLayout({
         <button
           type="button"
           onClick={() => router.push(otHubListPath())}
-          className="mb-4 flex items-center gap-2 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 rounded-md"
-          style={{ color: "#557EFF" }}
+          className={`mb-4 ${ADMIN_BACK_LINK_CLS}`}
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Volver al listado de OT
         </button>
       )}
 
-      <ModuleTitle title={moduleTitle} subtitle={subtitle} />
+      <ModuleTitle title={moduleTitle} subtitle={subtitle} right={titleRight} />
 
       {inactiveTenant && (
         <div

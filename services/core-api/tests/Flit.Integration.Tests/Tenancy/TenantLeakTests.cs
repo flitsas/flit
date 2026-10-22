@@ -120,11 +120,11 @@ public sealed class TenantLeakTests(PostgresDatabaseFixture fixture) : PostgresT
         todas.Should().HaveCount(10);
 
         var act = () => LeakAssert.NoForeignRows(
-            "Q27 (demostración)", HierarchyScenario.C1, new HashSet<Guid> { HierarchyScenario.C1 },
+            "Q26 (demostración)", HierarchyScenario.C1, new HashSet<Guid> { HierarchyScenario.C1 },
             todas, r => r.TenantId, r => r.Id);
 
         var ex = act.Should().Throw<LeakDetectedException>().Which;
-        ex.Message.Should().Contain("FUGA en Q27")
+        ex.Message.Should().Contain("FUGA en Q26")
             .And.Contain("8 fila(s) ajena(s)")
             .And.Contain($"del tenant C2 ({HierarchyScenario.C2})")
             .And.Contain($"del tenant P ({HierarchyScenario.P})")
@@ -132,7 +132,7 @@ public sealed class TenantLeakTests(PostgresDatabaseFixture fixture) : PostgresT
             .And.Contain(HierarchyScenario.DeliveredProcedureOf(HierarchyScenario.C2).ToString());
     }
 
-    // ── Q27: ruta nueva con TenantScope (ADR-0057) ──────────────────────────────────────────────
+    // ── Q26: ruta nueva con TenantScope (ADR-0057) ──────────────────────────────────────────────
 
     [PostgresFact]
     public async Task Q27_Single_del_hijo_solo_lee_lo_propio()
@@ -145,7 +145,7 @@ public sealed class TenantLeakTests(PostgresDatabaseFixture fixture) : PostgresT
             .Select(p => p.Id)
             .ToListAsync();
 
-        LeakAssert.NoForeignProcedures("Q27 Single(C1)", HierarchyScenario.C1, new HashSet<Guid> { HierarchyScenario.C1 }, rows);
+        LeakAssert.NoForeignProcedures("Q26 Single(C1)", HierarchyScenario.C1, new HashSet<Guid> { HierarchyScenario.C1 }, rows);
         rows.Should().BeEquivalentTo(HierarchyScenario.ProceduresOf(HierarchyScenario.C1));
     }
 
@@ -161,7 +161,7 @@ public sealed class TenantLeakTests(PostgresDatabaseFixture fixture) : PostgresT
             .Select(p => p.Id)
             .ToListAsync();
 
-        LeakAssert.NoForeignProcedures("Q27 Group(P)", HierarchyScenario.P, scope.ReadTenantIds, rows);
+        LeakAssert.NoForeignProcedures("Q26 Group(P)", HierarchyScenario.P, scope.ReadTenantIds, rows);
         rows.Should().HaveCount(6).And.NotContain(HierarchyScenario.ProceduresOf(HierarchyScenario.X))
             .And.NotContain(HierarchyScenario.ProceduresOf(HierarchyScenario.S));
     }
@@ -185,7 +185,7 @@ public sealed class TenantLeakTests(PostgresDatabaseFixture fixture) : PostgresT
         rows.Should().BeEmpty("un conjunto de lectura sin datos es cero filas, no ausencia de filtro");
     }
 
-    // ── Q26: DbTenantScopeResolver contra la base real ───────────────────────────────────────────
+    // ── Q25: DbTenantScopeResolver contra la base real ───────────────────────────────────────────
 
     [PostgresFact]
     public async Task Q26_hijo_resuelve_Single_propio()
@@ -252,7 +252,7 @@ public sealed class TenantLeakTests(PostgresDatabaseFixture fixture) : PostgresT
         scope.ReadTenantIds.Should().Equal(inexistente);
     }
 
-    // ── Q24 / Q25: organismo de tránsito por grants ─────────────────────────────────────────────
+    // ── Q23 / Q24: organismo de tránsito por grants ─────────────────────────────────────────────
 
     /// <summary>
     /// HU #12350 AC7 — la bandeja lista trámites ya recibidos por el organismo (todos los clientes
@@ -271,7 +271,7 @@ public sealed class TenantLeakTests(PostgresDatabaseFixture fixture) : PostgresT
             .Select(HierarchyScenario.DeliveredProcedureOf)
             .ToHashSet();
 
-        LeakAssert.NoForeignRows("Q24 OtClientProcedureRepository.ListAsync", HierarchyScenario.O,
+        LeakAssert.NoForeignRows("Q23 OtClientProcedureRepository.ListAsync", HierarchyScenario.O,
             expectedIds, page.Items, r => r.Id, r => r.Id);
         page.Items.Should().HaveCount(HierarchyScenario.Clients.Count);
     }
@@ -285,12 +285,12 @@ public sealed class TenantLeakTests(PostgresDatabaseFixture fixture) : PostgresT
         var options = await new OtMetricsReadRepository(ctx).ListClientCompaniesAsync(HierarchyScenario.O);
 
         options.Should().NotBeNull();
-        LeakAssert.NoForeignRows("Q25 OtMetricsReadRepository.ListClientCompaniesAsync", HierarchyScenario.O,
+        LeakAssert.NoForeignRows("Q24 OtMetricsReadRepository.ListClientCompaniesAsync", HierarchyScenario.O,
             new HashSet<Guid> { HierarchyScenario.C1 }, options!, r => r.TenantId, r => r.TenantId);
         options.Should().ContainSingle().Which.TenantId.Should().Be(HierarchyScenario.C1);
     }
 
-    /// <summary>Q13 no devuelve filas con tenant: se comprueba el contenido exacto (C1 → Ot1; el resto → Ot1 también, pero cada uno una sola).</summary>
+    /// <summary>Q12 no devuelve filas con tenant: se comprueba el contenido exacto (C1 → Ot1; el resto → Ot1 también, pero cada uno una sola).</summary>
     [PostgresFact]
     public async Task Q13_convenios_de_OT_son_exactamente_los_propios()
     {

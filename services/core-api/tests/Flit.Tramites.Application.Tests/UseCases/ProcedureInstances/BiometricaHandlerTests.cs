@@ -1057,7 +1057,7 @@ public sealed class BiometricaHandlerTests
         var ct = TestContext.Current.CancellationToken;
         var tenant = Guid.NewGuid();
         var handler = new ListTenantBiometricValidationsHandler(_repo);
-        // 999 fuera de rango → se acota a 50; página 0 → se normaliza a 1 (skip 0).
+        // 999 fuera de rango → se acota a 100 (Bug #13055: mismo tope que el resto de listados); página 0 → se normaliza a 1 (skip 0).
         var query = new TenantBiometricValidationListQuery(Page: 0, PageSize: 999);
         _repo.ListBiometricValidationsByTenantAsync(OnlyTenant(tenant), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct)
             .Returns(new List<ProcedureInstanceBiometricValidation>());
@@ -1066,10 +1066,10 @@ public sealed class BiometricaHandlerTests
 
         var (result, _) = await handler.HandleAsync(tenant, query, ct);
 
-        result!.PageSize.Should().Be(50);
+        result!.PageSize.Should().Be(100);
         result.Page.Should().Be(1);
         await _repo.Received(1).ListBiometricValidationsByTenantAsync(
-            OnlyTenant(tenant), 0, 50, Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct);
+            OnlyTenant(tenant), 0, 100, Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), ct);
     }
 
     [Fact]

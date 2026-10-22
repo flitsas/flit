@@ -107,7 +107,7 @@ export function AvaluoComercialCard({
               Avalúo sugerido <span className="font-normal opacity-70">({fuenteLabel})</span>
             </span>
             <div className={cn(FIELD_BOX, 'justify-between gap-3 bg-[#F8FAFC] dark:bg-white/5')}>
-              <span className="truncate text-sm font-bold text-[#162744] dark:text-white">
+              <span className="truncate text-sm font-bold text-flit-primary dark:text-white">
                 {sugerido != null ? formatCOP(sugerido) : '—'}
               </span>
 

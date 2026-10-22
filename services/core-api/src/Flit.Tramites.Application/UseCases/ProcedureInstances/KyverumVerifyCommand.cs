@@ -170,7 +170,7 @@ public sealed class IniciarKyverumVerifyHandler(
         try
         {
             provider = await kyverum.StartVerificationAsync(
-                new KyverumVerifyStartRequest(id, validationId, parte, nombre, tipoDoc, documento, email),
+                new KyverumVerifyStartRequest(id, validationId, parte, nombre, tipoDoc, documento, email, tenantId),
                 ct);
         }
         catch (KyverumVerifyException ex)
@@ -378,6 +378,19 @@ public sealed class KyverumWebhookHandler(
             return ("ok", null);
         }
 
+        // HU #13286 (Épica #13202) — la validación ya es del flujo manual (A2 limpió id, url y secreto de Kyverum):
+        // un webhook tardío NO la decide. 200 para que Kyverum no reintente; no se verifica firma, no se
+        // consulta al proveedor, no se aplica nada y no se persiste. La bitácora no lleva payload ni secretos.
+        if (string.Equals(v.Provider, BiometricProviders.Manual, StringComparison.OrdinalIgnoreCase))
+        {
+            await audit.LogAsync(new IdentityValidationAuditEntry(
+                IdentityValidationAuditStages.WebhookIgnoradoManual, IdentityValidationAuditOutcomes.Ok,
+                TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
+                PartyRole: v.PartyRole, SignaturePresent: signaturePresent, HttpStatus: 200,
+                Message: "Webhook de Kyverum ignorado: la validación está en el flujo manual."), ct);
+            return ("ok", null);
+        }
+
         // Descifrado del secreto (vía rápida HMAC). CryptographicException (keyring/ApplicationName) ⇒ NO 500.
         string? secret = null;
         string? decryptError = null;
@@ -421,11 +434,54 @@ public sealed class KyverumWebhookHandler(
             return (null, "firma_invalida");
         }
 
-        // Idempotencia: estados terminales no se re-procesan (AC2).
-        if (v.Status is BiometricEstados.Aprobado or BiometricEstados.Rechazado)
+        // Idempotencia: estados terminales no se re-procesan (AC2), salvo el rechazo aplicado antes de agotar los
+        // intentos: un aprobado posterior del mismo enlace lo reemplaza (el applier decide).
+        if ((v.Status is BiometricEstados.Aprobado or BiometricEstados.Rechazado)
+            && !BiometricRules.EsRechazoKyverumConIntentosDisponibles(v))
             return ("ok", null);
 
         return await ApplyFromBodyAsync(v, input.RawBody, ct);
+    }
+
+    /// <summary>
+    /// HU #13351 (ADR-0065 §6) — aviso de Kyverum que llegó a Consultas, ya verificado contra el secreto que guarda
+    /// Consultas, y que llega aquí por el bus. Mismo tratamiento que <see cref="HandleAsync"/> después de la firma:
+    /// trámite congelado, estados terminales idempotentes, conteo de intentos y aplicación del resultado.
+    /// </summary>
+    public async Task<(string? Result, string? Error)> HandleVerifiedAsync(Guid validationId, byte[] rawBody, CancellationToken ct = default)
+    {
+        if (rawBody is null || rawBody.Length == 0)
+            return (null, "cuerpo_invalido");
+
+        var v = await repo.GetBiometricByIdAsync(validationId, ct);
+        if (v is null)
+        {
+            await audit.LogAsync(new IdentityValidationAuditEntry(
+                IdentityValidationAuditStages.WebhookReceived, IdentityValidationAuditOutcomes.NotFound,
+                ValidationId: validationId, Message: "Aviso verificado por Consultas para una validación que no existe."), ct);
+            return (null, "not_found");
+        }
+
+        await audit.LogAsync(new IdentityValidationAuditEntry(
+            IdentityValidationAuditStages.WebhookReceived, IdentityValidationAuditOutcomes.Received,
+            TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
+            KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole,
+            SignaturePresent: true, Message: "Aviso recibido por Consultas (firma verificada allí) y entregado por el bus."), ct);
+
+        if (v.CongeladaPorTramite)
+        {
+            await audit.LogAsync(new IdentityValidationAuditEntry(
+                IdentityValidationAuditStages.WebhookReceived, IdentityValidationAuditOutcomes.TramiteInactivo,
+                TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
+                KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole,
+                Message: $"Trámite {v.ProcedureInstance!.Status}: el resultado del proveedor no se aplica."), ct);
+            return ("ok", null);
+        }
+
+        if (v.Status is BiometricEstados.Aprobado or BiometricEstados.Rechazado)
+            return ("ok", null);
+
+        return await ApplyFromBodyAsync(v, rawBody, ct);
     }
 
     /// <summary>Vía rápida: firma válida ⇒ confiar en el cuerpo del webhook y aplicar.</summary>
@@ -576,7 +632,8 @@ public sealed class KyverumWebhookHandler(
     private async Task<(string? Result, string? Error)> ReconcileFromKyverumAsync(
         ProcedureInstanceBiometricValidation v, CancellationToken ct)
     {
-        if (v.Status is BiometricEstados.Aprobado or BiometricEstados.Rechazado)
+        if ((v.Status is BiometricEstados.Aprobado or BiometricEstados.Rechazado)
+            && !BiometricRules.EsRechazoKyverumConIntentosDisponibles(v))
             return ("ok", null);
         if (string.IsNullOrWhiteSpace(v.KyverumVerificationId))
             return ("ok", null); // sin id no hay cómo consultar; el worker/reintento lo cubrirá.

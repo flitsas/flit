@@ -153,6 +153,7 @@ public sealed class NetworkListPersonIdentityValidationsHandler(ListPersonBiomet
         string? documentNumber,
         int page,
         int pageSize,
+        bool mandatario = false,
         CancellationToken ct = default)
     {
         if (NetworkScopePolicy.Validate(scope) is { } scopeError)
@@ -166,7 +167,7 @@ public sealed class NetworkListPersonIdentityValidationsHandler(ListPersonBiomet
             return (null, narrowError);
 
         var tenantId = effective!.WriteTenantId!.Value;
-        var (result, error) = await inner.HandleAsync(tenantId, documentType, documentNumber, page, pageSize, ct);
+        var (result, error) = await inner.HandleAsync(tenantId, documentType, documentNumber, page, pageSize, mandatario, ct);
         if (error is not null)
             return (null, error);
 

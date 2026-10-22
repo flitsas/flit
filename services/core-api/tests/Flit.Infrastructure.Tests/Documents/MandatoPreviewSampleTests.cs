@@ -90,4 +90,23 @@ public sealed class MandatoPreviewSampleTests
         data.InstitutionalMandataryNit.Should().Be("900273813-7");
         data.ModoFirmaMandatario.Should().Be(MandatarioFirmaModo.SinBloque);
     }
+
+    [Fact]
+    public void HU13173_BorradorDePlantilla_UsaDatosFicticiosDeMuestra_YSustituyeLasVariables()
+    {
+        // La vista previa de un borrador usa MandatoPreviewSample con datosDeMuestra: ninguna persona real.
+        var data = MandatoPreviewSample.Build("bello", datosDeMuestra: true) with
+        {
+            CustomTemplateKind = "editor",
+            CustomTemplateBody = "Mandante {{mandante_nombre}} placa {{placa}} mandatario {{mandatario_nombre}}",
+        };
+
+        var text = string.Concat(MandatoPdfGenerator.ApplyPlaceholdersSegmented(data.CustomTemplateBody!, data)
+            .SelectMany(l => l).Select(s => s.Texto));
+
+        text.Should().Contain(MandatoPreviewSample.MuestraRazonSocial).And.Contain(MandatoPreviewSample.MuestraPlaca)
+            .And.Contain(MandatoPreviewSample.MuestraMandatarioNombre);
+        text.Should().NotContain("{{");
+        System.Text.Encoding.ASCII.GetString(Generator.GenerateMandato(data).Content, 0, 4).Should().Be("%PDF");
+    }
 }

@@ -15,4 +15,18 @@ public interface IPublicBrandingCache
     bool TryGet(Guid headTenantId, out BrandIdentity identity);
 
     void Store(Guid headTenantId, BrandIdentity identity, TimeSpan ttl);
+
+    /// <summary>
+    /// Como <see cref="TryGet(Guid, out BrandIdentity)"/>, con el sello de la fila de marca con que se
+    /// guardó (<see cref="ResolvePublicBrandingHandler.NoBrandingStamp"/> si no había fila; <c>null</c>
+    /// si la caché no guarda sellos, y entonces no se verifica).
+    /// </summary>
+    bool TryGet(Guid headTenantId, out BrandIdentity identity, out long? stamp)
+    {
+        stamp = null;
+        return TryGet(headTenantId, out identity);
+    }
+
+    void Store(Guid headTenantId, BrandIdentity identity, long? stamp, TimeSpan ttl) =>
+        Store(headTenantId, identity, ttl);
 }

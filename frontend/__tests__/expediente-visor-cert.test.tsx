@@ -21,9 +21,6 @@ vi.mock('@/lib/api/tramites-client', () => ({
     getBiometricState: vi.fn(() =>
       Promise.resolve({ validations: [], provider: 'mock', firmaBaulPartes: [] }),
     ),
-    getFirmaPosterior: vi.fn(() =>
-      Promise.resolve({ aplica: false, marcado: false }),
-    ),
   },
 }));
 

@@ -120,6 +120,51 @@ public sealed class EnviarAlOtTests
             f.FieldKey == EnvioOtCheckFields.ImpuestoDepartamentalPagado && f.ValueText == "false");
     }
 
+    /// <summary>HU #13264 AC3 — el gestor envía con el check desmarcado y la marca de FLITO se conserva.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(null)]
+    [InlineData(true)]
+    public async Task AC3_Enviar_noSobrescribeLaMarcaDeImpuestoPuestaPorFlito(bool? checkDelGestor)
+    {
+        var instance = Asignado(Guid.NewGuid(), Guid.NewGuid());
+        var marca = new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(), TenantId = instance.TenantId, ProcedureInstanceId = instance.Id,
+            FieldKey = EnvioOtCheckFields.ImpuestoDepartamentalPagado, ValueText = "true", Source = "flito",
+            CreatedAt = DateTimeOffset.UtcNow.AddHours(-1),
+        };
+        instance.FieldValues.Add(marca);
+
+        var (_, error, _) = await Sut().HandleAsync(
+            instance.Id, instance.TenantId, Guid.NewGuid(), new EnviarAlOtRequest(true, checkDelGestor), Ct);
+
+        error.Should().BeNull();
+        marca.ValueText.Should().Be("true");
+        marca.Source.Should().Be("flito");
+        marca.UpdatedAt.Should().BeNull("la fila de FLITO no se toca");
+        instance.FieldValues.Should().ContainSingle(f => f.FieldKey == EnvioOtCheckFields.ImpuestoDepartamentalPagado);
+    }
+
+    /// <summary>HU #13264 AC3 — una marca del gestor (no de FLITO) sigue siendo editable al enviar.</summary>
+    [Fact]
+    public async Task AC3_Enviar_laMarcaDelGestorSigueSiendoEditable()
+    {
+        var instance = Asignado(Guid.NewGuid(), Guid.NewGuid());
+        var marca = new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(), TenantId = instance.TenantId, ProcedureInstanceId = instance.Id,
+            FieldKey = EnvioOtCheckFields.ImpuestoDepartamentalPagado, ValueText = "true", Source = "user",
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        instance.FieldValues.Add(marca);
+
+        await Sut().HandleAsync(instance.Id, instance.TenantId, Guid.NewGuid(), new EnviarAlOtRequest(true, false), Ct);
+
+        marca.ValueText.Should().Be("false");
+        marca.Source.Should().Be("user");
+    }
+
     /// <summary>El código de error es el que el endpoint traduce a la alerta bloqueante (409).</summary>
     [Fact]
     public void ElCodigoDeErrorDeSoatEsEstable()

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Children, Fragment, isValidElement, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, Clock, Copy, Download, FileSignature, FileText, Star } from 'lucide-react';
 import type {
   BiometricParte,
@@ -13,6 +13,7 @@ import type {
 import { estadoChipStyle, estadoLabelConOrigen } from '@/lib/tramites/estados';
 import { actorsOrderedByOrdinal, validationsForActor, isCoveredByVaultForActor } from '@/lib/tramites/ownership-share';
 import { StatusBadge } from '@/components/atom/StatusBadge';
+import { COPY } from '@/lib/copy/copy-catalog';
 import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
 import { formatDateOnly } from '@/lib/format/date-only';
 import { tramitesClient } from '@/lib/api/tramites-client';
@@ -175,7 +176,7 @@ interface Props {
 }
 
 const BORDER = '#DFE5ED';
-const BLUE = '#557EFF';
+const BLUE = 'var(--color-flit-brand)';
 
 // `ResumenDisclosure` desapareció: transformaciones y prenda eran las últimas que lo usaban y ahora
 // son `ResumenCard`, como el resto de la fila. Un acordeón con chevrón entre tarjetas planas se leía
@@ -281,20 +282,20 @@ function IdentidadStatusBanner({
     return (
       <div
         className="flex items-center gap-3 rounded-xl p-3"
-        style={{ background: 'rgba(85,126,255,0.10)', border: '1px solid rgba(85,126,255,0.35)' }}
+        style={{ background: 'color-mix(in srgb, var(--color-flit-brand) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--color-flit-brand) 35%, transparent)' }}
         role="status"
         aria-live="polite"
         data-testid="identidad-firma-baul"
       >
         <span
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
-          style={{ background: '#557EFF', color: 'white' }}
+          style={{ background: 'var(--color-flit-brand)', color: 'white' }}
           aria-hidden
         >
           <FileSignature className="h-5 w-5" />
         </span>
         <div className="space-y-0.5">
-          <p className="text-xs font-bold" style={{ color: '#557EFF' }}>
+          <p className="text-xs font-bold" style={{ color: 'var(--color-flit-brand)' }}>
             Firma electrónica (baúl)
           </p>
           <p className="text-xs opacity-70">
@@ -520,7 +521,7 @@ function ActorBlock({
         // gestor necesita saber de esta parte: que no le toca firmar, y que aun así se le notifica.
         <div className="space-y-2 border-t pt-3" style={{ borderColor: BORDER }}>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] opacity-70">Firma</p>
-          <p className="text-xs font-semibold" style={{ color: '#162744' }}>
+          <p className="text-xs font-semibold" style={{ color: 'var(--color-flit-primary)' }}>
             No requiere firma
           </p>
           <p className="text-xs opacity-70">
@@ -911,9 +912,9 @@ export default function MatriculaResumen({
     },
     { label: 'Llantas', value: especificaciones.llantas },
     { label: 'Estado', value: especificaciones.estado },
-    { label: 'N. Motor', value: especificaciones.motor },
-    { label: 'N. Chasis', value: especificaciones.chasis },
-    { label: 'N. Serie', value: especificaciones.serie },
+    { label: COPY.A09Motor, value: especificaciones.motor },
+    { label: COPY.A09Chasis, value: especificaciones.chasis },
+    { label: COPY.A09Serie, value: especificaciones.serie },
   ].filter((s) => !!s.value);
 
   return (
@@ -968,7 +969,7 @@ export default function MatriculaResumen({
                       disabled
                       aria-readonly="true"
                       className="cursor-default rounded-lg border bg-transparent px-2.5 py-1 text-xs font-medium opacity-100 disabled:opacity-100"
-                      style={{ borderColor: BORDER, color: '#162744' }}
+                      style={{ borderColor: BORDER, color: 'var(--color-flit-primary)' }}
                     />
                   </div>
                 ) : null}
@@ -1030,7 +1031,7 @@ export default function MatriculaResumen({
           {specs.length > 0 ? (
             <div className="mt-4">
               <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] opacity-70">
-                Especificaciones técnicas
+                {COPY.A08}
               </p>
               {/* Especificaciones del vehículo: `grid-cols-2 sm:grid-cols-4` (captura Step5). */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -1131,78 +1132,108 @@ export default function MatriculaResumen({
       {/* Mandatario retirado del resumen (decisión del usuario). El backend lo resuelve solo cuando
           no se elige a mano, que es lo que decía el propio subtítulo de la sección. */}
 
-      {/* Última fila del resumen, en tres columnas: transformaciones, prenda y —vía `extrasSlot`—
-          el organismo de tránsito y la placa preasignada, que los monta `FirmaFurStep` porque es
-          quien tiene esos datos. Antes iban apiladas a ancho completo y la prenda además usaba un
-          acordeón, así que se leía como una pieza distinta de las tarjetas de al lado. */}
+      {/* HU #12730 (D.4) — segunda fila alineada con Vehículo/partes: `lg:grid-cols-2`. Si queda un
+          número impar de tarjetas, la última ocupa el ancho completo para no dejar hueco. */}
       {hasExtras || extrasSlot ? (
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-          {transformaciones.length > 0 ? (
-            <ResumenCard title="Transformaciones">
-              <div
-                className="grid grid-cols-1 gap-3 sm:grid-cols-2"
-                aria-label="Transformaciones declaradas"
-              >
-                {transformaciones.map((t) => {
-                  const sep = t.indexOf(':');
-                  const label = sep >= 0 ? t.slice(0, sep).trim() : 'Cambio';
-                  const value = sep >= 0 ? t.slice(sep + 1).trim() : t;
-                  return (
-                    <div
-                      key={t}
-                      className="rounded-xl border px-3 py-2.5"
-                      style={{ borderColor: BORDER, background: 'rgba(85,126,255,0.04)' }}
-                    >
-                      <p
-                        className="text-xs font-semibold uppercase tracking-[0.2em]"
-                        style={{ color: BLUE }}
+        (() => {
+          const cells: ReactNode[] = [];
+          if (transformaciones.length > 0) {
+            cells.push(
+              <ResumenCard key="transformaciones" title="Transformaciones">
+                <div
+                  className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+                  aria-label="Transformaciones declaradas"
+                >
+                  {transformaciones.map((t) => {
+                    const sep = t.indexOf(':');
+                    const label = sep >= 0 ? t.slice(0, sep).trim() : 'Cambio';
+                    const value = sep >= 0 ? t.slice(sep + 1).trim() : t;
+                    return (
+                      <div
+                        key={t}
+                        className="rounded-xl border px-3 py-2.5"
+                        style={{ borderColor: BORDER, background: 'color-mix(in srgb, var(--color-flit-brand) 4%, transparent)' }}
                       >
-                        {label}
-                      </p>
-                      <p className="mt-1 text-sm font-semibold tracking-wide" style={{ color: '#162744' }}>
-                        {value || '—'}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </ResumenCard>
-          ) : null}
-          {/* AC4 (HU #12130) — una tarjeta por decisión vigente: con la acción complementaria
-              activada (ADR-0055) llegan dos (constitución + levantamiento), cada una con su
-              propio acreedor/documento; con 0-1 elementos el markup es idéntico al histórico. */}
-          {prendas.map((p, idx) => (
-            <ResumenCard
-              key={`${p.decisionLabel}-${idx}`}
-              title={prendas.length > 1 ? `Prenda / gravamen (${idx + 1} de ${prendas.length})` : 'Prenda / gravamen'}
-            >
-              <div
-                className="grid grid-cols-1 gap-3"
-                aria-label="Prenda o gravamen"
+                        <p
+                          className="text-xs font-semibold uppercase tracking-[0.2em]"
+                          style={{ color: BLUE }}
+                        >
+                          {label}
+                        </p>
+                        <p className="mt-1 text-sm font-semibold tracking-wide" style={{ color: 'var(--color-flit-primary)' }}>
+                          {value || '—'}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </ResumenCard>,
+            );
+          }
+          prendas.forEach((p, idx) => {
+            cells.push(
+              <ResumenCard
+                key={`${p.decisionLabel}-${idx}`}
+                title={
+                  prendas.length > 1
+                    ? `Prenda / gravamen (${idx + 1} de ${prendas.length})`
+                    : 'Prenda / gravamen'
+                }
               >
-                <Field label="Decisión" value={p.decisionLabel} />
-                {p.acreedorNombre || p.acreedorDocumento ? (
-                  <>
-                    <Field label="Acreedor (beneficiario)" value={p.acreedorNombre} />
-                    <Field label="NIT / documento del acreedor" value={p.acreedorDocumento} />
-                  </>
-                ) : null}
-                {p.documentoLabel ? (
-                  p.documento && instanceId ? (
-                    <PrendaDocumentoVerButton
-                      instanceId={instanceId}
-                      documento={p.documento}
-                      label={p.documentoLabel}
-                    />
-                  ) : (
-                    <Field label={p.documentoLabel} value="Sin documento cargado" />
-                  )
-                ) : null}
-              </div>
-            </ResumenCard>
-          ))}
-          {extrasSlot}
-        </div>
+                <div className="grid grid-cols-1 gap-3" aria-label="Prenda o gravamen">
+                  <Field label="Decisión" value={p.decisionLabel} />
+                  {p.acreedorNombre || p.acreedorDocumento ? (
+                    <>
+                      <Field label="Acreedor (beneficiario)" value={p.acreedorNombre} />
+                      <Field label="NIT / documento del acreedor" value={p.acreedorDocumento} />
+                    </>
+                  ) : null}
+                  {p.documentoLabel ? (
+                    p.documento && instanceId ? (
+                      <PrendaDocumentoVerButton
+                        instanceId={instanceId}
+                        documento={p.documento}
+                        label={p.documentoLabel}
+                      />
+                    ) : (
+                      <Field label={p.documentoLabel} value="Sin documento cargado" />
+                    )
+                  ) : null}
+                </div>
+              </ResumenCard>,
+            );
+          });
+          if (extrasSlot) {
+            // `Children.forEach` no entra a los Fragment, y `FirmaFurStep` manda organismo + placa
+            // en `<>…</>`: sin desenvolverlo quedaban en una sola celda, la tarjeta del organismo
+            // (`h-full`) tomaba toda su altura y la de placa se desbordaba encima de «Documentos
+            // cargados».
+            const pushCells = (node: ReactNode) => {
+              Children.forEach(node, (child) => {
+                if (!child) return;
+                if (isValidElement<{ children?: ReactNode }>(child) && child.type === Fragment) {
+                  pushCells(child.props.children);
+                } else {
+                  cells.push(child);
+                }
+              });
+            };
+            pushCells(extrasSlot);
+          }
+          const total = cells.length;
+          return (
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 items-stretch">
+              {cells.map((cell, idx) => (
+                <div
+                  key={idx}
+                  className={idx === total - 1 && total % 2 === 1 ? 'lg:col-span-2' : undefined}
+                >
+                  {cell}
+                </div>
+              ))}
+            </div>
+          );
+        })()
       ) : null}
     </section>
   );

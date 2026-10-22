@@ -5,6 +5,7 @@ using Flit.Api.Authorization;
 using Flit.Api.Endpoints.Auditing;
 using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.Auditing;
+using Flit.Tramites.Domain.Integration;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -55,6 +56,7 @@ internal static class NetworkReportsEndpoints
             DateOnly from,
             DateOnly to,
             GetNetworkDetailedProceduresHandler handler,
+            IProcedureFamilyPermissionGate familyGate,
             CancellationToken ct,
             [FromQuery] Guid? childTenantId = null,
             [FromQuery] Guid? transitOfficeId = null,
@@ -71,7 +73,10 @@ internal static class NetworkReportsEndpoints
         {
             var request = new NetworkDetailedReportRequest(
                 childTenantId, from, to, transitOfficeId, procedureTypeId, category, status,
-                referenceNumber, personDocument, personName, hasTransformation, isLeasing);
+                referenceNumber, personDocument, personName, hasTransformation, isLeasing)
+            {
+                AllowedFamilies = familyGate.ReadableFamilyCodes(), // HU #13664 — Ver por familia
+            };
             var (result, error) = await handler.HandleAsync(
                 new GetNetworkDetailedProceduresQuery(
                     RequestTenantResolver.ScopeFromItems(http), request,
@@ -92,6 +97,7 @@ internal static class NetworkReportsEndpoints
             DateOnly from,
             DateOnly to,
             IDetailedReportExcelExporter exporter,
+            IProcedureFamilyPermissionGate familyGate,
             CancellationToken ct,
             [FromQuery] Guid? childTenantId = null,
             [FromQuery] Guid? transitOfficeId = null,
@@ -106,7 +112,10 @@ internal static class NetworkReportsEndpoints
         {
             var request = new NetworkDetailedReportRequest(
                 childTenantId, from, to, transitOfficeId, procedureTypeId, category, status,
-                referenceNumber, personDocument, personName, hasTransformation, isLeasing);
+                referenceNumber, personDocument, personName, hasTransformation, isLeasing)
+            {
+                AllowedFamilies = familyGate.ReadableFamilyCodes(), // HU #13664 — Ver por familia
+            };
             // AC5 — la misma función de resolución que el listado: mismo conjunto, mismos filtros normalizados.
             var (filter, error) = ExportNetworkDetailedProceduresHandler.Validate(RequestTenantResolver.ScopeFromItems(http), request);
             if (error is not null)

@@ -1,6 +1,7 @@
 // Cliente HTTP base contra el Gateway FLIT (HU #10194). Resuelve el token JWT,
 // adjunta el header Authorization y normaliza errores 422 a ApiValidationError.
 import { TOKEN_COOKIE, TOKEN_STORAGE_KEY } from "@/lib/auth/jwt";
+import { isReauthenticating } from "@flit/auth/client";
 import { clearToken, emitSessionExpired } from "@/lib/auth/session";
 import { apiBaseForPageRoot, resolveApiBase } from "./base-url";
 import { ApiError, ApiValidationError, type ValidationErrorResponse } from "./types";
@@ -68,6 +69,8 @@ export interface RequestOptions {
   /** Los arrays se serializan repitiendo el parámetro (`userIds=a&userIds=b`), que es lo que espera el binding de Minimal API. */
   query?: Record<string, string | number | boolean | string[] | undefined | null>;
   signal?: AbortSignal;
+  /** Recibe la respuesta cruda antes de interpretarla (p. ej. para leer cabeceras de un 204). */
+  onResponse?: (response: Response) => void;
 }
 
 /**
@@ -76,7 +79,7 @@ export interface RequestOptions {
  * en 204.
  */
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = "GET", body, query, signal } = options;
+  const { method = "GET", body, query, signal, onResponse } = options;
   const configuredBase = resolveApiBase(API_BASE_URL);
   const base =
     configuredBase || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
@@ -99,6 +102,9 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
     }
   }
 
+  // Si la app ya va camino al hub por una sesión nueva, no se llama a nadie: la página está por recargarse.
+  if (isReauthenticating()) return waitForReload<T>();
+
   const token = getToken();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) {
@@ -111,6 +117,7 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
     body: body === undefined ? undefined : JSON.stringify(body),
     signal,
   });
+  onResponse?.(response);
 
   if (response.status === 204) {
     return undefined as T;
@@ -138,6 +145,9 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
       // HU #10172 AC2 — sesión expirada: limpia el token y avisa al modal global.
       clearToken();
       emitSessionExpired();
+      // HU #13004 — con la sesión de la suite el aviso pide una sesión nueva al hub y la página se recarga: la llamada
+      // queda esperando en vez de fallar, así ninguna pantalla pinta «Tu sesión expiró» un instante antes de recargar.
+      if (isReauthenticating()) return waitForReload<T>();
       throw new ApiError(401, "SESSION_EXPIRED");
     }
     if (response.status === 401 && data?.error === "SESSION_DOMAIN_MISMATCH") {
@@ -152,6 +162,11 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   }
 
   return (await safeJson(response)) as T;
+}
+
+/** Promesa que no se resuelve: la llamada «espera» hasta que la página se recarga con la sesión nueva. */
+function waitForReload<T>(): Promise<T> {
+  return new Promise<T>(() => {});
 }
 
 /**

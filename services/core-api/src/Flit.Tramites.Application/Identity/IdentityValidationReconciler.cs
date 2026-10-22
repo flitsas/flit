@@ -21,7 +21,13 @@ namespace Flit.Tramites.Application.Identity;
 /// worker, botón "Actualizar estado", respaldo del webhook) aunque quedaran reintentos y el ciudadano
 /// aprobara después. El cliente ahora discrimina con <c>result.closedAt</c> (única señal fiable de cierre):
 /// un rechazo SIN esa señal llega aquí como <c>rechazado_intento</c> (no terminal); un rechazo CON esa señal
-/// llega como <c>rechazado</c> (terminal, ver el <c>case</c> de abajo).</para>
+/// llega como <c>rechazado</c>.</para>
+/// <para><b>Rechazo antes del tercer intento:</b> <c>result.closedAt</c> tampoco resultó fiable: Kyverum lo trae
+/// también tras un intento intermedio, y la fila quedaba en <c>rechazado</c> con 1 de 3 intentos aunque la persona
+/// aprobara en el siguiente. Ahora el rechazo solo es terminal cuando el conteo de intentos se agotó, venga como
+/// <c>rechazado</c> o como <c>rechazado_intento</c>; mientras queden intentos se sigue consultando. Y el aprobado de
+/// Kyverum gana sobre un rechazo aplicado antes de agotar los intentos
+/// (<see cref="BiometricRules.EsRechazoKyverumConIntentosDisponibles"/>).</para>
 /// </summary>
 public static class IdentityValidationReconciler
 {
@@ -47,7 +53,9 @@ public static class IdentityValidationReconciler
                 return await applier.ApplyAsync(
                     v, new IdentityValidationTerminalResult(true, status.Status, status.RawPayloadSanitized, status.Score, status.FirmaSerie), now, ct);
 
+            // El rechazo solo es terminal con los intentos agotados, traiga o no la señal de cierre de Kyverum.
             case "rechazado_intento":
+            case "rechazado":
                 {
                     // Idempotencia: una validación ya terminal no se re-evalúa.
                     if (v.Status is BiometricEstados.Aprobado or BiometricEstados.Rechazado or BiometricEstados.Expirado)
@@ -71,14 +79,6 @@ public static class IdentityValidationReconciler
                     }
                     return false;
                 }
-
-            // "rechazado" (normalizado por KyverumVerifyClient a partir de `result.closedAt`, Bug #11503) es
-            // AUTORITATIVO: Kyverum CERRÓ la validación rechazada (agotó reintentos), así que se aplica
-            // terminal de inmediato aunque el conteo LOCAL de intentos aún tenga margen. También cubre
-            // fixtures/otros orígenes que ya entregan el estado terminal directamente.
-            case "rechazado":
-                return await applier.ApplyAsync(
-                    v, new IdentityValidationTerminalResult(false, status.Status, status.RawPayloadSanitized, status.Score), now, ct);
 
             case "expirado":
                 // Expiró en Kyverum sin resolución: se marca expirado (no es un resultado → sin evento Completed).

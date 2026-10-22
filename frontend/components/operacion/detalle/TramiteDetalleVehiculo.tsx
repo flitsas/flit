@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { COPY } from '@/lib/copy/copy-catalog';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { useConsultaMode } from '@/components/operacion/ConsultaModeContext';
 import {
@@ -78,16 +79,16 @@ function buildEspecificaciones(fieldValues: FieldValue[]): { campo: string; valo
     },
     { campo: 'Combustible', valor: valorDe('vehicle_fuel') },
     { campo: 'Carrocería', valor: valorDe('vehicle_body_type') },
-    { campo: 'Capacidad', valor: valorDe('vehicle_passengers') },
+    { campo: COPY.A10, valor: valorDe('vehicle_passengers') },
     { campo: 'Ejes', valor: valorDe('vehicle_axles') },
     { campo: 'Alto', valor: conMm(valorDe('vehicle_height')) },
     { campo: 'Ancho', valor: conMm(valorDe('vehicle_width')) },
     { campo: 'Largo', valor: conMm(valorDe('vehicle_length')) },
     { campo: 'Llantas', valor: valorDe('vehicle_tires') },
     { campo: 'Estado', valor: valorDe('vehicle_state') },
-    { campo: 'N. Motor', valor: valorDe('vehicle_engine_number') },
-    { campo: 'N. Chasis', valor: valorDe('vehicle_chassis') },
-    { campo: 'N. Serie', valor: valorDe('vehicle_series') },
+    { campo: COPY.A09Motor, valor: valorDe('vehicle_engine_number') },
+    { campo: COPY.A09Chasis, valor: valorDe('vehicle_chassis') },
+    { campo: COPY.A09Serie, valor: valorDe('vehicle_series') },
     // Solo las que sí llegaron: una clave ausente en `fieldValues` se omite, nunca se deja en «—».
   ].filter((s) => s.valor !== '');
 }
@@ -189,7 +190,7 @@ export function TramiteDetalleVehiculo({ instanceId, tenantId }: SeccionDetalleP
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
-      <TarjetaDetalle titulo="Especificaciones técnicas">
+      <TarjetaDetalle titulo={COPY.A08}>
         {especificaciones.loading ? (
           <SeccionCargando etiqueta="Cargando especificaciones técnicas" />
         ) : especificaciones.error ? (
@@ -235,10 +236,10 @@ export function TramiteDetalleVehiculo({ instanceId, tenantId }: SeccionDetalleP
               return (
                 <li key={check.key} className="rounded-xl border px-3 py-2 border-[#DFE5ED] dark:border-white/10">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="min-w-0 text-xs font-medium text-[#162744] dark:text-white">
+                    <span className="min-w-0 text-xs font-medium text-flit-primary dark:text-white">
                       {check.label}
                       {inline && (
-                        <span className="font-normal text-[#162744]/70 dark:text-white/70"> — {message}</span>
+                        <span className="font-normal text-flit-primary/70 dark:text-white/70"> — {message}</span>
                       )}
                     </span>
                     <StatusBadge
@@ -249,7 +250,7 @@ export function TramiteDetalleVehiculo({ instanceId, tenantId }: SeccionDetalleP
                     />
                   </div>
                   {!inline && message && (
-                    <p className="mt-1 text-xs text-[#162744]/70 dark:text-white/70">{message}</p>
+                    <p className="mt-1 text-xs text-flit-primary/70 dark:text-white/70">{message}</p>
                   )}
                   {check.details && check.details.length > 0 && <FineDetailList details={check.details} />}
                 </li>

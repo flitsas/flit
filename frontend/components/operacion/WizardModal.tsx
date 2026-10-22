@@ -48,17 +48,17 @@ export function WizardModal({
         className={`relative max-h-[85vh] w-full ${
           wide ? 'max-w-2xl' : 'max-w-md'
         } overflow-y-auto rounded-2xl border bg-white p-6 outline-none focus:ring-0 dark:bg-[#162744]`}
-        style={{ boxShadow: '0 8px 40px -8px rgba(85,126,255,0.28)' }}
+        style={{ boxShadow: '0 8px 40px -8px color-mix(in srgb, var(--color-flit-brand) 28%, transparent)' }}
       >
         <button
           type="button"
           onClick={onClose}
           aria-label="Cerrar"
-          className="absolute right-4 top-4 rounded-lg p-1 opacity-60 transition hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+          className="absolute right-4 top-4 rounded-lg p-1 opacity-60 transition hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
         >
           <X className="h-4 w-4" aria-hidden="true" />
         </button>
-        <h3 className="pr-6 text-base font-bold" style={{ color: '#557EFF' }}>
+        <h3 className="pr-6 text-base font-bold" style={{ color: 'var(--color-flit-brand)' }}>
           {title}
         </h3>
         <div className="mt-3">{children}</div>

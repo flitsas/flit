@@ -1,5 +1,6 @@
 using Flit.Admin.Domain.Companies.Settings;
 using Flit.Infrastructure.Messaging;
+using Flit.Infrastructure.Notifications.Identity;
 using Flit.Infrastructure.Notifications.Preview;
 using Flit.Infrastructure.Notifications.Tramites;
 using Flit.Modules.Security.Domain.Auth;
@@ -56,6 +57,8 @@ public static class NotificationSampleRenderer
                 RevocationRequestEmailMilestone.Aprobada, channel, baseUrl, effectiveTheme),
             RevocationRequestNotificationEnqueuer.DecisionTemplateKeyRechazada => ComposeRevocationRequest(
                 RevocationRequestEmailMilestone.Rechazada, channel, baseUrl, effectiveTheme),
+            ManualCaptureEmailComposer.TemplateId => ManualCaptureEmailPreviewSample.Build(baseUrl, effectiveTheme),
+            ManualCaptureEmailComposer.RejectionTemplateId => ManualCaptureRejectedEmailPreviewSample.Build(baseUrl, effectiveTheme),
             _ => throw new InvalidOperationException(
                 $"El catálogo resolvió el id '{templateId}' pero no hay muestra registrada para él."),
         };

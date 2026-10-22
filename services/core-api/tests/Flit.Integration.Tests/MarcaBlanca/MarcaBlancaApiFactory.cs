@@ -68,6 +68,9 @@ public sealed class MarcaBlancaApiFactory : WebApplicationFactory<Program>
             // golpea smtp.office365.com de appsettings.Development.json): la suite verifica el correo
             // vía admin.notification_delivery_logs (AC5/AC6), no el envío real.
             Environment.SetEnvironmentVariable("Smtp__Host", string.Empty);
+            // HU #12993 (FLIT Suite A-08): la suite de Marca Blanca corre con el servidor OIDC del hub encendido; así
+            // se comprueba que no cambia nada de lo existente y se ejercita el login OIDC por el dominio de una red.
+            Environment.SetEnvironmentVariable("Suite__Oidc__Enabled", "true");
 
             _environmentConfigured = true;
         }

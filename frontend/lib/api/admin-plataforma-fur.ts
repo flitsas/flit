@@ -1,4 +1,5 @@
 import { API_BASE_URL, apiFetch, friendlyErrorMessage, getToken } from "./client";
+import { sessionAwareBase } from "@/lib/api/base-url";
 import { ApiError } from "./types";
 
 const base = "/api/v1/admin/plataforma/fur";
@@ -49,7 +50,7 @@ export async function listFurClassifications(signal?: AbortSignal): Promise<FurC
 
 export async function fetchFurPreview(body: FurPreviewRequest, signal?: AbortSignal): Promise<Blob> {
   const baseUrl =
-    API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+    sessionAwareBase(API_BASE_URL) || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
   const url = new URL(`${base}/preview`, baseUrl);
   const token = getToken();
   const headers: Record<string, string> = { "Content-Type": "application/json" };

@@ -194,7 +194,7 @@ export function DynamicFieldRenderer({ field, value, onChange, showErrors, serve
               aria-describedby={describedBy}
               onChange={(e) => onChange(e.target.checked)}
               onBlur={markTouched}
-              className="h-4 w-4 accent-[#557EFF] disabled:opacity-60"
+              className="h-4 w-4 accent-flit-brand disabled:opacity-60"
             />
             <span>{field.label}</span>
           </label>
@@ -236,7 +236,7 @@ export function DynamicFieldRenderer({ field, value, onChange, showErrors, serve
                   required={isRequired}
                   onChange={() => onChange(opt.value)}
                   onBlur={markTouched}
-                  className="accent-[#557EFF]"
+                  className="accent-flit-brand"
                 />
                 {opt.label}
               </label>

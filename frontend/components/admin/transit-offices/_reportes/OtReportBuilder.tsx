@@ -46,6 +46,9 @@ import {
   reportFileName,
 } from "./report-columns";
 import { XLSX_MIME } from "@/lib/xlsx";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { Pagination } from "@/components/atom/Pagination";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { EstadoComposition, TimeHistogram, TrendChart, granularidadLabel } from "./report-visuals";
 import { CSV_EXPORT_VISIBLE, Empty, ErrorNotice, PrimaryButton, Section, Tile } from "./shared";
 import {
@@ -57,7 +60,6 @@ import {
   CARDLIST_TH,
 } from "@/components/atom/table-cardlist";
 
-const PAGE_SIZE = 25;
 
 /** Tope de la exportación. Existe para no encadenar decenas de páginas; si se alcanza, se DICE. */
 const EXPORT_MAX_ROWS = 2000;
@@ -86,7 +88,8 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
 
   const [sortBy, setSortBy] = useState<OtReportSort>(OT_REPORT_SORT.radicado);
   const [desc, setDesc] = useState(true);
-  const [page, setPage] = useState(1);
+  // Bug #13055 — paginación de servidor con «Filas por página» (misma del modelo de trámites).
+  const { page, setPage, pageSize, setPageSize } = usePaginacion();
 
   const [visibleColumns, setVisibleColumns] = useState<string[]>(defaultVisibleColumns);
   const [report, setReport] = useState<OtReport | null>(null);
@@ -153,7 +156,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
       setError(null);
       try {
         const data = await fetchOtReport(
-          { ...params, page, pageSize: PAGE_SIZE, sortBy, desc },
+          { ...params, page, pageSize, sortBy, desc },
           signal,
         );
         if (signal?.aborted) return;
@@ -165,7 +168,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
         if (!signal?.aborted) setBusy(false);
       }
     },
-    [params, page, sortBy, desc],
+    [params, page, pageSize, sortBy, desc],
   );
 
   useEffect(() => {
@@ -266,7 +269,6 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
 
   const resumen = report?.resumen;
   const columns = REPORT_COLUMNS.filter((c) => visibleColumns.includes(c.id));
-  const totalPages = report ? Math.max(1, Math.ceil(report.total / report.pageSize)) : 1;
   const presetActivo = activePresetId(visibleColumns);
   const exportDisabled = exportState.busy || !report || report.total === 0;
 
@@ -289,7 +291,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
 
         {zoom && (
           <p
-            className="flex flex-wrap items-center gap-2 rounded-xl bg-[#557EFF]/10 px-3 py-2 text-[11px] text-[#2B4AA8] dark:text-[#9DB4FF]"
+            className="flex flex-wrap items-center gap-2 rounded-xl bg-flit-brand/10 px-3 py-2 text-[11px] text-[#2B4AA8] dark:text-[#9DB4FF]"
             data-testid="ot-report-zoom"
           >
             Informe acotado a <strong>{zoom.label}</strong> desde la gráfica.
@@ -334,7 +336,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
               <Tile
                 value={formatInt(resumen.enRevision + resumen.esperandoPlaca)}
                 label="Pendientes en el organismo"
-                accent="#557EFF"
+                accent="var(--color-flit-brand)"
                 hint="En revisión o esperando placa"
               />
               <Tile
@@ -439,7 +441,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
               disabled={exportDisabled}
               aria-busy={exportState.busy}
               className="rounded-xl px-3 py-2 text-xs font-semibold text-white transition disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
               data-testid="ot-report-export-xlsx"
             >
               {exportState.busy ? "Exportando…" : "Exportar a Excel"}
@@ -450,7 +452,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
                 onClick={() => void handleExport("csv")}
                 disabled={exportDisabled}
                 aria-busy={exportState.busy}
-                className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs font-semibold transition hover:border-[#557EFF] disabled:opacity-60 dark:border-white/10"
+                className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs font-semibold transition hover:border-flit-brand disabled:opacity-60 dark:border-white/10"
                 data-testid="ot-report-export"
               >
                 CSV
@@ -476,8 +478,8 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
                 onClick={() => applyColumns(preset.columns)}
                 className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
                   activa
-                    ? "border-[#557EFF] bg-[#557EFF]/10 text-[#557EFF]"
-                    : "border-[#DFE5ED] text-[#6B7280] hover:border-[#557EFF] hover:text-[#557EFF] dark:border-white/10 dark:text-white/50"
+                    ? "border-flit-brand bg-flit-brand/10 text-flit-brand"
+                    : "border-[#DFE5ED] text-[#6B7280] hover:border-flit-brand hover:text-flit-brand dark:border-white/10 dark:text-white/50"
                 }`}
               >
                 {preset.label}
@@ -505,7 +507,9 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
           </p>
         )}
 
-        {!report || report.filas.length === 0 ? (
+        {busy && !report ? (
+          <CarLoaderModal label="Generando el informe…" />
+        ) : !report || report.filas.length === 0 ? (
           <Empty>
             {busy
               ? "Generando el informe…"
@@ -518,12 +522,12 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
                 <thead>
                   <tr className={CARDLIST_HEAD_ROW}>
                     {columns.map((column) => (
-                      <th key={column.id} className={CARDLIST_TH}>
+                      <th key={column.id} scope="col" className={CARDLIST_TH}>
                         {column.sort ? (
                           <button
                             type="button"
                             onClick={() => toggleSort(column.sort!)}
-                            className="flex items-center gap-1 uppercase transition hover:text-[#557EFF]"
+                            className="flex items-center gap-1 uppercase transition hover:text-flit-brand"
                             aria-label={`Ordenar por ${column.label}`}
                           >
                             {column.label}
@@ -562,29 +566,15 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
               </table>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
-              <span className="text-[#6B7280] dark:text-white/50">
-                {plural(report.total, "trámite", "trámites")} · página {report.page} de {totalPages}
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={busy || report.page <= 1}
-                  className="rounded-lg border border-[#DFE5ED] px-3 py-1 font-semibold disabled:opacity-40 dark:border-white/10"
-                >
-                  Anterior
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPage((p) => p + 1)}
-                  disabled={busy || report.page >= totalPages}
-                  className="rounded-lg border border-[#DFE5ED] px-3 py-1 font-semibold disabled:opacity-40 dark:border-white/10"
-                >
-                  Siguiente
-                </button>
-              </div>
-            </div>
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              totalCount={report.total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              ariaLabel="Paginación del informe"
+              noun="trámites"
+            />
           </>
         )}
       </Section>

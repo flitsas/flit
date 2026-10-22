@@ -156,7 +156,7 @@ export function buildTrendData(serie: OtReportSeriesPoint[]): TrendPoint[] {
 }
 
 const SERIES = [
-  { key: "radicados", label: "Radicados", color: "#557EFF" },
+  { key: "radicados", label: "Radicados", color: "var(--color-flit-brand)" },
   { key: "aprobados", label: "Aprobados", color: "#8CC63F" },
   { key: "rechazados", label: "Rechazados", color: "#FF4E00" },
 ] as const;
@@ -295,18 +295,18 @@ export function TrendChart({
         onToggle={(e) => setVerValores((e.currentTarget as HTMLDetailsElement).open)}
         data-testid="ot-report-tendencia-valores"
       >
-        <summary className="cursor-pointer text-[11px] font-semibold text-[#557EFF]">
+        <summary className="cursor-pointer text-[11px] font-semibold text-flit-brand">
           Ver los valores periodo a periodo
         </summary>
         <div className={`mt-2 ${CARDLIST_SCROLL}`}>
           <table className={`min-w-[28rem] ${CARDLIST_TABLE}`}>
             <thead>
               <tr className={CARDLIST_HEAD_ROW}>
-                <th className={CARDLIST_TH}>Periodo</th>
-                <th className={CARDLIST_TH}>Radicados</th>
-                <th className={CARDLIST_TH}>Aprobados</th>
-                <th className={CARDLIST_TH}>Rechazados</th>
-                <th className={CARDLIST_TH}>Acumulado</th>
+                <th scope="col" className={CARDLIST_TH}>Periodo</th>
+                <th scope="col" className={CARDLIST_TH}>Radicados</th>
+                <th scope="col" className={CARDLIST_TH}>Aprobados</th>
+                <th scope="col" className={CARDLIST_TH}>Rechazados</th>
+                <th scope="col" className={CARDLIST_TH}>Acumulado</th>
               </tr>
             </thead>
             <tbody>
@@ -317,7 +317,7 @@ export function TrendChart({
                       <button
                         type="button"
                         onClick={() => onZoom(point.desde, point.hasta, point.label)}
-                        className="font-semibold underline underline-offset-2 transition hover:text-[#557EFF]"
+                        className="font-semibold underline underline-offset-2 transition hover:text-flit-brand"
                         aria-label={`Acotar el informe a ${point.label}`}
                       >
                         {point.label}
@@ -400,7 +400,7 @@ export function TimeHistogram({ buckets }: { buckets: OtReportTimeBucket[] }) {
   }
 
   // Del verde al rojo según el tramo: el color hace el trabajo de decir qué tramo es bueno.
-  const colors = ["#8CC63F", "#00DBD5", "#557EFF", "#F9AC00", "#FF4E00"];
+  const colors = ["#8CC63F", "var(--color-flit-tech)", "var(--color-flit-brand)", "#F9AC00", "#FF4E00"];
 
   return (
     <div className="flex flex-col gap-2" data-testid="ot-report-histograma">
@@ -417,7 +417,7 @@ export function TimeHistogram({ buckets }: { buckets: OtReportTimeBucket[] }) {
                 className="block h-full rounded"
                 style={{
                   width: `${bucket.tramites === 0 ? 0 : Math.max(1, pct)}%`,
-                  background: colors[i] ?? "#557EFF",
+                  background: colors[i] ?? "var(--color-flit-brand)",
                 }}
               />
             </span>

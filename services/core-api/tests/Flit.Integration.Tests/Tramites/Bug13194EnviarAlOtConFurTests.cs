@@ -76,6 +76,46 @@ public sealed class Bug13194EnviarAlOtConFurTests(PostgresDatabaseFixture fixtur
         (await LeerAsync(ct)).Estado.Should().Be(TramiteEstado.Entregado);
     }
 
+    /// <summary>
+    /// HU #13264 AC3 — FLITO marcó el impuesto como pagado (<c>source = flito</c>) y el gestor envía al OT con el check
+    /// desmarcado: la marca sigue en <c>true</c>/<c>flito</c>. Una marca del gestor, en cambio, sí se actualiza.
+    /// </summary>
+    [PostgresTheory]
+    [InlineData("flito", "true", "true", "flito")]
+    [InlineData("user", "true", "false", "user")]
+    public async Task AC3_EnviarAlOt_ConElCheckDesmarcado_RespetaLaMarcaDeFlito(
+        string fuente, string valorPrevio, string valorEsperado, string fuenteEsperada)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SembrarAsignadoFirmadoAsync(conFur: false, ct);
+        await using (var conn = await Fixture.OpenConnectionAsync())
+        await using (var cmd = new NpgsqlCommand(
+                         "INSERT INTO tramites.procedure_instance_field_values (tenant_id, procedure_instance_id, field_key, value_text, source) "
+                         + "VALUES (@tenant, @id, 'impuesto_departamental_pagado', @valor, @fuente)", conn))
+        {
+            cmd.Parameters.AddWithValue("tenant", Tenant);
+            cmd.Parameters.AddWithValue("id", Instancia);
+            cmd.Parameters.AddWithValue("valor", valorPrevio);
+            cmd.Parameters.AddWithValue("fuente", fuente);
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+
+        await using (var ctx = NewContext())
+        {
+            var (_, error, _) = await Handler(ctx).HandleAsync(
+                Instancia, Tenant, HierarchyScenario.UserOf(Tenant),
+                new EnviarAlOtRequest(SoatPagado: true, ImpuestoDepartamentalPagado: false), ct);
+            error.Should().BeNull();
+        }
+
+        (await LeerAsync(ct)).Estado.Should().Be(TramiteEstado.Entregado);
+        await using var verify = NewContext();
+        var marca = await verify.Set<ProcedureInstanceFieldValue>().AsNoTracking()
+            .SingleAsync(f => f.ProcedureInstanceId == Instancia && f.FieldKey == "impuesto_departamental_pagado", ct);
+        marca.ValueText.Should().Be(valorEsperado);
+        marca.Source.Should().Be(fuenteEsperada);
+    }
+
     private static EnviarAlOtHandler Handler(FlitDbContext ctx)
     {
         var repo = new ProcedureInstanceRepository(ctx);

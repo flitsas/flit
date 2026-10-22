@@ -12,6 +12,13 @@ export interface TransitGrantsPickerProps {
   /** Mensaje de error de validación (p. ej. ningún OT elegido). */
   error?: string;
   disabled?: boolean;
+  /**
+   * `marca-blanca`: la selección es la lista de OT con acceso (lo no elegido se bloquea) y no elegir
+   * ninguno deja la red con todos los OT activos de FLIT. Solo cambian los textos.
+   */
+  variant?: "concesion" | "marca-blanca";
+  /** Recibe los OT operativos listados: la Marca Blanca bloquea los que queden sin elegir. */
+  onOfficesLoaded?: (offices: TransitOffice[]) => void;
 }
 
 /** Selector embebido de organismos de tránsito (HU #12357 AC6). */
@@ -20,6 +27,8 @@ export function TransitGrantsPicker({
   onChange,
   error,
   disabled = false,
+  variant = "concesion",
+  onOfficesLoaded,
 }: TransitGrantsPickerProps) {
   const [offices, setOffices] = useState<TransitOffice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,7 +47,9 @@ export function TransitGrantsPicker({
       const activeIds = new Set(
         operational.filter((s) => s.hasTenant && s.estadoActivo === true).map((s) => s.id),
       );
-      setOffices(catalog.filter((office) => activeIds.has(office.id)));
+      const active = catalog.filter((office) => activeIds.has(office.id));
+      setOffices(active);
+      onOfficesLoaded?.(active);
     } catch {
       if (!signal?.aborted) {
         setLoadError("No se pudo cargar el catálogo de organismos de tránsito.");
@@ -48,7 +59,7 @@ export function TransitGrantsPicker({
         setLoading(false);
       }
     }
-  }, []);
+  }, [onOfficesLoaded]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -104,10 +115,15 @@ export function TransitGrantsPicker({
 
   return (
     <fieldset className="space-y-2" disabled={disabled}>
-      <legend className="text-xs font-semibold">Organismos de tránsito de la Concesión</legend>
-      <p className="text-[10px] opacity-60">
-        Selecciona los organismos que esta Concesión podrá usar. La Concesión y sus clientes hijos
-        verán esta lista en solo lectura.
+      <legend className="text-xs font-semibold">
+        {variant === "marca-blanca"
+          ? "Organismos de tránsito de la Marca Blanca"
+          : "Organismos de tránsito de la Concesión"}
+      </legend>
+      <p className="text-xs opacity-60">
+        {variant === "marca-blanca"
+          ? "Selecciona los organismos a los que tendrá acceso esta Marca Blanca; los demás quedan bloqueados para la red. Si no eliges ninguno, tendrá acceso a todos los organismos activos en FLIT. Podrás ajustarlo después desde la ficha."
+          : "Selecciona los organismos que esta Concesión podrá usar. La Concesión y sus clientes hijos verán esta lista en solo lectura."}
       </p>
       <label htmlFor="ot-grants-search" className="sr-only">
         Buscar organismo de tránsito
@@ -120,7 +136,7 @@ export function TransitGrantsPicker({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar por nombre, código o municipio…"
-          className="w-full rounded-xl border py-2 pl-8 pr-3 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+          className="w-full rounded-xl border py-2 pl-8 pr-3 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-flit-brand"
           style={{ borderColor: "#DFE5ED" }}
         />
       </div>
@@ -140,7 +156,7 @@ export function TransitGrantsPicker({
           <ul className="space-y-1">
             {filtered.map((office) => (
               <li key={office.id}>
-                <label className="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5 hover:bg-[#557EFF]/5">
+                <label className="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5 hover:bg-flit-brand/5">
                   <input
                     type="checkbox"
                     checked={selected.has(office.id)}
@@ -152,7 +168,7 @@ export function TransitGrantsPicker({
                     <span className="font-semibold">{office.name}</span>
                     <span className="ml-1 font-mono opacity-60">{office.code}</span>
                     {office.cityCode && (
-                      <span className="block text-[10px] opacity-50">{office.cityCode}</span>
+                      <span className="block text-xs opacity-50">{office.cityCode}</span>
                     )}
                   </span>
                 </label>
@@ -162,7 +178,7 @@ export function TransitGrantsPicker({
         )}
       </div>
       {error && (
-        <p className="text-[10px] font-medium" style={{ color: "#FF4E00" }} role="alert">
+        <p className="text-xs font-medium" style={{ color: "#FF4E00" }} role="alert">
           {error}
         </p>
       )}

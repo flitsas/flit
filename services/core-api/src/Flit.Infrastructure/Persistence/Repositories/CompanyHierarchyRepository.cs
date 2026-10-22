@@ -33,6 +33,24 @@ internal sealed class CompanyHierarchyRepository : ICompanyHierarchyRepository
         return row;
     }
 
+    public async Task<IReadOnlyList<CompanyHierarchyInfo>> ListNetworkHierarchyInfoAsync(
+        IReadOnlyCollection<Guid> extraTenantIds,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(extraTenantIds);
+        var extra = extraTenantIds.Distinct().ToList();
+
+        return await _context.Tenants
+            .AsNoTracking()
+            .Where(t => t.IsGroupParent
+                || t.ParentTenantId != null
+                || extra.Contains(t.Id)
+                || _context.Tenants.Any(c => c.ParentTenantId == t.Id))
+            .Select(t => new CompanyHierarchyInfo(t.Id, t.TenantType, t.IsGroupParent, t.ParentTenantId))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     public async Task<IReadOnlyList<CompanyChildListItem>> ListChildrenAsync(
         Guid headTenantId,
         CancellationToken cancellationToken = default)
@@ -82,7 +100,7 @@ internal sealed class CompanyHierarchyRepository : ICompanyHierarchyRepository
         var entity = new Tenant
         {
             Id = tenantId,
-            Code = company.Code,
+            // HU #13605 — sin Code: lo asigna Postgres (consecutivo COMP-XXXX).
             LegalName = company.LegalName,
             TaxId = company.TaxId,
             TenantType = company.TenantType,
@@ -181,6 +199,7 @@ internal sealed class CompanyHierarchyRepository : ICompanyHierarchyRepository
             RazonSocial = entity.LegalName,
             Code = entity.Code,
             TenantType = entity.TenantType,
+            ParentTenantId = entity.ParentTenantId,
             IsTransitOffice = isOt,
             EstadoActivo = entity.IsActive,
             FechaCreacion = entity.CreatedAt,

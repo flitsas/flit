@@ -1,10 +1,12 @@
+import { COPY } from "@/lib/copy/copy-catalog";
+
 export type DrFlitSession = "gestion" | "ayuda";
 
 /** Intents de búsqueda operativa (sesión Gestión). */
 export type DrFlitIntentId = "placa" | "vin" | "tramite" | "cliente";
 
 /** Opciones de la sesión Ayuda. */
-export type DrFlitHelpOptionId = "necesito-ayuda" | "soporte";
+export type DrFlitHelpOptionId = "necesito-ayuda" | "normativa" | "soporte";
 
 /** Intent interno solo para flujo de documentación. */
 export type DrFlitHelpIntentId = "ayuda";
@@ -15,6 +17,8 @@ export interface DrFlitIntent {
   id: DrFlitIntentId;
   label: string;
   valueLabel: string;
+  /** Pregunta específica del intent; si falta, se usa la genérica de `buildValuePrompt`. */
+  prompt?: string;
 }
 
 export interface DrFlitHelpOption {
@@ -23,13 +27,21 @@ export interface DrFlitHelpOption {
   description?: string;
 }
 
+// HU-E — las palabras del menú salen del catálogo canónico OT↔Gestor (HU #12693): «Placa», «VIN»,
+// «Trámite», «Radicado». «Cliente» no está homologado en el catálogo y se escribe aquí.
 export const DR_FLIT_GESTION_INTENTS: readonly DrFlitIntent[] = [
-  { id: "placa", label: "Buscar por placa", valueLabel: "placa" },
-  { id: "vin", label: "Buscar por VIN", valueLabel: "VIN" },
+  {
+    id: "placa",
+    label: `Buscar por ${COPY.A02Placa.toLowerCase()}`,
+    valueLabel: COPY.A02Placa.toLowerCase(),
+  },
+  { id: "vin", label: `Buscar por ${COPY.A02Vin}`, valueLabel: COPY.A02Vin },
   {
     id: "tramite",
-    label: "Búsqueda por Trámites",
-    valueLabel: "ID del trámite",
+    label: `Buscar por ${COPY.A03.toLowerCase()}`,
+    valueLabel: COPY.B15.toLowerCase(),
+    prompt:
+      "Indícame el número de radicado del trámite (por ejemplo FT1-0000012 o solo 12). También acepto el ID del trámite.",
   },
   {
     id: "cliente",
@@ -45,6 +57,11 @@ export const DR_FLIT_HELP_OPTIONS: readonly DrFlitHelpOption[] = [
     description: "Consulta la documentación del sistema",
   },
   {
+    id: "normativa",
+    label: "Normativa",
+    description: "La resolución que avala los trámites virtuales",
+  },
+  {
     id: "soporte",
     label: "Soporte",
     description: "Canales de contacto y radicación de casos",
@@ -54,9 +71,30 @@ export const DR_FLIT_HELP_OPTIONS: readonly DrFlitHelpOption[] = [
 /** @deprecated Usar DR_FLIT_GESTION_INTENTS */
 export const DR_FLIT_INTENTS = DR_FLIT_GESTION_INTENTS;
 
-export const DR_FLIT_SUPPORT_EMAIL = "soporte@flitsas.com";
-export const DR_FLIT_SUPPORT_PHONE = "300 000 0000";
-export const DR_FLIT_SUPPORT_CASE_URL = "https://flitsas.com.co/SOPORTE/";
+/**
+ * HU-F — canales de soporte configurables por ambiente (`NEXT_PUBLIC_DR_FLIT_SUPPORT_*`, se hornean
+ * en build). El teléfono NO tiene respaldo: sin configurar no se muestra, antes que mostrar un número
+ * inventado. Correo y URL conservan el respaldo institucional.
+ */
+function envOrNull(value: string | undefined): string | null {
+  const v = value?.trim();
+  return v ? v : null;
+}
+
+export const DR_FLIT_SUPPORT_EMAIL =
+  envOrNull(process.env.NEXT_PUBLIC_DR_FLIT_SUPPORT_EMAIL) ?? "soporte@flitsas.com";
+export const DR_FLIT_SUPPORT_PHONE: string | null = envOrNull(
+  process.env.NEXT_PUBLIC_DR_FLIT_SUPPORT_PHONE,
+);
+export const DR_FLIT_SUPPORT_CASE_URL =
+  envOrNull(process.env.NEXT_PUBLIC_DR_FLIT_SUPPORT_CASE_URL) ?? "https://flitsas.com.co/SOPORTE/";
+
+/**
+ * Épica #12718 — interruptor de apagado rápido del chat con LLM (`NEXT_PUBLIC_DR_FLIT_CHAT_ENABLED`,
+ * se hornea en build). Encendido por defecto; con `false` el texto libre vuelve a pedir que se elija
+ * una opción del menú, como antes de la épica.
+ */
+export const DR_FLIT_CHAT_ENABLED = process.env.NEXT_PUBLIC_DR_FLIT_CHAT_ENABLED?.trim() !== "false";
 
 export function getIntentById(id: DrFlitIntentId): DrFlitIntent | undefined {
   return DR_FLIT_GESTION_INTENTS.find((i) => i.id === id);
@@ -68,18 +106,38 @@ export function getHelpOptionById(
   return DR_FLIT_HELP_OPTIONS.find((o) => o.id === id);
 }
 
-export function buildGreeting(displayName?: string | null): string {
+/**
+ * Saludo inicial. Un correo no es un nombre (el JWT a veces no trae display_name): en ese caso se saluda
+ * sin nombre. Con el chat con IA activo se invita a escribir la duda con sus palabras, que es lo más
+ * directo; el menú queda como atajo.
+ */
+export function buildGreeting(
+  displayName?: string | null,
+  chatEnabled: boolean = DR_FLIT_CHAT_ENABLED,
+): string {
   const name = displayName?.trim();
-  const hello = name ? `Hola ${name}` : "Hola";
-  return `${hello} 👋, soy DR. FLIT. En **Gestión** localizo registros; en **Ayuda** te guío con documentación y soporte.`;
+  const hello = name && !name.includes("@") ? `Hola ${name}` : "Hola";
+  return chatEnabled
+    ? `${hello} 👋, soy DR. FLIT. **Escríbeme tu duda con tus palabras** o elige una opción: en **Gestión** localizo registros y en **Ayuda** te guío con documentación y soporte.`
+    : `${hello} 👋, soy DR. FLIT. En **Gestión** localizo registros; en **Ayuda** te guío con documentación y soporte.`;
 }
 
 export function buildValuePrompt(intent: DrFlitIntent): string {
-  return `Indícame el valor de ${intent.valueLabel} a consultar.`;
+  return intent.prompt ?? `Indícame el valor de ${intent.valueLabel} a consultar.`;
 }
 
 export function buildHelpValuePrompt(): string {
   return "Cuéntame qué necesitas. Por ejemplo: «cómo creo un trámite», «documentos de matrícula» o «preasignación de placas».";
+}
+
+/** Normativa — la fuente principal: la norma que habilita y regula lo que FLIT hace. */
+export function buildNormativaIntro(): string {
+  return "La **Resolución 20233040017145 de 2023** del Ministerio de Transporte es la norma que habilita los trámites virtuales ante los organismos de tránsito y fija sus requisitos: es la fuente principal que respalda a FLIT. Abre el resumen por temas o el texto completo en PDF.";
+}
+
+/** HU-G — hay artículo para el módulo actual: se ofrece primero, sin cerrar la pregunta libre. */
+export function buildContextHelpPrompt(articleTitle: string): string {
+  return `Estás en un módulo con documentación: **${articleTitle}**. Ábrelo abajo o cuéntame qué necesitas.`;
 }
 
 export function buildSupportIntro(): string {
@@ -94,12 +152,19 @@ export function buildTramitesIntro(
   queryLabel: string,
   queryValue: string,
   count: number,
+  /** Universo que cumple el criterio; si supera `count`, se dice cuántos se muestran. */
+  total: number = count,
 ): string {
   if (count === 0) {
     return `No encontré trámites asociados a **${queryLabel}** \`${queryValue.trim()}\`.`;
   }
-  const n = count === 1 ? "1 trámite" : `${count} trámites`;
-  return `Encontré **${n}** asociado(s) a **${queryLabel}** \`${queryValue.trim()}\`.`;
+  const universo = Math.max(total, count);
+  const n = universo === 1 ? "1 trámite" : `${universo} trámites`;
+  const base = `Encontré **${n}** asociado(s) a **${queryLabel}** \`${queryValue.trim()}\`.`;
+  if (universo > count) {
+    return `${base} Te muestro los ${count} más recientes.`;
+  }
+  return base;
 }
 
 export function buildValidacionesIntro(
@@ -121,6 +186,18 @@ export function buildHelpIntro(query: string, count: number): string {
   return `Encontré **${n}** en la documentación relacionados con tu consulta. Elige uno para abrirlo:`;
 }
 
+/**
+ * HU #12926 AC2 — el asistente con IA no respondió: se contesta con el buscador del manual y se dice
+ * que es una respuesta rápida, para no hacerla pasar por una respuesta del asistente.
+ */
+export function buildQuickManualIntro(query: string, count: number): string {
+  if (count === 0) {
+    return `Ahora mismo no puedo responderte con el asistente y no encontré un artículo del manual para «${query.trim()}». Prueba con otras palabras, abre el Centro de Ayuda o usa el menú.`;
+  }
+  const n = count === 1 ? "1 artículo" : `${count} artículos`;
+  return `Ahora mismo no puedo responderte con el asistente. Respuesta rápida del manual: encontré **${n}** relacionados con tu consulta.`;
+}
+
 export function buildSearchError(message: string): string {
   return `No pude completar la búsqueda: ${message}`;
 }
@@ -130,7 +207,25 @@ export const DR_FLIT_FREE_TEXT_HINT =
 
 export const DR_FLIT_BACK_LABEL = "Volver al menú";
 
+/** Placeholder del compositor cuando se puede preguntar libremente: un ejemplo dice qué preguntar. */
+export const DR_FLIT_COMPOSER_EXAMPLE = "Ej.: ¿cómo creo un traspaso?";
+
+/** Texto corto del chip de Gestión: «Buscar por placa» → «Placa». */
+export function gestionChipLabel(intent: DrFlitIntent): string {
+  const short = intent.label.replace(/^Buscar por\s+/i, "");
+  return short.charAt(0).toUpperCase() + short.slice(1);
+}
+
 export const DR_FLIT_MANUAL_HOME_HREF = "/manual";
+
+/**
+ * HU-C — atajo al módulo «Historial por placa» (HU #12194/#12196) con la placa ya consultada.
+ * Misma forma canónica que el módulo (sin espacios, mayúscula); el servidor la repite.
+ */
+export function buildHistorialPlacaHref(placa: string): string {
+  const canon = placa.replace(/\s+/g, "").toUpperCase();
+  return `/?m=historial-placa&placa=${encodeURIComponent(canon)}`;
+}
 
 export const DR_FLIT_CLIENT_BRANCHES: readonly {
   id: DrFlitClientBranch;

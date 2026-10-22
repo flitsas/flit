@@ -34,7 +34,12 @@ public sealed class UpdateOtRequirementsHandler
         var saved = await _repository.SaveAsync(
             command.TenantId,
             request.RequiresRnmc ?? current.RequiresRnmc,
-            request.AllowPlatePreassign ?? current.AllowPlatePreassign,
+            // HU #12853 (Feature #12846, Épica #12751) — la ruta de placa preasignada del organismo se
+            // apagó: el campo sigue aceptándose en el contrato (no rompe clientes que aún lo envían)
+            // pero el backend lo IGNORA. Nunca se toma request.AllowPlatePreassign, así el trigger de
+            // auditoría de BD no ve un cambio y el histórico persistido antes de esta HU no se altera
+            // (AC2/AC3).
+            current.AllowPlatePreassign,
             request.IdentityValidationEnabled ?? current.IdentityValidationEnabled,
             command.ChangedBy,
             cancellationToken: cancellationToken).ConfigureAwait(false);

@@ -24,7 +24,7 @@ export interface CompanyFiltersPanelProps {
 const EMPTY: CompanyFilters = {};
 
 const INPUT_CLS =
-  "w-full rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF] border-[#DFE5ED]";
+  "w-full rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-flit-brand border-[#DFE5ED]";
 
 export function CompanyFiltersPanel({ onApply, initialValue = EMPTY }: CompanyFiltersPanelProps) {
   const [filters, setFilters] = useState<CompanyFilters>(initialValue);
@@ -115,7 +115,7 @@ export function CompanyFiltersPanel({ onApply, initialValue = EMPTY }: CompanyFi
         <button
           type="submit"
           className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
-          style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+          style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
         >
           <Search className="h-4 w-4" /> Buscar
         </button>
@@ -145,7 +145,7 @@ function Field({
 }) {
   return (
     <div className={className}>
-      <label htmlFor={htmlFor} className="mb-1 block text-[11px] font-semibold opacity-70">
+      <label htmlFor={htmlFor} className="mb-1 block text-xs font-semibold opacity-70">
         {label}
       </label>
       {children}

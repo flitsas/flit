@@ -41,7 +41,8 @@ internal static class SettingsMapper
             settings.StateEmailRecipients.ExtraEmail),
         settings.TramitesModuleEnabled,
         settings.ComparendosModuleEnabled,
-        settings.ResolucionesModuleEnabled);
+        settings.ResolucionesModuleEnabled,
+        settings.GenerateImprontas);
 
     private static Dictionary<string, ConsultationProviderChoice> ToChoices(
         ConsultationProviderConfig config)

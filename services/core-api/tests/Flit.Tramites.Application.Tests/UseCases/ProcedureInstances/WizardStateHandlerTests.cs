@@ -1106,4 +1106,123 @@ public sealed class WizardStateHandlerTests
             Guid tenantId, string documentType, string documentNumber, CancellationToken cancellationToken = default)
             => Task.FromResult(match);
     }
+    // ── Feature #13110 — PrendaOmitAllowed: el servidor publica si se ofrece «Omitir prenda» ──────
+
+    /// <summary>
+    /// Instancia con (o sin) gravamen reportado por el RUNT en los field_values, que es la señal que
+    /// alimenta <c>HasPrendaGate</c> en matrícula y traspaso.
+    /// </summary>
+    private static ProcedureInstance ConGravamenRunt(string modalidad, bool gravamen)
+    {
+        var instance = Base(modalidad);
+        instance.TransitOfficeId = Guid.NewGuid();
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            FieldKey = "runt_tiene_prendas",
+            ValueText = gravamen ? "SI" : "NO",
+            Source = "runt",
+        });
+        return instance;
+    }
+
+    /// <summary>
+    /// HU #13777 (AC3/AC4) — matriz familia × gravamen RUNT × política del OT: <c>prendaOmitAllowed</c>
+    /// sigue solo a la decisión de prenda (gravamen RUNT en matrícula/traspaso), sin depender de la
+    /// familia ni de la política del OT. Antes (Feature #13110) el traspaso con OT que exige daba false.
+    /// <para>Uso de ejemplo: <c>GET /tramites/instances/{id}/wizard-state</c> de un traspaso con
+    /// <c>runt_tiene_prendas=SI</c> y OT que exige el certificado devuelve
+    /// <c>{ prendaDocumentRequired: true, prendaOmitAllowed: true }</c>.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("matricula_inicial", true, true, true)]
+    [InlineData("matricula_inicial", false, true, false)]
+    [InlineData("traspaso", true, true, true)]
+    [InlineData("traspaso", true, false, true)]
+    [InlineData("traspaso", false, true, false)]
+    [InlineData("traspaso", false, false, false)]
+    public async Task Get_PrendaOmitAllowed_PorFamiliaGravamenYPoliticaDelOt(
+        string modalidad, bool gravamen, bool otExige, bool esperado)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        Setup(ConGravamenRunt(modalidad, gravamen));
+        var handler = new GetWizardStateHandler(
+            _repo, prendaDocumentRequirementPolicy: new StubPrendaDocumentRequirementPolicy(otExige));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.PrendaDocumentRequired.Should().Be(otExige);
+        result.Capabilities!.HasPrendaGate.Should().Be(gravamen);
+        result.PrendaOmitAllowed.Should().Be(esperado);
+    }
+
+    /// <summary>
+    /// AC6 — el campo se asigna también en el return del camino estático (un expediente migrado en
+    /// estado final no entra al motor dinámico), no solo en el dinámico.
+    /// </summary>
+    [Theory]
+    [InlineData("matricula_inicial", true, true)]
+    [InlineData("traspaso", true, true)]
+    [InlineData("traspaso", false, true)]
+    public async Task Get_PrendaOmitAllowed_CaminoEstatico_TambienSeAsigna(
+        string modalidad, bool otExige, bool esperado)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = ConGravamenRunt(modalidad, gravamen: true);
+        instance.IsMigrated = true;
+        instance.Status = TramiteEstado.Aprobado;
+        Setup(instance);
+        var handler = new GetWizardStateHandler(
+            _repo, prendaDocumentRequirementPolicy: new StubPrendaDocumentRequirementPolicy(otExige));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.EsMigrado.Should().BeTrue();
+        result.PrendaOmitAllowed.Should().Be(esperado);
+    }
+
+    /// <summary>
+    /// HU #13777 (AC3) — familia OTROS con dimensión de prenda (levantamiento de prenda): con el OT que
+    /// exige el certificado o sin él, <c>prendaOmitAllowed</c> es true. Antes la familia OTROS solo lo
+    /// tenía con el certificado opcional.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Get_PrendaOmitAllowed_OtrosPrendario_TrueSeaCualSeaLaPoliticaDelOt(bool otExige)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = ConGravamenRunt("matricula_inicial", gravamen: true);
+        instance.ProcedureType = ProcedureTypeFixture.LevantamientoPrenda;
+        Setup(instance);
+        var handler = new GetWizardStateHandler(
+            _repo, prendaDocumentRequirementPolicy: new StubPrendaDocumentRequirementPolicy(otExige));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.Capabilities!.HasPrendaGate.Should().BeTrue();
+        result.PrendaOmitAllowed.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// HU #13777 (AC5) — traspaso con gravamen RUNT, decisión <c>omitir</c> y OT que exige el certificado
+    /// de prenda: el estado del wizard (lo que habilita radicar) no publica ningún bloqueo de prenda sin
+    /// documento adjunto. Los gates ya lo aceptaban; esto lo fija.
+    /// </summary>
+    [Fact]
+    public async Task Get_TraspasoConGravamen_OmitirConOtQueExige_SinBloqueoDePrenda()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instance = ConGravamenRunt("traspaso", gravamen: true);
+        Setup(instance);
+        var handler = new GetWizardStateHandler(
+            _repo,
+            prendaDocumentRequirementPolicy: new StubPrendaDocumentRequirementPolicy(required: true),
+            prendaRepo: new StubPrendaRepo(PrendaDecision.Omitir));
+
+        var (result, _) = await handler.HandleAsync(Guid.NewGuid(), Guid.NewGuid(), ct);
+
+        result!.PrendaDocumentRequired.Should().BeTrue();
+        result.Blockers.Should().NotContain(TramiteEstadoErrores.PrendaDocumentoRequeridoOt);
+        result.Blockers.Should().NotContain(TramiteEstadoErrores.PrendaDecisionRequerida);
+    }
 }

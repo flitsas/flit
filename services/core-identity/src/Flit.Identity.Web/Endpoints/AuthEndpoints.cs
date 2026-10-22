@@ -1,0 +1,439 @@
+using System.Security.Claims;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Flit.Api.Authorization;
+using Flit.Api.Identity;
+using Flit.Infrastructure.Security;
+using Flit.Modules.Security.Application.Auth.ActivateAccount;
+using Flit.Modules.Security.Application.Auth.AdminResetPassword;
+using Flit.Modules.Security.Application.Auth.ChangePassword;
+using Flit.Modules.Security.Application.Auth.ForgotPassword;
+using Flit.Modules.Security.Application.Auth.Login;
+using Flit.Modules.Security.Application.Auth.Network;
+using Flit.Modules.Security.Application.Auth.ResetPassword;
+using Flit.Modules.Security.Domain.Auth;
+using Microsoft.AspNetCore.Mvc;
+
+namespace Flit.Api.Endpoints;
+
+public static class AuthEndpoints
+{
+    public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/api/v1/auth");
+
+        group.MapPost("/login", async (
+            [FromBody] LoginRequest request,
+            LoginHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var result = await handler.HandleAsync(
+                    new LoginCommand(request.Email, request.Password),
+                    cancellationToken);
+
+                return Results.Ok(new LoginResponse(
+                    result.AccessToken,
+                    result.ExpiresInSeconds,
+                    result.TokenType,
+                    result.NetworkHost is { } host ? new NetworkInfoResponse(host) : null));
+            }
+            catch (InvalidCredentialsException)
+            {
+                return Results.Json(
+                    new ErrorResponse("INVALID_CREDENTIALS", "Invalid credentials."),
+                    statusCode: StatusCodes.Status401Unauthorized);
+            }
+            // HU #12422 AC3 (ADR-0060 D3) — credencial válida de un usuario de una red MARCA_BLANCA
+            // con dominio activo, presentada por el dominio de FLIT: no abre sesión, redirige a su
+            // dominio (aditivo, ruta/verbo intactos — AC7).
+            catch (NetworkDomainRequiredException ex)
+            {
+                return Results.Json(
+                    new NetworkDomainRequiredResponse(
+                        "NETWORK_DOMAIN_REQUIRED", ex.NetworkDomain, $"https://{ex.NetworkDomain}/login"),
+                    statusCode: StatusCodes.Status403Forbidden);
+            }
+            catch (AccountSuspendedException)
+            {
+                // HU #10170 AC2 — bloqueo temporal vigente.
+                return Results.Json(
+                    new ErrorResponse("ACCOUNT_TEMPORARILY_BLOCKED", "La cuenta está bloqueada temporalmente."),
+                    statusCode: StatusCodes.Status403Forbidden);
+            }
+            catch (AllRolesInactiveException)
+            {
+                // HU #10507 AC2 — todos los roles asignados al usuario están inactivos.
+                return Results.Json(
+                    new ErrorResponse("ALL_ROLES_INACTIVE", "Todos los roles asignados al usuario están inactivos."),
+                    statusCode: StatusCodes.Status403Forbidden);
+            }
+        });
+
+        // HU #10169 AC1/AC2 — solicitud de recuperación. Siempre 202 genérico (anti-enumeración).
+        group.MapPost("/forgot-password", async (
+            [FromBody] ForgotPasswordRequest request,
+            ForgotPasswordHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            await handler.HandleAsync(new ForgotPasswordCommand(request.Email), cancellationToken);
+
+            return Results.Json(
+                new MessageResponse("Si el correo está registrado, enviaremos instrucciones de recuperación."),
+                statusCode: StatusCodes.Status202Accepted);
+        });
+
+        // HU #10169 — redención del token: fija la nueva contraseña.
+        group.MapPost("/reset-password", async (
+            [FromBody] ResetPasswordRequest request,
+            ResetPasswordHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                await handler.HandleAsync(
+                    new ResetPasswordCommand(request.Token, request.NewPassword),
+                    cancellationToken);
+
+                return Results.Ok(new MessageResponse("Contraseña actualizada correctamente."));
+            }
+            catch (InvalidResetTokenException)
+            {
+                return Results.Json(
+                    new ErrorResponse("INVALID_RESET_TOKEN", "El enlace de recuperación es inválido o expiró."),
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+            catch (WeakPasswordException)
+            {
+                return Results.Json(
+                    new ErrorResponse("WEAK_PASSWORD", "La contraseña no cumple los requisitos mínimos."),
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+            catch (PasswordReusedException)
+            {
+                // HU #11553 AC2 — el token de recuperación sigue vigente; el usuario puede reintentar.
+                return Results.Json(
+                    new ErrorResponse("PASSWORD_REUSED", "La contraseña nueva debe ser distinta de la actual."),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+        });
+
+        // HU #10170 AC1 — reset administrativo: el admin restablece la contraseña de un usuario de su ámbito.
+        // AdminCompany auth-parity: mismo tenant vía rol AdminCompany o permiso security.users.reset_password.
+        group.MapPost("/admin/reset-password", async (
+            [FromBody] AdminResetPasswordRequest request,
+            ClaimsPrincipal caller,
+            AdminResetPasswordHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            var callerTenantId = RequestTenantResolver.ResolveTenantIdOrNull(caller);
+            // Multi-rol (HU #10506): FindFirstValue puede no ver SuperAdmin/AdminCompany si no es el primer claim.
+            var roleCode = ResolveCallerRoleCode(caller);
+            var permissions = ExtractPermissionSlugs(caller);
+
+            try
+            {
+                await handler.HandleAsync(
+                    new AdminResetPasswordCommand(callerTenantId, roleCode, permissions, request.Email),
+                    cancellationToken);
+
+                return Results.Ok(new MessageResponse("Contraseña restablecida; se notificó al usuario."));
+            }
+            catch (AdminScopeException)
+            {
+                return Results.Json(
+                    new ErrorResponse("FORBIDDEN_SCOPE", "No tiene ámbito sobre este usuario."),
+                    statusCode: StatusCodes.Status403Forbidden);
+            }
+            catch (TargetUserNotFoundException)
+            {
+                return Results.Json(
+                    new ErrorResponse("USER_NOT_FOUND", "Usuario no encontrado."),
+                    statusCode: StatusCodes.Status404NotFound);
+            }
+            catch (PasswordReusedException)
+            {
+                return Results.Json(
+                    new ErrorResponse("PASSWORD_REUSED", "La contraseña nueva debe ser distinta de la actual."),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+        }).RequireAuthorization();
+
+        // HU #10171 AC1/AC2 — cambio voluntario de contraseña del propio usuario autenticado.
+        group.MapPut("/change-password", async (
+            [FromBody] ChangePasswordRequest request,
+            ClaimsPrincipal user,
+            ChangePasswordHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            var sub = user.FindFirstValue(ClaimTypes.NameIdentifier) ?? user.FindFirstValue("sub");
+            if (!Guid.TryParse(sub, out var userId))
+                return Results.Unauthorized();
+
+            try
+            {
+                await handler.HandleAsync(
+                    new ChangePasswordCommand(userId, request.CurrentPassword, request.NewPassword),
+                    cancellationToken);
+
+                return Results.Ok(new MessageResponse("Contraseña actualizada correctamente."));
+            }
+            catch (WeakPasswordException)
+            {
+                return Results.Json(
+                    new ErrorResponse("PASSWORD_POLICY_VIOLATION", "La contraseña no cumple la política de complejidad."),
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+            catch (InvalidCurrentPasswordException)
+            {
+                return Results.Json(
+                    new ErrorResponse("INVALID_CURRENT_PASSWORD", "La contraseña actual es incorrecta."),
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+            catch (InvalidCredentialsException)
+            {
+                return Results.Unauthorized();
+            }
+            catch (PasswordReusedException)
+            {
+                return Results.Json(
+                    new ErrorResponse("PASSWORD_REUSED", "La contraseña nueva debe ser distinta de la actual."),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+        }).RequireAuthorization();
+
+        // HU #10177 AC1/AC2 — activación cuenta onboarding con token de invitación.
+        group.MapPost("/activate", async (
+            [FromBody] ActivateAccountRequest request,
+            ActivateAccountHandler handler,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                await handler.HandleAsync(
+                    new ActivateAccountCommand(request.Token, request.Password),
+                    cancellationToken);
+
+                return Results.Ok(new MessageResponse("Cuenta activada. Ya puedes iniciar sesión."));
+            }
+            catch (InvalidInvitationTokenException)
+            {
+                return Results.Json(
+                    new ErrorResponse("INVITATION_INVALID", "El enlace de invitación es inválido o ya fue utilizado."),
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+            catch (WeakPasswordException)
+            {
+                return Results.Json(
+                    new ErrorResponse("WEAK_PASSWORD", "La contraseña no cumple los requisitos mínimos."),
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+            catch (UserAlreadyExistsException)
+            {
+                // HU #13811 — el correo ya lo usa otra cuenta viva (revalidación o carrera): 409 con el código
+                // y mensaje únicos de conflicto de correo, nunca 500.
+                return Results.Json(
+                    new ErrorResponse(EmailConflict.Code, EmailConflict.Message),
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+        });
+
+        // HU #10616 AC3 — expone TODOS los roles activos (roleId + roleCode de cada uno) y el
+        // arreglo completo de permisos (unión de todos los roles, igual que el JWT), no solo el
+        // primer rol. El claim "roles" es un array JSON de {id, code} por rol activo (emitido por
+        // RsaJwtTokenIssuer, HU #10506); el pipeline de JwtBearer lo expande a un Claim("roles", ...)
+        // por elemento — se deserializa cada uno individualmente.
+        group.MapGet("/me", (ClaimsPrincipal user) =>
+        {
+            var userId = user.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? user.FindFirstValue("sub");
+            var email = user.FindFirstValue(ClaimTypes.Email)
+                ?? user.FindFirstValue("email");
+            var tenantId = user.FindFirstValue("tenant_id");
+            var companyName = user.FindFirstValue("company_name") ?? string.Empty;
+            var companyNit = user.FindFirstValue("company_nit") ?? string.Empty;
+            var entityType = user.FindFirstValue("entity_type") ?? string.Empty;
+            var permissions = user.FindAll("permissions").Select(c => c.Value).ToArray();
+            var roles = user.FindAll("roles")
+                .Select(TryParseRoleClaim)
+                .Where(r => r is not null)
+                .Select(r => r!)
+                .ToArray();
+
+            if (userId is null || email is null || tenantId is null)
+                return Results.Unauthorized();
+
+            return Results.Ok(new CurrentUserResponse(
+                Guid.Parse(userId),
+                email,
+                Guid.Parse(tenantId),
+                roles,
+                permissions,
+                companyName,
+                companyNit,
+                entityType));
+        }).RequireAuthorization();
+
+        // HU #13651 (Feature #13102, Épica #12753) — vigencia de la sesión: cuánto tarda en aplicarse un cambio de
+        // permisos de un usuario (el token lleva los permisos efectivos y solo se recalcula al emitirse uno nuevo).
+        //   · "oidc"   (Suite:Oidc:Enabled): el access token dura Suite:Oidc:AccessTokenMinutes y se renueva solo.
+        //   · "legacy" (sin OIDC): un solo JWT que dura Jwt:TokenLifetimeHours; no se renueva.
+        // Vive en este grupo —y no en /security— porque /api/v1/auth lo atiende core-identity cuando
+        // Gateway:IdentityCluster:Enabled está encendida; así el endpoint llega en los dos modos de enrutamiento.
+        // Lee la configuración (sin literales) para que el aviso al administrador refleje lo configurado.
+        group.MapGet("/session-policy", (IConfiguration configuration) =>
+            Results.Ok(SessionPolicy.Resolve(configuration))).RequireAuthorization();
+
+        return app;
+    }
+
+    /// <summary>Forma pública de <c>GET /api/v1/auth/session-policy</c>: <c>{ "mode": "legacy" | "oidc", "maxMinutes": n }</c>.</summary>
+    internal sealed record SessionPolicyResponse(string Mode, int MaxMinutes);
+
+    internal static class SessionPolicy
+    {
+        public const string Legacy = "legacy";
+        public const string Oidc = "oidc";
+
+        public static SessionPolicyResponse Resolve(IConfiguration configuration)
+        {
+            var oidc = configuration.GetSection(OidcOptions.SectionName).Get<OidcOptions>() ?? new OidcOptions();
+            if (oidc.Enabled)
+                return new SessionPolicyResponse(Oidc, oidc.AccessTokenMinutes);
+
+            var jwt = configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>() ?? new JwtSettings();
+            return new SessionPolicyResponse(Legacy, jwt.TokenLifetimeHours * 60);
+        }
+    }
+
+    /// <summary>
+    /// Deserializa un elemento del claim <c>roles</c> (<c>{"id": "...", "code": "..."}</c>, HU
+    /// #10506/#10616). Devuelve <c>null</c> ante un valor inesperado en vez de propagar la
+    /// excepción — un claim corrupto no debe tumbar <c>/me</c> con 500.
+    /// </summary>
+    private static RoleClaimResponse? TryParseRoleClaim(Claim claim)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(claim.Value);
+            var id = doc.RootElement.GetProperty("id").GetGuid();
+            var code = doc.RootElement.GetProperty("code").GetString() ?? string.Empty;
+            return new RoleClaimResponse(id, code);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (KeyNotFoundException)
+        {
+            return null;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Prioriza SuperAdmin y AdminCompany entre todos los claims de rol (multi-rol HU #10506).
+    /// </summary>
+    private static string ResolveCallerRoleCode(ClaimsPrincipal caller)
+    {
+        static bool HasRole(ClaimsPrincipal user, string role) =>
+            user.Claims.Any(c =>
+                (c.Type == "role_code" || c.Type == AdminAuthorization.RoleClaimType)
+                && string.Equals(c.Value, role, StringComparison.OrdinalIgnoreCase));
+
+        if (HasRole(caller, AdminAuthorization.SuperAdminRole))
+            return AdminAuthorization.SuperAdminRole;
+        if (HasRole(caller, AdminAuthorization.AdminCompanyRole))
+            return AdminAuthorization.AdminCompanyRole;
+
+        return caller.FindFirstValue("role_code")
+            ?? caller.FindFirstValue(AdminAuthorization.RoleClaimType)
+            ?? string.Empty;
+    }
+
+    /// <summary>
+    /// El JWT emite <c>permissions</c> como JSON array (un claim); también puede llegar expandido
+    /// en varios claims del mismo tipo. Normaliza ambos casos a slugs sueltos.
+    /// </summary>
+    private static List<string> ExtractPermissionSlugs(ClaimsPrincipal caller)
+    {
+        var slugs = new List<string>();
+        foreach (var claim in caller.FindAll("permissions"))
+        {
+            var raw = claim.Value?.Trim() ?? string.Empty;
+            if (raw.Length == 0)
+                continue;
+
+            if (raw.StartsWith('[') && raw.EndsWith(']'))
+            {
+                try
+                {
+                    var parsed = JsonSerializer.Deserialize<string[]>(raw);
+                    if (parsed is not null)
+                        slugs.AddRange(parsed.Where(s => !string.IsNullOrWhiteSpace(s)));
+                    continue;
+                }
+                catch (JsonException)
+                {
+                    // cae al valor literal
+                }
+            }
+
+            slugs.Add(raw);
+        }
+
+        return slugs;
+    }
+
+    private sealed record ActivateAccountRequest(string Token, string Password);
+
+    private sealed record LoginRequest(string Email, string Password);
+
+    private sealed record ForgotPasswordRequest(string Email);
+
+    private sealed record ResetPasswordRequest(string Token, string NewPassword);
+
+    private sealed record AdminResetPasswordRequest(string Email);
+
+    private sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);
+
+    private sealed record MessageResponse(string Message);
+
+    // HU #12422 AC1/AC7 (ADR-0060 D3) — "Network" es aditivo y opcional: solo viene con valor
+    // cuando el login se hizo por el dominio de una red MARCA_BLANCA. HU #12429 AC1 — sin red,
+    // la propiedad se OMITE del JSON (no viaja como "network":null): una respuesta de login sin
+    // red debe seguir siendo byte a byte la de antes de la épica, con exactamente 3 claves.
+    private sealed record LoginResponse(
+        string AccessToken,
+        int ExpiresInSeconds,
+        string TokenType,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] NetworkInfoResponse? Network = null);
+
+    private sealed record NetworkInfoResponse(string Host);
+
+    /// <summary>HU #12422 AC3 — 403 aditivo de <c>POST /auth/login</c> (ruta/verbo intactos).</summary>
+    private sealed record NetworkDomainRequiredResponse(string Error, string NetworkDomain, string LoginUrl);
+
+    private sealed record CurrentUserResponse(
+        Guid UserId,
+        string Email,
+        Guid TenantId,
+        IReadOnlyList<RoleClaimResponse> Roles,
+        IReadOnlyList<string> Permissions,
+        string CompanyName,
+        string CompanyNit,
+        string EntityType);
+
+    /// <summary>Rol activo del usuario, tal como viaja en el JWT (HU #10506/#10616).</summary>
+    private sealed record RoleClaimResponse(Guid RoleId, string RoleCode);
+
+    private sealed record ErrorResponse(string Code, string Message);
+}

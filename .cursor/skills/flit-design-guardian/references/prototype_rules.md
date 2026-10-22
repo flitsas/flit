@@ -176,6 +176,24 @@ Cabecera gris de marca, filas cómodas, badges y acciones compactas. No usar tab
 | Progreso | Barra horizontal con color semántico y porcentaje si aplica |
 | **Semántica** | `<table>`, `<thead>`, `<th scope>` reales. Una grilla de `div` con `role="button"` por fila **no** es una tabla y rompe el lector de pantalla |
 
+### Modelo único de tabla (Bug #13055 — obligatorio en toda tabla nueva o tocada)
+
+La referencia canónica es el listado de trámites (`components/operacion/TramitesTable.tsx`). Toda
+tabla de datos del producto se ve y se comporta igual; no hay variantes por módulo.
+
+| Pieza | Cómo se implementa |
+|---|---|
+| Componente | `DataTable` (`@/components/atom/DataTable` / `@flit/ui`) siempre que el listado quepa en columnas simples. Si la fila necesita algo que `DataTable` no ofrece, `<table>` a mano con las MISMAS piezas de abajo |
+| Contenedor | **Sin tarjeta blanca envolvente**: la tabla va directa sobre el fondo; cada fila ya es su propia tarjeta |
+| Filas | `border-collapse: separate; border-spacing: 0 8px`; celda inicial `rounded-l-xl border-l`, final `rounded-r-xl border-r`, borde `#DFE5ED`; `bg-white dark:bg-[#0B0F14]` + `TABLA_ROW_HOVER_CLS` (sombra azul, no cambio de borde) |
+| Cabecera | `TABLA_HEADER_CELL_CLS` con `TABLA_HEADER_BG` / `TABLA_HEADER_FG` (`@/components/atom/table-styles`): gris `#DFE5ED`, versalita de 10px, **fija** al hacer scroll |
+| Acciones | `RowActions` (iconos con `aria-label` + tooltip, objetivo de 40 px). Prohibidos los botones de texto por fila |
+| Paginación | `Pagination` (`@/components/atom/Pagination`) con `onPageSizeChange`: «Filas por página» (10/25/50/100) a la izquierda y «Mostrando X–Y de N ‹ 1 2 … N ›» a la derecha. Estado con `usePaginacion`. Prohibido el paginador «Anterior / Siguiente» o uno propio |
+| Estados | Carga con `CarLoaderModal`; vacío y error con `UiStateBoundary` |
+
+Excepción: tablas fijas y cortas que no son listados (una matriz de configuración, una tabla dentro
+de un documento o del manual) no llevan paginación, pero sí cabecera y filas del modelo.
+
 ## Reglas de wizards y trámites
 
 El wizard es un patrón crítico: conserva círculos numerados, etiquetas y colores por estado.

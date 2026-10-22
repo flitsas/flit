@@ -3,7 +3,7 @@
 import { type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShieldX } from 'lucide-react';
-import { Shell, type ModuleId } from '@/components/atom/Shell';
+import { Shell } from '@/components/atom/Shell';
 import { canSeeGeneracionDocumental } from '@/components/admin/generacion-documental/generacion-documental-nav';
 import { useAccessibleModules } from '@/hooks/useAccessibleModules';
 import { useAuthGate } from '@/hooks/useAuthGate';
@@ -30,17 +30,10 @@ export default function AdminGeneracionDocumentalLayout({ children }: { children
   const accessibleCodes = accessibleModules.map((m) => m.code);
   const allowed = canSeeGeneracionDocumental(accessibleCodes);
 
-  const handleNav = (m: ModuleId) => {
-    if (m === 'tramites') router.push('/tramites');
-    else router.push(`/?m=${m}`);
-  };
-
   if (!hydrated || !authed) return null;
 
   return (
     <Shell
-      active="dashboard"
-      onNav={handleNav}
       onLogout={logout}
       visibleModuleCodes={modulesLoading ? [] : accessibleCodes}
     >
@@ -62,7 +55,7 @@ export default function AdminGeneracionDocumentalLayout({ children }: { children
             className="mx-auto flex min-h-[40vh] max-w-md flex-col items-center justify-center gap-3 px-6 text-center"
           >
             <ShieldX className="h-10 w-10" style={{ color: '#FF4E00' }} aria-hidden="true" />
-            <h1 className="text-lg font-bold" style={{ color: '#162744' }}>
+            <h1 className="text-lg font-bold" style={{ color: 'var(--color-flit-primary)' }}>
               Acceso restringido
             </h1>
             <p className="text-xs opacity-70">
@@ -72,8 +65,8 @@ export default function AdminGeneracionDocumentalLayout({ children }: { children
             <button
               type="button"
               onClick={() => router.push('/')}
-              className="rounded-xl px-4 py-2 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-              style={{ background: '#557EFF' }}
+              className="rounded-xl px-4 py-2 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+              style={{ background: 'var(--color-flit-brand)' }}
             >
               Volver al inicio
             </button>

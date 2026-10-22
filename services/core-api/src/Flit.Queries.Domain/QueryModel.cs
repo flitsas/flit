@@ -146,4 +146,11 @@ public static class QueryLimits
 public sealed record QueryRequest(
     QueryDefinition Definition,
     int Page,
-    int PageSize);
+    int PageSize)
+{
+    /// <summary>
+    /// HU #13664 — Ver por familia: códigos visibles (<c>ProcedureFamilyCodes</c>); <c>null</c> = sin restricción.
+    /// Solo lo aplica el motor de trámites de la empresa; el de ICT no tiene familias.
+    /// </summary>
+    public IReadOnlyList<string>? AllowedFamilies { get; init; }
+}

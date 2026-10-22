@@ -1,0 +1,41 @@
+<!-- nombre: Mala notificación -->
+<p style="text-align:right">{{#si ot.municipio}}{{ot.municipio}}, {{/si}}{{dp.fecha}}<br>Radicado: <b>{{dp.radicado}}</b></p>
+<p><b>SEÑORES:</b><br><b>{{ot.nombre}}</b>{{#si ot.municipio}}<br>{{ot.municipio}}{{#si ot.departamento}}, {{ot.departamento}}{{/si}}{{/si}}</p>
+<p><b>Asunto: Derecho de petición – Impugnación de multa por indebida notificación del comparendo y vulneración al debido proceso.</b></p>
+<p><b>Referencia:</b> Orden de comparendo N° {{comparendo.numero}} del {{comparendo.fecha_imposicion}}{{#si comparendo.placa}} · Placa {{comparendo.placa}}{{/si}}</p>
+<p style="text-align:justify">Yo, <b>{{rl.nombres}}</b>, mayor de edad, identificado(a) con {{rl.tipo_documento}} No. <b>{{rl.numero_documento}}</b>, en representación de la razón social <b>{{peticionario.nombre}}</b>, identificada con {{peticionario.tipo_documento}} {{peticionario.numero_documento}}, actuando en calidad de titular del vehículo identificado con placa <b>{{comparendo.placa}}</b>, respetuosamente me permito formular <b>Derecho de Petición</b> de conformidad con el artículo 23 de la Constitución Política, los artículos 13, 14, 16, 17, 19 y 20 de la Ley 1755 de 2015 y el CPACA (Ley 1437 de 2011), con el fin de impugnar la orden de comparendo y la multa asociada, por las razones de hecho y de derecho que expongo a continuación:</p>
+<h3 style="text-align:center">HECHOS</h3>
+<ol>
+<li>El día {{comparendo.fecha_imposicion}}, presuntamente se generó un comparendo {{#si comparendo.es_fotomulta == "fotomulta"}}automatizado{{#sino}}físico{{/si}} No. <b>{{comparendo.numero}}</b> por parte de esa entidad.</li>
+<li>Sin embargo, <b>NUNCA</b> recibí notificación válida, oportuna y en forma legal del mencionado comparendo, tal como lo exige el ordenamiento jurídico colombiano.</li>
+<li>La presunta notificación fue realizada fuera de los 30 días calendario que exige el artículo 8 de la Ley 1843 de 2017, o en una dirección errónea, incompleta, diferente, o sin cumplir los requisitos de notificación personal, por aviso o por correo certificado, según el caso.</li>
+<li>La falta de notificación o la notificación irregular me impidió ejercer mi derecho a la defensa, presentar descargos dentro del término y acceder al beneficio del 50% de descuento, lo cual genera una afectación directa y grave del debido proceso.</li>
+</ol>
+<h3 style="text-align:center">FUNDAMENTOS DE DERECHO</h3>
+<p style="text-align:justify"><b>1. Constitución Política</b><br>a. Artículo 29: derecho al debido proceso, incluidas las garantías de defensa y contradicción.<br>b. Artículo 29: «Nadie podrá ser juzgado sino conforme a leyes preexistentes…».</p>
+<p style="text-align:justify"><b>2. Ley 1437 de 2011 (CPACA)</b><br>a. Art. 3: Principio de publicidad.<br>b. Art. 67 y siguientes: Reglas de notificación personal.<br>c. Art. 69: Notificación por aviso.<br>d. Art. 70: Notificación electrónica válida.</p>
+<p style="text-align:justify">La administración está obligada a garantizar que el administrado reciba la comunicación de forma cierta y verificable.</p>
+{{#si comparendo.es_fotomulta == "fotomulta"}}<p style="text-align:justify"><b>3. Ley 1843 de 2017 – Fotodetecciones</b><br>a. Artículo 8: notificación al propietario máximo dentro de los 3 días hábiles siguientes a la infracción por medios eficaces.</p>
+<p style="text-align:justify">El incumplimiento de este plazo genera nulidad del comparendo por violación al debido proceso.</p>{{/si}}
+<p style="text-align:justify"><b>{{#si comparendo.es_fotomulta == "fotomulta"}}4{{#sino}}3{{/si}}. Jurisprudencia relevante</b><br>a. Corte Constitucional – Sentencia C-980 de 2010: La notificación defectuosa vulnera el debido proceso y conlleva la invalidez de la actuación.</p>
+<h3 style="text-align:center">PETICIONES</h3>
+<p style="text-align:justify">Respetuosamente solicito a {{ot.nombre}}:</p>
+<ol>
+<li>Declarar la nulidad del comparendo No. <b>{{comparendo.numero}}</b>, por indebida notificación e incumplimiento de los términos legales.</li>
+<li>Dejar sin efectos la multa generada, incluidos reportes, cobros coactivos o medidas derivadas.</li>
+<li>Certificar por escrito que el ciudadano no tiene obligaciones pendientes derivadas de este proceso sancionatorio.</li>
+<li>En caso de que la entidad considere lo contrario, solicito: (i) la prueba física o digital de la notificación (guía certificada, registro de entrega, aviso, correo válido, captura de RUNT, etc.), y (ii) la fecha exacta de envío y la evidencia de que cumplió con el marco legal.</li>
+<li>Responder esta petición dentro de los 15 días hábiles establecidos por la Ley 1755 de 2015.</li>
+</ol>
+<h3 style="text-align:center">ANEXOS</h3>
+<ol>
+<li>Copia de mi cédula de ciudadanía.</li>
+<li>Copia del certificado de existencia y representación de {{peticionario.nombre}}.</li>
+<li>Copia de mi poder y nota de vigencia de mi poder.</li>
+</ol>
+<h3 style="text-align:center">NOTIFICACIONES</h3>
+{{#si empresa.correo_respuesta}}<p style="text-align:justify">Las respuestas las recibiré electrónicamente en la siguiente dirección de correo electrónico: {{empresa.correo_respuesta}}.</p>
+<p style="text-align:justify">Autorizo que la respuesta sea enviada vía correo electrónico a la dirección electrónica señalada en el acápite de notificaciones.{{#si peticionario.direccion}} Sin perjuicio de esto, comparto la dirección física de la entidad en caso de ser requerida para efectos de notificaciones: {{peticionario.direccion}}.{{/si}}</p>{{#sino}}{{#si peticionario.direccion}}<p style="text-align:justify">Recibiré notificaciones en la dirección física: {{peticionario.direccion}}.</p>{{/si}}{{/si}}
+<p>Cordialmente,</p>
+{{rl.firma_imagen}}
+<p><b>{{rl.nombres}}</b><br>{{rl.tipo_documento}} No. {{rl.numero_documento}}<br>{{rl.cargo}}<br>{{peticionario.nombre}}</p>

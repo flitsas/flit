@@ -148,6 +148,23 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .IsRequired()
             .HasDefaultValue(false);
 
+        // HU #12790 (Épica #12760) — sello UTC de generación de cada consolidado. Columnas nulables
+        // agregadas por migración SQL cruda (tabla ExcludeFromMigrations); aquí solo se mapean. Null
+        // en trámites históricos («fecha no disponible»), nunca invalida el documento.
+        builder.Property(x => x.ConsolidadoWizardGeneradoEn)
+            .HasColumnName("consolidado_wizard_generado_en")
+            .HasColumnType("timestamptz");
+
+        builder.Property(x => x.ConsolidadoMaestroGeneradoEn)
+            .HasColumnName("consolidado_maestro_generado_en")
+            .HasColumnType("timestamptz");
+
+        // Bug #13055 — último cambio de los datos que imprime el FUR (lo sella ConsolidadoVigenciaTracker).
+        // Columna agregada por migración SQL cruda (tabla ExcludeFromMigrations); aquí solo se mapea.
+        builder.Property(x => x.ExpedienteActualizadoEn)
+            .HasColumnName("expediente_actualizado_en")
+            .HasColumnType("timestamptz");
+
         // HU #12165 (Feature #12156) — ventana de 1 hora de corrección de placa por el OT (HU
         // #12167). Columnas agregadas por migración SQL cruda (la tabla está ExcludeFromMigrations);
         // aquí solo se mapean para el modelo EF.
@@ -214,6 +231,18 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
         // db.Update(instance) no lo marca modificado. Sin FK a propósito (trazabilidad): aquí solo se mapea.
         builder.Property(x => x.ParentTenantIdAtCreation)
             .HasColumnName("parent_tenant_id_at_creation")
+            .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
+
+        // HU #13402 — parámetro «generar improntas» de la compañía congelado al crear el trámite
+        // (boolean NOT NULL DEFAULT true; las filas previas quedan true). Va en el INSERT y nunca en
+        // un UPDATE: la política de la compañía cambia, el trámite en curso no.
+        builder.Property(x => x.ImprontaGeneracionHabilitada)
+            .HasColumnName("impronta_generacion_habilitada")
+            .IsRequired()
+            .HasDefaultValue(true)
+            // Sentinel true: sin él EF toma el default CLR (false) como «no establecido» y podría omitir un
+            // false explícito en el INSERT, dejando el trámite en true en silencio (mismo criterio que HU #13400).
+            .HasSentinel(true)
             .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
 
         // ICT — pausa del trámite (servicio v1 pauseDraftProcess + bandera starts_procedure_in_paused).

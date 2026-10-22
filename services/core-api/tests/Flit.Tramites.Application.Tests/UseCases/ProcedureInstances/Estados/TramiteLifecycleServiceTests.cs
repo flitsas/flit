@@ -1013,6 +1013,173 @@ public sealed class TramiteLifecycleServiceTests
         i.Status.Should().Be(TramiteEstado.Preparado);
     }
 
+    // ── Feature #13110 — «Omitir prenda» no bloquea Preparar (AC7, CF-4) ───────────────────────
+    // Sin cambios en TramiteLifecycleService ni en PrendaGate: regresión de que la excepción de
+    // Matrícula Inicial en el PUT no deja un trámite atascado en el gate de preparación.
+
+    /// <summary>
+    /// AC7 — Matrícula Inicial con <c>omitir</c> y OT que exige el certificado: ni el override del OT
+    /// (<c>omitir</c> no pide documento) ni el gate R10 de matrícula (acepta <c>omitir</c> sin
+    /// documento ni acreedor) bloquean.
+    /// <para>Uso de ejemplo: <c>TransitionAsync(new TramiteTransitionCommand(id, tenant, "preparado", …))</c>
+    /// devuelve <c>Success = true</c>.</para>
+    /// </summary>
+    [Fact]
+    public async Task Preparar_MatriculaOmitirConOtQueExige_NoBloquea()
+    {
+        var i = Wire(TramiteEstado.Borrador, conGates: true);
+        _prendaPolicy
+            .IsRequiredAsync(i.TenantId, i.TransitOfficeId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .Returns(true);
+        var sut = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(PrendaDecision.Omitir));
+
+        var outcome = await sut.TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        outcome.Success.Should().BeTrue(outcome.ErrorCode);
+        i.Status.Should().Be(TramiteEstado.Preparado);
+    }
+
+    /// <summary>Snapshot de preflight con el check <c>gravamenes</c> en <c>warn</c> (activa R10 en traspaso).</summary>
+    private static void ConGravamenesEnWarn(ProcedureInstance instance) =>
+        instance.PreflightSnapshots.Add(new ProcedureInstancePreflightSnapshot
+        {
+            Id = Guid.NewGuid(),
+            TenantId = instance.TenantId,
+            ProcedureInstanceId = instance.Id,
+            Overall = "warn",
+            Checks = """[{"key":"gravamenes","status":"warn"}]""",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+
+    /// <summary>
+    /// HU #13776 (O1 de revisión) — gate R10 del traspaso con el check <c>gravamenes</c> de Intempo en
+    /// <c>unknown</c> (banderas vacías, sin detalle ni limitaciones): preparar NO exige decisión de
+    /// prenda, porque <c>HasGravamenWarn</c> solo reconoce <c>warn</c>/<c>fail</c>. El control con
+    /// <c>warn</c> prueba que, en el mismo cableado y sin decisión, el gate sí bloquea.
+    /// <para>Uso de ejemplo: <c>TransitionAsync(new TramiteTransitionCommand(id, tenant, "preparado", …))</c>
+    /// con el snapshot en <c>unknown</c> devuelve <c>Success = true</c>.</para>
+    /// </summary>
+    [Theory]
+    [InlineData("unknown", true)]
+    [InlineData("warn", false)]
+    public async Task Preparar_TraspasoSinDecision_SoloExigePrendaSiGravamenesEnWarn(string status, bool avanza)
+    {
+        var otId = Guid.NewGuid();
+        var i = WireTraspaso(TramiteEstado.Borrador, otId, DateTimeOffset.UtcNow, conDocumentoPrenda: false);
+        i.PreflightSnapshots.Add(new ProcedureInstancePreflightSnapshot
+        {
+            Id = Guid.NewGuid(),
+            TenantId = i.TenantId,
+            ProcedureInstanceId = i.Id,
+            Overall = status,
+            Checks = $$"""[{"key":"gravamenes","label":"Gravámenes","status":"{{status}}","source":"intempo","message":null,"details":[]}]""",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        _prendaPolicy
+            .IsRequiredAsync(i.TenantId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .Returns(false);
+        var sut = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(null));
+
+        var outcome = await sut.TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        if (avanza)
+        {
+            outcome.Success.Should().BeTrue(outcome.ErrorCode);
+            i.Status.Should().Be(TramiteEstado.Preparado);
+        }
+        else
+        {
+            outcome.Success.Should().BeFalse();
+            outcome.ErrorCode.Should().Be(TramiteEstadoErrores.PrendaDecisionRequerida);
+        }
+    }
+
+    /// <summary>
+    /// AC7 — Traspaso con <c>omitir</c>, preflight de gravámenes en <c>warn</c> y OT con certificado
+    /// opcional: el gate R10 del traspaso acepta <c>omitir</c> sin documento ni acreedor. El control
+    /// (<c>decision = null</c>) prueba que el semáforo en warn sí activa el gate en este cableado.
+    /// </summary>
+    [Theory]
+    [InlineData(PrendaDecision.Omitir, true)]
+    [InlineData(null, false)]
+    public async Task Preparar_TraspasoOmitirConGravamenWarnYOtOpcional_NoBloquea(string? decision, bool avanza)
+    {
+        var otId = Guid.NewGuid();
+        var i = WireTraspaso(TramiteEstado.Borrador, otId, DateTimeOffset.UtcNow, conDocumentoPrenda: false);
+        ConGravamenesEnWarn(i);
+        _prendaPolicy
+            .IsRequiredAsync(i.TenantId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .Returns(false);
+        var sut = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(decision));
+
+        var outcome = await sut.TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        if (avanza)
+        {
+            outcome.Success.Should().BeTrue(outcome.ErrorCode);
+            i.Status.Should().Be(TramiteEstado.Preparado);
+        }
+        else
+        {
+            outcome.Success.Should().BeFalse();
+            outcome.ErrorCode.Should().Be(TramiteEstadoErrores.PrendaDecisionRequerida);
+        }
+    }
+
+    /// <summary>
+    /// HU #13777 (AC5) — Traspaso con <c>omitir</c>, gravámenes en <c>warn</c> y OT que EXIGE el
+    /// certificado de prenda, sin documento de prenda adjunto: ni el override del OT ni el gate R10
+    /// bloquean Preparar. El control (<c>decision = null</c>) prueba que el override está activo.
+    /// <para>Uso de ejemplo: <c>TransitionAsync(new TramiteTransitionCommand(id, tenant, "preparado", …))</c>
+    /// devuelve <c>Success = true</c> con la decisión <c>omitir</c>.</para>
+    /// </summary>
+    [Theory]
+    [InlineData(PrendaDecision.Omitir, true)]
+    [InlineData(null, false)]
+    public async Task Preparar_TraspasoOmitirConGravamenWarnYOtQueExige_NoBloquea(string? decision, bool avanza)
+    {
+        var otId = Guid.NewGuid();
+        var i = WireTraspaso(TramiteEstado.Borrador, otId, DateTimeOffset.UtcNow, conDocumentoPrenda: false);
+        ConGravamenesEnWarn(i);
+        _prendaPolicy
+            .IsRequiredAsync(i.TenantId, otId, i.CreatedAt, Arg.Any<CancellationToken>())
+            .Returns(true);
+        var sut = new TramiteLifecycleService(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(decision));
+
+        var outcome = await sut.TransitionAsync(
+            new TramiteTransitionCommand(i.Id, i.TenantId, TramiteEstado.Preparado, null, null),
+            TestContext.Current.CancellationToken);
+
+        if (avanza)
+        {
+            outcome.Success.Should().BeTrue(outcome.ErrorCode);
+            i.Status.Should().Be(TramiteEstado.Preparado);
+        }
+        else
+        {
+            outcome.Success.Should().BeFalse();
+            outcome.ErrorCode.Should().Be(TramiteEstadoErrores.PrendaDecisionRequerida);
+        }
+    }
+
     // ── HU #10872 — re-radicar re-evaluando SOLO los gates de lo corregido ────────────────
 
     private static string BaselineMetadata(Dictionary<string, string?> fieldSnapshot, string? motivo = null) =>
@@ -1149,6 +1316,16 @@ public sealed class TramiteLifecycleServiceTests
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
     }
 
+    // ── HU #12775 AC3 — no se radica sin el certificado de Cámara de Comercio obligatorio ────────
+
+    /// <summary>Servicio con el resolutor de Cámara de Comercio cableado (sin baúl ni escrituras).</summary>
+    private TramiteLifecycleService ConCamaraComercio() =>
+        new(
+            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
+            prendaDocumentRequirementPolicy: _prendaPolicy,
+            prendaRepo: StubPrendaRepo(PrendaDecision.Registrar),
+            camaraComercioResolver: new CamaraComercioRequirementResolver());
+
     /// <summary>Actor persona natural con documento CC (Bug #13194: el resolutor exige actor con documento).</summary>
     private static ProcedureInstanceActor ActorNatural(ProcedureInstance i, string parte, string documento) => new()
     {
@@ -1162,17 +1339,11 @@ public sealed class TramiteLifecycleServiceTests
         PersonType = "natural",
     };
 
-    // ── HU #12775 AC3 — no se radica sin el certificado de Cámara de Comercio obligatorio ────────
-
-    /// <summary>Servicio con el resolutor de Cámara de Comercio cableado (sin baúl ni escrituras).</summary>
-    private TramiteLifecycleService ConCamaraComercio() =>
-        new(
-            _repo, _typeRepo, _grantGate, _operabilityGate, NullOtRuleGate.Instance, _recorder, _publisher,
-            prendaDocumentRequirementPolicy: _prendaPolicy,
-            prendaRepo: StubPrendaRepo(PrendaDecision.Registrar),
-            camaraComercioResolver: new CamaraComercioRequirementResolver());
-
-    private static void ConCompradorJuridico(ProcedureInstance i) =>
+    private static void ConCompradorJuridico(ProcedureInstance i)
+    {
+        // El comprador natural que siembra Wire(conGates: true) se reemplaza por la persona jurídica.
+        foreach (var natural in i.Actors.Where(a => a.ActorType == "comprador").ToList())
+            i.Actors.Remove(natural);
         i.Actors.Add(new ProcedureInstanceActor
         {
             Id = Guid.NewGuid(),
@@ -1188,6 +1359,7 @@ public sealed class TramiteLifecycleServiceTests
             Metadata = ActorMetadataReader.Serialize(
                 null, null, new ActorRepresentanteLegal("CC", "1", "Rep Legal", "x@y.com", null)),
         });
+    }
 
     [Fact]
     public async Task Radicar_CompradorJuridicoSinCertificado_Bloquea()

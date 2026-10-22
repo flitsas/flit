@@ -71,8 +71,8 @@ const mocks = vi.hoisted(() => ({
   generarImpronta: vi.fn(),
   generarConsolidado: vi.fn(),
   getPrenda: vi.fn(),
-  listMandateSigners: vi.fn(),
-  setMandateSigner: vi.fn(),
+  // HU #13146 — firmante previsto del mandato (solo lectura).
+  getMandateSigner: vi.fn(),
   // Declaraciones del paso de requisitos (tipo de servicio, casilla 18 del FUR).
   listVehicleServiceTypes: vi.fn(),
   ruesPreview: vi.fn(),
@@ -317,8 +317,7 @@ beforeEach(() => {
     hash: 'h',
   });
   mocks.getPrenda.mockResolvedValue([]);
-  mocks.listMandateSigners.mockResolvedValue({ opciones: [], elegidoId: null, editable: true });
-  mocks.setMandateSigner.mockResolvedValue(undefined);
+  mocks.getMandateSigner.mockResolvedValue({ estado: 'no_aplica', modo: 'block' });
   mocks.generarConsolidado.mockResolvedValue({
     document: { attachmentId: 'c-1', tipo: 'consolidado', filename: 'c.pdf', sha256: 'abc' },
     regenerado: true,
@@ -891,6 +890,77 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     ).toBeInTheDocument();
     expect(mocks.transitionInstance).not.toHaveBeenCalled();
     expect(onExit).not.toHaveBeenCalled();
+  });
+
+  // HU #13403 — generación de improntas deshabilitada: la impronta se carga a mano.
+  describe('impronta con generación deshabilitada (HU #13403)', () => {
+    const preparado = (extra: Record<string, unknown>) => {
+      const PREPARADO: WizardState = {
+        ...TRASPASO_WIZARD,
+        canSubmit: true,
+        blockers: [],
+        status: 'preparado',
+        allowedTransitions: ['entregado'],
+        steps: TRASPASO_WIZARD.steps.map((s) => ({ ...s, status: 'complete', reasons: [] as string[] })),
+      };
+      mocks.getWizardState.mockResolvedValue(PREPARADO);
+      mocks.getInstance.mockResolvedValue({
+        id: 'inst-1',
+        status: 'preparado',
+        draftFinalizedAt: null,
+        fieldValues: [],
+        actors: [],
+        ...extra,
+      });
+      mocks.submitInstance.mockResolvedValue({ id: 'inst-1', status: 'entregado' });
+    };
+
+    async function radicar() {
+      const user = userEvent.setup();
+      render(<TramiteWizard existingInstanceId="inst-1" onExit={vi.fn()} />);
+      await user.click(await screen.findByRole('button', { name: /Finalizar y enviar trámite/ }));
+      await screen.findByText('Confirmar radicación');
+      await user.click(screen.getByRole('button', { name: /^Sí, radicar trámite$/ }));
+    }
+
+    it('AC1 — con improntaGeneracionHabilitada=false al radicar NO llama a generarImpronta', async () => {
+      preparado({ improntaGeneracionHabilitada: false });
+      await radicar();
+      await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
+      expect(mocks.generarFur).toHaveBeenCalled();
+      expect(mocks.generarConsolidado).toHaveBeenCalledWith('inst-1', undefined, true);
+      expect(mocks.generarImpronta).not.toHaveBeenCalled();
+    });
+
+    it('AC4 — con el flag en true conserva la generación al radicar', async () => {
+      preparado({ improntaGeneracionHabilitada: true });
+      await radicar();
+      await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
+      expect(mocks.generarImpronta).toHaveBeenCalledWith('inst-1');
+    });
+
+    it('AC4 — sin el campo en el detalle (trámites previos) se trata como habilitada', async () => {
+      preparado({});
+      await radicar();
+      await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
+      expect(mocks.generarImpronta).toHaveBeenCalledWith('inst-1');
+    });
+
+    it('AC3 — impronta obligatoria sin cargar: radicar queda bloqueado y el mensaje nombra la impronta', async () => {
+      preparado({ improntaGeneracionHabilitada: false });
+      mocks.generarConsolidado.mockResolvedValue({
+        document: { attachmentId: 'c-1', tipo: 'consolidado', filename: 'c.pdf', sha256: 'abc' },
+        regenerado: true,
+        incompleto: true,
+        documentosFaltantes: ['impronta'],
+      });
+      await radicar();
+      expect(
+        await screen.findByText(/No se puede radicar: Expediente incompleto: faltan impronta/i),
+      ).toBeInTheDocument();
+      expect(mocks.submitInstance).not.toHaveBeenCalled();
+      expect(mocks.generarImpronta).not.toHaveBeenCalled();
+    });
   });
 
   it('N 03 dos pasos — el error del gate al preparar se muestra y el wizard sigue en borrador', async () => {
@@ -1870,5 +1940,134 @@ describe('TramiteWizard — datos del vehículo tras consultar', () => {
     await screen.findByRole('button', { name: /^Paso 1:/ });
     expect(screen.queryByText(/Consulta la placa y el documento del propietario/)).toBeNull();
     expect(screen.queryByText('PWL160')).toBeNull();
+  });
+});
+
+describe('TramiteWizard — HU #13146 quién firmará el mandato', () => {
+  const BORRADOR_COMPLETO: WizardState = {
+    ...TRASPASO_WIZARD,
+    canSubmit: true,
+    blockers: [],
+    steps: TRASPASO_WIZARD.steps.map((s) => ({ ...s, status: 'complete', reasons: [] as string[] })),
+  };
+
+  async function abrirResumen() {
+    mocks.getWizardState.mockResolvedValue(BORRADOR_COMPLETO);
+    mocks.getInstance.mockResolvedValue({
+      id: 'inst-1',
+      status: 'borrador',
+      fieldValues: [
+        { formFieldId: null, fieldKey: 'transit_office_code', valueText: '11001', valueJson: null, source: 'runt' },
+        { formFieldId: null, fieldKey: 'transit_office_name', valueText: 'OT Bogotá', valueJson: null, source: 'runt' },
+      ],
+      actors: [],
+      statusHistory: [],
+    });
+    const user = userEvent.setup();
+    render(<TramiteWizard existingInstanceId="inst-1" onExit={vi.fn()} />);
+    await screen.findByRole('button', { name: /^Paso 1: Consulta Vehículo/ });
+    await user.click(screen.getByRole('button', { name: /^Paso \d: Resumen/ }));
+    return user;
+  }
+
+  it('AC1: con mandatario válido dice en una frase quién firmará el mandato, sin controles para cambiarlo', async () => {
+    mocks.getMandateSigner.mockResolvedValue({
+      estado: 'valido',
+      nombre: 'Ana Restrepo',
+      formaFirma: 'baul',
+      modo: 'block',
+    });
+    await abrirResumen();
+    const ind = await screen.findByTestId('mandatario-firma-valido');
+    expect(ind).toHaveTextContent(
+      'Ana Restrepo firmará el contrato de mandato con la firma que ya tiene guardada.',
+    );
+    expect(within(ind).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(ind).queryByRole('combobox')).not.toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /^Finalizar y enviar trámite$/ })).toBeEnabled();
+  });
+
+  it('AC2: sin mandatario en block muestra la alerta con motivo y deshabilita Radicar con explicación', async () => {
+    mocks.getMandateSigner.mockResolvedValue({
+      estado: 'sin_mandatario',
+      motivo: 'sin_mandatario_configurado',
+      modo: 'block',
+    });
+    await abrirResumen();
+    expect(
+      await screen.findByText('Sin mandatario configurado — no se puede radicar'),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('mandatario-firma-bloqueo')).toHaveTextContent(
+      /No hay un mandatario registrado.*organismo de tránsito o al administrador de tu compañía/,
+    );
+    const radicar = screen.getByRole('button', { name: /^Finalizar y enviar trámite$/ });
+    expect(radicar).toBeDisabled();
+    expect(radicar).toHaveAttribute('aria-describedby', 'mandatario-firma-alerta');
+    expect(radicar).toHaveAttribute('title', expect.stringMatching(/no se puede radicar/));
+  });
+
+  it('AC3: en warn la alerta es advertencia y se puede radicar', async () => {
+    mocks.getMandateSigner.mockResolvedValue({
+      estado: 'firma_invalida',
+      motivo: 'sin_validacion_aprobada',
+      modo: 'warn',
+    });
+    await abrirResumen();
+    expect(await screen.findByText('Mandatario sin firma válida')).toBeInTheDocument();
+    expect(screen.getByTestId('mandatario-firma-aviso')).toHaveTextContent(/no tiene una validación de identidad aprobada.*Puedes radicar/);
+    expect(screen.getByRole('button', { name: /^Finalizar y enviar trámite$/ })).toBeEnabled();
+  });
+
+  it.each([
+    ['no_aplica', { estado: 'no_aplica', modo: 'block' }],
+    ['pendiente_organismo', { estado: 'pendiente_organismo', modo: 'block' }],
+    ['validación apagada (off)', { estado: 'sin_mandatario', motivo: 'sin_mandatario_configurado', modo: 'off' }],
+  ])('AC4: %s no muestra alerta ni indicador y se puede radicar', async (_n, resp) => {
+    mocks.getMandateSigner.mockResolvedValue(resp);
+    await abrirResumen();
+    const radicar = await screen.findByRole('button', { name: /^Finalizar y enviar trámite$/ });
+    await waitFor(() => expect(mocks.getMandateSigner).toHaveBeenCalled());
+    expect(screen.queryByTestId('mandatario-firma-valido')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('mandatario-firma-bloqueo')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('mandatario-firma-aviso')).not.toBeInTheDocument();
+    expect(radicar).toBeEnabled();
+  });
+
+  it('AC4: un fallo al consultar el firmante no bloquea ni muestra alerta', async () => {
+    mocks.getMandateSigner.mockRejectedValue(new Error('boom'));
+    await abrirResumen();
+    const radicar = await screen.findByRole('button', { name: /^Finalizar y enviar trámite$/ });
+    await waitFor(() => expect(mocks.getMandateSigner).toHaveBeenCalled());
+    expect(screen.queryByTestId('mandatario-firma-bloqueo')).not.toBeInTheDocument();
+    expect(radicar).toBeEnabled();
+  });
+
+  it('AC5: el 409 mandatario_no_configurado del backend se muestra con su motivo, no genérico', async () => {
+    mocks.submitInstance.mockRejectedValue(
+      new FakeTramitesApiError(409, 'No hay mandatario configurado para este organismo.', {
+        title: 'mandatario_no_configurado',
+        detail: 'No hay mandatario configurado para este organismo.',
+      }),
+    );
+    const user = await abrirResumen();
+    await user.click(await screen.findByRole('button', { name: /^Finalizar y enviar trámite$/ }));
+    await screen.findByText('Confirmar radicación');
+    await user.click(screen.getByRole('button', { name: /^Sí, radicar trámite$/ }));
+    expect(
+      await screen.findByText('No hay mandatario configurado para este organismo.'),
+    ).toBeInTheDocument();
+  });
+
+  it('AC5: sin detalle, mandatario_firma_invalida explica qué hacer', async () => {
+    mocks.submitInstance.mockRejectedValue(
+      new FakeTramitesApiError(409, 'No se pudo completar la solicitud.', {
+        title: 'mandatario_firma_invalida',
+      }),
+    );
+    const user = await abrirResumen();
+    await user.click(await screen.findByRole('button', { name: /^Finalizar y enviar trámite$/ }));
+    await screen.findByText('Confirmar radicación');
+    await user.click(screen.getByRole('button', { name: /^Sí, radicar trámite$/ }));
+    expect(await screen.findByText(/la firma del mandatario no es válida/)).toBeInTheDocument();
   });
 });

@@ -17,7 +17,11 @@ public static class PrendaDecision
     /// <summary>Se levanta un gravamen existente (requiere documento de levantamiento).</summary>
     public const string Levantar = "levantar";
 
-    /// <summary>Existe gravamen pero el gestor decide continuar sin gestionarlo ("asumo el riesgo").</summary>
+    /// <summary>
+    /// «Omitir prenda»: existe gravamen pero no se solicita ningún trámite de prenda (no se inscribe ni se
+    /// levanta). HU #13777 — se admite en todo tipo con dimensión de prenda, sin depender de la familia ni
+    /// de la política del OT sobre el certificado de prenda.
+    /// </summary>
     public const string Omitir = "omitir";
 
     /// <summary>El vehículo no tiene prenda (declaración informativa).</summary>
@@ -39,6 +43,15 @@ public static class PrendaDecision
 
     public static bool RequiereDocumento(string? decision) =>
         !string.IsNullOrWhiteSpace(decision) && RequierenDocumento.Contains(decision);
+
+    /// <summary>
+    /// Feature #13110 (CF-6) — ¿la decisión guarda los datos del acreedor y la entidad de levantamiento?
+    /// <c>false</c> solo para <see cref="Omitir"/>: con ella no se solicita ningún trámite de prenda, así
+    /// que el acreedor no se usa en ningún documento y no se persiste (minimización, Ley 1581).
+    /// <see cref="SinPrenda"/> conserva su comportamiento histórico (CF-12).
+    /// </summary>
+    public static bool ConservaDatosDeAcreedor(string? decision) =>
+        !string.Equals(decision?.Trim(), Omitir, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// ADR-0055 (HU #12128/#12129) — familia de acción derivada de la decisión: <see cref="PrendaAccionFamilia.Constitucion"/>

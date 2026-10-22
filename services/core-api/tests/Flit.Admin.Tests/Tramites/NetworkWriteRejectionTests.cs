@@ -63,7 +63,6 @@ public sealed class NetworkWriteRejectionTests : IClassFixture<NetworkWriteRejec
     private static readonly (string Method, string Route)[] Routes =
     [
         // ProcedureInstanceEndpoints (F13)
-        ("PUT", "/api/v1/tramites/instances/{id}/mandate-signer"),
         ("PATCH", "/api/v1/tramites/instances/{id}/field-values"),
         ("POST", "/api/v1/tramites/instances/{id}/ocr-fields"),
         ("PUT", "/api/v1/tramites/instances/{id}/prenda"),

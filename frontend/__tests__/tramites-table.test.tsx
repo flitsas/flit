@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   getAttachments: vi.fn(),
   fetchAttachmentPreviewUrl: vi.fn(),
   downloadAttachment: vi.fn(),
+  // HU #12786 — el consolidado se pide a la ruta de entrega (vigente), no al id del resumen.
+  entregarConsolidado: vi.fn(),
   // Frente C, etapa 1 — modal de detalle de un trámite ya radicado.
   getInstance: vi.fn(),
   // HU #12185 — el panel del trámite pide el historial paginado (que sí trae usuario y compañía),
@@ -786,8 +788,8 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
       'Vehículo',
       'Vendedor',
       'Comprador',
-      'Trámite / Estado',
-      'Secretaría',
+      'Trámite',
+      'Organismo de tránsito',
       'Acciones',
     ]) {
       expect(within(header).getByText(col)).toBeInTheDocument();
@@ -799,7 +801,7 @@ describe('TramitesTable — columnas del listado (HU #11057)', () => {
     // disponibles en el selector para moverlo a su propia columna.
     expect(within(header).queryByText('Paso')).not.toBeInTheDocument();
     expect(within(header).queryByText('Estado')).not.toBeInTheDocument();
-    expect(within(header).queryByText('Fecha de creación')).not.toBeInTheDocument();
+    expect(within(header).queryByText('Fecha radicación')).not.toBeInTheDocument();
     // La acreditación de cada parte va dentro de su columna de actor: no hay columna "Firmas".
     expect(within(header).queryByText('Firmas')).not.toBeInTheDocument();
     // Fuera del default por decisión de producto: el gestor las enciende desde "Columnas".
@@ -1046,18 +1048,34 @@ describe('TramitesTable — documentos y consolidado desde el listado', () => {
       url: 'https://s3.local/consolidado.pdf',
       expiresAt: '2026-07-29T00:10:00Z',
     });
+    // HU #12786 — la entrega devuelve el adjunto vigente (aquí el mismo id: `modo: "vigente"`).
+    mocks.entregarConsolidado.mockResolvedValue({
+      document: {
+        attachmentId: 'att-consolidado',
+        tipo: 'consolidado',
+        filename: 'expediente-consolidado-TR-0001.pdf',
+        sha256: 'x',
+      },
+      regenerado: false,
+      definitivoPorEstadoFinal: false,
+      modo: 'vigente',
+    });
     render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await screen.findByText('P0001');
     await abrirAcciones();
     await userEvent.click(screen.getByRole('menuitem', { name: 'Ver consolidado' }));
 
-    expect(await screen.findByText('Expediente consolidado')).toBeInTheDocument();
-    // Se abre con el id que trae el resumen: no se consultan los adjuntos del trámite.
-    expect(mocks.fetchAttachmentPreviewUrl).toHaveBeenCalledWith(
-      'inst-0001',
-      'att-consolidado',
-      undefined,
+    expect(await screen.findByRole('dialog', { name: 'Consolidado' })).toBeInTheDocument();
+    // HU #12786 — se pide a la ruta de entrega y se abre el adjunto que ella devuelve; no se
+    // consultan los adjuntos del trámite.
+    expect(mocks.entregarConsolidado).toHaveBeenCalledWith('inst-0001', {}, undefined);
+    await waitFor(() =>
+      expect(mocks.fetchAttachmentPreviewUrl).toHaveBeenCalledWith(
+        'inst-0001',
+        'att-consolidado',
+        undefined,
+      ),
     );
     expect(mocks.getAttachments).not.toHaveBeenCalled();
     expect(routerPush).not.toHaveBeenCalled();
@@ -1098,18 +1116,16 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     ]);
     const { unmount } = render(<ToastProvider><TramitesTable /></ToastProvider>);
     await userEvent.click(await screen.findByText('PASO01'));
-    // Se comparan los NOMBRES ACCESIBLES: llevan el ordinal, el rótulo y el estado del paso, que
-    // es justo el contrato que hay que blindar. El número visible lo pinta el círculo del stepper,
-    // no el rótulo. Un trámite «entregado» tiene la captura cumplida y el expediente pendiente.
+    // Se comparan los NOMBRES ACCESIBLES: ordinal + rótulo (el estado visual lo lleva el círculo).
     const tabsTraspaso = within(
       await screen.findByRole('tablist', { name: 'Pasos del trámite' }),
     ).getAllByRole('tab');
     expect(tabsTraspaso.map((t) => t.getAttribute('aria-label'))).toEqual([
-      'Paso 1: Trámite y vehículo — completado',
-      'Paso 2: Actores y validación — completado',
-      'Paso 3: Documentos — completado',
-      'Paso 4: Datos comerciales — completado',
-      'Paso 5: FUR y expediente — pendiente',
+      'Paso 1: Trámite y vehículo',
+      'Paso 2: Actores y validación',
+      'Paso 3: Documentos',
+      'Paso 4: Datos comerciales',
+      'Paso 5: FUR y expediente',
     ]);
     unmount();
 
@@ -1129,10 +1145,10 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
       await screen.findByRole('tablist', { name: 'Pasos del trámite' }),
     ).getAllByRole('tab');
     expect(tabsMatricula.map((t) => t.getAttribute('aria-label'))).toEqual([
-      'Paso 1: Consulta VIN y placa — completado',
-      'Paso 2: Comprador y rep. legal — completado',
-      'Paso 3: Documentos — completado',
-      'Paso 4: FUR y expediente — pendiente',
+      'Paso 1: Consulta VIN y placa',
+      'Paso 2: Comprador y rep. legal',
+      'Paso 3: Documentos',
+      'Paso 4: FUR y expediente',
     ]);
   });
 
@@ -1199,52 +1215,53 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     expect(within(dialog).getByText(/Preparado desde Borrador/)).toBeInTheDocument();
   });
 
-  it('el badge de Estado abre el panel del trámite sin abrir el detalle ni navegar', async () => {
+  it('HU #12726 (C.2) — el chip de Estado abre el detalle en la línea de tiempo', async () => {
     mocks.listInstances.mockResolvedValue([
       { ...base, id: 'rad-tl', referenceNumber: 'TR-TL', placa: 'RADTL1', estado: 'entregado' },
     ]);
-    // HU #12185 — el panel lee el historial PAGINADO, no el `statusHistory` del detalle: ese no
-    // trae quién movió cada estado ni desde qué compañía, que es la mitad de lo que se viene a ver.
-    mocks.getStatusHistory.mockResolvedValue({
-      items: [
-        {
-          id: 'h2',
-          fromStatus: 'borrador',
-          toStatus: 'entregado',
-          changedAt: '2026-07-03T09:00:00Z',
-          changedByUserId: 'u1',
-          changedByName: 'Laura Restrepo',
-          changedByCompania: 'Renting Colombia S.A.S',
-          reason: null,
-        },
-        {
-          id: 'h1',
-          fromStatus: null,
-          toStatus: 'borrador',
-          changedAt: '2026-07-01T09:00:00Z',
-          changedByUserId: null,
-          changedByName: null,
-          changedByCompania: null,
-          reason: null,
-        },
+    mocks.getInstance.mockResolvedValue({
+      id: 'rad-tl',
+      status: 'entregado',
+      statusHistory: [
+        { fromStatus: null, toStatus: 'borrador', changedAt: '2026-07-01T09:00:00Z', reason: null },
+        { fromStatus: 'borrador', toStatus: 'entregado', changedAt: '2026-07-03T09:00:00Z', reason: null },
       ],
-      total: 2,
-      page: 1,
-      pageSize: 50,
     });
+    mocks.getAttachments.mockResolvedValue([]);
     render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     await userEvent.click(
-      await screen.findByRole('button', { name: /Ver trazabilidad del trámite TR-TL/i }),
+      await screen.findByRole('button', { name: /Ver línea de tiempo de TR-TL/i }),
     );
 
-    expect(await screen.findByRole('dialog', { name: /Trámite TR-TL/i })).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: /Detalle de traspaso/ })).toBeNull();
+    const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
+    expect(dialog).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: /Trámite TR-TL/i })).toBeNull();
     expect(routerPush).not.toHaveBeenCalled();
-    // La ficha identifica el trámite; el historial dice por dónde va y quién lo movió.
-    expect(await screen.findByRole('region', { name: 'Resumen del trámite' })).toBeInTheDocument();
-    expect(await screen.findByText(/Entregado desde Borrador/)).toBeInTheDocument();
-    expect(screen.getByText('Renting Colombia S.A.S · Laura Restrepo')).toBeInTheDocument();
+    expect(await within(dialog).findByText('Línea de tiempo del trámite')).toBeInTheDocument();
+    expect(within(dialog).getByText(/Entregado desde Borrador/)).toBeInTheDocument();
+  });
+
+  // Uso de ejemplo: clic en radicado (no en chip) → panel por defecto, sin TimelineTrackPanel (AC2).
+  it('HU #12726 (AC2) — clic fuera del chip abre el detalle en panel por defecto', async () => {
+    mocks.listInstances.mockResolvedValue([
+      { ...base, id: 'rad-def', referenceNumber: 'TR-DEF', placa: 'RADDEF', estado: 'entregado' },
+    ]);
+    mocks.getInstance.mockResolvedValue({
+      id: 'rad-def',
+      status: 'entregado',
+      statusHistory: [
+        { fromStatus: null, toStatus: 'borrador', changedAt: '2026-07-01T09:00:00Z', reason: null },
+        { fromStatus: 'borrador', toStatus: 'entregado', changedAt: '2026-07-03T09:00:00Z', reason: null },
+      ],
+    });
+    mocks.getAttachments.mockResolvedValue([]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await userEvent.click(await screen.findByText('TR-DEF'));
+    const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
+    expect(within(dialog).queryByText('Línea de tiempo del trámite')).not.toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Datos del vehículo')).toBeInTheDocument();
   });
 
   it('la línea Firmas abre el modal de tracking de identidad de esa parte sin navegar', async () => {
@@ -1333,11 +1350,11 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
 
     await userEvent.click(await screen.findByText('RAD006'));
     const dialog = await screen.findByRole('dialog', { name: /Detalle de traspaso/ });
-    expect(within(dialog).getByRole('status', { name: 'Cargando trazabilidad' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('status', { name: 'Cargando historial' })).toBeInTheDocument();
 
     resolveGetInstance({ id: 'rad-6', statusHistory: [] });
     await vi.waitFor(() => {
-      expect(within(dialog).queryByRole('status', { name: 'Cargando trazabilidad' })).toBeNull();
+      expect(within(dialog).queryByRole('status', { name: 'Cargando historial' })).toBeNull();
     });
   });
 
@@ -1354,11 +1371,9 @@ describe('TramitesTable — Frente C etapa 1: modal de detalle del trámite radi
     expect(await within(dialog).findByText('Fallo de red')).toBeInTheDocument();
 
     mocks.getInstance.mockResolvedValueOnce({ id: 'rad-7', statusHistory: [] });
-    // El panel de trazabilidad tiene tres bloques que fallan por separado (cronología, archivos e
-    // identidad), así que el reintento se pide por su nombre accesible concreto y no por el
-    // genérico «Reintentar», que ahora sería ambiguo.
+    // El historial de auditoría tiene reintento propio (no el genérico «Reintentar»).
     await userEvent.click(
-      within(dialog).getByRole('button', { name: 'Reintentar la trazabilidad' }),
+      within(dialog).getByRole('button', { name: 'Reintentar el historial de auditoría' }),
     );
 
     await vi.waitFor(() => {
@@ -1411,13 +1426,13 @@ describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_p
     expect(screen.queryByText('Pausado')).not.toBeInTheDocument();
   });
 
-  it('con pausado Y placa asignada (sin revocatoria), solo se ve "Pausado"', async () => {
+  it('con pausado Y asignado (sin revocatoria), solo se ve "Pausado"', async () => {
     const [item] = makeInstances(1);
     mocks.listInstances.mockResolvedValue([
       {
         ...item,
+        estado: 'asignado',
         isPaused: true,
-        plateFlowStatus: 'asignado',
       },
     ]);
     render(<ToastProvider><TramitesTable /></ToastProvider>);
@@ -1427,13 +1442,14 @@ describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_p
     expect(screen.queryByText('Placa asignada por el OT')).not.toBeInTheDocument();
   });
 
-  it('sin revocatoria ni pausa, la nota de placa asignada sí se ve', async () => {
+  it('sin revocatoria ni pausa, el estado asignado lo dice el chip principal (ADR-0059)', async () => {
     const [item] = makeInstances(1);
-    mocks.listInstances.mockResolvedValue([{ ...item, plateFlowStatus: 'asignado' }]);
+    mocks.listInstances.mockResolvedValue([{ ...item, estado: 'asignado' }]);
     render(<ToastProvider><TramitesTable /></ToastProvider>);
 
-    await screen.findByText('P0001');
-    expect(screen.getByText('Placa asignada por el OT')).toBeInTheDocument();
+    const row = (await screen.findByText('P0001')).closest('tr') as HTMLElement;
+    expect(within(row).getByText('Asignado')).toBeInTheDocument();
+    expect(within(row).queryByText('Placa asignada por el OT')).not.toBeInTheDocument();
   });
 
   it('en un borrador ICT el menú de acciones ofrece "Pausar" y al elegirlo llama a pauseInstance (optimista → "Reanudar")', async () => {
@@ -1548,6 +1564,39 @@ describe('TramitesTable — «Enviar al OT» desde asignado (ADR-0059, HU #12601
     const fila = screen.getByText('TR-PROC').closest('tr');
     expect(fila).not.toBeNull();
     expect(await within(fila!).findByText('Entregado')).toBeInTheDocument();
+  });
+
+  it('HU #13266 AC2 — impuesto marcado por FLITO: check marcado, deshabilitado, «Pagado (comprobante cargado)» y se envía en true', async () => {
+    mocks.getInstance.mockResolvedValue({
+      fieldValues: [
+        {
+          formFieldId: '',
+          fieldKey: 'impuesto_departamental_pagado',
+          valueText: 'true',
+          valueJson: null,
+          source: 'flito',
+        },
+      ],
+    });
+    mocks.enviarAlOt.mockResolvedValue({ instance: null, warningCode: null, warningMessage: null });
+    mocks.listInstances.mockResolvedValue([asignado()]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+    await userEvent.click(await screen.findByRole('button', { name: /Acciones del trámite TR-PROC/ }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Enviar al OT' }));
+
+    const dialogo = screen.getByRole('dialog', { name: 'Enviar al organismo de tránsito' });
+    const check = await within(dialogo).findByRole('checkbox', { name: /Pagado \(comprobante cargado\)/ });
+    expect(check).toBeChecked();
+    expect(check).toBeDisabled();
+    expect(check).toHaveAccessibleDescription(/El pago quedó registrado/);
+    expect(mocks.getInstance).toHaveBeenCalledWith('proc1', undefined);
+
+    await userEvent.click(within(dialogo).getByRole('button', { name: 'Enviar al OT' }));
+    expect(mocks.enviarAlOt).toHaveBeenCalledWith(
+      'proc1',
+      { soatPagado: false, impuestoDepartamentalPagado: true },
+      undefined,
+    );
   });
 
   it('AC5 — muestra la advertencia del backend y deja el modal abierto', async () => {
@@ -1667,7 +1716,8 @@ describe('TramitesTable — pausa masiva ICT (pause-unpause-massive)', () => {
 
     await userEvent.click(checks[0]);
     await userEvent.click(checks[1]);
-    expect(screen.getByText('2 seleccionados')).toBeInTheDocument();
+    // HU #13380 — una sola barra para la selección única (descarga y pausa en lote).
+    expect(screen.getByText('2 trámites seleccionados')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Pausar' }));
     expect(mocks.pauseInstancesMassive).toHaveBeenCalledWith(['m1', 'm2'], true, null, undefined);
@@ -1678,7 +1728,7 @@ describe('TramitesTable — pausa masiva ICT (pause-unpause-massive)', () => {
   async function seleccionarTodas(placa: string) {
     await screen.findByText(placa);
     for (const check of screen.getAllByRole('checkbox')) await userEvent.click(check);
-    return screen.getByRole('region', { name: 'Acciones masivas de pausa' });
+    return screen.getByRole('region', { name: 'Acciones sobre los trámites seleccionados' });
   }
 
   it('Bug #13109 — sin ninguna fila pausada la barra solo ofrece "Pausar"', async () => {
@@ -1718,11 +1768,11 @@ describe('TramitesTable — pausa masiva ICT (pause-unpause-massive)', () => {
     render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     const barra = await seleccionarTodas('MIX001');
-    expect(within(barra).getByText('2 seleccionados')).toBeInTheDocument();
+    expect(within(barra).getByText('2 trámites seleccionados')).toBeInTheDocument();
     expect(within(barra).queryByRole('button', { name: 'Pausar' })).not.toBeInTheDocument();
     expect(within(barra).queryByRole('button', { name: 'Reanudar' })).not.toBeInTheDocument();
-    // «Limpiar» sigue disponible para salir de la selección.
-    expect(within(barra).getByRole('button', { name: 'Limpiar' })).toBeInTheDocument();
+    // «Limpiar selección» sigue disponible para salir de la selección.
+    expect(within(barra).getByRole('button', { name: 'Limpiar selección' })).toBeInTheDocument();
   });
 });
 
@@ -1784,7 +1834,7 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
     await agregarCondicion('placa', 'Placa', 'contiene', 'ABC');
     await agregarCondicion('comprador', 'Comprador', 'es_alguno', 'García');
 
-    // Rango propio sobre "Fecha de creación": vive en el popover "Periodo", un disparador distinto.
+    // Rango propio sobre "Fecha radicación": vive en el popover "Periodo", un disparador distinto.
     // Abrirlo cierra "Filtros" (clic fuera), pero el borrador sigue vivo — todo el estado vive en
     // TramitesTable, no en el popover.
     await abrirPopoverPeriodo();
@@ -1929,13 +1979,13 @@ describe('TramitesTable — filtros y ordenamiento server-side', () => {
     // La fecha de creación va apilada bajo el radicado en el default: para ordenar por ella hay
     // que sacarla a su propia columna, que es donde vive la cabecera ordenable.
     await userEvent.click(screen.getByRole('button', { name: /Columnas/i }));
-    await userEvent.click(screen.getByRole('checkbox', { name: /^Fecha de creación$/i }));
+    await userEvent.click(screen.getByRole('checkbox', { name: /^Fecha radicación$/i }));
 
-    await userEvent.click(screen.getByRole('button', { name: /^Ordenar Fecha de creación$/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^Ordenar Fecha radicación$/ }));
     await userEvent.click(
-      within(screen.getByRole('menu', { name: /Ordenar por, en Fecha de creación/ })).getByRole(
+      within(screen.getByRole('menu', { name: /Ordenar por, en Fecha radicación/ })).getByRole(
         'menuitemradio',
-        { name: 'Fecha de creación: Más antigua' },
+        { name: 'Fecha radicación: Más antigua' },
       ),
     );
     await vi.waitFor(() => {

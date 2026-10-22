@@ -5,7 +5,7 @@
 // exige SuperAdminPolicy). Mismo patrón que TransitOfficeStatusDialog: Modal + confirmación,
 // en error muestra el mensaje y NO cierra.
 //
-// OJO — no confundir con el toggle «Consola en solo lectura» de TramitesSuperSection
+// OJO — no confundir con el toggle «Consola en solo lectura» de OtConfiguracionSection
 // (`operation_mode`): aquello describe al OT CLIENTE de FLIT, esto describe a la secretaría
 // DESTINO a la que FLIT radica y que normalmente ni siquiera es cliente.
 import { useState } from "react";
@@ -197,7 +197,7 @@ export function TransitOfficeQuipuxDialog({
             onClick={save}
             disabled={busy || formatoInvalido || sinDivipoConBanderas}
             className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
           >
             {busy ? "Guardando…" : "Guardar"}
           </button>

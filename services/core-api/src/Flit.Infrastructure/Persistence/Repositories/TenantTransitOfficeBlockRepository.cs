@@ -34,6 +34,17 @@ internal sealed class TenantTransitOfficeBlockRepository : ITenantTransitOfficeB
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
+    public async Task<IReadOnlyList<Guid>> ListBlockingHeadIdsAsync(
+        Guid transitOfficeId,
+        CancellationToken cancellationToken = default) =>
+        await _context.TenantTransitOfficeBlocks
+            .AsNoTracking()
+            .Where(b => b.TransitOfficeId == transitOfficeId)
+            .Select(b => b.TenantId)
+            .Distinct()
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
     public Task<bool> AddBlockAsync(
         Guid headTenantId,
         Guid transitOfficeId,

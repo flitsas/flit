@@ -6,6 +6,7 @@
  * 4 estados: idle (sin URL), cargando, cargado, error.
  */
 
+import type { ReactNode } from "react";
 import { Download, FileText } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 
@@ -25,6 +26,12 @@ export interface DocumentPreviewModalProps {
   error: string | null;
   /** Fallback: dispara la descarga cuando no se puede previsualizar. */
   onDownload?: () => void;
+  /**
+   * HU #12786/#12787 — aviso sobre el documento mostrado (p. ej. «Documento final» cuando el
+   * consolidado es el definitivo de un trámite en estado final). Se pinta sobre el cuerpo, en
+   * cualquiera de los cuatro estados. Omitido = sin aviso (comportamiento previo).
+   */
+  notice?: ReactNode;
 }
 
 function isPreviewable(mime: string | null): boolean {
@@ -52,6 +59,7 @@ export function DocumentPreviewModal({
   loading,
   error,
   onDownload,
+  notice,
 }: DocumentPreviewModalProps) {
   return (
     <Modal
@@ -70,6 +78,7 @@ export function DocumentPreviewModal({
         className="min-h-[50vh] flex flex-col"
         data-testid="preview-modal-body"
       >
+        {notice ? <div className="mb-3">{notice}</div> : null}
         {/* Estado: cargando */}
         {loading && (
           <div
@@ -102,7 +111,7 @@ export function DocumentPreviewModal({
               <button
                 type="button"
                 className="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white"
-                style={{ background: "#557EFF" }}
+                style={{ background: "var(--color-flit-brand)" }}
                 aria-label="Descargar documento"
                 onClick={onDownload}
               >
@@ -130,7 +139,7 @@ export function DocumentPreviewModal({
               <button
                 type="button"
                 className="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white"
-                style={{ background: "#557EFF" }}
+                style={{ background: "var(--color-flit-brand)" }}
                 aria-label="Descargar documento"
                 onClick={onDownload}
               >
@@ -184,7 +193,7 @@ export function DocumentPreviewModal({
                   <button
                     type="button"
                     className="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white"
-                    style={{ background: "#557EFF" }}
+                    style={{ background: "var(--color-flit-brand)" }}
                     aria-label="Descargar documento"
                     onClick={onDownload}
                   >
@@ -200,7 +209,7 @@ export function DocumentPreviewModal({
               <div className="mt-3 flex justify-end">
                 <button
                   type="button"
-                  className="flex items-center gap-1.5 rounded-xl border border-[#DFE5ED] dark:border-white/15 px-3 py-1.5 text-[11px] font-semibold text-[#162744] dark:text-slate-100"
+                  className="flex items-center gap-1.5 rounded-xl border border-[#DFE5ED] dark:border-white/15 px-3 py-1.5 text-[11px] font-semibold text-flit-primary dark:text-slate-100"
                   aria-label="Descargar documento"
                   onClick={onDownload}
                 >

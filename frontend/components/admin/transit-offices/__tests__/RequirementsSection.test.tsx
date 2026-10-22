@@ -57,14 +57,10 @@ describe("RequirementsSection — HU #10547", () => {
     );
   });
 
-  it("renderiza los tres requisitos con su estado inicial (identidad exigida por defecto)", async () => {
+  it("renderiza los dos requisitos vigentes con su estado inicial (identidad exigida por defecto)", async () => {
     renderSection();
 
     expect(await screen.findByRole("switch", { name: /Exige RNMC/i })).toHaveAttribute(
-      "aria-checked",
-      "false",
-    );
-    expect(screen.getByRole("switch", { name: /Ruta de placa preasignada/i })).toHaveAttribute(
       "aria-checked",
       "false",
     );
@@ -72,6 +68,23 @@ describe("RequirementsSection — HU #10547", () => {
       "aria-checked",
       "true",
     );
+  });
+
+  // HU12851 AC2 — el ToggleRow "Ruta de placa preasignada" (id ot-req-plate) se retiró: ya no
+  // hay consola de rangos detrás (Feature #12846).
+  it("HU12851 AC2 — no ofrece el switch 'Ruta de placa preasignada' ni envía allowPlatePreassign al guardar", async () => {
+    const user = userEvent.setup();
+    renderSection();
+
+    await screen.findByRole("switch", { name: /Exige RNMC/i });
+    expect(screen.queryByRole("switch", { name: /Ruta de placa preasignada/i })).not.toBeInTheDocument();
+    expect(document.getElementById("ot-req-plate")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /Guardar requisitos/i }));
+
+    await waitFor(() => expect(updateOtRequirements).toHaveBeenCalled());
+    const [body] = vi.mocked(updateOtRequirements).mock.calls[0]!;
+    expect(body).not.toHaveProperty("allowPlatePreassign");
   });
 
   it("consulta los requisitos con el scope del SuperAdmin", async () => {

@@ -157,6 +157,7 @@ describe('HU #12104 — AC3: las celdas compuestas se despliegan en columnas', (
       // columna el dato desaparecería justo en el archivo, que es donde nadie puede contrastarlo
       // con la pantalla.
       'marcas',
+      'confirmadoRunt',
       'secretaria',
     ]);
     expect(new Set(ids).size).toBe(ids.length);

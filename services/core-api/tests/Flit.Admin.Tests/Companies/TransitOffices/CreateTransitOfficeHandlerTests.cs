@@ -58,7 +58,6 @@ public sealed class CreateTransitOfficeHandlerTests
                     TransitOfficeId: MedellinOfficeId,
                     LegalName: "Secretaría de Movilidad Medellín OT",
                     TaxId: "900123456-1",
-                    Code: "OT-MEDELLIN",
                     OperationMode: null),
             }, TestContext.Current.CancellationToken);
 
@@ -73,7 +72,7 @@ public sealed class CreateTransitOfficeHandlerTests
 
         await using var verify = NewContext(db);
         var tenant = await verify.Tenants.SingleAsync(
-            t => t.Code == "OT-MEDELLIN", cancellationToken: TestContext.Current.CancellationToken);
+            t => t.TaxId == "900123456-1", cancellationToken: TestContext.Current.CancellationToken);
         tenant.TenantType.Should().Be("RENTING");
         tenant.CreatedBy.Should().Be(Operator);
 
@@ -137,7 +136,6 @@ public sealed class CreateTransitOfficeHandlerTests
                     TransitOfficeId: BogotaOfficeId,
                     LegalName: "Otro OT Bogotá",
                     TaxId: "900111111-1",
-                    Code: "OT-BOGOTA-DUP",
                     OperationMode: "dashboard"),
             }, TestContext.Current.CancellationToken);
 
@@ -146,7 +144,7 @@ public sealed class CreateTransitOfficeHandlerTests
         }
 
         await using var verify = NewContext(db);
-        (await verify.Tenants.CountAsync(t => t.Code == "OT-BOGOTA-DUP", cancellationToken: TestContext.Current.CancellationToken))
+        (await verify.Tenants.CountAsync(t => t.TaxId == "900111111-1", cancellationToken: TestContext.Current.CancellationToken))
             .Should().Be(0);
     }
 
@@ -163,7 +161,6 @@ public sealed class CreateTransitOfficeHandlerTests
                 TransitOfficeId: Guid.NewGuid(),
                 LegalName: "OT Inexistente",
                 TaxId: "900222222-2",
-                Code: "OT-INEXISTENTE",
                 OperationMode: "dashboard"),
         }, TestContext.Current.CancellationToken);
 
@@ -184,7 +181,6 @@ public sealed class CreateTransitOfficeHandlerTests
                 TransitOfficeId: null,
                 LegalName: "OT Sin Oficina",
                 TaxId: "900333333-3",
-                Code: "OT-SINOFICINA",
                 OperationMode: "dashboard"),
         }, TestContext.Current.CancellationToken);
 
@@ -205,7 +201,6 @@ public sealed class CreateTransitOfficeHandlerTests
                 TransitOfficeId: MedellinOfficeId,
                 LegalName: "OT Modo Inválido",
                 TaxId: "900444444-4",
-                Code: "OT-MODOINVALIDO",
                 OperationMode: "invalid-mode"),
         }, TestContext.Current.CancellationToken);
 
@@ -227,58 +222,15 @@ public sealed class CreateTransitOfficeHandlerTests
                 TransitOfficeId: null,
                 LegalName: "  ",
                 TaxId: "",
-                Code: null,
                 OperationMode: null),
         }, TestContext.Current.CancellationToken);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Select(e => e.Field).Should()
-            .Contain(["legalName", "taxId", "code", "transitOfficeId"]);
+            .Contain(["legalName", "taxId", "transitOfficeId"]);
+        // HU #13605 — el código ya no lo envía el cliente: nunca es un error de validación.
+        result.Errors.Select(e => e.Field).Should().NotContain("code");
         (await ctx.Tenants.CountAsync(cancellationToken: TestContext.Current.CancellationToken)).Should().Be(0);
-    }
-
-    [Fact]
-    public async Task DuplicateCode_Returns422_WithoutDuplicating()
-    {
-        var db = NewDbName();
-
-        await using (var seed = NewContext(db))
-        {
-            seed.Tenants.Add(new Tenant
-            {
-                Id = Guid.NewGuid(),
-                Code = "OT-DUPLICADO",
-                LegalName = "Existente S.A.S.",
-                TaxId = "900555555-5",
-                TenantType = "RENTING",
-                IsActive = true,
-                CreatedAt = DateTimeOffset.UtcNow,
-            });
-            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
-        }
-
-        await using (var act = NewContext(db))
-        {
-            var handler = new CreateTransitOfficeHandler(
-                new TransitOfficeTenantWriteRepository(act, NullAuditContextAccessor.Instance), new StaticTransitOfficeCatalog());
-
-            var result = await handler.HandleAsync(new CreateTransitOfficeCommand
-            {
-                Request = new CreateTransitOfficeRequest(
-                    TransitOfficeId: MedellinOfficeId,
-                    LegalName: "Nuevo OT",
-                    TaxId: "900666666-6",
-                    Code: "OT-DUPLICADO",
-                    OperationMode: "dashboard"),
-            }, TestContext.Current.CancellationToken);
-
-            result.IsValid.Should().BeFalse();
-            result.Errors.Should().ContainSingle(e => e.Field == "code");
-        }
-
-        await using var verify = NewContext(db);
-        (await verify.Tenants.CountAsync(t => t.Code == "OT-DUPLICADO", cancellationToken: TestContext.Current.CancellationToken))
-            .Should().Be(1);
     }
 
     // ---------- Helpers ----------

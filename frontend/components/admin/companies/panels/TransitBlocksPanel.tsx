@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Ban, Search } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
-import { Pagination } from "@/components/atom/Pagination";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { RowActions } from "@/components/atom/RowActions";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { useToast } from "@/components/admin/Toast";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { StatusBadge } from "@/components/atom/StatusBadge";
@@ -20,8 +22,6 @@ import {
 } from "@/lib/api/admin-transit-office-tenants";
 import type { TransitOffice } from "@/lib/api/types";
 import { ApiValidationError } from "@/lib/api/types";
-
-const PAGE_SIZE = 10;
 
 type PendingAction = {
   office: TransitOffice;
@@ -47,7 +47,8 @@ export function TransitBlocksPanel({
     Record<string, { hasTenant: boolean; estadoActivo: boolean | null }>
   >({});
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  // Bug #13055 — tabla homologada con el modelo de trámites: filas por página elegibles.
+  const pg = usePaginacion();
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -102,9 +103,9 @@ export function TransitBlocksPanel({
     );
   }, [operableOffices, search]);
 
-  const lastPage = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(page, lastPage);
-  const pageRows = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const lastPage = Math.max(1, Math.ceil(filtered.length / pg.pageSize));
+  const safePage = Math.min(pg.page, lastPage);
+  const pageRows = pg.paginar(filtered);
 
   const requestToggle = (office: TransitOffice) => {
     const enable = !blockedIds.includes(office.id);
@@ -176,16 +177,17 @@ export function TransitBlocksPanel({
       render: (office) => {
         const blocked = blockedIds.includes(office.id);
         return (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => requestToggle(office)}
-            className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[10px] font-semibold disabled:opacity-50"
-            aria-label={`${blocked ? "Desbloquear" : "Bloquear"} ${office.name}`}
-          >
-            <Ban className="h-3 w-3" aria-hidden />
-            {blocked ? "Desbloquear" : "Bloquear"}
-          </button>
+          <RowActions
+            actions={[
+              {
+                icon: Ban,
+                label: `${blocked ? "Desbloquear" : "Bloquear"} ${office.name}`,
+                onClick: () => requestToggle(office),
+                tone: blocked ? "primary" : "danger",
+                disabled: busy,
+              },
+            ]}
+          />
         );
       },
     },
@@ -198,13 +200,16 @@ export function TransitBlocksPanel({
           <Ban className="mt-0.5 h-4 w-4 shrink-0 opacity-70" aria-hidden />
           <div>
             <h4 className="text-sm font-semibold">Organismos bloqueados (Marca Blanca)</h4>
-            <p className="mt-0.5 text-[11px] opacity-60">
+            <p className="mt-0.5 text-xs opacity-60">
               Excluye organismos de la red: la cabeza y sus clientes hijos dejan de verlos al radicar.
               Solo aplica a compañías Marca Blanca.
             </p>
           </div>
         </div>
 
+        {status === "loading" ? (
+          <CarLoaderModal label="Cargando bloqueos de organismos…" />
+        ) : (
         <UiStateBoundary
           status={status === "ready" && operableOffices.length === 0 ? "empty" : status}
           onRetry={() => void load()}
@@ -212,7 +217,7 @@ export function TransitBlocksPanel({
           errorMessage="No se pudieron cargar los bloqueos de organismos."
           skeletonRows={3}
         >
-          <div className="flex max-w-md items-center gap-2 rounded-xl border bg-white p-2.5 dark:bg-[#0B0F14]">
+          <div className="flex max-w-md items-center gap-2 rounded-xl border bg-white p-2.5 focus-within:outline focus-within:outline-2 focus-within:outline-flit-brand dark:bg-[#0B0F14]">
             <Search className="h-4 w-4 opacity-60" aria-hidden />
             <label htmlFor="ot-blocks-search" className="sr-only">
               Buscar organismo de tránsito
@@ -220,7 +225,10 @@ export function TransitBlocksPanel({
             <input
               id="ot-blocks-search"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                pg.setPage(1);
+              }}
               placeholder="Buscar por nombre o código…"
               className="flex-1 bg-transparent text-xs outline-none"
             />
@@ -233,14 +241,16 @@ export function TransitBlocksPanel({
             emptyMessage="Ningún organismo coincide con la búsqueda."
             ariaLabel="Bloqueos de organismos de tránsito"
             minWidth={560}
-          />
-          <Pagination
-            page={safePage}
-            pageSize={PAGE_SIZE}
-            totalCount={filtered.length}
-            onPageChange={setPage}
+            pagination={{
+              page: safePage,
+              pageSize: pg.pageSize,
+              totalCount: filtered.length,
+              onPageChange: pg.setPage,
+              onPageSizeChange: pg.setPageSize,
+            }}
           />
         </UiStateBoundary>
+        )}
       </section>
 
       {pending && (

@@ -11,11 +11,10 @@ public sealed record MandateSignerResponse(
     Guid TransitOfficeId,
     string FullName,
     string DocumentType,
-    string DocumentNumber,
+    string? DocumentNumber,
     string IntegrityHash,
     string? Email,
     Guid? UserId,
-    Guid? IdentityValidationRef,
     Guid? SignatureVaultId,
     string IdentityStatus,
     DateTimeOffset RegisteredAt,
@@ -32,7 +31,42 @@ public sealed record MandateSignerResponse(
     /// </summary>
     IReadOnlyList<Guid>? PhysicalSignatureOfficeIds = null,
     /// <summary>
-    /// Empresas representadas por organismo. Lo necesita el formulario para precargar la selección al
-    /// editar; vacío para un organismo significa "aplica a todas allí".
+    /// HU #13179 — compañías asociadas (por tenant) por organismo. Lo necesita el formulario para precargar la
+    /// selección al editar; vacío para un organismo significa «solo su propia compañía».
     /// </summary>
-    IReadOnlyList<MandateSignerOfficeCompanies>? OfficeCompanies = null);
+    IReadOnlyList<MandateSignerOfficeCompanies>? OfficeCompanies = null,
+    /// <summary>HU #13129 — modelo: <c>natural</c> | <c>juridica</c> | <c>formato_blanco</c>.</summary>
+    string SignerModel = MandateSignerModels.Natural,
+    /// <summary>HU #13129 — forma de firma (<c>baul</c> | <c>biometria</c>); nula fuera de natural y en legados.</summary>
+    string? SignatureMethod = null,
+    /// <summary>HU #13129 — vigencia propia: <c>fixed</c> | <c>range</c>.</summary>
+    string ValidityKind = MandateValidityKinds.Fixed,
+    /// <summary>HU #13129 — inicio del rango (date); nulo con vigencia fija.</summary>
+    DateOnly? ValidFrom = null,
+    /// <summary>HU #13129 — fin del rango (date); nulo con vigencia fija.</summary>
+    DateOnly? ValidTo = null,
+    /// <summary>
+    /// HU #13129 — estado de vigencia calculado en servidor (día de Colombia): <c>inactivo</c> →
+    /// <c>vencido</c> → <c>por_vencer</c> (≤ 7 días al fin) → <c>vigente</c>; <c>no_vigente</c> si el rango
+    /// aún no empieza. No se persiste.
+    /// </summary>
+    string ValidityStatus = MandateValidityStatus.Vigente,
+    /// <summary>
+    /// HU #13130 — firma válida: vigencia propia activa Y, con biometría, validación biométrica aprobada
+    /// (sin renovación, HU #13130b). Nulo si el modelo no es Persona natural.
+    /// </summary>
+    bool? SignatureValid = null,
+    /// <summary>
+    /// HU #13130 — motivo cuando <c>SignatureValid</c> es falso: <c>mandatario_fuera_de_vigencia</c>,
+    /// <c>mandatario_inactivo</c> o <c>sin_validacion_aprobada</c>.
+    /// </summary>
+    string? SignatureInvalidReason = null,
+    /// <summary>
+    /// HU #13134 — origen de la configuración: <c>organismo</c> (organismo de tránsito o Super Admin) o
+    /// <c>compania</c>. La UI muestra «Configurado por el organismo de tránsito» con candado para el primero.
+    /// </summary>
+    string Origin = MandateSignerOriginRules.Organismo,
+    /// <summary>HU #13134 — el actor puede editar, inactivar y reactivar este mandatario (regla única por origen y rol).</summary>
+    bool PuedeEditar = true,
+    /// <summary>HU #13134 — el actor puede eliminar este mandatario (misma regla que <see cref="PuedeEditar"/>).</summary>
+    bool PuedeEliminar = true);

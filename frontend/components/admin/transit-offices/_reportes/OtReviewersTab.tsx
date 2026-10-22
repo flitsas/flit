@@ -26,6 +26,9 @@ import {
   type OtReviewersReport,
 } from "@/lib/api/ot-metrics";
 import { XLSX_MIME } from "@/lib/xlsx";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { Pagination } from "@/components/atom/Pagination";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { ColumnPicker } from "@/components/consultas/ColumnPicker";
 import { activePreset } from "@/components/consultas/columns";
 import {
@@ -78,6 +81,8 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
   const [visibleColumns, setVisibleColumns] = useState<string[]>(defaultVisibleReviewerColumns);
   const [report, setReport] = useState<OtReviewersReport | null>(null);
   const [busy, setBusy] = useState(false);
+  // Bug #13055 — tabla homologada con el modelo de trámites: paginación en cliente con filas por página.
+  const pg = usePaginacion();
   const [error, setError] = useState<string | null>(null);
   const [exportState, setExportState] = useState<{ busy: boolean; notice: string | null }>({
     busy: false,
@@ -237,7 +242,7 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
               <Tile
                 value={formatInt(resumen.decididos)}
                 label="Trámites gestionados"
-                accent="#557EFF"
+                accent="var(--color-flit-brand)"
                 hint={`${formatInt(resumen.aprobados)} aprobados · ${formatInt(resumen.rechazados)} rechazados`}
               />
               <Tile
@@ -301,7 +306,7 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
               disabled={exportState.busy || sinFilas}
               aria-busy={exportState.busy}
               className="rounded-xl px-3 py-2 text-xs font-semibold text-white transition disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
               data-testid="ot-reviewers-export-xlsx"
             >
               {exportState.busy ? "Exportando…" : "Exportar a Excel"}
@@ -311,7 +316,7 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
                 type="button"
                 onClick={() => handleExport("csv")}
                 disabled={exportState.busy || sinFilas}
-                className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs font-semibold transition hover:border-[#557EFF] disabled:opacity-60 dark:border-white/10"
+                className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs font-semibold transition hover:border-flit-brand disabled:opacity-60 dark:border-white/10"
                 data-testid="ot-reviewers-export-csv"
               >
                 CSV
@@ -335,8 +340,8 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
                 onClick={() => applyColumns(preset.columns)}
                 className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
                   activa
-                    ? "border-[#557EFF] bg-[#557EFF]/10 text-[#557EFF]"
-                    : "border-[#DFE5ED] text-[#6B7280] hover:border-[#557EFF] hover:text-[#557EFF] dark:border-white/10 dark:text-white/50"
+                    ? "border-flit-brand bg-flit-brand/10 text-flit-brand"
+                    : "border-[#DFE5ED] text-[#6B7280] hover:border-flit-brand hover:text-flit-brand dark:border-white/10 dark:text-white/50"
                 }`}
               >
                 {preset.label}
@@ -362,7 +367,9 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
           </p>
         )}
 
-        {sinFilas ? (
+        {busy && !report ? (
+          <CarLoaderModal label="Generando el informe…" />
+        ) : sinFilas ? (
           <Empty>
             {busy
               ? "Generando el informe…"
@@ -371,17 +378,18 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
                 : "Nadie decidió trámites en el periodo y con los filtros seleccionados."}
           </Empty>
         ) : (
+          <>
           <div className={CARDLIST_SCROLL}>
             <table className={`min-w-[40rem] ${CARDLIST_TABLE}`} data-testid="ot-reviewers-table">
               <thead>
                 <tr className={CARDLIST_HEAD_ROW}>
                   {columns.map((column) => (
-                    <th key={column.id} className={CARDLIST_TH}>
+                    <th key={column.id} scope="col" className={CARDLIST_TH}>
                       {column.sort ? (
                         <button
                           type="button"
                           onClick={() => toggleSort(column.sort!)}
-                          className="flex items-center gap-1 uppercase transition hover:text-[#557EFF]"
+                          className="flex items-center gap-1 uppercase transition hover:text-flit-brand"
                           aria-label={`Ordenar por ${column.label}`}
                         >
                           {column.label}
@@ -395,7 +403,7 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
                 </tr>
               </thead>
               <tbody>
-                {report!.filas.map((row) => (
+                {pg.paginar(report!.filas).map((row) => (
                   <tr key={row.userId} className={CARDLIST_ROW}>
                     {columns.map((column) => (
                       <td
@@ -410,6 +418,16 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
               </tbody>
             </table>
           </div>
+          <Pagination
+            page={pg.page}
+            pageSize={pg.pageSize}
+            totalCount={report!.filas.length}
+            onPageChange={pg.setPage}
+            onPageSizeChange={pg.setPageSize}
+            ariaLabel="Paginación de revisores"
+            noun="revisores"
+          />
+          </>
         )}
       </Section>
     </div>

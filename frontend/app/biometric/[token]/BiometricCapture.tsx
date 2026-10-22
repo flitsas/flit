@@ -200,7 +200,7 @@ export function BiometricCapture({ token }: Props) {
                 capture="environment"
                 aria-label={slot.label}
                 onChange={(e) => setFile(slot.key, e.target.files?.[0])}
-                className="text-xs flex-1 file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-white file:text-xs file:font-semibold file:bg-[#557EFF]"
+                className="text-xs flex-1 file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-white file:text-xs file:font-semibold file:bg-flit-brand"
               />
               {previews[slot.key] ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -248,7 +248,7 @@ export function BiometricCapture({ token }: Props) {
         onClick={() => void handleSubmit()}
         disabled={!allSelected || submitting || sinIntentos}
         className="w-full mt-5 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
-        style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+        style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
       >
         {submitting
           ? 'Validando…'

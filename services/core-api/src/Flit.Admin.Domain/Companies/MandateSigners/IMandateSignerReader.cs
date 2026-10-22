@@ -1,3 +1,5 @@
+using Flit.Admin.Domain.Companies.TransitOffices;
+
 namespace Flit.Admin.Domain.Companies.MandateSigners;
 
 /// <summary>
@@ -13,9 +15,13 @@ public interface IMandateSignerReader
     /// Mandatarios del OT (activos e inactivos) con sus compañías <b>activas</b> asignadas,
     /// ordenados primero los activos y luego por nombre. Los inactivados (baja lógica) siguen
     /// visibles para poder reactivarlos, pero sus compañías ya quedaron liberadas.
+    /// Bug #12912 (Habeas Data) — con <see cref="OtCompanyVisibility.DirectOrWithReceivedProcedures"/> se
+    /// omiten los mandatarios cuyas compañías en este organismo no son visibles para él, y a los demás se
+    /// les recortan compañías y organismos a lo que el organismo puede ver.
     /// </summary>
     Task<IReadOnlyList<MandateSignerItem>> ListByOtAsync(
         Guid transitOfficeId,
+        OtCompanyVisibility visibility,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -29,9 +35,12 @@ public interface IMandateSignerReader
     /// <summary>
     /// Compañías gestoras con grant en el OT (candidatas a mandatario), con su estado activo
     /// y si el grant está habilitado. Insumo del multiselect y de la regla de uso RF33.
+    /// Bug #12912 — <paramref name="visibility"/> acota la lista a lo que el organismo puede ver por
+    /// nombre (Ley 1581).
     /// </summary>
     Task<IReadOnlyList<OtCompanyOption>> ListOtCompaniesAsync(
         Guid transitOfficeId,
+        OtCompanyVisibility visibility,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -57,6 +66,17 @@ public interface IMandateSignerReader
     /// en el catálogo). Es la lista que se ofrece al elegir dónde aplica un mandatario.
     /// </summary>
     Task<IReadOnlyList<CompanyTransitOfficeOption>> ListCompanyTransitOfficesAsync(
+        Guid companyTenantId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #13134 — origen del mandatario (<see cref="MandateSignerOriginRules.Organismo"/> o
+    /// <see cref="MandateSignerOriginRules.Compania"/>) visto desde <paramref name="companyTenantId"/>: se calcula
+    /// con los vínculos (activos o no) del mandatario con ESA compañía. <c>null</c> si no existe, está eliminado o
+    /// no tiene ningún vínculo con la compañía (la ruta responde 404 sin revelar si existe).
+    /// </summary>
+    Task<string?> GetOriginForCompanyAsync(
+        Guid mandateSignerId,
         Guid companyTenantId,
         CancellationToken cancellationToken = default);
 }

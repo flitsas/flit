@@ -204,7 +204,7 @@ describe("OtImprintValidationSection", () => {
     await userEvent.type(screen.getByTestId("ot-imprint-validation-placa-input"), "ABC123");
     await userEvent.click(screen.getByTestId("ot-imprint-validation-search-btn"));
 
-    const viewBtn = await screen.findByTestId("ot-imprint-view-pdf-imp-1");
+    const viewBtn = await screen.findByRole("button", { name: /pdf no disponible para impronta abc123/i });
     expect(viewBtn).toBeDisabled();
     expect(fetchImprintSignaturePreviewUrl).not.toHaveBeenCalled();
   });
@@ -279,7 +279,7 @@ describe("OtImprintValidationSection", () => {
     renderSection();
     await userEvent.type(screen.getByTestId("ot-imprint-validation-placa-input"), "ABC123");
     await userEvent.click(screen.getByTestId("ot-imprint-validation-search-btn"));
-    await userEvent.click(await screen.findByTestId("ot-imprint-history-imp-1"));
+    await userEvent.click(await screen.findByRole("button", { name: /ver bitácora de impronta abc123/i }));
 
     await waitFor(() => {
       expect(screen.getByTestId("ot-imprint-history-modal")).toBeInTheDocument();
@@ -312,7 +312,7 @@ describe("OtImprintValidationSection", () => {
     expect(screen.getByLabelText("Impronta reemplazada de la placa ABC123")).toBeInTheDocument();
     expect(screen.getByText("Reemplazada")).toBeInTheDocument();
 
-    const viewBtn = await screen.findByTestId("ot-imprint-view-pdf-imp-replaced");
+    const viewBtn = await screen.findByRole("button", { name: /ver pdf de impronta abc123/i });
     expect(viewBtn).toBeEnabled();
   });
 

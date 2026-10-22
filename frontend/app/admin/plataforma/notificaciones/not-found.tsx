@@ -29,7 +29,7 @@ export default function AdminNotificacionesNotFound() {
         >
           404
         </p>
-        <h1 className="text-base font-semibold text-[#162744] dark:text-white">
+        <h1 className="text-base font-semibold text-flit-primary dark:text-white">
           Notificaciones no disponible
         </h1>
         <p className="max-w-md text-sm text-[#59677D] dark:text-white/65">
@@ -42,8 +42,8 @@ export default function AdminNotificacionesNotFound() {
         </span>
         <Link
           href="/"
-          className="mt-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
-          style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+          className="mt-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+          style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
         >
           Volver al inicio
         </Link>

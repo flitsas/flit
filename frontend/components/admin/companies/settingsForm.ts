@@ -10,6 +10,8 @@ import type {
 // FEATURE 02 — fuente de comparendos. Default 'external' (SIMIT en línea).
 export const DEFAULT_FINES_QUERY_SOURCE: FinesQuerySource = "external";
 
+export const IMPRONTAS_MODULE = "Improntas";
+
 // ── HU #10478: proveedores de consulta RUNT ─────────────────────────────────
 export const CONSULTA_MODULE = "Proveedores de consulta RUNT";
 export const DEFAULT_VEHICLE_PROVIDER = "kyverum_runt";
@@ -122,6 +124,12 @@ export interface SettingsForm {
   blockProcedureFamilyTraspaso: boolean;
   blockProcedureFamilyOtros: boolean;
   baulFirmasActivo: boolean;
+  /**
+   * HU #12851 (Feature #12846) — sin control de UI: ya no hay switch que lo edite (el backend
+   * ignora este campo, HU-A5). Se conserva en el formulario solo para echoar el valor tal cual
+   * llega de `TenantSettings` de vuelta en el PUT, sin romper el contrato de
+   * `TenantSettingsUpdate`.
+   */
   preasignacionPlacaActiva: boolean;
   validarSoatConRunt: boolean;
   enrutamientoSMTP: EnrutamientoSMTP;
@@ -148,6 +156,8 @@ export interface SettingsForm {
   tramitesModuleEnabled: boolean;
   comparendosModuleEnabled: boolean;
   resolucionesModuleEnabled: boolean;
+  // Feature #13398 (HU #13401) — el wizard genera la impronta automáticamente (solo SuperAdmin).
+  generacionImprontas: boolean;
 }
 
 /** Construye el estado del formulario a partir de la configuración cargada. */
@@ -189,6 +199,7 @@ export function formFromSettings(settings: TenantSettings): SettingsForm {
     tramitesModuleEnabled: settings.tramitesModuleEnabled ?? false,
     comparendosModuleEnabled: settings.comparendosModuleEnabled ?? false,
     resolucionesModuleEnabled: settings.resolucionesModuleEnabled ?? false,
+    generacionImprontas: settings.generacionImprontas ?? true,
   };
 }
 
@@ -247,9 +258,10 @@ export function formToUpdate(form: SettingsForm): TenantSettingsUpdate {
       enabled: normalizeAvaluoEnabled(form.avaluoEnabled),
     },
     finesQuerySource: form.finesQuerySource,
-    tramitesModuleEnabled: form.tramitesModuleEnabled,
-    comparendosModuleEnabled: form.comparendosModuleEnabled,
+    // HU #12967 (B-07): Trámites y Comparendos ya no viajan en el PUT de configuración; son la
+    // habilitación de productos y el SuperAdmin los cambia al instante en la plataforma.
     resolucionesModuleEnabled: form.resolucionesModuleEnabled,
+    generacionImprontas: form.generacionImprontas,
   };
 }
 
@@ -331,12 +343,6 @@ const FIELD_DESCRIPTORS: FieldDescriptor[] = [
     describe: (_i, c) => onOff(c.baulFirmasActivo),
   },
   {
-    key: "preasignacionPlacaActiva",
-    module: "Configuración Empresa",
-    label: "Preasignación de placa activa",
-    describe: (_i, c) => onOff(c.preasignacionPlacaActiva),
-  },
-  {
     key: "validarSoatConRunt",
     module: "Configuración Empresa",
     label: "Validar SOAT ante el RUNT al procesar",
@@ -400,22 +406,19 @@ const FIELD_DESCRIPTORS: FieldDescriptor[] = [
     }),
   },
   {
-    key: "tramitesModuleEnabled",
-    module: "Configuración Empresa",
-    label: "Módulo de Trámites",
-    describe: (_i, c) => onOff(c.tramitesModuleEnabled),
-  },
-  {
-    key: "comparendosModuleEnabled",
-    module: "Configuración Empresa",
-    label: "Módulo de Comparendos",
-    describe: (_i, c) => onOff(c.comparendosModuleEnabled),
-  },
-  {
     key: "resolucionesModuleEnabled",
     module: "Configuración Empresa",
     label: "Módulo de Resoluciones",
     describe: (_i, c) => onOff(c.resolucionesModuleEnabled),
+  },
+  {
+    key: "generacionImprontas",
+    module: IMPRONTAS_MODULE,
+    label: "Generación de improntas",
+    describe: (_i, c) => ({
+      detail: c.generacionImprontas ? "Habilitar" : "Deshabilitar",
+      tone: c.generacionImprontas ? "on" : "off",
+    }),
   },
   {
     key: "metodosRecaudo",
@@ -497,6 +500,7 @@ const MODULE_ORDER = [
   "Traspaso",
   "Otros trámites",
   "Configuración Empresa",
+  IMPRONTAS_MODULE,
   CONSULTA_MODULE,
   AVALUO_MODULE,
 ];

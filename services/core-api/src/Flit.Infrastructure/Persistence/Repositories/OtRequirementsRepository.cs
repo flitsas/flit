@@ -95,7 +95,10 @@ internal sealed class OtRequirementsRepository : IOtRequirementsRepository
                 }
 
                 entity.RequiresRnmc = requiresRnmc;
-                entity.AllowPlatePreassign = allowPlatePreassign;
+                // HU #12853 (Feature #12846, Épica #12751) — allow_plate_preassign deja de escribirse
+                // aquí: el handler ya ignora el valor entrante del request y siempre reenvía el actual
+                // (ver UpdateOtRequirementsHandler), así que esta línea nunca aplicaría un cambio real;
+                // se retira para que quede explícito que la columna ya no se toca desde este UPSERT.
                 entity.IdentityValidationEnabled = identityValidationEnabled;
 
                 await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

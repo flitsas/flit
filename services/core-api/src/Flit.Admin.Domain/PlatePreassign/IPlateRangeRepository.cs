@@ -105,18 +105,11 @@ public interface IPlateRangeRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// ¿Se puede operar la preasignación entre esta compañía y este OT? Exige: flag de la compañía
-    /// (<c>plate_preassign_enabled</c>) + grant vigente (compañía↔OT) + <c>allow_plate_preassign</c> del OT.
-    /// </summary>
-    Task<bool> IsAssignmentAllowedAsync(
-        Guid companyTenantId,
-        Guid transitOfficeId,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// HU #10806 — evalúa la elegibilidad con detalle: distingue "compañía sin preasignación" (ruta
-    /// estándar) de "compañía activa pero OT mal configurado" (bloqueo). Misma lectura que
-    /// <see cref="IsAssignmentAllowedAsync"/> (que equivale a <c>== Allowed</c>).
+    /// estándar) de "compañía activa pero OT mal configurado" (bloqueo). Equivale a <c>== Allowed</c>.
+    /// HU #12853 (Feature #12846, Épica #12751) — <c>IsAssignmentAllowedAsync</c> (el wrapper booleano
+    /// de este método) se retiró de la interfaz: se quedó sin llamador cuando HU #12849 retiró la
+    /// consola de rangos y esta HU apagó <c>/plate-preassign/status</c>, su único consumidor restante.
     /// </summary>
     Task<PlateAssignmentEligibility> EvaluateAssignmentEligibilityAsync(
         Guid companyTenantId,

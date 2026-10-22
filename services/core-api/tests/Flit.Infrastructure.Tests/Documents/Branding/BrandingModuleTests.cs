@@ -1,4 +1,5 @@
 using System.Text;
+using Flit.Infrastructure.Copy;
 using Flit.Infrastructure.Documents.Branding;
 using FluentAssertions;
 using PdfSharpCore.Drawing;
@@ -207,6 +208,18 @@ public sealed class BrandingModuleTests
 
         act.Should().NotThrow();
         Encoding.ASCII.GetString(pdf!, 0, 4).Should().Be("%PDF");
+    }
+
+    [Fact]
+    public void CoverGenerator_UsaOrganismoDeTransito_NoSecretariaNiContradiceA12()
+    {
+        FlitCoverPageGenerator.OrganismoFieldLabel.Should().Be("Organismo de tránsito");
+        FlitCoverPageGenerator.OrganismoFieldLabel.Should().NotContain("Secretaría");
+        HomologacionCopy.VerConsolidado.Should().Be("Ver consolidado");
+        HomologacionCopy.VerConsolidado.Should().NotContain("del expediente");
+        HomologacionCopy.Soat.Should().Be("SOAT");
+        HomologacionCopy.Soat.Should().NotContain("RUNT");
+        HomologacionCopy.Soat.Should().NotBe("SOAT vigente");
     }
 
     private static int PageCount(byte[] pdf)

@@ -116,11 +116,11 @@ public sealed class IctOrchestrationPrendaTests
         await IctOrchestrationService.AplicarResolucionPrendaAsync(
             reply,
             IctPrendaResolucion.Auto(PrendaDecision.Omitir, null, null),
-            _ => Task.FromResult<(PrendaDto?, string?)>((null, RegistrarPrendaHandler.OmitirNoAdmitidoError)),
+            _ => Task.FromResult<(PrendaDto?, string?)>((null, RegistrarPrendaHandler.PrendaNoAdmitidaError)),
             _ => { },
             Ct);
 
-        reply.ErrorCode.Should().Be("prenda_auto_error:prenda_omitir_no_admitido");
+        reply.ErrorCode.Should().Be("prenda_auto_error:prenda_no_admitida_en_tipo");
     }
 
     [Fact]

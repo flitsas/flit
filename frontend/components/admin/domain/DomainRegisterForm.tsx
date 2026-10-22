@@ -82,7 +82,7 @@ export function DomainRegisterForm({ tenantId, domain, onRegistered, onRemoved }
   return (
     <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-3">
       <div>
-        <label htmlFor="domain-host" className="mb-1 block text-xs font-semibold" style={{ color: "#162744" }}>
+        <label htmlFor="domain-host" className="mb-1 block text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }}>
           Dominio de la red
         </label>
         <input
@@ -120,7 +120,7 @@ export function DomainRegisterForm({ tenantId, domain, onRegistered, onRemoved }
           type="submit"
           disabled={saving || removing}
           className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-          style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+          style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
         >
           <Save className="h-3.5 w-3.5" aria-hidden />
           {saving ? "Guardando…" : isChange ? "Cambiar dominio" : "Registrar dominio"}
@@ -146,7 +146,7 @@ export function DomainRegisterForm({ tenantId, domain, onRegistered, onRemoved }
           role="alertdialog"
           aria-label="Confirmar retiro del dominio"
         >
-          <p style={{ color: "#162744" }}>
+          <p style={{ color: "var(--color-flit-primary)" }}>
             ¿Retirar el dominio de esta red? Los usuarios volverán a acceder por el dominio de FLIT.
             El registro histórico se conserva.
           </p>

@@ -412,4 +412,33 @@ public sealed class AdminReenviarValidacionIdentidadHandlerTests
                 && (e.Detail == null || !e.Detail.Contains("comprador@old.com"))),
             ct);
     }
+
+    // ── HU #13286 (Épica #13202): reenviar sobre una fila manual NO la devuelve a Kyverum ───────────────
+
+    [Theory]
+    [InlineData(BiometricEstados.ManualActivo)]
+    [InlineData(BiometricEstados.PendienteRevisionManual)]
+    public async Task FilaManual_NoSeReenviaAKyverum_Devuelve_identidad_manual_YNoMutaLaFila(string estado)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var instanceId = Guid.NewGuid();
+        _repo.GetByIdAsync(instanceId, _tenantId, Arg.Any<CancellationToken>())
+            .Returns(Instance(instanceId, _tenantId, TramiteEstado.Entregado));
+        var validation = SeedTramiteValidation(instanceId, status: estado, provider: BiometricProviders.Manual);
+        StubKyverumOk();
+        var handler = BuildHandler(isKyverum: true);
+
+        var (result, error, _, _) = await handler.HandleAsync(
+            new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, _tenantId, null, null), ct);
+
+        result.Should().BeNull();
+        error.Should().Be("identidad_manual"); // el endpoint responde 409 Conflict
+        validation.Provider.Should().Be(BiometricProviders.Manual);
+        validation.Status.Should().Be(estado);
+        validation.KyverumVerificationId.Should().BeNull();
+        validation.ResendCount.Should().Be(0);
+        await _kyverum.DidNotReceive().StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
+        await _events.DidNotReceiveWithAnyArgs().PublishAsync(default!, ct);
+        await _repo.DidNotReceiveWithAnyArgs().SaveChangesAsync(ct);
+    }
 }

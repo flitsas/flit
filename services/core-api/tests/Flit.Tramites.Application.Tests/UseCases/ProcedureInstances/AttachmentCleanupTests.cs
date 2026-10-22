@@ -109,4 +109,22 @@ public sealed class AttachmentCleanupTests
 
         AttachmentCleanup.EsGeneradoPorElSistema(attachment).Should().BeTrue();
     }
+
+    [Fact]
+    public void HU12797_RetirarGenerados_ConBorradoDiferido_NoTocaStorage_YDevuelveLasRutas()
+    {
+        var instance = Instance();
+        var sistema = Attachment(instance, "mandato", "system", "path/sistema.pdf");
+        instance.Attachments.Add(sistema);
+        var repo = Substitute.For<IProcedureInstanceRepository>();
+        var storage = Substitute.For<IAttachmentStorage>();
+        var diferidos = new List<string>();
+
+        AttachmentCleanup.RetirarGenerados(instance, repo, storage, a => a.Tipo == "mandato", diferidos);
+
+        diferidos.Should().Equal("path/sistema.pdf");
+        storage.DidNotReceiveWithAnyArgs().Delete(default!);
+        instance.Attachments.Should().BeEmpty();
+        repo.Received(1).RemoveAttachment(sistema);
+    }
 }

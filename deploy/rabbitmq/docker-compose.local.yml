@@ -1,0 +1,20 @@
+# RabbitMQ para correr la suite en tu máquina (docs/suite/local.md, sección 0). Mismo broker y definiciones que en la
+# VPS, pero publica 5672 (AMQP) y 15672 (consola) en 127.0.0.1 para que los servicios que corren con `dotnet` lo vean.
+# Se llama `rabbitmq` como en docker-compose.prod.yml, así usuario-de-servicio.sh funciona igual con
+# COMPOSE="docker compose -f deploy/rabbitmq/docker-compose.local.yml".
+name: flit-local
+services:
+  rabbitmq:
+    image: rabbitmq:4.1-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: flit-admin
+      RABBITMQ_DEFAULT_PASS: flit-admin-local
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+      - ./definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ./rabbitmq.conf:/etc/rabbitmq/conf.d/20-flit.conf:ro
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+volumes:
+  rabbitmq-data:

@@ -13,6 +13,7 @@ import {
   User,
   X,
 } from 'lucide-react';
+import { Modal } from '@/components/atom/Modal';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
@@ -24,7 +25,9 @@ import {
   hasKyverumCaptureQr,
   IdentityCaptureLinkBlock,
 } from '@/components/atom/modules/IdentityCaptureLinkBlock';
+import { ApprovalOriginChip, puedeVerOrigenAprobacion } from '@/components/atom/modules/ApprovalOriginChip';
 import { IdentityInfoTile } from '@/components/atom/modules/IdentityInfoTile';
+import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
 import { FLIT } from '@/lib/flit-design-tokens';
 import type { BiometricEstado, BiometricValidation } from '@/lib/api/types/procedure-runtime';
 
@@ -43,6 +46,7 @@ const ESTADO_META: Record<BiometricEstado, { label: string; tone: StatusTone }> 
   expirado: { label: 'Expirado', tone: 'warning' },
   pendiente_envio: { label: 'Pendiente de envío', tone: 'info' },
   error_envio: { label: 'Error de envío', tone: 'danger' },
+  ...MANUAL_ESTADO_META,
 };
 
 const POLL_MS = 5000;
@@ -120,14 +124,6 @@ export function PrevalidacionDetailDrawer({
     return () => clearInterval(timer);
   }, [detail, load]);
 
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   const meta = detail ? (ESTADO_META[detail.status] ?? ESTADO_META.enviado) : null;
   const showCaptura = hasKyverumCaptureQr(detail?.captureUrl);
   const awaiting =
@@ -136,20 +132,14 @@ export function PrevalidacionDetailDrawer({
     (detail.status === 'en_proceso' || detail.status === 'enviado' || detail.status === 'pendiente_envio');
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex justify-end"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="identity-process-title"
-    >
-      <button
-        type="button"
-        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
-        aria-label="Cerrar panel"
-        onClick={onClose}
-      />
-      <aside className="relative z-10 flex h-full w-full max-w-xl flex-col border-l bg-white shadow-2xl dark:bg-[#0B0F14]">
-        <header className="flex shrink-0 items-center justify-between border-b px-5 py-4">
+    <Modal
+      open
+      title={title}
+      onClose={onClose}
+      size="lg"
+      zClassName="z-50"
+      header={({ titleId }) => (
+        <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             <span
               className="grid h-8 w-8 shrink-0 place-items-center rounded-xl"
@@ -158,10 +148,7 @@ export function PrevalidacionDetailDrawer({
             >
               <ScanFace className="h-4 w-4" />
             </span>
-            <h2
-              id="identity-process-title"
-              className="truncate text-sm font-bold text-[#162744] dark:text-white"
-            >
+            <h2 id={titleId} className="truncate text-sm font-bold text-flit-primary dark:text-white">
               {title}
             </h2>
           </div>
@@ -173,9 +160,10 @@ export function PrevalidacionDetailDrawer({
           >
             <X className="h-4 w-4 opacity-70" aria-hidden="true" />
           </button>
-        </header>
-
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+        </div>
+      )}
+    >
+        <div className="space-y-4">
           {loading && !detail && !error && (
             <div role="status" aria-live="polite" aria-busy="true" className="space-y-3">
               <span className="sr-only">Cargando proceso…</span>
@@ -209,9 +197,9 @@ export function PrevalidacionDetailDrawer({
                     </p>
                   </div>
                 ) : (
-                  <p className="text-sm font-semibold text-[#162744] dark:text-white">{detail.name}</p>
+                  <p className="text-sm font-semibold text-flit-primary dark:text-white">{detail.name}</p>
                 )}
-                <StatusBadge label={meta.label} tone={meta.tone} ariaLabel={`Estado: ${meta.label}`} />
+                <StatusBadge label={meta.label} tone={meta.tone} ariaLabel={`Estado: ${meta.label}`} wrap />
               </div>
 
               {/* Campos con iconos — lectura rápida, sin tabla densa */}
@@ -235,6 +223,16 @@ export function PrevalidacionDetailDrawer({
                   label="Score"
                   value={detail.score != null ? String(detail.score) : '—'}
                 />
+                {puedeVerOrigenAprobacion(detail.approvalOrigin) && detail.approvalOrigin ? (
+                  <div className="flex items-start gap-2.5 rounded-xl border px-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide opacity-55">Origen de la aprobación</p>
+                      <div className="mt-1">
+                        <ApprovalOriginChip origin={detail.approvalOrigin} />
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               {/* HU #11069 — trámites asociados a la VID (enlace, id, tipo). */}
@@ -283,7 +281,7 @@ export function PrevalidacionDetailDrawer({
           {showCaptura && <IdentityCaptureLinkBlock captureUrl={detail.captureUrl!} />}
 
               <div className="rounded-xl border p-3">
-                <p className="mb-1 text-[11px] font-semibold text-[#162744] dark:text-white">
+                <p className="mb-1 text-[11px] font-semibold text-flit-primary dark:text-white">
                   Tracking del proceso
                 </p>
                 <p className="mb-2 text-[10px] opacity-60">
@@ -298,7 +296,6 @@ export function PrevalidacionDetailDrawer({
             </div>
           )}
         </div>
-      </aside>
-    </div>
+    </Modal>
   );
 }

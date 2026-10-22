@@ -3,10 +3,22 @@
     <Project Path="src/Flit.Admin.Domain/Flit.Admin.Domain.csproj" />
     <Project Path="src/Flit.Admin.Application/Flit.Admin.Application.csproj" />
     <Project Path="src/Flit.Analytics.Application/Flit.Analytics.Application.csproj" />
+    <Project Path="src/Flit.DrFlit.Application/Flit.DrFlit.Application.csproj" />
     <Project Path="src/Flit.Queries.Domain/Flit.Queries.Domain.csproj" />
     <Project Path="src/Flit.Api/Flit.Api.csproj" />
     <Project Path="src/Flit.Gateway/Flit.Gateway.csproj" />
     <Project Path="src/Flit.Infrastructure/Flit.Infrastructure.csproj" />
+    <Project Path="src/Flit.Identity.Infrastructure/Flit.Identity.Infrastructure.csproj" />
+    <Project Path="src/Flit.Suite.AspNetCore/Flit.Suite.AspNetCore.csproj" />
+    <Project Path="src/Flit.Platform.Sdk/Flit.Platform.Sdk.csproj" />
+    <Project Path="src/Flit.Modules.Consultas/Flit.Modules.Consultas.csproj" />
+    <Project Path="../core-identity/src/Flit.Identity.Application/Flit.Identity.Application.csproj" />
+    <Project Path="../core-identity/src/Flit.Identity.Web/Flit.Identity.Web.csproj" />
+    <Project Path="../core-identity/src/Flit.Identity.Api/Flit.Identity.Api.csproj" />
+    <Project Path="../core-identity/src/Flit.Platform.Grpc.Contracts/Flit.Platform.Grpc.Contracts.csproj" />
+    <Project Path="../core-identity/src/Flit.Identidad.Grpc.Contracts/Flit.Identidad.Grpc.Contracts.csproj" />
+    <Project Path="../core-consultas/src/Flit.Consultas.Grpc.Contracts/Flit.Consultas.Grpc.Contracts.csproj" />
+    <Project Path="src/Flit.Tramites.Grpc.Contracts/Flit.Tramites.Grpc.Contracts.csproj" />
     <Project Path="src/Flit.Tramites.Domain/Flit.Tramites.Domain.csproj" />
     <Project Path="src/Flit.Tramites.Application/Flit.Tramites.Application.csproj" />
     <Project Path="src/Flit.Modules.Security.Application/Flit.Modules.Security.Application.csproj" />
@@ -14,17 +26,24 @@
     <Project Path="src/Flit.Modules.Improntas.Domain/Flit.Modules.Improntas.Domain.csproj" />
     <Project Path="src/Flit.Modules.Quipux.Domain/Flit.Modules.Quipux.Domain.csproj" />
     <Project Path="src/Flit.Modules.Quipux.Application/Flit.Modules.Quipux.Application.csproj" />
+    <Project Path="src/Flit.Modules.Notificaciones/Flit.Modules.Notificaciones.csproj" />
+    <Project Path="src/Flit.Modules.Platform/Flit.Modules.Platform.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Flit.Platform.Sdk.Tests/Flit.Platform.Sdk.Tests.csproj" />
     <Project Path="tests/Flit.Infrastructure.Tests/Flit.Infrastructure.Tests.csproj" />
     <Project Path="tests/Flit.Tramites.Application.Tests/Flit.Tramites.Application.Tests.csproj" />
     <Project Path="tests/Flit.Tramites.Domain.Tests/Flit.Tramites.Domain.Tests.csproj" />
     <Project Path="tests/Flit.Modules.Security.Application.Tests/Flit.Modules.Security.Application.Tests.csproj" />
     <Project Path="tests/Flit.Admin.Tests/Flit.Admin.Tests.csproj" />
     <Project Path="tests/Flit.Analytics.Application.Tests/Flit.Analytics.Application.Tests.csproj" />
+    <Project Path="tests/Flit.DrFlit.Application.Tests/Flit.DrFlit.Application.Tests.csproj" />
     <Project Path="tests/Flit.Modules.Quipux.Application.Tests/Flit.Modules.Quipux.Application.Tests.csproj" />
+    <Project Path="tests/Flit.Modules.Platform.Tests/Flit.Modules.Platform.Tests.csproj" />
     <Project Path="tests/Flit.DataMigration.Tests/Flit.DataMigration.Tests.csproj" />
     <Project Path="tests/Flit.Integration.Tests/Flit.Integration.Tests.csproj" />
+    <Project Path="tests/Flit.Gateway.Tests/Flit.Gateway.Tests.csproj" />
+    <Project Path="../core-identity/tests/Flit.Identity.Tests/Flit.Identity.Tests.csproj" />
   </Folder>
   <!--
     Migracion V1 -> V2. Vive en tools/ y no en src/ a proposito: es andamiaje temporal que se

@@ -33,6 +33,12 @@ internal sealed class IdentityValidationReconcileProcessor(
     /// (~N·2 min) y luego calla en vez de pegarle a Kyverum cada 2 min durante horas.
     /// </summary>
     private const int MaxReconcilePolls = BiometricRules.KyverumMaxReconcilePolls;
+    /// <summary>
+    /// Agotado el presupuesto de sondeos rápidos, se sigue consultando cada tanto hasta que Kyverum resuelva o venza el
+    /// enlace. Empezó solo para la validación propia del mandatario (sin pantalla de espera que consulte); ahora cubre
+    /// todos los roles: un intento aprobado cuyo webhook se perdió quedaba «pendiente» si nadie miraba la pantalla.
+    /// </summary>
+    internal static readonly TimeSpan SlowPollInterval = TimeSpan.FromMinutes(10);
     private const int BatchSize = 10;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -111,7 +117,7 @@ internal sealed class IdentityValidationReconcileProcessor(
             return true;
         }
 
-        var claimedId = await ClaimNextIdAsync(db, now - Staleness, ct);
+        var claimedId = await ClaimNextIdAsync(db, now - Staleness, ct, now - SlowPollInterval);
         if (claimedId is null)
         {
             await tx.CommitAsync(ct);
@@ -125,6 +131,7 @@ internal sealed class IdentityValidationReconcileProcessor(
 
         KyverumVerifyStatus? status = null;
         var updated = false;
+        var sinRespuesta = false;
         try
         {
             status = await kyverum.GetStatusAsync(v.KyverumVerificationId!, v.PartyRole, ct);
@@ -134,6 +141,7 @@ internal sealed class IdentityValidationReconcileProcessor(
         catch (KyverumVerifyException ex)
         {
             // Transitorio/definitivo: no se bloquea la cola; se reintenta en el próximo ciclo tras la ventana.
+            sinRespuesta = ex.Transient;
             ReconcileLog.PollFailed(logger, v.Id, ex.Transient, ex);
             await audit.LogAsync(new IdentityValidationAuditEntry(
                 IdentityValidationAuditStages.Reconcile, IdentityValidationAuditOutcomes.Error,
@@ -143,14 +151,7 @@ internal sealed class IdentityValidationReconcileProcessor(
                 Message: "Worker: falló la consulta de estado; se reintenta."), ct);
         }
 
-        // Estampa updated_at siempre (aunque siga pendiente) para no re-sondear dentro de la ventana de frescura,
-        // y consume una unidad del presupuesto de sondeo: al agotarlo el worker deja de reclamar esta validación
-        // hasta que una señal nueva (intento por webhook, (re)envío o reconcile manual) lo reinicie a 0.
-        if (v.Status is BiometricEstados.EnProceso or BiometricEstados.Enviado)
-        {
-            v.UpdatedAt = now;
-            v.ReconcilePollCount += 1;
-        }
+        EstamparSondeo(v, now, sinRespuesta);
 
         try
         {
@@ -196,11 +197,35 @@ internal sealed class IdentityValidationReconcileProcessor(
         string.IsNullOrEmpty(message) || message.Length <= 300 ? message : message[..300];
 
     /// <summary>
+    /// Estampa <c>updated_at</c> siempre (aunque siga pendiente) para no re-sondear dentro de la ventana de frescura, y
+    /// consume una unidad del presupuesto de sondeo: al agotarlo el worker deja de reclamar esta validación hasta que una
+    /// señal nueva (intento por webhook, (re)envío o reconcile manual) lo reinicie a 0.
+    /// HU #13351: un fallo transitorio (Consultas o Kyverum sin responder) NO consume presupuesto, porque no hubo respuesta
+    /// del proveedor. Si lo consumiera, una caída de unos minutos agotaba los sondeos y una validación ya resuelta en
+    /// Kyverum quedaba «en proceso» cuando el servicio volvía. La ventana de frescura sigue espaciando los intentos.
+    /// HU #13444: también se estampa un rechazo aplicado con intentos disponibles, que el worker sigue consultando.
+    /// </summary>
+    internal static void EstamparSondeo(ProcedureInstanceBiometricValidation v, DateTimeOffset now, bool sinRespuesta)
+    {
+        if (!(v.Status is BiometricEstados.EnProceso or BiometricEstados.Enviado
+              || BiometricRules.EsRechazoKyverumConIntentosDisponibles(v)))
+            return;
+        v.UpdatedAt = now;
+        if (!sinRespuesta)
+            v.ReconcilePollCount += 1;
+    }
+
+    /// <summary>
     /// Reclama la validación Kyverum <c>en_proceso</c> más antigua no expirada cuyo último toque
     /// (<c>updated_at</c> o <c>created_at</c>) sea anterior a <paramref name="cutoff"/>, con
     /// <c>FOR UPDATE SKIP LOCKED</c>. Devuelve null si no hay ninguna reclamable.
     /// </summary>
-    private static async Task<Guid?> ClaimNextIdAsync(FlitDbContext db, DateTimeOffset cutoff, CancellationToken ct)
+    /// <param name="slowCutoff">
+    /// Corte del sondeo lento de las validaciones que ya agotaron el presupuesto rápido. Nulo ⇒
+    /// <paramref name="cutoff"/> menos <see cref="SlowPollInterval"/> (relativo al corte rápido).
+    /// </param>
+    internal static async Task<Guid?> ClaimNextIdAsync(
+        FlitDbContext db, DateTimeOffset cutoff, CancellationToken ct, DateTimeOffset? slowCutoff = null)
     {
         var connection = db.Database.GetDbConnection();
         var transaction = db.Database.CurrentTransaction!.GetDbTransaction();
@@ -210,12 +235,17 @@ internal sealed class IdentityValidationReconcileProcessor(
         cmd.CommandText = """
             SELECT id
             FROM tramites.procedure_instance_biometric_validations v
-            WHERE status = @status
+            WHERE (status = @status
+                   -- Rechazo aplicado antes de agotar los intentos (BiometricRules.EsRechazoKyverumConIntentosDisponibles):
+                   -- se sigue consultando por si la persona aprobó en un intento posterior del mismo enlace.
+                   OR (status = @rechazado AND rejection_reason_code IS NULL
+                       AND max_attempts > 0 AND attempts < max_attempts))
               AND provider = @provider
               AND kyverum_verification_id IS NOT NULL
               AND expires_at > now()
-              AND reconcile_poll_count < @maxPolls
               AND COALESCE(updated_at, created_at) < @cutoff
+              AND (reconcile_poll_count < @maxPolls
+                   OR COALESCE(updated_at, created_at) < @slowCutoff)
               AND NOT EXISTS (
                   SELECT 1 FROM tramites.procedure_instances pi
                   WHERE pi.id = v.procedure_instance_id AND pi.status IN ('anulado', 'revocado'))
@@ -224,9 +254,11 @@ internal sealed class IdentityValidationReconcileProcessor(
             FOR UPDATE SKIP LOCKED
             """;
         AddParam(cmd, "status", BiometricEstados.EnProceso);
+        AddParam(cmd, "rechazado", BiometricEstados.Rechazado);
         AddParam(cmd, "provider", BiometricProviders.Kyverum);
         AddParam(cmd, "maxPolls", MaxReconcilePolls);
         AddParam(cmd, "cutoff", cutoff);
+        AddParam(cmd, "slowCutoff", slowCutoff ?? cutoff - SlowPollInterval);
 
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? reader.GetGuid(0) : null;
@@ -237,7 +269,7 @@ internal sealed class IdentityValidationReconcileProcessor(
     /// (<c>expires_at &lt;= @now</c>), con <c>FOR UPDATE SKIP LOCKED</c>. No consulta a Kyverum: solo se usa
     /// para terminalizarla como <c>expirado</c>. Devuelve null si no hay ninguna reclamable.
     /// </summary>
-    private static async Task<Guid?> ClaimNextExpiredIdAsync(FlitDbContext db, DateTimeOffset now, CancellationToken ct)
+    internal static async Task<Guid?> ClaimNextExpiredIdAsync(FlitDbContext db, DateTimeOffset now, CancellationToken ct)
     {
         var connection = db.Database.GetDbConnection();
         var transaction = db.Database.CurrentTransaction!.GetDbTransaction();

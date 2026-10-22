@@ -93,6 +93,8 @@ public sealed class NetworkRoleGateTests : IClassFixture<NetworkRoleGateTests.Ga
         { "GET", $"{Prefix}/instances/{{id:guid}}/attachments" },
         { "GET", $"{Prefix}/instances/{{id:guid}}/attachments/{{attachmentId:guid}}/download" },
         { "GET", $"{Prefix}/children" },
+        // Ajuste #13419 AC5 (HU #13417) — disponibilidad de documentos de red para la vista de red.
+        { "GET", $"{Prefix}/documentos" },
         // HU #12708 — Validación de Identidad de la red (solo lectura).
         { "GET", $"{Prefix}/identity-validations/by-person" },
         { "GET", $"{Prefix}/identity-validations/by-person/detail" },
@@ -207,7 +209,7 @@ public sealed class NetworkRoleGateTests : IClassFixture<NetworkRoleGateTests.Ga
         counts.StatusCode.Should().Be(HttpStatusCode.OK);
         stats.StatusCode.Should().Be(HttpStatusCode.OK);
         await _factory.Analytics.Received(1).GetNetworkOverviewAsync(
-            Arg.Is<IReadOnlySet<Guid>>(s => s.SetEquals(new[] { P, C1, C2 })), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>());
+            Arg.Is<IReadOnlySet<Guid>>(s => s.SetEquals(new[] { P, C1, C2 })), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), null, Arg.Any<CancellationToken>());
     }
 
     [Theory]
@@ -374,7 +376,7 @@ public sealed class NetworkRoleGateTests : IClassFixture<NetworkRoleGateTests.Ga
                 .Returns(new Dictionary<string, int> { ["entregado"] = 2 });
             Instances.ListTenantIdsWithMatchesAsync(Arg.Any<TenantScope>(), Arg.Any<ProcedureInstanceListFilter>(), Arg.Any<CancellationToken>())
                 .Returns(new List<Guid> { C1 });
-            Analytics.GetNetworkOverviewAsync(Arg.Any<IReadOnlySet<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+            Analytics.GetNetworkOverviewAsync(Arg.Any<IReadOnlySet<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), null, Arg.Any<CancellationToken>())
                 .Returns(call =>
                 {
                     var set = call.ArgAt<IReadOnlySet<Guid>>(0);

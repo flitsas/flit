@@ -60,10 +60,10 @@ export function IdentityActionsBlock({
         data-testid="rl-identity-block"
         aria-label="Validación de identidad"
       >
-        <p className="text-[11px] font-bold uppercase tracking-wide opacity-60">
+        <p className="text-xs font-bold uppercase tracking-wide opacity-60">
           Validación de identidad
         </p>
-        <p className="mt-2 text-[11px] opacity-60" data-testid="rl-identity-create-note">
+        <p className="mt-2 text-xs opacity-60" data-testid="rl-identity-create-note">
           Al guardar el representante, la identidad se asociará automáticamente si la persona ya
           tiene una validación aprobada y vigente en el módulo Identidad.
         </p>
@@ -78,21 +78,21 @@ export function IdentityActionsBlock({
       data-testid="rl-identity-block"
       aria-label="Validación de identidad"
     >
-      <p className="text-[11px] font-bold uppercase tracking-wide opacity-60">
+      <p className="text-xs font-bold uppercase tracking-wide opacity-60">
         Validación de identidad
       </p>
 
       {/* Los dos rótulos SIEMPRE, sin fusionarse en una sola cadena (HU #11756, CF-04) */}
       <div className="flex flex-wrap items-center gap-2">
         <span
-          className="inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold"
+          className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold"
           style={idUi.style}
           data-testid="rl-identity-status-badge"
         >
           {identidadRotulo(identityStatus)}
         </span>
         <span
-          className="inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold"
+          className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold"
           style={
             firmaBaulVigente
               ? { background: RL_COLOR.successBg, color: RL_COLOR.successText }
@@ -106,7 +106,7 @@ export function IdentityActionsBlock({
 
       {/* Copy por estado (CF-03): invita al módulo Identidad solo cuando aplica (D8 ADR-0025 manda) */}
       {copy.message && (
-        <p className="text-[11px] opacity-70" data-testid="rl-identity-copy">
+        <p className="text-xs opacity-70" data-testid="rl-identity-copy">
           {copy.message}
           {copy.showLink && (
             <>

@@ -6,6 +6,7 @@ import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { GeneracionDocumentalTabs } from "@/components/admin/generacion-documental/GeneracionDocumentalTabs";
 import { BatchProgressPanel } from "@/components/admin/generacion-documental/BatchProgressPanel";
 import { generacionDocumentalTabPath } from "@/components/admin/generacion-documental/generacion-documental-nav";
+import { ADMIN_BACK_LINK_CLS, ADMIN_CONTENT_SURFACE_CLS } from "@/components/admin/admin-ui-styles";
 
 /**
  * Seguimiento de un lote XLSX (HU #12211; CF-13, CF-14, CF-15).
@@ -30,8 +31,7 @@ export default function AdminGeneracionDocumentalLoteDetallePage() {
       <button
         type="button"
         onClick={() => router.push(generacionDocumentalTabPath("lotes"))}
-        className="flex w-fit items-center gap-1.5 text-xs font-semibold"
-        style={{ color: "#557EFF" }}
+        className={ADMIN_BACK_LINK_CLS}
       >
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
         Volver a Carga masiva
@@ -42,7 +42,7 @@ export default function AdminGeneracionDocumentalLoteDetallePage() {
         subtitle="Avance en vivo de la carga masiva, detalle de cada fila y descarga de los documentos que sí salieron."
       />
 
-      <div className="flex flex-1 flex-col rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60">
+      <div className={ADMIN_CONTENT_SURFACE_CLS}>
         <GeneracionDocumentalTabs activeId="lotes" />
         <div className="mt-4">
           {batchId ? (

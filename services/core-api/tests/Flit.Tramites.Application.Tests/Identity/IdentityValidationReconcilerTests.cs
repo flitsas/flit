@@ -96,17 +96,98 @@ public sealed class IdentityValidationReconcilerTests
     }
 
     [Fact]
-    public async Task Rechazado_SenalDeCierreDelProveedor_TerminalizaAunConIntentosDisponibles()
+    public async Task Rechazado_ConSenalDeCierre_PeroConIntentosDisponibles_NoTerminaliza()
     {
-        // "rechazado" (ya normalizado por KyverumVerifyClient a partir de result.closedAt) es AUTORITATIVO:
-        // Kyverum cerró la validación, así que se aplica terminal aunque el conteo local aún tenga margen.
+        // Kyverum trae result.closedAt también tras un intento intermedio: con 1 de 3 intentos el rechazo NO es
+        // terminal; la fila sigue en_proceso y el aprobado del intento siguiente se aplica.
         var ct = TestContext.Current.CancellationToken;
         var v = Seed(attempts: 1, maxAttempts: 3, procedureInstanceId: Guid.NewGuid());
+        var status = new KyverumVerifyStatus("rechazado", 20, "{\"status\":\"rechazado\"}");
+
+        await IdentityValidationReconciler.ApplyStatusAsync(_applier, v, status, _now, ct);
+
+        v.Status.Should().Be(BiometricEstados.EnProceso);
+        await _events.DidNotReceive().PublishAsync(Arg.Any<IdentityValidationEvent>(), Arg.Any<CancellationToken>());
+
+        var aprobado = new KyverumVerifyStatus("aprobado", 90, "{\"status\":\"aprobado\"}");
+        (await IdentityValidationReconciler.ApplyStatusAsync(_applier, v, aprobado, _now.AddMinutes(3), ct))
+            .Should().BeTrue();
+        v.Status.Should().Be(BiometricEstados.Aprobado);
+    }
+
+    [Fact]
+    public async Task Rechazado_ConSenalDeCierre_ConIntentosAgotados_Terminaliza()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var v = Seed(attempts: 3, maxAttempts: 3, procedureInstanceId: Guid.NewGuid());
         var status = new KyverumVerifyStatus("rechazado", 20, "{\"status\":\"rechazado\"}");
 
         var updated = await IdentityValidationReconciler.ApplyStatusAsync(_applier, v, status, _now, ct);
 
         updated.Should().BeTrue();
         v.Status.Should().Be(BiometricEstados.Rechazado);
+    }
+
+    [Theory]
+    [InlineData(null)] // prevalidación standalone
+    [InlineData("procedure")] // identidad de trámite (comprador)
+    [InlineData("mandatario")] // validación propia del mandatario
+    public async Task Aprobado_ReemplazaRechazoAplicadoAntesDeAgotarLosIntentos(string? rol)
+    {
+        // Fila que una versión anterior dejó en rechazado con 1 de 3 intentos: la persona aprobó en el segundo
+        // intento del mismo enlace y ese aprobado debe aplicarse, con su evento.
+        var ct = TestContext.Current.CancellationToken;
+        var v = Seed(attempts: 1, maxAttempts: 3, procedureInstanceId: rol == "procedure" ? Guid.NewGuid() : null);
+        if (rol == "mandatario")
+        {
+            v.PartyRole = BiometricRules.ParteMandatario;
+            v.MandateSignerId = Guid.NewGuid();
+        }
+        v.Status = BiometricEstados.Rechazado;
+
+        var aprobado = new KyverumVerifyStatus("aprobado", 91, "{\"status\":\"aprobado\"}", FirmaSerie: "SER-1");
+        var updated = await IdentityValidationReconciler.ApplyStatusAsync(_applier, v, aprobado, _now, ct);
+
+        updated.Should().BeTrue();
+        v.Status.Should().Be(BiometricEstados.Aprobado);
+        v.ValidatedAt.Should().Be(_now);
+        v.CertificateHash.Should().Be("SER-1");
+        await _events.Received(1).PublishAsync(
+            Arg.Is<IdentityValidationCompleted>(e => e.ValidationId == v.Id && e.Estado == BiometricEstados.Aprobado),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(3, BiometricProviders.Kyverum, null)] // intentos agotados: el rechazo es definitivo
+    [InlineData(1, BiometricProviders.Manual, null)] // flujo manual: no lo decide Kyverum
+    [InlineData(1, BiometricProviders.Kyverum, "documento_ilegible")] // rechazo de la revisión humana
+    public async Task Aprobado_NoReemplazaUnRechazoDefinitivo(int attempts, string provider, string? motivoManual)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var v = Seed(attempts, maxAttempts: 3, procedureInstanceId: Guid.NewGuid());
+        v.Status = BiometricEstados.Rechazado;
+        v.Provider = provider;
+        v.RejectionReasonCode = motivoManual;
+
+        var aprobado = new KyverumVerifyStatus("aprobado", 91, "{\"status\":\"aprobado\"}");
+        var updated = await IdentityValidationReconciler.ApplyStatusAsync(_applier, v, aprobado, _now, ct);
+
+        updated.Should().BeFalse();
+        v.Status.Should().Be(BiometricEstados.Rechazado);
+        await _events.DidNotReceive().PublishAsync(Arg.Any<IdentityValidationEvent>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RechazoAplicadoAntesDeAgotarLosIntentos_UnNuevoRechazoNoLoCambia()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var v = Seed(attempts: 1, maxAttempts: 3, procedureInstanceId: Guid.NewGuid());
+        v.Status = BiometricEstados.Rechazado;
+
+        var rechazo = new KyverumVerifyStatus("rechazado", 20, "{\"status\":\"rechazado\"}");
+        (await IdentityValidationReconciler.ApplyStatusAsync(_applier, v, rechazo, _now, ct)).Should().BeFalse();
+
+        v.Status.Should().Be(BiometricEstados.Rechazado);
+        await _events.DidNotReceive().PublishAsync(Arg.Any<IdentityValidationEvent>(), Arg.Any<CancellationToken>());
     }
 }

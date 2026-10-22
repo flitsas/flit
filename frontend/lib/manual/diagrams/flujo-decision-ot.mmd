@@ -1,0 +1,10 @@
+flowchart TD
+    A["El trámite llega Entregado\na tu bandeja"] --> B["Ábrelo: revisa vehículo,\nactores, documentos y\ntransformaciones declaradas"]
+    B --> C{"¿Necesita placa?\n(matrícula en ruta larga)"}
+    C -- "Sí" --> D["Asigna la placa\n(o libérala si te equivocaste)"]
+    D --> E
+    C -- "No" --> E{"Tu decisión"}
+    E -- "Aprobar" --> F["Aprobado:\nel gestor y su cliente\nquedan notificados"]
+    E -- "Rechazar" --> G["Elige la causal\ny explica el motivo"]
+    G --> H["Rechazado: la compañía\npuede subsanar y reenviar"]
+    H --> A

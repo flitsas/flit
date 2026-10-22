@@ -59,6 +59,13 @@ import type { WizardStepFormHandle } from './wizard-step-form';
 import { BiometricStep } from './BiometricStep';
 import { FirmaFurStep } from './FirmaFurStep';
 import { blockerCopy, identidadAutomaticaCopy, stepLabelCopy } from './wizard-copy';
+import {
+  MANDATARIO_ALERTA_ID,
+  MandatarioFirmaIndicator,
+  mandatarioBloqueaRadicacion,
+  mensajeRechazoMandatario,
+  useMandatarioPrevisto,
+} from './MandatarioFirmaIndicator';
 import { canNavigateToStep, frontierIndex } from './wizard-navigation';
 import { WizardReadOnlyProvider, useWizardReadOnly } from './WizardReadOnlyContext';
 import { DeclaracionesTramite } from './DeclaracionesTramite';
@@ -88,6 +95,7 @@ import {
   type VehicleStateBlockInfo,
 } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
+import { COPY } from '@/lib/copy/copy-catalog';
 import { decodeJwtPayload } from '@/lib/auth/jwt';
 import {
   isTenantOwnDocument,
@@ -319,8 +327,8 @@ const READ_ONLY_NOTICE: Record<string, ReadOnlyNoticeStyle> = {
     titulo: 'Enviado a tránsito — solo visualización.',
     detalle:
       'Este trámite ya no puede editarse, pero aún puedes generar o descargar el expediente consolidado.',
-    border: '#557EFF',
-    bg: 'rgba(85,126,255,0.06)',
+    border: 'var(--color-flit-brand)',
+    bg: 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)',
   },
   aprobado: {
     titulo: 'Trámite aprobado — solo visualización.',
@@ -359,8 +367,8 @@ const READ_ONLY_NOTICE: Record<string, ReadOnlyNoticeStyle> = {
 const READ_ONLY_NOTICE_FALLBACK: ReadOnlyNoticeStyle = {
   titulo: 'Solo visualización.',
   detalle: 'Este trámite no puede editarse en su estado actual.',
-  border: '#557EFF',
-  bg: 'rgba(85,126,255,0.06)',
+  border: 'var(--color-flit-brand)',
+  bg: 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)',
 };
 
 function ReadOnlyStateNotice({
@@ -380,7 +388,7 @@ function ReadOnlyStateNotice({
   return (
     <div
       className="rounded-xl p-3 text-xs border shrink-0 flex items-start gap-2"
-      style={{ borderColor: notice.border, background: notice.bg, color: '#162744' }}
+      style={{ borderColor: notice.border, background: notice.bg, color: 'var(--color-flit-primary)' }}
       role="status"
       aria-live="polite"
     >
@@ -502,6 +510,9 @@ export function TramiteWizard(props: Props) {
   // de ellos los tres modos del wizard (ver más abajo). Los trámites nuevos arrancan editables.
   const [instanceStatus, setInstanceStatus] = useState<InstanceStatus | null>(null);
   const [draftFinalizedAt, setDraftFinalizedAt] = useState<string | null>(null);
+  // HU #13403 — la compañía puede tener la generación automática de improntas deshabilitada. El flag
+  // viene en el detalle del trámite; ausente/undefined ⇒ true (comportamiento histórico).
+  const [improntaGenInstancia, setImprontaGeneracionHabilitada] = useState(true);
   // HU #12575 (Feature #12565, AC1) — sub-estado ACTIVO de revocatoria (badge secundario en la franja
   // de identidad), ORTOGONAL a `estadoTramite` (que sigue 'aprobado', ADR-0022). Se lee con el resto
   // del detalle inicial. (El botón "Solicitar revocatoria"/AC1-AC3, HU #12573-#12574, ya no vive en
@@ -536,6 +547,7 @@ export function TramiteWizard(props: Props) {
         if (!active) return;
         setInstanceStatus(d.status ?? null);
         setDraftFinalizedAt(d.draftFinalizedAt ?? null);
+        setImprontaGeneracionHabilitada(d.improntaGeneracionHabilitada !== false);
         setStatusHistory(d.statusHistory ?? []);
         setReferenceNumber(d.referenceNumber ?? null);
         setActiveRevocationRequest(d.activeRevocationRequest ?? null);
@@ -589,6 +601,15 @@ export function TramiteWizard(props: Props) {
     error: wizardError,
     refresh,
   } = useWizard(instanceId, undefined, deferredCreation ? entryProcedureTypeCode : undefined);
+
+  // HU #13403 — deshabilitada si CUALQUIERA de las dos lecturas del detalle lo dice (la inicial de la
+  // instancia existente o la del reducer, que cubre también el trámite recién creado en esta sesión).
+  const improntaGeneracionHabilitada =
+    improntaGenInstancia && state.detail?.improntaGeneracionHabilitada !== false;
+  const improntaGeneracionRef = useRef(true);
+  useEffect(() => {
+    improntaGeneracionRef.current = improntaGeneracionHabilitada;
+  }, [improntaGeneracionHabilitada]);
 
   // N 03 — estado de negocio del trámite: manda el del wizard (se refresca tras cada acción);
   // fallback al fetch inicial de la instancia existente mientras el wizard carga.
@@ -892,7 +913,10 @@ export function TramiteWizard(props: Props) {
       show('Trámite re-radicado a tránsito correctamente.', 'success');
       onExit();
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : 'No se pudo re-radicar el trámite.');
+      setSubmitError(
+        mensajeRechazoMandatario(err) ??
+          (err instanceof Error ? err.message : 'No se pudo re-radicar el trámite.'),
+      );
       setReradicando(false);
     }
   }, [instanceId, reradicando, telemetry, show, onExit]);
@@ -929,9 +953,21 @@ export function TramiteWizard(props: Props) {
     }
   };
 
+  // HU #13146 — quién firmará el mandato (solo lectura) y gate de radicación en modo block. Solo se
+  // consulta en el paso de decisión; un fallo de consulta no bloquea (decide el backend al radicar).
+  const { data: mandatarioPrevisto, loading: mandatarioCargando } = useMandatarioPrevisto(
+    instanceId,
+    activeStep?.key === 'fur',
+    `${instanceStatus ?? ''}|${
+      state.detail?.fieldValues?.find((f) => f.fieldKey === 'transit_office_name')?.valueText ?? ''
+    }`,
+  );
+  const mandatarioBloquea = mandatarioBloqueaRadicacion(mandatarioPrevisto);
+
   // Gate de Re-radicar (Feature #11066): checklist del OT resuelto + al menos una edición guardada
   // y sin cambios sueltos. Los tres motivos se explican en el `title` del botón, no solo con el gris.
   const reradicarHabilitado =
+    !mandatarioBloquea &&
     !!instanceId &&
     inSubsanacion &&
     checklistResuelto &&
@@ -1254,10 +1290,13 @@ export function TramiteWizard(props: Props) {
         } catch {
           // Puede existir ya; el consolidado fallará si realmente falta.
         }
-        try {
-          await tramitesClient.generarImpronta(id);
-        } catch {
-          // Best-effort: sin impronta no bloquea el consolidado en backend (HU #11017).
+        // HU #13403 — con la generación deshabilitada la impronta se carga a mano: no se genera.
+        if (improntaGeneracionRef.current) {
+          try {
+            await tramitesClient.generarImpronta(id);
+          } catch {
+            // Best-effort: sin impronta no bloquea el consolidado en backend (HU #11017).
+          }
         }
         const result = await tramitesClient.generarConsolidado(id, undefined, true);
         if (!result.incompleto) {
@@ -1327,7 +1366,8 @@ export function TramiteWizard(props: Props) {
       setSubmitting(false);
     } catch (err) {
       setSubmitError(
-        err instanceof Error ? err.message : 'Error al enviar el trámite',
+        mensajeRechazoMandatario(err) ??
+          (err instanceof Error ? err.message : 'Error al enviar el trámite'),
       );
       setSubmitting(false);
     }
@@ -1757,7 +1797,7 @@ export function TramiteWizard(props: Props) {
               onExit();
             }}
             disabled={cancelandoSubsanacion}
-            className="mt-1 shrink-0 rounded-md text-xs font-medium hover:opacity-100 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#557EFF]"
+            className="mt-1 shrink-0 rounded-md text-xs font-medium hover:opacity-100 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-flit-brand"
             style={{ color: puedeCancelarSubsanacion ? '#C2410C' : '#59677D' }}
             aria-label={
               puedeCancelarSubsanacion
@@ -1783,13 +1823,13 @@ export function TramiteWizard(props: Props) {
         </div>
 
         {/* Franja de identidad del expediente (prototipo Lovable MatriculaInicial / Traspaso):
-            pastilla azul sólido `#557EFF`, rótulos white/80, valores blancos, chip de estado
+            pastilla azul sólido `var(--color-flit-brand)`, rótulos white/80, valores blancos, chip de estado
             glass (border-white/30 + bg-white/15). Autoridad visual: prototipo + captura de
             referencia del PO — no sustituir por tinte claro. */}
         {(refLabel || identificador) && (
           <div
             className="mx-auto mt-1.5 flex w-fit max-w-full flex-wrap items-center justify-center gap-x-6 gap-y-1 rounded-xl px-4 py-1.5"
-            style={{ background: '#557EFF', color: '#fff' }}
+            style={{ background: 'var(--color-flit-brand)', color: '#fff' }}
             data-testid="tramite-identity-strip"
           >
             {refLabel && (
@@ -1845,7 +1885,7 @@ export function TramiteWizard(props: Props) {
                     type="button"
                     onClick={() => void activarSubsanacion()}
                     disabled={activandoSubsanacion}
-                    className="inline-flex items-center gap-1.5 rounded-xl px-5 py-2 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#557EFF]"
+                    className="inline-flex items-center gap-1.5 rounded-xl px-5 py-2 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-flit-brand"
                     style={{ background: WIZARD_CTA_GRADIENT }}
                     title="Reabre el trámite para corregir lo que observó el organismo de tránsito y volver a radicarlo"
                   >
@@ -1881,7 +1921,7 @@ export function TramiteWizard(props: Props) {
       {draftFinalized && (
         <div
           className="flex items-start gap-2 rounded-xl border p-3 text-xs"
-          style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.08)', color: '#162744' }}
+          style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.08)', color: 'var(--color-flit-primary)' }}
           role="status"
           aria-live="polite"
         >
@@ -1965,6 +2005,7 @@ export function TramiteWizard(props: Props) {
                 tipoCodigo={tipoCodigo}
                 instanceId={instanceId}
                 instanceStatus={estadoTramite}
+                improntaGeneracionHabilitada={improntaGeneracionHabilitada}
                 preflight={preflight}
                 preflightLoading={preflightLoading}
                 onRunPreflight={runPreflight}
@@ -1983,6 +2024,8 @@ export function TramiteWizard(props: Props) {
                 rnmcEnabled={wizard?.rnmcEnabled ?? false}
                 esMigrado={wizard?.esMigrado ?? false}
                 prendaDocumentRequired={wizard?.prendaDocumentRequired ?? true}
+                prendaOmitAllowed={wizard?.prendaOmitAllowed}
+                runtReportaGravamen={wizard?.runtReportaGravamen}
                 onPrendaDocumentGateChange={setPrendaDocGateOk}
                 deferredFamily={deferredCreation ? entryFamily : undefined}
                 onSimultaneosGateChange={setSimultaneosGateOk}
@@ -2038,6 +2081,16 @@ export function TramiteWizard(props: Props) {
               </InlineAlert>
             )}
 
+          {/* HU #13146 — frase de solo lectura de quién firmará el contrato de mandato, o la alerta
+              de falta de mandatario (error en block, aviso en warn). */}
+          {isDecisionStep && (
+            <MandatarioFirmaIndicator
+              data={mandatarioPrevisto}
+              loading={mandatarioCargando}
+              className="mt-6"
+            />
+          )}
+
           {/* Bloqueos de envío traducidos (en el paso de decisión). */}
           {isDecisionStep && blockers.length > 0 && (
             <InlineAlert
@@ -2068,12 +2121,16 @@ export function TramiteWizard(props: Props) {
                   onClick={() => setConfirmRadicar(true)}
                   disabled={
                     submitting ||
+                    mandatarioBloquea ||
                     (!fullReadOnly && !canRadicar && draftFinalized)
                   }
-                  className={`${WIZARD_BTN} text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
+                  aria-describedby={mandatarioBloquea ? MANDATARIO_ALERTA_ID : undefined}
+                  className={`${WIZARD_BTN} text-white focus-visible:ring-flit-brand disabled:opacity-50`}
                   style={{ background: WIZARD_CTA_GRADIENT_DONE }}
                   title={
-                    fullReadOnly
+                    mandatarioBloquea
+                      ? 'Sin mandatario válido no se puede radicar: pide que lo configuren'
+                      : fullReadOnly
                       ? 'Entrega el trámite al organismo de tránsito'
                       : canRadicar
                         ? 'Prepara y radica el trámite en un solo paso'
@@ -2093,7 +2150,7 @@ export function TramiteWizard(props: Props) {
               // Misma altura que las acciones de la derecha: en la propuesta el pie es una sola
               // línea de botones, y un "Anterior" más bajo la partía en dos.
               className={`${WIZARD_BTN} flex items-center gap-1 border focus-visible:ring-[#162744] disabled:opacity-30`}
-              style={{ borderColor: '#162744', color: '#162744' }}
+              style={{ borderColor: '#162744', color: 'var(--color-flit-primary)' }}
             >
               <ChevronLeft className="h-3 w-3" /> Anterior
             </button>
@@ -2147,7 +2204,7 @@ export function TramiteWizard(props: Props) {
                       })();
                     }}
                     disabled={continuing || reradicando}
-                    className={`${WIZARD_BTN} flex items-center gap-1 text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
+                    className={`${WIZARD_BTN} flex items-center gap-1 text-white focus-visible:ring-flit-brand disabled:opacity-50`}
                     style={{ background: WIZARD_CTA_GRADIENT }}
                     title="Guarda los cambios de este paso y habilita Re-radicar"
                   >
@@ -2161,7 +2218,7 @@ export function TramiteWizard(props: Props) {
                     type="button"
                     onClick={() => void reradicar()}
                     disabled={!reradicarHabilitado}
-                    className={`${WIZARD_BTN} flex items-center gap-1 text-white focus-visible:ring-[#00DBD5] disabled:opacity-50`}
+                    className={`${WIZARD_BTN} flex items-center gap-1 text-white focus-visible:ring-flit-tech disabled:opacity-50`}
                     style={{
                       background: reradicarHabilitado ? WIZARD_CTA_GRADIENT_DONE : '#94A3B8',
                     }}
@@ -2183,7 +2240,7 @@ export function TramiteWizard(props: Props) {
                 <button
                   onClick={() => void handleFinalizeDraft()}
                   disabled={!canSubmit || submitting}
-                  className={`${WIZARD_BTN} text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
+                  className={`${WIZARD_BTN} text-white focus-visible:ring-flit-brand disabled:opacity-50`}
                   style={{ background: WIZARD_CTA_GRADIENT }}
                 >
                   {submitting ? 'Finalizando…' : 'Finalizar'}
@@ -2193,7 +2250,7 @@ export function TramiteWizard(props: Props) {
               <button
                 onClick={() => goToStep(activeIndex + 1)}
                 disabled={!canNavigateToStep(steps, activeIndex + 1, navViewOnly)}
-                className={`${WIZARD_BTN} flex items-center gap-1 text-white focus-visible:ring-[#557EFF] disabled:opacity-50`}
+                className={`${WIZARD_BTN} flex items-center gap-1 text-white focus-visible:ring-flit-brand disabled:opacity-50`}
                 style={{ background: WIZARD_CTA_GRADIENT }}
               >
                 Continuar
@@ -2218,7 +2275,7 @@ export function TramiteWizard(props: Props) {
                 <button
                   onClick={() => void handleContinue()}
                   disabled={continueDisabled}
-                  className={`${WIZARD_BTN} text-white focus-visible:ring-[#557EFF] disabled:opacity-40`}
+                  className={`${WIZARD_BTN} text-white focus-visible:ring-flit-brand disabled:opacity-40`}
                   // Deshabilitado en gris pleno, no el degradado atenuado: media opacidad sobre un
                   // degradado deja un azul lavado que sigue leyéndose como acción disponible.
                   style={{ background: continueDisabled ? '#94A3B8' : WIZARD_CTA_GRADIENT }}
@@ -2262,7 +2319,7 @@ export function TramiteWizard(props: Props) {
                 disabled={anulando}
                 aria-describedby={errorAnulacion ? 'wizard-motivo-anulacion-err' : undefined}
                 placeholder="Por qué se anula este trámite"
-                className="mt-1.5 w-full rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs outline-none transition focus:border-[#557EFF] focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-50 dark:border-white/15 dark:bg-white/5"
+                className="mt-1.5 w-full rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs outline-none transition focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50 dark:border-white/15 dark:bg-white/5"
               />
               <p className="mt-1 text-[11px] opacity-60">
                 Queda en la trazabilidad del trámite.
@@ -2296,7 +2353,7 @@ export function TramiteWizard(props: Props) {
                 setErrorAnulacion(null);
               }}
               disabled={anulando}
-              className="rounded-xl border px-4 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-50"
+              className="rounded-xl border px-4 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50"
             >
               Continuar editando
             </button>
@@ -2327,7 +2384,7 @@ export function TramiteWizard(props: Props) {
             <button
               type="button"
               onClick={() => setConfirmRadicar(false)}
-              className="rounded-xl border px-4 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+              className="rounded-xl border px-4 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
             >
               Revisar datos
             </button>
@@ -2337,7 +2394,7 @@ export function TramiteWizard(props: Props) {
                 setConfirmRadicar(false);
                 void handleRadicarTramite();
               }}
-              className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+              className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
               style={{ background: WIZARD_CTA_GRADIENT_DONE }}
             >
               Sí, radicar trámite
@@ -2362,7 +2419,7 @@ export function TramiteWizard(props: Props) {
           onExit();
         }}
         title="¡Trámite completado!"
-        titleClassName="text-lg font-bold text-[#557EFF]"
+        titleClassName="text-lg font-bold text-flit-brand"
         size="sm"
       >
         <div className="text-center">
@@ -2371,7 +2428,7 @@ export function TramiteWizard(props: Props) {
           </p>
           <p
             className="mt-1 text-3xl font-bold"
-            style={{ color: '#162744', letterSpacing: radicado?.placa ? '0.35em' : '0.12em' }}
+            style={{ color: 'var(--color-flit-primary)', letterSpacing: radicado?.placa ? '0.35em' : '0.12em' }}
           >
             {radicado?.placa ?? radicado?.referencia ?? '—'}
           </p>
@@ -2395,8 +2452,8 @@ export function TramiteWizard(props: Props) {
               setRadicado(null);
               onExit();
             }}
-            className="mt-5 w-full rounded-xl py-2.5 text-xs font-semibold text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
-            style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+            className="mt-5 w-full rounded-xl py-2.5 text-xs font-semibold text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+            style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
           >
             Ir al listado de trámites
           </button>
@@ -2428,24 +2485,24 @@ const DOC_TYPES: ActorDocumentType[] = ['CC', 'CE', 'NIT', 'PAS'];
  * nombra el dato— y sí compiten con el valor, que es lo único que el gestor viene a leer.
  */
 const VEHICLE_DETAILS: { key: string; label: string }[] = [
-  { key: 'vin', label: 'VIN' },
+  { key: 'vin', label: COPY.A02Vin },
   { key: 'vehicle_color', label: 'Color' },
   { key: 'vehicle_class', label: 'Clase' },
   { key: 'vehicle_service', label: 'Servicio' },
   { key: 'vehicle_fuel', label: 'Combustible' },
   { key: 'vehicle_engine_displacement', label: 'Cilindraje' },
   { key: 'vehicle_body_type', label: 'Carrocería' },
-  { key: 'vehicle_engine_number', label: 'Nº Motor' },
-  { key: 'vehicle_chassis', label: 'Nº Chasis' },
-  { key: 'vehicle_series', label: 'Nº Serie' },
-  { key: 'vehicle_passengers', label: 'Pasajeros' },
+  { key: 'vehicle_engine_number', label: COPY.A09Motor },
+  { key: 'vehicle_chassis', label: COPY.A09Chasis },
+  { key: 'vehicle_series', label: COPY.A09Serie },
+  { key: 'vehicle_passengers', label: COPY.A10 },
   { key: 'vehicle_axles', label: 'Ejes' },
   { key: 'vehicle_height', label: 'Alto' },
   { key: 'vehicle_width', label: 'Ancho' },
   { key: 'vehicle_length', label: 'Largo' },
   { key: 'vehicle_tires', label: 'Llantas' },
   { key: 'vehicle_registration_date', label: 'Fecha matrícula' },
-  { key: 'transit_office_name', label: 'Organismo de tránsito' },
+  { key: 'transit_office_name', label: COPY.A05 },
 ];
 
 /**
@@ -2454,25 +2511,25 @@ const VEHICLE_DETAILS: { key: string; label: string }[] = [
  */
 const VEHICLE_GRID_PDF: { key: string; label: string }[][] = [
   [
-    { key: 'vin', label: 'VIN' },
+    { key: 'vin', label: COPY.A02Vin },
     { key: 'vehicle_service', label: 'Servicio' },
-    { key: 'vehicle_chassis', label: 'Nº Chasis' },
+    { key: 'vehicle_chassis', label: COPY.A09Chasis },
   ],
   [
     { key: 'vehicle_color', label: 'Color' },
     { key: 'vehicle_fuel', label: 'Combustible' },
-    { key: 'vehicle_series', label: 'Nº Serie' },
+    { key: 'vehicle_series', label: COPY.A09Serie },
   ],
   [
     { key: 'vehicle_class', label: 'Clase' },
     { key: 'vehicle_engine_displacement', label: 'Cilindraje' },
-    { key: 'vehicle_passengers', label: 'Pasajeros' },
+    { key: 'vehicle_passengers', label: COPY.A10 },
     { key: 'vehicle_axles', label: 'Ejes' },
   ],
   [
     { key: 'vehicle_body_type', label: 'Carrocería' },
-    { key: 'vehicle_engine_number', label: 'Nº Motor' },
-    { key: 'transit_office_name', label: 'Organismo de Tránsito' },
+    { key: 'vehicle_engine_number', label: COPY.A09Motor },
+    { key: 'transit_office_name', label: COPY.A05 },
     { key: 'vehicle_height', label: 'Alto' },
     { key: 'vehicle_length', label: 'Largo' },
     { key: 'vehicle_width', label: 'Ancho' },
@@ -2549,7 +2606,7 @@ function VehicleDataCard({
             {plate && (
               <p
                 className="shrink-0 font-mono text-sm font-extrabold tracking-[0.2em]"
-                style={{ color: '#162744' }}
+                style={{ color: 'var(--color-flit-primary)' }}
               >
                 {plate}
               </p>
@@ -2568,7 +2625,7 @@ function VehicleDataCard({
             <div className="flex shrink-0 flex-wrap items-start gap-4">
               {(soatVencimiento || soatAseguradora) && (
                 <div>
-                  <p className="text-xs font-bold" style={{ color: '#162744' }}>
+                  <p className="text-xs font-bold" style={{ color: 'var(--color-flit-primary)' }}>
                     SOAT
                   </p>
                   {soatVencimiento && (
@@ -2583,7 +2640,7 @@ function VehicleDataCard({
               )}
               {rtmVencimiento && (
                 <div>
-                  <p className="text-xs font-bold" style={{ color: '#162744' }}>
+                  <p className="text-xs font-bold" style={{ color: 'var(--color-flit-primary)' }}>
                     Tecno-mecánica
                   </p>
                   <p className="whitespace-nowrap text-xs opacity-70">
@@ -2608,8 +2665,8 @@ function VehicleDataCard({
                         <button
                           type="button"
                           onClick={onEditOrganismo}
-                          className="mt-0.5 text-xs font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-                          style={{ color: '#557EFF' }}
+                          className="mt-0.5 text-xs font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+                          style={{ color: 'var(--color-flit-brand)' }}
                         >
                           Editar
                         </button>
@@ -2650,9 +2707,9 @@ function VehicleDataCard({
         <div className="flex items-center gap-3 border-b px-4 py-3">
           <span
             className="grid h-7 w-7 shrink-0 place-items-center rounded-lg"
-            style={{ background: 'rgba(85,126,255,0.10)' }}
+            style={{ background: 'color-mix(in srgb, var(--color-flit-brand) 10%, transparent)' }}
           >
-            <Car className="h-4 w-4" style={{ color: '#557EFF' }} />
+            <Car className="h-4 w-4" style={{ color: 'var(--color-flit-brand)' }} />
           </span>
           <div className="min-w-0 flex-1">
             <WizardCardHeader
@@ -2673,12 +2730,12 @@ function VehicleDataCard({
         {plate && (
           <div
             className="rounded-xl border-2 px-4 py-2 text-center"
-            style={{ borderColor: '#557EFF', background: 'rgba(85,126,255,0.06)' }}
+            style={{ borderColor: 'var(--color-flit-brand)', background: 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)' }}
           >
             <p className="text-xs font-semibold uppercase opacity-50">Placa</p>
             <p
               className="font-mono text-lg font-extrabold tracking-widest"
-              style={{ color: '#557EFF' }}
+              style={{ color: 'var(--color-flit-brand)' }}
             >
               {plate}
             </p>
@@ -2705,9 +2762,9 @@ function VehicleDataCard({
           <div className="flex shrink-0 flex-wrap gap-2">
             {(soatVencimiento || soatAseguradora) && (
               <div className="flex min-w-0 items-start gap-1.5 rounded-xl border px-2.5 py-1.5">
-                <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: '#557EFF' }} />
+                <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: 'var(--color-flit-brand)' }} />
                 <div className="min-w-0">
-                  <p className="text-xs font-bold uppercase" style={{ color: '#557EFF' }}>SOAT</p>
+                  <p className="text-xs font-bold uppercase" style={{ color: 'var(--color-flit-brand)' }}>SOAT</p>
                   {soatVencimiento && (
                     <p className="text-xs font-semibold">Vence: {formatDateOnly(soatVencimiento)}</p>
                   )}
@@ -2754,9 +2811,9 @@ function VehicleDataCard({
           <div className="flex flex-wrap gap-3">
             {(soatVencimiento || soatAseguradora) && (
               <div className="flex min-w-0 items-start gap-2 rounded-xl border px-3 py-2">
-                <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: '#557EFF' }} />
+                <Shield className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: 'var(--color-flit-brand)' }} />
                 <div className="min-w-0">
-                  <p className="text-xs font-bold uppercase" style={{ color: '#557EFF' }}>SOAT</p>
+                  <p className="text-xs font-bold uppercase" style={{ color: 'var(--color-flit-brand)' }}>SOAT</p>
                   {soatVencimiento && (
                     <p className="text-xs font-semibold">Vence: {formatDateOnly(soatVencimiento)}</p>
                   )}
@@ -2908,7 +2965,7 @@ function TramiteObservacionesField({
         </p>
       )}
       {(preview.manual || preview.auto.length > 0) && (
-        <div className="rounded-xl bg-[#F4F6FA] px-3 py-2 dark:bg-[#131A22]">
+        <div className="min-w-0 rounded-xl bg-[#F4F6FA] px-3 py-2 dark:bg-[#131A22]">
           <p className="text-xs font-bold uppercase opacity-55">Así quedarán en el FUR</p>
           <div className="mt-1 space-y-0.5 text-xs leading-relaxed">
             {preview.manual && (
@@ -2916,7 +2973,7 @@ function TramiteObservacionesField({
             )}
             {/* Atenuadas: son las que el gestor no escribió y no puede editar aquí. */}
             {preview.auto.map((segment) => (
-              <p key={segment} className="opacity-70">
+              <p key={segment} className="break-words whitespace-pre-line opacity-70">
                 {segment}
               </p>
             ))}
@@ -3920,8 +3977,8 @@ function ConsultaStep({
         !identificadorCompleto ||
         (secretariaAntesDeConsultar && !transitOfficeId)
       }
-      className={`${WIZARD_BTN} flex shrink-0 items-center justify-center gap-2 bg-[#557EFF] text-white focus-visible:ring-[#557EFF] disabled:cursor-not-allowed disabled:opacity-50`}
-      style={{ backgroundColor: '#557EFF', backgroundImage: 'none' }}
+      className={`${WIZARD_BTN} flex shrink-0 items-center justify-center gap-2 bg-flit-brand text-white focus-visible:ring-flit-brand disabled:cursor-not-allowed disabled:opacity-50`}
+      style={{ backgroundColor: 'var(--color-flit-brand)', backgroundImage: 'none' }}
       aria-label={familyBlocked ? 'Consulta no permitida para esta compañía' : 'Consultar RUNT'}
     >
       {loading ? 'Consultando…' : hasResult ? 'Actualizar' : 'Consultar RUNT'}
@@ -4203,13 +4260,13 @@ function ConsultaStep({
           <div
             className="min-w-0 flex-1 rounded-xl border p-3.5"
             style={{
-              borderColor: '#557EFF',
+              borderColor: 'var(--color-flit-brand)',
               background: '#EFF6FF',
-              boxShadow: '0 0 0 3px rgba(85,126,255,0.15)',
+              boxShadow: '0 0 0 3px color-mix(in srgb, var(--color-flit-brand) 15%, transparent)',
             }}
             aria-current="step"
           >
-            <p className="text-xs font-semibold" style={{ color: '#557EFF' }}>
+            <p className="text-xs font-semibold" style={{ color: 'var(--color-flit-brand)' }}>
               {tipoNombre}
             </p>
             <p className="mt-0.5 text-xs opacity-70">
@@ -4224,7 +4281,7 @@ function ConsultaStep({
             <button
               type="button"
               onClick={() => setPendingTipo('__selector__')}
-              className="shrink-0 rounded-xl border px-4 py-2 text-xs font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 hover:border-[#557EFF]"
+              className="shrink-0 rounded-xl border px-4 py-2 text-xs font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 hover:border-flit-brand"
             >
               Cambiar tipo
             </button>
@@ -4454,7 +4511,7 @@ function ConsultaStep({
               role="status"
               aria-label={`Secretaría de tránsito: ${transitOfficeNombreTraspaso}`}
             >
-              <span className="truncate text-xs font-semibold" style={{ color: '#162744' }}>
+              <span className="truncate text-xs font-semibold" style={{ color: 'var(--color-flit-primary)' }}>
                 {transitOfficeNombreTraspaso}
               </span>
             </div>
@@ -4482,8 +4539,8 @@ function ConsultaStep({
             <button
               type="button"
               onClick={handleRetomarDuplicado}
-              className="shrink-0 rounded-xl px-4 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
-              style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+              className="shrink-0 rounded-xl px-4 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+              style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
               aria-label="Retomar el trámite existente"
             >
               Retomar
@@ -4524,7 +4581,7 @@ function ConsultaStep({
             checked={pazSalvoConfirmado}
             onChange={(e) => void handlePazSalvo(e.target.checked)}
             disabled={readOnly || pazSalvoSaving}
-            className="mt-0.5 h-4 w-4 shrink-0 accent-[#557EFF] disabled:opacity-60"
+            className="mt-0.5 h-4 w-4 shrink-0 accent-flit-brand disabled:opacity-60"
           />
           <span className="text-xs">
             <span className="font-semibold">Confirmo paz y salvo de impuesto vehicular</span>
@@ -4578,7 +4635,7 @@ function ConsultaStep({
         open={!!pendingTipo}
         onClose={() => setPendingTipo(null)}
         title="Nuevo trámite"
-        titleClassName="text-[22px] font-bold text-[#557EFF] dark:text-[#557EFF]"
+        titleClassName="text-[22px] font-bold text-flit-brand dark:text-flit-brand"
         description="Se actualizarán las validaciones y los documentos requeridos, y se perderá lo capturado en este paso."
         size="xl"
       >
@@ -4606,6 +4663,7 @@ function StepBody({
   tipoCodigo,
   instanceId,
   instanceStatus,
+  improntaGeneracionHabilitada = true,
   preflight,
   preflightLoading,
   onRunPreflight,
@@ -4624,6 +4682,8 @@ function StepBody({
   rnmcEnabled = false,
   esMigrado = false,
   prendaDocumentRequired = true,
+  prendaOmitAllowed,
+  runtReportaGravamen,
   onPrendaDocumentGateChange,
   deferredFamily,
   onSimultaneosGateChange,
@@ -4650,6 +4710,8 @@ function StepBody({
   instanceId: string | null;
   /** Para remount del paso FUR tras Preparar y mostrar adjuntos generados. */
   instanceStatus?: InstanceStatus | null;
+  /** HU #13403 — false ⇒ la impronta no se genera automáticamente; se carga a mano. */
+  improntaGeneracionHabilitada?: boolean;
   /** CF-02 — modalidad en curso cuando el trámite AÚN no existe (paso 1 desacoplado). */
   deferredFamily?: ProcedureFamily | WizardModalidad;
   seedVin?: string;
@@ -4693,6 +4755,13 @@ function StepBody({
   esMigrado?: boolean;
   /** Compañía+OT: certificado de prenda obligatorio (default) u opcional. */
   prendaDocumentRequired?: boolean;
+  /**
+   * Feature #13110 / HU #13778 — el servidor resuelve si se ofrece «Omitir prenda»
+   * (`prendaOmitAllowed`). Sin `true` no se ofrece, en ningún tipo ni política del OT.
+   */
+  prendaOmitAllowed?: boolean;
+  /** HU #13778 — señal única de gravamen del servidor (GET /wizard `runtReportaGravamen`). */
+  runtReportaGravamen?: boolean;
   /** Gate Continuar: certificado de prenda listo (o no exigible). */
   onPrendaDocumentGateChange?: (ready: boolean) => void;
   /** Gate Continuar: trámites simultáneos con valor + adjunto (o ninguno activo). */
@@ -4770,7 +4839,23 @@ function StepBody({
     // puede llegar desde un borrador abierto antes del cambio, y encuentra sus datos donde ahora
     // viven en vez de toparse con un paso que ya no existe.
     case 'prenda':
-    case 'documentos':
+    case 'documentos': {
+      // HU #12727 (D.1) — Observaciones comparte fila con Prenda cuando esta sección existe.
+      const muestraSeccionPrenda =
+        caps.pideValorComercial ||
+        ((caps.permitePrendaComplementaria || esTipoDePrenda(tipoCodigo)) &&
+          !esCancelacionDeMatricula(tipoCodigo));
+      const observacionesAccordion = (
+        <WizardAccordion
+          title="Observaciones del trámite"
+          defaultOpen
+          level="h3"
+          className="h-full min-w-0"
+        >
+          <TramiteObservacionesField instanceId={instanceId} hideCardWrapper />
+        </WizardAccordion>
+      );
+
       return (
         <div className="space-y-3">
           {caps.pideValorComercial ? (
@@ -4780,6 +4865,7 @@ function StepBody({
                 subtitle="Avalúo de referencia y condiciones económicas del traspaso."
                 defaultOpen
                 level="h3"
+                keepMounted
               >
                 <CommercialForm
                   key="comercial-en-requisitos"
@@ -4797,10 +4883,12 @@ function StepBody({
                 const esPuerta = caps.prendaEsPuerta;
                 return (
                   <WizardAccordionRow defaultOpen>
-                    <div className="grid grid-cols-1 gap-3 items-stretch">
+                    <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-2">
                       <WizardAccordion
                         title="Asignación de Prenda / Limitación a la Propiedad"
                         level="h3"
+                        className="h-full min-w-0"
+                        keepMounted
                       >
                         <PrendaForm
                           ref={prendaFormRef}
@@ -4808,14 +4896,19 @@ function StepBody({
                           onSaved={onRefresh}
                           embeddedInWizard
                           modalidad={esPuerta ? 'traspaso' : 'matricula_inicial'}
-                          decisions={esPuerta ? traspasoDecisions(prendaDocumentRequired) : undefined}
+                          decisions={
+                            esPuerta ? traspasoDecisions(prendaOmitAllowed) : undefined
+                          }
                           documentRequired={prendaDocumentRequired}
+                          omitAllowed={prendaOmitAllowed}
                           onDocumentGateChange={onPrendaDocumentGateChange}
                           runtHasGravamen={runtHasPrendaInfo}
+                          runtReportaGravamen={runtReportaGravamen}
                           runtGravamenMessage={gravamen?.message}
                           hideHeader
                         />
                       </WizardAccordion>
+                      {observacionesAccordion}
                     </div>
                   </WizardAccordionRow>
                 );
@@ -4873,38 +4966,49 @@ function StepBody({
                   const documentoObligatorio =
                     prendaDocumentRequired || esPrendaDeAccionUnica(tipoCodigo);
                   return (
-                    <WizardAccordion
-                      title="Asignación de Prenda / Limitación a la Propiedad"
-                      defaultOpen
-                      level="h3"
-                    >
-                      <PrendaForm
-                        ref={prendaFormRef}
-                        instanceId={instanceId}
-                        onSaved={onRefresh}
-                        embeddedInWizard
-                        modalidad={esPuerta ? 'traspaso' : 'matricula_inicial'}
-                        decisions={
-                          decisionesDelTipo ??
-                          (esPuerta ? traspasoDecisions(prendaDocumentRequired) : undefined)
-                        }
-                        documentRequired={documentoObligatorio}
-                        exigeEntidadLevantamiento={esPrendaDeAccionUnica(tipoCodigo)}
-                        // ADR-0055/HU #12130 (AC1/AC2) — solo PRENDA_INSCRIPCION/LEVANTAMIENTO_PRENDA
-                        // admiten declarar la acción complementaria en la misma radicación.
-                        permiteAccionComplementaria={permiteAccionComplementaria(tipoCodigo)}
-                        onDocumentGateChange={onPrendaDocumentGateChange}
-                        runtHasGravamen={gravamen?.status === 'warn'}
-                        runtGravamenMessage={gravamen?.message}
-                        // HU #12131 (AC1/AC2) — el check ya corrió (existe en la respuesta) y no
-                        // encontró gravamen: `runtAvisoGravamenVariant` solo devuelve variante para
-                        // los tipos de UNA sola decisión de prenda (Inscribir/Levantar), que es
-                        // justo el alcance de esta HU.
-                        runtGravamenChecked={gravamen !== undefined}
-                        runtAvisoVariant={runtAvisoGravamenVariant(tipoCodigo)}
-                        hideHeader
-                      />
-                    </WizardAccordion>
+                    <WizardAccordionRow defaultOpen>
+                      <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-2">
+                        <WizardAccordion
+                          title="Asignación de Prenda / Limitación a la Propiedad"
+                          defaultOpen
+                          level="h3"
+                          className="h-full min-w-0"
+                          keepMounted
+                        >
+                          <PrendaForm
+                            ref={prendaFormRef}
+                            instanceId={instanceId}
+                            onSaved={onRefresh}
+                            embeddedInWizard
+                            modalidad={esPuerta ? 'traspaso' : 'matricula_inicial'}
+                            decisions={
+                              decisionesDelTipo ??
+                              (esPuerta
+                                ? traspasoDecisions(prendaOmitAllowed)
+                                : undefined)
+                            }
+                            documentRequired={documentoObligatorio}
+                            omitAllowed={prendaOmitAllowed}
+                            exigeEntidadLevantamiento={esPrendaDeAccionUnica(tipoCodigo)}
+                            // ADR-0055/HU #12130 (AC1/AC2) — solo PRENDA_INSCRIPCION/LEVANTAMIENTO_PRENDA
+                            // admiten declarar la acción complementaria en la misma radicación.
+                            permiteAccionComplementaria={permiteAccionComplementaria(tipoCodigo)}
+                            onDocumentGateChange={onPrendaDocumentGateChange}
+                            runtHasGravamen={gravamen?.status === 'warn'}
+                            runtReportaGravamen={runtReportaGravamen}
+                            runtGravamenMessage={gravamen?.message}
+                            // HU #12131 (AC1/AC2) — el check ya corrió (existe en la respuesta) y no
+                            // encontró gravamen: `runtAvisoGravamenVariant` solo devuelve variante para
+                            // los tipos de UNA sola decisión de prenda (Inscribir/Levantar), que es
+                            // justo el alcance de esta HU.
+                            runtGravamenChecked={gravamen !== undefined}
+                            runtAvisoVariant={runtAvisoGravamenVariant(tipoCodigo)}
+                            hideHeader
+                          />
+                        </WizardAccordion>
+                        {observacionesAccordion}
+                      </div>
+                    </WizardAccordionRow>
                   );
                 })()}
             </>
@@ -4955,7 +5059,10 @@ function StepBody({
               uploadMode={docUploadMode}
               onUploadModeChange={setDocUploadMode}
               modalidad={modalidadUi}
-              permiteGenerarImprontaAutomatica={caps.permiteGenerarImprontaAutomatica}
+              permiteGenerarImprontaAutomatica={
+                caps.permiteGenerarImprontaAutomatica && improntaGeneracionHabilitada
+              }
+              improntaGeneracionHabilitada={improntaGeneracionHabilitada}
             />
           </WizardAccordion>
 
@@ -5007,11 +5114,10 @@ function StepBody({
             })()
           )}
 
-          <WizardAccordion title="Observaciones del trámite" level="h3">
-            <TramiteObservacionesField instanceId={instanceId} hideCardWrapper />
-          </WizardAccordion>
+          {!muestraSeccionPrenda && observacionesAccordion}
         </div>
       );
+    }
 
     // ADR-0050 — las partes las declara el TIPO. Con dos partes se unifican en un solo formulario
     // (2 tarjetas) y la key estable `actores` evita remontar al pasar del índice server
@@ -5155,7 +5261,7 @@ function StepBody({
               style={
                 paqueteDocsStatus === 'error'
                   ? { borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }
-                  : { borderColor: '#DFE5ED', background: 'rgba(85,126,255,0.06)' }
+                  : { borderColor: '#DFE5ED', background: 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)' }
               }
               role="status"
               aria-live="polite"
@@ -5181,13 +5287,13 @@ function StepBody({
           {!identityApproved && (
             <div
               className="rounded-xl p-3 text-xs border flex items-start gap-2"
-              style={{ borderColor: '#557EFF', background: 'rgba(85,126,255,0.06)', color: '#162744' }}
+              style={{ borderColor: 'var(--color-flit-brand)', background: 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)', color: 'var(--color-flit-primary)' }}
               role="status"
               aria-live="polite"
             >
-              <Shield className="h-4 w-4 shrink-0 mt-0.5" style={{ color: '#557EFF' }} aria-hidden="true" />
+              <Shield className="h-4 w-4 shrink-0 mt-0.5" style={{ color: 'var(--color-flit-brand)' }} aria-hidden="true" />
               <span>
-                <span className="font-semibold" style={{ color: '#557EFF' }}>
+                <span className="font-semibold" style={{ color: 'var(--color-flit-brand)' }}>
                   El FUR y la firma se generarán automáticamente
                 </span>{' '}
                 cuando el cliente valide su identidad. No necesitas generarlos a mano: completa los datos

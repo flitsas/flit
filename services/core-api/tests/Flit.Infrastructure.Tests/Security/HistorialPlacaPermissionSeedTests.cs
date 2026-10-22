@@ -41,7 +41,7 @@ public sealed class HistorialPlacaPermissionSeedTests
         await using (var seed = NewContext(dbName))
         {
             AddRole(seed, "SuperAdmin");
-            AddRole(seed, "AdminCompany");
+            AddRole(seed, "admin_tramites");
             AddRole(seed, "Radicador");
             await seed.SaveChangesAsync(ct);
         }
@@ -67,7 +67,7 @@ public sealed class HistorialPlacaPermissionSeedTests
             action.IsActive.Should().BeTrue();
 
             var grantedRoleCodes = await GrantedRoleCodesAsync(check, action.Id, ct);
-            grantedRoleCodes.Should().BeEquivalentTo(["SuperAdmin", "AdminCompany", "Radicador"]);
+            grantedRoleCodes.Should().BeEquivalentTo(["SuperAdmin", "admin_tramites", "Radicador"]);
         }
     }
 
@@ -82,7 +82,7 @@ public sealed class HistorialPlacaPermissionSeedTests
         await using (var seed = NewContext(dbName))
         {
             AddRole(seed, "SuperAdmin");
-            AddRole(seed, "AdminCompany");
+            AddRole(seed, "admin_tramites");
             AddRole(seed, "Radicador");
             await seed.SaveChangesAsync(ct);
         }
@@ -120,7 +120,7 @@ public sealed class HistorialPlacaPermissionSeedTests
         await using (var seed = NewContext(dbName))
         {
             AddRole(seed, "SuperAdmin");
-            AddRole(seed, "AdminCompany", deleted: true);
+            AddRole(seed, "admin_tramites", deleted: true);
             // "Radicador" no existe en este ambiente.
             AddRole(seed, "Auditor");
             await seed.SaveChangesAsync(ct);

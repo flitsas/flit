@@ -14,6 +14,8 @@ export interface TenantUser {
   role: string | null;
   roleCode: string | null;
   roleId: string | null;
+  /** HU #13647: todos los roles activos del usuario en el tenant (la fila muestra uno solo). */
+  roleIds?: string[];
   /** HU #11552 / ADR-0048: "cancelled" es un cuarto valor — invitación cancelada, visible y
    *  reactivable. El `id` de la fila sigue siendo el `invitationId` en "pending" y "cancelled". */
   status: "active" | "inactive" | "pending" | "cancelled";
@@ -48,6 +50,44 @@ export interface TenantRole {
   isSystem: boolean;
   permissionCount: number;
   createdAt: string;
+  /** HU #13441: `null`/ausente = rol global del catálogo FLIT (solo lectura para la compañía); con valor = rol propio. */
+  tenantId?: string | null;
+  isActive?: boolean;
+  targetEntityType?: string;
+  productCode?: string;
+}
+
+/** HU #13441: permiso que el Admin de Compañía puede ofrecer al armar un rol propio. */
+export interface GrantablePermission {
+  id: string;
+  slug: string;
+  name: string;
+  moduleCode: string;
+  productCode: string;
+  /** HU #13666: nombre legible del módulo (el mismo del Panel SA). */
+  moduleName?: string;
+}
+
+/** HU #13441: detalle de un rol visible para la compañía (permisos asignados incluidos). */
+export interface TenantRoleDetail {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  isSystem: boolean;
+  isActive: boolean;
+  productCode: string;
+  tenantId: string | null;
+  permissions: { id: string; slug: string; name: string }[];
+}
+
+export interface NewTenantRole {
+  /** HU #13666: opcional y la pantalla no lo envía; el servidor lo genera a partir del nombre. */
+  code?: string;
+  name: string;
+  description?: string | null;
+  productCode?: string;
+  permissionIds: string[];
 }
 
 export interface AccessibleAction {
@@ -62,6 +102,8 @@ export interface AccessibleModule {
   name: string;
   sortOrder: number;
   actions: AccessibleAction[];
+  /** HU #12964: producto del módulo (`plataforma` | `tramites` …). */
+  productCode?: string;
 }
 
 export interface RoleDetail {
@@ -117,6 +159,41 @@ export async function getRoles(): Promise<TenantRole[]> {
   return apiFetch<TenantRole[]>("/api/v1/security/roles");
 }
 
+// ── HU #13441/#13443 — roles propios de la compañía (solo AdminCompany; el resto recibe 403) ──────────────
+
+/** GET /api/v1/security/roles/grantable-permissions → solo lo que el caller puede otorgar. */
+export async function getGrantablePermissions(): Promise<GrantablePermission[]> {
+  return apiFetch<GrantablePermission[]>("/api/v1/security/roles/grantable-permissions");
+}
+
+/** GET /api/v1/security/roles/{id} */
+export async function getTenantRole(id: string): Promise<TenantRoleDetail> {
+  return apiFetch<TenantRoleDetail>(`/api/v1/security/roles/${id}`);
+}
+
+/** POST /api/v1/security/roles → 201 { id }. Siempre rol COMPANY con el tenant del caller. */
+export async function createTenantRole(body: NewTenantRole): Promise<{ id: string }> {
+  return apiFetch<{ id: string }>("/api/v1/security/roles", {
+    method: "POST",
+    body: { targetEntityType: "COMPANY", productCode: "tramites", ...body },
+  });
+}
+
+/** PUT /api/v1/security/roles/{id} → nombre y descripción. */
+export async function updateTenantRole(id: string, body: { name: string; description?: string | null }): Promise<TenantRoleDetail> {
+  return apiFetch<TenantRoleDetail>(`/api/v1/security/roles/${id}`, { method: "PUT", body });
+}
+
+/** PUT /api/v1/security/roles/{id}/permissions → reemplaza los permisos del rol. */
+export async function setTenantRolePermissions(id: string, permissionIds: string[]): Promise<TenantRoleDetail> {
+  return apiFetch<TenantRoleDetail>(`/api/v1/security/roles/${id}/permissions`, { method: "PUT", body: { permissionIds } });
+}
+
+/** DELETE /api/v1/security/roles/{id} → 204; 409 ROLE_HAS_ACTIVE_USERS si tiene usuarios. */
+export async function deleteTenantRole(id: string): Promise<void> {
+  return apiFetch<void>(`/api/v1/security/roles/${id}`, { method: "DELETE" });
+}
+
 /** PUT /api/v1/security/users/{userId}/role */
 export async function assignRole(userId: string, roleId: string): Promise<void> {
   return apiFetch<void>(`/api/v1/security/users/${userId}/role`, {
@@ -128,8 +205,10 @@ export async function assignRole(userId: string, roleId: string): Promise<void> 
 /** GET /api/v1/security/modules → módulos accesibles según permisos del caller.
  *  RBAC puro (HU #10664): los módulos son transversales; el SuperAdmin ve todos los módulos
  *  activos (constructor de roles) y el caller tenant solo los de sus slugs. */
-export async function getAccessibleModules(): Promise<AccessibleModule[]> {
-  return apiFetch<AccessibleModule[]>("/api/v1/security/modules");
+export async function getAccessibleModules(product?: string): Promise<AccessibleModule[]> {
+  // HU #12964: `product` filtra por producto; un rol solo puede tener permisos de módulos de su producto.
+  const query = product ? `?product=${encodeURIComponent(product)}` : "";
+  return apiFetch<AccessibleModule[]>(`/api/v1/security/modules${query}`);
 }
 
 /** Cuerpo del POST de suspensión/desactivación. `endsAt` nulo = desactivación indefinida

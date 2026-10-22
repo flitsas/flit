@@ -7,6 +7,8 @@ import { CreateButton } from "@/components/atom/CreateButton";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { ToastProvider, useToast } from "@/components/admin/Toast";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { DocumentTypeListTable } from "@/components/admin/documents/DocumentTypeListTable";
 import { CreateDocumentTypeDialog } from "@/components/admin/documents/CreateDocumentTypeDialog";
 import {
@@ -29,8 +31,12 @@ import {
 } from "@/lib/api/admin-document-types";
 import { ApiError } from "@/lib/api/types";
 import type { DocumentType, DocumentTypePagedResult } from "@/lib/api/types-documents";
+import {
+  ADMIN_BACK_LINK_CLS,
+  ADMIN_BRAND_OUTLINE_BTN_CLS,
+  ADMIN_CONTENT_SURFACE_CLS,
+} from "@/components/admin/admin-ui-styles";
 
-const PAGE_SIZE = 20;
 
 // Consola documental — catálogo de tipos de documento (HU #10198, AC1/AC7) con alta,
 // edición y baja lógica. Paginación server-side; 4 estados UI vía UiStateBoundary.
@@ -45,7 +51,8 @@ export default function AdminDocumentsPage() {
 function DocumentsCatalog() {
   const router = useRouter();
   const { show } = useToast();
-  const [page, setPage] = useState(1);
+  // Bug #13055 — tabla homologada con el modelo de trámites: filas por página elegibles.
+  const { page, pageSize, setPage, setPageSize } = usePaginacion();
   const [draftFilters, setDraftFilters] = useState<DocumentTypeCatalogFilters>(EMPTY_DOCUMENT_TYPE_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState<DocumentTypeCatalogFilters>(EMPTY_DOCUMENT_TYPE_FILTERS);
   const [status, setStatus] = useState<UiStatus>("loading");
@@ -69,7 +76,7 @@ function DocumentsCatalog() {
         const data = await fetchDocumentTypes(
           {
             page,
-            pageSize: PAGE_SIZE,
+            pageSize,
             includeInactive: true,
             q: appliedFilters.q || undefined,
             origen: appliedFilters.origen || undefined,
@@ -88,7 +95,7 @@ function DocumentsCatalog() {
         }
       }
     },
-    [page, appliedFilters],
+    [page, pageSize, appliedFilters],
   );
 
   useEffect(() => {
@@ -179,40 +186,37 @@ function DocumentsCatalog() {
 
   return (
     <div className="flex min-h-screen flex-col gap-4 px-6 pt-6 pb-10">
-      <button
-        type="button"
-        onClick={() => router.push("/")}
-        className="flex w-fit items-center gap-1.5 text-xs font-semibold"
-        style={{ color: "#557EFF" }}
-      >
-        <ArrowLeft className="h-3.5 w-3.5" /> Volver al inicio
+      <button type="button" onClick={() => router.push("/")} className={ADMIN_BACK_LINK_CLS}>
+        <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Volver al inicio
       </button>
 
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <ModuleTitle
-          title="Gestión documental"
-          subtitle="Administra el catálogo de documentos y la configuración documental por trámite."
-        />
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => router.push("/admin/documents/procedures")}
-            className="inline-flex items-center gap-1.5 rounded-xl border px-4 py-2 text-xs font-semibold"
-            style={{ borderColor: "#557EFF", color: "#557EFF" }}
-          >
-            <Layers className="h-4 w-4" /> Configurar por trámite
-          </button>
-          <CreateButton label="Crear documento" icon={FilePlus} onClick={openCreate} />
-        </div>
-      </div>
+      <ModuleTitle
+        title="Gestión documental"
+        subtitle="Administra el catálogo de documentos y la configuración documental por trámite."
+        action={
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => router.push("/admin/documents/procedures")}
+              className={ADMIN_BRAND_OUTLINE_BTN_CLS}
+            >
+              <Layers className="h-4 w-4" aria-hidden="true" /> Configurar por trámite
+            </button>
+            <CreateButton label="Crear documento" icon={FilePlus} onClick={openCreate} />
+          </div>
+        }
+      />
 
-      <div className="flex flex-1 flex-col rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60">
+      <div className={ADMIN_CONTENT_SURFACE_CLS}>
         <DocumentTypeFiltersBar
           value={draftFilters}
           onChange={setDraftFilters}
           onApply={applyFilters}
           onClear={clearFilters}
         />
+        {status === "loading" ? (
+          <CarLoaderModal label="Cargando catálogo de documentos…" />
+        ) : (
         <UiStateBoundary
           status={status}
           onRetry={() => void load()}
@@ -233,6 +237,7 @@ function DocumentsCatalog() {
               page={result.page}
               pageSize={result.pageSize}
               onPageChange={setPage}
+              onPageSizeChange={setPageSize}
               onEdit={openEdit}
               onDeactivate={handleDeactivate}
               onReactivate={handleReactivate}
@@ -240,6 +245,7 @@ function DocumentsCatalog() {
             />
           )}
         </UiStateBoundary>
+        )}
       </div>
 
       <CreateDocumentTypeDialog

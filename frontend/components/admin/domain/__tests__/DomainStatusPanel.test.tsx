@@ -68,10 +68,10 @@ function stubClipboard(): { writeText: ReturnType<typeof vi.fn> } {
 }
 
 describe("DomainStatusPanel — 4 estados de UI", () => {
-  it("cargando: muestra skeleton", () => {
+  it("cargando: muestra el loader del carrito", () => {
     vi.mocked(getAdminDomain).mockReturnValue(new Promise(() => {}));
     render(<DomainStatusPanel mode="admin" tenantId="tenant-1" />);
-    expect(screen.getByTestId("ui-loading")).toBeInTheDocument();
+    expect(screen.getByText(/cargando estado del dominio/i)).toBeInTheDocument();
   });
 
   it("error: muestra estado de error con reintentar", async () => {

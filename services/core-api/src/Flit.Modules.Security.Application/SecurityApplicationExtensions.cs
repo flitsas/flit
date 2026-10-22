@@ -1,15 +1,11 @@
-using Flit.Modules.Security.Application.Auth.ActivateAccount;
-using Flit.Modules.Security.Application.Auth.AdminResetPassword;
 using Flit.Modules.Security.Application.Auth.CancelInvitation;
-using Flit.Modules.Security.Application.Auth.ChangePassword;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
-using Flit.Modules.Security.Application.Auth.ForgotPassword;
-using Flit.Modules.Security.Application.Auth.Login;
 using Flit.Modules.Security.Application.Auth.Network;
 using Flit.Modules.Security.Application.Auth.ReactivateInvitation;
 using Flit.Modules.Security.Application.Auth.ResendInvitation;
-using Flit.Modules.Security.Application.Auth.ResetPassword;
 using Flit.Modules.Security.Application.Modules;
+using Flit.Modules.Security.Application.PermissionOverrides;
+using Flit.Modules.Security.Application.PermissionOverrides.GrantModule;
 using Flit.Modules.Security.Application.Permissions;
 using Flit.Modules.Security.Application.Roles;
 using Flit.Modules.Security.Application.UserManagement.DeleteUser;
@@ -32,16 +28,13 @@ public static class SecurityApplicationExtensions
         // sin E/S propia (delega en ITenantNetworkMembership, registrada en Infrastructure).
         services.AddScoped<INetworkUrlBaseResolver, NetworkUrlBaseResolver>();
 
-        services.AddScoped<LoginHandler>();
-        services.AddScoped<ForgotPasswordHandler>();
-        services.AddScoped<ResetPasswordHandler>();
-        services.AddScoped<AdminResetPasswordHandler>();
-        services.AddScoped<ChangePasswordHandler>();
+        // Epic #13217 (HU #13232): login y recuperación de cuenta viven en Flit.Identity.Application
+        // (AddIdentityAuthApplication), que registra core-identity y, durante la transición, core-api.
+
         services.AddScoped<CreateInvitationHandler>();
         services.AddScoped<ResendInvitationHandler>(); // HU #10625 — reenviar invitación pendiente
         services.AddScoped<CancelInvitationHandler>(); // HU #10627 — cancelar invitación pendiente
         services.AddScoped<ReactivateInvitationHandler>(); // HU #11552 — reactivar invitación cancelada
-        services.AddScoped<ActivateAccountHandler>();
 
         // HU #10161 — CRUD módulos dinámicos Super Admin
         services.AddScoped<CreateModuleHandler>();
@@ -64,6 +57,13 @@ public static class SecurityApplicationExtensions
         services.AddScoped<SetRoleActiveHandler>();
         services.AddScoped<ListRolesHandler>();
         services.AddScoped<GetRoleHandler>();
+        services.AddScoped<ListTenantRolesHandler>();
+        services.AddScoped<GetTenantRoleHandler>();
+        services.AddScoped<ListGrantablePermissionsHandler>();
+        services.AddScoped<CreateTenantRoleHandler>();
+        services.AddScoped<SetTenantRolePermissionsHandler>();
+        services.AddScoped<UpdateTenantRoleHandler>();
+        services.AddScoped<DeleteTenantRoleHandler>();
 
         // HU #10164 — Asignación única de rol por usuario tenant
         // HU #10506 — soporte multi-rol por usuario (modelo aditivo) + quitar rol puntual
@@ -89,6 +89,23 @@ public static class SecurityApplicationExtensions
         // tablas de trámites (GET/PUT /api/v1/me/ui-preferences/{scope}).
         services.AddScoped<GetUserUiPreferenceHandler>();
         services.AddScoped<UpsertUserUiPreferenceHandler>();
+
+        // HU #13642 (ADR-0073) - permisos individuales por usuario: foto de módulo completo.
+        services.AddScoped<GrantModuleOverridesHandler>();
+        services.AddScoped<PermissionCapCalculator>(); // HU #13644 - tope del administrador
+        services.AddScoped<ManageUserPermissionOverridesHandler>(); // HU #13644
+        services.AddScoped<QueryPermissionAuditHandler>(); // HU #13647
+
+        // HU #13645 - reglas de permisos individuales (en este orden; la primera que rechaza gana).
+        services.AddScoped<OverrideTargetLookup>();
+        services.AddScoped<IPermissionOverrideRule, UserExistsRule>();
+        services.AddScoped<IPermissionOverrideRule, SelfEditRule>();
+        services.AddScoped<IPermissionOverrideRule, TargetSuperAdminRule>();
+        services.AddScoped<IPermissionOverrideRule, TenantScopeRule>();
+        services.AddScoped<IPermissionOverrideRule, TargetIsAdminRule>();
+        services.AddScoped<IPermissionOverrideRule, ExcludedPermissionRule>();
+        services.AddScoped<IPermissionOverrideRule, OtPermissionTenantRule>();
+        services.AddScoped<IPermissionOverrideRule, InvitationPendingRule>();
 
         return services;
     }

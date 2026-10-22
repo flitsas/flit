@@ -5,7 +5,6 @@ using Flit.Infrastructure.Email;
 using Flit.Infrastructure.Notifications;
 using Flit.Infrastructure.Notifications.Admin;
 using Flit.Infrastructure.Notifications.Renting;
-using Flit.Infrastructure.Notifications.Routing;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Modules.Security.Domain.Auth;
@@ -741,15 +740,41 @@ public sealed class NotificationTestSendAdminServiceTests
 
         return new NotificationTestSendAdminService(
             NewContext(dbName),
-            explicitChannelSender,
-            emailSettings,
-            Options.Create(rentingOptions ?? new RentingChannelOptions()),
+            new CanalesSobreElDoble(explicitChannelSender, emailSettings, rentingOptions ?? new RentingChannelOptions(), isConsoleTransport),
             Options.Create(new NotificationEmailAssetsOptions()),
-            new EmailTransportDescriptor(isConsoleTransport),
             timeProvider,
             NullLogger<NotificationTestSendAdminService>.Instance,
             NewProcedureTypeCatalog(),
             themeResolver);
+    }
+
+    /// <summary>
+    /// HU #13359: el envío y los canales los da core-notificaciones (<see cref="ICanalesDeNotificaciones"/>). Este
+    /// adaptador traduce el doble de siempre (disponibilidad y envío por canal) y la configuración de remitentes a lo que
+    /// respondería Notificaciones, para que las aserciones sobre el doble no cambien.
+    /// </summary>
+    private sealed class CanalesSobreElDoble(
+        IExplicitChannelEmailSender doble, EmailSettings smtp, RentingChannelOptions renting, bool consola) : ICanalesDeNotificaciones
+    {
+        public Task<IReadOnlyList<CanalDeNotificacion>> ListarAsync(CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<CanalDeNotificacion>>(
+            [
+                new(NotificationChannel.FlitSmtp, doble.IsChannelAvailable(NotificationChannel.FlitSmtp), Vacio(smtp.DefaultSenderEmail), Vacio(smtp.DefaultSenderName), consola),
+                new(NotificationChannel.TenantApi, doble.IsChannelAvailable(NotificationChannel.TenantApi), Vacio(renting.SendEmailSenderEmail), Vacio(renting.SendEmailSenderUsername), false),
+            ]);
+
+        public Task<EmailSendResult> EnviarPruebaAsync(NotificationChannel canal, EmailMessage mensaje, CancellationToken ct) =>
+            doble.SendAsync(canal, mensaje, ct);
+
+        private static string? Vacio(string? v) => string.IsNullOrWhiteSpace(v) ? null : v;
+    }
+
+    /// <summary>El puerto de envío por canal explícito que tenía core-api antes del corte; aquí, solo el doble.</summary>
+    public interface IExplicitChannelEmailSender
+    {
+        bool IsChannelAvailable(NotificationChannel channel);
+
+        Task<EmailSendResult> SendAsync(NotificationChannel channel, EmailMessage message, CancellationToken cancellationToken);
     }
 
     /// <summary>

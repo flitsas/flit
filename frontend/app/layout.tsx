@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono, Poppins } from "next/font/google";
+import { isOidcSessionMode } from "@flit/auth/request";
 import { SessionExpiredListener } from "@/components/auth/SessionExpiredListener";
 import { BrandProvider } from "@/components/brand/BrandProvider";
 import { BrandStyle } from "@/components/brand/BrandStyle";
@@ -40,6 +41,8 @@ export default async function RootLayout({
   return (
     <html
       lang="es"
+      // A-10 (HU #13001): modo de sesión en runtime (FLIT_SESSION_MODE), leído por lib/auth/session-mode.ts.
+      data-session-mode={isOidcSessionMode() ? "oidc" : "legacy"}
       suppressHydrationWarning
       className={`${poppins.variable} ${jetbrainsMono.variable} h-full`}
     >

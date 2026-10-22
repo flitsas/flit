@@ -9,9 +9,9 @@ namespace Flit.Api.Endpoints.Tramites;
 /// <summary>
 /// Firma a posteriori (HU #11196 / #11197): consultar si la opción aplica a una parte y marcar el
 /// trámite para que se firme cuando su firmante consiga con qué firmar.
-/// <para>Partes admitidas: <c>comprador</c>, <c>vendedor</c> y <c>mandatario</c>. Las dos primeras
-/// firman por su representante legal y se destraban con la validación de identidad de esa persona; el
-/// mandatario se destraba en la regeneración del expediente al entregar o aprobar.</para>
+/// <para>Partes admitidas: <c>comprador</c> y <c>vendedor</c>. Firman por su representante legal y se
+/// destraban con la validación de identidad de esa persona. La parte <c>mandatario</c> se retiró (HU #13157):
+/// responde 400 <c>parte_invalida</c>; el mandatario lo exige validado la radicación.</para>
 /// </summary>
 internal static class FirmaPosteriorEndpoints
 {
@@ -36,7 +36,7 @@ internal static class FirmaPosteriorEndpoints
             var (result, error) = await handler.ConsultarAsync(id, tenantId.Value, parte, documento, ct);
             return error switch
             {
-                "parte_invalida" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "parte inválida (use comprador|vendedor|mandatario)."),
+                "parte_invalida" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "parte inválida (use comprador|vendedor)."),
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 _ => Results.Ok(result),
             };
@@ -56,13 +56,12 @@ internal static class FirmaPosteriorEndpoints
             var (result, error) = await handler.HandleAsync(id, tenantId.Value, body?.Parte, body?.Documento, ct);
             return error switch
             {
-                "parte_invalida" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "parte inválida (use comprador|vendedor|mandatario)."),
+                "parte_invalida" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "parte inválida (use comprador|vendedor)."),
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede diferir la firma en borrador o con subsanación activa."),
                 "sin_actor" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La parte aún no tiene actor registrado."),
                 "no_aplica" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "La firma a posteriori solo aplica a partes de tipo persona jurídica."),
                 "sin_representante" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El representante legal del trámite no tiene documento con el que validar su identidad."),
-                "sin_mandatario" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El trámite no tiene un mandatario elegido con documento registrado."),
                 "firma_disponible" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El firmante ya tiene firma del baúl o identidad vigente: el trámite puede firmarse ahora."),
                 _ => Results.Ok(result),
             };

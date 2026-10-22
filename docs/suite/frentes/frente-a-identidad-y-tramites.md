@@ -1,0 +1,192 @@
+# Frente A — Identidad, sesión y Trámites en la suite
+
+> **Responsable:** Samuel Cardenas, único desarrollador de la suite desde el 2026-09-25 (antes, desarrollador de Trámites). **Producto que retoma después:** Trámites.
+> **Skill:** `flit-suite-a-identidad`. **Rama:** una por Feature de ADO, `feature/AB-<Feature>-suite-…`, con commits `HU<id>: …` ([reglas R1](../reglas-trabajo-paralelo.md#r1-ramas-prs-y-merges)).
+>
+> Leer antes de empezar: [README de la suite](../README.md), [reglas](../reglas-trabajo-paralelo.md),
+> [contrato v1](../contrato-plataforma-v1.md) §2, §3, §8 y §9, [plan maestro](../plan-maestro.md) §4.3
+> y §4.4, [ADR-0062](../adr-borradores/ADR-0062-identidad-oidc-sobre-dominio-sellado.md) y el ADR de
+> Marca Blanca `docs/decisions/ADR-0060-marca-blanca-identidad-dominio-y-tema-de-correo.md`.
+
+## Objetivo
+
+Que un usuario inicie sesión una sola vez en el hub y abra cualquier producto sin volver a escribir la contraseña. Cada producto recibe un token propio con solo sus permisos, validado de verdad en el gateway y en la API. Al final, Trámites funciona como un producto más de la suite en `<ambiente>.tramites.flitsas.online`.
+
+## Qué debe funcionar al terminar la plataforma
+
+- Ningún ambiente desplegado corre con `ASPNETCORE_ENVIRONMENT=Development`. Gateway y API rechazan tokens sin firma válida, de otro emisor o de otro producto.
+- El hub sirve el login y los endpoints OIDC en su host, en FLIT y en cada red de Marca Blanca.
+- Cada app Next.js usa `@flit/auth`: cookie `HttpOnly; Secure` del propio host, token solo en servidor, refresh rotado en Redis y cierre de sesión global.
+- Trámites vive en `<ambiente>.tramites.flitsas.online`, con las rutas viejas repartidas según el plan maestro §4.3.
+- La suite de integración de Marca Blanca sigue en verde.
+
+## Lo que entregas a otros frentes
+
+| Entrega | Para | Cuándo |
+|---|---|---|
+| Secciones §2 y §3 del contrato cerradas | B, C | Semana 1 |
+| Gateway y API validando firma, emisor y audiencia en DEV | Todos | Fin de la Fase 0 |
+| Servidor OIDC en DEV con `/.well-known/openid-configuration`, JWKS y `GET /api/v1/platform/issuers` | C (SDK), B (hub) | Mitad de la Fase 1 |
+| Cliente de servicio `svc-demo` registrado | C | Fin de la Fase 1 |
+| `@flit/auth` v1 | B (hub y shell), C (plantilla) | Inicio de la Fase 2 |
+
+## Lo que consumes y el stub mientras tanto
+
+| Necesitas | De | Stub mientras tanto |
+|---|---|---|
+| `IProductAccessResolver` (contrato §4) | B | `StubProductAccessResolver`: `tramites` activo, roles actuales del usuario |
+| `DomainContext.ProductCode` (contrato §5) | B | Deducir el producto del host en tu propio código, detrás de una interfaz |
+| Publicador de eventos (contrato §7) | C | Escribir en el outbox existente y no publicar |
+| Redis en DEV | Líder | Almacén en memoria solo para pruebas locales |
+| Hosts `dev.tramites.flitsas.online` con certificado | Líder | `tramites.localhost` |
+
+## Tus carpetas
+
+Ver [reglas R4](../reglas-trabajo-paralelo.md#r4-propiedad-de-carpetas). Resumen: `Flit.Gateway`, `Flit.Modules.Identity` (nuevo), `Flit.Modules.Security.Application/Auth`, `Flit.Infrastructure/Security`, `Flit.Api/Authorization`, `packages/auth`, `frontend/lib/auth`, `frontend/lib/api/client.ts` y `base-url.ts`, `frontend/middleware.ts`, `frontend-hub/app/(auth)`.
+
+## Features sugeridas en ADO
+
+- **A1 — Autenticación endurecida e identidad OIDC:** A-01 a A-08.
+- **A2 — Trámites en la suite:** A-09 a A-14.
+
+---
+
+## Estado
+
+- [x] A-00 Cerrar §2, §3 y §8 (`@flit/auth`) del contrato con B y C
+- [x] A-01 Inventario de lo que depende de `Development` y nombres de ambiente
+- [x] A-02 Salir de `Development` en DEV
+- [x] A-03 Gateway y API validan firma, emisor y audiencia (la API; el gateway pasa a A-05)
+- [x] A-04 Espiga técnica de OpenIddict
+- [x] A-05 Servidor OIDC en `core-api`
+- [x] A-06 Pantallas de login en el hub
+- [x] A-07 Token por producto y refresh rotado (en la base de OpenIddict, no en Redis)
+- [x] A-08 Marca Blanca sobre OIDC
+- [x] A-09 Paquete `@flit/auth`
+- [x] A-10 Trámites usa `@flit/auth` con convivencia
+- [x] A-11 Trámites en su host y reparto de rutas (encendido en cada ambiente pendiente del borde)
+- [x] A-12 Recursos de correo y URLs sin valores fijos (los valores de código quedan solo como respaldo de pruebas)
+- [x] A-13 Cierre de sesión global y revocación (eventos de suspensión con C-01)
+- [ ] A-14 Retirar la sesión antigua
+
+---
+
+## Tareas
+
+### A-00 · Contrato de identidad · Fase 0 · semana 1 · S
+
+- **Qué:** revisar con B y C las secciones §2 (token), §3 (token de servicio) y §8 (`@flit/auth`) de `contrato-plataforma-v1.md` y cerrarlas.
+- **Hecho cuando:** PR que cambia solo el contrato, aprobado por los tres frentes, con la fila de historial.
+
+### A-01 · Inventario de `Development` · Fase 0 · semana 1 · S
+
+- **Qué:** listar todo lo que cambia según el nombre de ambiente en `core-api`, `Flit.Gateway` y `core-ict`: `IsDevelopment()`, `appsettings.Development.json`, `Jwt__DevGenerate`, `DevelopmentAuthSeeder`, `DevelopmentNoJwtProxyConfigFilter` (`Flit.Gateway/Configuration/`), Swagger y seeds.
+- **Dónde:** `docker-compose.prod.yml` (líneas 130, 329 y 467 fijan `Development`), `services/core-api/src/Flit.Gateway/Program.cs:79-130`, `services/core-api/src/Flit.Api/Authorization/ApiSecurityExtensions.cs`.
+- **Hecho cuando:** `docs/suite/frentes/a-inventario-ambientes.md` lista cada punto con su decisión y propone los nombres de ambiente (por ejemplo `Development` solo local; `Dev`, `QA` y `Production` desplegados; ya existe `appsettings.QA.json`).
+
+### A-02 · Salir de `Development` en DEV · Fase 0 · semanas 1–2 · M
+
+- **Qué:** aplicar el inventario. DEV corre con su nombre de ambiente propio y las mismas funciones que hoy, sin los atajos de desarrollo.
+- **Dónde:** configuración por ambiente en `docker-compose.prod.yml`, con variables `${VAR:-valor de hoy}` para que desplegar no cambie nada; el cambio real es una línea en el `.env` de DEV.
+- **Hecho cuando:** DEV funciona un sprint sin `Development`, incluidos Marca Blanca, ICT y el migrador. QA y PDN siguen en una HU aparte con aprobación del líder (R13).
+- **Pruebas:** arranque de cada servicio con el ambiente nuevo; `tests/Flit.Integration.Tests/MarcaBlanca`.
+
+### A-03 · Validación real del token · Fase 0 · semanas 2–3 · M
+
+- **Qué:** quitar `RequireAssertion(_ => true)` y el `SignatureValidator` permisivo del gateway fuera de local. La API falla al arrancar si no tiene llave pública fuera de local. Validar `iss` y `aud`, con `aud=flit-api` aceptado durante la transición.
+- **Dónde:** `Flit.Gateway/Program.cs`, `Flit.Api/Authorization/ApiSecurityExtensions.cs`, `Flit.Infrastructure/Security/RsaJwtTokenIssuer.cs`.
+- **Hecho cuando:** un token sin firma, con otro emisor o vencido recibe 401 en gateway y API en DEV. ADR-0060 deja de depender de que el gateway "no valide".
+- **Pruebas:** unitarias de las policies; integración con token manipulado; suite de Marca Blanca.
+- **Gateway (movido a A-05):** validar en el gateway exige una llave publicada; con el JWKS del servidor OIDC se valida sin copiar llaves. Mientras tanto la API rechaza cualquier token inválido, y el gateway no puede exigir el token de la API en las rutas de ICT, que usan otra llave.
+
+### A-04 · Espiga de OpenIddict · Fase 0 · semana 3 · M
+
+- **Qué:** prototipo en una rama de espiga, que no se fusiona: authorization code con PKCE sobre el `LoginHandler` actual, emisor tomado del host sellado, un cliente `tramites` y uno `svc-demo`.
+- **Hecho cuando:** `docs/suite/frentes/a-espiga-openiddict.md` responde cuatro preguntas: almacenamiento de OpenIddict (schema `identity`), emisor por host, cómo reutilizar `LoginHandler` y el rendimiento del JWKS. Incluye la decisión.
+
+### A-05 · Servidor OIDC en `core-api` · Fase 1 · M–L
+
+- **Qué:** módulo nuevo `Flit.Modules.Identity` con OpenIddict. Endpoints `/connect/authorize`, `/connect/token`, `/connect/logout`, `/.well-known/openid-configuration` y JWKS. Clientes `plataforma`, `tramites`, `demo`, `svc-demo`. `GET /api/v1/platform/issuers`.
+- **Dónde:** `services/core-api/src/Flit.Modules.Identity/**`; registro con **una línea** en `Program.cs` y en `InfrastructureExtensions.cs` (R5); tablas de OpenIddict con migración (R6); paquete OpenIddict en PR propio de `Directory.Packages.props`.
+- **Hecho cuando:** en DEV, detrás de `Suite:Oidc:Enabled`, un cliente de prueba obtiene un token por authorization code + PKCE y otro por client credentials.
+- **Pruebas:** integración del flujo completo contra PostgreSQL real.
+
+### A-06 · Login en el hub · Fase 1 · M
+
+- **Qué:** pantallas de login, recuperación y activación de invitación en `frontend-hub/app/(auth)`, reutilizando lo de `frontend/app/login`, `frontend/app/auth/*` y `frontend/app/invite/activate`, con la marca por host de Marca Blanca.
+- **Coordinación:** B crea `frontend-hub`. Tú solo trabajas en `app/(auth)`.
+- **Hecho cuando:** el login del hub completa el flujo OIDC de A-05 y muestra la marca de la red en su dominio.
+
+### A-07 · Token por producto y refresh · Fase 1 · M
+
+- **Qué:** emisión según el contrato §2. `aud` y `product` iguales al cliente; roles y permisos del producto desde `IProductAccessResolver` (`Flit.Modules.Security.Application.Products`; stub hasta que B entregue; el SuperAdmin no pasa por él, contrato §2.1); rechazo `PRODUCT_NOT_ENABLED` o `PRODUCT_ROLE_REQUIRED`. Vida de 15 minutos; refresh rotado y revocable en Redis.
+- **Hecho cuando:** un usuario sin rol en un producto no obtiene token para él; un refresh usado dos veces revoca la cadena.
+
+### A-08 · Marca Blanca sobre OIDC · Fase 1 · M
+
+- **Qué:** el login OIDC se sirve también en el dominio de cada red. `NETWORK_DOMAIN_REQUIRED` redirige al hub de la red. `NetworkUrlBaseResolver` apunta al hub de la red. Coordinar con B el campo `purpose` de `tenant_domains`.
+- **Dónde:** `Flit.Modules.Security.Application/Auth/Login/LoginHandler.cs`, `Auth/Network/NetworkUrlBaseResolver.cs`, `Flit.Api/Authorization/DomainBindingMiddleware.cs`.
+- **Hecho cuando:** la suite de integración de Marca Blanca y la de paridad (#12429) pasan con OIDC encendido.
+
+### A-09 · Paquete `@flit/auth` · Fase 2 · M
+
+- **Qué:** implementar el contrato §8 para Next.js: rutas de login, callback, refresh y logout; proxy `/api/*` con Bearer desde la sesión; sesión en Redis; cookie `HttpOnly; Secure; SameSite=Lax` sin `Domain`.
+- **Dónde:** `packages/auth/**`. El líder habilita `packages/*` en el workspace en la semana 1.
+- **Hecho cuando:** `frontend-hub` y `frontend-demo` lo usan. Una prueba automática falla si alguna respuesta emite `Set-Cookie` con `Domain`.
+
+### A-10 · Trámites usa `@flit/auth` · Fase 2 · M
+
+- **Qué:** reemplazar `frontend/lib/auth/session.ts` (cookie legible y copia en `localStorage`) y el Bearer desde el navegador en `frontend/lib/api/client.ts`. Convivencia con `Suite:LegacySession:Enabled` durante un sprint.
+- **Hecho cuando:** con la bandera nueva, Trámites no guarda tokens en el navegador; con la vieja, todo sigue como hoy.
+
+### A-11 · Trámites en su host · Fase 2 · M
+
+- **Qué:** Trámites pasa a `<ambiente>.tramites.flitsas.online`. El reparto de rutas del plan maestro §4.3 queda en un mapa de redirecciones del hub (`frontend-hub/redirects/legacy-tramites.ts`, archivo tuyo dentro del hub). Redirecciones 308 conservando ruta y parámetros. Detrás de `Suite:TramitesHost:Enabled`.
+- **Coordinación:** el líder cambia hosts, certificados y `cd.yml`; B publica el hub en la raíz con `Suite:Hub:Enabled`.
+- **Hecho cuando:** los enlaces viejos de invitación, recuperación, portal (`/portal/[token]`) y biometría (`/biometric/[token]`) funcionan en DEV después del cambio.
+
+### A-12 · Recursos de correo y URLs sin valores fijos · Fase 2 · S
+
+- **Qué:** sacar a configuración por ambiente los `https://dev.flitsas.online/...` escritos en código: `NotificationEmailAssetsOptions.cs`, `TramiteCambioEstadoEmailComposer.cs`, `AsignacionPlacaEmailComposer.cs`, `Preview/*Sample.cs`, `EmailThemePublicBrandingOptions.cs`, `Flit.Api/RateLimiting/PublicBrandingOptions.cs`, `FlitBrandedEmailLayout.cs` y `WelcomeRegistrationEmailTemplate.cs`. Recursos nuevos desde `assets.<ambiente>`; los hosts viejos siguen sirviendo `/email-assets`.
+- **Hecho cuando:** ninguna URL de ambiente queda fija en código (verificado con `grep`) y los correos de prueba cargan sus imágenes.
+
+### A-13 · Cierre de sesión global y revocación · Fase 2 · S–M
+
+- **Qué:** cerrar sesión en un producto la cierra en toda la suite. Consumir `platform.user.suspended` y `platform.tenant.suspended` para revocar refresh tokens y sesiones.
+- **Hecho cuando:** después de cerrar sesión en Trámites, abrir el hub pide login; suspender un usuario corta su sesión en menos de 15 minutos.
+
+### A-14 · Retirar la sesión antigua · Fase 2 · S
+
+- **Qué:** después de un sprint con `Suite:LegacySession:Enabled` apagada en PDN sin incidentes, borrar la cookie `flit_token`, la copia en `localStorage` y la bandera.
+- **Hecho cuando:** ya no hay referencias a `flit:jwt` ni a `flit_token` en el código.
+
+---
+
+## Riesgos del frente
+
+| Riesgo | Qué hacer |
+|---|---|
+| Salir de `Development` rompe algo que hoy funciona por la omisión | A-01 antes que A-02; primero DEV; observar un sprint |
+| Validar el token rompe llamadas internas (ICT, migrador, frontend por `CORE_API_ORIGIN`) | Incluirlas en el inventario A-01 con su forma de autenticarse |
+| OpenIddict y el emisor por host | A-04 decide antes de A-05 |
+| Tiempo repartido con el soporte de Trámites | Solo errores de PDN durante las Fases 1 y 2 (pendiente de confirmar con el PO) |
+
+## Bitácora
+
+| Fecha | Tarea | PR | Nota |
+|---|---|---|---|
+| 2026-09-25 | A-01 (HU #12894) | Feature #12886 | `a-inventario-ambientes.md`: 21 puntos, 15 preguntas para quien tiene acceso a la VPS y cambios compatibles para A-02/A-03. Hallazgo: según el repo, API y gateway no validan firma del JWT en ningún ambiente (sin llave pública); a confirmar con `docker inspect`. |
+| 2026-09-25 | A-03 (HU #12896), parte API | Feature #12886 | La API firma con llave persistente (`security.jwt_signing_keys`, cifrada con Data Protection) y valida firma, emisor, audiencia y vencimiento de sus tokens (`Jwt:PersistSigningKey`, `Jwt:ValidateIssuedTokens`, encendidas en `docker-compose.prod.yml` con salida por `.env`). Sin llaves en el `.env` ni acceso a la VPS. Cualquier token inválido responde `SESSION_EXPIRED` para que el frontend lleve al login. Se corrigió la doble escritura del 401 vencido. El gateway pasa a A-05 (ver la tarea). |
+| 2026-09-25 | A-04 (HU #12897) | Feature #12886 | Espiga en rama local `spike/AB-12897-openiddict` (no se fusiona). Respuestas y decisión en `a-espiga-openiddict.md`: OpenIddict 7.x, tablas `identity.oidc_*`, emisor por host sellado, `CredentialVerifier` y llave persistente. Exige subir EF/Extensions a 10.0.11 e IdentityModel a 8.19.2. |
+| 2026-09-28 | A-00 (HU #12893) | PR #433 | El contrato v1 se cerró en el PR #433, sin reunión, al pasar a un solo desarrollador. |
+| 2026-09-28 | A-02 (HU #12895) | Feature #12886 | Lo que decidía `Development` pasa a banderas: `Seed:RbacCatalog` y `Seed:DemoUsers` (el seeder separa catálogo RBAC de cuentas demo), `Swagger:Enabled` (API e ICT), `Smtp:UseConsoleWhenNoHost` y `Gateway:DisableJwtPolicy`; validación del contenedor de DI fija. Compose: `ASPNETCORE_ENVIRONMENT: ${FLIT_DOTNET_ENVIRONMENT:-Development}` en los tres servicios, banderas con el valor de hoy, `FLIT_DEV_SEED` y se retira `Jwt__DevGenerate`, que nadie leía. Probado arrancando la API como `Dev` sobre una base nueva: catálogo completo, sin cuentas demo ni Swagger. De paso: el seeder creaba SuperAdmin y AdminCompany con producto `tramites` en bases nuevas; ahora `plataforma`. Falta que alguien con acceso ponga `FLIT_DOTNET_ENVIRONMENT=Dev` en el `.env` de DEV. |
+| 2026-09-28 | A-05 (HU #12990) | Feature #12886 | OpenIddict 7.7.1 en `Flit.Api/Identity` (no un módulo aparte: necesita ASP.NET Core y `FlitDbContext`, como los endpoints de plataforma de B-06), detrás de `Suite:Oidc:Enabled`. Tablas `identity.oidc_*` por DDL 124 (el snapshot de EF está desfasado). `CredentialVerifier` extraído de `LoginHandler`; `POST /connect/login` abre la sesión del hub (cookie `flit_hub`, HttpOnly, Lax, Secure, sin Domain). Emisor: el host sellado si es el hub del ambiente o el dominio de una red; si no, el hub del ambiente. Llaves de firma y cifrado persistentes en `security.jwt_signing_keys`. Clientes: uno por producto (code + PKCE, retorno `<producto>/auth/callback`) y los de servicio con secreto. `GET /api/v1/platform/issuers`. Limpieza de tokens cada 6 h. Gateway con rutas `/connect/*` y `/.well-known/*`; el hub también las reenvía. El CD pasa `Suite:Hosts:Environment` (faltaba desde B-06: DEV armaba URLs de PDN). 14 pruebas de punta a punta. |
+| 2026-09-28 | A-07 (HU #12992) | Feature #12886 | Token según el contrato §2 con los nombres y formatos del JWT de siempre (`role`, `role_code`, `role_id`, `roles` y `permissions` como arreglos). Roles y permisos solo del producto (`IProductAccessResolver`); el hub (plataforma) no exige rol. Sin acceso no hay código: `access_denied` con `PRODUCT_NOT_ENABLED` o `PRODUCT_ROLE_REQUIRED`. Se relee el usuario en cada emisión y cada refresh: suspensión, roles o producto apagado se aplican en el siguiente refresh (≤ 15 min). SuperAdmin con bypass (§2.1). **Refresh en la base, no en Redis:** OpenIddict ya guarda y rota los refresh en `identity.oidc_tokens` y revoca la cadena si se reusa (margen de reuso en 0); Redis no existe aún en DEV (L-07) y no agrega nada a esto. core-api acepta los tokens del hub (llave OIDC, emisor de `/platform/issuers` con caché de 5 min, `aud` plataforma o tramites) cuando valida tokens. `parent_tenant_id` queda fuera: el JWT de siempre tampoco lo lleva. 8 pruebas nuevas. |
+| 2026-09-28 | A-06 (HU #12991) | Feature #12886 | `frontend-hub/app/(auth)`: `/login`, `/auth/forgot-password`, `/auth/reset-password` e `/invite/activate`, con las mismas rutas, diseño y mensajes de Trámites (los enlaces de correo ya enviados siguen sirviendo cuando la raíz pase al hub). El login llama `POST /connect/login` y vuelve a `returnUrl`; ningún token llega al navegador. El hub reenvía `/connect/*` y `/.well-known/*`. «Iniciar sesión» de la portada va a `/login`. Probado en el navegador: authorize de Trámites → login del hub → retorno al callback con `code` e `iss` del hub. 6 pruebas del componente. |
+| 2026-09-28 | A-08 (HU #12993) | Feature #12886 | Por el dominio de una red, emisor y `dom` son ese dominio. Los retornos a dominios de red no se registran (cambian en caliente): se aceptan solo por el hub de esa red, a un dominio activo de la misma red con el `purpose` del producto (B-08), por https y a `/auth/callback` (o `/` al cerrar sesión); reemplaza los manejadores de OpenIddict de `redirect_uri` y `post_logout_redirect_uri`. `DomainBindingMiddleware` acepta la sesión en cualquier dominio activo de la misma red (hub → Trámites de la red); entre redes sigue `SESSION_DOMAIN_MISMATCH`. Un usuario de red en el hub de FLIT recibe `NETWORK_DOMAIN_REQUIRED` con el login de su dominio, sin sesión. La suite de Marca Blanca corre ahora con OIDC encendido: 25 pruebas existentes sin cambios + 4 nuevas. |
+| 2026-09-28 | A-09 (HU #13000) | Feature #12887 | `packages/auth`: rutas `/auth/login`, `callback`, `logout`, `refresh` y `session`, `createApiProxy`, `getSession()` y `useSession()` (contrato §8). **Sesión sin Redis:** cookie cifrada (AES-GCM, `FLIT_SESSION_SECRET`), comprimida, `HttpOnly`, `Lax`, sin `Domain`, partida en trozos si hace falta. Probado en el navegador: la primera versión pesaba ~7,5 KB y, sumada a otras cookies de `localhost`, pasó el límite de 16 KB de Node (todas las peticiones fallaban). Se comprimió, el payload del JWT se guarda como texto y el refresh pasó a referencia opaca (`UseReferenceRefreshTokens`): ~1,3 KB. El hub ya lo usa como cliente `plataforma`: portada → login → saludo → cerrar sesión (cierra también la del hub). CD exporta `FLIT_HUB_URL`; `FLIT_SESSION_SECRET` va en el `.env` al encender el perfil `suite`. 15 pruebas del paquete. |
+| 2026-09-28 | A-10 (HU #13001) | Feature #12887 | Bandera en runtime `FLIT_SESSION_MODE` (`legacy` por defecto, `oidc`), no `Suite:LegacySession:Enabled`: la decide el servidor de Next y el mismo build sirve los dos modos (middleware en runtime Node). En `oidc`: `/login` → login del hub, `/api/v1/*` → BFF (`/bff/api/v1`, Bearer de la sesión), gates de `/admin` y `/empresa` con los claims de la sesión cifrada, y el navegador solo guarda los claims **sin firma** (`/auth/claims` → `localStorage`) para que menús, permisos y guardias sigan igual sin tocar sus 56 lecturas de `getToken()`. Los clientes que usaban la base configurada tal cual pasan por `sessionAwareBase` (idéntico en `legacy`). Cookies de sesión por producto (`flit_session_<producto>`): en local hub y Trámites comparten host. Probado en el navegador: Trámites → login del hub → dashboard con el rol `admin_tramites`; sin firma en el navegador, sin `flit_token`, API por el mismo origen; «Salir» cierra Trámites y hub. Build de producción verificado en los dos modos. Encender `oidc` en un ambiente exige A-11 (el hub ocupa la raíz). |
+| 2026-09-28 | A-13 (HU #13004) | Feature #12887 | Cada `authorize` crea una autorización explícita por (sesión del hub, producto) y su id queda en la cookie del hub; los refresh cuelgan de ella también al rotar. `/connect/logout` revoca solo las autorizaciones de esa sesión y sus tokens, y cierra la sesión del hub: los productos abiertos en ese navegador pierden la sesión en su siguiente renovación (≤ 15 min); otros dispositivos no se tocan. Usuario desactivado, suspendido o sin roles: el siguiente refresh da `SESSION_INVALID` (A-07). Consumir `platform.user.suspended` para cortar antes queda para cuando exista el publicador de eventos (C-01). Probado en el navegador: «Salir» en Trámites cierra Trámites y hub. |
+| 2026-09-28 | A-12 (HU #13003) | Feature #12887 | El compose pasa por ambiente, desde `FLIT_HUB_URL` que exporta el CD, las URLs de recuperación, invitación, recursos de correo y marca pública; antes no las pasaba y QA y PDN enviaban enlaces e imágenes de DEV. **Hallazgo:** la recuperación enlazaba `/reset-password`, que no existe en el front (la pantalla es `/auth/reset-password`) y ninguna capa lo redirigía; se corrige la URL y Trámites y el hub redirigen los enlaces ya enviados. Las plantillas de seguridad (invitación, recuperación, reset administrativo, bienvenida) no recibían la base de recursos: ahora `EmailLinksOptions` (derivada de la configuración existente). Los valores `dev.flitsas.online` del código quedan solo como respaldo: los fijan unas 40 pruebas de paridad byte a byte. `email-assets` también en el hub, para cuando ocupe la raíz (A-11). **Efecto al desplegar en QA y PDN:** sus correos pasan a enlazar su propio ambiente. |
+| 2026-09-28 | A-11 (HU #13002) | Feature #12887 | El hub ocupa la raíz y redirige con 308 lo de Trámites a su host conservando ruta y parámetros (`frontend-hub/lib/legacy-tramites.ts`, plan maestro §4.3); login, recuperación, invitación, `/connect`, `/api`, `email-assets` y `/` se quedan en el hub. `/profile` y `/admin` siguen en Trámites hasta que el hub los tenga (B-12). Detrás de `FLIT_TRAMITES_HOST_ENABLED` (runtime), no `Suite:TramitesHost:Enabled`. El CD exporta `FLIT_TRAMITES_URL` por ambiente. Plantilla del borde con el orden para encenderlo y cómo volver atrás: `deploy/edge/nginx/flit-suite-hosts.conf.example` (DNS y certificado de `<ambiente>.tramites.flitsas.online` + cambiar el `proxy_pass` de la raíz al hub). Hub con página `/403` para los accesos negados. Verificado en el build: 308 a Trámites y rutas de plataforma en el hub. |
+| 2026-09-30 | Suite consolidada | un solo PR | Revisión contra el simulador de la suite de Jorman (ejemplo 2), en local con `127.0.0.1` (`docs/suite/local.md`). Tres huecos corregidos: (1) **cerrar sesión no cerraba el hub ni los demás productos** hasta que vencía su token (15 min): la API rechaza con `SESSION_EXPIRED` los tokens cuya autorización de sesión (`oi_au_id`) se revocó (caché 15 s) y `@flit/auth` borra la sesión local cuando la API rechaza su token; (2) **el hub mostraba la portada a quien ya había iniciado sesión** (por ejemplo, entrando por Trámites): intento silencioso `prompt=none` antes de la portada, con `sso=0` para no repetir; (3) **Trámites con la sesión de la suite se fiaba de los claims de localStorage** y mostraba páginas con una sesión cerrada: el middleware exige la sesión del servidor en las páginas protegidas. Además, el token de producto lleva los roles de plataforma mientras su administración viva en Trámites (ver frente B, B-12) y el 403 de Trámites explica el motivo y lleva a «Ir a mis productos». |

@@ -2,7 +2,6 @@ using System.Security.Claims;
 using Flit.Admin.Application.Companies.Settings.GetTenantSettings;
 using Flit.Admin.Application.Companies.TransitOffices.GetTransitGrants;
 using Flit.Admin.Domain.Companies.TransitOffices;
-using Flit.Admin.Domain.PlatePreassign;
 using Flit.Api.Authorization;
 using Flit.Api.Middleware;
 using Flit.Queries.Domain;
@@ -18,6 +17,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 using Flit.Tramites.Domain.Enums;
+using Flit.Tramites.Domain.Integration;
 
 namespace Flit.Api.Endpoints.Tramites;
 
@@ -96,6 +96,7 @@ internal static class ProcedureInstanceEndpoints
                 "not_published" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El tipo de trámite no está publicado."),
                 "invalid_reference" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El tenant, el usuario o el tipo de trámite indicado no existe."),
                 "reference_conflict" => Results.Problem(statusCode: 409, title: "Conflict", detail: "No se pudo generar un número de referencia único. Reintente."),
+                "family_permission_denied" => FamilyForbidden(), // HU #13664
                 "procedure_family_blocked" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "La compañía tiene bloqueada la creación de trámites de esta familia. Contacta al administrador."),
                 // ADR-0050 — el tipo existe y está publicado, pero su recorrido todavía no está
                 // habilitado para operarse. Se distingue de `not_published` a propósito: uno es un
@@ -105,9 +106,14 @@ internal static class ProcedureInstanceEndpoints
                 "COMPANY_RULE_VIOLATION" => Results.Problem(statusCode: 422, title: "COMPANY_RULE_VIOLATION", detail: "El OT del operador no cumple la regla de compañía del tipo."),
                 "OT_NOT_AUTHORIZED_FOR_TYPE" => Results.Problem(statusCode: 422, title: "OT_NOT_AUTHORIZED_FOR_TYPE", detail: "El OT del operador no está habilitado/operable para este tipo."),
                 "DUPLICATE_ACTIVE_PROCEDURE" => Results.Problem(statusCode: 409, title: "DUPLICATE_ACTIVE_PROCEDURE", detail: "Ya existe un trámite activo del mismo tipo para la placa/VIN."),
-                _ => Results.Created($"/api/v1/tramites/instances/{result!.Id}", result)
+                // Gate de creación (HU #12348 / #12409): ot_not_permitted, tenant_inactive, network_inactive.
+                _ => MapRadicationGateError(error)
+                    ?? (result is null
+                        ? Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "No se pudo crear el trámite.")
+                        : Results.Created($"/api/v1/tramites/instances/{result.Id}", result))
             };
-        }).WithName("CreateProcedureInstance");
+        }).RequireModulePermission("tramites.create") // HU #13662 (Feature #13105 F-E)
+            .WithName("CreateProcedureInstance");
 
         // Listado para la tabla de operación (Slice M6). Ruta literal /instances → NO colisiona con
         // /instances/{id:guid} (la constraint :guid solo casa GUIDs; el listado no lleva segmento).
@@ -116,6 +122,7 @@ internal static class ProcedureInstanceEndpoints
         group.MapGet("/instances", async (
             HttpContext http,
             ListProcedureInstancesHandler handler,
+            IProcedureFamilyPermissionGate familyGate, // HU #13664
             ListProcedureInstancesFilteredHandler filteredHandler,
             [FromQuery] string? vin,
             [FromQuery] string? placa,
@@ -140,6 +147,7 @@ internal static class ProcedureInstanceEndpoints
             CancellationToken ct) =>
         {
             var (tenantId, _) = ResolveTenantContext(http);
+            var familiasPermitidas = familyGate.ReadableFamilyCodes(); // HU #13664
 
             // Filtrado/ordenamiento server-side (WHERE/ORDER BY en SQL): solo se activa el camino nuevo
             // cuando el caller pide EXPLÍCITAMENTE algún filtro, orden o paginación. Sin ningún parámetro
@@ -155,7 +163,8 @@ internal static class ProcedureInstanceEndpoints
                 || createdFrom is not null || createdTo is not null
                 || updatedFrom is not null || updatedTo is not null
                 || !string.IsNullOrWhiteSpace(sortBy) || !string.IsNullOrWhiteSpace(sortDir)
-                || skip is not null || take is not null;
+                || skip is not null || take is not null
+                || familiasPermitidas is not null; // HU #13664: restringir por familia exige el camino filtrado
 
             if (!pideFiltradoOrdenado)
             {
@@ -178,6 +187,7 @@ internal static class ProcedureInstanceEndpoints
                 Modalidad = modalidad,
                 OrganismoTransito = organismoTransito,
                 TipoCodigo = tipoCodigo,
+                AllowedFamilies = familiasPermitidas, // HU #13664
                 Busqueda = busqueda,
                 Prioritario = prioritario,
                 CreatedFrom = createdFrom,
@@ -215,6 +225,7 @@ internal static class ProcedureInstanceEndpoints
         group.MapGet("/instances/plate-history", async (
             HttpContext http,
             ListProcedureInstancesFilteredHandler filteredHandler,
+            IProcedureFamilyPermissionGate familyGate, // HU #13664
             [FromQuery] string? placa,
             [FromQuery] int? skip,
             [FromQuery] int? take,
@@ -237,6 +248,7 @@ internal static class ProcedureInstanceEndpoints
             // La consulta se arma a partir del ALCANCE, no de variables sueltas: el tenant (incluido
             // el null global) sale de PlateHistoryScope y el orden/tope los fija el contrato.
             var request = PlateHistoryScope.BuildRequest(alcance, placaNormalizada, skip, take);
+            request = request with { AllowedFamilies = familyGate.ReadableFamilyCodes() }; // HU #13664 — Ver por familia
 
             // Placa sin trámites → 200 con lista vacía y total 0. NUNCA 404: la placa no es un
             // recurso de esta API, y un 404 haría que el cliente pintara un error donde solo hay
@@ -288,6 +300,7 @@ internal static class ProcedureInstanceEndpoints
         group.MapPost("/instances/search", async (
             HttpContext http,
             ListProcedureInstancesFilteredHandler handler,
+            IProcedureFamilyPermissionGate familyGate, // HU #13664
             [FromBody] TramitesSearchRequest body,
             CancellationToken ct) =>
         {
@@ -303,7 +316,7 @@ internal static class ProcedureInstanceEndpoints
 
             try
             {
-                var (items, total) = await handler.HandleAsync(body.ToRequest(tenantId) with { UsuarioActualId = ResolveUserId(http.User) }, ct);
+                var (items, total) = await handler.HandleAsync(body.ToRequest(tenantId) with { UsuarioActualId = ResolveUserId(http.User), AllowedFamilies = familyGate.ReadableFamilyCodes() }, ct);
                 return Results.Ok(new { items, total });
             }
             catch (BusquedaRapidaDemasiadoAmpliaException ex)
@@ -323,6 +336,7 @@ internal static class ProcedureInstanceEndpoints
         group.MapPost("/instances/estado-counts", async (
             HttpContext http,
             CountProcedureInstancesByStatusHandler handler,
+            IProcedureFamilyPermissionGate familyGate, // HU #13664
             [FromBody] TramitesSearchRequest body,
             CancellationToken ct) =>
         {
@@ -335,7 +349,7 @@ internal static class ProcedureInstanceEndpoints
 
             try
             {
-                return Results.Ok(await handler.HandleAsync(body.ToRequest(tenantId) with { UsuarioActualId = ResolveUserId(http.User) }, ct));
+                return Results.Ok(await handler.HandleAsync(body.ToRequest(tenantId) with { UsuarioActualId = ResolveUserId(http.User), AllowedFamilies = familyGate.ReadableFamilyCodes() }, ct));
             }
             catch (BusquedaRapidaDemasiadoAmpliaException ex)
             {
@@ -357,6 +371,7 @@ internal static class ProcedureInstanceEndpoints
         group.MapGet("/instances/estado-counts", async (
             HttpContext http,
             CountProcedureInstancesByStatusHandler handler,
+            IProcedureFamilyPermissionGate familyGate, // HU #13664
             [FromQuery] string? vin,
             [FromQuery] string? placa,
             [FromQuery] string? vendedor,
@@ -390,6 +405,7 @@ internal static class ProcedureInstanceEndpoints
                 Modalidad = modalidad,
                 OrganismoTransito = organismoTransito,
                 TipoCodigo = tipoCodigo,
+                AllowedFamilies = familyGate.ReadableFamilyCodes(), // HU #13664
                 Busqueda = busqueda,
                 Prioritario = prioritario,
                 CreatedFrom = createdFrom,
@@ -427,12 +443,15 @@ internal static class ProcedureInstanceEndpoints
             return Results.Ok(new { items });
         }).WithName("ListEnabledTransitOffices");
 
-        // HU #11203 — mandatarios que pueden firmar el mandato de este trámite, con su documento y la
-        // vigencia de su identidad, más cuál está elegido. Se consulta al registrar, no al aprobar.
-        group.MapGet("/instances/{id:guid}/mandate-signers", async (
+        // HU #13145 (ADR-0066) — el firmante PREVISTO, de solo lectura: estado (valido, sin_mandatario,
+        // firma_invalida, no_aplica, pendiente_organismo, pendiente_eleccion_ot), nombre y forma de firma
+        // (solo con valido) y el modo vigente de la validación. Reutiliza el evaluador del gate de radicación.
+        // El trámite se busca en el tenant de la petición (otro tenant = 404) y la respuesta nunca trae el
+        // documento ni la ruta de firma del mandatario (Ley 1581).
+        group.MapGet("/instances/{id:guid}/mandate-signer", async (
             Guid id,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
-            ListMandateSignerOptionsHandler handler,
+            GetMandateSignerPrevistoHandler handler,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
@@ -442,38 +461,7 @@ internal static class ProcedureInstanceEndpoints
             return error is "not_found"
                 ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found.")
                 : Results.Ok(result);
-        }).WithName("ListProcedureInstanceMandateSigners");
-
-        // HU #11203 (AC4/AC5) — fija quién firma. Solo en borrador o subsanación.
-        group.MapPut("/instances/{id:guid}/mandate-signer", async (
-            Guid id,
-            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
-            SetMandateSignerBody body,
-            SetMandateSignerHandler handler,
-            CancellationToken ct) =>
-        {
-            if (tenantId is null || tenantId == Guid.Empty)
-                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
-
-            var error = await handler.HandleAsync(id, tenantId.Value, body.MandateSignerId, ct);
-            return error switch
-            {
-                null => Results.NoContent(),
-                "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
-                "not_draft" => Results.Problem(
-                    statusCode: 409,
-                    title: "Conflict",
-                    detail: "El trámite ya salió de borrador: el mandatario que firma no puede cambiarse."),
-                "sin_organismo" => Results.Problem(
-                    statusCode: 409,
-                    title: "Conflict",
-                    detail: "El trámite todavía no tiene organismo de tránsito."),
-                _ => Results.Problem(
-                    statusCode: 422,
-                    title: "Unprocessable Entity",
-                    detail: "El mandatario no está habilitado para el organismo de tránsito del trámite."),
-            };
-        }).WithName("SetProcedureInstanceMandateSigner");
+        }).WithName("GetProcedureInstanceMandateSigner");
 
         group.MapGet("/instances/{id:guid}", async (
             Guid id,
@@ -485,6 +473,8 @@ internal static class ProcedureInstanceEndpoints
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
             var (result, error) = await handler.HandleAsync(id, tenantId.Value, ct);
+            if (error is "family_forbidden") // HU #13664
+                return Results.Problem(statusCode: 403, title: "Forbidden", detail: "No tienes permiso para ver trámites de esta familia.");
             return error is "not_found"
                 ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found.")
                 : Results.Ok(result);
@@ -565,10 +555,6 @@ internal static class ProcedureInstanceEndpoints
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "prenda_decision_invalida" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "La decisión de prenda no es válida (solicitar|registrar|levantar|omitir|sin_prenda)."),
-                // CF-06 (HU #10881) — el organismo exige el certificado: "asumo el riesgo" no es una
-                // elección disponible en ese trámite. 409 y no 400: la decisión es válida en general,
-                // lo que choca es la regla del OT.
-                RegistrarPrendaHandler.OmitirNoAdmitidoError => Results.Problem(statusCode: 409, title: RegistrarPrendaHandler.OmitirNoAdmitidoError, detail: "El organismo de tránsito exige el certificado de prenda: registra o levanta la prenda, o declara que el vehículo no tiene."),
                 // ADR-0050 — el tipo no tiene dimensión de gravamen (familia OTROS que no es de prenda).
                 RegistrarPrendaHandler.PrendaNoAdmitidaError => Results.Problem(statusCode: 409, title: RegistrarPrendaHandler.PrendaNoAdmitidaError, detail: "Este tipo de trámite no gestiona prenda: para inscribirla o levantarla radica el trámite de prenda correspondiente."),
                 // R17 (HU #10599) — un trámite en estado final no admite modificar la prenda.
@@ -705,6 +691,9 @@ internal static class ProcedureInstanceEndpoints
                 // HU #10518 — OT con grant pero desactivado/sin tenant a nivel plataforma.
                 "organismo_no_operable" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El organismo de tránsito no está operativo en FLIT."),
                 "ot_rule_blocked" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El trámite está bloqueado por una regla OT activa."),
+                // HU #13144 (ADR-0066) — gate de mandatario al radicar en modo block. Sin este mapeo el default
+                // los devolvería como 422; son 409 igual que documentos_incompletos.
+                TramiteEstadoErrores.MandatarioNoConfigurado or TramiteEstadoErrores.MandatarioFirmaInvalida => MandatarioGateProblem.For(error, null),
                 "biometria_requerida_ot" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Se requiere validación biométrica según reglas OT."),
                 // R10 (HU #10597) — gate de prenda del traspaso.
                 TramiteEstadoErrores.PrendaDecisionRequerida => Results.Problem(statusCode: 409, title: TramiteEstadoErrores.PrendaDecisionRequerida, detail: "El vehículo tiene gravámenes: registra una decisión de prenda antes de radicar."),
@@ -764,6 +753,10 @@ internal static class ProcedureInstanceEndpoints
             // una cabeza de grupo no puede pausar/reanudar trámites de sus hijos (CanWrite, nunca CanRead).
             if (await TenantWriteGuard.RejectIfAnyCannotWriteAsync(http, body.Ids, ct) is { } forbidden)
                 return forbidden;
+
+            // HU #13664 — Ver por familia: los ids viajan en el body, fuera del alcance de FamilyReadEnforcementMiddleware.
+            if (await Flit.Api.Middleware.FamilyReadEnforcementMiddleware.RejectIfAnyUnreadableAsync(http, body.Ids, ct) is { } familyDenied)
+                return familyDenied;
 
             var results = await handler.HandleBulkAsync(
                 body.Ids, tenantId.Value, body.Paused, body.Observation, ResolveUserId(http.User), ct);
@@ -937,6 +930,10 @@ internal static class ProcedureInstanceEndpoints
                 // (409, subsanable reintentando con mandateSignerId).
                 TramiteEstadoErrores.MandatarioRequerido =>
                     Results.Problem(statusCode: 409, title: errorCode, detail: errorDetail),
+                // HU #13144 (ADR-0066) — gate de mandatario al radicar (modo block): 409 subsanable, el
+                // organismo o la compañía registran un mandatario.
+                TramiteEstadoErrores.MandatarioNoConfigurado or TramiteEstadoErrores.MandatarioFirmaInvalida =>
+                    MandatarioGateProblem.For(errorCode, errorDetail),
                 // Bug #13194 (P4, D2) — gate de firma (409): el detalle nombra las partes sin firmar.
                 TramiteEstadoErrores.FirmaPendiente =>
                     FirmaPendienteProblem.Crear(errorCode, errorDetail, bloqueoFirma.PartesSinFirma),
@@ -946,51 +943,19 @@ internal static class ProcedureInstanceEndpoints
             };
         }).WithName("TransitionProcedureInstance");
 
-        // Feature #10587 (P-10) — placas DISPONIBLES para la compañía en el OT elegido, para el
-        // selector del wizard de matrícula inicial. Company-facing: el tenant sale del JWT/header.
-        group.MapGet("/plate-preassign/available", async (
-            [FromQuery] Guid transitOfficeId,
-            HttpContext http,
-            IPlateRangeRepository plateRepo,
-            CancellationToken ct) =>
-        {
-            var (resolvedTenant, _) = ResolveTenantContext(http);
-            if (resolvedTenant is not { } tenantId || tenantId == Guid.Empty)
-                return Results.Problem(statusCode: 403, title: "Forbidden",
-                    detail: "El usuario autenticado no tiene una compañía asignada.");
+        // HU #12853 (Feature #12846, Épica #12751) — la ruta de placa preasignada de la compañía se
+        // apaga: el wizard ya no ofrece un selector de placas de rango (Feature #10587 P-10, HU #10806
+        // AC3 retiradas). Responde 410 Gone, nunca 200: el módulo de Preasignación de rango dejó de
+        // decidir la asignación de placa de cualquier trámite.
+        group.MapGet("/plate-preassign/available", DeprecatedPlatePreassignEndpoints.Gone)
+            .WithName("ListAvailablePreassignPlates")
+            .WithSummary("Retirado (410) — la ruta de placa preasignada se retiró, Épica #12751")
+            .Produces(StatusCodes.Status410Gone);
 
-            if (transitOfficeId == Guid.Empty)
-                return Results.BadRequest(new { error = "transitOfficeId es obligatorio." });
-
-            var plates = await plateRepo
-                .ListDetailsAsync(tenantId, transitOfficeId, PlateState.Disponible, ct)
-                .ConfigureAwait(false);
-            return Results.Ok(plates);
-        }).WithName("ListAvailablePreassignPlates");
-
-        // HU #10806 (AC3) — ¿la ruta de preasignación de placa está ACTIVA para la compañía del
-        // radicador en el OT elegido? El wizard lo consulta para no mostrar el selector como si
-        // preasignara cuando en realidad el trámite se entregará de forma estándar. Reutiliza el
-        // mismo AND de tres flags que el submit (IsAssignmentAllowedAsync).
-        group.MapGet("/plate-preassign/status", async (
-            [FromQuery] Guid transitOfficeId,
-            HttpContext http,
-            IPlateRangeRepository plateRepo,
-            CancellationToken ct) =>
-        {
-            var (resolvedTenant, _) = ResolveTenantContext(http);
-            if (resolvedTenant is not { } tenantId || tenantId == Guid.Empty)
-                return Results.Problem(statusCode: 403, title: "Forbidden",
-                    detail: "El usuario autenticado no tiene una compañía asignada.");
-
-            if (transitOfficeId == Guid.Empty)
-                return Results.BadRequest(new { error = "transitOfficeId es obligatorio." });
-
-            var enabled = await plateRepo
-                .IsAssignmentAllowedAsync(tenantId, transitOfficeId, ct)
-                .ConfigureAwait(false);
-            return Results.Ok(new { enabled });
-        }).WithName("PlatePreassignStatus");
+        group.MapGet("/plate-preassign/status", DeprecatedPlatePreassignEndpoints.Gone)
+            .WithName("PlatePreassignStatus")
+            .WithSummary("Retirado (410) — la ruta de placa preasignada se retiró, Épica #12751")
+            .Produces(StatusCodes.Status410Gone);
 
         // CF-02 (HU #10879 AC3 / #10883 AC3) — consulta del vehículo del PASO 1 SIN crear el trámite.
         // Devuelve el mismo semáforo y los mismos bloqueos (409 duplicidad / 422 estado registral) que
@@ -1139,6 +1104,7 @@ internal static class ProcedureInstanceEndpoints
 
             return err switch
             {
+                "family_permission_denied" => FamilyForbidden(), // HU #13664
                 "identificador_requerido" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Indique el identificador del vehículo (VIN o placa, según el tipo de trámite) para crear el trámite."),
                 // ADR-0050 — el tipo elegido no existe o no está publicado. Se distingue de
                 // `modalidad_not_available`: aquí el catálogo SÍ se consultó y el code no está.
@@ -1195,7 +1161,8 @@ internal static class ProcedureInstanceEndpoints
                 null => Results.Created($"/api/v1/tramites/instances/{result!.Instance.Id}", result),
                 _ => Results.Problem(statusCode: 409, title: "Conflict", detail: "No se pudo crear el trámite."),
             };
-        }).WithName("CreateProcedureInstanceFromConsulta");
+        }).RequireModulePermission("tramites.create") // HU #13662 (Feature #13105 F-E)
+            .WithName("CreateProcedureInstanceFromConsulta");
 
         return app;
     }
@@ -1300,6 +1267,10 @@ internal static class ProcedureInstanceEndpoints
         return validos.Count > 0 ? validos : null;
     }
 
+    /// <summary>HU #13664 — falta el «Crear» de la familia del trámite (en AND con tramites.create de la ruta).</summary>
+    private static IResult FamilyForbidden() => Results.Problem(
+        statusCode: 403, title: "Forbidden", detail: "No tienes permiso para crear trámites de esta familia.");
+
     private static (Guid? TenantId, bool IsSuperAdmin) ResolveTenantContext(HttpContext http) =>
         RequestTenantResolver.FromItems(http);
 
@@ -1311,6 +1282,25 @@ internal static class ProcedureInstanceEndpoints
     }
 
     /// <summary>La modalidad solicitada es matrícula inicial (tolerante a espacios/caja).</summary>
+    /// <summary>
+    /// Traduce las denegaciones del gate de creación (<see cref="Flit.Tramites.Domain.Integration.ProcedureRadicationDenialReasons"/>)
+    /// a 403 con un mensaje claro. Antes caían al caso por defecto y respondían 500 (NullReferenceException).
+    /// Devuelve <c>null</c> si el código no es del gate.
+    /// </summary>
+    internal static IResult? MapRadicationGateError(string? error) => error switch
+    {
+        Flit.Tramites.Domain.Integration.ProcedureRadicationDenialReasons.OtNotPermitted => Results.Problem(
+            statusCode: 403, title: "Forbidden",
+            detail: "La compañía no tiene habilitado este organismo de tránsito. Contacta al administrador."),
+        Flit.Tramites.Domain.Integration.ProcedureRadicationDenialReasons.TenantInactive => Results.Problem(
+            statusCode: 403, title: "Forbidden",
+            detail: "La compañía está inactiva y no puede crear trámites."),
+        Flit.Tramites.Domain.Integration.ProcedureRadicationDenialReasons.NetworkInactive => Results.Problem(
+            statusCode: 403, title: "Forbidden",
+            detail: "La red de la compañía está inactiva y no puede crear trámites."),
+        _ => null,
+    };
+
     private static bool EsMatriculaInicial(string? modalidad) =>
         string.Equals(
             modalidad?.Trim(),
@@ -1368,9 +1358,6 @@ internal sealed record EnviarAlOtResponse(
 /// Body de POST /preflight-preview (CF-02). <c>TenantId</c> solo lo usa el SuperAdmin sin
 /// <c>X-Tenant-Id</c>; para un usuario de compañía el backend lo impone desde el JWT.
 /// </summary>
-/// <summary>HU #11203 — cuerpo de la elección del mandatario que firma el mandato del trámite.</summary>
-internal sealed record SetMandateSignerBody(Guid MandateSignerId);
-
 internal sealed record PreflightPreviewBody(
     Guid TenantId,
     string Modalidad,
@@ -1487,4 +1474,20 @@ internal record TramitesSearchRequest
         // Default DESC, igual que el GET: solo "asc" invierte.
         SortDescending = !string.Equals(SortDir, "asc", StringComparison.OrdinalIgnoreCase),
     };
+}
+
+/// <summary>
+/// HU #13144 (ADR-0066) — respuesta 409 del gate de mandatario al radicar. Compartida por <c>/submit</c> y
+/// <c>/transition</c> (ambos pasan por <c>TramiteLifecycleService</c>): sin este mapeo el <c>default</c> de cada
+/// endpoint devolvería 422. El mensaje explica cómo resolverlo y nunca lleva datos del mandatario.
+/// </summary>
+internal static class MandatarioGateProblem
+{
+    public static IResult For(string errorCode, string? detail) =>
+        Results.Problem(
+            statusCode: StatusCodes.Status409Conflict,
+            title: errorCode,
+            detail: detail ?? (errorCode == TramiteEstadoErrores.MandatarioFirmaInvalida
+                ? MandateSignerEstados.MensajeFirmaInvalida
+                : MandateSignerEstados.MensajeSinMandatario));
 }

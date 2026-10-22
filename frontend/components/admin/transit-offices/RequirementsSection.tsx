@@ -48,7 +48,7 @@ function ToggleRow({ id, label, description, checked, disabled, onChange, note }
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full bg-muted transition-colors disabled:opacity-50"
-        style={{ background: checked ? "#557EFF" : undefined }}
+        style={{ background: checked ? "var(--color-flit-brand)" : undefined }}
       >
         <span
           className="inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform"
@@ -76,7 +76,7 @@ function saveErrorMessage(err: unknown): string {
   return "No se pudieron guardar los requisitos.";
 }
 
-/** Pantalla de requisitos configurables del OT (HU #10547): RNMC, ruta de placa e identidad. */
+/** Pantalla de requisitos configurables del OT (HU #10547): RNMC e identidad. */
 export function RequirementsSection({ transitOfficeId }: RequirementsSectionProps) {
   const { show } = useToast();
   const [status, setStatus] = useState<UiStatus>("loading");
@@ -114,10 +114,12 @@ export function RequirementsSection({ transitOfficeId }: RequirementsSectionProp
     if (!requirements) return;
     setSaving(true);
     try {
+      // HU #12851 (Feature #12846) — allowPlatePreassign deja de enviarse: la ruta de placa
+      // preasignada de la compañía se apaga en backend (HU-A5) y este switch ya no tiene consola
+      // detrás. El campo sigue en el contrato (opcional) para no romper clientes existentes.
       const saved = await updateOtRequirements(
         {
           requiresRnmc: requirements.requiresRnmc,
-          allowPlatePreassign: requirements.allowPlatePreassign,
           identityValidationEnabled: requirements.identityValidationEnabled,
         },
         scope,
@@ -153,14 +155,6 @@ export function RequirementsSection({ transitOfficeId }: RequirementsSectionProp
             onChange={(v) => patch({ requiresRnmc: v })}
           />
           <ToggleRow
-            id="ot-req-plate"
-            label="Ruta de placa preasignada"
-            description="Habilita la ruta con placa preasignada para secretarías con backoffice de preasignación."
-            checked={requirements.allowPlatePreassign}
-            disabled={saving}
-            onChange={(v) => patch({ allowPlatePreassign: v })}
-          />
-          <ToggleRow
             id="ot-req-identity"
             label="Validación de identidad"
             description="Exige la validación biométrica de identidad. Desactívala solo según el acuerdo con el OT."
@@ -181,7 +175,7 @@ export function RequirementsSection({ transitOfficeId }: RequirementsSectionProp
               onClick={() => void save()}
               disabled={saving}
               className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-              style={{ background: "#557EFF" }}
+              style={{ background: "var(--color-flit-brand)" }}
             >
               {saving ? "Guardando…" : "Guardar requisitos"}
             </button>

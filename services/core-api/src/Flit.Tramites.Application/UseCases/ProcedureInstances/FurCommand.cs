@@ -62,7 +62,8 @@ public sealed class GenerarFurHandler(
     IMandateCustomTemplateBlobReader? mandateTemplateBlobReader = null,
     ITransitOfficeResolver? transitOfficeResolver = null,
     IIdentitySignatureCapture? identitySignatureCapture = null,
-    IIdentitySignatureExtractor? identitySignatureExtractor = null)
+    IIdentitySignatureExtractor? identitySignatureExtractor = null,
+    IMandateFormatTemplateProvider? mandateFormatTemplates = null)
     : IExpedienteHotDocumentsRegenerator
 {
     // Bug #11613 — respaldo del gate de organismo: resuelve el OT habilitado por id para rellenar los
@@ -99,6 +100,10 @@ public sealed class GenerarFurHandler(
     // ADR-0036 (HU #10912/#10915) — config de mandato por OT (plantilla / exige a PN / mandatario
     // institucional). Default seguro (NUNCA resuelve ⇒ plantilla genérica, solo PJ) si no se inyecta.
     private readonly IMandateRequirementPolicy _mandatePolicy = mandatePolicy ?? NullMandateRequirementPolicy.Instance;
+
+    // HU #13172 (Feature #13118) — plantilla publicada de cada formato de mandato. Opcional: sin él (tests y DI que no
+    // lo ejercitan) el mandato se emite con la redacción del generador, como antes.
+    private readonly IMandateFormatTemplateProvider? _mandateFormatTemplates = mandateFormatTemplates;
 
     // Convenio compañía↔organismo y firma física del mandatario: deciden si el mandato lleva bloque de
     // firma del mandatario. Default seguro ⇒ lo lleva (es un actor obligatorio).
@@ -368,7 +373,7 @@ public sealed class GenerarFurHandler(
 
         // ADR-0036 (HU #10915) — Contrato de mandato. El firmante se resuelve YA en borrador (HU-L8/L9):
         // default OT, default compañía o elección del wizard. Sin esos, el recuadro sale «Sin firmar».
-        var mandato = await TryGenerateMandatoAsync(
+        var mandatoEmitido = await TryGenerateMandatoAsync(
             instance,
             data,
             Get(fv, TransitOfficeFieldKeys.Code),
@@ -376,9 +381,9 @@ public sealed class GenerarFurHandler(
             Get(fv, TransitOfficeFieldKeys.CityName) ?? Get(fv, TransitOfficeFieldKeys.City),
             TransformacionesActivas(fv, data),
             ct);
-        if (mandato is not null)
+        if (mandatoEmitido is not null)
         {
-            generated.Add(mandato);
+            generated.Add(mandatoEmitido.Document);
         }
         else
         {
@@ -692,6 +697,16 @@ public sealed class GenerarFurHandler(
                 // HU #11316 — traza la versión personalizada usada; null en cualquier otro adjunto.
                 SourcePersonalizedDocumentId = esPersonalizado ? personalizado!.PersonalizedDocumentId : null,
             };
+            // HU #13172 — el contrato de mandato del sistema registra con qué formato y versión de plantilla se emitió,
+            // para que regenerarlo reproduzca esa versión y publicar una nueva no altere lo ya emitido.
+            if (!esPersonalizado
+                && mandatoEmitido is not null
+                && string.Equals(doc.Tipo, "mandato", StringComparison.OrdinalIgnoreCase))
+            {
+                attachment.MandateFormatCode = mandatoEmitido.FormatCode;
+                attachment.MandateFormatVersion = mandatoEmitido.FormatVersion;
+            }
+
             instance.Attachments.Add(attachment);
             repo.Add(attachment);
 
@@ -1021,12 +1036,12 @@ public sealed class GenerarFurHandler(
     /// vigente, y si no el sello de su validación de identidad. Best-effort: cualquier fallo deja la
     /// línea de firma en blanco, nunca rompe la generación del mandato.
     /// </summary>
-    private async Task<(byte[]? Firma, string? Sello, FirmaBaulMetadata? Metadatos)> ResolveMandatarioFirmaAsync(
+    private async Task<(byte[]? Firma, string? Sello, FirmaBaulMetadata? Metadatos, byte[]? FirmaIdentidad)> ResolveMandatarioFirmaAsync(
         FurDocumentData data, MandateSignerCandidate signer, CancellationToken ct)
     {
         // La precedencia vive en MandatarioFirmaResolver: el simulador de mandatos la comparte para
         // mostrar el documento tal como saldría del trámite (Feature #11702).
-        var (firma, sello, metadatos) = await MandatarioFirmaResolver
+        var (firma, sello, metadatos, _, firmaIdentidad) = await MandatarioFirmaResolver
             .ResolveAsync(
                 _vaultPolicy,
                 storage,
@@ -1036,7 +1051,54 @@ public sealed class GenerarFurHandler(
                 ct)
             .ConfigureAwait(false);
 
-        return (firma, sello, metadatos);
+        return (firma, sello, metadatos, firmaIdentidad);
+    }
+
+    /// <summary>
+    /// Respaldo de la rúbrica del MANDATARIO, como <see cref="TryCaptureIdentitySignatureAsync"/> para las partes. La
+    /// captura al terminar la validación puede no guardar la imagen (certificado aún no disponible, o un recorte que no
+    /// la reconocía) y la outbox no reintenta. Solo actúa si firma con su validación propia vigente, sin baúl y sin
+    /// rúbrica: toma su validación propia más reciente con el documento actual (la misma que decide su vigencia),
+    /// descarga el certificado y captura. Devuelve el candidato con la ruta de la rúbrica si se capturó.
+    /// </summary>
+    private async Task<MandateSignerCandidate> TryCaptureMandatarioRubricaAsync(
+        MandateSignerCandidate signer, Guid instanceId, CancellationToken ct)
+    {
+        if (identitySignatureCapture is null
+            || !signer.FirmaValida
+            || !signer.IdentityVigente
+            || !string.IsNullOrWhiteSpace(signer.RubricaIdentidadPath)
+            || signer.SignatureVaultId is not null
+            || string.IsNullOrWhiteSpace(signer.Documento))
+            return signer;
+
+        try
+        {
+            var tipo = string.IsNullOrWhiteSpace(signer.TipoDocumento) ? "CC" : signer.TipoDocumento.Trim();
+            var propias = await repo.ListMandatarioValidationsAsync([signer.Id], ct).ConfigureAwait(false);
+            var ultima = propias.FirstOrDefault(v => BiometricRules.DocumentoCoincide(v, tipo, signer.Documento.Trim()));
+            if (ultima is null || !EsKyverumConId(ultima) || !string.IsNullOrWhiteSpace(ultima.SignatureImagePath))
+                return signer;
+
+            // La lista es de solo lectura: la captura escribe sobre la validación rastreada.
+            var bio = await repo.GetBiometricByIdAsync(ultima.Id, ct).ConfigureAwait(false);
+            if (bio is null)
+                return signer;
+
+            var cert = await certClient.DownloadCertificateAsync(bio.KyverumVerificationId!, ct).ConfigureAwait(false);
+            if (cert is null || cert.Content.Length == 0)
+                return signer;
+
+            var outcome = await identitySignatureCapture.EnsureFromPdfAsync(bio, cert.Content, ct).ConfigureAwait(false);
+            return outcome == IdentitySignatureCaptureOutcome.Captured
+                ? signer with { RubricaIdentidadPath = bio.SignatureImagePath }
+                : signer;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            GenerarFurLog.CertificadoDescargaFallo(logger, ex, instanceId);
+            return signer;
+        }
     }
 
     private async Task<(IReadOnlyDictionary<string, byte[]>? Images, IReadOnlyDictionary<string, FirmaBaulMetadata>? Metadata)> ResolveVaultSignaturesAsync(
@@ -1243,7 +1305,7 @@ public sealed class GenerarFurHandler(
         return [.. keys];
     }
 
-    private async Task<GeneratedDocument?> TryGenerateMandatoAsync(
+    private async Task<MandatoEmitido?> TryGenerateMandatoAsync(
         ProcedureInstance instance,
         FurDocumentData data,
         string? transitOfficeCode,
@@ -1280,7 +1342,8 @@ public sealed class GenerarFurHandler(
             .ConfigureAwait(false);
         // Producto: el mandato se emite siempre (PN y PJ). La plantilla/familia vienen de la config del OT.
 
-        // HU-L8 — elección del trámite → default OT (aunque no esté en la compañía) → default compañía.
+        // HU-L8 / HU #13142 — firmante por la prelación de ADR-0066 (OT para la compañía → propio de la compañía →
+        // default del OT → vacío).
         // Sin esos, Mandatario queda null (cuerpo ___ / recuadro Sin firmar). Ya no se espera a aprobar
         // para pintar nombre y cédula cuando hay default.
         var assignmentMode = config?.AssignmentMode;
@@ -1293,42 +1356,51 @@ public sealed class GenerarFurHandler(
         {
             if (transitOfficeId is { } officeId)
             {
-                var candidatos = await _mandateDirectory
-                    .GetCandidatesAsync(
-                        officeId, data.TenantIdParaFirmas,
-                        MandateSignerSelectionResolver.ResolveNitMandante(instance), ct)
-                    .ConfigureAwait(false);
-                candidatos = await MandateSignerSelectionResolver
-                    .WithOtDefaultAsync(candidatos, config?.OtDefaultMandateSignerId, _mandateDirectory, ct)
-                    .ConfigureAwait(false);
-
-                // En borrador/subsanación el firmante se recalcula SIEMPRE contra la config vigente
-                // (cliente×OT → OT → vacío). Congelar instance.MandateSignerId en la primera generación
-                // dejaba el PDF con un Hugo/Carlos viejo después de cambiar el default en Mandatos.
-                // Fuera de borrador (expediente ya radicado) sí manda lo guardado: es documento legal.
+                // En borrador/subsanación el firmante se recalcula SIEMPRE con la prelación única de ADR-0066
+                // (OT para la compañía → propio → asociado → default del OT) contra la config vigente.
+                // Congelar instance.MandateSignerId en la primera generación dejaba el PDF con un firmante
+                // viejo después de cambiar la configuración en Mandatos.
+                // Fuera de borrador (expediente ya radicado) manda lo guardado aunque hoy ya no sea válido
+                // (baja lógica, vencimiento): es documento legal y se conserva la referencia (HU #13142 AC4).
                 var enBorrador = TramiteEstado.PermiteEdicionDatos(
                     instance.Status, instance.SubsanacionActiva);
-                var eleccionCongelada = enBorrador ? null : instance.MandateSignerId;
 
-                resolvedSignerId = MandateSignerDefaultResolver.Resolve(
-                    candidatos.Select(c => c.Id).ToList(),
-                    eleccionCongelada,
-                    config?.OtDefaultMandateSignerId,
-                    config?.DefaultMandateSignerId);
+                MandateSignerCandidate? signer = null;
+                if (!enBorrador && instance.MandateSignerId is { } guardadoId)
+                {
+                    resolvedSignerId = guardadoId;
+                    signer = await _mandateDirectory
+                        .GetByIdAsync(guardadoId, incluirEliminados: true, ct).ConfigureAwait(false);
+                }
+                else
+                {
+                    var (prelacion, _) = await MandateSignerPrelacionLoader
+                        .ResolveAsync(
+                            _mandateDirectory, _vaultPolicy, officeId, data.TenantIdParaFirmas,
+                            MandateSignerSelectionResolver.ResolveNitMandante(instance), config,
+                            eleccionOt: null, guardado: null, ct)
+                        .ConfigureAwait(false);
+                    // Un nivel ambiguo no sugiere a nadie (el OT elige al aprobar); quien firma a mano
+                    // sigue saliendo en el PDF (P4).
+                    signer = prelacion.Signer ?? prelacion.FirmaFisicaPendiente;
+                    resolvedSignerId = signer?.Id;
+                }
 
                 if (resolvedSignerId is { } signerId)
                 {
-                    var signer = candidatos.FirstOrDefault(c => c.Id == signerId)
-                        ?? await _mandateDirectory.GetByIdAsync(signerId, ct).ConfigureAwait(false);
                     if (signer is not null)
                     {
                         // HU #11030 — la firma del mandatario no se pintaba nunca: el contrato salía con
                         // la línea en blanco aunque el mandatario tuviera firma en el baúl o identidad
                         // validada. Misma precedencia que el resto de documentos: imagen del baúl > sello
                         // de identidad > línea.
-                        var (firma, sello, metadatos) =
+                        // Igual que las partes en el FUR: si su validación propia no guardó la rúbrica al terminar, se
+                        // captura ahora del certificado de Kyverum (best-effort; nunca bloquea el mandato).
+                        signer = await TryCaptureMandatarioRubricaAsync(signer, instance.Id, ct).ConfigureAwait(false);
+                        var (firma, sello, metadatos, firmaIdentidad) =
                             await ResolveMandatarioFirmaAsync(data, signer, ct).ConfigureAwait(false);
-                        mandatario = new MandatarioFirmante(signer.Nombre, signer.Documento, firma, sello, metadatos);
+                        mandatario = new MandatarioFirmante(
+                            signer.Nombre, signer.Documento, firma, sello, metadatos, firmaIdentidad);
 
                         if (enBorrador)
                             instance.MandateSignerId = signerId;
@@ -1379,8 +1451,26 @@ public sealed class GenerarFurHandler(
             config?.CustomTemplateBody,
             customPdf);
 
-        return _mandatoGenerator.GenerateMandato(mandatoData);
+        // HU #13172 — plantilla publicada del formato. Regenerar un mandato ya emitido reproduce la versión registrada en su
+        // adjunto (si es del mismo formato); un trámite sin mandato previo toma la vigente. Es el mismo camino del simulador.
+        var previo = instance.Attachments.FirstOrDefault(a =>
+            string.Equals(a.Tipo, "mandato", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(a.Source, "system", StringComparison.OrdinalIgnoreCase));
+        int? versionRegistrada = previo?.MandateFormatVersion is { } v
+            && (string.IsNullOrEmpty(previo.MandateFormatCode)
+                || string.Equals(previo.MandateFormatCode, templateCode, StringComparison.OrdinalIgnoreCase))
+            ? v
+            : null;
+        var aplicado = await MandatoFormatTemplateApplier
+            .ApplyAsync(mandatoData, _mandateFormatTemplates, versionRegistrada, ct)
+            .ConfigureAwait(false);
+
+        return new MandatoEmitido(
+            _mandatoGenerator.GenerateMandato(aplicado.Data), aplicado.FormatCode, aplicado.FormatVersion);
     }
+
+    /// <summary>Contrato de mandato generado y el formato/versión de plantilla con que salió (HU #13172).</summary>
+    private sealed record MandatoEmitido(GeneratedDocument Document, string? FormatCode, int? FormatVersion);
 
     /// <summary>
     /// HU #10589 / HU #10990 — Genera UN certificado RUES por cada actor persona jurídica del trámite.
@@ -1999,14 +2089,7 @@ public sealed class GenerarFurHandler(
     /// <summary>Subconjunto del representante legal leído de <c>actor.metadata</c> (ADR-0036).</summary>
     private sealed record ActorMetadataRl(string? TipoDocumento, string? NumeroDocumento, string? NombreCompleto);
 
-    private static DateTime? ParseFechaTramite(string? raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw))
-            return null;
-        return DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var dt)
-            ? dt
-            : null;
-    }
+    private static DateTime? ParseFechaTramite(string? raw) => FechaTramiteParser.Parse(raw);
 
     private static string? Get(Dictionary<string, string?> fv, string key) =>
         fv.TryGetValue(key, out var v) ? v : null;

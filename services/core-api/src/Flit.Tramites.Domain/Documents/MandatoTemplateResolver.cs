@@ -37,7 +37,7 @@ public static class MandatoFamiliaCodes
 /// </summary>
 public static class MandatoAssignmentModeCodes
 {
-    /// <summary>Persona o RL firma el bloque del mandatario (default).</summary>
+    /// <summary>Persona natural firma el bloque del mandatario (default).</summary>
     public const string Signer = "signer";
 
     /// <summary>El OT / unión temporal actúa como mandatario (sin firmante persona).</summary>
@@ -166,24 +166,36 @@ public static class MandatoTemplateResolver
     /// </summary>
     public const string Auto = "auto";
 
+    /// <summary>
+    /// Redacciones reales (única definición, HU #13161): las que se previsualizan por código. <see cref="Auto"/> NO
+    /// entra: no es una redacción sino una delegación en la plantilla de sistema del organismo.
+    /// </summary>
+    public static IReadOnlyList<string> PreviewableRedactions => MandatoFormatCatalog.RedactionCodes;
+
+    /// <summary>True si <paramref name="templateCode"/> es una redacción real (sin <see cref="Auto"/>), sin distinguir mayúsculas.</summary>
+    public static bool IsRedaction(string? templateCode) =>
+        MandatoFormatCatalog.IsRedaction(templateCode);
+
+    /// <summary>True si el código se acepta al configurar el OT: una redacción real o <see cref="Auto"/>.</summary>
+    public static bool IsAcceptedTemplateCode(string? templateCode) =>
+        IsRedaction(templateCode)
+        || string.Equals(templateCode?.Trim(), Auto, StringComparison.OrdinalIgnoreCase);
+
     /// <summary>True si el código NO fija redacción (ausente, en blanco o <see cref="Auto"/>).</summary>
     public static bool IsAuto(string? templateCode) =>
         string.IsNullOrWhiteSpace(templateCode)
         || string.Equals(templateCode.Trim(), Auto, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Mapea el <paramref name="templateCode"/> del OT a su variante; desconocido ⇒ genérico.</summary>
+    /// <summary>
+    /// Mapea el <paramref name="templateCode"/> del OT a su variante (según <see cref="MandatoFormatCatalog"/>);
+    /// desconocido o <c>auto</c> ⇒ genérico.
+    /// </summary>
     public static MandatoVariante Resolve(string? templateCode) =>
-        (templateCode?.Trim().ToLowerInvariant()) switch
-        {
-            Sabaneta => MandatoVariante.Sabaneta,
-            Bello => MandatoVariante.Bello,
-            Municipio => MandatoVariante.Municipio,
-            _ => MandatoVariante.Generico,
-        };
+        MandatoFormatCatalog.Find(templateCode)?.Variante ?? MandatoVariante.Generico;
 
     /// <summary>
     /// Modo de asignación que nace de la redacción: Sabaneta es institucional;
-    /// el resto (incluido genérico) es Persona o RL. El modo abierto ya no es default.
+    /// el resto (incluido genérico) es Persona natural. El modo abierto ya no es default.
     /// </summary>
     public static string AssignmentModeForTemplate(string? templateCode) =>
         Resolve(templateCode) == MandatoVariante.Sabaneta
@@ -332,7 +344,7 @@ public static class MandatoSystemOfficeTemplates
 }
 
 /// <summary>
-/// Valores con los que nace un OT al activarse: Persona o RL, salvo que la plantilla
+/// Valores con los que nace un OT al activarse: Persona natural, salvo que la plantilla
 /// del organismo implique otro modo (hoy: Sabaneta → institucional).
 /// La plantilla es la del organismo si tiene builtin (Sabaneta, Bello, Envigado, Funza, Medellín);
 /// el resto nace en genérico.

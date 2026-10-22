@@ -53,15 +53,15 @@ export function TipoTramiteBarrera({
           aria-label={`Operable en el asistente: ${tipo.name}`}
           disabled={guardando}
           onClick={() => void alternar()}
-          className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:opacity-50"
-          style={{ background: tipo.wizardEnabled ? '#557EFF' : '#C8D2E0' }}
+          className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-50"
+          style={{ background: tipo.wizardEnabled ? 'var(--color-flit-brand)' : '#C8D2E0' }}
         >
           <span
             className="inline-block h-4 w-4 transform rounded-full bg-white transition"
             style={{ transform: tipo.wizardEnabled ? 'translateX(1.5rem)' : 'translateX(0.25rem)' }}
           />
         </button>
-        <span className="text-xs font-medium text-[#162744] dark:text-white">
+        <span className="text-xs font-medium text-flit-primary dark:text-white">
           {guardando ? (
             <span className="inline-flex items-center gap-1.5">
               <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
@@ -85,7 +85,7 @@ export function TipoTramiteBarrera({
             <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
             Todavía no se puede habilitar
           </p>
-          <ul className="ml-4 list-disc space-y-1 text-[#162744]/80 dark:text-white/80">
+          <ul className="ml-4 list-disc space-y-1 text-flit-primary/80 dark:text-white/80">
             {impedimentos.map((m) => (
               <li key={m}>{m}</li>
             ))}

@@ -371,7 +371,7 @@ export function PreflightPanel({
                   type="button"
                   onClick={() => onRun(hasResult)}
                   disabled={loading}
-                  className={`${WIZARD_BTN} flex items-center justify-center gap-2 bg-[#557EFF] text-white focus-visible:ring-[#557EFF] disabled:cursor-not-allowed disabled:opacity-50`}
+                  className={`${WIZARD_BTN} flex items-center justify-center gap-2 bg-flit-brand text-white focus-visible:ring-flit-brand disabled:cursor-not-allowed disabled:opacity-50`}
                   style={{ backgroundColor: WIZARD_BTN_SOLID, backgroundImage: 'none' }}
                   aria-label={hasResult ? 'Actualizar consulta' : 'Consultar RUNT y SIMIT'}
                 >
@@ -413,7 +413,7 @@ export function PreflightPanel({
       {!hasResult && !loading && esMigrado && (
         <div
           className="flex flex-wrap items-start gap-2 rounded-xl border p-2.5 text-xs"
-          style={{ borderColor: 'rgba(85,126,255,0.30)', background: 'rgba(85,126,255,0.06)' }}
+          style={{ borderColor: 'color-mix(in srgb, var(--color-flit-brand) 30%, transparent)', background: 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)' }}
           role="status"
           aria-live="polite"
         >
@@ -430,7 +430,7 @@ export function PreflightPanel({
       {hasResult && snapshot?.fromCache && (
         <div
           className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border p-2.5 text-xs"
-          style={{ borderColor: 'rgba(85,126,255,0.30)', background: 'rgba(85,126,255,0.06)' }}
+          style={{ borderColor: 'color-mix(in srgb, var(--color-flit-brand) 30%, transparent)', background: 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)' }}
           role="status"
           aria-live="polite"
         >
@@ -484,7 +484,7 @@ export function PreflightPanel({
                     // debe partirse, no desbordar. `min-w-0` solo le permite encoger; sin una regla
                     // de quiebre encogía la caja y dejaba el texto por fuera, encima de la pastilla.
                     className="min-w-0 break-words text-[13px] font-semibold leading-tight"
-                    style={{ color: '#162744' }}
+                    style={{ color: 'var(--color-flit-primary)' }}
                   >
                     {c.label}
                     {checkRoleSuffix(c.key)}
@@ -525,7 +525,7 @@ export function PreflightPanel({
                 {c.action && (
                   <span
                     className="text-xs font-semibold"
-                    style={{ color: '#557EFF' }}
+                    style={{ color: 'var(--color-flit-brand)' }}
                   >
                     {c.action.label} →
                   </span>
@@ -539,11 +539,11 @@ export function PreflightPanel({
       {vinConflicto && (
         <div
           className="mt-3 rounded-xl p-3"
-          style={{ background: 'rgba(85,126,255,0.06)', border: '1px solid rgba(85,126,255,0.30)' }}
+          style={{ background: 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--color-flit-brand) 30%, transparent)' }}
           role="status"
           aria-live="polite"
         >
-          <p className="text-xs font-bold" style={{ color: '#557EFF' }}>
+          <p className="text-xs font-bold" style={{ color: 'var(--color-flit-brand)' }}>
             Este VIN ya está matriculado
           </p>
           <p className="mt-0.5 text-xs opacity-70">{vinConflicto.message}</p>
@@ -600,7 +600,7 @@ export function PreflightPanel({
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-xs font-semibold" style={{ color: '#162744' }}>
+          <p className="mt-2 text-xs font-semibold" style={{ color: 'var(--color-flit-primary)' }}>
             Puedes continuar con la gestión del trámite. El organismo de tránsito correspondiente
             revisará estas observaciones durante el proceso.
           </p>

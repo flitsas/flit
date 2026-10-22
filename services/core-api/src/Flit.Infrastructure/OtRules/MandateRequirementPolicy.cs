@@ -103,22 +103,35 @@ internal sealed class MandateRequirementPolicy : IMandateRequirementPolicy
             rule?.AssignmentMode, otRow?.AssignmentMode, otConfigExists: otRow is not null);
         var companySigner = rule is not null
             && MandatoAssignmentModeCodes.Resolve(rule.AssignmentMode) == MandatoAssignmentModeCodes.Signer;
+        var effectiveSigner = MandatoAssignmentModeCodes.Resolve(assignmentMode) == MandatoAssignmentModeCodes.Signer;
 
         if (otRow is null)
         {
             var builtin = MandatoSystemOfficeTemplates.TryGetByOfficeCode(code);
+            var builtinTemplate = MandatoSystemOfficeTemplates.ResolveTemplateCode(code, null, null);
+            // Sin fila de OT el «signer» es solo el default del legado (Sabaneta sigue institucional): aquí solo
+            // cuenta la regla explícita de la compañía.
+            var naturalSinOt = NaturalPersonMandate(
+                companySigner, effectiveSigner: false, builtinTemplate, hasCustom: false);
             return new MandateOtConfig(
                 officeId,
-                ResolveClientTemplate(
-                    companySigner,
-                    MandatoSystemOfficeTemplates.ResolveTemplateCode(code, null, null),
-                    hasCustom: false),
+                ResolveClientTemplate(naturalSinOt, builtinTemplate, hasCustom: false),
                 builtin?.RequiresForNaturalPerson ?? false,
-                OpenOrValue(assignmentMode, builtin?.InstitutionalMandataryName),
-                OpenOrValue(assignmentMode, builtin?.InstitutionalMandataryNit),
-                builtin?.MandataryFamily ?? MandatoFamiliaCodes.Individuo,
-                builtin?.ChamberCity,
-                builtin?.MandatarySigla,
+                // HU #13154 — sin fila de OT (legado) la regla de la compañía igual manda: antes se ignoraba y el
+                // contrato de una compañía en «Persona jurídica» no citaba a su entidad.
+                OpenOrValue(
+                    assignmentMode,
+                    rule?.InstitutionalMandataryName ?? (naturalSinOt ? null : builtin?.InstitutionalMandataryName)),
+                OpenOrValue(
+                    assignmentMode,
+                    rule?.InstitutionalMandataryNit ?? (naturalSinOt ? null : builtin?.InstitutionalMandataryNit)),
+                !string.IsNullOrWhiteSpace(rule?.MandataryFamily)
+                    ? rule!.MandataryFamily
+                    : naturalSinOt
+                        ? MandatoFamiliaCodes.Individuo
+                        : builtin?.MandataryFamily ?? MandatoFamiliaCodes.Individuo,
+                rule?.ChamberCity ?? builtin?.ChamberCity,
+                rule?.MandatarySigla ?? builtin?.MandatarySigla,
                 assignmentMode,
                 OtDefaultMandateSignerId: OtDefaultOrNull(assignmentMode, null),
                 DefaultMandateSignerId: SignerDefaultOrNull(rule));
@@ -126,17 +139,20 @@ internal sealed class MandateRequirementPolicy : IMandateRequirementPolicy
 
         var hasCustom = MandatoCustomTemplateKindCodes.HasCustom(otRow.CustomTemplateKind);
         var builtinForOffice = MandatoSystemOfficeTemplates.TryGetByOfficeCode(code);
-        var templateCode = ResolveClientTemplate(
-            companySigner,
-            MandatoSystemOfficeTemplates.ResolveTemplateCode(
-                code, otRow.TemplateCode, otRow.CustomTemplateKind),
-            hasCustom);
+        var otTemplate = MandatoSystemOfficeTemplates.ResolveTemplateCode(
+            code, otRow.TemplateCode, otRow.CustomTemplateKind);
+        // HU #13154b — Persona natural (regla de la compañía o heredada del OT) sobre una redacción institucional
+        // (Sabaneta): el contrato cita al mandatario persona resuelto, no a la UT del organismo.
+        var natural = NaturalPersonMandate(companySigner, effectiveSigner, otTemplate, hasCustom);
+        var templateCode = ResolveClientTemplate(natural, otTemplate, hasCustom);
 
         var family = !string.IsNullOrWhiteSpace(rule?.MandataryFamily)
             ? rule!.MandataryFamily
-            : !string.IsNullOrWhiteSpace(otRow.MandataryFamily)
-                ? otRow.MandataryFamily
-                : builtinForOffice?.MandataryFamily ?? MandatoFamiliaCodes.Individuo;
+            : natural
+                ? MandatoFamiliaCodes.Individuo
+                : !string.IsNullOrWhiteSpace(otRow.MandataryFamily)
+                    ? otRow.MandataryFamily
+                    : builtinForOffice?.MandataryFamily ?? MandatoFamiliaCodes.Individuo;
 
         return new MandateOtConfig(
             otRow.TransitOfficeId,
@@ -145,13 +161,11 @@ internal sealed class MandateRequirementPolicy : IMandateRequirementPolicy
             OpenOrValue(
                 assignmentMode,
                 rule?.InstitutionalMandataryName
-                    ?? otRow.InstitutionalMandataryName
-                    ?? builtinForOffice?.InstitutionalMandataryName),
+                    ?? (natural ? null : otRow.InstitutionalMandataryName ?? builtinForOffice?.InstitutionalMandataryName)),
             OpenOrValue(
                 assignmentMode,
                 rule?.InstitutionalMandataryNit
-                    ?? otRow.InstitutionalMandataryNit
-                    ?? builtinForOffice?.InstitutionalMandataryNit),
+                    ?? (natural ? null : otRow.InstitutionalMandataryNit ?? builtinForOffice?.InstitutionalMandataryNit)),
             family,
             rule?.ChamberCity ?? otRow.ChamberCity ?? builtinForOffice?.ChamberCity,
             rule?.MandatarySigla ?? otRow.MandatarySigla ?? builtinForOffice?.MandatarySigla,
@@ -163,6 +177,18 @@ internal sealed class MandateRequirementPolicy : IMandateRequirementPolicy
             OtDefaultOrNull(assignmentMode, otRow.DefaultMandateSignerId),
             SignerDefaultOrNull(rule));
     }
+
+    /// <summary>
+    /// ¿El mandato debe citar a una persona natural como mandatario? Sí cuando la regla de la compañía es
+    /// Persona natural (siempre), o cuando el tipo efectivo es Persona natural y la redacción del organismo es
+    /// la institucional (Sabaneta), que de otro modo pintaría a la UT. Con plantilla propia no se toca.
+    /// </summary>
+    private static bool NaturalPersonMandate(
+        bool companySigner, bool effectiveSigner, string templateCode, bool hasCustom) =>
+        !hasCustom
+        && (companySigner
+            || (effectiveSigner
+                && MandatoTemplateResolver.Resolve(templateCode) == MandatoVariante.Sabaneta));
 
     private async Task<CompanyOtMandateRuleEntity?> LoadCompanyRuleAsync(
         Guid officeId,
@@ -201,11 +227,11 @@ internal sealed class MandateRequirementPolicy : IMandateRequirementPolicy
     /// <summary>
     /// Mandato de la empresa que radica (<c>signer</c>): plantilla genérica, salvo PDF/editor propio.
     /// </summary>
-    private static string ResolveClientTemplate(bool companySigner, string templateCode, bool hasCustom)
+    private static string ResolveClientTemplate(bool naturalPerson, string templateCode, bool hasCustom)
     {
         if (hasCustom)
             return templateCode;
-        if (companySigner)
+        if (naturalPerson)
             return MandatoTemplateResolver.Generico;
         return templateCode;
     }

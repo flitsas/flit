@@ -12,12 +12,13 @@ import {
 } from "@/lib/api/admin-transit-office-tenants";
 import { fetchOtProfile } from "@/lib/api/admin-ot";
 import { getToken } from "@/lib/api/client";
-import { decodeJwtPayload, isOtAdmin } from "@/lib/auth/jwt";
+import { decodeJwtPayload, isOtUser } from "@/lib/auth/jwt";
 import { otHubModulePath } from "@/components/admin/transit-offices/ot-nav";
 import { ApiError, ApiValidationError } from "@/lib/api/types";
+import { ADMIN_BACK_LINK_CLS, ADMIN_CONTENT_SURFACE_CLS } from "@/components/admin/admin-ui-styles";
 
 // Consola OT — listado (HU #10236) + activación one-shot sin modal (HU #11224).
-// ot_admin salta a su hub; SuperAdmin activa desde la fila del catálogo.
+// Usuario de un tenant OT salta a su hub; SuperAdmin activa desde la fila del catálogo.
 export default function AdminTransitOfficesPage() {
   return (
     <ToastProvider>
@@ -38,7 +39,7 @@ function AdminTransitOfficesPageInner() {
   useEffect(() => {
     const payload = decodeJwtPayload(getToken());
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setRole(payload && isOtAdmin(payload) ? "ot_admin" : "other");
+    setRole(payload && isOtUser(payload) ? "ot_admin" : "other");
   }, []);
 
   useEffect(() => {
@@ -68,7 +69,7 @@ function AdminTransitOfficesPageInner() {
           transitOfficeId: office.id,
           legalName: office.name,
           taxId: office.code,
-          code: office.code,
+          // HU #13607 — el código del tenant lo asigna el servidor (COMP-XXXX); antes se copiaba el DIVIPOL.
         });
         show(`Organismo de tránsito «${tenant.legalName}» activado.`, "success");
         setListVersion((v) => v + 1);
@@ -94,7 +95,7 @@ function AdminTransitOfficesPageInner() {
         <span className="sr-only">Cargando…</span>
         <div
           className="h-10 w-10 animate-spin rounded-full border-2 border-t-transparent"
-          style={{ borderColor: "#557EFF", borderTopColor: "transparent" }}
+          style={{ borderColor: "var(--color-flit-brand)", borderTopColor: "transparent" }}
           aria-hidden="true"
         />
       </div>
@@ -106,8 +107,7 @@ function AdminTransitOfficesPageInner() {
       <button
         type="button"
         onClick={() => router.push("/")}
-        className="flex w-fit items-center gap-1.5 text-xs font-semibold"
-        style={{ color: "#557EFF" }}
+        className={ADMIN_BACK_LINK_CLS}
       >
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
         Volver al inicio
@@ -120,7 +120,7 @@ function AdminTransitOfficesPageInner() {
         />
       </div>
 
-      <div className="flex flex-1 flex-col rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60">
+      <div className={ADMIN_CONTENT_SURFACE_CLS}>
         <TransitOfficesList key={listVersion} onCreateTenant={(office) => void activateOffice(office)} />
       </div>
     </div>

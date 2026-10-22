@@ -47,6 +47,8 @@ export function BrandingLogoUploader({
       const uploaded = await uploadBrandLogo(source, file, tenantId);
       onUploaded(uploaded);
     } catch (err) {
+      // El servidor lo rechazó: no se guardó, así que la vista previa vuelve al logotipo vigente.
+      setLocalPreview(null);
       setError(brandingErrorMessage(brandingErrorCode(err)) || "No se pudo cargar el logotipo.");
     } finally {
       setUploading(false);
@@ -57,7 +59,7 @@ export function BrandingLogoUploader({
 
   return (
     <div className="flex flex-col gap-2">
-      <span className="text-xs font-semibold" style={{ color: "#162744" }}>
+      <span className="text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }}>
         Logotipo
       </span>
       <div className="flex items-center gap-4">
@@ -78,7 +80,7 @@ export function BrandingLogoUploader({
             disabled={disabled || uploading}
             onClick={() => inputRef.current?.click()}
             className="inline-flex w-fit items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-            style={{ borderColor: "#557EFF", color: "#557EFF" }}
+            style={{ borderColor: "var(--color-flit-brand)", color: "var(--color-flit-brand)" }}
           >
             {uploading ? (
               <>
@@ -94,7 +96,7 @@ export function BrandingLogoUploader({
       <input
         ref={inputRef}
         type="file"
-        accept="image/png,image/jpeg,image/webp"
+        accept="image/png,image/jpeg"
         aria-label="Cargar logotipo de marca"
         className="sr-only"
         onChange={(e) => void handleFileChange(e)}

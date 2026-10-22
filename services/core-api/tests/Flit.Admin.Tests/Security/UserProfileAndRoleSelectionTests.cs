@@ -252,21 +252,22 @@ public sealed class UserProfileAndRoleSelectionTests : IClassFixture<WebApplicat
     }
 
     [Fact]
-    public async Task InviteOtUser_WithoutRoleIds_StillForcesOtAdmin()
+    public async Task InviteOtUser_WithoutRoleIds_Returns400RoleRequired()
     {
+        // HU #13655: el rol es obligatorio; ya no se fuerza Administrador OT cuando no llega.
         var email = $"ot-rol-forzado-{Guid.NewGuid():N}@flit.local";
 
         var response = await _client.PostAsJsonAsync(
             $"/api/v1/admin/ot/users/invite?transitOfficeId={_transitOfficeId}",
-            new { email, fullName = "Admin OT por defecto" },
+            new { email, fullName = "Sin rol" },
             TestContext.Current.CancellationToken);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().Contain("ROLE_REQUIRED");
 
         await using var db = CreateDbContext();
-        var invitation = await db.UserInvitations.AsNoTracking()
-            .SingleAsync(i => i.Email == email, TestContext.Current.CancellationToken);
-        invitation.RoleId.Should().Be(_otAdminRoleId);
+        (await db.UserInvitations.AsNoTracking()
+            .AnyAsync(i => i.Email == email, TestContext.Current.CancellationToken)).Should().BeFalse();
     }
 
     [Fact]
@@ -316,6 +317,37 @@ public sealed class UserProfileAndRoleSelectionTests : IClassFixture<WebApplicat
         ProfileOf(rows, otEmail).Should().Be("OT");
         ProfileOf(rows, flitEmail).Should().Be("FLIT",
             "las invitaciones al tenant interno deben aparecer y clasificarse como perfil FLIT");
+    }
+
+    // HU #13647: la fila colapsa a un rol, pero roleIds trae todos (los espejos admin_* incluidos) para que
+    // «Permisos por módulo» marque como heredado lo que da cualquiera de ellos.
+    [Fact]
+    public async Task ListUsers_ConVariosRoles_LaFilaTraeTodosEnRoleIds()
+    {
+        await using (var db = CreateDbContext())
+        {
+            var adminComparendos = await db.Roles.AsNoTracking()
+                .SingleAsync(r => r.Code == "admin_comparendos" && r.TenantId == null, TestContext.Current.CancellationToken);
+            db.UserRoleAssignments.Add(new UserRoleAssignment
+            {
+                Id = Guid.NewGuid(),
+                TenantId = _companyTenantId,
+                UserId = _userWithoutHomeTenantId,
+                RoleId = adminComparendos.Id,
+                AssignedBy = _superAdminUserId,
+                AssignedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            var response = await _client.GetAsync("/api/v1/security/users", TestContext.Current.CancellationToken);
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+            var fila = doc.RootElement.EnumerateArray().Single(r => r.GetProperty("id").GetString() == _userWithoutHomeTenantId.ToString());
+
+            fila.GetProperty("roleId").GetGuid().Should().Be(_customCompanyRoleId, "la fila sigue mostrando el rol que no es espejo");
+            fila.GetProperty("roleIds").EnumerateArray().Select(e => e.GetGuid())
+                .Should().BeEquivalentTo([_customCompanyRoleId, adminComparendos.Id]);
+        }
     }
 
     // ── El rol SuperAdmin no sale del perfil FLIT ─────────────────────────────────────
@@ -647,6 +679,9 @@ public sealed class UserProfileAndRoleSelectionTests : IClassFixture<WebApplicat
             Code = code,
             Name = name,
             TargetEntityType = targetEntityType,
+            // Mismo producto que le da la migración (DDL 120): sin esto queda en «tramites» por defecto y el espejo
+            // AdminCompany ⇒ admin_<producto> (DDL 126) da por hecho que el usuario ya tiene rol en Trámites.
+            ProductCode = code is "SuperAdmin" or "AdminCompany" ? "plataforma" : "tramites",
             IsSystem = true,
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,

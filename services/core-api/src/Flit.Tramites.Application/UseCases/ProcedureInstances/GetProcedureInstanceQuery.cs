@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Flit.Queries.Domain.Documentos;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.RevocationRequests;
@@ -192,7 +193,17 @@ public sealed record ProcedureInstanceDetailDto(
     // dos campos de arriba: null en la vista de red.
     ProcedureInstanceRevocationDecisionDto? LastRevocationDecision = null,
     /// <summary>ADR-0059 — estado desde el que el OT rechazó por última vez (entregado | preasignacion); null si no aplica.</summary>
-    string? RejectedFrom = null);
+    string? RejectedFrom = null,
+    // HU #12791 (Épica #12760) — vigencia + sello de tiempo de cada consolidado (ver XML doc de
+    // ConsolidadoVigenciaDto). Opcionales (default null) y ADITIVOS: consumidores que no los lean no
+    // cambian. Los arma BuildDetailAsync (detalle propio y vista de red por igual); null solo si el
+    // detalle se construye sin repositorio (ToDetail directo en tests antiguos).
+    ConsolidadoVigenciaDto? ConsolidadoWizard = null,
+    ConsolidadoVigenciaDto? ConsolidadoMaestro = null,
+    // HU #13402 — parámetro «generar improntas» de la compañía congelado al crear el trámite (JSON
+    // improntaGeneracionHabilitada). El wizard (HU #13403) lo usa para ofrecer o no «generar
+    // impronta». Default true = comportamiento histórico para consumidores que no lo informen.
+    bool ImprontaGeneracionHabilitada = true);
 
 public sealed class GetProcedureInstanceHandler(
     IProcedureInstanceRepository repo,
@@ -200,7 +211,9 @@ public sealed class GetProcedureInstanceHandler(
     // que ya usan varios tests existentes (Integration.Tests, Application.Tests): sin ellos, el handler
     // sigue funcionando igual, solo que RevocationEligibility queda null (degradación segura).
     IProcedureRevocationRequestRepository? revocationRepo = null,
-    IBusinessDayCalculator? businessDayCalculator = null)
+    IBusinessDayCalculator? businessDayCalculator = null,
+    // HU #13664 — Ver por familia: sin el «.read» de la familia del trámite el detalle responde 403.
+    Flit.Tramites.Domain.Integration.IProcedureFamilyPermissionGate? familyPermissions = null)
 {
     /// <summary>Tipos de <see cref="ProcedureInstanceEvent"/> que el dashboard muestra en el tracking
     /// (ver XML doc de <see cref="ProcedureInstanceEventDto"/> sobre por qué solo estos tres).</summary>
@@ -227,6 +240,8 @@ public sealed class GetProcedureInstanceHandler(
         var instance = await repo.GetByIdWithDetailsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
+        if (familyPermissions is not null && !familyPermissions.CanRead(instance.Family))
+            return (null, "family_forbidden");
 
         var revocationEligibility = await BuildRevocationEligibilityAsync(instance, tenantId, ct).ConfigureAwait(false);
         var activeRevocationRequest = await BuildActiveRevocationRequestAsync(instance, tenantId, ct).ConfigureAwait(false);
@@ -345,7 +360,11 @@ public sealed class GetProcedureInstanceHandler(
     {
         var events = await BuildEventsAsync(repo, instance.Events, ct).ConfigureAwait(false);
         var actorInfo = await BuildStatusHistoryActorInfoAsync(repo, instance.StatusHistory, ct).ConfigureAwait(false);
-        return ToDetail(instance, events, actorInfo, revocationEligibility, activeRevocationRequest, lastRevocationDecision);
+        // HU #12791 — el grafo del detalle no carga adjuntos: UNA lectura lean de los consolidados.
+        var sources = await repo.GetConsolidadoSourcesAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false);
+        var (wizard, maestro) = ConsolidadoVigenciaProyeccion.Desde(instance, sources);
+        return ToDetail(instance, events, actorInfo, revocationEligibility, activeRevocationRequest, lastRevocationDecision)
+            with { ConsolidadoWizard = wizard, ConsolidadoMaestro = maestro };
     }
 
     /// <summary>
@@ -566,7 +585,8 @@ public sealed class GetProcedureInstanceHandler(
             revocationEligibility,
             activeRevocationRequest,
             lastRevocationDecision,
-            RejectedFrom: e.RejectedFrom);
+            RejectedFrom: e.RejectedFrom,
+            ImprontaGeneracionHabilitada: e.ImprontaGeneracionHabilitada);
     }
 
     private static readonly Dictionary<Guid, string> EmptyActorMap = [];

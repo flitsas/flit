@@ -9,6 +9,11 @@ public enum InactivateMandateSignerOutcome
     NotFound,
 }
 
+/// <summary>Desenlace detallado de la inactivación: incluye los conteos de la reasignación de trámites (HU #13137).</summary>
+public sealed record InactivateMandateSignerResult(
+    InactivateMandateSignerOutcome Outcome,
+    MandateSignerLifecycleResult? Lifecycle);
+
 /// <summary>
 /// Inactiva un mandatario (RF24, baja lógica): marca inactivo y libera sus compañías para
 /// reasignación, con auditoría atómica (RF28). Idempotente: 404 si no existe, pertenece a otro
@@ -32,6 +37,15 @@ public sealed class InactivateMandateSignerHandler
 
     public async Task<InactivateMandateSignerOutcome> HandleAsync(
         InactivateMandateSignerCommand command,
+        CancellationToken cancellationToken = default) =>
+        (await HandleDetailedAsync(command, cancellationToken).ConfigureAwait(false)).Outcome;
+
+    /// <summary>
+    /// Igual que <see cref="HandleAsync"/> pero devuelve el detalle: defaults retirados y trámites reasignados o
+    /// pendientes de decisión del OT (HU #13135, #13137).
+    /// </summary>
+    public async Task<InactivateMandateSignerResult> HandleDetailedAsync(
+        InactivateMandateSignerCommand command,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(command);
@@ -41,7 +55,7 @@ public sealed class InactivateMandateSignerHandler
 
         if (signer is null || signer.TransitOfficeId != command.TransitOfficeId || !signer.IsActive)
         {
-            return InactivateMandateSignerOutcome.NotFound;
+            return new InactivateMandateSignerResult(InactivateMandateSignerOutcome.NotFound, null);
         }
 
         // El tenant del OT es necesario para la auditoría; se resuelve aun si el OT está
@@ -51,19 +65,20 @@ public sealed class InactivateMandateSignerHandler
 
         if (otStatus?.TenantId is null)
         {
-            return InactivateMandateSignerOutcome.NotFound;
+            return new InactivateMandateSignerResult(InactivateMandateSignerOutcome.NotFound, null);
         }
 
-        var inactivated = await _repository.InactivateAsync(
+        var result = await _repository.InactivateAsync(
             new InactivateMandateSignerData(
                 command.MandateSignerId,
                 otStatus.TenantId.Value,
                 command.ChangedBy,
-                command.CorrelationId),
+                command.CorrelationId,
+                command.ActorKind),
             cancellationToken).ConfigureAwait(false);
 
-        return inactivated
-            ? InactivateMandateSignerOutcome.Inactivated
-            : InactivateMandateSignerOutcome.NotFound;
+        return result.Applied
+            ? new InactivateMandateSignerResult(InactivateMandateSignerOutcome.Inactivated, result)
+            : new InactivateMandateSignerResult(InactivateMandateSignerOutcome.NotFound, null);
     }
 }

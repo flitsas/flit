@@ -62,9 +62,9 @@ export function StepMarker({
       <span
         className={`grid ${tamano} shrink-0 place-items-center rounded-full bg-white text-xs font-bold dark:bg-[#162744]`}
         style={{
-          border: '2px solid #557EFF',
-          color: '#557EFF',
-          boxShadow: '0 0 0 4px rgba(85,126,255,0.15)',
+          border: '2px solid var(--color-flit-brand)',
+          color: 'var(--color-flit-brand)',
+          boxShadow: '0 0 0 4px color-mix(in srgb, var(--color-flit-brand) 15%, transparent)',
         }}
         aria-hidden="true"
       >
@@ -151,14 +151,14 @@ export function WizardStepTracker({
               {i > 0 && (
                 <span
                   className={`pointer-events-none absolute left-0 right-1/2 h-0.5 -translate-y-1/2 ${compacto ? 'top-3' : 'top-4'}`}
-                  style={{ background: prevComplete ? '#557EFF' : '#DFE5ED' }}
+                  style={{ background: prevComplete ? 'var(--color-flit-brand)' : '#DFE5ED' }}
                   aria-hidden="true"
                 />
               )}
               {i < displaySteps.length - 1 && (
                 <span
                   className={`pointer-events-none absolute left-1/2 right-0 h-0.5 -translate-y-1/2 ${compacto ? 'top-3' : 'top-4'}`}
-                  style={{ background: lineAfterGreen ? '#557EFF' : '#DFE5ED' }}
+                  style={{ background: lineAfterGreen ? 'var(--color-flit-brand)' : '#DFE5ED' }}
                   aria-hidden="true"
                 />
               )}
@@ -167,9 +167,9 @@ export function WizardStepTracker({
                 onClick={() => onGoToStep(sourceIndexForDisplayClick(s))}
                 disabled={!clickable}
                 // El foco estaba roto: la clase venía escrita como
-                // `focus-visible:ring-[#557EFF]/focus-visible:ring-offset-2` (sin separar), que
+                // `focus-visible:ring-flit-brand/focus-visible:ring-offset-2` (sin separar), que
                 // Tailwind no reconoce — el paso activo no mostraba anillo alguno al tabular.
-                className={`relative z-10 flex w-full flex-col items-center rounded-lg px-1 text-center outline-none disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 ${compacto ? 'gap-1' : 'gap-2'}`}
+                className={`relative z-10 flex w-full flex-col items-center rounded-lg px-1 text-center outline-none disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 ${compacto ? 'gap-1' : 'gap-2'}`}
                 aria-label={`Paso ${i + 1}: ${label} (${s.status})`}
               >
                 <StepMarker status={s.status} index={i} active={isActive} compacto={compacto} />
@@ -184,7 +184,7 @@ export function WizardStepTracker({
                     } ${compacto && !isActive ? 'sr-only' : ''}`}
                     style={
                       isActive
-                        ? { color: '#557EFF' }
+                        ? { color: 'var(--color-flit-brand)' }
                         : s.status === 'complete'
                           ? { color: '#59677D' }
                           : { color: '#59677D' }

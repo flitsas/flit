@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -30,6 +29,13 @@ import {
 } from 'lucide-react';
 import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
 import { ModuleTitle } from './ModuleTitle';
+import { SectionTabs } from '@/components/atom/SectionTabs';
+import { ValidacionesManuales } from './ValidacionesManuales';
+import { getManualReviewClient } from '@/lib/api/manual-review-client';
+import { COPY } from '@/lib/copy/copy-catalog';
+
+/** H1 canónico del módulo Identidad (HU #12699 / A17). El id SPA permanece `validaciones`. */
+export const IDENTIDAD_MODULE_TITLE = COPY.A17;
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { ValidacionesFiltrosBar } from './ValidacionesFiltrosBar';
 import {
@@ -42,7 +48,14 @@ import {
 } from '@/lib/identidad/validaciones-filtros';
 import { FiltrosChipsTira, rangoDePeriodo } from '@/components/operacion/TramitesFiltrosBar';
 import { controlCls } from '@/components/operacion/tramites-control-styles';
-import { PageNav } from '@/components/atom/PageNav';
+import { Pagination } from '@/components/atom/Pagination';
+import { CarLoaderModal } from '@/components/atom/CarLoader';
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from '@/components/atom/table-styles';
 import { ColumnSelector } from '@/components/atom/ColumnSelector';
 import { SearchableSelect } from '@/components/atom/SearchableSelect';
 import { useUiPreferences } from '@/hooks/useUiPreferences';
@@ -55,6 +68,8 @@ import {
   isScopeRejection,
 } from '@/lib/tramites/network-scope';
 import { PersonIdentityDetailDrawer } from './PersonIdentityDetailDrawer';
+import { MANUAL_ESTADO_META, enlaceDetalleManual } from '@/lib/identity/manual-flow';
+import { useSearchParams } from 'next/navigation';
 import {
   PrevalidacionForm,
   PrevalidacionSuccessPanel,
@@ -116,7 +131,7 @@ import { ZONA_COLOMBIA, formatFechaHora } from '@/lib/format/date';
  * gestor pulse "Actualizar" (que sigue disponible). Pausa cuando la pestaña no está visible.
  */
 
-const ESTADO_META: Record<BiometricEstado, { label: string; tone: StatusTone }> = {
+const ESTADO_META: Record<BiometricEstado, { label: string; shortLabel?: string; tone: StatusTone }> = {
   enviado: { label: 'Enviado', tone: 'info' },
   en_proceso: { label: 'En proceso', tone: 'warning' },
   aprobado: { label: 'Aprobado', tone: 'success' },
@@ -124,11 +139,13 @@ const ESTADO_META: Record<BiometricEstado, { label: string; tone: StatusTone }> 
   expirado: { label: 'Expirado', tone: 'neutral' },
   pendiente_envio: { label: 'Pendiente de envío', tone: 'info' },
   error_envio: { label: 'Error de envío', tone: 'danger' },
+  ...MANUAL_ESTADO_META,
 };
 
 const PROVIDER_LABEL: Record<string, string> = {
   mock: 'Simulado',
   kyverum: 'Kyverum',
+  manual: 'Manual',
 };
 
 /** Formatea una fecha ISO a texto legible (es-CO). Devuelve el ISO crudo si no parsea. */
@@ -212,14 +229,14 @@ const SEARCH_DEBOUNCE_MS = 300;
  */
 const IDENTIDAD_COLUMNS = [
   { key: 'tramite', label: 'Trámite', width: 'minmax(0,1.5fr)' },
-  { key: 'persona', label: 'Persona', width: 'minmax(0,1.4fr)' },
+  { key: 'persona', label: 'Persona', width: 'minmax(0,1.25fr)' },
   { key: 'documento', label: 'Documento', width: 'minmax(0,1.1fr)' },
-  { key: 'correo', label: 'Correo', width: 'minmax(0,1.3fr)' },
-  { key: 'estado', label: 'Estado', width: 'minmax(0,1.2fr)' },
-  { key: 'score', label: 'Score', width: 'minmax(0,0.5fr)' },
+  { key: 'correo', label: 'Correo', width: 'minmax(0,1.2fr)' },
+  { key: 'estado', label: 'Estado', width: 'minmax(0,1.6fr)' },
+  { key: 'score', label: 'Score', width: 'minmax(0,0.6fr)' },
   { key: 'registro', label: 'Registro', width: 'minmax(0,1.1fr)' },
   { key: 'aprobacion', label: 'Aprobación', width: 'minmax(0,1fr)' },
-  { key: 'vigencia', label: 'Vigencia', width: 'minmax(0,1.4fr)' },
+  { key: 'vigencia', label: 'Vigencia', width: 'minmax(0,1.2fr)' },
   { key: 'enlace', label: 'Enlace vigente', width: 'minmax(0,1.2fr)' },
 ] as const;
 type IdentidadColumnKey = (typeof IDENTIDAD_COLUMNS)[number]['key'] | 'compania';
@@ -300,7 +317,126 @@ interface ResendResultState {
   notice?: string;
 }
 
+/**
+ * Módulo Validaciones. Para el Super Admin añade la pestaña «Validaciones manuales» (Épica #13202, HU-C5) con el
+ * contador de pendientes de revisión, junto a la lista actual, que no cambia; el resto de roles ve exactamente la
+ * lista de siempre, sin pestañas y sin ninguna llamada al listado manual.
+ */
 export function Validaciones() {
+  const [esSuperAdmin] = useState(() => isSuperAdmin(decodeJwtPayload(getToken())));
+  if (!esSuperAdmin) return <ValidacionesLista />;
+  return <ValidacionesSuperAdmin />;
+}
+
+/** Tamaño mínimo que acepta el backend (10): basta para leer `total` sin traer filas de más. */
+const PENDIENTES_PAGE_SIZE = 10;
+
+function ValidacionesSuperAdmin() {
+  // Enlace profundo (`?m=validaciones&tab=manuales&manual=<id>`): `useSearchParams` también refleja los
+  // `history.pushState/replaceState` de la propia app, así que el acceso desde el detalle de Identidad no recarga.
+  const params = useSearchParams();
+  const manualParam = params?.get('manual') || null;
+  const tabParam = params?.get('tab') || null;
+  const quiereManuales = tabParam === 'manuales' || manualParam !== null;
+  const [pestana, setPestana] = useState<'validaciones' | 'manuales'>(quiereManuales ? 'manuales' : 'validaciones');
+  const enlaceKey = `${tabParam ?? ''}|${manualParam ?? ''}`;
+  const [enlaceVisto, setEnlaceVisto] = useState(enlaceKey);
+  // Ajuste durante el render: un enlace profundo nuevo activa la pestaña manual (no se vuelve a forzar sin cambio).
+  if (enlaceKey !== enlaceVisto) {
+    setEnlaceVisto(enlaceKey);
+    if (quiereManuales) setPestana('manuales');
+  }
+  const limpiarManual = useCallback(() => {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has('manual')) return;
+    url.searchParams.delete('manual');
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+  }, []);
+  const [pendientes, setPendientes] = useState<number | undefined>(undefined);
+  const [refreshSignal, setRefreshSignal] = useState(0);
+
+  const cargarPendientes = useCallback((signal?: AbortSignal) => {
+    getManualReviewClient()
+      .listManual({ page: 1, pageSize: PENDIENTES_PAGE_SIZE, status: 'pendiente_revision_manual' }, signal)
+      .then((res) => {
+        if (!signal?.aborted) setPendientes(res.total);
+      })
+      .catch(() => {
+        if (!signal?.aborted) setPendientes(undefined); // sin cifra antes que una cifra falsa
+      });
+  }, []);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    cargarPendientes(ctrl.signal);
+    return () => ctrl.abort();
+  }, [cargarPendientes]);
+
+  // El contador de pendientes se mantiene al día solo (llegan capturas de clientes sin que nadie toque nada).
+  useEffect(() => {
+    const tick = () => {
+      if (document.visibilityState === 'visible') cargarPendientes();
+    };
+    const id = window.setInterval(tick, AUTO_REFRESH_MS);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', tick);
+    };
+  }, [cargarPendientes]);
+
+  /** Algo cambió (aprobar, rechazar, activar, regenerar): contador y grilla de «Validaciones» se refrescan ya. */
+  const refrescarTodo = useCallback(() => {
+    cargarPendientes();
+    setRefreshSignal((n) => n + 1);
+  }, [cargarPendientes]);
+
+  return (
+    <ValidacionesLista
+      refreshSignal={refreshSignal}
+      onListChanged={cargarPendientes}
+      renderTabs={(lista) => (
+        <SectionTabs
+          ariaLabel="Secciones de validaciones"
+          active={pestana}
+          onChange={(id) => {
+            setPestana(id);
+            refrescarTodo(); // al cambiar de pestaña se ve siempre el dato actual
+          }}
+          tabs={[
+            { id: 'validaciones', label: 'Validaciones', content: <div className="flex flex-col gap-4">{lista}</div> },
+            {
+              id: 'manuales',
+              label: 'Validaciones manuales',
+              count: pendientes,
+              countLabel: 'por revisar',
+              title: 'Por revisar: capturas del cliente que esperan aprobación o rechazo',
+              content: (
+                <ValidacionesManuales
+                  onChanged={refrescarTodo}
+                  openId={manualParam}
+                  onDetailClose={limpiarManual}
+                />
+              ),
+            },
+          ]}
+        />
+      )}
+    />
+  );
+}
+
+function ValidacionesLista({
+  renderTabs,
+  refreshSignal = 0,
+  onListChanged,
+}: {
+  renderTabs?: (lista: ReactNode) => ReactNode;
+  /** Sube cuando algo cambió fuera de la lista (p. ej. se aprobó una validación manual): la lista se refresca ya. */
+  refreshSignal?: number;
+  /** La lista cambió por una acción del detalle (activar/regenerar el flujo manual): quien monta refresca el contador. */
+  onListChanged?: () => void;
+} = {}) {
   // HU #12706/#12707 — el admin FLIT ve por defecto TODAS las compañías («Todas») y puede acotar a una.
   // El alcance del listado y de las incidencias viaja EXPLÍCITO en cada llamada (`listTenant`): ya no se
   // fija global con `setActiveTramitesTenant`, porque en «Todas» cada fila es de una compañía distinta.
@@ -373,6 +509,8 @@ export function Validaciones() {
     tenantId?: string;
     /** HU #12709 — persona de una hija vista por la cabeza: detalle por la ruta de red, en lectura. */
     soloConsulta?: boolean;
+    /** Fila «Mandatario»: historial de la validación propia del mandatario, aparte y en lectura. */
+    mandatario?: boolean;
   } | null>(null);
 
   // Gestión de prevalidaciones, absorbida de la pantalla retirada /tramites/prevalidaciones.
@@ -594,6 +732,15 @@ export function Validaciones() {
   useEffect(() => {
     void refreshStuck();
   }, [applied, refreshStuck]);
+
+  // Cambio externo (aprobación/rechazo en la pestaña manual, cambio de pestaña): refresca la grilla en segundo plano.
+  const refreshSignalVisto = useRef(refreshSignal);
+  useEffect(() => {
+    if (refreshSignalVisto.current === refreshSignal) return;
+    refreshSignalVisto.current = refreshSignal;
+    void load(appliedRef.current, { background: true });
+    void refreshStuck({ background: true });
+  }, [refreshSignal, load, refreshStuck]);
 
   // Auto-refresco en vivo (fase 2 — "suscripción"): tras la primera carga, refresca la grilla cada
   // AUTO_REFRESH_MS con los filtros vigentes para reflejar los cambios que el backend persiste vía
@@ -930,7 +1077,6 @@ export function Validaciones() {
   const isEmpty = persons !== null && persons.length === 0;
   // "Sin resultados" (AC2) vs "Aún no hay validaciones" se decide por los filtros EFECTIVAMENTE aplicados.
   const filtersActive = hasActiveValidacionesFilters(applied);
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   // Compañía concreta que está mirando el admin FLIT (undefined = «Todas»).
   const empresaVista = isFlitAdmin && companyId !== '' ? companiesById.get(companyId) : undefined;
   const companyLabel = (tenantId: string | undefined, tenantName: string | null | undefined) => {
@@ -974,14 +1120,14 @@ export function Validaciones() {
     ) : null;
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
       {/* Anuncios para lector de pantalla del resultado de crear/editar/reenviar (WCAG 2.1 AA) */}
       <div className="sr-only" role="status" aria-live="polite">
         {liveMessage}
       </div>
 
       <ModuleTitle
-        title="Validaciones"
+        title={IDENTIDAD_MODULE_TITLE}
         subtitle="Monitoreo, verificación biométrica y gestión de estados de identidad en tiempo real."
         right={
           <div className="flex items-center gap-2">
@@ -991,7 +1137,7 @@ export function Validaciones() {
               onClick={() => setIncidenciasOpen(true)}
               aria-label="Ver alertas de validación"
               aria-busy={stuckLoading}
-              className="relative grid h-7 w-7 place-items-center rounded-lg border border-[#DFE5ED] bg-white transition hover:bg-[#EEF5FF] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] dark:bg-[#162744]"
+              className="relative grid h-7 w-7 place-items-center rounded-lg border border-[#DFE5ED] bg-white transition hover:bg-[#EEF5FF] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand dark:bg-[#162744]"
             >
               <Bell className="h-3.5 w-3.5" aria-hidden="true" />
               {!stuckLoading && stuck && stuck.total > 0 ? (
@@ -1007,6 +1153,7 @@ export function Validaciones() {
         }
       />
 
+      {(renderTabs ?? ((c: ReactNode) => c))(<>
       {stuckLoading ? (
         <div className="sr-only" role="status" aria-label="Cargando validaciones atascadas">
           Cargando validaciones atascadas
@@ -1024,8 +1171,8 @@ export function Validaciones() {
           aria-label="Crear nueva prevalidación de identidad"
           aria-describedby={networkActive ? 'val-nueva-solo-propio' : undefined}
           title={networkActive ? 'Disponible en Mi compañía' : undefined}
-          className="flex h-[88px] w-full shrink-0 flex-col items-center justify-center rounded-2xl px-4 text-[13px] font-semibold leading-tight text-white transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] disabled:cursor-not-allowed disabled:opacity-50 sm:w-36"
-          style={{ background: 'linear-gradient(90deg, #557EFF 0%, #00DBD5 100%)' }}
+          className="flex h-[88px] w-full shrink-0 flex-col items-center justify-center rounded-2xl px-4 text-[13px] font-semibold leading-tight text-white transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:cursor-not-allowed disabled:opacity-50 sm:w-36"
+          style={{ background: 'linear-gradient(90deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%)' }}
         >
           <span>Nueva</span>
           <span>prevalidación</span>
@@ -1073,7 +1220,7 @@ export function Validaciones() {
         {empresaVista ? (
           // Salvaguarda que ya tenía el panel anterior: mirando UNA compañía ajena, lo que se haga
           // desde aquí la afecta a ella. En «Todas» cada fila lleva su compañía en la columna.
-          <p className="mt-2 text-xs" style={{ color: '#557EFF' }} role="status" aria-live="polite">
+          <p className="mt-2 text-xs" style={{ color: 'var(--color-flit-brand)' }} role="status" aria-live="polite">
             Estás viendo los datos de <strong>{empresaVista.razonSocial}</strong>. Todo lo que hagas desde
             esta pantalla afecta a esa empresa.
           </p>
@@ -1125,7 +1272,8 @@ export function Validaciones() {
         </div>
       )}
 
-      {initialLoading && <ValidacionesSkeleton />}
+      {/* Bug #13055 — carga con el loader del carrito (antes, esqueleto animate-pulse). */}
+      {initialLoading && <CarLoaderModal label="Cargando validaciones de identidad…" />}
 
       {isEmpty && (
         <div
@@ -1152,8 +1300,8 @@ export function Validaciones() {
                 <button
                   type="button"
                   onClick={handleNew}
-                  className="mt-4 mx-auto flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
-                  style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, #557EFF 100%)' }}
+                  className="mt-4 mx-auto flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
+                  style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, var(--color-flit-brand) 100%)' }}
                 >
                   Nueva prevalidación
                 </button>
@@ -1172,13 +1320,14 @@ export function Validaciones() {
             companyLabel={companyLabel}
             now={nowTick}
             resendMeta={resendMeta}
-            onOpenPerson={(docType, docNumber, tenantId) => {
+            onOpenPerson={(docType, docNumber, tenantId, mandatario) => {
               openForTenant(tenantId);
               setPersonDetail({
                 documentType: docType,
                 documentNumber: docNumber,
                 tenantId,
                 soloConsulta: esSoloConsulta(tenantId),
+                mandatario,
               });
             }}
             onEdit={(row) => {
@@ -1201,37 +1350,17 @@ export function Validaciones() {
             }}
           />
 
-          {/* HU #12707 (AC9) — pie de Trámites: «Filas por página» + navegación numerada. */}
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <label className="flex items-center gap-2 pt-3 text-xs opacity-70">
-              Filas por página
-              <select
-                value={pageSize}
-                onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-                disabled={fetching}
-                className={controlCls(false)}
-                aria-label="Filas por página"
-              >
-                {TAMANOS_DE_PAGINA.map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <PageNav
-              page={page}
-              totalPages={totalPages}
-              resumen={
-                total === 0
-                  ? 'Sin validaciones que mostrar'
-                  : `Mostrando ${(page - 1) * pageSize + 1}–${(page - 1) * pageSize + persons.length} de ${total}`
-              }
-              ariaLabel="Paginación de validaciones"
-              onPageChange={handlePageChange}
-              className="flex-1"
-            />
-          </div>
+          {/* HU #12707 (AC9) — pie de Trámites: «Filas por página» + navegación numerada. Bug #13055:
+              ahora con la `Pagination` estándar (el tamaño se sigue recordando en la sesión). */}
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            totalCount={total}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+            noun="validaciones"
+            ariaLabel="Paginación de validaciones"
+          />
         </div>
       )}
 
@@ -1241,11 +1370,25 @@ export function Validaciones() {
           documentType={personDetail.documentType}
           documentNumber={personDetail.documentNumber}
           networkTenantId={personDetail.soloConsulta ? personDetail.tenantId : undefined}
+          mandatario={personDetail.mandatario}
           onClose={() => {
             setPersonDetail(null);
             closeTenantScope();
           }}
-          onStatusChanged={() => void load(appliedRef.current, { background: true })}
+          onStatusChanged={() => {
+            void load(appliedRef.current, { background: true });
+            onListChanged?.();
+          }}
+          onVerEnManuales={
+            isFlitAdmin
+              ? (id) => {
+                  // Cierra el detalle y navega por enlace profundo: Validaciones activa la pestaña y abre el detalle.
+                  setPersonDetail(null);
+                  closeTenantScope();
+                  window.history.pushState(null, '', enlaceDetalleManual(id));
+                }
+              : undefined
+          }
         />
       )}
 
@@ -1301,7 +1444,7 @@ export function Validaciones() {
           aria-labelledby="val-resend-confirm-title"
         >
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl dark:bg-[#0B0F14]">
-            <h2 id="val-resend-confirm-title" className="text-base font-semibold text-[#162744] dark:text-white">
+            <h2 id="val-resend-confirm-title" className="text-base font-semibold text-flit-primary dark:text-white">
               Reenviar validación
             </h2>
             <p className="mt-2 text-sm opacity-70">
@@ -1332,7 +1475,7 @@ export function Validaciones() {
                   setResendConfirmError(null);
                 }}
                 disabled={resendSubmitting}
-                className="rounded-xl border px-4 py-2 text-sm font-medium text-[#162744] transition hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] disabled:opacity-50 dark:text-white dark:hover:bg-white/10"
+                className="rounded-xl border px-4 py-2 text-sm font-medium text-flit-primary transition hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:opacity-50 dark:text-white dark:hover:bg-white/10"
               >
                 Cancelar
               </button>
@@ -1340,8 +1483,8 @@ export function Validaciones() {
                 type="button"
                 onClick={() => void handleConfirmAction()}
                 disabled={resendSubmitting}
-                className="rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
-                style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, #557EFF 100%)' }}
+                className="rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
+                style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, var(--color-flit-brand) 100%)' }}
               >
                 {resendSubmitting ? 'Enviando…' : 'Confirmar reenvío'}
               </button>
@@ -1380,6 +1523,7 @@ export function Validaciones() {
           onError={handleAdminReenviarError}
         />
       )}
+      </>)}
     </div>
   );
 }
@@ -1406,7 +1550,7 @@ function CompanyPickerDialog({
       aria-labelledby="val-pick-company-title"
     >
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-[#0B0F14]">
-        <h2 id="val-pick-company-title" className="text-base font-semibold text-[#162744] dark:text-white">
+        <h2 id="val-pick-company-title" className="text-base font-semibold text-flit-primary dark:text-white">
           ¿Para qué compañía es la prevalidación?
         </h2>
         <p className="mt-1 text-sm opacity-70">
@@ -1426,7 +1570,7 @@ function CompanyPickerDialog({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-xl border px-4 py-2 text-sm font-medium text-[#162744] transition hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
+            className="rounded-xl border px-4 py-2 text-sm font-medium text-flit-primary transition hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
           >
             Cancelar
           </button>
@@ -1435,7 +1579,7 @@ function CompanyPickerDialog({
             onClick={() => onPick(elegida)}
             disabled={elegida === ''}
             className="rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-50"
-            style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, #557EFF 100%)' }}
+            style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, var(--color-flit-brand) 100%)' }}
           >
             Continuar
           </button>
@@ -1570,13 +1714,13 @@ function StuckIncidenciasDialog({
           type="button"
           onClick={onClose}
           aria-label="Cerrar"
-          className="absolute right-4 top-4 rounded-lg p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
+          className="absolute right-4 top-4 rounded-lg p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
         >
           <X className="h-4 w-4 opacity-70" aria-hidden="true" />
         </button>
         <div className="flex flex-wrap items-start justify-between gap-4 pr-8">
           <div>
-            <h2 id="incidencias-title" className="text-base font-bold" style={{ color: '#557EFF' }}>
+            <h2 id="incidencias-title" className="text-base font-bold" style={{ color: 'var(--color-flit-brand)' }}>
               Gestión de incidencias en validaciones
             </h2>
             <p className="mt-1 text-[13px] leading-snug opacity-70">
@@ -1906,36 +2050,21 @@ function StatsCards({
   );
 }
 
-/** Estado de carga (AC8): placeholder accesible mientras llega la primera respuesta. */
-function ValidacionesSkeleton() {
-  return (
-    <div
-      className="flex-1 min-h-0 space-y-2 pt-2"
-      role="status"
-      aria-live="polite"
-      aria-busy="true"
-    >
-      <span className="sr-only">Cargando validaciones de identidad…</span>
-      {[0, 1, 2, 3].map((i) => (
-        <div
-          key={i}
-          className="h-12 w-full animate-pulse rounded-xl bg-black/5 dark:bg-white/5"
-          aria-hidden="true"
-        />
-      ))}
-    </div>
-  );
-}
-
 /**
- * Plantilla de columnas compartida por cabecera y filas, calculada desde las columnas visibles (HU #12707).
- * minmax(0,..) permite truncar el contenido dentro de cada celda del grid.
+ * Anchos relativos de las columnas visibles (HU #12707), en porcentaje para un `<colgroup>`.
+ * Bug #13055 — antes eran `fr` de una grilla de div; con `table-fixed` se conservan las proporciones y
+ * el contenido puede truncarse dentro de cada celda.
  */
-function gridColsFor(columns: readonly IdentidadColumnKey[]): string {
-  const widths = columns.map((key) =>
-    key === 'compania' ? COMPANIA_COLUMN.width : (IDENTIDAD_COLUMNS.find((c) => c.key === key)?.width ?? 'minmax(0,1fr)'),
-  );
-  return [...widths, ACCIONES_WIDTH].join(' ');
+function anchosColumnas(columns: readonly IdentidadColumnKey[]): string[] {
+  const fr = (w: string) => Number(/([\d.]+)fr/.exec(w)?.[1] ?? 1);
+  const pesos = [
+    ...columns.map((key) =>
+      fr(key === 'compania' ? COMPANIA_COLUMN.width : (IDENTIDAD_COLUMNS.find((c) => c.key === key)?.width ?? 'minmax(0,1fr)')),
+    ),
+    fr(ACCIONES_WIDTH),
+  ];
+  const total = pesos.reduce((a, b) => a + b, 0);
+  return pesos.map((w) => `${((w / total) * 100).toFixed(2)}%`);
 }
 
 function columnLabel(key: IdentidadColumnKey): string {
@@ -1975,7 +2104,12 @@ function PersonasTable({
   now: number;
   resendMeta: Record<string, ResendMeta>;
   /** HU #12707 (AC6) — con la compañía de la fila: la misma cédula puede estar en dos compañías. */
-  onOpenPerson: (documentType: string, documentNumber: string, tenantId: string | undefined) => void;
+  onOpenPerson: (
+    documentType: string,
+    documentNumber: string,
+    tenantId: string | undefined,
+    mandatario: boolean,
+  ) => void;
   onEdit: (row: TenantBiometricValidation) => void;
   onResendClick: (row: TenantBiometricValidation) => void;
   onRetryClick: (row: TenantBiometricValidation) => void;
@@ -2011,6 +2145,7 @@ function PersonasTable({
     // HU #11505 — opcionales: el backend de esta vista aún no los envía (AC4, ver tipo en procedure-runtime.ts).
     intentos: p.intentos,
     maxIntentos: p.maxIntentos,
+    esMandatario: p.esMandatario,
   }));
 
   const counts = new Map(rows.map((r) => [r.latestValidationId, r.validationCount]));
@@ -2026,7 +2161,9 @@ function PersonasTable({
       validationCounts={counts}
       onViewProcess={(latestValidationId) => {
         const person = byLatestId.get(latestValidationId);
-        if (person) onOpenPerson(person.documentType, person.documentNumber, person.tenantId);
+        if (person) {
+          onOpenPerson(person.documentType, person.documentNumber, person.tenantId, person.esMandatario === true);
+        }
       }}
       onEdit={onEdit}
       onResendClick={onResendClick}
@@ -2070,30 +2207,50 @@ function ValidacionesTable({
   canAdminReenviar: boolean;
   onAdminReenviarClick: (row: TenantBiometricValidation) => void;
 }) {
-  const gridCols = gridColsFor(columns);
+  const anchos = anchosColumnas(columns);
   // Ancho mínimo proporcional a las columnas visibles: con pocas no fuerza scroll horizontal.
   const minWidth = Math.max(640, 100 * (columns.length + 1));
   return (
     <div className="overflow-x-auto shrink-0">
-      <div style={{ minWidth: `${minWidth}px` }}>
-        <div
-          className="sticky top-0 z-10 grid gap-2 px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl"
-          style={{ background: '#DDE5F0', color: '#162744', gridTemplateColumns: gridCols }}
-          aria-hidden="true"
-        >
-          {columns.map((key) => (
-            <div key={key}>{columnLabel(key)}</div>
+      {/* Bug #13055 — tabla homologada con el modelo de trámites: `<table>` semántica (antes grilla de
+          div), cabecera #DFE5ED fija y filas-tarjeta con sombra azul al pasar el puntero. */}
+      <table
+        aria-label="Validaciones de identidad"
+        className="text-xs"
+        style={{
+          width: '100%',
+          borderCollapse: 'separate',
+          borderSpacing: '0 8px',
+          tableLayout: 'fixed',
+          minWidth: `${minWidth}px`,
+        }}
+      >
+        <colgroup>
+          {anchos.map((w, i) => (
+            <col key={i} style={{ width: w }} />
           ))}
-          <div>Acciones</div>
-        </div>
-        <ul className="space-y-2 pt-2" aria-label="Validaciones de identidad">
+        </colgroup>
+        <thead>
+          <tr>
+            {[...columns.map((key) => columnLabel(key)), 'Acciones'].map((label, i, arr) => (
+              <th
+                key={label}
+                scope="col"
+                className={`${TABLA_HEADER_CELL_CLS} ${i === 0 ? 'rounded-l-xl' : ''} ${i === arr.length - 1 ? 'rounded-r-xl' : ''}`}
+                style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+              >
+                {label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
           {rows.map((r) => (
             <ValidacionRow
               key={r.id}
               row={r}
               columns={columns}
               soloConsulta={esSoloConsulta(r.tenantId)}
-              gridCols={gridCols}
               companyLabel={companyLabel}
               now={now}
               resendMeta={resendMeta[r.id] ?? { count: 0, cooldownUntil: null }}
@@ -2107,8 +2264,8 @@ function ValidacionesTable({
               onAdminReenviarClick={onAdminReenviarClick}
             />
           ))}
-        </ul>
-      </div>
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -2117,7 +2274,6 @@ function ValidacionRow({
   row: r,
   columns,
   soloConsulta,
-  gridCols,
   companyLabel,
   now,
   resendMeta,
@@ -2134,7 +2290,6 @@ function ValidacionRow({
   columns: readonly IdentidadColumnKey[];
   /** HU #12709 (AC3) — fila de una compañía hija: solo «Ver proceso», con el distintivo visible. */
   soloConsulta: boolean;
-  gridCols: string;
   companyLabel: CompanyLabelFn;
   now: number;
   resendMeta: ResendMeta;
@@ -2169,19 +2324,28 @@ function ValidacionRow({
   const intentosAgotados = intentosInfo != null && intentosInfo.intentos >= intentosInfo.maxIntentos;
   const esRechazoPrematuro = estado === 'rechazado' && intentosInfo != null && !intentosAgotados;
   let badgeLabel: string = meta.label;
+  // Etiqueta de la CELDA: corta para los estados largos (el texto completo queda en title/aria-label y en
+  // el detalle «Ver proceso»). El badge además se parte en líneas si aun así no cupiera en la columna.
+  let badgeCelda: string = meta.shortLabel ?? meta.label;
   let badgeTone: StatusTone = meta.tone;
   if (estado === 'rechazado' && intentosInfo != null) {
     if (intentosAgotados) {
       badgeLabel = 'Rechazado (intentos agotados)';
+      badgeCelda = badgeLabel;
       badgeTone = 'danger';
     } else {
       badgeLabel = 'Rechazado (intentos disponibles)';
+      badgeCelda = badgeLabel;
       badgeTone = 'warning';
     }
   }
-  const modalidad = r.modalidad
-    ? (familiaLabel(r.modalidad))
-    : 'Prevalidación';
+  // Validación PROPIA del mandatario: se lista aparte y solo se consulta (se gestiona desde su ficha).
+  const esMandatario = r.esMandatario === true;
+  const modalidad = esMandatario
+    ? 'Mandatario'
+    : r.modalidad
+      ? (familiaLabel(r.modalidad))
+      : 'Prevalidación';
   const provider = PROVIDER_LABEL[r.provider] ?? r.provider;
   const parte = r.partyRole ? ` (${r.partyRole})` : '';
   const vigencia = vigenciaBadge(r.daysRemaining);
@@ -2209,7 +2373,7 @@ function ValidacionRow({
               : `vigencia: ${vigencia.label}`
         }`
       : '') +
-    (r.instanceId ? '.' : '. Prevalidación standalone.') +
+    (r.instanceId ? '.' : esMandatario ? '. Validación propia del mandatario.' : '. Prevalidación standalone.') +
     (validationCount > 1 ? ` ${validationCount} validaciones en el historial de la persona.` : '');
 
   const copiarEnlace = async () => {
@@ -2349,10 +2513,10 @@ function ValidacionRow({
           </span>
         ) : (
           <span
-            className="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold"
+            className="inline-block max-w-full rounded-full px-2 py-0.5 text-center text-[10px] font-semibold leading-tight"
             style={{ background: 'rgba(79,116,201,0.12)', color: '#4F74C9' }}
           >
-            Prevalidación
+            {esMandatario ? 'Mandatario' : 'Prevalidación'}
           </span>
         )}
       </div>
@@ -2383,7 +2547,7 @@ function ValidacionRow({
     ),
     estado: (
       <div className="min-w-0">
-        <StatusBadge label={badgeLabel} tone={badgeTone} ariaLabel={`Estado: ${badgeLabel}`} />
+        <StatusBadge label={badgeCelda} tone={badgeTone} ariaLabel={`Estado: ${badgeLabel}`} title={badgeLabel} wrap />
         {/* HU #11505 (AC1) — contador de intentos, mismo criterio que el drawer. AC4: si falta
             `intentos` o `maxIntentos`, no se pinta nada (nunca NaN/undefined/"0 / 0"). */}
         {intentosInfo && (
@@ -2432,44 +2596,44 @@ function ValidacionRow({
   };
 
   // AC3 — fila de una hija: ni reenviar, ni editar, ni simular, ni iniciar, ni reintentar. Solo verla.
-  const menuItems = soloConsulta ? actionItems.filter((i) => i.key === 'proceso') : actionItems;
+  // La fila del mandatario tampoco: reenviar o editar su validación se hace desde la ficha del mandatario.
+  const menuItems = soloConsulta || esMandatario ? actionItems.filter((i) => i.key === 'proceso') : actionItems;
 
-  const rowContent = (
-    <div
-      className="grid gap-2 items-center px-4 py-3 text-xs"
-      style={{ gridTemplateColumns: gridCols }}
-    >
-      {columns.map((key) => (
-        <Fragment key={key}>{cells[key]}</Fragment>
-      ))}
-      <div className="flex min-w-0 flex-col items-end gap-0.5">
-        {soloConsulta ? (
-          <StatusBadge label={ETIQUETA_SOLO_CONSULTA} tone="neutral" ariaLabel={ETIQUETA_SOLO_CONSULTA} />
-        ) : null}
-        <ActionsMenu
-          ariaLabel={`Acciones de validación de ${r.name}`}
-          items={menuItems}
-          className="bg-white dark:bg-[#0B0F14]"
-        />
-        {!isTramite && admiteReenvio && resendDisabledReason && (
-          <span className="text-[10px] opacity-60">{resendDisabledReason}</span>
-        )}
-        {copied && (
-          <span className="text-[10px] font-semibold" style={{ color: '#4F74C9' }} role="status" aria-live="polite">
-            Enlace copiado
-          </span>
-        )}
-      </div>
-    </div>
-  );
+  const celdaCls = 'border-y px-4 py-3 align-middle';
+  const celdaStyle = { borderColor: '#DFE5ED' };
 
   return (
-    <li
-      className="relative rounded-xl bg-white dark:bg-[#0B0F14] border hover:border-[#4F74C9] transition"
-      aria-label={ariaLabel}
-    >
-      {/* Fila no navegable: el detalle/proceso se abre solo desde Acciones → Ver proceso. */}
-      {rowContent}
-    </li>
+    // Fila no navegable: el detalle/proceso se abre solo desde Acciones → Ver proceso.
+    <tr aria-label={ariaLabel} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+      {columns.map((key, i) => (
+        <td
+          key={key}
+          className={`${celdaCls} ${i === 0 ? 'rounded-l-xl border-l' : ''}`}
+          style={celdaStyle}
+        >
+          {cells[key]}
+        </td>
+      ))}
+      <td className={`${celdaCls} rounded-r-xl border-r`} style={celdaStyle}>
+        <div className="flex min-w-0 flex-col items-end gap-0.5">
+          {soloConsulta ? (
+            <StatusBadge label={ETIQUETA_SOLO_CONSULTA} tone="neutral" ariaLabel={ETIQUETA_SOLO_CONSULTA} />
+          ) : null}
+          <ActionsMenu
+            ariaLabel={`Acciones de validación de ${r.name}`}
+            items={menuItems}
+            className="bg-white dark:bg-[#0B0F14]"
+          />
+          {!isTramite && !esMandatario && admiteReenvio && resendDisabledReason && (
+            <span className="text-[10px] opacity-60">{resendDisabledReason}</span>
+          )}
+          {copied && (
+            <span className="text-[10px] font-semibold" style={{ color: '#4F74C9' }} role="status" aria-live="polite">
+              Enlace copiado
+            </span>
+          )}
+        </div>
+      </td>
+    </tr>
   );
 }

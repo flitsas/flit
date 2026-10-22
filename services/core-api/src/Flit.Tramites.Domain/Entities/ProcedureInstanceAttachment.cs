@@ -51,5 +51,18 @@ public sealed class ProcedureInstanceAttachment
     /// </summary>
     public bool IsHistorico { get; set; }
 
+    /// <summary>
+    /// HU #13172 (Feature #13118) — código del formato de mandato (<c>template_code</c>) con el que se generó este
+    /// adjunto cuando es el contrato de mandato del sistema. <c>null</c> en cualquier otro adjunto.
+    /// </summary>
+    public string? MandateFormatCode { get; set; }
+
+    /// <summary>
+    /// HU #13172 — versión de la plantilla del formato usada al emitir el mandato: <c>null</c> = no aplica (otro adjunto o
+    /// plantilla propia heredada del OT); <c>0</c> = redacción del generador; <c>N</c> = versión N publicada. La
+    /// regeneración reproduce esta versión y no la vigente, para no alterar un contrato ya emitido.
+    /// </summary>
+    public int? MandateFormatVersion { get; set; }
+
     public ProcedureInstance? ProcedureInstance { get; set; }
 }

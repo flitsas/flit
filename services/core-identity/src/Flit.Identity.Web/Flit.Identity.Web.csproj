@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Epic #13217 (HU #13232) — la parte web que solo atiende core-identity: servidor OIDC del hub (OpenIddict), endpoints
+    del login de siempre y de la recuperación de cuenta, productos de la empresa (me/apps, manifiesto) y marca pública
+    con su límite de tasa. Espacios de nombres Flit.Api.* conservados (salieron de Flit.Api). core-api lo referencia
+    solo durante la transición (HU #13235).
+  -->
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>Flit.Identity.Web</RootNamespace>
+    <PublishAot>false</PublishAot>
+    <IsAotCompatible>false</IsAotCompatible>
+    <NuGetAuditMode>direct</NuGetAuditMode>
+  </PropertyGroup>
+
+  <!-- Los mismos usings implícitos del SDK web que tenían estos archivos en Flit.Api. -->
+  <ItemGroup>
+    <Using Include="Microsoft.AspNetCore.Builder" />
+    <Using Include="Microsoft.AspNetCore.Hosting" />
+    <Using Include="Microsoft.AspNetCore.Http" />
+    <Using Include="Microsoft.AspNetCore.Routing" />
+    <Using Include="Microsoft.Extensions.Configuration" />
+    <Using Include="Microsoft.Extensions.DependencyInjection" />
+    <Using Include="Microsoft.Extensions.Hosting" />
+    <Using Include="Microsoft.Extensions.Logging" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\..\..\core-api\src\Flit.Suite.AspNetCore\Flit.Suite.AspNetCore.csproj" />
+    <ProjectReference Include="..\Flit.Identity.Application\Flit.Identity.Application.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OpenIddict.AspNetCore" />
+    <PackageReference Include="OpenIddict.EntityFrameworkCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Flit.Api" />
+    <InternalsVisibleTo Include="Flit.Identity.Api" />
+    <InternalsVisibleTo Include="Flit.Admin.Tests" />
+    <InternalsVisibleTo Include="Flit.Integration.Tests" />
+    <InternalsVisibleTo Include="Flit.Identity.Tests" />
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+  </ItemGroup>
+
+</Project>

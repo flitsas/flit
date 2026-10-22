@@ -113,7 +113,7 @@ export function BatchProgressPanel({ batchId }: BatchProgressPanelProps) {
             >
               <div
                 className="h-full rounded-full transition-all"
-                style={{ width: `${porcentaje}%`, background: "#557EFF" }}
+                style={{ width: `${porcentaje}%`, background: "var(--color-flit-brand)" }}
               />
             </div>
 
@@ -131,8 +131,8 @@ export function BatchProgressPanel({ batchId }: BatchProgressPanelProps) {
                 onClick={() => void descargarZip()}
                 disabled={descargando}
                 aria-busy={descargando}
-                className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-                style={{ background: "#557EFF" }}
+                className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+                style={{ background: "var(--color-flit-brand)" }}
               >
                 <Download className="h-3.5 w-3.5" aria-hidden="true" />
                 {descargando ? "Preparando ZIP…" : "Descargar documentos generados"}
@@ -142,7 +142,7 @@ export function BatchProgressPanel({ batchId }: BatchProgressPanelProps) {
                 <button
                   type="button"
                   onClick={refresh}
-                  className="rounded-xl border px-3 py-2 text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+                  className="rounded-xl border px-3 py-2 text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
                 >
                   Actualizar ahora
                 </button>

@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import MatriculaResumen, { ResumenCard } from './MatriculaResumen';
-import ExpedienteTimeline from './ExpedienteTimeline';
+import { ExpedienteCronologicoAccordion } from './ExpedienteTimeline';
 import ExpedienteVisor from './ExpedienteVisor';
 import { sourceLabel, checkRoleSuffix } from './PreflightPanel';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
@@ -25,6 +25,7 @@ import type {
   BiometricParte,
   BiometricValidation,
   ChecklistItemView,
+  ConsolidadoVigencia,
   FieldValue,
   FirmaBaulActorCoberturaDto,
   InstanceStatus,
@@ -146,7 +147,7 @@ function RnmcSection({ checks, loading }: { checks: PreflightCheck[]; loading: b
 function OrganismoInfoCard({ name }: { name: string }) {
   return (
     <ResumenCard title="Organismo de tránsito">
-      <p className="text-sm font-semibold" style={{ color: '#162744' }}>
+      <p className="text-sm font-semibold" style={{ color: 'var(--color-flit-primary)' }}>
         {name || 'Sin seleccionar'}
       </p>
       {/* El gestor solo llega a este paso con un OT que ya pasó la re-confirmación contra grants y
@@ -304,6 +305,8 @@ export function FirmaFurStep({
     /** ADR-0059 — origen del último rechazo para el chip del resumen. */
     rejectedFrom: string | null;
     statusHistory: StatusHistory[];
+    /** HU #13403 — false ⇒ la impronta no se genera automáticamente (carga manual). */
+    improntaGeneracionHabilitada: boolean;
   } | null>(null);
   /** Contacto completo (teléfono/dirección/ciudad) desde GET actors — el detalle de instancia no lo trae. */
   const [actorsContact, setActorsContact] = useState<ProcedureActor[]>([]);
@@ -328,6 +331,11 @@ export function FirmaFurStep({
   // se podía marcar en el paso 1 o desde el listado). Vive en una columna del expediente, no en
   // `fieldValues`: se hidrata de `getInstance` y se cambia con su propio endpoint idempotente.
   const [prioritario, setPrioritario] = useState(false);
+  // HU #12792 — vigencia del consolidado del wizard para el indicador del `ExpedienteVisor`. Se
+  // refresca tras cada generación (ver `refrescarVigencia`); `undefined` = backend sin el campo.
+  const [consolidadoWizard, setConsolidadoWizard] = useState<ConsolidadoVigencia | null | undefined>(
+    undefined,
+  );
   // FEATURE 05 — resultado RNMC por actor (medidas correctivas). Se consulta al entrar a este paso
   // (cuando ya se capturó la fecha de expedición de cada actor), no en el pre-vuelo.
   const [rnmcChecks, setRnmcChecks] = useState<PreflightCheck[]>([]);
@@ -354,6 +362,7 @@ export function FirmaFurStep({
         status: d.status,
         rejectedFrom: d.rejectedFrom ?? null,
         statusHistory: d.statusHistory ?? [],
+        improntaGeneracionHabilitada: d.improntaGeneracionHabilitada !== false,
       });
       setActorsContact(actors);
       // ADR-0055/HU #12129 — GET /prenda devuelve un ARRAY de 0-2 (una por familia). El resumen
@@ -362,6 +371,7 @@ export function FirmaFurStep({
       // levantamiento a la vez.
       setPrenda(prendas);
       setPrioritario(d.prioritario ?? false);
+      setConsolidadoWizard(d.consolidadoWizard);
       // Siempre la fecha del día (no editable en el resumen).
       const fecha = todayIsoDate();
       setFechaTramite(fecha);
@@ -609,6 +619,8 @@ export function FirmaFurStep({
 
   /** Estado del trámite como PRIMITIVO: `detail` es un objeto nuevo en cada recarga (ver arriba). */
   const estadoDetalle = detail?.status;
+  /** HU #13403 — primitivo por la misma razón que `estadoDetalle`. */
+  const improntaAutomatica = detail?.improntaGeneracionHabilitada !== false;
 
   // Feature #11066 — al entrar al paso FUR (con organismo y en borrador/subsanación) pre-genera
   // el paquete + impronta. Preparar/Guardar NO esperan a que termine; Radicar sí exige consolidado.
@@ -638,7 +650,8 @@ export function FirmaFurStep({
         // si aún no (matrícula), las casillas quedan vacías. Un FUR previo sin placa no se conserva.
         await tramitesClient.generarFur(instanceId);
 
-        if (!hasImpronta) {
+        // HU #13403 — con la generación deshabilitada la impronta se carga a mano en el checklist.
+        if (!hasImpronta && improntaAutomatica) {
           try {
             await tramitesClient.generarImpronta(instanceId);
           } catch {
@@ -656,7 +669,7 @@ export function FirmaFurStep({
         setPaqueteStatus('error');
       }
     })();
-  }, [instanceId, readOnly, organismoSelected, estadoDetalle, loadExpediente]);
+  }, [instanceId, readOnly, organismoSelected, estadoDetalle, improntaAutomatica, loadExpediente]);
 
   // Transformaciones de vehículo declaradas (`VehicleTransformationsCard`, paso de Requisitos): la
   // reutiliza «Expediente consolidado» como su cuarta casilla de confirmación dinámica — «trámites
@@ -808,15 +821,23 @@ export function FirmaFurStep({
         modalidad={modalidad}
         status={detail?.status ?? 'borrador'}
         onBeforeGenerateConsolidado={guardarFechaTramite}
+        consolidadoWizard={consolidadoWizard}
         onAttachmentsChange={() => {
           void loadExpediente();
+          // HU #12792 — solo la vigencia: `loadDetail` además reescribe la fecha del trámite.
+          if (instanceId) {
+            void Promise.resolve()
+              .then(() => tramitesClient.getInstance(instanceId))
+              .then((d) => setConsolidadoWizard(d?.consolidadoWizard))
+              .catch(() => undefined);
+          }
           onRefresh?.();
         }}
       />
 
       {/* Borrador: la cronología vive en el resumen. Otros estados: modal de detalle / badge listado. */}
       {(detail?.status ?? 'borrador') === 'borrador' ? (
-        <ExpedienteTimeline statusHistory={detail?.statusHistory ?? []} />
+        <ExpedienteCronologicoAccordion statusHistory={detail?.statusHistory ?? []} />
       ) : null}
 
       {rnmcEnabled && <RnmcSection checks={rnmcChecks} loading={rnmcLoading} />}
@@ -919,7 +940,7 @@ export function PlacaPreasignadaSection({
       <div className="mb-3 flex items-center gap-2">
         <span
           className="h-4 w-1 shrink-0 rounded-full"
-          style={{ background: '#557EFF' }}
+          style={{ background: 'var(--color-flit-brand)' }}
           aria-hidden="true"
         />
         <WizardCardHeader title="Placa" level="h4" className="" />
@@ -1114,9 +1135,9 @@ function OrganismoModal({
             onClick={() => void persist(runtSuggestion)}
             disabled={saving}
             className="mb-3 w-full text-left rounded-xl border p-3 disabled:opacity-50"
-            style={{ borderColor: '#557EFF', background: 'rgba(85,126,255,0.06)' }}
+            style={{ borderColor: 'var(--color-flit-brand)', background: 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)' }}
           >
-            <p className="text-xs font-semibold uppercase" style={{ color: '#557EFF' }}>
+            <p className="text-xs font-semibold uppercase" style={{ color: 'var(--color-flit-brand)' }}>
               Usar el organismo registrado en RUNT
             </p>
             <p className="text-xs font-semibold mt-0.5">{runtSuggestion.name}</p>
@@ -1152,7 +1173,7 @@ function OrganismoModal({
                 type="button"
                 onClick={() => void persist(o)}
                 disabled={saving}
-                className="w-full text-left rounded-xl border p-2.5 hover:border-[#557EFF] disabled:opacity-50"
+                className="w-full text-left rounded-xl border p-2.5 hover:border-flit-brand disabled:opacity-50"
               >
                 <p className="text-xs font-semibold">{o.name}</p>
                 <p className="text-xs opacity-70">{o.code}</p>
@@ -1448,7 +1469,7 @@ function ParticipantRow({
             onClick={() => void handleReinvite()}
             disabled={busy || !instanceId}
             className="rounded-xl border px-3 py-1.5 text-xs font-semibold shrink-0 disabled:opacity-50"
-            style={{ borderColor: '#557EFF', color: '#557EFF' }}
+            style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
           >
             {busy ? 'Reinvitando…' : 'Reinvitar'}
           </button>

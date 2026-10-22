@@ -3,6 +3,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { BellPlus, History, Pencil, Trash2 } from "lucide-react";
 import { CreateButton } from "@/components/atom/CreateButton";
+import { Pagination } from "@/components/atom/Pagination";
+import { RowActions } from "@/components/atom/RowActions";
+import {
+  CARDLIST_CELL,
+  CARDLIST_HEAD_ROW,
+  CARDLIST_ROW,
+  CARDLIST_SCROLL,
+  CARDLIST_TABLE,
+  CARDLIST_TH,
+} from "@/components/atom/table-cardlist";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { CompanyNotice } from "../CompanyNotice";
 import { cn } from "@/lib/utils";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
@@ -52,6 +63,8 @@ export function AlertsSection({ tenantId, needsCompany = false, otTransitOfficeI
   const [creating, setCreating] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<AlertRule | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  // Bug #13055 — las reglas pueden crecer: paginación en cliente con «Filas por página».
+  const pg = usePaginacion();
 
   const load = useCallback(async () => {
     if (needsCompany) return;
@@ -115,7 +128,7 @@ export function AlertsSection({ tenantId, needsCompany = false, otTransitOfficeI
       "rounded-lg px-3 py-1.5 text-xs font-semibold",
       active
         ? "text-white"
-        : "text-[#162744] dark:text-slate-200 border border-slate-200 dark:border-slate-700",
+        : "text-flit-primary dark:text-slate-200 border border-slate-200 dark:border-slate-700",
     );
 
   return (
@@ -126,7 +139,7 @@ export function AlertsSection({ tenantId, needsCompany = false, otTransitOfficeI
             type="button"
             onClick={() => setSubView("rules")}
             className={subTabClass(subView === "rules")}
-            style={subView === "rules" ? { background: "#557EFF" } : undefined}
+            style={subView === "rules" ? { background: "var(--color-flit-brand)" } : undefined}
           >
             Reglas
           </button>
@@ -134,7 +147,7 @@ export function AlertsSection({ tenantId, needsCompany = false, otTransitOfficeI
             type="button"
             onClick={() => setSubView("history")}
             className={cn(subTabClass(subView === "history"), "flex items-center gap-1")}
-            style={subView === "history" ? { background: "#557EFF" } : undefined}
+            style={subView === "history" ? { background: "var(--color-flit-brand)" } : undefined}
           >
             <History className="h-3.5 w-3.5" aria-hidden="true" /> Historial de disparos
           </button>
@@ -174,74 +187,68 @@ export function AlertsSection({ tenantId, needsCompany = false, otTransitOfficeI
               onRetry={() => void load()}
               skeletonRows={3}
             >
-              <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700">
-                <table className="w-full text-left text-sm">
+              {/* Bug #13055 — tabla homologada con el modelo de trámites (sin tarjeta envolvente). */}
+              <div className={CARDLIST_SCROLL}>
+                <table className={CARDLIST_TABLE} aria-label="Reglas de alerta">
                   <thead>
-                    <tr className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
-                      <th className="px-3 py-2">Nombre</th>
-                      <th className="px-3 py-2">Métrica</th>
-                      <th className="px-3 py-2">Condición</th>
-                      <th className="px-3 py-2">Ventana</th>
-                      <th className="px-3 py-2">Cooldown</th>
-                      <th className="px-3 py-2">Último disparo</th>
-                      <th className="px-3 py-2">Estado</th>
-                      <th className="px-3 py-2 text-right">Acciones</th>
+                    <tr className={CARDLIST_HEAD_ROW}>
+                      <th scope="col" className={CARDLIST_TH}>Nombre</th>
+                      <th scope="col" className={CARDLIST_TH}>Métrica</th>
+                      <th scope="col" className={CARDLIST_TH}>Condición</th>
+                      <th scope="col" className={CARDLIST_TH}>Ventana</th>
+                      <th scope="col" className={CARDLIST_TH}>Cooldown</th>
+                      <th scope="col" className={CARDLIST_TH}>Último disparo</th>
+                      <th scope="col" className={CARDLIST_TH}>Estado</th>
+                      <th scope="col" className={`${CARDLIST_TH} text-right`}>Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {items.map((r) => (
-                      <tr
-                        key={r.id}
-                        data-testid="alert-rule-row"
-                        className="border-b border-slate-100 dark:border-slate-800 last:border-0 text-[#162744] dark:text-slate-200"
-                      >
-                        <td className="px-3 py-2 font-medium">{r.name}</td>
-                        <td className="px-3 py-2">{METRIC_LABELS[r.metric]}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">
+                    {pg.paginar(items).map((r) => (
+                      <tr key={r.id} data-testid="alert-rule-row" className={CARDLIST_ROW}>
+                        <td className={`${CARDLIST_CELL} font-medium`}>{r.name}</td>
+                        <td className={CARDLIST_CELL}>{METRIC_LABELS[r.metric]}</td>
+                        <td className={`${CARDLIST_CELL} whitespace-nowrap`}>
                           {OPERATOR_LABELS[r.operator]} {r.threshold}
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap">{r.windowMinutes} min</td>
-                        <td className="px-3 py-2 whitespace-nowrap" data-testid="alert-cooldown-cell">
+                        <td className={`${CARDLIST_CELL} whitespace-nowrap`}>{r.windowMinutes} min</td>
+                        <td className={`${CARDLIST_CELL} whitespace-nowrap`} data-testid="alert-cooldown-cell">
                           {r.cooldownMinutes} min
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap">{formatDateTime(r.lastTriggeredAt)}</td>
-                        <td className="px-3 py-2">
+                        <td className={`${CARDLIST_CELL} whitespace-nowrap`}>{formatDateTime(r.lastTriggeredAt)}</td>
+                        <td className={CARDLIST_CELL}>
                           <span
                             className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
                             style={
                               r.isActive
-                                ? { background: "#557EFF1A", color: "#557EFF" }
+                                ? { background: "color-mix(in srgb, var(--color-flit-brand) 10.2%, transparent)", color: "var(--color-flit-brand)" }
                                 : { background: "#6b7a941A", color: "#6b7a94" }
                             }
                           >
                             {r.isActive ? "Activa" : "Inactiva"}
                           </span>
                         </td>
-                        <td className="px-3 py-2">
-                          <div className="flex justify-end gap-1">
-                            <button
-                              type="button"
-                              aria-label={`Editar ${r.name}`}
-                              onClick={() => setEditing(r)}
-                              className="rounded-lg border border-slate-200 dark:border-slate-700 p-1.5 hover:bg-slate-50 dark:hover:bg-slate-800"
-                            >
-                              <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={`Eliminar ${r.name}`}
-                              onClick={() => setConfirmDelete(r)}
-                              className="rounded-lg border border-slate-200 dark:border-slate-700 p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                            </button>
-                          </div>
+                        <td className={CARDLIST_CELL}>
+                          <RowActions
+                            actions={[
+                              { icon: Pencil, label: `Editar ${r.name}`, tone: "primary", onClick: () => setEditing(r) },
+                              { icon: Trash2, label: `Eliminar ${r.name}`, tone: "danger", onClick: () => setConfirmDelete(r) },
+                            ]}
+                          />
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+              <Pagination
+                page={Math.min(pg.page, Math.max(1, Math.ceil(items.length / pg.pageSize)))}
+                pageSize={pg.pageSize}
+                totalCount={items.length}
+                onPageChange={pg.setPage}
+                onPageSizeChange={pg.setPageSize}
+                ariaLabel="Paginación de reglas de alerta"
+                noun="alertas"
+              />
             </UiStateBoundary>
           )}
 
@@ -252,7 +259,7 @@ export function AlertsSection({ tenantId, needsCompany = false, otTransitOfficeI
               data-testid="alert-delete-confirm"
               className="rounded-2xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 p-4 space-y-2"
             >
-              <p className="text-sm text-[#162744] dark:text-slate-100">
+              <p className="text-sm text-flit-primary dark:text-slate-100">
                 ¿Eliminar la alerta <strong>{confirmDelete.name}</strong>? Su historial de disparos se conserva.
               </p>
               {actionError && (
@@ -272,7 +279,7 @@ export function AlertsSection({ tenantId, needsCompany = false, otTransitOfficeI
                     setConfirmDelete(null);
                     setActionError(null);
                   }}
-                  className="rounded-xl border border-slate-200 dark:border-slate-700 px-4 py-2 text-xs font-semibold text-[#162744] dark:text-slate-200"
+                  className="rounded-xl border border-slate-200 dark:border-slate-700 px-4 py-2 text-xs font-semibold text-flit-primary dark:text-slate-200"
                 >
                   Cancelar
                 </button>

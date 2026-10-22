@@ -7,6 +7,7 @@
 // moverlo no cambiaba un solo número. Al partir los filtros por pestaña, cada control queda al lado
 // de lo que de verdad gobierna.
 
+import { DateRangePicker } from "@/components/atom/DateRangePicker";
 import {
   TipoTramiteSelect,
   type GrupoTiposTramite,
@@ -101,8 +102,8 @@ export function RangePresets({
             onClick={() => onChange(target)}
             className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
               active
-                ? "border-[#557EFF] bg-[#557EFF]/10 text-[#557EFF]"
-                : "border-[#DFE5ED] text-[#6B7280] hover:border-[#557EFF] dark:border-white/10 dark:text-white/50"
+                ? "border-flit-brand bg-flit-brand/10 text-flit-brand"
+                : "border-[#DFE5ED] text-[#6B7280] hover:border-flit-brand dark:border-white/10 dark:text-white/50"
             }`}
           >
             {preset.label}
@@ -121,28 +122,12 @@ export function DateRangeFields({
   onChange: (range: DateRange) => void;
 }) {
   return (
-    <>
-      <label className="flex flex-col gap-1 text-xs font-semibold">
-        Desde
-        <input
-          type="date"
-          value={range.from}
-          max={range.to}
-          onChange={(e) => onChange({ ...range, from: e.target.value })}
-          className={FIELD_CLS}
-        />
-      </label>
-      <label className="flex flex-col gap-1 text-xs font-semibold">
-        Hasta
-        <input
-          type="date"
-          value={range.to}
-          min={range.from}
-          onChange={(e) => onChange({ ...range, to: e.target.value })}
-          className={FIELD_CLS}
-        />
-      </label>
-    </>
+    <DateRangePicker
+      value={range}
+      onChange={onChange}
+      label="Rango de fechas"
+      className="min-w-[240px]"
+    />
   );
 }
 

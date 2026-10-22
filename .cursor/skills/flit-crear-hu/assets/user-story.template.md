@@ -24,7 +24,7 @@ Ejemplos:
 | Campo | Valor |
 |-------|-------|
 | `Story Points` | `<Fibonacci: 1,2,3,5,8>` |
-| `Custom.Refinement` | `true` |
+| `Custom.Refinement` | `"True"` (string, no booleano) |
 | `Tags` | `DOR`, `adopcion-ia` |
 | `AssignedTo` | `<Humano responsable>` |
 | `Parent` | `Feature #<ID>` |
@@ -76,7 +76,7 @@ Then <resultado>
 - [ ] Título sigue formato `[US #ID] [BACKEND|FRONTEND] – ...`
 - [ ] ≥1 AC positivo + ≥1 AC negativo
 - [ ] Story Points asignados (Fibonacci)
-- [ ] `Refinement = true`
+- [ ] `Refinement = "True"` (string, no booleano)
 - [ ] Dependencies explícitas (o "Ninguna")
 - [ ] Sprint = siguiente al activo
 - [ ] AssignedTo = humano

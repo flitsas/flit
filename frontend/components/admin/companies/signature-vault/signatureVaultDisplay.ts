@@ -12,7 +12,7 @@ export const ESTADO_LABELS: Record<SignatureVaultEstado, string> = {
 
 /** Colores del badge de estado (tokens FLIT): activa teal, revocada naranja, vencida ámbar. */
 export const ESTADO_BADGE: Record<SignatureVaultEstado, { color: string; border: string; bg: string }> = {
-  activa: { color: "#0a8f8b", border: "#8fdedb", bg: "rgba(0,219,213,0.12)" },
+  activa: { color: "#0a8f8b", border: "#8fdedb", bg: "color-mix(in srgb, var(--color-flit-tech) 12%, transparent)" },
   revocada: { color: "#FF4E00", border: "#f0b49a", bg: "rgba(255,78,0,0.08)" },
   vencida: { color: "#8a6000", border: "#f0d38e", bg: "rgba(249,172,0,0.10)" },
 };

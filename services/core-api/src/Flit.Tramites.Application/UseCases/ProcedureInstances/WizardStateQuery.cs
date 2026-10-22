@@ -106,6 +106,24 @@ public sealed record WizardStateDto(
     public bool PrendaDocumentRequired { get; init; } = true;
 
     /// <summary>
+    /// Feature #13110 / HU #13777 — el wizard puede ofrecer «Omitir prenda» (<c>omitir</c>). <c>true</c>
+    /// siempre que la decisión de prenda aplica al trámite (<see cref="WizardCapabilitiesDto.HasPrendaGate"/>:
+    /// tipo prendario o gravamen reportado por el RUNT), sea cual sea la familia del tipo. El PUT de prenda
+    /// admite <c>omitir</c> en todo tipo con dimensión de prenda: el asistente recibe la respuesta y no
+    /// replica la regla.
+    /// </summary>
+    public bool PrendaOmitAllowed { get; init; }
+
+    /// <summary>
+    /// HU #13776 — el RUNT reporta prenda o gravamen sobre el vehículo, según la señal ÚNICA
+    /// (<see cref="RuntGravamenSignal.Reporta(IEnumerable{ProcedureInstanceFieldValue})"/>: banderas, garantías
+    /// RNGM, dato prendario o limitaciones a la propiedad). Es el mismo valor con el que se evalúa la
+    /// exigencia de decisión de prenda: el asistente pinta el aviso con él en vez de releer los
+    /// <c>field_values</c> por su cuenta.
+    /// </summary>
+    public bool RuntReportaGravamen { get; init; }
+
+    /// <summary>
     /// ADR-0050 — identidad del tipo con el que se conformó el expediente, para que el asistente
     /// titule el trámite que se está haciendo. Sin esto, el frontend solo tenía la familia y
     /// rotulaba «Matrícula Inicial» cualquier cosa que no fuera un traspaso.
@@ -425,23 +443,34 @@ public sealed class GetWizardStateHandler(
                         IdentityValidationEnabled = identityRequired,
                         RnmcEnabled = rnmcEnabled,
                         PrendaDocumentRequired = prendaDocumentRequired,
+                        PrendaOmitAllowed = ResolvePrendaOmitAllowed(dynamicState),
                     },
                     instance), null);
             }
         }
 
+        var staticState = ComputeState(
+            instance, partesEfectivas, docsCompletos, comparendosBloquean, prendaOtBlocker,
+            runtExigido);
         var state = AnnotateInstanceFlags(
-            ComputeState(
-                instance, partesEfectivas, docsCompletos, comparendosBloquean, prendaOtBlocker,
-                runtExigido) with
+            staticState with
             {
                 IdentityValidationEnabled = identityRequired,
                 RnmcEnabled = rnmcEnabled,
                 PrendaDocumentRequired = prendaDocumentRequired,
+                PrendaOmitAllowed = ResolvePrendaOmitAllowed(staticState),
             },
             instance);
         return (state, null);
     }
+
+    /// <summary>
+    /// <see cref="WizardStateDto.PrendaOmitAllowed"/> (HU #13777): vale lo mismo que el
+    /// <c>HasPrendaGate</c> que ya viaja en las capacidades (derivado del tipo y del gravamen RUNT), sin
+    /// depender de la familia ni de la política del OT.
+    /// </summary>
+    private static bool ResolvePrendaOmitAllowed(WizardStateDto state) =>
+        state.Capabilities?.HasPrendaGate ?? false;
 
     /// <summary>
     /// Política compañía+OT del certificado de prenda (snapshot al <see cref="ProcedureInstance.CreatedAt"/>).
@@ -778,6 +807,7 @@ public sealed class GetWizardStateHandler(
             AllowedTransitions = allowed,
             Status = instance.Status,
             EsMigrado = instance.IsMigrated,
+            RuntReportaGravamen = RuntReportaGravamen(instance),
         };
     }
 

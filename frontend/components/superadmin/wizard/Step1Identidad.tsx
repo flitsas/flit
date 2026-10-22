@@ -30,7 +30,7 @@ export function Step1Identidad({ identity, onChange }: Step1Props) {
             required
             value={identity.family}
             onChange={(e) => onChange({ family: e.target.value as ProcedureFamily })}
-            className="w-full md:w-1/2 px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF]"
+            className="w-full md:w-1/2 px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-flit-brand"
           >
             {FAMILIES.map((f) => (
               <option key={f.value} value={f.value}>
@@ -51,7 +51,7 @@ export function Step1Identidad({ identity, onChange }: Step1Props) {
             placeholder="Ej. MI_ESTANDAR"
             value={identity.code}
             onChange={(e) => onChange({ code: e.target.value.toUpperCase().replace(/\s/g, '_') })}
-            className="w-full md:w-1/2 px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF] font-mono tracking-wide"
+            className="w-full md:w-1/2 px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-flit-brand font-mono tracking-wide"
           />
           <p className="text-[10px] opacity-50 mt-1">Solo mayúsculas y guiones bajos.</p>
         </div>
@@ -67,7 +67,7 @@ export function Step1Identidad({ identity, onChange }: Step1Props) {
             placeholder="Ej. Matrícula Estándar"
             value={identity.name}
             onChange={(e) => onChange({ name: e.target.value })}
-            className="w-full md:w-2/3 px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-[#557EFF]"
+            className="w-full md:w-2/3 px-3 py-2 rounded-xl border bg-white dark:bg-[#0B0F14] text-xs outline-none focus:border-flit-brand"
           />
         </div>
       </div>

@@ -103,6 +103,41 @@ describe('IdentityValidationTrackingPanel (HU #11007)', () => {
     expect(alert).toHaveTextContent(/no encontrada/i);
   });
 
+  it('Bug #13449 — la tabla muestra lo más reciente arriba y lo más antiguo abajo', async () => {
+    const user = userEvent.setup();
+    const evento = (occurredAt: string, stage: string) => ({
+      occurredAt,
+      stage,
+      outcome: 'ok',
+      httpStatus: 200,
+      signaturePresent: true,
+      secretPresent: true,
+      decryptOk: true,
+      providerStatus: null,
+      errorType: null,
+      message: null,
+    });
+    // El backend entrega orden cronológico (ascendente).
+    mocks.getBiometricAuditByValidation.mockResolvedValue({
+      validationId: 'val-1',
+      events: [
+        evento('2026-07-20T10:00:00Z', 'send'),
+        evento('2026-07-20T11:00:00Z', 'webhook'),
+        evento('2026-07-20T12:00:00Z', 'reconcile'),
+      ],
+      referencedFromOtherProcedure: false,
+    });
+
+    render(<IdentityValidationTrackingPanel validationId="val-1" />);
+    await user.click(screen.getByRole('button', { name: /ver tracking/i }));
+    await screen.findByText('Envío al proveedor');
+
+    const filas = screen.getAllByRole('row').slice(1);
+    expect(filas).toHaveLength(3);
+    expect(filas[0]).not.toHaveTextContent('Envío al proveedor');
+    expect(filas[2]).toHaveTextContent('Envío al proveedor');
+  });
+
   it('sin eventos registrados muestra el estado vacío del panel', async () => {
     const user = userEvent.setup();
     mocks.getBiometricAuditByValidation.mockResolvedValue({

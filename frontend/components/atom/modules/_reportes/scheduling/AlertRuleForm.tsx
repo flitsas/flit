@@ -30,9 +30,9 @@ interface AlertRuleFormProps {
 
 const inputClass =
   "w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 " +
-  "px-3 py-2 text-sm text-[#162744] dark:text-slate-100 outline-none focus:ring-2 focus:ring-[#557EFF]/40";
+  "px-3 py-2 text-sm text-flit-primary dark:text-slate-100 outline-none focus:ring-2 focus:ring-flit-brand/40";
 
-const labelClass = "block text-xs font-semibold text-[#162744] dark:text-slate-200 mb-1";
+const labelClass = "block text-xs font-semibold text-flit-primary dark:text-slate-200 mb-1";
 
 /**
  * Formulario de creación/edición de una regla de alerta (Reportes 2.0, HU-D): métrica con
@@ -106,7 +106,7 @@ export function AlertRuleForm({ initial, allowedMetrics, onSubmit, onCancel }: A
       data-testid="alert-rule-form"
       className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-3"
     >
-      <h4 className="text-sm font-bold text-[#162744] dark:text-slate-100">
+      <h4 className="text-sm font-bold text-flit-primary dark:text-slate-100">
         {initial ? "Editar alerta" : "Nueva alerta"}
       </h4>
 
@@ -211,12 +211,12 @@ export function AlertRuleForm({ initial, allowedMetrics, onSubmit, onCancel }: A
         <RecipientsInput value={recipients} onChange={setRecipients} />
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-[#162744] dark:text-slate-200">
+      <label className="flex items-center gap-2 text-sm text-flit-primary dark:text-slate-200">
         <input
           type="checkbox"
           checked={isActive}
           onChange={(e) => setIsActive(e.target.checked)}
-          className="h-4 w-4 accent-[#557EFF]"
+          className="h-4 w-4 accent-flit-brand"
         />
         Activa
       </label>
@@ -233,7 +233,7 @@ export function AlertRuleForm({ initial, allowedMetrics, onSubmit, onCancel }: A
           disabled={saving}
           aria-busy={saving}
           className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-          style={{ background: "#557EFF" }}
+          style={{ background: "var(--color-flit-brand)" }}
         >
           {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
           {initial ? "Guardar cambios" : "Crear alerta"}
@@ -241,7 +241,7 @@ export function AlertRuleForm({ initial, allowedMetrics, onSubmit, onCancel }: A
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-xl border border-slate-200 dark:border-slate-700 px-4 py-2 text-xs font-semibold text-[#162744] dark:text-slate-200"
+          className="rounded-xl border border-slate-200 dark:border-slate-700 px-4 py-2 text-xs font-semibold text-flit-primary dark:text-slate-200"
         >
           Cancelar
         </button>

@@ -154,6 +154,11 @@ public sealed class ListIdentityValidationAlertsHandler(
     private static (string? AlertKind, bool RequiresResendReminder) Classify(
         ProcedureInstanceBiometricValidation v, IReadOnlySet<Guid> stuckIds, DateTimeOffset now)
     {
+        // HU #13286 (Épica #13202) — el PO pidió SIN alertas para el flujo manual: ni «expirada» pasadas las 24 h
+        // del enlace, ni «atascada», ni recordatorio de reenvío (reenviar a Kyverum no aplica a estas filas).
+        if (string.Equals(v.Provider, BiometricProviders.Manual, StringComparison.OrdinalIgnoreCase))
+            return (null, false);
+
         // Atascada (dead-letter): mismo criterio que IIdentityValidationOutboxRepository.ListStuckAsync
         // (cola de envío agotada o encadenamiento firma/FUR agotado). Requiere reencolar, no reenviar.
         if (stuckIds.Contains(v.Id))

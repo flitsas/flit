@@ -146,6 +146,36 @@ public sealed class PatchFieldValuesTests
         await _repo.Received(1).SaveChangesAsync(ct);
     }
 
+    /// <summary>HU #13264 AC3 — la edición del gestor en subsanación no pisa la marca de pago puesta por FLITO.</summary>
+    [Theory]
+    [InlineData("flito", "true", "true", "flito")]
+    [InlineData("user", "true", "false", "user")]
+    public async Task AC3_Subsanacion_ImpuestoPagado_SoloSeProtegeSiLaMarcaEsDeFlito(
+        string fuenteInicial, string valorInicial, string valorNuevo, string fuenteEsperada)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = Instance(id, tenantId, TramiteEstado.Rechazado);
+        instance.SubsanacionActiva = true;
+        var marca = new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, ProcedureInstanceId = id,
+            FieldKey = EnvioOtCheckFields.ImpuestoDepartamentalPagado, ValueText = valorInicial, Source = fuenteInicial,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        instance.FieldValues.Add(marca);
+        _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(instance);
+
+        var request = new PatchFieldValuesRequest(
+            [new FieldValueInput(null, EnvioOtCheckFields.ImpuestoDepartamentalPagado, valorNuevo, null)]);
+        var (_, error) = await _sut.HandleAsync(id, tenantId, request, ct);
+
+        error.Should().BeNull();
+        marca.Source.Should().Be(fuenteEsperada == "flito" ? "flito" : "user");
+        marca.ValueText.Should().Be(fuenteInicial == "flito" ? "true" : valorNuevo);
+    }
+
     [Fact]
     public async Task HandleAsync_Subsanacion_ExistingField_IsUpdated()
     {

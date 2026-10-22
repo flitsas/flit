@@ -16,9 +16,12 @@ internal static partial class TramiteValidationLog
 
     [LoggerMessage(Level = LogLevel.Information,
         Message = "TramiteValidations resuelto — DuplicateActiveProcedure={Duplicidad}, " +
-                  "VehicleRegistrationState={Registral}.")]
+                  "VehicleRegistrationState={Registral}, VehicleBodyTypeRequired={Carroceria}, " +
+                  "MandatarioRequerido={Mandatario}.")]
     public static partial void PolicyResolved(
         ILogger logger,
         TramiteValidationMode duplicidad,
-        TramiteValidationMode registral);
+        TramiteValidationMode registral,
+        TramiteValidationMode carroceria,
+        TramiteValidationMode mandatario);
 }

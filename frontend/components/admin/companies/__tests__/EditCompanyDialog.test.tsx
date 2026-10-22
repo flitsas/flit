@@ -36,6 +36,24 @@ describe("EditCompanyDialog (#10118)", () => {
     expect(code).toBeDisabled();
   });
 
+  it("deshabilita el tipo de una hija de red aunque no tenga hijos", () => {
+    const child: CompanyListItem = { ...company, parentTenantId: "00000000-0000-0000-0000-0000000000aa" };
+    render(
+      <EditCompanyDialog open company={child} onClose={vi.fn()} onUpdate={vi.fn()} onUpdated={vi.fn()} />,
+    );
+
+    expect(screen.getByLabelText(/tipo de compañía/i)).toBeDisabled();
+    expect(screen.getByText(/es cliente hijo de una red/i)).toBeInTheDocument();
+  });
+
+  it("deja el tipo habilitado en una compañía sin red", () => {
+    render(
+      <EditCompanyDialog open company={company} onClose={vi.fn()} onUpdate={vi.fn()} onUpdated={vi.fn()} />,
+    );
+
+    expect(screen.getByLabelText(/tipo de compañía/i)).toBeEnabled();
+  });
+
   it("valida requeridos en cliente y no llama a la API", async () => {
     const user = userEvent.setup();
     const onUpdate = vi.fn();
@@ -80,9 +98,9 @@ describe("EditCompanyDialog (#10118)", () => {
     expect(onUpdated).toHaveBeenCalledWith(updated);
   });
 
-  it("preserva un tipo heredado fuera del catálogo B2B (no lo fuerza a Renting)", async () => {
+  it("preserva un tipo heredado fuera del catálogo B2B (no lo fuerza a Radicadora)", async () => {
     // El listado incluye tenants con tipos heredados (p.ej. 'standard'); editar solo la
-    // razón social debe conservar ese tipo, no mostrar 'Renting' por defecto ni enviarlo.
+    // razón social debe conservar ese tipo, no mostrar 'Radicadora' por defecto ni enviarlo.
     const user = userEvent.setup();
     const legacy: CompanyListItem = { ...company, tenantType: "standard", code: "DEMO" };
     const onUpdate = vi.fn().mockResolvedValue(legacy);
@@ -91,7 +109,7 @@ describe("EditCompanyDialog (#10118)", () => {
       <EditCompanyDialog open company={legacy} onClose={vi.fn()} onUpdate={onUpdate} onUpdated={vi.fn()} />,
     );
 
-    // El select preselecciona el tipo heredado con su etiqueta legible, no 'Renting'.
+    // El select preselecciona el tipo heredado con su etiqueta legible, no 'Radicadora'.
     const select = screen.getByLabelText(/tipo de compañía/i) as HTMLSelectElement;
     expect(select.value).toBe("standard");
 

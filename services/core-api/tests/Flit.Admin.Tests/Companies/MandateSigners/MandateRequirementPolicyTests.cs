@@ -115,6 +115,75 @@ public sealed class MandateRequirementPolicyTests
     }
 
     [Fact]
+    public async Task ResolveAsync_Hu13154b_OtSignerConRedaccionSabaneta_SinRegla_CitaALaPersonaNatural()
+    {
+        // D-A3: OT Sabaneta con redacción institucional pero tipo efectivo Persona natural (heredado del OT,
+        // sin regla de la compañía). El contrato no debe citar a la UT-SETSA.
+        await using var ctx = NewContext();
+        SeedSabaneta(ctx, otMode: "signer");
+        await ctx.SaveChangesAsync(Ct);
+
+        var config = await new MandateRequirementPolicy(ctx).ResolveAsync("5631000", CompanyA, Ct);
+
+        config!.AssignmentMode.Should().Be("signer");
+        config.TemplateCode.Should().Be("generico");
+        config.MandataryFamily.Should().Be("individuo");
+        config.InstitutionalMandataryName.Should().BeNull();
+        config.InstitutionalMandataryNit.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ResolveAsync_Hu13154b_ReglaPersonaNatural_NoHeredaLaUtDelOrganismo()
+    {
+        await using var ctx = NewContext();
+        SeedSabaneta(ctx, otMode: "institutional");
+        ctx.CompanyOtMandateRules.Add(new CompanyOtMandateRuleEntity
+        {
+            Id = Guid.NewGuid(), CompanyTenantId = CompanyA, TransitOfficeId = Sabaneta,
+            AssignmentMode = "signer", CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await ctx.SaveChangesAsync(Ct);
+
+        var config = await new MandateRequirementPolicy(ctx).ResolveAsync("5631000", CompanyA, Ct);
+
+        config!.TemplateCode.Should().Be("generico");
+        config.MandataryFamily.Should().Be("individuo");
+        config.InstitutionalMandataryName.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ResolveAsync_Hu13154b_OtInstitucional_ConservaLaUt()
+    {
+        await using var ctx = NewContext();
+        SeedSabaneta(ctx, otMode: "institutional");
+        await ctx.SaveChangesAsync(Ct);
+
+        var config = await new MandateRequirementPolicy(ctx).ResolveAsync("5631000", CompanyA, Ct);
+
+        config!.TemplateCode.Should().Be("sabaneta");
+        config.MandataryFamily.Should().Be("organismo_transito");
+        config.InstitutionalMandataryNit.Should().Be("900273813-7");
+    }
+
+    private static void SeedSabaneta(FlitDbContext ctx, string otMode)
+    {
+        ctx.TransitOffices.Add(new TransitOffice
+        {
+            Id = Sabaneta, Code = "5631000", Name = "SABANETA",
+            DepartmentCode = "05", CityCode = "05631", IsActive = true,
+        });
+        ctx.TransitOfficeMandateConfigs.Add(new TransitOfficeMandateConfigEntity
+        {
+            Id = Guid.NewGuid(), TransitOfficeId = Sabaneta, TemplateCode = "sabaneta",
+            RequiresForNaturalPerson = true,
+            MandataryFamily = "organismo_transito",
+            AssignmentMode = otMode,
+            InstitutionalMandataryName = "UT-SETSA", InstitutionalMandataryNit = "900273813-7",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+    }
+
+    [Fact]
     public async Task ResolveAsync_UsesCompanyRuleAssignmentMode()
     {
         await using var ctx = NewContext();

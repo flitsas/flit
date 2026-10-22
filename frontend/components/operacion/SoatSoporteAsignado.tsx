@@ -71,9 +71,9 @@ export function SoatSoporteAsignado({
           </p>
           <label
             htmlFor={inputId}
-            className="mt-2 flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed bg-white p-4 text-center text-sm font-semibold focus-within:ring-2 focus-within:ring-[#557EFF] dark:bg-transparent"
+            className="mt-2 flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed bg-white p-4 text-center text-sm font-semibold focus-within:ring-2 focus-within:ring-flit-brand dark:bg-transparent"
             style={{
-              borderColor: '#557EFF',
+              borderColor: 'var(--color-flit-brand)',
               color: 'var(--flit-brand-ink)',
               opacity: disabled || cargando ? 0.6 : 1,
             }}

@@ -20,9 +20,9 @@ public sealed record MandateOtConfig(
     string? CustomTemplateBody = null,
     string? CustomTemplateStoragePath = null,
     string? CustomTemplateFileName = null,
-    /// <summary>Mandatario global del OT. Aplica si no hay default cliente×OT.</summary>
+    /// <summary>Mandatario global del OT: último nivel de la prelación (ADR-0066), antes del bloqueo.</summary>
     Guid? OtDefaultMandateSignerId = null,
-    /// <summary>Mandatario persona preferido (regla compañía×OT, solo signer).</summary>
+    /// <summary>Mandatario designado en la regla compañía×OT (solo signer): ya no es un nivel, solo desempata un grupo con N&gt;1 válidos (ADR-0066).</summary>
     Guid? DefaultMandateSignerId = null);
 
 /// <summary>

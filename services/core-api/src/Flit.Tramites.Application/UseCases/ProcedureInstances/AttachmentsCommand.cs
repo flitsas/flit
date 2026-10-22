@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.ExternalSync;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
@@ -122,6 +123,17 @@ public static class AttachmentRules
     public static bool ReemplazaAlSubir(string? tipo) =>
         !string.IsNullOrWhiteSpace(tipo) && !TiposMultiples.Contains(tipo.Trim());
 
+    /// <summary>
+    /// HU #13265 — «gana quien carga primero»: ¿el gestor que sube/registra/pide presign de <paramref name="tipo"/> chocaría con un
+    /// adjunto VIGENTE de ese tipo cargado por el cliente externo (<c>provider = flito</c>)? Solo aplica a los tipos que
+    /// reemplazan al subir: en los múltiples (<see cref="TiposMultiples"/>) la carga añade, no reemplaza.
+    /// </summary>
+    public static bool BloqueadoPorFlito(IEnumerable<ProcedureInstanceAttachment> adjuntos, string tipo) =>
+        ReemplazaAlSubir(tipo)
+        && adjuntos.Any(a => !a.IsHistorico
+                             && ExternalAttachmentRules.IsFromProvider(a.Provider)
+                             && string.Equals(a.Tipo, tipo.Trim(), StringComparison.OrdinalIgnoreCase));
+
     public static bool IsSoatEvidenceTipo(string? tipo) =>
         !string.IsNullOrWhiteSpace(tipo) && SoatEvidenceTipos.Contains(tipo.Trim());
 
@@ -214,6 +226,10 @@ public sealed class UploadAttachmentHandler(
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
 
+        // HU #13265 — antes de guardar el binario: si FLITO cargó primero, el gestor no lo reemplaza.
+        if (AttachmentRules.BloqueadoPorFlito(instance.Attachments, tipo))
+            return (null, ExternalAttachmentRules.BlockedCode);
+
         // HU #12046 — «Reemplazar archivo» tiene que reemplazar. Antes esto solo añadía: el expediente se
         // quedaba con el documento corregido Y con el que se quiso corregir, el consolidado los metía los
         // dos (ordena por tipo y luego por fecha, sin deduplicar) y la pantalla enseñaba el PRIMERO, o sea
@@ -235,11 +251,14 @@ public sealed class UploadAttachmentHandler(
 
         // Se retiran DESPUÉS de guardar el nuevo: si el almacenamiento falla, el gestor conserva el que tenía.
         // Soft-delete auditoría + conservar blob firmado (snapshot signed_storage_path).
+        // HU #13265 — los binarios retirados se borran DESPUÉS de confirmar: si el motor rechaza la carga («gana quien carga
+        // primero», carrera con FLITO) las filas del gestor siguen ahí y no pueden quedarse sin archivo.
         var preservePaths = SoftDeleteImprintAudits(previos, imprintAudit);
+        var borrarTrasGuardar = new List<string>();
         foreach (var prev in previos)
         {
             if (!preservePaths.Contains(prev.StoragePath))
-                storage.Delete(prev.StoragePath);
+                borrarTrasGuardar.Add(prev.StoragePath);
             instance.Attachments.Remove(prev);
             repo.RemoveAttachment(prev);
         }
@@ -271,7 +290,15 @@ public sealed class UploadAttachmentHandler(
         // Instancia trackeada (GetByIdWithAttachmentsAsync sin AsNoTracking): el change tracker
         // detecta el attachment nuevo (INSERT) y el cambio de checklist_estado. NO se llama
         // Update(): marcaría el hijo nuevo como Modified → UPDATE de 0 filas en vez de INSERT.
-        await repo.SaveChangesAsync(ct);
+        if (!await SaveGanaElPrimeroAsync(repo, ct))
+        {
+            // HU #13265 — FLITO cargó ese tipo entre la lectura y el guardado: el binario recién subido no lo referencia nadie.
+            storage.Delete(stored.StoragePath);
+            return (null, ExternalAttachmentRules.BlockedCode);
+        }
+
+        foreach (var path in borrarTrasGuardar)
+            storage.Delete(path);
 
         return (ToDto(attachment), null);
     }
@@ -283,6 +310,23 @@ public sealed class UploadAttachmentHandler(
     private static bool EsDeOtroDueno(ProcedureInstanceAttachment a) =>
         string.Equals(a.Source, "system", StringComparison.OrdinalIgnoreCase)
         || string.Equals(a.Source, "company", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// HU #13265 — guarda; <c>false</c> si el motor rechazó la carga por «gana quien carga primero» (DDL 131), que es la
+    /// carrera con FLITO que las lecturas previas no pueden ver. Cualquier otro error se propaga.
+    /// </summary>
+    internal static async Task<bool> SaveGanaElPrimeroAsync(IProcedureInstanceRepository repo, CancellationToken ct)
+    {
+        try
+        {
+            await repo.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (Exception ex) when (repo.IsFlitoFirstWinsConflict(ex))
+        {
+            return false;
+        }
+    }
 
     internal static IReadOnlySet<string> SoftDeleteImprintAudits(
         IReadOnlyList<ProcedureInstanceAttachment> previos,
@@ -330,6 +374,11 @@ public sealed class PresignAttachmentHandler(
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
+
+        // HU #13265 — ANTES de emitir la URL: no tiene sentido dejar subir el binario si el registro se va a rechazar.
+        if (AttachmentRules.BloqueadoPorFlito(instance.Attachments, tipo))
+            return (null, ExternalAttachmentRules.BlockedCode);
+
         var filename = string.IsNullOrWhiteSpace(input.Filename) ? "file" : input.Filename.Trim();
         var presigned = await storage.CreatePresignedUploadAsync(id, tipo, filename, ct);
 
@@ -378,6 +427,10 @@ public sealed class RegisterAttachmentHandler(
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
 
+        // HU #13265 — mismo bloqueo que la subida multipart (el binario ya está en S3, pero la fila de FLITO no se toca).
+        if (AttachmentRules.BloqueadoPorFlito(instance.Attachments, tipo))
+            return (null, ExternalAttachmentRules.BlockedCode);
+
         // Paridad HU #12046 con UploadAttachmentHandler: el front usa presign→register.
         var previos = AttachmentRules.ReemplazaAlSubir(tipo)
             ? instance.Attachments
@@ -387,11 +440,13 @@ public sealed class RegisterAttachmentHandler(
                 .ToList()
             : [];
 
+        // HU #13265 — binarios retirados: después de confirmar (ver UploadAttachmentHandler).
         var preservePaths = UploadAttachmentHandler.SoftDeleteImprintAudits(previos, imprintAudit);
+        var borrarTrasGuardar = new List<string>();
         foreach (var prev in previos)
         {
-            if (storage is not null && !preservePaths.Contains(prev.StoragePath))
-                storage.Delete(prev.StoragePath);
+            if (!preservePaths.Contains(prev.StoragePath))
+                borrarTrasGuardar.Add(prev.StoragePath);
             instance.Attachments.Remove(prev);
             repo.RemoveAttachment(prev);
         }
@@ -416,7 +471,18 @@ public sealed class RegisterAttachmentHandler(
         repo.Add(attachment);
 
         ChecklistEstadoJson.AutoMark(instance, tipo);
-        await repo.SaveChangesAsync(ct);
+
+        // HU #13265 — carrera con FLITO. El binario ya está en S3 (lo subió el cliente con la URL firmada) y su
+        // `storagePath` lo da el cliente: NO se borra (podría apuntar a un archivo ajeno); queda huérfano como cualquier
+        // presign sin register.
+        if (!await UploadAttachmentHandler.SaveGanaElPrimeroAsync(repo, ct))
+            return (null, ExternalAttachmentRules.BlockedCode);
+
+        if (storage is not null)
+        {
+            foreach (var path in borrarTrasGuardar)
+                storage.Delete(path);
+        }
 
         return (UploadAttachmentHandler.ToDto(attachment), null);
     }
@@ -595,12 +661,25 @@ public sealed class DownloadAttachmentHandler(
     }
 }
 
-/// <summary>Borra un adjunto (FS + fila). Solo en <c>draft</c>.</summary>
+/// <summary>
+/// Borra un adjunto (FS + fila). Solo en <c>draft</c> o con subsanación activa.
+/// <para>Re-review #12760 (M-N1) — los consolidados (<c>consolidado</c>, <c>consolidado_maestro</c>) son
+/// documentos del sistema y no se borran por esta vía (<see cref="AdjuntoProtegido"/>): en subsanación el
+/// gestor podía eliminar el maestro radicado ante Quipux. Defensa adicional: tampoco se borra ningún adjunto
+/// referenciado por una radicación (<see cref="IMaestroRadicadoLookup.AttachmentsProtegidosAsync"/>). El
+/// SuperAdmin no usa este handler: sus acciones Limpiar/Cargar consolidado tienen su propio flujo.</para>
+/// </summary>
 public sealed class DeleteAttachmentHandler(
     IProcedureInstanceRepository repo,
     IAttachmentStorage storage,
-    IVehicleSignatureImprintRepository? imprintAudit = null)
+    IVehicleSignatureImprintRepository? imprintAudit = null,
+    IMaestroRadicadoLookup? maestroRadicado = null)
 {
+    /// <summary>Código de error: el adjunto lo genera el sistema (o lo referencia Quipux) y no se borra.</summary>
+    public const string AdjuntoProtegido = "adjunto_protegido";
+
+    private readonly IMaestroRadicadoLookup _maestroRadicado = maestroRadicado ?? NullMaestroRadicadoLookup.Instance;
+
     public async Task<string?> HandleAsync(
         Guid id,
         Guid tenantId,
@@ -617,17 +696,17 @@ public sealed class DeleteAttachmentHandler(
         if (attachment is null)
             return "attachment_not_found";
 
-        var tipo = attachment.Tipo;
-        var preservePaths = UploadAttachmentHandler.SoftDeleteImprintAudits([attachment], imprintAudit);
-        if (!preservePaths.Contains(attachment.StoragePath))
-            storage.Delete(attachment.StoragePath);
-        instance.Attachments.Remove(attachment);
-        repo.RemoveAttachment(attachment);
+        if (AttachmentRetiro.EsDelSistema(attachment.Tipo))
+            return AdjuntoProtegido;
+        // HU #13265 — lo cargado por FLITO solo lo corrige FLITO reenviando.
+        if (ExternalAttachmentRules.IsFromProvider(attachment.Provider))
+            return AdjuntoProtegido;
+        var protegidos = await _maestroRadicado.AttachmentsProtegidosAsync(tenantId, id, ct).ConfigureAwait(false);
+        if (protegidos.Contains(attachment.Id))
+            return AdjuntoProtegido;
 
-        // Simétrico al AutoMark de la subida: si ya no queda ningún adjunto de ese tipo, se
-        // des-marca el ítem de checklist que se había auto-marcado. Sin esto, borrar un documento
-        // dejaba el ítem "satisfecho" y el gate seguía pasando sin el documento.
-        ChecklistEstadoJson.AutoUnmark(instance, tipo);
+        var tipo = attachment.Tipo;
+        AttachmentRetiro.Retirar(instance, [attachment], repo, storage, imprintAudit);
 
         // HU #12776 — la fecha de expedición que el OCR leyó del certificado de Cámara de Comercio se
         // va con el certificado. Si se quedara, el siguiente certificado cuyo OCR no lea la fecha
@@ -642,6 +721,73 @@ public sealed class DeleteAttachmentHandler(
         await repo.SaveChangesAsync(ct);
 
         return null;
+    }
+}
+
+/// <summary>
+/// Retiro de adjuntos del gestor con las reglas de <see cref="DeleteAttachmentHandler"/>, compartido con
+/// quien retira de rebote un documento que dejó de exigirse (Bug #13240: <see cref="RegistrarPrendaHandler"/>
+/// al cambiar la decisión de prenda). No valida el estado del trámite ni llama a <c>SaveChanges</c>: eso
+/// es de cada caso de uso. La invalidación del consolidado no se hace aquí: el
+/// <c>ConsolidadoVigenciaTracker</c> la deriva del adjunto borrado al guardar.
+/// </summary>
+internal static class AttachmentRetiro
+{
+    /// <summary>Tipos que genera el sistema (consolidados) y nunca se retiran por estas vías.</summary>
+    private static readonly HashSet<string> TiposDelSistema = new(StringComparer.OrdinalIgnoreCase)
+    {
+        RegenerarConsolidadoAnticipadoHandler.TipoAdjuntoWizard,
+        RegenerarConsolidadoAnticipadoHandler.TipoAdjuntoMaestro,
+    };
+
+    public static bool EsDelSistema(string? tipo) => tipo is not null && TiposDelSistema.Contains(tipo);
+
+    /// <summary>
+    /// De <paramref name="candidatos"/>, los que se pueden retirar: ni del sistema ni referenciados por
+    /// una radicación (<see cref="IMaestroRadicadoLookup.AttachmentsProtegidosAsync"/>).
+    /// </summary>
+    public static async Task<IReadOnlyList<ProcedureInstanceAttachment>> FiltrarRetirablesAsync(
+        IReadOnlyList<ProcedureInstanceAttachment> candidatos,
+        IMaestroRadicadoLookup maestroRadicado,
+        Guid tenantId,
+        Guid instanceId,
+        CancellationToken ct)
+    {
+        var sinSistema = candidatos
+            .Where(a => !EsDelSistema(a.Tipo) && !ExternalAttachmentRules.IsFromProvider(a.Provider))
+            .ToList();
+        if (sinSistema.Count == 0)
+            return sinSistema;
+        var protegidos = await maestroRadicado.AttachmentsProtegidosAsync(tenantId, instanceId, ct).ConfigureAwait(false);
+        return sinSistema.Where(a => !protegidos.Contains(a.Id)).ToList();
+    }
+
+    /// <summary>
+    /// Retira los adjuntos: soft-delete de la auditoría de impronta (conserva el blob firmado), borra el
+    /// blob, quita la fila y des-marca el checklist (simétrico al AutoMark de la subida: sin esto el ítem
+    /// seguía "satisfecho" y el gate pasaba sin el documento).
+    /// </summary>
+    public static void Retirar(
+        ProcedureInstance instance,
+        IReadOnlyList<ProcedureInstanceAttachment> adjuntos,
+        IProcedureInstanceRepository repo,
+        IAttachmentStorage storage,
+        IVehicleSignatureImprintRepository? imprintAudit)
+    {
+        if (adjuntos.Count == 0)
+            return;
+
+        var preservePaths = UploadAttachmentHandler.SoftDeleteImprintAudits(adjuntos, imprintAudit);
+        foreach (var attachment in adjuntos)
+        {
+            if (!preservePaths.Contains(attachment.StoragePath))
+                storage.Delete(attachment.StoragePath);
+            instance.Attachments.Remove(attachment);
+            repo.RemoveAttachment(attachment);
+        }
+
+        foreach (var tipo in adjuntos.Select(a => a.Tipo).Distinct(StringComparer.OrdinalIgnoreCase))
+            ChecklistEstadoJson.AutoUnmark(instance, tipo);
     }
 }
 

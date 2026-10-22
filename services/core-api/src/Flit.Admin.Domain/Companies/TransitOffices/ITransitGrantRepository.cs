@@ -42,4 +42,13 @@ public interface ITransitGrantRepository
     Task<IReadOnlyList<Guid>> ListEnabledOfficeIdsAsync(
         Guid tenantId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Tenants con grant directo habilitado hacia el organismo (Bug #12912). Es solo la fila de
+    /// <c>tenant_transit_office_grants</c>: la lista efectiva por red la calcula
+    /// <see cref="IEffectiveTransitOfficeListResolver.ListEffectiveTenantIdsForOfficeAsync"/>.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> ListEnabledTenantIdsForOfficeAsync(
+        Guid transitOfficeId,
+        CancellationToken cancellationToken = default);
 }

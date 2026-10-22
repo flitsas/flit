@@ -1,5 +1,9 @@
 "use client";
 
+import { useState } from "react";
+import { SlidersHorizontal } from "lucide-react";
+import { StatusBadge } from "@/components/atom/StatusBadge";
+import { Accordion, ClampedText, FIELD_CLASS, FIELD_LABEL, HELP_TEXT } from "./ConfigUi";
 import {
   CONSULTATION_CONDUCTOR_PROVIDERS,
   CONSULTATION_VEHICLE_PROVIDERS,
@@ -25,13 +29,13 @@ export function ConsultaProvidersSection({
   const configError = fieldErrors?.consultationProviderConfig;
   const timeoutError = fieldErrors?.runtFailoverTimeoutMs;
 
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  // Un error en el campo plegado no puede quedar oculto: se fuerza abierto.
+  const showAdvanced = advancedOpen || Boolean(timeoutError);
+
   return (
-    <fieldset className="rounded-2xl border p-4">
-      <legend className="px-1 text-xs font-semibold">Proveedores de consulta RUNT</legend>
-      <p className="mb-3 max-w-md text-[11px] opacity-60">
-        Proveedor que resuelve cada consulta al RUNT. Kyverum es el predeterminado; si no responde, la
-        consulta cae automáticamente al proveedor de contingencia.
-      </p>
+    <div className="space-y-4">
+      <ClampedText text="Proveedor que resuelve cada consulta al RUNT. Kyverum es el predeterminado; si no responde, la consulta cae automáticamente al proveedor de contingencia." />
 
       <div className="grid gap-4 sm:grid-cols-3">
         <ProviderSelect
@@ -61,39 +65,61 @@ export function ConsultaProvidersSection({
       </div>
 
       {configError && (
-        <p className="mt-1 text-[11px] font-medium" style={{ color: "#FF4E00" }} role="alert">
+        <p className="text-xs font-medium" style={{ color: "#FF4E00" }} role="alert">
           {configError}
         </p>
       )}
 
-      <div className="mt-4 max-w-xs">
-        <label htmlFor="runtFailoverTimeoutMs" className="mb-1 block text-xs font-semibold">
-          Timeout de failover (ms)
-        </label>
-        <input
-          id="runtFailoverTimeoutMs"
-          type="text"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          autoComplete="off"
-          value={form.runtFailoverTimeoutMs}
-          onChange={(e) => {
-            const raw = digitsOnly(e.target.value);
-            onChange({ runtFailoverTimeoutMs: raw === "" ? 0 : Number(raw) });
-          }}
-          className="w-full rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF]"
-          style={{ borderColor: timeoutError ? "#FF4E00" : "#DFE5ED" }}
-        />
-        <p className="mt-1 text-[11px] opacity-60">
-          Cuánto espera al proveedor primario antes de intentar con el de contingencia (500–60000 ms).
-        </p>
-        {timeoutError && (
-          <p className="mt-1 text-[11px] font-medium" style={{ color: "#FF4E00" }} role="alert">
-            {timeoutError}
+      <Accordion
+        title="Opciones avanzadas"
+        subtitle="Tiempo de espera antes de pasar al proveedor de contingencia."
+        open={showAdvanced}
+        onToggle={() => setAdvancedOpen((v) => !v)}
+        keepMounted
+        flat
+        bodyClassName="block"
+        badge={
+          <StatusBadge
+            tone="neutral"
+            ariaLabel={`Failover ${form.runtFailoverTimeoutMs} milisegundos`}
+            label={
+              <span className="inline-flex items-center gap-1">
+                <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+                Failover {form.runtFailoverTimeoutMs} ms
+              </span>
+            }
+          />
+        }
+      >
+        <div className="max-w-xs">
+          <label htmlFor="runtFailoverTimeoutMs" className={FIELD_LABEL}>
+            Timeout de failover (ms)
+          </label>
+          <input
+            id="runtFailoverTimeoutMs"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            autoComplete="off"
+            value={form.runtFailoverTimeoutMs}
+            onChange={(e) => {
+              const raw = digitsOnly(e.target.value);
+              onChange({ runtFailoverTimeoutMs: raw === "" ? 0 : Number(raw) });
+            }}
+            className={FIELD_CLASS}
+            style={{ borderColor: timeoutError ? "#FF4E00" : "#DFE5ED" }}
+          />
+          <p className={`mt-1 ${HELP_TEXT}`}>
+            Cuánto espera al proveedor primario antes de intentar con el de contingencia (500–60000 ms).
           </p>
-        )}
-      </div>
-    </fieldset>
+          {timeoutError && (
+            <p className="mt-1 text-xs font-medium" style={{ color: "#FF4E00" }} role="alert">
+              {timeoutError}
+            </p>
+          )}
+        </div>
+      </Accordion>
+    </div>
   );
 }
 
@@ -109,14 +135,14 @@ interface ProviderSelectProps {
 function ProviderSelect({ id, label, value, options, invalid, onChange }: ProviderSelectProps) {
   return (
     <div>
-      <label htmlFor={id} className="mb-1 block text-xs font-semibold">
+      <label htmlFor={id} className={FIELD_LABEL}>
         {label}
       </label>
       <select
         id={id}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-[#557EFF]"
+        className={FIELD_CLASS}
         style={{ borderColor: invalid ? "#FF4E00" : "#DFE5ED" }}
       >
         {options.map((option) => (

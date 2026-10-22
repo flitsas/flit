@@ -1,7 +1,6 @@
 using Flit.Admin.Application.Companies.Branding;
 using Flit.Admin.Application.Companies.Branding.ResolvePublicBranding;
 using Flit.Admin.Domain.Companies.Branding;
-using Flit.Infrastructure.Notifications.DeliveryLog;
 using Flit.Infrastructure.Notifications.Theme;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Repositories;
@@ -59,42 +58,6 @@ public sealed class BrandingFallbackTests(PostgresDatabaseFixture fixture) : Pos
         var theme = await resolver.ResolveAsync(Guid.NewGuid(), TestContext.Current.CancellationToken);
 
         theme.Should().Be(EmailTheme.Flit);
-    }
-
-    [PostgresFact]
-    public async Task AC5_ElCorreoConTemaFlitDeRespaldo_SeEntregaYQuedaRegistradoEnLaBitacora()
-    {
-        var tenantId = Guid.NewGuid();
-        await using (var seedCtx = NewContext())
-        {
-            seedCtx.Tenants.Add(TenantSeed.Lone(tenantId, "IT-MB-FALLBACK"));
-            await seedCtx.SaveChangesAsync(TestContext.Current.CancellationToken);
-        }
-
-        await using var ctx = NewContext();
-        var writer = new NotificationDeliveryLogWriter(ctx);
-
-        // Simula lo que el decorador escribiría si el tema resolvió Flit por el fallback de AC5:
-        // el correo SIGUE enviándose (Success=true) y la bitácora deja theme_kind='flit'.
-        await writer.WriteAsync(
-            new NotificationDeliveryLogEntry(
-                tenantId, "tramites.aprobado", "flit_smtp", "destinatario@ejemplo.test",
-                Success: true, FailureReason: null, DurationMs: 5)
-            {
-                ThemeKind = EmailTheme.Flit.KindWireValue,
-                ThemeVersion = null,
-                SenderName = null,
-                SenderEmail = null,
-            },
-            TestContext.Current.CancellationToken);
-
-        await using var check = NewContext();
-        var row = await check.NotificationDeliveryLogs.AsNoTracking()
-            .Where(l => l.TenantId == tenantId)
-            .SingleAsync(TestContext.Current.CancellationToken);
-
-        row.Result.Should().Be("enviado");
-        row.ThemeKind.Should().Be("flit");
     }
 
     private sealed class NoopCache : IPublicBrandingCache

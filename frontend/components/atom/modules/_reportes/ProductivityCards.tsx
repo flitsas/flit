@@ -54,7 +54,7 @@ export function ProductivityCards({ producers, status, errorMessage, onRetry }: 
     <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border flex flex-col">
       <div className="flex items-center justify-between mb-3 shrink-0">
         <h2 className="text-sm font-bold flex items-center gap-2">
-          <Users className="h-4 w-4" style={{ color: "#557EFF" }} /> Top 5 productividad
+          <Users className="h-4 w-4" style={{ color: "var(--color-flit-brand)" }} /> Top 5 productividad
         </h2>
         {selected.size > 0 && (
           <button
@@ -80,7 +80,7 @@ export function ProductivityCards({ producers, status, errorMessage, onRetry }: 
           aria-live="polite"
           aria-label={selected.size === 0 ? "Indicadores de todos los usuarios" : "Indicadores de los usuarios seleccionados"}
         >
-          <Indicator label="Enviados" value={totals.submitted} color="#557EFF" />
+          <Indicator label="Enviados" value={totals.submitted} color="var(--color-flit-brand)" />
           <Indicator label="Aprobados" value={totals.approved} color="#8CC63F" />
           <Indicator label="Rechazados" value={totals.rejected} color="#FF4E00" />
         </div>
@@ -99,8 +99,8 @@ export function ProductivityCards({ producers, status, errorMessage, onRetry }: 
                     type="button"
                     onClick={() => toggle(p.userId)}
                     aria-pressed={isSelected}
-                    className="w-full text-left rounded-xl border p-3 outline-none transition-colors hover:border-[#557EFF] focus:border-[#557EFF]"
-                    style={{ borderColor: isSelected ? "#557EFF" : "#DFE5ED", background: isSelected ? "#557EFF0F" : undefined }}
+                    className="w-full text-left rounded-xl border p-3 outline-none transition-colors hover:border-flit-brand focus:border-flit-brand"
+                    style={{ borderColor: isSelected ? "var(--color-flit-brand)" : "#DFE5ED", background: isSelected ? "color-mix(in srgb, var(--color-flit-brand) 5.88%, transparent)" : undefined }}
                   >
                     <p className="text-xs font-semibold truncate">{p.displayName}</p>
                     <div className="flex items-center gap-3 mt-1 text-[10px] opacity-80">

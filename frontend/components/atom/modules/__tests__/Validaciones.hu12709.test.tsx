@@ -149,7 +149,7 @@ describe('Validación de Identidad — alcance de red de la cabeza (HU #12709)',
     await screen.findByText('Cliente Hija');
     expect(mocks.listNetworkIdentityPersons).toHaveBeenCalledWith(expect.objectContaining({ page: 1 }), undefined);
     expect(mocks.listTenantBiometricPersons).not.toHaveBeenCalled();
-    const filas = screen.getByRole('list', { name: /validaciones de identidad/i });
+    const filas = screen.getByRole('table', { name: /validaciones de identidad/i });
     expect(within(filas).getByText('Hija Andina SAS')).toBeInTheDocument();
     expect(screen.getByTestId('identidad-network-scope-badge')).toBeInTheDocument();
   });
@@ -168,14 +168,14 @@ describe('Validación de Identidad — alcance de red de la cabeza (HU #12709)',
     renderValidaciones();
     await screen.findByText('Cliente Hija');
 
-    const filaHija = screen.getByRole('listitem', { name: /Cliente Hija/ });
+    const filaHija = screen.getByRole('row', { name: /Cliente Hija/ });
     expect(within(filaHija).getByText('Solo consulta')).toBeInTheDocument();
     await user.click(within(filaHija).getByRole('button', { name: /acciones de validación de cliente hija/i }));
     const acciones = await screen.findAllByRole('menuitem');
     expect(acciones.map((a) => a.textContent)).toEqual(['Ver proceso']);
     await user.keyboard('{Escape}');
 
-    const filaPropia = screen.getByRole('listitem', { name: /Propia Cabeza/ });
+    const filaPropia = screen.getByRole('row', { name: /Propia Cabeza/ });
     expect(within(filaPropia).queryByText('Solo consulta')).not.toBeInTheDocument();
     await user.click(within(filaPropia).getByRole('button', { name: /acciones de validación de propia cabeza/i }));
     expect((await screen.findAllByRole('menuitem')).map((a) => a.textContent)).toContain('Editar');

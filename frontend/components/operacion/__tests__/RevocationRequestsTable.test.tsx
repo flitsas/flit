@@ -95,4 +95,23 @@ describe('RevocationRequestsTable', () => {
     const headers = screen.getAllByRole('columnheader');
     expect(headers.length).toBeGreaterThanOrEqual(7);
   });
+
+  // Bug #13055 — «Filas por página»: con onTakeChange la tabla ofrece el selector estándar.
+  it('con onTakeChange ofrece «Filas por página» y avisa del nuevo tamaño', async () => {
+    const onTakeChange = vi.fn();
+    render(
+      <RevocationRequestsTable
+        items={[makeItem()]}
+        total={1}
+        skip={0}
+        take={10}
+        onPageChange={vi.fn()}
+        onTakeChange={onTakeChange}
+      />,
+    );
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Filas por página' }), '25');
+
+    expect(onTakeChange).toHaveBeenCalledWith(25);
+  });
 });

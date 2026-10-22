@@ -2,6 +2,7 @@ import type { QueryField } from '@/lib/api/queries';
 import type { ProcedureTypeSummary } from './types/procedure-parametrization';
 import { apiBaseForPageRoot } from './base-url';
 import { uploadFileToPresignedUrl } from './presigned-upload';
+import type { DocumentosRedRespuesta } from './types-consolidado-lotes';
 import type {
   AceptarConsentimientoResult,
   ActorContactLookupInput,
@@ -36,6 +37,8 @@ import type {
   GenerarFurResult,
   FurTemplateFormatResult,
   GenerarConsolidadoResult,
+  ConsolidadoEntregaParams,
+  ConsolidadoEntregaResult,
   GenerarImprontaAttachmentResult,
   IdentityAuditResponse,
   IdentityValidationAlertsResponse,
@@ -49,8 +52,7 @@ import type {
   InstanceEstadoCountsResponse,
   InstancesResponse,
   ListInstancesParams,
-  FirmaPosteriorEstado,
-  MandateSignerSelection,
+  MandateSignerPrevisto,
   TransitOfficeOption,
   TransitOfficesResponse,
   VehicleServiceTypeOption,
@@ -73,6 +75,8 @@ import type {
   ProcedureConfiguration,
   ProcedureInstanceDetail,
   ReconcileIdentityResult,
+  ActivarIdentidadManualResult,
+  RegenerarEnlaceManualResult,
   ProcedureInstanceSummary,
   EnviarAlOtResult,
   RuntPersonLookupInput,
@@ -154,7 +158,8 @@ import { DEV_TENANT_ID, DEV_USER_ID } from './dev-constants';
 import { getToken } from './client';
 import { esFirmaPendiente, mensajeFirmaPendiente } from '@/lib/tramites/firma-pendiente';
 import { resolveApiBase } from './base-url';
-import { decodeJwtPayload } from '@/lib/auth/jwt';
+import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
+import { ocultarManualAlCliente } from '@/lib/identity/ocultar-manual';
 import { buildListInstancesSearchParams } from '@/lib/tramites/list-instances-query';
 import type {
   NetworkChildFilter,
@@ -209,6 +214,19 @@ export interface NetworkChildItem {
  */
 export function fetchNetworkChildren(signal?: AbortSignal): Promise<NetworkChildItem[]> {
   return request<NetworkChildItem[]>('/api/v1/tramites/network/children', { signal });
+}
+
+/**
+ * HU #13419 AC5 — ¿la cabeza tiene encendidos los documentos de red? (`GET
+ * /api/v1/tramites/network/documentos` → `200 { documentosRed }`). Mismas puertas y 403 que
+ * `/network/children`: el 403 se propaga como `TramitesApiError` y decide el llamador. Fail-closed:
+ * cualquier respuesta sin el booleano `true` cuenta como apagado.
+ */
+export async function fetchNetworkDocumentos(signal?: AbortSignal): Promise<boolean> {
+  const res = await request<DocumentosRedRespuesta | undefined>('/api/v1/tramites/network/documentos', {
+    signal,
+  });
+  return res?.documentosRed === true;
 }
 
 // La API vive en otro origen (api.<env>.flitsas.online); el CD inyecta
@@ -550,7 +568,8 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     return undefined as T;
   }
 
-  return JSON.parse(text) as T;
+  // Lo «manual» del flujo de identidad solo lo ve el Super Admin FLIT: para el resto es una validación biométrica normal.
+  return ocultarManualAlCliente(JSON.parse(text) as T, isSuperAdmin(decodeJwtPayload(token)));
 }
 
 /**
@@ -797,6 +816,8 @@ function normalizeInstances(items: InstanceSummary[] | undefined): InstanceSumma
     firmaVendedorEstado: item.firmaVendedorEstado ?? null,
     firmaCompradorEstado: item.firmaCompradorEstado ?? null,
     consolidadoAttachmentId: item.consolidadoAttachmentId ?? null,
+    // HU #12791 — backend anterior al campo ⇒ null (la UI no infiere vigencia).
+    consolidadoWizard: item.consolidadoWizard ?? null,
   }));
 }
 
@@ -1108,35 +1129,11 @@ export const tramitesClient = {
     return res?.items ?? [];
   },
 
-  // HU #11203 — mandatarios que pueden firmar el mandato de este trámite (los habilitados para su
-  // organismo en la compañía), con la vigencia de su identidad y cuál está elegido.
-  listMandateSigners: (id: string, tenantId?: string) =>
-    request<MandateSignerSelection>(`/api/v1/tramites/instances/${id}/mandate-signers`, {
+  // HU #13146 — quién firmará el mandato (solo lectura). La elección la hace la prelación y, cuando hace
+  // falta, el OT al aprobar: no existe PUT para fijarlo.
+  getMandateSigner: (id: string, tenantId?: string) =>
+    request<MandateSignerPrevisto>(`/api/v1/tramites/instances/${id}/mandate-signer`, {
       headers: tenantHeader(tenantId),
-    }),
-
-  // HU #11203 — fija quién firma. 409 fuera de borrador; 422 si no está habilitado para el organismo.
-  setMandateSigner: (id: string, mandateSignerId: string, tenantId?: string) =>
-    request<void>(`/api/v1/tramites/instances/${id}/mandate-signer`, {
-      method: 'PUT',
-      headers: tenantHeader(tenantId),
-      body: JSON.stringify({ mandateSignerId }),
-    }),
-
-  // HU #11197 — ¿se ofrece la firma a posteriori para esta parte y ya está marcada? En persona natural
-  // responde `aplica:false` en vez de un error: para el gestor la opción sencillamente no existe.
-  getFirmaPosterior: (id: string, parte: string, tenantId?: string) =>
-    request<FirmaPosteriorEstado>(
-      `/api/v1/tramites/instances/${id}/deferred-signature?parte=${encodeURIComponent(parte)}`,
-      { headers: tenantHeader(tenantId) },
-    ),
-
-  // HU #11196 — marca el trámite para firmarse cuando el representante valide su identidad. Idempotente.
-  marcarFirmaPosterior: (id: string, parte: string, tenantId?: string) =>
-    request<FirmaPosteriorEstado>(`/api/v1/tramites/instances/${id}/deferred-signature`, {
-      method: 'POST',
-      headers: tenantHeader(tenantId),
-      body: JSON.stringify({ parte }),
     }),
 
   getInstance: (id: string, tenantId?: string) =>
@@ -2100,7 +2097,7 @@ export const tramitesClient = {
     childTenantId: string,
     documentType: string,
     documentNumber: string,
-    opts: { page?: number; pageSize?: number } = {},
+    opts: { page?: number; pageSize?: number; mandatario?: boolean } = {},
   ): Promise<PersonBiometricValidationsResponse> => {
     const params = new URLSearchParams();
     params.set('childTenantId', childTenantId);
@@ -2108,6 +2105,7 @@ export const tramitesClient = {
     params.set('documentNumber', documentNumber);
     if (opts.page != null) params.set('page', String(opts.page));
     if (opts.pageSize != null) params.set('pageSize', String(opts.pageSize));
+    if (opts.mandatario) params.set('mandatario', 'true');
     const res = await request<PersonBiometricValidationsResponse>(
       `/api/v1/tramites/network/identity-validations/by-person/detail?${params.toString()}`,
       { headers: authOnlyHeader() },
@@ -2158,7 +2156,8 @@ export const tramitesClient = {
   listPersonBiometricValidations: async (
     documentType: string,
     documentNumber: string,
-    opts: { page?: number; pageSize?: number } = {},
+    // mandatario: historial de la fila «Mandatario» (validación propia del mandatario, aparte).
+    opts: { page?: number; pageSize?: number; mandatario?: boolean } = {},
     tenantId?: string,
   ): Promise<PersonBiometricValidationsResponse> => {
     const params = new URLSearchParams();
@@ -2166,6 +2165,7 @@ export const tramitesClient = {
     params.set('documentNumber', documentNumber);
     if (opts.page != null) params.set('page', String(opts.page));
     if (opts.pageSize != null) params.set('pageSize', String(opts.pageSize));
+    if (opts.mandatario) params.set('mandatario', 'true');
     const res = await request<PersonBiometricValidationsResponse>(
       `/api/v1/tramites/biometric-validations/by-person/detail?${params.toString()}`,
       { headers: tenantHeader(tenantId) },
@@ -2349,6 +2349,21 @@ export const tramitesClient = {
       { method: 'POST', headers: tenantHeader(tenantId) },
     ),
 
+  // HU #13288 (Épica #13202) — SOLO Super Admin (el backend responde 403 al resto). Cross-tenant: el tenant
+  // sale de la fila, no de X-Tenant-Id. Errores: 404, 409 (identidad_aprobada_vigente | tramite_inactivo).
+  activateManualIdentity: (validationId: string): Promise<ActivarIdentidadManualResult> =>
+    request<ActivarIdentidadManualResult>(
+      `/api/v1/tramites/biometric-validations/${validationId}/activate-manual`,
+      { method: 'POST' },
+    ),
+
+  // HU #13288 — regenera el enlace de captura manual (el anterior deja de funcionar). 409 flujo_manual_no_activo.
+  regenerateManualLink: (validationId: string): Promise<RegenerarEnlaceManualResult> =>
+    request<RegenerarEnlaceManualResult>(
+      `/api/v1/tramites/biometric-validations/${validationId}/regenerate-manual-link`,
+      { method: 'POST' },
+    ),
+
   // GET bitácora (solo lectura) del ciclo de una validación: envío, llegada del webhook, si descifró el
   // secreto, firma, resultado y reconciliaciones. Sin PII/secretos. Diagnóstico de soporte desde la UI.
   getBiometricAudit: (
@@ -2456,6 +2471,30 @@ export const tramitesClient = {
         headers: tenantHeader(tenantId),
       },
     ),
+
+  /**
+   * HU #12785/#12786 — ruta ÚNICA de obtención del consolidado para el gestor y el SuperAdmin:
+   * `GET /api/v1/tramites/instances/{id}/consolidado/entrega`. Reconstruye SOLO si la bandera de
+   * vigencia está abajo (`modo: "regenerado"`); si está arriba devuelve el adjunto cacheado
+   * (`modo: "vigente"`) y en estado final el definitivo (`definitivoPorEstadoFinal: true`). Devuelve
+   * metadatos: el PDF se baja por `downloadAttachment` / `fetchAttachmentPreviewUrl` con
+   * `document.attachmentId`. Los parámetros omitidos no viajan (default del backend).
+   */
+  entregarConsolidado: (
+    instanceId: string,
+    params: ConsolidadoEntregaParams = {},
+    tenantId?: string,
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.tipo) qs.set('tipo', params.tipo);
+    if (params.force) qs.set('force', 'true');
+    if (params.soloLectura) qs.set('soloLectura', 'true');
+    const query = qs.toString();
+    return request<ConsolidadoEntregaResult>(
+      `/api/v1/tramites/instances/${instanceId}/consolidado/entrega${query ? `?${query}` : ''}`,
+      { headers: tenantHeader(tenantId) },
+    );
+  },
 
   // POST generar impronta (Kyverum RUNT) con los datos del trámite y adjuntarla. Idempotente por
   // NO-regeneración: 409 impronta_ya_existe si ya hay un adjunto tipo 'impronta' (manual o generado).

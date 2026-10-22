@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { ChevronDown, Info, Loader2 } from 'lucide-react';
 import type { ProcedureTypeSummary } from '@/lib/api/types/procedure-parametrization';
 import { useTiposHabilitados } from '@/hooks/useTiposHabilitados';
+import { useFamilyAccess } from '@/hooks/useFamilyAccess';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import {
   TIPOS_UI_MOCKUP,
@@ -18,7 +19,7 @@ import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { OperacionLoadingState } from './states';
 import { TerminosCondicionesCheckbox } from './TerminosCondicionesCheckbox';
 
-const BLUE = '#557EFF';
+const BLUE = 'var(--color-flit-brand)';
 const BORDER = '#DFE5ED';
 const ALERT = '#FF4E00';
 
@@ -135,8 +136,8 @@ function TarjetaSelect({
         aria-expanded={open}
         aria-label={ariaLabel}
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between rounded-xl border bg-white px-3 py-2.5 text-left text-[13px] outline-none transition focus:border-[#557EFF] focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#0B0F14]"
-        style={{ borderColor: BORDER, color: elegida ? '#162744' : '#94A3B8' }}
+        className="flex w-full items-center justify-between rounded-xl border bg-white px-3 py-2.5 text-left text-[13px] outline-none transition focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#0B0F14]"
+        style={{ borderColor: BORDER, color: elegida ? 'var(--color-flit-primary)' : '#94A3B8' }}
       >
         <span className="truncate pr-2">{elegida?.label ?? placeholder}</span>
         <ChevronDown
@@ -152,7 +153,7 @@ function TarjetaSelect({
               role="listbox"
               aria-label={ariaLabel}
               // z por encima del overlay del Modal (z-[100]): si no, el panel queda detrás.
-              className="fixed z-[1200] overflow-y-auto rounded-xl border bg-white shadow-lg dark:bg-[#162744]"
+              className="fixed z-[1200] overflow-y-auto rounded-xl border bg-white shadow-lg dark:bg-flit-primary"
               style={{
                 borderColor: BORDER,
                 left: rect?.left ?? -9999,
@@ -175,8 +176,8 @@ function TarjetaSelect({
                     }}
                     className={`block w-full px-3 py-2 text-left text-[13px] transition ${
                       on
-                        ? 'bg-[#EEF5FF] font-semibold text-[#162744]'
-                        : 'text-[#475569] hover:bg-[#EEF5FF] hover:text-[#162744] dark:text-white/80'
+                        ? 'bg-[#EEF5FF] font-semibold text-flit-primary'
+                        : 'text-[#475569] hover:bg-[#EEF5FF] hover:text-flit-primary dark:text-white/80'
                     }`}
                   >
                     {o.label}
@@ -207,6 +208,8 @@ export function NuevoTramiteModalContent({
   tituloEnContenedor = false,
 }: Props) {
   const { familias, status, error, reload } = useTiposHabilitados();
+  // HU #13665 — la tarjeta de una familia sin permiso Crear no se ofrece (no basta deshabilitarla).
+  const { canCreate } = useFamilyAccess();
   const [tipo, setTipo] = useState<NuevoTramiteTipoUi | null>(null);
   const [leasing, setLeasing] = useState(false);
   const [modalidad, setModalidad] = useState<ModalidadTraspasoUi>('bilateral');
@@ -334,7 +337,7 @@ export function NuevoTramiteModalContent({
         <button
           type="button"
           onClick={() => void reload()}
-          className="mt-2 text-xs font-semibold underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+          className="mt-2 text-xs font-semibold underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
           style={{ color: '#C2410C' }}
         >
           Reintentar
@@ -366,7 +369,7 @@ export function NuevoTramiteModalContent({
       )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {TIPOS_UI_MOCKUP.map((t) => {
+        {TIPOS_UI_MOCKUP.filter((t) => canCreate(t.id)).map((t) => {
           const on = tipo === t.id;
           const blocked = estaBloqueada(t.id);
           const noFamilia = !tieneTipos(t.id);
@@ -375,7 +378,7 @@ export function NuevoTramiteModalContent({
           return (
             <div
               key={t.id}
-              className={`rounded-2xl border-2 p-5 transition ${on ? 'bg-blue-50/50' : 'bg-white dark:bg-[#162744]'}`}
+              className={`rounded-2xl border-2 p-5 transition ${on ? 'bg-blue-50/50' : 'bg-white dark:bg-flit-primary'}`}
               style={{
                 borderColor: on ? BLUE : BORDER,
                 opacity: inhabilitada ? 0.55 : 1,
@@ -463,7 +466,7 @@ export function NuevoTramiteModalContent({
           type="button"
           onClick={() => void iniciar()}
           disabled={!puedeIniciar}
-          className="inline-flex min-w-[160px] items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-[13px] font-semibold text-white shadow-md transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
+          className="inline-flex min-w-[160px] items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-[13px] font-semibold text-white shadow-md transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
           style={{ background: WIZARD_CTA_GRADIENT }}
         >
           {registrandoTerminos ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}

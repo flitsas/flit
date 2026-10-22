@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Building2,
-  ChevronLeft,
-  ChevronRight,
+  CheckCircle2,
   Loader2,
   MailCheck,
   Pencil,
@@ -15,8 +14,19 @@ import {
 } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { Modal } from "@/components/atom/Modal";
+import { Pagination } from "@/components/atom/Pagination";
+import { usePaginacion } from "@/components/atom/usePaginacion";
+import { RowActions } from "@/components/atom/RowActions";
+import { SearchInput } from "@/components/atom/SearchInput";
 import { StatusBadge } from "@/components/atom/StatusBadge";
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from "@/components/atom/table-styles";
 import { IDENTITY_MODULE_HREF } from "@/lib/admin/identity-vigencia";
 import {
   createLegalRepresentative,
@@ -44,17 +54,26 @@ import {
   RL_COLOR,
   rlDangerCtaClass,
   rlDangerCtaStyle,
-  rlDangerGhostStyle,
-  rlIconActionClass,
   rlPrimaryCtaClass,
   rlPrimaryCtaStyle,
 } from "./rl-flit-styles";
 
-const PAGE_SIZE = 20;
+const LOAD_PAGE_SIZE = 100;
+const MAX_PAGES = 50;
+
+/** Minúsculas, sin tildes, puntos, guiones ni espacios: «1.098-765» coincide con «1098765». */
+const normaliza = (v: string) =>
+  v
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[\s.\-]/g, "");
 
 /**
  * Directorio de representantes legales.
  * Acciones por fila (iconos lineales FLIT): Editar, Empresas, Eliminar.
+ * Bug #13055 — tabla homologada con la de Trámites (table-styles, RowActions, Pagination y el loader
+ * del carrito), sin tarjeta blanca envolvente.
  * La ficha completa (modo view) queda disponible en código pero sin entrada en el grid.
  */
 export function LegalRepresentativesTab({
@@ -65,10 +84,15 @@ export function LegalRepresentativesTab({
   networkHeadId?: string | null;
 }) {
   const { show } = useToast();
-  const [page, setPage] = useState(1);
+  // Bug #13055 — filas por página elegibles. El directorio de una compañía es corto: se carga completo
+  // (páginas de 100 contra la misma API) y se busca y pagina en cliente, de modo que el resumen y la
+  // búsqueda cubren a TODOS los representantes y no solo la página visible.
+  const { page, pageSize, setPage, setPageSize, paginar } = usePaginacion();
+  const [search, setSearch] = useState("");
   const [status, setStatus] = useState<UiStatus>("loading");
   const [items, setItems] = useState<LegalRepresentativeItem[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
+  // Total que informa el API: si supera lo cargado (tope MAX_PAGES) se avisa en lugar de truncar en silencio.
+  const [totalReported, setTotalReported] = useState(0);
   const [procedureTypes, setProcedureTypes] = useState<AssignableProcedureType[]>([]);
 
   const [panelOpen, setPanelOpen] = useState(false);
@@ -83,22 +107,29 @@ export function LegalRepresentativesTab({
     async (signal?: AbortSignal) => {
       setStatus("loading");
       try {
-        const result = await fetchLegalRepresentatives(
-          tenantId,
-          page,
-          PAGE_SIZE,
-          signal,
-          networkHeadId,
-        );
-        if (signal?.aborted) return;
-        setItems(result.data);
-        setTotalCount(result.totalCount);
-        setStatus(result.data.length === 0 ? "empty" : "ready");
+        const all: LegalRepresentativeItem[] = [];
+        let reported = 0;
+        for (let p = 1; p <= MAX_PAGES; p++) {
+          const result = await fetchLegalRepresentatives(
+            tenantId,
+            p,
+            LOAD_PAGE_SIZE,
+            signal,
+            networkHeadId,
+          );
+          if (signal?.aborted) return;
+          reported = result.totalCount;
+          all.push(...result.data);
+          if (result.data.length === 0 || all.length >= result.totalCount) break;
+        }
+        setItems(all);
+        setTotalReported(reported);
+        setStatus(all.length === 0 ? "empty" : "ready");
       } catch {
         if (!signal?.aborted) setStatus("error");
       }
     },
-    [tenantId, page, networkHeadId],
+    [tenantId, networkHeadId],
   );
 
   useEffect(() => {
@@ -194,7 +225,15 @@ export function LegalRepresentativesTab({
     }
   };
 
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const filtered = useMemo(() => {
+    const q = normaliza(search.trim());
+    if (!q) return items;
+    return items.filter(
+      (i) => normaliza(fullName(i)).includes(q) || normaliza(i.documentNumber).includes(q),
+    );
+  }, [items, search]);
+  const sinFirma = items.filter((i) => !i.hasSignatureOrIdentity).length;
+
   const pendingItem = pendingSignatureId
     ? items.find((i) => i.id === pendingSignatureId) ?? null
     : null;
@@ -213,7 +252,7 @@ export function LegalRepresentativesTab({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <p className="max-w-xl text-[11px]" style={{ color: RL_COLOR.secondary }}>
+        <p className="max-w-xl text-xs" style={{ color: RL_COLOR.secondary }}>
           Gestiona los representantes legales de las compañías que la gestora representa, con sus
           datos, los tipos de trámite que pueden firmar y su estado de firma o validación de identidad.
         </p>
@@ -236,7 +275,7 @@ export function LegalRepresentativesTab({
             background: RL_COLOR.pendingBg,
           }}
         >
-          <p className="text-[11px] font-medium" style={{ color: RL_COLOR.pendingText }}>
+          <p className="text-xs font-medium" style={{ color: RL_COLOR.pendingText }}>
             <strong>{fullName(pendingItem)}</strong> quedó guardado sin firma ni validación de
             identidad vigente. Valida su identidad desde el módulo Identidad o vincula una firma
             para que pueda firmar sus trámites.
@@ -259,6 +298,9 @@ export function LegalRepresentativesTab({
         </div>
       )}
 
+      {status === "loading" ? (
+        <CarLoaderModal label="Cargando representantes legales…" />
+      ) : (
       <UiStateBoundary
         status={status}
         emptyMessage="Esta compañía aún no tiene representantes legales registrados."
@@ -267,58 +309,86 @@ export function LegalRepresentativesTab({
         onRetry={() => void load()}
         skeletonRows={4}
       >
-        <div className="flex flex-col">
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <SearchInput
+              value={search}
+              onChange={(v) => {
+                setSearch(v);
+                setPage(1);
+              }}
+              label="Buscar representantes"
+              placeholder="Buscar por nombre o documento…"
+              className="max-w-md flex-1"
+            />
+            <p className="text-xs" style={{ color: RL_COLOR.secondary }} data-testid="representantes-resumen">
+              {items.length} {items.length === 1 ? "representante" : "representantes"}
+              {sinFirma > 0 ? ` · ${sinFirma} sin firma ni identidad` : ""}
+            </p>
+            {totalReported > items.length && (
+              <p className="text-xs font-semibold text-[#B45309]" role="status" data-testid="representantes-truncado">
+                Solo se cargaron {items.length} de {totalReported} representantes: la búsqueda y el resumen no cubren el resto.
+              </p>
+            )}
+          </div>
+
+          {filtered.length === 0 ? (
+            <p className="py-10 text-center text-sm opacity-60" role="status">
+              Ningún representante coincide con la búsqueda.
+            </p>
+          ) : (
+          <>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] border-separate border-spacing-y-2 text-xs">
+            <table
+              className="min-w-[820px] text-xs"
+              style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
+            >
               <caption className="sr-only">Representantes legales de la compañía</caption>
               <thead>
-                <tr
-                  className="text-left text-[10px] font-semibold uppercase"
-                  style={{ color: RL_COLOR.navy }}
-                >
+                <tr>
                   <th
                     scope="col"
-                    className="rounded-l-xl px-4 py-2.5"
-                    style={{ background: RL_COLOR.tableHeader }}
+                    className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`}
+                    style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                   >
                     Representante
                   </th>
                   <th
                     scope="col"
-                    className="px-4 py-2.5"
-                    style={{ background: RL_COLOR.tableHeader }}
+                    className={`${TABLA_HEADER_CELL_CLS}`}
+                    style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                   >
                     Documento
                   </th>
                   <th
                     scope="col"
-                    className="px-4 py-2.5"
-                    style={{ background: RL_COLOR.tableHeader }}
+                    className={`${TABLA_HEADER_CELL_CLS}`}
+                    style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                   >
                     Trámites
                   </th>
                   <th
                     scope="col"
-                    className="px-4 py-2.5"
-                    style={{ background: RL_COLOR.tableHeader }}
+                    className={`${TABLA_HEADER_CELL_CLS}`}
+                    style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                   >
                     Firma / Identidad
                   </th>
                   <th
                     scope="col"
-                    className="rounded-r-xl px-4 py-2.5 text-right"
-                    style={{ background: RL_COLOR.tableHeader }}
+                    className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl text-right`}
+                    style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                   >
                     Acciones
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {items.map((item) => {
+                {paginar(filtered).map((item) => {
                   const st = signatureStatus(item.hasSignatureOrIdentity);
                   const tramites = procedureTypeLabels(item.procedureTypeIds, procedureTypes);
                   return (
-                    <tr key={item.id} className="bg-white">
+                    <tr key={item.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
                       <td
                         className="rounded-l-xl border-y border-l px-4 py-3 font-semibold"
                         style={{ borderColor: RL_COLOR.border, color: RL_COLOR.navy }}
@@ -343,33 +413,46 @@ export function LegalRepresentativesTab({
                         </div>
                       </td>
                       <td className="border-y px-4 py-3" style={{ borderColor: RL_COLOR.border }}>
-                        <StatusBadge tone={st.tone} label={st.label} />
+                        <StatusBadge
+                          tone={st.tone}
+                          ariaLabel={`Estado: ${st.label}`}
+                          label={
+                            <span className="inline-flex items-center gap-1">
+                              {item.hasSignatureOrIdentity ? (
+                                <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                              ) : (
+                                <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                              )}
+                              {st.label}
+                            </span>
+                          }
+                        />
                       </td>
                       <td
                         className="rounded-r-xl border-y border-r px-4 py-3 text-right"
                         style={{ borderColor: RL_COLOR.border }}
                       >
-                        <div className="flex flex-wrap justify-end gap-1.5">
-                          <RowButton
-                            icon={Pencil}
-                            label="Editar"
-                            onClick={() => openEdit(item)}
-                            ariaLabel={`Editar persona y firma de ${fullName(item)}`}
-                          />
-                          <RowButton
-                            icon={Building2}
-                            label="Empresas"
-                            onClick={() => openCompanies(item)}
-                            ariaLabel={`Asociar empresas de ${fullName(item)}`}
-                          />
-                          <RowButton
-                            icon={Trash2}
-                            label="Eliminar"
-                            danger
-                            onClick={() => setToDelete(item)}
-                            ariaLabel={`Eliminar ${fullName(item)}`}
-                          />
-                        </div>
+                        <RowActions
+                          actions={[
+                            {
+                              icon: Pencil,
+                              label: `Editar persona y firma de ${fullName(item)}`,
+                              onClick: () => openEdit(item),
+                              tone: "primary",
+                            },
+                            {
+                              icon: Building2,
+                              label: `Asociar empresas de ${fullName(item)}`,
+                              onClick: () => openCompanies(item),
+                            },
+                            {
+                              icon: Trash2,
+                              label: `Eliminar ${fullName(item)}`,
+                              onClick: () => setToDelete(item),
+                              tone: "danger",
+                            },
+                          ]}
+                        />
                       </td>
                     </tr>
                   );
@@ -378,36 +461,19 @@ export function LegalRepresentativesTab({
             </table>
           </div>
 
-          <div className="mt-2 flex items-center justify-between pt-1 text-[11px]">
-            <p style={{ color: RL_COLOR.secondary }}>{totalCount} representantes</p>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                aria-label="Página anterior"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 font-medium disabled:opacity-40"
-                style={{ borderColor: RL_COLOR.border, color: RL_COLOR.navy }}
-              >
-                <ChevronLeft className="h-3.5 w-3.5" /> Anterior
-              </button>
-              <span className="font-semibold" style={{ color: RL_COLOR.brand }}>
-                {page} / {totalPages}
-              </span>
-              <button
-                type="button"
-                aria-label="Página siguiente"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 font-medium disabled:opacity-40"
-                style={{ borderColor: RL_COLOR.border, color: RL_COLOR.navy }}
-              >
-                Siguiente <ChevronRight className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            totalCount={filtered.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            noun="representantes"
+          />
+          </>
+          )}
         </div>
       </UiStateBoundary>
+      )}
 
       <LegalRepresentativesFormPanel
         open={panelOpen}
@@ -487,45 +553,6 @@ function SignatureAction({
     >
       {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />}
       {label}
-    </button>
-  );
-}
-
-function RowButton({
-  icon: Icon,
-  label,
-  onClick,
-  ariaLabel,
-  danger = false,
-  busy = false,
-}: {
-  icon: LucideIcon;
-  label: string;
-  onClick: () => void;
-  ariaLabel?: string;
-  danger?: boolean;
-  busy?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={busy}
-      aria-label={ariaLabel ?? label}
-      title={label}
-      className={rlIconActionClass}
-      style={
-        danger
-          ? rlDangerGhostStyle
-          : { color: RL_COLOR.navy, borderColor: RL_COLOR.border }
-      }
-    >
-      {busy ? (
-        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-      ) : (
-        <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-      )}
-      <span className="hidden sm:inline">{label}</span>
     </button>
   );
 }

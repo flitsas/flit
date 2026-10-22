@@ -94,29 +94,9 @@ internal sealed class FileManagerAttachmentStorage(
             string.IsNullOrWhiteSpace(created.PresignedUrl.Method) ? "POST" : created.PresignedUrl.Method);
     }
 
-    public async Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default)
-    {
-        if (string.IsNullOrWhiteSpace(storagePath))
-            return null;
-
-        // GET /files/{id}/presigned-url → presigned de descarga.
-        var path = $"{_options.FilesPath}/{Uri.EscapeDataString(storagePath)}/presigned-url";
-        using var req = new HttpRequestMessage(HttpMethod.Get, path);
-        ApplyAuth(req);
-        using var resp = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
-        if (resp.StatusCode == HttpStatusCode.NotFound)
-            return null;
-        resp.EnsureSuccessStatusCode();
-
-        var body = await resp.Content.ReadFromJsonAsync<FilePresignedResponse>(JsonOptions, ct);
-        var url = body?.PresignedUrl?.Url;
-        if (string.IsNullOrWhiteSpace(url))
-            return null;
-
-        // Descarga desde S3 y bufferiza para devolver un stream seekable, desligado de la conexión.
-        var data = await http.GetByteArrayAsync(url, ct);
-        return new MemoryStream(data, writable: false);
-    }
+    // Epic #13217 (HU #13232): misma descarga que el lector de logos de core-identity (FileManagerDownloader).
+    public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default) =>
+        FileManagerDownloader.OpenReadAsync(http, _options, storagePath, ct);
 
     public async Task<(string Url, DateTimeOffset ExpiresAt)?> GetPresignedViewUrlAsync(
         string storagePath,
@@ -229,11 +209,7 @@ internal sealed class FileManagerAttachmentStorage(
         return form;
     }
 
-    private void ApplyAuth(HttpRequestMessage req)
-    {
-        if (!string.IsNullOrWhiteSpace(_options.AuthToken))
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.AuthToken);
-    }
+    private void ApplyAuth(HttpRequestMessage req) => FileManagerDownloader.ApplyAuth(req, _options);
 
     // ── Contrato del file-manager (BackCrudFileManager · api/v1/files) ──────────────
     private sealed record CreateFileRequest(

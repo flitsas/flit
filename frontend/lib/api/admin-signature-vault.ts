@@ -132,6 +132,40 @@ export function createSignatureVaultEntry(
 }
 
 /**
+ * Baúl de firmas del propio ORGANISMO DE TRÁNSITO (hub del OT). El OT es dueño del mandatario que registra para sí:
+ * su firma con baúl se elige o se captura aquí y vive en el tenant del OT. Mismo contrato que el de la compañía.
+ */
+function otBase(transitOfficeId: string): string {
+  return `/api/v1/admin/transit-offices/${encodeURIComponent(transitOfficeId)}/signature-vault`;
+}
+
+/** GET del baúl del OT filtrado por documento (`soloVigentes` por defecto). */
+export async function fetchOtSignatureVaultByDocument(
+  transitOfficeId: string,
+  documentType: string,
+  documentNumber: string,
+  soloVigentes = true,
+  signal?: AbortSignal,
+): Promise<SignatureVaultItem[]> {
+  const result = await apiFetch<unknown>(otBase(transitOfficeId), {
+    query: { documentType, documentNumber, soloVigentes },
+    signal,
+  });
+  return unwrapList(result);
+}
+
+/** POST al baúl del OT. Mismos errores 422 que {@link createSignatureVaultEntry}. */
+export function createOtSignatureVaultEntry(
+  transitOfficeId: string,
+  body: SignatureVaultInput,
+): Promise<SignatureVaultCreated> {
+  return apiFetch<SignatureVaultCreated>(otBase(transitOfficeId), {
+    method: "POST",
+    body: { mandateSignerId: null, ...body },
+  });
+}
+
+/**
  * PUT "/{id}" — corrige los datos capturados de una firma ACTIVA (204).
  *
  * No admite cambiar el documento (identifica a la persona dueña de la firma) ni el artefacto (lo ya

@@ -53,10 +53,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <div
             key={toast.id}
             className="flex items-start gap-2 rounded-xl border bg-white px-4 py-3 text-xs shadow-lg dark:bg-[#0B0F14]"
-            style={{ borderColor: toast.type === "success" ? "#00DBD5" : "#FF4E00", minWidth: 260 }}
+            style={{ borderColor: toast.type === "success" ? "var(--color-flit-tech)" : "#FF4E00", minWidth: 260 }}
           >
             {toast.type === "success" ? (
-              <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color: "#00DBD5" }} />
+              <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color: "var(--color-flit-tech)" }} />
             ) : (
               <XCircle className="h-4 w-4 shrink-0" style={{ color: "#FF4E00" }} />
             )}
