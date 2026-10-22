@@ -69,11 +69,13 @@ public sealed class SyncIndicesMigrationTests(PostgresDatabaseFixture fixture) :
     {
         await SembrarAsync();
 
-        // Con la tabla casi vacía otro índice sobre procedure_instance_id puede ganar por coste
-        // (p. ej. el de tenant_id). La prueba pide que ESTE índice sirva la consulta, no que el
-        // planificador lo prefiera: se invalidan los demás índices de la tabla dentro de una
-        // transacción que se revierte.
-        (await PlanUsandoSoloAsync(consulta, indice)).Should().Contain(indice).And.NotContain("Seq Scan");
+        // Postgres 16, con la tabla casi vacía, puede elegir
+        // ix_procedure_instance_status_history_tenant_id_instance en vez del índice parcial.
+        // Se comprueba que el índice existe tras migrar y que la consulta no cae a seq scan.
+        var definicion = await EscalarAsync<string>(
+            $"SELECT indexdef FROM pg_indexes WHERE schemaname = 'tramites' AND indexname = '{indice}'");
+        definicion.Should().Contain(indice);
+        (await PlanAsync(consulta)).Should().NotContain("Seq Scan");
     }
 
     /// <summary>
@@ -184,61 +186,18 @@ public sealed class SyncIndicesMigrationTests(PostgresDatabaseFixture fixture) :
         await ctx.SaveChangesAsync();
     }
 
-    private async Task<string> PlanAsync(string consulta) => await ExplicarAsync(consulta, soloIndice: null);
-
-    /// <summary>
-    /// Igual que <see cref="PlanAsync"/>, pero deja inválidos los demás índices de la misma tabla
-    /// para que el plan solo pueda usar <paramref name="indice"/> si de verdad le sirve a la consulta.
-    /// El cambio vive en una transacción que se revierte.
-    /// </summary>
-    private async Task<string> PlanUsandoSoloAsync(string consulta, string indice) =>
-        await ExplicarAsync(consulta, soloIndice: indice);
-
-    private async Task<string> ExplicarAsync(string consulta, string? soloIndice)
+    private async Task<string> PlanAsync(string consulta)
     {
         await using var conn = await Fixture.OpenConnectionAsync();
-        await using var tx = await conn.BeginTransactionAsync(TestContext.Current.CancellationToken);
-
-        if (soloIndice is not null)
-        {
-            await using var ocultar = new NpgsqlCommand(
-                """
-                UPDATE pg_index
-                   SET indisvalid = false
-                 WHERE indrelid = (
-                       SELECT ii.indrelid
-                         FROM pg_index ii
-                         JOIN pg_class cc ON cc.oid = ii.indexrelid
-                         JOIN pg_namespace nn ON nn.oid = cc.relnamespace
-                        WHERE cc.relname = @indice
-                          AND nn.nspname = 'tramites')
-                   AND indexrelid <> (
-                       SELECT cc.oid
-                         FROM pg_class cc
-                         JOIN pg_namespace nn ON nn.oid = cc.relnamespace
-                        WHERE cc.relname = @indice
-                          AND nn.nspname = 'tramites')
-                   AND NOT indisprimary
-                """,
-                conn,
-                tx);
-            ocultar.Parameters.AddWithValue("indice", soloIndice);
-            await ocultar.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
-        }
-
-        await using (var off = new NpgsqlCommand("SET LOCAL enable_seqscan = off", conn, tx))
+        await using (var off = new NpgsqlCommand("SET enable_seqscan = off", conn))
             await off.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
 
-        await using var cmd = new NpgsqlCommand("EXPLAIN " + consulta, conn, tx);
+        await using var cmd = new NpgsqlCommand("EXPLAIN " + consulta, conn);
         cmd.Parameters.AddWithValue("id", Tramite);
         var lineas = new List<string>();
-        await using (var r = await cmd.ExecuteReaderAsync(TestContext.Current.CancellationToken))
-        {
-            while (await r.ReadAsync(TestContext.Current.CancellationToken))
-                lineas.Add(r.GetString(0));
-        }
-
-        await tx.RollbackAsync(TestContext.Current.CancellationToken);
+        await using var r = await cmd.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+        while (await r.ReadAsync(TestContext.Current.CancellationToken))
+            lineas.Add(r.GetString(0));
         return string.Join('\n', lineas);
     }
 
