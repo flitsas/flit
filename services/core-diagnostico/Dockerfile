@@ -3,7 +3,7 @@
 #   docker build -f services/core-diagnostico/Dockerfile --build-context contracts=contracts/proto services
 #
 # Solo copia lo que compila: su código, el SDK de plataforma, los tipos comunes de los contratos y el contrato de
-# Identidad (suscripción por petición, HU #13726). Replica la estructura
+# Identidad (suscripción por petición, HU #13726) y el de Consultas (fuentes D3, HU #13791). Replica la estructura
 # del repo bajo /services para que las ProjectReference relativas resuelvan igual que en local.
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
@@ -15,6 +15,8 @@ COPY core-api/src/Flit.Tramites.Grpc.Contracts/ /services/core-api/src/Flit.Tram
 COPY core-identity/Directory.Build.props core-identity/Directory.Packages.props /services/core-identity/
 COPY core-identity/src/Flit.Platform.Grpc.Contracts/ /services/core-identity/src/Flit.Platform.Grpc.Contracts/
 COPY core-identity/src/Flit.Identidad.Grpc.Contracts/ /services/core-identity/src/Flit.Identidad.Grpc.Contracts/
+COPY core-consultas/Directory.Build.props core-consultas/Directory.Packages.props /services/core-consultas/
+COPY core-consultas/src/Flit.Consultas.Grpc.Contracts/ /services/core-consultas/src/Flit.Consultas.Grpc.Contracts/
 COPY --from=contracts . /contracts/proto/
 COPY core-diagnostico/src/ ./src/
 RUN dotnet publish src/Flit.Diagnostico.Api/Flit.Diagnostico.Api.csproj \
