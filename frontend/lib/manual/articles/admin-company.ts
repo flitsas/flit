@@ -182,6 +182,8 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
       "activar cliente",
       "desactivar cliente",
       "invitar usuario",
+      "usuario ya creado",
+      "correo duplicado",
       "administrar cliente",
       "equipo flit",
     ],
@@ -204,6 +206,7 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
           "Agregar cliente a la red: razón social, NIT y tipo de compañía. El código lo asigna el sistema (COMP-XXXX). Nace vinculado a tu red.",
           "Activar / Desactivar cliente, con confirmación.",
           "Invitar usuario a un cliente: eliges el cliente como destino y el rol (Administrador de compañía, Radicador, Gestor, Documentador, Validador u Operario full).",
+          "Cada correo corresponde a un solo usuario en toda la plataforma, sin importar la compañía ni las mayúsculas (Juan@empresa.com y juan@empresa.com son el mismo). El correo se guarda siempre en minúsculas. Si ya existe un usuario con ese correo, o ya hay una invitación pendiente para él en cualquier compañía, la invitación no se crea, ves «El usuario ya se encuentra previamente creado» y el campo de correo queda marcado en rojo; corrige el correo para continuar.",
           "Administrar un cliente: abre su ficha para gestionar sus Representantes legales y Mandatarios (y sus Usuarios), con un aviso de que estás en un cliente de tu red.",
         ],
         callouts: [

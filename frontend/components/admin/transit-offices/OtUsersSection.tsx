@@ -24,6 +24,7 @@ import {
   EMAIL_ALREADY_ASSOCIATED_MESSAGE,
   emailConflictErrorCode,
   isEmailConflictCode,
+  normalizeEmail,
 } from "@/lib/users/emailConflict";
 import { usePermissions } from "@/hooks/usePermissions";
 import { EditUserModal } from "@/components/atom/modules/users/EditUserModal";
@@ -696,7 +697,7 @@ function OtInviteUserDialog({
     e.preventDefault();
     if (missingRole) return;
     setBusy(true);
-    await onConfirm(email.trim(), fullName.trim(), selectedRoleIds);
+    await onConfirm(normalizeEmail(email), fullName.trim(), selectedRoleIds);
     setBusy(false);
   }
 
