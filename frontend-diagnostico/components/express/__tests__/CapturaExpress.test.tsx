@@ -10,7 +10,8 @@ import { FECHA, ID_EXPRESS, configuracion, creadoOk, cuerpoDe, llamadas, simular
 // alcance y modo en la parametrización compacta y, con el 201 de POST /express, llega a /diagnosticos/{id}.
 
 const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }));
-vi.mock("next/navigation", () => ({ usePathname: () => "/", useRouter: () => router }));
+// Desde HU #13852 el home lleva el listado de diagnósticos, que lee los filtros con useSearchParams.
+vi.mock("next/navigation", () => ({ usePathname: () => "/", useSearchParams: () => new URLSearchParams(), useRouter: () => router }));
 
 beforeEach(() => {
   router.push.mockReset();
