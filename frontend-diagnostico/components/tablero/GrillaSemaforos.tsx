@@ -26,8 +26,10 @@ export interface GrillaSemaforosProps extends Pick<CeldaSemaforoProps, "onReproc
   puedeReprocesar: boolean;
   /** Cargador del detalle de la celda; el backoffice (F06-H5) pasa el suyo con `?empresa=`. Por defecto, el de la compañía. */
   cargarDetalle?: CargadorDetalle;
-  /** Acciones extra al pie del detalle (p. ej. «Llenar a mano» en el backoffice). */
-  accionesDetalle?: (celda: CeldaGrilla, vehiculo: FilaVehiculo) => ReactNode;
+  /** Acciones extra al pie del detalle (p. ej. «Llenar a mano» en el backoffice); `cerrar` cierra el detalle. */
+  accionesDetalle?: (celda: CeldaGrilla, vehiculo: FilaVehiculo, cerrar: () => void) => ReactNode;
+  /** Marca bajo el semáforo de cada celda: solo el backoffice (origen manual, HU #13802); la compañía nunca (Q5). */
+  marcaCelda?: (celda: CeldaGrilla) => ReactNode;
 }
 
 interface Seleccion {
@@ -61,7 +63,7 @@ function EncabezadoVehiculo({ vehiculo, total }: { vehiculo: FilaVehiculo; total
  * Por locatario según el alcance del lote. El usuario no ve acciones; el admin, «Reprocesar» solo en las rojas. Cada
  * semáforo abre el detalle de su celda (HU #13801).
  */
-export function GrillaSemaforos({ grilla, puedeReprocesar, onReprocesada, onErrorReproceso, cargarDetalle, accionesDetalle }: GrillaSemaforosProps) {
+export function GrillaSemaforos({ grilla, puedeReprocesar, onReprocesada, onErrorReproceso, cargarDetalle, accionesDetalle, marcaCelda }: GrillaSemaforosProps) {
   const [seleccion, setSeleccion] = useState<Seleccion | null>(null);
   const grupos = GRUPOS.map((g) => ({ ...g, fuentes: grilla.columnas[g.clave] ?? [] })).filter((g) => g.fuentes.length > 0);
   const fuentes: Fuente[] = grupos.flatMap((g) => g.fuentes);
@@ -94,18 +96,22 @@ export function GrillaSemaforos({ grilla, puedeReprocesar, onReprocesada, onErro
             return (
               <tr key={v.id} data-vehiculo={v.id} className="border-t border-[var(--table-row-border)] bg-white dark:bg-transparent">
                 <EncabezadoVehiculo vehiculo={v} total={fuentes.length} />
-                {fuentes.map((f) => (
+                {fuentes.map((f) => {
+                  const celda = porFuente.get(f);
+                  return (
                   <CeldaSemaforo
                     key={f}
-                    celda={porFuente.get(f)}
+                    celda={celda}
                     nombreFuente={nombreFuente(f)}
                     identificador={v.identificador}
                     puedeReprocesar={puedeReprocesar}
                     onReprocesada={onReprocesada}
                     onErrorReproceso={onErrorReproceso}
-                    onAbrirDetalle={(celda, disparador) => setSeleccion({ celda, vehiculo: v, disparador })}
+                    onAbrirDetalle={(c, disparador) => setSeleccion({ celda: c, vehiculo: v, disparador })}
+                    marca={celda && marcaCelda ? marcaCelda(celda) : undefined}
                   />
-                ))}
+                  );
+                })}
               </tr>
             );
           })}
@@ -120,7 +126,7 @@ export function GrillaSemaforos({ grilla, puedeReprocesar, onReprocesada, onErro
           nombreFuente={nombreFuente(seleccion.celda.fuente)}
           identificador={seleccion.vehiculo.identificador}
           cargar={cargarDetalle}
-          acciones={accionesDetalle?.(seleccion.celda, seleccion.vehiculo)}
+          acciones={accionesDetalle?.(seleccion.celda, seleccion.vehiculo, () => setSeleccion(null))}
           devolverFocoA={seleccion.disparador}
           onClose={() => setSeleccion(null)}
         />

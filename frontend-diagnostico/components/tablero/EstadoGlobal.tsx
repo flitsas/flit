@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useId, type CSSProperties } from "react";
 import type { StatusTone } from "@flit/ui/StatusBadge";
 import { AYUDA_CLS } from "@/components/configuracion/estilos";
 import { nombreFuente } from "@/lib/configuracion";
@@ -8,7 +8,7 @@ import type { EstadoDiagnostico } from "@/lib/diagnosticos/api";
 import type { EstimadoVsConsumido as Estimado, Grilla } from "@/lib/tablero/api";
 
 /** Estado del lote → tono semántico FLIT: gris creado, azul en proceso, verde completado, ámbar incompleto. */
-const ESTADOS_LOTE: Record<EstadoDiagnostico, { texto: string; tono: StatusTone }> = {
+export const ESTADOS_LOTE: Record<EstadoDiagnostico, { texto: string; tono: StatusTone }> = {
   CREADO: { texto: "Creado", tono: "neutral" },
   EN_PROCESO: { texto: "En proceso", tono: "info" },
   COMPLETADO: { texto: "Completado", tono: "success" },
@@ -60,10 +60,14 @@ export function EstadoGlobal({ grilla, sondeando }: { grilla: Grilla; sondeando:
 
 /**
  * Estimado frente a consumido por fuente (HU #13748, F04-C13). La API solo lo manda con estimado AL_FINALIZAR y el lote
- * COMPLETADO o INCOMPLETO; sin la propiedad no se pinta nada.
+ * COMPLETADO o INCOMPLETO; sin la propiedad no se pinta nada. Con minimo=true (HU #13796) las estimadas se leen «al menos N»
+ * con la misma ayuda accesible que ListaEstimado (HU #13797), enlazada por aria-describedby; sin la marca, el número tal cual
+ * (ampliación de HU #13802, decisión del usuario 2026-10-22). Lo usan el tablero de la compañía y la grilla del backoffice.
  */
 export function EstimadoVsConsumido({ estimado }: { estimado?: Estimado[] }) {
+  const ayudaId = useId();
   if (!estimado?.length) return null;
+  const hayMinimo = estimado.some((e) => e.minimo);
   const celda = "border-t border-[var(--table-row-border)] px-3 py-2 text-right tabular-nums";
   return (
     <section aria-labelledby="estimado-consumido" className="flex flex-col gap-2">
@@ -92,12 +96,21 @@ export function EstimadoVsConsumido({ estimado }: { estimado?: Estimado[] }) {
               <th scope="row" className="border-t border-[var(--table-row-border)] px-3 py-2 text-left font-medium">
                 {nombreFuente(e.fuente)}
               </th>
-              <td className={celda}>{e.estimadas}</td>
+              <td className={celda} aria-describedby={e.minimo ? ayudaId : undefined}>
+                {e.minimo && <span className="text-xs font-semibold">al menos </span>}
+                {e.estimadas}
+              </td>
               <td className={celda}>{e.consumidas}</td>
             </tr>
           ))}
         </tbody>
       </table>
+      {hayMinimo && (
+        <p id={ayudaId} className={AYUDA_CLS}>
+          «Al menos» indica que el número estimado es un mínimo: las fuentes de propietario y locatario consultan a cada persona
+          del vehículo, y al lanzar el lote algún vehículo no tenía sus personas registradas.
+        </p>
+      )}
     </section>
   );
 }

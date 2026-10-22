@@ -46,6 +46,11 @@ export interface EstimadoVsConsumido {
   fuente: Fuente;
   estimadas: number;
   consumidas: number;
+  /**
+   * HU #13796: las estimadas son un mínimo (fuente por persona y algún vehículo sin personas registradas). Sin la propiedad,
+   * el número es exacto.
+   */
+  minimo?: boolean;
 }
 
 export interface Grilla {

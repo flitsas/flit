@@ -48,13 +48,15 @@ describe("sin formulario propio", () => {
       expect(codigo, archivo).not.toMatch(/type=["']password["']/);
       // Los campos de la pantalla 10 (HU #13744) y del formulario de parametrización (HU #13752) son de configuración y de
       // la cabecera del diagnóstico, y los de la carga masiva (HU #13754) son el archivo y las filas de vehículos, no de
-      // credenciales; los de la captura express (HU #13755) son la placa o el VIN y el documento declarado del locatario. El
-      // resto de la app sigue sin ningún <input>.
+      // credenciales; los de la captura express (HU #13755) son la placa o el VIN y el documento declarado del locatario, y
+      // los del backoffice (HU #13802) son el identificador de la compañía y el resultado del llenado manual. El resto de la
+      // app sigue sin ningún <input>.
       const conCampos = [
         join("components", "configuracion"),
         join("components", "parametrizacion"),
         join("components", "carga"),
         join("components", "express"),
+        join("components", "backoffice"),
       ];
       if (!conCampos.some((carpeta) => archivo.includes(carpeta))) expect(codigo, archivo).not.toMatch(/<input\b/);
       expect(codigo, archivo).not.toMatch(/autoComplete=["'](username|current-password)["']/);

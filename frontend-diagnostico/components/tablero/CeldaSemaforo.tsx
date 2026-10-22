@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { CheckCircle2, Clock, LoaderCircle, MinusCircle, XCircle, type LucideIcon } from "lucide-react";
 import { BLOQUEADA_POR_RUNT, type CeldaGrilla, type EstadoCelda, type MotivoNa } from "@/lib/tablero/api";
 import { FOCO_CLS } from "@/components/configuracion/estilos";
@@ -93,10 +93,15 @@ export interface CeldaSemaforoProps extends Pick<BotonReprocesarProps, "onReproc
    * para devolverle el foco al cerrar el diálogo.
    */
   onAbrirDetalle?: (celda: CeldaGrilla, disparador: HTMLElement) => void;
+  /** Marca bajo el semáforo. Solo la pasa la grilla del backoffice (origen manual, HU #13802); la compañía nunca (Q5). */
+  marca?: ReactNode;
 }
 
-/** Una celda vehículo × fuente del tablero (HU #13748). Sin ningún indicador de origen ni de dato manual (R-20). */
-export function CeldaSemaforo({ celda, nombreFuente, identificador, puedeReprocesar, onReprocesada, onErrorReproceso, onAbrirDetalle }: CeldaSemaforoProps) {
+/**
+ * Una celda vehículo × fuente del tablero (HU #13748). En la vista de la compañía, sin ningún indicador de origen ni de dato
+ * manual (R-20); solo el backoffice pasa `marca` (HU #13802).
+ */
+export function CeldaSemaforo({ celda, nombreFuente, identificador, puedeReprocesar, onReprocesada, onErrorReproceso, onAbrirDetalle, marca }: CeldaSemaforoProps) {
   if (!celda)
     return (
       <td className="px-3 py-2.5 align-top text-xs text-[var(--nav-texto)] dark:text-slate-300">
@@ -121,6 +126,7 @@ export function CeldaSemaforo({ celda, nombreFuente, identificador, puedeReproce
         ) : (
           <ChipEstadoCelda estado={celda.estado} />
         )}
+        {marca}
         {nota && <span className="text-xs text-[var(--nav-texto)] dark:text-slate-300">{nota}</span>}
         {puedeReprocesar && esReprocesable(celda) && (
           <BotonReprocesar

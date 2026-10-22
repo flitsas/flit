@@ -47,8 +47,11 @@ type Carga = { tipo: "cargando" } | { tipo: "error"; error: ErrorDetalle } | { t
 
 const ENFOCABLES = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
-/** Atrapa el foco dentro del diálogo que contiene `ancla`, lo pone en su primer control y lo devuelve al cerrar. */
-function useFocoAtrapado(ancla: React.RefObject<HTMLElement | null>, devolverFocoA?: HTMLElement | null) {
+/**
+ * Atrapa el foco dentro del diálogo que contiene `ancla`, lo pone en su primer control y lo devuelve al cerrar. También lo usa
+ * el formulario del llenado manual del backoffice (HU #13802).
+ */
+export function useFocoAtrapado(ancla: React.RefObject<HTMLElement | null>, devolverFocoA?: HTMLElement | null) {
   useEffect(() => {
     const previo = devolverFocoA ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     const dialogo = ancla.current?.closest<HTMLElement>('[role="dialog"]');

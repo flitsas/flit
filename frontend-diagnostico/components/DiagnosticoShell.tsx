@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useEffectEvent, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Settings } from "lucide-react";
+import { Settings, ShieldCheck } from "lucide-react";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { SuiteShell, type NavCatalog, type ShellUser } from "@flit/shell/SuiteShell";
@@ -42,6 +42,19 @@ const NAV: NavCatalog = {
       icon: Settings,
       permission: ["diagnostico.configuracion.ver", "diagnostico.configuracion.contrato.editar"],
     },
+  ],
+};
+
+/**
+ * Dock con la entrada «Backoffice» (HU #13802, F06-C7): solo con la capacidad `backoffice` de GET /sesion, que además del
+ * permiso diagnostico.backoffice.ver exige ser de la compañía FLIT (el permiso del token solo no basta). El admin de una
+ * compañía nunca la ve; la ruta, además, lo lleva a la 403 (AccesoBackoffice).
+ */
+const NAV_BACKOFFICE: NavCatalog = {
+  sections: [{ id: "backoffice", label: "Backoffice", icon: ShieldCheck, side: "left" }, ...NAV.sections],
+  items: [
+    { key: "backoffice-diagnosticos", label: "Backoffice", href: "/backoffice/diagnosticos", section: "backoffice", icon: ShieldCheck },
+    ...NAV.items,
   ],
 };
 
@@ -108,7 +121,7 @@ export function DiagnosticoShell({ user, tramitesUrl, children }: { user: Usuari
 
   return (
     <SesionContext.Provider value={valor}>
-      <SuiteShell productCode="diagnostico" productName="Diagnóstico" nav={NAV} user={usuario} accountUrl={tramitesUrl} layout="app">
+      <SuiteShell productCode="diagnostico" productName="Diagnóstico" nav={estado.sesion?.capacidades.backoffice ? NAV_BACKOFFICE : NAV} user={usuario} accountUrl={tramitesUrl} layout="app">
         <div className="flex min-h-full flex-col gap-4 px-4 pt-6 text-flit-primary md:px-6 dark:text-white">{contenido}</div>
       </SuiteShell>
     </SesionContext.Provider>
