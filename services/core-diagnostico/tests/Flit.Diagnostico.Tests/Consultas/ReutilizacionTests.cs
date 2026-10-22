@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using Flit.Diagnostico.Api;
 using Flit.Diagnostico.Api.Modulos.Consultas;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
+using Flit.Diagnostico.Api.Plataforma;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Diagnosticos;
 using Flit.Diagnostico.Domain.Personas;
@@ -13,6 +15,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using TableroAyudas = Flit.Diagnostico.Tests.Tablero.Tablero;
 
 namespace Flit.Diagnostico.Tests.Consultas;
 
@@ -254,6 +257,46 @@ public sealed class ReutilizacionTests
         (await Motor.CeldasAsync(api, empresa.Id, porVin, ct)).Single().ReutilizadaDeId.Should().BeNull();
         (await Lotes.VehiculosAsync(api, empresa.Id, porVin, ct)).Single().TipoIdentificador.Should().Be(TipoIdentificador.Vin);
         (await Motor.CeldasAsync(api, empresa.Id, porPlaca, ct)).Single().ReutilizadaDeId.Should().NotBeNull();
+    }
+
+    // HU #13800 AC8 (F06-C11) — una celda llenada a mano hoy en A nunca se copia: otro lote de A con la misma placa y fuente
+    // consulta de nuevo. Control: una celda de API del mismo día sí se reutiliza.
+    [Fact]
+    public async Task Celda_manual_nunca_se_reutiliza()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var manual = await TableroAyudas.SembrarAsync(empresa, ct, vehiculos:
+            [new("TST081", [new(Fuente.Runt, EstadoCelda.Completado, 1), new(Fuente.SimitVehiculo, EstadoCelda.Error, 1)])]);
+        var token = api.Token(
+            empresa: Guid.NewGuid(), permisos: [Permisos.BackofficeVer, Permisos.ConsultasLlenar],
+            roles: ["backoffice_diagnostico"], tipoEmpresa: "FLIT");
+        var llenado = await api.Cliente(token).PutAsync(
+            $"{Program.Prefijo}/backoffice/consultas/{manual.Celda("TST081", Fuente.SimitVehiculo).Id}/manual?empresa={empresa.Id}",
+            new StringContent("""{"version":1,"resultado":{"semaforo":"VERDE","cantidad_comparendos":0,"comparendos":[]}}""", System.Text.Encoding.UTF8, "application/json"),
+            ct);
+        llenado.StatusCode.Should().Be(System.Net.HttpStatusCode.OK, await llenado.Content.ReadAsStringAsync(ct));
+        var nuevo = await TableroAyudas.SembrarAsync(empresa, ct, vehiculos:
+            [new("TST081", [new(Fuente.Runt, EstadoCelda.Completado, 1), new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1)])]);
+
+        var reutilizada = await BuscarAsync(api, empresa, nuevo.Celda("TST081", Fuente.SimitVehiculo), ct);
+
+        reutilizada.Should().BeNull("el dato manual no se copia: se consulta de nuevo");
+        var deApi = await TableroAyudas.SembrarAsync(empresa, ct, vehiculos:
+            [new("TST081", [new(Fuente.Runt, EstadoCelda.Completado, 1), new(Fuente.SimitVehiculo, EstadoCelda.Completado, 1)])]);
+        var control = await BuscarAsync(api, empresa, nuevo.Celda("TST081", Fuente.SimitVehiculo), ct);
+        control.Should().NotBeNull("control: la celda de API del mismo día sí se reutiliza");
+        control!.ReutilizadaDeId.Should().Be(deApi.Celda("TST081", Fuente.SimitVehiculo).Id);
+    }
+
+    private static async Task<ResultadoCelda?> BuscarAsync(ApiDePrueba api, EmpresaDePrueba empresa, CeldaConsulta celda, CancellationToken ct)
+    {
+        await using var db = empresa.Db();
+        var tomada = new global::Flit.Diagnostico.Api.Modulos.Trabajos.CeldaTomada(
+            celda.Id, empresa.Id, celda.DiagnosticoId, celda.VehiculoId, celda.Fuente, DateTimeOffset.UtcNow.AddMinutes(1));
+        return await ReutilizacionMismoDia.BuscarAsync(new ContextoCelda(tomada, db), DateTimeOffset.UtcNow, ct);
     }
 
     /// <summary>API con la fuente RUNT simulada espiada y un reloj manual.</summary>

@@ -46,10 +46,24 @@ internal static class RecalculadorEstado
     /// el estado no cambia. Las celdas seguidas por el contexto cuentan con su valor en memoria (la que se está cerrando y las
     /// que el orquestador acaba de liberar o bloquear).
     /// </summary>
-    public static async Task<TransicionLote?> RecalcularAsync(DiagnosticoDb db, Guid diagnosticoId, DateTimeOffset ahora, CancellationToken ct)
+    public static Task<TransicionLote?> RecalcularAsync(DiagnosticoDb db, Guid diagnosticoId, DateTimeOffset ahora, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
-        var estadoActual = await db.Set<CabeceraDiagnostico>().AsNoTracking()
+        return RecalcularAsync(db, db.Set<CabeceraDiagnostico>(), db.Set<CeldaConsulta>(), diagnosticoId, ahora, ct);
+    }
+
+    /// <summary>
+    /// El mismo recálculo leyendo el lote y sus celdas de <paramref name="cabeceras"/> y <paramref name="celdas"/> (con
+    /// seguimiento de cambios en la cabecera): el llenado manual del backoffice (HU #13800) pasa las filas de la empresa
+    /// explícita (<c>EscrituraEntreEmpresas</c>), porque su contexto es el de la compañía FLIT.
+    /// </summary>
+    internal static async Task<TransicionLote?> RecalcularAsync(
+        DiagnosticoDb db, IQueryable<CabeceraDiagnostico> cabeceras, IQueryable<CeldaConsulta> celdas, Guid diagnosticoId, DateTimeOffset ahora, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(cabeceras);
+        ArgumentNullException.ThrowIfNull(celdas);
+        var estadoActual = await cabeceras.AsNoTracking()
             .Where(c => c.Id == diagnosticoId).Select(c => c.Estado).SingleAsync(ct).ConfigureAwait(false);
         if (estadoActual != EstadoDiagnostico.EnProceso)
             return null;
@@ -57,7 +71,7 @@ internal static class RecalculadorEstado
         var enMemoria = db.ChangeTracker.Entries<CeldaConsulta>()
             .Where(e => e.Entity.DiagnosticoId == diagnosticoId)
             .ToDictionary(e => e.Entity.Id, e => e.Entity.Estado);
-        var deBase = await db.Set<CeldaConsulta>().AsNoTracking()
+        var deBase = await celdas.AsNoTracking()
             .Where(c => c.DiagnosticoId == diagnosticoId)
             .Select(c => new { c.Id, c.Estado })
             .ToListAsync(ct).ConfigureAwait(false);
@@ -68,7 +82,7 @@ internal static class RecalculadorEstado
             return null;
 
         var transicion = TransicionesLote.Transicionar(estadoActual, nuevo, DisparadorEstado.Auto);
-        var cabecera = await db.Set<CabeceraDiagnostico>().SingleAsync(c => c.Id == diagnosticoId, ct).ConfigureAwait(false);
+        var cabecera = await cabeceras.SingleAsync(c => c.Id == diagnosticoId, ct).ConfigureAwait(false);
         cabecera.Estado = transicion.Nuevo;
         cabecera.CerradoEn = ahora;
         db.Add(new HistorialEstadoDiagnostico

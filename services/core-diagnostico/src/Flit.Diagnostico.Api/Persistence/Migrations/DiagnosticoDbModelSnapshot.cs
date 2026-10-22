@@ -449,6 +449,8 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_consultas_origen", "origen IS NULL OR origen IN ('API', 'MANUAL')");
 
+                            t.HasCheckConstraint("ck_consultas_origen_manual", "(COALESCE(origen, '') = 'MANUAL') = (usuario_manual_id IS NOT NULL)");
+
                             t.HasCheckConstraint("ck_consultas_payload_objeto", "payload IS NULL OR jsonb_typeof(payload) = 'object'");
 
                             t.HasCheckConstraint("ck_consultas_reproceso_usuario", "reproceso_usuario_id IS NULL OR estado IN ('PENDIENTE', 'EN_CURSO')");

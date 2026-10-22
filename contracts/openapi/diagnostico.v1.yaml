@@ -1255,6 +1255,197 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorRegla"
 
+  /api/v1/diagnostico/backoffice/consultas/{consulta}/manual:
+    parameters:
+      - name: consulta
+        in: path
+        required: true
+        description: Id de la celda (`vehiculos[].celdas[].id` de obtenerGrillaDiagnosticoBackoffice).
+        schema:
+          type: string
+          format: uuid
+      - name: empresa
+        in: query
+        required: true
+        description: Id de la compañía dueña de la celda (uuid distinto de cero, un solo valor).
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Backoffice]
+      operationId: obtenerFormularioLlenadoManualBackoffice
+      summary: Formulario del llenado manual de una celda (backoffice FLIT)
+      description: >
+        HU #13800 (F06-H3). Política diagnostico.backoffice (diagnostico.backoffice.ver + tenant_type=FLIT) y además
+        diagnostico.consultas.llenar; empresa explícita en ?empresa= (la lectura queda en diagnostico.lecturas_backoffice).
+        Devuelve la versión de la celda que se manda en el PUT, si admite el llenado (`admite_manual`) y, si no, el `motivo`
+        (FUENTE_NO_ADMITE_MANUAL, CELDA_NO_EN_ERROR, CELDA_BLOQUEADA_POR_RUNT o SIN_PERSONAS_EN_ERROR). En las fuentes de persona
+        (RUNT_PROPIETARIO, RUNT_LOCATARIO, SIMIT_PROPIETARIO, SIMIT_LOCATARIO) trae SOLO las personas en ERROR con su
+        `persona_id` (el que va en el PUT), el documento enmascarado y la `consulta` que define el esquema de su resultado
+        (RUNT_PERSONA, RUES o SIMIT); en las del vehículo, `personas` es null. Nunca el documento en claro ni el payload.
+      responses:
+        "200":
+          description: Formulario de la celda.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FormularioLlenadoManual"
+              example:
+                id: 0199f3a1-6666-7000-8000-000000000006
+                diagnostico_id: 0199f3a1-1111-7000-8000-000000000001
+                vehiculo_id: 0199f3a1-2222-7000-8000-000000000002
+                fuente: SIMIT_PROPIETARIO
+                estado: ERROR
+                tipo_error: PERSONAS_CON_ERROR
+                version: 2
+                admite_manual: true
+                motivo: null
+                personas:
+                  - { persona_id: 0199f3a1-7777-7000-8000-000000000007, orden: 2, rol: PROPIETARIO, tipo_documento: C, documento_enmascarado: "****0102", declarado_por_cliente: false, consulta: SIMIT, tipo_error: TIMEOUT }
+        "400":
+          description: Falta ?empresa= o no es válido (`code` = EMPRESA_REQUERIDA). No se audita.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: No es backoffice FLIT o le falta diagnostico.consultas.llenar (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
+        "404":
+          description: "`code` = NO_ENCONTRADO: la celda no existe en la compañía indicada."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+    put:
+      tags: [Backoffice]
+      operationId: llenarConsultaManualBackoffice
+      summary: Llenar a mano una celda en ERROR (backoffice FLIT)
+      description: >
+        HU #13800 (F06-H3, F06-C8..C11, R-1, R-8, R-20). Misma autorización que el GET (sin diagnostico.consultas.llenar: 403;
+        el admin y el usuario de la compañía: 403). Solo una celda en ERROR que no sea BLOQUEADA_POR_RUNT, de una fuente distinta
+        de RUNT e IMPUESTO_DEPARTAMENTAL (Q3, R-9). El cuerpo lleva la `version` de la celda que vio el backoffice (la de la
+        grilla del backoffice o la del GET) y, según la fuente, `resultado` (SIMIT_VEHICULO: ResultadoManualSimit; AVALUO:
+        ResultadoManualAvaluo) o `personas` (fuentes de persona: TODAS las personas en ERROR y solo ellas, cada una con el
+        esquema de su `consulta`: RUNT_PERSONA, ResultadoManualRuntPersona; RUES, ResultadoManualRues; SIMIT,
+        ResultadoManualSimit). Esquema cerrado: un campo desconocido es 422. La fecha del dato la fija el servidor (el avalúo
+        no acepta `fecha`). En una transacción: la celda queda COMPLETADO con origen MANUAL y el usuario, tipo_error null y
+        dato_obtenido_en del servidor; sube la versión del tablero; queda un intento disparador=MANUAL con el usuario, sin
+        servicio ni transacción del proveedor (uno por persona llenada en las de persona; no consume); si el lote estaba
+        COMPLETADO o INCOMPLETO vuelve a EN_PROCESO (historial MANUAL con el usuario) y se recalcula (sin más errores pasa a
+        COMPLETADO, historial AUTO). Las personas que respondieron por API no cambian. La compañía no distingue el dato
+        (mismo payload que la API; su historial muestra MANUAL como AUTO, Q5). Una celda MANUAL nunca se reutiliza el mismo día.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/LlenadoManualVehiculo"
+                - $ref: "#/components/schemas/LlenadoManualPersonas"
+            examples:
+              simitVehiculo:
+                summary: SIMIT_VEHICULO
+                value:
+                  version: 14
+                  resultado:
+                    semaforo: AMARILLO
+                    cantidad_comparendos: 1
+                    comparendos:
+                      - { numero: TST-C-0001, fecha: "2026-09-30", valor: "468500", estado: PENDIENTE, organismo: Organismo de prueba }
+              avaluo:
+                summary: AVALUO con valor
+                value:
+                  version: 9
+                  resultado:
+                    sin_valor_comercial: false
+                    valor_sugerido: 48500000
+                    fuente_principal: fasecolda
+                    fuentes:
+                      - { fuente: fasecolda, estado: OK, valor: 48500000, muestras: 3 }
+                      - { fuente: mercado_libre, estado: SIN_DATOS }
+              avaluoSinValor:
+                summary: AVALUO sin valor comercial
+                value:
+                  version: 9
+                  resultado: { sin_valor_comercial: true, fuentes: [{ fuente: fasecolda, estado: SIN_DATOS }] }
+              simitPersona:
+                summary: SIMIT_PROPIETARIO (solo las personas en ERROR)
+                value:
+                  version: 2
+                  personas:
+                    - persona_id: 0199f3a1-7777-7000-8000-000000000007
+                      resultado: { semaforo: VERDE, cantidad_comparendos: 0, comparendos: [] }
+              runtPersona:
+                summary: RUNT_PROPIETARIO, persona natural (consulta RUNT_PERSONA)
+                value:
+                  version: 5
+                  personas:
+                    - persona_id: 0199f3a1-8888-7000-8000-000000000008
+                      resultado: { inscrito: true, estado_conductor: ACTIVO, licencias: [{ categoria: B1, estado: VIGENTE, vigente_hasta: "2030-01-01" }] }
+              rues:
+                summary: RUNT_PROPIETARIO con NIT (consulta RUES)
+                value:
+                  version: 5
+                  personas:
+                    - persona_id: 0199f3a1-9999-7000-8000-000000000009
+                      resultado: { encontrada: true, estado_matricula: ACTIVA, ultima_renovacion: "2026-03-31" }
+      responses:
+        "200":
+          description: Celda llenada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LlenadoManualRespuesta"
+              example:
+                id: 0199f3a1-4444-7000-8000-000000000004
+                diagnostico_id: 0199f3a1-1111-7000-8000-000000000001
+                vehiculo_id: 0199f3a1-2222-7000-8000-000000000002
+                fuente: SIMIT_VEHICULO
+                estado: COMPLETADO
+                origen: MANUAL
+                usuario_manual_id: 0199f3a1-5555-7000-8000-000000000005
+                dato_obtenido_en: "2026-10-22T17:30:00+00:00"
+                version: 15
+                estado_lote: COMPLETADO
+        "400":
+          description: Falta ?empresa= o no es válido (`code` = EMPRESA_REQUERIDA), o el cuerpo no es JSON.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: No es backoffice FLIT o le falta diagnostico.consultas.llenar (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
+        "404":
+          description: "`code` = NO_ENCONTRADO: la celda no existe en la compañía indicada (nada cambia)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "409":
+          description: >
+            Nada cambia. `code` = CELDA_MODIFICADA (la `version` enviada no es la actual, p. ej. un reproceso en curso:
+            recargar la grilla), CELDA_NO_EN_ERROR (COMPLETADO, también el avalúo «sin valor comercial»; PENDIENTE, EN_CURSO o NA)
+            o CELDA_BLOQUEADA_POR_RUNT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "422":
+          description: >
+            Nada cambia. `code` = FUENTE_NO_ADMITE_MANUAL (RUNT o IMPUESTO_DEPARTAMENTAL), RESULTADO_INVALIDO con `campo` (ruta del
+            cuerpo, p. ej. `version`, `resultado`, `resultado.proveedor`, `resultado.fuentes[0].valor`, `personas`,
+            `personas[0].resultado.licencias[1].categoria`) o PERSONA_NO_EN_ERROR con `campo` = `personas[i].persona_id` (la persona
+            no está en ERROR en la celda: las que respondieron por API no se llenan).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+              example: { code: RESULTADO_INVALIDO, error: "El campo «proveedor» no existe en el esquema de esta fuente.", campo: resultado.proveedor }
+
   /api/v1/diagnostico/backoffice/diagnosticos:
     get:
       tags: [Backoffice]
@@ -2782,6 +2973,169 @@ components:
         encontrada: { type: boolean }
         estado_matricula: { type: string, nullable: true }
         ultima_renovacion: { type: string, nullable: true }
+
+    FormularioLlenadoManual:
+      type: object
+      description: Formulario del llenado manual (HU #13800). Todas las claves van siempre.
+      required: [id, diagnostico_id, vehiculo_id, fuente, estado, tipo_error, version, admite_manual, motivo, personas]
+      properties:
+        id: { type: string, format: uuid }
+        diagnostico_id: { type: string, format: uuid }
+        vehiculo_id: { type: string, format: uuid }
+        fuente: { type: string, enum: [RUNT, RUNT_PROPIETARIO, RUNT_LOCATARIO, SIMIT_VEHICULO, SIMIT_PROPIETARIO, SIMIT_LOCATARIO, AVALUO, IMPUESTO_DEPARTAMENTAL] }
+        estado: { type: string, enum: [PENDIENTE, EN_CURSO, COMPLETADO, ERROR, NA] }
+        tipo_error: { type: string, nullable: true }
+        version: { type: integer, format: int64, description: "Versión de la celda; va en el cuerpo del PUT." }
+        admite_manual: { type: boolean }
+        motivo: { type: string, nullable: true, enum: [FUENTE_NO_ADMITE_MANUAL, CELDA_NO_EN_ERROR, CELDA_BLOQUEADA_POR_RUNT, SIN_PERSONAS_EN_ERROR, null] }
+        personas:
+          type: array
+          nullable: true
+          description: Solo en fuentes de persona (null en las del vehículo); solo las personas en ERROR, por orden.
+          items:
+            $ref: "#/components/schemas/PersonaEnErrorManual"
+
+    PersonaEnErrorManual:
+      type: object
+      required: [persona_id, orden, rol, tipo_documento, documento_enmascarado, declarado_por_cliente, consulta, tipo_error]
+      properties:
+        persona_id: { type: string, format: uuid, description: "Va en personas[].persona_id del PUT." }
+        orden: { type: integer }
+        rol: { type: string, enum: [PROPIETARIO, LOCATARIO] }
+        tipo_documento: { type: string }
+        documento_enmascarado: { type: string, example: "****0102" }
+        declarado_por_cliente: { type: boolean }
+        consulta: { type: string, enum: [RUNT_PERSONA, RUES, SIMIT], description: "Define el esquema del resultado de esa persona." }
+        tipo_error: { type: string, nullable: true }
+
+    LlenadoManualVehiculo:
+      type: object
+      description: Cuerpo para SIMIT_VEHICULO (resultado ResultadoManualSimit) y AVALUO (resultado ResultadoManualAvaluo).
+      additionalProperties: false
+      required: [version, resultado]
+      properties:
+        version: { type: integer, format: int64, minimum: 0 }
+        resultado:
+          oneOf:
+            - $ref: "#/components/schemas/ResultadoManualSimit"
+            - $ref: "#/components/schemas/ResultadoManualAvaluo"
+
+    LlenadoManualPersonas:
+      type: object
+      description: Cuerpo para las fuentes de persona; todas las personas en ERROR de la celda y solo ellas, sin repetir.
+      additionalProperties: false
+      required: [version, personas]
+      properties:
+        version: { type: integer, format: int64, minimum: 0 }
+        personas:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: object
+            additionalProperties: false
+            required: [persona_id, resultado]
+            properties:
+              persona_id: { type: string, format: uuid }
+              resultado:
+                oneOf:
+                  - $ref: "#/components/schemas/ResultadoManualRuntPersona"
+                  - $ref: "#/components/schemas/ResultadoManualRues"
+                  - $ref: "#/components/schemas/ResultadoManualSimit"
+
+    ResultadoManualSimit:
+      type: object
+      description: >
+        SIMIT (del vehículo o consulta SIMIT de una persona). `cantidad_comparendos`, si viene, debe ser igual al número de
+        comparendos; sin él se calcula. Números de comparendo sin repetir.
+      additionalProperties: false
+      required: [comparendos]
+      properties:
+        semaforo: { type: string, nullable: true, enum: [VERDE, AMARILLO, ROJO, null] }
+        cantidad_comparendos: { type: integer, minimum: 0 }
+        comparendos:
+          type: array
+          maxItems: 500
+          items:
+            type: object
+            additionalProperties: false
+            required: [numero]
+            properties:
+              numero: { type: string, maxLength: 60 }
+              fecha: { type: string, format: date, nullable: true }
+              valor: { type: string, nullable: true, pattern: '^\d{1,15}(\.\d{1,2})?$', description: "Texto decimal en pesos.", example: "468500" }
+              estado: { type: string, nullable: true, maxLength: 60 }
+              organismo: { type: string, nullable: true, maxLength: 120 }
+
+    ResultadoManualAvaluo:
+      type: object
+      description: >
+        AVALUO. Con `sin_valor_comercial=false`, `valor_sugerido` (mayor que 0) y `fuente_principal` (una fuente enviada con
+        estado OK) son obligatorios; con `true` no van y ninguna fuente puede estar en OK. `valor` solo (y obligatorio) en
+        fuentes OK. Sin `fecha`: la pone el servidor (día de hoy en Colombia).
+      additionalProperties: false
+      required: [sin_valor_comercial, fuentes]
+      properties:
+        sin_valor_comercial: { type: boolean }
+        valor_sugerido: { type: integer, format: int64, minimum: 1, nullable: true }
+        fuente_principal: { type: string, nullable: true, enum: [fasecolda, mercado_libre, base_gravable, null] }
+        fuentes:
+          type: array
+          maxItems: 3
+          items:
+            type: object
+            additionalProperties: false
+            required: [fuente, estado]
+            properties:
+              fuente: { type: string, enum: [fasecolda, mercado_libre, base_gravable] }
+              estado: { type: string, enum: [OK, SIN_DATOS, ERROR] }
+              valor: { type: integer, format: int64, minimum: 1, nullable: true }
+              muestras: { type: integer, minimum: 1, nullable: true }
+
+    ResultadoManualRuntPersona:
+      type: object
+      description: RUNT de una persona natural (consulta RUNT_PERSONA).
+      additionalProperties: false
+      required: [inscrito, licencias]
+      properties:
+        inscrito: { type: boolean }
+        estado_conductor: { type: string, nullable: true, maxLength: 60 }
+        licencias:
+          type: array
+          maxItems: 30
+          items:
+            type: object
+            additionalProperties: false
+            required: [categoria]
+            properties:
+              categoria: { type: string, maxLength: 10 }
+              estado: { type: string, nullable: true, maxLength: 60 }
+              vigente_hasta: { type: string, format: date, nullable: true }
+
+    ResultadoManualRues:
+      type: object
+      description: RUES de una persona jurídica (consulta RUES).
+      additionalProperties: false
+      required: [encontrada]
+      properties:
+        encontrada: { type: boolean }
+        estado_matricula: { type: string, nullable: true, maxLength: 60 }
+        ultima_renovacion: { type: string, nullable: true, description: "AAAA-MM-DD o el año AAAA.", example: "2026-03-31" }
+
+    LlenadoManualRespuesta:
+      type: object
+      required: [id, diagnostico_id, vehiculo_id, fuente, estado, origen, usuario_manual_id, dato_obtenido_en, version, estado_lote]
+      properties:
+        id: { type: string, format: uuid }
+        diagnostico_id: { type: string, format: uuid }
+        vehiculo_id: { type: string, format: uuid }
+        fuente: { type: string }
+        estado: { type: string, enum: [COMPLETADO] }
+        origen: { type: string, enum: [MANUAL] }
+        usuario_manual_id: { type: string, format: uuid }
+        dato_obtenido_en: { type: string, format: date-time }
+        version: { type: integer, format: int64, description: "Nueva versión del tablero (la de la celda)." }
+        estado_lote: { type: string, enum: [CREADO, EN_PROCESO, COMPLETADO, INCOMPLETO] }
 
     ErrorRegla:
       type: object

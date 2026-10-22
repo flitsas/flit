@@ -120,6 +120,37 @@ public sealed class EsquemaD3Tests
             "ck_personas_vehiculo_declarado_solo_locatario");
     }
 
+    // HU #13800 (F06-H3) — ck_consultas_origen_manual: origen MANUAL si y solo si hay usuario del llenado manual (también con
+    // origen nulo, que no es MANUAL).
+    [Fact]
+    public async Task Check_origen_manual_exige_usuario()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        await using var conexion = await AbrirAsync(api, ct);
+        var (tenant, lote, vehiculo) = await SembrarVehiculoAsync(conexion, Guid.NewGuid(), ct);
+        var celda = await InsertarCeldaAsync(conexion, tenant, lote, vehiculo, ct);
+        const string Actualizar = "UPDATE diagnostico.consultas SET estado = 'COMPLETADO', payload = '{}'::jsonb, origen = @origen, usuario_manual_id = @usuario WHERE id = @id";
+
+        await DebeViolarAsync(() => ActualizarOrigenAsync(conexion, Actualizar, celda, "MANUAL", null, ct), "ck_consultas_origen_manual");
+        await DebeViolarAsync(() => ActualizarOrigenAsync(conexion, Actualizar, celda, "API", Guid.NewGuid(), ct), "ck_consultas_origen_manual");
+        await DebeViolarAsync(() => ActualizarOrigenAsync(conexion, Actualizar, celda, null, Guid.NewGuid(), ct), "ck_consultas_origen_manual");
+
+        await ActualizarOrigenAsync(conexion, Actualizar, celda, "MANUAL", Guid.NewGuid(), ct);
+        await ActualizarOrigenAsync(conexion, Actualizar, celda, "API", null, ct);
+        await ActualizarOrigenAsync(conexion, Actualizar, celda, null, null, ct);
+    }
+
+    private static async Task ActualizarOrigenAsync(NpgsqlConnection conexion, string sql, Guid celda, string? origen, Guid? usuario, CancellationToken ct)
+    {
+        await using var comando = new NpgsqlCommand(sql, conexion);
+        comando.Parameters.AddWithValue("id", celda);
+        comando.Parameters.Add(new NpgsqlParameter("origen", NpgsqlTypes.NpgsqlDbType.Varchar) { Value = (object?)origen ?? DBNull.Value });
+        comando.Parameters.Add(new NpgsqlParameter("usuario", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)usuario ?? DBNull.Value });
+        await comando.ExecuteNonQueryAsync(ct);
+    }
+
     private static async Task VerificarSchemaAsync(NpgsqlConnection conexion, CancellationToken ct)
     {
         var columnas = await ListarAsync(

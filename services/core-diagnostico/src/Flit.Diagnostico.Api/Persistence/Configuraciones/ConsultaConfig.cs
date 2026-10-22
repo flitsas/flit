@@ -34,6 +34,10 @@ internal sealed class ConsultaConfig : IEntityTypeConfiguration<CeldaConsulta>
             t.HasCheckConstraint("ck_consultas_tipo_error", $"tipo_error IS NULL OR estado = '{CodigosDeEnum.Codigo(EstadoCelda.Error)}'");
             // HU #13746: el reproceso pendiente solo existe mientras la celda espera o se ejecuta.
             t.HasCheckConstraint("ck_consultas_reproceso_usuario", $"reproceso_usuario_id IS NULL OR estado IN ({enCola})");
+            // HU #13800: el dato es MANUAL si y solo si hay usuario del llenado manual (con origen nulo tampoco hay usuario).
+            t.HasCheckConstraint(
+                "ck_consultas_origen_manual",
+                $"(COALESCE(origen, '') = '{CodigosDeEnum.Codigo(OrigenCelda.Manual)}') = (usuario_manual_id IS NOT NULL)");
         });
         builder.HasKey(x => x.Id).HasName("pk_consultas");
         builder.HasAlternateKey(x => new { x.TenantId, x.Id }).HasName("uq_consultas_tenant_id");
