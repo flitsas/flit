@@ -20,6 +20,11 @@ export interface ExpressEntrada {
 export interface EstimadoFuente {
   fuente: Fuente;
   consultas: number;
+  /**
+   * HU #13796/#13797: true en las fuentes de persona (RUNT/SIMIT propietario o locatario) cuando el número es un mínimo
+   * (uno por vehículo): la pantalla lo rotula «al menos N». La API la manda siempre; ausente se trata como false.
+   */
+  minimo?: boolean;
 }
 
 export interface VehiculoExpress {

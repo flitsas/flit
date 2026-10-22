@@ -6,7 +6,7 @@ import { ArrowLeft, Rocket } from "lucide-react";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { ApiError } from "@/lib/api";
-import { FUENTES, obtenerConfiguracion, type Configuracion } from "@/lib/configuracion";
+import { obtenerConfiguracion, type Configuracion } from "@/lib/configuracion";
 import type { CabeceraEntrada } from "@/lib/diagnosticos/api";
 import {
   TIPOS_DOCUMENTO_LOCATARIO,
@@ -19,6 +19,7 @@ import {
   type ExpressEntrada,
 } from "@/lib/express/api";
 import { DocumentoDeclarado, enmascararDocumento } from "@/components/comun/DocumentoDeclarado";
+import { ListaEstimado } from "@/components/carga/EstimadoConsultas";
 import { ParametrizacionCompacta } from "@/components/parametrizacion/ParametrizacionCompacta";
 import { CAMPO_INVALIDO_CLS, ERROR_CLS, INSIGNIA_CLS } from "@/components/parametrizacion/estilos";
 import {
@@ -51,7 +52,8 @@ const BOTON_ANTERIOR_CLS = BOTON_PRIMARIO_CLS.replace("bg-[var(--flit-brand-ink)
 /**
  * Panel del Diagnóstico Express (HU #13755, F02-H8): pide GET /configuracion y abre la parametrización compacta (#13752)
  * con el nombre autogenerado, más el documento opcional del locatario, rotulado «Declarado por el cliente» y enmascarado
- * tras escribirlo. Con estimado_consultas = ANTES_DE_LANZAR muestra el estimado de POST /express/estimado antes de lanzar;
+ * tras escribirlo. Con estimado_consultas = ANTES_DE_LANZAR muestra el estimado de POST /express/estimado antes de lanzar
+ * (fuentes de persona con minimo=true rotuladas «al menos N», HU #13797, con la misma lista que la carga);
  * lanza con POST /express y, con el 201, navega a /diagnosticos/{id}. Estados: cargando, error con Reintentar y lleno.
  */
 export function PanelExpress({ identificador, fecha, onErrorIdentificador }: PanelExpressProps) {
@@ -267,14 +269,7 @@ export function PanelExpress({ identificador, fecha, onErrorIdentificador }: Pan
               Locatario: <DocumentoDeclarado tipo={fase.entrada.tipo_documento_locatario} documento={fase.entrada.documento_locatario} />
             </p>
           )}
-          <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {fase.estimado.map((e) => (
-              <div key={e.fuente} className="flex flex-col rounded-xl border border-[var(--color-flit-gray)] px-3 py-2 dark:border-white/15">
-                <dt className={AYUDA_CLS}>{FUENTES.find((f) => f.codigo === e.fuente)?.nombre ?? e.fuente}</dt>
-                <dd className="text-lg font-semibold text-flit-primary dark:text-white">{e.consultas}</dd>
-              </div>
-            ))}
-          </dl>
+          <ListaEstimado estimado={fase.estimado} />
           <div className="flex flex-wrap justify-end gap-2">
             <button type="button" onClick={() => setFase({ tipo: "editando" })} className={BOTON_ANTERIOR_CLS}>
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
