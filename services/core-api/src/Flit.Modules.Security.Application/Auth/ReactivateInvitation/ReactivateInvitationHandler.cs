@@ -81,7 +81,7 @@ public sealed partial class ReactivateInvitationHandler(
         var token = tokenGenerator.Generate();
 
         // Red de la condición de carrera: el repositorio traduce el 23505 de
-        // uq_user_invitations_tenant_email_pending a InvitationAlreadyPendingException si otra
+        // uq_user_invitations_email_pending a InvitationAlreadyPendingException si otra
         // invitación se volvió "pending" entre la validación de arriba y este UPDATE.
         await invitationRepository.ReactivateAsync(
             invitation.InvitationId, token.TokenHash, now, command.ReactivatedBy, cancellationToken);
