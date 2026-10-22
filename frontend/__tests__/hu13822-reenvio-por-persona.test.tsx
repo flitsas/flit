@@ -226,6 +226,25 @@ describe('HU #13822 — reenvío por persona', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('AC4: el enlace se ve completo y se copia con dominio aunque el proveedor lo devuelva relativo', async () => {
+    const user = setupUser();
+    mocks.adminListValidacionesReenviables.mockResolvedValue({ personas: [persona()] });
+    mocks.adminReenviarValidacionesLote.mockResolvedValue({
+      items: [item({ captureUrl: '/api/v1/public/biometric/tok-123' })],
+    });
+    renderModal();
+
+    await user.click(await screen.findByRole('button', { name: 'Reenviar' }));
+
+    const esperado = `${window.location.origin}/api/v1/public/biometric/tok-123`;
+    const enlace = await screen.findByRole('link', { name: 'Abrir enlace de captura' });
+    expect(enlace).toHaveAttribute('href', esperado);
+    expect(enlace).toHaveTextContent(esperado);
+
+    await user.click(screen.getByRole('button', { name: 'Copiar enlace' }));
+    expect(writeText).toHaveBeenCalledWith(esperado);
+  });
+
   it('AC4: cerrar sin haber reenviado no avisa éxito ni recarga el listado', async () => {
     const user = setupUser();
     mocks.adminListValidacionesReenviables.mockResolvedValue({ personas: [persona()] });
