@@ -40,14 +40,10 @@ public sealed record RegistrarPrendaInput(
 public sealed class RegistrarPrendaHandler(
     IProcedureInstanceRepository instances,
     IProcedureInstancePrendaRepository prendas,
-    IPrendaDocumentRequirementPolicy? prendaDocumentRequirementPolicy = null,
     IAttachmentStorage? storage = null,
     IVehicleSignatureImprintRepository? imprintAudit = null,
     IMaestroRadicadoLookup? maestroRadicado = null)
 {
-    /// <summary>Error: el OT exige el certificado de prenda, así que "omitir" no es elegible (salvo la familia Matrículas, Feature #13110).</summary>
-    public const string OmitirNoAdmitidoError = "prenda_omitir_no_admitido";
-
     /// <summary>Error: este tipo no tiene dimensión de gravamen (familia OTROS, tipo no prendario).</summary>
     public const string PrendaNoAdmitidaError = "prenda_no_admitida_en_tipo";
 
@@ -60,9 +56,6 @@ public sealed class RegistrarPrendaHandler(
     /// handler nunca produce por su cuenta, pero que se rechaza en vez de adivinar cuál reemplazar.
     /// </summary>
     public const string SegundaDecisionVigenteNoAdmitidaError = "prenda_segunda_decision_no_admitida";
-
-    private readonly IPrendaDocumentRequirementPolicy _documentPolicy =
-        prendaDocumentRequirementPolicy ?? NullPrendaDocumentRequirementPolicy.Instance;
 
     private readonly IAttachmentStorage? _storage = storage;
     private readonly IVehicleSignatureImprintRepository? _imprintAudit = imprintAudit;
@@ -100,27 +93,11 @@ public sealed class RegistrarPrendaHandler(
 
         var decision = input.Decision.Trim().ToLowerInvariant();
 
-        // CF-06 (HU #10881) — con un OT que exige el certificado de prenda, "omitir" no es elegible en
-        // Traspaso ni en el resto de familias: la regla es del organismo. Se rechaza AL ELEGIR, que es
-        // donde el gate de radicación decía que había que decidirlo (ver PrendaGate.EvaluateOtOverride):
-        // bloquear después dejaría guardada una decisión que ningún adjunto puede satisfacer. Las
-        // decisiones ya guardadas no se revisan: la regla mira la elección nueva.
-        //
-        // Feature #13110 — excepción de la familia Matrículas: ahí "Omitir prenda" siempre se admite (la
-        // prenda es un trámite propio, art. 5.3.13.1). La regla vive en PrendaDecision.OmitirAdmitido,
-        // la misma que publica el estado del wizard (PrendaOmitAllowed). La familia se lee null-safe
-        // (instance.Family lanza sin la navegación cargada); sin tipo cargado se trata como "no es
-        // matrícula" y se conserva el rechazo (postura conservadora).
-        if (string.Equals(decision, PrendaDecision.Omitir, StringComparison.OrdinalIgnoreCase))
-        {
-            var family = ProcedureFamilyCodes.FromCodeOrOtros(instance.ProcedureType?.Family);
-            var otEfectiva = await ResolveOtEfectivaAsync(instance, ct).ConfigureAwait(false);
-            var otExigeDocumento = await _documentPolicy
-                .IsRequiredAsync(tenantId, otEfectiva, instance.CreatedAt, ct)
-                .ConfigureAwait(false);
-            if (!PrendaDecision.OmitirAdmitido(family, otExigeDocumento))
-                return (null, OmitirNoAdmitidoError);
-        }
+        // HU #13777 (Bug #13768) — «Omitir prenda» se admite en todo tipo con dimensión de prenda, sin
+        // depender de la familia ni de la política del OT sobre el certificado de prenda (check «Prenda
+        // Opcional» del OT prendido o apagado). Los gates de preparación y radicación ya aceptan
+        // "omitir" sin documento (PrendaGate.EvaluateOtOverride). No se valida el gravamen: "omitir"
+        // sin gravamen se comporta como "sin prenda" para los documentos.
 
         var now = DateTimeOffset.UtcNow;
 
@@ -203,23 +180,6 @@ public sealed class RegistrarPrendaHandler(
             instanceId, tenantId, vigentesResultantes, aReemplazar, permiteComplementaria, ct).ConfigureAwait(false);
 
         return (ToDto(nueva), null);
-    }
-
-    /// <summary>
-    /// OT efectiva del trámite (<see cref="OtEfectivaResolver"/>), la MISMA que usa el estado del wizard
-    /// para publicar <c>prendaOmitAllowed</c>: sin ella, un borrador sin columna <c>TransitOfficeId</c>
-    /// (previo a HU #11199) veía «Omitir prenda» ofrecido en el GET y rechazado en el PUT.
-    /// <c>GetByIdAsync</c> no carga <c>FieldValues</c>, así que con la columna vacía se leen por la
-    /// proyección lean del repositorio (solo en ese caso: la columna prevalece).
-    /// </summary>
-    private async Task<Guid?> ResolveOtEfectivaAsync(ProcedureInstance instance, CancellationToken ct)
-    {
-        var desdeInstancia = OtEfectivaResolver.Resolve(instance);
-        if (desdeInstancia is not null)
-            return desdeInstancia;
-
-        var fieldValues = await instances.GetFieldValuesAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false);
-        return OtEfectivaResolver.FromFieldValues(fieldValues);
     }
 
     /// <summary>

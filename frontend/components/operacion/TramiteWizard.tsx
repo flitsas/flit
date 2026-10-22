@@ -2025,6 +2025,7 @@ export function TramiteWizard(props: Props) {
                 esMigrado={wizard?.esMigrado ?? false}
                 prendaDocumentRequired={wizard?.prendaDocumentRequired ?? true}
                 prendaOmitAllowed={wizard?.prendaOmitAllowed}
+                runtReportaGravamen={wizard?.runtReportaGravamen}
                 onPrendaDocumentGateChange={setPrendaDocGateOk}
                 deferredFamily={deferredCreation ? entryFamily : undefined}
                 onSimultaneosGateChange={setSimultaneosGateOk}
@@ -4682,6 +4683,7 @@ function StepBody({
   esMigrado = false,
   prendaDocumentRequired = true,
   prendaOmitAllowed,
+  runtReportaGravamen,
   onPrendaDocumentGateChange,
   deferredFamily,
   onSimultaneosGateChange,
@@ -4754,10 +4756,12 @@ function StepBody({
   /** Compañía+OT: certificado de prenda obligatorio (default) u opcional. */
   prendaDocumentRequired?: boolean;
   /**
-   * Feature #13110 — el servidor resuelve si se ofrece «Omitir prenda» (`prendaOmitAllowed`).
-   * `undefined` ⇒ compatibilidad: traspaso con `!prendaDocumentRequired`, matrícula sin omitir.
+   * Feature #13110 / HU #13778 — el servidor resuelve si se ofrece «Omitir prenda»
+   * (`prendaOmitAllowed`). Sin `true` no se ofrece, en ningún tipo ni política del OT.
    */
   prendaOmitAllowed?: boolean;
+  /** HU #13778 — señal única de gravamen del servidor (GET /wizard `runtReportaGravamen`). */
+  runtReportaGravamen?: boolean;
   /** Gate Continuar: certificado de prenda listo (o no exigible). */
   onPrendaDocumentGateChange?: (ready: boolean) => void;
   /** Gate Continuar: trámites simultáneos con valor + adjunto (o ninguno activo). */
@@ -4893,12 +4897,13 @@ function StepBody({
                           embeddedInWizard
                           modalidad={esPuerta ? 'traspaso' : 'matricula_inicial'}
                           decisions={
-                            esPuerta ? traspasoDecisions(prendaDocumentRequired, prendaOmitAllowed) : undefined
+                            esPuerta ? traspasoDecisions(prendaOmitAllowed) : undefined
                           }
                           documentRequired={prendaDocumentRequired}
                           omitAllowed={prendaOmitAllowed}
                           onDocumentGateChange={onPrendaDocumentGateChange}
                           runtHasGravamen={runtHasPrendaInfo}
+                          runtReportaGravamen={runtReportaGravamen}
                           runtGravamenMessage={gravamen?.message}
                           hideHeader
                         />
@@ -4979,7 +4984,7 @@ function StepBody({
                             decisions={
                               decisionesDelTipo ??
                               (esPuerta
-                                ? traspasoDecisions(prendaDocumentRequired, prendaOmitAllowed)
+                                ? traspasoDecisions(prendaOmitAllowed)
                                 : undefined)
                             }
                             documentRequired={documentoObligatorio}
@@ -4990,6 +4995,7 @@ function StepBody({
                             permiteAccionComplementaria={permiteAccionComplementaria(tipoCodigo)}
                             onDocumentGateChange={onPrendaDocumentGateChange}
                             runtHasGravamen={gravamen?.status === 'warn'}
+                            runtReportaGravamen={runtReportaGravamen}
                             runtGravamenMessage={gravamen?.message}
                             // HU #12131 (AC1/AC2) — el check ya corrió (existe en la respuesta) y no
                             // encontró gravamen: `runtAvisoGravamenVariant` solo devuelve variante para

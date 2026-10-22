@@ -88,6 +88,13 @@ public sealed class FurPrendaObservationTests
     }
 
     [Fact]
+    public void Compose_Ninguna_ConEntidadDeLevantamiento_NoEscribeNada()
+    {
+        // HU #13777 — LEVANTAMIENTO_PRENDA con «omitir»: ni la entidad capturada antes produce texto.
+        FurPrendaObservation.Compose(FurPrendaMarking.Ninguna, "X", "1", "ENT").Should().BeNull();
+    }
+
+    [Fact]
     public void Compose_RecortaLosEspaciosDelCaptura()
     {
         FurPrendaObservation.Compose(FurPrendaMarking.Constitucion, "  BANCO XYZ S.A.  ", "  890900608  ")

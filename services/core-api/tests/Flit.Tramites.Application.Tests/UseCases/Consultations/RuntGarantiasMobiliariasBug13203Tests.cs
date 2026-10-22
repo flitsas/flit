@@ -96,7 +96,7 @@ public sealed class RuntGarantiasMobiliariasBug13203Tests
         var result = KyverumRuntVehicleResultMapper.MapVehicle(response);
 
         Check(result).Status.Should().Be("warn");
-        Check(result).Message.Should().Be("El RUNT registra 1 garantía(s) mobiliaria(s) (gravámenes: NO · prendas: NO)");
+        Check(result).Message.Should().Be("El RUNT reporta prenda o gravamen: 1 garantía(s) mobiliaria(s)");
         Text(result, "runt_nombre_acreedor").Should().Be("BANCO DE PRUEBA S.A.");
         DebeSerElAcreedorNormalizado(PrimerGravamen(result));
     }
@@ -119,7 +119,7 @@ public sealed class RuntGarantiasMobiliariasBug13203Tests
             JsonSerializer.Deserialize<KyverumRuntVehicleResponse>(KyverumJson(gravamenes: "SÍ", garantiasPrendas: "[]"), WebJsonOptions)!);
 
         Check(result).Status.Should().Be("warn");
-        Check(result).Message.Should().StartWith("El vehículo tiene gravámenes o prendas");
+        Check(result).Message.Should().Be("El RUNT reporta prenda o gravamen: gravámenes: SI");
     }
 
     [Fact]
@@ -142,7 +142,7 @@ public sealed class RuntGarantiasMobiliariasBug13203Tests
         var result = VerifikResultMapper.MapVehicle(response);
 
         Check(result).Status.Should().Be("warn");
-        Check(result).Message.Should().StartWith("El vehículo tiene gravámenes o prendas");
+        Check(result).Message.Should().Be("El RUNT reporta prenda o gravamen: gravámenes: SI · 1 garantía(s) mobiliaria(s)");
         Text(result, "runt_nombre_acreedor").Should().Be("BANCO DE PRUEBA S.A.");
         DebeSerElAcreedorNormalizado(PrimerGravamen(result));
     }
@@ -154,7 +154,7 @@ public sealed class RuntGarantiasMobiliariasBug13203Tests
             JsonSerializer.Deserialize<VerifikVehicleResponse>(VerifikJson(tieneGravamenes: "NO"))!);
 
         Check(result).Status.Should().Be("warn");
-        Check(result).Message.Should().Be("El RUNT registra 1 garantía(s) mobiliaria(s) (gravámenes: NO · prendas: NO)");
+        Check(result).Message.Should().Be("El RUNT reporta prenda o gravamen: 1 garantía(s) mobiliaria(s)");
     }
 
     [Fact]
@@ -164,7 +164,7 @@ public sealed class RuntGarantiasMobiliariasBug13203Tests
             JsonSerializer.Deserialize<VerifikVehicleResponse>(VerifikJson(tieneGravamenes: null, prendas: null), WebJsonOptions)!);
 
         Check(result).Status.Should().Be("warn");
-        Check(result).Message.Should().Be("El RUNT registra 1 garantía(s) mobiliaria(s) (gravámenes: — · prendas: —)");
+        Check(result).Message.Should().Be("El RUNT reporta prenda o gravamen: 1 garantía(s) mobiliaria(s)");
     }
 
     [Fact]
