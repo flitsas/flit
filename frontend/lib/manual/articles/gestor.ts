@@ -423,7 +423,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           {
             variant: "info",
             title: "Mensajes que puedes ver",
-            text: "«Comprador y vendedor ya firmaron. No hay a quién reenviar.»: todas las personas ya validaron. «Correo inválido.»: revisa el correo escrito. «El reenvío quedó en cola…»: el proveedor tuvo una falla momentánea y se reintenta solo; el enlace aparecerá después. «En validación manual…»: esa persona está en captura manual y su enlace se regenera desde la revisión manual.",
+            text: "«El comprador ya firmó…» (matrícula y otros trámites, que tienen un solo actor) o «Comprador y vendedor ya firmaron…» (traspaso): todas las personas ya validaron. «Correo inválido.»: revisa el correo escrito. «El reenvío quedó en cola…»: el proveedor tuvo una falla momentánea y se reintenta solo; el enlace aparecerá después. «En validación manual…»: esa persona está en captura manual y su enlace se regenera desde la revisión manual.",
           },
           {
             variant: "tip",
