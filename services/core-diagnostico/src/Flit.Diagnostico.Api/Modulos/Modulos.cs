@@ -99,6 +99,20 @@ public static class Modulos
         return services;
     }
 
+    /// <summary>
+    /// Evidencias (HU #13846): el almacén de archivos (file-manager corporativo con <c>FILE_MANAGER_*</c>; la base solo con
+    /// <see cref="Infraestructura.Archivos.OpcionesAlmacen.GuardarEnBase"/>; sin ninguno el servicio no arranca) y el registro de
+    /// evidencias con huella que usan el PDF, el Excel y el ZIP de F07.
+    /// </summary>
+    public static IServiceCollection AddEvidencias(this IServiceCollection services, IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        Infraestructura.Archivos.AlmacenArchivosExtensions.AddAlmacenArchivos(services, configuration);
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddScoped<Reportes.ServicioEvidencias>();
+        return services;
+    }
+
     public static RouteGroupBuilder MapModulosDiagnostico(this WebApplication app, string prefijo)
     {
         ArgumentNullException.ThrowIfNull(app);

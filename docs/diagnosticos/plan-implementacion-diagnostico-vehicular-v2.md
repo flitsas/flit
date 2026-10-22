@@ -886,19 +886,36 @@ CREATE INDEX ix_derivacion_vehiculo ON diagnostico.derivaciones (vehiculo_id);
 CREATE UNIQUE INDEX ux_derivacion_canjeada ON diagnostico.derivaciones (vehiculo_id)
   WHERE destino = 'WIZARD' AND canjeado_en IS NOT NULL;   -- un trámite por vehículo (R-16)
 
--- Evidencias (MOD07)
+-- Evidencias (MOD07). Materializada en la HU #13846 (D4_Evidencias): clase (a) de ADR-0072 (xmin, sin borrado lógico ni físico:
+-- invalidar = vigente=false, R-18), FK compuestas (tenant_id, diagnostico_id) y (tenant_id, vehiculo_id) RESTRICT, sin origen de
+-- las celdas ni usuario manual (R-20). La huella la calcula HuellaEvidencia y la invalidación la da version_tablero de cada celda.
 CREATE TABLE diagnostico.evidencias (
   id              uuid PRIMARY KEY,
-  tenant_id       uuid NOT NULL,
-  diagnostico_id  uuid NOT NULL,
-  vehiculo_id     uuid NULL,                         -- nulo para Excel o ZIP del lote
-  tipo            varchar(8) NOT NULL CHECK (tipo IN ('PDF','XLSX','ZIP')),
-  huella          char(64) NOT NULL,                 -- hash de las entradas (incluye el texto del dictamen): si no cambia, no se regenera
-  archivo_ref     varchar(256) NOT NULL,             -- file-manager
+  tenant_id       uuid NOT NULL,                     -- uq_evidencias_tenant_id (tenant_id, id)
+  diagnostico_id  uuid NOT NULL,                     -- fk_evidencias_diagnosticos
+  vehiculo_id     uuid NULL,                         -- fk_evidencias_vehiculos; nulo para Excel o ZIP del lote
+  tipo            varchar(8) NOT NULL,               -- PDF | XLSX | ZIP; CHECK (tipo = 'PDF') = (vehiculo_id IS NOT NULL)
+  huella          char(64) NOT NULL,                 -- SHA-256 hex de las entradas: si no cambia, no se regenera
+  estado          varchar(16) NOT NULL,              -- PENDIENTE | GENERANDO | LISTA | ERROR; PDF y XLSX nacen LISTA, el ZIP pasa por la cola (F07-H5)
+  archivo_ref     varchar(256) NULL,                 -- file-manager (db:{id} en pruebas); CHECK estado = 'LISTA' ⇔ archivo_ref IS NOT NULL
+  tamano_bytes    bigint NULL,                       -- obligatorio con LISTA
+  solicitado_por  uuid NOT NULL,                     -- claim sub
+  empresa_nombre  varchar(200) NULL,                 -- claim company_name para el ZIP (el trabajador no tiene sesión)
   vigente         boolean NOT NULL,
-  creado_en       timestamptz NOT NULL
+  intentos        integer NOT NULL DEFAULT 0,
+  lease_hasta     timestamptz NULL,                  -- cola del ZIP
+  tipo_error      varchar(32) NULL,                  -- solo con ERROR
+  creado_en       timestamptz NOT NULL,
+  generado_en     timestamptz NULL                   -- obligatorio con LISTA
 );
-CREATE UNIQUE INDEX ux_evidencia_vigente ON diagnostico.evidencias (diagnostico_id, vehiculo_id, tipo) WHERE vigente;
+CREATE UNIQUE INDEX ux_evidencias_vigente ON diagnostico.evidencias (tenant_id, diagnostico_id, vehiculo_id, tipo)
+  NULLS NOT DISTINCT WHERE vigente;                  -- Postgres 16 en los tres ambientes
+CREATE INDEX ix_evidencias_diagnostico ON diagnostico.evidencias (tenant_id, diagnostico_id, tipo);
+CREATE INDEX ix_evidencias_vehiculo ON diagnostico.evidencias (tenant_id, vehiculo_id);
+CREATE INDEX ix_evidencias_cola ON diagnostico.evidencias (estado, lease_hasta)
+  WHERE tipo = 'ZIP' AND estado IN ('PENDIENTE', 'GENERANDO');
+-- Sin file-manager (solo pruebas, Diagnostico:Archivos:GuardarEnBase=true) los bytes van a diagnostico.archivo_local
+-- (id, tenant_id, tipo, nombre, content_type, contenido bytea @pii:medium, creado_en); sin URL y sin bandera el servicio no arranca.
 
 -- Réplica de organismos con bandera de impuesto (patrón Comparendos, HU13459). Materializadas en la HU #13723
 -- (D2_MotorConsultas): catálogos globales sin tenant_id (excepción por tabla de ADR-0072); ix_organismos_nombre_norm (nombre_norm)

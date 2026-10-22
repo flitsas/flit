@@ -23,6 +23,62 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Flit.Diagnostico.Api.Infraestructura.Archivos.ArchivoLocal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasComment("uuid v7 generado por la aplicación; la referencia es db:{id}.");
+
+                    b.Property<byte[]>("Contenido")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("contenido")
+                        .HasComment("@pii:medium Bytes del archivo del cliente (documentos enmascarados, sin nombres de personas).");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("content_type")
+                        .HasComment("Tipo de contenido.");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en")
+                        .HasComment("Instante en que se guardó.");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("nombre")
+                        .HasComment("Nombre del archivo.");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id")
+                        .HasComment("Empresa dueña del archivo.");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("tipo")
+                        .HasComment("PDF, XLSX o ZIP.");
+
+                    b.HasKey("Id")
+                        .HasName("pk_archivo_local");
+
+                    b.HasIndex("TenantId", "CreadoEn")
+                        .HasDatabaseName("ix_archivo_local_tenant");
+
+                    b.ToTable("archivo_local", "diagnostico", t =>
+                        {
+                            t.HasComment("Archivos generados guardados en la base sin file-manager; solo pruebas automáticas (HU #13846).");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Catalogos.DepartamentoImpuesto", b =>
                 {
                     b.Property<string>("DepartamentoCodigo")
@@ -866,6 +922,153 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Reportes.Evidencia", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasComment("uuid v7 generado por la aplicación.");
+
+                    b.Property<string>("ArchivoRef")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("archivo_ref")
+                        .HasComment("Referencia del archivo en el file-manager (o db: en pruebas); solo con estado LISTA.");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en")
+                        .HasComment("Instante del pedido (timestamptz).");
+
+                    b.Property<Guid>("DiagnosticoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("diagnostico_id")
+                        .HasComment("Lote de la evidencia.");
+
+                    b.Property<string>("EmpresaNombre")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("empresa_nombre")
+                        .HasComment("Nombre de la empresa del claim company_name para el ZIP, que se genera sin sesión (F07-H5).");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("estado")
+                        .HasComment("PENDIENTE, GENERANDO, LISTA o ERROR; PDF y XLSX nacen LISTA, el ZIP pasa por la cola (F07-H5).");
+
+                    b.Property<DateTimeOffset?>("GeneradoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("generado_en")
+                        .HasComment("Instante en que el archivo quedó listo; null mientras no lo está.");
+
+                    b.Property<string>("Huella")
+                        .IsRequired()
+                        .HasColumnType("char(64)")
+                        .HasColumnName("huella")
+                        .HasComment("SHA-256 hex de las entradas del archivo (plantilla, cabecera, encabezado y celdas con su versión); si no cambia, no se regenera.");
+
+                    b.Property<int>("Intentos")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("intentos")
+                        .HasComment("Intentos de generación (cola del ZIP).");
+
+                    b.Property<DateTimeOffset?>("LeaseHasta")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lease_hasta")
+                        .HasComment("Cola del ZIP: vencimiento del lease del trabajador; null si nadie lo tiene.");
+
+                    b.Property<Guid>("SolicitadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("solicitado_por")
+                        .HasComment("@pii:low Usuario que pidió el archivo (claim sub).");
+
+                    b.Property<long?>("TamanoBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("tamano_bytes")
+                        .HasComment("Tamaño del archivo en bytes; obligatorio con estado LISTA.");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id")
+                        .HasComment("Empresa dueña del lote.");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("tipo")
+                        .HasComment("PDF, XLSX o ZIP.");
+
+                    b.Property<string>("TipoError")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("tipo_error")
+                        .HasComment("Causa del fallo de generación; solo con estado ERROR.");
+
+                    b.Property<Guid?>("VehiculoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("vehiculo_id")
+                        .HasComment("Vehículo del PDF; null en el Excel y el ZIP del lote.");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<bool>("Vigente")
+                        .HasColumnType("boolean")
+                        .HasColumnName("vigente")
+                        .HasComment("La que se entrega hoy para su clave; false = reemplazada y conservada (R-18).");
+
+                    b.HasKey("Id")
+                        .HasName("pk_evidencias");
+
+                    b.HasAlternateKey("TenantId", "Id")
+                        .HasName("uq_evidencias_tenant_id");
+
+                    b.HasIndex("Estado", "LeaseHasta")
+                        .HasDatabaseName("ix_evidencias_cola")
+                        .HasFilter("tipo = 'ZIP' AND estado IN ('PENDIENTE', 'GENERANDO')");
+
+                    b.HasIndex("TenantId", "VehiculoId")
+                        .HasDatabaseName("ix_evidencias_vehiculo");
+
+                    b.HasIndex("TenantId", "DiagnosticoId", "Tipo")
+                        .HasDatabaseName("ix_evidencias_diagnostico");
+
+                    b.HasIndex("TenantId", "DiagnosticoId", "VehiculoId", "Tipo")
+                        .IsUnique()
+                        .HasDatabaseName("ux_evidencias_vigente")
+                        .HasFilter("vigente");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("TenantId", "DiagnosticoId", "VehiculoId", "Tipo"), false);
+
+                    b.ToTable("evidencias", "diagnostico", t =>
+                        {
+                            t.HasComment("PDF, Excel y ZIP generados con la huella de sus entradas y su archivo en el file-manager (MOD07, HU #13846, R-18).");
+
+                            t.HasCheckConstraint("ck_evidencias_estado", "estado IN ('PENDIENTE', 'GENERANDO', 'LISTA', 'ERROR')");
+
+                            t.HasCheckConstraint("ck_evidencias_huella", "huella ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_evidencias_intentos", "intentos >= 0");
+
+                            t.HasCheckConstraint("ck_evidencias_lista_archivo", "(estado = 'LISTA') = (archivo_ref IS NOT NULL) AND (estado <> 'LISTA' OR (tamano_bytes IS NOT NULL AND generado_en IS NOT NULL))");
+
+                            t.HasCheckConstraint("ck_evidencias_pdf_vehiculo", "(tipo = 'PDF') = (vehiculo_id IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_evidencias_tamano", "tamano_bytes IS NULL OR tamano_bytes >= 0");
+
+                            t.HasCheckConstraint("ck_evidencias_tipo", "tipo IN ('PDF', 'XLSX', 'ZIP')");
+
+                            t.HasCheckConstraint("ck_evidencias_tipo_error", "tipo_error IS NULL OR estado = 'ERROR'");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Vehiculos.VehiculoDiagnostico", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1230,6 +1433,24 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_historial_estado_diagnostico_diagnosticos");
+                });
+
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Reportes.Evidencia", b =>
+                {
+                    b.HasOne("Flit.Diagnostico.Api.Modulos.Diagnosticos.CabeceraDiagnostico", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "DiagnosticoId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_evidencias_diagnosticos");
+
+                    b.HasOne("Flit.Diagnostico.Api.Modulos.Vehiculos.VehiculoDiagnostico", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "VehiculoId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_evidencias_vehiculos");
                 });
 
             modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Vehiculos.VehiculoDiagnostico", b =>

@@ -75,6 +75,8 @@ public static class Program
         Modulos.Backoffice.LlenadoManualEndpoints.AddLlenadoManual(builder.Services);
         // HU #13725: fuente RUNT del vehículo (no conectada por defecto; simulada de Intempo solo con configuración explícita en LOCAL o DEV).
         builder.Services.AddFuentesConsultas(builder.Configuration);
+        // HU #13846: almacén de archivos (file-manager; sin él ni la bandera de pruebas, no arranca) y registro de evidencias con huella.
+        builder.Services.AddEvidencias(builder.Configuration);
         builder.Services.AddFlitGrpcServer();
         builder.Services.AddFlitOutbox<DiagnosticoDb>(builder.Configuration);
         builder.Services.AddExceptionHandler<ManejadorReglas>();
