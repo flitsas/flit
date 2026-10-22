@@ -79,7 +79,12 @@ public static partial class EmpresasEndpoints
         admin.MapPut("/{id:guid}/correo", GuardarCorreoDeEmpresa);
         admin.MapGet("/{id:guid}/auditoria", Historial);
         admin.MapPut("/{id:guid}/nits/{nitId:guid}/consulta-contrato", GuardarConsultaContratoNit);
+        // HU #13843: la conexión con la API de contratos es del ambiente, no de una empresa.
+        api.MapPost("/admin/contratos/probar", ProbarContratos).RequireAuthorization(AutorizacionExtensions.PoliticaSuperAdmin);
     }
+
+    private static async Task<IResult> ProbarContratos(Contraventor.IApiContratos contratos, CancellationToken ct) =>
+        Results.Ok(await contratos.ProbarAsync(ct).ConfigureAwait(false));
 
     public static ConfiguracionDto Dto(ConfiguracionEmpresa c)
     {

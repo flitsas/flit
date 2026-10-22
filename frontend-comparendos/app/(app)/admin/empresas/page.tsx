@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { History, Plus } from "lucide-react";
+import { History, Plug, Plus } from "lucide-react";
 import { DataTable, InlineAlert, Modal, StatusBadge } from "@flit/ui";
 import { ConsultasAdmin } from "@/components/consultas/ConsultasAdmin";
 import { Encabezado, Requiere } from "@/components/Pantalla";
@@ -25,6 +25,7 @@ import type {
   Nit,
   Tipologia,
 } from "@/lib/tipos";
+import { type PruebaContratos, resumenPrueba } from "@/lib/conductor";
 import { useCarga } from "@/lib/useCarga";
 
 function NuevaEmpresa({
@@ -167,6 +168,47 @@ function Historial({ empresaId, onCerrar }: { empresaId: string; onCerrar: () =>
  * NIT que consultan el conductor en la API de contratos (HU #13712). La API de Renting solo conoce su propia flota: se
  * marca NIT por NIT. El interruptor general sigue siendo la integración de la empresa; apagarla no borra estas casillas.
  */
+/**
+ * «Probar conexión» (HU #13843): solo el inicio de sesión con la API de contratos, sin consultar placas. La conexión es
+ * del ambiente, no de la empresa.
+ */
+function ProbarConexion() {
+  const [probando, setProbando] = useState(false);
+  const [resultado, setResultado] = useState<PruebaContratos | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const probar = async () => {
+    setProbando(true);
+    setError(null);
+    try {
+      setResultado(await apiFetch<PruebaContratos>("/admin/contratos/probar", { method: "POST" }));
+    } catch (e) {
+      setResultado(null);
+      setError(e instanceof Error ? e.message : "No se pudo probar la conexión.");
+    } finally {
+      setProbando(false);
+    }
+  };
+  const r = resultado && resumenPrueba(resultado);
+  return (
+    <div className="flex flex-col gap-2">
+      <div>
+        <button type="button" className={controlCls(false)} disabled={probando} onClick={probar}>
+          <Plug className="h-3.5 w-3.5" aria-hidden />
+          {probando ? "Probando…" : "Probar conexión"}
+        </button>
+      </div>
+      {error && <InlineAlert tone="error" compact>{error}</InlineAlert>}
+      {r && (
+        <InlineAlert tone={r.tono} title={r.titulo} compact>
+          {r.detalle.map((d) => (
+            <p key={d}>{d}</p>
+          ))}
+        </InlineAlert>
+      )}
+    </div>
+  );
+}
+
 function NitsConsultaContrato({ empresaId, integracionApi }: { empresaId: string; integracionApi: boolean }) {
   const toast = useToast();
   const nits = useCarga(`nits-contrato:${empresaId}`, (signal) =>
@@ -190,6 +232,7 @@ function NitsConsultaContrato({ empresaId, integracionApi }: { empresaId: string
         La API de Renting solo sabe quién tenía un vehículo de su propia flota. Marca únicamente esos NIT: los demás se
         asignan a mano.
       </p>
+      <ProbarConexion />
       {!integracionApi && (
         <InlineAlert tone="info" compact>
           La integración del contraventor está en Manual o la consulta de contraventor está apagada: no sale ninguna

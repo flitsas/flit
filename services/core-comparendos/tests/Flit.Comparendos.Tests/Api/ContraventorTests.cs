@@ -263,4 +263,39 @@ public sealed class ContraventorTests(ApiConFuente api) : IClassFixture<ApiConFu
         docs.GetArrayLength().Should().Be(2);
         docs.EnumerateArray().Count(d => d.GetProperty("vigente").GetBoolean()).Should().Be(1);
     }
+
+    [Fact]
+    public async Task HU13843_ProbarConexion_SoloSuperAdmin_YDevuelveLaPrueba()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = await EmpresaAsync(api, consulta: true, integracion: "ApiRenting");
+        (await api.Cliente(new UsuarioDePrueba(empresa, [.. Operador, Permisos.ConfiguracionEditar])).PostAsync("/api/v1/comparendos/admin/contratos/probar", null, ct))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        var r = await (await api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [], SuperAdmin: true)).PostAsync("/api/v1/comparendos/admin/contratos/probar", null, ct))
+            .Content.ReadFromJsonAsync<JsonElement>(ct);
+        (r.GetProperty("conectado").GetBoolean(), r.GetProperty("contactoDesviado").GetBoolean(), r.GetProperty("correoDesvio").GetString())
+            .Should().Be((true, true, "buzon.pruebas@flitsas.com"));
+    }
+
+    [Fact]
+    public async Task HU13844_LaEmpresaVeQueNitTienenConsultaAutomatica()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        async Task<bool> Automatica(Guid empresa, bool marcar)
+        {
+            await api.Cliente(new UsuarioDePrueba(empresa, [Permisos.MonitoreoGestionar])).PostAsJsonAsync("/api/v1/comparendos/monitoreo/nits", new { numero = "811011779" }, ct);
+            if (marcar)
+                await ConsultaPorApiDeLosNitsAsync(api, empresa);
+            var nits = await api.Cliente(new UsuarioDePrueba(empresa, [Permisos.MonitoreoVer])).GetFromJsonAsync<JsonElement>("/api/v1/comparendos/monitoreo/nits", ct);
+            return nits.EnumerateArray().Single().GetProperty("consultaAutomatica").GetBoolean();
+        }
+
+        (await Automatica(await EmpresaAsync(api, consulta: true, integracion: "ApiRenting"), marcar: true)).Should().BeTrue();
+        (await Automatica(await EmpresaAsync(api, consulta: true, integracion: "ApiRenting"), marcar: false)).Should().BeFalse("FLIT no marcó el NIT");
+        (await Automatica(await EmpresaAsync(api, consulta: true), marcar: true)).Should().BeFalse("la empresa asigna el conductor a mano");
+        (await Automatica(await EmpresaAsync(api, integracion: "ApiRenting"), marcar: true)).Should().BeFalse("la consulta de contraventor está apagada");
+    }
 }
