@@ -7,13 +7,21 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 
 public sealed class InvitationRepository(IIdentityDb db) : IInvitationRepository
 {
-    public Task<bool> ExistsPendingAsync(Guid tenantId, string email, CancellationToken cancellationToken) =>
-        db.UserInvitations.AnyAsync(
-            x => x.TenantId == tenantId && x.Email == email && x.Status == "pending",
+    public Task<bool> ExistsPendingAsync(string email, CancellationToken cancellationToken)
+    {
+        // HU #13811: global, sin filtrar por compañía (antes era única por tenant).
+        var normalizedEmail = EmailNormalizer.Normalize(email);
+        return db.UserInvitations.AnyAsync(
+            x => x.Email == normalizedEmail && x.Status == "pending",
             cancellationToken);
+    }
 
-    public Task<bool> UserExistsWithEmailAsync(string email, CancellationToken cancellationToken) =>
-        db.Users.AnyAsync(u => u.Email == email && u.DeletedAt == null, cancellationToken);
+    public Task<bool> UserExistsWithEmailAsync(string email, CancellationToken cancellationToken)
+    {
+        // HU #13810: la base solo guarda la forma canónica (DDL 149); se compara contra ella.
+        var normalizedEmail = EmailNormalizer.Normalize(email);
+        return db.Users.AnyAsync(u => u.Email == normalizedEmail && u.DeletedAt == null, cancellationToken);
+    }
 
     public Task<bool> RoleExistsInTenantAsync(Guid tenantId, Guid roleId, CancellationToken cancellationToken)
     {
@@ -61,7 +69,17 @@ public sealed class InvitationRepository(IIdentityDb db) : IInvitationRepository
             });
         }
 
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (IsPendingUniqueViolation(ex))
+        {
+            // HU #13811 — red de la carrera: dos compañías invitan el mismo correo a la vez; el handler ya
+            // pre-valida con ExistsPendingAsync y uq_user_invitations_email_pending decide al segundo.
+            db.ChangeTracker.Clear();
+            throw new InvitationAlreadyPendingException();
+        }
 
         return entity.Id;
     }
@@ -209,14 +227,14 @@ public sealed class InvitationRepository(IIdentityDb db) : IInvitationRepository
         {
             // Red de la condición de carrera: el handler ya pre-valida con ExistsPendingAsync,
             // pero entre esa lectura y este UPDATE otra invitación pudo volverse "pending" para
-            // el mismo (tenant, email) — uq_user_invitations_tenant_email_pending revienta con
+            // el mismo correo — uq_user_invitations_email_pending (HU #13809) revienta con
             // 23505 y se traduce a la misma excepción de dominio que el chequeo previo.
             db.Entry(entity).State = EntityState.Unchanged;
             throw new InvitationAlreadyPendingException();
         }
     }
 
-    private const string PendingUniqueIndex = "uq_user_invitations_tenant_email_pending";
+    private const string PendingUniqueIndex = "uq_user_invitations_email_pending";
 
     private static bool IsPendingUniqueViolation(DbUpdateException ex) =>
         ex.InnerException is PostgresException pg

@@ -17,11 +17,11 @@ public sealed class AuthUserRepository(IIdentityDb db, IUserRoleAssignmentReposi
 
     public async Task<UserAuthSnapshot?> FindByEmailAsync(string email, CancellationToken cancellationToken)
     {
-        var normalizedEmail = email.Trim().ToLowerInvariant();
+        var normalizedEmail = EmailNormalizer.Normalize(email);
 
         var user = await db.Users
             .AsNoTracking()
-            .Where(u => u.DeletedAt == null && EF.Functions.ILike(u.Email, normalizedEmail))
+            .Where(u => u.DeletedAt == null && u.Email == normalizedEmail)
             .Select(u => new { u.Id, u.Email, u.Status, u.HomeTenantId })
             .FirstOrDefaultAsync(cancellationToken);
 

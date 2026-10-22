@@ -539,7 +539,7 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         body!.Error.Should().Be("EMAIL_ALREADY_IN_USE");
         // HU #11550 — mensaje visible unificado / HU #11580 — código único, con los otros dos
         // conflictos de correo.
-        body.Message.Should().Be("El correo utilizado ya se encuentra asociado a otra cuenta");
+        body.Message.Should().Be("El usuario ya se encuentra previamente creado");
     }
 
     // HU #10625 AC3 — invitación ya no pendiente (aceptada) → 409
@@ -1326,7 +1326,7 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         var body = await inviteResponse.Content.ReadFromJsonAsync<ErrorBody>(
             cancellationToken: TestContext.Current.CancellationToken);
         body!.Error.Should().Be("EMAIL_ALREADY_IN_USE");
-        body.Message.Should().Be("El correo utilizado ya se encuentra asociado a otra cuenta");
+        body.Message.Should().Be("El usuario ya se encuentra previamente creado");
     }
 
     // HU #11550 AC2/AC4 / HU #11580 AC1-AC2 — invitar por la ruta del OT con el correo de una
@@ -1355,7 +1355,7 @@ public sealed class AdminOtUsersEndpointsTests : IClassFixture<WebApplicationFac
         var body = await inviteResponse.Content.ReadFromJsonAsync<ErrorBody>(
             cancellationToken: TestContext.Current.CancellationToken);
         body!.Error.Should().Be("EMAIL_ALREADY_IN_USE");
-        body.Message.Should().Be("El correo utilizado ya se encuentra asociado a otra cuenta");
+        body.Message.Should().Be("El usuario ya se encuentra previamente creado");
     }
 
     private async Task<(Guid InvitationId, string Email)> SeedPendingInvitationAsync(

@@ -222,7 +222,8 @@
           "title": "3. Activar una invitación",
           "paragraphs": [
             "Cuando el administrador de tu compañía (o el equipo FLIT) crea tu usuario, te llega un correo con un enlace de activación. Ese enlace te lleva a la pantalla «Activa tu cuenta», donde defines tu contraseña por primera vez.",
-            "Con eso queda lista tu cuenta y puedes iniciar sesión de inmediato con tu correo y la contraseña que acabas de definir."
+            "Con eso queda lista tu cuenta y puedes iniciar sesión de inmediato con tu correo y la contraseña que acabas de definir.",
+            "Si al activar ves «El usuario ya se encuentra previamente creado», tu correo ya tiene una cuenta en FLIT: inicia sesión con ella (o recupera la contraseña desde «¿Olvidó su contraseña?») en lugar de activar la invitación."
           ],
           "bullets": [],
           "callouts": []
@@ -268,6 +269,7 @@
           "paragraphs": [],
           "bullets": [
             "No me llega el correo de recuperación o de invitación: revisa la carpeta de spam o correo no deseado antes de pedir uno nuevo.",
+            "Al iniciar sesión no importa si escribes tu correo con mayúsculas o con espacios al inicio o al final: la plataforma lo reconoce igual.",
             "El enlace de recuperación o de activación ya venció: pide uno nuevo (recuperación desde «¿Olvidó su contraseña?»; invitación, pídele al administrador que te la reenvíe).",
             "Mi cuenta está bloqueada temporalmente: verás el aviso «Tu cuenta está bloqueada temporalmente». Contacta al administrador de tu compañía para que la reactive.",
             "Mi usuario está suspendido: no podrás iniciar sesión aunque la contraseña sea correcta; solo el administrador de tu compañía puede reactivarlo."
@@ -1662,6 +1664,7 @@
             "Completa nombre, correo y rol. El rol es obligatorio, también para el administrador: hasta que lo eliges, «Enviar invitación» queda deshabilitado y ves «Elige el rol de la persona.». El invitado recibe un enlace para activar su cuenta.",
             "Elige «Gestor OT» para quien solo opera la bandeja de trámites; «Administrador OT» para quien administra el organismo. Puedes cambiar entre los dos desde «Acciones» → «Editar usuario» en su fila.",
             "Verifica que el correo sea institucional del OT cuando la política lo exija.",
+            "Cada correo corresponde a un solo usuario en toda la plataforma, sin importar la compañía ni las mayúsculas (Juan@empresa.com y juan@empresa.com son el mismo). El correo se guarda siempre en minúsculas. Si ya existe un usuario con ese correo, o ya hay una invitación pendiente para él en cualquier compañía, la invitación no se crea, ves «El usuario ya se encuentra previamente creado» y el campo de correo queda marcado en rojo; corrige el correo para continuar.",
             "Una invitación pendiente se reenvía con el ícono «Reenviar invitación» de su fila y se cancela desde «Acciones» → «Cancelar invitación».",
             "Al cambiar el rol de una persona desde «Editar usuario», si tiene permisos individuales el sistema te avisa cuántos se eliminarán («Este usuario tiene 3 permisos individuales que se eliminarán al cambiar su rol.»). El rol solo cambia si confirmas con «Cambiar rol»; «Mantener rol actual» no cambia nada."
           ],
@@ -2240,6 +2243,7 @@
             "Agregar cliente a la red: razón social, NIT y tipo de compañía. El código lo asigna el sistema (COMP-XXXX). Nace vinculado a tu red.",
             "Activar / Desactivar cliente, con confirmación.",
             "Invitar usuario a un cliente: eliges el cliente como destino y el rol (Administrador de compañía, Radicador, Gestor, Documentador, Validador u Operario full).",
+            "Cada correo corresponde a un solo usuario en toda la plataforma, sin importar la compañía ni las mayúsculas (Juan@empresa.com y juan@empresa.com son el mismo). El correo se guarda siempre en minúsculas. Si ya existe un usuario con ese correo, o ya hay una invitación pendiente para él en cualquier compañía, la invitación no se crea, ves «El usuario ya se encuentra previamente creado» y el campo de correo queda marcado en rojo; corrige el correo para continuar.",
             "Administrar un cliente: abre su ficha para gestionar sus Representantes legales y Mandatarios (y sus Usuarios), con un aviso de que estás en un cliente de tu red."
           ],
           "callouts": [
@@ -2610,6 +2614,7 @@
           "title": "2. Usuarios",
           "paragraphs": [
             "El módulo Usuarios para el Super Admin es global: eliges el destino de la invitación (compañía, organismo o perfil FLIT interno) y los roles que aplican a ese destino. Al invitar desde la pestaña Usuarios del hub de un organismo, el rol es obligatorio: no hay rol por defecto y, hasta que lo eliges, «Enviar invitación» queda deshabilitado (incluido el primer Administrador OT). Un perfil FLIT no pertenece a una compañía ni a un organismo y admite un solo rol.",
+            "Cada correo corresponde a un solo usuario en toda la plataforma, sin importar la compañía ni las mayúsculas (Juan@empresa.com y juan@empresa.com son el mismo). El correo se guarda siempre en minúsculas. Si ya existe un usuario con ese correo, o ya hay una invitación pendiente para él en cualquier compañía, la invitación no se crea, ves «El usuario ya se encuentra previamente creado» y el campo de correo queda marcado en rojo; corrige el correo para continuar.",
             "«Eliminar usuario» es un borrado lógico: el usuario sale del listado activo y pierde el acceso, pero queda visible en la pestaña Eliminados, donde «Restaurar» lo devuelve a activo con sus roles previos. Cada usuario tiene además su propio historial de auditoría: quién lo invitó, qué roles cambiaron y cuándo.",
             "Las acciones de cada usuario (historial, permisos por módulo, editar, restablecer contraseña, suspender, desactivar y eliminar) están en el botón «Acciones» de su fila; las que quitan acceso van al final. Reenviar o reactivar una invitación sigue siendo el ícono de la fila.",
             "Permisos por módulo: en la fila del usuario abre «Acciones» y elige «Permisos por módulo»; ves cada módulo y cada acción con su origen: «Heredado del rol» (lo que dicta su rol), «Individual» (un permiso que se le dio o quitó solo a él) o «Parcial» (módulo con acciones de ambos orígenes). Puedes habilitar o denegar un módulo completo o una acción, y «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo. Solo aparecen los permisos que la plataforma ya exige. La ficha es una sola lista: primero «Módulos» y después «Tipos de servicio» (si la persona no tiene tipos de servicio, solo ves la lista). Ver y Crear por tipo de servicio: en «Tipos de servicio», «Trámites: Matrículas», «Trámites: Traspasos» y «Trámites: Otros trámites» tienen cada uno un par «Ver» / «Crear». «Crear» solo se puede habilitar si «Ver» está habilitado, y al apagar «Ver» también se apaga «Crear». Cada interruptor muestra si viene «Heredado del rol» o es «Individual»; «Crear» queda deshabilitado mientras el «Ver» de la persona (heredado o individual) esté inactivo, y si «Volver al rol» deja a la persona sin «Ver», su «Crear» individual también se retira. Los permisos que un administrador de la compañía o del organismo no podría otorgar llevan la etiqueta «Solo SA» con un candado: son exclusivos del Super Admin. Al habilitar el permiso de revelar datos personales aparece un aviso de la Ley 1581 de 2012: solo se guarda si marcas «Confirmo» y pulsas «Otorgar»; si cancelas, no cambia nada, y la confirmación queda en la auditoría. Ese permiso no se otorga con «Habilitar módulo»; se hace uno a uno. Tras cada cambio guardado ves un aviso verde que te dice cuándo entra en vigor (la próxima vez que la persona inicie sesión, con el máximo de espera); si algo falla, ves un aviso de error. Si el usuario es Super Admin, o su invitación sigue pendiente, la sección no permite cambios y te explica por qué.",

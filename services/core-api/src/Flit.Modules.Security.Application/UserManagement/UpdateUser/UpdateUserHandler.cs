@@ -43,7 +43,8 @@ public sealed class UpdateUserHandler(IUserManagementRepository repo)
             throw new ArgumentException($"El nombre no puede superar {DisplayNameMaxLength} caracteres.", nameof(cmd));
 
         string? email = null;
-        var trimmedEmail = cmd.Email?.Trim();
+        // HU #13810 — forma canónica (sin espacios, en minúsculas) antes de validar y guardar.
+        var trimmedEmail = string.IsNullOrWhiteSpace(cmd.Email) ? null : EmailNormalizer.Normalize(cmd.Email);
         if (!string.IsNullOrEmpty(trimmedEmail))
         {
             if (trimmedEmail.Length > EmailMaxLength)
