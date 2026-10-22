@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Download, RotateCcw, Save, Trash2, ZoomIn, ZoomOut } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Download, RefreshCcw, RotateCcw, Save, Trash2, ZoomIn, ZoomOut } from "lucide-react";
 import { DataTable, InlineAlert, Modal } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { DetalleComparendo } from "@/components/detalle/DetalleComparendo";
@@ -18,10 +18,10 @@ import { P } from "@/lib/nav";
 import {
   accionesDocumento,
   cambiosCampos,
-  confianza,
   ETIQUETA_CAMPO,
   FUENTE_DUPLICADO,
   hayEnCurso,
+  marcasRevision,
   TIPO_FALLO,
   TIPOS_DOCUMENTO,
   tipoEntrada,
@@ -69,6 +69,11 @@ interface Documento {
   tipoFallo: string | null;
   mensajeError: string | null;
   reintentable: boolean;
+  avisoNumero: string | null;
+  reprocesos: number;
+  maximoReprocesos: number;
+  motivoNoReprocesable: string | null;
+  versionPrompt: number | null;
   comparendoId: string | null;
   procesadoEn: string | null;
   revisadoEn: string | null;
@@ -85,8 +90,6 @@ interface Registro {
   placa: string | null;
   placaYaMonitoreada: boolean;
 }
-
-const TONO_CONFIANZA = { alta: "text-[#1E7B3C]", media: "text-[#B45309]", baja: "text-[#B42318]" } as const;
 
 function Original({ d }: { d: Documento }) {
   const [zoom, setZoom] = useState(1);
@@ -177,11 +180,13 @@ function Formulario({
   onVer: (comparendoId: string) => void;
 }) {
   const toast = useToast();
-  const acciones = accionesDocumento({ estado: d.estado, reintentable: d.reintentable, fuenteDuplicado: d.duplicado?.fuente ?? null });
+  const acciones = accionesDocumento({ estado: d.estado, reintentable: d.reintentable, fuenteDuplicado: d.duplicado?.fuente ?? null, tipoFallo: d.tipoFallo });
+  const marcas = marcasRevision(d);
+  const porRevisar = Object.keys(marcas).length;
   const iniciales = Object.fromEntries(d.campos.map((c) => [c.nombreCampo, valorInicial(c.nombreCampo, c.valorFinal)]));
   const [editados, setEditados] = useState<Record<string, string>>(iniciales);
   const [motivo, setMotivo] = useState("");
-  const [modal, setModal] = useState<"guardar" | "descartar" | null>(null);
+  const [modal, setModal] = useState<"guardar" | "descartar" | "reprocesar" | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const cambios = cambiosCampos(iniciales, editados);
   const sucio = Object.keys(cambios).length > 0;
@@ -232,6 +237,12 @@ function Formulario({
       toast.show("El documento volvió a la cola.", "success");
     });
 
+  const reprocesar = () =>
+    ejecutar(async () => {
+      await apiFetch(`/ocr/documentos/${d.id}/reprocesar`, { method: "POST" });
+      toast.show("El documento volvió a la cola para leerse de nuevo.", "success");
+    });
+
   const dup = d.duplicado;
   // Arriba y al final del formulario, sin barra flotante: una barra pegada abajo con fondo tapaba los campos (B12-6).
   const botones = opera ? (
@@ -240,6 +251,18 @@ function Formulario({
         <button type="button" className={controlCls(false)} disabled={ocupado} onClick={reintentar}>
           <RotateCcw className="h-3.5 w-3.5" aria-hidden />
           Reintentar
+        </button>
+      )}
+      {acciones.reprocesar && (
+        <button
+          type="button"
+          className={controlCls(false)}
+          disabled={ocupado || sucio || !!d.motivoNoReprocesable}
+          title={d.motivoNoReprocesable ?? (sucio ? "Guarda o deshaz los cambios antes de reprocesar" : undefined)}
+          onClick={() => setModal("reprocesar")}
+        >
+          <RefreshCcw className="h-3.5 w-3.5" aria-hidden />
+          Reprocesar
         </button>
       )}
       {acciones.descartar && (
@@ -267,7 +290,16 @@ function Formulario({
       {d.estado === "Fallido" && (
         <InlineAlert tone="error" title={(d.tipoFallo && TIPO_FALLO[d.tipoFallo]) ?? "El documento falló"}>
           {d.mensajeError}
-          {!d.reintentable && " No se reintenta: revisa el archivo y descártalo, o cárgalo de nuevo en otro paquete."}
+          {!d.reintentable &&
+            (acciones.reprocesar && !d.motivoNoReprocesable
+              ? " Puedes reprocesarlo para leerlo de nuevo, o descartarlo."
+              : " No se reintenta: revisa el archivo y descártalo, o cárgalo de nuevo en otro paquete.")}
+        </InlineAlert>
+      )}
+
+      {porRevisar > 0 && ["Completo", "Incompleto", "Duplicado"].includes(d.estado) && (
+        <InlineAlert tone="warning" title={porRevisar === 1 ? "Revisa 1 campo marcado" : `Revisa ${porRevisar} campos marcados`}>
+          Compáralos con el original antes de registrar.
         </InlineAlert>
       )}
 
@@ -311,7 +343,7 @@ function Formulario({
         <div className="flex flex-col gap-3">
           {d.campos.map((c) => {
             const faltante = d.camposFaltantes.includes(c.nombreCampo);
-            const conf = confianza(c.confianza);
+            const marca = marcas[c.nombreCampo];
             return (
               <label key={c.nombreCampo} className={ETIQUETA_CLS}>
                 <span className="flex items-center justify-between gap-2">
@@ -322,16 +354,17 @@ function Formulario({
                   </span>
                   <span className="flex items-center gap-2 font-normal">
                     {c.valorCorregido !== null && <span className="opacity-60">corregido</span>}
-                    {conf ? (
-                      <span className={TONO_CONFIANZA[conf.tono]} title="Confianza del modelo en la lectura">
-                        {conf.texto}
+                    {marca && !faltante ? (
+                      <span className="inline-flex items-center gap-1 font-semibold text-[#B45309]">
+                        <AlertTriangle className="h-3 w-3" aria-hidden />
+                        Revisar
                       </span>
-                    ) : c.esNull ? (
+                    ) : c.esNull && !faltante ? (
                       <span className="opacity-50">no leído</span>
                     ) : null}
                   </span>
                 </span>
-                <div className={faltante ? "rounded-xl ring-1 ring-[#B42318]" : undefined}>
+                <div className={faltante ? "rounded-xl ring-1 ring-[#B42318]" : marca ? "rounded-xl ring-1 ring-[#B45309]" : undefined}>
                   <CampoEntrada
                     campo={c.nombreCampo}
                     valor={editados[c.nombreCampo] ?? ""}
@@ -339,6 +372,7 @@ function Formulario({
                     onCambio={(v) => setEditados((e) => ({ ...e, [c.nombreCampo]: v }))}
                   />
                 </div>
+                {marca && !faltante && c.nombreCampo !== "fecha_notificacion" && <span className="text-[11px] font-normal text-[#B45309]">{marca}</span>}
                 {c.nombreCampo === "fecha_notificacion" && (
                   <span className="text-[11px] font-normal opacity-70">
                     En las fotomultas casi nunca viene impresa: se toma del sello de recibido o radicado de la empresa. Confírmala, porque de ella cuentan los plazos.
@@ -356,11 +390,13 @@ function Formulario({
         open={modal !== null}
         onClose={() => setModal(null)}
         busy={ocupado}
-        title={modal === "descartar" ? "Descartar el documento" : "Guardar la corrección"}
+        title={modal === "descartar" ? "Descartar el documento" : modal === "reprocesar" ? "Leer de nuevo el documento" : "Guardar la corrección"}
         description={
           modal === "descartar"
             ? "El documento queda descartado con su motivo; no se registra ni se borra."
-            : `Cambian ${Object.keys(cambios).length} campo(s). Cada cambio queda en el historial con tu usuario.`
+            : modal === "reprocesar"
+              ? `Se lee otra vez con la versión publicada del prompt (reproceso ${d.reprocesos + 1} de ${d.maximoReprocesos}). Lo que corregiste a mano se conserva; lo demás toma la nueva lectura.`
+              : `Cambian ${Object.keys(cambios).length} campo(s). Cada cambio queda en el historial con tu usuario.`
         }
         footer={
           <div className="flex justify-end gap-2">
@@ -371,6 +407,10 @@ function Formulario({
               <button type="button" className={BOTON_PELIGRO_CLS} disabled={ocupado || !motivo.trim()} onClick={descartar}>
                 Descartar
               </button>
+            ) : modal === "reprocesar" ? (
+              <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado} onClick={reprocesar}>
+                Reprocesar
+              </button>
             ) : (
               <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado} onClick={guardar}>
                 Guardar
@@ -379,10 +419,14 @@ function Formulario({
           </div>
         }
       >
-        <label className={ETIQUETA_CLS}>
-          {modal === "descartar" ? "Motivo (obligatorio)" : "Motivo (opcional)"}
-          <input className={INPUT_CLS} value={motivo} maxLength={500} onChange={(e) => setMotivo(e.target.value)} />
-        </label>
+        {modal === "reprocesar" ? (
+          <p className="text-sm">Cada lectura tiene costo en el proveedor de OCR.</p>
+        ) : (
+          <label className={ETIQUETA_CLS}>
+            {modal === "descartar" ? "Motivo (obligatorio)" : "Motivo (opcional)"}
+            <input className={INPUT_CLS} value={motivo} maxLength={500} onChange={(e) => setMotivo(e.target.value)} />
+          </label>
+        )}
       </Modal>
     </div>
   );
@@ -416,10 +460,14 @@ function Historial({ d }: { d: Documento }) {
           getRowKey={(i) => String(i.numero) + i.intentadoEn}
           emptyMessage="Todavía no se ha procesado."
           columns={[
-            { key: "n", header: "#", align: "right", render: (i) => i.numero },
+            { key: "n", header: "#", align: "right", render: (i) => (i.resultado === "REPROCESO" ? "—" : i.numero) },
             { key: "fecha", header: "Fecha", render: (i) => formatoFechaHora(i.intentadoEn) },
-            { key: "resultado", header: "Resultado", render: (i) => (i.resultado === "EXITO" ? "Éxito" : "Error") },
-            { key: "error", header: "Error", render: (i) => (i.tipoError ? `${TIPO_FALLO[i.tipoError] ?? i.tipoError}${i.mensajeError ? `: ${i.mensajeError}` : ""}` : "—") },
+            { key: "resultado", header: "Resultado", render: (i) => (i.resultado === "EXITO" ? "Éxito" : i.resultado === "REPROCESO" ? "Reproceso pedido" : "Error") },
+            {
+              key: "error",
+              header: "Detalle",
+              render: (i) => (i.tipoError ? `${TIPO_FALLO[i.tipoError] ?? i.tipoError}${i.mensajeError ? `: ${i.mensajeError}` : ""}` : (i.mensajeError ?? "—")),
+            },
             { key: "proximo", header: "Siguiente intento", render: (i) => formatoFechaHora(i.proximoReintentoEn) },
           ]}
         />
@@ -451,6 +499,8 @@ function Revision({ id }: { id: string }) {
         <EstadoDocumento estado={d.estado} />
         <span className="text-xs opacity-70">
           {d.procesadoEn ? `Procesado ${formatoFechaHora(d.procesadoEn)}` : "En cola"}
+          {d.versionPrompt !== null && ` · Leído con la versión ${d.versionPrompt} del prompt`}
+          {d.reprocesos > 0 && ` · Reprocesado ${d.reprocesos} de ${d.maximoReprocesos}`}
           {d.proveedorModelo && ` · ${d.proveedorModelo}`}
           {d.motivoDescarte && ` · Descartado: ${d.motivoDescarte}`}
         </span>

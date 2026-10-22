@@ -1,6 +1,7 @@
 // Lógica pura de la carga por OCR (HU #13471 sobre la API de las HUs #13469/#13470; especificación GDC §6.18, §7.6).
 // La API vuelve a validar todo; aquí solo se adelanta el rechazo y se arman etiquetas y cuerpos.
 import type { Etiqueta } from "@/lib/etiquetas";
+import { bogotaClock, type XlsxSheet } from "@/lib/xlsx";
 
 export const MAXIMO_DOCUMENTOS = 200;
 export const MAXIMO_BYTES = 20 * 1024 * 1024;
@@ -196,13 +197,6 @@ export function cambiosCampos(iniciales: Record<string, string>, editados: Recor
   return cambios;
 }
 
-/** Confianza 0–1 → «93 %» y un tono: baja (< 0,6), media (< 0,85) o alta. */
-export function confianza(c: number | null | undefined): { texto: string; tono: "alta" | "media" | "baja" } | null {
-  if (c === null || c === undefined) return null;
-  const tono = c < 0.6 ? "baja" : c < 0.85 ? "media" : "alta";
-  return { texto: `${Math.round(c * 100)} %`, tono };
-}
-
 /** El original se muestra como imagen salvo los PDF y los TIFF (los navegadores no pintan TIFF en <img>). */
 export function vistaOriginal(tipoArchivo: string, nombre: string): "imagen" | "pdf" | "descarga" {
   if (tipoArchivo === "PDF") return "pdf";
@@ -210,13 +204,102 @@ export function vistaOriginal(tipoArchivo: string, nombre: string): "imagen" | "
 }
 
 /** Acciones que admite un documento según su estado (la API manda; esto solo decide qué botones se muestran). */
-export function accionesDocumento(d: { estado: string; reintentable: boolean; fuenteDuplicado: string | null }) {
+export function accionesDocumento(d: { estado: string; reintentable: boolean; fuenteDuplicado: string | null; tipoFallo?: string | null }) {
   return {
     editar: ["Completo", "Incompleto", "Duplicado"].includes(d.estado) && d.fuenteDuplicado !== "ARCHIVO",
     registrar: d.estado === "Completo",
     descartar: ["Completo", "Incompleto", "Duplicado", "Fallido"].includes(d.estado),
     reintentar: d.estado === "Fallido" && d.reintentable,
+    // HU #13828: un incompleto o un ilegible se vuelve a leer; el tope de reprocesos lo dice la API (motivoNoReprocesable).
+    reprocesar: d.estado === "Incompleto" || (d.estado === "Fallido" && d.tipoFallo === "Ilegible"),
   };
+}
+
+/** Por debajo de esto el modelo dijo dudar: es la única lectura útil de su confianza, que casi siempre sale en 95 % (B12-5). */
+export const CONFIANZA_DUDOSA = 0.8;
+
+/**
+ * Qué campos hay que mirar y por qué (HU #13830, hallazgo B12-5). Reglas comprobables en vez del porcentaje del modelo:
+ * obligatorio que falta o no sirve, número con 19 o 21 dígitos (HU #13829), la fecha de notificación (de ella cuentan
+ * los plazos) y los pocos campos en los que el modelo dijo dudar.
+ */
+export function marcasRevision(d: {
+  campos: { nombreCampo: string; confianza: number | null; valorFinal: string | null; valorCorregido: string | null }[];
+  camposFaltantes: string[];
+  avisoNumero?: string | null;
+}): Record<string, string> {
+  const marcas: Record<string, string> = {};
+  for (const c of d.campos) {
+    // El aviso del número vale también si lo escribió el operador: se calcula sobre el valor que quedó.
+    if (d.camposFaltantes.includes(c.nombreCampo)) marcas[c.nombreCampo] = "Falta o no es válido.";
+    else if (c.nombreCampo === "numero_comparendo" && d.avisoNumero) marcas[c.nombreCampo] = d.avisoNumero;
+    else if (c.valorCorregido !== null) continue;
+    else if (c.nombreCampo === "fecha_notificacion" && c.valorFinal) marcas[c.nombreCampo] = "Confírmala: de ella cuentan los plazos.";
+    else if (c.valorFinal && c.confianza !== null && c.confianza < CONFIANZA_DUDOSA) marcas[c.nombreCampo] = "El modelo dijo no estar seguro de esta lectura.";
+  }
+  return marcas;
+}
+
+/** Un documento tal como lo lista el detalle del paquete. */
+export interface DocumentoPaquete {
+  nombreArchivo: string;
+  estado: string;
+  numeroComparendoExtraido: string | null;
+  camposFaltantes: string[];
+  tipoFallo: string | null;
+  mensajeError: string | null;
+  fuenteDuplicado: string | null;
+  motivoDescarte?: string | null;
+  comparendoId: string | null;
+  avisoNumero?: string | null;
+  reprocesos?: number;
+}
+
+/** Fallo, duplicado, descarte o faltantes: lo que explica el estado de un documento, en una frase. */
+export function motivoDocumento(d: DocumentoPaquete): string {
+  if (d.estado === "Fallido") return motivoFallo(d.tipoFallo, d.mensajeError);
+  if (d.estado === "Duplicado") return (d.fuenteDuplicado && FUENTE_DUPLICADO[d.fuenteDuplicado]) ?? "Ya existe";
+  if (d.estado === "Descartado") return d.motivoDescarte ?? "Descartado";
+  return d.camposFaltantes.map((c) => ETIQUETA_CAMPO[c] ?? c).join(", ");
+}
+
+/** Resumen del paquete en Excel (HU #13831): un renglón por documento y los totales en la nota. */
+export function hojaPaquete(p: { nombre: string; creadoEn: string }, docs: DocumentoPaquete[]): XlsxSheet {
+  const totales = ESTADOS_DOCUMENTO.map((e) => [ESTADO_DOCUMENTO[e].texto, docs.filter((d) => d.estado === e).length] as const)
+    .filter(([, n]) => n > 0)
+    .map(([t, n]) => `${t}: ${n}`);
+  return {
+    name: "Paquete OCR",
+    columns: [
+      { header: "Archivo", width: 34 },
+      { header: "Estado", width: 16 },
+      { header: "Número leído", width: 26 },
+      { header: "Verificar número", width: 40 },
+      { header: "Campos faltantes / motivo", width: 60 },
+      { header: "Reprocesos", width: 12 },
+      { header: "Registrado", width: 12 },
+    ],
+    rows: docs.map((d) => [
+      d.nombreArchivo,
+      ESTADO_DOCUMENTO[d.estado]?.texto ?? d.estado,
+      d.numeroComparendoExtraido,
+      d.avisoNumero ?? null,
+      motivoDocumento(d) || null,
+      d.reprocesos ?? 0,
+      d.comparendoId ? "Sí" : "No",
+    ]),
+    notes: [
+      `Paquete «${p.nombre}», creado ${fechaHora(p.creadoEn)} (hora de Colombia).`,
+      `${docs.length} documentos. ${totales.join(", ")}.`,
+    ],
+  };
+}
+
+function fechaHora(iso: string): string {
+  const d = bogotaClock(iso);
+  if (!d) return iso;
+  const dos = (n: number | undefined) => String(n ?? 0).padStart(2, "0");
+  return `${dos(d.day)}/${dos(d.month)}/${d.year} ${dos(d.hour)}:${dos(d.minute)}`;
 }
 
 /** Última evaluación de una versión del prompt contra la publicada (solo SuperAdmin). */
