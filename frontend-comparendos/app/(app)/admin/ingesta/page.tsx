@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Play } from "lucide-react";
 import { DataTable, InlineAlert, Modal, StatusBadge, enabledTone, usePaginacion } from "@flit/ui";
 import { Encabezado, Requiere } from "@/components/Pantalla";
@@ -220,6 +220,15 @@ export default function Ingesta() {
   const ciclos = useCarga(`ciclos:${filtroCanal}:${filtroResultado}:${pg.page}:${pg.pageSize}`, (signal) =>
     apiFetch<Pagina<Ciclo>>("/admin/ingesta/ciclos", { signal, query: { canal: filtroCanal, resultado: filtroResultado, pagina: pg.page, tamano: pg.pageSize } }),
   );
+  // HU #13786 (B14-4): mientras haya un ciclo en curso, la tabla se actualiza sola cada pocos segundos, sin parpadear.
+  const hayEnCurso = (ciclos.datos?.items ?? []).some((c) => c.resultado === "EnCurso");
+  const { recargar: recargarCiclos } = ciclos;
+  useEffect(() => {
+    if (!hayEnCurso) return;
+    const t = setTimeout(recargarCiclos, 4000);
+    return () => clearTimeout(t);
+  }, [hayEnCurso, ciclos.datos, recargarCiclos]);
+  const estadoCiclos = ciclos.estado === "loading" && ciclos.datos ? "ready" : ciclos.estado;
 
   return (
     <Requiere superAdmin>
@@ -289,7 +298,7 @@ export default function Ingesta() {
           ariaLabel="Ciclos de ingesta"
           rows={ciclos.datos?.items ?? []}
           getRowKey={(c) => c.id}
-          status={ciclos.estado}
+          status={estadoCiclos}
           errorMessage={ciclos.error ?? undefined}
           onRetry={ciclos.recargar}
           onRowClick={(c) => setCiclo(c.id)}

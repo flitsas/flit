@@ -386,7 +386,7 @@ public sealed class Reconciliador(ComparendosDb db, Timeline timeline, MapeadorO
         c.DireccionInfraccion = Texto(i.DireccionInfraccion, c.DireccionInfraccion);
         c.FechaImposicion = i.FechaImposicion ?? c.FechaImposicion;
         c.HoraImposicion = i.HoraImposicion ?? c.HoraImposicion;
-        c.FechaNotificacion = i.FechaNotificacion ?? c.FechaNotificacion;
+        c.FechaNotificacion = (i.FechaNotificacion == Plazos.FechaVaciaDeLasFuentes ? null : i.FechaNotificacion) ?? c.FechaNotificacion;
         c.EsFotomulta = i.EsFotomulta ?? c.EsFotomulta;
         c.SecretariaTexto = Texto(i.Secretaria, c.SecretariaTexto);
         c.TipoVehiculo = Texto(i.TipoVehiculo, c.TipoVehiculo);

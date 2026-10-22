@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Download, Mail, Send, SlidersHorizontal } from "lucide-react";
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, Download, Mail, Send, SlidersHorizontal } from "lucide-react";
 import { ActionsMenu, DataTable, InlineAlert, usePaginacion, type DataTableColumn } from "@flit/ui";
 import { BarraFiltrosRapidos } from "@/components/bandeja/BarraFiltrosRapidos";
 import { COLUMNAS_BANDEJA } from "@/components/bandeja/columnas";
@@ -19,6 +19,7 @@ import { SelectorEmpresa } from "@/components/SelectorEmpresa";
 import { useToast } from "@/components/Toast";
 import { controlCls, INPUT_CLS } from "@/components/ui/estilos";
 import { apiDownload, apiFetch } from "@/lib/api";
+import { textoCambioOrden, textoOrden } from "@/lib/orden";
 import { COLUMNA_FIJA, guardadas, guardar, ocultasDesde } from "@/lib/columnas";
 import { MAXIMO_LOTE } from "@/lib/dp";
 import { aQuery, contarFiltros, FILTROS_VACIOS, type FiltrosBandeja } from "@/lib/filtros";
@@ -252,8 +253,15 @@ function ContenidoBandeja() {
               </select>
             </label>
             {orden && (
-              <button type="button" className={controlCls(false)} onClick={() => setDescendente((d) => !d)}>
-                {descendente ? "Mayor a menor" : "Menor a mayor"}
+              <button
+                type="button"
+                className={controlCls(false)}
+                onClick={() => setDescendente((d) => !d)}
+                title={textoCambioOrden(orden, descendente)}
+                aria-label={`${textoOrden(orden, descendente)}. ${textoCambioOrden(orden, descendente)}`}
+              >
+                {descendente ? <ArrowDownWideNarrow className="h-3.5 w-3.5" aria-hidden /> : <ArrowUpNarrowWide className="h-3.5 w-3.5" aria-hidden />}
+                {textoOrden(orden, descendente)}
               </button>
             )}
           </div>
