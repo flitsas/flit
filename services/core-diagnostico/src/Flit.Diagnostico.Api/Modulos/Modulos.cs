@@ -33,6 +33,9 @@ public static class Modulos
         ArgumentNullException.ThrowIfNull(configuration);
         var seleccion = SeleccionAdaptadores.Desde(configuration);
         services.AddSingleton(seleccion);
+        // HU #13792: RUNT persona (persona natural) y RUES (persona con NIT) de las celdas RUNT_PROPIETARIO y RUNT_LOCATARIO.
+        services.AddAdaptador<IFuenteRuntPersona, FuenteRuntPersonaReal, FuenteRuntPersonaSimulada, FuenteRuntPersonaNoConectada>(seleccion);
+        services.AddAdaptador<IFuenteRues, FuenteRuesReal, FuenteRuesSimulada, FuenteRuesNoConectada>(seleccion);
         if (seleccion.ModoDe(Domain.Consultas.Fuente.Runt) == ModoAdaptador.Simulado)
             services.TryAddSingleton<IFuenteRunt, FuenteRuntIntempoSimulada>();
         else
@@ -46,7 +49,8 @@ public static class Modulos
 
     /// <summary>
     /// Motor de consultas (HU #13727, ADR a): el encolador real (TryAdd, para que las pruebas pongan su doble antes), la cola,
-    /// el ejecutor de la celda RUNT (HU #13730; un ejecutor de la misma fuente registrado antes, el doble de una prueba, lo reemplaza),
+    /// el ejecutor de la celda RUNT (HU #13730; un ejecutor de la misma fuente registrado antes, el doble de una prueba, lo reemplaza)
+    /// y los de RUNT_PROPIETARIO y RUNT_LOCATARIO (HU #13792),
     /// el registro de adaptadores y el catálogo de fuentes disponibles que de él se deriva (HU #13733), el procesador
     /// y su configuración <see cref="Trabajos.OpcionesProcesador"/> validada al arrancar, y la de reintentos
     /// <see cref="Consultas.OpcionesConsultas"/> (HU #13737), también validada al arrancar. El trabajador en segundo
@@ -58,6 +62,11 @@ public static class Modulos
         services.TryAddScoped<Domain.Consultas.IEncoladorConsultas, Consultas.EncoladorConsultas>();
         services.AddScoped<Trabajos.ColaConsultas>();
         services.AddScoped<Consultas.IEjecutorCelda, Consultas.EjecutorCeldaRunt>();
+        // HU #13792: las celdas RUNT de persona (una instancia por fuente; los puertos los registra AddFuentesConsultas).
+        services.AddScoped<Consultas.IEjecutorCelda>(sp =>
+            ActivatorUtilities.CreateInstance<Consultas.EjecutorCeldaRuntPersona>(sp, Domain.Consultas.Fuente.RuntPropietario));
+        services.AddScoped<Consultas.IEjecutorCelda>(sp =>
+            ActivatorUtilities.CreateInstance<Consultas.EjecutorCeldaRuntPersona>(sp, Domain.Consultas.Fuente.RuntLocatario));
         // HU #13733: las fuentes con ejecutor son las únicas que se pueden habilitar o pedir (TryAdd: las pruebas ponen su doble).
         services.TryAddSingleton<Consultas.IRegistroAdaptadores, Consultas.RegistroAdaptadores>();
         services.AddSingleton<Consultas.FuentesDisponibles>();

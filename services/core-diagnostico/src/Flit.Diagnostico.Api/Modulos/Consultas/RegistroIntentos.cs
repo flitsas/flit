@@ -11,7 +11,8 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// <c>disparador=AUTO</c> y <c>usuario_id</c> nulo, o <c>disparador=REPROCESO</c> con el usuario si la ejecución es un reproceso
 /// (<see cref="CeldaTomada.ReprocesoUsuarioId"/>, HU #13746, R-1). El procesador lo inserta en la MISMA transacción que cierra la celda
 /// (<see cref="EscritorCeldas"/>); si el lease se perdió y la celda no se cierra, lo guarda solo (<see cref="GuardarSoloAsync"/>):
-/// la llamada se hizo y queda auditada. Una ejecución que devuelve N/A no llamó a ninguna fuente y no deja intento. Escribe con
+/// la llamada se hizo y queda auditada. Una celda de persona (HU #13792) deja un intento por persona consultada, con
+/// <c>persona_id</c> y sin identificador (<see cref="CrearTodos"/>). Una ejecución que devuelve N/A no llamó a ninguna fuente y no deja intento. Escribe con
 /// el contexto de la empresa de la celda (<c>TenantFilter.ValidarEscritura</c>). La reutilización del mismo día (HU #13739, D-10)
 /// también deja su intento, con <c>desde_cache=true</c> y sin servicio ni transacción: no se llamó a la fuente ni hubo consumo.
 /// </summary>
@@ -60,13 +61,61 @@ internal static class RegistroIntentos
         };
     }
 
+    /// <summary>
+    /// Los intentos de la ejecución (HU #13792): en una celda de persona, uno por cada persona consultada
+    /// (<see cref="ResultadoCelda.IntentosPorPersona"/>) con su <c>persona_id</c>, su inicio y fin, y su propio estado; en las
+    /// demás, el intento único de <see cref="Crear"/>. Vacío si el resultado es N/A.
+    /// </summary>
+    public static IReadOnlyList<IntentoConsulta> CrearTodos(CeldaTomada celda, DateTimeOffset inicio, DateTimeOffset fin, ResultadoCelda resultado)
+    {
+        ArgumentNullException.ThrowIfNull(celda);
+        ArgumentNullException.ThrowIfNull(resultado);
+        if (resultado.Estado is not (EstadoCelda.Completado or EstadoCelda.Error) || resultado.IntentosPorPersona is not { Count: > 0 } porPersona)
+            return Crear(celda, inicio, fin, resultado) is { } unico ? [unico] : [];
+
+        var desdeCache = resultado.ReutilizadaDeId is not null;
+        return [.. porPersona.Select(p =>
+        {
+            var exito = p.TipoError is null;
+            return new IntentoConsulta
+            {
+                TenantId = celda.TenantId,
+                DiagnosticoId = celda.DiagnosticoId,
+                VehiculoId = celda.VehiculoId,
+                ConsultaId = celda.Id,
+                Fuente = celda.Fuente,
+                IdentificadorConsultado = null,
+                Servicio = p.Datos.Servicio,
+                Disparador = celda.ReprocesoUsuarioId is null ? DisparadorIntento.Auto : DisparadorIntento.Reproceso,
+                Inicio = p.Inicio,
+                Fin = p.Fin < p.Inicio ? p.Inicio : p.Fin,
+                Estado = exito ? ResultadoIntento.Success : ResultadoIntento.Error,
+                TipoError = p.TipoError,
+                MensajeError = exito ? null : Recortar(p.Datos.MensajeError, LargoMensaje),
+                TransaccionProveedorId = Recortar(p.Datos.TransaccionProveedorId, LargoTransaccion),
+                DesdeCache = exito && desdeCache,
+                UsuarioId = celda.ReprocesoUsuarioId,
+                PersonaId = p.PersonaId,
+            };
+        })];
+    }
+
     /// <summary>Guarda el intento solo, cuando la celda no se pudo cerrar (lease perdido).</summary>
-    public static async Task GuardarSoloAsync(DiagnosticoDb db, IntentoConsulta intento, CancellationToken ct)
+    public static Task GuardarSoloAsync(DiagnosticoDb db, IntentoConsulta intento, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(intento);
+        return GuardarSoloAsync(db, [intento], ct);
+    }
+
+    /// <summary>Guarda los intentos solos, cuando la celda no se pudo cerrar (lease perdido); no hace nada si no hay ninguno.</summary>
+    public static async Task GuardarSoloAsync(DiagnosticoDb db, IReadOnlyCollection<IntentoConsulta> intentos, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
-        ArgumentNullException.ThrowIfNull(intento);
+        ArgumentNullException.ThrowIfNull(intentos);
+        if (intentos.Count == 0)
+            return;
         db.ChangeTracker.Clear();
-        db.Add(intento);
+        db.AddRange(intentos);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 

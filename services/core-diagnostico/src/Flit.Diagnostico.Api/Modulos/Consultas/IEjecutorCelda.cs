@@ -64,7 +64,27 @@ public sealed record ResultadoCelda(
     /// escritor en <c>consultas.reutilizada_de_id</c> y el intento queda con <c>desde_cache=true</c>. Null si hubo llamada.
     /// </summary>
     public Guid? ReutilizadaDeId { get; init; }
+
+    /// <summary>
+    /// Celdas de persona (HU #13792, <see cref="EjecutorPorPersonas"/>): un intento por persona consultada en esta ejecución, con
+    /// su <c>persona_id</c>, en lugar del intento único de la celda. Null en las fuentes por vehículo.
+    /// </summary>
+    public IReadOnlyList<IntentoPersona>? IntentosPorPersona { get; init; }
+
+    /// <summary>
+    /// Código con que la celda queda en ERROR si el procesador NO la reintenta (HU #13792): en una celda de persona,
+    /// <see cref="TipoError"/> lleva el transitorio de una persona (para que <c>PoliticaReintentos</c> decida el backoff) y,
+    /// agotados los reintentos, la celda queda con este código (<c>PERSONAS_CON_ERROR</c> o la causa común). Null: queda
+    /// <see cref="TipoError"/>.
+    /// </summary>
+    public string? TipoErrorSinReintento { get; init; }
 }
+
+/// <summary>
+/// Intento de UNA persona en una celda de persona (HU #13792): la persona consultada, cuándo, el error (null si respondió) y los
+/// datos de la llamada (sin identificador: nunca un documento).
+/// </summary>
+public sealed record IntentoPersona(Guid PersonaId, DateTimeOffset Inicio, DateTimeOffset Fin, string? TipoError, DatosIntento Datos);
 
 /// <summary>Datos de la llamada a la fuente para <c>intentos_consulta</c> (HU #13737); nunca un documento en claro.</summary>
 /// <param name="Identificador">Placa o VIN consultado; null si la consulta fue por persona.</param>

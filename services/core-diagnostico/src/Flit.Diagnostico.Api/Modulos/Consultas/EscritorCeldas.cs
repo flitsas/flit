@@ -22,10 +22,11 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 internal sealed class EscritorCeldas(DiagnosticoDb db, TimeProvider reloj)
 {
     /// <summary>
-    /// Cierra la celda (o la devuelve a la cola si <see cref="ResultadoCelda.ReintentarDesde"/> viene, HU #13737) e inserta el
-    /// <paramref name="intento"/> en la misma transacción; false si el lease ya no es de quien la tomó (entonces no guarda nada).
+    /// Cierra la celda (o la devuelve a la cola si <see cref="ResultadoCelda.ReintentarDesde"/> viene, HU #13737) e inserta los
+    /// <paramref name="intentos"/> (uno, o uno por persona en las celdas de persona, HU #13792) en la misma transacción; false si
+    /// el lease ya no es de quien la tomó (entonces no guarda nada).
     /// </summary>
-    public async Task<bool> CerrarAsync(CeldaTomada tomada, ResultadoCelda resultado, CancellationToken ct, IntentoConsulta? intento = null)
+    public async Task<bool> CerrarAsync(CeldaTomada tomada, ResultadoCelda resultado, CancellationToken ct, IReadOnlyCollection<IntentoConsulta>? intentos = null)
     {
         ArgumentNullException.ThrowIfNull(tomada);
         ArgumentNullException.ThrowIfNull(resultado);
@@ -65,8 +66,8 @@ internal sealed class EscritorCeldas(DiagnosticoDb db, TimeProvider reloj)
                 celda.IntentosAuto++;
             }
 
-            if (intento is not null)
-                db.Add(intento);
+            if (intentos is { Count: > 0 })
+                db.AddRange(intentos);
             if (resultado.Efectos is { } efectos)
                 await efectos(db, version, ct).ConfigureAwait(false);
             try

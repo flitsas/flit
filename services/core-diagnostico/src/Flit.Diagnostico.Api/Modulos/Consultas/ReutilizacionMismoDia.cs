@@ -22,7 +22,11 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// usan la placa definitiva que dejó el RUNT (sin ella, no hay reutilización). Solo se copia de una celda original (con
 /// <c>reutilizada_de_id</c> nulo), así que la referencia siempre apunta al dato que sí se consultó. Las fuentes del locatario
 /// solo se reutilizan si el locatario de ambos vehículos es el del proveedor: un locatario declarado puede ser distinto aunque
-/// la placa sea la misma. Lo vencido no se borra: queda como historial. Usa índices existentes (<c>ix_consultas_reutilizacion</c>
+/// la placa sea la misma. Las celdas de persona (HU #13792, decisión 3 del gate) solo se reutilizan si el RUNT del vehículo
+/// vino del MISMO origen que el del vehículo de la celda original (mismas personas): la clave es la celda RUNT original
+/// (<c>reutilizada_de_id</c> o, si se consultó, ella misma); un RUNT consultado de nuevo nunca reutiliza el dato de persona de
+/// otro lote. Al reutilizar, el payload apunta a las personas del vehículo nuevo (mismo rol y orden) y queda un intento
+/// <c>desde_cache=true</c> por persona. Lo vencido no se borra: queda como historial. Usa índices existentes (<c>ix_consultas_reutilizacion</c>
 /// e <c>ix_vehiculos_tenant_placa</c>).
 /// </para>
 /// </summary>
@@ -53,23 +57,42 @@ internal static class ReutilizacionMismoDia
         if (porLocatario && vehiculo.LocatarioDocOrigen != OrigenDocumento.Proveedor)
             return null;
 
+        // HU #13792: una celda de persona solo se reutiliza con el RUNT del mismo origen (mismas personas).
+        var porPersona = EjecutorPorPersonas.EsPorPersona(celda.Fuente);
+        Guid? origenRunt = null;
+        if (porPersona && (origenRunt = await OrigenRuntAsync(db, empresa, celda.VehiculoId, ct).ConfigureAwait(false)) is null)
+            return null;
+
         // Npgsql solo escribe timestamptz en UTC.
         var desde = VigenciaDelDia.InicioDelDia(ahora).ToUniversalTime();
         var hasta = VigenciaDelDia.FinDelDia(ahora).ToUniversalTime();
-        var origen = await (
-                from c in db.Set<CeldaConsulta>().AsNoTracking()
-                join v in db.Set<VehiculoDiagnostico>().AsNoTracking() on c.VehiculoId equals v.Id
-                where c.TenantId == empresa && v.TenantId == empresa
-                    && c.Fuente == celda.Fuente && c.Estado == EstadoCelda.Completado && c.Origen == OrigenCelda.Api
-                    && c.ReutilizadaDeId == null && c.Id != celda.Id && c.Payload != null
-                    && c.DatoObtenidoEn >= desde && c.DatoObtenidoEn < hasta
-                    && v.Placa == placa
-                    && (!porLocatario || v.LocatarioDocOrigen == OrigenDocumento.Proveedor)
-                orderby c.DatoObtenidoEn descending, c.Id descending
-                select new { Celda = c, Vehiculo = v })
+        var candidatas =
+            from c in db.Set<CeldaConsulta>().AsNoTracking()
+            join v in db.Set<VehiculoDiagnostico>().AsNoTracking() on c.VehiculoId equals v.Id
+            where c.TenantId == empresa && v.TenantId == empresa
+                && c.Fuente == celda.Fuente && c.Estado == EstadoCelda.Completado && c.Origen == OrigenCelda.Api
+                && c.ReutilizadaDeId == null && c.Id != celda.Id && c.Payload != null
+                && c.DatoObtenidoEn >= desde && c.DatoObtenidoEn < hasta
+                && v.Placa == placa
+                && (!porLocatario || v.LocatarioDocOrigen == OrigenDocumento.Proveedor)
+            select new { Celda = c, Vehiculo = v };
+        if (porPersona)
+        {
+            candidatas =
+                from x in candidatas
+                join r in db.Set<CeldaConsulta>().AsNoTracking() on x.Vehiculo.Id equals r.VehiculoId
+                where r.TenantId == empresa && r.Fuente == Fuente.Runt && r.Estado == EstadoCelda.Completado
+                    && (r.ReutilizadaDeId ?? r.Id) == origenRunt
+                select x;
+        }
+
+        var origen = await candidatas
+            .OrderByDescending(x => x.Celda.DatoObtenidoEn).ThenByDescending(x => x.Celda.Id)
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
         if (origen is null)
             return null;
+        if (porPersona)
+            return await PorPersonaAsync(db, empresa, celda.VehiculoId, origen.Celda, origen.Vehiculo.Id, ahora, ct).ConfigureAwait(false);
 
         var original = origen.Celda;
         var deVehiculo = origen.Vehiculo;
@@ -103,8 +126,43 @@ internal static class ReutilizacionMismoDia
         return string.IsNullOrWhiteSpace(vehiculo.Placa) ? null : vehiculo.Placa;
     }
 
-    private static bool EsPorPersona(Fuente fuente) =>
-        fuente is Fuente.RuntPropietario or Fuente.RuntLocatario or Fuente.SimitPropietario or Fuente.SimitLocatario;
+    private static bool EsPorPersona(Fuente fuente) => EjecutorPorPersonas.EsPorPersona(fuente);
+
+    /// <summary>
+    /// La celda RUNT original de la que salieron las personas del vehículo: la que se reutilizó o, si se consultó, la propia;
+    /// null si el RUNT del vehículo no está COMPLETADO.
+    /// </summary>
+    private static Task<Guid?> OrigenRuntAsync(Persistence.DiagnosticoDb db, Guid empresa, Guid vehiculoId, CancellationToken ct) =>
+        db.Set<CeldaConsulta>().AsNoTracking()
+            .Where(c => c.TenantId == empresa && c.VehiculoId == vehiculoId && c.Fuente == Fuente.Runt && c.Estado == EstadoCelda.Completado)
+            .Select(c => (Guid?)(c.ReutilizadaDeId ?? c.Id))
+            .FirstOrDefaultAsync(ct);
+
+    /// <summary>
+    /// Copia de una celda de persona (HU #13792): el payload con las personas del vehículo nuevo (mismo rol y orden) y un intento
+    /// <c>desde_cache=true</c> por persona; null si las personas no casan una a una (entonces se consulta).
+    /// </summary>
+    private static async Task<ResultadoCelda?> PorPersonaAsync(
+        Persistence.DiagnosticoDb db, Guid empresa, Guid vehiculoId, CeldaConsulta original, Guid vehiculoOriginal, DateTimeOffset ahora, CancellationToken ct)
+    {
+        var rol = EjecutorPorPersonas.RolDe(original.Fuente);
+        var nuevas = await DocumentosVehiculo.PersonasDelVehiculoAsync(db, empresa, vehiculoId, ct, rol).ConfigureAwait(false);
+        var previas = await DocumentosVehiculo.PersonasDelVehiculoAsync(db, empresa, vehiculoOriginal, ct, rol).ConfigureAwait(false);
+        var porOrden = nuevas.ToDictionary(p => p.Orden, p => p.Id);
+        if (nuevas.Count == 0 || nuevas.Count != previas.Count || previas.Any(p => !porOrden.ContainsKey(p.Orden)))
+            return null;
+        var mapa = previas.ToDictionary(p => p.Id, p => porOrden[p.Orden]);
+        if (EjecutorPorPersonas.Traducir(original.Payload!, mapa) is not { } payload)
+            return null;
+
+        var sinLlamada = new DatosIntento(null, null, null, null);
+        return new ResultadoCelda(EstadoCelda.Completado, payload, null, OrigenCelda.Api, original.DatoObtenidoEn, null)
+        {
+            ReutilizadaDeId = original.Id,
+            Intento = sinLlamada,
+            IntentosPorPersona = [.. nuevas.Select(p => new IntentoPersona(p.Id, ahora, ahora, null, sinLlamada))],
+        };
+    }
 
     /// <summary>
     /// Los datos que dejó el RUNT en el vehículo original, en el vehículo de la celda reutilizada: placa, VIN, servicio,

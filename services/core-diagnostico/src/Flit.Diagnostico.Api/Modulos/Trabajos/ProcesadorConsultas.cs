@@ -85,7 +85,8 @@ internal sealed partial class ProcesadorConsultas(
 
         // HU #13737: un intento por ejecución; un transitorio con reintentos disponibles vuelve a la cola con backoff.
         var fin = reloj.GetUtcNow();
-        var intento = RegistroIntentos.Crear(celda, inicio, fin, resultado);
+        // HU #13792: una celda de persona deja un intento por persona consultada.
+        var intentos = RegistroIntentos.CrearTodos(celda, inicio, fin, resultado);
         if (resultado.Estado == EstadoCelda.Error)
         {
             var decision = _politica.Decidir(resultado.TipoError, celda.IntentosAuto, fin);
@@ -94,6 +95,11 @@ internal sealed partial class ProcesadorConsultas(
                 resultado = resultado with { Estado = EstadoCelda.Pendiente, ReintentarDesde = decision.DisponibleDesde };
                 Reintento(log, celda.Id, celda.Fuente, resultado.TipoError ?? "-", decision.IntentosAuto, _politica.MaxReintentos);
             }
+            else if (resultado.TipoErrorSinReintento is { } final)
+            {
+                // HU #13792: sin reintento, la celda de persona queda con su código final (PERSONAS_CON_ERROR o la causa común).
+                resultado = resultado with { TipoError = final };
+            }
         }
 
         // RUNT va primero (HU #13730): su cierre libera o bloquea las demás celdas del vehículo en la misma transacción. Un
@@ -101,11 +107,10 @@ internal sealed partial class ProcesadorConsultas(
         resultado = OrquestadorVehiculo.TrasEjecutar(celda, resultado, reloj);
         // HU #13743: tras cada celda terminal, el estado global del lote se recalcula en la misma transacción de cierre.
         resultado = RecalculadorEstado.TrasCerrar(celda, resultado, reloj);
-        if (!await new EscritorCeldas(db, reloj).CerrarAsync(celda, resultado, ct, intento).ConfigureAwait(false))
+        if (!await new EscritorCeldas(db, reloj).CerrarAsync(celda, resultado, ct, intentos).ConfigureAwait(false))
         {
             LeasePerdido(log, celda.Id, celda.Fuente);
-            if (intento is not null)
-                await RegistroIntentos.GuardarSoloAsync(db, intento, ct).ConfigureAwait(false);
+            await RegistroIntentos.GuardarSoloAsync(db, intentos, ct).ConfigureAwait(false);
         }
     }
 
