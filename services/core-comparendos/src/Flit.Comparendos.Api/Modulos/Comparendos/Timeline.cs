@@ -10,7 +10,7 @@ namespace Flit.Comparendos.Api.Modulos.Comparendos;
 public sealed record Actor(ActorTipo Tipo, Guid? UsuarioId, string Nombre)
 {
     public static readonly Actor Sistema = new(ActorTipo.Sistema, null, "Sistema");
-    public static readonly Actor Scheduler = new(ActorTipo.Scheduler, null, "Scheduler");
+    public static readonly Actor Scheduler = new(ActorTipo.Scheduler, null, "Automático");
     public static readonly Actor Conductor = new(ActorTipo.Conductor, null, "Conductor");
 
     public static Actor De(UsuarioActual usuario)
