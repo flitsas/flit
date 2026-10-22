@@ -15,7 +15,11 @@ public sealed record ExportDetailedProceduresQuery(
     string? PersonDocument,
     string? PersonName,
     bool? HasTransformation,
-    bool? IsLeasing);
+    bool? IsLeasing)
+{
+    /// <summary>HU #13664 — Ver por familia: códigos visibles (<c>ProcedureFamilyCodes</c>); <c>null</c> = sin restricción.</summary>
+    public IReadOnlyList<string>? AllowedFamilies { get; init; }
+}
 
 /// <summary>Valida filtros del export del reporte detallado (HU #10816).</summary>
 public static class ExportDetailedProceduresHandler
@@ -39,7 +43,8 @@ public static class ExportDetailedProceduresHandler
             Normalize(query.PersonDocument),
             Normalize(query.PersonName),
             query.HasTransformation,
-            query.IsLeasing), null);
+            query.IsLeasing)
+        { AllowedFamilies = query.AllowedFamilies }, null);
     }
 
     private static string? Normalize(string? value) =>

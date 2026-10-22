@@ -21,7 +21,11 @@ public sealed record NetworkDetailedReportRequest(
     string? PersonDocument = null,
     string? PersonName = null,
     bool? HasTransformation = null,
-    bool? IsLeasing = null);
+    bool? IsLeasing = null)
+{
+    /// <summary>HU #13664 — Ver por familia: códigos visibles (<c>ProcedureFamilyCodes</c>); <c>null</c> = sin restricción.</summary>
+    public IReadOnlyList<string>? AllowedFamilies { get; init; }
+}
 
 /// <summary>
 /// HU #12360 (Feature #12257, épica #12235) — ÚNICA función de resolución del reporte de red, compartida
@@ -53,7 +57,8 @@ public static class NetworkDetailedReportScope
             Normalize(request.PersonDocument),
             Normalize(request.PersonName),
             request.HasTransformation,
-            request.IsLeasing), null);
+            request.IsLeasing)
+        { AllowedFamilies = request.AllowedFamilies }, null);
     }
 
     private static string? Normalize(string? value) =>

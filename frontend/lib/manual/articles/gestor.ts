@@ -111,6 +111,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         paragraphs: [
           "Confirma que tu compañía tiene habilitado el tipo de trámite (lo define su configuración operativa). Si la matrícula inicial está apagada, no verás esa modalidad al crear.",
           "Necesitas permiso tramites.create además de tramites.read. Sin create solo puedes consultar trámites existentes.",
+          "Los permisos de ver y crear se otorgan por familia de trámite (Matrículas, Traspaso y Otros trámites). Solo verás las pestañas de las familias que puedes ver, y el asistente de «Nuevo trámite» solo ofrece las familias que puedes crear. Si tienes permiso para ver una familia pero no para crearla, puedes consultar sus trámites pero esa opción no aparece al crear. Si no puedes ver ninguna familia, al abrir Trámites volverás al inicio con el aviso «No tienes acceso a este módulo.».",
         ],
         bullets: [
           "Ten a mano documentos de identidad de las partes (vendedor, comprador, mandante, etc.).",
@@ -842,6 +843,10 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       "suspender",
       "desactivar",
       "bloquear",
+      "permisos por modulo",
+      "permisos individuales",
+      "fuera de tu tope",
+      "auditoria de permisos",
     ],
     summary: "Las pestañas del módulo Usuarios, cómo invitar y gestionar personas, y qué es Clientes ICT.",
     blocks: [
@@ -854,7 +859,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         bullets: [
           "Usuarios: invitar, editar y gestionar el acceso de las personas de tu compañía.",
           "Roles y permisos: crea y edita los roles de tu compañía y consulta los roles de FLIT. Solo la ve el Administrador de la compañía.",
-          "Clientes ICT: solo si tu compañía integra con terceros y tienes el permiso correspondiente (ver bloque 4).",
+          "Clientes ICT: solo si tu compañía integra con terceros y tienes el permiso correspondiente (ver bloque 7).",
         ],
         media: [
           {
@@ -876,10 +881,10 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         id: "gestionar",
         title: "3. Gestionar usuarios existentes",
         paragraphs: [
-          "Como Administrador de la compañía puedes editar, restablecer contraseña, y suspender o desactivar un usuario. Eliminar un usuario de forma definitiva (y restaurarlo desde Eliminados) es exclusivo del equipo FLIT.",
+          "Como Administrador de la compañía puedes editar, restablecer contraseña, y suspender o desactivar un usuario. Eliminar un usuario de forma definitiva (y restaurarlo desde Eliminados) es exclusivo del equipo FLIT. Todas estas acciones están en el botón «Acciones» de la fila del usuario: ábrelo y elige la que necesitas.",
         ],
         bullets: [
-          "Editar: cambia nombre, perfil o roles.",
+          "Editar: cambia nombre, perfil o roles. Al cambiar el rol de una persona que tiene permisos individuales, el sistema te avisa antes, por ejemplo «Este usuario tiene 3 permisos individuales que se eliminarán al cambiar su rol.»: el rol solo cambia si confirmas con «Cambiar rol»; con «Mantener rol actual» no cambia nada. Si no tiene permisos individuales, el cambio es directo y no aparece aviso.",
           "Restablecer contraseña: envía instrucciones de cambio al correo del usuario.",
           "Suspender: bloquea el acceso temporalmente; puedes reactivarlo cuando corresponda.",
           "Desactivar: bloquea el acceso de forma indefinida.",
@@ -888,16 +893,48 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         ],
       },
       {
-        id: "roles",
-        title: "4. Roles y permisos",
+        id: "permisos-modulo",
+        title: "4. Permisos por módulo de una persona",
         paragraphs: [
-          "Esta pestaña es solo del Administrador de la compañía. Aquí ves los roles que puedes asignar a tu equipo: los tuyos, marcados como «Propio», y los de FLIT, marcados como «FLIT · solo lectura». Los roles de FLIT se pueden asignar, pero no cambiar. Los usuarios con otros roles no ven la pestaña, aunque siguen pudiendo elegir un rol al invitar o editar a una persona.",
+          "Además del rol, puedes ajustar los permisos de una persona de tu compañía sin cambiarle el rol. En la fila del usuario abre «Acciones» y elige «Permisos por módulo»: verás cada módulo y cada acción con su origen: «Heredado del rol» (lo que dicta su rol), «Individual» (un permiso que se le dio o quitó solo a esa persona) o «Parcial» (un módulo con acciones de ambos orígenes).",
         ],
         bullets: [
-          "1. Pulsa «Nuevo rol».",
-          "2. Escribe un código (letras, números, punto, guion o guion bajo; no se cambia después) y un nombre.",
-          "3. Marca los permisos del rol. La lista solo muestra los que tú tienes y que están habilitados para tu compañía; los permisos de plataforma (como los banners) no se pueden dar.",
-          "4. Pulsa «Crear rol». Para cambiarlo después usa el lápiz de su fila; para quitarlo, el icono de papelera.",
+          "1. En la fila de la persona abre «Acciones» y elige «Permisos por módulo». La ficha es una sola lista: primero «Módulos» y después «Tipos de servicio».",
+          "2. Activa o desactiva una acción con su interruptor, o usa «Habilitar módulo» y «Denegar módulo» para todo el módulo a la vez.",
+          "3. «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo.",
+          "4. En «Tipos de servicio», «Trámites: Matrículas», «Traspasos» y «Otros trámites» tienen cada uno «Ver» y «Crear»: «Crear» solo se habilita si «Ver» está habilitado y, al apagar «Ver», también se apaga «Crear».",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Los permisos de otro administrador, y los tuyos, solo se pueden ver: la pantalla aparece en solo lectura con el aviso «Solo el Super Admin puede modificar los permisos de un administrador.». Si la persona no tiene rol de administrador, los controles están habilitados.",
+          },
+          {
+            variant: "warning",
+            text: "Solo puedes dar permisos que tú mismo tienes (tu tope). Lo que queda fuera de tu tope aparece deshabilitado, y «Habilitar módulo» solo aplica las acciones que sí están dentro de tu tope. Si una persona ya tiene un permiso que otro administrador le dio y que está fuera de tu tope, verás la etiqueta «Fuera de tu tope»: puedes quitarlo, pero no volver a otorgarlo.",
+          },
+        ],
+      },
+      {
+        id: "auditoria-permisos",
+        title: "5. Auditoría de permisos",
+        paragraphs: [
+          "La pestaña «Auditoría de permisos» del módulo Usuarios lista cada cambio de permisos individuales hecho en tu compañía: fecha y hora (DD/MM/AAAA HH:mm), el administrador que lo hizo, la persona afectada, el permiso, la acción (otorgó, denegó, volvió al rol) y el valor antes y después. Los intentos rechazados quedan registrados con su motivo.",
+          "Solo ves los registros de las personas de tu compañía. Puedes filtrar por usuario y por administrador (no hay filtro de compañía, porque siempre es la tuya) y la lista se pagina con «Filas por página». Si ningún registro coincide con los filtros, la tabla te lo avisa. Si el servicio no responde, verás un aviso de error con el botón «Reintentar».",
+        ],
+      },
+      {
+        id: "roles",
+        title: "6. Roles y permisos",
+        paragraphs: [
+          "Esta pestaña es solo del Administrador de la compañía. Aquí ves los roles que puedes asignar a tu equipo: los tuyos, marcados como «Propio», y los de FLIT, marcados como «FLIT · solo lectura». Los roles de FLIT se pueden asignar, pero no cambiar. Los usuarios con otros roles no ven la pestaña, aunque siguen pudiendo elegir un rol al invitar o editar a una persona.",
+          "La tabla muestra el nombre, el tipo, la cantidad de permisos y las acciones de cada rol. Un rol se identifica por su nombre: no tienes que escribir ningún código, la plataforma asigna uno interno por debajo. Al crear o editar un rol, cada módulo y cada permiso aparecen con su nombre, igual que en el resto de la plataforma.",
+        ],
+        bullets: [
+          "1. Pulsa «Nuevo rol». El editor es una sola lista: «Datos del rol», «Módulos» y «Tipos de servicio».",
+          "2. En «Datos del rol» escribe el nombre y, si quieres, una descripción.",
+          "3. En «Módulos» y «Tipos de servicio» marca los permisos del rol. La lista solo muestra los que tú tienes y que están habilitados para tu compañía; los permisos de plataforma (como los banners) no se pueden dar. En «Trámites: Matrículas», «Traspasos» y «Otros trámites» cada tipo de servicio tiene «Ver» y «Crear»: «Crear» solo se habilita si «Ver» está marcado y, al quitar «Ver», también se quita «Crear».",
+          "4. Pulsa «Crear rol»: guarda todo. Si falta el nombre, ves el aviso debajo del campo y el cursor queda allí. Para cambiarlo o quitarlo después, abre «Acciones» en su fila y elige «Editar» o «Eliminar»; en un rol de FLIT, «Ver permisos».",
         ],
         callouts: [
           {
@@ -908,7 +945,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       },
       {
         id: "ict",
-        title: "5. Clientes ICT (si tu compañía integra con terceros)",
+        title: "7. Clientes ICT (si tu compañía integra con terceros)",
         paragraphs: [
           "Son credenciales que usan integraciones externas para registrar pre-trámites en tu nombre. Cada cliente tiene un usuario y un secreto que el sistema genera y muestra una sola vez (no se puede recuperar después); si lo pierdes, usa «Regenerar secreto».",
         ],

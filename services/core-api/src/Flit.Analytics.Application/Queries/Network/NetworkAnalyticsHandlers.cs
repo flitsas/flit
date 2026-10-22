@@ -45,7 +45,11 @@ public static class NetworkAnalyticsScope
 
 /// <summary>Consulta del overview consolidado de la red (AC1).</summary>
 /// <remarks>BUG #12588 — From/To null = sin acotar por fecha (universo completo de la red).</remarks>
-public sealed record GetNetworkAnalyticsOverviewQuery(TenantScope? Scope, Guid? ChildTenantId, DateOnly? From, DateOnly? To);
+public sealed record GetNetworkAnalyticsOverviewQuery(TenantScope? Scope, Guid? ChildTenantId, DateOnly? From, DateOnly? To)
+{
+    /// <summary>HU #13664 — Ver por familia: códigos visibles (<c>ProcedureFamilyCodes</c>); <c>null</c> = sin restricción.</summary>
+    public IReadOnlyList<string>? AllowedFamilies { get; init; }
+}
 
 /// <summary>
 /// Overview de la red: misma forma que <c>GetAnalyticsOverviewHandler</c> sobre el conjunto de lectura.
@@ -61,7 +65,7 @@ public sealed class GetNetworkAnalyticsOverviewHandler(INetworkAnalyticsReadRepo
         if (error is not null)
             return (null, error);
 
-        var result = await repo.GetNetworkOverviewAsync(tenantIds!, query.From, query.To, ct).ConfigureAwait(false);
+        var result = await repo.GetNetworkOverviewAsync(tenantIds!, query.From, query.To, query.AllowedFamilies, ct).ConfigureAwait(false);
         var tenantId = query.ChildTenantId is { } child && child != Guid.Empty ? child : query.Scope!.WriteTenantId!.Value;
         var dto = new NetworkAnalyticsOverviewDto(tenantId, query.From, query.To, result.Items, NetworkAnalyticsScope.ToDto(tenantIds!));
         return (new NetworkAnalyticsOutcome<NetworkAnalyticsOverviewDto>(dto, result.ReachedTenantIds), null);
@@ -69,7 +73,11 @@ public sealed class GetNetworkAnalyticsOverviewHandler(INetworkAnalyticsReadRepo
 }
 
 /// <summary>Consulta del Top de productividad de la red (AC1).</summary>
-public sealed record GetNetworkTopProducersQuery(TenantScope? Scope, Guid? ChildTenantId, DateOnly From, DateOnly To, int Limit);
+public sealed record GetNetworkTopProducersQuery(TenantScope? Scope, Guid? ChildTenantId, DateOnly From, DateOnly To, int Limit)
+{
+    /// <summary>HU #13664 — Ver por familia: códigos visibles (<c>ProcedureFamilyCodes</c>); <c>null</c> = sin restricción.</summary>
+    public IReadOnlyList<string>? AllowedFamilies { get; init; }
+}
 
 /// <summary>Top de radicadores de la red; mismo límite por defecto y tope que <c>GetTopProducersHandler</c>.</summary>
 public sealed class GetNetworkTopProducersHandler(INetworkAnalyticsReadRepository repo)
@@ -83,14 +91,18 @@ public sealed class GetNetworkTopProducersHandler(INetworkAnalyticsReadRepositor
             return (null, error);
 
         var limit = query.Limit <= 0 ? GetTopProducersHandler.DefaultLimit : Math.Min(query.Limit, GetTopProducersHandler.MaxLimit);
-        var result = await repo.GetNetworkTopProducersAsync(tenantIds!, query.From, query.To, limit, ct).ConfigureAwait(false);
+        var result = await repo.GetNetworkTopProducersAsync(tenantIds!, query.From, query.To, limit, query.AllowedFamilies, ct).ConfigureAwait(false);
         var dto = new NetworkAnalyticsItemsDto<TopProducerDto>(result.Items, NetworkAnalyticsScope.ToDto(tenantIds!));
         return (new NetworkAnalyticsOutcome<NetworkAnalyticsItemsDto<TopProducerDto>>(dto, result.ReachedTenantIds), null);
     }
 }
 
 /// <summary>Consulta de la tendencia mensual de la red (AC1).</summary>
-public sealed record GetNetworkMonthlyTrendQuery(TenantScope? Scope, Guid? ChildTenantId, DateOnly From, DateOnly To);
+public sealed record GetNetworkMonthlyTrendQuery(TenantScope? Scope, Guid? ChildTenantId, DateOnly From, DateOnly To)
+{
+    /// <summary>HU #13664 — Ver por familia: códigos visibles (<c>ProcedureFamilyCodes</c>); <c>null</c> = sin restricción.</summary>
+    public IReadOnlyList<string>? AllowedFamilies { get; init; }
+}
 
 /// <summary>Tendencia mensual por categoría de la red (un punto por año/mes/categoría, sumando los clientes del conjunto).</summary>
 public sealed class GetNetworkMonthlyTrendHandler(INetworkAnalyticsReadRepository repo)
@@ -103,7 +115,7 @@ public sealed class GetNetworkMonthlyTrendHandler(INetworkAnalyticsReadRepositor
         if (error is not null)
             return (null, error);
 
-        var result = await repo.GetNetworkMonthlyTrendAsync(tenantIds!, query.From, query.To, ct).ConfigureAwait(false);
+        var result = await repo.GetNetworkMonthlyTrendAsync(tenantIds!, query.From, query.To, query.AllowedFamilies, ct).ConfigureAwait(false);
         var dto = new NetworkAnalyticsItemsDto<MonthlyTrendPointDto>(result.Items, NetworkAnalyticsScope.ToDto(tenantIds!));
         return (new NetworkAnalyticsOutcome<NetworkAnalyticsItemsDto<MonthlyTrendPointDto>>(dto, result.ReachedTenantIds), null);
     }

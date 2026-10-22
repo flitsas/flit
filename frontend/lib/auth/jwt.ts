@@ -115,6 +115,28 @@ export function isAdminCompany(payload: JwtPayload | null): boolean {
   );
 }
 
+/**
+ * Indica si el payload tiene el rol `code` (comparación case-insensitive sobre `role`, `role_code` o el
+ * arreglo `roles`). Base de los requisitos de rol de la tabla de acceso (`lib/nav/module-access.ts`, ADR-0074).
+ */
+export function hasRoleCode(payload: JwtPayload | null, code: string): boolean {
+  if (!payload) {
+    return false;
+  }
+
+  const target = code.toLowerCase();
+  if (typeof payload.role_code === "string" && payload.role_code.toLowerCase() === target) {
+    return true;
+  }
+  if (typeof payload.role === "string" && payload.role.toLowerCase() === target) {
+    return true;
+  }
+  return (
+    Array.isArray(payload.roles) &&
+    payload.roles.some((r) => typeof r?.code === "string" && r.code.toLowerCase() === target)
+  );
+}
+
 /** Slug del permiso que gobierna el módulo LOG QX (HU #10794/#10795). */
 export const LOG_QX_READ_PERMISSION = "logqx.read";
 

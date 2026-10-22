@@ -26,6 +26,7 @@ const ROLE_LABELS: Record<string, string> = {
   SuperAdmin: "Super Admin",
   AdminCompany: "Admin de Compañía",
   ot_admin: "Admin OT",
+  gestor_tramites_ot: "Gestor OT",
 };
 
 /** Nombre del rol en la barra: los de plataforma con su rótulo; cualquier otro, tal cual; sin roles, «Usuario». */

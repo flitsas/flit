@@ -24,6 +24,13 @@ public static class DevelopmentAuthSeeder
     public const string OtSabanetaEmail = "otsabaneta@flit.local";
     public const string OtSabanetaPassword = "OtSabaneta1!";
 
+    /// <summary>Gestor OT de Sabaneta (DEV, HU #13655): operador no administrador del organismo.</summary>
+    public const string GestorOtSabanetaEmail = "gestorot@flit.local";
+    public const string GestorOtSabanetaPassword = "GestorOt1!";
+
+    /// <summary>Código del rol de sistema «Gestor OT» (lo crea la migración HU13655_RolGestorOt, DDL 147).</summary>
+    public const string GestorOtRoleCode = "gestor_tramites_ot";
+
     /// <summary>Admin OT Envigado (DEV) — tenant vinculado al catálogo RUNT 5266000.</summary>
     public const string OtEnvigadoEmail = "otenvigado@flit.local";
     public const string OtEnvigadoPassword = "OtEnvigado1!";
@@ -68,6 +75,9 @@ public static class DevelopmentAuthSeeder
 
     public static readonly Guid OtSabanetaProfileId =
         Guid.Parse("b9ec839d-7b78-4165-8860-cf29b104c76d");
+
+    public static readonly Guid GestorOtSabanetaUserId =
+        Guid.Parse("ec4dddb9-ade5-43e8-b33b-c6036eba49d3");
 
     /// <summary>Tenant OT Envigado (DEV) — perfil → catálogo <c>5266000</c>.</summary>
     public static readonly Guid OtEnvigadoTenantId =
@@ -121,11 +131,18 @@ public static class DevelopmentAuthSeeder
             await SeedAdminCompanyUserAsync(db, passwordHasher, cancellationToken);
             await EnsureDevOperacionCredentialsAsync(db, passwordHasher, cancellationToken);
             await SeedSabanetaOtAdminAsync(db, passwordHasher, cancellationToken);
+            await SeedSabanetaGestorOtAsync(db, passwordHasher, cancellationToken);
             await SeedEnvigadoOtAdminAsync(db, passwordHasher, cancellationToken);
         }
 
         if (settings.RbacCatalog)
+        {
             await SeedRbacCatalogAsync(db, cancellationToken);
+            // HU #13641: los permisos recién sembrados nacen con enforced='false'; los DDL del marcador (139 y los de
+            // Feature #13105) los clasifican en orden (idempotentes).
+            foreach (var script in EmbeddedDdl.EnforcedMarkerScripts())
+                await ExecuteRawSqlScriptAsync(db, EmbeddedDdl.LoadUp(script), cancellationToken);
+        }
 
         if (settings.DemoData)
             await SeedRadicadorUserAsync(db, passwordHasher, cancellationToken);
@@ -213,6 +230,9 @@ public static class DevelopmentAuthSeeder
             }));
             await db.SaveChangesAsync(cancellationToken);
         }
+
+        // HU #13663: los permisos Ver/Crear por familia equivalentes a tramites.read / tramites.create.
+        await GrantFamilyPermissionsLikeTramitesAsync(db, role.Id, cancellationToken);
 
         // 3. Usuario + credencial (idempotente).
         var user = await db.Users
@@ -537,6 +557,7 @@ public static class DevelopmentAuthSeeder
             };
             db.Roles.Add(role);
             await db.SaveChangesAsync(cancellationToken);
+            await GrantOtModulePermissionsAsync(db, role.Id, cancellationToken);
         }
 
         db.UserRoleAssignments.Add(new UserRoleAssignment
@@ -648,6 +669,78 @@ public static class DevelopmentAuthSeeder
 
         await db.SaveChangesAsync(cancellationToken);
         await EnsureOtAdminAssignmentAsync(db, OtSabanetaUserId, tenantId, cancellationToken);
+    }
+
+    /// <summary>
+    /// HU #13655 — usuario <see cref="GestorOtSabanetaEmail"/> con el rol «Gestor OT» en el organismo de Sabaneta, para
+    /// probar en pantalla que el Admin OT le ajusta permisos individuales. Solo datos demo (Development). Idempotente:
+    /// si el usuario ya tiene un rol en Sabaneta no se toca (un cambio de rol hecho por la UI se conserva). Si el rol
+    /// todavía no existe (migración sin aplicar) no se crea aquí: es de la migración.
+    /// </summary>
+    private static async Task SeedSabanetaGestorOtAsync(
+        FlitDbContext db,
+        IPasswordHasher passwordHasher,
+        CancellationToken cancellationToken)
+    {
+        var profile = await db.TransitOfficeProfiles.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.TransitOfficeId == OtSabanetaCatalogOfficeId, cancellationToken);
+        var role = await db.Roles.AsNoTracking()
+            .FirstOrDefaultAsync(
+                r => r.Code == GestorOtRoleCode && r.TargetEntityType == "TRANSIT_OFFICE" && r.TenantId == null
+                    && r.DeletedAt == null,
+                cancellationToken);
+        if (profile is null || role is null)
+            return;
+
+        var tenantId = profile.TenantId;
+        var now = DateTimeOffset.UtcNow;
+
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == GestorOtSabanetaEmail, cancellationToken);
+        if (user is null)
+        {
+            user = new User
+            {
+                Id = GestorOtSabanetaUserId,
+                Email = GestorOtSabanetaEmail,
+                DisplayName = "Gestor OT Sabaneta",
+                Status = "active",
+                CreatedAt = now,
+                RowVersion = 0,
+            };
+            db.Users.Add(user);
+            db.UserCredentials.Add(new UserCredential
+            {
+                Id = Guid.CreateVersion7(),
+                UserId = user.Id,
+                PasswordHash = passwordHasher.Hash(GestorOtSabanetaPassword),
+                MustChangePassword = false,
+                FailedLoginAttempts = 0,
+                CreatedAt = now,
+                RowVersion = 0,
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        else
+        {
+            await EnsureUserCredentialsAsync(db, user.Id, GestorOtSabanetaPassword, passwordHasher, cancellationToken);
+        }
+
+        var hasRoleInTenant = await db.UserRoleAssignments
+            .AnyAsync(a => a.UserId == user.Id && a.TenantId == tenantId && a.DeletedAt == null, cancellationToken);
+        if (hasRoleInTenant)
+            return;
+
+        db.UserRoleAssignments.Add(new UserRoleAssignment
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantId,
+            UserId = user.Id,
+            RoleId = role.Id,
+            AssignedAt = now,
+            CreatedAt = now,
+            RowVersion = 0,
+        });
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>
@@ -841,6 +934,7 @@ public static class DevelopmentAuthSeeder
             };
             db.Roles.Add(role);
             await db.SaveChangesAsync(cancellationToken);
+            await GrantOtModulePermissionsAsync(db, role.Id, cancellationToken);
         }
 
         var assignedAt = DateTimeOffset.UtcNow;
@@ -1047,6 +1141,45 @@ public static class DevelopmentAuthSeeder
         }
 
         await db.SaveChangesAsync(cancellationToken);
+
+        // HU #13663: en una base nueva el DDL 145 corrió antes de que existieran estos grants, así que el backfill
+        // por familia no los alcanzó. Este camino solo corre al sembrar el catálogo base (early-return en bases ya
+        // sembradas), así que no re-otorga lo que un administrador haya quitado (HU #13640).
+        var adminTramitesId = await db.Roles
+            .Where(r => r.Code == ProductRoleCodes.AdminTramites && r.DeletedAt == null)
+            .Select(r => (Guid?)r.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (adminTramitesId is { } atId)
+            await GrantFamilyPermissionsLikeTramitesAsync(db, atId, cancellationToken);
+    }
+
+    /// <summary>
+    /// HU #13663: un rol con <c>tramites.read</c> / <c>tramites.create</c> recibe los <c>.read</c> / <c>.create</c> de las tres
+    /// familias (matriculas, traspasos, otros-tramites), igual que el backfill del DDL 145. Solo agrega lo que falta.
+    /// </summary>
+    internal static async Task GrantFamilyPermissionsLikeTramitesAsync(FlitDbContext db, Guid roleId, CancellationToken ct)
+    {
+        var pairs = new (string Base, string[] Familias)[]
+        {
+            ("tramites.read", ["matriculas.read", "traspasos.read", "otros-tramites.read"]),
+            ("tramites.create", ["matriculas.create", "traspasos.create", "otros-tramites.create"]),
+        };
+        var slugs = pairs.SelectMany(p => p.Familias.Append(p.Base)).ToArray();
+        var idBySlug = await db.RbacActions.Where(a => slugs.Contains(a.Slug)).ToDictionaryAsync(a => a.Slug, a => a.Id, ct);
+        var existing = (await db.RoleGrants.Where(g => g.RoleId == roleId).Select(g => g.PermissionId).ToListAsync(ct)).ToHashSet();
+        var now = DateTimeOffset.UtcNow;
+        foreach (var (baseSlug, familias) in pairs)
+        {
+            if (!idBySlug.TryGetValue(baseSlug, out var baseId) || !existing.Contains(baseId))
+                continue;
+            foreach (var slug in familias)
+            {
+                if (idBySlug.TryGetValue(slug, out var id) && existing.Add(id))
+                    db.RoleGrants.Add(new RoleGrant { Id = Guid.CreateVersion7(), RoleId = roleId, PermissionId = id, CreatedAt = now });
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
     }
 
     /// <summary>
@@ -1480,6 +1613,7 @@ public static class DevelopmentAuthSeeder
         foreach (var (slug, name, routePattern) in permisos)
         {
             var action = await db.RbacActions.FirstOrDefaultAsync(a => a.Slug == slug, ct);
+            var actionCreated = action is null;
             if (action is null)
             {
                 action = new RbacAction
@@ -1497,7 +1631,9 @@ public static class DevelopmentAuthSeeder
                 await db.SaveChangesAsync(ct);
             }
 
-            foreach (var role in roles)
+            // HU #13640: admin_tramites recibe el default solo cuando el permiso se crea en esta ejecución;
+            // SuperAdmin se re-concilia siempre. Un grant retirado por el Super Admin no vuelve al reiniciar.
+            foreach (var role in roles.Where(r => actionCreated || r.Code == "SuperAdmin"))
             {
                 var alreadyGranted = await db.RoleGrants
                     .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
@@ -1562,6 +1698,7 @@ public static class DevelopmentAuthSeeder
 
         var action = await db.RbacActions
             .FirstOrDefaultAsync(a => a.Slug == "historial-placa.read", ct);
+        var actionCreated = action is null;
         if (action is null)
         {
             action = new RbacAction
@@ -1582,11 +1719,13 @@ public static class DevelopmentAuthSeeder
         // Grant a los tres roles de D4 (idempotente): solo si aún no lo tienen. HU #12964: el de AdminCompany
         // pasa a admin_tramites, porque historial-placa es un módulo de Trámites. Se excluyen los roles
         // borrados lógicamente — conceder permisos a un rol eliminado no sirve a nadie.
+        // HU #13640: solo SuperAdmin se re-concilia en cada arranque; los demás roles reciben el default
+        // únicamente cuando el permiso se crea en esta ejecución, para no revertir lo que el Super Admin quitó.
         string[] targetRoleCodes = ["SuperAdmin", ProductRoleCodes.AdminTramites, "Radicador"];
         var roles = await db.Roles
             .Where(r => targetRoleCodes.Contains(r.Code) && r.DeletedAt == null)
             .ToListAsync(ct);
-        foreach (var role in roles)
+        foreach (var role in roles.Where(r => actionCreated || r.Code == "SuperAdmin"))
         {
             var alreadyGranted = await db.RoleGrants
                 .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
@@ -1650,6 +1789,7 @@ public static class DevelopmentAuthSeeder
 
         var action = await db.RbacActions
             .FirstOrDefaultAsync(a => a.Slug == "consolidado-masivo.download", ct);
+        var actionCreated = action is null;
         if (action is null)
         {
             action = new RbacAction
@@ -1672,7 +1812,9 @@ public static class DevelopmentAuthSeeder
         var roles = await db.Roles
             .Where(r => targetRoleCodes.Contains(r.Code) && r.DeletedAt == null)
             .ToListAsync(ct);
-        foreach (var role in roles)
+        // HU #13640: solo SuperAdmin se re-concilia en cada arranque; el resto recibe el default únicamente
+        // cuando el permiso se crea en esta ejecución (un grant retirado por el Super Admin no vuelve).
+        foreach (var role in roles.Where(r => actionCreated || r.Code == "SuperAdmin"))
         {
             var alreadyGranted = await db.RoleGrants
                 .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
@@ -1934,6 +2076,7 @@ public static class DevelopmentAuthSeeder
         foreach (var permission in permissions)
         {
             var action = await db.RbacActions.FirstOrDefaultAsync(a => a.Slug == permission.Slug, ct);
+            var actionCreated = action is null;
             if (action is null)
             {
                 action = new RbacAction
@@ -1951,7 +2094,8 @@ public static class DevelopmentAuthSeeder
                 await db.SaveChangesAsync(ct);
             }
 
-            foreach (var roleCode in new[] { "SuperAdmin", ProductRoleCodes.AdminTramites })
+            // HU #13640: admin_tramites recibe el default solo cuando el permiso se crea en esta ejecución.
+            foreach (var roleCode in actionCreated ? new[] { "SuperAdmin", ProductRoleCodes.AdminTramites } : new[] { "SuperAdmin" })
             {
                 var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
                 foreach (var role in roles)
@@ -1973,6 +2117,40 @@ public static class DevelopmentAuthSeeder
 
             await db.SaveChangesAsync(ct);
         }
+    }
+
+    /// <summary>
+    /// HU #13638 (Épica #12753): al crear el rol global <c>ot_admin</c> en una base nueva le concede los
+    /// permisos de los módulos OT (<c>ot-*</c>) que la migración <c>20261016150000_HU13638_SlugsOt</c> ya dejó
+    /// en el catálogo. La migración corre antes que este seeder y no encuentra el rol, así que sin esto el
+    /// Admin OT de una base nueva quedaría sin sus slugs. Solo se llama cuando el rol se crea (HU #13640).
+    /// </summary>
+    private static async Task GrantOtModulePermissionsAsync(FlitDbContext db, Guid roleId, CancellationToken ct)
+    {
+        var otModuleIds = await db.SecurityModules
+            .Where(m => m.Code.StartsWith("ot-"))
+            .Select(m => m.Id)
+            .ToListAsync(ct);
+        var actionIds = await db.RbacActions
+            .Where(a => otModuleIds.Contains(a.ModuleId))
+            .Select(a => a.Id)
+            .ToListAsync(ct);
+        var existing = await db.RoleGrants
+            .Where(g => g.RoleId == roleId)
+            .Select(g => g.PermissionId)
+            .ToListAsync(ct);
+
+        var now = DateTimeOffset.UtcNow;
+        db.RoleGrants.AddRange(actionIds
+            .Where(id => !existing.Contains(id))
+            .Select(id => new RoleGrant
+            {
+                Id = Guid.CreateVersion7(),
+                RoleId = roleId,
+                PermissionId = id,
+                CreatedAt = now,
+            }));
+        await db.SaveChangesAsync(ct);
     }
 
     /// <summary>
@@ -2073,6 +2251,7 @@ public static class DevelopmentAuthSeeder
             return;
 
         var action = await db.RbacActions.FirstOrDefaultAsync(a => a.Slug == slug, ct);
+        var actionCreated = action is null;
         if (action is null)
         {
             action = new RbacAction
@@ -2090,7 +2269,9 @@ public static class DevelopmentAuthSeeder
             await db.SaveChangesAsync(ct);
         }
 
-        foreach (var roleCode in new[] { "SuperAdmin", "AdminCompany" })
+        // HU #13640: AdminCompany recibe el default solo cuando el permiso se crea en esta ejecución; si el
+        // Super Admin se lo quitó, el reinicio no lo devuelve. SuperAdmin se re-concilia siempre.
+        foreach (var roleCode in actionCreated ? new[] { "SuperAdmin", "AdminCompany" } : new[] { "SuperAdmin" })
         {
             var roles = await db.Roles.Where(r => r.Code == roleCode).ToListAsync(ct);
             foreach (var role in roles)

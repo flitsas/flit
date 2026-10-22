@@ -1223,6 +1223,10 @@ public static class SecurityEndpoints
         // HU #13441: gestión de roles propios de la compañía (AdminCompanyPolicy por endpoint).
         SecurityTenantRolesEndpoints.Map(group);
 
+        // HU #13644: permisos individuales por usuario dentro del tope del administrador.
+        PermissionOverridesEndpoints.Map(group);
+        PermissionAuditEndpoints.Map(group); // HU #13647
+
         return app;
     }
 
@@ -1253,7 +1257,14 @@ public static class SecurityEndpoints
     // el frontend. Antes la UI lo infería del roleCode y cualquier rol personalizado de un tenant
     // OT terminaba etiquetado como Gestor. TenantType se proyecta en SQL (presencia de
     // TransitOfficeProfile) y Profile se deriva de (roleCode, tenantType) con ResolveProfile.
-    private sealed record TenantUserDto(string Id, string FullName, string Email, string? Role, string? RoleCode, Guid? RoleId, string Status, DateTimeOffset? CreatedAt, bool IsSuspended, string? TenantId, string? TenantName, long RowVersion, DateTimeOffset? DeletedAt = null, string? TenantType = null, string? Profile = null);
+    private sealed record TenantUserDto(string Id, string FullName, string Email, string? Role, string? RoleCode, Guid? RoleId, string Status, DateTimeOffset? CreatedAt, bool IsSuspended, string? TenantId, string? TenantName, long RowVersion, DateTimeOffset? DeletedAt = null, string? TenantType = null, string? Profile = null)
+    {
+        /// <summary>
+        /// HU #13647: TODOS los roles activos del usuario en el tenant (la fila colapsada muestra uno). La sección
+        /// «Permisos por módulo» los necesita para marcar «Heredado del rol» también lo que dan los espejos (admin_tramites…).
+        /// </summary>
+        public IReadOnlyList<Guid> RoleIds { get; init; } = [];
+    }
 
     /// <summary>
     /// Perfil funcional FLIT — <c>FLIT</c> | <c>OT</c> | <c>GESTOR</c> (ver context/contexto-perfiles.md).
@@ -1283,7 +1294,10 @@ public static class SecurityEndpoints
     private static List<TenantUserDto> WithProfile(IEnumerable<TenantUserDto> rows) =>
         rows.Select(r => r with { Profile = ResolveProfile(r.RoleCode, r.TenantType) })
             .GroupBy(r => (r.Id, r.TenantId))
-            .Select(g => g.OrderBy(r => ProductRoleCodes.IsProductAdmin(r.RoleCode) ? 1 : 0).First())
+            .Select(g => g.OrderBy(r => ProductRoleCodes.IsProductAdmin(r.RoleCode) ? 1 : 0).First() with
+            {
+                RoleIds = [.. g.Where(r => r.RoleId.HasValue).Select(r => r.RoleId!.Value).Distinct()],
+            })
             .ToList();
 
     /// <summary>

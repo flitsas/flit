@@ -2,6 +2,8 @@ using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Flit.Api.Authorization;
+using Flit.Api.Identity;
+using Flit.Infrastructure.Security;
 using Flit.Modules.Security.Application.Auth.ActivateAccount;
 using Flit.Modules.Security.Application.Auth.AdminResetPassword;
 using Flit.Modules.Security.Application.Auth.ChangePassword;
@@ -265,7 +267,36 @@ public static class AuthEndpoints
                 entityType));
         }).RequireAuthorization();
 
+        // HU #13651 (Feature #13102, Épica #12753) — vigencia de la sesión: cuánto tarda en aplicarse un cambio de
+        // permisos de un usuario (el token lleva los permisos efectivos y solo se recalcula al emitirse uno nuevo).
+        //   · "oidc"   (Suite:Oidc:Enabled): el access token dura Suite:Oidc:AccessTokenMinutes y se renueva solo.
+        //   · "legacy" (sin OIDC): un solo JWT que dura Jwt:TokenLifetimeHours; no se renueva.
+        // Vive en este grupo —y no en /security— porque /api/v1/auth lo atiende core-identity cuando
+        // Gateway:IdentityCluster:Enabled está encendida; así el endpoint llega en los dos modos de enrutamiento.
+        // Lee la configuración (sin literales) para que el aviso al administrador refleje lo configurado.
+        group.MapGet("/session-policy", (IConfiguration configuration) =>
+            Results.Ok(SessionPolicy.Resolve(configuration))).RequireAuthorization();
+
         return app;
+    }
+
+    /// <summary>Forma pública de <c>GET /api/v1/auth/session-policy</c>: <c>{ "mode": "legacy" | "oidc", "maxMinutes": n }</c>.</summary>
+    internal sealed record SessionPolicyResponse(string Mode, int MaxMinutes);
+
+    internal static class SessionPolicy
+    {
+        public const string Legacy = "legacy";
+        public const string Oidc = "oidc";
+
+        public static SessionPolicyResponse Resolve(IConfiguration configuration)
+        {
+            var oidc = configuration.GetSection(OidcOptions.SectionName).Get<OidcOptions>() ?? new OidcOptions();
+            if (oidc.Enabled)
+                return new SessionPolicyResponse(Oidc, oidc.AccessTokenMinutes);
+
+            var jwt = configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>() ?? new JwtSettings();
+            return new SessionPolicyResponse(Legacy, jwt.TokenLifetimeHours * 60);
+        }
     }
 
     /// <summary>

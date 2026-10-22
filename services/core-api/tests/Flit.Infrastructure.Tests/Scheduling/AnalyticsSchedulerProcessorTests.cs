@@ -541,12 +541,12 @@ public sealed class AnalyticsSchedulerProcessorTests
         Flit.Analytics.Application.IctQueries.IIctQueryRepository? ictQueryRepository = null)
     {
         var analytics = Substitute.For<IAnalyticsReadRepository>();
-        analytics.GetOverviewAsync(Arg.Any<Guid?>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+        analytics.GetOverviewAsync(Arg.Any<Guid?>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), null, Arg.Any<CancellationToken>())
             .Returns(new List<CategoryMetricsDto>
             {
                 new("matriculas", 3, new List<StatusCountDto> { new("aprobado", 3) }),
             });
-        analytics.GetTopProducersAsync(Arg.Any<Guid?>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        analytics.GetTopProducersAsync(Arg.Any<Guid?>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<int>(), null, Arg.Any<CancellationToken>())
             .Returns(new List<TopProducerDto>());
 
         var services = new ServiceCollection();

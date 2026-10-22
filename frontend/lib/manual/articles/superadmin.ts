@@ -350,6 +350,10 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
       "usuarios eliminados",
       "restaurar usuario",
       "eliminar usuario",
+      "permisos por modulo",
+      "permisos individuales",
+      "heredado del rol",
+      "auditoria de permisos",
     ],
     summary: "Cómo se definen módulos, permisos y roles, quién los recibe y dónde queda el rastro.",
     blocks: [
@@ -357,12 +361,20 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         id: "rbac",
         title: "1. RBAC Admin",
         paragraphs: [
-          "Gestiona módulos, permisos y roles del sistema, en 2 pestañas: Módulos y Permisos (las entradas navegables del sistema, con sus acciones) y Roles del sistema (que agrupan permisos y se separan en dos tablas: Roles de Compañía y Roles de Organismo de Tránsito). El dock de cada usuario se filtra por los módulos accesibles de su rol; la API vuelve a validar cada permiso.",
+          "Gestiona módulos, permisos y roles del sistema, en 2 pestañas: Módulos y Permisos (las entradas navegables del sistema, con sus acciones) y Roles del sistema (que agrupan permisos y se separan en dos sub-pestañas: «Compañía» y «Organismo de Tránsito»). En cada fila, el botón «Acciones» reúne lo que puedes hacer: en un módulo, «Agregar permiso», desactivarlo o activarlo y eliminarlo; en un rol, «Editar permisos», desactivarlo o activarlo y eliminarlo (un rol de sistema no se puede eliminar). El dock de cada usuario se filtra por los módulos accesibles de su rol; la API vuelve a validar cada permiso.",
         ],
         callouts: [
           {
             variant: "warning",
             text: "Quitar un permiso a un rol afecta de inmediato a todos sus usuarios. El Super Admin no pasa por RBAC: tiene bypass total.",
+          },
+          {
+            variant: "info",
+            text: "El editor de un rol es una sola lista, en este orden: «Datos del rol» (solo al crear: tipo de entidad, nombre y descripción), «Módulos» y «Tipos de servicio». No se escribe ningún código: la plataforma asigna uno interno a partir del nombre. «Crear rol» y «Guardar permisos» guardan todo; si falta el nombre, ves el aviso debajo del campo y el cursor queda allí. Sin tipos de servicio en el catálogo solo ves la lista de módulos.",
+          },
+          {
+            variant: "info",
+            text: "En «Tipos de servicio», «Trámites: Matrículas», «Trámites: Traspasos» y «Trámites: Otros trámites» muestran cada uno el par «Ver» / «Crear». «Crear» aparece deshabilitado mientras «Ver» esté sin marcar y, si desmarcas «Ver», «Crear» se desmarca también. Si el sistema devuelve «Para habilitar «Crear» primero debe estar habilitado «Ver» en ese tipo de servicio.», marca «Ver» y guarda de nuevo.",
           },
         ],
         media: [
@@ -378,8 +390,11 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         id: "usuarios",
         title: "2. Usuarios",
         paragraphs: [
-          "El módulo Usuarios para el Super Admin es global: eliges el destino de la invitación (compañía, organismo o perfil FLIT interno) y los roles que aplican a ese destino. Un perfil FLIT no pertenece a una compañía ni a un organismo y admite un solo rol.",
+          "El módulo Usuarios para el Super Admin es global: eliges el destino de la invitación (compañía, organismo o perfil FLIT interno) y los roles que aplican a ese destino. Al invitar desde la pestaña Usuarios del hub de un organismo, el rol es obligatorio: no hay rol por defecto y, hasta que lo eliges, «Enviar invitación» queda deshabilitado (incluido el primer Administrador OT). Un perfil FLIT no pertenece a una compañía ni a un organismo y admite un solo rol.",
           "«Eliminar usuario» es un borrado lógico: el usuario sale del listado activo y pierde el acceso, pero queda visible en la pestaña Eliminados, donde «Restaurar» lo devuelve a activo con sus roles previos. Cada usuario tiene además su propio historial de auditoría: quién lo invitó, qué roles cambiaron y cuándo.",
+          "Las acciones de cada usuario (historial, permisos por módulo, editar, restablecer contraseña, suspender, desactivar y eliminar) están en el botón «Acciones» de su fila; las que quitan acceso van al final. Reenviar o reactivar una invitación sigue siendo el ícono de la fila.",
+          "Permisos por módulo: en la fila del usuario abre «Acciones» y elige «Permisos por módulo»; ves cada módulo y cada acción con su origen: «Heredado del rol» (lo que dicta su rol), «Individual» (un permiso que se le dio o quitó solo a él) o «Parcial» (módulo con acciones de ambos orígenes). Puedes habilitar o denegar un módulo completo o una acción, y «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo. Solo aparecen los permisos que la plataforma ya exige. La ficha es una sola lista: primero «Módulos» y después «Tipos de servicio» (si la persona no tiene tipos de servicio, solo ves la lista). Ver y Crear por tipo de servicio: en «Tipos de servicio», «Trámites: Matrículas», «Trámites: Traspasos» y «Trámites: Otros trámites» tienen cada uno un par «Ver» / «Crear». «Crear» solo se puede habilitar si «Ver» está habilitado, y al apagar «Ver» también se apaga «Crear». Cada interruptor muestra si viene «Heredado del rol» o es «Individual»; «Crear» queda deshabilitado mientras el «Ver» de la persona (heredado o individual) esté inactivo, y si «Volver al rol» deja a la persona sin «Ver», su «Crear» individual también se retira. Los permisos que un administrador de la compañía o del organismo no podría otorgar llevan la etiqueta «Solo SA» con un candado: son exclusivos del Super Admin. Al habilitar el permiso de revelar datos personales aparece un aviso de la Ley 1581 de 2012: solo se guarda si marcas «Confirmo» y pulsas «Otorgar»; si cancelas, no cambia nada, y la confirmación queda en la auditoría. Ese permiso no se otorga con «Habilitar módulo»; se hace uno a uno. Tras cada cambio guardado ves un aviso verde que te dice cuándo entra en vigor (la próxima vez que la persona inicie sesión, con el máximo de espera); si algo falla, ves un aviso de error. Si el usuario es Super Admin, o su invitación sigue pendiente, la sección no permite cambios y te explica por qué.",
+          "Cambio de rol con permisos individuales: al cambiar el rol de un usuario desde «Editar» (en Usuarios, en la ficha de la compañía o en el hub del organismo), si tiene permisos individuales el sistema te avisa cuántos se eliminarán al cambiar su rol y el rol solo cambia si confirmas con «Cambiar rol». «Mantener rol actual» cancela el cambio sin tocar nada.",
         ],
       },
       {
@@ -387,6 +402,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         title: "3. Auditoría",
         paragraphs: [
           "Rastro global de operaciones administrativas y de seguridad: usuarios, roles, permisos y autenticación, además del módulo Trámites (creación, aceptación de términos, accesos de red) y el módulo Mandatarios (baja, reactivación, eliminación, retiro del default y reasignación de trámites). Filtra por módulo, actor, entidad y fecha. Es de solo lectura y no se puede alterar (append-only).",
+          "Auditoría de permisos individuales: en Usuarios, la pestaña «Auditoría de permisos» lista cada cambio de permisos por usuario con su fecha y hora (DD/MM/AAAA HH:mm), el administrador que lo hizo, el usuario afectado, la compañía, el permiso, la acción (otorgó, denegó, volvió al rol) y el valor antes y después; los intentos rechazados quedan registrados con su motivo. Filtra por usuario, compañía y administrador; si ningún registro coincide, la tabla te lo avisa. La lista se pagina con «Filas por página».",
         ],
       },
     ],

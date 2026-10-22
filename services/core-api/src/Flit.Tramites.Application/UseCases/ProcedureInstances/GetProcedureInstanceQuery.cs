@@ -211,7 +211,9 @@ public sealed class GetProcedureInstanceHandler(
     // que ya usan varios tests existentes (Integration.Tests, Application.Tests): sin ellos, el handler
     // sigue funcionando igual, solo que RevocationEligibility queda null (degradación segura).
     IProcedureRevocationRequestRepository? revocationRepo = null,
-    IBusinessDayCalculator? businessDayCalculator = null)
+    IBusinessDayCalculator? businessDayCalculator = null,
+    // HU #13664 — Ver por familia: sin el «.read» de la familia del trámite el detalle responde 403.
+    Flit.Tramites.Domain.Integration.IProcedureFamilyPermissionGate? familyPermissions = null)
 {
     /// <summary>Tipos de <see cref="ProcedureInstanceEvent"/> que el dashboard muestra en el tracking
     /// (ver XML doc de <see cref="ProcedureInstanceEventDto"/> sobre por qué solo estos tres).</summary>
@@ -238,6 +240,8 @@ public sealed class GetProcedureInstanceHandler(
         var instance = await repo.GetByIdWithDetailsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
+        if (familyPermissions is not null && !familyPermissions.CanRead(instance.Family))
+            return (null, "family_forbidden");
 
         var revocationEligibility = await BuildRevocationEligibilityAsync(instance, tenantId, ct).ConfigureAwait(false);
         var activeRevocationRequest = await BuildActiveRevocationRequestAsync(instance, tenantId, ct).ConfigureAwait(false);

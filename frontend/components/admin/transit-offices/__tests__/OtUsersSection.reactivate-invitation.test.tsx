@@ -7,6 +7,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ToastProvider } from "@/components/admin/Toast";
 import { OtUsersSection } from "../OtUsersSection";
+import { rowActionNames } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 import { fetchOtUsers, reactivateOtInvitation } from "@/lib/api/admin-ot-security";
 import { ApiError } from "@/lib/api/types";
 import type { OtUserItem } from "@/lib/api/admin-ot-security";
@@ -81,12 +82,11 @@ describe("OtUsersSection — invitación cancelada, estado vivo y reversible (#1
     renderSection();
 
     await screen.findByText("Rita Peña");
-    expect(screen.queryByRole("button", { name: /editar usuario rita peña/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /eliminar usuario rita peña/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /ver historial de rita peña/i })).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /cancelar invitación a rita peña/i }),
-    ).not.toBeInTheDocument();
+    // HU #13653: las acciones de la fila viven en su menú «Acciones».
+    const acciones = await rowActionNames(userEvent.setup(), "Rita Peña");
+    for (const prohibida of [/editar usuario/i, /eliminar usuario/i, /ver historial/i, /cancelar invitación/i]) {
+      expect(acciones).not.toContainEqual(expect.stringMatching(prohibida));
+    }
   });
 
   it("AC2: reactivar exitosamente liga el scope OT, refresca la lista y muestra un toast", async () => {
