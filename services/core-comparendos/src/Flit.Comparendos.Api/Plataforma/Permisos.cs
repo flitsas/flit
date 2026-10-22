@@ -43,7 +43,7 @@ public static class Permisos
         ("comparendos_gestion", "Comparendos · Gestión", [(ComparendoInactivar, "Inactivar comparendos"), (ComparendoObservar, "Agregar observaciones")]),
         ("comparendos_contraventor", "Comparendos · Contraventor",
         [
-            (ContraventorAsignar, "Asignar o reemplazar el conductor"), (ContraventorConsultar, "Consultar el conductor por API"),
+            (ContraventorAsignar, "Asignar o reemplazar el conductor"), (ContraventorConsultar, "Consultar el conductor automáticamente"),
             (ContraventorDocumentos, "Cargar documentos del conductor"), (CambioContraventorSolicitar, "Solicitar el cambio de contraventor"),
             (CambioContraventorResponder, "Registrar la respuesta del OT al cambio de contraventor"), (AvisosEnviar, "Enviar avisos al conductor"),
         ]),

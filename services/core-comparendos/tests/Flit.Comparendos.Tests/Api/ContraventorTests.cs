@@ -86,8 +86,11 @@ public sealed class ContraventorTests(ApiConFuente api) : IClassFixture<ApiConFu
 
         var detalle = await cliente.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/comparendos/{ids["K5"]}", ct);
         detalle.GetProperty("estadoConsultaContraventor").GetString().Should().Be("Error");
-        detalle.GetProperty("errorConsultaContraventor").GetString().Should().Contain("no disponible", "queda qué respondió la API para diagnosticar");
-        (await cliente.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/comparendos/{ids["K6"]}", ct)).GetProperty("errorConsultaContraventor").ValueKind
+        detalle.GetProperty("errorConsultaContraventor").ValueKind.Should().Be(JsonValueKind.Null, "la gestora no ve la respuesta técnica de la consulta");
+        var flit = api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [], SuperAdmin: true));
+        (await flit.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/comparendos/{ids["K5"]}", ct)).GetProperty("errorConsultaContraventor").GetString()
+            .Should().Contain("no disponible", "queda qué respondió la consulta para que FLIT diagnostique");
+        (await flit.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/comparendos/{ids["K6"]}", ct)).GetProperty("errorConsultaContraventor").ValueKind
             .Should().Be(JsonValueKind.Null, "de una consulta que respondió bien no se guarda nada");
     }
 

@@ -79,7 +79,7 @@ public sealed class ServicioContraventor(ComparendosDb db, Timeline timeline, IA
             db.Contraventores.Add(nuevo);
             c.Contraventor = nuevo;
             timeline.Agregar(c, TipoEventoTimeline.ContraventorAsignado,
-                $"Conductor asignado ({(origen == OrigenContraventor.Api ? "API" : "manual")}): {nuevo.Nombres}, {(numero is null ? "documento pendiente" : $"{tipo} {Comun.HtmlCorreo.Enmascarar(numero)}")}.", actor);
+                $"Conductor asignado ({(origen == OrigenContraventor.Api ? "automático" : "manual")}): {nuevo.Nombres}, {(numero is null ? "documento pendiente" : $"{tipo} {Comun.HtmlCorreo.Enmascarar(numero)}")}.", actor);
         }
         else
         {
@@ -134,7 +134,7 @@ public sealed class ServicioContraventor(ComparendosDb db, Timeline timeline, IA
             DatosAnteriores = anterior,
             DatosNuevos = JsonSerializer.Serialize(Foto(k), Json),
             Origen = k.Origen,
-            Motivo = "Documento completado: la API de contratos no lo trae.",
+            Motivo = "Documento completado: la consulta automática no lo trae.",
             UsuarioId = actor.UsuarioId,
             ActorNombre = actor.Nombre,
             RegistradoEn = reloj.Ahora,
@@ -152,9 +152,9 @@ public sealed class ServicioContraventor(ComparendosDb db, Timeline timeline, IA
         ArgumentNullException.ThrowIfNull(c);
         var config = await capacidades.ExigirAsync(c.TenantId, Capacidad.ConsultaContraventor, ct).ConfigureAwait(false);
         if (config.TipoIntegracionConductor != TipoIntegracionConductor.ApiRenting)
-            throw new ReglaException("SIN_INTEGRACION", "Tu empresa asigna el conductor a mano: no tiene una API de contratos configurada.");
+            throw new ReglaException("SIN_INTEGRACION", "Tu empresa asigna el conductor a mano: no tiene la consulta automática del conductor.");
         if (!ConsultaPorApi.DeNitMarcado(c, await ConsultaPorApi.MarcadosAsync(db, c.TenantId, ct).ConfigureAwait(false)))
-            throw new ReglaException("NIT_SIN_API", "La API de contratos no aplica para el propietario de este comparendo: asigna el conductor a mano.");
+            throw new ReglaException("NIT_SIN_API", "La consulta automática del conductor no aplica para el propietario de este comparendo: asígnalo a mano.");
         if (c.OrganismoTransitoId is { } ot && !(await permisos.DeAsync(c.TenantId, ot, null, ct).ConfigureAwait(false)).Consulta)
             throw new ReglaException("OT_BLOQUEADO", "La consulta de contraventor está bloqueada para este organismo de tránsito.");
         if (c.Placa is null || (c.FechaImposicion ?? c.FechaNotificacion) is not { } fecha)
@@ -167,7 +167,7 @@ public sealed class ServicioContraventor(ComparendosDb db, Timeline timeline, IA
                 if (c.Contraventor is not null && !confirmarReemplazo)
                     return r;
                 Asignar(c, new DatosConductor(k.TipoDocumento?.ToString(), k.NumeroDocumento, k.Nombres, k.Correo, k.Telefono, k.Direccion, k.Ciudad, k.Sucursal, k.TipoContrato),
-                    OrigenContraventor.Api, actor, c.Contraventor is null ? null : "Reemplazo confirmado con la consulta a la API de contratos.", declaracion: false);
+                    OrigenContraventor.Api, actor, c.Contraventor is null ? null : "Reemplazo confirmado con la consulta automática del conductor.", declaracion: false);
                 c.EstadoConsultaContraventor = EstadoConsultaContraventor.Encontrado;
                 c.ErrorConsultaContraventor = null;
                 break;
@@ -185,9 +185,10 @@ public sealed class ServicioContraventor(ComparendosDb db, Timeline timeline, IA
 
         timeline.Agregar(c, TipoEventoTimeline.ContraventorConsultado, r.Resultado switch
         {
-            ResultadoContrato.Encontrado => "La API de contratos encontró el conductor.",
-            ResultadoContrato.NoEncontrado => "La API de contratos no encontró conductor para la placa y la fecha: hay que asignarlo a mano.",
-            _ => $"La consulta a la API de contratos falló: {r.Mensaje}",
+            // El detalle técnico del fallo queda en ErrorConsultaContraventor (solo lo ve el SuperAdmin).
+            ResultadoContrato.Encontrado => "La consulta automática encontró el conductor.",
+            ResultadoContrato.NoEncontrado => "La consulta automática no encontró conductor para la placa y la fecha: hay que asignarlo a mano.",
+            _ => "No se pudo consultar el conductor: se reintenta más tarde o se asigna a mano.",
         }, actor);
         return r;
     }

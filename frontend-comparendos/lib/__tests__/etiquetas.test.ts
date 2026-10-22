@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cambioContraventor, estadoProceso, textoSemaforo, tonoSemaforo, ultimoHito } from "@/lib/etiquetas";
+import { cambioContraventor, estadoProceso, nombreActor, textoParaGestora, textoSemaforo, tonoSemaforo, ultimoHito } from "@/lib/etiquetas";
 import { aQuery, contarFiltros, describirFiltros, FILTROS_VACIOS, resumenPagina } from "@/lib/filtros";
 
 describe("semáforo legal", () => {
@@ -79,5 +79,23 @@ describe("colores del contraventor (Epic GDC-4)", () => {
     expect(consultaContraventor("NoAplica").tono).toBe("warning");
     expect(consultaContraventor("NoEncontrado").tono).toBe("warning");
     expect(consultaContraventor("Encontrado").tono).toBe("success");
+  });
+});
+
+describe("textos sin tecnología para la gestora", () => {
+  it("traduce los eventos guardados con los textos viejos", () => {
+    expect(textoParaGestora("La API de contratos encontró el conductor.")).toBe("La consulta automática encontró el conductor.");
+    expect(textoParaGestora("La consulta a la API de contratos falló: API de contratos simulada no disponible.\n{\"placa\":\"X\"}")).toBe(
+      "No se pudo consultar el conductor: se reintenta más tarde o se asigna a mano.",
+    );
+    expect(textoParaGestora("Conductor asignado (API): JUAN, CC ****0655.")).toBe("Conductor asignado (automático): JUAN, CC ****0655.");
+    expect(textoParaGestora("Aviso 1 enviado por el scheduler a x@y.co (sin descuento).")).toBe("Aviso 1 enviado automáticamente a x@y.co (sin descuento).");
+    expect(textoParaGestora("Pago registrado.")).toBe("Pago registrado.");
+  });
+
+  it("los autores técnicos se leen como automáticos", () => {
+    expect(nombreActor("Scheduler")).toBe("Automático");
+    expect(nombreActor("API de contratos")).toBe("Consulta automática");
+    expect(nombreActor("admin@empresa.local")).toBe("admin@empresa.local");
   });
 });
