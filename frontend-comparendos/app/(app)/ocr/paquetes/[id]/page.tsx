@@ -309,7 +309,7 @@ function Detalle({ id }: { id: string }) {
           onClose={() => setReprocesando(false)}
           busy={ocupado}
           title="Reprocesar los documentos incompletos"
-          description="Se vuelven a leer con la versión publicada del prompt. Lo que ya corregiste a mano se conserva; cada documento se reprocesa máximo 3 veces."
+          description="Se vuelven a leer los documentos incompletos. Lo que ya corregiste a mano se conserva; cada documento se reprocesa máximo 3 veces."
           footer={
             <div className="flex justify-end gap-2">
               <button type="button" className={controlCls(false)} onClick={() => setReprocesando(false)}>
@@ -321,7 +321,7 @@ function Detalle({ id }: { id: string }) {
             </div>
           }
         >
-          <p className="text-sm">Cada lectura tiene costo en el proveedor de OCR.</p>
+          <p className="text-sm">Los que ya se reprocesaron 3 veces se omiten.</p>
         </Modal>
       )}
 

@@ -209,7 +209,7 @@ describe("motivo de un documento fallido (HU #13787, B12-7)", () => {
   });
 
   it("sin mensaje, usa la etiqueta del tipo; sin nada, «Falló»", () => {
-    expect(motivoFallo("Timeout", null)).toBe("El proveedor no respondió a tiempo");
+    expect(motivoFallo("Timeout", null)).toBe("La lectura tardó demasiado");
     expect(motivoFallo(null, "  ")).toBe("Falló");
   });
 });

@@ -522,9 +522,13 @@ public sealed class OcrTests(ApiConOcr api) : IClassFixture<ApiConOcr>
         campos[CamposOcr.Valor].ValorFinal.Should().Be("604100", "lo que nadie tocó toma la nueva lectura");
 
         // AC5: el detalle dice con qué versión se leyó y cuántas veces se reprocesó; el historial registra el pedido.
+        // La versión del prompt solo la ve el SuperAdmin: para la gestora la lectura es transparente.
         var detalle = await Json(await cliente.GetAsync($"/api/v1/comparendos/ocr/documentos/{rp.Id}", ct), ct);
-        (detalle.GetProperty("versionPrompt").GetInt32(), detalle.GetProperty("reprocesos").GetInt32()).Should().Be((publicada.NumeroVersion, 1));
-        detalle.GetProperty("historialIntentos").EnumerateArray().Should().Contain(i => i.GetProperty("resultado").GetString() == "REPROCESO");
+        (detalle.GetProperty("versionPrompt").ValueKind, detalle.GetProperty("reprocesos").GetInt32()).Should().Be((JsonValueKind.Null, 1));
+        detalle.GetProperty("historialIntentos").EnumerateArray().Should().Contain(i => i.GetProperty("resultado").GetString() == "REPROCESO"
+            && i.GetProperty("mensajeError").GetString()!.StartsWith("Reproceso 1 de 3", StringComparison.Ordinal));
+        var flit = await Json(await api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [], SuperAdmin: true)).GetAsync($"/api/v1/comparendos/ocr/documentos/{rp.Id}", ct), ct);
+        flit.GetProperty("versionPrompt").GetInt32().Should().Be(publicada.NumeroVersion);
 
         // AC4: un completo no se reprocesa, y después del tercer reproceso tampoco.
         (await cliente.PostAsync($"/api/v1/comparendos/ocr/documentos/{rp.Id}/reprocesar", null, ct)).StatusCode.Should().Be(HttpStatusCode.Conflict);

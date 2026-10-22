@@ -133,7 +133,7 @@ public sealed class ServicioAvisos(
             c.EstadoNotificacionConductor = nuevo;
         c.Gestionado = true;
         timeline.Agregar(c, TipoEventoTimeline.AvisoEnviado,
-            $"{Nombre(tipo)} {(disparo == Disparo.Manual ? "enviado a mano" : "enviado por el scheduler")} a {c.Contraventor.Correo} ({(porcentaje > 0 ? $"descuento del {porcentaje}%" : "sin descuento")}){(adjunto is null ? string.Empty : ", con la foto de la fotomulta")}.",
+            $"{Nombre(tipo)} {(disparo == Disparo.Manual ? "enviado a mano" : "enviado automáticamente")} a {c.Contraventor.Correo} ({(porcentaje > 0 ? $"descuento del {porcentaje}%" : "sin descuento")}){(adjunto is null ? string.Empty : ", con la foto de la fotomulta")}.",
             actor, new { tipo = tipo.ToString(), ventana = ventana.ToString(), destinatario = c.Contraventor.Correo, foto = adjunto is not null }, "comunicacion_saliente", enviados[0].Id);
         return aviso;
     }

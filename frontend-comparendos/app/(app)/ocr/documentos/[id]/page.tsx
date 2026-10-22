@@ -395,7 +395,7 @@ function Formulario({
           modal === "descartar"
             ? "El documento queda descartado con su motivo; no se registra ni se borra."
             : modal === "reprocesar"
-              ? `Se lee otra vez con la versión publicada del prompt (reproceso ${d.reprocesos + 1} de ${d.maximoReprocesos}). Lo que corregiste a mano se conserva; lo demás toma la nueva lectura.`
+              ? `Se vuelve a leer el documento (reproceso ${d.reprocesos + 1} de ${d.maximoReprocesos}). Lo que corregiste a mano se conserva; lo demás toma la nueva lectura.`
               : `Cambian ${Object.keys(cambios).length} campo(s). Cada cambio queda en el historial con tu usuario.`
         }
         footer={
@@ -419,9 +419,7 @@ function Formulario({
           </div>
         }
       >
-        {modal === "reprocesar" ? (
-          <p className="text-sm">Cada lectura tiene costo en el proveedor de OCR.</p>
-        ) : (
+        {modal !== "reprocesar" && (
           <label className={ETIQUETA_CLS}>
             {modal === "descartar" ? "Motivo (obligatorio)" : "Motivo (opcional)"}
             <input className={INPUT_CLS} value={motivo} maxLength={500} onChange={(e) => setMotivo(e.target.value)} />
@@ -499,7 +497,8 @@ function Revision({ id }: { id: string }) {
         <EstadoDocumento estado={d.estado} />
         <span className="text-xs opacity-70">
           {d.procesadoEn ? `Procesado ${formatoFechaHora(d.procesadoEn)}` : "En cola"}
-          {d.versionPrompt !== null && ` · Leído con la versión ${d.versionPrompt} del prompt`}
+          {/* Versión del prompt, proveedor y modelo: solo los recibe el SuperAdmin. */}
+          {d.versionPrompt !== null && ` · Prompt v${d.versionPrompt}`}
           {d.reprocesos > 0 && ` · Reprocesado ${d.reprocesos} de ${d.maximoReprocesos}`}
           {d.proveedorModelo && ` · ${d.proveedorModelo}`}
           {d.motivoDescarte && ` · Descartado: ${d.motivoDescarte}`}

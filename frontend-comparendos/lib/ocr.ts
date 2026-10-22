@@ -92,12 +92,12 @@ export const ESTADO_DOCUMENTO: Record<string, { texto: string; clase: string }> 
 export const ESTADOS_DOCUMENTO = Object.keys(ESTADO_DOCUMENTO);
 
 export const TIPO_FALLO: Record<string, string> = {
-  Timeout: "El proveedor no respondió a tiempo",
-  Http5xx: "El proveedor falló (5xx)",
-  RateLimit: "El proveedor limitó las peticiones (429)",
-  Red: "Error de red",
-  Ilegible: "Ilegible: el modelo no extrajo datos",
-  ArchivoInvalido: "Archivo inválido",
+  Timeout: "La lectura tardó demasiado",
+  Http5xx: "La lectura falló por un problema temporal",
+  RateLimit: "La lectura está ocupada en este momento",
+  Red: "La lectura falló por un problema de conexión",
+  Ilegible: "Ilegible: no se pudieron leer los datos",
+  ArchivoInvalido: "El archivo no se pudo leer",
 };
 
 /**
@@ -235,7 +235,7 @@ export function marcasRevision(d: {
     else if (c.nombreCampo === "numero_comparendo" && d.avisoNumero) marcas[c.nombreCampo] = d.avisoNumero;
     else if (c.valorCorregido !== null) continue;
     else if (c.nombreCampo === "fecha_notificacion" && c.valorFinal) marcas[c.nombreCampo] = "Confírmala: de ella cuentan los plazos.";
-    else if (c.valorFinal && c.confianza !== null && c.confianza < CONFIANZA_DUDOSA) marcas[c.nombreCampo] = "El modelo dijo no estar seguro de esta lectura.";
+    else if (c.valorFinal && c.confianza !== null && c.confianza < CONFIANZA_DUDOSA) marcas[c.nombreCampo] = "La lectura de este campo es dudosa.";
   }
   return marcas;
 }

@@ -47,7 +47,7 @@ public sealed class ServicioOcr(
         ArgumentNullException.ThrowIfNull(lista);
         await capacidades.ExigirAsync(tenant, Capacidad.Ocr, ct).ConfigureAwait(false);
         if (!proveedor.Configurado)
-            throw ReglaException.Conflicto("OCR_NO_CONFIGURADO", "El OCR no está configurado en este ambiente: falta la llave del proveedor.");
+            throw ReglaException.Conflicto("OCR_NO_CONFIGURADO", "La carga por OCR no está disponible en este momento. Contacta a FLIT.");
         if (string.IsNullOrWhiteSpace(nombre) || nombre.Trim().Length > 150)
             throw new ReglaException("NOMBRE_INVALIDO", "El paquete necesita un nombre de hasta 150 caracteres.");
         if (lista.Count is 0 or > MaximoDocumentos)
@@ -105,7 +105,7 @@ public sealed class ServicioOcr(
 
     public async Task<PromptOcrVersion> PromptPublicadoAsync(CancellationToken ct) =>
         await db.PromptsOcr.AsNoTracking().FirstOrDefaultAsync(p => p.Publicada, ct).ConfigureAwait(false)
-        ?? throw new ReglaException("SIN_PROMPT_OCR", "No hay una versión publicada del prompt de OCR.", StatusCodes.Status409Conflict);
+        ?? throw new ReglaException("SIN_PROMPT_OCR", "La carga por OCR no está disponible en este momento. Contacta a FLIT.", StatusCodes.Status409Conflict);
 
     public async Task IniciarAsync(PaqueteOcr paquete, CancellationToken ct)
     {
@@ -495,7 +495,7 @@ public sealed class ServicioOcr(
     {
         ArgumentNullException.ThrowIfNull(doc);
         if (doc.Estado != EstadoDocumentoOcr.Fallido || !ResultadoOcr.EsTecnico(doc.TipoFallo))
-            throw ReglaException.Conflicto("NO_REINTENTABLE", "Solo se reintentan los documentos que fallaron por un problema técnico del proveedor.");
+            throw ReglaException.Conflicto("NO_REINTENTABLE", "Solo se reintentan los documentos que fallaron por un problema temporal.");
         (doc.Estado, doc.Intentos, doc.ProximoIntentoEn) = (EstadoDocumentoOcr.Pendiente, 0, null);
         var paquete = await db.PaquetesOcr.FirstAsync(p => p.Id == doc.PaqueteId, ct).ConfigureAwait(false);
         if (paquete.Estado == EstadoPaqueteOcr.ProcesadoConErrores)
@@ -527,7 +527,7 @@ public sealed class ServicioOcr(
         db.DocumentoOcrIntentos.Add(new DocumentoOcrIntento
         {
             Id = Guid.CreateVersion7(), DocumentoOcrId = doc.Id, Numero = 0, IntentadoEn = reloj.Ahora, Resultado = "REPROCESO",
-            MensajeError = $"Reproceso {doc.Reprocesos} de {MaximoReprocesos} con la versión {prompt.NumeroVersion} del prompt, pedido por {usuarioNombre ?? usuario.ToString()}.",
+            MensajeError = $"Reproceso {doc.Reprocesos} de {MaximoReprocesos}, pedido por {usuarioNombre ?? usuario.ToString()}.",
         });
         var paquete = await db.PaquetesOcr.FirstAsync(p => p.Id == doc.PaqueteId, ct).ConfigureAwait(false);
         if (paquete.Estado is EstadoPaqueteOcr.Procesado or EstadoPaqueteOcr.ProcesadoConErrores)
