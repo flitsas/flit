@@ -118,8 +118,8 @@ Define `tramites.procedure_types.family` + `code`. Sin prenda ni transformacione
 | Otros | `CAMBIO_COLOR` | Cambio de color | **5** Cambio de color | Obligatoria: `Color nuevo(NUEVO COLOR: {COLOR_NUEVO})`. No sumar color otra vez en tabla 3. |
 | Otros | `REGRABAR_MOTOR_CHASIS` | Regrabar motor, chasis *(inactivo)* | **7** + **8** | Obligatoria si aplica: `Regrabación de motor: {MOTOR}.` / `Regrabación de chasis: {CHASIS}.` FLIT aún no genera este bloque. |
 | Otros | `DUPLICADO_TARJETA` | Duplicado de tarjeta | **10** Duplicado licencia tránsito | Sin bloque automático. Marca además **OTRO** en el numeral 20 (A FAVOR DE vacío). |
-| Otros | `PRENDA_INSCRIPCION` | Inscribir prenda | **11** Inscrip. prenda | Obligatoria: ver estructura tabla 2 (constituir). No sumar tabla 2 otra vez. |
-| Otros | `LEVANTAMIENTO_PRENDA` | Levantar prenda | **12** Levanta prenda | Obligatoria: ver estructura tabla 2 (levantar). No sumar tabla 2 otra vez. |
+| Otros | `PRENDA_INSCRIPCION` | Inscribir prenda | **11** Inscrip. prenda | Obligatoria: ver estructura tabla 2 (constituir). No sumar tabla 2 otra vez. Con decisión `omitir`: casilla 11 sí, sin texto y numeral 20 vacío (riesgo aceptado, ver «Decisión `omitir`»). |
+| Otros | `LEVANTAMIENTO_PRENDA` | Levantar prenda | **12** Levanta prenda | Obligatoria: ver estructura tabla 2 (levantar). No sumar tabla 2 otra vez. Con decisión `omitir`: casilla 12 sí, sin texto y numeral 20 vacío (riesgo aceptado, ver «Decisión `omitir`»). |
 | Otros | `LEVANTAR_INSCRIBIR_PRENDA` | Levantar e inscribir *(inactivo)* | **11** + **12** | Unir ambos literales de la tabla 2 con un espacio. |
 | Otros | `DUPLICADO_PLACA` | Duplicado de placa | **15** Duplicado de placas | Sin bloque automático. Marca además **OTRO** en el numeral 20 (A FAVOR DE vacío). |
 | Otros | `CAMBIO_CARROCERIA` | Cambio de carrocería | **17** Cambio de carrocería | Obligatoria: `Carroceria nueva(NUEVA CARROCERIA: {CARROCERIA_NUEVA})`. No sumar tabla 3. |
@@ -147,14 +147,16 @@ Constantes de código: `FurPrendaObservation.Etiqueta`, `EtiquetaLevantamiento` 
 
 ### Decisión `omitir` («Omitir prenda»)
 
-Aplica en toda la familia `MATRICULAS` con prenda complementaria (`MATRICULA_NUEVA`, `MATRICULA_LEASING`, `REMATRICULA`; gravamen reportado por RUNT), **sin importar** la política CF-06 del OT, y en `TRASPASO_*` y demás tipos con dimensión de gravamen **solo si** el OT admite el certificado de gravamen como opcional (CF-06). `CANCELACION_MATRICULA` queda fuera (su perfil apaga la prenda, DDL 93). El gestor declara que existe gravamen pero **no se solicita ningún trámite de prenda en este FUR**: no hay adjunto, justificación ni acreedor.
+Aplica en **todo** tipo con dimensión de prenda en el que la decisión de prenda aplica (`HasPrendaGate` = `AdmiteDimensionDePrenda && (EsTipoPrendaBase(code) || runtReportaGravamen)`), **sin depender** de la familia ni de la política del OT: CF-06 / HU #10881 quedan retirados (HU #13777). Incluye `MATRICULA_NUEVA`, `MATRICULA_LEASING`, `REMATRICULA`, `TRASPASO_*` y demás tipos con gravamen reportado («gravamen» = prenda, gravamen, garantía RNGM, `runt_prendario` o limitación a la propiedad «a favor de»), y también los tipos de prenda base (`PRENDA_INSCRIPCION`, `LEVANTAMIENTO_PRENDA`; `ProcedureTypeLayers.EsPrendaDeAccionUnica`) aun sin gravamen RUNT. `CANCELACION_MATRICULA` queda fuera (su perfil apaga la prenda, DDL 93). El gestor declara que existe gravamen pero **no se solicita ningún trámite de prenda en este FUR**: no hay adjunto, justificación, acreedor ni entidad de levantamiento.
 
-- Numeral 3: solo la casilla de la tabla 1 (1 en `MATRICULA_NUEVA`/`MATRICULA_LEASING`, 16 en `REMATRICULA`, 2 en `TRASPASO_*`) y las de la tabla 3 que estén activas. **Ni 11 ni 12.**
+- Numeral 3: solo la casilla de la tabla 1 (1 en `MATRICULA_NUEVA`/`MATRICULA_LEASING`, 16 en `REMATRICULA`, 2 en `TRASPASO_*`) y las de la tabla 3 que estén activas. La tabla 2 no suma (**ni 11 ni 12**). En los tipos de prenda base la casilla del propio tipo **se conserva** porque la pone la tabla 1, no la decisión: **11** en `PRENDA_INSCRIPCION`, **12** en `LEVANTAMIENTO_PRENDA` (sin sumar la contraria).
 - Numeral 20: nada por gravamen (LIM. PROPIEDAD, OTRO y A FAVOR DE vacíos).
 - Párrafo 23: no hay bloque de gravamen. Los demás bloques se mantienen en su orden; en `MATRICULA_LEASING` (y en `TRASPASO_UNILATERAL`) el bloque 1 de locatario **sí** se imprime completo — `omitir` solo suprime el bloque 3 (gravamen), nunca el del tipo.
 - El dato de gravamen de la consulta RUNT **no** alimenta el FUR: el formulario declara lo que se solicita, no lo que reporta el RUNT.
 
-Fuente: art. 5.1.8 (el FUR acumula los trámites *solicitados*) y 5.3.13.1 (la inscripción de prenda es un trámite propio). Dejar las casillas vacías es **decisión de producto** (Feature #13110; alcance ampliado a toda la familia Matrículas el 2026-09-29). En traspaso, el riesgo del art. 5.3.2.1 num. 3 está aceptado y registrado en el Feature. Código: `PrendaDecision.ToFurMarking` devuelve `FurPrendaMarking.Ninguna`.
+Fuente: art. 5.1.8 (el FUR acumula los trámites *solicitados*) y 5.3.13.1 (la inscripción de prenda es un trámite propio). Dejar la tabla 2 y el numeral 20 vacíos es **decisión de producto** (Feature #13110; ampliada a Matrículas el 2026-09-29 y a todo tipo con dimensión de prenda, sin CF-06, el 2026-10-21 — HU #13777). Código: `PrendaDecision.ToFurMarking` devuelve `FurPrendaMarking.Ninguna`.
+
+**Riesgo aceptado (2026-10-21, HU #13777 / Feature #13110):** (1) en traspaso y demás tipos, art. 5.3.2.1 num. 3 (gravamen/limitación del vehículo) puede motivar devolución por el OT; (2) en `PRENDA_INSCRIPCION` / `LEVANTAMIENTO_PRENDA` con `omitir`, el FUR sale con la casilla 11 / 12 pero sin LIM. PROPIEDAD / OTRO, sin A FAVOR DE y sin el literal obligatorio de la tabla 1: el formulario solicita la prenda sin nombrar acreedor. Producto lo asume; code review lo advirtió.
 
 ---
 

@@ -174,4 +174,15 @@ public sealed class MandatoObjetoComposerTests
                 "TRASPASO_STANDARD")
             .Should().Be("TRASPASO CON CAMBIO DE COLOR");
     }
+
+    // HU #13777 — prenda base con «omitir»: la tabla 2 nunca suma, el objeto es el de la tabla 1.
+    [Theory]
+    [InlineData("INSCRIBIR PRENDA", "PRENDA_INSCRIPCION")]
+    [InlineData("LEVANTAR PRENDA", "LEVANTAMIENTO_PRENDA")]
+    public void PrendaBase_ConOmitir_ObjetoDeLaTabla1(string nombreTramite, string code)
+    {
+        MandatoObjetoComposer.Componer(
+                nombreTramite, null, PrendaDecision.ToFurMarking(PrendaDecision.Omitir), code)
+            .Should().Be(nombreTramite);
+    }
 }
