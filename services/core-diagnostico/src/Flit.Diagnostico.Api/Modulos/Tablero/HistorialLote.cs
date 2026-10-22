@@ -17,7 +17,8 @@ public sealed record HistorialLoteDto(
 /// <summary>
 /// Una transición del lote: estado anterior (null en la creación), nuevo, disparador (<c>AUTO</c>, <c>CIERRE_PANEL</c> o
 /// <c>REPROCESO</c>; el <c>MANUAL</c> se presenta como <c>AUTO</c> a la compañía, HU #13798), usuario (null si fue el
-/// procesador o el llenado manual) y fecha.
+/// procesador o el llenado manual) y fecha. La ruta del backoffice (HU #13799) usa el mismo registro con el disparador real
+/// (<c>MANUAL</c> incluido) y su usuario.
 /// </summary>
 public sealed record TransicionLoteDto(
     [property: JsonPropertyName("estado_anterior")] string? EstadoAnterior,

@@ -15,7 +15,8 @@ namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 /// <c>/backoffice/</c> también pasa por la política: 403 a quien no es backoffice FLIT, 404 a quien sí. Existen
 /// <c>GET /backoffice/resumen?empresa=</c> (D0) y <c>GET/PUT /backoffice/empresas/{empresa}/configuracion/contrato</c>
 /// (<see cref="ContratoBackofficeEndpoints"/>, HU #13741) y <c>GET /backoffice/consultas/{consulta}/intentos</c>
-/// (<see cref="IntentosBackofficeEndpoints"/>, HU #13737); D3 suma aquí las suyas.
+/// (<see cref="IntentosBackofficeEndpoints"/>, HU #13737) y los lotes, la grilla y el historial de una compañía
+/// (<see cref="DiagnosticosBackofficeEndpoints"/>, HU #13799); D3 suma aquí las suyas.
 /// </summary>
 public static class BackofficeEndpoints
 {
@@ -28,6 +29,7 @@ public static class BackofficeEndpoints
         backoffice.MapGet(RutaResumen, Resumen).WithName("ObtenerResumenEmpresaBackoffice");
         ContratoBackofficeEndpoints.Map(backoffice);
         IntentosBackofficeEndpoints.Map(backoffice);
+        DiagnosticosBackofficeEndpoints.Map(backoffice);
 
         api.MapGroup(Grupo).RequireAuthorization(PoliticaBackoffice.Nombre).MapFallback(() => Results.NotFound());
     }

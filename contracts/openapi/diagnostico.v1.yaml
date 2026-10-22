@@ -1255,6 +1255,207 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorRegla"
 
+  /api/v1/diagnostico/backoffice/diagnosticos:
+    get:
+      tags: [Backoffice]
+      operationId: listarDiagnosticosBackoffice
+      summary: Lotes de una compañía para el backoffice FLIT
+      description: >
+        HU #13799 (F06-H2, F06-C6). Política diagnostico.backoffice (diagnostico.backoffice.ver + tenant_type=FLIT):
+        el rol backoffice_diagnostico en una compañía que no es FLIT, o el admin de la compañía, reciben 403 sin cuerpo.
+        Empresa explícita en ?empresa= (nunca la del token); la lectura queda en diagnostico.lecturas_backoffice con el
+        usuario, la empresa consultada, la ruta y la fecha, antes de leer. Solo lotes de esa compañía, del más reciente
+        al más antiguo (creado_en, id), paginados. `celdas_en_error` = celdas del lote en estado ERROR.
+      parameters:
+        - name: empresa
+          in: query
+          required: true
+          description: Id de la compañía (uuid distinto de cero, un solo valor).
+          schema:
+            type: string
+            format: uuid
+        - name: estado
+          in: query
+          required: false
+          description: Filtra por estado del lote.
+          schema:
+            $ref: "#/components/schemas/EstadoDiagnostico"
+        - name: con_errores
+          in: query
+          required: false
+          description: true = solo lotes con al menos una celda en ERROR; false = solo lotes sin ERROR; sin él, todos.
+          schema:
+            type: boolean
+        - name: pagina
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: tamano
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: Página de lotes de la compañía indicada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListaDiagnosticosBackoffice"
+        "400":
+          description: >
+            `code` = EMPRESA_REQUERIDA (falta ?empresa= o no es válido; no se audita), ESTADO_INVALIDO (`campo` = estado)
+            o PAGINACION_INVALIDA (`campo` = pagina o tamano). Un con_errores que no es booleano también responde 400.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >
+            No es backoffice FLIT (sin cuerpo); token sin compañía (`code` = SIN_EMPRESA) o sin usuario
+            (`code` = SIN_USUARIO); la compañía FLIT sin Diagnóstico activo (`code` = PRODUCTO_NO_HABILITADO).
+
+  /api/v1/diagnostico/backoffice/diagnosticos/{id}/grilla:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote (cabecera).
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Backoffice]
+      operationId: obtenerGrillaDiagnosticoBackoffice
+      summary: Grilla de un lote de una compañía con el origen de cada celda (backoffice FLIT)
+      description: >
+        HU #13799 (F06-H2, F06-C5/C6). Misma política y empresa explícita que listarDiagnosticosBackoffice (la lectura
+        queda auditada). Es la grilla de obtenerGrillaDiagnostico (misma semántica de `desde`/`version`, columnas, avance
+        y estimado_consultas) más `empresa` y, en cada celda, `origen` y `usuario_manual_id`. Sin payload ni documentos.
+        No aplica la visibilidad_usuario de la compañía. El DTO de la compañía no cambia.
+      parameters:
+        - name: empresa
+          in: query
+          required: true
+          description: Id de la compañía dueña del lote (uuid distinto de cero, un solo valor).
+          schema:
+            type: string
+            format: uuid
+        - name: desde
+          in: query
+          required: false
+          description: Versión del tablero que ya tiene el cliente (0 o mayor; por defecto 0 = todo).
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Grilla del lote con el origen de cada celda.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GrillaBackoffice"
+              example:
+                empresa: 7b1f0c2e-6d1a-4c55-9a43-2f6f0d1b9e10
+                id: 0199f3a1-1111-7000-8000-000000000001
+                nombre: Lote octubre
+                estado: COMPLETADO
+                version: 14
+                desde: 0
+                columnas: { por_vehiculo: [RUNT, SIMIT_VEHICULO], por_propietario: [], por_locatario: [] }
+                avance: { vehiculos: 1, terminados: 1 }
+                vehiculos:
+                  - id: 0199f3a1-2222-7000-8000-000000000002
+                    orden: 1
+                    identificador: TST611
+                    tipo_identificador: PLACA_CARRO
+                    placa: TST611
+                    vin: null
+                    terminado: true
+                    celdas:
+                      - { id: 0199f3a1-3333-7000-8000-000000000003, fuente: RUNT, estado: COMPLETADO, motivo_na: null, tipo_error: null, dato_obtenido_en: "2026-10-22T15:00:00+00:00", reutilizada: false, version: 1, origen: API, usuario_manual_id: null }
+                      - { id: 0199f3a1-4444-7000-8000-000000000004, fuente: SIMIT_VEHICULO, estado: COMPLETADO, motivo_na: null, tipo_error: null, dato_obtenido_en: "2026-10-22T15:10:00+00:00", reutilizada: false, version: 14, origen: MANUAL, usuario_manual_id: 0199f3a1-5555-7000-8000-000000000005 }
+        "400":
+          description: "`code` = EMPRESA_REQUERIDA (no se audita) o DESDE_INVALIDO (`campo` = desde)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: No es backoffice FLIT (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
+        "404":
+          description: "`code` = NO_ENCONTRADO: el lote no existe en la compañía indicada."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/backoffice/diagnosticos/{id}/historial:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote (cabecera).
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Backoffice]
+      operationId: obtenerHistorialDiagnosticoBackoffice
+      summary: Historial real de un lote de una compañía (backoffice FLIT)
+      description: >
+        HU #13799 (F06-H2, F06-C5, decisión Q5). Política diagnostico.backoffice y además diagnostico.auditoria.ver.
+        Empresa explícita en ?empresa= (la lectura queda auditada). A diferencia de obtenerHistorialDiagnostico (vista de
+        la compañía, donde MANUAL llega como AUTO y sin usuario), aquí el disparador y el usuario son los reales.
+      parameters:
+        - name: empresa
+          in: query
+          required: true
+          description: Id de la compañía dueña del lote (uuid distinto de cero, un solo valor).
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Estado actual y transiciones reales del lote.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HistorialLoteBackoffice"
+              example:
+                diagnostico_id: 0199f3a1-1111-7000-8000-000000000001
+                estado: COMPLETADO
+                transiciones:
+                  - { estado_anterior: INCOMPLETO, estado_nuevo: COMPLETADO, disparador: MANUAL, usuario_id: 0199f3a1-5555-7000-8000-000000000005, en: "2026-10-22T15:10:00+00:00" }
+        "400":
+          description: "`code` = EMPRESA_REQUERIDA (no se audita)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: No es backoffice FLIT o le falta diagnostico.auditoria.ver (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
+        "404":
+          description: "`code` = NO_ENCONTRADO: el lote no existe en la compañía indicada."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
   /api/v1/diagnostico/backoffice/resumen:
     get:
       tags: [Backoffice]
@@ -2273,6 +2474,138 @@ components:
           format: uuid
           nullable: true
           description: Usuario que la provocó; null si fue el procesador o el llenado manual.
+        en:
+          type: string
+          format: date-time
+
+    ListaDiagnosticosBackoffice:
+      type: object
+      description: Página de lotes de una compañía para el backoffice FLIT (HU #13799).
+      required: [empresa, pagina, tamano, total, diagnosticos]
+      properties:
+        empresa:
+          type: string
+          format: uuid
+          description: La compañía consultada (eco de ?empresa=).
+        pagina:
+          type: integer
+        tamano:
+          type: integer
+        total:
+          type: integer
+          description: Lotes que cumplen los filtros (todas las páginas).
+        diagnosticos:
+          type: array
+          items:
+            $ref: "#/components/schemas/DiagnosticoBackoffice"
+      example:
+        empresa: 7b1f0c2e-6d1a-4c55-9a43-2f6f0d1b9e10
+        pagina: 1
+        tamano: 50
+        total: 1
+        diagnosticos:
+          - { id: 0199f3a1-1111-7000-8000-000000000001, nombre: Lote octubre, estado: EN_PROCESO, creado_en: "2026-10-22T14:00:00+00:00", vehiculos: 2, celdas_en_error: 2 }
+
+    DiagnosticoBackoffice:
+      type: object
+      required: [id, nombre, estado, creado_en, vehiculos, celdas_en_error]
+      properties:
+        id:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+        estado:
+          $ref: "#/components/schemas/EstadoDiagnostico"
+        creado_en:
+          type: string
+          format: date-time
+        vehiculos:
+          type: integer
+          description: Vehículos del lote.
+        celdas_en_error:
+          type: integer
+          description: Celdas del lote en estado ERROR.
+
+    GrillaBackoffice:
+      description: Grilla (schema Grilla) más la empresa consultada; las celdas llevan origen y usuario_manual_id (HU #13799).
+      allOf:
+        - $ref: "#/components/schemas/Grilla"
+        - type: object
+          required: [empresa, vehiculos]
+          properties:
+            empresa:
+              type: string
+              format: uuid
+            vehiculos:
+              type: array
+              items:
+                $ref: "#/components/schemas/FilaVehiculoBackoffice"
+
+    FilaVehiculoBackoffice:
+      description: FilaVehiculo con celdas del backoffice.
+      allOf:
+        - $ref: "#/components/schemas/FilaVehiculo"
+        - type: object
+          required: [celdas]
+          properties:
+            celdas:
+              type: array
+              items:
+                $ref: "#/components/schemas/CeldaGrillaBackoffice"
+
+    CeldaGrillaBackoffice:
+      description: CeldaGrilla más el origen del dato y el usuario del llenado manual (solo backoffice, HU #13799).
+      allOf:
+        - $ref: "#/components/schemas/CeldaGrilla"
+        - type: object
+          required: [origen, usuario_manual_id]
+          properties:
+            origen:
+              type: string
+              nullable: true
+              enum: [API, MANUAL]
+              description: >
+                API = consulta a la fuente (también la reutilizada del mismo día, que se distingue con reutilizada=true);
+                MANUAL = llenado del backoffice; null mientras la celda no tiene dato.
+            usuario_manual_id:
+              type: string
+              format: uuid
+              nullable: true
+              description: Usuario del backoffice que la llenó a mano; null si origen no es MANUAL.
+
+    HistorialLoteBackoffice:
+      type: object
+      required: [diagnostico_id, estado, transiciones]
+      properties:
+        diagnostico_id:
+          type: string
+          format: uuid
+        estado:
+          $ref: "#/components/schemas/EstadoDiagnostico"
+        transiciones:
+          type: array
+          items:
+            $ref: "#/components/schemas/TransicionLoteBackoffice"
+
+    TransicionLoteBackoffice:
+      type: object
+      description: Transición con el disparador y el usuario reales (HU #13799, Q5).
+      required: [estado_anterior, estado_nuevo, disparador, usuario_id, en]
+      properties:
+        estado_anterior:
+          type: string
+          nullable: true
+        estado_nuevo:
+          $ref: "#/components/schemas/EstadoDiagnostico"
+        disparador:
+          type: string
+          enum: [AUTO, CIERRE_PANEL, REPROCESO, MANUAL]
+        usuario_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Null si fue el procesador (AUTO); MANUAL trae el usuario del backoffice.
         en:
           type: string
           format: date-time
