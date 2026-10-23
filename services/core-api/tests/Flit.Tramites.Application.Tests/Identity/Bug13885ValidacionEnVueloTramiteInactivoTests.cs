@@ -200,57 +200,30 @@ public sealed class Bug13885ValidacionEnVueloTramiteInactivoTests
         _repo.ListInFlightBlockersByDocumentAsync(Tenant, "CC", Documento, Arg.Any<CancellationToken>())
             .Returns(filas);
 
-    private static ProcedureInstance Tramite(string estado, bool borrado = false) => new()
-    {
-        Id = Guid.NewGuid(),
-        TenantId = Tenant,
-        Status = estado,
-        DeletedAt = borrado ? DateTimeOffset.UtcNow.AddDays(-1) : null,
-    };
+    private static ProcedureInstance Tramite(string estado, bool borrado = false) =>
+        new() { Id = Guid.NewGuid(), TenantId = Tenant, Status = estado, DeletedAt = borrado ? DateTimeOffset.UtcNow.AddDays(-1) : null };
 
     private static ProcedureInstanceBiometricValidation Fila(string estado, ProcedureInstance? tramite) => new()
     {
-        Id = Guid.NewGuid(),
-        TenantId = Tenant,
-        ProcedureInstanceId = tramite?.Id,
-        ProcedureInstance = tramite,
-        PartyRole = tramite is null ? null : BiometricRules.ParteComprador,
-        Name = "Persona de prueba",
-        DocumentType = "CC",
-        DocumentNumber = Documento,
-        Email = "persona@prueba.test",
-        Status = estado,
-        Provider = BiometricProviders.Kyverum,
-        KyverumVerificationId = "kyv_zombie",
-        TokenHash = Guid.NewGuid().ToString("N"),
-        ExpiresAt = DateTimeOffset.UtcNow.AddDays(-20),
-        CreatedAt = DateTimeOffset.UtcNow.AddDays(-21),
+        Id = Guid.NewGuid(), TenantId = Tenant, ProcedureInstanceId = tramite?.Id, ProcedureInstance = tramite,
+        PartyRole = tramite is null ? null : BiometricRules.ParteComprador, Name = "Persona de prueba",
+        DocumentType = "CC", DocumentNumber = Documento, Email = "persona@prueba.test", Status = estado,
+        Provider = BiometricProviders.Kyverum, KyverumVerificationId = "kyv_zombie", TokenHash = Guid.NewGuid().ToString("N"),
+        ExpiresAt = DateTimeOffset.UtcNow.AddDays(-20), CreatedAt = DateTimeOffset.UtcNow.AddDays(-21),
     };
 
     private ProcedureInstance TramiteBorradorConVendedor()
     {
         var instance = new ProcedureInstance
         {
-            ProcedureType = ProcedureTypeFixture.Traspaso,
-            Id = Guid.NewGuid(),
-            TenantId = Tenant,
-            ProcedureTypeId = Guid.NewGuid(),
-            ReferenceNumber = "FT2-0000181",
-            Status = TramiteEstado.Borrador,
-            CreatedAt = DateTimeOffset.UtcNow,
+            ProcedureType = ProcedureTypeFixture.Traspaso, Id = Guid.NewGuid(), TenantId = Tenant, ProcedureTypeId = Guid.NewGuid(),
+            ReferenceNumber = "FT2-0000181", Status = TramiteEstado.Borrador, CreatedAt = DateTimeOffset.UtcNow,
         };
         instance.Actors.Add(new ProcedureInstanceActor
         {
-            Id = Guid.NewGuid(),
-            TenantId = Tenant,
-            ProcedureInstanceId = instance.Id,
-            ActorType = BiometricRules.ParteVendedor,
-            FullName = "Persona de prueba",
-            DocumentType = "CC",
-            DocumentNumber = Documento,
-            PersonType = "natural",
-            Email = "persona@prueba.test",
-            Ordinal = 1,
+            Id = Guid.NewGuid(), TenantId = Tenant, ProcedureInstanceId = instance.Id, ActorType = BiometricRules.ParteVendedor,
+            FullName = "Persona de prueba", DocumentType = "CC", DocumentNumber = Documento, PersonType = "natural",
+            Email = "persona@prueba.test", Ordinal = 1,
         });
         _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, Tenant, Arg.Any<CancellationToken>()).Returns(instance);
         return instance;
@@ -261,14 +234,8 @@ public sealed class Bug13885ValidacionEnVueloTramiteInactivoTests
         var personRepo = Substitute.For<IPersonRepository>();
         var person = new Person
         {
-            Id = Guid.NewGuid(),
-            TenantId = Tenant,
-            DocumentType = "CC",
-            DocumentNumber = Documento,
-            FullName = "Persona de prueba",
-            Email = "persona@prueba.test",
-            PersonType = PersonTypes.Natural,
-            CreatedAt = DateTimeOffset.UtcNow,
+            Id = Guid.NewGuid(), TenantId = Tenant, DocumentType = "CC", DocumentNumber = Documento, FullName = "Persona de prueba",
+            Email = "persona@prueba.test", PersonType = PersonTypes.Natural, CreatedAt = DateTimeOffset.UtcNow,
         };
         personRepo.FindOrCreateAsync(
                 Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(),
