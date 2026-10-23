@@ -87,13 +87,19 @@ internal sealed class QuipuxApiClient(
             NroDocumentoFuncionario: request.NroDocumentoFuncionario,
             ContenidoDocumento: request.ContenidoDocumento);
 
-        var payload = await SendAuthenticatedAsync<QuipuxRegisterBody, QuipuxRegisterResponse>(
+        var (payload, rawBody) = await SendAuthenticatedAsync<QuipuxRegisterBody, QuipuxRegisterResponse>(
             settings, url, body, "la radicación", cancellationToken);
 
-        if (payload?.Data?.Codigo is not { } codigo)
+        // PDN envuelve el payload en `responseData` (contrato FLIT 1.0 / BackCrudQuipux). Sin unwrap,
+        // `data.codigo` queda null con HTTP 200 → "Respuesta inválida" y no se radica (#13912).
+        var data = payload?.EffectiveData;
+        if (data?.Codigo is not { } codigo)
+        {
+            QuipuxLog.RespuestaSinCodigo(logger, "la radicación", TruncateForLog(rawBody));
             throw new QuipuxException("Respuesta inválida de Quipux al radicar el documento.", isTransient: false);
+        }
 
-        return new QuipuxRegisterResult(codigo, payload.Data.Descripcion);
+        return new QuipuxRegisterResult(codigo, data.Descripcion);
     }
 
     /// <inheritdoc />
@@ -111,18 +117,20 @@ internal sealed class QuipuxApiClient(
             CodigoDivipo: request.CodigoDivipo,
             Consumidor: request.Consumidor);
 
-        var payload = await SendAuthenticatedAsync<QuipuxValidateStatusBody, QuipuxValidateStatusResponse>(
+        var (payload, _) = await SendAuthenticatedAsync<QuipuxValidateStatusBody, QuipuxValidateStatusResponse>(
             settings, url, body, "la consulta de estado", cancellationToken);
+
+        var data = payload?.EffectiveData;
 
         // Sin `data.codigo`: Quipux responde HTTP 200 con cuerpo vacío/parcial cuando el documento
         // nunca se radicó (consulta previa del reintento o sondeo). NO es excepción definitiva —
         // el registrador debe poder continuar al POST (#13912). Se mapea a RegistroError (0), que
         // `EsRegistroExitoso` trata como "no está en Quipux".
-        if (payload?.Data?.Codigo is not { } codigo)
+        if (data?.Codigo is not { } codigo)
         {
             return new QuipuxValidateStatusResult(
                 QuipuxCodigos.RegistroError,
-                payload?.Data?.Descripcion ?? "sin_codigo",
+                data?.Descripcion ?? "sin_codigo",
                 EstadoTramiteCodigo: null,
                 EstadoTramiteDescripcion: null);
         }
@@ -130,8 +138,8 @@ internal sealed class QuipuxApiClient(
         // `estadoTramite` AUSENTE ⇒ null, NO 0. 1.0 colapsaba el ausente a '0' y perdía la distinción entre
         // "Quipux aún no resolvió el trámite" y "Quipux respondió un estado 0", que son cosas distintas para
         // el sondeo (la primera se reintenta; la segunda es un dato real).
-        var estado = payload.Data.EstadoTramite;
-        return new QuipuxValidateStatusResult(codigo, payload.Data.Descripcion, estado?.Codigo, estado?.Descripcion);
+        var estado = data.EstadoTramite;
+        return new QuipuxValidateStatusResult(codigo, data.Descripcion, estado?.Codigo, estado?.Descripcion);
     }
 
     // ── Transporte ────────────────────────────────────────────────────────────
@@ -145,7 +153,7 @@ internal sealed class QuipuxApiClient(
     /// cliente y el reintento solo repite el POST: se invalida el token, se re-loguea y se reintenta UNA
     /// vez. <paramref name="body"/> es un record inmutable y no se toca entre intentos.
     /// </summary>
-    private async Task<TResponse?> SendAuthenticatedAsync<TBody, TResponse>(
+    private async Task<(TResponse? Payload, string RawBody)> SendAuthenticatedAsync<TBody, TResponse>(
         QuipuxSettings settings,
         string url,
         TBody body,
@@ -206,8 +214,12 @@ internal sealed class QuipuxApiClient(
         return await http.SendAsync(message, ct);
     }
 
-    /// <summary>Valida el status HTTP y deserializa. 5xx ⇒ transitorio; 4xx ⇒ definitivo.</summary>
-    private async Task<TResponse?> ReadAsync<TResponse>(HttpResponseMessage response, string operacion, CancellationToken ct)
+    /// <summary>
+    /// Valida el status HTTP y deserializa. Devuelve también el cuerpo crudo (para diagnosticar
+    /// envelopes / campos ausentes sin PII de request). 5xx ⇒ transitorio; 4xx ⇒ definitivo.
+    /// </summary>
+    private async Task<(TResponse? Payload, string RawBody)> ReadAsync<TResponse>(
+        HttpResponseMessage response, string operacion, CancellationToken ct)
     {
         if (!response.IsSuccessStatusCode)
         {
@@ -221,7 +233,19 @@ internal sealed class QuipuxApiClient(
                 transient);
         }
 
-        return await response.Content.ReadFromJsonAsync<TResponse>(JsonOptions, ct);
+        var rawBody = await response.Content.ReadAsStringAsync(ct);
+        var payload = string.IsNullOrWhiteSpace(rawBody)
+            ? default
+            : JsonSerializer.Deserialize<TResponse>(rawBody, JsonOptions);
+        return (payload, rawBody);
+    }
+
+    /// <summary>Cuerpo de respuesta truncado para logs (sin request; solo diagnóstico de forma).</summary>
+    private static string TruncateForLog(string? body)
+    {
+        if (string.IsNullOrEmpty(body))
+            return "(vacío)";
+        return body.Length > 800 ? body[..800] + "…" : body;
     }
 
     // ── Token ─────────────────────────────────────────────────────────────────
@@ -374,9 +398,9 @@ internal sealed class QuipuxApiClient(
     // ── Contrato de cable de Quipux (nombres en español, tal cual los espera) ──
     // JsonPropertyName explícito en todos: el binder no puede depender de convenciones de nombres
     // (restricción AOT del repo, nada de reflexión dinámica) y estos nombres son contrato externo.
-    // `status` (nivel raíz de las respuestas) se OMITE a propósito: 1.0 nunca lo consume — la verdad está
-    // en `data.codigo` — y su tipo en el cable no está fijado, así que mapearlo solo añadiría un modo de
-    // fallo. Las propiedades no mapeadas se ignoran al deserializar.
+    // Envelope: PDN/BackCrudQuipux suele responder `{ "responseData": { "data": {...}, "status": 200 } }`.
+    // Ambientes de prueba a veces mandan `{ "data": {...} }` en la raíz. Se aceptan ambos vía EffectiveData.
+    // El `status` HTTP-like del envelope no se usa para la lógica: la verdad operativa está en `data.codigo`.
 
     private sealed record QuipuxLoginBody(
         [property: JsonPropertyName("usuario")] string Usuario,
@@ -402,7 +426,11 @@ internal sealed class QuipuxApiClient(
         [property: JsonPropertyName("contenidoDocumento")] string ContenidoDocumento);
 
     private sealed record QuipuxRegisterResponse(
-        [property: JsonPropertyName("data")] QuipuxRegisterData? Data);
+        [property: JsonPropertyName("data")] QuipuxRegisterData? Data,
+        [property: JsonPropertyName("responseData")] QuipuxResponseEnvelope<QuipuxRegisterData>? ResponseData)
+    {
+        public QuipuxRegisterData? EffectiveData => Data ?? ResponseData?.Data;
+    }
 
     private sealed record QuipuxRegisterData(
         [property: JsonPropertyName("codigo")] int? Codigo,
@@ -414,7 +442,11 @@ internal sealed class QuipuxApiClient(
         [property: JsonPropertyName("consumidor")] string Consumidor);
 
     private sealed record QuipuxValidateStatusResponse(
-        [property: JsonPropertyName("data")] QuipuxValidateStatusData? Data);
+        [property: JsonPropertyName("data")] QuipuxValidateStatusData? Data,
+        [property: JsonPropertyName("responseData")] QuipuxResponseEnvelope<QuipuxValidateStatusData>? ResponseData)
+    {
+        public QuipuxValidateStatusData? EffectiveData => Data ?? ResponseData?.Data;
+    }
 
     private sealed record QuipuxValidateStatusData(
         [property: JsonPropertyName("codigo")] int? Codigo,
@@ -425,6 +457,11 @@ internal sealed class QuipuxApiClient(
     private sealed record QuipuxEstadoTramite(
         [property: JsonPropertyName("codigo")] int? Codigo,
         [property: JsonPropertyName("descripcion")] string? Descripcion);
+
+    /// <summary>Envelope FLIT 1.0 / PDN: <c>responseData.data</c> (+ <c>status</c> informativo).</summary>
+    private sealed record QuipuxResponseEnvelope<T>(
+        [property: JsonPropertyName("data")] T? Data,
+        [property: JsonPropertyName("status")] int? Status);
 }
 
 /// <summary>
@@ -452,4 +489,8 @@ internal static partial class QuipuxLog
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "El token de Quipux vence dentro del margen de seguridad; se cachea el mínimo de {TtlSegundos}s.")]
     public static partial void TokenVidaCorta(ILogger logger, int ttlSegundos);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Quipux respondió HTTP 200 en {Operacion} sin data.codigo usable. Cuerpo: {ResponseBody}")]
+    public static partial void RespuestaSinCodigo(ILogger logger, string operacion, string responseBody);
 }
