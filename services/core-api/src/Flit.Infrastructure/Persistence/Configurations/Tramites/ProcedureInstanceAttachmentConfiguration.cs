@@ -32,6 +32,9 @@ internal sealed class ProcedureInstanceAttachmentConfiguration : IEntityTypeConf
         builder.Property(x => x.SourcePersonalizedDocumentId).HasColumnName("source_personalized_document_id");
         // HU #12166 (Feature #12156) — FUR/certificados marcados como históricos al revocar (OT).
         builder.Property(x => x.IsHistorico).HasColumnName("is_historico").IsRequired().HasDefaultValue(false);
+        // HU #13172 (Feature #13118) — formato y versión de plantilla con que se emitió el contrato de mandato.
+        builder.Property(x => x.MandateFormatCode).HasColumnName("mandate_format_code").HasMaxLength(30);
+        builder.Property(x => x.MandateFormatVersion).HasColumnName("mandate_format_version");
 
         builder.HasIndex(x => new { x.TenantId, x.ProcedureInstanceId })
             .HasDatabaseName("ix_procedure_instance_attachments_tenant_id_instance");

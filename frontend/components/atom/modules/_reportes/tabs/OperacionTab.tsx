@@ -68,7 +68,7 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
               value={formatInt(summary.entregados)}
               tooltip="Transiciones a 'entregado' dentro del rango de fechas."
               variation={kpiVariation("entregados")}
-              color="#557EFF"
+              color="var(--color-flit-brand)"
             />
             <KpiCard
               label="Aprobados"
@@ -147,7 +147,8 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
       >
         {metrics.data && (
           <div className="flex flex-col gap-4">
-            <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="stuck-title">
+            <section aria-labelledby="stuck-title">
+              {/* Bug #13055 — tabla homologada con el modelo de trámites (sin tarjeta envolvente). */}
               <h2
                 id="stuck-title"
                 className="text-sm font-bold mb-3"
@@ -159,15 +160,15 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
                 <p className="text-xs opacity-60">No hay trámites atascados. ¡Buen ritmo!</p>
               ) : (
                 <div className={CARDLIST_SCROLL}>
-                  <table className={CARDLIST_TABLE} data-testid="stuck-table">
+                  <table className={CARDLIST_TABLE} data-testid="stuck-table" aria-labelledby="stuck-title">
                     <thead>
                       <tr className={CARDLIST_HEAD_ROW}>
-                        <th className={CARDLIST_TH}>Referencia</th>
-                        <th className={CARDLIST_TH}>Estado</th>
-                        <th className={CARDLIST_TH}>Días detenido</th>
-                        <th className={CARDLIST_TH}>Organismo</th>
-                        <th className={CARDLIST_TH}>Tipo</th>
-                        <th className={CARDLIST_TH}>Radicador</th>
+                        <th scope="col" className={CARDLIST_TH}>Referencia</th>
+                        <th scope="col" className={CARDLIST_TH}>Estado</th>
+                        <th scope="col" className={CARDLIST_TH}>Días detenido</th>
+                        <th scope="col" className={CARDLIST_TH}>Organismo</th>
+                        <th scope="col" className={CARDLIST_TH}>Tipo</th>
+                        <th scope="col" className={CARDLIST_TH}>Radicador</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -176,7 +177,7 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
                           <td className={`${CARDLIST_CELL} font-medium`}>
                             <a
                               href={`/tramites/${item.instanceId}`}
-                              className="text-[#557EFF] hover:underline"
+                              className="text-flit-brand hover:underline"
                               aria-label={`Abrir el trámite ${item.referenceNumber}`}
                             >
                               {item.referenceNumber}
@@ -209,7 +210,7 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
                     value: t.entregados,
                     hint: `${formatInt(t.rechazados)} rechazados (${formatPct(t.rejectionRatePct)})`,
                   }))}
-                  color="#557EFF"
+                  color="var(--color-flit-brand)"
                   emptyMessage="Sin entregas por tipo en el periodo."
                 />
               </section>
@@ -224,7 +225,7 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
                     value: o.entregados,
                     hint: `${formatInt(o.aprobados)} aprobados · ${formatInt(o.rechazados)} rechazados`,
                   }))}
-                  color="#00DBD5"
+                  color="var(--color-flit-tech)"
                   emptyMessage="Sin entregas por organismo en el periodo."
                 />
               </section>

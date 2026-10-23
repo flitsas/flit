@@ -150,7 +150,7 @@ describe('TramiteDetalleActores', () => {
 
     render(<TramiteDetalleActores instanceId="inst-1" item={BASE_ITEM} />);
 
-    const vendedorCard = await screen.findByRole('region', { name: 'Propietario / vendedor' });
+    const vendedorCard = await screen.findByRole('region', { name: 'Vendedor' });
     expect(within(vendedorCard).getByText('Actor Vendedor Prueba')).toBeInTheDocument();
     expect(within(vendedorCard).getByText('CC 1017229443')).toBeInTheDocument();
     expect(within(vendedorCard).getByText('vendedor@example.com')).toBeInTheDocument();
@@ -178,7 +178,7 @@ describe('TramiteDetalleActores', () => {
     );
 
     expect(await screen.findByRole('region', { name: 'Comprador' })).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Propietario / vendedor' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Vendedor' })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Vendedor' })).not.toBeInTheDocument();
 
     const rlCard = screen.getByRole('region', { name: 'Representante legal' });
@@ -212,7 +212,7 @@ describe('TramiteDetalleActores', () => {
 
       render(<TramiteDetalleActores instanceId="inst-1" item={BASE_ITEM} />);
 
-      expect(await screen.findByRole('region', { name: 'Propietario / vendedor' })).toBeInTheDocument();
+      expect(await screen.findByRole('region', { name: 'Vendedor' })).toBeInTheDocument();
       expect(screen.getByRole('region', { name: 'Comprador' })).toBeInTheDocument();
       expect(screen.queryByRole('region', { name: /Comprador 1/ })).not.toBeInTheDocument();
       expect(screen.queryByText(/%/)).not.toBeInTheDocument();

@@ -49,9 +49,6 @@ internal sealed class TransitOfficeTenantWriteRepository : ITransitOfficeTenantW
         _auditContext = auditContext ?? throw new ArgumentNullException(nameof(auditContext));
     }
 
-    public Task<bool> CodeExistsAsync(string code, CancellationToken cancellationToken = default) =>
-        _context.Tenants.AsNoTracking().AnyAsync(t => t.Code == code, cancellationToken);
-
     public Task<bool> TransitOfficeHasProfileAsync(
         Guid transitOfficeId,
         CancellationToken cancellationToken = default) =>
@@ -75,7 +72,7 @@ internal sealed class TransitOfficeTenantWriteRepository : ITransitOfficeTenantW
                 var tenant = new Tenant
                 {
                     Id = tenantId,
-                    Code = newTransitOffice.Code,
+                    // HU #13605 — sin Code: lo asigna Postgres (consecutivo COMP-XXXX).
                     LegalName = newTransitOffice.LegalName,
                     TaxId = newTransitOffice.TaxId,
                     // Decisión intencional (no se toca en HUs futuras sin revisar el ADR):

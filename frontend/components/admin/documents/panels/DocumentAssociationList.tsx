@@ -34,7 +34,7 @@ export function DocumentAssociationList({
         >
           <span
             className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-white"
-            style={{ background: "#557EFF" }}
+            style={{ background: "var(--color-flit-brand)" }}
             aria-hidden="true"
           >
             <FileText className="h-3.5 w-3.5" />
@@ -49,7 +49,7 @@ export function DocumentAssociationList({
             </p>
           </div>
 
-          <label className="flex items-center gap-1.5 text-[10px] font-semibold">
+          <label className="flex items-center gap-1.5 text-xs font-semibold">
             <input
               type="checkbox"
               checked={item.obligatorio}

@@ -106,13 +106,13 @@ public sealed class AnalyticsEmailGoldenTests
     private static IAnalyticsReadRepository ConActividad()
     {
         var analytics = Substitute.For<IAnalyticsReadRepository>();
-        analytics.GetOverviewAsync(Arg.Any<Guid?>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+        analytics.GetOverviewAsync(Arg.Any<Guid?>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), null, Arg.Any<CancellationToken>())
             .Returns(new List<CategoryMetricsDto>
             {
                 new("matriculas", 7, new List<StatusCountDto> { new("aprobado", 5), new("rechazado", 2) }),
                 new("traspasos", 3, new List<StatusCountDto> { new("radicado", 3) }),
             });
-        analytics.GetTopProducersAsync(Arg.Any<Guid?>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        analytics.GetTopProducersAsync(Arg.Any<Guid?>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<int>(), null, Arg.Any<CancellationToken>())
             .Returns(new List<TopProducerDto>
             {
                 new(Guid.Empty, "Radicador Uno", 6, 5, 1),
@@ -124,9 +124,9 @@ public sealed class AnalyticsEmailGoldenTests
     private static IAnalyticsReadRepository SinActividad()
     {
         var analytics = Substitute.For<IAnalyticsReadRepository>();
-        analytics.GetOverviewAsync(Arg.Any<Guid?>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+        analytics.GetOverviewAsync(Arg.Any<Guid?>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), null, Arg.Any<CancellationToken>())
             .Returns(new List<CategoryMetricsDto>());
-        analytics.GetTopProducersAsync(Arg.Any<Guid?>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        analytics.GetTopProducersAsync(Arg.Any<Guid?>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<int>(), null, Arg.Any<CancellationToken>())
             .Returns(new List<TopProducerDto>());
         return analytics;
     }

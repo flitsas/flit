@@ -25,6 +25,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Eye, Search } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
 import { ModuleTitle } from "./ModuleTitle";
@@ -38,7 +39,8 @@ import { formatFechaHora } from "@/lib/format/date";
 
 type Phase = "idle" | "loading" | "error" | "empty" | "ready";
 
-const PAGE_SIZE = 20;
+// Bug #13055 — tamaño inicial dentro del estándar de filas por página (10/25/50/100).
+const PAGE_SIZE = 10;
 
 // Clases del input: el color sale de tokens, no de hex (HU #12197). `border` a secas ya toma
 // `--border` (== #DFE5ED en claro, white/10 en oscuro) desde la capa base de globals.css, así que
@@ -89,10 +91,11 @@ export function HistorialPlaca({
   const [rows, setRows] = useState<InstanceSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   /** Fila abierta en el detalle. `null` = modal cerrado (el modal es controlado por `open`). */
   const [detalle, setDetalle] = useState<InstanceSummary | null>(null);
 
-  const load = useCallback(async (placa: string, pageToLoad: number) => {
+  const load = useCallback(async (placa: string, pageToLoad: number, size: number = PAGE_SIZE) => {
     const normalized = normalizarPlaca(placa);
     // Placa vacía: no se consulta al servidor. Volver a `idle` es deliberado — nadie ha buscado
     // nada, así que anunciar "no hay resultados" sería responder una pregunta que no se hizo.
@@ -111,8 +114,8 @@ export function HistorialPlaca({
     try {
       const res = await tramitesClient.listPlateHistory({
         placa: normalized,
-        skip: (pageToLoad - 1) * PAGE_SIZE,
-        take: PAGE_SIZE,
+        skip: (pageToLoad - 1) * size,
+        take: size,
       });
       setRows(res.items);
       setTotal(res.total);
@@ -134,7 +137,7 @@ export function HistorialPlaca({
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    void load(placaInput, 1);
+    void load(placaInput, 1, pageSize);
   };
 
   // HU #12196 — entrada con placa precargada. El `ref` guarda la última placa auto-consultada para
@@ -320,11 +323,13 @@ export function HistorialPlaca({
             emptyMessage="Ingrese una placa y pulse Consultar para ver su historial de trámites."
           />
         </div>
+      ) : phase === "loading" ? (
+        // Bug #13055 — carga con el loader del carrito (antes, esqueleto).
+        <CarLoaderModal label="Cargando historial de la placa…" />
       ) : (
         <UiStateBoundary
           status={boundaryStatus}
-          onRetry={() => void load(appliedPlaca || placaInput, page)}
-          skeletonRows={5}
+          onRetry={() => void load(appliedPlaca || placaInput, page, pageSize)}
           emptyMessage={
             appliedPlaca
               ? `No hay trámites registrados para la placa ${appliedPlaca}.`
@@ -341,9 +346,14 @@ export function HistorialPlaca({
               minWidth={1400}
               pagination={{
                 page,
-                pageSize: PAGE_SIZE,
+                pageSize,
                 totalCount: total,
-                onPageChange: (next) => void load(appliedPlaca, next),
+                onPageChange: (next) => void load(appliedPlaca, next, pageSize),
+                // «Filas por página»: cambiar el tamaño vuelve a la página 1.
+                onPageSizeChange: (next) => {
+                  setPageSize(next);
+                  void load(appliedPlaca, 1, next);
+                },
               }}
             />
           </div>

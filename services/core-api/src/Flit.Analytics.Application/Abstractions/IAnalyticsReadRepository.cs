@@ -6,6 +6,8 @@ namespace Flit.Analytics.Application.Abstractions;
 /// Acceso de solo lectura a los agregados analíticos (schema <c>analytics</c>, HU #10153/#10240).
 /// La implementación fija <c>app.current_tenant_id</c> para respetar RLS antes de consultar.
 /// <paramref name="tenantId"/> null (solo SuperAdmin) = todas las compañías (sin filtro de tenant).
+/// HU #13664 — <c>allowedFamilies</c> en cada lectura: códigos de familia con Ver (<c>ProcedureFamilyCodes</c>);
+/// <c>null</c> = sin restricción, vacío = ninguna familia (ningún trámite).
 /// </summary>
 public interface IAnalyticsReadRepository
 {
@@ -20,14 +22,16 @@ public interface IAnalyticsReadRepository
     /// aunque siga en curso. Cada extremo es independiente: se puede acotar solo por uno.
     /// </para>
     Task<IReadOnlyList<CategoryMetricsDto>> GetOverviewAsync(
-        Guid? tenantId, DateOnly? fromDate, DateOnly? toDate, CancellationToken ct = default);
+        Guid? tenantId, DateOnly? fromDate, DateOnly? toDate,
+        IReadOnlyList<string>? allowedFamilies = null, CancellationToken ct = default);
 
     /// <summary>
     /// Top de radicadores ordenados por trámites enviados (submitted) descendente, hasta <paramref name="limit"/>.
     /// <paramref name="tenantId"/> null → vista global de todas las compañías (solo SuperAdmin).
     /// </summary>
     Task<IReadOnlyList<TopProducerDto>> GetTopProducersAsync(
-        Guid? tenantId, DateOnly fromDate, DateOnly toDate, int limit, CancellationToken ct = default);
+        Guid? tenantId, DateOnly fromDate, DateOnly toDate, int limit,
+        IReadOnlyList<string>? allowedFamilies = null, CancellationToken ct = default);
 
     /// <summary>
     /// Detalle paginado de trámites del tenant en el rango, filtrable por categoría y estado.
@@ -36,7 +40,8 @@ public interface IAnalyticsReadRepository
     /// </summary>
     Task<ProcedureDetailsPageDto> GetProcedureDetailsAsync(
         Guid tenantId, DateOnly fromDate, DateOnly toDate,
-        string? category, string? status, int page, int pageSize, CancellationToken ct = default);
+        string? category, string? status, int page, int pageSize,
+        IReadOnlyList<string>? allowedFamilies = null, CancellationToken ct = default);
 
     /// <summary>
     /// Recorre en streaming el detalle de trámites filtrado (sin paginar), invocando
@@ -45,12 +50,14 @@ public interface IAnalyticsReadRepository
     /// </summary>
     Task ExportProcedureDetailsAsync(
         Guid tenantId, DateOnly fromDate, DateOnly toDate, string? category, string? status,
-        Func<ProcedureDetailDto, CancellationToken, Task> onRowAsync, CancellationToken ct = default);
+        Func<ProcedureDetailDto, CancellationToken, Task> onRowAsync,
+        IReadOnlyList<string>? allowedFamilies = null, CancellationToken ct = default);
 
     /// <summary>
     /// Tendencia mensual de trámites agrupados por categoría en el rango indicado.
     /// <paramref name="tenantId"/> null (solo SuperAdmin) = todas las compañías (sin filtro de tenant).
     /// </summary>
     Task<IReadOnlyList<MonthlyTrendPointDto>> GetMonthlyTrendAsync(
-        Guid? tenantId, DateOnly fromDate, DateOnly toDate, CancellationToken ct = default);
+        Guid? tenantId, DateOnly fromDate, DateOnly toDate,
+        IReadOnlyList<string>? allowedFamilies = null, CancellationToken ct = default);
 }

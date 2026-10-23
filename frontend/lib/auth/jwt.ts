@@ -22,6 +22,8 @@ export interface JwtPayload {
   /** HU #12351 — tenant padre cuando el usuario opera un cliente hijo. */
   parent_tenant_id?: string;
   tenant_type?: string;
+  /** HU #10616 — tipo de entidad del tenant: "COMPANY" | "TRANSIT_OFFICE". */
+  entity_type?: string;
   role_id?: string;
   exp?: number;
   [key: string]: unknown;
@@ -41,6 +43,9 @@ export const ADMIN_COMPANY_ROLE = "AdminCompany";
 
 /** Rol requerido para la consola OT (HU #10218). */
 export const OT_ADMIN_ROLE = "ot_admin";
+
+/** Valor de `entity_type` que identifica a un tenant organismo de tránsito. */
+export const TRANSIT_OFFICE_ENTITY_TYPE = "TRANSIT_OFFICE";
 
 /**
  * Decodifica el payload (segunda parte) de un JWT base64url. Devuelve `null` si
@@ -98,6 +103,28 @@ export function isAdminCompany(payload: JwtPayload | null): boolean {
   }
 
   const target = ADMIN_COMPANY_ROLE.toLowerCase();
+  if (typeof payload.role_code === "string" && payload.role_code.toLowerCase() === target) {
+    return true;
+  }
+  if (typeof payload.role === "string" && payload.role.toLowerCase() === target) {
+    return true;
+  }
+  return (
+    Array.isArray(payload.roles) &&
+    payload.roles.some((r) => typeof r?.code === "string" && r.code.toLowerCase() === target)
+  );
+}
+
+/**
+ * Indica si el payload tiene el rol `code` (comparación case-insensitive sobre `role`, `role_code` o el
+ * arreglo `roles`). Base de los requisitos de rol de la tabla de acceso (`lib/nav/module-access.ts`, ADR-0074).
+ */
+export function hasRoleCode(payload: JwtPayload | null, code: string): boolean {
+  if (!payload) {
+    return false;
+  }
+
+  const target = code.toLowerCase();
   if (typeof payload.role_code === "string" && payload.role_code.toLowerCase() === target) {
     return true;
   }
@@ -201,6 +228,18 @@ export function canReadGeneracionDocumental(payload: JwtPayload | null): boolean
   return isSuperAdmin(payload) || hasPermission(payload, GENERACION_DOCUMENTAL_READ_PERMISSION);
 }
 
+/** Permiso de la descarga masiva de consolidados (épica #13216, HU #13380). */
+export const CONSOLIDADO_MASIVO_DOWNLOAD_PERMISSION = "consolidado-masivo.download";
+
+/**
+ * Puede seleccionar trámites para la descarga masiva de consolidados: permiso
+ * `consolidado-masivo.download` o SuperAdmin. Sin él no se pintan casillas ni barra de selección
+ * (HU #13380, AC6). Solo decide qué se muestra; la autorización real la hace la API.
+ */
+export function canDescargarConsolidadosMasivo(payload: JwtPayload | null): boolean {
+  return isSuperAdmin(payload) || hasPermission(payload, CONSOLIDADO_MASIVO_DOWNLOAD_PERMISSION);
+}
+
 /** Permiso para administrar la configuración global de Confirmación RUNT (Feature #12276, HU #12313). */
 export const RUNT_CONFIRMATION_SETTINGS_MANAGE_PERMISSION = "runt_confirmation.settings.manage";
 
@@ -232,17 +271,13 @@ export function canAccessRuntConfirmation(payload: JwtPayload | null): boolean {
   return canManageRuntConfirmation(payload) || canReadRuntConfirmationHistory(payload);
 }
 
-/** Permiso del módulo de banners promocionales (Feature #12236, HU #12241). */
-export const BANNERS_MANAGE_PERMISSION = "banners.manage";
-
 /**
- * Puede administrar (listar/crear/editar/eliminar) banners promocionales: permiso
- * `banners.manage` o SuperAdmin (bypass total, igual que `RequirePermission` en
- * `AdminBannersEndpoints.cs`). El módulo NO es exclusivo de SuperAdmin: igual que
- * `generacion-documental.read`, cualquier rol con este permiso concedido debe entrar.
+ * Puede administrar (listar/crear/editar/eliminar) banners promocionales: SOLO el Super Admin FLIT
+ * (HU #13438/#13439, Épica #12750). Ningún otro rol puede tenerlo, ni siquiera con el permiso
+ * `banners.manage` en el token: el backend exige el rol (`SuperAdminPolicy`), no el permiso.
  */
 export function canManageBanners(payload: JwtPayload | null): boolean {
-  return isSuperAdmin(payload) || hasPermission(payload, BANNERS_MANAGE_PERMISSION);
+  return isSuperAdmin(payload);
 }
 
 /** Permiso de reset administrativo de contraseña en el propio tenant (HU #10170). */
@@ -301,6 +336,28 @@ export function isOtAdmin(payload: JwtPayload | null): boolean {
     Array.isArray(payload.roles) &&
     payload.roles.some((r) => typeof r?.code === "string" && r.code.toLowerCase() === target)
   );
+}
+
+/**
+ * Indica si el tenant del payload es un organismo de tránsito (`entity_type = TRANSIT_OFFICE`).
+ */
+export function isTransitOfficeTenant(payload: JwtPayload | null): boolean {
+  return (
+    typeof payload?.entity_type === "string" &&
+    payload.entity_type.toUpperCase() === TRANSIT_OFFICE_ENTITY_TYPE
+  );
+}
+
+/**
+ * Indica si el usuario opera la superficie OT (tablero, hub, bandeja de trámites).
+ * Antes esto era `isOtAdmin` a secas y cualquier otro rol de un organismo (p. ej. "Gestor OT")
+ * caía en la experiencia del gestor de empresa, con dashboard y radicación incluidos. La señal
+ * que decide es el tipo de tenant: los roles con TargetEntityType TRANSIT_OFFICE solo pueden
+ * asignarse en tenants OT, así que todo usuario de un organismo entra aquí. `ot_admin` se
+ * conserva por compatibilidad con tokens que no traigan `entity_type`.
+ */
+export function isOtUser(payload: JwtPayload | null): boolean {
+  return isOtAdmin(payload) || isTransitOfficeTenant(payload);
 }
 
 function base64UrlDecode(value: string): string {

@@ -7,6 +7,7 @@ import type { UiStatus } from "@/components/admin/UiStateBoundary";
 import { RowActions, type RowAction } from "@/components/atom/RowActions";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { useToast } from "@/components/admin/Toast";
 import {
   fetchTransitOfficesOperationalStatus,
@@ -69,10 +70,10 @@ function matchesQuipux(office: TransitOfficeOperationalStatus, filter: QuipuxFil
 
 // Selects de filtro — tokens FLIT (borde soft, foco azul marca).
 const FILTER_SELECT_CLS =
-  "rounded-[10px] border border-[var(--nav-borde,#DDE5F0)] bg-white px-3 py-2 text-sm text-[#162744] outline-none focus:border-[#4F74C9] focus:ring-2 focus:ring-[#4F74C9]/30 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
-const FILTER_OPTION_CLS = "bg-white text-[#162744] dark:bg-[#0B0F14] dark:text-white";
+  "rounded-[10px] border border-[var(--nav-borde,#DDE5F0)] bg-white px-3 py-2 text-sm text-flit-primary outline-none focus:border-[#4F74C9] focus:ring-2 focus:ring-[#4F74C9]/30 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
+const FILTER_OPTION_CLS = "bg-white text-flit-primary dark:bg-[#0B0F14] dark:text-white";
 const FILTER_INPUT_CLS =
-  "w-full rounded-[10px] border border-[var(--nav-borde,#DDE5F0)] bg-white py-2 pl-9 pr-3 text-sm text-[#162744] outline-none focus:border-[#4F74C9] focus:ring-2 focus:ring-[#4F74C9]/30 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
+  "w-full rounded-[10px] border border-[var(--nav-borde,#DDE5F0)] bg-white py-2 pl-9 pr-3 text-sm text-flit-primary outline-none focus:border-[#4F74C9] focus:ring-2 focus:ring-[#4F74C9]/30 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
 
 export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps = {}) {
   const router = useRouter();
@@ -120,6 +121,14 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
       ),
     [offices, search, estadoFilter, quipuxFilter, departamento],
   );
+
+  // Bug #13055 — tabla homologada con el modelo de trámites: paginación en cliente con filas por
+  // página; al cambiar cualquier filtro se vuelve a la página 1.
+  const pg = usePaginacion();
+  const { setPage } = pg;
+  useEffect(() => {
+    setPage(1);
+  }, [search, estadoFilter, quipuxFilter, departamento, setPage]);
 
   const departamentos = useMemo(() => {
     const codes = Array.from(new Set(offices.map((o) => o.departmentCode))).filter(Boolean);
@@ -318,8 +327,15 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
 
       <DataTable
         columns={columns}
-        rows={filtered}
+        rows={pg.paginar(filtered)}
         getRowKey={(office) => office.id}
+        pagination={{
+          page: pg.page,
+          pageSize: pg.pageSize,
+          totalCount: filtered.length,
+          onPageChange: pg.setPage,
+          onPageSizeChange: pg.setPageSize,
+        }}
         status={listStatus}
         onRetry={() => void load()}
         minWidth={768}
@@ -401,7 +417,7 @@ function QuipuxCell({ office }: { office: TransitOfficeOperationalStatus }) {
   return (
     <div className="flex flex-col gap-1">
       {office.divipoCode ? (
-        <span className="font-mono text-xs text-[#162744] dark:text-white">{office.divipoCode}</span>
+        <span className="font-mono text-xs text-flit-primary dark:text-white">{office.divipoCode}</span>
       ) : (
         <StatusBadge
           label="Sin código integrador"

@@ -11,7 +11,10 @@ using Flit.Admin.Application.Companies.LegalRepresentatives.GetLegalRepresentati
 using Flit.Admin.Application.Companies.LegalRepresentatives.ListLegalRepresentatives;
 using Flit.Admin.Application.Companies.LegalRepresentatives.UpdateLegalRepresentative;
 using Flit.Admin.Application.Companies.MandateSigners.CompanyMandateSigners;
+using Flit.Admin.Application.Companies.MandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.CreateMandateSigner;
+using Flit.Admin.Application.Companies.MandateSigners.DeleteMandateSigner;
+using Flit.Admin.Application.Companies.MandateSigners.GetMandateSignerImpact;
 using Flit.Admin.Application.Companies.MandateSigners.InactivateMandateSigner;
 using Flit.Admin.Application.Companies.MandateSigners.ListCompanyMandateSigners;
 using Flit.Admin.Application.Companies.MandateSigners.ReactivateMandateSigner;
@@ -43,11 +46,15 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
     {
         group.MapGet("", ListMandateSignersAsync);
         group.MapGet("/transit-offices", ListChildTransitOfficesAsync);
-        group.MapGet("/represented-companies", ListChildRepresentedCompaniesAsync);
+        group.MapGet("/associable-companies", ListChildAssociableCompaniesAsync);
         group.MapPost("", CreateMandateSignerAsync);
         group.MapPut("/{mandateSignerId:guid}", UpdateMandateSignerAsync);
         group.MapPost("/{mandateSignerId:guid}/inactivate", InactivateChildMandateSignerAsync);
         group.MapPost("/{mandateSignerId:guid}/reactivate", ReactivateChildMandateSignerAsync);
+        group.MapRetiredRepresentedCompanies(); // HU #13179b: ruta retirada → 404 (no 405)
+        // HU #13135 — eliminación (baja lógica) e impacto, también desde la cabeza de red sobre sus hijas.
+        group.MapDelete("/{mandateSignerId:guid}", DeleteChildMandateSignerAsync);
+        group.MapGet("/{mandateSignerId:guid}/impact", ImpactChildMandateSignerAsync);
         return group;
     }
 
@@ -124,7 +131,10 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
             return forbid;
         }
 
-        var result = await handler.HandleAsync(childTenantId, ct).ConfigureAwait(false);
+        // HU #13134 — origen y banderas por rol (la cabeza de red actúa como Admin de Compañía).
+        var result = await handler
+            .HandleAsync(childTenantId, MandateSignerActors.ForCompany(user), ct)
+            .ConfigureAwait(false);
         return Results.Ok(new { data = result });
     }
 
@@ -144,7 +154,8 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
         }
 
         var result = await handler
-            .HandleAsync(childTenantId, request, AdminCompanyChildrenConfigEndpoints.ResolveUserId(user), ct)
+            .HandleAsync(
+                childTenantId, request, AdminCompanyChildrenConfigEndpoints.ResolveUserId(user), AdminCompanyMandateSignersEndpoints.OrigenDeLaCompania(user), ct)
             .ConfigureAwait(false);
 
         return result.IsValid
@@ -163,6 +174,7 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
         CompanyMandateSignerRequest request,
         ClaimsPrincipal user,
         [FromServices] ICompanyHierarchyRepository hierarchy,
+        [FromServices] MandateSignerAccessGuard accessGuard,
         [FromServices] UpdateCompanyMandateSignerHandler handler,
         CancellationToken ct)
     {
@@ -172,8 +184,17 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
             return forbid;
         }
 
+        // HU #13134 — candado: lo configurado por el organismo no lo edita la cabeza de red (403).
+        var denied = await MandateSignerActors
+            .CheckCompanyWriteAsync(accessGuard, user, childTenantId, mandateSignerId, ct).ConfigureAwait(false);
+        if (denied is not null)
+        {
+            return denied;
+        }
+
         var result = await handler
-            .HandleAsync(childTenantId, mandateSignerId, request, AdminCompanyChildrenConfigEndpoints.ResolveUserId(user), ct)
+            .HandleAsync(
+                childTenantId, mandateSignerId, request, AdminCompanyChildrenConfigEndpoints.ResolveUserId(user), AdminCompanyMandateSignersEndpoints.OrigenDeLaCompania(user), ct)
             .ConfigureAwait(false);
 
         return result.Outcome switch
@@ -610,12 +631,17 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
         return Results.Ok(new { data = result });
     }
 
-    private static async Task<IResult> ListChildRepresentedCompaniesAsync(
+    /// <summary>HU #13178 — hijas del cliente hijo (por jerarquía no tiene: lista vacía y aplica solo a su compañía).</summary>
+    private static async Task<IResult> ListChildAssociableCompaniesAsync(
         Guid headTenantId,
         Guid childTenantId,
         ClaimsPrincipal user,
+        [FromQuery] string? search,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize,
+        [FromQuery] bool? all,
         [FromServices] ICompanyHierarchyRepository hierarchy,
-        [FromServices] ILegalRepresentativeReader reader,
+        [FromServices] Flit.Admin.Domain.Companies.MandateSigners.IMandatarioAssociableCompanies service,
         CancellationToken ct)
     {
         var forbid = await GuardAsync(user, headTenantId, childTenantId, hierarchy, ct).ConfigureAwait(false);
@@ -624,95 +650,78 @@ internal static class AdminCompanyChildrenSubmoduleEndpoints
             return forbid;
         }
 
-        var empresas = await reader.ListRepresentedCompaniesAsync(childTenantId, ct).ConfigureAwait(false);
-        return Results.Ok(new
-        {
-            items = empresas.Select(e => new { id = e.Id, documentNumber = e.DocumentNumber, name = e.Name }),
-        });
+        return AssociableCompaniesHttp.ToResult(
+            await service.ListForCompanyAsync(childTenantId, search, page ?? 1, AssociableCompaniesHttp.PageSizeOf(pageSize, all), ct).ConfigureAwait(false));
     }
 
     private static async Task<IResult> InactivateChildMandateSignerAsync(
         Guid headTenantId,
         Guid childTenantId,
         Guid mandateSignerId,
-        ClaimsPrincipal user,
+        HttpContext http,
         [FromServices] ICompanyHierarchyRepository hierarchy,
+        [FromServices] MandateSignerAccessGuard accessGuard,
         [FromServices] ListCompanyMandateSignersHandler listHandler,
         [FromServices] InactivateMandateSignerHandler handler,
         CancellationToken ct)
     {
-        var forbid = await GuardAsync(user, headTenantId, childTenantId, hierarchy, ct).ConfigureAwait(false);
-        if (forbid is not null)
-        {
-            return forbid;
-        }
-
-        var transitOfficeId = await ResolverOrganismoPrimarioAsync(listHandler, childTenantId, mandateSignerId, ct)
+        var forbid = await GuardAsync(http.User, headTenantId, childTenantId, hierarchy, ct).ConfigureAwait(false);
+        return forbid ?? await MandateSignerLifecycleResponses
+            .CompanyInactivateAsync(http, childTenantId, mandateSignerId, accessGuard, listHandler, handler, ct)
             .ConfigureAwait(false);
-        if (transitOfficeId is null)
-        {
-            return Results.NotFound();
-        }
-
-        var outcome = await handler
-            .HandleAsync(
-                new InactivateMandateSignerCommand
-                {
-                    TransitOfficeId = transitOfficeId.Value,
-                    MandateSignerId = mandateSignerId,
-                    ChangedBy = AdminCompanyChildrenConfigEndpoints.ResolveUserId(user),
-                },
-                ct)
-            .ConfigureAwait(false);
-
-        return outcome == InactivateMandateSignerOutcome.Inactivated ? Results.NoContent() : Results.NotFound();
     }
 
     private static async Task<IResult> ReactivateChildMandateSignerAsync(
         Guid headTenantId,
         Guid childTenantId,
         Guid mandateSignerId,
-        ClaimsPrincipal user,
+        HttpContext http,
         [FromServices] ICompanyHierarchyRepository hierarchy,
+        [FromServices] MandateSignerAccessGuard accessGuard,
         [FromServices] ListCompanyMandateSignersHandler listHandler,
         [FromServices] ReactivateMandateSignerHandler handler,
         CancellationToken ct)
     {
-        var forbid = await GuardAsync(user, headTenantId, childTenantId, hierarchy, ct).ConfigureAwait(false);
-        if (forbid is not null)
-        {
-            return forbid;
-        }
-
-        var transitOfficeId = await ResolverOrganismoPrimarioAsync(listHandler, childTenantId, mandateSignerId, ct)
+        var forbid = await GuardAsync(http.User, headTenantId, childTenantId, hierarchy, ct).ConfigureAwait(false);
+        return forbid ?? await MandateSignerLifecycleResponses
+            .CompanyReactivateAsync(http, childTenantId, mandateSignerId, accessGuard, listHandler, handler, ct)
             .ConfigureAwait(false);
-        if (transitOfficeId is null)
-        {
-            return Results.NotFound();
-        }
-
-        var outcome = await handler
-            .HandleAsync(
-                new ReactivateMandateSignerCommand
-                {
-                    TransitOfficeId = transitOfficeId.Value,
-                    MandateSignerId = mandateSignerId,
-                    ChangedBy = AdminCompanyChildrenConfigEndpoints.ResolveUserId(user),
-                },
-                ct)
-            .ConfigureAwait(false);
-
-        return outcome == ReactivateMandateSignerOutcome.Reactivated ? Results.NoContent() : Results.NotFound();
     }
 
-    private static async Task<Guid?> ResolverOrganismoPrimarioAsync(
-        ListCompanyMandateSignersHandler listHandler,
-        Guid tenantId,
+    private static async Task<IResult> DeleteChildMandateSignerAsync(
+        Guid headTenantId,
+        Guid childTenantId,
         Guid mandateSignerId,
-        CancellationToken cancellationToken)
+        HttpContext http,
+        [FromQuery] bool? confirmarImpacto,
+        [FromServices] ICompanyHierarchyRepository hierarchy,
+        [FromServices] MandateSignerAccessGuard accessGuard,
+        [FromServices] ListCompanyMandateSignersHandler listHandler,
+        [FromServices] DeleteMandateSignerHandler handler,
+        CancellationToken ct)
     {
-        var signers = await listHandler.HandleAsync(tenantId, cancellationToken).ConfigureAwait(false);
-        return signers.FirstOrDefault(s => s.Id == mandateSignerId)?.TransitOfficeId;
+        var forbid = await GuardAsync(http.User, headTenantId, childTenantId, hierarchy, ct).ConfigureAwait(false);
+        return forbid ?? await MandateSignerLifecycleResponses
+            .CompanyDeleteAsync(
+                http, childTenantId, mandateSignerId, confirmarImpacto ?? false, accessGuard, listHandler, handler, ct)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<IResult> ImpactChildMandateSignerAsync(
+        Guid headTenantId,
+        Guid childTenantId,
+        Guid mandateSignerId,
+        HttpContext http,
+        [FromServices] ICompanyHierarchyRepository hierarchy,
+        [FromServices] MandateSignerAccessGuard accessGuard,
+        [FromServices] ListCompanyMandateSignersHandler listHandler,
+        [FromServices] GetMandateSignerImpactHandler handler,
+        CancellationToken ct)
+    {
+        var forbid = await GuardAsync(http.User, headTenantId, childTenantId, hierarchy, ct).ConfigureAwait(false);
+        return forbid ?? await MandateSignerLifecycleResponses
+            .CompanyImpactAsync(http, childTenantId, mandateSignerId, accessGuard, listHandler, handler, ct)
+            .ConfigureAwait(false);
     }
 
     private static async Task<IResult> ListChildProcedureTypesAsync(

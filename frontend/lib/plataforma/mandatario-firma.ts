@@ -13,53 +13,57 @@ export type MandatarioIdentityStatus = "valid" | "expired" | "pending" | "none";
 export interface MedioDeFirma {
   /** Firma del baúl elegida para el mandatario. */
   signatureVaultId?: string | null;
-  /** Correo al que se envía la validación de identidad al registrarlo. */
+  /** Correo de contacto (ya no es medio de firma, HU #13132). */
   email?: string | null;
   identityStatus?: MandatarioIdentityStatus | null;
+  /**
+   * HU #13248 (F9) - forma de firma de la ficha. Con `biometria` la firma depende SOLO de la
+   * validación propia del mandatario: una firma de baúl suelta no cuenta.
+   */
+  signatureMethod?: "baul" | "biometria" | null;
+  /** Veredicto del servidor (vigencia + validación propia). Si viene, manda sobre el cálculo local. */
+  signatureValid?: boolean;
+  signatureInvalidReason?: string | null;
 }
 
 /**
- * `expired` NO cuenta: una validación vencida no estampa sello y renovarla es una acción explícita
- * del gestor. `pending` sí — la validación va en camino y el mandatario podrá firmar cuando llegue.
+ * `valid` = el mandatario tiene SU validación biométrica APROBADA, sin renovación mientras su vigencia
+ * propia esté activa (HU #13130b: la ventana de 30 días rige solo el trámite). HU #13248 (F9): `pending`
+ * (enviada o en proceso) y `expired` NO cuentan; solo la aprobada habilita la firma.
  */
-const IDENTIDAD_RESUELTA_O_EN_CURSO: readonly string[] = ["valid", "pending"];
+const IDENTIDAD_RESUELTA: readonly string[] = ["valid"];
 
 /**
  * Si el mandatario puede firmar electrónicamente: con firma del baúl, o con una validación de
  * identidad vigente o en camino.
  *
- * <p>El correo cuenta porque un mandatario nuevo todavía no tiene identidad vigente —se le envía al
- * registrarlo—, y exigir `valid` haría imposible dar de alta a nadie que no tuviera ya firma en el
- * baúl.</p>
+ * <p>HU #13132 (HU #13122 en el backend): el correo YA NO cuenta como medio de firma. Es solo un dato
+ * de contacto; la biometría la origina y vigila el módulo Identidad.</p>
  */
 export function puedeFirmarElectronicamente(medio: MedioDeFirma): boolean {
-  if (medio.signatureVaultId) return true;
-  if (medio.email && medio.email.trim() !== "") return true;
-  return IDENTIDAD_RESUELTA_O_EN_CURSO.includes(medio.identityStatus ?? "none");
+  if (medio.signatureValid !== undefined) return medio.signatureValid;
+  if (medio.signatureVaultId && medio.signatureMethod !== "biometria") return true;
+  return IDENTIDAD_RESUELTA.includes(medio.identityStatus ?? "none");
 }
 
 /**
  * Organismos de `seleccionados` en los que el mandatario quedaría sin poder firmar. Vacío ⇒ se puede
  * habilitar en todos.
  *
- * <p>Los marcados como de firma física quedan exentos: ahí la línea en blanco es el resultado
- * correcto, porque el gestor eligió que ese organismo se firme a mano.</p>
+ * <p>HU #13133: la firma física ya no es medio de firma, así que no hay organismos exentos.</p>
  */
 export function organismosSinMedioDeFirma(
   seleccionados: readonly string[],
-  fisicos: readonly string[],
   medio: MedioDeFirma,
 ): string[] {
-  if (puedeFirmarElectronicamente(medio)) return [];
-  const aMano = new Set(fisicos);
-  return seleccionados.filter((id) => !aMano.has(id));
+  return puedeFirmarElectronicamente(medio) ? [] : [...seleccionados];
 }
 
 /** Qué le falta al mandatario, para decírselo al gestor en vez de un «no se pudo guardar». */
 export function motivoSinFirma(medio: MedioDeFirma): string {
-  return medio.identityStatus === "expired"
-    ? "Su validación de identidad está vencida y no tiene firma en el baúl."
-    : "No tiene firma en el baúl ni validación de identidad.";
+  if (medio.signatureInvalidReason === "mandatario_fuera_de_vigencia") return "Su vigencia terminó.";
+  if (medio.signatureMethod === "biometria") return "Pendiente de validación de identidad.";
+  return "Aún no tiene una firma guardada en el baúl ni su validación de identidad aprobada.";
 }
 
 /** Cómo se presenta el medio de firma del mandatario en listados del OT. */
@@ -67,30 +71,29 @@ export type TipoFirmaMandatario =
   | "baul"
   | "identidad"
   | "identidad_pendiente"
-  | "a_mano"
+  | "identidad_sin_validar"
   | "sin_medio";
 
-export function tipoDeFirmaMandatario(
-  medio: MedioDeFirma & { physicalSignatureOfficeIds?: string[] | null },
-  officeId: string,
-): TipoFirmaMandatario {
-  if (medio.signatureVaultId) return "baul";
+export function tipoDeFirmaMandatario(medio: MedioDeFirma): TipoFirmaMandatario {
+  const conIdentidad = medio.signatureMethod === "biometria";
+  if (medio.signatureVaultId && !conIdentidad) return "baul";
   if (medio.identityStatus === "valid") return "identidad";
-  if (medio.identityStatus === "pending" || (medio.email?.trim() ?? "") !== "") return "identidad_pendiente";
-  if (medio.physicalSignatureOfficeIds?.includes(officeId)) return "a_mano";
+  if (medio.identityStatus === "pending") return "identidad_pendiente";
+  // Con validación de identidad elegida y sin validación propia: no es «sin medio», está pendiente.
+  if (conIdentidad) return "identidad_sin_validar";
   return "sin_medio";
 }
 
 export function etiquetaTipoFirma(tipo: TipoFirmaMandatario): string {
   switch (tipo) {
     case "baul":
-      return "Firma del baúl";
+      return "Baúl de firmas";
     case "identidad":
       return "Validación de identidad";
     case "identidad_pendiente":
       return "Identidad en curso";
-    case "a_mano":
-      return "Firma a mano";
+    case "identidad_sin_validar":
+      return "Validación pendiente";
     default:
       return "Sin medio de firma";
   }

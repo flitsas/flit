@@ -234,9 +234,9 @@ internal sealed class AnalyticsSchedulerProcessor(
             var (from, to) = ScheduleDueEvaluator.GetElapsedPeriod(schedule.Frequency, nowLocal);
             var periodLabel = ScheduleDueEvaluator.DescribePeriod(schedule.Frequency, from, to);
 
-            var overview = await analytics.GetOverviewAsync(schedule.TenantId, from, to, ct);
+            var overview = await analytics.GetOverviewAsync(schedule.TenantId, from, to, ct: ct);
             var topProducers = await analytics.GetTopProducersAsync(
-                schedule.TenantId, from, to, TopProducersLimit, ct);
+                schedule.TenantId, from, to, TopProducersLimit, ct: ct);
 
             var (subject, html) = SchedulerEmailComposer.BuildScheduledReport(
                 schedule.Name, schedule.ReportType, periodLabel, overview, topProducers, theme);

@@ -18,7 +18,7 @@
  *   cada formulario se acuerde de pintarlo.
  */
 export const WIZARD_INPUT =
-  'w-full rounded-xl border bg-white px-3 py-2 text-xs outline-none transition focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20 ' +
+  'w-full rounded-xl border bg-white px-3 py-2 text-xs outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20 ' +
   'aria-[invalid=true]:border-[#FF4E00] ' +
   'disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#162744]';
 
@@ -26,13 +26,13 @@ export const WIZARD_INPUT =
  * `<select>` nativo. Igual que el campo de texto, PERO con `[color-scheme:light]` forzado para
  * que el dropdown nativo use tema claro en cualquier sistema operativo — sin esto, en OS con tema
  * oscuro activado, el popup del `<select>` queda con fondo negro y texto negro, ilegible.
- * También añade `hover:border-[#557EFF]` (señal de foco pre-click) y elimina
+ * También añade `hover:border-flit-brand` (señal de foco pre-click) y elimina
  * `dark:bg-[#162744]` (el fondo oscuro del OS ya está cubierto por color-scheme:light en la caja).
  */
 export const WIZARD_SELECT =
   'w-full rounded-xl border bg-white px-3 py-2 text-xs outline-none transition ' +
-  'focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20 ' +
-  'hover:border-[#557EFF] ' +
+  'focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20 ' +
+  'hover:border-flit-brand ' +
   'aria-[invalid=true]:border-[#FF4E00] ' +
   'disabled:cursor-not-allowed disabled:opacity-60 ' +
   '[color-scheme:light]';
@@ -76,14 +76,28 @@ export const WIZARD_BTN =
  * PDF anotaciones + prototipo Lovable: estos botones son `#557EFF` sólido, SIN degradado.
  * El degradado (`WIZARD_CTA_GRADIENT`) queda reservado a CTAs de avance/cierre (Continuar, Radicar).
  */
-export const WIZARD_BTN_SOLID = '#557EFF';
+export const WIZARD_BTN_SOLID = 'var(--color-flit-brand)';
+
+/**
+ * Botón de acción primario dentro de tarjetas del wizard (validación, documentos, etc.): azul
+ * plano `#557EFF`, sin degradado. El degradado (`WIZARD_CTA_GRADIENT`) queda reservado al pie del
+ * asistente (Continuar / Radicar / Finalizar) — HU #12729 D.3.
+ */
+export const WIZARD_BTN_BRAND =
+  'rounded-xl px-3 py-2 text-xs font-semibold text-white transition hover:opacity-90 ' +
+  'disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2';
+
+/** Variante outline del botón de marca para cancelar / reenviar secundario. */
+export const WIZARD_BTN_BRAND_OUTLINE =
+  'flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition ' +
+  'disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2';
 
 /**
  * Degradado del CTA primario del asistente: token FLIT `gradient.primary` (azul→cian), el mismo
  * del CTA general del producto. Antes era azul→`#2563EB` (blue-600 de Tailwind, no un token FLIT):
  * B7 (guardián de diseño) lo corrige al degradado de marca.
  */
-export const WIZARD_CTA_GRADIENT = 'linear-gradient(135deg, #557EFF 0%, #00DBD5 100%)';
+export const WIZARD_CTA_GRADIENT = 'linear-gradient(135deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%)';
 
 /**
  * Degradado del CTA de cierre: token FLIT `gradient.success` (cian→verde), descrito en el token
@@ -92,4 +106,10 @@ export const WIZARD_CTA_GRADIENT = 'linear-gradient(135deg, #557EFF 0%, #00DBD5 
  * cierran el trámite. «Continuar» y «Guardar y continuar» siguen con el degradado primario,
  * porque avanzar no es cerrar.
  */
-export const WIZARD_CTA_GRADIENT_DONE = 'linear-gradient(135deg, #00DBD5 0%, #8CC63F 100%)';
+export const WIZARD_CTA_GRADIENT_DONE = 'linear-gradient(135deg, var(--color-flit-tech) 0%, #8CC63F 100%)';
+
+/**
+ * Degradado del CTA de acción destructiva o de rechazo: token FLIT `gradient.danger` (naranja de alerta → rojo),
+ * en pastilla con texto blanco. Sustituye al rojo plano `#C1272D`, que no es un token de la línea base.
+ */
+export const WIZARD_CTA_GRADIENT_DANGER = 'linear-gradient(135deg, #FF4E00 0%, #E43D30 100%)';

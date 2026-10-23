@@ -75,6 +75,10 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
         "tramites.vehicle_classification_fur",
         // Interruptores globales de la jerarquía (HU #12323): nacen encendidos por seed.
         "identity.hierarchy_switches",
+        // Catálogo de productos de la FLIT Suite (HU #12958, DDL 119).
+        "platform.products",
+        // Catálogo global de formatos de mandato (HU #13169, DDL 124): una fila por formato, sin tenant.
+        "admin.mandate_format_settings",
     };
 
     /// <summary>
@@ -92,6 +96,25 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
         "admin.notification_test_settings",
         "tramites.runt_confirmation_settings",
         "audit.audit_logs",
+        // HU #12958: tramites encendido para las compañías mock (backfill y disparador del DDL 119).
+        "platform.tenant_products",
+        // HU #12964: la migración de la B-04 crea el rol admin_tramites. Se trunca como el resto de roles
+        // que siembran las pruebas; la que lo necesite lo crea (PlatformRbacTests).
+        "security.roles",
+        // Feature #13508 / HU #13509: seed ocr + dr_flit y transición reason=seed (configuración, no catálogo).
+        // Clasificadas a propósito para HarnessBootstrapTests (no son catálogo preservado).
+        "admin.ai_tool_provider_settings",
+        "admin.ai_provider_transitions",
+        // HU #13367 (DDL 133): fila única de parámetros del motor de lotes de consolidados. Configuración, no
+        // catálogo (como runt_confirmation_settings): se trunca; la prueba que la necesite reaplica el DDL 133.
+        "tramites.consolidado_export_settings",
+        // HU #13638 (DDL 137): modulos y permisos RBAC ot.* sembrados por migracion. Se truncan como el resto de las
+        // tablas RBAC (security.roles, role_permissions): la prueba que los necesite reaplica el DDL 137.
+        "security.modules",
+        "security.permissions",
+        // HU #13655 (DDL 147): permisos base del rol «Gestor OT» que crea la migración. Se trunca con roles y permisos;
+        // la prueba que los necesite reaplica los DDL 137 y 147.
+        "security.role_permissions",
     };
 
     private const string MigrationsHistoryTable = "__EFMigrationsHistory";

@@ -111,7 +111,7 @@ public sealed record PreflightVehicleSnapshot(
 /// <summary>
 /// Bug #13304 (M-1) — fuente única de lo que una consulta de vehículo puede traer: unión literal de lo que
 /// emiten los mappers de vehículo (<see cref="KyverumRuntVehicleResultMapper"/>, <see cref="VerifikResultMapper"/>,
-/// <see cref="IntempoVehicleResultMapper"/>) más los checks de
+/// <see cref="IntempoVehicleResultMapper"/>, con <see cref="RuntGarantiasMobiliarias"/>) más los checks de
 /// «no encontrado», error y entrada de sus proveedores y de la cadena. Si un mapper añade una clave, se añade
 /// aquí: el test de deriva <c>PreflightVehicleSnapshotAllowListTests</c> falla si no.
 /// </summary>
@@ -147,12 +147,12 @@ public static class PreflightVehicleSnapshotAllowList
         "vehicle_tires",
         "vehicle_traction",
         "vehicle_registration_date",
-        // En release no existen RuntGravamenSignal ni RuntGarantiasMobiliarias (Bug #13203): mismas claves en literal.
-        "runt_tiene_gravamenes",
-        "runt_tiene_prendas",
-        "runt_gravamenes",
-        "runt_nombre_acreedor",
-        "runt_prendario",
+        RuntGravamenSignal.GravamenesKey,
+        RuntGravamenSignal.PrendasKey,
+        RuntGravamenSignal.DetalleKey,
+        RuntGarantiasMobiliarias.NombreAcreedorKey,
+        RuntGravamenSignal.PrendarioKey,
+        RuntGravamenSignal.LimitacionesKey,
         "soat_vencimiento",
         "soat_aseguradora",
         "soat_poliza",

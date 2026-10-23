@@ -46,7 +46,7 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
         int pageSize,
         CancellationToken cancellationToken = default) =>
         TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {
@@ -78,7 +78,7 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
         Guid id,
         CancellationToken cancellationToken = default) =>
         TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {
@@ -115,7 +115,7 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
         var doc = documentNumber.Trim();
 
         return TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {
@@ -141,7 +141,7 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
         var nit = companyNit.Trim();
 
         return TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {
@@ -167,7 +167,7 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
         var nit = companyNit.Trim();
 
         return TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {
@@ -190,7 +190,7 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
         var doc = documentNumber.Trim();
 
         return TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {
@@ -260,7 +260,7 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
         Guid tenantId,
         CancellationToken cancellationToken = default) =>
         TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {
@@ -285,7 +285,7 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
         var nit = documentNumber.Trim();
 
         return TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {
@@ -310,7 +310,7 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
         var nit = documentNumber.Trim();
 
         return TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {
@@ -343,7 +343,7 @@ internal sealed class DbLegalRepresentativeReader : ILegalRepresentativeReader
         var idSet = ids.Distinct().ToArray();
 
         return TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {

@@ -79,7 +79,7 @@ Un solo `POST $User%20Story` con JSON Patch (`ensure_ascii=False` / UTF-8). Fase
   {
     "op": "add",
     "path": "/fields/Custom.Refinement",
-    "value": true
+    "value": "True"
   },
   {
     "op": "add",
@@ -149,6 +149,8 @@ Tras obtener el `id` del `POST`, enviar `PATCH` con:
 - Description y AC siempre en **HTML** al enviar a ADO (`<p>`, `<br>`, `<h3>`, `<pre>`).
 - Confirmar al usuario: ID, URL; campos Description y AC poblados; Commits/Evidences **vacíos**.
 - Anti-duplicado: WIQL por título exacto antes del `POST` (ver `flit-azure-devops`).
+- `Custom.Refinement` es un **picklist de strings** (`"True"` / `"False"`), no un booleano. Enviar `true` devuelve **200 con el campo vacío**: ADO lo descarta en silencio, el `POST` no falla y solo se detecta releyendo el work item. Enviar siempre `"True"` entre comillas.
+- Tras crear en lote, **releer** los work items y validarlos contra el checklist de salida: un 200 no garantiza que todos los campos se guardaran.
 - Plantilla de referencia: `.cursor/skills/flit-crear-hu/assets/user-story.template.md`
 
 ## Checklist de salida
@@ -156,7 +158,7 @@ Tras obtener el `id` del `POST`, enviar `PATCH` con:
 - [ ] Título con `–` (guion largo), módulo y verbo+sustantivo
 - [ ] `System.Description` = HTML con Como / quiero / para
 - [ ] `Microsoft.VSTS.Common.AcceptanceCriteria` = HTML con AC1/AC2/… en `<h3>` + `<pre>`
-- [ ] `Custom.Refinement` = `true`
+- [ ] `Custom.Refinement` = `"True"` (string, **no** booleano)
 - [ ] `System.IterationPath` = Sprint siguiente al activo
 - [ ] `Custom.Commits` y `Custom.Evidences` **sin tocar** (vacíos en ADO)
 - [ ] `System.History` = comentario de trazabilidad HTML

@@ -88,10 +88,10 @@ function ownershipPanelId(idPrefix: string): string {
  * padding simétrico porque el icono ya trae su propio margen visual dentro del SVG.
  */
 const ADD_BUTTON_CLASS =
-  'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-[#557EFF] pr-3 text-xs ' +
+  'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-flit-brand pr-3 text-xs ' +
   'font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed ' +
   'disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ' +
-  'focus-visible:ring-[#557EFF]';
+  'focus-visible:ring-flit-brand';
 
 export interface OwnershipTabsBarProps {
   /** Pestañas de este lado, en orden de ordinal. */
@@ -158,7 +158,7 @@ export function OwnershipTabsBar({
           // píldora: mismo borde/fondo/color, sin borde compartido en el punto de unión
           // (`border-r-0`/`border-l-0`) para que se vea como una sola forma continua.
           const pillStyle = isActive
-            ? { borderColor: '#557EFF', color: '#557EFF', background: 'rgba(85,126,255,0.08)' }
+            ? { borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)', background: 'color-mix(in srgb, var(--color-flit-brand) 8%, transparent)' }
             : { borderColor: '#DFE5ED', color: '#59677D', background: '#fff' };
           return (
             <div key={item.index} className="flex items-center">
@@ -169,7 +169,7 @@ export function OwnershipTabsBar({
                 aria-selected={isActive}
                 aria-controls={hasPercentagePanel ? panelId : undefined}
                 onClick={() => onSelectTab(item.index)}
-                className={`flex h-9 items-center gap-1.5 border pl-3 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF] ${
+                className={`flex h-9 items-center gap-1.5 border pl-3 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand ${
                   showRemove ? 'rounded-l-full border-r-0 pr-2' : 'rounded-full pr-3'
                 }`}
                 style={pillStyle}
@@ -184,7 +184,7 @@ export function OwnershipTabsBar({
                   type="button"
                   onClick={() => onRemove(item.index)}
                   aria-label={`Quitar ${item.label}`}
-                  className="grid h-9 place-items-center rounded-r-full border border-l-0 pl-1 pr-3 opacity-70 transition hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF]"
+                  className="grid h-9 place-items-center rounded-r-full border border-l-0 pl-1 pr-3 opacity-70 transition hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand"
                   style={pillStyle}
                 >
                   <X className="h-3.5 w-3.5" aria-hidden="true" />
@@ -217,7 +217,7 @@ export function OwnershipTabsBar({
         </button>
       </div>
       <span className="text-xs opacity-70 whitespace-nowrap">
-        Copropiedad: hasta <span className="font-semibold" style={{ color: '#557EFF' }}>4</span> propietarios
+        Copropiedad: hasta <span className="font-semibold" style={{ color: 'var(--color-flit-brand)' }}>4</span> propietarios
       </span>
     </div>
   );
@@ -273,7 +273,7 @@ export function OwnershipPercentagePanel({
       style={{ borderColor: '#DFE5ED' }}
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className={`${WIZARD_LABEL} text-[13px] font-bold`} style={{ color: '#162744' }}>
+        <p className={`${WIZARD_LABEL} text-[13px] font-bold`} style={{ color: 'var(--color-flit-primary)' }}>
           Porcentaje de propiedad
         </p>
         <div className="flex items-center gap-2">
@@ -290,8 +290,8 @@ export function OwnershipPercentagePanel({
             disabled={readOnly}
             value={active.percentage}
             onChange={(e) => onPercentageChange(active.index, Number(e.target.value))}
-            className="w-20 rounded-xl border bg-white px-3 py-2 text-right text-xs outline-none transition focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
-            style={{ borderColor: '#DFE5ED', color: '#162744' }}
+            className="w-20 rounded-xl border bg-white px-3 py-2 text-right text-xs outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
+            style={{ borderColor: '#DFE5ED', color: 'var(--color-flit-primary)' }}
           />
           <span className="text-xs font-semibold" style={{ color: '#334155' }} aria-hidden="true">
             %

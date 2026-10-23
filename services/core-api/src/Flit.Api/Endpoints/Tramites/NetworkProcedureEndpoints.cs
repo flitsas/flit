@@ -3,6 +3,7 @@ using Flit.Api.Endpoints.Auditing;
 using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.Auditing;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Domain.Integration;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -64,6 +65,7 @@ internal static class NetworkProcedureEndpoints
         group.MapGet("/instances", async (
             HttpContext http,
             NetworkListProcedureInstancesHandler handler,
+            IProcedureFamilyPermissionGate familyGate, // HU #13664
             [FromQuery] Guid? childTenantId,
             [FromQuery] string? vin,
             [FromQuery] string? placa,
@@ -109,6 +111,7 @@ internal static class NetworkProcedureEndpoints
                 UpdatedTo = updatedTo,
                 SortBy = sortBy,
                 SortDescending = !string.Equals(sortDir, "asc", StringComparison.OrdinalIgnoreCase),
+                AllowedFamilies = familyGate.ReadableFamilyCodes(), // HU #13664 — Ver por familia
             };
 
             var (items, total, error) = await handler.HandleAsync(
@@ -126,6 +129,7 @@ internal static class NetworkProcedureEndpoints
         group.MapPost("/instances/search", async (
             HttpContext http,
             NetworkListProcedureInstancesHandler handler,
+            IProcedureFamilyPermissionGate familyGate, // HU #13664
             [FromBody] NetworkTramitesSearchRequest body,
             CancellationToken ct) =>
         {
@@ -134,7 +138,7 @@ internal static class NetworkProcedureEndpoints
             if (BusquedaRapida.Validate(body.BusquedaRapida) is { } atajoInvalido)
                 return Results.BadRequest(new { error = atajoInvalido });
 
-            var request = body.ToRequest(tenantId: null) with { UsuarioActualId = UsuarioActual(http.User) };
+            var request = body.ToRequest(tenantId: null) with { UsuarioActualId = UsuarioActual(http.User), AllowedFamilies = familyGate.ReadableFamilyCodes() }; // HU #13664
             IReadOnlyList<InstanceSummaryDto> items;
             int total;
             string? error;
@@ -161,6 +165,7 @@ internal static class NetworkProcedureEndpoints
         group.MapPost("/instances/estado-counts", async (
             HttpContext http,
             NetworkCountProcedureInstancesByStatusHandler handler,
+            IProcedureFamilyPermissionGate familyGate, // HU #13664
             [FromBody] NetworkTramitesSearchRequest body,
             CancellationToken ct) =>
         {
@@ -169,7 +174,7 @@ internal static class NetworkProcedureEndpoints
             if (BusquedaRapida.Validate(body.BusquedaRapida) is { } atajoInvalido)
                 return Results.BadRequest(new { error = atajoInvalido });
 
-            var request = body.ToRequest(tenantId: null) with { UsuarioActualId = UsuarioActual(http.User) };
+            var request = body.ToRequest(tenantId: null) with { UsuarioActualId = UsuarioActual(http.User), AllowedFamilies = familyGate.ReadableFamilyCodes() }; // HU #13664
             NetworkStatusCountsResult? result;
             string? error;
             try
@@ -216,6 +221,7 @@ internal static class NetworkProcedureEndpoints
             {
                 null => Results.Ok(result),
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                "family_forbidden" => Results.Problem(statusCode: 403, title: "Forbidden", detail: "No tienes permiso para ver trámites de esta familia."), // HU #13664
                 _ => Forbidden(error),
             };
         })
@@ -235,6 +241,8 @@ internal static class NetworkProcedureEndpoints
         group.MapNetworkAttachments();
         // HU #12555 — GET /children: clientes hijos vigentes de la cabeza (id + nombre), sin policy admin.
         group.MapNetworkChildren();
+        // Ajuste #13419 AC5 (HU #13417) — GET /documentos: ¿la cabeza puede leer documentos de su red? (sin auditoría).
+        group.MapNetworkDocumentos();
         // HU #12708 — Validación de Identidad de la red (solo lectura): por persona, historial y bitácora.
         group.MapNetworkIdentityValidations();
 

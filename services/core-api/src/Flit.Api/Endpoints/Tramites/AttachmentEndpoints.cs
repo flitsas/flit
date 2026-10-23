@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Domain.ExternalSync;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -44,6 +45,11 @@ internal static class AttachmentEndpoints
                 "file_too_large" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El archivo excede el tamaño máximo permitido para este documento."),
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden adjuntar documentos en borrador o con subsanación activa."),
+                ExternalAttachmentRules.BlockedCode => Results.Problem(
+                    statusCode: 409,
+                    title: "Conflict",
+                    detail: "Este documento ya fue cargado y no se puede reemplazar.",
+                    extensions: new Dictionary<string, object?> { ["error"] = ExternalAttachmentRules.BlockedCode }),
                 _ => Results.Created($"/api/v1/tramites/instances/{id}/attachments/{result!.Id}", result),
             };
         })
@@ -79,6 +85,11 @@ internal static class AttachmentEndpoints
                 "file_too_large" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El archivo excede el tamaño máximo permitido para este documento."),
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden adjuntar documentos en borrador o con subsanación activa."),
+                ExternalAttachmentRules.BlockedCode => Results.Problem(
+                    statusCode: 409,
+                    title: "Conflict",
+                    detail: "Este documento ya fue cargado y no se puede reemplazar.",
+                    extensions: new Dictionary<string, object?> { ["error"] = ExternalAttachmentRules.BlockedCode }),
                 _ => Results.Ok(result),
             };
         }).WithName("PresignProcedureInstanceAttachment");
@@ -115,6 +126,11 @@ internal static class AttachmentEndpoints
                 "missing_sha256" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta sha256."),
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden adjuntar documentos en borrador o con subsanación activa."),
+                ExternalAttachmentRules.BlockedCode => Results.Problem(
+                    statusCode: 409,
+                    title: "Conflict",
+                    detail: "Este documento ya fue cargado y no se puede reemplazar.",
+                    extensions: new Dictionary<string, object?> { ["error"] = ExternalAttachmentRules.BlockedCode }),
                 _ => Results.Created($"/api/v1/tramites/instances/{id}/attachments/{result!.Id}", result),
             };
         }).WithName("RegisterProcedureInstanceAttachment");
@@ -193,6 +209,12 @@ internal static class AttachmentEndpoints
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "attachment_not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Attachment not found."),
                 "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden borrar documentos en borrador o con subsanación activa."),
+                // Re-review #12760 (M-N1) — consolidados y maestro radicado: documentos del sistema.
+                DeleteAttachmentHandler.AdjuntoProtegido => Results.Problem(
+                    statusCode: 409,
+                    title: "Conflict",
+                    detail: "Este documento lo genera el sistema y no se puede eliminar.",
+                    extensions: new Dictionary<string, object?> { ["error"] = DeleteAttachmentHandler.AdjuntoProtegido }),
                 _ => Results.NoContent(),
             };
         }).WithName("DeleteProcedureInstanceAttachment");
@@ -218,6 +240,12 @@ internal static class AttachmentEndpoints
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede generar la impronta en borrador o con subsanación activa."),
                 "impronta_ya_existe" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Ya existe un documento de impronta cargado para este trámite."),
+                // HU #13402 — trámite creado con la generación de improntas deshabilitada: la impronta se sube a mano.
+                GenerarImprontaAttachmentHandler.ImprontaGeneracionDeshabilitada => Results.Problem(
+                    statusCode: 409,
+                    title: "Conflict",
+                    detail: "La generación automática de improntas está deshabilitada para este trámite; cargue la impronta manualmente.",
+                    extensions: new Dictionary<string, object?> { ["error"] = GenerarImprontaAttachmentHandler.ImprontaGeneracionDeshabilitada }),
                 "organismo_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Debe seleccionar el organismo de tránsito antes de generar la impronta."),
                 "identificador_vehiculo_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Falta la placa o el VIN del vehículo para generar la impronta."),
                 "documento_propietario_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Falta el documento del propietario para generar la impronta."),
@@ -300,6 +328,12 @@ internal static class AttachmentEndpoints
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se puede diferir la impronta en borrador o con subsanación activa."),
                 "impronta_no_aplica" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La tipología del trámite no incluye impronta."),
+                // HU #13402 — no se puede marcar «se generará automáticamente» si el trámite nació sin generación.
+                GenerarImprontaAttachmentHandler.ImprontaGeneracionDeshabilitada => Results.Problem(
+                    statusCode: 409,
+                    title: "Conflict",
+                    detail: "La generación automática de improntas está deshabilitada para este trámite; cargue la impronta manualmente.",
+                    extensions: new Dictionary<string, object?> { ["error"] = GenerarImprontaAttachmentHandler.ImprontaGeneracionDeshabilitada }),
                 _ => Results.NoContent(),
             };
         }).WithName("SetProcedureInstanceImprontaDiferida");

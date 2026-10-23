@@ -235,7 +235,7 @@ export function PrevalidacionForm({
   };
 
   const fieldClass = (field: keyof FormValues) =>
-    `w-full rounded-xl border px-3 py-2 text-sm outline-none transition focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20 disabled:opacity-50 ${
+    `w-full rounded-xl border px-3 py-2 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20 disabled:opacity-50 ${
       touched[field] && errors[field] ? 'border-[#FF4E00]' : 'border-[#DDE5F0]'
     }`;
 
@@ -251,14 +251,14 @@ export function PrevalidacionForm({
       <div className="relative w-full max-w-lg rounded-2xl border border-[#DFE5ED] bg-white shadow-xl dark:bg-[#162744]">
         {/* Header */}
         <div className="flex items-start justify-between px-6 pt-5">
-          <h2 id="prevalidacion-form-title" className="text-base font-bold" style={{ color: '#557EFF' }}>
+          <h2 id="prevalidacion-form-title" className="text-base font-bold" style={{ color: 'var(--color-flit-brand)' }}>
             Nueva prevalidación de identidad
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Cerrar formulario"
-            className="rounded-lg p-1 hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] dark:hover:bg-white/10"
+            className="rounded-lg p-1 hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand dark:hover:bg-white/10"
           >
             <X className="h-5 w-5 opacity-60" aria-hidden="true" />
           </button>
@@ -268,7 +268,7 @@ export function PrevalidacionForm({
         <form onSubmit={(e) => void handleSubmit(e)} noValidate>
           <div className="space-y-4 overflow-y-auto max-h-[70vh] px-6 py-5">
             <div>
-              <label htmlFor="pv-docType" className="mb-1 block text-xs font-medium text-[#162744] dark:text-white">
+              <label htmlFor="pv-docType" className="mb-1 block text-xs font-medium text-flit-primary dark:text-white">
                 Tipo de documento <span aria-hidden="true" className="text-[#FF4E00]">*</span>
               </label>
               <select
@@ -300,7 +300,7 @@ export function PrevalidacionForm({
               )}
             </div>
             <div>
-              <label htmlFor="pv-docNum" className="mb-1 block text-xs font-medium text-[#162744] dark:text-white">
+              <label htmlFor="pv-docNum" className="mb-1 block text-xs font-medium text-flit-primary dark:text-white">
                 Número de documento <span aria-hidden="true" className="text-[#FF4E00]">*</span>
               </label>
               <input
@@ -327,7 +327,7 @@ export function PrevalidacionForm({
 
             {/* Nombre */}
             <div>
-              <label htmlFor="pv-name" className="mb-1 block text-xs font-medium text-[#162744] dark:text-white">
+              <label htmlFor="pv-name" className="mb-1 block text-xs font-medium text-flit-primary dark:text-white">
                 Nombre completo <span aria-hidden="true" className="text-[#FF4E00]">*</span>
               </label>
               <input
@@ -350,7 +350,7 @@ export function PrevalidacionForm({
 
             {/* Correo */}
             <div>
-              <label htmlFor="pv-email" className="mb-1 block text-xs font-medium text-[#162744] dark:text-white">
+              <label htmlFor="pv-email" className="mb-1 block text-xs font-medium text-flit-primary dark:text-white">
                 Correo electrónico <span aria-hidden="true" className="text-[#FF4E00]">*</span>
               </label>
               <input
@@ -432,7 +432,7 @@ export function PrevalidacionForm({
               type="button"
               onClick={onClose}
               disabled={submitting}
-              className="rounded-xl border px-4 py-2 text-sm font-medium text-[#162744] transition hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] disabled:opacity-50 dark:text-white dark:hover:bg-white/10"
+              className="rounded-xl border px-4 py-2 text-sm font-medium text-flit-primary transition hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:opacity-50 dark:text-white dark:hover:bg-white/10"
             >
               Cancelar
             </button>
@@ -440,8 +440,8 @@ export function PrevalidacionForm({
               <button
                 type="submit"
                 disabled={submitting}
-                className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
-                style={{ background: 'linear-gradient(90deg, #557EFF 0%, #00DBD5 100%)' }}
+                className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
+                style={{ background: 'linear-gradient(90deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%)' }}
               >
                 Crear prevalidación
               </button>
@@ -458,7 +458,7 @@ export function PrevalidacionForm({
             aria-labelledby="pv-confirm-title"
           >
             <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-lg dark:bg-[#0B0F14]">
-              <h3 id="pv-confirm-title" className="text-sm font-semibold" style={{ color: '#557EFF' }}>
+              <h3 id="pv-confirm-title" className="text-sm font-semibold" style={{ color: 'var(--color-flit-brand)' }}>
                 Confirmar envío de prevalidación
               </h3>
               <p className="mt-2 text-xs opacity-80">
@@ -478,7 +478,7 @@ export function PrevalidacionForm({
                   onClick={() => void sendPrevalidacion()}
                   disabled={submitting}
                   className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
-                  style={{ background: '#557EFF' }}
+                  style={{ background: 'var(--color-flit-brand)' }}
                 >
                   {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
                   {submitting ? 'Enviando…' : 'Confirmar y enviar'}
@@ -531,7 +531,7 @@ export function PrevalidacionSuccessPanel({
           style={{ color: '#5B8A1F' }}
           aria-hidden="true"
         />
-        <h2 id="pv-success-title" className="mt-3 text-base font-semibold text-[#162744] dark:text-white">
+        <h2 id="pv-success-title" className="mt-3 text-base font-semibold text-flit-primary dark:text-white">
           Prevalidación creada
         </h2>
         {result.enqueued ? (
@@ -549,17 +549,17 @@ export function PrevalidacionSuccessPanel({
                 href={result.captureUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex-1 text-[#557EFF] underline underline-offset-2"
+                className="flex-1 text-flit-brand underline underline-offset-2"
                 aria-label="Abrir enlace de captura"
               >
                 {result.captureUrl}
               </a>
-              <ExternalLink className="h-3.5 w-3.5 shrink-0 text-[#557EFF]" aria-hidden="true" />
+              <ExternalLink className="h-3.5 w-3.5 shrink-0 text-flit-brand" aria-hidden="true" />
             </div>
             <button
               type="button"
               onClick={() => void copiar()}
-              className="mt-3 rounded-xl border px-4 py-2 text-sm font-medium text-[#557EFF] transition hover:bg-[#557EFF]/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
+              className="mt-3 rounded-xl border px-4 py-2 text-sm font-medium text-flit-brand transition hover:bg-flit-brand/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
               aria-live="polite"
             >
               {copied ? 'Copiado ✓' : 'Copiar enlace'}
@@ -575,15 +575,15 @@ export function PrevalidacionSuccessPanel({
           <button
             type="button"
             onClick={onNew}
-            className="rounded-xl border px-4 py-2 text-sm font-medium text-[#162744] hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] dark:text-white dark:hover:bg-white/10"
+            className="rounded-xl border px-4 py-2 text-sm font-medium text-flit-primary hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand dark:text-white dark:hover:bg-white/10"
           >
             Crear otra
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl px-4 py-2 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]"
-            style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, #557EFF 100%)' }}
+            className="rounded-xl px-4 py-2 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
+            style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, var(--color-flit-brand) 100%)' }}
           >
             Ver listado
           </button>

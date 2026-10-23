@@ -7,18 +7,12 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import type { InstanceStatus } from '@/lib/api/types/procedure-runtime';
-import { estadoLabel, estadoLabelConOrigen } from '@/lib/tramites/estados';
-import {
-  DETALLE_BLUE,
-  DETALLE_GREEN,
-  DETALLE_GREY,
-  DETALLE_GOLD,
-  DETALLE_RED,
-} from './detalle-visual';
+import { estadoChipStyle, estadoLabel, estadoLabelConOrigen } from '@/lib/tramites/estados';
 
 /** Chip sólido del header detalle (spec flit-detalle-tramite). */
 export interface DetalleEstadoHeader {
   label: string;
+  /** Tono del estado — mismo `accent` que fila/filtros (`estadoChipStyle`). */
   color: string;
   Icon: LucideIcon;
   /** Banner contextual opcional bajo el header. */
@@ -30,11 +24,13 @@ export function detalleEstadoHeader(
   estado: InstanceStatus,
   rejectedFrom: string | null | undefined = null,
 ): DetalleEstadoHeader {
+  const color = estadoChipStyle(estado).accent;
+
   switch (estado) {
     case 'aprobado':
       return {
         label: estadoLabel(estado),
-        color: DETALLE_GREEN,
+        color,
         Icon: Check,
         alert: null,
         pendiente: false,
@@ -42,7 +38,7 @@ export function detalleEstadoHeader(
     case 'anulado':
       return {
         label: estadoLabel(estado),
-        color: DETALLE_RED,
+        color,
         Icon: Ban,
         alert: 'Trámite anulado. Requiere radicación nueva si aplica.',
         pendiente: false,
@@ -51,7 +47,7 @@ export function detalleEstadoHeader(
       return {
         // ADR-0059 — «Rechazado preasignación» cuando el OT rechazó desde la cola de placa.
         label: estadoLabelConOrigen(estado, rejectedFrom),
-        color: DETALLE_RED,
+        color,
         Icon: Ban,
         alert:
           rejectedFrom === 'preasignacion'
@@ -66,7 +62,7 @@ export function detalleEstadoHeader(
     case 'revocado':
       return {
         label: estadoLabel(estado),
-        color: DETALLE_RED,
+        color,
         Icon: Ban,
         alert: 'Aprobación revocada por el Organismo de Tránsito. La placa quedó liberada.',
         pendiente: false,
@@ -75,7 +71,7 @@ export function detalleEstadoHeader(
     case 'preasignacion':
       return {
         label: estadoLabel(estado),
-        color: '#0891B2',
+        color,
         Icon: Clock,
         alert: 'Radicado sin placa: el Organismo de Tránsito debe asignarla.',
         pendiente: true,
@@ -83,7 +79,7 @@ export function detalleEstadoHeader(
     case 'asignado':
       return {
         label: estadoLabel(estado),
-        color: '#4F46E5',
+        color,
         Icon: Check,
         alert: 'Placa asignada por el Organismo de Tránsito. Gestiona el SOAT y los impuestos y envía el trámite al OT.',
         pendiente: true,
@@ -91,7 +87,7 @@ export function detalleEstadoHeader(
     case 'borrador':
       return {
         label: estadoLabel(estado),
-        color: DETALLE_GREY,
+        color,
         Icon: FileText,
         alert: 'Trámite en borrador: faltan pasos por completar.',
         pendiente: false,
@@ -99,7 +95,7 @@ export function detalleEstadoHeader(
     case 'entregado':
       return {
         label: estadoLabel(estado),
-        color: '#7C3AED',
+        color,
         Icon: Check,
         alert: null,
         pendiente: false,
@@ -107,7 +103,7 @@ export function detalleEstadoHeader(
     case 'preparado':
       return {
         label: estadoLabel(estado),
-        color: DETALLE_BLUE,
+        color,
         Icon: Clock,
         alert: null,
         pendiente: false,
@@ -115,7 +111,7 @@ export function detalleEstadoHeader(
     case 'subsanacion':
       return {
         label: estadoLabel(estado),
-        color: DETALLE_GOLD,
+        color,
         Icon: AlertTriangle,
         alert: 'Trámite en subsanación activa.',
         pendiente: true,
@@ -123,7 +119,7 @@ export function detalleEstadoHeader(
     default:
       return {
         label: estadoLabel(estado),
-        color: DETALLE_GOLD,
+        color,
         Icon: AlertTriangle,
         alert: 'Trámite pendiente por aprobación del Organismo de Tránsito.',
         pendiente: true,

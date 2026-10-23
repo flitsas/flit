@@ -9,22 +9,35 @@ AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport
 
 var builder = WebApplication.CreateBuilder(args);
 
+// HU #12895 (FLIT Suite A-02): la validación del contenedor de DI (scopes y construcción) queda fija y no depende del
+// nombre del ambiente. En Development ya estaba activa, así que DEV, QA y PDN no cambian; un ambiente con otro nombre
+// sigue detectando al arrancar los errores de DI en vez de descubrirlos en la primera petición.
+builder.Host.UseDefaultServiceProvider(options =>
+{
+    options.ValidateScopes = true;
+    options.ValidateOnBuild = true;
+});
+
 builder.Services.AddIctInfrastructure(builder.Configuration);
 builder.Services.AddIctApplication();
 builder.Services.AddIctApiSecurity(builder.Configuration);
+// Token de plataforma (Logs/Trazabilidad/Clientes): firma, emisor, audiencia y vencimiento; fail-fast sin llave.
+builder.Services.AddIctPlatformTokenValidation(builder.Configuration, builder.Environment);
 builder.Services.AddGrpc();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
+// HU #12895 (FLIT Suite A-02): Swagger:Enabled lo decide, por defecto solo en Development (igual que core-api).
+if (app.Configuration.GetValue("Swagger:Enabled", app.Environment.IsDevelopment()))
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
 app.UseAuthentication();
+app.UseIctPlatformToken();
 app.UseAuthorization();
 
 // Logging de requests entrantes de cliente ICT (rutas v1, redactado, en scope propio). Tras la auth para

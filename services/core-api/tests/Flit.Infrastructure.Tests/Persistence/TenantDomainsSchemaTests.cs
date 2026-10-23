@@ -300,11 +300,12 @@ public sealed class TenantDomainsSchemaTests
         entidad.FindProperty(nameof(TenantDomainEntity.RowVersion))!.IsConcurrencyToken.Should().BeTrue();
         entidad.GetIndexes().Select(i => i.GetDatabaseName()).Should().BeEquivalentTo(
         [
-            "uq_tenant_domains_tenant_id", "uq_tenant_domains_host", "uq_tenant_domains_verification_token",
+            "uq_tenant_domains_tenant_purpose", "uq_tenant_domains_host", "uq_tenant_domains_verification_token",
             "ix_tenant_domains_tenant_id", "ix_tenant_domains_host_active", "ix_tenant_domains_next_check",
         ]);
         entidad.GetIndexes().Single(i => i.GetDatabaseName() == "uq_tenant_domains_host").GetFilter().Should().Be("deleted_at IS NULL");
-        entidad.GetIndexes().Single(i => i.GetDatabaseName() == "uq_tenant_domains_tenant_id").IsUnique.Should().BeTrue();
+        // HU #12968: la unicidad es por (red, propósito).
+        entidad.GetIndexes().Single(i => i.GetDatabaseName() == "uq_tenant_domains_tenant_purpose").IsUnique.Should().BeTrue();
         entidad.GetDeclaredTriggers().Select(t => t.GetDatabaseName()).Should().BeEquivalentTo(
             ["tr_tenant_domains_marca_blanca", "tr_tenant_domains_row_version", "tr_tenant_domains_audit"]);
     }

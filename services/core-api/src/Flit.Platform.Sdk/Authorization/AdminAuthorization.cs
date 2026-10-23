@@ -1,0 +1,102 @@
+namespace Flit.Api.Authorization;
+
+/// <summary>
+/// Constantes de autorización del módulo Admin (HU #10189, RF01).
+/// </summary>
+public static class AdminAuthorization
+{
+    /// <summary>Nombre de la policy que exige rol SuperAdmin.</summary>
+    public const string SuperAdminPolicy = "SuperAdmin";
+
+    /// <summary>
+    /// HU #12429 — como <see cref="GroupHeadCompanyPolicy"/>, pero exige además que la clase de la
+    /// cabeza sea MARCA_BLANCA. Exclusiva de <c>/company/branding*</c> y <c>/company/domain*</c>: una
+    /// Concesión con hijas sigue usando <see cref="GroupHeadCompanyPolicy"/> para sus rutas de
+    /// jerarquía (#12345), pero no puede autogestionar marca ni dominio.
+    /// </summary>
+    public const string MarcaBlancaHeadCompanyPolicy = "MarcaBlancaHeadCompany";
+
+    /// <summary>Valor del claim de rol que concede acceso multi-tenant.</summary>
+    public const string SuperAdminRole = "SuperAdmin";
+
+    /// <summary>Nombre de la policy que permite acceso a AdminCompany o SuperAdmin.</summary>
+    public const string AdminCompanyPolicy = "AdminCompany";
+
+    /// <summary>Valor del claim de rol para administradores de compañía.</summary>
+    public const string AdminCompanyRole = "AdminCompany";
+
+    /// <summary>
+    /// Tipo de claim donde viaja el rol en el JWT FLIT. Se configura como
+    /// <c>RoleClaimType</c> para que <c>RequireRole</c> / <c>IsInRole</c> lo evalúen.
+    /// </summary>
+    public const string RoleClaimType = "role";
+
+    /// <summary>Mensaje de error 403 cuando falta el rol SuperAdmin (AC3).</summary>
+    public const string ForbiddenMessage = "Acceso restringido: se requiere rol SuperAdmin";
+
+    /// <summary>Nombre de la policy que exige rol ot_admin (HU #10215).</summary>
+    public const string OtAdminPolicy = "OtAdmin";
+
+    /// <summary>
+    /// Policy del módulo OT: catálogo <c>/admin/transit-offices</c> y API
+    /// <c>/api/v1/admin/ot/*</c>. SuperAdmin, ot_admin o cualquier usuario de un tenant
+    /// organismo de tránsito (HU #10218 / #10236; ver <see cref="OtModuleRequirement"/>).
+    /// </summary>
+    public const string OtModulePolicy = "OtModule";
+
+    /// <summary>Claim del JWT con el tipo de entidad del tenant (HU #10616).</summary>
+    public const string EntityTypeClaimType = "entity_type";
+
+    /// <summary>Valor de <see cref="EntityTypeClaimType"/> para un organismo de tránsito.</summary>
+    public const string TransitOfficeEntityType = "TRANSIT_OFFICE";
+
+    /// <summary>Valor del claim de rol para administrador OT.</summary>
+    public const string OtAdminRole = "ot_admin";
+
+    /// <summary>Mensaje de error 403 cuando falta el rol ot_admin.</summary>
+    public const string OtAdminForbiddenMessage = "Acceso restringido: se requiere rol ot_admin";
+
+    /// <summary>Mensaje de error 403 para el módulo OT (SuperAdmin, ot_admin o tenant OT).</summary>
+    public const string OtModuleForbiddenMessage =
+        "Acceso restringido: se requiere rol SuperAdmin, ot_admin o pertenecer a un organismo de tránsito";
+
+    /// <summary>
+    /// Policy de administración de usuarios del PROPIO alcance: SuperAdmin, AdminCompany
+    /// y ot_admin. Existe para que un ot_admin pueda cambiar el rol de los usuarios de su
+    /// organismo sin tener que ensanchar <see cref="AdminCompanyPolicy"/>, que protege otras
+    /// rutas donde ot_admin no debe entrar. El alcance por tenant lo sigue imponiendo el
+    /// handler (<c>UserOutOfScopeException</c>), no la policy.
+    /// </summary>
+    public const string UserAdminPolicy = "UserAdmin";
+
+    /// <summary>HU #13644 (FB-9): quién entra a los permisos individuales por usuario: SuperAdmin, AdminCompany, ot_admin y admin_tramites.</summary>
+    public const string PermissionOverridesAdminPolicy = "PermissionOverridesAdmin";
+
+    /// <summary>Valor del claim de rol del administrador del producto trámites.</summary>
+    public const string AdminTramitesRole = "admin_tramites";
+
+    /// <summary>Claim JWT del tenant autenticado.</summary>
+    public const string TenantIdClaimType = "tenant_id";
+
+    /// <summary>
+    /// HU #12345 AC4 — AdminCompany con marca de cabeza de grupo (<c>is_group_parent</c> en BD).
+    /// </summary>
+    public const string GroupHeadCompanyPolicy = "GroupHeadCompany";
+
+    /// <summary>Mensaje 403 cuando el caller no es cabeza de grupo (HU #12345 AC5).</summary>
+    public const string GroupHeadForbiddenMessage =
+        "Acceso restringido: se requiere ser administrador de una cabeza de grupo.";
+
+    /// <summary>
+    /// HU #12859 (Feature #12848, Épica #12751) — exige rol SuperAdmin u <c>ot_admin</c>
+    /// exclusivamente, SIN el bypass de <c>entity_type=TRANSIT_OFFICE</c> que sí concede
+    /// <see cref="OtModulePolicy"/> (<see cref="OtModuleRequirement"/>). Exclusiva de Prelación
+    /// documental (<c>document-precedence</c>): el Admin OT "solo ordena" — cualquier otro rol de
+    /// un tenant OT (p. ej. <c>gestor_tramites_ot</c>) recibe 403 incluso ahí.
+    /// </summary>
+    public const string OtAdminOrSuperAdminPolicy = "OtAdminOrSuperAdmin";
+
+    /// <summary>Mensaje de error 403 para <see cref="OtAdminOrSuperAdminPolicy"/> (HU #12859).</summary>
+    public const string OtAdminOrSuperAdminForbiddenMessage =
+        "Acceso restringido: se requiere rol SuperAdmin u ot_admin";
+}

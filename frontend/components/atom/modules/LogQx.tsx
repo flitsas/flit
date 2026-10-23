@@ -20,7 +20,15 @@ import {
 } from "lucide-react";
 import { ModuleTitle } from "./ModuleTitle";
 import { StatusBadge } from "@/components/atom/StatusBadge";
-import { PageNav } from "@/components/atom/PageNav";
+import { Pagination } from "@/components/atom/Pagination";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { usePaginacion } from "@/components/atom/usePaginacion";
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from "@/components/atom/table-styles";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { WIZARD_CTA_GRADIENT } from "@/components/operacion/wizard-field-styles";
 import {
@@ -61,7 +69,7 @@ import {
  * que resuelve el caso frecuente sin navegar ni perder los filtros.
  */
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 
 /** Filtros que viajan en el estado y en el query string, para restituirlos al volver. */
 interface Filtros {
@@ -122,14 +130,6 @@ function leerFiltrosDeLaUrl(): Filtros | null {
   return Object.values(filtros).some(Boolean) ? filtros : null;
 }
 
-/** «Mostrando 26–50 de 300»; la bandeja pagina en servidor, así que el rango se calcula. */
-function resumenPagina(page: number, pageSize: number, total: number): string {
-  if (total === 0) return "Mostrando 0 de 0";
-  const desde = (page - 1) * pageSize + 1;
-  const hasta = Math.min(page * pageSize, total);
-  return `Mostrando ${desde}–${hasta} de ${total}`;
-}
-
 function hoyMenos(dias: number): string {
   const d = new Date();
   d.setDate(d.getDate() - dias);
@@ -170,7 +170,8 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
   const [entries, setEntries] = useState<LogQxBandejaEntry[] | null>(null);
   const [contadores, setContadores] = useState<Record<string, number>>({});
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
+  // Bug #13055 — paginación de servidor estándar, con «Filas por página».
+  const { page, pageSize, setPage, setPageSize } = usePaginacion(PAGE_SIZE);
   const [error, setError] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false);
   const [abierta, setAbierta] = useState<string | null>(null);
@@ -178,7 +179,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
   // Guard anti-race: solo se aplica el resultado de la petición más reciente.
   const reqIdRef = useRef(0);
 
-  const load = useCallback(async (f: Filtros, targetPage: number) => {
+  const load = useCallback(async (f: Filtros, targetPage: number, tamano: number) => {
     const reqId = ++reqIdRef.current;
     setFetching(true);
     try {
@@ -193,7 +194,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
         familia: f.familia || undefined,
         instanceId: f.instanceId || undefined,
         page: targetPage,
-        pageSize: PAGE_SIZE,
+        pageSize: tamano,
       };
       const res = await fetchLogQxBandeja(params);
       if (reqId !== reqIdRef.current) return;
@@ -214,8 +215,8 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
   // disponible en render. Mismo patrón que Auditoria.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load(aplicados, page);
-  }, [aplicados, page, load]);
+    void load(aplicados, page, pageSize);
+  }, [aplicados, page, pageSize, load]);
 
   const aplicar = useCallback(
     (f: Filtros) => {
@@ -223,7 +224,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
       setAbierta(null);
       setAplicados(f);
     },
-    [],
+    [setPage],
   );
 
   const handleSubmit = useCallback(
@@ -318,14 +319,14 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
   }, [aplicar, filtros]);
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
       <ModuleTitle
         title="LOG QX"
         subtitle="Trámites con integración Quipux. Filtra por fecha, placa, documento o estado, y abre la trazabilidad completa del que necesites."
       />
 
       {aplicados.instanceId && (
-        <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-xl border border-[#557EFF]/30 bg-[#557EFF]/[0.07] px-3 py-2 text-xs">
+        <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-xl border border-flit-brand/30 bg-flit-brand/[0.07] px-3 py-2 text-xs">
           <span>
             Mostrando solo el trámite{" "}
             <span className="font-mono">{aplicados.instanceId}</span>
@@ -333,7 +334,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
           <button
             type="button"
             onClick={quitarTramite}
-            className="inline-flex items-center gap-1 rounded-full border border-[#557EFF]/40 px-2 py-0.5 font-medium text-[#557EFF] hover:bg-[#557EFF]/10"
+            className="inline-flex items-center gap-1 rounded-full border border-flit-brand/40 px-2 py-0.5 font-medium text-flit-brand hover:bg-flit-brand/10"
           >
             <X className="h-3 w-3" aria-hidden="true" /> Ver todos
           </button>
@@ -360,7 +361,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
               aria-label={`${meta.label}: ${total} trámite${total === 1 ? "" : "s"}`}
               aria-pressed={activo}
               onClick={() => alternarEstado(estado)}
-              className="flex flex-col items-center gap-1 px-2 py-3 transition hover:bg-[#557EFF]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF]"
+              className="flex flex-col items-center gap-1 px-2 py-3 transition hover:bg-flit-brand/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand"
               style={activo ? { background: meta.style.bg } : undefined}
             >
               {/* El icono es elemento gráfico (umbral 3:1): lleva el tono PURO del estado. */}
@@ -370,11 +371,11 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
               >
                 <Icon className="h-4 w-4" style={{ color: meta.style.accent }} aria-hidden="true" />
               </span>
-              <span className="max-w-full truncate text-xs font-medium text-[#162744]/70 dark:text-white/70">
+              <span className="max-w-full truncate text-xs font-medium text-flit-primary/70 dark:text-white/70">
                 {meta.label}
               </span>
               <span
-                className="text-xl font-bold leading-none tabular-nums text-[#162744] dark:text-white"
+                className="text-xl font-bold leading-none tabular-nums text-flit-primary dark:text-white"
                 aria-hidden="true"
               >
                 {total}
@@ -485,11 +486,12 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
         </button>
       </form>
 
+      {/* Bug #13055 — carga con el loader del carrito (antes, esqueleto). */}
+      {status === "loading" && <CarLoaderModal label="Cargando LOG QX…" />}
       <UiStateBoundary
-        status={status}
-        skeletonRows={6}
+        status={status === "loading" ? "ready" : status}
         errorMessage={error ?? "No se pudo cargar el LOG QX."}
-        onRetry={() => void load(aplicados, page)}
+        onRetry={() => void load(aplicados, page, pageSize)}
         emptyMessage="Ningún trámite con integración Quipux coincide con los filtros. Amplía el rango de fechas o quita algún filtro."
       >
         {entries && entries.length > 0 && (
@@ -498,21 +500,31 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
                 pastilla #DFE5ED y cada fila como tarjeta blanca separada, no una rejilla de
                 bordes. */}
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1040px] border-separate border-spacing-y-2 text-xs">
+              <table className="w-full min-w-[1040px] text-xs" style={{ borderCollapse: "separate", borderSpacing: "0 8px" }}>
                 <thead>
-                  <tr
-                    className="text-left text-[10px] font-semibold uppercase"
-                    style={{ color: "#162744" }}
-                  >
-                    <th className="rounded-l-xl px-3 py-2.5" style={{ background: "#DFE5ED", width: 34 }}>
+                  <tr>
+                    <th
+                      scope="col"
+                      className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`}
+                      style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG, width: 34 }}
+                    >
                       <span className="sr-only">Detalle</span>
                     </th>
                     {COLUMNAS.map((c) => (
-                      <th key={c} className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                      <th
+                        key={c}
+                        scope="col"
+                        className={TABLA_HEADER_CELL_CLS}
+                        style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                      >
                         {c}
                       </th>
                     ))}
-                    <th className="rounded-r-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                    <th
+                      scope="col"
+                      className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl`}
+                      style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                    >
                       Antigüedad
                     </th>
                   </tr>
@@ -535,15 +547,19 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
                 </tbody>
               </table>
             </div>
-            {/* Misma paginación numerada del listado de trámites (`PageNav`). */}
-            <PageNav
+            <Pagination
               page={page}
-              totalPages={Math.max(1, Math.ceil(total / PAGE_SIZE))}
-              resumen={resumenPagina(page, PAGE_SIZE, total)}
+              pageSize={pageSize}
+              totalCount={total}
               ariaLabel="Paginación del LOG QX"
+              noun="trámites"
               onPageChange={(p) => {
                 setAbierta(null);
                 setPage(Math.max(1, p));
+              }}
+              onPageSizeChange={(n) => {
+                setAbierta(null);
+                setPageSize(n);
               }}
             />
           </>
@@ -554,10 +570,10 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
 }
 
 const inputCls =
-  "rounded-lg border border-[#D9DEE8] dark:border-white/15 bg-white dark:bg-[#0B0F14] px-2.5 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20";
+  "rounded-lg border border-[#D9DEE8] dark:border-white/15 bg-white dark:bg-[#0B0F14] px-2.5 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20";
 
 const ghostCls =
-  "inline-flex items-center gap-1.5 rounded-lg border border-[#D9DEE8] dark:border-white/15 px-3 py-2 text-xs font-medium opacity-80 hover:opacity-100 hover:border-[#557EFF]";
+  "inline-flex items-center gap-1.5 rounded-lg border border-[#D9DEE8] dark:border-white/15 px-3 py-2 text-xs font-medium opacity-80 hover:opacity-100 hover:border-flit-brand";
 
 /** Cabeceras entre el chevron y «Antigüedad»; el orden lo fijó el PO. */
 const COLUMNAS = [
@@ -622,8 +638,8 @@ function FilaTramite({
   return (
     <>
       <tr
-        className={`cursor-pointer transition ${
-          abierta ? "bg-[#557EFF]/[0.06]" : "bg-white hover:bg-[#557EFF]/[0.04] dark:bg-[#0B0F14]"
+        className={`cursor-pointer bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS} ${
+          abierta ? "shadow-[0_8px_24px_color-mix(in_srgb,var(--color-flit-brand)_18%,transparent)]" : ""
         }`}
         onClick={onToggle}
         tabIndex={0}
@@ -643,7 +659,7 @@ function FilaTramite({
           />
         </td>
         <td className={tdCls}>
-          <span className="font-mono font-semibold text-[#557EFF]">{entry.referenceNumber}</span>
+          <span className="font-mono font-semibold text-flit-brand">{entry.referenceNumber}</span>
           {entry.intentos > 1 && (
             <span className="ml-1.5 rounded-full bg-[#FF4E00]/15 px-1.5 py-0.5 font-mono text-[10px] font-bold text-[#C2410C]">
               {entry.intentos} intentos
@@ -750,7 +766,7 @@ function Vistazo({
           <button
             type="button"
             onClick={onAbrir}
-            className="whitespace-nowrap rounded-lg px-4 py-2 text-xs font-semibold text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+            className="whitespace-nowrap rounded-lg px-4 py-2 text-xs font-semibold text-white transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
             style={{ background: WIZARD_CTA_GRADIENT }}
           >
             Ver trazabilidad completa
@@ -763,7 +779,7 @@ function Vistazo({
         <Link
           href={hrefTramite(entry.procedureInstanceId, entry.clientTenantId, esAdmin)}
           onClick={(e) => e.stopPropagation()}
-          className="inline-flex items-center justify-center whitespace-nowrap rounded-lg border border-[#DFE5ED] bg-white px-4 py-2 text-xs font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] dark:border-white/15 dark:bg-transparent"
+          className="inline-flex items-center justify-center whitespace-nowrap rounded-lg border border-[#DFE5ED] bg-white px-4 py-2 text-xs font-semibold text-flit-brand transition hover:bg-flit-brand/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/15 dark:bg-transparent"
         >
           Ver trámite
         </Link>

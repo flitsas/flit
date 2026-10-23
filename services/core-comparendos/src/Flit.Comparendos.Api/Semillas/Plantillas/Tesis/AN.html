@@ -1,0 +1,10 @@
+<!-- nombre: Notificación (acto) -->
+<p style="text-align:right">{{dp.fecha}}<br>Radicado: <b>{{dp.radicado}}</b></p>
+<h2>Notificación a SIMIT</h2>
+<p><b>Señores:</b><br><b>FEDERACIÓN COLOMBIANA DE MUNICIPIOS ADMINISTRADORES DE LA BASE DE DATOS SIMIT</b></p>
+<p><b>Referencia:</b> Orden de comparendo N° {{comparendo.numero}} del {{comparendo.fecha_imposicion}}{{#si comparendo.placa}} · Placa {{comparendo.placa}}{{/si}} · Organismo de tránsito: {{comparendo.secretaria}}</p>
+<p>Tengan un cordial saludo;</p>
+<p style="text-align:justify">Por medio de la presente, <b>{{peticionario.nombre}}</b>, identificado(a) con <b>{{peticionario.tipo_documento}} No. {{peticionario.numero_documento}}</b>, notifica el acto administrativo por el cual el organismo de tránsito <b>{{comparendo.secretaria}}</b> nos exonera del proceso contravencional por la presunta comisión de una infracción a las normas de tránsito vigentes. De acuerdo con lo anterior, solicitamos eliminar de la base de datos SIMIT la información de los comparendos y/o multas que determina el acto administrativo adjunto.</p>
+<p>Muchas gracias por su atención.</p>
+{{rl.firma_imagen}}
+<p><b>{{rl.nombres}}</b><br>{{rl.tipo_documento}} No. {{rl.numero_documento}}<br>{{rl.cargo}}<br>{{peticionario.nombre}}</p>

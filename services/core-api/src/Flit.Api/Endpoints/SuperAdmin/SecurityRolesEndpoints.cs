@@ -50,7 +50,7 @@ internal static class SecurityRolesEndpoints
             try
             {
                 var id = await handler.HandleAsync(
-                    new CreateRoleCommand(request.TargetEntityType, request.Code, request.Name, request.Description),
+                    new CreateRoleCommand(request.TargetEntityType, request.Code, request.Name, request.Description, request.ProductCode ?? "tramites"),
                     ct);
                 return Results.Created($"/api/v1/superadmin/roles/{id}", new { id });
             }
@@ -61,6 +61,10 @@ internal static class SecurityRolesEndpoints
             catch (InvalidTargetEntityTypeException)
             {
                 return Results.BadRequest(new { code = "INVALID_TARGET_ENTITY_TYPE" });
+            }
+            catch (InvalidRoleProductException)
+            {
+                return Results.BadRequest(new { code = "INVALID_ROLE_PRODUCT" });
             }
         }).WithName("CreateRole")
           .AddEndpointFilter(new AdminAuditFilter(
@@ -83,6 +87,18 @@ internal static class SecurityRolesEndpoints
             catch (RoleNotFoundException)
             {
                 return Results.NotFound();
+            }
+            catch (FamilyCreateRequiresReadException ex) // HU #13664 AC1
+            {
+                return Results.BadRequest(new { code = "FAMILY_CREATE_REQUIRES_READ", permissions = ex.Slugs });
+            }
+            catch (RolePermissionProductMismatchException)
+            {
+                return Results.BadRequest(new { code = "ROLE_PERMISSION_PRODUCT_MISMATCH" });
+            }
+            catch (OtPermissionNotApplicableToRoleException) // HU #13644
+            {
+                return Results.BadRequest(new { code = "OT_NOT_APPLICABLE" });
             }
         }).WithName("SetRolePermissions")
           .AddEndpointFilter(new AdminAuditFilter(
@@ -159,7 +175,8 @@ internal static class SecurityRolesEndpoints
               AuditVocabulary.Modules.Roles, AuditVocabulary.Operations.Delete, "role", "ROLE", "id"));
     }
 
-    private sealed record CreateRoleRequest(string TargetEntityType, string Code, string Name, string? Description);
+    /// <summary>HU #13653: <c>Code</c> es opcional; sin él, el servidor lo genera a partir de <c>Name</c>.</summary>
+    private sealed record CreateRoleRequest(string TargetEntityType, string? Code, string Name, string? Description, string? ProductCode = null);
 
     private sealed record SetPermissionsRequest(List<Guid> PermissionIds);
 }

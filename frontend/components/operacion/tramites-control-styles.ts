@@ -16,7 +16,7 @@
 export const TRAMITES_CONTROL_CLS =
   'inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border ' +
   'border-[#DFE5ED] bg-white px-3 text-xs font-semibold text-[#1E293B] transition ' +
-  'hover:bg-[#EFF6FF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] ' +
+  'hover:bg-[#EFF6FF] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand ' +
   'focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ' +
   'dark:border-white/15 dark:bg-[#0B0F14] dark:text-white';
 
@@ -25,7 +25,7 @@ export const TRAMITES_CONTROL_CLS =
  * el `#557EFF` puro — sobre blanco el puro se queda en 3.7:1 y este es texto pequeño.
  * Se concatena al de reposo, que ya aporta la geometría.
  */
-export const TRAMITES_CONTROL_ACTIVO_CLS = 'border-[#557EFF] text-[#3B4FD6] dark:text-[#8FA8FF]';
+export const TRAMITES_CONTROL_ACTIVO_CLS = 'border-flit-brand text-[#3B4FD6] dark:text-[#8FA8FF]';
 
 /** Clase del control según tenga o no algo aplicado. */
 export function controlCls(activo: boolean): string {

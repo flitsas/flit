@@ -65,6 +65,12 @@ import {
 import { defaultRange, lastDaysRange } from "@/components/admin/transit-offices/_reportes/filters";
 import { formatHours } from "@/components/admin/transit-offices/_reportes/report-columns";
 
+/** Hero del dashboard OT (A18 es N/A: no se unifica con «Hola, {nombre}»). */
+export const OT_DASHBOARD_HERO_TITLE = "Tu cola de trabajo";
+/** KPIs de métrica OT (A19 es N/A: no se clonan ni se unifican con COPY.E03). */
+export const OT_KPI_ESPERAN_MI_DECISION = "Esperan mi decisión";
+export const OT_KPI_ENTREGADOS_HOY = "Entregados hoy";
+
 /**
  * Ventana de la mediana de decisión. Fija y declarada en la propia tarjeta: el usuario no la eligió,
  * así que no puede deducirla. Coincide con el rango que se manda al endpoint (`defaultRange`).
@@ -166,7 +172,7 @@ export function OtDashboard() {
 
   return (
     <div
-      className="app-bg flex min-h-screen flex-col gap-4 px-6 pb-10 pt-6 text-[#162744] dark:text-white"
+      className="app-bg flex min-h-screen flex-col gap-4 px-6 pb-10 pt-6 text-flit-primary dark:text-white"
       data-testid="ot-inicio"
     >
       {/* Banner + KPIs: misma grilla que el dashboard del gestor (`Dashboard.tsx`) — banner en
@@ -206,7 +212,7 @@ export function OtDashboard() {
 const ROTACION_MS = 6000;
 
 /** Fondo del carrusel, IGUAL en todos los slides (mensaje fijo y banner) — ver `Bienvenida`. */
-const BRAND_GRADIENT = "linear-gradient(120deg,#00dbd5 0%,#557eff 100%)";
+const BRAND_GRADIENT = "linear-gradient(120deg,var(--color-flit-tech) 0%,var(--color-flit-brand) 100%)";
 
 type MensajeSlide = {
   kind: "mensaje";
@@ -264,7 +270,7 @@ function mensajesDelOrganismo(
   const fijo: MensajeSlide = {
     kind: "mensaje",
     id: "bienvenida",
-    title: "Tu cola de trabajo",
+    title: OT_DASHBOARD_HERO_TITLE,
     body: `${cola}${medianaTexto} Los datos son del día calendario de Bogotá.`,
   };
 
@@ -369,7 +375,7 @@ function Bienvenida({
         >
           <span className="absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/25" />
           <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-[#162744] shadow-lg">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-flit-primary shadow-lg">
               <ExternalLink className="h-5 w-5" aria-hidden="true" />
             </span>
           </span>
@@ -529,8 +535,8 @@ function Actividad({ estado, serie }: { estado: Estado; serie: OtReportSeriesPoi
               <CartesianGrid strokeDasharray="3 3" stroke="#EEF1F5" vertical={false} />
               <XAxis dataKey="label" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
               <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
-              <Tooltip cursor={{ fill: "rgba(85,126,255,0.06)" }} />
-              <Bar dataKey="radicados" name="Radicados" fill="#557EFF" radius={[3, 3, 0, 0]} />
+              <Tooltip cursor={{ fill: "color-mix(in srgb, var(--color-flit-brand) 6%, transparent)" }} />
+              <Bar dataKey="radicados" name="Radicados" fill="var(--color-flit-brand)" radius={[3, 3, 0, 0]} />
               <Bar dataKey="aprobados" name="Aprobados" fill="#8CC63F" radius={[3, 3, 0, 0]} />
               <Bar dataKey="rechazados" name="Rechazados" fill="#FF4E00" radius={[3, 3, 0, 0]} />
             </BarChart>
@@ -580,7 +586,7 @@ function composicionDelPeriodo(resumen: OtReportSummary) {
     {
       id: "sin-decision",
       name: "Sin decisión",
-      color: "#557EFF",
+      color: "var(--color-flit-brand)",
       value:
         resumen.enRevision + resumen.esperandoPlaca + resumen.esperandoCliente + resumen.otros,
       hint: "En revisión, esperando placa y los que esperan algo de la empresa (SOAT, impuestos o trámite pausado).",
@@ -712,7 +718,7 @@ function ErrorPanel({ message, onRetry }: { message: string | null; onRetry: () 
       role="alert"
       className="flex flex-col items-start gap-3 rounded-2xl border border-[#FF4E00]/40 bg-[#FF4E00]/[0.07] px-5 py-4"
     >
-      <p className="flex items-center gap-2 text-sm font-semibold text-[#162744] dark:text-white">
+      <p className="flex items-center gap-2 text-sm font-semibold text-flit-primary dark:text-white">
         <AlertTriangle className="h-4 w-4 shrink-0 text-[#FF4E00]" aria-hidden="true" />
         No se pudo cargar el estado de la cola
       </p>
@@ -722,7 +728,7 @@ function ErrorPanel({ message, onRetry }: { message: string | null; onRetry: () 
       <button
         type="button"
         onClick={onRetry}
-        className="rounded-lg border border-[#DFE5ED] px-3 py-1.5 text-xs font-semibold transition hover:border-[#557EFF] dark:border-white/15"
+        className="rounded-lg border border-[#DFE5ED] px-3 py-1.5 text-xs font-semibold transition hover:border-flit-brand dark:border-white/15"
       >
         Reintentar
       </button>
@@ -764,12 +770,12 @@ function PanelOperativoKpis({
   return (
     <div className="grid grid-cols-2 gap-3">
       <Kpi
-        label="Esperan mi decisión"
+        label={OT_KPI_ESPERAN_MI_DECISION}
         value={cola?.porRevisar}
         cargando={cargando}
-        color="#557EFF"
+        color="var(--color-flit-brand)"
         icon={Inbox}
-        onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.porRevisar, "Esperan mi decisión")}
+        onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.porRevisar, OT_KPI_ESPERAN_MI_DECISION)}
       />
       <Kpi
         label="Pendientes en total"
@@ -781,12 +787,12 @@ function PanelOperativoKpis({
         onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.pendientes, "Pendientes en total")}
       />
       <Kpi
-        label="Entregados hoy"
+        label={OT_KPI_ENTREGADOS_HOY}
         value={movimiento?.entregadosHoy}
         cargando={cargando}
         color="#8CC63F"
         icon={CheckCircle2}
-        onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.entregadosHoy, "Entregados hoy")}
+        onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.entregadosHoy, OT_KPI_ENTREGADOS_HOY)}
       />
       <Kpi
         label="Tiempo mediano de decisión"
@@ -804,7 +810,7 @@ function PanelOperativoKpis({
                 formatHours(movimiento?.tiempoMedianoDecisionHoras)
         }
         cargando={cargando}
-        color="#00DBD5"
+        color="var(--color-flit-tech)"
         sinDato={sinMediana}
         icon={Timer}
         hint={
@@ -952,7 +958,7 @@ function Navegable({
       // El nombre accesible dice a dónde lleva: el texto visible es una etiqueta y un número, que
       // por sí solos no anuncian que haya una lista detrás.
       aria-label={etiqueta}
-      className={`${className} text-left transition hover:border-[#557EFF] hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]`}
+      className={`${className} text-left transition hover:border-flit-brand hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand`}
     >
       {children}
     </button>
@@ -1045,7 +1051,7 @@ function Espera({
           className="block h-full rounded"
           style={{
             width: `${pct}%`,
-            background: miTurno ? "linear-gradient(135deg,#557EFF,#00DBD5)" : "#C9D2E0",
+            background: miTurno ? "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" : "#C9D2E0",
           }}
         />
       </span>

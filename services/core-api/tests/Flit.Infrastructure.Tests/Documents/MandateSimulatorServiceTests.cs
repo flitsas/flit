@@ -166,7 +166,55 @@ public sealed class MandateSimulatorServiceTests
         result.Message.Should().NotContainAny("smtp", "Host", "password");
     }
 
-    private static (MandateSimulatorService Service, FakeEmailSender Sender) Build(bool conMandatario)
+    // HU #13172 (Feature #13118) — el simulador sigue el mismo camino que el trámite: usa la plantilla vigente del formato.
+    [Fact]
+    public async Task HU13172_PreviewAsync_UsaLaPlantillaVigenteDelFormato_ComoElTramite()
+    {
+        var provider = Substitute.For<IMandateFormatTemplateProvider>();
+        provider.ResolveAsync(MandatoTemplateResolver.Municipio, null, Arg.Any<CancellationToken>())
+            .Returns(new MandateFormatTemplate(MandatoTemplateResolver.Municipio, 3, "Plantilla v3 {{placa}}"));
+        var capturing = new CapturingGenerator();
+        var (service, _) = Build(conMandatario: false, provider, capturing);
+
+        var result = await service.PreviewAsync(
+            new MandateSimulationRequest(Funza, "juridica", null, null, "traspaso_standard"), Ct);
+
+        result.Success.Should().BeTrue();
+        capturing.Captured!.CustomTemplateKind.Should().Be(MandatoCustomTemplateKindCodes.Editor);
+        capturing.Captured.CustomTemplateBody.Should().Be("Plantilla v3 {{placa}}");
+    }
+
+    [Fact]
+    public async Task HU13172_PreviewAsync_SinPlantillaPublicada_UsaLaRedaccionDelGenerador()
+    {
+        var provider = Substitute.For<IMandateFormatTemplateProvider>();
+        provider.ResolveAsync(Arg.Any<string>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
+            .Returns(new MandateFormatTemplate(MandatoTemplateResolver.Municipio, 0, null));
+        var capturing = new CapturingGenerator();
+        var (service, _) = Build(conMandatario: false, provider, capturing);
+
+        var result = await service.PreviewAsync(
+            new MandateSimulationRequest(Funza, "juridica", null, null, "traspaso_standard"), Ct);
+
+        result.Success.Should().BeTrue();
+        capturing.Captured!.CustomTemplateKind.Should().Be(MandatoCustomTemplateKindCodes.None);
+    }
+
+    private sealed class CapturingGenerator : IMandatoGenerator
+    {
+        public MandatoData? Captured { get; private set; }
+
+        public GeneratedDocument GenerateMandato(MandatoData data)
+        {
+            Captured = data;
+            return new MandatoPdfGenerator().GenerateMandato(data);
+        }
+    }
+
+    private static (MandateSimulatorService Service, FakeEmailSender Sender) Build(
+        bool conMandatario,
+        IMandateFormatTemplateProvider? formatTemplates = null,
+        IMandatoGenerator? generator = null)
     {
         var db = new FlitDbContext(new DbContextOptionsBuilder<FlitDbContext>()
             .UseInMemoryDatabase($"flit-mandate-sim-{Guid.NewGuid()}")
@@ -229,17 +277,24 @@ public sealed class MandateSimulatorServiceTests
         otStatusReader
             .GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns((Flit.Admin.Domain.Companies.TransitOffices.TransitOfficeOperationalStatusItem?)null);
-        var identityResolver = new IdentityVigenciaPorDocumentoResolver(Substitute.For<IProcedureInstanceRepository>());
+        // HU #13121: la identidad se busca en el tenant de las compañías vinculadas; aquí no se ejercita.
+        var identityRepo = Substitute.For<IProcedureInstanceRepository>();
+        identityRepo.ListBiometricValidationsByPersonAsync(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>(),
+                Arg.Any<CancellationToken>())
+            .Returns((Array.Empty<Flit.Tramites.Domain.Entities.ProcedureInstanceBiometricValidation>(), 0, false));
+        var identityResolver = new IdentityVigenciaPorDocumentoResolver(identityRepo);
         var service = new MandateSimulatorService(
             db,
             new FakeCatalog(),
             new MandateRequirementPolicy(db),
             new MandateSignerDirectory(db, otStatusReader, identityResolver),
-            new MandatoPdfGenerator(),
+            generator ?? new MandatoPdfGenerator(),
             new FakeConfigService(),
             NullSignatureVaultPolicy.Instance,
             new FakeStorage(),
-            sender);
+            sender,
+            formatTemplates);
 
         return (service, sender);
     }
@@ -278,10 +333,6 @@ public sealed class MandateSimulatorServiceTests
         public Task<MandateConfigWriteStatus> DeleteAsync(Guid officeId, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
-        public Task<MandateConfigExtractResult> ExtractAsync(
-            ReadOnlyMemory<byte> content, string mediaType, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
         public Task<(MandateConfigWriteStatus Status, MandateOtConfigView? View)> UploadPdfTemplateAsync(
             Guid officeId, Stream content, string fileName, Guid? userId, CancellationToken ct = default) =>
             throw new NotSupportedException();
@@ -298,21 +349,25 @@ public sealed class MandateSimulatorServiceTests
             Task.FromResult<byte[]?>(null);
 
         public Task<IReadOnlyList<CompanyOtMandateRuleView>> ListCompanyRulesAsync(
-            Guid officeId, CancellationToken ct = default) =>
+            Guid officeId, OtCompanyVisibility visibility,
+            CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<CompanyOtMandateRuleView>>([]);
 
         public Task<(MandateConfigWriteStatus Status, CompanyOtMandateRuleView? View)> UpsertCompanyRuleAsync(
             Guid officeId, Guid companyTenantId, UpsertCompanyOtMandateRuleRequest request,
-            Guid? userId, CancellationToken ct = default) =>
+            Guid? userId, MandateRuleTypeChange? change = null, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
         public Task<(MandateConfigWriteStatus Status, CompanyOtMandateRuleView? View)> SetCompanyDefaultSignerAsync(
             Guid officeId, Guid companyTenantId, SetCompanyDefaultSignerRequest request,
-            Guid? userId, CancellationToken ct = default) =>
+            Guid? userId, OtCompanyVisibility visibility,
+            CancellationToken ct = default) =>
             throw new NotSupportedException();
 
         public Task<MandateConfigWriteStatus> DeleteCompanyRuleAsync(
-            Guid officeId, Guid companyTenantId, CancellationToken ct = default) =>
+            Guid officeId, Guid companyTenantId, OtCompanyVisibility visibility,
+            long? expectedRowVersion = null, MandateRuleTypeChange? change = null,
+            CancellationToken ct = default) =>
             throw new NotSupportedException();
     }
 

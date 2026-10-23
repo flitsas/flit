@@ -38,8 +38,16 @@ jobs:
 
       - name: Install gitleaks
         run: |
-          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz \
-            | tar -xz gitleaks
+          set -euo pipefail
+          url="https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz"
+          for i in 1 2 3; do
+            curl -fL --retry 3 --retry-all-errors --retry-delay 2 -o gitleaks.tgz "$url" \
+              && tar -xzf gitleaks.tgz gitleaks \
+              && break
+            echo "intento $i falló; reintentando..."
+            sleep $((i * 2))
+          done
+          test -f gitleaks
           sudo mv gitleaks /usr/local/bin/
 
       - name: Run gitleaks

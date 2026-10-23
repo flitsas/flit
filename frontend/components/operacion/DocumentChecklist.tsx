@@ -22,6 +22,7 @@ import { tramitesClient } from '@/lib/api/tramites-client';
 import { DocumentPreviewModal } from '@/components/shared/DocumentPreviewModal';
 import { DocumentCatalogCaption } from '@/components/shared/DocumentCatalogCaption';
 import { catalogDocumentTitle } from '@/lib/tramites/document-labels';
+import { esAdjuntoDeFlito } from '@/lib/tramites/flito';
 import type {
   ChecklistItemView,
   ProcedureAttachment,
@@ -31,7 +32,16 @@ import type {
 export type DocumentUploadMode = 'individual' | 'batch';
 
 /** Mensaje del POST generate-impronta del trámite (ProblemDetails.detail). */
+export const IMPRONTA_MANUAL_TEXTO = 'Cargue la impronta; no se genera automáticamente.';
+
+/** HU #13403 — 409 `generacion_improntas_deshabilitada` (extensions.error en el ProblemDetails). */
+export function esGeneracionImprontasDeshabilitada(error: unknown): boolean {
+  const problem = (error as { problem?: Record<string, unknown> | null } | null)?.problem;
+  return problem?.error === 'generacion_improntas_deshabilitada';
+}
+
 export function describeGenerarImprontaEnTramite(error: unknown): string {
+  if (esGeneracionImprontasDeshabilitada(error)) return IMPRONTA_MANUAL_TEXTO;
   if (error instanceof Error && error.message.trim()) return error.message;
   return 'No se pudo generar la impronta. Verifica placa u organismo e intenta de nuevo.';
 }
@@ -64,6 +74,11 @@ interface Props {
    * obligatorio. Por defecto sí: solo `improntaSource === 'MANUAL'` la apaga.
    */
   permiteGenerarImprontaAutomatica?: boolean;
+  /**
+   * HU #13403 — false ⇒ la compañía tiene deshabilitada la generación de improntas: no se ofrece
+   * generar y se muestra la carga manual con un texto corto. Ausente/true ⇒ comportamiento histórico.
+   */
+  improntaGeneracionHabilitada?: boolean;
 }
 
 /**
@@ -104,7 +119,7 @@ export function DocumentUploadModeToggle({
               on
                 ? {
                     background: '#EFF6FF',
-                    color: '#557EFF',
+                    color: 'var(--color-flit-brand)',
                     boxShadow: '0 4px 20px -2px rgba(15,23,42,0.05)',
                   }
                 : { color: '#64748B' }
@@ -592,7 +607,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
             </p>
           )}
           {fields.length > 0 && (
-            <p className="mt-1.5 text-xs font-medium" style={{ color: '#557EFF' }}>
+            <p className="mt-1.5 text-xs font-medium" style={{ color: 'var(--color-flit-brand)' }}>
               Clic para ver {fields.length} campo{fields.length === 1 ? '' : 's'}
             </p>
           )}
@@ -629,7 +644,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
                 <h3
                   id={`ocr-detail-title-${tipo}`}
                   className="text-sm font-semibold"
-                  style={{ color: '#162744' }}
+                  style={{ color: 'var(--color-flit-primary)' }}
                 >
                   OCR — {nombre}
                   <span className="mt-0.5 block text-xs font-bold" style={{ color: palette.color }}>
@@ -709,6 +724,7 @@ export function DocumentSlot({
   onGenerateImpronta,
   onPreview,
   permiteGenerarImprontaAutomatica = true,
+  improntaGeneracionHabilitada = true,
 }: {
   item: ChecklistItemView;
   attachment: ProcedureAttachment | undefined;
@@ -724,6 +740,8 @@ export function DocumentSlot({
   onPreview?: (attachment: ProcedureAttachment) => void;
   /** Si false, no se ofrece generar (tipo parametrizado en MANUAL). */
   permiteGenerarImprontaAutomatica?: boolean;
+  /** HU #13403 — false ⇒ carga manual de la impronta (sin generación automática). */
+  improntaGeneracionHabilitada?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -732,6 +750,9 @@ export function DocumentSlot({
 
   const tipo = item.docTipo ?? item.key;
   const caption = catalogDocumentTitle(tipo, item.label);
+  // HU #13266 (AC1) — gana quien carga primero (HU #13265): el adjunto de FLITO no se reemplaza ni se
+  // borra desde aquí (el backend respondería 409); la casilla solo deja previsualizarlo.
+  const deFlito = esAdjuntoDeFlito(attachment);
   const done = item.satisfied || !!attachment;
   const busy = uploading || analyzing || deleting || generating;
   const isAuto = AUTO_DOC_TIPOS.has(tipo);
@@ -743,8 +764,10 @@ export function DocumentSlot({
     allowedMimes: item.mimeTypesAllowed,
     maxSizeBytes: item.maxSizeBytes,
   });
+  const improntaSoloManual = isImpronta && !improntaGeneracionHabilitada;
   const canGenerate =
     isImpronta &&
+    improntaGeneracionHabilitada &&
     permiteGenerarImprontaAutomatica &&
     !!onGenerateImpronta &&
     !attachment &&
@@ -797,11 +820,11 @@ export function DocumentSlot({
         'relative flex grow shrink-0 basis-full flex-col rounded-xl bg-white p-4 shadow-sm transition hover:shadow-md dark:bg-[#162744] md:basis-[calc(50%-0.5rem)] xl:basis-[calc(25%-0.75rem)] 2xl:basis-[calc(16.6667%-0.8333rem)] ' +
         (isAuto || (done && !ocrRejected)
           ? 'border'
-          : 'border-2 border-dashed hover:border-[#557EFF] hover:bg-[#F0F5FF]')
+          : 'border-2 border-dashed hover:border-flit-brand hover:bg-[#F0F5FF]')
       }
       style={{ borderColor: '#E2E8F0' }}
     >
-      {/* Badges esquina superior derecha (prototipo DocSlot). */}
+      {/* Badges + OCR en cabecera (HU #12728 D.2): Opcional en brand-ink; chip obligatorio por token danger. */}
       <div className="absolute right-3 top-3 flex items-center gap-1.5">
         {showValidado ? (
           <span
@@ -813,17 +836,18 @@ export function DocumentSlot({
         ) : ocrRejected ? (
           <StatusBadge tone="danger" label="No coincide" />
         ) : item.obligatorio ? (
-          <span className="whitespace-nowrap rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-600">
-            Por cargar
-          </span>
+          <StatusBadge tone="danger" label="Por cargar" />
         ) : (
-          <span className="text-xs font-medium opacity-60">Opcional</span>
+          <span className="text-xs font-medium" style={{ color: 'var(--flit-brand-ink)' }}>
+            Opcional
+          </span>
         )}
+        {ocr && !analyzing ? <OcrStatusPanel tipo={tipo} ocr={ocr} /> : null}
       </div>
 
       <p
         className="pr-28 text-[13px] font-semibold leading-tight"
-        style={{ color: '#162744' }}
+        style={{ color: 'var(--color-flit-primary)' }}
       >
         <DocumentCatalogCaption nombre={item.label} codigo={tipo} />
       </p>
@@ -838,8 +862,17 @@ export function DocumentSlot({
               de «Ver» y del foco), no en el degradado de marca, y a plena opacidad: el `opacity-70`
               vive en el texto para que el color no salga lavado. `shrink-0` + `mt-px` evitan que se
               deforme o se despegue de la primera línea cuando el texto envuelve. */}
-          <Info className="mt-px h-3 w-3 shrink-0" style={{ color: '#557EFF' }} aria-hidden />
+          <Info className="mt-px h-3 w-3 shrink-0" style={{ color: 'var(--color-flit-brand)' }} aria-hidden />
           <span className="opacity-70">{instruccion}</span>
+        </p>
+      )}
+      {improntaSoloManual && !readOnly && !attachment && !isAuto && (
+        <p className="mt-1 flex items-start gap-1 text-[11px] leading-snug">
+          <Info className="mt-px h-3 w-3 shrink-0" style={{ color: 'var(--color-flit-brand)' }} aria-hidden />
+          <span className="opacity-70">
+            {IMPRONTA_MANUAL_TEXTO}
+            {item.obligatorio ? ' Debe cargarla para radicar.' : ''}
+          </span>
         </p>
       )}
       <p className="mt-1 text-[11px] opacity-70">{limitsCaption}</p>
@@ -867,17 +900,11 @@ export function DocumentSlot({
               className={`h-full rounded-full ${analyzing || generating ? 'animate-pulse' : ''}`}
               style={{
                 width: analyzing || generating ? '60%' : '100%',
-                background: analyzing || generating ? '#557EFF' : ocrRejected ? 'var(--badge-danger-fg)' : '#8CC63F',
+                background: analyzing || generating ? 'var(--color-flit-brand)' : ocrRejected ? 'var(--badge-danger-fg)' : '#8CC63F',
               }}
           />
         </div>
       )}
-
-      {ocr && !analyzing ? (
-        <div className="mt-2">
-          <OcrStatusPanel tipo={tipo} ocr={ocr} />
-        </div>
-      ) : null}
 
       <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
         {isAuto ? (
@@ -890,7 +917,7 @@ export function DocumentSlot({
               type="button"
               onClick={() => onPreview(attachment)}
               className="text-xs font-semibold"
-              style={{ color: '#557EFF' }}
+              style={{ color: 'var(--color-flit-brand)' }}
               aria-label={`Previsualizar ${caption}`}
             >
               Ver
@@ -903,57 +930,61 @@ export function DocumentSlot({
                 type="button"
                 onClick={() => onPreview(attachment)}
                 className="rounded-lg border p-1 disabled:opacity-60"
-                style={{ color: '#557EFF' }}
+                style={{ color: 'var(--color-flit-brand)' }}
                 aria-label={`Previsualizar ${caption}`}
-              >
+                >
                 <Eye className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
             )}
-            <input
-              ref={inputRef}
-              type="file"
-              accept={(item.mimeTypesAllowed?.length ? item.mimeTypesAllowed : ALLOWED_MIME).join(',')}
-              onChange={handlePick}
-              className="hidden"
-              aria-label={`Subir ${caption}`}
-            />
-            <button
-              type="button"
-              onClick={() => inputRef.current?.click()}
-              disabled={busy}
-              className="h-9 rounded-lg border bg-white px-4 text-[12px] font-semibold transition hover:bg-[#EFF6FF] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent"
-              style={{ borderColor: '#557EFF', color: '#557EFF' }}
-            >
-              {analyzing
-                ? 'Analizando documento...'
-                : uploading
-                  ? 'Subiendo…'
-                  : attachment
-                    ? 'Reemplazar archivo'
-                    : 'Adjuntar archivo'}
-            </button>
-            {canGenerate && (
-              <button
-                type="button"
-                onClick={() => void handleGenerate()}
-                disabled={busy}
-                className="h-9 rounded-lg px-4 text-[12px] font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                style={{ background: '#557EFF' }}
-              >
-                {generating ? 'Generando impronta…' : 'Generar impronta'}
-              </button>
-            )}
-            {attachment && (
-              <button
-                type="button"
-                onClick={() => onRemove(attachment.id)}
-                disabled={busy}
-                className="text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-                style={{ color: '#FF4E00' }}
-                aria-label={`Borrar ${caption}`}
-              >
-                {deleting ? 'Borrando…' : 'Borrar'}
-              </button>
+            {!deFlito && (
+              <>
+                <input
+                  ref={inputRef}
+                  type="file"
+                  accept={(item.mimeTypesAllowed?.length ? item.mimeTypesAllowed : ALLOWED_MIME).join(',')}
+                  onChange={handlePick}
+                  className="hidden"
+                  aria-label={`Subir ${caption}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => inputRef.current?.click()}
+                  disabled={busy}
+                  className="h-9 rounded-lg border bg-white px-4 text-[12px] font-semibold transition hover:bg-[#EFF6FF] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent"
+                  style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
+                >
+                  {analyzing
+                    ? 'Analizando documento...'
+                    : uploading
+                      ? 'Subiendo…'
+                      : attachment
+                        ? 'Reemplazar archivo'
+                        : 'Adjuntar archivo'}
+                </button>
+                {canGenerate && (
+                  <button
+                    type="button"
+                    onClick={() => void handleGenerate()}
+                    disabled={busy}
+                    className="h-9 rounded-lg px-4 text-[12px] font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    style={{ background: 'var(--color-flit-brand)' }}
+                  >
+                    {generating ? 'Generando impronta…' : 'Generar impronta'}
+                  </button>
+                )}
+                {attachment && (
+                  <button
+                    type="button"
+                    onClick={() => onRemove(attachment.id)}
+                    disabled={busy}
+                    className="text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                    style={{ color: '#FF4E00' }}
+                    aria-label={`Borrar ${caption}`}
+                  >
+                    {deleting ? 'Borrando…' : 'Borrar'}
+                  </button>
+                )}
+              </>
             )}
           </>
         )}
@@ -988,6 +1019,7 @@ export function DocumentChecklist({
   onUploadModeChange,
   hideModeToggle = false,
   permiteGenerarImprontaAutomatica = true,
+  improntaGeneracionHabilitada = true,
 }: Props) {
   const { state, refresh, upload, remove, clearError } = useProcedureDocuments(instanceId);
   const { checklist, attachments, uploadingTipos, analyzingTipos, deletingId, ocrResults } =
@@ -1296,7 +1328,7 @@ export function DocumentChecklist({
                   })
                 }
                 onGenerateImpronta={
-                  instanceId && permiteGenerarImprontaAutomatica
+                  instanceId && permiteGenerarImprontaAutomatica && improntaGeneracionHabilitada
                     ? async () => {
                         await tramitesClient.generarImpronta(instanceId);
                         await refresh();
@@ -1305,6 +1337,7 @@ export function DocumentChecklist({
                     : undefined
                 }
                 permiteGenerarImprontaAutomatica={permiteGenerarImprontaAutomatica}
+                improntaGeneracionHabilitada={improntaGeneracionHabilitada}
                 onPreview={instanceId ? (att) => void handlePreview(att) : undefined}
               />
             );

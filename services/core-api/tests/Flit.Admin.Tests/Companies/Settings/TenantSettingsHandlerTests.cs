@@ -40,7 +40,7 @@ public sealed class TenantSettingsHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance), new StubTenantProductFlags());
             var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
             {
                 TenantId = tenantId,
@@ -103,7 +103,7 @@ public sealed class TenantSettingsHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance), new StubTenantProductFlags());
             // Solo cambia un campo (baúl de firmas); el resto es idéntico a lo sembrado.
             await handler.HandleAsync(new UpdateTenantSettingsCommand
             {
@@ -132,7 +132,7 @@ public sealed class TenantSettingsHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance), new StubTenantProductFlags());
             var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
             {
                 TenantId = tenantId,
@@ -153,10 +153,16 @@ public sealed class TenantSettingsHandlerTests
         (await verify.TenantConfigAuditLogs.CountAsync(a => a.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken)).Should().BeGreaterThan(0);
     }
 
-    // ---------- Feature #10587: flag de preasignación de placa por compañía ----------
+    // ---------- Feature #10587 / HU12853 (Feature #12846, Épica #12751): flag de preasignación de
+    // placa por compañía — la ruta se apagó y el backend ahora IGNORA el campo ----------
 
+    // HU12853_AC2/AC3 — PreasignacionPlacaActiva=true en el request ya NO se persiste ni se audita
+    // (reemplaza Feature10587_PersistsPlatePreassignFlag_AndAudits, que probaba el comportamiento
+    // contrario, retirado por esta HU): el flag se queda en su valor previo (false, sin fila
+    // sembrada) y el resto de la configuración se guarda igual (200), sin registrar la línea de
+    // auditoría del campo apagado.
     [Fact]
-    public async Task Feature10587_PersistsPlatePreassignFlag_AndAudits()
+    public async Task HU12853_AC2_PreasignacionPlacaActiva_SeIgnora_NoPersisteNiAudita()
     {
         var db = NewDbName();
         var tenantId = Guid.NewGuid();
@@ -170,8 +176,9 @@ public sealed class TenantSettingsHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
-            // Resto idéntico a lo sembrado: solo cambia el flag de preasignación de placa.
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance), new StubTenantProductFlags());
+            // Resto idéntico a lo sembrado: solo pide cambiar el flag de preasignación de placa
+            // (ignorado) para aislar su efecto del resto de la configuración.
             var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
             {
                 TenantId = tenantId,
@@ -186,16 +193,16 @@ public sealed class TenantSettingsHandlerTests
             }, TestContext.Current.CancellationToken);
 
             result.IsValid.Should().BeTrue();
-            result.Settings!.PreasignacionPlacaActiva.Should().BeTrue();
+            result.Settings!.PreasignacionPlacaActiva.Should().BeFalse(
+                "HU12853 (Épica #12751) — el campo se ignora, se conserva el valor previo (sin fila sembrada, false)");
         }
 
         await using var verify = NewContext(db);
         var policy = await verify.TenantOperationalPolicies.SingleAsync(p => p.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken);
-        policy.PlatePreassignEnabled.Should().BeTrue();
+        policy.PlatePreassignEnabled.Should().BeFalse();
 
         var audits = await verify.TenantConfigAuditLogs.Where(a => a.TenantId == tenantId).ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
-        audits.Should().ContainSingle()
-            .Which.FieldName.Should().Be("plate_preassign_enabled");
+        audits.Should().BeEmpty("el resto del payload es idéntico a lo sembrado y plate_preassign_enabled ya no se audita");
     }
 
     [Fact]
@@ -208,7 +215,7 @@ public sealed class TenantSettingsHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance), new StubTenantProductFlags());
             var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
             {
                 TenantId = tenantId,
@@ -251,7 +258,7 @@ public sealed class TenantSettingsHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance), new StubTenantProductFlags());
             var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
             {
                 TenantId = tenantId,
@@ -277,7 +284,7 @@ public sealed class TenantSettingsHandlerTests
     }
 
     [Fact]
-    public async Task HU12250_AC3_PersistsModuleFlags_AndAuditsOnlyChangedFields()
+    public async Task HU12967_TramitesYComparendosYaNoSeEscribenDesdeLaConfiguracion_SoloResoluciones()
     {
         var db = NewDbName();
         var tenantId = Guid.NewGuid();
@@ -291,7 +298,7 @@ public sealed class TenantSettingsHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance), new StubTenantProductFlags());
             // Resto idéntico a lo sembrado: solo cambian los 3 flags de módulos.
             var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
             {
@@ -308,25 +315,22 @@ public sealed class TenantSettingsHandlerTests
                     ResolucionesModuleEnabled: true),
             }, TestContext.Current.CancellationToken);
 
+            // HU #12967 (B-07): Trámites y Comparendos se ignoran (los cambia el SuperAdmin en la plataforma)
+            // y la respuesta los lee de la habilitación de productos.
             result.IsValid.Should().BeTrue();
-            result.Settings!.TramitesModuleEnabled.Should().BeFalse();
-            result.Settings.ComparendosModuleEnabled.Should().BeTrue();
+            result.Settings!.TramitesModuleEnabled.Should().BeTrue();
+            result.Settings.ComparendosModuleEnabled.Should().BeFalse();
             result.Settings.ResolucionesModuleEnabled.Should().BeTrue();
         }
 
         await using var verify = NewContext(db);
         var policy = await verify.TenantOperationalPolicies.SingleAsync(p => p.TenantId == tenantId, cancellationToken: TestContext.Current.CancellationToken);
-        policy.TramitesModuleEnabled.Should().BeFalse();
-        policy.ComparendosModuleEnabled.Should().BeTrue();
+        policy.TramitesModuleEnabled.Should().BeTrue();
+        policy.ComparendosModuleEnabled.Should().BeFalse();
         policy.ResolucionesModuleEnabled.Should().BeTrue();
 
         var audits = await verify.TenantConfigAuditLogs.Where(a => a.TenantId == tenantId).ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
-        audits.Should().HaveCount(3);
-        audits.Should().Contain(a =>
-            a.FieldName == "tramites_module_enabled" && a.OldValue == "true" && a.NewValue == "false");
-        audits.Should().Contain(a =>
-            a.FieldName == "comparendos_module_enabled" && a.OldValue == "false" && a.NewValue == "true");
-        audits.Should().Contain(a =>
+        audits.Should().ContainSingle(a =>
             a.FieldName == "resoluciones_module_enabled" && a.OldValue == "false" && a.NewValue == "true");
     }
 
@@ -363,7 +367,7 @@ public sealed class TenantSettingsHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance), new StubTenantProductFlags(tramites: false, comparendos: true));
             // Payload sin tramitesModuleEnabled/comparendosModuleEnabled/resolucionesModuleEnabled
             // (cambia solo el baúl de firmas, campo no relacionado).
             var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
@@ -412,7 +416,7 @@ public sealed class TenantSettingsHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance), new StubTenantProductFlags());
             var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
             {
                 TenantId = tenantId,
@@ -442,7 +446,7 @@ public sealed class TenantSettingsHandlerTests
     public async Task AC2_InvalidEnrutamientoSMTP_Returns422()
     {
         await using var ctx = NewContext(NewDbName());
-        var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance));
+        var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance), new StubTenantProductFlags());
 
         var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
         {
@@ -475,7 +479,7 @@ public sealed class TenantSettingsHandlerTests
         }
 
         await using var ctx = NewContext(db);
-        var handler = new GetTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance));
+        var handler = new GetTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance), new StubTenantProductFlags());
 
         var result = await handler.HandleAsync(new GetTenantSettingsQuery { TenantId = tenantId }, TestContext.Current.CancellationToken);
 
@@ -493,7 +497,7 @@ public sealed class TenantSettingsHandlerTests
     public async Task AC3_Get_ReturnsNull_WhenNoConfiguration()
     {
         await using var ctx = NewContext(NewDbName());
-        var handler = new GetTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance));
+        var handler = new GetTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance), new StubTenantProductFlags());
 
         var result = await handler.HandleAsync(new GetTenantSettingsQuery { TenantId = Guid.NewGuid() }, TestContext.Current.CancellationToken);
 
@@ -517,7 +521,7 @@ public sealed class TenantSettingsHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance), new StubTenantProductFlags());
             // Resto idéntico a lo sembrado: solo cambian los 2 campos nuevos.
             var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
             {
@@ -561,7 +565,7 @@ public sealed class TenantSettingsHandlerTests
     public async Task HU10478_InvalidProviderKey_Returns422_AndPersistsNothing()
     {
         await using var ctx = NewContext(NewDbName());
-        var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance));
+        var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance), new StubTenantProductFlags());
 
         var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
         {
@@ -587,7 +591,7 @@ public sealed class TenantSettingsHandlerTests
     public async Task HU10478_UnknownKind_Returns422()
     {
         await using var ctx = NewContext(NewDbName());
-        var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance));
+        var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance), new StubTenantProductFlags());
 
         var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
         {
@@ -612,7 +616,7 @@ public sealed class TenantSettingsHandlerTests
     public async Task HU10478_FailoverTimeoutOutOfRange_Returns422()
     {
         await using var ctx = NewContext(NewDbName());
-        var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance));
+        var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance), new StubTenantProductFlags());
 
         var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
         {
@@ -658,7 +662,7 @@ public sealed class TenantSettingsHandlerTests
         }
 
         await using var ctx = NewContext(db);
-        var handler = new GetTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance));
+        var handler = new GetTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance), new StubTenantProductFlags());
 
         var result = await handler.HandleAsync(new GetTenantSettingsQuery { TenantId = tenantId }, TestContext.Current.CancellationToken);
 
@@ -687,7 +691,7 @@ public sealed class TenantSettingsHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance), new StubTenantProductFlags());
             // Resto idéntico a lo sembrado: solo cambia la fuente de comparendos.
             var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
             {
@@ -731,7 +735,7 @@ public sealed class TenantSettingsHandlerTests
 
         await using (var act = NewContext(db))
         {
-            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance));
+            var handler = new UpdateTenantSettingsHandler(new TenantSettingsRepository(act, NullAuditContextAccessor.Instance), new StubTenantProductFlags());
             var result = await handler.HandleAsync(new UpdateTenantSettingsCommand
             {
                 TenantId = tenantId,
@@ -780,7 +784,7 @@ public sealed class TenantSettingsHandlerTests
         }
 
         await using var ctx = NewContext(db);
-        var handler = new GetTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance));
+        var handler = new GetTenantSettingsHandler(new TenantSettingsRepository(ctx, NullAuditContextAccessor.Instance), new StubTenantProductFlags());
 
         var result = await handler.HandleAsync(new GetTenantSettingsQuery { TenantId = tenantId }, TestContext.Current.CancellationToken);
 

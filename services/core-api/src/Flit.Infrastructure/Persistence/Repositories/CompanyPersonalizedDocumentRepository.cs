@@ -23,7 +23,7 @@ internal sealed class CompanyPersonalizedDocumentRepository : ICompanyPersonaliz
 
     public Task<int> GetNextVersionAsync(Guid tenantId, string documentType, CancellationToken cancellationToken = default) =>
         TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {
@@ -42,7 +42,7 @@ internal sealed class CompanyPersonalizedDocumentRepository : ICompanyPersonaliz
         ArgumentNullException.ThrowIfNull(data);
 
         return TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             data.TenantId,
             async () =>
             {
@@ -71,7 +71,7 @@ internal sealed class CompanyPersonalizedDocumentRepository : ICompanyPersonaliz
 
     public Task<CompanyPersonalizedDocumentRecord?> GetByIdAsync(Guid tenantId, Guid id, CancellationToken cancellationToken = default) =>
         TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {
@@ -86,7 +86,7 @@ internal sealed class CompanyPersonalizedDocumentRepository : ICompanyPersonaliz
 
     public Task<IReadOnlyList<CompanyPersonalizedDocumentRecord>> ListByTenantAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
         TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {
@@ -109,7 +109,7 @@ internal sealed class CompanyPersonalizedDocumentRepository : ICompanyPersonaliz
         ArgumentNullException.ThrowIfNull(data);
 
         return TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {
@@ -161,7 +161,7 @@ internal sealed class CompanyPersonalizedDocumentRepository : ICompanyPersonaliz
 
     public Task RejectAsync(Guid tenantId, Guid id, CancellationToken cancellationToken = default) =>
         TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {
@@ -188,7 +188,7 @@ internal sealed class CompanyPersonalizedDocumentRepository : ICompanyPersonaliz
         Guid? reactivatedBy,
         CancellationToken cancellationToken = default) =>
         TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {
@@ -255,7 +255,7 @@ internal sealed class CompanyPersonalizedDocumentRepository : ICompanyPersonaliz
     public Task<CompanyPersonalizedDocumentRecord?> GetActiveAsync(
         Guid tenantId, string documentType, CancellationToken cancellationToken = default) =>
         TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {
@@ -276,7 +276,7 @@ internal sealed class CompanyPersonalizedDocumentRepository : ICompanyPersonaliz
         Guid? deactivatedBy,
         CancellationToken cancellationToken = default) =>
         TenantRlsScope.ExecuteAsync(
-            _context,
+            _context.Database,
             tenantId,
             async () =>
             {

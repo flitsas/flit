@@ -1,0 +1,18 @@
+# deploy/rabbitmq/systemd/flit-rabbitmq-dlq.timer.example (HU #13352)
+#
+# Instalar como /etc/systemd/system/flit-rabbitmq-dlq.timer y activar con
+#   systemctl enable --now flit-rabbitmq-dlq.timer
+# Revisión cada 5 minutos: un mensaje muerto llega tras 10 s + 1 min + 10 min de reintentos, así que el aviso sale a lo
+# sumo 5 minutos después.
+
+[Unit]
+Description=FLIT - revisión periódica de colas .dlq (HU #13352)
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

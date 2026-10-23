@@ -269,7 +269,7 @@ export function CargueMasivo() {
             onClick={() => entradaArchivo.current?.click()}
             disabled={corriendo}
             className="rounded-lg px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
-            style={{ backgroundColor: "#557EFF" }}
+            style={{ backgroundColor: "var(--color-flit-brand)" }}
           >
             Cargar archivo
           </button>
@@ -407,7 +407,7 @@ export function CargueMasivo() {
                   onClick={migrarSeleccionadas}
                   disabled={corriendo || pendientes.length === 0}
                   className={`flex items-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-colors disabled:opacity-50 ${
-                    dryRun ? "bg-[#557EFF]" : "bg-amber-600 hover:bg-amber-700"
+                    dryRun ? "bg-flit-brand" : "bg-amber-600 hover:bg-amber-700"
                   }`}
                 >
                   {corriendo ? (

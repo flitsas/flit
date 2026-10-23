@@ -2,17 +2,18 @@ using System.Text.Json;
 using Flit.Admin.Application;
 using Flit.Analytics.Application;
 using Flit.Api.Authorization;
-using Flit.Api.Endpoints.Analytics;
-using Flit.Api.Endpoints;
-using Flit.Api.Endpoints.Internal;
-using Flit.Api.Endpoints.Public;
-using Flit.Api.Endpoints.SuperAdmin;
-using Flit.Api.Endpoints.Tramites;
+using Flit.Api.Hosting;
 using Flit.Api.OpenApi;
+using Flit.Api.Notificaciones;
+using Flit.Api.Platform;
 using Flit.Api.RateLimiting;
+using Flit.Api.Consultas;
+using Flit.Api.Telemetry;
+using Flit.Api.Identity;
 using Flit.Infrastructure;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Security;
+using Flit.Modules.Security.Application;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Tramites.Application;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -27,6 +28,15 @@ AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport
 
 var builder = WebApplication.CreateBuilder(args);
 
+// HU #12895 (FLIT Suite A-02): la validación del contenedor de DI (scopes y construcción) queda fija y no depende del
+// nombre del ambiente. En Development ya estaba activa, así que DEV, QA y PDN no cambian; un ambiente con otro nombre
+// sigue detectando al arrancar los errores de DI en vez de descubrirlos en la primera petición.
+builder.Host.UseDefaultServiceProvider(options =>
+{
+    options.ValidateScopes = true;
+    options.ValidateOnBuild = true;
+});
+
 // Persistencia (EF Core + PostgreSQL) + servicios de seguridad/login (HU #10168).
 var coreConnStr = builder.Configuration.GetConnectionString("Core")
     ?? builder.Configuration.GetConnectionString("FlitDb");
@@ -37,55 +47,25 @@ if (string.IsNullOrWhiteSpace(coreConnStr))
 }
 
 builder.Services.AddPostgresInfrastructure(coreConnStr, builder.Configuration, builder.Environment);
+// Epic #13217 (HU #13232): login y recuperación de cuenta (Flit.Identity.Application). Transición: hasta el corte.
+builder.Services.AddIdentityAuthApplication();
 
 // Runtime de trámites (rework #10128): casos de uso de instancias/wizard/consultas.
 builder.Services.AddTramitesApplication();
 
 // Dashboard analítico (Feature #10139, HU #10243): handlers de lectura de agregados.
 builder.Services.AddAnalyticsApplication();
+
+// DR. FLIT (Épica #12718, ADR-0060): chat con LLM sobre el manual. Los puertos los registra Infrastructure.
+Flit.DrFlit.Application.DrFlitApplicationServiceCollectionExtensions.AddDrFlitApplication(builder.Services);
 Flit.Analytics.Application.Scheduling.AnalyticsSchedulingServiceCollectionExtensions.AddAnalyticsScheduling(builder.Services); // Reportes2 HU-D — CRUD de informes programados y alertas
 
 // Seguridad: autenticación JWT + policy SuperAdmin (HU #10189, RF01).
 builder.Services.AddApiSecurity(builder.Configuration, builder.Environment);
 
-// Respuesta 401 con código SESSION_EXPIRED para tokens expirados (HU #10168, AC3).
-// Aditivo sobre AddApiSecurity: solo fija Events, sin alterar TokenValidationParameters.
-builder.Services.PostConfigure<JwtBearerOptions>(
-    JwtBearerDefaults.AuthenticationScheme,
-    options => options.Events = new JwtBearerEvents
-    {
-        OnAuthenticationFailed = context =>
-        {
-            if (context.Exception is SecurityTokenExpiredException)
-            {
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                context.Response.ContentType = "application/json";
-                return context.Response.WriteAsync(JsonSerializer.Serialize(new
-                {
-                    code = "SESSION_EXPIRED",
-                    message = "Session expired. Please sign in again.",
-                }));
-            }
-
-            return Task.CompletedTask;
-        },
-        OnChallenge = context =>
-        {
-            if (context.AuthenticateFailure is SecurityTokenExpiredException)
-            {
-                context.HandleResponse();
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                context.Response.ContentType = "application/json";
-                return context.Response.WriteAsync(JsonSerializer.Serialize(new
-                {
-                    code = "SESSION_EXPIRED",
-                    message = "Session expired. Please sign in again.",
-                }));
-            }
-
-            return Task.CompletedTask;
-        },
-    });
+// Respuesta 401 con código SESSION_EXPIRED para tokens expirados (HU #10168, AC3) y cierre de sesión en toda la suite.
+// Epic #13217 (HU #13232): compartido con core-identity (Flit.Suite.AspNetCore).
+builder.Services.AddFlitSessionExpiredResponses();
 
 // Módulo Admin (HU #10189, RF02).
 builder.Services.AddAdminApplication();
@@ -110,9 +90,23 @@ builder.Services.AddScoped<ITransitOfficeTenantProbe, TransitOfficeTenantProbe>(
 
 // Handler de autorización por permisos del JWT (HU #10165).
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
+builder.Services.Configure<Flit.Api.Authorization.OtPermissionEnforcementOptions>(builder.Configuration.GetSection(Flit.Api.Authorization.OtPermissionEnforcementOptions.Section)); // HU #13639
+builder.Services.Configure<Flit.Api.Authorization.ModulePermissionEnforcementOptions>(builder.Configuration.GetSection(Flit.Api.Authorization.ModulePermissionEnforcementOptions.Section)); // Feature #13105
+builder.Services.AddSingleton<IAuthorizationHandler, Flit.Api.Authorization.ModulePermissionAuthorizationHandler>();
+builder.Services.AddScoped<Flit.Tramites.Domain.Integration.IProcedureFamilyPermissionGate, Flit.Api.Authorization.HttpProcedureFamilyPermissionGate>(); // HU #13664
+builder.Services.AddSingleton<Flit.Api.Authorization.IFlaggedPermissionSource, Flit.Api.Authorization.FamilyFlaggedPermissionSource>(); // HU #13664: Ver/Crear por familia siguen el flag de módulos
+// Hallazgo review Épica #12753: ¿la API exige hoy este slug? (flags OT/módulos + IFlaggedPermissionSource). Ver PermissionEnforcementState.
+builder.Services.AddSingleton<Flit.Modules.Security.Domain.PermissionOverrides.IPermissionEnforcementState, Flit.Api.Authorization.PermissionEnforcementState>();
 
 // Handler para la policy AdminCompany (roles de empresa + SuperAdmin bypass).
 builder.Services.AddSingleton<IAuthorizationHandler, AdminCompanyAuthorizationHandler>();
+
+// Handler para la policy OtModule (SuperAdmin, ot_admin o tenant organismo de tránsito).
+builder.Services.AddSingleton<IAuthorizationHandler, OtModuleAuthorizationHandler>();
+
+// HU #12859 (Feature #12848, Épica #12751) — policy exclusiva de Prelación documental:
+// SuperAdmin u ot_admin, sin el bypass de entity_type=TRANSIT_OFFICE de OtModulePolicy.
+builder.Services.AddSingleton<IAuthorizationHandler, OtAdminOrSuperAdminAuthorizationHandler>();
 
 // HU #12345 — cabeza de grupo (AdminCompany + is_group_parent en BD).
 builder.Services.AddScoped<IAuthorizationHandler, GroupHeadCompanyAuthorizationHandler>();
@@ -130,6 +124,10 @@ builder.Services.AddScoped<Flit.Modules.Security.Application.Auth.IDomainContext
 builder.Services.Configure<Flit.Api.RateLimiting.PublicBrandingOptions>(
     builder.Configuration.GetSection(Flit.Api.RateLimiting.PublicBrandingOptions.SectionName));
 builder.Services.AddPublicBrandingRateLimiter();
+// HU #13087 — policy external-token (10/min por IP); va después: fija el OnRejected común.
+builder.Services.AddExternalClientRateLimiter(builder.Configuration);
+// HU #13289 (Épica #13202) — policy manual-capture (por IP) de la captura manual pública; no fija OnRejected.
+builder.Services.AddManualCaptureRateLimiter();
 
 // Swagger/OpenAPI: documento generado desde los endpoints. La UI se monta solo en
 // Development (más abajo), pero el generador se registra siempre para no divergir.
@@ -184,7 +182,21 @@ if (ictGrpcPort is { } grpcPort)
     });
 }
 
+// === FLIT Suite: servicios ===
+// Una línea por frente que llama a su propio método de extensión (regla R5 de
+// docs/suite/reglas-trabajo-paralelo.md). No se reordenan las líneas existentes.
+builder.Services.AddPlatformApi(builder.Configuration); // Frente B · HU #12966
+builder.Services.AddFlitOidc(builder.Configuration); // Frente A · HU #12990 (Suite:Oidc:Enabled)
+// === FLIT Suite: fin servicios ===
+builder.AddFlitTelemetry("flit-core-api"); // Epic #13316 · HU #13332 (solo con OTEL_EXPORTER_OTLP_ENDPOINT)
+builder.Services.AddConsultasRemoto(builder.Configuration); // Epic #13316 · HU #13348: consultas, avalúos y documentos por core-consultas
+builder.Services.AddNotificacionesRemoto(builder.Configuration); // Epic #13316 · HU #13359: canales, buzón de pruebas, entregas y mensajes muertos por core-notificaciones
+
 var app = builder.Build();
+
+// Epic #13316 · HU #13332: X-Correlation-Id en la respuesta, en la traza y en cada log de la petición. Va primero para
+// que todo el pipeline, también el manejo de errores, quede dentro de su alcance.
+app.UseFlitCorrelationId();
 
 // Migraciones automáticas al arrancar: valida si hay migraciones pendientes
 // (comparando contra __EFMigrationsHistory) y aplica solo las que faltan. Si no
@@ -210,18 +222,18 @@ if (app.Configuration.GetValue("Database:AutoMigrate", true))
         MigrationLog.NoPendingMigrations(logger);
     }
 
-    // Seed de datos de desarrollo (usuario demo para login: demo@flit.local / DemoPass1!).
-    // Idempotente (no recrea si ya existe) y no-op fuera de Development. Corre DESPUÉS de
-    // migrar para que existan las tablas de identity/security. Antes faltaba esta llamada,
-    // por eso identity.users quedaba vacía y no se podía iniciar sesión.
+    // Seed idempotente, DESPUÉS de migrar para que existan las tablas de identity/security. HU #12895 (A-02): el
+    // catálogo RBAC (Seed:RbacCatalog) y las cuentas demo (Seed:DemoUsers) se encienden por separado; por defecto,
+    // ambos solo en Development.
     var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
-    await DevelopmentAuthSeeder.SeedAsync(db, hasher, app.Environment, CancellationToken.None);
+    await DevelopmentAuthSeeder.SeedAsync(
+        db, hasher, SeedSettings.From(app.Configuration, app.Environment), CancellationToken.None);
 }
 
-// Swagger UI solo en Development: /swagger (doc en /swagger/v1/swagger.json). No se
-// expone en producción (la API es de borde tras el Gateway). Va antes de auth para que
-// la página de la UI sea accesible sin token; cada «Try it out» sí envía el JWT.
-if (app.Environment.IsDevelopment())
+// Swagger UI: /swagger (doc en /swagger/v1/swagger.json). Va antes de auth para que la página de la UI sea accesible
+// sin token; cada «Try it out» sí envía el JWT. HU #12895 (A-02): Swagger:Enabled lo decide, por defecto solo en
+// Development; fuera de local se apaga con FLIT_SWAGGER_ENABLED=false en el .env.
+if (app.Configuration.GetValue("Swagger:Enabled", app.Environment.IsDevelopment()))
 {
     app.UseFlitSwagger();
 }
@@ -230,6 +242,9 @@ app.UseCors(FrontendCorsPolicy);
 
 // HU #12418 (Feature #12366, ADR-0060 D2) — límite de tasa de /public/branding* (delta-hechos #1:
 // primera policy del repo). Tras CORS/routing, antes de auth/endpoints.
+// HU #13086 (Épica #12737) — bitácora de /api/v1/external/*. Antes de UseRateLimiter: registra también los 429.
+app.UseMiddleware<Flit.Api.Middleware.ExternalAccessLogMiddleware>();
+
 app.UseRateLimiter();
 
 // HU #12417 (Feature #12368, ADR-0060 D2) — puebla DomainContext leyendo EXCLUSIVAMENTE el sello
@@ -246,6 +261,14 @@ app.UseMiddleware<Flit.Api.Authorization.DomainBindingMiddleware>();
 
 app.UseAuthorization();
 
+// HU #13639 (Feature #13100 FA-4, Anexo A) — slug OT por ruta en AND con la policy de rol; apagado por defecto
+// (Security:OtPermissionEnforcement:Enabled). Ver OtPermissionMap.
+app.UseMiddleware<Flit.Api.Authorization.OtPermissionEnforcementMiddleware>();
+
+// HU #13085 (Épica #12737) — cuota por cliente externo (120/min por client_id). Va DESPUÉS de la autorización:
+// el client_id solo es fiable con el pase ya validado, y los 401/403 no consumen cuota.
+app.UseMiddleware<Flit.Api.RateLimiting.ExternalClientQuotaMiddleware>();
+
 // Enforcement multi-tenant de los endpoints runtime de trámites (#1): resuelve el tenant desde el
 // JWT (no del header del cliente) y deja superadmin con acceso multi-tenant. Va DESPUÉS de la auth
 // (necesita HttpContext.User) y ANTES de los endpoints. No toca parametrización ni portal público.
@@ -256,141 +279,25 @@ app.UseMiddleware<Flit.Api.Middleware.TenantEnforcementMiddleware>();
 // cubre /api/v1/tramites/instances/{id}/** y /api/v1/admin/tramites/{id}/** en todos los verbos de escritura.
 app.UseMiddleware<Flit.Api.Middleware.TenantWriteGuardMiddleware>();
 
+// HU #13664 (Feature #13636 F-F, Épica #12753) — «Ver por familia» en un solo punto: toda ruta por id de trámite
+// (/instances/{id}/**, /network/instances/{id}/**, /{tramiteId}/document-requirements) exige el «.read» de la familia del
+// trámite cuando Security:ModulePermissionEnforcement:Enabled está encendido; apagado, pasa sin consultar. Va tras el enforcement
+// de tenant (usa su alcance) y del enrutamiento.
+app.UseMiddleware<Flit.Api.Middleware.FamilyReadEnforcementMiddleware>();
+
 app.UseMiddleware<Flit.Api.Middleware.UsageTelemetryMiddleware>(); // Reportes2 HU-A
+app.UseMiddleware<Flit.Api.Platform.RequireProductMiddleware>(); // FLIT Suite · HU #12966 — RequireProduct (Suite:ProductAccess:Enforce)
 
 // Liveness: el healthcheck de Docker (docker-compose.prod.yml) y el /ready del
 // Gateway sondean este endpoint. Debe existir en core-api, no solo en el Gateway.
 app.MapGet("/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();
 app.MapGet("/api/v1/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();
+app.MapReadiness(); // HU #13224 — /health/ready: base alcanzable y sin migraciones pendientes
 
-// Orquestación ICT (core-ict -> core-api): exige el service-token (esquema/policy IctService) para que
-// solo core-ict autenticado como sistema pueda invocar la orquestación (no un tercero en el puerto interno).
-app.MapGrpcService<Flit.Api.Grpc.IctOrchestrationService>()
-    .RequireAuthorization(Flit.Api.Authorization.ApiSecurityExtensions.IctServicePolicy);
-// Consulta de fuentes externas para ICT (reusa el subsistema de consultas de core-api).
-app.MapGrpcService<Flit.Api.Grpc.IctConsultationService>()
-    .RequireAuthorization(Flit.Api.Authorization.ApiSecurityExtensions.IctServicePolicy);
-
-// ── Endpoints de seguridad + Admin/parametrización (develop) ──────────────────
-app.MapAuthEndpoints();
-app.MapSecurityEndpoints();
-app.MapUserUiPreferencesEndpoints();
-app.MapAdminCompaniesEndpoints();
-app.MapAdminCompaniesBrandingEndpoints();
-app.MapCompanyBrandingEndpoints();
-app.MapAdminCompaniesDomainEndpoints();
-app.MapCompanyDomainEndpoints();
-app.MapInternalDomainsEndpoints();
-app.MapAdminCompanyChildrenEndpoints();
-app.MapAdminCompanyChildrenConfigEndpoints();
-app.MapAdminCompanyChildrenInvitationsEndpoints();
-app.MapAdminOtEndpoints();
-app.MapAdminOtMetricsEndpoints();
-app.MapAdminOtQueriesEndpoints();
-app.MapAdminPlateRangesEndpoints();
-app.MapOtIntegrationEndpoints();
-app.MapAdminTransitOfficesEndpoints();
-app.MapAdminQuipuxEndpoints();
-app.MapAdminIctJobSettingsEndpoints();
-app.MapAdminIctJobCatalogEndpoints();
-app.MapAdminPlataformaMandatosEndpoints();
-app.MapAdminOtMandatosEndpoints();
-app.MapAdminPlataformaFurEndpoints();
-app.MapAdminHierarchySwitchesEndpoints(); // HU #12323 — interruptores globales de jerarquía (SuperAdmin)
-app.MapAdminPlataformaNotificacionesEndpoints();
-app.MapAdminPlataformaNotificacionesPlantillasEndpoints();
-app.MapAdminRuntConfirmationEndpoints();
-app.MapAdminLogQxEndpoints();
-app.MapAdminTransitOfficeTenantsEndpoints();
-app.MapAdminMandateSignersEndpoints();
-app.MapAdminCompanyMandateSignersEndpoints();
-app.MapAdminMandateSignerIdentityEndpoints();
-app.MapAdminSignatureVaultEndpoints();
-app.MapAdminLegalRepresentativesEndpoints();
-app.MapAdminDeedsEndpoints();
-app.MapAdminPersonalizedDocumentsEndpoints();
-app.MapAdminCompanyNotificationDeliveryLogsEndpoints();
-app.MapAdminLegalRepresentativeIdentityEndpoints();
-app.MapAdminIdentityVigenciaEndpoints();
-app.MapAdminDocumentTypesEndpoints();
-app.MapAdminBannersEndpoints();
-app.MapAdminRejectionReasonsEndpoints();
-app.MapAdminProcedureDocumentRequirementsEndpoints();
-app.MapAdminDocumentOrderOverridesEndpoints();
-app.MapAdminDocumentRequirementOverridesEndpoints();
-app.MapAdminOtPrendaDocumentPolicyEndpoints();
-app.MapAdminResolvedDocumentMatrixEndpoints();
-app.MapAdminCompanyDocumentParamsEndpoints();
-app.MapAdminImprontasEndpoints();
-// Feature #12201 (ADR-0056-generacion-documental-standalone) — generación documental SIN trámite.
-// Autorización por permiso (generacion-documental.*), no por policy de grupo.
-app.MapAdminGeneracionDocumentalEndpoints();
-app.MapTramitesEndpoints();
-app.MapBulkTramitesEndpoints();
-// Epic #12543 — aceptación de Términos y Condiciones antes de abrir el asistente.
-app.MapTramitesTermsAcceptanceEndpoints();
-app.MapTransfersEndpoints();
-
-// ── Runtime de trámites (rework #10128) ───────────────────────────────────────
-app.MapSuperAdminEndpoints();
-app.MapPublicProcedureEndpoints();
-app.MapPublicProcedureTypeEndpoints();
-app.MapPublicBiometricaEndpoints();
-app.MapPublicKyverumWebhookEndpoints();
-app.MapPublicPortalEndpoints();
-// HU #12240 (Feature #12236) — banners promocionales: listado publico + imagen por streaming.
-app.MapPublicBannersEndpoints();
-// HU #12418 (Feature #12366, ADR-0060 D2) — identidad de marca pública (antes del login) + sesión.
-app.MapPublicBrandingEndpoints();
-app.MapMeBrandingEndpoints();
-app.MapTramitesInstanceEndpoints();
-// HU #12358 (Feature #12257) — vista consolidada de la red (solo lectura) bajo /api/v1/tramites/network.
-app.MapTramitesNetworkEndpoints();
-// HU #12361 (Feature #12257) — consulta de la auditoría de accesos consolidados (hijo + SuperAdmin).
-app.MapNetworkAccessAuditEndpoints();
-app.MapTramitesActorEndpoints();
-// HU #11196 / #11197 — firma a posteriori: marcar el trámite y consultar si la opción aplica.
-app.MapTramitesFirmaPosteriorEndpoints();
-app.MapTramitesAttachmentEndpoints();
-app.MapTramitesRevocationRequestEndpoints(); // HU #12572 (Feature #12565) — solicitud de revocatoria de trámite Aprobado
-app.MapTramitesOcrEndpoints();
-app.MapTramitesParticipantEndpoints();
-app.MapTramitesBiometricaEndpoints();
-app.MapTramitesFirmaEndpoints();
-app.MapTramitesFurEndpoints();
-app.MapTramitesConsolidadoEndpoints();
-app.MapAdminTramiteConsolidadoEndpoints(); // HU #12158 — limpiar/cargar consolidado (admin)
-app.MapAdminTramiteEstadoEndpoints(); // HU #12159 — cambiar estado sin restricción de flujo (admin)
-app.MapAdminTramiteAnularEndpoints(); // HU #12160 — anular desde cualquier estado salvo Aprobado/Revocado
-app.MapAdminTramiteReenviarValidacionEndpoints(); // HU #12161 — reenviar validación de identidad (admin, correo opcional)
-app.MapAdminTramiteReasignarGestorEndpoints(); // HU #12162 — reasignar gestor (AssignedToUserId) + selector de disponibles
-app.MapConsultationEndpoints();
-app.MapTramitesCommercialEndpoints();
-app.MapTramitesPreflightEndpoints();
-app.MapTramitesRnmcEndpoints();
-app.MapTramitesWizardEndpoints();
-app.MapTramitesVehicleColorsEndpoints();
-app.MapTramitesVehicleBodyworksEndpoints();
-app.MapTramitesVehicleServiceTypesEndpoints();
-app.MapTramitesStatusHistoryEndpoints();
-app.MapTramitesNotificationDispatchesEndpoints();
-app.MapLegalRepresentativeConsumptionEndpoints();
-
-// ── Dashboard analítico (Feature #10139) ──────────────────────────────────────
-app.MapAnalyticsEndpoints();
-app.MapDashboardActiveModulesEndpoints(); // HU #12251 (Feature #12249) — flags de módulos activos, sin AdminCompanyPolicy
-app.MapDetailedReportEndpoints(); // Feature #10813
-app.MapReportSchedulesEndpoints(); // Reportes2 HU-D
-app.MapSuperAdminReportSchedulesEndpoints(); // Reportes2 HU-D 2da ola — informes de consulta SuperAdmin
-app.MapAlertRulesEndpoints(); // Reportes2 HU-D
-app.MapAdminOtReportSchedulesEndpoints(); // Reportes2 HU-D 3ra ola — informes programados del OT
-app.MapAdminOtAlertRulesEndpoints(); // Reportes2 HU-D 3ra ola — alertas por umbral del OT
-app.MapAnalyticsMetricsEndpoints(); // Reportes2 HU-B
-app.MapCompanyQueriesEndpoints(); // Consultas propias de la empresa
-app.MapSuperAdminQueriesEndpoints(); // Consultas de SuperAdmin sobre todas las compañías
-app.MapIctQueriesEndpoints(); // Consultas propias de la empresa sobre sus pre-trámites de ICT
-app.MapIctReportsEndpoints(); // Reportes de ICT en vivo (HU #11617)
-app.MapUsageEventsEndpoints(); // Reportes2 HU-A
+// Rutas del login (Flit.Identity.Web): core-api las atiende solo durante la transición, como respaldo del gateway de
+// core-identity (Epic #13217; se quitan en el corte, HU #13235). Después, todo lo demás de core-api.
+app.MapIdentityEndpoints();
+app.MapApiEndpoints();
 
 app.Run();
 

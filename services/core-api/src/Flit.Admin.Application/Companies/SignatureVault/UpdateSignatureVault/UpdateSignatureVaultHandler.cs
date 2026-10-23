@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Consolidados;
 using Flit.Admin.Domain.Companies.SignatureVault;
 
 namespace Flit.Admin.Application.Companies.SignatureVault.UpdateSignatureVault;
@@ -64,9 +65,18 @@ public sealed class UpdateSignatureVaultHandler
 
     private readonly ISignatureVaultReader _reader;
     private readonly ISignatureVaultRepository _repository;
+    private readonly IConsolidadoInvalidacionMasiva? _invalidacion;
 
-    public UpdateSignatureVaultHandler(ISignatureVaultReader reader, ISignatureVaultRepository repository)
+    /// <param name="invalidacion">
+    /// HU #12789 — invalida en bloque los consolidados de la compañía. Opcional para no romper a los
+    /// llamadores que no lo necesitan; en DI siempre se inyecta.
+    /// </param>
+    public UpdateSignatureVaultHandler(
+        ISignatureVaultReader reader,
+        ISignatureVaultRepository repository,
+        IConsolidadoInvalidacionMasiva? invalidacion = null)
     {
+        _invalidacion = invalidacion;
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
     }
@@ -110,7 +120,18 @@ public sealed class UpdateSignatureVaultHandler
             cancellationToken).ConfigureAwait(false);
 
         // El repositorio devuelve false si entre la lectura y la escritura la firma se revocó.
-        return updated ? UpdateSignatureVaultResult.Ok() : UpdateSignatureVaultResult.Revoked();
+        if (!updated)
+        {
+            return UpdateSignatureVaultResult.Revoked();
+        }
+
+        // HU #12789 AC3 — el código hash / la vigencia editados se estampan en el expediente: sus consolidados en curso quedan invalidados.
+        if (_invalidacion is not null)
+        {
+            await _invalidacion.InvalidarPorFirmaBaulAsync(command.TenantId, cancellationToken).ConfigureAwait(false);
+        }
+
+        return UpdateSignatureVaultResult.Ok();
     }
 
     private static List<SignatureVaultValidationError> Validate(UpdateSignatureVaultCommand command)

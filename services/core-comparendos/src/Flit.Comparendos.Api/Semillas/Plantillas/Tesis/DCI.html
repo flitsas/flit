@@ -1,0 +1,26 @@
+<!-- nombre: Caducidad individual -->
+<p style="text-align:right">{{#si ot.municipio}}{{ot.municipio}}, {{/si}}{{dp.fecha}}<br>Radicado: <b>{{dp.radicado}}</b></p>
+<p><b>SEÑORES:</b><br><b>{{ot.nombre}}</b>{{#si ot.municipio}}<br>{{ot.municipio}}{{#si ot.departamento}}, {{ot.departamento}}{{/si}}{{/si}}</p>
+<p><b>ASUNTO: DERECHO DE PETICIÓN – ARTÍCULO 23 CONSTITUCIÓN POLÍTICA DE COLOMBIA – SOLICITUD DE CADUCIDAD INDIVIDUAL DE PROCESO CONTRAVENCIONAL</b></p>
+<p><b>Referencia:</b> Orden de comparendo N° {{comparendo.numero}} del {{comparendo.fecha_imposicion}}{{#si comparendo.placa}} · Placa {{comparendo.placa}}{{/si}}</p>
+<p>Cordial saludo,</p>
+<p style="text-align:justify">Yo, <b>{{rl.nombres}}</b>, identificado(a) con {{rl.tipo_documento}} No. <b>{{rl.numero_documento}}</b>, en calidad de {{rl.cargo}} de <b>{{peticionario.nombre}}</b>, identificada con {{peticionario.tipo_documento}} No. <b>{{peticionario.numero_documento}}</b>, en ejercicio del derecho de petición consagrado en el artículo 23 de la Constitución Política de Colombia y dando cumplimiento a lo dispuesto en los artículos 5, 15 y 16 del Código de Procedimiento Administrativo y de lo Contencioso Administrativo – Ley 1437 de 2011, modificado por la Ley 1755 de 2015, respetuosamente me dirijo a su despacho con el fin de solicitar:</p>
+<ol>
+<li>Solicito respetuosamente la <b>caducidad del proceso contravencional</b> correspondiente al siguiente comparendo:</li>
+</ol>
+<table>
+<tr><th>Número de comparendo</th><th>Código de infracción</th><th>Fecha del comparendo</th></tr>
+<tr><td>{{comparendo.numero}}</td><td>{{comparendo.codigo_infraccion}}</td><td>{{comparendo.fecha_imposicion}}</td></tr>
+</table>
+<p style="text-align:justify">Lo anterior, teniendo en cuenta que desde la fecha de imposición del comparendo ha transcurrido un término superior a un (1) año sin que se haya impuesto la sanción económica correspondiente.</p>
+<p style="text-align:justify">2. Solicito retirar de la base de datos del <b>SIMIT</b> la información del comparendo anteriormente mencionado, asociado al tipo y número de documento de {{peticionario.nombre}}.</p>
+<h3 style="text-align:center">RAZONES QUE SUSTENTAN ESTA PETICIÓN</h3>
+<p style="text-align:justify">El artículo 2 del Código Nacional de Tránsito define el comparendo como una orden de comparecer ante la autoridad de tránsito por la comisión de una presunta infracción. En consecuencia, los términos de caducidad se rigen por lo establecido en la normativa vigente.</p>
+<p style="text-align:justify"><b>CADUCIDAD – LEY 1843 DE 2017, ARTÍCULO 11:</b><br>El artículo 161 de la Ley 769 de 2002 establece que la acción por contravención de las normas de tránsito caduca al año (1), contado a partir de la ocurrencia de los hechos que dieron origen a la misma. Durante dicho término se deberá decidir sobre la imposición de la sanción; de no hacerlo, se configura la caducidad del proceso.</p>
+<p style="text-align:justify">En virtud de lo anterior y conforme a la evidencia obtenida en la consulta del comparendo en la plataforma del SIMIT, se observa que ha transcurrido un término superior a un (1) año desde la ocurrencia de los hechos, razón por la cual solicito se declare la caducidad del proceso contravencional y se proceda a retirar la información del comparendo de dicha base de datos.</p>
+<h3 style="text-align:center">NOTIFICACIONES</h3>
+{{#si empresa.correo_respuesta}}<p style="text-align:justify">Las respuestas las recibiré electrónicamente en la siguiente dirección de correo electrónico: {{empresa.correo_respuesta}}. Autorizo que la respuesta sea enviada vía correo electrónico a dicha dirección.</p>{{/si}}
+{{#si peticionario.direccion}}<p style="text-align:justify">Dirección física para efectos de notificaciones, en caso de ser requerida: {{peticionario.direccion}}.</p>{{/si}}
+<p>ATENTAMENTE,</p>
+{{rl.firma_imagen}}
+<p><b>{{rl.nombres}}</b><br>{{rl.tipo_documento}} No. {{rl.numero_documento}}<br>{{rl.cargo}}<br>{{peticionario.nombre}}<br>{{peticionario.tipo_documento}} {{peticionario.numero_documento}}</p>

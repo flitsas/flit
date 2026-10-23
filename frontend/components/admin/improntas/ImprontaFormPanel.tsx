@@ -104,11 +104,11 @@ export function ImprontaFormPanel() {
   return (
     <form className="flex flex-col gap-4" onSubmit={(e) => void handleSubmit(e)} noValidate>
       <fieldset className={IMPRONTA_SECTION_CLS}>
-        <legend className="px-1 text-sm font-semibold" style={{ color: "#162744" }}>
+        <legend className="px-1 text-sm font-semibold" style={{ color: "var(--color-flit-primary)" }}>
           Datos del vehículo
         </legend>
 
-        <label className={IMPRONTA_LABEL_CLS} style={{ color: "#162744" }} htmlFor="impronta-placa">
+        <label className={IMPRONTA_LABEL_CLS} style={{ color: "var(--color-flit-primary)" }} htmlFor="impronta-placa">
           Placa <span aria-hidden="true">*</span>
           <input
             id="impronta-placa"
@@ -127,7 +127,7 @@ export function ImprontaFormPanel() {
           </p>
         )}
 
-        <label className={IMPRONTA_LABEL_CLS} style={{ color: "#162744" }} htmlFor="impronta-documento">
+        <label className={IMPRONTA_LABEL_CLS} style={{ color: "var(--color-flit-primary)" }} htmlFor="impronta-documento">
           Documento del propietario <span aria-hidden="true">*</span>
           <input
             id="impronta-documento"
@@ -151,7 +151,7 @@ export function ImprontaFormPanel() {
       </fieldset>
 
       <fieldset className={IMPRONTA_SECTION_CLS}>
-        <legend className="px-1 text-sm font-semibold" style={{ color: "#162744" }}>
+        <legend className="px-1 text-sm font-semibold" style={{ color: "var(--color-flit-primary)" }}>
           Organización solicitante
         </legend>
         <p className="text-[11px] opacity-70">
@@ -160,7 +160,7 @@ export function ImprontaFormPanel() {
         </p>
 
         <div>
-          <label className={IMPRONTA_LABEL_CLS} style={{ color: "#162744" }} htmlFor="impronta-org-nombre">
+          <label className={IMPRONTA_LABEL_CLS} style={{ color: "var(--color-flit-primary)" }} htmlFor="impronta-org-nombre">
             Nombre de la organización <span aria-hidden="true">*</span>
             <input
               id="impronta-org-nombre"
@@ -179,7 +179,7 @@ export function ImprontaFormPanel() {
         </div>
 
         <div>
-          <label className={IMPRONTA_LABEL_CLS} style={{ color: "#162744" }} htmlFor="impronta-operador">
+          <label className={IMPRONTA_LABEL_CLS} style={{ color: "var(--color-flit-primary)" }} htmlFor="impronta-operador">
             Operador <span aria-hidden="true">*</span>
             <input
               id="impronta-operador"
@@ -203,7 +203,7 @@ export function ImprontaFormPanel() {
           role="status"
           aria-live="polite"
           className="flex items-center gap-2 text-[11px] font-medium"
-          style={{ color: "#162744" }}
+          style={{ color: "var(--color-flit-primary)" }}
           data-testid="impronta-loading"
         >
           <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
@@ -230,10 +230,10 @@ export function ImprontaFormPanel() {
           role="status"
           aria-live="polite"
           className="flex items-start gap-2 rounded-xl border p-3 text-xs font-medium"
-          style={{ borderColor: "#00DBD5", color: "#162744" }}
+          style={{ borderColor: "var(--color-flit-tech)", color: "var(--color-flit-primary)" }}
           data-testid="impronta-success"
         >
-          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "#00DBD5" }} aria-hidden="true" />
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--color-flit-tech)" }} aria-hidden="true" />
           <div className="flex flex-col gap-1">
             <span>
               Impronta generada y descargada. La descarga del PDF se inició en tu navegador.
@@ -263,7 +263,7 @@ export function ImprontaFormPanel() {
         disabled={submitting}
         aria-busy={submitting}
         className="flex w-fit items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-xs font-semibold text-white disabled:opacity-50"
-        style={{ background: "linear-gradient(135deg,#557EFF 0%,#00DBD5 100%)" }}
+        style={{ background: "linear-gradient(135deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
       >
         {submitting ? (
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />

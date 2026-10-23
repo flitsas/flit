@@ -85,8 +85,8 @@ export function TarjetaDetalle({
 export function CampoValor({ campo, valor }: { campo: string; valor: ReactNode }) {
   return (
     <>
-      <dt className="text-xs text-[#162744]/70 dark:text-white/70">{campo}</dt>
-      <dd className="text-xs font-medium break-words text-[#162744] dark:text-white">
+      <dt className="text-xs text-flit-primary/70 dark:text-white/70">{campo}</dt>
+      <dd className="text-xs font-medium break-words text-flit-primary dark:text-white">
         {valor === null || valor === undefined || valor === '' ? '—' : valor}
       </dd>
     </>
@@ -158,19 +158,19 @@ export function SeccionError({
 }) {
   if (sinReintento) {
     return (
-      <p className="text-xs text-[#162744]/70 dark:text-white/70" role="status">
+      <p className="text-xs text-flit-primary/70 dark:text-white/70" role="status">
         {mensaje}
       </p>
     );
   }
   return (
     <div className="flex flex-col items-start gap-2" role="alert">
-      <p className="text-xs text-[#162744]/70 dark:text-white/70">{mensaje}</p>
+      <p className="text-xs text-flit-primary/70 dark:text-white/70">{mensaje}</p>
       <button
         type="button"
         onClick={onReintentar}
         aria-label={contexto ? `Reintentar ${contexto}` : undefined}
-        className="rounded-xl border px-3 py-1.5 text-xs font-semibold transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2"
+        className="rounded-xl border px-3 py-1.5 text-xs font-semibold transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
         style={{ borderColor: AZUL, color: AZUL }}
       >
         Reintentar
@@ -181,5 +181,5 @@ export function SeccionError({
 
 /** Estado "vacío" de una sección: se dice qué falta, nunca se deja el hueco mudo. */
 export function SeccionVacia({ mensaje }: { mensaje: string }) {
-  return <p className="text-xs text-[#162744]/70 dark:text-white/70">{mensaje}</p>;
+  return <p className="text-xs text-flit-primary/70 dark:text-white/70">{mensaje}</p>;
 }

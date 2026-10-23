@@ -1,5 +1,6 @@
 using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.ExternalSync;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
@@ -95,6 +96,10 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
             var existing = instance.FieldValues.FirstOrDefault(f => f.FieldKey == item.FieldKey);
             if (existing is not null)
             {
+                // HU #13264 — la marca de pago de FLITO no la sobrescribe la edición del gestor (subsanación).
+                if (ExternalAttachmentRules.IsProtectedFlitoMark(existing.FieldKey, existing.Source))
+                    continue;
+
                 existing.ValueText = item.ValueText;
                 existing.ValueJson = item.ValueJson;
                 existing.Source = "user";

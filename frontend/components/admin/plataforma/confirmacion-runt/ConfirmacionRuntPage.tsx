@@ -51,7 +51,7 @@ export function ConfirmacionRuntPage({
           type="button"
           onClick={() => router.push("/")}
           className="flex w-fit items-center gap-1.5 text-xs font-semibold"
-          style={{ color: "#557EFF" }}
+          style={{ color: "var(--color-flit-brand)" }}
         >
           <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
           Volver al inicio

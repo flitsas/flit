@@ -1,5 +1,6 @@
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.ExternalSync;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -260,6 +261,11 @@ public sealed class SubirDocumentoPortalHandler(
             return (null, "not_draft");
 
         var tipo = input.Tipo.Trim().ToLowerInvariant();
+
+        // HU #13265 — «gana quien carga primero»: si FLITO ya cargó este tipo, el portal no lo duplica (antes de guardar el binario).
+        if (AttachmentRules.BloqueadoPorFlito(instance.Attachments, tipo))
+            return (null, ExternalAttachmentRules.BlockedCode);
+
         var stored = await storage.SaveAsync(instance.Id, tipo, input.Filename ?? "file", input.Content, ct);
 
         var attachment = new ProcedureInstanceAttachment
@@ -284,7 +290,13 @@ public sealed class SubirDocumentoPortalHandler(
         ChecklistEstadoJson.AutoMark(instance, tipo);
 
         await repo.AddEventAsync(EventFactory.DocumentoSubido(participant, tipo), ct);
-        await repo.SaveChangesAsync(ct);
+
+        // HU #13265 — carrera con FLITO: el motor (DDL 131) rechaza el insert; el binario recién subido no lo referencia nadie.
+        if (!await UploadAttachmentHandler.SaveGanaElPrimeroAsync(repo, ct))
+        {
+            storage.Delete(stored.StoragePath);
+            return (null, ExternalAttachmentRules.BlockedCode);
+        }
 
         return (UploadAttachmentHandler.ToDto(attachment), null);
     }

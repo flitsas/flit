@@ -25,6 +25,7 @@ import {
   CARDLIST_TABLE,
   CARDLIST_TH,
 } from "@/components/atom/table-cardlist";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { fetchAllCompanies } from "@/lib/api/admin-companies";
 import { variationPct } from "@/lib/api/analytics-v2";
 import type { ReportType } from "@/lib/api/analytics-scheduling";
@@ -34,7 +35,6 @@ import {
   exportIctNovedadesReport,
   exportIctWebhooksReport,
   ICT_EXCEL_MAX_ROWS,
-  ICT_REPORT_PAGE_SIZE,
   fetchIctAtascadosReport,
   fetchIctJobsReport,
   fetchIctNovedadesReport,
@@ -96,8 +96,8 @@ const RANGE_TABS: ReadonlyArray<TabId> = ["novedades", "jobs", "webhooks"];
  * un color de marca.
  */
 const CAUSA_COLOR: Record<string, string> = {
-  SOAT: "#557EFF",
-  RTM: "#00DBD5",
+  SOAT: "var(--color-flit-brand)",
+  RTM: "var(--color-flit-tech)",
   RNMC: "#9B8AFB",
   "Documento faltante": "#F9AC00",
   "Otra/sin clasificar": "#162744",
@@ -149,11 +149,21 @@ function initialParam(name: string): string {
  * compañía, la clave deja de coincidir y la página vuelve a 1 en el mismo render, sin un paso
  * intermedio pidiendo la página 7 de un periodo que ya no es el elegido.
  */
-function usePagedFilters(filtersKey: string): [number, (page: number) => void] {
-  const [state, setState] = useState({ key: filtersKey, page: 1 });
+function usePagedFilters(
+  filtersKey: string,
+): [number, (page: number) => void, number, (pageSize: number) => void] {
+  // Bug #13055 — el tamaño de página es elegible («Filas por página»); cambiarlo vuelve a la página 1.
+  const [state, setState] = useState({ key: filtersKey, page: 1, pageSize: 10 });
   const page = state.key === filtersKey ? state.page : 1;
-  const setPage = useCallback((next: number) => setState({ key: filtersKey, page: next }), [filtersKey]);
-  return [page, setPage];
+  const setPage = useCallback(
+    (next: number) => setState((prev) => ({ ...prev, key: filtersKey, page: next })),
+    [filtersKey],
+  );
+  const setPageSize = useCallback(
+    (next: number) => setState({ key: filtersKey, page: 1, pageSize: next }),
+    [filtersKey],
+  );
+  return [page, setPage, state.pageSize, setPageSize];
 }
 
 /** Refleja un valor en la dirección sin recargar ni apilar historial. */
@@ -258,7 +268,7 @@ export function IctReports() {
   const nothingToExport = tabTotals[activeTab] === 0;
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
       <ModuleTitle
         title="Reportes de Integración con Terceros"
         subtitle="Novedades, atascados y entregas de ICT, con consultas propias y envío programado."
@@ -390,7 +400,7 @@ function ExcelExportButton({
         // fila —allí, el PDF ejecutivo—, y una exportación a Excel no lo es en ninguno de los
         // módulos: que ICT lo usara era la excepción, no la regla.
         className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border disabled:opacity-50"
-        style={{ color: "#162744" }}
+        style={{ color: "var(--color-flit-primary)" }}
         data-testid="ict-reportes-exportar-excel"
       >
         {busy ? (
@@ -493,19 +503,24 @@ function ExcelTruncatedNotice({ what }: { what: string }) {
 /** Barra de paginación del detalle, con el mismo paginador del resto del producto. */
 function DetailPagination({
   page,
+  pageSize,
   total,
   onPageChange,
+  onPageSizeChange,
 }: {
   page: number;
+  pageSize: number;
   total: number;
   onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
 }) {
   return (
     <Pagination
       page={page}
-      pageSize={ICT_REPORT_PAGE_SIZE}
+      pageSize={pageSize}
       totalCount={total}
       onPageChange={onPageChange}
+      onPageSizeChange={onPageSizeChange}
     />
   );
 }
@@ -560,22 +575,24 @@ function NovedadesTab({
   tenantId?: string;
   onTotal: (tab: TabId, total: number) => void;
 }) {
-  const [page, setPage] = usePagedFilters(`${range.from}|${range.to}|${tenantId ?? ""}`);
+  const [page, setPage, pageSize, setPageSize] = usePagedFilters(`${range.from}|${range.to}|${tenantId ?? ""}`);
   const q = useAnalyticsQuery<IctNovedadesReport>(
-    (signal) => fetchIctNovedadesReport(range, tenantId, { page, pageSize: ICT_REPORT_PAGE_SIZE }, signal),
-    [range.from, range.to, tenantId, page],
+    (signal) => fetchIctNovedadesReport(range, tenantId, { page, pageSize }, signal),
+    [range.from, range.to, tenantId, page, pageSize],
     { isEmpty: (r) => r.total === 0 },
   );
   const report = q.data;
   useReportTotal("novedades", report?.total, onTotal);
 
   return (
+    <>
+      {/* Bug #13055 — carga con el loader del carrito (antes, esqueleto). */}
+      {q.status === "loading" && <CarLoaderModal label="Cargando reporte ICT…" />}
     <UiStateBoundary
-      status={q.status}
+      status={q.status === "loading" ? "ready" : q.status}
       errorMessage={q.errorMessage}
       onRetry={q.retry}
       emptyMessage="Sin novedades en el periodo seleccionado."
-      skeletonRows={3}
     >
       {report && (
         <div className="flex flex-col gap-4" data-testid="ict-novedades-tab">
@@ -622,12 +639,19 @@ function NovedadesTab({
                 ],
               }))}
             />
-            <DetailPagination page={report.page} total={report.total} onPageChange={setPage} />
+            <DetailPagination
+              page={report.page}
+              pageSize={pageSize}
+              total={report.total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
             {report.truncated && <ExcelTruncatedNotice what="novedades" />}
           </ReportSection>
         </div>
       )}
     </UiStateBoundary>
+    </>
   );
 }
 
@@ -638,22 +662,24 @@ function AtascadosTab({
   tenantId?: string;
   onTotal: (tab: TabId, total: number) => void;
 }) {
-  const [page, setPage] = usePagedFilters(tenantId ?? "");
+  const [page, setPage, pageSize, setPageSize] = usePagedFilters(tenantId ?? "");
   const q = useAnalyticsQuery<IctAtascadosReport>(
-    (signal) => fetchIctAtascadosReport(tenantId, { page, pageSize: ICT_REPORT_PAGE_SIZE }, signal),
-    [tenantId, page],
+    (signal) => fetchIctAtascadosReport(tenantId, { page, pageSize }, signal),
+    [tenantId, page, pageSize],
     { isEmpty: (r) => r.total === 0 },
   );
   const report = q.data;
   useReportTotal("atascados", report?.total, onTotal);
 
   return (
+    <>
+      {/* Bug #13055 — carga con el loader del carrito (antes, esqueleto). */}
+      {q.status === "loading" && <CarLoaderModal label="Cargando reporte ICT…" />}
     <UiStateBoundary
-      status={q.status}
+      status={q.status === "loading" ? "ready" : q.status}
       errorMessage={q.errorMessage}
       onRetry={q.retry}
       emptyMessage="No hay pre-trámites atascados en validación."
-      skeletonRows={3}
     >
       {report && (
         <div className="flex flex-col gap-4" data-testid="ict-atascados-tab">
@@ -686,12 +712,19 @@ function AtascadosTab({
                 ],
               }))}
             />
-            <DetailPagination page={report.page} total={report.total} onPageChange={setPage} />
+            <DetailPagination
+              page={report.page}
+              pageSize={pageSize}
+              total={report.total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
             {report.truncated && <ExcelTruncatedNotice what="atascados" />}
           </ReportSection>
         </div>
       )}
     </UiStateBoundary>
+    </>
   );
 }
 
@@ -702,22 +735,24 @@ function JobsTab({
   range: DateRange;
   onTotal: (tab: TabId, total: number) => void;
 }) {
-  const [page, setPage] = usePagedFilters(`${range.from}|${range.to}`);
+  const [page, setPage, pageSize, setPageSize] = usePagedFilters(`${range.from}|${range.to}`);
   const q = useAnalyticsQuery<IctJobsReport>(
-    (signal) => fetchIctJobsReport(range, { page, pageSize: ICT_REPORT_PAGE_SIZE }, signal),
-    [range.from, range.to, page],
+    (signal) => fetchIctJobsReport(range, { page, pageSize }, signal),
+    [range.from, range.to, page, pageSize],
     { isEmpty: (r) => r.resumenPorJob.length === 0 },
   );
   const report = q.data;
   useReportTotal("jobs", report?.total, onTotal);
 
   return (
+    <>
+      {/* Bug #13055 — carga con el loader del carrito (antes, esqueleto). */}
+      {q.status === "loading" && <CarLoaderModal label="Cargando reporte ICT…" />}
     <UiStateBoundary
-      status={q.status}
+      status={q.status === "loading" ? "ready" : q.status}
       errorMessage={q.errorMessage}
       onRetry={q.retry}
       emptyMessage="Sin corridas de jobs en el periodo seleccionado."
-      skeletonRows={3}
     >
       {report && (
         <div className="flex flex-col gap-4" data-testid="ict-jobs-tab">
@@ -727,7 +762,7 @@ function JobsTab({
               value={formatInt(report.total)}
               tooltip="Corridas de los jobs del pipeline de ICT en el rango elegido, en toda la plataforma. La variación compara con el periodo anterior de la misma longitud."
               variation={variationPct(report.total, report.totalPeriodoAnterior)}
-              color="#557EFF"
+              color="var(--color-flit-brand)"
             />
             {/* Cero incumplimientos es buena noticia y se pinta como tal; en cuanto hay uno, pasa
                 al naranja. Un rojo permanente en una tarjeta que dice "0" enseña a ignorarla. */}
@@ -775,8 +810,10 @@ function JobsTab({
               />
               <DetailPagination
                 page={report.page}
+                pageSize={pageSize}
                 total={report.totalFueraDeSla}
                 onPageChange={setPage}
+                onPageSizeChange={setPageSize}
               />
               {report.truncated && <ExcelTruncatedNotice what="corridas fuera de SLA" />}
             </ReportSection>
@@ -784,6 +821,7 @@ function JobsTab({
         </div>
       )}
     </UiStateBoundary>
+    </>
   );
 }
 
@@ -796,22 +834,24 @@ function WebhooksTab({
   tenantId?: string;
   onTotal: (tab: TabId, total: number) => void;
 }) {
-  const [page, setPage] = usePagedFilters(`${range.from}|${range.to}|${tenantId ?? ""}`);
+  const [page, setPage, pageSize, setPageSize] = usePagedFilters(`${range.from}|${range.to}|${tenantId ?? ""}`);
   const q = useAnalyticsQuery<IctWebhooksReport>(
-    (signal) => fetchIctWebhooksReport(range, tenantId, { page, pageSize: ICT_REPORT_PAGE_SIZE }, signal),
-    [range.from, range.to, tenantId, page],
+    (signal) => fetchIctWebhooksReport(range, tenantId, { page, pageSize }, signal),
+    [range.from, range.to, tenantId, page, pageSize],
     { isEmpty: (r) => r.total === 0 },
   );
   const report = q.data;
   useReportTotal("webhooks", report?.total, onTotal);
 
   return (
+    <>
+      {/* Bug #13055 — carga con el loader del carrito (antes, esqueleto). */}
+      {q.status === "loading" && <CarLoaderModal label="Cargando reporte ICT…" />}
     <UiStateBoundary
-      status={q.status}
+      status={q.status === "loading" ? "ready" : q.status}
       errorMessage={q.errorMessage}
       onRetry={q.retry}
       emptyMessage="Sin webhooks en el periodo seleccionado."
-      skeletonRows={3}
     >
       {report && (
         <div className="flex flex-col gap-4" data-testid="ict-webhooks-tab">
@@ -824,7 +864,7 @@ function WebhooksTab({
               value={formatInt(report.total)}
               tooltip="Notificaciones que ICT intentó entregar al sistema del cliente en el rango elegido. La variación compara con el periodo anterior de la misma longitud."
               variation={variationPct(report.total, report.totalPeriodoAnterior)}
-              color="#00DBD5"
+              color="var(--color-flit-tech)"
             />
             <KpiCard
               label="Entregados"
@@ -863,11 +903,18 @@ function WebhooksTab({
                 ],
               }))}
             />
-            <DetailPagination page={report.page} total={report.total} onPageChange={setPage} />
+            <DetailPagination
+              page={report.page}
+              pageSize={pageSize}
+              total={report.total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
             {report.truncated && <ExcelTruncatedNotice what="webhooks" />}
           </ReportSection>
         </div>
       )}
     </UiStateBoundary>
+    </>
   );
 }

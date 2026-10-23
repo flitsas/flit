@@ -8,8 +8,8 @@ import type { OverrideScope, ResolutionLevel } from "@/lib/api/types-documents";
 type BadgeLevel = OverrideScope | ResolutionLevel;
 
 const STYLES: Record<BadgeLevel, { bg: string; fg: string; label: string }> = {
-  CLIENTE: { bg: "#557EFF", fg: "#FFFFFF", label: "CLIENTE" },
-  OT: { bg: "#00DBD5", fg: "#0a3d3b", label: "OT" },
+  CLIENTE: { bg: "var(--color-flit-brand)", fg: "#FFFFFF", label: "CLIENTE" },
+  OT: { bg: "var(--color-flit-tech)", fg: "#0a3d3b", label: "OT" },
   DEFAULT: { bg: "#DFE5ED", fg: "#162744", label: "DEFAULT" },
 };
 
@@ -17,7 +17,7 @@ export function ScopeBadge({ scope }: { scope: BadgeLevel }) {
   const style = STYLES[scope];
   return (
     <span
-      className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+      className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold uppercase tracking-wide"
       style={{ background: style.bg, color: style.fg }}
     >
       {style.label}

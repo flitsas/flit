@@ -4,6 +4,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { chooseRowAction, rowActionNames } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 import { Usuarios } from "../Usuarios";
 import { getUsers, deleteUser } from "@/lib/api/security";
 import type { TenantUser } from "@/lib/api/security";
@@ -92,15 +93,12 @@ describe("Usuarios — botón Eliminar (#10623, SuperAdmin)", () => {
 
   it("AC2: no muestra el botón Eliminar sobre la propia fila del usuario autenticado", async () => {
     vi.mocked(getUsers).mockResolvedValue([selfUser, otherUser]);
+    const user = userEvent.setup();
     render(<Usuarios />);
 
     await screen.findByText("Ana Torres");
-    expect(
-      screen.queryByRole("button", { name: /eliminar usuario yo mismo/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /eliminar usuario ana torres/i }),
-    ).toBeInTheDocument();
+    expect(await rowActionNames(user, "Yo Mismo")).not.toContainEqual(expect.stringMatching(/eliminar usuario yo mismo/i));
+    expect(await rowActionNames(user, "Ana Torres")).toContainEqual(expect.stringMatching(/eliminar usuario ana torres/i));
   });
 
   it("AC1: abre la confirmación con el aviso de que solo un Super Admin puede restaurar", async () => {
@@ -109,7 +107,7 @@ describe("Usuarios — botón Eliminar (#10623, SuperAdmin)", () => {
     render(<Usuarios />);
 
     await screen.findByText("Ana Torres");
-    await user.click(screen.getByRole("button", { name: /eliminar usuario ana torres/i }));
+    await chooseRowAction(user, "Ana Torres", /eliminar usuario ana torres/i);
 
     // El texto está partido por un <strong>, se busca por el textContent del párrafo completo.
     expect(
@@ -126,7 +124,7 @@ describe("Usuarios — botón Eliminar (#10623, SuperAdmin)", () => {
     render(<Usuarios />);
 
     await screen.findByText("Ana Torres");
-    await user.click(screen.getByRole("button", { name: /eliminar usuario ana torres/i }));
+    await chooseRowAction(user, "Ana Torres", /eliminar usuario ana torres/i);
     await user.click(screen.getByRole("button", { name: /^eliminar usuario$/i }));
 
     await waitFor(() => expect(deleteUser).toHaveBeenCalledWith("user-other", 2));
@@ -138,12 +136,11 @@ describe("Usuarios — botón Eliminar (#10623, SuperAdmin)", () => {
   it("AC4: un AdminCompany no ve la pestaña Eliminados ni el botón Eliminar", async () => {
     perms.current = { ...ADMIN_COMPANY_PERMS };
     vi.mocked(getUsers).mockResolvedValue([otherUser]);
+    const user = userEvent.setup();
     render(<Usuarios />);
 
     await screen.findByText("Ana Torres");
     expect(screen.queryByRole("button", { name: /^eliminados$/i })).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /eliminar usuario ana torres/i }),
-    ).not.toBeInTheDocument();
+    expect(await rowActionNames(user, "Ana Torres")).not.toContainEqual(expect.stringMatching(/eliminar usuario ana torres/i));
   });
 });

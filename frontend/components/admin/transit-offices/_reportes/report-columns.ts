@@ -31,12 +31,12 @@ export interface EstadoMeta {
 export const ESTADO_META: Record<string, EstadoMeta> = {
   [OT_REPORT_ESTADOS.enRevision]: {
     label: "En revisión",
-    color: "#557EFF",
+    color: "var(--color-flit-brand)",
     hint: "Radicado y esperando decisión del organismo. Es el trabajo que está sobre la mesa.",
   },
   [OT_REPORT_ESTADOS.esperandoPlaca]: {
     label: "Esperando placa",
-    color: "#00DBD5",
+    color: "var(--color-flit-tech)",
     hint: "Radicado sin placa: el organismo debe asignarla antes de que el gestor lo envíe a revisión. Sigue siendo trabajo del organismo.",
   },
   [OT_REPORT_ESTADOS.esperandoCliente]: {

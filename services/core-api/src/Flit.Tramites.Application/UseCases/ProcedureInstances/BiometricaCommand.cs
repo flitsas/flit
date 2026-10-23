@@ -58,7 +58,19 @@ public sealed record BiometricValidationDto(
     /// por un reenvío administrativo. Null en filas anteriores a la migración de este campo (fallback:
     /// el frontend usa <see cref="Email"/>).
     /// </summary>
-    string? RegisteredEmail = null);
+    string? RegisteredEmail = null,
+    /// <summary>
+    /// Épica #13202 (HU #13303) — cómo se aprobó: <c>automatica</c> (Kyverum/mock) o <c>manual</c> (revisión del Super Admin).
+    /// Solo con estado <c>aprobado</c>; <c>null</c> en cualquier otro estado y en aprobaciones anteriores al campo. Nunca trae
+    /// el nombre del revisor.
+    /// </summary>
+    string? ApprovalOrigin = null,
+    /// <summary>
+    /// Épica #13202 — código homologado (lista cerrada, sin texto libre ni PII) del motivo que eligió el Super Admin al rechazar
+    /// una validación MANUAL. Solo con status=rechazado y provider=manual; <c>null</c> en cualquier otro caso (Kyverum/mock
+    /// rechazados siguen con <see cref="RejectionReason"/>).
+    /// </summary>
+    string? RejectionReasonCode = null);
 
 /// <summary>Resultado de iniciar: incluye el token CRUDO (solo aquí) para construir el magic-link.</summary>
 public sealed record IniciarBiometriaResult(
@@ -294,7 +306,12 @@ public sealed class IniciarBiometriaHandler(
             ExtractUltimoIntentoMotivo(v),
             CreatedAt: v.CreatedAt,
             Ordinal: ordinal,
-            RegisteredEmail: string.IsNullOrWhiteSpace(v.RegisteredEmail) ? null : v.RegisteredEmail);
+            RegisteredEmail: string.IsNullOrWhiteSpace(v.RegisteredEmail) ? null : v.RegisteredEmail,
+            ApprovalOrigin: v.Status == BiometricEstados.Aprobado ? v.ApprovalOrigin : null,
+            RejectionReasonCode: v.Status == BiometricEstados.Rechazado
+                && string.Equals(v.Provider, BiometricProviders.Manual, StringComparison.Ordinal)
+                    ? v.RejectionReasonCode
+                    : null);
 
     /// <summary>
     /// Motivo de rechazo SANITIZADO para mostrar al gestor (HU #10234 AC4). Solo se expone en estado
@@ -751,6 +768,12 @@ public sealed class CompletarBiometriaHandler(
         if (v.CongeladaPorTramite)
             return (null, "tramite_inactivo");
 
+        // HU #13284 — el token del flujo manual se busca por el mismo hash que el magic-link mock: este flujo
+        // (3 fotos + scorer mock) NO puede completar ni aprobar una validación manual; la captura manual y su
+        // revisión humana son otro flujo (Feature B/C).
+        if (string.Equals(v.Provider, BiometricProviders.Manual, StringComparison.Ordinal))
+            return (null, "estado_invalido");
+
         var now = DateTimeOffset.UtcNow;
 
         // Expiración: marca expirado y rechaza el intento.
@@ -925,6 +948,7 @@ public sealed class SimularBiometriaHandler(IProcedureInstanceRepository repo)
                 Email = subject.Email ?? string.Empty,
                 RegisteredEmail = subject.Email ?? string.Empty,
                 Status = BiometricEstados.Aprobado,
+                ApprovalOrigin = BiometricApprovalOrigins.Automatica,
                 TokenHash = BiometricToken.Hash(BiometricToken.Generate()),
                 ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras),
                 Attempts = 0,

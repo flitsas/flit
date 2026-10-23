@@ -8,29 +8,30 @@ import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { ToastProvider, useToast } from "@/components/admin/Toast";
-import { PermissionGate } from "@/components/auth/PermissionGate";
-import { BANNERS_MANAGE_PERMISSION } from "@/lib/auth/jwt";
+import { usePermissions } from "@/hooks/usePermissions";
 import { BannerListTable } from "@/components/admin/banners/BannerListTable";
 import { BannerFormPanel } from "@/components/admin/banners/BannerFormPanel";
 import { BannerDeleteDialog } from "@/components/admin/banners/BannerDeleteDialog";
 import { createBanner, fetchBanners, updateBanner, type Banner, type BannerPagedResult } from "@/lib/api/admin-banners";
-
-const PAGE_SIZE = 20;
+import { usePaginacion } from "@/components/atom/usePaginacion";
+import { ADMIN_BACK_LINK_CLS } from "@/components/admin/admin-ui-styles";
 
 /**
  * Consola admin de banners promocionales (HU #12241, Feature #12236): listado administrable
  * (AC1), alta/edición con vista previa en vivo (AC2), eliminación con confirmación (AC3) y guía
- * de tamaño recomendado en el formulario (AC4). El módulo completo está gateado por el permiso
- * `banners.manage` — el borde (middleware, `evaluateAdminAccess`) ya redirige a /403 a quien no
- * lo tiene; `PermissionGate` es la defensa en profundidad del lado del componente.
+ * de tamaño recomendado en el formulario (AC4). El módulo es exclusivo del Super Admin FLIT
+ * (HU #13439, Épica #12750) — el borde (middleware, `evaluateAdminAccess`) ya redirige a /403 a
+ * quien no lo es; aquí se repite la comprobación como defensa en profundidad del lado del componente.
  */
 export default function AdminBannersPage() {
+  const { isSuperAdmin } = usePermissions();
+
+  if (!isSuperAdmin) return <NoAccess />;
+
   return (
-    <PermissionGate permission={BANNERS_MANAGE_PERMISSION} fallback={<NoAccess />}>
-      <ToastProvider>
-        <BannersList />
-      </ToastProvider>
-    </PermissionGate>
+    <ToastProvider>
+      <BannersList />
+    </ToastProvider>
   );
 }
 
@@ -38,7 +39,7 @@ function NoAccess() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-4 text-center">
       <ShieldAlert className="h-8 w-8" style={{ color: "#FF4E00" }} aria-hidden="true" />
-      <p className="text-sm font-medium" style={{ color: "#162744" }}>
+      <p className="text-sm font-medium" style={{ color: "var(--color-flit-primary)" }}>
         No tienes permiso para administrar banners promocionales.
       </p>
     </div>
@@ -48,7 +49,8 @@ function NoAccess() {
 function BannersList() {
   const router = useRouter();
   const { show } = useToast();
-  const [page, setPage] = useState(1);
+  // Bug #13055 — tabla homologada con el modelo de trámites: filas por página elegibles.
+  const { page, pageSize, setPage, setPageSize } = usePaginacion();
   const [status, setStatus] = useState<UiStatus>("loading");
   const [result, setResult] = useState<BannerPagedResult | null>(null);
   const [formTarget, setFormTarget] = useState<Banner | null | "new">(null);
@@ -58,7 +60,7 @@ function BannersList() {
     async (signal?: AbortSignal) => {
       setStatus("loading");
       try {
-        const data = await fetchBanners({ page, pageSize: PAGE_SIZE }, signal);
+        const data = await fetchBanners({ page, pageSize }, signal);
         if (signal?.aborted) return;
         setResult(data);
         setStatus(data.data.length === 0 ? "empty" : "ready");
@@ -66,7 +68,7 @@ function BannersList() {
         if (!signal?.aborted) setStatus("error");
       }
     },
-    [page],
+    [page, pageSize],
   );
 
   useEffect(() => {
@@ -108,22 +110,15 @@ function BannersList() {
 
   return (
     <div className="flex min-h-screen flex-col gap-4 px-4 md:px-6 pt-6 pb-10">
-      <button
-        type="button"
-        onClick={() => router.push("/")}
-        className="flex w-fit items-center gap-1.5 text-xs font-semibold"
-        style={{ color: "#557EFF" }}
-      >
+      <button type="button" onClick={() => router.push("/")} className={ADMIN_BACK_LINK_CLS}>
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Volver al inicio
       </button>
 
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <ModuleTitle
-          title="Banners promocionales"
-          subtitle="Configura y programa el contenido informativo del carrusel de banners, sin intervención técnica."
-        />
-        <CreateButton label="Nuevo banner" icon={ImageIcon} onClick={() => setFormTarget("new")} />
-      </div>
+      <ModuleTitle
+        title="Banners promocionales"
+        subtitle="Configura y programa el contenido informativo del carrusel de banners, sin intervención técnica."
+        action={<CreateButton label="Nuevo banner" icon={ImageIcon} onClick={() => setFormTarget("new")} />}
+      />
 
       {/* Sin tarjeta blanca envolvente: mismo lenguaje visual que TramitesTable — la tabla es una
           pila de filas-tarjeta directamente sobre el fondo de la app, no un bloque encapsulado.
@@ -146,6 +141,7 @@ function BannersList() {
               page={result.page}
               pageSize={result.pageSize}
               onPageChange={setPage}
+              onPageSizeChange={setPageSize}
               onEdit={setFormTarget}
               onDelete={setDeleteTarget}
             />

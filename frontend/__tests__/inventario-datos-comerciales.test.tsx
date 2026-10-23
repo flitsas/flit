@@ -64,8 +64,6 @@ const mocks = vi.hoisted(() => ({
   generarImpronta: vi.fn(),
   generarConsolidado: vi.fn(),
   getPrenda: vi.fn(),
-  listMandateSigners: vi.fn(),
-  setMandateSigner: vi.fn(),
   listVehicleServiceTypes: vi.fn(),
   ruesPreview: vi.fn(),
 }));
@@ -218,8 +216,6 @@ beforeEach(() => {
   mocks.generarImpronta.mockResolvedValue({ attachmentId: 'imp-1', filename: 'i.pdf', sha256: 'x', radicado: 'R', hash: 'h' });
   mocks.generarConsolidado.mockResolvedValue({ regenerado: true });
   mocks.getPrenda.mockResolvedValue([]);
-  mocks.listMandateSigners.mockResolvedValue({ opciones: [], elegidoId: null, editable: true });
-  mocks.setMandateSigner.mockResolvedValue(undefined);
   mocks.listVehicleServiceTypes.mockResolvedValue([
     { id: 'ts-1', code: 'PARTICULAR', name: 'Particular', sortOrder: 1 },
     { id: 'ts-2', code: 'PUBLICO', name: 'Público', sortOrder: 2 },

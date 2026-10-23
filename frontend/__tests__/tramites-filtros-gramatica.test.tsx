@@ -268,7 +268,7 @@ describe('HU #12108 — ordenamiento por subcampo desde la cabecera', () => {
     await userEvent.click(screen.getByRole('button', { name: /^Ordenar Radicado$/ }));
     const menu = screen.getByRole('menu', { name: /Ordenar por, en Radicado/ });
 
-    for (const opcion of ['Radicado', 'Fecha de creación', 'Fecha de actualización']) {
+    for (const opcion of ['Radicado', 'Fecha radicación', 'Fecha de actualización']) {
       expect(within(menu).getAllByRole('menuitemradio', { name: new RegExp(opcion) })).toHaveLength(2);
     }
   });
@@ -300,14 +300,14 @@ describe('HU #12108 — ordenamiento por subcampo desde la cabecera', () => {
     await userEvent.click(
       within(screen.getByRole('menu', { name: /Ordenar por, en Radicado/ })).getByRole(
         'menuitemradio',
-        { name: /Fecha de creación: Más antigua/ },
+        { name: /Fecha radicación: Más antigua/ },
       ),
     );
 
     // El nombre accesible dice por qué ordena AHORA: sin esto solo lo diría el icono.
     expect(
       await screen.findByRole('button', {
-        name: /Ordenar Radicado\. Ahora: Fecha de creación ascendente/,
+        name: /Ordenar Radicado\. Ahora: Fecha radicación ascendente/,
       }),
     ).toBeInTheDocument();
     // Y ninguna otra cabecera compuesta se muestra como activa.
@@ -352,18 +352,18 @@ describe('HU #12108 — ordenamiento por subcampo desde la cabecera', () => {
     expect(within(menu).queryByRole('menuitemradio', { name: /Radicado: A-Z/ })).toBeNull();
 
     expect(
-      within(menu).getByRole('menuitemradio', { name: 'Fecha de creación: Más antigua' }),
+      within(menu).getByRole('menuitemradio', { name: 'Fecha radicación: Más antigua' }),
     ).toBeInTheDocument();
-    expect(within(menu).queryByRole('menuitemradio', { name: /Fecha de creación: A-Z/ })).toBeNull();
+    expect(within(menu).queryByRole('menuitemradio', { name: /Fecha radicación: A-Z/ })).toBeNull();
   });
 
-  it('toda columna ordenable ofrece su menú, también Vendedor y Secretaría', async () => {
+  it('toda columna ordenable ofrece su menú, también Vendedor y Organismo de tránsito', async () => {
     render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('P0001');
 
     // Se quedaron sin desplegable hasta que el catálogo del backend admitió ordenar por ellas:
     // la cabecera solo ofrece lo que el servidor sabe ordenar, así que el hueco venía de allí.
-    for (const columna of ['Vendedor', 'Secretaría']) {
+    for (const columna of ['Vendedor', 'Organismo de tránsito']) {
       await userEvent.click(screen.getByRole('button', { name: new RegExp(`^Ordenar ${columna}$`) }));
       expect(
         screen.getByRole('menu', { name: new RegExp(`Ordenar por, en ${columna}`) }),

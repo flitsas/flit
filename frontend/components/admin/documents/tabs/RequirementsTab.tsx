@@ -135,7 +135,7 @@ export function RequirementsTab({ procedureTypeId }: { procedureTypeId: string }
         onClick={handleAdd}
         disabled={busy || !newDocId}
         className="inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-        style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+        style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
       >
         Agregar
       </button>

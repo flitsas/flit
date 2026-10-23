@@ -7,10 +7,13 @@ export function DrFlitComposer({
   onSend,
   inputRef,
   disabled,
+  placeholder = "Pregúntale a DR. FLIT...",
 }: {
   onSend: (text: string) => void;
   inputRef: RefObject<HTMLInputElement | null>;
   disabled?: boolean;
+  /** Con el chat con IA y sin un valor pendiente se muestra un ejemplo de pregunta. */
+  placeholder?: string;
 }) {
   const [value, setValue] = useState("");
 
@@ -41,7 +44,7 @@ export function DrFlitComposer({
         value={value}
         disabled={disabled}
         onChange={(e) => setValue(e.target.value)}
-        placeholder="Pregúntale a DR. FLIT..."
+        placeholder={placeholder}
         autoComplete="off"
         className="flex-1 min-w-0 rounded-[10px] border px-4 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--dr-flit-focus)] disabled:opacity-50"
         style={{

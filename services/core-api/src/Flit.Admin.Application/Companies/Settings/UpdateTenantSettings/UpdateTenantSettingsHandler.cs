@@ -18,10 +18,15 @@ namespace Flit.Admin.Application.Companies.Settings.UpdateTenantSettings;
 public sealed class UpdateTenantSettingsHandler
 {
     private readonly ITenantSettingsRepository _repository;
+    private readonly ITenantProductFlags _products;
+    private readonly IConsultasConfigSync? _consultas;
 
-    public UpdateTenantSettingsHandler(ITenantSettingsRepository repository)
+    /// <param name="consultas">HU #13344: solo con Consultas remoto encendido; sin él, todo queda como antes.</param>
+    public UpdateTenantSettingsHandler(ITenantSettingsRepository repository, ITenantProductFlags products, IConsultasConfigSync? consultas = null)
     {
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+        _products = products ?? throw new ArgumentNullException(nameof(products));
+        _consultas = consultas;
     }
 
     public async Task<UpdateTenantSettingsResult> HandleAsync(
@@ -139,7 +144,12 @@ public sealed class UpdateTenantSettingsHandler
             OnlyOwnVehiclesMatriculas = onlyMatriculas,
             OnlyOwnVehiclesOtros = onlyOtros,
             SignatureVaultEnabled = request.BaulFirmasActivo,
-            PlatePreassignEnabled = request.PreasignacionPlacaActiva,
+            // HU #12853 (Feature #12846, Épica #12751) — la ruta de placa preasignada de la compañía
+            // se apagó: el campo se sigue aceptando en el contrato (no rompe clientes que aún lo
+            // envían) pero el backend lo IGNORA. Se conserva el valor previo, nunca el que llegue en
+            // request.PreasignacionPlacaActiva, para que ni se persista ni aparezca en el diff de
+            // auditoría (AC2). El histórico persistido antes de esta HU no se toca (AC3).
+            PlatePreassignEnabled = previous.PlatePreassignEnabled,
             ValidateSoatWithRunt = request.ValidarSoatConRunt,
             NotificationChannel = channel,
             // HU #11357/#11362 (ADR-0043) — campo propio, ya no derivado del canal. Opcional: si el
@@ -166,17 +176,43 @@ public sealed class UpdateTenantSettingsHandler
             FinesQuerySource = finesQuerySource ?? previous.FinesQuerySource,
             // HU #12250 (Feature #12249) — flags de módulos del dashboard: opcionales, si el
             // request los omite se conserva el valor previo (AC4).
-            TramitesModuleEnabled = request.TramitesModuleEnabled ?? previous.TramitesModuleEnabled,
-            ComparendosModuleEnabled = request.ComparendosModuleEnabled ?? previous.ComparendosModuleEnabled,
+            // HU #12967 (B-07): Trámites y Comparendos ya no se escriben aquí. Son la habilitación de
+            // productos (platform.tenant_products) y solo la cambia el SuperAdmin por
+            // PUT /api/v1/platform/admin/tenants/{id}/products/{code}. Se ignora lo que traiga el request.
+            TramitesModuleEnabled = previous.TramitesModuleEnabled,
+            ComparendosModuleEnabled = previous.ComparendosModuleEnabled,
             ResolucionesModuleEnabled = request.ResolucionesModuleEnabled ?? previous.ResolucionesModuleEnabled,
+            // HU #13400 (Feature #13398) — opcional: si el request lo omite se conserva el valor previo.
+            // El endpoint ya es SuperAdmin-only, así que solo el SuperAdmin FLIT llega a este punto.
+            GenerateImprontas = request.GeneracionImprontas ?? previous.GenerateImprontas,
         };
 
         var changes = SettingsDiff.Compute(previous, updated);
+
+        // HU #13344: primero Consultas. Si no responde, no se guarda nada: nunca queda en FLIT una configuración que
+        // Consultas no tiene. Volver a guardar reintenta (la sincronización es idempotente).
+        if (_consultas is not null)
+        {
+            try
+            {
+                await _consultas.SyncAsync(command.TenantId, updated, cancellationToken).ConfigureAwait(false);
+            }
+            catch (ConsultasConfigSyncException)
+            {
+                return UpdateTenantSettingsResult.Invalid(
+                    [new SettingsValidationError("consultationProviderConfig", "No se pudo guardar la configuración en Consultas. No se guardó ningún cambio; inténtalo de nuevo.")]);
+            }
+        }
 
         await _repository
             .SaveAsync(updated, changes, command.ChangedBy, command.CorrelationId, cancellationToken)
             .ConfigureAwait(false);
 
-        return UpdateTenantSettingsResult.Success(SettingsMapper.ToResponse(updated));
+        var products = await _products.GetAsync(command.TenantId, cancellationToken).ConfigureAwait(false);
+        return UpdateTenantSettingsResult.Success(SettingsMapper.ToResponse(updated) with
+        {
+            TramitesModuleEnabled = products.Tramites,
+            ComparendosModuleEnabled = products.Comparendos,
+        });
     }
 }

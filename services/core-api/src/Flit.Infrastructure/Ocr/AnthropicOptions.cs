@@ -38,4 +38,27 @@ public sealed class AnthropicOptions
     /// escaneadas es una sola llamada, pero larga.
     /// </summary>
     public int ClassifierTimeoutSeconds { get; set; } = 180;
+
+    // ── DR. FLIT (Épica #12718, ADR-0060) ────────────────────────────────────
+    // El chat reutiliza el mismo cliente, la misma API key y la misma sección. Sus claves van aparte
+    // porque el perfil de uso es otro: respuesta corta, sin streaming, y un deadline que el usuario
+    // sí siente mientras espera en el chat.
+
+    /// <summary>Modelo del chat. Configurable para poder cambiarlo sin desplegar.</summary>
+    public string DrFlitModel { get; set; } = "claude-haiku-4-5";
+
+    /// <summary>Tope de salida: una respuesta conversacional corta más el arreglo de slugs citados.</summary>
+    public int DrFlitMaxTokens { get; set; } = 600;
+
+    /// <summary>Deadline de cada llamada del chat. Corto: al vencer, el frontend cae al buscador local.</summary>
+    public int DrFlitTimeoutSeconds { get; set; } = 20;
+
+    /// <summary>Mensajes al LLM por usuario, tenant y día calendario en hora Colombia.</summary>
+    public int DrFlitDailyMessageLimit { get; set; } = 30;
+
+    /// <summary>
+    /// Interruptor de apagado total del LLM del chat. En <c>false</c> no se llama a Anthropic y el chat
+    /// responde siempre en modo degradado (buscador por palabras clave del frontend).
+    /// </summary>
+    public bool DrFlitEnabled { get; set; } = true;
 }

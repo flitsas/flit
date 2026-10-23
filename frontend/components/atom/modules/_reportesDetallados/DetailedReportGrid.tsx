@@ -1,5 +1,14 @@
 "use client";
 
+import { Pagination } from "@/components/atom/Pagination";
+import {
+  CARDLIST_CELL,
+  CARDLIST_HEAD_ROW,
+  CARDLIST_ROW,
+  CARDLIST_SCROLL,
+  CARDLIST_TABLE,
+  CARDLIST_TH,
+} from "@/components/atom/table-cardlist";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import type { DetailedReportPage, NetworkDetailedReportPage } from "@/lib/api/detailed-report";
 import { statusLabel } from "../_reportes/categories";
@@ -15,7 +24,11 @@ interface DetailedReportGridProps {
   emptyMessage?: string;
   onRetry?: () => void;
   page: number;
+  /** Tamaño de página elegido; si no llega, se usa el que informa la API. */
+  pageSize?: number;
   onPageChange: (page: number) => void;
+  /** Bug #13055 — «Filas por página»; sin este manejador el selector no se muestra. */
+  onPageSizeChange?: (pageSize: number) => void;
 }
 
 export function DetailedReportGrid({
@@ -25,10 +38,11 @@ export function DetailedReportGrid({
   emptyMessage = "No hay trámites que coincidan con los filtros seleccionados.",
   onRetry,
   page,
+  pageSize,
   onPageChange,
+  onPageSizeChange,
   networkScope = false,
 }: DetailedReportGridProps) {
-  const totalPages = data ? Math.max(1, Math.ceil(data.totalCount / data.pageSize)) : 1;
   const columnas = networkScope ? ["Cliente", ...COLUMNAS] : COLUMNAS;
 
   return (
@@ -39,45 +53,48 @@ export function DetailedReportGrid({
       onRetry={onRetry}
       skeletonRows={6}
     >
-      <div className="overflow-x-auto rounded-2xl border">
-        <table className="min-w-full text-xs">
-          <thead className="bg-[#F4F7FC] dark:bg-white/5">
-            <tr>
+      {/* Bug #13055 — tabla homologada con el modelo de trámites (sin tarjeta envolvente). */}
+      <div className={CARDLIST_SCROLL}>
+        <table className={`min-w-full ${CARDLIST_TABLE}`} aria-label="Reporte detallado de trámites">
+          <thead>
+            <tr className={CARDLIST_HEAD_ROW}>
               {columnas.map((h) => (
-                <th key={h} className="px-3 py-2 text-left font-semibold">{h}</th>
+                <th key={h} scope="col" className={CARDLIST_TH}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {data?.items.map((row) => (
-              <tr key={row.id} className="border-t">
+              <tr key={row.id} className={CARDLIST_ROW}>
                 {networkScope && (
-                  <td className="px-3 py-2 font-medium" data-testid="detallado-fila-cliente">
+                  <td className={`${CARDLIST_CELL} font-medium`} data-testid="detallado-fila-cliente">
                     {"tenantName" in row && row.tenantName ? row.tenantName : "—"}
                   </td>
                 )}
-                <td className="px-3 py-2">{row.referenceNumber}</td>
-                <td className="px-3 py-2">{row.procedureTypeName}</td>
-                <td className="px-3 py-2">{statusLabel(row.status) ?? row.status}</td>
-                <td className="px-3 py-2">{row.personFullName || row.personDocument || "—"}</td>
-                <td className="px-3 py-2">{row.hasTransformation ? row.transformationDetail ?? "Sí" : "No"}</td>
-                <td className="px-3 py-2">{row.isLeasing ? "Sí" : "No"}</td>
-                <td className="px-3 py-2">{row.paymentType || "—"}</td>
-                <td className="px-3 py-2">{row.transferType}</td>
-                <td className="px-3 py-2">{row.createdByDisplayName}</td>
+                <td className={CARDLIST_CELL}>{row.referenceNumber}</td>
+                <td className={CARDLIST_CELL}>{row.procedureTypeName}</td>
+                <td className={CARDLIST_CELL}>{statusLabel(row.status) ?? row.status}</td>
+                <td className={CARDLIST_CELL}>{row.personFullName || row.personDocument || "—"}</td>
+                <td className={CARDLIST_CELL}>{row.hasTransformation ? row.transformationDetail ?? "Sí" : "No"}</td>
+                <td className={CARDLIST_CELL}>{row.isLeasing ? "Sí" : "No"}</td>
+                <td className={CARDLIST_CELL}>{row.paymentType || "—"}</td>
+                <td className={CARDLIST_CELL}>{row.transferType}</td>
+                <td className={CARDLIST_CELL}>{row.createdByDisplayName}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      {data && data.totalCount > data.pageSize && (
-        <div className="flex items-center justify-between pt-3 text-xs">
-          <span>Página {page} de {totalPages} · {data.totalCount} registros</span>
-          <div className="flex gap-2">
-            <button type="button" disabled={page <= 1} className="rounded-lg border px-3 py-1 disabled:opacity-40" onClick={() => onPageChange(page - 1)}>Anterior</button>
-            <button type="button" disabled={page >= totalPages} className="rounded-lg border px-3 py-1 disabled:opacity-40" onClick={() => onPageChange(page + 1)}>Siguiente</button>
-          </div>
-        </div>
+      {data && (
+        <Pagination
+          page={page}
+          pageSize={pageSize ?? data.pageSize}
+          totalCount={data.totalCount}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+          ariaLabel="Paginación del reporte detallado"
+          noun="trámites"
+        />
       )}
     </UiStateBoundary>
   );

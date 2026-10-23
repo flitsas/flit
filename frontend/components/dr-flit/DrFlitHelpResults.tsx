@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen } from "lucide-react";
+import { BookOpen, FileText, Scale } from "lucide-react";
 import type { DrFlitHelpResult } from "./dr-flit-types";
 
 export function DrFlitHelpResults({
@@ -31,10 +31,11 @@ export function DrFlitHelpResults({
               style={{ background: "var(--dr-flit-icon-tint)" }}
               aria-hidden="true"
             >
-              <BookOpen
-                className="h-5 w-5"
-                style={{ color: "var(--dr-flit-brand-blue)" }}
-              />
+              {item.primarySource ? (
+                <Scale className="h-5 w-5" style={{ color: "var(--dr-flit-brand-blue)" }} />
+              ) : (
+                <BookOpen className="h-5 w-5" style={{ color: "var(--dr-flit-brand-blue)" }} />
+              )}
             </span>
             <span className="min-w-0 flex-1">
               <span
@@ -63,6 +64,21 @@ export function DrFlitHelpResults({
               </span>
             </span>
           </button>
+          {item.sourceHref ? (
+            <button
+              type="button"
+              onClick={() => onOpen(item.sourceHref as string)}
+              className="mt-1.5 inline-flex w-full items-center justify-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dr-flit-focus)] focus-visible:ring-offset-2"
+              style={{
+                borderColor: "var(--dr-flit-border)",
+                background: "var(--dr-flit-card-bg)",
+                color: "var(--dr-flit-brand-title)",
+              }}
+            >
+              <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+              {item.sourceLabel ?? "Abrir la fuente"}
+            </button>
+          ) : null}
         </li>
       ))}
     </ul>

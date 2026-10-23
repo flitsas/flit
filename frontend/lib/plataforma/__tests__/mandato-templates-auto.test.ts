@@ -1,38 +1,47 @@
 import { describe, it, expect } from "vitest";
+import type { MandatoFormatView } from "@/lib/api/admin-plataforma-mandatos";
 
-import {
-  MANDATO_TEMPLATE_AUTO,
-  MANDATO_TEMPLATES,
-  mandatoTemplateOptions,
-} from "../mandato-templates";
+import * as templates from "../mandato-templates";
+import { MANDATO_TEMPLATE_AUTO_CODE, findMandatoFormat } from "../mandato-templates";
 
-// Uso de ejemplo:
-// mandatoTemplateOptions() → [{ code: "auto", ... }, { code: "generico", ... }, ...]
-// Alimenta el selector de plantilla por OT (HU #11705).
+// HU #13174 — las opciones del selector salen del catálogo del backend, no de constantes del frontend.
 
-describe("mandatoTemplateOptions — opciones del selector por OT", () => {
-  it("happy path: encabeza la automática y sigue con las redacciones del sistema", () => {
-    const options = mandatoTemplateOptions();
+const FORMATOS: MandatoFormatView[] = [
+  {
+    code: "auto",
+    name: "Automática (según el organismo)",
+    assignmentMode: "signer",
+    baseRedaction: null,
+    selectableAsRedaction: false,
+    delegatesToOfficeTemplate: true, currentVersion: 0, hasCustomTemplate: false, rowVersion: 1, updatedAt: null,
+  },
+  {
+    code: "generico",
+    name: "Genérico renombrado",
+    assignmentMode: "signer",
+    baseRedaction: "generico",
+    selectableAsRedaction: true,
+    delegatesToOfficeTemplate: false, currentVersion: 0, hasCustomTemplate: false, rowVersion: 1, updatedAt: null,
+  },
+];
 
-    expect(options[0].code).toBe("auto");
-    expect(options).toHaveLength(MANDATO_TEMPLATES.length + 1);
-    expect(options.map((o) => o.code)).toEqual([
-      "auto",
-      ...MANDATO_TEMPLATES.map((t) => t.code),
-    ]);
+describe("catálogo de formatos en mandato-templates", () => {
+  it("encuentra el formato por código sin distinguir mayúsculas y devuelve el nombre del backend", () => {
+    expect(findMandatoFormat(FORMATOS, "GENERICO")?.name).toBe("Genérico renombrado");
+    expect(findMandatoFormat(FORMATOS, "retirado")).toBeUndefined();
+    expect(findMandatoFormat(FORMATOS, null)).toBeUndefined();
   });
 
-  it("cada opción trae etiqueta y resumen para poder elegir sin adivinar", () => {
-    for (const option of mandatoTemplateOptions()) {
-      expect(option.label.trim().length).toBeGreaterThan(0);
-      expect(option.summary.trim().length).toBeGreaterThan(0);
-    }
+  it("la automática no es una redacción: el catálogo la marca como delegación", () => {
+    const auto = findMandatoFormat(FORMATOS, MANDATO_TEMPLATE_AUTO_CODE);
+    expect(auto?.selectableAsRedaction).toBe(false);
+    expect(auto?.baseRedaction).toBeNull();
   });
 
-  it("edge case — la automática NO es una redacción: no está en el catálogo del generador", () => {
-    // Si "auto" apareciera como redacción, el backend intentaría generar un PDF con ese código.
-    expect(MANDATO_TEMPLATES.some((t) => (t.code as string) === MANDATO_TEMPLATE_AUTO.code)).toBe(
-      false,
-    );
+  it("el módulo ya no define la lista ni el tipo local de formatos", () => {
+    const exported = Object.keys(templates);
+    expect(exported).not.toContain("MANDATO_TEMPLATES");
+    expect(exported).not.toContain("mandatoTemplateOptions");
+    expect(exported).not.toContain("systemTemplateLabel");
   });
 });

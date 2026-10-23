@@ -66,7 +66,13 @@ export function EditCompanyDialog({
   const changingToConcesion = tenantType === "CONCESION" && company.tenantType !== "CONCESION";
   const needsOtStep = changingToConcesion;
   const isMarcaBlanca = tenantType === "MARCA_BLANCA";
-  const typeChangeBlocked = initialWasHead && activeChildrenCount > 0;
+  const headWithChildren = initialWasHead && activeChildrenCount > 0;
+  // El tipo de una hija de red (Concesión o Marca Blanca) queda fijo mientras esté vinculada.
+  const isNetworkChild = Boolean(company.parentTenantId);
+  const typeChangeBlocked = headWithChildren || isNetworkChild;
+  const typeBlockedReason = isNetworkChild
+    ? "No puedes cambiar el tipo de un cliente hijo mientras pertenezca a una red."
+    : "No puedes cambiar el tipo mientras la cabeza tenga clientes hijos vigentes.";
 
   const catalogTypes = selectableTenantTypes(isSuperAdmin);
   const typeOptions: string[] = catalogTypes.includes(tenantType as TenantType)
@@ -197,7 +203,7 @@ export function EditCompanyDialog({
       busy={submitting}
       icon={Building2}
       title={step === "ot" ? "Organismos de la Concesión" : "Editar compañía"}
-      titleClassName="text-base font-bold text-[#557EFF]"
+      titleClassName="text-base font-bold text-flit-brand"
     >
       <div className="space-y-3.5">
         {step === "form" && (
@@ -210,7 +216,7 @@ export function EditCompanyDialog({
                 value={razonSocial}
                 onChange={(e) => setRazonSocial(sanitizeName(e.target.value))}
                 maxLength={255}
-                className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+                className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
                 style={{ borderColor: errors.razonSocial ? "#FF4E00" : "#DFE5ED" }}
               />
             </Field>
@@ -223,7 +229,7 @@ export function EditCompanyDialog({
                 onChange={(e) => setNit(sanitizeTaxId(e.target.value))}
                 maxLength={20}
                 placeholder="900123456-1"
-                className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+                className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
                 style={{ borderColor: errors.nit ? "#FF4E00" : "#DFE5ED" }}
               />
             </Field>
@@ -246,13 +252,9 @@ export function EditCompanyDialog({
                 value={tenantType}
                 onChange={(e) => setTenantType(e.target.value)}
                 disabled={typeChangeBlocked}
-                title={
-                  typeChangeBlocked
-                    ? "No puedes cambiar el tipo mientras la cabeza tenga clientes hijos vigentes."
-                    : undefined
-                }
+                title={typeChangeBlocked ? typeBlockedReason : undefined}
                 aria-describedby={typeChangeBlocked ? "ec-type-blocked" : undefined}
-                className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20 disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20 disabled:cursor-not-allowed disabled:opacity-60"
                 style={{ borderColor: errors.tenantType ? "#FF4E00" : "#DFE5ED" }}
               >
                 {typeOptions.map((t) => (
@@ -261,18 +263,24 @@ export function EditCompanyDialog({
                   </option>
                 ))}
               </select>
-              {typeChangeBlocked && (
-                <p id="ec-type-blocked" className="mt-1 text-[10px] opacity-70">
-                  Desvincula o da de baja a los clientes hijos antes de cambiar el tipo de cabeza (
-                  {activeChildrenCount} vigente{activeChildrenCount === 1 ? "" : "s"}).
+              {isNetworkChild ? (
+                <p id="ec-type-blocked" className="mt-1 text-xs opacity-70">
+                  Es cliente hijo de una red: desvincúlalo de su cabeza antes de cambiar el tipo.
                 </p>
+              ) : (
+                headWithChildren && (
+                  <p id="ec-type-blocked" className="mt-1 text-xs opacity-70">
+                    Desvincula o da de baja a los clientes hijos antes de cambiar el tipo de cabeza (
+                    {activeChildrenCount} vigente{activeChildrenCount === 1 ? "" : "s"}).
+                  </p>
+                )
               )}
             </Field>
 
             {isMarcaBlanca && (
               <div
                 className="space-y-2 rounded-xl border px-3 py-2.5"
-                style={{ borderColor: "#DFE5ED", background: "rgba(85,126,255,0.04)" }}
+                style={{ borderColor: "#DFE5ED", background: "color-mix(in srgb, var(--color-flit-brand) 4%, transparent)" }}
               >
                 <p className="text-xs font-semibold">Dominio de integración</p>
                 <input
@@ -282,13 +290,13 @@ export function EditCompanyDialog({
                   className="w-full cursor-not-allowed rounded-lg border px-3 py-2 text-xs opacity-60"
                   aria-describedby="ec-domain-hint"
                 />
-                <p id="ec-domain-hint" className="text-[10px] opacity-60">
+                <p id="ec-domain-hint" className="text-xs opacity-60">
                   Opera en todos los organismos habilitados por la plataforma salvo los bloqueados.
                 </p>
               </div>
             )}
 
-            <p className="text-[10px] opacity-60">
+            <p className="text-xs opacity-60">
               Tipo actual en ficha: <strong>{tenantTypeLabel(company.tenantType)}</strong>
             </p>
 
@@ -314,7 +322,7 @@ export function EditCompanyDialog({
         {formError && (
           <p
             role="alert"
-            className="rounded-lg px-3 py-2 text-[11px] font-medium"
+            className="rounded-lg px-3 py-2 text-xs font-medium"
             style={{ background: "rgba(255,78,0,0.1)", color: "#FF4E00" }}
           >
             {formError}
@@ -345,7 +353,7 @@ export function EditCompanyDialog({
             onClick={step === "form" ? goNext : () => void submit()}
             disabled={submitting}
             className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
           >
             {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
             {submitting ? "Guardando…" : step === "form" && needsOtStep ? "Siguiente" : "Guardar cambios"}
@@ -375,9 +383,9 @@ function Field({
         {label}
       </label>
       {children}
-      {hint && !error && <p className="mt-1 text-[10px] opacity-60">{hint}</p>}
+      {hint && !error && <p className="mt-1 text-xs opacity-60">{hint}</p>}
       {error && (
-        <p className="mt-1 text-[10px] font-medium" style={{ color: "#FF4E00" }}>
+        <p className="mt-1 text-xs font-medium" style={{ color: "#FF4E00" }}>
           {error}
         </p>
       )}

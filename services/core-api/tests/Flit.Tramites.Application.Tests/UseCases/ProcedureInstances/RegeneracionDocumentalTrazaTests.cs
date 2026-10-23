@@ -155,6 +155,14 @@ public sealed class RegeneracionDocumentalTrazaTests
             string tipoEvento,
             CancellationToken cancellationToken = default) =>
             EscribirFalloAsync(tenantId, procedureInstanceId, origen, codigoError, detalle, cancellationToken);
+
+        // HU #12798 — esta suite no ejercita la inserción genérica (la usa ConsolidadoFalloBitacora).
+        public Task<bool> EscribirEventoAsync(
+            Guid tenantId,
+            Guid procedureInstanceId,
+            string tipoEvento,
+            string payloadJson,
+            CancellationToken cancellationToken = default) => Task.FromResult(false);
     }
 
     private sealed class LoggerEspia : ILogger<RegenerarDocumentosTrazadoHandler>

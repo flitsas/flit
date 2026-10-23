@@ -33,7 +33,8 @@ public static class AttachmentCleanup
         ProcedureInstance instance,
         IProcedureInstanceRepository repo,
         IAttachmentStorage storage,
-        Func<ProcedureInstanceAttachment, bool> predicadoDeTipo)
+        Func<ProcedureInstanceAttachment, bool> predicadoDeTipo,
+        ICollection<string>? borrarTrasGuardar = null)
     {
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentNullException.ThrowIfNull(repo);
@@ -44,7 +45,9 @@ public static class AttachmentCleanup
                      .Where(a => predicadoDeTipo(a) && EsGeneradoPorElSistema(a))
                      .ToList())
         {
-            storage.Delete(prev.StoragePath);
+            // HU #12797 — con borrarTrasGuardar el binario se borra DESPUÉS del SaveChanges del llamador.
+            if (borrarTrasGuardar is null) storage.Delete(prev.StoragePath);
+            else borrarTrasGuardar.Add(prev.StoragePath);
             instance.Attachments.Remove(prev);
             repo.RemoveAttachment(prev);
         }

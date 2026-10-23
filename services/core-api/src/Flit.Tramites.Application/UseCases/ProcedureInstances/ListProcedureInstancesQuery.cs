@@ -1,4 +1,5 @@
-﻿using Flit.Tramites.Domain.Entities;
+﻿using Flit.Queries.Domain.Documentos;
+using Flit.Tramites.Domain.Entities;
 using Flit.Queries.Domain.Time;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
@@ -101,7 +102,12 @@ public sealed record InstanceSummaryDto(
                                               // ADR-0059 (HU #12597) — estado desde el que el OT rechazó por última vez
                                               // (entregado | preasignacion). El gestor pinta «Rechazado preasignación» cuando
                                               // vale preasignacion; null si nunca se rechazó o ya se subsanó.
-    string? RejectedFrom = null);
+    string? RejectedFrom = null,
+                                              // HU #12791 (Épica #12760) — vigencia + sello del consolidado del WIZARD (el
+                                              // que muestra la fila). Se deriva de columnas de la instancia y de los adjuntos
+                                              // que el grafo del listado YA carga (Include de Attachments en la misma consulta
+                                              // dividida): cero consultas por fila. Aditivo (default null).
+    ConsolidadoVigenciaDto? ConsolidadoWizard = null);
 
 /// <summary>
 /// Lista las instancias de un tenant (más recientes primero, cap del repo) y las mapea a
@@ -282,7 +288,8 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
             TramiteMarcas.TieneTransformacion(fv, e.TypeCode),
             Flit.Tramites.Domain.RuntConfirmation.RuntConfirmedColumn.Derive(e.Status, e.RuntConfirmedAt, e.RuntAttempts, e.RuntFlag),
             revocationRequestStatus,
-            RejectedFrom: e.RejectedFrom);
+            RejectedFrom: e.RejectedFrom,
+            ConsolidadoWizard: ConsolidadoVigenciaProyeccion.Wizard(e));
     }
 
     /// <summary>

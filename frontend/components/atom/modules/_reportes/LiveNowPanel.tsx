@@ -16,6 +16,7 @@ import {
 } from "./useLiveOverview";
 
 import { ZONA_COLOMBIA } from "@/lib/format/date";
+import { COPY } from "@/lib/copy/copy-catalog";
 export interface LiveNowPanelProps {
 
   tenantId?: string;
@@ -35,8 +36,8 @@ export function LiveNowPanel({ tenantId, stuckDays, skip, onDrillDown }: LiveNow
     <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border flex flex-col gap-3" aria-labelledby="live-now-title">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id="live-now-title" className="text-sm font-bold flex items-center gap-2">
-          <Radio className="h-4 w-4 animate-pulse" style={{ color: "#00DBD5" }} aria-hidden="true" />
-          Ahora mismo
+          <Radio className="h-4 w-4 animate-pulse" style={{ color: "var(--color-flit-tech)" }} aria-hidden="true" />
+          {COPY.A22}
         </h2>
         {!skip && (
           <div className="flex items-center gap-2">
@@ -66,7 +67,7 @@ export function LiveNowPanel({ tenantId, stuckDays, skip, onDrillDown }: LiveNow
               onClick={() => live.setPaused(!live.paused)}
               aria-label={live.paused ? "Reanudar actualización" : "Pausar actualización"}
               aria-pressed={live.paused}
-              className="h-7 w-7 grid place-items-center rounded-lg border hover:bg-[#557EFF1A]"
+              className="h-7 w-7 grid place-items-center rounded-lg border hover:bg-[color-mix(in_srgb,var(--color-flit-brand)_10.2%,transparent)]"
             >
               {live.paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
             </button>
@@ -87,8 +88,8 @@ export function LiveNowPanel({ tenantId, stuckDays, skip, onDrillDown }: LiveNow
           {live.data && (
             <div className="flex flex-col gap-3">
               <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2">
-                <LiveStat label="Creados hoy" value={live.data.today.creados} color="#557EFF" tooltip="Instancias de trámite creadas hoy (hora de Bogotá)." />
-                <LiveStat label="Entregados hoy" value={live.data.today.entregados} color="#557EFF" tooltip="Transiciones a 'entregado' registradas hoy." />
+                <LiveStat label="Creados hoy" value={live.data.today.creados} color="var(--color-flit-brand)" tooltip="Instancias de trámite creadas hoy (hora de Bogotá)." />
+                <LiveStat label="Entregados hoy" value={live.data.today.entregados} color="var(--color-flit-brand)" tooltip="Transiciones a 'entregado' registradas hoy." />
                 <LiveStat label="Aprobados hoy" value={live.data.today.aprobados} color="#8CC63F" tooltip="Transiciones a 'aprobado' registradas hoy." />
                 <LiveStat label="Rechazados hoy" value={live.data.today.rechazados} color="#FF4E00" tooltip="Transiciones a 'rechazado' registradas hoy." />
                 <LiveStat label="Atascados" value={live.data.stuckCount} color="#F9AC00" tooltip="Trámites activos sin cambio de estado hace más días que el umbral configurado (7 por defecto)." />
@@ -104,7 +105,7 @@ export function LiveNowPanel({ tenantId, stuckDays, skip, onDrillDown }: LiveNow
                       type="button"
                       onClick={onDrillDown ? () => onDrillDown(s.status) : undefined}
                       disabled={!onDrillDown}
-                      className="flex items-center gap-1 text-[10px] rounded-full border px-2 py-0.5 hover:bg-[#557EFF14] disabled:cursor-default"
+                      className="flex items-center gap-1 text-[10px] rounded-full border px-2 py-0.5 hover:bg-[color-mix(in_srgb,var(--color-flit-brand)_7.84%,transparent)] disabled:cursor-default"
                       aria-label={`Ver trámites en estado ${statusLabel(s.status)}`}
                     >
                       <span className="h-2 w-2 rounded-full" style={{ background: statusColor(s.status, i) }} />

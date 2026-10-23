@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import { ToastProvider } from "@/components/admin/Toast";
 import { OtHubLayout } from "@/components/admin/transit-offices/OtHubLayout";
 import { OtUsersSection } from "@/components/admin/transit-offices/OtUsersSection";
+import { COPY } from "@/lib/copy/copy-catalog";
 
 export default function OtUsuariosPage() {
   return (
@@ -21,7 +22,7 @@ function OtUsuariosPageInner() {
     <OtHubLayout
       transitOfficeId={transitOfficeId}
       activeTab="usuarios"
-      moduleTitle="Administración OT — Usuarios"
+      moduleTitle={COPY.A23}
     >
       <OtUsersSection transitOfficeId={transitOfficeId} />
     </OtHubLayout>

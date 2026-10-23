@@ -55,6 +55,16 @@ public interface IProcedureInstanceRepository
     Task<ProcedureInstance?> GetByIdWithAttachmentsAsync(Guid id, Guid tenantId, CancellationToken ct = default);
 
     /// <summary>
+    /// HU #12791 (Épica #12760) — <c>Source</c> del adjunto MÁS RECIENTE (por <c>UploadedAt</c>) de cada
+    /// tipo de consolidado (<c>consolidado</c>, <c>consolidado_maestro</c>) de la instancia, indexado por
+    /// tipo (sin distinguir mayúsculas). Tipo ausente del diccionario = no hay PDF de ese tipo
+    /// (estado <c>inexistente</c>). UNA consulta lean (sin blobs ni grafo): la usa el detalle del trámite,
+    /// cuyo grafo (<see cref="GetByIdWithDetailsAsync(Guid, Guid, CancellationToken)"/>) no carga adjuntos.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, string>> GetConsolidadoSourcesAsync(
+        Guid procedureInstanceId, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
     /// Carga la instancia con el grafo necesario para computar el checklist condicional
     /// (RF30/31/35): <c>Attachments</c> (auto-marcado), <c>Actors</c> (NIT vs persona natural),
     /// <c>FieldValues</c> (servicio especial, tipo de documento del propietario) y
@@ -290,6 +300,20 @@ public interface IProcedureInstanceRepository
             CancellationToken ct = default);
 
     /// <summary>
+    /// Igual que <see cref="ListBiometricValidationsByPersonAsync"/> pero SOLO con las validaciones propias de mandatario
+    /// de ese documento: el historial de la fila «Mandatario» del módulo Validaciones. Nunca se mezclan con las del
+    /// trámite o la prevalidación (no se apalancan entre sí).
+    /// </summary>
+    Task<(IReadOnlyList<ProcedureInstanceBiometricValidation> Rows, int Total, bool AnyNonTerminal)>
+        ListMandatarioValidationsByPersonAsync(
+            Guid tenantId,
+            string documentType,
+            string documentNumber,
+            int skip,
+            int take,
+            CancellationToken ct = default);
+
+    /// <summary>
     /// HU #11765 (ADR-0050) — la validación MÁS RECIENTE de CADA persona (documento normalizado,
     /// ver <see cref="Identity.DocumentCanonicalNormalization"/>) del tenant, en UNA sola consulta
     /// (sin N+1). Reemplaza a <c>admin.admin_identity_validations</c> como fuente de la vigencia de
@@ -301,6 +325,22 @@ public interface IProcedureInstanceRepository
     /// fila por persona (la más reciente); ausentes en <paramref name="documents"/> sin ninguna
     /// validación simplemente no aparecen en el resultado.
     /// </summary>
+    /// <summary>
+    /// HU #13246/#13247 (Feature #13245) — validaciones lanzadas PARA los mandatarios indicados (party_role
+    /// <c>mandatario</c> + <c>mandate_signer_id</c>), de la más reciente a la más antigua. Es la ÚNICA lectura que
+    /// alimenta la identidad del mandatario: no mira el documento ni el tenant, así que la aprobación de un comprador,
+    /// un vendedor o una prevalidación con la misma cédula jamás aparece aquí. Solo lectura.
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListMandatarioValidationsAsync(
+        IReadOnlyCollection<Guid> mandateSignerIds,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #13246 — marca como <c>expirado</c> las validaciones EN VUELO del mandatario (la anterior deja de contar al
+    /// lanzar una nueva: reenvío, cambio de documento, paso de baúl a biometría) y persiste. Devuelve cuántas cerró.
+    /// </summary>
+    Task<int> SupersedeMandatarioInFlightAsync(Guid mandateSignerId, DateTimeOffset now, CancellationToken ct = default);
+
     Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListLatestBiometricValidationsByPersonsAsync(
         Guid tenantId,
         IReadOnlyCollection<(string DocumentTypeNorm, string DocumentNumberNorm)> documents,
@@ -416,6 +456,15 @@ public interface IProcedureInstanceRepository
         Guid validationId, string attemptKey, DateTimeOffset now, CancellationToken ct = default);
 
     /// <summary>
+    /// HU #13290 — persiste de forma ATÓMICA la captura manual ya aplicada en memoria con
+    /// <c>RegistrarCapturaManual</c> (rutas, hash de firma y estado) con un <c>UPDATE</c> guardado por
+    /// <c>provider = 'manual'</c> y <c>status = 'manual_activo'</c> (o <c>'rechazado'</c> con motivo, HU #13299): dos envíos concurrentes con el mismo token no pueden ganar
+    /// ambos (el segundo afecta 0 filas y no pisa las rutas del primero). Devuelve <c>false</c> si otro envío ya consumió el
+    /// enlace; la entidad queda sin cambios pendientes en el change tracker (el UPDATE ya escribió sus valores).
+    /// </summary>
+    Task<bool> TryPersistManualCaptureAsync(ProcedureInstanceBiometricValidation validation, CancellationToken ct = default);
+
+    /// <summary>
     /// Recarga desde la BD los valores de una validación ya rastreada (tras un <c>UPDATE</c> atómico que no
     /// pasó por el change tracker), para que el caller vea el conteo actualizado antes de terminalizar/enriquecer.
     /// </summary>
@@ -524,6 +573,30 @@ public interface IProcedureInstanceRepository
     /// <c>DbUpdateConcurrencyException</c> vive en el repositorio). <c>true</c> = commit OK.
     /// </summary>
     Task<bool> SaveChangesWithConcurrencyGuardAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #12797 (Épica #12760) — ¿<paramref name="ex"/> es un conflicto de concurrencia optimista del
+    /// guardado (otro proceso cambió o borró las filas entre la carga y el commit)? La capa Application
+    /// no referencia EF: el mapeo de <c>DbUpdateConcurrencyException</c> vive en el repositorio. Por
+    /// defecto <c>false</c> (dobles de prueba y composiciones sin EF).
+    /// </summary>
+    bool IsConcurrencyConflict(Exception ex) => false;
+
+    /// <summary>
+    /// HU #13265 — ¿<paramref name="ex"/> es el rechazo del motor «gana quien carga primero» (23505 con
+    /// <c>ck_attachments_flito_gana_primero</c>, DDL 131)? Pasa solo si FLITO y el gestor/portal cargan el mismo tipo a la vez.
+    /// Por defecto <c>false</c> (dobles de prueba).
+    /// </summary>
+    bool IsFlitoFirstWinsConflict(Exception ex) => false;
+
+    /// <summary>
+    /// HU #12797 (Épica #12760) — difiere <paramref name="alConfirmar"/> hasta que la transacción AMBIENTE
+    /// (abierta por quien envuelve el caso de uso, p. ej. el scope de tenant de la consola OT) confirme de
+    /// verdad, y <paramref name="alRevertir"/> hasta que se revierta. Devuelve <c>false</c> si no hay una
+    /// transacción ambiente gestionada: entonces el guardado que acaba de hacer el llamador YA confirmó y
+    /// debe ejecutar la acción él mismo. Por defecto <c>false</c> (sin transacción ambiente).
+    /// </summary>
+    bool TryDeferUntilTransactionEnds(Action alConfirmar, Action? alRevertir = null) => false;
 
     /// <summary>
     /// Página del historial de transiciones de estado de la instancia (HU-2 N03, RF05), ordenada
@@ -650,6 +723,60 @@ public interface IProcedureInstanceRepository
     /// de acceso consolidado de las estadísticas: los conteos por estado no dicen a qué hijos alcanzan.
     /// </summary>
     Task<IReadOnlyList<Guid>> ListTenantIdsWithMatchesAsync(
+        TenantScope scope,
+        ProcedureInstanceListFilter filter,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Épica #13216 (HU #13370) — TODOS los trámites que cumplen el filtro del listado, sin el tope de
+    /// página, en el mismo orden que <see cref="ListWithSummaryGraphFilteredAsync(Guid?, int, int, ProcedureInstanceListFilter, ProcedureInstanceSortBy, SortDirection, CancellationToken)"/>.
+    /// Misma base (<c>deleted_at IS NULL</c> + tenant), mismos filtros y mismo orden: solo cambia la
+    /// proyección (<see cref="ProcedureInstanceRef"/>, sin grafo) y la ausencia de <c>Skip/Take</c>.
+    /// <c>tenantId</c> <c>null</c> = todas las compañías (solo Super Admin; el guard vive en quien llama).
+    /// <para>Code review épica #13216 (Obs2): <paramref name="limite"/> corta la lectura en SQL (<c>LIMIT</c>, después
+    /// del mismo orden) para que el tope M1 no obligue a cargar toda la selección; <c>null</c> = sin límite.</para>
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstanceRef>> ListIdsFilteredAsync(
+        Guid? tenantId,
+        ProcedureInstanceListFilter filter,
+        ProcedureInstanceSortBy sortBy,
+        SortDirection direction,
+        int? limite = null,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Code review épica #13216 (Obs2) — cuántos trámites devolvería
+    /// <see cref="ListIdsFilteredAsync(Guid?, ProcedureInstanceListFilter, ProcedureInstanceSortBy, SortDirection, int?, CancellationToken)"/>
+    /// sin límite: misma base y mismo predicado, solo cambia la proyección (<c>COUNT</c>). Lo usa el 422
+    /// <c>seleccion_excede_tope</c> para informar el total sin cargar la selección.
+    /// </summary>
+    Task<int> CountIdsFilteredAsync(
+        Guid? tenantId,
+        ProcedureInstanceListFilter filter,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #13417 (épica #13216, ADR-0070 adenda v7) — selección del lote desde la vista de red: idéntica a
+    /// <see cref="ListIdsFilteredAsync(Guid?, ProcedureInstanceListFilter, ProcedureInstanceSortBy, SortDirection, int?, CancellationToken)"/>
+    /// (misma base, filtros, orden y <c>LIMIT</c>) pero el alcance entra por <see cref="TenantScope"/> con
+    /// <c>WhereTenantInScope</c>, como el listado de red: {cabeza} ∪ hijas, una sola hija tras <c>Narrow</c>, y un
+    /// conjunto de lectura vacío ⇒ cero filas. Con <c>IdsIncluidos</c> es la intersección en SQL de los ids del cuerpo
+    /// con el alcance (defensa contra ids inyectados). Nombre propio y no sobrecarga: <c>ListIdsFilteredAsync(null, …)</c>
+    /// (Super Admin) quedaría ambiguo.
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstanceRef>> ListIdsFilteredInScopeAsync(
+        TenantScope scope,
+        ProcedureInstanceListFilter filter,
+        ProcedureInstanceSortBy sortBy,
+        SortDirection direction,
+        int? limite = null,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #13417 — cuántos devolvería <see cref="ListIdsFilteredInScopeAsync"/> sin límite (mismo predicado contado en
+    /// SQL). Lo usa el 422 <c>seleccion_excede_tope</c> del lote de red.
+    /// </summary>
+    Task<int> CountIdsFilteredInScopeAsync(
         TenantScope scope,
         ProcedureInstanceListFilter filter,
         CancellationToken ct = default);

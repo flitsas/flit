@@ -17,10 +17,21 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 internal sealed class AnalyticsMetricsReadRepository : IAnalyticsMetricsReadRepository
 {
     // ── Fragmentos comunes ────────────────────────────────────────────────────────────────────────
+    // HU #13664 — Ver por familia (ver AnalyticsFamilyFilter): alias locales para el barrido de interpolación SQL.
+    private const string FamilyByInstance = AnalyticsFamilyFilter.ByInstance;
+    private const string FamilyByHistory = AnalyticsFamilyFilter.ByHistory;
+
+    // Validación de identidad: la de un trámite cuenta solo si su familia es visible; la standalone (sin trámite,
+    // Prevalidación de Identidad) no tiene familia y se cuenta siempre.
+    private const string FamilyByBiometricValidation =
+        "(@families::text[] IS NULL OR v.procedure_instance_id IS NULL OR EXISTS (SELECT 1 FROM tramites.procedure_instances pif"
+        + " JOIN tramites.procedure_types ptf ON ptf.id = pif.procedure_type_id"
+        + " WHERE pif.id = v.procedure_instance_id AND upper(ptf.family) = ANY(@families::text[])))";
+
     // CTE de instancias del tenant con los filtros comunes §4.1. Los cast ::uuid/::text permiten
     // parámetros NULL tipados (mismo truco que DetailsFilter en AnalyticsReadRepository). El filtro
     // `reason` selecciona instancias con AL MENOS una transición a 'rechazado' cuya causal matchea.
-    private const string InstancesCte = """
+    private const string InstancesCte = $"""
         WITH insts AS (
             SELECT pi.id, pi.reference_number, pi.status, pi.created_at,
                    pi.transit_office_id, pi.procedure_type_id, pi.created_by_user_id
@@ -31,6 +42,7 @@ internal sealed class AnalyticsMetricsReadRepository : IAnalyticsMetricsReadRepo
               AND (@ptype::uuid IS NULL OR pi.procedure_type_id = @ptype::uuid)
               AND (@operator::uuid IS NULL OR pi.created_by_user_id = @operator::uuid)
               AND (@status::text IS NULL OR pi.status = @status::text)
+              AND {FamilyByInstance}
               AND (@reason::text IS NULL OR EXISTS (
                     SELECT 1 FROM tramites.procedure_instance_status_history hr
                     WHERE hr.tenant_id = @tenant
@@ -310,16 +322,20 @@ internal sealed class AnalyticsMetricsReadRepository : IAnalyticsMetricsReadRepo
         """;
 
     // ── Live overview (§4.5): UN comando con 7 statements — una sola conexión/ronda, < 300 ms ────
-    private const string LiveOverviewSql = """
+    // HU #13664 — los conteos de trámites, transiciones y validaciones excluyen las familias sin Ver; las
+    // integraciones (admin.ot_api_call_logs) no son de un trámite y no se filtran.
+    private const string LiveOverviewSql = $"""
         SELECT count(*)::int
         FROM tramites.procedure_instances pi
         WHERE pi.tenant_id = @tenant AND pi.deleted_at IS NULL
-          AND (pi.created_at AT TIME ZONE 'America/Bogota')::date = (now() AT TIME ZONE 'America/Bogota')::date;
+          AND (pi.created_at AT TIME ZONE 'America/Bogota')::date = (now() AT TIME ZONE 'America/Bogota')::date
+          AND {FamilyByInstance};
 
         SELECT pi.status, count(*)::int
         FROM tramites.procedure_instances pi
         WHERE pi.tenant_id = @tenant AND pi.deleted_at IS NULL
           AND pi.status NOT IN ('aprobado', 'anulado')
+          AND {FamilyByInstance}
         GROUP BY pi.status
         ORDER BY pi.status;
 
@@ -328,7 +344,8 @@ internal sealed class AnalyticsMetricsReadRepository : IAnalyticsMetricsReadRepo
                count(*) FILTER (WHERE h.to_status = 'rechazado')::int
         FROM tramites.procedure_instance_status_history h
         WHERE h.tenant_id = @tenant
-          AND (h.changed_at AT TIME ZONE 'America/Bogota')::date = (now() AT TIME ZONE 'America/Bogota')::date;
+          AND (h.changed_at AT TIME ZONE 'America/Bogota')::date = (now() AT TIME ZONE 'America/Bogota')::date
+          AND {FamilyByHistory};
 
         SELECT count(*)::int
         FROM tramites.procedure_instances pi
@@ -339,12 +356,14 @@ internal sealed class AnalyticsMetricsReadRepository : IAnalyticsMetricsReadRepo
         ) lh ON TRUE
         WHERE pi.tenant_id = @tenant AND pi.deleted_at IS NULL
           AND pi.status NOT IN ('aprobado', 'anulado')
-          AND coalesce(lh.last_changed_at, pi.created_at) < now() - make_interval(days => @stuckDays);
+          AND coalesce(lh.last_changed_at, pi.created_at) < now() - make_interval(days => @stuckDays)
+          AND {FamilyByInstance};
 
         SELECT count(*)::int
         FROM tramites.procedure_instance_biometric_validations v
         WHERE v.tenant_id = @tenant
-          AND v.status IN ('enviado', 'en_proceso', 'pendiente_envio');
+          AND v.status IN ('enviado', 'en_proceso', 'pendiente_envio')
+          AND {FamilyByBiometricValidation};
 
         SELECT count(*)::int,
                count(*) FILTER (WHERE l.response_code >= 400 OR l.error_message IS NOT NULL)::int,
@@ -353,8 +372,8 @@ internal sealed class AnalyticsMetricsReadRepository : IAnalyticsMetricsReadRepo
         WHERE l.tenant_id = @tenant AND l.called_at >= now() - interval '1 hour';
 
         SELECT greatest(
-            (SELECT max(h.changed_at) FROM tramites.procedure_instance_status_history h WHERE h.tenant_id = @tenant),
-            (SELECT max(pi.created_at) FROM tramites.procedure_instances pi WHERE pi.tenant_id = @tenant AND pi.deleted_at IS NULL),
+            (SELECT max(h.changed_at) FROM tramites.procedure_instance_status_history h WHERE h.tenant_id = @tenant AND {FamilyByHistory}),
+            (SELECT max(pi.created_at) FROM tramites.procedure_instances pi WHERE pi.tenant_id = @tenant AND pi.deleted_at IS NULL AND {FamilyByInstance}),
             (SELECT max(l.called_at) FROM admin.ot_api_call_logs l WHERE l.tenant_id = @tenant));
         """;
 
@@ -593,12 +612,13 @@ internal sealed class AnalyticsMetricsReadRepository : IAnalyticsMetricsReadRepo
     }
 
     public Task<LiveOverviewDataDto> GetLiveOverviewAsync(
-        Guid tenantId, int stuckDays, CancellationToken ct = default) =>
+        Guid tenantId, int stuckDays, IReadOnlyList<string>? allowedFamilies = null, CancellationToken ct = default) =>
         ExecuteWithTenantAsync(tenantId, async (conn, tx) =>
         {
             await using var cmd = CreateCommand(conn, tx, LiveOverviewSql);
             AddParam(cmd, "tenant", tenantId);
             AddParam(cmd, "stuckDays", stuckDays);
+            AnalyticsFamilyFilter.AddParam(cmd, allowedFamilies);
 
             await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
 
@@ -657,6 +677,7 @@ internal sealed class AnalyticsMetricsReadRepository : IAnalyticsMetricsReadRepo
         AddParam(cmd, "operator", (object?)filter.OperatorUserId ?? DBNull.Value);
         AddParam(cmd, "status", (object?)filter.Status ?? DBNull.Value);
         AddParam(cmd, "reason", (object?)filter.Reason ?? DBNull.Value);
+        AnalyticsFamilyFilter.AddParam(cmd, filter.AllowedFamilies);
     }
 
     private static double? GetNullableDouble(DbDataReader reader, int ordinal) =>

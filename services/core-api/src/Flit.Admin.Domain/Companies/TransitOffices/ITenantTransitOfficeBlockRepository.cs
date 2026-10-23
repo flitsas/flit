@@ -5,6 +5,11 @@ namespace Flit.Admin.Domain.Companies.TransitOffices;
 /// </summary>
 public interface ITenantTransitOfficeBlockRepository
 {
+    /// <summary>Cabezas que bloquean el organismo (cálculo inverso de la lista efectiva, Bug #12912).</summary>
+    Task<IReadOnlyList<Guid>> ListBlockingHeadIdsAsync(
+        Guid transitOfficeId,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Lista los ids de OT bloqueados para la cabeza.</summary>
     Task<IReadOnlyList<Guid>> ListBlockedOfficeIdsAsync(
         Guid headTenantId,

@@ -59,6 +59,17 @@ describe("superadminClient — roles (HU #10509)", () => {
     expect(body).toEqual({ targetEntityType: "TRANSIT_OFFICE", code: "OT_SUPERVISOR", name: "Supervisor OT" });
   });
 
+  it("HU #13653: createRole sin code no lo envía (el servidor lo genera a partir del nombre)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ id: "role-2" }, 201));
+    global.fetch = fetchMock as never;
+
+    await superadminClient.createRole({ targetEntityType: "COMPANY", name: "Auditor de Trámites" });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body).toEqual({ targetEntityType: "COMPANY", name: "Auditor de Trámites" });
+    expect(body).not.toHaveProperty("code");
+  });
+
   it("setRolePermissions ya no envía tenantId y devuelve el RoleDetail completo", async () => {
     const detail = {
       id: "role-1",

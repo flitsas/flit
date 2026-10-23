@@ -3,6 +3,12 @@
 import type { ImprontaHistorialItem } from "@/lib/api/types-improntas";
 import { formatImprontaHistorialDate } from "./improntas-nav";
 import { Pagination } from "@/components/atom/Pagination";
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from "@/components/atom/table-styles";
 
 export interface ImprontaHistorialTableProps {
   rows: ImprontaHistorialItem[];
@@ -10,6 +16,8 @@ export interface ImprontaHistorialTableProps {
   page: number;
   pageSize: number;
   onPageChange: (page: number) => void;
+  /** Bug #13055: «Filas por página»; sin este manejador el selector no se muestra. */
+  onPageSizeChange?: (pageSize: number) => void;
 }
 
 /**
@@ -25,56 +33,78 @@ export function ImprontaHistorialTable({
   page,
   pageSize,
   onPageChange,
+  onPageSizeChange,
 }: ImprontaHistorialTableProps) {
   return (
     <div className="flex flex-1 flex-col">
+      {/* Bug #13055 — tabla homologada con el modelo de trámites. */}
       <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] border-separate border-spacing-y-2 text-xs">
-        <thead>
-          <tr className="text-left text-[10px] font-semibold uppercase" style={{ color: "#162744" }}>
-            <th className="rounded-l-xl px-4 py-2.5" style={{ background: "#DFE5ED" }} scope="col">
-              Radicado
-            </th>
-            <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }} scope="col">
-              Placa
-            </th>
-            <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }} scope="col">
-              Fecha de generación
-            </th>
-            <th className="px-4 py-2.5" style={{ background: "#DFE5ED" }} scope="col">
-              Operador
-            </th>
-            <th className="rounded-r-xl px-4 py-2.5" style={{ background: "#DFE5ED" }} scope="col">
-              Usuario FLIT
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.id} className="bg-white dark:bg-[#0B0F14]">
-              <td
-                className="rounded-l-xl border-y border-l px-4 py-3 font-mono font-semibold"
+        <table
+          aria-label="Historial de improntas"
+          className="min-w-[640px] text-xs"
+          style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
+        >
+          <thead>
+            <tr>
+              <th
+                scope="col"
+                className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`}
+                style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
               >
-                {row.radicado}
-              </td>
-              <td className="border-y px-4 py-3 font-medium uppercase">
-                {row.placa}
-              </td>
-              <td className="border-y px-4 py-3 opacity-80">
-                {formatImprontaHistorialDate(row.fechaImpresa)}
-              </td>
-              <td className="border-y px-4 py-3">
-                {row.operador}
-              </td>
-              <td
-                className="rounded-r-xl border-y border-r px-4 py-3 opacity-80"
+                Radicado
+              </th>
+              <th
+                scope="col"
+                className={`${TABLA_HEADER_CELL_CLS}`}
+                style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
               >
-                {row.flitUserName}
-              </td>
+                Placa
+              </th>
+              <th
+                scope="col"
+                className={`${TABLA_HEADER_CELL_CLS}`}
+                style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+              >
+                Fecha de generación
+              </th>
+              <th
+                scope="col"
+                className={`${TABLA_HEADER_CELL_CLS}`}
+                style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+              >
+                Operador
+              </th>
+              <th
+                scope="col"
+                className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl`}
+                style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+              >
+                Usuario FLIT
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+                <td className="border-y px-4 py-3 rounded-l-xl border-l font-mono font-semibold" style={{ borderColor: "#DFE5ED" }}>
+                  {row.radicado}
+                </td>
+                <td className="border-y px-4 py-3 font-medium uppercase" style={{ borderColor: "#DFE5ED" }}>
+                  {row.placa}
+                </td>
+                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: "#DFE5ED" }}>
+                  {formatImprontaHistorialDate(row.fechaImpresa)}
+                </td>
+                <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                  {row.operador}
+                </td>
+                <td className="border-y px-4 py-3 rounded-r-xl border-r opacity-80" style={{ borderColor: "#DFE5ED" }}>
+                  {row.flitUserName}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       <Pagination
@@ -82,6 +112,7 @@ export function ImprontaHistorialTable({
         pageSize={pageSize}
         totalCount={totalCount}
         onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
         className="mt-auto"
       />
     </div>

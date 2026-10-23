@@ -54,7 +54,10 @@ public sealed class IdentityValidationResultApplier(
         // aprueba la reconciliación por GET, que no siempre expone `firmaSerie`: sin este enriquecimiento
         // el hash quedaba null PARA SIEMPRE y el sello de firma del FUR salía sin valor. No cambia el
         // estado ni re-emite eventos: solo rellena el hueco (mismo criterio que AdminIdentityValidation).
-        if (v.Status is BiometricEstados.Aprobado or BiometricEstados.Rechazado)
+        // EXCEPCIÓN 2: el aprobado de Kyverum reemplaza un rechazo aplicado antes de agotar los intentos (la persona
+        // aprobó en un intento posterior del mismo enlace). Se aplica como cualquier aprobación y emite su evento.
+        var aprobadoTrasRechazoPrematuro = result.Approved && BiometricRules.EsRechazoKyverumConIntentosDisponibles(v);
+        if ((v.Status is BiometricEstados.Aprobado or BiometricEstados.Rechazado) && !aprobadoTrasRechazoPrematuro)
         {
             if (v.Status == BiometricEstados.Aprobado
                 && string.IsNullOrWhiteSpace(v.CertificateHash)

@@ -104,6 +104,40 @@ public sealed class SetImprontaDiferidaHandlerTests
     }
 
     [Fact]
+    public async Task Diferir_ConGeneracionDeshabilitada_RechazaConErrorClaro_SinGuardar()
+    {
+        // HU #13402 AC6 — «se generará automáticamente» no aplica si el trámite nació sin generación.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance(Guid.NewGuid(), Guid.NewGuid());
+        instance.ImprontaGeneracionHabilitada = false;
+        SetupRepo(instance);
+
+        var (ok, error) = await _handler.HandleAsync(instance.Id, instance.TenantId, diferida: true, ct);
+
+        ok.Should().BeNull();
+        error.Should().Be("generacion_improntas_deshabilitada");
+        instance.ChecklistEstado.Should().NotContain("impronta");
+        await _repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task NoDiferir_ConGeneracionDeshabilitada_SigueQuitandoLaMarcaPrevia()
+    {
+        // HU #13402 — desmarcar sigue permitido (limpia una marca anterior).
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance(Guid.NewGuid(), Guid.NewGuid());
+        instance.ImprontaGeneracionHabilitada = false;
+        instance.ChecklistEstado = "{\"impronta\":true}";
+        SetupRepo(instance);
+
+        var (ok, error) = await _handler.HandleAsync(instance.Id, instance.TenantId, diferida: false, ct);
+
+        error.Should().BeNull();
+        ok.Should().BeTrue();
+        instance.ChecklistEstado.Should().NotContain("impronta");
+    }
+
+    [Fact]
     public async Task Diferir_NoDebilitaRadicacion_SubmitGateSigueExigiendoImprontaReal()
     {
         // Regresión clave: aunque la impronta quede "diferida" (flag manual en checklist_estado), el

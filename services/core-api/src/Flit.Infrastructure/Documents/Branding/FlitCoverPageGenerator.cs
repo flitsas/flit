@@ -1,3 +1,4 @@
+using Flit.Infrastructure.Copy;
 using QuestPDF.Fluent;
 using QuestPDF.Infrastructure;
 
@@ -20,6 +21,9 @@ public sealed record FlitCoverData(
 /// </summary>
 public static class FlitCoverPageGenerator
 {
+    /// <summary>A05 / D06 — mismo vocablo que el FUR oficial y el detalle.</summary>
+    internal const string OrganismoFieldLabel = HomologacionCopy.OrganismoDeTransito;
+
     static FlitCoverPageGenerator()
     {
         QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
@@ -63,7 +67,7 @@ public static class FlitCoverPageGenerator
                             info.Spacing(6);
                             Field(info, "Placa", data.Placa);
                             Field(info, "Tipo de trámite", data.TipoTramite);
-                            Field(info, "Secretaría de Tránsito", data.SecretariaTransito);
+                            Field(info, OrganismoFieldLabel, data.SecretariaTransito);
                             Field(info, "Compañía radicadora", data.CompaniaRadicadora);
                         });
                     });

@@ -13,12 +13,12 @@ namespace Flit.Api.Endpoints;
 /// Granular solo para OT: cada documento asociado a un trámite puede marcarse, por OT, como
 /// obligatorio (REQUIRED), opcional (OPTIONAL) o no aplica (NOT_APPLICABLE → se oculta de la
 /// matriz de ese OT). El upsert por tupla natural usa estado=DEFAULT para limpiar el override.
-/// El grupo exige SuperAdmin u ot_admin (<see cref="AdminAuthorization.OtModulePolicy"/>); un
-/// ot_admin queda acotado a SU propio organismo de tránsito vía
-/// <see cref="EnforceTransitOfficeScopeAsync"/> (mismo guard que la cola Quipux, HU #10774):
-/// se resuelve el <c>transit_office_id</c> del llamante a partir del claim <c>tenant_id</c>
-/// (<see cref="IOtProfileRepository.GetByTenantAsync"/>) y se exige que coincida con el
-/// <c>transitOfficeId</c> de la petición. El SuperAdmin es cross-tenant (cualquier OT).
+/// HU #12859 (Feature #12848, Épica #12751): el grupo pasó a exigir EXCLUSIVAMENTE
+/// <see cref="AdminAuthorization.SuperAdminPolicy"/> — antes admitía ot_admin acotado a SU propio
+/// organismo de tránsito vía <see cref="EnforceTransitOfficeScopeAsync"/> (mismo guard que la cola
+/// Quipux, HU #10774); esa rama queda sin alcanzar en runtime (SuperAdminPolicy corta antes en el
+/// middleware de autorización), pero se conserva como defensa en profundidad. El SuperAdmin sigue
+/// siendo cross-tenant (cualquier OT). Sin consumidor en UI a la fecha de esta HU.
 /// </summary>
 public static class AdminDocumentRequirementOverridesEndpoints
 {
@@ -34,12 +34,12 @@ public static class AdminDocumentRequirementOverridesEndpoints
 
         // GET ?procedureTypeId&transitOfficeId — overrides de obligatoriedad del trámite/OT.
         group.MapGet("/", ListAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminDocumentRequirementOverrideList")
-            .WithSummary("Lista la obligatoriedad por OT de un trámite")
+            .WithSummary("Lista la obligatoriedad por OT de un trámite (solo SuperAdmin)")
             .WithDescription("Retorna los overrides de obligatoriedad (REQUIRED / OPTIONAL / NOT_APPLICABLE) "
                 + "configurados para un trámite en un Organismo de Tránsito. Requiere procedureTypeId y "
-                + "transitOfficeId; 400 si falta alguno. Requiere SuperAdmin u ot_admin (acotado a su propia "
-                + "OT; 403 si consulta otra).")
+                + "transitOfficeId; 400 si falta alguno. Requiere SuperAdmin (HU #12859).")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status401Unauthorized)
@@ -47,12 +47,13 @@ public static class AdminDocumentRequirementOverridesEndpoints
 
         // PUT — upsert por tupla natural (estado=DEFAULT limpia) → 200 / 204 / 422 / 404.
         group.MapPut("/", SetAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminDocumentRequirementOverrideSet")
-            .WithSummary("Define o limpia la obligatoriedad de un documento por OT")
+            .WithSummary("Define o limpia la obligatoriedad de un documento por OT (solo SuperAdmin)")
             .WithDescription("Upsert por tupla natural (trámite, documento, OT). estado=REQUIRED/OPTIONAL/"
                 + "NOT_APPLICABLE fija el override (200); estado=DEFAULT lo limpia y devuelve 204. "
-                + "404 si trámite/documento/OT no existen; 422 si el payload es inválido. Requiere SuperAdmin "
-                + "u ot_admin (acotado a su propia OT; 403 si intenta configurar otra).")
+                + "404 si trámite/documento/OT no existen; 422 si el payload es inválido. Requiere "
+                + "SuperAdmin (HU #12859).")
             .Produces<DocumentRequirementOverrideResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status401Unauthorized)

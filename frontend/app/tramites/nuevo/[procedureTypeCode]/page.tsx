@@ -97,7 +97,7 @@ function PasoConsulta() {
   if (gate.estado === 'not-found') {
     return (
       <div className="space-y-4 rounded-2xl border px-4 py-6" role="alert">
-        <p className="text-sm font-semibold text-[#162744] dark:text-white">
+        <p className="text-sm font-semibold text-flit-primary dark:text-white">
           Este trámite no está disponible
         </p>
         <p className="text-xs opacity-70">
@@ -111,7 +111,7 @@ function PasoConsulta() {
   if (gate.estado === 'blocked') {
     return (
       <div className="space-y-4 rounded-2xl border px-4 py-6" role="alert">
-        <p className="text-sm font-semibold text-[#162744] dark:text-white">
+        <p className="text-sm font-semibold text-flit-primary dark:text-white">
           No se puede iniciar este trámite
         </p>
         <p className="text-xs opacity-70">
@@ -144,7 +144,7 @@ function VolverATramites({ onClick, label }: { onClick: () => void; label: strin
       type="button"
       onClick={onClick}
       className="rounded-xl px-4 py-2 text-xs font-semibold text-white"
-      style={{ background: 'linear-gradient(135deg,#557EFF,#00DBD5)' }}
+      style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
     >
       {label}
     </button>

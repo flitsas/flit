@@ -11,8 +11,11 @@ using Flit.Infrastructure.OtWebhooks;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Repositories;
+using Flit.Modules.Notificaciones.Webhooks;
+using Flit.Platform.Sdk.Messaging;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -199,13 +202,11 @@ public sealed class OtWebhookHandlerTests
     }
 
     [Fact]
-    public async Task AC2_Dispatch_SendsSignedPostAndLogsOutboundCall()
+    public async Task AC2_HU13359_ElWebhookQuedaComoTrabajoFirmado_YLaBitacoraOutboundLoRegistra()
     {
         var db = NewDbName();
-        var secret = "dispatch-secret";
+        const string secret = "dispatch-secret";
         const string targetUrl = "https://hooks.example.com/ot";
-        var recordingHandler = new RecordingHttpMessageHandler();
-
         await using (var seed = NewContext(db))
         {
             seed.OtWebhookSubscriptions.Add(new OtWebhookSubscriptionEntity
@@ -222,57 +223,41 @@ public sealed class OtWebhookHandlerTests
         }
 
         var services = new ServiceCollection();
-        services.AddHttpClient(nameof(OtWebhookDispatchService))
-            .ConfigurePrimaryHttpMessageHandler(() => recordingHandler);
+        services.AddLogging();
+        services.AddScoped(_ => NewContext(db));
+        services.AddFlitOutbox<FlitDbContext>(new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Platform:Messaging:Producer"] = "tramites",
+                ["Platform:Messaging:ConnectionString"] = "amqp://tramites:x@127.0.0.1:5672/flit",
+            }).Build());
         await using var provider = services.BuildServiceProvider();
 
         await using var ctx = NewContext(db);
         var dispatch = new OtWebhookDispatchService(
             new OtWebhookSubscriptionRepository(ctx),
             new OtApiCallLogRepository(ctx),
-            provider.GetRequiredService<IHttpClientFactory>());
+            provider.GetRequiredService<IServiceScopeFactory>());
 
-        var payload = new { procedure_instance_id = Guid.NewGuid(), to_status = "submitted" };
-        await dispatch.DispatchAsync(TenantA, OtWebhookEventTypes.VehicleStateChanged, payload, TestContext.Current.CancellationToken);
-
-        recordingHandler.LastRequest.Should().NotBeNull();
-        recordingHandler.LastRequest!.Method.Should().Be(HttpMethod.Post);
-        recordingHandler.LastRequest.RequestUri!.ToString().Should().Be(targetUrl);
-        recordingHandler.LastRequest.Headers.TryGetValues("X-Webhook-Signature", out var signatures).Should().BeTrue();
-
-        var body = recordingHandler.LastBody!;
-        var expectedSignature = ComputeHmacSha256Hex(
-            body,
-            OtWebhookSecretHasher.SigningKeyFromStoredHash(OtWebhookSecretHasher.HashSecret(secret)));
-        signatures!.Single().Should().Be($"sha256={expectedSignature}");
+        await dispatch.DispatchAsync(TenantA, OtWebhookEventTypes.VehicleStateChanged, new { to_status = "submitted" }, TestContext.Current.CancellationToken);
 
         await using var verify = NewContext(db);
-        var log = await verify.OtApiCallLogs.SingleAsync(l => l.TenantId == TenantA, cancellationToken: TestContext.Current.CancellationToken);
+        var mensaje = await verify.Set<OutboxMessage>().SingleAsync(TestContext.Current.CancellationToken);
+        mensaje.Exchange.Should().Be("flit.notificaciones");
+        var trabajo = EventEnvelope.FromJson(Encoding.UTF8.GetBytes(mensaje.Payload)).DataAs<TrabajoWebhook>();
+        trabajo.Url.Should().Be(targetUrl);
+        trabajo.Origen.Should().Be("ot");
+        var firmaEsperada = ComputeHmacSha256Hex(trabajo.Cuerpo, OtWebhookSecretHasher.SigningKeyFromStoredHash(OtWebhookSecretHasher.HashSecret(secret)));
+        trabajo.Cabeceras["X-Webhook-Signature"].Should().Be($"sha256={firmaEsperada}", "viaja la firma del cuerpo, no la llave");
+        trabajo.Cabeceras.Should().ContainKey("X-Correlation-Id");
+        // HU #13359: core-api no hace el POST (lo hace Notificaciones); la bitácora outbound registra el envío encolado.
+        var log = await verify.OtApiCallLogs.SingleAsync(TestContext.Current.CancellationToken);
         log.Direction.Should().Be("outbound");
         log.Endpoint.Should().Be(targetUrl);
         log.HttpMethod.Should().Be("POST");
-        log.ResponseCode.Should().Be(200);
-        log.DurationMs.Should().NotBeNull();
-        log.CorrelationId.Should().NotBeNull();
+        log.ResponseCode.Should().BeNull("aún no hay respuesta del destino");
+        log.CorrelationId.Should().Be(Guid.Parse(trabajo.Cabeceras["X-Correlation-Id"]));
         log.PayloadHash.Should().NotBeNullOrWhiteSpace();
-    }
-
-    private sealed class RecordingHttpMessageHandler : HttpMessageHandler
-    {
-        public HttpRequestMessage? LastRequest { get; private set; }
-
-        public string? LastBody { get; private set; }
-
-        protected override async Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken)
-        {
-            LastRequest = request;
-            LastBody = request.Content is null
-                ? string.Empty
-                : await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-            return new HttpResponseMessage(HttpStatusCode.OK);
-        }
     }
 
     private static string NewDbName() => Guid.NewGuid().ToString();

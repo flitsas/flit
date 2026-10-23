@@ -1,0 +1,45 @@
+{
+  // core-api en tu máquina (docs/suite/local.md). Copia este archivo a appsettings.Development.json (ignorado por git)
+  // y reemplaza cada CAMBIAR. Desde el corte de la Epic #13316, core-api NO lleva llaves de proveedores (Verifik,
+  // Kyverum, Fasecolda, RUES) ni SMTP/Renting: van en core-consultas y core-notificaciones. Si las tienes aquí, ya no
+  // se usan. Sin las secciones Consultas, Notificaciones, Tramites:Bus y Platform, core-api no arranca.
+  "ConnectionStrings": {
+    "Core": "Host=127.0.0.1;Port=5432;Database=CAMBIAR;Username=CAMBIAR;Password=CAMBIAR"
+  },
+
+  // Servicios de plataforma: core-api los llama por gRPC con su cliente de servicio svc-tramites.
+  "Consultas": { "Remoto": { "Address": "http://127.0.0.1:8084" } },
+  "Notificaciones": { "Remoto": { "Address": "http://127.0.0.1:8085" } },
+
+  // Bus de eventos: obligatorio (el aviso de Kyverum Verify vuelve por aquí). Usuario creado con
+  // deploy/rabbitmq/usuario-de-servicio.sh tramites <clave> notificaciones.
+  "Tramites": { "Bus": { "Habilitado": true } },
+  "Platform": {
+    "Messaging": {
+      "Producer": "tramites",
+      "ConnectionString": "amqp://tramites:CAMBIAR@127.0.0.1:5672/flit"
+    },
+    "ServiceClient": {
+      "ClientId": "svc-tramites",
+      "ClientSecret": "CAMBIAR-igual-a-Suite:Oidc:ServiceClients:svc-tramites:Secret",
+      "TokenEndpoint": "http://127.0.0.1:4003/connect/token"
+    }
+  },
+
+  // core-api emite los tokens de servicio. Un secreto por cliente (cualquier cadena larga en local); el de cada
+  // servicio va también en el Platform:ServiceClient:ClientSecret de ese servicio.
+  "Suite": {
+    "Oidc": {
+      "ServiceClients": {
+        "svc-tramites": { "Secret": "CAMBIAR" },
+        "svc-consultas": { "Secret": "CAMBIAR" },
+        "svc-notificaciones": { "Secret": "CAMBIAR" },
+        "svc-ict": { "Secret": "CAMBIAR" }
+      }
+    }
+  },
+
+  // Validación de identidad: «mock» aprueba sin Kyverum. Con «kyverum» la crea core-consultas y hace falta un túnel
+  // público hasta core-consultas para el aviso (ver local.md).
+  "Biometrics": { "Provider": "mock" }
+}

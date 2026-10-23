@@ -22,6 +22,7 @@ public static class DependencyInjection
         // IBusinessDayCalculator sobre por qué es una versión simple sin festivos colombianos).
         services.AddSingleton<IBusinessDayCalculator, BusinessDayCalculator>();
 
+        services.AddScoped<Flit.Tramites.Application.UseCases.ExternalAttachments.SubmitExternalAttachmentHandler>(); // HU #13263
         services.AddScoped<CreateProcedureTypeHandler>();
         services.AddScoped<ListProcedureTypesHandler>();
         services.AddScoped<GetProcedureTypeHandler>();
@@ -147,8 +148,9 @@ public static class DependencyInjection
         services.AddScoped<CreateProcedureInstanceFromConsultaHandler>();
 
         // HU #11203 — elección del mandatario que firma, adelantada al registro del trámite.
-        services.AddScoped<ListMandateSignerOptionsHandler>();
-        services.AddScoped<SetMandateSignerHandler>();
+        // HU #13144/#13145 (ADR-0066) — evaluador único del mandatario y firmante previsto de solo lectura.
+        services.AddScoped<MandateSignerEvaluator>();
+        services.AddScoped<GetMandateSignerPrevistoHandler>();
 
         // FEATURE 05 — consulta RNMC desacoplada del pre-vuelo (corre en el paso final, por actor).
         services.AddScoped<RunRnmcConsultHandler>();
@@ -169,6 +171,11 @@ public static class DependencyInjection
         services.AddScoped<ListBiometriaHandler>();
         // HU #10234 — vista transversal del submódulo "Validaciones de Identidad" (todas las instancias).
         services.AddScoped<ListTenantBiometricValidationsHandler>();
+        // HU #13296 — listado de validaciones manuales del Super Admin (cross-tenant).
+        services.AddScoped<ListManualIdentityValidationsHandler>();
+        // HU #13297 — detalle e imágenes (auditados) de una validación manual, solo Super Admin.
+        services.AddScoped<GetManualDetailHandler>();
+        services.AddScoped<GetManualImageHandler>();
         // HU #11270 — vista agrupada por persona (ADR-0040); endpoint propio.
         services.AddScoped<ListTenantBiometricPersonsHandler>();
         // HU #12708 — Validación de Identidad de la red (cabeza de grupo, solo lectura).
@@ -268,6 +275,17 @@ public static class DependencyInjection
         // HU #12161 — reenvío administrativo de la validación de identidad de un trámite (correo
         // opcional), fuera del gate not_draft y del mecanismo standalone.
         services.AddScoped<AdminReenviarValidacionIdentidadHandler>();
+        // HU #13284/#13287 (Épica #13202) — activar el flujo manual de identidad y regenerar su enlace (Super Admin). El
+        // notificador del enlace (IManualCaptureLinkNotifier, correo al titular) se registra en Infraestructura.
+        services.AddScoped<ActivarIdentidadManualHandler>();
+        services.AddScoped<RegenerarEnlaceManualHandler>();
+        // HU #13298/#13299 (Feature #13282 C) — aprobar y rechazar la revisión manual (Super Admin).
+        services.AddScoped<AprobarValidacionManualHandler>();
+        services.AddScoped<RechazarValidacionManualHandler>();
+        // HU #13289/#13290 (Feature #13281 B) — captura manual pública por token.
+        services.AddScoped<UseCases.ProcedureInstances.ManualCapture.GetManualCaptureHandler>();
+        services.AddScoped<UseCases.ProcedureInstances.ManualCapture.RegistrarConsentimientoManualHandler>();
+        services.AddScoped<UseCases.ProcedureInstances.ManualCapture.EnviarCapturaManualHandler>();
         // HU #12162 — reasignar el gestor responsable del trámite (AssignedToUserId), sin tocar
         // CreatedByUserId (quién radicó).
         services.AddScoped<AdminReasignarGestorHandler>();
@@ -280,6 +298,15 @@ public static class DependencyInjection
         // Feature #10701 — presigned view URL inline (HU #10702) y consolidado maestro (HU #10706).
         services.AddScoped<GetAttachmentPreviewUrlHandler>();
         services.AddScoped<GenerarConsolidadoMaestroHandler>();
+        // HU #12785 — ruta única de entrega de ambos consolidados (reconstruye solo si está desactualizado).
+        services.AddScoped<EntregarConsolidadoHandler>();
+        // HU #12795 (Épica #12760) — un trabajo de la cola de regeneración anticipada: comprueba
+        // vigencia / estado final / migrado / Source=user y delega en los dos handlers de arriba.
+        services.AddScoped<RegenerarConsolidadoAnticipadoHandler>();
+        // HU #12798 — bitácora de fallos de regeneración del consolidado (evento
+        // consolidado_regeneracion_fallida + aviso en cascada) y POST del wizard con respaldo del anterior.
+        services.AddScoped<ConsolidadoFalloBitacora>();
+        services.AddScoped<GenerarConsolidadoConRespaldoHandler>();
         // Perfil OT: visualizar el consolidado y adjuntar la Licencia de Tránsito (LT) sobre
         // trámites de clientes (se ejecutan en el scope RLS del tenant cliente vía AdminOtEndpoints).
         services.AddScoped<DescargarConsolidadoHandler>();
@@ -365,6 +392,35 @@ public static class DependencyInjection
         services.AddScoped<ValidateImprintSignatureHandler>();
         services.AddScoped<GetImprintSignaturePreviewUrlHandler>();
         services.AddScoped<ListImprintSignatureValidationsHandler>();
+
+        // Épica #13216 — HU13370: resolución de la selección del lote por origen (la bandeja OT añade el suyo).
+        services.AddScoped<UseCases.ConsolidadoLotes.ILoteSeleccionResolver,
+            UseCases.ConsolidadoLotes.TramitesSeleccionResolver>();
+        // Épica #13216 — HU13383: selección del Super Admin (origen superadmin) sobre el mismo listado, sin compañía.
+        services.AddScoped<UseCases.ConsolidadoLotes.ILoteSeleccionResolver,
+            UseCases.ConsolidadoLotes.SuperAdminSeleccionResolver>();
+        services.AddScoped<UseCases.ConsolidadoLotes.LoteSeleccionResolverPorOrigen>();
+
+        // Épica #13216 — HU13373: crear el lote (selección congelada + auditoría lote_creado en una transacción).
+        services.AddScoped<UseCases.ConsolidadoLotes.CrearLoteConsolidadosHandler>();
+        // Épica #13216 — HU13420: ver y editar los parámetros del motor desde el Super Admin.
+        services.AddScoped<UseCases.ConsolidadoLotes.ObtenerParametrosMotorLoteHandler>();
+        services.AddScoped<UseCases.ConsolidadoLotes.ActualizarParametrosMotorLoteHandler>();
+        // Épica #13216 — HU13375: procesamiento por ítem del lote (entregador común, procesadores por origen y handler).
+        services.AddScoped<UseCases.ConsolidadoLotes.ILoteItemEntregador, UseCases.ConsolidadoLotes.ConsolidadoLoteEntregador>();
+        services.AddScoped<UseCases.ConsolidadoLotes.ILoteItemOrigen, UseCases.ConsolidadoLotes.TramitesLoteItemOrigen>();
+        services.AddScoped<UseCases.ConsolidadoLotes.ILoteItemOrigen, UseCases.ConsolidadoLotes.SuperAdminLoteItemOrigen>();
+        services.AddScoped<UseCases.ConsolidadoLotes.LoteItemOrigenPorOrigen>();
+        services.AddScoped<UseCases.ConsolidadoLotes.ProcesarItemLoteHandler>();
+        // Épica #13216 — HU13378: empaquetado de partes (ZIP + cifrado + subida) y plan B del snapshot (adjunto actual).
+        services.AddScoped<UseCases.ConsolidadoLotes.IConsolidadoLoteAdjuntoActual, UseCases.ConsolidadoLotes.ConsolidadoLoteAdjuntoActual>();
+        services.AddScoped<UseCases.ConsolidadoLotes.EmpaquetarParteHandler>();
+        // Épica #13216 — HU13379: consulta del lote (actual / por id), descarga de partes del dueño y purga a las 24 h.
+        services.AddScoped<UseCases.ConsolidadoLotes.ConsultarLoteConsolidadosHandler>();
+        services.AddScoped<UseCases.ConsolidadoLotes.DescargarParteHandler>();
+        services.AddScoped<UseCases.ConsolidadoLotes.PurgarLotesExpiradosHandler>();
+        // Épica #13216 — HU13385: cancelación del lote por su dueño (lote_cancelado en la misma transacción).
+        services.AddScoped<UseCases.ConsolidadoLotes.CancelarLoteConsolidadosHandler>();
 
         return services;
     }

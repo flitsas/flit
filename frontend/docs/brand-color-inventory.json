@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-15T23:06:45.540Z",
+  "generatedAt": "2026-09-28T16:34:53.431Z",
   "hu": 12415,
   "methodology": {
     "scanDirs": [
@@ -124,90 +124,38 @@
         {
           "relPath": "components/atom/Shell.tsx",
           "exists": true,
+          "occurrences": []
+        },
+        {
+          "relPath": "../packages/shell/src/SuiteShell.tsx",
+          "exists": true,
           "occurrences": [
             {
-              "line": 588,
+              "line": 95,
               "hex": "#05060A",
               "hexNormalized": "#05060a",
               "classification": "neutro",
-              "snippet": "background: dark ? \"#05060A\" : \"var(--color-flit-bg)\","
+              "snippet": "app ? \"shrink-0 dark:border-white/10 dark:bg-[#05060A]/90\" : \"sticky top-0\""
             },
             {
-              "line": 589,
-              "hex": "#FFFFFF",
-              "hexNormalized": "#ffffff",
+              "line": 163,
+              "hex": "#05060A",
+              "hexNormalized": "#05060a",
               "classification": "neutro",
-              "snippet": "color: dark ? \"#FFFFFF\" : \"var(--color-flit-primary)\","
-            },
-            {
-              "line": 651,
-              "hex": "#0B0F14",
-              "hexNormalized": "#0b0f14",
-              "classification": "neutro",
-              "snippet": "background: dark ? \"#0B0F14\" : \"#FFFFFF\","
-            },
-            {
-              "line": 651,
-              "hex": "#FFFFFF",
-              "hexNormalized": "#ffffff",
-              "classification": "neutro",
-              "snippet": "background: dark ? \"#0B0F14\" : \"#FFFFFF\","
-            },
-            {
-              "line": 654,
-              "hex": "#FFFFFF",
-              "hexNormalized": "#ffffff",
-              "classification": "neutro",
-              "snippet": "color: dark ? \"#FFFFFF\" : \"var(--color-flit-primary)\","
-            },
-            {
-              "line": 783,
-              "hex": "#ffffff",
-              "hexNormalized": "#ffffff",
-              "classification": "neutro",
-              "snippet": "color: \"#ffffff\","
+              "snippet": "<div className=\"flex h-screen w-full flex-col overflow-hidden bg-[var(--color-flit-bg)] text-[var(--color-flit-primary)] dark:bg-[#05060A] dark:text-white\">"
             }
           ]
         },
         {
-          "relPath": "components/atom/dock/DockDesktop.tsx",
+          "relPath": "../packages/shell/src/dock/Dock.tsx",
           "exists": true,
-          "occurrences": [
-            {
-              "line": 135,
-              "hex": "#ffffff",
-              "hexNormalized": "#ffffff",
-              "classification": "neutro",
-              "snippet": "? { background: \"var(--nav-activo)\", boxShadow: \"var(--nav-sombra-activo)\", color: \"#ffffff\" }"
-            },
-            {
-              "line": 156,
-              "hex": "#ffffff",
-              "hexNormalized": "#ffffff",
-              "classification": "neutro",
-              "snippet": "style={{ color: lit ? \"#ffffff\" : undefined }}"
-            },
-            {
-              "line": 180,
-              "hex": "#ffffff",
-              "hexNormalized": "#ffffff",
-              "classification": "neutro",
-              "snippet": "style={{ color: lit ? \"#ffffff\" : undefined }}"
-            },
-            {
-              "line": 204,
-              "hex": "#4F74C9",
-              "hexNormalized": "#4f74c9",
-              "classification": "estado",
-              "snippet": "[\"--acc\" as string]: \"#4F74C9\","
-            }
-          ]
+          "occurrences": []
         }
       ],
       "totals": {
         "marca": 0,
-        "neutro": 9,
-        "estado": 1
+        "neutro": 2,
+        "estado": 0
       }
     },
     {
@@ -272,17 +220,17 @@
     }
   ],
   "repoWide": {
-    "totalFilesScanned": 700,
+    "totalFilesScanned": 745,
     "brandHexOccurrences": {
       "insideScope": {
         "files": 1,
         "occurrences": 2
       },
       "outsideScope": {
-        "files": 379,
-        "occurrences": 3006
+        "files": 373,
+        "occurrences": 3042
       },
-      "total": 3008
+      "total": 3044
     }
   }
 }

@@ -8,7 +8,10 @@ namespace Flit.Api.Endpoints;
 
 /// <summary>
 /// Hub OT: listar/configurar opt-out de documento de prenda por compañía habilitada en el OT.
-/// SuperAdmin u ot_admin (acotado a su OT).
+/// HU #12859 (Feature #12848, Épica #12751): EXCLUSIVO de SuperAdmin — antes admitía ot_admin
+/// acotado a su propia OT (<see cref="EnforceTransitOfficeScopeAsync"/>); esa rama queda sin
+/// alcanzar en runtime (SuperAdminPolicy corta antes en el middleware de autorización), pero se
+/// conserva como defensa en profundidad.
 /// </summary>
 public static class AdminOtPrendaDocumentPolicyEndpoints
 {
@@ -23,15 +26,17 @@ public static class AdminOtPrendaDocumentPolicyEndpoints
             .WithTags("Admin · OT · Prenda");
 
         group.MapGet("/", ListForOfficeAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminOtListPrendaDocumentPolicies")
-            .WithSummary("Lista compañías del OT y si la prenda es opcional")
+            .WithSummary("Lista compañías del OT y si la prenda es opcional (solo SuperAdmin)")
             .Produces<IReadOnlyList<OtPrendaDocumentPolicyCompanyResponse>>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
         group.MapPut("/{tenantId:guid}", SetForOfficeAsync)
+            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
             .WithName("AdminOtSetPrendaDocumentPolicy")
-            .WithSummary("Activa/desactiva prenda opcional para una compañía en este OT")
+            .WithSummary("Activa/desactiva prenda opcional para una compañía en este OT (solo SuperAdmin)")
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden)

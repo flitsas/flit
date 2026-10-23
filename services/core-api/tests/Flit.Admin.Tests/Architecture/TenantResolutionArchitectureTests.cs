@@ -56,7 +56,7 @@ public sealed class TenantResolutionArchitectureTests : IClassFixture<WebApplica
         {
             // GET /auth/me devuelve el claim como STRING en el payload y hace Guid.Parse (lanza si está
             // mal formado): semántica distinta a "resolver o no"; se conserva tal cual (AC1: mismo resultado).
-            ["Endpoints/AuthEndpoints.cs"] = "payload de /auth/me expone el claim crudo",
+            ["Flit.Identity.Web/Endpoints/AuthEndpoints.cs"] = "payload de /auth/me expone el claim crudo",
         };
 
     /// <summary>
@@ -134,19 +134,15 @@ public sealed class TenantResolutionArchitectureTests : IClassFixture<WebApplica
     [Fact]
     public void AC2_NingunArchivoDeFlitApiLeeElClaimTenantIdFueraDelComponente()
     {
-        var apiDir = LocateFlitApiSourceDirectory();
-        var files = Directory.EnumerateFiles(apiDir, "*.cs", SearchOption.AllDirectories)
-            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
-                && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
-            .ToList();
+        // Epic #13217 (HU #13232): el código web vive en Flit.Api, la librería compartida y el proyecto web de identidad.
+        var files = WebSourceFiles().ToList();
 
-        files.Should().NotBeEmpty($"debe existir el código fuente de Flit.Api en {apiDir}");
+        files.Should().NotBeEmpty("debe existir el código fuente web (Flit.Api, Flit.Suite.AspNetCore, Flit.Identity.Web)");
 
         var offenders = new List<string>();
-        foreach (var file in files)
+        foreach (var (rel, file) in files)
         {
-            var rel = Path.GetRelativePath(apiDir, file).Replace('\\', '/');
-            if (rel.Equals("Authorization/RequestTenantResolver.cs", StringComparison.OrdinalIgnoreCase))
+            if (rel.Equals("Flit.Suite.AspNetCore/Authorization/RequestTenantResolver.cs", StringComparison.OrdinalIgnoreCase))
                 continue;
 
             var lines = File.ReadAllLines(file);
@@ -173,10 +169,10 @@ public sealed class TenantResolutionArchitectureTests : IClassFixture<WebApplica
     public void AC2_LaAllowlistDeLecturaCrudaSigueVigente()
     {
         // Si el archivo allowlisted deja de leer el claim crudo, la entrada debe retirarse (no acumular deuda).
-        var apiDir = LocateFlitApiSourceDirectory();
+        var sources = WebSourceFiles().ToDictionary(f => f.Rel, f => f.Path, StringComparer.OrdinalIgnoreCase);
         foreach (var (rel, reason) in RawClaimReadAllowlist)
         {
-            var path = Path.Combine(apiDir, rel.Replace('/', Path.DirectorySeparatorChar));
+            var path = sources.GetValueOrDefault(rel) ?? rel;
             File.Exists(path).Should().BeTrue($"la allowlist referencia {rel} ({reason})");
             File.ReadLines(path).Any(l => RawClaimReadPattern.IsMatch(l)).Should().BeTrue(
                 $"{rel} ya no lee el claim crudo: retira la entrada de RawClaimReadAllowlist ({reason})");
@@ -474,6 +470,31 @@ public sealed class TenantResolutionArchitectureTests : IClassFixture<WebApplica
                 .StartsWithSegments(declared, StringComparison.OrdinalIgnoreCase));
 
     // ── helpers ───────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Los <c>.cs</c> del código web, con su ruta relativa precedida por el proyecto
+    /// (<c>Flit.Identity.Web/Endpoints/AuthEndpoints.cs</c>).
+    /// </summary>
+    private static IEnumerable<(string Rel, string Path)> WebSourceFiles()
+    {
+        var src = Directory.GetParent(LocateFlitApiSourceDirectory())!.FullName;
+        string[] roots =
+        [
+            System.IO.Path.Combine(src, "Flit.Api"),
+            System.IO.Path.Combine(src, "Flit.Suite.AspNetCore"),
+            System.IO.Path.GetFullPath(System.IO.Path.Combine(src, "..", "..", "core-identity", "src", "Flit.Identity.Web")),
+        ];
+        foreach (var root in roots.Where(Directory.Exists))
+        {
+            var project = new DirectoryInfo(root).Name;
+            foreach (var file in Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)
+                .Where(f => !f.Contains($"{System.IO.Path.DirectorySeparatorChar}obj{System.IO.Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                    && !f.Contains($"{System.IO.Path.DirectorySeparatorChar}bin{System.IO.Path.DirectorySeparatorChar}", StringComparison.Ordinal)))
+            {
+                yield return ($"{project}/{System.IO.Path.GetRelativePath(root, file).Replace('\\', '/')}", file);
+            }
+        }
+    }
 
     private static string LocateFlitApiSourceDirectory()
     {

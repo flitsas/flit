@@ -20,7 +20,7 @@ function makeToken(payload: Record<string, unknown>): string {
 
 function renderShell() {
   return render(
-    <Shell active="dashboard" onNav={vi.fn()} visibleModuleCodes={["tramites"]}>
+    <Shell visibleModuleCodes={["tramites"]}>
       <div>contenido</div>
     </Shell>,
   );
@@ -39,7 +39,7 @@ describe("Shell — Administradores → Plataforma → Confirmación RUNT", () =
     await userEvent.click(screen.getByRole("button", { name: "Plataforma" }));
 
     const labels = screen
-      .getAllByRole("button")
+      .getAllByRole("link")
       .map((b) => b.textContent?.trim())
       .filter((t) => t === "Tipos de trámites" || t === "Confirmación RUNT" || t === "Mandatos");
     expect(labels).toEqual(["Tipos de trámites", "Confirmación RUNT", "Mandatos"]);
@@ -59,9 +59,9 @@ describe("Shell — Administradores → Plataforma → Confirmación RUNT", () =
     const nested = screen.getAllByRole("button", { name: "Plataforma" });
     await userEvent.click(nested[nested.length - 1]);
 
-    expect(screen.getByRole("button", { name: "Confirmación RUNT" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Tipos de trámites" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Mandatos" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Confirmación RUNT" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Tipos de trámites" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Mandatos" })).not.toBeInTheDocument();
   });
 
   it("sin ninguno de los dos permisos no aparece Plataforma ni la entrada (AC4)", () => {
@@ -72,6 +72,6 @@ describe("Shell — Administradores → Plataforma → Confirmación RUNT", () =
     renderShell();
 
     expect(screen.queryByRole("button", { name: "Plataforma" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Confirmación RUNT" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Confirmación RUNT" })).not.toBeInTheDocument();
   });
 });

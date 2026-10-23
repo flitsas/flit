@@ -16,6 +16,14 @@ namespace Flit.Modules.Security.Domain.Auth;
 public static class BrandedEmailChrome
 {
     private const int MaxWidthPx = 600;
+    private const string Ink = "#4A5568";
+    private const string TitleHighlight = "#F1F4F9";
+
+    /// <summary>Mismo soporte que el pie del correo FLIT (la plataforma detrás de la marca).</summary>
+    public const string FlitSupportEmail = "soporte@flitsas.com";
+
+    /// <summary>Misma política de privacidad que el pie del correo FLIT.</summary>
+    public const string FlitPrivacyPolicyUrl = "https://flitsas.com.co/privacy-policy/";
     private static readonly Regex HexColorPattern = new("^#[0-9A-Fa-f]{6}$", RegexOptions.Compiled);
 
     /// <summary>
@@ -44,12 +52,13 @@ public static class BrandedEmailChrome
 
         sb.Append(HeaderRowHtml(theme));
 
-        sb.Append(CultureInvariant($"<tr><td style=\"padding:24px 28px 8px;text-align:center;\"><h1 style=\"margin:0;font-size:20px;letter-spacing:0.02em;color:{primary};\">{Enc(headline)}</h1></td></tr>"));
-        sb.Append(CultureInvariant($"<tr><td style=\"padding:16px 28px 8px;font-size:14px;line-height:1.55;color:#162244;\">{bodyInnerHtml}</td></tr>"));
+        // Misma estructura que el correo FLIT: título destacado, cuerpo centrado y cierre.
+        sb.Append(CultureInvariant($"<tr><td style=\"padding:28px 28px 8px;text-align:center;\"><h1 style=\"margin:0 auto;display:inline-block;padding:8px 16px;font-size:22px;letter-spacing:0.02em;color:{primary};background-color:{TitleHighlight};font-weight:700;\">{Enc(headline)}</h1></td></tr>"));
+        sb.Append(CultureInvariant($"<tr><td style=\"padding:16px 36px 8px;text-align:center;font-size:15px;line-height:1.6;color:{Ink};\">{bodyInnerHtml}</td></tr>"));
 
         if (!string.IsNullOrWhiteSpace(closingHeadline))
         {
-            sb.Append(CultureInvariant($"<tr><td style=\"padding:8px 28px 8px;text-align:center;\"><p style=\"margin:0;font-size:18px;font-weight:700;color:{primary};\">{Enc(closingHeadline)}</p></td></tr>"));
+            sb.Append(CultureInvariant($"<tr><td style=\"padding:12px 28px 8px;text-align:center;\"><p style=\"margin:0;font-size:18px;font-weight:700;color:{primary};\">{Enc(closingHeadline)}</p></td></tr>"));
         }
 
         sb.Append(FooterRowHtml(theme));
@@ -84,16 +93,26 @@ public static class BrandedEmailChrome
             "</td></tr>");
     }
 
-    /// <summary>Pie con el nombre de la marca (AC2, última cláusula).</summary>
+    /// <summary>
+    /// Pie con el nombre de la marca (AC2, última cláusula), el mismo bloque de soporte y política
+    /// de privacidad del correo FLIT y el crédito de FLIT como plataforma ("By FLIT", derechos
+    /// reservados). Sin año: la composición es pura (sin reloj).
+    /// </summary>
     public static string FooterRowHtml(EmailTheme theme)
     {
         ArgumentNullException.ThrowIfNull(theme);
         var platformName = Enc(string.IsNullOrWhiteSpace(theme.PlatformName) ? EmailTheme.Flit.PlatformName : theme.PlatformName);
+        var primary = SafeColor(theme.Primary, EmailTheme.Flit.Primary);
 
         return CultureInvariant(
             "<tr><td style=\"padding:16px 28px 24px;\">" +
             "<hr style=\"border:none;border-top:1px solid #E5EAF2;margin:0 0 16px;\"/>" +
-            $"<p style=\"margin:0;font-size:12px;line-height:1.5;color:#6B778C;text-align:center;\">Mensaje automático de <strong>{platformName}</strong> — no respondas a este correo.</p>" +
+            "<p style=\"margin:0 0 12px;font-size:12px;line-height:1.5;color:#6B778C;text-align:center;\">" +
+            "Si tienes alguna pregunta o necesitas ayuda, no dudes en ponerte en contacto con nosotros. " +
+            $"Puedes hacerlo a través de <strong>{Enc(FlitSupportEmail)}</strong> o nuestro <strong>chat online</strong>.</p>" +
+            $"<p style=\"margin:0 0 12px;text-align:center;\"><a href=\"{EncAttr(FlitPrivacyPolicyUrl)}\" style=\"color:{primary};font-size:12px;text-decoration:underline;\">POLÍTICA DE PRIVACIDAD</a></p>" +
+            $"<p style=\"margin:0 0 8px;font-size:12px;line-height:1.5;color:#6B778C;text-align:center;\">Mensaje automático de <strong>{platformName}</strong> — no respondas a este correo.</p>" +
+            "<p style=\"margin:0;font-size:11px;line-height:1.5;color:#8A94A6;text-align:center;\">By <strong>FLIT</strong> · © FLIT · Todos los derechos reservados</p>" +
             "</td></tr>");
     }
 

@@ -72,7 +72,8 @@ public sealed record CargarConsolidadoExternoInput(
 /// </summary>
 public sealed class CargarConsolidadoExternoHandler(
     IProcedureInstanceRepository repo,
-    IAttachmentStorage storage)
+    IAttachmentStorage storage,
+    Microsoft.Extensions.Logging.ILogger<CargarConsolidadoExternoHandler>? logger = null)
 {
     /// <summary>Paridad con <see cref="AttachmentRules.MaxSizeBytes"/> (20 MB).</summary>
     public const long MaxSizeBytes = 20L * 1024 * 1024;
@@ -104,18 +105,14 @@ public sealed class CargarConsolidadoExternoHandler(
             return (null, "migrado_solo_lectura");
 
         var filename = string.IsNullOrWhiteSpace(input.Filename) ? "consolidado.pdf" : input.Filename.Trim();
-        var stored = await storage.SaveAsync(id, Tipo, filename, input.Content, ct).ConfigureAwait(false);
-
         // Acción explícita del admin (igual que "Limpiar", AC1): reemplaza CUALQUIER consolidado
-        // vigente, sin mirar su Source actual.
-        foreach (var prev in instance.Attachments
-            .Where(a => string.Equals(a.Tipo, Tipo, StringComparison.OrdinalIgnoreCase))
-            .ToList())
-        {
-            storage.Delete(prev.StoragePath);
-            instance.Attachments.Remove(prev);
-            repo.RemoveAttachment(prev);
-        }
+        // vigente, sin mirar su Source actual. HU #12797 — el binario anterior solo se borra tras
+        // confirmar el guardado del nuevo (ConsolidadoReemplazoSeguro).
+        var previos = ConsolidadoReemplazoSeguro.Previos(instance, Tipo);
+        var wizardVigenteAntes = instance.ConsolidadoWizardVigente;
+
+        var stored = await storage.SaveAsync(id, Tipo, filename, input.Content, ct).ConfigureAwait(false);
+        ConsolidadoReemplazoSeguro.RetirarFilas(instance, repo, previos);
 
         var now = DateTimeOffset.UtcNow;
         var attachment = new ProcedureInstanceAttachment
@@ -143,6 +140,7 @@ public sealed class CargarConsolidadoExternoHandler(
         // encima de lo que el admin acaba de cargar (aunque la protección de Source="user" en
         // GenerarConsolidadoHandler ya lo cubriría igual).
         instance.ConsolidadoWizardVigente = true;
+        instance.ConsolidadoWizardGeneradoEn = now; // HU #12790 AC4 — sello UTC de la carga manual (Source="user").
 
         // AC4 — trazabilidad.
         await repo.AddEventAsync(new ProcedureInstanceEvent
@@ -161,7 +159,9 @@ public sealed class CargarConsolidadoExternoHandler(
             CreatedBy = userId,
         }, ct).ConfigureAwait(false);
 
-        await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+        await ConsolidadoReemplazoSeguro.ConfirmarAsync(
+            instance, repo, storage, stored, attachment, previos,
+            () => instance.ConsolidadoWizardVigente = wizardVigenteAntes, logger, ct).ConfigureAwait(false);
 
         return (new ConsolidadoDocumentDto(attachment.Id, attachment.Tipo, attachment.Filename, attachment.Sha256), null);
     }

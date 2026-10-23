@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { ImprontaHistorialSection } from "@/components/admin/improntas/ImprontaHistorialSection";
 import { ImprontasTabs } from "@/components/admin/improntas/ImprontasTabs";
+import { ADMIN_BACK_LINK_CLS, ADMIN_CONTENT_SURFACE_CLS } from "@/components/admin/admin-ui-styles";
 
 // Vista de historial del módulo "Generación de improntas" (HU #10470 AC1/AC2/AC3).
 // Lista las improntas generadas previamente, filtrable por placa y rango de fecha.
@@ -13,12 +14,7 @@ export default function AdminImprontasHistorialPage() {
 
   return (
     <div className="flex min-h-screen flex-col gap-4 px-6 pt-6 pb-10">
-      <button
-        type="button"
-        onClick={() => router.push("/")}
-        className="flex w-fit items-center gap-1.5 text-xs font-semibold"
-        style={{ color: "#557EFF" }}
-      >
+      <button type="button" onClick={() => router.push("/")} className={ADMIN_BACK_LINK_CLS}>
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
         Volver al inicio
       </button>
@@ -28,9 +24,7 @@ export default function AdminImprontasHistorialPage() {
         subtitle="Consulta las improntas generadas previamente para tu tenant, filtrables por placa y rango de fecha."
       />
 
-      <div
-        className="flex flex-1 flex-col rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60"
-      >
+      <div className={ADMIN_CONTENT_SURFACE_CLS}>
         <ImprontasTabs activeId="historial" />
         <div className="mt-4">
           <ImprontaHistorialSection />

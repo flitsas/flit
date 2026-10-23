@@ -34,7 +34,11 @@ public sealed class OtRequirementsTests
         requirements.IdentityValidationEnabled.Should().BeTrue();
     }
 
-    [Fact] // HU #10545 AC2 — con fila, devuelve lo persistido.
+    // HU #10545 AC2 — con fila, devuelve lo persistido. HU12853_AC3 (Feature #12846, Épica #12751):
+    // allow_plate_preassign ya NO se escribe desde SaveAsync (OtRequirementsRepository ignora el
+    // parámetro): aunque el caller pida true, el campo queda en su valor por defecto (false), el
+    // resto de campos persiste igual que siempre.
+    [Fact]
     public async Task HU10545_AC2_Provider_ConFila_DevuelvePersistido()
     {
         var db = NewDbName();
@@ -55,7 +59,8 @@ public sealed class OtRequirementsTests
             .ResolveByTenantAsync(OtTenant, TestContext.Current.CancellationToken);
 
         requirements.RequiresRnmc.Should().BeTrue();
-        requirements.AllowPlatePreassign.Should().BeTrue();
+        requirements.AllowPlatePreassign.Should().BeFalse(
+            "HU12853 (Épica #12751) — allow_plate_preassign ya no se escribe, sin importar lo pedido.");
         requirements.IdentityValidationEnabled.Should().BeFalse();
         requirements.TransitOfficeId.Should().Be(TransitOffice);
     }
@@ -88,8 +93,12 @@ public sealed class OtRequirementsTests
         reread.RequiresRnmc.Should().BeTrue();
     }
 
-    [Fact] // HU #10546 AC2 — PUT allow_plate_preassign = true queda habilitado.
-    public async Task HU10546_AC2_Put_AllowPlatePreassign_Persiste()
+    // HU12853_AC2 (Feature #12846, Épica #12751) — la ruta de placa preasignada del organismo se
+    // apagó: PUT allow_plate_preassign=true se sigue aceptando en el contrato (no rompe clientes que
+    // aún lo envían), pero el backend lo IGNORA — no lo persiste. Reemplaza el AC2 original de
+    // HU #10546 (que esperaba que quedara habilitado), invertido a propósito por esta épica.
+    [Fact]
+    public async Task HU12853_AC2_Put_AllowPlatePreassign_SeIgnora()
     {
         var db = NewDbName();
         await using (var seed = NewContext(db))
@@ -105,7 +114,8 @@ public sealed class OtRequirementsTests
             Request = new UpdateOtRequirementsRequest { AllowPlatePreassign = true },
         }, TestContext.Current.CancellationToken);
 
-        result.Requirements!.AllowPlatePreassign.Should().BeTrue();
+        result.IsValid.Should().BeTrue();
+        result.Requirements!.AllowPlatePreassign.Should().BeFalse();
     }
 
     [Fact] // HU #10546 — merge: un campo nulo conserva el valor actual (toggle independiente en UI).

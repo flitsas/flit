@@ -31,14 +31,14 @@ export function GeneracionDocumentalTabs({ activeId }: { activeId: GeneracionDoc
             role="tab"
             aria-selected={active}
             onClick={() => router.push(generacionDocumentalTabPath(tab.id))}
-            className="relative shrink-0 px-4 py-2.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
-            style={{ color: active ? "#557EFF" : "#162744", opacity: active ? 1 : 0.65 }}
+            className="relative shrink-0 px-4 py-2.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+            style={{ color: active ? "var(--color-flit-brand)" : "#162744", opacity: active ? 1 : 0.65 }}
           >
             {tab.label}
             {active && (
               <span
                 className="absolute inset-x-0 bottom-0 h-0.5 rounded-full"
-                style={{ background: "#557EFF" }}
+                style={{ background: "var(--color-flit-brand)" }}
                 aria-hidden="true"
               />
             )}

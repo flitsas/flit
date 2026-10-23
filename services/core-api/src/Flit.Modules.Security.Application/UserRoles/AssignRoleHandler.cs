@@ -1,3 +1,4 @@
+using Flit.Modules.Security.Domain.PermissionOverrides;
 using Flit.Modules.Security.Domain.UserRoles;
 
 namespace Flit.Modules.Security.Application.UserRoles;
@@ -12,7 +13,9 @@ namespace Flit.Modules.Security.Application.UserRoles;
 /// permiso, no un segundo rol. El índice único de BD que garantiza la invariante volvió a ser
 /// (user_id, tenant_id) — ver la migración RolUnicoPorUsuario.
 /// </summary>
-public sealed class AssignRoleHandler(IUserRoleAssignmentRepository repo)
+public sealed class AssignRoleHandler(
+    IUserRoleAssignmentRepository repo,
+    IRoleChangeOverridesPurger? purger = null)
 {
     public async Task HandleAsync(AssignRoleCommand cmd, CancellationToken ct)
     {
@@ -36,6 +39,10 @@ public sealed class AssignRoleHandler(IUserRoleAssignmentRepository repo)
         if (role is null)
             throw new RoleForAssignmentNotFoundException();
 
+        // HU #13441: un rol propio de otra compañía no existe para este tenant (no se revela).
+        if (role.TenantId is { } roleTenant && roleTenant != tenantId)
+            throw new RoleForAssignmentNotFoundException();
+
         // HU #10506: el rol solo puede asignarse en un tenant del mismo TargetEntityType
         // (COMPANY | TRANSIT_OFFICE) para el que fue definido.
         var tenantTargetEntityType = await repo.GetTenantTargetEntityTypeAsync(tenantId, ct);
@@ -48,6 +55,34 @@ public sealed class AssignRoleHandler(IUserRoleAssignmentRepository repo)
         if (current.Any(a => a.RoleId == cmd.RoleId))
             throw new RoleAlreadyAssignedException();
 
+        // HU #13646 (FB-15): el cambio de rol y la purga de permisos individuales van en la misma transacción; si el cambio
+        // falla no se purga. Los permisos de productos en los que el usuario no cambia de rol no se tocan.
+        // Un producto nulo/vacío del rol se trata como el producto por defecto (tramites, igual que Role.ProductCode): antes el cambio
+        // se hacía sin purgar en silencio y dejaba overrides vivos.
+        if (purger is null)
+        {
+            await ReplaceAsync(cmd, tenantId, current, ct);
+            return;
+        }
+
+        // Hallazgo de la prueba funcional: el reemplazo cierra TODAS las asignaciones del tenant, no solo la del producto del rol
+        // nuevo (un Radicador que pasa a AdminCompany pierde su rol de tramites). Se purgan el producto del rol nuevo y el de
+        // cada rol que se cierra; sin esto los permisos individuales de tramites seguían vivos tras el cambio.
+        var products = new SortedSet<string>(StringComparer.Ordinal) { RoleProductCode.Normalize(role.ProductCode) };
+        foreach (var assignment in current)
+            products.Add(RoleProductCode.Normalize(await repo.GetRoleProductCodeAsync(assignment.RoleId, ct)));
+
+        await purger.RunAtomicallyAsync(async () =>
+        {
+            await ReplaceAsync(cmd, tenantId, current, ct);
+            foreach (var product in products)
+                await purger.PurgeAsync(tenantId, cmd.UserId, product, cmd.AssignedBy, ct);
+        }, ct);
+    }
+
+    private async Task ReplaceAsync(
+        AssignRoleCommand cmd, Guid tenantId, IReadOnlyList<UserRoleAssignmentSnapshot> current, CancellationToken ct)
+    {
         // Reemplazo: se cierran TODAS las asignaciones activas anteriores del usuario en este
         // tenant. Normalmente es una sola; el bucle cubre los datos previos al rol único.
         foreach (var assignment in current)

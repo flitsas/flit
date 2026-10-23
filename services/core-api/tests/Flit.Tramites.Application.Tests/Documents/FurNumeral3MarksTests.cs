@@ -229,4 +229,30 @@ public sealed class FurNumeral3MarksTests
             new FurTransformacionesDeclaradas(Combustible: true))
             .Should().BeEquivalentTo([2, 12, 18]);
     }
+    // ── Feature #13110 — «Omitir prenda»: la tabla 2 no suma (ni 11 ni 12) ─────────────────────
+
+    [Fact]
+    public void MatriculaInicial_SinPrenda_SoloCasilla1()
+    {
+        Marks("MATRICULA_NUEVA", "MATRICULAS", PrendaDecision.ToFurMarking(PrendaDecision.Omitir))
+            .Should().Equal(1);
+    }
+
+    [Fact]
+    public void Traspaso_SinPrenda_SoloCasilla2()
+    {
+        Marks("TRASPASO_STANDARD", "TRASPASO", PrendaDecision.ToFurMarking(PrendaDecision.Omitir))
+            .Should().Equal(2);
+    }
+
+    // HU #13777 — riesgo aceptado: en prenda base la casilla del propio tipo la pone la tabla 1,
+    // no la decisión, así que con «omitir» se conserva (sin sumar la contraria).
+    [Theory]
+    [InlineData("PRENDA_INSCRIPCION", 11)]
+    [InlineData("LEVANTAMIENTO_PRENDA", 12)]
+    public void PrendaBase_ConOmitir_ConservaSoloLaCasillaDeLaTabla1(string code, int casilla)
+    {
+        Marks(code, "OTROS", PrendaDecision.ToFurMarking(PrendaDecision.Omitir))
+            .Should().Equal(casilla);
+    }
 }

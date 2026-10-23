@@ -34,6 +34,9 @@ const TABS: Array<{ id: PreviewTab; label: string }> = [
 ];
 
 const DEFAULT_TEMPLATE_ID = "tramites.aprobado";
+// La muestra de la consola de plantillas exige `procedureTypeId` para las de Trámites (400
+// procedure_type_id_invalido sin él); la invitación no lo necesita y también lleva el tema de la red.
+const ADMIN_TEMPLATE_ID = "security.invitation";
 
 /**
  * HU #12414 AC4 — previsualización sin publicar. Reproduce las superficies "acceso" y
@@ -57,8 +60,8 @@ export function BrandingPreview({
   const [tab, setTab] = useState<PreviewTab>("acceso");
 
   const scopedVars: CSSProperties = {
-    ["--preview-primary" as string]: colors?.primary ?? "#557EFF",
-    ["--preview-secondary" as string]: colors?.secondary ?? "#00DBD5",
+    ["--preview-primary" as string]: colors?.primary ?? "var(--color-flit-brand)",
+    ["--preview-secondary" as string]: colors?.secondary ?? "var(--color-flit-tech)",
     ["--preview-on-primary" as string]: colors?.onPrimary ?? "#FFFFFF",
   };
 
@@ -84,8 +87,8 @@ export function BrandingPreview({
             className="rounded-lg px-3 py-1.5 text-xs font-semibold"
             style={
               tab === t.id
-                ? { background: "#557EFF", color: "#FFFFFF" }
-                : { background: "transparent", color: "#162744" }
+                ? { background: "var(--color-flit-brand)", color: "#FFFFFF" }
+                : { background: "transparent", color: "var(--color-flit-primary)" }
             }
           >
             {t.label}
@@ -181,7 +184,7 @@ function EmailPreviewPanel({ open, active, source, tenantId }: EmailPreviewPanel
         setStatus("error");
         return;
       }
-      getNotificationSample(DEFAULT_TEMPLATE_ID, { tenantId })
+      getNotificationSample(ADMIN_TEMPLATE_ID, { tenantId })
         .then((data) => {
           setSample(data);
           setStatus("ready");
@@ -235,8 +238,8 @@ function EmailPreviewPanel({ open, active, source, tenantId }: EmailPreviewPanel
               className="rounded-full px-3 py-1 text-[11px] font-semibold"
               style={
                 emailSource === value
-                  ? { background: "#557EFF", color: "#FFFFFF" }
-                  : { background: "transparent", color: "#162744" }
+                  ? { background: "var(--color-flit-brand)", color: "#FFFFFF" }
+                  : { background: "transparent", color: "var(--color-flit-primary)" }
               }
             >
               {value === "draft" ? "Borrador" : "Publicada"}
@@ -255,7 +258,7 @@ function EmailPreviewPanel({ open, active, source, tenantId }: EmailPreviewPanel
         {sample ? (
           <div className="flex flex-col gap-2">
             <p className="text-xs opacity-70">
-              <span className="font-semibold" style={{ color: "#162744" }}>
+              <span className="font-semibold" style={{ color: "var(--color-flit-primary)" }}>
                 Asunto:{" "}
               </span>
               {sample.subject}

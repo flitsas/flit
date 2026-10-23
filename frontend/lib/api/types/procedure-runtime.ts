@@ -339,6 +339,11 @@ export interface InstanceSummary {
    * generado ⇒ la fila NO ofrece la acción (el botón no dispara generación).
    */
   consolidadoAttachmentId?: string | null;
+  /**
+   * HU #12791 (Épica #12760) — vigencia del consolidado del wizard. `null`/ausente en backends
+   * anteriores al campo: la UI no infiere vigencia, pide la entrega.
+   */
+  consolidadoWizard?: ConsolidadoVigencia | null;
   // ── ICT (PR #204) — pausa de trámites de la integración ──────────────────────────
   /**
    * ICT (servicio v1 pauseDraftProcess / bandera starts_procedure_in_paused): el trámite está pausado
@@ -546,6 +551,11 @@ export interface ProcedureInstanceDetail {
   /** HU #10350 — sello de borrador finalizado; controla el modo readOnly parcial del wizard. */
   draftFinalizedAt?: string | null;
   /**
+   * HU #13403 — false ⇒ la compañía tiene deshabilitada la generación automática de improntas: el
+   * radicador la carga a mano. Ausente/undefined ⇒ true (comportamiento histórico).
+   */
+  improntaGeneracionHabilitada?: boolean;
+  /**
    * HU #10879/#10883 — paso actual PERSISTIDO del wizard (autosave por paso). `null`/ausente ⇒ el
    * frontend cae al paso derivado de los gates (comportamiento previo).
    */
@@ -574,6 +584,10 @@ export interface ProcedureInstanceDetail {
   activeRevocationRequest?: ActiveRevocationRequest | null;
   /** Ver {@link RevocationDecision}. */
   lastRevocationDecision?: RevocationDecision | null;
+  /** HU #12791 (Épica #12760) — vigencia del consolidado del wizard. Ver {@link ConsolidadoVigencia}. */
+  consolidadoWizard?: ConsolidadoVigencia | null;
+  /** HU #12791 (Épica #12760) — vigencia del consolidado maestro. Ver {@link ConsolidadoVigencia}. */
+  consolidadoMaestro?: ConsolidadoVigencia | null;
 }
 
 /** Ver `ProcedureInstanceDetail.events`. */
@@ -1465,6 +1479,19 @@ export interface WizardState {
    * el trámite). Ausente ⇒ se trata como obligatorio.
    */
   prendaDocumentRequired?: boolean;
+  /**
+   * Feature #13110 / HU #13778 — el servidor resuelve si se ofrece «Omitir prenda»: `true` siempre
+   * que la decisión de prenda aplique (gravamen RUNT o tipo prendario), sin importar familia ni
+   * política del OT. El front no replica la regla: solo lee este booleano. Ausente o `false` ⇒ no se
+   * ofrece.
+   */
+  prendaOmitAllowed?: boolean;
+  /**
+   * HU #13778 — señal única de gravamen del servidor: prenda, gravamen, garantía RNGM,
+   * `runt_prendario` o limitaciones a la propiedad «a favor de». Gobierna el aviso de gravamen y el
+   * resumen RUNT del paso de prenda. Ausente ⇒ el front usa el check `gravamenes` del pre-vuelo.
+   */
+  runtReportaGravamen?: boolean;
 }
 
 // ── Datos comerciales (traspaso) — GET/PUT /instances/{id}/commercial ──
@@ -1568,7 +1595,10 @@ export type BiometricEstado =
   | 'expirado'
   // Cola de envío (provider-agnostic): el envío al proveedor falló y se reintenta / agotó intentos.
   | 'pendiente_envio'
-  | 'error_envio';
+  | 'error_envio'
+  // Flujo manual de identidad (Épica #13202): esperando la captura del cliente / pendiente de revisión.
+  | 'manual_activo'
+  | 'pendiente_revision_manual';
 
 /** Parte a la que pertenece la validación. null = matrícula (comprador único). */
 export type BiometricParte = 'comprador' | 'vendedor';
@@ -1578,7 +1608,7 @@ export type BiometricParte = 'comprador' | 'vendedor';
  * `migracion_v1` = identidad que ya venía validada de V1 y la migración trajo como hecho
  * consumado; no hubo captura ni proveedor externo, y solo acredita a su propio trámite.
  */
-export type BiometricProvider = 'mock' | 'kyverum' | 'migracion_v1';
+export type BiometricProvider = 'mock' | 'kyverum' | 'migracion_v1' | 'manual';
 
 /** Estado de vigencia derivado de una identidad aprobada (espejo de BiometricVigenciaEstados). */
 export type BiometricVigenciaEstado = 'vigente' | 'por_vencer' | 'vencida';
@@ -1606,6 +1636,9 @@ export interface BiometricValidation {
   captureUrl: string | null;
   // HU #10234 (AC4): motivo de rechazo sanitizado (solo estado rechazado). Opcional por compat.
   rejectionReason?: string | null;
+  // Épica #13202: código homologado del motivo que eligió el Super Admin al rechazar una validación MANUAL.
+  // Solo con status 'rechazado' y provider 'manual'; null/ausente en los demás casos (Kyverum/mock usan rejectionReason).
+  rejectionReasonCode?: string | null;
   // Motivo del ÚLTIMO intento fallido mientras la validación sigue ABIERTA (en_proceso): Kyverum permite
   // reintentar. Guía amigable de Kyverum (p.ej. "rostro no completamente visible"). Null si no aplica.
   ultimoIntentoMotivo?: string | null;
@@ -1631,6 +1664,12 @@ export interface BiometricValidation {
    * `null`/ausente en filas anteriores a este campo — el consumidor cae a `email`.
    */
   registeredEmail?: string | null;
+  /**
+   * Épica #13202 (HU-C8) — cómo se aprobó la validación: `automatica` (Kyverum) o `manual` (revisión del
+   * Super Admin). `null`/ausente = no aprobada o respuesta anterior a este campo: la UI no muestra la fila.
+   * Nunca trae el nombre del revisor.
+   */
+  approvalOrigin?: 'automatica' | 'manual' | null;
 }
 
 /**
@@ -1640,6 +1679,36 @@ export interface BiometricValidation {
 export interface ReconcileIdentityResult {
   status: BiometricEstado;
   updated: boolean;
+}
+
+/**
+ * HU #13288 (Épica #13202) — respuesta de POST /api/v1/tramites/biometric-validations/{id}/activate-manual
+ * (espejo de `ActivarIdentidadManualResult`). El token del enlace NO viaja: se entrega por correo.
+ */
+export interface ActivarIdentidadManualResult {
+  validationId: string;
+  tenantId: string;
+  procedureInstanceId: string | null;
+  provider: string;
+  status: BiometricEstado;
+  expiresAt: string;
+  activatedAt: string;
+  kyverumCancelado: boolean;
+  origin: string;
+  /** false = el correo no salió (p. ej. el titular no tiene correo válido): la activación SÍ quedó hecha. */
+  emailEnviado: boolean;
+}
+
+/** Respuesta de POST .../biometric-validations/{id}/regenerate-manual-link (`RegenerarEnlaceManualResult`). */
+export interface RegenerarEnlaceManualResult {
+  validationId: string;
+  tenantId: string;
+  procedureInstanceId: string | null;
+  provider: string;
+  status: BiometricEstado;
+  expiresAt: string;
+  activatedAt: string;
+  emailEnviado: boolean;
 }
 
 /**
@@ -1769,6 +1838,11 @@ export interface LinkedProcedureRef {
  */
 export interface TenantBiometricValidation {
   /**
+   * Validación PROPIA de un mandatario: se lista aparte y solo se consulta (no se apalanca con el trámite ni
+   * la prevalidación del mismo documento; se gestiona desde la ficha del mandatario).
+   */
+  esMandatario?: boolean;
+  /**
    * HU #12706 — compañía dueña del registro (columna «Compañía» del SuperAdmin y de la red de la cabeza).
    * Opcional: aditivo en el contrato; las acciones de la fila viajan con esta compañía.
    */
@@ -1894,6 +1968,8 @@ export interface TenantBiometricValidationFilters {
  * peor alerta. Espejo de TenantBiometricPersonDto.
  */
 export interface TenantBiometricPerson {
+  /** Fila de la validación PROPIA de un mandatario (persona aparte; ver `TenantBiometricValidation.esMandatario`). */
+  esMandatario?: boolean;
   /**
    * HU #12706 — compañía dueña del registro (columna «Compañía» del SuperAdmin y de la red de la cabeza).
    * Opcional: aditivo en el contrato; las acciones de la fila viajan con esta compañía.
@@ -2202,7 +2278,72 @@ export interface GenerarConsolidadoResult {
    * salía sin ese documento sin que el gestor supiera por qué. No bloquea: el consolidado se entrega.
    */
   avisosCascada?: string[] | null;
+  /**
+   * HU #12785/#12786 — true si el PDF se reconstruyó en esta petición. Las rutas POST de generación
+   * y la ruta GET de entrega lo devuelven; en la entrega, `false` significa que se sirvió el cacheado.
+   */
+  regenerado?: boolean;
+  /**
+   * HU #12785/#12786 (AC4) — el trámite está en estado final (aprobado/anulado/revocado): el PDF es
+   * la documentación definitiva y no se regenera. La UI lo avisa como «documento final».
+   */
+  definitivoPorEstadoFinal?: boolean;
+  /** HU #12785 — cómo se resolvió la entrega. `null` en las rutas POST de generación. */
+  modo?: ConsolidadoEntregaModo | null;
 }
+
+/**
+ * HU #12785 — modos de `GET …/consolidado/entrega` (schema `ConsolidadoEntregaResponse.modo`).
+ * - `vigente`: bandera arriba, se sirvió el adjunto cacheado sin escribir.
+ * - `regenerado`: bandera abajo (o sin PDF), se reconstruyó en esta petición.
+ * - `definitivo_estado_final` / `migrado_solo_lectura`: estado final, PDF definitivo sin regenerar.
+ * - `cargado_por_usuario`: PDF cargado por el SuperAdmin (Source="user"), nunca se pisa.
+ * - `solo_lectura`: `?soloLectura=true` o un OT que no puede generar; adjunto tal cual.
+ * - `radicado_fijo`: el maestro ya se radicó en Quipux y se sirve el radicado tal cual (HU #12787
+ *   AC2, «maestro radicado, fijo»): nunca se regenera, así que no hay fallo ni vigencia que refrescar.
+ */
+export type ConsolidadoEntregaModo =
+  | 'vigente'
+  | 'regenerado'
+  | 'definitivo_estado_final'
+  | 'migrado_solo_lectura'
+  | 'cargado_por_usuario'
+  | 'solo_lectura'
+  | 'radicado_fijo';
+
+/**
+ * HU #12791 (Épica #12760) — vigencia de un consolidado (wizard o maestro) tal como la exponen el
+ * listado y el detalle del trámite (gestor y OT).
+ * - `estado`: `vigente` (el PDF refleja el expediente), `desactualizado` (la bandera bajó: la
+ *   próxima entrega lo reconstruye) o `inexistente` (nunca se generó).
+ * - `generadoEn`: ISO UTC del sello de generación; `null` si no existe.
+ * - `origen`: `system` (generado) o `user` (cargado por el SuperAdmin); `null` si no existe.
+ * - `definitivo`: el trámite está en estado final y el PDF ya no se regenera.
+ * - `modo`: cómo se resolvería la entrega en estado final o carga manual; `null` en el caso normal.
+ */
+export interface ConsolidadoVigencia {
+  estado: 'vigente' | 'desactualizado' | 'inexistente';
+  generadoEn: string | null;
+  origen: 'system' | 'user' | null;
+  definitivo: boolean;
+  modo: 'definitivo_estado_final' | 'migrado_solo_lectura' | 'cargado_por_usuario' | null;
+}
+
+/** HU #12785 — tipo de PDF que se pide a la ruta de entrega. */
+export type ConsolidadoEntregaTipo = 'consolidado' | 'consolidado_maestro';
+
+/** HU #12785 — query de `GET …/consolidado/entrega`. Omitidos = comportamiento normal. */
+export interface ConsolidadoEntregaParams {
+  tipo?: ConsolidadoEntregaTipo;
+  force?: boolean;
+  soloLectura?: boolean;
+}
+
+/**
+ * HU #12785 — respuesta de la ruta de entrega (`ConsolidadoEntregaResponse`): mismo shape que la
+ * generación. El binario se baja por la descarga / `preview-url` de `document.attachmentId`.
+ */
+export type ConsolidadoEntregaResult = GenerarConsolidadoResult;
 
 // ── Participantes del portal (Slice 7B) — lado gestor autenticado ───
 // Contrato FIJO acordado con backend:
@@ -2458,42 +2599,38 @@ export interface NotificationDispatchesResponse {
 }
 
 /**
- * HU #11203 — un mandatario que puede firmar el mandato del trámite.
- *
- * Puede firmar por cualquiera de dos vías ALTERNATIVAS: `firmaBaulVigente` o `identidadVigente`. Antes
- * solo se informaba la identidad, así que un mandatario con su firma del baúl vigente —perfectamente
- * capaz de firmar— se anunciaba como si le faltara algo.
+ * HU #13145 / #13146 (ADR-0066) — firmante previsto del mandato, de solo lectura. Lo calcula el mismo
+ * evaluador que el gate de radicación. Nunca trae documento de identidad ni ruta de la firma.
  */
-export interface MandateSignerOption {
-  id: string;
-  nombre: string;
-  tipoDocumento: string;
-  documento: string;
-  identidadVigente: boolean;
-  identidadHasta: string | null;
-  firmaBaulVigente?: boolean;
+export type MandateSignerPrevistoEstado =
+  | 'valido'
+  | 'sin_mandatario'
+  | 'firma_invalida'
+  | 'no_aplica'
+  | 'pendiente_organismo'
+  | 'pendiente_eleccion_ot';
+
+export type MandateSignerNivel =
+  | 'explicita'
+  | 'ot_para_compania'
+  | 'propio_de_compania'
+  | 'asociado_de_otra_compania'
+  | 'default_del_ot';
+
+export interface MandateSignerPrevisto {
+  estado: MandateSignerPrevistoEstado;
+  /** Solo con `estado = valido`. */
+  nombre?: string | null;
+  /** Solo con `estado = valido`. */
+  formaFirma?: 'baul' | 'biometria' | null;
   /**
-   * Firma A MANO ante el organismo del trámite. Quien firma a mano no necesita ninguna de las dos vías
-   * anteriores: el documento le deja la línea y él la suscribe.
+   * HU #13180/#13183 — nivel de la prelación que eligió al mandatario (solo con `estado = valido`):
+   * `explicita`, `ot_para_compania`, `propio_de_compania`, `asociado_de_otra_compania` o
+   * `default_del_ot`. Nunca trae la compañía de origen.
    */
-  firmaFisica?: boolean;
-}
-
-/** Mandatarios disponibles y cuál está elegido. `editable` es falso fuera de borrador. */
-export interface MandateSignerSelection {
-  opciones: MandateSignerOption[];
-  elegidoId: string | null;
-  editable: boolean;
-}
-
-/**
- * HU #11197 - estado de la firma a posteriori de una parte. `aplica` es true solo cuando el
- * representante legal tiene la identidad Y la firma del baul vencidas: con cualquiera de las dos
- * vigente el tramite puede firmarse ya y la opcion no se ofrece.
- */
-export interface FirmaPosteriorEstado {
-  aplica: boolean;
-  marcado: boolean;
-  representanteNombre?: string | null;
-  marcadoAt?: string | null;
+  nivel?: MandateSignerNivel | null;
+  /** Vocabulario estable de ADR-0066 (p. ej. `sin_validacion_aprobada`). */
+  motivo?: string | null;
+  /** Modo vigente de la validación al radicar. */
+  modo: 'block' | 'warn' | 'off';
 }

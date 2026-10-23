@@ -27,7 +27,9 @@ internal static class SettingsDiff
         AddBool(changes, "block_procedure_family_traspaso", previous.BlockProcedureFamilyTraspaso, updated.BlockProcedureFamilyTraspaso);
         AddBool(changes, "block_procedure_family_otros", previous.BlockProcedureFamilyOtros, updated.BlockProcedureFamilyOtros);
         AddBool(changes, "signature_vault_enabled", previous.SignatureVaultEnabled, updated.SignatureVaultEnabled);
-        AddBool(changes, "plate_preassign_enabled", previous.PlatePreassignEnabled, updated.PlatePreassignEnabled);
+        // HU #12853 (Feature #12846, Épica #12751) — plate_preassign_enabled dejó de auditarse: el
+        // handler ya ignora el valor entrante (previous == updated siempre), así que esta línea nunca
+        // generaría un cambio real; se retira para que quede explícito que el campo no se rastrea más.
         AddBool(changes, "validate_soat_with_runt", previous.ValidateSoatWithRunt, updated.ValidateSoatWithRunt);
         // HU #11357/#11362 (ADR-0043) — elegibilidad de documentos personalizados, campo propio.
         AddBool(changes, "personalized_documents_enabled", previous.PersonalizedDocumentsEnabled, updated.PersonalizedDocumentsEnabled);
@@ -38,6 +40,9 @@ internal static class SettingsDiff
         AddBool(changes, "tramites_module_enabled", previous.TramitesModuleEnabled, updated.TramitesModuleEnabled);
         AddBool(changes, "comparendos_module_enabled", previous.ComparendosModuleEnabled, updated.ComparendosModuleEnabled);
         AddBool(changes, "resoluciones_module_enabled", previous.ResolucionesModuleEnabled, updated.ResolucionesModuleEnabled);
+
+        // HU #13400 (Feature #13398) — generación automática de improntas por compañía.
+        AddBool(changes, "generate_improntas", previous.GenerateImprontas, updated.GenerateImprontas);
 
         // FEATURE 02 — fuente de comparendos (internal | external).
         AddString(changes, "fines_query_source", previous.FinesQuerySource, updated.FinesQuerySource);

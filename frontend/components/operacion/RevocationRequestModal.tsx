@@ -146,7 +146,7 @@ export function RevocationRequestModal({ instanceId, tenantId, onClose, onSucces
               style={{ color: 'var(--badge-warning-fg)' }}
               aria-hidden="true"
             />
-            <p className="text-xs leading-relaxed" style={{ color: '#162744' }}>
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--color-flit-primary)' }}>
               <strong>Esta acción no tiene reversa.</strong> Al continuar iniciarás la solicitud de
               revocatoria de este trámite Aprobado. En el siguiente paso deberás indicar el motivo,
               adjuntar el documento de soporte y confirmar que entiendes las consecuencias: una vez
@@ -157,14 +157,14 @@ export function RevocationRequestModal({ instanceId, tenantId, onClose, onSucces
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl border px-4 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF]"
+              className="rounded-xl border px-4 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
             >
               Cancelar
             </button>
             <button
               type="button"
               onClick={() => setStep('form')}
-              className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#557EFF]"
+              className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-flit-brand"
               style={{ background: WIZARD_CTA_GRADIENT }}
             >
               Continuar
@@ -175,7 +175,7 @@ export function RevocationRequestModal({ instanceId, tenantId, onClose, onSucces
         <div>
           <div className="space-y-4">
             <div>
-              <label htmlFor="revocation-reason" className="block text-xs font-semibold" style={{ color: '#162744' }}>
+              <label htmlFor="revocation-reason" className="block text-xs font-semibold" style={{ color: 'var(--color-flit-primary)' }}>
                 Motivo de la solicitud
               </label>
               <textarea
@@ -190,7 +190,7 @@ export function RevocationRequestModal({ instanceId, tenantId, onClose, onSucces
                 aria-invalid={!!fieldErrors.reason}
                 aria-describedby={fieldErrors.reason ? 'revocation-reason-err' : undefined}
                 placeholder="Explica por qué solicitas la revocatoria de este trámite"
-                className="mt-1.5 w-full rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs outline-none transition focus:border-[#557EFF] focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-50 dark:border-white/15 dark:bg-white/5"
+                className="mt-1.5 w-full rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs outline-none transition focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50 dark:border-white/15 dark:bg-white/5"
               />
               {fieldErrors.reason ? (
                 <p id="revocation-reason-err" role="alert" className="mt-1 text-[11px] font-medium" style={{ color: '#C2410C' }}>
@@ -200,7 +200,7 @@ export function RevocationRequestModal({ instanceId, tenantId, onClose, onSucces
             </div>
 
             <div>
-              <span className="block text-xs font-semibold" style={{ color: '#162744' }}>
+              <span className="block text-xs font-semibold" style={{ color: 'var(--color-flit-primary)' }}>
                 Documento de soporte (PDF)
               </span>
               <input
@@ -226,15 +226,15 @@ export function RevocationRequestModal({ instanceId, tenantId, onClose, onSucces
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={submitting}
-                className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition hover:bg-[#557EFF]/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
-                style={{ borderColor: '#557EFF', color: '#557EFF' }}
+                className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition hover:bg-flit-brand/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
+                style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
               >
                 <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
                 {file ? 'Cambiar archivo' : 'Elegir archivo PDF'}
               </button>
               {file ? (
                 <p className="mt-1 truncate text-xs" style={{ color: '#59677D' }}>
-                  Archivo seleccionado: <span className="font-medium" style={{ color: '#162744' }}>{file.name}</span>
+                  Archivo seleccionado: <span className="font-medium" style={{ color: 'var(--color-flit-primary)' }}>{file.name}</span>
                 </p>
               ) : (
                 <p className="mt-1 text-xs" style={{ color: '#94A3B8' }}>Ningún archivo elegido todavía.</p>
@@ -283,7 +283,7 @@ export function RevocationRequestModal({ instanceId, tenantId, onClose, onSucces
               type="button"
               onClick={() => setStep('warning')}
               disabled={submitting}
-              className="rounded-xl border px-4 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] disabled:opacity-50"
+              className="rounded-xl border px-4 py-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50"
             >
               Atrás
             </button>
@@ -291,7 +291,7 @@ export function RevocationRequestModal({ instanceId, tenantId, onClose, onSucces
               type="button"
               onClick={() => void handleSubmit()}
               disabled={submitting}
-              className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#557EFF] disabled:opacity-50"
+              className="rounded-xl px-5 py-2 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-flit-brand disabled:opacity-50"
               style={{ background: WIZARD_CTA_GRADIENT }}
             >
               {submitting ? 'Enviando…' : 'Enviar solicitud'}
@@ -329,9 +329,9 @@ function RevocationCheckbox({
           aria-invalid={!!error}
           aria-describedby={error ? `${id}-err` : undefined}
           onChange={(e) => onChange(e.target.checked)}
-          className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-[#557EFF] disabled:opacity-60"
+          className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-flit-brand disabled:opacity-60"
         />
-        <label htmlFor={id} className="cursor-pointer text-xs leading-snug" style={{ color: '#162744' }}>
+        <label htmlFor={id} className="cursor-pointer text-xs leading-snug" style={{ color: 'var(--color-flit-primary)' }}>
           {label}
         </label>
       </div>

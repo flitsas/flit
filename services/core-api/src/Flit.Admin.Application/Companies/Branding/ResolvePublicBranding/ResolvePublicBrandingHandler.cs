@@ -20,7 +20,8 @@ namespace Flit.Admin.Application.Companies.Branding.ResolvePublicBranding;
 /// total, cero acceso a datos de ninguna red).</para>
 ///
 /// <para><b>Kind Network</b>: cachea POR <paramref name="headTenantId"/> (no por host — ver
-/// <see cref="IPublicBrandingCache"/>) durante 60 s, positivo y negativo por el MISMO camino
+/// <see cref="IPublicBrandingCache"/>) durante 60 s, validado en cada acierto contra el sello de la
+/// fila de marca (<see cref="ITenantBrandingRepository.GetStampAsync"/>), positivo y negativo por el MISMO camino
 /// (AC2/AC7 anti-enumeración: mismo costo/forma para "cabeza sin publicar" que para "marca
 /// publicada"). En caché fría: relee el ESTADO del tenant (<see cref="IBrandingTenantLookup"/>) —
 /// SIGUE MARCA_BLANCA + cabeza de grupo + activa — y solo entonces el borrador publicado
@@ -60,14 +61,40 @@ public sealed class ResolvePublicBrandingHandler
             return BrandIdentityResponse.From(BrandIdentity.Flit);
         }
 
-        if (_cache.TryGet(tenantId, out var cached))
+        // El sello se lee ANTES de resolver: si alguien publica entre medias, el próximo acierto ve
+        // un sello distinto y vuelve a resolver (nunca se queda con datos más nuevos que su sello).
+        var stamp = await CurrentStampAsync(tenantId, cancellationToken).ConfigureAwait(false);
+
+        // Publicar invalida la caché en memoria del proceso que publica (core-api), pero este
+        // endpoint lo sirve core-identity: sin comparar el sello de la fila, la marca nueva tardaba
+        // hasta 60 s en verse y había que publicar dos veces. Positivo y negativo hacen la misma
+        // lectura (AC2/AC7). Sin sello verificable (caché sin sellos o BD caída) se sirve lo cacheado.
+        if (_cache.TryGet(tenantId, out var cached, out var cachedStamp)
+            && (cachedStamp is null || stamp is null || cachedStamp == stamp))
         {
             return BrandIdentityResponse.From(cached);
         }
 
         var identity = await ResolveUncachedAsync(tenantId, cancellationToken).ConfigureAwait(false);
-        _cache.Store(tenantId, identity, CacheTtl);
+        _cache.Store(tenantId, identity, stamp, CacheTtl);
         return BrandIdentityResponse.From(identity);
+    }
+
+    /// <summary>Sello guardado cuando la cabeza no tiene fila de marca (distinto de "sin verificar").</summary>
+    public const long NoBrandingStamp = -1;
+
+    private async Task<long?> CurrentStampAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _brandingRepository.GetStampAsync(tenantId, cancellationToken).ConfigureAwait(false)
+                ?? NoBrandingStamp;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            PublicBrandingResolutionLog.ResolveFailed(_logger, tenantId, ex);
+            return null;
+        }
     }
 
     private async Task<BrandIdentity> ResolveUncachedAsync(Guid tenantId, CancellationToken cancellationToken)

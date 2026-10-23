@@ -24,15 +24,16 @@ import {
   type SeccionDetalleProps,
 } from './primitivos';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
+import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
 
 /**
  * Sección «Validación de identidad» del modal de detalle (Frente C).
  *
- * Estado por parte + descarga de certificado + bitácora Kyverum (`IdentityValidationTrackingPanel`)
+ * Estado por parte + descarga de certificado + bitácora de identidad (`IdentityValidationTrackingPanel`)
  * cuando hay `validationId`. Firma del baúl: sin tracking de identidad.
  */
 
-const AZUL = '#557EFF';
+const AZUL = 'var(--color-flit-brand)';
 
 const PARTE_LABEL: Record<BiometricParte, string> = {
   vendedor: 'Vendedor',
@@ -51,6 +52,8 @@ const ESTADO_LABEL: Record<BiometricEstado, string> = {
   expirado: 'Expirado',
   pendiente_envio: 'Pendiente de envío',
   error_envio: 'Error de envío',
+  manual_activo: MANUAL_ESTADO_META.manual_activo.label,
+  pendiente_revision_manual: MANUAL_ESTADO_META.pendiente_revision_manual.label,
 };
 
 const ESTADO_TONE: Record<BiometricEstado, StatusTone> = {
@@ -61,6 +64,8 @@ const ESTADO_TONE: Record<BiometricEstado, StatusTone> = {
   expirado: 'neutral',
   pendiente_envio: 'info',
   error_envio: 'danger',
+  manual_activo: MANUAL_ESTADO_META.manual_activo.tone,
+  pendiente_revision_manual: MANUAL_ESTADO_META.pendiente_revision_manual.tone,
 };
 
 interface FilaIdentidad {
@@ -157,9 +162,9 @@ function FilaValidacion({
         className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 border-[#DFE5ED] dark:border-white/10"
       >
         <span className="min-w-0">
-          <span className="block text-xs font-medium text-[#162744] dark:text-white">{fila.label}</span>
+          <span className="block text-xs font-medium text-flit-primary dark:text-white">{fila.label}</span>
           {fila.timestamp ? (
-            <span className="block text-xs text-[#162744]/70 dark:text-white/70">
+            <span className="block text-xs text-flit-primary/70 dark:text-white/70">
               {formatFechaHora(fila.timestamp)}
             </span>
           ) : null}
@@ -173,7 +178,7 @@ function FilaValidacion({
               disabled={descargando}
               aria-label={`Descargar certificado de ${fila.label}`}
               title="Descargar certificado"
-              className="shrink-0 rounded-lg border p-1.5 transition hover:bg-[#557EFF]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#557EFF] focus-visible:ring-offset-2 disabled:opacity-40 border-[#DFE5ED] dark:border-white/10"
+              className="shrink-0 rounded-lg border p-1.5 transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-40 border-[#DFE5ED] dark:border-white/10"
               style={{ color: AZUL }}
             >
               <Download className="h-3.5 w-3.5" aria-hidden="true" />
@@ -182,7 +187,7 @@ function FilaValidacion({
         </span>
       </div>
       {fila.validationId ? (
-        <IdentityValidationTrackingPanel validationId={fila.validationId} tenantId={tenantId} />
+        <IdentityValidationTrackingPanel validationId={fila.validationId} tenantId={tenantId} compacto />
       ) : null}
     </li>
   );

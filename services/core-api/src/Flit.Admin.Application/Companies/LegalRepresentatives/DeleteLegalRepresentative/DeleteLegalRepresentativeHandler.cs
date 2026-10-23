@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Consolidados;
 using Flit.Admin.Domain.Companies.LegalRepresentatives;
 
 namespace Flit.Admin.Application.Companies.LegalRepresentatives.DeleteLegalRepresentative;
@@ -21,11 +22,18 @@ public sealed class DeleteLegalRepresentativeHandler
 {
     private readonly ILegalRepresentativeReader _reader;
     private readonly ILegalRepresentativeRepository _repository;
+    private readonly IConsolidadoInvalidacionMasiva? _invalidacion;
 
+    /// <param name="invalidacion">
+    /// HU #12789 — invalida en bloque los consolidados de la compañía. Opcional para no romper a los
+    /// llamadores que no lo necesitan; en DI siempre se inyecta.
+    /// </param>
     public DeleteLegalRepresentativeHandler(
         ILegalRepresentativeReader reader,
-        ILegalRepresentativeRepository repository)
+        ILegalRepresentativeRepository repository,
+        IConsolidadoInvalidacionMasiva? invalidacion = null)
     {
+        _invalidacion = invalidacion;
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
     }
@@ -48,6 +56,12 @@ public sealed class DeleteLegalRepresentativeHandler
         await _repository
             .DeactivateAsync(command.TenantId, command.Id, command.ChangedBy, cancellationToken)
             .ConfigureAwait(false);
+
+        // HU #12789 AC2 — la escritura/RL entra al expediente: sus consolidados en curso quedan invalidados.
+        if (_invalidacion is not null)
+        {
+            await _invalidacion.InvalidarPorCompaniaAsync(command.TenantId, cancellationToken).ConfigureAwait(false);
+        }
 
         return DeleteLegalRepresentativeOutcome.Deactivated;
     }

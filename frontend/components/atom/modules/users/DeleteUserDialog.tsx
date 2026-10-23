@@ -85,7 +85,7 @@ export function DeleteUserDialog({ user, onClose, onDeleted, onDelete }: DeleteU
         </p>
         <p
           className="rounded-lg px-3 py-2 text-[11px] font-medium"
-          style={{ background: "rgba(85,126,255,0.08)", color: "#557EFF" }}
+          style={{ background: "color-mix(in srgb, var(--color-flit-brand) 8%, transparent)", color: "var(--color-flit-brand)" }}
         >
           Esta acción es reversible: solo un <strong>Super Admin</strong> puede restaurarlo más
           adelante desde la vista de usuarios eliminados.

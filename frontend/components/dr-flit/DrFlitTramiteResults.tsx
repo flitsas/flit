@@ -1,7 +1,9 @@
 "use client";
 
 import { ExternalLink } from "lucide-react";
+import { COPY } from "@/lib/copy/copy-catalog";
 import { estadoChipStyle, estadoLabel } from "@/lib/tramites/estados";
+import { estadoHint } from "./dr-flit-estados";
 import type { DrFlitTramiteResult } from "./dr-flit-types";
 
 export function DrFlitTramiteResults({
@@ -27,6 +29,7 @@ export function DrFlitTramiteResults({
       {results.map((row) => {
         const chip = estadoChipStyle(row.estado);
         const placa = (row.placa || "—").toUpperCase();
+        const hint = estadoHint(row.estado);
         return (
           <li
             key={row.id}
@@ -48,10 +51,19 @@ export function DrFlitTramiteResults({
                 <p
                   className="mt-0.5 font-mono text-[11px]"
                   style={{ color: "var(--dr-flit-text-secondary)" }}
-                  title={row.id}
+                  title={`ID ${row.id}`}
                 >
-                  ID {row.id.slice(0, 8)}…
+                  {COPY.B15} {row.radicado}
                 </p>
+                {row.compania ? (
+                  <p
+                    className="mt-0.5 truncate text-[11px]"
+                    style={{ color: "var(--dr-flit-text-secondary)" }}
+                    title={row.compania}
+                  >
+                    {row.compania}
+                  </p>
+                ) : null}
               </div>
               <span
                 className="shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold"
@@ -65,13 +77,22 @@ export function DrFlitTramiteResults({
               </span>
             </div>
 
+            {hint ? (
+              <p
+                className="mb-2 text-xs"
+                style={{ color: "var(--dr-flit-text-secondary)" }}
+              >
+                {hint}
+              </p>
+            ) : null}
+
             <dl className="m-0 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
               <div>
                 <dt
                   className="font-medium"
                   style={{ color: "var(--dr-flit-text-secondary)" }}
                 >
-                  Fecha
+                  {COPY.A04}
                 </dt>
                 <dd
                   className="m-0 font-medium"
@@ -85,7 +106,7 @@ export function DrFlitTramiteResults({
                   className="font-medium"
                   style={{ color: "var(--dr-flit-text-secondary)" }}
                 >
-                  Placa
+                  {COPY.A02Placa}
                 </dt>
                 <dd
                   className="m-0 font-semibold uppercase tracking-[0.18em]"
@@ -99,7 +120,7 @@ export function DrFlitTramiteResults({
                   className="font-medium"
                   style={{ color: "var(--dr-flit-text-secondary)" }}
                 >
-                  VIN
+                  {COPY.A02Vin}
                 </dt>
                 <dd
                   className="m-0 truncate font-mono text-[11px]"

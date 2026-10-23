@@ -138,6 +138,25 @@ public sealed class MandatoPdfGeneratorTests
         }
     }
 
+    [Fact]
+    public void MandatarioConValidacionDeIdentidad_EstampaLaRubricaDeKyverum_ComoAlMandante()
+    {
+        // Antes el recuadro MANDATARIO solo llevaba el sello de texto; ahora lleva además la rúbrica. El proyecto no lee
+        // PDFs: la imagen embebida se nota en el tamaño del documento frente al mismo mandato sin rúbrica.
+        const string sello = "Validación de identidad\nFirma hash-abc";
+        var tramite = DataWith(Natural());
+        var soloSello = new MandatarioFirmante("Carlos Ruiz", "70111222", null, sello);
+        var conRubrica = soloSello with { FirmaIdentidadImagen = FirmaPng };
+
+        foreach (var template in new[] { "generico", "bello", "municipio" })
+        {
+            var sinImagen = Generator.GenerateMandato(new MandatoData(tramite, template, null, null, soloSello));
+            var conImagen = Generator.GenerateMandato(new MandatoData(tramite, template, null, null, conRubrica));
+
+            conImagen.Content.Length.Should().BeGreaterThan(sinImagen.Content.Length, template);
+        }
+    }
+
     /// <summary>
     /// Las firmas del mandato y de la solicitud virtual se ven en TODOS los estados. Se fija como
     /// invariante estructural —el modelo del documento no transporta ningún interruptor de estado— y no

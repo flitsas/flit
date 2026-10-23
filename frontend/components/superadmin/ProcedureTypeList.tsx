@@ -68,7 +68,7 @@ export function ProcedureTypeList({
       {publishSuccessMessage && (
         <div
           className="rounded-xl p-3 text-xs border"
-          style={{ borderColor: '#00DBD5', background: 'rgba(0,219,213,0.08)', color: '#00DBD5' }}
+          style={{ borderColor: 'var(--color-flit-tech)', background: 'color-mix(in srgb, var(--color-flit-tech) 8%, transparent)', color: 'var(--color-flit-tech)' }}
           role="status"
           aria-live="polite"
         >
@@ -89,7 +89,7 @@ export function ProcedureTypeList({
 
       <div
         className="grid grid-cols-12 px-4 py-2.5 text-[10px] font-semibold uppercase rounded-xl shrink-0"
-        style={{ background: '#DFE5ED', color: '#162744' }}
+        style={{ background: '#DFE5ED', color: 'var(--color-flit-primary)' }}
         role="row"
         aria-label="Encabezado de tabla de parametrizaciones"
       >
@@ -128,8 +128,8 @@ export function ProcedureTypeList({
               }
               className="grid grid-cols-12 items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs transition"
               style={{
-                borderColor: isSelected ? '#00DBD5' : '#DFE5ED',
-                boxShadow: isSelected ? '0 0 0 1px #00DBD5' : undefined,
+                borderColor: isSelected ? 'var(--color-flit-tech)' : '#DFE5ED',
+                boxShadow: isSelected ? '0 0 0 1px var(--color-flit-tech)' : undefined,
                 cursor: isDraft ? 'pointer' : 'default',
               }}
             >
@@ -150,7 +150,7 @@ export function ProcedureTypeList({
                         onEdit(item.id);
                       }}
                       className="text-[10px] font-semibold px-2 py-1 rounded-lg border"
-                      style={{ borderColor: '#557EFF', color: '#557EFF' }}
+                      style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
                       aria-label={`Editar ${item.name}`}
                     >
                       Editar
@@ -163,7 +163,7 @@ export function ProcedureTypeList({
                       }}
                       disabled={publishingId === item.id}
                       className="text-[10px] font-semibold px-2 py-1 rounded-lg border disabled:opacity-50"
-                      style={{ borderColor: '#00DBD5', color: '#00DBD5' }}
+                      style={{ borderColor: 'var(--color-flit-tech)', color: 'var(--color-flit-tech)' }}
                       aria-label={`Publicar ${item.name}`}
                     >
                       {publishingId === item.id ? 'Publicando…' : 'Publicar'}

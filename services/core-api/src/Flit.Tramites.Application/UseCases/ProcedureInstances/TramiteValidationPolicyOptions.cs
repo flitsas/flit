@@ -55,6 +55,16 @@ public sealed class TramiteValidationPolicyOptions
     /// sobre la que cambiar (422).
     /// </summary>
     public TramiteValidationSetting VehicleBodyTypeRequired { get; set; } = new();
+
+    /// <summary>
+    /// HU #13143 (ADR-0066) — el trámite que se radica necesita un mandatario activo, vigente y con firma
+    /// válida (409 <c>mandatario_no_configurado</c> / <c>mandatario_firma_invalida</c>). Variable de
+    /// entorno <c>TramiteValidations__MandatarioRequerido__Mode</c> (<c>TRAMITE_VALIDATION_MANDATARIO_MODE</c>
+    /// en el <c>.env</c> del VPS). Ausente, vacío o no reconocido ⇒ <c>Block</c> en código; la configuración
+    /// entregada (appsettings y compose) fija <c>warn</c> de forma explícita, excepción deliberada al patrón
+    /// <c>block</c> de las demás: código nuevo con datos sin migrar detendría radicaciones en PDN.
+    /// </summary>
+    public TramiteValidationSetting MandatarioRequerido { get; set; } = new();
 }
 
 /// <summary>
@@ -65,7 +75,8 @@ public sealed class TramiteValidationPolicyOptions
 public sealed class TramiteValidationPolicy(
     TramiteValidationMode duplicateActiveProcedure,
     TramiteValidationMode vehicleRegistrationState,
-    TramiteValidationMode vehicleBodyTypeRequired = TramiteValidationMode.Block)
+    TramiteValidationMode vehicleBodyTypeRequired = TramiteValidationMode.Block,
+    TramiteValidationMode mandatarioRequerido = TramiteValidationMode.Block)
 {
     /// <summary>CF-01 — modo efectivo del bloqueo de duplicidad.</summary>
     public TramiteValidationMode DuplicateActiveProcedure { get; } = duplicateActiveProcedure;
@@ -76,13 +87,17 @@ public sealed class TramiteValidationPolicy(
     /// <summary>Modo efectivo del bloqueo "sin carrocería que cambiar".</summary>
     public TramiteValidationMode VehicleBodyTypeRequired { get; } = vehicleBodyTypeRequired;
 
+    /// <summary>HU #13143 — modo efectivo de la validación de mandatario al radicar (gate de #13144).</summary>
+    public TramiteValidationMode MandatarioRequerido { get; } = mandatarioRequerido;
+
     /// <summary>
     /// Política por defecto: todas las validaciones en bloqueo duro. Es la que usan los handlers cuando
     /// no se les inyecta ninguna (tests que no ejercitan la configurabilidad) ⇒ comportamiento idéntico
     /// al previo a esta historia.
     /// </summary>
     public static TramiteValidationPolicy BlockAll { get; } =
-        new(TramiteValidationMode.Block, TramiteValidationMode.Block, TramiteValidationMode.Block);
+        new(TramiteValidationMode.Block, TramiteValidationMode.Block, TramiteValidationMode.Block,
+            TramiteValidationMode.Block);
 
     /// <summary>
     /// Resuelve los modos efectivos desde la configuración. <paramref name="onUnrecognized"/> recibe
@@ -99,7 +114,8 @@ public sealed class TramiteValidationPolicy(
         return new TramiteValidationPolicy(
             ResolveOne(nameof(options.DuplicateActiveProcedure), options.DuplicateActiveProcedure, onUnrecognized),
             ResolveOne(nameof(options.VehicleRegistrationState), options.VehicleRegistrationState, onUnrecognized),
-            ResolveOne(nameof(options.VehicleBodyTypeRequired), options.VehicleBodyTypeRequired, onUnrecognized));
+            ResolveOne(nameof(options.VehicleBodyTypeRequired), options.VehicleBodyTypeRequired, onUnrecognized),
+            ResolveOne(nameof(options.MandatarioRequerido), options.MandatarioRequerido, onUnrecognized));
     }
 
     /// <summary>

@@ -154,4 +154,35 @@ public sealed class MandatoObjetoComposerTests
                 "PRENDA_INSCRIPCION")
             .Should().Be("INSCRIBIR PRENDA");
     }
+    // ── Feature #13110 — «Omitir prenda» (PrendaMarking = Ninguna) ────────────────────────────
+
+    [Fact]
+    public void MatriculaInicial_PrendaNinguna_SinComplemento()
+    {
+        MandatoObjetoComposer.Componer(
+                "MATRÍCULA INICIAL", null, PrendaDecision.ToFurMarking(PrendaDecision.Omitir), "MATRICULA_NUEVA")
+            .Should().Be("MATRÍCULA INICIAL");
+    }
+
+    [Fact]
+    public void TraspasoPrendaNingunaConColor_SoloTransformacion()
+    {
+        MandatoObjetoComposer.Componer(
+                "TRASPASO",
+                [MandatoObjetoComposer.CambioColor],
+                PrendaDecision.ToFurMarking(PrendaDecision.Omitir),
+                "TRASPASO_STANDARD")
+            .Should().Be("TRASPASO CON CAMBIO DE COLOR");
+    }
+
+    // HU #13777 — prenda base con «omitir»: la tabla 2 nunca suma, el objeto es el de la tabla 1.
+    [Theory]
+    [InlineData("INSCRIBIR PRENDA", "PRENDA_INSCRIPCION")]
+    [InlineData("LEVANTAR PRENDA", "LEVANTAMIENTO_PRENDA")]
+    public void PrendaBase_ConOmitir_ObjetoDeLaTabla1(string nombreTramite, string code)
+    {
+        MandatoObjetoComposer.Componer(
+                nombreTramite, null, PrendaDecision.ToFurMarking(PrendaDecision.Omitir), code)
+            .Should().Be(nombreTramite);
+    }
 }

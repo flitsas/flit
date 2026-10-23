@@ -1,0 +1,7 @@
+flowchart TD
+    A["Trámite Aprobado"] --> B["El administrador de la compañía\npulsa «Solicitar revocatoria»"]
+    B --> C["Escribe el motivo\ny confirma la solicitud"]
+    C --> D["La solicitud llega a la bandeja\ndel organismo de tránsito"]
+    D --> E{"Decisión del\norganismo"}
+    E -- "Aprueba" --> F["El trámite queda Revocado:\nla placa se libera y los documentos\nquedan marcados como históricos"]
+    E -- "Rechaza" --> G["El trámite sigue Aprobado\ny la compañía ve el motivo\ndel rechazo"]

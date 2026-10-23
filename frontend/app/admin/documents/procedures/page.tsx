@@ -6,6 +6,7 @@ import { ArrowLeft, ArrowRight, Search } from "lucide-react";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { useProcedureTypes } from "@/hooks/useProcedureTypes";
 import { SEARCH_TEXT_MAX_LENGTH, sanitizeNoAngleBrackets } from "@/lib/validation/fieldRules";
+import { ADMIN_BACK_LINK_CLS, ADMIN_CONTENT_SURFACE_CLS } from "@/components/admin/admin-ui-styles";
 
 // Lista de tipos de trámite para la consola documental (HU #10198, AC2–AC5).
 // Un solo camino: tarjetas. El select duplicado se retiró porque hacía lo mismo.
@@ -32,13 +33,8 @@ export default function DocumentProceduresPage() {
 
   return (
     <main className="app-bg flex min-h-screen flex-col gap-4 px-6 py-6">
-      <button
-        type="button"
-        onClick={() => router.push("/admin/documents")}
-        className="flex w-fit items-center gap-1.5 text-xs font-semibold"
-        style={{ color: "#557EFF" }}
-      >
-        <ArrowLeft className="h-3.5 w-3.5" /> Volver al catálogo
+      <button type="button" onClick={() => router.push("/admin/documents")} className={ADMIN_BACK_LINK_CLS}>
+        <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Volver al catálogo
       </button>
 
       <ModuleTitle
@@ -46,7 +42,7 @@ export default function DocumentProceduresPage() {
         subtitle="Selecciona un tipo de trámite para gestionar sus documentos, overrides y matriz resuelta."
       />
 
-      <div className="flex flex-col gap-4 rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60">
+      <div className={`${ADMIN_CONTENT_SURFACE_CLS} gap-4`}>
         <div className="max-w-md">
           <label className="mb-1 block text-xs font-semibold" htmlFor="procedure-type-search">
             Buscar trámite
@@ -59,7 +55,7 @@ export default function DocumentProceduresPage() {
               onChange={(e) => setQ(sanitizeNoAngleBrackets(e.target.value))}
               maxLength={SEARCH_TEXT_MAX_LENGTH}
               placeholder="Nombre o código"
-              className="w-full rounded-xl border py-2 pl-9 pr-3 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+              className="w-full rounded-xl border py-2 pl-9 pr-3 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
             />
           </div>
         </div>
@@ -73,13 +69,13 @@ export default function DocumentProceduresPage() {
                   key={p.id}
                   type="button"
                   onClick={() => go(p.id)}
-                  className="flex items-center justify-between rounded-xl border bg-white px-4 py-3 text-left transition hover:border-[#557EFF] dark:bg-[#0B0F14]"
+                  className="flex items-center justify-between rounded-xl border bg-white px-4 py-3 text-left transition hover:border-flit-brand dark:bg-[#0B0F14]"
                 >
                   <span>
                     <span className="block text-xs font-semibold">{p.name}</span>
                     <span className="block font-mono text-[10px] opacity-60">{p.code}</span>
                   </span>
-                  <ArrowRight className="h-4 w-4" style={{ color: "#557EFF" }} />
+                  <ArrowRight className="h-4 w-4 text-[color:var(--color-flit-brand)]" aria-hidden="true" />
                 </button>
               ))}
           </div>

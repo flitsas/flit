@@ -1,10 +1,11 @@
 // Tabla de usuarios compartida (context/usuarios-contex.md): columna Perfil / Rol con filtros
-// y columna de acciones con el área de clic de RowActions.
+// y columna de acciones con un solo botón «Acciones» con menú (HU #13653).
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Pencil } from "lucide-react";
 import { UsersTable, toUserRow, type UserRow } from "../UsersTable";
+import { chooseRowAction, findRowAction, rowActionNames } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 
 function row(over: Partial<UserRow> & Pick<UserRow, "id" | "fullName">): UserRow {
   return toUserRow({
@@ -43,7 +44,7 @@ describe("UsersTable — columnas Perfil y Rol separadas (HU #11551)", () => {
     renderTable();
     // La cabecera de la tabla vive en el mismo grid que "Usuario"/"Estado"/"Fecha"; el label
     // "Perfil" también existe en la barra de filtros, así que se acota al encabezado.
-    const encabezado = screen.getByText("Usuario").closest("div.grid") as HTMLElement;
+    const encabezado = screen.getByText("Usuario").closest("tr") as HTMLElement;
     expect(within(encabezado).getByText("Perfil")).toBeInTheDocument();
     expect(within(encabezado).getByText("Rol")).toBeInTheDocument();
     // Ya no existe la columna compuesta "Perfil / Rol".
@@ -54,7 +55,7 @@ describe("UsersTable — columnas Perfil y Rol separadas (HU #11551)", () => {
   // de Compañía, en celdas distintas y legibles (sin truncar por opacidad baja).
   it("AC1 — perfil Gestor y rol Administrador de Compañía en celdas separadas", () => {
     renderTable();
-    const fila = screen.getByText("Ana Torres").closest("div.grid") as HTMLElement;
+    const fila = screen.getByText("Ana Torres").closest("tr") as HTMLElement;
     expect(within(fila).getByText("Gestor · Admin")).toBeInTheDocument();
     const rol = within(fila).getByText("Administrador de Compañía");
     expect(rol).toBeInTheDocument();
@@ -70,25 +71,25 @@ describe("UsersTable — columnas Perfil y Rol separadas (HU #11551)", () => {
         actionsFor={() => []}
       />,
     );
-    const fila = screen.getByText("Fer Ríos").closest("div.grid") as HTMLElement;
+    const fila = screen.getByText("Fer Ríos").closest("tr") as HTMLElement;
     expect(within(fila).getByText("Sin rol")).toBeInTheDocument();
   });
 
   // AC3 — un usuario FLIT y otro OT: cada uno con su perfil correcto y su rol respectivo.
   it("AC3 — perfiles FLIT y OT muestran cada uno su perfil y su rol", () => {
     renderTable();
-    const filaFlit = screen.getByText("Caro Díaz").closest("div.grid") as HTMLElement;
+    const filaFlit = screen.getByText("Caro Díaz").closest("tr") as HTMLElement;
     expect(within(filaFlit).getByText("FLIT")).toBeInTheDocument();
     expect(within(filaFlit).getByText("Super Administrador")).toBeInTheDocument();
 
-    const filaOt = screen.getByText("Beto Ruiz").closest("div.grid") as HTMLElement;
+    const filaOt = screen.getByText("Beto Ruiz").closest("tr") as HTMLElement;
     expect(within(filaOt).getByText("OT · Admin")).toBeInTheDocument();
     expect(within(filaOt).getByText("Administrador OT")).toBeInTheDocument();
   });
 
   it("usa el perfil del backend aunque el rol sea personalizado", () => {
     renderTable();
-    const fila = screen.getByText("Dani Soto").closest("div.grid") as HTMLElement;
+    const fila = screen.getByText("Dani Soto").closest("tr") as HTMLElement;
     expect(within(fila).getByText("OT")).toBeInTheDocument();
     expect(within(fila).getByText("Revisor documental")).toBeInTheDocument();
   });
@@ -154,16 +155,17 @@ describe("UsersTable — filtros", () => {
 });
 
 describe("UsersTable — acciones", () => {
-  // HU19: el cursor SVG de FLIT desplaza el punto de clic, así que los botones de solo icono
-  // necesitan 40x40 de área activa. Con el tamaño anterior (28px) muchos clics caían fuera.
-  it("los botones de icono conservan el área de clic mínima de RowActions", () => {
+  // HU #13653: un solo botón «Acciones» por fila (el patrón de trámites y mandatos), no iconos sueltos.
+  it("cada fila tiene un solo botón «Acciones»; las opciones muestran texto y conservan el nombre accesible completo", async () => {
+    const user = userEvent.setup();
     renderTable();
-    const boton = screen.getByRole("button", { name: "Editar usuario Ana Torres" });
-    expect(boton.className).toContain("min-h-[40px]");
-    expect(boton.className).toContain("min-w-[40px]");
+    const fila = screen.getByText("Ana Torres").closest("tr") as HTMLElement;
+    expect(within(fila).queryByRole("button", { name: "Editar usuario Ana Torres" })).not.toBeInTheDocument();
+    const opcion = await findRowAction(user, "Ana Torres", "Editar usuario Ana Torres", within(fila));
+    expect(opcion).toHaveTextContent("Editar usuario");
   });
 
-  it("un solo clic dispara la acción", async () => {
+  it("elegir la opción dispara la acción una vez", async () => {
     const onClick = vi.fn();
     const user = userEvent.setup();
     render(
@@ -173,16 +175,44 @@ describe("UsersTable — acciones", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Editar usuario Ana Torres" }));
+    await chooseRowAction(user, "Ana Torres", "Editar usuario Ana Torres");
 
     expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("las destructivas van al final del menú y una fila sin acciones no muestra el botón", async () => {
+    const user = userEvent.setup();
+    render(
+      <UsersTable
+        rows={rows}
+        actionsFor={(r) =>
+          r.fullName === "Ana Torres"
+            ? [
+                { icon: Pencil, label: `Eliminar usuario ${r.fullName}`, tone: "danger", onClick: vi.fn() },
+                { icon: Pencil, label: `Editar usuario ${r.fullName}`, onClick: vi.fn() },
+                { icon: Pencil, label: `Suspender temporalmente a ${r.fullName}`, tone: "danger", onClick: vi.fn() },
+                { icon: Pencil, label: `Permisos por módulo de ${r.fullName}`, tone: "primary", onClick: vi.fn() },
+              ]
+            : []
+        }
+      />,
+    );
+
+    expect(await rowActionNames(user, "Ana Torres")).toEqual([
+      "Editar usuario Ana Torres",
+      "Permisos por módulo de Ana Torres",
+      "Eliminar usuario Ana Torres",
+      "Suspender temporalmente a Ana Torres",
+    ]);
+    const otra = rows.find((r) => r.fullName !== "Ana Torres")!.fullName;
+    expect(screen.queryByRole("button", { name: `Acciones de ${otra}` })).not.toBeInTheDocument();
   });
 });
 
 describe("UsersTable — estados", () => {
   it("expone los mismos data-testid de estado que UiStateBoundary", () => {
     const { rerender } = render(<UsersTable rows={[]} loading actionsFor={() => []} />);
-    expect(screen.getByTestId("ui-loading")).toBeInTheDocument();
+    expect(screen.getByText("Cargando usuarios…")).toBeInTheDocument();
 
     rerender(<UsersTable rows={[]} actionsFor={() => []} />);
     expect(screen.getByTestId("ui-empty")).toBeInTheDocument();
@@ -192,10 +222,9 @@ describe("UsersTable — estados", () => {
   });
 });
 
-// Bug #13055 — con la columna Acciones fija en 108 px, 4 acciones de 40 px se desbordaban bajo la
-// celda Fecha y el clic en «Editar» caía en la fecha. El ancho sale de la fila con más acciones
-// y es el mismo en cabecera y filas (grids separados que deben compartir plantilla).
-describe("UsersTable — columna Acciones a la medida de sus botones (Bug #13055)", () => {
+// Bug #13055 — tabla homologada con el modelo de trámites: `<table>` semántica; la columna Acciones
+// se ajusta al contenido (ya no hay ancho fijo que desborde los botones) y la lista pagina.
+describe("UsersTable — tabla semántica y paginación (Bug #13055)", () => {
   const cuatro = (r: UserRow) =>
     ["Editar", "Restablecer", "Suspender", "Desactivar"].map((a) => ({
       icon: Pencil,
@@ -203,28 +232,59 @@ describe("UsersTable — columna Acciones a la medida de sus botones (Bug #13055
       onClick: vi.fn(),
     }));
 
-  function columnas(el: HTMLElement) {
-    return el.style.gridTemplateColumns.trim().split(/\s+/);
-  }
-
-  it("reserva 44 px por acción: 4 acciones → 176 px, igual en cabecera y filas", () => {
+  it("es una <table> con cabeceras de columna y las 4 acciones en el menú de la celda de Acciones", async () => {
+    const user = userEvent.setup();
     renderTable({ actionsFor: cuatro });
-    const cabecera = screen.getByText("Usuario").closest("div.grid") as HTMLElement;
-    const fila = screen.getByText("Ana Torres").closest("div.grid") as HTMLElement;
-
-    expect(columnas(cabecera).at(-1)).toBe("176px");
-    expect(columnas(fila)).toEqual(columnas(cabecera));
+    expect(screen.getByRole("table", { name: "Usuarios" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Acciones" })).toBeInTheDocument();
+    const fila = screen.getByText("Ana Torres").closest("tr") as HTMLElement;
+    // HU #13653: un solo botón en la celda; las 4 acciones viven en su menú.
+    expect(within(fila).getAllByRole("button")).toHaveLength(1);
+    const celda = within(fila).getByRole("button", { name: "Acciones de Ana Torres" }).closest("td");
+    expect(celda?.className).toContain("whitespace-nowrap");
+    expect(await rowActionNames(user, "Ana Torres", within(fila))).toEqual([
+      "Editar Ana Torres",
+      "Restablecer Ana Torres",
+      "Suspender Ana Torres",
+      "Desactivar Ana Torres",
+    ]);
   });
 
-  it("suma el hueco de la acción extra (reenviar/reactivar invitación)", () => {
-    renderTable({ actionsFor: cuatro, extraActionsFor: (r) => (r.id === "u1" ? <button type="button">Reenviar</button> : null) });
-    const cabecera = screen.getByText("Usuario").closest("div.grid") as HTMLElement;
-    expect(columnas(cabecera).at(-1)).toBe("220px");
+  it("muestra la paginación estándar con «Filas por página»", () => {
+    renderTable();
+    expect(screen.getByRole("combobox", { name: "Filas por página" })).toBeInTheDocument();
+    expect(screen.getByText(/Mostrando 1–4 de 4/)).toBeInTheDocument();
   });
 
-  it("la celda de acciones queda por encima de la vecina", () => {
-    renderTable({ actionsFor: cuatro });
-    const editar = screen.getByRole("button", { name: "Editar Ana Torres" });
-    expect(editar.closest("div.grid > div:last-child")?.className).toContain("z-[1]");
+  it("pagina en cliente y vuelve a la página 1 al filtrar", async () => {
+    const user = userEvent.setup();
+    const muchos = Array.from({ length: 12 }, (_, i) =>
+      row({ id: `m${i}`, fullName: `Usuario ${String(i).padStart(2, "0")}`, role: "Rol X", roleCode: "x", profile: "OT" }),
+    );
+    render(<UsersTable rows={muchos} actionsFor={() => []} />);
+    expect(screen.getAllByRole("row")).toHaveLength(1 + 10);
+    await user.click(screen.getByRole("button", { name: /página 2|2/i }));
+    expect(screen.getAllByRole("row")).toHaveLength(1 + 2);
+    await user.type(screen.getByLabelText("Buscar usuarios"), "Usuario 0");
+    expect(screen.getByText(/Mostrando 1–10 de 10/)).toBeInTheDocument();
+  });
+});
+
+describe("UsersTable — diseño", () => {
+  it("el chip de perfil Gestor usa el tono neutral tintado (no el cian de éxito) y lleva texto", () => {
+    renderTable();
+    const chip = screen.getByText("Gestor · Admin");
+    expect(chip.style.color).toBe("var(--badge-neutral-fg)");
+    expect(chip.style.background).toBe("var(--badge-neutral-bg)");
+    expect(chip.className).toContain("text-xs");
+  });
+
+  it("las opciones del menú llevan icono, nombre accesible y tooltip", async () => {
+    const user = userEvent.setup();
+    renderTable();
+    const fila = screen.getByText("Ana Torres").closest("tr") as HTMLElement;
+    const opcion = await findRowAction(user, "Ana Torres", "Editar usuario Ana Torres", within(fila));
+    expect(opcion).toHaveAttribute("title", "Editar usuario Ana Torres");
+    expect(opcion.querySelector("svg")).not.toBeNull();
   });
 });

@@ -27,7 +27,7 @@ public sealed class GetProcedureDetailsHandlerTests
     {
         var item = new ProcedureDetailDto(Guid.NewGuid(), "REF-1", "Traspaso Estándar", "traspasos",
             "submitted", "Ana", DateTimeOffset.UtcNow, null);
-        _repo.GetProcedureDetailsAsync(Tenant, From, To, "traspasos", "submitted", 1, 20, Ct)
+        _repo.GetProcedureDetailsAsync(Tenant, From, To, "traspasos", "submitted", 1, 20, null, Ct)
             .Returns(new ProcedureDetailsPageDto(new List<ProcedureDetailDto> { item }, 1, 1, 20));
 
         var (page, error) = await new GetProcedureDetailsHandler(_repo)
@@ -37,13 +37,13 @@ public sealed class GetProcedureDetailsHandlerTests
         page.Should().NotBeNull();
         page!.TotalCount.Should().Be(1);
         page.Items.Should().ContainSingle(i => i.ReferenceNumber == "REF-1" && i.Category == "traspasos");
-        await _repo.Received(1).GetProcedureDetailsAsync(Tenant, From, To, "traspasos", "submitted", 1, 20, Ct);
+        await _repo.Received(1).GetProcedureDetailsAsync(Tenant, From, To, "traspasos", "submitted", 1, 20, null, Ct);
     }
 
     [Fact] // AC3 — sin resultados: items vacío y totalCount 0
     public async Task HandleAsync_SinResultados_DevuelveVacioYTotalCero()
     {
-        _repo.GetProcedureDetailsAsync(Tenant, From, To, null, null, 1, 20, Ct)
+        _repo.GetProcedureDetailsAsync(Tenant, From, To, null, null, 1, 20, null, Ct)
             .Returns(new ProcedureDetailsPageDto(new List<ProcedureDetailDto>(), 0, 1, 20));
 
         var (page, error) = await new GetProcedureDetailsHandler(_repo)
@@ -54,20 +54,20 @@ public sealed class GetProcedureDetailsHandlerTests
         page.TotalCount.Should().Be(0);
         // pageSize 0 → default 20; status en blanco → null (sin filtro)
         await _repo.Received(1).GetProcedureDetailsAsync(
-            Tenant, From, To, null, null, 1, GetProcedureDetailsHandler.DefaultPageSize, Ct);
+            Tenant, From, To, null, null, 1, GetProcedureDetailsHandler.DefaultPageSize, null, Ct);
     }
 
     [Fact] // Edge: pageSize excesivo se acota; page <= 0 → 1
     public async Task HandleAsync_PaginacionFueraDeRango_SeAcota()
     {
-        _repo.GetProcedureDetailsAsync(Tenant, From, To, null, null, 1, GetProcedureDetailsHandler.MaxPageSize, Ct)
+        _repo.GetProcedureDetailsAsync(Tenant, From, To, null, null, 1, GetProcedureDetailsHandler.MaxPageSize, null, Ct)
             .Returns(new ProcedureDetailsPageDto(new List<ProcedureDetailDto>(), 0, 1, GetProcedureDetailsHandler.MaxPageSize));
 
         await new GetProcedureDetailsHandler(_repo)
             .HandleAsync(new GetProcedureDetailsQuery(Tenant, From, To, null, null, 0, 9999), Ct);
 
         await _repo.Received(1).GetProcedureDetailsAsync(
-            Tenant, From, To, null, null, 1, GetProcedureDetailsHandler.MaxPageSize, Ct);
+            Tenant, From, To, null, null, 1, GetProcedureDetailsHandler.MaxPageSize, null, Ct);
     }
 
     [Fact] // Rango inválido → invalid_range, sin consultar el repo

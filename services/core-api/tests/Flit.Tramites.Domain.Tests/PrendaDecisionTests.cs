@@ -62,4 +62,21 @@ public sealed class PrendaDecisionTests
         PrendaDocTipos.All.Should().BeEquivalentTo(
             new[] { "prenda_solicitud", "prenda_registro", "prenda_levantamiento" });
     }
+    // ── Feature #13110 — «Omitir prenda» ────────────────────────────────────────────────────
+    // HU #13777 — la regla OmitirAdmitido (familia × política del OT) se retiró: «omitir» se admite en
+    // todo tipo con dimensión de prenda (ver OmitirPrendaSinReglaDelOtTests en Application.Tests).
+
+    /// <summary>CF-6/CF-12 — solo <c>omitir</c> descarta acreedor y entidad de levantamiento.</summary>
+    [Theory]
+    [InlineData("solicitar", true)]
+    [InlineData("registrar", true)]
+    [InlineData("levantar", true)]
+    [InlineData("omitir", false)]
+    [InlineData(" OMITIR ", false)]
+    [InlineData("sin_prenda", true)]
+    [InlineData(null, true)]
+    public void ConservaDatosDeAcreedor_SoloOmitirLosDescarta(string? decision, bool esperado)
+    {
+        PrendaDecision.ConservaDatosDeAcreedor(decision).Should().Be(esperado);
+    }
 }

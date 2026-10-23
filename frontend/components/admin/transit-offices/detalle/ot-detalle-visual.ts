@@ -11,7 +11,7 @@
  */
 
 export const OT_NAVY = "#162744";
-export const OT_BLUE = "#557EFF";
+export const OT_BLUE = "var(--color-flit-brand)";
 export const OT_GREEN = "#8CC63F";
 export const OT_WARN = "#F9AC00";
 /** Texto sobre la banda ámbar de avisos: el ámbar puro sobre blanco no contrasta. */

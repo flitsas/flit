@@ -1,0 +1,11 @@
+flowchart TD
+    A["Nuevo trámite:\nelige el tipo"] --> B["Completa actores\ny datos del vehículo"]
+    B --> C["Carga los documentos\nrequeridos"]
+    C --> D{"¿Identidad y firmas\ncompletas?"}
+    D -- "No" --> E["FLIT te bloquea el envío\ny señala lo que falta"]
+    E --> B
+    D -- "Sí" --> F["Radica: el trámite\nqueda Entregado al organismo"]
+    F --> G{"Decisión del\norganismo"}
+    G -- "Aprueba" --> H["Aprobado"]
+    G -- "Rechaza" --> I["Rechazado:\npuedes subsanar y reenviar"]
+    I --> B

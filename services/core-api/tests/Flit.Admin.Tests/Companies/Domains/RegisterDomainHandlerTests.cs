@@ -89,6 +89,57 @@ public sealed class RegisterDomainHandlerTests
         await repo.DidNotReceiveWithAnyArgs().RegisterOrReplaceAsync(default, default!, default!, default, default);
     }
 
+    /// <summary>HU #12761 — el host de prueba exceptuado atraviesa la validación de reservados y se registra.</summary>
+    [Fact]
+    public async Task AC1_HostDePruebaPermitido_SeRegistraPeseAEstarEnLaZonaReservada()
+    {
+        var repo = Substitute.For<ITenantDomainRepository>();
+        repo.GetByTenantIdAsync(TenantId, Arg.Any<CancellationToken>()).Returns((TenantDomain?)null);
+        repo.RegisterOrReplaceAsync(TenantId, "marcablancadev.flitsas.online", Arg.Any<string>(), Operator, Arg.Any<CancellationToken>())
+            .Returns(ci => NewDomain(ci.ArgAt<string>(1)));
+
+        var options = new DomainOptions
+        {
+            Reserved = ["*.flitsas.online"],
+            Allowed = ["marcablancadev.flitsas.online", "marcablancaqa.flitsas.online", "marcablancapdn.flitsas.online"],
+        };
+
+        var handler = new RegisterDomainHandler(repo, options);
+        var result = await handler.HandleAsync(new RegisterDomainCommand
+        {
+            TenantId = TenantId,
+            Host = "MarcaBlancaDev.FLITSAS.online",
+            ChangedBy = Operator,
+        }, TestContext.Current.CancellationToken);
+
+        result.Outcome.Should().Be(RegisterDomainOutcome.Registered);
+        result.Domain!.Host.Should().Be("marcablancadev.flitsas.online");
+        await repo.Received(1).RegisterOrReplaceAsync(TenantId, "marcablancadev.flitsas.online", Arg.Any<string>(), Operator, Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>HU #12761 — la excepción es exacta: un subdominio del host de prueba sigue reservado.</summary>
+    [Fact]
+    public async Task AC3_SubdominioDelHostPermitido_SeSigueRechazando()
+    {
+        var repo = Substitute.For<ITenantDomainRepository>();
+        var options = new DomainOptions
+        {
+            Reserved = ["*.flitsas.online"],
+            Allowed = ["marcablancadev.flitsas.online"],
+        };
+
+        var handler = new RegisterDomainHandler(repo, options);
+        var result = await handler.HandleAsync(new RegisterDomainCommand
+        {
+            TenantId = TenantId,
+            Host = "sub.marcablancadev.flitsas.online",
+        }, TestContext.Current.CancellationToken);
+
+        result.Outcome.Should().Be(RegisterDomainOutcome.Invalid);
+        result.ErrorCode.Should().Be(DomainErrors.HostReserved);
+        await repo.DidNotReceiveWithAnyArgs().RegisterOrReplaceAsync(default, default!, default!, default, default);
+    }
+
     [Fact]
     public async Task AC2_TenantNoMarcaBlanca_RepositorioRechaza_SeTraduce()
     {

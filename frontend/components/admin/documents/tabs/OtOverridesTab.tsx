@@ -263,7 +263,7 @@ export function OtOverridesTab({ procedureTypeId }: { procedureTypeId: string })
           <section className="flex flex-col gap-3">
             <div>
               <h3 className="text-xs font-semibold">Documento de prenda por compañía</h3>
-              <p className="text-[11px] opacity-60">
+              <p className="text-xs opacity-60">
                 Por defecto es obligatorio. Activa el check por compañía para que deje de exigirse
                 en este OT.
               </p>
@@ -274,7 +274,7 @@ export function OtOverridesTab({ procedureTypeId }: { procedureTypeId: string })
           <section className="flex flex-col gap-3 border-t pt-4">
             <div>
               <h3 className="text-xs font-semibold">Orden de los documentos</h3>
-              <p className="text-[11px] opacity-60">
+              <p className="text-xs opacity-60">
                 Personaliza el orden de un documento para este OT. Arrastra (o usa ↑/↓) para
                 reordenar; prevalece sobre el orden por defecto del trámite.
               </p>
@@ -304,7 +304,7 @@ export function OtOverridesTab({ procedureTypeId }: { procedureTypeId: string })
           <section className="flex flex-col gap-3 border-t pt-4">
             <div>
               <h3 className="text-xs font-semibold">Obligatoriedad por OT</h3>
-              <p className="text-[11px] opacity-60">
+              <p className="text-xs opacity-60">
                 Aplica a los documentos que agregaste arriba en «Orden de los documentos».
                 Define si este OT los pide como obligatorio, opcional o no aplica (se oculta
                 de la matriz de este OT). «Por defecto» hereda la obligatoriedad del trámite.

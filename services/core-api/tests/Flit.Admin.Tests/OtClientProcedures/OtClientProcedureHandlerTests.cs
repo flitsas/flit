@@ -688,7 +688,7 @@ public sealed class OtClientProcedureHandlerTests
             SeedCatalog(seed, ClientTenant, ProcedureTypeA, "Flota Andina S.A.S.", "Matrícula inicial");
             SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
             // VerifikResultMapper.MapHydratedFields persiste el año bajo "vehicle_year"
-            // (services/core-api/src/Flit.Tramites.Application/UseCases/Consultations/VerifikResultMapper.cs:182).
+            // (services/core-api/src/Flit.Modules.Consultas/Contracts/VerifikResultMapper.cs).
             // "vehicle_model" nunca se escribe en runtime.
             seed.ProcedureInstanceFieldValues.Add(new ProcedureInstanceFieldValue
             {
@@ -851,6 +851,82 @@ public sealed class OtClientProcedureHandlerTests
         procedure.Prenda.AcreedorNombre.Should().Be("Banco Ejemplo");
         procedure.Prenda.AcreedorDocumento.Should().Be("900123456");
         procedure.Prenda.LevantamientoEntidad.Should().Be("Banco Ejemplo");
+    }
+
+    /// <summary>
+    /// Bug #13164 — el detalle del OT leía CUALQUIER fila de prenda (sin filtrar vigente ni ordenar):
+    /// devolvía la <c>solicitar</c> reemplazada con su acreedor. Ahora toma la vigente más reciente y,
+    /// con <c>omitir</c>, no expone el acreedor residual (Habeas Data, Ley 1581) aunque la fila lo
+    /// tenga. Con <c>registrar</c> vigente (regresión) el acreedor se conserva.
+    /// </summary>
+    [Theory]
+    [InlineData("omitir", false, true)]
+    [InlineData("omitir", false, false)]
+    [InlineData("registrar", true, true)]
+    [InlineData("registrar", true, false)]
+    public async Task DetallePrenda_ConReemplazadaYOmitirVigente_DevuelveVigenteSinAcreedor(
+        string decisionVigente, bool exponeAcreedor, bool reemplazadaPrimero)
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+        var creada = DateTimeOffset.UtcNow.AddDays(-2);
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedCatalog(seed, ClientTenant, ProcedureTypeA, "Flota Andina S.A.S.", "Matrícula inicial");
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Entregado);
+            // Se siembra en los dos órdenes: sin filtro de vigente, el defecto devuelve la primera fila
+            // que el proveedor encuentre, así que alguno de los dos órdenes lo deja en evidencia.
+            var reemplazada = new ProcedureInstancePrenda
+            {
+                // Id mínimo y CreatedAt más nuevo: sin el filtro de vigente, cualquier orden la elige.
+                Id = Guid.Parse("00000000-0000-0000-0000-000000000001"),
+                TenantId = ClientTenant,
+                ProcedureInstanceId = procedureId,
+                Decision = "solicitar",
+                Estado = "reemplazada",
+                AcreedorNombre = "Banco Viejo",
+                AcreedorDocumento = "900111222",
+                CreatedAt = creada.AddDays(2),
+            };
+            var vigente = new ProcedureInstancePrenda
+            {
+                Id = Guid.NewGuid(),
+                TenantId = ClientTenant,
+                ProcedureInstanceId = procedureId,
+                Decision = decisionVigente,
+                Estado = "vigente",
+                AcreedorNombre = "Banco Residual",
+                AcreedorDocumento = "900333444",
+                LevantamientoEntidad = "Oficina Norte",
+                CreatedAt = creada.AddDays(1),
+            };
+            seed.ProcedureInstancePrendas.AddRange(
+                reemplazadaPrimero ? [reemplazada, vigente] : [vigente, reemplazada]);
+            seed.SaveChanges();
+        }
+
+        await using var ctx = NewContext(db);
+        var result = await GetDetailAsync(ctx, procedureId);
+
+        var prenda = result.Procedure!.Prenda;
+        prenda.Should().NotBeNull();
+        prenda!.Decision.Should().Be(decisionVigente);
+        prenda.Estado.Should().Be("vigente");
+        if (exponeAcreedor)
+        {
+            prenda.AcreedorNombre.Should().Be("Banco Residual");
+            prenda.AcreedorDocumento.Should().Be("900333444");
+            prenda.LevantamientoEntidad.Should().Be("Oficina Norte");
+        }
+        else
+        {
+            prenda.AcreedorNombre.Should().BeNull();
+            prenda.AcreedorDocumento.Should().BeNull();
+            prenda.LevantamientoEntidad.Should().BeNull();
+        }
     }
 
     [Fact] // HU #11929 AC4 — lo ausente se devuelve vacío y ningún valor se sustituye por otro.
@@ -1292,8 +1368,12 @@ public sealed class OtClientProcedureHandlerTests
         result.Succeeded.Should().BeTrue();
     }
 
+    // HU12849_AC1 — la consola de rangos se retiró (Feature #12846, Épica #12751): AssignPlateAsync
+    // ignora el flag outOfRange recibido y SIEMPRE reserva fuera de rango (ReserveOutOfRangePlateAsync),
+    // sin invocar TryReservePlateAsync bajo ninguna condición. Una placa fuera de cualquier rango
+    // configurado (ZZZ999) ya no falla con PlateNotAvailable: se registra como rango ad-hoc de 1 placa.
     [Fact]
-    public async Task AssignPlate_PlacaFueraDeLosRangos_InformaNoDisponible()
+    public async Task HU12849_AC1_AssignPlate_PlacaFueraDeLosRangos_SeReservaFueraDeRango()
     {
         var db = NewDbName();
         var procedureId = Guid.NewGuid();
@@ -1310,11 +1390,48 @@ public sealed class OtClientProcedureHandlerTests
         await using var ctx = NewContext(db);
         var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher(), new PlateRangeRepository(ctx));
 
-        // ZZZ999 no pertenece a ningún rango del OT y no se pidió fuera de rango.
+        // ZZZ999 no pertenece a ningún rango del OT y outOfRange=false (valor por defecto, IGNORADO):
+        // la asignación igual reserva fuera de rango.
         var result = await repo.AssignPlateAsync(OtTenant, procedureId, "ZZZ999", Approver, OtTransitionSource.OtAdmin, cancellationToken: TestContext.Current.CancellationToken);
 
-        result.Succeeded.Should().BeFalse();
-        result.Failure.Should().Be(PlateAssignmentFailure.PlateNotAvailable);
+        result.Succeeded.Should().BeTrue(result.Failure + " " + result.Detail);
+        result.Procedure!.Status.Should().Be(TramiteEstado.Asignado);
+
+        await using var verify = NewContext(db);
+        var detail = await verify.PlateRangeDetails.SingleAsync(d => d.Plate == "ZZZ999", TestContext.Current.CancellationToken);
+        detail.State.Should().Be("preasignada");
+        detail.ProcedureInstanceId.Should().Be(procedureId);
+        // Registrada como rango ad-hoc de 1 placa (ZZZ, 999, 999), igual que ReserveOutOfRangePlateAsync
+        // ya hacía para el flujo explícito "fuera de rango" antes de esta HU.
+        var range = await verify.PlateRanges.SingleAsync(r => r.Id == detail.PlateRangeId, TestContext.Current.CancellationToken);
+        range.Prefix.Should().Be("ZZZ");
+        range.RangeFrom.Should().Be(999);
+        range.RangeTo.Should().Be(999);
+    }
+
+    // HU12849_AC1 — outOfRange=true en la request no cambia nada: es el comportamiento por defecto.
+    [Fact]
+    public async Task HU12849_AC1_AssignPlate_OutOfRangeTrue_MismoResultadoQueDefault()
+    {
+        var db = NewDbName();
+        var procedureId = Guid.NewGuid();
+
+        await using (var seed = NewContext(db))
+        {
+            SeedOt(seed, OtTenant, TransitOffice);
+            SeedGrant(seed, ClientTenant, TransitOffice);
+            SeedActorUser(seed, Approver);
+            SeedProcedure(seed, procedureId, ClientTenant, TransitOffice, ProcedureTypeA, TramiteEstado.Preasignacion);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(ctx, new NullTramiteTransitionPublisher(), new PlateRangeRepository(ctx));
+
+        var result = await repo.AssignPlateAsync(
+            OtTenant, procedureId, "ZZZ999", Approver, OtTransitionSource.OtAdmin, outOfRange: true,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        result.Succeeded.Should().BeTrue(result.Failure + " " + result.Detail);
     }
 
     [Fact]

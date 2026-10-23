@@ -1,3 +1,5 @@
+using Flit.Queries.Domain.Documentos;
+
 namespace Flit.Admin.Domain.OtClientProcedures;
 
 /// <summary>Resumen de trámite de cliente visible para OT admin (HU #10217).</summary>
@@ -166,6 +168,30 @@ public sealed record OtClientProcedure
     public string? RevocationRequestReason { get; init; }
     /// <summary>Motivo de la decisión del OT: obligatorio al rechazar, opcional al aprobar (HU #12577).</summary>
     public string? RevocationDecisionReason { get; init; }
+
+    /// <summary>
+    /// HU #12791 (Épica #12760) — vigencia + sello del consolidado del wizard (adjunto <c>consolidado</c>).
+    /// Lo proyectan la bandeja (listado) y el detalle en la MISMA consulta de la fila; <c>null</c> en las
+    /// respuestas de las acciones (aprobar/rechazar/revocar), que no lo recalculan.
+    /// </summary>
+    public ConsolidadoVigenciaDto? ConsolidadoWizard { get; init; }
+
+    /// <summary>HU #12791 — ídem para el consolidado maestro del OT (adjunto <c>consolidado_maestro</c>).</summary>
+    public ConsolidadoVigenciaDto? ConsolidadoMaestro { get; init; }
+
+    /// <summary>
+    /// HU #12791 (ampliación para #12787 AC2) — instante UTC de la ÚLTIMA radicación exitosa del trámite
+    /// ante Quipux (<c>quipux_submissions.registered_at</c> con valor; una submission <c>fallido</c> nunca
+    /// radicó). <c>null</c> si no se ha radicado. Permite a la vista read-only del OT rotular la
+    /// «versión radicada» del maestro. Proyectado en la misma consulta de la fila.
+    /// </summary>
+    public DateTimeOffset? QuipuxRadicadoEn { get; init; }
+
+    /// <summary>
+    /// HU #12791 — adjunto <c>consolidado_maestro</c> que se envió en esa radicación
+    /// (<c>quipux_submissions.attachment_id</c>). <c>null</c> si no se ha radicado.
+    /// </summary>
+    public Guid? QuipuxMaestroAttachmentId { get; init; }
 }
 
 /// <summary>

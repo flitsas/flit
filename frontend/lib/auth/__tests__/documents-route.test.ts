@@ -6,6 +6,9 @@
 import { describe, expect, it } from "vitest";
 import { evaluateAdminAccess, FORBIDDEN_PATH } from "../guard";
 
+// HU #13650: sesión válida sin el permiso → inicio con el aviso (no /403, que queda para fallos de sesión).
+const ACCESO_DENEGADO = /^\/\?acceso=denegado/;
+
 function makeToken(payload: Record<string, unknown>): string {
   const header = Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString("base64url");
   const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
@@ -24,11 +27,11 @@ describe("acceso a /admin/documents (AC6)", () => {
     expect(decision.allowed).toBe(true);
   });
 
-  it("redirige a /403 a un Operador en cualquier subruta documental", () => {
+  it("redirige al inicio con aviso a un Operador en cualquier subruta documental", () => {
     for (const _route of DOCUMENT_ROUTES) {
       const decision = evaluateAdminAccess(makeToken({ role: "Operador" }));
       expect(decision.allowed).toBe(false);
-      expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+      expect(decision.redirectTo).toMatch(ACCESO_DENEGADO);
     }
   });
 

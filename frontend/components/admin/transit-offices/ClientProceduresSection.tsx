@@ -13,9 +13,9 @@ import {
   fetchOtBandejaFilterFields,
   fetchOtBandejaHealth,
   fetchOtClientProcedure,
-  fetchOtDocuments,
   fetchOtProfile,
   generarOtConsolidadoMaestro,
+  entregarOtConsolidado,
   rejectOtClientProcedure,
   rejectOtRevocationRequest,
   searchOtBandejaCounters,
@@ -34,12 +34,34 @@ import type {
   RejectionReason,
 } from "@/lib/api/types-ot";
 import { fetchRejectionReasons } from "@/lib/api/ot-metrics";
-import { fetchMandateSigners, type MandateSigner } from "@/lib/api/admin-mandate-signers";
+import {
+  candidatosDeRespuesta,
+  formaFirmaLabel,
+  type MandatarioCandidato,
+} from "@/lib/plataforma/mandatario-candidatos";
 import { ApiError } from "@/lib/api/types";
 import { getToken } from "@/lib/api/client";
+import { COPY } from "@/lib/copy/copy-catalog";
 import { downloadFile } from "@/lib/api/download";
-import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
+import { canDescargarConsolidadosMasivo, decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
+import { claveEstable, useSeleccionLote } from "@/hooks/useSeleccionLote";
+import { BarraSeleccionLote } from "@/components/operacion/BarraSeleccionLote";
+import { BotonDescargaMaestrosOt } from "./BotonDescargaMaestrosOt";
 import { DocumentPreviewModal } from "@/components/shared/DocumentPreviewModal";
+import { AvisoDocumentoFinal } from "@/components/shared/AvisoDocumentoFinal";
+import { AvisoFalloRegeneracion } from "@/components/shared/AvisoFalloRegeneracion";
+import {
+  detectarFalloRegeneracion,
+  type FalloRegeneracionConsolidado,
+} from "@/lib/tramites/fallo-regeneracion-consolidado";
+import { AvisoMaestroRadicado } from "@/components/shared/AvisoMaestroRadicado";
+import { esDocumentoDefinitivo } from "@/lib/tramites/consolidado-entrega";
+import {
+  conservarCamposConsolidadoOt,
+  esEntregaRadicadaFija,
+  mensajeEntregaOtFallida,
+  resolverFuenteMaestroOt,
+} from "@/lib/tramites/consolidado-entrega-ot";
 import { Download, RefreshCw } from "lucide-react";
 import { ClientProceduresTable } from "./ClientProceduresTable";
 import {
@@ -48,10 +70,8 @@ import {
 } from "./ClientProcedureDetailModal";
 import {
   assignPlateToProcedure,
-  listPlateDetails,
   releaseProcedurePlate,
   updateProcedurePlate,
-  type PlateDetail,
 } from "@/lib/api/admin-plate-ranges";
 import { OT_INPUT_CLS } from "./ot-form-styles";
 import { plateUpdateRemainingLabel } from "./ot-utils";
@@ -69,7 +89,6 @@ import {
 import { BusquedaRapidaAcordeon } from "@/components/operacion/BusquedaRapidaAcordeon";
 import { AvisoHayCambios } from "@/components/operacion/AvisoHayCambios";
 import { useSondeoDeConteos } from "@/hooks/useSondeoDeConteos";
-import { formatDocumentWithType } from "@/lib/display/document-number";
 import { ColumnSelector } from "@/components/atom/ColumnSelector";
 import { useUiPreferences } from "@/hooks/useUiPreferences";
 import {
@@ -92,8 +111,9 @@ import { buildWorkbook, type DataColumn } from "@/components/consultas/columns";
 import { download, EXPORT_BATCH_SIZE, exportarPorLotes } from "@/components/consultas/export";
 import { selloDeArchivo } from "@/components/operacion/tramites-export";
 import { XLSX_MIME } from "@/lib/xlsx";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 
-const PAGE_SIZE = 20;
+// Bug #13055 — tamaño inicial; el usuario lo cambia con «Filas por página».
 
 /**
  * Tamaño de página del recorrido del export: el tope DURO del endpoint
@@ -418,7 +438,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [status, setStatus] = useState<UiStatus>("loading");
   const [rows, setRows] = useState<OtClientProcedure[]>([]);
   const [totalCount, setTotalCount] = useState(0);
-  const [page, setPage] = useState(1);
+  const { page, setPage, pageSize, setPageSize } = usePaginacion();
   // N 03 — `entregado` reemplaza a pending_ot como estado en cola de decisión OT.
   const [statusFilter, setStatusFilter] = useState(ESTADO_POR_DEFECTO);
   /** Sub-estado de placa; lo fijan las tarjetas de la cabecera, no el panel de búsqueda. */
@@ -487,14 +507,13 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   // ADR-0036 §D9 (HU #10916) — cuando la aprobación devuelve 409 mandatario_requerido, se elige el
   // mandatario que firma el mandato y se reintenta la aprobación con él.
   const [mandatarioTarget, setMandatarioTarget] = useState<OtClientProcedure | null>(null);
-  const [mandatarioOptions, setMandatarioOptions] = useState<MandateSigner[]>([]);
+  const [mandatarioOptions, setMandatarioOptions] = useState<MandatarioCandidato[]>([]);
   const [mandatarioChoice, setMandatarioChoice] = useState("");
   // Feature #10587 — asignar placa (preasignado) / revocar preasignación.
+  // HU #12852 (Feature #12846) — el modal ya no ofrece modo en-rango/fuera-de-rango: un único
+  // campo de placa libre; el payload siempre equivale a outOfRange=true (lo fija admin-plate-ranges.ts).
   const [assignTarget, setAssignTarget] = useState<OtClientProcedure | null>(null);
   const [plateInput, setPlateInput] = useState("");
-  // HU #10800 — placas disponibles del rango de la compañía (para el select) y modo de asignación.
-  const [availablePlates, setAvailablePlates] = useState<PlateDetail[]>([]);
-  const [assignMode, setAssignMode] = useState<"range" | "out">("range");
   const [revokeTarget, setRevokeTarget] = useState<OtClientProcedure | null>(null);
   const [revokePlateReason, setRevokePlateReason] = useState("");
   // HU #12577 (Feature #12565) — decidir (aprobar/rechazar) la solicitud de revocatoria ACTIVA del
@@ -576,6 +595,15 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     loading: boolean;
     error: string | null;
     download: { procId: string; attId: string; filename: string } | null;
+    /** HU #12787 (AC3) — el consolidado abierto es el definitivo del trámite (estado final). */
+    definitivo?: boolean;
+    /** HU #12787 (AC2) — el consolidado abierto es el maestro radicado en Quipux (fecha ISO). */
+    radicadoEn?: string | null;
+    /**
+     * HU #12799 (AC3) — la regeneración del maestro falló y se sirvió el anterior; `generadoEn` es
+     * la fecha de ese PDF conservado (vigencia de la fila).
+     */
+    fallo?: { detalle: FalloRegeneracionConsolidado; generadoEn: string | null } | null;
   }>({ open: false, title: "Consolidado", mimetype: null, url: null, loading: false, error: null, download: null });
   // Diagnóstico de bandeja (R09): entregados hacia el OT que no aparecen por falta de grant.
   const [health, setHealth] = useState<OtBandejaHealth | null>(null);
@@ -597,6 +625,9 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   // (los endpoints approve/reject YA soportan el override de organismo del SuperAdmin vía
   // ?transitOfficeId=; en esta bandeja OT nativa el SuperAdmin no decide, solo supervisa).
   const [superAdmin] = useState(() => isSuperAdmin(decodeJwtPayload(getToken())));
+  // HU #13393 — sin el permiso en el token no hay casillas, barra ni contador (AC5). Un token
+  // emitido antes del grant no lo trae y NO se «arregla» aquí (FB-i): hay que renovar la sesión.
+  const [puedeLote] = useState(() => canDescargarConsolidadosMasivo(decodeJwtPayload(getToken())));
 
   const isReadOnly = Boolean(
     profile?.operationMode === "quipux" && profile?.quipuxReadOnly,
@@ -716,6 +747,24 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   );
 
   /**
+   * HU #13393 — selección para la descarga masiva. El filtro es el de `buildListQuery` sin el orden
+   * (reordenar no cambia el universo); la página no entra, así que paginar conserva la selección
+   * (AC3). La clave suma el organismo: cambiar filtro, lista pegada, familia u organismo la reinicia
+   * (AC4). Contador = `totalCount` del servidor − excluidos (AC2), lo calcula el hook.
+   */
+  const filtroLote = useMemo(() => {
+    const criterios = buildListQuery();
+    delete criterios.sortBy;
+    delete criterios.sortDir;
+    return criterios;
+  }, [buildListQuery]);
+  const claveLote = useCallback(
+    (f: OtClientProceduresParams) => claveEstable({ f, transitOfficeId: transitOfficeId ?? null }),
+    [transitOfficeId],
+  );
+  const lote = useSeleccionLote({ filtro: filtroLote, total: totalCount, claveFiltro: claveLote });
+
+  /**
    * ADR-0059 — cada tarjeta de la cabecera es un estado real, así que toda decisión del OT (asignar,
    * liberar, aprobar, rechazar, revocar) mueve el trámite de una tarjeta a otra. La fila se parchea
    * en sitio para no perder la página ni el filtro; los contadores se vuelven a pedir porque son un
@@ -771,7 +820,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           {
             ...buildListQuery(),
             page: targetPage,
-            pageSize: PAGE_SIZE,
+            pageSize,
           },
           signal,
           transitOfficeId ? { transitOfficeId } : undefined,
@@ -813,7 +862,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         if (!signal?.aborted) setStatus("error");
       }
     },
-    [buildListQuery, page, transitOfficeId],
+    [buildListQuery, page, pageSize, transitOfficeId],
   );
 
   // Epic #12686 (HU #12808) — la tira se mantiene al día sola; la tabla, no. La tarjeta que manda
@@ -1046,9 +1095,6 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     setPage(1);
   };
 
-  // OT sobre el que se listan los mandatarios (SuperAdmin: prop de la ruta; ot_admin: su perfil).
-  const otIdForSigners = transitOfficeId ?? profile?.transitOfficeId ?? null;
-
   /**
    * Aprueba el trámite (opcionalmente con el mandatario elegido) y, si se adjuntó, sube la LT.
    * ADR-0036 §D9 (HU #10916): un 409 `mandatario_requerido` abre el diálogo de selección de mandatario
@@ -1062,7 +1108,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       // en 'asignado', así que adjuntar antes fallaba con estado_invalido; tras aprobar queda
       // 'aprobado' (válido para la LT). El consolidado se genera on-demand y toma la LT vigente.
       const updated = await approveOtClientProcedure(target.id, mandateSignerId);
-      reconciliarFila(updated.id, () => updated);
+      // HU #12787 — la respuesta trae en null la vigencia y la radicación: no pisan las locales.
+      reconciliarFila(updated.id, (r) => conservarCamposConsolidadoOt(r, updated));
       refreshCounters();
 
       if (ltFile) {
@@ -1105,34 +1152,18 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           ? (err.body as { error?: string } | undefined)?.error
           : undefined;
 
-      // ADR-0036 §D9 (HU #10911) — el mandatario resuelto no tiene identidad validada vigente.
-      if (errorCode === "mandatario_identidad_requerida") {
-        setApproveTarget(null);
-        setMandatarioTarget(null);
-        show(
-          "El mandatario debe validar su identidad (vigente) antes de firmar el mandato. " +
-            "La compañía se la envía desde la pestaña «Mandatarios» de su configuración.",
-          "error",
-        );
-        return;
-      }
-
-      // ADR-0036 §D9 — hay varios mandatarios y ninguno cotejó: pedir que el OT elija uno.
-      const needsMandatario = errorCode === "mandatario_requerido";
-      const otId = target.transitOfficeId ?? otIdForSigners;
-      if (needsMandatario && otId) {
-        try {
-          const signers = await fetchMandateSigners(otId);
-          const options = signers.filter(
-            (s) => s.isActive && s.companyTenantIds.includes(target.clientTenantId),
-          );
-          setMandatarioOptions(options);
-          setMandatarioChoice(options[0]?.id ?? "");
+      // ADR-0036 §D9 / HU #13147 (ADR-0066) — el OT debe elegir al firmante: el diálogo lista
+      // EXACTAMENTE los candidatos válidos que devuelve el backend en el 409 (sin consultar la lista
+      // del organismo ni filtrar en el cliente, que ignoraba la vigencia y el scope del Super Admin).
+      // Un 409 sin `candidatos` no abre un diálogo vacío: cae al mensaje de error de aprobación.
+      if (errorCode === "mandatario_requerido") {
+        const candidatos = candidatosDeRespuesta((err as ApiError).body);
+        if (candidatos) {
+          setMandatarioOptions(candidatos);
+          setMandatarioChoice(candidatos[0]?.id ?? "");
           setApproveTarget(null);
           setMandatarioTarget(target);
           return;
-        } catch {
-          // cae al mensaje genérico
         }
       }
       show("No se pudo aprobar el trámite.", "error");
@@ -1149,28 +1180,20 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     if (mandatarioTarget && mandatarioChoice) void runApprove(mandatarioTarget, mandatarioChoice);
   };
 
-  // HU #10800 — abre el modal de asignar placa y carga las placas disponibles del rango de la compañía;
-  // si no hay, arranca en modo "fuera de rango".
+  // HU #12852 (Feature #12846) — abre el modal de asignar placa. Ya no consulta el rango de la
+  // compañía: un único campo de placa libre (el backend siempre reserva fuera de rango).
   const openAssignPlate = (row: OtClientProcedure) => {
     setPlateInput("");
-    setAssignMode("range");
-    setAvailablePlates([]);
     setAssignTarget(row);
-    listPlateDetails(row.clientTenantId, { state: "disponible", scope: { transitOfficeId } })
-      .then((plates) => {
-        setAvailablePlates(plates);
-        setAssignMode(plates.length > 0 ? "range" : "out");
-      })
-      .catch(() => setAssignMode("out"));
   };
 
   const confirmAssignPlate = async () => {
     if (!assignTarget || !plateInput.trim()) return;
     setActing(true);
     try {
-      // HU #10800 — del rango (outOfRange=false) o fuera de rango (outOfRange=true).
+      // HU #12852 — sin selector de modo: assignPlateToProcedure fija outOfRange=true implícito.
       const placaAsignada = plateInput.trim().toUpperCase();
-      await assignPlateToProcedure(assignTarget.id, placaAsignada, assignMode === "out");
+      await assignPlateToProcedure(assignTarget.id, placaAsignada);
       // ADR-0059 — preasignacion → asignado es una transición real. La placa se refleja YA: es el
       // dato que el operador acaba de escribir y el que viene a ver.
       const conPlaca = (r: OtClientProcedure): OtClientProcedure => ({
@@ -1380,7 +1403,16 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const closePreview = () => {
     setPreview((p) => {
       if (p.url) URL.revokeObjectURL(p.url);
-      return { ...p, open: false, url: null, error: null, download: null };
+      return {
+        ...p,
+        open: false,
+        url: null,
+        error: null,
+        download: null,
+        definitivo: false,
+        radicadoEn: null,
+        fallo: null,
+      };
     });
   };
 
@@ -1402,33 +1434,52 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         loading: true,
         error: null,
         download: null,
+        definitivo: false,
+        radicadoEn: null,
+        fallo: null,
       };
     });
     try {
       let attId: string;
       let filename: string;
-      let mimetype = "application/pdf";
+      const mimetype = "application/pdf";
+      let definitivo = false;
+      let radicadoEn: string | null = null;
+      let fallo: FalloRegeneracionConsolidado | null = null;
       if (!isReadOnly) {
         const res = await generarOtConsolidadoMaestro(row.id, scope, force);
         attId = res.document.attachmentId;
         filename = res.document.filename;
         if (res.regenerado) show("Consolidado generado.", "success");
+        fallo = detectarFalloRegeneracion(res);
       } else {
-        const docs = await fetchOtDocuments(row.id, scope);
-        const consol =
-          docs.data.find((a) => a.tipo === "consolidado_maestro") ??
-          docs.data.find((a) => a.tipo === "consolidado");
-        if (!consol) {
-          setPreview((p) => ({
-            ...p,
-            loading: false,
-            error: "El trámite aún no tiene consolidado generado.",
-          }));
-          return;
+        // HU #12787 (AC2, «maestro radicado, fijo») — si el trámite ya se radicó en Quipux y se
+        // conoce el adjunto, se sirve ESE maestro por la ruta de documentos, sin pasar por la
+        // entrega (que podría regenerarlo). Radicado sin adjunto ⇒ entrega con `soloLectura`.
+        const fuente = resolverFuenteMaestroOt(row);
+        radicadoEn = fuente.radicadoEn;
+        if (fuente.via === "adjunto_radicado") {
+          attId = fuente.attachmentId;
+          filename = `consolidado-maestro-${row.referenceNumber}.pdf`;
+        } else {
+          // HU #12787 (AC1/AC3) — en modo QX read-only el maestro se pide a la ruta de entrega OT (no
+          // al adjunto de `GET …/documents`, que puede estar desactualizado). La entrega reconstruye
+          // solo si la bandera está abajo y en estado final sirve el definitivo sin regenerar.
+          let res;
+          try {
+            res = await entregarOtConsolidado(row.id, scope, fuente.params);
+          } catch (e: unknown) {
+            setPreview((p) => ({ ...p, loading: false, error: mensajeEntregaOtFallida(e) }));
+            return;
+          }
+          attId = res.document.attachmentId;
+          filename = res.document.filename;
+          definitivo = esDocumentoDefinitivo(res);
+          // `modo: "radicado_fijo"`: el backend sirvió el maestro radicado tal cual ⇒ versión radicada.
+          if (esEntregaRadicadaFija(res)) radicadoEn = radicadoEn ?? (row.quipuxRadicadoEn?.trim() || null);
+          // Maestro radicado (fijo): no se regenera, así que nunca hay aviso de fallo.
+          fallo = radicadoEn || esEntregaRadicadaFija(res) ? null : detectarFalloRegeneracion(res);
         }
-        attId = consol.id;
-        filename = consol.filename;
-        mimetype = consol.mimetype || "application/pdf";
       }
       const { url } = await fetchOtAttachmentPreviewUrl(row.id, attId, scope);
       // El file-manager sirve el objeto como binary/octet-stream: re-empaquetamos como Blob con el
@@ -1444,6 +1495,11 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         url: objectUrl,
         mimetype,
         download: { procId: row.id, attId, filename },
+        definitivo,
+        radicadoEn,
+        fallo: fallo
+          ? { detalle: fallo, generadoEn: row.consolidadoMaestro?.generadoEn ?? null }
+          : null,
       }));
     } catch {
       setPreview((p) => ({
@@ -1511,7 +1567,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         reason: rejectReason.trim(),
         rejectionReasonIds: rejectReasonIds.length > 0 ? rejectReasonIds : undefined,
       });
-      reconciliarFila(updated.id, () => updated);
+      // HU #12787 — la respuesta trae en null la vigencia y la radicación: no pisan las locales.
+      reconciliarFila(updated.id, (r) => conservarCamposConsolidadoOt(r, updated));
       refreshCounters();
       setRejectTarget(null);
       setDetailProcedure(null);
@@ -1525,15 +1582,11 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     }
   };
 
-  // HU #10805 — dígito de preferencia del trámite en asignación (solo guía). Las placas del rango que
-  // terminan en ese dígito se ordenan primero y se marcan; el OT puede elegir esa u otra cualquiera.
+  // HU #10805 — dígito de preferencia del trámite en asignación (solo guía).
+  // HU #12852 (Feature #12846) — ya no hay lista de placas del rango que ordenar ni marcar: el
+  // dígito sigue teniendo sentido como guía de qué placa libre conviene escribir, así que se
+  // conserva como texto de ayuda junto al único campo de placa.
   const preferredDigit = assignTarget?.platePreferredLastDigit?.trim() ?? "";
-  const orderedPlates = preferredDigit
-    ? [...availablePlates].sort(
-        (a, b) =>
-          Number(b.plate.endsWith(preferredDigit)) - Number(a.plate.endsWith(preferredDigit)),
-      )
-    : availablePlates;
 
   return (
     <div className="space-y-4">
@@ -1579,7 +1632,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         producto ya usa al otro lado del trámite.
       */}
       <div className="flex min-w-0 flex-col">
-{/* Epic #12686 — pestañas de familia a la izquierda, como en el listado del gestor. */}
+        {/* Epic #12686 — pestañas de familia a la izquierda, como en el listado del gestor. */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#DFE5ED] pb-2 dark:border-white/10">
           <FamiliaTabs value={familia} onChange={handleFamiliaChange} />
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -1606,7 +1659,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                     <button
                       type="button"
                       onClick={() => setFieldsKey((k) => k + 1)}
-                      className="rounded-lg border border-[#DFE5ED] px-2.5 py-1.5 font-semibold text-[#557EFF] transition hover:bg-[#557EFF]/10"
+                      className="rounded-lg border border-[#DFE5ED] px-2.5 py-1.5 font-semibold text-flit-brand transition hover:bg-flit-brand/10"
                     >
                       Reintentar
                     </button>
@@ -1636,7 +1689,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                   onClick={() => void handleExportExcel()}
                   disabled={exporting || status === "loading" || totalCount === 0}
                   aria-label="Exportar la bandeja de trámites a Excel"
-                  title="Exportar a Excel"
+                  title={COPY.A13}
                   className={controlCls(false)}
                   data-testid="ot-bandeja-export-xlsx"
                 >
@@ -1644,7 +1697,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                     className={`h-3.5 w-3.5 ${exporting ? "animate-pulse" : ""}`}
                     aria-hidden="true"
                   />
-                  {exporting ? "Exportando…" : "Exportar"}
+                  {exporting ? "Exportando…" : COPY.A13}
                 </button>
               }
             />
@@ -1718,6 +1771,22 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         darkBgClassName="dark:bg-[#0B0F14]"
       />
 
+      {/* HU #13393 — fuera del UiStateBoundary: en cargando/vacío/error sigue visible y deshabilitada
+          (AC7). «Descargar ZIP» y su confirmación (HU #13394) entran por `children`. */}
+      {puedeLote ? (
+        <BarraSeleccionLote
+          estadoTabla={status === "ready" ? "lleno" : status === "empty" ? "vacio" : status === "error" ? "error" : "cargando"}
+          estadoCabecera={lote.estadoCabecera}
+          contador={lote.contador}
+          todosDelFiltro={lote.modo === "filtro"}
+          onAlternarTodos={lote.alternarTodos}
+          onLimpiar={lote.limpiar}
+          mensajeTope={lote.mensajeTope}
+        >
+          <BotonDescargaMaestrosOt seleccion={lote.modelo} contador={lote.contador} scope={scope} onCreado={lote.limpiar} />
+        </BarraSeleccionLote>
+      ) : null}
+
       <UiStateBoundary
         status={status}
         emptyMessage={
@@ -1734,8 +1803,9 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           rows={rows}
           totalCount={totalCount}
           page={page}
-          pageSize={PAGE_SIZE}
+          pageSize={pageSize}
           onPageChange={setPage}
+          onPageSizeChange={setPageSize}
           visibleColumns={visibleColumns}
           sortBy={sortBy}
           sortDir={sortDir}
@@ -1774,6 +1844,9 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             setDetailSection("vehiculo");
             setDetailProcedure(row);
           }}
+          seleccionable={puedeLote}
+          seleccion={lote}
+          onToggle={lote.alternar}
         />
       </UiStateBoundary>
 
@@ -1822,7 +1895,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               <button
                 type="button"
                 className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                style={{ background: "#557EFF" }}
+                style={{ background: "var(--color-flit-brand)" }}
                 disabled={acting || ltOcr?.fase === "analizando"}
                 onClick={() => void confirmApprove()}
               >
@@ -1846,17 +1919,22 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         >
           <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-card p-6 shadow-2xl border">
             <h2 className="text-lg font-semibold text-foreground">Elige el mandatario que firma</h2>
-            <p className="mt-2 text-sm opacity-80">
-              Este trámite requiere contrato de mandato y la compañía tiene varios mandatarios. Elige quién
-              firma para aprobar.
-            </p>
+            {mandatarioOptions.length > 0 && (
+              <p className="mt-2 text-sm opacity-80">
+                Este trámite requiere contrato de mandato y hay varios mandatarios válidos. Elige quién firma
+                para aprobar.
+              </p>
+            )}
             <p className="mt-1 text-xs opacity-60">{mandatarioTarget.referenceNumber}</p>
 
             {mandatarioOptions.length === 0 ? (
-              <p className="mt-4 rounded-xl border p-3 text-center text-xs opacity-70">
-                No hay mandatarios activos para esta compañía en el organismo. Ahora los registra la
-                propia compañía, desde la pestaña «Mandatarios» de su configuración, marcando en qué
-                organismos aplican.
+              <p
+                role="alert"
+                data-testid="mandatario-sin-candidatos"
+                className="mt-4 rounded-xl border p-3 text-center text-xs opacity-70"
+              >
+                No hay mandatarios válidos para aprobar este trámite. Registra uno en «Mandatos y
+                mandatarios» del organismo (lo hace el Admin OT) y vuelve a aprobar.
               </p>
             ) : (
               <fieldset className="mt-4 space-y-2" data-testid="mandatario-options">
@@ -1872,12 +1950,12 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                       value={s.id}
                       checked={mandatarioChoice === s.id}
                       onChange={() => setMandatarioChoice(s.id)}
-                      className="h-4 w-4 accent-[#557EFF]"
+                      className="h-4 w-4 accent-flit-brand"
                     />
                     <span className="flex-1">
-                      <span className="font-semibold">{s.fullName}</span>
-                      <span className="ml-2 font-mono text-xs opacity-60">
-                        {formatDocumentWithType(s.documentType, s.documentNumber)}
+                      <span className="font-semibold">{s.nombre}</span>
+                      <span className="ml-2 text-xs opacity-60">
+                        {formaFirmaLabel(s.formaFirma)}
                       </span>
                     </span>
                   </label>
@@ -1897,7 +1975,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               <button
                 type="button"
                 className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                style={{ background: "#557EFF" }}
+                style={{ background: "var(--color-flit-brand)" }}
                 disabled={acting || !mandatarioChoice}
                 onClick={() => void confirmMandatario()}
               >
@@ -1916,78 +1994,40 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-label="Asignar placa"
         >
           <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
-            <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>Asignar placa al trámite</h2>
+            <h2 className="text-lg font-semibold" style={{ color: "var(--color-flit-primary)" }}>Asignar placa al trámite</h2>
             <p className="mt-2 text-sm opacity-80">{assignTarget.referenceNumber}</p>
-            {/* HU #10805 — dígito de preferencia del gestor: SOLO guía. El OT puede asignar una placa
-                que termine en ese dígito o cualquier otra. */}
+            {/* HU #10805 — dígito de preferencia del gestor: SOLO guía. El OT puede escribir una placa
+                que termine en ese dígito o cualquier otra.
+                HU #12852 (Feature #12846) — ya no hay lista de placas del rango que marcar con ★: la
+                guía queda como sugerencia sobre la placa libre que se va a escribir abajo. */}
             {preferredDigit && (
               <div
                 className="mt-3 rounded-lg px-3 py-2 text-xs"
                 style={{ background: "#EEF3FF", color: "#1E3A8A", border: "1px solid #C7D7FE" }}
               >
-                Dígito de preferencia: <b>termina en {preferredDigit}</b> — solo guía. Las placas ★ del
-                rango terminan en ese dígito; puedes asignar esa u otra cualquiera.
+                Dígito de preferencia: <b>termina en {preferredDigit}</b> — solo guía para elegir la
+                placa; puedes asignar esa u otra cualquiera.
               </div>
             )}
-            {/* HU #10800 — elegir del rango (select) o registrar una placa fuera de rango (input). */}
-            <div className="mt-4 flex gap-2 text-xs font-semibold">
-              <button
-                type="button"
-                disabled={availablePlates.length === 0}
-                onClick={() => { setAssignMode("range"); setPlateInput(""); }}
-                className={`rounded-lg border px-3 py-1.5 disabled:opacity-40 ${assignMode === "range" ? "text-white" : ""}`}
-                style={assignMode === "range" ? { background: "#557EFF", borderColor: "#557EFF" } : undefined}
-              >
-                Del rango{availablePlates.length > 0 ? ` (${availablePlates.length})` : ""}
-              </button>
-              <button
-                type="button"
-                onClick={() => { setAssignMode("out"); setPlateInput(""); }}
-                className={`rounded-lg border px-3 py-1.5 ${assignMode === "out" ? "text-white" : ""}`}
-                style={assignMode === "out" ? { background: "#557EFF", borderColor: "#557EFF" } : undefined}
-              >
-                Fuera de rango
-              </button>
-            </div>
-            {assignMode === "range" ? (
-              <label className="mt-4 block text-xs font-semibold" style={{ color: "#162744" }}>
-                Placa del rango
-                <select
-                  value={plateInput}
-                  onChange={(e) => setPlateInput(e.target.value)}
-                  aria-label="Placa del rango"
-                  className={`mt-1 ${OT_INPUT_CLS}`}
-                >
-                  <option value="">
-                    {availablePlates.length === 0 ? "No hay placas disponibles" : "Selecciona una placa"}
-                  </option>
-                  {orderedPlates.map((p) => (
-                    <option key={p.id} value={p.plate}>
-                      {p.plate}
-                      {preferredDigit && p.plate.endsWith(preferredDigit) ? " ★" : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : (
-              <label className="mt-4 block text-xs font-semibold" style={{ color: "#162744" }}>
-                Placa (fuera de rango)
-                <input
-                  type="text"
-                  value={plateInput}
-                  onChange={(e) => setPlateInput(e.target.value)}
-                  placeholder="ABC123"
-                  aria-label="Placa fuera de rango"
-                  className={`mt-1 uppercase ${OT_INPUT_CLS}`}
-                />
-                <span className="mt-1 block text-[11px] font-normal opacity-70">
-                  Formato ABC123. Se validará que no esté registrada y quedará en el inventario de la compañía.
-                </span>
-              </label>
-            )}
+            {/* HU #12852 (Feature #12846) — único campo de placa: el backend siempre reserva fuera de
+                rango (HU-A1), así que ya no hay selector de modo en-rango/fuera-de-rango. */}
+            <label className="mt-4 block text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }}>
+              Placa
+              <input
+                type="text"
+                value={plateInput}
+                onChange={(e) => setPlateInput(e.target.value)}
+                placeholder="ABC123"
+                aria-label="Placa"
+                className={`mt-1 uppercase ${OT_INPUT_CLS}`}
+              />
+              <span className="mt-1 block text-[11px] font-normal opacity-70">
+                Formato ABC123. Se validará que no esté registrada y quedará en el inventario de la compañía.
+              </span>
+            </label>
             <div className="mt-5 flex gap-3">
               <button type="button" className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60" onClick={() => setAssignTarget(null)} disabled={acting}>Cancelar</button>
-              <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "#557EFF" }} disabled={acting || !plateInput.trim()} onClick={() => void confirmAssignPlate()}>{acting ? "Procesando…" : "Asignar"}</button>
+              <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "var(--color-flit-brand)" }} disabled={acting || !plateInput.trim()} onClick={() => void confirmAssignPlate()}>{acting ? "Procesando…" : "Asignar"}</button>
             </div>
           </div>
         </div>
@@ -2001,7 +2041,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-label="Liberar placa"
         >
           <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
-            <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>Liberar placa</h2>
+            <h2 className="text-lg font-semibold" style={{ color: "var(--color-flit-primary)" }}>Liberar placa</h2>
             <p className="mt-1 text-xs opacity-70">
               El trámite vuelve a Preasignación para asignarle otra placa. La placa actual queda liberada en el inventario.
             </p>
@@ -2032,7 +2072,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-label="Decidir revocatoria"
         >
           <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
-            <h2 className="text-lg font-semibold" style={{ color: "#162744" }}>Decidir revocatoria</h2>
+            <h2 className="text-lg font-semibold" style={{ color: "var(--color-flit-primary)" }}>Decidir revocatoria</h2>
             <p className="mt-2 text-sm opacity-80">Trámite {decideRevocationTarget.referenceNumber}</p>
             <p className="mt-2 text-xs opacity-70">
               El gestor solicitó revocar este trámite. Aprobar lo revoca; rechazar lo deja Aprobado
@@ -2043,9 +2083,9 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                 OT decidía sin poder verlos. */}
             <div
               className="mt-3 rounded-xl border p-3 text-xs"
-              style={{ borderColor: "#DFE5ED", background: "rgba(85,126,255,0.05)" }}
+              style={{ borderColor: "#DFE5ED", background: "color-mix(in srgb, var(--color-flit-brand) 5%, transparent)" }}
             >
-              <p className="font-semibold" style={{ color: "#162744" }}>
+              <p className="font-semibold" style={{ color: "var(--color-flit-primary)" }}>
                 Motivo de la solicitud
               </p>
               {decideRevocationDetailLoading ? (
@@ -2060,14 +2100,14 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                 onClick={() => void handleVerSoporteRevocatoria()}
                 disabled={decideRevocationDetailLoading || !decideRevocationDetail?.supportDocumentId}
                 className="mt-2 font-semibold underline disabled:cursor-not-allowed disabled:opacity-50"
-                style={{ color: "#557EFF" }}
+                style={{ color: "var(--color-flit-brand)" }}
               >
                 Ver documento de soporte (PDF)
               </button>
             </div>
 
             <fieldset className="mt-4">
-              <legend className="text-xs font-semibold" style={{ color: "#162744" }}>Decisión</legend>
+              <legend className="text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }}>Decisión</legend>
               {/* Selector de modo, NO un botón de acción: fondo tenue en vez del mismo azul/rojo
                   sólido del botón de confirmar de abajo, para que no se lean como "dos aprobar". */}
               <div
@@ -2086,7 +2126,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                   className="flex-1 rounded-lg px-3 py-1.5"
                   style={
                     decideRevocationMode === "approve"
-                      ? { background: "rgba(85,126,255,0.12)", color: "#3B5BDB" }
+                      ? { background: "color-mix(in srgb, var(--color-flit-brand) 12%, transparent)", color: "#3B5BDB" }
                       : { color: "#64748b" }
                   }
                 >
@@ -2108,7 +2148,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               </div>
             </fieldset>
 
-            <label className="mt-4 block text-xs font-semibold" style={{ color: "#162744" }}>
+            <label className="mt-4 block text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }}>
               Motivo {decideRevocationMode === "reject" ? "(obligatorio)" : "(opcional)"}
               <textarea
                 className={`mt-1 ${OT_INPUT_CLS}`}
@@ -2159,7 +2199,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               <button
                 type="button"
                 className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                style={{ background: decideRevocationMode === "reject" ? "#dc2626" : "#557EFF" }}
+                style={{ background: decideRevocationMode === "reject" ? "#dc2626" : "var(--color-flit-brand)" }}
                 disabled={acting}
                 onClick={() => void confirmDecideRevocation()}
               >
@@ -2185,7 +2225,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-label="Actualizar placa"
         >
           <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#0B0F14]" style={{ border: "1px solid #DFE5ED" }}>
-            <h2 className="text-lg font-semibold" style={{ color: "#557EFF" }}>Corregir placa</h2>
+            <h2 className="text-lg font-semibold" style={{ color: "var(--color-flit-brand)" }}>Corregir placa</h2>
             <p className="mt-2 text-sm opacity-80">
               Trámite {updatePlateTarget.referenceNumber} · placa actual {updatePlateTarget.placa?.trim() || "—"}
             </p>
@@ -2196,14 +2236,14 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             {updatePlateTarget.plateAssignedAt && (
               <p
                 className="mt-2 text-sm font-semibold"
-                style={{ color: plateWindowJustExpired ? "#dc2626" : "#557EFF" }}
+                style={{ color: plateWindowJustExpired ? "#dc2626" : "var(--color-flit-brand)" }}
               >
                 {plateWindowJustExpired
                   ? "La ventana de 1 hora venció mientras tenías este cuadro abierto."
                   : `Tiempo restante: ${plateUpdateRemainingLabel(updatePlateTarget.plateAssignedAt)}`}
               </p>
             )}
-            <label className="mt-3 block text-xs font-semibold" style={{ color: "#162744" }}>
+            <label className="mt-3 block text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }}>
               Placa correcta
               <input
                 type="text"
@@ -2216,7 +2256,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
             </label>
             <div className="mt-5 flex gap-3">
               <button type="button" className="flex-1 rounded-xl border py-2.5 text-sm font-medium disabled:opacity-60" onClick={() => setUpdatePlateTarget(null)} disabled={acting}>Cancelar</button>
-              <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "#557EFF" }} disabled={acting || !updatePlateInput.trim() || plateWindowJustExpired} onClick={() => void confirmUpdatePlate()}>{acting ? "Procesando…" : "Corregir"}</button>
+              <button type="button" className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60" style={{ background: "var(--color-flit-brand)" }} disabled={acting || !updatePlateInput.trim() || plateWindowJustExpired} onClick={() => void confirmUpdatePlate()}>{acting ? "Procesando…" : "Corregir"}</button>
             </div>
           </div>
         </div>
@@ -2340,7 +2380,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
               <button
                 type="button"
                 className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-                style={{ background: "#557EFF" }}
+                style={{ background: "var(--color-flit-brand)" }}
                 disabled={acting || !ltFile || ltOcr?.fase === "analizando"}
                 onClick={() => void confirmAdjuntarLt()}
               >
@@ -2348,7 +2388,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                   ? "Adjuntando…"
                   : ltOcr?.fase === "analizando"
                     ? "Analizando la LT…"
-                    : "Adjuntar LT"}
+                    : COPY.E02}
               </button>
             </div>
           </div>
@@ -2386,6 +2426,21 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
         loading={preview.loading}
         error={preview.error}
         onDownload={preview.download ? () => void handlePreviewDownload() : undefined}
+        notice={
+          preview.radicadoEn || preview.definitivo || preview.fallo ? (
+            <div className="space-y-2">
+              {preview.radicadoEn ? <AvisoMaestroRadicado radicadoEn={preview.radicadoEn} /> : null}
+              {preview.definitivo ? <AvisoDocumentoFinal /> : null}
+              {/* HU #12799 (AC3) — el maestro servido es el anterior: fallo + fecha disponible. */}
+              {preview.fallo ? (
+                <AvisoFalloRegeneracion
+                  fallo={preview.fallo.detalle}
+                  generadoEn={preview.fallo.generadoEn}
+                />
+              ) : null}
+            </div>
+          ) : undefined
+        }
       />
     </div>
   );

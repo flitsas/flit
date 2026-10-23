@@ -129,6 +129,14 @@ public sealed class BrandAssetValidatorTests
     }
 
     [Fact]
+    public void ValidateLogo_WebP_DevuelveLogoFormat_SoloSeAdmitenPngYJpeg()
+    {
+        var errors = NewValidator().ValidateLogo("image/webp", 1000, 200, 200);
+
+        errors.Should().ContainSingle(e => e.Code == BrandingErrors.LogoFormat);
+    }
+
+    [Fact]
     public void ValidateLogo_PesoMayorAlMaximo_DevuelveLogoTooLargeConMaxBytes()
     {
         var options = new BrandingOptions();

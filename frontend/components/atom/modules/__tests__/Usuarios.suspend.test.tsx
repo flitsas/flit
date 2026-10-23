@@ -5,6 +5,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { chooseRowAction } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 import { Usuarios } from "../Usuarios";
 import { ApiError } from "@/lib/api/types";
 
@@ -67,7 +68,7 @@ describe("Usuarios — suspender/desactivar (HU #10620)", () => {
     render(<Usuarios />);
     await screen.findByText("Ana Torres");
 
-    await user.click(screen.getByRole("button", { name: /Suspender temporalmente a Ana Torres/i }));
+    await chooseRowAction(user, "Ana Torres", /Suspender temporalmente a Ana Torres/i);
     expect(screen.getByLabelText(/Suspendido hasta/i)).toBeRequired();
 
     await user.type(screen.getByLabelText(/Motivo/i), "Incumplimiento");
@@ -85,7 +86,7 @@ describe("Usuarios — suspender/desactivar (HU #10620)", () => {
     render(<Usuarios />);
     await screen.findByText("Ana Torres");
 
-    await user.click(screen.getByRole("button", { name: /Desactivar indefinidamente a Ana Torres/i }));
+    await chooseRowAction(user, "Ana Torres", /Desactivar indefinidamente a Ana Torres/i);
     expect(screen.queryByLabelText(/Suspendido hasta/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Sin fecha de fin/i)).toBeInTheDocument();
 
@@ -103,7 +104,7 @@ describe("Usuarios — suspender/desactivar (HU #10620)", () => {
     render(<Usuarios />);
     await screen.findByText("Ana Torres");
 
-    await user.click(screen.getByRole("button", { name: /Suspender temporalmente a Ana Torres/i }));
+    await chooseRowAction(user, "Ana Torres", /Suspender temporalmente a Ana Torres/i);
     expect(screen.getByLabelText(/Suspendido hasta/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("checkbox", { name: /Sin fecha de fin/i }));
@@ -125,7 +126,7 @@ describe("Usuarios — suspender/desactivar (HU #10620)", () => {
     render(<Usuarios />);
     await screen.findByText("Ana Torres");
 
-    await user.click(screen.getByRole("button", { name: /Desactivar indefinidamente a Ana Torres/i }));
+    await chooseRowAction(user, "Ana Torres", /Desactivar indefinidamente a Ana Torres/i);
     await user.type(screen.getByLabelText(/Motivo/i), "Intento de desactivación");
     await user.click(screen.getByRole("button", { name: /^Desactivar usuario$/i }));
 

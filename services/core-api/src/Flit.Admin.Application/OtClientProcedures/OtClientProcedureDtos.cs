@@ -1,4 +1,5 @@
 using Flit.Admin.Domain.OtClientProcedures;
+using Flit.Queries.Domain.Documentos;
 
 namespace Flit.Admin.Application.OtClientProcedures;
 
@@ -101,6 +102,18 @@ public sealed class OtClientProcedureResponse
     public DateTimeOffset? RevocationDecisionAt { get; init; }
     public string? RevocationRequestReason { get; init; }
     public string? RevocationDecisionReason { get; init; }
+
+    /// <summary>HU #12791 — vigencia + sello del consolidado del wizard (<c>consolidadoWizard</c>). Aditivo; null en respuestas de acciones.</summary>
+    public ConsolidadoVigenciaDto? ConsolidadoWizard { get; init; }
+
+    /// <summary>HU #12791 — vigencia + sello del consolidado maestro del OT (<c>consolidadoMaestro</c>). Aditivo; null en respuestas de acciones.</summary>
+    public ConsolidadoVigenciaDto? ConsolidadoMaestro { get; init; }
+
+    /// <summary>HU #12791 (para #12787 AC2) — última radicación exitosa ante Quipux (ISO UTC); null si no se radicó.</summary>
+    public DateTimeOffset? QuipuxRadicadoEn { get; init; }
+
+    /// <summary>HU #12791 — adjunto <c>consolidado_maestro</c> enviado en esa radicación; null si no se radicó.</summary>
+    public Guid? QuipuxMaestroAttachmentId { get; init; }
 }
 
 public sealed class OtClientProcedureVehicleSnapshotResponse
@@ -276,5 +289,9 @@ internal static class OtClientProcedureMapper
             RevocationDecisionAt = procedure.RevocationDecisionAt,
             RevocationRequestReason = procedure.RevocationRequestReason,
             RevocationDecisionReason = procedure.RevocationDecisionReason,
+            ConsolidadoWizard = procedure.ConsolidadoWizard,
+            ConsolidadoMaestro = procedure.ConsolidadoMaestro,
+            QuipuxRadicadoEn = procedure.QuipuxRadicadoEn,
+            QuipuxMaestroAttachmentId = procedure.QuipuxMaestroAttachmentId,
         };
 }

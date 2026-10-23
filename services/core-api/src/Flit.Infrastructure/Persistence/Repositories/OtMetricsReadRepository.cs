@@ -1,3 +1,4 @@
+using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.OtMetrics;
 using Flit.Queries.Domain.Time;
 using Flit.Tramites.Domain.RevocationRequests;
@@ -32,10 +33,10 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
     private readonly FlitDbContext _context;
     private readonly OtTenantScope _scope;
 
-    public OtMetricsReadRepository(FlitDbContext context)
+    public OtMetricsReadRepository(FlitDbContext context, IEffectiveTransitOfficeListResolver? effectiveOffices = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
-        _scope = new OtTenantScope(_context);
+        _scope = new OtTenantScope(_context, effectiveOffices);
     }
 
     // ── A.1 Panel operativo ───────────────────────────────────────────────────────────────────
@@ -1220,10 +1221,14 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
         ExecuteScopedAsync<IReadOnlyList<OtClientCompanyOptionDto>>(
             otTenantId,
             transitOfficeIdOverride,
-            async (_, tenantIds) =>
+            async (transitOfficeId, tenantIds) =>
             {
+                // Bug #12912 — Ley 1581: la red solo aparece por nombre si ya entregó un trámite.
+                var visibles = await _scope
+                    .ListVisibleClientTenantIdsAsync(transitOfficeId, tenantIds, cancellationToken)
+                    .ConfigureAwait(false);
                 var names = await ResolveTenantNamesAsync(
-                    tenantIds.ToList(), cancellationToken).ConfigureAwait(false);
+                    visibles.ToList(), cancellationToken).ConfigureAwait(false);
 
                 return names
                     .Select(kv => new OtClientCompanyOptionDto(kv.Key, kv.Value))

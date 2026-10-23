@@ -6,7 +6,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight, X } from "lucide-react";
 import { ModuleTitle } from "./ModuleTitle";
-import { PageNav } from "@/components/atom/PageNav";
+import { Pagination } from "@/components/atom/Pagination";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { usePaginacion } from "@/components/atom/usePaginacion";
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from "@/components/atom/table-styles";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { WIZARD_CTA_GRADIENT } from "@/components/operacion/wizard-field-styles";
 import {
@@ -39,7 +47,7 @@ import { DetalleTramiteIct } from "@/components/ict/DetalleTramiteIct";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { getToken } from "@/lib/api/client";
 
-const TAMANO_PAGINA = 25;
+const TAMANO_PAGINA = 10;
 
 /**
  * Tamaño de página al exportar. El backend acota el suyo a 200; pedir más no trae más filas y sí
@@ -61,10 +69,10 @@ const COLUMNAS = [
 const tdCls = "border-y px-4 py-3 align-middle";
 
 const inputCls =
-  "rounded-lg border border-[#D9DEE8] dark:border-white/15 bg-white dark:bg-[#0B0F14] px-2.5 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20";
+  "rounded-lg border border-[#D9DEE8] dark:border-white/15 bg-white dark:bg-[#0B0F14] px-2.5 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20";
 
 const ghostCls =
-  "inline-flex items-center gap-1.5 rounded-lg border border-[#D9DEE8] dark:border-white/15 px-3 py-2 text-xs font-medium opacity-80 hover:opacity-100 hover:border-[#557EFF]";
+  "inline-flex items-center gap-1.5 rounded-lg border border-[#D9DEE8] dark:border-white/15 px-3 py-2 text-xs font-medium opacity-80 hover:opacity-100 hover:border-flit-brand";
 
 interface Filtros {
   desde: string;
@@ -124,7 +132,8 @@ function aParametros(f: Filtros, page: number, pageSize = TAMANO_PAGINA): Filtro
 export function IctTrazabilidad() {
   const [filtros, setFiltros] = useState<Filtros>(filtrosIniciales);
   const [aplicados, setAplicados] = useState<Filtros>(filtrosIniciales);
-  const [page, setPage] = useState(1);
+  // Bug #13055 — paginación de servidor estándar, con «Filas por página».
+  const { page, pageSize, setPage, setPageSize } = usePaginacion(TAMANO_PAGINA);
   const [pagina, setPagina] = useState<PaginaTramitesIct | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -158,11 +167,11 @@ export function IctTrazabilidad() {
   // Evita que una respuesta lenta de una búsqueda anterior pise a la de la búsqueda actual.
   const peticion = useRef(0);
 
-  const cargar = useCallback(async (f: Filtros, p: number) => {
+  const cargar = useCallback(async (f: Filtros, p: number, tamano: number) => {
     const propia = ++peticion.current;
     setCargando(true);
     try {
-      const datos = await fetchTramitesIct(aParametros(f, p));
+      const datos = await fetchTramitesIct(aParametros(f, p, tamano));
       if (peticion.current !== propia) return;
       setPagina(datos);
       setError(null);
@@ -180,14 +189,14 @@ export function IctTrazabilidad() {
     // la pantalla sin señal de que está trabajando durante toda la consulta, que es cuando más
     // falta hace.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void cargar(aplicados, page);
-  }, [cargar, aplicados, page]);
+    void cargar(aplicados, page, pageSize);
+  }, [cargar, aplicados, page, pageSize]);
 
   const aplicar = useCallback((f: Filtros) => {
     setAplicados(f);
     setPage(1);
     setAbierto(null);
-  }, []);
+  }, [setPage]);
 
   const limpiar = useCallback(() => {
     const iniciales = filtrosIniciales();
@@ -256,7 +265,6 @@ export function IctTrazabilidad() {
 
   const items = pagina?.items ?? null;
   const total = pagina?.total ?? 0;
-  const totalPaginas = Math.max(1, Math.ceil(total / TAMANO_PAGINA));
 
   // El export recorre todas las páginas, así que puede tardar: sin señal, el usuario vuelve a
   // pulsar y se lleva el mismo archivo dos veces.
@@ -290,7 +298,7 @@ export function IctTrazabilidad() {
         : "ready";
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
       <ModuleTitle
         title="Trazabilidad ICT"
         subtitle="Qué pasó con cada trámite que entró por la integración con terceros. Busca por número, placa o VIN y abre su recorrido completo."
@@ -316,7 +324,7 @@ export function IctTrazabilidad() {
               aria-label={`${meta.label}: ${conteo} trámite${conteo === 1 ? "" : "s"}`}
               aria-pressed={activo}
               onClick={() => alternarEstado(estado)}
-              className="flex flex-col items-center gap-1 px-2 py-3 transition hover:bg-[#557EFF]/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#557EFF]"
+              className="flex flex-col items-center gap-1 px-2 py-3 transition hover:bg-flit-brand/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand"
               style={activo ? { background: meta.style.bg } : undefined}
             >
               {/* El icono es elemento gráfico (umbral 3:1): lleva el tono PURO del estado. */}
@@ -326,11 +334,11 @@ export function IctTrazabilidad() {
               >
                 <Icon className="h-4 w-4" style={{ color: meta.style.accent }} aria-hidden="true" />
               </span>
-              <span className="max-w-full truncate text-xs font-medium text-[#162744]/70 dark:text-white/70">
+              <span className="max-w-full truncate text-xs font-medium text-flit-primary/70 dark:text-white/70">
                 {meta.label}
               </span>
               <span
-                className="text-xl font-bold leading-none tabular-nums text-[#162744] dark:text-white"
+                className="text-xl font-bold leading-none tabular-nums text-flit-primary dark:text-white"
                 aria-hidden="true"
               >
                 {conteo}
@@ -468,17 +476,18 @@ export function IctTrazabilidad() {
         // que quien navega con lector necesita que se le anuncie.
         <p
           role="status"
-          className="shrink-0 text-xs text-[#162744]/70 dark:text-white/70"
+          className="shrink-0 text-xs text-flit-primary/70 dark:text-white/70"
         >
           {avisoExport}
         </p>
       )}
 
+      {/* Bug #13055 — carga con el loader del carrito (antes, esqueleto). */}
+      {status === "loading" && <CarLoaderModal label="Cargando trazabilidad ICT…" />}
       <UiStateBoundary
-        status={status}
-        skeletonRows={6}
+        status={status === "loading" ? "ready" : status}
         errorMessage={error ?? "No se pudo cargar la trazabilidad ICT."}
-        onRetry={() => void cargar(aplicados, page)}
+        onRetry={() => void cargar(aplicados, page, pageSize)}
         emptyMessage="Ningún trámite de la integración coincide con los filtros. Amplía el rango de fechas o quita algún filtro."
       >
         {items && items.length > 0 && (
@@ -486,21 +495,31 @@ export function IctTrazabilidad() {
             {/* Tabla en el patrón del resto de la consola (companies / trámites): cabecera en
                 pastilla #DFE5ED y cada fila como tarjeta blanca separada. */}
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1040px] border-separate border-spacing-y-2 text-xs">
+              <table className="w-full min-w-[1040px] text-xs" style={{ borderCollapse: "separate", borderSpacing: "0 8px" }}>
                 <thead>
-                  <tr
-                    className="text-left text-[10px] font-semibold uppercase"
-                    style={{ color: "#162744" }}
-                  >
-                    <th className="rounded-l-xl px-3 py-2.5" style={{ background: "#DFE5ED", width: 34 }}>
+                  <tr>
+                    <th
+                      scope="col"
+                      className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`}
+                      style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG, width: 34 }}
+                    >
                       <span className="sr-only">Detalle</span>
                     </th>
                     {COLUMNAS.map((c) => (
-                      <th key={c} className="px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                      <th
+                        key={c}
+                        scope="col"
+                        className={TABLA_HEADER_CELL_CLS}
+                        style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                      >
                         {c}
                       </th>
                     ))}
-                    <th className="rounded-r-xl px-4 py-2.5" style={{ background: "#DFE5ED" }}>
+                    <th
+                      scope="col"
+                      className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl`}
+                      style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                    >
                       Esperando
                     </th>
                   </tr>
@@ -519,13 +538,13 @@ export function IctTrazabilidad() {
               </table>
             </div>
 
-            <PageNav
+            <Pagination
               page={page}
-              totalPages={totalPaginas}
+              pageSize={pageSize}
+              totalCount={total}
               onPageChange={setPage}
-              resumen={`Mostrando ${(page - 1) * TAMANO_PAGINA + 1}–${
-                Math.min(page * TAMANO_PAGINA, total)
-              } de ${total.toLocaleString("es-CO")} trámites`}
+              onPageSizeChange={setPageSize}
+              noun="trámites"
               ariaLabel="Paginación de la trazabilidad ICT"
             />
           </>
@@ -581,8 +600,8 @@ function FilaTramite({
   return (
     <>
       <tr
-        className={`cursor-pointer bg-white text-[#162744] transition dark:bg-[#162744] dark:text-white ${
-          abierta ? "border-[#557EFF]/40" : "border-[#DFE5ED] dark:border-white/10"
+        className={`cursor-pointer bg-white text-flit-primary dark:bg-[#0B0F14] dark:text-white ${TABLA_ROW_HOVER_CLS} ${
+          abierta ? "border-flit-brand/40" : "border-[#DFE5ED] dark:border-white/10"
         }`}
         onClick={onToggle}
         tabIndex={0}
@@ -598,12 +617,12 @@ function FilaTramite({
       >
         <td className={`${tdCls} rounded-l-xl border-l px-3`}>
           <ChevronRight
-            className={`h-3.5 w-3.5 text-[#557EFF] transition-transform ${abierta ? "rotate-90" : ""}`}
+            className={`h-3.5 w-3.5 text-flit-brand transition-transform ${abierta ? "rotate-90" : ""}`}
             aria-hidden="true"
           />
         </td>
         <td className={tdCls}>
-          <span className="font-mono font-semibold text-[#557EFF]">{tramite.numero}</span>
+          <span className="font-mono font-semibold text-flit-brand">{tramite.numero}</span>
         </td>
         <td className={tdCls}>
           <span className="font-mono font-semibold tracking-wide">{tramite.placa}</span>

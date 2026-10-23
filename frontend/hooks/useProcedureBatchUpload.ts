@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { mensajeErrorAdjunto } from '@/lib/tramites/flito';
 import {
   cargarTiposOcr,
   OCR_TIPOS_PERSISTIBLES,
@@ -365,7 +366,8 @@ export function useProcedureBatchUpload(
       } catch (err) {
         fallos.push({
           filename: piece.filename,
-          motivo: err instanceof Error ? err.message : 'No se pudo adjuntar.',
+          // HU #13266 (AC3) — si el tipo ya lo cargó FLITO, copy de FLITO en vez del 409 crudo.
+          motivo: mensajeErrorAdjunto(err, 'No se pudo adjuntar.', item.conflicto),
         });
       }
     }

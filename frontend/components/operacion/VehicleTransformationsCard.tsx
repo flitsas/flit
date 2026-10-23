@@ -404,7 +404,7 @@ export function VehicleTransformationsCard({
         className={cn('rounded-xl px-3 py-2 text-xs', changes.length > 0 ? 'font-medium' : 'opacity-70')}
         style={
           changes.length > 0
-            ? { background: 'rgba(85,126,255,0.08)', color: '#557EFF' }
+            ? { background: 'color-mix(in srgb, var(--color-flit-brand) 8%, transparent)', color: 'var(--color-flit-brand)' }
             : undefined
         }
       >
@@ -483,7 +483,7 @@ function SubtramiteDocCard({
     <div
       className={cn(
         'relative flex flex-col rounded-xl bg-white p-4 shadow-sm transition hover:shadow-md dark:bg-[#162744]',
-        done ? 'border' : 'border-2 border-dashed hover:border-[#557EFF] hover:bg-[#F0F5FF]',
+        done ? 'border' : 'border-2 border-dashed hover:border-flit-brand hover:bg-[#F0F5FF]',
       )}
       style={{ borderColor: '#E2E8F0' }}
     >
@@ -504,7 +504,7 @@ function SubtramiteDocCard({
 
       {/* Con el subtrámite como tipo base, el contenedor ya lo nombró: repetirlo dejaba dos rótulos
           seguidos diciendo lo mismo. Lo que sí falta ahí es qué soporte se pide, así que sube. */}
-      <p className="pr-28 text-[13px] font-semibold leading-tight" style={{ color: '#162744' }}>
+      <p className="pr-28 text-[13px] font-semibold leading-tight" style={{ color: 'var(--color-flit-primary)' }}>
         {esTipoBase ? (
           <DocumentCatalogCaption nombre={soporte.nombre} codigo={soporte.codigo} />
         ) : (
@@ -527,7 +527,7 @@ function SubtramiteDocCard({
             className={`h-full rounded-full ${uploading ? 'animate-pulse' : ''}`}
             style={{
               width: uploading ? '60%' : '100%',
-              background: uploading ? '#557EFF' : '#8CC63F',
+              background: uploading ? 'var(--color-flit-brand)' : '#8CC63F',
             }}
           />
         </div>
@@ -578,7 +578,7 @@ function SubtramiteDocCard({
           </p>
         )}
         {changed && (
-          <p className="flex items-center gap-1.5 text-xs" style={{ color: '#557EFF' }}>
+          <p className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--color-flit-brand)' }}>
             <span className="opacity-70">{up(item.runtValue)}</span>
             <ArrowRight aria-hidden="true" className="h-3 w-3" />
             <span className="font-semibold">{up(item.effectiveValue)}</span>
@@ -595,7 +595,7 @@ function SubtramiteDocCard({
         className="mt-3 rounded-lg px-2.5 py-2 text-[11px] leading-snug"
         style={{ background: '#F8FAFC' }}
       >
-        <p className="font-semibold" style={{ color: '#162744' }}>
+        <p className="font-semibold" style={{ color: 'var(--color-flit-primary)' }}>
           <span className="font-normal opacity-70">Debes adjuntar: </span>
           {item.nota.titulo}
         </p>
@@ -623,8 +623,8 @@ function SubtramiteDocCard({
               disabled={busy || disabled}
               className="inline-flex h-9 items-center gap-1.5 rounded-lg border bg-white px-4 text-[12px] font-semibold transition hover:bg-[#EFF6FF] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent"
               style={{
-                borderColor: '#557EFF',
-                color: '#557EFF',
+                borderColor: 'var(--color-flit-brand)',
+                color: 'var(--color-flit-brand)',
                 borderWidth: 1,
               }}
             >

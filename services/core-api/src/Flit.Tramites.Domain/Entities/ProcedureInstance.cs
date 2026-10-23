@@ -87,6 +87,16 @@ public sealed class ProcedureInstance
     public DateTimeOffset? PlateUpdatedAt { get; set; }
 
     /// <summary>
+    /// Bug #13055 — último instante en que cambiaron los DATOS que imprime el FUR (campos, actores,
+    /// participantes, datos comerciales, prenda, firmas o validación de identidad), desde cualquier
+    /// pantalla: gestor, OT o administración. Lo sella <c>ConsolidadoVigenciaTracker</c> al guardar,
+    /// solo si el trámite ya tiene FUR. Un FUR anterior a esta marca está desactualizado y se regenera
+    /// antes de armar el consolidado. <c>null</c> = sin cambios registrados desde que existe la
+    /// columna. Columna agregada por migración SQL cruda (la tabla está ExcludeFromMigrations).
+    /// </summary>
+    public DateTimeOffset? ExpedienteActualizadoEn { get; set; }
+
+    /// <summary>
     /// Feature #12276 — momento en que la Confirmación RUNT dio Confirmado. NULL = no confirmado: la
     /// columna del gestor muestra NO si ya hubo intentos y — si nunca se consultó. Ortogonal al
     /// <see cref="Status"/>: la corrida jamás lo cambia.
@@ -161,6 +171,15 @@ public sealed class ProcedureInstance
     public bool ConsolidadoMaestroVigente { get; set; }
 
     /// <summary>
+    /// HU #12790 (Épica #12760) — instante UTC en que se generó el <c>consolidado_maestro</c>
+    /// vigente. Lo sella <c>GenerarConsolidadoMaestroHandler</c> junto con
+    /// <see cref="ConsolidadoMaestroVigente"/>. <c>null</c> en trámites históricos (anteriores a la
+    /// columna): no invalida el documento, solo indica «fecha no disponible». Columna agregada por
+    /// migración SQL cruda (tabla ExcludeFromMigrations); aquí solo se mapea al modelo EF.
+    /// </summary>
+    public DateTimeOffset? ConsolidadoMaestroGeneradoEn { get; set; }
+
+    /// <summary>
     /// Migración V1→V2 (traspasos) — marca de "trámite histórico importado desde Flit V1". En
     /// <c>true</c> el trámite es una FOTO de solo lectura: no se capturó paso a paso en V2, así que
     /// no debe someterse al gating del wizard vivo (que exige datos —comercial, biométrica, FUR—
@@ -197,6 +216,18 @@ public sealed class ProcedureInstance
     public Guid? ParentTenantIdAtCreation { get; set; }
 
     /// <summary>
+    /// HU #13402 (Feature #13399, Épica #13039) — valor del parámetro de la compañía «generar
+    /// improntas automáticamente» (<c>admin.tenant_operational_policies.generate_improntas</c>)
+    /// CONGELADO al crear el trámite. Cambiar o reactivar el parámetro después no altera trámites
+    /// ya creados. Con <c>false</c> la generación automática de la impronta (wizard, pre-generación
+    /// del consolidado, marca «se generará automáticamente») no aplica; el usuario sube el adjunto
+    /// a mano y su exigencia sigue gobernada por la matriz/checklist. Default true: trámites previos
+    /// a la migración y creadores que no lo informan conservan el comportamiento histórico. Se manda
+    /// en el INSERT y nunca en un UPDATE (<c>AfterSaveBehavior.Throw</c>).
+    /// </summary>
+    public bool ImprontaGeneracionHabilitada { get; set; } = true;
+
+    /// <summary>
     /// Pausa del trámite (ICT — servicio v1 <c>pauseDraftProcess</c> y bandera <c>starts_procedure_in_paused</c>
     /// del register). En <c>true</c> el trámite NO avanza: la radicación/preparación se bloquean
     /// (<see cref="UseCases.ProcedureInstances.SubmitProcedureInstanceHandler"/> devuelve
@@ -222,6 +253,15 @@ public sealed class ProcedureInstance
     /// ExcludeFromMigrations); aquí solo se mapea al modelo EF.
     /// </summary>
     public bool ConsolidadoWizardVigente { get; set; }
+
+    /// <summary>
+    /// HU #12790 (Épica #12760) — instante UTC en que se generó (<c>GenerarConsolidadoHandler</c>) o
+    /// se cargó a mano (<c>CargarConsolidadoExternoHandler</c>, <c>Source="user"</c>) el consolidado
+    /// del wizard vigente. <c>null</c> en trámites históricos: no invalida el documento, solo indica
+    /// «fecha no disponible». Columna agregada por migración SQL cruda (tabla
+    /// ExcludeFromMigrations); aquí solo se mapea al modelo EF.
+    /// </summary>
+    public DateTimeOffset? ConsolidadoWizardGeneradoEn { get; set; }
 
     /// <summary>
     /// Invalida los consolidados persistidos (maestro y wizard) tras un cambio que altera el

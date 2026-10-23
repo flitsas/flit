@@ -1,0 +1,494 @@
+# API externa — Sincronización incremental de trámites (v3.3)
+
+> Contrato para clientes de integración externos (primer consumidor: **Flito**).
+> Estado: **Acordado** (2026-09-29) · Épica ADO: [#12737](https://dev.azure.com/FlitDevOps/FLIT%20-%20EVOLUTION/_workitems/edit/12737) · Sin implementar.
+> Todos los ejemplos usan datos ficticios. Este documento puede copiarse al repositorio del consumidor.
+>
+> **Cambios de v3.2 → v3.3** (2026-10-16, Épica [#13614](https://dev.azure.com/FlitDevOps/FLIT%20-%20EVOLUTION/_workitems/edit/13614),
+> contraparte de la Épica FLITO [#13576](https://dev.azure.com/FlitDevOps/FLIT%20-%20FLITO/_workitems/edit/13576)):
+> vuelve el **canal de señal** del v2, ahora sobre la plataforma de mensajería (ADR-0071). FLIT 2 avisa en segundos,
+> con un webhook firmado y delgado, que un trámite cambió (§8). El feed por cursor **sigue siendo la fuente de
+> verdad**: el aviso solo indica cuándo leer. La consulta periódica pasa a ser un respaldo (FLITO: cada hora).
+> Feed, ítem, autenticación y adjuntos: sin cambios.
+>
+> **Cambios de v3.1 → v3.2** (2026-10-02, Épica [#12741](https://dev.azure.com/FlitDevOps/FLIT%20-%20FLITO/_workitems/edit/12741),
+> Feature [#13261](https://dev.azure.com/FlitDevOps/FLIT%20-%20EVOLUTION/_workitems/edit/13261)): primera operación de
+> **escritura**. El consumidor adjunta al trámite el comprobante de pago del impuesto departamental con
+> `POST /api/v1/external/tramites/{id}/adjuntos` y el permiso nuevo `external.tramites.attachments.write` (§7).
+> Estado: **implementada** (HU #13263). Lo demás, sin cambios.
+> **Aclaración** (2026-10-05, HU #13264): el `200` idempotente no escribe el adjunto, pero si el trámite está en un
+> estado que marca el pago y la marca falta, la pone (`pagadoMarcado: true`).
+>
+> **Aclaración (2026-09-30, HU #13077):** el endpoint de URL de adjunto entrega **solo facturas** (cualquier
+> otro adjunto responde 404) y suma `503 storage_unavailable` si el almacenamiento no responde (§3).
+>
+> **Cambios de v3 → v3.1** (2026-09-29): los trámites **migrados desde FLIT 1** a FLIT 2 no se entregan
+> nunca, ni como cambio ni como tombstone. Al consumidor ya le llegan por FLIT 1; entregarlos también por
+> aquí duplicaría el trámite con otro radicado.
+>
+> **Cambios de v2 → v3** (2026-09-29, acordados entre los equipos de FLIT y Flito):
+> 1. **Se elimina el canal de señal** (webhook `tramite_sync_changed`, firma HMAC, secreto compartido y
+>    requisito de conectividad FLIT → consumidor). La integración es **solo pull**: el consumidor
+>    consulta cada 5 min y a demanda, siempre por el mismo cursor.
+> 2. `cursor` y `since` en la misma llamada → `400 cursor_and_since_exclusive`.
+> 3. La guía de consumo (§5) arranca por `since` con la hora real, no por cursor vacío.
+> 4. **`comprador` (objeto) pasa a `compradores` (array)** con `ordinal` y `porcentajeParticipacion`, para
+>    no perder copropietarios (FLIT 2 admite hasta 4 por rol, ADR-0053). Nunca `null`; puede venir vacío.
+> 5. Autenticación, alcance, resto del ítem, estados y endpoint del adjunto: **sin cambios**.
+>
+> **Cambios de v1 → v2** (histórico; el punto 1 queda anulado por v3):
+> 1. Se añade un **canal de señal** (webhook saliente firmado) para que el consumidor no consulte a
+>    ciegas — ver §3. El pull por cursor sigue siendo la fuente de verdad; la señal solo lo acelera.
+> 2. Se precisa la regla de alcance: **se entrega todo trámite radicado al menos una vez, y una vez
+>    dentro ya no sale nunca del feed.** v1 decía lo mismo en prosa pero lo implementaba con una
+>    condición distinta, que dejaba desaparecer del feed a los trámites que retrocedían.
+> 3. Se añade la **tabla de estados** (§4) con cuáles son terminales y a dónde puede ir cada uno.
+> 4. §2 (auth), §4 (ítem) y el endpoint de adjunto quedan **sin cambios funcionales**.
+
+## 1. Resumen
+
+| Aspecto | Valor |
+|---|---|
+| Base | `https://<host-ambiente>/api/v1/external` (un cliente y un host por ambiente: DEV, QA, PDN) |
+| Autenticación | `client_credentials` → JWT Bearer RS256, vigencia 30 min |
+| Scopes | `external.tramites.read` (obligatorio) · `external.tramites.pii.read` (datos personales sin enmascarar) · `external.tramites.attachments.write` (envío de adjuntos, §7) |
+| Patrón | Pull incremental por cursor opaco (keyset), consultado al recibir un aviso (§8), periódicamente como respaldo y a demanda. Semántica **al menos una vez**. Escritura puntual: envío de adjuntos (§7) |
+| Formato | JSON camelCase · fechas ISO-8601 con offset `-05:00` · **todas las claves siempre presentes**, vacío = `null` |
+| Errores | RFC 7807 `application/problem+json` |
+| Límites | `pageSize` default 200, máx 1000 · 120 solicitudes/min por cliente · token: límite por IP · ventana de estabilidad 5 s |
+
+## 2. Autenticación
+
+### `POST /api/v1/external/auth/token`
+
+```http
+POST /api/v1/external/auth/token
+Content-Type: application/json
+
+{ "clientId": "flito-qa", "clientSecret": "<secreto>" }
+```
+
+```json
+{ "accessToken": "<jwt>", "tokenType": "Bearer", "expiresIn": 1800, "scope": ["external.tramites.read", "external.tramites.pii.read"] }
+```
+
+- 401 `invalid_client` si las credenciales son inválidas o el cliente está inactivo (no se revela cuál).
+- 423 `client_locked` tras 5 fallos consecutivos; bloqueo temporal de **15 min**, con desbloqueo automático o por el superadministrador.
+- 403 `secret_rotation_required` si el cliente tiene rotación obligatoria pendiente.
+- El consumidor cachea el token y lo renueva antes de `expiresIn` o ante un 401.
+
+Todos los errores de `/api/v1/external/*` son `application/problem+json`; el código estable va en la extensión `code` (p. ej. `{"type":"about:blank","title":"invalid_client","status":401,"detail":"…","code":"invalid_client"}`). Además: `429 rate_limited` con `Retry-After` (10 solicitudes de token/min por IP) y `503 external_auth_unavailable` si el ambiente no tiene llave de emisión. `423` incluye `Retry-After` en segundos. La respuesta 200 lleva `Cache-Control: no-store`. Tras una rotación, el secreto anterior sigue siendo válido 24 h.
+
+En los endpoints protegidos, un pase ausente, caducado o de otro emisor recibe `401 invalid_token` (problem+json, con cabecera `WWW-Authenticate: Bearer`); un pase válido sin el permiso requerido, `403 insufficient_scope`.
+
+Todos los demás endpoints exigen `Authorization: Bearer <jwt>`.
+
+## 3. Sincronización
+
+### `GET /api/v1/external/tramites/sync`
+
+| Parámetro | Tipo | Descripción |
+|---|---|---|
+| `cursor` | string, opcional | Cursor opaco devuelto en `nextCursor`. Vacío = desde el inicio del histórico. |
+| `since` | ISO-8601, opcional | Solo sin `cursor` (los dos juntos → 400). Inicia desde el primer trámite cuya **fecha de último cambio** ≥ `since` (no por fecha de creación). |
+| `pageSize` | int, opcional | Default 200, máximo 1000. |
+
+Respuesta `200`:
+
+```json
+{
+  "items": [ { "...": "ver §4" } ],
+  "nextCursor": "eyJ2IjoxLCJzdiI6NDgyMTN9",
+  "hasMore": true,
+  "pageSize": 500,
+  "serverTime": "2026-09-21T10:15:03-05:00"
+}
+```
+
+Reglas:
+- Ítems en el orden del cursor. Normalmente coincide con `syncVersion` ascendente, pero no está garantizado entre trámites distintos (tras una transacción larga puede llegar antes una versión menor). La regla de upsert por `id` descartando `syncVersion` ≤ al guardado sigue siendo la que decide. `nextCursor` **siempre** presente (aunque `hasMore=false`): el consumidor lo persiste y continúa desde ahí en la siguiente corrida.
+- Sin resultados → `200` con `items: []` (nunca 404).
+- Un trámite puede repetirse entre páginas o corridas si cambió entre medias: el consumidor hace **upsert por `id`** y descarta si `syncVersion` recibido ≤ el guardado.
+- **Alcance: se entrega todo trámite RADICADO al menos una vez**, es decir, que alguna vez ha llegado al organismo de tránsito. Un trámite que nunca se radicó —en `borrador` o `preparado`— no se entrega: es trabajo en curso interno de la empresa. **Tampoco se entregan los trámites migrados desde FLIT 1** (históricos importados a FLIT 2 como foto de solo lectura): el consumidor ya los recibe por FLIT 1. La exclusión es permanente; no generan cambios ni tombstone.
+- **Una vez entregado por primera vez, el trámite permanece en el feed de forma definitiva.** Si retrocede a `borrador` o a `preparado`, llega como **un cambio de estado más, nunca como una baja**. Desaparecer del feed no es un comportamiento posible de este contrato: la única forma de baja es el tombstone.
+- Un trámite eliminado lógicamente llega con `eliminado: true` y payload mínimo (tombstone).
+- Ventana de estabilidad: los cambios se exponen con un retraso de **5 s** para no perder transacciones concurrentes.
+- Errores: `400 invalid_cursor`, `400 invalid_page_size`, `400 invalid_since`, `400 cursor_and_since_exclusive` (`cursor` y `since` juntos), `401`, `403 insufficient_scope`, `429` con `Retry-After`.
+
+### `GET /api/v1/external/tramites/{id}/adjuntos/{adjuntoId}/url`
+
+Devuelve una URL firmada de corta vida para descargar **la factura** del trámite (`adjuntoId` = `factura.adjuntoId` del ítem, o el de una factura anterior del mismo trámite). Solo se entregan adjuntos de tipo factura: los demás pueden llevar datos personales (documentos de identidad, poderes).
+
+```json
+{ "url": "https://.../firmada?...", "expiraEn": "2026-09-21T10:30:00-05:00", "nombreArchivo": "factura.pdf", "contentType": "application/pdf" }
+```
+
+- Vigencia de la URL: **10 minutos** (mismo mecanismo y mismo tope que el resto de la plataforma; el ADR-0029 exige ≤ 15 min).
+- `expiraEn` es **informativo**: el TTL real lo firma el servicio de almacenamiento y puede no devolverlo. El consumidor debe tratar la URL como de un solo uso inmediato y volver a pedirla si falla, en vez de confiar en `expiraEn`.
+- `404 attachment_not_found` si el trámite o el adjunto no existen, el adjunto no pertenece al trámite, **no es una factura**, el trámite está fuera de alcance (nunca radicado, migrado desde FLIT 1 o eliminado) o el almacenamiento ya no tiene el archivo. Nunca 410.
+- `503 storage_unavailable` si el servicio de almacenamiento no responde: es transitorio, reintentar más tarde con la misma petición.
+- Exige `external.tramites.read`. Queda en la bitácora de acceso.
+
+## 4. Ítem de trámite
+
+```json
+{
+  "id": "0192b7c4-5e6a-7d10-9f21-3a4b5c6d7e8f",
+  "radicado": "FT1-0001234",
+  "consecutivo": 1234,
+  "syncVersion": 48213,
+  "fechaUltimoCambio": "2026-09-21T10:14:55-05:00",
+  "eliminado": false,
+
+  "estado": "aprobado",
+  "tramite": { "codigo": "MATRICULA_NUEVA", "nombre": "Matrícula inicial", "familia": "MATRICULAS" },
+  "fechaCreacion": "2026-09-01T08:00:00-05:00",
+  "fechaRadicacion": "2026-09-01T09:30:00-05:00",
+  "fechaAprobacion": "2026-09-20T16:02:10-05:00",
+
+  "vehiculo": {
+    "vin": "1HGBH41JXMN109186",
+    "placa": "ABC123",
+    "clase": "CAMIONETA",
+    "marca": "MARCA EJEMPLO",
+    "linea": "LINEA EJEMPLO",
+    "modeloAno": 2026,
+    "carroceria": "SUV",
+    "cilindraje": 2000,
+    "cilindrajeTexto": null,
+    "capacidad": 5,
+    "numeroMotor": "MTR000000",
+    "numeroSerie": "SER000000",
+    "tipoServicio": { "codigo": "PARTICULAR", "nombre": "Particular" }
+  },
+
+  "organismo": {
+    "codigoTransito": "76520000",
+    "nombre": "SECRETARIA DE TRANSITO EJEMPLO",
+    "codigoSecretaria": "76520",
+    "ciudad": "PALMIRA",
+    "departamento": "VALLE DEL CAUCA"
+  },
+
+  "compradores": [
+    {
+      "ordinal": 1,
+      "porcentajeParticipacion": 60.00,
+      "rolActor": "comprador",
+      "tipoPersona": "juridical",
+      "tipoDocumento": "NIT",
+      "numeroDocumento": "900000000",
+      "nombreCompleto": "EMPRESA EJEMPLO SAS",
+      "direccion": "CALLE 1 # 2-3",
+      "ciudad": "PALMIRA",
+      "celular": "3000000000",
+      "correo": "contacto@ejemplo.test"
+    },
+    {
+      "ordinal": 2,
+      "porcentajeParticipacion": 40.00,
+      "rolActor": "comprador",
+      "tipoPersona": "natural",
+      "tipoDocumento": "CC",
+      "numeroDocumento": "1000000000",
+      "nombreCompleto": "PERSONA EJEMPLO",
+      "direccion": "CARRERA 4 # 5-6",
+      "ciudad": "PALMIRA",
+      "celular": "3100000000",
+      "correo": "persona@ejemplo.test"
+    }
+  ],
+
+  "factura": {
+    "adjuntoId": "0192b7c4-9a1b-7c2d-8e3f-4a5b6c7d8e9f",
+    "nombreArchivo": "factura.pdf",
+    "cargadaEn": "2026-09-02T10:00:00-05:00"
+  },
+
+  "companiaGestora": {
+    "tenantId": "0189a0b1-c2d3-7e4f-a5b6-c7d8e9f0a1b2",
+    "nit": "901000000",
+    "nombre": "TRAMITADORA EJEMPLO SAS"
+  }
+}
+```
+
+### Diccionario de campos
+
+| Clave | Tipo | Descripción | PII |
+|---|---|---|---|
+| `id` | uuid | Identificador estable del trámite. Clave de upsert. | |
+| `radicado` | string | Radicado FLIT, formato `FTn-NNNNNNN`. Único e inmutable. | |
+| `consecutivo` | long | Consecutivo numérico global. | |
+| `syncVersion` | long | Versión de sincronización, estrictamente creciente. | |
+| `fechaUltimoCambio` | datetime | Último cambio del trámite o de sus datos relacionados. | |
+| `eliminado` | bool | `true` = tombstone (borrado lógico). Con `true`, `vehiculo`, `organismo` y `factura` llegan en `null` y `compradores` en `[]`. | |
+| `estado` | string | Código interno, siempre en minúscula (ver tabla de estados). `borrador` y `preparado` solo aparecen en trámites ya radicados que retrocedieron. | |
+| `tramite.codigo` / `.nombre` / `.familia` | string | Tipo de trámite; familia `MATRICULAS` \| `TRASPASO` \| `OTROS`. | |
+| `fechaCreacion` / `fechaRadicacion` / `fechaAprobacion` | datetime \| null | Aprobación = última transición a `aprobado`. | |
+| `vehiculo.vin` / `.placa` | string \| null | | |
+| `vehiculo.clase` / `.marca` / `.linea` / `.carroceria` | string \| null | `linea` equivale al «modelo» comercial. | |
+| `vehiculo.modeloAno` | int \| null | Año modelo. | |
+| `vehiculo.cilindraje` / `.cilindrajeTexto` | int \| null / string \| null | Si el valor origen no es numérico, `cilindraje=null` y el texto crudo va en `cilindrajeTexto`. | |
+| `vehiculo.capacidad` | int \| null | Pasajeros. | |
+| `vehiculo.numeroMotor` / `.numeroSerie` | string \| null | | |
+| `vehiculo.tipoServicio.{codigo,nombre}` | object \| null | Normalizado (`PARTICULAR`, `PUBLICO`, …). | |
+| `organismo.codigoTransito` | string \| null | Código RUNT del organismo (8 dígitos). | |
+| `organismo.nombre` / `.ciudad` / `.departamento` | string \| null | | |
+| `organismo.codigoSecretaria` | string \| null | Código DIVIPOLA del municipio (ej. `76520`). | |
+| `compradores` | array | Actores `comprador` del trámite; si no hay ninguno, los `propietario`. Ordenado por `ordinal`. **Nunca `null`: vacío `[]` si no hay ninguno** (también en tombstone). Hasta 4 (copropiedad). | |
+| `compradores[].ordinal` | int | Posición dentro del rol: `1` = principal, `2..4` = copropietarios. | |
+| `compradores[].porcentajeParticipacion` | decimal \| null | Porcentaje de propiedad (2 decimales). `null` cuando hay un solo comprador (equivale a 100). Con 2+ compradores la suma es 100. | |
+| `compradores[].rolActor` | string | `comprador` \| `propietario`. Todos los elementos comparten rol. | |
+| `compradores[].tipoPersona` | string \| null | `natural` \| `juridical`. En jurídica, `nombreCompleto` es la razón social. | |
+| `compradores[].tipoDocumento` | string \| null | Código canónico FLIT: `CC`, `NIT`, `CE`, `PAS`, `TI`, … | |
+| `compradores[].numeroDocumento` | string \| null | | alta |
+| `compradores[].nombreCompleto` | string \| null | FLIT no separa nombres y apellidos. | media |
+| `compradores[].direccion` | string \| null | | alta |
+| `compradores[].ciudad` | string \| null | | |
+| `compradores[].celular` | string \| null | | media |
+| `compradores[].correo` | string \| null | | alta |
+| `factura` | object \| null | Adjunto de tipo factura más reciente. Descarga vía §3. | |
+| `companiaGestora.{tenantId,nit,nombre}` | | Compañía que radicó el trámite. | |
+
+Sin el scope `external.tramites.pii.read`, los campos marcados PII llegan enmascarados, nunca
+ausentes; un `null` sigue siendo `null`. Reglas: `numeroDocumento` primer carácter y últimos 4
+(`"9****0000"`); `correo` primera letra y dominio (`"c***@ejemplo.test"`); `celular` últimos 4
+(`"******0000"`); `nombreCompleto` inicial de cada palabra (`"P*** E***"`); `direccion` oculta
+(`"***"`).
+
+**Bloques en `null`.** Todo trámite entregado ha superado el control de completitud de la radicación,
+así que los bloques principales vienen poblados. Aun así, un campo sin dato llega siempre como `null`
+—nunca ausente, nunca cadena vacía— y el consumidor debe tolerarlo sin descartar el ítem. El caso en
+que pueden llegar bloques vacíos es el **retroceso**: un trámite que vuelve a `borrador` entra en
+edición y sus datos pueden variar entre entregas.
+
+**`compradores` vacío.** Un trámite radicado y no eliminado **puede llegar con `compradores: []`**:
+durante un retroceso o una subsanación los actores se editan y pueden faltar entre dos entregas, y
+existen tipos de trámite cuyo actor principal no es comprador ni propietario. El consumidor debe
+guardar el ítem sin comprador, **nunca rechazarlo**; la siguiente entrega del trámite trae el estado
+vigente.
+
+### Estados del trámite
+
+| Estado | Qué significa | ¿Terminal? | Puede pasar a | ¿Puerta de entrada? |
+|---|---|---|---|---|
+| `borrador` | La empresa arma el expediente. Único estado donde se editan datos | No | `anulado`, `preparado` | No — solo por retroceso |
+| `preparado` | Expediente completo, aún **no radicado** | No | `entregado`, `preasignacion` | No — solo por retroceso |
+| `preasignacion` | Radicado **sin placa**, esperando que el organismo la asigne | No | `asignado`, `rechazado` | **Sí** |
+| `asignado` | El organismo asignó la placa; el gestor gestiona SOAT e impuestos | No | `entregado`, `preasignacion` | Sí |
+| `entregado` | En manos del organismo para que decida | No | `aprobado`, `rechazado` | **Sí** |
+| `aprobado` | El organismo aprobó | **No** | `revocado` | Sí |
+| `rechazado` | El organismo rechazó; se reabre para subsanar | No | `borrador`, `anulado`, `entregado`, `preasignacion` | Sí |
+| `anulado` | Anulado | **Sí** | — | Sí |
+| `revocado` | El organismo deshace su propia aprobación | **Sí** | — | Sí |
+
+Notas imprescindibles para el consumidor:
+
+- **Terminales de verdad: solo `anulado` y `revocado`.** `aprobado` **no** lo es — el organismo puede
+  revocar su propia aprobación después. Si el consumidor arranca procesos al aprobar, debe prever que
+  la revocación llega más tarde.
+- **`rechazado` revive por cuatro caminos.** Un trámite dado por cerrado puede volver a estar vivo.
+- La **subsanación no es un estado**: es un indicador sobre `rechazado` que reabre la edición sin
+  mover el estado. Durante la subsanación llegan cambios de datos y nuevas `syncVersion`, pero
+  `estado` no cambia.
+- `preasignacion` y `asignado` solo ocurren en los tipos que piden asignación de placa (hoy 4 de 96:
+  matrícula inicial, matrícula leasing, rematrícula y duplicado de placa). **El resto —incluidos todos
+  los traspasos— entra directamente por `entregado` y nunca pasa por `asignado`.**
+- Liberan la placa: `rechazado`, `anulado`, `revocado`. El vehículo queda disponible para otro trámite,
+  que tendrá un `id` distinto.
+
+## 5. Guía de consumo
+
+1. Obtener token; cachearlo hasta `expiresIn − 60 s`; ante 401 volver a pedir token una vez.
+2. Primera corrida: `GET /tramites/sync?since=<hora real del arranque>&pageSize=500` (ver «Arrancar sin cargar el histórico»). Iterar mientras `hasMore=true` pasando `nextCursor`. Un cursor vacío entrega **todo el histórico**: úsese solo si se quiere esa carga.
+3. Persistir `nextCursor` **solo después de aplicar** la página (no antes, y no solo al final de la corrida). Un fallo a mitad no deja huecos: el cursor no avanzó.
+4. Corridas siguientes: `GET /tramites/sync?cursor=<guardado>&pageSize=500`.
+5. Por cada ítem: upsert por `id`; si `syncVersion` ≤ el guardado, ignorar; si `eliminado=true`, aplicar la política local de borrado. Un estado desconocido no debe descartar el ítem.
+6. Ante 429: esperar `Retry-After` y reintentar la misma página con el mismo cursor.
+7. Para descargar la factura: `GET /tramites/{id}/adjuntos/{factura.adjuntoId}/url` y descargar la URL antes de `expiraEn`.
+8. Frecuencia: una corrida al recibir un aviso (§8), una corrida programada de respaldo (por si se pierde un aviso) y corridas a demanda, **nunca dos a la vez** para el mismo cliente (todas comparten cursor). Varios avisos seguidos pueden atenderse con una sola corrida. Sin cambios, la respuesta es `items: []` con el mismo `nextCursor`: es la situación normal, no un error.
+
+### Arrancar sin cargar el histórico
+
+Si el consumidor NO quiere la población histórica y solo pretende seguir los cambios desde su puesta en
+marcha, su primera llamada debe usar `since` con **la hora del reloj en el momento real del arranque**,
+nunca una fecha escrita a mano ni planificada de antemano.
+
+> **Aviso operativo.** La asignación inicial de `syncVersion` sella todo el histórico con la fecha de
+> esa migración. Un `since` **anterior** a ese instante hace que **todo el histórico califique** y se
+> entregue completo, paginado, sin error ni advertencia. Un `since` posterior arranca en el presente,
+> que es el comportamiento buscado. La diferencia entre las dos cosas puede ser un solo segundo.
+
+La decisión es reversible en cualquier momento: una sola corrida con **cursor vacío** vuelve a entregar
+todo el histórico desde el principio.
+
+## 6. Auditoría y datos personales
+
+Cada solicitud queda registrada en FLIT (cliente, rango de `syncVersion`, cantidad de ítems, compañías
+tocadas, IP, duración, resultado), con una **retención de 12 meses**. El consumidor es responsable del tratamiento posterior de los datos
+personales conforme a la Ley 1581 de 2012 y de no exponerlos en logs ni documentación.
+
+## 7. Envío de adjuntos (v3.2)
+
+### `POST /api/v1/external/tramites/{id}/adjuntos`
+
+> Estado: **implementada** (HU #13263). El contrato es el acordado con Flito, sin cambios.
+
+Adjunta al trámite el **comprobante de pago del impuesto vehicular departamental** (recibo de impuesto o
+recibo de caja). No es el paz y salvo: ese certificado no se envía por aquí.
+
+```http
+POST /api/v1/external/tramites/0192b7c4-5e6a-7d10-9f21-3a4b5c6d7e8f/adjuntos
+Authorization: Bearer <jwt>
+Content-Type: multipart/form-data; boundary=---x
+
+-----x
+Content-Disposition: form-data; name="tipo"
+
+liquidacion_impuesto
+-----x
+Content-Disposition: form-data; name="file"; filename="recibo.pdf"
+Content-Type: application/pdf
+
+<bytes>
+-----x--
+```
+
+| Parte | Descripción |
+|---|---|
+| `{id}` | `id` del trámite, el mismo de los ítems del feed. Sin `X-Tenant-Id`: el tenant sale del trámite. |
+| `tipo` | Código del tipo documental. La v3.2 acepta **solo** `liquidacion_impuesto`. Ampliar la lista no cambia el endpoint. |
+| `file` | PDF, JPEG, PNG o WebP, hasta **20 MB**. El `Content-Type` de la parte decide el tipo. |
+
+Respuesta `201` (adjunto nuevo) o `200` (reenvío idempotente), **mismo cuerpo**:
+
+```json
+{
+  "adjuntoId": "0192b7c4-2b3c-7d4e-8f5a-6b7c8d9e0f1a",
+  "tipo": "liquidacion_impuesto",
+  "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "reemplazoDe": null,
+  "enMatriz": true,
+  "pagadoMarcado": true
+}
+```
+
+| Campo | Significado |
+|---|---|
+| `adjuntoId` | id del adjunto en FLIT. Guardarlo. |
+| `sha256` | SHA-256 hexadecimal en minúsculas de los bytes recibidos. |
+| `reemplazoDe` | id del adjunto anterior **del consumidor** que este envío retiró; `null` si no había o si es el 200 idempotente. |
+| `enMatriz` | `true` si el tipo está en la matriz documental del gestor para ese trámite (completa una casilla de su checklist). `false`: queda archivado sin casilla. |
+| `pagadoMarcado` | `true` si el trámite tiene marcada por el consumidor el impuesto departamental como pagado (marca vigente). Un envío en `entregado` no marca, pero si la marca ya existía devuelve `true`. |
+
+Reglas:
+
+- **Estados que aceptan el envío:** `preasignacion`, `asignado`, `entregado` y `rechazado` con subsanación
+  activa. Los demás responden `409 not_allowed_in_state` sin archivar (ver la tabla de abajo).
+- **Gana quien carga primero.** Si en FLIT ya se cargó ese tipo (el gestor o el portal de participantes), responde `409 attachment_exists` y su archivo
+  se conserva: es definitivo, no reintentar. Si el consumidor cargó primero, el gestor **no** puede
+  reemplazarlo ni borrarlo; en FLIT lo ve como un comprobante cargado, sin indicar el origen.
+- **Corrección:** un nuevo envío del consumidor con otro archivo reemplaza el suyo anterior (`reemplazoDe`).
+  Es la única vía de corrección; FLIT no la ofrece al gestor.
+- **Idempotencia por contenido:** si el archivo es idéntico (mismo SHA-256) al adjunto vigente del
+  consumidor, responde `200` con el mismo cuerpo y no escribe el adjunto; si el trámite está en un estado que
+  marca (`preasignacion`, `asignado`, `rechazado` con subsanación) y la marca falta, la pone. Un reintento de red no duplica.
+- **Impuesto pagado:** al aceptar el archivo se marca el impuesto departamental como pagado en
+  `preasignacion`, `asignado` y `rechazado` con subsanación. En `entregado` **no** se marca (el trámite está
+  en el organismo); `pagadoMarcado` refleja la marca vigente del consumidor, así que vale `true` si ya existía y
+  `false` si no. El gestor no puede desmarcar lo que marcó el consumidor.
+- **Reversa en el consumidor:** si el consumidor reversa el pago, no avisa a FLIT; el adjunto y la marca
+  quedan. Un nuevo comprobante posterior se reenvía y reemplaza el anterior.
+- **Solo archiva:** no corre OCR ni regenera el consolidado del trámite.
+- Exige `external.tramites.attachments.write`. Cada llamada queda en la bitácora de acceso (§6) como
+  escritura con datos personales; el archivo no se registra.
+
+Errores (problem+json, decidir siempre por `code`):
+
+| HTTP | `code` | Qué hacer |
+|---|---|---|
+| 400 | `missing_file`, `invalid_tipo`, `invalid_mime`, `file_too_large` | Corregir el envío; no reintentar igual. |
+| 401 | `invalid_token` | Renovar el pase una vez y reintentar. |
+| 403 | `insufficient_scope` | Falta `external.tramites.attachments.write` en el cliente; avisar a FLIT. |
+| 404 | `procedure_not_found` | Trámite inexistente o fuera de alcance. Definitivo. |
+| 409 | `not_allowed_in_state` | Lleva `estado` (estado actual) y `terminal`. `terminal: true` (`aprobado`, `anulado`, `revocado`): definitivo. `terminal: false`: reintentar con espera creciente. |
+| 409 | `attachment_exists` | El comprobante ya se cargó en FLIT (gestor o portal). Definitivo. |
+| 429 | `rate_limited` | Esperar `Retry-After`. |
+| 503 | `storage_unavailable` | Transitorio: reintentar con la misma petición. |
+
+```json
+{ "type": "about:blank", "title": "not_allowed_in_state", "status": 409,
+  "detail": "El trámite está en un estado que no admite este envío.",
+  "code": "not_allowed_in_state", "estado": "aprobado", "terminal": true }
+```
+
+`terminal` aquí significa «el trámite ya no volverá a un estado que acepte el envío». No es lo mismo que
+la columna «¿Terminal?» de §4: `aprobado` no es terminal en el feed (puede revocarse), pero nunca vuelve a
+aceptar el comprobante.
+
+**Cuota:** los envíos comparten con el feed y la URL de factura las **120 solicitudes por minuto** del
+cliente. Enviar por cola con concurrencia baja (2–4, o ~60 por minuto) para no frenar la sincronización,
+y reutilizar el pase cacheado (el endpoint de token tiene su propio límite por IP).
+
+## 8. Avisos en tiempo real (v3.3)
+
+FLIT 2 avisa al consumidor, en segundos, que un trámite cambió. El aviso **no trae datos del trámite**: el consumidor
+lo atiende con una corrida del feed (§5). Si se pierde un aviso, la corrida de respaldo recoge el cambio.
+
+### `POST <URL del consumidor>`
+
+FLIT 2 llama a una URL HTTPS pública que da el consumidor, una por ambiente. La de Flito es
+`/api/flito/sync/flit2/avisos` en su host de DEV, QA y PDN.
+
+**Cabeceras**
+
+| Cabecera | Valor |
+|---|---|
+| `Content-Type` | `application/json; charset=utf-8` |
+| `X-Webhook-Signature` | `sha256=<HMAC-SHA256 del cuerpo, 64 hex en minúsculas>` |
+| `X-Correlation-Id` | igual a `eventId` |
+
+**Cuerpo** (siempre estos 7 campos)
+
+```json
+{
+  "eventId": "0192f0a1-7b2c-7d10-9f21-3a4b5c6d7e8f",
+  "tipo": "tramite.cambio",
+  "id": "0192b7c4-5e6a-7d10-9f21-3a4b5c6d7e8f",
+  "syncVersion": 48213,
+  "fechaUltimoCambio": "2026-10-16T15:20:04.512345+00:00",
+  "eliminado": false,
+  "tenantId": "0ad1c0de-0000-4000-8000-000000000001"
+}
+```
+
+| Campo | Significado |
+|---|---|
+| `eventId` | UUIDv7 nuevo por aviso. Un reintento de entrega repite el mismo cuerpo y el mismo `eventId` |
+| `tipo` | `tramite.cambio`. Un tipo desconocido debe responderse `200` e ignorarse |
+| `id` | El `id` del trámite en el feed |
+| `syncVersion` | Versión del trámite al avisar. Dos avisos del mismo trámite pueden traer la misma |
+| `fechaUltimoCambio` | Último cambio del trámite (RFC 3339, con microsegundos y desfase) |
+| `eliminado` | `true` si el trámite tiene borrado lógico (tombstone del feed) |
+| `tenantId` | Compañía dueña del trámite. Informativo: la autenticidad la da la firma |
+
+**Firma.** La clave es una por ambiente, compartida para todos los tenants, y se entrega fuera de banda. Entra al
+HMAC como los **bytes UTF-8 del texto tal cual**, sin decodificar ni recortar. El HMAC se calcula sobre el **cuerpo
+crudo** recibido, antes de parsearlo, y se compara en tiempo constante.
+
+**Respuesta esperada.** `200` en cuanto la firma es válida, también para duplicados y tipos desconocidos. Cualquier
+otra respuesta, o ninguna, se reintenta a los 10 s, 1 min y 10 min; después el aviso se descarta (el cambio sigue en
+el feed).
+
+**Qué se avisa.** Lo mismo que entrega el feed: trámites radicados al menos una vez, nunca migrados desde FLIT 1, y
+los borrados como `eliminado = true`. Varios cambios del mismo trámite en pocos segundos se agrupan en un solo aviso
+con la versión más reciente.
+
+**Cuándo.** De 6 a 8 s después del cambio. FLIT 2 avisa solo cuando el cambio ya cumple las condiciones de
+estabilidad del feed, así que la corrida que dispara el aviso lo encuentra.
+
+**Recomendaciones al consumidor.** Deduplicar por (`id`, `syncVersion`). Si la corrida aún no trae esa versión,
+reintentar unos segundos o dejarla al respaldo. Limitar la tasa por IP, más estricta para firmas fallidas.
+
+Contrato del mensaje: `contracts/asyncapi/domain-events.v1.yaml`, canal `flito-webhook/tramite.cambio`.

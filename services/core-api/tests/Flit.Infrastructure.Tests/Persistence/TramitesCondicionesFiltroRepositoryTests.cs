@@ -832,4 +832,52 @@ public sealed class TramitesCondicionesFiltroRepositoryTests
             .Where(i => TramiteMarcas.TienePrenda(conPrendaVigente.Contains(i.Id), i.ProcedureType?.Code, i.FieldValues))
             .Select(i => i.ReferenceNumber).Order());
     }
+
+    // ── HU #13776 AC6 — dato prendario y limitaciones a la propiedad, igual en C# y en SQL ─────────
+
+    private static ProcedureInstance ConLimitaciones(string reference, string? json, string? texto = null)
+    {
+        var instancia = Instancia(reference);
+        instancia.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = TenantId,
+            ProcedureInstanceId = instancia.Id,
+            FieldKey = "runt_limitaciones_propiedad",
+            ValueText = texto,
+            ValueJson = json,
+            CreatedAt = Base,
+        });
+        return instancia;
+    }
+
+    [Fact]
+    public async Task HU13776_Prenda_PrendarioYLimitacionesMarcanYElFiltroDevuelveLoMismoQueElDominio()
+    {
+        await using var db = NewContext(nameof(HU13776_Prenda_PrendarioYLimitacionesMarcanYElFiltroDevuelveLoMismoQueElDominio));
+        db.ProcedureInstances.AddRange(
+            ConCampo("P1", "runt_prendario", " si "),
+            ConCampo("P2", "runt_prendario", "NO"),
+            ConLimitaciones("P3", """[{"aFavorDe":"ACREEDOR DE PRUEBA S.A.S.","documento":"900000001"}]"""),
+            ConLimitaciones("P4", "[]"),
+            ConLimitaciones("P5", null, """[{"aFavorDe":"ACREEDOR DE PRUEBA S.A.S."}]"""),
+            ConLimitaciones("P6", "null"),
+            Instancia("P7"));
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var universo = await db.ProcedureInstances
+            .Include(i => i.ProcedureType).Include(i => i.FieldValues)
+            .ToListAsync(TestContext.Current.CancellationToken);
+
+        var (conMarca, _) = await Filtrar(db,
+            Cond(TramitesQueryFieldCatalog.Prenda, QueryOperator.EsAlguno, "true"));
+        var (sinMarca, _) = await Filtrar(db,
+            Cond(TramitesQueryFieldCatalog.Prenda, QueryOperator.EsAlguno, "false"));
+
+        conMarca.Should().BeEquivalentTo(["P1", "P3", "P5"]);
+        sinMarca.Should().BeEquivalentTo(["P2", "P4", "P6", "P7"]);
+        conMarca.Order().Should().Equal(universo
+            .Where(i => TramiteMarcas.TienePrenda(false, i.ProcedureType?.Code, i.FieldValues))
+            .Select(i => i.ReferenceNumber).Order());
+    }
 }

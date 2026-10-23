@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { Login } from "@/components/atom/Login";
@@ -8,6 +6,7 @@ import { ForgotPasswordForm } from "@/components/auth/ForgotPasswordForm";
 import { ResetPasswordForm } from "@/components/auth/ResetPasswordForm";
 import { AuthCard } from "@/components/auth/AuthCard";
 import { Shell } from "@/components/atom/Shell";
+import { readDesignCss } from "./helpers/read-design-css";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/",
@@ -43,7 +42,7 @@ vi.mock("next/navigation", () => ({
  * `components/brand/__tests__/BrandStyle.test.tsx` (HU #12419) — no se repite aquí.
  */
 
-const GLOBALS_CSS = readFileSync(path.join(__dirname, "..", "app", "globals.css"), "utf8");
+const GLOBALS_CSS = readDesignCss();
 
 // Hex de marca FLIT tal como aparecían escritos a mano en las superficies antes de #12420
 // (frontend/docs/brand-color-inventory.json → occurrences classification "marca").
@@ -126,7 +125,7 @@ describe("HU #12420 AC3 — superficies saneadas sin hex de marca literal (host 
 describe("HU #12420 AC3 — Shell sin hex de marca literal, claro y oscuro", () => {
   function renderShell() {
     return render(
-      <Shell active="dashboard" onNav={vi.fn()}>
+      <Shell visibleModuleCodes={[]}>
         <div>contenido</div>
       </Shell>,
     );
@@ -145,9 +144,8 @@ describe("HU #12420 AC3 — Shell sin hex de marca literal, claro y oscuro", () 
       const { container } = renderShell();
       expectHtmlHasNoLiteralBrandHex(container, "Shell (oscuro)");
       // AC2 — el neutro de dark mode (#05060A → fondo del shell, HU #12420 no lo toca) sigue
-      // presente; jsdom normaliza los `style.background`/`color` con hex a `rgb(...)` al
-      // serializar el atributo, por eso se compara contra el equivalente rgb.
-      expect(container.innerHTML).toMatch(/rgb\(5,\s*6,\s*10\)/i);
+      // presente. Desde B-13 lo pone la barra de la suite con la variante `dark:` de Tailwind.
+      expect(container.innerHTML).toContain("dark:bg-[#05060A]");
     } finally {
       window.localStorage.removeItem("flit-theme");
       document.documentElement.classList.remove("dark");

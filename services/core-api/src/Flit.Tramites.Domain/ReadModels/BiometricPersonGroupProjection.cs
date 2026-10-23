@@ -35,4 +35,10 @@ public sealed class BiometricPersonGroupProjection
     /// <summary>Intentos consumidos y máximo permitido de la validación MÁS RECIENTE (HU #11505 AC3).</summary>
     public int Attempts { get; init; }
     public int MaxAttempts { get; init; }
+
+    /// <summary>
+    /// Es la validación PROPIA de un mandatario (persona aparte en la vista: no se mezcla con el trámite ni la
+    /// prevalidación del mismo documento, porque no se apalancan entre sí).
+    /// </summary>
+    public bool EsMandatario { get; init; }
 }

@@ -75,7 +75,12 @@ public sealed class AdminOtRequirementsScopeTests
         body.RequiresRnmc.Should().BeTrue("A exige RNMC; B no — así se distingue una fila de la otra");
     }
 
-    [Fact] // El PUT escribe en el organismo pedido y NO toca al vecino.
+    // El PUT escribe en el organismo pedido y NO toca al vecino. HU12853_AC2 (Feature #12846,
+    // Épica #12751) invierte la aserción original sobre allowPlatePreassign: el backend ya IGNORA
+    // ese campo (no lo persiste), así que A se queda en su valor previo (false) aunque el PUT pida
+    // true — el resto del scoping (tenant dueño, no tocar RequiresRnmc no enviado, no tocar B) sigue
+    // probándose igual.
+    [Fact]
     public async Task PutRequirements_AsSuperAdmin_WritesRequestedOfficeAndLeavesOtherUntouched()
     {
         Authenticate();
@@ -91,7 +96,8 @@ public sealed class AdminOtRequirementsScopeTests
 
         var a = await db.OtRequirements.AsNoTracking()
             .SingleAsync(r => r.TransitOfficeId == _officeAId, TestContext.Current.CancellationToken);
-        a.AllowPlatePreassign.Should().BeTrue("es el organismo que se pidió configurar");
+        a.AllowPlatePreassign.Should().BeFalse(
+            "HU12853 (Épica #12751) — allow_plate_preassign se ignora, ni siquiera para el organismo pedido");
         a.TenantId.Should().Be(_tenantAId, "la fila debe pertenecer al tenant OT dueño, no al del SuperAdmin");
         a.RequiresRnmc.Should().BeTrue("el PUT parcial no debe alterar los flags no enviados");
 

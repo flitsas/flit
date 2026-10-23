@@ -46,12 +46,6 @@ internal sealed class RegeneracionDocumentalTrazaWriter(FlitDbContext db)
         string tipoEvento,
         CancellationToken cancellationToken = default)
     {
-        if (tenantId == Guid.Empty || procedureInstanceId == Guid.Empty)
-            return false;
-
-        var tipo = tipoEvento;
-        var id = Guid.CreateVersion7();
-        var now = DateTimeOffset.UtcNow;
         var payload = JsonSerializer.Serialize(new
         {
             origen,
@@ -59,6 +53,49 @@ internal sealed class RegeneracionDocumentalTrazaWriter(FlitDbContext db)
             detalle,
             tenant_id = tenantId,
         });
+
+        return await EscribirEventoAsync(tenantId, procedureInstanceId, tipoEvento, payload, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// HU #12798 — inserción genérica (tipo + payload ya serializado). Es el único punto que toca la
+    /// tabla: los dos <c>EscribirFalloAsync</c> componen su payload histórico y delegan aquí.
+    /// </summary>
+    public async Task<bool> EscribirEventoAsync(
+        Guid tenantId,
+        Guid procedureInstanceId,
+        string tipoEvento,
+        string payloadJson,
+        CancellationToken cancellationToken = default)
+    {
+        if (tenantId == Guid.Empty || procedureInstanceId == Guid.Empty)
+            return false;
+
+        // HU #12797 (F2) — dentro de la transacción gestionada de la consola OT el INSERT viajaría en la
+        // misma transacción del intento fallido: un rollback (o una transacción abortada) se lo llevaría
+        // en silencio. Se difiere a DESPUÉS de su fin, confirme, se revierta o quede ambigua (commit sin
+        // respuesta, re-review N2); ya fuera de ella es autocommit.
+        // `true` = programada (el fallo, si lo hay, ya quedó en el log del llamador).
+        Func<Task> escribir = () => InsertarAsync(tenantId, procedureInstanceId, tipoEvento, payloadJson, CancellationToken.None);
+        if (db.AccionesPostTransaccion.TryDiferirSiempre(db.Database.CurrentTransaction?.TransactionId, escribir))
+            return true;
+
+        return await InsertarAsync(tenantId, procedureInstanceId, tipoEvento, payloadJson, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<bool> InsertarAsync(
+        Guid tenantId,
+        Guid procedureInstanceId,
+        string tipoEvento,
+        string payloadJson,
+        CancellationToken cancellationToken)
+    {
+        var tipo = tipoEvento;
+        var payload = payloadJson;
+        var id = Guid.CreateVersion7();
+        var now = DateTimeOffset.UtcNow;
 
         // Proveedor no relacional (tests con InMemory): no hay SQL que ejecutar. El tracker de esos
         // tests no arrastra un intento fallido de generación, así que aquí sí es seguro usarlo.

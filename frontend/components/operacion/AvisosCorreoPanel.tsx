@@ -7,6 +7,8 @@ import type { NotificationDispatchItem } from '@/lib/api/types/procedure-runtime
 
 const STATUS_LABEL: Record<string, string> = {
   pendiente: 'Pendiente',
+  // HU #13359 — core-api lo dejó en cola para Notificaciones, que es quien lo entrega.
+  encolado: 'En cola de envío',
   enviado: 'Enviado',
   fallido: 'Fallido',
   omitido: 'Omitido',
@@ -78,7 +80,7 @@ export function AvisosCorreoPanel({ instanceId }: { instanceId: string | null })
           {items.map((item) => (
             <li
               key={item.id}
-              className="rounded-xl border px-3 py-2.5 text-xs text-[#162744] dark:text-white/85"
+              className="rounded-xl border px-3 py-2.5 text-xs text-flit-primary dark:text-white/85"
             >
               <div className="flex flex-wrap justify-between gap-2">
                 <strong>
@@ -109,6 +111,8 @@ function statusColor(status: string): string {
   switch (status) {
     case 'enviado':
       return '#2E7D32';
+    case 'encolado':
+      return '#1565C0';
     case 'fallido':
       return '#C62828';
     case 'omitido':

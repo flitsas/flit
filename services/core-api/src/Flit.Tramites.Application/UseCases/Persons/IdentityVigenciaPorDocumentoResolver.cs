@@ -14,7 +14,12 @@ public sealed record IdentityVigenciaResult(
     string Status,
     DateTimeOffset? ValidatedAt,
     DateTimeOffset? ValidUntil,
-    string? CertificateHash)
+    string? CertificateHash,
+    // Ruta del PNG de la rúbrica capturada en Kyverum. Solo la llena la validación propia APROBADA del mandatario:
+    // el mandato la estampa como al mandante.
+    string? SignatureImagePath = null,
+    // Validación propia APROBADA del mandatario: de ella sale su sello (documento, UUID, firma, aprobación).
+    ProcedureInstanceBiometricValidation? Validacion = null)
 {
     /// <summary>Sin ninguna validación para ese documento en el tenant.</summary>
     public static readonly IdentityVigenciaResult SinValidacion =
@@ -134,6 +139,84 @@ public sealed class IdentityVigenciaPorDocumentoResolver(IProcedureInstanceRepos
         }
 
         return result;
+    }
+
+    // ---- Variante del MANDATARIO (HU #13130b, HU #13247, decisiones del Líder Técnico 01-oct-2026) ---------------
+    // Para el mandatario persona natural que firma con biometría, «identidad vigente» = tener una validación biométrica
+    // APROBADA lanzada PARA ÉL (party_role mandatario + referencia a su ficha), sin renovación mientras su vigencia propia
+    // esté activa: NO se aplica la ventana de BiometricRules.VigenciaDias (30 días), que sigue rigiendo el trámite (gate,
+    // prevalidación) y NO se toca. EXCLUSIVA: la aprobación de un comprador, un vendedor o una prevalidación con el mismo
+    // documento no cuenta, y tampoco importa el tenant (la validación es de la ficha, no del documento).
+
+    /// <summary>Datos de un mandatario para resolver su identidad: su ficha y su documento ACTUAL.</summary>
+    public readonly record struct MandatarioIdentityRef(Guid MandateSignerId, string? DocumentType, string? DocumentNumber);
+
+    /// <summary>Identidad de UN mandatario (variante de lote con un solo elemento).</summary>
+    public async Task<IdentityVigenciaResult> ResolveMandatarioAsync(
+        Guid mandateSignerId,
+        string? documentType,
+        string? documentNumber,
+        DateTimeOffset now,
+        CancellationToken ct = default)
+    {
+        var resolved = await ResolveMandatariosAsync(
+            [new MandatarioIdentityRef(mandateSignerId, documentType, documentNumber)], now, ct).ConfigureAwait(false);
+        return resolved.GetValueOrDefault(mandateSignerId, IdentityVigenciaResult.SinValidacion);
+    }
+
+    /// <summary>
+    /// Identidad de varios mandatarios con UNA lectura (HU #13247). Para cada ficha cuenta solo su validación MÁS RECIENTE
+    /// cuyo documento coincide con el documento actual de la ficha: al lanzar una nueva (reenvío, cambio de documento,
+    /// paso de baúl a biometría) la anterior deja de contar, y una validación de un documento anterior tampoco. Aprobada ⇒
+    /// <see cref="IdentityVigenciaEstados.AprobadaVigente"/> sin fecha de fin (el mandatario no renueva); en curso, vencida
+    /// o sin validación se clasifica como siempre. Toda ficha pedida aparece en el resultado.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<Guid, IdentityVigenciaResult>> ResolveMandatariosAsync(
+        IReadOnlyCollection<MandatarioIdentityRef> signers,
+        DateTimeOffset now,
+        CancellationToken ct = default)
+    {
+        var result = new Dictionary<Guid, IdentityVigenciaResult>();
+        if (signers.Count == 0)
+            return result;
+
+        var rows = await repo
+            .ListMandatarioValidationsAsync([.. signers.Select(x => x.MandateSignerId)], ct)
+            .ConfigureAwait(false);
+        var bySigner = rows
+            .Where(r => r.MandateSignerId.HasValue)
+            .GroupBy(r => r.MandateSignerId!.Value)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        foreach (var signer in signers)
+        {
+            var (tipo, numero) = DocumentCanonicalNormalization.Normalize(signer.DocumentType, signer.DocumentNumber);
+            if (tipo.Length == 0 || numero.Length == 0 || !bySigner.TryGetValue(signer.MandateSignerId, out var own))
+            {
+                result[signer.MandateSignerId] = IdentityVigenciaResult.SinValidacion;
+                continue;
+            }
+
+            // Más reciente primero (el repositorio ya ordena así); la primera con el documento actual decide.
+            var latest = own.FirstOrDefault(r =>
+                DocumentCanonicalNormalization.Normalize(r.DocumentType, r.DocumentNumber) == (tipo, numero));
+            result[signer.MandateSignerId] = ClassifyMandatario(latest, now);
+        }
+
+        return result;
+    }
+
+    private static IdentityVigenciaResult ClassifyMandatario(
+        ProcedureInstanceBiometricValidation? latest, DateTimeOffset now)
+    {
+        if (latest is null)
+            return IdentityVigenciaResult.SinValidacion;
+
+        return latest.Status == BiometricEstados.Aprobado
+            ? new IdentityVigenciaResult(
+                IdentityVigenciaEstados.AprobadaVigente, latest.ValidatedAt, null, latest.CertificateHash,
+                latest.SignatureImagePath, latest)
+            : Classify(latest, now);
     }
 
     /// <summary>Clasifica la fila más reciente (o su ausencia) con <see cref="IdentityVigenciaClassifier"/>.</summary>

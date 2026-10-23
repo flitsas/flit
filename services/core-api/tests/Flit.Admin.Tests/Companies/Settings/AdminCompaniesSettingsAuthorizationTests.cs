@@ -71,5 +71,36 @@ public sealed class AdminCompaniesSettingsAuthorizationTests
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
+    [Theory]
+    [InlineData("AdminCompany")]
+    [InlineData("Operador")]
+    public async Task HU13400_AC2_Put_ImprontasParameter_WithNonSuperAdminRole_Returns403(string role)
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken(role));
+
+        var response = await client.PutAsJsonAsync(
+            SettingsUrl, new { generacionImprontas = false }, cancellationToken: TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Theory]
+    [InlineData("AdminCompany")]
+    [InlineData("Operador")]
+    public async Task HU13400_AC2_Get_WithNonSuperAdminRole_Returns403_WithoutImprontasField(string role)
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken(role));
+
+        var response = await client.GetAsync(SettingsUrl, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        var raw = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        raw.Should().NotContain("generacionImprontas");
+    }
+
     private sealed record ErrorBody(string Error);
 }

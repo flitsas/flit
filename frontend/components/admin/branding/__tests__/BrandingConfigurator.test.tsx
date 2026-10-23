@@ -9,6 +9,10 @@ import { BrandingConfigurator } from "../BrandingConfigurator";
 import { ApiError } from "@/lib/api/types";
 import type { TenantBrandingResponse } from "@/lib/api/branding";
 
+const routerRefresh = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: routerRefresh }) }));
+vi.mock("@/app/actions/brand", () => ({ refreshBrand: vi.fn().mockResolvedValue(undefined) }));
+
 vi.mock("@/lib/api/branding", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api/branding")>("@/lib/api/branding");
   return {
@@ -21,11 +25,22 @@ vi.mock("@/lib/api/branding", async () => {
   };
 });
 
+// jsdom no decodifica imágenes (`Image.onload` nunca dispara): la validación de dimensiones en
+// cliente se stubea para poder ejercitar el flujo de subida (Bug #12735).
+vi.mock("@/lib/brand/validate-logo", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/brand/validate-logo")>("@/lib/brand/validate-logo");
+  return {
+    ...actual,
+    validateLogoFile: vi.fn(async () => ({ ok: true, width: 300, height: 100 })),
+  };
+});
+
 import {
   getBranding,
   publishBranding,
   upsertBrandingDraft,
   retireBranding,
+  uploadBrandLogo,
 } from "@/lib/api/branding";
 
 function branding(overrides: Partial<TenantBrandingResponse> = {}): TenantBrandingResponse {
@@ -33,7 +48,7 @@ function branding(overrides: Partial<TenantBrandingResponse> = {}): TenantBrandi
     tenantId: "tenant-1",
     draft: {
       platformName: "Movilidad Andina",
-      colors: { primary: "#0B3D91", secondary: "#1FA2FF", onPrimary: "#FFFFFF" },
+      colors: { primary: "#0B3D91", secondary: "#0F766E", onPrimary: "#FFFFFF" },
       logoId: "logo-1",
     },
     published: null,
@@ -53,6 +68,7 @@ beforeEach(() => {
   vi.mocked(upsertBrandingDraft).mockReset();
   vi.mocked(publishBranding).mockReset();
   vi.mocked(retireBranding).mockReset();
+  vi.mocked(uploadBrandLogo).mockReset();
 });
 
 describe("BrandingConfigurator — estados de UI", () => {
@@ -89,7 +105,7 @@ describe("BrandingConfigurator — estados de UI", () => {
 describe("BrandingConfigurator — AC3 contraste y completitud bloquean publicar", () => {
   it("deshabilita Publicar cuando falta el logotipo", async () => {
     vi.mocked(getBranding).mockResolvedValue(
-      branding({ draft: { platformName: "X", colors: { primary: "#0B3D91", secondary: "#1FA2FF", onPrimary: "#FFFFFF" }, logoId: null }, logoUrl: null }),
+      branding({ draft: { platformName: "X", colors: { primary: "#0B3D91", secondary: "#0F766E", onPrimary: "#FFFFFF" }, logoId: null }, logoUrl: null }),
     );
     render(<BrandingConfigurator source="company" />);
 
@@ -105,7 +121,8 @@ describe("BrandingConfigurator — AC3 contraste y completitud bloquean publicar
 
     await screen.findByLabelText(/nombre de la plataforma/i);
     expect(screen.getByRole("button", { name: /^publicar$/i })).toBeDisabled();
-    expect(screen.getByText(/no cumple el mínimo/i)).toBeInTheDocument();
+    expect(screen.getByText(/no se leería bien/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ajustar automáticamente/i })).toBeInTheDocument();
   });
 
   it("habilita Publicar cuando el borrador está completo y el contraste cumple", async () => {
@@ -114,6 +131,66 @@ describe("BrandingConfigurator — AC3 contraste y completitud bloquean publicar
 
     await screen.findByLabelText(/nombre de la plataforma/i);
     expect(screen.getByRole("button", { name: /^publicar$/i })).toBeEnabled();
+  });
+});
+
+describe("BrandingConfigurator — rechazos con mensaje claro y sin guardar", () => {
+  it("los colores por defecto de una marca nueva cumplen el contraste y el borrador se envía", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getBranding).mockRejectedValue(new ApiError(404, "BRANDING_NOT_FOUND"));
+    vi.mocked(upsertBrandingDraft).mockResolvedValue(branding());
+    render(<BrandingConfigurator source="company" />);
+    await screen.findByLabelText(/nombre de la plataforma/i);
+
+    await user.click(screen.getByRole("button", { name: /guardar borrador/i }));
+
+    await waitFor(() => expect(upsertBrandingDraft).toHaveBeenCalled());
+    expect(screen.queryByText(/no se leería bien/i)).not.toBeInTheDocument();
+  });
+
+  it("contraste < 4.5:1 en el secundario: avisa y no envía el borrador", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getBranding).mockResolvedValue(
+      branding({ draft: { platformName: "X Red", colors: { primary: "#0B3D91", secondary: "#1FA2FF", onPrimary: "#FFFFFF" }, logoId: "logo-1" } }),
+    );
+    render(<BrandingConfigurator source="company" />);
+    await screen.findByLabelText(/nombre de la plataforma/i);
+
+    await user.click(screen.getByRole("button", { name: /guardar borrador/i }));
+
+    expect(await screen.findByText(/no se guardó ningún cambio/i)).toBeInTheDocument();
+    expect(upsertBrandingDraft).not.toHaveBeenCalled();
+  });
+
+  it("un 422 de validación del servidor muestra el motivo, no el mensaje genérico", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getBranding).mockResolvedValue(branding());
+    vi.mocked(upsertBrandingDraft).mockRejectedValue(
+      new ApiError(422, "x", { errors: [{ code: "BRANDING_NAME_MARKUP", field: "platformName" }] }),
+    );
+    render(<BrandingConfigurator source="company" />);
+    await screen.findByLabelText(/nombre de la plataforma/i);
+
+    await user.click(screen.getByRole("button", { name: /guardar borrador/i }));
+
+    expect(await screen.findByText(/no puede contener etiquetas/i)).toBeInTheDocument();
+  });
+
+  it("un logotipo rechazado por el servidor muestra el motivo", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getBranding).mockResolvedValue(branding());
+    vi.mocked(uploadBrandLogo).mockRejectedValue(
+      new ApiError(422, "x", { errors: [{ code: "BRANDING_LOGO_TOO_LARGE", field: "logo" }] }),
+    );
+    render(<BrandingConfigurator source="company" />);
+    await screen.findByLabelText(/nombre de la plataforma/i);
+
+    await user.upload(
+      screen.getByLabelText(/cargar logotipo de marca/i),
+      new File(["x"], "logo.png", { type: "image/png" }),
+    );
+
+    expect(await screen.findByText(/pesa más de 512 KB/i)).toBeInTheDocument();
   });
 });
 
@@ -138,6 +215,8 @@ describe("BrandingConfigurator — AC5 publicar pide confirmación", () => {
 
     await waitFor(() => expect(publishBranding).toHaveBeenCalled());
     expect(await screen.findByText(/publicada el/i)).toBeInTheDocument();
+    // La marca aplicada se refresca al instante, sin esperar los 60 s de caché.
+    await waitFor(() => expect(routerRefresh).toHaveBeenCalled());
   });
 });
 
@@ -170,5 +249,55 @@ describe("BrandingConfigurator — AC6 retirar solo existe con source=admin", ()
 
     await user.click(screen.getByRole("button", { name: /^retirar$/i }));
     await waitFor(() => expect(retireBranding).toHaveBeenCalledWith("tenant-1"));
+  });
+});
+
+describe("BrandingConfigurator — Bug #12735 logotipo con URL absoluta de la API", () => {
+  // `@/lib/api/branding` está mockeado (getBranding/uploadBrandLogo devuelven la relativa cruda del
+  // backend), así que estos tests prueban la normalización defensiva del componente; la de la
+  // capa `lib/api` (host FLIT cross-origin) vive en `lib/api/__tests__/branding-logo-url.test.ts`.
+  const ABSOLUTE_LOGO_1 = `${window.location.origin}/api/v1/public/branding/logos/logo-1`;
+  const ABSOLUTE_LOGO_2 = `${window.location.origin}/api/v1/public/branding/logos/logo-2`;
+
+  it("tras cargar el branding, el <img> del uploader tiene src absoluto aunque llegue la ruta relativa", async () => {
+    vi.mocked(getBranding).mockResolvedValue(branding({ logoUrl: "/api/v1/public/branding/logos/logo-1" }));
+    render(<BrandingConfigurator source="admin" tenantId="tenant-1" />);
+
+    const img = await screen.findByRole("img", { name: /logotipo de la marca/i });
+    expect(img).toHaveAttribute("src", ABSOLUTE_LOGO_1);
+    expect(img.getAttribute("src")).not.toMatch(/^\/api\//);
+  });
+
+  it("tras subir un logotipo (onUploaded con logoUrl relativa), la previsualización usa la URL absoluta", async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(URL, "createObjectURL", {
+      value: vi.fn(() => "blob:mock-logo"),
+      writable: true,
+      configurable: true,
+    });
+
+    vi.mocked(getBranding).mockResolvedValue(branding({ logoUrl: null, draft: { ...branding().draft, logoId: null } }));
+    vi.mocked(uploadBrandLogo).mockResolvedValue({
+      logoId: "logo-2",
+      version: 1,
+      contentType: "image/png",
+      width: 300,
+      height: 100,
+      sizeBytes: 1024,
+      sha256: "abc",
+      logoUrl: "/api/v1/public/branding/logos/logo-2",
+    });
+
+    render(<BrandingConfigurator source="admin" tenantId="tenant-1" />);
+    await screen.findByLabelText(/nombre de la plataforma/i);
+
+    const file = new File(["img"], "logo.png", { type: "image/png" });
+    await user.upload(screen.getByLabelText(/cargar logotipo de marca/i), file);
+    await waitFor(() => expect(uploadBrandLogo).toHaveBeenCalled());
+
+    // `draftLogoUrl` alimenta la previsualización (el uploader muestra el blob local mientras tanto).
+    await user.click(screen.getByRole("button", { name: /previsualizar/i }));
+    const previewImg = await screen.findByRole("img", { name: /logotipo de movilidad andina/i });
+    expect(previewImg).toHaveAttribute("src", ABSOLUTE_LOGO_2);
   });
 });

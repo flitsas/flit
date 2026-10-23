@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Users, Shield, Ban, Clock, ShieldOff, ArrowRight, Pencil, Trash2, RotateCcw, MailX, KeyRound, History } from "lucide-react";
+import { Users, Shield, Ban, Clock, ShieldOff, ArrowRight, Pencil, Trash2, RotateCcw, MailX, KeyRound, History, PlugZap, ShieldCheck, ClipboardList } from "lucide-react";
 import { getUsers, getRoles, assignRole, blockUser, unblockUser, updateUser, deleteUser, restoreUser, resendInvitation, cancelInvitation, reactivateInvitation, TenantUser, TenantRole } from "@/lib/api/security";
 import { EditUserModal } from "./users/EditUserModal";
 import { DeleteUserDialog } from "./users/DeleteUserDialog";
@@ -13,17 +13,31 @@ import { CancelInvitationDialog } from "./users/CancelInvitationDialog";
 import { InviteUserModal } from "./users/InviteUserModal";
 import { UsersTable, toUserRow } from "./users/UsersTable";
 import { UserAuditHistoryDrawer } from "./users/UserAuditHistoryDrawer";
+import { UserPermissionsModal } from "./users/UserPermissionsModal";
+import { PermissionAuditView } from "@/components/shared/permissions/PermissionAuditView";
 import { ResetPasswordDialog } from "./users/ResetPasswordDialog";
 import { ModuleTitle } from "./ModuleTitle";
-import { ICON_BUTTON_HIT_AREA, type RowAction } from "@/components/atom/RowActions";
+import { COPY } from "@/lib/copy/copy-catalog";
+import { RowActions, type RowAction } from "@/components/atom/RowActions";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { Pagination } from "@/components/atom/Pagination";
+import { usePaginacion } from "@/components/atom/usePaginacion";
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from "@/components/atom/table-styles";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ICT_CLIENTS_MANAGE_PERMISSION } from "@/lib/auth/jwt";
 import { IctClientsPanel } from "./users/IctClientsPanel";
+import { CompanyRolesPanel } from "./users/CompanyRolesPanel";
+import { ExternalClientsPanel } from "./users/ExternalClientsPanel";
 import {
   SuspendOrDeactivateModal,
   type SuspendMode,
 } from "./users/SuspendOrDeactivateModal";
-import { resolveProfile, targetEntityTypeForProfile } from "@/lib/users/profiles";
+import { isSuperAdminRole, resolveProfile, targetEntityTypeForProfile } from "@/lib/users/profiles";
 import { isInvitationRow } from "@/lib/users/invitationRow";
 import { superadminClient } from "@/lib/api/superadmin-client";
 
@@ -35,6 +49,10 @@ const ALL_TABS = [
   { id: "usuarios", label: "Usuarios", icon: Users },
   { id: "roles", label: "Roles y permisos", icon: Shield },
   { id: "clientes-ict", label: "Clientes ICT", icon: KeyRound },
+  // HU #13200 — clientes de integración EXTERNOS (Flito), solo SuperAdmin.
+  { id: "clientes-integracion", label: "Clientes de integración", icon: PlugZap },
+  // HU #13654 (Feature #13103): auditoría de permisos individuales, solo Super Admin en el Panel SA.
+  { id: "auditoria-permisos", label: "Auditoría de permisos", icon: ClipboardList },
   { id: "eliminados", label: "Eliminados", icon: Trash2 },
 ] as const;
 
@@ -62,7 +80,12 @@ export function Usuarios() {
   // Eliminar: SuperAdmin-only (AdminCompany ya no tiene este permiso).
   // Ver eliminados / restaurar siguen exclusivos de SuperAdmin.
   const canManageUserLifecycle = isSuperAdmin || isAdminCompany;
+  // HU #13652/#13655: permisos por módulo y su auditoría — Super Admin (cualquier tenant) y Admin de Compañía
+  // (modo `admin`: tope y ámbito de su sesión; la API acota al tenant).
+  const canConfigurePermissions = isSuperAdmin || isAdminCompany;
+  const permissionsMode: "superadmin" | "admin" = isSuperAdmin ? "superadmin" : "admin";
   const [open, setOpen] = useState(false);
+  const pgEliminados = usePaginacion();
   const [tab, setTab] = useState<TabId>("usuarios");
   const [users, setUsers] = useState<TenantUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,14 +104,22 @@ export function Usuarios() {
   // HU #10628 — objetivo del diálogo de confirmación "Cancelar invitación" (filas "Pendiente").
   const [cancelTarget, setCancelTarget] = useState<TenantUser | null>(null);
   const [auditTarget, setAuditTarget] = useState<TenantUser | null>(null);
+  // HU #13652 — ficha «Permisos por módulo» (solo Super Admin).
+  const [permissionsTarget, setPermissionsTarget] = useState<TenantUser | null>(null);
   const [editRoles, setEditRoles] = useState<TenantRole[]>([]);
   const [editRolesLoading, setEditRolesLoading] = useState(false);
 
   // AC4 (HU #10623): "Eliminados" es exclusivo de SuperAdmin. "Clientes ICT" requiere ict.clients.manage.
+  // HU #13200 AC6: "Clientes de integración" es exclusivo de SuperAdmin (la API de la HU #13088 también).
   const tabs = ALL_TABS.filter(
     (t) =>
       (t.id !== "eliminados" || isSuperAdmin) &&
-      (t.id !== "clientes-ict" || canManageIctClients),
+      // HU #13443: la gestión de roles es de SuperAdmin (atajo a RBAC) y de Admin de Compañía (roles propios).
+      // ot_admin y el resto de roles no ven la pestaña: asignan roles desde la edición del usuario.
+      (t.id !== "roles" || isSuperAdmin || isAdminCompany) &&
+      (t.id !== "clientes-ict" || canManageIctClients) &&
+      (t.id !== "clientes-integracion" || isSuperAdmin) &&
+      (t.id !== "auditoria-permisos" || isSuperAdmin || isAdminCompany),
   );
 
   async function loadUsers() {
@@ -189,6 +220,7 @@ export function Usuarios() {
               isSystem: r.isSystem,
               permissionCount: r.permissionCount,
               createdAt: r.createdAt,
+              productCode: r.productCode,
             })),
         );
       })
@@ -203,9 +235,8 @@ export function Usuarios() {
     };
   }, [editTarget, isSuperAdmin, roles, rolesLoading]);
 
-  // Acciones de cada fila. Se declaran como datos (RowAction[]) para que UsersTable las
-  // renderice con el área de clic de 40x40 de RowActions — el tamaño anterior (28px) quedaba
-  // por debajo del desfase del cursor SVG de FLIT y muchos clics caían fuera del botón.
+  // Acciones de cada fila. Se declaran como datos (RowAction[]) para que UsersTable las muestre
+  // en un solo botón «Acciones» con menú (RowActionsMenu), con las destructivas al final.
   function actionsForUser(userId: string): RowAction[] {
     const u = users.find((x) => x.id === userId);
     if (!u) return [];
@@ -218,6 +249,17 @@ export function Usuarios() {
         label: `Ver historial de ${u.fullName}`,
         tone: "primary",
         onClick: () => setAuditTarget(u),
+      });
+    }
+
+    // HU #13652: permisos individuales por módulo. Solo Super Admin aquí; las invitaciones pendientes la
+    // abren para ver el aviso deshabilitado (AC5), las canceladas no tienen cuenta ni invitación vigente.
+    if (canConfigurePermissions && u.status !== "cancelled") {
+      actions.push({
+        icon: ShieldCheck,
+        label: `Permisos por módulo de ${u.fullName}`,
+        tone: "primary",
+        onClick: () => setPermissionsTarget(u),
       });
     }
 
@@ -261,7 +303,7 @@ export function Usuarios() {
         actions.push({
           icon: Ban,
           label: `Desactivar indefinidamente a ${u.fullName}`,
-          tone: "primary",
+          tone: "danger",
           onClick: () => setSuspendTarget({ user: u, mode: "indefinite" }),
         });
       }
@@ -325,9 +367,9 @@ export function Usuarios() {
   }
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
       <ModuleTitle
-        title="Usuarios"
+        title={COPY.A23}
         subtitle="Gestiona el acceso de tu equipo a la plataforma."
         action={
           // El backend exige AdminCompanyPolicy para invitar (Bug #11581). El acceso a este
@@ -335,7 +377,7 @@ export function Usuarios() {
           // concedido veria el boton y recibiria un 403 opaco: se gatea con el mismo criterio
           // que el resto de acciones de ciclo de vida.
           tab === "usuarios" && canManageUserLifecycle ? (
-            <button onClick={() => setOpen(true)} className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}>
+            <button onClick={() => setOpen(true)} className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}>
               Invitar usuario
             </button>
           ) : undefined
@@ -350,12 +392,18 @@ export function Usuarios() {
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className="relative flex items-center gap-2 px-4 py-2.5 text-xs font-semibold transition"
-              style={{ color: active ? "#557EFF" : undefined, opacity: active ? 1 : 0.65 }}
+              className={`relative flex items-center gap-2 px-4 py-2.5 text-xs font-semibold transition ${
+                active ? "text-[color:var(--flit-brand-ink)] opacity-100" : "opacity-65"
+              }`}
             >
-              <Icon className="h-3.5 w-3.5" />
+              <Icon className="h-3.5 w-3.5" aria-hidden="true" />
               {t.label}
-              {active && <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full" style={{ background: "#557EFF" }} />}
+              {active && (
+                <span
+                  className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-[color:var(--color-flit-brand)]"
+                  aria-hidden="true"
+                />
+              )}
             </button>
           );
         })}
@@ -410,75 +458,106 @@ export function Usuarios() {
         <IctClientsPanel isSuperAdmin={isSuperAdmin} tenantId={tenantId} />
       )}
 
+      {tab === "clientes-integracion" && isSuperAdmin && (
+        // HU #13200 (Épica #12737): clientes de integración externos (Flito) que leen el feed de trámites.
+        <ExternalClientsPanel />
+      )}
+
       {tab === "eliminados" && isSuperAdmin && (
         // HU #10624 (AC3) — GET /api/v1/security/users?onlyDeleted=true: usuarios eliminados
         // (soft-delete) de CUALQUIER tenant, exclusivo de SuperAdmin. Restaurar (1 clic de
         // confirmación en RestoreUserDialog) deshace el soft-delete vía restoreUser().
-        <div className="flex flex-col overflow-x-auto">
-          <div
-            className="grid min-w-[560px] px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0"
-            style={{ gridTemplateColumns: "3fr 2fr 2fr 40px", background: "#DFE5ED", color: "#162744" }}
-          >
-            <div>Usuario</div>
-            <div>Empresa</div>
-            <div>Eliminado el</div>
-            <div />
-          </div>
-
-          <div className="space-y-2 pt-2">
-            {deletedLoading && (
-              <div role="status" className="py-12 text-center text-sm opacity-60">Cargando usuarios eliminados…</div>
-            )}
-            {!deletedLoading && deletedError && (
-              <div role="alert" className="py-12 text-center text-sm" style={{ color: "#FF4E00" }}>{deletedError}</div>
-            )}
-            {!deletedLoading && !deletedError && deletedUsers.length === 0 && (
-              <div className="py-12 text-center text-sm opacity-60">
-                No hay usuarios eliminados de ninguna compañía u organismo.
-              </div>
-            )}
-            {!deletedLoading && !deletedError && deletedUsers.map((u) => (
-              <div
-                // Mismo criterio que la tabla de "Usuarios": u.id + u.roleId evita colisión de
-                // key cuando el JOIN produce N filas por usuario con N roles.
-                key={`${u.id}-${u.roleId ?? "sin-rol"}`}
-                className="grid min-w-[560px] items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs"
-                style={{ gridTemplateColumns: "3fr 2fr 2fr 40px" }}
-              >
-                <div>
-                  <p className="font-semibold">{u.fullName}</p>
-                  <p className="text-[10px] opacity-60">{u.email}</p>
-                </div>
-                <div className="opacity-70 truncate">{u.tenantName ?? "—"}</div>
-                <div className="opacity-70">{formatDateTime(u.deletedAt)}</div>
-                <div className="flex justify-end">
-                  <button
-                    title="Restaurar usuario"
-                    aria-label={`Restaurar usuario ${u.fullName}`}
-                    onClick={() => setRestoreTarget(u)}
-                    className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-blue-50`}
-                    style={{ color: "#557EFF" }}
-                  >
-                    <RotateCcw className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+        // Bug #13055 — tabla homologada con el modelo de trámites: `<table>` semántica, RowActions,
+        // loader del carrito y paginación en cliente con «Filas por página».
+        <div className="flex flex-col gap-3">
+          {deletedLoading && <CarLoaderModal label="Cargando usuarios eliminados…" />}
+          {!deletedLoading && deletedError && (
+            <div role="alert" className="py-12 text-center text-sm" style={{ color: "#FF4E00" }}>{deletedError}</div>
+          )}
+          {!deletedLoading && !deletedError && deletedUsers.length === 0 && (
+            <div className="py-12 text-center text-sm opacity-60">
+              No hay usuarios eliminados de ninguna compañía u organismo.
+            </div>
+          )}
           {!deletedLoading && !deletedError && deletedUsers.length > 0 && (
-            <p className="text-[10px] opacity-60 text-right pt-2 shrink-0">
-              Mostrando {deletedUsers.length} usuario{deletedUsers.length !== 1 ? "s" : ""} eliminado{deletedUsers.length !== 1 ? "s" : ""}
-            </p>
+            <>
+              <div className="overflow-x-auto">
+                <table
+                  aria-label="Usuarios eliminados"
+                  style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px", minWidth: 560 }}
+                  className="text-xs"
+                >
+                  <thead>
+                    <tr>
+                      {["Usuario", "Empresa", "Eliminado el", "Acciones"].map((col, i, arr) => (
+                        <th
+                          key={col}
+                          scope="col"
+                          className={`${TABLA_HEADER_CELL_CLS} ${i === 0 ? "rounded-l-xl" : ""} ${i === arr.length - 1 ? "rounded-r-xl text-right" : ""}`}
+                          style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                        >
+                          {col}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pgEliminados.paginar(deletedUsers).map((u) => (
+                      <tr
+                        // Mismo criterio que la tabla de "Usuarios": u.id + u.roleId evita colisión de
+                        // key cuando el JOIN produce N filas por usuario con N roles.
+                        key={`${u.id}-${u.roleId ?? "sin-rol"}`}
+                        className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
+                      >
+                        <td className="rounded-l-xl border-y border-l px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                          <p className="font-semibold">{u.fullName}</p>
+                          <p className="text-[10px] opacity-60">{u.email}</p>
+                        </td>
+                        <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                          <span className="block truncate opacity-70">{u.tenantName ?? "—"}</span>
+                        </td>
+                        <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                          <span className="opacity-70">{formatDateTime(u.deletedAt)}</span>
+                        </td>
+                        <td className="rounded-r-xl border-y border-r px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                          <RowActions
+                            actions={[
+                              {
+                                icon: RotateCcw,
+                                label: `Restaurar usuario ${u.fullName}`,
+                                tone: "primary",
+                                onClick: () => setRestoreTarget(u),
+                              },
+                            ]}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <Pagination
+                page={pgEliminados.page}
+                pageSize={pgEliminados.pageSize}
+                totalCount={deletedUsers.length}
+                onPageChange={pgEliminados.setPage}
+                onPageSizeChange={pgEliminados.setPageSize}
+                noun="usuarios eliminados"
+                ariaLabel="Paginación de usuarios eliminados"
+              />
+            </>
           )}
         </div>
       )}
+
+      {tab === "auditoria-permisos" && canConfigurePermissions && <PermissionAuditView mode={permissionsMode} users={users} />}
 
       {tab === "roles" && isSuperAdmin && (
         // AC4 (HU #10509) — el CRUD completo de roles es exclusivo de RbacAdmin (HU #10508);
         // no se duplica aquí. El SuperAdmin solo recibe un atajo directo al módulo RBAC.
         <div className="flex flex-col items-center gap-3 py-14 text-center">
-          <div className="h-12 w-12 rounded-full grid place-items-center" style={{ background: "rgba(85,126,255,0.10)" }}>
-            <Shield className="h-5 w-5" style={{ color: "#557EFF" }} aria-hidden="true" />
+          <div className="h-12 w-12 rounded-full grid place-items-center" style={{ background: "color-mix(in srgb, var(--color-flit-brand) 10%, transparent)" }}>
+            <Shield className="h-5 w-5" style={{ color: "var(--color-flit-brand)" }} aria-hidden="true" />
           </div>
           <div>
             <p className="text-sm font-semibold">La gestión de roles del sistema vive en el módulo RBAC</p>
@@ -489,7 +568,7 @@ export function Usuarios() {
           <Link
             href="/?m=rbac"
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white"
-            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
           >
             Ir a Roles y permisos (RBAC)
             <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
@@ -497,41 +576,7 @@ export function Usuarios() {
         </div>
       )}
 
-      {tab === "roles" && !isSuperAdmin && (
-        <div className="flex flex-col gap-3">
-          {/* AC4 (HU #10509) — modo SOLO LECTURA para AdminCompany/OtAdmin: sin botones de
-              crear/editar/eliminar/desactivar. La gobernanza de roles es exclusiva de SuperAdmin. */}
-          <p className="text-xs opacity-60">
-            Roles disponibles para tu empresa. Solo el Super Admin puede crear, editar o desactivar roles.
-          </p>
-          {rolesLoading ? (
-            <div className="py-12 text-center text-sm opacity-60">Cargando roles…</div>
-          ) : roles.length === 0 ? (
-            <div className="py-12 text-center text-sm opacity-60">
-              No hay roles configurados para este tenant. Contacta al Super Admin.
-            </div>
-          ) : (
-            <div className="flex flex-col overflow-x-auto">
-              <div className="grid grid-cols-12 min-w-[560px] px-4 py-2.5 text-[10px] font-semibold uppercase rounded-t-xl shrink-0" style={{ background: "#DFE5ED", color: "#162744" }}>
-                <div className="col-span-2">Código</div>
-                <div className="col-span-4">Nombre</div>
-                <div className="col-span-4">Descripción</div>
-                <div className="col-span-2 text-center">Permisos</div>
-              </div>
-              <div className="space-y-2 pt-2">
-                {roles.map((r) => (
-                  <div key={r.id} className="grid grid-cols-12 min-w-[560px] items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs">
-                    <div className="col-span-2 font-mono opacity-80">{r.code}</div>
-                    <div className="col-span-4 font-semibold">{r.name}</div>
-                    <div className="col-span-4 opacity-70">{r.description ?? "—"}</div>
-                    <div className="col-span-2 text-center font-bold" style={{ color: "#557EFF" }}>{r.permissionCount}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+      {tab === "roles" && !isSuperAdmin && isAdminCompany && <CompanyRolesPanel onChanged={() => void loadRoles()} />}
 
       {open && (
         <InviteUserModal
@@ -574,6 +619,7 @@ export function Usuarios() {
               : {
                   currentRoleName: editTarget.role,
                   currentRoleId: editTarget.roleId,
+                  tenantId: isSuperAdmin ? editTarget.tenantId : undefined,
                   roles: editRoles,
                   rolesLoading: editRolesLoading,
                   onAssignRole: async (roleId) => {
@@ -599,6 +645,29 @@ export function Usuarios() {
           userId={auditTarget.id}
           userLabel={auditTarget.fullName}
           onClose={() => setAuditTarget(null)}
+        />
+      )}
+      {permissionsTarget && canConfigurePermissions && (
+        <UserPermissionsModal
+          user={{
+            id: permissionsTarget.id,
+            fullName: permissionsTarget.fullName,
+            email: permissionsTarget.email,
+            tenantId: permissionsTarget.tenantId,
+          }}
+          mode={permissionsMode}
+          // La fila trae todos los roles del usuario (roleIds); sin él, los de las filas con su id.
+          roleIds={
+            permissionsTarget.roleIds?.length
+              ? permissionsTarget.roleIds
+              : users.filter((x) => x.id === permissionsTarget.id && x.roleId).map((x) => x.roleId as string)
+          }
+          targetIsSuperAdmin={users.some((x) => x.id === permissionsTarget.id && isSuperAdminRole(x.roleCode))}
+          // HU #13656: en modo admin, otro administrador o la propia ficha se ven en solo lectura.
+          targetRoleCodes={users.filter((x) => x.id === permissionsTarget.id).map((x) => x.roleCode)}
+          isSelf={permissionsTarget.id === currentUserId}
+          invitationPending={isInvitationRow(permissionsTarget)}
+          onClose={() => setPermissionsTarget(null)}
         />
       )}
       {resetPasswordTarget && (

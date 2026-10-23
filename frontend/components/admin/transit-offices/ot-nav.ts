@@ -1,12 +1,12 @@
+import { COPY } from "@/lib/copy/copy-catalog";
+
 /** Rutas del hub consola OT (HU #10236). */
 export type OtHubTabId =
-  | "tramites"
   | "webhooks"
   | "client-procedures"
   | "rules"
   | "documents"
   | "requirements"
-  | "plate-ranges"
   | "usuarios"
   | "reportes"
   | "mandatos"
@@ -24,17 +24,22 @@ export interface OtHubTab {
  * Pestañas del hub (navegación interna). Visibles en OtTabBar solo para SuperAdmin;
  * Admin OT las consume desde el dock (sin barra de pestañas).
  *
- * Labels alineados al dock Admin OT: Trámites (ex "Trámites clientes"), Preasignación.
- * "Trámites"/"Webhooks" (ids legacy) siguen fuera de la oferta; rutas por URL siguen vivas.
+ * Labels alineados al dock Admin OT: Trámites (ex "Trámites clientes").
+ * "Webhooks" (id legacy) sigue fuera de la oferta; su ruta por URL sigue viva.
+ * HU #12850 (Feature #12846) — Preasignación se retiró: la consola de rangos ya no existe en
+ * backend (HU-A1) y la asignación de placa del trámite siempre reserva fuera de rango.
+ * HU #12857 (Feature #12847) — la ruta legacy `[id]/tramites` (TramitesSuperSection) se retiró:
+ * duplicaba sin enlace de menú lo que ya cubre "Configuración" (modo Dashboard/QX, ventana de
+ * revocatoria, feature flags operativos). El id `tramites` salió de `OtHubTabId`: ya no hay
+ * pantalla que lo resuelva. El id vigente de la bandeja sigue siendo `client-procedures`.
  */
 export const OT_HUB_TABS: OtHubTab[] = [
-  { id: "client-procedures", label: "Trámites", segment: "client-procedures" },
+  { id: "client-procedures", label: COPY.B21Tramites, segment: "client-procedures" },
   { id: "rules", label: "Reglas", segment: "rules" },
   { id: "documents", label: "Documentos", segment: "documents" },
   { id: "requirements", label: "Requisitos", segment: "requirements" },
-  { id: "plate-ranges", label: "Preasignación", segment: "plate-ranges" },
-  { id: "usuarios", label: "Usuarios", segment: "usuarios" },
-  { id: "reportes", label: "Reportes", segment: "reportes" },
+  { id: "usuarios", label: COPY.B21Usuarios, segment: "usuarios" },
+  { id: "reportes", label: COPY.B21Reportes, segment: "reportes" },
   { id: "mandatos", label: "Mandatos", segment: "mandatos" },
   { id: "imprint-validation", label: "Validar impronta", segment: "imprint-validation" },
   // HU #12578 (Feature #12565) — vista dedicada "Revocatorias": todos los intentos de solicitud de
@@ -52,7 +57,6 @@ export const OT_ADM_DOCK = {
   documents: "ot-adm-documents",
   requirements: "ot-adm-requirements",
   tramites: "ot-adm-tramites",
-  preasignacion: "ot-adm-preasignacion",
   usuarios: "ot-adm-usuarios",
   reportes: "ot-adm-reportes",
   mandatos: "ot-adm-mandatos",

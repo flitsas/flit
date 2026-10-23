@@ -265,6 +265,70 @@ public sealed class KyverumWebhookHandlerTests
     }
 
     [Fact]
+    public async Task Webhook_PrimerIntentoRechazadoConCierre_SegundoAprobado_QuedaAprobada()
+    {
+        // Caso de QA: falla el primer intento y aprueba el segundo en el mismo enlace. La consulta de respaldo tras el
+        // primer rechazo trae la señal de cierre (`rechazado`), pero con 1 de 3 intentos no es final.
+        var ct = TestContext.Current.CancellationToken;
+        var v = Seed();
+        v.MaxAttempts = BiometricRules.KyverumMaxIntentos;
+        _kyverum.GetStatusAsync("kyv_123", Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new KyverumVerifyStatus("rechazado", 30, "{\"status\":\"rechazado\"}"));
+
+        var rechazo = Body(aprobado: false, score: 30, closedAt: "2026-10-08T10:00:00.000Z");
+        await _handler.HandleAsync(new KyverumWebhookInput(v.Id, rechazo, "sha256=" + Sign(rechazo)), ct);
+
+        v.Attempts.Should().Be(1);
+        v.Status.Should().Be(BiometricEstados.EnProceso);
+
+        var aprobado = Body(aprobado: true, score: 91, closedAt: "2026-10-08T10:05:00.000Z");
+        var (result, error) = await _handler.HandleAsync(new KyverumWebhookInput(v.Id, aprobado, "sha256=" + Sign(aprobado)), ct);
+
+        error.Should().BeNull();
+        result.Should().Be("ok");
+        v.Status.Should().Be(BiometricEstados.Aprobado);
+        await _events.Received(1).PublishAsync(Arg.Is<IdentityValidationCompleted>(e =>
+            e.ValidationId == v.Id && e.Estado == BiometricEstados.Aprobado), ct);
+    }
+
+    [Fact]
+    public async Task Webhook_AprobadoSobreRechazoAntesDeAgotarIntentos_LoReemplaza()
+    {
+        // Fila que quedó en rechazado con 1 de 3 intentos (versión anterior): el aprobado tardío del mismo enlace gana.
+        var ct = TestContext.Current.CancellationToken;
+        var v = Seed(estado: BiometricEstados.Rechazado);
+        v.Attempts = 1;
+        v.MaxAttempts = BiometricRules.KyverumMaxIntentos;
+        var body = Body(aprobado: true, score: 90);
+
+        var (result, error) = await _handler.HandleAsync(new KyverumWebhookInput(v.Id, body, "sha256=" + Sign(body)), ct);
+
+        error.Should().BeNull();
+        result.Should().Be("ok");
+        v.Status.Should().Be(BiometricEstados.Aprobado);
+        v.CertificateHash.Should().Be(FirmaSerie);
+        await _events.Received(1).PublishAsync(Arg.Is<IdentityValidationCompleted>(e =>
+            e.ValidationId == v.Id && e.Estado == BiometricEstados.Aprobado), ct);
+        await _repo.Received().SaveChangesAsync(ct);
+    }
+
+    [Fact]
+    public async Task Webhook_AprobadoSobreRechazoConIntentosAgotados_EsIdempotente()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var v = Seed(estado: BiometricEstados.Rechazado);
+        v.Attempts = BiometricRules.KyverumMaxIntentos;
+        v.MaxAttempts = BiometricRules.KyverumMaxIntentos;
+        var body = Body(aprobado: true);
+
+        var (result, _) = await _handler.HandleAsync(new KyverumWebhookInput(v.Id, body, "sha256=" + Sign(body)), ct);
+
+        result.Should().Be("ok");
+        v.Status.Should().Be(BiometricEstados.Rechazado);
+        await _events.DidNotReceive().PublishAsync(Arg.Any<IdentityValidationEvent>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Webhook_UnknownValidation_ReturnsNotFound()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -356,5 +420,59 @@ public sealed class KyverumWebhookHandlerTests
         v.Attempts.Should().Be(attemptsBefore, "los intentos no se alteran");
         await _events.DidNotReceive().PublishAsync(Arg.Any<IdentityValidationEvent>(), Arg.Any<CancellationToken>());
         await _repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    // ── HU #13351: aviso verificado por Consultas, entregado por el bus ─────────────────────────────────────────
+
+    [Fact]
+    public async Task HU13351_AvisoVerificadoPorConsultas_AplicaElResultado_SinPedirFirmaNiSecreto()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var v = Seed();
+        v.WebhookSecretEncrypted = null; // con Kyverum por Consultas, Trámites no guarda el secreto
+
+        var (result, error) = await _handler.HandleVerifiedAsync(v.Id, Body(aprobado: true, score: 91), ct);
+
+        error.Should().BeNull();
+        result.Should().Be("ok");
+        v.Status.Should().Be(BiometricEstados.Aprobado);
+        v.Score.Should().Be(91);
+        await _events.Received(1).PublishAsync(Arg.Is<IdentityValidationCompleted>(e => e.ValidationId == v.Id), ct);
+        await _kyverum.DidNotReceiveWithAnyArgs().GetStatusAsync(default!, default, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task HU13351_AvisoVerificadoDeUnIntentoRechazado_CuentaElIntento_ComoElWebhook()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var v = Seed();
+        v.MaxAttempts = 3;
+
+        var (result, _) = await _handler.HandleVerifiedAsync(v.Id, Body(aprobado: false), ct);
+
+        result.Should().Be("ok");
+        v.Attempts.Should().Be(1);
+        v.Status.Should().Be(BiometricEstados.EnProceso, "aún quedan intentos");
+    }
+
+    [Fact]
+    public async Task HU13351_AvisoVerificadoDeUnaValidacionTerminada_NoSeReaplica()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var v = Seed(BiometricEstados.Aprobado);
+
+        var (result, error) = await _handler.HandleVerifiedAsync(v.Id, Body(aprobado: false), ct);
+
+        (result, error).Should().Be(("ok", (string?)null));
+        v.Status.Should().Be(BiometricEstados.Aprobado);
+        await _events.DidNotReceiveWithAnyArgs().PublishAsync(default!, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task HU13351_AvisoVerificadoDeUnaValidacionDesconocida_NotFound()
+    {
+        var (_, error) = await _handler.HandleVerifiedAsync(Guid.NewGuid(), Body(aprobado: true), TestContext.Current.CancellationToken);
+
+        error.Should().Be("not_found");
     }
 }

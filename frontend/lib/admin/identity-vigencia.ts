@@ -36,7 +36,7 @@ const IDENTITY_UI: Record<AdminIdentityStatus, AdminIdentityUi> = {
   },
   pending: {
     label: "Validación en proceso",
-    style: { background: "rgba(85,126,255,0.14)", color: "#3559c7" },
+    style: { background: "color-mix(in srgb, var(--color-flit-brand) 14%, transparent)", color: "#3559c7" },
     isValid: false,
     action: "Reenviar validación",
   },

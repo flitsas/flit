@@ -124,12 +124,12 @@ export function RuesGeneracionForm() {
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4" aria-labelledby="rues-form-titulo">
-      <h3 id="rues-form-titulo" className="text-sm font-semibold" style={{ color: "#162744" }}>
+      <h3 id="rues-form-titulo" className="text-sm font-semibold" style={{ color: "var(--color-flit-primary)" }}>
         Emitir Certificado RUES por NIT
       </h3>
 
       <div className="flex flex-col gap-1.5">
-        <label htmlFor={nitInputId} className="text-xs font-semibold" style={{ color: "#162744" }}>
+        <label htmlFor={nitInputId} className="text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }}>
           NIT de la compañía
         </label>
         <input
@@ -160,7 +160,7 @@ export function RuesGeneracionForm() {
           onClick={onRevisar}
           disabled={!puedeConsultar}
           className="flex items-center gap-1.5 rounded-xl border px-4 py-2 text-xs font-semibold disabled:opacity-60"
-          style={{ color: "#557EFF", borderColor: "#557EFF" }}
+          style={{ color: "var(--color-flit-brand)", borderColor: "var(--color-flit-brand)" }}
         >
           <Search className="h-3.5 w-3.5" aria-hidden="true" />
           {revisando ? "Consultando…" : "Revisar antes de generar"}
@@ -171,7 +171,7 @@ export function RuesGeneracionForm() {
           disabled={!puedeConsultar}
           aria-describedby="rues-generar-ayuda"
           className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-          style={{ backgroundColor: "#557EFF" }}
+          style={{ backgroundColor: "var(--color-flit-brand)" }}
         >
           {generando ? "Generando…" : "Generar certificado"}
         </button>
@@ -198,7 +198,7 @@ export function RuesGeneracionForm() {
 
       {preview?.found && camposVisibles.length > 0 && (
         <section aria-labelledby="rues-preview-titulo" className="rounded-xl border p-3">
-          <h4 id="rues-preview-titulo" className="text-xs font-semibold" style={{ color: "#162744" }}>
+          <h4 id="rues-preview-titulo" className="text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }}>
             Revisión previa — datos que quedarán congelados en el certificado
           </h4>
           <dl className="mt-2 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
@@ -230,7 +230,7 @@ export function RuesGeneracionForm() {
 
       {resultado && (
         <div role="status" className="flex flex-wrap items-center gap-2 rounded-xl border p-3">
-          <FileCheck2 className="h-4 w-4 shrink-0" style={{ color: "#557EFF" }} aria-hidden="true" />
+          <FileCheck2 className="h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} aria-hidden="true" />
           <p className="text-xs">
             Certificado generado. La descarga se hace desde el historial: la generación devuelve
             siempre JSON, nunca el PDF.
@@ -238,7 +238,7 @@ export function RuesGeneracionForm() {
           <Link
             href="/admin/generacion-documental/historial"
             className="text-xs font-semibold underline"
-            style={{ color: "#557EFF" }}
+            style={{ color: "var(--color-flit-brand)" }}
           >
             Ir al historial
           </Link>

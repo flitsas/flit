@@ -14,6 +14,12 @@ import {
   type BulkTramitesBatchSummary,
 } from '@/lib/api/bulk-tramites-client';
 import { controlCls } from './tramites-control-styles';
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_CELL_CLS,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from '@/components/atom/table-styles';
 
 interface Props {
   /** Se recarga cuando cambia: el modal lo sube al encolar un lote nuevo. */
@@ -79,7 +85,7 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
 
   if (cargando) {
     return (
-      <p className="flex items-center gap-2 text-xs text-[#162744]/70 dark:text-white/60">
+      <p className="flex items-center gap-2 text-xs text-flit-primary/70 dark:text-white/60">
         <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
         Cargando lotes…
       </p>
@@ -92,7 +98,7 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
 
   if (lotes.length === 0) {
     return (
-      <p className="text-xs text-[#162744]/70 dark:text-white/60" data-testid="carga-masiva-sin-lotes">
+      <p className="text-xs text-flit-primary/70 dark:text-white/60" data-testid="carga-masiva-sin-lotes">
         Todavía no has cargado ningún archivo. Cuando lo hagas, aquí verás en qué quedó cada fila.
       </p>
     );
@@ -103,7 +109,7 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
   return (
     <div className="flex flex-col gap-4" data-testid="carga-masiva-resultados">
       <div className="flex items-center justify-between gap-2">
-        <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-[#162744] dark:text-white">
+        <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-flit-primary dark:text-white">
           <span className="shrink-0 font-semibold">Lote</span>
           <select
             value={detalle?.batch.id ?? ''}
@@ -143,33 +149,49 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
               </span>
             </InlineAlert>
           ) : (
-            <p className="text-xs text-[#162744] dark:text-white" data-testid="carga-masiva-contadores">
+            <p className="text-xs text-flit-primary dark:text-white" data-testid="carga-masiva-contadores">
               {`${detalle.batch.counts.created} creados · ${detalle.batch.counts.createdPending} por retomar · ${detalle.batch.counts.notCreated} no creados`}
             </p>
           )}
 
           <div className="max-h-64 overflow-y-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="sticky top-0 bg-white text-[#162744]/70 dark:bg-[#0B0F14] dark:text-white/60">
+            {/* Bug #13055 — tabla homologada con el modelo de trámites (resultados del lote dentro del
+                modal: tabla de resultados, sin paginación). */}
+            <table
+              className="text-left text-xs"
+              style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px' }}
+            >
+              <thead>
                 <tr>
-                  <th className="py-1.5 pr-2 font-semibold">Fila</th>
-                  <th className="py-1.5 pr-2 font-semibold">Vehículo</th>
-                  <th className="py-1.5 pr-2 font-semibold">Resultado</th>
-                  <th className="py-1.5 font-semibold">Motivo</th>
+                  {['Fila', 'Vehículo', 'Resultado', 'Motivo'].map((col, i, arr) => (
+                    <th
+                      key={col}
+                      scope="col"
+                      className={`${TABLA_HEADER_CELL_CLS} ${i === 0 ? 'rounded-l-xl' : ''} ${i === arr.length - 1 ? 'rounded-r-xl' : ''}`}
+                      style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                    >
+                      {col}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {detalle.rows.map((fila) => (
                   <tr
                     key={fila.rowNumber}
-                    className="border-t border-[#DFE5ED] align-top dark:border-white/10"
+                    className={`bg-white align-top dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
                     data-testid={`carga-masiva-fila-${fila.rowNumber}`}
                   >
-                    <td className="py-1.5 pr-2 text-[#162744] dark:text-white">{fila.rowNumber}</td>
-                    <td className="py-1.5 pr-2 text-[#162744] dark:text-white">
+                    <td
+                      className="rounded-l-xl border-y border-l px-4 py-3 text-flit-primary dark:text-white"
+                      style={{ borderColor: '#DFE5ED' }}
+                    >
+                      {fila.rowNumber}
+                    </td>
+                    <td className="border-y px-4 py-3 text-flit-primary dark:text-white" style={{ borderColor: '#DFE5ED' }}>
                       {fila.identificador ?? '—'}
                     </td>
-                    <td className="py-1.5 pr-2">
+                    <td className="border-y px-4 py-3" style={{ borderColor: '#DFE5ED' }}>
                       {fila.procedureInstanceId ? (
                         <button
                           type="button"
@@ -180,12 +202,15 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
                           {etiquetaOutcome(fila.outcome)}
                         </button>
                       ) : (
-                        <span className="text-[#162744] dark:text-white">
+                        <span className="text-flit-primary dark:text-white">
                           {etiquetaOutcome(fila.outcome)}
                         </span>
                       )}
                     </td>
-                    <td className="py-1.5 text-[#162744]/70 dark:text-white/60">
+                    <td
+                      className="rounded-r-xl border-y border-r px-4 py-3 text-flit-primary/70 dark:text-white/60"
+                      style={{ borderColor: '#DFE5ED' }}
+                    >
                       {fila.motivo ? mensajeMotivo(fila.motivo) : '—'}
                     </td>
                   </tr>

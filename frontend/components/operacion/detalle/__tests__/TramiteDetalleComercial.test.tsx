@@ -76,6 +76,32 @@ describe('TramiteDetalleComercial — estado lleno', () => {
   });
 });
 
+// HU #13112 (AC8) — la decisión `omitir` se rotula con la fuente única y en tono informativo.
+// Uso de ejemplo: getPrenda → [{ decision: 'omitir' }] ⇒ la tarjeta muestra «Omitir prenda».
+describe('TramiteDetalleComercial — decisión omitir', () => {
+  it('muestra «Omitir prenda» (no el literal viejo) con tono informativo', async () => {
+    client.getCommercial.mockResolvedValue(NULO_COMERCIAL);
+    client.getPrenda.mockResolvedValue([
+      {
+        id: 'prenda-omitir',
+        decision: 'omitir',
+        estado: 'vigente',
+        acreedorNombre: null,
+        acreedorDocumento: null,
+        levantamientoEntidad: null,
+        createdAt: '2026-09-29T10:00:00Z',
+      },
+    ]);
+
+    renderSeccion();
+
+    const etiqueta = await screen.findByText('Omitir prenda');
+    expect(etiqueta).toBeInTheDocument();
+    expect(screen.queryByText(/Continuar sin gestionar/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/riesgo/i)).not.toBeInTheDocument();
+  });
+});
+
 describe('TramiteDetalleComercial — trámite sin datos comerciales', () => {
   it('usa el estado vacío en vez de pintar la tarjeta con todos los campos en "—"', async () => {
     client.getCommercial.mockResolvedValue(NULO_COMERCIAL);

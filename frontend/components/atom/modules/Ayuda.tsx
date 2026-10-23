@@ -1,8 +1,11 @@
 import Link from "next/link";
-import { LifeBuoy, MessageCircle, BookOpen, Mail } from "lucide-react";
+import { LifeBuoy, MessageCircle, BookOpen, Mail, Scale } from "lucide-react";
+import { DR_FLIT_SUPPORT_EMAIL } from "@/components/dr-flit/dr-flit-intents";
+import { NORMATIVA_RESOLUCION_SLUG } from "@/lib/manual/articles/normativa";
 import { ModuleTitle } from "./ModuleTitle";
+import { COPY } from "@/lib/copy/copy-catalog";
 
-const FAQ = [
+export const AYUDA_FAQ = [
   {
     q: "¿Cómo inicio un nuevo trámite?",
     a: "Ve a Trámites, elige el tipo disponible para tu compañía y sigue el asistente. Detalle en el Centro de Ayuda.",
@@ -17,27 +20,33 @@ const FAQ = [
   },
   {
     q: "¿El manual es para administradores?",
-    a: "No. Documenta Gestor y Organismo de Tránsito. Las consolas de SuperAdmin/AdminCompany quedan fuera.",
+    a: `Cubre ${COPY.A06}, ${COPY.A05} y las consolas de administración según tu perfil. DR. FLIT solo te sugiere artículos que aplican a tu rol.`,
   },
 ];
 
 export function Ayuda() {
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-[#162744] dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
       <ModuleTitle
         title="Centro de Ayuda"
         subtitle="Documentación operativa, chat DR. FLIT y canales de soporte."
       />
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 shrink-0">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 shrink-0">
         {[
           {
             l: "Manual FLIT",
-            d: "Docs Gestor y OT",
+            d: "Docs por perfil",
             i: BookOpen,
             href: "/manual",
           },
           { l: "Chat DR. FLIT", d: "«Necesito ayuda»", i: MessageCircle },
-          { l: "Email soporte", d: "soporte@flitsas.com", i: Mail },
+          {
+            l: "Normativa",
+            d: "Res. 20233040017145/2023",
+            i: Scale,
+            href: `/manual/${NORMATIVA_RESOLUCION_SLUG}`,
+          },
+          { l: "Email soporte", d: DR_FLIT_SUPPORT_EMAIL, i: Mail },
           { l: "Soporte prioritario", d: "Plan Enterprise", i: LifeBuoy },
         ].map((k) => {
           const Icon = k.i;
@@ -45,9 +54,9 @@ export function Ayuda() {
             <div className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border h-full">
               <div
                 className="h-10 w-10 rounded-xl grid place-items-center mb-2"
-                style={{ background: "rgba(0,219,213,0.15)" }}
+                style={{ background: "color-mix(in srgb, var(--color-flit-tech) 15%, transparent)" }}
               >
-                <Icon className="h-5 w-5" style={{ color: "#00DBD5" }} />
+                <Icon className="h-5 w-5" style={{ color: "var(--color-flit-tech)" }} />
               </div>
               <p className="text-xs font-bold">{k.l}</p>
               <p className="text-[10px] opacity-60 mt-0.5">{k.d}</p>
@@ -73,7 +82,7 @@ export function Ayuda() {
           </Link>
         </div>
         <div className="space-y-3">
-          {FAQ.map((f) => (
+          {AYUDA_FAQ.map((f) => (
             <details key={f.q} className="p-3 rounded-xl border">
               <summary className="text-xs font-semibold cursor-pointer">{f.q}</summary>
               <p className="text-xs opacity-70 mt-2">{f.a}</p>

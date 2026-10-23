@@ -72,17 +72,18 @@ export function UsoTab({ filters, needsCompany }: UsoTabProps) {
               label="Duración media del wizard"
               value={formatDurationMs(usage.data.current.avgWizardDurationMs)}
               tooltip="Promedio del tiempo total desde que se abre el wizard hasta radicar el trámite."
-              color="#557EFF"
+              color="var(--color-flit-brand)"
             />
             <KpiCard
               label="Duración mediana del wizard"
               value={formatDurationMs(usage.data.current.medianWizardDurationMs)}
               tooltip="Mediana del tiempo total del wizard: la mitad de los trámites se radica en este tiempo o menos."
-              color="#00DBD5"
+              color="var(--color-flit-tech)"
             />
           </div>
 
-          <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="wizard-steps-title">
+          <section aria-labelledby="wizard-steps-title">
+            {/* Bug #13055 — tabla homologada con el modelo de trámites (sin tarjeta envolvente). */}
             <h2
               id="wizard-steps-title"
               className="text-sm font-bold mb-3"
@@ -94,15 +95,15 @@ export function UsoTab({ filters, needsCompany }: UsoTabProps) {
               <p className="text-xs opacity-60">Aún no hay telemetría del wizard.</p>
             ) : (
               <div className={CARDLIST_SCROLL}>
-                <table className={CARDLIST_TABLE} data-testid="wizard-steps-table">
+                <table className={CARDLIST_TABLE} data-testid="wizard-steps-table" aria-labelledby="wizard-steps-title">
                   <thead>
                     <tr className={CARDLIST_HEAD_ROW}>
-                      <th className={CARDLIST_TH}>Paso</th>
-                      <th className={CARDLIST_TH}>Vistas</th>
-                      <th className={CARDLIST_TH}>Completados</th>
-                      <th className={CARDLIST_TH}>Abandono</th>
-                      <th className={CARDLIST_TH}>Tiempo promedio</th>
-                      <th className={CARDLIST_TH}>Tiempo mediano</th>
+                      <th scope="col" className={CARDLIST_TH}>Paso</th>
+                      <th scope="col" className={CARDLIST_TH}>Vistas</th>
+                      <th scope="col" className={CARDLIST_TH}>Completados</th>
+                      <th scope="col" className={CARDLIST_TH}>Abandono</th>
+                      <th scope="col" className={CARDLIST_TH}>Tiempo promedio</th>
+                      <th scope="col" className={CARDLIST_TH}>Tiempo mediano</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -149,7 +150,7 @@ export function UsoTab({ filters, needsCompany }: UsoTabProps) {
                   value: m.events,
                   hint: `${formatInt(m.uniqueUsers)} usuarios distintos`,
                 }))}
-                color="#557EFF"
+                color="var(--color-flit-brand)"
                 emptyMessage="Aún no hay uso de módulos registrado."
                 testId="modulos-mas-usados"
               />

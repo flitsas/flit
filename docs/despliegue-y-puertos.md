@@ -139,6 +139,41 @@ Para arrancar todo: `pnpm dev` (front + gateway + core-api) o
   destinos YARP. Cambiar el puerto de un ambiente = cambiar un solo número en el `setup`
   del CD (o en el `.env`).
 
+### d) Puertos reservados para la FLIT Suite
+
+Asignados en L-03 según el contrato de plataforma (`docs/suite/contrato-plataforma-v1.md`, §11).
+Siguen el mismo esquema: local y DEV `40xx`, QA `50xx`, PDN `60xx`. Los números ya ocupados
+(`x001` frontend, `x002` gateway, `x003` core-api, `x012` python-ml, `x020` core-ict, `x021` file-manager (repo aparte), `x030` migración)
+no se reutilizan.
+
+| Servicio | Local y DEV | QA | PDN |
+|----------|-------------|----|-----|
+| `frontend-hub` | `4022` | `5022` | `6022` |
+| Comparendos (`frontend-comparendos`) | `4023` | `5023` | `6023` |
+| API de Comparendos (`core-comparendos`, sin publicar) | `4028` | `5028` | `6028` |
+| Diagnóstico (`frontend-diagnostico`) | `4024` | `5024` | `6024` |
+| `core-identity` | `4025` | `5025` | `6025` |
+
+- Bloque `x022`–`x025` (2026-10-06): un puerto por producto, el de su app web, que es a donde apunta nginx. Si un
+  producto tiene API propia, va por la red interna detrás del gateway, sin puerto publicado.
+- En local, cada app nueva se abre en `<código>.localhost:<puerto>` (contrato §11).
+- `frontend-hub` y `core-identity` ya tienen variables y `setup` en el CD (`HUB_PORT`,
+  `CORE_IDENTITY_PORT`); Comparendos ya los tiene (`COMPARENDOS_PORT`, `CORE_COMPARENDOS_PORT`;
+  perfil `comparendos`, ver `docs/suite/handoff-vps-comparendos.md`); Diagnóstico se agrega cuando se despliegue (L-10). El producto `demo` se retiró (DDL 125).
+- Cómo se enciende la suite en la VPS: `docs/suite/handoff-vps-suite.md`.
+
+#### Puertos gRPC internos (contrato v1.3 §11, Epic #13316)
+
+Solo en la red de Docker: sin mapeo en `ports`, sin nginx y el mismo número en todos los ambientes (cada ambiente es
+su propia red). Un servicio gRPC escucha HTTP/2 sin TLS (h2c) en un puerto aparte del REST.
+
+| Servicio | Puerto | Variable | Estado |
+|----------|--------|----------|--------|
+| `core-api` (ICT) | `8082` | `CORE_API_GRPC_PORT` | En uso |
+| `core-identity` (`flit.identidad.v1`) | `8083` (propuesto) | `CORE_IDENTITY_GRPC_PORT` | Por confirmar con el líder; vacío = apagado |
+| `core-consultas` (`flit.consultas.v1`) | `8084` (propuesto) | `CORE_CONSULTAS_GRPC_PORT` | Por confirmar con el líder; REST interno `CORE_CONSULTAS_PORT` 4026 |
+| `core-comparendos` (`flit.comparendos.v1`) | `8086` (propuesto) | `CORE_COMPARENDOS_GRPC_PORT` | Perfil `comparendos`; encendido en [handoff-vps-comparendos.md](suite/handoff-vps-comparendos.md) |
+
 ---
 
 ## 3. Comunicación entre servicios
@@ -203,6 +238,49 @@ El flujo es el mismo en los tres escenarios; solo cambian los hostnames/puertos.
   contenedor `frontend`). Si falta el segundo, el front de marca blanca carga pero
   todas sus llamadas a la API fallan por CORS.
 - El origen permitido debe ser la URL desde la que sirve el **frontend**.
+
+### Marca blanca: el vhost debe enrutar `/api/v1`, `/hubs` y `/ml` al Gateway (HU #12421)
+
+En un **dominio de red** (marca blanca) el navegador **no** usa la base cross-origin
+horneada en el build: `resolveApiBase()` devuelve `""` cuando `isFlitHost()` es `false`
+(`frontend/lib/api/base-url.ts`), así que llama a **su propio origen**. Y los
+`marcablanca{dev,qa,pdn}.flitsas.online` están negados a propósito en `NEXT_PUBLIC_FLIT_HOSTS`
+(HU #12761), o sea que cuentan como dominio de red.
+
+Por eso su vhost necesita, **además** del `location /` al frontend:
+
+| location | Destino | Nota |
+|---|---|---|
+| `/api/v1/` | gateway (`4002`/`5002`/`6002`) | **`/api/v1/` exacto, nunca `/api/`**: el BFF propio de Next vive en `/api/migracion` (sin `/v1/`) y debe seguir cayendo en `location /` |
+| `/hubs/` | gateway | SignalR: exige `Upgrade`/`Connection` y `proxy_read_timeout 3600s` |
+| `/ml/` | gateway | OCR/ML detrás de YARP |
+
+nginx elige por **prefijo más largo**, no por orden, así que `/api/v1/...` siempre gana
+sobre `/`. Además hay que fijar `client_max_body_size` igual que en el vhost de la API de
+ese ambiente (sin él rige el default de 1 MB y los adjuntos fallan con 413), y en QA
+replicar el `location /api/v1/tramites/ocr/` con 600 s.
+
+`X-Flit-Domain` **no se fija** en nginx: lo sella en exclusiva `DomainSealTransform` del
+gateway con el host real de la conexión (HU #12417). Pero sí conviene **borrar** el que
+mande el cliente (`proxy_set_header X-Flit-Domain "";` y lo mismo con `X-Internal-Key`):
+detrás de nginx las conexiones llegan al gateway con la IP del bridge, que cae dentro de
+`DomainSeal__InternalAllowedNetworks`, así que ese CIDR no discrimina y la única defensa
+quedaría en la clave compartida. El SSR no se ve afectado: llama al gateway por la red
+Docker, sin pasar por nginx.
+
+> **Síntoma cuando falta este enrutado:** el front carga y el SSR hasta aplica la marca
+> (título y colores correctos, porque eso va por la red interna), pero el **logo aparece
+> roto** —`logoUrl` es relativo— y toda llamada a la API responde **500**, porque la pide
+> al contenedor de Next en vez de al Gateway.
+>
+> Aplicado a mano en los tres vhosts de la 177 el **2026-09-24**. Recordar que **las
+> configuraciones de nginx de ese host no están en git**: si se recrea un vhost, hay que
+> volver a añadir estos tres `location`.
+
+El enrutado es condición necesaria pero no suficiente: el dominio tiene que estar
+**registrado y activo** en `admin.tenant_domains` de ese ambiente. Con el enrutado puesto
+pero sin registro, `/api/v1/public/branding` responde 200 con la marca de **FLIT**
+(comportamiento correcto de respaldo, AC5), no con la del cliente.
 
 ### Health checks (para verificar conectividad)
 
@@ -279,6 +357,7 @@ sin relajar producción:
 |------------|---------|------------------------------------|
 | CF-01 duplicidad de trámite en curso | `TramiteValidations:DuplicateActiveProcedure:Mode` | `409 DUPLICATE_ACTIVE_PROCEDURE` (VIN en Matrícula Inicial, placa en Traspaso) |
 | CF-03 precondición registral | `TramiteValidations:VehicleRegistrationState:Mode` | `422 VEHICLE_STATE_INVALID_FOR_TYPE` (vehículo ya matriculado, fuente RUNT o FLIT) |
+| Mandatario requerido al radicar (HU #13143, ADR-0066) | `TramiteValidations:MandatarioRequerido:Mode` | `409 mandatario_no_configurado` / `409 mandatario_firma_invalida` (el trámite no tiene mandatario activo, vigente y con firma válida) |
 
 | Modo | Efecto |
 |------|--------|
@@ -298,6 +377,19 @@ TRAMITE_VALIDATION_VEHICLE_STATE_MODE=warn    # DEV: warn · QA: warn  · PDN: b
 ```
 
 Sin esas variables el compose inyecta `block` en ambas: **un ambiente nunca se relaja por olvido**.
+
+**Excepción deliberada: mandatario al radicar (HU #13143).** Su variable es
+`TRAMITE_VALIDATION_MANDATARIO_MODE` (en el compose, `TramiteValidations__MandatarioRequerido__Mode`) y el
+compose la entrega en **`warn`** (`${TRAMITE_VALIDATION_MANDATARIO_MODE:-warn}`), igual que `appsettings.json`:
+código nuevo con datos sin migrar (firma física, organismos sin mandatarios) detendría radicaciones en PDN. En
+**código** sigue el fail-safe: ausente, vacío o no reconocido resuelve a `block`. Calendario: DEV y QA arrancan
+en `warn`; PDN pasa a `block` solo con el reporte de firma física vacío, 14 días en `warn` sin avisos y la
+confirmación escrita del Líder Técnico (ADR-0066). El paso a `block` es **cambiar esta variable en el `.env` del
+VPS y reiniciar, sin despliegue de código**:
+
+```bash
+TRAMITE_VALIDATION_MANDATARIO_MODE=warn   # DEV: warn · QA: warn (ensayo: block) · PDN: warn hasta la confirmación
+```
 Un valor no reconocido (`false`, `desactivado`, …) también resuelve a `block` y deja un `warning` en
 el log de arranque. El modo efectivo de cada validación se registra al arrancar con la categoría
 `Flit.TramiteValidations`.
@@ -308,7 +400,8 @@ sección a su copia:
 ```jsonc
 "TramiteValidations": {
   "DuplicateActiveProcedure": { "Mode": "off" },
-  "VehicleRegistrationState": { "Mode": "off" }
+  "VehicleRegistrationState": { "Mode": "off" },
+  "MandatarioRequerido": { "Mode": "warn" }
 }
 ```
 
@@ -407,10 +500,11 @@ Basado en la plantilla [.env.prod.example](../.env.prod.example). Variables a te
 | `CORS_ORIGIN` | ✅ | URL pública **exacta** del frontend (esquema + host, **sin** barra final), p. ej. `https://dev.flitsas.online`. Si no coincide con el origen real, el navegador bloquea las respuestas. |
 | `VERIFIK_API_TOKEN` | ✅ | Token Verifik (RUNT). Secreto. |
 | `VERIFIK_BASE_URL` | ⛔ opc. | Default `https://api.verifik.co`. |
-| `VERIFIK_TIMEOUT_SECONDS` | ⛔ opc. | Default operativo `120` (HU #13762). Timeout HTTP a Verifik. |
+| `VERIFIK_TIMEOUT_SECONDS` | ⛔ opc. | Default operativo `120` (HU #13762). Timeout HTTP a Verifik en core-consultas. |
 | `KYVERUM_RUNT_TIMEOUT_SECONDS` | ⛔ opc. | Default operativo `120` (HU #13762). Timeout HTTP a Kyverum RUNT. |
 | `KYVERUM_TIMEOUT_SECONDS` | ⛔ opc. | Default operativo `120` (HU #13762). Timeout HTTP a Kyverum Verify. |
 | `KYVERUM_FINES_TIMEOUT_SECONDS` | ⛔ opc. | Default operativo `120` (HU #13762). Timeout HTTP a Kyverum comparendos. |
+| `CONSULTAS_REMOTO_DEADLINE_SEGUNDOS` | ⛔ opc. | Default operativo `180` (HU #13762). Deadline gRPC core-api/ICT → core-consultas (`Consultas__Remoto__DeadlineSegundos` / `CoreConsultas__DeadlineSegundos`). |
 | `FRONTEND_PORT` / `GATEWAY_PORT` / `CORE_API_PORT` / `PYTHON_ML_PORT` / `MIGRACION_API_PORT` | ⛔ opc.* | Puertos del ambiente (DEV 40xx / QA 50xx / PDN 60xx). *El **CD los inyecta** automáticamente; defínelos en el `.env` solo para operación manual. Defaults DEV. `MIGRACION_API_PORT` (4030/5030/6030) no se publica en el host, pero lo leen **dos** servicios (migracion-api y el destino del gateway): si falta o diverge, `/admin/migracion` responde 502 sin cuerpo. |
 | `CORE_API_TAG` / `FRONTEND_TAG` / `PYTHON_ML_TAG` | ⛔ opc.* | Default `latest`. El **CD los inyecta**: tag móvil (`dev`/`qa`) en DEV/QA y `sha-<commit>` inmutable en PDN. **Para rollback manual**, fija el `sha-<commit>` deseado. |
 | `COMPOSE_PROJECT_NAME` | ⛔ opc. | El compose ya fija `name: flitdev`. Solo defínela si necesitas aislar varias instancias en el mismo VPS (evita que `up --remove-orphans` borre contenedores de otro stack). |
@@ -455,7 +549,7 @@ Un job `setup` resuelve el mapeo y los jobs siguientes lo consumen:
 |------|:---------------------:|-------|---------------|------------------------------|
 | `develop` | `dev` | `dev.flitsas.online` | `api.dev.flitsas.online` | `dev` (móvil) |
 | `staging` | `qa` | `qa.flitsas.online` | `api.qa.flitsas.online` | `qa` (móvil) |
-| `release` | `pdn` | `pdn.flitsas.online` | `api.pdn.flitsas.online` | `sha-<commit>` (**inmutable**) |
+| `release` | `pdn` | `flitsas.online` | `api.flitsas.online` | `sha-<commit>` (**inmutable**) |
 
 - **Tags publicados vs. tag de deploy:** cada build publica **3 tags** — `sha-<commit>`
   (inmutable, formato largo), el tag móvil del ambiente (`dev`/`qa`/`pdn`) y `latest`

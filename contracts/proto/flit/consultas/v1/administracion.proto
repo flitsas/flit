@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package flit.consultas.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "Flit.Consultas.Grpc.V1";
+
+// Configuración de consultas por empresa (Epic #13316, HU #13344; ADR-0065): la escribe la administración de FLIT
+// (core-api reenvía lo que guarda el SuperAdmin) y la usa Consultas en cada consulta.
+//
+// Autenticación: token de servicio con `aud=consultas` y scope `platform.consultas.admin`; la empresa en la metadata
+// `x-flit-tenant-id`, como en ConsultasService.
+service ConsultasAdminService {
+  // Reemplaza la configuración de la empresa. Idempotente.
+  rpc GuardarConfiguracionEmpresa(GuardarConfiguracionEmpresaRequest) returns (GuardarConfiguracionEmpresaResponse);
+
+  // La configuración vigente; sin fila, la por defecto (cadenas vacías = las globales).
+  rpc ObtenerConfiguracionEmpresa(ObtenerConfiguracionEmpresaRequest) returns (ObtenerConfiguracionEmpresaResponse);
+
+  // Consumo de la empresa entre dos fechas, por producto que consultó y fuente (HU #13345). Solo esa empresa.
+  rpc ObtenerConsumo(ObtenerConsumoRequest) returns (ObtenerConsumoResponse);
+}
+
+message ConfiguracionEmpresa {
+  // Cadena por tipo de consulta: vehicle_vin, vehicle_plate, conductor. Sin entrada = la cadena global.
+  map<string, CadenaProveedores> cadenas = 1;
+  // Presupuesto del primer proveedor antes del respaldo, en ms. 0 = el global.
+  int32 failover_timeout_ms = 2;
+  // Fuente de comparendos: internal | external.
+  string fuente_multas = 3;
+  // Proveedores de avalúo habilitados (Fasecolda siempre) y el sugerido.
+  repeated string avaluos_habilitados = 4;
+  string avaluo_principal = 5;
+}
+
+message CadenaProveedores {
+  string principal = 1;
+  repeated string respaldo = 2;
+}
+
+message GuardarConfiguracionEmpresaRequest {
+  ConfiguracionEmpresa configuracion = 1;
+}
+
+message GuardarConfiguracionEmpresaResponse {}
+
+message ObtenerConfiguracionEmpresaRequest {}
+
+message ObtenerConfiguracionEmpresaResponse {
+  ConfiguracionEmpresa configuracion = 1;
+}
+
+message ObtenerConsumoRequest {
+  google.protobuf.Timestamp desde = 1;
+  // Exclusivo.
+  google.protobuf.Timestamp hasta = 2;
+}
+
+message ObtenerConsumoResponse {
+  repeated ConsumoAgregado consumos = 1;
+}
+
+message ConsumoAgregado {
+  // Producto que consultó (código del cliente de servicio: svc-tramites → tramites).
+  string producto = 1;
+  // vehiculo, conductor, multas, rnmc, rues, avaluos.
+  string fuente = 2;
+  int64 total = 3;
+  int64 desde_cache = 4;
+  // Consultas que terminaron en error (proveedor caído, pedido inválido o tiempo agotado).
+  int64 errores = 5;
+  int64 latencia_promedio_ms = 6;
+}
+

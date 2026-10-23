@@ -10,6 +10,21 @@ namespace Flit.Infrastructure.Ocr;
 /// <summary>Resultado de una llamada de visión a Anthropic: texto del modelo, o fallo con código+mensaje.</summary>
 internal sealed record AnthropicVisionResult(bool Ok, string? Text, int Status, string? Message);
 
+/// <summary>Bloque del <c>system</c> de una llamada de chat. <paramref name="Cache"/> lo marca cacheable.</summary>
+internal sealed record AnthropicSystemBlock(string Text, bool Cache);
+
+/// <summary>Turno de la conversación de una llamada de chat (<c>user</c> o <c>assistant</c>).</summary>
+internal sealed record AnthropicChatTurn(string Role, string Text);
+
+/// <summary>Tokens que reporta Anthropic en una respuesta sin streaming.</summary>
+internal sealed record AnthropicUsage(int InputTokens, int OutputTokens, int CacheReadInputTokens, int CacheCreationInputTokens);
+
+/// <summary>Resultado de una llamada de chat: texto del modelo y uso de tokens, o fallo.</summary>
+internal sealed record AnthropicChatResult(bool Ok, string? Text, AnthropicUsage? Usage)
+{
+    public static readonly AnthropicChatResult Failed = new(false, null, null);
+}
+
 /// <summary>
 /// Cliente HTTP resiliente de la Anthropic Messages API para el OCR semántico de documentos de trámites.
 /// La respuesta llega SIEMPRE en streaming (SSE): con ~100k tokens de entrada por expediente, una
@@ -169,6 +184,109 @@ internal sealed class AnthropicMessagesClient(
     }
 
     /// <summary>
+    /// Llamada de chat de texto (DR. FLIT, HU #12918): <c>system</c> en bloques (los marcados con
+    /// <see cref="AnthropicSystemBlock.Cache"/> llevan <c>cache_control: ephemeral</c>) y la conversación
+    /// en <c>messages</c>. SIN streaming: la salida es una respuesta corta, así que basta el deadline. SIN
+    /// <c>tools</c>: el modelo no tiene nada que invocar (guardarraíl ADR-0060 §8.2.2). Mismo reintento que
+    /// <see cref="SendVisionAsync"/>: 1 reintento ante fallo de transporte; una respuesta HTTP completa
+    /// no-200 no se reintenta. Nunca loguea el texto enviado ni el recibido.
+    /// </summary>
+    public async Task<AnthropicChatResult> SendChatAsync(
+        IReadOnlyList<AnthropicSystemBlock> system,
+        IReadOnlyList<AnthropicChatTurn> turns,
+        string model,
+        int maxTokens,
+        int timeoutSeconds,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(_options.ApiKey))
+        {
+            AnthropicLog.NoKey(logger);
+            return AnthropicChatResult.Failed;
+        }
+
+        var payload = new AnthropicChatRequest(
+            Model: model,
+            MaxTokens: maxTokens,
+            System: [.. system.Select(b => new AnthropicChatBlock(
+                "text", b.Text, b.Cache ? AnthropicCacheControl.Ephemeral : null))],
+            Messages: [.. turns.Select(t => new AnthropicChatMessage(t.Role, t.Text))]);
+
+        var deadline = TimeSpan.FromSeconds(timeoutSeconds);
+
+        for (var attempt = 1; attempt <= MaxAttempts; attempt++)
+        {
+            var isLastAttempt = attempt == MaxAttempts;
+            try
+            {
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeoutCts.CancelAfter(deadline);
+
+                using var message = new HttpRequestMessage(HttpMethod.Post, "/v1/messages")
+                {
+                    Content = JsonContent.Create(payload, options: JsonOptions),
+                };
+                message.Headers.TryAddWithoutValidation("x-api-key", _options.ApiKey);
+                message.Headers.TryAddWithoutValidation("anthropic-version", "2023-06-01");
+
+                using var response = await http.SendAsync(message, timeoutCts.Token).ConfigureAwait(false);
+                if (!response.StatusCode.Equals(System.Net.HttpStatusCode.OK))
+                {
+                    AnthropicLog.NonSuccess(logger, (int)response.StatusCode);
+                    return AnthropicChatResult.Failed;
+                }
+
+                var body = await response.Content
+                    .ReadFromJsonAsync<AnthropicChatResponse>(JsonOptions, timeoutCts.Token)
+                    .ConfigureAwait(false);
+
+                var text = string.Concat(
+                    (body?.Content ?? []).Where(c => c.Type == "text").Select(c => c.Text));
+
+                if (string.Equals(body?.StopReason, "max_tokens", StringComparison.Ordinal))
+                    AnthropicLog.Truncated(logger);
+
+                if (string.IsNullOrWhiteSpace(text))
+                    return AnthropicChatResult.Failed;
+
+                var usage = body!.Usage is { } u
+                    ? new AnthropicUsage(u.InputTokens, u.OutputTokens, u.CacheReadInputTokens, u.CacheCreationInputTokens)
+                    : null;
+                return new AnthropicChatResult(true, text, usage);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (TaskCanceledException)
+            {
+                if (isLastAttempt)
+                {
+                    AnthropicLog.Timeout(logger);
+                    return AnthropicChatResult.Failed;
+                }
+                AnthropicLog.Retrying(logger, attempt);
+            }
+            catch (Exception ex) when (ex is HttpRequestException or IOException)
+            {
+                if (isLastAttempt)
+                {
+                    AnthropicLog.Network(logger, ex.Message);
+                    return AnthropicChatResult.Failed;
+                }
+                AnthropicLog.Retrying(logger, attempt);
+            }
+            catch (JsonException)
+            {
+                AnthropicLog.InvalidResponse(logger);
+                return AnthropicChatResult.Failed;
+            }
+        }
+
+        return AnthropicChatResult.Failed;
+    }
+
+    /// <summary>
     /// Consume el stream SSE y devuelve el texto concatenado de los bloques de texto, el
     /// <c>stop_reason</c> final y el tipo de error del proveedor si llegó uno a mitad del stream.
     /// Los eventos que no aportan texto (ping, content_block_start/stop) se ignoran a propósito.
@@ -262,6 +380,42 @@ internal sealed class AnthropicMessagesClient(
         [property: JsonPropertyName("type")] string Type,
         [property: JsonPropertyName("media_type")] string MediaType,
         [property: JsonPropertyName("data")] string Data);
+
+    // ── Contrato Anthropic Messages API (payload de chat, sin streaming ni tools) ──
+    private sealed record AnthropicChatRequest(
+        [property: JsonPropertyName("model")] string Model,
+        [property: JsonPropertyName("max_tokens")] int MaxTokens,
+        [property: JsonPropertyName("system")] IReadOnlyList<AnthropicChatBlock> System,
+        [property: JsonPropertyName("messages")] IReadOnlyList<AnthropicChatMessage> Messages);
+
+    private sealed record AnthropicChatBlock(
+        [property: JsonPropertyName("type")] string Type,
+        [property: JsonPropertyName("text")] string Text,
+        [property: JsonPropertyName("cache_control"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] AnthropicCacheControl? CacheControl = null);
+
+    private sealed record AnthropicCacheControl([property: JsonPropertyName("type")] string Type)
+    {
+        public static readonly AnthropicCacheControl Ephemeral = new("ephemeral");
+    }
+
+    private sealed record AnthropicChatMessage(
+        [property: JsonPropertyName("role")] string Role,
+        [property: JsonPropertyName("content")] string Content);
+
+    private sealed record AnthropicChatResponse(
+        [property: JsonPropertyName("content")] IReadOnlyList<AnthropicChatResponseBlock>? Content,
+        [property: JsonPropertyName("stop_reason")] string? StopReason,
+        [property: JsonPropertyName("usage")] AnthropicChatResponseUsage? Usage);
+
+    private sealed record AnthropicChatResponseBlock(
+        [property: JsonPropertyName("type")] string? Type,
+        [property: JsonPropertyName("text")] string? Text);
+
+    private sealed record AnthropicChatResponseUsage(
+        [property: JsonPropertyName("input_tokens")] int InputTokens,
+        [property: JsonPropertyName("output_tokens")] int OutputTokens,
+        [property: JsonPropertyName("cache_read_input_tokens")] int CacheReadInputTokens,
+        [property: JsonPropertyName("cache_creation_input_tokens")] int CacheCreationInputTokens);
 }
 
 /// <summary>Logging source-generated (CA1848) del cliente Anthropic. Nunca loguea imágenes, PDFs ni datos extraídos.</summary>

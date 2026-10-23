@@ -163,6 +163,10 @@ public sealed class ConsultationRestrictionPolicyTests
             Guid tenantId, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<Guid>>(offices);
 
+        public Task<IReadOnlyList<Guid>> ListEnabledTenantIdsForOfficeAsync(
+            Guid transitOfficeId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<Guid>>([]);
+
         public Task<string?> GetGrantSourceAsync(
             Guid tenantId, Guid transitOfficeId, CancellationToken cancellationToken = default) =>
             Task.FromResult<string?>(null);

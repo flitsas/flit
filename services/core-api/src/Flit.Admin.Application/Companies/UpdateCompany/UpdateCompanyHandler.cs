@@ -100,6 +100,12 @@ public sealed class UpdateCompanyHandler
             // Sin cambio de tipo: se conserva el valor existente exactamente (incl. heredados).
             effectiveType = current.TenantType;
         }
+        else if (current.ParentTenantId is not null)
+        {
+            // El tipo de una hija de red (Concesión o Marca Blanca) no cambia mientras esté vinculada.
+            effectiveType = string.Empty;
+            errors.Add(new CompanyValidationError("tenantType", ChildTenantTypes.TypeChangeBlockedMessage));
+        }
         else
         {
             var normalized = requestedType.ToUpperInvariant();

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Linq.Expressions;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.ExternalSync;
 using Flit.Tramites.Domain.Identity;
 using Flit.Tramites.Domain.ReadModels;
 using Flit.Tramites.Domain.Repositories;
@@ -15,6 +16,7 @@ using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Flit.Tramites.Domain.Enums;
 using Flit.Queries.Domain;
+using Flit.Queries.Domain.Documentos;
 using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -175,6 +177,26 @@ internal sealed partial class ProcedureInstanceRepository(
             .Where(x => x.ValidationId == validationId)
             .OrderBy(x => x.OccurredAt)
             .ToListAsync(ct);
+
+    // HU #12791 — una sola lectura de los adjuntos de consolidado (solo tipo/source/fecha, sin grafo).
+    public async Task<IReadOnlyDictionary<string, string>> GetConsolidadoSourcesAsync(
+        Guid procedureInstanceId, Guid tenantId, CancellationToken ct)
+    {
+        var rows = await db.ProcedureInstanceAttachments
+            .AsNoTracking()
+            .Where(a => a.ProcedureInstanceId == procedureInstanceId
+                && a.TenantId == tenantId
+                && (a.Tipo == ConsolidadoVigencia.TipoWizard || a.Tipo == ConsolidadoVigencia.TipoMaestro))
+            .Select(a => new { a.Tipo, a.Source, a.UploadedAt })
+            .ToListAsync(ct);
+
+        return rows
+            .GroupBy(r => r.Tipo, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderByDescending(r => r.UploadedAt).First().Source,
+                StringComparer.OrdinalIgnoreCase);
+    }
 
     public Task<ProcedureInstance?> GetByIdWithAttachmentsAsync(Guid id, Guid tenantId, CancellationToken ct) =>
         db.ProcedureInstances
@@ -602,6 +624,7 @@ internal sealed partial class ProcedureInstanceRepository(
         var candidates = await db.ProcedureInstanceBiometricValidations
             .AsNoTracking()
             .Where(v => tenantIds.Contains(v.TenantId)
+                && v.MandateSignerId == null
                 && v.Status == BiometricEstados.Aprobado
                 && v.DocumentType != null
                 && v.DocumentNumber != null
@@ -648,6 +671,7 @@ internal sealed partial class ProcedureInstanceRepository(
         var fromBio = await db.ProcedureInstanceBiometricValidations
             .AsNoTracking()
             .Where(v => v.TenantId == tenantId
+                && v.MandateSignerId == null
                 && v.ProcedureInstanceId != null
                 && v.ProcedureInstance != null
                 && v.ProcedureInstance.DeletedAt == null
@@ -805,6 +829,12 @@ internal sealed partial class ProcedureInstanceRepository(
     /// Estado tal como lo ve el gestor: una validación no aprobada con el enlace vencido es "expirada"
     /// aunque en base siga como enviada o en proceso. Misma regla que el filtro por estado (AC3) y que
     /// el flag <c>Expired</c> del DTO; el conteo de KPIs debe hablar el mismo idioma que la fila.
+    /// <para>
+    /// HU #13286 (Épica #13202): una fila del flujo manual (<c>manual_activo</c> / <c>pendiente_revision_manual</c>) con
+    /// <c>ExpiresAt &lt; now</c> también se reporta «expirada»: es CORRECTO, el enlace de captura de 24 h venció. Es solo
+    /// presentación: ningún worker la mueve (el reconcile filtra <c>provider = 'kyverum'</c>) ni genera alertas. No cambia
+    /// el modelo ni el estado persistido.
+    /// </para>
     /// </summary>
     private static string EstadoEfectivo(string status, DateTimeOffset expiresAt, DateTimeOffset now) =>
         status != BiometricEstados.Aprobado && expiresAt < now
@@ -853,6 +883,44 @@ internal sealed partial class ProcedureInstanceRepository(
             .ToList();
     }
 
+    public async Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListMandatarioValidationsAsync(
+        IReadOnlyCollection<Guid> mandateSignerIds, CancellationToken ct = default)
+    {
+        if (mandateSignerIds.Count == 0)
+            return [];
+
+        var ids = mandateSignerIds.Distinct().ToList();
+        return await db.ProcedureInstanceBiometricValidations
+            .AsNoTracking()
+            .Where(v => v.MandateSignerId != null
+                && ids.Contains(v.MandateSignerId.Value)
+                && v.PartyRole == BiometricRules.ParteMandatario)
+            .OrderByDescending(v => v.CreatedAt)
+            .ThenByDescending(v => v.Id)
+            .ToListAsync(ct);
+    }
+
+    public async Task<int> SupersedeMandatarioInFlightAsync(
+        Guid mandateSignerId, DateTimeOffset now, CancellationToken ct = default)
+    {
+        var enVuelo = await db.ProcedureInstanceBiometricValidations
+            .Where(v => v.MandateSignerId == mandateSignerId
+                && (v.Status == BiometricEstados.PendienteEnvio
+                    || v.Status == BiometricEstados.Enviado
+                    || v.Status == BiometricEstados.EnProceso))
+            .ToListAsync(ct);
+        foreach (var v in enVuelo)
+        {
+            v.Status = BiometricEstados.Expirado;
+            v.UpdatedAt = now;
+        }
+
+        if (enVuelo.Count > 0)
+            await db.SaveChangesAsync(ct);
+
+        return enVuelo.Count;
+    }
+
     public async Task<IReadOnlyList<ProcedureInstanceBiometricValidation>>
         ListLatestBiometricValidationsByPersonsAsync(
             Guid tenantId,
@@ -898,13 +966,33 @@ internal sealed partial class ProcedureInstanceRepository(
             string documentNumber,
             int skip,
             int take,
+            CancellationToken ct) =>
+        await ListByPersonAsync(BaseTenantBiometricQuery(tenantId), documentType, documentNumber, skip, take, ct);
+
+    public async Task<(IReadOnlyList<ProcedureInstanceBiometricValidation> Rows, int Total, bool AnyNonTerminal)>
+        ListMandatarioValidationsByPersonAsync(
+            Guid tenantId,
+            string documentType,
+            string documentNumber,
+            int skip,
+            int take,
+            CancellationToken ct) =>
+        await ListByPersonAsync(MandatarioTenantBiometricQuery(tenantId), documentType, documentNumber, skip, take, ct);
+
+    private static async Task<(IReadOnlyList<ProcedureInstanceBiometricValidation> Rows, int Total, bool AnyNonTerminal)>
+        ListByPersonAsync(
+            IQueryable<ProcedureInstanceBiometricValidation> source,
+            string documentType,
+            string documentNumber,
+            int skip,
+            int take,
             CancellationToken ct)
     {
         var (tipo, numero) = DocumentCanonicalNormalization.Normalize(documentType, documentNumber);
         if (tipo.Length == 0 || numero.Length == 0)
             return ([], 0, false);
 
-        var query = BaseTenantBiometricQuery(tenantId)
+        var query = source
             .Where(v => v.DocumentType.Trim().ToUpper() == tipo
                 && v.DocumentNumber.Trim().ToUpper() == numero);
 
@@ -960,7 +1048,10 @@ internal sealed partial class ProcedureInstanceRepository(
                     v.score,
                     v.capture_url,
                     v.attempts,
-                    v.max_attempts
+                    v.max_attempts,
+                    -- La validación PROPIA del mandatario se lista, pero como persona aparte: nunca se mezcla con
+                    -- las del trámite o la prevalidación del mismo documento (no se apalancan entre sí).
+                    (v.mandate_signer_id IS NOT NULL) AS es_mandatario
                 FROM tramites.procedure_instance_biometric_validations v
                 LEFT JOIN tramites.procedure_instances pi
                     ON pi.id = v.procedure_instance_id
@@ -988,12 +1079,13 @@ internal sealed partial class ProcedureInstanceRepository(
             counted AS (
                 -- La persona es compañía + documento: la misma cédula en dos compañías son dos personas
                 -- (HU #12706, AC3). Con una sola compañía el tenant_id no cambia la agrupación.
-                SELECT tenant_id, document_type_norm, document_number_norm, COUNT(*)::int AS validation_count
+                SELECT tenant_id, document_type_norm, document_number_norm, es_mandatario,
+                       COUNT(*)::int AS validation_count
                 FROM base
-                GROUP BY tenant_id, document_type_norm, document_number_norm
+                GROUP BY tenant_id, document_type_norm, document_number_norm, es_mandatario
             ),
             latest AS (
-                SELECT DISTINCT ON (b.tenant_id, b.document_type_norm, b.document_number_norm)
+                SELECT DISTINCT ON (b.tenant_id, b.document_type_norm, b.document_number_norm, b.es_mandatario)
                     b.*,
                     c.validation_count
                 FROM base b
@@ -1001,11 +1093,13 @@ internal sealed partial class ProcedureInstanceRepository(
                   ON c.tenant_id = b.tenant_id
                  AND c.document_type_norm = b.document_type_norm
                  AND c.document_number_norm = b.document_number_norm
+                 AND c.es_mandatario = b.es_mandatario
                 -- Desempate por id: sin él, dos validaciones de la misma persona con idéntico
                 -- created_at hacen que DISTINCT ON elija una u otra en cada ejecución, y la página de
                 -- filas y el conteo de KPIs (dos sentencias distintas) pueden quedarse con estados
                 -- diferentes para la misma persona.
-                ORDER BY b.tenant_id, b.document_type_norm, b.document_number_norm, b.created_at DESC, b.id DESC
+                ORDER BY b.tenant_id, b.document_type_norm, b.document_number_norm, b.es_mandatario,
+                         b.created_at DESC, b.id DESC
             ),
             filtered AS (
                 SELECT *
@@ -1065,6 +1159,7 @@ internal sealed partial class ProcedureInstanceRepository(
                 capture_url,
                 attempts,
                 max_attempts,
+                es_mandatario,
                 validation_count,
                 COUNT(*) OVER() AS total_persons
             FROM filtered
@@ -1206,7 +1301,7 @@ internal sealed partial class ProcedureInstanceRepository(
             DateTimeOffset now,
             CancellationToken ct)
     {
-        var all = await BaseTenantBiometricQuery(scope).ToListAsync(ct);
+        var all = await BaseTenantBiometricQuery(scope, incluirMandatario: true).ToListAsync(ct);
 
         if (filter is not null)
         {
@@ -1240,11 +1335,13 @@ internal sealed partial class ProcedureInstanceRepository(
         }
 
         var groups = all
-            // Misma clave que el SQL: compañía + documento normalizado (HU #12706, AC3).
+            // Misma clave que el SQL: compañía + documento normalizado (HU #12706, AC3) + si es la validación propia de un
+            // mandatario (persona aparte: no se mezcla con el trámite ni la prevalidación del mismo documento).
             .GroupBy(v => (
                 v.TenantId,
                 DocumentCanonicalNormalization.NormalizePart(v.DocumentType),
-                DocumentCanonicalNormalization.NormalizePart(v.DocumentNumber)))
+                DocumentCanonicalNormalization.NormalizePart(v.DocumentNumber),
+                EsMandatario: v.MandateSignerId != null))
             .Select(g =>
             {
                 // Mismo desempate que el DISTINCT ON de Postgres (created_at, luego id).
@@ -1274,6 +1371,7 @@ internal sealed partial class ProcedureInstanceRepository(
                     ValidationCount = g.Count(),
                     Attempts = latest.Attempts,
                     MaxAttempts = latest.MaxAttempts,
+                    EsMandatario = g.Key.EsMandatario,
                 };
             })
             .ToList();
@@ -1375,6 +1473,7 @@ internal sealed partial class ProcedureInstanceRepository(
         public string? CaptureUrl { get; init; }
         public int Attempts { get; init; }
         public int MaxAttempts { get; init; }
+        public bool EsMandatario { get; init; }
         public int ValidationCount { get; init; }
         public int TotalPersons { get; init; }
 
@@ -1403,6 +1502,7 @@ internal sealed partial class ProcedureInstanceRepository(
             ValidationCount = ValidationCount,
             Attempts = Attempts,
             MaxAttempts = MaxAttempts,
+            EsMandatario = EsMandatario,
         };
     }
 
@@ -1410,11 +1510,17 @@ internal sealed partial class ProcedureInstanceRepository(
     /// HU #12706 — base de las lecturas transversales de identidad acotada por <see cref="TenantScope"/>
     /// (<c>WhereTenantInScope</c>: sin filtro solo en <c>All</c>, conjunto vacío ⇒ cero filas).
     /// </summary>
-    private IQueryable<ProcedureInstanceBiometricValidation> BaseTenantBiometricQuery(TenantScope scope) =>
+    /// <param name="incluirMandatario">
+    /// La vista agrupada por persona del módulo Validaciones SÍ lista la validación propia del mandatario (como persona
+    /// aparte). El resto de lecturas la siguen excluyendo (HU #13246): no alimenta la identidad de nadie más.
+    /// </param>
+    private IQueryable<ProcedureInstanceBiometricValidation> BaseTenantBiometricQuery(
+        TenantScope scope, bool incluirMandatario = false) =>
         db.ProcedureInstanceBiometricValidations
             .AsNoTracking()
             .Include(v => v.ProcedureInstance)
             .WhereTenantInScope(scope, v => v.TenantId)
+            .Where(v => incluirMandatario || v.MandateSignerId == null)
             .Where(v => v.ProcedureInstanceId == null
                 || (v.ProcedureInstance != null && v.ProcedureInstance.DeletedAt == null));
 
@@ -1424,8 +1530,16 @@ internal sealed partial class ProcedureInstanceRepository(
             .Include(v => v.ProcedureInstance)
             // HU #10867 — incluir prevalidaciones standalone (ProcedureInstanceId IS NULL) + las ligadas a instancias no eliminadas.
             .Where(v => v.TenantId == tenantId
+                && v.MandateSignerId == null
                 && (v.ProcedureInstanceId == null
                     || (v.ProcedureInstance != null && v.ProcedureInstance.DeletedAt == null)));
+
+    /// <summary>Validaciones PROPIAS de mandatario del tenant (detalle de la fila «Mandatario» del módulo Validaciones).</summary>
+    private IQueryable<ProcedureInstanceBiometricValidation> MandatarioTenantBiometricQuery(Guid tenantId) =>
+        db.ProcedureInstanceBiometricValidations
+            .AsNoTracking()
+            .Include(v => v.ProcedureInstance)
+            .Where(v => v.TenantId == tenantId && v.MandateSignerId != null);
 
     /// <summary>Carácter de escape para los patrones LIKE/ILIKE (saneo de búsqueda).</summary>
     private const string LikeEscapeChar = "\\";
@@ -1492,6 +1606,8 @@ internal sealed partial class ProcedureInstanceRepository(
             if (estado == BiometricEstados.Expirado)
             {
                 // AC3: expirado incluye estado persistido + flag expired calculado (no aprobada y vencida).
+                // HU #13286: una fila manual no aprobada con el enlace de 24 h vencido también cuenta como expirada
+                // (aceptado: es solo presentación; ningún worker la toca y no genera alertas).
                 query = query.Where(v =>
                     v.Status == BiometricEstados.Expirado
                     || (v.Status != BiometricEstados.Aprobado && v.ExpiresAt < now));
@@ -1580,11 +1696,13 @@ internal sealed partial class ProcedureInstanceRepository(
     public Task<ProcedureInstanceBiometricValidation?> GetBiometricByTokenHashAsync(string tokenHash, CancellationToken ct) =>
         db.ProcedureInstanceBiometricValidations
             .Include(x => x.ProcedureInstance) // Bug #13055 — CongeladaPorTramite necesita el estado del trámite.
+                .ThenInclude(i => i!.ProcedureType) // HU #13289 — nombre del producto en la vista de captura manual.
             .FirstOrDefaultAsync(x => x.TokenHash == tokenHash, ct);
 
     public Task<ProcedureInstanceBiometricValidation?> GetBiometricByIdAsync(Guid id, CancellationToken ct) =>
         db.ProcedureInstanceBiometricValidations
             .Include(x => x.ProcedureInstance)
+            .Include(x => x.Person) // HU #13285 — ManualValidationOrigin distingue al representante legal por la persona jurídica.
             .FirstOrDefaultAsync(x => x.Id == id, ct);
 
     // HU #10943 (CF-03) — TRACKEADA (editar/reenviar la modifica) + Person incluida (ResolveSubject).
@@ -1608,6 +1726,52 @@ internal sealed partial class ProcedureInstanceRepository(
                 .SetProperty(x => x.LastAttemptAt, attemptKey)
                 .SetProperty(x => x.ReconcilePollCount, 0)
                 .SetProperty(x => x.UpdatedAt, now), ct);
+        return affected > 0;
+    }
+
+    // HU #13290 — UPDATE atómico de la captura manual: la guarda por proveedor/estado (más el row-lock del UPDATE) hace que, de
+    // dos envíos simultáneos con el mismo token, solo uno consuma el enlace. Escribe los valores que ya dejó en memoria
+    // RegistrarCapturaManual; el UPDATE no pasa por el change tracker, así que se marca la entidad como sin cambios.
+    public async Task<bool> TryPersistManualCaptureAsync(ProcedureInstanceBiometricValidation validation, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(validation);
+        var face = validation.FacePhotoPath;
+        var front = validation.IdFrontPhotoPath;
+        var back = validation.IdBackPhotoPath;
+        var signature = validation.SignatureImagePath;
+        var signatureSha = validation.SignatureImageSha256;
+        var status = validation.Status;
+        var updatedAt = validation.UpdatedAt;
+
+        var affected = await db.ProcedureInstanceBiometricValidations
+            .Where(x => x.Id == validation.Id
+                        && x.Provider == BiometricProviders.Manual
+                        // manual_activo, o rechazado con motivo (repetición tras un rechazo, HU #13299): la misma
+                        // condición que ProcedureInstanceBiometricValidation.EsperaCapturaManual.
+                        && (x.Status == BiometricEstados.ManualActivo
+                            || (x.Status == BiometricEstados.Rechazado && x.RejectionReasonCode != null)))
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.FacePhotoPath, face)
+                .SetProperty(x => x.IdFrontPhotoPath, front)
+                .SetProperty(x => x.IdBackPhotoPath, back)
+                .SetProperty(x => x.SignatureImagePath, signature)
+                .SetProperty(x => x.SignatureImageSha256, signatureSha)
+                .SetProperty(x => x.Status, status)
+                // HU #13299 — la captura nueva limpia el motivo y la revisión del rechazo previo (RegistrarCapturaManual).
+                .SetProperty(x => x.RejectionReasonCode, validation.RejectionReasonCode)
+                .SetProperty(x => x.ReviewedBy, validation.ReviewedBy)
+                .SetProperty(x => x.ReviewedAt, validation.ReviewedAt)
+                .SetProperty(x => x.UpdatedAt, updatedAt), ct);
+
+        if (affected > 0)
+        {
+            // Los valores ya están en la BD: se igualan los originales a los actuales ANTES de marcar la entidad sin
+            // cambios (pasar de Modified a Unchanged a secas revertiría las propiedades al valor original).
+            var entry = db.Entry(validation);
+            entry.OriginalValues.SetValues(entry.CurrentValues);
+            entry.State = EntityState.Unchanged;
+        }
+
         return affected > 0;
     }
 
@@ -1787,13 +1951,43 @@ internal sealed partial class ProcedureInstanceRepository(
 
     private const string BiometricInFlightUniqueIndex = "uq_biometric_validations_inflight_doc_norm";
 
+    /// <summary>HU #13246 — a lo sumo una validación en vuelo por mandatario (DDL 129).</summary>
+    private const string BiometricInFlightMandatarioIndex = "uq_biometric_validations_inflight_mandate_signer";
+
     private static bool IsBiometricInFlightUniqueViolation(DbUpdateException ex) =>
         ex.InnerException is PostgresException pg
         && pg.SqlState == PostgresErrorCodes.UniqueViolation
-        && string.Equals(pg.ConstraintName, BiometricInFlightUniqueIndex, StringComparison.Ordinal);
+        && (string.Equals(pg.ConstraintName, BiometricInFlightUniqueIndex, StringComparison.Ordinal)
+            || string.Equals(pg.ConstraintName, BiometricInFlightMandatarioIndex, StringComparison.Ordinal));
 
     /// <summary>HU #11029 — ver <see cref="IProcedureInstanceRepository.ResetTracking"/>.</summary>
     public void ResetTracking() => db.ChangeTracker.Clear();
+
+    /// <summary>HU #12797 — ver <see cref="IProcedureInstanceRepository.IsConcurrencyConflict"/>.</summary>
+    public bool IsConcurrencyConflict(Exception ex) => ex is DbUpdateConcurrencyException;
+
+    /// <summary>HU #13265 — ver <see cref="IProcedureInstanceRepository.IsFlitoFirstWinsConflict"/>.</summary>
+    public bool IsFlitoFirstWinsConflict(Exception ex) => ExternalAttachmentFirstWins.Is(ex);
+
+    /// <summary>HU #12797 (F2) — ver <see cref="IProcedureInstanceRepository.TryDeferUntilTransactionEnds"/>.</summary>
+    public bool TryDeferUntilTransactionEnds(Action alConfirmar, Action? alRevertir = null)
+    {
+        ArgumentNullException.ThrowIfNull(alConfirmar);
+        return db.AccionesPostTransaccion.TryDiferir(
+            db.Database.CurrentTransaction?.TransactionId,
+            () =>
+            {
+                alConfirmar();
+                return Task.CompletedTask;
+            },
+            alRevertir is null
+                ? null
+                : () =>
+                {
+                    alRevertir();
+                    return Task.CompletedTask;
+                });
+    }
 
     // N 03 (RNF01) — commit con guarda de concurrencia optimista: row_version es concurrency
     // token (lo incrementa el trigger tr_procedure_instances_row_version); si otro proceso
@@ -2157,6 +2351,74 @@ internal sealed partial class ProcedureInstanceRepository(
             .ToListAsync(ct);
     }
 
+    // Épica #13216 (HU #13370) — selección del lote de consolidados. Reutiliza ApplyListFilters y
+    // ApplyListSort tal cual (ADR-0070 D3: cero lógica de visibilidad copiada); sin Skip ni grafo.
+    // Code review #13216 (Obs2): `limite` es un LIMIT en SQL después del mismo orden; null = sin límite.
+    public Task<IReadOnlyList<ProcedureInstanceRef>> ListIdsFilteredAsync(
+        Guid? tenantId,
+        ProcedureInstanceListFilter filter,
+        ProcedureInstanceSortBy sortBy,
+        SortDirection direction,
+        int? limite,
+        CancellationToken ct) =>
+        ListIdsAsync(IdsFilteredQuery(tenantId, filter), sortBy, direction, limite, ct);
+
+    // Code review #13216 (Obs2) — el mismo predicado que ListIdsFilteredAsync, contado en SQL.
+    public Task<int> CountIdsFilteredAsync(Guid? tenantId, ProcedureInstanceListFilter filter, CancellationToken ct) =>
+        IdsFilteredQuery(tenantId, filter).CountAsync(ct);
+
+    // HU #13417 — selección del lote de red: único cambio frente a la sobrecarga Guid? es el alcance, por
+    // WhereTenantInScope (el mismo del listado de red de HU #12358). Filtros, orden y LIMIT idénticos.
+    public Task<IReadOnlyList<ProcedureInstanceRef>> ListIdsFilteredInScopeAsync(
+        TenantScope scope,
+        ProcedureInstanceListFilter filter,
+        ProcedureInstanceSortBy sortBy,
+        SortDirection direction,
+        int? limite,
+        CancellationToken ct) =>
+        ListIdsAsync(IdsFilteredQuery(scope, filter), sortBy, direction, limite, ct);
+
+    // HU #13417 — el mismo predicado que ListIdsFilteredInScopeAsync, contado en SQL (total del 422 de la red).
+    public Task<int> CountIdsFilteredInScopeAsync(TenantScope scope, ProcedureInstanceListFilter filter, CancellationToken ct) =>
+        IdsFilteredQuery(scope, filter).CountAsync(ct);
+
+    /// <summary>Proyección, orden y <c>LIMIT</c> compartidos por las dos selecciones del lote (propia y de red).</summary>
+    private async Task<IReadOnlyList<ProcedureInstanceRef>> ListIdsAsync(
+        IQueryable<ProcedureInstance> query,
+        ProcedureInstanceSortBy sortBy,
+        SortDirection direction,
+        int? limite,
+        CancellationToken ct)
+    {
+        var refs = ApplyListSort(query, sortBy, direction)
+            .Select(x => new ProcedureInstanceRef(x.Id, x.TenantId, x.ReferenceNumber, x.Plate));
+        if (limite is { } max)
+            refs = refs.Take(Math.Max(0, max));
+
+        return await refs.ToListAsync(ct);
+    }
+
+    /// <summary>Base y filtros compartidos por <see cref="ListIdsFilteredAsync"/> y <see cref="CountIdsFilteredAsync"/>.</summary>
+    private IQueryable<ProcedureInstance> IdsFilteredQuery(Guid? tenantId, ProcedureInstanceListFilter filter)
+    {
+        var query = db.ProcedureInstances.AsNoTracking().Where(x => x.DeletedAt == null);
+        if (tenantId is { } tid)
+            query = query.Where(x => x.TenantId == tid);
+
+        return ApplyListFilters(query, filter);
+    }
+
+    /// <summary>Base y filtros de la selección de red: alcance por <c>WhereTenantInScope</c> (vacío ⇒ cero filas).</summary>
+    private IQueryable<ProcedureInstance> IdsFilteredQuery(TenantScope scope, ProcedureInstanceListFilter filter)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+        var query = db.ProcedureInstances.AsNoTracking()
+            .Where(x => x.DeletedAt == null)
+            .WhereTenantInScope(scope, x => x.TenantId);
+
+        return ApplyListFilters(query, filter);
+    }
+
     /// <summary>Núcleo compartido de las dos sobrecargas de <c>CountByStatusFilteredAsync</c>.</summary>
     private async Task<IReadOnlyDictionary<string, int>> CountByStatusAsync(
         IQueryable<ProcedureInstance> query,
@@ -2400,6 +2662,13 @@ internal sealed partial class ProcedureInstanceRepository(
             {
                 query = query.Where(x => normalizados.Contains(x.Status.ToLower()));
             }
+        }
+
+        if (filter.AllowedFamilies is { } familiasPermitidas)
+        {
+            // HU #13664 — la familia vive en el tipo (ADR-0050); vacío = ninguna familia visible.
+            var familias = familiasPermitidas.Select(f => f.Trim().ToUpperInvariant()).ToList();
+            query = query.Where(x => x.ProcedureType != null && familias.Contains(x.ProcedureType.Family.ToUpper()));
         }
 
         if (!string.IsNullOrWhiteSpace(filter.Modalidad))

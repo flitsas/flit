@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Ban, Clock, History, MailX, Pencil, RotateCcw, ShieldOff, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Ban, Clock, History, MailX, Pencil, RotateCcw, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import {
@@ -24,6 +24,7 @@ import {
   EMAIL_ALREADY_ASSOCIATED_MESSAGE,
   emailConflictErrorCode,
   isEmailConflictCode,
+  normalizeEmail,
 } from "@/lib/users/emailConflict";
 import { usePermissions } from "@/hooks/usePermissions";
 import { EditUserModal } from "@/components/atom/modules/users/EditUserModal";
@@ -35,9 +36,15 @@ import { CancelInvitationDialog } from "@/components/atom/modules/users/CancelIn
 import { UsersTable, toUserRow } from "@/components/atom/modules/users/UsersTable";
 import { isInvitationRow } from "@/lib/users/invitationRow";
 import { UserAuditHistoryDrawer } from "@/components/atom/modules/users/UserAuditHistoryDrawer";
-// HU19 — misma area clickeable minima que la columna de acciones unificada (RowActions).
-import { ICON_BUTTON_HIT_AREA, type RowAction } from "@/components/atom/RowActions";
+import { UserPermissionsModal } from "@/components/atom/modules/users/UserPermissionsModal";
+import { PermissionAuditView } from "@/components/shared/permissions/PermissionAuditView";
+import { SectionTabs } from "@/components/atom/SectionTabs";
+import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { usePaginacion } from "@/components/atom/usePaginacion";
+import { RowActions, type RowAction } from "@/components/atom/RowActions";
 import { assignRole, getRoles, type TenantRole } from "@/lib/api/security";
+import { isAdministratorRoleCode, isOtModuleCode } from "@/lib/permissions/modulePermissions";
 import { superadminClient } from "@/lib/api/superadmin-client";
 import { formatOtDate } from "./ot-utils";
 import {
@@ -57,7 +64,13 @@ export interface OtUsersSectionProps {
  */
 export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
   const { show } = useToast();
-  const { isSuperAdmin, userId: currentUserId } = usePermissions();
+  const { isSuperAdmin, isOtAdmin, userId: currentUserId } = usePermissions();
+  // HU #13655/#13658: el Admin OT configura los permisos de los usuarios de su organismo (modo `admin`: tope y
+  // ámbito de su sesión) y consulta su auditoría. El Super Admin lo hace desde el Panel SA.
+  const canConfigurePermissions = isOtAdmin && !isSuperAdmin;
+  // HU #13655: un Gestor OT con Usuarios delegado lista, invita y edita a otros usuarios no administradores; cambiar
+  // roles, invitar o editar administradores sigue siendo del Admin OT y del Super Admin.
+  const isUserAdmin = isOtAdmin || isSuperAdmin;
   const [status, setStatus] = useState<UiStatus>("loading");
   const [users, setUsers] = useState<OtUserItem[]>([]);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -74,6 +87,10 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
   // HU #10628 — objetivo del diálogo de confirmación "Cancelar invitación" (filas "Pendiente").
   const [cancelTarget, setCancelTarget] = useState<OtUserItem | null>(null);
   const [auditTarget, setAuditTarget] = useState<OtUserItem | null>(null);
+  const [permissionsTarget, setPermissionsTarget] = useState<OtUserItem | null>(null);
+  // HU #13655: sub-pestañas «Usuarios | Auditoría de permisos» (mismo componente que Mandatos), solo para el Admin OT.
+  const [subTab, setSubTab] = useState<"usuarios" | "auditoria">("usuarios");
+  const showingUsers = !canConfigurePermissions || subTab === "usuarios";
   // Roles asignables al editar: catálogo TRANSIT_OFFICE (SuperAdmin) o los del propio tenant.
   const [editRoles, setEditRoles] = useState<TenantRole[]>([]);
   const [editRolesLoading, setEditRolesLoading] = useState(false);
@@ -152,6 +169,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
               isSystem: r.isSystem,
               permissionCount: r.permissionCount,
               createdAt: r.createdAt,
+              productCode: r.productCode,
             })),
         )
       : getRoles();
@@ -172,8 +190,8 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     };
   }, [editTarget, isSuperAdmin]);
 
-  // Acciones de la fila como datos: UsersTable las renderiza con RowActions, que ya trae el
-  // área de clic de 40x40 (HU19).
+  // Acciones de la fila como datos: UsersTable las muestra en un solo botón «Acciones» con menú
+  // (RowActionsMenu), con las destructivas al final.
   function actionsForUser(userId: string): RowAction[] {
     const u = users.find((x) => x.id === userId);
     if (!u) return [];
@@ -189,9 +207,20 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
       });
     }
 
+    // HU #13655: permisos individuales por módulo del Admin OT. Las invitaciones pendientes la abren para ver el
+    // aviso deshabilitado; las canceladas no tienen cuenta ni invitación vigente.
+    if (canConfigurePermissions && u.status !== "cancelled") {
+      actions.push({
+        icon: ShieldCheck,
+        label: `Permisos por módulo de ${u.fullName}`,
+        tone: "primary",
+        onClick: () => setPermissionsTarget(u),
+      });
+    }
+
     // AC4 (HU #10622): sin "Editar" para pendientes ni canceladas (HU #11552 / ADR-0048) — no
-    // hay cuenta real que editar.
-    if (!isInvitationRow(u)) {
+    // hay cuenta real que editar. HU #13655: quien no es administrador no edita a un administrador.
+    if (!isInvitationRow(u) && (isUserAdmin || !isAdministratorRoleCode(u.roleCode))) {
       actions.push({
         icon: Pencil,
         label: `Editar usuario ${u.fullName}`,
@@ -218,7 +247,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
         actions.push({
           icon: Ban,
           label: `Desactivar indefinidamente a ${u.fullName}`,
-          tone: "primary",
+          tone: "danger",
           onClick: () => setSuspendTarget({ user: u, mode: "indefinite" }),
         });
       }
@@ -250,14 +279,16 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
   async function handleInvite(email: string, fullName: string, roleIds: string[]) {
     try {
       await inviteOtUser(
-        { email, fullName: fullName || undefined, roleIds: roleIds.length > 0 ? roleIds : undefined },
+        { email, fullName: fullName || undefined, roleIds },
         { transitOfficeId },
       );
       show(`Invitación enviada a ${email}.`, "success");
       setInviteOpen(false);
       void load();
     } catch (err) {
-      if (err instanceof ApiError && isEmailConflictCode(emailConflictErrorCode(err.body))) {
+      if (err instanceof ApiError && err.status === 400 && errorCodeOf(err.body) === "ROLE_REQUIRED") {
+        show(ROLE_REQUIRED_MESSAGE, "error");
+      } else if (err instanceof ApiError && isEmailConflictCode(emailConflictErrorCode(err.body))) {
         // Mensaje unificado (HU #11550) — mismo texto que la ruta Security/AdminCompany
         // (InviteUserModal) para el único código EMAIL_ALREADY_IN_USE (HU #11580).
         show(EMAIL_ALREADY_ASSOCIATED_MESSAGE, "error");
@@ -332,6 +363,64 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     return reactivateOtInvitation(invitationId, { transitOfficeId });
   }
 
+  // Misma tabla, mismos filtros y mismas acciones que el módulo Usuarios y que la ficha
+  // de compañía: antes esta sección tenía su propia <table>, sin filtros y con chips de
+  // estado distintos, y por eso "no se parecía a las otras".
+  const usersTable = (
+      <UsersTable
+        rows={users.map((u) =>
+          toUserRow(u, { profile: "OT", tenantType: "TRANSIT_OFFICE" }),
+        )}
+        loading={status === "loading"}
+        error={status === "error" ? "No se pudo cargar el listado de usuarios." : null}
+        onRetry={() => void load()}
+        emptyMessage="No hay usuarios en este organismo de tránsito todavía."
+        actionsFor={(row) => actionsForUser(row.id)}
+        extraActionsFor={(row) => {
+          // AC3 (HU #10626): SOLO en filas "Pendiente" — el id de la fila ya es el invitationId.
+          if (row.status === "pending") {
+            return (
+              <ResendInvitationButton
+                invitationId={row.id}
+                fullName={row.fullName}
+                resend={handleResendInvitation}
+                onResent={(outcome) =>
+                  show(
+                    outcome.emailSent
+                      ? `Invitación reenviada a ${outcome.email}.`
+                      : "Invitación reenviada, pero el correo no pudo entregarse.",
+                    "success",
+                  )
+                }
+              />
+            );
+          }
+          // HU #11552 / ADR-0048: SOLO en filas "Cancelada" — el id de la fila ya es el
+          // invitationId. Tras reactivar, la fila vuelve a verse como "Pendiente" recargando
+          // el listado, sin recargar la página.
+          if (row.status === "cancelled") {
+            return (
+              <ReactivateInvitationButton
+                invitationId={row.id}
+                fullName={row.fullName}
+                reactivate={handleReactivateInvitation}
+                onReactivated={(outcome) => {
+                  show(
+                    outcome.emailSent
+                      ? `Invitación reactivada y reenviada a ${outcome.email}.`
+                      : "Invitación reactivada, pero el correo no pudo entregarse.",
+                    "success",
+                  );
+                  void load();
+                }}
+              />
+            );
+          }
+          return null;
+        }}
+      />
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -339,149 +428,62 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
           <h2 className="text-sm font-bold text-foreground">
             Usuarios
           </h2>
-          <p className="text-xs mt-0.5" style={{ color: "#557EFF" }}>
+          <p className="text-xs mt-0.5" style={{ color: "var(--color-flit-brand)" }}>
             Invita colaboradores a este organismo de tránsito y gestiona su acceso.
           </p>
         </div>
         <div className="flex items-center gap-2">
           {/* AC4 (HU #10623): "Ver eliminados" es exclusivo de SuperAdmin — ot_admin nunca lo ve. */}
-          {isSuperAdmin && (
+          {isSuperAdmin && showingUsers && (
             <button
               type="button"
               onClick={() => setShowDeleted((v) => !v)}
               aria-pressed={showDeleted}
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition hover:bg-blue-50"
-              style={{ color: "#557EFF" }}
+              style={{ color: "var(--color-flit-brand)" }}
             >
               <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
               {showDeleted ? "Ver usuarios activos" : "Ver eliminados"}
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => setInviteOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white transition hover:opacity-90"
-            style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
-          >
-            Invitar usuario
-          </button>
+          {/* «Invitar usuario» solo en la pestaña Usuarios. */}
+          {showingUsers && (
+            <button
+              type="button"
+              onClick={() => setInviteOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white transition hover:opacity-90"
+              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+            >
+              Invitar usuario
+            </button>
+          )}
         </div>
       </div>
 
-      {showDeleted && isSuperAdmin && (
-        // HU #10624 (AC3) — GET /api/v1/admin/ot/users?onlyDeleted=true: usuarios eliminados
-        // del tenant OT resuelto. Restaurar (1 clic de confirmación en RestoreUserDialog) deshace
-        // el soft-delete vía el endpoint genérico restoreUser() (SOLO SuperAdmin).
-        <UiStateBoundary
-          status={deletedStatus}
-          emptyMessage="No hay usuarios eliminados en este organismo de tránsito."
-          errorMessage="No se pudo cargar el listado de usuarios eliminados."
-          onRetry={() => void loadDeleted()}
-        >
-          <div className="rounded-xl border overflow-hidden bg-card">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-muted">
-                  <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "#557EFF" }}>
-                    Usuario
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold" style={{ color: "#557EFF" }}>
-                    Eliminado el
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold" style={{ color: "#557EFF" }}>
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {deletedUsers.map((u) => (
-                  <tr
-                    key={u.id}
-                    className="transition hover:bg-blue-50/40 dark:hover:bg-white/5 border-b"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-sm">{u.fullName}</div>
-                      <div className="text-xs" style={{ color: "#557EFF" }}>
-                        {u.email}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 opacity-70">{u.deletedAt ? formatOtDate(u.deletedAt) : "—"}</td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        title="Restaurar usuario"
-                        aria-label={`Restaurar usuario ${u.fullName}`}
-                        onClick={() => setRestoreTarget(u)}
-                        className={`${ICON_BUTTON_HIT_AREA} p-1.5 rounded-lg transition hover:bg-blue-50`}
-                        style={{ color: "#557EFF" }}
-                      >
-                        <RotateCcw className="h-4 w-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </UiStateBoundary>
-      )}
-
-      {!showDeleted && (
-        // Misma tabla, mismos filtros y mismas acciones que el módulo Usuarios y que la ficha
-        // de compañía: antes esta sección tenía su propia <table>, sin filtros y con chips de
-        // estado distintos, y por eso "no se parecía a las otras".
-        <UsersTable
-          rows={users.map((u) =>
-            toUserRow(u, { profile: "OT", tenantType: "TRANSIT_OFFICE" }),
-          )}
-          loading={status === "loading"}
-          error={status === "error" ? "No se pudo cargar el listado de usuarios." : null}
-          onRetry={() => void load()}
-          emptyMessage="No hay usuarios en este organismo de tránsito todavía."
-          actionsFor={(row) => actionsForUser(row.id)}
-          extraActionsFor={(row) => {
-            // AC3 (HU #10626): SOLO en filas "Pendiente" — el id de la fila ya es el invitationId.
-            if (row.status === "pending") {
-              return (
-                <ResendInvitationButton
-                  invitationId={row.id}
-                  fullName={row.fullName}
-                  resend={handleResendInvitation}
-                  onResent={(outcome) =>
-                    show(
-                      outcome.emailSent
-                        ? `Invitación reenviada a ${outcome.email}.`
-                        : "Invitación reenviada, pero el correo no pudo entregarse.",
-                      "success",
-                    )
-                  }
-                />
-              );
-            }
-            // HU #11552 / ADR-0048: SOLO en filas "Cancelada" — el id de la fila ya es el
-            // invitationId. Tras reactivar, la fila vuelve a verse como "Pendiente" recargando
-            // el listado, sin recargar la página.
-            if (row.status === "cancelled") {
-              return (
-                <ReactivateInvitationButton
-                  invitationId={row.id}
-                  fullName={row.fullName}
-                  reactivate={handleReactivateInvitation}
-                  onReactivated={(outcome) => {
-                    show(
-                      outcome.emailSent
-                        ? `Invitación reactivada y reenviada a ${outcome.email}.`
-                        : "Invitación reactivada, pero el correo no pudo entregarse.",
-                      "success",
-                    );
-                    void load();
-                  }}
-                />
-              );
-            }
-            return null;
-          }}
+      {canConfigurePermissions ? (
+        <SectionTabs
+          ariaLabel="Secciones de usuarios del organismo"
+          active={subTab}
+          onChange={setSubTab}
+          tabs={[
+            { id: "usuarios", label: "Usuarios", content: usersTable },
+            {
+              id: "auditoria",
+              label: "Auditoría de permisos",
+              // Se monta al abrir la pestaña: no consulta la auditoría mientras no se mira.
+              content: subTab === "auditoria" ? <PermissionAuditView mode="admin" users={users} /> : null,
+            },
+          ]}
         />
+      ) : showDeleted && isSuperAdmin ? (
+        <DeletedUsersTable
+          status={deletedStatus}
+          users={deletedUsers}
+          onRetry={() => void loadDeleted()}
+          onRestore={setRestoreTarget}
+        />
+      ) : (
+        usersTable
       )}
 
       {inviteOpen && (
@@ -489,6 +491,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
           onConfirm={handleInvite}
           onClose={() => setInviteOpen(false)}
           isSuperAdmin={isSuperAdmin}
+          canInviteAdmins={isUserAdmin}
         />
       )}
       {suspendTarget && (
@@ -516,17 +519,41 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
           onUpdate={handleUpdateUser}
           // Toda esta sección vive dentro de un organismo: el perfil no depende de la fila.
           profile="OT"
-          roleSection={{
-            currentRoleName: editTarget.role,
-            currentRoleId: editTarget.roleId,
-            roles: editRoles,
-            rolesLoading: editRolesLoading,
-            onAssignRole: async (roleId) => {
-              await assignRole(editTarget.id, roleId);
-              show("Rol actualizado correctamente.", "success");
-              await load();
-            },
+          // HU #13655: cambiar el rol (p. ej. de Gestor OT a Administrador OT) es del Admin OT y del Super Admin.
+          roleSection={
+            isUserAdmin
+              ? {
+                  currentRoleName: editTarget.role,
+                  currentRoleId: editTarget.roleId,
+                  roles: editRoles,
+                  rolesLoading: editRolesLoading,
+                  onAssignRole: async (roleId) => {
+                    await assignRole(editTarget.id, roleId);
+                    show("Rol actualizado correctamente.", "success");
+                    await load();
+                  },
+                }
+              : undefined
+          }
+        />
+      )}
+      {permissionsTarget && canConfigurePermissions && (
+        <UserPermissionsModal
+          user={{
+            id: permissionsTarget.id,
+            fullName: permissionsTarget.fullName,
+            email: permissionsTarget.email,
           }}
+          mode="admin"
+          // El listado puede traer una fila por rol: los roles del usuario son todas las filas con su id.
+          roleIds={users.filter((x) => x.id === permissionsTarget.id && x.roleId).map((x) => x.roleId as string)}
+          invitationPending={isInvitationRow(permissionsTarget)}
+          // HU #13656: otro administrador o la propia ficha se ven en solo lectura.
+          targetRoleCodes={users.filter((x) => x.id === permissionsTarget.id).map((x) => x.roleCode)}
+          // HU #13655: solo los módulos del organismo; los de compañía y Ver/Crear por familia no aplican al OT.
+          moduleFilter={isOtModuleCode}
+          isSelf={permissionsTarget.id === currentUserId}
+          onClose={() => setPermissionsTarget(null)}
         />
       )}
       {auditTarget && isSuperAdmin && (
@@ -594,19 +621,32 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
 }
 
 
+/** HU #13655: mensaje cuando falta el rol al invitar (el rol es obligatorio para todos). */
+const ROLE_REQUIRED_MESSAGE = "Elige el rol de la persona.";
+
+function errorCodeOf(body: unknown): string | undefined {
+  if (body && typeof body === "object" && "error" in body) {
+    const code = (body as { error?: unknown }).error;
+    return typeof code === "string" ? code : undefined;
+  }
+  return undefined;
+}
+
 /**
- * Alta de usuario del organismo. Ya no fuerza `ot_admin` a ciegas: ofrece los roles del
- * catálogo TRANSIT_OFFICE y, si no se marca ninguno, el backend asigna el rol de sistema
- * (comportamiento previo).
+ * Alta de usuario del organismo: ofrece los roles del catálogo TRANSIT_OFFICE. HU #13655: el rol es obligatorio
+ * para todos (Admin OT, Super Admin y Gestor OT); no hay rol por defecto.
  */
 function OtInviteUserDialog({
   onConfirm,
   onClose,
   isSuperAdmin,
+  canInviteAdmins = true,
 }: {
   onConfirm: (email: string, fullName: string, roleIds: string[]) => Promise<void>;
   onClose: () => void;
   isSuperAdmin: boolean;
+  /** HU #13655: quien no es administrador no ofrece roles de administrador. */
+  canInviteAdmins?: boolean;
 }) {
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
@@ -637,7 +677,7 @@ function OtInviteUserDialog({
 
     void load
       .then((list) => {
-        if (!cancelled) setRoles(list);
+        if (!cancelled) setRoles(canInviteAdmins ? list : list.filter((r) => !isAdministratorRoleCode(r.code)));
       })
       .catch(() => {
         if (!cancelled) setRoles([]);
@@ -649,12 +689,15 @@ function OtInviteUserDialog({
     return () => {
       cancelled = true;
     };
-  }, [isSuperAdmin]);
+  }, [isSuperAdmin, canInviteAdmins]);
+
+  const missingRole = selectedRoleIds.length === 0;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (missingRole) return;
     setBusy(true);
-    await onConfirm(email.trim(), fullName.trim(), selectedRoleIds);
+    await onConfirm(normalizeEmail(email), fullName.trim(), selectedRoleIds);
     setBusy(false);
   }
 
@@ -709,22 +752,22 @@ function OtInviteUserDialog({
                     <input
                       type="radio"
                       name="ot-invite-role"
+                      required
+                      aria-describedby="ot-invite-role-hint"
                       checked={selectedRoleIds[0] === r.id}
                       onChange={() => setSelectedRoleIds([r.id])}
-                      className="h-3.5 w-3.5 accent-[#557EFF]"
+                      className="h-3.5 w-3.5 accent-flit-brand"
                     />
                     <span>{r.name}</span>
                   </label>
                 ))}
               </div>
-              <p className="mt-1 text-[10px] opacity-60">
-                Un usuario tiene un solo rol. Sin selección se asigna Administrador OT.
+              <p id="ot-invite-role-hint" className="mt-1 text-[10px] opacity-60">
+                {missingRole ? ROLE_REQUIRED_MESSAGE : "Un usuario tiene un solo rol."}
               </p>
             </fieldset>
           ) : (
-            <p className="text-xs opacity-60">
-              No hay roles configurados para organismos de tránsito. Se asignará Administrador OT.
-            </p>
+            <p className="text-xs opacity-60">No hay roles disponibles para invitar.</p>
           )}
           <div className="flex gap-3 pt-2">
             <button
@@ -737,9 +780,9 @@ function OtInviteUserDialog({
             </button>
             <button
               type="submit"
-              disabled={busy}
+              disabled={busy || missingRole}
               className="flex-1 py-2 rounded-lg text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
             >
               {busy ? "Enviando…" : "Enviar invitación"}
             </button>
@@ -766,5 +809,86 @@ function OtField({
       </label>
       {children}
     </div>
+  );
+}
+
+/** HU #12731 — usuarios eliminados con DataTable canónico. */
+function DeletedUsersTable({
+  status,
+  users,
+  onRetry,
+  onRestore,
+}: {
+  status: UiStatus;
+  users: OtUserItem[];
+  onRetry: () => void;
+  onRestore: (user: OtUserItem) => void;
+}) {
+  // Bug #13055 — tabla homologada con el modelo de trámites: paginación en cliente con filas por página.
+  const pg = usePaginacion();
+  const columns: DataTableColumn<OtUserItem>[] = useMemo(
+    () => [
+      {
+        key: "user",
+        header: "Usuario",
+        render: (u) => (
+          <div>
+            <div className="text-sm font-medium">{u.fullName}</div>
+            <div className="text-xs text-[var(--badge-info-fg)]">{u.email}</div>
+          </div>
+        ),
+      },
+      {
+        key: "deletedAt",
+        header: "Eliminado el",
+        render: (u) => (
+          <span className="opacity-70">{u.deletedAt ? formatOtDate(u.deletedAt) : "—"}</span>
+        ),
+      },
+      {
+        key: "actions",
+        header: "Acciones",
+        align: "right",
+        render: (u) => (
+          <RowActions
+            actions={[
+              {
+                icon: RotateCcw,
+                label: `Restaurar usuario ${u.fullName}`,
+                tone: "primary",
+                onClick: () => onRestore(u),
+              },
+            ]}
+          />
+        ),
+      },
+    ],
+    [onRestore],
+  );
+
+  if (status === "loading") return <CarLoaderModal label="Cargando usuarios eliminados…" />;
+
+  return (
+    <UiStateBoundary
+      status={status}
+      emptyMessage="No hay usuarios eliminados en este organismo de tránsito."
+      errorMessage="No se pudo cargar el listado de usuarios eliminados."
+      onRetry={onRetry}
+    >
+      <DataTable
+        columns={columns}
+        rows={pg.paginar(users)}
+        getRowKey={(u) => u.id}
+        ariaLabel="Usuarios eliminados del organismo de tránsito"
+        minWidth={640}
+        pagination={{
+          page: pg.page,
+          pageSize: pg.pageSize,
+          totalCount: users.length,
+          onPageChange: pg.setPage,
+          onPageSizeChange: pg.setPageSize,
+        }}
+      />
+    </UiStateBoundary>
   );
 }

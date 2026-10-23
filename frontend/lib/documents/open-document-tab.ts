@@ -204,9 +204,10 @@ export async function openPdfBlobInNewTab(
     openObjectUrlInWindow(objectUrl, win);
     if (options?.maximize) tryMaximizeWindow(win);
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 120_000);
-  } catch {
+  } catch (err) {
     showDocumentTabError(win);
-    throw new Error("document_preview_failed");
+    // Se conserva el error original en `cause` para que quien llama explique POR QUÉ falló.
+    throw new Error("document_preview_failed", { cause: err });
   }
 }
 

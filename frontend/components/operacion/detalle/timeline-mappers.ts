@@ -8,13 +8,14 @@ import type {
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
 import { formatFechaHora } from '@/lib/format/date';
+import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
 import type { TimelineTrackNode } from './TimelineTrackPanel';
 
 const GREEN = '#8CC63F';
 const WARN = '#F9AC00';
 const RED = '#FF4E00';
 const GREY = '#94A3B8';
-const BLUE = '#557EFF';
+const BLUE = 'var(--color-flit-brand)';
 
 const PARTE_LABEL: Record<BiometricParte, string> = {
   vendedor: 'Vendedor',
@@ -29,6 +30,8 @@ const ESTADO_COLOR: Record<BiometricEstado, string> = {
   expirado: GREY,
   pendiente_envio: GREY,
   error_envio: RED,
+  manual_activo: BLUE,
+  pendiente_revision_manual: BLUE,
 };
 
 const ESTADO_LABEL: Record<BiometricEstado, string> = {
@@ -39,6 +42,8 @@ const ESTADO_LABEL: Record<BiometricEstado, string> = {
   expirado: 'Expirado',
   pendiente_envio: 'Pendiente de envío',
   error_envio: 'Error de envío',
+  manual_activo: MANUAL_ESTADO_META.manual_activo.label,
+  pendiente_revision_manual: MANUAL_ESTADO_META.pendiente_revision_manual.label,
 };
 
 function hitoLabel(e: StatusHistory): string {

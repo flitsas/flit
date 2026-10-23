@@ -63,6 +63,20 @@ public interface IRegeneracionDocumentalTrazaWriter
         string? detalle,
         string tipoEvento,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #12798 — inserta en la bitácora de la instancia un evento de <paramref name="tipoEvento"/>
+    /// con un <paramref name="payloadJson"/> ya compuesto por el llamador (p. ej. el fallo de
+    /// regeneración del consolidado, que necesita el documento afectado además del código de causa).
+    /// Mismas garantías que <c>EscribirFalloAsync</c>: SQL parametrizado fuera del change tracker y
+    /// fila atada al trámite y a su tenant. El llamador es responsable de que el payload NO lleve PII.
+    /// </summary>
+    Task<bool> EscribirEventoAsync(
+        Guid tenantId,
+        Guid procedureInstanceId,
+        string tipoEvento,
+        string payloadJson,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -88,6 +102,13 @@ public sealed class NullRegeneracionDocumentalTrazaWriter : IRegeneracionDocumen
         string codigoError,
         string? detalle,
         string tipoEvento,
+        CancellationToken cancellationToken = default) => Task.FromResult(false);
+
+    public Task<bool> EscribirEventoAsync(
+        Guid tenantId,
+        Guid procedureInstanceId,
+        string tipoEvento,
+        string payloadJson,
         CancellationToken cancellationToken = default) => Task.FromResult(false);
 }
 

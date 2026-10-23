@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { ImprontaFormPanel } from "@/components/admin/improntas/ImprontaFormPanel";
 import { ImprontasTabs } from "@/components/admin/improntas/ImprontasTabs";
+import { ADMIN_BACK_LINK_CLS, ADMIN_CONTENT_SURFACE_CLS } from "@/components/admin/admin-ui-styles";
 
 // Landing del módulo "Generación de improntas" — formulario de captura (HU #10469 AC1).
 // La generación real y descarga fina de errores por tipo (validación/auth/upstream de
@@ -14,12 +15,7 @@ export default function AdminImprontasPage() {
 
   return (
     <div className="flex min-h-screen flex-col gap-4 px-4 md:px-6 pt-6 pb-10">
-      <button
-        type="button"
-        onClick={() => router.push("/")}
-        className="flex w-fit items-center gap-1.5 text-xs font-semibold"
-        style={{ color: "#557EFF" }}
-      >
+      <button type="button" onClick={() => router.push("/")} className={ADMIN_BACK_LINK_CLS}>
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
         Volver al inicio
       </button>
@@ -29,9 +25,7 @@ export default function AdminImprontasPage() {
         subtitle="Genera el Certificado de Improntas Digitales del vehículo (Res. 17145/2023 Mintransporte) y descárgalo en tu equipo."
       />
 
-      <div
-        className="flex flex-1 flex-col rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60"
-      >
+      <div className={ADMIN_CONTENT_SURFACE_CLS}>
         <ImprontasTabs activeId="formulario" />
         <div className="mt-4">
           <ImprontaFormPanel />

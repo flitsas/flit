@@ -99,4 +99,69 @@ public sealed class CreateRoleHandlerTests
         await _repo.DidNotReceiveWithAnyArgs().CreateAsync(
             Arg.Any<CreateRoleData>(), Arg.Any<CancellationToken>());
     }
+
+    // HU #12964 — el producto del rol tiene que existir en el contrato v1 §1
+    [Fact]
+    public async Task HandleAsync_UnknownProduct_ThrowsInvalidRoleProduct()
+    {
+        await _handler
+            .Invoking(h => h.HandleAsync(new CreateRoleCommand(TargetEntityType, Code, Name, null, "flotas"), CancellationToken.None))
+            .Should().ThrowAsync<InvalidRoleProductException>();
+
+        await _repo.DidNotReceiveWithAnyArgs().CreateAsync(Arg.Any<CreateRoleData>(), Arg.Any<CancellationToken>());
+    }
+
+    // HU #13653 — sin code, se genera a partir del nombre en el ámbito global del tipo de entidad
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task HandleAsync_SinCodigo_GeneraElCodigoDesdeElNombre(string? code)
+    {
+        _repo.FindTakenCodesAsync(null, TargetEntityType, "auditor_de_tramites", Arg.Any<CancellationToken>()).Returns([]);
+
+        var result = await _handler.HandleAsync(
+            new CreateRoleCommand(TargetEntityType, code, "Auditor de Trámites", null), CancellationToken.None);
+
+        result.Should().Be(RoleId);
+        await _repo.Received(1).CreateAsync(
+            Arg.Is<CreateRoleData>(d => d.Code == "auditor_de_tramites" && d.TenantId == null && d.Name == "Auditor de Trámites"),
+            Arg.Any<CancellationToken>());
+        await _repo.DidNotReceiveWithAnyArgs().CodeExistsAsync(default!, default!, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_SinCodigo_ConCodigoTomado_AgregaSufijo()
+    {
+        _repo.FindTakenCodesAsync(null, TargetEntityType, "administrador", Arg.Any<CancellationToken>())
+            .Returns(["administrador"]);
+
+        await _handler.HandleAsync(new CreateRoleCommand(TargetEntityType, null, Name, null), CancellationToken.None);
+
+        await _repo.Received(1).CreateAsync(Arg.Is<CreateRoleData>(d => d.Code == "administrador_2"), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HandleAsync_SinCodigo_SiLaCarreraPersiste_SeRindeConDuplicado()
+    {
+        _repo.FindTakenCodesAsync(null, TargetEntityType, Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns([]);
+        _repo.CreateAsync(Arg.Any<CreateRoleData>(), Arg.Any<CancellationToken>())
+            .Returns<Guid>(_ => throw new RoleCodeDuplicateException());
+
+        var act = () => _handler.HandleAsync(new CreateRoleCommand(TargetEntityType, null, Name, null), CancellationToken.None);
+
+        await act.Should().ThrowAsync<RoleCodeDuplicateException>();
+        await _repo.ReceivedWithAnyArgs(5).CreateAsync(default!, Arg.Any<CancellationToken>());
+    }
+
+    // HU #12964 — sin producto, el rol nuevo es de Trámites
+    [Fact]
+    public async Task HandleAsync_WithoutProduct_CreatesTramitesRole()
+    {
+        _repo.CodeExistsAsync(TargetEntityType, Code, Arg.Any<CancellationToken>()).Returns(false);
+
+        await _handler.HandleAsync(new CreateRoleCommand(TargetEntityType, Code, Name, null), CancellationToken.None);
+
+        await _repo.Received(1).CreateAsync(Arg.Is<CreateRoleData>(d => d.ProductCode == "tramites"), Arg.Any<CancellationToken>());
+    }
 }

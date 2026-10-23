@@ -25,8 +25,10 @@ import {
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
 } from "@/components/atom/table-styles";
+import { COPY } from "@/lib/copy/copy-catalog";
 import { OtTablePagination } from "./OtTablePagination";
 import { ActionsMenu, type ActionsMenuItem } from "@/components/atom/ActionsMenu";
+import { CasillaFilaLote } from "@/components/operacion/BarraSeleccionLote";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
 import { formatOtDate, formatOtProcedureStatus, plateUpdateWindow, procedureStatusChip } from "./ot-utils";
 import {
@@ -47,6 +49,8 @@ export interface ClientProceduresTableProps {
   page: number;
   pageSize: number;
   onPageChange: (page: number) => void;
+  /** Bug #13055 — «Filas por página». */
+  onPageSizeChange?: (pageSize: number) => void;
   onApprove: (row: OtClientProcedure) => void;
   onReject: (row: OtClientProcedure) => void;
   showApprovalActions?: boolean;
@@ -91,6 +95,17 @@ export interface ClientProceduresTableProps {
   sortBy?: string;
   sortDir?: "asc" | "desc";
   onSortChange?: (sortBy: string, sortDir: "asc" | "desc") => void;
+  /**
+   * HU #13393 — la bandeja permite seleccionar trámites para la descarga masiva (permiso
+   * `consolidado-masivo.download`). Sin él no hay columna ni casillas (AC5). «Seleccionar todos» y
+   * el contador NO van aquí sino en la barra sobre la tabla (`BarraSeleccionLote`), que sigue
+   * visible y deshabilitada cuando la tabla no se pinta por estar cargando, vacía o en error (AC7).
+   */
+  seleccionable?: boolean;
+  /** HU #13393 — selección vigente (de `useSeleccionLote`): marca cada casilla. */
+  seleccion?: { estaSeleccionado: (id: string) => boolean } | null;
+  /** HU #13393 — alterna la fila en la selección; `false` si el tope de 10.000 lo impidió. */
+  onToggle?: (id: string) => boolean;
 }
 
 /**
@@ -169,7 +184,7 @@ function SortMenu({
           ref={panelRef}
           role="menu"
           aria-label={`Ordenar por, en ${label}`}
-          className="absolute left-0 top-full z-50 mt-1.5 w-[16rem] overflow-hidden rounded-xl border border-[#DFE5ED] bg-white normal-case text-[#162744] shadow-xl dark:border-white/10 dark:bg-[#162744] dark:text-white"
+          className="absolute left-0 top-full z-50 mt-1.5 w-[16rem] overflow-hidden rounded-xl border border-[#DFE5ED] bg-white normal-case text-flit-primary shadow-xl dark:border-white/10 dark:bg-[#162744] dark:text-white"
         >
           <p className="border-b border-[#EEF2F7] px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#7B8794] dark:border-white/10 dark:text-white/50">
             Ordenar por
@@ -375,6 +390,7 @@ export function ClientProceduresTable({
   page,
   pageSize,
   onPageChange,
+  onPageSizeChange,
   onApprove,
   onReject,
   showApprovalActions = true,
@@ -391,7 +407,12 @@ export function ClientProceduresTable({
   sortBy,
   sortDir,
   onSortChange,
+  seleccionable = false,
+  seleccion = null,
+  onToggle,
 }: ClientProceduresTableProps) {
+  // HU #13393 — con casillas, la columna de selección abre la fila y se lleva el borde redondeado.
+  const conCasillas = seleccionable && Boolean(onToggle);
   // Sin preferencia (o con una que dejara la tabla vacía) se pintan todas: una tabla sin columnas
   // no es una tabla, y eso NO puede depender de que una llamada de preferencias haya respondido.
   const columnasVisibles =
@@ -414,7 +435,7 @@ export function ClientProceduresTable({
     if (decidible) {
       items.push({
         key: "aprobar",
-        label: "Aprobar",
+        label: COPY.E01Aprobar,
         icon: Check,
         onSelect: () => onApprove(row),
       });
@@ -432,7 +453,7 @@ export function ClientProceduresTable({
     if (decidible || enColaDePlaca) {
       items.push({
         key: "rechazar",
-        label: "Rechazar",
+        label: COPY.E01Rechazar,
         icon: X,
         onSelect: () => onReject(row),
       });
@@ -479,13 +500,13 @@ export function ClientProceduresTable({
     }
 
     if (row.status === "aprobado" && onAdjuntarLt) {
-      items.push({ key: "adjuntar-lt", label: "Adjuntar LT", icon: Paperclip, onSelect: () => onAdjuntarLt(row) });
+      items.push({ key: "adjuntar-lt", label: COPY.E02, icon: Paperclip, onSelect: () => onAdjuntarLt(row) });
     }
 
     if ((row.status === "entregado" || row.status === "aprobado") && onConsolidado) {
       items.push({
         key: "consolidado",
-        label: consolidadoActingId === row.id ? "Abriendo…" : "Ver consolidado",
+        label: COPY.A12,
         icon: FileStack,
         // Se deshabilita mientras se abre: el consolidado puede tener que generarse, y un segundo
         // clic dispararía una segunda generación del mismo expediente.
@@ -522,6 +543,14 @@ export function ClientProceduresTable({
       <table className="w-full min-w-[1100px] border-separate border-spacing-y-2 text-xs">
         <thead>
           <tr>
+            {conCasillas ? (
+              <th
+                className={`${TABLA_HEADER_CELL_CLS} w-10 rounded-l-xl`}
+                style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+              >
+                <span className="sr-only">Selección para la descarga masiva</span>
+              </th>
+            ) : null}
             {columnasVisibles.map((columna, indice) => (
               <SortableTh
                 key={columna.key}
@@ -531,7 +560,7 @@ export function ClientProceduresTable({
                 sortBy={sortBy}
                 sortDir={sortDir}
                 onSortChange={columna.sortable ? onSortChange : undefined}
-                className={indice === 0 ? "rounded-l-xl" : ""}
+                className={indice === 0 && !conCasillas ? "rounded-l-xl" : ""}
               />
             ))}
             <th
@@ -546,7 +575,8 @@ export function ClientProceduresTable({
           {rows.map((row) => (
             <tr
               key={row.id}
-              className={`bg-card ${TABLA_ROW_HOVER_CLS} ${onVerDetalle ? "cursor-pointer" : ""}`}
+              // Bug #13055 — tabla homologada con el modelo de trámites.
+              className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS} ${onVerDetalle ? "cursor-pointer" : ""}`}
               onClick={onVerDetalle ? () => onVerDetalle(row) : undefined}
               // La fila no es un `<button>`: sigue siendo una fila de tabla, así que el teclado
               // necesita su propia puerta. Enter y Espacio hacen lo mismo que el clic, y el menú
@@ -565,10 +595,21 @@ export function ClientProceduresTable({
                   : undefined
               }
             >
+              {conCasillas && onToggle ? (
+                // La casilla corta clic y teclado (CasillaFilaLote): marcar no abre el detalle (AC1).
+                <td className="w-10 rounded-l-xl border-y border-l border-flit-gray px-4 py-3 align-middle dark:border-white/10">
+                  <CasillaFilaLote
+                    radicado={row.referenceNumber}
+                    seleccionado={seleccion?.estaSeleccionado(row.id) ?? false}
+                    onAlternar={() => onToggle(row.id)}
+                  />
+                </td>
+              ) : null}
               {columnasVisibles.map((columna, indice) => (
                 <td
                   key={columna.key}
-                  className={`${indice === 0 ? "rounded-l-xl border-l " : ""}border-y px-4 py-3 ${CELDA_CLS[columna.key] ?? ""}`}
+                  className={`${indice === 0 && !conCasillas ? "rounded-l-xl border-l " : ""}border-y px-4 py-3 ${CELDA_CLS[columna.key] ?? ""}`}
+                  style={{ borderColor: "#DFE5ED" }}
                 >
                   {renderCelda(columna.key, row)}
                 </td>
@@ -585,6 +626,7 @@ export function ClientProceduresTable({
               {/* Las acciones cortan la propagación: pulsar «Aprobar» abriría además el detalle. */}
               <td
                 className="rounded-r-xl border-y border-r px-4 py-3 text-right"
+                style={{ borderColor: "#DFE5ED" }}
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => e.stopPropagation()}
               >
@@ -620,6 +662,7 @@ export function ClientProceduresTable({
         page={page}
         pageSize={pageSize}
         onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
       />
     </div>
   );

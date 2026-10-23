@@ -5,7 +5,7 @@ import { Building2, Loader2 } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { ToggleSwitch } from "@/components/admin/companies/ToggleSwitch";
 import { TransitGrantsPicker } from "@/components/admin/companies/TransitGrantsPicker";
-import { addTransitGrant } from "@/lib/api/admin-companies";
+import { addTransitBlock, addTransitGrant } from "@/lib/api/admin-companies";
 import { domainErrorCode, domainErrorMessage, isValidHostFormat, registerAdminDomain } from "@/lib/api/domain-client";
 import {
   ApiValidationError,
@@ -14,13 +14,11 @@ import {
   TENANT_TYPE_LABELS,
   type TenantType,
 } from "@/lib/api/types";
-import type { CompanyListItem, CreateCompanyRequest } from "@/lib/api/types";
+import type { CompanyListItem, CreateCompanyRequest, TransitOffice } from "@/lib/api/types";
 import {
   hasDigit,
-  hasLetterOrDigit,
   sanitizeName,
   sanitizeTaxId,
-  sanitizeTenantCode,
   validateReadableName,
 } from "@/lib/validation/fieldRules";
 
@@ -34,8 +32,9 @@ export interface CreateCompanyDialogProps {
   isSuperAdmin?: boolean;
 }
 
+/** `general`: error sin campo propio (HU #13607 — antes se mostraba bajo el campo Código, que ya no existe). */
 type FieldErrors = Partial<
-  Record<"razonSocial" | "nit" | "code" | "tenantType" | "transitGrants" | "domainHost", string>
+  Record<"razonSocial" | "nit" | "tenantType" | "transitGrants" | "domainHost" | "general", string>
 >;
 
 type WizardStep = "form" | "ot" | "review";
@@ -49,23 +48,27 @@ export function CreateCompanyDialog({
 }: CreateCompanyDialogProps) {
   const [razonSocial, setRazonSocial] = useState("");
   const [nit, setNit] = useState("");
-  const [code, setCode] = useState("");
   const [tenantType, setTenantType] = useState<TenantType>("RENTING");
   const [estadoActivo, setEstadoActivo] = useState(true);
   const [transitGrantIds, setTransitGrantIds] = useState<string[]>([]);
+  /** OT operativos que listó el selector: en Marca Blanca se bloquean los que queden sin elegir. */
+  const [availableOffices, setAvailableOffices] = useState<TransitOffice[]>([]);
   const [domainHost, setDomainHost] = useState("");
   const [step, setStep] = useState<WizardStep>("form");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
   /** HU #12427 AC3 — el registro del dominio en el alta es opcional y omisible: si el PUT falla
    * tras crear la compañía, esta NO se deshace. Se pausa el cierre del diálogo con un aviso en
-   * vez de perder ese error, y se deja al usuario continuar (reintentar desde la ficha). */
+   * vez de perder ese error, y se deja al usuario continuar (reintentar desde la ficha). Lo mismo
+   * con los bloqueos de OT de una Marca Blanca. */
   const [pendingCreated, setPendingCreated] = useState<CompanyListItem | null>(null);
-  const [domainWarning, setDomainWarning] = useState<string | null>(null);
+  const [setupWarnings, setSetupWarnings] = useState<string[]>([]);
 
   const tenantTypes = selectableTenantTypes(isSuperAdmin);
-  const needsOtStep = tenantType === "CONCESION";
+  const isConcesion = tenantType === "CONCESION";
   const isMarcaBlanca = tenantType === "MARCA_BLANCA";
+  // La Marca Blanca también elige sus OT en el alta; sin elegir ninguno queda con todos los de FLIT.
+  const needsOtStep = isConcesion || isMarcaBlanca;
 
   if (!open) {
     return null;
@@ -74,7 +77,6 @@ export function CreateCompanyDialog({
   const reset = () => {
     setRazonSocial("");
     setNit("");
-    setCode("");
     setTenantType("RENTING");
     setEstadoActivo(true);
     setTransitGrantIds([]);
@@ -82,7 +84,7 @@ export function CreateCompanyDialog({
     setStep("form");
     setErrors({});
     setPendingCreated(null);
-    setDomainWarning(null);
+    setSetupWarnings([]);
   };
 
   const finishAfterDomainWarning = () => {
@@ -111,7 +113,6 @@ export function CreateCompanyDialog({
     const next: FieldErrors = {};
     const rs = razonSocial.trim();
     const n = nit.trim();
-    const c = code.trim();
     if (!rs) next.razonSocial = "La razón social es obligatoria.";
     else {
       const e = validateReadableName(rs, "La razón social");
@@ -119,8 +120,6 @@ export function CreateCompanyDialog({
     }
     if (!n) next.nit = "El NIT es obligatorio.";
     else if (!hasDigit(n)) next.nit = "El NIT debe contener al menos un dígito.";
-    if (!c) next.code = "El código es obligatorio.";
-    else if (!hasLetterOrDigit(c)) next.code = "El código debe contener al menos una letra o número.";
     if (isMarcaBlanca) {
       const host = domainHost.trim();
       if (host && !isValidHostFormat(host)) {
@@ -132,7 +131,7 @@ export function CreateCompanyDialog({
   };
 
   const validateOt = (): FieldErrors => {
-    if (needsOtStep && transitGrantIds.length === 0) {
+    if (isConcesion && transitGrantIds.length === 0) {
       return { transitGrants: "Selecciona al menos un organismo de tránsito para la Concesión." };
     }
     return {};
@@ -168,14 +167,37 @@ export function CreateCompanyDialog({
       const created = await onCreate({
         razonSocial: razonSocial.trim(),
         nit: nit.trim(),
-        code: code.trim(),
         tenantType,
         estadoActivo,
       });
 
-      if (needsOtStep) {
+      if (isConcesion) {
         for (const otId of transitGrantIds) {
           await addTransitGrant(created.id, otId);
+        }
+      }
+
+      // La compañía YA se creó: lo que falle desde aquí no la deshace. Se pausa el cierre para que
+      // el usuario vea qué quedó pendiente y sepa que puede completarlo desde la ficha.
+      const warnings: string[] = [];
+
+      // Marca Blanca: su acceso es «operables menos bloqueados», así que lo elegido se traduce en
+      // bloquear el resto. Sin selección no se bloquea nada y la red queda con todos los OT activos.
+      if (isMarcaBlanca && transitGrantIds.length > 0) {
+        const selected = new Set(transitGrantIds);
+        const toBlock = availableOffices.filter((office) => !selected.has(office.id));
+        const failed: string[] = [];
+        for (const office of toBlock) {
+          try {
+            await addTransitBlock(created.id, office.id);
+          } catch {
+            failed.push(office.name);
+          }
+        }
+        if (failed.length > 0) {
+          warnings.push(
+            `No se pudieron bloquear ${failed.length} organismo(s) de tránsito (${failed.join(", ")}). Bloquéalos desde el panel de organismos de la ficha.`,
+          );
         }
       }
 
@@ -184,15 +206,17 @@ export function CreateCompanyDialog({
         try {
           await registerAdminDomain(created.id, { host });
         } catch (domainError) {
-          // La compañía YA se creó — no se deshace. Se pausa el cierre para que el usuario vea
-          // el motivo y sepa que puede reintentar el registro del dominio desde la ficha.
-          setPendingCreated(created);
-          setDomainWarning(
-            domainErrorMessage(domainErrorCode(domainError)) || "No se pudo registrar el dominio.",
+          warnings.push(
+            `${domainErrorMessage(domainErrorCode(domainError)) || "No se pudo registrar el dominio."} Puedes registrarlo más tarde desde la ficha.`,
           );
-          setSubmitting(false);
-          return;
         }
+      }
+
+      if (warnings.length > 0) {
+        setPendingCreated(created);
+        setSetupWarnings(warnings);
+        setSubmitting(false);
+        return;
       }
 
       reset();
@@ -204,16 +228,15 @@ export function CreateCompanyDialog({
           if (
             field === "razonSocial" ||
             field === "nit" ||
-            field === "code" ||
             field === "tenantType"
           ) {
             mapped[field] = message;
           }
         }
-        setErrors(Object.keys(mapped).length > 0 ? mapped : { code: "No se pudo crear la compañía." });
+        setErrors(Object.keys(mapped).length > 0 ? mapped : { general: "No se pudo crear la compañía." });
         setStep("form");
       } else {
-        setErrors({ code: "No se pudo crear la compañía. Intenta de nuevo." });
+        setErrors({ general: "No se pudo crear la compañía. Intenta de nuevo." });
         setStep("form");
       }
     } finally {
@@ -227,8 +250,16 @@ export function CreateCompanyDialog({
       onClose={handleClose}
       busy={submitting}
       icon={Building2}
-      title={pendingCreated ? "Compañía creada" : step === "ot" ? "Organismos de la Concesión" : "Crear compañía"}
-      titleClassName="text-base font-bold text-[#557EFF]"
+      title={
+        pendingCreated
+          ? "Compañía creada"
+          : step === "ot"
+            ? isMarcaBlanca
+              ? "Organismos de la Marca Blanca"
+              : "Organismos de la Concesión"
+            : "Crear compañía"
+      }
+      titleClassName="text-base font-bold text-flit-brand"
     >
       <div className="space-y-3.5">
         {pendingCreated && (
@@ -237,16 +268,15 @@ export function CreateCompanyDialog({
             style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)" }}
             role="alert"
           >
-            <p style={{ color: "#162744" }}>
-              La compañía <strong>{pendingCreated.razonSocial}</strong> se creó correctamente, pero no se
-              pudo registrar el dominio.
+            <p style={{ color: "var(--color-flit-primary)" }}>
+              La compañía <strong>{pendingCreated.razonSocial}</strong> se creó correctamente, pero quedó
+              pendiente:
             </p>
-            <p className="font-medium" style={{ color: "#8a6000" }}>
-              {domainWarning}
-            </p>
-            <p style={{ color: "#162744" }}>
-              Puedes registrar el dominio más tarde desde la ficha de la compañía.
-            </p>
+            <ul className="list-disc space-y-1 pl-4 font-medium" style={{ color: "#8a6000" }}>
+              {setupWarnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
             <div className="flex justify-end">
               <button
                 type="button"
@@ -255,7 +285,7 @@ export function CreateCompanyDialog({
                   onClose();
                 }}
                 className="rounded-xl px-4 py-2 text-xs font-semibold text-white"
-                style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+                style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
               >
                 Continuar
               </button>
@@ -272,7 +302,7 @@ export function CreateCompanyDialog({
                 value={razonSocial}
                 onChange={(e) => setRazonSocial(sanitizeName(e.target.value))}
                 maxLength={255}
-                className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+                className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
                 style={{ borderColor: errors.razonSocial ? "#FF4E00" : "#DFE5ED" }}
               />
             </Field>
@@ -285,20 +315,8 @@ export function CreateCompanyDialog({
                 onChange={(e) => setNit(sanitizeTaxId(e.target.value))}
                 maxLength={20}
                 placeholder="900123456-1"
-                className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+                className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
                 style={{ borderColor: errors.nit ? "#FF4E00" : "#DFE5ED" }}
-              />
-            </Field>
-
-            <Field label="Código" htmlFor="cc-code" error={errors.code} hint="Identificador único de la compañía (máx. 32).">
-              <input
-                id="cc-code"
-                type="text"
-                value={code}
-                onChange={(e) => setCode(sanitizeTenantCode(e.target.value))}
-                maxLength={32}
-                className="w-full rounded-xl border px-3 py-2 font-mono text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
-                style={{ borderColor: errors.code ? "#FF4E00" : "#DFE5ED" }}
               />
             </Field>
 
@@ -313,7 +331,7 @@ export function CreateCompanyDialog({
                     setTransitGrantIds([]);
                   }
                 }}
-                className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+                className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
                 style={{ borderColor: errors.tenantType ? "#FF4E00" : "#DFE5ED" }}
               >
                 {tenantTypes.map((t) => (
@@ -327,7 +345,7 @@ export function CreateCompanyDialog({
             {isMarcaBlanca && (
               <div
                 className="space-y-2 rounded-xl border px-3 py-2.5"
-                style={{ borderColor: errors.domainHost ? "#FF4E00" : "#DFE5ED", background: "rgba(85,126,255,0.04)" }}
+                style={{ borderColor: errors.domainHost ? "#FF4E00" : "#DFE5ED", background: "color-mix(in srgb, var(--color-flit-brand) 4%, transparent)" }}
               >
                 <label htmlFor="cc-domain" className="block text-xs font-semibold">
                   Dominio de la red (opcional)
@@ -339,17 +357,17 @@ export function CreateCompanyDialog({
                   onChange={(e) => setDomainHost(e.target.value)}
                   maxLength={253}
                   placeholder="app.tudominio.com"
-                  className="w-full rounded-lg border px-3 py-2 font-mono text-xs outline-none focus:border-[#557EFF] focus:ring-2 focus:ring-[#557EFF]/20"
+                  className="w-full rounded-lg border px-3 py-2 font-mono text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
                   style={{ borderColor: errors.domainHost ? "#FF4E00" : "#DFE5ED" }}
                   aria-describedby="cc-domain-hint"
                   aria-invalid={Boolean(errors.domainHost)}
                 />
                 {errors.domainHost ? (
-                  <p role="alert" id="cc-domain-hint" className="text-[10px] font-medium" style={{ color: "#FF4E00" }}>
+                  <p role="alert" id="cc-domain-hint" className="text-xs font-medium" style={{ color: "#FF4E00" }}>
                     {errors.domainHost}
                   </p>
                 ) : (
-                  <p id="cc-domain-hint" className="text-[10px] opacity-60">
+                  <p id="cc-domain-hint" className="text-xs opacity-60">
                     Puedes dejarlo en blanco y registrarlo después desde la ficha de la compañía.
                   </p>
                 )}
@@ -370,9 +388,17 @@ export function CreateCompanyDialog({
           <TransitGrantsPicker
             selectedIds={transitGrantIds}
             onChange={setTransitGrantIds}
+            variant={isMarcaBlanca ? "marca-blanca" : "concesion"}
+            onOfficesLoaded={setAvailableOffices}
             error={errors.transitGrants}
             disabled={submitting}
           />
+        )}
+
+        {!pendingCreated && errors.general && (
+          <p role="alert" className="text-xs font-medium" style={{ color: "#FF4E00" }}>
+            {errors.general}
+          </p>
         )}
 
         {!pendingCreated && (
@@ -400,7 +426,7 @@ export function CreateCompanyDialog({
               onClick={step === "form" ? goNext : () => void submit()}
               disabled={submitting}
               className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg,#557EFF,#00DBD5)" }}
+              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
             >
               {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
               {submitting ? "Creando…" : step === "form" && needsOtStep ? "Siguiente" : "Crear compañía"}
@@ -431,9 +457,9 @@ function Field({
         {label}
       </label>
       {children}
-      {hint && !error && <p className="mt-1 text-[10px] opacity-60">{hint}</p>}
+      {hint && !error && <p className="mt-1 text-xs opacity-60">{hint}</p>}
       {error && (
-        <p className="mt-1 text-[10px] font-medium" style={{ color: "#FF4E00" }}>
+        <p className="mt-1 text-xs font-medium" style={{ color: "#FF4E00" }}>
           {error}
         </p>
       )}

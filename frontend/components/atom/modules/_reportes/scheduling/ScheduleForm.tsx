@@ -43,9 +43,9 @@ interface ScheduleFormProps {
 
 const inputClass =
   "w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 " +
-  "px-3 py-2 text-sm text-[#162744] dark:text-slate-100 outline-none focus:ring-2 focus:ring-[#557EFF]/40";
+  "px-3 py-2 text-sm text-flit-primary dark:text-slate-100 outline-none focus:ring-2 focus:ring-flit-brand/40";
 
-const labelClass = "block text-xs font-semibold text-[#162744] dark:text-slate-200 mb-1";
+const labelClass = "block text-xs font-semibold text-flit-primary dark:text-slate-200 mb-1";
 
 /** Tipos que el backend solo entrega en Excel (espejo de SchedulingValidation): "consulta" y los
  * 4 propios de ICT — un detalle fila a fila no tiene una versión PDF con sentido. */
@@ -130,7 +130,7 @@ export function ScheduleForm({
       data-testid="schedule-form"
       className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-3"
     >
-      <h4 className="text-sm font-bold text-[#162744] dark:text-slate-100">
+      <h4 className="text-sm font-bold text-flit-primary dark:text-slate-100">
         {initial ? "Editar informe programado" : "Nuevo informe programado"}
       </h4>
 
@@ -154,7 +154,7 @@ export function ScheduleForm({
               <span className={labelClass}>Tipo de informe</span>
               <p
                 data-testid="schedule-consulta-locked"
-                className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-[#162744] dark:text-slate-100"
+                className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-flit-primary dark:text-slate-100"
               >
                 Consulta personalizada — {consultaQueryName}
               </p>
@@ -248,7 +248,7 @@ export function ScheduleForm({
         <div>
           <label htmlFor="schedule-format" className={labelClass}>Formato</label>
           {isExcelOnly ? (
-            <p className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-[#162744] dark:text-slate-100">
+            <p className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-flit-primary dark:text-slate-100">
               Excel
             </p>
           ) : (
@@ -278,12 +278,12 @@ export function ScheduleForm({
         <RecipientsInput value={recipients} onChange={setRecipients} />
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-[#162744] dark:text-slate-200">
+      <label className="flex items-center gap-2 text-sm text-flit-primary dark:text-slate-200">
         <input
           type="checkbox"
           checked={isActive}
           onChange={(e) => setIsActive(e.target.checked)}
-          className="h-4 w-4 accent-[#557EFF]"
+          className="h-4 w-4 accent-flit-brand"
         />
         Activo
       </label>
@@ -300,7 +300,7 @@ export function ScheduleForm({
           disabled={saving}
           aria-busy={saving}
           className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-          style={{ background: "#557EFF" }}
+          style={{ background: "var(--color-flit-brand)" }}
         >
           {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
           {initial ? "Guardar cambios" : "Crear informe"}
@@ -308,7 +308,7 @@ export function ScheduleForm({
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-xl border border-slate-200 dark:border-slate-700 px-4 py-2 text-xs font-semibold text-[#162744] dark:text-slate-200"
+          className="rounded-xl border border-slate-200 dark:border-slate-700 px-4 py-2 text-xs font-semibold text-flit-primary dark:text-slate-200"
         >
           Cancelar
         </button>
