@@ -118,6 +118,23 @@ public sealed class EnvioDeCorreoTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task HU13881_SoloElBancoDePruebasQuedaFueraDelDesvio()
+    {
+        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+
+        // Comparendos (o cualquier otro servicio) por la API de la empresa: pasa por el desvío, aunque pida la marca.
+        await Cliente(Token(cliente: "svc-comparendos")).EnviarCorreoAsync(new EnviarCorreoRequest { Correo = Correo(Canal.EmpresaApi) }, Empresa(_empresa), cancellationToken: ct);
+        await Cliente(Token(cliente: "svc-comparendos")).EnviarCorreoAsync(new EnviarCorreoRequest { Correo = Correo(Canal.EmpresaApi), BuzonDePruebas = true }, Empresa(_empresa), cancellationToken: ct);
+        // core-api sin la marca: también pasa por el desvío.
+        await Cliente(Token()).EnviarCorreoAsync(new EnviarCorreoRequest { Correo = Correo(Canal.EmpresaApi) }, Empresa(_empresa), cancellationToken: ct);
+        // El banco de pruebas de core-api, con la marca: su buzón controlado no se desvía (HU #11372).
+        await Cliente(Token()).EnviarCorreoAsync(new EnviarCorreoRequest { Correo = Correo(Canal.EmpresaApi), BuzonDePruebas = true }, Empresa(_empresa), cancellationToken: ct);
+
+        _renting.Exentos.Should().Equal(false, false, false, true);
+    }
+
+    [Fact]
     public async Task ElCanalDeFlit_SalePorElTransporteDeFlit()
     {
         Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
@@ -236,11 +253,11 @@ public sealed class EnvioDeCorreoTests : IAsyncLifetime
 
     private static Metadata Empresa(Guid tenant) => new() { { "x-flit-tenant-id", tenant.ToString() } };
 
-    private string Token(string scope = "platform.notificaciones.send") => new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
+    private string Token(string scope = "platform.notificaciones.send", string cliente = "svc-tramites") => new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
     {
         Issuer = Issuer,
         Audience = "notificaciones",
-        Subject = new ClaimsIdentity([new Claim("sub", "svc-tramites"), new Claim("scope", scope)]),
+        Subject = new ClaimsIdentity([new Claim("sub", cliente), new Claim("scope", scope)]),
         Expires = DateTime.UtcNow.AddMinutes(10),
         SigningCredentials = new SigningCredentials(_key, SecurityAlgorithms.RsaSha256),
     });
@@ -250,14 +267,22 @@ public sealed class EnvioDeCorreoTests : IAsyncLifetime
     {
         public List<RentingSendEmailRequest> Pedidos { get; } = [];
 
+        /// <summary>Por cada pedido, si llegó exento del desvío (buzón controlado del banco de pruebas).</summary>
+        public List<bool> Exentos { get; } = [];
+
         public Task<EmailSendResult> SendAsync(RentingSendEmailRequest request, CancellationToken cancellationToken)
         {
             Pedidos.Add(request);
+            Exentos.Add(false);
             return Task.FromResult(EmailSendResult.Sent);
         }
 
-        public Task<EmailSendResult> SendAsync(RentingSendEmailRequest request, ControlledMailboxRecipient recipient, CancellationToken cancellationToken) =>
-            SendAsync(request, cancellationToken);
+        public Task<EmailSendResult> SendAsync(RentingSendEmailRequest request, ControlledMailboxRecipient recipient, CancellationToken cancellationToken)
+        {
+            Pedidos.Add(request);
+            Exentos.Add(true);
+            return Task.FromResult(EmailSendResult.Sent);
+        }
     }
 
     private sealed class Jwks(RsaSecurityKey key) : HttpMessageHandler
