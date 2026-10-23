@@ -48,7 +48,7 @@ export function TransitBlocksPanel({
   >({});
   const [search, setSearch] = useState("");
   // Bug #13055 — tabla homologada con el modelo de trámites: filas por página elegibles.
-  const pg = usePaginacion();
+  const pg = usePaginacion("panels.TransitBlocksPanel");
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [busy, setBusy] = useState(false);
 

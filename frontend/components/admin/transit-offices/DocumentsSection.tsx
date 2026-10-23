@@ -57,7 +57,7 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
   const [tagStatus, setTagStatus] = useState<UiStatus>("loading");
   const [tags, setTags] = useState<OtDocumentTag[]>([]);
   // Bug #13055 — tabla de etiquetas homologada con el modelo de trámites: paginación en cliente.
-  const pgTags = usePaginacion();
+  const pgTags = usePaginacion("transit-offices.DocumentsSection");
   const [tagFormOpen, setTagFormOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<OtDocumentTag | null>(null);
   const [deleting, setDeleting] = useState(false);

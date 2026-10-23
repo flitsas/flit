@@ -18,7 +18,7 @@ export function AuditLogPanel({
   networkHeadId?: string | null;
 }) {
   // Bug #13055 — tabla homologada con el modelo de trámites: filas por página elegibles.
-  const { page, pageSize, setPage, setPageSize } = usePaginacion();
+  const { page, pageSize, setPage, setPageSize } = usePaginacion("panels.AuditLogPanel");
   const [status, setStatus] = useState<UiStatus>("loading");
   const [result, setResult] = useState<AuditLogPageResponse | null>(null);
 

@@ -27,6 +27,7 @@ import { Eye, Search } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+import { TAMANO_DE_PAGINA_POR_DEFECTO, useTamanoDePagina } from "@/components/atom/usePaginacion";
 import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
 import { ModuleTitle } from "./ModuleTitle";
 import { TramiteDetalleModal } from "@/components/operacion/TramiteDetalleModal";
@@ -38,9 +39,6 @@ import { formatFechaHora } from "@/lib/format/date";
 /** Fases de la vista. `idle` = todavía no se consultó nada (distinto de vacío). */
 
 type Phase = "idle" | "loading" | "error" | "empty" | "ready";
-
-// Bug #13055 — tamaño inicial dentro del estándar de filas por página (10/25/50/100).
-const PAGE_SIZE = 10;
 
 // Clases del input: el color sale de tokens, no de hex (HU #12197). `border` a secas ya toma
 // `--border` (== #DFE5ED en claro, white/10 en oscuro) desde la capa base de globals.css, así que
@@ -91,11 +89,12 @@ export function HistorialPlaca({
   const [rows, setRows] = useState<InstanceSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  // «Filas por página» estándar, recordado en la sesión (HU #13917).
+  const [pageSize, setPageSize] = useTamanoDePagina("modulos.HistorialPlaca");
   /** Fila abierta en el detalle. `null` = modal cerrado (el modal es controlado por `open`). */
   const [detalle, setDetalle] = useState<InstanceSummary | null>(null);
 
-  const load = useCallback(async (placa: string, pageToLoad: number, size: number = PAGE_SIZE) => {
+  const load = useCallback(async (placa: string, pageToLoad: number, size: number = TAMANO_DE_PAGINA_POR_DEFECTO) => {
     const normalized = normalizarPlaca(placa);
     // Placa vacía: no se consulta al servidor. Volver a `idle` es deliberado — nadie ha buscado
     // nada, así que anunciar "no hay resultados" sería responder una pregunta que no se hizo.
@@ -149,8 +148,9 @@ export function HistorialPlaca({
     if (!normalized || autoConsultada.current === normalized) return;
     autoConsultada.current = normalized;
     setPlacaInput(normalized);
-    void load(normalized, 1);
-  }, [initialPlaca, load]);
+    // Con el tamaño recordado en la sesión, no con el de por defecto (HU #13917).
+    void load(normalized, 1, pageSize);
+  }, [initialPlaca, load, pageSize]);
 
   const columns: DataTableColumn<InstanceSummary>[] = useMemo(() => {
     const base: DataTableColumn<InstanceSummary>[] = [

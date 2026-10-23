@@ -14,6 +14,7 @@ import {
   type RevocationRequestsFiltersValue,
 } from '@/components/operacion/RevocationRequestsFiltersBar';
 import { RevocationRequestsTable } from '@/components/operacion/RevocationRequestsTable';
+import { useTamanoDePagina } from '@/components/atom/usePaginacion';
 
 
 
@@ -40,8 +41,8 @@ export default function RevocatoriasPage() {
 
   const [filtros, setFiltros] = useState<RevocationRequestsFiltersValue>(FILTROS_VACIOS);
   const [skip, setSkip] = useState(0);
-  // Bug #13055 — «Filas por página» como en trámites: el tamaño es estado y arranca en 10.
-  const [take, setTake] = useState(10);
+  // «Filas por página» estándar, recordado en la sesión (HU #13917).
+  const [take, setTake] = useTamanoDePagina('tramites.revocatorias');
   const [status, setStatus] = useState<UiStatus>('loading');
   const [items, setItems] = useState<RevocationRequestListItem[]>([]);
   const [total, setTotal] = useState(0);

@@ -85,7 +85,7 @@ export function Usuarios() {
   const canConfigurePermissions = isSuperAdmin || isAdminCompany;
   const permissionsMode: "superadmin" | "admin" = isSuperAdmin ? "superadmin" : "admin";
   const [open, setOpen] = useState(false);
-  const pgEliminados = usePaginacion();
+  const pgEliminados = usePaginacion("modulos.Usuarios");
   const [tab, setTab] = useState<TabId>("usuarios");
   const [users, setUsers] = useState<TenantUser[]>([]);
   const [loading, setLoading] = useState(true);

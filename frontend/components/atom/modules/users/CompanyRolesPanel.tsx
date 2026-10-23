@@ -40,7 +40,7 @@ export function CompanyRolesPanel({ onChanged }: { onChanged?: () => void } = {}
   const [status, setStatus] = useState<UiStatus>("loading");
   const [form, setForm] = useState<CompanyRoleFormMode | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<TenantRole | null>(null);
-  const pg = usePaginacion();
+  const pg = usePaginacion("users.CompanyRolesPanel");
 
   const load = useCallback(async () => {
     setStatus("loading");
