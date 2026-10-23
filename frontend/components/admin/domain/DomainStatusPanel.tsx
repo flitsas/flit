@@ -257,12 +257,12 @@ function DnsInstructions({
       <h3 className="mb-2 text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }}>
         Registros DNS que debes crear
       </h3>
-      {/* Bug #13055 — tabla homologada con el modelo de trámites (fija: registros DNS, sin paginar) */}
+      {/* HU #13918 — mismo diseño que la tabla de trámites. Son dos registros FIJOS (TXT y CNAME), no una
+          colección: solo recibe el diseño, sin paginación. */}
       <div className="overflow-x-auto">
         <table
           aria-label="Registros DNS que debes crear"
-          className="text-left text-xs"
-          style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
+          className="w-full border-separate border-spacing-y-2 text-left text-xs"
         >
           <thead>
             <tr>
@@ -285,7 +285,7 @@ function DnsInstructions({
 }
 
 function DnsRow({ type, name, value }: { type: string; name: string; value: string }) {
-  const border = { borderColor: "#DFE5ED" };
+  const border = { borderColor: "var(--table-row-border)" };
   return (
     <tr className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
       <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold" style={border}>{type}</td>
