@@ -61,7 +61,8 @@ public sealed class IniciarPrevalidacionHandler(
     IKyverumVerifyClient kyverum,
     BiometricsProviderOptions providerOptions,
     IWebhookSecretProtector secretProtector,
-    IIdentityValidationEventPublisher events)
+    IIdentityValidationEventPublisher events,
+    IIdentityValidationAuditLog? audit = null)
 {
     public async Task<(IniciarPrevalidacionResult? Result, string? Error, IdentitySendDecision? Conflict)> HandleAsync(
         Guid tenantId,
@@ -140,6 +141,14 @@ public sealed class IniciarPrevalidacionHandler(
             || string.IsNullOrWhiteSpace(subject.TipoDocumento)
             || string.IsNullOrWhiteSpace(subject.NumeroDocumento))
             return (null, "datos_incompletos", null);
+
+        // Bug #13885 — la precedencia de arriba solo ve prevalidaciones e identidades vigentes, no las validaciones en
+        // vuelo de un trámite. Antes de llamar al proveedor se cierran las de trámites anulados, revocados o borrados que
+        // bloquearían el guardado; si queda una viva, 409 con su estado y su origen, sin crear nada en Kyverum.
+        var bloqueo = await IdentityInFlightRelease.LiberarAsync(
+            procedureRepo, audit, tenantId, subject.TipoDocumento, subject.NumeroDocumento, now, ct);
+        if (bloqueo is not null)
+            return (null, "prevalidacion_activa", IdentityInFlightRelease.Conflicto(bloqueo));
 
         var validationId = Guid.NewGuid();
 

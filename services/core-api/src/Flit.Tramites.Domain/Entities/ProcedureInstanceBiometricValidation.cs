@@ -610,6 +610,32 @@ public static class BiometricRules
             && validation.Attempts < validation.MaxAttempts;
     }
 
+    /// <summary>
+    /// Estados "en vuelo": los que cuenta el índice único <c>uq_biometric_validations_inflight_doc_norm</c> (DDL 56/129).
+    /// Mientras una fila esté en uno de ellos, ninguna otra validación del mismo documento se puede guardar en el tenant.
+    /// </summary>
+    public static bool EstaEnVuelo(ProcedureInstanceBiometricValidation validation)
+    {
+        ArgumentNullException.ThrowIfNull(validation);
+        return validation.Status is BiometricEstados.PendienteEnvio or BiometricEstados.Enviado or BiometricEstados.EnProceso;
+    }
+
+    /// <summary>
+    /// Bug #13885 — ¿es una validación en vuelo de un trámite que ya no puede usarla (anulado, revocado o borrado)?
+    /// Bug #13055 la congela sin cerrarla, así que quedaba en vuelo para siempre y el índice único bloqueaba toda
+    /// validación nueva de la persona en el tenant. Una fila así se cierra como <c>expirado</c>: no se aplica ningún
+    /// veredicto del proveedor (la congelación se respeta), solo se libera el documento. Requiere la navegación
+    /// <see cref="ProcedureInstanceBiometricValidation.ProcedureInstance"/> cargada; sin trámite (prevalidación) nunca aplica.
+    /// </summary>
+    public static bool EsEnVueloDeTramiteInactivo(ProcedureInstanceBiometricValidation validation)
+    {
+        ArgumentNullException.ThrowIfNull(validation);
+        return EstaEnVuelo(validation)
+            && validation.ProcedureInstance is { } tramite
+            && (Flit.Tramites.Domain.Tramites.Estados.TramiteEstado.CongelaValidacionIdentidad(tramite.Status)
+                || tramite.DeletedAt is not null);
+    }
+
     public const int ThresholdAprobacion = 60;
     public const int TokenTtlHoras = 24;
 

@@ -402,6 +402,15 @@ public interface IProcedureInstanceRepository
         Guid tenantId, string tipoDoc, string documento, CancellationToken ct = default);
 
     /// <summary>
+    /// Bug #13885 — TODAS las validaciones en vuelo que impedirían guardar una nueva para este documento en el tenant:
+    /// el mismo predicado que el índice único <c>uq_biometric_validations_inflight_doc_norm</c> (sin mandatario, tipo y
+    /// número con <c>Trim</c>+<c>Upper</c>), incluidas las de trámites anulados, revocados o borrados. Rastreadas y con
+    /// <see cref="ProcedureInstanceBiometricValidation.ProcedureInstance"/> cargado.
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListInFlightBlockersByDocumentAsync(
+        Guid tenantId, string tipoDoc, string documento, CancellationToken ct = default);
+
+    /// <summary>
     /// Claves (<see cref="Entities.BiometricRules.IdentidadKey"/>) de todas las identidades APROBADAS y VIGENTES
     /// de los tenants indicados, en UNA consulta. Para el listado de trámites: resuelve la identidad por PERSONA
     /// sin N+1 (HU #10350 — referenciar la identidad vigente, no clonar por trámite). Set vacío si no hay ninguna.
