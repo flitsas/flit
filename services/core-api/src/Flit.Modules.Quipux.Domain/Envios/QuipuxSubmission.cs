@@ -81,5 +81,12 @@ public sealed class QuipuxSubmission
     /// antes de reintentar: Quipux pudo haber radicado el documento aunque la respuesta HTTP
     /// expirara. Absorbe el job <c>validateStatusDocumentForTimeOut</c> de FLIT 1.0.
     /// </summary>
-    public bool RequiereConsultaPrevia => Attempts > 0 && string.Equals(Status, QuipuxSubmissionEstado.Pendiente, StringComparison.Ordinal);
+    /// <remarks>
+    /// El claim incrementa <see cref="Attempts"/> <b>antes</b> de procesar
+    /// (<c>attempts += 1</c> en el repositorio). Por eso el umbral es <c>&gt; 1</c> y no
+    /// <c>&gt; 0</c>: en el primer claim <c>Attempts == 1</c> y aún no hubo POST a Quipux
+    /// (bug #13912 — consulta previa en el 1.er ciclo quemaba intentos sin radicar).
+    /// </remarks>
+    public bool RequiereConsultaPrevia =>
+        Attempts > 1 && string.Equals(Status, QuipuxSubmissionEstado.Pendiente, StringComparison.Ordinal);
 }
