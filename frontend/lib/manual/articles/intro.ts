@@ -364,4 +364,66 @@ export const INTRO_ARTICLES: ManualArticle[] = [
       },
     ],
   },
+  {
+    slug: "0-introduccion/7-tablas-y-paginacion",
+    title: "Tablas: cómo leerlas y moverte entre páginas",
+    audience: "Todos",
+    sectionId: "introduccion",
+    keywords: [
+      "tabla",
+      "tablas",
+      "paginación",
+      "filas por página",
+      "registros por página",
+      "primera página",
+      "última página",
+      "página siguiente",
+      "página anterior",
+      "cuántos registros",
+    ],
+    summary:
+      "Todas las tablas de FLIT se ven y se usan igual: cómo cambiar de página, ir al principio o al final y elegir cuántas filas ver.",
+    blocks: [
+      {
+        id: "mismo-diseno",
+        title: "1. Todas las tablas funcionan igual",
+        paragraphs: [
+          "Trámites, usuarios, compañías, reportes, auditoría o cualquier otra lista: todas las tablas de FLIT tienen el mismo aspecto y los mismos controles. La cabecera gris se queda fija al bajar, cada fila es una tarjeta que se ilumina al pasar el puntero y las acciones de la fila son iconos con su nombre al acercar el puntero.",
+        ],
+      },
+      {
+        id: "navegar",
+        title: "2. Moverte entre páginas",
+        paragraphs: ["Al pie de cada tabla, a la derecha, está la barra de páginas:"],
+        bullets: [
+          "« lleva a la primera página.",
+          "‹ y › van a la página anterior y a la siguiente.",
+          "Los números saltan directo a esa página; la página en la que estás se ve resaltada en azul.",
+          "» lleva a la última página.",
+          "Si ya estás en la primera página, « y ‹ se ven apagados; en la última, › y » también.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "El texto «Mostrando 21–30 de 95» te dice qué registros estás viendo y cuántos hay en total. Si todo cabe en una sola página, no aparecen los botones de navegación.",
+          },
+        ],
+      },
+      {
+        id: "filas-por-pagina",
+        title: "3. Elegir cuántas filas ver",
+        paragraphs: [
+          "A la izquierda del pie, «Filas por página» deja elegir 10, 20, 30 o 50 registros. Toda tabla abre con 10. Al cambiar la cantidad, la tabla vuelve a la primera página para que no te pierdas.",
+          "Tu elección se recuerda mientras tengas abierta la sesión del navegador: si eliges 50 en Usuarios, sales a otro módulo y vuelves, sigues viendo 50. Cada tabla recuerda lo suyo, así que cambiar Usuarios no cambia Auditoría. Al cerrar la pestaña y entrar de nuevo, todas vuelven a 10.",
+        ],
+      },
+      {
+        id: "filtros",
+        title: "4. Filtros y exportaciones",
+        paragraphs: [
+          "Las páginas se calculan sobre el resultado filtrado: si aplicas un filtro que deja pocos registros, la tabla te lleva a la página que existe en vez de mostrarte una vacía. Exportar a Excel o CSV siempre incluye todo el resultado del filtro, no solo la página que estás viendo.",
+        ],
+      },
+    ],
+  },
 ];
