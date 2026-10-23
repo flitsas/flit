@@ -19,9 +19,18 @@ env:
   # el pull del docker-compose.prod.yml en el VPS. El ambiente se diferencia por TAG
   # (dev/qa/pdn), no por nombre de repo.
   CORE_API_IMAGE: ghcr.io/flitsas/flitdev/core-api
+  # Epic #13217 (HU #13234): el servicio de identidad, con su propia imagen y su propio build.
+  CORE_IDENTITY_IMAGE: ghcr.io/flitsas/flitdev/core-identity
+  CORE_CONSULTAS_IMAGE: ghcr.io/flitsas/flitdev/core-consultas
+  CORE_NOTIFICACIONES_IMAGE: ghcr.io/flitsas/flitdev/core-notificaciones
   CORE_ICT_IMAGE: ghcr.io/flitsas/flitdev/core-ict
   FRONTEND_IMAGE: ghcr.io/flitsas/flitdev/frontend
   PYTHON_ML_IMAGE: ghcr.io/flitsas/flitdev/python-ml
+  # FLIT Suite (B-09): hub en flitsas.online. Una sola imagen por ambiente, sin build-args (config en runtime).
+  FRONTEND_HUB_IMAGE: ghcr.io/flitsas/flitdev/frontend-hub
+  # Epic #12878 (GDC): Comparendos, API y app web (perfil «comparendos» del compose).
+  CORE_COMPARENDOS_IMAGE: ghcr.io/flitsas/flitdev/core-comparendos
+  FRONTEND_COMPARENDOS_IMAGE: ghcr.io/flitsas/flitdev/frontend-comparendos
 
 jobs:
   # ── Resolver ambiente segun la rama ─────────────────────────────────────────
@@ -42,6 +51,12 @@ jobs:
       core_port: ${{ steps.env.outputs.core_port }}
       python_port: ${{ steps.env.outputs.python_port }}
       migracion_port: ${{ steps.env.outputs.migracion_port }}
+      hub_port: ${{ steps.env.outputs.hub_port }}
+      identity_port: ${{ steps.env.outputs.identity_port }}
+      comparendos_port: ${{ steps.env.outputs.comparendos_port }}
+      core_comparendos_port: ${{ steps.env.outputs.core_comparendos_port }}
+      suite_env: ${{ steps.env.outputs.suite_env }}
+      tramites_domain: ${{ steps.env.outputs.tramites_domain }}
       internal_subnet: ${{ steps.env.outputs.internal_subnet }}
     steps:
       - name: Map branch to environment
@@ -55,16 +70,22 @@ jobs:
           # (dev/qa/pdn) se usa solo para tags de imagen y etiquetas de display.
           # FLIT_INTERNAL_SUBNET (Marca Blanca #12421): CIDR distinto por stack si DEV/QA/PDN
           # comparten VPS — Docker rechaza subredes solapadas ("Pool overlaps...").
-          # Convencion: DEV 172.28.40.0/24 · QA 10.114.50.0/24 · PDN 10.114.60.0/24.
+          # Convencion: DEV 10.114.40.0/24 · QA 10.114.50.0/24 · PDN 10.114.60.0/24.
           case "${{ github.ref_name }}" in
             release)
               env_name=pdn
               gh_env=production
-              # Dominios reales del VPS/nginx (NO pdn.flitsas.online — ese host no sirve el stack).
-              front_domain=flitsas.online
+              # PDN solo en flitsas.com (decision del 2026-10-19, #560 cerrado): hub en app.flitsas.com
+              # y productos en <producto>.flitsas.com. La API horneada sigue en api.flitsas.online (ICT,
+              # webhooks); en las paginas .com el front la pasa a api.flitsas.com (apiBaseForPageRoot).
+              front_domain=app.flitsas.com
               api_domain=api.flitsas.online
               image_tag=pdn
-              front_port=6001; gateway_port=6002; core_port=6003; python_port=6012; migracion_port=6030
+              front_port=6001; gateway_port=6002; core_port=6003; python_port=6012; migracion_port=6030; hub_port=6022; identity_port=6025
+              comparendos_port=6023; core_comparendos_port=6028
+              # FLIT Suite (contrato §1): prefijo de ambiente de los hosts; vacío en PDN.
+              suite_env=
+              tramites_domain=tramites.flitsas.com
               internal_subnet=10.114.60.0/24
               ;;
             staging)
@@ -73,7 +94,10 @@ jobs:
               front_domain=qa.flitsas.online
               api_domain=api.qa.flitsas.online
               image_tag=qa
-              front_port=5001; gateway_port=5002; core_port=5003; python_port=5012; migracion_port=5030
+              front_port=5001; gateway_port=5002; core_port=5003; python_port=5012; migracion_port=5030; hub_port=5022; identity_port=5025
+              comparendos_port=5023; core_comparendos_port=5028
+              suite_env=qa
+              tramites_domain=qa.tramites.flitsas.online
               internal_subnet=10.114.50.0/24
               ;;
             develop)
@@ -82,10 +106,13 @@ jobs:
               front_domain=dev.flitsas.online
               api_domain=api.dev.flitsas.online
               image_tag=dev
-              front_port=4001; gateway_port=4002; core_port=4003; python_port=4012; migracion_port=4030
-              # 172.28.40.0/24 y 10.114.40.0/24 ya chocaron en el VPS (Pool overlaps).
-              # 10.114.41.0/24 es el CIDR vivo de flitdev tras hotfix login 502 (2026-09-18).
-              internal_subnet=10.114.41.0/24
+              front_port=4001; gateway_port=4002; core_port=4003; python_port=4012; migracion_port=4030; hub_port=4022; identity_port=4025
+              comparendos_port=4023; core_comparendos_port=4028
+              suite_env=dev
+              tramites_domain=dev.tramites.flitsas.online
+              # 172.28.40.0/24 (doc) ya estaba ocupado en el VPS compartido → Pool overlaps.
+              # CIDR 10.114.x/24: el rango 172.28.x/24 choca en el VPS compartido (Pool overlaps).
+              internal_subnet=10.114.40.0/24
               ;;
             *)
               echo "::error::Rama no soportada para deploy: ${{ github.ref_name }}"
@@ -112,6 +139,12 @@ jobs:
             echo "core_port=$core_port"
             echo "python_port=$python_port"
             echo "migracion_port=$migracion_port"
+            echo "hub_port=$hub_port"
+            echo "identity_port=$identity_port"
+            echo "comparendos_port=$comparendos_port"
+            echo "core_comparendos_port=$core_comparendos_port"
+            echo "suite_env=$suite_env"
+            echo "tramites_domain=$tramites_domain"
             echo "internal_subnet=$internal_subnet"
           } >> "$GITHUB_OUTPUT"
           echo "Ambiente: $env_name | front: $front_domain ($front_port) | api: $api_domain ($gateway_port) | build-tag: $image_tag | deploy-tag: $deploy_tag | subnet: $internal_subnet"
@@ -121,13 +154,16 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # PDN se despliega por DIGEST en flit-gitops (job deploy-pdn-gitops), no por tag.
+    # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
+    # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
     outputs:
-      digest: ${{ steps.build.outputs.digest }}
+      digest: ${{ steps.reuse.outputs.digest || steps.build.outputs.digest }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # para comparar contra el commit de la imagen vigente
 
       # El driver docker-container de Buildx baja moby/buildkit de Docker Hub al
       # arrancar y a veces da timeout (context deadline exceeded). La pre-descargamos
@@ -153,8 +189,37 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # HU #13329 (Epic #13316): si nada de lo que compila la imagen cambió, se reetiqueta la vigente en vez de
+      # reconstruirla (acción .github/actions/reuse-image, la misma lógica que nació aquí en la HU #13234).
+      - name: Reuse previous image when unchanged
+        id: reuse
+        uses: ./.github/actions/reuse-image
+        with:
+          image: ${{ env.CORE_API_IMAGE }}
+          tag: ${{ needs.setup.outputs.image_tag }}
+          paths: |
+            services/core-api
+            services/core-ict/Directory.Build.props
+            services/core-ict/Directory.Packages.props
+            services/core-ict/src/Flit.Ict.Grpc.Contracts
+            # Transición (hasta el corte, HU #13235): core-api todavía compila estos proyectos de identidad.
+            services/core-identity/Directory.Build.props
+            services/core-identity/Directory.Packages.props
+            services/core-identity/src/Flit.Identity.Application
+            services/core-identity/src/Flit.Identity.Web
+            services/core-identity/src/Flit.Platform.Grpc.Contracts
+            services/core-consultas/Directory.Build.props
+            services/core-consultas/Directory.Packages.props
+            services/core-consultas/src/Flit.Consultas.Grpc.Contracts
+            services/core-consultas/src/Flit.Consultas.Grpc.Mapping
+            services/core-notificaciones/Directory.Build.props
+            services/core-notificaciones/Directory.Packages.props
+            services/core-notificaciones/src/Flit.Notificaciones.Grpc.Contracts
+            contracts/proto
+
       - name: Extract metadata — core-api
         id: meta
+        if: steps.reuse.outputs.reused != 'true'
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.CORE_API_IMAGE }}
@@ -165,10 +230,14 @@ jobs:
 
       - name: Build and push core-api
         id: build
+        if: steps.reuse.outputs.reused != 'true'
         uses: docker/build-push-action@v6
         with:
           # Context = services/ para incluir Flit.Ict.Grpc.Contracts (ProjectReference desde core-api).
           context: ./services
+          # HU #13344: el contrato de core-consultas se genera desde contracts/proto (COPY --from=contracts).
+          build-contexts: |
+            contracts=./contracts/proto
           file: ./services/core-api/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
@@ -176,18 +245,376 @@ jobs:
           cache-from: type=gha,scope=core-api
           cache-to: type=gha,mode=max,scope=core-api
 
+  build-core-identity:
+    name: Build & push core-identity (.NET) image
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
+    # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
+    outputs:
+      digest: ${{ steps.reuse.outputs.digest || steps.build.outputs.digest }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # para comparar contra el commit de la imagen vigente
+
+      - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
+        run: |
+          for i in 1 2 3 4 5; do
+            docker pull moby/buildkit:buildx-stable-1 && exit 0
+            echo "Intento $i fallo; reintentando en 15s..."
+            sleep 15
+          done
+          echo "No se pudo descargar moby/buildkit tras 5 intentos"; exit 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=moby/buildkit:buildx-stable-1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # HU #13329 (Epic #13316): si nada de lo que compila la imagen cambió, se reetiqueta la vigente en vez de
+      # reconstruirla (acción .github/actions/reuse-image, la misma lógica que nació aquí en la HU #13234).
+      - name: Reuse previous image when unchanged
+        id: reuse
+        uses: ./.github/actions/reuse-image
+        with:
+          image: ${{ env.CORE_IDENTITY_IMAGE }}
+          tag: ${{ needs.setup.outputs.image_tag }}
+          paths: |
+            services/core-identity
+            services/core-api/global.json
+            services/core-api/Directory.Build.props
+            services/core-api/Directory.Packages.props
+            services/core-api/src/Flit.Api/appsettings.json
+            services/core-api/src/Flit.Api/appsettings.Development.json
+            services/core-api/src/Flit.Admin.Application
+            services/core-api/src/Flit.Admin.Domain
+            services/core-api/src/Flit.Identity.Infrastructure
+            services/core-api/src/Flit.Modules.Improntas.Domain
+            services/core-api/src/Flit.Modules.Notificaciones
+            services/core-api/src/Flit.Modules.Platform
+            services/core-api/src/Flit.Modules.Security.Application
+            services/core-api/src/Flit.Modules.Security.Domain
+            services/core-api/src/Flit.Platform.Sdk
+            services/core-api/src/Flit.Queries.Domain
+            services/core-api/src/Flit.Suite.AspNetCore
+            contracts/proto
+
+      - name: Extract metadata — core-identity
+        id: meta
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.CORE_IDENTITY_IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=long
+            type=raw,value=${{ needs.setup.outputs.image_tag }}
+            type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
+
+      - name: Build and push core-identity
+        id: build
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          # Context = services/: core-identity compila librerías compartidas de core-api (ver su Dockerfile).
+          context: ./services
+          # HU #13334: los contratos gRPC entran como contexto con nombre (COPY --from=contracts en el Dockerfile).
+          build-contexts: |
+            contracts=./contracts/proto
+          file: ./services/core-identity/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=core-identity
+          cache-to: type=gha,mode=max,scope=core-identity
+
+
+  # Epic #13316 (HU #13347): core-consultas (perfil «consultas»; ver docs/suite/servicio-nuevo.md).
+  build-core-consultas:
+    name: Build & push core-consultas (.NET) image
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
+    # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
+    outputs:
+      digest: ${{ steps.reuse.outputs.digest || steps.build.outputs.digest }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # para comparar contra el commit de la imagen vigente
+
+      - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
+        run: |
+          for i in 1 2 3 4 5; do
+            docker pull moby/buildkit:buildx-stable-1 && exit 0
+            echo "Intento $i fallo; reintentando en 15s..."
+            sleep 15
+          done
+          echo "No se pudo descargar moby/buildkit tras 5 intentos"; exit 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=moby/buildkit:buildx-stable-1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # HU #13329 (Epic #13316): si nada de lo que compila la imagen cambió, se reetiqueta la vigente en vez de
+      # reconstruirla (acción .github/actions/reuse-image, la misma lógica que nació aquí en la HU #13234).
+      - name: Reuse previous image when unchanged
+        id: reuse
+        uses: ./.github/actions/reuse-image
+        with:
+          image: ${{ env.CORE_CONSULTAS_IMAGE }}
+          tag: ${{ needs.setup.outputs.image_tag }}
+          paths: |
+            services/core-consultas
+            services/core-api/Directory.Build.props
+            services/core-api/Directory.Packages.props
+            services/core-api/src/Flit.Platform.Sdk
+            services/core-api/src/Flit.Modules.Consultas
+            services/core-api/src/Flit.Modules.Improntas.Domain
+            services/core-api/src/Flit.Queries.Domain
+            services/core-identity/Directory.Build.props
+            services/core-identity/Directory.Packages.props
+            services/core-identity/src/Flit.Platform.Grpc.Contracts
+            contracts/proto
+
+      - name: Extract metadata — core-consultas
+        id: meta
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.CORE_CONSULTAS_IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=long
+            type=raw,value=${{ needs.setup.outputs.image_tag }}
+            type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
+
+      - name: Build and push core-consultas
+        id: build
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          # Context = services/: compila el SDK y el módulo de consultas de core-api (ver su Dockerfile).
+          context: ./services
+          build-contexts: |
+            contracts=./contracts/proto
+          file: ./services/core-consultas/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=core-consultas
+          cache-to: type=gha,mode=max,scope=core-consultas
+
+
+  # Epic #12878 (GDC): core-comparendos (perfil «comparendos»; ver docs/suite/servicio-nuevo.md).
+  build-core-comparendos:
+    name: Build & push core-comparendos (.NET) image
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
+    # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
+    outputs:
+      digest: ${{ steps.reuse.outputs.digest || steps.build.outputs.digest }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # para comparar contra el commit de la imagen vigente
+
+      - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
+        run: |
+          for i in 1 2 3 4 5; do
+            docker pull moby/buildkit:buildx-stable-1 && exit 0
+            echo "Intento $i fallo; reintentando en 15s..."
+            sleep 15
+          done
+          echo "No se pudo descargar moby/buildkit tras 5 intentos"; exit 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=moby/buildkit:buildx-stable-1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # HU #13329 (Epic #13316): si nada de lo que compila la imagen cambió, se reetiqueta la vigente en vez de
+      # reconstruirla (acción .github/actions/reuse-image, la misma lógica que nació aquí en la HU #13234).
+      - name: Reuse previous image when unchanged
+        id: reuse
+        uses: ./.github/actions/reuse-image
+        with:
+          image: ${{ env.CORE_COMPARENDOS_IMAGE }}
+          tag: ${{ needs.setup.outputs.image_tag }}
+          paths: |
+            services/core-comparendos
+            services/core-api/Directory.Build.props
+            services/core-api/Directory.Packages.props
+            services/core-api/src/Flit.Platform.Sdk
+            services/core-api/src/Flit.Tramites.Grpc.Contracts
+            services/core-identity/Directory.Build.props
+            services/core-identity/Directory.Packages.props
+            services/core-identity/src/Flit.Platform.Grpc.Contracts
+            services/core-notificaciones/Directory.Build.props
+            services/core-notificaciones/Directory.Packages.props
+            services/core-notificaciones/src/Flit.Notificaciones.Grpc.Contracts
+            contracts/proto
+
+      - name: Extract metadata — core-comparendos
+        id: meta
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.CORE_COMPARENDOS_IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=long
+            type=raw,value=${{ needs.setup.outputs.image_tag }}
+            type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
+
+      - name: Build and push core-comparendos
+        id: build
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          # Context = services/: compila el SDK de plataforma y sus contratos (ver su Dockerfile).
+          context: ./services
+          build-contexts: |
+            contracts=./contracts/proto
+          file: ./services/core-comparendos/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=core-comparendos
+          cache-to: type=gha,mode=max,scope=core-comparendos
+
+
+  # Epic #13316 (HU #13353): core-notificaciones (perfil «notificaciones»; ver docs/suite/servicio-nuevo.md).
+  build-core-notificaciones:
+    name: Build & push core-notificaciones (.NET) image
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
+    # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
+    outputs:
+      digest: ${{ steps.reuse.outputs.digest || steps.build.outputs.digest }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # para comparar contra el commit de la imagen vigente
+
+      - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
+        run: |
+          for i in 1 2 3 4 5; do
+            docker pull moby/buildkit:buildx-stable-1 && exit 0
+            echo "Intento $i fallo; reintentando en 15s..."
+            sleep 15
+          done
+          echo "No se pudo descargar moby/buildkit tras 5 intentos"; exit 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=moby/buildkit:buildx-stable-1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # HU #13329 (Epic #13316): si nada de lo que compila la imagen cambió, se reetiqueta la vigente en vez de
+      # reconstruirla (acción .github/actions/reuse-image, la misma lógica que nació aquí en la HU #13234).
+      - name: Reuse previous image when unchanged
+        id: reuse
+        uses: ./.github/actions/reuse-image
+        with:
+          image: ${{ env.CORE_NOTIFICACIONES_IMAGE }}
+          tag: ${{ needs.setup.outputs.image_tag }}
+          paths: |
+            services/core-notificaciones
+            services/core-api/Directory.Build.props
+            services/core-api/Directory.Packages.props
+            services/core-api/src/Flit.Platform.Sdk
+            services/core-api/src/Flit.Modules.Notificaciones
+            services/core-api/src/Flit.Modules.Security.Domain
+            services/core-identity/Directory.Build.props
+            services/core-identity/Directory.Packages.props
+            services/core-identity/src/Flit.Platform.Grpc.Contracts
+            contracts/proto
+
+      - name: Extract metadata — core-notificaciones
+        id: meta
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.CORE_NOTIFICACIONES_IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=long
+            type=raw,value=${{ needs.setup.outputs.image_tag }}
+            type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
+
+      - name: Build and push core-notificaciones
+        id: build
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          # Context = services/: compila el SDK y el módulo de transportes de correo de core-api (ver su Dockerfile).
+          context: ./services
+          build-contexts: |
+            contracts=./contracts/proto
+          file: ./services/core-notificaciones/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=core-notificaciones
+          cache-to: type=gha,mode=max,scope=core-notificaciones
+
 
   build-frontend:
     name: Build & push frontend image
     needs: setup
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
+    # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
     outputs:
-      digest: ${{ steps.build.outputs.digest }}
+      digest: ${{ steps.reuse.outputs.digest || steps.build.outputs.digest }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # reuse-image compara contra el commit de la imagen vigente
 
       # El driver docker-container de Buildx baja moby/buildkit de Docker Hub al
       # arrancar y a veces da timeout (context deadline exceeded). La pre-descargamos
@@ -213,8 +640,28 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # HU #13329 (Epic #13316): si nada de lo que compila la imagen cambió, se reetiqueta la vigente en vez de
+      # reconstruirla (acción .github/actions/reuse-image, la misma lógica que nació aquí en la HU #13234).
+      - name: Reuse previous image when unchanged
+        id: reuse
+        uses: ./.github/actions/reuse-image
+        with:
+          image: ${{ env.FRONTEND_IMAGE }}
+          tag: ${{ needs.setup.outputs.image_tag }}
+          paths: |
+            frontend
+            packages
+            package.json
+            pnpm-lock.yaml
+            pnpm-workspace.yaml
+            .npmrc
+            .nvmrc
+            # Los build-args del frontend (dominios del API, hosts FLIT) viven en este workflow.
+            .github/workflows/cd.yml
+
       - name: Extract metadata — frontend
         id: meta
+        if: steps.reuse.outputs.reused != 'true'
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.FRONTEND_IMAGE }}
@@ -225,6 +672,7 @@ jobs:
 
       - name: Build and push frontend
         id: build
+        if: steps.reuse.outputs.reused != 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -242,21 +690,196 @@ jobs:
             # Marca Blanca (HU #12419, delta-hechos-post-adr.md #25) — hosts que se consideran
             # FLIT (sin marca de red). No hay salida de dominio de frontend en `needs.setup`,
             # así que se usa el respaldo de dominios propios de la plataforma.
-            NEXT_PUBLIC_FLIT_HOSTS=flitsas.online,*.flitsas.online,flitsas.com,*.flitsas.com
+            # Las entradas con "!" (HU #12761) excluyen los hosts de prueba de marca blanca, que
+            # viven bajo *.flitsas.online pero deben tratarse como dominios de red. Se hornean los
+            # tres a la vez porque este workflow construye una imagen por ambiente y cada ambiente
+            # solo sirve su propio host: las negaciones de los otros dos son inertes.
+            # El dominio raíz (flitsas.online / flitsas.com) va explícito: en PDN el frontend se
+            # sirve en la raíz y debe ser host FLIT (arreglo 5ae9578f, traído de release).
+            NEXT_PUBLIC_FLIT_HOSTS=flitsas.online,*.flitsas.online,flitsas.com,*.flitsas.com,!marcablancadev.flitsas.online,!marcablancaqa.flitsas.online,!marcablancapdn.flitsas.online,!tramites.marcablancadev.flitsas.online,!tramites.marcablancaqa.flitsas.online,!tramites.marcablancapdn.flitsas.online,!marcablancadag1.flitsas.online,!tramites.marcablancadag1.flitsas.online
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
+
+  # FLIT Suite (B-09) — hub. Sin build-args: la misma imagen sirve a los tres ambientes y lee su
+  # configuración en runtime. En los servidores no arranca hasta encender el perfil `suite` del compose.
+  build-frontend-hub:
+    name: Build & push frontend-hub image
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
+    # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
+    outputs:
+      digest: ${{ steps.reuse.outputs.digest || steps.build.outputs.digest }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # reuse-image compara contra el commit de la imagen vigente
+
+      - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
+        run: |
+          for i in 1 2 3 4 5; do
+            docker pull moby/buildkit:buildx-stable-1 && exit 0
+            echo "Intento $i fallo; reintentando en 15s..."
+            sleep 15
+          done
+          echo "No se pudo descargar moby/buildkit tras 5 intentos"; exit 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=moby/buildkit:buildx-stable-1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # HU #13329 (Epic #13316): si nada de lo que compila la imagen cambió, se reetiqueta la vigente en vez de
+      # reconstruirla (acción .github/actions/reuse-image, la misma lógica que nació aquí en la HU #13234).
+      - name: Reuse previous image when unchanged
+        id: reuse
+        uses: ./.github/actions/reuse-image
+        with:
+          image: ${{ env.FRONTEND_HUB_IMAGE }}
+          tag: ${{ needs.setup.outputs.image_tag }}
+          paths: |
+            frontend-hub
+            packages/ui
+            packages/brand
+            packages/auth
+            packages/shell
+            package.json
+            pnpm-lock.yaml
+            pnpm-workspace.yaml
+            .npmrc
+            .nvmrc
+
+      - name: Extract metadata — frontend-hub
+        id: meta
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.FRONTEND_HUB_IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=long
+            type=raw,value=${{ needs.setup.outputs.image_tag }}
+            type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
+
+      - name: Build and push frontend-hub
+        id: build
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./frontend-hub/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=frontend-hub
+          cache-to: type=gha,mode=max,scope=frontend-hub
+
+  # Epic #12878 (GDC): app web de Comparendos (misma receta que el hub: config en runtime, sin build-args).
+  build-frontend-comparendos:
+    name: Build & push frontend-comparendos image
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
+    # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
+    outputs:
+      digest: ${{ steps.reuse.outputs.digest || steps.build.outputs.digest }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # reuse-image compara contra el commit de la imagen vigente
+
+      - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
+        run: |
+          for i in 1 2 3 4 5; do
+            docker pull moby/buildkit:buildx-stable-1 && exit 0
+            echo "Intento $i fallo; reintentando en 15s..."
+            sleep 15
+          done
+          echo "No se pudo descargar moby/buildkit tras 5 intentos"; exit 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: image=moby/buildkit:buildx-stable-1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # HU #13329 (Epic #13316): si nada de lo que compila la imagen cambió, se reetiqueta la vigente en vez de
+      # reconstruirla (acción .github/actions/reuse-image, la misma lógica que nació aquí en la HU #13234).
+      - name: Reuse previous image when unchanged
+        id: reuse
+        uses: ./.github/actions/reuse-image
+        with:
+          image: ${{ env.FRONTEND_COMPARENDOS_IMAGE }}
+          tag: ${{ needs.setup.outputs.image_tag }}
+          paths: |
+            frontend-comparendos
+            packages/ui
+            packages/brand
+            packages/auth
+            packages/shell
+            package.json
+            pnpm-lock.yaml
+            pnpm-workspace.yaml
+            .npmrc
+            .nvmrc
+
+      - name: Extract metadata — frontend-comparendos
+        id: meta
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.FRONTEND_COMPARENDOS_IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=long
+            type=raw,value=${{ needs.setup.outputs.image_tag }}
+            type=raw,value=latest,enable=${{ github.ref_name == 'release' }}
+
+      - name: Build and push frontend-comparendos
+        id: build
+        if: steps.reuse.outputs.reused != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./frontend-comparendos/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=frontend-comparendos
+          cache-to: type=gha,mode=max,scope=frontend-comparendos
 
   build-python-ml:
     name: Build & push python-ml image
     needs: setup
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
+    # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
     outputs:
-      digest: ${{ steps.build.outputs.digest }}
+      digest: ${{ steps.reuse.outputs.digest || steps.build.outputs.digest }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # reuse-image compara contra el commit de la imagen vigente
 
       # El driver docker-container de Buildx baja moby/buildkit de Docker Hub al
       # arrancar y a veces da timeout (context deadline exceeded). La pre-descargamos
@@ -282,8 +905,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # HU #13329 (Epic #13316): si nada de lo que compila la imagen cambió, se reetiqueta la vigente en vez de
+      # reconstruirla (acción .github/actions/reuse-image, la misma lógica que nació aquí en la HU #13234).
+      - name: Reuse previous image when unchanged
+        id: reuse
+        uses: ./.github/actions/reuse-image
+        with:
+          image: ${{ env.PYTHON_ML_IMAGE }}
+          tag: ${{ needs.setup.outputs.image_tag }}
+          paths: |
+            services/python-ml
+
       - name: Extract metadata — python-ml
         id: meta
+        if: steps.reuse.outputs.reused != 'true'
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.PYTHON_ML_IMAGE }}
@@ -294,6 +929,7 @@ jobs:
 
       - name: Build and push python-ml
         id: build
+        if: steps.reuse.outputs.reused != 'true'
         uses: docker/build-push-action@v6
         with:
           context: ./services/python-ml
@@ -309,12 +945,16 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
+    # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
     outputs:
-      digest: ${{ steps.build.outputs.digest }}
+      digest: ${{ steps.reuse.outputs.digest || steps.build.outputs.digest }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # reuse-image compara contra el commit de la imagen vigente
 
       - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
         run: |
@@ -337,8 +977,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # HU #13329 (Epic #13316): si nada de lo que compila la imagen cambió, se reetiqueta la vigente en vez de
+      # reconstruirla (acción .github/actions/reuse-image, la misma lógica que nació aquí en la HU #13234).
+      - name: Reuse previous image when unchanged
+        id: reuse
+        uses: ./.github/actions/reuse-image
+        with:
+          image: ${{ env.CORE_ICT_IMAGE }}
+          tag: ${{ needs.setup.outputs.image_tag }}
+          paths: |
+            services/core-ict
+            contracts/proto
+
       - name: Extract metadata — core-ict
         id: meta
+        if: steps.reuse.outputs.reused != 'true'
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.CORE_ICT_IMAGE }}
@@ -349,9 +1002,13 @@ jobs:
 
       - name: Build and push core-ict
         id: build
+        if: steps.reuse.outputs.reused != 'true'
         uses: docker/build-push-action@v6
         with:
           context: ./services/core-ict
+          # HU #13346: cliente de core-consultas generado desde contracts/proto (COPY --from=contracts).
+          build-contexts: |
+            contracts=./contracts/proto
           file: ./services/core-ict/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
@@ -359,218 +1016,59 @@ jobs:
           cache-from: type=gha,scope=core-ict
           cache-to: type=gha,mode=max,scope=core-ict
 
-  # DEV y QA siguen en docker compose en la 177. PDN NO: desde el 2026-10-11 vive en el k3s
-  # de la 169 y se despliega con deploy-pdn-gitops (abajo). Si este job corriera en release,
-  # levantaria otra vez el stack viejo de /opt/flitpdn en la 177 (su base quedo con
-  # ALLOW_CONNECTIONS false justo para que eso no pueda duplicar correos ni webhooks).
-  deploy-to-vps:
-    name: Deploy to VPS (${{ needs.setup.outputs.env_name }})
-    if: github.ref_name != 'release'
-    needs: [setup, build-core-api, build-core-ict, build-frontend, build-python-ml]
-    runs-on: ubuntu-latest
-    # Incluye margen para reintentos SCP + pausa UFW (hasta ~4×45s + 120s dial).
-    timeout-minutes: 15
-    # GitHub Environment por ambiente: cada uno (dev/qa/pdn) tiene SUS PROPIOS secrets
-    # (HOSTINGER_SSH_*, HOSTINGER_DEPLOY_PATH, GHCR_PAT). Asi un mismo workflow despliega
-    # al VPS correcto segun la rama.
-    environment:
-      name: ${{ needs.setup.outputs.gh_env }}
-      url: https://${{ needs.setup.outputs.front_domain }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      # SCP nativo (OpenSSH) + reintentos en shell.
-      # Historial: wretry + appleboy/scp-action (Docker) falló por (1) PEM multilínea
-      # dentro del YAML anidado, (2) key_path fuera del mount del contenedor, (3)
-      # timeouts SSH. El último CD verde usaba `key:` como input nativo; aquí
-      # replicamos ese modelo sin Docker y con espera > ventana UFW `limit ssh`.
-      - name: Copy compose file to VPS
-        env:
-          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
-          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
-          SSH_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
-          DEPLOY_PATH: ${{ secrets.HOSTINGER_DEPLOY_PATH }}
-        run: |
-          set -euo pipefail
-          KEY_FILE="${RUNNER_TEMP}/hostinger_deploy_key"
-          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$KEY_FILE"
-          chmod 600 "$KEY_FILE"
-          cleanup() { rm -f "$KEY_FILE"; }
-          trap cleanup EXIT
-
-          SSH_OPTS=(
-            -o IdentitiesOnly=yes
-            -o StrictHostKeyChecking=accept-new
-            -o ConnectTimeout=30
-            -o ServerAliveInterval=15
-            -o ServerAliveCountMax=3
-            -i "$KEY_FILE"
-            -P 22
-          )
-
-          for i in 1 2 3 4; do
-            echo "SCP attempt ${i}/4 → ${SSH_USER}@${SSH_HOST}:${DEPLOY_PATH}/"
-            if scp "${SSH_OPTS[@]}" \
-                docker-compose.prod.yml \
-                "${SSH_USER}@${SSH_HOST}:${DEPLOY_PATH}/"; then
-              echo "SCP OK"
-              exit 0
-            fi
-            echo "SCP attempt ${i} failed (posible UFW limit ssh). Esperando 45s..."
-            sleep 45
-          done
-          echo "::error::SCP falló tras 4 intentos hacia ${SSH_HOST}"
-          exit 1
-
-      # Pausa breve para no encadenar el SSH de deploy dentro de la ventana UFW.
-      - name: Wait before SSH deploy (UFW rate limit)
-        run: sleep 35
-
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.HOSTINGER_SSH_HOST }}
-          username: ${{ secrets.HOSTINGER_SSH_USER }}
-          key: ${{ secrets.HOSTINGER_SSH_KEY }}
-          port: 22
-          timeout: 120s
-          script: |
-            set -eo pipefail
-            DEPLOY_PATH="${{ secrets.HOSTINGER_DEPLOY_PATH }}"
-            cd "$DEPLOY_PATH"
-
-            if [ ! -f docker-compose.prod.yml ]; then
-              echo "::error::docker-compose.prod.yml no encontrado en $DEPLOY_PATH"
-              ls -la "$DEPLOY_PATH" || true
-              exit 1
-            fi
-
-            # Carpeta de intercambio del migrador V1->V2 (perfil `migracion`): por aqui
-            # entran los archivos de ids y salen los reportes. Se crea aqui, con el
-            # usuario del deploy, y no se deja que la cree Docker al montar el bind:
-            # Docker la crearia como root y quien entre por SSH no podria escribir
-            # dentro, con un "permission denied" que no dice de donde viene.
-            mkdir -p migracion
-
-            # Tag + puertos segun ambiente (override del .env del VPS).
-            # deploy_tag: sha-<commit> inmutable en PDN; tag movil (dev/qa) en DEV/QA.
-            export CORE_API_TAG=${{ needs.setup.outputs.deploy_tag }}
-            export CORE_ICT_TAG=${{ needs.setup.outputs.deploy_tag }}
-            export FRONTEND_TAG=${{ needs.setup.outputs.deploy_tag }}
-            export PYTHON_ML_TAG=${{ needs.setup.outputs.deploy_tag }}
-            export FRONTEND_PORT=${{ needs.setup.outputs.front_port }}
-            export GATEWAY_PORT=${{ needs.setup.outputs.gateway_port }}
-            export CORE_API_PORT=${{ needs.setup.outputs.core_port }}
-            export PYTHON_ML_PORT=${{ needs.setup.outputs.python_port }}
-            export MIGRACION_API_PORT=${{ needs.setup.outputs.migracion_port }}
-            # Marca Blanca (#12421): CIDR de la red Docker de ESTE stack (distinto por ambiente).
-            export FLIT_INTERNAL_SUBNET=${{ needs.setup.outputs.internal_subnet }}
-            # host-gateway de Docker apunta a docker0 (172.17.0.1). En este VPS docker0
-            # esta DOWN y UFW solo permite 5432 desde bridges 172.16/12, 192.168/16 y
-            # 10.114.x — Host=host.docker.internal deja core-api en restart loop (login 502).
-            # Forzamos el .1 del CIDR del stack como gateway al Postgres host.
-            export FLIT_HOST_GATEWAY=$(echo "$FLIT_INTERNAL_SUBNET" | awk -F'[./]' '{print $1"."$2"."$3".1"}')
-            if [ -f .env ]; then
-              grep -q '^FLIT_INTERNAL_SUBNET=' .env \
-                && sed -i "s|^FLIT_INTERNAL_SUBNET=.*|FLIT_INTERNAL_SUBNET=${FLIT_INTERNAL_SUBNET}|" .env \
-                || echo "FLIT_INTERNAL_SUBNET=${FLIT_INTERNAL_SUBNET}" >> .env
-              grep -q '^FLIT_HOST_GATEWAY=' .env \
-                && sed -i "s|^FLIT_HOST_GATEWAY=.*|FLIT_HOST_GATEWAY=${FLIT_HOST_GATEWAY}|" .env \
-                || echo "FLIT_HOST_GATEWAY=${FLIT_HOST_GATEWAY}" >> .env
-              sed -i -E "s/Host=host\\.docker\\.internal/Host=${FLIT_HOST_GATEWAY}/g; s/Host=[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+/Host=${FLIT_HOST_GATEWAY}/g" .env
-            fi
-
-            # Recrear la red del proyecto si el compose ahora fija IPAM (evita quedar
-            # con un bridge viejo sin subnet / conflicto al "Creating" de nuevo).
-            docker compose -f docker-compose.prod.yml down --remove-orphans || true
-
-            # GHCR login: el usuario DEBE ser el dueño del PAT (GHCR_USERNAME), NO github.actor.
-            # Si el merge lo hace otro usuario, login con github.actor falla en ~10s (exit 1).
-            GHCR_USER="${{ secrets.GHCR_USERNAME }}"
-            if [ -z "$GHCR_USER" ]; then
-              GHCR_USER="${{ vars.GHCR_USERNAME }}"
-            fi
-            if [ -z "$GHCR_USER" ]; then
-              # Fallback histórico: PAT del equipo asociado a deploys exitosos previos.
-              GHCR_USER="jormancopeteflit"
-              echo "::warning::GHCR_USERNAME no configurado; usando fallback $GHCR_USER. Configura secret GHCR_USERNAME en el repo."
-            fi
-            if ! echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u "$GHCR_USER" --password-stdin; then
-              echo "::error::docker login ghcr.io falló para usuario $GHCR_USER"
-              exit 1
-            fi
-
-            # Pull latest images and restart services
-            docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
-
-            # Remove dangling images to free space
-            docker image prune -f
-
-            # Health check: hit the container directly (bypass host nginx)
-            echo "Waiting for application to start..."
-            sleep 15
-            ok=0
-            for i in 1 2 3 4 5 6; do
-              # Front + API publica del gateway (puertos del ambiente) deben responder.
-              # /ready del gateway exige core-api reachable (evita false-green con /health solo).
-              if curl -fsS http://127.0.0.1:${{ needs.setup.outputs.front_port }}/ > /dev/null \
-                 && curl -fsS http://127.0.0.1:${{ needs.setup.outputs.gateway_port }}/ready > /dev/null; then
-                echo "Health check OK (attempt $i)"
-                ok=1
-                break
-              fi
-              echo "Attempt $i failed, retrying in 5s..."
-              sleep 5
-            done
-            if [ "$ok" -ne 1 ]; then
-              echo "Health check FAILED"
-              docker compose -f docker-compose.prod.yml ps
-              docker compose -f docker-compose.prod.yml logs --tail=100
-              exit 1
-            fi
-            echo "Deploy OK."
-
-      - name: Notify success
-        if: success()
-        run: echo "Deploy a ${{ needs.setup.outputs.env_name }} (https://${{ needs.setup.outputs.front_domain }}) exitoso."
-
-      - name: Notify failure
-        if: failure()
-        run: |
-          echo "Deploy a ${{ needs.setup.outputs.env_name }} FALLIDO. Revisa los logs arriba."
-          echo "Rollback manual: ssh al VPS y ejecuta:"
-          echo "  cd <deploy-path> && docker compose down && docker compose up -d"
-
-  # ── PDN: GitOps (k3s de la 169 + ArgoCD) ─────────────────────────────────────
-  # Mismo patron que los servicios del legado (flit-ci/service-ci.yml): este job NO toca
-  # ningun servidor. Escribe los digests recien publicados en
-  # flit-gitops/services/flit2-pdn/kustomization.yaml y ArgoCD los aplica en la 169
-  # (Application flit2-pdn, solo en ese cluster).
+  # ── DEV, QA y PDN: GitOps (Argo CD) ──────────────────────────────────────────
+  # Ningun ambiente se despliega ya por SSH (el antiguo deploy-to-vps se retiro al nivelar
+  # release con staging, #658): este job NO toca ningun servidor. Escribe los digests recien
+  # publicados en flit-gitops/services/flit2-<dev|qa|pdn>/kustomization.yaml y Argo CD los aplica:
+  #   develop -> flit2-dev  (k3s de la 177, root-vps-177)
+  #   staging -> flit2-qa   (k3s de la 177, root-vps-177)
+  #   release -> flit2-pdn  (k3s de la 169, root-vps-169; antes era el job deploy-pdn-gitops, #587)
+  # El ambiente sale de setup.env_name; el Environment de GitHub (develop/staging/production)
+  # aporta su GITOPS_TOKEN y, en production, sus reglas de proteccion.
   #
-  # Por digest y no por tag: el tag `pdn`/`latest` se mueve, el digest no, y asi git dice
-  # exactamente que corre en produccion. Rollback = revertir ese commit en flit-gitops.
+  # Por digest y no por tag: el tag `dev`/`qa`/`pdn` se mueve, el digest no, y asi git dice que
+  # corre en el ambiente. Rollback = revertir ese commit en flit-gitops.
   #
-  # OJO: la CONFIGURACION de PDN ya no sale de docker-compose.prod.yml ni del .env de la
-  # 177. Vive en flit-gitops/services/flit2-pdn/ (configmaps.yaml + sealed-secrets.yaml).
-  # Una variable nueva en el compose NO llega a PDN sola: hay que agregarla alla.
-  deploy-pdn-gitops:
-    name: Deploy PDN (GitOps → k3s 169)
-    if: github.ref_name == 'release'
-    needs: [setup, build-core-api, build-core-ict, build-frontend, build-python-ml]
+  # Si el build de una imagen falla, su digest no se toca (ese servicio conserva su version)
+  # y el job termina en rojo.
+  #
+  # OJO: la CONFIGURACION de los tres ambientes ya no sale de docker-compose.prod.yml ni de un
+  # .env. Vive en flit-gitops/services/flit2-<ambiente>/ (configmaps.yaml + sealed-secrets.yaml).
+  # Una variable nueva en el compose NO llega sola: hay que agregarla alla, en cada ambiente.
+  deploy-gitops:
+    name: Deploy ${{ needs.setup.outputs.env_name }} (GitOps → Argo CD)
+    needs: [setup, build-core-api, build-core-identity, build-core-consultas, build-core-notificaciones, build-core-comparendos, build-core-ict, build-frontend, build-frontend-hub, build-frontend-comparendos, build-python-ml]
+    if: ${{ !cancelled() && needs.setup.result == 'success' && (github.ref_name == 'develop' || github.ref_name == 'staging' || github.ref_name == 'release') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # Mantiene las reglas de proteccion del Environment de produccion.
     environment:
-      name: production
-      url: https://app.flitsas.com
+      # develop / staging / production: cada Environment tiene su GITOPS_TOKEN.
+      name: ${{ needs.setup.outputs.gh_env }}
+      url: https://${{ needs.setup.outputs.front_domain }}
     env:
-      CORE_API_DIGEST: ${{ needs.build-core-api.outputs.digest }}
-      CORE_ICT_DIGEST: ${{ needs.build-core-ict.outputs.digest }}
-      FRONTEND_DIGEST: ${{ needs.build-frontend.outputs.digest }}
-      PYTHON_ML_DIGEST: ${{ needs.build-python-ml.outputs.digest }}
+      AMBIENTE: ${{ needs.setup.outputs.env_name }}
+      FRONT_DOMAIN: ${{ needs.setup.outputs.front_domain }}
+      API_DOMAIN: ${{ needs.setup.outputs.api_domain }}
+      R_CORE_API: ${{ needs.build-core-api.result }}
+      D_CORE_API: ${{ needs.build-core-api.outputs.digest }}
+      R_CORE_IDENTITY: ${{ needs.build-core-identity.result }}
+      D_CORE_IDENTITY: ${{ needs.build-core-identity.outputs.digest }}
+      R_CORE_CONSULTAS: ${{ needs.build-core-consultas.result }}
+      D_CORE_CONSULTAS: ${{ needs.build-core-consultas.outputs.digest }}
+      R_CORE_NOTIFICACIONES: ${{ needs.build-core-notificaciones.result }}
+      D_CORE_NOTIFICACIONES: ${{ needs.build-core-notificaciones.outputs.digest }}
+      R_CORE_COMPARENDOS: ${{ needs.build-core-comparendos.result }}
+      D_CORE_COMPARENDOS: ${{ needs.build-core-comparendos.outputs.digest }}
+      R_CORE_ICT: ${{ needs.build-core-ict.result }}
+      D_CORE_ICT: ${{ needs.build-core-ict.outputs.digest }}
+      R_FRONTEND: ${{ needs.build-frontend.result }}
+      D_FRONTEND: ${{ needs.build-frontend.outputs.digest }}
+      R_FRONTEND_HUB: ${{ needs.build-frontend-hub.result }}
+      D_FRONTEND_HUB: ${{ needs.build-frontend-hub.outputs.digest }}
+      R_FRONTEND_COMPARENDOS: ${{ needs.build-frontend-comparendos.result }}
+      D_FRONTEND_COMPARENDOS: ${{ needs.build-frontend-comparendos.outputs.digest }}
+      R_PYTHON_ML: ${{ needs.build-python-ml.result }}
+      D_PYTHON_ML: ${{ needs.build-python-ml.outputs.digest }}
     steps:
       - name: Checkout (para comparar el compose)
         uses: actions/checkout@v4
@@ -578,7 +1076,7 @@ jobs:
           fetch-depth: 0
 
       # Aviso, no bloqueo: si este push cambio docker-compose.prod.yml, lo mas probable es que
-      # traiga una variable de entorno nueva que en PDN hay que replicar a mano en flit-gitops.
+      # traiga una variable de entorno nueva que hay que replicar a mano en flit-gitops.
       - name: Avisar si cambio docker-compose.prod.yml
         env:
           BEFORE: ${{ github.event.before }}
@@ -589,20 +1087,9 @@ jobs:
             exit 0
           fi
           if ! git diff --quiet "$BEFORE" "$GITHUB_SHA" -- docker-compose.prod.yml; then
-            echo "::warning title=Revisar config de PDN::docker-compose.prod.yml cambio en este despliegue. PDN ya no lo usa: si hay variables nuevas o distintas, replicalas en flit-gitops/services/flit2-pdn/configmaps.yaml (o sealed-secrets.yaml si son secretas)."
+            echo "::warning title=Revisar config de ${AMBIENTE^^}::docker-compose.prod.yml cambio en este despliegue. ${AMBIENTE^^} ya no lo usa: si hay variables nuevas o distintas, replicalas en flit-gitops/services/flit2-${AMBIENTE}/configmaps.yaml (o sealed-secrets.yaml si son secretas)."
             git diff "$BEFORE" "$GITHUB_SHA" -- docker-compose.prod.yml | grep -E '^[+-][^+-]' | head -60 || true
           fi
-
-      - name: Validar digests
-        run: |
-          for v in CORE_API_DIGEST CORE_ICT_DIGEST FRONTEND_DIGEST PYTHON_ML_DIGEST; do
-            d="${!v}"
-            if [[ ! "$d" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-              echo "::error::$v no es un digest valido: '$d'"
-              exit 1
-            fi
-            echo "$v=$d"
-          done
 
       - name: Actualizar digests en flit-gitops
         env:
@@ -611,51 +1098,72 @@ jobs:
           set -euo pipefail
           git clone --depth 1 "https://x-access-token:${GITOPS_TOKEN}@github.com/${{ github.repository_owner }}/flit-gitops.git" gitops
           cd gitops
-          K=services/flit2-pdn/kustomization.yaml
-          set_digest() {
+          K="services/flit2-${AMBIENTE}/kustomization.yaml"
+          FAILED=""
+          MSG=""
+          # servicio:imagen:variable (R_<variable> = resultado del build, D_<variable> = digest)
+          for entry in \
+              "core-api:${{ env.CORE_API_IMAGE }}:CORE_API" \
+              "core-identity:${{ env.CORE_IDENTITY_IMAGE }}:CORE_IDENTITY" \
+              "core-consultas:${{ env.CORE_CONSULTAS_IMAGE }}:CORE_CONSULTAS" \
+              "core-notificaciones:${{ env.CORE_NOTIFICACIONES_IMAGE }}:CORE_NOTIFICACIONES" \
+              "core-comparendos:${{ env.CORE_COMPARENDOS_IMAGE }}:CORE_COMPARENDOS" \
+              "core-ict:${{ env.CORE_ICT_IMAGE }}:CORE_ICT" \
+              "frontend:${{ env.FRONTEND_IMAGE }}:FRONTEND" \
+              "frontend-hub:${{ env.FRONTEND_HUB_IMAGE }}:FRONTEND_HUB" \
+              "frontend-comparendos:${{ env.FRONTEND_COMPARENDOS_IMAGE }}:FRONTEND_COMPARENDOS" \
+              "python-ml:${{ env.PYTHON_ML_IMAGE }}:PYTHON_ML"; do
+            svc=${entry%%:*}; rest=${entry#*:}; img=${rest%:*}; var=${rest##*:}
+            r="R_$var"; d="D_$var"
+            if [ "${!r}" != "success" ] || [[ ! "${!d}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::warning::$svc: build '${!r}' sin digest valido; conserva la version que corre"
+              FAILED="$FAILED $svc"
+              continue
+            fi
             # Falla si la imagen no esta en la kustomization (evita un despliegue a medias).
-            yq -e "(.images[] | select(.name == \"$1\"))" "$K" > /dev/null
-            yq -i "(.images[] | select(.name == \"$1\")).digest = \"$2\"" "$K"
-            yq -i "del((.images[] | select(.name == \"$1\")).newTag)" "$K"
-          }
-          # gateway y migracion-api usan la imagen de core-api con otro entrypoint.
-          set_digest "${{ env.CORE_API_IMAGE }}"  "$CORE_API_DIGEST"
-          set_digest "${{ env.CORE_ICT_IMAGE }}"  "$CORE_ICT_DIGEST"
-          set_digest "${{ env.FRONTEND_IMAGE }}"  "$FRONTEND_DIGEST"
-          set_digest "${{ env.PYTHON_ML_IMAGE }}" "$PYTHON_ML_DIGEST"
+            yq -e "(.images[] | select(.name == \"$img\"))" "$K" > /dev/null
+            yq -i "(.images[] | select(.name == \"$img\")).digest = \"${!d}\"" "$K"
+            yq -i "del((.images[] | select(.name == \"$img\")).newTag)" "$K"
+            MSG="$MSG"$'\n'"$svc ${!d}"
+          done
           git diff --stat
           git config user.name "flit-ci"
           git config user.email "ci@flitsas.com"
           git add "$K"
           if git diff --cached --quiet; then
             echo "Los digests ya eran estos: nada que desplegar."
-            exit 0
+          else
+            git commit -m "flit2-${AMBIENTE}: despliegue ${GITHUB_SHA::7} (flitsas/flit ${GITHUB_REF_NAME})" -m "${MSG#$'\n'}"
+            pushed=0
+            for i in 1 2 3; do
+              if git push; then pushed=1; break; fi
+              echo "Push rechazado (intento $i); rebase y reintento..."
+              git pull --rebase
+            done
+            if [ "$pushed" -ne 1 ]; then
+              echo "::error::No se pudo empujar a flit-gitops tras 3 intentos"
+              exit 1
+            fi
           fi
-          git commit -m "flit2-pdn: despliegue ${GITHUB_SHA::7} (flitsas/flit release)" \
-                     -m "core-api ${CORE_API_DIGEST}" -m "core-ict ${CORE_ICT_DIGEST}" \
-                     -m "frontend ${FRONTEND_DIGEST}" -m "python-ml ${PYTHON_ML_DIGEST}"
-          for i in 1 2 3; do
-            git push && exit 0
-            echo "Push rechazado (intento $i); rebase y reintento..."
-            git pull --rebase
-          done
-          echo "::error::No se pudo empujar a flit-gitops tras 3 intentos"
-          exit 1
+          if [ -n "$FAILED" ]; then
+            echo "::error::Despliegue parcial: fallaron los builds de$FAILED; esos servicios conservan su version anterior."
+            exit 1
+          fi
 
-      # ArgoCD sondea el repo cada ~3 min y core-api/core-ict van con Recreate (corte de
-      # segundos). Esto comprueba que PDN SIGUE SANO tras el despliegue; no prueba que ya
-      # corra la version nueva (eso se ve en ArgoCD: revision de flit2-pdn).
-      - name: Comprobar que PDN responde
+      # Argo CD sondea el repo cada ~3 min. Esto comprueba que el ambiente SIGUE SANO tras el
+      # despliegue; la revision que corre se ve en Argo CD (Application flit2-<ambiente>: dev/qa en
+      # la 177, pdn en la 169).
+      - name: Comprobar que el ambiente responde
         run: |
-          sleep 240
+          sleep 180
           for i in $(seq 1 30); do
-            if curl -fsS --max-time 10 https://api.flitsas.online/ready > /dev/null \
-               && curl -fsS --max-time 10 -o /dev/null https://app.flitsas.com/; then
-              echo "PDN responde (intento $i)."
+            if curl -fsS --max-time 10 -o /dev/null "https://${API_DOMAIN}/health" \
+               && curl -fsS --max-time 10 -o /dev/null "https://${FRONT_DOMAIN}/"; then
+              echo "${AMBIENTE^^} responde (intento $i)."
               exit 0
             fi
             echo "Intento $i: aun no responde; reintento en 15 s"
             sleep 15
           done
-          echo "::error::PDN no responde 11 min despues del despliegue. Revisar ArgoCD (flit2-pdn) en la 169; rollback = revertir el commit de flit-gitops."
+          echo "::error::${AMBIENTE^^} no responde 10 min despues del despliegue. Revisar Argo CD (flit2-${AMBIENTE}; dev/qa en la 177, pdn en la 169); rollback = revertir el commit de flit-gitops."
           exit 1
