@@ -110,8 +110,8 @@ describe('RevocationRequestsTable', () => {
       />,
     );
 
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Filas por página' }), '25');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Filas por página' }), '20');
 
-    expect(onTakeChange).toHaveBeenCalledWith(25);
+    expect(onTakeChange).toHaveBeenCalledWith(20);
   });
 });

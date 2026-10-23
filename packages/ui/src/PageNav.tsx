@@ -24,6 +24,14 @@ export interface PageNavProps {
   className?: string;
 }
 
+/** Botones de desplazamiento (« ‹ › »): mismo tamaño que los números, apagados en el extremo. */
+const BOTON_FLECHA_CLS =
+  'grid h-7 min-w-7 place-items-center rounded-lg px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:cursor-not-allowed disabled:opacity-40';
+const ESTILO_FLECHA = {
+  color: 'var(--color-flit-brand)',
+  background: 'color-mix(in srgb, var(--color-flit-brand) 8%, transparent)',
+} as const;
+
 export function PageNav({
   page,
   totalPages,
@@ -53,12 +61,24 @@ export function PageNav({
       </p>
       {hayVariasPaginas ? (
         <div className="flex items-center gap-1">
+          {/* HU #13916 — los extremos van aparte de los números: en un listado de 40 páginas el «40»
+              se pierde entre los demás y no se lee como «ir al final». */}
+          <button
+            type="button"
+            onClick={() => onPageChange(1)}
+            disabled={page <= 1}
+            className={BOTON_FLECHA_CLS}
+            style={ESTILO_FLECHA}
+            aria-label="Primera página"
+          >
+            «
+          </button>
           <button
             type="button"
             onClick={() => onPageChange(page - 1)}
             disabled={page <= 1}
-            className="grid h-7 min-w-7 place-items-center rounded-lg px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-40"
-            style={{ color: 'var(--color-flit-brand)', background: 'color-mix(in srgb, var(--color-flit-brand) 8%, transparent)' }}
+            className={BOTON_FLECHA_CLS}
+            style={ESTILO_FLECHA}
             aria-label="Página anterior"
           >
             ‹
@@ -90,11 +110,21 @@ export function PageNav({
             type="button"
             onClick={() => onPageChange(page + 1)}
             disabled={page >= totalPages}
-            className="grid h-7 min-w-7 place-items-center rounded-lg px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-40"
-            style={{ color: 'var(--color-flit-brand)', background: 'color-mix(in srgb, var(--color-flit-brand) 8%, transparent)' }}
+            className={BOTON_FLECHA_CLS}
+            style={ESTILO_FLECHA}
             aria-label="Página siguiente"
           >
             ›
+          </button>
+          <button
+            type="button"
+            onClick={() => onPageChange(totalPages)}
+            disabled={page >= totalPages}
+            className={BOTON_FLECHA_CLS}
+            style={ESTILO_FLECHA}
+            aria-label="Última página"
+          >
+            »
           </button>
         </div>
       ) : null}
