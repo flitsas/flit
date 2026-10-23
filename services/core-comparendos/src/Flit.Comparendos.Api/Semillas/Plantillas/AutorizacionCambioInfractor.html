@@ -1,0 +1,20 @@
+<!-- nombre: Autorización de cambio de infractor -->
+<h2>{{peticionario.nombre}}</h2>
+<p>{{hoy}}</p>
+<p>Señores</p>
+<h2>{{ot.nombre}}</h2>
+<p>Asunto: <b>AUTORIZACIÓN CAMBIO DE INFRACTOR</b></p>
+<p style="text-align:justify">Yo, <b>{{rl.nombres}}</b>, identificado(a) con {{rl.tipo_documento}} {{rl.numero_documento}}, en mi condición de {{rl.cargo}} de <b>{{peticionario.nombre}}</b> ({{peticionario.tipo_documento}} {{peticionario.numero_documento}}), estando dentro del término concedido por su despacho, me dirijo a ustedes para presentar descargos en relación con la notificación de una presunta infracción, con base en los siguientes hechos:</p>
+<p style="text-align:justify"><b>{{peticionario.nombre}}</b> es propietario inscrito del vehículo relacionado a continuación, que en la fecha de la infracción estaba a cargo del conductor indicado:</p>
+<table>
+<tr><th>Placa</th><th>Comparendo</th><th>Conductor</th><th>Documento</th></tr>
+<tr><td>{{comparendo.placa}}</td><td>{{comparendo.numero}}</td><td>{{conductor.nombres}}</td><td>{{conductor.tipo_documento}} {{conductor.numero_documento}}</td></tr>
+</table>
+<h3 style="text-align:center">PETICIONES</h3>
+<ol>
+<li><b>CERRAR</b> el proceso contravencional en contra de <b>{{peticionario.nombre}}</b> y abstenerse de imponer alguna sanción por la presunta infracción.</li>
+<li><b>PERMITIR</b> que el conductor acuda a su despacho para pagar o apelar el comparendo.</li>
+</ol>
+<p>Atentamente,</p>
+{{rl.firma_imagen}}
+<p><b>{{rl.nombres}}</b><br>{{rl.cargo}}<br>{{peticionario.nombre}}</p>

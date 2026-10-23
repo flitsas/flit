@@ -114,4 +114,8 @@ message Empresa {
   // NIT tal como lo guarda la plataforma: solo el número, sin dígito de verificación. Vacío si no tiene. El dígito lo
   // calcula quien lo muestre (DIAN, módulo 11).
   string nit = 3;
+  // HU #13882: «Enrutamiento de notificaciones» de la empresa en Trámites (admin.tenant_operational_policies):
+  // "flit_smtp" (Colas FLIT) o "tenant_api" (API de correo de la empresa, hoy Renting). Sin política, "flit_smtp".
+  // Comparendos lo usa como su canal de correo y su juego de plantillas.
+  string canal_correo = 4;
 }

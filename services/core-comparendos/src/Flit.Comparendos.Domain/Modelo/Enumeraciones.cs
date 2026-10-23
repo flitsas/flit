@@ -217,6 +217,9 @@ public enum TipoPlantilla
     CorreoAlertaSinRl,
     CorreoReporteSemanal,
     CorreoReporteMensual,
+
+    /// <summary>HU #13884: la autorización de cambio de infractor (PDF) que firma el representante y va en los avisos.</summary>
+    AutorizacionCambioInfractor,
 }
 
 /// <summary>Dos conjuntos: el de FLIT (cualquier cliente) y el de Renting [Excel J2].</summary>

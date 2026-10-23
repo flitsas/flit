@@ -20,14 +20,29 @@ public static partial class HtmlAPdf
     private static int _fuentes;
 
     /// <param name="titulo">Título del PDF: el navegador lo muestra en la pestaña en vez de un identificador (hallazgo B9-4).</param>
-    public static byte[] Generar(string html, string? marcaDeAgua = null, string? titulo = null)
+    /// <param name="fondo">HU #13884: membrete de página completa (el de Renting); deja más margen arriba y abajo para su
+    /// logo y su pie, y sin numeración, que caería encima del pie.</param>
+    public static byte[] Generar(string html, string? marcaDeAgua = null, string? titulo = null, byte[]? fondo = null)
     {
         Inicializar();
         var bloques = Parsear(html ?? string.Empty);
         return Document.Create(doc => doc.Page(page =>
         {
-            page.Size(PageSizes.Letter);
-            page.Margin(2.2f, Unit.Centimetre);
+            if (fondo is { Length: > 0 })
+            {
+                // El membrete de V1 es A4: en carta se vería estirado.
+                page.Size(PageSizes.A4);
+                page.MarginHorizontal(2.4f, Unit.Centimetre);
+                page.MarginTop(4f, Unit.Centimetre);
+                page.MarginBottom(4.2f, Unit.Centimetre);
+                page.Background().Image(fondo).FitUnproportionally();
+            }
+            else
+            {
+                page.Size(PageSizes.Letter);
+                page.Margin(2.2f, Unit.Centimetre);
+            }
+
             page.DefaultTextStyle(t => t.FontFamily("Poppins").FontSize(10.5f).LineHeight(1.35f).FontColor("#1F2A3D"));
             if (marcaDeAgua is { Length: > 0 })
             {
@@ -41,6 +56,8 @@ public static partial class HtmlAPdf
                 foreach (var b in bloques)
                     Dibujar(col.Item(), b);
             });
+            if (fondo is { Length: > 0 })
+                return;
             page.Footer().AlignRight().Text(t =>
             {
                 t.DefaultTextStyle(s => s.FontSize(8).FontColor("#8792A6"));

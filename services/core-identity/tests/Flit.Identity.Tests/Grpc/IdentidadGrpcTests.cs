@@ -5,6 +5,7 @@ using System.Text.Json;
 using Flit.Identidad.Grpc.V1;
 using Flit.Identity.Api;
 using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Platform;
 using Flit.Infrastructure.Persistence.Entities.Security;
@@ -221,6 +222,50 @@ public sealed class IdentidadGrpcTests : IClassFixture<IdentidadGrpcTests.Host>,
             var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
             db.Set<TenantProductEntity>().Where(r => ids.Contains(r.TenantId)).ExecuteDelete();
             db.Tenants.Where(t => t.Id == hijaDeApagada).ExecuteDelete();
+            db.Tenants.Where(t => ids.Contains(t.Id)).ExecuteDelete();
+        }
+    }
+
+    [Fact]
+    public async Task HU13882_ListarEmpresasConProducto_TraeElCanalDeCorreoDeTramites()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        Guid renting = Guid.NewGuid(), sinPolitica = Guid.NewGuid();
+        Guid[] ids = [renting, sinPolitica];
+        using (var scope = _host.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+            var now = DateTimeOffset.UtcNow;
+            foreach (var (id, code) in new[] { (renting, "API"), (sinPolitica, "FLIT") })
+            {
+                // NIT distinto por empresa: la base exige NIT único (uq_tenants_tax_id) y otras pruebas usan los fijos.
+                db.Tenants.Add(new Tenant
+                {
+                    Id = id, Code = $"IT-CANAL-{code}-{_suffix}", LegalName = $"Canal {code} {_suffix}", TaxId = $"8{Random.Shared.Next(10000000, 99999999)}", TenantType = "RENTING",
+                    IsActive = true, CreatedAt = now,
+                });
+            }
+
+            await db.SaveChangesAsync(ct);
+            db.Set<TenantOperationalPolicy>().Add(new TenantOperationalPolicy { TenantId = renting, NotificationChannel = "tenant_api" });
+            await db.SaveChangesAsync(ct);
+            await SetProductAsync(db, renting, "comparendos", true, now);
+            await SetProductAsync(db, sinPolitica, "comparendos", true, now);
+        }
+
+        try
+        {
+            var token = await ServiceTokenAsync(ct, "svc-empresas-grpc", "platform.identidad.empresas");
+            var r = await EmpresasClient(token).ListarEmpresasConProductoAsync(new ListarEmpresasConProductoRequest { Producto = "comparendos" }, cancellationToken: ct);
+            r.Empresas.Where(e => ids.Contains(Guid.Parse(e.Id))).ToDictionary(e => Guid.Parse(e.Id), e => e.CanalCorreo)
+                .Should().BeEquivalentTo(new Dictionary<Guid, string> { [renting] = "tenant_api", [sinPolitica] = "flit_smtp" }, "sin política la empresa usa el correo de FLIT, como en Trámites");
+        }
+        finally
+        {
+            using var scope = _host.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+            db.Set<TenantOperationalPolicy>().Where(p => ids.Contains(p.TenantId)).ExecuteDelete();
+            db.Set<TenantProductEntity>().Where(r => ids.Contains(r.TenantId)).ExecuteDelete();
             db.Tenants.Where(t => ids.Contains(t.Id)).ExecuteDelete();
         }
     }

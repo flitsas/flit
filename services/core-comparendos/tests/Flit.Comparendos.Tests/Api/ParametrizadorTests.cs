@@ -6,6 +6,7 @@ using Flit.Comparendos.Api.Plataforma;
 using Flit.Comparendos.Domain.Modelo;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Flit.Comparendos.Tests.Api;
@@ -134,4 +135,44 @@ public sealed class ParametrizadorTests(ApiConFuente api) : IClassFixture<ApiCon
         var r = await admin.PutAsJsonAsync("/api/v1/comparendos/configuracion/correo", new { canalCorreo = "FlitSmtp", correoRespuesta = "no-es-correo" }, TestContext.Current.CancellationToken);
         r.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
+
+    [Fact]
+    public async Task HU13882_ElCanalDeCorreoYLasPlantillasSalenDeTramites()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        Guid renting = Guid.NewGuid(), flit = Guid.NewGuid();
+        api.Empresas.Agregar(renting, "Renting Colombia S.A.S", "811011779", CanalCorreo.EmpresaApi);
+        api.Empresas.Agregar(flit, "Gestora FLIT S.A.S", "900123456", CanalCorreo.FlitSmtp);
+        OlvidarCanales();
+        HttpClient Gestora(Guid empresa) => api.Cliente(new UsuarioDePrueba(empresa, [Permisos.ConfiguracionVer, Permisos.ConfiguracionEditar]));
+        async Task<(string Canal, string Conjunto)> Config(Guid empresa)
+        {
+            var c = await Gestora(empresa).GetFromJsonAsync<JsonElement>("/api/v1/comparendos/configuracion", ct);
+            return (c.GetProperty("canalCorreo").GetString()!, c.GetProperty("conjuntoPlantillas").GetString()!);
+        }
+
+        (await Config(renting)).Should().Be(("EmpresaApi", "Renting"), "«API Renting cliente» en Trámites = API de Renting con sus textos");
+        (await Config(flit)).Should().Be(("FlitSmtp", "Flit"));
+
+        // El canal ya no se elige en Comparendos: lo que llegue en el pedido se ignora.
+        (await Gestora(flit).PutAsJsonAsync("/api/v1/comparendos/configuracion/correo", new { canalCorreo = "EmpresaApi", remitenteNombre = "Gestora" }, ct)).EnsureSuccessStatusCode();
+        (await Config(flit)).Should().Be(("FlitSmtp", "Flit"));
+
+        // Si Identidad no responde, se conserva el último canal conocido: no se cambia la marca por una caída.
+        api.Empresas.Caida = true;
+        OlvidarCanales();
+        try
+        {
+            (await Config(renting)).Should().Be(("EmpresaApi", "Renting"));
+        }
+        finally
+        {
+            api.Empresas.Caida = false;
+            OlvidarCanales();
+        }
+    }
+
+    private void OlvidarCanales() =>
+        api.App.Services.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>().Remove(CanalDeTramites.ClaveCache);
 }

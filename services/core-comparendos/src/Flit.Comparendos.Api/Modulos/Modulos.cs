@@ -40,6 +40,7 @@ public static class Modulos
         services.AddScoped<Portal.ServicioPortal>();
         services.AddScoped<Avisos.ServicioAvisos>();
         services.AddScoped<Avisos.FotoFotomulta>();
+        services.AddScoped<Avisos.AdjuntosAviso>();
         services.AddSingleton<Avisos.IDescargaFoto, Avisos.DescargaFotoHttp>();
         services.AddHttpClient(Avisos.DescargaFotoHttp.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(15))
             .ConfigurePrimaryHttpMessageHandler(Avisos.DescargaFotoHttp.Manejador);

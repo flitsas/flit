@@ -414,17 +414,14 @@ function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardad
             <option value="ApiRenting">API de contratos de Renting</option>
           </select>
         </label>
-        <label className={ETIQUETA_CLS}>
+        {/* HU #13882: el conjunto sigue al canal de correo que la empresa tiene en Trámites. */}
+        <div className={ETIQUETA_CLS}>
           Conjunto de plantillas
-          <select
-            className={INPUT_CLS}
-            value={valores.conjuntoPlantillas}
-            onChange={(e) => cambiar({ conjuntoPlantillas: e.target.value })}
-          >
-            <option value="Flit">FLIT</option>
-            <option value="Renting">Renting</option>
-          </select>
-        </label>
+          <p className={`${INPUT_CLS} flex items-center bg-[#F4F6FA] dark:bg-white/5`}>{valores.conjuntoPlantillas === "Renting" ? "Renting" : "FLIT"}</p>
+          <span className="font-normal opacity-70">
+            Sigue el «Enrutamiento de notificaciones» de la empresa en Trámites: Renting con «API Renting cliente», FLIT con «Colas FLIT».
+          </span>
+        </div>
       </section>
 
       <div className="flex justify-end gap-2">

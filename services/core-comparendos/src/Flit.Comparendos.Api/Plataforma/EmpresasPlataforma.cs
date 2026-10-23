@@ -1,10 +1,14 @@
 using Flit.Comparendos.Domain.Identificadores;
+using Flit.Comparendos.Domain.Modelo;
 using Flit.Identidad.Grpc.V1;
 
 namespace Flit.Comparendos.Api.Plataforma;
 
-/// <summary>Una empresa de la plataforma con Comparendos encendido. <c>NitBase</c> va sin dígito de verificación.</summary>
-public sealed record EmpresaPlataforma(Guid Id, string Nombre, string? NitBase);
+/// <summary>
+/// Una empresa de la plataforma con Comparendos encendido. <c>NitBase</c> va sin dígito de verificación. <c>Canal</c> es el
+/// «Enrutamiento de notificaciones» que la empresa eligió en Trámites (HU #13882); null si Identidad no lo informa.
+/// </summary>
+public sealed record EmpresaPlataforma(Guid Id, string Nombre, string? NitBase, CanalCorreo? Canal = null);
 
 /// <summary>
 /// Las empresas con Comparendos encendido, con su nombre y su NIT tal como los tiene la plataforma (hallazgos B2-1 y
@@ -24,8 +28,16 @@ internal sealed class EmpresasPlataformaIdentidad(EmpresasService.EmpresasServic
         var r = await cliente.ListarEmpresasConProductoAsync(new ListarEmpresasConProductoRequest { Producto = ProductosHabilitadosIdentidad.Producto },
             cancellationToken: ct).ConfigureAwait(false);
         return [.. r.Empresas.Where(e => Guid.TryParse(e.Id, out _))
-            .Select(e => new EmpresaPlataforma(Guid.Parse(e.Id), e.Nombre.Trim(), NitBase(e.Nit)))];
+            .Select(e => new EmpresaPlataforma(Guid.Parse(e.Id), e.Nombre.Trim(), NitBase(e.Nit), Canal(e.CanalCorreo)))];
     }
+
+    /// <summary>"tenant_api" = la API de correo de la empresa; "flit_smtp" = FLIT; vacío (Identidad anterior) = no se sabe.</summary>
+    internal static CanalCorreo? Canal(string? codigo) => codigo switch
+    {
+        "tenant_api" => CanalCorreo.EmpresaApi,
+        "flit_smtp" => CanalCorreo.FlitSmtp,
+        _ => null,
+    };
 
     /// <summary>
     /// La plataforma guarda solo el número; si por error trae el dígito con guion («890903938-8»), se quita. Null si no
