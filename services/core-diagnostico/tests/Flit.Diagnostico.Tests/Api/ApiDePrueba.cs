@@ -206,6 +206,9 @@ public sealed class ApiDePrueba : IAsyncDisposable
         // HU #13733: las pruebas anteriores a la guardia de fuentes sin adaptador habilitan y piden fuentes que en D2 no
         // tienen adaptador; aquí todas cuentan como con adaptador. FuentesSinAdaptadorTests quita este doble y prueba el real.
         b.Services.AddSingleton<Flit.Diagnostico.Api.Modulos.Consultas.IRegistroAdaptadores>(new TodasConAdaptador());
+        // HU #13861: el trabajador de la réplica de departamentos con impuesto corre siempre; en las pruebas su capacidad queda
+        // no conectada (solo carga el estado) y cada prueba sincroniza con su propia capacidad falsa, sin carreras.
+        b.Services.AddSingleton<ICapacidadImpuestoPlataforma, CapacidadImpuestoNoConectada>();
         _configurar?.Invoke(b);
     });
 

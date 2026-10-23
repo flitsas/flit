@@ -10,6 +10,9 @@ public sealed record RespuestaConsultas<T>(T? Respuesta, ErrorConsulta? Error)
     where T : class
 {
     public bool Exitosa => Respuesta is not null;
+
+    /// <summary>Código gRPC del fallo (HU #13861: la capacidad lo registra); null si la llamada fue exitosa.</summary>
+    public StatusCode? Codigo { get; init; }
 }
 
 /// <summary>
@@ -44,16 +47,35 @@ public sealed partial class ClienteConsultas(ConsultasService.ConsultasServiceCl
             throw new ArgumentException("La consulta exige la empresa de la celda.", nameof(empresa));
 
         var metadata = new Metadata { { PlatformServiceCallInterceptor.TenantMetadata, empresa.ToString() } };
+        return await LlamarConAsync(new CallOptions(metadata, cancellationToken: ct), llamada, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Llamada a un rpc de capacidad global, igual para todas las empresas (HU #13861: <c>ListarDepartamentosImpuesto</c>, Q4=a):
+    /// sin <c>x-flit-tenant-id</c>, con el mismo token de servicio, deadline y traducción de errores que <see cref="LlamarAsync"/>.
+    /// </summary>
+    public Task<RespuestaConsultas<T>> LlamarGlobalAsync<T>(
+        Func<ConsultasService.ConsultasServiceClient, CallOptions, AsyncUnaryCall<T>> llamada, CancellationToken ct)
+        where T : class
+    {
+        ArgumentNullException.ThrowIfNull(llamada);
+        return LlamarConAsync(new CallOptions(cancellationToken: ct), llamada, ct);
+    }
+
+    private async Task<RespuestaConsultas<T>> LlamarConAsync<T>(
+        CallOptions opciones, Func<ConsultasService.ConsultasServiceClient, CallOptions, AsyncUnaryCall<T>> llamada, CancellationToken ct)
+        where T : class
+    {
         try
         {
-            using var grpc = llamada(cliente, new CallOptions(metadata, cancellationToken: ct));
+            using var grpc = llamada(cliente, opciones);
             return new RespuestaConsultas<T>(await grpc.ResponseAsync.ConfigureAwait(false), null);
         }
         catch (RpcException ex) when (!ct.IsCancellationRequested)
         {
             var error = TraductorErroresConsultas.Traducir(ex);
             LlamadaFallida(log, typeof(T).Name, ex.StatusCode, error.TipoError);
-            return new RespuestaConsultas<T>(null, error);
+            return new RespuestaConsultas<T>(null, error) { Codigo = ex.StatusCode };
         }
     }
 

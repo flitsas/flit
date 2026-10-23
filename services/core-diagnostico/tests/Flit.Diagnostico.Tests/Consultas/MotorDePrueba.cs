@@ -17,21 +17,122 @@ using static Flit.Diagnostico.Tests.Configuracion.ConfiguracionOperativaTests;
 namespace Flit.Diagnostico.Tests.Consultas;
 
 /// <summary>
-/// Reloj manual (HU #13727): la expiración del lease se prueba avanzando el reloj, sin esperas reales.
+/// Reloj manual (HU #13727): la expiración del lease se prueba avanzando el reloj, sin esperas reales. Con
+/// <see cref="TimersManuales"/> (HU #13861) también sus timers son manuales: <c>Task.Delay(intervalo, reloj, ct)</c> solo
+/// vence cuando <see cref="Avanzar"/> alcanza su hora; sin la opción, los timers son los del sistema (como antes).
 /// </summary>
 /// <example>
 /// <code>
-/// var reloj = new RelojManual();
-/// reloj.Avanzar(TimeSpan.FromMinutes(3));
+/// var reloj = new RelojManual { TimersManuales = true };
+/// await reloj.EsperarTimersAsync(1, ct);
+/// reloj.Avanzar(TimeSpan.FromHours(24));
 /// </code>
 /// </example>
 public sealed class RelojManual : TimeProvider
 {
+    private readonly List<TimerManual> _timers = [];
     private long _ticks = DateTimeOffset.UtcNow.UtcTicks;
+
+    /// <summary>Si los timers que crea este reloj vencen solo al avanzarlo (por defecto false: timers del sistema).</summary>
+    public bool TimersManuales { get; init; }
+
+    /// <summary>Timers manuales armados (con vencimiento pendiente).</summary>
+    public int TimersArmados
+    {
+        get
+        {
+            lock (_timers)
+                return _timers.Count(t => t.Armado);
+        }
+    }
 
     public override DateTimeOffset GetUtcNow() => new(Interlocked.Read(ref _ticks), TimeSpan.Zero);
 
-    public void Avanzar(TimeSpan tiempo) => Interlocked.Add(ref _ticks, tiempo.Ticks);
+    public void Avanzar(TimeSpan tiempo)
+    {
+        Interlocked.Add(ref _ticks, tiempo.Ticks);
+        if (!TimersManuales)
+            return;
+        while (true)
+        {
+            TimerManual? vencido;
+            lock (_timers)
+                vencido = _timers.Where(t => t.Armado && t.Vence <= Interlocked.Read(ref _ticks)).MinBy(t => t.Vence);
+            if (vencido is null)
+                return;
+            vencido.Disparar();
+        }
+    }
+
+    /// <summary>Espera (en tiempo real, con tope de 10 s) a que haya <paramref name="cuantos"/> timers manuales armados.</summary>
+    public async Task EsperarTimersAsync(int cuantos, CancellationToken ct)
+    {
+        var limite = DateTime.UtcNow.AddSeconds(10);
+        while (TimersArmados < cuantos)
+        {
+            DateTime.UtcNow.Should().BeBefore(limite, "el trabajador debe armar su espera");
+            await Task.Delay(5, ct);
+        }
+    }
+
+    public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+    {
+        if (!TimersManuales)
+            return base.CreateTimer(callback, state, dueTime, period);
+        var timer = new TimerManual(this, callback, state);
+        lock (_timers)
+            _timers.Add(timer);
+        timer.Change(dueTime, period);
+        return timer;
+    }
+
+    private void Quitar(TimerManual timer)
+    {
+        lock (_timers)
+            _timers.Remove(timer);
+    }
+
+    private sealed class TimerManual(RelojManual reloj, TimerCallback callback, object? state) : ITimer
+    {
+        private TimeSpan _periodo = Timeout.InfiniteTimeSpan;
+
+        public bool Armado { get; private set; }
+
+        public long Vence { get; private set; }
+
+        public bool Change(TimeSpan dueTime, TimeSpan period)
+        {
+            lock (reloj._timers)
+            {
+                _periodo = period;
+                Armado = dueTime != Timeout.InfiniteTimeSpan;
+                Vence = reloj.GetUtcNow().UtcTicks + (Armado ? dueTime.Ticks : 0);
+            }
+
+            return true;
+        }
+
+        public void Disparar()
+        {
+            lock (reloj._timers)
+            {
+                if (_periodo == Timeout.InfiniteTimeSpan || _periodo <= TimeSpan.Zero)
+                    Armado = false;
+                else
+                    Vence += _periodo.Ticks;
+            }
+
+            callback(state);
+        }
+
+        public void Dispose() => reloj.Quitar(this);
+
+        public ValueTask DisposeAsync()
+        {
+            Dispose();
+            return ValueTask.CompletedTask;
+        }
+    }
 }
 
 /// <summary>

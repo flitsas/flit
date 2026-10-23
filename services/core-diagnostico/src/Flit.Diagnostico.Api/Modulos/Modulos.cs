@@ -25,7 +25,8 @@ public static class Modulos
     /// en otro caso; con una configuración inválida el servicio no arranca) y queda registrada como singleton. RUNT conserva su
     /// regla: simulada con la simulación y no conectada en otro caso. Con adaptadores reales se registra el cliente gRPC de
     /// core-consultas (<see cref="Consultas.Fuentes.ClienteConsultas"/>); si no, ninguna llamada sale del servicio. Cada puerto de
-    /// fuente se registra con <c>services.AddAdaptador&lt;IPuerto, Real, Simulado, NoConectado&gt;(seleccion)</c>. No mira
+    /// fuente se registra con <c>services.AddAdaptador&lt;IPuerto, Real, Simulado, NoConectado&gt;(seleccion)</c>, igual que la
+    /// capacidad del impuesto por departamento y su réplica (HU #13861). No mira
     /// <c>IHostEnvironment</c>. Usa TryAdd para que las pruebas puedan poner su doble antes.
     /// </summary>
     public static IServiceCollection AddFuentesConsultas(this IServiceCollection services, IConfiguration configuration)
@@ -40,6 +41,12 @@ public static class Modulos
         services.AddAdaptador<IFuenteSimit, FuenteSimitReal, FuenteSimitSimulada, FuenteSimitNoConectada>(seleccion);
         // HU #13795: avalúo comercial (AVALUO) con los datos técnicos que dejó el RUNT.
         services.AddAdaptador<IFuenteAvaluo, FuenteAvaluoReal, FuenteAvaluoSimulada, FuenteAvaluoNoConectada>(seleccion);
+        // HU #13861: réplica de los departamentos con impuesto soportado (capacidad global de core-consultas, Q4=a). El trabajador
+        // se registra siempre; con la capacidad no conectada solo carga EstadoCapacidadImpuesto desde la base.
+        services.AddAdaptador<Catalogos.ICapacidadImpuestoPlataforma, Catalogos.CapacidadImpuestoGrpc, Catalogos.CapacidadImpuestoSimulada, Catalogos.CapacidadImpuestoNoConectada>(seleccion);
+        services.TryAddSingleton<Catalogos.EstadoCapacidadImpuesto>();
+        services.TryAddScoped<Catalogos.ISincronizacionDepartamentosImpuesto, Catalogos.SincronizacionDepartamentosImpuesto>();
+        services.AddHostedService<Catalogos.TrabajadorSincronizacionDepartamentosImpuesto>();
         if (seleccion.ModoDe(Domain.Consultas.Fuente.Runt) == ModoAdaptador.Simulado)
             services.TryAddSingleton<IFuenteRunt, FuenteRuntIntempoSimulada>();
         else
