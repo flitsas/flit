@@ -141,7 +141,7 @@ function Configuracion({ empresa }: { empresa: string | null }) {
           ].map(([t, v]) => (
             <StatusBadge key={t as string} label={`${t as string}: ${v ? "sí" : "no"}`} tone={v ? "success" : "neutral"} />
           ))}
-          <StatusBadge label={`Conductor: ${c.tipoIntegracionConductor === "ApiRenting" ? "API de Renting" : "manual"}`} tone="info" />
+          <StatusBadge label={`Conductor: ${c.tipoIntegracionConductor === "ApiRenting" ? "consulta automática" : "manual"}`} tone="info" />
           <StatusBadge label={`Plantillas: ${c.conjuntoPlantillas === "Renting" ? "Renting" : "FLIT"}`} tone="info" />
           <StatusBadge label={c.requiereRepresentanteLegal ? "Exige representante legal" : "No exige representante legal"} tone="info" />
         </div>
@@ -152,7 +152,7 @@ function Configuracion({ empresa }: { empresa: string | null }) {
           Canal de correo
           <select className={INPUT_CLS} value={f.canalCorreo} disabled={soloLectura} onChange={(e) => cambiar({ canalCorreo: e.target.value })}>
             <option value="FlitSmtp">Cuenta de FLIT</option>
-            <option value="EmpresaApi">Cuenta propia de la empresa (API)</option>
+            <option value="EmpresaApi">Cuenta de correo propia de la empresa</option>
           </select>
         </label>
         <label className={ETIQUETA_CLS}>
