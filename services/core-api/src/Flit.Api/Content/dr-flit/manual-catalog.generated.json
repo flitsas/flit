@@ -372,11 +372,11 @@
             "Al pie de cada tabla, a la derecha, está la barra de páginas:"
           ],
           "bullets": [
-            "« lleva a la primera página.",
+            "«Primera» lleva a la primera página.",
             "‹ y › van a la página anterior y a la siguiente.",
             "Los números saltan directo a esa página; la página en la que estás se ve resaltada en azul.",
-            "» lleva a la última página.",
-            "Si ya estás en la primera página, « y ‹ se ven apagados; en la última, › y » también."
+            "«Última» lleva a la última página.",
+            "Si ya estás en la primera página, «Primera» y ‹ se ven apagados; en la última, › y «Última» también."
           ],
           "callouts": [
             {
