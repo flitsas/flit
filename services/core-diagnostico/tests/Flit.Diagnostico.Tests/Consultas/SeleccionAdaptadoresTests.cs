@@ -51,7 +51,8 @@ public sealed class SeleccionAdaptadoresTests
 
         seleccion.Modo.Should().Be(ModoAdaptador.Simulado, "la simulación manda sobre la dirección: nunca se mezcla con proveedores reales");
         SeleccionAdaptadores.FuentesPorConsultas.Should().BeEquivalentTo(
-            [Fuente.RuntPropietario, Fuente.RuntLocatario, Fuente.SimitVehiculo, Fuente.SimitPropietario, Fuente.SimitLocatario, Fuente.Avaluo]);
+            [Fuente.RuntPropietario, Fuente.RuntLocatario, Fuente.SimitVehiculo, Fuente.SimitPropietario, Fuente.SimitLocatario, Fuente.Avaluo,
+             Fuente.ImpuestoDepartamental]);
         SeleccionAdaptadores.FuentesPorConsultas.Should().OnlyContain(f => seleccion.ModoDe(f) == ModoAdaptador.Simulado);
         SeleccionAdaptadores.FuentesPorConsultas.Should().NotContain(f => seleccion.EsNoConectada(f));
         proveedor.GetRequiredService<IFuenteRunt>().Should().BeOfType<FuenteRuntIntempoSimulada>();
@@ -160,6 +161,30 @@ public sealed class SeleccionAdaptadoresTests
         deB.FuentesHabilitadas.Should().Equal(Fuente.Runt);
         deB.LimiteVehiculosLote.Should().Be(500, "un 422 no guarda ningún campo");
         (await Motor.EscalarAsync(api, "SELECT count(*) FROM diagnostico.cambios_contrato", ct)).Should().Be(0);
+    }
+
+    // HU #13862 (F09-H3) — el impuesto sigue el modo de las fuentes de core-consultas: simulado con la simulación (LOCAL o DEV),
+    // real con la dirección y no conectado sin nada (entonces no se ofrece). La bandera ImpuestoDisponible queda solo para la
+    // disponibilidad (F09-H4), no para elegir adaptador.
+    [Fact]
+    public void El_impuesto_sigue_el_modo_de_las_fuentes_de_core_consultas()
+    {
+        SeleccionAdaptadores.FuentesPorConsultas.Should().Contain(Fuente.ImpuestoDepartamental);
+        var casos = new (IConfiguration Configuracion, ModoAdaptador Modo, Type Adaptador)[]
+        {
+            (Configuracion(simulacion: true, ambiente: "DEV", direccion: null), ModoAdaptador.Simulado, typeof(FuenteImpuestoSimulada)),
+            (Configuracion(simulacion: false, ambiente: "QA", direccion: Direccion), ModoAdaptador.Real, typeof(FuenteImpuestoReal)),
+            (Configuracion(simulacion: false, ambiente: "QA", direccion: null), ModoAdaptador.NoConectado, typeof(FuenteImpuestoNoConectada)),
+        };
+        foreach (var (configuracion, modo, adaptador) in casos)
+        {
+            var servicios = Servicios(configuracion);
+            var seleccion = (SeleccionAdaptadores)servicios.Single(d => d.ServiceType == typeof(SeleccionAdaptadores)).ImplementationInstance!;
+            seleccion.ModoDe(Fuente.ImpuestoDepartamental).Should().Be(modo);
+            seleccion.EsNoConectada(Fuente.ImpuestoDepartamental).Should().Be(modo == ModoAdaptador.NoConectado, modo.ToString());
+            servicios.Should().ContainSingle(d => d.ServiceType == typeof(IFuenteImpuesto))
+                .Which.ImplementationType.Should().Be(adaptador, modo.ToString());
+        }
     }
 
     private static IConfiguration Configuracion(bool simulacion, string? ambiente, string? direccion, string? deadline = null) =>

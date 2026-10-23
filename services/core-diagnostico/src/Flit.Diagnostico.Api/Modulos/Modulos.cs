@@ -41,6 +41,8 @@ public static class Modulos
         services.AddAdaptador<IFuenteSimit, FuenteSimitReal, FuenteSimitSimulada, FuenteSimitNoConectada>(seleccion);
         // HU #13795: avalúo comercial (AVALUO) con los datos técnicos que dejó el RUNT.
         services.AddAdaptador<IFuenteAvaluo, FuenteAvaluoReal, FuenteAvaluoSimulada, FuenteAvaluoNoConectada>(seleccion);
+        // HU #13862: impuesto departamental (IMPUESTO_DEPARTAMENTAL) por placa y departamento; UNIMPLEMENTED (sin C3) = NO_CONECTADO.
+        services.AddAdaptador<IFuenteImpuesto, FuenteImpuestoReal, FuenteImpuestoSimulada, FuenteImpuestoNoConectada>(seleccion);
         // HU #13861: réplica de los departamentos con impuesto soportado (capacidad global de core-consultas, Q4=a). El trabajador
         // se registra siempre; con la capacidad no conectada solo carga EstadoCapacidadImpuesto desde la base.
         services.AddAdaptador<Catalogos.ICapacidadImpuestoPlataforma, Catalogos.CapacidadImpuestoGrpc, Catalogos.CapacidadImpuestoSimulada, Catalogos.CapacidadImpuestoNoConectada>(seleccion);
@@ -62,7 +64,7 @@ public static class Modulos
     /// Motor de consultas (HU #13727, ADR a): el encolador real (TryAdd, para que las pruebas pongan su doble antes), la cola,
     /// el ejecutor de la celda RUNT (HU #13730; un ejecutor de la misma fuente registrado antes, el doble de una prueba, lo reemplaza)
     /// los de RUNT_PROPIETARIO y RUNT_LOCATARIO (HU #13792), SIMIT_VEHICULO (HU #13793), SIMIT_PROPIETARIO y SIMIT_LOCATARIO
-    /// (HU #13794) y AVALUO (HU #13795),
+    /// (HU #13794), AVALUO (HU #13795) e IMPUESTO_DEPARTAMENTAL (HU #13862),
     /// el registro de adaptadores y el catálogo de fuentes disponibles que de él se deriva (HU #13733), el procesador
     /// y su configuración <see cref="Trabajos.OpcionesProcesador"/> validada al arrancar, y la de reintentos
     /// <see cref="Consultas.OpcionesConsultas"/> (HU #13737), también validada al arrancar. El trabajador en segundo
@@ -88,6 +90,8 @@ public static class Modulos
             ActivatorUtilities.CreateInstance<Consultas.EjecutorCeldaSimitPersona>(sp, Domain.Consultas.Fuente.SimitLocatario));
         // HU #13795: la celda AVALUO (placa y VIN del RUNT con modelo, cilindraje, combustible y pasajeros).
         services.AddScoped<Consultas.IEjecutorCelda, Consultas.EjecutorCeldaAvaluo>();
+        // HU #13862: la celda IMPUESTO_DEPARTAMENTAL (placa del RUNT y departamento derivado, si sigue soportado en la réplica).
+        services.AddScoped<Consultas.IEjecutorCelda, Consultas.EjecutorCeldaImpuesto>();
         // HU #13733: las fuentes con ejecutor son las únicas que se pueden habilitar o pedir (TryAdd: las pruebas ponen su doble).
         services.TryAddSingleton<Consultas.IRegistroAdaptadores, Consultas.RegistroAdaptadores>();
         services.AddSingleton<Consultas.FuentesDisponibles>();

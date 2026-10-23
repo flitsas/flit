@@ -231,6 +231,33 @@ public sealed class LlenadoManualTests
         }
     }
 
+    // HU #13862 AC6 (negativo, F09-C6, R-9) — un admin FLIT intenta llenar a mano la celda del impuesto en ERROR (NO_CONECTADO,
+    // como queda sin C3) con un cuerpo de la forma del resultado: 422 FUENTE_NO_ADMITE_MANUAL, la celda no cambia y no queda
+    // intento MANUAL. Prueba de protección: AdmiteManual ya excluía el impuesto (HU #13800).
+    [Fact]
+    public async Task Impuesto_departamental_responde_422_FUENTE_NO_ADMITE_MANUAL()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresas = DosEmpresas.En(api);
+        var lote = await TableroAyudas.SembrarAsync(empresas.A, ct, vehiculos:
+            [new("TST752", [new(Fuente.Runt, EstadoCelda.Completado, 1), new(Fuente.ImpuestoDepartamental, EstadoCelda.Error, 2)])]);
+        var id = lote.Celda("TST752", Fuente.ImpuestoDepartamental).Id;
+        await Motor.EjecutarAsync(api, $"UPDATE diagnostico.consultas SET tipo_error = 'NO_CONECTADO' WHERE id = '{id}'", ct);
+        var antes = await CeldaAsync(empresas.A, id, ct);
+
+        var respuesta = await Llenar(api, TokenLlenado(api), id, empresas.A.Id,
+            Cuerpo(antes.VersionTablero, """{"monto_total":350000,"vigencias":[{"anio":2025,"valor":350000,"pagada":false}],"departamento_codigo":"05"}"""), ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, await respuesta.Content.ReadAsStringAsync(ct));
+        (await TableroAyudas.JsonAsync(respuesta, ct)).GetProperty("code").GetString().Should().Be("FUENTE_NO_ADMITE_MANUAL");
+        var despues = await CeldaAsync(empresas.A, id, ct);
+        (despues.Estado, despues.TipoError, despues.Payload, despues.Origen, despues.VersionTablero, despues.ActualizadoEn)
+            .Should().Be((EstadoCelda.Error, "NO_CONECTADO", (string?)null, (OrigenCelda?)null, antes.VersionTablero, antes.ActualizadoEn));
+        (await IntentosAsync(empresas.A, id, ct)).Should().BeEmpty("un 422 no deja intento MANUAL");
+    }
+
     // AC6 (F06-C8) — un campo que no existe en el esquema de AVALUO (y otros cuerpos fuera del esquema): 422 RESULTADO_INVALIDO con el campo.
     [Fact]
     public async Task Cuerpo_fuera_del_esquema_responde_422_con_campo()

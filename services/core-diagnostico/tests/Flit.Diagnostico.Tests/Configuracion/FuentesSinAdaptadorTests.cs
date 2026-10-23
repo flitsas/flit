@@ -146,15 +146,17 @@ public sealed class FuentesSinAdaptadorTests
 
     // El registro real del servicio: tienen adaptador RUNT (HU #13730), desde HU #13792 RUNT_PROPIETARIO y RUNT_LOCATARIO,
     // desde HU #13793 SIMIT_VEHICULO, desde HU #13795 AVALUO y, desde HU #13794, SIMIT_PROPIETARIO y SIMIT_LOCATARIO (cambio
-    // por diseño: cada HU de F05 suma el ejecutor de su fuente; solo IMPUESTO_DEPARTAMENTAL sigue sin adaptador).
+    // por diseño: cada HU de F05 suma el ejecutor de su fuente) y, desde HU #13862, IMPUESTO_DEPARTAMENTAL (su disponibilidad
+    // sigue exigiendo la bandera y un adaptador conectado).
     [Fact]
-    public async Task Tienen_adaptador_todas_las_fuentes_salvo_el_impuesto()
+    public async Task Tienen_adaptador_todas_las_fuentes_incluido_el_impuesto()
     {
         await using var api = await ArrancarAsync();
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var registro = api.App.Services.GetRequiredService<IRegistroAdaptadores>();
         Enum.GetValues<Fuente>().Where(registro.TieneAdaptador).Should().Equal(
-            Fuente.Runt, Fuente.RuntPropietario, Fuente.RuntLocatario, Fuente.SimitVehiculo, Fuente.SimitPropietario, Fuente.SimitLocatario, Fuente.Avaluo);
+            Fuente.Runt, Fuente.RuntPropietario, Fuente.RuntLocatario, Fuente.SimitVehiculo, Fuente.SimitPropietario, Fuente.SimitLocatario, Fuente.Avaluo,
+            Fuente.ImpuestoDepartamental);
     }
 
     /// <summary>API con el registro de adaptadores real (sin el doble de <see cref="ApiDePrueba"/>).</summary>

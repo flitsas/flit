@@ -27,9 +27,9 @@ public enum ModoAdaptador
 /// <item>Si no, todas son no conectadas: <see cref="EsNoConectada"/> es true y <see cref="FuentesDisponibles"/> no las ofrece.</item>
 /// </list>
 /// RUNT (<see cref="Fuente.Runt"/>) conserva su regla: simulada con la simulación y no conectada en otro caso, hasta que llegue su
-/// adaptador real (C-PER); nunca simulada junto con fuentes reales. <see cref="Fuente.ImpuestoDepartamental"/> no pasa por aquí
-/// (su bandera es <c>Diagnostico:Fuentes:ImpuestoDisponible</c>). No mira <c>IHostEnvironment</c>: los tres ambientes corren como
-/// Development.
+/// adaptador real (C-PER); nunca simulada junto con fuentes reales. <see cref="Fuente.ImpuestoDepartamental"/> (HU #13862) sigue
+/// este mismo modo: la bandera <c>Diagnostico:Fuentes:ImpuestoDisponible</c> no elige adaptador, solo decide su disponibilidad
+/// (F09-H4). No mira <c>IHostEnvironment</c>: los tres ambientes corren como Development.
 /// </summary>
 /// <example>
 /// <code>
@@ -48,10 +48,11 @@ public sealed class SeleccionAdaptadores
         Deadline = deadline;
     }
 
-    /// <summary>Fuentes que se consultan por core-consultas con la regla de esta clase (F05).</summary>
+    /// <summary>Fuentes que se consultan por core-consultas con la regla de esta clase (F05; el impuesto desde HU #13862).</summary>
     public static IReadOnlyList<Fuente> FuentesPorConsultas { get; } =
     [
         Fuente.RuntPropietario, Fuente.RuntLocatario, Fuente.SimitVehiculo, Fuente.SimitPropietario, Fuente.SimitLocatario, Fuente.Avaluo,
+        Fuente.ImpuestoDepartamental,
     ];
 
     /// <summary>Modo de las fuentes de <see cref="FuentesPorConsultas"/>.</summary>
@@ -105,8 +106,8 @@ public sealed class SeleccionAdaptadores
     }
 
     /// <summary>
-    /// Modo de una fuente: el de <see cref="FuentesPorConsultas"/>; para RUNT, simulado con la simulación y no conectado en otro
-    /// caso (#13725); null para una fuente fuera de esta regla (impuesto).
+    /// Modo de una fuente: el de <see cref="FuentesPorConsultas"/> (incluido el impuesto, HU #13862); para RUNT, simulado con la
+    /// simulación y no conectado en otro caso (#13725); null para una fuente fuera de esta regla.
     /// </summary>
     public ModoAdaptador? ModoDe(Fuente fuente) => fuente switch
     {

@@ -154,6 +154,42 @@ public sealed partial class FixturesSinPiiTests
         hallazgos.Should().NotContain(h => h.Contains(".modelo") || h.Contains(".noPlaca") || h.Contains(".noDocumento"));
     }
 
+    // HU #13862 — la simulación del impuesto (FuenteImpuestoSimulada) solo inventa montos, años y el departamento pedido: ningún
+    // nombre, documento, correo, placa ni proveedor, para todos los últimos dígitos. Los montos son números largos por naturaleza,
+    // así que de las reglas de arriba solo se tolera «número largo» bajo monto_total y valor.
+    [Fact]
+    public async Task Simulacion_del_impuesto_solo_trae_montos_vigencias_y_departamento()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var simulada = new FuenteImpuestoSimulada();
+        var permitidas = new HashSet<string>(StringComparer.Ordinal) { "monto_total", "vigencias", "departamento_codigo", "anio", "valor", "pagada" };
+        var conDato = 0;
+        for (var digito = 0; digito <= 9; digito++)
+        {
+            var placa = $"TST30{digito}";
+            var r = await simulada.ConsultarAsync(Guid.NewGuid(), new SolicitudImpuesto(placa, "05"), ct);
+            if (r.Resultado is null)
+                continue;
+            conDato++;
+            var json = JsonSerializer.Serialize(r.Resultado, Flit.Diagnostico.Api.Modulos.Consultas.EjecutorPorPersonas.Json);
+            var hallazgos = new List<string>();
+            Analizar($"impuesto-{placa}", json, hallazgos);
+            hallazgos.Should().OnlyContain(h => h.Contains("número largo") && (h.Contains(".monto_total") || h.Contains(".valor")), placa);
+            using var doc = JsonDocument.Parse(json);
+            Claves(doc.RootElement).Should().OnlyContain(c => permitidas.Contains(c), placa);
+            json.Should().NotContainAny([placa, "verifik", "proveedor", FuenteImpuestoSimulada.Transaccion]);
+        }
+
+        conDato.Should().Be(9, "solo el dígito 7 responde TIMEOUT");
+    }
+
+    private static IEnumerable<string> Claves(JsonElement e) => e.ValueKind switch
+    {
+        JsonValueKind.Object => e.EnumerateObject().SelectMany(p => Claves(p.Value).Prepend(p.Name)),
+        JsonValueKind.Array => e.EnumerateArray().SelectMany(Claves),
+        _ => [],
+    };
+
     /// <summary>Revisa un JSON y agrega sus hallazgos; devuelve cuántos documentos encontró.</summary>
     private static int Analizar(string archivo, string json, List<string> hallazgos)
     {
