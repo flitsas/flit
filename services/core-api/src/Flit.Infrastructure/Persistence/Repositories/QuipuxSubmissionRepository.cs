@@ -262,8 +262,10 @@ internal sealed class QuipuxSubmissionRepository(FlitDbContext db) : IQuipuxSubm
     /// <c>IdentityValidationOutboxWriter</c>, y por eso se mira el ChangeTracker ADEMÁS de la BD: dos
     /// encolados dentro del mismo caso de uso no habrían tocado aún la tabla.</para>
     ///
-    /// <para>Sin <c>SaveChanges</c>: la fila se confirma con la unidad de trabajo del caso de uso
-    /// (mismo contrato transaccional que el writer de la outbox de identidad).</para>
+    /// <para><b>Sin <c>SaveChanges</c> propio:</b> hace <c>db.Add</c> y devuelve la entidad en
+    /// estado <c>Added</c>. Es responsabilidad del llamador confirmar con
+    /// <c>UpdateAsync(submission, null)</c> ANTES de invocar al audit log (que usa scope propio).
+    /// Ver Bug #13894 y el contrato en <see cref="IQuipuxSubmissionRepository.EnqueueIfAbsentAsync"/>.</para>
     /// </summary>
     public async Task<QuipuxSubmission> EnqueueIfAbsentAsync(
         QuipuxSubmission submission,
