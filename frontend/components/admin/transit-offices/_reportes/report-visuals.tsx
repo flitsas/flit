@@ -23,14 +23,8 @@ import {
 import type { OtReportSeriesPoint, OtReportSummary, OtReportTimeBucket } from "@/lib/api/ot-metrics";
 import { ESTADO_ORDER, estadoMeta, formatInt } from "./report-columns";
 import { Empty } from "./shared";
-import {
-  CARDLIST_CELL,
-  CARDLIST_HEAD_ROW,
-  CARDLIST_ROW,
-  CARDLIST_SCROLL,
-  CARDLIST_TABLE,
-  CARDLIST_TH,
-} from "@/components/atom/table-cardlist";
+import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 
 // ── Composición por estado ─────────────────────────────────────────────────────
 
@@ -173,6 +167,35 @@ const ACUMULADO_COLOR = "#F9AC00";
  * La serie llega COMPLETA del backend, con los periodos vacíos en cero: por eso aquí no hay que
  * rellenar huecos ni la gráfica puede dibujar una continuidad que no existió.
  */
+/** Columnas de la tabla «Ver los valores periodo a periodo» (HU #13923: DataTable estándar). */
+function columnasTendencia(
+  onZoom?: (desde: string, hasta: string, label: string) => void,
+): DataTableColumn<TrendPoint>[] {
+  return [
+    {
+      key: "periodo",
+      header: "Periodo",
+      render: (point) =>
+        onZoom ? (
+          <button
+            type="button"
+            onClick={() => onZoom(point.desde, point.hasta, point.label)}
+            className="font-semibold underline underline-offset-2 transition hover:text-flit-brand"
+            aria-label={`Acotar el informe a ${point.label}`}
+          >
+            {point.label}
+          </button>
+        ) : (
+          point.label
+        ),
+    },
+    { key: "radicados", header: "Radicados", cellClassName: "tabular-nums", render: (p) => formatInt(p.radicados) },
+    { key: "aprobados", header: "Aprobados", cellClassName: "tabular-nums", render: (p) => formatInt(p.aprobados) },
+    { key: "rechazados", header: "Rechazados", cellClassName: "tabular-nums", render: (p) => formatInt(p.rechazados) },
+    { key: "acumulado", header: "Acumulado", cellClassName: "tabular-nums", render: (p) => formatInt(p.acumulado) },
+  ];
+}
+
 export function TrendChart({
   serie,
   granularidad,
@@ -184,6 +207,8 @@ export function TrendChart({
   onZoom?: (desde: string, hasta: string, label: string) => void;
 }) {
   const [verValores, setVerValores] = useState(false);
+  // HU #13923 — la tabla de valores por periodo (hasta un año en días) lleva la paginación estándar.
+  const pg = usePaginacion("_reportes.report-visuals.TrendChart");
 
   if (serie.length === 0) {
     return <Empty>No hay periodos que graficar en el rango seleccionado.</Empty>;
@@ -298,42 +323,21 @@ export function TrendChart({
         <summary className="cursor-pointer text-[11px] font-semibold text-flit-brand">
           Ver los valores periodo a periodo
         </summary>
-        <div className={`mt-2 ${CARDLIST_SCROLL}`}>
-          <table className={`min-w-[28rem] ${CARDLIST_TABLE}`}>
-            <thead>
-              <tr className={CARDLIST_HEAD_ROW}>
-                <th scope="col" className={CARDLIST_TH}>Periodo</th>
-                <th scope="col" className={CARDLIST_TH}>Radicados</th>
-                <th scope="col" className={CARDLIST_TH}>Aprobados</th>
-                <th scope="col" className={CARDLIST_TH}>Rechazados</th>
-                <th scope="col" className={CARDLIST_TH}>Acumulado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((point) => (
-                <tr key={point.bucket} className={CARDLIST_ROW}>
-                  <td className={CARDLIST_CELL}>
-                    {onZoom ? (
-                      <button
-                        type="button"
-                        onClick={() => onZoom(point.desde, point.hasta, point.label)}
-                        className="font-semibold underline underline-offset-2 transition hover:text-flit-brand"
-                        aria-label={`Acotar el informe a ${point.label}`}
-                      >
-                        {point.label}
-                      </button>
-                    ) : (
-                      point.label
-                    )}
-                  </td>
-                  <td className={`${CARDLIST_CELL} tabular-nums`}>{formatInt(point.radicados)}</td>
-                  <td className={`${CARDLIST_CELL} tabular-nums`}>{formatInt(point.aprobados)}</td>
-                  <td className={`${CARDLIST_CELL} tabular-nums`}>{formatInt(point.rechazados)}</td>
-                  <td className={`${CARDLIST_CELL} tabular-nums`}>{formatInt(point.acumulado)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="mt-2">
+          <DataTable
+            columns={columnasTendencia(onZoom)}
+            rows={pg.paginar(data)}
+            getRowKey={(point) => point.bucket}
+            ariaLabel="Valores periodo a periodo"
+            minWidth={448}
+            pagination={{
+              page: pg.page,
+              pageSize: pg.pageSize,
+              totalCount: data.length,
+              onPageChange: pg.setPage,
+              onPageSizeChange: pg.setPageSize,
+            }}
+          />
         </div>
       </details>
     </div>
