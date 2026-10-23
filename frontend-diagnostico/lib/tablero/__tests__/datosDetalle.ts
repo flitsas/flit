@@ -1,7 +1,7 @@
 // Detalles de celda ficticios (HU #13801): forma exacta de obtenerDetalleCelda (HU #13798) con placas TST### y documentos
 // inventados, ya enmascarados como los entrega la API. Los reutiliza la grilla de backoffice (F06-H5).
 import type { Fuente } from "@/lib/configuracion";
-import type { Comparendo, DetalleCelda, PersonaDetalle } from "@/lib/tablero/detalle";
+import type { Comparendo, DetalleCelda, PersonaDetalle, VigenciaImpuestoDetalle } from "@/lib/tablero/detalle";
 
 export const DATO_EN = "2026-10-22T15:00:00+00:00";
 
@@ -72,6 +72,22 @@ export const avaluoConValor = () =>
       ],
     },
   });
+
+/** Impuesto departamental (HU #13866): 2025 pagada y 2026 con 350.000 pendientes. */
+export const impuestoConVigencias = (
+  vigencias: VigenciaImpuestoDetalle[] = [
+    { anio: 2025, valor: 180000, pagada: true },
+    { anio: 2026, valor: 350000, pagada: false },
+  ],
+  montoTotal = 350000,
+) => detalle("IMPUESTO_DEPARTAMENTAL", { resultado: { monto_total: montoTotal, vigencias } });
+
+/** Impuesto completado que no registra vigencias. */
+export const impuestoSinVigencias = () => detalle("IMPUESTO_DEPARTAMENTAL", { resultado: { monto_total: 0, vigencias: [] } });
+
+/** Impuesto en N/A por el motivo dado (sin departamento derivado también llega como DEPARTAMENTO_NO_SOPORTADO). */
+export const impuestoNa = (motivo: "SERVICIO_PUBLICO" | "DEPARTAMENTO_NO_SOPORTADO") =>
+  detalle("IMPUESTO_DEPARTAMENTAL", { estado: "NA", motivo_na: motivo, dato_obtenido_en: null, resultado: null });
 
 export function persona(orden: number, cambios: Partial<PersonaDetalle> = {}): PersonaDetalle {
   return {

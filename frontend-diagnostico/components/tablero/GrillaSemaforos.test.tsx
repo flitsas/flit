@@ -191,3 +191,33 @@ describe("GrillaSemaforos — HU #13851: columna Reporte opcional", () => {
     expect(within(fila).getByText("acción TST002")).toBeInTheDocument();
   });
 });
+
+// HU #13866 (F09-H7): la columna del impuesto usa los chips N/A que ya existen (CeldaSemaforo); no se reescriben, se prueban.
+describe("GrillaSemaforos — HU #13866: columna del impuesto departamental", () => {
+  const conImpuesto = (impuesto: Parameters<typeof celda>[2], cambios: Parameters<typeof celda>[3] = {}) =>
+    grilla({
+      columnas: { por_vehiculo: ["RUNT", "IMPUESTO_DEPARTAMENTAL"], por_propietario: [], por_locatario: [] },
+      vehiculos: [vehiculo(7, [celda(7, "RUNT", "COMPLETADO"), celda(7, "IMPUESTO_DEPARTAMENTAL", impuesto, cambios)])],
+    });
+
+  it.each([
+    ["SERVICIO_PUBLICO", "Servicio público"],
+    ["DEPARTAMENTO_NO_SOPORTADO", "Departamento no soportado"],
+  ] as const)("AC2/AC3: N/A %s pinta el chip «No aplica» con el motivo «%s», tono na y sin Reprocesar aunque sea admin", (motivo, textoMotivo) => {
+    const { container } = pintar(conImpuesto("NA", { motivo_na: motivo }), true);
+    const td = celdaDe(container, "celda-7-impuesto_departamental");
+    expect(td).toHaveAttribute("data-estado", "NA");
+    expect(chipDe(td)).toHaveAttribute("data-tono", "na");
+    expect(chipDe(td)).toHaveTextContent("No aplica");
+    expect(td).toHaveTextContent(textoMotivo);
+    expect(accionesDe()).toHaveLength(0);
+    expect(within(td).getByRole("button", { name: "Ver detalle de Impuesto departamental de TST007: No aplica" })).toBeInTheDocument();
+  });
+
+  it("AC1: el impuesto completado se pinta en verde («Completada») y su semáforo abre el detalle", () => {
+    const { container } = pintar(conImpuesto("COMPLETADO"));
+    const td = celdaDe(container, "celda-7-impuesto_departamental");
+    expect(chipDe(td)).toHaveAttribute("data-tono", "success");
+    expect(within(td).getByRole("button", { name: "Ver detalle de Impuesto departamental de TST007: Completada" })).toHaveAttribute("aria-haspopup", "dialog");
+  });
+});

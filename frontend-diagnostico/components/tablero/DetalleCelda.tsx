@@ -17,12 +17,14 @@ import {
   type DetalleCelda as Detalle,
   type ErrorDetalle,
   type ResultadoAvaluoDetalle,
+  type ResultadoImpuestoDetalle,
   type ResultadoRuntDetalle,
   type ResultadoSimitDetalle,
 } from "@/lib/tablero/detalle";
 import { ChipEstadoCelda, fechaDelDato } from "./CeldaSemaforo";
 import { Vacio } from "./vistasDetalle/comun";
 import { DetalleAvaluo } from "./vistasDetalle/DetalleAvaluo";
+import { DetalleImpuesto } from "./vistasDetalle/DetalleImpuesto";
 import { SeccionesPersonas } from "./vistasDetalle/DetallePersonaRunt";
 import { DetalleRunt } from "./vistasDetalle/DetalleRunt";
 import { DetalleSimit } from "./vistasDetalle/DetalleSimit";
@@ -95,6 +97,7 @@ function Resultado({ detalle }: { detalle: Detalle }) {
   if (detalle.fuente === "SIMIT_VEHICULO") return <DetalleSimit resultado={r as ResultadoSimitDetalle} />;
   if (detalle.fuente === "AVALUO") return <DetalleAvaluo resultado={r as ResultadoAvaluoDetalle} />;
   if (detalle.fuente === "RUNT") return <DetalleRunt resultado={r as ResultadoRuntDetalle} />;
+  if (detalle.fuente === "IMPUESTO_DEPARTAMENTAL") return <DetalleImpuesto resultado={r as ResultadoImpuestoDetalle} />;
   return <Vacio>Esta consulta no trae detalle para mostrar.</Vacio>;
 }
 

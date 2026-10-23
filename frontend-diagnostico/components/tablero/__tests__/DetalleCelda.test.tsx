@@ -10,6 +10,9 @@ import {
   avaluoSinValor,
   comparendo,
   detalle,
+  impuestoConVigencias,
+  impuestoNa,
+  impuestoSinVigencias,
   persona,
   runtLocatarioDeclarado,
   runtPropietarioConError,
@@ -32,6 +35,7 @@ const NOMBRES: Record<string, string> = {
   AVALUO: "Avalúo comercial",
   RUNT_PROPIETARIO: "RUNT propietario",
   RUNT_LOCATARIO: "RUNT locatario",
+  IMPUESTO_DEPARTAMENTAL: "Impuesto departamental",
 };
 
 const rutaDetalle = (fuente: Fuente) => `GET /diagnosticos/${ID}/vehiculos/vehiculo-1/consultas/${fuente}`;
@@ -343,5 +347,113 @@ describe("DetalleCelda — accesibilidad del diálogo", () => {
     const v = vehiculo(1, [celda(1, "RUNT", "COMPLETADO")]);
     render(<GrillaSemaforos grilla={grilla({ vehiculos: [v], columnas: { por_vehiculo: ["RUNT", "AVALUO"], por_propietario: [], por_locatario: [] } })} puedeReprocesar={false} />);
     expect(screen.getAllByRole("button", { name: /^Ver detalle/ })).toHaveLength(1);
+  });
+});
+
+// HU #13866 (F09-H7): celda y detalle del impuesto departamental. Uso de ejemplo: el semáforo «Ver detalle de Impuesto
+// departamental de TST001» abre el diálogo con «Total adeudado» en pesos enteros y la tabla Vigencia / Valor / Estado, o el
+// texto del motivo cuando la celda es N/A (servicio público; departamento no soportado o sin departamento derivado).
+describe("DetalleCelda — HU #13866: impuesto departamental", () => {
+  const texto = (el: Element) => (el.textContent ?? "").replace(/\s/g, " ");
+
+  /** Grilla de TST001 con RUNT completado y el impuesto en el estado pedido. */
+  function grillaImpuesto(impuesto: ReturnType<typeof celda>, puedeReprocesar = false) {
+    const v = vehiculo(1, [celda(1, "RUNT", "COMPLETADO"), impuesto]);
+    return render(
+      <GrillaSemaforos grilla={grilla({ vehiculos: [v], columnas: { por_vehiculo: ["RUNT", "IMPUESTO_DEPARTAMENTAL"], por_propietario: [], por_locatario: [] } })} puedeReprocesar={puedeReprocesar} />,
+    );
+  }
+
+  it("AC1: desde el semáforo verde pide el detalle del impuesto y pinta «Total adeudado» con $ 350.000 y la tabla de vigencias con su estado", async () => {
+    const api = simularApi({ [rutaDetalle("IMPUESTO_DEPARTAMENTAL")]: () => Response.json(impuestoConVigencias()) });
+    grillaImpuesto(celda(1, "IMPUESTO_DEPARTAMENTAL", "COMPLETADO"));
+    fireEvent.click(screen.getByRole("button", { name: /^Ver detalle de Impuesto departamental de TST001: Completada$/ }));
+    const dialogo = await screen.findByRole("dialog", { name: "Impuesto departamental · TST001" });
+    expect(llamadas(api, "GET", `/diagnosticos/${ID}/vehiculos/vehiculo-1/consultas/IMPUESTO_DEPARTAMENTAL`)).toHaveLength(1);
+
+    const total = await within(dialogo).findByText("Total adeudado");
+    expect(texto(total.parentElement!)).toContain("$ 350.000");
+
+    const tabla = within(dialogo).getByRole("table", { name: "Vigencias del impuesto" });
+    expect(within(tabla).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Vigencia", "Valor", "Estado"]);
+    for (const c of within(tabla).getAllByRole("columnheader")) expect(c).toHaveAttribute("scope", "col");
+    const filas = within(tabla).getAllByRole("row").slice(1);
+    expect(filas).toHaveLength(2);
+    expect(filas[0]).toHaveTextContent("2025");
+    expect(texto(filas[0])).toContain("$ 180.000");
+    expect(filas[0]).toHaveTextContent("Pagada");
+    expect(filas[1]).toHaveTextContent("2026");
+    expect(texto(filas[1])).toContain("$ 350.000");
+    expect(filas[1]).toHaveTextContent("Pendiente");
+  });
+
+  it("AC1: los montos se muestran en pesos enteros con el formato del avalúo, sin decimales", async () => {
+    const { dialogo } = await pintarDetalle(impuestoConVigencias([{ anio: 2026, valor: 1234567, pagada: false }], 1234567));
+    expect(texto(dialogo)).toContain("$ 1.234.567");
+    expect(texto(dialogo)).not.toMatch(/1\.234\.567,\d/);
+  });
+
+  it("AC1 (vacío): sin vigencias dice «No registra vigencias» en vez de pintar una tabla vacía", async () => {
+    const { dialogo } = await pintarDetalle(impuestoSinVigencias());
+    expect(within(dialogo).getByText("No registra vigencias")).toBeInTheDocument();
+    expect(within(dialogo).queryByRole("table")).not.toBeInTheDocument();
+    expect(texto(within(dialogo).getByText("Total adeudado").parentElement!)).toContain("$ 0");
+  });
+
+  it("AC2: servicio público — el detalle explica el motivo con el texto existente y el chip «No aplica»", async () => {
+    const { dialogo } = await pintarDetalle(impuestoNa("SERVICIO_PUBLICO"));
+    expect(within(dialogo).getByText("No aplica")).toBeInTheDocument();
+    expect(within(dialogo).getByText("El vehículo es de servicio público: esta consulta no aplica.")).toBeInTheDocument();
+    expect(within(dialogo).queryByText("Total adeudado")).not.toBeInTheDocument();
+  });
+
+  it("AC2: desde la grilla, el chip N/A «Servicio público» del impuesto abre su detalle con el motivo", async () => {
+    simularApi({ [rutaDetalle("IMPUESTO_DEPARTAMENTAL")]: () => Response.json(impuestoNa("SERVICIO_PUBLICO")) });
+    const { container } = grillaImpuesto(celda(1, "IMPUESTO_DEPARTAMENTAL", "NA", { motivo_na: "SERVICIO_PUBLICO" }));
+    expect(container.querySelector('[data-celda="celda-1-impuesto_departamental"]')).toHaveTextContent("Servicio público");
+    fireEvent.click(screen.getByRole("button", { name: /^Ver detalle de Impuesto departamental de TST001: No aplica$/ }));
+    const dialogo = await screen.findByRole("dialog", { name: "Impuesto departamental · TST001" });
+    expect(await within(dialogo).findByText("El vehículo es de servicio público: esta consulta no aplica.")).toBeInTheDocument();
+  });
+
+  it("AC3 (negativo): departamento no soportado — texto existente, sin error ni botón de reprocesar", async () => {
+    simularApi({ [rutaDetalle("IMPUESTO_DEPARTAMENTAL")]: () => Response.json(impuestoNa("DEPARTAMENTO_NO_SOPORTADO")) });
+    grillaImpuesto(celda(1, "IMPUESTO_DEPARTAMENTAL", "NA", { motivo_na: "DEPARTAMENTO_NO_SOPORTADO" }), true);
+    expect(screen.queryByRole("button", { name: /reprocesar/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Ver detalle de Impuesto departamental de TST001: No aplica$/ }));
+    const dialogo = await screen.findByRole("dialog", { name: "Impuesto departamental · TST001" });
+    expect(await within(dialogo).findByText("El departamento del vehículo todavía no está soportado.")).toBeInTheDocument();
+    expect(within(dialogo).queryByRole("alert")).not.toBeInTheDocument();
+    expect(within(dialogo).queryByRole("button", { name: /reprocesar|reintentar/i })).not.toBeInTheDocument();
+    expect(within(dialogo).queryByText(/error/i)).not.toBeInTheDocument();
+  });
+
+  it("R-20: aunque el payload traiga un proveedor ficticio, transacción, origen o departamento, el detalle no los muestra", async () => {
+    const limpio = impuestoConVigencias();
+    const conFuga = {
+      ...impuestoConVigencias(),
+      proveedor: "PROVEEDOR-FICTICIO-ZETA",
+      transaccion_proveedor_id: "TX-FICTICIA-0099",
+      origen: "API",
+      departamento_codigo: "05",
+      resultado: {
+        monto_total: 350000,
+        proveedor: "PROVEEDOR-FICTICIO-ZETA",
+        vigencias: [
+          { anio: 2025, valor: 180000, pagada: true, proveedor: "PROVEEDOR-FICTICIO-ZETA" },
+          { anio: 2026, valor: 350000, pagada: false },
+        ],
+      },
+    } as unknown as Detalle;
+    const limpiar = (html: string) => html.replace(/\s(id|aria-labelledby|aria-describedby|aria-controls)="[^"]*"/g, "");
+
+    const a = await pintarDetalle(limpio);
+    await within(a.dialogo).findByText("Total adeudado");
+    const htmlLimpio = limpiar(a.dialogo.innerHTML);
+    a.unmount();
+    const b = await pintarDetalle(conFuga);
+    await within(b.dialogo).findByText("Total adeudado");
+    expect(b.dialogo.textContent).not.toMatch(/PROVEEDOR-FICTICIO-ZETA|TX-FICTICIA-0099|proveedor|transacci|origen|departamento/i);
+    expect(limpiar(b.dialogo.innerHTML)).toBe(htmlLimpio);
   });
 });

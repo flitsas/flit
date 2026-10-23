@@ -54,6 +54,22 @@ export interface ResultadoAvaluoDetalle {
   fuentes: FuenteAvaluo[];
 }
 
+/** Vigencia del impuesto departamental (HU #13864, Q1 = a): año, valor en pesos enteros y si está pagada. */
+export interface VigenciaImpuestoDetalle {
+  anio: number;
+  valor: number;
+  pagada: boolean;
+}
+
+/**
+ * Impuesto vehicular departamental (HU #13864): total adeudado (suma de lo no pagado) y vigencias por año ascendente, en
+ * pesos enteros. Sin proveedor, transacción, origen ni departamento consultado (R-20).
+ */
+export interface ResultadoImpuestoDetalle {
+  monto_total: number;
+  vigencias: VigenciaImpuestoDetalle[];
+}
+
 export interface ResultadoRuntPersona {
   inscrito: boolean;
   estado_conductor: string | null;
@@ -92,8 +108,8 @@ export interface DetalleCelda {
   tipo_error: string | null;
   dato_obtenido_en: string | null;
   reutilizada: boolean;
-  /** Solo RUNT, SIMIT_VEHICULO y AVALUO con la celda COMPLETADO. */
-  resultado: ResultadoRuntDetalle | ResultadoSimitDetalle | ResultadoAvaluoDetalle | null;
+  /** Solo RUNT, SIMIT_VEHICULO, AVALUO e IMPUESTO_DEPARTAMENTAL con la celda COMPLETADO; se discrimina por `fuente`. */
+  resultado: ResultadoRuntDetalle | ResultadoSimitDetalle | ResultadoAvaluoDetalle | ResultadoImpuestoDetalle | null;
   /** Solo en las fuentes de persona; una entrada por persona del rol, en orden. */
   personas: PersonaDetalle[] | null;
 }
