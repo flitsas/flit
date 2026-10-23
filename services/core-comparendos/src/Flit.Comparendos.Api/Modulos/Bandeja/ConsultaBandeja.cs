@@ -340,8 +340,8 @@ public sealed class ConsultaBandeja(ComparendosDb db, CalendarioService calendar
         ("notificacion", true) => q.OrderByDescending(c => c.FechaNotificacion).ThenBy(c => c.Id),
         ("actividad", false) => q.OrderBy(c => c.UltimoEventoEn).ThenBy(c => c.Id),
         ("actividad", true) => q.OrderByDescending(c => c.UltimoEventoEn).ThenBy(c => c.Id),
-        ("numero", false) => q.OrderBy(c => c.NumeroNormalizado),
-        ("numero", true) => q.OrderByDescending(c => c.NumeroNormalizado),
+        ("numero", false) => q.OrderBy(c => c.NumeroNormalizado).ThenBy(c => c.Id),
+        ("numero", true) => q.OrderByDescending(c => c.NumeroNormalizado).ThenBy(c => c.Id),
         // Por defecto: primero los EN_TIEMPO por fecha límite (lo más urgente arriba), luego el resto del más nuevo al más viejo.
         _ => q.OrderBy(c => c.Activo && c.FechaLimiteGestion != null && hoy <= c.FechaLimiteGestion ? 0 : 1)
             .ThenBy(c => c.Activo && c.FechaLimiteGestion != null && hoy <= c.FechaLimiteGestion ? c.FechaLimiteGestion : null)

@@ -1,65 +1,68 @@
-using System.Globalization;
-using System.Text.Json;
-using Flit.Comparendos.Api.Infraestructura.Archivos;
 using Flit.Comparendos.Api.Infraestructura.Excel;
-using Flit.Comparendos.Api.Modulos.Comun;
-using Flit.Comparendos.Api.Modulos.Correo;
-using Flit.Comparendos.Api.Persistence;
-using Flit.Comparendos.Api.Persistence.Modelo;
-using Flit.Comparendos.Api.Plataforma;
-using Flit.Comparendos.Domain.Modelo;
-using Microsoft.EntityFrameworkCore;
+using Flit.Comparendos.Domain.Tiempo;
 using Cell = Flit.Comparendos.Api.Infraestructura.Excel.TabularWorkbookWriter.Cell;
 
 namespace Flit.Comparendos.Api.Modulos.Bandeja;
 
 /// <summary>
-/// Exportación de la bandeja (§6.20, RN-184): exactamente lo filtrado, sin paginación, con el estado legal calculado a la
-/// fecha de generación. Hasta 5.000 filas se descarga directo; más, se genera en segundo plano y llega un correo con el
-/// enlace («Mis exportaciones», vigente 7 días, S-27).
+/// Exportación de la bandeja (§6.20, RN-184; HU #13871): exactamente lo filtrado, con el estado legal calculado a la fecha
+/// de generación, en archivos de hasta 5.000 filas. El navegador pide cada parte y la descarga en el mismo clic, como la
+/// exportación de Consultas de Trámites: no hay cola ni correo. Cada archivo trae solo las columnas visibles de la tabla.
 /// </summary>
 public sealed class ExportacionBandeja(ConsultaBandeja consulta)
 {
-    public const int LimiteDirecto = 5000;
+    public const int TamanoParte = 5000;
 
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-
-    private static readonly (string Titulo, int Ancho)[] Columnas =
+    /// <summary>
+    /// Las columnas del Excel por clave de columna de la tabla (components/bandeja/columnas.tsx), en el orden de la tabla.
+    /// Algunas columnas de la tabla son dos en el Excel (NIT y titular, estado legal y días, radicado y resultado del DP).
+    /// </summary>
+    private static readonly (string Clave, (string Titulo, int Ancho, Func<FilaBandeja, Cell> Valor)[] Celdas)[] Catalogo =
     [
-        ("Número", 22), ("Placa", 10), ("NIT consultado", 14), ("Titular", 30), ("Organismo de tránsito", 34), ("Fecha imposición", 13), ("Fecha notificación", 13),
-        ("Valor total", 14), ("Fuente", 11), ("Estado legal", 13), ("Días hábiles restantes", 10), ("Ventana de descuento", 14), ("Fin del descuento", 13),
-        ("Estado del proceso", 18), ("Contraventor", 28), ("Último hito de notificación", 30), ("Cambio de contraventor", 16), ("Radicado DP", 18), ("Resultado DP", 14),
-        ("Pagado", 8), ("Activo", 8), ("Cobro coactivo", 10),
+        ("numero", [("Número", 22, f => Cell.Of(f.Numero))]),
+        ("placa", [("Placa", 10, f => Cell.Of(f.Placa))]),
+        ("titular", [("NIT consultado", 14, f => Cell.Of(ConDv(f.NitConsultado))), ("Titular", 30, f => Cell.Of(f.Titular))]),
+        ("ot", [("Organismo de tránsito", 34, f => Cell.Of(f.Organismo ?? f.SecretariaTexto))]),
+        ("imposicion", [("Fecha imposición", 13, f => Fecha(f.FechaImposicion))]),
+        ("notificacion", [("Fecha notificación", 13, f => Fecha(f.FechaNotificacion))]),
+        ("valor", [("Valor total", 14, f => f.ValorTotal is { } v ? Cell.Of((double)v) : Cell.Empty)]),
+        ("fuente", [("Fuente", 11, f => Cell.Of(Texto(f.Fuente)))]),
+        ("semaforo", [("Estado legal", 13, f => Cell.Of(Texto(f.EstadoLegal))), ("Días hábiles restantes", 10, f => f.DiasHabilesRestantes is { } d ? Cell.Of(d) : Cell.Empty)]),
+        ("ventana", [("Ventana de descuento", 14, f => Cell.Of(Texto(f.VentanaDescuento)))]),
+        ("finDescuento", [("Fin del descuento", 13, f => Fecha(f.FinDescuentoVigente))]),
+        ("proceso", [("Estado del proceso", 18, f => Cell.Of(Texto(f.EstadoProceso)))]),
+        ("contraventor", [("Contraventor", 28, f => Cell.Of(f.ContraventorNombre))]),
+        ("aviso", [("Último hito de notificación", 30, f => Cell.Of(ConsultaBandeja.TextoHito(f.UltimoHito)))]),
+        ("cambio", [("Cambio de contraventor", 16, f => Cell.Of(Texto(f.CambioContraventor)))]),
+        ("dp", [("Radicado DP", 18, f => Cell.Of(f.DpRadicado)), ("Resultado DP", 14, f => Cell.Of(Texto(f.DpResultado)))]),
+        ("pagado", [("Pagado", 8, f => Cell.Of(f.Pagado ? "Sí" : "No"))]),
+        ("activo", [("Activo", 8, f => Cell.Of(f.Activo ? "Sí" : "No"))]),
+        ("cobroCoactivo", [("Cobro coactivo", 10, f => Cell.Of(f.EnCobroCoactivo ? "Sí" : "No"))]),
+        ("actividad", [("Última actividad", 17, f => Cell.Of(f.UltimoEventoEn.ToOffset(ColombiaTime.Offset).ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture)))]),
     ];
 
-    public async Task<byte[]> GenerarAsync(Guid? tenant, FiltrosBandeja filtros, CancellationToken ct)
+    /// <summary>
+    /// Una parte de la exportación (desde 1). <paramref name="columnas"/> son las claves de la tabla en el orden en que se
+    /// ven; las desconocidas se ignoran y sin ninguna conocida salen todas.
+    /// </summary>
+    public async Task<byte[]> GenerarAsync(Guid? tenant, FiltrosBandeja filtros, int parte, IReadOnlyList<string>? columnas, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(filtros);
         var h = await consulta.HoyAsync(ct).ConfigureAwait(false);
-        var q = ConsultaBandeja.Ordenar(consulta.Filtrar(tenant, filtros, h), filtros.Orden, filtros.Descendente, h.Dia);
+        var q = ConsultaBandeja.Ordenar(consulta.Filtrar(tenant, filtros, h), filtros.Orden, filtros.Descendente, h.Dia)
+            .Skip((Math.Max(parte, 1) - 1) * TamanoParte).Take(TamanoParte);
         var filas = await consulta.ProyectarAsync(q, h, ct).ConfigureAwait(false);
+        var celdas = Elegidas(columnas).SelectMany(c => c.Celdas).ToList();
         var hoja = new TabularWorkbookWriter.Sheet($"Comparendos {h.Dia:yyyy-MM-dd}",
-            Columnas.Select(c => new TabularWorkbookWriter.Column(c.Titulo, c.Ancho)).ToList(),
-            filas.Select(f => (IReadOnlyList<Cell>)
-            [
-                Cell.Of(f.Numero), Cell.Of(f.Placa), Cell.Of(ConDv(f.NitConsultado)), Cell.Of(f.Titular), Cell.Of(f.Organismo ?? f.SecretariaTexto),
-                Fecha(f.FechaImposicion), Fecha(f.FechaNotificacion), f.ValorTotal is { } v ? Cell.Of((double)v) : Cell.Empty, Cell.Of(Texto(f.Fuente)),
-                Cell.Of(Texto(f.EstadoLegal)), f.DiasHabilesRestantes is { } d ? Cell.Of(d) : Cell.Empty, Cell.Of(Texto(f.VentanaDescuento)), Fecha(f.FinDescuentoVigente),
-                Cell.Of(Texto(f.EstadoProceso)), Cell.Of(f.ContraventorNombre), Cell.Of(ConsultaBandeja.TextoHito(f.UltimoHito)), Cell.Of(Texto(f.CambioContraventor)), Cell.Of(f.DpRadicado),
-                Cell.Of(f.DpResultado), Cell.Of(f.Pagado ? "Sí" : "No"), Cell.Of(f.Activo ? "Sí" : "No"), Cell.Of(f.EnCobroCoactivo ? "Sí" : "No"),
-            ]).ToList());
+            celdas.Select(c => new TabularWorkbookWriter.Column(c.Titulo, c.Ancho)).ToList(),
+            filas.Select(f => (IReadOnlyList<Cell>)celdas.Select(c => c.Valor(f)).ToList()).ToList());
         return TabularWorkbookWriter.Write([hoja]);
     }
 
-    public static string Serializar(Guid? tenant, FiltrosBandeja filtros, string correo) =>
-        JsonSerializer.Serialize(new { tenant, correo, filtros }, Json);
-
-    public static (Guid? Tenant, FiltrosBandeja Filtros, string Correo) Deserializar(string texto)
+    private static IEnumerable<(string Clave, (string Titulo, int Ancho, Func<FilaBandeja, Cell> Valor)[] Celdas)> Elegidas(IReadOnlyList<string>? columnas)
     {
-        using var doc = JsonDocument.Parse(texto);
-        var root = doc.RootElement;
-        return (root.TryGetProperty("tenant", out var t) && t.ValueKind == JsonValueKind.String ? t.GetGuid() : null,
-            root.GetProperty("filtros").Deserialize<FiltrosBandeja>(Json) ?? new FiltrosBandeja(),
-            root.TryGetProperty("correo", out var c) ? c.GetString() ?? string.Empty : string.Empty);
+        var elegidas = (columnas ?? []).Distinct(StringComparer.Ordinal).Select(c => Catalogo.FirstOrDefault(x => x.Clave == c)).Where(x => x.Clave is not null).ToList();
+        return elegidas.Count > 0 ? elegidas : Catalogo;
     }
 
     private static Cell Fecha(DateOnly? d) => d is { } x ? Cell.Of(x) : Cell.Empty;
@@ -83,76 +86,4 @@ public sealed class ExportacionBandeja(ConsultaBandeja consulta)
     /// <summary>El NIT consultado como en la pantalla: «811011779-8».</summary>
     internal static string? ConDv(string? nit) =>
         nit is { Length: > 0 } && nit.All(char.IsAsciiDigit) ? $"{nit}-{Flit.Comparendos.Domain.Identificadores.Nit.DigitoVerificacion(nit)}" : nit;
-}
-
-/// <summary>Genera en segundo plano las exportaciones grandes y avisa por correo cuando quedan listas.</summary>
-internal sealed partial class ExportadorEnSegundoPlano(IServiceScopeFactory scopes, TimeProvider time, ILogger<ExportadorEnSegundoPlano> logger) : BackgroundService
-{
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            try
-            {
-                while (await ProcesarSiguienteAsync(stoppingToken).ConfigureAwait(false))
-                {
-                }
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                LogFallo(logger, ex);
-            }
-
-            await Task.Delay(TimeSpan.FromSeconds(15), time, stoppingToken).ConfigureAwait(false);
-        }
-    }
-
-    public async Task<bool> ProcesarSiguienteAsync(CancellationToken ct)
-    {
-        await using var scope = scopes.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<ComparendosDb>();
-        var ids = await db.Database.SqlQuery<Guid>($"""
-            UPDATE comparendos.exportacion SET estado = 'Generando'
-            WHERE id = (SELECT id FROM comparendos.exportacion WHERE estado = 'EnCola' ORDER BY creado_en LIMIT 1 FOR UPDATE SKIP LOCKED)
-            RETURNING id AS "Value"
-            """).ToListAsync(ct).ConfigureAwait(false);
-        if (ids.Count == 0)
-            return false;
-
-        var e = await db.Exportaciones.FirstAsync(x => x.Id == ids[0], ct).ConfigureAwait(false);
-        var (tenant, filtros, correo) = ExportacionBandeja.Deserializar(e.Filtros);
-        try
-        {
-            var bytes = await scope.ServiceProvider.GetRequiredService<ExportacionBandeja>().GenerarAsync(tenant, filtros, ct).ConfigureAwait(false);
-            var servicio = scope.ServiceProvider.GetRequiredService<ServicioCorreo>();
-            e.ArchivoId = await servicio.GuardarAsync(e.TenantId, "exportacion", $"comparendos-{time.GetUtcNow():yyyyMMddHHmm}.xlsx", TabularWorkbookWriter.ContentType, bytes, ct).ConfigureAwait(false);
-            e.Estado = EstadoExportacion.Lista;
-            e.TerminadoEn = time.GetUtcNow();
-            e.ExpiraEn = e.TerminadoEn.Value.AddDays(7);
-            if (correo.Length > 0)
-            {
-                await servicio.RegistrarAsync(new CorreoNuevo
-                {
-                    TenantId = e.TenantId,
-                    Tipo = TipoComunicacion.ExportacionLista,
-                    Plantilla = "comparendos.exportacion_lista",
-                    Para = [new Destinatario(correo)],
-                    Asunto = "Tu exportación de comparendos está lista",
-                    Html = HtmlCorreo.Envolver("Exportación lista", $"<p>La exportación de la bandeja que pediste ya está lista.</p><p><a href=\"{servicio.AppUrl}/exportaciones\">Descárgala en «Mis exportaciones»</a>. Estará disponible 7 días.</p>"),
-                }, ct).ConfigureAwait(false);
-            }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            LogFallo(logger, ex);
-            e.Estado = EstadoExportacion.Fallida;
-            e.TerminadoEn = time.GetUtcNow();
-        }
-
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        return true;
-    }
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "Falló una exportación de la bandeja de Comparendos.")]
-    private static partial void LogFallo(ILogger logger, Exception ex);
 }

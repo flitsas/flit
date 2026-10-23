@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aQuery, describirFiltros, etiquetasAplicadas, FILTROS_VACIOS, leerLista, quitarEtiqueta, type FiltrosBandeja } from "@/lib/filtros";
+import { aQuery, etiquetasAplicadas, FILTROS_VACIOS, leerLista, quitarEtiqueta, type FiltrosBandeja } from "@/lib/filtros";
 
 const f = (cambios: Partial<FiltrosBandeja>): FiltrosBandeja => ({ ...FILTROS_VACIOS, ...cambios });
 const textos = (x: FiltrosBandeja, nombres: Record<string, string> = {}) => etiquetasAplicadas(x, nombres).map((e) => e.texto);
@@ -57,11 +57,5 @@ describe("menú «Filtros» y etiquetas (HU #13868)", () => {
     expect(quitarEtiqueta(x, "imposicion")).toMatchObject({ imposicionDesde: "", imposicionHasta: "" });
     expect(quitarEtiqueta(x, "activos").activos).toBe("todos");
     expect(quitarEtiqueta(f({ rapido: "Radar" }), "rapido").rapido).toBeNull();
-  });
-
-  it("«Mis exportaciones» describe la búsqueda, las listas y el «no es»", () => {
-    expect(describirFiltros({ buscar: "abc", placas: ["XYZ987"], organismos: ["o1"], negar: ["organismos"] }, { o1: "Bogotá" }, {})).toBe(
-      "Búsqueda: abc · Placa: XYZ987 · Organismo no es: Bogotá",
-    );
   });
 });

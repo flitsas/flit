@@ -1,10 +1,6 @@
-using Flit.Comparendos.Api.Infraestructura.Archivos;
 using Flit.Comparendos.Api.Infraestructura.Excel;
 using Flit.Comparendos.Api.Modulos.Comun;
-using Flit.Comparendos.Api.Persistence;
-using Flit.Comparendos.Api.Persistence.Modelo;
 using Flit.Comparendos.Api.Plataforma;
-using Flit.Comparendos.Domain.Modelo;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Comparendos.Api.Modulos.Bandeja;
@@ -22,8 +18,6 @@ public static class BandejaEndpoints
         api.MapGet("/comparendos", Listar).RequirePermiso(Permisos.BandejaVer);
         api.MapGet("/comparendos/contadores", ContarRapidos).RequirePermiso(Permisos.BandejaVer);
         api.MapGet("/comparendos/excel", Exportar).RequirePermiso(Permisos.BandejaExportar);
-        api.MapGet("/exportaciones", MisExportaciones).RequireAuthorization(AutorizacionExtensions.PoliticaUsuario);
-        api.MapGet("/exportaciones/{id:guid}/archivo", DescargarExportacion).RequireAuthorization(AutorizacionExtensions.PoliticaUsuario);
     }
 
     private static async Task<IResult> Listar(HttpRequest request, UsuarioActual usuario, ConsultaBandeja consulta, CancellationToken ct)
@@ -60,63 +54,17 @@ public static class BandejaEndpoints
             estados));
     }
 
-    private static async Task<IResult> Exportar(HttpRequest request, UsuarioActual usuario, ConsultaBandeja consulta, ExportacionBandeja exportacion, ComparendosDb db, Reloj reloj, CancellationToken ct)
+    /// <summary>
+    /// Una parte de hasta 5.000 filas de lo filtrado (HU #13871): ?parte=N (desde 1) y ?columnas=clave,clave… con las
+    /// columnas visibles de la tabla, en su orden. El navegador pide todas las partes en el mismo clic.
+    /// </summary>
+    private static async Task<IResult> Exportar(HttpRequest request, UsuarioActual usuario, ExportacionBandeja exportacion, Reloj reloj, CancellationToken ct)
     {
         var f = FiltrosBandeja.Desde(request);
         var tenant = usuario.EmpresaLectura(f.Empresa);
-        var h = await consulta.HoyAsync(ct).ConfigureAwait(false);
-        var total = await consulta.Filtrar(tenant, f, h).CountAsync(ct).ConfigureAwait(false);
-        if (total <= ExportacionBandeja.LimiteDirecto)
-        {
-            var bytes = await exportacion.GenerarAsync(tenant, f, ct).ConfigureAwait(false);
-            return Results.File(bytes, TabularWorkbookWriter.ContentType, $"comparendos-{reloj.Hoy:yyyyMMdd}.xlsx");
-        }
-
-        var e = new Exportacion
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = tenant ?? Guid.Empty,
-            SolicitadaPor = usuario.Id,
-            Filtros = ExportacionBandeja.Serializar(tenant, f, usuario.Email),
-            TotalFilas = total,
-            CreadoEn = reloj.Ahora,
-        };
-        db.Exportaciones.Add(e);
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        return Results.Accepted($"{Program.Prefijo}/exportaciones/{e.Id}", new { id = e.Id, total, mensaje = "La exportación es grande: te avisamos por correo cuando esté lista." });
-    }
-
-    private static async Task<IResult> MisExportaciones(UsuarioActual usuario, ComparendosDb db, Reloj reloj, CancellationToken ct)
-    {
-        var lista = await db.Exportaciones.AsNoTracking().Where(e => e.SolicitadaPor == usuario.Id).OrderByDescending(e => e.CreadoEn).Take(50).ToListAsync(ct).ConfigureAwait(false);
-        // Los filtros con que se pidió cada una (§7.26), con el nombre de los NIT y organismos para mostrarlos.
-        var filtros = lista.ToDictionary(e => e.Id, e => ExportacionBandeja.Deserializar(e.Filtros).Filtros);
-        var nits = filtros.Values.SelectMany(f => f.Nits ?? []).Distinct().ToList();
-        var ots = filtros.Values.SelectMany(f => f.Organismos ?? []).Distinct().ToList();
-        var nombres = (await db.IdentificacionesMonitoreadas.AsNoTracking().Where(i => nits.Contains(i.Id)).Select(i => new { i.Id, Texto = i.NumeroBase }).ToListAsync(ct).ConfigureAwait(false))
-            .Concat(await db.OrganismosTransito.AsNoTracking().Where(o => ots.Contains(o.Id)).Select(o => new { o.Id, Texto = o.Nombre }).ToListAsync(ct).ConfigureAwait(false))
-            .ToDictionary(x => x.Id, x => x.Texto);
-        return Results.Ok(lista.Select(e => new
-        {
-            e.Id,
-            filtros = filtros[e.Id],
-            nombres = (filtros[e.Id].Nits ?? []).Concat(filtros[e.Id].Organismos ?? []).Where(nombres.ContainsKey).ToDictionary(id => id, id => nombres[id]),
-            e.TotalFilas,
-            estado = (e.Estado == EstadoExportacion.Lista && e.ExpiraEn < reloj.Ahora ? EstadoExportacion.Expirada : e.Estado).ToString(),
-            e.CreadoEn,
-            e.TerminadoEn,
-            e.ExpiraEn,
-        }));
-    }
-
-    private static async Task<IResult> DescargarExportacion(Guid id, UsuarioActual usuario, ComparendosDb db, IAlmacenArchivos almacen, Reloj reloj, CancellationToken ct)
-    {
-        var e = await db.Exportaciones.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id && x.SolicitadaPor == usuario.Id, ct).ConfigureAwait(false)
-            ?? throw ReglaException.NoEncontrado("La exportación");
-        if (e.Estado != EstadoExportacion.Lista || e.ArchivoId is not { } archivoId || e.ExpiraEn < reloj.Ahora)
-            throw ReglaException.Conflicto("EXPORTACION_NO_DISPONIBLE", "La exportación no está lista o ya venció.");
-        var archivo = await db.Archivos.AsNoTracking().FirstAsync(a => a.Id == archivoId, ct).ConfigureAwait(false);
-        var bytes = await almacen.LeerAsync(archivo.Referencia, ct).ConfigureAwait(false) ?? throw ReglaException.NoEncontrado("El archivo");
-        return Results.File(bytes, archivo.ContentType, archivo.NombreOriginal);
+        var parte = int.TryParse(request.Query["parte"], out var n) && n > 0 ? n : 1;
+        var columnas = request.Query["columnas"].SelectMany(x => (x ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)).ToList();
+        var bytes = await exportacion.GenerarAsync(tenant, f, parte, columnas, ct).ConfigureAwait(false);
+        return Results.File(bytes, TabularWorkbookWriter.ContentType, $"comparendos-{reloj.Hoy:yyyyMMdd}.xlsx");
     }
 }

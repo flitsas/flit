@@ -344,17 +344,6 @@ export interface AliasOt {
   origen: string;
 }
 
-export interface Exportacion {
-  id: string;
-  filtros: import("@/lib/filtros").FiltrosGuardados;
-  nombres: Record<string, string>;
-  totalFilas: number | null;
-  estado: string;
-  creadoEn: string;
-  terminadoEn: string | null;
-  expiraEn: string | null;
-}
-
 // ── Parametrizador (HU #13473-#13475) ──────────────────────────────────────────────────────────────────────────────
 /** Empresa de la plataforma con Comparendos encendido (GET /admin/empresas/plataforma). `nit` ya trae el dígito. */
 export interface EmpresaPlataforma {

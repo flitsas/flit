@@ -1,10 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { Suspense, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowDownWideNarrow, ArrowUpNarrowWide, Download, Mail, RefreshCw, Search, Send } from "lucide-react";
-import { ActionsMenu, DataTable, InlineAlert, usePaginacion, type DataTableColumn } from "@flit/ui";
+import { ActionsMenu, DataTable, InlineAlert, Modal, usePaginacion, type DataTableColumn } from "@flit/ui";
 import { BusquedaRapida } from "@/components/bandeja/BusquedaRapida";
 import { COLUMNAS_BANDEJA } from "@/components/bandeja/columnas";
 import { EnvioMasivoAviso } from "@/components/bandeja/EnvioMasivoAviso";
@@ -19,11 +18,12 @@ import { useSesion } from "@/components/ComparendosShell";
 import { Encabezado } from "@/components/Pantalla";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
 import { useToast } from "@/components/Toast";
-import { controlCls, INPUT_CLS } from "@/components/ui/estilos";
+import { BOTON_PRIMARIO_CLS, controlCls, INPUT_CLS } from "@/components/ui/estilos";
 import { apiDownload, apiFetch } from "@/lib/api";
 import { textoCambioOrden, textoOrden } from "@/lib/orden";
 import { COLUMNA_FIJA, guardadas, guardar, ocultasDesde } from "@/lib/columnas";
 import { MAXIMO_LOTE } from "@/lib/dp";
+import { FILAS_POR_PARTE, mensajeExportacion, nombreParte, PARTES_SIN_CONFIRMAR, partesDe } from "@/lib/exportar";
 import { aQuery, etiquetasAplicadas, FILTROS_VACIOS, quitarEtiqueta, type FiltrosBandeja } from "@/lib/filtros";
 import { P } from "@/lib/nav";
 import { capacidades, tienePermiso } from "@/lib/sesion";
@@ -68,7 +68,9 @@ function ContenidoBandeja() {
   const [nombresElegidos, setNombresElegidos] = useState<Record<string, string>>({});
   const [orden, setOrden] = useState("");
   const [descendente, setDescendente] = useState(false);
-  const [exportando, setExportando] = useState(false);
+  // Lo que dice el botón mientras se descargan las partes («Parte 2 de 3…»); null = no se está exportando.
+  const [exportando, setExportando] = useState<string | null>(null);
+  const [confirmarPartes, setConfirmarPartes] = useState<number | null>(null);
   const [seleccionado, setSeleccionado] = useState<string | null>(null);
   const [seccion, setSeccion] = useState<SeccionDetalle | null>(null);
   const abrir = (id: string, s: SeccionDetalle | null = null) => {
@@ -93,7 +95,7 @@ function ContenidoBandeja() {
   const cambiarColumnas = (visibles: string[]) => {
     const nuevas = ocultasDesde(visibles, claves);
     setPreferencia({ usuario: usuarioId, ocultas: nuevas });
-    guardar(usuarioId, nuevas);
+    guardar(usuarioId, nuevas, claves);
   };
 
   const setFiltros = (f: FiltrosBandeja) => {
@@ -130,16 +132,33 @@ function ContenidoBandeja() {
   const nits = useCarga(listo ? `nits:${empresa ?? ""}` : null, (signal) => apiFetch<Nit[]>("/monitoreo/nits", { signal, query: { empresa: esSuperAdmin ? empresa : undefined } }));
   const nombres = { ...Object.fromEntries((nits.datos ?? []).map((n) => [n.id, n.numero])), ...nombresElegidos };
 
-  const exportar = async () => {
-    setExportando(true);
+  // HU #13871: lo filtrado sale en partes de hasta 5.000 filas, todas en el mismo clic y con solo las columnas visibles.
+  const totalFiltrado = lista.datos?.total ?? 0;
+  const exportar = async (partes: number) => {
+    setConfirmarPartes(null);
+    const visibles = columnas.map((c) => c.key);
+    const hoy = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota" }).format(new Date());
     try {
-      const r = await apiDownload("/comparendos/excel", "comparendos.xlsx", { ...consulta, orden: orden || undefined, descendente: descendente || undefined });
-      if (r.aceptado) toast.show(r.mensaje ?? "La exportación es grande: te avisamos por correo cuando esté lista.", "success");
+      for (let parte = 1; parte <= partes; parte++) {
+        setExportando(partes > 1 ? `Parte ${parte} de ${partes}…` : "Exportando…");
+        await apiDownload(
+          "/comparendos/excel",
+          nombreParte(hoy, parte, partes),
+          { ...consulta, orden: orden || undefined, descendente: descendente || undefined, parte, columnas: visibles.join(",") },
+          true,
+        );
+      }
+      toast.show(mensajeExportacion(totalFiltrado, partes, visibles.length), "success");
     } catch (e) {
       toast.show(e instanceof Error ? e.message : "No se pudo exportar.", "error");
     } finally {
-      setExportando(false);
+      setExportando(null);
     }
+  };
+  const pedirExportacion = () => {
+    const partes = partesDe(totalFiltrado);
+    if (partes > PARTES_SIN_CONFIRMAR) setConfirmarPartes(partes);
+    else void exportar(partes);
   };
 
   if (cargandoSesion) return <p className="text-sm opacity-60">Abriendo Comparendos…</p>;
@@ -210,11 +229,6 @@ function ContenidoBandeja() {
       <Encabezado
         titulo="Bandeja de comparendos"
         descripcion={esSuperAdmin ? "Vista de administración FLIT: elige una empresa para ver su bandeja. Solo lectura." : sesion?.empresa?.nombre}
-        acciones={
-          <Link href="/exportaciones" className="text-xs font-semibold text-[#3B4FD6] hover:underline">
-            Mis exportaciones
-          </Link>
-        }
       />
 
       {esSuperAdmin && (
@@ -282,9 +296,9 @@ function ContenidoBandeja() {
             )}
             <div className="ml-auto flex items-center gap-2">
               {tienePermiso(sesion, "comparendos.bandeja.exportar") && (
-                <button type="button" className={controlCls(false)} onClick={exportar} disabled={exportando}>
+                <button type="button" className={controlCls(false)} onClick={pedirExportacion} disabled={exportando !== null || lista.estado !== "ready" || totalFiltrado === 0}>
                   <Download className="h-3.5 w-3.5" aria-hidden />
-                  {exportando ? "Exportando…" : "Exportar"}
+                  {exportando ?? "Exportar"}
                 </button>
               )}
               <button
@@ -379,6 +393,28 @@ function ContenidoBandeja() {
           contadores.recargar();
         }}
       />
+      {confirmarPartes !== null && (
+        <Modal
+          open
+          onClose={() => setConfirmarPartes(null)}
+          title="Exportar en varios archivos"
+          footer={
+            <div className="flex justify-end gap-2">
+              <button type="button" className={controlCls(false)} onClick={() => setConfirmarPartes(null)}>
+                Cancelar
+              </button>
+              <button type="button" className={BOTON_PRIMARIO_CLS} onClick={() => void exportar(confirmarPartes)}>
+                Descargar {confirmarPartes} archivos
+              </button>
+            </div>
+          }
+        >
+          <p className="text-sm">
+            Son {totalFiltrado.toLocaleString("es-CO")} comparendos: se descargarán {confirmarPartes} archivos de hasta {FILAS_POR_PARTE.toLocaleString("es-CO")} filas,
+            uno detrás de otro. Si el navegador pregunta si permites descargar varios archivos, acepta.
+          </p>
+        </Modal>
+      )}
       {envioMasivo && <EnvioMasivoDp filas={[...marcados.values()]} onCerrar={() => setEnvioMasivo(false)} />}
       {envioAviso && (
         <EnvioMasivoAviso

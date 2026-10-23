@@ -139,28 +139,39 @@ public sealed class BandejaTests(ApiConFuente api) : IClassFixture<ApiConFuente>
     }
 
     [Fact]
-    public async Task E4_MisExportaciones_MuestranLosFiltrosConQueSePidieron()
+    public async Task HU13871_ExportaPorPartes_ConLasColumnasVisibles()
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var ct = TestContext.Current.CancellationToken;
-        var empresa = Guid.NewGuid();
-        var usuario = new UsuarioDePrueba(empresa, Lectura);
-        var bogota = Guid.Parse("aaaaaaaa-0001-4000-8000-000000000001");
-        var filtros = new Flit.Comparendos.Api.Modulos.Bandeja.FiltrosBandeja { Placa = "ABC123", Organismos = [bogota], Rapido = "Radar" };
-        await api.EnDbAsync(async db =>
+        var (_, cliente) = await PrepararAsync();
+        async Task<List<List<string>>> Hoja(string query)
         {
-            db.Exportaciones.Add(new Flit.Comparendos.Api.Persistence.Modelo.Exportacion
-            {
-                Id = Guid.NewGuid(), TenantId = empresa, SolicitadaPor = usuario.Id, CreadoEn = DateTimeOffset.UtcNow,
-                Filtros = Flit.Comparendos.Api.Modulos.Bandeja.ExportacionBandeja.Serializar(empresa, filtros, usuario.Email),
-            });
-            await db.SaveChangesAsync(ct);
-        });
+            var r = await cliente.GetAsync($"/api/v1/comparendos/comparendos/excel?{query}", ct);
+            r.StatusCode.Should().Be(HttpStatusCode.OK);
+            return LeerHoja(await r.Content.ReadAsByteArrayAsync(ct));
+        }
 
-        var e = (await api.Cliente(usuario).GetFromJsonAsync<JsonElement>("/api/v1/comparendos/exportaciones", ct)).EnumerateArray().Single();
-        e.GetProperty("filtros").GetProperty("placa").GetString().Should().Be("ABC123");
-        e.GetProperty("filtros").GetProperty("rapido").GetString().Should().Be("Radar");
-        e.GetProperty("nombres").GetProperty(bogota.ToString()).GetString().Should().NotBeNullOrWhiteSpace("el organismo se muestra con su nombre");
+        var completa = await Hoja("orden=numero");
+        completa[0].Should().HaveCount(23, "sin columnas pedidas salen todas, incluidas las que la tabla trae ocultas");
+        completa.Skip(1).Select(f => f[0]).Should().Equal("A-1", "B-2", "C-3", "D-4");
+
+        var visibles = await Hoja("orden=numero&columnas=numero,ot,titular,inventada");
+        visibles[0].Should().Equal("Número", "Organismo de tránsito", "NIT consultado", "Titular");
+        visibles.Should().HaveCount(5);
+
+        (await Hoja("orden=numero&parte=2&columnas=numero")).Should().HaveCount(1, "con 4 filas la parte 2 queda vacía: cada parte es de 5.000");
+        (await Hoja("estadoLegal=Vencido&columnas=numero,semaforo")).Should().BeEquivalentTo(new List<List<string>> { new() { "Número", "Estado legal", "Días hábiles restantes" }, new() { "B-2", "Vencido" } });
+        (await cliente.GetAsync("/api/v1/comparendos/exportaciones", ct)).StatusCode.Should().Be(HttpStatusCode.NotFound, "«Mis exportaciones» ya no existe");
+    }
+
+    /// <summary>Las celdas de la primera hoja de un .xlsx, fila por fila, sin las vacías.</summary>
+    private static List<List<string>> LeerHoja(byte[] xlsx)
+    {
+        using var zip = new System.IO.Compression.ZipArchive(new MemoryStream(xlsx));
+        using var hoja = zip.GetEntry("xl/worksheets/sheet1.xml")!.Open();
+        var xml = System.Xml.Linq.XDocument.Load(hoja);
+        System.Xml.Linq.XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+        return xml.Descendants(ns + "row").Select(r => r.Elements(ns + "c").Select(c => c.Value).Where(v => v.Length > 0).ToList()).ToList();
     }
 
     [Fact]
