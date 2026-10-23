@@ -52,6 +52,17 @@ service ConsultasService {
 
   // Certificado RUES de una persona jurídica por NIT (HU #13348).
   rpc GenerarCertificadoRues(GenerarCertificadoRuesRequest) returns (GenerarCertificadoRuesResponse);
+
+  // Impuesto vehicular departamental de una placa (HU #13860; épica #12659). Contrato primero: hasta que exista la
+  // consulta real (C3) el servicio no lo sobrescribe y responde UNIMPLEMENTED. Proveedor caído = OK con un chequeo
+  // en ERROR, como el resto del servicio; departamento sin consulta de impuesto (fuera de ListarDepartamentosImpuesto)
+  // = FAILED_PRECONDITION.
+  rpc ConsultarImpuestoVehicular(ConsultarImpuestoVehicularRequest) returns (ConsultarImpuestoVehicularResponse);
+
+  // Departamentos en los que el servicio sabe consultar el impuesto (HU #13860). Es capacidad global, igual para todas
+  // las empresas: EXCEPCIÓN a la cabecera del servicio, no exige `x-flit-tenant-id` (sí el token de servicio).
+  // Hasta C3 responde UNIMPLEMENTED.
+  rpc ListarDepartamentosImpuesto(ListarDepartamentosImpuestoRequest) returns (ListarDepartamentosImpuestoResponse);
 }
 
 // Opciones comunes a todas las consultas.
@@ -229,4 +240,37 @@ message GenerarCertificadoRuesResponse {
   string pdf_data_uri = 2;
   optional string radicado = 3;
   ErrorProveedor error = 4;
+}
+
+// ── Impuesto vehicular departamental ─────────────────────────────────────────────────────────────────────────────
+// Montos en pesos enteros, sin decimales (como Avaluo.valor).
+
+message ConsultarImpuestoVehicularRequest {
+  OpcionesConsulta opciones = 1;
+  flit.platform.v1.Placa placa = 2;
+  // Departamento en código DIVIPOLA de dos dígitos (por ejemplo "05"), el mismo de vehiculos.departamento_codigo.
+  string departamento_codigo = 3;
+}
+
+message ConsultarImpuestoVehicularResponse {
+  // El proveedor viaja en resultado.proveedor; quien consulta solo lo guarda en su registro auditable.
+  ResultadoConsulta resultado = 1;
+  // Suma de las vigencias no pagadas; 0 si no hay deuda.
+  int64 monto_total = 2;
+  repeated VigenciaImpuesto vigencias = 3;
+}
+
+// Una vigencia (año gravable) del impuesto.
+message VigenciaImpuesto {
+  int32 anio = 1;
+  // Valor de la vigencia.
+  int64 valor = 2;
+  bool pagada = 3;
+}
+
+message ListarDepartamentosImpuestoRequest {}
+
+message ListarDepartamentosImpuestoResponse {
+  // Códigos DIVIPOLA de dos dígitos. Vacía = ningún departamento soportado.
+  repeated string departamento_codigos = 1;
 }
