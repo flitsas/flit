@@ -2754,6 +2754,13 @@ export const tramitesClient = {
       },
     ),
 
+  /** HU #13825 (backend #13824) — vence una identidad aprobada y vigente (solo Super Admin; sin body). */
+  vencerIdentidad: (validationId: string) =>
+    request<VencerIdentidadResult>(
+      `/api/v1/tramites/biometric-validations/${validationId}/vencer`,
+      { method: 'POST' },
+    ),
+
   /** HU #13822 (Feature #13819) — personas SIN firmar a las que se puede reenviar la validación. */
   adminListValidacionesReenviables: (instanceId: string, tenantId?: string) =>
     request<AdminValidacionesReenviablesResult>(
@@ -2818,6 +2825,24 @@ export interface AdminReenviarValidacionResult {
   emailActualizado: boolean;
   /** `true` = 202 Accepted (falla transitoria del proveedor; el worker reintenta). */
   queued: boolean;
+}
+
+/** HU #13825 — resultado de vencer una identidad (espejo de `VencerIdentidadResult`). */
+export interface VencerIdentidadResult {
+  validationId: string;
+  tenantId: string;
+  procedureInstanceId: string | null;
+  vencidaAt: string;
+  borradoresAfectados: number;
+  enlaceEnviado: boolean;
+  nuevaValidacionId: string | null;
+  tramiteBorradorId: string | null;
+  tramiteBorradorReferencia: string | null;
+  /** Absoluta con Kyverum; relativa (`/biometric/{token}`) con el proveedor mock. */
+  enlaceCaptura: string | null;
+  enCola: boolean;
+  /** sin_borradores | validacion_en_curso | proveedor_error | proveedor_no_disponible | datos_incompletos | actor_requerido */
+  motivoSinEnlace: string | null;
 }
 
 /** HU #13822 — persona sin firmar que admite reenvío (espejo del contrato HU #13821). */
