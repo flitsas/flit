@@ -95,19 +95,31 @@ public sealed class Evidencia : IEntidadDeEmpresa
     /// <summary>Nombre de la empresa del claim <c>company_name</c>; lo usa el ZIP, que se genera sin sesión (F07-H5).</summary>
     public string? EmpresaNombre { get; init; }
 
-    /// <summary>La evidencia que se entrega hoy para su clave; false = reemplazada, se conserva (R-18).</summary>
+    /// <summary>
+    /// La evidencia que se entrega hoy para su clave; false = reemplazada, se conserva (R-18). Un ZIP nace no vigente y pasa a
+    /// vigente al quedar LISTA (HU #13850): mientras el nuevo está en la cola, el anterior LISTA se sigue entregando.
+    /// </summary>
     public bool Vigente { get; set; } = true;
 
     /// <summary>Intentos de generación (la cola del ZIP los suma; PDF y Excel se generan en el primero).</summary>
     public int Intentos { get; set; }
 
-    /// <summary>Cola del ZIP: hasta cuándo lo tiene tomado el trabajador; null si nadie.</summary>
+    /// <summary>
+    /// Cola del ZIP: en GENERANDO, hasta cuándo lo tiene tomado el trabajador; en PENDIENTE tras un fallo, desde cuándo se puede
+    /// reintentar (backoff, HU #13850); null si nadie lo tiene ni espera.
+    /// </summary>
     public DateTimeOffset? LeaseHasta { get; set; }
 
     /// <summary>Causa del fallo de generación (solo con estado ERROR); nunca la causa técnica de una fuente.</summary>
     public string? TipoError { get; set; }
 
     public DateTimeOffset CreadoEn { get; init; }
+
+    /// <summary>ZIP (HU #13850): vehículos con su PDF en el archivo (al pedirlo, los que se esperan; al quedar LISTA, los que trae). 0 en PDF y Excel.</summary>
+    public int VehiculosIncluidos { get; set; }
+
+    /// <summary>ZIP (HU #13850): vehículos del lote que quedan fuera por no haber terminado (van en el índice). 0 en PDF y Excel.</summary>
+    public int VehiculosPendientes { get; set; }
 
     /// <summary>Momento en que el archivo quedó listo; null mientras no lo está.</summary>
     public DateTimeOffset? GeneradoEn { get; set; }

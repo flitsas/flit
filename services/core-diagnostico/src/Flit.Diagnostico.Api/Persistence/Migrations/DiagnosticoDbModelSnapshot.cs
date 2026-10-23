@@ -978,7 +978,7 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                     b.Property<DateTimeOffset?>("LeaseHasta")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("lease_hasta")
-                        .HasComment("Cola del ZIP: vencimiento del lease del trabajador; null si nadie lo tiene.");
+                        .HasComment("Cola del ZIP: vencimiento del lease (GENERANDO) o inicio del reintento con backoff (PENDIENTE); null si nadie lo tiene.");
 
                     b.Property<Guid>("SolicitadoPor")
                         .HasColumnType("uuid")
@@ -1013,6 +1013,18 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasColumnName("vehiculo_id")
                         .HasComment("Vehículo del PDF; null en el Excel y el ZIP del lote.");
 
+                    b.Property<int>("VehiculosIncluidos")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("vehiculos_incluidos")
+                        .HasComment("ZIP: vehículos con su PDF en el archivo (al pedirlo, los esperados; LISTA, los que trae). 0 en PDF y XLSX.");
+
+                    b.Property<int>("VehiculosPendientes")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("vehiculos_pendientes")
+                        .HasComment("ZIP: vehículos fuera del archivo por no haber terminado (van en el índice). 0 en PDF y XLSX.");
+
                     b.Property<uint>("Version")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
@@ -1036,6 +1048,11 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
 
                     b.HasIndex("TenantId", "VehiculoId")
                         .HasDatabaseName("ix_evidencias_vehiculo");
+
+                    b.HasIndex("TenantId", "DiagnosticoId", "Huella")
+                        .IsUnique()
+                        .HasDatabaseName("ux_evidencias_zip_en_cola")
+                        .HasFilter("tipo = 'ZIP' AND estado IN ('PENDIENTE', 'GENERANDO')");
 
                     b.HasIndex("TenantId", "DiagnosticoId", "Tipo")
                         .HasDatabaseName("ix_evidencias_diagnostico");
@@ -1066,6 +1083,8 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                             t.HasCheckConstraint("ck_evidencias_tipo", "tipo IN ('PDF', 'XLSX', 'ZIP')");
 
                             t.HasCheckConstraint("ck_evidencias_tipo_error", "tipo_error IS NULL OR estado = 'ERROR'");
+
+                            t.HasCheckConstraint("ck_evidencias_vehiculos_zip", "vehiculos_incluidos >= 0 AND vehiculos_pendientes >= 0");
                         });
                 });
 

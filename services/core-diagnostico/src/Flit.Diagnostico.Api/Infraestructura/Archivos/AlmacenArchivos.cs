@@ -8,6 +8,7 @@ using System.Text.Json.Serialization;
 using Flit.Diagnostico.Api.Modulos.Comun;
 using Flit.Diagnostico.Api.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
 namespace Flit.Diagnostico.Api.Infraestructura.Archivos;
@@ -32,6 +33,41 @@ public interface IAlmacenArchivos
 
     /// <summary>Los bytes del archivo, o null si ya no existe.</summary>
     Task<byte[]?> LeerAsync(string referencia, CancellationToken ct);
+
+    /// <summary>
+    /// Guarda el archivo que está en disco en <paramref name="ruta"/> (el ZIP del lote, HU #13850, decisión Q5: se escribe en un
+    /// temporal y no se tiene entero en memoria). El file-manager lo sube leyendo del disco; por defecto (la base, las pruebas) se
+    /// leen sus bytes. Quien llama borra el temporal.
+    /// </summary>
+    async Task<ArchivoGuardado> GuardarArchivoAsync(Guid empresaId, string tipo, string nombre, string contentType, string ruta, CancellationToken ct) =>
+        await GuardarAsync(empresaId, tipo, nombre, contentType, await File.ReadAllBytesAsync(ruta, ct).ConfigureAwait(false), ct).ConfigureAwait(false);
+
+    /// <summary>
+    /// El archivo como flujo para entregarlo sin cargarlo entero (el ZIP del lote, HU #13850), o null si ya no existe. El
+    /// file-manager lo lee de su URL firmada; por defecto, los bytes de <see cref="LeerAsync"/>. Quien llama libera el flujo.
+    /// </summary>
+    async Task<Stream?> AbrirAsync(string referencia, CancellationToken ct) =>
+        await LeerAsync(referencia, ct).ConfigureAwait(false) is { } bytes ? new MemoryStream(bytes, writable: false) : null;
+}
+
+/// <summary>
+/// El almacén sobre un contexto de datos dado (HU #13850). En una petición, <see cref="IAlmacenArchivos"/> usa el contexto de la
+/// petición; el trabajador del ZIP, que no tiene sesión, lo arma con esta fábrica sobre el contexto fijado a la empresa de su
+/// trabajo (el respaldo en la base filtra y escribe con esa empresa). Las pruebas registran la suya antes que el servicio.
+/// </summary>
+public interface IFabricaAlmacen
+{
+    IAlmacenArchivos Para(DiagnosticoDb db);
+}
+
+internal sealed class FabricaAlmacenEnBase : IFabricaAlmacen
+{
+    public IAlmacenArchivos Para(DiagnosticoDb db) => new AlmacenEnBase(db);
+}
+
+internal sealed class FabricaAlmacenFileManager(FileManagerAlmacen fileManager) : IFabricaAlmacen
+{
+    public IAlmacenArchivos Para(DiagnosticoDb db) => new AlmacenFileManagerConRespaldo(fileManager, db);
 }
 
 public sealed class FileManagerOptions
@@ -71,6 +107,55 @@ internal sealed class FileManagerAlmacen(HttpClient http, IOptions<FileManagerOp
     {
         ArgumentNullException.ThrowIfNull(contenido);
         var sha = Convert.ToHexStringLower(SHA256.HashData(contenido));
+        var (id, firmada, url, archivo) = await CrearRegistroAsync(empresaId, tipo, nombre, sha, ct).ConfigureAwait(false);
+        await SubirAsync(firmada, url, () => Crudo(contenido), archivo, ct).ConfigureAwait(false);
+        return new ArchivoGuardado(id, sha, contenido.LongLength);
+    }
+
+    /// <summary>Como <see cref="GuardarAsync"/>, pero subiendo desde el disco (cada intento abre el archivo de nuevo).</summary>
+    public async Task<ArchivoGuardado> GuardarArchivoAsync(Guid empresaId, string tipo, string nombre, string contentType, string ruta, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ruta);
+        string sha;
+        long tamano;
+        await using (var lectura = File.OpenRead(ruta))
+        {
+            sha = Convert.ToHexStringLower(await SHA256.HashDataAsync(lectura, ct).ConfigureAwait(false));
+            tamano = lectura.Length;
+        }
+
+        var (id, firmada, url, archivo) = await CrearRegistroAsync(empresaId, tipo, nombre, sha, ct).ConfigureAwait(false);
+        await SubirAsync(firmada, url, () => Crudo(File.OpenRead(ruta)), archivo, ct).ConfigureAwait(false);
+        return new ArchivoGuardado(id, sha, tamano);
+    }
+
+    /// <summary>El archivo leído de su URL firmada como flujo (sin cargarlo entero); liberar el flujo libera la respuesta.</summary>
+    public async Task<Stream?> AbrirAsync(string referencia, CancellationToken ct)
+    {
+        if (await UrlDescargaAsync(referencia, ct).ConfigureAwait(false) is not { } url)
+            return null;
+        var resp = await http.GetAsync(new Uri(url), HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+        try
+        {
+            if (resp.StatusCode == HttpStatusCode.NotFound)
+            {
+                resp.Dispose();
+                return null;
+            }
+
+            resp.EnsureSuccessStatusCode();
+            return await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            resp.Dispose();
+            throw;
+        }
+    }
+
+    private async Task<(string Id, UrlFirmada Firmada, string Url, string Archivo)> CrearRegistroAsync(
+        Guid empresaId, string tipo, string nombre, string sha, CancellationToken ct)
+    {
         var archivo = string.IsNullOrWhiteSpace(nombre) ? "archivo" : nombre;
         var pedido = new CrearArchivo(_o.Category, archivo, [tipo], new Dictionary<string, string>
         {
@@ -89,12 +174,10 @@ internal sealed class FileManagerAlmacen(HttpClient http, IOptions<FileManagerOp
         var creado = await resp.Content.ReadFromJsonAsync<ArchivoCreado>(Json, ct).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(creado?.Id) || creado.PresignedUrl?.Url is not { Length: > 0 } url)
             throw new InvalidOperationException("file-manager: respuesta de creación sin id o sin URL firmada.");
-
-        await SubirAsync(creado.PresignedUrl, url, contenido, archivo, ct).ConfigureAwait(false);
-        return new ArchivoGuardado(creado.Id, sha, contenido.LongLength);
+        return (creado.Id, creado.PresignedUrl, url, archivo);
     }
 
-    public async Task<byte[]?> LeerAsync(string referencia, CancellationToken ct)
+    private async Task<string?> UrlDescargaAsync(string referencia, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(referencia))
             return null;
@@ -106,12 +189,15 @@ internal sealed class FileManagerAlmacen(HttpClient http, IOptions<FileManagerOp
             return null;
         resp.EnsureSuccessStatusCode();
         var body = await resp.Content.ReadFromJsonAsync<UrlFirmadaRespuesta>(Json, ct).ConfigureAwait(false);
-        return body?.PresignedUrl?.Url is { Length: > 0 } url
-            ? await http.GetByteArrayAsync(new Uri(url), ct).ConfigureAwait(false)
-            : null;
+        return body?.PresignedUrl?.Url is { Length: > 0 } url ? url : null;
     }
 
-    private async Task SubirAsync(UrlFirmada firmada, string url, byte[] bytes, string nombre, CancellationToken ct)
+    public async Task<byte[]?> LeerAsync(string referencia, CancellationToken ct) =>
+        await UrlDescargaAsync(referencia, ct).ConfigureAwait(false) is { } url
+            ? await http.GetByteArrayAsync(new Uri(url), ct).ConfigureAwait(false)
+            : null;
+
+    private async Task SubirAsync(UrlFirmada firmada, string url, Func<HttpContent> crudo, string nombre, CancellationToken ct)
     {
         // PUT existe porque hay gateways (Contabo) que rechazan el POST policy. Un reintento ante fallos de red.
         var put = string.Equals(firmada.Method, "PUT", StringComparison.OrdinalIgnoreCase);
@@ -120,7 +206,7 @@ internal sealed class FileManagerAlmacen(HttpClient http, IOptions<FileManagerOp
         {
             try
             {
-                using HttpContent contenido = put ? Crudo(bytes) : Formulario(firmada, bytes, nombre);
+                using HttpContent contenido = put ? crudo() : Formulario(firmada, crudo(), nombre);
                 using var resp = put
                     ? await http.PutAsync(new Uri(url), contenido, ct).ConfigureAwait(false)
                     : await http.PostAsync(new Uri(url), contenido, ct).ConfigureAwait(false);
@@ -147,12 +233,19 @@ internal sealed class FileManagerAlmacen(HttpClient http, IOptions<FileManagerOp
         return c;
     }
 
-    private static MultipartFormDataContent Formulario(UrlFirmada firmada, byte[] bytes, string nombre)
+    private static StreamContent Crudo(Stream flujo)
+    {
+        var c = new StreamContent(flujo);
+        c.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        return c;
+    }
+
+    private static MultipartFormDataContent Formulario(UrlFirmada firmada, HttpContent archivo, string nombre)
     {
         var form = new MultipartFormDataContent();
         foreach (var (k, v) in firmada.Fields ?? [])
             form.Add(new StringContent(v), k);
-        form.Add(Crudo(bytes), "file", nombre);
+        form.Add(archivo, "file", nombre);
         return form;
     }
 
@@ -199,6 +292,14 @@ internal sealed class AlmacenFileManagerConRespaldo(FileManagerAlmacen fileManag
         referencia.StartsWith(AlmacenEnBase.Prefijo, StringComparison.Ordinal)
             ? AlmacenEnBase.LeerDeBaseAsync(db, referencia, ct)
             : fileManager.LeerAsync(referencia, ct);
+
+    public Task<ArchivoGuardado> GuardarArchivoAsync(Guid empresaId, string tipo, string nombre, string contentType, string ruta, CancellationToken ct) =>
+        fileManager.GuardarArchivoAsync(empresaId, tipo, nombre, contentType, ruta, ct);
+
+    public async Task<Stream?> AbrirAsync(string referencia, CancellationToken ct) =>
+        referencia.StartsWith(AlmacenEnBase.Prefijo, StringComparison.Ordinal)
+            ? await AlmacenEnBase.LeerDeBaseAsync(db, referencia, ct).ConfigureAwait(false) is { } bytes ? new MemoryStream(bytes, writable: false) : null
+            : await fileManager.AbrirAsync(referencia, ct).ConfigureAwait(false);
 }
 
 /// <summary>
@@ -261,7 +362,9 @@ public static class AlmacenArchivosExtensions
 {
     /// <summary>
     /// File-manager con <c>FILE_MANAGER_BASE_URL</c> (o <c>FileManager:BaseUrl</c>); sin URL, la base solo con
-    /// <see cref="OpcionesAlmacen.GuardarEnBase"/>=true; sin ninguna de las dos, el servicio no arranca.
+    /// <see cref="OpcionesAlmacen.GuardarEnBase"/>=true; sin ninguna de las dos, el servicio no arranca. Con la misma elección se
+    /// registra <see cref="IFabricaAlmacen"/> (TryAdd: las pruebas ponen la suya antes), con la que el trabajador del ZIP arma el
+    /// almacén sobre el contexto fijado a la empresa de su trabajo.
     /// </summary>
     public static IServiceCollection AddAlmacenArchivos(this IServiceCollection services, IConfiguration configuration)
     {
@@ -277,6 +380,7 @@ public static class AlmacenArchivosExtensions
                     + "Contabo en PDN, que además exige FILE_MANAGER_AUTH_TOKEN). Guardar los archivos en la base solo se permite "
                     + $"con {OpcionesAlmacen.GuardarEnBase}=true, que es para las pruebas automáticas.");
             services.AddScoped<IAlmacenArchivos, AlmacenEnBase>();
+            services.TryAddSingleton<IFabricaAlmacen, FabricaAlmacenEnBase>();
             return services;
         }
 
@@ -286,6 +390,7 @@ public static class AlmacenArchivosExtensions
             c.Timeout = TimeSpan.FromSeconds(opciones.TimeoutSeconds);
         });
         services.AddScoped<IAlmacenArchivos, AlmacenFileManagerConRespaldo>();
+        services.TryAddScoped<IFabricaAlmacen, FabricaAlmacenFileManager>();
         return services;
     }
 }

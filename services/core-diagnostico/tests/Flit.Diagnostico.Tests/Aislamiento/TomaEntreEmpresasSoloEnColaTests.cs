@@ -8,8 +8,10 @@ namespace Flit.Diagnostico.Tests.Aislamiento;
 /// HU #13727 (F03-H2), ADR a + ADR-0072 — prueba de arquitectura (grep auditable, como
 /// <see cref="IgnoreQueryFiltersSoloEnBackofficeTests"/>): la toma de la cola es la única lectura y escritura del servicio que
 /// cruza empresas sin el filtro de EF, y lo hace con SQL crudo (<c>FOR UPDATE SKIP LOCKED</c>). El SQL crudo
-/// (<c>GetDbConnection</c>, <c>SqlQuery</c>, <c>ExecuteSql</c>, <c>FromSql</c>, <c>NpgsqlCommand</c>) solo puede estar en
-/// <c>Modulos/Trabajos/ColaConsultas.cs</c>; todo lo demás pasa por EF con <c>TenantFilter</c>. Las migraciones quedan fuera.
+/// (<c>GetDbConnection</c>, <c>SqlQuery</c>, <c>ExecuteSql</c>, <c>FromSql</c>, <c>NpgsqlCommand</c>) solo puede estar en las dos
+/// colas: <c>Modulos/Trabajos/ColaConsultas.cs</c> (celdas, HU #13727) y <c>Modulos/Trabajos/ColaEvidencias.cs</c> (ZIP del lote,
+/// HU #13850, revisión del security-agent: solo toca columnas de la cola y devuelve ids, empresa, intentos y lease); todo lo demás
+/// pasa por EF con <c>TenantFilter</c>. Las migraciones quedan fuera.
 /// </summary>
 /// <example>
 /// <code>
@@ -18,7 +20,7 @@ namespace Flit.Diagnostico.Tests.Aislamiento;
 /// </example>
 public sealed partial class TomaEntreEmpresasSoloEnColaTests
 {
-    private const string ArchivoPermitido = "Modulos/Trabajos/ColaConsultas.cs";
+    private static readonly string[] ArchivosPermitidos = ["Modulos/Trabajos/ColaConsultas.cs", "Modulos/Trabajos/ColaEvidencias.cs"];
 
     [Fact]
     public void Solo_la_cola_usa_SQL_crudo_entre_empresas()
@@ -27,10 +29,11 @@ public sealed partial class TomaEntreEmpresasSoloEnColaTests
 
         var usos = IgnoreQueryFiltersSoloEnBackofficeTests.Usos(src, SqlCrudo()).Where(u => !u.Archivo.Contains("/Migrations/", StringComparison.Ordinal)).ToList();
 
-        usos.Should().Contain(u => u.Archivo.EndsWith(ArchivoPermitido, StringComparison.Ordinal),
-            "la toma de la cola usa SQL crudo: si no hay usos ahí, el escáner no mira donde debe");
-        usos.Where(u => !u.Archivo.EndsWith(ArchivoPermitido, StringComparison.Ordinal)).Select(u => $"{u.Archivo}:{u.Linea}")
-            .Should().BeEmpty("el SQL crudo salta el filtro por empresa: solo la toma de la cola lo usa (ADR a, ADR-0072)");
+        foreach (var permitido in ArchivosPermitidos)
+            usos.Should().Contain(u => u.Archivo.EndsWith(permitido, StringComparison.Ordinal),
+                $"la toma de la cola de {permitido} usa SQL crudo: si no hay usos ahí, el escáner no mira donde debe");
+        usos.Where(u => !ArchivosPermitidos.Any(p => u.Archivo.EndsWith(p, StringComparison.Ordinal))).Select(u => $"{u.Archivo}:{u.Linea}")
+            .Should().BeEmpty("el SQL crudo salta el filtro por empresa: solo la toma de las colas lo usa (ADR a, ADR-0072)");
     }
 
     [Fact]

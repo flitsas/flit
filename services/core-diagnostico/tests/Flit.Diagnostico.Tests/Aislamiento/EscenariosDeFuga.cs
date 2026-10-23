@@ -134,6 +134,20 @@ public static class EscenariosDeFuga
     /// </summary>
     public const string RutaExcelLote = Program.Prefijo + global::Flit.Diagnostico.Api.Modulos.Reportes.ReportesEndpoints.RutaExcelLote;
 
+    /// <summary>
+    /// Estado del ZIP del lote (HU #13850): cada empresa siembra un lote con un vehículo terminado y pide su ZIP; el estado devuelve
+    /// el id de la evidencia, y con el token de A el estado del ZIP de B responde 404 sin nada de B.
+    /// </summary>
+    public const string RutaEstadoEvidencia = Program.Prefijo + global::Flit.Diagnostico.Api.Modulos.Reportes.EvidenciasEndpoints.RutaEstadoEvidencia;
+
+    /// <summary>
+    /// Archivo del ZIP del lote (HU #13850): cada empresa siembra un lote con un vehículo terminado, pide su ZIP y la cola lo
+    /// genera (la cola es de todas las compañías); el contenido leído (<see cref="Reportes.ZipDePrueba.TextoAsync"/>: nombres de
+    /// las entradas, índice y texto de cada PDF) trae el ID del diagnóstico, la placa y la clase del vehículo (solo en el PDF), y con
+    /// el token de A el ZIP de B responde 404 sin el id del lote de B.
+    /// </summary>
+    public const string RutaArchivoEvidencia = Program.Prefijo + global::Flit.Diagnostico.Api.Modulos.Reportes.EvidenciasEndpoints.RutaArchivoEvidencia;
+
     public static IReadOnlyList<EscenarioDeFuga> Todos { get; } =
     [
         EscenarioDeFuga.Con(RutaSonda, _ => new LecturaBackoffice { EmpresaConsultada = Guid.NewGuid(), UsuarioId = Guid.NewGuid(), Ruta = "/sonda" }, l => l.Id),
@@ -180,7 +194,32 @@ public static class EscenariosDeFuga
                 """{"placa":"TST906","clase":"AUTOMOVIL","propietarios":[],"locatarios":0}""", ct);
             return new Sembrado(Reportes.ExcelDePrueba.Ruta(lote.Id), [lote.Id.ToString()]);
         }, Reportes.ExcelDePrueba.TextoAsync),
+        new EscenarioDeFuga(RutaEstadoEvidencia, async (empresa, ct) =>
+        {
+            var (lote, evidencia) = await ZipSembradoAsync(empresa, "TST907", procesar: false, ct);
+            return new Sembrado(Reportes.ZipDePrueba.RutaEstado(lote, evidencia), [evidencia.ToString()]);
+        }),
+        new EscenarioDeFuga(RutaArchivoEvidencia, async (empresa, ct) =>
+        {
+            var (lote, evidencia) = await ZipSembradoAsync(empresa, "TST908", procesar: true, ct);
+            // AUTOMOVIL solo sale en el texto del PDF (no en el índice ni en los nombres): prueba que se leyó el PDF. Las dos
+            // compañías siembran la misma placa ficticia, así que lo que no debe cruzar es el id del lote.
+            return new Sembrado(Reportes.ZipDePrueba.RutaArchivo(lote, evidencia), [lote.ToString(), "TST908", "AUTOMOVIL"], Exclusivos: [lote.ToString()]);
+        }, Reportes.ZipDePrueba.TextoAsync),
     ];
+
+    /// <summary>Lote con un vehículo terminado y su ZIP pedido (y generado por la cola si <paramref name="procesar"/>).</summary>
+    private static async Task<(Guid Lote, Guid Evidencia)> ZipSembradoAsync(EmpresaDePrueba empresa, string placa, bool procesar, CancellationToken ct)
+    {
+        var lote = await Tablero.Tablero.SembrarAsync(empresa, ct, nombre: "Lote del ZIP", vehiculos: [new(placa, [new(Fuente.Runt, EstadoCelda.Pendiente, 1)])]);
+        await Tablero.Tablero.PayloadAsync(empresa, lote.Celdas.Single(), $$"""{"placa":"{{placa}}","clase":"AUTOMOVIL","propietarios":[],"locatarios":0}""", ct);
+        var (respuesta, pedido) = await Reportes.ZipDePrueba.PedirAsync(empresa.Cliente(), lote.Id, ct);
+        if (respuesta.StatusCode != System.Net.HttpStatusCode.Accepted)
+            throw new InvalidOperationException($"El pedido del ZIP respondió {(int)respuesta.StatusCode}: {pedido}");
+        if (procesar)
+            await Reportes.ZipDePrueba.DrenarAsync(empresa.Api, ct);
+        return (lote.Id, pedido.GetProperty("id").GetGuid());
+    }
 
     public static EscenarioDeFuga Buscar(string ruta) => Todos.Single(e => e.Ruta == ruta);
 

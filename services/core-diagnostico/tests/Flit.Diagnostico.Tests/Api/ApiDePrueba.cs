@@ -133,6 +133,8 @@ public sealed class ApiDePrueba : IAsyncDisposable
         [CertificadoDePrueba.ClaveClave] = CertificadoDePrueba.Clave,
         // HU #13727: el trabajador hospedado de la cola no corre en las pruebas; cada prueba llama al procesador directo.
         ["Diagnostico:Procesador:Habilitado"] = "false",
+        // HU #13850: tampoco el trabajador del ZIP; cada prueba llama al empaquetador directo.
+        ["Diagnostico:Evidencias:Habilitado"] = "false",
         // HU #13846: sin file-manager en las pruebas, los archivos generados van a diagnostico.archivo_local.
         [Flit.Diagnostico.Api.Infraestructura.Archivos.OpcionesAlmacen.GuardarEnBase] = "true",
     };

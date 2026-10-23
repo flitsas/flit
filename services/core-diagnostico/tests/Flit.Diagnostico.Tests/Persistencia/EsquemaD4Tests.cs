@@ -162,10 +162,11 @@ public sealed class EsquemaD4Tests
             "evidencias.empresa_nombre character varying YES", "evidencias.vigente boolean NO", "evidencias.intentos integer NO",
             "evidencias.lease_hasta timestamp with time zone YES", "evidencias.tipo_error character varying YES",
             "evidencias.creado_en timestamp with time zone NO", "evidencias.generado_en timestamp with time zone YES",
+            "evidencias.vehiculos_incluidos integer NO", "evidencias.vehiculos_pendientes integer NO",
             "archivo_local.id uuid NO", "archivo_local.tenant_id uuid NO", "archivo_local.contenido bytea NO",
         ]);
         columnas.Where(c => c.StartsWith("evidencias.", StringComparison.Ordinal))
-            .Should().HaveCount(17, "sin borrado lógico ni origen de las celdas (R-18, R-20)")
+            .Should().HaveCount(19, "sin borrado lógico ni origen de las celdas (R-18, R-20); HU #13850 suma los vehículos del ZIP")
             .And.NotContain(c => c.Contains("deleted", StringComparison.Ordinal) || c.Contains("origen", StringComparison.Ordinal));
 
         var restricciones = await ListarAsync(
@@ -190,6 +191,10 @@ public sealed class EsquemaD4Tests
             && i.Contains("WHERE vigente", StringComparison.Ordinal));
         indices.Should().Contain(i => i.StartsWith("ix_evidencias_cola ", StringComparison.Ordinal)
             && i.Contains("(estado, lease_hasta)", StringComparison.Ordinal) && i.Contains("'ZIP'", StringComparison.Ordinal));
+        // HU #13850: un solo ZIP en la cola por lote y huella (dos pedidos a la vez no lo duplican).
+        indices.Should().Contain(i => i.StartsWith("ux_evidencias_zip_en_cola ", StringComparison.Ordinal)
+            && i.Contains("UNIQUE", StringComparison.Ordinal) && i.Contains("(tenant_id, diagnostico_id, huella)", StringComparison.Ordinal)
+            && i.Contains("'ZIP'", StringComparison.Ordinal) && i.Contains("'PENDIENTE'", StringComparison.Ordinal));
         indices.Should().Contain(i => i.StartsWith("ix_evidencias_diagnostico ", StringComparison.Ordinal) && i.Contains("(tenant_id, diagnostico_id", StringComparison.Ordinal));
         indices.Should().Contain(i => i.StartsWith("ix_evidencias_vehiculo ", StringComparison.Ordinal) && i.Contains("(tenant_id, vehiculo_id)", StringComparison.Ordinal));
     }

@@ -36,6 +36,7 @@ internal sealed class EvidenciaConfig : IEntityTypeConfiguration<Evidencia>
             t.HasCheckConstraint("ck_evidencias_tipo_error", $"tipo_error IS NULL OR estado = '{CodigosDeEnum.Codigo(EstadoEvidencia.Error)}'");
             t.HasCheckConstraint("ck_evidencias_tamano", "tamano_bytes IS NULL OR tamano_bytes >= 0");
             t.HasCheckConstraint("ck_evidencias_intentos", "intentos >= 0");
+            t.HasCheckConstraint("ck_evidencias_vehiculos_zip", "vehiculos_incluidos >= 0 AND vehiculos_pendientes >= 0");
         });
         builder.HasKey(x => x.Id).HasName("pk_evidencias");
         builder.HasAlternateKey(x => new { x.TenantId, x.Id }).HasName("uq_evidencias_tenant_id");
@@ -60,7 +61,11 @@ internal sealed class EvidenciaConfig : IEntityTypeConfiguration<Evidencia>
             .HasComment("Nombre de la empresa del claim company_name para el ZIP, que se genera sin sesión (F07-H5).");
         builder.Property(x => x.Vigente).HasComment("La que se entrega hoy para su clave; false = reemplazada y conservada (R-18).");
         builder.Property(x => x.Intentos).HasDefaultValue(0).ValueGeneratedNever().HasComment("Intentos de generación (cola del ZIP).");
-        builder.Property(x => x.LeaseHasta).HasComment("Cola del ZIP: vencimiento del lease del trabajador; null si nadie lo tiene.");
+        builder.Property(x => x.LeaseHasta).HasComment("Cola del ZIP: vencimiento del lease (GENERANDO) o inicio del reintento con backoff (PENDIENTE); null si nadie lo tiene.");
+        builder.Property(x => x.VehiculosIncluidos).HasDefaultValue(0).ValueGeneratedNever()
+            .HasComment("ZIP: vehículos con su PDF en el archivo (al pedirlo, los esperados; LISTA, los que trae). 0 en PDF y XLSX.");
+        builder.Property(x => x.VehiculosPendientes).HasDefaultValue(0).ValueGeneratedNever()
+            .HasComment("ZIP: vehículos fuera del archivo por no haber terminado (van en el índice). 0 en PDF y XLSX.");
         builder.Property(x => x.TipoError).HasMaxLength(32).HasComment("Causa del fallo de generación; solo con estado ERROR.");
         builder.Property(x => x.CreadoEn).HasComment("Instante del pedido (timestamptz).");
         builder.Property(x => x.GeneradoEn).HasComment("Instante en que el archivo quedó listo; null mientras no lo está.");
@@ -90,6 +95,12 @@ internal sealed class EvidenciaConfig : IEntityTypeConfiguration<Evidencia>
         builder.HasIndex(x => new { x.Estado, x.LeaseHasta })
             .HasFilter($"tipo = '{CodigosDeEnum.Codigo(TipoEvidencia.Zip)}' AND estado IN ({enCola})")
             .HasDatabaseName("ix_evidencias_cola");
+
+        // HU #13850: un solo ZIP en la cola por lote y huella; dos pedidos a la vez chocan aquí (23505) y el perdedor entrega el ganador.
+        builder.HasIndex(x => new { x.TenantId, x.DiagnosticoId, x.Huella })
+            .IsUnique()
+            .HasFilter($"tipo = '{CodigosDeEnum.Codigo(TipoEvidencia.Zip)}' AND estado IN ({enCola})")
+            .HasDatabaseName("ux_evidencias_zip_en_cola");
 
         // Concurrencia optimista con la columna de sistema xmin: dos pedidos no invalidan a la vez la misma vigente.
         builder.Property(x => x.Version).IsRowVersion();

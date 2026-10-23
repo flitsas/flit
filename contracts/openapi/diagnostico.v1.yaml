@@ -1191,6 +1191,201 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorRegla"
 
+  /api/v1/diagnostico/diagnosticos/{id}/evidencias:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote (cabecera).
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [Reportes]
+      operationId: pedirZipLote
+      summary: Pide el ZIP con los PDF del lote, que se genera en segundo plano
+      description: >
+        HU #13850 (F07-H5, F07-C4/C7/C8/C9/C11/C12; decisiones Q2, Q5 y Q7). Permiso diagnostico.reportes.descargar y la misma
+        visibilidad que la grilla. Solo `tipo` = ZIP. Entran los vehículos que pueden emitir su PDF (la regla del PDF del vehículo:
+        terminados, aunque el lote siga EN_PROCESO, y con el lote INCOMPLETO también los que tienen fuentes en ERROR, que salen
+        «consulta no disponible»); los demás van en el índice. Huella del ZIP = versión de la plantilla + entradas del lote (celdas con
+        su versión del tablero, cabecera, empresa, creador, documentos enmascarados, estado del lote) + lista ordenada de los
+        vehículos incluidos. Si el ZIP vigente está LISTA con esa huella responde 200 con él (no encola); si hay uno PENDIENTE o
+        GENERANDO con esa huella responde 202 con el mismo id (no duplica, tampoco con pedidos simultáneos); si no, encola uno nuevo
+        (202) con quien lo pidió (claim sub) y la empresa del claim company_name. Mientras el nuevo está en la cola, el anterior LISTA
+        sigue vigente y descargable; al quedar LISTA el nuevo, el anterior pasa a no vigente (se conserva). Sin tope propio de
+        vehículos: lo acota limite_vehiculos_lote.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudEvidencia"
+      responses:
+        "200":
+          description: Ya hay un ZIP LISTA y vigente con la misma huella (nada cambió desde que se generó).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EstadoEvidencia"
+        "202":
+          description: El ZIP está en la cola (nuevo, o el que ya estaba con la misma huella). Sondear el estado hasta LISTA o ERROR.
+          headers:
+            Location:
+              description: /api/v1/diagnostico/diagnosticos/{id}/evidencias/{eid} (estado del ZIP).
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EstadoEvidencia"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >
+            Sin diagnostico.reportes.descargar (sin cuerpo); sin compañía (`code` = SIN_EMPRESA); compañía sin Diagnóstico activo
+            (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: >
+            `code` = NO_ENCONTRADO: el lote no existe, es de otra compañía o (con PROPIOS) de otro usuario. Sin datos del lote. Se
+            comprueba antes del 422 y del 409.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "409":
+          description: >
+            `code` = SIN_VEHICULOS_TERMINADOS: ningún vehículo del lote puede emitir todavía su PDF. No se crea evidencia.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "422":
+          description: >
+            `code` = TIPO_INVALIDO, `campo` = tipo: el tipo no es ZIP (los PDF y el Excel se descargan directo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/diagnosticos/{id}/evidencias/{eid}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote (cabecera).
+        schema:
+          type: string
+          format: uuid
+      - name: eid
+        in: path
+        required: true
+        description: Id del ZIP (el que devolvió el pedido).
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Reportes]
+      operationId: estadoZipLote
+      summary: Estado del ZIP del lote
+      description: >
+        HU #13850 (F07-H5). Permiso diagnostico.reportes.descargar y la visibilidad de la grilla. Para sondear tras el pedido
+        (Cache-Control no-store). PENDIENTE → GENERANDO → LISTA, o ERROR tras agotar los reintentos (por defecto 2, con espera
+        creciente). Un fallo con reintentos pendientes vuelve a PENDIENTE.
+      responses:
+        "200":
+          description: El estado del ZIP.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EstadoEvidencia"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.reportes.descargar (sin cuerpo); SIN_EMPRESA o PRODUCTO_NO_HABILITADO (con cuerpo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: >
+            `code` = NO_ENCONTRADO: el lote no se ve (otra compañía o PROPIOS de otro usuario) o el ZIP no es de ese lote. Sin datos.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/diagnosticos/{id}/evidencias/{eid}/archivo:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote (cabecera).
+        schema:
+          type: string
+          format: uuid
+      - name: eid
+        in: path
+        required: true
+        description: Id del ZIP.
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Reportes]
+      operationId: descargarZipLote
+      summary: Descarga el ZIP del lote cuando está LISTA
+      description: >
+        HU #13850 (F07-H5, F07-C9/C11). Permiso diagnostico.reportes.descargar y la visibilidad de la grilla. Un PDF por vehículo
+        incluido (diagnostico-{8 primeros del id}-{placa o VIN}.pdf, el mismo PDF del vehículo: si su huella coincide se reutiliza el
+        PDF vigente) e indice.txt (UTF-8, separado por tabuladores) con todos los vehículos del lote en el orden de la carga: orden,
+        identificador (placa o VIN), estado (Terminado, En proceso o Con error) y si su PDF va en el ZIP (Incluido / No incluido) con
+        el nombre del archivo. Sin documentos completos, nombres de personas, origen, usuario manual, proveedor ni transacción
+        (R-20). Un ZIP LISTA que ya no es el vigente se sigue pudiendo descargar por su id.
+      responses:
+        "200":
+          description: El ZIP.
+          headers:
+            Content-Disposition:
+              description: attachment; filename=diagnostico-{8 primeros caracteres del id}.zip
+              schema:
+                type: string
+            Cache-Control:
+              description: no-store
+              schema:
+                type: string
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.reportes.descargar (sin cuerpo); SIN_EMPRESA o PRODUCTO_NO_HABILITADO (con cuerpo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: >
+            `code` = NO_ENCONTRADO: el lote no se ve o el ZIP no es de ese lote. Se comprueba antes del 409.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "409":
+          description: >
+            `code` = EVIDENCIA_NO_LISTA: el ZIP está PENDIENTE, GENERANDO o en ERROR.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
   /api/v1/diagnostico/consultas/{cid}/reprocesar:
     parameters:
       - name: cid
@@ -3462,6 +3657,50 @@ components:
         version: { type: integer, format: int64, description: "Nueva versión del tablero (la de la celda)." }
         estado_lote: { type: string, enum: [CREADO, EN_PROCESO, COMPLETADO, INCOMPLETO] }
 
+    SolicitudEvidencia:
+      type: object
+      description: Pedido de una evidencia en segundo plano (HU #13850). Hoy solo el ZIP de los PDF del lote.
+      required: [tipo]
+      properties:
+        tipo:
+          type: string
+          enum: [ZIP]
+    EstadoEvidencia:
+      type: object
+      description: >
+        Estado del ZIP del lote (HU #13850). vehiculos_incluidos = vehículos con su PDF (los esperados mientras está en la cola, los
+        del archivo cuando está LISTA); vehiculos_pendientes = los que quedan fuera por no haber terminado (van en el índice).
+      required: [id, tipo, estado, vehiculos_incluidos, vehiculos_pendientes, creado_en, generado_en, tipo_error]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tipo:
+          type: string
+          enum: [ZIP]
+        estado:
+          type: string
+          enum: [PENDIENTE, GENERANDO, LISTA, ERROR]
+        vehiculos_incluidos:
+          type: integer
+          minimum: 0
+        vehiculos_pendientes:
+          type: integer
+          minimum: 0
+        creado_en:
+          type: string
+          format: date-time
+          description: Instante del pedido.
+        generado_en:
+          type: string
+          format: date-time
+          nullable: true
+          description: Instante en que quedó LISTA; null mientras no.
+        tipo_error:
+          type: string
+          nullable: true
+          enum: [ALMACEN_NO_DISPONIBLE, GENERACION_FALLIDA, GENERACION_INTERRUMPIDA, SIN_VEHICULOS_TERMINADOS, null]
+          description: Solo con estado ERROR. Nunca la causa técnica de una fuente.
     ErrorRegla:
       type: object
       required: [code, error]

@@ -102,7 +102,8 @@ public static class Modulos
     /// <summary>
     /// Evidencias (HU #13846): el almacén de archivos (file-manager corporativo con <c>FILE_MANAGER_*</c>; la base solo con
     /// <see cref="Infraestructura.Archivos.OpcionesAlmacen.GuardarEnBase"/>; sin ninguno el servicio no arranca) y el registro de
-    /// evidencias con huella que usan el PDF, el Excel y el ZIP de F07.
+    /// evidencias con huella que usan el PDF, el Excel y el ZIP de F07. El ZIP (HU #13850) va por su cola con
+    /// <see cref="Trabajos.OpcionesEvidencias"/> validada al arrancar.
     /// </summary>
     public static IServiceCollection AddEvidencias(this IServiceCollection services, IConfiguration configuration)
     {
@@ -115,6 +116,17 @@ public static class Modulos
         services.AddScoped<Reportes.DescargaPdfVehiculo>();
         // HU #13849: Excel del lote (mismo contenido de F07-H2, huella del lote y registro de F07-H1).
         services.AddScoped<Reportes.DescargaExcelLote>();
+        // HU #13850: ZIP de los PDF del lote en segundo plano (pedido/estado/archivo, cola entre compañías y empaquetador con la
+        // empresa de cada ZIP fijada en su contexto). El trabajador solo se registra con Diagnostico:Evidencias:Habilitado=true.
+        services.AddScoped<Reportes.SolicitudZip>();
+        services.AddScoped<Trabajos.ColaEvidencias>();
+        services.AddSingleton<Reportes.EmpaquetadorZip>();
+        services.AddOptions<Trabajos.OpcionesEvidencias>()
+            .Bind(configuration.GetSection(Trabajos.OpcionesEvidencias.Seccion))
+            .Validate(o => o.Errores().Count == 0, $"{Trabajos.OpcionesEvidencias.Seccion} tiene valores fuera de rango (Intervalo > 0, DuracionLease >= 30 s, MaxReintentos 0-5, EsperaReintento > 0).")
+            .ValidateOnStart();
+        if (configuration.GetValue($"{Trabajos.OpcionesEvidencias.Seccion}:{nameof(Trabajos.OpcionesEvidencias.Habilitado)}", false))
+            services.AddHostedService<Trabajos.TrabajadorEvidencias>();
         return services;
     }
 
@@ -133,6 +145,7 @@ public static class Modulos
         Tablero.EndpointsTablero.Map(api);
         Consultas.EndpointsReproceso.Map(api);
         Reportes.ReportesEndpoints.Map(api);
+        Reportes.EvidenciasEndpoints.Map(api);
         api.MapFallback(() => Results.NotFound());
         return api;
     }

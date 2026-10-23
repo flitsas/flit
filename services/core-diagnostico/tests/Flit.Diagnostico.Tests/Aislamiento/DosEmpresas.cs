@@ -40,6 +40,9 @@ public sealed class EmpresaDePrueba(ApiDePrueba api, Guid id)
 
     public Guid Id { get; } = id;
 
+    /// <summary>La API de la empresa (HU #13850: el escenario de fuga del ZIP corre el empaquetador de la cola).</summary>
+    public ApiDePrueba Api => api;
+
     /// <summary>
     /// Token de un usuario del producto con los permisos de lectura de Diagnóstico (sin ellos no hay sesión, HU #13726); cada
     /// GET exige el suyo (<c>diagnosticos.ver</c>, <c>configuracion.ver</c> desde la HU #13741, <c>diagnosticos.crear</c>
