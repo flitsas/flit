@@ -102,7 +102,7 @@ public static class PlantillasEndpoints
     }
 
     /// <summary>Vista previa con datos de ejemplo o de un comparendo real de la empresa del usuario; HTML o PDF.</summary>
-    private static async Task<IResult> Previsualizar(VistaPrevia pedido, UsuarioActual usuario, AccesoComparendo acceso, ContextoPlantilla contexto, CancellationToken ct)
+    private static async Task<IResult> Previsualizar(VistaPrevia pedido, ServicioPlantillas plantillas, UsuarioActual usuario, AccesoComparendo acceso, ContextoPlantilla contexto, CancellationToken ct)
     {
         if (!Enum.TryParse<TipoPlantilla>(pedido.Tipo, true, out var tipo))
             throw new ReglaException("TIPO_INVALIDO", "Tipo de plantilla desconocido.");
@@ -111,7 +111,7 @@ public static class PlantillasEndpoints
             ? await contexto.DeAsync(await acceso.ParaLeerAsync(id, ct).ConfigureAwait(false), null, ct).ConfigureAwait(false)
             : ContextoPlantilla.Ejemplo();
         var conjunto = Enum.TryParse<ConjuntoPlantillas>(pedido.Conjunto, true, out var c) ? c : ConjuntoPlantillas.Flit;
-        var armado = ServicioPlantillas.Armar(new PlantillaVersion { Asunto = pedido.Asunto, CuerpoHtml = pedido.CuerpoHtml ?? string.Empty }, tipo, valores, conjunto);
+        var armado = ServicioPlantillas.Armar(new PlantillaVersion { Asunto = pedido.Asunto, CuerpoHtml = pedido.CuerpoHtml ?? string.Empty }, tipo, valores, conjunto, plantillas.Recursos);
         if (string.Equals(pedido.Formato, "pdf", StringComparison.OrdinalIgnoreCase) && !ServicioPlantillas.EsCorreo(tipo))
             return Results.File(ServicioPlantillas.Pdf(armado, "VISTA PREVIA"), "application/pdf");
         return Results.Ok(new { armado.Asunto, armado.Html, desconocidas = validacion.Desconocidas });

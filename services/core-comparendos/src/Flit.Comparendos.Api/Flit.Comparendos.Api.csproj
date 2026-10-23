@@ -39,6 +39,7 @@
     <EmbeddedResource Include="Semillas\*.json" />
     <EmbeddedResource Include="Semillas\Plantillas\*.html" />
     <EmbeddedResource Include="Semillas\Plantillas\Tesis\*.html" />
+    <EmbeddedResource Include="Semillas\Plantillas\Renting\*.html" />
     <EmbeddedResource Include="Infraestructura\Pdf\Fuentes\*.ttf" />
   </ItemGroup>
 

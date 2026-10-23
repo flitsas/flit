@@ -1,7 +1,12 @@
 <!-- nombre: Aviso 1 al conductor -->
-<!-- asunto: Comparendo {{comparendo.numero}} del vehículo {{comparendo.placa}} -->
-<p>Hola, {{conductor.nombres}}:</p>
-<p>{{peticionario.nombre}} te informa que el vehículo de placa <b>{{comparendo.placa}}</b>, que tenías a tu cargo, recibió el comparendo <b>{{comparendo.numero}}</b> el {{comparendo.fecha_imposicion}} por la infracción {{comparendo.codigo_infraccion}}: {{comparendo.descripcion_infraccion}}</p>
-<p>Valor: <b>{{comparendo.valor_total}}</b>. Hoy tienes <b>{{descuento.ventana}}</b>: puedes pagar con 50% de descuento hasta el {{descuento.fecha_fin_50}} y con 25% hasta el {{descuento.fecha_fin_25}}, haciendo el curso de seguridad vial en un CIA autorizado.</p>
-<p><a href="{{portal.enlace}}">Ver el comparendo y su evidencia</a> (enlace disponible hasta el {{portal.vence}}).</p>
-{{#si empresa.correo_respuesta}}<p>Si tienes preguntas, responde a {{empresa.correo_respuesta}}.</p>{{/si}}
+<!-- asunto: Comparendo {{comparendo.numero}} del vehículo {{comparendo.placa}}{{#si descuento.porcentaje != "0"}}: tienes descuento{{/si}} -->
+<h1 style="margin:4px 0 18px;text-align:center;color:#2F6FED;font-size:19px;letter-spacing:0.02em">AVISO DE COMPARENDO</h1>
+<p style="margin:0 0 12px">Estimado/a <strong style="color:#2F6FED">{{conductor.nombres}}</strong>.</p>
+<p style="margin:0 0 12px"><strong>{{peticionario.nombre}}</strong>, propietaria del vehículo que tenías a tu cargo, te informa que recibió este comparendo:</p>
+<p style="margin:0 0 12px"><strong style="color:#2F6FED">Número de comparendo:</strong> {{comparendo.numero}}<br><strong style="color:#2F6FED">Placa del vehículo:</strong> {{comparendo.placa}}<br><strong style="color:#2F6FED">Fecha de la infracción:</strong> {{comparendo.fecha_imposicion}}<br><strong style="color:#2F6FED">Infracción:</strong> {{comparendo.codigo_infraccion}}. {{comparendo.descripcion_infraccion}}.<br><strong style="color:#2F6FED">Organismo de tránsito:</strong> {{ot.nombre}}<br><strong style="color:#2F6FED">Valor:</strong> {{comparendo.valor_total}}</p>
+<p style="margin:20px 0 8px;font-weight:bold;color:#2F6FED">Cómo pagar menos</p>
+{{#si descuento.porcentaje == "50"}}<p style="margin:0 0 12px">Si haces el cambio de contraventor y el curso de seguridad vial dentro de los primeros 11 días hábiles, pagas con el <strong>50% de descuento</strong>, hasta el {{descuento.fecha_fin_50}}. Después, y hasta el {{descuento.fecha_fin_25}}, el descuento es del <strong>25%</strong>.</p>{{/si}}
+{{#si descuento.porcentaje == "25"}}<p style="margin:0 0 12px">Si haces el curso de seguridad vial dentro de los primeros 20 días hábiles, pagas con el <strong>25% de descuento</strong>, hasta el {{descuento.fecha_fin_25}}.</p>{{/si}}
+{{#si descuento.porcentaje == "0"}}<p style="margin:0 0 12px">Los plazos de descuento ya terminaron: el valor a pagar es el 100%, más los intereses que liquide el organismo de tránsito.</p>{{/si}}
+<p style="margin:0 0 12px">Adjuntamos la autorización de cambio de infractor y el poder de la empresa, para que los presentes en el organismo de tránsito. Puedes consultar el comparendo en <a href="https://www.fcm.org.co/simit/" target="_blank" style="color:#2F6FED">SIMIT</a>{{#si portal.enlace}} o <a href="{{portal.enlace}}" style="color:#2F6FED">verlo aquí</a> (enlace disponible hasta el {{portal.vence}}){{/si}}.</p>
+<p style="margin:0 0 12px">Si ya lo resolviste, ignora este mensaje.{{#si empresa.correo_respuesta}} Si tienes preguntas, escríbenos a <strong>{{empresa.correo_respuesta}}</strong>.{{/si}}</p>

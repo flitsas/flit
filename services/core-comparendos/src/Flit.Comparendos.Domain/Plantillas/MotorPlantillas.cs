@@ -18,6 +18,7 @@ public static class VariablesPlantilla
         new("comparendo.placa", "Comparendo", "Placa del vehículo", "ABC123"),
         new("comparendo.fecha_imposicion", "Comparendo", "Fecha de la infracción", "1 de octubre de 2026"),
         new("comparendo.fecha_notificacion", "Comparendo", "Fecha de notificación", "6 de octubre de 2026"),
+        new("comparendo.tiene_notificacion", "Comparendo", "«sí» si ya tiene fecha de notificación; vacío si no (para {{#si}})", "sí"),
         new("comparendo.codigo_infraccion", "Comparendo", "Código de la infracción", "C29"),
         new("comparendo.descripcion_infraccion", "Comparendo", "Descripción de la infracción", "Conducir a velocidad superior a la máxima permitida."),
         new("comparendo.direccion_infraccion", "Comparendo", "Dirección donde ocurrió", "AV BOYACA # 80-20"),
