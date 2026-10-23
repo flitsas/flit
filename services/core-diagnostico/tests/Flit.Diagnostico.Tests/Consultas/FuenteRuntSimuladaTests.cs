@@ -40,7 +40,8 @@ public sealed class FuenteRuntSimuladaTests
         vehiculo.Placa.Should().Be("TST001", "la simulación responde por la placa consultada");
         vehiculo.Servicio.Should().Be("PARTICULAR");
         vehiculo.ServicioQueResolvio.Should().Be(FuenteRuntIntempoSimulada.Servicio);
-        vehiculo.IdTransaccion.Should().NotBeNullOrWhiteSpace();
+        // HU #13877: Intempo no informa transacción (las muestras reales no traen codigoUUID).
+        vehiculo.IdTransaccion.Should().BeNull();
         var propietario = vehiculo.Propietarios.Should().ContainSingle().Subject;
         propietario.TipoDocumento.Should().Be("CC");
         propietario.NumeroDocumento.Should().Be("9999900001");
@@ -199,6 +200,33 @@ public sealed class FuenteRuntSimuladaTests
         resultado.Error.Should().Be(TipoErrorFuente.RespuestaInvalida);
         resultado.Vehiculo.Should().BeNull();
     }
+
+    // HU #13877 AC2 (G5=a) — los fixtures son proto-JSON de ConsultarVehiculoIntempoResponse: sin la forma vieja
+    // (codigoResultado, codigoUUID) ni la clave propia de la simulación, y el lector estricto los acepta.
+    [Fact]
+    public void Fixtures_no_traen_codigoResultado_codigoUUID_ni_simulacion()
+    {
+        var fixtures = FixturesIntempo.Todos();
+        fixtures.Keys.Should().BeEquivalentTo(FixturesSinPiiTests.Variantes);
+        foreach (var (archivo, json) in fixtures)
+        {
+            using var doc = JsonDocument.Parse(json);
+            Claves(doc.RootElement).Should().NotContain(["codigoResultado", "codigoUUID", "simulacion"], archivo);
+            var respuesta = JsonParserIntempo.Parse(json);
+            respuesta.Proveedor.Should().Be("intempo", archivo);
+            respuesta.Resultado.Should().NotBe(Flit.Consultas.Grpc.V1.ResultadoRuntIntempo.Unspecified, archivo);
+        }
+
+        JsonParserIntempo.Parse(fixtures["intempo-error-timeout.json"]).TipoError.Should().Be(Flit.Consultas.Grpc.V1.TipoErrorFuente.Timeout);
+        JsonParserIntempo.Parse(fixtures["intempo-error-respuesta-invalida.json"]).TipoError.Should().Be(Flit.Consultas.Grpc.V1.TipoErrorFuente.RespuestaInvalida);
+    }
+
+    private static IEnumerable<string> Claves(JsonElement e) => e.ValueKind switch
+    {
+        JsonValueKind.Object => e.EnumerateObject().SelectMany(p => Claves(p.Value).Prepend(p.Name)),
+        JsonValueKind.Array => e.EnumerateArray().SelectMany(Claves),
+        _ => [],
+    };
 
     private static IEnumerable<string> PropiedadesPublicas(Type tipo, HashSet<Type> vistos)
     {

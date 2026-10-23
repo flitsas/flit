@@ -1,8 +1,9 @@
 namespace Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 
 /// <summary>
-/// Clase de error de una fuente (patrón <c>TipoErrorFuente</c> de Comparendos). <see cref="Timeout"/> y <see cref="Red"/> son
-/// transitorios (se reintentan con backoff, D-12); los demás son definitivos.
+/// Clase de error de una fuente (patrón <c>TipoErrorFuente</c> de Comparendos). <see cref="Timeout"/>, <see cref="Red"/> y
+/// <see cref="Http5xx"/> son transitorios (se reintentan con backoff, D-12); los demás son definitivos. El código que se guarda
+/// en la celda sale de <see cref="TipoErrorFuenteCodigos.Codigo"/>.
 /// </summary>
 public enum TipoErrorFuente
 {
@@ -17,6 +18,40 @@ public enum TipoErrorFuente
 
     /// <summary>La fuente no está conectada en este ambiente: no se llamó a ningún proveedor (definitivo).</summary>
     NoConectado,
+
+    /// <summary>El proveedor respondió HTTP 5xx o no informó el status (transitorio, HU #13877).</summary>
+    Http5xx,
+
+    /// <summary>El proveedor rechazó la autenticación (definitivo, HU #13877).</summary>
+    Autenticacion,
+
+    /// <summary>El proveedor respondió sin éxito o el RUNT no registra el vehículo (definitivo, HU #13877).</summary>
+    EstadoNoOk,
+}
+
+/// <summary>
+/// Código de cada <see cref="TipoErrorFuente"/> en <c>consultas.tipo_error</c> e <c>intentos_consulta.tipo_error</c>, el de la
+/// tabla de <c>ClasificadorErrores</c> y de los textos del tablero (HU #13877). Mapa explícito: <c>CodigosDeEnum</c> daría
+/// <c>HTTP5XX</c> para <see cref="TipoErrorFuente.Http5xx"/>.
+/// </summary>
+/// <example>
+/// <code>
+/// TipoErrorFuenteCodigos.Codigo(TipoErrorFuente.Http5xx); // "HTTP_5XX"
+/// </code>
+/// </example>
+public static class TipoErrorFuenteCodigos
+{
+    public static string Codigo(TipoErrorFuente tipo) => tipo switch
+    {
+        TipoErrorFuente.Timeout => "TIMEOUT",
+        TipoErrorFuente.Red => "RED",
+        TipoErrorFuente.RespuestaInvalida => "RESPUESTA_INVALIDA",
+        TipoErrorFuente.NoConectado => "NO_CONECTADO",
+        TipoErrorFuente.Http5xx => "HTTP_5XX",
+        TipoErrorFuente.Autenticacion => "AUTENTICACION",
+        TipoErrorFuente.EstadoNoOk => "ESTADO_NO_OK",
+        _ => throw new ArgumentOutOfRangeException(nameof(tipo), tipo, "TipoErrorFuente sin código."),
+    };
 }
 
 /// <summary>Tipo de propiedad del propietario en el RUNT (<c>detallePropiedad</c> PROPIO|LEASING o <c>tipoPropiedad</c> 1|3).</summary>
@@ -87,8 +122,11 @@ public sealed record ResultadoRunt
 
     public bool Exitoso => Vehiculo is not null;
 
-    /// <summary>Verdadero si el error se puede reintentar (<see cref="TipoErrorFuente.Timeout"/> o <see cref="TipoErrorFuente.Red"/>).</summary>
-    public bool EsTransitorio => Error is TipoErrorFuente.Timeout or TipoErrorFuente.Red;
+    /// <summary>
+    /// Verdadero si el error se puede reintentar (<see cref="TipoErrorFuente.Timeout"/>, <see cref="TipoErrorFuente.Red"/> o
+    /// <see cref="TipoErrorFuente.Http5xx"/>).
+    /// </summary>
+    public bool EsTransitorio => Error is TipoErrorFuente.Timeout or TipoErrorFuente.Red or TipoErrorFuente.Http5xx;
 
     public static ResultadoRunt Exito(VehiculoRunt vehiculo)
     {

@@ -1,12 +1,11 @@
-using System.Text.Json;
-
 namespace Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 
 /// <summary>
 /// Fuente RUNT simulada de Intempo (HU #13725, RD-1): para probar el motor en DEV sin proveedor real. Solo se registra con
 /// <c>Diagnostico:Simulacion:Habilitada=true</c> y <c>Diagnostico:Ambiente</c> LOCAL o DEV (ver
-/// <see cref="Modulos.AddFuentesConsultas"/>). Responde con los fixtures inventados de <see cref="FixturesIntempo"/>, pasados
-/// por el mismo <see cref="MapperIntempo"/> del producto, y es determinista por el último carácter del identificador (plan
+/// <see cref="Modulos.AddFuentesConsultas"/>). Responde con los fixtures inventados de <see cref="FixturesIntempo"/> (proto-JSON
+/// de <c>ConsultarVehiculoIntempoResponse</c>, HU #13877, G5=a), pasados por <see cref="MapperIntempo.MapearJson"/>, la misma
+/// regla de la fuente real; los errores van dentro del mensaje. Es determinista por el último carácter del identificador (plan
 /// §9.1); el vehículo devuelto lleva la placa o el VIN consultado:
 /// <list type="table">
 /// <item><term>1</term><description>propietario persona natural (CC)</description></item>
@@ -51,13 +50,7 @@ public sealed class FuenteRuntIntempoSimulada : IFuenteRunt
         ct.ThrowIfCancellationRequested();
         var valor = identificador.Valor.Trim();
         var archivo = valor.Length > 0 && Escenarios.TryGetValue(valor[^1], out var a) ? a : PorDefecto;
-        var json = FixturesIntempo.Todos()[archivo];
-
-        var simulado = ErrorSimulado(json);
-        if (simulado is not null)
-            return Task.FromResult(simulado);
-
-        var resultado = MapperIntempo.Mapear(json, Servicio);
+        var resultado = MapperIntempo.MapearJson(FixturesIntempo.Todos()[archivo], Servicio);
         if (resultado.Vehiculo is { } vehiculo)
         {
             resultado = ResultadoRunt.Exito(identificador.EsVin
@@ -67,25 +60,12 @@ public sealed class FuenteRuntIntempoSimulada : IFuenteRunt
 
         return Task.FromResult(resultado);
     }
-
-    /// <summary>
-    /// Un transitorio no tiene cuerpo de respuesta: su fixture lo describe con <c>simulacion.error</c> (nombre de
-    /// <see cref="TipoErrorFuente"/>) y <c>simulacion.mensaje</c>. Es lo único propio de la simulación en los fixtures.
-    /// </summary>
-    private static ResultadoRunt? ErrorSimulado(string json)
-    {
-        using var doc = JsonDocument.Parse(json);
-        if (!doc.RootElement.TryGetProperty("simulacion", out var s)
-            || !Enum.TryParse<TipoErrorFuente>(s.GetProperty("error").GetString(), out var error))
-            return null;
-        return ResultadoRunt.Fallo(error, s.TryGetProperty("mensaje", out var m) ? m.GetString() ?? error.ToString() : error.ToString());
-    }
 }
 
 /// <summary>
-/// Respuestas inventadas de Intempo versionadas como recursos del ensamblado (<c>Fixtures/intempo-*.json</c>): forma de la
-/// respuesta real, datos ficticios (rango declarado y auditado por <c>FixturesSinPiiTests</c>). Nunca se construyen a partir
-/// de una muestra real.
+/// Respuestas inventadas del RUNT por Intempo versionadas como recursos del ensamblado (<c>Fixtures/intempo-*.json</c>): proto-JSON
+/// de <c>ConsultarVehiculoIntempoResponse</c> con el vehículo en las claves de §5 (HU #13877), datos ficticios (rango declarado
+/// y auditado por <c>FixturesSinPiiTests</c>). Nunca se construyen a partir de una muestra real.
 /// </summary>
 public static class FixturesIntempo
 {

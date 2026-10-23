@@ -1,43 +1,54 @@
 {
-  "codigoResultado": "Exitoso",
-  "codigoUUID": "00000000-0000-4000-8000-000000000004",
-  "fecha": "2026-01-15T10:00:00",
-  "informacionGeneral": {
-    "noPlaca": "TST004",
-    "noVin": "9ZZPRUEBA00000004",
-    "estadoDelVehiculo": "ACTIVO",
-    "tipoServicio": "PARTICULAR",
-    "claseVehiculo": "CAMIONETA",
-    "marca": "MARCA PRUEBA",
-    "linea": "LINEA PRUEBA",
-    "modelo": "2020",
-    "organismoTransito": "SECRETARIA DE TRANSITO DE PRUEBA"
-  },
-  "propietariosActuales": [
-    {
-      "noDocumento": "999990004",
-      "tipoDocumento": "N",
-      "idTipoDocumento": 2,
-      "nombreCompleto": "LEASING FICTICIO SA",
-      "tipoPropiedad": 3,
-      "detallePropiedad": "LEASING",
-      "locatarios": [
-        {
-          "ndoc": "999990014",
-          "tdoc": "N",
-          "tipo": "LOCATARIO",
-          "nombreRazonSocial": "EMPRESA LOCATARIA FICTICIA SAS"
-        }
-      ]
-    }
-  ],
-  "lessee": [
-    {
-      "documentNumber": "999990014",
-      "documentType": "N",
-      "lesseeType": "LOCATARIO",
-      "names": "EMPRESA LOCATARIA FICTICIA SAS"
-    }
-  ],
-  "infracciones": []
+  "proveedor": "intempo",
+  "resultado": "RESULTADO_RUNT_INTEMPO_ENCONTRADO",
+  "httpStatus": 200,
+  "duracionMs": 120,
+  "vehiculo": {
+    "plate": "TST004",
+    "informacionGeneral": {
+      "noPlaca": "TST004",
+      "noVin": "9ZZPRUEBA00000004",
+      "estadoDelVehiculo": "ACTIVO",
+      "tipoServicio": "PARTICULAR",
+      "claseVehiculo": "CAMIONETA",
+      "marca": "MARCA PRUEBA",
+      "linea": "LINEA PRUEBA",
+      "modelo": "2020",
+      "organismoTransito": "SECRETARIA DE TRANSITO DE PRUEBA"
+    },
+    "propietariosActuales": [
+      {
+        "id": "1",
+        "idTipoDocumento": "N",
+        "tipoDocumento": "NIT",
+        "noDocumento": "999990004",
+        "nombreCompleto": "LEASING FICTICIO SA",
+        "tipoPropiedad": 3,
+        "detallePropiedad": "LEASING",
+        "locatarios": [
+          {
+            "tipo": 1,
+            "tdoc": "N",
+            "ndoc": "999990014",
+            "nombreRazonSocial": "EMPRESA LOCATARIA FICTICIA SAS"
+          }
+        ]
+      }
+    ],
+    "owner": [
+      {
+        "documentType": "NIT",
+        "documentNumber": "999990004",
+        "name": "LEASING FICTICIO SA"
+      }
+    ],
+    "lessee": [
+      {
+        "documentType": "NIT",
+        "documentNumber": "999990014",
+        "name": "EMPRESA LOCATARIA FICTICIA SAS",
+        "lesseeType": 1
+      }
+    ]
+  }
 }

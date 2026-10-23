@@ -1,29 +1,40 @@
 {
-  "codigoResultado": "Exitoso",
-  "codigoUUID": "00000000-0000-4000-8000-000000000005",
-  "fecha": "2026-01-15T10:00:00",
-  "informacionGeneral": {
-    "noPlaca": "TST005",
-    "noVin": "9ZZPRUEBA00000005",
-    "estadoDelVehiculo": "ACTIVO",
-    "tipoServicio": "PUBLICO",
-    "claseVehiculo": "BUS",
-    "marca": "MARCA PRUEBA",
-    "linea": "LINEA PRUEBA",
-    "modelo": "2020",
-    "organismoTransito": "SECRETARIA DE TRANSITO DE PRUEBA"
-  },
-  "propietariosActuales": [
-    {
-      "noDocumento": "999990005",
-      "tipoDocumento": "N",
-      "idTipoDocumento": 2,
-      "nombreCompleto": "TRANSPORTES FICTICIOS SAS",
-      "tipoPropiedad": 1,
-      "detallePropiedad": "PROPIO",
-      "locatarios": []
-    }
-  ],
-  "lessee": [],
-  "infracciones": []
+  "proveedor": "intempo",
+  "resultado": "RESULTADO_RUNT_INTEMPO_ENCONTRADO",
+  "httpStatus": 200,
+  "duracionMs": 120,
+  "vehiculo": {
+    "plate": "TST005",
+    "informacionGeneral": {
+      "noPlaca": "TST005",
+      "noVin": "9ZZPRUEBA00000005",
+      "estadoDelVehiculo": "ACTIVO",
+      "tipoServicio": "PUBLICO",
+      "claseVehiculo": "BUS",
+      "marca": "MARCA PRUEBA",
+      "linea": "LINEA PRUEBA",
+      "modelo": "2020",
+      "organismoTransito": "SECRETARIA DE TRANSITO DE PRUEBA"
+    },
+    "propietariosActuales": [
+      {
+        "id": "1",
+        "idTipoDocumento": "N",
+        "tipoDocumento": "NIT",
+        "noDocumento": "999990005",
+        "nombreCompleto": "TRANSPORTES FICTICIOS SAS",
+        "tipoPropiedad": 1,
+        "detallePropiedad": "PROPIO",
+        "locatarios": []
+      }
+    ],
+    "owner": [
+      {
+        "documentType": "NIT",
+        "documentNumber": "999990005",
+        "name": "TRANSPORTES FICTICIOS SAS"
+      }
+    ],
+    "lessee": []
+  }
 }

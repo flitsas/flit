@@ -1,150 +1,248 @@
-using System.Text.Json;
+using System.Globalization;
+using Flit.Consultas.Grpc.V1;
+using Google.Protobuf;
+using TipoErrorIntempo = Flit.Consultas.Grpc.V1.TipoErrorFuente;
 
 namespace Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 
 /// <summary>
-/// Mapper del producto para la respuesta de Intempo (HU #13725, H-INT): el DTO de core-api solo mapea
-/// <c>propietariosActuales</c>; este hidrata además <c>locatarios[]</c> de cada propietario, <c>lessee[]</c> y
-/// <c>tipoPropiedad</c>/<c>detallePropiedad</c> y, para el avalúo (HU #13795), marca, línea, modelo, cilindraje,
-/// <c>tipoCombustible</c> y pasajeros de <c>informacionGeneral</c>. Toma solo tipo y número de documento: los nombres (<c>nombreCompleto</c>,
-/// <c>nombreRazonSocial</c>, <c>names</c>) nunca salen de aquí. Una respuesta que no es JSON, que no trae
-/// <c>informacionGeneral</c> o cuyo <c>codigoResultado</c> no es «Exitoso» es <see cref="TipoErrorFuente.RespuestaInvalida"/>.
+/// Regla única del producto para el RUNT por Intempo (HU #13877, F10-H5; antes HU #13725 y #13795): convierte la respuesta
+/// tipada de core-consultas (<see cref="ConsultarVehiculoIntempoResponse"/>, <c>runt_intempo.proto</c>) en
+/// <see cref="ResultadoRunt"/>. La fuente real (F10-H6) llama a <see cref="Mapear(ConsultarVehiculoIntempoResponse, string)"/>
+/// con el mensaje recibido; la simulada pasa su fixture proto-JSON por <see cref="MapearJson"/>, que lo lee con el
+/// <see cref="JsonParser"/> estricto y llama a la misma regla (G5=a).
+/// <list type="bullet">
+/// <item><c>ENCONTRADO</c>: placa, VIN, servicio, clase, organismo, marca, línea, modelo, <c>cilidraje</c> (errata de la
+/// especificación), combustible y <c>datosTecnicos.pasajerosSentados</c>; propietarios con el tipo de
+/// <c>idTipoDocumento</c> (C/N…) o, si falta, del texto <c>tipoDocumento</c>; locatarios como unión sin repetir de los de cada
+/// propietario y de <c>lessee[]</c> (tipo en texto), por documento normalizado. <c>IdTransaccion</c> es nulo: Intempo no
+/// informa transacción.</item>
+/// <item><c>NO_ENCONTRADO</c>: <see cref="TipoErrorFuente.EstadoNoOk"/> definitivo con <see cref="MensajeNoEncontrado"/> (G3=a).</item>
+/// <item><c>ERROR</c>: <c>TIMEOUT</c>→Timeout, <c>RED</c>→Red, <c>HTTP_NO_EXITOSO</c> ≥ 500 o sin status→Http5xx (transitorio) y
+/// el resto→EstadoNoOk, <c>AUTENTICACION</c>→Autenticacion, <c>RESPUESTA_INVALIDA</c>→RespuestaInvalida, otro→EstadoNoOk.</item>
+/// <item>JSON inválido, clave desconocida (la forma vieja con <c>codigoResultado</c>), resultado sin especificar o
+/// <c>ENCONTRADO</c> sin vehículo: <see cref="TipoErrorFuente.RespuestaInvalida"/>.</item>
+/// </list>
+/// Datos personales (R-20, Ley 1581): solo lee tipo y número de documento. Nombres, direcciones, teléfonos, correos,
+/// <c>owner[]</c> y el histórico nunca salen de aquí. Los mensajes de error son fijos y técnicos: nunca copia
+/// <c>mensaje_error</c> ni <c>errores</c>, que pueden traer un recorte del cuerpo. Puro y sin logs.
 /// </summary>
 /// <example>
 /// <code>
-/// var resultado = MapperIntempo.Mapear(cuerpo, "INTEMPO");
+/// var resultado = MapperIntempo.Mapear(await cliente.ConsultarPorPlacaAsync(new() { Placa = "TST003" }), "INTEMPO");
 /// // resultado.Vehiculo.Propietarios[0] → ("NIT", "999990003", Leasing, [("CC", "9999900013")])
 /// </code>
 /// </example>
 public static class MapperIntempo
 {
-    public static ResultadoRunt Mapear(string json, string servicioQueResolvio)
+    /// <summary>Mensaje del vehículo que el RUNT no registra (G3=a).</summary>
+    public const string MensajeNoEncontrado = "El RUNT no registra el vehículo consultado.";
+
+    private const string Prefijo = "RUNT (Intempo): ";
+
+    private static readonly JsonParser Lector = new(JsonParser.Settings.Default.WithIgnoreUnknownFields(false));
+
+    /// <summary>Compatibilidad: la firma anterior lee proto-JSON por <see cref="MapearJson"/>.</summary>
+    public static ResultadoRunt Mapear(string json, string servicioQueResolvio) => MapearJson(json, servicioQueResolvio);
+
+    /// <summary>
+    /// Lee <paramref name="protoJson"/> como <see cref="ConsultarVehiculoIntempoResponse"/> (claves de §5 por el
+    /// <c>json_name</c> del contrato, sin admitir claves desconocidas) y lo mapea con la misma regla de la fuente real.
+    /// </summary>
+    public static ResultadoRunt MapearJson(string protoJson, string servicioQueResolvio)
     {
-        ArgumentNullException.ThrowIfNull(json);
-        JsonDocument documento;
+        ArgumentNullException.ThrowIfNull(protoJson);
+        ConsultarVehiculoIntempoResponse respuesta;
         try
         {
-            documento = JsonDocument.Parse(json);
+            respuesta = Lector.Parse<ConsultarVehiculoIntempoResponse>(protoJson);
         }
-        catch (JsonException)
+        catch (InvalidJsonException)
         {
-            return Invalida("la respuesta de Intempo no es JSON válido");
+            return Invalida("la respuesta no es JSON válido");
         }
-
-        using (documento)
+        catch (InvalidProtocolBufferException)
         {
-            var raiz = documento.RootElement;
-            if (raiz.ValueKind != JsonValueKind.Object)
-                return Invalida("la respuesta de Intempo no es un objeto");
-            if (!string.Equals(Texto(raiz, "codigoResultado"), "Exitoso", StringComparison.OrdinalIgnoreCase))
-                return Invalida("Intempo respondió sin éxito");
-            if (!raiz.TryGetProperty("informacionGeneral", out var general) || general.ValueKind != JsonValueKind.Object)
-                return Invalida("la respuesta de Intempo no trae informacionGeneral");
-
-            var propietarios = Arreglo(raiz, "propietariosActuales")
-                .Select(Propietario)
-                .OfType<PropietarioRunt>()
-                .ToList();
-            var locatarios = Arreglo(raiz, "lessee")
-                .Select(l => Locatario(l, "documentType", "documentNumber"))
-                .Concat(propietarios.SelectMany(p => p.Locatarios))
-                .OfType<LocatarioRunt>()
-                .Distinct()
-                .ToList();
-
-            return ResultadoRunt.Exito(new VehiculoRunt(
-                Placa: Texto(general, "noPlaca"),
-                Vin: Texto(general, "noVin"),
-                Servicio: Texto(general, "tipoServicio"),
-                Clase: Texto(general, "claseVehiculo"),
-                Organismo: Texto(general, "organismoTransito"),
-                Propietarios: propietarios,
-                Locatarios: locatarios,
-                ServicioQueResolvio: servicioQueResolvio,
-                IdTransaccion: Texto(raiz, "codigoUUID"))
-            {
-                // HU #13795: datos técnicos del bien para el avalúo comercial.
-                Marca = Texto(general, "marca"),
-                Linea = Texto(general, "linea"),
-                Modelo = Entero(general, "modelo"),
-                Cilindraje = Entero(general, "cilindraje"),
-                Combustible = Texto(general, "tipoCombustible"),
-                Pasajeros = Entero(general, "pasajeros") ?? Entero(general, "pasajerosSentados") ?? Entero(general, "capacidadPasajeros"),
-            });
+            return Invalida("la respuesta no tiene la forma del contrato");
         }
+
+        return Mapear(respuesta, servicioQueResolvio);
+    }
+
+    /// <summary>Ruta única: la respuesta tipada de <c>RuntIntempoService</c> a <see cref="ResultadoRunt"/>.</summary>
+    public static ResultadoRunt Mapear(ConsultarVehiculoIntempoResponse respuesta, string servicioQueResolvio)
+    {
+        ArgumentNullException.ThrowIfNull(respuesta);
+        ArgumentNullException.ThrowIfNull(servicioQueResolvio);
+        return respuesta.Resultado switch
+        {
+            ResultadoRuntIntempo.Encontrado when respuesta.Vehiculo is { } vehiculo => ResultadoRunt.Exito(Vehiculo(vehiculo, servicioQueResolvio)),
+            ResultadoRuntIntempo.Encontrado => Invalida("la respuesta encontrada no trae el vehículo"),
+            ResultadoRuntIntempo.NoEncontrado => ResultadoRunt.Fallo(TipoErrorFuente.EstadoNoOk, MensajeNoEncontrado),
+            ResultadoRuntIntempo.Error => Error(respuesta),
+            _ => Invalida("la respuesta no informa el resultado"),
+        };
     }
 
     /// <summary>Código del tipo de documento del producto (CC, CE, NIT, PAS o TI) para el código de Intempo (C, N, …).</summary>
-    public static string TipoDocumento(string codigo) => codigo.Trim().ToUpperInvariant() switch
+    public static string TipoDocumento(string codigo)
     {
-        "C" or "CC" => "CC",
-        "N" or "NIT" => "NIT",
-        "E" or "CE" => "CE",
-        "P" or "PA" or "PAS" => "PAS",
-        "T" or "TI" => "TI",
-        var otro => otro,
-    };
+        ArgumentNullException.ThrowIfNull(codigo);
+        return codigo.Trim().ToUpperInvariant() switch
+        {
+            "C" or "CC" => "CC",
+            "N" or "NIT" => "NIT",
+            "E" or "CE" => "CE",
+            "P" or "PA" or "PAS" => "PAS",
+            "T" or "TI" => "TI",
+            var otro => otro,
+        };
+    }
 
-    private static PropietarioRunt? Propietario(JsonElement p)
+    /// <summary>
+    /// Código del producto para el tipo de documento en texto de Intempo (§6.1: «Cédula de ciudadanía», «Cédula Ciudadanía»,
+    /// «NIT», «Cédula de extranjería», «Pasaporte», «Tarjeta de identidad»), sin distinguir tildes, mayúsculas ni el «de»; un
+    /// código (C, N…) también vale. Lo desconocido vuelve tal cual, recortado.
+    /// </summary>
+    public static string TipoDocumentoDeTexto(string texto)
     {
-        var tipo = Texto(p, "tipoDocumento");
-        var numero = Texto(p, "noDocumento");
-        if (tipo is null || numero is null)
-            return null;
-        var locatarios = Arreglo(p, "locatarios")
-            .Select(l => Locatario(l, "tdoc", "ndoc"))
+        ArgumentNullException.ThrowIfNull(texto);
+        var clave = string.Join(' ', SinTildes(texto).ToUpperInvariant()
+            .Split([' ', '\t', '.'], StringSplitOptions.RemoveEmptyEntries)
+            .Where(p => p != "DE"));
+        return clave switch
+        {
+            "CEDULA CIUDADANIA" => "CC",
+            "CEDULA EXTRANJERIA" => "CE",
+            "PASAPORTE" => "PAS",
+            "TARJETA IDENTIDAD" => "TI",
+            _ => TipoDocumento(texto),
+        };
+    }
+
+    private static VehiculoRunt Vehiculo(VehiculoIntempo v, string servicio)
+    {
+        var general = v.InformacionGeneral ?? new InformacionGeneralIntempo();
+        var propietarios = v.PropietariosActuales.Select(Propietario).OfType<PropietarioRunt>().ToList();
+        var locatarios = v.Lessee
+            .Select(l => Locatario(l.DocumentType, l.DocumentNumber))
+            .Concat(propietarios.SelectMany(p => p.Locatarios))
             .OfType<LocatarioRunt>()
             .Distinct()
             .ToList();
-        return new PropietarioRunt(TipoDocumento(tipo), numero, Propiedad(p), locatarios);
+
+        return new VehiculoRunt(
+            Placa: Texto(v.Plate) ?? Texto(general.NoPlaca),
+            Vin: Texto(v.Vin) ?? Texto(general.NoVin),
+            Servicio: Texto(general.TipoServicio),
+            Clase: Texto(general.ClaseVehiculo),
+            Organismo: Texto(general.OrganismoTransito),
+            Propietarios: propietarios,
+            Locatarios: locatarios,
+            ServicioQueResolvio: servicio,
+            IdTransaccion: null)
+        {
+            // HU #13795: datos técnicos del bien para el avalúo comercial.
+            Marca = Texto(general.Marca),
+            Linea = Texto(general.Linea),
+            Modelo = Entero(general.Modelo),
+            Cilindraje = Entero(general.Cilidraje),
+            Combustible = Texto(general.TipoCombustible),
+            Pasajeros = Entero(v.DatosTecnicos?.PasajerosSentados),
+        };
     }
 
-    private static LocatarioRunt? Locatario(JsonElement l, string claveTipo, string claveNumero)
+    private static PropietarioRunt? Propietario(PropietarioActualIntempo p)
     {
-        var tipo = Texto(l, claveTipo);
-        var numero = Texto(l, claveNumero);
-        return tipo is null || numero is null ? null : new LocatarioRunt(TipoDocumento(tipo), numero);
+        var numero = Numero(p.NoDocumento);
+        var tipo = Texto(p.IdTipoDocumento) is { } id ? TipoDocumento(id) : Texto(p.TipoDocumento) is { } texto ? TipoDocumentoDeTexto(texto) : null;
+        if (tipo is null || numero is null)
+            return null;
+        var locatarios = p.Locatarios
+            .Select(l => Locatario(l.Tdoc, l.Ndoc))
+            .OfType<LocatarioRunt>()
+            .Distinct()
+            .ToList();
+        return new PropietarioRunt(tipo, numero, Propiedad(p), locatarios);
     }
 
-    private static TipoPropiedad Propiedad(JsonElement p) => Texto(p, "detallePropiedad")?.ToUpperInvariant() switch
+    private static LocatarioRunt? Locatario(string tipo, string numero)
+    {
+        var t = Texto(tipo);
+        var n = Numero(numero);
+        return t is null || n is null ? null : new LocatarioRunt(TipoDocumentoDeTexto(t), n);
+    }
+
+    private static TipoPropiedad Propiedad(PropietarioActualIntempo p) => Texto(p.DetallePropiedad)?.ToUpperInvariant() switch
     {
         "PROPIO" => TipoPropiedad.Propio,
         "LEASING" => TipoPropiedad.Leasing,
-        _ => Texto(p, "tipoPropiedad") switch
+        _ => p.TipoPropiedad switch
         {
-            "1" => TipoPropiedad.Propio,
-            "3" => TipoPropiedad.Leasing,
+            1 => TipoPropiedad.Propio,
+            3 => TipoPropiedad.Leasing,
             _ => TipoPropiedad.Desconocido,
         },
     };
 
-    private static List<JsonElement> Arreglo(JsonElement objeto, string clave) =>
-        objeto.ValueKind == JsonValueKind.Object && objeto.TryGetProperty(clave, out var v) && v.ValueKind == JsonValueKind.Array
-            ? v.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.Object).ToList()
-            : [];
-
-    /// <summary>Escalar como texto sin espacios en los extremos (Intempo manda cifras como string o como número); null si vacío.</summary>
-    private static string? Texto(JsonElement objeto, string clave)
+    private static ResultadoRunt Error(ConsultarVehiculoIntempoResponse r)
     {
-        if (objeto.ValueKind != JsonValueKind.Object || !objeto.TryGetProperty(clave, out var v))
-            return null;
-        var texto = v.ValueKind switch
+        int? status = r.HasHttpStatus ? r.HttpStatus : null;
+        return r.TipoError switch
         {
-            JsonValueKind.String => v.GetString(),
-            JsonValueKind.Number => v.GetRawText(),
-            _ => null,
+            TipoErrorIntempo.Timeout => ResultadoRunt.Fallo(TipoErrorFuente.Timeout, Prefijo + "el proveedor no respondió a tiempo."),
+            TipoErrorIntempo.Red => ResultadoRunt.Fallo(TipoErrorFuente.Red, Prefijo + "falla de red hacia el proveedor."),
+            TipoErrorIntempo.HttpNoExitoso when status is null or >= 500 =>
+                ResultadoRunt.Fallo(TipoErrorFuente.Http5xx, Prefijo + $"el proveedor respondió con error HTTP{Status(status)}."),
+            TipoErrorIntempo.HttpNoExitoso =>
+                ResultadoRunt.Fallo(TipoErrorFuente.EstadoNoOk, Prefijo + $"el proveedor rechazó la consulta (HTTP{Status(status)})."),
+            TipoErrorIntempo.Autenticacion => ResultadoRunt.Fallo(TipoErrorFuente.Autenticacion, Prefijo + "el proveedor rechazó la autenticación."),
+            TipoErrorIntempo.RespuestaInvalida => Invalida("la respuesta del proveedor no tiene la forma esperada"),
+            _ => ResultadoRunt.Fallo(TipoErrorFuente.EstadoNoOk, Prefijo + "el proveedor devolvió un error."),
         };
-        return string.IsNullOrWhiteSpace(texto) ? null : texto.Trim();
     }
 
-    /// <summary>Entero positivo de un escalar (texto o número, admite «1598.0»); null si no viene o no es un número.</summary>
-    private static int? Entero(JsonElement objeto, string clave)
+    private static string Status(int? status) => status is { } s ? " " + s.ToString(CultureInfo.InvariantCulture) : string.Empty;
+
+    private static string? Texto(string? valor) => string.IsNullOrWhiteSpace(valor) ? null : valor.Trim();
+
+    /// <summary>Número de documento normalizado para comparar: sin espacios en ningún lugar; null si vacío.</summary>
+    private static string? Numero(string? valor) =>
+        Texto(valor) is { } t ? string.Concat(t.Where(c => !char.IsWhiteSpace(c))) : null;
+
+    /// <summary>Entero positivo de un texto (admite «1598.0»); null si no viene o no es un número.</summary>
+    private static int? Entero(string? valor)
     {
-        var texto = Texto(objeto, clave);
-        if (texto is null || !decimal.TryParse(texto, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var valor))
+        var texto = Texto(valor);
+        if (texto is null || !decimal.TryParse(texto, NumberStyles.Number, CultureInfo.InvariantCulture, out var numero))
             return null;
-        return valor is > 0 and <= int.MaxValue ? (int)valor : null;
+        return numero is > 0 and <= int.MaxValue ? (int)numero : null;
     }
 
-    private static ResultadoRunt Invalida(string motivo) => ResultadoRunt.Fallo(TipoErrorFuente.RespuestaInvalida, $"RUNT (Intempo): {motivo}.");
+    /// <summary>
+    /// Vocales sin tilde ni diéresis. Tabla propia y no <c>string.Normalize</c>: con globalización invariante la normalización no
+    /// descompone los caracteres no ASCII.
+    /// </summary>
+    private static string SinTildes(string texto) => string.Create(texto.Length, texto, static (destino, origen) =>
+    {
+        for (var i = 0; i < origen.Length; i++)
+        {
+            destino[i] = origen[i] switch
+            {
+                'á' or 'à' or 'ä' => 'a',
+                'é' or 'è' or 'ë' => 'e',
+                'í' or 'ì' or 'ï' => 'i',
+                'ó' or 'ò' or 'ö' => 'o',
+                'ú' or 'ù' or 'ü' => 'u',
+                'Á' or 'À' or 'Ä' => 'A',
+                'É' or 'È' or 'Ë' => 'E',
+                'Í' or 'Ì' or 'Ï' => 'I',
+                'Ó' or 'Ò' or 'Ö' => 'O',
+                'Ú' or 'Ù' or 'Ü' => 'U',
+                var c => c,
+            };
+        }
+    });
+
+    private static ResultadoRunt Invalida(string motivo) => ResultadoRunt.Fallo(TipoErrorFuente.RespuestaInvalida, $"{Prefijo}{motivo}.");
 }

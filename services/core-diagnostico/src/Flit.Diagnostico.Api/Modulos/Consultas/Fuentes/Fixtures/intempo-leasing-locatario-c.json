@@ -1,43 +1,54 @@
 {
-  "codigoResultado": "Exitoso",
-  "codigoUUID": "00000000-0000-4000-8000-000000000003",
-  "fecha": "2026-01-15T10:00:00",
-  "informacionGeneral": {
-    "noPlaca": "TST003",
-    "noVin": "9ZZPRUEBA00000003",
-    "estadoDelVehiculo": "ACTIVO",
-    "tipoServicio": "PARTICULAR",
-    "claseVehiculo": "AUTOMOVIL",
-    "marca": "MARCA PRUEBA",
-    "linea": "LINEA PRUEBA",
-    "modelo": "2020",
-    "organismoTransito": "SECRETARIA DE TRANSITO DE PRUEBA"
-  },
-  "propietariosActuales": [
-    {
-      "noDocumento": "999990003",
-      "tipoDocumento": "N",
-      "idTipoDocumento": 2,
-      "nombreCompleto": "LEASING FICTICIO SA",
-      "tipoPropiedad": 3,
-      "detallePropiedad": "LEASING",
-      "locatarios": [
-        {
-          "ndoc": "9999900013",
-          "tdoc": "C",
-          "tipo": "LOCATARIO",
-          "nombreRazonSocial": "LOCATARIO PRUEBA DOS"
-        }
-      ]
-    }
-  ],
-  "lessee": [
-    {
-      "documentNumber": "9999900013",
-      "documentType": "C",
-      "lesseeType": "LOCATARIO",
-      "names": "LOCATARIO PRUEBA DOS"
-    }
-  ],
-  "infracciones": []
+  "proveedor": "intempo",
+  "resultado": "RESULTADO_RUNT_INTEMPO_ENCONTRADO",
+  "httpStatus": 200,
+  "duracionMs": 120,
+  "vehiculo": {
+    "plate": "TST003",
+    "informacionGeneral": {
+      "noPlaca": "TST003",
+      "noVin": "9ZZPRUEBA00000003",
+      "estadoDelVehiculo": "ACTIVO",
+      "tipoServicio": "PARTICULAR",
+      "claseVehiculo": "AUTOMOVIL",
+      "marca": "MARCA PRUEBA",
+      "linea": "LINEA PRUEBA",
+      "modelo": "2020",
+      "organismoTransito": "SECRETARIA DE TRANSITO DE PRUEBA"
+    },
+    "propietariosActuales": [
+      {
+        "id": "1",
+        "idTipoDocumento": "N",
+        "tipoDocumento": "NIT",
+        "noDocumento": "999990003",
+        "nombreCompleto": "LEASING FICTICIO SA",
+        "tipoPropiedad": 3,
+        "detallePropiedad": "LEASING",
+        "locatarios": [
+          {
+            "tipo": 1,
+            "tdoc": "C",
+            "ndoc": "9999900013",
+            "nombreRazonSocial": "LOCATARIO PRUEBA DOS"
+          }
+        ]
+      }
+    ],
+    "owner": [
+      {
+        "documentType": "NIT",
+        "documentNumber": "999990003",
+        "name": "LEASING FICTICIO SA"
+      }
+    ],
+    "lessee": [
+      {
+        "documentType": "Cédula de ciudadanía",
+        "documentNumber": "9999900013",
+        "name": "LOCATARIO PRUEBA DOS",
+        "lesseeType": 1
+      }
+    ]
+  }
 }

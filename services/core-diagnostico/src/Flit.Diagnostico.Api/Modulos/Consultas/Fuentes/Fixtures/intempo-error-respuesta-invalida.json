@@ -1,6 +1,14 @@
 {
-  "codigoResultado": "Error",
-  "codigoUUID": "00000000-0000-4000-8000-000000000008",
-  "fecha": "2026-01-15T10:00:00",
-  "mensaje": "Consulta no exitosa (simulada)."
+  "proveedor": "intempo",
+  "resultado": "RESULTADO_RUNT_INTEMPO_ERROR",
+  "tipoError": "TIPO_ERROR_FUENTE_RESPUESTA_INVALIDA",
+  "mensajeError": "Intempo respondió sin la forma esperada (simulado).",
+  "httpStatus": 200,
+  "duracionMs": 150,
+  "errores": [
+    {
+      "code": 200,
+      "description": "Intempo respondió sin la forma esperada (simulado)."
+    }
+  ]
 }

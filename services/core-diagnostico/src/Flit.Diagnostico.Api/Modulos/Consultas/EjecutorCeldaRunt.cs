@@ -16,7 +16,7 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// <c>runt_consultado_en</c>, <c>datos_consolidados</c> y los documentos cifrados (<see cref="DocumentosVehiculo"/>), y en
 /// <c>personas_vehiculo</c> todos los propietarios y locatarios (HU #13790). La celda
 /// guarda el resultado normalizado SIN documentos ni nombres (<c>payload</c> es <c>@pii:medium</c>) y
-/// <c>dato_obtenido_en</c>. Un error de la fuente devuelve ERROR con el código de <see cref="TipoErrorFuente"/>; el procesador
+/// <c>dato_obtenido_en</c>. Un error de la fuente devuelve ERROR con el código de <see cref="TipoErrorFuente"/> (<see cref="TipoErrorFuenteCodigos"/>, HU #13877); el procesador
 /// reintenta los transitorios (HU #13737). Cada salida lleva los <see cref="DatosIntento"/> del intento auditable: placa o VIN
 /// consultado, servicio, transacción del proveedor y mensaje de error, nunca documentos. Lee y escribe solo con <see cref="ContextoCelda.Db"/>, que tiene la empresa
 /// de la celda. Los logs llevan ids, servicio y tipo de error; nunca documentos.
@@ -54,7 +54,7 @@ internal sealed partial class EjecutorCeldaRunt(
         var respuesta = await fuente.ConsultarVehiculoAsync(celda.TenantId, identificador, ct).ConfigureAwait(false);
         if (respuesta.Vehiculo is not { } runt)
         {
-            var tipo = CodigosDeEnum.Codigo(respuesta.Error ?? TipoErrorFuente.RespuestaInvalida);
+            var tipo = TipoErrorFuenteCodigos.Codigo(respuesta.Error ?? TipoErrorFuente.RespuestaInvalida);
             RuntEnError(log, celda.Id, tipo);
             return ResultadoCelda.Error(tipo) with { Intento = new DatosIntento(identificador.Valor, null, null, respuesta.Mensaje) };
         }
@@ -66,7 +66,7 @@ internal sealed partial class EjecutorCeldaRunt(
         if (!Cabe(placa, LargoPlaca) || !Cabe(vin, LargoVin) || !Cabe(runt.Servicio, LargoServicio) || !Cabe(runt.Organismo, LargoOrganismo)
             || !DocumentosVehiculo.TiposValidos(runt))
         {
-            var tipo = CodigosDeEnum.Codigo(TipoErrorFuente.RespuestaInvalida);
+            var tipo = TipoErrorFuenteCodigos.Codigo(TipoErrorFuente.RespuestaInvalida);
             RuntEnError(log, celda.Id, tipo);
             return ResultadoCelda.Error(tipo) with
             {

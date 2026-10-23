@@ -1,29 +1,40 @@
 {
-  "codigoResultado": "Exitoso",
-  "codigoUUID": "00000000-0000-4000-8000-000000000006",
-  "fecha": "2026-01-15T10:00:00",
-  "informacionGeneral": {
-    "noPlaca": "TST006",
-    "noVin": "9ZZPRUEBA00000006",
-    "estadoDelVehiculo": "ACTIVO",
-    "tipoServicio": "PARTICULAR",
-    "claseVehiculo": "AUTOMOVIL",
-    "marca": "MARCA PRUEBA",
-    "linea": "LINEA PRUEBA",
-    "modelo": "2020",
-    "organismoTransito": "SECRETARIA DE TRANSITO DE PRUEBA SIN DEPARTAMENTO"
-  },
-  "propietariosActuales": [
-    {
-      "noDocumento": "9999900006",
-      "tipoDocumento": "C",
-      "idTipoDocumento": 1,
-      "nombreCompleto": "PERSONA PRUEBA TRES",
-      "tipoPropiedad": 1,
-      "detallePropiedad": "PROPIO",
-      "locatarios": []
-    }
-  ],
-  "lessee": [],
-  "infracciones": []
+  "proveedor": "intempo",
+  "resultado": "RESULTADO_RUNT_INTEMPO_ENCONTRADO",
+  "httpStatus": 200,
+  "duracionMs": 120,
+  "vehiculo": {
+    "plate": "TST006",
+    "informacionGeneral": {
+      "noPlaca": "TST006",
+      "noVin": "9ZZPRUEBA00000006",
+      "estadoDelVehiculo": "ACTIVO",
+      "tipoServicio": "PARTICULAR",
+      "claseVehiculo": "AUTOMOVIL",
+      "marca": "MARCA PRUEBA",
+      "linea": "LINEA PRUEBA",
+      "modelo": "2020",
+      "organismoTransito": "SECRETARIA DE TRANSITO DE PRUEBA SIN DEPARTAMENTO"
+    },
+    "propietariosActuales": [
+      {
+        "id": "1",
+        "idTipoDocumento": "C",
+        "tipoDocumento": "Cédula Ciudadanía",
+        "noDocumento": "9999900006",
+        "nombreCompleto": "PERSONA PRUEBA TRES",
+        "tipoPropiedad": 1,
+        "detallePropiedad": "PROPIO",
+        "locatarios": []
+      }
+    ],
+    "owner": [
+      {
+        "documentType": "Cédula de ciudadanía",
+        "documentNumber": "9999900006",
+        "name": "PERSONA PRUEBA TRES"
+      }
+    ],
+    "lessee": []
+  }
 }

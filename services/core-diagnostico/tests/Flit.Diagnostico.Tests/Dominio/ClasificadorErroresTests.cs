@@ -1,6 +1,5 @@
 using Flit.Diagnostico.Api.Modulos.Consultas;
 using Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
-using Flit.Diagnostico.Api.Persistence.Configuraciones;
 using Flit.Diagnostico.Domain.Consultas;
 using FluentAssertions;
 using Xunit;
@@ -35,16 +34,17 @@ public sealed class ClasificadorErroresTests
     public void Clasifica_por_tabla_de_codigos(string? codigo, ClaseError esperada) =>
         ClasificadorErrores.Clasificar(codigo).Should().Be(esperada);
 
-    // D-12 — cada valor de TipoErrorFuente tiene clase explícita: Timeout y Red transitorios, el resto definitivos.
+    // D-12 — cada valor de TipoErrorFuente tiene clase explícita: Timeout, Red y Http5xx transitorios, el resto definitivos.
+    // HU #13877: el código sale del mapa explícito TipoErrorFuenteCodigos (CodigosDeEnum no da HTTP_5XX para Http5xx).
     [Fact]
     public void Todo_TipoErrorFuente_tiene_clase_explicita()
     {
         foreach (var tipo in Enum.GetValues<TipoErrorFuente>())
         {
-            var codigo = CodigosDeEnum.Codigo(tipo);
+            var codigo = TipoErrorFuenteCodigos.Codigo(tipo);
             ClasificadorErrores.EsConocido(codigo).Should().BeTrue($"{codigo} debe estar en la tabla del clasificador");
             ClasificadorErrores.Clasificar(codigo).Should().Be(
-                tipo is TipoErrorFuente.Timeout or TipoErrorFuente.Red ? ClaseError.Transitorio : ClaseError.Definitivo, codigo);
+                tipo is TipoErrorFuente.Timeout or TipoErrorFuente.Red or TipoErrorFuente.Http5xx ? ClaseError.Transitorio : ClaseError.Definitivo, codigo);
         }
 
         ClasificadorErrores.EsConocido("CODIGO_QUE_NO_EXISTE").Should().BeFalse();

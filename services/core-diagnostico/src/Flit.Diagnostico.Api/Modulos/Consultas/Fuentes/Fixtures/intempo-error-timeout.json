@@ -1,6 +1,13 @@
 {
-  "simulacion": {
-    "error": "Timeout",
-    "mensaje": "Intempo no respondió a tiempo (simulado)."
-  }
+  "proveedor": "intempo",
+  "resultado": "RESULTADO_RUNT_INTEMPO_ERROR",
+  "tipoError": "TIPO_ERROR_FUENTE_TIMEOUT",
+  "mensajeError": "Intempo no respondió a tiempo (simulado).",
+  "duracionMs": 2000,
+  "errores": [
+    {
+      "code": 404,
+      "description": "Intempo no respondió a tiempo (simulado)."
+    }
+  ]
 }

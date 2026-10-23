@@ -54,7 +54,7 @@ public sealed class IntentosTests
         intento.Estado.Should().Be(ResultadoIntento.Success);
         intento.TipoError.Should().BeNull();
         intento.MensajeError.Should().BeNull();
-        intento.TransaccionProveedorId.Should().NotBeNullOrWhiteSpace("el fixture trae codigoUUID");
+        intento.TransaccionProveedorId.Should().BeNull("Intempo no informa transacción (HU #13877)");
         intento.Disparador.Should().Be(DisparadorIntento.Auto);
         intento.UsuarioId.Should().BeNull("lo disparó el procesador");
         intento.DesdeCache.Should().BeFalse();
