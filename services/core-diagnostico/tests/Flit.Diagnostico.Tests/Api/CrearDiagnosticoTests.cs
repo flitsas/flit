@@ -9,6 +9,8 @@ using Flit.Diagnostico.Domain.Catalogos;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Diagnosticos;
 using Flit.Diagnostico.Tests.Aislamiento;
+using Flit.Diagnostico.Tests.Catalogos;
+using Flit.Diagnostico.Tests.Consultas;
 using Flit.Diagnostico.Tests.Dominio;
 using FluentAssertions;
 using Grpc.Core;
@@ -107,6 +109,39 @@ public sealed class CrearDiagnosticoTests
         copia.GetProperty("estimado_consultas").GetString().Should().Be("NO_MOSTRAR");
         Codigos(copia.GetProperty("fuentes_por_defecto")).Should().Equal("RUNT", "AVALUO");
         despues.Alcance.Should().Equal(Fuente.Runt, Fuente.Avaluo);
+    }
+
+    // HU #13863 (F09-H4), AC5 (F09-C7) — la compañía tiene el impuesto habilitado y la réplica se queda sin departamentos
+    // soportados: crear un diagnóstico con el impuesto en el alcance responde 422 FUENTE_NO_DISPONIBLE con campo=alcance, el
+    // impuesto sale de fuentes_disponibles (sigue en fuentes_habilitadas) y quitarlo del contrato sigue permitido.
+    [Fact]
+    public async Task Impuesto_habilitado_que_deja_de_estar_disponible_responde_422_en_alcance()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await Configuracion.ContratoBackofficeTests.ConBanderaImpuestoAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresas = DosEmpresas.En(api);
+        await SembrarAsync(empresas.A, new ConfiguracionEmpresa { FuentesHabilitadas = [Fuente.Runt, Fuente.ImpuestoDepartamental] }, ct);
+        using var cliente = api.Cliente(Cabeceras.TokenUsuario(api, empresas.A.Id));
+        var conImpuesto = Cabeceras.Json("Lote con impuesto", "SIMPLE", null, ["RUNT", "IMPUESTO_DEPARTAMENTAL"]);
+        await ReplicaImpuesto.SincronizarAsync(api, new CapacidadFalsa("05"), new RelojManual(), ct);
+        (await cliente.PostAsync(Cabeceras.Ruta, Cuerpo(conImpuesto), ct)).StatusCode.Should().Be(HttpStatusCode.Created, "con 05 soportado sí se puede pedir");
+
+        (await ReplicaImpuesto.SincronizarAsync(api, new CapacidadFalsa(), new RelojManual(), ct))!.Soportados.Should().Be(0);
+        var respuesta = await cliente.PostAsync(Cabeceras.Ruta, Cuerpo(conImpuesto), ct);
+
+        var texto = await respuesta.Content.ReadAsStringAsync(ct);
+        respuesta.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, texto);
+        var json = JsonDocument.Parse(texto).RootElement;
+        json.GetProperty("code").GetString().Should().Be(ValidadorCabecera.CodigoFuenteNoDisponible);
+        json.GetProperty("campo").GetString().Should().Be("alcance");
+        (await Cabeceras.ContarAsync(api, empresas.A.Id, ct)).Should().Be(1, "el 422 no guarda la segunda cabecera");
+        var configuracion = JsonDocument.Parse(await api.Cliente(TokenVer(api, empresas.A.Id)).GetStringAsync(Program.Prefijo + ConfiguracionEndpoints.Ruta, ct)).RootElement;
+        Codigos(configuracion.GetProperty("fuentes_disponibles")).Should().NotContain("IMPUESTO_DEPARTAMENTAL");
+        Codigos(configuracion.GetProperty("contrato").GetProperty("fuentes_habilitadas")).Should().Equal("RUNT", "IMPUESTO_DEPARTAMENTAL");
+        var quitar = await api.Cliente(Configuracion.ContratoBackofficeTests.TokenBackoffice(api, Guid.NewGuid()))
+            .PutAsync(Configuracion.ContratoBackofficeTests.Url(empresas.A.Id), Cuerpo("""{ "fuentes_habilitadas": ["RUNT"] }"""), ct);
+        quitar.StatusCode.Should().Be(HttpStatusCode.OK, "quitar una fuente que dejó de estar disponible sigue permitido");
     }
 
     // Escenarios 1 a 5 (F01-C1..C5) y la decisión de la ronda (fuente sin adaptador) — 422 con el campo y nada guardado.

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net;
+using Flit.Diagnostico.Api.Modulos.Catalogos;
 using Flit.Diagnostico.Api.Modulos.Configuracion;
 using Flit.Diagnostico.Api.Modulos.Consultas;
 using Flit.Diagnostico.Domain.Consultas;
@@ -134,14 +135,41 @@ public sealed class FuentesSinAdaptadorTests
     [Fact]
     public void Bandera_ausente_equivale_a_false()
     {
+        // Desde HU #13863 la disponibilidad también mira la réplica: aquí con un departamento soportado, para aislar la bandera.
+        var soportados = ConSoportados(true);
         var conImpuesto = new RegistroFijo(Fuente.Runt, Fuente.ImpuestoDepartamental);
-        new FuentesDisponibles(conImpuesto, new DisponibilidadFuentes(new ConfigurationBuilder().Build()))
+        new FuentesDisponibles(conImpuesto, new DisponibilidadFuentes(new ConfigurationBuilder().Build()), soportados)
             .Disponible(Fuente.ImpuestoDepartamental).Should().BeFalse("sin la bandera, el impuesto no está disponible");
-        var conBandera = new DisponibilidadFuentes(new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { [DisponibilidadFuentes.ClaveImpuestoDisponible] = "true" }).Build());
-        new FuentesDisponibles(conImpuesto, conBandera).Disponible(Fuente.ImpuestoDepartamental).Should().BeTrue();
-        new FuentesDisponibles(new RegistroFijo(Fuente.Runt), conBandera).Disponible(Fuente.ImpuestoDepartamental).Should().BeFalse("sin adaptador no basta la bandera");
-        new FuentesDisponibles(conImpuesto, conBandera).Disponible(Fuente.SimitVehiculo).Should().BeFalse();
+        var conBandera = Bandera(true);
+        new FuentesDisponibles(conImpuesto, conBandera, soportados).Disponible(Fuente.ImpuestoDepartamental).Should().BeTrue();
+        new FuentesDisponibles(new RegistroFijo(Fuente.Runt), conBandera, soportados).Disponible(Fuente.ImpuestoDepartamental).Should().BeFalse("sin adaptador no basta la bandera");
+        new FuentesDisponibles(conImpuesto, conBandera, soportados).Disponible(Fuente.SimitVehiculo).Should().BeFalse();
+    }
+
+    // HU #13863 (F09-H4), AC1, AC2 y AC3 (F09-C7; Q5=a) — matriz de las cuatro condiciones del impuesto: ejecutor registrado,
+    // adaptador conectado (no el no conectado), bandera Diagnostico:Fuentes:ImpuestoDisponible=true y al menos un departamento
+    // soportado en la réplica (EstadoCapacidadImpuesto.HaySoportados). Solo con las cuatro está disponible; RUNT no cambia
+    // con ninguna, y Todas() devuelve las disponibles en el orden del enum con la misma regla.
+    [Theory]
+    [InlineData(true, true, true, true, true)]
+    [InlineData(false, true, true, true, false)]
+    [InlineData(true, false, true, true, false)]
+    [InlineData(true, true, false, true, false)]
+    [InlineData(true, true, true, false, false)]
+    [InlineData(true, false, false, false, false)]
+    public void Impuesto_disponible_solo_con_bandera_adaptador_conectado_y_departamento_soportado(
+        bool ejecutor, bool conectado, bool bandera, bool haySoportados, bool disponible)
+    {
+        var registro = new RegistroFijo(ejecutor ? [Fuente.Runt, Fuente.Avaluo, Fuente.ImpuestoDepartamental] : [Fuente.Runt, Fuente.Avaluo])
+        {
+            NoConectadas = conectado ? [] : [Fuente.ImpuestoDepartamental],
+        };
+        var fuentes = new FuentesDisponibles(registro, Bandera(bandera), ConSoportados(haySoportados));
+
+        fuentes.Disponible(Fuente.ImpuestoDepartamental).Should().Be(disponible, $"ejecutor={ejecutor} conectado={conectado} bandera={bandera} soportados={haySoportados}");
+        fuentes.Disponible(Fuente.Runt).Should().BeTrue("las demás fuentes no dependen de la réplica ni de la bandera");
+        fuentes.Disponible(Fuente.Avaluo).Should().BeTrue();
+        fuentes.Todas().Should().Equal(disponible ? [Fuente.Runt, Fuente.Avaluo, Fuente.ImpuestoDepartamental] : [Fuente.Runt, Fuente.Avaluo]);
     }
 
     // El registro real del servicio: tienen adaptador RUNT (HU #13730), desde HU #13792 RUNT_PROPIETARIO y RUNT_LOCATARIO,
@@ -167,8 +195,22 @@ public sealed class FuentesSinAdaptadorTests
             configurar?.Invoke(b);
         });
 
+    private static DisponibilidadFuentes Bandera(bool encendida) => new(new ConfigurationBuilder()
+        .AddInMemoryCollection(new Dictionary<string, string?> { [DisponibilidadFuentes.ClaveImpuestoDisponible] = encendida ? "true" : "false" }).Build());
+
+    private static EstadoCapacidadImpuesto ConSoportados(bool haySoportados)
+    {
+        var estado = new EstadoCapacidadImpuesto();
+        estado.Fijar(haySoportados);
+        return estado;
+    }
+
     private sealed class RegistroFijo(params Fuente[] fuentes) : IRegistroAdaptadores
     {
+        public Fuente[] NoConectadas { get; init; } = [];
+
         public bool TieneAdaptador(Fuente fuente) => fuentes.Contains(fuente);
+
+        public bool EsNoConectada(Fuente fuente) => NoConectadas.Contains(fuente);
     }
 }

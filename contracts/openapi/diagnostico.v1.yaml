@@ -324,7 +324,9 @@ paths:
         nombre vacío o de más de 150 caracteres (NOMBRE_INVALIDO); fuente en un grupo que no es el suyo
         (FUENTE_EN_GRUPO_AJENO); alcance sin RUNT (ALCANCE_SIN_RUNT); fuente fuera de fuentes_habilitadas
         (FUENTE_NO_HABILITADA); fuente habilitada sin adaptador registrado (en D2 solo RUNT lo tiene, HU #13733) o
-        IMPUESTO_DEPARTAMENTAL mientras Diagnostico:Fuentes:ImpuestoDisponible sea false (FUENTE_NO_DISPONIBLE);
+        IMPUESTO_DEPARTAMENTAL mientras no esté disponible (HU #13863, Q5: bandera Diagnostico:Fuentes:ImpuestoDisponible
+        en true, adaptador de core-consultas conectado y al menos un departamento soportado en la réplica
+        departamentos_impuesto; sin C3 nunca lo está) (FUENTE_NO_DISPONIBLE);
         CON_ANALISIS sin tipo
         (TIPO_TRAMITE_REQUERIDO). Solo si todo eso se cumple y el modo es CON_ANALISIS se consulta el catálogo de
         GET /tipos-tramite: tipo fuera del catálogo de la etapa (TIPO_TRAMITE_NO_DISPONIBLE) o faltan las fuentes
@@ -1604,8 +1606,10 @@ paths:
         el PUT no se registra en lecturas_backoffice. Orden de validación: un campo que no es del contrato da
         403 CAMPO_NO_EDITABLE; un valor fuera de conjunto, 422 VALOR_FUERA_DE_CONJUNTO; un límite que no es un
         entero positivo, 422 LIMITE_INVALIDO; habilitar una fuente sin adaptador registrado (en D2 solo RUNT lo
-        tiene, HU #13733) o IMPUESTO_DEPARTAMENTAL mientras Diagnostico:Fuentes:ImpuestoDisponible sea false
-        (C3, R-9), 422 FUENTE_NO_DISPONIBLE. Con un error no
+        tiene, HU #13733) o IMPUESTO_DEPARTAMENTAL mientras no esté disponible (C3, R-9; HU #13863: bandera
+        Diagnostico:Fuentes:ImpuestoDisponible en true, adaptador conectado y al menos un departamento soportado
+        en la réplica), 422 FUENTE_NO_DISPONIBLE: es la misma regla de fuentes_disponibles. Quitar del contrato
+        una fuente habilitada que dejó de estar disponible sigue permitido. Con un error no
         se guarda ningún campo.
       requestBody:
         required: true
@@ -2343,9 +2347,22 @@ components:
       type: string
       enum: [NO_MOSTRAR, ANTES_DE_LANZAR, AL_FINALIZAR]
 
+    FuentesDisponibles:
+      type: array
+      description: >
+        Fuentes que hoy se pueden habilitar en el contrato y pedir en un diagnóstico (HU #13863, F09-C8), en el orden
+        del enum Fuente. Se calcula con la misma regla del 422 FUENTE_NO_DISPONIBLE: la fuente tiene ejecutor y su
+        adaptador no es el no conectado; para IMPUESTO_DEPARTAMENTAL además la bandera
+        Diagnostico:Fuentes:ImpuestoDisponible en true y al menos un departamento soportado en la réplica
+        departamentos_impuesto (Q5). No depende de la compañía: una fuente habilitada que dejó de estar disponible
+        sigue en fuentes_habilitadas pero no aparece aquí (pedirla responde 422).
+      items:
+        $ref: "#/components/schemas/Fuente"
+      example: [RUNT, RUNT_PROPIETARIO, RUNT_LOCATARIO, SIMIT_VEHICULO, SIMIT_PROPIETARIO, SIMIT_LOCATARIO, AVALUO]
+
     Configuracion:
       type: object
-      required: [empresa, contrato, operacion]
+      required: [empresa, contrato, operacion, fuentes_disponibles]
       properties:
         empresa:
           type: string
@@ -2391,6 +2408,22 @@ components:
               type: string
               format: date-time
               nullable: true
+        fuentes_disponibles:
+          $ref: "#/components/schemas/FuentesDisponibles"
+      example:
+        empresa: 3f1c2b9e-0d4a-4c1e-9a77-2b5d8e6f1a10
+        contrato:
+          solo_lectura: true
+          fuentes_habilitadas: [RUNT, AVALUO, IMPUESTO_DEPARTAMENTAL]
+          limite_vehiculos_lote: 500
+          actualizado_en: "2026-10-22T14:00:00Z"
+        operacion:
+          visibilidad_usuario: EMPRESA
+          fuentes_por_defecto: [RUNT]
+          estimado_consultas: NO_MOSTRAR
+          actualizado_por: null
+          actualizado_en: null
+        fuentes_disponibles: [RUNT, RUNT_PROPIETARIO, RUNT_LOCATARIO, SIMIT_VEHICULO, SIMIT_PROPIETARIO, SIMIT_LOCATARIO, AVALUO]
 
     EdicionOperativa:
       type: object
@@ -2411,7 +2444,7 @@ components:
 
     ContratoBackoffice:
       type: object
-      required: [empresa, fuentes_habilitadas, limite_vehiculos_lote, redaccion_ia_suspendida, fuentes_por_defecto, actualizado_por, actualizado_en]
+      required: [empresa, fuentes_habilitadas, limite_vehiculos_lote, redaccion_ia_suspendida, fuentes_por_defecto, actualizado_por, actualizado_en, fuentes_disponibles]
       properties:
         empresa:
           type: string
@@ -2442,6 +2475,17 @@ components:
           type: string
           format: date-time
           nullable: true
+        fuentes_disponibles:
+          $ref: "#/components/schemas/FuentesDisponibles"
+      example:
+        empresa: 3f1c2b9e-0d4a-4c1e-9a77-2b5d8e6f1a10
+        fuentes_habilitadas: [RUNT, AVALUO]
+        limite_vehiculos_lote: 500
+        redaccion_ia_suspendida: false
+        fuentes_por_defecto: [RUNT]
+        actualizado_por: 7a0e5d3c-1b2f-4e8a-9c6d-5f4e3d2c1b0a
+        actualizado_en: "2026-10-22T14:00:00Z"
+        fuentes_disponibles: [RUNT, RUNT_PROPIETARIO, RUNT_LOCATARIO, SIMIT_VEHICULO, SIMIT_PROPIETARIO, SIMIT_LOCATARIO, AVALUO]
 
     EdicionContrato:
       type: object

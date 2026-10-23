@@ -9,8 +9,11 @@ using Flit.Diagnostico.Api.Plataforma;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Tests.Aislamiento;
 using Flit.Diagnostico.Tests.Api;
+using Flit.Diagnostico.Tests.Catalogos;
+using Flit.Diagnostico.Tests.Consultas;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Xunit;
 using static Flit.Diagnostico.Tests.Configuracion.ConfiguracionOperativaTests;
@@ -155,6 +158,92 @@ public sealed class ContratoBackofficeTests
         new DisponibilidadFuentes(new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build())
             .Disponible(Fuente.ImpuestoDepartamental).Should().BeFalse("sin la bandera, el impuesto no está disponible");
     }
+
+    // HU #13863 (F09-H4), AC1 (F09-C7) — bandera en true y adaptador conectado, pero la réplica de departamentos con impuesto
+    // vacía (sin C3): habilitar IMPUESTO_DEPARTAMENTAL responde 422 FUENTE_NO_DISPONIBLE y no guarda ningún campo.
+    [Fact]
+    public async Task Habilitar_impuesto_con_bandera_y_replica_vacia_responde_422_FUENTE_NO_DISPONIBLE_sin_guardar()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ConBanderaImpuestoAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresas = DosEmpresas.En(api);
+        await SembrarAsync(empresas.B, new ConfiguracionEmpresa(), ct);
+
+        var respuesta = await api.Cliente(TokenBackoffice(api, Guid.NewGuid()))
+            .PutAsync(Url(empresas.B.Id), Cuerpo("""{ "fuentes_habilitadas": ["RUNT", "IMPUESTO_DEPARTAMENTAL"], "limite_vehiculos_lote": 100 }"""), ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, await respuesta.Content.ReadAsStringAsync(ct));
+        (await Codigo(respuesta, ct)).Should().Be(ServicioConfiguracion.CodigoFuenteNoDisponible);
+        var deB = await LeerAsync(api, empresas.B.Id, ct);
+        deB.FuentesHabilitadas.Should().Equal(Fuente.Runt);
+        deB.LimiteVehiculosLote.Should().Be(500, "un 422 no guarda ningún campo");
+        (await CambiosAsync(api, empresas.B.Id, ct)).Should().BeEmpty();
+    }
+
+    // HU #13863, AC3 (F09-C7) — bandera en true, adaptador conectado y 05 soportado en la réplica: se guarda, queda el cambio en
+    // cambios_contrato, la respuesta ya lo trae en fuentes_disponibles y la compañía puede pedirlo en un diagnóstico.
+    [Fact]
+    public async Task Habilitar_impuesto_con_las_condiciones_cumplidas_guarda_y_deja_el_cambio_auditado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ConBanderaImpuestoAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        (await ReplicaImpuesto.SincronizarAsync(api, new CapacidadFalsa("05"), new RelojManual(), ct))!.Soportados.Should().Be(1);
+        var empresas = DosEmpresas.En(api);
+        await SembrarAsync(empresas.B, new ConfiguracionEmpresa(), ct);
+
+        var respuesta = await api.Cliente(TokenBackoffice(api, Guid.NewGuid()))
+            .PutAsync(Url(empresas.B.Id), Cuerpo("""{ "fuentes_habilitadas": ["RUNT", "IMPUESTO_DEPARTAMENTAL"] }"""), ct);
+
+        var texto = await respuesta.Content.ReadAsStringAsync(ct);
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK, texto);
+        Codigos(JsonDocument.Parse(texto).RootElement.GetProperty("fuentes_disponibles")).Should().Equal([.. SinImpuesto, "IMPUESTO_DEPARTAMENTAL"]);
+        (await LeerAsync(api, empresas.B.Id, ct)).FuentesHabilitadas.Should().Equal(Fuente.Runt, Fuente.ImpuestoDepartamental);
+        var cambio = (await CambiosAsync(api, empresas.B.Id, ct)).Should().ContainSingle().Subject;
+        cambio.Campo.Should().Be(ServicioConfiguracion.CampoFuentesHabilitadas);
+        // valor_anterior y valor_nuevo son jsonb: se comparan como JSON (Postgres normaliza los espacios).
+        JsonSerializer.Deserialize<string[]>(cambio.ValorAnterior!).Should().Equal("RUNT");
+        JsonSerializer.Deserialize<string[]>(cambio.ValorNuevo).Should().Equal("RUNT", "IMPUESTO_DEPARTAMENTAL");
+
+        var creacion = await api.Cliente(Cabeceras.TokenUsuario(api, empresas.B.Id))
+            .PostAsync(Cabeceras.Ruta, Cuerpo(Cabeceras.Json("Lote con impuesto", "SIMPLE", null, ["RUNT", "IMPUESTO_DEPARTAMENTAL"])), ct);
+        creacion.StatusCode.Should().Be(HttpStatusCode.Created, await creacion.Content.ReadAsStringAsync(ct));
+    }
+
+    // HU #13863, AC4 (F09-C8) — el GET y el PUT del contrato traen fuentes_disponibles en el nivel superior, en el orden del
+    // enum y con la regla del 422: con la bandera en false (por defecto) el impuesto no está, aunque todas tengan adaptador.
+    [Fact]
+    public async Task GET_y_PUT_del_contrato_traen_fuentes_disponibles()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresas = DosEmpresas.En(api);
+        await SembrarAsync(empresas.B, new ConfiguracionEmpresa { FuentesHabilitadas = [Fuente.Runt, Fuente.Avaluo] }, ct);
+        using var cliente = api.Cliente(TokenBackoffice(api, Guid.NewGuid()));
+
+        var lectura = await cliente.GetAsync(Url(empresas.B.Id), ct);
+        var edicion = await cliente.PutAsync(Url(empresas.B.Id), Cuerpo("""{ "limite_vehiculos_lote": 200 }"""), ct);
+
+        foreach (var respuesta in new[] { lectura, edicion })
+        {
+            var texto = await respuesta.Content.ReadAsStringAsync(ct);
+            respuesta.StatusCode.Should().Be(HttpStatusCode.OK, texto);
+            var json = JsonDocument.Parse(texto).RootElement;
+            Codigos(json.GetProperty("fuentes_disponibles")).Should().Equal(SinImpuesto, texto);
+            Codigos(json.GetProperty("fuentes_habilitadas")).Should().Equal("RUNT", "AVALUO");
+        }
+    }
+
+    /// <summary>Todas las fuentes salvo el impuesto, en el orden del enum: las disponibles en <see cref="ApiDePrueba"/> sin C3.</summary>
+    internal static readonly string[] SinImpuesto =
+        ["RUNT", "RUNT_PROPIETARIO", "RUNT_LOCATARIO", "SIMIT_VEHICULO", "SIMIT_PROPIETARIO", "SIMIT_LOCATARIO", "AVALUO"];
+
+    /// <summary>API de prueba (todas las fuentes con adaptador conectado) con la bandera del impuesto encendida y la réplica vacía.</summary>
+    internal static Task<ApiDePrueba> ConBanderaImpuestoAsync() =>
+        ApiDePrueba.ConBaseAsync(configurar: b => b.Configuration.AddInMemoryCollection(
+            new Dictionary<string, string?> { [DisponibilidadFuentes.ClaveImpuestoDisponible] = "true" }));
 
     // Escenario 10 — backoffice_diagnostico en una compañía que no es FLIT: 403 en la lectura y en la escritura.
     [Fact]

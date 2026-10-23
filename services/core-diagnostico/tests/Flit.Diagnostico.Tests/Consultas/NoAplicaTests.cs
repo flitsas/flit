@@ -8,6 +8,7 @@ using Flit.Diagnostico.Api.Persistence.Configuraciones;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Tests.Aislamiento;
 using Flit.Diagnostico.Tests.Api;
+using Flit.Diagnostico.Tests.Catalogos;
 using FluentAssertions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
@@ -142,9 +143,18 @@ public sealed class NoAplicaTests
 /// <summary>Ayudas de las pruebas de no aplica y de organismos (HU #13733).</summary>
 internal static class MotorNa
 {
-    /// <summary>API con la fuente RUNT simulada de Intempo y el impuesto disponible (bandera en true), salvo que se pida lo contrario.</summary>
-    public static Task<ApiDePrueba> ArrancarAsync(Action<WebApplicationBuilder>? configurar = null, bool impuestoDisponible = true) =>
-        MotorRunt.ArrancarAsync(b =>
+    /// <summary>Departamento ficticio (96 no es código DIVIPOLA) que deja la réplica del impuesto con un soportado (Q5).</summary>
+    public const string DepartamentoSoportadoFicticio = "96";
+
+    /// <summary>
+    /// API con la fuente RUNT simulada de Intempo y el impuesto disponible, salvo que se pida lo contrario. Desde HU #13863 (Q5)
+    /// disponible exige bandera en true, adaptador conectado (el doble de <see cref="ApiDePrueba"/> lo da) y al menos un
+    /// departamento soportado en la réplica: se siembra <see cref="DepartamentoSoportadoFicticio"/>, que ningún vehículo de
+    /// prueba deriva, así que no cambia qué celdas quedan N/A.
+    /// </summary>
+    public static async Task<ApiDePrueba> ArrancarAsync(Action<WebApplicationBuilder>? configurar = null, bool impuestoDisponible = true)
+    {
+        var api = await MotorRunt.ArrancarAsync(b =>
         {
             b.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
@@ -152,6 +162,10 @@ internal static class MotorNa
             });
             configurar?.Invoke(b);
         });
+        if (impuestoDisponible && api.Omitir is null)
+            await ReplicaImpuesto.SincronizarAsync(api, new CapacidadFalsa(DepartamentoSoportadoFicticio), new RelojManual(), TestContext.Current.CancellationToken);
+        return api;
+    }
 
     /// <summary>Registra un ejecutor de prueba (anota «FUENTE vehiculo» y completa) por cada fuente dada.</summary>
     public static void Espias(WebApplicationBuilder b, ConcurrentQueue<string> orden, params Fuente[] fuentes)

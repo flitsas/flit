@@ -5,8 +5,9 @@ namespace Flit.Diagnostico.Api.Modulos.Configuracion;
 /// <summary>
 /// Qué fuentes puede contratar hoy una compañía (HU #13741, R-9). <see cref="Fuente.ImpuestoDepartamental"/> solo con la
 /// consulta automatizada (C3): mientras <c>Diagnostico:Fuentes:ImpuestoDisponible</c> sea false (por defecto, en todos los
-/// ambientes) el backoffice no puede habilitarla. Consultar la capacidad a core-consultas queda para D5. Se lee en cada
-/// llamada, así que un cambio de configuración recargable aplica sin reiniciar.
+/// ambientes) el backoffice no puede habilitarla. La bandera es solo una de las condiciones: desde HU #13863 (Q5=a)
+/// <see cref="Consultas.FuentesDisponibles"/> exige además el adaptador conectado y un departamento soportado en la réplica.
+/// Se lee en cada llamada, así que un cambio de configuración recargable aplica sin reiniciar.
 /// </summary>
 public sealed class DisponibilidadFuentes(IConfiguration configuracion)
 {

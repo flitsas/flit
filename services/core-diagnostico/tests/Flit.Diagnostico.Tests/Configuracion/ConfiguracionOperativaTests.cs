@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Flit.Diagnostico.Api;
 using Flit.Diagnostico.Api.Modulos.Configuracion;
+using Flit.Diagnostico.Api.Persistence.Configuraciones;
 using Flit.Diagnostico.Api.Plataforma;
 using Flit.Diagnostico.Domain.Configuracion;
 using Flit.Diagnostico.Domain.Consultas;
@@ -65,6 +66,34 @@ public sealed class ConfiguracionOperativaTests
         Codigos(operacion.GetProperty("fuentes_por_defecto")).Should().Equal("RUNT");
         operacion.GetProperty("estimado_consultas").GetString().Should().Be("AL_FINALIZAR");
         cuerpo.Should().NotContainEquivalentOf("redaccion", "el DTO nunca trae redaccion_ia_suspendida");
+    }
+
+    // HU #13863 (F09-H4), AC4 y AC5 (F09-C8) — GET /configuracion trae fuentes_disponibles en el nivel superior, en el orden del
+    // enum y con la regla del 422: sin C3 el impuesto no está aunque la compañía lo tenga en fuentes_habilitadas. El PUT
+    // operativo devuelve la misma forma.
+    [Fact]
+    public async Task GET_configuracion_trae_fuentes_disponibles_en_el_orden_del_enum()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresas = DosEmpresas.En(api);
+        await SembrarAsync(empresas.A, new ConfiguracionEmpresa { FuentesHabilitadas = [Fuente.Runt, Fuente.Avaluo, Fuente.ImpuestoDepartamental] }, ct);
+        var esperadas = Enum.GetValues<Fuente>().Where(f => f != Fuente.ImpuestoDepartamental).Select(CodigosDeEnum.Codigo).ToList();
+
+        var lectura = await api.Cliente(TokenVer(api, empresas.A.Id)).GetAsync(Ruta, ct);
+        var edicion = await api.Cliente(TokenAdmin(api, empresas.A.Id)).PutAsync(Ruta, Cuerpo("""{ "visibilidad_usuario": "PROPIOS" }"""), ct);
+
+        foreach (var respuesta in new[] { lectura, edicion })
+        {
+            var texto = await respuesta.Content.ReadAsStringAsync(ct);
+            respuesta.StatusCode.Should().Be(HttpStatusCode.OK, texto);
+            var json = JsonDocument.Parse(texto).RootElement;
+            Codigos(json.GetProperty("fuentes_disponibles")).Should().Equal(esperadas, texto);
+            Codigos(json.GetProperty("contrato").GetProperty("fuentes_habilitadas")).Should().Equal("RUNT", "AVALUO", "IMPUESTO_DEPARTAMENTAL");
+        }
+
+        esperadas.Should().Equal(ContratoBackofficeTests.SinImpuesto);
     }
 
     // Escenario 2 — compañía sin fila: valores por defecto, sin escribir.

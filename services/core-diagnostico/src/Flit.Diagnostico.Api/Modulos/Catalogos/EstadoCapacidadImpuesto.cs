@@ -48,6 +48,17 @@ public sealed class EstadoCapacidadImpuesto
         ArgumentNullException.ThrowIfNull(db);
         var pedida = Interlocked.Increment(ref _pedidas);
         var hay = await db.Set<DepartamentoImpuesto>().AsNoTracking().AnyAsync(d => d.Soportado, ct).ConfigureAwait(false);
+        Aplicar(pedida, hay);
+    }
+
+    /// <summary>
+    /// Fija el valor sin leer la base (HU #13863): lo usan las pruebas de la matriz de disponibilidad. Cuenta como una recarga
+    /// más (gana sobre las lecturas que empezaron antes).
+    /// </summary>
+    internal void Fijar(bool haySoportados) => Aplicar(Interlocked.Increment(ref _pedidas), haySoportados);
+
+    private void Aplicar(long pedida, bool hay)
+    {
         lock (_cerrojo)
         {
             if (pedida <= _aplicada)

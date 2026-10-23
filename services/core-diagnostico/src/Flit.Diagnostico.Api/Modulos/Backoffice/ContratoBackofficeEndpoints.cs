@@ -13,7 +13,8 @@ namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 /// la empresa explícita del segmento <c>{empresa}</c> (la lectura queda en <c>lecturas_backoffice</c>) y, encima,
 /// <c>diagnostico.configuracion.contrato.editar</c>. La escritura sobre la fila de la otra compañía va por
 /// <see cref="EscrituraEntreEmpresas"/> (solo <c>configuracion_empresa</c> y <c>cambios_contrato</c> de esa empresa) y deja
-/// cada cambio en <c>cambios_contrato</c>. Las reglas las pone <see cref="ServicioConfiguracion.AplicarContrato"/>.
+/// cada cambio en <c>cambios_contrato</c>. Las reglas las pone <see cref="ServicioConfiguracion.AplicarContrato"/>. El GET y el PUT
+/// traen <c>fuentes_disponibles</c> (HU #13863) con la misma regla del 422 <c>FUENTE_NO_DISPONIBLE</c>.
 /// </summary>
 internal static class ContratoBackofficeEndpoints
 {
@@ -28,15 +29,16 @@ internal static class ContratoBackofficeEndpoints
         backoffice.MapPut(Ruta, Editar).RequirePermiso(Permisos.ConfiguracionContratoEditar).WithName("EditarContratoEmpresaBackoffice");
     }
 
-    private static async Task<IResult> Obtener(HttpContext http, DiagnosticoDb db, CancellationToken ct)
+    private static async Task<IResult> Obtener(HttpContext http, DiagnosticoDb db, Consultas.FuentesDisponibles fuentes, CancellationToken ct)
     {
         var empresa = EmpresaExplicita.De(http);
         var configuracion = await db.DeLaEmpresa<ConfiguracionEmpresa>(empresa).SingleOrDefaultAsync(ct).ConfigureAwait(false)
             ?? new ConfiguracionEmpresa { TenantId = empresa };
-        return Results.Ok(ContratoBackofficeDto.De(configuracion));
+        return Results.Ok(ContratoBackofficeDto.De(configuracion, fuentes.Todas()));
     }
 
-    private static async Task<IResult> Editar(HttpContext http, JsonElement cuerpo, DiagnosticoDb db, ServicioConfiguracion servicio, CancellationToken ct)
+    private static async Task<IResult> Editar(
+        HttpContext http, JsonElement cuerpo, DiagnosticoDb db, ServicioConfiguracion servicio, Consultas.FuentesDisponibles fuentes, CancellationToken ct)
     {
         var empresa = EmpresaExplicita.De(http);
         var configuracion = await db.ParaEditarDeLaEmpresa<ConfiguracionEmpresa>(empresa).SingleOrDefaultAsync(ct).ConfigureAwait(false);
@@ -52,6 +54,6 @@ internal static class ContratoBackofficeEndpoints
             await db.GuardarDeLaEmpresaAsync(empresa, TiposDelContrato, ct).ConfigureAwait(false);
         }
 
-        return Results.Ok(ContratoBackofficeDto.De(configuracion));
+        return Results.Ok(ContratoBackofficeDto.De(configuracion, fuentes.Todas()));
     }
 }
