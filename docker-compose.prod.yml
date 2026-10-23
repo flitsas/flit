@@ -596,6 +596,12 @@ services:
       RENTING_API_CONTRATOS_PATH: ${RENTING_API_CONTRATOS_PATH:-}
       RENTING_API_CONTRATOS_REAL_CONTACT_ENABLED: ${RENTING_API_CONTRATOS_REAL_CONTACT_ENABLED:-false}
       RENTING_API_CONTRATOS_DEVELOPMENT_EMAIL: ${RENTING_API_CONTRATOS_DEVELOPMENT_EMAIL:-}
+      # HU #13876: RUNT por Intempo (API nativa; sin la URL queda no conectado). Misma URL en DEV, QA y PDN, definida en el
+      # .env del ambiente (ver .env.intempo.example). INTEMPO_MODE de arriba es el proveedor heredado de core-api: no cambia.
+      INTEMPO_API_BASE_URL: ${INTEMPO_API_BASE_URL:-}
+      INTEMPO_API_VEHICLE_PLATE_PATH: ${INTEMPO_API_VEHICLE_PLATE_PATH:-/api/RuntConsulta/consultar-vehiculo}
+      INTEMPO_API_VEHICLE_VIN_PATH: ${INTEMPO_API_VEHICLE_VIN_PATH:-/api/RuntConsulta/consultar-vin}
+      INTEMPO_API_SECONDS_TIMEOUT: ${INTEMPO_API_SECONDS_TIMEOUT:-20}
     volumes:
       # El mismo .pfx que core-notificaciones, solo lectura y en la misma ruta a ambos lados. Si no existe, la API de
       # contratos queda «no conectada» con la ruta en el motivo (no impide arrancar).

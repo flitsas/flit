@@ -57,7 +57,8 @@ public static class Program
             .RequireServiceToken<ConsultasGrpcService>(ConsultasGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Consultas)
             .RequireServiceToken<ConsultasAdminGrpcService>(ConsultasAdminGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Consultas)
             .RequireServiceToken<ValidacionIdentidadGrpcService>(ValidacionIdentidadGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Consultas)
-            .RequireServiceToken<Comparendos.FuentesComparendosGrpcService>(ConsultasGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Consultas);
+            .RequireServiceToken<Comparendos.FuentesComparendosGrpcService>(ConsultasGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Consultas)
+            .RequireServiceToken<RuntIntempo.RuntIntempoGrpcService>(ConsultasGrpcService.Scope, Flit.Api.Identity.ServiceAudiences.Consultas);
         builder.Services.AddFlitOutbox<ConsultasDb>(builder.Configuration);
 
         // HU #13343 (ADR-0065): los proveedores del módulo, con sus modos mock|real y credenciales (las mismas claves de
@@ -97,6 +98,11 @@ public static class Program
             });
         builder.Services.AddSingleton(sp => new Comparendos.ProveedorContratosRenting(sp.GetRequiredService<IHttpClientFactory>(), renting, motivoCertificado,
             sp.GetRequiredService<TimeProvider>()));
+        // HU #13876 (F10-H4): RUNT por Intempo (API nativa, sin autenticación). Sin INTEMPO_API_BASE_URL queda no conectado
+        // (FailedPrecondition con el nombre de la variable) y el servicio arranca igual.
+        var intempo = RuntIntempo.IntempoOpciones.Desde(builder.Configuration);
+        builder.Services.AddHttpClient(RuntIntempo.ProveedorRuntIntempo.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(intempo.TimeoutSegundos));
+        builder.Services.AddSingleton(sp => new RuntIntempo.ProveedorRuntIntempo(sp.GetRequiredService<IHttpClientFactory>(), intempo));
         var simulados = bool.TryParse(builder.Configuration["Consultations:ComparendosSimulados"], out var sim) ? sim : builder.Environment.IsDevelopment();
         builder.Services.AddSingleton<Comparendos.IProveedorComparendos>(sp => new Comparendos.ProveedorSimulado(sp.GetRequiredService<TimeProvider>(), simulados));
 
@@ -153,6 +159,7 @@ public static class Program
         app.MapGrpcService<ConsultasAdminGrpcService>().RequireHost(grpcHost);
         app.MapGrpcService<ValidacionIdentidadGrpcService>().RequireHost(grpcHost);
         app.MapGrpcService<Comparendos.FuentesComparendosGrpcService>().RequireHost(grpcHost);
+        app.MapGrpcService<RuntIntempo.RuntIntempoGrpcService>().RequireHost(grpcHost);
         app.MapAvisosKyverum(); // HU #13351: receptor público de avisos (lo expone el gateway)
         app.MapFlitGrpcPlatform(app.Environment, grpcHost);
         return app;
