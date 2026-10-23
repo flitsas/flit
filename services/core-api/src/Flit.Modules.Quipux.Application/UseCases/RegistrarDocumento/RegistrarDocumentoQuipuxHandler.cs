@@ -35,9 +35,10 @@ namespace Flit.Modules.Quipux.Application.UseCases.RegistrarDocumento;
 ///   </item>
 ///   <item>
 ///   <b>Duplicados en Quipux.</b> El job <c>validateStatusDocumentForTimeOut</c> de 1.0 se ABSORBE
-///   aquí: si la submission ya tuvo un intento (<c>attempts &gt; 0</c>), se CONSULTA antes de
-///   re-radicar, porque Quipux pudo haber radicado el documento aunque la respuesta HTTP expirara.
-///   Es posible únicamente porque el <c>document_name</c> es estable entre reintentos.
+///   aquí: si la submission ya tuvo un ciclo de claim previo (<c>attempts &gt; 1</c>, porque el
+///   claim incrementa antes de procesar), se CONSULTA antes de re-radicar, porque Quipux pudo haber
+///   radicado el documento aunque la respuesta HTTP expirara. Es posible únicamente porque el
+///   <c>document_name</c> es estable entre reintentos.
 ///   </item>
 ///   <item>
 ///   <b>Corrupción del PDF en S3.</b> La subida ocurre UNA vez y ANTES de radicar. En 1.0 vivía dentro
