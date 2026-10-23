@@ -57,6 +57,29 @@ public sealed class ArquitecturaReportesTests
         prueba.Should().Throw<Exception>().WithMessage("*ReporteConOrigen.Origen*");
     }
 
+    // HU #13864 (F09-C9, R-20) — el resultado del impuesto llega al renderizador (está registrado entre los derivados de
+    // ResultadoDetalleDto) y ni él ni sus vigencias tienen proveedor, transacción, origen ni departamento: sus claves JSON son
+    // exactamente monto_total/vigencias y anio/valor/pagada.
+    [Fact]
+    public void ResultadoImpuestoDetalle_no_tiene_proveedor_transaccion_ni_origen()
+    {
+        var recorridas = Propiedades([typeof(ContenidoReporteVehiculo)]).Select(p => $"{p.DeclaringType!.Name}.{p.Name}").ToList();
+
+        recorridas.Should().Contain(
+            ["ResultadoImpuestoDetalle.MontoTotal", "ResultadoImpuestoDetalle.Vigencias", "VigenciaImpuestoDetalle.Pagada"],
+            "el resultado del impuesto es un derivado registrado de ResultadoDetalleDto (JsonDerivedType)");
+        Violaciones([typeof(ResultadoImpuestoDetalle)]).Should().BeEmpty();
+        Json(typeof(ResultadoImpuestoDetalle)).Should().BeEquivalentTo(["monto_total", "vigencias"]);
+        Json(typeof(VigenciaImpuestoDetalle)).Should().BeEquivalentTo(["anio", "valor", "pagada"]);
+        Propiedades([typeof(ResultadoImpuestoDetalle)]).Select(p => p.Name)
+            .Should().NotContain(n => n.Contains("Proveedor", StringComparison.OrdinalIgnoreCase) || n.Contains("Departamento", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static IEnumerable<string> Json(Type tipo) =>
+        tipo.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.Name != "EqualityContract")
+            .Select(p => p.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name ?? p.Name);
+
     /// <summary>«Tipo.Propiedad» de cada propiedad prohibida alcanzable desde <paramref name="raices"/>.</summary>
     internal static IReadOnlyList<string> Violaciones(IEnumerable<Type> raices) =>
         [.. Propiedades(raices)

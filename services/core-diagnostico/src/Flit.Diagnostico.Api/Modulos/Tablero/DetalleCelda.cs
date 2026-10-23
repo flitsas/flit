@@ -17,9 +17,10 @@ namespace Flit.Diagnostico.Api.Modulos.Tablero;
 /// <see cref="AccesoLote"/> (otra compañía, PROPIOS de otro usuario, vehículo de otro lote o fuente sin celda: 404 sin datos;
 /// código de fuente desconocido: 400 <see cref="CodigoFuenteInvalida"/>).
 /// <list type="bullet">
-/// <item>Fuentes del vehículo (RUNT, SIMIT_VEHICULO, AVALUO) con la celda COMPLETADO: <c>resultado</c> leído del payload a un tipo
+/// <item>Fuentes del vehículo (RUNT, SIMIT_VEHICULO, AVALUO, IMPUESTO_DEPARTAMENTAL) con la celda COMPLETADO: <c>resultado</c> leído del payload a un tipo
 /// propio y cerrado (<see cref="ResultadoDetalleDto"/>); lo que el payload traiga de más (proveedor, transacción, crudo) no
-/// pasa porque el tipo no lo tiene. El AVALUO sin valor llega con <c>sin_valor_comercial=true</c> (Q4 = b).</item>
+/// pasa porque el tipo no lo tiene. El AVALUO sin valor llega con <c>sin_valor_comercial=true</c> (Q4 = b). El impuesto
+/// (HU #13864) trae <c>monto_total</c> y sus vigencias por año, sin el <c>departamento_codigo</c> del payload.</item>
 /// <item>Fuentes de persona: <c>personas</c>, una por cada persona del rol en <c>personas_vehiculo</c>, con su documento
 /// descifrado SOLO para enmascararlo (<see cref="EnmascaradorDocumento"/>), si lo declaró el cliente y su resultado del payload
 /// (<c>OK</c>/<c>ERROR</c>, también en una celda ERROR <c>PERSONAS_CON_ERROR</c>); sin dato, <c>SIN_RESULTADO</c>.</item>
@@ -114,7 +115,7 @@ internal static class ProyectorDetalleCelda
         }
     }
 
-    /// <summary>El resultado de una fuente del vehículo (RUNT, SIMIT_VEHICULO, AVALUO) leído del payload; null si no se puede leer.</summary>
+    /// <summary>El resultado de una fuente del vehículo (RUNT, SIMIT_VEHICULO, AVALUO, IMPUESTO_DEPARTAMENTAL) leído del payload; null si no se puede leer.</summary>
     public static ResultadoDetalleDto? ResultadoVehiculo(Fuente fuente, string? payload)
     {
         if (string.IsNullOrWhiteSpace(payload))
@@ -127,6 +128,7 @@ internal static class ProyectorDetalleCelda
                 Fuente.Runt => Runt(documento.RootElement),
                 Fuente.SimitVehiculo => Simit(documento.RootElement),
                 Fuente.Avaluo => Avaluo(documento.RootElement),
+                Fuente.ImpuestoDepartamental => Impuesto(documento.RootElement),
                 _ => null,
             };
         }
@@ -161,6 +163,15 @@ internal static class ProyectorDetalleCelda
 
     private static ResultadoAvaluoDetalle? Avaluo(JsonElement e) =>
         e.ValueKind == JsonValueKind.Object && e.Deserialize<ResultadoAvaluoDetalle>(Json) is { } r ? r with { Fuentes = r.Fuentes ?? [] } : null;
+
+    /// <summary>
+    /// Impuesto departamental (HU #13864): total adeudado y vigencias por año ascendente. El payload de <c>EjecutorCeldaImpuesto</c>
+    /// trae además <c>departamento_codigo</c>, que no se proyecta (R-20: solo lo que el tipo tiene).
+    /// </summary>
+    private static ResultadoImpuestoDetalle? Impuesto(JsonElement e) =>
+        e.ValueKind == JsonValueKind.Object && e.Deserialize<ResultadoImpuestoDetalle>(Json) is { } r
+            ? r with { Vigencias = [.. (r.Vigencias ?? []).OrderBy(v => v.Anio)] }
+            : null;
 
     /// <summary>SIMIT con como mucho <see cref="DetalleCelda.TopeComparendos"/> comparendos; el corte lo calcula el detalle, no el payload.</summary>
     private static ResultadoSimitDetalle? Simit(JsonElement e)

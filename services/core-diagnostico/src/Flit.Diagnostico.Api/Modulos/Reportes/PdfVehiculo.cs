@@ -40,6 +40,9 @@ internal static partial class PdfVehiculo
 
     private const string NoRegistra = "No registra";
 
+    /// <summary>Impuesto sin vigencias registradas (HU #13864).</summary>
+    public const string SinVigencias = "No registra vigencias";
+
     /// <summary>Títulos de sección por código de fuente (los de la grilla).</summary>
     public static readonly IReadOnlyDictionary<string, string> Titulos = new Dictionary<string, string>(StringComparer.Ordinal)
     {
@@ -50,6 +53,7 @@ internal static partial class PdfVehiculo
         ["SIMIT_PROPIETARIO"] = "SIMIT — Comparendos de los propietarios",
         ["SIMIT_LOCATARIO"] = "SIMIT — Comparendos de los locatarios",
         ["AVALUO"] = "Avalúo comercial",
+        ["IMPUESTO_DEPARTAMENTAL"] = "Impuesto vehicular departamental",
     };
 
     /// <summary>Nombre de cada fuente del avalúo (también para el Excel del lote, HU #13849).</summary>
@@ -219,6 +223,9 @@ internal static partial class PdfVehiculo
             case ResultadoAvaluoDetalle avaluo:
                 contenedor.Element(c => Avaluo(c, avaluo));
                 break;
+            case ResultadoImpuestoDetalle impuesto:
+                contenedor.Element(c => Impuesto(c, impuesto));
+                break;
             case ResultadoRuntPersonaDetalle persona:
                 contenedor.Column(col =>
                 {
@@ -299,6 +306,25 @@ internal static partial class PdfVehiculo
                     NombreFuenteAvaluo(f.Fuente), f.Estado ?? NoRegistra, f.Valor is { } v ? Moneda(v) : NoRegistra,
                     f.Muestras?.ToString(CultureInfo.InvariantCulture) ?? NoRegistra, f.Fecha ?? NoRegistra,
                 })]));
+        }
+    });
+
+    /// <summary>
+    /// Impuesto departamental (HU #13864): «Total adeudado» con el formato de moneda del avalúo y la grilla Vigencia / Valor / Estado
+    /// («Pagada» o «Pendiente») por año; sin vigencias, «No registra vigencias».
+    /// </summary>
+    private static void Impuesto(IContainer contenedor, ResultadoImpuestoDetalle impuesto) => contenedor.Column(col =>
+    {
+        col.Spacing(3);
+        col.Item().Element(c => Tabla(c, [("Total adeudado", Moneda(impuesto.MontoTotal))]));
+        if (impuesto.Vigencias is { Count: > 0 } vigencias)
+        {
+            col.Item().Element(c => Grilla(c, ["Vigencia", "Valor", "Estado"],
+                [.. vigencias.Select(v => new[] { v.Anio.ToString(CultureInfo.InvariantCulture), Moneda(v.Valor), v.Pagada ? "Pagada" : "Pendiente" })]));
+        }
+        else
+        {
+            col.Item().Text(SinVigencias);
         }
     });
 

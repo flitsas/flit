@@ -21,6 +21,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using ImpuestoDePrueba = Flit.Diagnostico.Tests.Tablero.ImpuestoDePrueba;
 using TableroAyudas = Flit.Diagnostico.Tests.Tablero.Tablero;
 
 namespace Flit.Diagnostico.Tests.Reportes;
@@ -54,6 +55,8 @@ public sealed class PdfVehiculoTests
         """{"sin_valor_comercial":false,"valor_sugerido":48500000,"fuente_principal":"fasecolda","fuentes":[{"fuente":"fasecolda","estado":"OK","valor":48500000,"muestras":3,"fecha":"2026-10-22"}]}""";
 
     private const string TituloSimit = "SIMIT — Comparendos del vehículo";
+
+    private const string TituloImpuesto = "Impuesto vehicular departamental";
 
     private static readonly DateTimeOffset Dato = new(2026, 10, 22, 15, 0, 0, TimeSpan.Zero);
 
@@ -416,6 +419,78 @@ public sealed class PdfVehiculoTests
         (await db.Set<Evidencia>().CountAsync(ct)).Should().Be(0);
     }
 
+    // HU #13864 AC2 (F09-C9, R-20) — lote con RUNT, AVALUO e IMPUESTO_DEPARTAMENTAL y el vehículo terminado: la sección «Impuesto
+    // vehicular departamental» va después del avalúo (orden de la grilla) con «Total adeudado» en el formato de moneda del avalúo y
+    // la grilla Vigencia / Valor / Estado por año («Pagada» / «Pendiente»); otro vehículo sin vigencias dice «No registra vigencias».
+    // Ni el proveedor inventado ni la transacción ni el servicio del intento salen en el texto (fuga).
+    [Fact]
+    public async Task Seccion_de_impuesto_con_total_adeudado_y_vigencias()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ListadoDePrueba.ArrancarAsync(new UsuariosIdentidadDePrueba());
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await TableroAyudas.SembrarAsync(empresa, ct, alcance: [Fuente.Runt, Fuente.Avaluo, Fuente.ImpuestoDepartamental], vehiculos:
+        [
+            new("TST371", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.Avaluo, EstadoCelda.Pendiente, 1), new(Fuente.ImpuestoDepartamental, EstadoCelda.Pendiente, 1)]),
+            new("TST372", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.Avaluo, EstadoCelda.Pendiente, 1), new(Fuente.ImpuestoDepartamental, EstadoCelda.Pendiente, 1)]),
+        ]);
+        foreach (var placa in new[] { "TST371", "TST372" })
+        {
+            await TableroAyudas.PayloadAsync(empresa, lote.Celda(placa, Fuente.Runt), PayloadRunt.Replace("TST301", placa, StringComparison.Ordinal), ct);
+            await TableroAyudas.PayloadAsync(empresa, lote.Celda(placa, Fuente.Avaluo), PayloadAvaluo, ct);
+        }
+
+        var impuesto = lote.Celda("TST371", Fuente.ImpuestoDepartamental);
+        await TableroAyudas.PayloadAsync(empresa, impuesto, ImpuestoDePrueba.ConVigencias, ct);
+        await TableroAyudas.IntentoAsync(empresa, impuesto, desdeCache: false, ct);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST372", Fuente.ImpuestoDepartamental), ImpuestoDePrueba.SinVigencias, ct);
+        var token = PdfDePrueba.Token(api, empresa.Id);
+
+        var texto = await PdfDePrueba.TextoOkAsync(api, token, lote.Id, lote.Vehiculos.Single(v => v.Placa == "TST371").Id, ct);
+
+        var avaluo = texto.IndexOf(PdfDePrueba.Plano("Avalúo comercial"), StringComparison.Ordinal);
+        var titulo = texto.IndexOf(PdfDePrueba.Plano(TituloImpuesto), StringComparison.Ordinal);
+        titulo.Should().BeGreaterThan(avaluo, $"la sección del impuesto va después del avalúo (orden de la grilla): {texto}");
+        avaluo.Should().BeGreaterThanOrEqualTo(0, texto);
+        // La última sección puede partirse entre páginas (pie «Generado el … Página X de Y» en medio): se lee sin los pies.
+        var seccion = PdfDePrueba.SinPies(texto[titulo..]);
+        foreach (var esperado in new[] { "Total adeudado", "$ 350.000", "Vigencia", "Valor", "Estado", "$ 180.000", "Pagada", "Pendiente" })
+            PdfDePrueba.Tiene(seccion, esperado).Should().BeTrue($"la sección trae «{esperado}»: {seccion}");
+        PdfDePrueba.Tiene(seccion, "Vigencia Valor Estado 2025 $ 180.000 Pagada 2026 $ 350.000 Pendiente")
+            .Should().BeTrue($"la grilla va por año ascendente, fila a fila: {seccion}");
+        PdfDePrueba.Seccion(texto, "Avalúo comercial").Should().NotContain(PdfDePrueba.Plano("Total adeudado"), "el impuesto no se mezcla con el avalúo");
+        texto.Should().NotContainAny([ImpuestoDePrueba.ProveedorFicticio, PdfDePrueba.Plano(ImpuestoDePrueba.ProveedorFicticio), "TX-IMPUESTO", "INTEMPO", "IMPUESTO_DEPARTAMENTAL"]);
+        foreach (var prohibido in new[] { "proveedor", "transacci", "origen" })
+            texto.Should().NotContainEquivalentOf(prohibido);
+
+        var sinVigencias = await PdfDePrueba.TextoOkAsync(api, token, lote.Id, lote.Vehiculos.Single(v => v.Placa == "TST372").Id, ct);
+        var otra = PdfDePrueba.Seccion(sinVigencias, TituloImpuesto);
+        PdfDePrueba.Tiene(otra, "No registra vigencias").Should().BeTrue(otra);
+        PdfDePrueba.Tiene(otra, "$ 0").Should().BeTrue($"total adeudado 0: {otra}");
+    }
+
+    // HU #13864 AC3 (F09-C9) — vehículo con el impuesto en N/A DEPARTAMENTO_NO_SOPORTADO: la sección «Impuesto vehicular
+    // departamental» muestra el motivo con el texto existente y ningún dato del impuesto.
+    [Fact]
+    public async Task Impuesto_NA_muestra_el_motivo_departamento_no_soportado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ListadoDePrueba.ArrancarAsync(new UsuariosIdentidadDePrueba());
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await TableroAyudas.SembrarAsync(empresa, ct, alcance: [Fuente.Runt, Fuente.ImpuestoDepartamental], vehiculos:
+            [new("TST373", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.ImpuestoDepartamental, EstadoCelda.Pendiente, 1)])]);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST373", Fuente.Runt), PayloadRunt.Replace("TST301", "TST373", StringComparison.Ordinal), ct);
+        await ImpuestoDePrueba.NoAplicaAsync(empresa, lote.Celda("TST373", Fuente.ImpuestoDepartamental), MotivoNa.DepartamentoNoSoportado, ct);
+
+        var texto = await PdfDePrueba.TextoOkAsync(api, PdfDePrueba.Token(api, empresa.Id), lote.Id, lote.Vehiculos.Single().Id, ct);
+
+        var seccion = PdfDePrueba.Seccion(texto, TituloImpuesto);
+        PdfDePrueba.Tiene(seccion, ImpuestoDePrueba.TextoDepartamentoNoSoportado).Should().BeTrue(seccion);
+        PdfDePrueba.Tiene(seccion, "Total adeudado").Should().BeFalse("N/A no tiene dato");
+    }
+
     /// <summary>Lote EN_PROCESO: TST321 terminado (RUNT COMPLETADO y SIMIT_VEHICULO N/A) y TST322 con SIMIT_VEHICULO PENDIENTE.</summary>
     private static async Task<Tablero.LoteSembrado> LoteEnProcesoAsync(EmpresaDePrueba empresa, CancellationToken ct)
     {
@@ -537,7 +612,7 @@ public sealed class PdfVehiculoTests
 /// </example>
 internal static class PdfDePrueba
 {
-    private static readonly string[] FinesDeSeccion = ["RUNT—", "SIMIT—", "Avalúocomercial", "Generadoel"];
+    private static readonly string[] FinesDeSeccion = ["RUNT—", "SIMIT—", "Avalúocomercial", "Impuestovehiculardepartamental", "Generadoel"];
 
     public static string Ruta(Guid id, Guid vehiculo) => $"{Program.Prefijo}{DiagnosticosEndpoints.Ruta}/{id}/vehiculos/{vehiculo}/pdf";
 
@@ -575,6 +650,10 @@ internal static class PdfDePrueba
         ArgumentNullException.ThrowIfNull(api);
         return Texto(await BytesOkAsync(api.Cliente(token), id, vehiculo, ct));
     }
+
+    /// <summary>El texto aplanado sin los pies de página («Generado el … (hora Colombia) Página X de Y»), para leer una sección partida entre páginas.</summary>
+    public static string SinPies(string texto) =>
+        System.Text.RegularExpressions.Regex.Replace(texto, @"Generadoel.*?Página\d+de\d+", string.Empty, System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(5));
 
     /// <summary>
     /// La sección que empieza en <paramref name="titulo"/>, hasta el título de la sección siguiente o el pie (<c>Generado el</c>), lo

@@ -187,6 +187,8 @@ internal static class ExcelLote
                 a.SinValorComercial || a.FuentePrincipal is null ? Celda.Empty : Celda.Of(PdfVehiculo.FuentesAvaluo.GetValueOrDefault(a.FuentePrincipal, a.FuentePrincipal)),
                 Celda.Of(a.SinValorComercial ? "Sí" : "No"),
             ],
+            { Resultado: ResultadoImpuestoDetalle i } =>
+                [Celda.Of((double)i.MontoTotal), Celda.Of((i.Vigencias ?? []).Count(v => !v.Pagada))],
             { Personas: { } personas } => DePersonas(seccion.Fuente, personas, cantidad),
             _ => [],
         };

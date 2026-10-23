@@ -8,7 +8,7 @@ namespace Flit.Diagnostico.Api.Modulos.Tablero;
 /// proveedor, transacción, payload ni documentos completos (R-20), así que exponer uno de ellos obliga a cambiar este tipo
 /// (lo verifica <c>DetalleCeldaTests</c> por reflexión). Una celda llenada a mano y una consultada por API tienen las mismas
 /// claves. Todas las claves van siempre (con <c>null</c> si no aplican): <c>resultado</c> en las fuentes del vehículo
-/// (RUNT, SIMIT_VEHICULO, AVALUO) con la celda COMPLETADO; <c>personas</c> en las fuentes de persona (RUNT_PROPIETARIO,
+/// (RUNT, SIMIT_VEHICULO, AVALUO, IMPUESTO_DEPARTAMENTAL) con la celda COMPLETADO; <c>personas</c> en las fuentes de persona (RUNT_PROPIETARIO,
 /// RUNT_LOCATARIO, SIMIT_PROPIETARIO, SIMIT_LOCATARIO), null en las demás.
 /// </summary>
 public sealed record DetalleCeldaDto(
@@ -45,11 +45,13 @@ public sealed record PersonaDetalleDto(
 /// <summary>
 /// Resultado normalizado de una fuente en el detalle. Conjunto cerrado de tipos (polimorfismo de solo escritura, sin
 /// discriminador): <see cref="ResultadoRuntDetalle"/>, <see cref="ResultadoSimitDetalle"/>, <see cref="ResultadoAvaluoDetalle"/>,
-/// <see cref="ResultadoRuntPersonaDetalle"/> y <see cref="ResultadoRuesDetalle"/>. Sumar un tipo exige registrarlo aquí.
+/// <see cref="ResultadoImpuestoDetalle"/>, <see cref="ResultadoRuntPersonaDetalle"/> y <see cref="ResultadoRuesDetalle"/>. Sumar un
+/// tipo exige registrarlo aquí (y en el <c>oneOf</c> de <c>DetalleCelda.resultado</c> del OpenAPI).
 /// </summary>
 [JsonDerivedType(typeof(ResultadoRuntDetalle))]
 [JsonDerivedType(typeof(ResultadoSimitDetalle))]
 [JsonDerivedType(typeof(ResultadoAvaluoDetalle))]
+[JsonDerivedType(typeof(ResultadoImpuestoDetalle))]
 [JsonDerivedType(typeof(ResultadoRuntPersonaDetalle))]
 [JsonDerivedType(typeof(ResultadoRuesDetalle))]
 public abstract record ResultadoDetalleDto;
@@ -119,3 +121,17 @@ public sealed record ResultadoRuesDetalle(
     [property: JsonPropertyName("encontrada")] bool Encontrada,
     [property: JsonPropertyName("estado_matricula")] string? EstadoMatricula,
     [property: JsonPropertyName("ultima_renovacion")] string? UltimaRenovacion) : ResultadoDetalleDto;
+
+/// <summary>
+/// Impuesto vehicular departamental (HU #13864, F09-C9, Q1 = a): el total adeudado (suma de las vigencias no pagadas) y cada
+/// vigencia, en pesos enteros. Nunca el proveedor que resolvió el rpc, la transacción, el origen ni el departamento consultado (R-20).
+/// </summary>
+public sealed record ResultadoImpuestoDetalle(
+    [property: JsonPropertyName("monto_total")] long MontoTotal,
+    [property: JsonPropertyName("vigencias")] IReadOnlyList<VigenciaImpuestoDetalle>? Vigencias) : ResultadoDetalleDto;
+
+/// <summary>Una vigencia del impuesto: año, valor en pesos enteros y si está pagada.</summary>
+public sealed record VigenciaImpuestoDetalle(
+    [property: JsonPropertyName("anio")] int Anio,
+    [property: JsonPropertyName("valor")] long Valor,
+    [property: JsonPropertyName("pagada")] bool Pagada);

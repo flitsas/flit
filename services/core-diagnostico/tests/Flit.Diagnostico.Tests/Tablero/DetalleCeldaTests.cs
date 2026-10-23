@@ -324,6 +324,70 @@ public sealed class DetalleCeldaTests
         (await api.Cliente(sinPermiso).GetAsync(ruta, ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
+    // HU #13864 AC1 (F09-C9, Q1 = a, R-20) — celda del impuesto COMPLETADO con 350.000 pendientes de 2026 y 2025 pagada: el detalle
+    // trae monto_total y las dos vigencias por año ascendente, con solo las claves del contrato; ni el proveedor inventado ni la
+    // transacción ni el origen ni el departamento del payload llegan al JSON (fuga), y tampoco el servicio del intento.
+    [Fact]
+    public async Task Impuesto_completado_devuelve_monto_y_vigencias_sin_proveedor_ni_transaccion()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, alcance: [Fuente.Runt, Fuente.ImpuestoDepartamental], vehiculos:
+            [new("TST481", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.ImpuestoDepartamental, EstadoCelda.Pendiente, 1)])]);
+        var celda = lote.Celda("TST481", Fuente.ImpuestoDepartamental);
+        await Tablero.PayloadAsync(empresa, celda, ImpuestoDePrueba.ConVigencias, ct);
+        await Tablero.IntentoAsync(empresa, celda, desdeCache: false, ct);
+
+        var respuesta = await empresa.Cliente().GetAsync(Tablero.RutaDetalle(lote.Id, lote.Vehiculos.Single().Id, "IMPUESTO_DEPARTAMENTAL"), ct);
+        var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
+        var detalle = JsonDocument.Parse(cuerpo).RootElement;
+        detalle.GetProperty("estado").GetString().Should().Be("COMPLETADO");
+        detalle.GetProperty("personas").ValueKind.Should().Be(JsonValueKind.Null, "es una fuente del vehículo");
+        var resultado = detalle.GetProperty("resultado");
+        resultado.ValueKind.Should().Be(JsonValueKind.Object, cuerpo);
+        resultado.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["monto_total", "vigencias"]);
+        resultado.GetProperty("monto_total").GetInt64().Should().Be(350000, "pesos enteros");
+        var vigencias = resultado.GetProperty("vigencias").EnumerateArray().ToList();
+        vigencias.Select(v => v.GetProperty("anio").GetInt32()).Should().Equal([2025, 2026], "por año ascendente");
+        vigencias.Select(v => v.GetProperty("valor").GetInt64()).Should().Equal([180000L, 350000L]);
+        vigencias.Select(v => v.GetProperty("pagada").GetBoolean()).Should().Equal([true, false]);
+        vigencias.Should().AllSatisfy(v => v.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["anio", "valor", "pagada"]));
+        Claves(detalle).Should().NotContain(c => ClavesProhibidas.Any(p => c.Contains(p, StringComparison.Ordinal)) || c.Contains("departamento", StringComparison.Ordinal));
+        cuerpo.Should().NotContainAny([ImpuestoDePrueba.ProveedorFicticio, ImpuestoDePrueba.TransaccionFicticia, "INTEMPO", "departamento_codigo", "id_transaccion", "\"API\""]);
+    }
+
+    // HU #13864 AC3 (F09-C9) — celdas del impuesto en N/A: el detalle trae el motivo DEPARTAMENTO_NO_SOPORTADO o SERVICIO_PUBLICO,
+    // sin resultado ni personas (el texto lo pone el frontend con el mismo catálogo de motivos).
+    [Fact]
+    public async Task Impuesto_NA_devuelve_el_motivo()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, alcance: [Fuente.Runt, Fuente.ImpuestoDepartamental], vehiculos:
+        [
+            new("TST482", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.ImpuestoDepartamental, EstadoCelda.Pendiente, 1)]),
+            new("TST483", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.ImpuestoDepartamental, EstadoCelda.Pendiente, 1)]),
+        ]);
+        await ImpuestoDePrueba.NoAplicaAsync(empresa, lote.Celda("TST482", Fuente.ImpuestoDepartamental), MotivoNa.DepartamentoNoSoportado, ct);
+        await ImpuestoDePrueba.NoAplicaAsync(empresa, lote.Celda("TST483", Fuente.ImpuestoDepartamental), MotivoNa.ServicioPublico, ct);
+
+        foreach (var (placa, motivo) in new[] { ("TST482", "DEPARTAMENTO_NO_SOPORTADO"), ("TST483", "SERVICIO_PUBLICO") })
+        {
+            var detalle = await DetalleAsync(empresa.Cliente(), lote.Id, lote.Vehiculos.Single(v => v.Placa == placa).Id, "IMPUESTO_DEPARTAMENTAL", ct);
+            detalle.GetProperty("estado").GetString().Should().Be("NA");
+            detalle.GetProperty("motivo_na").GetString().Should().Be(motivo);
+            detalle.GetProperty("resultado").ValueKind.Should().Be(JsonValueKind.Null, "N/A no tiene dato");
+            detalle.GetProperty("personas").ValueKind.Should().Be(JsonValueKind.Null);
+            detalle.GetProperty("dato_obtenido_en").ValueKind.Should().Be(JsonValueKind.Null);
+        }
+    }
+
     private static async Task<JsonElement> DetalleAsync(HttpClient cliente, Guid lote, Guid vehiculo, string fuente, CancellationToken ct)
     {
         var respuesta = await cliente.GetAsync(Tablero.RutaDetalle(lote, vehiculo, fuente), ct);

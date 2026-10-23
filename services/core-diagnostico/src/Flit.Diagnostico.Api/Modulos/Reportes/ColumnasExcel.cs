@@ -4,8 +4,9 @@ namespace Flit.Diagnostico.Api.Modulos.Reportes;
 /// Catálogo de columnas de la hoja «Vehículos» del Excel del lote (HU #13849, F07-C5; documentado en <c>contracts/openapi/diagnostico.v1.yaml</c>,
 /// operación <c>descargarExcelLote</c>). Columnas fijas (<see cref="Fijas"/>) y, por cada fuente del alcance en el orden de la grilla, una
 /// columna de estado («{título} — Estado») seguida de sus columnas de dato («{título} — {dato}»). Una fuente fuera del alcance no tiene
-/// columnas. Ninguna columna es de origen, usuario manual, proveedor ni transacción (R-20). Cambiar este catálogo exige subir
-/// <see cref="ExcelLote.VersionPlantilla"/>.
+/// columnas. Ninguna columna es de origen, usuario manual, proveedor ni transacción (R-20). Un cambio de este catálogo cambia los
+/// encabezados, que entran en la huella del Excel por <see cref="ExcelLote.Firma"/> (solo invalida los lotes cuyo alcance tiene la
+/// fuente tocada); sube <see cref="ExcelLote.VersionPlantilla"/> si cambias cómo se pinta una celda sin cambiar lo que muestra.
 /// </summary>
 /// <example>
 /// <code>
@@ -25,6 +26,12 @@ internal static class ColumnasExcel
     public const string Comparendos = "Comparendos";
 
     public const string ValorTotal = "Valor total";
+
+    /// <summary>Impuesto departamental (HU #13864, Q6 = a): <c>monto_total</c> en pesos enteros.</summary>
+    public const string TotalAdeudado = "Total adeudado";
+
+    /// <summary>Impuesto departamental (HU #13864, Q6 = a): cantidad de vigencias con <c>pagada=false</c>.</summary>
+    public const string VigenciasPendientes = "Vigencias pendientes";
 
     /// <summary>Columnas fijas, antes de las fuentes.</summary>
     public static readonly IReadOnlyList<string> Fijas = ["Orden", "Identificador", "Tipo de identificador", "Placa", "VIN", "Estado del vehículo"];
@@ -56,6 +63,7 @@ internal static class ColumnasExcel
         ["SIMIT_PROPIETARIO"] = DePersonaSimit,
         ["SIMIT_LOCATARIO"] = DePersonaSimit,
         ["AVALUO"] = ["Valor sugerido", "Fuente principal", "Sin valor comercial"],
+        ["IMPUESTO_DEPARTAMENTAL"] = [TotalAdeudado, VigenciasPendientes],
     };
 
     public static string Titulo(string fuente) => Titulos.GetValueOrDefault(fuente, fuente);

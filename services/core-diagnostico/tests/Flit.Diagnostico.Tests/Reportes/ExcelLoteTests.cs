@@ -23,6 +23,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using ImpuestoDePrueba = Flit.Diagnostico.Tests.Tablero.ImpuestoDePrueba;
 using TableroAyudas = Flit.Diagnostico.Tests.Tablero.Tablero;
 
 namespace Flit.Diagnostico.Tests.Reportes;
@@ -420,6 +421,61 @@ public sealed class ExcelLoteTests
         (await api.Cliente(token).GetAsync(ExcelDePrueba.Ruta(deB.Id), ct)).StatusCode.Should().Be(HttpStatusCode.NotFound);
         await using var db = empresas.A.Db();
         (await db.Set<Evidencia>().CountAsync(ct)).Should().Be(0);
+    }
+
+    // HU #13864 AC3 / AC4 (F09-C9, Q6 = a, R-20) — lote con el impuesto en el alcance: después de las de RUNT van «Impuesto
+    // departamental — Estado», «— Total adeudado» (número en pesos) y «— Vigencias pendientes» (cantidad de no pagadas); el vehículo
+    // en N/A DEPARTAMENTO_NO_SOPORTADO lleva el texto del motivo en la columna de estado y los datos vacíos; ninguna celda trae el
+    // proveedor inventado, la transacción ni el servicio del intento (fuga) y ninguna es fórmula. Un lote sin el impuesto en el
+    // alcance (aunque tenga la celda) no tiene ninguna de esas columnas.
+    [Fact]
+    public async Task Columnas_del_impuesto_solo_con_la_fuente_en_el_alcance()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ListadoDePrueba.ArrancarAsync(new UsuariosIdentidadDePrueba());
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var conImpuesto = await TableroAyudas.SembrarAsync(empresa, ct, alcance: [Fuente.Runt, Fuente.ImpuestoDepartamental], vehiculos:
+        [
+            new("TST471", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.ImpuestoDepartamental, EstadoCelda.Pendiente, 1)]),
+            new("TST472", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.ImpuestoDepartamental, EstadoCelda.Pendiente, 1)]),
+        ]);
+        foreach (var placa in new[] { "TST471", "TST472" })
+            await TableroAyudas.PayloadAsync(empresa, conImpuesto.Celda(placa, Fuente.Runt), PayloadRunt.Replace("TST401", placa, StringComparison.Ordinal), ct);
+        var impuesto = conImpuesto.Celda("TST471", Fuente.ImpuestoDepartamental);
+        await TableroAyudas.PayloadAsync(empresa, impuesto, ImpuestoDePrueba.ConVigencias, ct);
+        await TableroAyudas.IntentoAsync(empresa, impuesto, desdeCache: false, ct);
+        await ImpuestoDePrueba.NoAplicaAsync(empresa, conImpuesto.Celda("TST472", Fuente.ImpuestoDepartamental), MotivoNa.DepartamentoNoSoportado, ct);
+        var token = ExcelDePrueba.Token(api, empresa.Id);
+
+        var libro = await ExcelDePrueba.LibroOkAsync(api, token, conImpuesto.Id, ct);
+
+        libro.Hojas["Vehículos"][0].Should().Equal(
+            [.. Fijas, .. DeRunt, "Impuesto departamental — Estado", "Impuesto departamental — Total adeudado", "Impuesto departamental — Vigencias pendientes"],
+            "las columnas del impuesto van después de RUNT, en el orden de la grilla");
+        var completado = libro.Fila("Vehículos", "TST471");
+        libro.Valor("Vehículos", completado, "Impuesto departamental — Estado").Should().Be("Completado");
+        libro.Valor("Vehículos", completado, "Impuesto departamental — Total adeudado").Should().Be("350000", "pesos enteros, como número");
+        libro.Valor("Vehículos", completado, "Impuesto departamental — Vigencias pendientes").Should().Be("1", "2026 pendiente; 2025 pagada no cuenta");
+        var na = libro.Fila("Vehículos", "TST472");
+        libro.Valor("Vehículos", na, "Impuesto departamental — Estado").Should().Be("No aplica: " + ImpuestoDePrueba.TextoDepartamentoNoSoportado);
+        libro.Valor("Vehículos", na, "Impuesto departamental — Total adeudado").Should().BeEmpty();
+        libro.Valor("Vehículos", na, "Impuesto departamental — Vigencias pendientes").Should().BeEmpty();
+        libro.Valor("Vehículos", na, "Estado del vehículo").Should().Be("Terminado", "N/A cuenta como terminado");
+        libro.Formulas.Should().Be(0);
+        libro.Texto.Should().NotContainAny([ImpuestoDePrueba.ProveedorFicticio, ImpuestoDePrueba.TransaccionFicticia, "INTEMPO", "departamento_codigo"]);
+        foreach (var prohibido in new[] { "proveedor", "transacci", "origen" })
+            libro.Texto.Should().NotContainEquivalentOf(prohibido);
+
+        var sinImpuesto = await TableroAyudas.SembrarAsync(empresa, ct, alcance: [Fuente.Runt], vehiculos:
+            [new("TST473", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.ImpuestoDepartamental, EstadoCelda.Pendiente, 1)])]);
+        await TableroAyudas.PayloadAsync(empresa, sinImpuesto.Celda("TST473", Fuente.Runt), PayloadRunt.Replace("TST401", "TST473", StringComparison.Ordinal), ct);
+        await TableroAyudas.PayloadAsync(empresa, sinImpuesto.Celda("TST473", Fuente.ImpuestoDepartamental), ImpuestoDePrueba.ConVigencias, ct);
+
+        var sinLibro = await ExcelDePrueba.LibroOkAsync(api, token, sinImpuesto.Id, ct);
+
+        sinLibro.Hojas["Vehículos"][0].Should().Equal([.. Fijas, .. DeRunt], "sin el impuesto en el alcance no hay columnas del impuesto");
+        sinLibro.Texto.Should().NotContainAny(["Impuesto departamental", "Total adeudado", "Vigencias pendientes", "350000"]);
     }
 
     /// <summary>Lote con un vehículo con RUNT y SIMIT_VEHICULO COMPLETADO.</summary>

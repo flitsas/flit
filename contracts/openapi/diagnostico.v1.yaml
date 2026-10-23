@@ -907,13 +907,16 @@ paths:
         HU #13798 (F06-H1, F06-C1..C4/C12). Permiso diagnostico.diagnosticos.ver, misma visibilidad que la grilla. Devuelve
         el resultado normalizado de la celda en un DTO propio y cerrado: nunca origen, usuario manual, proveedor, transacción,
         payload, nombres ni documentos completos; una celda llenada a mano y una consultada por API tienen las mismas claves.
-        Todas las claves van siempre (null si no aplican). Fuentes del vehículo (RUNT, SIMIT_VEHICULO, AVALUO): `resultado`
+        Todas las claves van siempre (null si no aplican). Fuentes del vehículo (RUNT, SIMIT_VEHICULO, AVALUO,
+        IMPUESTO_DEPARTAMENTAL): `resultado`
         solo con la celda COMPLETADO y `personas` null. Fuentes de persona (RUNT_PROPIETARIO, RUNT_LOCATARIO,
         SIMIT_PROPIETARIO, SIMIT_LOCATARIO): `resultado` null y `personas` con una entrada por persona del rol (vacía si el
         vehículo no tiene personas de ese rol), con el documento como `****` más los cuatro últimos caracteres alfanuméricos.
         Una celda ERROR PERSONAS_CON_ERROR trae el resultado de las personas que sí respondieron. SIMIT trae como mucho 100
         comparendos por resultado (`comparendos_truncados=true` si había más; `cantidad_comparendos` es el total).
-        IMPUESTO_DEPARTAMENTAL no tiene adaptador: `resultado` y `personas` null.
+        IMPUESTO_DEPARTAMENTAL (HU #13864): `resultado` = ResultadoImpuestoDetalle (total adeudado y vigencias en pesos
+        enteros) solo con la celda COMPLETADO; en N/A el `motivo_na` es DEPARTAMENTO_NO_SOPORTADO o SERVICIO_PUBLICO y `resultado`
+        null. Nunca el proveedor, la transacción, el origen ni el departamento consultado.
       responses:
         "200":
           description: Detalle de la celda.
@@ -978,6 +981,36 @@ paths:
                       fuente_principal: null
                       fuentes:
                         - { fuente: fasecolda, estado: SIN_DATOS, valor: null, muestras: null, fecha: "2026-10-22" }
+                    personas: null
+                impuesto:
+                  summary: IMPUESTO_DEPARTAMENTAL con 350.000 pendientes de 2026 y 2025 pagada (HU #13864)
+                  value:
+                    id: 01a1647a-4975-7c17-97ae-f10bc0928801
+                    vehiculo_id: 01a1647a-4975-7574-933e-133cadd1ea42
+                    fuente: IMPUESTO_DEPARTAMENTAL
+                    estado: COMPLETADO
+                    motivo_na: null
+                    tipo_error: null
+                    dato_obtenido_en: "2026-10-22T15:00:00+00:00"
+                    reutilizada: false
+                    resultado:
+                      monto_total: 350000
+                      vigencias:
+                        - { anio: 2025, valor: 180000, pagada: true }
+                        - { anio: 2026, valor: 350000, pagada: false }
+                    personas: null
+                impuestoNoAplica:
+                  summary: IMPUESTO_DEPARTAMENTAL en N/A por departamento no soportado (HU #13864)
+                  value:
+                    id: 01a1647a-4975-7c17-97ae-f10bc0928802
+                    vehiculo_id: 01a1647a-4975-7574-933e-133cadd1ea42
+                    fuente: IMPUESTO_DEPARTAMENTAL
+                    estado: NA
+                    motivo_na: DEPARTAMENTO_NO_SOPORTADO
+                    tipo_error: null
+                    dato_obtenido_en: null
+                    reutilizada: false
+                    resultado: null
                     personas: null
                 runtPropietario:
                   summary: RUNT_PROPIETARIO con un natural en OK y un NIT (RUES) en error
@@ -1067,7 +1100,8 @@ paths:
         Identidad no responde), fecha y hora de creación (hora Colombia), tipo de análisis («Diagnóstico Simple» o «Diagnóstico
         Con Análisis IA — TRÁMITE») e identificación; una sección por fuente del alcance en el orden de la grilla (SIMIT con hasta
         100 comparendos y «y N más»; avalúo con valor sugerido o «sin valor comercial»; personas con «****» + 4 últimos y el
-        rótulo «Declarado por el cliente»; N/A con su motivo); pie con «Generado el …» y «Página X de Y». Sin origen, usuario
+        rótulo «Declarado por el cliente»; impuesto departamental con «Total adeudado» y la grilla Vigencia / Valor / Estado
+        «Pagada» o «Pendiente», o «No registra vigencias», HU #13864; N/A con su motivo); pie con «Generado el …» y «Página X de Y». Sin origen, usuario
         manual, proveedor ni transacción (R-20): una celda llenada a mano produce el mismo texto que una de API. Mientras no
         cambie ninguna entrada (celdas, versión del tablero, nombres del encabezado, documentos enmascarados), la descarga
         devuelve los mismos bytes ya guardados; si cambió, genera un PDF nuevo e invalida el anterior (se conserva).
@@ -1138,7 +1172,8 @@ paths:
         (cantidad); SIMIT vehículo → Semáforo, Comparendos, Valor total; RUNT propietarios / RUNT locatarios → Personas
         consultadas, Personas con error, Documentos («TIPO ****1234» separados por «; », con «(Declarado por el cliente)» si lo
         declaró el cliente); SIMIT propietarios / SIMIT locatarios → las mismas más Comparendos y Valor total sumados de las
-        personas; Avalúo → Valor sugerido, Fuente principal, Sin valor comercial (Sí/No); Impuesto departamental → solo estado.
+        personas; Avalúo → Valor sugerido, Fuente principal, Sin valor comercial (Sí/No); Impuesto departamental → Total adeudado (número,
+        pesos enteros) y Vigencias pendientes (cantidad de vigencias no pagadas), HU #13864.
         El valor total en pesos es número; si el SIMIT trajo más comparendos de los que se listan (tope 100) sale el texto
         «al menos N». «Diagnóstico»: ID del diagnóstico, nombre del lote, empresa (claim company_name), usuario creador («No
         disponible» si Identidad no responde), fecha de creación (hora Colombia) y tipo de análisis («Diagnóstico Simple» o
@@ -3400,11 +3435,12 @@ components:
           type: boolean
         resultado:
           nullable: true
-          description: Solo en RUNT, SIMIT_VEHICULO y AVALUO con la celda COMPLETADO; el tipo depende de `fuente`.
+          description: Solo en RUNT, SIMIT_VEHICULO, AVALUO e IMPUESTO_DEPARTAMENTAL con la celda COMPLETADO; el tipo depende de `fuente`.
           oneOf:
             - $ref: "#/components/schemas/ResultadoRuntDetalle"
             - $ref: "#/components/schemas/ResultadoSimitDetalle"
             - $ref: "#/components/schemas/ResultadoAvaluoDetalle"
+            - $ref: "#/components/schemas/ResultadoImpuestoDetalle"
         personas:
           type: array
           nullable: true
@@ -3513,6 +3549,33 @@ components:
               valor: { type: integer, format: int64, nullable: true }
               muestras: { type: integer, nullable: true }
               fecha: { type: string, nullable: true, example: "2026-10-22" }
+
+    ResultadoImpuestoDetalle:
+      type: object
+      description: >
+        Impuesto vehicular departamental (HU #13864, Q1 = a). Sin proveedor, transacción, origen ni departamento consultado
+        (R-20). Pesos colombianos enteros.
+      required: [monto_total, vigencias]
+      properties:
+        monto_total: { type: integer, format: int64, description: "Total adeudado: suma de las vigencias no pagadas.", example: 350000 }
+        vigencias:
+          type: array
+          description: Por año ascendente; vacía si no registra vigencias («No registra vigencias»).
+          items:
+            $ref: "#/components/schemas/VigenciaImpuestoDetalle"
+      example:
+        monto_total: 350000
+        vigencias:
+          - { anio: 2025, valor: 180000, pagada: true }
+          - { anio: 2026, valor: 350000, pagada: false }
+
+    VigenciaImpuestoDetalle:
+      type: object
+      required: [anio, valor, pagada]
+      properties:
+        anio: { type: integer, example: 2026 }
+        valor: { type: integer, format: int64, description: "Pesos colombianos.", example: 350000 }
+        pagada: { type: boolean }
 
     ResultadoRuntPersonaDetalle:
       type: object
