@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Flit.Modules.Quipux.Domain.Codigos;
 using Flit.Modules.Quipux.Domain.Configuracion;
 using Flit.Modules.Quipux.Domain.Puertos;
 using Microsoft.Extensions.Logging;
@@ -113,8 +114,18 @@ internal sealed class QuipuxApiClient(
         var payload = await SendAuthenticatedAsync<QuipuxValidateStatusBody, QuipuxValidateStatusResponse>(
             settings, url, body, "la consulta de estado", cancellationToken);
 
+        // Sin `data.codigo`: Quipux responde HTTP 200 con cuerpo vacío/parcial cuando el documento
+        // nunca se radicó (consulta previa del reintento o sondeo). NO es excepción definitiva —
+        // el registrador debe poder continuar al POST (#13912). Se mapea a RegistroError (0), que
+        // `EsRegistroExitoso` trata como "no está en Quipux".
         if (payload?.Data?.Codigo is not { } codigo)
-            throw new QuipuxException("Respuesta inválida de Quipux al consultar el estado.", isTransient: false);
+        {
+            return new QuipuxValidateStatusResult(
+                QuipuxCodigos.RegistroError,
+                payload?.Data?.Descripcion ?? "sin_codigo",
+                EstadoTramiteCodigo: null,
+                EstadoTramiteDescripcion: null);
+        }
 
         // `estadoTramite` AUSENTE ⇒ null, NO 0. 1.0 colapsaba el ausente a '0' y perdía la distinción entre
         // "Quipux aún no resolvió el trámite" y "Quipux respondió un estado 0", que son cosas distintas para
