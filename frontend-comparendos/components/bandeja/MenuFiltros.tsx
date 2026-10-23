@@ -136,7 +136,7 @@ export function MenuFiltros({
           id={id}
           role="dialog"
           aria-label="Filtros de la bandeja"
-          className="absolute left-0 top-full z-40 mt-2 flex max-h-[min(34rem,calc(100dvh-14rem))] w-[24rem] max-w-[calc(100vw-2rem)] flex-col rounded-xl border border-[#DFE5ED] bg-white shadow-lg dark:border-white/10 dark:bg-[#162744]"
+          className="absolute left-0 top-full z-40 mt-2 flex max-h-[min(34rem,calc(100dvh-19rem))] w-[24rem] max-w-[calc(100vw-2rem)] flex-col rounded-xl border border-[#DFE5ED] bg-white shadow-lg dark:border-white/10 dark:bg-[#162744]"
         >
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
             {editando ? (
