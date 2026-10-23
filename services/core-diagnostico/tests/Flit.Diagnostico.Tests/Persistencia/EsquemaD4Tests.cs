@@ -147,6 +147,37 @@ public sealed class EsquemaD4Tests
         await InsertarAsync(conexion, tenant, lote, null, "ZIP", ct, estado: "GENERANDO", archivo: null);
     }
 
+    // ADR-0072 (d)2/(d)7 — archivo_local solo admite los tipos del enum (PDF, XLSX, ZIP) y su comentario declara «Solo inserción.».
+    [Fact]
+    public async Task Archivo_local_rechaza_tipo_fuera_del_enum_y_declara_solo_insercion()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        await using var conexion = await AbrirAsync(api, ct);
+        var tenant = Guid.NewGuid();
+
+        await DebeViolarAsync(() => InsertarArchivoLocalAsync(conexion, tenant, "CSV", ct), "ck_archivo_local_tipo");
+        foreach (var tipo in new[] { "PDF", "XLSX", "ZIP" })
+            await InsertarArchivoLocalAsync(conexion, tenant, tipo, ct);
+
+        (await ListarAsync(conexion, "SELECT obj_description('diagnostico.archivo_local'::regclass, 'pg_class')", ct))
+            .Should().ContainSingle().Which.Should().EndWith("Solo inserción.");
+    }
+
+    private static async Task InsertarArchivoLocalAsync(NpgsqlConnection conexion, Guid tenant, string tipo, CancellationToken ct)
+    {
+        await using var insertar = new NpgsqlCommand(
+            "INSERT INTO diagnostico.archivo_local (id, tenant_id, tipo, nombre, content_type, contenido, creado_en) " +
+            "VALUES (@id, @t, @tipo, 'prueba.bin', 'application/octet-stream', @c, now())",
+            conexion);
+        insertar.Parameters.AddWithValue("id", Guid.CreateVersion7());
+        insertar.Parameters.AddWithValue("t", tenant);
+        insertar.Parameters.AddWithValue("tipo", tipo);
+        insertar.Parameters.AddWithValue("c", new byte[] { 1, 2, 3 });
+        await insertar.ExecuteNonQueryAsync(ct);
+    }
+
     private static async Task VerificarSchemaAsync(NpgsqlConnection conexion, CancellationToken ct)
     {
         var columnas = await ListarAsync(

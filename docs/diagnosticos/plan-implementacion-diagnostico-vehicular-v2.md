@@ -889,6 +889,8 @@ CREATE UNIQUE INDEX ux_derivacion_canjeada ON diagnostico.derivaciones (vehiculo
 -- Evidencias (MOD07). Materializada en la HU #13846 (D4_Evidencias): clase (a) de ADR-0072 (xmin, sin borrado lógico ni físico:
 -- invalidar = vigente=false, R-18), FK compuestas (tenant_id, diagnostico_id) y (tenant_id, vehiculo_id) RESTRICT, sin origen de
 -- las celdas ni usuario manual (R-20). La huella la calcula HuellaEvidencia y la invalidación la da version_tablero de cada celda.
+-- La cola del ZIP se materializó en la HU #13850 (D4_ColaZip): el ZIP en cola nace vigente=false (el LISTA anterior se sigue
+-- entregando) y pasa a vigente al quedar LISTA, salvo que ya haya uno vigente creado después.
 CREATE TABLE diagnostico.evidencias (
   id              uuid PRIMARY KEY,
   tenant_id       uuid NOT NULL,                     -- uq_evidencias_tenant_id (tenant_id, id)
@@ -903,19 +905,25 @@ CREATE TABLE diagnostico.evidencias (
   empresa_nombre  varchar(200) NULL,                 -- claim company_name para el ZIP (el trabajador no tiene sesión)
   vigente         boolean NOT NULL,
   intentos        integer NOT NULL DEFAULT 0,
-  lease_hasta     timestamptz NULL,                  -- cola del ZIP
+  lease_hasta     timestamptz NULL,                  -- cola del ZIP, doble uso: vencimiento del lease (GENERANDO) o inicio del reintento con backoff (PENDIENTE); null si nadie lo tiene
   tipo_error      varchar(32) NULL,                  -- solo con ERROR
   creado_en       timestamptz NOT NULL,
-  generado_en     timestamptz NULL                   -- obligatorio con LISTA
+  generado_en     timestamptz NULL,                  -- obligatorio con LISTA
+  vehiculos_incluidos  integer NOT NULL DEFAULT 0,   -- ZIP: vehículos con su PDF en el archivo (al pedirlo, los esperados; LISTA, los que trae); 0 en PDF y XLSX (#13850)
+  vehiculos_pendientes integer NOT NULL DEFAULT 0,   -- ZIP: vehículos fuera del archivo por no haber terminado (van en el índice); 0 en PDF y XLSX (#13850)
+  CONSTRAINT ck_evidencias_vehiculos_zip CHECK (vehiculos_incluidos >= 0 AND vehiculos_pendientes >= 0)
 );
 CREATE UNIQUE INDEX ux_evidencias_vigente ON diagnostico.evidencias (tenant_id, diagnostico_id, vehiculo_id, tipo)
   NULLS NOT DISTINCT WHERE vigente;                  -- Postgres 16 en los tres ambientes
 CREATE INDEX ix_evidencias_diagnostico ON diagnostico.evidencias (tenant_id, diagnostico_id, tipo);
 CREATE INDEX ix_evidencias_vehiculo ON diagnostico.evidencias (tenant_id, vehiculo_id);
 CREATE INDEX ix_evidencias_cola ON diagnostico.evidencias (estado, lease_hasta)
-  WHERE tipo = 'ZIP' AND estado IN ('PENDIENTE', 'GENERANDO');
+  WHERE tipo = 'ZIP' AND estado IN ('PENDIENTE', 'GENERANDO');   -- A11: cola de todas las empresas (ADR-0072, excepciones)
+CREATE UNIQUE INDEX ux_evidencias_zip_en_cola ON diagnostico.evidencias (tenant_id, diagnostico_id, huella)
+  WHERE tipo = 'ZIP' AND estado IN ('PENDIENTE', 'GENERANDO');   -- un solo ZIP en cola por lote y huella (#13850)
 -- Sin file-manager (solo pruebas, Diagnostico:Archivos:GuardarEnBase=true) los bytes van a diagnostico.archivo_local
--- (id, tenant_id, tipo, nombre, content_type, contenido bytea @pii:medium, creado_en); sin URL y sin bandera el servicio no arranca.
+-- (id, tenant_id, tipo, nombre, content_type, contenido bytea @pii:medium, creado_en; CHECK ck_archivo_local_tipo tipo IN ('PDF', 'XLSX',
+-- 'ZIP'); solo inserción, D4_ArchivoLocalSoloInsercion); sin URL y sin bandera el servicio no arranca.
 
 -- Réplica de organismos con bandera de impuesto (patrón Comparendos, HU13459). Materializadas en la HU #13723
 -- (D2_MotorConsultas): catálogos globales sin tenant_id (excepción por tabla de ADR-0072); ix_organismos_nombre_norm (nombre_norm)

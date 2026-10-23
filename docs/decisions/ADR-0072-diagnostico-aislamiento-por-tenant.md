@@ -120,6 +120,8 @@ ya la tienen (HU #13723, ver excepciones por tabla).
 | `consultas` | #13723 · `D2_MotorConsultas`; #13746 · `D2_ReprocesoUsuarioCelda` | (a) | `xmin` | `actualizado_en`, `usuario_manual_id`, `dato_obtenido_en`, `reproceso_usuario_id` (reproceso pendiente; lo limpia el cierre, `ck_consultas_reproceso_usuario`); intentos en `intentos_consulta` | `(tenant_id, vehiculo_id)` → `vehiculos`, `(tenant_id, diagnostico_id)` → `diagnosticos`, `(tenant_id, reutilizada_de_id)` → `consultas`; todas `RESTRICT`; expone `uq_consultas_tenant_id` | A11 en `ix_cola` (ver excepciones) |
 | `intentos_consulta` | #13723 · `D2_MotorConsultas`; #13737 · `D2_IntentosConsultaRegistro`; #13790 · `D3_PersonasVehiculo` | (b) | — | `usuario_id` (nulo si fue el procesador), `inicio`/`fin` | `(tenant_id, consulta_id)` → `consultas`, `(tenant_id, vehiculo_id)` → `vehiculos`, `(tenant_id, diagnostico_id)` → `diagnosticos`, `(tenant_id, persona_id)` → `personas_vehiculo` (nula en las fuentes por vehículo, `ix_intentos_consulta_persona`); todas `RESTRICT` | Ninguna |
 | `personas_vehiculo` | #13790 · `D3_PersonasVehiculo` | (a) | `xmin` | `creado_en` (cierre de la celda RUNT); se escribe una sola vez | `(tenant_id, vehiculo_id)` → `vehiculos(tenant_id, id)`, `RESTRICT`; expone `uq_personas_vehiculo_tenant_id` | Ninguna. PII `@pii:high`: `doc_cifrado` (Data Protection, HU #13751); sin nombres. `ux_personas_vehiculo_rol_orden (tenant_id, vehiculo_id, rol, orden)`; CHECK de `rol`, `origen`, `orden >= 1` y `ck_personas_vehiculo_declarado_solo_locatario` |
+| `evidencias` | #13846 · `D4_Evidencias`; #13850 · `D4_ColaZip` | (a) | `xmin` | `solicitado_por`, `creado_en`, `generado_en`; invalidar = `vigente=false`, sin borrado | `(tenant_id, diagnostico_id)` → `diagnosticos(tenant_id, id)`, `(tenant_id, vehiculo_id)` → `vehiculos(tenant_id, id)`; ambas `RESTRICT`; expone `uq_evidencias_tenant_id` | A11 en `ix_evidencias_cola` (ver excepciones). PII `@pii:low`: `solicitado_por` |
+| `archivo_local` | #13846 · `D4_Evidencias`; `D4_ArchivoLocalSoloInsercion` | (b) | — | `creado_en`; solo inserción | Ninguna | Solo pruebas automáticas (`Diagnostico:Archivos:GuardarEnBase`). PII `@pii:medium`: `contenido`; `ck_archivo_local_tipo` |
 | `organismos` | #13723 · `D2_MotorConsultas` | Catálogo global (sin `tenant_id`) | — | — | Ninguna | A3, A4, A5, A20 (ver excepciones) |
 | `departamentos_impuesto` | #13723 · `D2_MotorConsultas` | Catálogo global (sin `tenant_id`) | — | `actualizado_en` | Ninguna | A3, A4, A5, A20 (ver excepciones) |
 
@@ -151,6 +153,11 @@ ya la tienen (HU #13723, ver excepciones por tabla).
 - **`consultas`, unicidad `(vehiculo_id, fuente)`.** Se materializa como `ux_consulta_vehiculo_fuente (tenant_id,
   vehiculo_id, fuente)`: como el vehículo fija la empresa, la unicidad es la misma, y el índice cubre la FK compuesta
   al vehículo (igual que `ux_vehiculo_por_lote`).
+- **`evidencias`, A11 en `ix_evidencias_cola (estado, lease_hasta)` (HU #13850).** El índice parcial de la cola del ZIP
+  `WHERE tipo = 'ZIP' AND estado IN ('PENDIENTE','GENERANDO')` no empieza por `tenant_id`: el trabajador del ZIP reclama
+  filas de todas las empresas con `FOR UPDATE SKIP LOCKED`, y luego fija la empresa de la fila en su propio contexto
+  (Tradeoff aceptado, «jobs sin usuario»). Es la segunda y última lectura entre empresas, junto con `ColaConsultas`;
+  `TomaEntreEmpresasSoloEnColaTests` vigila que no haya otra. Los demás índices de la tabla empiezan por `tenant_id`.
 
 ## Retención de datos personales
 

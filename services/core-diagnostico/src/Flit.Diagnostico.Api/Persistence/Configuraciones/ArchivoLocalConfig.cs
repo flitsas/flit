@@ -1,4 +1,5 @@
 using Flit.Diagnostico.Api.Infraestructura.Archivos;
+using Flit.Diagnostico.Api.Modulos.Reportes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -13,7 +14,11 @@ internal sealed class ArchivoLocalConfig : IEntityTypeConfiguration<ArchivoLocal
 {
     public void Configure(EntityTypeBuilder<ArchivoLocal> builder)
     {
-        builder.ToTable("archivo_local", t => t.HasComment("Archivos generados guardados en la base sin file-manager; solo pruebas automáticas (HU #13846)."));
+        builder.ToTable("archivo_local", t =>
+        {
+            t.HasComment("Archivos generados guardados en la base sin file-manager; solo pruebas automáticas (HU #13846). Solo inserción.");
+            t.HasCheckConstraint("ck_archivo_local_tipo", $"tipo IN ({CodigosDeEnum.ListaSql<TipoEvidencia>()})");
+        });
         builder.HasKey(x => x.Id).HasName("pk_archivo_local");
         builder.Property(x => x.Id).ValueGeneratedNever().HasComment("uuid v7 generado por la aplicación; la referencia es db:{id}.");
         builder.Property(x => x.TenantId).HasComment("Empresa dueña del archivo.");

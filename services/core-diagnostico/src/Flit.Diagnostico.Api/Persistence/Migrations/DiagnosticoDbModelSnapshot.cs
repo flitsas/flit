@@ -75,7 +75,9 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
 
                     b.ToTable("archivo_local", "diagnostico", t =>
                         {
-                            t.HasComment("Archivos generados guardados en la base sin file-manager; solo pruebas automáticas (HU #13846).");
+                            t.HasComment("Archivos generados guardados en la base sin file-manager; solo pruebas automáticas (HU #13846). Solo inserción.");
+
+                            t.HasCheckConstraint("ck_archivo_local_tipo", "tipo IN ('PDF', 'XLSX', 'ZIP')");
                         });
                 });
 
