@@ -18,23 +18,27 @@ public enum Capacidad
 /// Configuración de Comparendos de una empresa. Si la empresa todavía no tiene fila, se crea con los valores por
 /// defecto (todo apagado salvo lo básico) la primera vez que alguien la necesita.
 /// </summary>
-public sealed class Capacidades(ComparendosDb db, Reloj reloj)
+public sealed class Capacidades(ComparendosDb db, Reloj reloj, CanalDeTramites canalDeTramites)
 {
     public async Task<ConfiguracionEmpresa> DeAsync(Guid tenantId, CancellationToken ct, string? nombreEmpresa = null)
     {
         var config = await db.ConfiguracionesEmpresa.FirstOrDefaultAsync(c => c.TenantId == tenantId, ct).ConfigureAwait(false);
         if (config is not null)
         {
+            var cambio = await SeguirTramitesAsync(config, ct).ConfigureAwait(false);
             if (nombreEmpresa is { Length: > 0 } && config.EmpresaNombre != nombreEmpresa)
             {
                 config.EmpresaNombre = nombreEmpresa;
-                await db.SaveChangesAsync(ct).ConfigureAwait(false);
+                cambio = true;
             }
 
+            if (cambio)
+                await db.SaveChangesAsync(ct).ConfigureAwait(false);
             return config;
         }
 
         config = new ConfiguracionEmpresa { TenantId = tenantId, EmpresaNombre = nombreEmpresa, CreadoEn = reloj.Ahora };
+        await SeguirTramitesAsync(config, ct).ConfigureAwait(false);
         db.ConfiguracionesEmpresa.Add(config);
         try
         {
@@ -48,6 +52,21 @@ public sealed class Capacidades(ComparendosDb db, Reloj reloj)
         }
 
         return config;
+    }
+
+    /// <summary>
+    /// HU #13882: el canal de correo y el juego de plantillas salen del «Enrutamiento de notificaciones» de Trámites. Si
+    /// no se puede saber, se conservan los guardados. True si cambió algo.
+    /// </summary>
+    private async Task<bool> SeguirTramitesAsync(ConfiguracionEmpresa config, CancellationToken ct)
+    {
+        if (await canalDeTramites.DeAsync(config.TenantId, ct).ConfigureAwait(false) is not { } canal)
+            return false;
+        var conjunto = CanalDeTramites.ConjuntoDe(canal);
+        if (config.CanalCorreo == canal && config.ConjuntoPlantillas == conjunto)
+            return false;
+        (config.CanalCorreo, config.ConjuntoPlantillas) = (canal, conjunto);
+        return true;
     }
 
     public static bool Tiene(ConfiguracionEmpresa config, Capacidad capacidad)
