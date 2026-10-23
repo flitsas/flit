@@ -242,6 +242,7 @@ public sealed class AvisosTests(ApiConFuente api) : IClassFixture<ApiConFuente>
     [InlineData("LAURA MARCELA GÓMEZ DE LA ROSA", "Laura Marcela Gómez de la Rosa")]
     [InlineData("RENTING COLOMBIA S.A.S.", "Renting Colombia S.A.S.")]
     [InlineData("Juan Pérez", "Juan Pérez")]
+    [InlineData("CONDUCTOR DE PRUEBA QNQ836", "Conductor de Prueba QNQ836")]
     [InlineData("  ", "")]
     public void HU13883_NombresEnMayusculas_ANombrePropio(string entrada, string esperado) =>
         Flit.Comparendos.Api.Modulos.Plantillas.Formato.NombrePropio(entrada).Should().Be(esperado);

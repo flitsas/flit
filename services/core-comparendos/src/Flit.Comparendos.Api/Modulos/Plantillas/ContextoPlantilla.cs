@@ -27,7 +27,7 @@ public static class Formato
     /// <summary>
     /// Hallazgo del 22-oct (HU #13883): los nombres llegan del SIMIT o de la API en MAYÚSCULAS. Solo si todo el texto viene
     /// en mayúsculas se pasa a nombre propio: «LAURA GÓMEZ DE LA ROSA» → «Laura Gómez de la Rosa». Las siglas con punto
-    /// («S.A.S.») se conservan, y un texto escrito a mano se deja como está.
+    /// («S.A.S.») y las palabras con números se conservan, y un texto escrito a mano se deja como está.
     /// </summary>
     public static string? NombrePropio(string? texto)
     {
@@ -37,7 +37,8 @@ public static class Formato
         for (var i = 0; i < palabras.Length; i++)
         {
             var p = palabras[i];
-            if (p.Contains('.', StringComparison.Ordinal) || !p.Any(char.IsLetter))
+            // Siglas con punto («S.A.S.») y códigos con números (una placa) quedan como vienen.
+            if (p.Contains('.', StringComparison.Ordinal) || !p.Any(char.IsLetter) || p.Any(char.IsDigit))
                 continue;
             var minuscula = p.ToLowerInvariant();
             palabras[i] = i > 0 && Conectores.Contains(minuscula) ? minuscula : char.ToUpperInvariant(minuscula[0]) + minuscula[1..];
