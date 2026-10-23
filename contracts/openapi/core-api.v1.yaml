@@ -11419,6 +11419,121 @@ paths:
         "502": { description: "El proveedor de validación de identidad rechazó la solicitud." }
         "503": { description: "El proveedor de validación de identidad no está disponible." }
 
+  # ── Admin · Trámites · Reenviar validación por persona (Épica #13817, HU #13821) ────────────────
+
+  /api/v1/admin/tramites/{id}/validaciones-identidad/reenviables:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Admin · Trámites · Gestión avanzada]
+      summary: Personas del trámite a las que se puede reenviar la validación de identidad
+      operationId: adminTramiteListValidacionesReenviables
+      security:
+        - bearerAuth: []
+      description: >
+        Una entrada por PERSONA (actor que valida identidad según el perfil del tipo de trámite,
+        incluidos copropietarios) que todavía no firmó, con su validación PROPIA más reciente sin
+        aprobar. No incluye a quien tiene identidad aprobada y vigente (propia o reutilizada de otro
+        trámite), a quien está cubierto por la firma del baúl, ni a quien no tiene fila propia (no se
+        inventa la persona). `esFlujoManual` marca validaciones en captura manual, que no se reenvían
+        al proveedor automático. Requiere el permiso `AdminTramiteReenviarValidacion`.
+      responses:
+        "200":
+          description: Personas reenviables (lista vacía si todas firmaron).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  personas:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        validationId: { type: string, format: uuid }
+                        partyRole: { type: string, example: vendedor }
+                        ordinal: { type: integer, minimum: 1, maximum: 4 }
+                        name: { type: string, nullable: true }
+                        email: { type: string, nullable: true }
+                        status: { type: string }
+                        captureUrl: { type: string, nullable: true }
+                        captureExpiresAt: { type: string, format: date-time, nullable: true }
+                        esFlujoManual: { type: boolean }
+        "400": { description: "Falta el header X-Tenant-Id." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin el permiso AdminTramiteReenviarValidacion." }
+        "404": { description: "Trámite no encontrado." }
+
+  /api/v1/admin/tramites/{id}/validaciones-identidad/reenviar:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin · Trámites · Gestión avanzada]
+      summary: Reenvía la validación de identidad a una o varias personas del trámite
+      operationId: adminTramiteReenviarValidacionesIdentidad
+      security:
+        - bearerAuth: []
+      description: >
+        Reenvío múltiple (máximo 8 personas). Cada persona sigue las mismas reglas que el reenvío
+        individual (tope, cooldown, flujo manual, identidad aprobada) y su fallo no frena a las demás:
+        la respuesta trae el resultado POR PERSONA. `email` opcional por persona: si cambia, se guarda en
+        la validación y en el actor del trámite (persona jurídica: el correo del representante legal) y
+        el historial del trámite registra el correo anterior y el nuevo. Un trámite `aprobado`,
+        `anulado` o `revocado` rechaza toda la solicitud (422). Requiere el permiso
+        `AdminTramiteReenviarValidacion`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  minItems: 1
+                  maxItems: 8
+                  items:
+                    type: object
+                    required: [validationId]
+                    properties:
+                      validationId: { type: string, format: uuid }
+                      email: { type: string, format: email, nullable: true }
+      responses:
+        "200":
+          description: Resultado por persona.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        validationId: { type: string, format: uuid }
+                        ok: { type: boolean }
+                        queued: { type: boolean }
+                        captureUrl: { type: string, nullable: true, description: "Solo si el enlace ya existe (no en cola)." }
+                        emailActualizado: { type: boolean }
+                        email: { type: string, nullable: true }
+                        error: { type: string, nullable: true }
+                        mensaje: { type: string, nullable: true, description: "Texto para el usuario cuando ok es false." }
+        "400": { description: "Falta el header X-Tenant-Id, solicitud vacía o más de 8 personas." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin el permiso AdminTramiteReenviarValidacion." }
+        "404": { description: "Trámite no encontrado (o de otro tenant)." }
+        "422": { description: "El trámite está en 'aprobado', 'anulado' o 'revocado' (identidad no accionable)." }
+
   # ── Admin · Trámites · Reasignar gestor (Feature #12155, HU #12162) ─────────────────────────────
 
   /api/v1/admin/tramites/{id}/reasignar-gestor:

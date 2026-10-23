@@ -2754,11 +2754,26 @@ export const tramitesClient = {
       },
     ),
 
-  /** HU #13825 (backend #13824) — vence una identidad aprobada y vigente (solo Super Admin; sin body). */
-  vencerIdentidad: (validationId: string) =>
-    request<VencerIdentidadResult>(
-      `/api/v1/tramites/biometric-validations/${validationId}/vencer`,
-      { method: 'POST' },
+  /** HU #13822 (Feature #13819) — personas SIN firmar a las que se puede reenviar la validación. */
+  adminListValidacionesReenviables: (instanceId: string, tenantId?: string) =>
+    request<AdminValidacionesReenviablesResult>(
+      `/api/v1/admin/tramites/${instanceId}/validaciones-identidad/reenviables`,
+      { headers: tenantHeader(tenantId) },
+    ),
+
+  /** HU #13822 — reenvía la validación a varias personas a la vez (1..8), resultado por persona. */
+  adminReenviarValidacionesLote: (
+    instanceId: string,
+    items: AdminReenviarLoteItemInput[],
+    tenantId?: string,
+  ) =>
+    request<AdminReenviarLoteResult>(
+      `/api/v1/admin/tramites/${instanceId}/validaciones-identidad/reenviar`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ items }),
+      },
     ),
 
   /** HU #12162 — reasigna `AssignedToUserId` a otro gestor DISPONIBLE del mismo tenant. */
@@ -2805,22 +2820,41 @@ export interface AdminReenviarValidacionResult {
   queued: boolean;
 }
 
-/** HU #13825 — resultado de vencer una identidad (espejo de `VencerIdentidadResult`). */
-export interface VencerIdentidadResult {
+/** HU #13822 — persona sin firmar que admite reenvío (espejo del contrato HU #13821). */
+export interface AdminValidacionReenviable {
   validationId: string;
-  tenantId: string;
-  procedureInstanceId: string | null;
-  vencidaAt: string;
-  borradoresAfectados: number;
-  enlaceEnviado: boolean;
-  nuevaValidacionId: string | null;
-  tramiteBorradorId: string | null;
-  tramiteBorradorReferencia: string | null;
-  /** Absoluta con Kyverum; relativa (`/biometric/{token}`) con el proveedor mock. */
-  enlaceCaptura: string | null;
-  enCola: boolean;
-  /** sin_borradores | validacion_en_curso | proveedor_error | proveedor_no_disponible | datos_incompletos | actor_requerido */
-  motivoSinEnlace: string | null;
+  partyRole: string | null;
+  ordinal: number | null;
+  name: string;
+  email: string | null;
+  status: string;
+  captureUrl: string | null;
+  captureExpiresAt: string | null;
+  esFlujoManual: boolean;
+}
+
+export interface AdminValidacionesReenviablesResult {
+  personas: AdminValidacionReenviable[];
+}
+
+export interface AdminReenviarLoteItemInput {
+  validationId: string;
+  email: string | null;
+}
+
+export interface AdminReenviarLoteItemResult {
+  validationId: string;
+  ok: boolean;
+  queued: boolean;
+  captureUrl: string | null;
+  emailActualizado: boolean;
+  email: string | null;
+  error: string | null;
+  mensaje: string | null;
+}
+
+export interface AdminReenviarLoteResult {
+  items: AdminReenviarLoteItemResult[];
 }
 
 /** HU #12162 — resultado de la reasignación administrativa de gestor. */
