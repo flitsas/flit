@@ -30,7 +30,10 @@ jobs:
     # La suite completa ya cierra cerca de 18-22 min en develop; con 20 el job se cancela
     # antes de publicar resultados (p. ej. PR #545 y #565). Restaura el valor de 6f4fa2a91,
     # que se perdió al integrar 553a2160e.
-    timeout-minutes: 35
+    # Sube a 45: el paso Test ya ronda los 31 min (Admin.Tests e Integration.Tests) y con 35 el
+    # job se cortó dos veces seguidas en el PR #657 con las pruebas aún corriendo. Es un respiro
+    # mientras se acelera la suite; no reemplaza ese ajuste.
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:16-alpine

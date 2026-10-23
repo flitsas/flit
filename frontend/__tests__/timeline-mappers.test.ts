@@ -191,6 +191,37 @@ describe('timeline-mappers', () => {
     expect(nodes[0]!.info.extra).toBe('Reenviado a un correo distinto del registrado');
   });
 
+  it('HU #13822 AC3: reenvio_validacion_admin con cambio de correo dice «Correo actualizado: anterior → nuevo»', () => {
+    const nodes = mapEventsToTimelineNodes([
+      {
+        tipo: 'reenvio_validacion_admin',
+        createdAt: '2026-06-02T10:00:00Z',
+        createdByName: 'Willyn Londoño',
+        partyRole: 'locatario',
+        emailActualizado: true,
+        correoAnterior: 'viejo@dominio.com',
+        correoDestino: 'nueva@dominio.com',
+      },
+    ]);
+    expect(nodes[0]!.label).toBe('Reenvío de validación · Locatario');
+    expect(nodes[0]!.info.extra).toBe('Correo actualizado: viejo@dominio.com → nueva@dominio.com');
+  });
+
+  it('HU #13822 AC3: sin correo anterior mantiene el texto de reenvío al correo actual', () => {
+    const nodes = mapEventsToTimelineNodes([
+      {
+        tipo: 'reenvio_validacion_admin',
+        createdAt: '2026-06-02T10:00:00Z',
+        createdByName: null,
+        partyRole: 'vendedor',
+        emailActualizado: false,
+        correoAnterior: null,
+        correoDestino: 'ana@dominio.com',
+      },
+    ]);
+    expect(nodes[0]!.info.extra).toBe('Reenviado al correo actual');
+  });
+
   // HU #12575 (Feature #12565, AC2) — la solicitud de revocatoria se pinta como nodo ADICIONAL, con
   // el número de intento en la etiqueta y el motivo/correo del SOLICITANTE (no de un tercero).
   it('mapEventsToTimelineNodes pinta revocatoria_solicitada con intento, motivo y solicitante', () => {

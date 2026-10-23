@@ -104,6 +104,12 @@ public static class IdentityValidationAuditStages
     public const string ManualActivado = "manual_activado";
 
     /// <summary>
+    /// HU #13824 — un Super Admin venció a mano una identidad aprobada y vigente. Sin PII en claro (correo enmascarado) ni
+    /// secretos: ids, rol, quién y cuándo.
+    /// </summary>
+    public const string VencidaPorAdmin = "vencida_admin";
+
+    /// <summary>
     /// HU #13289 (Feature #13281 B) — la persona aceptó el consentimiento biométrico en la captura manual. Sin PII ni
     /// IP en el mensaje: la IP vive solo en la columna <c>consent_ip</c> de la validación.
     /// </summary>

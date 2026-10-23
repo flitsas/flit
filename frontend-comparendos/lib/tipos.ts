@@ -51,6 +51,8 @@ export interface Contadores {
   proximosAVencer: number;
   sinContraventor: number;
   rechazadosOt: number;
+  /** HU #13869: cuántos comparendos hay en cada estado legal con los demás filtros aplicados. */
+  estadosLegales: Record<string, number>;
 }
 
 export interface EmpresaResumen {
@@ -342,17 +344,6 @@ export interface AliasOt {
   organismoTransitoId: string;
   organismo: string;
   origen: string;
-}
-
-export interface Exportacion {
-  id: string;
-  filtros: import("@/lib/filtros").FiltrosGuardados;
-  nombres: Record<string, string>;
-  totalFilas: number | null;
-  estado: string;
-  creadoEn: string;
-  terminadoEn: string | null;
-  expiraEn: string | null;
 }
 
 // ── Parametrizador (HU #13473-#13475) ──────────────────────────────────────────────────────────────────────────────

@@ -81,6 +81,11 @@ internal static class IdentityApprovalResolver
 
                 var vigente = await repo.FindVigenteApprovedByDocumentAsync(
                     instance.TenantId, tipoDoc.Trim(), documento.Trim(), now, ct);
+                // HU #13824 — un trámite que ya NO está en borrador conserva su firma aunque un Super Admin haya vencido
+                // a mano la identidad de la persona (hasta el fin de vigencia que tenía). Un borrador no la conserva.
+                if (vigente is null && !EsBorrador(instance))
+                    vigente = await repo.FindProtegidaPorVencimientoManualAsync(
+                        instance.TenantId, tipoDoc.Trim(), documento.Trim(), now, ct);
                 if (vigente is null)
                 {
                     todosCubiertos = false;
@@ -129,7 +134,8 @@ internal static class IdentityApprovalResolver
         ProcedureInstance instance,
         IReadOnlySet<string> approvedKeys,
         DateTimeOffset now,
-        IReadOnlyDictionary<string, bool>? firmaBaulVigentePorPersona = null)
+        IReadOnlyDictionary<string, bool>? firmaBaulVigentePorPersona = null,
+        IReadOnlySet<string>? protegidasKeys = null)
     {
         var approved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var parte in Partes)
@@ -163,7 +169,10 @@ internal static class IdentityApprovalResolver
                     break;
                 }
 
-                if (!approvedKeys.Contains(BiometricRules.IdentidadKey(instance.TenantId, tipoDoc, documento)))
+                var key = BiometricRules.IdentidadKey(instance.TenantId, tipoDoc, documento);
+                if (!approvedKeys.Contains(key)
+                    // HU #13824 — ver ResolveApprovedPartiesAsync: fuera de borrador se conserva la firma.
+                    && !(protegidasKeys is not null && !EsBorrador(instance) && protegidasKeys.Contains(key)))
                 {
                     todosCubiertos = false;
                     break;
@@ -200,11 +209,15 @@ internal static class IdentityApprovalResolver
         return (subject.TipoDocumento, subject.NumeroDocumento);
     }
 
+    /// <summary>HU #13824 — ¿el trámite sigue en borrador? Solo ahí una identidad vencida a mano deja de valer.</summary>
+    private static bool EsBorrador(ProcedureInstance instance) =>
+        string.Equals(instance.Status, Flit.Tramites.Domain.Tramites.Estados.TramiteEstado.Borrador, StringComparison.OrdinalIgnoreCase);
+
     /// <summary>¿El trámite tiene una validación PROPIA de la parte aprobada+vigente y del documento del actor?</summary>
     private static bool HasLocalVigente(
         ProcedureInstance instance, string parte, string? tipoDoc, string? documento, DateTimeOffset now) =>
         instance.BiometricValidations.Any(v =>
             string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
-            && BiometricRules.EsAprobadaVigente(v, now)
+            && BiometricRules.EsAprobadaVigenteParaTramite(v, instance.Status, now)
             && BiometricRules.DocumentoCoincide(v, tipoDoc, documento));
 }

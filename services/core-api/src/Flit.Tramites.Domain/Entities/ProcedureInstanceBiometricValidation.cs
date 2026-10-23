@@ -140,6 +140,33 @@ public sealed class ProcedureInstanceBiometricValidation
     /// </summary>
     public DateTimeOffset? ValidUntil { get; set; }
 
+    /// <summary>
+    /// HU #13824 — instante en que un Super Admin VENCIÓ manualmente esta identidad aprobada (ver
+    /// <see cref="VencerManualmente"/>). Null si nunca se venció a mano. La fila, el certificado y el estado
+    /// <c>aprobado</c> se conservan: lo que termina es la vigencia (<see cref="ValidUntil"/> = este instante).
+    /// </summary>
+    public DateTimeOffset? ExpiredManuallyAt { get; set; }
+
+    /// <summary>
+    /// HU #13824 — fin de vigencia que tenía la identidad ANTES de vencerla a mano. Solo lo usan los trámites que ya no
+    /// están en borrador (<see cref="BiometricRules.EsAprobadaVigenteParaTramite"/>) para conservar su firma hasta ese
+    /// fin natural. Null si no se venció a mano (o si la aprobación no tenía fecha, caso solo de fixtures).
+    /// </summary>
+    public DateTimeOffset? ValidUntilPrevious { get; set; }
+
+    /// <summary>
+    /// HU #13824 — vence a mano una identidad aprobada y vigente: la vigencia termina en <paramref name="now"/>
+    /// (<see cref="ValidUntil"/> es la fuente de verdad de <see cref="BiometricRules.EsAprobadaVigente"/>). No borra la
+    /// fila ni el certificado. Guarda el fin de vigencia previo para proteger a los trámites ya fuera de borrador.
+    /// </summary>
+    public void VencerManualmente(DateTimeOffset now)
+    {
+        ValidUntilPrevious = ValidUntil ?? BiometricRules.FechaFinVigencia(this);
+        ExpiredManuallyAt = now;
+        ValidUntil = now;
+        UpdatedAt = now;
+    }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }
 
@@ -632,6 +659,26 @@ public static class BiometricRules
     /// vencer" — alinea con el badge ámbar de la grilla y el filtro de vigencia (1..7 días).
     /// </summary>
     public const int VigenciaPorVencerDias = 7;
+
+    /// <summary>
+    /// HU #13824 — <see cref="EsAprobadaVigente"/> desde el punto de vista de UN trámite: igual, salvo que una identidad
+    /// vencida a mano por un Super Admin (<see cref="ProcedureInstanceBiometricValidation.VencerManualmente"/>) sigue
+    /// valiendo para los trámites que ya NO están en borrador (hasta su fin de vigencia previo). Los consumidores que
+    /// evalúan la firma de un trámite concreto (gate, listado, FUR) usan este método; la reutilización de una identidad
+    /// para un trámite nuevo o en borrador sigue usando <see cref="EsAprobadaVigente"/>.
+    /// </summary>
+    public static bool EsAprobadaVigenteParaTramite(
+        ProcedureInstanceBiometricValidation validation, string? tramiteStatus, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(validation);
+        if (EsAprobadaVigente(validation, now))
+            return true;
+        if (validation.Status != BiometricEstados.Aprobado || validation.ExpiredManuallyAt is null)
+            return false;
+        if (string.Equals(tramiteStatus, Flit.Tramites.Domain.Tramites.Estados.TramiteEstado.Borrador, StringComparison.OrdinalIgnoreCase))
+            return false;
+        return validation.ValidUntilPrevious is not { } previa || now < previa;
+    }
 
     /// <summary>
     /// ¿La validación está APROBADA y VIGENTE en la fecha <paramref name="now"/>? Vigente ⟺ el DÍA

@@ -161,7 +161,6 @@ public static class Modulos
             services.AddHostedService<Trabajos.ProgramadorTrabajos>();
             services.AddHostedService<Trabajos.ProcesadorTrabajos>();
             services.AddHostedService(sp => sp.GetRequiredService<Correo.DespachadorCorreos>());
-            services.AddHostedService<Bandeja.ExportadorEnSegundoPlano>();
             services.AddHostedService(sp => sp.GetRequiredService<DerechosPeticion.ProcesadorLotesDp>());
             services.AddHostedService(sp => sp.GetRequiredService<Ocr.ProcesadorOcr>());
             services.AddHostedService(sp => sp.GetRequiredService<Ocr.EvaluadorPromptOcr>());

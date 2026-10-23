@@ -300,6 +300,11 @@ public sealed class ListProcedureInstancesFilteredHandler(
         IReadOnlySet<string> identidadKeys = await repo.ListVigenteApprovedIdentityKeysAsync(
             instances.Select(i => i.TenantId).Distinct().ToList(), now, ct) ?? new HashSet<string>();
 
+        // HU #13824 — identidades vencidas a mano por un Super Admin que los trámites fuera de borrador siguen honrando
+        // (una consulta en lote sobre el índice parcial de las filas vencidas a mano).
+        IReadOnlySet<string> protegidasKeys = await repo.ListProtegidasPorVencimientoManualKeysAsync(
+            instances.Select(i => i.TenantId).Distinct().ToList(), now, ct) ?? new HashSet<string>();
+
         var hoy = DateOnly.FromDateTime(now.ToOffset(ColombiaTime.Offset).DateTime);
         IReadOnlyDictionary<string, bool> firmaBaul = await repo.ListFirmaBaulVigenciaKeysAsync(
             instances.Select(i => i.TenantId).Distinct().ToList(), hoy, ct) ?? EmptyFirmaBaul;
@@ -318,7 +323,7 @@ public sealed class ListProcedureInstancesFilteredHandler(
         var items = instances
             .Select(e => ListProcedureInstancesHandler.ToSummary(
                 e,
-                IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now, firmaBaul),
+                IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now, firmaBaul, protegidasKeys),
                 nombres.GetValueOrDefault(e.TenantId),
                 gestores.GetValueOrDefault(e.GestorEfectivoUserId),
                 firmaBaul,
