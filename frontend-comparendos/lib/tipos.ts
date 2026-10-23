@@ -51,6 +51,8 @@ export interface Contadores {
   proximosAVencer: number;
   sinContraventor: number;
   rechazadosOt: number;
+  /** HU #13869: cuántos comparendos hay en cada estado legal con los demás filtros aplicados. */
+  estadosLegales: Record<string, number>;
 }
 
 export interface EmpresaResumen {

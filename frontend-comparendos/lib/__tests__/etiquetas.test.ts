@@ -39,17 +39,19 @@ describe("etiquetas §4.9", () => {
 
 describe("filtros de la bandeja", () => {
   it("solo envía lo que tiene valor", () => {
-    const q = aQuery({ ...FILTROS_VACIOS, estadoLegal: ["EnTiempo", "Vencido"], placa: " abc ", sinGestion: true, rapido: "ProximosAVencer" });
-    expect(q).toMatchObject({ estadoLegal: "EnTiempo,Vencido", placa: "abc", sinGestion: true, rapido: "ProximosAVencer" });
+    const q = aQuery({ ...FILTROS_VACIOS, estadoLegal: ["EnTiempo", "Vencido"], buscar: " abc ", sinGestion: true, rapido: "ProximosAVencer" });
+    expect(q).toMatchObject({ estadoLegal: "EnTiempo,Vencido", buscar: "abc", sinGestion: true, rapido: "ProximosAVencer" });
     expect(q.activos).toBeUndefined();
     expect(q.nits).toBeUndefined();
   });
 
-  it("cuenta los filtros aplicados del panel", () => {
+  it("cuenta solo lo del menú «Filtros»: ni la búsqueda, ni el estado legal, ni los atajos", () => {
     expect(contarFiltros(FILTROS_VACIOS)).toBe(0);
     expect(aQuery({ ...FILTROS_VACIOS, resultadoDp: "SinRespuesta" }).resultadoDp).toBe("SinRespuesta");
     expect(contarFiltros({ ...FILTROS_VACIOS, resultadoDp: "Favorable" })).toBe(1);
-    expect(contarFiltros({ ...FILTROS_VACIOS, placa: "X", imposicionDesde: "2026-01-01", activos: "todos" })).toBe(3);
+    expect(contarFiltros({ ...FILTROS_VACIOS, placas: ["X"], imposicionDesde: "2026-01-01", activos: "inactivos" })).toBe(3);
+    expect(contarFiltros({ ...FILTROS_VACIOS, activos: "todos" })).toBe(0);
+    expect(contarFiltros({ ...FILTROS_VACIOS, buscar: "abc", estadoLegal: ["Vencido"], rapido: "Radar" })).toBe(0);
   });
 
   it("resume la página del pie", () => {

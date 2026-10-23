@@ -7,6 +7,7 @@ using Flit.Comparendos.Domain.Identificadores;
 using Flit.Comparendos.Domain.Modelo;
 using Flit.Comparendos.Domain.Plazos;
 using Flit.Comparendos.Domain.Tiempo;
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Comparendos.Api.Modulos.Bandeja;
@@ -16,8 +17,15 @@ public sealed record FiltrosBandeja
 {
     public Guid? Empresa { get; init; }
     public Guid[]? Nits { get; init; }
+
+    /// <summary>HU #13870: busca el texto dentro del número o de la placa a la vez.</summary>
+    public string? Buscar { get; init; }
     public string? Placa { get; init; }
     public string? Numero { get; init; }
+
+    /// <summary>HU #13868: listas pegadas desde Excel; coinciden completas, no por parte.</summary>
+    public string[]? Placas { get; init; }
+    public string[]? Numeros { get; init; }
     public Guid[]? Organismos { get; init; }
     public DateOnly? ImposicionDesde { get; init; }
     public DateOnly? ImposicionHasta { get; init; }
@@ -45,6 +53,9 @@ public sealed record FiltrosBandeja
 
     /// <summary>CaducidadInmediata, NoImpugnables o C038 (§6.11; C-321 y pico y placa siguen sin definición, S-57).</summary>
     public string? Juridico { get; init; }
+
+    /// <summary>HU #13868: los filtros de lista que se piden con «no es» (nits, placas, numeros, organismos, estadoProceso, ultimoAviso, cambioContraventor, fuente).</summary>
+    public string[]? Negar { get; init; }
     public string? Orden { get; init; }
     public bool Descendente { get; init; }
     public int? Pagina { get; init; }
@@ -64,8 +75,11 @@ public sealed record FiltrosBandeja
         {
             Empresa = Guid.TryParse(S("empresa"), out var e) ? e : null,
             Nits = G("nits"),
+            Buscar = S("buscar"),
             Placa = S("placa"),
             Numero = S("numero"),
+            Placas = L("placas"),
+            Numeros = L("numeros"),
             Organismos = G("organismos"),
             ImposicionDesde = D("imposicionDesde"),
             ImposicionHasta = D("imposicionHasta"),
@@ -87,6 +101,7 @@ public sealed record FiltrosBandeja
             SinGestion = B("sinGestion"),
             Rapido = S("rapido"),
             Juridico = S("juridico"),
+            Negar = L("negar"),
             Orden = S("orden"),
             Descendente = B("descendente") ?? false,
             Pagina = I("pagina"),
@@ -160,8 +175,15 @@ public sealed class ConsultaBandeja(ComparendosDb db, CalendarioService calendar
             "todos" => q,
             _ => q.Where(c => c.Activo),
         };
+        // «no es» (HU #13868): el mismo criterio negado; lo que no tiene el dato (sin organismo, sin NIT) sí entra.
+        var negados = new HashSet<string>(f.Negar ?? [], StringComparer.OrdinalIgnoreCase);
+        IQueryable<Comparendo> Donde(IQueryable<Comparendo> origen, string campo, Expression<Func<Comparendo, bool>> criterio) =>
+            origen.Where(negados.Contains(campo) ? Expression.Lambda<Func<Comparendo, bool>>(Expression.Not(criterio.Body), criterio.Parameters) : criterio);
+
         if (f.Nits is { Length: > 0 } nits)
-            q = q.Where(c => c.IdentificacionMonitoreadaId != null && nits.Contains(c.IdentificacionMonitoreadaId.Value));
+            q = Donde(q, "nits", c => c.IdentificacionMonitoreadaId != null && nits.Contains(c.IdentificacionMonitoreadaId.Value));
+        if (NumeroComparendo.Normalizar(f.Buscar) is { } buscar)
+            q = q.Where(c => c.NumeroNormalizado.Contains(buscar) || (c.Placa != null && c.Placa.Contains(buscar)));
         if (!string.IsNullOrWhiteSpace(f.Placa))
         {
             var placa = new string(f.Placa.Where(char.IsAsciiLetterOrDigit).ToArray()).ToUpperInvariant();
@@ -170,8 +192,12 @@ public sealed class ConsultaBandeja(ComparendosDb db, CalendarioService calendar
 
         if (NumeroComparendo.Normalizar(f.Numero) is { } numero)
             q = q.Where(c => c.NumeroNormalizado.Contains(numero));
+        if (Normalizados(f.Placas) is { Count: > 0 } placas)
+            q = Donde(q, "placas", c => c.Placa != null && placas.Contains(c.Placa));
+        if (Normalizados(f.Numeros) is { Count: > 0 } numeros)
+            q = Donde(q, "numeros", c => numeros.Contains(c.NumeroNormalizado));
         if (f.Organismos is { Length: > 0 } ots)
-            q = q.Where(c => c.OrganismoTransitoId != null && ots.Contains(c.OrganismoTransitoId.Value));
+            q = Donde(q, "organismos", c => c.OrganismoTransitoId != null && ots.Contains(c.OrganismoTransitoId.Value));
         if (f.ImposicionDesde is { } id)
             q = q.Where(c => c.FechaImposicion >= id);
         if (f.ImposicionHasta is { } ih)
@@ -215,7 +241,7 @@ public sealed class ConsultaBandeja(ComparendosDb db, CalendarioService calendar
             var desfavorable = procesos.Contains("RespuestaDesfavorable");
             var dp = procesos.Contains("DerechoPeticion");
             var sinProcesar = procesos.Contains("SinProcesar");
-            q = q.Where(c =>
+            q = Donde(q, "estadoProceso", c =>
                 (noEncontrado && !c.Activo && c.MotivoInactivacion == MotivoInactivacion.DesaparecidoFuente)
                 || (inactivado && !c.Activo && c.MotivoInactivacion == MotivoInactivacion.InactivadoOperador)
                 || (c.Activo && favorable && c.EstadoGestion == EstadoGestion.RespuestaOt
@@ -227,15 +253,15 @@ public sealed class ConsultaBandeja(ComparendosDb db, CalendarioService calendar
         }
 
         if (Enums<EstadoNotificacionConductor>(f.UltimoAviso) is { Count: > 0 } avisos)
-            q = q.Where(c => avisos.Contains(c.EstadoNotificacionConductor));
+            q = Donde(q, "ultimoAviso", c => avisos.Contains(c.EstadoNotificacionConductor));
         if (Enums<EstadoCambioContraventor>(f.CambioContraventor) is { Count: > 0 } cambios)
-            q = q.Where(c => cambios.Contains(c.EstadoCambioContraventor));
+            q = Donde(q, "cambioContraventor", c => cambios.Contains(c.EstadoCambioContraventor));
         if (f.Fuente is { Length: > 0 } fuentes)
         {
             var simit = fuentes.Contains("Simit");
             var municipal = fuentes.Contains("Municipal");
             var ocr = fuentes.Contains("Ocr");
-            q = q.Where(c =>
+            q = Donde(q, "fuente", c =>
                 (simit && (c.TipoIngreso == TipoIngreso.SimitNit || c.TipoIngreso == TipoIngreso.SimitPlaca))
                 || (municipal && (c.TipoIngreso == TipoIngreso.MunicipalNit || c.TipoIngreso == TipoIngreso.MunicipalPlaca))
                 || (ocr && (c.TipoIngreso == TipoIngreso.Ocr || c.TipoIngreso == TipoIngreso.OcrComplemento)));
@@ -398,6 +424,10 @@ public sealed class ConsultaBandeja(ComparendosDb db, CalendarioService calendar
         "DpEnviado" => "Notificado a secretaría — derecho de petición",
         _ => "Sin procesar",
     };
+
+    /// <summary>Placas y números de una lista pegada, con el mismo formato con que se guardan.</summary>
+    private static List<string>? Normalizados(string[]? valores) =>
+        valores?.Select(NumeroComparendo.Normalizar).OfType<string>().Distinct().ToList();
 
     private static List<T>? Enums<T>(string[]? valores)
         where T : struct, Enum =>

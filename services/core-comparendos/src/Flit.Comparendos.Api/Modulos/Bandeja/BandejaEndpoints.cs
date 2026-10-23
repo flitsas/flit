@@ -12,7 +12,10 @@ namespace Flit.Comparendos.Api.Modulos.Bandeja;
 /// <summary>Bandeja unificada (HU #13496): lista filtrada y paginada, contadores de filtros rápidos y exportación.</summary>
 public static class BandejaEndpoints
 {
-    public sealed record Contadores(int Total, int ProximosAVencer, int SinContraventor, int RechazadosOt);
+    /// <summary>Los conteos de los filtros rápidos y, desde la HU #13869, el de cada estado legal (tarjetas de la bandeja).</summary>
+    public sealed record Contadores(int Total, int ProximosAVencer, int SinContraventor, int RechazadosOt, IReadOnlyDictionary<string, int> EstadosLegales);
+
+    private static readonly string[] EstadosLegales = ["SinNotificar", "EnTiempo", "Vencido", "Caducado", "Prescrito"];
 
     public static void Map(RouteGroupBuilder api)
     {
@@ -35,18 +38,26 @@ public static class BandejaEndpoints
         return Results.Ok(new Pagina<FilaBandeja>(filas, total, p, t));
     }
 
-    /// <summary>Conteo de cada filtro rápido sobre los filtros vigentes (sin el filtro rápido elegido).</summary>
+    /// <summary>
+    /// Conteo de cada filtro rápido sobre los filtros vigentes (sin el filtro rápido elegido) y de cada estado legal sobre
+    /// los filtros vigentes sin el de estado legal: así cada tarjeta dice cuántos quedarían al elegirla.
+    /// </summary>
     private static async Task<IResult> ContarRapidos(HttpRequest request, UsuarioActual usuario, ConsultaBandeja consulta, CancellationToken ct)
     {
-        var f = FiltrosBandeja.Desde(request) with { Rapido = null };
+        var vigentes = FiltrosBandeja.Desde(request);
+        var f = vigentes with { Rapido = null };
         var tenant = usuario.EmpresaLectura(f.Empresa);
         var h = await consulta.HoyAsync(ct).ConfigureAwait(false);
         var q = consulta.Filtrar(tenant, f, h);
+        var estados = new Dictionary<string, int>();
+        foreach (var estado in EstadosLegales)
+            estados[estado] = await consulta.Filtrar(tenant, vigentes with { EstadoLegal = [estado] }, h).CountAsync(ct).ConfigureAwait(false);
         return Results.Ok(new Contadores(
             await q.CountAsync(ct).ConfigureAwait(false),
             await consulta.AplicarRapido(q, "ProximosAVencer", h).CountAsync(ct).ConfigureAwait(false),
             await consulta.AplicarRapido(q, "SinContraventor", h).CountAsync(ct).ConfigureAwait(false),
-            await consulta.AplicarRapido(q, "RechazadosOt", h).CountAsync(ct).ConfigureAwait(false)));
+            await consulta.AplicarRapido(q, "RechazadosOt", h).CountAsync(ct).ConfigureAwait(false),
+            estados));
     }
 
     private static async Task<IResult> Exportar(HttpRequest request, UsuarioActual usuario, ConsultaBandeja consulta, ExportacionBandeja exportacion, ComparendosDb db, Reloj reloj, CancellationToken ct)
