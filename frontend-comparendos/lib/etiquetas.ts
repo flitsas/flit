@@ -197,6 +197,7 @@ export const TIPO_PLANTILLA: Record<string, string> = {
   DpDocumento: "Documento del derecho de petición",
   CartaCambioContraventor: "Carta al conductor (cambio de contraventor)",
   FormatoCambioContraventor: "Formato de cambio de contraventor",
+  AutorizacionCambioInfractor: "Autorización de cambio de infractor (adjunta a los avisos)",
   CorreoAviso1: "Correo: aviso 1",
   CorreoAviso2: "Correo: aviso 2",
   CorreoAviso3: "Correo: aviso 3",
