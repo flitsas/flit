@@ -27,6 +27,8 @@ export interface PageNavProps {
 /** Botones de desplazamiento (« ‹ › »): mismo tamaño que los números, apagados en el extremo. */
 const BOTON_FLECHA_CLS =
   'grid h-7 min-w-7 place-items-center rounded-lg px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:cursor-not-allowed disabled:opacity-40';
+/** Primera/Última llevan su nombre a la vista: un «»» suelto no se lee como «ir al final». */
+const BOTON_EXTREMO_CLS = `${BOTON_FLECHA_CLS} inline-flex gap-1`;
 const ESTILO_FLECHA = {
   color: 'var(--color-flit-brand)',
   background: 'color-mix(in srgb, var(--color-flit-brand) 8%, transparent)',
@@ -67,11 +69,13 @@ export function PageNav({
             type="button"
             onClick={() => onPageChange(1)}
             disabled={page <= 1}
-            className={BOTON_FLECHA_CLS}
+            className={BOTON_EXTREMO_CLS}
             style={ESTILO_FLECHA}
             aria-label="Primera página"
+            title="Primera página"
           >
-            «
+            <span aria-hidden="true">«</span>
+            <span aria-hidden="true">Primera</span>
           </button>
           <button
             type="button"
@@ -80,6 +84,7 @@ export function PageNav({
             className={BOTON_FLECHA_CLS}
             style={ESTILO_FLECHA}
             aria-label="Página anterior"
+            title="Página anterior"
           >
             ‹
           </button>
@@ -113,6 +118,7 @@ export function PageNav({
             className={BOTON_FLECHA_CLS}
             style={ESTILO_FLECHA}
             aria-label="Página siguiente"
+            title="Página siguiente"
           >
             ›
           </button>
@@ -120,11 +126,13 @@ export function PageNav({
             type="button"
             onClick={() => onPageChange(totalPages)}
             disabled={page >= totalPages}
-            className={BOTON_FLECHA_CLS}
+            className={BOTON_EXTREMO_CLS}
             style={ESTILO_FLECHA}
             aria-label="Última página"
+            title="Última página"
           >
-            »
+            <span aria-hidden="true">Última</span>
+            <span aria-hidden="true">»</span>
           </button>
         </div>
       ) : null}
