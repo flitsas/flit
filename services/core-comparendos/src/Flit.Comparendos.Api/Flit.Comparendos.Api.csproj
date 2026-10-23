@@ -41,6 +41,7 @@
     <EmbeddedResource Include="Semillas\Plantillas\Tesis\*.html" />
     <EmbeddedResource Include="Semillas\Plantillas\Renting\*.html" />
     <EmbeddedResource Include="Infraestructura\Pdf\Fuentes\*.ttf" />
+    <EmbeddedResource Include="Infraestructura\Pdf\Membretes\*.jpg" />
   </ItemGroup>
 
   <ItemGroup>

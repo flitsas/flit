@@ -245,4 +245,70 @@ public sealed class AvisosTests(ApiConFuente api) : IClassFixture<ApiConFuente>
     [InlineData("  ", "")]
     public void HU13883_NombresEnMayusculas_ANombrePropio(string entrada, string esperado) =>
         Flit.Comparendos.Api.Modulos.Plantillas.Formato.NombrePropio(entrada).Should().Be(esperado);
+
+    /// <summary>Representante legal de la empresa que firma el cambio de contraventor, con firma y, si se pide, poder.</summary>
+    private async Task RepresentanteAsync(Guid empresa, bool firma, bool poder)
+    {
+        var cliente = api.Cliente(new UsuarioDePrueba(empresa, [Permisos.RepresentantesVer, Permisos.RepresentantesGestionar]));
+        var rl = await (await cliente.PostAsJsonAsync("/api/v1/comparendos/representantes", new
+        {
+            alcance = "Empresa", tipoDocumento = "CC", numeroDocumento = "52123456", nombres = "María Gómez", correo = "rl@gestora.test", cargo = "Representante legal",
+            permisoEnvioDp = true, permisoCambioContraventor = true,
+        })).Content.ReadFromJsonAsync<JsonElement>();
+        var id = rl.GetProperty("id").GetGuid();
+        async Task SubirAsync(string tipo, byte[] contenido, string contentType, string nombre)
+        {
+            using var form = new MultipartFormDataContent { { new ByteArrayContent(contenido) { Headers = { ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType) } }, "archivo", nombre } };
+            (await cliente.PostAsync($"/api/v1/comparendos/representantes/{id}/documentos/{tipo}", form)).EnsureSuccessStatusCode();
+        }
+
+        if (firma)
+            await SubirAsync("firma", Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="), "image/png", "firma.png");
+        if (poder)
+            await SubirAsync("escritura", System.Text.Encoding.ASCII.GetBytes("%PDF-1.4\n%poder de prueba\n%%EOF"), "application/pdf", "poder.pdf");
+    }
+
+    private Task<List<string>> AdjuntosAsync(Guid comparendo, TipoComunicacion tipo) =>
+        api.EnDbAsync(db => (from c in db.Comunicaciones
+                             join a in db.ComunicacionAdjuntos on c.Id equals a.ComunicacionId
+                             where c.ComparendoId == comparendo && c.Tipo == tipo
+                             orderby a.Nombre
+                             select a.Nombre).ToListAsync());
+
+    [Fact]
+    public async Task HU13884_ConRepresentante_AdjuntaLaAutorizacionFirmadaYElPoder()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var (empresa, ids) = await PrepararAsync("AVA-1");
+        await RepresentanteAsync(empresa, firma: true, poder: true);
+
+        await SchedulerAsync(empresa);
+        (await AdjuntosAsync(ids["AVA1"], TipoComunicacion.Aviso1)).Should().Equal("autorizacion-cambio-infractor-ABC124.pdf", "poder-gestora-de-prueba.pdf");
+        var (_, html, _) = await CorreoAsync(ids["AVA1"], TipoComunicacion.Aviso1);
+        html.Should().Contain("Adjuntamos la autorizaci").And.Contain("y el poder de la empresa");
+
+        // El PDF de la autorización lleva el representante y el conductor.
+        var pdf = await api.EnDbAsync(async db =>
+        {
+            var archivoId = await (from c in db.Comunicaciones join a in db.ComunicacionAdjuntos on c.Id equals a.ComunicacionId
+                                   where c.ComparendoId == ids["AVA1"] && a.Nombre.StartsWith("autorizacion") select a.ArchivoId).SingleAsync();
+            return await db.Archivos.SingleAsync(a => a.Id == archivoId);
+        });
+        pdf.ContentType.Should().Be("application/pdf");
+    }
+
+    [Fact]
+    public async Task HU13884_SinFirmaNiPoder_SaleSinEsosAdjuntos_YLaLineaDeTiempoLoDice()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var (empresa, ids) = await PrepararAsync("AVS-1");
+        await RepresentanteAsync(empresa, firma: false, poder: false);
+
+        await SchedulerAsync(empresa);
+        (await AdjuntosAsync(ids["AVS1"], TipoComunicacion.Aviso1)).Should().BeEmpty("nunca sale un adjunto vacío");
+        var (_, html, _) = await CorreoAsync(ids["AVS1"], TipoComunicacion.Aviso1);
+        html.Should().NotContain("Adjuntamos la autorizaci", "el texto no promete lo que no va");
+        var evento = await api.EnDbAsync(db => db.Timeline.Where(e => e.ComparendoId == ids["AVS1"] && e.Tipo == TipoEventoTimeline.AvisoEnviado).Select(e => e.Descripcion).SingleAsync());
+        evento.Should().Contain("Salió sin la autorización (el representante legal no tiene la firma cargada) ni el poder");
+    }
 }

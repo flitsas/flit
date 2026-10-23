@@ -69,9 +69,21 @@ public sealed class ServicioPlantillas(ComparendosDb db, IConfiguration configur
 
     public static bool EsCorreo(TipoPlantilla tipo) => tipo.ToString().StartsWith("Correo", StringComparison.Ordinal);
 
-    public static byte[] Pdf(Armado armado, string? marcaDeAgua = null, string? titulo = null)
+    public static byte[] Pdf(Armado armado, string? marcaDeAgua = null, string? titulo = null, byte[]? fondo = null)
     {
         ArgumentNullException.ThrowIfNull(armado);
-        return HtmlAPdf.Generar(armado.Html, marcaDeAgua, titulo);
+        return HtmlAPdf.Generar(armado.Html, marcaDeAgua, titulo, fondo);
+    }
+
+    /// <summary>HU #13884: el membrete de Renting de V1 para sus documentos en PDF; null para FLIT.</summary>
+    public static byte[]? Membrete(ConjuntoPlantillas conjunto)
+    {
+        if (conjunto != ConjuntoPlantillas.Renting)
+            return null;
+        var asm = typeof(ServicioPlantillas).Assembly;
+        using var stream = asm.GetManifestResourceStream(asm.GetManifestResourceNames().Single(n => n.EndsWith(".Membretes.renting.jpg", StringComparison.Ordinal)))!;
+        using var memoria = new MemoryStream();
+        stream.CopyTo(memoria);
+        return memoria.ToArray();
     }
 }
