@@ -127,6 +127,13 @@ public static class EscenariosDeFuga
     /// </summary>
     public const string RutaPdfVehiculo = Program.Prefijo + global::Flit.Diagnostico.Api.Modulos.Reportes.ReportesEndpoints.RutaPdfVehiculo;
 
+    /// <summary>
+    /// Excel del lote (HU #13849): cada empresa siembra un lote con un vehículo terminado; las celdas del .xlsx
+    /// (<see cref="Reportes.ExcelDePrueba.TextoAsync"/>, lector OpenXml) traen el ID del diagnóstico en la hoja «Diagnóstico», y con
+    /// el token de A el Excel de B responde 404 sin nada de B.
+    /// </summary>
+    public const string RutaExcelLote = Program.Prefijo + global::Flit.Diagnostico.Api.Modulos.Reportes.ReportesEndpoints.RutaExcelLote;
+
     public static IReadOnlyList<EscenarioDeFuga> Todos { get; } =
     [
         EscenarioDeFuga.Con(RutaSonda, _ => new LecturaBackoffice { EmpresaConsultada = Guid.NewGuid(), UsuarioId = Guid.NewGuid(), Ruta = "/sonda" }, l => l.Id),
@@ -166,6 +173,13 @@ public static class EscenariosDeFuga
                 """{"placa":"TST905","clase":"AUTOMOVIL","propietarios":[],"locatarios":0}""", ct);
             return new Sembrado(Reportes.PdfDePrueba.Ruta(lote.Id, lote.Vehiculos.Single().Id), [lote.Id.ToString()]);
         }, Reportes.PdfDePrueba.TextoAsync),
+        new EscenarioDeFuga(RutaExcelLote, async (empresa, ct) =>
+        {
+            var lote = await Tablero.Tablero.SembrarAsync(empresa, ct, nombre: "Lote del Excel", vehiculos: [new("TST906", [new(Fuente.Runt, EstadoCelda.Pendiente, 1)])]);
+            await Tablero.Tablero.PayloadAsync(empresa, lote.Celdas.Single(),
+                """{"placa":"TST906","clase":"AUTOMOVIL","propietarios":[],"locatarios":0}""", ct);
+            return new Sembrado(Reportes.ExcelDePrueba.Ruta(lote.Id), [lote.Id.ToString()]);
+        }, Reportes.ExcelDePrueba.TextoAsync),
     ];
 
     public static EscenarioDeFuga Buscar(string ruta) => Todos.Single(e => e.Ruta == ruta);

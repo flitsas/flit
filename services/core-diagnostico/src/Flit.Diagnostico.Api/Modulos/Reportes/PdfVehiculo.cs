@@ -52,7 +52,8 @@ internal static partial class PdfVehiculo
         ["AVALUO"] = "Avalúo comercial",
     };
 
-    private static readonly IReadOnlyDictionary<string, string> FuentesAvaluo = new Dictionary<string, string>(StringComparer.Ordinal)
+    /// <summary>Nombre de cada fuente del avalúo (también para el Excel del lote, HU #13849).</summary>
+    internal static readonly IReadOnlyDictionary<string, string> FuentesAvaluo = new Dictionary<string, string>(StringComparer.Ordinal)
     {
         ["fasecolda"] = "Fasecolda",
         ["mercado_libre"] = "Mercado Libre",

@@ -60,7 +60,8 @@ tags:
       reglas de la cabecera y de la confirmación, y el estimado de vista previa. Campos en snake_case y códigos de la base.
   - name: Reportes
     description: >
-      Evidencias de la compañía (MOD07, F07): PDF corporativo de un vehículo (HU #13848) con el membrete FLIT. Permiso
+      Evidencias de la compañía (MOD07, F07): PDF corporativo de un vehículo (HU #13848) con el membrete FLIT y Excel del lote
+      (HU #13849). Permiso
       diagnostico.reportes.descargar y la visibilidad de la grilla. Nunca origen, usuario manual, proveedor, transacción ni
       documentos completos (R-20).
   - name: Backoffice
@@ -1106,6 +1107,85 @@ paths:
         "409":
           description: >
             `code` = VEHICULO_NO_TERMINADO: el vehículo todavía tiene consultas sin terminar y el lote no está INCOMPLETO.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
+  /api/v1/diagnostico/diagnosticos/{id}/excel:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote (cabecera).
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Reportes]
+      operationId: descargarExcelLote
+      summary: Excel del lote con columnas según el alcance y lo ya completado
+      description: >
+        HU #13849 (F07-H4, F07-C5/C6/C8..C11). Permiso diagnostico.reportes.descargar y la misma visibilidad que la grilla. Se
+        emite con el lote EN_PROCESO, COMPLETADO o INCOMPLETO (lo no terminado sale con su estado). Hojas, en este orden:
+        «Vehículos»: una fila por vehículo en el orden de la carga. Columnas fijas Orden, Identificador, Tipo de identificador
+        (código, p. ej. PLACA_CARRO), Placa, VIN y Estado del vehículo (Terminado, En proceso o Con error). Luego, por cada fuente
+        del alcance en el orden de la grilla, «{fuente} — Estado» (Completado, Pendiente, «No aplica: {motivo}» o «Consulta no
+        disponible», sin código de error ni causa) y sus columnas de dato, que solo se llenan con la fuente Completado (catálogo
+        ColumnasExcel): RUNT → Servicio, Clase, Organismo de tránsito, Marca, Línea, Modelo, Propietarios (cantidad), Locatarios
+        (cantidad); SIMIT vehículo → Semáforo, Comparendos, Valor total; RUNT propietarios / RUNT locatarios → Personas
+        consultadas, Personas con error, Documentos («TIPO ****1234» separados por «; », con «(Declarado por el cliente)» si lo
+        declaró el cliente); SIMIT propietarios / SIMIT locatarios → las mismas más Comparendos y Valor total sumados de las
+        personas; Avalúo → Valor sugerido, Fuente principal, Sin valor comercial (Sí/No); Impuesto departamental → solo estado.
+        El valor total en pesos es número; si el SIMIT trajo más comparendos de los que se listan (tope 100) sale el texto
+        «al menos N». «Diagnóstico»: ID del diagnóstico, nombre del lote, empresa (claim company_name), usuario creador («No
+        disponible» si Identidad no responde), fecha de creación (hora Colombia) y tipo de análisis («Diagnóstico Simple» o
+        «Diagnóstico Con Análisis IA — TRÁMITE»). «Consultas»: solo con estimado_consultas=AL_FINALIZAR en la copia de
+        configuración del lote y el lote COMPLETADO o INCOMPLETO; fuente, consultas estimadas, consultas consumidas y
+        «al menos» si el estimado es mínimo (el mismo cálculo de la grilla). Sin origen, usuario manual, proveedor ni transacción
+        (R-20): una celda llenada a mano produce la misma fila que una de API. Toda celda de texto que empiece por =, +, -, @,
+        tabulador o retorno de carro se escribe como texto literal (sin fórmula, con quotePrefix). Mientras no cambie ninguna
+        entrada (celdas, versión del tablero, nombres del encabezado, documentos enmascarados, estado del lote, lo que muestra
+        el libro), la descarga devuelve los mismos bytes ya guardados; si cambió, genera un Excel nuevo e invalida el anterior
+        (se conserva).
+      responses:
+        "200":
+          description: El Excel del lote.
+          headers:
+            Content-Disposition:
+              description: attachment; filename=diagnostico-{8 primeros caracteres del id}.xlsx
+              schema:
+                type: string
+            Cache-Control:
+              description: no-store
+              schema:
+                type: string
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >
+            Sin diagnostico.reportes.descargar (sin cuerpo); sin compañía (`code` = SIN_EMPRESA); compañía sin Diagnóstico activo
+            (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: >
+            `code` = NO_ENCONTRADO: el lote no existe, es de otra compañía o (con PROPIOS) de otro usuario. El cuerpo no trae datos
+            del lote. Se comprueba antes del 409.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "409":
+          description: >
+            `code` = LOTE_SIN_LANZAR: el lote sigue CREADO (sin vehículos lanzados).
           content:
             application/json:
               schema:

@@ -115,8 +115,11 @@ internal sealed class ConsultaGrilla(DiagnosticoDb db, UsuarioActual usuario)
         c.Id, CodigosDeEnum.Codigo(c.Fuente), CodigosDeEnum.Codigo(c.Estado), c.MotivoNa is { } m ? CodigosDeEnum.Codigo(m) : null,
         c.TipoError, c.DatoObtenidoEn, c.Reutilizada, c.Version);
 
-    /// <summary>Estimado frente a consumido solo con AL_FINALIZAR (copia de la cabecera) y el lote cerrado; null en todo otro caso.</summary>
-    private static async Task<IReadOnlyList<EstimadoVsConsumidoDto>?> EstimadoAsync(ILecturaTablero lectura, CabeceraDiagnostico cabecera, CancellationToken ct)
+    /// <summary>
+    /// Estimado frente a consumido solo con AL_FINALIZAR (copia de la cabecera) y el lote cerrado; null en todo otro caso. También lo
+    /// usa la hoja «Consultas» del Excel del lote (HU #13849) para no duplicar el cálculo.
+    /// </summary>
+    internal static async Task<IReadOnlyList<EstimadoVsConsumidoDto>?> EstimadoAsync(ILecturaTablero lectura, CabeceraDiagnostico cabecera, CancellationToken ct)
     {
         if (cabecera.Estado is not (EstadoDiagnostico.Completado or EstadoDiagnostico.Incompleto) || EstimadoDeLaCopia(cabecera.Configuracion) != EstimadoConsultas.AlFinalizar)
             return null;
