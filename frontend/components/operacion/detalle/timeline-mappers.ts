@@ -176,6 +176,7 @@ export function mapIdentidadToTimelineNodes(
 const PARTY_LABEL: Record<string, string> = {
   vendedor: 'Vendedor',
   comprador: 'Comprador',
+  locatario: 'Locatario',
 };
 
 /**
@@ -265,9 +266,11 @@ function mapSingleEventToTimelineNode(e: ProcedureInstanceEvent): TimelineTrackN
       empresa: e.createdByCompania || '—',
       rol: e.createdByName ? `Ejecutado por ${e.createdByName}` : 'Ejecutado por admin',
       fecha: formatFechaHora(e.createdAt),
-      extra: e.emailActualizado
-        ? 'Reenviado a un correo distinto del registrado'
-        : 'Reenviado al correo actual',
+      extra: e.correoAnterior?.trim()
+        ? `Correo actualizado: ${e.correoAnterior.trim()} → ${e.correoDestino?.trim() || '—'}`
+        : e.emailActualizado
+          ? 'Reenviado a un correo distinto del registrado'
+          : 'Reenviado al correo actual',
     },
   };
 }
