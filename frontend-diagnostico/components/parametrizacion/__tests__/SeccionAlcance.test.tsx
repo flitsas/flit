@@ -1,15 +1,18 @@
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { SeccionAlcance, type SeccionAlcanceProps } from "@/components/parametrizacion/SeccionAlcance";
+import { FormularioParametrizacion } from "@/components/parametrizacion/FormularioParametrizacion";
+import { DISPONIBLES_CON_IMPUESTO, DISPONIBLES_SIN_IMPUESTO, configuracion, simularApi, tiposOk } from "./datos";
 
 // Uso de ejemplo: <SeccionAlcance habilitadas={["RUNT", "SIMIT_VEHICULO"]} seleccionadas={["RUNT"]} obligatorias={[]}
-// onAlternar={(f) => ...} /> pinta los tres grupos con solo las fuentes contratadas.
+// disponibles={configuracion.fuentes_disponibles} onAlternar={(f) => ...} /> pinta los tres grupos con solo las fuentes contratadas.
 
 function montar(props: Partial<SeccionAlcanceProps> = {}) {
   const onAlternar = vi.fn();
   render(
     <SeccionAlcance
       habilitadas={["RUNT", "RUNT_PROPIETARIO", "RUNT_LOCATARIO", "SIMIT_VEHICULO", "SIMIT_PROPIETARIO", "SIMIT_LOCATARIO", "AVALUO"]}
+      disponibles={DISPONIBLES_SIN_IMPUESTO}
       seleccionadas={["RUNT"]}
       obligatorias={[]}
       onAlternar={onAlternar}
@@ -62,10 +65,6 @@ describe("SeccionAlcance — solo fuentes contratadas (AC 3)", () => {
     expect(within(screen.getByRole("group", { name: "Por Propietario" })).getByText(/tu contrato no incluye fuentes de este grupo/i)).toBeInTheDocument();
   });
 
-  it("no ofrece IMPUESTO_DEPARTAMENTAL aunque el contrato lo habilite", () => {
-    montar({ habilitadas: ["RUNT", "IMPUESTO_DEPARTAMENTAL"] });
-    expect(screen.queryByRole("checkbox", { name: "Impuesto departamental" })).toBeNull();
-  });
 
   it("una fuente libre se alterna con un clic", () => {
     const onAlternar = montar();
@@ -90,5 +89,45 @@ describe("SeccionAlcance — obligatorias del tipo (AC 5)", () => {
   it("el error de la API se asocia al grupo de alcance", () => {
     montar({ error: "La fuente no está habilitada." });
     expect(screen.getByRole("group", { name: "Alcance" })).toHaveAccessibleDescription(/la fuente no está habilitada/i);
+  });
+});
+
+afterEach(() => vi.unstubAllGlobals());
+
+// HU #13865: el impuesto departamental se ofrece solo cuando el backend lo declara en fuentes_disponibles.
+describe("SeccionAlcance — impuesto según fuentes_disponibles (HU #13865)", () => {
+  it("AC1: con el impuesto habilitado y disponible aparece en el grupo Por Vehículo y se puede marcar", () => {
+    const onAlternar = montar({ habilitadas: ["RUNT", "IMPUESTO_DEPARTAMENTAL"], disponibles: DISPONIBLES_CON_IMPUESTO });
+    const impuesto = within(screen.getByRole("group", { name: "Por Vehículo" })).getByRole("checkbox", { name: "Impuesto departamental" });
+    expect(impuesto).not.toBeChecked();
+    expect(impuesto).not.toHaveAttribute("aria-disabled");
+    fireEvent.click(impuesto);
+    expect(onAlternar).toHaveBeenCalledWith("IMPUESTO_DEPARTAMENTAL");
+  });
+
+  it("AC2: sin el impuesto en fuentes_disponibles no aparece aunque esté en fuentes_habilitadas", () => {
+    montar({ habilitadas: ["RUNT", "SIMIT_VEHICULO", "IMPUESTO_DEPARTAMENTAL"], disponibles: DISPONIBLES_SIN_IMPUESTO });
+    expect(screen.queryByRole("checkbox", { name: "Impuesto departamental" })).toBeNull();
+    expect(screen.getAllByRole("checkbox").map((c) => c.getAttribute("value"))).toEqual(["RUNT", "SIMIT_VEHICULO"]);
+  });
+
+  it("AC1 en el formulario: la configuración con el impuesto habilitado y disponible lo ofrece en el alcance del lote", async () => {
+    const api = simularApi({ "GET /tipos-tramite": tiposOk });
+    render(
+      <FormularioParametrizacion
+        configuracion={configuracion({ contrato: { fuentes_habilitadas: ["RUNT", "IMPUESTO_DEPARTAMENTAL"] }, fuentes_disponibles: DISPONIBLES_CON_IMPUESTO })}
+      />,
+    );
+    const impuesto = within(screen.getByRole("group", { name: "Por Vehículo" })).getByRole("checkbox", { name: "Impuesto departamental" });
+    fireEvent.click(impuesto);
+    expect(impuesto).toBeChecked();
+    await waitFor(() => expect(api).toHaveBeenCalled());
+  });
+
+  it("AC2 en el formulario: la configuración sin el impuesto en fuentes_disponibles no lo ofrece", async () => {
+    const api = simularApi({ "GET /tipos-tramite": tiposOk });
+    render(<FormularioParametrizacion configuracion={configuracion({ contrato: { fuentes_habilitadas: ["RUNT", "IMPUESTO_DEPARTAMENTAL"] } })} />);
+    expect(screen.queryByRole("checkbox", { name: "Impuesto departamental" })).toBeNull();
+    await waitFor(() => expect(api).toHaveBeenCalled());
   });
 });

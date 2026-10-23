@@ -3,7 +3,7 @@
 import { vi } from "vitest";
 import type { Diagnostico, TipoTramite } from "@/lib/diagnosticos/api";
 
-export { configuracion, sesion, cuerpo } from "@/__tests__/configuracion/datos";
+export { DISPONIBLES_CON_IMPUESTO, DISPONIBLES_SIN_IMPUESTO, configuracion, sesion, cuerpo } from "@/__tests__/configuracion/datos";
 
 export const ID = "00000000-0000-7000-8000-00000000d001";
 

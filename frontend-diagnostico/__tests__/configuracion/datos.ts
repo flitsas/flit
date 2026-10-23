@@ -1,12 +1,16 @@
 // Datos ficticios de las pruebas de la pantalla 10 (HU #13744): compañía, sesión y configuración inventadas.
-import type { Configuracion, ContratoBackoffice } from "@/lib/configuracion";
+import type { Configuracion, ContratoBackoffice, Fuente } from "@/lib/configuracion";
 import type { CapacidadesDiagnostico, SesionDiagnostico } from "@/lib/sesion";
 
 export const EMPRESA = "00000000-0000-7000-8000-0000000000e1";
 export const EMPRESA_CLIENTE = "00000000-0000-7000-8000-0000000000c2";
 
+/** Disponibles sin C3 (HU #13863): todas menos IMPUESTO_DEPARTAMENTAL, en el orden del enum. */
+export const DISPONIBLES_SIN_IMPUESTO: Fuente[] = ["RUNT", "RUNT_PROPIETARIO", "RUNT_LOCATARIO", "SIMIT_VEHICULO", "SIMIT_PROPIETARIO", "SIMIT_LOCATARIO", "AVALUO"];
+export const DISPONIBLES_CON_IMPUESTO: Fuente[] = [...DISPONIBLES_SIN_IMPUESTO, "IMPUESTO_DEPARTAMENTAL"];
+
 export function configuracion(
-  cambios: { contrato?: Partial<Configuracion["contrato"]>; operacion?: Partial<Configuracion["operacion"]> } = {},
+  cambios: { contrato?: Partial<Configuracion["contrato"]>; operacion?: Partial<Configuracion["operacion"]>; fuentes_disponibles?: Fuente[] } = {},
 ): Configuracion {
   return {
     empresa: EMPRESA,
@@ -25,6 +29,7 @@ export function configuracion(
       actualizado_en: null,
       ...cambios.operacion,
     },
+    fuentes_disponibles: cambios.fuentes_disponibles ?? DISPONIBLES_SIN_IMPUESTO,
   };
 }
 
@@ -37,6 +42,7 @@ export function contratoBackoffice(cambios: Partial<ContratoBackoffice> = {}): C
     fuentes_por_defecto: ["RUNT"],
     actualizado_por: null,
     actualizado_en: null,
+    fuentes_disponibles: DISPONIBLES_SIN_IMPUESTO,
     ...cambios,
   };
 }

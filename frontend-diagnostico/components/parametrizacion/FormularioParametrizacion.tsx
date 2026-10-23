@@ -71,6 +71,7 @@ export function FormularioParametrizacion({ configuracion, onGuardado }: Formula
       <SeccionInformacionGeneral nombre={p.nombre} onNombre={p.setNombre} error={p.errores.nombre} disabled={ocupado} />
       <SeccionAlcance
         habilitadas={p.habilitadas}
+        disponibles={p.disponibles}
         seleccionadas={p.seleccionadas}
         obligatorias={p.obligatorias}
         onAlternar={p.alternar}

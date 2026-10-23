@@ -11,6 +11,7 @@ import {
   guardarOperacion,
   nombreFuente,
   ordenarFuentes,
+  soloDisponibles,
   type Configuracion,
   type EstimadoConsultas,
   type Fuente,
@@ -21,8 +22,9 @@ import { AYUDA_CLS, BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, ETIQUETA_CLS, MARC
 type Estado = { tipo: "inactivo" } | { tipo: "guardando" } | { tipo: "guardado" } | { tipo: "error"; mensaje: string; reintentable: boolean };
 
 /**
- * Nivel operativo de la compañía del token: visibilidad, fuentes por defecto (solo entre las habilitadas del contrato)
- * y estimado de consultas. Sin diagnostico.configuracion.editar todo queda deshabilitado. Un rechazo de la API (400, 403,
+ * Nivel operativo de la compañía del token: visibilidad, fuentes por defecto (solo entre las habilitadas del contrato
+ * que el backend declara en `fuentes_disponibles`, HU #13865) y estimado de consultas. Una por defecto ya guardada que
+ * dejó de estar disponible no se ofrece, pero tampoco se borra en silencio: viaja igual en el PUT. Sin diagnostico.configuracion.editar todo queda deshabilitado. Un rechazo de la API (400, 403,
  * 422) se muestra sin perder lo digitado; un error del servidor (hoy también el conflicto de concurrencia, que responde
  * 500) ofrece Reintentar.
  */
@@ -36,6 +38,7 @@ export function PestanaOperacion({
   onGuardado?: (configuracion: Configuracion) => void;
 }) {
   const habilitadas = ordenarFuentes(configuracion.contrato.fuentes_habilitadas);
+  const ofrecidas = soloDisponibles(habilitadas, configuracion.fuentes_disponibles);
   const [visibilidad, setVisibilidad] = useState<VisibilidadUsuario>(configuracion.operacion.visibilidad_usuario);
   const [porDefecto, setPorDefecto] = useState<Fuente[]>(configuracion.operacion.fuentes_por_defecto);
   const [estimado, setEstimado] = useState<EstimadoConsultas>(configuracion.operacion.estimado_consultas);
@@ -115,11 +118,13 @@ export function PestanaOperacion({
       <fieldset className="flex flex-col gap-2">
         <legend className={ETIQUETA_CLS}>Fuentes por defecto</legend>
         <p className={AYUDA_CLS}>Se proponen al crear un diagnóstico. Solo puedes elegir entre las fuentes habilitadas en el contrato.</p>
-        {habilitadas.length === 0 ? (
-          <p className={AYUDA_CLS}>El contrato no tiene fuentes habilitadas.</p>
+        {ofrecidas.length === 0 ? (
+          <p className={AYUDA_CLS}>
+            {habilitadas.length === 0 ? "El contrato no tiene fuentes habilitadas." : "Ninguna fuente habilitada está disponible todavía."}
+          </p>
         ) : (
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {habilitadas.map((fuente) => (
+            {ofrecidas.map((fuente) => (
               <label key={fuente} className={OPCION_CLS}>
                 <input
                   type="checkbox"

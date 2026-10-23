@@ -1,13 +1,16 @@
 "use client";
 
 import { useRef, useState, type FormEvent } from "react";
-import { FileText, Save, Search } from "lucide-react";
+import { FileText, Lock, Save, Search, TriangleAlert } from "lucide-react";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { ApiError } from "@/lib/api";
 import {
+  AVISO_FUENTE_YA_NO_DISPONIBLE,
+  AYUDA_FUENTE_NO_DISPONIBLE,
   FUENTES,
   esEmpresaValida,
+  estaDisponible,
   guardarContratoEmpresa,
   nombreFuente,
   obtenerContratoEmpresa,
@@ -28,11 +31,18 @@ import {
   OPCION_CLS,
   TARJETA_CLS,
 } from "./estilos";
+import { TOOLTIP_CLS } from "@/components/parametrizacion/estilos";
+
+/** Código del 422 al habilitar una fuente que el backend no declara disponible (HU #13863). */
+const CODIGO_FUENTE_NO_DISPONIBLE = "FUENTE_NO_DISPONIBLE";
 
 /**
  * Pestaña Contrato. Lo contratado por la compañía del token va siempre en solo lectura. Con la capacidad editarContrato
  * (backoffice FLIT: permiso diagnostico.configuracion.contrato.editar y tenant_type=FLIT) se suma el editor del contrato
  * de la empresa indicada explícitamente por su identificador; el selector de empresas llega en D3.
+ * La disponibilidad de cada fuente sale solo de `fuentes_disponibles` del contrato (HU #13865, gate Q7 = a): una no
+ * disponible y no habilitada queda bloqueada con su ayuda; una habilitada que dejó de estar disponible se conserva
+ * marcada, con aviso, y se puede quitar.
  */
 export function PestanaContrato({ contrato, puedeEditar }: { contrato: NivelContrato | null; puedeEditar: boolean }) {
   return (
@@ -105,6 +115,7 @@ function EditorContratoBackoffice() {
   const [borrador, setBorrador] = useState<Borrador | null>(null);
   const [guardado, setGuardado] = useState<Guardado>({ tipo: "inactivo" });
   const [limiteInvalido, setLimiteInvalido] = useState(false);
+  const [errorFuentes, setErrorFuentes] = useState<string | null>(null);
   const empresaCargada = useRef("");
   const peticion = useRef<AbortController | null>(null);
 
@@ -115,6 +126,7 @@ function EditorContratoBackoffice() {
     empresaCargada.current = id;
     setCarga({ tipo: "cargando" });
     setGuardado({ tipo: "inactivo" });
+    setErrorFuentes(null);
     try {
       const contrato = await obtenerContratoEmpresa(id, controller.signal);
       if (controller.signal.aborted) return;
@@ -145,6 +157,7 @@ function EditorContratoBackoffice() {
       return;
     }
     setLimiteInvalido(false);
+    setErrorFuentes(null);
     setGuardado({ tipo: "guardando" });
     try {
       const anterior = carga.contrato.fuentes_por_defecto;
@@ -157,6 +170,12 @@ function EditorContratoBackoffice() {
       setCarga({ tipo: "listo", contrato });
       setGuardado({ tipo: "guardado", recortadas: anterior.filter((f) => !contrato.fuentes_por_defecto.includes(f)) });
     } catch (e) {
+      if (e instanceof ApiError && e.status === 422 && e.code === CODIGO_FUENTE_NO_DISPONIBLE) {
+        // El error es del campo Fuentes habilitadas (el 422 del contrato no trae `campo`): se muestra sobre él.
+        setErrorFuentes(e.message);
+        setGuardado({ tipo: "inactivo" });
+        return;
+      }
       const reintentable = !(e instanceof ApiError) || e.status >= 500;
       setGuardado({ tipo: "error", mensaje: e instanceof Error ? e.message : "No se pudo guardar el contrato.", reintentable });
     }
@@ -168,6 +187,7 @@ function EditorContratoBackoffice() {
   }
 
   function alternar(fuente: Fuente) {
+    setErrorFuentes(null);
     setBorrador((b) => (b ? { ...b, fuentes: b.fuentes.includes(fuente) ? b.fuentes.filter((f) => f !== fuente) : ordenarFuentes([...b.fuentes, fuente]) } : b));
   }
 
@@ -230,23 +250,29 @@ function EditorContratoBackoffice() {
 
       {carga.tipo === "listo" && borrador && (
         <form onSubmit={alGuardar} className="flex flex-col gap-5" noValidate aria-label="Editar contrato">
-          <fieldset className="flex flex-col gap-2">
+          <fieldset className="flex flex-col gap-2" aria-describedby={errorFuentes ? "contrato-fuentes-error" : undefined}>
             <legend className={ETIQUETA_CLS}>Fuentes habilitadas</legend>
+            {errorFuentes && (
+              <InlineAlert tone="error" compact id="contrato-fuentes-error">
+                {errorFuentes}
+              </InlineAlert>
+            )}
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {FUENTES.map(({ codigo, nombre }) => (
-                <label key={codigo} className={OPCION_CLS}>
-                  <input
-                    type="checkbox"
-                    name="fuentes_habilitadas"
-                    value={codigo}
-                    checked={borrador.fuentes.includes(codigo)}
-                    onChange={() => alternar(codigo)}
+              {FUENTES.map(({ codigo, nombre }) => {
+                const disponible = estaDisponible(codigo, carga.contrato.fuentes_disponibles);
+                const enContrato = carga.contrato.fuentes_habilitadas.includes(codigo);
+                return (
+                  <CasillaFuenteContrato
+                    key={codigo}
+                    codigo={codigo}
+                    nombre={nombre}
+                    marcada={borrador.fuentes.includes(codigo)}
+                    estado={disponible ? "disponible" : enContrato ? "ya-no-disponible" : "bloqueada"}
                     disabled={ocupado}
-                    className={MARCA_CLS}
+                    onAlternar={alternar}
                   />
-                  {nombre}
-                </label>
-              ))}
+                );
+              })}
             </div>
             <p className={AYUDA_CLS}>Al quitar una fuente habilitada se recortan las fuentes por defecto de la empresa.</p>
           </fieldset>
@@ -330,5 +356,62 @@ function EditorContratoBackoffice() {
         </form>
       )}
     </section>
+  );
+}
+
+/**
+ * Casilla de una fuente en el editor del contrato. Bloqueada: desmarcada, con aria-disabled (sigue enfocable para que la
+ * ayuda llegue por teclado) y el tooltip asociado por aria-describedby; no baja la opacidad para conservar el contraste
+ * AA. Ya no disponible: marcada según el borrador, con el aviso asociado, y se puede desmarcar.
+ */
+function CasillaFuenteContrato({
+  codigo,
+  nombre,
+  marcada,
+  estado,
+  disabled,
+  onAlternar,
+}: {
+  codigo: Fuente;
+  nombre: string;
+  marcada: boolean;
+  estado: "disponible" | "bloqueada" | "ya-no-disponible";
+  disabled: boolean;
+  onAlternar: (fuente: Fuente) => void;
+}) {
+  const id = `contrato-fuente-${codigo}`;
+  const ayudaId = `${id}-ayuda`;
+  const bloqueada = estado === "bloqueada";
+  return (
+    <div className="group relative flex flex-col gap-1">
+      <label className={`${OPCION_CLS} ${bloqueada ? "cursor-not-allowed" : ""}`}>
+        <input
+          type="checkbox"
+          name="fuentes_habilitadas"
+          value={codigo}
+          checked={marcada}
+          onChange={() => {
+            if (!bloqueada) onAlternar(codigo);
+          }}
+          aria-disabled={bloqueada || undefined}
+          aria-describedby={estado === "disponible" ? undefined : ayudaId}
+          disabled={disabled}
+          className={MARCA_CLS}
+        />
+        <span className="flex-1">{nombre}</span>
+        {bloqueada && <Lock className="h-3.5 w-3.5 text-[var(--nav-texto)]" aria-hidden="true" />}
+        {estado === "ya-no-disponible" && <TriangleAlert className="h-3.5 w-3.5 text-[var(--badge-warning-fg)]" aria-hidden="true" />}
+      </label>
+      {bloqueada && (
+        <span role="tooltip" id={ayudaId} className={TOOLTIP_CLS}>
+          {AYUDA_FUENTE_NO_DISPONIBLE}
+        </span>
+      )}
+      {estado === "ya-no-disponible" && (
+        <p id={ayudaId} className="px-1 text-xs font-medium text-[var(--badge-warning-fg)]">
+          {AVISO_FUENTE_YA_NO_DISPONIBLE}
+        </p>
+      )}
+    </div>
   );
 }

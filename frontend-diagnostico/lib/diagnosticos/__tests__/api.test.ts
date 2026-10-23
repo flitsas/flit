@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api";
+import * as apiDiagnosticos from "@/lib/diagnosticos/api";
 import { armarAlcance, crearDiagnostico, editarDiagnostico, fuentesOfrecidas, listarTiposTramite } from "@/lib/diagnosticos/api";
+import type { Fuente } from "@/lib/configuracion";
+
+const SIN_IMPUESTO: Fuente[] = ["RUNT", "RUNT_PROPIETARIO", "RUNT_LOCATARIO", "SIMIT_VEHICULO", "SIMIT_PROPIETARIO", "SIMIT_LOCATARIO", "AVALUO"];
+const CON_IMPUESTO: Fuente[] = [...SIN_IMPUESTO, "IMPUESTO_DEPARTAMENTAL"];
 
 // Uso de ejemplo: await crearDiagnostico({ nombre: "Flota norte", modo: "SIMPLE", tipo_tramite_codigo: null,
 // alcance: armarAlcance(["RUNT"]) }) → Diagnostico en CREADO
@@ -22,8 +27,26 @@ describe("contrato de la cabecera", () => {
     });
   });
 
-  it("fuentesOfrecidas quita IMPUESTO_DEPARTAMENTAL y suma RUNT siempre", () => {
-    expect(fuentesOfrecidas(["SIMIT_VEHICULO", "IMPUESTO_DEPARTAMENTAL"])).toEqual(["RUNT", "SIMIT_VEHICULO"]);
+  // HU #13865: la disponibilidad sale solo de fuentes_disponibles del backend.
+  it("fuentesOfrecidas ofrece el impuesto si está habilitado y llega en fuentes_disponibles", () => {
+    expect(fuentesOfrecidas(["SIMIT_VEHICULO", "IMPUESTO_DEPARTAMENTAL"], CON_IMPUESTO)).toEqual(["RUNT", "SIMIT_VEHICULO", "IMPUESTO_DEPARTAMENTAL"]);
+  });
+
+  it("fuentesOfrecidas quita el impuesto habilitado cuando no llega en fuentes_disponibles", () => {
+    expect(fuentesOfrecidas(["SIMIT_VEHICULO", "IMPUESTO_DEPARTAMENTAL"], SIN_IMPUESTO)).toEqual(["RUNT", "SIMIT_VEHICULO"]);
+  });
+
+  it("fuentesOfrecidas suma RUNT siempre, respeta el orden del enum y quita cualquier fuente no disponible (sin lista fija)", () => {
+    expect(fuentesOfrecidas(["AVALUO", "SIMIT_VEHICULO", "RUNT_PROPIETARIO"], ["RUNT", "SIMIT_VEHICULO", "RUNT_PROPIETARIO"])).toEqual([
+      "RUNT",
+      "RUNT_PROPIETARIO",
+      "SIMIT_VEHICULO",
+    ]);
+    expect(fuentesOfrecidas([], [])).toEqual(["RUNT"]);
+  });
+
+  it("ya no exporta la lista fija FUENTES_NO_DISPONIBLES", () => {
+    expect(apiDiagnosticos).not.toHaveProperty("FUENTES_NO_DISPONIBLES");
   });
 
   it("crearDiagnostico hace POST /diagnosticos con el cuerpo en snake_case", async () => {

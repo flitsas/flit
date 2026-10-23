@@ -34,6 +34,11 @@ export interface Configuracion {
   empresa: string;
   contrato: NivelContrato;
   operacion: NivelOperacion;
+  /**
+   * Fuentes que hoy se pueden habilitar y pedir (HU #13863, esquema FuentesDisponibles), globales y en el orden del enum.
+   * Única fuente de la disponibilidad en el frontend: sin C3 no trae IMPUESTO_DEPARTAMENTAL.
+   */
+  fuentes_disponibles: Fuente[];
 }
 
 export interface ContratoBackoffice {
@@ -44,6 +49,8 @@ export interface ContratoBackoffice {
   fuentes_por_defecto: Fuente[];
   actualizado_por: string | null;
   actualizado_en: string | null;
+  /** Igual que en Configuracion (HU #13863): disponibilidad global en el orden del enum. */
+  fuentes_disponibles: Fuente[];
 }
 
 export type EdicionOperativa = Partial<Pick<NivelOperacion, "visibilidad_usuario" | "fuentes_por_defecto" | "estimado_consultas">>;
@@ -79,6 +86,22 @@ export function nombreFuente(codigo: Fuente): string {
 /** Ordena una lista de fuentes según el enum del contrato (la API no garantiza orden). */
 export function ordenarFuentes(fuentes: readonly Fuente[]): Fuente[] {
   return FUENTES.map((f) => f.codigo).filter((c) => fuentes.includes(c));
+}
+
+/** Ayuda de una fuente que el backend todavía no declara disponible (gate Q7 = a, HU #13865). */
+export const AYUDA_FUENTE_NO_DISPONIBLE = "Disponible cuando la consulta automatizada esté en producción";
+
+/** Aviso de una fuente habilitada en el contrato que dejó de estar disponible: se conserva hasta que alguien la quite. */
+export const AVISO_FUENTE_YA_NO_DISPONIBLE = "Ya no está disponible: la compañía no podrá pedirla hasta que vuelva. Puedes quitarla del contrato.";
+
+/** La fuente está entre las que el backend declara disponibles (`fuentes_disponibles`); sin lista fija en el frontend. */
+export function estaDisponible(fuente: Fuente, disponibles: readonly Fuente[]): boolean {
+  return disponibles.includes(fuente);
+}
+
+/** Las fuentes de la lista que el backend declara disponibles, en el orden del enum. */
+export function soloDisponibles(fuentes: readonly Fuente[], disponibles: readonly Fuente[]): Fuente[] {
+  return ordenarFuentes(fuentes.filter((f) => estaDisponible(f, disponibles)));
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

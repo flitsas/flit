@@ -10,6 +10,8 @@ import { ERROR_CLS, INSIGNIA_CLS, TOOLTIP_CLS } from "./estilos";
 
 export interface SeccionAlcanceProps {
   habilitadas: readonly Fuente[];
+  /** `fuentes_disponibles` de la configuración (HU #13865): única fuente de la disponibilidad. */
+  disponibles: readonly Fuente[];
   seleccionadas: readonly Fuente[];
   obligatorias: readonly Fuente[];
   onAlternar: (fuente: Fuente) => void;
@@ -29,13 +31,13 @@ const MOTIVO_OBLIGATORIA = "Fuente obligatoria para el tipo de trámite elegido.
 
 /**
  * Sección Alcance (HU #13752, F01-C2/C3/C4/C7): las fuentes en sus tres grupos (R-24), solo las habilitadas del contrato
- * (sin IMPUESTO_DEPARTAMENTAL mientras el backend lo rechace). RUNT vehículo y las obligatorias del tipo van marcadas y
+ * que el backend declara en `fuentes_disponibles` (HU #13865: el impuesto departamental sale solo cuando llega ahí). RUNT vehículo y las obligatorias del tipo van marcadas y
  * bloqueadas con tooltip; las casillas bloqueadas siguen enfocables (aria-disabled) para que el tooltip llegue por teclado.
  */
-export function SeccionAlcance({ habilitadas, seleccionadas, obligatorias, onAlternar, error, disabled = false, compacta = false }: SeccionAlcanceProps) {
+export function SeccionAlcance({ habilitadas, disponibles, seleccionadas, obligatorias, onAlternar, error, disabled = false, compacta = false }: SeccionAlcanceProps) {
   const id = useId();
   const errorId = `${id}-error`;
-  const ofrecidas = fuentesOfrecidas(habilitadas);
+  const ofrecidas = fuentesOfrecidas(habilitadas, disponibles);
   const faltantes = obligatorias.filter((f) => !ofrecidas.includes(f));
   const Titulo = compacta ? "h3" : "h2";
 

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { PestanaContrato } from "@/components/configuracion/PestanaContrato";
-import { EMPRESA_CLIENTE, configuracion, contratoBackoffice, cuerpo } from "./datos";
+import { DISPONIBLES_CON_IMPUESTO, DISPONIBLES_SIN_IMPUESTO, EMPRESA_CLIENTE, configuracion, contratoBackoffice, cuerpo } from "./datos";
 
 // Uso de ejemplo: <PestanaContrato contrato={configuracion.contrato} puedeEditar={sesion.capacidades.editarContrato} />
 // muestra lo contratado en solo lectura y, para el backoffice FLIT, el editor del contrato de la empresa indicada.
@@ -105,24 +105,6 @@ describe("pestaña Contrato", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("muestra el 422 de la API al habilitar el impuesto con la fuente no disponible, sin perder lo digitado", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(Response.json(contratoBackoffice()))
-      .mockResolvedValueOnce(
-        Response.json({ code: "FUENTE_NO_DISPONIBLE", error: "La fuente Impuesto departamental todavía no está disponible." }, { status: 422 }),
-      );
-    vi.stubGlobal("fetch", fetchMock);
-
-    render(<PestanaContrato contrato={null} puedeEditar />);
-    await cargarEmpresa();
-    fireEvent.click(screen.getByRole("checkbox", { name: "Impuesto departamental" }));
-    fireEvent.click(screen.getByRole("button", { name: "Guardar contrato" }));
-
-    expect(await screen.findByText("La fuente Impuesto departamental todavía no está disponible.")).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: "Impuesto departamental" })).toBeChecked();
-  });
-
   it("si falla la carga del contrato muestra el error con Reintentar", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(Response.json({}, { status: 500 })).mockResolvedValueOnce(Response.json(contratoBackoffice()));
     vi.stubGlobal("fetch", fetchMock);
@@ -134,5 +116,115 @@ describe("pestaña Contrato", () => {
     expect(await screen.findByText(/Diagnóstico no respondió/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
     await waitFor(() => expect(screen.getByRole("checkbox", { name: "RUNT vehículo" })).toBeChecked());
+  });
+});
+
+// HU #13865: la disponibilidad de cada fuente sale de fuentes_disponibles del contrato del backoffice (gate Q7 = a).
+describe("pestaña Contrato — fuentes según fuentes_disponibles (HU #13865)", () => {
+  const AYUDA = /Disponible cuando la consulta automatizada esté en producción/;
+
+  it("AC3: una fuente no disponible y no habilitada queda desmarcada, bloqueada y enfocable, con la ayuda accesible y sin marcarse", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json(contratoBackoffice({ fuentes_disponibles: DISPONIBLES_SIN_IMPUESTO })))
+      .mockResolvedValueOnce(Response.json(contratoBackoffice()));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PestanaContrato contrato={null} puedeEditar />);
+    await cargarEmpresa();
+
+    const impuesto = screen.getByRole("checkbox", { name: "Impuesto departamental" });
+    expect(impuesto).not.toBeChecked();
+    expect(impuesto).toHaveAttribute("aria-disabled", "true");
+    expect(impuesto).not.toBeDisabled();
+    expect(impuesto).toHaveAccessibleDescription(AYUDA);
+    expect(screen.getAllByRole("tooltip").some((t) => AYUDA.test(t.textContent ?? ""))).toBe(true);
+    impuesto.focus();
+    expect(impuesto).toHaveFocus();
+
+    fireEvent.click(impuesto);
+    expect(impuesto).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Avalúo comercial" })).not.toHaveAttribute("aria-disabled");
+
+    fireEvent.click(screen.getByRole("button", { name: "Guardar contrato" }));
+    expect(await screen.findByText("Contrato guardado.")).toBeInTheDocument();
+    expect((cuerpo(fetchMock, 1) as { fuentes_habilitadas: string[] }).fuentes_habilitadas).toEqual(["RUNT", "SIMIT_VEHICULO"]);
+  });
+
+  it("con el impuesto en fuentes_disponibles la casilla queda libre y se puede habilitar", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(Response.json(contratoBackoffice({ fuentes_disponibles: DISPONIBLES_CON_IMPUESTO }))));
+
+    render(<PestanaContrato contrato={null} puedeEditar />);
+    await cargarEmpresa();
+
+    const impuesto = screen.getByRole("checkbox", { name: "Impuesto departamental" });
+    expect(impuesto).not.toHaveAttribute("aria-disabled");
+    expect(impuesto).not.toHaveAccessibleDescription(AYUDA);
+    fireEvent.click(impuesto);
+    expect(impuesto).toBeChecked();
+  });
+
+  it("una fuente habilitada que dejó de estar disponible se ve marcada, con aviso, y se puede desmarcar", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json(contratoBackoffice({ fuentes_habilitadas: ["RUNT", "SIMIT_VEHICULO", "IMPUESTO_DEPARTAMENTAL"], fuentes_disponibles: DISPONIBLES_SIN_IMPUESTO })),
+      )
+      .mockResolvedValueOnce(Response.json(contratoBackoffice()));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PestanaContrato contrato={null} puedeEditar />);
+    await cargarEmpresa();
+
+    const impuesto = screen.getByRole("checkbox", { name: "Impuesto departamental" });
+    expect(impuesto).toBeChecked();
+    expect(impuesto).not.toHaveAttribute("aria-disabled");
+    expect(impuesto).toHaveAccessibleDescription(/ya no está disponible/i);
+
+    fireEvent.click(impuesto);
+    expect(impuesto).not.toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Guardar contrato" }));
+    expect(await screen.findByText("Contrato guardado.")).toBeInTheDocument();
+    expect((cuerpo(fetchMock, 1) as { fuentes_habilitadas: string[] }).fuentes_habilitadas).toEqual(["RUNT", "SIMIT_VEHICULO"]);
+  });
+
+  it("si nadie la toca, la habilitada que dejó de estar disponible se conserva al guardar (no se borra en silencio)", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json(contratoBackoffice({ fuentes_habilitadas: ["RUNT", "IMPUESTO_DEPARTAMENTAL"], fuentes_disponibles: DISPONIBLES_SIN_IMPUESTO })),
+      )
+      .mockResolvedValueOnce(Response.json(contratoBackoffice({ fuentes_habilitadas: ["RUNT", "IMPUESTO_DEPARTAMENTAL"] })));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PestanaContrato contrato={null} puedeEditar />);
+    const limite = await cargarEmpresa();
+    fireEvent.change(limite, { target: { value: "100" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar contrato" }));
+
+    expect(await screen.findByText("Contrato guardado.")).toBeInTheDocument();
+    expect((cuerpo(fetchMock, 1) as { fuentes_habilitadas: string[] }).fuentes_habilitadas).toEqual(["RUNT", "IMPUESTO_DEPARTAMENTAL"]);
+  });
+
+  it("AC3: el 422 FUENTE_NO_DISPONIBLE se muestra sobre el campo Fuentes habilitadas, sin perder lo digitado", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json(contratoBackoffice({ fuentes_disponibles: DISPONIBLES_CON_IMPUESTO })))
+      .mockResolvedValueOnce(
+        Response.json({ code: "FUENTE_NO_DISPONIBLE", error: "La fuente IMPUESTO_DEPARTAMENTAL todavía no se puede habilitar.", campo: null }, { status: 422 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PestanaContrato contrato={null} puedeEditar />);
+    await cargarEmpresa();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Impuesto departamental" }));
+    fireEvent.click(screen.getByRole("button", { name: "Guardar contrato" }));
+
+    const campo = screen.getByRole("group", { name: "Fuentes habilitadas" });
+    const alerta = await within(campo).findByRole("alert");
+    expect(alerta).toHaveTextContent("La fuente IMPUESTO_DEPARTAMENTAL todavía no se puede habilitar.");
+    expect(campo).toHaveAccessibleDescription(/todavía no se puede habilitar/);
+    expect(screen.queryByText("No se guardó el contrato")).toBeNull();
+    expect(screen.getByRole("checkbox", { name: "Impuesto departamental" })).toBeChecked();
   });
 });

@@ -46,12 +46,13 @@ function campoDe(error: unknown): keyof ErroresCabecera | null {
 
 /**
  * Estado compartido del formulario de parametrización y de su versión compacta (HU #13752): nombre, modo, tipo de
- * trámite y alcance, con las fuentes ofrecidas según el contrato, las por defecto premarcadas, RUNT siempre y las
- * obligatorias del tipo (solo en Con Análisis IA). Carga el catálogo de tipos y, si responde 503, espera Retry-After antes
+ * trámite y alcance, con las fuentes ofrecidas según el contrato y `fuentes_disponibles` del backend (HU #13865), las
+ * por defecto premarcadas, RUNT siempre y las obligatorias del tipo (solo en Con Análisis IA). Carga el catálogo de tipos y, si responde 503, espera Retry-After antes
  * de permitir el reintento.
  */
 export function useParametrizacion(configuracion: Configuracion, nombreInicial = "") {
-  const habilitadas = useMemo(() => fuentesOfrecidas(configuracion.contrato.fuentes_habilitadas), [configuracion]);
+  const disponibles = configuracion.fuentes_disponibles;
+  const habilitadas = useMemo(() => fuentesOfrecidas(configuracion.contrato.fuentes_habilitadas, configuracion.fuentes_disponibles), [configuracion]);
   const [nombre, setNombreCrudo] = useState(nombreInicial);
   const [modo, setModoCrudo] = useState<ModoDiagnostico>("SIMPLE");
   const [tipoCodigo, setTipoCrudo] = useState("");
@@ -169,6 +170,7 @@ export function useParametrizacion(configuracion: Configuracion, nombreInicial =
     tipos,
     reintentarTipos,
     habilitadas,
+    disponibles,
     seleccionadas: efectivas,
     obligatorias,
     alternar,

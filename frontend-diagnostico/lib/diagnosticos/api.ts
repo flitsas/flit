@@ -3,7 +3,7 @@
 // `fuentesObligatorias` del catálogo de tipos de trámite, que el contrato publica en camelCase. La API vuelve a validar
 // cada regla (nombre, grupos, RUNT, fuentes habilitadas y tipo de trámite) y responde 422 con el campo que incumple.
 import { apiFetch } from "@/lib/api";
-import { ordenarFuentes, type EstimadoConsultas, type Fuente, type VisibilidadUsuario } from "@/lib/configuracion";
+import { ordenarFuentes, soloDisponibles, type EstimadoConsultas, type Fuente, type VisibilidadUsuario } from "@/lib/configuracion";
 
 export type ModoDiagnostico = "SIMPLE" | "CON_ANALISIS";
 export type EstadoDiagnostico = "CREADO" | "EN_PROCESO" | "COMPLETADO" | "INCOMPLETO";
@@ -63,14 +63,11 @@ export const GRUPOS: ReadonlyArray<{ grupo: GrupoAlcance; nombre: string; fuente
 export const FUENTE_SIEMPRE: Fuente = "RUNT";
 
 /**
- * Fuentes que el backend rechaza aunque el contrato las habilite (422 FUENTE_NO_DISPONIBLE): IMPUESTO_DEPARTAMENTAL no
- * tiene adaptador mientras Diagnostico:Fuentes:ImpuestoDisponible sea false. No se ofrecen.
+ * Fuentes que se pueden ofrecer en el alcance: RUNT siempre, más las habilitadas del contrato que el backend declara en
+ * `fuentes_disponibles` (HU #13865), en el orden del enum. Pedir una no disponible daría 422 FUENTE_NO_DISPONIBLE.
  */
-export const FUENTES_NO_DISPONIBLES: readonly Fuente[] = ["IMPUESTO_DEPARTAMENTAL"];
-
-/** Fuentes que se pueden ofrecer: las habilitadas del contrato sin las no disponibles, y RUNT siempre. */
-export function fuentesOfrecidas(habilitadas: readonly Fuente[]): Fuente[] {
-  return ordenarFuentes([FUENTE_SIEMPRE, ...habilitadas.filter((f) => !FUENTES_NO_DISPONIBLES.includes(f) && f !== FUENTE_SIEMPRE)]);
+export function fuentesOfrecidas(habilitadas: readonly Fuente[], disponibles: readonly Fuente[]): Fuente[] {
+  return ordenarFuentes([FUENTE_SIEMPRE, ...soloDisponibles(habilitadas, disponibles).filter((f) => f !== FUENTE_SIEMPRE)]);
 }
 
 /** Reparte una lista de fuentes en los tres grupos del alcance, en el orden del enum y sin repetir. */

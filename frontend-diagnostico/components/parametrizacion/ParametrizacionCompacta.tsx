@@ -52,6 +52,7 @@ export function ParametrizacionCompacta({ identificador, configuracion, onContin
       <SeccionInformacionGeneral nombre={p.nombre} onNombre={p.setNombre} error={p.errores.nombre} disabled={ocupado} compacta />
       <SeccionAlcance
         habilitadas={p.habilitadas}
+        disponibles={p.disponibles}
         seleccionadas={p.seleccionadas}
         obligatorias={p.obligatorias}
         onAlternar={p.alternar}
