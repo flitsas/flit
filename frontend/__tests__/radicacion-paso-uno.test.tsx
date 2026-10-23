@@ -305,7 +305,11 @@ describe('Dígito de preasignación de placa — paso 1', () => {
     expect(screen.getByRole('button', { name: /Continuar/ })).toBeDisabled();
   });
 
-  it('Ruta Corta sin organismo en el RUNT: se dice y se radica en la secretaría que se elija después', async () => {
+  /**
+   * Con placa y sin organismo en el RUNT (VIN 3KPFC41ABVE229071) el backend radica en la secretaría
+   * elegida: el paso 1 debe ofrecer el selector, exigirlo para continuar y enviarlo al crear.
+   */
+  it('Ruta Corta sin organismo en el RUNT: se elige la secretaría, se exige y viaja a la creación', async () => {
     mocks.runPreflightPreview.mockResolvedValue({
       ...PREVIEW_RUTA_CORTA,
       vehicleFields: PREVIEW_RUTA_CORTA.vehicleFields.filter((f) => f.fieldKey !== 'transit_office_name'),
@@ -316,8 +320,23 @@ describe('Dígito de preasignación de placa — paso 1', () => {
 
     await consultarVehiculo(user);
 
-    expect(await screen.findByTestId('ruta-corta-organismo')).toHaveTextContent(/El RUNT no reporta el organismo/);
-    expect(screen.getByRole('button', { name: /Continuar/ })).toBeEnabled();
+    expect(await screen.findByTestId('ruta-matricula')).toHaveAttribute('data-ruta', 'corta');
+    expect(screen.queryByTestId('ruta-corta-organismo')).not.toBeInTheDocument();
+    expect(screen.getByText(/El RUNT no reporta el organismo de tránsito del vehículo/)).toBeInTheDocument();
+    // Con placa del RUNT no hay dígito que elegir: se informa la placa.
+    expect(screen.queryByLabelText('Dígito de preasignación de placa')).not.toBeInTheDocument();
+    expect(screen.getByText(/No aplica la preasignación de placa/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Continuar/ })).toBeDisabled();
+
+    await elegirSecretaria(user);
+    await waitFor(() => expect(screen.getByRole('button', { name: /Continuar/ })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: /Continuar/ }));
+
+    await waitFor(() => expect(mocks.createInstanceFromConsulta).toHaveBeenCalled());
+    expect(mocks.createInstanceFromConsulta.mock.calls[0][0]).toMatchObject({
+      previewToken: 'token-abc',
+      transitOfficeId: SECRETARIA_ID,
+    });
   });
 
   /**
