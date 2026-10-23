@@ -1,35 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { Modal } from "@/components/atom/Modal";
 import { useToast } from "@/components/admin/Toast";
 import { superadminClient, type ColaMensajesMuertos, type MensajeMuerto } from "@/lib/api/superadmin-client";
 import { formatFechaHora } from "@/lib/format/date";
+import { useTamanoDePagina } from "@/components/atom/usePaginacion";
 
-/** Mismos tamaños que /tramites; el elegido se recuerda durante la sesión (sessionStorage, con guarda). */
-const TAMANOS_DE_PAGINA = [10, 25, 50, 100] as const;
-const PAGE_SIZE_POR_DEFECTO = 10;
-const CLAVE_PAGE_SIZE = "mensajes-muertos.pageSize";
+/** Tabla para recordar «Filas por página» en la sesión (estándar de toda tabla, HU #13917). */
+const CLAVE_TABLA = "plataforma.mensajesMuertos";
 
 const COLAS: Array<{ cola: ColaMensajesMuertos; etiqueta: string }> = [
   { cola: "correos", etiqueta: "Correos" },
   { cola: "webhooks", etiqueta: "Webhooks" },
 ];
-
-function suscripcionInerte(): () => void {
-  return () => {};
-}
-
-function leerPageSizeGuardado(): number {
-  try {
-    const guardado = Number(sessionStorage.getItem(CLAVE_PAGE_SIZE));
-    return TAMANOS_DE_PAGINA.includes(guardado as (typeof TAMANOS_DE_PAGINA)[number]) ? guardado : PAGE_SIZE_POR_DEFECTO;
-  } catch {
-    return PAGE_SIZE_POR_DEFECTO;
-  }
-}
 
 type Estado = "loading" | "error" | "ready";
 type Accion = { tipo: "descartar"; mensaje: MensajeMuerto };
@@ -50,9 +36,7 @@ export function MensajesMuertosPanel() {
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [confirmar, setConfirmar] = useState<Accion | null>(null);
 
-  const pageSizeGuardado = useSyncExternalStore(suscripcionInerte, leerPageSizeGuardado, () => PAGE_SIZE_POR_DEFECTO);
-  const [pageSizeElegido, setPageSizeElegido] = useState<number | null>(null);
-  const pageSize = pageSizeElegido ?? pageSizeGuardado;
+  const [pageSize, recordarPageSize] = useTamanoDePagina(CLAVE_TABLA);
 
   useEffect(() => {
     let vigente = true;
@@ -97,15 +81,13 @@ export function MensajesMuertosPanel() {
     setEstado("loading");
   }, []);
 
-  const cambiarPageSize = useCallback((n: number) => {
-    setPageSizeElegido(n);
-    setPage(1);
-    try {
-      sessionStorage.setItem(CLAVE_PAGE_SIZE, String(n));
-    } catch {
-      // ventana privada: se queda en memoria y ya
-    }
-  }, []);
+  const cambiarPageSize = useCallback(
+    (n: number) => {
+      recordarPageSize(n);
+      setPage(1);
+    },
+    [recordarPageSize],
+  );
 
   const reintentar = useCallback(
     async (m: MensajeMuerto) => {
@@ -249,7 +231,6 @@ export function MensajesMuertosPanel() {
           pageSize,
           totalCount: mensajes.length,
           onPageChange: setPage,
-          pageSizeOptions: TAMANOS_DE_PAGINA,
           onPageSizeChange: cambiarPageSize,
         }}
       />

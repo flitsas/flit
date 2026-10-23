@@ -96,7 +96,7 @@ function Cell({ children, first, last }: { children: React.ReactNode; first?: bo
 type FetchResult = { key: string; data?: PermissionAuditPage; failed?: boolean };
 
 export function PermissionAuditView({ mode, users, initialUserId }: PermissionAuditViewProps) {
-  const pg = usePaginacion();
+  const pg = usePaginacion("permissions.PermissionAuditView");
   const [userId, setUserId] = useState(initialUserId ?? "");
   const [tenantId, setTenantId] = useState("");
   const [actorId, setActorId] = useState("");

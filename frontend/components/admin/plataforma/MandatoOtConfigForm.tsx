@@ -144,7 +144,7 @@ export function MandatoOtConfigForm({
   const [savingCompanyId, setSavingCompanyId] = useState<string | null>(null);
   const [companySearch, setCompanySearch] = useState("");
   // Bug #13055 — tabla homologada con el modelo de trámites: filas por página elegibles.
-  const companyPg = usePaginacion();
+  const companyPg = usePaginacion("plataforma.MandatoOtConfigForm");
   const { setPage: setCompanyPage } = companyPg;
 
   const [saving, setSaving] = useState(false);

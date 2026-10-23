@@ -124,7 +124,7 @@ export function OtMandatosSection({
   const [previewSigner, setPreviewSigner] = useState<MandateSigner | null>(null);
   // Bug #13055 — tablas homologadas con el modelo de trámites: «Filas por página». El mandatario
   // general es una sola fila fija y no pagina; las compañías paginan en servidor (HU #13182).
-  const pgSigners = usePaginacion();
+  const pgSigners = usePaginacion("transit-offices.OtMandatosSection");
   const [seccion, setSeccion] = useState<"companias" | "mandatarios">("mandatarios");
   const [panel, setPanel] = useState<{
     mode: MandatoOtConfigPanelMode;

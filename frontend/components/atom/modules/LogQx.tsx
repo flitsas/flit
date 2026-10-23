@@ -69,7 +69,6 @@ import {
  * que resuelve el caso frecuente sin navegar ni perder los filtros.
  */
 
-const PAGE_SIZE = 10;
 
 /** Filtros que viajan en el estado y en el query string, para restituirlos al volver. */
 interface Filtros {
@@ -171,7 +170,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
   const [contadores, setContadores] = useState<Record<string, number>>({});
   const [total, setTotal] = useState(0);
   // Bug #13055 — paginación de servidor estándar, con «Filas por página».
-  const { page, pageSize, setPage, setPageSize } = usePaginacion(PAGE_SIZE);
+  const { page, pageSize, setPage, setPageSize } = usePaginacion("modulos.LogQx");
   const [error, setError] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false);
   const [abierta, setAbierta] = useState<string | null>(null);

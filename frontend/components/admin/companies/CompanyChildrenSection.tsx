@@ -30,7 +30,7 @@ export interface CompanyChildrenSectionProps {
 /** HU #12357 — sección «Clientes hijos» en ficha SuperAdmin de cabeza de grupo. */
 export function CompanyChildrenSection({ company }: CompanyChildrenSectionProps) {
   const [status, setStatus] = useState<UiStatus>("loading");
-  const pg = usePaginacion();
+  const pg = usePaginacion("companies.CompanyChildrenSection");
   const [children, setChildren] = useState<CompanyChildListItem[]>([]);
   const [linkOpen, setLinkOpen] = useState(false);
   const [unlinkTarget, setUnlinkTarget] = useState<CompanyChildListItem | null>(null);

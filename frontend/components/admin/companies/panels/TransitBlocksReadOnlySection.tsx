@@ -22,7 +22,7 @@ export function TransitBlocksReadOnlySection({
 }) {
   const [status, setStatus] = useState<UiStatus>("loading");
   // Bug #13055 — tabla homologada con el modelo de trámites: paginación en cliente con filas por página.
-  const pg = usePaginacion();
+  const pg = usePaginacion("panels.TransitBlocksReadOnlySection");
   const [blockedOffices, setBlockedOffices] = useState<TransitOffice[]>([]);
 
   const load = useCallback(

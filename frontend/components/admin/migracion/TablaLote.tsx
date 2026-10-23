@@ -41,7 +41,7 @@ export function TablaLote({
   // Bug #13055 — tabla homologada con el modelo de trámites: sin tarjeta envolvente, cabecera y
   // filas del modelo y paginación en cliente con filas por página. La selección vive en `seleccion`
   // (por clave), así que cambiar de página no la pierde.
-  const pg = usePaginacion();
+  const pg = usePaginacion("migracion.TablaLote");
   const head = { background: TABLA_HEADER_BG, color: TABLA_HEADER_FG } as const;
   const cell = { borderColor: "#DFE5ED" } as const;
 

@@ -438,7 +438,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   const [status, setStatus] = useState<UiStatus>("loading");
   const [rows, setRows] = useState<OtClientProcedure[]>([]);
   const [totalCount, setTotalCount] = useState(0);
-  const { page, setPage, pageSize, setPageSize } = usePaginacion();
+  const { page, setPage, pageSize, setPageSize } = usePaginacion("transit-offices.ClientProceduresSection");
   // N 03 — `entregado` reemplaza a pending_ot como estado en cola de decisión OT.
   const [statusFilter, setStatusFilter] = useState(ESTADO_POR_DEFECTO);
   /** Sub-estado de placa; lo fijan las tarjetas de la cabecera, no el panel de búsqueda. */

@@ -49,7 +49,7 @@ export function DetailedReportPanel({ embedded = false }: DetailedReportPanelPro
   const [filters, setFilters] = useState<DetailedReportFiltersState>(() => defaultDetailedFilters());
   const [applied, setApplied] = useState<DetailedReportFiltersState>(() => defaultDetailedFilters());
   // Bug #13055 — paginación estándar con «Filas por página» (10/25/50/100), de servidor.
-  const { page, pageSize, setPage, setPageSize } = usePaginacion();
+  const { page, pageSize, setPage, setPageSize } = usePaginacion("_reportesDetallados.DetailedReportPanel");
   const [data, setData] = useState<DetailedReportPage | NetworkDetailedReportPage | null>(null);
   const [uiStatus, setUiStatus] = useState<UiStatus>("empty");
   const [errorMessage, setErrorMessage] = useState<string>();

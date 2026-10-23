@@ -50,7 +50,7 @@ function BannersList() {
   const router = useRouter();
   const { show } = useToast();
   // Bug #13055 — tabla homologada con el modelo de trámites: filas por página elegibles.
-  const { page, pageSize, setPage, setPageSize } = usePaginacion();
+  const { page, pageSize, setPage, setPageSize } = usePaginacion("admin.banners");
   const [status, setStatus] = useState<UiStatus>("loading");
   const [result, setResult] = useState<BannerPagedResult | null>(null);
   const [formTarget, setFormTarget] = useState<Banner | null | "new">(null);
