@@ -605,8 +605,35 @@ internal sealed partial class ProcedureInstanceRepository(
                     || v.Status == BiometricEstados.EnProceso))
             .WhereDocumentoVigenteCandidato(tipoDoc, documento)
             .WhereInstanciaVigente()
+            // Bug #13885 — una validación en vuelo de un trámite anulado o revocado no representa a la persona: no
+            // debe encauzar el reenvío hacia un trámite muerto. El inicio la cierra antes de crear la nueva
+            // (ListInFlightBlockersByDocumentAsync), así que excluirla aquí no choca con el índice único.
+            .Where(v => v.ProcedureInstanceId == null
+                || (v.ProcedureInstance!.Status != TramiteEstado.Anulado && v.ProcedureInstance.Status != TramiteEstado.Revocado))
             .OrderByDescending(v => v.UpdatedAt ?? v.CreatedAt)
             .Take(20)
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListInFlightBlockersByDocumentAsync(
+        Guid tenantId, string tipoDoc, string documento, CancellationToken ct = default)
+    {
+        // Bug #13885 — MISMO predicado que el índice único uq_biometric_validations_inflight_doc_norm (tenant,
+        // upper(btrim(tipo)), upper(btrim(número)), en vuelo, sin mandatario): todas las filas que impedirían guardar una
+        // validación nueva de este documento, sin filtrar por trámite ni quedarse con la más reciente. Rastreadas y con el
+        // trámite cargado para que el caso de uso decida cuáles cerrar.
+        var tipo = (tipoDoc ?? string.Empty).Trim().ToUpperInvariant();
+        var numero = (documento ?? string.Empty).Trim().ToUpperInvariant();
+        return await db.ProcedureInstanceBiometricValidations
+            .Include(v => v.ProcedureInstance)
+            .Where(v => v.TenantId == tenantId
+                && v.MandateSignerId == null
+                && (v.Status == BiometricEstados.PendienteEnvio
+                    || v.Status == BiometricEstados.Enviado
+                    || v.Status == BiometricEstados.EnProceso)
+                && v.DocumentType.Trim().ToUpper() == tipo
+                && v.DocumentNumber.Trim().ToUpper() == numero)
+            .OrderBy(v => v.CreatedAt)
             .ToListAsync(ct);
     }
 
