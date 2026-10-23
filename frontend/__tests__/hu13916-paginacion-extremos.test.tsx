@@ -83,6 +83,15 @@ describe("HU #13916 — primera / última página", () => {
 
     expect(onPageChange).not.toHaveBeenCalled();
   });
+
+  it("los extremos se leen sin adivinar: muestran «Primera» y «Última», no solo « y »", () => {
+    render(<Pagination page={3} pageSize={10} totalCount={95} onPageChange={vi.fn()} />);
+
+    expect(boton("Primera página")).toHaveTextContent("Primera");
+    expect(boton("Última página")).toHaveTextContent("Última");
+    expect(boton("Página anterior")).toHaveAttribute("title", "Página anterior");
+    expect(boton("Página siguiente")).toHaveAttribute("title", "Página siguiente");
+  });
 });
 
 describe("HU #13916 — «Filas por página» 10/20/30/50", () => {
