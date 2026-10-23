@@ -489,6 +489,13 @@ services:
       Diagnostico__Tramites__Address: http://core-api:${CORE_API_GRPC_PORT:-8082}
       # Fuente de impuestos aún sin proveedor: apagada en los tres ambientes (se revisa al cerrar #13716).
       Diagnostico__Fuentes__ImpuestoDisponible: "false"
+      # HU #13878: fuentes reales por el gRPC de core-consultas (p. ej. http://core-consultas:8084), sin valor por defecto: cada
+      # ambiente la define en su .env. OJO: al definirla se encienden JUNTAS todas las fuentes de core-consultas del
+      # diagnóstico (RUNT por Intempo, RUNT persona, RUES, SIMIT, avalúo e impuesto), no solo el RUNT. Sin ella, todas quedan
+      # no conectadas. Diagnostico__Ambiente (LOCAL, DEV, QA o PDN) solo se valida si la simulación está habilitada, y la
+      # simulación no se declara aquí: QA y PDN nunca la encienden.
+      Diagnostico__Consultas__Address: ${DIAGNOSTICO_CONSULTAS_ADDRESS:-}
+      Diagnostico__Ambiente: ${DIAGNOSTICO_AMBIENTE:-}
       # Data Protection (HU #13751, fail-closed): el anillo de llaves en la base va cifrado con este certificado RSA.
       # El .pfx vive FUERA del repo (DIAGNOSTICO_DP_CERT_FILE, ver secrets: al final) y entra como secreto; la clave
       # sale del .env del ambiente. Perder el certificado deja ilegibles los documentos cifrados: respaldo obligatorio.

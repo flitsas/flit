@@ -14,9 +14,10 @@ public sealed record IdentificadorVehiculo(TipoIdentificador Tipo, string Valor)
 /// Puerta única del RUNT del vehículo (HU #13725, F03-C15): el producto no guarda credenciales ni llama a proveedores por su
 /// cuenta. Devuelve un resultado normalizado (placa, VIN, servicio, clase, organismo, propietarios y locatarios con tipo y
 /// número de documento, tipo de propiedad, servicio que resolvió e ID de transacción) o un error tipado. Nunca expone
-/// nombres. Implementaciones: <see cref="FuenteRuntIntempoSimulada"/> (solo con <c>Diagnostico:Simulacion:Habilitada=true</c>
-/// en LOCAL o DEV) y <see cref="FuenteRuntNoConectada"/> (por defecto: error definitivo, nunca datos). El adaptador real sobre
-/// <c>ConsultasService.ConsultarVehiculo</c> de core-consultas llega con C-PER.
+/// nombres. Implementaciones, elegidas por <see cref="SeleccionAdaptadores"/>: <see cref="FuenteRuntReal"/> (con
+/// <c>Diagnostico:Consultas:Address</c>: <c>RuntIntempoService</c> de core-consultas, HU #13878), <see cref="FuenteRuntIntempoSimulada"/>
+/// (solo con <c>Diagnostico:Simulacion:Habilitada=true</c> en LOCAL o DEV) y <see cref="FuenteRuntNoConectada"/> (por defecto:
+/// error definitivo, nunca datos).
 /// </summary>
 /// <example>
 /// <code>

@@ -77,7 +77,7 @@ public sealed class SeleccionAdaptadoresTests
     }
 
     // AC2 (F05-C1, F05-C2) — con dirección y sin simulación: adaptadores reales por el cliente gRPC con scope platform.consultas,
-    // la compañía de la celda en x-flit-tenant-id y el deadline por defecto de 90 s. RUNT sigue no conectado (su regla).
+    // la compañía de la celda en x-flit-tenant-id y el deadline por defecto de 90 s. Desde HU #13878 el RUNT también es real.
     [Fact]
     public async Task Con_direccion_registra_adaptadores_reales()
     {
@@ -86,7 +86,7 @@ public sealed class SeleccionAdaptadoresTests
         var token = new IdentidadFalsa();
         var consultas = new ConsultasFalso();
         servicios.AddHttpClient(ServiceTokenProvider.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => token);
-        servicios.AddHttpClient(NombreClienteGrpc(servicios)).ConfigurePrimaryHttpMessageHandler(() => consultas);
+        servicios.AddHttpClient(NombreClienteGrpc(servicios, runtIntempo: false)).ConfigurePrimaryHttpMessageHandler(() => consultas);
         await using var proveedor = servicios.BuildServiceProvider();
         var seleccion = proveedor.GetRequiredService<SeleccionAdaptadores>();
 
@@ -95,8 +95,8 @@ public sealed class SeleccionAdaptadoresTests
         seleccion.Deadline.Should().Be(TimeSpan.FromSeconds(ClienteConsultas.DeadlinePorDefectoSegundos));
         SeleccionAdaptadores.FuentesPorConsultas.Should().OnlyContain(f => seleccion.ModoDe(f) == ModoAdaptador.Real && !seleccion.EsNoConectada(f));
         seleccion.ModoDe(Fuente.Runt).Should().NotBe(ModoAdaptador.Simulado, "RUNT nunca simulado con fuentes reales");
-        proveedor.GetRequiredService<IFuenteRunt>().Should().BeOfType<FuenteRuntNoConectada>("RUNT conserva su regla hasta C-PER");
         await using var scope = proveedor.CreateAsyncScope();
+        scope.ServiceProvider.GetRequiredService<IFuenteRunt>().Should().BeOfType<FuenteRuntReal>("HU #13878: con dirección real el RUNT va por core-consultas");
         scope.ServiceProvider.GetRequiredService<IPuertoDePrueba>().Should().BeOfType<PuertoReal>();
 
         var respuesta = await scope.ServiceProvider.GetRequiredService<ClienteConsultas>().LlamarAsync(Empresa,
@@ -187,6 +187,74 @@ public sealed class SeleccionAdaptadoresTests
         }
     }
 
+    // HU #13878 (F10-H6) AC1 (F10-C9) — con dirección real el RUNT usa FuenteRuntReal (registrado con AddAdaptador, scoped) por el
+    // segundo cliente gRPC RuntIntempoServiceClient hacia la misma dirección: scope platform.consultas, la empresa en
+    // x-flit-tenant-id, deadline de 90 s y ConsultarPorPlaca contra un core-consultas falso sobre TestServer. Su disponibilidad
+    // sigue siendo de su ejecutor (EsNoConectada(Runt) false).
+    [Fact]
+    public async Task Con_direccion_real_RUNT_usa_FuenteRuntReal()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var servidor = await ServidorRuntFalso.IniciarAsync(new RuntIntempoFalso(), ct);
+        var servicios = Servicios(Configuracion(simulacion: false, ambiente: "QA", direccion: Direccion));
+        var token = new IdentidadFalsa();
+        servicios.AddHttpClient(ServiceTokenProvider.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => token);
+        servicios.AddHttpClient(NombreClienteGrpc(servicios, runtIntempo: true)).ConfigurePrimaryHttpMessageHandler(servidor.Handler);
+        await using var proveedor = servicios.BuildServiceProvider();
+        var seleccion = proveedor.GetRequiredService<SeleccionAdaptadores>();
+
+        seleccion.ModoDe(Fuente.Runt).Should().Be(ModoAdaptador.Real);
+        seleccion.EsNoConectada(Fuente.Runt).Should().BeFalse("la disponibilidad del RUNT la decide su ejecutor (#13733)");
+        servicios.Should().ContainSingle(d => d.ServiceType == typeof(IFuenteRunt))
+            .Which.Should().Match<ServiceDescriptor>(d => d.Lifetime == ServiceLifetime.Scoped && d.ImplementationType == typeof(FuenteRuntReal));
+        servicios.Should().Contain(d => d.ServiceType == typeof(RuntIntempoService.RuntIntempoServiceClient));
+        await using var scope = proveedor.CreateAsyncScope();
+        var fuente = scope.ServiceProvider.GetRequiredService<IFuenteRunt>();
+        fuente.Should().BeOfType<FuenteRuntReal>();
+
+        var resultado = await fuente.ConsultarVehiculoAsync(Empresa, new IdentificadorVehiculo(Domain.Vehiculos.TipoIdentificador.PlacaCarro, FuenteRuntRealTests.Placa), ct);
+
+        resultado.Exitoso.Should().BeTrue(resultado.Mensaje);
+        resultado.Vehiculo!.ServicioQueResolvio.Should().Be(FuenteRuntReal.Servicio);
+        servidor.Falso.Llamadas.Should().Equal(new LlamadaRunt("ConsultarPorPlaca", FuenteRuntRealTests.Placa, Empresa.ToString()));
+        token.Scopes.Should().Equal(ClienteConsultas.Scope);
+        servidor.Falso.Autorizacion.Should().Be("Bearer token-de-prueba");
+        servidor.Falso.Deadline.Should().NotBeNull().And.BeCloseTo(DateTime.UtcNow.AddSeconds(90), TimeSpan.FromSeconds(10));
+    }
+
+    // HU #13878 (F10-H6) AC4 (negativo, F10-C9, F10-C10) — sin dirección ni simulación el RUNT sigue no conectado (NO_CONECTADO,
+    // definitivo) y no existe ningún cliente hacia core-consultas; con la simulación (DEV), simulado, también con dirección:
+    // nunca simulado junto con fuentes reales. La simulada y la no conectada conservan su registro singleton de #13725.
+    [Fact]
+    public async Task Sin_direccion_RUNT_sigue_no_conectado_y_con_simulacion_simulado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        Type[] clientes = [typeof(RuntIntempoService.RuntIntempoServiceClient), typeof(ClienteRuntIntempo), typeof(ConsultasService.ConsultasServiceClient), typeof(ClienteConsultas)];
+        var casos = new (IConfiguration Configuracion, ModoAdaptador Modo, Type Adaptador)[]
+        {
+            (Configuracion(simulacion: false, ambiente: "QA", direccion: null), ModoAdaptador.NoConectado, typeof(FuenteRuntNoConectada)),
+            (Configuracion(simulacion: true, ambiente: "DEV", direccion: null), ModoAdaptador.Simulado, typeof(FuenteRuntIntempoSimulada)),
+            (Configuracion(simulacion: true, ambiente: "DEV", direccion: Direccion), ModoAdaptador.Simulado, typeof(FuenteRuntIntempoSimulada)),
+        };
+        foreach (var (configuracion, modo, adaptador) in casos)
+        {
+            var servicios = Servicios(configuracion);
+            await using var proveedor = servicios.BuildServiceProvider();
+            var seleccion = proveedor.GetRequiredService<SeleccionAdaptadores>();
+            seleccion.ModoDe(Fuente.Runt).Should().Be(modo);
+            seleccion.EsNoConectada(Fuente.Runt).Should().BeFalse("RUNT conserva su regla de disponibilidad (#13733)");
+            servicios.Should().ContainSingle(d => d.ServiceType == typeof(IFuenteRunt))
+                .Which.Should().Match<ServiceDescriptor>(d => d.Lifetime == ServiceLifetime.Singleton && d.ImplementationType == adaptador, modo.ToString());
+            servicios.Should().NotContain(d => clientes.Contains(d.ServiceType), "ninguna llamada sale a core-consultas sin modo real");
+            await using var scope = proveedor.CreateAsyncScope();
+            scope.ServiceProvider.GetRequiredService<IFuenteRunt>().Should().BeOfType(adaptador);
+        }
+
+        var noConectada = await new FuenteRuntNoConectada().ConsultarVehiculoAsync(
+            Empresa, new IdentificadorVehiculo(Domain.Vehiculos.TipoIdentificador.PlacaCarro, FuenteRuntRealTests.Placa), ct);
+        (noConectada.Error, noConectada.EsTransitorio).Should().Be(((Flit.Diagnostico.Api.Modulos.Consultas.Fuentes.TipoErrorFuente?)Flit.Diagnostico.Api.Modulos.Consultas.Fuentes.TipoErrorFuente.NoConectado, false));
+    }
+
     private static IConfiguration Configuracion(bool simulacion, string? ambiente, string? direccion, string? deadline = null) =>
         new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -210,9 +278,13 @@ public sealed class SeleccionAdaptadoresTests
         return servicios;
     }
 
-    private static string NombreClienteGrpc(ServiceCollection servicios) =>
+    /// <summary>
+    /// Nombre del cliente gRPC de la fábrica: el de <c>ConsultasService</c> o, con <paramref name="runtIntempo"/>, el de
+    /// <c>RuntIntempoService</c> (HU #13878: en modo real hay dos clientes hacia la misma dirección).
+    /// </summary>
+    private static string NombreClienteGrpc(ServiceCollection servicios, bool runtIntempo) =>
         servicios.Select(d => d.ImplementationInstance).OfType<ConfigureNamedOptions<GrpcClientFactoryOptions>>()
-            .Select(o => o.Name!).Distinct().Single();
+            .Select(o => o.Name!).Distinct().Single(n => n.Contains("RuntIntempo", StringComparison.Ordinal) == runtIntempo);
 
     public interface IPuertoDePrueba;
 

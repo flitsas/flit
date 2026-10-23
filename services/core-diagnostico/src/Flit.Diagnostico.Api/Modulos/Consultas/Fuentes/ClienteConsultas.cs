@@ -22,7 +22,8 @@ public sealed record RespuestaConsultas<T>(T? Respuesta, ErrorConsulta? Error)
 /// <c>x-flit-tenant-id</c> (el procesador corre sin petición HTTP, así que la empresa va explícita). Un error gRPC se devuelve
 /// traducido (<see cref="TraductorErroresConsultas"/>); la cancelación de quien llama se propaga. Solo se registra en
 /// <see cref="ModoAdaptador.Real"/>: con la simulación o sin dirección no existe y ninguna llamada sale a core-consultas.
-/// Los logs llevan el método y el código; nunca documentos ni el detalle del proveedor.
+/// Los logs llevan el método y el código; nunca documentos ni el detalle del proveedor. La llamada la hace
+/// <see cref="LlamadaConsultas"/>, compartida con <see cref="ClienteRuntIntempo"/> (HU #13878).
 /// </summary>
 /// <example>
 /// <code>
@@ -31,23 +32,19 @@ public sealed record RespuestaConsultas<T>(T? Respuesta, ErrorConsulta? Error)
 /// var error = respuesta.Error ?? TraductorErroresConsultas.Traducir(respuesta.Respuesta!.Resultado);
 /// </code>
 /// </example>
-public sealed partial class ClienteConsultas(ConsultasService.ConsultasServiceClient cliente, ILogger<ClienteConsultas> log)
+public sealed class ClienteConsultas(ConsultasService.ConsultasServiceClient cliente, ILogger<ClienteConsultas> log)
 {
     public const string Scope = "platform.consultas";
     public const string ClaveDireccion = "Diagnostico:Consultas:Address";
     public const string ClaveDeadline = "Diagnostico:Consultas:DeadlineSegundos";
     public const int DeadlinePorDefectoSegundos = 90;
 
-    public async Task<RespuestaConsultas<T>> LlamarAsync<T>(
+    public Task<RespuestaConsultas<T>> LlamarAsync<T>(
         Guid empresa, Func<ConsultasService.ConsultasServiceClient, CallOptions, AsyncUnaryCall<T>> llamada, CancellationToken ct)
         where T : class
     {
         ArgumentNullException.ThrowIfNull(llamada);
-        if (empresa == Guid.Empty)
-            throw new ArgumentException("La consulta exige la empresa de la celda.", nameof(empresa));
-
-        var metadata = new Metadata { { PlatformServiceCallInterceptor.TenantMetadata, empresa.ToString() } };
-        return await LlamarConAsync(new CallOptions(metadata, cancellationToken: ct), llamada, ct).ConfigureAwait(false);
+        return LlamadaConsultas.LlamarAsync(cliente, log, LlamadaConsultas.ConEmpresa(empresa, ct), llamada, ct);
     }
 
     /// <summary>
@@ -59,11 +56,52 @@ public sealed partial class ClienteConsultas(ConsultasService.ConsultasServiceCl
         where T : class
     {
         ArgumentNullException.ThrowIfNull(llamada);
-        return LlamarConAsync(new CallOptions(cancellationToken: ct), llamada, ct);
+        return LlamadaConsultas.LlamarAsync(cliente, log, new CallOptions(cancellationToken: ct), llamada, ct);
+    }
+}
+
+/// <summary>
+/// Puerta de Diagnóstico hacia <c>RuntIntempoService</c> de core-consultas (HU #13878, G1=a): el segundo cliente gRPC, hacia la
+/// misma dirección (<see cref="ClienteConsultas.ClaveDireccion"/>) y con el mismo contrato que <see cref="ClienteConsultas.LlamarAsync"/>:
+/// empresa obligatoria en <c>x-flit-tenant-id</c>, token de servicio con scope <see cref="ClienteConsultas.Scope"/>, deadline
+/// común, <see cref="RpcException"/> traducido por <see cref="TraductorErroresConsultas"/> y un log con solo el método y el
+/// código. Solo existe en <see cref="ModoAdaptador.Real"/>. La respuesta lleva PII (Q1=b): nunca se registra.
+/// </summary>
+/// <example>
+/// <code>
+/// var respuesta = await cliente.LlamarAsync(empresa,
+///     (c, o) => c.ConsultarPorPlacaAsync(new ConsultarPorPlacaRequest { Placa = "TST601" }, o), ct);
+/// </code>
+/// </example>
+public sealed class ClienteRuntIntempo(RuntIntempoService.RuntIntempoServiceClient cliente, ILogger<ClienteRuntIntempo> log)
+{
+    public Task<RespuestaConsultas<T>> LlamarAsync<T>(
+        Guid empresa, Func<RuntIntempoService.RuntIntempoServiceClient, CallOptions, AsyncUnaryCall<T>> llamada, CancellationToken ct)
+        where T : class
+    {
+        ArgumentNullException.ThrowIfNull(llamada);
+        return LlamadaConsultas.LlamarAsync(cliente, log, LlamadaConsultas.ConEmpresa(empresa, ct), llamada, ct);
+    }
+}
+
+/// <summary>
+/// La llamada común a core-consultas de <see cref="ClienteConsultas"/> y <see cref="ClienteRuntIntempo"/> (HU #13878: un solo
+/// <c>try/catch</c>): devuelve la respuesta o el <see cref="RpcException"/> traducido con su código; la cancelación de quien llama
+/// se propaga. El log lleva el tipo de respuesta, el código gRPC y el tipo de error; nunca <c>ex.Message</c> ni el payload.
+/// </summary>
+internal static partial class LlamadaConsultas
+{
+    /// <summary>Opciones con la empresa de la celda en <c>x-flit-tenant-id</c>; la empresa es obligatoria.</summary>
+    public static CallOptions ConEmpresa(Guid empresa, CancellationToken ct)
+    {
+        if (empresa == Guid.Empty)
+            throw new ArgumentException("La consulta exige la empresa de la celda.", nameof(empresa));
+
+        return new CallOptions(new Metadata { { PlatformServiceCallInterceptor.TenantMetadata, empresa.ToString() } }, cancellationToken: ct);
     }
 
-    private async Task<RespuestaConsultas<T>> LlamarConAsync<T>(
-        CallOptions opciones, Func<ConsultasService.ConsultasServiceClient, CallOptions, AsyncUnaryCall<T>> llamada, CancellationToken ct)
+    public static async Task<RespuestaConsultas<T>> LlamarAsync<TCliente, T>(
+        TCliente cliente, ILogger log, CallOptions opciones, Func<TCliente, CallOptions, AsyncUnaryCall<T>> llamada, CancellationToken ct)
         where T : class
     {
         try
@@ -83,7 +121,10 @@ public sealed partial class ClienteConsultas(ConsultasService.ConsultasServiceCl
     private static partial void LlamadaFallida(ILogger logger, string respuesta, StatusCode codigo, string tipoError);
 }
 
-/// <summary>Registro del cliente gRPC de core-consultas (HU #13791); lo llama <c>Modulos.AddFuentesConsultas</c> en modo real.</summary>
+/// <summary>
+/// Registro de los clientes gRPC de core-consultas (HU #13791; el de <c>RuntIntempoService</c> desde HU #13878): la misma
+/// dirección, scope y deadline para los dos. Lo llama <c>Modulos.AddFuentesConsultas</c> en modo real.
+/// </summary>
 internal static class RegistroClienteConsultas
 {
     public static IServiceCollection AddClienteConsultas(this IServiceCollection services, IConfiguration configuration, SeleccionAdaptadores seleccion)
@@ -94,7 +135,10 @@ internal static class RegistroClienteConsultas
 
         services.AddFlitGrpcClient<ConsultasService.ConsultasServiceClient>(
             configuration, seleccion.Direccion, ClienteConsultas.Scope, o => o.Deadline = seleccion.Deadline);
+        services.AddFlitGrpcClient<RuntIntempoService.RuntIntempoServiceClient>(
+            configuration, seleccion.Direccion, ClienteConsultas.Scope, o => o.Deadline = seleccion.Deadline);
         services.TryAddScoped<ClienteConsultas>();
+        services.TryAddScoped<ClienteRuntIntempo>();
         return services;
     }
 }

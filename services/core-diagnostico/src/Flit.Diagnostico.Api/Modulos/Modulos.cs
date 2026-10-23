@@ -22,9 +22,10 @@ public static class Modulos
     /// <summary>
     /// Fuentes de consulta (HU #13725, HU #13791): <see cref="Consultas.Fuentes.SeleccionAdaptadores"/> elige al arrancar el
     /// adaptador de todas las fuentes (simulado solo en LOCAL o DEV, real con <c>Diagnostico:Consultas:Address</c>, no conectado
-    /// en otro caso; con una configuración inválida el servicio no arranca) y queda registrada como singleton. RUNT conserva su
-    /// regla: simulada con la simulación y no conectada en otro caso. Con adaptadores reales se registra el cliente gRPC de
-    /// core-consultas (<see cref="Consultas.Fuentes.ClienteConsultas"/>); si no, ninguna llamada sale del servicio. Cada puerto de
+    /// en otro caso; con una configuración inválida el servicio no arranca) y queda registrada como singleton. RUNT sigue el mismo
+    /// modo desde HU #13878 (real por <c>RuntIntempoService</c>). Con adaptadores reales se registran los dos clientes gRPC de
+    /// core-consultas (<see cref="Consultas.Fuentes.ClienteConsultas"/> y <see cref="Consultas.Fuentes.ClienteRuntIntempo"/>); si no,
+    /// ninguna llamada sale del servicio. Cada puerto de
     /// fuente se registra con <c>services.AddAdaptador&lt;IPuerto, Real, Simulado, NoConectado&gt;(seleccion)</c>, igual que la
     /// capacidad del impuesto por departamento y su réplica (HU #13861). No mira
     /// <c>IHostEnvironment</c>. Usa TryAdd para que las pruebas puedan poner su doble antes.
@@ -49,10 +50,22 @@ public static class Modulos
         services.TryAddSingleton<Catalogos.EstadoCapacidadImpuesto>();
         services.TryAddScoped<Catalogos.ISincronizacionDepartamentosImpuesto, Catalogos.SincronizacionDepartamentosImpuesto>();
         services.AddHostedService<Catalogos.TrabajadorSincronizacionDepartamentosImpuesto>();
-        if (seleccion.ModoDe(Domain.Consultas.Fuente.Runt) == ModoAdaptador.Simulado)
-            services.TryAddSingleton<IFuenteRunt, FuenteRuntIntempoSimulada>();
-        else
-            services.TryAddSingleton<IFuenteRunt, FuenteRuntNoConectada>();
+        // HU #13878: RUNT del vehículo con el modo común; el real va por RuntIntempoService (ConsultarPorPlaca o ConsultarPorVin) y
+        // FAILED_PRECONDITION/UNIMPLEMENTED de core-consultas son NO_CONECTADO. El real es scoped (depende de ClienteRuntIntempo,
+        // scoped, como AddAdaptador); la simulada y la no conectada siguen singleton como desde #13725 (sin dependencias, se
+        // resuelven también desde la raíz).
+        switch (seleccion.ModoDe(Domain.Consultas.Fuente.Runt))
+        {
+            case ModoAdaptador.Real:
+                services.TryAddScoped<IFuenteRunt, FuenteRuntReal>();
+                break;
+            case ModoAdaptador.Simulado:
+                services.TryAddSingleton<IFuenteRunt, FuenteRuntIntempoSimulada>();
+                break;
+            default:
+                services.TryAddSingleton<IFuenteRunt, FuenteRuntNoConectada>();
+                break;
+        }
 
         if (seleccion.Modo == ModoAdaptador.Real)
             services.AddClienteConsultas(configuration, seleccion);

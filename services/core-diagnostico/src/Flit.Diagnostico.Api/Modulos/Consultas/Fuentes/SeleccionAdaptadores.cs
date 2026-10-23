@@ -26,8 +26,9 @@ public enum ModoAdaptador
 /// URL impide arrancar.</item>
 /// <item>Si no, todas son no conectadas: <see cref="EsNoConectada"/> es true y <see cref="FuentesDisponibles"/> no las ofrece.</item>
 /// </list>
-/// RUNT (<see cref="Fuente.Runt"/>) conserva su regla: simulada con la simulación y no conectada en otro caso, hasta que llegue su
-/// adaptador real (C-PER); nunca simulada junto con fuentes reales. <see cref="Fuente.ImpuestoDepartamental"/> (HU #13862) sigue
+/// RUNT (<see cref="Fuente.Runt"/>) sigue este mismo modo desde HU #13878 (real por <c>RuntIntempoService</c> con la dirección,
+/// <see cref="FuenteRuntReal"/>), así que nunca queda simulado junto con fuentes reales; su disponibilidad no es de esta clase
+/// (<see cref="EsNoConectada"/> es false para RUNT: la decide su ejecutor, #13733). <see cref="Fuente.ImpuestoDepartamental"/> (HU #13862) sigue
 /// este mismo modo: la bandera <c>Diagnostico:Fuentes:ImpuestoDisponible</c> no elige adaptador, solo decide su disponibilidad
 /// (F09-H4). No mira <c>IHostEnvironment</c>: los tres ambientes corren como Development.
 /// </summary>
@@ -106,12 +107,12 @@ public sealed class SeleccionAdaptadores
     }
 
     /// <summary>
-    /// Modo de una fuente: el de <see cref="FuentesPorConsultas"/> (incluido el impuesto, HU #13862); para RUNT, simulado con la
-    /// simulación y no conectado en otro caso (#13725); null para una fuente fuera de esta regla.
+    /// Modo de una fuente: el de <see cref="FuentesPorConsultas"/> (incluido el impuesto, HU #13862) y el de RUNT, que desde HU #13878
+    /// es el mismo modo común; null para una fuente fuera de esta regla.
     /// </summary>
     public ModoAdaptador? ModoDe(Fuente fuente) => fuente switch
     {
-        Fuente.Runt => Modo == ModoAdaptador.Simulado ? ModoAdaptador.Simulado : ModoAdaptador.NoConectado,
+        Fuente.Runt => Modo,
         _ when FuentesPorConsultas.Contains(fuente) => Modo,
         _ => null,
     };
