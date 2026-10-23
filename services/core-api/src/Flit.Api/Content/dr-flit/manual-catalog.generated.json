@@ -739,7 +739,7 @@
       "href": "/manual/1-gestor/5-seguimiento",
       "audience": "Gestor",
       "sectionId": "gestor",
-      "summary": "Cómo encontrar un trámite (radicado, placa, VIN, filtros), qué significa cada estado y qué hacer en cada uno.",
+      "summary": "Cómo encontrar un trámite (radicado, placa, VIN, filtros), qué significa cada estado, qué hacer en cada uno y cómo reenviar la validación de identidad a quien falta por firmar.",
       "primarySource": false,
       "blocks": [
         {
@@ -803,6 +803,40 @@
           ],
           "bullets": [],
           "callouts": []
+        },
+        {
+          "id": "reenviar-validacion",
+          "title": "5. Reenviar la validación de identidad",
+          "paragraphs": [
+            "Si una persona del trámite no recibió el correo de validación de identidad, o el correo estaba mal escrito, puedes reenviárselo desde el menú de la fila (tres rayas) → «Reenviar validación». La opción aparece si tu rol tiene el permiso «Reenviar validación de identidad»; el administrador de tu compañía puede asignarlo.",
+            "Validar la identidad es firmar el trámite. Por eso el cuadro solo muestra a las personas que todavía no han firmado: si el comprador ya validó y el vendedor no, solo verás al vendedor."
+          ],
+          "bullets": [
+            "Paso 1: abre las tres rayas del trámite y elige «Reenviar validación».",
+            "Paso 2: marca a quién reenviar. Hay una casilla por persona («Vendedor · nombre», «Comprador · nombre»); si hay varios propietarios, cada uno aparece por separado. Puedes marcar una o varias.",
+            "Paso 3 (opcional): si el correo registrado está mal, escribe el correcto en «Nuevo correo» de esa persona. Se guarda en el trámite y en Validaciones de Identidad, y el enlace sale a ese correo. Si lo dejas vacío, se envía al correo de siempre.",
+            "Paso 4: pulsa «Reenviar». El cuadro no se cierra: te muestra el resultado de cada persona y el enlace nuevo con «Copiar enlace», por si prefieres enviárselo tú.",
+            "Si la persona ya tiene un enlace vigente, puedes copiarlo con «Copiar enlace» sin reenviar.",
+            "Matrícula: solo aparece el comprador. Otros trámites: aparecen las personas que ese trámite pide validar.",
+            "Cada reenvío queda en el seguimiento del trámite: quién lo hizo, a qué persona y, si se corrigió, el correo anterior y el nuevo."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": "Mensajes que puedes ver",
+              "text": "«El comprador ya firmó…» (matrícula y otros trámites, que tienen un solo actor) o «Comprador y vendedor ya firmaron…» (traspaso): todas las personas ya validaron. «Correo inválido.»: revisa el correo escrito. «El reenvío quedó en cola…»: el proveedor tuvo una falla momentánea y se reintenta solo; el enlace aparecerá después. «En validación manual…»: esa persona está en captura manual y su enlace se regenera desde la revisión manual."
+            },
+            {
+              "variant": "tip",
+              "title": null,
+              "text": "Si una persona ya validó su identidad en otro trámite y sigue vigente, no aparece para reenviar: para este trámite ya cuenta como firmada."
+            },
+            {
+              "variant": "warning",
+              "title": null,
+              "text": "Un trámite aprobado, anulado o revocado no admite reenviar la validación."
+            }
+          ]
         }
       ],
       "sources": []
@@ -1235,7 +1269,8 @@
             "1. En la fila de la persona abre «Acciones» y elige «Permisos por módulo». La ficha es una sola lista: primero «Módulos» y después «Tipos de servicio».",
             "2. Activa o desactiva una acción con su interruptor, o usa «Habilitar módulo» y «Denegar módulo» para todo el módulo a la vez.",
             "3. «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo.",
-            "4. En «Tipos de servicio», «Trámites: Matrículas», «Traspasos» y «Otros trámites» tienen cada uno «Ver» y «Crear»: «Crear» solo se habilita si «Ver» está habilitado y, al apagar «Ver», también se apaga «Crear»."
+            "4. En «Tipos de servicio», «Trámites: Matrículas», «Traspasos» y «Otros trámites» tienen cada uno «Ver» y «Crear»: «Crear» solo se habilita si «Ver» está habilitado y, al apagar «Ver», también se apaga «Crear».",
+            "«Reenviar validación de identidad» (módulo de gestión avanzada de trámites) lo puedes dar a cualquier persona o rol de tu compañía: con él ve la opción «Reenviar validación» en las tres rayas del trámite, corrige el correo y copia el enlace. Las demás acciones avanzadas (cambiar estado, anular, consolidado, reasignar gestor) siguen siendo del Super Admin. La persona ve el permiso al volver a ingresar."
           ],
           "callouts": [
             {

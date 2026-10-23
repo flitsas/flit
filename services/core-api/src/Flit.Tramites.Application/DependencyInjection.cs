@@ -275,6 +275,9 @@ public static class DependencyInjection
         // HU #12161 — reenvío administrativo de la validación de identidad de un trámite (correo
         // opcional), fuera del gate not_draft y del mecanismo standalone.
         services.AddScoped<AdminReenviarValidacionIdentidadHandler>();
+        // HU #13821 (Épica #13817) — a quién se le puede reenviar: una entrada por persona sin firmar.
+        services.AddScoped<ListValidacionesReenviablesHandler>();
+        services.AddScoped<AdminReenviarValidacionesLoteHandler>();
         // HU #13284/#13287 (Épica #13202) — activar el flujo manual de identidad y regenerar su enlace (Super Admin). El
         // notificador del enlace (IManualCaptureLinkNotifier, correo al titular) se registra en Infraestructura.
         services.AddScoped<ActivarIdentidadManualHandler>();

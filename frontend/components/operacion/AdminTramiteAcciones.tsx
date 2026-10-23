@@ -11,7 +11,10 @@ import {
   SeccionVacia,
 } from '@/components/operacion/detalle/primitivos';
 import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
-import { ReenviarValidacionIdentidadModal } from './ReenviarValidacionIdentidadModal';
+import {
+  ReenviarValidacionIdentidadModal,
+  mensajeTodosFirmaron,
+} from './ReenviarValidacionIdentidadModal';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useToast } from '@/components/admin/Toast';
 import { tramitesClient, type GestorOption } from '@/lib/api/tramites-client';
@@ -687,6 +690,8 @@ export function useAdminTramiteAcciones({
   // falta reenviar nada.
   const identidadNoAccionable =
     esAprobado || esAnulado || item.identityValidationStatus === 'aprobado';
+  // Épica #13817 — la matrícula solo tiene comprador: no se habla de «comprador y vendedor».
+  const todosFirmaron = mensajeTodosFirmaron(item.modalidad, item.tipoCodigo);
 
   const [estadoOpen, setEstadoOpen] = useState(false);
   const [anularOpen, setAnularOpen] = useState(false);
@@ -746,7 +751,7 @@ export function useAdminTramiteAcciones({
       disabledReason:
         esAprobado || esAnulado
           ? 'La identidad ya no es accionable en este estado del trámite.'
-          : 'La identidad de este trámite ya está aprobada: no hay nada que reenviar.',
+          : todosFirmaron,
       onSelect: () => setReenviarOpen(true),
     });
   }
@@ -807,6 +812,7 @@ export function useAdminTramiteAcciones({
         instanceId={item.id}
         referenceNumber={item.referenceNumber}
         tenantId={tenantId}
+        mensajeVacio={todosFirmaron}
         onSuccess={onSuccess}
         onError={onError}
       />
