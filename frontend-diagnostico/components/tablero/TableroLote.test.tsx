@@ -224,3 +224,37 @@ describe("/diagnosticos/{id} — AC7: cerrar panel", () => {
     expect(desdesPedidos(api)).toEqual([0, 20]);
   });
 });
+
+describe("/diagnosticos/{id} — HU #13851: descargas del tablero", () => {
+  const DESCARGA: Partial<CapacidadesDiagnostico> = { verDiagnosticos: true, descargarReportes: true };
+
+  it("AC1: lote EN_PROCESO, el PDF del vehículo terminado está habilitado y el del que sigue en curso deshabilitado con su ayuda", async () => {
+    await montar({ [GRILLA]: () => Response.json(grilla()) }, DESCARGA);
+    const tabla = screen.getByRole("table", { name: /semáforo de consultas/i });
+    expect(within(tabla).getByRole("columnheader", { name: "Reporte" })).toBeInTheDocument();
+    const pdf1 = within(tabla).getByRole("link", { name: "Descargar PDF de TST001" });
+    expect(pdf1).toHaveAttribute("href", `/api/v1/diagnostico/diagnosticos/${ID}/vehiculos/vehiculo-1/pdf`);
+    expect(pdf1).toHaveAttribute("download");
+    const pdf2 = within(tabla).getByRole("button", { name: "Descargar PDF de TST002" });
+    expect(pdf2).toBeDisabled();
+    expect(pdf2).toHaveAccessibleDescription("Disponible cuando terminen las consultas de este vehículo");
+    const barra = screen.getByRole("region", { name: "Descargas del lote" });
+    expect(within(barra).getByRole("link", { name: "Descargar Excel" })).toBeInTheDocument();
+    expect(within(barra).getByRole("button", { name: "Descargar PDF (.zip)" })).toBeInTheDocument();
+  });
+
+  it("AC6: lote INCOMPLETO, el PDF del vehículo con celdas en error está habilitado con la ayuda de «no disponible»", async () => {
+    await montar({ [GRILLA]: () => Response.json(loteTerminadoConErrores({ estado: "INCOMPLETO" })) }, DESCARGA);
+    const pdf4 = screen.getByRole("link", { name: "Descargar PDF de TST004" });
+    expect(pdf4).toHaveAccessibleDescription("Las consultas no disponibles aparecerán así en el PDF");
+  });
+
+  it("AC4: sin la capacidad descargarReportes no hay ningún control de descarga ni la columna Reporte", async () => {
+    await montar({ [GRILLA]: () => Response.json(grilla()) }, USUARIO);
+    expect(screen.getByRole("table", { name: /semáforo de consultas/i })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Descargas del lote" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Reporte" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /descargar/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /descargar/i })).not.toBeInTheDocument();
+  });
+});

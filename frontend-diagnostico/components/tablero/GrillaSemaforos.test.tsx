@@ -177,3 +177,17 @@ describe("GrillaSemaforos — AC6: dato reutilizado y sin indicador manual", () 
     expect(container.querySelector("[data-origen], [data-manual]")).toBeNull();
   });
 });
+
+describe("GrillaSemaforos — HU #13851: columna Reporte opcional", () => {
+  it("sin accionVehiculo no hay columna Reporte (backoffice y compañía sin la capacidad)", () => {
+    pintar();
+    expect(screen.queryByRole("columnheader", { name: "Reporte" })).not.toBeInTheDocument();
+  });
+
+  it("con accionVehiculo pinta la columna Reporte con la acción de cada fila", () => {
+    pintar(grilla(), false, { accionVehiculo: (v) => <span>{`acción ${v.identificador}`}</span> });
+    expect(screen.getByRole("columnheader", { name: "Reporte" })).toBeInTheDocument();
+    const fila = screen.getByRole("rowheader", { name: /TST002/ }).closest("tr")!;
+    expect(within(fila).getByText("acción TST002")).toBeInTheDocument();
+  });
+});

@@ -13,6 +13,8 @@ import { accesoNegado } from "@/lib/carga/api";
 import { cerrarPanel, mensajeCierre, type CeldaGrilla, type Grilla } from "@/lib/tablero/api";
 import { hayPendientes, marcarReprocesada } from "@/lib/tablero/fusionarCeldas";
 import { useGrillaIncremental } from "@/lib/tablero/useGrillaIncremental";
+import { BotonPdfVehiculo } from "./BotonPdfVehiculo";
+import { DescargasLote } from "./DescargasLote";
 import { EstadoGlobal, EstimadoVsConsumido } from "./EstadoGlobal";
 import { GrillaSemaforos } from "./GrillaSemaforos";
 
@@ -44,6 +46,8 @@ export function TableroLote({ diagnosticoId }: { diagnosticoId: string }) {
   const puedeVer = sesion?.capacidades.verDiagnosticos ?? false;
   const puedeReprocesar = sesion?.capacidades.reprocesarConsultas ?? false;
   const puedeCargar = sesion?.capacidades.crearDiagnosticos ?? false;
+  // HU #13851: PDF por vehículo, Excel y ZIP del lote; sin la capacidad no hay ningún control (la API vuelve a exigirla).
+  const puedeDescargar = sesion?.capacidades.descargarReportes ?? false;
   const { grilla, cargando, error, errorSondeo, sondeando, reintentar, reanudar, refrescar, actualizar } = useGrillaIncremental(diagnosticoId, {
     habilitado: puedeVer,
   });
@@ -133,6 +137,7 @@ export function TableroLote({ diagnosticoId }: { diagnosticoId: string }) {
         <section aria-label="Avance del lote" className={TARJETA_CLS}>
           <EstadoGlobal grilla={grilla} sondeando={sondeando} />
         </section>
+        <DescargasLote diagnosticoId={diagnosticoId} estadoLote={grilla.estado} puedeDescargar={puedeDescargar} />
         {aviso && (
           <InlineAlert tone="error" title="No se completó la acción">
             {aviso}
@@ -152,7 +157,13 @@ export function TableroLote({ diagnosticoId }: { diagnosticoId: string }) {
           </InlineAlert>
         )}
         <section aria-label="Grilla del lote" className={`${TARJETA_CLS} flex flex-col gap-4`}>
-          <GrillaSemaforos grilla={grilla} puedeReprocesar={puedeReprocesar} onReprocesada={alReprocesar} onErrorReproceso={alFallarReproceso} />
+          <GrillaSemaforos
+            grilla={grilla}
+            puedeReprocesar={puedeReprocesar}
+            onReprocesada={alReprocesar}
+            onErrorReproceso={alFallarReproceso}
+            accionVehiculo={puedeDescargar ? (v) => <BotonPdfVehiculo diagnosticoId={grilla.id} estadoLote={grilla.estado} vehiculo={v} /> : undefined}
+          />
           <EstimadoVsConsumido estimado={grilla.estimado_consultas} />
         </section>
       </>

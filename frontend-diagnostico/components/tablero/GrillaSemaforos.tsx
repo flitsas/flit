@@ -30,6 +30,11 @@ export interface GrillaSemaforosProps extends Pick<CeldaSemaforoProps, "onReproc
   accionesDetalle?: (celda: CeldaGrilla, vehiculo: FilaVehiculo, cerrar: () => void) => ReactNode;
   /** Marca bajo el semáforo de cada celda: solo el backoffice (origen manual, HU #13802); la compañía nunca (Q5). */
   marcaCelda?: (celda: CeldaGrilla) => ReactNode;
+  /**
+   * Acción al final de cada fila en la columna «Reporte» (HU #13851: «PDF» del vehículo, solo con la capacidad
+   * `descargarReportes`). Sin ella la columna no existe (backoffice y compañía sin la capacidad).
+   */
+  accionVehiculo?: (vehiculo: FilaVehiculo) => ReactNode;
 }
 
 interface Seleccion {
@@ -63,7 +68,16 @@ function EncabezadoVehiculo({ vehiculo, total }: { vehiculo: FilaVehiculo; total
  * Por locatario según el alcance del lote. El usuario no ve acciones; el admin, «Reprocesar» solo en las rojas. Cada
  * semáforo abre el detalle de su celda (HU #13801).
  */
-export function GrillaSemaforos({ grilla, puedeReprocesar, onReprocesada, onErrorReproceso, cargarDetalle, accionesDetalle, marcaCelda }: GrillaSemaforosProps) {
+export function GrillaSemaforos({
+  grilla,
+  puedeReprocesar,
+  onReprocesada,
+  onErrorReproceso,
+  cargarDetalle,
+  accionesDetalle,
+  marcaCelda,
+  accionVehiculo,
+}: GrillaSemaforosProps) {
   const [seleccion, setSeleccion] = useState<Seleccion | null>(null);
   const grupos = GRUPOS.map((g) => ({ ...g, fuentes: grilla.columnas[g.clave] ?? [] })).filter((g) => g.fuentes.length > 0);
   const fuentes: Fuente[] = grupos.flatMap((g) => g.fuentes);
@@ -81,6 +95,11 @@ export function GrillaSemaforos({ grilla, puedeReprocesar, onReprocesada, onErro
                 {g.nombre}
               </th>
             ))}
+            {accionVehiculo && (
+              <th scope="col" rowSpan={2} className={`${CABECERA_CLS} border-l border-white/60 align-bottom dark:border-white/10`} style={CABECERA_ESTILO}>
+                Reporte
+              </th>
+            )}
           </tr>
           <tr>
             {fuentes.map((f) => (
@@ -112,6 +131,7 @@ export function GrillaSemaforos({ grilla, puedeReprocesar, onReprocesada, onErro
                   />
                   );
                 })}
+                {accionVehiculo && <td className="px-3 py-2.5 align-top">{accionVehiculo(v)}</td>}
               </tr>
             );
           })}
