@@ -133,7 +133,9 @@ public sealed class IniciarKyverumVerifyHandler(
             string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
             && (actoresDelRol <= 1 || BiometricRules.DocumentoCoincide(v, tipoDoc, documento))
             && v.Status is BiometricEstados.Enviado or BiometricEstados.EnProceso
-                or BiometricEstados.Aprobado or BiometricEstados.PendienteEnvio);
+                or BiometricEstados.Aprobado or BiometricEstados.PendienteEnvio
+            // HU #13824 — una aprobada que un Super Admin venció a mano ya no bloquea: es justo lo que se revalida.
+            && !(v.ExpiredManuallyAt != null && !BiometricRules.EsAprobadaVigente(v, nowDecision)));
         if (existing is not null)
         {
             // Un enlace VENCIDO no debe bloquear el reenvío. Si la validación activa es en_proceso/enviado y

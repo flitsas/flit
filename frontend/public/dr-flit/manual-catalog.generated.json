@@ -991,7 +991,7 @@
       "href": "/manual/1-gestor/8-identidad",
       "audience": "Gestor",
       "sectionId": "gestor",
-      "summary": "Qué muestra el módulo Identidad, cómo buscar una persona, leer estados y vigencias y desatascar una validación.",
+      "summary": "Qué muestra el módulo Identidad, cómo buscar una persona, leer estados y vigencias, desatascar una validación y quién puede vencer una identidad aprobada.",
       "primarySource": false,
       "blocks": [
         {
@@ -1023,13 +1023,19 @@
           "bullets": [
             "«Nueva» crea una prevalidación de persona natural: se envía un enlace de captura al correo indicado y el resultado queda disponible para trámites posteriores.",
             "Abre una fila para ver el detalle en un panel lateral (drawer): proceso ante el proveedor, reintentos y línea de tiempo del registro.",
-            "«Ver alertas de validación» abre el panel de validaciones atascadas (sin respuesta del proveedor), agrupadas por persona, con opción de reintentar todas de una vez o una por una."
+            "«Ver alertas de validación» abre el panel de validaciones atascadas (sin respuesta del proveedor), agrupadas por persona, con opción de reintentar todas de una vez o una por una.",
+            "«Vencer» (solo Super Admin de FLIT, en el menú «Acciones» de una validación aprobada y vigente): termina la vigencia en ese momento para que la persona repita la validación. En el mismo paso se le envía un enlace nuevo, que queda en pantalla con «Copiar enlace». El certificado anterior se conserva en el historial."
           ],
           "callouts": [
             {
               "variant": "info",
               "title": null,
               "text": "Una validación aprobada tiene vigencia. Al acercarse la fecha, el sistema la marca; una validación vencida no sirve para firmar y hay que repetirla."
+            },
+            {
+              "variant": "warning",
+              "title": "Qué pasa al vencer una identidad",
+              "text": "Los trámites en borrador que usaban esa identidad quedan sin firmar para esa persona: hasta que apruebe la validación nueva no se pueden radicar. Los trámites que ya salieron de borrador conservan la firma con la que salieron. Si ningún trámite en borrador la necesita, se vence sin enviar enlace y el aviso lo dice. Si tu compañía necesita vencer una identidad, pídeselo al equipo FLIT."
             }
           ]
         },

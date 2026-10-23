@@ -834,6 +834,7 @@ Flit.Tramites.Application.UseCases.ProcedureInstances.SubmitProcedureInstanceHan
 Flit.Tramites.Application.UseCases.ProcedureInstances.SyncSellerActorFromConsultationsHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.SyncSellerActorFromConsultationsHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.TramiteValidationPolicy => factory (Singleton)
 Flit.Tramites.Application.UseCases.ProcedureInstances.UploadAttachmentHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.UploadAttachmentHandler (Scoped)
+Flit.Tramites.Application.UseCases.ProcedureInstances.VencerIdentidadHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.VencerIdentidadHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureTypes.ArchiveProcedureTypeHandler => Flit.Tramites.Application.UseCases.ProcedureTypes.ArchiveProcedureTypeHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureTypes.CreateProcedureTypeHandler => Flit.Tramites.Application.UseCases.ProcedureTypes.CreateProcedureTypeHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureTypes.DeleteProcedureTypeHandler => Flit.Tramites.Application.UseCases.ProcedureTypes.DeleteProcedureTypeHandler (Scoped)
