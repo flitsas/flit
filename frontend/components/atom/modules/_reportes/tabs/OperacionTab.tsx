@@ -4,7 +4,7 @@
 // % de conversión, tabla accionable de trámites atascados, distribución por tipo
 // y por OT, y comparativa de KPIs según el periodo comparado (compareWith).
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
-import { fetchFunnel, fetchOtMetrics, variationPct } from "@/lib/api/analytics-v2";
+import { fetchFunnel, fetchOtMetrics, variationPct, type StuckItem } from "@/lib/api/analytics-v2";
 import type { AnalyticsCategory } from "@/lib/api/types";
 import { BarList } from "../BarList";
 import { statusLabel } from "../categories";
@@ -14,14 +14,8 @@ import { formatInt, formatNumber, formatPct } from "../format";
 import { FunnelChart } from "../FunnelChart";
 import { KpiCard } from "../KpiCard";
 import { useAnalyticsQuery } from "../useAnalyticsQuery";
-import {
-  CARDLIST_CELL,
-  CARDLIST_HEAD_ROW,
-  CARDLIST_ROW,
-  CARDLIST_SCROLL,
-  CARDLIST_TABLE,
-  CARDLIST_TH,
-} from "@/components/atom/table-cardlist";
+import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 
 export interface OperacionTabProps {
   filters: ReportFilters;
@@ -29,7 +23,36 @@ export interface OperacionTabProps {
   onDrillDown: (segment: { category?: AnalyticsCategory; status?: string }) => void;
 }
 
+// HU #13923 — columnas de «Trámites atascados» con el DataTable estándar.
+const STUCK_COLUMNS: DataTableColumn<StuckItem>[] = [
+  {
+    key: "referencia",
+    header: "Referencia",
+    cellClassName: "font-medium",
+    render: (item) => (
+      <a
+        href={`/tramites/${item.instanceId}`}
+        className="text-flit-brand hover:underline"
+        aria-label={`Abrir el trámite ${item.referenceNumber}`}
+      >
+        {item.referenceNumber}
+      </a>
+    ),
+  },
+  { key: "estado", header: "Estado", render: (item) => statusLabel(item.status) },
+  {
+    key: "dias",
+    header: "Días detenido",
+    cellClassName: "font-semibold text-[#F9AC00]",
+    render: (item) => formatNumber(item.daysInStatus),
+  },
+  { key: "organismo", header: "Organismo", cellClassName: "opacity-80", render: (item) => item.transitOfficeName },
+  { key: "tipo", header: "Tipo", cellClassName: "opacity-80", render: (item) => item.procedureTypeName },
+  { key: "radicador", header: "Radicador", cellClassName: "opacity-80", render: (item) => item.createdByDisplayName },
+];
+
 export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTabProps) {
+  const pg = usePaginacion("tabs.OperacionTab");
   const params = toMetricsParams(filters);
   const deps = [JSON.stringify(params)];
 
@@ -156,46 +179,23 @@ export function OperacionTab({ filters, needsCompany, onDrillDown }: OperacionTa
               >
                 Trámites atascados ({formatInt(metrics.data.current.stuck.totalCount)})
               </h2>
-              {metrics.data.current.stuck.items.length === 0 ? (
-                <p className="text-xs opacity-60">No hay trámites atascados. ¡Buen ritmo!</p>
-              ) : (
-                <div className={CARDLIST_SCROLL}>
-                  <table className={CARDLIST_TABLE} data-testid="stuck-table" aria-labelledby="stuck-title">
-                    <thead>
-                      <tr className={CARDLIST_HEAD_ROW}>
-                        <th scope="col" className={CARDLIST_TH}>Referencia</th>
-                        <th scope="col" className={CARDLIST_TH}>Estado</th>
-                        <th scope="col" className={CARDLIST_TH}>Días detenido</th>
-                        <th scope="col" className={CARDLIST_TH}>Organismo</th>
-                        <th scope="col" className={CARDLIST_TH}>Tipo</th>
-                        <th scope="col" className={CARDLIST_TH}>Radicador</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {metrics.data.current.stuck.items.map((item) => (
-                        <tr key={item.instanceId} className={CARDLIST_ROW}>
-                          <td className={`${CARDLIST_CELL} font-medium`}>
-                            <a
-                              href={`/tramites/${item.instanceId}`}
-                              className="text-flit-brand hover:underline"
-                              aria-label={`Abrir el trámite ${item.referenceNumber}`}
-                            >
-                              {item.referenceNumber}
-                            </a>
-                          </td>
-                          <td className={CARDLIST_CELL}>{statusLabel(item.status)}</td>
-                          <td className={`${CARDLIST_CELL} font-semibold`} style={{ color: "#F9AC00" }}>
-                            {formatNumber(item.daysInStatus)}
-                          </td>
-                          <td className={`${CARDLIST_CELL} opacity-80`}>{item.transitOfficeName}</td>
-                          <td className={`${CARDLIST_CELL} opacity-80`}>{item.procedureTypeName}</td>
-                          <td className={`${CARDLIST_CELL} opacity-80`}>{item.createdByDisplayName}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              {/* HU #13923 — paginación estándar con «Filas por página»; el texto vacío se conserva. */}
+              <div data-testid="stuck-table">
+                <DataTable
+                  columns={STUCK_COLUMNS}
+                  rows={pg.paginar(metrics.data.current.stuck.items)}
+                  getRowKey={(item) => item.instanceId}
+                  ariaLabel="Trámites atascados"
+                  emptyMessage="No hay trámites atascados. ¡Buen ritmo!"
+                  pagination={{
+                    page: pg.page,
+                    pageSize: pg.pageSize,
+                    totalCount: metrics.data.current.stuck.items.length,
+                    onPageChange: pg.setPage,
+                    onPageSizeChange: pg.setPageSize,
+                  }}
+                />
+              </div>
             </section>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
