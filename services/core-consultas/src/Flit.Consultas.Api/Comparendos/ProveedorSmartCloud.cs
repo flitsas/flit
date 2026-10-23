@@ -13,14 +13,41 @@ namespace Flit.Consultas.Api.Comparendos;
 /// Credenciales y direcciones de SmartCloud. Mismas variables de entorno que el BackCrudSmartCloud de V1, renombradas
 /// sin el prefijo de V1: <c>SMARTCLOUD_ACCESS_KEY</c>, <c>SMARTCLOUD_URL_IDENTIFICACION</c>, <c>SMARTCLOUD_URL_PLACA</c>
 /// y <c>SMARTCLOUD_TIMEOUT_SECONDS</c>. Las direcciones no tienen valor por defecto: salen solo del <c>.env</c>.
+/// <para>
+/// <c>SMARTCLOUD_PROXY_URL</c> (opcional, <c>http://usuario:clave@host:puerto</c>): proxy CONNECT SOLO para este cliente.
+/// El WAF del SIMIT rechaza con 403 las IPs de las VPS de Europa (PDN en la 169), así que allí SmartCloud sale por
+/// flit-egress de la 177. Va por cliente y no con <c>HTTPS_PROXY</c> del proceso: el proxy solo deja pasar el SIMIT, y
+/// con la variable global los demás proveedores (RUNT, Verifik, Kyverum, Fasecolda) se irían contra él.
+/// </para>
 /// </summary>
-internal sealed record SmartCloudOpciones(string ClaveAcceso, Uri? UrlIdentificacion, Uri? UrlPlaca, int TimeoutSegundos)
+internal sealed record SmartCloudOpciones(string ClaveAcceso, Uri? UrlIdentificacion, Uri? UrlPlaca, int TimeoutSegundos, Uri? Proxy = null)
 {
     public static SmartCloudOpciones Desde(IConfiguration c) => new(
         c["SMARTCLOUD_ACCESS_KEY"]?.Trim() ?? string.Empty,
         c["SMARTCLOUD_URL_IDENTIFICACION"] is { Length: > 0 } i ? new Uri(i) : null,
         c["SMARTCLOUD_URL_PLACA"] is { Length: > 0 } p ? new Uri(p) : null,
-        int.TryParse(c["SMARTCLOUD_TIMEOUT_SECONDS"], CultureInfo.InvariantCulture, out var t) && t > 0 ? t : 60);
+        int.TryParse(c["SMARTCLOUD_TIMEOUT_SECONDS"], CultureInfo.InvariantCulture, out var t) && t > 0 ? t : 60,
+        c["SMARTCLOUD_PROXY_URL"] is { Length: > 0 } x ? new Uri(x.Trim()) : null);
+
+    /// <summary>
+    /// Manejador del cliente de SmartCloud. Sin <see cref="Proxy"/>, sin proxy alguno (ni el del entorno). Con él, las
+    /// credenciales salen de la parte de usuario de la URL: <see cref="WebProxy"/> no las toma solo.
+    /// </summary>
+    public HttpMessageHandler CrearManejador()
+    {
+        if (Proxy is null)
+            return new SocketsHttpHandler { UseProxy = false };
+
+        var proxy = new WebProxy(new UriBuilder(Proxy) { UserName = string.Empty, Password = string.Empty }.Uri);
+        if (Proxy.UserInfo is { Length: > 0 } info)
+        {
+            var partes = info.Split(':', 2);
+            proxy.Credentials = new NetworkCredential(Uri.UnescapeDataString(partes[0]),
+                partes.Length > 1 ? Uri.UnescapeDataString(partes[1]) : string.Empty);
+        }
+
+        return new SocketsHttpHandler { Proxy = proxy, UseProxy = true };
+    }
 }
 
 /// <summary>

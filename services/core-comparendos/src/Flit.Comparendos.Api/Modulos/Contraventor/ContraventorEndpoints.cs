@@ -128,7 +128,7 @@ public sealed partial class ReintentoContraventor(ComparendosDb db, ServicioCont
             try
             {
                 var c = await db.Comparendos.Include(x => x.Contraventor).FirstAsync(x => x.Id == id, ct).ConfigureAwait(false);
-                await servicio.ConsultarAsync(c, Actor.Api("API de contratos"), confirmarReemplazo: false, ct).ConfigureAwait(false);
+                await servicio.ConsultarAsync(c, Actor.Api("Consulta automática"), confirmarReemplazo: false, ct).ConfigureAwait(false);
                 await db.SaveChangesAsync(ct).ConfigureAwait(false);
             }
             catch (ReglaException ex)
