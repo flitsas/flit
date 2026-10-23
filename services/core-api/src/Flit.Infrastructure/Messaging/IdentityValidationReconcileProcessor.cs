@@ -93,6 +93,27 @@ internal sealed class IdentityValidationReconcileProcessor(
 
         var now = DateTimeOffset.UtcNow;
 
+        // Bug #13885 — paso barato (SIN llamar a Kyverum): una validación en vuelo de un trámite anulado, revocado o
+        // borrado se cierra como `expirado`. Bug #13055 la congelaba sin cerrarla y el índice único por documento
+        // bloqueaba para siempre toda validación nueva de la persona en el tenant. No se aplica ningún veredicto.
+        var inactivaId = await ClaimNextInFlightDeTramiteInactivoIdAsync(db, ct);
+        if (inactivaId is not null)
+        {
+            var inactiva = await db.ProcedureInstanceBiometricValidations
+                .Include(x => x.ProcedureInstance)
+                .FirstAsync(x => x.Id == inactivaId.Value, ct);
+            var estadoPrevio = inactiva.Status;
+            inactiva.Status = BiometricEstados.Expirado;
+            inactiva.UpdatedAt = now;
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+
+            ReconcileLog.ClosedForInactiveProcedure(logger, inactiva.Id);
+            await audit.LogAsync(
+                IdentityInFlightRelease.CierreAuditado(inactiva, estadoPrevio, "Worker"), ct);
+            return true;
+        }
+
         // Paso barato (SIN llamar a Kyverum): terminaliza una validación cuyo enlace de captura ya venció
         // (en_proceso + expires_at <= now) pasándola a `expirado`. Es la cura del "queda trabada": el registro
         // se limpia solo aunque el gestor nunca reabra el trámite, y desbloquea el reenvío (el guardia deja de
@@ -297,6 +318,37 @@ internal sealed class IdentityValidationReconcileProcessor(
         return await reader.ReadAsync(ct) ? reader.GetGuid(0) : null;
     }
 
+    /// <summary>
+    /// Bug #13885 — reclama una validación EN VUELO (<c>pendiente_envio</c>, <c>enviado</c>, <c>en_proceso</c>; cualquier
+    /// proveedor) cuyo trámite está anulado, revocado o borrado, con <c>FOR UPDATE SKIP LOCKED</c>. No consulta a Kyverum:
+    /// solo se usa para cerrarla como <c>expirado</c>. Las prevalidaciones y las del mandatario (sin trámite) no entran.
+    /// </summary>
+    internal static async Task<Guid?> ClaimNextInFlightDeTramiteInactivoIdAsync(FlitDbContext db, CancellationToken ct)
+    {
+        var connection = db.Database.GetDbConnection();
+        var transaction = db.Database.CurrentTransaction!.GetDbTransaction();
+
+        await using var cmd = connection.CreateCommand();
+        cmd.Transaction = transaction;
+        cmd.CommandText = """
+            SELECT v.id
+            FROM tramites.procedure_instance_biometric_validations v
+            JOIN tramites.procedure_instances pi ON pi.id = v.procedure_instance_id
+            WHERE v.status IN (@pendienteEnvio, @enviado, @enProceso)
+              AND v.deleted_at IS NULL
+              AND (pi.status IN ('anulado', 'revocado') OR pi.deleted_at IS NOT NULL)
+            ORDER BY v.created_at
+            LIMIT 1
+            FOR UPDATE OF v SKIP LOCKED
+            """;
+        AddParam(cmd, "pendienteEnvio", BiometricEstados.PendienteEnvio);
+        AddParam(cmd, "enviado", BiometricEstados.Enviado);
+        AddParam(cmd, "enProceso", BiometricEstados.EnProceso);
+
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        return await reader.ReadAsync(ct) ? reader.GetGuid(0) : null;
+    }
+
     private static void AddParam(System.Data.Common.DbCommand cmd, string name, object value)
     {
         var p = cmd.CreateParameter();
@@ -316,6 +368,10 @@ internal static partial class ReconcileLog
     [LoggerMessage(Level = LogLevel.Information,
         Message = "Reconciliación identidad: enlace vencido; validación {ValidationId} terminalizada como expirada.")]
     public static partial void Expired(ILogger logger, Guid validationId);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Reconciliación identidad: trámite inactivo; validación en vuelo {ValidationId} cerrada como expirada.")]
+    public static partial void ClosedForInactiveProcedure(ILogger logger, Guid validationId);
 
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "Reconciliación identidad: falló la consulta de {ValidationId} (transitorio={Transient}); se reintentará.")]

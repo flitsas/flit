@@ -106,8 +106,10 @@ public sealed class IdentidadCongeladaPorTramiteTests
     // ── Webhook de Kyverum ──────────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Webhook_TramiteRevocado_Responde200SinContarIntentos_YAudita()
+    public async Task Webhook_TramiteRevocado_Responde200SinContarIntentosNiAplicarVeredicto_YCierraLaFilaEnVuelo()
     {
+        // Bug #13885 — antes la fila quedaba en en_proceso para siempre y bloqueaba a la persona en todo el tenant
+        // (índice único por documento). El veredicto sigue sin aplicarse (#13055); solo se cierra como expirada.
         var repo = Substitute.For<IProcedureInstanceRepository>();
         var audit = Substitute.For<IIdentityValidationAuditLog>();
         var v = Validacion(BiometricEstados.EnProceso, TramiteEstado.Revocado);
@@ -121,13 +123,61 @@ public sealed class IdentidadCongeladaPorTramiteTests
 
         result.Should().Be("ok", "un error haría que Kyverum reintentara indefinidamente");
         error.Should().BeNull();
-        v.Status.Should().Be(BiometricEstados.EnProceso);
+        v.Status.Should().Be(BiometricEstados.Expirado, "una validación en vuelo de un trámite revocado ya no puede usarse");
+        v.ValidatedAt.Should().BeNull();
+        v.ProviderPayload.Should().BeNull("el veredicto del proveedor no se aplica");
         await repo.DidNotReceive().TryCountKyverumAttemptAsync(
             Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
-        await repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await repo.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _events.DidNotReceive().PublishAsync(Arg.Any<IdentityValidationCompleted>(), Arg.Any<CancellationToken>());
         await audit.Received(1).LogAsync(
             Arg.Is<IdentityValidationAuditEntry>(e => e.Outcome == IdentityValidationAuditOutcomes.TramiteInactivo),
             Arg.Any<CancellationToken>());
+        await audit.Received(1).LogAsync(
+            Arg.Is<IdentityValidationAuditEntry>(e =>
+                e.Stage == IdentityValidationAuditStages.Expired && e.Detail!.Contains("estado_previo=en_proceso")),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(BiometricEstados.Aprobado)]
+    [InlineData(BiometricEstados.Rechazado)]
+    [InlineData(BiometricEstados.Expirado)]
+    public async Task Webhook_TramiteAnulado_ValidacionTerminal_ConservaSuEstado(string estado)
+    {
+        var repo = Substitute.For<IProcedureInstanceRepository>();
+        var v = Validacion(estado, TramiteEstado.Anulado);
+        repo.GetBiometricByIdAsync(v.Id, Arg.Any<CancellationToken>()).Returns(v);
+        var handler = new KyverumWebhookHandler(
+            repo, Substitute.For<IWebhookSecretProtector>(), Substitute.For<IKyverumVerifyClient>(),
+            Applier(), Substitute.For<IIdentityValidationAuditLog>(), NullLogger<KyverumWebhookHandler>.Instance);
+
+        var (result, _) = await handler.HandleAsync(
+            new KyverumWebhookInput(v.Id, Encoding.UTF8.GetBytes("{\"event\":\"validation.completed\"}"), "sig"), Ct);
+
+        result.Should().Be("ok");
+        v.Status.Should().Be(estado, "solo se cierran las que seguían en vuelo");
+        await repo.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AvisoVerificadoPorConsultas_TramiteAnulado_CierraLaFilaEnVuelo()
+    {
+        var repo = Substitute.For<IProcedureInstanceRepository>();
+        var v = Validacion(BiometricEstados.EnProceso, TramiteEstado.Anulado);
+        repo.GetBiometricByIdAsync(v.Id, Arg.Any<CancellationToken>()).Returns(v);
+        var handler = new KyverumWebhookHandler(
+            repo, Substitute.For<IWebhookSecretProtector>(), Substitute.For<IKyverumVerifyClient>(),
+            Applier(), Substitute.For<IIdentityValidationAuditLog>(), NullLogger<KyverumWebhookHandler>.Instance);
+
+        var (result, error) = await handler.HandleVerifiedAsync(
+            v.Id, Encoding.UTF8.GetBytes("{\"evento\":\"validation.completed\",\"data\":{\"aprobado\":true}}"), Ct);
+
+        result.Should().Be("ok");
+        error.Should().BeNull();
+        v.Status.Should().Be(BiometricEstados.Expirado);
+        v.ValidatedAt.Should().BeNull("un aprobado sobre un trámite anulado no se aplica");
+        await repo.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     // ── Flujos simulados (DEV/QA) ───────────────────────────────────────────────────────────────
