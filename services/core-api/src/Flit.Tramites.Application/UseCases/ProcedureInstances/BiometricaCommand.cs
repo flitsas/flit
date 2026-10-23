@@ -245,6 +245,12 @@ public sealed class IniciarBiometriaHandler(
         if (existing is not null)
             return (null, "biometria_activa", null);
 
+        // Bug #13885 — misma liberación que el camino Kyverum: cierra las validaciones en vuelo de trámites inactivos del
+        // documento (índice único) o responde 409 con la que siga viva.
+        var bloqueo = await IdentityInFlightRelease.LiberarAsync(repo, null, tenantId, tipoDoc, documento, now, ct);
+        if (bloqueo is not null)
+            return (null, "biometria_activa", IdentityInFlightRelease.Conflicto(bloqueo));
+
         var token = BiometricToken.Generate();
         var validation = new ProcedureInstanceBiometricValidation
         {

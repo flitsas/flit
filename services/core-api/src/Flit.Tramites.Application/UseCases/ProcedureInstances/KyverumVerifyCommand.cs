@@ -158,6 +158,14 @@ public sealed class IniciarKyverumVerifyHandler(
                 Detail: $"expires_at={existing.ExpiresAt:O}"), ct);
         }
 
+        // Bug #13885 — ANTES de llamar a Kyverum: cierra las filas en vuelo de trámites anulados, revocados o borrados que
+        // impedirían guardar la nueva (índice único por documento) y, si queda una viva, responde 409 sin crear nada en el
+        // proveedor. Antes se llamaba a Kyverum, el guardado chocaba con el índice y quedaba una verificación huérfana.
+        var bloqueo = await IdentityInFlightRelease.LiberarAsync(
+            repo, audit, tenantId, tipoDoc, documento, DateTimeOffset.UtcNow, ct);
+        if (bloqueo is not null)
+            return (null, "biometria_activa", IdentityInFlightRelease.Conflicto(bloqueo));
+
         // Id de NUESTRA validación: se genera ANTES de llamar al proveedor para incrustarlo en la
         // webhookUrl (el webhook de Kyverum no repite el id en el cuerpo → correlación por URL).
         var validationId = Guid.NewGuid();
@@ -366,9 +374,10 @@ public sealed class KyverumWebhookHandler(
             KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole,
             SignaturePresent: signaturePresent, SecretPresent: secretPresent), ct);
 
-        // Bug #13055 — trámite anulado o revocado: la validación conserva su estado (ni conteo de
+        // Bug #13055 — trámite anulado o revocado: el veredicto del proveedor no se aplica (ni conteo de
         // intentos, ni rechazo por agotamiento, ni consulta de respaldo). Se responde 200 para que
         // Kyverum no reintente, y la auditoría deja constancia de que el proveedor sí respondió.
+        // Bug #13885 — si la fila seguía en vuelo, se cierra como expirada para que no bloquee a la persona.
         if (v.CongeladaPorTramite)
         {
             await audit.LogAsync(new IdentityValidationAuditEntry(
@@ -377,6 +386,7 @@ public sealed class KyverumWebhookHandler(
                 KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole,
                 SignaturePresent: signaturePresent, SecretPresent: secretPresent, HttpStatus: 200,
                 Message: $"Trámite {v.ProcedureInstance!.Status}: el resultado del proveedor no se aplica."), ct);
+            await CerrarSiEnVueloAsync(v, ct);
             return ("ok", null);
         }
 
@@ -477,6 +487,7 @@ public sealed class KyverumWebhookHandler(
                 TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
                 KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole,
                 Message: $"Trámite {v.ProcedureInstance!.Status}: el resultado del proveedor no se aplica."), ct);
+            await CerrarSiEnVueloAsync(v, ct);
             return ("ok", null);
         }
 
@@ -484,6 +495,23 @@ public sealed class KyverumWebhookHandler(
             return ("ok", null);
 
         return await ApplyFromBodyAsync(v, rawBody, ct);
+    }
+
+    /// <summary>
+    /// Bug #13885 — una validación en vuelo de un trámite anulado o revocado se cierra como <c>expirado</c> al recibir el
+    /// aviso: no se aplica el veredicto (Bug #13055 se respeta), solo se libera el documento. Si ya era terminal no cambia.
+    /// </summary>
+    private async Task CerrarSiEnVueloAsync(ProcedureInstanceBiometricValidation v, CancellationToken ct)
+    {
+        if (!BiometricRules.EsEnVueloDeTramiteInactivo(v))
+            return;
+
+        var estadoPrevio = v.Status;
+        v.Status = BiometricEstados.Expirado;
+        v.UpdatedAt = DateTimeOffset.UtcNow;
+        await repo.SaveChangesAsync(ct);
+        await audit.LogAsync(
+            IdentityInFlightRelease.CierreAuditado(v, estadoPrevio, "Aviso de Kyverum sobre un trámite inactivo"), ct);
     }
 
     /// <summary>Vía rápida: firma válida ⇒ confiar en el cuerpo del webhook y aplicar.</summary>
