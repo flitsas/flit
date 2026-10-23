@@ -169,6 +169,11 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
         IReadOnlySet<string> identidadKeys = await repo.ListVigenteApprovedIdentityKeysAsync(
             instances.Select(i => i.TenantId).Distinct().ToList(), now, ct) ?? new HashSet<string>();
 
+        // HU #13824 — identidades vencidas a mano por un Super Admin que los trámites fuera de borrador siguen honrando
+        // (una consulta en lote sobre el índice parcial de las filas vencidas a mano).
+        IReadOnlySet<string> protegidasKeys = await repo.ListProtegidasPorVencimientoManualKeysAsync(
+            instances.Select(i => i.TenantId).Distinct().ToList(), now, ct) ?? new HashSet<string>();
+
         // Ajuste del PO sobre HU #11056 — las columnas "Firmado" acreditan por identidad O por firma del
         // baúl, y tienen que distinguir «baúl vigente» de «baúl vencido». UNA consulta para todos los
         // tenants del listado, con la MISMA llave que la identidad (tenant|TIPO|NÚMERO).
@@ -192,7 +197,7 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
         return instances
             .Select(e => ToSummary(
                 e,
-                IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now, firmaBaul),
+                IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now, firmaBaul, protegidasKeys),
                 nombres.GetValueOrDefault(e.TenantId),
                 // HU #12162 — mismo id EFECTIVO usado para resolver el lote de arriba.
                 gestores.GetValueOrDefault(e.GestorEfectivoUserId),

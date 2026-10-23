@@ -410,6 +410,31 @@ public interface IProcedureInstanceRepository
         IReadOnlyCollection<Guid> tenantIds, DateTimeOffset now, CancellationToken ct = default);
 
     /// <summary>
+    /// HU #13824 — identidad aprobada que un Super Admin VENCIÓ a mano pero que los trámites ya fuera de borrador siguen
+    /// honrando (<see cref="Entities.BiometricRules.EsAprobadaVigenteParaTramite"/>): la más reciente de la persona
+    /// (<paramref name="tipoDoc"/> + <paramref name="documento"/>) cuyo fin de vigencia previo aún no llega. Para el
+    /// FUR, el certificado y el gate de un trámite que NO está en borrador. Solo lectura.
+    /// </summary>
+    Task<ProcedureInstanceBiometricValidation?> FindProtegidaPorVencimientoManualAsync(
+        Guid tenantId, string tipoDoc, string documento, DateTimeOffset now, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #13824 — claves (<see cref="Entities.BiometricRules.IdentidadKey"/>) de las identidades vencidas a mano que los
+    /// trámites ya fuera de borrador siguen honrando, en UNA consulta (listado de trámites, sin N+1). Set vacío si no hay.
+    /// </summary>
+    Task<IReadOnlySet<string>> ListProtegidasPorVencimientoManualKeysAsync(
+        IReadOnlyCollection<Guid> tenantIds, DateTimeOffset now, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #13824 — trámites EN BORRADOR del tenant (no eliminados) que tienen un actor con ese documento (el propio o el
+    /// de su representante legal), con actores y validaciones cargados. Ordenados del más reciente al más antiguo
+    /// (<c>updated_at</c> o, si no hay, <c>created_at</c>). La coincidencia exacta con el sujeto de identidad se resuelve
+    /// en la capa de aplicación. Solo lectura.
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstance>> ListBorradoresConActorDocumentoAsync(
+        Guid tenantId, string tipoDoc, string documento, CancellationToken ct = default);
+
+    /// <summary>
     /// Feature #11066 / HU #11069 — trámites del tenant asociados a la misma identidad
     /// (<paramref name="documents"/> = pares tipo+número): por validación biométrica de la instancia
     /// y/o por actores con ese documento. Mapa por <see cref="Entities.BiometricRules.IdentidadKey"/>.

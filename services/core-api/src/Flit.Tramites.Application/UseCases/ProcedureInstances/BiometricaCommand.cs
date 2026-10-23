@@ -239,7 +239,9 @@ public sealed class IniciarBiometriaHandler(
         var existing = instance.BiometricValidations.FirstOrDefault(v =>
             string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
             && (actoresDelRol <= 1 || BiometricRules.DocumentoCoincide(v, tipoDoc, documento))
-            && v.Status is BiometricEstados.Enviado or BiometricEstados.EnProceso or BiometricEstados.Aprobado);
+            && v.Status is BiometricEstados.Enviado or BiometricEstados.EnProceso or BiometricEstados.Aprobado
+            // HU #13824 — una aprobada que un Super Admin venció a mano ya no bloquea: es justo lo que se revalida.
+            && !(v.ExpiredManuallyAt != null && !BiometricRules.EsAprobadaVigente(v, now)));
         if (existing is not null)
             return (null, "biometria_activa", null);
 
@@ -556,7 +558,7 @@ public sealed class ListBiometriaHandler(
                 // son las únicas que pueden representar el estado de la parte sin referenciar otro trámite.
                 var vigentesLocales = instance.BiometricValidations
                     .Where(v => string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
-                                && BiometricRules.EsAprobadaVigente(v, now)
+                                && BiometricRules.EsAprobadaVigenteParaTramite(v, instance.Status, now)
                                 && BiometricRules.DocumentoCoincide(v, subject.TipoDocumento, documentoSujeto))
                     .ToList();
                 if (vigentesLocales.Count > 0)
@@ -572,6 +574,11 @@ public sealed class ListBiometriaHandler(
 
                 var source = await repo.FindVigenteApprovedByDocumentAsync(
                     instance.TenantId, subject.TipoDocumento.Trim(), documentoSujeto, now, ct);
+                // HU #13824 — fuera de borrador se sigue mostrando la identidad que un Super Admin venció a mano.
+                if (source is null
+                    && !string.Equals(instance.Status, TramiteEstado.Borrador, StringComparison.OrdinalIgnoreCase))
+                    source = await repo.FindProtegidaPorVencimientoManualAsync(
+                        instance.TenantId, subject.TipoDocumento.Trim(), documentoSujeto, now, ct);
                 if (source is null)
                     continue;
 
