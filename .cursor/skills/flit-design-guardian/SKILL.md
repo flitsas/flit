@@ -81,7 +81,7 @@ Aplicar estas reglas como compuertas bloqueantes.
 | App interna | Fondo azul claro, **dock inferior flotante**, topbar derecha, título en tarjeta blanca y contenido modular en cards. |
 | Autenticación | Pantalla partida con panel visual izquierdo y formulario derecho en tarjeta clara. |
 | Botones | CTA primario (avance/cierre) en pastilla degradada `#557EFF → #00DBD5`; cierre final en `#00DBD5 → #8CC63F`; «Anterior» en navy; cancelar/error en naranja-rojo. **Consulta** (Consultar RUNT/RUES, Buscar): `#557EFF` **sólido SIN degradado** + clase `bg-[#557EFF]` (PDF 20 ago). |
-| Tablas | **Modelo único = listado de trámites** (ver `prototype_rules.md` › «Modelo único de tabla»): `DataTable` o `<table>` con `table-styles`, sin tarjeta blanca envolvente, filas-tarjeta con sombra azul al pasar el mouse, acciones con `RowActions` y `Pagination` con «Filas por página» (10/20/30/50, recordado por tabla con `usePaginacion("<clave>")`), primera/última página y navegación numerada. Aplica a **toda** tabla, existente o nueva, sin excepciones; la prueba `frontend/__tests__/hu13920-estandar-tablas.test.ts` lo exige en CI. |
+| Tablas | **Modelo único = listado de trámites** (ver `prototype_rules.md` › «Modelo único de tabla»): `DataTable` o `<table>` con `table-styles`, sin tarjeta blanca envolvente, filas-tarjeta con sombra azul al pasar el mouse, acciones con `RowActions` o el menú «Acciones» del listado de trámites y `Pagination` con «Filas por página» (10/20/30/50, recordado por tabla con `usePaginacion("<clave>")`), primera/última página y navegación numerada. Aplica a **toda** tabla, existente o nueva, sin excepciones; la prueba `frontend/__tests__/hu13920-estandar-tablas.test.ts` lo exige en CI. |
 | Wizards | Stepper horizontal con pasos circulares numerados y colores por estado. |
 | Modales | Blur de fondo, overlay azulado, contenedor claro, radio amplio, X superior, CTA degradado, `role="dialog"` y focus trap. |
 | OCR/carga | Upload boxes blancos con borde punteado azul, icono centrado y texto azul. |
@@ -118,7 +118,7 @@ Corregir antes de entregar si aparece alguno de estos:
 - Grilla de `div` sustituyendo una tabla de datos
 - Tabla envuelta en una tarjeta blanca (`rounded-2xl border bg-white` alrededor de la tabla)
 - Paginador «Anterior / Siguiente», paginador propio o listado sin «Filas por página»
-- Botones de texto como acciones de fila (usar `RowActions`)
+- Botones de texto sueltos como acciones de fila (usar `RowActions` o el menú «Acciones»)
 - Cabecera de tabla con clases propias en vez de `table-styles`
 - Badge sólido con texto blanco
 - Badge `success` con tint cian (`rgba(0,219,213,…)`): incorrecto — success = verde tintado (`#F3FBE8`/`#4F7A12`), el cian es acento tecnológico (PDF 20 ago)

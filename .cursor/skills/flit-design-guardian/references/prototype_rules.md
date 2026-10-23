@@ -189,7 +189,7 @@ una tabla nueva fuera del modelo rompe el build.
 | Contenedor | **Sin tarjeta blanca envolvente**: la tabla va directa sobre el fondo; cada fila ya es su propia tarjeta |
 | Filas | `border-collapse: separate; border-spacing: 0 8px`; celda inicial `rounded-l-xl border-l`, final `rounded-r-xl border-r`, borde `#DFE5ED`; `bg-white dark:bg-[#0B0F14]` + `TABLA_ROW_HOVER_CLS` (sombra azul, no cambio de borde) |
 | Cabecera | `TABLA_HEADER_CELL_CLS` con `TABLA_HEADER_BG` / `TABLA_HEADER_FG` (`@/components/atom/table-styles`): gris `#DFE5ED`, versalita de 10px, **fija** al hacer scroll |
-| Acciones | `RowActions` (iconos con `aria-label` + tooltip, objetivo de 40 px). Prohibidos los botones de texto por fila |
+| Acciones | `RowActions` (iconos con `aria-label` + tooltip, objetivo de 40 px) o el menú desplegable «Acciones» del listado de trámites, cuando la fila tiene muchas acciones. Ambos son estándar (decisión del usuario, Feature #13915). Prohibidos los botones de texto sueltos por fila |
 | Paginación | `Pagination` (`@/components/atom/Pagination`) con `onPageSizeChange`: «Filas por página» (**10/20/30/50**, por defecto 10, HU #13916) a la izquierda y «Mostrando X–Y de N  «Primera ‹ 1 2 … N › Última»» a la derecha: los extremos llevan su nombre a la vista («Primera» / «Última»), no solo « y ». Estado con `usePaginacion("<carpeta>.<Componente>")`: la clave es obligatoria, única por tabla, y recuerda el tamaño en la sesión (HU #13917). Prohibidos el paginador «Anterior / Siguiente», uno propio y tamaños propios (`pageSizeOptions` ya no existe) |
 | Estados | Carga con `CarLoaderModal`; vacío y error con `UiStateBoundary` |
 
