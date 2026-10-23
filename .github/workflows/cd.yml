@@ -75,15 +75,17 @@ jobs:
             release)
               env_name=pdn
               gh_env=production
-              # Dominios reales del VPS/nginx (NO pdn.flitsas.online — ese host no sirve el stack).
-              front_domain=flitsas.online
+              # PDN solo en flitsas.com (decision del 2026-10-19, #560 cerrado): hub en app.flitsas.com
+              # y productos en <producto>.flitsas.com. La API horneada sigue en api.flitsas.online (ICT,
+              # webhooks); en las paginas .com el front la pasa a api.flitsas.com (apiBaseForPageRoot).
+              front_domain=app.flitsas.com
               api_domain=api.flitsas.online
               image_tag=pdn
               front_port=6001; gateway_port=6002; core_port=6003; python_port=6012; migracion_port=6030; hub_port=6022; identity_port=6025
               comparendos_port=6023; core_comparendos_port=6028
               # FLIT Suite (contrato §1): prefijo de ambiente de los hosts; vacío en PDN.
               suite_env=
-              tramites_domain=tramites.flitsas.online
+              tramites_domain=tramites.flitsas.com
               internal_subnet=10.114.60.0/24
               ;;
             staging)
@@ -1014,352 +1016,33 @@ jobs:
           cache-from: type=gha,scope=core-ict
           cache-to: type=gha,mode=max,scope=core-ict
 
-  # DEV y QA ya NO se despliegan aqui: viven en el k3s de la 177 (DEV desde el 2026-10-17, QA
-  # desde el 2026-10-18) y los despliega deploy-gitops (abajo). Si este job corriera en develop o
-  # staging, levantaria otra vez el stack docker de /opt/flitdev o /opt/flitqa junto al de k3s:
-  # dos copias del ambiente sobre la misma base, con jobs, correos y consumidores duplicados.
-  # OJO PDN: la rama release tiene su propio deploy-pdn-gitops (PR #587) que este archivo aun no
-  # trae; al nivelar release con staging hay que conservarlo.
-  deploy-to-vps:
-    name: Deploy to VPS (${{ needs.setup.outputs.env_name }})
-    needs: [setup, build-core-api, build-core-identity, build-core-consultas, build-core-notificaciones, build-core-comparendos, build-core-ict, build-frontend, build-frontend-hub, build-frontend-comparendos, build-python-ml]
-    # HU #13329: corre aunque falle el build de algún servicio. En despliegue por servicio (FLIT_DEPLOY_ROLLING) se
-    # despliegan los demás y el que falló conserva su versión; sin él, se detiene sin tocar nada, como antes.
-    if: ${{ !cancelled() && needs.setup.result == 'success' && github.ref_name == 'release' }}
-    runs-on: ubuntu-latest
-    # Incluye margen para reintentos SCP + pausa UFW (hasta ~4×45s + 120s dial).
-    timeout-minutes: 15
-    # GitHub Environment por ambiente: cada uno (dev/qa/pdn) tiene SUS PROPIOS secrets
-    # (HOSTINGER_SSH_*, HOSTINGER_DEPLOY_PATH, GHCR_PAT). Asi un mismo workflow despliega
-    # al VPS correcto segun la rama.
-    environment:
-      name: ${{ needs.setup.outputs.gh_env }}
-      url: https://${{ needs.setup.outputs.front_domain }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      # SCP nativo (OpenSSH) + reintentos en shell.
-      # Historial: wretry + appleboy/scp-action (Docker) falló por (1) PEM multilínea
-      # dentro del YAML anidado, (2) key_path fuera del mount del contenedor, (3)
-      # timeouts SSH. El último CD verde usaba `key:` como input nativo; aquí
-      # replicamos ese modelo sin Docker y con espera > ventana UFW `limit ssh`.
-      - name: Copy compose file to VPS
-        env:
-          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
-          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
-          SSH_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
-          DEPLOY_PATH: ${{ secrets.HOSTINGER_DEPLOY_PATH }}
-        run: |
-          set -euo pipefail
-          KEY_FILE="${RUNNER_TEMP}/hostinger_deploy_key"
-          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$KEY_FILE"
-          chmod 600 "$KEY_FILE"
-          cleanup() { rm -f "$KEY_FILE"; }
-          trap cleanup EXIT
-
-          SSH_OPTS=(
-            -o IdentitiesOnly=yes
-            -o StrictHostKeyChecking=accept-new
-            -o ConnectTimeout=30
-            -o ServerAliveInterval=15
-            -o ServerAliveCountMax=3
-            -i "$KEY_FILE"
-            -P 22
-          )
-
-          for i in 1 2 3 4; do
-            echo "SCP attempt ${i}/4 → ${SSH_USER}@${SSH_HOST}:${DEPLOY_PATH}/"
-            if scp "${SSH_OPTS[@]}" \
-                docker-compose.prod.yml \
-                "${SSH_USER}@${SSH_HOST}:${DEPLOY_PATH}/"; then
-              echo "SCP OK"
-              exit 0
-            fi
-            echo "SCP attempt ${i} failed (posible UFW limit ssh). Esperando 45s..."
-            sleep 45
-          done
-          echo "::error::SCP falló tras 4 intentos hacia ${SSH_HOST}"
-          exit 1
-
-      # Pausa breve para no encadenar el SSH de deploy dentro de la ventana UFW.
-      - name: Wait before SSH deploy (UFW rate limit)
-        run: sleep 35
-
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.HOSTINGER_SSH_HOST }}
-          username: ${{ secrets.HOSTINGER_SSH_USER }}
-          key: ${{ secrets.HOSTINGER_SSH_KEY }}
-          port: 22
-          timeout: 120s
-          script: |
-            set -eo pipefail
-            DEPLOY_PATH="${{ secrets.HOSTINGER_DEPLOY_PATH }}"
-            cd "$DEPLOY_PATH"
-
-            if [ ! -f docker-compose.prod.yml ]; then
-              echo "::error::docker-compose.prod.yml no encontrado en $DEPLOY_PATH"
-              ls -la "$DEPLOY_PATH" || true
-              exit 1
-            fi
-
-            # Carpeta de intercambio del migrador V1->V2 (perfil `migracion`): por aqui
-            # entran los archivos de ids y salen los reportes. Se crea aqui, con el
-            # usuario del deploy, y no se deja que la cree Docker al montar el bind:
-            # Docker la crearia como root y quien entre por SSH no podria escribir
-            # dentro, con un "permission denied" que no dice de donde viene.
-            mkdir -p migracion
-
-            # Tag + puertos segun ambiente (override del .env del VPS).
-            # deploy_tag: sha-<commit> inmutable en PDN; tag movil (dev/qa) en DEV/QA.
-            export CORE_API_TAG=${{ needs.setup.outputs.deploy_tag }}
-            export CORE_IDENTITY_TAG=${{ needs.setup.outputs.deploy_tag }}
-            export CORE_CONSULTAS_TAG=${{ needs.setup.outputs.deploy_tag }}
-            export CORE_NOTIFICACIONES_TAG=${{ needs.setup.outputs.deploy_tag }}
-            export CORE_ICT_TAG=${{ needs.setup.outputs.deploy_tag }}
-            export FRONTEND_TAG=${{ needs.setup.outputs.deploy_tag }}
-            export FRONTEND_HUB_TAG=${{ needs.setup.outputs.deploy_tag }}
-            export CORE_COMPARENDOS_TAG=${{ needs.setup.outputs.deploy_tag }}
-            export FRONTEND_COMPARENDOS_TAG=${{ needs.setup.outputs.deploy_tag }}
-            export PYTHON_ML_TAG=${{ needs.setup.outputs.deploy_tag }}
-            export FRONTEND_PORT=${{ needs.setup.outputs.front_port }}
-            export GATEWAY_PORT=${{ needs.setup.outputs.gateway_port }}
-            export CORE_API_PORT=${{ needs.setup.outputs.core_port }}
-            export PYTHON_ML_PORT=${{ needs.setup.outputs.python_port }}
-            export MIGRACION_API_PORT=${{ needs.setup.outputs.migracion_port }}
-            export HUB_PORT=${{ needs.setup.outputs.hub_port }}
-            export COMPARENDOS_PORT=${{ needs.setup.outputs.comparendos_port }}
-            export CORE_COMPARENDOS_PORT=${{ needs.setup.outputs.core_comparendos_port }}
-            # HU #13226 (Epic #13217): core-identity (perfil "identity"); sin el perfil no se levanta.
-            export CORE_IDENTITY_PORT=${{ needs.setup.outputs.identity_port }}
-            # FLIT Suite: hosts de los productos en este ambiente (Suite:Hosts:Environment de core-api).
-            export FLIT_SUITE_ENV=${{ needs.setup.outputs.suite_env }}
-            # URL pública del hub (emisor OIDC) para @flit/auth.
-            export FLIT_HUB_URL=https://${{ needs.setup.outputs.front_domain }}
-            # Host propio de Trámites en la suite (A-11); el hub redirige ahí cuando FLIT_TRAMITES_HOST_ENABLED=true.
-            export FLIT_TRAMITES_URL=https://${{ needs.setup.outputs.tramites_domain }}
-            # Marca Blanca (#12421): CIDR de la red Docker de ESTE stack (distinto por ambiente).
-            export FLIT_INTERNAL_SUBNET=${{ needs.setup.outputs.internal_subnet }}
-
-            # Feature #13220 (Epic #13217): despliegue por servicio, detrás de la variable FLIT_DEPLOY_ROLLING del
-            # GitHub Environment. Sin ella (hoy) se hace como siempre: down de todo el stack y up.
-            # Con "true": sin down global; core-api primero (migra), luego el resto y core-identity al final, así el
-            # login nunca se cae junto con core-api (ver docs/suite/identidad-frontera.md §9).
-            ROLLING="${{ vars.FLIT_DEPLOY_ROLLING }}"
-
-            # HU #13329 (Epic #13316): resultado y digest del build de cada imagen (sin arreglos asociativos, para
-            # que el script corra igual en cualquier bash).
-            IMAGE_TAG="${{ needs.setup.outputs.image_tag }}"
-            SERVICES="core-api core-identity core-consultas core-notificaciones core-comparendos core-ict frontend frontend-hub frontend-comparendos python-ml"
-            build_result() {
-              case "$1" in
-                core-api) echo "${{ needs.build-core-api.result }}" ;;
-                core-identity) echo "${{ needs.build-core-identity.result }}" ;;
-                core-consultas) echo "${{ needs.build-core-consultas.result }}" ;;
-                core-notificaciones) echo "${{ needs.build-core-notificaciones.result }}" ;;
-                core-comparendos) echo "${{ needs.build-core-comparendos.result }}" ;;
-                frontend-comparendos) echo "${{ needs.build-frontend-comparendos.result }}" ;;
-                core-ict) echo "${{ needs.build-core-ict.result }}" ;;
-                frontend) echo "${{ needs.build-frontend.result }}" ;;
-                frontend-hub) echo "${{ needs.build-frontend-hub.result }}" ;;
-                python-ml) echo "${{ needs.build-python-ml.result }}" ;;
-              esac
-            }
-            build_digest() {
-              case "$1" in
-                core-api) echo "${{ needs.build-core-api.outputs.digest }}" ;;
-                core-identity) echo "${{ needs.build-core-identity.outputs.digest }}" ;;
-                core-consultas) echo "${{ needs.build-core-consultas.outputs.digest }}" ;;
-                core-notificaciones) echo "${{ needs.build-core-notificaciones.outputs.digest }}" ;;
-                core-comparendos) echo "${{ needs.build-core-comparendos.outputs.digest }}" ;;
-                frontend-comparendos) echo "${{ needs.build-frontend-comparendos.outputs.digest }}" ;;
-                core-ict) echo "${{ needs.build-core-ict.outputs.digest }}" ;;
-                frontend) echo "${{ needs.build-frontend.outputs.digest }}" ;;
-                frontend-hub) echo "${{ needs.build-frontend-hub.outputs.digest }}" ;;
-                python-ml) echo "${{ needs.build-python-ml.outputs.digest }}" ;;
-              esac
-            }
-            tag_var() {
-              case "$1" in
-                core-api) echo CORE_API_TAG ;; core-identity) echo CORE_IDENTITY_TAG ;; core-consultas) echo CORE_CONSULTAS_TAG ;; core-notificaciones) echo CORE_NOTIFICACIONES_TAG ;; core-comparendos) echo CORE_COMPARENDOS_TAG ;; frontend-comparendos) echo FRONTEND_COMPARENDOS_TAG ;; core-ict) echo CORE_ICT_TAG ;;
-                frontend) echo FRONTEND_TAG ;; frontend-hub) echo FRONTEND_HUB_TAG ;; python-ml) echo PYTHON_ML_TAG ;;
-              esac
-            }
-            FAILED_BUILDS=""
-            for svc in $SERVICES; do
-              [ "$(build_result "$svc")" = "success" ] || FAILED_BUILDS="$FAILED_BUILDS $svc"
-            done
-            if [ -n "$FAILED_BUILDS" ] && [ "$ROLLING" != "true" ]; then
-              echo "::error::Fallaron builds:$FAILED_BUILDS. Sin despliegue por servicio no se despliega nada."
-              exit 1
-            fi
-            if [ "$ROLLING" = "true" ]; then
-              # Cada imagen se despliega como <tag>@<digest>. Si la imagen no cambió, el digest es el mismo que corre y
-              # compose no recrea el contenedor (antes, en PDN, la etiqueta sha-<commit> lo recreaba siempre). Si su
-              # build falló, se despliega la referencia que ya corre: el contenedor queda como estaba.
-              current_ref() {
-                c=$(docker compose -f docker-compose.prod.yml ps -q "$1" 2>/dev/null | head -n1)
-                [ -n "$c" ] || return 1
-                img=$(docker inspect -f '{{.Config.Image}}' "$c") || return 1
-                echo "${img#*:}"
-              }
-              for svc in $SERVICES; do
-                var=$(tag_var "$svc")
-                digest=$(build_digest "$svc")
-                if [ "$(build_result "$svc")" = "success" ] && [ -n "$digest" ]; then
-                  export "$var=${IMAGE_TAG}@${digest}"
-                elif ref=$(current_ref "$svc"); then
-                  export "$var=$ref"
-                  echo "::warning::$svc: su build falló o no dio digest; se deja la versión que corre ($ref)"
-                else
-                  echo "::warning::$svc: su build falló y no está corriendo; se usa ${!var}"
-                fi
-                echo "$svc -> ${!var}"
-              done
-            fi
-
-            if [ "$ROLLING" != "true" ]; then
-              # Recrear la red del proyecto si el compose ahora fija IPAM (evita quedar
-              # con un bridge viejo sin subnet / conflicto al "Creating" de nuevo).
-              docker compose -f docker-compose.prod.yml down --remove-orphans || true
-            fi
-
-            # GHCR login: el usuario DEBE ser el dueño del PAT (GHCR_USERNAME), NO github.actor.
-            # Si el merge lo hace otro usuario, login con github.actor falla en ~10s (exit 1).
-            GHCR_USER="${{ secrets.GHCR_USERNAME }}"
-            if [ -z "$GHCR_USER" ]; then
-              GHCR_USER="${{ vars.GHCR_USERNAME }}"
-            fi
-            if [ -z "$GHCR_USER" ]; then
-              # Fallback histórico: PAT del equipo asociado a deploys exitosos previos.
-              GHCR_USER="jormancopeteflit"
-              echo "::warning::GHCR_USERNAME no configurado; usando fallback $GHCR_USER. Configura secret GHCR_USERNAME en el repo."
-            fi
-            if ! echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u "$GHCR_USER" --password-stdin; then
-              echo "::error::docker login ghcr.io falló para usuario $GHCR_USER"
-              exit 1
-            fi
-
-            # Pull latest images and restart services
-            docker compose -f docker-compose.prod.yml pull
-            if [ "$ROLLING" != "true" ]; then
-              docker compose -f docker-compose.prod.yml up -d --remove-orphans
-            else
-              wait_healthy() {
-                for i in $(seq 1 30); do
-                  state=$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose -f docker-compose.prod.yml ps -q "$1")" 2>/dev/null || echo missing)
-                  [ "$state" = "healthy" ] && return 0
-                  sleep 5
-                done
-                echo "::error::$1 no quedó healthy"; docker compose -f docker-compose.prod.yml logs --tail=100 "$1"; return 1
-              }
-              docker compose -f docker-compose.prod.yml up -d --no-deps core-api
-              wait_healthy core-api
-              others=$(docker compose -f docker-compose.prod.yml config --services | grep -vx -e core-api -e core-identity | tr '\n' ' ')
-              docker compose -f docker-compose.prod.yml up -d --remove-orphans $others
-              if docker compose -f docker-compose.prod.yml config --services | grep -qx core-identity; then
-                docker compose -f docker-compose.prod.yml up -d --no-deps core-identity
-                wait_healthy core-identity
-              fi
-            fi
-
-            # Remove dangling images to free space
-            docker image prune -f
-
-            # Health check: hit the container directly (bypass host nginx)
-            echo "Waiting for application to start..."
-            sleep 15
-            ok=0
-            for i in 1 2 3 4 5 6; do
-              # Front + API publica del gateway (puertos del ambiente) deben responder.
-              if curl -fsS http://127.0.0.1:${{ needs.setup.outputs.front_port }}/ > /dev/null \
-                 && curl -fsS http://127.0.0.1:${{ needs.setup.outputs.gateway_port }}/health > /dev/null; then
-                echo "Health check OK (attempt $i)"
-                ok=1
-                break
-              fi
-              echo "Attempt $i failed, retrying in 5s..."
-              sleep 5
-            done
-            if [ "$ok" -ne 1 ]; then
-              echo "Health check FAILED"
-              docker compose -f docker-compose.prod.yml ps
-              docker compose -f docker-compose.prod.yml logs --tail=100
-              exit 1
-            fi
-            # HU #13226: si core-identity corre (perfil "identity"), también tiene que estar listo.
-            if [ -n "$(docker compose -f docker-compose.prod.yml ps -q core-identity 2>/dev/null)" ]; then
-              if ! curl -fsS http://127.0.0.1:${{ needs.setup.outputs.identity_port }}/health/ready > /dev/null; then
-                echo "::error::core-identity no está listo (/health/ready)"
-                docker compose -f docker-compose.prod.yml logs --tail=100 core-identity
-                exit 1
-              fi
-              echo "core-identity listo."
-            fi
-            # HU #13347: si core-consultas corre (perfil «consultas»), también tiene que estar listo. Sin puerto publicado:
-            # se pregunta desde dentro del contenedor.
-            if [ -n "$(docker compose -f docker-compose.prod.yml ps -q core-consultas 2>/dev/null)" ]; then
-              if ! docker compose -f docker-compose.prod.yml exec -T core-consultas wget -qO- "http://localhost:${CORE_CONSULTAS_PORT:-4026}/health/ready" > /dev/null; then
-                echo "::error::core-consultas no está listo (/health/ready)"
-                docker compose -f docker-compose.prod.yml logs --tail=100 core-consultas
-                exit 1
-              fi
-              echo "core-consultas listo."
-            fi
-            # HU #13353: si core-notificaciones corre (perfil «notificaciones»), también tiene que estar listo. Sin puerto publicado:
-            # se pregunta desde dentro del contenedor.
-            if [ -n "$(docker compose -f docker-compose.prod.yml ps -q core-notificaciones 2>/dev/null)" ]; then
-              if ! docker compose -f docker-compose.prod.yml exec -T core-notificaciones wget -qO- "http://localhost:${CORE_NOTIFICACIONES_PORT:-4027}/health/ready" > /dev/null; then
-                echo "::error::core-notificaciones no está listo (/health/ready)"
-                docker compose -f docker-compose.prod.yml logs --tail=100 core-notificaciones
-                exit 1
-              fi
-              echo "core-notificaciones listo."
-            fi
-            if [ -n "$FAILED_BUILDS" ]; then
-              echo "::error::Despliegue parcial: fallaron los builds de$FAILED_BUILDS; esos servicios conservan su versión anterior."
-              exit 1
-            fi
-            echo "Deploy OK."
-
-      - name: Notify success
-        if: success()
-        run: echo "Deploy a ${{ needs.setup.outputs.env_name }} (https://${{ needs.setup.outputs.front_domain }}) exitoso."
-
-      - name: Notify failure
-        if: failure()
-        run: |
-          echo "Deploy a ${{ needs.setup.outputs.env_name }} FALLIDO. Revisa los logs arriba."
-          echo "Rollback manual: ssh al VPS y ejecuta:"
-          echo "  cd <deploy-path> && docker compose down && docker compose up -d"
-
-  # ── DEV y QA: GitOps (k3s de la 177 + Argo CD) ───────────────────────────────
-  # Mismo patron que deploy-pdn-gitops en release (PR #587): este job NO toca ningun
-  # servidor. Escribe los digests recien publicados en
-  # flit-gitops/services/flit2-<dev|qa>/kustomization.yaml y Argo CD los aplica en la 177
-  # (Applications flit2-dev y flit2-qa, leidas por root-vps-177). develop -> flit2-dev,
-  # staging -> flit2-qa (sale de setup.env_name).
+  # ── DEV, QA y PDN: GitOps (Argo CD) ──────────────────────────────────────────
+  # Ningun ambiente se despliega ya por SSH (el antiguo deploy-to-vps se retiro al nivelar
+  # release con staging, #658): este job NO toca ningun servidor. Escribe los digests recien
+  # publicados en flit-gitops/services/flit2-<dev|qa|pdn>/kustomization.yaml y Argo CD los aplica:
+  #   develop -> flit2-dev  (k3s de la 177, root-vps-177)
+  #   staging -> flit2-qa   (k3s de la 177, root-vps-177)
+  #   release -> flit2-pdn  (k3s de la 169, root-vps-169; antes era el job deploy-pdn-gitops, #587)
+  # El ambiente sale de setup.env_name; el Environment de GitHub (develop/staging/production)
+  # aporta su GITOPS_TOKEN y, en production, sus reglas de proteccion.
   #
-  # Por digest y no por tag: el tag `dev`/`qa` se mueve, el digest no, y asi git dice que corre
-  # en el ambiente. Rollback = revertir ese commit en flit-gitops.
+  # Por digest y no por tag: el tag `dev`/`qa`/`pdn` se mueve, el digest no, y asi git dice que
+  # corre en el ambiente. Rollback = revertir ese commit en flit-gitops.
   #
   # Si el build de una imagen falla, su digest no se toca (ese servicio conserva su version)
-  # y el job termina en rojo, igual que el despliegue por servicio de deploy-to-vps.
+  # y el job termina en rojo.
   #
-  # OJO: la CONFIGURACION de DEV/QA ya no sale de docker-compose.prod.yml ni del .env de la
-  # 177. Vive en flit-gitops/services/flit2-<ambiente>/ (configmaps.yaml + sealed-secrets.yaml).
+  # OJO: la CONFIGURACION de los tres ambientes ya no sale de docker-compose.prod.yml ni de un
+  # .env. Vive en flit-gitops/services/flit2-<ambiente>/ (configmaps.yaml + sealed-secrets.yaml).
   # Una variable nueva en el compose NO llega sola: hay que agregarla alla, en cada ambiente.
   deploy-gitops:
-    name: Deploy ${{ needs.setup.outputs.env_name }} (GitOps → k3s 177)
+    name: Deploy ${{ needs.setup.outputs.env_name }} (GitOps → Argo CD)
     needs: [setup, build-core-api, build-core-identity, build-core-consultas, build-core-notificaciones, build-core-comparendos, build-core-ict, build-frontend, build-frontend-hub, build-frontend-comparendos, build-python-ml]
-    if: ${{ !cancelled() && needs.setup.result == 'success' && (github.ref_name == 'develop' || github.ref_name == 'staging') }}
+    if: ${{ !cancelled() && needs.setup.result == 'success' && (github.ref_name == 'develop' || github.ref_name == 'staging' || github.ref_name == 'release') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
-      # develop / staging: cada Environment tiene su GITOPS_TOKEN.
+      # develop / staging / production: cada Environment tiene su GITOPS_TOKEN.
       name: ${{ needs.setup.outputs.gh_env }}
       url: https://${{ needs.setup.outputs.front_domain }}
     env:
@@ -1468,7 +1151,8 @@ jobs:
           fi
 
       # Argo CD sondea el repo cada ~3 min. Esto comprueba que el ambiente SIGUE SANO tras el
-      # despliegue; la revision que corre se ve en Argo CD (Application flit2-<ambiente> de la 177).
+      # despliegue; la revision que corre se ve en Argo CD (Application flit2-<ambiente>: dev/qa en
+      # la 177, pdn en la 169).
       - name: Comprobar que el ambiente responde
         run: |
           sleep 180
@@ -1481,5 +1165,5 @@ jobs:
             echo "Intento $i: aun no responde; reintento en 15 s"
             sleep 15
           done
-          echo "::error::${AMBIENTE^^} no responde 10 min despues del despliegue. Revisar Argo CD (flit2-${AMBIENTE}) en la 177; rollback = revertir el commit de flit-gitops."
+          echo "::error::${AMBIENTE^^} no responde 10 min despues del despliegue. Revisar Argo CD (flit2-${AMBIENTE}; dev/qa en la 177, pdn en la 169); rollback = revertir el commit de flit-gitops."
           exit 1
