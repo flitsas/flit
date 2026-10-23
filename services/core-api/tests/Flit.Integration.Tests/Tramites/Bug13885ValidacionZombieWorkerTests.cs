@@ -26,8 +26,7 @@ public sealed class Bug13885ValidacionZombieWorkerTests(PostgresDatabaseFixture 
     private static async Task ExecAsync(NpgsqlConnection cn, string sql, params (string Name, object? Value)[] args)
     {
         await using var cmd = new NpgsqlCommand(sql, cn);
-        foreach (var (name, value) in args)
-            cmd.Parameters.AddWithValue(name, value ?? DBNull.Value);
+        foreach (var (name, value) in args) cmd.Parameters.AddWithValue(name, value ?? DBNull.Value);
         await cmd.ExecuteNonQueryAsync(Ct);
     }
 
@@ -39,12 +38,8 @@ public sealed class Bug13885ValidacionZombieWorkerTests(PostgresDatabaseFixture 
             await ctx.SaveChangesAsync(Ct);
             ctx.Users.Add(new User
             {
-                Id = Gestor,
-                Email = "it-13885@flit.test",
-                DisplayName = "Gestor sintético 13885",
-                Status = "active",
-                HomeTenantId = Compania,
-                CreatedAt = DateTimeOffset.UtcNow,
+                Id = Gestor, Email = "it-13885@flit.test", DisplayName = "Gestor sintético 13885", Status = "active",
+                HomeTenantId = Compania, CreatedAt = DateTimeOffset.UtcNow,
             });
             await ctx.SaveChangesAsync(Ct);
         }

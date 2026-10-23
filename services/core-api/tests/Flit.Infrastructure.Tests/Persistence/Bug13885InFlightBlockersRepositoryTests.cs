@@ -29,30 +29,17 @@ public sealed class Bug13885InFlightBlockersRepositoryTests
 
     private static ProcedureInstance Tramite(string estado, bool borrado = false) => new()
     {
-        Id = Guid.NewGuid(),
-        TenantId = Tenant,
-        ProcedureTypeId = Guid.NewGuid(),
-        ReferenceNumber = $"FT2-{Guid.NewGuid():N}"[..14],
-        Status = estado,
-        CreatedAt = Now.AddDays(-30),
-        DeletedAt = borrado ? Now.AddDays(-1) : null,
+        Id = Guid.NewGuid(), TenantId = Tenant, ProcedureTypeId = Guid.NewGuid(), ReferenceNumber = $"FT2-{Guid.NewGuid():N}"[..14],
+        Status = estado, CreatedAt = Now.AddDays(-30), DeletedAt = borrado ? Now.AddDays(-1) : null,
     };
 
     private static ProcedureInstanceBiometricValidation Fila(
         string estado, ProcedureInstance? tramite, string tipo = "CC", string numero = "10741866", Guid? mandateSignerId = null) => new()
     {
-        Id = Guid.NewGuid(),
-        TenantId = Tenant,
-        ProcedureInstanceId = tramite?.Id,
-        MandateSignerId = mandateSignerId,
-        PartyRole = mandateSignerId is null ? "comprador" : BiometricRules.ParteMandatario,
-        DocumentType = tipo,
-        DocumentNumber = numero,
-        Status = estado,
-        Provider = BiometricProviders.Kyverum,
-        TokenHash = Guid.NewGuid().ToString("N"),
-        ExpiresAt = Now.AddDays(-20),
-        CreatedAt = Now.AddDays(-21),
+        Id = Guid.NewGuid(), TenantId = Tenant, ProcedureInstanceId = tramite?.Id, MandateSignerId = mandateSignerId,
+        PartyRole = mandateSignerId is null ? "comprador" : BiometricRules.ParteMandatario, DocumentType = tipo, DocumentNumber = numero,
+        Status = estado, Provider = BiometricProviders.Kyverum, TokenHash = Guid.NewGuid().ToString("N"),
+        ExpiresAt = Now.AddDays(-20), CreatedAt = Now.AddDays(-21),
     };
 
     private static async Task<string> SembrarAsync(IEnumerable<ProcedureInstance> tramites, IEnumerable<ProcedureInstanceBiometricValidation> filas)
