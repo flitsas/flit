@@ -82,7 +82,9 @@ public static class Program
         builder.Services.AddScoped<Comparendos.IProveedorComparendos, Comparendos.ProveedorVerifikSimit>();
         // SmartCloud = los SOAP del SIMIT y la API municipal, con el contrato del BackCrudSmartCloud de V1 (HU #13465-#13467).
         var smartCloud = Comparendos.SmartCloudOpciones.Desde(builder.Configuration);
-        builder.Services.AddHttpClient(Comparendos.ProveedorSmartCloud.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(smartCloud.TimeoutSegundos));
+        // SMARTCLOUD_PROXY_URL: proxy solo para este cliente (en PDN, flit-egress de la 177; ver SmartCloudOpciones).
+        builder.Services.AddHttpClient(Comparendos.ProveedorSmartCloud.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(smartCloud.TimeoutSegundos))
+            .ConfigurePrimaryHttpMessageHandler(smartCloud.CrearManejador);
         builder.Services.AddSingleton<Comparendos.IProveedorComparendos>(sp => new Comparendos.ProveedorSmartCloud(sp.GetRequiredService<IHttpClientFactory>(), smartCloud));
         var municipal = Comparendos.MunicipalOpciones.Desde(builder.Configuration);
         builder.Services.AddHttpClient(Comparendos.ProveedorMunicipal.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(municipal.TimeoutSegundos));
