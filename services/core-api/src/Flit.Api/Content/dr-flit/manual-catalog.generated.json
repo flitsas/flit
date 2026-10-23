@@ -564,6 +564,7 @@
             "Abre Trámites desde el dock inferior.",
             "Pulsa «Nuevo trámite». Antes de continuar debes aceptar los Términos y Condiciones (casilla con enlace al documento vigente); la aceptación queda registrada con el trámite.",
             "El sistema crea una instancia en estado Borrador y te lleva al asistente; el tipo de trámite se elige dentro del paso 1.",
+            "En matrícula, después de consultar el VIN, la tarjeta «Organismo de Tránsito y Radicación» indica dónde se radica. Si el vehículo no tiene placa, escoge la secretaría y el dígito de preasignación. Si ya tiene placa y el RUNT reporta su organismo, ambos se muestran sin poder cambiarlos. Si tiene placa pero el RUNT no reporta el organismo, verás «El RUNT no reporta el organismo de tránsito del vehículo» y debes escoger la secretaría para poder continuar.",
             "Completa cada paso que el servidor expone: actores, datos del vehículo, consultas externas (RUNT, SIMIT, RUES…), adjuntos, validación de identidad si aplica.",
             "Revisa los bloqueos en la barra del asistente. Solo cuando estén resueltos podrás firmar o radicar."
           ],
