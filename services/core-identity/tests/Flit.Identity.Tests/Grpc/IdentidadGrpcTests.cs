@@ -238,9 +238,10 @@ public sealed class IdentidadGrpcTests : IClassFixture<IdentidadGrpcTests.Host>,
             var now = DateTimeOffset.UtcNow;
             foreach (var (id, code) in new[] { (renting, "API"), (sinPolitica, "FLIT") })
             {
+                // NIT distinto por empresa: la base exige NIT único (uq_tenants_tax_id) y otras pruebas usan los fijos.
                 db.Tenants.Add(new Tenant
                 {
-                    Id = id, Code = $"IT-CANAL-{code}-{_suffix}", LegalName = $"Canal {code} {_suffix}", TaxId = "900000010", TenantType = "RENTING",
+                    Id = id, Code = $"IT-CANAL-{code}-{_suffix}", LegalName = $"Canal {code} {_suffix}", TaxId = $"8{Random.Shared.Next(10000000, 99999999)}", TenantType = "RENTING",
                     IsActive = true, CreatedAt = now,
                 });
             }
