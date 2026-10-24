@@ -10,6 +10,8 @@ on:
       - 'contracts/proto/**'
       - 'contracts/openapi/core-api.v1.yaml'
       - 'contracts/openapi/external-api.v1.json'
+      - '.github/workflows/core-api.yml'
+      - '.github/scripts/ci-core-api-pruebas.sh'
       # El catálogo del manual es texto generado. No debe disparar la suite completa,
       # que en develop ya falla por pruebas ajenas a ese archivo.
       - '!services/core-api/src/Flit.Api/Content/dr-flit/**'
@@ -22,18 +24,41 @@ on:
       - 'contracts/proto/**'
       - 'contracts/openapi/core-api.v1.yaml'
       - 'contracts/openapi/external-api.v1.json'
+      - '.github/workflows/core-api.yml'
+      - '.github/scripts/ci-core-api-pruebas.sh'
       - '!services/core-api/src/Flit.Api/Content/dr-flit/**'
+  workflow_dispatch:
+
+# Un push nuevo al mismo PR (o a la misma rama) cancela la corrida anterior: solo importa la última.
+concurrency:
+  group: core-api-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: 1
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
 
 jobs:
-  build-test:
+  # La suite se reparte en carriles que corren en paralelo, cada uno en su runner (antes era un solo
+  # job de ~44 min, con timeout de 45). El camino crítico es «admin» (~28 min) hasta que se aligere su
+  # arnés. Reparto y detalles en .github/scripts/ci-core-api-pruebas.sh.
+  pruebas:
+    name: pruebas (${{ matrix.nombre }})
     runs-on: ubuntu-latest
-    # La suite completa ya cierra cerca de 18-22 min en develop; con 20 el job se cancela
-    # antes de publicar resultados (p. ej. PR #545 y #565). Restaura el valor de 6f4fa2a91,
-    # que se perdió al integrar 553a2160e.
-    # Sube a 45: el paso Test ya ronda los 31 min (Admin.Tests e Integration.Tests) y con 35 el
-    # job se cortó dos veces seguidas en el PR #657 con las pruebas aún corriendo. Es un respiro
-    # mientras se acelera la suite; no reemplaza ese ajuste.
-    timeout-minutes: 45
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { nombre: admin, carril: admin, shard: 0 }
+          - { nombre: integration-0, carril: integration, shard: 0 }
+          - { nombre: integration-1, carril: integration, shard: 1 }
+          - { nombre: integration-2, carril: integration, shard: 2 }
+          - { nombre: integration-3, carril: integration, shard: 3 }
+          - { nombre: resto, carril: resto, shard: 0 }
     services:
       postgres:
         image: postgres:16-alpine
@@ -48,9 +73,8 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-      # Epic #13316 (HU #13338): broker real para las pruebas de la outbox del SDK (Flit.Platform.Sdk.Tests), con la
-      # misma decisión que Postgres: servicio del job, sin Testcontainers. Usuario propio: guest solo entra desde
-      # loopback dentro del contenedor.
+      # Epic #13316 (HU #13338): broker real para las pruebas de la outbox del SDK y las de bus de
+      # Integration. Usuario propio: guest solo entra desde loopback dentro del contenedor.
       rabbitmq:
         image: rabbitmq:4.1-alpine
         env:
@@ -63,6 +87,12 @@ jobs:
           --health-interval 5s
           --health-timeout 10s
           --health-retries 20
+    env:
+      ConnectionStrings__Core: "Host=localhost;Port=5432;Database=flit_dev;Username=postgres;Password=postgres"
+      FLIT_TEST_RABBITMQ: "amqp://flit:flit-prueba@localhost:5672/"
+    defaults:
+      run:
+        working-directory: services/core-api
     steps:
       - uses: actions/checkout@v4
 
@@ -72,41 +102,48 @@ jobs:
           global-json-file: services/core-api/global.json
 
       - name: Restore
-        working-directory: services/core-api
         run: dotnet restore
 
       - name: Build
-        working-directory: services/core-api
         run: dotnet build --no-restore --configuration Release
 
       - name: Apply migrations
-        working-directory: services/core-api
         run: |
           dotnet tool install --global dotnet-ef --version 10.0.1
           dotnet ef database update \
             --project src/Flit.Infrastructure \
             --startup-project src/Flit.Api \
             --no-build --configuration Release
-        env:
-          ConnectionStrings__Core: "Host=localhost;Port=5432;Database=flit_dev;Username=postgres;Password=postgres"
 
       - name: Test
-        working-directory: services/core-api
-        run: dotnet test --no-build --configuration Release --logger "trx" --collect "XPlat Code Coverage"
+        run: ../../.github/scripts/ci-core-api-pruebas.sh "${{ matrix.carril }}"
         env:
-          ConnectionStrings__Core: "Host=localhost;Port=5432;Database=flit_dev;Username=postgres;Password=postgres"
-          FLIT_TEST_RABBITMQ: "amqp://flit:flit-prueba@localhost:5672/"
+          SHARD: ${{ matrix.shard }}
+          SHARDS: '4'
+          # La cobertura solo se recoge en push: en el PR alarga la corrida sin que nadie la mire.
+          COBERTURA: ${{ github.event_name == 'push' && '1' || '' }}
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: core-api-test-results
-          path: services/core-api/tests/**/TestResults/
+          name: core-api-test-results-${{ matrix.nombre }}
+          path: |
+            services/core-api/tests/**/TestResults/
+            services/core-api/TestResults-*.log
 
+  # Check único que resume los carriles (el que se marcará como obligatorio, en vez de cada carril).
+  core-api:
+    if: always()
+    needs: pruebas
+    runs-on: ubuntu-latest
+    steps:
+      - name: Todos los carriles en verde
+        run: test "${{ needs.pruebas.result }}" = success
+
+  # Ya no espera a las pruebas: corre en paralelo y solo comprueba que el publish siga funcionando.
   aot-publish:
     runs-on: ubuntu-latest
-    needs: build-test
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
