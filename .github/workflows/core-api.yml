@@ -10,10 +10,15 @@ on:
   pull_request:
     branches: [develop, staging, release]
   workflow_dispatch:
+    inputs:
+      runner:
+        description: 'Etiqueta del runner (vacio = la variable RUNNER o ubuntu-latest; flit-ci = pool propio de la 177)'
+        required: false
+        default: ''
 
 # Un push nuevo al mismo PR (o a la misma rama) cancela la corrida anterior: solo importa la última.
 concurrency:
-  group: core-api-${{ github.event.pull_request.number || github.ref }}
+  group: core-api-${{ github.event.pull_request.number || github.ref }}-${{ inputs.runner }}
   cancel-in-progress: true
 
 permissions:
@@ -26,7 +31,7 @@ env:
 jobs:
   # ¿El cambio toca core-api? Las mismas rutas que antes filtraba el disparador.
   cambios:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner || vars.RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 5
     outputs:
       core: ${{ steps.rutas.outputs.core }}
@@ -68,7 +73,7 @@ jobs:
     name: pruebas (${{ matrix.nombre }})
     needs: cambios
     if: needs.cambios.outputs.core == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner || vars.RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 40
     strategy:
       fail-fast: false
@@ -87,8 +92,8 @@ jobs:
           POSTGRES_DB: flit_dev
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
+        # Puerto dinamico: en el pool propio el 5432 es del Postgres del host.
+        ports: ['5432']
         options: >-
           --health-cmd "pg_isready -U postgres -d flit_dev"
           --health-interval 5s
@@ -101,21 +106,22 @@ jobs:
         env:
           RABBITMQ_DEFAULT_USER: flit
           RABBITMQ_DEFAULT_PASS: flit-prueba
-        ports:
-          - 5672:5672
+        ports: ['5672']
         options: >-
           --health-cmd "rabbitmq-diagnostics -q ping"
           --health-interval 5s
           --health-timeout 10s
           --health-retries 20
-    env:
-      ConnectionStrings__Core: "Host=localhost;Port=5432;Database=flit_dev;Username=postgres;Password=postgres"
-      FLIT_TEST_RABBITMQ: "amqp://flit:flit-prueba@localhost:5672/"
     defaults:
       run:
         working-directory: services/core-api
     steps:
       - uses: actions/checkout@v4
+
+      - name: Conexiones a los servicios del job
+        run: |
+          echo "ConnectionStrings__Core=Host=localhost;Port=${{ job.services.postgres.ports['5432'] }};Database=flit_dev;Username=postgres;Password=postgres" >> "$GITHUB_ENV"
+          echo "FLIT_TEST_RABBITMQ=amqp://flit:flit-prueba@localhost:${{ job.services.rabbitmq.ports['5672'] }}/" >> "$GITHUB_ENV"
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -130,8 +136,10 @@ jobs:
 
       - name: Apply migrations
         run: |
-          dotnet tool install --global dotnet-ef --version 10.0.1
-          dotnet ef database update \
+          # En una carpeta del runner y no en ~/.dotnet/tools: en el pool propio los runners comparten HOME.
+          ef="${{ runner.tool_cache }}/dotnet-ef-10.0.1"
+          [ -x "$ef/dotnet-ef" ] || dotnet tool install dotnet-ef --version 10.0.1 --tool-path "$ef"
+          "$ef/dotnet-ef" database update \
             --project src/Flit.Infrastructure \
             --startup-project src/Flit.Api \
             --no-build --configuration Release
@@ -158,7 +166,7 @@ jobs:
   core-api:
     if: always()
     needs: [cambios, pruebas, aot-publish]
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner || vars.RUNNER || 'ubuntu-latest' }}
     steps:
       - name: Resultado
         env:
@@ -176,7 +184,7 @@ jobs:
   aot-publish:
     needs: cambios
     if: needs.cambios.outputs.core == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner || vars.RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
