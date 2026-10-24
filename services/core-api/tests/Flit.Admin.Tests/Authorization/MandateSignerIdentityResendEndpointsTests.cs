@@ -20,10 +20,17 @@ namespace Flit.Admin.Tests.Authorization;
 /// retiradas <c>identity/send|resend|link</c> siguen respondiendo 410 (AC8). <para>Uso: <c>POST
 /// /api/v1/admin/transit-offices/{ot}/mandate-signers/{id}/identity-validation/resend</c> ⇒ 200 <c>{ identity: "sent" }</c>.</para>
 /// </summary>
-public sealed class MandateSignerIdentityResendEndpointsTests(WebApplicationFactory<Program> factory)
-    : MandateSignerEndpointsTestBase(WithStubLauncher(factory, Launcher))
+public sealed class MandateSignerIdentityResendEndpointsTests(MandateSignerIdentityResendEndpointsTests.Host host)
+    : MandateSignerEndpointsTestBase(host.Factory), IClassFixture<MandateSignerIdentityResendEndpointsTests.Host>
 {
     private static readonly StubMandateSignerIdentityLauncher Launcher = new();
+
+    /// <summary>Un host con el lanzador doble para toda la clase (<see cref="HostPorClase"/>); el doble ya era estático.</summary>
+    public sealed class Host : HostPorClase
+    {
+        protected override WebApplicationFactory<Program> Configurar(WebApplicationFactory<Program> factory) =>
+            WithStubLauncher(factory, Launcher);
+    }
 
     private static WebApplicationFactory<Program> WithStubLauncher(
         WebApplicationFactory<Program> factory, StubMandateSignerIdentityLauncher stub) =>
