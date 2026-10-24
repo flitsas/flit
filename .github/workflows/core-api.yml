@@ -1,32 +1,14 @@
 name: Core API (.NET 10)
 
+# Sin filtro `paths:` en el disparador: «core-api» es check OBLIGATORIO del ruleset, y un workflow que no
+# se dispara deja el PR esperando ese check para siempre. Las rutas se evalúan en el job «cambios»; si el
+# PR no toca core-api, las pruebas se saltan y el check «core-api» queda en verde.
+# PRs a staging y release también: los ports *-qa / *-pdn pasan por las mismas pruebas.
 on:
   push:
     branches: [develop, main]
-    paths:
-      - 'services/core-api/**'
-      - 'services/core-identity/**'
-      - 'services/core-consultas/**'
-      - 'contracts/proto/**'
-      - 'contracts/openapi/core-api.v1.yaml'
-      - 'contracts/openapi/external-api.v1.json'
-      - '.github/workflows/core-api.yml'
-      - '.github/scripts/ci-core-api-pruebas.sh'
-      # El catálogo del manual es texto generado. No debe disparar la suite completa,
-      # que en develop ya falla por pruebas ajenas a ese archivo.
-      - '!services/core-api/src/Flit.Api/Content/dr-flit/**'
   pull_request:
-    branches: [develop]
-    paths:
-      - 'services/core-api/**'
-      - 'services/core-identity/**'
-      - 'services/core-consultas/**'
-      - 'contracts/proto/**'
-      - 'contracts/openapi/core-api.v1.yaml'
-      - 'contracts/openapi/external-api.v1.json'
-      - '.github/workflows/core-api.yml'
-      - '.github/scripts/ci-core-api-pruebas.sh'
-      - '!services/core-api/src/Flit.Api/Content/dr-flit/**'
+    branches: [develop, staging, release]
   workflow_dispatch:
 
 # Un push nuevo al mismo PR (o a la misma rama) cancela la corrida anterior: solo importa la última.
@@ -42,11 +24,50 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
 
 jobs:
+  # ¿El cambio toca core-api? Las mismas rutas que antes filtraba el disparador.
+  cambios:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      core: ${{ steps.rutas.outputs.core }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      - id: rutas
+        env:
+          EVENTO: ${{ github.event_name }}
+          BASE: ${{ github.base_ref }}
+          ANTES: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          case "$EVENTO" in
+            pull_request) archivos=$(git diff --name-only "origin/$BASE...HEAD") ;;
+            push)
+              if [ -z "$ANTES" ] || [ "$ANTES" = 0000000000000000000000000000000000000000 ] \
+                 || ! git cat-file -e "$ANTES^{commit}" 2>/dev/null; then
+                archivos=TODO   # rama nueva o historia reescrita: se corre todo
+              else
+                archivos=$(git diff --name-only "$ANTES" "$GITHUB_SHA")
+              fi ;;
+            *) archivos=TODO ;;
+          esac
+          # El catálogo del manual (dr-flit) es texto generado: no dispara la suite.
+          if [ "$archivos" = TODO ] || echo "$archivos" | grep -v '^services/core-api/src/Flit.Api/Content/dr-flit/' | grep -qE \
+               '^(services/core-(api|identity|consultas)/|contracts/proto/|contracts/openapi/(core-api\.v1\.yaml|external-api\.v1\.json)$|\.github/workflows/core-api\.yml$|\.github/scripts/ci-core-api-pruebas\.sh$)'; then
+            echo "core=true" >> "$GITHUB_OUTPUT"; echo "Toca core-api: corren las pruebas."
+          else
+            echo "core=false" >> "$GITHUB_OUTPUT"; echo "No toca core-api: se saltan las pruebas."
+          fi
+
   # La suite se reparte en carriles que corren en paralelo, cada uno en su runner (antes era un solo
-  # job de ~44 min, con timeout de 45). El camino crítico es «admin» (~28 min) hasta que se aligere su
+  # job de ~44 min, con timeout de 45). El camino crítico es «admin» (~22 min) hasta que se aligere su
   # arnés. Reparto y detalles en .github/scripts/ci-core-api-pruebas.sh.
   pruebas:
     name: pruebas (${{ matrix.nombre }})
+    needs: cambios
+    if: needs.cambios.outputs.core == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     strategy:
@@ -132,17 +153,29 @@ jobs:
             services/core-api/tests/**/TestResults/
             services/core-api/TestResults-*.log
 
-  # Check único que resume los carriles (el que se marcará como obligatorio, en vez de cada carril).
+  # Check único y OBLIGATORIO (ruleset proteger-produccion): resume los carriles y el publish. En verde si
+  # todo pasó o si el cambio no toca core-api; en rojo si algo falló o se canceló.
   core-api:
     if: always()
-    needs: pruebas
+    needs: [cambios, pruebas, aot-publish]
     runs-on: ubuntu-latest
     steps:
-      - name: Todos los carriles en verde
-        run: test "${{ needs.pruebas.result }}" = success
+      - name: Resultado
+        env:
+          CAMBIOS: ${{ needs.cambios.result }}
+          CORE: ${{ needs.cambios.outputs.core }}
+          PRUEBAS: ${{ needs.pruebas.result }}
+          AOT: ${{ needs.aot-publish.result }}
+        run: |
+          echo "cambios=$CAMBIOS core=$CORE pruebas=$PRUEBAS aot-publish=$AOT"
+          [ "$CAMBIOS" = success ] || { echo "::error::falló la detección de cambios"; exit 1; }
+          if [ "$CORE" != true ]; then echo "El cambio no toca core-api: no aplica."; exit 0; fi
+          [ "$PRUEBAS" = success ] && [ "$AOT" = success ]
 
-  # Ya no espera a las pruebas: corre en paralelo y solo comprueba que el publish siga funcionando.
+  # No espera a las pruebas: corre en paralelo y solo comprueba que el publish siga funcionando.
   aot-publish:
+    needs: cambios
+    if: needs.cambios.outputs.core == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
