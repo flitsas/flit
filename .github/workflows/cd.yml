@@ -1158,8 +1158,9 @@ jobs:
       # cae en ese commit posterior (que contiene el nuestro): se revisan los commits de main desde la punta
       # hasta el nuestro. Si el status no aparece o no se puede leer, se sigue con la comprobacion de salud
       # de siempre: una notificacion rota nunca frena un despliegue.
+      # pdn (169) entra cuando su Argo CD publique el status (vars.ARGO_STATUS_PDN = 'true').
       - name: Esperar a Argo CD (Synced + Healthy)
-        if: env.GITOPS_SHA != ''
+        if: env.GITOPS_SHA != '' && (needs.setup.outputs.env_name != 'pdn' || vars.ARGO_STATUS_PDN == 'true')
         env:
           GH_TOKEN: ${{ secrets.GITOPS_TOKEN }}
           APP: flit2-${{ needs.setup.outputs.env_name }}
@@ -1171,7 +1172,9 @@ jobs:
               echo "::warning::No se pueden leer los commits de $REPO; se sigue con la comprobacion de salud."; exit 0
             fi
             for sha in $shas; do
-              st=$(gh api "repos/$REPO/commits/$sha/statuses" --jq "[.[] | select(.context==\"argocd/$APP\")][0].state // empty" 2>/dev/null || true)
+              if ! st=$(gh api "repos/$REPO/commits/$sha/statuses" --jq "[.[] | select(.context==\"argocd/$APP\")][0].state // empty" 2>/dev/null); then
+                echo "::warning::El token no puede leer los commit statuses de $REPO; se sigue con la comprobacion de salud."; exit 0
+              fi
               case "$st" in
                 success) echo "Argo CD: $APP Synced + Healthy en ${sha::7} ($((SECONDS/60)) min)."; echo "ARGO_OK=1" >> "$GITHUB_ENV"; exit 0 ;;
                 failure|error) echo "::error::Argo CD informa '$st' en $APP (${sha::7}). Revisar Argo CD; rollback = revertir el commit de flit-gitops."; exit 1 ;;
