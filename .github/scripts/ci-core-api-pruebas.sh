@@ -42,14 +42,25 @@ case "$carril" in
     exec dotnet test $p --no-build -c Release "${args[@]}" --logger "trx;LogFileName=integration-$SHARD.trx" "${cob[@]}" ;;
 
   resto)
-    pids=(); nombres=()
-    for csproj in $(grep -o 'Path="[^"]*Tests\.csproj"' Flit.slnx | sed 's/Path="//; s/"$//'); do
-      case $csproj in *Admin.Tests*|*Integration.Tests*) continue ;; esac
+    # Proyectos con pruebas de TIEMPO (LoginTimingTests compara la latencia de dos caminos del login con una
+    # tolerancia de 2.5x): corren solos y primero, sin competir por CPU con los demás.
+    solos="Flit.Modules.Security.Application.Tests"
+    pids=(); nombres=(); rc=0
+    proyectos=$(grep -o 'Path="[^"]*Tests\.csproj"' Flit.slnx | sed 's/Path="//; s/"$//')
+    for csproj in $proyectos; do
       n=$(basename "$csproj" .csproj)
+      case " $solos " in *" $n "*)
+        if dotnet test "$csproj" --no-build -c Release --logger "trx;LogFileName=$n.trx" "${cob[@]}" > "TestResults-$n.log" 2>&1
+        then echo "OK    $n (solo)"; else echo "FALLA $n (solo)"; tail -80 "TestResults-$n.log"; rc=1; fi ;;
+      esac
+    done
+    for csproj in $proyectos; do
+      n=$(basename "$csproj" .csproj)
+      case $csproj in *Admin.Tests*|*Integration.Tests*) continue ;; esac
+      case " $solos " in *" $n "*) continue ;; esac
       dotnet test "$csproj" --no-build -c Release --logger "trx;LogFileName=$n.trx" "${cob[@]}" > "TestResults-$n.log" 2>&1 &
       pids+=($!); nombres+=("$n")
     done
-    rc=0
     for i in "${!pids[@]}"; do
       if wait "${pids[$i]}"; then echo "OK    ${nombres[$i]}"; else echo "FALLA ${nombres[$i]}"; tail -80 "TestResults-${nombres[$i]}.log"; rc=1; fi
     done
