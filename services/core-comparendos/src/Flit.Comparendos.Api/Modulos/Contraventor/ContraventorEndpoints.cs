@@ -17,10 +17,13 @@ public static class ContraventorEndpoints
 
     public sealed record NotificacionFisica(bool Valor);
 
+    public sealed record DocumentoConductor(string TipoDocumento, string NumeroDocumento);
+
     public static void Map(RouteGroupBuilder api)
     {
         api.MapPut("/comparendos/{id:guid}/contraventor", Asignar).RequirePermiso(Permisos.ContraventorAsignar);
         api.MapPost("/comparendos/{id:guid}/contraventor/consultar", Consultar).RequirePermiso(Permisos.ContraventorConsultar);
+        api.MapPut("/comparendos/{id:guid}/contraventor/documento", CompletarDocumento).RequirePermiso(Permisos.ContraventorAsignar);
         api.MapPost("/comparendos/{id:guid}/documentos", SubirDocumento).RequirePermiso(Permisos.ContraventorDocumentos).DisableAntiforgery();
         api.MapPut("/comparendos/{id:guid}/notificado-fisicamente", MarcarNotificado).RequirePermiso(Permisos.ContraventorAsignar);
     }
@@ -34,13 +37,24 @@ public static class ContraventorEndpoints
         return Results.NoContent();
     }
 
+    private static async Task<IResult> CompletarDocumento(Guid id, DocumentoConductor d, AccesoComparendo acceso, ServicioContraventor servicio, UsuarioActual usuario,
+        ComparendosDb db, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(d);
+        var c = await acceso.ParaOperarAsync(id, ct).ConfigureAwait(false);
+        servicio.CompletarDocumento(c, d.TipoDocumento, d.NumeroDocumento, Actor.De(usuario));
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return Results.NoContent();
+    }
+
     /// <summary>Consulta manual a la API de contratos. Si encuentra otro conductor y ya hay uno, pide confirmar el reemplazo.</summary>
     private static async Task<IResult> Consultar(Guid id, bool? confirmarReemplazo, AccesoComparendo acceso, ServicioContraventor servicio, UsuarioActual usuario, ComparendosDb db, CancellationToken ct)
     {
         var c = await acceso.ParaOperarAsync(id, ct).ConfigureAwait(false);
         var r = await servicio.ConsultarAsync(c, Actor.De(usuario), confirmarReemplazo == true, ct).ConfigureAwait(false);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        var pendienteConfirmar = r.Resultado == ResultadoContrato.Encontrado && c.Contraventor is { } k && r.Conductor is { } nuevo && k.NumeroDocumento != nuevo.NumeroDocumento;
+        var pendienteConfirmar = r.Resultado == ResultadoContrato.Encontrado && c.Contraventor is { } k && r.Conductor is { } nuevo
+            && (k.NumeroDocumento != nuevo.NumeroDocumento || !string.Equals(k.Nombres, nuevo.Nombres, StringComparison.OrdinalIgnoreCase));
         return Results.Ok(new { resultado = r.Resultado.ToString(), r.Mensaje, conductor = r.Conductor, requiereConfirmarReemplazo = pendienteConfirmar });
     }
 
@@ -114,15 +128,16 @@ public sealed partial class ReintentoContraventor(ComparendosDb db, ServicioCont
             try
             {
                 var c = await db.Comparendos.Include(x => x.Contraventor).FirstAsync(x => x.Id == id, ct).ConfigureAwait(false);
-                await servicio.ConsultarAsync(c, Actor.Api("API de contratos"), confirmarReemplazo: false, ct).ConfigureAwait(false);
+                await servicio.ConsultarAsync(c, Actor.Api("Consulta automática"), confirmarReemplazo: false, ct).ConfigureAwait(false);
                 await db.SaveChangesAsync(ct).ConfigureAwait(false);
             }
             catch (ReglaException ex)
             {
                 LogOmitido(logger, id, ex.Codigo);
                 db.ChangeTracker.Clear();
-                // §4.7: si el OT bloquea la consulta o faltan placa/fecha, no aplica: el comparendo pasa a «Sin contraventor (manual)».
-                if (ex.Codigo is "OT_BLOQUEADO" or "SIN_DATOS_CONSULTA")
+                // §4.7: si el OT bloquea la consulta, faltan placa/fecha o el NIT no usa la API (HU #13712), no aplica: el
+                // comparendo pasa a «Sin contraventor (manual)».
+                if (ex.Codigo is "OT_BLOQUEADO" or "SIN_DATOS_CONSULTA" or "NIT_SIN_API")
                 {
                     await db.Comparendos.Where(c => c.Id == id)
                         .ExecuteUpdateAsync(u => u.SetProperty(c => c.EstadoConsultaContraventor, EstadoConsultaContraventor.NoAplica), ct).ConfigureAwait(false);

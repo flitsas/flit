@@ -1,30 +1,33 @@
 "use client";
 
-import Link from "next/link";
-import { Suspense, useState } from "react";
+import { Suspense, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Download, Mail, Send, SlidersHorizontal } from "lucide-react";
-import { ActionsMenu, DataTable, InlineAlert, usePaginacion, type DataTableColumn } from "@flit/ui";
-import { BarraFiltrosRapidos } from "@/components/bandeja/BarraFiltrosRapidos";
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, Download, Mail, RefreshCw, Search, Send } from "lucide-react";
+import { ActionsMenu, DataTable, InlineAlert, Modal, usePaginacion, type DataTableColumn } from "@flit/ui";
+import { BusquedaRapida } from "@/components/bandeja/BusquedaRapida";
 import { COLUMNAS_BANDEJA } from "@/components/bandeja/columnas";
 import { EnvioMasivoAviso } from "@/components/bandeja/EnvioMasivoAviso";
 import { EnvioMasivoDp } from "@/components/bandeja/EnvioMasivoDp";
-import { PanelFiltros } from "@/components/bandeja/PanelFiltros";
-import { MultiSeleccion } from "@/components/ui/MultiSeleccion";
+import { EtiquetasFiltros } from "@/components/bandeja/EtiquetasFiltros";
+import { MenuFiltros } from "@/components/bandeja/MenuFiltros";
+import { TarjetasEstadoLegal } from "@/components/bandeja/TarjetasEstadoLegal";
+import { SelectorColumnas } from "@/components/ui/SelectorColumnas";
 import { DetalleComparendo } from "@/components/detalle/DetalleComparendo";
 import type { SeccionDetalle } from "@/components/detalle/Timeline";
 import { useSesion } from "@/components/ComparendosShell";
 import { Encabezado } from "@/components/Pantalla";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
 import { useToast } from "@/components/Toast";
-import { controlCls, INPUT_CLS } from "@/components/ui/estilos";
+import { BOTON_PRIMARIO_CLS, controlCls, INPUT_CLS } from "@/components/ui/estilos";
 import { apiDownload, apiFetch } from "@/lib/api";
+import { textoCambioOrden, textoOrden } from "@/lib/orden";
 import { COLUMNA_FIJA, guardadas, guardar, ocultasDesde } from "@/lib/columnas";
 import { MAXIMO_LOTE } from "@/lib/dp";
-import { aQuery, contarFiltros, FILTROS_VACIOS, type FiltrosBandeja } from "@/lib/filtros";
+import { FILAS_POR_PARTE, mensajeExportacion, nombreParte, PARTES_SIN_CONFIRMAR, partesDe } from "@/lib/exportar";
+import { aQuery, etiquetasAplicadas, FILTROS_VACIOS, quitarEtiqueta, type FiltrosBandeja } from "@/lib/filtros";
 import { P } from "@/lib/nav";
 import { capacidades, tienePermiso } from "@/lib/sesion";
-import type { Contadores, FilaBandeja, Pagina } from "@/lib/tipos";
+import type { Contadores, FilaBandeja, Nit, Pagina } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
 
 const ORDENES = [
@@ -58,10 +61,16 @@ function ContenidoBandeja() {
     const nit = params.get("nit");
     return { ...FILTROS_VACIOS, rapido: params.get("rapido") === "Radar" ? "Radar" : null, nits: nit ? [nit] : [] };
   });
-  const [verPanel, setVerPanel] = useState(false);
+  // HU #13870: la caja busca en número y placa; consulta cuando se deja de escribir, sin pulsar nada.
+  const [textoBuscar, setTextoBuscar] = useState("");
+  const espera = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Nombres de los NIT y organismos elegidos, para las etiquetas de lo aplicado.
+  const [nombresElegidos, setNombresElegidos] = useState<Record<string, string>>({});
   const [orden, setOrden] = useState("");
   const [descendente, setDescendente] = useState(false);
-  const [exportando, setExportando] = useState(false);
+  // Lo que dice el botón mientras se descargan las partes («Parte 2 de 3…»); null = no se está exportando.
+  const [exportando, setExportando] = useState<string | null>(null);
+  const [confirmarPartes, setConfirmarPartes] = useState<number | null>(null);
   const [seleccionado, setSeleccionado] = useState<string | null>(null);
   const [seccion, setSeccion] = useState<SeccionDetalle | null>(null);
   const abrir = (id: string, s: SeccionDetalle | null = null) => {
@@ -86,13 +95,27 @@ function ContenidoBandeja() {
   const cambiarColumnas = (visibles: string[]) => {
     const nuevas = ocultasDesde(visibles, claves);
     setPreferencia({ usuario: usuarioId, ocultas: nuevas });
-    guardar(usuarioId, nuevas);
+    guardar(usuarioId, nuevas, claves);
   };
 
   const setFiltros = (f: FiltrosBandeja) => {
     setFiltrosEstado(f);
     setMarcados(new Map());
     setPage(1);
+  };
+  const buscar = (texto: string) => {
+    setTextoBuscar(texto);
+    if (espera.current) clearTimeout(espera.current);
+    espera.current = setTimeout(() => {
+      setFiltrosEstado((f) => ({ ...f, buscar: texto }));
+      setMarcados(new Map());
+      setPage(1);
+    }, 400);
+  };
+  const limpiarTodo = () => {
+    if (espera.current) clearTimeout(espera.current);
+    setTextoBuscar("");
+    setFiltros(FILTROS_VACIOS);
   };
 
   const listo = !!sesion && (!esSuperAdmin || !!empresa);
@@ -104,26 +127,46 @@ function ContenidoBandeja() {
       query: { ...consulta, orden: orden || undefined, descendente: descendente || undefined, pagina: pg.page, tamano: pg.pageSize },
     }),
   );
-  const contadores = useCarga(listo ? JSON.stringify({ ...consulta, rapido: undefined }) : null, (signal) =>
-    apiFetch<Contadores>("/comparendos/contadores", { signal, query: { ...consulta, rapido: undefined } }),
-  );
+  // El servidor cuenta cada atajo sin el atajo elegido y cada estado legal sin el estado elegido (HU #13869).
+  const contadores = useCarga(listo ? JSON.stringify(consulta) : null, (signal) => apiFetch<Contadores>("/comparendos/contadores", { signal, query: consulta }));
+  const nits = useCarga(listo ? `nits:${empresa ?? ""}` : null, (signal) => apiFetch<Nit[]>("/monitoreo/nits", { signal, query: { empresa: esSuperAdmin ? empresa : undefined } }));
+  const nombres = { ...Object.fromEntries((nits.datos ?? []).map((n) => [n.id, n.numero])), ...nombresElegidos };
 
-  const exportar = async () => {
-    setExportando(true);
+  // HU #13871: lo filtrado sale en partes de hasta 5.000 filas, todas en el mismo clic y con solo las columnas visibles.
+  const totalFiltrado = lista.datos?.total ?? 0;
+  const exportar = async (partes: number) => {
+    setConfirmarPartes(null);
+    const visibles = columnas.map((c) => c.key);
+    const hoy = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota" }).format(new Date());
     try {
-      const r = await apiDownload("/comparendos/excel", "comparendos.xlsx", { ...consulta, orden: orden || undefined, descendente: descendente || undefined });
-      if (r.aceptado) toast.show(r.mensaje ?? "La exportación es grande: te avisamos por correo cuando esté lista.", "success");
+      for (let parte = 1; parte <= partes; parte++) {
+        setExportando(partes > 1 ? `Parte ${parte} de ${partes}…` : "Exportando…");
+        await apiDownload(
+          "/comparendos/excel",
+          nombreParte(hoy, parte, partes),
+          { ...consulta, orden: orden || undefined, descendente: descendente || undefined, parte, columnas: visibles.join(",") },
+          true,
+        );
+      }
+      toast.show(mensajeExportacion(totalFiltrado, partes, visibles.length), "success");
     } catch (e) {
       toast.show(e instanceof Error ? e.message : "No se pudo exportar.", "error");
     } finally {
-      setExportando(false);
+      setExportando(null);
     }
+  };
+  const pedirExportacion = () => {
+    const partes = partesDe(totalFiltrado);
+    if (partes > PARTES_SIN_CONFIRMAR) setConfirmarPartes(partes);
+    else void exportar(partes);
   };
 
   if (cargandoSesion) return <p className="text-sm opacity-60">Abriendo Comparendos…</p>;
   if (errorSesion) return <InlineAlert tone="error">{errorSesion}</InlineAlert>;
 
-  const nFiltros = contarFiltros(filtros);
+  const etiquetas = etiquetasAplicadas(filtros, nombres);
+  // «Limpiar todo» aparece cuando la bandeja no está como viene de fábrica (solo «Activos»).
+  const fueraDeFabrica = !!filtros.buscar || filtros.activos !== "activos" || etiquetas.some((e) => !e.porDefecto);
   const pagina = lista.datos?.items ?? [];
   const todosMarcados = pagina.length > 0 && pagina.every((f) => marcados.has(f.id));
   const alternar = (filas: FilaBandeja[], marcar: boolean) =>
@@ -186,19 +229,6 @@ function ContenidoBandeja() {
       <Encabezado
         titulo="Bandeja de comparendos"
         descripcion={esSuperAdmin ? "Vista de administración FLIT: elige una empresa para ver su bandeja. Solo lectura." : sesion?.empresa?.nombre}
-        acciones={
-          <>
-            {tienePermiso(sesion, "comparendos.bandeja.exportar") && listo && (
-              <button type="button" className={controlCls(false)} onClick={exportar} disabled={exportando}>
-                <Download className="h-3.5 w-3.5" aria-hidden />
-                {exportando ? "Exportando…" : "Exportar a Excel"}
-              </button>
-            )}
-            <Link href="/exportaciones" className="text-xs font-semibold text-[#3B4FD6] hover:underline">
-              Mis exportaciones
-            </Link>
-          </>
-        }
       />
 
       {esSuperAdmin && (
@@ -213,7 +243,85 @@ function ContenidoBandeja() {
 
       {listo && (
         <>
-          <BarraFiltrosRapidos
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative w-full sm:w-64">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-flit-brand" aria-hidden />
+              <input
+                type="search"
+                value={textoBuscar}
+                onChange={(e) => buscar(e.target.value)}
+                placeholder="Buscar número o placa"
+                aria-label="Buscar comparendos por número o placa"
+                className={`${INPUT_CLS} pl-9`}
+              />
+            </div>
+            <MenuFiltros
+              aplicados={filtros}
+              onAplicar={setFiltros}
+              empresa={esSuperAdmin ? empresa : null}
+              nombres={nombres}
+              onNombres={(n) => setNombresElegidos((prev) => ({ ...prev, ...n }))}
+            />
+            <SelectorColumnas
+              columnas={COLUMNAS_BANDEJA.filter((c) => c.key !== COLUMNA_FIJA).map((c) => ({ clave: c.key, texto: typeof c.header === "string" ? c.header : c.key }))}
+              visibles={columnas.map((c) => c.key).filter((k) => k !== COLUMNA_FIJA)}
+              onCambio={cambiarColumnas}
+            />
+            <select
+              className={`${controlCls(orden !== "")} pr-2`}
+              value={orden}
+              onChange={(e) => {
+                setOrden(e.target.value);
+                setPage(1);
+              }}
+              aria-label="Ordenar la bandeja"
+            >
+              {ORDENES.map((o) => (
+                <option key={o.valor} value={o.valor}>
+                  {o.texto}
+                </option>
+              ))}
+            </select>
+            {orden && (
+              <button
+                type="button"
+                className={controlCls(false)}
+                onClick={() => setDescendente((d) => !d)}
+                title={textoCambioOrden(orden, descendente)}
+                aria-label={`${textoOrden(orden, descendente)}. ${textoCambioOrden(orden, descendente)}`}
+              >
+                {descendente ? <ArrowDownWideNarrow className="h-3.5 w-3.5" aria-hidden /> : <ArrowUpNarrowWide className="h-3.5 w-3.5" aria-hidden />}
+                {textoOrden(orden, descendente)}
+              </button>
+            )}
+            <div className="ml-auto flex items-center gap-2">
+              {tienePermiso(sesion, "comparendos.bandeja.exportar") && (
+                <button type="button" className={controlCls(false)} onClick={pedirExportacion} disabled={exportando !== null || lista.estado !== "ready" || totalFiltrado === 0}>
+                  <Download className="h-3.5 w-3.5" aria-hidden />
+                  {exportando ?? "Exportar"}
+                </button>
+              )}
+              <button
+                type="button"
+                className={controlCls(false)}
+                onClick={() => {
+                  lista.recargar();
+                  contadores.recargar();
+                }}
+              >
+                <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+                Actualizar
+              </button>
+            </div>
+          </div>
+
+          <TarjetasEstadoLegal
+            conteos={contadores.datos?.estadosLegales ?? null}
+            elegido={filtros.estadoLegal.length === 1 ? filtros.estadoLegal[0] : ""}
+            onElegir={(e) => setFiltros({ ...filtros, estadoLegal: e ? [e] : [] })}
+          />
+
+          <BusquedaRapida
             contadores={contadores.datos}
             rapido={filtros.rapido}
             onRapido={(r) => setFiltros({ ...filtros, rapido: r })}
@@ -223,40 +331,11 @@ function ContenidoBandeja() {
             onJuridico={(j) => setFiltros({ ...filtros, juridico: j })}
           />
 
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className={controlCls(nFiltros > 0)} onClick={() => setVerPanel((v) => !v)} aria-expanded={verPanel}>
-              <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
-              {nFiltros > 0 ? `Filtros (${nFiltros})` : "Filtros"}
-            </button>
-            {nFiltros > 0 && (
-              <button type="button" className="text-xs font-semibold text-[#3B4FD6] hover:underline" onClick={() => setFiltros({ ...FILTROS_VACIOS, rapido: filtros.rapido, juridico: filtros.juridico, sinGestion: filtros.sinGestion })}>
-                Limpiar filtros
-              </button>
-            )}
-            <div className="w-44">
-              <MultiSeleccion
-                etiqueta="Columnas"
-                opciones={COLUMNAS_BANDEJA.filter((c) => c.key !== COLUMNA_FIJA).map((c) => ({ valor: c.key, texto: typeof c.header === "string" ? c.header : c.key }))}
-                valores={columnas.map((c) => c.key).filter((k) => k !== COLUMNA_FIJA)}
-                onCambio={cambiarColumnas}
-              />
-            </div>
-            <label className="ml-auto flex items-center gap-2 text-xs font-semibold">
-              Ordenar
-              <select className={`${INPUT_CLS} w-48`} value={orden} onChange={(e) => { setOrden(e.target.value); setPage(1); }}>
-                {ORDENES.map((o) => (
-                  <option key={o.valor} value={o.valor}>
-                    {o.texto}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {orden && (
-              <button type="button" className={controlCls(false)} onClick={() => setDescendente((d) => !d)}>
-                {descendente ? "Mayor a menor" : "Menor a mayor"}
-              </button>
-            )}
-          </div>
+          <EtiquetasFiltros
+            etiquetas={etiquetas}
+            onQuitar={(clave) => setFiltros(quitarEtiqueta(filtros, clave))}
+            onLimpiarTodo={fueraDeFabrica ? limpiarTodo : undefined}
+          />
 
           {seleccionable && marcados.size > 0 && (
             <div className="flex flex-wrap items-center gap-3 text-xs">
@@ -281,8 +360,6 @@ function ContenidoBandeja() {
               </button>
             </div>
           )}
-
-          {verPanel && <PanelFiltros filtros={filtros} onCambio={setFiltros} empresa={esSuperAdmin ? empresa : null} />}
 
           <DataTable
             ariaLabel="Comparendos"
@@ -316,6 +393,28 @@ function ContenidoBandeja() {
           contadores.recargar();
         }}
       />
+      {confirmarPartes !== null && (
+        <Modal
+          open
+          onClose={() => setConfirmarPartes(null)}
+          title="Exportar en varios archivos"
+          footer={
+            <div className="flex justify-end gap-2">
+              <button type="button" className={controlCls(false)} onClick={() => setConfirmarPartes(null)}>
+                Cancelar
+              </button>
+              <button type="button" className={BOTON_PRIMARIO_CLS} onClick={() => void exportar(confirmarPartes)}>
+                Descargar {confirmarPartes} archivos
+              </button>
+            </div>
+          }
+        >
+          <p className="text-sm">
+            Son {totalFiltrado.toLocaleString("es-CO")} comparendos: se descargarán {confirmarPartes} archivos de hasta {FILAS_POR_PARTE.toLocaleString("es-CO")} filas,
+            uno detrás de otro. Si el navegador pregunta si permites descargar varios archivos, acepta.
+          </p>
+        </Modal>
+      )}
       {envioMasivo && <EnvioMasivoDp filas={[...marcados.values()]} onCerrar={() => setEnvioMasivo(false)} />}
       {envioAviso && (
         <EnvioMasivoAviso

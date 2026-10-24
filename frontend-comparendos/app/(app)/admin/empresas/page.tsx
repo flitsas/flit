@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { History, Plus } from "lucide-react";
+import { History, Plug, Plus } from "lucide-react";
 import { DataTable, InlineAlert, Modal, StatusBadge } from "@flit/ui";
 import { ConsultasAdmin } from "@/components/consultas/ConsultasAdmin";
 import { Encabezado, Requiere } from "@/components/Pantalla";
@@ -22,8 +22,10 @@ import type {
   ConfiguracionEmpresa,
   EmpresaAdmin,
   EmpresaPlataforma,
+  Nit,
   Tipologia,
 } from "@/lib/tipos";
+import { type PruebaContratos, resumenPrueba } from "@/lib/conductor";
 import { useCarga } from "@/lib/useCarga";
 
 function NuevaEmpresa({
@@ -162,6 +164,123 @@ function Historial({ empresaId, onCerrar }: { empresaId: string; onCerrar: () =>
   );
 }
 
+/**
+ * NIT que consultan el conductor en la API de contratos (HU #13712). La API de Renting solo conoce su propia flota: se
+ * marca NIT por NIT. El interruptor general sigue siendo la integración de la empresa; apagarla no borra estas casillas.
+ */
+/**
+ * «Probar conexión» (HU #13843): solo el inicio de sesión con la API de contratos, sin consultar placas. La conexión es
+ * del ambiente, no de la empresa.
+ */
+function ProbarConexion() {
+  const [probando, setProbando] = useState(false);
+  const [resultado, setResultado] = useState<PruebaContratos | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const probar = async () => {
+    setProbando(true);
+    setError(null);
+    try {
+      setResultado(await apiFetch<PruebaContratos>("/admin/contratos/probar", { method: "POST" }));
+    } catch (e) {
+      setResultado(null);
+      setError(e instanceof Error ? e.message : "No se pudo probar la conexión.");
+    } finally {
+      setProbando(false);
+    }
+  };
+  const r = resultado && resumenPrueba(resultado);
+  return (
+    <div className="flex flex-col gap-2">
+      <div>
+        <button type="button" className={controlCls(false)} disabled={probando} onClick={probar}>
+          <Plug className="h-3.5 w-3.5" aria-hidden />
+          {probando ? "Probando…" : "Probar conexión"}
+        </button>
+      </div>
+      {error && <InlineAlert tone="error" compact>{error}</InlineAlert>}
+      {r && (
+        <InlineAlert tone={r.tono} title={r.titulo} compact>
+          {r.detalle.map((d) => (
+            <p key={d}>{d}</p>
+          ))}
+        </InlineAlert>
+      )}
+    </div>
+  );
+}
+
+function NitsConsultaContrato({ empresaId, integracionApi }: { empresaId: string; integracionApi: boolean }) {
+  const toast = useToast();
+  const nits = useCarga(`nits-contrato:${empresaId}`, (signal) =>
+    apiFetch<Nit[]>("/monitoreo/nits", { signal, query: { empresa: empresaId } }),
+  );
+
+  const cambiar = async (n: Nit, activo: boolean) => {
+    try {
+      await apiFetch(`/admin/empresas/${empresaId}/nits/${n.id}/consulta-contrato`, { method: "PUT", body: { activo } });
+      nits.recargar();
+      toast.show(`${n.numero}: ${activo ? "consulta por API" : "asignación manual"}.`, "success");
+    } catch (e) {
+      toast.show(e instanceof Error ? e.message : "No se pudo cambiar el NIT.", "error");
+    }
+  };
+
+  return (
+    <section className="flex flex-col gap-2">
+      <h2 className="text-sm font-semibold">NIT que consultan el conductor en la API de contratos</h2>
+      <p className="text-xs opacity-70">
+        La API de Renting solo sabe quién tenía un vehículo de su propia flota. Marca únicamente esos NIT: los demás se
+        asignan a mano.
+      </p>
+      <ProbarConexion />
+      {!integracionApi && (
+        <InlineAlert tone="info" compact>
+          La integración del contraventor está en Manual o la consulta de contraventor está apagada: no sale ninguna
+          consulta. Las casillas se conservan para cuando se vuelva a encender.
+        </InlineAlert>
+      )}
+      <DataTable
+        ariaLabel="NIT que consultan la API de contratos"
+        rows={nits.datos ?? []}
+        getRowKey={(n) => n.id}
+        status={nits.estado}
+        errorMessage={nits.error ?? undefined}
+        onRetry={nits.recargar}
+        emptyMessage="La empresa no tiene NIT monitoreados."
+        columns={[
+          {
+            key: "numero",
+            header: "NIT",
+            render: (n) => (
+              <span className="font-mono">
+                {n.tipoDocumento} {n.numero}
+              </span>
+            ),
+          },
+          { key: "titular", header: "Titular", render: (n) => n.nombreTitular ?? "—" },
+          {
+            key: "estado",
+            header: "Monitoreo",
+            render: (n) => <StatusBadge label={n.activo ? "Activo" : "Inactivo"} tone={n.activo ? "info" : "neutral"} />,
+          },
+          {
+            key: "api",
+            header: "Consulta por API",
+            align: "right",
+            render: (n) => (
+              <Interruptor
+                activo={n.consultaContratoApi}
+                onCambio={(v) => cambiar(n, v)}
+                etiqueta="Consultar por API"
+              />
+            ),
+          },
+        ]}
+      />
+    </section>
+  );
+}
+
 function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardado: () => void }) {
   const toast = useToast();
   const config = useCarga(`config:${empresaId}`, (signal) =>
@@ -295,17 +414,14 @@ function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardad
             <option value="ApiRenting">API de contratos de Renting</option>
           </select>
         </label>
-        <label className={ETIQUETA_CLS}>
+        {/* HU #13882: el conjunto sigue al canal de correo que la empresa tiene en Trámites. */}
+        <div className={ETIQUETA_CLS}>
           Conjunto de plantillas
-          <select
-            className={INPUT_CLS}
-            value={valores.conjuntoPlantillas}
-            onChange={(e) => cambiar({ conjuntoPlantillas: e.target.value })}
-          >
-            <option value="Flit">FLIT</option>
-            <option value="Renting">Renting</option>
-          </select>
-        </label>
+          <p className={`${INPUT_CLS} flex items-center bg-[#F4F6FA] dark:bg-white/5`}>{valores.conjuntoPlantillas === "Renting" ? "Renting" : "FLIT"}</p>
+          <span className="font-normal opacity-70">
+            Sigue el «Enrutamiento de notificaciones» de la empresa en Trámites: Renting con «API Renting cliente», FLIT con «Colas FLIT».
+          </span>
+        </div>
       </section>
 
       <div className="flex justify-end gap-2">
@@ -326,6 +442,11 @@ function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardad
           Guardar cambios
         </button>
       </div>
+
+      <NitsConsultaContrato
+        empresaId={empresaId}
+        integracionApi={base.tipoIntegracionConductor === "ApiRenting" && base.allowsContravenerConsultation}
+      />
 
       <section className="flex flex-col gap-2">
         <h2 className="text-sm font-semibold">Tipologías de derecho de petición habilitadas</h2>

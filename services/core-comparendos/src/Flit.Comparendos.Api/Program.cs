@@ -68,6 +68,7 @@ public static class Program
         builder.Services.AddSingleton<Reloj>();
         builder.Services.AddSingleton<CalendarioService>();
         builder.Services.AddScoped<Capacidades>();
+        builder.Services.AddScoped<CanalDeTramites>();
         builder.Services.AddAlmacenArchivos(builder.Configuration);
         builder.Services.AddModulosComparendos(builder.Configuration, builder.Environment);
         builder.Services.AddHttpClient(RegistroManifiesto.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(20));
@@ -127,6 +128,8 @@ app.UseMiddleware<LecturasSuperAdmin>();
         var db = scope.ServiceProvider.GetRequiredService<ComparendosDb>();
         await db.Database.MigrateAsync().ConfigureAwait(false);
         await Semillas.Semillas.SembrarAsync(db, scope.ServiceProvider.GetRequiredService<TimeProvider>(), CancellationToken.None).ConfigureAwait(false);
+        await Modulos.Comparendos.CorreccionFechaVacia.AplicarAsync(db, scope.ServiceProvider.GetRequiredService<Modulos.Calendario.CalendarioService>(),
+            scope.ServiceProvider.GetRequiredService<Modulos.Comparendos.Timeline>(), scope.ServiceProvider.GetRequiredService<Reloj>(), CancellationToken.None).ConfigureAwait(false);
     }
 
     /// <summary>Tokens de servicio de svc-comparendos (mismo registro que hace el SDK para sus clientes gRPC).</summary>

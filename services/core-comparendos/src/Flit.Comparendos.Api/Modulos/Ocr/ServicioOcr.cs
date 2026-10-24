@@ -37,6 +37,7 @@ public sealed class ServicioOcr(
     public const int MaximoDocumentos = 200;
     public const long MaximoBytes = 20L * 1024 * 1024;
     public const int MaximoIntentos = 3;
+    public const int MaximoReprocesos = 3;
     public static readonly string[] Formatos = ["application/pdf", "image/jpeg", "image/png", "image/tiff"];
     private static readonly TimeSpan[] Esperas = [TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(45)];
     private static readonly EstadoDocumentoOcr[] Finales = [EstadoDocumentoOcr.Registrado, EstadoDocumentoOcr.Descartado, EstadoDocumentoOcr.Duplicado];
@@ -46,7 +47,7 @@ public sealed class ServicioOcr(
         ArgumentNullException.ThrowIfNull(lista);
         await capacidades.ExigirAsync(tenant, Capacidad.Ocr, ct).ConfigureAwait(false);
         if (!proveedor.Configurado)
-            throw ReglaException.Conflicto("OCR_NO_CONFIGURADO", "El OCR no está configurado en este ambiente: falta la llave del proveedor.");
+            throw ReglaException.Conflicto("OCR_NO_CONFIGURADO", "La carga por OCR no está disponible en este momento. Contacta a FLIT.");
         if (string.IsNullOrWhiteSpace(nombre) || nombre.Trim().Length > 150)
             throw new ReglaException("NOMBRE_INVALIDO", "El paquete necesita un nombre de hasta 150 caracteres.");
         if (lista.Count is 0 or > MaximoDocumentos)
@@ -104,7 +105,7 @@ public sealed class ServicioOcr(
 
     public async Task<PromptOcrVersion> PromptPublicadoAsync(CancellationToken ct) =>
         await db.PromptsOcr.AsNoTracking().FirstOrDefaultAsync(p => p.Publicada, ct).ConfigureAwait(false)
-        ?? throw new ReglaException("SIN_PROMPT_OCR", "No hay una versión publicada del prompt de OCR.", StatusCodes.Status409Conflict);
+        ?? throw new ReglaException("SIN_PROMPT_OCR", "La carga por OCR no está disponible en este momento. Contacta a FLIT.", StatusCodes.Status409Conflict);
 
     public async Task IniciarAsync(PaqueteOcr paquete, CancellationToken ct)
     {
@@ -148,10 +149,12 @@ public sealed class ServicioOcr(
             return;
         }
 
-        var prompt = await db.PromptsOcr.AsNoTracking().FirstAsync(p => p.Id == paquete.PromptVersionId, ct).ConfigureAwait(false);
+        var promptId = doc.PromptVersionId ?? paquete.PromptVersionId;
+        var prompt = await db.PromptsOcr.AsNoTracking().FirstAsync(p => p.Id == promptId, ct).ConfigureAwait(false);
         var r = await proveedor.ExtraerAsync(a.Contenido, a.Archivo.ContentType, prompt.Texto, prompt.Modelo, ct).ConfigureAwait(false);
         doc.Intentos++;
         doc.ProveedorModelo = $"{prompt.Proveedor}/{r.Modelo}";
+        doc.PromptVersionId = prompt.Id;
         var intento = new DocumentoOcrIntento
         {
             Id = Guid.CreateVersion7(), DocumentoOcrId = doc.Id, Numero = doc.Intentos, IntentadoEn = ahora, TipoError = r.TipoFallo,
@@ -187,10 +190,16 @@ public sealed class ServicioOcr(
             return;
         }
 
+        // HU #13828: en un reproceso, lo que corrigió el operador se queda; solo cambia lo que nadie tocó.
+        var corregidos = await db.DocumentoOcrEdiciones.AsNoTracking().Where(e => e.DocumentoOcrId == doc.Id).Select(e => e.Campo).Distinct().ToListAsync(ct).ConfigureAwait(false);
+        var anteriores = corregidos.Count == 0 ? new Dictionary<string, DocumentoOcrCampo>() : await db.DocumentoOcrCampos.AsNoTracking()
+            .Where(c => c.DocumentoOcrId == doc.Id && corregidos.Contains(c.NombreCampo)).ToDictionaryAsync(c => c.NombreCampo, ct).ConfigureAwait(false);
         var campos = CamposOcr.Todos.Select(n => (Nombre: n, Campo: r.Campos.GetValueOrDefault(n))).Select(x => new DocumentoOcrCampo
         {
             Id = Guid.CreateVersion7(), DocumentoOcrId = doc.Id, NombreCampo = x.Nombre, ValorExtraido = x.Campo?.Valor, Confianza = x.Campo?.Confianza,
-            EsNull = x.Campo?.Valor is null, ValorFinal = x.Campo?.Valor,
+            EsNull = x.Campo?.Valor is null,
+            ValorCorregido = anteriores.GetValueOrDefault(x.Nombre)?.ValorCorregido,
+            ValorFinal = anteriores.TryGetValue(x.Nombre, out var a) ? a.ValorFinal : x.Campo?.Valor,
         }).ToList();
         await db.DocumentoOcrCampos.Where(c => c.DocumentoOcrId == doc.Id).ExecuteDeleteAsync(ct).ConfigureAwait(false);
         db.DocumentoOcrCampos.AddRange(campos);
@@ -413,14 +422,12 @@ public sealed class ServicioOcr(
             FuentePrincipal = null,
             ArchivoEvidenciaId = doc.ArchivoId,
             EstadoCambioContraventor = config.AllowsContravenerChange ? EstadoCambioContraventor.SinSolicitar : EstadoCambioContraventor.NoAplica,
-            EstadoConsultaContraventor = config.TipoIntegracionConductor == TipoIntegracionConductor.ApiRenting && config.AllowsContravenerConsultation
-                ? EstadoConsultaContraventor.Pendiente
-                : EstadoConsultaContraventor.NoAplica,
             CreadoEn = ahora,
             UltimoEventoEn = ahora,
         };
         Reconciliador.AplicarCampos(c, item);
         await AsociarMonitoreoAsync(c, ct).ConfigureAwait(false);
+        c.EstadoConsultaContraventor = await Contraventor.ConsultaPorApi.EstadoInicialAsync(db, config, c, ct).ConfigureAwait(false);
         c.OrganismoTransitoId = await mapeador.MapearAsync(item.Secretaria, ct, c.NumeroNormalizado).ConfigureAwait(false);
         Plazos.Recalcular(c, await calendario.MotorAsync(ct).ConfigureAwait(false), ahora);
         db.Comparendos.Add(c);
@@ -452,12 +459,8 @@ public sealed class ServicioOcr(
     /// </summary>
     private async Task AsociarMonitoreoAsync(Comparendo c, CancellationToken ct)
     {
-        if (Nit.Separar(c.NumeroDocumentoInfractor)?.Base is { } numero)
+        if (Contraventor.ConsultaPorApi.CandidatosNit(c.NumeroDocumentoInfractor) is { Count: > 0 } candidatos)
         {
-            // El dígito de verificación a veces viene pegado («8110117798»): si el último es el DV correcto, también vale sin él.
-            var candidatos = new List<string> { numero };
-            if (numero.Length > 1 && Nit.DigitoVerificacion(numero[..^1]) == numero[^1] - '0')
-                candidatos.Add(numero[..^1]);
             var nit = await db.IdentificacionesMonitoreadas.AsNoTracking()
                 .Where(n => n.TenantId == c.TenantId && n.Activo && candidatos.Contains(n.NumeroBase))
                 .OrderBy(n => n.TipoDocumento == c.TipoDocumentoInfractor ? 0 : 1)
@@ -492,10 +495,42 @@ public sealed class ServicioOcr(
     {
         ArgumentNullException.ThrowIfNull(doc);
         if (doc.Estado != EstadoDocumentoOcr.Fallido || !ResultadoOcr.EsTecnico(doc.TipoFallo))
-            throw ReglaException.Conflicto("NO_REINTENTABLE", "Solo se reintentan los documentos que fallaron por un problema técnico del proveedor.");
+            throw ReglaException.Conflicto("NO_REINTENTABLE", "Solo se reintentan los documentos que fallaron por un problema temporal.");
         (doc.Estado, doc.Intentos, doc.ProximoIntentoEn) = (EstadoDocumentoOcr.Pendiente, 0, null);
         var paquete = await db.PaquetesOcr.FirstAsync(p => p.Id == doc.PaqueteId, ct).ConfigureAwait(false);
         if (paquete.Estado == EstadoPaqueteOcr.ProcesadoConErrores)
+            paquete.Estado = EstadoPaqueteOcr.EnProcesamiento;
+        await CerrarProcesoAsync(paquete, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Qué impide reprocesar el documento (HU #13828); null si se puede.</summary>
+    public static string? MotivoNoReprocesable(DocumentoOcr doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        if (!(doc.Estado == EstadoDocumentoOcr.Incompleto || (doc.Estado == EstadoDocumentoOcr.Fallido && doc.TipoFallo == TipoFalloOcr.Ilegible)))
+            return "Solo se reprocesan los documentos incompletos o ilegibles.";
+        return doc.Reprocesos >= MaximoReprocesos ? $"Ya se reprocesó {MaximoReprocesos} veces: corrígelo a mano o descártalo." : null;
+    }
+
+    /// <summary>
+    /// HU #13828: vuelve a leer un INCOMPLETO o un ilegible con la versión publicada del prompt. Lo corregido a mano se
+    /// conserva (ver <see cref="ProcesarAsync"/>); el paquete vuelve a procesamiento hasta que termine.
+    /// </summary>
+    public async Task ReprocesarAsync(DocumentoOcr doc, Guid usuario, CancellationToken ct, string? usuarioNombre = null)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        if (MotivoNoReprocesable(doc) is { } motivo)
+            throw ReglaException.Conflicto("NO_REPROCESABLE", motivo);
+        var prompt = await PromptPublicadoAsync(ct).ConfigureAwait(false);
+        doc.Reprocesos++;
+        (doc.Estado, doc.Intentos, doc.ProximoIntentoEn, doc.PromptVersionId) = (EstadoDocumentoOcr.Pendiente, 0, null, prompt.Id);
+        db.DocumentoOcrIntentos.Add(new DocumentoOcrIntento
+        {
+            Id = Guid.CreateVersion7(), DocumentoOcrId = doc.Id, Numero = 0, IntentadoEn = reloj.Ahora, Resultado = "REPROCESO",
+            MensajeError = $"Reproceso {doc.Reprocesos} de {MaximoReprocesos}, pedido por {usuarioNombre ?? usuario.ToString()}.",
+        });
+        var paquete = await db.PaquetesOcr.FirstAsync(p => p.Id == doc.PaqueteId, ct).ConfigureAwait(false);
+        if (paquete.Estado is EstadoPaqueteOcr.Procesado or EstadoPaqueteOcr.ProcesadoConErrores)
             paquete.Estado = EstadoPaqueteOcr.EnProcesamiento;
         await CerrarProcesoAsync(paquete, ct).ConfigureAwait(false);
     }

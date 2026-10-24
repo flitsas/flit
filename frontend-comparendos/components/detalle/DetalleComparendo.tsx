@@ -20,6 +20,8 @@ import {
   ultimoHito,
   estadoSolicitud,
   fuente,
+  nombreActor,
+  textoParaGestora,
   resultadoDp,
   textoSemaforo,
   tonoSemaforo,
@@ -30,7 +32,7 @@ import { tienePermiso } from "@/lib/sesion";
 import type { CambioCampo, DetalleComparendo as Detalle } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
 
-const ORIGEN_CONTRAVENTOR: Record<string, string> = { Api: "Automático (API)", Manual: "Manual", MigracionV1: "Migrado de V1" };
+const ORIGEN_CONTRAVENTOR: Record<string, string> = { Api: "Automático", Manual: "Manual", MigracionV1: "Migrado de V1" };
 
 function Archivo({ id, nombre }: { id: string; nombre: string }) {
   const toast = useToast();
@@ -180,18 +182,20 @@ function conductorDeFoto(json: string | null): string | null {
 function Contraventor({ d, extra }: { d: Detalle; extra?: ReactNode }) {
   const k = d.contraventor;
   const consulta = consultaContraventor(d.estadoConsultaContraventor);
+  // La respuesta cruda de la consulta es para soporte de FLIT: la gestora no ve cómo funciona por dentro.
+  const { sesion } = useSesion();
   return (
     <div className="flex flex-col gap-4">
       {/* §7.2: el estado de la consulta a la API de contratos, si la empresa la tiene (NoAplica = asignación manual). */}
       {d.estadoConsultaContraventor !== "NoAplica" && (
         <div className="flex items-center gap-2 text-xs">
-          <span className="opacity-60">Consulta a la API de contratos:</span>
+          <span className="opacity-60">Consulta automática del conductor:</span>
           <StatusBadge label={consulta.texto} tone={consulta.tono} />
         </div>
       )}
-      {d.estadoConsultaContraventor === "Error" && d.errorConsultaContraventor && (
+      {sesion?.usuario.esSuperAdmin && d.estadoConsultaContraventor === "Error" && d.errorConsultaContraventor && (
         <details className="text-xs">
-          <summary className="cursor-pointer opacity-70">Qué respondió la API</summary>
+          <summary className="cursor-pointer opacity-70">Qué respondió la consulta (solo FLIT)</summary>
           <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-[#F4F7FC] p-2 dark:bg-white/5">{d.errorConsultaContraventor}</pre>
         </details>
       )}
@@ -199,7 +203,14 @@ function Contraventor({ d, extra }: { d: Detalle; extra?: ReactNode }) {
         <Datos
           filas={[
             ["Nombre", k.nombres],
-            ["Documento", `${k.tipoDocumento} ${k.numeroDocumento}`],
+            [
+              "Documento",
+              k.documentoPendiente ? (
+                <StatusBadge key="d" label="Pendiente: la consulta automática no lo trae" tone="warning" />
+              ) : (
+                `${k.tipoDocumento} ${k.numeroDocumento}`
+              ),
+            ],
             ["Correo", k.correo],
             ["Teléfono", k.telefono],
             ["Dirección", [k.direccion, k.ciudad].filter(Boolean).join(", ")],
@@ -238,11 +249,11 @@ function Contraventor({ d, extra }: { d: Detalle; extra?: ReactNode }) {
               <div key={h.id} className="text-xs">
                 <p>
                   {formatoFechaHora(h.registradoEn)} · {ORIGEN_CONTRAVENTOR[h.origen] ?? h.origen}
-                  {h.actorNombre ? ` · ${h.actorNombre}` : ""}
+                  {h.actorNombre ? ` · ${nombreActor(h.actorNombre)}` : ""}
                 </p>
                 <p className="opacity-70">
                   {anterior ? `${anterior} → ${nuevo ?? "—"}` : `Asignado: ${nuevo ?? "—"}`}
-                  {h.motivo ? ` · Motivo: ${h.motivo}` : ""}
+                  {h.motivo ? ` · Motivo: ${textoParaGestora(h.motivo)}` : ""}
                 </p>
               </div>
             );

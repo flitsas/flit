@@ -34,6 +34,7 @@ public sealed class ServicioCambioContraventor(
     RegistroArchivos archivos,
     CalendarioService calendario,
     Timeline timeline,
+    Avisos.AdjuntosAviso adjuntos,
     Reloj reloj)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -61,6 +62,8 @@ public sealed class ServicioCambioContraventor(
             new("SIN_COBRO", "El comparendo no está en cobro coactivo", !c.EnCobroCoactivo),
             new("PROPIETARIO", "El propietario del vehículo es la empresa o uno de sus NITs", propietarioEsDeLaEmpresa),
             new("CONDUCTOR", "El comparendo tiene conductor asignado", c.Contraventor is not null),
+            // HU #13712: el que trae la API de contratos llega sin documento; el formato al OT lo necesita.
+            new("DOCUMENTO_CONDUCTOR", "El conductor tiene tipo y número de documento", c.Contraventor?.NumeroDocumento is not null),
             new("CEDULA", "Está cargada la cédula del conductor", documentos.Contains(TipoDocumentoSoporte.Cedula)),
             new("LICENCIA", "Está cargada la licencia de conducción", documentos.Contains(TipoDocumentoSoporte.Licencia)),
             new("ESTADO", "No hay una solicitud en curso ni aceptada", c.EstadoCambioContraventor is EstadoCambioContraventor.SinSolicitar or EstadoCambioContraventor.RechazadoOt),
@@ -141,7 +144,7 @@ public sealed class ServicioCambioContraventor(
             NumeroIntento = intento,
             OrganismoTransitoId = ot.Id,
             RepresentanteLegalId = rl?.Id,
-            ContraventorSnapshot = JsonSerializer.Serialize(new { c.Contraventor!.Nombres, tipoDocumento = c.Contraventor.TipoDocumento.ToString(), c.Contraventor.NumeroDocumento, c.Contraventor.Correo }, Json),
+            ContraventorSnapshot = JsonSerializer.Serialize(new { c.Contraventor!.Nombres, tipoDocumento = c.Contraventor.TipoDocumento?.ToString(), c.Contraventor.NumeroDocumento, c.Contraventor.Correo }, Json),
             FormatoArchivoId = formatoId,
             ComunicacionId = enviados[0].Id,
             SolicitadoPor = actor.UsuarioId ?? Guid.Empty,
@@ -170,7 +173,9 @@ public sealed class ServicioCambioContraventor(
 
         var config = await capacidades.DeAsync(c.TenantId, ct).ConfigureAwait(false);
         var valores = await contexto.DeAsync(c, null, ct).ConfigureAwait(false);
-        var carta = ServicioPlantillas.Pdf(await plantillas.ArmarAsync(config.ConjuntoPlantillas, TipoPlantilla.CartaCambioContraventor, null, valores, ct).ConfigureAwait(false));
+        // HU #13884: el aviso 4 lleva la autorización de cambio de infractor que se radicó, como los demás avisos.
+        var adjuntado = await adjuntos.ParaAvisoAsync(c, config, TipoAviso.Aviso4, ct).ConfigureAwait(false);
+        valores["adjuntos.autorizacion"] = adjuntado.Autorizacion ? "sí" : null;
         var cuerpo = await plantillas.ArmarAsync(config.ConjuntoPlantillas, TipoPlantilla.CorreoAviso4, null, valores, ct).ConfigureAwait(false);
         var enviados = await correo.RegistrarAsync(new CorreoNuevo
         {
@@ -184,7 +189,7 @@ public sealed class ServicioCambioContraventor(
             Bcc = EmpresasEndpoints.CopiasPara(config.Bcc, TipoComunicacion.Aviso4),
             Asunto = cuerpo.Asunto ?? $"Solicitamos el cambio de contraventor del comparendo {c.Numero}",
             Html = cuerpo.Html,
-            Adjuntos = [new AdjuntoCorreo($"carta-cambio-contraventor-{c.Numero}.pdf", "application/pdf", carta)],
+            Adjuntos = adjuntado.Archivos,
             Canal = config.CanalCorreo,
             RemitenteNombre = config.RemitenteNombre ?? config.EmpresaNombre,
             CreadoPor = actor.UsuarioId,
@@ -204,8 +209,8 @@ public sealed class ServicioCambioContraventor(
             RegistradoEn = reloj.Ahora,
         });
         c.Gestionado = true;
-        timeline.Agregar(c, TipoEventoTimeline.AvisoEnviado, $"Aviso 4 (carta de cambio de contraventor) enviado a {destino}.", actor,
-            new { tipo = "Aviso4", destinatario = destino }, "comunicacion_saliente", enviados[0].Id);
+        timeline.Agregar(c, TipoEventoTimeline.AvisoEnviado, $"Aviso 4 (cambio de contraventor) enviado a {destino}.{Avisos.ServicioAvisos.Faltantes(adjuntado)}", actor,
+            new { tipo = "Aviso4", destinatario = destino, adjuntos = adjuntado.Archivos.Select(a => a.Nombre), faltantes = adjuntado.Faltantes }, "comunicacion_saliente", enviados[0].Id);
         return enviados[0].Id;
     }
 

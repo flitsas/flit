@@ -74,10 +74,10 @@ export const FUENTE: Record<string, Etiqueta> = {
 // Epic GDC-4: verde asignado, naranja pendiente de asignación manual, rojo rechazado por el OT (CAMBIO_CONTRAVENTOR).
 export const CONSULTA_CONTRAVENTOR: Record<string, Etiqueta> = {
   NoAplica: { texto: "Pendiente de asignación manual", tono: "warning" },
-  Pendiente: { texto: "Consultando API", tono: "info" },
-  Encontrado: { texto: "Asignado por API", tono: "success" },
+  Pendiente: { texto: "Consultando", tono: "info" },
+  Encontrado: { texto: "Asignado automáticamente", tono: "success" },
   NoEncontrado: { texto: "No encontrado: asignar a mano", tono: "warning" },
-  Error: { texto: "Error de la API", tono: "danger" },
+  Error: { texto: "No se pudo consultar", tono: "danger" },
 };
 
 export const RESULTADO_DP: Record<string, Etiqueta> = {
@@ -197,6 +197,7 @@ export const TIPO_PLANTILLA: Record<string, string> = {
   DpDocumento: "Documento del derecho de petición",
   CartaCambioContraventor: "Carta al conductor (cambio de contraventor)",
   FormatoCambioContraventor: "Formato de cambio de contraventor",
+  AutorizacionCambioInfractor: "Autorización de cambio de infractor (adjunta a los avisos)",
   CorreoAviso1: "Correo: aviso 1",
   CorreoAviso2: "Correo: aviso 2",
   CorreoAviso3: "Correo: aviso 3",
@@ -208,6 +209,12 @@ export const TIPO_PLANTILLA: Record<string, string> = {
   CorreoReporteSemanal: "Correo: reporte semanal",
   CorreoReporteMensual: "Correo: reporte mensual",
 };
+
+/**
+ * HU #13786 (B14-2): tipos que existen en el modelo pero no tienen plantilla ni los usa el código (esos correos se arman
+ * fijos). No se ofrecen en el filtro de plantillas.
+ */
+export const TIPOS_PLANTILLA_SIN_USO = new Set(["CorreoAlertaFallo", "CorreoReporteSemanal", "CorreoReporteMensual"]);
 
 /** Las plantillas de correo se ven como HTML; las demás son documentos PDF. */
 export const esPlantillaDeCorreo = (tipo: string) => tipo.startsWith("Correo");
@@ -247,4 +254,28 @@ export function tonoSemaforo(estado: string, proximoAVencer: boolean): StatusTon
 /** Opciones de un selector a partir de un mapa de etiquetas. */
 export function opciones(mapa: Record<string, Etiqueta | string>): { valor: string; texto: string }[] {
   return Object.entries(mapa).map(([valor, e]) => ({ valor, texto: typeof e === "string" ? e : e.texto }));
+}
+
+/**
+ * Nombre del autor de un evento como lo lee la gestora. Los eventos anteriores al ajuste guardaron nombres técnicos
+ * («Scheduler», «API de contratos»); la gestora no ve cómo funciona el sistema por dentro.
+ */
+export function nombreActor(nombre: string | null | undefined): string {
+  if (!nombre) return "";
+  return { Scheduler: "Automático", "API de contratos": "Consulta automática" }[nombre] ?? nombre;
+}
+
+/**
+ * Texto de un evento o motivo guardado antes de que los textos dejaran de nombrar la tecnología (la API de contratos, el
+ * scheduler). El historial no se reescribe en la base: se traduce al mostrarlo.
+ */
+export function textoParaGestora(texto: string | null | undefined): string {
+  if (!texto) return "";
+  return texto
+    .replace(/^La consulta a la API de contratos falló:[\s\S]*$/, "No se pudo consultar el conductor: se reintenta más tarde o se asigna a mano.")
+    .replace(/la consulta a la API de contratos/g, "la consulta automática del conductor")
+    .replace(/La API de contratos/g, "La consulta automática")
+    .replace(/la API de contratos/g, "la consulta automática")
+    .replace(/Conductor asignado \(API\)/g, "Conductor asignado (automático)")
+    .replace(/enviado por el scheduler/g, "enviado automáticamente");
 }

@@ -89,6 +89,16 @@ public static class Program
         var municipal = Comparendos.MunicipalOpciones.Desde(builder.Configuration);
         builder.Services.AddHttpClient(Comparendos.ProveedorMunicipal.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(municipal.TimeoutSegundos));
         builder.Services.AddSingleton<Comparendos.IProveedorComparendos>(sp => new Comparendos.ProveedorMunicipal(sp.GetRequiredService<IHttpClientFactory>(), municipal));
+        // HU #13712: API de contratos de Renting (mismo APIM, certificado y login que el canal de correo de Renting).
+        var renting = Comparendos.RentingContratosOpciones.Desde(builder.Configuration);
+        var (certificadoRenting, motivoCertificado) = renting.AbrirCertificado();
+        builder.Services.AddHttpClient(Comparendos.ProveedorContratosRenting.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(renting.TimeoutSegundos))
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                SslOptions = { ClientCertificates = certificadoRenting is null ? null : new System.Security.Cryptography.X509Certificates.X509Certificate2Collection(certificadoRenting) },
+            });
+        builder.Services.AddSingleton(sp => new Comparendos.ProveedorContratosRenting(sp.GetRequiredService<IHttpClientFactory>(), renting, motivoCertificado,
+            sp.GetRequiredService<TimeProvider>()));
         var simulados = bool.TryParse(builder.Configuration["Consultations:ComparendosSimulados"], out var sim) ? sim : builder.Environment.IsDevelopment();
         builder.Services.AddSingleton<Comparendos.IProveedorComparendos>(sp => new Comparendos.ProveedorSimulado(sp.GetRequiredService<TimeProvider>(), simulados));
 

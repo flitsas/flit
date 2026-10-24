@@ -55,7 +55,6 @@ function Copias({ titulo, ayuda, valor, onCambio, soloLectura }: { titulo: strin
 }
 
 interface FormCorreo {
-  canalCorreo: string;
   remitenteNombre: string;
   correoRespuesta: string;
   cc: Copia[];
@@ -66,7 +65,6 @@ interface FormCorreo {
 
 function aForm(c: ConfiguracionEmpresa): FormCorreo {
   return {
-    canalCorreo: c.canalCorreo,
     remitenteNombre: c.remitenteNombre ?? "",
     correoRespuesta: c.correoRespuesta ?? "",
     cc: c.cc,
@@ -105,7 +103,6 @@ function Configuracion({ empresa }: { empresa: string | null }) {
     setError(null);
     try {
       const body = {
-        canalCorreo: f.canalCorreo,
         remitenteNombre: f.remitenteNombre.trim() || null,
         correoRespuesta: f.correoRespuesta.trim() || null,
         cc: limpiarCopias(f.cc),
@@ -141,23 +138,27 @@ function Configuracion({ empresa }: { empresa: string | null }) {
           ].map(([t, v]) => (
             <StatusBadge key={t as string} label={`${t as string}: ${v ? "sí" : "no"}`} tone={v ? "success" : "neutral"} />
           ))}
-          <StatusBadge label={`Conductor: ${c.tipoIntegracionConductor === "ApiRenting" ? "API de Renting" : "manual"}`} tone="info" />
+          <StatusBadge label={`Conductor: ${c.tipoIntegracionConductor === "ApiRenting" ? "consulta automática" : "manual"}`} tone="info" />
           <StatusBadge label={`Plantillas: ${c.conjuntoPlantillas === "Renting" ? "Renting" : "FLIT"}`} tone="info" />
           <StatusBadge label={c.requiereRepresentanteLegal ? "Exige representante legal" : "No exige representante legal"} tone="info" />
         </div>
       </section>
 
       <section className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <label className={ETIQUETA_CLS}>
+        {/* HU #13882: el canal sale del «Enrutamiento de notificaciones» de la empresa en la plataforma; aquí solo se ve. */}
+        <div className={ETIQUETA_CLS}>
           Canal de correo
-          <select className={INPUT_CLS} value={f.canalCorreo} disabled={soloLectura} onChange={(e) => cambiar({ canalCorreo: e.target.value })}>
-            <option value="FlitSmtp">Cuenta de FLIT</option>
-            <option value="EmpresaApi">Cuenta propia de la empresa (API)</option>
-          </select>
-        </label>
+          <p className={`${INPUT_CLS} flex items-center bg-[#F4F6FA] dark:bg-white/5`}>
+            {c.canalCorreo === "EmpresaApi" ? "Cuenta de correo propia de la empresa" : "Cuenta de FLIT"}
+          </p>
+          <span className="font-normal opacity-70">
+            {esSuper ? "Sigue el «Enrutamiento de notificaciones» de la empresa en Trámites (Administración → Compañías)." : "Lo define FLIT para tu empresa."}
+          </span>
+        </div>
         <label className={ETIQUETA_CLS}>
           Nombre del remitente
           <input className={INPUT_CLS} value={f.remitenteNombre} maxLength={120} disabled={soloLectura} onChange={(e) => cambiar({ remitenteNombre: e.target.value })} placeholder="Si se deja vacío, la razón social" />
+          {c.canalCorreo === "EmpresaApi" && <span className="font-normal opacity-70">Con la cuenta propia de la empresa, los correos salen con el remitente de esa cuenta.</span>}
         </label>
         <label className={ETIQUETA_CLS}>
           Correo para respuestas
