@@ -242,8 +242,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=core-api
-          cache-to: type=gha,mode=max,scope=core-api
+          # Sin cache gha: este job solo corre cuando cambio algo que el Dockerfile copia ANTES del publish, asi
+          # que la capa del publish nunca sale de cache, y exportarla (mode=max) costaba ~2 min por build.
 
   build-core-identity:
     name: Build & push core-identity (.NET) image
