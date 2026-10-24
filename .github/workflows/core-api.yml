@@ -60,7 +60,7 @@ jobs:
           esac
           # El catálogo del manual (dr-flit) es texto generado: no dispara la suite.
           if [ "$archivos" = TODO ] || echo "$archivos" | grep -v '^services/core-api/src/Flit.Api/Content/dr-flit/' | grep -qE \
-               '^(services/core-(api|identity|consultas)/|contracts/proto/|contracts/openapi/(core-api\.v1\.yaml|external-api\.v1\.json)$|\.github/workflows/core-api\.yml$|\.github/scripts/ci-core-api-pruebas\.sh$)'; then
+               '^(services/core-(api|identity|consultas)/|contracts/proto/|contracts/openapi/(core-api\.v1\.yaml|external-api\.v1\.json)$|\.github/workflows/core-api\.yml$|\.github/scripts/ci-(core-api-pruebas|servicios)\.sh$)'; then
             echo "core=true" >> "$GITHUB_OUTPUT"; echo "Toca core-api: corren las pruebas."
           else
             echo "core=false" >> "$GITHUB_OUTPUT"; echo "No toca core-api: se saltan las pruebas."
@@ -85,43 +85,21 @@ jobs:
           - { nombre: integration-2, carril: integration, shard: 2 }
           - { nombre: integration-3, carril: integration, shard: 3 }
           - { nombre: resto, carril: resto, shard: 0 }
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: flit_dev
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        # Puerto dinamico: en el pool propio el 5432 es del Postgres del host.
-        ports: ['5432']
-        options: >-
-          --health-cmd "pg_isready -U postgres -d flit_dev"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-      # Epic #13316 (HU #13338): broker real para las pruebas de la outbox del SDK y las de bus de
-      # Integration. Usuario propio: guest solo entra desde loopback dentro del contenedor.
-      rabbitmq:
-        image: rabbitmq:4.1-alpine
-        env:
-          RABBITMQ_DEFAULT_USER: flit
-          RABBITMQ_DEFAULT_PASS: flit-prueba
-        ports: ['5672']
-        options: >-
-          --health-cmd "rabbitmq-diagnostics -q ping"
-          --health-interval 5s
-          --health-timeout 10s
-          --health-retries 20
     defaults:
       run:
         working-directory: services/core-api
     steps:
       - uses: actions/checkout@v4
 
-      - name: Conexiones a los servicios del job
-        run: |
-          echo "ConnectionStrings__Core=Host=localhost;Port=${{ job.services.postgres.ports['5432'] }};Database=flit_dev;Username=postgres;Password=postgres" >> "$GITHUB_ENV"
-          echo "FLIT_TEST_RABBITMQ=amqp://flit:flit-prueba@localhost:${{ job.services.rabbitmq.ports['5672'] }}/" >> "$GITHUB_ENV"
+      # Postgres y RabbitMQ con puerto dinámico y reintento (en vez de `services:`; ver el script).
+      - name: Postgres y RabbitMQ de CI
+        working-directory: .
+        run: .github/scripts/ci-servicios.sh "ci-${{ github.run_id }}-${{ matrix.nombre }}"
+
+      # En el pool propio .NET va en el tool cache del runner (sin permisos sobre /usr/share/dotnet).
+      - name: Carpeta de .NET (runner propio)
+        if: runner.environment == 'self-hosted'
+        run: echo "DOTNET_INSTALL_DIR=$RUNNER_TOOL_CACHE/dotnet" >> "$GITHUB_ENV"
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -161,6 +139,11 @@ jobs:
             services/core-api/tests/**/TestResults/
             services/core-api/TestResults-*.log
 
+      - name: Apagar Postgres y RabbitMQ de CI
+        if: always()
+        working-directory: .
+        run: .github/scripts/ci-servicios.sh --apagar "ci-${{ github.run_id }}-${{ matrix.nombre }}"
+
   # Check único y OBLIGATORIO (ruleset proteger-produccion): resume los carriles y el publish. En verde si
   # todo pasó o si el cambio no toca core-api; en rojo si algo falló o se canceló.
   core-api:
@@ -188,6 +171,11 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      # En el pool propio .NET va en el tool cache del runner (sin permisos sobre /usr/share/dotnet).
+      - name: Carpeta de .NET (runner propio)
+        if: runner.environment == 'self-hosted'
+        run: echo "DOTNET_INSTALL_DIR=$RUNNER_TOOL_CACHE/dotnet" >> "$GITHUB_ENV"
+
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
