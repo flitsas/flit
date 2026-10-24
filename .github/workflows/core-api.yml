@@ -74,7 +74,8 @@ jobs:
     needs: cambios
     if: needs.cambios.outputs.core == 'true'
     runs-on: ${{ inputs.runner || vars.RUNNER || 'ubuntu-latest' }}
-    timeout-minutes: 40
+    # 60 en el pool propio de la 177: comparte 6 núcleos entre los carriles (en GitHub cada uno tiene 4).
+    timeout-minutes: ${{ (inputs.runner || vars.RUNNER) && 60 || 40 }}
     strategy:
       fail-fast: false
       matrix:

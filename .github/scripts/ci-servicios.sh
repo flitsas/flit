@@ -26,10 +26,12 @@ levantar "$p-pg" 5432 -e POSTGRES_DB=flit_dev -e POSTGRES_USER=postgres -e POSTG
 # Usuario propio: guest solo entra desde loopback dentro del contenedor.
 levantar "$p-mq" 5672 -e RABBITMQ_DEFAULT_USER=flit -e RABBITMQ_DEFAULT_PASS=flit-prueba rabbitmq:4.1-alpine
 
+# rabbitmq-diagnostics como el usuario rabbitmq: si corre como root antes de que arranque el servidor, crea
+# /var/lib/rabbitmq/.erlang.cookie con dueño root y RabbitMQ muere con «eacces» al leerlo.
 for i in $(seq 1 60); do docker exec "$p-pg" pg_isready -U postgres -d flit_dev >/dev/null 2>&1 && break; sleep 1; done
-for i in $(seq 1 90); do docker exec "$p-mq" rabbitmq-diagnostics -q ping >/dev/null 2>&1 && break; sleep 1; done
+for i in $(seq 1 90); do docker exec -u rabbitmq "$p-mq" rabbitmq-diagnostics -q ping >/dev/null 2>&1 && break; sleep 1; done
 docker exec "$p-pg" pg_isready -U postgres -d flit_dev >/dev/null || { echo "::error::Postgres no quedó listo"; exit 1; }
-docker exec "$p-mq" rabbitmq-diagnostics -q ping >/dev/null || { echo "::error::RabbitMQ no quedó listo"; exit 1; }
+docker exec -u rabbitmq "$p-mq" rabbitmq-diagnostics -q ping >/dev/null || { echo "::error::RabbitMQ no quedó listo"; exit 1; }
 
 pg=$(puerto "$p-pg" 5432); mq=$(puerto "$p-mq" 5672)
 echo "ConnectionStrings__Core=Host=127.0.0.1;Port=$pg;Database=flit_dev;Username=postgres;Password=postgres" >> "$GITHUB_ENV"
