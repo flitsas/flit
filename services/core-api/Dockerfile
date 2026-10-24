@@ -53,14 +53,17 @@ COPY --from=contracts . /contracts/proto/
 # Framework-dependent (JIT): desactivar AOT y sus analizadores (IsAotCompatible),
 # que estan en true por defecto en Directory.Build.props y rompen el publish con
 # TreatWarningsAsErrors (IL2026/IL3050) al no ser un build AOT real.
-RUN dotnet publish src/Flit.Api/Flit.Api.csproj \
-    -c Release -o /app/api /p:PublishAot=false /p:IsAotCompatible=false
-RUN dotnet publish src/Flit.Gateway/Flit.Gateway.csproj \
-    -c Release -o /app/gateway /p:PublishAot=false /p:IsAotCompatible=false
-RUN dotnet publish tools/Flit.DataMigration.V1/Flit.DataMigration.V1.csproj \
-    -c Release -o /app/migrador /p:PublishAot=false /p:IsAotCompatible=false
-RUN dotnet publish tools/Flit.DataMigration.Api/Flit.DataMigration.Api.csproj \
-    -c Release -o /app/migracion-api /p:PublishAot=false /p:IsAotCompatible=false
+# Los 4 publish en UNA capa: los proyectos comunes se compilan con el de Flit.Api y los demas
+# reutilizan obj/ (incremental). Los paquetes NuGet van en una cache de BuildKit: en los runners
+# propios (driver docker) sobrevive entre builds; en GitHub el builder es efimero y no cambia nada.
+RUN --mount=type=cache,id=nuget-core-api,target=/root/.nuget/packages \
+    set -e; \
+    for p in src/Flit.Api/Flit.Api.csproj:api \
+             src/Flit.Gateway/Flit.Gateway.csproj:gateway \
+             tools/Flit.DataMigration.V1/Flit.DataMigration.V1.csproj:migrador \
+             tools/Flit.DataMigration.Api/Flit.DataMigration.Api.csproj:migracion-api; do \
+      dotnet publish "${p%%:*}" -c Release -o "/app/${p##*:}" /p:PublishAot=false /p:IsAotCompatible=false; \
+    done
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
 WORKDIR /app
