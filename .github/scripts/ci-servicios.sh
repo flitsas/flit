@@ -4,16 +4,24 @@
 #   - Con docker rootless, el puerto al azar puede chocar con una conexión saliente del host
 #     («bind: address already in use»): se reintenta con otro.
 # Exporta ConnectionStrings__Core y FLIT_TEST_RABBITMQ a $GITHUB_ENV.
+# Los contenedores llevan etiquetas con el prefijo y el runner: --apagar borra todo lo del prefijo (también lo que
+# quedó a medias) y ci-limpiar-runner.sh, lo que un job cancelado dejó en el runner.
 # Uso: ci-servicios.sh <prefijo>      |  ci-servicios.sh --apagar <prefijo>
 set -euo pipefail
-if [ "${1:-}" = --apagar ]; then docker rm -f "$2-pg" "$2-mq" >/dev/null 2>&1 || true; exit 0; fi
+if [ "${1:-}" = --apagar ]; then
+  ids=$(docker ps -aq --filter "label=flit-ci.prefijo=$2" 2>/dev/null || true)
+  docker rm -f "$2-pg" "$2-mq" $ids >/dev/null 2>&1 || true
+  exit 0
+fi
 p=${1:?prefijo de los contenedores}
 
 levantar() { # $1 nombre, $2 puerto interno, resto: argumentos de docker run
   local n=$1 puerto=$2; shift 2
   for i in 1 2 3 4 5; do
     docker rm -f "$n" >/dev/null 2>&1 || true
-    if docker run -d --name "$n" -p "127.0.0.1::$puerto" "$@" >/dev/null 2>"/tmp/$n.err"; then return 0; fi
+    if docker run -d --name "$n" -p "127.0.0.1::$puerto" \
+         --label "flit-ci.prefijo=$p" --label "flit-ci.runner=${RUNNER_NAME:-local}" \
+         "$@" >/dev/null 2>"/tmp/$n.err"; then return 0; fi
     echo "Intento $i de $n falló: $(tail -1 "/tmp/$n.err")"; sleep 2
   done
   echo "::error::No se pudo levantar $n"; return 1

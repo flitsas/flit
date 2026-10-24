@@ -60,7 +60,7 @@ jobs:
           esac
           # El catálogo del manual (dr-flit) es texto generado: no dispara la suite.
           if [ "$archivos" = TODO ] || echo "$archivos" | grep -v '^services/core-api/src/Flit.Api/Content/dr-flit/' | grep -qE \
-               '^(services/core-(api|identity|consultas)/|contracts/proto/|contracts/openapi/(core-api\.v1\.yaml|external-api\.v1\.json)$|\.github/workflows/core-api\.yml$|\.github/scripts/ci-(core-api-pruebas|servicios)\.sh$)'; then
+               '^(services/core-(api|identity|consultas)/|contracts/proto/|contracts/openapi/(core-api\.v1\.yaml|external-api\.v1\.json)$|\.github/workflows/core-api\.yml$|\.github/scripts/ci-(core-api-pruebas|servicios|limpiar-runner)\.sh$)'; then
             echo "core=true" >> "$GITHUB_OUTPUT"; echo "Toca core-api: corren las pruebas."
           else
             echo "core=false" >> "$GITHUB_OUTPUT"; echo "No toca core-api: se saltan las pruebas."
@@ -92,15 +92,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pool propio: .NET en el tool cache del runner (sin permisos sobre /usr/share/dotnet) y sin procesos que
+      # sobrevivan al job (servidor de Roslyn, nodos y servidor de MSBuild). En GitHub no hace falta: la VM se
+      # descarta y el servidor de Roslyn acelera el build. Antes, lo que haya dejado un job cancelado.
+      - name: Runner propio (.NET y limpieza previa)
+        if: runner.environment == 'self-hosted'
+        working-directory: .
+        run: |
+          { echo "DOTNET_INSTALL_DIR=$RUNNER_TOOL_CACHE/dotnet"
+            echo "UseSharedCompilation=false"; echo "MSBUILDDISABLENODEREUSE=1"; echo "DOTNET_CLI_USE_MSBUILD_SERVER=0"
+          } >> "$GITHUB_ENV"
+          .github/scripts/ci-limpiar-runner.sh
+
       # Postgres y RabbitMQ con puerto dinámico y reintento (en vez de `services:`; ver el script).
       - name: Postgres y RabbitMQ de CI
         working-directory: .
         run: .github/scripts/ci-servicios.sh "ci-${{ github.run_id }}-${{ matrix.nombre }}"
-
-      # En el pool propio .NET va en el tool cache del runner (sin permisos sobre /usr/share/dotnet).
-      - name: Carpeta de .NET (runner propio)
-        if: runner.environment == 'self-hosted'
-        run: echo "DOTNET_INSTALL_DIR=$RUNNER_TOOL_CACHE/dotnet" >> "$GITHUB_ENV"
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -115,13 +122,26 @@ jobs:
 
       - name: Apply migrations
         run: |
-          # En una carpeta del runner y no en ~/.dotnet/tools: en el pool propio los runners comparten HOME.
-          ef="${{ runner.tool_cache }}/dotnet-ef-10.0.1"
-          [ -x "$ef/dotnet-ef" ] || dotnet tool install dotnet-ef --version 10.0.1 --tool-path "$ef"
-          "$ef/dotnet-ef" database update \
-            --project src/Flit.Infrastructure \
-            --startup-project src/Flit.Api \
-            --no-build --configuration Release
+          if [ "${{ runner.environment }}" = self-hosted ]; then
+            # En una carpeta del runner y no en ~/.dotnet/tools: en el pool propio los runners comparten HOME.
+            dir="${{ runner.tool_cache }}/dotnet-ef-10.0.1"
+            [ -x "$dir/dotnet-ef" ] || dotnet tool install dotnet-ef --version 10.0.1 --tool-path "$dir"
+            ef=("$dir/dotnet-ef")
+          else
+            dotnet tool install --global dotnet-ef --version 10.0.1
+            ef=(dotnet ef)
+          fi
+          # dotnet-ef murió una vez por señal (exit 139, SIGSEGV) al arrancar, sin traza administrada, en 1 de 6
+          # jobs con el mismo binario (run 40061241032). Cada migración va en su transacción: reintentar es seguro.
+          for intento in 1 2; do
+            "${ef[@]}" database update \
+              --project src/Flit.Infrastructure \
+              --startup-project src/Flit.Api \
+              --no-build --configuration Release && break
+            rc=$?
+            if [ "$intento" = 2 ] || [ "$rc" -lt 128 ]; then exit "$rc"; fi
+            echo "::warning::dotnet-ef terminó por señal (exit $rc); se reintenta una vez."
+          done
 
       - name: Test
         run: ../../.github/scripts/ci-core-api-pruebas.sh "${{ matrix.carril }}"
@@ -144,6 +164,11 @@ jobs:
         if: always()
         working-directory: .
         run: .github/scripts/ci-servicios.sh --apagar "ci-${{ github.run_id }}-${{ matrix.nombre }}"
+
+      - name: Limpieza del runner propio
+        if: always() && runner.environment == 'self-hosted'
+        working-directory: .
+        run: .github/scripts/ci-limpiar-runner.sh --final
 
   # Check único y OBLIGATORIO (ruleset proteger-produccion): resume los carriles y el publish. En verde si
   # todo pasó o si el cambio no toca core-api; en rojo si algo falló o se canceló.
@@ -172,10 +197,14 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      # En el pool propio .NET va en el tool cache del runner (sin permisos sobre /usr/share/dotnet).
-      - name: Carpeta de .NET (runner propio)
+      # Igual que en «pruebas»: .NET en el tool cache y sin procesos que sobrevivan al job.
+      - name: Runner propio (.NET y limpieza previa)
         if: runner.environment == 'self-hosted'
-        run: echo "DOTNET_INSTALL_DIR=$RUNNER_TOOL_CACHE/dotnet" >> "$GITHUB_ENV"
+        run: |
+          { echo "DOTNET_INSTALL_DIR=$RUNNER_TOOL_CACHE/dotnet"
+            echo "UseSharedCompilation=false"; echo "MSBUILDDISABLENODEREUSE=1"; echo "DOTNET_CLI_USE_MSBUILD_SERVER=0"
+          } >> "$GITHUB_ENV"
+          .github/scripts/ci-limpiar-runner.sh
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -189,3 +218,7 @@ jobs:
       - name: Publish (linux-musl-x64, JIT)
         working-directory: services/core-api
         run: dotnet publish src/Flit.Api/Flit.Api.csproj -c Release -r linux-musl-x64 --self-contained -o publish /p:PublishAot=false
+
+      - name: Limpieza del runner propio
+        if: always() && runner.environment == 'self-hosted'
+        run: .github/scripts/ci-limpiar-runner.sh --final
