@@ -7,6 +7,13 @@
     // La misma base de core-api; el servicio usa su esquema propio «diagnostico» y lo migra al arrancar.
     "Servicio": "Host=127.0.0.1;Port=5432;Database=CAMBIAR;Username=CAMBIAR;Password=CAMBIAR"
   },
+  // Evidencias y PDF del informe (HU #13846): el mismo file-manager de core-api, en su propia categoría. Sin BaseUrl no arranca.
+  "FileManager": {
+    "BaseUrl": "https://ny46zhyeti.execute-api.us-east-1.amazonaws.com/pdn/",
+    "FilesPath": "api/v1/files",
+    "Category": "diagnostico",
+    "TimeoutSeconds": 30
+  },
   "Diagnostico": {
     // Catálogo de tipos de trámite (HU #13742): gRPC de core-api con Ict__GrpcPort=8082 (docs/suite/local.md). Sin esta
     // dirección GET /tipos-tramite responde 503: no hay lista de respaldo.

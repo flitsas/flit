@@ -84,6 +84,11 @@ La suscripción simulada es solo para pruebas en local y no se pone en ningún a
 El compose ya fija, sin variable del `.env`: `Diagnostico__Tramites__Address=http://core-api:${CORE_API_GRPC_PORT}`
 (sin ella `GET /tipos-tramite` responde 503) y `Diagnostico__Fuentes__ImpuestoDisponible=false`.
 
+Archivos (evidencias y PDF del informe, HU #13846): el compose pasa las mismas `FILE_MANAGER_*` de core-api, con el mismo
+defecto (`https://ny46zhyeti.execute-api.us-east-1.amazonaws.com/pdn/`, `api/v1/files`, timeout 30 s) y la categoría
+`diagnostico` (`DIAGNOSTICO_FILE_MANAGER_CATEGORY`). Si el ambiente ya define `FILE_MANAGER_BASE_URL` o
+`FILE_MANAGER_AUTH_TOKEN` para core-api, el diagnóstico las toma igual: no hay que repetirlas. Sin URL no arranca.
+
 ### 4.1 Certificado de Data Protection (HU #13751, obligatorio)
 
 Los documentos de propietario y locatario se guardan cifrados. El anillo de llaves vive en
