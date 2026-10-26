@@ -57,8 +57,8 @@ describe("HU #10493 — AC1/unificación: módulos migrados al encabezado unific
     // misma barra que usan la ficha de compañía y el hub OT.
     expect(usuarios).not.toMatch(/p-2\.5 rounded-xl border bg-white dark:bg-\[#0B0F14\] max-w-md/);
     expect(usuarios).not.toMatch(/placeholder="Buscar/);
-    expect(usersTable).toMatch(/ml-auto|flex-1[\s\S]*?rounded-xl border bg-white/);
-    expect(usersTable).toMatch(/aria-label="Buscar usuarios"/);
+    expect(usersTable).toMatch(/<TablaFiltrosBar/);
+    expect(usersTable).toMatch(/ariaLabel: "Buscar usuarios"/);
   });
 
   it("RBAC usa el componente ModuleTitle unificado con `action` (antes era un h1 plano)", () => {
