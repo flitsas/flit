@@ -3,17 +3,29 @@
 // HU #10523 (RF31) — Consola de parámetros documentales por compañía gestora.
 // Permite fijar el estado (OCULTO/OBLIGATORIO/OPCIONAL) de un tipo de documento por gestora,
 // consumiendo el endpoint admin de HU #10521. Sin parámetros, el checklist queda en su estado base.
-// Rediseño: tabla del modelo único + modal FLIT para agregar/editar; el error de carga muestra el
+// Rediseño: tabla del modelo único + modal FLIT para editar; el error de carga muestra el
 // motivo real (antes un `catch {}` lo tragaba y siempre salía el mismo texto).
+// HU #14000 (Feature #13996): la tabla lista TODOS los documentos activos del catálogo cruzados con los
+// parámetros (sin parámetro = «Base») y lleva filtros por columna (Documento, Estado). «Agregar
+// parámetro» se retiró: editar la fila del documento es un paso menos que abrir un selector.
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, EyeOff, FilePlus, MinusCircle, Pencil, type LucideIcon } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  CircleDashed,
+  EyeOff,
+  FilePlus,
+  MinusCircle,
+  Pencil,
+  type LucideIcon,
+} from "lucide-react";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
-import { CreateButton } from "@/components/atom/CreateButton";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import { Modal } from "@/components/atom/Modal";
 import { RowActions } from "@/components/atom/RowActions";
 import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
+import { TablaFiltrosBar, TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import {
   fetchCompanyDocumentParams,
@@ -24,6 +36,8 @@ import {
 import { fetchDocumentTypes } from "@/lib/api/admin-document-types";
 import { ApiError, ApiValidationError } from "@/lib/api/types";
 import type { DocumentType } from "@/lib/api/types-documents";
+import { filtrarFilas, type ColumnaFiltro } from "@/lib/tablas/filtrar-filas";
+import { useTablaFiltros } from "@/lib/tablas/useTablaFiltros";
 import { catalogDocumentName } from "@/lib/tramites/document-labels";
 
 interface StateMeta {
@@ -33,7 +47,16 @@ interface StateMeta {
   icon: LucideIcon;
 }
 
-const STATE_META: Record<CompanyDocumentParamState, StateMeta> = {
+/** Estado de una fila: el del parámetro, o «BASE» cuando la compañía no lo parametrizó. */
+type RowState = CompanyDocumentParamState | "BASE";
+
+const STATE_META: Record<RowState, StateMeta> = {
+  BASE: {
+    label: "Base",
+    hint: "Sin parámetro: aplica el comportamiento base.",
+    tone: "neutral",
+    icon: CircleDashed,
+  },
   OBLIGATORIO: {
     label: "Obligatorio",
     hint: "El gestor debe cargarlo para continuar.",
@@ -62,7 +85,11 @@ const FIELD_CLS =
   "disabled:opacity-60 dark:border-white/15 dark:bg-[#0B0F14] dark:text-white";
 
 /** Motivo legible de un fallo de red/HTTP: nunca un texto genérico que oculte el 403/500 real. */
-export function describeDocumentParamsError(err: unknown, action: "cargar" | "guardar"): string {
+export function describeDocumentParamsError(
+  err: unknown,
+  action: "cargar" | "guardar" | "catalogo",
+): string {
+  if (action === "catalogo") return describeCatalogError(err);
   if (err instanceof ApiError) {
     if (err.status === 401) return "Tu sesión expiró. Vuelve a iniciar sesión.";
     if (err.status === 403) {
@@ -70,8 +97,10 @@ export function describeDocumentParamsError(err: unknown, action: "cargar" | "gu
         ? "No tienes permiso para ver los parámetros documentales de esta compañía."
         : "No tienes permiso para modificar los parámetros documentales de esta compañía.";
     }
-    if (err.status === 404) return "No se encontró la ruta de parámetros documentales de esta compañía.";
-    if (err.status >= 500) return `El servidor falló al ${action} los parámetros (error ${err.status}). Inténtalo de nuevo.`;
+    if (err.status === 404)
+      return "No se encontró la ruta de parámetros documentales de esta compañía.";
+    if (err.status >= 500)
+      return `El servidor falló al ${action} los parámetros (error ${err.status}). Inténtalo de nuevo.`;
     return err.message;
   }
   if (err instanceof ApiValidationError) {
@@ -82,16 +111,65 @@ export function describeDocumentParamsError(err: unknown, action: "cargar" | "gu
   if (err instanceof Error && err.message === FORMAT_ERROR) {
     return "La respuesta del servidor no tiene el formato esperado.";
   }
-  if (err instanceof TypeError) return "No hay conexión con el servidor. Revisa tu red e inténtalo de nuevo.";
+  if (err instanceof TypeError)
+    return "No hay conexión con el servidor. Revisa tu red e inténtalo de nuevo.";
   return `No se pudieron ${action === "cargar" ? "cargar" : "guardar"} los parámetros documentales.`;
 }
 
 const FORMAT_ERROR = "unexpected_shape";
 
-type ModalState =
-  | { mode: "closed" }
-  | { mode: "add" }
-  | { mode: "edit"; item: CompanyDocumentParam };
+function describeCatalogError(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 401) return "Tu sesión expiró. Vuelve a iniciar sesión.";
+    if (err.status === 403) return "No tienes permiso para ver el catálogo de documentos.";
+    if (err.status >= 500) {
+      return `El servidor falló al cargar el catálogo de documentos (error ${err.status}). Inténtalo de nuevo.`;
+    }
+    return err.message;
+  }
+  if (err instanceof Error && err.message === FORMAT_ERROR) {
+    return "La respuesta del catálogo de documentos no tiene el formato esperado.";
+  }
+  if (err instanceof TypeError)
+    return "No hay conexión con el servidor. Revisa tu red e inténtalo de nuevo.";
+  return "No se pudo cargar el catálogo de documentos.";
+}
+
+const PAGE_SIZE_CATALOGO = 100;
+const MAX_PAGINAS_CATALOGO = 50;
+
+/** Trae TODAS las páginas del catálogo (no solo la primera). Cualquier fallo aborta: sin tabla parcial. */
+async function fetchAllDocumentTypes(signal?: AbortSignal): Promise<DocumentType[]> {
+  const all: DocumentType[] = [];
+  for (let page = 1; page <= MAX_PAGINAS_CATALOGO; page++) {
+    const res = await fetchDocumentTypes({ page, pageSize: PAGE_SIZE_CATALOGO }, signal);
+    if (!Array.isArray(res?.data)) throw new Error(FORMAT_ERROR);
+    all.push(...res.data);
+    if (res.data.length < PAGE_SIZE_CATALOGO || all.length >= (res.totalCount ?? 0)) break;
+  }
+  return all;
+}
+
+interface DocRow {
+  code: string;
+  name: string;
+  state: RowState;
+}
+
+const COLUMNAS_FILTRO: ColumnaFiltro[] = [
+  { id: "documento", label: "Documento", tipo: "texto" },
+  {
+    id: "estado",
+    label: "Estado",
+    tipo: "seleccion",
+    opciones: (["OBLIGATORIO", "OPCIONAL", "OCULTO", "BASE"] as RowState[]).map((value) => ({
+      value,
+      label: STATE_META[value].label,
+    })),
+  },
+];
+
+type ModalState = { mode: "closed" } | { mode: "edit"; row: DocRow };
 
 export interface CompanyDocumentParamsPanelProps {
   tenantId: string;
@@ -103,24 +181,32 @@ export function CompanyDocumentParamsPanel({
   networkHeadId,
 }: CompanyDocumentParamsPanelProps) {
   const [items, setItems] = useState<CompanyDocumentParam[]>([]);
+  const [catalog, setCatalog] = useState<DocumentType[]>([]);
   const pg = usePaginacion("documents.CompanyDocumentParamsPanel");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [catalog, setCatalog] = useState<DocumentType[]>([]);
   const [modal, setModal] = useState<ModalState>({ mode: "closed" });
+
+  const { setPage } = pg;
+  const filtros = useTablaFiltros({ columnas: COLUMNAS_FILTRO, onCambio: () => setPage(1) });
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
       setLoading(true);
       setLoadError(null);
+      let step: "cargar" | "catalogo" = "cargar";
       try {
         const data = await fetchCompanyDocumentParams(tenantId, signal, networkHeadId);
         if (signal?.aborted) return;
         if (!Array.isArray(data)) throw new Error(FORMAT_ERROR);
+        step = "catalogo";
+        const types = await fetchAllDocumentTypes(signal);
+        if (signal?.aborted) return;
         setItems(data);
+        setCatalog(types);
       } catch (err) {
         if (signal?.aborted) return;
-        setLoadError(describeDocumentParamsError(err, "cargar"));
+        setLoadError(describeDocumentParamsError(err, step));
       } finally {
         if (!signal?.aborted) setLoading(false);
       }
@@ -135,27 +221,40 @@ export function CompanyDocumentParamsPanel({
     return () => controller.abort();
   }, [load]);
 
-  // Catálogo de tipos de documento: solo mejora la UI (nombres legibles y selector). Si falla o el
-  // rol no lo puede leer, el panel sigue funcionando con el código en crudo.
-  useEffect(() => {
-    const controller = new AbortController();
-    fetchDocumentTypes({ page: 1, pageSize: 100 }, controller.signal)
-      .then((res) => {
-        if (!controller.signal.aborted && Array.isArray(res?.data)) setCatalog(res.data);
-      })
-      .catch(() => undefined);
-    return () => controller.abort();
-  }, []);
+  // Catálogo activo + parámetros. Un parámetro cuyo código ya no está activo se muestra igual.
+  const rows = useMemo<DocRow[]>(() => {
+    const paramByCode = new Map(items.map((p) => [p.documentTypeCode, p]));
+    const result: DocRow[] = [];
+    const seen = new Set<string>();
+    for (const d of catalog) {
+      if (d.estado !== "activo" || seen.has(d.codigo)) continue;
+      seen.add(d.codigo);
+      result.push({
+        code: d.codigo,
+        name: catalogDocumentName(d.codigo, d.nombre),
+        state: paramByCode.get(d.codigo)?.state ?? "BASE",
+      });
+    }
+    for (const p of items) {
+      if (seen.has(p.documentTypeCode)) continue;
+      const inactive = catalog.find((d) => d.codigo === p.documentTypeCode);
+      result.push({
+        code: p.documentTypeCode,
+        name: catalogDocumentName(p.documentTypeCode, inactive?.nombre),
+        state: p.state,
+      });
+    }
+    return result.sort(
+      (a, b) => a.name.localeCompare(b.name, "es") || a.code.localeCompare(b.code),
+    );
+  }, [catalog, items]);
 
-  const nameByCode = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const d of catalog) map.set(d.codigo, catalogDocumentName(d.codigo, d.nombre));
-    return map;
-  }, [catalog]);
-
-  const documentName = useCallback(
-    (code: string) => nameByCode.get(code) ?? catalogDocumentName(code),
-    [nameByCode],
+  const visibles = useMemo(
+    () =>
+      filtrarFilas(rows, filtros.condicionesTotales, filtros.busqueda, {
+        columnas: { documento: (r) => [r.name, r.code], estado: (r) => r.state },
+      }),
+    [rows, filtros.condicionesTotales, filtros.busqueda],
   );
 
   const handleSaved = useCallback((saved: CompanyDocumentParam) => {
@@ -166,27 +265,27 @@ export function CompanyDocumentParamsPanel({
     setModal({ mode: "closed" });
   }, []);
 
-  const columns: DataTableColumn<CompanyDocumentParam>[] = [
+  const columns: DataTableColumn<DocRow>[] = [
     {
       key: "document",
       header: "Documento",
-      render: (item) => (
+      render: (row) => (
         <div className="min-w-0">
-          <p className="font-medium text-flit-primary dark:text-white">{documentName(item.documentTypeCode)}</p>
-          <p className="font-mono text-xs opacity-70">{item.documentTypeCode}</p>
+          <p className="font-medium text-flit-primary dark:text-white">{row.name}</p>
+          <p className="font-mono text-xs opacity-70">{row.code}</p>
         </div>
       ),
     },
     {
       key: "state",
       header: "Estado",
-      render: (item) => {
-        const meta = STATE_META[item.state] ?? STATE_META.OPCIONAL;
+      render: (row) => {
+        const meta = STATE_META[row.state] ?? STATE_META.OPCIONAL;
         const Icon = meta.icon;
         return (
           <StatusBadge
             tone={meta.tone}
-            ariaLabel={`Estado de ${item.documentTypeCode}: ${meta.label}`}
+            ariaLabel={`Estado de ${row.code}: ${meta.label}`}
             label={
               <span className="inline-flex items-center gap-1.5">
                 <Icon className="h-3.5 w-3.5" aria-hidden />
@@ -201,14 +300,14 @@ export function CompanyDocumentParamsPanel({
       key: "actions",
       header: "Acciones",
       align: "right",
-      render: (item) => (
+      render: (row) => (
         <RowActions
           actions={[
             {
               icon: Pencil,
-              label: `Editar ${item.documentTypeCode}`,
+              label: `Editar ${row.code}`,
               tone: "primary",
-              onClick: () => setModal({ mode: "edit", item }),
+              onClick: () => setModal({ mode: "edit", row }),
             },
           ]}
         />
@@ -216,60 +315,59 @@ export function CompanyDocumentParamsPanel({
     },
   ];
 
-  const addButton = (
-    <CreateButton label="Agregar parámetro" icon={FilePlus} onClick={() => setModal({ mode: "add" })} />
-  );
+  const filtradoVacio = visibles.length === 0 && filtros.hayFiltros;
 
   return (
     <section aria-label="Parámetros documentales por gestora" className="space-y-4">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">Parámetros documentales por gestora</h2>
-          <p className="text-sm opacity-70">
-            Define si cada tipo de documento es obligatorio, opcional u oculto para esta compañía.
-          </p>
-        </div>
-        {!loading && !loadError ? addButton : null}
+      <header>
+        <h2 className="text-lg font-semibold">Parámetros documentales por gestora</h2>
+        <p className="text-sm opacity-70">
+          Define si cada tipo de documento es obligatorio, opcional u oculto para esta compañía. Los
+          documentos en «Base» aplican el comportamiento base.
+        </p>
       </header>
 
       {loading ? (
         <CarLoaderModal label="Cargando parámetros documentales…" />
       ) : (
         <UiStateBoundary
-          status={loadError ? "error" : items.length === 0 ? "empty" : "ready"}
+          status={loadError ? "error" : rows.length === 0 ? "empty" : "ready"}
           errorMessage={loadError ?? undefined}
           onRetry={() => void load()}
-          emptyMessage="Sin parámetros: se aplica el comportamiento base."
-          emptyCta={addButton}
+          emptyMessage="No hay documentos activos en el catálogo."
         >
-          {/* HU #13918 — también esta lista corta lleva la paginación estándar: con una sola página
-              solo se ven el resumen y «Filas por página». */}
-          <DataTable
-            ariaLabel="Parámetros documentales"
-            columns={columns}
-            rows={pg.paginar(items)}
-            getRowKey={(item) => item.id}
-            allowHorizontalScroll
-            pagination={{
-              page: pg.page,
-              pageSize: pg.pageSize,
-              totalCount: items.length,
-              onPageChange: pg.setPage,
-              onPageSizeChange: pg.setPageSize,
-            }}
-          />
+          <div className="space-y-3">
+            <TablaFiltrosBar filtros={filtros} />
+            {filtradoVacio ? (
+              <TablaFiltrosVacio onLimpiar={filtros.limpiar} />
+            ) : (
+              /* HU #13918 — paginación estándar: con una sola página solo se ven el resumen y
+                 «Filas por página». */
+              <DataTable
+                ariaLabel="Parámetros documentales"
+                columns={columns}
+                rows={pg.paginar(visibles)}
+                getRowKey={(row) => row.code}
+                allowHorizontalScroll
+                pagination={{
+                  page: pg.page,
+                  pageSize: pg.pageSize,
+                  totalCount: visibles.length,
+                  onPageChange: pg.setPage,
+                  onPageSizeChange: pg.setPageSize,
+                }}
+              />
+            )}
+          </div>
         </UiStateBoundary>
       )}
 
-      {modal.mode !== "closed" ? (
+      {modal.mode === "edit" ? (
         <DocumentParamModal
-          key={modal.mode === "edit" ? modal.item.id : "add"}
+          key={modal.row.code}
           tenantId={tenantId}
           networkHeadId={networkHeadId}
-          item={modal.mode === "edit" ? modal.item : null}
-          catalog={catalog}
-          existingCodes={items.map((i) => i.documentTypeCode)}
-          documentName={documentName}
+          row={modal.row}
           onClose={() => setModal({ mode: "closed" })}
           onSaved={handleSaved}
         />
@@ -281,11 +379,8 @@ export function CompanyDocumentParamsPanel({
 interface DocumentParamModalProps {
   tenantId: string;
   networkHeadId?: string | null;
-  /** Parámetro a editar; `null` = alta. */
-  item: CompanyDocumentParam | null;
-  catalog: DocumentType[];
-  existingCodes: string[];
-  documentName: (code: string) => string;
+  /** Documento a parametrizar (ya elegido: viene de la fila). */
+  row: DocRow;
   onClose: () => void;
   onSaved: (saved: CompanyDocumentParam) => void;
 }
@@ -293,36 +388,26 @@ interface DocumentParamModalProps {
 function DocumentParamModal({
   tenantId,
   networkHeadId,
-  item,
-  catalog,
-  existingCodes,
-  documentName,
+  row,
   onClose,
   onSaved,
 }: DocumentParamModalProps) {
   const codeId = useId();
-  const [code, setCode] = useState(item?.documentTypeCode ?? "");
-  const [state, setState] = useState<CompanyDocumentParamState>(item?.state ?? "OBLIGATORIO");
+  const [state, setState] = useState<CompanyDocumentParamState>(
+    row.state === "BASE" ? "OBLIGATORIO" : row.state,
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isEdit = item !== null;
-  const available = useMemo(
-    () => catalog.filter((d) => d.estado === "activo" && !existingCodes.includes(d.codigo)),
-    [catalog, existingCodes],
-  );
-  const useSelector = !isEdit && available.length > 0;
-  const trimmed = code.trim();
-
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!trimmed || saving) return;
+    if (saving) return;
     setSaving(true);
     setError(null);
     try {
       const saved = await upsertCompanyDocumentParam(
         tenantId,
-        { documentTypeCode: trimmed, state },
+        { documentTypeCode: row.code, state },
         networkHeadId,
       );
       onSaved(saved);
@@ -338,47 +423,28 @@ function DocumentParamModal({
       onClose={onClose}
       busy={saving}
       icon={FilePlus}
-      title={isEdit ? "Editar parámetro" : "Agregar parámetro"}
-      description={
-        isEdit ? documentName(item.documentTypeCode) : "Elige el documento y cómo se le pedirá al gestor."
-      }
+      title="Editar parámetro"
+      description={row.name}
     >
-      <form onSubmit={(e) => void submit(e)} className="space-y-4" aria-label="Parámetro documental">
+      <form
+        onSubmit={(e) => void submit(e)}
+        className="space-y-4"
+        aria-label="Parámetro documental"
+      >
         <div>
           <label htmlFor={codeId} className="mb-1 block text-xs font-semibold">
-            {useSelector ? "Documento" : "Código de documento"}
+            Código de documento
           </label>
-          {useSelector ? (
-            <select
-              id={codeId}
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              disabled={saving}
-              className={FIELD_CLS}
-            >
-              <option value="">Selecciona un documento…</option>
-              {available.map((d) => (
-                <option key={d.id} value={d.codigo}>
-                  {catalogDocumentName(d.codigo, d.nombre)} ({d.codigo})
-                </option>
-              ))}
-            </select>
-          ) : (
-            <input
-              id={codeId}
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              readOnly={isEdit}
-              disabled={saving}
-              autoComplete="off"
-              className={`${FIELD_CLS} font-mono`}
-            />
-          )}
+          <input id={codeId} value={row.code} readOnly className={`${FIELD_CLS} font-mono`} />
         </div>
 
         <fieldset disabled={saving} className="min-w-0">
           <legend className="mb-1 text-xs font-semibold">Estado</legend>
-          <div role="radiogroup" aria-label="Estado del parámetro" className="grid gap-2 sm:grid-cols-3">
+          <div
+            role="radiogroup"
+            aria-label="Estado del parámetro"
+            className="grid gap-2 sm:grid-cols-3"
+          >
             {STATES.map((s) => {
               const meta = STATE_META[s];
               const Icon = meta.icon;
@@ -429,9 +495,11 @@ function DocumentParamModal({
           </button>
           <button
             type="submit"
-            disabled={saving || !trimmed}
+            disabled={saving}
             className="rounded-xl px-5 py-2 text-xs font-semibold text-white shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+            style={{
+              background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))",
+            }}
           >
             {saving ? "Guardando…" : "Guardar"}
           </button>
