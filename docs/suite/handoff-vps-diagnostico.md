@@ -44,16 +44,129 @@ El servicio migra su esquema al arrancar.
 **Comprobar:** `psql "$ADMIN_URL" -c "\du flit_diagnostico"`. **Volver atrás:** `DROP SCHEMA diagnostico CASCADE; DROP ROLE flit_diagnostico;`
 (solo si nunca se usó).
 
-## 2. RabbitMQ: exchange y usuario
+## 2. RabbitMQ: colas, política de 7 días y usuario con destino
 
-El exchange `flit.diagnostico` está en `deploy/rabbitmq/definitions.json`; en un broker que ya corre, recargarlo:
+Desde [ADR-0075](../decisions/ADR-0075-diagnostico-consultas-por-rabbitmq.md), las consultas del diagnóstico van por el
+bus: diagnóstico deja un trabajo en `flit.consultas`, core-consultas lo atiende y publica el resultado en su propio
+exchange, y diagnóstico cierra la celda. Sin broker no hay consultas.
 
-```bash
-docker compose -f docker-compose.prod.yml exec rabbitmq rabbitmqctl import_definitions /etc/rabbitmq/definitions.json
-deploy/rabbitmq/usuario-de-servicio.sh diagnostico <clave>
+**Orden.** Este paso va **antes** de desplegar una imagen de core-diagnostico que publique trabajos de consulta. Sin el
+destino `consultas`, el broker le rechaza cada publicación (`ACCESS_REFUSED`) y su outbox se queda reintentando.
+
+### 2.1 Variable obligatoria
+
+`RABBITMQ_URL_DIAGNOSTICO` es obligatoria (`:?`). `docker compose` valida todo el archivo, así que la exige en **todos**
+los ambientes que usan `docker-compose.prod.yml`, también en los que no tienen el perfil `diagnostico`. Si falta,
+`docker compose` no arranca nada. Hay que escribirla en el `.env` **antes de fusionar**, porque en DEV fusionar es
+desplegar.
+
+```
+RABBITMQ_URL_DIAGNOSTICO=amqp://diagnostico:<clave>@rabbitmq:5672/flit
 ```
 
-En el `.env`: `RABBITMQ_URL_DIAGNOSTICO=amqp://diagnostico:<clave>@rabbitmq:5672/flit`.
+**Comprobar:** `docker compose -f docker-compose.prod.yml config > /dev/null` no nombra `RABBITMQ_URL_DIAGNOSTICO`.
+
+En DEV y QA por GitOps, el equivalente es la misma cadena (`Platform__Messaging__ConnectionString` de
+core-diagnostico) en `flit-gitops/services/flit2-<amb>/`, como sealed secret.
+
+### 2.2 Colas y política de retención
+
+`deploy/rabbitmq/definitions.json` declara por adelantado las tres colas del flujo. Un mensaje publicado en un exchange
+sin cola atada se pierde, y estas colas no pueden esperar a que su consumidor arranque por primera vez:
+
+| Cola | La consume | Atada a `flit.consultas` con |
+|---|---|---|
+| `consultas.diagnostico` | core-consultas (lotes) | `consultas.diagnostico.*` |
+| `consultas.diagnostico-express` | core-consultas (Express) | `consultas.diagnostico-express.*` |
+| `diagnostico.consultas-resultados` | core-diagnostico | `consultas.resultado.diagnostico` |
+
+También declara la política `dlq-7d`, que borra a los **7 días** (`message-ttl` 604800000 ms) los mensajes de las `.dlq`
+de esas tres colas. Llevan placa, VIN y documentos en claro (U1 de ADR-0075, Ley 1581). Las `.retry.<n>` y las `.dlq`
+las crea cada consumidor al arrancar, y la política se les aplica sola cuando aparecen.
+
+En un broker que ya corre, recargar las definiciones (agrega lo nuevo y no borra nada):
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T rabbitmq rabbitmqctl import_definitions /etc/rabbitmq/definitions.json
+```
+
+**Comprobar:**
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T rabbitmq rabbitmqctl list_queues -p flit name messages consumers policy | grep -e consultas.diagnostico -e consultas-resultados
+docker compose -f docker-compose.prod.yml exec -T rabbitmq rabbitmqctl list_bindings -p flit source_name destination_name routing_key | grep flit.consultas
+docker compose -f docker-compose.prod.yml exec -T rabbitmq rabbitmqctl list_policies -p flit
+```
+
+Deben aparecer las tres colas, sus tres bindings y la política `dlq-7d` con prioridad 10. Cuando los consumidores ya
+arrancaron, las tres `.dlq` muestran `dlq-7d` en la columna `policy`. RabbitMQ aplica **una sola** política por cola,
+la de mayor prioridad. Si en el ambiente hay otra política cuyo patrón alcance estas `.dlq` (`list_policies`), tiene
+que repetir el `message-ttl` o tener una prioridad menor que 10.
+
+**Volver atrás:** `rabbitmqctl clear_policy -p flit dlq-7d` quita la retención. **No borrar las colas**: se perderían
+los trabajos pendientes. Para volver a una versión de los servicios sin consumidores, ver §7.
+
+### 2.3 Usuario `diagnostico` con destino `consultas`
+
+El usuario necesita escribir en `flit.consultas` además de en `flit.diagnostico`. El script lo recrea con el tercer
+argumento, igual que `tramites` → `notificaciones`. **Con la misma clave de hoy no hay que tocar el `.env`.** La clave
+se lee del `.env` sin imprimirla:
+
+```bash
+CLAVE="$(sed -n 's|^RABBITMQ_URL_DIAGNOSTICO=amqp://diagnostico:\(.*\)@rabbitmq:5672/flit$|\1|p' .env)"
+[ -n "$CLAVE" ] || echo "falta RABBITMQ_URL_DIAGNOSTICO en el .env (§2.1)"
+deploy/rabbitmq/usuario-de-servicio.sh diagnostico "$CLAVE" consultas
+unset CLAVE
+```
+
+Si el usuario no existía, generar una clave nueva (`openssl rand -hex 24`, como en el paso 1 de
+[handoff-vps-consultas-notificaciones.md](handoff-vps-consultas-notificaciones.md)) y escribirla en la variable de §2.1.
+El usuario `consultas` **no cambia**: devuelve los resultados en su propio exchange.
+
+**Comprobar:**
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T rabbitmq rabbitmqctl list_user_permissions -p flit diagnostico
+```
+
+La columna de escritura debe ser `^(flit\.diagnostico|flit\.consultas|diagnostico\..*)$`. Al arrancar
+core-diagnostico, su log no tiene `ACCESS_REFUSED` y en `diagnostico.outbox` no crecen las filas con
+`published_at IS NULL`.
+
+**Volver atrás:** volver a correr el script **sin** el tercer argumento y con la misma clave. Desde ese momento,
+diagnóstico no puede publicar trabajos de consulta.
+
+### 2.4 Consumidor de resultados y pool de Postgres
+
+core-diagnostico consume `diagnostico.consultas-resultados` con `Concurrencia` 4 y `Prefetch` 8
+(`Diagnostico:Consultas:Bus` en su `appsettings.json`). Cada mensaje en curso ocupa **una** conexión de Postgres
+mientras dura su transacción. Si se cambia por ambiente, se pasa como `Diagnostico__Consultas__Bus__Concurrencia` y
+`Diagnostico__Consultas__Bus__Prefetch`. `Prefetch` tiene que ser mayor o igual que `Concurrencia`.
+
+Con el tope de §1 (`conexiones=20`, `Maximum Pool Size=20`), el consumo cabe con holgura: 4 conexiones del consumidor,
+más el reconciliador (1, cada 60 s), el publicador de la outbox (1) y las peticiones HTTP. El trabajador de Postgres
+anterior (`Diagnostico:Procesador`) desaparece y libera sus conexiones. Si se sube `Concurrencia`, hay que subir
+`conexiones` y `Maximum Pool Size` en la misma cantidad.
+
+**Comprobar** con un lote en curso:
+
+```bash
+psql "$ADMIN_URL" -Atc "select count(*) from pg_stat_activity where usename = 'flit_diagnostico';"
+```
+
+Debe quedar por debajo de 20. Si llega al tope, el log dice `too many connections for role "flit_diagnostico"` o
+`The connection pool has been exhausted`.
+
+**Volver atrás:** bajar `Diagnostico__Consultas__Bus__Concurrencia` y recrear el servicio (`up -d core-diagnostico`).
+
+### 2.5 Qué esperar en la operación
+
+| Si se cae | Qué pasa | Al volver |
+|---|---|---|
+| core-consultas | Los trabajos esperan en `consultas.diagnostico*` y las celdas siguen PENDIENTE. El reconciliador se pausa: no duplica trabajos ni pasa celdas a ERROR | Las consultas siguen solas |
+| core-diagnostico | Los resultados esperan en `diagnostico.consultas-resultados` | Se aplican solos |
+| RabbitMQ | Las outbox de los dos servicios acumulan | Publican al volver |
+| Un trabajo agota los reintentos de infraestructura | Llega a `consultas.diagnostico*.dlq` y suena `alerta-dlq.sh`, que revisa todas las `.dlq`. El reconciliador re-publica la celda una vez y después la cierra en ERROR (reprocesable) | El mensaje de la `.dlq` se borra a los 7 días |
 
 ## 3. Cliente de servicio `svc-diagnostico`
 
@@ -156,4 +269,12 @@ curl -s http://127.0.0.1:${DIAGNOSTICO_PORT:-4024}/healthz
 ## 7. Si algo sale mal
 
 `docker compose stop core-diagnostico frontend-diagnostico` y quitar `diagnostico` de `COMPOSE_PROFILES`: el resto del
-stack no depende de ellos.
+stack no depende de ellos. `RABBITMQ_URL_DIAGNOSTICO` se queda en el `.env`, porque el compose la sigue exigiendo (§2.1).
+
+**Volver a una versión sin consultas por el bus** (imagen **y** compose anteriores de core-diagnostico y
+core-consultas): el trabajador de Postgres vuelve a atender las celdas. Los mensajes que queden en
+`consultas.diagnostico`, `consultas.diagnostico-express` y `diagnostico.consultas-resultados` ya no los consume nadie.
+Si la versión anterior todavía **publica** trabajos (tanda A de ADR-0075, sin consumidores), esas colas crecen sin
+límite. En ese caso, con confirmación del líder técnico, vaciarlas con `rabbitmqctl purge_queue -p flit <cola>`: son
+copias de trabajos que ya atiende el trabajador de Postgres. No se borran las colas ni la política, y el usuario puede
+conservar su destino.

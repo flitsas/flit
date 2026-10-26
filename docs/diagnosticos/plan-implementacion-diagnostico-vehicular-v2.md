@@ -425,6 +425,13 @@ Cada decisión trae 2–3 alternativas y una recomendación. Las marcadas **ADR*
 
 ### (a) Cola y orquestación durable por vehículo — ADR
 
+> **Reemplazada (2026-10-26) por [ADR-0075](../decisions/ADR-0075-diagnostico-consultas-por-rabbitmq.md)** (Propuesto,
+> HU #13727). Las consultas del diagnóstico van por RabbitMQ: diagnóstico publica un trabajo por celda en
+> `flit.consultas`, core-consultas lo ejecuta y devuelve el resultado, y la celda sigue siendo el estado. La cola de
+> Postgres con lease (A2) se borra en la tanda B. Un reconciliador cubre las pérdidas, y por eso la excepción A11 de
+> `ix_cola` en ADR-0072 cambia de dueño. La tabla y la recomendación de abajo quedan como historia de la decisión
+> original. La cola del ZIP de evidencias no cambia.
+
 | | A1. `Channel` en memoria (como Comparendos) | A2. Tabla Postgres con lease + `FOR UPDATE SKIP LOCKED` | A3. Consumers RabbitMQ + inbox |
 |---|---|---|---|
 | Pros | Ya está escrito. Cero infraestructura. Latencia mínima | Durable. Funciona con más de una réplica. Se encola en la **misma transacción** que crea las celdas. Sin dependencias nuevas. Reintentos y backoff con columnas. Se observa con SQL | Durable. Escala horizontal. El SDK ya trae inbox. Es el bus de la plataforma |
@@ -588,7 +595,7 @@ Dos decisiones del 2026-10-21 acotan el handoff:
 
 | ADR (número al versionar) | Decisión | Estado de la decisión | Antes de la ola |
 |---|---|---|---|
-| ADR-xxxx Cola durable por vehículo en Postgres | (a) A2 | **Se implementa en Propuesto en D0–D2 (RD-3)**; el LT ratifica en el PR | D2 |
+| ADR-xxxx Cola durable por vehículo en Postgres | (a) A2 | **Reemplazada por ADR-0075** (consultas por RabbitMQ, Propuesto, HU #13727). Se implementó en D0–D2 y se retira en la tanda B | D2 |
 | ADR-xxxx Aislamiento por tenant con filtro global | (b) B2 | **Se implementa en Propuesto en D0–D2 (RD-3)**; el LT ratifica en el PR | D0 |
 | ADR-xxxx Tiempo real del tablero por polling incremental | (c) C1 | **Se implementa en Propuesto en D0–D2 (RD-3)**; el LT ratifica en el PR | D2 |
 | ADR-xxxx SIMIT normalizado, RUNT por placa vía Intempo y celdas de persona del producto | (e) E1 + cadena «placa sin documento» + `RUNT_PROPIETARIO`/`RUNT_LOCATARIO` | **Decidida en sesión**, pendiente de ratificar por el LT | D2 |

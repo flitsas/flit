@@ -117,7 +117,7 @@ ya la tienen (HU #13723, ver excepciones por tabla).
 | `diagnosticos` | #13738 · `D1_CabeceraDiagnostico` | (a) | `xmin` | `usuario_creador_id`, `creado_en`, `cerrado_en`; transiciones en el historial | — (expone `uq_diagnosticos_tenant_id`) | Ninguna |
 | `historial_estado_diagnostico` | #13738 · `D1_CabeceraDiagnostico` | (b) | — | `usuario_id` (nulo si fue el procesador), `en` | `(tenant_id, diagnostico_id)` → `diagnosticos(tenant_id, id)`, `RESTRICT` | Ninguna |
 | `vehiculos` | #13735 · `D1_Vehiculos`; #13723 · `D2_MotorConsultas`; #13730b · `D2_LocatarioDeclaradoRespaldo` | (a) | `xmin` | Del lote (`diagnosticos`); `runt_consultado_en` | `(tenant_id, diagnostico_id)` → `diagnosticos(tenant_id, id)`, `RESTRICT`; expone `uq_vehiculos_tenant_id` (D2) | Ninguna. PII `@pii:high`: `propietario_doc_cifrado`, `locatario_doc_cifrado` y, desde #13730b, `locatario_declarado_doc_cifrado` (respaldo del declarado cuando el proveedor trae el suyo; `ck_vehiculos_locatario_declarado` y `ck_vehiculos_locatario_declarado_con_proveedor`) |
-| `consultas` | #13723 · `D2_MotorConsultas`; #13746 · `D2_ReprocesoUsuarioCelda`; #13727 · `D5_ConsultasPorBus` | (a) | `xmin` | `actualizado_en`, `usuario_manual_id`, `dato_obtenido_en`, `reproceso_usuario_id` (reproceso pendiente; lo limpia el cierre, `ck_consultas_reproceso_usuario`); intentos en `intentos_consulta` | `(tenant_id, vehiculo_id)` → `vehiculos`, `(tenant_id, diagnostico_id)` → `diagnosticos`, `(tenant_id, reutilizada_de_id)` → `consultas`; todas `RESTRICT`; expone `uq_consultas_tenant_id` | A11 en `ix_cola` (ver excepciones). Desde #13727 (ADR-0075), columnas técnicas sin PII y sin índice propio: `trabajo_id` (uuid nulo, trabajo vigente del bus, sin FK) y `republicaciones` (smallint, defecto 0, `ck_consultas_republicaciones` 0..1) |
+| `consultas` | #13723 · `D2_MotorConsultas`; #13746 · `D2_ReprocesoUsuarioCelda`; #13727 · `D5_ConsultasPorBus` | (a) | `xmin` | `actualizado_en`, `usuario_manual_id`, `dato_obtenido_en`, `reproceso_usuario_id` (reproceso pendiente; lo limpia el cierre, `ck_consultas_reproceso_usuario`); intentos en `intentos_consulta` | `(tenant_id, vehiculo_id)` → `vehiculos`, `(tenant_id, diagnostico_id)` → `diagnosticos`, `(tenant_id, reutilizada_de_id)` → `consultas`; todas `RESTRICT`; expone `uq_consultas_tenant_id` | A11 en `ix_cola`, cuyo dueño es el reconciliador desde ADR-0075 (ver excepciones). Desde #13727 (ADR-0075), columnas técnicas sin PII y sin índice propio: `trabajo_id` (uuid nulo, trabajo vigente del bus, sin FK) y `republicaciones` (smallint, defecto 0, `ck_consultas_republicaciones` 0..1) |
 | `intentos_consulta` | #13723 · `D2_MotorConsultas`; #13737 · `D2_IntentosConsultaRegistro`; #13790 · `D3_PersonasVehiculo` | (b) | — | `usuario_id` (nulo si fue el procesador), `inicio`/`fin` | `(tenant_id, consulta_id)` → `consultas`, `(tenant_id, vehiculo_id)` → `vehiculos`, `(tenant_id, diagnostico_id)` → `diagnosticos`, `(tenant_id, persona_id)` → `personas_vehiculo` (nula en las fuentes por vehículo, `ix_intentos_consulta_persona`); todas `RESTRICT` | Ninguna |
 | `personas_vehiculo` | #13790 · `D3_PersonasVehiculo` | (a) | `xmin` | `creado_en` (cierre de la celda RUNT); se escribe una sola vez | `(tenant_id, vehiculo_id)` → `vehiculos(tenant_id, id)`, `RESTRICT`; expone `uq_personas_vehiculo_tenant_id` | Ninguna. PII `@pii:high`: `doc_cifrado` (Data Protection, HU #13751); sin nombres. `ux_personas_vehiculo_rol_orden (tenant_id, vehiculo_id, rol, orden)`; CHECK de `rol`, `origen`, `orden >= 1` y `ck_personas_vehiculo_declarado_solo_locatario` |
 | `evidencias` | #13846 · `D4_Evidencias`; #13850 · `D4_ColaZip` | (a) | `xmin` | `solicitado_por`, `creado_en`, `generado_en`; invalidar = `vigente=false`, sin borrado | `(tenant_id, diagnostico_id)` → `diagnosticos(tenant_id, id)`, `(tenant_id, vehiculo_id)` → `vehiculos(tenant_id, id)`; ambas `RESTRICT`; expone `uq_evidencias_tenant_id` | A11 en `ix_evidencias_cola` (ver excepciones). PII `@pii:low`: `solicitado_por` |
@@ -146,18 +146,27 @@ ya la tienen (HU #13723, ver excepciones por tabla).
   clave es la natural del catálogo (código del organismo, código DIVIPOLA del departamento), que es la que usa quien busca.
   A5/A20: no tienen `created_*`, `is_active` ni `external_refs`; la réplica se reemplaza desde su origen y
   `departamentos_impuesto.actualizado_en` marca el último refresco. No se editan a mano.
-- **`consultas`, A11 en `ix_cola` (HU #13723).** El índice parcial de la cola `(disponible_desde) WHERE estado IN
-  ('PENDIENTE','EN_CURSO')` no empieza por `tenant_id`: el procesador (#13727) toma celdas de todas las empresas en orden
-  de disponibilidad con `FOR UPDATE SKIP LOCKED`, y luego fija la empresa de cada celda en su scope (Tradeoff aceptado,
-  «jobs sin usuario»). Los demás índices de la tabla empiezan por `tenant_id`.
+- **`consultas`, A11 en `ix_cola` (HU #13723; enmendada por ADR-0075, HU #13727).** El índice parcial de la cola
+  `(disponible_desde) WHERE estado IN ('PENDIENTE','EN_CURSO')` no empieza por `tenant_id`, y los demás índices de la
+  tabla sí. Su dueño cambió con [ADR-0075](ADR-0075-diagnostico-consultas-por-rabbitmq.md):
+  - **Antes (decisión (a) A2 del plan v2, reemplazada).** El procesador de Postgres tomaba celdas de todas las empresas
+    en orden de disponibilidad, con lease y `FOR UPDATE SKIP LOCKED`.
+  - **Ahora.** El dueño es el **reconciliador** (`ReconciliadorConsultas`, cada 60 s). Busca en todas las empresas las
+    celdas huérfanas: PENDIENTE no diferidas o EN_CURSO, con `trabajo_id` y sin resultado pasado el margen, y las
+    PENDIENTE no diferidas con `trabajo_id` nulo. Después fija la empresa de cada celda en su scope y solo entonces la
+    re-publica o la cierra en ERROR (Tradeoff aceptado, «jobs sin usuario»). No toma ni bloquea filas: la ejecución va
+    por el bus.
+  - **Los consumidores del bus no leen entre empresas.** Fijan la empresa del sobre (`tenantId`) antes de tocar la celda.
+  - **Se borran en la tanda B de ADR-0075:** `ColaConsultas.TomarAsync`, el procesador de Postgres y su lease.
 - **`consultas`, unicidad `(vehiculo_id, fuente)`.** Se materializa como `ux_consulta_vehiculo_fuente (tenant_id,
   vehiculo_id, fuente)`: como el vehículo fija la empresa, la unicidad es la misma, y el índice cubre la FK compuesta
   al vehículo (igual que `ux_vehiculo_por_lote`).
 - **`evidencias`, A11 en `ix_evidencias_cola (estado, lease_hasta)` (HU #13850).** El índice parcial de la cola del ZIP
   `WHERE tipo = 'ZIP' AND estado IN ('PENDIENTE','GENERANDO')` no empieza por `tenant_id`: el trabajador del ZIP reclama
   filas de todas las empresas con `FOR UPDATE SKIP LOCKED`, y luego fija la empresa de la fila en su propio contexto
-  (Tradeoff aceptado, «jobs sin usuario»). Es la segunda y última lectura entre empresas, junto con `ColaConsultas`;
-  `TomaEntreEmpresasSoloEnColaTests` vigila que no haya otra. Los demás índices de la tabla empiezan por `tenant_id`.
+  (Tradeoff aceptado, «jobs sin usuario»). Es la segunda y última lectura entre empresas, junto con la del
+  reconciliador de consultas (antes `ColaConsultas`, ver A11 de `consultas`); `TomaEntreEmpresasSoloEnColaTests` vigila
+  que no haya otra. Los demás índices de la tabla empiezan por `tenant_id`.
 
 ## Retención de datos personales
 
@@ -284,3 +293,5 @@ aquí; hasta entonces, ningún endpoint de backoffice escribe entre empresas.
 
 - ADR-0069: lectura entre compañías, acotada y auditada.
 - ADR-0070: gRPC entre servicios y REST hacia afuera.
+- ADR-0075: consultas del diagnóstico por RabbitMQ. Enmienda la excepción A11 de `consultas` (el dueño de `ix_cola` pasa
+  a ser el reconciliador).
