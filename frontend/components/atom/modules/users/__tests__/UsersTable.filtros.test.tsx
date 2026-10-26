@@ -1,6 +1,6 @@
 // HU #14006 (Feature #13996): filtros por columna del estándar HU #13997 en la tabla compartida de usuarios.
 import { describe, expect, it } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { UsersTable, toUserRow, type UserRow } from "../UsersTable";
 
@@ -59,62 +59,58 @@ function renderTable(rs: UserRow[] = rows, showTenantColumn = false) {
 }
 
 async function filtroSeleccion(user: User, columna: string, opcion: string) {
-  await user.click(screen.getByRole("button", { name: /^\+ Filtro/ }));
-  await user.click(screen.getByRole("button", { name: columna }));
+  await user.click(screen.getByRole("button", { name: `Filtrar por ${columna}` }));
   await user.click(screen.getByRole("checkbox", { name: opcion }));
   await user.click(screen.getByRole("button", { name: "Aplicar" }));
 }
 
 async function filtroTexto(user: User, columna: string, texto: string) {
-  await user.click(screen.getByRole("button", { name: /^\+ Filtro/ }));
-  await user.click(screen.getByRole("button", { name: columna }));
+  await user.click(screen.getByRole("button", { name: `Filtrar por ${columna}` }));
   await user.type(screen.getByLabelText(`${columna} contiene`), texto);
   await user.click(screen.getByRole("button", { name: "Aplicar" }));
 }
 
-describe("UsersTable — filtros por columna (HU #14006)", () => {
-  it("AC1/AC2 — ya no hay selects propios: la barra es la del estándar", () => {
+describe("UsersTable — filtros de arriba + filtro por columna (HU #14006)", () => {
+  it("AC1/AC2 — conserva los filtros de consulta de siempre y NO monta la barra «+ Filtro»", () => {
     renderTable();
-    expect(screen.queryByLabelText("Filtrar por perfil")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "+ Filtro" })).toBeInTheDocument();
     expect(screen.getByLabelText("Buscar usuarios")).toBeInTheDocument();
+    expect(screen.getByLabelText("Filtrar por perfil")).toBeInTheDocument();
+    expect(screen.getByLabelText("Filtrar por rol")).toBeInTheDocument();
+    expect(screen.getByLabelText("Filtrar por estado")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "+ Filtro" })).not.toBeInTheDocument();
   });
 
-  it("AC1 — ofrece un filtro por columna con datos y nunca «Acciones»", async () => {
-    const user = userEvent.setup();
+  it("AC1 — hay un embudo por columna con datos y ninguno en «Acciones»", () => {
     renderTable();
-    await user.click(screen.getByRole("button", { name: "+ Filtro" }));
-    const lista = screen.getByRole("list", { name: "Columnas filtrables" });
-    const nombres = within(lista)
-      .getAllByRole("button")
-      .map((b) => b.textContent);
-    expect(nombres).toEqual(["Nombre", "Correo", "Perfil", "Rol", "Estado"]);
+    for (const c of ["Usuario", "Perfil", "Rol", "Estado", "Fecha"]) {
+      expect(screen.getByRole("button", { name: `Filtrar por ${c}` })).toBeInTheDocument();
+    }
+    expect(screen.queryByRole("button", { name: "Filtrar por Empresa" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Filtrar por Acciones" })).not.toBeInTheDocument();
   });
 
-  it("AC1 — con la columna Empresa visible aparece su filtro de texto", async () => {
-    const user = userEvent.setup();
+  it("AC1 — con la columna Empresa visible aparece su embudo de texto", () => {
     renderTable(rows, true);
-    await user.click(screen.getByRole("button", { name: "+ Filtro" }));
-    expect(screen.getByRole("button", { name: "Empresa" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Filtrar por Empresa" })).toBeInTheDocument();
   });
 
-  it("AC1 — filtra por nombre (contiene)", async () => {
+  it("AC1 — el embudo de Usuario busca en el nombre", async () => {
     const user = userEvent.setup();
     renderTable();
-    await filtroTexto(user, "Nombre", "torres");
+    await filtroTexto(user, "Usuario", "torres");
     expect(screen.getByText("Ana Torres")).toBeInTheDocument();
     expect(screen.queryByText("Beto Ruiz")).not.toBeInTheDocument();
   });
 
-  it("AC1 — filtra por correo", async () => {
+  it("AC1 — el embudo de Usuario también busca en el correo", async () => {
     const user = userEvent.setup();
     renderTable();
-    await filtroTexto(user, "Correo", "ot.gov");
+    await filtroTexto(user, "Usuario", "ot.gov");
     expect(screen.getByText("Beto Ruiz")).toBeInTheDocument();
     expect(screen.queryByText("Ana Torres")).not.toBeInTheDocument();
   });
 
-  it("AC2 — filtra por perfil, incluidos los roles personalizados de un organismo", async () => {
+  it("AC2 — embudo de Perfil, incluidos los roles personalizados de un organismo", async () => {
     const user = userEvent.setup();
     renderTable();
     await filtroSeleccion(user, "Perfil", "OT");
@@ -124,7 +120,7 @@ describe("UsersTable — filtros por columna (HU #14006)", () => {
     expect(screen.queryByText("Caro Díaz")).not.toBeInTheDocument();
   });
 
-  it("AC2 — filtra por rol", async () => {
+  it("AC2 — embudo de Rol", async () => {
     const user = userEvent.setup();
     renderTable();
     await filtroSeleccion(user, "Rol", "Revisor documental");
@@ -132,7 +128,7 @@ describe("UsersTable — filtros por columna (HU #14006)", () => {
     expect(screen.queryByText("Beto Ruiz")).not.toBeInTheDocument();
   });
 
-  it("AC2 — filtra por estado Bloqueado (suspendido) y por Cancelada", async () => {
+  it("AC2 — embudo de Estado: Bloqueado (suspendido) y Cancelada", async () => {
     const user = userEvent.setup();
     const { unmount } = renderTable();
     await filtroSeleccion(user, "Estado", "Bloqueado");
@@ -146,10 +142,20 @@ describe("UsersTable — filtros por columna (HU #14006)", () => {
     expect(screen.queryByText("Dani Soto")).not.toBeInTheDocument();
   });
 
-  it("AC1 — combina varias columnas: solo quedan los usuarios que cumplen todas", async () => {
+  it("AC1 — varios embudos se combinan: solo quedan los que cumplen todos", async () => {
     const user = userEvent.setup();
     renderTable();
     await filtroSeleccion(user, "Perfil", "OT");
+    await filtroSeleccion(user, "Estado", "Pendiente");
+    expect(screen.getByText("Beto Ruiz")).toBeInTheDocument();
+    expect(screen.queryByText("Dani Soto")).not.toBeInTheDocument();
+  });
+
+  it("AC1 — los filtros de arriba y los de columna se combinan con AND", async () => {
+    const user = userEvent.setup();
+    renderTable();
+    await user.selectOptions(screen.getByLabelText("Filtrar por perfil"), "OT");
+    expect(screen.queryByText("Ana Torres")).not.toBeInTheDocument();
     await filtroSeleccion(user, "Estado", "Pendiente");
     expect(screen.getByText("Beto Ruiz")).toBeInTheDocument();
     expect(screen.queryByText("Dani Soto")).not.toBeInTheDocument();
@@ -163,17 +169,19 @@ describe("UsersTable — filtros por columna (HU #14006)", () => {
     expect(screen.queryByText("Ana Torres")).not.toBeInTheDocument();
   });
 
-  it("AC3 — sin resultados muestra el estado vacío y «Limpiar filtros» restaura la lista", async () => {
+  it("AC3 — sin resultados muestra el vacío y «Limpiar filtros» limpia arriba y columnas", async () => {
     const user = userEvent.setup();
     renderTable();
-    await user.type(screen.getByLabelText("Buscar usuarios"), "zzzz");
+    await user.type(screen.getByLabelText("Buscar usuarios"), "ana");
+    await filtroSeleccion(user, "Estado", "Pendiente");
     expect(screen.getByText(/ningún usuario coincide/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Limpiar filtros" }));
     expect(screen.getByText("Ana Torres")).toBeInTheDocument();
+    expect(screen.getByText("Beto Ruiz")).toBeInTheDocument();
     expect(screen.getByLabelText("Buscar usuarios")).toHaveValue("");
   });
 
-  it("vuelve a la página 1 al filtrar", async () => {
+  it("vuelve a la página 1 al filtrar por un embudo", async () => {
     const user = userEvent.setup();
     const muchos = Array.from({ length: 12 }, (_, i) =>
       row({
@@ -186,7 +194,7 @@ describe("UsersTable — filtros por columna (HU #14006)", () => {
     renderTable(muchos);
     await user.click(screen.getByRole("button", { name: /página 2|2/i }));
     expect(screen.getAllByRole("row")).toHaveLength(1 + 2);
-    await filtroTexto(user, "Nombre", "Usuario 0");
+    await filtroTexto(user, "Usuario", "Usuario 0");
     expect(screen.getByText(/Mostrando 1–10 de 10/)).toBeInTheDocument();
   });
 });

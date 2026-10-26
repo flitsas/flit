@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { Pagination } from "@/components/atom/Pagination";
-import { TablaFiltrosBar, TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
+import { EncabezadoFiltrable } from "@/components/atom/FiltroColumna";
+import { SearchInput } from "@/components/atom/SearchInput";
+import { TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import {
   TABLA_HEADER_BG,
@@ -15,7 +17,12 @@ import type { RowAction } from "@/components/atom/RowActions";
 import { RowActionsMenu, destructivasAlFinal } from "@/components/atom/RowActionsMenu";
 import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
 import { ProfileCell, RoleCell } from "./ProfileRoleCell";
-import { USER_PROFILE_ORDER, profileShortLabel, resolveProfile } from "@/lib/users/profiles";
+import {
+  USER_PROFILE_ORDER,
+  profileShortLabel,
+  resolveProfile,
+  type UserProfileKind,
+} from "@/lib/users/profiles";
 
 import { filtrarFilas, type ColumnaFiltro } from "@/lib/tablas/filtrar-filas";
 import { useTablaFiltros } from "@/lib/tablas/useTablaFiltros";
@@ -111,6 +118,16 @@ function formatDateTime(iso: string | null | undefined): string {
   return formatFechaHora(parsed);
 }
 
+/** Columnas con filtro en el encabezado -> id de su `ColumnaFiltro`. «Acciones» no se filtra. */
+const FILTRABLES: Record<string, string> = {
+  Usuario: "usuario",
+  Empresa: "empresa",
+  Perfil: "perfil",
+  Rol: "rol",
+  Estado: "estado",
+  Fecha: "fecha",
+};
+
 const CELDA = "border-y px-4 py-3";
 const CELDA_STYLE = { borderColor: "#DFE5ED" };
 
@@ -154,6 +171,11 @@ export function UsersTable({
   emptyMessage = "No hay usuarios para mostrar.",
   toolbar,
 }: UsersTableProps) {
+  const [search, setSearch] = useState("");
+  const [profileFilter, setProfileFilter] = useState<"" | UserProfileKind>("");
+  const [roleFilter, setRoleFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<UserStatusFilter>("");
+
   // Perfil y Rol viven en columnas separadas (HU #11551): antes se apilaban en una sola celda
   // y el chip de Perfil (siempre "Gestor" para cualquier usuario de compañía) eclipsaba el rol
   // real, dando la impresión de que todos los usuarios tenían el mismo rol.
@@ -177,12 +199,12 @@ export function UsersTable({
     return Array.from(names).sort((a, b) => a.localeCompare(b, "es"));
   }, [rows]);
 
-  // HU #14006: un filtro por cada columna con datos (estándar HU #13997). Siguen a las columnas
-  // visibles: «Empresa» solo existe en los listados cross-tenant. «Acciones» nunca se filtra.
+  // HU #14006: además de los filtros de consulta de siempre (arriba), cada columna con datos lleva su
+  // filtro en el encabezado (estándar HU #13997). Ambos se combinan con AND. «Usuario» muestra nombre
+  // y correo en la misma celda, así que su filtro de texto busca en los dos a la vez.
   const columnasFiltro = useMemo<ColumnaFiltro[]>(
     () => [
-      { id: "nombre", label: "Nombre", tipo: "texto" },
-      { id: "correo", label: "Correo", tipo: "texto" },
+      { id: "usuario", label: "Usuario", tipo: "texto" },
       ...(showTenantColumn
         ? [{ id: "empresa", label: "Empresa", tipo: "texto" } as ColumnaFiltro]
         : []),
@@ -204,39 +226,147 @@ export function UsersTable({
     [showTenantColumn, roleOptions],
   );
 
-  // Cada cambio de filtro vuelve a la página 1; la paginación se aplica DESPUÉS de filtrar.
   const filtros = useTablaFiltros({
     columnas: columnasFiltro,
     periodoColumnaId: "fecha",
     onCambio: () => setPage(1),
   });
 
-  const filtered = useMemo(
-    () =>
-      filtrarFilas(rows, filtros.condicionesTotales, filtros.busqueda, {
-        columnas: {
-          nombre: (r) => r.fullName,
-          correo: (r) => r.email,
-          empresa: (r) => r.tenantName,
-          perfil: (r) => resolveProfile(r),
-          rol: (r) => r.role,
-          estado: (r) => (r.isSuspended ? "blocked" : r.status),
-          fecha: (r) => r.createdAt,
-        },
-        busqueda: (r) => [r.fullName, r.email, r.tenantName],
-      }),
-    [rows, filtros.condicionesTotales, filtros.busqueda],
-  );
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const previas = rows.filter((row) => {
+      if (q) {
+        const haystack = `${row.fullName} ${row.email} ${row.tenantName ?? ""}`.toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      if (profileFilter && resolveProfile(row) !== profileFilter) return false;
+      if (roleFilter && (row.role ?? "") !== roleFilter) return false;
+      if (statusFilter === "blocked") {
+        if (!row.isSuspended) return false;
+      } else if (statusFilter) {
+        if (row.isSuspended || row.status !== statusFilter) return false;
+      }
+      return true;
+    });
+    return filtrarFilas(previas, filtros.condicionesTotales, "", {
+      columnas: {
+        usuario: (r) => `${r.fullName} ${r.email}`,
+        empresa: (r) => r.tenantName,
+        perfil: (r) => resolveProfile(r),
+        rol: (r) => r.role,
+        estado: (r) => (r.isSuspended ? "blocked" : r.status),
+        fecha: (r) => r.createdAt,
+      },
+    });
+  }, [rows, search, profileFilter, roleFilter, statusFilter, filtros.condicionesTotales]);
 
   const visibles = pg.paginar(filtered);
 
+  // Sin resultados, el «Limpiar filtros» del estado vacío sustituye al de la barra (un solo botón).
+  const sinResultados = !loading && !error && rows.length > 0 && filtered.length === 0;
+  const hasActiveFilters = Boolean(search || profileFilter || roleFilter || statusFilter);
+
+  function clearFilters() {
+    setSearch("");
+    setProfileFilter("");
+    setRoleFilter("");
+    setStatusFilter("");
+    setPage(1);
+  }
+
+  // «Limpiar filtros» del estado vacío limpia los de arriba y los de las columnas.
+  function limpiarTodo() {
+    clearFilters();
+    filtros.limpiar();
+  }
+
   return (
     <div className="flex flex-col gap-3">
-      <TablaFiltrosBar
-        filtros={filtros}
-        buscador={{ placeholder: "Buscar por nombre o correo…", ariaLabel: "Buscar usuarios" }}
-        acciones={toolbar}
-      />
+      <div className="flex flex-wrap items-center gap-2">
+        <SearchInput
+          value={search}
+          onChange={(v) => {
+            setSearch(v);
+            setPage(1);
+          }}
+          placeholder="Buscar por nombre o correo…"
+          label="Buscar usuarios"
+          className="flex-1"
+        />
+
+        <label className="flex items-center gap-1.5 text-xs">
+          <span className="font-semibold opacity-60">Perfil</span>
+          <select
+            value={profileFilter}
+            onChange={(e) => {
+              setProfileFilter(e.target.value as "" | UserProfileKind);
+              setPage(1);
+            }}
+            aria-label="Filtrar por perfil"
+            className="rounded-lg border bg-transparent px-2 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand/40"
+          >
+            <option value="">Todos</option>
+            {USER_PROFILE_ORDER.map((p) => (
+              <option key={p} value={p}>
+                {profileShortLabel(p)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex items-center gap-1.5 text-xs">
+          <span className="font-semibold opacity-60">Rol</span>
+          <select
+            value={roleFilter}
+            onChange={(e) => {
+              setRoleFilter(e.target.value);
+              setPage(1);
+            }}
+            aria-label="Filtrar por rol"
+            className="max-w-[170px] rounded-lg border bg-transparent px-2 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand/40"
+          >
+            <option value="">Todos</option>
+            {roleOptions.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex items-center gap-1.5 text-xs">
+          <span className="font-semibold opacity-60">Estado</span>
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value as UserStatusFilter);
+              setPage(1);
+            }}
+            aria-label="Filtrar por estado"
+            className="rounded-lg border bg-transparent px-2 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand/40"
+          >
+            <option value="">Todos</option>
+            {STATUS_OPTIONS.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {hasActiveFilters && !sinResultados && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="rounded text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand/40"
+            style={{ color: "var(--color-flit-brand)" }}
+          >
+            Limpiar filtros
+          </button>
+        )}
+
+        {toolbar}
+      </div>
 
       {loading && <CarLoaderModal label="Cargando usuarios…" />}
 
@@ -272,7 +402,7 @@ export function UsersTable({
 
       {!loading && !error && rows.length > 0 && filtered.length === 0 && (
         <TablaFiltrosVacio
-          onLimpiar={filtros.limpiar}
+          onLimpiar={limpiarTodo}
           mensaje="Ningún usuario coincide con la búsqueda o los filtros"
         />
       )}
@@ -300,7 +430,13 @@ export function UsersTable({
                     }`}
                     style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                   >
-                    {col}
+                    {FILTRABLES[col] ? (
+                      <EncabezadoFiltrable filtros={filtros} columnaId={FILTRABLES[col]}>
+                        {col}
+                      </EncabezadoFiltrable>
+                    ) : (
+                      col
+                    )}
                   </th>
                 ))}
               </tr>
