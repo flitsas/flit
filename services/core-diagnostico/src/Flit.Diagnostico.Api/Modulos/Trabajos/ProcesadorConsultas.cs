@@ -2,7 +2,6 @@ using Flit.Diagnostico.Api.Modulos.Consultas;
 using Flit.Diagnostico.Api.Modulos.Tablero;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Domain.Consultas;
-using Flit.Platform.Sdk.Tenancy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -11,8 +10,9 @@ namespace Flit.Diagnostico.Api.Modulos.Trabajos;
 /// <summary>
 /// Procesador genérico de la cola de celdas (HU #13727, ADR a): una vuelta toma hasta <see cref="OpcionesProcesador.TamanoLote"/>
 /// celdas con <see cref="ColaConsultas"/> (solo de las fuentes con un <see cref="IEjecutorCelda"/> registrado; sin ninguno no
-/// toma nada), las ejecuta en paralelo y cierra cada una con <see cref="EscritorCeldas"/>. Cada ejecución fija la empresa de
-/// su celda en un contexto propio ANTES de leer o escribir. Si el proceso se cancela (el pod se detiene) la celda queda
+/// toma nada), las ejecuta en paralelo y cierra cada una con <see cref="EscritorCeldas"/>. Cada ejecución corre en su propio scope
+/// y fija ahí la empresa de su celda (<see cref="Plataforma.EmpresaDelTrabajo"/>, ADR-0075) ANTES de leer o escribir: el
+/// <c>DiagnosticoDb</c>, la outbox y el publicador de celdas de ese scope la comparten. Si el proceso se cancela (el pod se detiene) la celda queda
 /// EN_CURSO con su lease y otra réplica la retoma al vencer; un fallo inesperado del ejecutor la deja en ERROR (definitivo).
 /// Cada ejecución deja un intento auditable (<see cref="RegistroIntentos"/>, HU #13737) y un error transitorio con reintentos
 /// disponibles vuelve a la cola con backoff (<see cref="PoliticaReintentos"/>, <c>Diagnostico:Consultas:MaxReintentos</c>, D-12). Al cerrar la RUNT de un vehículo, <see cref="OrquestadorVehiculo"/> libera
@@ -51,10 +51,11 @@ internal sealed partial class ProcesadorConsultas(
     private async Task EjecutarAsync(CeldaTomada celda, CancellationToken ct)
     {
         await using var scope = scopes.CreateAsyncScope();
+        // ADR-0075: la empresa de la celda queda fijada en el scope; el contexto y la outbox del scope la usan.
+        scope.ServiceProvider.GetRequiredService<Plataforma.EmpresaDelTrabajo>().Fijar(celda.TenantId);
         // Gana el primero registrado para la fuente: las pruebas ponen su doble antes que Program (como con TryAdd).
         var ejecutor = scope.ServiceProvider.GetServices<IEjecutorCelda>().First(e => e.Fuente == celda.Fuente);
-        await using var db = new DiagnosticoDb(
-            scope.ServiceProvider.GetRequiredService<DbContextOptions<DiagnosticoDb>>(), new EmpresaDeLaCelda(celda.TenantId));
+        var db = scope.ServiceProvider.GetRequiredService<DiagnosticoDb>();
 
         ResultadoCelda resultado;
         var inicio = reloj.GetUtcNow();
@@ -125,10 +126,4 @@ internal sealed partial class ProcesadorConsultas(
 
     [LoggerMessage(EventId = 137370, Level = LogLevel.Information, Message = "La celda {CeldaId} de {Fuente} terminó en {TipoError} (transitorio): reintento {Reintento} de {Maximo} con backoff")]
     private static partial void Reintento(ILogger logger, Guid celdaId, Fuente fuente, string tipoError, int reintento, int maximo);
-
-    /// <summary>La empresa de la celda en ejecución: el contexto filtra y valida con ella, como una petición con su token.</summary>
-    private sealed class EmpresaDeLaCelda(Guid empresa) : IPlatformTenantAccessor
-    {
-        public PlatformTenantContext Current { get; } = new(empresa, IsSuperAdmin: false, IsService: true);
-    }
 }

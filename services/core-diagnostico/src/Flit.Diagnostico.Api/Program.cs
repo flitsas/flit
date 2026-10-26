@@ -46,6 +46,8 @@ public static class Program
         var connectionString = builder.Configuration.GetConnectionString("Servicio")!;
         builder.Services.AddDbContext<DiagnosticoDb>(o => DiagnosticoDb.Configure(o, connectionString));
         builder.Services.AddFlitPlatformAuthentication(builder.Configuration);
+        // HU #13727 (ADR-0075): la empresa del scope decora la del token; los trabajos en segundo plano la fijan con Fijar.
+        builder.Services.AddEmpresaDelTrabajo();
         builder.Services.AddAutorizacionDiagnostico();
         // HU #13728: auditoría de cada lectura entre compañías del backoffice (diagnostico.lecturas_backoffice).
         builder.Services.AddScoped<Modulos.Comun.AuditoriaLecturaBackoffice>();

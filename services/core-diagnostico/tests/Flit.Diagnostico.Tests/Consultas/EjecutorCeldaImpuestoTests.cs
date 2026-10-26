@@ -7,6 +7,7 @@ using Flit.Diagnostico.Api;
 using Flit.Diagnostico.Api.Modulos.Catalogos;
 using Flit.Diagnostico.Api.Modulos.Consultas;
 using Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
+using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Tests.Aislamiento;
 using Flit.Diagnostico.Tests.Api;
@@ -356,11 +357,13 @@ public sealed class EjecutorCeldaImpuestoTests
     private static async Task ReencolarAsync(ApiDePrueba api, EmpresaDePrueba empresa, Guid lote, CancellationToken ct)
     {
         var vehiculos = await Lotes.VehiculosAsync(api, empresa.Id, lote, ct);
-        await using var db = empresa.Db();
+        // ADR-0075: el encolador publica con la outbox del scope, así que se arma en uno con la empresa fijada.
+        await using var scope = OutboxDePrueba.Scope(api, empresa.Id);
+        var db = scope.ServiceProvider.GetRequiredService<DiagnosticoDb>();
         await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
             await using var transaccion = await db.Database.BeginTransactionAsync(ct);
-            await new EncoladorConsultas(db, TimeProvider.System).EncolarAsync(
+            await scope.ServiceProvider.GetRequiredService<IEncoladorConsultas>().EncolarAsync(
                 lote, [.. vehiculos.Select(v => new VehiculoAEncolar(v.Id, v.IdentificadorNorm, v.TipoIdentificador))], ct);
             await transaccion.CommitAsync(ct);
         });

@@ -1,13 +1,21 @@
 using System.Net;
 using System.Text.Json;
+using Flit.Diagnostico.Api;
+using Flit.Diagnostico.Api.Modulos.Configuracion;
 using Flit.Diagnostico.Api.Modulos.Consultas;
+using Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
+using Flit.Diagnostico.Api.Modulos.Vehiculos;
+using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Diagnosticos;
+using Flit.Diagnostico.Domain.Vehiculos;
 using Flit.Diagnostico.Tests.Aislamiento;
 using Flit.Diagnostico.Tests.Api;
+using Flit.Platform.Sdk.Messaging;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Flit.Diagnostico.Tests.Consultas;
@@ -16,7 +24,9 @@ namespace Flit.Diagnostico.Tests.Consultas;
 /// HU #13727 (F03-H2), AC1, AC2 y AC5 — el encolador real (<see cref="EncoladorConsultas"/>) en la confirmación del lote
 /// (<c>POST /diagnosticos/{id}/vehiculos</c>, 202): crea una celda PENDIENTE por vehículo y fuente del alcance (las demás
 /// fuentes no), pasa el lote de CREADO a EN_PROCESO con historial AUTO, sube la versión del tablero, todo en la misma
-/// transacción que los vehículos; un segundo disparo no crea ni reabre celdas. Postgres real; placas ficticias (TST###).
+/// transacción que los vehículos; un segundo disparo no crea ni reabre celdas. Desde ADR-0075 (HU #13727) también deja en la
+/// outbox, en esa transacción, un trabajo <c>consultas.diagnostico[-express].runt</c> por cada celda RUNT nueva (las diferidas
+/// no se publican). Postgres real; placas ficticias (TST###).
 /// </summary>
 /// <example>
 /// <code>
@@ -129,17 +139,8 @@ public sealed class EncoladoTests
             """, ct);
         var versionAntes = (await Cabeceras.LeerAsync(api, empresa.Id, id, ct)).VersionTablero;
 
-        await using (var db = empresa.Db())
-        {
-            // Como la confirmación: la transacción va dentro de la estrategia de reintento de Npgsql.
-            await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
-            {
-                await using var transaccion = await db.Database.BeginTransactionAsync(ct);
-                await new EncoladorConsultas(db, TimeProvider.System).EncolarAsync(
-                    id, [.. vehiculos.Select(v => new VehiculoAEncolar(v.Id, v.IdentificadorNorm, v.TipoIdentificador))], ct);
-                await transaccion.CommitAsync(ct);
-            });
-        }
+        // Como la confirmación: la transacción va dentro de la estrategia de reintento de Npgsql.
+        await EncolarEnScopeAsync(api, empresa, id, vehiculos, revertir: false, ct);
 
         var despues = await Motor.CeldasAsync(api, empresa.Id, id, ct);
         despues.Select(c => (c.Id, c.Estado)).Should().BeEquivalentTo(
@@ -150,5 +151,140 @@ public sealed class EncoladoTests
         (await Motor.Procesador(api).ProcesarLoteAsync(ct)).Should().Be(1);
         ejecutor.Llamadas.Keys.Should().Equal(pendiente);
         (await Motor.CeldasAsync(api, empresa.Id, id, ct)).Single(c => c.Id == completada).Estado.Should().Be(EstadoCelda.Completado);
+    }
+
+    // ADR-0075 (HU #13727) — 7 vehículos: 7 trabajos RUNT en la outbox, cada uno con el trabajo_id de su celda, y ninguno de
+    // las celdas diferidas (SIMIT_VEHICULO espera a la RUNT).
+    [Fact]
+    public async Task Confirmar_lote_publica_un_trabajo_RUNT_por_vehiculo_y_ninguna_diferida()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+
+        var id = await Motor.LoteConfirmadoAsync(api, empresa, Motor.Placas(7), ct, ["RUNT", "SIMIT_VEHICULO"], [Fuente.Runt, Fuente.SimitVehiculo]);
+
+        var celdas = await Motor.CeldasAsync(api, empresa.Id, id, ct);
+        var vehiculos = (await Lotes.VehiculosAsync(api, empresa.Id, id, ct)).ToDictionary(v => v.Id);
+        var trabajos = await OutboxDePrueba.TrabajosAsync(api, ct);
+        trabajos.Should().HaveCount(7);
+        trabajos.Should().OnlyContain(t => t.RoutingKey == "consultas.diagnostico.runt" && t.Sobre.Type == t.RoutingKey
+            && t.Sobre.Producer == "diagnostico" && t.Sobre.TenantId == empresa.Id && t.Sobre.Version == 1);
+        celdas.Where(c => c.Fuente == Fuente.SimitVehiculo).Should().HaveCount(7).And.OnlyContain(c => c.TrabajoId == null, "las diferidas no se publican");
+        var runt = celdas.Where(c => c.Fuente == Fuente.Runt).ToDictionary(c => c.Id);
+        foreach (var trabajo in trabajos)
+        {
+            var celda = runt[trabajo.ConsultaId];
+            trabajo.TrabajoId.Should().Be(celda.TrabajoId!.Value);
+            trabajo.Data.GetProperty("fuente").GetString().Should().Be(FuentesBus.Runt);
+            trabajo.Data.GetProperty("rpc").GetString().Should().Be(RpcConsultas.PorPlaca);
+            trabajo.Data.GetProperty("solicitud").GetProperty("placa").GetString().Should().Be(vehiculos[celda.VehiculoId].IdentificadorNorm);
+        }
+
+        trabajos.Select(t => t.ConsultaId).Should().BeEquivalentTo(runt.Keys);
+    }
+
+    // ADR-0075 (brecha 3) — el Express publica en la cola aparte: la clave lleva -express.
+    [Fact]
+    public async Task Express_publica_el_trabajo_RUNT_con_la_clave_express()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        await Configuracion.ConfiguracionOperativaTests.SembrarAsync(empresa, new ConfiguracionEmpresa(), ct);
+        var cuerpo = JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["identificador"] = "TST101",
+            ["modo"] = "SIMPLE",
+            ["tipo_tramite_codigo"] = null,
+            ["alcance"] = new Dictionary<string, string[]> { ["por_vehiculo"] = ["RUNT"], ["por_propietario"] = [], ["por_locatario"] = [] },
+            ["tipo_documento_locatario"] = null,
+            ["documento_locatario"] = null,
+        });
+
+        var respuesta = await api.Cliente(Cabeceras.TokenUsuario(api, empresa.Id))
+            .PostAsync(Program.Prefijo + "/express", Configuracion.ConfiguracionOperativaTests.Cuerpo(cuerpo), ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.Created, await respuesta.Content.ReadAsStringAsync(ct));
+        var trabajo = (await OutboxDePrueba.TrabajosAsync(api, ct)).Should().ContainSingle().Subject;
+        trabajo.RoutingKey.Should().Be("consultas.diagnostico-express.runt");
+        trabajo.Data.GetProperty("solicitud").GetProperty("placa").GetString().Should().Be("TST101");
+    }
+
+    // ADR-0075 — un segundo disparo del mismo lote no crea celdas y por eso no publica de nuevo ni cambia el trabajo vigente.
+    [Fact]
+    public async Task Reencolar_el_mismo_lote_no_duplica_trabajos()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var id = await Motor.LoteConfirmadoAsync(api, empresa, Motor.Placas(3), ct);
+        var antes = (await Motor.CeldasAsync(api, empresa.Id, id, ct)).ToDictionary(c => c.Id, c => c.TrabajoId);
+        var vehiculos = await Lotes.VehiculosAsync(api, empresa.Id, id, ct);
+
+        await EncolarEnScopeAsync(api, empresa, id, vehiculos, revertir: false, ct);
+
+        (await OutboxDePrueba.TrabajosAsync(api, ct)).Should().HaveCount(3);
+        (await Motor.CeldasAsync(api, empresa.Id, id, ct)).ToDictionary(c => c.Id, c => c.TrabajoId).Should().Equal(antes);
+    }
+
+    // ADR-0075 — el trabajo va en la transacción de la celda: si se revierte, no queda celda ni mensaje.
+    [Fact]
+    public async Task Un_rollback_del_encolado_no_deja_trabajos()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var id = await Motor.CabeceraAsync(api, empresa, ct);
+        var vehiculos = Motor.Placas(2).Select(f => (string)f["identificador"]!).Select((placa, i) => new VehiculoDiagnostico
+        {
+            DiagnosticoId = id,
+            IdentificadorOriginal = placa,
+            IdentificadorNorm = placa,
+            TipoIdentificador = TipoIdentificador.PlacaCarro,
+            Placa = placa,
+            Orden = i + 1,
+        }).ToList();
+
+        var dentro = await EncolarEnScopeAsync(api, empresa, id, vehiculos, revertir: true, ct);
+
+        dentro.Should().Be(2, "dentro de la transacción la outbox tenía los dos trabajos");
+        (await OutboxDePrueba.TrabajosAsync(api, ct)).Should().BeEmpty();
+        (await Motor.EscalarAsync(api, "SELECT count(*) FROM diagnostico.consultas", ct)).Should().Be(0);
+    }
+
+    /// <summary>
+    /// Encola en un scope con la empresa fijada (como la confirmación: transacción dentro de la estrategia de Npgsql). Los
+    /// vehículos sin guardar se guardan antes; con <paramref name="revertir"/> la transacción se revierte. Devuelve las filas de
+    /// la outbox que se veían dentro de la transacción.
+    /// </summary>
+    private static async Task<int> EncolarEnScopeAsync(
+        ApiDePrueba api, EmpresaDePrueba empresa, Guid id, IReadOnlyList<VehiculoDiagnostico> vehiculos, bool revertir, CancellationToken ct)
+    {
+        await using var scope = OutboxDePrueba.Scope(api, empresa.Id);
+        var db = scope.ServiceProvider.GetRequiredService<DiagnosticoDb>();
+        var encolador = scope.ServiceProvider.GetRequiredService<IEncoladorConsultas>();
+        return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            await using var transaccion = await db.Database.BeginTransactionAsync(ct);
+            var nuevos = vehiculos.Where(v => !db.Set<VehiculoDiagnostico>().AsNoTracking().Any(g => g.Id == v.Id)).ToList();
+            if (nuevos.Count > 0)
+            {
+                db.AddRange(nuevos);
+                await db.SaveChangesAsync(ct);
+            }
+
+            await encolador.EncolarAsync(id, [.. vehiculos.Select(v => new VehiculoAEncolar(v.Id, v.IdentificadorNorm, v.TipoIdentificador))], ct);
+            var dentro = await db.Set<OutboxMessage>().CountAsync(m => m.Exchange == "flit.consultas", ct);
+            if (revertir)
+                await transaccion.RollbackAsync(ct);
+            else
+                await transaccion.CommitAsync(ct);
+            return dentro;
+        });
     }
 }

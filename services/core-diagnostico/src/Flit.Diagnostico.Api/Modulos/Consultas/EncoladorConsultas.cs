@@ -1,3 +1,4 @@
+using Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Api.Plataforma;
@@ -15,9 +16,12 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// F03-H4 cuando RUNT termina). Sube <c>diagnosticos.version_tablero</c> y la copia en las celdas nuevas. Pasa el lote de
 /// <c>CREADO</c> a <c>EN_PROCESO</c> con historial <c>AUTO</c> (<see cref="TransicionesLote"/>). Idempotente: una celda que
 /// ya existe (en cualquier estado, también <c>COMPLETADO</c> o <c>NA</c>) no se crea ni se reabre, y un lote que ya está en
-/// proceso no repite la transición. Escribe con el filtro de la empresa del contexto.
+/// proceso no repite la transición. Escribe con el filtro de la empresa del contexto. Desde ADR-0075 (HU #13727) deja además, en
+/// esa misma transacción, el trabajo de consulta de la celda RUNT de CADA vehículo nuevo en la outbox
+/// (<see cref="PublicadorCeldas"/>, <c>consultas.diagnostico[-express].runt</c>); las diferidas se publican al liberarse. Nadie lo
+/// consume todavía: el procesador de la cola sigue ejecutando la celda como siempre.
 /// </summary>
-internal sealed class EncoladorConsultas(DiagnosticoDb db, TimeProvider reloj) : IEncoladorConsultas
+internal sealed class EncoladorConsultas(DiagnosticoDb db, TimeProvider reloj, PublicadorCeldas publicador) : IEncoladorConsultas
 {
     /// <summary>
     /// <c>disponible_desde</c> de una celda que espera a la RUNT de su vehículo: fuera del alcance de la cola hasta que
@@ -60,6 +64,9 @@ internal sealed class EncoladorConsultas(DiagnosticoDb db, TimeProvider reloj) :
             foreach (var celda in nuevas)
                 celda.VersionTablero = cabecera.VersionTablero;
             db.AddRange(nuevas);
+            // ADR-0075: la RUNT de todos los vehículos nuevos sale ya; las demás esperan a que su RUNT las libere.
+            foreach (var celda in nuevas.Where(c => c.Fuente == Fuente.Runt))
+                await publicador.PublicarAsync(celda, ct).ConfigureAwait(false);
         }
 
         if (cabecera.Estado == EstadoDiagnostico.Creado)

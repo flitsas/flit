@@ -109,6 +109,17 @@ public static class Modulos
         services.TryAddSingleton<Consultas.IRegistroAdaptadores, Consultas.RegistroAdaptadores>();
         services.AddSingleton<Consultas.FuentesDisponibles>();
         services.AddTransient<Trabajos.ProcesadorConsultas>();
+        // ADR-0075 (HU #13727): un constructor del *Request por fuente y el publicador de celdas, que deja el trabajo en la outbox
+        // del scope (la del contexto con la empresa fijada por EmpresaDelTrabajo). Ningún consumidor se registra todavía.
+        services.AddScoped<Consultas.Bus.IConstructorSolicitud, Consultas.Bus.ConstructorSolicitudRunt>();
+        foreach (var fuente in new[] { Domain.Consultas.Fuente.RuntPropietario, Domain.Consultas.Fuente.RuntLocatario })
+            services.AddScoped<Consultas.Bus.IConstructorSolicitud>(sp => ActivatorUtilities.CreateInstance<Consultas.Bus.ConstructorSolicitudRuntPersona>(sp, fuente));
+        services.AddScoped<Consultas.Bus.IConstructorSolicitud, Consultas.Bus.ConstructorSolicitudSimitVehiculo>();
+        foreach (var fuente in new[] { Domain.Consultas.Fuente.SimitPropietario, Domain.Consultas.Fuente.SimitLocatario })
+            services.AddScoped<Consultas.Bus.IConstructorSolicitud>(sp => ActivatorUtilities.CreateInstance<Consultas.Bus.ConstructorSolicitudSimitPersona>(sp, fuente));
+        services.AddScoped<Consultas.Bus.IConstructorSolicitud, Consultas.Bus.ConstructorSolicitudAvaluo>();
+        services.AddScoped<Consultas.Bus.IConstructorSolicitud, Consultas.Bus.ConstructorSolicitudImpuesto>();
+        services.AddScoped<Consultas.Bus.PublicadorCeldas>();
         // HU #13737 (D-12): reintentos de transitorios, configuración global validada al arrancar en [0, 3].
         services.AddOptions<Consultas.OpcionesConsultas>()
             .Bind(configuration.GetSection(Consultas.OpcionesConsultas.Seccion))
