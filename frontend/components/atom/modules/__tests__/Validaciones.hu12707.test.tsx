@@ -269,12 +269,12 @@ describe('Administrador de Compañía — mismo alcance de hoy (AC8)', () => {
     expect(mocks.listTenantBiometricPersons).toHaveBeenCalledTimes(peticiones);
   });
 
-  it('AC9 — pie de Trámites: Filas por página 10/25/50/100 y «Mostrando X–Y de N»', async () => {
+  it('AC9 — pie de Trámites: Filas por página 10/20/30/50 (HU #13916) y «Mostrando X–Y de N»', async () => {
     renderValidaciones();
     await screen.findByText('Carolina Pérez');
 
     const select = screen.getByRole('combobox', { name: 'Filas por página' });
-    expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['10', '25', '50', '100']);
+    expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['10', '20', '30', '50']);
     expect(screen.getByText('Mostrando 1–1 de 1')).toBeInTheDocument();
   });
 

@@ -84,7 +84,7 @@ function LogsTab() {
   const [fromInput, setFromInput] = useState("");
   const [toInput, setToInput] = useState("");
   // Bug #13055 — paginación de servidor estándar, con «Filas por página».
-  const { page, pageSize, setPage, setPageSize } = usePaginacion();
+  const { page, pageSize, setPage, setPageSize } = usePaginacion("modulos.IctLogs");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [data, setData] = useState<IctLogEntry[]>([]);
   const [total, setTotal] = useState(0);
@@ -524,7 +524,7 @@ function IctAlertEventsList() {
   const [status, setStatus] = useState<UiStatus>("loading");
   const [acking, setAcking] = useState<string | null>(null);
   // Bug #13055 — la lista de eventos pagina en cliente (llegan hasta 50).
-  const pg = usePaginacion();
+  const pg = usePaginacion("modulos.IctLogs.lista");
 
   const tenantId = useMemo<string | undefined>(() => {
     if (typeof window === "undefined") return undefined;

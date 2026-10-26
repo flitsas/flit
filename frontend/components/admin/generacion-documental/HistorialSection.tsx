@@ -47,7 +47,7 @@ export function HistorialSection() {
   const [rows, setRows] = useState<StandaloneDocumentListItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   // Bug #13055: paginación estándar con «Filas por página» (10/25/50/100), de servidor.
-  const { page, pageSize, setPage, setPageSize } = usePaginacion();
+  const { page, pageSize, setPage, setPageSize } = usePaginacion("generacion-documental.HistorialSection");
   const [filters, setFilters] = useState<HistorialFiltersValue>(HISTORIAL_FILTERS_EMPTY);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);

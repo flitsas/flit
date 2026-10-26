@@ -9,8 +9,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { Check, Copy, KeyRound, LockOpen, Pencil, PlugZap, Power, RefreshCcw, X } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
+import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { RowActions, type RowAction } from "@/components/atom/RowActions";
 import { StatusBadge } from "@/components/atom/StatusBadge";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { formatFechaHora } from "@/lib/format/date";
 import {
   EXTERNAL_SCOPE_ATTACHMENTS,
@@ -26,9 +28,6 @@ import {
 import { ExternalClientActionDialog, type ExternalClientAction } from "./ExternalClientActionDialog";
 import { ExternalClientFormModal } from "./ExternalClientFormModal";
 
-const TH_CLS = "px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider";
-const TD_CLS = "px-4 py-3 align-top";
-
 function formatOptional(iso: string | null): string {
   return iso ? formatFechaHora(new Date(iso)) : "—";
 }
@@ -43,6 +42,8 @@ export function ExternalClientsPanel() {
   const [pending, setPending] = useState<ActionState>(null);
   const [revealed, setRevealed] = useState<{ clientId: string; secret: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  // HU #13918 — tabla estándar con paginación en cliente: el listado llega completo.
+  const pg = usePaginacion("users.ExternalClientsPanel");
 
   const load = useCallback(async () => {
     setStatus("loading");
@@ -132,6 +133,77 @@ export function ExternalClientsPanel() {
     return actions;
   }
 
+  const columns: DataTableColumn<ExternalClient>[] = [
+    {
+      key: "cliente",
+      header: "Cliente",
+      render: (c) => (
+        <>
+          <span className="block font-mono text-sm font-semibold">{c.clientId}</span>
+          <span className="block text-xs text-[#59677D] dark:text-white/70">{c.displayName}</span>
+        </>
+      ),
+    },
+    {
+      key: "finalidad",
+      header: "Finalidad",
+      cellClassName: "max-w-[280px] text-xs text-[#59677D] dark:text-white/78",
+      render: (c) => c.purpose,
+    },
+    {
+      key: "permisos",
+      header: "Permisos",
+      render: (c) => (
+        <div className="flex flex-wrap gap-1">
+          <StatusBadge label="Lectura" tone="info" ariaLabel="Permiso: lectura de trámites" />
+          {c.scopes.includes(EXTERNAL_SCOPE_PII) ? (
+            <StatusBadge label="Datos personales" tone="info" ariaLabel="Permiso: datos personales sin enmascarar" />
+          ) : (
+            <StatusBadge label="Enmascarado" tone="neutral" ariaLabel="Sin permiso de datos personales: llegan enmascarados" />
+          )}
+          {c.scopes.includes(EXTERNAL_SCOPE_ATTACHMENTS) && (
+            <StatusBadge label="Adjuntos" tone="info" ariaLabel="Permiso: envío de adjuntos" />
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "estado",
+      header: "Estado",
+      render: (c) => (
+        <div className="flex flex-wrap gap-1">
+          <StatusBadge label={c.isActive ? "Activo" : "Inactivo"} tone={c.isActive ? "success" : "neutral"} />
+          {isExternalClientLocked(c) && (
+            <StatusBadge
+              label={`Bloqueado hasta ${formatOptional(c.lockedUntil)}`}
+              tone="danger"
+              ariaLabel={`Bloqueado por intentos fallidos hasta ${formatOptional(c.lockedUntil)}`}
+            />
+          )}
+          {c.mustRotate && <StatusBadge label="Debe rotar" tone="warning" ariaLabel="Debe rotar el secreto" />}
+        </div>
+      ),
+    },
+    {
+      key: "ultimo-pase",
+      header: "Último pase",
+      cellClassName: "whitespace-nowrap text-xs",
+      render: (c) => formatOptional(c.lastTokenAt),
+    },
+    {
+      key: "alta",
+      header: "Alta",
+      cellClassName: "whitespace-nowrap text-xs",
+      render: (c) => formatOptional(c.createdAt),
+    },
+    {
+      key: "acciones",
+      header: "Acciones",
+      align: "right",
+      render: (c) => <RowActions actions={actionsFor(c)} />,
+    },
+  ];
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -198,70 +270,19 @@ export function ExternalClientsPanel() {
         onRetry={() => void load()}
         skeletonRows={3}
       >
-        <div className="overflow-x-auto rounded-[18px] border border-[#DFE5ED] bg-white dark:border-white/10 dark:bg-[#162744]">
-          <table className="w-full text-sm">
-            <caption className="sr-only">Clientes de integración externos</caption>
-            <thead className="bg-[#DFE5ED] text-flit-primary dark:bg-white/6 dark:text-white/72">
-              <tr>
-                <th scope="col" className={TH_CLS}>Cliente</th>
-                <th scope="col" className={TH_CLS}>Finalidad</th>
-                <th scope="col" className={TH_CLS}>Permisos</th>
-                <th scope="col" className={TH_CLS}>Estado</th>
-                <th scope="col" className={TH_CLS}>Último pase</th>
-                <th scope="col" className={TH_CLS}>Alta</th>
-                <th scope="col" className={`${TH_CLS} text-right`}>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {clients.map((c) => {
-                const locked = isExternalClientLocked(c);
-                return (
-                  <tr
-                    key={c.id}
-                    className="border-t border-[#DFE5ED] text-flit-primary hover:bg-[#F4F8FF] dark:border-white/10 dark:text-white dark:hover:bg-white/4"
-                  >
-                    <td className={TD_CLS}>
-                      <span className="block font-mono text-sm font-semibold">{c.clientId}</span>
-                      <span className="block text-xs text-[#59677D] dark:text-white/70">{c.displayName}</span>
-                    </td>
-                    <td className={`${TD_CLS} max-w-[280px] text-xs text-[#59677D] dark:text-white/78`}>{c.purpose}</td>
-                    <td className={TD_CLS}>
-                      <div className="flex flex-wrap gap-1">
-                        <StatusBadge label="Lectura" tone="info" ariaLabel="Permiso: lectura de trámites" />
-                        {c.scopes.includes(EXTERNAL_SCOPE_PII) ? (
-                          <StatusBadge label="Datos personales" tone="info" ariaLabel="Permiso: datos personales sin enmascarar" />
-                        ) : (
-                          <StatusBadge label="Enmascarado" tone="neutral" ariaLabel="Sin permiso de datos personales: llegan enmascarados" />
-                        )}
-                        {c.scopes.includes(EXTERNAL_SCOPE_ATTACHMENTS) && (
-                          <StatusBadge label="Adjuntos" tone="info" ariaLabel="Permiso: envío de adjuntos" />
-                        )}
-                      </div>
-                    </td>
-                    <td className={TD_CLS}>
-                      <div className="flex flex-wrap gap-1">
-                        <StatusBadge label={c.isActive ? "Activo" : "Inactivo"} tone={c.isActive ? "success" : "neutral"} />
-                        {locked && (
-                          <StatusBadge
-                            label={`Bloqueado hasta ${formatOptional(c.lockedUntil)}`}
-                            tone="danger"
-                            ariaLabel={`Bloqueado por intentos fallidos hasta ${formatOptional(c.lockedUntil)}`}
-                          />
-                        )}
-                        {c.mustRotate && <StatusBadge label="Debe rotar" tone="warning" ariaLabel="Debe rotar el secreto" />}
-                      </div>
-                    </td>
-                    <td className={`${TD_CLS} whitespace-nowrap text-xs`}>{formatOptional(c.lastTokenAt)}</td>
-                    <td className={`${TD_CLS} whitespace-nowrap text-xs`}>{formatOptional(c.createdAt)}</td>
-                    <td className={`${TD_CLS} text-right`}>
-                      <RowActions actions={actionsFor(c)} />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <DataTable<ExternalClient>
+          ariaLabel="Clientes de integración externos"
+          columns={columns}
+          rows={pg.paginar(clients)}
+          getRowKey={(c) => c.id}
+          pagination={{
+            page: pg.page,
+            pageSize: pg.pageSize,
+            totalCount: clients.length,
+            onPageChange: pg.setPage,
+            onPageSizeChange: pg.setPageSize,
+          }}
+        />
       </UiStateBoundary>
 
       {form && (
@@ -271,6 +292,7 @@ export function ExternalClientsPanel() {
           onCreate={async (body) => {
             const res = await createExternalClient(body);
             setClients((prev) => [res.client, ...prev]);
+            pg.setPage(1); // el cliente nuevo queda arriba: se muestra la primera página
             setStatus("ready");
             setForm(null);
             reveal(res.client.clientId, res.clientSecret);

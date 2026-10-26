@@ -124,7 +124,7 @@ export function TransitOfficesList({ onCreateTenant }: TransitOfficesListProps =
 
   // Bug #13055 — tabla homologada con el modelo de trámites: paginación en cliente con filas por
   // página; al cambiar cualquier filtro se vuelve a la página 1.
-  const pg = usePaginacion();
+  const pg = usePaginacion("transit-offices.TransitOfficesList");
   const { setPage } = pg;
   useEffect(() => {
     setPage(1);

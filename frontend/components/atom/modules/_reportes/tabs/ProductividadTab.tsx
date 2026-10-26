@@ -5,10 +5,10 @@
 // y comparativa entre operadores con barras agrupadas (Recharts).
 import { useMemo } from "react";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Pagination } from "@/components/atom/Pagination";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { fetchNetworkTopProducers, fetchTopProducers } from "@/lib/api/analytics";
+import type { TopProducer } from "@/lib/api/types";
 import type { NetworkChildOption } from "@/hooks/useNetworkScope";
 import { NetworkScopeBadge } from "@/components/operacion/NetworkScopeBadge";
 import type { NetworkScopePreference } from "@/lib/tramites/network-scope";
@@ -16,14 +16,40 @@ import { toMetricsParams, type ReportFilters } from "../filters";
 import { formatInt, formatPct } from "../format";
 import { ProductivityCards } from "../ProductivityCards";
 import { useAnalyticsQuery } from "../useAnalyticsQuery";
-import {
-  CARDLIST_CELL,
-  CARDLIST_HEAD_ROW,
-  CARDLIST_ROW,
-  CARDLIST_SCROLL,
-  CARDLIST_TABLE,
-  CARDLIST_TH,
-} from "@/components/atom/table-cardlist";
+import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+
+// HU #13923 — fila del detalle por operador: el número de orden depende de la página, así que se
+// calcula al paginar y viaja con la fila.
+type OperadorFila = TopProducer & { n: number };
+
+const OPERADOR_COLUMNS: DataTableColumn<OperadorFila>[] = [
+  { key: "n", header: "#", cellClassName: "opacity-60", render: (p) => p.n },
+  { key: "operador", header: "Operador", cellClassName: "font-medium", render: (p) => p.displayName },
+  { key: "enviados", header: "Enviados", render: (p) => formatInt(p.submittedCount) },
+  {
+    key: "aprobados",
+    header: "Aprobados",
+    render: (p) => <span style={{ color: "#8CC63F" }}>{formatInt(p.approvedCount)}</span>,
+  },
+  {
+    key: "rechazados",
+    header: "Rechazados",
+    render: (p) => <span style={{ color: p.rejectedCount > 0 ? "#FF4E00" : undefined }}>{formatInt(p.rejectedCount)}</span>,
+  },
+  {
+    key: "aprobacion",
+    header: "% aprobación",
+    render: (p) => {
+      const decided = p.approvedCount + p.rejectedCount;
+      const approvalPct = decided > 0 ? (p.approvedCount / decided) * 100 : null;
+      return (
+        <span title="Aprobados / (aprobados + rechazados) × 100; — si aún no hay decisiones.">
+          {formatPct(approvalPct)}
+        </span>
+      );
+    },
+  },
+];
 
 const DETAIL_LIMIT = 100;
 const CHART_LIMIT = 10;
@@ -53,7 +79,7 @@ export function ProductividadTab({ filters, networkScope, networkChildren = [] }
 
   const items = useMemo(() => producers.data?.items ?? [], [producers.data]);
   // Bug #13055 — el detalle por operador puede llegar a 100 filas: paginación en cliente.
-  const pg = usePaginacion();
+  const pg = usePaginacion("tabs.ProductividadTab");
   const ultimaPagina = Math.max(1, Math.ceil(items.length / pg.pageSize));
   const paginaActual = Math.min(pg.page, ultimaPagina);
   const inicioPagina = (paginaActual - 1) * pg.pageSize;
@@ -124,52 +150,22 @@ export function ProductividadTab({ filters, networkScope, networkChildren = [] }
               Detalle por operador ({formatInt(items.length)})
             </h2>
             {/* Bug #13055 — tabla homologada con el modelo de trámites (sin tarjeta envolvente). */}
-            <div className={CARDLIST_SCROLL}>
-              <table className={CARDLIST_TABLE} data-testid="operadores-table" aria-labelledby="detalle-operadores-title">
-                <thead>
-                  <tr className={CARDLIST_HEAD_ROW}>
-                    <th scope="col" className={CARDLIST_TH}>#</th>
-                    <th scope="col" className={CARDLIST_TH}>Operador</th>
-                    <th scope="col" className={CARDLIST_TH}>Enviados</th>
-                    <th scope="col" className={CARDLIST_TH}>Aprobados</th>
-                    <th scope="col" className={CARDLIST_TH}>Rechazados</th>
-                    <th scope="col" className={CARDLIST_TH}>% aprobación</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pg.paginar(items).map((p, i) => {
-                    const decided = p.approvedCount + p.rejectedCount;
-                    const approvalPct = decided > 0 ? (p.approvedCount / decided) * 100 : null;
-                    return (
-                      <tr key={p.userId} className={CARDLIST_ROW}>
-                        <td className={`${CARDLIST_CELL} opacity-60`}>{inicioPagina + i + 1}</td>
-                        <td className={`${CARDLIST_CELL} font-medium`}>{p.displayName}</td>
-                        <td className={CARDLIST_CELL}>{formatInt(p.submittedCount)}</td>
-                        <td className={CARDLIST_CELL} style={{ color: "#8CC63F" }}>{formatInt(p.approvedCount)}</td>
-                        <td className={CARDLIST_CELL} style={{ color: p.rejectedCount > 0 ? "#FF4E00" : undefined }}>
-                          {formatInt(p.rejectedCount)}
-                        </td>
-                        <td
-                          className={CARDLIST_CELL}
-                          title="Aprobados / (aprobados + rechazados) × 100; — si aún no hay decisiones."
-                        >
-                          {formatPct(approvalPct)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div data-testid="operadores-table">
+              <DataTable
+                columns={OPERADOR_COLUMNS}
+                rows={pg.paginar(items).map((p, i) => ({ ...p, n: inicioPagina + i + 1 }))}
+                getRowKey={(p) => p.userId}
+                ariaLabel="Detalle por operador"
+                emptyMessage="Sin operadores con actividad en el periodo."
+                pagination={{
+                  page: paginaActual,
+                  pageSize: pg.pageSize,
+                  totalCount: items.length,
+                  onPageChange: pg.setPage,
+                  onPageSizeChange: pg.setPageSize,
+                }}
+              />
             </div>
-            <Pagination
-              page={paginaActual}
-              pageSize={pg.pageSize}
-              totalCount={items.length}
-              onPageChange={pg.setPage}
-              onPageSizeChange={pg.setPageSize}
-              ariaLabel="Paginación del detalle por operador"
-              noun="operadores"
-            />
           </section>
         </div>
       </UiStateBoundary>

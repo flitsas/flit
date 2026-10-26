@@ -35,7 +35,6 @@ export interface DataTablePagination {
   pageSize: number;
   totalCount: number;
   onPageChange: (page: number) => void;
-  pageSizeOptions?: readonly number[];
   onPageSizeChange?: (pageSize: number) => void;
 }
 
@@ -151,7 +150,6 @@ export function DataTable<T>({
           pageSize={pagination.pageSize}
           totalCount={pagination.totalCount}
           onPageChange={pagination.onPageChange}
-          pageSizeOptions={pagination.pageSizeOptions}
           onPageSizeChange={pagination.onPageSizeChange}
           ariaLabel={ariaLabel ? `Paginación de ${ariaLabel.toLowerCase()}` : undefined}
           className="mt-auto"

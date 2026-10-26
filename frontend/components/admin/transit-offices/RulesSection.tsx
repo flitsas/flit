@@ -27,7 +27,7 @@ export function RulesSection({ transitOfficeId }: RulesSectionProps = {}) {
   const [editingRule, setEditingRule] = useState<OtRule | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   // Bug #13055 — tabla homologada con el modelo de trámites: paginación en cliente con filas por página.
-  const pg = usePaginacion();
+  const pg = usePaginacion("transit-offices.RulesSection");
 
   // HU #12854 (backend) / HU #12856 — Reglas resuelve el organismo por ?transitOfficeId cuando
   // el caller es Super Admin (mismo patrón que RequirementsSection).
