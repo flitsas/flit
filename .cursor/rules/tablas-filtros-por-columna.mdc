@@ -1,47 +1,50 @@
 ---
-description: Toda tabla de registros nueva o modificada filtra por columna con el componente genérico TablaFiltrosBar (estándar de Trámites)
+description: Toda tabla de registros nueva o modificada filtra por columna desde el encabezado (EncabezadoFiltrable) y conserva arriba sus filtros de consulta propios
 globs: frontend/**/*.tsx
 alwaysApply: false
 ---
 
 # Filtros por columna en tablas (HU #14007 · Feature #13996 · Épica #13514)
 
-Decisión del usuario: todos los filtros de tablas de FLIT se ven y funcionan igual. El estándar es la
-barra de Trámites, extraída al componente genérico de la HU #13997. No se vuelve a decidir por tabla.
+Decisión del usuario (al probar la épica, 2026-10-26): **cada columna despliega su propio filtro desde
+su encabezado**, y **arriba de la tabla se quedan los filtros de consulta que la pantalla ya tenía**
+(su panel, su buscador o sus selectores). Ambos se combinan. No se vuelve a decidir por tabla.
 
 ## Regla
 
-Toda tabla cuyas filas salen de una colección (el mismo criterio que la paginación estándar) usa
-`TablaFiltrosBar` (`@/components/atom/TablaFiltrosBar`) con `useTablaFiltros`
-(`@/lib/tablas/useTablaFiltros`) cuando se **crea** o se **modifica**:
+Toda tabla cuyas filas salen de una colección (el mismo criterio que la paginación estándar), cuando
+se **crea** o se **modifica**:
 
 | Pieza | Cómo |
 |---|---|
-| Forma | Una línea encima de la tabla: buscador (opcional) · Periodo · «+ Filtro» · Columnas · acciones |
-| Columnas filtrables | **Una condición por cada columna con datos.** Nunca la columna «Acciones» |
-| Tipo de filtro | Texto → «contiene» (sin mayúsculas, tildes, puntos ni espacios) · estado, tipo o catálogo → selección (varias opciones = OR) · fecha → Periodo (si hay varias fechas, `periodoColumnaId` elige una; las demás son rango en «+ Filtro») |
-| Opciones de selección | Salen de la **misma** función que pinta la celda: el filtro ofrece exactamente lo que el usuario ve |
-| Combinación | Todas las condiciones a la vez (AND). Aplicar o limpiar vuelve a la página 1 (`onCambio`) |
+| Filtro por columna | `EncabezadoFiltrable` (`@/components/atom/FiltroColumna`, reexportado en `@/components/atom/TablaFiltrosBar`) dentro de cada `<th>` o como `header` de `DataTable`, con el estado de `useTablaFiltros` (`@/lib/tablas/useTablaFiltros`) |
+| Qué columnas | **Todas las columnas con datos.** Nunca la columna «Acciones» |
+| Tipo de filtro | Texto → «contiene» (sin mayúsculas, tildes, puntos ni espacios) · estado, tipo o catálogo → casillas (varias = OR) · fecha → Periodo (Hoy, Últimos 7/30/90 días, Mes actual, Mes anterior, Rango propio) |
+| Opciones de casillas | Salen de la **misma** función que pinta la celda: el filtro ofrece exactamente lo que el usuario ve |
+| Estado activo | El embudo se pinta en azul cuando su columna tiene un filtro |
+| Filtros de arriba | Se **conservan** los filtros de consulta propios de la pantalla (panel, buscador, selectores). Una tabla nueva puede tener o no un buscador arriba; los filtros por columna son obligatorios |
+| Combinación | Filtros de arriba y de columnas a la vez (AND). Si ambos fijan el mismo parámetro de API, gana la columna. Aplicar o quitar vuelve a la página 1 (`onCambio`) |
 | Sin resultados | `TablaFiltrosVacio` («Ningún registro coincide con los filtros» + «Limpiar filtros») |
 | Cliente o servidor | Si la tabla tiene todas las filas en memoria: `filtrarFilas`. Si pagina en servidor: `condicionesAParams` y el filtro va a la API (nunca filtrar solo la página cargada) |
 | Contadores | Los avisos del tipo «N sin firma» cuentan sobre TODOS los registros, no sobre los filtrados |
 
-Prohibido: un panel de filtros propio, un buscador único como único filtro, selects sueltos encima de
-la tabla o copiar el código de `TramitesFiltrosBar` / `ValidacionesFiltrosBar`.
+Prohibido: filtros por columna hechos a mano (inputs sueltos en la cabecera, selects propios por
+columna) o copiar el código de `FiltroColumna`.
 
 ## Excepción
 
 La misma que la paginación: una ficha de pares fijos campo/valor (su `<tbody>` no recorre ninguna
 colección) no lleva filtros. Una columna que la API no permite filtrar en una tabla paginada en
-servidor se deja sin filtro y se anota en la HU (no se filtra solo la página visible).
+servidor se deja sin embudo y se anota en la HU (no se filtra solo la página visible).
 
 ## Tablas existentes
 
-Las tablas de otros módulos que hoy tienen filtros propios (Trámites, Validaciones, Auditoría global,
-historiales, reportes…) se pasan al estándar **cuando una HU las toque**; no se migran en bloque sin HU.
+Las tablas de otros módulos se pasan al estándar **cuando una HU las toque**; no se migran en bloque
+sin HU. Al migrar, sus filtros de arriba se conservan tal cual.
 
 ## Verificación
 
 - El `code-review-agent` lo revisa en su dimensión (9) «Estándar de tablas»: una tabla nueva o
-  modificada sin `TablaFiltrosBar` y sin la excepción justificada es hallazgo citando esta regla.
+  modificada sin `EncabezadoFiltrable` en sus columnas con datos y sin la excepción justificada es
+  hallazgo citando esta regla.
 - La regla de diseño vive también en `flit-design-guardian/references/prototype_rules.md` (fila «Filtros»).

@@ -104,7 +104,7 @@ Invoca la skill `db-schema-validator` y trata `BLOCKED` como **BLOQUEANTE** (�
 
 **(9) Estándar de tablas** *(solo si el PR crea o modifica una tabla de registros en `frontend/`)*
 Contra `.cursor/rules/tablas-filtros-por-columna.mdc` y la sección de tablas de `flit-design-guardian/references/prototype_rules.md`:
-la tabla usa `TablaFiltrosBar` con una condición por cada columna con datos (no «Acciones»), opciones de selección iguales a lo que pinta la celda, `TablaFiltrosVacio` sin resultados y, si pagina en servidor, el filtro llega a la API. Una tabla nueva o modificada sin el estándar y sin la excepción justificada (ficha fija campo/valor, o columna que la API no filtra anotada en la HU) es **BLOQUEANTE** (🚫) citando la regla; una columna sin filtro es observación (💡).
+cada columna con datos (no «Acciones») lleva `EncabezadoFiltrable` en su encabezado, las opciones de casillas son iguales a lo que pinta la celda, los filtros de consulta propios de la pantalla siguen arriba, `TablaFiltrosVacio` aparece sin resultados y, si pagina en servidor, el filtro llega a la API. Una tabla nueva o modificada sin el estándar y sin la excepción justificada (ficha fija campo/valor, o columna que la API no filtra anotada en la HU) es **BLOQUEANTE** (🚫) citando la regla; una columna sin filtro es observación (💡).
 
 ### Paso 4 — Comentario consolidado
 
