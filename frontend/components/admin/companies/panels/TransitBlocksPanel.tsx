@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Ban, Search } from "lucide-react";
+import { Ban } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { RowActions } from "@/components/atom/RowActions";
@@ -9,6 +9,7 @@ import { usePaginacion } from "@/components/atom/usePaginacion";
 import { useToast } from "@/components/admin/Toast";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { StatusBadge } from "@/components/atom/StatusBadge";
+import { TablaFiltrosBar, TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
 import { OtScopeConfirmDialog } from "@/components/admin/companies/OtScopeConfirmDialog";
 import {
   addTransitBlock,
@@ -22,6 +23,8 @@ import {
 } from "@/lib/api/admin-transit-office-tenants";
 import type { TransitOffice } from "@/lib/api/types";
 import { ApiValidationError } from "@/lib/api/types";
+import { COLUMNAS_FILTRO_BLOQUEOS, filtrarBloqueos } from "@/lib/companies/ot-config-filtros";
+import { useTablaFiltros } from "@/lib/tablas/useTablaFiltros";
 
 type PendingAction = {
   office: TransitOffice;
@@ -46,9 +49,13 @@ export function TransitBlocksPanel({
   const [operationalById, setOperationalById] = useState<
     Record<string, { hasTenant: boolean; estadoActivo: boolean | null }>
   >({});
-  const [search, setSearch] = useState("");
   // Bug #13055 — tabla homologada con el modelo de trámites: filas por página elegibles.
   const pg = usePaginacion("panels.TransitBlocksPanel");
+  // HU #14003 — filtros por columna (Organismo, Código, Estado en red).
+  const filtros = useTablaFiltros({
+    columnas: COLUMNAS_FILTRO_BLOQUEOS,
+    onCambio: () => pg.setPage(1),
+  });
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -95,13 +102,16 @@ export function TransitBlocksPanel({
     [offices, operationalById],
   );
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return operableOffices;
-    return operableOffices.filter(
-      (o) => o.name.toLowerCase().includes(q) || o.code.toLowerCase().includes(q),
-    );
-  }, [operableOffices, search]);
+  const filtered = useMemo(
+    () =>
+      filtrarBloqueos(
+        operableOffices,
+        filtros.condicionesTotales,
+        filtros.busqueda,
+        new Set(blockedIds),
+      ),
+    [operableOffices, filtros.condicionesTotales, filtros.busqueda, blockedIds],
+  );
 
   const lastPage = Math.max(1, Math.ceil(filtered.length / pg.pageSize));
   const safePage = Math.min(pg.page, lastPage);
@@ -120,7 +130,9 @@ export function TransitBlocksPanel({
     setBusy(true);
     const prev = blockedIds;
     setBlockedIds((current) =>
-      enable ? Array.from(new Set([...current, office.id])) : current.filter((id) => id !== office.id),
+      enable
+        ? Array.from(new Set([...current, office.id]))
+        : current.filter((id) => id !== office.id),
     );
     try {
       if (enable) {
@@ -130,11 +142,9 @@ export function TransitBlocksPanel({
       }
     } catch (err) {
       setBlockedIds(prev);
-      const serverMessage =
-        err instanceof ApiValidationError ? err.errors[0]?.message : undefined;
+      const serverMessage = err instanceof ApiValidationError ? err.errors[0]?.message : undefined;
       show(
-        serverMessage ??
-          `No se pudo ${enable ? "bloquear" : "desbloquear"} ${office.name}.`,
+        serverMessage ?? `No se pudo ${enable ? "bloquear" : "desbloquear"} ${office.name}.`,
         "error",
       );
     } finally {
@@ -165,7 +175,9 @@ export function TransitBlocksPanel({
               label={blocked ? "Bloqueado" : "Disponible"}
               tone={blocked ? "warning" : "success"}
             />
-            <span className="sr-only">{blocked ? "Bloqueado para la red" : "Disponible para radicar"}</span>
+            <span className="sr-only">
+              {blocked ? "Bloqueado para la red" : "Disponible para radicar"}
+            </span>
           </div>
         );
       },
@@ -201,8 +213,8 @@ export function TransitBlocksPanel({
           <div>
             <h4 className="text-sm font-semibold">Organismos bloqueados (Marca Blanca)</h4>
             <p className="mt-0.5 text-xs opacity-60">
-              Excluye organismos de la red: la cabeza y sus clientes hijos dejan de verlos al radicar.
-              Solo aplica a compañías Marca Blanca.
+              Excluye organismos de la red: la cabeza y sus clientes hijos dejan de verlos al
+              radicar. Solo aplica a compañías Marca Blanca.
             </p>
           </div>
         </div>
@@ -210,46 +222,41 @@ export function TransitBlocksPanel({
         {status === "loading" ? (
           <CarLoaderModal label="Cargando bloqueos de organismos…" />
         ) : (
-        <UiStateBoundary
-          status={status === "ready" && operableOffices.length === 0 ? "empty" : status}
-          onRetry={() => void load()}
-          emptyMessage="No hay organismos operativos en la plataforma."
-          errorMessage="No se pudieron cargar los bloqueos de organismos."
-          skeletonRows={3}
-        >
-          <div className="flex max-w-md items-center gap-2 rounded-xl border bg-white p-2.5 focus-within:outline focus-within:outline-2 focus-within:outline-flit-brand dark:bg-[#0B0F14]">
-            <Search className="h-4 w-4 opacity-60" aria-hidden />
-            <label htmlFor="ot-blocks-search" className="sr-only">
-              Buscar organismo de tránsito
-            </label>
-            <input
-              id="ot-blocks-search"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                pg.setPage(1);
+          <UiStateBoundary
+            status={status === "ready" && operableOffices.length === 0 ? "empty" : status}
+            onRetry={() => void load()}
+            emptyMessage="No hay organismos operativos en la plataforma."
+            errorMessage="No se pudieron cargar los bloqueos de organismos."
+            skeletonRows={3}
+          >
+            <TablaFiltrosBar
+              filtros={filtros}
+              buscador={{
+                placeholder: "Buscar por nombre o código…",
+                ariaLabel: "Buscar organismo de tránsito",
               }}
-              placeholder="Buscar por nombre o código…"
-              className="flex-1 bg-transparent text-xs outline-none"
             />
-          </div>
 
-          <DataTable
-            columns={columns}
-            rows={pageRows}
-            getRowKey={(office) => office.id}
-            emptyMessage="Ningún organismo coincide con la búsqueda."
-            ariaLabel="Bloqueos de organismos de tránsito"
-            minWidth={560}
-            pagination={{
-              page: safePage,
-              pageSize: pg.pageSize,
-              totalCount: filtered.length,
-              onPageChange: pg.setPage,
-              onPageSizeChange: pg.setPageSize,
-            }}
-          />
-        </UiStateBoundary>
+            {filtros.hayFiltros && filtered.length === 0 ? (
+              <TablaFiltrosVacio onLimpiar={filtros.limpiar} />
+            ) : (
+              <DataTable
+                columns={columns}
+                rows={pageRows}
+                getRowKey={(office) => office.id}
+                emptyMessage="Ningún organismo coincide con la búsqueda."
+                ariaLabel="Bloqueos de organismos de tránsito"
+                minWidth={560}
+                pagination={{
+                  page: safePage,
+                  pageSize: pg.pageSize,
+                  totalCount: filtered.length,
+                  onPageChange: pg.setPage,
+                  onPageSizeChange: pg.setPageSize,
+                }}
+              />
+            )}
+          </UiStateBoundary>
         )}
       </section>
 
