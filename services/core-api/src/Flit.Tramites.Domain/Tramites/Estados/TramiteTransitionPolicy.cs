@@ -28,10 +28,11 @@ public sealed record TramiteTransitionVerdict(string? ErrorCode, string? Detail)
 public static class TramiteTransitionPolicy
 {
     /// <summary>
-    /// Estado al que aterriza una RADICACIÓN (desde <c>preparado</c> o re-radicación desde
-    /// <c>rechazado</c>): la Ruta Larga (tipo pide placa y no la tiene) entra por
+    /// Estado al que aterriza una RADICACIÓN del canal gestor/OT (desde <c>preparado</c> o
+    /// re-radicación desde <c>rechazado</c>): la Ruta Larga (tipo pide placa y no la tiene) entra por
     /// <see cref="TramiteEstado.Preasignacion"/>; todo lo demás por <see cref="TramiteEstado.Entregado"/>.
-    /// Es el mismo predicado que <see cref="Evaluate"/> usa para vetar el destino contrario.
+    /// El canal Quipux NO usa este destino: el submit deja el trámite en <c>preparado</c> para que el
+    /// worker encole (Bug #13912).
     /// </summary>
     public static string DestinoDeRadicacion(TransitionContext context)
     {
@@ -64,6 +65,8 @@ public static class TramiteTransitionPolicy
                 EvaluarRadicacionSinPlaca(context),
             (TramiteEstado.Preparado or TramiteEstado.Rechazado, TramiteEstado.Entregado) =>
                 EvaluarRadicacionAEntregado(context),
+            (TramiteEstado.Rechazado, TramiteEstado.Preparado) =>
+                EvaluarReaperturaQuipux(context),
             (TramiteEstado.Preasignacion, TramiteEstado.Asignado) => EvaluarAsignacionDePlaca(context),
             (TramiteEstado.Preasignacion, TramiteEstado.Rechazado) => SoloOt(context, "rechazar en preasignación"),
             (TramiteEstado.Asignado, TramiteEstado.Preasignacion) => SoloOt(context, "liberar la placa"),
@@ -73,7 +76,14 @@ public static class TramiteTransitionPolicy
     }
 
     private static bool EsReRadicacion(string? to) =>
-        to is TramiteEstado.Entregado or TramiteEstado.Preasignacion;
+        to is TramiteEstado.Entregado or TramiteEstado.Preasignacion or TramiteEstado.Preparado;
+
+    /// <summary>
+    /// Re-radicación Quipux: <c>rechazado → preparado</c> para que el worker vuelva a encolar.
+    /// Exige gestor + subsanación (ya validada arriba).
+    /// </summary>
+    private static TramiteTransitionVerdict EvaluarReaperturaQuipux(TransitionContext context) =>
+        SoloGestor(context, "reabrir a preparado (canal Quipux)");
 
     private static bool RadicaSinPlaca(TransitionContext context) =>
         context.RequiresPlateRequest && !context.HasPlate;
