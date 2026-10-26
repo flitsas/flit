@@ -825,7 +825,9 @@ public static class AdminCompaniesEndpoints
         [FromQuery] DateOnly? fechaHasta = null,
         [FromQuery] string? campo = null,
         [FromQuery] string? valorAnterior = null,
-        [FromQuery] string? operador = null)
+        [FromQuery] string? operador = null,
+        [FromQuery] string? campoClaves = null,
+        [FromQuery] string? valorAnteriorAlternativas = null)
     {
         return await TenantAuditLogResponses.ExecuteAsync(
             handler,
@@ -839,6 +841,8 @@ public static class AdminCompaniesEndpoints
                 Campo = campo,
                 ValorAnterior = valorAnterior,
                 Operador = operador,
+                CampoClaves = campoClaves,
+                ValorAnteriorAlternativas = valorAnteriorAlternativas,
             },
             cancellationToken).ConfigureAwait(false);
     }

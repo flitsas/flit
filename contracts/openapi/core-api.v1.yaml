@@ -4601,6 +4601,20 @@ paths:
           required: false
           schema: { type: string }
           description: Valor anterior (contiene, sin distinguir mayúsculas).
+        - name: campoClaves
+          in: query
+          required: false
+          schema: { type: string }
+          description: >-
+            Claves técnicas separadas por comas (máx. 50, 422 si se excede). Se suman por OR a `campo`:
+            coincide si lower(fieldName) o lower(entityName) es igual a alguna. Vacías se ignoran.
+        - name: valorAnteriorAlternativas
+          in: query
+          required: false
+          schema: { type: string }
+          description: >-
+            Textos alternativos separados por comas (máx. 50, 422 si se excede). Se suman por OR a
+            `valorAnterior` (contiene, sin distinguir mayúsculas).
         - name: operador
           in: query
           required: false

@@ -21,6 +21,12 @@ public sealed class GetTenantAuditLogQuery
     /// <summary>Valor anterior (contiene, sin distinguir mayúsculas).</summary>
     public string? ValorAnterior { get; init; }
 
+    /// <summary>Claves técnicas de campo separadas por comas; se suman por OR a <see cref="Campo"/> (coincidencia exacta).</summary>
+    public string? CampoClaves { get; init; }
+
+    /// <summary>Textos alternativos separados por comas; se suman por OR a <see cref="ValorAnterior"/> (contiene).</summary>
+    public string? ValorAnteriorAlternativas { get; init; }
+
     /// <summary>Operador: id de usuario, nombre o correo (contiene, sin distinguir mayúsculas).</summary>
     public string? Operador { get; init; }
 }
