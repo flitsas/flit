@@ -85,13 +85,15 @@ const TABLA = { name: "Mandatarios de la compañía" };
 const filas = () =>
   screen.queryAllByText(/^Mandatario (Ana|Beto|Carla)$/).map((e) => e.textContent);
 
+const abrir = (user: ReturnType<typeof userEvent.setup>, columna: string) =>
+  user.click(screen.getByRole("button", { name: new RegExp(`^Filtrar por ${columna}`) }));
+
 async function filtrarSeleccion(
   user: ReturnType<typeof userEvent.setup>,
   columna: string,
   opcion: string,
 ) {
-  await user.click(screen.getByRole("button", { name: /\+ filtro/i }));
-  await user.click(screen.getByRole("button", { name: columna }));
+  await abrir(user, columna);
   await user.click(screen.getByRole("checkbox", { name: opcion }));
   await user.click(screen.getByRole("button", { name: "Aplicar" }));
 }
@@ -102,28 +104,35 @@ beforeEach(() => {
 });
 
 describe("HU #14002 — filtros por columna en Mandatarios", () => {
-  it("AC1: el buscador único se reemplaza por la barra estándar y ofrece las 6 columnas", async () => {
-    const user = userEvent.setup();
+  it("AC1: conserva el buscador de arriba y pone un embudo en las 6 columnas (sin Acciones)", async () => {
     renderPanel();
     await screen.findByRole("table", TABLA);
-    expect(screen.queryByRole("textbox", { name: "Buscar mandatarios" })).not.toBeInTheDocument();
-    expect(screen.getByRole("searchbox", { name: "Buscar mandatarios" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /\+ filtro/i }));
+    expect(screen.getByRole("textbox", { name: "Buscar mandatarios" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "+ Filtro" })).not.toBeInTheDocument();
     for (const c of ["Mandatario", "Documento", "Modelo", "Vigencia", "Validación", "Organismos"]) {
-      expect(screen.getByRole("button", { name: c })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: `Filtrar por ${c}` })).toBeInTheDocument();
     }
-    expect(screen.queryByRole("button", { name: "Acciones" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Filtrar por Acciones/ })).not.toBeInTheDocument();
   });
 
   it("AC1: filtra por texto en Documento", async () => {
     const user = userEvent.setup();
     renderPanel();
     await screen.findByRole("table", TABLA);
-    await user.click(screen.getByRole("button", { name: /\+ filtro/i }));
-    await user.click(screen.getByRole("button", { name: "Documento" }));
+    await abrir(user, "Documento");
     await user.type(screen.getByLabelText(/documento contiene/i), "222");
     await user.click(screen.getByRole("button", { name: "Aplicar" }));
     expect(filas()).toEqual(["Mandatario Beto"]);
+  });
+
+  it("AC1: filtra por texto en Mandatario", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    await screen.findByRole("table", TABLA);
+    await abrir(user, "Mandatario");
+    await user.type(screen.getByLabelText(/mandatario contiene/i), "carla");
+    await user.click(screen.getByRole("button", { name: "Aplicar" }));
+    expect(filas()).toEqual(["Mandatario Carla"]);
   });
 
   it("AC1: filtra por Modelo, Vigencia y Validación con lo que muestra la tabla", async () => {
@@ -132,19 +141,19 @@ describe("HU #14002 — filtros por columna en Mandatarios", () => {
     await screen.findByRole("table", TABLA);
     await filtrarSeleccion(user, "Modelo", "Persona jurídica");
     expect(filas()).toEqual(["Mandatario Beto"]);
-    await user.click(screen.getByRole("button", { name: /\+ filtro/i }));
-    await user.click(screen.getByRole("button", { name: "Empezar de cero" }));
+    await abrir(user, "Modelo");
+    await user.click(screen.getByRole("button", { name: "Quitar filtro" }));
 
     await filtrarSeleccion(user, "Vigencia", "Vencido");
     expect(filas()).toEqual(["Mandatario Carla"]);
-    await user.click(screen.getByRole("button", { name: /\+ filtro/i }));
-    await user.click(screen.getByRole("button", { name: "Empezar de cero" }));
+    await abrir(user, "Vigencia");
+    await user.click(screen.getByRole("button", { name: "Quitar filtro" }));
 
     await filtrarSeleccion(user, "Validación", "Pendiente de validación");
     expect(filas()).toEqual(["Mandatario Carla"]);
   });
 
-  it("AC1: combina condiciones (todas deben cumplirse) y filtra por Organismos", async () => {
+  it("AC1: combina embudos (todas deben cumplirse) y filtra por Organismos", async () => {
     const user = userEvent.setup();
     renderPanel();
     await screen.findByRole("table", TABLA);
@@ -152,6 +161,19 @@ describe("HU #14002 — filtros por columna en Mandatarios", () => {
     expect(filas()).toEqual(["Mandatario Beto", "Mandatario Carla"]);
     await filtrarSeleccion(user, "Vigencia", "Vencido");
     expect(filas()).toEqual(["Mandatario Carla"]);
+  });
+
+  it("AC1: el buscador de arriba se combina con los embudos", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    await screen.findByRole("table", TABLA);
+    await filtrarSeleccion(user, "Organismos", "Tránsito de Bogotá");
+    expect(filas()).toEqual(["Mandatario Beto", "Mandatario Carla"]);
+    await user.type(screen.getByRole("textbox", { name: "Buscar mandatarios" }), "333");
+    expect(filas()).toEqual(["Mandatario Carla"]);
+    await user.clear(screen.getByRole("textbox", { name: "Buscar mandatarios" }));
+    await user.type(screen.getByRole("textbox", { name: "Buscar mandatarios" }), "111");
+    expect(screen.getByText("Ningún mandatario coincide con los filtros")).toBeInTheDocument();
   });
 
   it("AC2: un organismo sin mandatarios muestra el estado vacío con «Limpiar filtros»", async () => {

@@ -17,9 +17,7 @@ vi.mock("@/lib/api/admin-mandate-signers", async () => {
     fetchCompanyMandateSigners: (...a: unknown[]) => fetchCompanyMandateSigners(...a),
     fetchCompanyTransitOffices: vi
       .fn()
-      .mockResolvedValue([
-        { transitOfficeId: "ot-1", code: "05001000", name: "Tránsito de Medellín" },
-      ]),
+      .mockResolvedValue([{ transitOfficeId: "ot-1", code: "05001000", name: "Tránsito de Medellín" }]),
     fetchRepresentedCompanies: vi.fn().mockResolvedValue([]),
   };
 });
@@ -75,9 +73,7 @@ beforeEach(() => {
     Array.from({ length: 12 }, (_, i) =>
       signer(
         i + 1,
-        i === 0
-          ? { signatureMethod: "biometria", signatureVaultId: null, identityStatus: "none" }
-          : {},
+        i === 0 ? { signatureMethod: "biometria", signatureVaultId: null, identityStatus: "none" } : {},
       ),
     ),
   );
@@ -115,7 +111,7 @@ describe("CompanyMandatariosPanel — diseño", () => {
     const user = userEvent.setup();
     renderPanel();
     await screen.findByRole("table", { name: "Mandatarios de la compañía" });
-    const caja = screen.getByRole("searchbox", { name: "Buscar mandatarios" });
+    const caja = screen.getByRole("textbox", { name: "Buscar mandatarios" });
     await user.type(caja, "mandatario 12");
     expect(screen.getByText("Mandatario 12")).toBeInTheDocument();
     expect(screen.queryByText("Mandatario 1")).not.toBeInTheDocument();
