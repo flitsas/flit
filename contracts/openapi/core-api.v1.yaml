@@ -415,6 +415,26 @@ paths:
           required: false
           schema: { type: string }
           description: Coincidencia parcial e insensible a mayúsculas sobre la razón social.
+        - name: codigo
+          in: query
+          required: false
+          schema: { type: string }
+          description: Coincidencia parcial e insensible a mayúsculas sobre el código de compañía (COMP-XXXX).
+        - name: tenantType
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [RENTING, CONCESIONARIO, FLIT, CONCESION, MARCA_BLANCA]
+          description: >
+            Tipo(s) de compañía (selección múltiple, OR). Se acepta repetido
+            (`tenantType=RENTING&tenantType=FLIT`) o separado por comas
+            (`tenantType=RENTING,FLIT`); insensible a mayúsculas. Un valor fuera del catálogo
+            responde 422 sin ejecutar la consulta.
         - name: estadoActivo
           in: query
           required: false
@@ -460,6 +480,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: "tenantType fuera del catálogo; cuerpo `{ errors: [{ field: \"tenantType\", message }] }`."
 
   /api/v1/admin/transit-offices/{transitOfficeId}/mandate-signers/{mandateSignerId}:
     delete:
