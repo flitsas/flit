@@ -80,8 +80,10 @@ const MARTA = rep({
 type User = ReturnType<typeof userEvent.setup>;
 
 async function abrirFiltro(user: User, columna: string) {
-  await user.click(screen.getByRole("button", { name: /^\+ Filtro/ }));
-  await user.click(screen.getByRole("button", { name: columna }));
+  const base = `Filtrar por ${columna}`;
+  await user.click(
+    screen.getByRole("button", { name: (n) => n === base || n.startsWith(`${base} (`) }),
+  );
 }
 
 async function renderTab() {
@@ -107,11 +109,27 @@ describe("LegalRepresentativesTab · filtros por columna (HU #14001)", () => {
     });
   });
 
-  it("AC1: el buscador único se reemplaza por la barra estándar", async () => {
+  it("AC1: conserva el buscador de arriba y suma un embudo por columna (sin la barra de la épica)", async () => {
     await renderTab();
-    expect(screen.queryByPlaceholderText(/buscar por nombre o documento/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^\+ Filtro/ })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/buscar por nombre o documento/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^\+ Filtro/ })).not.toBeInTheDocument();
+    for (const c of ["Representante", "Documento", "Trámites", "Firma / Identidad"]) {
+      expect(screen.getByRole("button", { name: `Filtrar por ${c}` })).toBeInTheDocument();
+    }
+    expect(screen.queryByRole("button", { name: /Filtrar por Acciones/ })).not.toBeInTheDocument();
     expect(visibles()).toBe(3);
+  });
+
+  it("AC1: el buscador de arriba se combina con el embudo (AND)", async () => {
+    const user = userEvent.setup();
+    await renderTab();
+    await abrirFiltro(user, "Trámites");
+    await user.click(screen.getByRole("checkbox", { name: "Traspaso" }));
+    await user.click(screen.getByRole("button", { name: "Aplicar" }));
+    expect(visibles()).toBe(2);
+    await user.type(screen.getByRole("textbox", { name: "Buscar representantes" }), "1.098-765");
+    expect(screen.getByText("Ana Gómez")).toBeInTheDocument();
+    expect(visibles()).toBe(1);
   });
 
   it("AC1: filtra por Representante (contiene, sin tildes ni mayúsculas)", async () => {
@@ -179,7 +197,7 @@ describe("LegalRepresentativesTab · filtros por columna (HU #14001)", () => {
     await abrirFiltro(user, "Representante");
     await user.type(screen.getByLabelText(/representante contiene/i), "zzz");
     await user.click(screen.getByRole("button", { name: "Aplicar" }));
-    expect(screen.getByText(/ningún registro coincide/i)).toBeInTheDocument();
+    expect(screen.getByText(/ningún representante coincide/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Limpiar filtros" }));
     expect(visibles()).toBe(3);
   });

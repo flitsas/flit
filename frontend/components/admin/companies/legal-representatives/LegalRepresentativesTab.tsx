@@ -19,7 +19,9 @@ import { Modal } from "@/components/atom/Modal";
 import { Pagination } from "@/components/atom/Pagination";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import { RowActions } from "@/components/atom/RowActions";
-import { TablaFiltrosBar, TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
+import { EncabezadoFiltrable } from "@/components/atom/FiltroColumna";
+import { SearchInput } from "@/components/atom/SearchInput";
+import { TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import {
   TABLA_HEADER_BG,
@@ -65,6 +67,14 @@ const FIRMA_CON = "con";
 const FIRMA_SIN = "sin";
 const firmaDe = (i: LegalRepresentativeItem) => (i.hasSignatureOrIdentity ? FIRMA_CON : FIRMA_SIN);
 
+/** Minúsculas, sin tildes, puntos, guiones ni espacios: «1.098-765» coincide con «1098765». */
+const normaliza = (v: string) =>
+  v
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[\s.\-]/g, "");
+
 /**
  * Directorio de representantes legales.
  * Acciones por fila (iconos lineales FLIT): Editar, Empresas, Eliminar.
@@ -86,13 +96,15 @@ export function LegalRepresentativesTab({
   const { page, pageSize, setPage, setPageSize, paginar } = usePaginacion(
     "legal-representatives.LegalRepresentativesTab",
   );
+  const [search, setSearch] = useState("");
   const [status, setStatus] = useState<UiStatus>("loading");
   const [items, setItems] = useState<LegalRepresentativeItem[]>([]);
   // Total que informa el API: si supera lo cargado (tope MAX_PAGES) se avisa en lugar de truncar en silencio.
   const [totalReported, setTotalReported] = useState(0);
   const [procedureTypes, setProcedureTypes] = useState<AssignableProcedureType[]>([]);
 
-  // HU #14001 — filtros por columna (estándar HU #13997). El directorio está completo en memoria.
+  // HU #14001 — filtro desplegable por columna, ADEMÁS del buscador de siempre (se combinan con AND).
+  // El directorio está completo en memoria.
   const columnasFiltro = useMemo<ColumnaFiltro[]>(
     () => [
       { id: "representante", label: "Representante", tipo: "texto" },
@@ -245,18 +257,22 @@ export function LegalRepresentativesTab({
     }
   };
 
-  const filtered = useMemo(
-    () =>
-      filtrarFilas(items, filtros.condicionesTotales, filtros.busqueda, {
-        columnas: {
-          representante: (i) => fullName(i),
-          documento: (i) => `${i.documentType} ${i.documentNumber}`,
-          tramites: (i) => i.procedureTypeIds,
-          firma: firmaDe,
-        },
-      }),
-    [items, filtros.condicionesTotales, filtros.busqueda],
-  );
+  const filtered = useMemo(() => {
+    const q = normaliza(search.trim());
+    const base = q
+      ? items.filter(
+          (i) => normaliza(fullName(i)).includes(q) || normaliza(i.documentNumber).includes(q),
+        )
+      : items;
+    return filtrarFilas(base, filtros.condicionesTotales, "", {
+      columnas: {
+        representante: (i) => fullName(i),
+        documento: (i) => `${i.documentType} ${i.documentNumber}`,
+        tramites: (i) => i.procedureTypeIds,
+        firma: firmaDe,
+      },
+    });
+  }, [items, search, filtros.condicionesTotales]);
   const sinFirma = items.filter((i) => !i.hasSignatureOrIdentity).length;
 
   const pendingItem = pendingSignatureId
@@ -333,7 +349,16 @@ export function LegalRepresentativesTab({
         >
           <div className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center gap-3">
-              <TablaFiltrosBar filtros={filtros} />
+              <SearchInput
+                value={search}
+                onChange={(v) => {
+                  setSearch(v);
+                  setPage(1);
+                }}
+                label="Buscar representantes"
+                placeholder="Buscar por nombre o documento…"
+                className="max-w-md flex-1"
+              />
               <p
                 className="text-xs"
                 style={{ color: RL_COLOR.secondary }}
@@ -355,7 +380,13 @@ export function LegalRepresentativesTab({
             </div>
 
             {filtered.length === 0 ? (
-              <TablaFiltrosVacio onLimpiar={filtros.limpiar} />
+              <TablaFiltrosVacio
+                mensaje="Ningún representante coincide con la búsqueda ni los filtros"
+                onLimpiar={() => {
+                  filtros.limpiar();
+                  setSearch("");
+                }}
+              />
             ) : (
               <>
                 <div className="overflow-x-auto">
@@ -371,28 +402,36 @@ export function LegalRepresentativesTab({
                           className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`}
                           style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                         >
-                          Representante
+                          <EncabezadoFiltrable filtros={filtros} columnaId="representante">
+                            Representante
+                          </EncabezadoFiltrable>
                         </th>
                         <th
                           scope="col"
                           className={`${TABLA_HEADER_CELL_CLS}`}
                           style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                         >
-                          Documento
+                          <EncabezadoFiltrable filtros={filtros} columnaId="documento">
+                            Documento
+                          </EncabezadoFiltrable>
                         </th>
                         <th
                           scope="col"
                           className={`${TABLA_HEADER_CELL_CLS}`}
                           style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                         >
-                          Trámites
+                          <EncabezadoFiltrable filtros={filtros} columnaId="tramites">
+                            Trámites
+                          </EncabezadoFiltrable>
                         </th>
                         <th
                           scope="col"
                           className={`${TABLA_HEADER_CELL_CLS}`}
                           style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                         >
-                          Firma / Identidad
+                          <EncabezadoFiltrable filtros={filtros} columnaId="firma">
+                            Firma / Identidad
+                          </EncabezadoFiltrable>
                         </th>
                         <th
                           scope="col"

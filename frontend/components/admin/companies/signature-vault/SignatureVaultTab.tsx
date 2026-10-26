@@ -8,7 +8,8 @@ import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { Modal } from "@/components/atom/Modal";
 import { Pagination } from "@/components/atom/Pagination";
 import { RowActions } from "@/components/atom/RowActions";
-import { TablaFiltrosBar, TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
+import { EncabezadoFiltrable } from "@/components/atom/FiltroColumna";
+import { TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import {
   createSignatureVaultEntry,
@@ -61,12 +62,11 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
   const [items, setItems] = useState<SignatureVaultItem[]>([]);
   const filtros = useTablaFiltros({
     columnas: COLUMNAS_FILTRO,
-    periodoColumnaId: "vigencia",
     onCambio: () => pg.setPage(1),
   });
   const filtradas = useMemo(
     () =>
-      filtrarFilas(items, filtros.condicionesTotales, filtros.busqueda, {
+      filtrarFilas(items, filtros.condicionesTotales, "", {
         columnas: {
           registro: (i) => formatDate(i.fechaRegistro ?? i.createdAt ?? null),
           documento: (i) => `${i.documentType} ${i.documentNumber}`,
@@ -76,7 +76,7 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
           estado: (i) => i.estado,
         },
       }),
-    [items, filtros.condicionesTotales, filtros.busqueda],
+    [items, filtros.condicionesTotales],
   );
   const [formOpen, setFormOpen] = useState(false);
   const [detail, setDetail] = useState<SignatureVaultItem | null>(null);
@@ -164,7 +164,6 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
           skeletonRows={4}
         >
           <div className="flex flex-col gap-3">
-            <TablaFiltrosBar filtros={filtros} />
             {filtradas.length === 0 ? (
               <TablaFiltrosVacio onLimpiar={filtros.limpiar} />
             ) : (
@@ -185,42 +184,54 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
                           className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`}
                           style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                         >
-                          Registro
+                          <EncabezadoFiltrable filtros={filtros} columnaId="registro">
+                            Registro
+                          </EncabezadoFiltrable>
                         </th>
                         <th
                           scope="col"
                           className={TABLA_HEADER_CELL_CLS}
                           style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                         >
-                          Documento
+                          <EncabezadoFiltrable filtros={filtros} columnaId="documento">
+                            Documento
+                          </EncabezadoFiltrable>
                         </th>
                         <th
                           scope="col"
                           className={TABLA_HEADER_CELL_CLS}
                           style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                         >
-                          Código hash
+                          <EncabezadoFiltrable filtros={filtros} columnaId="hash">
+                            Código hash
+                          </EncabezadoFiltrable>
                         </th>
                         <th
                           scope="col"
                           className={TABLA_HEADER_CELL_CLS}
                           style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                         >
-                          Apoderado
+                          <EncabezadoFiltrable filtros={filtros} columnaId="apoderado">
+                            Apoderado
+                          </EncabezadoFiltrable>
                         </th>
                         <th
                           scope="col"
                           className={TABLA_HEADER_CELL_CLS}
                           style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                         >
-                          Vigencia
+                          <EncabezadoFiltrable filtros={filtros} columnaId="vigencia">
+                            Vigencia
+                          </EncabezadoFiltrable>
                         </th>
                         <th
                           scope="col"
                           className={TABLA_HEADER_CELL_CLS}
                           style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                         >
-                          Estado
+                          <EncabezadoFiltrable filtros={filtros} columnaId="estado">
+                            Estado
+                          </EncabezadoFiltrable>
                         </th>
                         <th
                           scope="col"
