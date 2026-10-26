@@ -398,9 +398,11 @@ internal sealed class QuipuxApiClient(
     // ── Contrato de cable de Quipux (nombres en español, tal cual los espera) ──
     // JsonPropertyName explícito en todos: el binder no puede depender de convenciones de nombres
     // (restricción AOT del repo, nada de reflexión dinámica) y estos nombres son contrato externo.
-    // Envelope: PDN/BackCrudQuipux suele responder `{ "responseData": { "data": {...}, "status": 200 } }`.
-    // Ambientes de prueba a veces mandan `{ "data": {...} }` en la raíz. Se aceptan ambos vía EffectiveData.
-    // El `status` HTTP-like del envelope no se usa para la lógica: la verdad operativa está en `data.codigo`.
+    // Formas de respuesta observadas (todas vía EffectiveData):
+    // 1) `{ "responseData": { "data": { codigo, descripcion }, "status": 200 } }` (BackCrudQuipux / PDN)
+    // 2) `{ "data": { codigo, descripcion } }`
+    // 3) `{ "codigo": 82, "descripcion": "..." }` plano en raíz (registroDocumento PDN, catálogo 081/082)
+    // El `status` HTTP-like del envelope no se usa: la verdad operativa está en `codigo`.
 
     private sealed record QuipuxLoginBody(
         [property: JsonPropertyName("usuario")] string Usuario,
@@ -427,9 +429,16 @@ internal sealed class QuipuxApiClient(
 
     private sealed record QuipuxRegisterResponse(
         [property: JsonPropertyName("data")] QuipuxRegisterData? Data,
-        [property: JsonPropertyName("responseData")] QuipuxResponseEnvelope<QuipuxRegisterData>? ResponseData)
+        [property: JsonPropertyName("responseData")] QuipuxResponseEnvelope<QuipuxRegisterData>? ResponseData,
+        [property: JsonPropertyName("codigo")] int? Codigo,
+        [property: JsonPropertyName("descripcion")] string? Descripcion)
     {
-        public QuipuxRegisterData? EffectiveData => Data ?? ResponseData?.Data;
+        public QuipuxRegisterData? EffectiveData =>
+            Data
+            ?? ResponseData?.Data
+            ?? (Codigo is not null || !string.IsNullOrWhiteSpace(Descripcion)
+                ? new QuipuxRegisterData(Codigo, Descripcion)
+                : null);
     }
 
     private sealed record QuipuxRegisterData(
@@ -443,9 +452,17 @@ internal sealed class QuipuxApiClient(
 
     private sealed record QuipuxValidateStatusResponse(
         [property: JsonPropertyName("data")] QuipuxValidateStatusData? Data,
-        [property: JsonPropertyName("responseData")] QuipuxResponseEnvelope<QuipuxValidateStatusData>? ResponseData)
+        [property: JsonPropertyName("responseData")] QuipuxResponseEnvelope<QuipuxValidateStatusData>? ResponseData,
+        [property: JsonPropertyName("codigo")] int? Codigo,
+        [property: JsonPropertyName("descripcion")] string? Descripcion,
+        [property: JsonPropertyName("estadoTramite")] QuipuxEstadoTramite? EstadoTramite)
     {
-        public QuipuxValidateStatusData? EffectiveData => Data ?? ResponseData?.Data;
+        public QuipuxValidateStatusData? EffectiveData =>
+            Data
+            ?? ResponseData?.Data
+            ?? (Codigo is not null || !string.IsNullOrWhiteSpace(Descripcion) || EstadoTramite is not null
+                ? new QuipuxValidateStatusData(Codigo, Descripcion, EstadoTramite)
+                : null);
     }
 
     private sealed record QuipuxValidateStatusData(
