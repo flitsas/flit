@@ -350,16 +350,26 @@ export function setOtPrendaDocumentPolicy(
   });
 }
 
-/** GET /{tenantId}/audit-log — historial paginado DESC (AC5). */
+/** Filtros por columna del historial (HU #14004/#14005). Fechas `yyyy-MM-dd` (día local Bogotá, inclusivo). */
+export interface AuditLogFilters {
+  fechaDesde?: string;
+  fechaHasta?: string;
+  campo?: string;
+  valorAnterior?: string;
+  operador?: string;
+}
+
+/** GET /{tenantId}/audit-log — historial paginado DESC (AC5), filtrable en servidor (HU #14005). */
 export function fetchAuditLog(
   tenantId: string,
   page = 1,
   pageSize = 20,
   signal?: AbortSignal,
   networkHeadId?: string | null,
+  filters: AuditLogFilters = {},
 ): Promise<AuditLogPageResponse> {
   return apiFetch<AuditLogPageResponse>(companyResourcePath(tenantId, "/audit-log", networkHeadId), {
-    query: { page, pageSize },
+    query: { page, pageSize, ...filters },
     signal,
   });
 }
