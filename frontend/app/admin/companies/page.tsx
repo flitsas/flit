@@ -9,6 +9,10 @@ import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { ToastProvider, useToast } from "@/components/admin/Toast";
+import {
+  CompanyFiltersPanel,
+  type CompanyFilters,
+} from "@/components/admin/companies/CompanyFiltersPanel";
 import { COLUMNAS_LISTADO_COMPANIAS } from "@/components/admin/companies/company-filter-columns";
 import { CompanyListTable } from "@/components/admin/companies/CompanyListTable";
 import { CompanyStatusDialog } from "@/components/admin/companies/CompanyStatusDialog";
@@ -27,7 +31,7 @@ import {
   type CompanyListItem,
   type CompanyPagedResult,
 } from "@/lib/api/types";
-import { TablaFiltrosBar, TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
+import { TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
 import { condicionesAParams } from "@/lib/tablas/filtrar-filas";
 import { useTablaFiltros } from "@/lib/tablas/useTablaFiltros";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -50,23 +54,30 @@ function CompaniesList() {
   const { isSuperAdmin, isAdminCompany, tenantId } = usePermissions();
   // Bug #13055 — tabla homologada con el modelo de trámites: filas por página elegibles.
   const { page, pageSize, setPage, setPageSize } = usePaginacion("admin.companies");
-  // HU #13999 — filtros por columna (estándar HU #13997), resueltos en el servidor.
+  // Panel de consulta de siempre (NIT, Razón social, Estado, fechas): se confirma con «Buscar».
+  const [filters, setFilters] = useState<CompanyFilters>({});
+  const [panelKey, setPanelKey] = useState(0);
+  // HU #13999 — filtros por columna (embudo del encabezado, estándar HU #13997), resueltos en el
+  // servidor. Se combinan con AND con el panel; si ambos fijan el mismo parámetro gana la columna.
+  // «Limpiar filtros» (vacío de la tabla) quita SOLO los de columna; el «Limpiar» del panel, los suyos.
   const filtros = useTablaFiltros({
     columnas: COLUMNAS_LISTADO_COMPANIAS,
-    periodoColumnaId: "fechaCreacion",
     onCambio: () => setPage(1),
   });
   const filterParams = useMemo<CompaniesIndexParams>(() => {
     const raw = condicionesAParams(filtros.condicionesTotales, COLUMNAS_LISTADO_COMPANIAS);
     const { estadoActivo, ...rest } = raw;
-    // Estado es booleano: Activa + Inactiva a la vez = sin filtro de estado.
+    // Estado es booleano: Activa + Inactiva a la vez = la columna no filtra estado.
+    const estado =
+      estadoActivo === "true" || estadoActivo === "false"
+        ? estadoActivo === "true"
+        : filters.estadoActivo;
     return {
+      ...filters,
       ...rest,
-      ...(estadoActivo === "true" || estadoActivo === "false"
-        ? { estadoActivo: estadoActivo === "true" }
-        : {}),
+      ...(estado === undefined ? {} : { estadoActivo: estado }),
     };
-  }, [filtros.condicionesTotales]);
+  }, [filtros.condicionesTotales, filters]);
   // HU #11227 — solo SuperAdmin; desactivado = excluir OT (default).
   const [includeTransitOffices, setIncludeTransitOffices] = useState(false);
   const [status, setStatus] = useState<UiStatus>("loading");
@@ -135,12 +146,19 @@ function CompaniesList() {
     }
   };
 
+  const handleApplyFilters = (next: CompanyFilters) => {
+    setPage(1);
+    setFilters(next);
+  };
+
   const handleCreated = (razonSocial: string) => {
     setCreateOpen(false);
     show(`Compañía «${razonSocial}» creada.`, "success");
     // Vuelve a la primera página (orden por fecha DESC → la nueva aparece arriba).
-    const habiaFiltros = filtros.hayFiltros;
+    const habiaFiltros = filtros.hayFiltros || Object.keys(filters).length > 0;
     filtros.limpiar();
+    setFilters({});
+    setPanelKey((k) => k + 1);
     setPage(1);
     if (!habiaFiltros && page === 1) void load();
   };
@@ -198,7 +216,7 @@ function CompaniesList() {
         />
       )}
 
-      <TablaFiltrosBar filtros={filtros} />
+      <CompanyFiltersPanel key={panelKey} onApply={handleApplyFilters} initialValue={filters} />
 
       <div className={ADMIN_CONTENT_SURFACE_CLS}>
         {status === "loading" ? (
@@ -226,6 +244,7 @@ function CompaniesList() {
                 onConfigure={(tenantId) => router.push(`/admin/companies/${tenantId}`)}
                 onEdit={openEdit}
                 onToggleStatus={setToggleTarget}
+                filtros={filtros}
               />
             )}
           </UiStateBoundary>
