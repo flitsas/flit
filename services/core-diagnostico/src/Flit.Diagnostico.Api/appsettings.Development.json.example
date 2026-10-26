@@ -15,6 +15,14 @@
     "TimeoutSeconds": 30
   },
   "Diagnostico": {
+    // Simulación de TODAS las fuentes (RUNT, RUNT persona, SIMIT, RUES, avalúo e impuesto): solo con Ambiente LOCAL o DEV.
+    // Manda sobre Consultas:Address, así que esa dirección no se define aquí. Sin simulación ni dirección, solo se ofrece el RUNT.
+    "Ambiente": "LOCAL",
+    "Simulacion": { "Habilitada": true },
+    // El impuesto además exige ≥ 1 departamento en la réplica; en simulación salen 05 y 25 en la primera sincronización.
+    "Fuentes": { "ImpuestoDisponible": true },
+    // Solo en local: la empresa queda suscrita al producto sin preguntarle a Identidad. Nunca en DEV, QA ni PDN.
+    "Identidad": { "SimularSuscripcionActiva": true },
     // Catálogo de tipos de trámite (HU #13742): gRPC de core-api con Ict__GrpcPort=8082 (docs/suite/local.md). Sin esta
     // dirección GET /tipos-tramite responde 503: no hay lista de respaldo.
     "Tramites": { "Address": "http://127.0.0.1:8082" }
