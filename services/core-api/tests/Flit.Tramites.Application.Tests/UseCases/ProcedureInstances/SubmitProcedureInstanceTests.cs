@@ -611,4 +611,89 @@ public sealed class SubmitProcedureInstanceTests
         result!.Status.Should().Be(TramiteEstado.Entregado);
         await _repo.Received(1).GetByIdWithFurGraphAsync(id, tenantId, Arg.Any<CancellationToken>());
     }
+
+    // ── Bug #13912 — canal Quipux: submit deja el trámite en preparado ─────────────
+
+    /// <summary>
+    /// Clona el tipo con bloque <c>quipux</c> — no mutar el singleton de
+    /// <see cref="ProcedureTypeFixture"/> (contaminaría el resto de la suite).
+    /// </summary>
+    private static void MarcarComoQuipux(ProcedureInstance instance)
+    {
+        var original = instance.ProcedureType
+            ?? throw new InvalidOperationException("La instancia de prueba requiere ProcedureType.");
+        instance.ProcedureType = new ProcedureType
+        {
+            Id = original.Id,
+            Code = original.Code,
+            Name = original.Name,
+            Family = original.Family,
+            GateProfile = original.GateProfile,
+            Steps = original.Steps,
+            PublicationStatus = original.PublicationStatus,
+            WizardEnabled = original.WizardEnabled,
+            CreatedAt = original.CreatedAt,
+            ExternalRefs = """{"quipux":{"tipoTramite":"MATRICULA","codigoTramite":"01"}}""",
+        };
+    }
+
+    [Fact]
+    public async Task HandleAsync_Quipux_DesdeBorrador_QuedaEnPreparado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = ConPlaca(FullyGated(id, tenantId));
+        MarcarComoQuipux(instance);
+        Wire(instance, ct);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
+
+        error.Should().BeNull();
+        result!.Status.Should().Be(TramiteEstado.Preparado);
+        instance.Status.Should().Be(TramiteEstado.Preparado);
+        _recorder.Records.Should().ContainSingle(r =>
+            r.FromStatus == TramiteEstado.Borrador && r.ToStatus == TramiteEstado.Preparado);
+        _recorder.Records.Should().NotContain(r => r.ToStatus == TramiteEstado.Entregado);
+    }
+
+    [Fact]
+    public async Task HandleAsync_Quipux_YaPreparado_EsIdempotente()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = ConPlaca(FullyGated(id, tenantId));
+        MarcarComoQuipux(instance);
+        instance.Status = TramiteEstado.Preparado;
+        Wire(instance, ct);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
+
+        error.Should().BeNull();
+        result!.Status.Should().Be(TramiteEstado.Preparado);
+        _recorder.Records.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task HandleAsync_Quipux_ReRadicarDesdeRechazado_QuedaEnPreparado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = ConPlaca(FullyGated(id, tenantId));
+        MarcarComoQuipux(instance);
+        instance.Status = TramiteEstado.Rechazado;
+        instance.SubsanacionActiva = true;
+        Wire(instance, ct);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
+
+        error.Should().BeNull();
+        result!.Status.Should().Be(TramiteEstado.Preparado);
+        instance.SubsanacionActiva.Should().BeFalse("reabrir a preparado cierra la ventana de subsanación");
+        _recorder.Records.Should().ContainSingle(r =>
+            r.FromStatus == TramiteEstado.Rechazado && r.ToStatus == TramiteEstado.Preparado);
+        _recorder.Records.Should().NotContain(r => r.ToStatus == TramiteEstado.Entregado);
+    }
 }

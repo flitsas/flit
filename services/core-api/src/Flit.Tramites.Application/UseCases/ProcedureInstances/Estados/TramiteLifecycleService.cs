@@ -143,6 +143,13 @@ public sealed class TramiteLifecycleService(
         // «Enviar al OT» (asignado → entregado) no es una radicación: el trámite ya llegó al OT.
         var esRadicacion = TramiteEstado.EsRadicacion(from, command.ToStatus);
 
+        // Bug #13912 — re-radicación Quipux: rechazado → preparado (sin llegar al OT aún). Cierra
+        // subsanación y re-evalúa gates selectivos; NO fija submitted_at ni corre gates de entrega.
+        var esReaperturaAPreparado =
+            from == TramiteEstado.Rechazado
+            && command.ToStatus == TramiteEstado.Preparado
+            && instance.SubsanacionActiva;
+
         // RF05 — anular/rechazar exigen motivo explícito para el historial.
         if (command.ToStatus is TramiteEstado.Anulado or TramiteEstado.Rechazado
             && string.IsNullOrWhiteSpace(command.Reason))
@@ -151,9 +158,10 @@ public sealed class TramiteLifecycleService(
                 $"Debe indicar el motivo para pasar el trámite a '{command.ToStatus}'.");
 
         // Re-radicación selectiva: desde subsanación (flag sobre rechazado, o legado status
-        // subsanacion) → entregado. Solo re-evalúa gates afectados por el diff del snapshot.
+        // subsanacion) → entregado|preasignacion|preparado. Solo re-evalúa gates afectados por el diff.
         var isSubsanacionReradicacion =
-            TramiteEstado.EsReRadicacionSubsanacion(from, instance.SubsanacionActiva) && esRadicacion;
+            TramiteEstado.EsReRadicacionSubsanacion(from, instance.SubsanacionActiva)
+            && (esRadicacion || esReaperturaAPreparado);
 
         var affectedGates = isSubsanacionReradicacion
             ? await ResolveSubsanacionAffectedGatesAsync(instance, command.TenantId, ct).ConfigureAwait(false)
@@ -274,6 +282,14 @@ public sealed class TramiteLifecycleService(
                 instance.SubsanacionActiva = false;
                 instance.SubsanacionBaseline = null;
             }
+        }
+
+        // Bug #13912 — reapertura a preparado (Quipux): cierra la ventana de subsanación sin
+        // marcar submitted_at (eso lo hace el worker al pasar a entregado con 081/082).
+        if (esReaperturaAPreparado && instance.SubsanacionActiva)
+        {
+            instance.SubsanacionActiva = false;
+            instance.SubsanacionBaseline = null;
         }
 
         // Si se anula o se vuelve a borrador, apagar el flag de subsanación.
