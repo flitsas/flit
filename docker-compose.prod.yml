@@ -40,6 +40,8 @@
 #                           (en PDN, https://app.flitsas.com). Vacío en DEV/QA
 #   VERIFIK_API_TOKEN       token Verifik (RUNT); lo lee core-consultas (HU #13348)
 #   RABBITMQ_URL_TRAMITES   usuario tramites del broker; OBLIGATORIA desde el corte (HU #13348)
+#   RABBITMQ_URL_DIAGNOSTICO  usuario diagnostico del broker (con destino consultas); OBLIGATORIA aunque el
+#                           perfil diagnostico esté apagado: compose valida todo el archivo (ADR-0075)
 #   ICT_SERVICE_TOKEN_SECRET  secreto HMAC del canal gRPC este-oeste ICT (core-api <-> core-ict).
 #                             Sin el, la orquestacion y el callback quedan fail-closed.
 #   FLIT_INTERNAL_API_KEY   clave compartida Gateway <-> core-api para GET /internal/domains/active
@@ -477,8 +479,9 @@ services:
       Platform__ServiceClient__TokenEndpoint: http://gateway:${GATEWAY_PORT:-4002}/connect/token
       Platform__Auth__JwksUri: http://gateway:${GATEWAY_PORT:-4002}/.well-known/jwks.json
       Platform__Auth__Issuers__0: ${FLIT_HUB_URL:-https://dev.flitsas.online}/
-      # Su usuario del broker (deploy/rabbitmq/usuario-de-servicio.sh diagnostico <clave>), exchange flit.diagnostico.
-      Platform__Messaging__ConnectionString: ${RABBITMQ_URL_DIAGNOSTICO:-}
+      # Su usuario del broker (deploy/rabbitmq/usuario-de-servicio.sh diagnostico <clave> consultas): publica en
+      # flit.diagnostico y deja los trabajos de consulta en flit.consultas (ADR-0075). Sin bus no hay consultas.
+      Platform__Messaging__ConnectionString: ${RABBITMQ_URL_DIAGNOSTICO:?RABBITMQ_URL_DIAGNOSTICO es obligatoria (amqp://diagnostico:<clave>@rabbitmq:5672/flit; las consultas del diagnóstico van por el bus, ADR-0075)}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       # Manifiesto de permisos (contrato v1 §6) por la plataforma.
       Diagnostico__Plataforma__GatewayUrl: http://gateway:${GATEWAY_PORT:-4002}
