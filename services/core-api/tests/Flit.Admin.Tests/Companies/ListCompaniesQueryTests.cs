@@ -227,7 +227,149 @@ public sealed class ListCompaniesQueryTests
         result.Data.Should().ContainSingle().Which.Nit.Should().Be("900611111");
     }
 
+    // ---------- HU #13998: filtros de código y tipo ----------
+
+    [Fact]
+    public async Task AC1_FiltersByCodigo_PartialCaseInsensitive()
+    {
+        await using var ctx = NewContext();
+        Seed(ctx,
+            Typed("COMP-0042", "Alfa", "RENTING", "2026-01-01"),
+            Typed("comp-0142", "Beta", "RENTING", "2026-01-02"),
+            Typed("COMP-0007", "Gamma", "RENTING", "2026-01-03"));
+
+        var result = await Handler(ctx).HandleAsync(new ListCompaniesQuery { Codigo = "0042" }, TestContext.Current.CancellationToken);
+        var lower = await Handler(ctx).HandleAsync(new ListCompaniesQuery { Codigo = "comp-01" }, TestContext.Current.CancellationToken);
+
+        result.TotalCount.Should().Be(1);
+        result.Data.Should().ContainSingle().Which.Code.Should().Be("COMP-0042");
+        lower.Data.Should().ContainSingle().Which.Code.Should().Be("comp-0142");
+    }
+
+    [Fact]
+    public async Task AC2_FiltersByTenantType_SingleValue_TotalCountReflectsOnlyThose()
+    {
+        await using var ctx = NewContext();
+        Seed(ctx,
+            Typed("COMP-0001", "A", "RENTING", "2026-01-01"),
+            Typed("COMP-0002", "B", "RENTING", "2026-01-02"),
+            Typed("COMP-0003", "C", "FLIT", "2026-01-03"));
+
+        var result = await Handler(ctx).HandleAsync(new ListCompaniesQuery { TenantType = ["RENTING"] }, TestContext.Current.CancellationToken);
+
+        result.IsValid.Should().BeTrue();
+        result.TotalCount.Should().Be(2);
+        result.Data.Should().OnlyContain(c => c.TenantType == "RENTING");
+    }
+
+    [Theory]
+    [InlineData("RENTING,FLIT")]
+    [InlineData("renting, flit")]
+    public async Task AC2_FiltersByTenantType_CommaSeparated_MultipleValues(string raw)
+    {
+        await using var ctx = NewContext();
+        Seed(ctx,
+            Typed("COMP-0001", "A", "RENTING", "2026-01-01"),
+            Typed("COMP-0002", "B", "CONCESIONARIO", "2026-01-02"),
+            Typed("COMP-0003", "C", "FLIT", "2026-01-03"));
+
+        var result = await Handler(ctx).HandleAsync(new ListCompaniesQuery { TenantType = [raw] }, TestContext.Current.CancellationToken);
+
+        result.TotalCount.Should().Be(2);
+        result.Data.Select(c => c.TenantType).Should().BeEquivalentTo("RENTING", "FLIT");
+    }
+
+    [Fact]
+    public async Task AC2_FiltersByTenantType_RepeatedParameter_MultipleValues()
+    {
+        await using var ctx = NewContext();
+        Seed(ctx,
+            Typed("COMP-0001", "A", "RENTING", "2026-01-01"),
+            Typed("COMP-0002", "B", "CONCESIONARIO", "2026-01-02"),
+            Typed("COMP-0003", "C", "FLIT", "2026-01-03"));
+
+        var result = await Handler(ctx).HandleAsync(new ListCompaniesQuery { TenantType = ["RENTING", "CONCESIONARIO"] }, TestContext.Current.CancellationToken);
+
+        result.TotalCount.Should().Be(2);
+        result.Data.Select(c => c.TenantType).Should().BeEquivalentTo("RENTING", "CONCESIONARIO");
+    }
+
+    [Fact]
+    public async Task AC3_UnknownTenantType_ReturnsValidationErrors_WithoutQuerying()
+    {
+        var repo = new ThrowingReadRepository();
+        var handler = new ListCompaniesHandler(repo);
+
+        var result = await handler.HandleAsync(new ListCompaniesQuery { TenantType = ["RENTING", "NOPE"] }, TestContext.Current.CancellationToken);
+
+        result.IsValid.Should().BeFalse();
+        var error = result.Errors.Should().ContainSingle().Which;
+        error.Field.Should().Be("tenantType");
+        error.Message.Should().Contain("NOPE").And.Contain("RENTING");
+        result.Data.Should().BeEmpty();
+        repo.Calls.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task AC4_CodigoAndTenantType_CombineWithExistingFilters_AndPaginationOverFiltered()
+    {
+        await using var ctx = NewContext();
+        Seed(ctx,
+            Typed("COMP-0010", "FLIT uno", "RENTING", "2026-01-01"),
+            Typed("COMP-0011", "FLIT dos", "RENTING", "2026-01-02"),
+            Typed("COMP-0012", "FLIT tres", "RENTING", "2026-01-03"),
+            Typed("COMP-0013", "FLIT otro tipo", "FLIT", "2026-01-04"),
+            Typed("COMP-0099", "FLIT otro codigo", "RENTING", "2026-01-05"),
+            Typed("COMP-0014", "Distinta", "RENTING", "2026-01-06"));
+
+        var query = new ListCompaniesQuery
+        {
+            Codigo = "COMP-001",
+            TenantType = ["RENTING"],
+            RazonSocial = "flit",
+            EstadoActivo = true,
+            PageSize = 2,
+            Page = 2,
+        };
+        var page2 = await Handler(ctx).HandleAsync(query, TestContext.Current.CancellationToken);
+
+        page2.TotalCount.Should().Be(3);
+        page2.Page.Should().Be(2);
+        page2.Data.Should().ContainSingle().Which.RazonSocial.Should().Be("FLIT uno");
+    }
+
     // ---------- Helpers ----------
+
+    private sealed class ThrowingReadRepository : Flit.Admin.Domain.Companies.ICompanyReadRepository
+    {
+        public int Calls { get; private set; }
+
+        public Task<Flit.Admin.Domain.Common.PagedResult<Flit.Admin.Domain.Companies.CompanyListItem>> ListAsync(
+            Flit.Admin.Domain.Companies.CompanyListFilter filter, CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            throw new InvalidOperationException("No debe consultarse");
+        }
+
+        public Task<Flit.Admin.Domain.Companies.CompanyListItem?> GetByIdAsync(Guid tenantId, CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            throw new InvalidOperationException("No debe consultarse");
+        }
+    }
+
+    private static Tenant Typed(string code, string legalName, string tenantType, string created) =>
+        new()
+        {
+            Id = Guid.NewGuid(),
+            Code = code,
+            LegalName = legalName,
+            TaxId = "9" + Guid.NewGuid().ToString("N")[..8],
+            TenantType = tenantType,
+            IsActive = true,
+            CreatedAt = new DateTimeOffset(DateOnly.Parse(created).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero),
+            RowVersion = 0,
+        };
 
     private static FlitDbContext NewContext() =>
         new(new DbContextOptionsBuilder<FlitDbContext>()

@@ -56,7 +56,8 @@ public static class AdminCompaniesEndpoints
                 + "estado y rango de fechas de creación. Requiere SuperAdmin.")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
-            .Produces(StatusCodes.Status403Forbidden);
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
 
         // GET /api/v1/admin/companies/{tenantId} — identidad de la compañía (#11062). Alimenta el
         // encabezado de la consola de configuración: razón social + NIT visibles en toda la pantalla.
@@ -385,6 +386,8 @@ public static class AdminCompaniesEndpoints
         [FromQuery] bool? estadoActivo = null,
         [FromQuery] DateOnly? fechaDesde = null,
         [FromQuery] DateOnly? fechaHasta = null,
+        [FromQuery] string? codigo = null,
+        [FromQuery] string[]? tenantType = null,
         [FromQuery] bool? excludeTransitOffices = null,
         [FromQuery] int? page = null,
         [FromQuery] int? pageSize = null)
@@ -401,6 +404,8 @@ public static class AdminCompaniesEndpoints
             EstadoActivo = estadoActivo,
             FechaDesde = fechaDesde,
             FechaHasta = fechaHasta,
+            Codigo = codigo,
+            TenantType = tenantType,
             ExcludeTransitOffices = excludeOt,
             Page = page,
             PageSize = pageSize,
@@ -408,7 +413,11 @@ public static class AdminCompaniesEndpoints
 
         var result = await handler.HandleAsync(query, cancellationToken).ConfigureAwait(false);
 
-        return Results.Ok(result);
+        return result.IsValid
+            ? Results.Ok(result)
+            : Results.Json(
+                new CompanyValidationErrorResponse(result.Errors),
+                statusCode: StatusCodes.Status422UnprocessableEntity);
     }
 
     private static async Task<IResult> CreateCompanyAsync(

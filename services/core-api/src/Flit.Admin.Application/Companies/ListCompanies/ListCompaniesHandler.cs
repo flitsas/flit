@@ -1,4 +1,6 @@
+using Flit.Admin.Application.Companies.CreateCompany;
 using Flit.Admin.Domain.Companies;
+using Flit.Admin.Domain.Companies.Create;
 
 namespace Flit.Admin.Application.Companies.ListCompanies;
 
@@ -31,6 +33,17 @@ public sealed class ListCompaniesHandler
     {
         ArgumentNullException.ThrowIfNull(query);
 
+        var tenantTypes = ParseTenantTypes(query.TenantType, out var invalid);
+        if (invalid.Count > 0)
+        {
+            return ListCompaniesResult.Invalid(
+            [
+                new CompanyValidationError(
+                    "tenantType",
+                    $"Tipo de compañía no válido ({string.Join(", ", invalid)}). Debe ser {CompanyTenantTypes.DisplayList}."),
+            ]);
+        }
+
         var page = NormalizePage(query.Page);
         var pageSize = NormalizePageSize(query.PageSize);
 
@@ -38,6 +51,8 @@ public sealed class ListCompaniesHandler
         {
             Nit = Trim(query.Nit),
             RazonSocial = Trim(query.RazonSocial),
+            Codigo = Trim(query.Codigo),
+            TenantTypes = tenantTypes,
             EstadoActivo = query.EstadoActivo,
             FechaDesde = query.FechaDesde,
             FechaHasta = query.FechaHasta,
@@ -50,6 +65,36 @@ public sealed class ListCompaniesHandler
         var result = await _repository.ListAsync(filter, cancellationToken).ConfigureAwait(false);
 
         return new ListCompaniesResult(result.Items, result.TotalCount, page, pageSize);
+    }
+
+    private static List<string>? ParseTenantTypes(IReadOnlyList<string>? raw, out List<string> invalid)
+    {
+        invalid = [];
+        if (raw is null)
+        {
+            return null;
+        }
+
+        var valid = new List<string>();
+        foreach (var token in raw
+                     .Where(r => !string.IsNullOrWhiteSpace(r))
+                     .SelectMany(r => r.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)))
+        {
+            var normalized = token.ToUpperInvariant();
+            if (CompanyTenantTypes.IsValid(normalized))
+            {
+                if (!valid.Contains(normalized))
+                {
+                    valid.Add(normalized);
+                }
+            }
+            else if (!invalid.Contains(token))
+            {
+                invalid.Add(token);
+            }
+        }
+
+        return valid.Count == 0 ? null : valid;
     }
 
     private static int NormalizePage(int? page) =>
