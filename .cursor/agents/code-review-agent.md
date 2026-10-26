@@ -74,7 +74,7 @@ Si cualquiera de estos falla → emite **FAIL** inmediato con la razón. No revi
 Si el diff supera **800 líneas** → emite **FAIL** inmediato con sugerencia de partir el PR.
 No continúes con la revisión.
 
-### Paso 3 — Revisión en 6 dimensiones
+### Paso 3 — Revisión por dimensiones
 
 Evalúa cada dimensión de forma independiente:
 
@@ -101,6 +101,10 @@ Tamaño por tipo de archivo, archivos inesperados, sanity checks generales.
 
 **(7) Datos y persistencia** *(solo si el PR incluye migraciones, `Persistence/` o repositorios)*
 Invoca la skill `db-schema-validator` y trata `BLOCKED` como **BLOQUEANTE** (🚫). `MISSING_N` → observación o bloqueante según gravedad (sin RLS/`tenant_id` = bloqueante).
+
+**(9) Estándar de tablas** *(solo si el PR crea o modifica una tabla de registros en `frontend/`)*
+Contra `.cursor/rules/tablas-filtros-por-columna.mdc` y la sección de tablas de `flit-design-guardian/references/prototype_rules.md`:
+la tabla usa `TablaFiltrosBar` con una condición por cada columna con datos (no «Acciones»), opciones de selección iguales a lo que pinta la celda, `TablaFiltrosVacio` sin resultados y, si pagina en servidor, el filtro llega a la API. Una tabla nueva o modificada sin el estándar y sin la excepción justificada (ficha fija campo/valor, o columna que la API no filtra anotada en la HU) es **BLOQUEANTE** (🚫) citando la regla; una columna sin filtro es observación (💡).
 
 ### Paso 4 — Comentario consolidado
 
