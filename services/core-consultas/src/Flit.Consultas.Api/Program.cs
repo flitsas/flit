@@ -72,6 +72,16 @@ public static class Program
         builder.Services.AddScoped<IAvaluoMockValueSource, ValoresMockDeAvaluo>(); // HU #13348
         builder.Services.AddScoped<ConsumoRecorder>(); // HU #13345
 
+        // HU #13876 (ADR-0075): los trabajos del diagnóstico llegan por el bus y se atienden con los mismos *Core de los servicios
+        // gRPC (registrados en el contenedor para que el ejecutor los use con el llamador del sobre).
+        builder.Services.AddSingleton(Bus.OpcionesConsumidoresDiagnostico.Desde(builder.Configuration));
+        builder.Services.AddScoped<ConsultasGrpcService>();
+        builder.Services.AddScoped<RuntIntempo.RuntIntempoGrpcService>();
+        builder.Services.AddScoped<Bus.EjecutorTrabajo>();
+        builder.Services.AddScoped<Bus.PublicadorResultado>();
+        builder.Services.AddScoped<Bus.ConsumidorTrabajosLote>();
+        builder.Services.AddScoped<Bus.ConsumidorTrabajosExpress>();
+
         // HU #13520: fuentes de Gestión de Comparendos (separadas de ConsultarMultas). Verifik SIMIT con las mismas
         // credenciales de Trámites; el simulado solo en DEV (Development o Consultations:ComparendosSimulados=true).
         builder.Services.AddHttpClient(Comparendos.ProveedorVerifikSimit.HttpClientName, (sp, c) =>
