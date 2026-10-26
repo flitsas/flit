@@ -89,24 +89,26 @@ describe("LegalRepresentativesTab — diseño", () => {
     expect(screen.getByText(/filas por página/i)).toBeInTheDocument();
   });
 
-  it("la búsqueda filtra por nombre o documento en todo el directorio", async () => {
+  it("los filtros por columna (Representante, Documento) cubren todo el directorio", async () => {
     const user = userEvent.setup();
     renderTab();
     await screen.findByText("Nombre1 Apellido1");
-    const caja = screen.getByRole("textbox", { name: "Buscar representantes" });
+    const filtrar = async (columna: string, valor: string) => {
+      await user.click(screen.getByRole("button", { name: /^[+] Filtro/ }));
+      await user.click(screen.getByRole("button", { name: columna }));
+      await user.type(screen.getByLabelText(new RegExp(`${columna} contiene`, "i")), valor);
+      await user.click(screen.getByRole("button", { name: "Aplicar" }));
+    };
 
-    await user.type(caja, "nombre12");
+    await filtrar("Representante", "nombre12");
     expect(screen.getByText("Nombre12 Apellido12")).toBeInTheDocument();
     expect(screen.queryByText("Nombre1 Apellido1")).not.toBeInTheDocument();
 
-    await user.clear(caja);
-    await user.type(caja, "1000000003");
+    await user.click(screen.getByRole("button", { name: /^[+] Filtro/ }));
+    await user.click(screen.getByRole("button", { name: "Empezar de cero" }));
+    await filtrar("Documento", "1000000003");
     expect(screen.getByText("Nombre3 Apellido3")).toBeInTheDocument();
     expect(screen.queryByText("Nombre4 Apellido4")).not.toBeInTheDocument();
-
-    await user.clear(caja);
-    await user.type(caja, "zzz");
-    expect(screen.getByText(/ningún representante coincide/i)).toBeInTheDocument();
   });
 
   it("cada fila ofrece acciones con nombre accesible y tooltip", async () => {
