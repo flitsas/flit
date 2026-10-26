@@ -49,7 +49,17 @@ public static class TraductorErroresConsultas
     public static ErrorConsulta Traducir(RpcException excepcion)
     {
         ArgumentNullException.ThrowIfNull(excepcion);
-        var codigo = excepcion.StatusCode;
+        return TraducirCodigo(excepcion.StatusCode);
+    }
+
+    /// <summary>
+    /// El mismo error a partir del código gRPC solo (ADR-0075): es el <c>grpcStatus</c> que core-consultas devuelve en
+    /// <c>consultas.resultado.diagnostico</c> cuando no pudo consultar.
+    /// </summary>
+    public static ErrorConsulta Traducir(StatusCode codigo) => TraducirCodigo(codigo);
+
+    private static ErrorConsulta TraducirCodigo(StatusCode codigo)
+    {
         var tipo = codigo switch
         {
             StatusCode.Unavailable => Red,

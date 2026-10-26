@@ -11,7 +11,7 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// <summary>
 /// Documentos de persona que trae el RUNT del vehículo (HU #13730, F03-C5, D-02, R-3, plan §9.3): el del propietario y, si la
 /// respuesta trae locatario, el del locatario, cifrados con <see cref="IProtectorDocumentoPersona"/> antes de tocar la entidad.
-/// Solo se guardan tipo y número cifrado: el RUNT normalizado ya no trae nombres (<see cref="MapperIntempo"/>). La precedencia
+/// Solo se guardan tipo y número cifrado: el RUNT normalizado ya no trae nombres (<see cref="Mapeos.MapperIntempo"/>). La precedencia
 /// del locatario es la de <see cref="ResolucionLocatario"/>: el del proveedor reemplaza al declarado con origen
 /// <c>PROVEEDOR</c> y el declarado pasa, tal como estaba cifrado, a <c>locatario_declarado_doc_*</c> (respaldo, HU #13730b);
 /// si no viene, se conserva el que había y el respaldo queda vacío. En estas columnas (D2) va el primero que informa el proveedor;

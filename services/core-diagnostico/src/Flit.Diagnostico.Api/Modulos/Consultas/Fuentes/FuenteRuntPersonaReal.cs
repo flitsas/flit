@@ -1,5 +1,7 @@
 using Flit.Consultas.Grpc.V1;
+using Flit.Diagnostico.Api.Modulos.Consultas.Mapeos;
 using Flit.Platform.Grpc.V1;
+using Grpc.Core;
 
 namespace Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 
@@ -13,11 +15,6 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 /// </summary>
 public sealed class FuenteRuntPersonaReal(ClienteConsultas cliente) : IFuenteRuntPersona
 {
-    private const string ChequeoIdentidad = "conductor_identidad";
-    private const string CampoEstado = "person_license_status";
-    private const string CampoCategorias = "person_license_categories";
-    private const string LicenciaActiva = "ACTIVA";
-
     public async Task<RespuestaFuente<ResultadoPersonaRunt>> ConsultarAsync(Guid empresa, DocumentoPersona documento, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(documento);
@@ -27,31 +24,6 @@ public sealed class FuenteRuntPersonaReal(ClienteConsultas cliente) : IFuenteRun
             Documento = new DocumentoIdentidad { Tipo = documento.Tipo, Numero = documento.Numero },
         };
         var respuesta = await cliente.LlamarAsync(empresa, (c, o) => c.ConsultarConductorAsync(solicitud, o), ct).ConfigureAwait(false);
-        if (respuesta.Error is { } errorGrpc)
-            return RespuestaFuente<ResultadoPersonaRunt>.Fallo(errorGrpc);
-
-        var resultado = respuesta.Respuesta!.Resultado;
-        var servicio = TraductorErroresConsultas.Servicio(resultado?.Proveedor);
-        if (TraductorErroresConsultas.Traducir(resultado) is { } error)
-            return RespuestaFuente<ResultadoPersonaRunt>.Fallo(error, servicio);
-
-        return RespuestaFuente<ResultadoPersonaRunt>.Exito(Normalizar(resultado!), servicio, null);
+        return respuesta.Respuesta is { } r ? MapeoRuntPersona.Mapear(r) : MapeoRuntPersona.Error(respuesta.Codigo ?? StatusCode.Unknown);
     }
-
-    internal static ResultadoPersonaRunt Normalizar(ResultadoConsulta resultado)
-    {
-        var inscrito = resultado.Chequeos.Any(c => c.Clave == ChequeoIdentidad && c.Estado == EstadoChequeo.Ok);
-        var estado = Campo(resultado, CampoEstado);
-        var licencias = (Campo(resultado, CampoCategorias) ?? string.Empty)
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Select(categoria => new LicenciaConduccion(categoria.ToUpperInvariant(), LicenciaActiva, null))
-            .ToList();
-        return new ResultadoPersonaRunt(inscrito, estado, licencias);
-    }
-
-    private static string? Campo(ResultadoConsulta resultado, string clave) =>
-        resultado.Campos.FirstOrDefault(c => c.Clave == clave && c.HasValorTexto) is { } campo && !string.IsNullOrWhiteSpace(campo.ValorTexto)
-            ? campo.ValorTexto.Trim()
-            : null;
 }

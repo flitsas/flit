@@ -1,5 +1,7 @@
 using Flit.Consultas.Grpc.V1;
+using Flit.Diagnostico.Api.Modulos.Consultas.Mapeos;
 using Flit.Platform.Grpc.V1;
+using Grpc.Core;
 
 namespace Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 
@@ -19,22 +21,12 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 /// </example>
 public sealed class FuenteAvaluoReal(ClienteConsultas cliente) : IFuenteAvaluo
 {
-    private const string Http5xx = "HTTP_5XX";
-
     public async Task<RespuestaFuente<ResultadoAvaluo>> ConsultarAsync(Guid empresa, SolicitudAvaluo solicitud, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(solicitud);
         var request = Solicitud(solicitud);
         var respuesta = await cliente.LlamarAsync(empresa, (c, o) => c.ConsultarAvaluosAsync(request, o), ct).ConfigureAwait(false);
-        if (respuesta.Error is { } errorGrpc)
-            return RespuestaFuente<ResultadoAvaluo>.Fallo(errorGrpc);
-
-        var resultado = ResultadoAvaluo.Normalizar(respuesta.Respuesta!);
-        var servicio = TraductorErroresConsultas.Servicio(resultado.FuentePrincipal ?? (resultado.Fuentes.Count > 0 ? resultado.Fuentes[0].Fuente : null));
-        if (resultado.TodasEnError)
-            return RespuestaFuente<ResultadoAvaluo>.Fallo(new ErrorConsulta(Http5xx, "Ninguna fuente de avalúo respondió; se puede reintentar."), servicio);
-
-        return RespuestaFuente<ResultadoAvaluo>.Exito(resultado, servicio, null);
+        return respuesta.Respuesta is { } r ? MapeoAvaluo.Mapear(r) : MapeoAvaluo.Error(respuesta.Codigo ?? StatusCode.Unknown);
     }
 
     /// <summary>La solicitud gRPC: placa y VIN si los hay y los datos técnicos (0 o vacío si faltan).</summary>

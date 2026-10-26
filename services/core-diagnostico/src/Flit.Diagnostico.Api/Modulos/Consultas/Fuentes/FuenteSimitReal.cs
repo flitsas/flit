@@ -1,5 +1,7 @@
 using Flit.Consultas.Grpc.V1;
+using Flit.Diagnostico.Api.Modulos.Consultas.Mapeos;
 using Flit.Platform.Grpc.V1;
+using Grpc.Core;
 
 namespace Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 
@@ -23,15 +25,7 @@ public sealed class FuenteSimitReal(ClienteConsultas cliente) : IFuenteSimit
         ArgumentNullException.ThrowIfNull(solicitud);
         var request = Solicitud(solicitud);
         var respuesta = await cliente.LlamarAsync(empresa, (c, o) => c.ConsultarMultasAsync(request, o), ct).ConfigureAwait(false);
-        if (respuesta.Error is { } errorGrpc)
-            return RespuestaFuente<ResultadoSimit>.Fallo(errorGrpc);
-
-        var resultado = respuesta.Respuesta!.Resultado;
-        var servicio = TraductorErroresConsultas.Servicio(resultado?.Proveedor);
-        if (TraductorErroresConsultas.Traducir(resultado) is { } error)
-            return RespuestaFuente<ResultadoSimit>.Fallo(error, servicio);
-
-        return RespuestaFuente<ResultadoSimit>.Exito(ResultadoSimit.Normalizar(resultado!), servicio, null);
+        return respuesta.Respuesta is { } r ? MapeoSimit.Mapear(r) : MapeoSimit.Error(respuesta.Codigo ?? StatusCode.Unknown);
     }
 
     /// <summary>La solicitud gRPC: por placa o por documento, nunca los dos.</summary>

@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using Flit.Diagnostico.Api.Modulos;
 using Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
+using Flit.Diagnostico.Api.Modulos.Consultas.Mapeos;
 using Flit.Diagnostico.Domain.Vehiculos;
 using Flit.Diagnostico.Tests.Api;
 using FluentAssertions;

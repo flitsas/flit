@@ -1,3 +1,4 @@
+using Flit.Diagnostico.Api.Modulos.Consultas.Mapeos;
 namespace Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 
 /// <summary>

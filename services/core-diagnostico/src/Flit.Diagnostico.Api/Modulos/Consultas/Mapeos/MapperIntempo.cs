@@ -1,16 +1,18 @@
 using System.Globalization;
 using Flit.Consultas.Grpc.V1;
+using Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 using Google.Protobuf;
+using TipoErrorFuente = Flit.Diagnostico.Api.Modulos.Consultas.Fuentes.TipoErrorFuente;
 using TipoErrorIntempo = Flit.Consultas.Grpc.V1.TipoErrorFuente;
 
-namespace Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
+namespace Flit.Diagnostico.Api.Modulos.Consultas.Mapeos;
 
 /// <summary>
 /// Regla única del producto para el RUNT por Intempo (HU #13877, F10-H5; antes HU #13725 y #13795): convierte la respuesta
 /// tipada de core-consultas (<see cref="ConsultarVehiculoIntempoResponse"/>, <c>runt_intempo.proto</c>) en
-/// <see cref="ResultadoRunt"/>. La fuente real (F10-H6) llama a <see cref="Mapear(ConsultarVehiculoIntempoResponse, string)"/>
-/// con el mensaje recibido; la simulada pasa su fixture proto-JSON por <see cref="MapearJson"/>, que lo lee con el
-/// <see cref="JsonParser"/> estricto y llama a la misma regla (G5=a).
+/// <see cref="ResultadoRunt"/>. Desde ADR-0075 la respuesta llega por el bus (<see cref="MapeoRunt"/>, que llama a
+/// <see cref="Mapear(ConsultarVehiculoIntempoResponse, string)"/>); un fixture proto-JSON pasa por <see cref="MapearJson"/>, que
+/// lo lee con el <see cref="JsonParser"/> estricto y llama a la misma regla (G5=a).
 /// <list type="bullet">
 /// <item><c>ENCONTRADO</c>: placa, VIN, servicio, clase, organismo, marca, línea, modelo, <c>cilidraje</c> (errata de la
 /// especificación), combustible y <c>datosTecnicos.pasajerosSentados</c>; propietarios con el tipo de

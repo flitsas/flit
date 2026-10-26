@@ -1,4 +1,5 @@
 using Flit.Consultas.Grpc.V1;
+using Flit.Diagnostico.Api.Modulos.Consultas.Mapeos;
 using Grpc.Core;
 
 namespace Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
@@ -28,7 +29,7 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 public sealed class FuenteRuntReal(ClienteRuntIntempo cliente) : IFuenteRunt
 {
     /// <summary>Servicio que resolvió (<c>EjecutorCeldaRunt</c> lo lleva a <c>ServicioConsulta.Intempo</c>).</summary>
-    public const string Servicio = "INTEMPO";
+    public const string Servicio = MapeoRunt.Servicio;
 
     public async Task<ResultadoRunt> ConsultarVehiculoAsync(Guid empresa, IdentificadorVehiculo identificador, CancellationToken ct)
     {
@@ -37,17 +38,6 @@ public sealed class FuenteRuntReal(ClienteRuntIntempo cliente) : IFuenteRunt
         var respuesta = identificador.EsVin
             ? await cliente.LlamarAsync(empresa, (c, o) => c.ConsultarPorVinAsync(new ConsultarPorVinRequest { Vin = valor }, o), ct).ConfigureAwait(false)
             : await cliente.LlamarAsync(empresa, (c, o) => c.ConsultarPorPlacaAsync(new ConsultarPorPlacaRequest { Placa = valor }, o), ct).ConfigureAwait(false);
-        if (respuesta.Respuesta is { } r)
-            return MapperIntempo.Mapear(r, Servicio);
-
-        if (respuesta.Codigo is StatusCode.FailedPrecondition or StatusCode.Unimplemented)
-            return ResultadoRunt.Fallo(TipoErrorFuente.NoConectado, FuenteRuntNoConectada.Mensaje);
-
-        var error = respuesta.Error!;
-        return ResultadoRunt.Fallo(Tipo(error.TipoError), error.Mensaje);
+        return respuesta.Respuesta is { } r ? MapeoRunt.Mapear(r) : MapeoRunt.Error(respuesta.Codigo ?? StatusCode.Unknown);
     }
-
-    /// <summary>Código de <see cref="TraductorErroresConsultas"/> → <see cref="TipoErrorFuente"/>; desconocido → definitivo.</summary>
-    private static TipoErrorFuente Tipo(string codigo) =>
-        Enum.GetValues<TipoErrorFuente>().FirstOrDefault(t => TipoErrorFuenteCodigos.Codigo(t) == codigo, TipoErrorFuente.EstadoNoOk);
 }

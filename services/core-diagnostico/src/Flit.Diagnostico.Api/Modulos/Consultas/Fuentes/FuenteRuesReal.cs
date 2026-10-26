@@ -1,4 +1,6 @@
 using Flit.Consultas.Grpc.V1;
+using Flit.Diagnostico.Api.Modulos.Consultas.Mapeos;
+using Grpc.Core;
 
 namespace Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 
@@ -16,34 +18,6 @@ public sealed class FuenteRuesReal(ClienteConsultas cliente) : IFuenteRues
         ArgumentException.ThrowIfNullOrWhiteSpace(nit);
         var solicitud = new ConsultarRuesRequest { Opciones = new OpcionesConsulta(), Nit = nit };
         var respuesta = await cliente.LlamarAsync(empresa, (c, o) => c.ConsultarRuesAsync(solicitud, o), ct).ConfigureAwait(false);
-        if (respuesta.Error is { } errorGrpc)
-            return RespuestaFuente<ResultadoRues>.Fallo(errorGrpc);
-
-        var resultado = respuesta.Respuesta!.Resultado;
-        var servicio = TraductorErroresConsultas.Servicio(resultado?.Proveedor);
-        if (TraductorErroresConsultas.Traducir(resultado) is { } error)
-            return RespuestaFuente<ResultadoRues>.Fallo(error, servicio);
-
-        return RespuestaFuente<ResultadoRues>.Exito(Normalizar(resultado!), servicio, null);
+        return respuesta.Respuesta is { } r ? MapeoRues.Mapear(r) : MapeoRues.Error(respuesta.Codigo ?? StatusCode.Unknown);
     }
-
-    internal static ResultadoRues Normalizar(ResultadoConsulta resultado)
-    {
-        var matricula = resultado.Certificaciones?.MatriculasMercantiles.FirstOrDefault();
-        var estado = Texto(matricula?.Estado?.Crudo) ?? Vigencia(matricula?.Estado) ?? Campo(resultado, "rues_estado");
-        var renovacion = Texto(matricula?.RenovadaEn?.Valor) ?? Campo(resultado, "rues_fecha_renovacion") ?? Campo(resultado, "rues_ultimo_ano_renovado");
-        return new ResultadoRues(estado is not null || renovacion is not null, estado?.ToUpperInvariant(), renovacion);
-    }
-
-    private static string? Vigencia(EstadoVigencia? estado) => estado?.Valor switch
-    {
-        Flit.Consultas.Grpc.V1.Vigencia.Vigente => "ACTIVA",
-        Flit.Consultas.Grpc.V1.Vigencia.Vencido => "VENCIDA",
-        _ => null,
-    };
-
-    private static string? Texto(string? valor) => string.IsNullOrWhiteSpace(valor) ? null : valor.Trim();
-
-    private static string? Campo(ResultadoConsulta resultado, string clave) =>
-        resultado.Campos.FirstOrDefault(c => c.Clave == clave && c.HasValorTexto) is { } campo ? Texto(campo.ValorTexto) : null;
 }

@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Flit.Consultas.Grpc.V1;
 using Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
+using Flit.Diagnostico.Api.Modulos.Consultas.Mapeos;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Personas;
 using Flit.Diagnostico.Domain.Vehiculos;
