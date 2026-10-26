@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Ban, Eye, Loader2, Pencil } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
@@ -8,6 +8,7 @@ import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { Modal } from "@/components/atom/Modal";
 import { Pagination } from "@/components/atom/Pagination";
 import { RowActions } from "@/components/atom/RowActions";
+import { TablaFiltrosBar, TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import {
   createSignatureVaultEntry,
@@ -16,6 +17,8 @@ import {
   type SignatureVaultInput,
   type SignatureVaultItem,
 } from "@/lib/api/admin-signature-vault";
+import { filtrarFilas, type ColumnaFiltro } from "@/lib/tablas/filtrar-filas";
+import { useTablaFiltros } from "@/lib/tablas/useTablaFiltros";
 import { SignatureVaultFormPanel } from "./SignatureVaultFormPanel";
 import { SignatureVaultEditPanel } from "./SignatureVaultEditPanel";
 import { SignatureVaultDetailModal } from "./SignatureVaultDetailModal";
@@ -28,6 +31,23 @@ import {
   TABLA_ROW_HOVER_CLS,
 } from "@/components/atom/table-styles";
 
+// HU #14001 — filtros por columna. «Vigencia» es un rango: Periodo actúa sobre la fecha de VENCIMIENTO
+// (vigenciaHasta), que es la que decide si la firma sigue sirviendo y la que el usuario busca
+// («¿cuáles vencen este mes?»).
+const COLUMNAS_FILTRO: ColumnaFiltro[] = [
+  { id: "registro", label: "Registro", tipo: "texto" },
+  { id: "documento", label: "Documento", tipo: "texto" },
+  { id: "hash", label: "Código hash", tipo: "texto" },
+  { id: "apoderado", label: "Apoderado", tipo: "texto" },
+  { id: "vigencia", label: "Vigencia", tipo: "fecha" },
+  {
+    id: "estado",
+    label: "Estado",
+    tipo: "seleccion",
+    opciones: Object.entries(ESTADO_LABELS).map(([value, label]) => ({ value, label })),
+  },
+];
+
 /**
  * Pestaña "Baúl de Firmas" (HU #10644): registra, lista, consulta, CORRIGE y anula firmas de
  * apoderados de la compañía. Visible solo cuando `baulFirmasActivo` está activo (lo
@@ -39,6 +59,25 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
   const [status, setStatus] = useState<UiStatus>("loading");
   const pg = usePaginacion("signature-vault.SignatureVaultTab");
   const [items, setItems] = useState<SignatureVaultItem[]>([]);
+  const filtros = useTablaFiltros({
+    columnas: COLUMNAS_FILTRO,
+    periodoColumnaId: "vigencia",
+    onCambio: () => pg.setPage(1),
+  });
+  const filtradas = useMemo(
+    () =>
+      filtrarFilas(items, filtros.condicionesTotales, filtros.busqueda, {
+        columnas: {
+          registro: (i) => formatDate(i.fechaRegistro ?? i.createdAt ?? null),
+          documento: (i) => `${i.documentType} ${i.documentNumber}`,
+          hash: (i) => i.codigoHash,
+          apoderado: (i) => i.fullName,
+          vigencia: (i) => i.vigenciaHasta,
+          estado: (i) => i.estado,
+        },
+      }),
+    [items, filtros.condicionesTotales, filtros.busqueda],
+  );
   const [formOpen, setFormOpen] = useState(false);
   const [detail, setDetail] = useState<SignatureVaultItem | null>(null);
   const [toEdit, setToEdit] = useState<SignatureVaultItem | null>(null);
@@ -116,123 +155,190 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
       {status === "loading" ? (
         <CarLoaderModal label="Cargando firmas del baúl…" />
       ) : (
-      <UiStateBoundary
-        status={status}
-        emptyMessage="Esta compañía aún no tiene firmas registradas en el baúl."
-        emptyCta={emptyCta}
-        errorMessage="No se pudieron cargar las firmas del baúl."
-        onRetry={() => void load()}
-        skeletonRows={4}
-      >
-        {/* Bug #13055 — tabla homologada con el modelo de trámites */}
-        <div className="overflow-x-auto">
-          <table className="min-w-[820px] text-xs" style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}>
-            <caption className="sr-only">Firmas de apoderados registradas en el baúl</caption>
-            <thead>
-              <tr>
-                <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-                  Registro
-                </th>
-                <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-                  Documento
-                </th>
-                <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-                  Código hash
-                </th>
-                <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-                  Apoderado
-                </th>
-                <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-                  Vigencia
-                </th>
-                <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-                  Estado
-                </th>
-                <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl text-right`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-                  Acciones
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {pg.paginar(items).map((item) => {
-                const registro = item.fechaRegistro ?? item.createdAt ?? null;
-                const revoked = item.estado === "revocada";
-                const badge = ESTADO_BADGE[item.estado] ?? ESTADO_BADGE.vencida;
-                return (
-                  <tr key={item.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
-                    <td className={`rounded-l-xl border-y border-l px-4 py-3 ${revoked ? "opacity-60" : ""}`} style={{ borderColor: "#DFE5ED" }}>
-                      {formatDate(registro)}
-                    </td>
-                    <td className={`border-y px-4 py-3 ${revoked ? "opacity-60" : ""}`} style={{ borderColor: "#DFE5ED" }}>
-                      <span className="font-mono">
-                        {item.documentType} {formatDocumentNumber(item.documentNumber)}
-                      </span>
-                    </td>
-                    <td className={`border-y px-4 py-3 font-mono ${revoked ? "opacity-60" : ""}`} style={{ borderColor: "#DFE5ED" }}>
-                      {item.codigoHash ?? "—"}
-                    </td>
-                    <td className={`border-y px-4 py-3 font-semibold ${revoked ? "opacity-60" : ""}`} style={{ borderColor: "#DFE5ED" }}>
-                      {item.fullName}
-                    </td>
-                    <td className={`border-y px-4 py-3 ${revoked ? "opacity-60" : ""}`} style={{ borderColor: "#DFE5ED" }}>
-                      {formatDate(item.vigenciaDesde)} — {formatDate(item.vigenciaHasta)}
-                    </td>
-                    <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
-                      <span
-                        className="inline-block rounded-full border px-2 py-0.5 text-xs font-semibold"
-                        style={{ color: badge.color, borderColor: badge.border, background: badge.bg }}
-                      >
-                        {ESTADO_LABELS[item.estado] ?? item.estado}
-                      </span>
-                    </td>
-                    <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "#DFE5ED" }}>
-                      {/* Corregir/Anular solo sobre firmas activas: el contenido de una revocada es
+        <UiStateBoundary
+          status={status}
+          emptyMessage="Esta compañía aún no tiene firmas registradas en el baúl."
+          emptyCta={emptyCta}
+          errorMessage="No se pudieron cargar las firmas del baúl."
+          onRetry={() => void load()}
+          skeletonRows={4}
+        >
+          <div className="flex flex-col gap-3">
+            <TablaFiltrosBar filtros={filtros} />
+            {filtradas.length === 0 ? (
+              <TablaFiltrosVacio onLimpiar={filtros.limpiar} />
+            ) : (
+              <>
+                {/* Bug #13055 — tabla homologada con el modelo de trámites */}
+                <div className="overflow-x-auto">
+                  <table
+                    className="min-w-[820px] text-xs"
+                    style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
+                  >
+                    <caption className="sr-only">
+                      Firmas de apoderados registradas en el baúl
+                    </caption>
+                    <thead>
+                      <tr>
+                        <th
+                          scope="col"
+                          className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`}
+                          style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                        >
+                          Registro
+                        </th>
+                        <th
+                          scope="col"
+                          className={TABLA_HEADER_CELL_CLS}
+                          style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                        >
+                          Documento
+                        </th>
+                        <th
+                          scope="col"
+                          className={TABLA_HEADER_CELL_CLS}
+                          style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                        >
+                          Código hash
+                        </th>
+                        <th
+                          scope="col"
+                          className={TABLA_HEADER_CELL_CLS}
+                          style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                        >
+                          Apoderado
+                        </th>
+                        <th
+                          scope="col"
+                          className={TABLA_HEADER_CELL_CLS}
+                          style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                        >
+                          Vigencia
+                        </th>
+                        <th
+                          scope="col"
+                          className={TABLA_HEADER_CELL_CLS}
+                          style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                        >
+                          Estado
+                        </th>
+                        <th
+                          scope="col"
+                          className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl text-right`}
+                          style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                        >
+                          Acciones
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pg.paginar(filtradas).map((item) => {
+                        const registro = item.fechaRegistro ?? item.createdAt ?? null;
+                        const revoked = item.estado === "revocada";
+                        const badge = ESTADO_BADGE[item.estado] ?? ESTADO_BADGE.vencida;
+                        return (
+                          <tr
+                            key={item.id}
+                            className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
+                          >
+                            <td
+                              className={`rounded-l-xl border-y border-l px-4 py-3 ${revoked ? "opacity-60" : ""}`}
+                              style={{ borderColor: "#DFE5ED" }}
+                            >
+                              {formatDate(registro)}
+                            </td>
+                            <td
+                              className={`border-y px-4 py-3 ${revoked ? "opacity-60" : ""}`}
+                              style={{ borderColor: "#DFE5ED" }}
+                            >
+                              <span className="font-mono">
+                                {item.documentType} {formatDocumentNumber(item.documentNumber)}
+                              </span>
+                            </td>
+                            <td
+                              className={`border-y px-4 py-3 font-mono ${revoked ? "opacity-60" : ""}`}
+                              style={{ borderColor: "#DFE5ED" }}
+                            >
+                              {item.codigoHash ?? "—"}
+                            </td>
+                            <td
+                              className={`border-y px-4 py-3 font-semibold ${revoked ? "opacity-60" : ""}`}
+                              style={{ borderColor: "#DFE5ED" }}
+                            >
+                              {item.fullName}
+                            </td>
+                            <td
+                              className={`border-y px-4 py-3 ${revoked ? "opacity-60" : ""}`}
+                              style={{ borderColor: "#DFE5ED" }}
+                            >
+                              {formatDate(item.vigenciaDesde)} — {formatDate(item.vigenciaHasta)}
+                            </td>
+                            <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                              <span
+                                className="inline-block rounded-full border px-2 py-0.5 text-xs font-semibold"
+                                style={{
+                                  color: badge.color,
+                                  borderColor: badge.border,
+                                  background: badge.bg,
+                                }}
+                              >
+                                {ESTADO_LABELS[item.estado] ?? item.estado}
+                              </span>
+                            </td>
+                            <td
+                              className="rounded-r-xl border-y border-r px-4 py-3 text-right"
+                              style={{ borderColor: "#DFE5ED" }}
+                            >
+                              {/* Corregir/Anular solo sobre firmas activas: el contenido de una revocada es
                           histórico. Sin Corregir, arreglar un código hash mal digitado obligaba a
                           anular la firma y volver a registrarla. */}
-                      <RowActions
-                        actions={[
-                          {
-                            icon: Eye,
-                            label: `Ver detalle de la firma de ${item.fullName}`,
-                            onClick: () => setDetail(item),
-                            tone: "primary",
-                          },
-                          ...(!revoked
-                            ? [
-                                {
-                                  icon: Pencil,
-                                  label: `Corregir la firma de ${item.fullName}`,
-                                  onClick: () => setToEdit(item),
-                                  tone: "primary" as const,
-                                },
-                                {
-                                  icon: Ban,
-                                  label: `Anular la firma de ${item.fullName}`,
-                                  onClick: () => setToRevoke(item),
-                                  tone: "danger" as const,
-                                },
-                              ]
-                            : []),
-                        ]}
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                              <RowActions
+                                actions={[
+                                  {
+                                    icon: Eye,
+                                    label: `Ver detalle de la firma de ${item.fullName}`,
+                                    onClick: () => setDetail(item),
+                                    tone: "primary",
+                                  },
+                                  ...(!revoked
+                                    ? [
+                                        {
+                                          icon: Pencil,
+                                          label: `Corregir la firma de ${item.fullName}`,
+                                          onClick: () => setToEdit(item),
+                                          tone: "primary" as const,
+                                        },
+                                        {
+                                          icon: Ban,
+                                          label: `Anular la firma de ${item.fullName}`,
+                                          onClick: () => setToRevoke(item),
+                                          tone: "danger" as const,
+                                        },
+                                      ]
+                                    : []),
+                                ]}
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
 
-        {/* Bug #13055 — paginación en cliente con filas por página, como el listado de trámites */}
-        <Pagination
-          page={pg.page}
-          pageSize={pg.pageSize}
-          totalCount={items.length}
-          onPageChange={pg.setPage}
-          onPageSizeChange={pg.setPageSize}
-          noun="firmas"
-        />
-      </UiStateBoundary>
+                {/* Bug #13055 — paginación en cliente con filas por página, como el listado de trámites */}
+                <Pagination
+                  page={pg.page}
+                  pageSize={pg.pageSize}
+                  totalCount={filtradas.length}
+                  onPageChange={pg.setPage}
+                  onPageSizeChange={pg.setPageSize}
+                  noun="firmas"
+                />
+              </>
+            )}
+          </div>
+        </UiStateBoundary>
       )}
 
       <SignatureVaultFormPanel
@@ -270,8 +376,8 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
           title="Anular firma"
         >
           <p className="mt-2 text-sm opacity-80">
-            Vas a anular la firma de <strong>{toRevoke.fullName}</strong>. Quedará como revocada y ya
-            no podrá reutilizarse en nuevos trámites. Esta acción no se puede deshacer.
+            Vas a anular la firma de <strong>{toRevoke.fullName}</strong>. Quedará como revocada y
+            ya no podrá reutilizarse en nuevos trámites. Esta acción no se puede deshacer.
           </p>
           <div className="mt-5 flex gap-3">
             <button
@@ -298,4 +404,3 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
     </div>
   );
 }
-
