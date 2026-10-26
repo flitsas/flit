@@ -175,6 +175,18 @@ describe("UsersTable — filtros de arriba + filtro por columna (HU #14006)", ()
     await user.type(screen.getByLabelText("Buscar usuarios"), "ana");
     await filtroSeleccion(user, "Estado", "Pendiente");
     expect(screen.getByText(/ningún usuario coincide/i)).toBeInTheDocument();
+    // La tabla sigue montada: embudos visibles (el de Estado, activo) y el buscador de arriba.
+    expect(screen.getByRole("table", { name: "Usuarios" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Filtrar por Estado \(/ })).toHaveAttribute(
+      "data-activo",
+      "true",
+    );
+    expect(screen.getByLabelText("Buscar usuarios")).toHaveValue("ana");
+    // Se quita solo el filtro de columna; el buscador se conserva.
+    await user.click(screen.getByRole("button", { name: /^Filtrar por Estado/ }));
+    await user.click(screen.getByRole("button", { name: "Quitar filtro" }));
+    expect(screen.getByText("Ana Torres")).toBeInTheDocument();
+    await filtroSeleccion(user, "Estado", "Pendiente");
     await user.click(screen.getByRole("button", { name: "Limpiar filtros" }));
     expect(screen.getByText("Ana Torres")).toBeInTheDocument();
     expect(screen.getByText("Beto Ruiz")).toBeInTheDocument();

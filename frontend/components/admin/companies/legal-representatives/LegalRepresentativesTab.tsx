@@ -21,7 +21,7 @@ import { usePaginacion } from "@/components/atom/usePaginacion";
 import { RowActions } from "@/components/atom/RowActions";
 import { EncabezadoFiltrable } from "@/components/atom/FiltroColumna";
 import { SearchInput } from "@/components/atom/SearchInput";
-import { TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
+import { FilaVaciaFiltros } from "@/components/atom/FilaVaciaFiltros";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import {
   TABLA_HEADER_BG,
@@ -379,15 +379,7 @@ export function LegalRepresentativesTab({
               )}
             </div>
 
-            {filtered.length === 0 ? (
-              <TablaFiltrosVacio
-                mensaje="Ningún representante coincide con la búsqueda ni los filtros"
-                onLimpiar={() => {
-                  filtros.limpiar();
-                  setSearch("");
-                }}
-              />
-            ) : (
+            {
               <>
                 <div className="overflow-x-auto">
                   <table
@@ -443,6 +435,16 @@ export function LegalRepresentativesTab({
                       </tr>
                     </thead>
                     <tbody>
+                      {filtered.length === 0 ? (
+                        <FilaVaciaFiltros
+                          columnas={5}
+                          mensaje="Ningún representante coincide con la búsqueda ni los filtros"
+                          onLimpiar={() => {
+                            filtros.limpiar();
+                            setSearch("");
+                          }}
+                        />
+                      ) : null}
                       {paginar(filtered).map((item) => {
                         const st = signatureStatus(item.hasSignatureOrIdentity);
                         const tramites = procedureTypeLabels(item.procedureTypeIds, procedureTypes);
@@ -529,16 +531,18 @@ export function LegalRepresentativesTab({
                   </table>
                 </div>
 
-                <Pagination
-                  page={page}
-                  pageSize={pageSize}
-                  totalCount={filtered.length}
-                  onPageChange={setPage}
-                  onPageSizeChange={setPageSize}
-                  noun="representantes"
-                />
+                {filtered.length > 0 ? (
+                  <Pagination
+                    page={page}
+                    pageSize={pageSize}
+                    totalCount={filtered.length}
+                    onPageChange={setPage}
+                    onPageSizeChange={setPageSize}
+                    noun="representantes"
+                  />
+                ) : null}
               </>
-            )}
+            }
           </div>
         </UiStateBoundary>
       )}

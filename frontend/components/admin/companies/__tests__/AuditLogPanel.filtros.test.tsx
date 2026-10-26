@@ -63,16 +63,18 @@ describe("AuditLogPanel — filtros por columna (HU #14005)", () => {
     expect(ultimoLlamado()[5]).toEqual({});
 
     await aplicarTexto("Campo modificado", "improntas");
-    await waitFor(() => expect(ultimoLlamado()[5]).toEqual({ campo: "improntas" }));
+    await waitFor(() => expect(ultimoLlamado()[5]).toMatchObject({ campo: "improntas" }));
     await aplicarTexto("Valor anterior", "false");
     await aplicarTexto("Operador", "aaaa");
     await waitFor(() =>
-      expect(ultimoLlamado()[5]).toEqual({
+      expect(ultimoLlamado()[5]).toMatchObject({
         campo: "improntas",
         valorAnterior: "false",
         operador: "aaaa",
       }),
     );
+    // «false» no es una etiqueta visible: no añade alternativas.
+    expect(ultimoLlamado()[5].valorAnteriorAlternativas).toBeUndefined();
     expect(ultimoLlamado()[1]).toBe(1);
     expect(ultimoLlamado()[4]).toBe("h-1");
   });
@@ -149,6 +151,46 @@ describe("AuditLogPanel — filtros por columna (HU #14005)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Limpiar filtros" }));
     await screen.findByRole("cell", { name: "Generación de improntas" });
     expect(ultimoLlamado()[5]).toEqual({});
+  });
+
+  it("vacío por filtros: siguen los encabezados con embudos y los filtros de arriba; se quita solo un filtro", async () => {
+    fetchAuditLog.mockResolvedValueOnce(FULL);
+    fetchAuditLog.mockResolvedValueOnce(FULL);
+    fetchAuditLog.mockResolvedValueOnce(EMPTY);
+    fetchAuditLog.mockResolvedValue(FULL);
+    render(<AuditLogPanel tenantId="t-1" />);
+    await screen.findByRole("cell", { name: "Generación de improntas" });
+    await aplicarTexto("Campo modificado", "improntas");
+    await aplicarTexto("Operador", "zzz");
+    await screen.findByText("Ningún registro coincide con los filtros");
+    expect(screen.getByRole("columnheader", { name: /Operador/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Filtrar por Fecha/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Filtrar por Operador \(/ })).toHaveAttribute(
+      "data-activo",
+      "true",
+    );
+    expect(screen.getByLabelText("Buscar en el historial")).toBeInTheDocument();
+    expect(screen.getByRole("search", { name: "Filtros del historial" })).toBeInTheDocument();
+
+    const dialog = await abrirEmbudo("Operador");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Quitar filtro" }));
+    await screen.findByRole("cell", { name: "Generación de improntas" });
+    expect(ultimoLlamado()[5]).toEqual({
+      campo: "improntas",
+      campoClaves: expect.stringContaining("generate_improntas"),
+    });
+  });
+
+  it("el texto visible viaja con sus claves técnicas: «Inicio de sesión» → login; «Deshabilitada» → false", async () => {
+    fetchAuditLog.mockResolvedValue(FULL);
+    render(<AuditLogPanel tenantId="t-1" />);
+    await screen.findByRole("cell", { name: "Generación de improntas" });
+    await aplicarTexto("Campo modificado", "Inicio de sesión");
+    await waitFor(() => expect(ultimoLlamado()[5].campo).toBe("Inicio de sesión"));
+    expect(ultimoLlamado()[5].campoClaves.split(",")).toContain("login");
+    await aplicarTexto("Valor anterior", "Deshabilitada");
+    await waitFor(() => expect(ultimoLlamado()[5].valorAnterior).toBe("Deshabilitada"));
+    expect(ultimoLlamado()[5].valorAnteriorAlternativas).toBe("false");
   });
 
   it("sin filtros y sin datos conserva el vacío propio de la compañía", async () => {

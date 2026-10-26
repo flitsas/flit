@@ -357,6 +357,10 @@ export interface AuditLogFilters {
   campo?: string;
   valorAnterior?: string;
   operador?: string;
+  /** Claves técnicas (coma) cuya etiqueta visible coincide con `campo`; OR con `campo`. */
+  campoClaves?: string;
+  /** Valores técnicos (coma, p. ej. `true,false`) de la etiqueta visible; OR con `valorAnterior`. */
+  valorAnteriorAlternativas?: string;
 }
 
 /** GET /{tenantId}/audit-log — historial paginado DESC (AC5), filtrable en servidor (HU #14005). */
