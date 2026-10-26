@@ -1,6 +1,7 @@
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.Quipux;
 using Microsoft.Extensions.Logging;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
@@ -13,17 +14,23 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// pasa pero la radicación falla (p.ej. organismo_no_habilitado), el trámite queda en
 /// <c>preparado</c>: corregida la causa, un nuevo submit solo reintenta la radicación.
 /// <para>
-/// ADR-0059 (HU #12597) — el destino de la radicación lo decide
+/// ADR-0059 (HU #12597) — el destino de la radicación del canal gestor/OT lo decide
 /// <see cref="TramiteTransitionPolicy.DestinoDeRadicacion"/>: la Ruta Larga (tipo que pide placa y
 /// no la tiene) entra por <c>preasignacion</c>; con placa (RUNT o digitada) o en tipos sin placa entra
 /// por <c>entregado</c>. Los flags de preasignación de compañía/OT ya NO deciden la ruta.
 /// </para>
 /// <para>
-/// Desde <c>rechazado</c> con subsanación activa (HU #10870) este MISMO handler re-radica directo
-/// (sin encadenar preparado): <see cref="ITramiteLifecycleService"/> re-evalúa SOLO los gates de
-/// negocio afectados por los campos corregidos desde el snapshot capturado al entrar a
-/// subsanación (HU #10872, AC1) — más el gate final de entrega al OT, que siempre corre. La
-/// identidad y las consultas externas aún vigentes NO se vuelven a solicitar (AC2).
+/// Bug #13912 — canal Quipux: el submit NO avanza a <c>entregado</c>/<c>preasignacion</c>. Tras
+/// <c>borrador→preparado</c> (o <c>rechazado→preparado</c> con subsanación) el trámite permanece en
+/// <c>preparado</c> para que el worker encole <c>registroDocumento</c>; <c>entregado</c> solo ocurre
+/// tras código 081/082 (actor Quipux).
+/// </para>
+/// <para>
+/// Desde <c>rechazado</c> con subsanación activa (HU #10870) este MISMO handler re-radica:
+/// canal gestor/OT → destino de <see cref="TramiteTransitionPolicy.DestinoDeRadicacion"/>;
+/// canal Quipux → <c>preparado</c>. <see cref="ITramiteLifecycleService"/> re-evalúa SOLO los gates
+/// afectados por el diff del snapshot (HU #10872, AC1) — más el gate final de entrega al OT cuando
+/// el destino es llegada al organismo.
 /// </para>
 /// </summary>
 public sealed class SubmitProcedureInstanceHandler(
@@ -58,6 +65,8 @@ public sealed class SubmitProcedureInstanceHandler(
         if (instance.IsPaused)
             return (null, TramiteEstadoErrores.TramitePausado);
 
+        var esQuipux = ProcedureTypeQuipuxGate.EstaParametrizadoParaQuipux(instance.ProcedureType?.ExternalRefs);
+
         // La resolución de identidad por persona (HU #10350, #87) y los gates OT viven en
         // TramiteLifecycleService — este orquestador solo encadena las transiciones.
         if (instance.Status == TramiteEstado.Borrador)
@@ -69,6 +78,37 @@ public sealed class SubmitProcedureInstanceHandler(
                 ct).ConfigureAwait(false);
             if (!preparado.Success)
                 return (null, preparado.ErrorCode);
+
+            // Quipux: listo para encolar — no radicar a entregado/preasignacion desde el gestor.
+            if (esQuipux)
+            {
+                SubmitLog.DestinoQuipuxPreparado(_logger, id, tenantId, "borrador");
+                return (CreateProcedureInstanceHandler.ToSummary(preparado.Instance!), null);
+            }
+        }
+        else if (esQuipux && instance.Status == TramiteEstado.Preparado)
+        {
+            // Idempotente: ya está en cola para el worker (evitar salto a entregado).
+            SubmitLog.DestinoQuipuxPreparado(_logger, id, tenantId, "preparado");
+            return (CreateProcedureInstanceHandler.ToSummary(instance), null);
+        }
+        else if (esQuipux
+                 && TramiteEstado.EsReRadicacionSubsanacion(instance.Status, instance.SubsanacionActiva))
+        {
+            var reapertura = await lifecycle.TransitionAsync(
+                new TramiteTransitionCommand(
+                    id,
+                    tenantId,
+                    TramiteEstado.Preparado,
+                    "Re-radicación Quipux: trámite listo para encolar de nuevo.",
+                    changedBy,
+                    TramiteActor.Gestor),
+                ct).ConfigureAwait(false);
+            if (!reapertura.Success)
+                return (null, reapertura.ErrorCode);
+
+            SubmitLog.DestinoQuipuxPreparado(_logger, id, tenantId, "rechazado");
+            return (CreateProcedureInstanceHandler.ToSummary(reapertura.Instance!), null);
         }
         else if (!(instance.Status == TramiteEstado.Preparado
                   || TramiteEstado.EsReRadicacionSubsanacion(instance.Status, instance.SubsanacionActiva)))
@@ -120,6 +160,11 @@ internal static partial class SubmitLog
         Message = "Radicación del trámite {InstanceId} (tenant {TenantId}) → '{Destino}' (pide placa: {PidePlaca}, tiene placa: {TienePlaca}).")]
     public static partial void DestinoRadicacion(
         ILogger logger, Guid instanceId, Guid tenantId, string destino, bool pidePlaca, bool tienePlaca);
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Radicación Quipux del trámite {InstanceId} (tenant {TenantId}): permanece en 'preparado' (origen {Origen}) para encolar.")]
+    public static partial void DestinoQuipuxPreparado(
+        ILogger logger, Guid instanceId, Guid tenantId, string origen);
 
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "La firma automática de impronta del trámite {InstanceId} (tenant {TenantId}) se omitió por una excepción no controlada.")]
