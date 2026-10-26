@@ -69,8 +69,10 @@ async function renderTab() {
 }
 
 async function abrirFiltro(user: User, columna: string) {
-  await user.click(screen.getByRole("button", { name: /^\+ Filtro/ }));
-  await user.click(screen.getByRole("button", { name: columna }));
+  const base = `Filtrar por ${columna}`;
+  await user.click(
+    screen.getByRole("button", { name: (n) => n === base || n.startsWith(`${base} (`) }),
+  );
 }
 
 async function filtrarTexto(user: User, columna: string, valor: string) {
@@ -85,6 +87,15 @@ describe("SignatureVaultTab · filtros por columna (HU #14001)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(fetchSignatureVault).mockResolvedValue([ANA, LUIS, MARTA]);
+  });
+
+  it("AC2: no monta la barra de la épica; hay un embudo por columna y ninguno en Acciones", async () => {
+    await renderTab();
+    expect(screen.queryByRole("button", { name: /^\+ Filtro/ })).not.toBeInTheDocument();
+    for (const c of ["Registro", "Documento", "Código hash", "Apoderado", "Vigencia", "Estado"]) {
+      expect(screen.getByRole("button", { name: `Filtrar por ${c}` })).toBeInTheDocument();
+    }
+    expect(screen.queryByRole("button", { name: /Filtrar por Acciones/ })).not.toBeInTheDocument();
   });
 
   it("AC2: filtra por Registro (la fecha tal como se ve)", async () => {
@@ -133,10 +144,10 @@ describe("SignatureVaultTab · filtros por columna (HU #14001)", () => {
   it("AC2: Vigencia (Periodo) actúa sobre la fecha de vencimiento", async () => {
     const user = userEvent.setup();
     await renderTab();
-    await user.click(screen.getByRole("button", { name: /periodo/i }));
-    await user.selectOptions(screen.getByLabelText("Periodo"), "Rango propio");
-    await user.type(screen.getByLabelText("Fecha inicial del rango propio"), "2026-07-01");
-    await user.type(screen.getByLabelText("Fecha final del rango propio"), "2026-09-30");
+    await abrirFiltro(user, "Vigencia");
+    await user.click(screen.getByRole("radio", { name: "Rango propio" }));
+    await user.type(screen.getByLabelText("Desde"), "2026-07-01");
+    await user.type(screen.getByLabelText("Hasta"), "2026-09-30");
     await user.click(screen.getByRole("button", { name: "Aplicar" }));
     expect(screen.getByText("Marta Rojas")).toBeInTheDocument();
     expect(visibles()).toBe(1);
