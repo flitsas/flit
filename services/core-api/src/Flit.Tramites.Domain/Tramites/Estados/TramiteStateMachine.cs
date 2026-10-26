@@ -22,8 +22,9 @@ public static class TramiteStateMachine
         new(StringComparer.Ordinal)
         {
             [TramiteEstado.Borrador] = [TramiteEstado.Anulado, TramiteEstado.Preparado],
-            // ADR-0059 — al radicar, la Ruta Larga (tipo pide placa y no la tiene) entra por
-            // 'preasignacion'; todo lo demás (Ruta Corta, traspasos, Quipux) sigue entrando por 'entregado'.
+            // ADR-0059 — al radicar (canal gestor/OT), la Ruta Larga entra por 'preasignacion'; el resto
+            // por 'entregado'. El canal Quipux NO usa esta arista desde el submit: se queda en
+            // 'preparado' hasta que el worker radica (actor Quipux → entregado).
             [TramiteEstado.Preparado] = [TramiteEstado.Entregado, TramiteEstado.Preasignacion],
             // Cola de placa del OT: asigna (→ asignado) o rechaza (→ rechazado, con marca de origen).
             // NO puede aprobar: la decisión sigue siendo exclusiva de 'entregado'.
@@ -32,15 +33,16 @@ public static class TramiteStateMachine
             // Sin decisión del OT aquí: ni aprobar ni rechazar.
             [TramiteEstado.Asignado] = [TramiteEstado.Entregado, TramiteEstado.Preasignacion],
             [TramiteEstado.Entregado] = [TramiteEstado.Aprobado, TramiteEstado.Rechazado],
-            // Rechazado → entregado | preasignacion: re-radicación tras activar subsanación (flag). La
-            // política exige subsanacion_activa; sin el flag la transición se rechaza. El destino lo
-            // decide la placa: sin placa y tipo que la pide → preasignacion; en otro caso → entregado.
+            // Rechazado → entregado | preasignacion: re-radicación gestor/OT tras subsanación.
+            // Rechazado → preparado: re-radicación canal Quipux (Bug #13912): el worker vuelve a
+            // encolar; 'entregado' solo tras código 081/082. Política: exige subsanacion_activa.
             [TramiteEstado.Rechazado] =
             [
                 TramiteEstado.Borrador,
                 TramiteEstado.Anulado,
                 TramiteEstado.Entregado,
                 TramiteEstado.Preasignacion,
+                TramiteEstado.Preparado,
             ],
             // HU #12166 (Feature #12156) — única salida de 'aprobado': el OT revoca su propia
             // aprobación. El admin de FLIT NO tiene esta transición disponible (su "Cambiar estado" y
