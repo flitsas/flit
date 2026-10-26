@@ -9,7 +9,7 @@ import { Pagination } from "@/components/atom/Pagination";
 import { RowActions } from "@/components/atom/RowActions";
 import { EncabezadoFiltrable } from "@/components/atom/FiltroColumna";
 import { SearchInput } from "@/components/atom/SearchInput";
-import { TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
+import { FilaVaciaFiltros } from "@/components/atom/FilaVaciaFiltros";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import {
   TABLA_HEADER_BG,
@@ -403,15 +403,7 @@ export function CompanyMandatariosPanel({
             </p>
           </div>
 
-          {filtrados.length === 0 ? (
-            <TablaFiltrosVacio
-              onLimpiar={() => {
-                filtros.limpiar();
-                setSearch("");
-              }}
-              mensaje="Ningún mandatario coincide con los filtros"
-            />
-          ) : (
+          {
             <>
               <div className="overflow-x-auto">
                 <table
@@ -485,6 +477,16 @@ export function CompanyMandatariosPanel({
                     </tr>
                   </thead>
                   <tbody>
+                    {filtrados.length === 0 ? (
+                      <FilaVaciaFiltros
+                        columnas={7}
+                        mensaje="Ningún mandatario coincide con los filtros"
+                        onLimpiar={() => {
+                          filtros.limpiar();
+                          setSearch("");
+                        }}
+                      />
+                    ) : null}
                     {pg.paginar(filtrados).map((signer) => {
                       // HU #13139 — candado: lo configuró el organismo y este actor no lo puede tocar.
                       const candado = tieneCandadoDelOrganismo(signer);
@@ -610,16 +612,18 @@ export function CompanyMandatariosPanel({
                 </table>
               </div>
 
-              <Pagination
-                page={pg.page}
-                pageSize={pg.pageSize}
-                totalCount={filtrados.length}
-                onPageChange={pg.setPage}
-                onPageSizeChange={pg.setPageSize}
-                noun="mandatarios"
-              />
+              {filtrados.length > 0 ? (
+                <Pagination
+                  page={pg.page}
+                  pageSize={pg.pageSize}
+                  totalCount={filtrados.length}
+                  onPageChange={pg.setPage}
+                  onPageSizeChange={pg.setPageSize}
+                  noun="mandatarios"
+                />
+              ) : null}
             </>
-          )}
+          }
         </UiStateBoundary>
       )}
 

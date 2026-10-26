@@ -198,6 +198,20 @@ describe("LegalRepresentativesTab · filtros por columna (HU #14001)", () => {
     await user.type(screen.getByLabelText(/representante contiene/i), "zzz");
     await user.click(screen.getByRole("button", { name: "Aplicar" }));
     expect(screen.getByText(/ningún representante coincide/i)).toBeInTheDocument();
+    // La tabla sigue montada con sus embudos (el activo en azul) y el buscador de arriba.
+    expect(screen.getByRole("button", { name: /^Filtrar por Documento/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Filtrar por Representante \(/ })).toHaveAttribute(
+      "data-activo",
+      "true",
+    );
+    expect(screen.getByRole("textbox", { name: "Buscar representantes" })).toBeInTheDocument();
+    // Se quita solo ese filtro desde su embudo.
+    await abrirFiltro(user, "Representante");
+    await user.click(screen.getByRole("button", { name: "Quitar filtro" }));
+    expect(visibles()).toBe(3);
+    await abrirFiltro(user, "Representante");
+    await user.type(screen.getByLabelText(/representante contiene/i), "zzz");
+    await user.click(screen.getByRole("button", { name: "Aplicar" }));
     await user.click(screen.getByRole("button", { name: "Limpiar filtros" }));
     expect(visibles()).toBe(3);
   });

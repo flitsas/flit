@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { EncabezadoFiltrable, TablaFiltrosBar, TablaFiltrosVacio } from "../TablaFiltrosBar";
@@ -126,6 +126,29 @@ describe("EncabezadoFiltrable", () => {
     expect(screen.getByLabelText(/nombre contiene/i)).toHaveValue("alf");
     await user.click(screen.getByRole("button", { name: "Quitar filtro" }));
     expect(filas()).toHaveLength(3);
+  });
+
+  it("al abrir, el foco queda en la caja «X contiene» y Enter aplica", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(embudo("Nombre"));
+    await waitFor(() => expect(screen.getByLabelText(/nombre contiene/i)).toHaveFocus());
+    await user.keyboard("alf{Enter}");
+    expect(filas().map((l) => l.textContent)).toEqual(["Alfa"]);
+  });
+
+  it("al abrir una selección el foco va a la primera casilla; en fecha, a la opción marcada", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(embudo("Estado"));
+    await waitFor(() =>
+      expect(screen.getAllByRole("checkbox")[0]).toHaveFocus(),
+    );
+    await user.keyboard("{Escape}");
+    await user.click(embudo("Creación"));
+    await waitFor(() =>
+      expect(screen.getByRole("radio", { name: "Sin periodo" })).toHaveFocus(),
+    );
   });
 
   it("selección: varias opciones son OR", async () => {

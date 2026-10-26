@@ -182,6 +182,19 @@ describe("HU #14002 — filtros por columna en Mandatarios", () => {
     await screen.findByRole("table", TABLA);
     await filtrarSeleccion(user, "Organismos", "Tránsito de Cali");
     expect(screen.getByText("Ningún mandatario coincide con los filtros")).toBeInTheDocument();
+    // La tabla sigue montada: encabezados con embudos (el activo en azul) y buscador de arriba.
+    expect(screen.getByRole("table", TABLA)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Filtrar por Modelo/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Filtrar por Organismos \(/ })).toHaveAttribute(
+      "data-activo",
+      "true",
+    );
+    expect(screen.getByRole("textbox", { name: "Buscar mandatarios" })).toBeInTheDocument();
+    // Se puede quitar solo ese filtro desde su embudo.
+    await user.click(screen.getByRole("button", { name: /^Filtrar por Organismos/ }));
+    await user.click(screen.getByRole("button", { name: "Quitar filtro" }));
+    expect(filas()).toHaveLength(3);
+    await filtrarSeleccion(user, "Organismos", "Tránsito de Cali");
     await user.click(screen.getByRole("button", { name: "Limpiar filtros" }));
     expect(filas()).toHaveLength(3);
   });

@@ -5,7 +5,7 @@ import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { Pagination } from "@/components/atom/Pagination";
 import { EncabezadoFiltrable } from "@/components/atom/FiltroColumna";
 import { SearchInput } from "@/components/atom/SearchInput";
-import { TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
+import { FilaVaciaFiltros } from "@/components/atom/FilaVaciaFiltros";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import {
   TABLA_HEADER_BG,
@@ -400,14 +400,7 @@ export function UsersTable({
         </div>
       )}
 
-      {!loading && !error && rows.length > 0 && filtered.length === 0 && (
-        <TablaFiltrosVacio
-          onLimpiar={limpiarTodo}
-          mensaje="Ningún usuario coincide con la búsqueda o los filtros"
-        />
-      )}
-
-      {!loading && !error && filtered.length > 0 && (
+      {!loading && !error && rows.length > 0 && (
         <div className="overflow-x-auto">
           <table
             aria-label="Usuarios"
@@ -442,6 +435,13 @@ export function UsersTable({
               </tr>
             </thead>
             <tbody>
+              {filtered.length === 0 ? (
+                <FilaVaciaFiltros
+                  columnas={columnas.length}
+                  onLimpiar={limpiarTodo}
+                  mensaje="Ningún usuario coincide con la búsqueda o los filtros"
+                />
+              ) : null}
               {visibles.map((row) => {
                 const badge = row.isSuspended ? SUSPENDED_BADGE : STATUS_BADGE[row.status];
                 return (

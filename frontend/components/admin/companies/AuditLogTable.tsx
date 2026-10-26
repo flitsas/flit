@@ -9,6 +9,7 @@ import { EncabezadoFiltrable } from "@/components/atom/FiltroColumna";
 import { Modal } from "@/components/atom/Modal";
 import { SearchInput } from "@/components/atom/SearchInput";
 import { StatusBadge } from "@/components/atom/StatusBadge";
+import { TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
 import { esRangoVacio, sinRango, type DateRange } from "@/components/atom/modules/_reportes/range";
 import type { TablaFiltrosEstado } from "@/lib/tablas/useTablaFiltros";
 import { formatFechaHora } from "@/lib/format/date";
@@ -214,6 +215,16 @@ export function AuditLogTable({
         getRowKey={(entry) => `${entry.changedAt}|${entry.entityName}|${entry.fieldName}|${entry.newValue ?? ""}|${entry.changedBy ?? ""}`}
         emptyMessage={
           filtersActive ? "Ningún cambio de esta página coincide con los filtros." : "Aún no hay cambios registrados."
+        }
+        emptyContent={
+          entries.length === 0 && filtros?.hayFiltros ? (
+            <TablaFiltrosVacio
+              onLimpiar={() => {
+                filtros?.limpiar();
+                clearFilters();
+              }}
+            />
+          ) : undefined
         }
         minWidth={720}
         pagination={{

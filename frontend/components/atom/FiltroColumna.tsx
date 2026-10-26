@@ -281,7 +281,6 @@ function BotonFiltro({
 
   useEffect(() => {
     if (!open) return;
-    panelRef.current?.querySelector<HTMLElement>("input, button")?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") cerrar(true);
     };
@@ -306,6 +305,23 @@ function BotonFiltro({
       window.removeEventListener("scroll", ubicar, true);
     };
   }, [open, cerrar, ubicar]);
+
+  // Foco inicial: caja «X contiene» (texto), primera casilla (selección) u opción marcada (fecha).
+  // Se espera a que el panel tenga posición: mientras es `visibility: hidden` el navegador no
+  // le concede el foco.
+  const posicionado = pos !== null;
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!open || !posicionado || !panel || panel.contains(document.activeElement)) return;
+    const destino =
+      columna.tipo === "texto"
+        ? panel.querySelector<HTMLElement>('input[type="text"]')
+        : columna.tipo === "seleccion"
+          ? panel.querySelector<HTMLElement>('input[type="checkbox"]')
+          : (panel.querySelector<HTMLElement>('input[type="radio"]:checked') ??
+            panel.querySelector<HTMLElement>('input[type="radio"]'));
+    (destino ?? panel.querySelector<HTMLElement>("input, button"))?.focus();
+  }, [open, posicionado, columna.tipo]);
 
   const nombre = activo
     ? `Filtrar por ${columna.label} (${columna.label}: filtro activo)`

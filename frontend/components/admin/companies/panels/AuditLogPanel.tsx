@@ -4,8 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { usePaginacion } from "@/components/atom/usePaginacion";
-import { TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
 import { AuditLogTable } from "@/components/admin/companies/AuditLogTable";
+import {
+  alternativasParaValor,
+  clavesParaCampo,
+} from "@/components/admin/companies/auditLogLabels";
 import { fetchAuditLog, type AuditLogFilters } from "@/lib/api/admin-companies";
 import { ApiValidationError, type AuditLogPageResponse } from "@/lib/api/types";
 import { condicionesAParams, type ColumnaFiltro } from "@/lib/tablas/filtrar-filas";
@@ -48,10 +51,17 @@ export function AuditLogPanel({
     onCambio: volverAPrimera,
   });
 
-  const params = useMemo(
-    () => condicionesAParams(filtros.condicionesTotales, COLUMNAS) as AuditLogFilters,
-    [filtros.condicionesTotales],
-  );
+  const params = useMemo(() => {
+    const base = condicionesAParams(filtros.condicionesTotales, COLUMNAS) as AuditLogFilters;
+    // La API filtra el valor técnico; el usuario escribe lo que ve (etiquetas traducidas).
+    const claves = base.campo ? clavesParaCampo(base.campo) : [];
+    const alternativas = base.valorAnterior ? alternativasParaValor(base.valorAnterior) : [];
+    return {
+      ...base,
+      ...(claves.length > 0 ? { campoClaves: claves.join(",") } : {}),
+      ...(alternativas.length > 0 ? { valorAnteriorAlternativas: alternativas.join(",") } : {}),
+    } as AuditLogFilters;
+  }, [filtros.condicionesTotales]);
   // Clave estable: la identidad del objeto cambia en cada render del hook, su contenido no.
   const paramsKey = JSON.stringify(params);
 
@@ -110,9 +120,20 @@ export function AuditLogPanel({
           {errorFiltro}
         </p>
       ) : null}
-      {status === "empty" && filtros.hayFiltros ? (
-        <TablaFiltrosVacio onLimpiar={filtros.limpiar} />
-      ) : (
+      {
+        // Vacío por filtros: la tabla sigue montada (encabezados con embudos y filtros de arriba);
+        // el cuerpo muestra el aviso con «Limpiar filtros» (emptyContent de AuditLogTable).
+        status === "empty" && filtros.hayFiltros && result ? (
+          <AuditLogTable
+            entries={result.data}
+            totalCount={result.totalCount}
+            page={result.page}
+            pageSize={result.pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            filtros={filtros}
+          />
+        ) : (
         <UiStateBoundary
           status={status === "loading" ? "ready" : status}
           onRetry={() => void load()}
