@@ -32,7 +32,8 @@ public static class PlatformMessagingExtensions
     /// <summary>
     /// Consumidor de eventos de <paramref name="producer"/> en la cola <paramref name="queue"/> con su efecto
     /// <typeparamref name="THandler"/> (HU #13339). El <c>DbContext</c> debe mapear la bandeja con
-    /// <see cref="InboxModelBuilderExtensions.AddFlitInbox"/>. Usa la conexión de <c>Platform:Messaging</c>.
+    /// <see cref="InboxModelBuilderExtensions.AddFlitInbox"/>. Usa la conexión de <c>Platform:Messaging</c>. Con
+    /// <see cref="PlatformConsumerOptions.Concurrencia"/> mayor que 1 atiende varios mensajes a la vez (HU #13727).
     /// </summary>
     public static IServiceCollection AddFlitConsumer<TContext, THandler, TData>(
         this IServiceCollection services,
@@ -60,6 +61,9 @@ public static class PlatformMessagingExtensions
         configure?.Invoke(consumer);
         if (consumer.EventTypes.Count == 0)
             throw new InvalidOperationException($"El consumidor {queue} no se suscribe a ningún evento.");
+        // HU #13727 (ADR-0075, D1): cada mensaje en curso ocupa un lugar del prefetch.
+        if (consumer.Concurrencia < 1 || consumer.Prefetch < consumer.Concurrencia)
+            throw new InvalidOperationException($"El consumidor {queue}: Concurrencia debe ser al menos 1 y no mayor que Prefetch.");
 
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<THandler>();

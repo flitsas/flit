@@ -37,6 +37,13 @@ public sealed class PlatformConsumerOptions
 
     /// <summary>Mensajes en vuelo por consumidor.</summary>
     public ushort Prefetch { get; set; } = 10;
+
+    /// <summary>
+    /// Mensajes que el consumidor atiende a la vez (ADR-0075, D1): el <c>ConsumerDispatchConcurrency</c> de su conexión. Por
+    /// defecto 1, un mensaje detrás de otro. Debe ser al menos 1 y no mayor que <see cref="Prefetch"/>; cada mensaje en curso
+    /// usa su propio scope y su propia transacción.
+    /// </summary>
+    public ushort Concurrencia { get; set; } = 1;
 }
 
 /// <summary>Métricas del bus (OpenTelemetry las exporta si está encendido): la de mensajes muertos es la de alertar.</summary>
@@ -107,13 +114,7 @@ internal sealed class PlatformConsumer<TContext, THandler, TData>(
 
         async Task StartAsync()
         {
-            var factory = new ConnectionFactory
-            {
-                Uri = new Uri(messaging.ConnectionString),
-                ClientProvidedName = $"flit-{consumer.Queue}",
-                AutomaticRecoveryEnabled = true,
-                TopologyRecoveryEnabled = true,
-            };
+            var factory = Fabrica();
             _connection = await factory.CreateConnectionAsync(stoppingToken).ConfigureAwait(false);
             _channel = await _connection.CreateChannelAsync(cancellationToken: stoppingToken).ConfigureAwait(false);
             await DeclareTopologyAsync(_channel, stoppingToken).ConfigureAwait(false);
@@ -124,6 +125,16 @@ internal sealed class PlatformConsumer<TContext, THandler, TData>(
             await _channel.BasicConsumeAsync(consumer.Queue, autoAck: false, listener, stoppingToken).ConfigureAwait(false);
         }
     }
+
+    /// <summary>Conexión del consumidor, con su <see cref="PlatformConsumerOptions.Concurrencia"/> (HU #13727).</summary>
+    internal ConnectionFactory Fabrica() => new()
+    {
+        Uri = new Uri(messaging.ConnectionString),
+        ClientProvidedName = $"flit-{consumer.Queue}",
+        AutomaticRecoveryEnabled = true,
+        TopologyRecoveryEnabled = true,
+        ConsumerDispatchConcurrency = consumer.Concurrencia,
+    };
 
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
