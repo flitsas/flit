@@ -1,4 +1,5 @@
 using Flit.Diagnostico.Api.Modulos.Catalogos;
+using Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 using Flit.Diagnostico.Api.Modulos.Vehiculos;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Domain.Consultas;
@@ -15,11 +16,14 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// empresa). Antes de liberar (HU #13733, F03-H5) deriva el departamento del organismo y aplica
 /// <see cref="ReglasAplicabilidad"/>: las celdas que no aplican quedan en NA con su motivo, sin llamar a ninguna fuente ni
 /// consumir. Solo RUNT bloquea al vehículo: el ERROR de otra celda (las de persona, R-24) no toca las demás. Cuando la RUNT
-/// que completa es un reproceso (HU #13746), las bloqueadas que libera corren con el usuario de ese reproceso.
+/// que completa es un reproceso (HU #13746), las bloqueadas que libera corren con el usuario de ese reproceso. Desde ADR-0075
+/// (HU #13730) cada celda liberada publica además su trabajo de consulta (<see cref="PublicadorCeldas"/>) en esa misma
+/// transacción, con lo que acaba de dejar la RUNT (placa, datos técnicos, personas y departamento aún sin guardar); las que
+/// quedan en NA y las bloqueadas no publican.
 /// </summary>
 /// <example>
 /// <code>
-/// resultado = OrquestadorVehiculo.TrasEjecutar(celdaTomada, resultado, reloj);
+/// resultado = OrquestadorVehiculo.TrasEjecutar(celdaTomada, resultado, reloj, publicador);
 /// await escritor.CerrarAsync(celdaTomada, resultado, ct); // cierra RUNT y libera o bloquea las demás, todo junto
 /// </code>
 /// </example>
@@ -32,11 +36,12 @@ internal static class OrquestadorVehiculo
     /// El resultado con los efectos del orden por vehículo sumados a los del ejecutor; las celdas que no son RUNT, o una RUNT
     /// en N/A, pasan sin cambios.
     /// </summary>
-    public static ResultadoCelda TrasEjecutar(Trabajos.CeldaTomada celda, ResultadoCelda resultado, TimeProvider reloj)
+    public static ResultadoCelda TrasEjecutar(Trabajos.CeldaTomada celda, ResultadoCelda resultado, TimeProvider reloj, PublicadorCeldas publicador)
     {
         ArgumentNullException.ThrowIfNull(celda);
         ArgumentNullException.ThrowIfNull(resultado);
         ArgumentNullException.ThrowIfNull(reloj);
+        ArgumentNullException.ThrowIfNull(publicador);
         if (celda.Fuente != Fuente.Runt || resultado.Estado is not (EstadoCelda.Completado or EstadoCelda.Error))
             return resultado;
 
@@ -49,7 +54,7 @@ internal static class OrquestadorVehiculo
                 if (propios is not null)
                     await propios(db, version, ct).ConfigureAwait(false);
                 if (completado)
-                    await LiberarCeldasDelVehiculoAsync(db, celda.VehiculoId, reloj.GetUtcNow(), version, ct, celda.ReprocesoUsuarioId).ConfigureAwait(false);
+                    await LiberarCeldasDelVehiculoAsync(db, celda.VehiculoId, reloj.GetUtcNow(), version, publicador, ct, celda.ReprocesoUsuarioId).ConfigureAwait(false);
                 else
                     await BloquearCeldasDelVehiculoAsync(db, celda.VehiculoId, reloj.GetUtcNow(), version, ct).ConfigureAwait(false);
             },
@@ -62,13 +67,16 @@ internal static class OrquestadorVehiculo
     /// reproceso de F03-H8; si la RUNT que acaba de completar era un reproceso, heredan su <paramref name="reprocesoUsuarioId"/> y
     /// se ejecutan con <c>disparador=REPROCESO</c> y ese usuario, HU #13746). Antes deriva <c>vehiculos.departamento_codigo</c> del organismo (<see cref="DerivacionDepartamento"/>)
     /// y evalúa <see cref="ReglasAplicabilidad"/>: la celda que no aplica pasa a NA con su motivo en lugar de liberarse (HU
-    /// #13733). No toca COMPLETADO, NA ni ERROR por otra causa. No guarda: lo hace quien cierra la celda.
+    /// #13733). No toca COMPLETADO, NA ni ERROR por otra causa. Cada celda liberada publica su trabajo con <paramref name="publicador"/>
+    /// (ADR-0075, HU #13730), que debe ser el del mismo contexto <paramref name="db"/>. No guarda: lo hace quien cierra la celda.
     /// </summary>
     /// <returns>Cuántas celdas liberó (sin contar las que quedaron en NA).</returns>
     public static async Task<int> LiberarCeldasDelVehiculoAsync(
-        DiagnosticoDb db, Guid vehiculoId, DateTimeOffset ahora, long versionTablero, CancellationToken ct, Guid? reprocesoUsuarioId = null)
+        DiagnosticoDb db, Guid vehiculoId, DateTimeOffset ahora, long versionTablero, PublicadorCeldas publicador, CancellationToken ct,
+        Guid? reprocesoUsuarioId = null)
     {
         ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(publicador);
         var celdas = await db.Set<CeldaConsulta>()
             .Where(c => c.VehiculoId == vehiculoId && c.Fuente != Fuente.Runt
                 && ((c.Estado == EstadoCelda.Pendiente && c.DisponibleDesde > ahora)
@@ -88,7 +96,12 @@ internal static class OrquestadorVehiculo
             c.ActualizadoEn = ahora;
             c.VersionTablero = versionTablero;
             c.ReprocesoUsuarioId = motivo is null && bloqueada ? reprocesoUsuarioId : null;
-            liberadas += motivo is null ? 1 : 0;
+            if (motivo is null)
+            {
+                liberadas++;
+                // ADR-0075: el trabajo de la celda liberada sale en la transacción que cierra la RUNT.
+                await publicador.PublicarAsync(c, ct).ConfigureAwait(false);
+            }
         }
 
         return liberadas;

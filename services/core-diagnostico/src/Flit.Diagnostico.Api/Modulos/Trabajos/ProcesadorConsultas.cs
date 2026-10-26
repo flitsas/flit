@@ -103,9 +103,9 @@ internal sealed partial class ProcesadorConsultas(
             }
         }
 
-        // RUNT va primero (HU #13730): su cierre libera o bloquea las demás celdas del vehículo en la misma transacción. Un
-        // reintento no es un cierre: las demás celdas siguen esperando.
-        resultado = OrquestadorVehiculo.TrasEjecutar(celda, resultado, reloj);
+        // RUNT va primero (HU #13730): su cierre libera o bloquea las demás celdas del vehículo en la misma transacción (y las
+        // liberadas publican su trabajo con el publicador del scope, ADR-0075). Un reintento no es un cierre: las demás siguen esperando.
+        resultado = OrquestadorVehiculo.TrasEjecutar(celda, resultado, reloj, scope.ServiceProvider.GetRequiredService<Consultas.Bus.PublicadorCeldas>());
         // HU #13743: tras cada celda terminal, el estado global del lote se recalcula en la misma transacción de cierre.
         resultado = RecalculadorEstado.TrasCerrar(celda, resultado, reloj);
         if (!await new EscritorCeldas(db, reloj).CerrarAsync(celda, resultado, ct, intentos).ConfigureAwait(false))
