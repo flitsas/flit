@@ -73,8 +73,8 @@ public sealed class CeldaConsulta : IEntidadDeEmpresa
     public Guid? TrabajoId { get; set; }
 
     /// <summary>
-    /// Republicaciones del reconciliador (ADR-0075, D3): 0 o 1; a la segunda huérfana la celda se cierra en ERROR.
-    /// Aún no lo lee ni escribe el motor.
+    /// Republicaciones del reconciliador (ADR-0075, D3, <see cref="Trabajos.ReconciliadorConsultas"/>): 0 o 1; a la segunda
+    /// huérfana la celda se cierra en ERROR. Cada publicación que no es del reconciliador la deja en 0.
     /// </summary>
     public short Republicaciones { get; set; }
 

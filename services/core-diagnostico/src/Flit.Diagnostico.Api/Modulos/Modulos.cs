@@ -48,8 +48,9 @@ public static class Modulos
     /// <see cref="Consultas.OpcionesConsultas"/> validada al arrancar), el registro de adaptadores y el catálogo de fuentes
     /// disponibles (HU #13733). El consumidor de <c>consultas.resultado.diagnostico</c> (cola <see cref="Consultas.Bus.OpcionesBus.Cola"/>,
     /// solo del productor <c>consultas</c>, con la concurrencia y el prefetch de <see cref="Consultas.Bus.OpcionesBus"/> y la cola de
-    /// reintentos de 5, 10 y 20 s) se registra solo con <c>Diagnostico:Consultas:Bus:ConsumidorHabilitado=true</c>; no mira
-    /// <c>IHostEnvironment</c>.
+    /// reintentos de 5, 10 y 20 s) y el reconciliador (<see cref="Trabajos.ReconciliadorConsultas"/>, D3, con
+    /// <see cref="Trabajos.OpcionesReconciliador"/> validada al arrancar) se registran solo con
+    /// <c>Diagnostico:Consultas:Bus:ConsumidorHabilitado=true</c>; no mira <c>IHostEnvironment</c>.
     /// </summary>
     public static IServiceCollection AddMotorConsultas(this IServiceCollection services, IConfiguration configuration)
     {
@@ -94,8 +95,14 @@ public static class Modulos
             .Bind(configuration.GetSection(Consultas.OpcionesConsultas.Seccion))
             .Validate(o => o.EsValida(), Consultas.OpcionesConsultas.MensajeFueraDeRango)
             .ValidateOnStart();
-        // ADR-0075 (HU #13727, T9): el consumidor de los resultados de core-consultas.
+        // ADR-0075 (HU #13727, T9): el consumidor de los resultados de core-consultas y su señal de vida para el reconciliador (T11).
         services.TryAddScoped<Consultas.Bus.ConsumidorResultados>();
+        services.TryAddSingleton<Consultas.Bus.PulsoConsultas>();
+        services.AddOptions<Trabajos.OpcionesReconciliador>()
+            .Bind(configuration.GetSection(Trabajos.OpcionesReconciliador.Seccion))
+            .Validate(o => o.Errores().Count == 0, $"{Trabajos.OpcionesReconciliador.Seccion} tiene valores fuera de rango (Intervalo > 0, Margen >= 1 min, VentanaVida > 0, Maximo 1-5000).")
+            .ValidateOnStart();
+        services.AddSingleton<Trabajos.ReconciliadorConsultas>();
         var bus = new Consultas.Bus.OpcionesBus();
         configuration.GetSection(Consultas.Bus.OpcionesBus.Seccion).Bind(bus);
         if (bus.Errores() is { Count: > 0 } errores)
@@ -114,6 +121,8 @@ public static class Modulos
                     foreach (var espera in Consultas.Bus.ProgramadorReintentos.Esperas)
                         o.RetryDelays.Add(espera);
                 });
+            // D3 (6r-i, U4 = a): la red de seguridad de los trabajos perdidos corre con el consumidor.
+            services.AddHostedService(sp => sp.GetRequiredService<Trabajos.ReconciliadorConsultas>());
         }
 
         return services;

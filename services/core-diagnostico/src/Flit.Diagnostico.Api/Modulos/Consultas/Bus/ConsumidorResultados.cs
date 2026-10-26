@@ -13,7 +13,8 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 /// <c>eventId</c> repetido no repite el efecto) y solo acepta mensajes del productor <c>consultas</c> con su <c>user_id</c> validado.
 /// Por cada resultado:
 /// <list type="number">
-/// <item>Fija la empresa del sobre (<see cref="EmpresaDelTrabajo"/>), lo primero: el contexto, la outbox y el publicador del scope la
+/// <item>Marca el pulso de core-consultas (<see cref="PulsoConsultas"/>, para el reconciliador) y fija la empresa del sobre
+/// (<see cref="EmpresaDelTrabajo"/>), lo primero: el contexto, la outbox y el publicador del scope la
 /// usan; una celda de otra empresa no se ve y el resultado se descarta.</item>
 /// <item>Correlación por <c>trabajo_id</c>: si el del resultado ya no es el vigente de la celda (reproceso, republicación o un
 /// duplicado tardío), se descarta sin efecto. Si la celda está PENDIENTE con ese trabajo, es el resultado demorado de un reintento:
@@ -38,12 +39,14 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 /// </example>
 internal sealed partial class ConsumidorResultados(
     EmpresaDelTrabajo empresa, DiagnosticoDb db, PublicadorCeldas publicador, IEnumerable<IEjecutorCelda> ejecutores, ProgramadorReintentos programador,
-    TimeProvider reloj, ILogger<ConsumidorResultados> log) : IEventConsumer<ResultadoConsultaDiagnostico>
+    PulsoConsultas pulso, TimeProvider reloj, ILogger<ConsumidorResultados> log) : IEventConsumer<ResultadoConsultaDiagnostico>
 {
     public async Task HandleAsync(EventEnvelope envelope, ResultadoConsultaDiagnostico data, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(envelope);
         ArgumentNullException.ThrowIfNull(data);
+        // 6r-i (U4 = a): todo resultado, también el que se descarta, dice que core-consultas está respondiendo.
+        pulso.Registrar(reloj.GetUtcNow());
         if (envelope.TenantId == Guid.Empty)
         {
             Descartado(log, data.ConsultaId, data.TrabajoId, "SIN_EMPRESA");
