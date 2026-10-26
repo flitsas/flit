@@ -34,6 +34,9 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
       "dominio marca blanca",
       "hub del organismo",
       "revocatorias organismo",
+      "filtrar compañias",
+      "filtros por columna",
+      "buscar compania",
     ],
     summary:
       "Alta y ciclo de vida de compañías y organismos, la ficha completa de cada compañía, entrada al hub OT y catálogo de causales de rechazo.",
@@ -42,18 +45,18 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         id: "companias",
         title: "1. Compañías",
         paragraphs: [
-          "Administradores → Compañías. Catálogo de compañías B2B con filtros, estado y el toggle «incluir OT» para ver también los organismos de tránsito en el mismo listado. La primera columna, «Código», muestra el consecutivo de cada compañía (COMP-0001, COMP-0002…); las compañías que ya existían recibieron el suyo según su antigüedad. «Crear compañía»: razón social, NIT, tipo de compañía (normal, Concesión o Marca Blanca) y, para Marca Blanca, dominio propio. El código no se escribe: el sistema asigna el siguiente consecutivo (COMP-0001, COMP-0002…) al guardar. «Activar / Desactivar» cambia el estado con confirmación; una compañía de tipo de sistema no se edita desde aquí.",
+          "Administradores → Compañías. Catálogo de compañías B2B con el toggle «incluir OT» para ver también los organismos de tránsito en el mismo listado. Encima de la tabla está la barra de filtros estándar (ver «Tablas: cómo leerlas y moverte entre páginas»): «Periodo» sobre la fecha de creación y «+ Filtro» por Código, NIT, Razón social, Tipo y Estado. Ya no existe el panel con NIT, Razón social, fechas y «Buscar»; todos los filtros se suman. La primera columna, «Código», muestra el consecutivo de cada compañía (COMP-0001, COMP-0002…); las compañías que ya existían recibieron el suyo según su antigüedad. «Crear compañía»: razón social, NIT, tipo de compañía (normal, Concesión o Marca Blanca) y, para Marca Blanca, dominio propio. El código no se escribe: el sistema asigna el siguiente consecutivo (COMP-0001, COMP-0002…) al guardar. «Activar / Desactivar» cambia el estado con confirmación; una compañía de tipo de sistema no se edita desde aquí.",
           "Abrir una fila lleva a la ficha completa de la compañía, con 8 pestañas:",
         ],
         bullets: [
           "Productos: enciende o apaga los productos de la suite para la compañía (Trámites, Comparendos, Diagnóstico). El cambio se aplica al instante, sin «Guardar todo», y queda en el historial. Cada producto muestra su estado escrito: Encendido, Apagado o Próximamente.",
           "Trámites: familias habilitadas (Matrículas, Traspaso, Otros), cada una en un acordeón con un resumen («Sin restricciones» o «N restricciones activas») y con el estado de cada opción escrito junto a su switch (por ejemplo Permitido o Bloqueado), más la lista blanca de trámites permitidos. Debajo, la sección «Improntas» tiene el interruptor «Generación de improntas» (visible solo para el Super Admin), con el estado escrito junto a él: Habilitada o Deshabilitada. Si lo desactivas, el asistente no genera la impronta automáticamente y el radicador la carga a mano; solo aplica a trámites nuevos. Se guarda con «Guardar todo».",
-          "Configuración Empresa: cinco bloques con un índice de acceso rápido arriba. «Firma y documentos» (firma precargada desde el baúl y módulo de Resoluciones), «Notificaciones» (enrutamiento, avisos al aprobar o rechazar y sus destinatarios), «Cobro y recaudo» (métodos de recaudo), «Consultas y fuentes» (validar SOAT ante RUNT, fuente de comparendos, proveedores de consulta y de avalúo; el tiempo de espera de contingencia está en «Opciones avanzadas») y «Organismos de tránsito», con los bloqueos y restricciones que aplica cada uno. Las opciones elegidas se marcan en verde y la de Fasecolda aparece como obligatoria. El buscador de esa tabla (por nombre o código, con o sin tildes) recorre todos los organismos, no solo la página que estás viendo.",
-          "Documentos: parámetros documentales de la gestora, en una tabla con cada tipo de documento y su estado (Obligatorio, Opcional u Oculto). «Agregar parámetro» o el ícono de editar abren la ventana para elegir el documento y su estado.",
-          "Representantes legales: buscador por nombre o documento, un resumen de cuántos representantes no tienen firma ni identidad y paginación con «Filas por página».",
-          "Mandatarios: el mismo formulario que ve el Administrador de la compañía, con modelo (Persona natural, Persona jurídica o Formato en blanco), forma de firma y vigencia. La lista muestra el modelo y la etiqueta de vigencia (Vigente, Por vencer, Vencido, Inactivo, Aún no vigente; guion en Persona jurídica y Formato en blanco). Tiene buscador por nombre o documento y las acciones de cada fila son íconos (editar, dar de baja o reactivar, eliminar) con su nombre al pasar el mouse. Ver el artículo «Representantes legales y mandatarios» de Administrador de compañía.",
-          "Usuarios: usuarios de la compañía con buscador y filtros por perfil, rol y estado, e «Invitar usuario».",
-          "Historial de Cambios: quién cambió qué y cuándo, con el campo en lenguaje claro y el valor anterior y el nuevo como etiquetas. «Ver detalle» abre los valores extensos. Los filtros (fechas, tipo de cambio y texto) se aplican a la página cargada.",
+          "Configuración Empresa: cinco bloques con un índice de acceso rápido arriba. «Firma y documentos» (firma precargada desde el baúl y módulo de Resoluciones), «Notificaciones» (enrutamiento, avisos al aprobar o rechazar y sus destinatarios), «Cobro y recaudo» (métodos de recaudo), «Consultas y fuentes» (validar SOAT ante RUNT, fuente de comparendos, proveedores de consulta y de avalúo; el tiempo de espera de contingencia está en «Opciones avanzadas») y «Organismos de tránsito», con los bloqueos y restricciones que aplica cada uno. Las opciones elegidas se marcan en verde y la de Fasecolda aparece como obligatoria. Esa tabla y la de Bloqueos usan la barra de filtros estándar: «+ Filtro» por Organismo, Código, Estado y Convenio (en Bloqueos, Estado en red); recorren todos los organismos, no solo la página que estás viendo.",
+          "Documentos: la tabla lista todos los documentos del catálogo con su estado: Obligatorio, Opcional, Oculto o Base (el documento que aún no tiene parámetro para esa compañía). Ya no hay botón «Agregar parámetro»: se edita desde la fila, con el ícono de editar, para elegir el estado. Filtra por Documento (nombre o código) y por Estado.",
+          "Representantes legales: un resumen de cuántos representantes no tienen firma ni identidad y paginación con «Filas por página». Filtra con «+ Filtro» por Representante, Documento, Trámites y Firma / Identidad (Con firma o identidad, Sin firma ni identidad); ya no hay un buscador único. El baúl de firmas se filtra por Registro, Documento, Código hash, Apoderado, Vigencia («Periodo» sobre la fecha de vencimiento) y Estado (Activa, Vencida, Revocada).",
+          "Mandatarios: el mismo formulario que ve el Administrador de la compañía, con modelo (Persona natural, Persona jurídica o Formato en blanco), forma de firma y vigencia. La lista muestra el modelo y la etiqueta de vigencia (Vigente, Por vencer, Vencido, Inactivo, Aún no vigente; guion en Persona jurídica y Formato en blanco). Tiene buscador por nombre o documento y «+ Filtro» por Mandatario, Documento, Modelo, Vigencia, Validación y Organismos; las acciones de cada fila son íconos (editar, dar de baja o reactivar, eliminar) con su nombre al pasar el mouse. Ver el artículo «Representantes legales y mandatarios» de Administrador de compañía.",
+          "Usuarios: usuarios de la compañía con buscador y «+ Filtro» por Nombre, Correo, Perfil, Rol, Estado y Fecha, e «Invitar usuario».",
+          "Historial de Cambios: quién cambió qué y cuándo, con el campo en lenguaje claro y el valor anterior y el nuevo como etiquetas. «Ver detalle» abre los valores extensos. Filtra con «Periodo» sobre la fecha y «+ Filtro» por Campo modificado, Valor anterior y Operador; el filtro recorre todo el historial de la compañía, no solo la página que ves. Si en el rango propio la fecha inicial es posterior a la final, la tabla te lo avisa.",
         ],
         callouts: [
           {
@@ -65,7 +68,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
           {
             kind: "image",
             src: "/manual/screenshots/admin-companias.png",
-            alt: "Administración de compañías con el toggle de incluir organismos, los filtros de búsqueda y el listado con NIT, razón social, tipo y estado",
+            alt: "Administración de compañías con el toggle de incluir organismos, la barra de filtros por columna y el listado con NIT, razón social, tipo y estado",
             caption: "Administración de compañías: el punto de entrada a la ficha de cada tenant.",
           },
         ],
@@ -74,7 +77,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         id: "companias-red",
         title: "2. Cabezas de red",
         paragraphs: [
-          "Si la compañía es cabeza de red (Concesión o Marca Blanca), su ficha suma el panel de hijas: agregar un cliente a la red, activar o inactivar una hija e invitar usuarios para que la administren.",
+          "Si la compañía es cabeza de red (Concesión o Marca Blanca), su ficha suma el panel de hijas: agregar un cliente a la red, activar o inactivar una hija e invitar usuarios para que la administren. La tabla de hijas y el Panel de red se filtran con «+ Filtro» por Razón social, NIT, Tipo y Estado, y con «Periodo» sobre la fecha de vinculación.",
           "Si además es Marca Blanca, configura la marca y el dominio propio de la red: registrar el dominio, cambiarlo, retirarlo y comprobarlo (validación de propiedad). Estas cuatro acciones son exclusivas del Super Admin; el Administrador de la cabeza de red solo las ve en modo lectura.",
         ],
       },

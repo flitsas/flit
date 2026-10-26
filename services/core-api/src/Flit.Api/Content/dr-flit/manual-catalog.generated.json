@@ -353,7 +353,7 @@
       "href": "/manual/0-introduccion/7-tablas-y-paginacion",
       "audience": "Todos",
       "sectionId": "introduccion",
-      "summary": "Todas las tablas de FLIT se ven y se usan igual: cómo cambiar de página, ir al principio o al final y elegir cuántas filas ver.",
+      "summary": "Todas las tablas de FLIT se ven y se usan igual: cómo filtrar por columna, cambiar de página, ir al principio o al final y elegir cuántas filas ver.",
       "primarySource": false,
       "blocks": [
         {
@@ -397,8 +397,29 @@
           "callouts": []
         },
         {
+          "id": "filtrar-tabla",
+          "title": "4. Cómo filtrar una tabla",
+          "paragraphs": [
+            "Encima de cada tabla hay una línea con los filtros. Es la misma en Trámites, Compañías, Usuarios, Auditoría y las demás listas: aprendes una vez y la usas en todas."
+          ],
+          "bullets": [
+            "Buscador (solo en algunas tablas): escribe parte de un nombre, un documento o un código y la tabla se reduce mientras escribes.",
+            "«Periodo» (solo si la tabla tiene una fecha): elige un periodo de la lista o un rango propio con fecha inicial y final. La fecha inicial no puede ser posterior a la final; si lo es, verás un aviso.",
+            "«+ Filtro»: pulsa el botón, elige la columna que quieres filtrar, escribe el texto o marca una o varias opciones y pulsa «Aplicar». Puedes añadir tantos filtros como necesites.",
+            "Los filtros se suman: la tabla muestra solo lo que cumple todos a la vez.",
+            "El botón «+ Filtro» te dice cuántos filtros hay activos. Para quitarlos todos, pulsa «Empezar de cero»."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Si ningún registro cumple los filtros, la tabla muestra «Ningún registro coincide con los filtros» y el botón «Limpiar filtros» para volver a ver todo."
+            }
+          ]
+        },
+        {
           "id": "filtros",
-          "title": "4. Filtros y exportaciones",
+          "title": "5. Filtros y exportaciones",
           "paragraphs": [
             "Las páginas se calculan sobre el resultado filtrado: si aplicas un filtro que deja pocos registros, la tabla te lleva a la página que existe en vez de mostrarte una vacía. Exportar a Excel o CSV siempre incluye todo el resultado del filtro, no solo la página que estás viendo."
           ],
@@ -1296,7 +1317,7 @@
             "Píldora «Usuarios» del dock (visible para el Administrador de la compañía). Según tu perfil y permisos verás hasta tres pestañas:"
           ],
           "bullets": [
-            "Usuarios: invitar, editar y gestionar el acceso de las personas de tu compañía.",
+            "Usuarios: invitar, editar y gestionar el acceso de las personas de tu compañía. Para encontrar a alguien usa el buscador y «+ Filtro» (Nombre, Correo, Perfil, Rol, Estado, Fecha); ver «Tablas: cómo leerlas y moverte entre páginas».",
             "Roles y permisos: crea y edita los roles de tu compañía y consulta los roles de FLIT. Solo la ve el Administrador de la compañía.",
             "Clientes ICT: solo si tu compañía integra con terceros y tienes el permiso correspondiente (ver bloque 7)."
           ],
@@ -1803,7 +1824,7 @@
           "id": "auditoria-permisos",
           "title": "4. Auditoría de permisos",
           "paragraphs": [
-            "Usuarios tiene dos pestañas: «Usuarios» (la tabla de personas y el botón «Invitar usuario») y «Auditoría de permisos», con el registro de cada cambio de permisos individuales hecho en tu organismo: fecha y hora (DD/MM/AAAA HH:mm), el administrador que lo hizo, la persona afectada, el permiso, la acción (otorgó, denegó, volvió al rol) y el valor antes y después. La pestaña «Usuarios» te devuelve a la tabla.",
+            "Usuarios tiene dos pestañas: «Usuarios» (la tabla de personas, con buscador y «+ Filtro» por Nombre, Correo, Perfil, Rol, Estado y Fecha, y el botón «Invitar usuario»; ver «Tablas: cómo leerlas y moverte entre páginas») y «Auditoría de permisos», con el registro de cada cambio de permisos individuales hecho en tu organismo: fecha y hora (DD/MM/AAAA HH:mm), el administrador que lo hizo, la persona afectada, el permiso, la acción (otorgó, denegó, volvió al rol) y el valor antes y después. La pestaña «Usuarios» te devuelve a la tabla.",
             "Solo ves los registros de las personas de tu organismo. Puedes filtrar por usuario y por administrador; no hay filtro de compañía porque siempre es el tuyo. Si el servicio no responde, verás un aviso de error con el botón «Reintentar»."
           ],
           "bullets": [],
@@ -2205,7 +2226,7 @@
           "title": "1. Qué ves al entrar",
           "paragraphs": [
             "Píldora «Administración» del dock (solo Administrador de compañía). Hoy se abre directo en dos pestañas: Representantes legales y Mandatarios. Es un cambio a propósito: antes veías la ficha completa de tu compañía (Trámites, Configuración Empresa, Documentos, Usuarios, Historial de Cambios); esas secciones ahora las gestiona el equipo FLIT para proteger cambios sensibles.",
-            "Si administras una compañía hija desde el panel «Red de clientes» (solo cabezas de Concesión o Marca Blanca) y abres su ficha, ves una tercera pestaña, Usuarios, propia de esa hija: ahí resetas contraseñas y suspendes o desactivas sus usuarios."
+            "Si administras una compañía hija desde el panel «Red de clientes» (solo cabezas de Concesión o Marca Blanca) y abres su ficha, ves una tercera pestaña, Usuarios, propia de esa hija: ahí resetas contraseñas y suspendes o desactivas sus usuarios. La tabla tiene buscador y «+ Filtro» por Nombre, Correo, Perfil, Rol, Estado y Fecha."
           ],
           "bullets": [],
           "callouts": [
@@ -2278,7 +2299,8 @@
           "bullets": [
             "Registra la persona (tipo y número de documento, nombre; correo, dirección y ciudad opcionales).",
             "Dentro de su ficha, asocia las empresas que representa: por cada NIT, adjunta la escritura de constitución o poder (PDF) que respalda esa representación en los documentos del trámite.",
-            "Asocia la firma del baúl para que los documentos la estampen automáticamente."
+            "Asocia la firma del baúl para que los documentos la estampen automáticamente.",
+            "Encontrar a alguien: encima del directorio, «+ Filtro» permite filtrar por Representante, Documento, Trámites y Firma / Identidad (Con firma o identidad o Sin firma ni identidad). Ya no hay un buscador único; las condiciones se suman. Lo mismo aplica al baúl de firmas, que se filtra por Registro, Documento, Código hash, Apoderado, Vigencia (con «Periodo» sobre el vencimiento) y Estado (Activa, Vencida o Revocada). Cómo funciona la barra: ver «Tablas: cómo leerlas y moverte entre páginas»."
           ],
           "callouts": []
         },
@@ -2293,6 +2315,7 @@
             "Validación de identidad del mandatario: al guardar un mandatario nuevo con Validación de identidad, le enviamos un enlace al correo para que valide su identidad; antes de guardar el formulario te lo avisa. Solo cuenta la validación hecha para ese mandatario (no la que la misma persona haya hecho como comprador o vendedor). Al editar, la ficha muestra el estado: «Pendiente de validación» (aún sin firma válida), «En curso», «Aprobada» o «Enlace vencido», y el botón «Reenviar validación» para volver a enviar el enlace (te confirma el correo de destino y se deshabilita mientras envía). Si cambias el tipo o el número de documento, o pasas de Baúl de firmas a Validación de identidad, el formulario te avisa antes de guardar que se enviará una nueva validación y que la anterior deja de contar. Con Baúl de firmas, Persona jurídica o Formato en blanco no aparece este bloque. Reactivar un mandatario no envía ninguna validación. Los mandatarios anteriores con Validación de identidad aparecen como «Pendiente de validación» hasta que completen el nuevo flujo; los de Baúl de firmas siguen igual.",
             "Organismos donde aplica: solo se ofrecen los habilitados para tu compañía. La firma de forma física ya no se ofrece.",
             "Sobre la lista se indica el formato de contrato de cada organismo habilitado, con el nombre vigente del catálogo. Lista de mandatarios: cada fila muestra el modelo, una columna «Validación» (solo con Validación de identidad) y una etiqueta de vigencia con texto e ícono: verde «Vigente», naranja «Por vencer» (faltan 7 días o menos para el fin), rojo «Vencido», rojo «Inactivo» y azul «Aún no vigente» si el rango todavía no empieza. En rango de fechas se indica hasta cuándo. Si el organismo de tránsito configuró un mandatario para tu compañía, su fila se ve en gris con un candado y la leyenda «Configurado por el organismo de tránsito»: puedes consultarlo, pero no editarlo ni eliminarlo (solo el organismo). Los mandatarios que registraste tú conservan sus acciones.",
+            "Encontrar un mandatario: encima de la lista hay un buscador por nombre o documento y «+ Filtro» por Mandatario, Documento, Modelo, Vigencia, Validación y Organismos. Si ningún mandatario cumple, verás «Ningún registro coincide con los filtros» y «Limpiar filtros».",
             "Desactivar, reactivar y eliminar: en cada fila tienes los iconos de editar, desactivar (o reactivar si está inactivo) y eliminar. Antes de desactivar o eliminar, el sistema revisa qué afecta. Si es el único mandatario activo de una compañía en un organismo, o es un default, el diálogo lista las compañías y organismos que quedarían sin mandatario y pide que confirmes; los trámites radicados sin aprobar se reasignan con la prelación (mandatario propio, asociado de otra compañía o default del organismo) y, si no queda nadie, el organismo decide al aprobar. Sin impacto basta una confirmación corta. Eliminar conserva el historial. Al terminar te dice cuántos trámites se reasignaron y cuántos quedan para el organismo. Reactivar no desplaza al mandatario que ya esté vigente: si hubo otro activo, el vínculo queda inactivo y se te avisa. Si el servidor responde «No tienes permiso», la fila no cambia. Persona jurídica y Formato en blanco no tienen vigencia y muestran un guion. Un mandatario eliminado no aparece.",
             "Compañías asociadas: el formulario se abre como una ventana (modal) por pasos (¿Quién firma?, Datos, ¿Cómo firma?, Vigencia y Dónde aplica) con un resumen que se actualiza mientras lo llenas. En «Dónde aplica», si tu compañía tiene compañías hijas, las ves completas, sin páginas: escribe en el buscador parte del nombre o del NIT para filtrar, marca las que quieras (quedan como chips con una «x» para quitarlas y un contador), y usa «Seleccionar las filtradas» o «Limpiar» para marcar o quitar varias de una vez. Es opcional: sin marcar ninguna, el mandatario aplica solo a tu compañía. Los organismos funcionan igual: con ocho o menos se muestran como chips que activas con un clic, y con más aparece el buscador. Si no tienes compañías hijas no hay lista y el formulario dice «Este mandatario aplica solo a su compañía». Ya no aparecen las empresas de los Representantes Legales."
           ],
@@ -2345,6 +2368,7 @@
           "bullets": [
             "Agregar cliente a la red: razón social, NIT y tipo de compañía. El código lo asigna el sistema (COMP-XXXX). Nace vinculado a tu red.",
             "Activar / Desactivar cliente, con confirmación.",
+            "Encontrar un cliente: la tabla del Panel de red se filtra con «+ Filtro» por Cliente, NIT, Tipo y Estado, y con «Periodo» sobre la fecha de vinculación.",
             "Invitar usuario a un cliente: eliges el cliente como destino y el rol (Administrador de compañía, Radicador, Gestor, Documentador, Validador u Operario full).",
             "Cada correo corresponde a un solo usuario en toda la plataforma, sin importar la compañía ni las mayúsculas (Juan@empresa.com y juan@empresa.com son el mismo). El correo se guarda siempre en minúsculas. Si ya existe un usuario con ese correo, o ya hay una invitación pendiente para él en cualquier compañía, la invitación no se crea, ves «El usuario ya se encuentra previamente creado» y el campo de correo queda marcado en rojo; corrige el correo para continuar.",
             "Administrar un cliente: abre su ficha para gestionar sus Representantes legales y Mandatarios (y sus Usuarios), con un aviso de que estás en un cliente de tu red."
@@ -2465,18 +2489,18 @@
           "id": "companias",
           "title": "1. Compañías",
           "paragraphs": [
-            "Administradores → Compañías. Catálogo de compañías B2B con filtros, estado y el toggle «incluir OT» para ver también los organismos de tránsito en el mismo listado. La primera columna, «Código», muestra el consecutivo de cada compañía (COMP-0001, COMP-0002…); las compañías que ya existían recibieron el suyo según su antigüedad. «Crear compañía»: razón social, NIT, tipo de compañía (normal, Concesión o Marca Blanca) y, para Marca Blanca, dominio propio. El código no se escribe: el sistema asigna el siguiente consecutivo (COMP-0001, COMP-0002…) al guardar. «Activar / Desactivar» cambia el estado con confirmación; una compañía de tipo de sistema no se edita desde aquí.",
+            "Administradores → Compañías. Catálogo de compañías B2B con el toggle «incluir OT» para ver también los organismos de tránsito en el mismo listado. Encima de la tabla está la barra de filtros estándar (ver «Tablas: cómo leerlas y moverte entre páginas»): «Periodo» sobre la fecha de creación y «+ Filtro» por Código, NIT, Razón social, Tipo y Estado. Ya no existe el panel con NIT, Razón social, fechas y «Buscar»; todos los filtros se suman. La primera columna, «Código», muestra el consecutivo de cada compañía (COMP-0001, COMP-0002…); las compañías que ya existían recibieron el suyo según su antigüedad. «Crear compañía»: razón social, NIT, tipo de compañía (normal, Concesión o Marca Blanca) y, para Marca Blanca, dominio propio. El código no se escribe: el sistema asigna el siguiente consecutivo (COMP-0001, COMP-0002…) al guardar. «Activar / Desactivar» cambia el estado con confirmación; una compañía de tipo de sistema no se edita desde aquí.",
             "Abrir una fila lleva a la ficha completa de la compañía, con 8 pestañas:"
           ],
           "bullets": [
             "Productos: enciende o apaga los productos de la suite para la compañía (Trámites, Comparendos, Diagnóstico). El cambio se aplica al instante, sin «Guardar todo», y queda en el historial. Cada producto muestra su estado escrito: Encendido, Apagado o Próximamente.",
             "Trámites: familias habilitadas (Matrículas, Traspaso, Otros), cada una en un acordeón con un resumen («Sin restricciones» o «N restricciones activas») y con el estado de cada opción escrito junto a su switch (por ejemplo Permitido o Bloqueado), más la lista blanca de trámites permitidos. Debajo, la sección «Improntas» tiene el interruptor «Generación de improntas» (visible solo para el Super Admin), con el estado escrito junto a él: Habilitada o Deshabilitada. Si lo desactivas, el asistente no genera la impronta automáticamente y el radicador la carga a mano; solo aplica a trámites nuevos. Se guarda con «Guardar todo».",
-            "Configuración Empresa: cinco bloques con un índice de acceso rápido arriba. «Firma y documentos» (firma precargada desde el baúl y módulo de Resoluciones), «Notificaciones» (enrutamiento, avisos al aprobar o rechazar y sus destinatarios), «Cobro y recaudo» (métodos de recaudo), «Consultas y fuentes» (validar SOAT ante RUNT, fuente de comparendos, proveedores de consulta y de avalúo; el tiempo de espera de contingencia está en «Opciones avanzadas») y «Organismos de tránsito», con los bloqueos y restricciones que aplica cada uno. Las opciones elegidas se marcan en verde y la de Fasecolda aparece como obligatoria. El buscador de esa tabla (por nombre o código, con o sin tildes) recorre todos los organismos, no solo la página que estás viendo.",
-            "Documentos: parámetros documentales de la gestora, en una tabla con cada tipo de documento y su estado (Obligatorio, Opcional u Oculto). «Agregar parámetro» o el ícono de editar abren la ventana para elegir el documento y su estado.",
-            "Representantes legales: buscador por nombre o documento, un resumen de cuántos representantes no tienen firma ni identidad y paginación con «Filas por página».",
-            "Mandatarios: el mismo formulario que ve el Administrador de la compañía, con modelo (Persona natural, Persona jurídica o Formato en blanco), forma de firma y vigencia. La lista muestra el modelo y la etiqueta de vigencia (Vigente, Por vencer, Vencido, Inactivo, Aún no vigente; guion en Persona jurídica y Formato en blanco). Tiene buscador por nombre o documento y las acciones de cada fila son íconos (editar, dar de baja o reactivar, eliminar) con su nombre al pasar el mouse. Ver el artículo «Representantes legales y mandatarios» de Administrador de compañía.",
-            "Usuarios: usuarios de la compañía con buscador y filtros por perfil, rol y estado, e «Invitar usuario».",
-            "Historial de Cambios: quién cambió qué y cuándo, con el campo en lenguaje claro y el valor anterior y el nuevo como etiquetas. «Ver detalle» abre los valores extensos. Los filtros (fechas, tipo de cambio y texto) se aplican a la página cargada."
+            "Configuración Empresa: cinco bloques con un índice de acceso rápido arriba. «Firma y documentos» (firma precargada desde el baúl y módulo de Resoluciones), «Notificaciones» (enrutamiento, avisos al aprobar o rechazar y sus destinatarios), «Cobro y recaudo» (métodos de recaudo), «Consultas y fuentes» (validar SOAT ante RUNT, fuente de comparendos, proveedores de consulta y de avalúo; el tiempo de espera de contingencia está en «Opciones avanzadas») y «Organismos de tránsito», con los bloqueos y restricciones que aplica cada uno. Las opciones elegidas se marcan en verde y la de Fasecolda aparece como obligatoria. Esa tabla y la de Bloqueos usan la barra de filtros estándar: «+ Filtro» por Organismo, Código, Estado y Convenio (en Bloqueos, Estado en red); recorren todos los organismos, no solo la página que estás viendo.",
+            "Documentos: la tabla lista todos los documentos del catálogo con su estado: Obligatorio, Opcional, Oculto o Base (el documento que aún no tiene parámetro para esa compañía). Ya no hay botón «Agregar parámetro»: se edita desde la fila, con el ícono de editar, para elegir el estado. Filtra por Documento (nombre o código) y por Estado.",
+            "Representantes legales: un resumen de cuántos representantes no tienen firma ni identidad y paginación con «Filas por página». Filtra con «+ Filtro» por Representante, Documento, Trámites y Firma / Identidad (Con firma o identidad, Sin firma ni identidad); ya no hay un buscador único. El baúl de firmas se filtra por Registro, Documento, Código hash, Apoderado, Vigencia («Periodo» sobre la fecha de vencimiento) y Estado (Activa, Vencida, Revocada).",
+            "Mandatarios: el mismo formulario que ve el Administrador de la compañía, con modelo (Persona natural, Persona jurídica o Formato en blanco), forma de firma y vigencia. La lista muestra el modelo y la etiqueta de vigencia (Vigente, Por vencer, Vencido, Inactivo, Aún no vigente; guion en Persona jurídica y Formato en blanco). Tiene buscador por nombre o documento y «+ Filtro» por Mandatario, Documento, Modelo, Vigencia, Validación y Organismos; las acciones de cada fila son íconos (editar, dar de baja o reactivar, eliminar) con su nombre al pasar el mouse. Ver el artículo «Representantes legales y mandatarios» de Administrador de compañía.",
+            "Usuarios: usuarios de la compañía con buscador y «+ Filtro» por Nombre, Correo, Perfil, Rol, Estado y Fecha, e «Invitar usuario».",
+            "Historial de Cambios: quién cambió qué y cuándo, con el campo en lenguaje claro y el valor anterior y el nuevo como etiquetas. «Ver detalle» abre los valores extensos. Filtra con «Periodo» sobre la fecha y «+ Filtro» por Campo modificado, Valor anterior y Operador; el filtro recorre todo el historial de la compañía, no solo la página que ves. Si en el rango propio la fecha inicial es posterior a la final, la tabla te lo avisa."
           ],
           "callouts": [
             {
@@ -2490,7 +2514,7 @@
           "id": "companias-red",
           "title": "2. Cabezas de red",
           "paragraphs": [
-            "Si la compañía es cabeza de red (Concesión o Marca Blanca), su ficha suma el panel de hijas: agregar un cliente a la red, activar o inactivar una hija e invitar usuarios para que la administren.",
+            "Si la compañía es cabeza de red (Concesión o Marca Blanca), su ficha suma el panel de hijas: agregar un cliente a la red, activar o inactivar una hija e invitar usuarios para que la administren. La tabla de hijas y el Panel de red se filtran con «+ Filtro» por Razón social, NIT, Tipo y Estado, y con «Periodo» sobre la fecha de vinculación.",
             "Si además es Marca Blanca, configura la marca y el dominio propio de la red: registrar el dominio, cambiarlo, retirarlo y comprobarlo (validación de propiedad). Estas cuatro acciones son exclusivas del Super Admin; el Administrador de la cabeza de red solo las ve en modo lectura."
           ],
           "bullets": [],

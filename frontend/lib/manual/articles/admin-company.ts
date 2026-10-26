@@ -41,7 +41,7 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
         title: "1. Qué ves al entrar",
         paragraphs: [
           "Píldora «Administración» del dock (solo Administrador de compañía). Hoy se abre directo en dos pestañas: Representantes legales y Mandatarios. Es un cambio a propósito: antes veías la ficha completa de tu compañía (Trámites, Configuración Empresa, Documentos, Usuarios, Historial de Cambios); esas secciones ahora las gestiona el equipo FLIT para proteger cambios sensibles.",
-          "Si administras una compañía hija desde el panel «Red de clientes» (solo cabezas de Concesión o Marca Blanca) y abres su ficha, ves una tercera pestaña, Usuarios, propia de esa hija: ahí resetas contraseñas y suspendes o desactivas sus usuarios.",
+          "Si administras una compañía hija desde el panel «Red de clientes» (solo cabezas de Concesión o Marca Blanca) y abres su ficha, ves una tercera pestaña, Usuarios, propia de esa hija: ahí resetas contraseñas y suspendes o desactivas sus usuarios. La tabla tiene buscador y «+ Filtro» por Nombre, Correo, Perfil, Rol, Estado y Fecha.",
         ],
         callouts: [
           {
@@ -109,6 +109,8 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
       "acordeon por compania",
       "nit",
       "bloque de identidad",
+      "filtrar mandatarios",
+      "filtros por columna",
       "modulo identidad",
       "estado de identidad",
     ],
@@ -126,6 +128,7 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
           "Registra la persona (tipo y número de documento, nombre; correo, dirección y ciudad opcionales).",
           "Dentro de su ficha, asocia las empresas que representa: por cada NIT, adjunta la escritura de constitución o poder (PDF) que respalda esa representación en los documentos del trámite.",
           "Asocia la firma del baúl para que los documentos la estampen automáticamente.",
+          "Encontrar a alguien: encima del directorio, «+ Filtro» permite filtrar por Representante, Documento, Trámites y Firma / Identidad (Con firma o identidad o Sin firma ni identidad). Ya no hay un buscador único; las condiciones se suman. Lo mismo aplica al baúl de firmas, que se filtra por Registro, Documento, Código hash, Apoderado, Vigencia (con «Periodo» sobre el vencimiento) y Estado (Activa, Vencida o Revocada). Cómo funciona la barra: ver «Tablas: cómo leerlas y moverte entre páginas».",
         ],
       },
       {
@@ -139,6 +142,7 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
           "Validación de identidad del mandatario: al guardar un mandatario nuevo con Validación de identidad, le enviamos un enlace al correo para que valide su identidad; antes de guardar el formulario te lo avisa. Solo cuenta la validación hecha para ese mandatario (no la que la misma persona haya hecho como comprador o vendedor). Al editar, la ficha muestra el estado: «Pendiente de validación» (aún sin firma válida), «En curso», «Aprobada» o «Enlace vencido», y el botón «Reenviar validación» para volver a enviar el enlace (te confirma el correo de destino y se deshabilita mientras envía). Si cambias el tipo o el número de documento, o pasas de Baúl de firmas a Validación de identidad, el formulario te avisa antes de guardar que se enviará una nueva validación y que la anterior deja de contar. Con Baúl de firmas, Persona jurídica o Formato en blanco no aparece este bloque. Reactivar un mandatario no envía ninguna validación. Los mandatarios anteriores con Validación de identidad aparecen como «Pendiente de validación» hasta que completen el nuevo flujo; los de Baúl de firmas siguen igual.",
           "Organismos donde aplica: solo se ofrecen los habilitados para tu compañía. La firma de forma física ya no se ofrece.",
           "Sobre la lista se indica el formato de contrato de cada organismo habilitado, con el nombre vigente del catálogo. Lista de mandatarios: cada fila muestra el modelo, una columna «Validación» (solo con Validación de identidad) y una etiqueta de vigencia con texto e ícono: verde «Vigente», naranja «Por vencer» (faltan 7 días o menos para el fin), rojo «Vencido», rojo «Inactivo» y azul «Aún no vigente» si el rango todavía no empieza. En rango de fechas se indica hasta cuándo. Si el organismo de tránsito configuró un mandatario para tu compañía, su fila se ve en gris con un candado y la leyenda «Configurado por el organismo de tránsito»: puedes consultarlo, pero no editarlo ni eliminarlo (solo el organismo). Los mandatarios que registraste tú conservan sus acciones.",
+          "Encontrar un mandatario: encima de la lista hay un buscador por nombre o documento y «+ Filtro» por Mandatario, Documento, Modelo, Vigencia, Validación y Organismos. Si ningún mandatario cumple, verás «Ningún registro coincide con los filtros» y «Limpiar filtros».",
           "Desactivar, reactivar y eliminar: en cada fila tienes los iconos de editar, desactivar (o reactivar si está inactivo) y eliminar. Antes de desactivar o eliminar, el sistema revisa qué afecta. Si es el único mandatario activo de una compañía en un organismo, o es un default, el diálogo lista las compañías y organismos que quedarían sin mandatario y pide que confirmes; los trámites radicados sin aprobar se reasignan con la prelación (mandatario propio, asociado de otra compañía o default del organismo) y, si no queda nadie, el organismo decide al aprobar. Sin impacto basta una confirmación corta. Eliminar conserva el historial. Al terminar te dice cuántos trámites se reasignaron y cuántos quedan para el organismo. Reactivar no desplaza al mandatario que ya esté vigente: si hubo otro activo, el vínculo queda inactivo y se te avisa. Si el servidor responde «No tienes permiso», la fila no cambia. Persona jurídica y Formato en blanco no tienen vigencia y muestran un guion. Un mandatario eliminado no aparece.",
           "Compañías asociadas: el formulario se abre como una ventana (modal) por pasos (¿Quién firma?, Datos, ¿Cómo firma?, Vigencia y Dónde aplica) con un resumen que se actualiza mientras lo llenas. En «Dónde aplica», si tu compañía tiene compañías hijas, las ves completas, sin páginas: escribe en el buscador parte del nombre o del NIT para filtrar, marca las que quieras (quedan como chips con una «x» para quitarlas y un contador), y usa «Seleccionar las filtradas» o «Limpiar» para marcar o quitar varias de una vez. Es opcional: sin marcar ninguna, el mandatario aplica solo a tu compañía. Los organismos funcionan igual: con ocho o menos se muestran como chips que activas con un clic, y con más aparece el buscador. Si no tienes compañías hijas no hay lista y el formulario dice «Este mandatario aplica solo a su compañía». Ya no aparecen las empresas de los Representantes Legales.",
         ],
@@ -205,6 +209,7 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
         bullets: [
           "Agregar cliente a la red: razón social, NIT y tipo de compañía. El código lo asigna el sistema (COMP-XXXX). Nace vinculado a tu red.",
           "Activar / Desactivar cliente, con confirmación.",
+          "Encontrar un cliente: la tabla del Panel de red se filtra con «+ Filtro» por Cliente, NIT, Tipo y Estado, y con «Periodo» sobre la fecha de vinculación.",
           "Invitar usuario a un cliente: eliges el cliente como destino y el rol (Administrador de compañía, Radicador, Gestor, Documentador, Validador u Operario full).",
           "Cada correo corresponde a un solo usuario en toda la plataforma, sin importar la compañía ni las mayúsculas (Juan@empresa.com y juan@empresa.com son el mismo). El correo se guarda siempre en minúsculas. Si ya existe un usuario con ese correo, o ya hay una invitación pendiente para él en cualquier compañía, la invitación no se crea, ves «El usuario ya se encuentra previamente creado» y el campo de correo queda marcado en rojo; corrige el correo para continuar.",
           "Administrar un cliente: abre su ficha para gestionar sus Representantes legales y Mandatarios (y sus Usuarios), con un aviso de que estás en un cliente de tu red.",

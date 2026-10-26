@@ -899,6 +899,8 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       "permisos individuales",
       "fuera de tu tope",
       "auditoria de permisos",
+      "filtrar usuarios",
+      "buscar usuario",
     ],
     summary: "Las pestañas del módulo Usuarios, cómo invitar y gestionar personas, y qué es Clientes ICT.",
     blocks: [
@@ -909,7 +911,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "Píldora «Usuarios» del dock (visible para el Administrador de la compañía). Según tu perfil y permisos verás hasta tres pestañas:",
         ],
         bullets: [
-          "Usuarios: invitar, editar y gestionar el acceso de las personas de tu compañía.",
+          "Usuarios: invitar, editar y gestionar el acceso de las personas de tu compañía. Para encontrar a alguien usa el buscador y «+ Filtro» (Nombre, Correo, Perfil, Rol, Estado, Fecha); ver «Tablas: cómo leerlas y moverte entre páginas».",
           "Roles y permisos: crea y edita los roles de tu compañía y consulta los roles de FLIT. Solo la ve el Administrador de la compañía.",
           "Clientes ICT: solo si tu compañía integra con terceros y tienes el permiso correspondiente (ver bloque 7).",
         ],
