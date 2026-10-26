@@ -35,7 +35,7 @@ namespace Flit.Diagnostico.Tests.Consultas;
 /// </example>
 public sealed class EncoladoTests
 {
-    // AC1 (F03-C1) — 3 vehículos con alcance RUNT: 3 celdas RUNT PENDIENTE (SIMIT habilitado pero no elegido no nace), 202,
+    // AC1 (F03-C1) — 3 vehículos con alcance RUNT: 3 celdas RUNT EN_CURSO con su trabajo publicado (ADR-0075) (SIMIT habilitado pero no elegido no nace), 202,
     // lote EN_PROCESO con la transición AUTO en el historial y la versión del tablero copiada en las celdas.
     [Fact]
     public async Task Confirmar_lote_crea_celdas_solo_del_alcance_y_responde_202()
@@ -54,7 +54,7 @@ public sealed class EncoladoTests
         var vehiculos = await Lotes.VehiculosAsync(api, empresa.Id, id, ct);
         var celdas = await Motor.CeldasAsync(api, empresa.Id, id, ct);
         celdas.Should().HaveCount(3).And.OnlyContain(c =>
-            c.Fuente == Fuente.Runt && c.Estado == EstadoCelda.Pendiente && c.LeaseHasta == null && c.TenantId == empresa.Id && c.IntentosAuto == 0);
+            c.Fuente == Fuente.Runt && c.Estado == EstadoCelda.EnCurso && c.LeaseHasta == null && c.TenantId == empresa.Id && c.IntentosAuto == 0);
         celdas.Select(c => c.VehiculoId).Should().BeEquivalentTo(vehiculos.Select(v => v.Id));
         var cabecera = await Cabeceras.LeerAsync(api, empresa.Id, id, ct);
         cabecera.Estado.Should().Be(EstadoDiagnostico.EnProceso);
@@ -84,7 +84,8 @@ public sealed class EncoladoTests
 
         var celdas = await Motor.CeldasAsync(api, empresa.Id, id, ct);
         celdas.Should().HaveCount(4, "2 vehículos × (RUNT + SIMIT_VEHICULO); AVALUO está habilitado pero no en el alcance");
-        celdas.Should().OnlyContain(c => c.Estado == EstadoCelda.Pendiente);
+        celdas.Where(c => c.Fuente == Fuente.Runt).Should().OnlyContain(c => c.Estado == EstadoCelda.EnCurso, "la RUNT se publica al encolar (ADR-0075)");
+        celdas.Where(c => c.Fuente != Fuente.Runt).Should().OnlyContain(c => c.Estado == EstadoCelda.Pendiente && c.TrabajoId == null, "las diferidas esperan a su RUNT");
         celdas.Where(c => c.Fuente == Fuente.Runt).Should().HaveCount(2).And.OnlyContain(c => c.DisponibleDesde <= DateTimeOffset.UtcNow.AddSeconds(5));
         celdas.Where(c => c.Fuente == Fuente.SimitVehiculo).Should().HaveCount(2).And.OnlyContain(c => c.DisponibleDesde > DateTimeOffset.UtcNow.AddYears(100));
     }
@@ -118,7 +119,7 @@ public sealed class EncoladoTests
     }
 
     // AC5 (F03-C3) — con una celda COMPLETADO y otra NA, un segundo disparo del mismo lote no crea ni reabre celdas, no
-    // repite la transición y el procesador solo llama a la fuente por la celda que seguía PENDIENTE.
+    // repite la transición ni republica, y solo la celda que seguía en curso se cierra con su resultado (ADR-0075).
     [Fact]
     public async Task Segundo_encolado_no_reabre_celdas_COMPLETADO_ni_NA()
     {
@@ -144,11 +145,11 @@ public sealed class EncoladoTests
 
         var despues = await Motor.CeldasAsync(api, empresa.Id, id, ct);
         despues.Select(c => (c.Id, c.Estado)).Should().BeEquivalentTo(
-            [(completada, EstadoCelda.Completado), (na, EstadoCelda.Na), (pendiente, EstadoCelda.Pendiente)]);
+            [(completada, EstadoCelda.Completado), (na, EstadoCelda.Na), (pendiente, EstadoCelda.EnCurso)]);
         (await Cabeceras.LeerAsync(api, empresa.Id, id, ct)).VersionTablero.Should().Be(versionAntes, "no se creó ninguna celda");
         (await Motor.EscalarAsync(api, "SELECT count(*) FROM diagnostico.historial_estado_diagnostico WHERE estado_nuevo = 'EN_PROCESO'", ct)).Should().Be(1);
 
-        (await Motor.Procesador(api).ProcesarLoteAsync(ct)).Should().Be(1);
+        (await Motor.Bus(api).ProcesarLoteAsync(ct)).Should().Be(3, "solo los tres trabajos del primer encolado: el segundo no publicó ninguno");
         ejecutor.Llamadas.Keys.Should().Equal(pendiente);
         (await Motor.CeldasAsync(api, empresa.Id, id, ct)).Single(c => c.Id == completada).Estado.Should().Be(EstadoCelda.Completado);
     }

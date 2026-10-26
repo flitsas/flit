@@ -56,7 +56,7 @@ public sealed class CeldaRuntTests
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST001")], ct, Fuente.SimitVehiculo);
-        var procesador = Motor.Procesador(api);
+        var procesador = Motor.Bus(api);
 
         (await procesador.ProcesarLoteAsync(ct)).Should().Be(1, "solo la celda RUNT está disponible al principio");
         orden.Should().Equal(["RUNT PLACA_CARRO TST001"], "la primera llamada es RUNT, por placa y sin documento");
@@ -65,7 +65,7 @@ public sealed class CeldaRuntTests
         var simitCelda = celdas.Single(c => c.Fuente == Fuente.SimitVehiculo);
         runt.Estado.Should().Be(EstadoCelda.Completado);
         runt.DatoObtenidoEn.Should().NotBeNull();
-        simitCelda.Estado.Should().Be(EstadoCelda.Pendiente);
+        simitCelda.Estado.Should().Be(EstadoCelda.EnCurso, "la liberada sale con su trabajo de consulta (ADR-0075)");
         simitCelda.DisponibleDesde.Should().BeBefore(DateTimeOffset.UtcNow.AddMinutes(1), "RUNT completó y liberó las demás celdas");
         simitCelda.VersionTablero.Should().Be(runt.VersionTablero, "la liberación va en la misma transacción que cierra RUNT");
 
@@ -93,7 +93,7 @@ public sealed class CeldaRuntTests
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("9ZZPRUEBA00000003")], ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         orden.Should().Equal(["RUNT VIN 9ZZPRUEBA00000003"]);
         var vehiculo = (await Lotes.VehiculosAsync(api, empresa.Id, id, ct)).Single();
@@ -114,7 +114,7 @@ public sealed class CeldaRuntTests
         var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST003", "CC", LocatarioDeclarado)], ct);
         (await Lotes.VehiculosAsync(api, empresa.Id, id, ct)).Single().LocatarioDocOrigen.Should().Be(OrigenDocumento.DeclaradoCliente);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var protector = api.App.Services.GetRequiredService<IProtectorDocumentoPersona>();
         var vehiculo = (await Lotes.VehiculosAsync(api, empresa.Id, id, ct)).Single();
@@ -135,7 +135,7 @@ public sealed class CeldaRuntTests
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST001", "CC", LocatarioDeclarado), Lotes.Fila("TST011")], ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var protector = api.App.Services.GetRequiredService<IProtectorDocumentoPersona>();
         var vehiculos = await Lotes.VehiculosAsync(api, empresa.Id, id, ct);
@@ -162,7 +162,7 @@ public sealed class CeldaRuntTests
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST003", "CC", LocatarioDeclarado)], ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         await using var conexion = new NpgsqlConnection(api.BaseDeDatos);
         await conexion.OpenAsync(ct);
@@ -206,7 +206,7 @@ public sealed class CeldaRuntTests
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST003", "CC", LocatarioDeclarado), Lotes.Fila("TST004"), Lotes.Fila("TST008")], ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var celdas = await Motor.CeldasAsync(api, empresa.Id, id, ct);
         celdas.Should().Contain(c => c.Estado == EstadoCelda.Completado).And.Contain(c => c.Estado == EstadoCelda.Error);
@@ -226,7 +226,7 @@ public sealed class CeldaRuntTests
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST003", "CE", LocatarioDeclarado)], ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var protector = api.App.Services.GetRequiredService<IProtectorDocumentoPersona>();
         var vehiculo = (await Lotes.VehiculosAsync(api, empresa.Id, id, ct)).Single();
@@ -252,7 +252,7 @@ public sealed class CeldaRuntTests
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST001", "CC", LocatarioDeclarado), Lotes.Fila("TST004")], ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var protector = api.App.Services.GetRequiredService<IProtectorDocumentoPersona>();
         var conDeclarado = await MotorRunt.VehiculoAsync(api, empresa, id, "TST001", ct);
@@ -273,7 +273,7 @@ public sealed class CeldaRuntTests
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST003", "CC", LocatarioDeclarado), Lotes.Fila("TST001", "CC", LocatarioDeclarado)], ct);
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
         var conRespaldo = await MotorRunt.VehiculoAsync(api, empresa, id, "TST003", ct);
         var declarado = await MotorRunt.VehiculoAsync(api, empresa, id, "TST001", ct);
 
@@ -302,7 +302,7 @@ public sealed class CeldaRuntTests
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST003", "CC", LocatarioDeclarado)], ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var vehiculo = (await Lotes.VehiculosAsync(api, empresa.Id, id, ct)).Single();
         (await RespaldoAsync(api, vehiculo.Id, ct)).Cifrado.Should().NotBeNull("hay respaldo que proteger");
@@ -360,13 +360,13 @@ public sealed class FuenteRuntEspia(ConcurrentQueue<string> orden, IFuenteRunt? 
 }
 
 /// <summary>Ejecutor de prueba de una fuente distinta de RUNT (HU #13730): anota «FUENTE vehiculo» y completa la celda.</summary>
-public sealed class EjecutorFuenteDePrueba(Fuente fuente, ConcurrentQueue<string> orden) : IEjecutorCelda
+public sealed class EjecutorFuenteDePrueba(Fuente fuente, ConcurrentQueue<string> orden) : EjecutorSimple
 {
-    public Fuente Fuente => fuente;
+    public override Fuente Fuente => fuente;
 
     public void Registrar(IServiceCollection servicios) => servicios.AddSingleton<IEjecutorCelda>(this);
 
-    public Task<ResultadoCelda> EjecutarAsync(ContextoCelda contexto, CancellationToken ct)
+    public override Task<ResultadoCelda> EjecutarAsync(ContextoCelda contexto, CancellationToken ct)
     {
         orden.Enqueue($"{CodigosDeEnum.Codigo(fuente)} {contexto.Celda.VehiculoId}");
         return Task.FromResult(ResultadoCelda.Completado("{}", DateTimeOffset.UtcNow));
@@ -391,17 +391,8 @@ internal static class MotorRunt
         return Motor.LoteConfirmadoAsync(api, empresa, filas, ct, [.. alcance.Select(CodigosDeEnum.Codigo)], alcance);
     }
 
-    /// <summary>Procesa vueltas hasta que no quede celda tomable (las diferidas o en error no lo son).</summary>
-    public static async Task ProcesarTodoAsync(ProcesadorConsultas procesador, CancellationToken ct)
-    {
-        for (var vuelta = 0; vuelta < 50; vuelta++)
-        {
-            if (await procesador.ProcesarLoteAsync(ct) == 0)
-                return;
-        }
-
-        throw new InvalidOperationException("La cola no se vació en 50 vueltas.");
-    }
+    /// <summary>Atiende trabajos hasta que no quede ninguno listo (las diferidas, las cerradas y los reintentos en espera no lo están).</summary>
+    public static Task ProcesarTodoAsync(BusDePrueba bus, CancellationToken ct) => bus.ProcesarTodoAsync(ct);
 
     /// <summary>«FUENTE ESTADO TIPO_ERROR» de cada celda del vehículo, leído por SQL directo.</summary>
     public static async Task<List<string>> CeldasDelVehiculoAsync(ApiDePrueba api, Guid vehiculo, CancellationToken ct)

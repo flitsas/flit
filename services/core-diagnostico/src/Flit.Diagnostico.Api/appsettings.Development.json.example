@@ -15,11 +15,16 @@
     "TimeoutSeconds": 30
   },
   "Diagnostico": {
-    // Simulación de TODAS las fuentes (RUNT, RUNT persona, SIMIT, RUES, avalúo e impuesto): solo con Ambiente LOCAL o DEV.
-    // Manda sobre Consultas:Address, así que esa dirección no se define aquí. Sin simulación ni dirección, solo se ofrece el RUNT.
     "Ambiente": "LOCAL",
-    "Simulacion": { "Habilitada": true },
-    // El impuesto además exige ≥ 1 departamento en la réplica; en simulación salen 05 y 25 en la primera sincronización.
+    // ADR-0075: las consultas de las celdas van por RabbitMQ a core-consultas, que es quien simula los proveedores en LOCAL y DEV
+    // (levántalo con su simulación y el broker de deploy/rabbitmq/docker-compose.local.yml). El consumidor de resultados (cola
+    // diagnostico.consultas-resultados) y el reconciliador solo corren con ConsumidorHabilitado=true. Address es el gRPC de
+    // core-consultas, que aquí solo sirve para la réplica de departamentos con impuesto.
+    "Consultas": {
+      "Address": "http://127.0.0.1:8084",
+      "Bus": { "ConsumidorHabilitado": true }
+    },
+    // El impuesto además exige ≥ 1 departamento en la réplica (la sincroniza ListarDepartamentosImpuesto de core-consultas).
     "Fuentes": { "ImpuestoDisponible": true },
     // Solo en local: la empresa queda suscrita al producto sin preguntarle a Identidad. Nunca en DEV, QA ni PDN.
     "Identidad": { "SimularSuscripcionActiva": true },

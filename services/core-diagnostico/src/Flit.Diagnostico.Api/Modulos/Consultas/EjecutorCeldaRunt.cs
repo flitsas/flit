@@ -1,33 +1,36 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Flit.Consultas.Grpc.V1;
 using Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
+using Flit.Diagnostico.Api.Modulos.Consultas.Mapeos;
 using Flit.Diagnostico.Api.Modulos.Vehiculos;
 using Flit.Diagnostico.Api.Persistence.Configuraciones;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Personas;
 using Microsoft.EntityFrameworkCore;
+using TipoErrorFuente = Flit.Diagnostico.Api.Modulos.Consultas.Fuentes.TipoErrorFuente;
 
 namespace Flit.Diagnostico.Api.Modulos.Consultas;
 
 /// <summary>
-/// Ejecutor de la celda RUNT (HU #13730, F03-C4/F03-C5, MOD03 paso 1): consulta <see cref="IFuenteRunt"/> con el identificador
-/// normalizado del vehículo (por placa, sin documento, Intempo; por VIN, la cadena normal) y, con el cierre de la celda y en su
-/// misma transacción, guarda en <c>vehiculos</c> la placa definitiva, el VIN, el servicio, el organismo,
-/// <c>runt_consultado_en</c>, <c>datos_consolidados</c> y los documentos cifrados (<see cref="DocumentosVehiculo"/>), y en
-/// <c>personas_vehiculo</c> todos los propietarios y locatarios (HU #13790). La celda
-/// guarda el resultado normalizado SIN documentos ni nombres (<c>payload</c> es <c>@pii:medium</c>) y
-/// <c>dato_obtenido_en</c>. Un error de la fuente devuelve ERROR con el código de <see cref="TipoErrorFuente"/> (<see cref="TipoErrorFuenteCodigos"/>, HU #13877); el procesador
-/// reintenta los transitorios (HU #13737). Cada salida lleva los <see cref="DatosIntento"/> del intento auditable: placa o VIN
-/// consultado, servicio, transacción del proveedor y mensaje de error, nunca documentos. Lee y escribe solo con <see cref="ContextoCelda.Db"/>, que tiene la empresa
-/// de la celda. Los logs llevan ids, servicio y tipo de error; nunca documentos.
+/// Celda RUNT (HU #13730, F03-C4/F03-C5, MOD03 paso 1; desde ADR-0075 «construir solicitud / aplicar respuesta»): la consulta
+/// (por placa o por VIN, <see cref="Bus.ConstructorSolicitudRunt"/>) va por el bus y aquí se aplica la respuesta de
+/// <c>RuntIntempoService</c> con <see cref="Mapeos.MapeoRunt"/>. Con el cierre de la celda y en su misma transacción guarda en
+/// <c>vehiculos</c> la placa definitiva, el VIN, el servicio, el organismo, <c>runt_consultado_en</c>, <c>datos_consolidados</c> y
+/// los documentos cifrados (<see cref="DocumentosVehiculo"/>), y en <c>personas_vehiculo</c> todos los propietarios y locatarios
+/// (HU #13790). La celda guarda el resultado normalizado SIN documentos ni nombres (<c>payload</c> es <c>@pii:medium</c>) y
+/// <c>dato_obtenido_en</c>. Un error devuelve ERROR con el código de <see cref="TipoErrorFuente"/>
+/// (<see cref="TipoErrorFuenteCodigos"/>, HU #13877); el consumidor de resultados reintenta los transitorios (HU #13737). Cada
+/// salida lleva los <see cref="DatosIntento"/> del intento auditable: placa o VIN consultado, servicio, transacción del proveedor
+/// y mensaje de error, nunca documentos. Lee y escribe solo con <see cref="ContextoCelda.Db"/>, que tiene la empresa de la celda.
+/// Los logs llevan ids, servicio y tipo de error; nunca documentos.
 /// </summary>
 /// <example>
 /// <code>
 /// services.AddScoped&lt;IEjecutorCelda, EjecutorCeldaRunt&gt;();
 /// </code>
 /// </example>
-internal sealed partial class EjecutorCeldaRunt(
-    IFuenteRunt fuente, IProtectorDocumentoPersona protector, TimeProvider reloj, ILogger<EjecutorCeldaRunt> log) : IEjecutorCelda
+internal sealed partial class EjecutorCeldaRunt(IProtectorDocumentoPersona protector, ILogger<EjecutorCeldaRunt> log) : IEjecutorCelda
 {
     private const int LargoPlaca = 10;
     private const int LargoVin = 17;
@@ -38,25 +41,33 @@ internal sealed partial class EjecutorCeldaRunt(
 
     public Fuente Fuente => Fuente.Runt;
 
-    public async Task<ResultadoCelda> EjecutarAsync(ContextoCelda contexto, CancellationToken ct)
+    /// <summary>El constructor no arma la consulta solo si el vehículo de la celda no existe: ERROR definitivo, sin consultar.</summary>
+    public Task<ResultadoCelda> SinConsultaAsync(ContextoCelda contexto, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(contexto);
+        RuntEnError(log, contexto.Celda.Id, "VEHICULO_NO_ENCONTRADO");
+        return Task.FromResult(ResultadoCelda.Error() with { Intento = new DatosIntento(null, null, null, "El vehículo de la celda no existe.") });
+    }
+
+    public async Task<ResultadoCelda> AplicarAsync(ContextoCelda contexto, RespuestaConsulta respuesta, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(contexto);
+        ArgumentNullException.ThrowIfNull(respuesta);
         var celda = contexto.Celda;
         var vehiculo = await contexto.Db.Set<VehiculoDiagnostico>().AsNoTracking()
             .SingleOrDefaultAsync(v => v.Id == celda.VehiculoId, ct).ConfigureAwait(false);
         if (vehiculo is null)
-        {
-            RuntEnError(log, celda.Id, "VEHICULO_NO_ENCONTRADO");
-            return ResultadoCelda.Error() with { Intento = new DatosIntento(null, null, null, "El vehículo de la celda no existe.") };
-        }
+            return await SinConsultaAsync(contexto, ct).ConfigureAwait(false);
 
         var identificador = new IdentificadorVehiculo(vehiculo.TipoIdentificador, vehiculo.IdentificadorNorm);
-        var respuesta = await fuente.ConsultarVehiculoAsync(celda.TenantId, identificador, ct).ConfigureAwait(false);
-        if (respuesta.Vehiculo is not { } runt)
+        var resultado = respuesta.Respuesta is ConsultarVehiculoIntempoResponse r
+            ? MapeoRunt.Mapear(r)
+            : respuesta.Codigo is { } codigo ? MapeoRunt.Error(codigo) : ResultadoRunt.Fallo(TipoErrorFuente.RespuestaInvalida, RespuestaConsulta.Invalida.Mensaje);
+        if (resultado.Vehiculo is not { } runt)
         {
-            var tipo = TipoErrorFuenteCodigos.Codigo(respuesta.Error ?? TipoErrorFuente.RespuestaInvalida);
+            var tipo = TipoErrorFuenteCodigos.Codigo(resultado.Error ?? TipoErrorFuente.RespuestaInvalida);
             RuntEnError(log, celda.Id, tipo);
-            return ResultadoCelda.Error(tipo) with { Intento = new DatosIntento(identificador.Valor, null, null, respuesta.Mensaje) };
+            return ResultadoCelda.Error(tipo) with { Intento = new DatosIntento(identificador.Valor, null, null, resultado.Mensaje) };
         }
 
         var servicio = Servicio(runt.ServicioQueResolvio);
@@ -74,7 +85,7 @@ internal sealed partial class EjecutorCeldaRunt(
             };
         }
 
-        var ahora = reloj.GetUtcNow();
+        var ahora = respuesta.Fin;
         RuntCompletado(log, celda.Id, runt.ServicioQueResolvio);
         return ResultadoCelda.Completado(Payload(runt, placa, vin), ahora, async (db, _, token) =>
         {
@@ -148,6 +159,6 @@ internal sealed partial class EjecutorCeldaRunt(
     [LoggerMessage(EventId = 137300, Level = LogLevel.Information, Message = "La celda RUNT {CeldaId} completó (servicio {Servicio})")]
     private static partial void RuntCompletado(ILogger logger, Guid celdaId, string servicio);
 
-    [LoggerMessage(EventId = 137301, Level = LogLevel.Warning, Message = "La celda RUNT {CeldaId} terminó en error ({TipoError}); el procesador decide si la reintenta o bloquea las demás celdas")]
+    [LoggerMessage(EventId = 137301, Level = LogLevel.Warning, Message = "La celda RUNT {CeldaId} terminó en error ({TipoError}); el consumidor decide si la reintenta o bloquea las demás celdas")]
     private static partial void RuntEnError(ILogger logger, Guid celdaId, string tipoError);
 }

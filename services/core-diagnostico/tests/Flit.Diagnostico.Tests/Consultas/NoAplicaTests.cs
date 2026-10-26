@@ -49,7 +49,7 @@ public sealed class NoAplicaTests
             [Fuente.Runt, Fuente.ImpuestoDepartamental], null, [Fuente.RuntLocatario, Fuente.SimitLocatario], ct);
         var vehiculo = await MotorRunt.VehiculoAsync(api, empresa, id, "TST005", ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         orden.Should().Equal(["RUNT PLACA_CARRO TST005"], "las celdas NA no llaman a su adaptador");
         var celdas = await Motor.CeldasAsync(api, empresa.Id, id, ct);
@@ -83,7 +83,7 @@ public sealed class NoAplicaTests
         var proveedor = await MotorRunt.VehiculoAsync(api, empresa, id, "TST003", ct);
         var sinDocumento = await MotorRunt.VehiculoAsync(api, empresa, id, "TST011", ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         foreach (var conDocumento in new[] { declarado, proveedor })
         {
@@ -115,7 +115,7 @@ public sealed class NoAplicaTests
             [Fuente.Runt, Fuente.SimitVehiculo], [Fuente.RuntPropietario, Fuente.SimitPropietario], null, ct);
         var vehiculo = await MotorRunt.VehiculoAsync(api, empresa, id, "TST001", ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         (await MotorRunt.CeldasDelVehiculoAsync(api, vehiculo.Id, ct)).Should().BeEquivalentTo(
             ["RUNT COMPLETADO -", "RUNT_PROPIETARIO ERROR RESPUESTA_INVALIDA", "SIMIT_VEHICULO COMPLETADO -", "SIMIT_PROPIETARIO COMPLETADO -"]);
@@ -124,15 +124,15 @@ public sealed class NoAplicaTests
     }
 
     /// <summary>Ejecutor de prueba que deja su celda en ERROR con el tipo dado y cuenta sus llamadas.</summary>
-    private sealed class EjecutorQueFalla(Fuente fuente, string tipoError) : IEjecutorCelda
+    private sealed class EjecutorQueFalla(Fuente fuente, string tipoError) : EjecutorSimple
     {
         private int _llamadas;
 
-        public Fuente Fuente => fuente;
+        public override Fuente Fuente => fuente;
 
         public int Llamadas => Volatile.Read(ref _llamadas);
 
-        public Task<ResultadoCelda> EjecutarAsync(ContextoCelda contexto, CancellationToken ct)
+        public override Task<ResultadoCelda> EjecutarAsync(ContextoCelda contexto, CancellationToken ct)
         {
             Interlocked.Increment(ref _llamadas);
             return Task.FromResult(ResultadoCelda.Error(tipoError));

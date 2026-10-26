@@ -47,7 +47,7 @@ public sealed class EjecutorCeldaAvaluoTests
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST201")], ct, Fuente.Avaluo);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var llamada = grpc.Llamadas.Should().ContainSingle().Subject;
         llamada.Tenant.Should().Be(empresa.Id.ToString());
@@ -91,7 +91,7 @@ public sealed class EjecutorCeldaAvaluoTests
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST201"), Lotes.Fila("TST202")], ct, Fuente.Avaluo);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var tres = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST201", Fuente.Avaluo, ct);
         tres.Estado.Should().Be(EstadoCelda.Completado);
@@ -131,7 +131,7 @@ public sealed class EjecutorCeldaAvaluoTests
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST204")], ct, Fuente.Avaluo);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var celda = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST204", Fuente.Avaluo, ct);
         (celda.Estado, celda.TipoError).Should().Be((EstadoCelda.Completado, (string?)null));
@@ -156,12 +156,12 @@ public sealed class EjecutorCeldaAvaluoTests
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST204")], ct, Fuente.Avaluo);
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
         var antes = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST204", Fuente.Avaluo, ct);
         antes.Estado.Should().Be(EstadoCelda.Completado);
 
         var respuesta = await api.Cliente(MotorPersonas.Admin(api, empresa)).PostAsync($"{Program.Prefijo}/consultas/{antes.Id}/reprocesar", null, ct);
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         respuesta.StatusCode.Should().Be(HttpStatusCode.Conflict);
         (await TableroAyudas.JsonAsync(respuesta, ct)).GetProperty("code").GetString().Should().Be("CELDA_NO_EN_ERROR");
@@ -187,7 +187,7 @@ public sealed class EjecutorCeldaAvaluoTests
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila(RuntParaSimit.VinSinPlaca)], ct, Fuente.Avaluo);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var llamada = avaluo.Llamadas.Should().ContainSingle().Subject;
         (llamada.Empresa, llamada.Solicitud.Placa, llamada.Solicitud.Vin).Should().Be((empresa.Id, (string?)null, RuntParaSimit.VinSinPlaca));
@@ -213,7 +213,7 @@ public sealed class EjecutorCeldaAvaluoTests
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST201")], ct, Fuente.SimitVehiculo, Fuente.Avaluo);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api, maxReintentos: 0), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api, maxReintentos: 0), ct);
 
         var vehiculo = await MotorRunt.VehiculoAsync(api, empresa, lote, "TST201", ct);
         (await MotorRunt.CeldasDelVehiculoAsync(api, vehiculo.Id, ct))
@@ -231,7 +231,7 @@ public sealed class EjecutorCeldaAvaluoTests
     {
         var ct = TestContext.Current.CancellationToken;
         var grpc = new AvaluosGrpcFalso(todasEnError: true);
-        var fuente = new FuenteAvaluoReal(new ClienteConsultas(grpc, NullLogger<ClienteConsultas>.Instance));
+        var fuente = new AvaluoPorMapeo(grpc);
 
         var r = await fuente.ConsultarAsync(Guid.NewGuid(), new SolicitudAvaluo("TST201", null, 2020, null, null, null), ct);
 
@@ -278,8 +278,8 @@ public sealed class AvaluosGrpcFalso(bool todasEnError = false) : ConsultasServi
     public void RegistrarAdaptadorReal(WebApplicationBuilder b)
     {
         ArgumentNullException.ThrowIfNull(b);
-        b.Services.AddSingleton(new ClienteConsultas(this, NullLogger<ClienteConsultas>.Instance));
-        b.Services.AddScoped<IFuenteAvaluo, FuenteAvaluoReal>();
+        // ADR-0075: core-consultas de las pruebas (BusDePrueba) responde los trabajos del bus con este cliente.
+        b.Services.AddSingleton<ConsultasService.ConsultasServiceClient>(this);
     }
 
     public override AsyncUnaryCall<ConsultarAvaluosResponse> ConsultarAvaluosAsync(ConsultarAvaluosRequest request, CallOptions options)

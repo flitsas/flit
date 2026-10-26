@@ -1,10 +1,13 @@
+using Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 using Flit.Diagnostico.Api.Modulos.Consultas.Mapeos;
-namespace Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
+namespace Flit.Diagnostico.Tests.Consultas;
 
 /// <summary>
+/// Doble de prueba de core-consultas (ADR-0075, U3 = a): la simulación de LOCAL y DEV vive en core-consultas; en las pruebas
+/// responde los trabajos de <see cref="BusDePrueba"/>. Lo que sigue es su comportamiento heredado de la fuente de Diagnóstico.
 /// Fuente RUNT simulada de Intempo (HU #13725, RD-1): para probar el motor en DEV sin proveedor real. Solo se registra con
 /// <c>Diagnostico:Simulacion:Habilitada=true</c> y <c>Diagnostico:Ambiente</c> LOCAL o DEV (ver
-/// <see cref="Modulos.AddFuentesConsultas"/>). Responde con los fixtures inventados de <see cref="FixturesIntempo"/> (proto-JSON
+/// <c>Modulos.AddFuentesConsultas</c>). Responde con los fixtures inventados de <see cref="FixturesIntempo"/> (proto-JSON
 /// de <c>ConsultarVehiculoIntempoResponse</c>, HU #13877, G5=a), pasados por <see cref="MapperIntempo.MapearJson"/>, la misma
 /// regla de la fuente real; los errores van dentro del mensaje. Es determinista por el último carácter del identificador (plan
 /// §9.1); el vehículo devuelto lleva la placa o el VIN consultado:

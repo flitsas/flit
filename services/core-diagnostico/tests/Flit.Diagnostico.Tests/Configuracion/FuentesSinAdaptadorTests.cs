@@ -34,13 +34,14 @@ namespace Flit.Diagnostico.Tests.Configuracion;
 /// </example>
 public sealed class FuentesSinAdaptadorTests
 {
-    // AC5 (F03-C8) — el backoffice habilita SIMIT_VEHICULO, que aquí no está disponible (en D2 no tenía adaptador; desde HU
-    // #13793 lo tiene, pero sin simulación ni dirección de core-consultas es no conectado): 422 y el contrato no cambia.
+    // AC5 (F03-C8) — el backoffice habilita SIMIT_VEHICULO sin un ejecutor que cierre sus celdas: 422 y el contrato no cambia.
+    // Desde ADR-0075 todas las fuentes de F05 tienen ejecutor y la conexión con el proveedor es de core-consultas, así que la
+    // fuente sin adaptador la da un registro de prueba con solo RUNT.
     [Fact]
     public async Task Contrato_con_fuente_sin_adaptador_responde_422()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var api = await ArrancarAsync();
+        await using var api = await ArrancarAsync(SoloRunt);
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresas = DosEmpresas.En(api);
         await SembrarAsync(empresas.B, new ConfiguracionEmpresa(), ct);
@@ -57,20 +58,13 @@ public sealed class FuentesSinAdaptadorTests
     }
 
     // AC5 — con un adaptador registrado para la fuente, el mismo contrato se guarda (la guardia mira el registro, no una lista fija).
-    // Desde HU #13791 el adaptador además debe estar conectado: aquí la simulación en DEV (sin ella, SIMIT es no conectada).
+    // Desde ADR-0075 la conexión con el proveedor es de core-consultas: basta el ejecutor de la fuente.
     [Fact]
     public async Task Contrato_con_fuente_con_adaptador_se_guarda()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var api = await ArrancarAsync(b =>
-        {
-            b.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                [Flit.Diagnostico.Api.Modulos.Modulos.ClaveSimulacionHabilitada] = "true",
-                [Flit.Diagnostico.Api.Modulos.Modulos.ClaveAmbiente] = "DEV",
-            });
-            new EjecutorFuenteDePrueba(Fuente.SimitVehiculo, new ConcurrentQueue<string>()).Registrar(b.Services);
-        });
+            new EjecutorFuenteDePrueba(Fuente.SimitVehiculo, new ConcurrentQueue<string>()).Registrar(b.Services));
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresas = DosEmpresas.En(api);
         await SembrarAsync(empresas.B, new ConfiguracionEmpresa(), ct);
@@ -82,12 +76,13 @@ public sealed class FuentesSinAdaptadorTests
         (await LeerAsync(api, empresas.B.Id, ct)).FuentesHabilitadas.Should().Equal(Fuente.Runt, Fuente.SimitVehiculo);
     }
 
-    // AC5 — la compañía tiene SIMIT_VEHICULO habilitada de antes, pero no disponible (no conectada): pedirla al crear es 422.
+    // AC5 — la compañía tiene SIMIT_VEHICULO habilitada de antes, pero sin adaptador (registro de prueba con solo RUNT): pedirla al
+    // crear es 422.
     [Fact]
     public async Task Crear_diagnostico_con_fuente_sin_adaptador_responde_422()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var api = await ArrancarAsync();
+        await using var api = await ArrancarAsync(SoloRunt);
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresas = DosEmpresas.En(api);
         await SembrarAsync(empresas.A, new ConfiguracionEmpresa { FuentesHabilitadas = [Fuente.Runt, Fuente.SimitVehiculo] }, ct);
@@ -194,6 +189,8 @@ public sealed class FuentesSinAdaptadorTests
             b.Services.RemoveAll<IRegistroAdaptadores>();
             configurar?.Invoke(b);
         });
+
+    private static void SoloRunt(WebApplicationBuilder b) => b.Services.AddSingleton<IRegistroAdaptadores>(new RegistroFijo(Fuente.Runt));
 
     private static DisponibilidadFuentes Bandera(bool encendida) => new(new ConfigurationBuilder()
         .AddInMemoryCollection(new Dictionary<string, string?> { [DisponibilidadFuentes.ClaveImpuestoDisponible] = encendida ? "true" : "false" }).Build());

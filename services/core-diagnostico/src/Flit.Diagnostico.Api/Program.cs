@@ -65,7 +65,7 @@ public static class Program
         // confirmación de los vehículos del lote.
         builder.Services.AddProteccionDocumentos(builder.Configuration);
         builder.Services.AddScoped<Modulos.Vehiculos.ServicioConfirmacionVehiculos>();
-        // HU #13727: motor de consultas (encolador real, cola durable con lease y procesador en segundo plano).
+        // HU #13727 (ADR-0075): motor de consultas por RabbitMQ (encolador, publicador de celdas y consumidor de resultados).
         builder.Services.AddMotorConsultas(builder.Configuration);
         // HU #13753: Diagnóstico Express (cabecera + un vehículo en una transacción) y su estimado de vista previa.
         builder.Services.AddScoped<Modulos.Express.ServicioExpress>();
@@ -75,7 +75,7 @@ public static class Program
         Modulos.Consultas.EndpointsReproceso.AddReproceso(builder.Services);
         // HU #13800: llenado manual de una celda en ERROR desde el backoffice (PUT /backoffice/consultas/{cid}/manual).
         Modulos.Backoffice.LlenadoManualEndpoints.AddLlenadoManual(builder.Services);
-        // HU #13725: fuente RUNT del vehículo (no conectada por defecto; simulada de Intempo solo con configuración explícita en LOCAL o DEV).
+        // HU #13861 (ADR-0075): lo que sigue en línea con core-consultas, la réplica de departamentos con impuesto.
         builder.Services.AddFuentesConsultas(builder.Configuration);
         // HU #13846: almacén de archivos (file-manager; sin él ni la bandera de pruebas, no arranca) y registro de evidencias con huella.
         builder.Services.AddEvidencias(builder.Configuration);

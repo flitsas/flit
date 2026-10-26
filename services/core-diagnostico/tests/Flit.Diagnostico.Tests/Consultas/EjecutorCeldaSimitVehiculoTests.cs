@@ -48,7 +48,7 @@ public sealed class EjecutorCeldaSimitVehiculoTests
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST102")], ct, Fuente.SimitVehiculo);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         simit.Llamadas.Should().ContainSingle().Which.Should().Be((empresa.Id, "TST102", (string?)null));
         var celda = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST102", Fuente.SimitVehiculo, ct);
@@ -76,7 +76,7 @@ public sealed class EjecutorCeldaSimitVehiculoTests
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila(RuntParaSimit.VinSinPlaca)], ct, Fuente.SimitVehiculo);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api, maxReintentos: 3), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api, maxReintentos: 3), ct);
 
         simit.Llamadas.Should().BeEmpty("sin placa no se llama a la fuente");
         (await MotorPersonas.CeldaAsync(api, empresa, lote, RuntParaSimit.VinSinPlaca, Fuente.Runt, ct)).Estado.Should().Be(EstadoCelda.Completado);
@@ -104,7 +104,7 @@ public sealed class EjecutorCeldaSimitVehiculoTests
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST107"), Lotes.Fila("TST108")], ct, Fuente.SimitVehiculo);
-        var procesador = Motor.Procesador(api, maxReintentos: 1);
+        var procesador = Motor.Bus(api, maxReintentos: 1);
 
         await MotorRunt.ProcesarTodoAsync(procesador, ct);
 
@@ -147,10 +147,10 @@ public sealed class EjecutorCeldaSimitVehiculoTests
 
         IrA(reloj, 8, 0);
         var deB = await MotorRunt.LoteAsync(api, dos.B, [Lotes.Fila("TST102")], ct, Fuente.SimitVehiculo);
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
         IrA(reloj, 9, 0);
         var deA = await MotorRunt.LoteAsync(api, dos.A, [Lotes.Fila("TST102")], ct, Fuente.SimitVehiculo);
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         grpc.Llamadas.Should().BeEquivalentTo(
             [(dos.B.Id.ToString(), "TST102", false, TipoPersona.Unspecified), (dos.A.Id.ToString(), "TST102", false, TipoPersona.Unspecified)],
@@ -164,7 +164,7 @@ public sealed class EjecutorCeldaSimitVehiculoTests
 
         IrA(reloj, 10, 0);
         var otroDeA = await SegundoLoteAsync(api, dos.A, "TST102", ct);
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         grpc.Llamadas.Should().HaveCount(2, "el segundo lote de A reutiliza el dato de hoy de A");
         var copia = await MotorPersonas.CeldaAsync(api, dos.A, otroDeA, "TST102", Fuente.SimitVehiculo, ct);
@@ -258,8 +258,9 @@ public sealed class MultasGrpcFalso : ConsultasService.ConsultasServiceClient
     /// <summary>Registra el adaptador real de SIMIT sobre este cliente (antes que Program: gana al TryAdd).</summary>
     public void RegistrarAdaptadorReal(WebApplicationBuilder b)
     {
-        b.Services.AddSingleton(new ClienteConsultas(this, NullLogger<ClienteConsultas>.Instance));
-        b.Services.AddScoped<IFuenteSimit, FuenteSimitReal>();
+        ArgumentNullException.ThrowIfNull(b);
+        // ADR-0075: core-consultas de las pruebas (BusDePrueba) responde los trabajos del bus con este cliente.
+        b.Services.AddSingleton<ConsultasService.ConsultasServiceClient>(this);
     }
 
     public override AsyncUnaryCall<ConsultarMultasResponse> ConsultarMultasAsync(ConsultarMultasRequest request, CallOptions options)

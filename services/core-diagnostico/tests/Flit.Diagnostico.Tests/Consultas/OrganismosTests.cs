@@ -41,7 +41,7 @@ public sealed class OrganismosTests
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST001")], [Fuente.Runt, Fuente.ImpuestoDepartamental], null, null, ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var vehiculo = await MotorRunt.VehiculoAsync(api, empresa, id, "TST001", ct);
         vehiculo.DepartamentoCodigo.Should().Be(DepartamentoPrueba, "el organismo del RUNT está en la réplica");
@@ -65,7 +65,7 @@ public sealed class OrganismosTests
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST001")], [Fuente.Runt, Fuente.ImpuestoDepartamental], null, null, ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var vehiculo = await MotorRunt.VehiculoAsync(api, empresa, id, "TST001", ct);
         (await MotorRunt.CeldasDelVehiculoAsync(api, vehiculo.Id, ct)).Should().BeEquivalentTo(["IMPUESTO_DEPARTAMENTAL COMPLETADO -", "RUNT COMPLETADO -"]);
@@ -84,7 +84,7 @@ public sealed class OrganismosTests
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST006")], [Fuente.Runt, Fuente.ImpuestoDepartamental], null, null, ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var vehiculo = await MotorRunt.VehiculoAsync(api, empresa, id, "TST006", ct);
         vehiculo.OrganismoNombre.Should().Be("SECRETARIA DE TRANSITO DE PRUEBA SIN DEPARTAMENTO");

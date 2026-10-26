@@ -296,7 +296,7 @@ public sealed class MapperIntempoProtoTests
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST511"), Lotes.Fila("TST512"), Lotes.Fila("TST513")], ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api, maxReintentos: 0), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api, maxReintentos: 0), ct);
 
         var vehiculos = (await Lotes.VehiculosAsync(api, empresa.Id, id, ct)).ToDictionary(v => v.Id, v => v.IdentificadorNorm);
         var codigos = (await Motor.CeldasAsync(api, empresa.Id, id, ct))

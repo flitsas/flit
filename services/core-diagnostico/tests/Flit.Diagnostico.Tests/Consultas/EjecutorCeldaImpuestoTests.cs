@@ -6,6 +6,7 @@ using Flit.Consultas.Grpc.V1;
 using Flit.Diagnostico.Api;
 using Flit.Diagnostico.Api.Modulos.Catalogos;
 using Flit.Diagnostico.Api.Modulos.Consultas;
+using Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 using Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Domain.Consultas;
@@ -56,7 +57,7 @@ public sealed class EjecutorCeldaImpuestoTests
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST001")], Alcance, null, null, ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var llamada = grpc.Llamadas.Should().ContainSingle().Subject;
         (llamada.Tenant, llamada.Request.Placa?.Valor, llamada.Request.DepartamentoCodigo).Should().Be((empresa.Id.ToString(), "TST001", Departamento));
@@ -86,7 +87,7 @@ public sealed class EjecutorCeldaImpuestoTests
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST001")], Alcance, null, null, ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var celda = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST001", Fuente.ImpuestoDepartamental, ct);
         celda.Estado.Should().Be(EstadoCelda.Completado);
@@ -94,11 +95,12 @@ public sealed class EjecutorCeldaImpuestoTests
             payload.RootElement.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["monto_total", "vigencias", "departamento_codigo"]);
         celda.Payload.Should().NotContainAny(["proveedor", "transaccion", "origen", FuenteImpuestoSimulada.Transaccion, "servicio"]);
         var intento = (await MotorPersonas.IntentosAsync(empresa, celda.Id, ct)).Should().ContainSingle().Subject;
-        (intento.Servicio, intento.TransaccionProveedorId).Should().Be(((ServicioConsulta?)ServicioConsulta.Otro, FuenteImpuestoSimulada.Transaccion));
+        // ADR-0075: el *Response del impuesto no trae transacción; el servicio sale del proveedor de la respuesta.
+        (intento.Servicio, intento.TransaccionProveedorId).Should().Be(((ServicioConsulta?)ServicioConsulta.Otro, (string?)null));
 
         // Adaptador real: el proveedor (verifik) va al intento y nunca al payload.
         var grpc = new ImpuestoGrpcFalso();
-        var real = await new FuenteImpuestoReal(new ClienteConsultas(grpc, NullLogger<ClienteConsultas>.Instance))
+        var real = await new ImpuestoPorMapeo(grpc)
             .ConsultarAsync(empresa.Id, new SolicitudImpuesto("TST001", Departamento), ct);
         real.Servicio.Should().Be(ServicioConsulta.Verifik);
         JsonSerializer.Serialize(real.Resultado, EjecutorPorPersonas.Json).Should().NotContainAny(["verifik", "proveedor", "chequeo"]);
@@ -116,7 +118,7 @@ public sealed class EjecutorCeldaImpuestoTests
         await MotorNa.LoteAsync(api, dos.A, [Lotes.Fila("TST001")], Alcance, null, null, ct);
         await MotorNa.LoteAsync(api, dos.B, [Lotes.Fila("TST001")], Alcance, null, null, ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         grpc.Llamadas.Select(l => l.Tenant).Should().BeEquivalentTo([dos.A.Id.ToString(), dos.B.Id.ToString()],
             "cada compañía consulta a su nombre; nunca se reutiliza el dato de otra");
@@ -139,7 +141,7 @@ public sealed class EjecutorCeldaImpuestoTests
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST001")], [.. Alcance, Fuente.SimitVehiculo], null, null, ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api, maxReintentos: 3), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api, maxReintentos: 3), ct);
 
         var vehiculo = await MotorRunt.VehiculoAsync(api, empresa, lote, "TST001", ct);
         (await MotorRunt.CeldasDelVehiculoAsync(api, vehiculo.Id, ct))
@@ -171,7 +173,7 @@ public sealed class EjecutorCeldaImpuestoTests
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST001")], Alcance, null, null, ct);
-        var procesador = Motor.Procesador(api, maxReintentos: 1);
+        var procesador = Motor.Bus(api, maxReintentos: 1);
 
         await MotorRunt.ProcesarTodoAsync(procesador, ct);
         var enEspera = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST001", Fuente.ImpuestoDepartamental, ct);
@@ -218,45 +220,56 @@ public sealed class EjecutorCeldaImpuestoTests
     {
         var ct = TestContext.Current.CancellationToken;
         var grpc = new ImpuestoGrpcFalso();
-        await using var api = await ArrancarAsync(grpc.RegistrarAdaptadorReal, ct);
+        await using var api = await ArrancarAsync(b =>
+        {
+            grpc.RegistrarAdaptadorReal(b);
+            // Un vehículo consultado por VIN que el RUNT devuelve sin placa asignada.
+            b.Services.AddSingleton<IFuenteRunt, RuntParaSimit>();
+        }, ct);
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresa = DosEmpresas.En(api).A;
-        var lote = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST001")], Alcance, null, null, ct);
-        var procesador = Motor.Procesador(api, maxReintentos: 3);
-        (await procesador.ProcesarLoteAsync(ct)).Should().Be(1, "primero solo la RUNT, que libera la del impuesto en PENDIENTE");
-        var vehiculo = await MotorRunt.VehiculoAsync(api, empresa, lote, "TST001", ct);
-        await Motor.EjecutarAsync(api, $"UPDATE diagnostico.vehiculos SET placa = NULL WHERE id = '{vehiculo.Id}'", ct);
+        var lote = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila(RuntParaSimit.VinSinPlaca)], Alcance, null, null, ct);
+        var procesador = Motor.Bus(api, maxReintentos: 3);
+        (await procesador.ProcesarLoteAsync(ct)).Should().Be(1, "solo la RUNT: la del impuesto se cierra al liberarse, sin trabajo");
 
         await MotorRunt.ProcesarTodoAsync(procesador, ct);
 
         grpc.Llamadas.Should().BeEmpty();
-        var celda = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST001", Fuente.ImpuestoDepartamental, ct);
+        var celda = await MotorPersonas.CeldaAsync(api, empresa, lote, RuntParaSimit.VinSinPlaca, Fuente.ImpuestoDepartamental, ct);
         (celda.Estado, celda.TipoError, celda.IntentosAuto).Should().Be((EstadoCelda.Error, EjecutorCeldaImpuesto.SinPlaca, 0));
         ClasificadorErrores.Clasificar(EjecutorCeldaImpuesto.SinPlaca).Should().Be(ClaseError.Definitivo);
     }
 
-    // AC7 (negativo, F09-C3) — celda en PENDIENTE cuyo departamento pasó a no soportado antes de ejecutarse: N/A
-    // DEPARTAMENTO_NO_SOPORTADO sin llamada ni consumo (ningún intento).
+    // AC7 (negativo, F09-C3) — desde ADR-0075 el departamento se mira al publicar: una celda cuyo reintento vuelve a publicarse
+    // cuando su departamento ya no está soportado queda N/A DEPARTAMENTO_NO_SOPORTADO sin otro trabajo ni llamada.
     [Fact]
     public async Task Departamento_que_dejo_de_estar_soportado_al_ejecutar_queda_NA_sin_llamar()
     {
         var ct = TestContext.Current.CancellationToken;
+        var reloj = new RelojManual();
         var grpc = new ImpuestoGrpcFalso();
-        await using var api = await ArrancarAsync(grpc.RegistrarAdaptadorReal, ct);
+        await using var api = await ArrancarAsync(b =>
+        {
+            b.Services.AddSingleton<TimeProvider>(reloj);
+            grpc.RegistrarAdaptadorReal(b);
+        }, ct);
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST001")], Alcance, null, null, ct);
-        var procesador = Motor.Procesador(api);
+        var procesador = Motor.Bus(api, maxReintentos: 1);
         (await procesador.ProcesarLoteAsync(ct)).Should().Be(1);
-        (await MotorPersonas.CeldaAsync(api, empresa, lote, "TST001", Fuente.ImpuestoDepartamental, ct)).Estado.Should().Be(EstadoCelda.Pendiente);
+        (await MotorPersonas.CeldaAsync(api, empresa, lote, "TST001", Fuente.ImpuestoDepartamental, ct)).Estado.Should().Be(EstadoCelda.EnCurso);
+        grpc.Falla = StatusCode.DeadlineExceeded;
+        (await procesador.ProcesarLoteAsync(ct)).Should().Be(1, "el impuesto responde TIMEOUT y queda su reintento");
         (await ReplicaImpuesto.SincronizarAsync(api, new CapacidadFalsa(), new RelojManual(), ct))!.Soportados.Should().Be(0, "la capacidad ya no trae el 05");
 
+        reloj.Avanzar(ProgramadorReintentos.Esperas[0]);
         await MotorRunt.ProcesarTodoAsync(procesador, ct);
 
-        grpc.Llamadas.Should().BeEmpty();
+        grpc.Llamadas.Should().ContainSingle("la republicación ya no tiene qué consultar");
         var celda = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST001", Fuente.ImpuestoDepartamental, ct);
         (celda.Estado, celda.MotivoNa, celda.Payload).Should().Be((EstadoCelda.Na, (MotivoNa?)MotivoNa.DepartamentoNoSoportado, (string?)null));
-        (await MotorPersonas.IntentosAsync(empresa, celda.Id, ct)).Should().BeEmpty("una N/A no deja intento ni consumo");
+        (await MotorPersonas.IntentosAsync(empresa, celda.Id, ct)).Select(i => i.TipoError).Should().Equal(["TIMEOUT"], "la N/A no deja otro intento ni consumo");
     }
 
     // AC3 (F09-C5) — celda COMPLETADO: un segundo disparo del mismo lote no la reabre ni llama; otro lote de la misma compañía
@@ -276,19 +289,19 @@ public sealed class EjecutorCeldaImpuestoTests
         var empresa = DosEmpresas.En(api).A;
         IrA(reloj, 8, 0);
         var primero = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST001")], Alcance, null, null, ct);
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
         var original = await MotorPersonas.CeldaAsync(api, empresa, primero, "TST001", Fuente.ImpuestoDepartamental, ct);
         original.Estado.Should().Be(EstadoCelda.Completado);
 
         await ReencolarAsync(api, empresa, primero, ct);
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
         var trasDisparo = await MotorPersonas.CeldaAsync(api, empresa, primero, "TST001", Fuente.ImpuestoDepartamental, ct);
         (trasDisparo.Id, trasDisparo.Estado, trasDisparo.Payload, trasDisparo.VersionTablero)
             .Should().Be((original.Id, EstadoCelda.Completado, original.Payload, original.VersionTablero));
 
         IrA(reloj, 15, 0);
         var segundo = await SegundoLoteAsync(api, empresa, "TST001", ct);
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         grpc.Llamadas.Should().ContainSingle("ni el segundo disparo ni el otro lote del mismo día llaman al servidor");
         var copia = await MotorPersonas.CeldaAsync(api, empresa, segundo, "TST001", Fuente.ImpuestoDepartamental, ct);
@@ -322,7 +335,7 @@ public sealed class EjecutorCeldaImpuestoTests
         JsonSerializer.Serialize(otraVez.Resultado).Should().Be(JsonSerializer.Serialize(conDeuda.Resultado));
     }
 
-    private static FuenteImpuestoReal Real(ImpuestoGrpcFalso grpc) => new(new ClienteConsultas(grpc, NullLogger<ClienteConsultas>.Instance));
+    private static ImpuestoPorMapeo Real(ImpuestoGrpcFalso grpc) => new(grpc);
 
     /// <summary>
     /// API con RUNT simulada de Intempo, el impuesto con la bandera encendida (<see cref="MotorNa"/>), el organismo ficticio en el
@@ -405,7 +418,7 @@ public sealed class ImpuestoGrpcFalso : ConsultasService.ConsultasServiceClient
 {
     private readonly ConcurrentQueue<(string? Tenant, ConsultarImpuestoVehicularRequest Request)> _llamadas = new();
 
-    public StatusCode? Falla { get; init; }
+    public StatusCode? Falla { get; set; }
 
     public bool ChequeoEnError { get; init; }
 
@@ -415,8 +428,8 @@ public sealed class ImpuestoGrpcFalso : ConsultasService.ConsultasServiceClient
     public void RegistrarAdaptadorReal(WebApplicationBuilder b)
     {
         ArgumentNullException.ThrowIfNull(b);
-        b.Services.AddSingleton(new ClienteConsultas(this, NullLogger<ClienteConsultas>.Instance));
-        b.Services.AddScoped<IFuenteImpuesto, FuenteImpuestoReal>();
+        // ADR-0075: core-consultas de las pruebas (BusDePrueba) responde los trabajos del bus con este cliente.
+        b.Services.AddSingleton<ConsultasService.ConsultasServiceClient>(this);
     }
 
     public override AsyncUnaryCall<ConsultarImpuestoVehicularResponse> ConsultarImpuestoVehicularAsync(ConsultarImpuestoVehicularRequest request, CallOptions options)

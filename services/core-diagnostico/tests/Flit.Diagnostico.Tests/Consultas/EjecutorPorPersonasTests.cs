@@ -45,7 +45,7 @@ public sealed class EjecutorPorPersonasTests
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorPersonas.LoteAsync(api, empresa, [Lotes.Fila("TST301")], ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         fuentes.Llamadas.Select(l => (l.Consulta, l.Numero)).Should().BeEquivalentTo(
             [("RUNT_PERSONA", RuntConPersonas.Natural1), ("RUNT_PERSONA", RuntConPersonas.Natural2), ("RUES", RuntConPersonas.Nit)]);
@@ -78,7 +78,7 @@ public sealed class EjecutorPorPersonasTests
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorPersonas.LoteAsync(api, empresa, [Lotes.Fila("TST301"), Lotes.Fila("TST302")], ct, porVehiculo: [Fuente.SimitVehiculo]);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api, maxReintentos: 3), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api, maxReintentos: 3), ct);
 
         var celda = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST301", Fuente.RuntPropietario, ct);
         (celda.Estado, celda.TipoError).Should().Be((EstadoCelda.Error, EjecutorPorPersonas.PersonasConError));
@@ -113,7 +113,7 @@ public sealed class EjecutorPorPersonasTests
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorPersonas.LoteAsync(api, empresa, [Lotes.Fila("TST301")], ct);
-        var procesador = Motor.Procesador(api, maxReintentos: 1);
+        var procesador = Motor.Bus(api, maxReintentos: 1);
 
         await MotorRunt.ProcesarTodoAsync(procesador, ct);
         var enEspera = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST301", Fuente.RuntPropietario, ct);
@@ -157,7 +157,7 @@ public sealed class EjecutorPorPersonasTests
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorPersonas.LoteAsync(api, empresa, [Lotes.Fila("TST301")], ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var celda = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST301", Fuente.RuntPropietario, ct);
         var personas = await MotorPersonas.PersonasAsync(empresa, celda.VehiculoId, RolPersona.Propietario, ct);
@@ -166,7 +166,7 @@ public sealed class EjecutorPorPersonasTests
         intentos.Select(i => i.PersonaId).Should().BeEquivalentTo(personas.Select(p => (Guid?)p.Id));
         intentos.Should().OnlyContain(i => i.IdentificadorConsultado == null && i.Fuente == Fuente.RuntPropietario && i.Disparador == DisparadorIntento.Auto && !i.DesdeCache);
         var porPersona = intentos.ToDictionary(i => i.PersonaId!.Value);
-        porPersona[personas[0].Id].Should().Match<IntentoConsulta>(i => i.Estado == ResultadoIntento.Success && i.Servicio == ServicioConsulta.Kyverum && i.TransaccionProveedorId != null);
+        porPersona[personas[0].Id].Should().Match<IntentoConsulta>(i => i.Estado == ResultadoIntento.Success && i.Servicio == ServicioConsulta.Kyverum && i.TransaccionProveedorId == null);
         porPersona[personas[1].Id].Should().Match<IntentoConsulta>(i => i.Estado == ResultadoIntento.Error && i.TipoError == "RESPUESTA_INVALIDA" && i.MensajeError != null);
         porPersona[personas[2].Id].Should().Match<IntentoConsulta>(i => i.Estado == ResultadoIntento.Success && i.Servicio == ServicioConsulta.Verifik);
     }

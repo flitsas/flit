@@ -1,10 +1,13 @@
+using Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 using Flit.Diagnostico.Domain.Consultas;
 
-namespace Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
+namespace Flit.Diagnostico.Tests.Consultas;
 
 /// <summary>
+/// Doble de prueba de core-consultas (ADR-0075, U3 = a): la simulación de LOCAL y DEV vive en core-consultas; en las pruebas
+/// responde los trabajos de <see cref="BusDePrueba"/>. Lo que sigue es su comportamiento heredado de la fuente de Diagnóstico.
 /// Impuesto simulado (HU #13862): solo con <c>Diagnostico:Simulacion:Habilitada=true</c> en LOCAL o DEV
-/// (<see cref="SeleccionAdaptadores"/>). Determinista por el último carácter de la placa; montos inventados, sin PII ni
+/// (<c>SeleccionAdaptadores</c>). Determinista por el último carácter de la placa; montos inventados, sin PII ni
 /// proveedor, y nada sale del servicio (cubierto por <c>FixturesSinPiiTests</c>):
 /// <list type="table">
 /// <item><term>0</term><description>sin deuda: vigencias 2025 y 2026 pagadas, <c>monto_total</c> 0</description></item>

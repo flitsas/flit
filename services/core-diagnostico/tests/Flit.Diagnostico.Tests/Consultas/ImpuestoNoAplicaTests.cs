@@ -42,7 +42,7 @@ public sealed class ImpuestoNoAplicaTests
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST001")], [Fuente.Runt, Fuente.ImpuestoDepartamental], null, null, ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var vehiculo = await MotorRunt.VehiculoAsync(api, empresa, id, "TST001", ct);
         vehiculo.DepartamentoCodigo.Should().Be("11");
@@ -60,7 +60,7 @@ public sealed class ImpuestoNoAplicaTests
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST006")], [Fuente.Runt, Fuente.ImpuestoDepartamental], null, null, ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var vehiculo = await MotorRunt.VehiculoAsync(api, empresa, id, "TST006", ct);
         vehiculo.DepartamentoCodigo.Should().BeNull("el organismo del RUNT no está en la réplica");
@@ -79,7 +79,7 @@ public sealed class ImpuestoNoAplicaTests
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST005")], [Fuente.Runt, Fuente.ImpuestoDepartamental], null, null, ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var vehiculo = await MotorRunt.VehiculoAsync(api, empresa, id, "TST005", ct);
         vehiculo.Servicio.Should().Be("PUBLICO");
@@ -87,7 +87,7 @@ public sealed class ImpuestoNoAplicaTests
         await DebeQuedarNaAsync(api, empresa, id, vehiculo.Id, MotivoNa.ServicioPublico, orden, ct);
     }
 
-    // Contraste — particular de un departamento soportado: al completar la RUNT la celda del impuesto se libera en PENDIENTE.
+    // Contraste — particular de un departamento soportado: al completar la RUNT la celda del impuesto se libera y se publica (EN_CURSO).
     [Fact]
     public async Task Departamento_soportado_y_servicio_particular_libera_la_celda_en_PENDIENTE()
     {
@@ -98,12 +98,12 @@ public sealed class ImpuestoNoAplicaTests
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST001")], [Fuente.Runt, Fuente.ImpuestoDepartamental], null, null, ct);
 
-        (await Motor.Procesador(api).ProcesarLoteAsync(ct)).Should().Be(1, "en la primera vuelta solo la RUNT es tomable");
+        (await Motor.Bus(api).ProcesarLoteAsync(ct)).Should().Be(1, "en la primera vuelta solo la RUNT es tomable");
 
         var vehiculo = await MotorRunt.VehiculoAsync(api, empresa, id, "TST001", ct);
         vehiculo.DepartamentoCodigo.Should().Be(Soportado);
         var impuesto = (await Motor.CeldasAsync(api, empresa.Id, id, ct)).Single(c => c.Fuente == Fuente.ImpuestoDepartamental);
-        impuesto.Estado.Should().Be(EstadoCelda.Pendiente);
+        impuesto.Estado.Should().Be(EstadoCelda.EnCurso, "la liberada sale con su trabajo de consulta (ADR-0075)");
         impuesto.MotivoNa.Should().BeNull();
         impuesto.DisponibleDesde.Should().BeBefore(DateTimeOffset.UtcNow.AddMinutes(1), "la RUNT completada la liberó (antes estaba diferida)");
         orden.Should().BeEmpty("la celda liberada espera a la siguiente vuelta del procesador");

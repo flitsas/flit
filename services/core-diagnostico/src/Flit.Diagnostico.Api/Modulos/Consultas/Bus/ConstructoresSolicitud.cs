@@ -11,13 +11,13 @@ using Microsoft.EntityFrameworkCore;
 namespace Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 
 /// <summary>
-/// Arma las consultas de una celda para el bus (ADR-0075, T6): el MISMO <c>*Request</c> proto que hoy envía el ejecutor de la
-/// celda con su <c>Fuente*Real</c> (<c>ConstructoresSolicitudTests</c> lo compara con lo que capturan los clientes gRPC), sacado de
-/// los <c>EjecutorCelda*</c> sin cambiarlos todavía. Solo lleva identificación: placa o VIN, tipo y número de documento o NIT,
-/// los datos técnicos del avalúo o el departamento del impuesto; nunca nombres ni direcciones (U1 = b). Lee con el contexto de
-/// la empresa de la celda y CON seguimiento: al liberar las celdas en el cierre de la RUNT, el vehículo y sus personas todavía
-/// no están guardados y el contexto los tiene con lo que dejó la RUNT. Lista vacía si la celda no tiene qué consultar (sin
-/// placa, sin personas, departamento no soportado): entonces no se publica nada y el ejecutor de hoy decide como siempre.
+/// Arma las consultas de una celda para el bus (ADR-0075, T6): el MISMO <c>*Request</c> proto que antes enviaba por gRPC la
+/// <c>Fuente*Real</c> de la celda (<c>ConstructoresSolicitudTests</c> lo fija campo por campo). Es la mitad «construir solicitud» de
+/// cada <see cref="IEjecutorCelda"/>. Solo lleva identificación: placa o VIN, tipo y número de documento o NIT, los datos técnicos
+/// del avalúo o el departamento del impuesto; nunca nombres ni direcciones (U1 = b). Lee con el contexto de la empresa de la celda
+/// y CON seguimiento (lo que el contexto tenga sin guardar cuenta). Lista vacía si la celda no tiene qué consultar (sin placa, sin
+/// personas, departamento no soportado): entonces no se publica nada y el ejecutor decide el cierre
+/// (<see cref="IEjecutorCelda.SinConsultaAsync"/>).
 /// </summary>
 internal interface IConstructorSolicitud
 {
@@ -25,6 +25,52 @@ internal interface IConstructorSolicitud
 
     /// <summary>Las consultas de la celda, en el orden en que hoy las hace su ejecutor.</summary>
     Task<IReadOnlyList<SolicitudConsulta>> ConstruirAsync(DiagnosticoDb db, CeldaConsulta celda, CancellationToken ct);
+}
+
+/// <summary>
+/// Los <c>*Request</c> de SIMIT y del avalúo, iguales a los que enviaban <c>FuenteSimitReal</c> y <c>FuenteAvaluoReal</c>: por placa
+/// solo <c>placa</c> (core-consultas elige el proveedor con la configuración de la empresa); por persona <c>documento</c> y
+/// <c>tipo_persona</c> JURIDICA para NIT o NATURAL en otro caso; el avalúo con placa y VIN si los hay y los datos técnicos (0 o
+/// vacío si faltan).
+/// </summary>
+internal static class SolicitudesProto
+{
+    /// <summary>La solicitud de SIMIT: por placa o por documento, nunca los dos.</summary>
+    public static ConsultarMultasRequest Multas(SolicitudSimit solicitud)
+    {
+        ArgumentNullException.ThrowIfNull(solicitud);
+        var request = new ConsultarMultasRequest { Opciones = new OpcionesConsulta() };
+        if (solicitud.Documento is { } documento)
+        {
+            request.Documento = new DocumentoIdentidad { Tipo = documento.Tipo.Trim().ToUpperInvariant(), Numero = documento.Numero };
+            request.TipoPersona = solicitud.EsJuridica ? TipoPersona.Juridica : TipoPersona.Natural;
+        }
+        else
+        {
+            request.Placa = new Placa { Valor = solicitud.Placa };
+        }
+
+        return request;
+    }
+
+    /// <summary>La solicitud del avalúo: placa y VIN si los hay y los datos técnicos (0 o vacío si faltan).</summary>
+    public static ConsultarAvaluosRequest Avaluos(SolicitudAvaluo solicitud)
+    {
+        ArgumentNullException.ThrowIfNull(solicitud);
+        var request = new ConsultarAvaluosRequest
+        {
+            Opciones = new OpcionesConsulta(),
+            Modelo = solicitud.Modelo ?? 0,
+            Cilindraje = solicitud.Cilindraje ?? 0,
+            Combustible = solicitud.Combustible ?? string.Empty,
+            Pasajeros = solicitud.Pasajeros ?? 0,
+        };
+        if (!string.IsNullOrWhiteSpace(solicitud.Placa))
+            request.Placa = new Placa { Valor = solicitud.Placa };
+        if (!string.IsNullOrWhiteSpace(solicitud.Vin))
+            request.Vin = new Vin { Valor = solicitud.Vin };
+        return request;
+    }
 }
 
 /// <summary>Lecturas comunes de los constructores.</summary>
@@ -41,7 +87,7 @@ internal static class DatosDeLaCelda
     public static string? Limpio(string? valor) => string.IsNullOrWhiteSpace(valor) ? null : valor.Trim();
 }
 
-/// <summary>RUNT del vehículo: <c>ConsultarPorVin</c> con un VIN y <c>ConsultarPorPlaca</c> en otro caso, como <see cref="FuenteRuntReal"/>.</summary>
+/// <summary>RUNT del vehículo: <c>ConsultarPorVin</c> con un VIN y <c>ConsultarPorPlaca</c> en otro caso (G2=b, HU #13878).</summary>
 internal sealed class ConstructorSolicitudRunt : IConstructorSolicitud
 {
     public Fuente Fuente => Fuente.Runt;
@@ -68,7 +114,7 @@ internal sealed class ConstructorSolicitudSimitVehiculo : IConstructorSolicitud
         var placa = DatosDeLaCelda.Limpio((await DatosDeLaCelda.VehiculoAsync(db, celda, ct).ConfigureAwait(false))?.Placa);
         return placa is null
             ? []
-            : [new SolicitudConsulta(FuentesBus.SimitVehiculo, RpcConsultas.Multas, FuenteSimitReal.Solicitud(SolicitudSimit.PorPlaca(placa)))];
+            : [new SolicitudConsulta(FuentesBus.SimitVehiculo, RpcConsultas.Multas, SolicitudesProto.Multas(SolicitudSimit.PorPlaca(placa)))];
     }
 }
 
@@ -85,7 +131,7 @@ internal sealed class ConstructorSolicitudAvaluo : IConstructorSolicitud
         if (placa is null && vin is null)
             return [];
         var solicitud = EjecutorCeldaAvaluo.Solicitud(placa, vin, vehiculo!.DatosConsolidados);
-        return [new SolicitudConsulta(FuentesBus.Avaluo, RpcConsultas.Avaluos, FuenteAvaluoReal.Solicitud(solicitud))];
+        return [new SolicitudConsulta(FuentesBus.Avaluo, RpcConsultas.Avaluos, SolicitudesProto.Avaluos(solicitud))];
     }
 }
 
@@ -205,5 +251,5 @@ internal sealed class ConstructorSolicitudSimitPersona : ConstructorPorPersonas
 
     protected override SolicitudConsulta? Solicitud(DocumentoPersona documento, Guid personaId) => new(
         FuentesBus.De(Fuente), RpcConsultas.Multas,
-        FuenteSimitReal.Solicitud(SolicitudSimit.PorDocumento(EjecutorCeldaSimitPersona.Normalizar(documento))), personaId);
+        SolicitudesProto.Multas(SolicitudSimit.PorDocumento(EjecutorCeldaSimitPersona.Normalizar(documento))), personaId);
 }

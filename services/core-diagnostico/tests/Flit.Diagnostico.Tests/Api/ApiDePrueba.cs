@@ -131,8 +131,9 @@ public sealed class ApiDePrueba : IAsyncDisposable
         // HU #13751: llaves de Data Protection protegidas con un certificado efímero (sin él el servicio no arranca).
         [CertificadoDePrueba.ClaveRuta] = CertificadoDePrueba.Ruta,
         [CertificadoDePrueba.ClaveClave] = CertificadoDePrueba.Clave,
-        // HU #13727: el trabajador hospedado de la cola no corre en las pruebas; cada prueba llama al procesador directo.
-        ["Diagnostico:Procesador:Habilitado"] = "false",
+        // HU #13727 (ADR-0075): el consumidor de resultados ni el reconciliador corren en las pruebas; cada prueba entrega los
+        // resultados con su BusDePrueba (y llama al reconciliador directo).
+        ["Diagnostico:Consultas:Bus:ConsumidorHabilitado"] = "false",
         // HU #13850: tampoco el trabajador del ZIP; cada prueba llama al empaquetador directo.
         ["Diagnostico:Evidencias:Habilitado"] = "false",
         // HU #13846: sin file-manager en las pruebas, los archivos generados van a diagnostico.archivo_local.

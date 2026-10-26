@@ -11,25 +11,25 @@ public interface IRegistroAdaptadores
     bool TieneAdaptador(Fuente fuente);
 
     /// <summary>
-    /// Verdadero si el adaptador de la fuente es el no conectado (HU #13791): aunque tenga ejecutor, no se ofrece. Por defecto
-    /// false (un doble que da toda fuente por adaptada la da también por conectada).
+    /// Verdadero si la fuente no está conectada (HU #13791): aunque tenga ejecutor, no se ofrece. Desde ADR-0075 Diagnóstico no
+    /// tiene adaptadores de proveedor (la conexión es de core-consultas), así que el registro real nunca lo dice; queda para los
+    /// dobles de prueba. Por defecto false.
     /// </summary>
     bool EsNoConectada(Fuente fuente) => false;
 }
 
 /// <summary>
-/// Registro real: las fuentes con un <see cref="IEjecutorCelda"/> registrado, que son las mismas que toma el procesador de la
-/// cola (en D2 solo RUNT, <see cref="EjecutorCeldaRunt"/>). Los ejecutores son scoped, así que el conjunto se calcula una
-/// vez, en un ámbito propio, la primera vez que se consulta (el contenedor no cambia después de arrancar). Si una fuente es no
-/// conectada lo dice <see cref="Fuentes.SeleccionAdaptadores"/> (HU #13791).
+/// Registro real: las fuentes con un <see cref="IEjecutorCelda"/> registrado, las únicas cuyas celdas se pueden cerrar con lo
+/// que responde core-consultas (ADR-0075). Los ejecutores son scoped, así que el conjunto se calcula una vez, en un ámbito propio,
+/// la primera vez que se consulta (el contenedor no cambia después de arrancar).
 /// </summary>
 /// <example>
 /// <code>
 /// services.TryAddSingleton&lt;IRegistroAdaptadores, RegistroAdaptadores&gt;();
-/// registro.TieneAdaptador(Fuente.SimitVehiculo) // false en D2
+/// registro.TieneAdaptador(Fuente.SimitVehiculo) // true: tiene ejecutor
 /// </code>
 /// </example>
-internal sealed class RegistroAdaptadores(IServiceScopeFactory scopes, Fuentes.SeleccionAdaptadores seleccion) : IRegistroAdaptadores
+internal sealed class RegistroAdaptadores(IServiceScopeFactory scopes) : IRegistroAdaptadores
 {
     private readonly Lazy<IReadOnlySet<Fuente>> _fuentes = new(() =>
     {
@@ -38,6 +38,4 @@ internal sealed class RegistroAdaptadores(IServiceScopeFactory scopes, Fuentes.S
     });
 
     public bool TieneAdaptador(Fuente fuente) => _fuentes.Value.Contains(fuente);
-
-    public bool EsNoConectada(Fuente fuente) => seleccion.EsNoConectada(fuente);
 }

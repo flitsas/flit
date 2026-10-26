@@ -20,7 +20,7 @@
     <ProjectReference Include="..\..\..\core-identity\src\Flit.Identidad.Grpc.Contracts\Flit.Identidad.Grpc.Contracts.csproj" />
     <!-- HU #13742: catálogo de tipos de trámite (ListarTiposTramite de flit.tramites.v1.CatalogosService, en core-api). -->
     <ProjectReference Include="..\..\..\core-api\src\Flit.Tramites.Grpc.Contracts\Flit.Tramites.Grpc.Contracts.csproj" />
-    <!-- HU #13791: fuentes de D3 (RUNT persona, RUES, SIMIT, avalúo) por ConsultasService de core-consultas. -->
+    <!-- HU #13791 / ADR-0075: los *Request y *Response proto de core-consultas que viajan por el bus, y su gRPC del catálogo de impuesto. -->
     <ProjectReference Include="..\..\..\core-consultas\src\Flit.Consultas.Grpc.Contracts\Flit.Consultas.Grpc.Contracts.csproj" />
   </ItemGroup>
 
@@ -37,11 +37,6 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-  </ItemGroup>
-
-  <!-- HU #13725: respuestas inventadas de Intempo para la fuente RUNT simulada (sin PII; rango ficticio en FixturesSinPiiTests). -->
-  <ItemGroup>
-    <EmbeddedResource Include="Modulos\Consultas\Fuentes\Fixtures\intempo-*.json" LogicalName="$(RootNamespace).Fixtures.%(Filename)%(Extension)" />
   </ItemGroup>
 
   <!--

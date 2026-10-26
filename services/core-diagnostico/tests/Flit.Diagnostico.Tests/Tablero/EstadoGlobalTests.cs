@@ -37,7 +37,7 @@ public sealed class EstadoGlobalTests
         var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST001"), Lotes.Fila("TST011")], ct);
         (await Cabeceras.LeerAsync(api, empresa.Id, id, ct)).Estado.Should().Be(EstadoDiagnostico.EnProceso);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var cabecera = await Cabeceras.LeerAsync(api, empresa.Id, id, ct);
         cabecera.Estado.Should().Be(EstadoDiagnostico.Completado);
@@ -58,7 +58,7 @@ public sealed class EstadoGlobalTests
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST001"), Lotes.Fila("TST008")], ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         (await Motor.CeldasAsync(api, empresa.Id, id, ct)).Select(c => c.Estado).Should().BeEquivalentTo([EstadoCelda.Completado, EstadoCelda.Error]);
         var cabecera = await Cabeceras.LeerAsync(api, empresa.Id, id, ct);
@@ -76,7 +76,7 @@ public sealed class EstadoGlobalTests
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST001"), Lotes.Fila("TST008")], ct);
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
         var token = api.Token(empresa: empresa.Id, permisos: [Permisos.DiagnosticosVer], roles: ["usuario_diagnostico"]);
 
         var respuesta = await api.Cliente(token).PostAsync(Tablero.RutaCierrePanel(id), null, ct);
@@ -108,7 +108,7 @@ public sealed class EstadoGlobalTests
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST008")], ct);
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
         var token = api.Token(empresa: empresa.Id, permisos: [Permisos.DiagnosticosVer], roles: ["usuario_diagnostico"]);
         (await api.Cliente(token).PostAsync(Tablero.RutaCierrePanel(id), null, ct)).StatusCode.Should().Be(HttpStatusCode.OK);
 

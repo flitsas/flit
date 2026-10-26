@@ -1,32 +1,29 @@
 using Flit.Consultas.Grpc.V1;
 using Flit.Diagnostico.Api.Modulos.Consultas;
 using Flit.Diagnostico.Api.Modulos.Consultas.Bus;
-using Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
-using Flit.Diagnostico.Api.Modulos.Trabajos;
 using Flit.Diagnostico.Api.Modulos.Vehiculos;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Personas;
 using Flit.Diagnostico.Tests.Aislamiento;
 using Flit.Diagnostico.Tests.Api;
+using Flit.Platform.Grpc.V1;
 using FluentAssertions;
 using Google.Protobuf;
-using Grpc.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace Flit.Diagnostico.Tests.Consultas;
 
 /// <summary>
-/// HU #13727 (ADR-0075, T6) — <see cref="IConstructorSolicitud"/>: para cada fuente, el <c>*Request</c> que arma el constructor
-/// es igual (<c>Equals</c> de proto) al que HOY envía a core-consultas el ejecutor de la celda con su <c>Fuente*Real</c> (capturado
-/// en un cliente gRPC falso que responde Unavailable), con el mismo vehículo y las mismas personas, y en el mismo orden. Los
-/// documentos se descifran de <c>personas_vehiculo</c> con la protección de documentos. El <c>*Request</c> solo trae campos de
-/// identificación (placa o VIN, tipo y número de documento o NIT, los datos técnicos del avalúo o el departamento del impuesto).
-/// PostgreSQL real; RUNT simulado de Intempo: TST001 persona natural, TST003 leasing (propietario NIT y locatario con cédula) y
-/// un VIN de prueba que termina en 1.
+/// HU #13727 (ADR-0075, T6; tanda B) — <see cref="IConstructorSolicitud"/>: para cada fuente, el <c>*Request</c> que arma el
+/// constructor es el que enviaba a core-consultas la <c>Fuente*Real</c> de la celda antes del bus, fijado aquí campo por campo
+/// (<c>Equals</c> de proto) con el mismo vehículo y las mismas personas, y en el mismo orden: RUNT por placa o VIN; RUNT persona
+/// con tipo en mayúsculas y número; RUES con el NIT sin dígito; SIMIT por placa o por documento con su tipo de persona; avalúo con
+/// placa, VIN y datos técnicos; impuesto con placa y departamento. Los documentos se descifran de <c>personas_vehiculo</c> con la
+/// protección de documentos y el <c>*Request</c> solo trae campos de identificación. PostgreSQL real; RUNT simulado de Intempo:
+/// TST001 persona natural, TST003 leasing (propietario NIT y locatario con cédula) y un VIN de prueba que termina en 1.
 /// </summary>
 /// <example>
 /// <code>
@@ -36,6 +33,9 @@ namespace Flit.Diagnostico.Tests.Consultas;
 public sealed class ConstructoresSolicitudTests
 {
     internal const string Vin = "9ZZPRUEBA00000011";
+    private const string Natural = "9999900001";
+    private const string Nit = "999990003";
+    private const string Locatario = "9999900013";
 
     /// <summary>Rutas de campo (proto-JSON) que puede traer el <c>*Request</c> de cada rpc: solo identificación.</summary>
     internal static readonly IReadOnlyDictionary<string, string[]> CamposPermitidos = new Dictionary<string, string[]>
@@ -50,7 +50,7 @@ public sealed class ConstructoresSolicitudTests
     };
 
     [Fact]
-    public async Task Cada_constructor_arma_el_mismo_request_que_hoy_envia_la_fuente_real_y_solo_con_identificacion()
+    public async Task Cada_constructor_arma_el_request_de_su_fuente_y_solo_con_identificacion()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var api = await MotorNa.ArrancarAsync();
@@ -62,15 +62,16 @@ public sealed class ConstructoresSolicitudTests
         await using var scope = OutboxDePrueba.Scope(api, empresa.Id);
         var db = scope.ServiceProvider.GetRequiredService<DiagnosticoDb>();
         var constructores = scope.ServiceProvider.GetServices<IConstructorSolicitud>().ToList();
+        var vehiculos = await db.Set<VehiculoDiagnostico>().AsNoTracking().Where(v => v.DiagnosticoId == lote).ToDictionaryAsync(v => v.Id, ct);
         foreach (var celda in await db.Set<CeldaConsulta>().Where(c => c.DiagnosticoId == lote).OrderBy(c => c.VehiculoId).ThenBy(c => c.Fuente).ToListAsync(ct))
         {
-            var hoy = await CapturarAsync(scope.ServiceProvider, db, celda, ct);
+            var esperadas = Esperadas(vehiculos[celda.VehiculoId], celda.Fuente);
             var constructor = constructores.Should().ContainSingle(c => c.Fuente == celda.Fuente, $"hay un constructor para {celda.Fuente}").Subject;
 
             var construidas = await constructor.ConstruirAsync(db, celda, ct);
 
-            construidas.Select(s => s.Rpc).Should().Equal(hoy.Select(h => h.Rpc), $"mismos rpc en {celda.Fuente}");
-            construidas.Select(s => s.Solicitud).Should().Equal(hoy.Select(h => h.Solicitud), (a, b) => a.Equals(b), $"mismo *Request en {celda.Fuente}");
+            construidas.Select(s => s.Rpc).Should().Equal(esperadas.Select(h => h.Rpc), $"mismos rpc en {celda.Fuente} de {vehiculos[celda.VehiculoId].IdentificadorNorm}");
+            construidas.Select(s => s.Solicitud).Should().Equal(esperadas.Select(h => h.Solicitud), (a, b) => a.Equals(b), $"mismo *Request en {celda.Fuente}");
             foreach (var solicitud in construidas)
             {
                 Campos(solicitud.Solicitud).Should().BeSubsetOf(CamposPermitidos[solicitud.Rpc], $"{solicitud.Rpc} solo lleva identificación");
@@ -114,44 +115,81 @@ public sealed class ConstructoresSolicitudTests
     }
 
     /// <summary>
-    /// Lote con RUNT y todas las fuentes de D3 para TST001, TST003 y el VIN de prueba; procesa solo las RUNT (las demás nacen
-    /// diferidas y quedan liberadas, sin ejecutarse) y deja el departamento del impuesto soportado en los tres vehículos.
+    /// Lote con RUNT y todas las fuentes de D3 para TST001, TST003 y el VIN de prueba; atiende solo los trabajos de la RUNT (las
+    /// demás nacen diferidas y se publican al liberarse, sin respuesta todavía) y deja el departamento del impuesto soportado en
+    /// los tres vehículos.
     /// </summary>
     internal static async Task<Guid> LoteConRuntAsync(ApiDePrueba api, EmpresaDePrueba empresa, CancellationToken ct)
     {
         var lote = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST001"), Lotes.Fila("TST003"), Lotes.Fila(Vin)],
             [Fuente.Runt, Fuente.SimitVehiculo, Fuente.Avaluo, Fuente.ImpuestoDepartamental],
             [Fuente.RuntPropietario, Fuente.SimitPropietario], [Fuente.RuntLocatario, Fuente.SimitLocatario], ct);
-        (await Motor.Procesador(api).ProcesarLoteAsync(ct)).Should().Be(3, "la primera vuelta solo toma las RUNT");
+        (await Motor.Bus(api).ProcesarLoteAsync(ct)).Should().Be(3, "la primera vuelta solo atiende las RUNT");
         // Ningún organismo de prueba deriva un departamento: se fija el soportado de la réplica (MotorNa).
         await Motor.EjecutarAsync(api,
             $"UPDATE diagnostico.vehiculos SET departamento_codigo = '{MotorNa.DepartamentoSoportadoFicticio}' WHERE diagnostico_id = '{lote}'", ct);
         return lote;
     }
 
-    /// <summary>Lo que hoy envía el ejecutor de la celda con su <c>Fuente*Real</c> a core-consultas, en orden.</summary>
-    internal static async Task<IReadOnlyList<(string Rpc, IMessage Solicitud)>> CapturarAsync(IServiceProvider sp, DiagnosticoDb db, CeldaConsulta celda, CancellationToken ct)
+    /// <summary>
+    /// El <c>*Request</c> que enviaba la <c>Fuente*Real</c> de cada celda (antes del bus) para los vehículos del lote de prueba: la
+    /// placa y el VIN son los que dejó la RUNT; los documentos y los datos técnicos, los de los fixtures de Intempo.
+    /// </summary>
+    private static List<(string Rpc, IMessage Solicitud)> Esperadas(VehiculoDiagnostico v, Fuente fuente)
     {
-        var consultas = new ConsultasCaptura();
-        var runt = new RuntIntempoCaptura();
-        var cliente = new ClienteConsultas(consultas, NullLogger<ClienteConsultas>.Instance);
-        var protector = sp.GetRequiredService<IProtectorDocumentoPersona>();
-        var reloj = TimeProvider.System;
-        IEjecutorCelda ejecutor = celda.Fuente switch
+        var tst003 = v.IdentificadorNorm == "TST003";
+        var porVin = v.IdentificadorNorm == Vin;
+        var opciones = new OpcionesConsulta();
+        return fuente switch
         {
-            Fuente.Runt => new EjecutorCeldaRunt(new FuenteRuntReal(new ClienteRuntIntempo(runt, NullLogger<ClienteRuntIntempo>.Instance)), protector, reloj, NullLogger<EjecutorCeldaRunt>.Instance),
-            Fuente.RuntPropietario or Fuente.RuntLocatario => new EjecutorCeldaRuntPersona(
-                celda.Fuente, new FuenteRuntPersonaReal(cliente), new FuenteRuesReal(cliente), protector, reloj, NullLogger<EjecutorCeldaRuntPersona>.Instance),
-            Fuente.SimitVehiculo => new EjecutorCeldaSimitVehiculo(new FuenteSimitReal(cliente), reloj, NullLogger<EjecutorCeldaSimitVehiculo>.Instance),
-            Fuente.SimitPropietario or Fuente.SimitLocatario => new EjecutorCeldaSimitPersona(
-                celda.Fuente, new FuenteSimitReal(cliente), protector, reloj, NullLogger<EjecutorCeldaSimitPersona>.Instance),
-            Fuente.Avaluo => new EjecutorCeldaAvaluo(new FuenteAvaluoReal(cliente), reloj, NullLogger<EjecutorCeldaAvaluo>.Instance),
-            Fuente.ImpuestoDepartamental => new EjecutorCeldaImpuesto(new FuenteImpuestoReal(cliente), reloj, NullLogger<EjecutorCeldaImpuesto>.Instance),
-            _ => throw new ArgumentOutOfRangeException(nameof(celda)),
+            Fuente.Runt => porVin
+                ? [(RpcConsultas.PorVin, new ConsultarPorVinRequest { Vin = Vin })]
+                : [(RpcConsultas.PorPlaca, new ConsultarPorPlacaRequest { Placa = v.IdentificadorNorm })],
+            Fuente.RuntPropietario => tst003
+                ? [(RpcConsultas.Rues, new ConsultarRuesRequest { Opciones = opciones, Nit = Nit })]
+                : [(RpcConsultas.Conductor, new ConsultarConductorRequest { Opciones = opciones, Documento = new DocumentoIdentidad { Tipo = "CC", Numero = Natural } })],
+            Fuente.RuntLocatario => tst003
+                ? [(RpcConsultas.Conductor, new ConsultarConductorRequest { Opciones = opciones, Documento = new DocumentoIdentidad { Tipo = "CC", Numero = Locatario } })]
+                : [],
+            Fuente.SimitVehiculo => [(RpcConsultas.Multas, new ConsultarMultasRequest { Opciones = opciones, Placa = new Placa { Valor = v.Placa } })],
+            Fuente.SimitPropietario => tst003
+                ? [(RpcConsultas.Multas, PorDocumento("NIT", Nit, TipoPersona.Juridica))]
+                : [(RpcConsultas.Multas, PorDocumento("CC", Natural, TipoPersona.Natural))],
+            Fuente.SimitLocatario => tst003 ? [(RpcConsultas.Multas, PorDocumento("CC", Locatario, TipoPersona.Natural))] : [],
+            Fuente.Avaluo => [(RpcConsultas.Avaluos, Avaluo(v, tst003))],
+            Fuente.ImpuestoDepartamental => [(RpcConsultas.Impuesto, new ConsultarImpuestoVehicularRequest
+            {
+                Opciones = opciones,
+                Placa = new Placa { Valor = v.Placa },
+                DepartamentoCodigo = MotorNa.DepartamentoSoportadoFicticio,
+            })],
+            _ => throw new ArgumentOutOfRangeException(nameof(fuente)),
         };
-        var tomada = new CeldaTomada(celda.Id, celda.TenantId, celda.DiagnosticoId, celda.VehiculoId, celda.Fuente, DateTimeOffset.UtcNow.AddMinutes(2));
-        await ejecutor.EjecutarAsync(new ContextoCelda(tomada, db), ct);
-        return [.. runt.Llamadas, .. consultas.Llamadas];
+    }
+
+    private static ConsultarMultasRequest PorDocumento(string tipo, string numero, TipoPersona tipoPersona) => new()
+    {
+        Opciones = new OpcionesConsulta(),
+        Documento = new DocumentoIdentidad { Tipo = tipo, Numero = numero },
+        TipoPersona = tipoPersona,
+    };
+
+    /// <summary>Avalúo: placa y VIN de la RUNT; el leasing de prueba solo trae el modelo, la persona natural todos los datos técnicos.</summary>
+    private static ConsultarAvaluosRequest Avaluo(VehiculoDiagnostico v, bool soloModelo)
+    {
+        var request = new ConsultarAvaluosRequest
+        {
+            Opciones = new OpcionesConsulta(),
+            Modelo = 2020,
+            Cilindraje = soloModelo ? 0 : 1598,
+            Combustible = soloModelo ? string.Empty : "GASOLINA",
+            Pasajeros = soloModelo ? 0 : 5,
+        };
+        if (!string.IsNullOrWhiteSpace(v.Placa))
+            request.Placa = new Placa { Valor = v.Placa };
+        if (!string.IsNullOrWhiteSpace(v.Vin))
+            request.Vin = new Flit.Platform.Grpc.V1.Vin { Valor = v.Vin };
+        return request;
     }
 
     /// <summary>Rutas de los campos presentes en el proto-JSON del mensaje (<c>documento.numero</c>, <c>placa.valor</c>…).</summary>
@@ -174,59 +212,4 @@ public sealed class ConstructoresSolicitudTests
             }
         }
     }
-}
-
-/// <summary>Cliente gRPC de <c>ConsultasService</c> que anota cada solicitud y responde Unavailable (nunca core-consultas).</summary>
-internal sealed class ConsultasCaptura : ConsultasService.ConsultasServiceClient
-{
-    public List<(string Rpc, IMessage Solicitud)> Llamadas { get; } = [];
-
-    public override AsyncUnaryCall<ConsultarConductorResponse> ConsultarConductorAsync(ConsultarConductorRequest request, CallOptions options) =>
-        Anotar<ConsultarConductorResponse>(RpcConsultas.Conductor, request);
-
-    public override AsyncUnaryCall<ConsultarRuesResponse> ConsultarRuesAsync(ConsultarRuesRequest request, CallOptions options) =>
-        Anotar<ConsultarRuesResponse>(RpcConsultas.Rues, request);
-
-    public override AsyncUnaryCall<ConsultarMultasResponse> ConsultarMultasAsync(ConsultarMultasRequest request, CallOptions options) =>
-        Anotar<ConsultarMultasResponse>(RpcConsultas.Multas, request);
-
-    public override AsyncUnaryCall<ConsultarAvaluosResponse> ConsultarAvaluosAsync(ConsultarAvaluosRequest request, CallOptions options) =>
-        Anotar<ConsultarAvaluosResponse>(RpcConsultas.Avaluos, request);
-
-    public override AsyncUnaryCall<ConsultarImpuestoVehicularResponse> ConsultarImpuestoVehicularAsync(ConsultarImpuestoVehicularRequest request, CallOptions options) =>
-        Anotar<ConsultarImpuestoVehicularResponse>(RpcConsultas.Impuesto, request);
-
-    private AsyncUnaryCall<T> Anotar<T>(string rpc, IMessage solicitud)
-    {
-        Llamadas.Add((rpc, solicitud));
-        return LlamadaFallida.De<T>();
-    }
-}
-
-/// <summary>Cliente gRPC de <c>RuntIntempoService</c> que anota cada solicitud y responde Unavailable.</summary>
-internal sealed class RuntIntempoCaptura : RuntIntempoService.RuntIntempoServiceClient
-{
-    public List<(string Rpc, IMessage Solicitud)> Llamadas { get; } = [];
-
-    public override AsyncUnaryCall<ConsultarVehiculoIntempoResponse> ConsultarPorPlacaAsync(ConsultarPorPlacaRequest request, CallOptions options)
-    {
-        Llamadas.Add((RpcConsultas.PorPlaca, request));
-        return LlamadaFallida.De<ConsultarVehiculoIntempoResponse>();
-    }
-
-    public override AsyncUnaryCall<ConsultarVehiculoIntempoResponse> ConsultarPorVinAsync(ConsultarPorVinRequest request, CallOptions options)
-    {
-        Llamadas.Add((RpcConsultas.PorVin, request));
-        return LlamadaFallida.De<ConsultarVehiculoIntempoResponse>();
-    }
-}
-
-internal static class LlamadaFallida
-{
-    public static AsyncUnaryCall<T> De<T>() => new(
-        Task.FromException<T>(new RpcException(new Status(StatusCode.Unavailable, "captura de prueba"))),
-        Task.FromResult(new Metadata()),
-        () => new Status(StatusCode.Unavailable, "captura de prueba"),
-        () => [],
-        () => { });
 }

@@ -320,7 +320,7 @@ public sealed class LlenadoManualTests
         vieja.StatusCode.Should().Be(HttpStatusCode.Conflict);
         (await TableroAyudas.JsonAsync(vieja, ct)).GetProperty("code").GetString().Should().Be("CELDA_MODIFICADA");
         var enCola = await CeldaAsync(empresas.A, celda.Id, ct);
-        enCola.Estado.Should().Be(EstadoCelda.Pendiente);
+        enCola.Estado.Should().Be(EstadoCelda.EnCurso, "el reproceso publicó su trabajo (ADR-0075)");
         enCola.ReprocesoUsuarioId.Should().Be(TableroAyudas.Usuario(admin));
         var nueva = await Llenar(api, token, celda.Id, empresas.A.Id, Cuerpo(enCola.VersionTablero, SimitManual), ct);
         nueva.StatusCode.Should().Be(HttpStatusCode.Conflict, "con la versión al día la celda ya no está en ERROR");

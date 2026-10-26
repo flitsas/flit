@@ -59,15 +59,25 @@ public sealed class TrabajoConsultaDiagnosticoContratoTests
         await using var api = await MotorNa.ArrancarAsync();
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresa = DosEmpresas.En(api).A;
+        // La RUNT de los tres vehículos sale al encolar y, al cerrarla, las liberadas publican el suyo (tanda B). El impuesto quedó N/A
+        // (ningún organismo de prueba deriva su departamento): con el departamento ya fijado, se vuelve a publicar.
         var lote = await ConstructoresSolicitudTests.LoteConRuntAsync(api, empresa, ct);
-
         await using (var scope = OutboxDePrueba.Scope(api, empresa.Id))
         {
             var db = scope.ServiceProvider.GetRequiredService<DiagnosticoDb>();
             var publicador = scope.ServiceProvider.GetRequiredService<PublicadorCeldas>();
-            foreach (var celda in await db.Set<CeldaConsulta>().Where(c => c.DiagnosticoId == lote).ToListAsync(ct))
-                await publicador.PublicarAsync(celda, ct);
-            await db.SaveChangesAsync(ct);
+            await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+            {
+                await using var transaccion = await db.Database.BeginTransactionAsync(ct);
+                foreach (var celda in await db.Set<CeldaConsulta>().Where(c => c.DiagnosticoId == lote && c.Fuente == Domain.Consultas.Fuente.ImpuestoDepartamental).ToListAsync(ct))
+                {
+                    (celda.Estado, celda.MotivoNa) = (Domain.Consultas.EstadoCelda.Pendiente, null);
+                    await publicador.PublicarAsync(celda, ct, celda.VersionTablero);
+                }
+
+                await db.SaveChangesAsync(ct);
+                await transaccion.CommitAsync(ct);
+            });
         }
 
         var trabajos = await OutboxDePrueba.TrabajosAsync(api, ct);

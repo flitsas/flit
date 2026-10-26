@@ -3,6 +3,7 @@ using System.Net;
 using Flit.Consultas.Grpc.V1;
 using Flit.Diagnostico.Api;
 using Flit.Diagnostico.Api.Modulos.Consultas;
+using Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 using Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Tests.Aislamiento;
@@ -41,7 +42,7 @@ public sealed class EjecutorCeldaSimitPersonaTests
     [Fact]
     public async Task Una_consulta_por_persona_con_su_tipo_persona()
     {
-        var porCc = FuenteSimitReal.Solicitud(SolicitudSimit.PorDocumento(new DocumentoPersona("cc", RuntSimitPersonas.Locatario1)));
+        var porCc = SolicitudesProto.Multas(SolicitudSimit.PorDocumento(new DocumentoPersona("cc", RuntSimitPersonas.Locatario1)));
         (porCc.TipoPersona, porCc.Documento.Tipo, porCc.Documento.Numero).Should().Be((TipoPersona.Natural, "CC", RuntSimitPersonas.Locatario1));
         porCc.Placa.Should().BeNull("por persona no va la placa");
 
@@ -52,7 +53,7 @@ public sealed class EjecutorCeldaSimitPersonaTests
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST401")], [Fuente.Runt], null, [Fuente.SimitLocatario], ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         grpc.Llamadas.Select(l => (l.Tenant, l.Tipo, l.Numero, l.TipoPersona, l.ConPlaca)).Should().BeEquivalentTo(
         [
@@ -78,7 +79,7 @@ public sealed class EjecutorCeldaSimitPersonaTests
     [Fact]
     public async Task NIT_consulta_con_tipo_persona_juridica()
     {
-        FuenteSimitReal.Solicitud(SolicitudSimit.PorDocumento(new DocumentoPersona("NIT", RuntSimitPersonas.Financiera)))
+        SolicitudesProto.Multas(SolicitudSimit.PorDocumento(new DocumentoPersona("NIT", RuntSimitPersonas.Financiera)))
             .TipoPersona.Should().Be(TipoPersona.Juridica);
 
         var ct = TestContext.Current.CancellationToken;
@@ -88,7 +89,7 @@ public sealed class EjecutorCeldaSimitPersonaTests
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST402")], [Fuente.Runt], [Fuente.SimitPropietario], null, ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         grpc.Llamadas.Select(l => (l.Tenant, l.Tipo, l.Numero, l.TipoPersona, l.ConPlaca)).Should().ContainSingle()
             .Which.Should().Be((empresa.Id.ToString(), "NIT", RuntSimitPersonas.Financiera, TipoPersona.Juridica, false), "el NIT va sin dígito de verificación");
@@ -117,7 +118,7 @@ public sealed class EjecutorCeldaSimitPersonaTests
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST402")], [Fuente.Runt], [Fuente.SimitPropietario], null, ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var celda = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST402", Fuente.SimitPropietario, ct);
         celda.Estado.Should().Be(EstadoCelda.Completado);
@@ -147,7 +148,7 @@ public sealed class EjecutorCeldaSimitPersonaTests
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST403")], [Fuente.Runt], [Fuente.SimitPropietario], null, ct);
-        var procesador = Motor.Procesador(api, maxReintentos: 1);
+        var procesador = Motor.Bus(api, maxReintentos: 1);
 
         await MotorRunt.ProcesarTodoAsync(procesador, ct);
         reloj.Avanzar(PoliticaReintentos.Espera(1));
@@ -189,7 +190,7 @@ public sealed class EjecutorCeldaSimitPersonaTests
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST404")], [Fuente.Runt], null, [Fuente.SimitLocatario], ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         grpc.Llamadas.Should().BeEmpty("sin locatario no se consulta");
         var celda = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST404", Fuente.SimitLocatario, ct);
@@ -219,7 +220,7 @@ public sealed class EjecutorCeldaSimitPersonaTests
         var lote = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST405", "CC", RuntSimitPersonas.Declarado)],
             [Fuente.Runt], [Fuente.SimitPropietario], [Fuente.SimitLocatario], ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         grpc.Llamadas.Select(l => l.Numero).Should().BeEquivalentTo([RuntSimitPersonas.Financiera, RuntSimitPersonas.Declarado]);
         var locatario = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST405", Fuente.SimitLocatario, ct);
@@ -347,8 +348,8 @@ public sealed class MultasPersonaGrpcFalso : ConsultasService.ConsultasServiceCl
     public void RegistrarAdaptadorReal(WebApplicationBuilder b)
     {
         ArgumentNullException.ThrowIfNull(b);
-        b.Services.AddSingleton(new ClienteConsultas(this, NullLogger<ClienteConsultas>.Instance));
-        b.Services.AddScoped<IFuenteSimit, FuenteSimitReal>();
+        // ADR-0075: core-consultas de las pruebas (BusDePrueba) responde los trabajos del bus con este cliente.
+        b.Services.AddSingleton<ConsultasService.ConsultasServiceClient>(this);
     }
 
     public override AsyncUnaryCall<ConsultarMultasResponse> ConsultarMultasAsync(ConsultarMultasRequest request, CallOptions options)

@@ -21,8 +21,8 @@ public sealed record ReprocesoDto(
 
 /// <summary>
 /// Reproceso de una celda en ERROR (HU #13746, F03-H8, R-1, R-8, plan §6.1 fila 03): la celda vuelve a PENDIENTE con
-/// <c>intentos_auto=0</c>, <c>disponible_desde=ahora</c> y el usuario en <c>reproceso_usuario_id</c>; el procesador repite la
-/// consulta real (sin reutilizar el dato del mismo día) y su intento queda con <c>disparador=REPROCESO</c> y ese usuario. Nunca
+/// <c>intentos_auto=0</c>, <c>disponible_desde=ahora</c> y el usuario en <c>reproceso_usuario_id</c>; se publica la consulta real
+/// (sin reutilizar el dato del mismo día) y su intento queda con <c>disparador=REPROCESO</c> y ese usuario. Nunca
 /// escribe datos de resultado: el endpoint no lee cuerpo. La celda sube <c>version_tablero</c> (el sondeo del tablero la ve
 /// volver a gris). Si el lote estaba COMPLETADO o INCOMPLETO vuelve a EN_PROCESO, sin <c>cerrado_en</c> y con una fila del
 /// historial REPROCESO con el usuario; al terminar, <see cref="RecalculadorEstado"/> fija el estado final. Todo en una
@@ -78,10 +78,12 @@ internal sealed class Reproceso(DiagnosticoDb db, UsuarioActual usuario, TimePro
             celda.ReprocesoUsuarioId = autor;
             celda.ActualizadoEn = ahora;
             celda.VersionTablero = version;
-            // ADR-0075: trabajo nuevo de la celda (trabajo_id nuevo), en la misma transacción del reproceso.
-            await publicador.PublicarAsync(celda, ct).ConfigureAwait(false);
             try
             {
+                await db.SaveChangesAsync(ct).ConfigureAwait(false);
+                // ADR-0075: trabajo nuevo de la celda (trabajo_id nuevo), en la misma transacción del reproceso. Va después de guardar el
+                // reproceso para que, si la celda no tiene qué consultar y se cierra ahí mismo, el recálculo del lote lo vea reabierto.
+                await publicador.PublicarAsync(celda, ct, version).ConfigureAwait(false);
                 await db.SaveChangesAsync(ct).ConfigureAwait(false);
             }
             catch (DbUpdateConcurrencyException)
@@ -128,7 +130,7 @@ internal sealed class Reproceso(DiagnosticoDb db, UsuarioActual usuario, TimePro
         });
     }
 
-    /// <summary>Sube la versión del tablero; el UPDATE deja la cabecera bloqueada hasta el commit (frente al procesador).</summary>
+    /// <summary>Sube la versión del tablero; el UPDATE deja la cabecera bloqueada hasta el commit (frente al consumidor de resultados).</summary>
     private async Task<long> SubirVersionAsync(Guid diagnosticoId, CancellationToken ct)
     {
         await db.Set<CabeceraDiagnostico>().Where(c => c.Id == diagnosticoId)

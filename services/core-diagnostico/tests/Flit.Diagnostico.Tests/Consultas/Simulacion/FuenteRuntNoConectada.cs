@@ -1,6 +1,9 @@
-namespace Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
+using Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
+namespace Flit.Diagnostico.Tests.Consultas;
 
 /// <summary>
+/// Doble de prueba de core-consultas (ADR-0075, U3 = a): la simulación de LOCAL y DEV vive en core-consultas; en las pruebas
+/// responde los trabajos de <see cref="BusDePrueba"/>. Lo que sigue es su comportamiento heredado de la fuente de Diagnóstico.
 /// Fuente RUNT por defecto (HU #13725, F03-C15): mientras no exista el adaptador real sobre core-consultas (C-PER), QA y PDN
 /// fallan cerrado. Devuelve siempre <see cref="TipoErrorFuente.NoConectado"/> (definitivo, no se reintenta), nunca datos, y
 /// no tiene dependencias: no hay proveedor al que llamar.

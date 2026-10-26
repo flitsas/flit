@@ -36,6 +36,14 @@
     <None Include="..\..\..\..\contracts\fixtures\bus\*.v1.json" Link="Fixtures\bus\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!--
+    Respuestas inventadas de Intempo (HU #13725; sin PII, rango ficticio en FixturesSinPiiTests): desde ADR-0075 (U3 = a) la
+    simulación de LOCAL y DEV vive en core-consultas y aquí solo responden por core-consultas en BusDePrueba.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="Consultas\Simulacion\Fixtures\intempo-*.json" LogicalName="$(RootNamespace).Fixtures.%(Filename)%(Extension)" />
+  </ItemGroup>
+
   <!-- Archivos de carga inventados (HU #13749): .xlsx, .csv, .xls, .pdf y un .xlsx dañado. -->
   <ItemGroup>
     <None Include="Api\Fixtures\carga*" CopyToOutputDirectory="PreserveNewest" />

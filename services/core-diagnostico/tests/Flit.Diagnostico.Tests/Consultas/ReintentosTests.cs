@@ -46,7 +46,7 @@ public sealed class ReintentosTests
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST007")], ct, Fuente.SimitVehiculo);
-        var procesador = Motor.Procesador(api, maxReintentos: maxReintentos);
+        var procesador = Motor.Bus(api, maxReintentos: maxReintentos);
 
         for (var reintento = 1; reintento <= maxReintentos; reintento++)
         {
@@ -102,7 +102,7 @@ public sealed class ReintentosTests
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila(placa)], ct, Fuente.SimitVehiculo);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api, maxReintentos: 3), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api, maxReintentos: 3), ct);
 
         orden.Should().ContainSingle();
         var intento = (await IntentosAsync(api, empresa, id, ct)).Should().ContainSingle().Subject;

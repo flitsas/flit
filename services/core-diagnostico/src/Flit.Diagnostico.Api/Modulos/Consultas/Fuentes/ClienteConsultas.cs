@@ -16,20 +16,19 @@ public sealed record RespuestaConsultas<T>(T? Respuesta, ErrorConsulta? Error)
 }
 
 /// <summary>
-/// Puerta única de Diagnóstico hacia <c>ConsultasService</c> de core-consultas (HU #13791, F05-C1): el producto no guarda
-/// credenciales de proveedores ni elige proveedor. Token de servicio de svc-diagnostico con scope <see cref="Scope"/>, deadline
-/// <see cref="ClaveDeadline"/> (por defecto <see cref="DeadlinePorDefectoSegundos"/> s), y la empresa de la celda en la metadata
-/// <c>x-flit-tenant-id</c> (el procesador corre sin petición HTTP, así que la empresa va explícita). Un error gRPC se devuelve
-/// traducido (<see cref="TraductorErroresConsultas"/>); la cancelación de quien llama se propaga. Solo se registra en
-/// <see cref="ModoAdaptador.Real"/>: con la simulación o sin dirección no existe y ninguna llamada sale a core-consultas.
-/// Los logs llevan el método y el código; nunca documentos ni el detalle del proveedor. La llamada la hace
-/// <see cref="LlamadaConsultas"/>, compartida con <see cref="ClienteRuntIntempo"/> (HU #13878).
+/// Puerta de Diagnóstico hacia <c>ConsultasService</c> de core-consultas para lo que sigue en línea (acta §3.1; ADR-0075): desde
+/// la tanda B las consultas de las celdas van por RabbitMQ y por aquí solo pasa el catálogo diario de departamentos con impuesto
+/// (<c>ListarDepartamentosImpuesto</c>, HU #13861, <see cref="LlamarGlobalAsync"/>). Token de servicio de svc-diagnostico con scope
+/// <see cref="Scope"/> y deadline <see cref="ClaveDeadline"/> (por defecto <see cref="DeadlinePorDefectoSegundos"/> s);
+/// <see cref="LlamarAsync"/> pone la empresa en la metadata <c>x-flit-tenant-id</c> para un rpc por empresa. Un error gRPC se
+/// devuelve traducido (<see cref="TraductorErroresConsultas"/>); la cancelación de quien llama se propaga. Solo se registra con
+/// <see cref="ClaveDireccion"/>: sin ella ninguna llamada sale a core-consultas. Los logs llevan el método y el código; nunca
+/// documentos ni el detalle del proveedor.
 /// </summary>
 /// <example>
 /// <code>
-/// var respuesta = await cliente.LlamarAsync(celda.TenantId,
-///     (c, opciones) => c.ConsultarMultasAsync(new ConsultarMultasRequest { Placa = placa }, opciones), ct);
-/// var error = respuesta.Error ?? TraductorErroresConsultas.Traducir(respuesta.Respuesta!.Resultado);
+/// var respuesta = await cliente.LlamarGlobalAsync(
+///     (c, opciones) => c.ListarDepartamentosImpuestoAsync(new ListarDepartamentosImpuestoRequest(), opciones), ct);
 /// </code>
 /// </example>
 public sealed class ClienteConsultas(ConsultasService.ConsultasServiceClient cliente, ILogger<ClienteConsultas> log)
@@ -61,32 +60,7 @@ public sealed class ClienteConsultas(ConsultasService.ConsultasServiceClient cli
 }
 
 /// <summary>
-/// Puerta de Diagnóstico hacia <c>RuntIntempoService</c> de core-consultas (HU #13878, G1=a): el segundo cliente gRPC, hacia la
-/// misma dirección (<see cref="ClienteConsultas.ClaveDireccion"/>) y con el mismo contrato que <see cref="ClienteConsultas.LlamarAsync"/>:
-/// empresa obligatoria en <c>x-flit-tenant-id</c>, token de servicio con scope <see cref="ClienteConsultas.Scope"/>, deadline
-/// común, <see cref="RpcException"/> traducido por <see cref="TraductorErroresConsultas"/> y un log con solo el método y el
-/// código. Solo existe en <see cref="ModoAdaptador.Real"/>. La respuesta lleva PII (Q1=b): nunca se registra.
-/// </summary>
-/// <example>
-/// <code>
-/// var respuesta = await cliente.LlamarAsync(empresa,
-///     (c, o) => c.ConsultarPorPlacaAsync(new ConsultarPorPlacaRequest { Placa = "TST601" }, o), ct);
-/// </code>
-/// </example>
-public sealed class ClienteRuntIntempo(RuntIntempoService.RuntIntempoServiceClient cliente, ILogger<ClienteRuntIntempo> log)
-{
-    public Task<RespuestaConsultas<T>> LlamarAsync<T>(
-        Guid empresa, Func<RuntIntempoService.RuntIntempoServiceClient, CallOptions, AsyncUnaryCall<T>> llamada, CancellationToken ct)
-        where T : class
-    {
-        ArgumentNullException.ThrowIfNull(llamada);
-        return LlamadaConsultas.LlamarAsync(cliente, log, LlamadaConsultas.ConEmpresa(empresa, ct), llamada, ct);
-    }
-}
-
-/// <summary>
-/// La llamada común a core-consultas de <see cref="ClienteConsultas"/> y <see cref="ClienteRuntIntempo"/> (HU #13878: un solo
-/// <c>try/catch</c>): devuelve la respuesta o el <see cref="RpcException"/> traducido con su código; la cancelación de quien llama
+/// La llamada a core-consultas de <see cref="ClienteConsultas"/> (un solo <c>try/catch</c>): devuelve la respuesta o el <see cref="RpcException"/> traducido con su código; la cancelación de quien llama
 /// se propaga. El log lleva el tipo de respuesta, el código gRPC y el tipo de error; nunca <c>ex.Message</c> ni el payload.
 /// </summary>
 internal static partial class LlamadaConsultas
@@ -122,23 +96,38 @@ internal static partial class LlamadaConsultas
 }
 
 /// <summary>
-/// Registro de los clientes gRPC de core-consultas (HU #13791; el de <c>RuntIntempoService</c> desde HU #13878): la misma
-/// dirección, scope y deadline para los dos. Lo llama <c>Modulos.AddFuentesConsultas</c> en modo real.
+/// Registro del cliente gRPC de core-consultas (HU #13791; desde ADR-0075 solo para el catálogo de departamentos con impuesto):
+/// con <see cref="ClienteConsultas.ClaveDireccion"/> (URL http o https) registra el cliente con el scope y el deadline; sin ella no
+/// registra nada y devuelve false. Una dirección que no es URL o un deadline que no es positivo impiden arrancar. Lo llama
+/// <c>Modulos.AddFuentesConsultas</c>.
 /// </summary>
 internal static class RegistroClienteConsultas
 {
-    public static IServiceCollection AddClienteConsultas(this IServiceCollection services, IConfiguration configuration, SeleccionAdaptadores seleccion)
+    public static bool AddClienteConsultas(this IServiceCollection services, IConfiguration configuration)
     {
-        ArgumentNullException.ThrowIfNull(seleccion);
-        if (seleccion.Modo != ModoAdaptador.Real || seleccion.Direccion is null)
-            throw new InvalidOperationException("El cliente de core-consultas solo se registra con adaptadores reales.");
+        ArgumentNullException.ThrowIfNull(configuration);
+        var segundos = configuration.GetValue(ClienteConsultas.ClaveDeadline, ClienteConsultas.DeadlinePorDefectoSegundos);
+        if (segundos <= 0)
+        {
+            throw new InvalidOperationException(
+                $"core-{ServicioSettings.Codigo} no puede arrancar: {Variable(ClienteConsultas.ClaveDeadline)} debe ser mayor que 0 (valor actual: {segundos}).");
+        }
+
+        var direccion = configuration[ClienteConsultas.ClaveDireccion]?.Trim();
+        if (string.IsNullOrEmpty(direccion))
+            return false;
+        if (!Uri.TryCreate(direccion, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new InvalidOperationException(
+                $"core-{ServicioSettings.Codigo} no puede arrancar: {Variable(ClienteConsultas.ClaveDireccion)} no es una URL http o https " +
+                "(p. ej. http://core-consultas:8084). Sin dirección, el catálogo de departamentos con impuesto queda sin capacidad.");
+        }
 
         services.AddFlitGrpcClient<ConsultasService.ConsultasServiceClient>(
-            configuration, seleccion.Direccion, ClienteConsultas.Scope, o => o.Deadline = seleccion.Deadline);
-        services.AddFlitGrpcClient<RuntIntempoService.RuntIntempoServiceClient>(
-            configuration, seleccion.Direccion, ClienteConsultas.Scope, o => o.Deadline = seleccion.Deadline);
+            configuration, uri, ClienteConsultas.Scope, o => o.Deadline = TimeSpan.FromSeconds(segundos));
         services.TryAddScoped<ClienteConsultas>();
-        services.TryAddScoped<ClienteRuntIntempo>();
-        return services;
+        return true;
     }
+
+    private static string Variable(string clave) => clave.Replace(":", "__", StringComparison.Ordinal);
 }

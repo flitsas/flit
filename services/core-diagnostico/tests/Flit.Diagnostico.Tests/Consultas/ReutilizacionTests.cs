@@ -294,8 +294,7 @@ public sealed class ReutilizacionTests
     private static async Task<ResultadoCelda?> BuscarAsync(ApiDePrueba api, EmpresaDePrueba empresa, CeldaConsulta celda, CancellationToken ct)
     {
         await using var db = empresa.Db();
-        var tomada = new global::Flit.Diagnostico.Api.Modulos.Trabajos.CeldaTomada(
-            celda.Id, empresa.Id, celda.DiagnosticoId, celda.VehiculoId, celda.Fuente, DateTimeOffset.UtcNow.AddMinutes(1));
+        var tomada = new CeldaEnCurso(celda.Id, empresa.Id, celda.DiagnosticoId, celda.VehiculoId, celda.Fuente, celda.TrabajoId);
         return await ReutilizacionMismoDia.BuscarAsync(new ContextoCelda(tomada, db), DateTimeOffset.UtcNow, ct);
     }
 
@@ -334,7 +333,7 @@ public sealed class ReutilizacionTests
             id = await MotorRunt.LoteAsync(api, empresa, filas, ct);
         }
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
         return id;
     }
 

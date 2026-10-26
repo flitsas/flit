@@ -18,8 +18,8 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// ya existe (en cualquier estado, también <c>COMPLETADO</c> o <c>NA</c>) no se crea ni se reabre, y un lote que ya está en
 /// proceso no repite la transición. Escribe con el filtro de la empresa del contexto. Desde ADR-0075 (HU #13727) deja además, en
 /// esa misma transacción, el trabajo de consulta de la celda RUNT de CADA vehículo nuevo en la outbox
-/// (<see cref="PublicadorCeldas"/>, <c>consultas.diagnostico[-express].runt</c>); las diferidas se publican al liberarse. Nadie lo
-/// consume todavía: el procesador de la cola sigue ejecutando la celda como siempre.
+/// (<see cref="PublicadorCeldas"/>, <c>consultas.diagnostico[-express].runt</c>) o, si la misma compañía ya tiene hoy el dato de la
+/// placa, lo copia sin mensaje (HU #13739); las diferidas se publican al liberarse.
 /// </summary>
 internal sealed class EncoladorConsultas(DiagnosticoDb db, TimeProvider reloj, PublicadorCeldas publicador) : IEncoladorConsultas
 {
@@ -64,9 +64,6 @@ internal sealed class EncoladorConsultas(DiagnosticoDb db, TimeProvider reloj, P
             foreach (var celda in nuevas)
                 celda.VersionTablero = cabecera.VersionTablero;
             db.AddRange(nuevas);
-            // ADR-0075: la RUNT de todos los vehículos nuevos sale ya; las demás esperan a que su RUNT las libere.
-            foreach (var celda in nuevas.Where(c => c.Fuente == Fuente.Runt))
-                await publicador.PublicarAsync(celda, ct).ConfigureAwait(false);
         }
 
         if (cabecera.Estado == EstadoDiagnostico.Creado)
@@ -84,6 +81,14 @@ internal sealed class EncoladorConsultas(DiagnosticoDb db, TimeProvider reloj, P
             });
         }
 
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        if (nuevas.Count == 0)
+            return;
+
+        // ADR-0075: la RUNT de todos los vehículos nuevos sale ya (o se copia del mismo día y libera las demás); las demás esperan a
+        // que su RUNT las libere. Va después de guardar las celdas, en la misma transacción, para que la reutilización las vea.
+        foreach (var celda in nuevas.Where(c => c.Fuente == Fuente.Runt))
+            await publicador.PublicarAsync(celda, ct, cabecera.VersionTablero).ConfigureAwait(false);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 }

@@ -32,7 +32,8 @@ public sealed class BloqueoPorRuntTests
     [InlineData("TST007", "simulada", "TIMEOUT")]
     [InlineData("TST008", "simulada", "RESPUESTA_INVALIDA")]
     [InlineData("TST001", "no-conectada", "NO_CONECTADO")]
-    [InlineData("TST001", "excepcion", "-")]
+    // Una excepción inesperada en core-consultas sale como ERROR con grpcStatus Internal (Q4 del diseño): definitivo.
+    [InlineData("TST001", "excepcion", "ESTADO_NO_OK")]
     public async Task Runt_en_error_pasa_las_demas_celdas_a_error_sin_llamar_fuentes(string placa, string fuenteRunt, string tipoError)
     {
         var ct = TestContext.Current.CancellationToken;
@@ -55,7 +56,7 @@ public sealed class BloqueoPorRuntTests
         var vehiculo = await MotorRunt.VehiculoAsync(api, empresa, id, placa, ct);
 
         // HU #13737: sin reintentos el transitorio (Timeout) bloquea en la primera ejecución, como un definitivo.
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api, maxReintentos: 0), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api, maxReintentos: 0), ct);
 
         orden.Should().Equal([$"RUNT PLACA_CARRO {placa}"], "solo se llamó a RUNT");
         (await MotorRunt.CeldasDelVehiculoAsync(api, vehiculo.Id, ct)).Should().BeEquivalentTo(
@@ -83,7 +84,7 @@ public sealed class BloqueoPorRuntTests
         var fallido = await MotorRunt.VehiculoAsync(api, empresa, id, "TST008", ct);
         var sano = await MotorRunt.VehiculoAsync(api, empresa, id, "TST001", ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         (await MotorRunt.CeldasDelVehiculoAsync(api, fallido.Id, ct)).Should().BeEquivalentTo(
             ["RUNT ERROR RESPUESTA_INVALIDA", "SIMIT_VEHICULO ERROR BLOQUEADA_POR_RUNT"]);
@@ -110,12 +111,12 @@ public sealed class BloqueoPorRuntTests
         var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST001")], ct, Fuente.SimitVehiculo, Fuente.Avaluo);
         var antes = await OutboxDePrueba.TrabajosAsync(api, ct);
 
-        (await Motor.Procesador(api).ProcesarLoteAsync(ct)).Should().Be(1, "solo la RUNT es tomable");
+        (await Motor.Bus(api).ProcesarLoteAsync(ct)).Should().Be(1, "solo la RUNT es tomable");
 
         var celdas = (await Motor.CeldasAsync(api, empresa.Id, id, ct)).ToDictionary(c => c.Fuente);
         celdas[Fuente.Runt].Estado.Should().Be(EstadoCelda.Completado);
         var liberadas = new[] { celdas[Fuente.SimitVehiculo], celdas[Fuente.Avaluo] };
-        liberadas.Should().OnlyContain(c => c.Estado == EstadoCelda.Pendiente && c.TrabajoId != null);
+        liberadas.Should().OnlyContain(c => c.Estado == EstadoCelda.EnCurso && c.TrabajoId != null);
         liberadas.Select(c => c.VersionTablero).Should().OnlyContain(v => v == celdas[Fuente.Runt].VersionTablero, "se liberan en el cierre de la RUNT");
         var nuevos = (await OutboxDePrueba.TrabajosAsync(api, ct)).Skip(antes.Count).ToList();
         nuevos.Select(t => (t.RoutingKey, t.ConsultaId, t.TrabajoId)).Should().BeEquivalentTo(
@@ -142,7 +143,7 @@ public sealed class BloqueoPorRuntTests
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST008")], ct, Fuente.SimitVehiculo, Fuente.Avaluo);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api, maxReintentos: 0), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api, maxReintentos: 0), ct);
 
         var trabajos = await OutboxDePrueba.TrabajosAsync(api, ct);
         trabajos.Should().ContainSingle("solo el de la RUNT, del encolado").Which.RoutingKey.Should().Be("consultas.diagnostico.runt");
@@ -161,7 +162,7 @@ public sealed class BloqueoPorRuntTests
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST001")], ct, Fuente.Avaluo);
 
-        await Motor.Procesador(api).ProcesarLoteAsync(ct);
+        await Motor.Bus(api).ProcesarLoteAsync(ct);
 
         var vehiculo = await MotorRunt.VehiculoAsync(api, empresa, id, "TST001", ct);
         using var datos = JsonDocument.Parse(vehiculo.DatosConsolidados);

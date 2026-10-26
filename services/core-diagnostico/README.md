@@ -53,23 +53,24 @@ Perder o cambiar el certificado deja ilegibles los documentos ya cifrados: en lo
 al rotarlo el certificado anterior debe seguir disponible para descifrar. Las pruebas generan uno efímero por proceso
 (`tests/Flit.Diagnostico.Tests/Seguridad/CertificadoDePrueba.cs`).
 
-### Fuente RUNT del vehículo (simulada o no conectada)
+### Consultas por RabbitMQ (ADR-0075)
 
-La fuente RUNT (`IFuenteRunt`, HU #13725) se elige **solo por configuración**; no se mira `ASPNETCORE_ENVIRONMENT`, porque los
-tres ambientes corren como `Development`.
+Las consultas de las celdas (RUNT, RUNT persona, RUES, SIMIT, avalúo e impuesto) no llaman a nadie desde Diagnóstico: cada
+celda publica por la outbox un trabajo `consultas.diagnostico[-express].<fuente>` con el `*Request` proto mínimo (placa o VIN,
+tipo y número de documento cuando la fuente lo exige; nunca nombres ni direcciones), core-consultas lo atiende una sola vez y
+publica `consultas.resultado.diagnostico`, y el consumidor de la cola `diagnostico.consultas-resultados` cierra la celda (los
+reintentos de los transitorios los decide Diagnóstico: 5, 10 y 20 s). Un reconciliador cada 60 s republica una vez las celdas
+huérfanas y luego las cierra en ERROR, y se pausa si core-consultas no devuelve resultados. La simulación de LOCAL y DEV vive en
+core-consultas (U3): en local se levantan core-consultas con su simulación y el broker de `deploy/rabbitmq/docker-compose.local.yml`.
+No se mira `ASPNETCORE_ENVIRONMENT`, porque los tres ambientes corren como `Development`.
 
 | Variable | Por defecto | Qué hace |
 |---|---|---|
-| `Diagnostico__Simulacion__Habilitada` | `false` | `true` usa la fuente simulada de Intempo (fixtures inventados en `Modulos/Consultas/Fuentes/Fixtures/`). Con `false` responde la fuente **no conectada**: error definitivo `NoConectado`, sin datos ni llamadas a proveedores. |
-| `Diagnostico__Ambiente` | vacío | `LOCAL`, `DEV`, `QA` o `PDN`. La simulación solo se admite con `LOCAL` o `DEV`; con otro valor, o vacío, el servicio **no arranca**. |
-| `Diagnostico__Consultas__Address` | vacío | URL gRPC de core-consultas (p. ej. `http://core-consultas:8084`). Sin simulación y con dirección, las fuentes de core-consultas (RUNT persona, RUES, SIMIT, avalúo; HU #13791) usan el adaptador **real** con el token de `svc-diagnostico` y el scope `platform.consultas`. Vacía: **no conectadas** y no se ofrecen (422 `FUENTE_NO_DISPONIBLE`). Un valor que no es URL impide arrancar. La simulación manda sobre la dirección. |
-| `Diagnostico__Consultas__DeadlineSegundos` | `90` | Deadline de cada llamada a core-consultas; debe ser mayor que 0. |
-
-En QA y PDN no se define `Diagnostico__Simulacion__Habilitada` hasta que llegue el adaptador real sobre core-consultas (C-PER).
-La simulación es determinista por el último carácter de la placa o del VIN: 1 persona natural, 2 NIT, 3 leasing con
-locatario C, 4 leasing con locatario N, 5 servicio público, 6 organismo sin departamento soportado, 7 error transitorio
-(Timeout), 8 error definitivo (RespuestaInvalida); cualquier otro, persona natural. Los fixtures solo usan placas `TST###`,
-VIN `9ZZPRUEBA########`, documentos `99999` + 4 o 5 dígitos y nombres de una lista ficticia (`FixturesSinPiiTests`).
+| `Diagnostico__Consultas__Bus__ConsumidorHabilitado` | `true` (appsettings) | Registra el consumidor de resultados y el reconciliador. Las pruebas lo apagan y entregan los resultados con su bus de prueba. |
+| `Diagnostico__Consultas__Bus__Concurrencia` / `__Prefetch` | `4` / `8` | Resultados atendidos a la vez y en vuelo; el prefetch no puede ser menor que la concurrencia (si no, no arranca). |
+| `Diagnostico__Consultas__MaxReintentos` | `1` | Reintentos automáticos de un transitorio por celda, en [0, 3]. |
+| `Diagnostico__Consultas__Address` | vacío | URL gRPC de core-consultas (p. ej. `http://core-consultas:8084`). Solo para la réplica diaria de departamentos con impuesto (`ListarDepartamentosImpuesto`); vacía, la réplica queda como está. Un valor que no es URL impide arrancar. |
+| `Diagnostico__Consultas__DeadlineSegundos` | `90` | Deadline de esa llamada a core-consultas; debe ser mayor que 0. |
 
 ## Pruebas
 

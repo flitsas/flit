@@ -40,7 +40,7 @@ public sealed class IntentosTests
         var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST001")], ct);
         var antes = DateTimeOffset.UtcNow.AddSeconds(-1);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var celda = (await Motor.CeldasAsync(api, empresa.Id, id, ct)).Single();
         var vehiculo = (await Lotes.VehiculosAsync(api, empresa.Id, id, ct)).Single();
@@ -76,7 +76,7 @@ public sealed class IntentosTests
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST001")], ct);
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
         var celda = (await Motor.CeldasAsync(api, empresa.Id, id, ct)).Single();
         var url = $"{Program.Prefijo}/backoffice/consultas/{celda.Id}/intentos?empresa={empresa.Id}";
         var flit = Guid.NewGuid();

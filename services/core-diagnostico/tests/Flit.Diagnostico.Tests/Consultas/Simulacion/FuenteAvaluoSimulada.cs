@@ -1,10 +1,13 @@
+using Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 using Flit.Diagnostico.Domain.Consultas;
 
-namespace Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
+namespace Flit.Diagnostico.Tests.Consultas;
 
 /// <summary>
+/// Doble de prueba de core-consultas (ADR-0075, U3 = a): la simulación de LOCAL y DEV vive en core-consultas; en las pruebas
+/// responde los trabajos de <see cref="BusDePrueba"/>. Lo que sigue es su comportamiento heredado de la fuente de Diagnóstico.
 /// Avalúo simulado (HU #13795): solo con <c>Diagnostico:Simulacion:Habilitada=true</c> en LOCAL o DEV
-/// (<see cref="SeleccionAdaptadores"/>). Determinista por el último carácter de la placa (o del VIN si no hay placa); valores
+/// (<c>SeleccionAdaptadores</c>). Determinista por el último carácter de la placa (o del VIN si no hay placa); valores
 /// inventados y nada sale del servicio:
 /// <list type="table">
 /// <item><term>1</term><description>las tres fuentes con valor (Fasecolda principal)</description></item>

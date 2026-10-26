@@ -1,4 +1,5 @@
 using Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
+using Flit.Platform.Sdk.Messaging;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Flit.Diagnostico.Api.Modulos;
@@ -10,9 +11,6 @@ namespace Flit.Diagnostico.Api.Modulos;
 /// </summary>
 public static class Modulos
 {
-    /// <summary>Habilita las fuentes simuladas (por defecto false). Solo se admite con <see cref="ClaveAmbiente"/> LOCAL o DEV.</summary>
-    public const string ClaveSimulacionHabilitada = "Diagnostico:Simulacion:Habilitada";
-
     /// <summary>
     /// Ambiente lógico del despliegue: LOCAL, DEV, QA o PDN (sin valor por defecto). Existe porque los tres ambientes corren
     /// con ASPNETCORE_ENVIRONMENT=Development, así que el entorno del host no distingue DEV de QA o PDN.
@@ -20,68 +18,38 @@ public static class Modulos
     public const string ClaveAmbiente = "Diagnostico:Ambiente";
 
     /// <summary>
-    /// Fuentes de consulta (HU #13725, HU #13791): <see cref="Consultas.Fuentes.SeleccionAdaptadores"/> elige al arrancar el
-    /// adaptador de todas las fuentes (simulado solo en LOCAL o DEV, real con <c>Diagnostico:Consultas:Address</c>, no conectado
-    /// en otro caso; con una configuración inválida el servicio no arranca) y queda registrada como singleton. RUNT sigue el mismo
-    /// modo desde HU #13878 (real por <c>RuntIntempoService</c>). Con adaptadores reales se registran los dos clientes gRPC de
-    /// core-consultas (<see cref="Consultas.Fuentes.ClienteConsultas"/> y <see cref="Consultas.Fuentes.ClienteRuntIntempo"/>); si no,
-    /// ninguna llamada sale del servicio. Cada puerto de
-    /// fuente se registra con <c>services.AddAdaptador&lt;IPuerto, Real, Simulado, NoConectado&gt;(seleccion)</c>, igual que la
-    /// capacidad del impuesto por departamento y su réplica (HU #13861). No mira
-    /// <c>IHostEnvironment</c>. Usa TryAdd para que las pruebas puedan poner su doble antes.
+    /// Lo que sigue en línea con core-consultas (ADR-0075, acta §3.1): desde la tanda B Diagnóstico no tiene adaptadores de
+    /// proveedor ni simulación (la de LOCAL y DEV vive en core-consultas, U3 = a) y las consultas de las celdas van por el bus
+    /// (<see cref="AddMotorConsultas"/>). Aquí queda la réplica diaria de los departamentos con impuesto soportado (HU #13861,
+    /// capacidad global, Q4=a): con <c>Diagnostico:Consultas:Address</c> por el rpc <c>ListarDepartamentosImpuesto</c>
+    /// (<see cref="Consultas.Fuentes.ClienteConsultas"/>); sin dirección, la capacidad no conectada (la réplica queda como está). Una
+    /// dirección o un deadline inválidos impiden arrancar. El trabajador de la réplica se registra siempre. Usa TryAdd para que las
+    /// pruebas puedan poner su doble antes.
     /// </summary>
     public static IServiceCollection AddFuentesConsultas(this IServiceCollection services, IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
-        var seleccion = SeleccionAdaptadores.Desde(configuration);
-        services.AddSingleton(seleccion);
-        // HU #13792: RUNT persona (persona natural) y RUES (persona con NIT) de las celdas RUNT_PROPIETARIO y RUNT_LOCATARIO.
-        services.AddAdaptador<IFuenteRuntPersona, FuenteRuntPersonaReal, FuenteRuntPersonaSimulada, FuenteRuntPersonaNoConectada>(seleccion);
-        services.AddAdaptador<IFuenteRues, FuenteRuesReal, FuenteRuesSimulada, FuenteRuesNoConectada>(seleccion);
-        // HU #13793: SIMIT por placa (SIMIT_VEHICULO); F05-H5 lo reutiliza por documento (SIMIT_PROPIETARIO/LOCATARIO).
-        services.AddAdaptador<IFuenteSimit, FuenteSimitReal, FuenteSimitSimulada, FuenteSimitNoConectada>(seleccion);
-        // HU #13795: avalúo comercial (AVALUO) con los datos técnicos que dejó el RUNT.
-        services.AddAdaptador<IFuenteAvaluo, FuenteAvaluoReal, FuenteAvaluoSimulada, FuenteAvaluoNoConectada>(seleccion);
-        // HU #13862: impuesto departamental (IMPUESTO_DEPARTAMENTAL) por placa y departamento; UNIMPLEMENTED (sin C3) = NO_CONECTADO.
-        services.AddAdaptador<IFuenteImpuesto, FuenteImpuestoReal, FuenteImpuestoSimulada, FuenteImpuestoNoConectada>(seleccion);
-        // HU #13861: réplica de los departamentos con impuesto soportado (capacidad global de core-consultas, Q4=a). El trabajador
-        // se registra siempre; con la capacidad no conectada solo carga EstadoCapacidadImpuesto desde la base.
-        services.AddAdaptador<Catalogos.ICapacidadImpuestoPlataforma, Catalogos.CapacidadImpuestoGrpc, Catalogos.CapacidadImpuestoSimulada, Catalogos.CapacidadImpuestoNoConectada>(seleccion);
+        if (services.AddClienteConsultas(configuration))
+            services.TryAddScoped<Catalogos.ICapacidadImpuestoPlataforma, Catalogos.CapacidadImpuestoGrpc>();
+        else
+            services.TryAddScoped<Catalogos.ICapacidadImpuestoPlataforma, Catalogos.CapacidadImpuestoNoConectada>();
         services.TryAddSingleton<Catalogos.EstadoCapacidadImpuesto>();
         services.TryAddScoped<Catalogos.ISincronizacionDepartamentosImpuesto, Catalogos.SincronizacionDepartamentosImpuesto>();
         services.AddHostedService<Catalogos.TrabajadorSincronizacionDepartamentosImpuesto>();
-        // HU #13878: RUNT del vehículo con el modo común; el real va por RuntIntempoService (ConsultarPorPlaca o ConsultarPorVin) y
-        // FAILED_PRECONDITION/UNIMPLEMENTED de core-consultas son NO_CONECTADO. El real es scoped (depende de ClienteRuntIntempo,
-        // scoped, como AddAdaptador); la simulada y la no conectada siguen singleton como desde #13725 (sin dependencias, se
-        // resuelven también desde la raíz).
-        switch (seleccion.ModoDe(Domain.Consultas.Fuente.Runt))
-        {
-            case ModoAdaptador.Real:
-                services.TryAddScoped<IFuenteRunt, FuenteRuntReal>();
-                break;
-            case ModoAdaptador.Simulado:
-                services.TryAddSingleton<IFuenteRunt, FuenteRuntIntempoSimulada>();
-                break;
-            default:
-                services.TryAddSingleton<IFuenteRunt, FuenteRuntNoConectada>();
-                break;
-        }
-
-        if (seleccion.Modo == ModoAdaptador.Real)
-            services.AddClienteConsultas(configuration, seleccion);
-
         return services;
     }
 
     /// <summary>
-    /// Motor de consultas (HU #13727, ADR a): el encolador real (TryAdd, para que las pruebas pongan su doble antes), la cola,
-    /// el ejecutor de la celda RUNT (HU #13730; un ejecutor de la misma fuente registrado antes, el doble de una prueba, lo reemplaza)
-    /// los de RUNT_PROPIETARIO y RUNT_LOCATARIO (HU #13792), SIMIT_VEHICULO (HU #13793), SIMIT_PROPIETARIO y SIMIT_LOCATARIO
-    /// (HU #13794), AVALUO (HU #13795) e IMPUESTO_DEPARTAMENTAL (HU #13862),
-    /// el registro de adaptadores y el catálogo de fuentes disponibles que de él se deriva (HU #13733), el procesador
-    /// y su configuración <see cref="Trabajos.OpcionesProcesador"/> validada al arrancar, y la de reintentos
-    /// <see cref="Consultas.OpcionesConsultas"/> (HU #13737), también validada al arrancar. El trabajador en segundo
-    /// plano solo se registra con <c>Diagnostico:Procesador:Habilitado=true</c>; no mira <c>IHostEnvironment</c>.
+    /// Motor de consultas por RabbitMQ (HU #13727, ADR-0075): el encolador real (TryAdd, para que las pruebas pongan su doble
+    /// antes), los ejecutores de cada fuente («construir solicitud / aplicar respuesta»: RUNT, HU #13730; RUNT_PROPIETARIO y
+    /// RUNT_LOCATARIO, HU #13792; SIMIT_VEHICULO, HU #13793; SIMIT_PROPIETARIO y SIMIT_LOCATARIO, HU #13794; AVALUO, HU #13795;
+    /// IMPUESTO_DEPARTAMENTAL, HU #13862; un ejecutor de la misma fuente registrado antes, el doble de una prueba, lo reemplaza), un
+    /// constructor del <c>*Request</c> por fuente, el publicador de celdas, los reintentos (HU #13737,
+    /// <see cref="Consultas.OpcionesConsultas"/> validada al arrancar), el registro de adaptadores y el catálogo de fuentes
+    /// disponibles (HU #13733). El consumidor de <c>consultas.resultado.diagnostico</c> (cola <see cref="Consultas.Bus.OpcionesBus.Cola"/>,
+    /// solo del productor <c>consultas</c>, con la concurrencia y el prefetch de <see cref="Consultas.Bus.OpcionesBus"/> y la cola de
+    /// reintentos de 5, 10 y 20 s) se registra solo con <c>Diagnostico:Consultas:Bus:ConsumidorHabilitado=true</c>; no mira
+    /// <c>IHostEnvironment</c>.
     /// </summary>
     public static IServiceCollection AddMotorConsultas(this IServiceCollection services, IConfiguration configuration)
     {
@@ -89,7 +57,7 @@ public static class Modulos
         services.TryAddScoped<Domain.Consultas.IEncoladorConsultas, Consultas.EncoladorConsultas>();
         services.AddScoped<Trabajos.ColaConsultas>();
         services.AddScoped<Consultas.IEjecutorCelda, Consultas.EjecutorCeldaRunt>();
-        // HU #13792: las celdas RUNT de persona (una instancia por fuente; los puertos los registra AddFuentesConsultas).
+        // HU #13792: las celdas RUNT de persona (una instancia por fuente).
         services.AddScoped<Consultas.IEjecutorCelda>(sp =>
             ActivatorUtilities.CreateInstance<Consultas.EjecutorCeldaRuntPersona>(sp, Domain.Consultas.Fuente.RuntPropietario));
         services.AddScoped<Consultas.IEjecutorCelda>(sp =>
@@ -108,9 +76,8 @@ public static class Modulos
         // HU #13733: las fuentes con ejecutor son las únicas que se pueden habilitar o pedir (TryAdd: las pruebas ponen su doble).
         services.TryAddSingleton<Consultas.IRegistroAdaptadores, Consultas.RegistroAdaptadores>();
         services.AddSingleton<Consultas.FuentesDisponibles>();
-        services.AddTransient<Trabajos.ProcesadorConsultas>();
         // ADR-0075 (HU #13727): un constructor del *Request por fuente y el publicador de celdas, que deja el trabajo en la outbox
-        // del scope (la del contexto con la empresa fijada por EmpresaDelTrabajo). Ningún consumidor se registra todavía.
+        // del scope (la del contexto con la empresa fijada por EmpresaDelTrabajo) o cierra la celda.
         services.AddScoped<Consultas.Bus.IConstructorSolicitud, Consultas.Bus.ConstructorSolicitudRunt>();
         foreach (var fuente in new[] { Domain.Consultas.Fuente.RuntPropietario, Domain.Consultas.Fuente.RuntLocatario })
             services.AddScoped<Consultas.Bus.IConstructorSolicitud>(sp => ActivatorUtilities.CreateInstance<Consultas.Bus.ConstructorSolicitudRuntPersona>(sp, fuente));
@@ -127,12 +94,28 @@ public static class Modulos
             .Bind(configuration.GetSection(Consultas.OpcionesConsultas.Seccion))
             .Validate(o => o.EsValida(), Consultas.OpcionesConsultas.MensajeFueraDeRango)
             .ValidateOnStart();
-        services.AddOptions<Trabajos.OpcionesProcesador>()
-            .Bind(configuration.GetSection(Trabajos.OpcionesProcesador.Seccion))
-            .Validate(o => o.Errores().Count == 0, $"{Trabajos.OpcionesProcesador.Seccion} tiene valores fuera de rango (Intervalo > 0, TamanoLote 1-500, DuracionLease >= 10 s, VehiculosEnVueloPorEmpresa >= 1).")
-            .ValidateOnStart();
-        if (configuration.GetValue($"{Trabajos.OpcionesProcesador.Seccion}:{nameof(Trabajos.OpcionesProcesador.Habilitado)}", false))
-            services.AddHostedService<Trabajos.TrabajadorConsultas>();
+        // ADR-0075 (HU #13727, T9): el consumidor de los resultados de core-consultas.
+        services.TryAddScoped<Consultas.Bus.ConsumidorResultados>();
+        var bus = new Consultas.Bus.OpcionesBus();
+        configuration.GetSection(Consultas.Bus.OpcionesBus.Seccion).Bind(bus);
+        if (bus.Errores() is { Count: > 0 } errores)
+            throw new InvalidOperationException($"{Consultas.Bus.OpcionesBus.Seccion} tiene valores fuera de rango: {string.Join("; ", errores)}.");
+        if (bus.ConsumidorHabilitado)
+        {
+            services.AddFlitConsumer<Persistence.DiagnosticoDb, Consultas.Bus.ConsumidorResultados, Consultas.Bus.ResultadoConsultaDiagnostico>(
+                configuration, Consultas.Bus.OpcionesBus.Cola, Consultas.Bus.OpcionesBus.Productor, [Consultas.Bus.ResultadoConsultaDiagnostico.Tipo], o =>
+                {
+                    o.Concurrencia = bus.Concurrencia;
+                    o.Prefetch = bus.Prefetch;
+                    // Q3 = 3a: solo core-consultas (user_id validado por el broker) publica los resultados.
+                    o.ProductoresPermitidos.Add(Consultas.Bus.OpcionesBus.Productor);
+                    // Q4 (U2 = a): la espera del resultado demorado es la de PoliticaReintentos (5, 10 y 20 s).
+                    o.RetryDelays.Clear();
+                    foreach (var espera in Consultas.Bus.ProgramadorReintentos.Esperas)
+                        o.RetryDelays.Add(espera);
+                });
+        }
+
         return services;
     }
 

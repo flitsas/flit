@@ -7,17 +7,17 @@ using Microsoft.EntityFrameworkCore;
 namespace Flit.Diagnostico.Api.Modulos.Consultas;
 
 /// <summary>
-/// Reutilización del dato del mismo día (HU #13739, F03-H7, F03-C13, D-10 «b con corte a medianoche»): ANTES de llamar a la
-/// fuente, el procesador busca una celda COMPLETADO de origen API de la MISMA compañía, con la misma placa y la misma fuente, y
+/// Reutilización del dato del mismo día (HU #13739, F03-H7, F03-C13, D-10 «b con corte a medianoche»): ANTES de publicar el
+/// trabajo de consulta (ADR-0075, Q3: <see cref="Bus.PublicadorCeldas"/>), se busca una celda COMPLETADO de origen API de la MISMA compañía, con la misma placa y la misma fuente, y
 /// con <c>dato_obtenido_en</c> dentro del día de hoy en hora Colombia (<see cref="VigenciaDelDia"/>). Si existe, la celda copia
 /// su resultado normalizado y su <c>dato_obtenido_en</c>, apunta a ella con <c>reutilizada_de_id</c> y se cierra por el camino
-/// normal (<see cref="EscritorCeldas"/>: sube la versión del tablero, libera las demás celdas si es RUNT y recalcula el estado
-/// del lote), con un intento <c>desde_cache=true</c> y sin llamar a la fuente ni consumir. En RUNT copia además los datos del
+/// normal (<see cref="Bus.PublicadorCeldas.CerrarAsync"/>: sube la versión del tablero, libera las demás celdas si es RUNT y
+/// recalcula el estado del lote), con un intento <c>desde_cache=true</c>, sin mensaje y sin consumo. En RUNT copia además los datos del
 /// vehículo, los documentos cifrados (<see cref="DocumentosVehiculo.Copiar"/>, sin descifrar) y las personas del vehículo de
 /// origen (<see cref="DocumentosVehiculo.CopiarPersonas"/>, HU #13790).
 /// <para>
 /// Reglas: la búsqueda filtra por <c>tenant_id</c> de forma EXPLÍCITA, además del filtro global del contexto de la celda (el
-/// procesador corre fuera de una petición), y la FK compuesta <c>fk_consultas_consultas_reutilizada_de</c> impide apuntar a una
+/// publicador también corre fuera de una petición), y la FK compuesta <c>fk_consultas_consultas_reutilizada_de</c> impide apuntar a una
 /// celda de otra empresa. La clave es la placa: con identificador VIN no hay reutilización de la celda RUNT; las demás fuentes
 /// usan la placa definitiva que dejó el RUNT (sin ella, no hay reutilización). Solo se copia de una celda original (con
 /// <c>reutilizada_de_id</c> nulo), así que la referencia siempre apunta al dato que sí se consultó. Las fuentes del locatario

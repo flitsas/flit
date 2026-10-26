@@ -110,10 +110,8 @@ internal sealed partial class ProgramadorReintentos(
         if (celda.DisponibleDesde > ahora)
             throw new ReintentoProgramadoException("La espera del reintento no ha vencido: el resultado da otra vuelta por la cola de reintentos.");
 
-        celda.DisponibleDesde = ahora;
-        celda.ActualizadoEn = ahora;
-        if (await publicador.PublicarAsync(celda, ct).ConfigureAwait(false) > 0)
-            celda.Estado = EstadoCelda.EnCurso;
+        // El publicador da el trabajo_id nuevo y deja la celda EN_CURSO (o la cierra si ya no hay qué consultar o hay dato de hoy).
+        await publicador.PublicarAsync(celda, ct).ConfigureAwait(false);
     }
 
     [LoggerMessage(EventId = 137372, Level = LogLevel.Information,

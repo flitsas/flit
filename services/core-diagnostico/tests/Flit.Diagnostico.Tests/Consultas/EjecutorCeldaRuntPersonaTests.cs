@@ -54,7 +54,7 @@ public sealed class EjecutorCeldaRuntPersonaTests
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorPersonas.LoteAsync(api, empresa, [Lotes.Fila("TST301"), Lotes.Fila("TST303")], ct, conLocatario: true);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         grpc.Llamadas.Where(l => l.Metodo == "ConsultarConductor").Select(l => (l.Tipo, l.Numero)).Should().BeEquivalentTo(
             [("CC", RuntConPersonas.Natural1), ("CE", RuntConPersonas.Natural2), ("CC", RuntConPersonas.Locatario)]);
@@ -78,7 +78,7 @@ public sealed class EjecutorCeldaRuntPersonaTests
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorPersonas.LoteAsync(api, empresa, [Lotes.Fila("TST301")], ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var celda = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST301", Fuente.RuntPropietario, ct);
         celda.Payload.Should().NotContainAny(FuncionarioFicticio, RazonSocialFicticia, RepresentanteFicticio, "CALLE FICTICIA")
@@ -151,7 +151,7 @@ public sealed class EjecutorCeldaRuntPersonaTests
         var deA = await MotorPersonas.LoteAsync(api, dos.A, [Lotes.Fila("TST304")], ct);
         var deB = await MotorPersonas.LoteAsync(api, dos.B, [Lotes.Fila("TST304")], ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         grpc.Llamadas.Select(l => (l.Numero, l.Tenant)).Should().BeEquivalentTo(
             [("9999900341", dos.A.Id.ToString()), ("999990345", dos.A.Id.ToString()), ("9999900342", dos.B.Id.ToString())]);
@@ -187,7 +187,7 @@ public sealed class EjecutorCeldaRuntPersonaTests
         runt.PorEmpresa[(empresa.Id, "TST305")] = [.. conError.Select(d => RuntConPersonas.Propio("CC", d))];
         var lote = await MotorPersonas.LoteAsync(api, empresa, [Lotes.Fila("TST301"), Lotes.Fila("TST305")], ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api, maxReintentos: 0), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api, maxReintentos: 0), ct);
 
         var sanas = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST301", Fuente.RuntPropietario, ct);
         sanas.Estado.Should().Be(EstadoCelda.Completado);
@@ -240,7 +240,7 @@ public sealed class EjecutorCeldaRuntPersonaTests
             confirmada.StatusCode.Should().Be(HttpStatusCode.Accepted, await confirmada.Content.ReadAsStringAsync(ct));
         }
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
         return id;
     }
 
@@ -270,9 +270,9 @@ public sealed class ConsultasGrpcFalso : ConsultasService.ConsultasServiceClient
     /// <summary>Registra los adaptadores reales de RUNT persona y RUES sobre este cliente (antes que Program: ganan al TryAdd).</summary>
     public void RegistrarAdaptadoresReales(WebApplicationBuilder b)
     {
-        b.Services.AddSingleton(new ClienteConsultas(this, NullLogger<ClienteConsultas>.Instance));
-        b.Services.AddScoped<IFuenteRuntPersona, FuenteRuntPersonaReal>();
-        b.Services.AddScoped<IFuenteRues, FuenteRuesReal>();
+        ArgumentNullException.ThrowIfNull(b);
+        // ADR-0075: core-consultas de las pruebas (BusDePrueba) responde los trabajos del bus con este cliente.
+        b.Services.AddSingleton<ConsultasService.ConsultasServiceClient>(this);
     }
 
     public override AsyncUnaryCall<ConsultarConductorResponse> ConsultarConductorAsync(ConsultarConductorRequest request, CallOptions options)

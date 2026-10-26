@@ -41,18 +41,7 @@ public sealed partial class CapacidadImpuestoGrpc(ClienteConsultas cliente, ILog
     private static partial void CapacidadNoDisponible(ILogger logger, StatusCode codigo, string tipoError);
 }
 
-/// <summary>
-/// Capacidad simulada para LOCAL o DEV (con <c>Diagnostico:Simulacion:Habilitada=true</c>): dos departamentos con códigos
-/// DIVIPOLA públicos, <c>05</c> (Antioquia) y <c>25</c> (Cundinamarca). No sale ninguna llamada.
-/// </summary>
-public sealed class CapacidadImpuestoSimulada : ICapacidadImpuestoPlataforma
-{
-    public static IReadOnlyList<string> Departamentos { get; } = ["05", "25"];
-
-    public Task<IReadOnlyList<string>?> ListarAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<string>?>(Departamentos);
-}
-
-/// <summary>Sin dirección de core-consultas ni simulación: no hay con quién hablar (null) y la réplica queda como está.</summary>
+/// <summary>Sin dirección de core-consultas (<c>Diagnostico:Consultas:Address</c>): no hay con quién hablar (null) y la réplica queda como está.</summary>
 public sealed class CapacidadImpuestoNoConectada : ICapacidadImpuestoPlataforma
 {
     public Task<IReadOnlyList<string>?> ListarAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<string>?>(null);

@@ -3,7 +3,6 @@ using System.Text.Json.Serialization;
 using Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Domain.Consultas;
-using Flit.Diagnostico.Domain.Personas;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Diagnostico.Api.Modulos.Consultas;
@@ -31,37 +30,36 @@ internal sealed record PayloadPersonas(IReadOnlyList<ResultadoPorPersona> Person
 
 /// <summary>
 /// Base común de las cuatro celdas de persona (HU #13792, F05-C5, F05-C10, decisión Q1 y decisión 2 del gate): RUNT_PROPIETARIO
-/// y RUNT_LOCATARIO (<see cref="EjecutorCeldaRuntPersona"/>) y SIMIT_PROPIETARIO y SIMIT_LOCATARIO (<see cref="EjecutorCeldaSimitPersona"/>, HU #13794). La subclase solo
-/// dice su <see cref="Fuente"/> y cómo consulta a una persona (<see cref="ConsultarAsync"/>); el patrón vive aquí:
+/// y RUNT_LOCATARIO (<see cref="EjecutorCeldaRuntPersona"/>) y SIMIT_PROPIETARIO y SIMIT_LOCATARIO (<see cref="EjecutorCeldaSimitPersona"/>,
+/// HU #13794). Desde ADR-0075 la celda publica UN trabajo por persona del rol, todos con el mismo <c>trabajo_id</c>
+/// (<see cref="Bus.ConstructorPorPersonas"/>: el documento se descifra solo para armar la solicitud y nunca sale en logs, intento ni
+/// payload), y cada respuesta llega por separado. La subclase solo dice su <see cref="Fuente"/> y cómo se lee la respuesta de una
+/// persona (<see cref="Mapear"/>); el patrón vive aquí:
 /// <list type="number">
-/// <item>Lee las personas del rol en <c>personas_vehiculo</c> (<see cref="DocumentosVehiculo.PersonasDelVehiculoAsync"/>, filtro
-/// de empresa explícito) y hace UNA llamada por persona, descifrando su documento justo antes de llamar
-/// (<see cref="IProtectorDocumentoPersona"/>); el documento en claro no sale de esa llamada: ni logs, ni intento, ni payload.</item>
-/// <item>Guarda en el payload <c>{personas:[{persona_id, orden, consulta, estado OK|ERROR, resultado?, tipo_error?,
-/// consultado_en?}]}</c> (<see cref="PayloadPersonas"/>), sin nombres ni documentos.</item>
-/// <item>COMPLETADO solo si todas responden. Si alguna falla, ERROR con <see cref="PersonasConError"/> (o el código de la causa
-/// si fallan todas por la misma), conservando lo que sí respondió. Si alguna falló con un transitorio, <c>tipo_error</c> lleva
-/// ese transitorio para que el procesador decida el backoff (#13737) y <see cref="ResultadoCelda.TipoErrorSinReintento"/> el
-/// código final si ya no se reintenta.</item>
-/// <item>El reintento automático y el reproceso (#13746) leen el payload que dejó la ejecución anterior y vuelven a llamar
-/// SOLO a las personas en ERROR (o que no estaban): las que respondieron no se vuelven a consumir.</item>
-/// <item>Un intento por persona consultada (<see cref="ResultadoCelda.IntentosPorPersona"/>), con su <c>persona_id</c> e
-/// <c>identificador_consultado=null</c>.</item>
+/// <item>Cada respuesta deja en el payload <c>{personas:[{persona_id, orden, consulta, estado OK|ERROR, resultado?, tipo_error?,
+/// consultado_en?}]}</c> (<see cref="PayloadPersonas"/>), sin nombres ni documentos, y su intento con su <c>persona_id</c>.
+/// Mientras falte alguna persona del rol, la celda sigue EN_CURSO con lo que ya respondió.</item>
+/// <item>Con la última: COMPLETADO si todas respondieron; si alguna falló, ERROR con <see cref="PersonasConError"/> (o el código
+/// de la causa si fallan todas por la misma), conservando lo que sí respondió. Si alguna falló con un transitorio,
+/// <c>tipo_error</c> lleva ese transitorio para que el consumidor decida el reintento (#13737) y
+/// <see cref="ResultadoCelda.TipoErrorSinReintento"/> el código final si ya no se reintenta.</item>
+/// <item>El reintento y el reproceso (#13746) solo vuelven a pedir a las personas que no respondieron OK: las que respondieron no
+/// se vuelven a consumir (el publicador conserva solo ésas en el payload, <see cref="SoloRespondidas"/>).</item>
 /// </list>
 /// Su ERROR no bloquea al vehículo (solo RUNT bloquea, <see cref="OrquestadorVehiculo"/>). La reutilización del mismo día
 /// (<see cref="ReutilizacionMismoDia"/>) solo copia una celda de persona si el RUNT del vehículo vino del mismo origen.
 /// </summary>
 /// <example>
 /// <code>
-/// internal sealed class EjecutorCeldaSimitPersona(...) : EjecutorPorPersonas(protector, reloj, log)
+/// internal sealed class EjecutorCeldaSimitPersona(...) : EjecutorPorPersonas(reloj, log)
 /// {
 ///     public override Fuente Fuente => fuente;
-///     protected override async Task&lt;ConsultaPersona&gt; ConsultarAsync(Guid empresa, DocumentoPersona doc, CancellationToken ct) =&gt;
-///         ConsultaPersona.De("SIMIT", await simit.ConsultarAsync(empresa, SolicitudSimit.PorDocumento(doc), ct));
+///     protected override ConsultaPersona Mapear(RespuestaConsulta r) =&gt;
+///         ConsultaPersona.De("SIMIT", r.Mapear&lt;ConsultarMultasResponse, ResultadoSimit&gt;(MapeoSimit.Mapear, MapeoSimit.Error));
 /// }
 /// </code>
 /// </example>
-internal abstract partial class EjecutorPorPersonas(IProtectorDocumentoPersona protector, TimeProvider reloj, ILogger logger) : IEjecutorCelda
+internal abstract partial class EjecutorPorPersonas(TimeProvider reloj, ILogger logger) : IEjecutorCelda
 {
     /// <summary><c>tipo_error</c> de la celda cuando falló al menos una persona y no todas por la misma causa.</summary>
     public const string PersonasConError = "PERSONAS_CON_ERROR";
@@ -72,7 +70,7 @@ internal abstract partial class EjecutorPorPersonas(IProtectorDocumentoPersona p
     public const string EstadoOk = "OK";
     public const string EstadoError = "ERROR";
 
-    /// <summary>Error de una fuente que falló sin un error tipado (definitivo).</summary>
+    /// <summary>Error de una persona sin documento consultable (definitivo).</summary>
     private const string FallaInesperada = "ESTADO_NO_OK";
 
     internal static readonly JsonSerializerOptions Json = new()
@@ -82,6 +80,9 @@ internal abstract partial class EjecutorPorPersonas(IProtectorDocumentoPersona p
     };
 
     public abstract Fuente Fuente { get; }
+
+    /// <summary>Tipo de consulta de una persona que no se pudo consultar (sin documento consultable).</summary>
+    protected abstract string ConsultaPorDefecto { get; }
 
     /// <summary>Rol de las personas que consulta una fuente de persona.</summary>
     public static RolPersona RolDe(Fuente fuente) => fuente switch
@@ -95,13 +96,14 @@ internal abstract partial class EjecutorPorPersonas(IProtectorDocumentoPersona p
     public static bool EsPorPersona(Fuente fuente) =>
         fuente is Fuente.RuntPropietario or Fuente.RuntLocatario or Fuente.SimitPropietario or Fuente.SimitLocatario;
 
-    /// <summary>Consulta a UNA persona con su documento en claro; no debe guardarlo ni registrarlo.</summary>
-    protected abstract Task<ConsultaPersona> ConsultarAsync(Guid empresa, DocumentoPersona documento, CancellationToken ct);
+    /// <summary>Lo que respondió core-consultas para UNA persona, normalizado (sin nombres ni documento).</summary>
+    protected abstract ConsultaPersona Mapear(RespuestaConsulta respuesta);
 
-    /// <summary>Tipo de consulta que corresponde al documento (<c>RUNT_PERSONA</c>, <c>RUES</c>, …), sin llamar a nadie.</summary>
-    protected abstract string ConsultaDe(DocumentoPersona documento);
-
-    public async Task<ResultadoCelda> EjecutarAsync(ContextoCelda contexto, CancellationToken ct)
+    /// <summary>
+    /// El constructor no armó ninguna consulta: sin personas del rol, ERROR <see cref="SinPersonas"/>; si todas ya respondieron OK,
+    /// COMPLETADO con lo que hay; las que no tienen un documento consultable quedan en ERROR definitivo.
+    /// </summary>
+    public async Task<ResultadoCelda> SinConsultaAsync(ContextoCelda contexto, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(contexto);
         var celda = contexto.Celda;
@@ -112,49 +114,56 @@ internal abstract partial class EjecutorPorPersonas(IProtectorDocumentoPersona p
             return ResultadoCelda.Error(SinPersonas) with { Intento = new DatosIntento(null, null, null, "El vehículo no tiene personas de ese rol.") };
         }
 
-        // Reintento o reproceso: lo que ya respondió en la ejecución anterior se conserva sin volver a consumir.
         var previas = await PreviasAsync(contexto.Db, celda.Id, ct).ConfigureAwait(false);
-        var resultados = new List<ResultadoPorPersona>(personas.Count);
-        var intentos = new List<IntentoPersona>();
-        foreach (var persona in personas)
-        {
-            if (previas.TryGetValue(persona.Id, out var previa) && previa.Estado == EstadoOk)
-            {
-                resultados.Add(previa with { Orden = persona.Orden });
-                continue;
-            }
+        var resultados = personas
+            .Select(p => previas.TryGetValue(p.Id, out var previa) && previa.Estado == EstadoOk
+                ? previa with { Orden = p.Orden }
+                : new ResultadoPorPersona(p.Id, p.Orden, ConsultaPorDefecto, EstadoError, null, FallaInesperada, null))
+            .ToList();
+        return Cierre(celda.Id, resultados, [], reloj.GetUtcNow());
+    }
 
-            var inicio = reloj.GetUtcNow();
-            var consulta = await ConsultarPersonaAsync(celda.TenantId, persona, ct).ConfigureAwait(false);
-            var fin = reloj.GetUtcNow();
-            var error = consulta.Error ?? (consulta.Resultado is null ? new ErrorConsulta(ErroresFuentePersona.RespuestaInvalida, "La fuente respondió sin resultado.") : null);
-            intentos.Add(new IntentoPersona(persona.Id, inicio, fin, error?.TipoError, new DatosIntento(null, consulta.Servicio, consulta.Transaccion, error?.Mensaje)));
-            resultados.Add(error is null
-                ? new ResultadoPorPersona(persona.Id, persona.Orden, consulta.Consulta, EstadoOk,
-                    JsonSerializer.SerializeToElement(consulta.Resultado!, consulta.Resultado!.GetType(), Json), null, fin)
-                : new ResultadoPorPersona(persona.Id, persona.Orden, consulta.Consulta, EstadoError, null, error.TipoError, null));
-            if (error is not null)
-                PersonaEnError(logger, celda.Id, Fuente, persona.Id, error.TipoError);
+    /// <summary>
+    /// La respuesta de UNA persona: queda en el payload con su intento; mientras falten personas la celda sigue EN_CURSO y con la
+    /// última se cierra. Una respuesta de una persona que ya no es del rol no cambia nada.
+    /// </summary>
+    public async Task<ResultadoCelda> AplicarAsync(ContextoCelda contexto, RespuestaConsulta respuesta, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(contexto);
+        ArgumentNullException.ThrowIfNull(respuesta);
+        var celda = contexto.Celda;
+        var personas = await DocumentosVehiculo.PersonasDelVehiculoAsync(contexto.Db, celda.TenantId, celda.VehiculoId, ct, RolDe(Fuente)).ConfigureAwait(false);
+        var previas = await PreviasAsync(contexto.Db, celda.Id, ct).ConfigureAwait(false);
+        if (personas.FirstOrDefault(p => p.Id == respuesta.PersonaId) is not { } persona)
+        {
+            PersonaAjena(logger, celda.Id, Fuente);
+            return new ResultadoCelda(EstadoCelda.EnCurso, Serializar(personas, previas), null, null, null) { IntentosPorPersona = [] };
         }
 
-        var payload = JsonSerializer.Serialize(new PayloadPersonas(resultados), Json);
-        var errores = resultados.Where(r => r.Estado == EstadoError).ToList();
-        if (errores.Count == 0)
-        {
-            CeldaCompletada(logger, celda.Id, Fuente, resultados.Count, intentos.Count);
-            return ResultadoCelda.Completado(payload, reloj.GetUtcNow()) with { IntentosPorPersona = intentos };
-        }
+        var consulta = Mapear(respuesta);
+        var error = consulta.Error ?? (consulta.Resultado is null ? new ErrorConsulta(ErroresFuentePersona.RespuestaInvalida, "La fuente respondió sin resultado.") : null);
+        var intento = new IntentoPersona(persona.Id, respuesta.Inicio, respuesta.Fin, error?.TipoError, new DatosIntento(null, consulta.Servicio, consulta.Transaccion, error?.Mensaje));
+        previas[persona.Id] = error is null
+            ? new ResultadoPorPersona(persona.Id, persona.Orden, consulta.Consulta, EstadoOk,
+                JsonSerializer.SerializeToElement(consulta.Resultado!, consulta.Resultado!.GetType(), Json), null, respuesta.Fin)
+            : new ResultadoPorPersona(persona.Id, persona.Orden, consulta.Consulta, EstadoError, null, error.TipoError, null);
+        if (error is not null)
+            PersonaEnError(logger, celda.Id, Fuente, persona.Id, error.TipoError);
 
-        var final = errores.Count == resultados.Count && errores.Select(e => e.TipoError).Distinct().Count() == 1
-            ? errores[0].TipoError!
-            : PersonasConError;
-        var transitorio = errores.Select(e => e.TipoError).FirstOrDefault(t => ClasificadorErrores.Clasificar(t) == ClaseError.Transitorio);
-        CeldaEnError(logger, celda.Id, Fuente, final, errores.Count, resultados.Count);
-        return new ResultadoCelda(EstadoCelda.Error, payload, null, null, null, transitorio ?? final)
-        {
-            IntentosPorPersona = intentos,
-            TipoErrorSinReintento = transitorio is null ? null : final,
-        };
+        if (personas.Any(p => !previas.ContainsKey(p.Id)))
+            return new ResultadoCelda(EstadoCelda.EnCurso, Serializar(personas, previas), null, null, null) { IntentosPorPersona = [intento] };
+
+        return Cierre(celda.Id, [.. personas.Select(p => previas[p.Id] with { Orden = p.Orden })], [intento], respuesta.Fin);
+    }
+
+    /// <summary>
+    /// El payload con SOLO las personas que respondieron OK (null si ninguna): lo deja el publicador al pedir de nuevo a las demás,
+    /// para que la celda se cierre cuando lleguen todas las respuestas de ese trabajo.
+    /// </summary>
+    internal static string? SoloRespondidas(string? payload)
+    {
+        var ok = Leer(payload)?.Personas.Where(p => p.Estado == EstadoOk).ToList();
+        return ok is { Count: > 0 } ? JsonSerializer.Serialize(new PayloadPersonas(ok), Json) : null;
     }
 
     /// <summary>
@@ -193,36 +202,42 @@ internal abstract partial class EjecutorPorPersonas(IProtectorDocumentoPersona p
         }
     }
 
+    /// <summary>El cierre de la celda con todas sus personas: COMPLETADO, o ERROR con el transitorio para el reintento.</summary>
+    private ResultadoCelda Cierre(Guid celdaId, List<ResultadoPorPersona> resultados, IReadOnlyList<IntentoPersona> intentos, DateTimeOffset ahora)
+    {
+        var payload = JsonSerializer.Serialize(new PayloadPersonas(resultados), Json);
+        var errores = resultados.Where(r => r.Estado == EstadoError).ToList();
+        if (errores.Count == 0)
+        {
+            CeldaCompletada(logger, celdaId, Fuente, resultados.Count, intentos.Count);
+            return ResultadoCelda.Completado(payload, ahora) with { IntentosPorPersona = intentos };
+        }
+
+        var final = errores.Count == resultados.Count && errores.Select(e => e.TipoError).Distinct().Count() == 1
+            ? errores[0].TipoError!
+            : PersonasConError;
+        var transitorio = errores.Select(e => e.TipoError).FirstOrDefault(t => ClasificadorErrores.Clasificar(t) == ClaseError.Transitorio);
+        CeldaEnError(logger, celdaId, Fuente, final, errores.Count, resultados.Count);
+        return new ResultadoCelda(EstadoCelda.Error, payload, null, null, null, transitorio ?? final)
+        {
+            IntentosPorPersona = intentos,
+            TipoErrorSinReintento = transitorio is null ? null : final,
+        };
+    }
+
+    private static string? Serializar(IReadOnlyList<PersonaVehiculo> personas, Dictionary<Guid, ResultadoPorPersona> previas)
+    {
+        var parciales = personas.Where(p => previas.ContainsKey(p.Id)).Select(p => previas[p.Id] with { Orden = p.Orden }).ToList();
+        return parciales.Count == 0 ? null : JsonSerializer.Serialize(new PayloadPersonas(parciales), Json);
+    }
+
     private static async Task<Dictionary<Guid, ResultadoPorPersona>> PreviasAsync(DiagnosticoDb db, Guid celdaId, CancellationToken ct)
     {
         var payload = await db.Set<CeldaConsulta>().AsNoTracking().Where(c => c.Id == celdaId).Select(c => c.Payload).SingleOrDefaultAsync(ct).ConfigureAwait(false);
         return Leer(payload)?.Personas.GroupBy(p => p.PersonaId).ToDictionary(g => g.Key, g => g.First()) ?? [];
     }
 
-    /// <summary>
-    /// Descifra el documento y llama a la fuente. Una falla inesperada (no tipada) de la fuente queda como error definitivo de
-    /// ESA persona, sin perder lo que respondieron las demás; la cancelación del proceso se propaga.
-    /// </summary>
-    private async Task<ConsultaPersona> ConsultarPersonaAsync(Guid empresa, PersonaVehiculo persona, CancellationToken ct)
-    {
-        var documento = new DocumentoPersona(persona.DocTipo, protector.Desproteger(persona.DocCifrado));
-        try
-        {
-            return await ConsultarAsync(empresa, documento, ct).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            throw;
-        }
-#pragma warning disable CA1031 // La falla de una persona no tumba la celda: queda en ERROR esa persona.
-        catch (Exception ex)
-#pragma warning restore CA1031
-        {
-            return new ConsultaPersona(ConsultaDe(documento), null, new ErrorConsulta(FallaInesperada, $"Falla inesperada de la fuente ({ex.GetType().Name})."), null, null);
-        }
-    }
-
-    [LoggerMessage(EventId = 137920, Level = LogLevel.Information, Message = "La celda {CeldaId} de {Fuente} completó con {Personas} personas ({Consultadas} consultadas en esta ejecución)")]
+    [LoggerMessage(EventId = 137920, Level = LogLevel.Information, Message = "La celda {CeldaId} de {Fuente} completó con {Personas} personas ({Consultadas} consultadas en este cierre)")]
     private static partial void CeldaCompletada(ILogger logger, Guid celdaId, Fuente fuente, int personas, int consultadas);
 
     [LoggerMessage(EventId = 137921, Level = LogLevel.Warning, Message = "La persona {PersonaId} de la celda {CeldaId} de {Fuente} terminó en error ({TipoError})")]
@@ -230,4 +245,7 @@ internal abstract partial class EjecutorPorPersonas(IProtectorDocumentoPersona p
 
     [LoggerMessage(EventId = 137922, Level = LogLevel.Warning, Message = "La celda {CeldaId} de {Fuente} terminó en error ({TipoError}): {Errores} de {Personas} personas en error")]
     private static partial void CeldaEnError(ILogger logger, Guid celdaId, Fuente fuente, string tipoError, int errores, int personas);
+
+    [LoggerMessage(EventId = 137923, Level = LogLevel.Warning, Message = "La celda {CeldaId} de {Fuente} recibió la respuesta de una persona que no es del rol: no cambia")]
+    private static partial void PersonaAjena(ILogger logger, Guid celdaId, Fuente fuente);
 }

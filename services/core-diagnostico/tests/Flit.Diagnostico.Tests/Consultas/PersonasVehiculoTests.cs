@@ -295,7 +295,7 @@ public sealed class PersonasVehiculoTests
             if (!await db.Set<ConfiguracionEmpresa>().AsNoTracking().AnyAsync(ct))
             {
                 id = await MotorRunt.LoteAsync(api, empresa, filas, ct);
-                await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+                await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
                 return id;
             }
         }
@@ -306,7 +306,7 @@ public sealed class PersonasVehiculoTests
         id = (await creada.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("id").GetGuid();
         var confirmada = await Lotes.ConfirmarAsync(cliente, id, filas, ct);
         confirmada.StatusCode.Should().Be(HttpStatusCode.Accepted, await confirmada.Content.ReadAsStringAsync(ct));
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
         return id;
     }
 

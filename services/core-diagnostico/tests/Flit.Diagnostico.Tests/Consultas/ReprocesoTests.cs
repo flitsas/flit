@@ -35,22 +35,23 @@ namespace Flit.Diagnostico.Tests.Consultas;
 /// </example>
 public sealed class ReprocesoTests
 {
-    // AC1 (F03-C14) — RUNT_PROPIETARIO en ERROR: se repite la consulta real (aunque haya un dato de hoy reutilizable), el intento
-    // queda con REPROCESO y el usuario, la celda sube la versión del tablero y las COMPLETADO del vehículo no cambian.
+    // AC1 (F03-C14) — SIMIT_VEHICULO en ERROR: se repite la consulta real (aunque haya un dato de hoy reutilizable), el intento
+    // queda con REPROCESO y el usuario, la celda sube la versión del tablero y las COMPLETADO del vehículo no cambian. Desde
+    // ADR-0075 el reproceso publica el trabajo en la misma transacción: la celda queda EN_CURSO hasta que llega su resultado.
     [Fact]
     public async Task Admin_reprocesa_celda_ERROR_y_queda_intento_REPROCESO_con_usuario()
     {
         var ct = TestContext.Current.CancellationToken;
         var orden = new ConcurrentQueue<string>();
-        await using var api = await MotorRunt.ArrancarAsync(b => new EjecutorFuenteDePrueba(Fuente.RuntPropietario, orden).Registrar(b.Services));
+        await using var api = await MotorRunt.ArrancarAsync(b => new EjecutorFuenteDePrueba(Fuente.SimitVehiculo, orden).Registrar(b.Services));
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresa = DosEmpresas.En(api).A;
         var lote = await TableroAyudas.SembrarAsync(empresa, ct, version: 5, vehiculos:
-            [new("TST201", [new(Fuente.Runt, EstadoCelda.Completado, 2), new(Fuente.SimitVehiculo, EstadoCelda.Completado, 3), new(Fuente.RuntPropietario, EstadoCelda.Error, 4)])]);
+            [new("TST201", [new(Fuente.Runt, EstadoCelda.Completado, 2), new(Fuente.RuntPropietario, EstadoCelda.Completado, 3), new(Fuente.SimitVehiculo, EstadoCelda.Error, 4)])]);
         // Otro lote de hoy con el mismo dato: el reproceso no lo reutiliza, repite la consulta real.
         await TableroAyudas.SembrarAsync(empresa, ct, nombre: "Otro lote de hoy", vehiculos:
-            [new("TST201", [new(Fuente.Runt, EstadoCelda.Completado, 1), new(Fuente.RuntPropietario, EstadoCelda.Completado, 1)])]);
-        var celda = lote.Celda("TST201", Fuente.RuntPropietario);
+            [new("TST201", [new(Fuente.Runt, EstadoCelda.Completado, 1), new(Fuente.SimitVehiculo, EstadoCelda.Completado, 1)])]);
+        var celda = lote.Celda("TST201", Fuente.SimitVehiculo);
         var completadasAntes = (await CeldasAsync(empresa, lote.Id, ct)).Where(c => c.Estado == EstadoCelda.Completado).OrderBy(c => c.Fuente).ToList();
         var token = Admin(api, empresa);
 
@@ -59,17 +60,17 @@ public sealed class ReprocesoTests
         respuesta.StatusCode.Should().Be(HttpStatusCode.Accepted, await respuesta.Content.ReadAsStringAsync(ct));
         var cuerpo = await TableroAyudas.JsonAsync(respuesta, ct);
         cuerpo.GetProperty("id").GetGuid().Should().Be(celda.Id);
-        cuerpo.GetProperty("estado").GetString().Should().Be("PENDIENTE");
+        cuerpo.GetProperty("estado").GetString().Should().Be("EN_CURSO");
         cuerpo.GetProperty("estado_lote").GetString().Should().Be("EN_PROCESO");
         var enCola = await CeldaAsync(empresa, celda.Id, ct);
-        (enCola.Estado, enCola.IntentosAuto, enCola.TipoError).Should().Be((EstadoCelda.Pendiente, 0, (string?)null));
+        (enCola.Estado, enCola.IntentosAuto, enCola.TipoError).Should().Be((EstadoCelda.EnCurso, 0, (string?)null));
         enCola.VersionTablero.Should().Be(6, "el reproceso sube la versión del tablero y la celda vuelve a gris en el sondeo");
         (await Cabeceras.LeerAsync(api, empresa.Id, lote.Id, ct)).VersionTablero.Should().Be(6);
         cuerpo.GetProperty("version").GetInt64().Should().Be(6);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
-        orden.Should().Equal([$"RUNT_PROPIETARIO {celda.VehiculoId}"], "se repite la consulta real una vez, sin reutilizar el dato de hoy");
+        orden.Should().Equal([$"SIMIT_VEHICULO {celda.VehiculoId}"], "se repite la consulta real una vez, sin reutilizar el dato de hoy");
         (await CeldaAsync(empresa, celda.Id, ct)).Estado.Should().Be(EstadoCelda.Completado);
         var intento = (await IntentosAsync(empresa, celda.Id, ct)).Should().ContainSingle().Subject;
         (intento.Disparador, intento.UsuarioId, intento.DesdeCache).Should().Be((DisparadorIntento.Reproceso, (Guid?)TableroAyudas.Usuario(token), false));
@@ -112,7 +113,7 @@ public sealed class ReprocesoTests
         var antes = await CeldaAsync(empresa, celda.Id, ct);
 
         var respuesta = await api.Cliente(Admin(api, empresa)).PostAsync(Ruta(celda.Id), null, ct);
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         respuesta.StatusCode.Should().Be(HttpStatusCode.Conflict);
         (await TableroAyudas.JsonAsync(respuesta, ct)).GetProperty("code").GetString().Should().Be("CELDA_NO_EN_ERROR");
@@ -145,9 +146,9 @@ public sealed class ReprocesoTests
         respuesta.StatusCode.Should().Be(HttpStatusCode.Accepted, await respuesta.Content.ReadAsStringAsync(ct));
         var enCola = await CeldaAsync(empresa, celda.Id, ct);
         (enCola.Estado, enCola.Payload, enCola.Origen, enCola.UsuarioManualId, enCola.DatoObtenidoEn)
-            .Should().Be((EstadoCelda.Pendiente, (string?)null, (OrigenCelda?)null, (Guid?)null, (DateTimeOffset?)null));
+            .Should().Be((EstadoCelda.EnCurso, (string?)null, (OrigenCelda?)null, (Guid?)null, (DateTimeOffset?)null));
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var final = await CeldaAsync(empresa, celda.Id, ct);
         final.Estado.Should().Be(EstadoCelda.Completado);
@@ -177,7 +178,7 @@ public sealed class ReprocesoTests
         var simit = lote.Celda("TST205", Fuente.SimitVehiculo);
 
         var respuesta = await api.Cliente(Admin(api, empresa)).PostAsync(Ruta(simit.Id), null, ct);
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         respuesta.StatusCode.Should().Be(HttpStatusCode.Conflict);
         (await TableroAyudas.JsonAsync(respuesta, ct)).GetProperty("code").GetString().Should().Be("CELDA_BLOQUEADA_POR_RUNT");
@@ -188,8 +189,8 @@ public sealed class ReprocesoTests
     }
 
     // AC5 (F03-C7, F03-C14, F04-C6) — lote INCOMPLETO, RUNT en ERROR y dos bloqueadas. Con un fallo inyectado tras marcar RUNT
-    // no queda nada a medias; sin él, en la misma transacción RUNT queda COMPLETADO, las bloqueadas vuelven a PENDIENTE y el lote
-    // sigue EN_PROCESO; el procesador las ejecuta con REPROCESO y el usuario del reproceso de RUNT, y el lote termina COMPLETADO.
+    // no queda nada a medias (el resultado vuelve a la cola de reintentos); sin él, en la misma transacción RUNT queda COMPLETADO,
+    // las bloqueadas se liberan y publican su trabajo con lo que dejó la RUNT (placa y propietario) y el lote sigue EN_PROCESO; todas corren con REPROCESO y el usuario del reproceso de RUNT, y el lote termina COMPLETADO.
     [Fact]
     public async Task Runt_reprocesado_en_OK_libera_celdas_bloqueadas_en_la_misma_transaccion()
     {
@@ -208,7 +209,7 @@ public sealed class ReprocesoTests
         var lote = await LoteBloqueadoAsync(api, empresa, "TST001", EstadoDiagnostico.Incompleto, ct);
         var runt = lote.Celda("TST001", Fuente.Runt);
         var token = Admin(api, empresa);
-        var procesador = Motor.Procesador(api);
+        var procesador = Motor.Bus(api);
 
         (await api.Cliente(token).PostAsync(Ruta(runt.Id), null, ct)).StatusCode.Should().Be(HttpStatusCode.Accepted);
         var versionTrasReproceso = (await Cabeceras.LeerAsync(api, empresa.Id, lote.Id, ct)).VersionTablero;
@@ -220,8 +221,8 @@ public sealed class ReprocesoTests
             CREATE TRIGGER tg_prueba_falla_tras_runt AFTER UPDATE ON diagnostico.consultas
             FOR EACH ROW WHEN (NEW.fuente = 'RUNT' AND NEW.estado = 'COMPLETADO') EXECUTE FUNCTION diagnostico.prueba_falla_tras_runt();
             """, ct);
-        var fallido = () => procesador.ProcesarLoteAsync(ct);
-        await fallido.Should().ThrowAsync<Exception>();
+        (await procesador.ProcesarLoteAsync(ct)).Should().Be(1);
+        procesador.Demorados.Should().Be(1, "la falla de la base revierte el mensaje y el resultado vuelve a la cola de reintentos");
 
         (await MotorRunt.CeldasDelVehiculoAsync(api, runt.VehiculoId, ct)).Should().BeEquivalentTo(
             ["RUNT EN_CURSO -", "SIMIT_VEHICULO ERROR BLOQUEADA_POR_RUNT", "RUNT_PROPIETARIO ERROR BLOQUEADA_POR_RUNT"], "nada queda a medias");
@@ -229,13 +230,13 @@ public sealed class ReprocesoTests
         (await IntentosAsync(empresa, runt.Id, ct)).Should().BeEmpty();
         (await MotorRunt.VehiculoAsync(api, empresa, lote.Id, "TST001", ct)).RuntConsultadoEn.Should().BeNull();
 
-        // Sin el fallo: vence el lease, otra vuelta retoma la RUNT y su cierre libera las bloqueadas en la misma transacción.
+        // Sin el fallo: el resultado vuelve de la cola de reintentos y su cierre libera las bloqueadas en la misma transacción.
         await Motor.EjecutarAsync(api, "DROP TRIGGER tg_prueba_falla_tras_runt ON diagnostico.consultas;", ct);
         reloj.Avanzar(TimeSpan.FromMinutes(3));
-        (await procesador.ProcesarLoteAsync(ct)).Should().Be(1, "solo la RUNT era tomable");
+        (await procesador.EntregarDemoradosAsync(ct)).Should().Be(1, "solo el resultado de la RUNT estaba esperando");
 
         (await MotorRunt.CeldasDelVehiculoAsync(api, runt.VehiculoId, ct)).Should().BeEquivalentTo(
-            ["RUNT COMPLETADO -", "SIMIT_VEHICULO PENDIENTE -", "RUNT_PROPIETARIO PENDIENTE -"]);
+            ["RUNT COMPLETADO -", "SIMIT_VEHICULO EN_CURSO -", "RUNT_PROPIETARIO EN_CURSO -"]);
         var celdas = await CeldasAsync(empresa, lote.Id, ct);
         celdas.Select(c => c.VersionTablero).Distinct().Should().ContainSingle("RUNT y sus bloqueadas cambian en la misma transacción");
         celdas.Where(c => c.Fuente != Fuente.Runt).Should().OnlyContain(c => c.IntentosAuto == 0 && c.DisponibleDesde <= reloj.GetUtcNow());
@@ -243,7 +244,7 @@ public sealed class ReprocesoTests
 
         await MotorRunt.ProcesarTodoAsync(procesador, ct);
 
-        orden.Should().Contain([$"SIMIT_VEHICULO {runt.VehiculoId}", $"RUNT_PROPIETARIO {runt.VehiculoId}"], "el procesador las ejecuta sin otra acción del admin");
+        orden.Should().Contain([$"SIMIT_VEHICULO {runt.VehiculoId}", $"RUNT_PROPIETARIO {runt.VehiculoId}"], "se cierran sin otra acción del admin");
         (await CeldasAsync(empresa, lote.Id, ct)).Should().OnlyContain(c => c.Estado == EstadoCelda.Completado);
         foreach (var celda in celdas)
         {
@@ -274,7 +275,7 @@ public sealed class ReprocesoTests
         var token = Admin(api, empresa);
 
         (await api.Cliente(token).PostAsync(Ruta(runt.Id), null, ct)).StatusCode.Should().Be(HttpStatusCode.Accepted);
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api, maxReintentos: 0), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api, maxReintentos: 0), ct);
 
         orden.Should().Equal(["RUNT PLACA_CARRO TST208"], "solo se llamó a RUNT");
         (await MotorRunt.CeldasDelVehiculoAsync(api, runt.VehiculoId, ct)).Should().BeEquivalentTo(
@@ -307,7 +308,7 @@ public sealed class ReprocesoTests
         (reabierto.EstadoAnterior, reabierto.EstadoNuevo, reabierto.Disparador, reabierto.UsuarioId)
             .Should().Be(((EstadoDiagnostico?)EstadoDiagnostico.Incompleto, EstadoDiagnostico.EnProceso, DisparadorEstado.Reproceso, (Guid?)TableroAyudas.Usuario(token)));
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var final = await Cabeceras.LeerAsync(api, empresa.Id, lote.Id, ct);
         final.Estado.Should().Be(EstadoDiagnostico.Completado);

@@ -2,7 +2,7 @@ namespace Flit.Diagnostico.Api.Modulos.Trabajos;
 
 /// <summary>
 /// Configuración de la cola del ZIP del lote (<c>Diagnostico:Evidencias</c>, HU #13850, decisiones Q2 y Q5 del 2026-10-22). Todo
-/// explícito, como <see cref="OpcionesProcesador"/>: sin <see cref="Habilitado"/>=true el trabajador en segundo plano no se registra
+/// explícito, como <see cref="Consultas.Bus.OpcionesBus"/>: sin <see cref="Habilitado"/>=true el trabajador en segundo plano no se registra
 /// (las pruebas lo apagan y llaman al empaquetador directo). Los valores se validan al arrancar.
 /// </summary>
 public sealed class OpcionesEvidencias

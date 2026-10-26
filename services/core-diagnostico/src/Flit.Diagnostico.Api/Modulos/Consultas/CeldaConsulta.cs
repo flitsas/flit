@@ -4,9 +4,9 @@ using Flit.Diagnostico.Domain.Consultas;
 namespace Flit.Diagnostico.Api.Modulos.Consultas;
 
 /// <summary>
-/// Celda del semáforo de un vehículo para una fuente (<c>diagnostico.consultas</c>, HU #13723, plan §5, MOD03/MOD04). También es
-/// la unidad de trabajo de la cola durable (ADR a): <see cref="DisponibleDesde"/>, <see cref="LeaseHasta"/> e
-/// <see cref="IntentosAuto"/>. Una sola celda por vehículo y fuente. Cuelga del vehículo y del lote con FK compuestas por
+/// Celda del semáforo de un vehículo para una fuente (<c>diagnostico.consultas</c>, HU #13723, plan §5, MOD03/MOD04). Desde
+/// ADR-0075 es el ESTADO de la consulta que viaja por RabbitMQ: <see cref="TrabajoId"/> (trabajo vigente), <see cref="DisponibleDesde"/>
+/// (publicación o reintento), <see cref="IntentosAuto"/> y <see cref="Republicaciones"/>. Una sola celda por vehículo y fuente. Cuelga del vehículo y del lote con FK compuestas por
 /// empresa; si reutiliza el dato de otra celda del mismo día (D-10), esa celda es de la misma empresa.
 /// </summary>
 public sealed class CeldaConsulta : IEntidadDeEmpresa
@@ -50,10 +50,10 @@ public sealed class CeldaConsulta : IEntidadDeEmpresa
     /// <summary>Celda de la misma empresa, consultada el mismo día, cuyo dato se reutilizó sin consumo (D-10).</summary>
     public Guid? ReutilizadaDeId { get; set; }
 
-    /// <summary>Desde cuándo el procesador la puede tomar (backoff de reintentos).</summary>
+    /// <summary>Cuándo se publicó su trabajo o, con un reintento programado, desde cuándo se vuelve a publicar (backoff).</summary>
     public DateTimeOffset DisponibleDesde { get; set; } = DateTimeOffset.UtcNow;
 
-    /// <summary>Hasta cuándo la tiene tomada el procesador; null si nadie la tiene.</summary>
+    /// <summary>Lease de la cola de Postgres de antes de ADR-0075; ya no se usa y queda en null.</summary>
     public DateTimeOffset? LeaseHasta { get; set; }
 
     /// <summary>Intentos automáticos hechos (reintentos de errores transitorios, D-12).</summary>
@@ -68,7 +68,7 @@ public sealed class CeldaConsulta : IEntidadDeEmpresa
 
     /// <summary>
     /// Trabajo vigente de la celda en la consulta por RabbitMQ (ADR-0075): descarta trabajos y resultados viejos o duplicados y
-    /// reconoce un resultado demorado. Null si la celda no tiene trabajo publicado. Aún no lo lee ni escribe el motor.
+    /// reconoce un resultado demorado. Null si la celda no tiene trabajo publicado.
     /// </summary>
     public Guid? TrabajoId { get; set; }
 
@@ -84,6 +84,6 @@ public sealed class CeldaConsulta : IEntidadDeEmpresa
     /// <summary>Versión del tablero del lote en el último cambio (polling <c>?desde=</c>).</summary>
     public long VersionTablero { get; set; }
 
-    /// <summary>Token de concurrencia (columna de sistema <c>xmin</c>): dos réplicas no se pisan la celda.</summary>
+    /// <summary>Token de concurrencia (columna de sistema <c>xmin</c>): dos resultados a la vez no se pisan la celda.</summary>
     public uint Version { get; set; }
 }

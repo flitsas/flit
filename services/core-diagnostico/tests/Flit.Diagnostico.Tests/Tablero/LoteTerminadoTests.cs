@@ -47,7 +47,7 @@ public sealed class LoteTerminadoTests
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST001"), Lotes.Fila("TST002")], [Fuente.Runt, Fuente.SimitVehiculo], null, [Fuente.SimitLocatario], ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var cabecera = await Cabeceras.LeerAsync(api, empresa.Id, id, ct);
         cabecera.Estado.Should().Be(EstadoDiagnostico.Completado);
@@ -77,7 +77,7 @@ public sealed class LoteTerminadoTests
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST001"), Lotes.Fila("TST008")], [Fuente.Runt, Fuente.SimitVehiculo], null, null, ct);
 
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api, maxReintentos: 0), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api, maxReintentos: 0), ct);
 
         (await Cabeceras.LeerAsync(api, empresa.Id, id, ct)).Estado.Should().Be(EstadoDiagnostico.EnProceso);
         (await OutboxDePrueba.EventosAsync(api, LoteTerminado.Tipo, ct)).Should().BeEmpty();
@@ -93,7 +93,7 @@ public sealed class LoteTerminadoTests
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST001")], [Fuente.Runt, Fuente.SimitVehiculo], null, null, ct);
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api, maxReintentos: 0), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api, maxReintentos: 0), ct);
         (await CerrarPanelAsync(api, empresa, id, ct)).StatusCode.Should().Be(HttpStatusCode.OK);
         var primero = (await OutboxDePrueba.EventosAsync(api, LoteTerminado.Tipo, ct)).Should().ContainSingle().Subject;
         primero.Data.GetProperty("estado").GetString().Should().Be("INCOMPLETO");
@@ -102,7 +102,7 @@ public sealed class LoteTerminadoTests
 
         var reproceso = await api.Cliente(admin).PostAsync($"{Program.Prefijo}/consultas/{simit.Id}/reprocesar", null, ct);
         reproceso.StatusCode.Should().Be(HttpStatusCode.Accepted, await reproceso.Content.ReadAsStringAsync(ct));
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         var eventos = await OutboxDePrueba.EventosAsync(api, LoteTerminado.Tipo, ct);
         eventos.Should().HaveCount(2);
@@ -124,7 +124,7 @@ public sealed class LoteTerminadoTests
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresa = DosEmpresas.En(api).A;
         var id = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST001"), Lotes.Fila("TST008")], [Fuente.Runt, Fuente.SimitVehiculo], null, null, ct);
-        await MotorRunt.ProcesarTodoAsync(Motor.Procesador(api, maxReintentos: 0), ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api, maxReintentos: 0), ct);
         (await OutboxDePrueba.EventosAsync(api, LoteTerminado.Tipo, ct)).Should().BeEmpty("con errores el lote sigue EN_PROCESO hasta el panel");
 
         (await CerrarPanelAsync(api, empresa, id, ct)).StatusCode.Should().Be(HttpStatusCode.OK);
@@ -207,13 +207,13 @@ public sealed class LoteTerminadoTests
         objeto.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetInt32());
 
     /// <summary>Ejecutor SIMIT_VEHICULO que la primera vez falla con un error definitivo y después completa.</summary>
-    private sealed class SimitQueFallaUnaVez : IEjecutorCelda
+    private sealed class SimitQueFallaUnaVez : EjecutorSimple
     {
         private int _llamadas;
 
-        public Fuente Fuente => Fuente.SimitVehiculo;
+        public override Fuente Fuente => Fuente.SimitVehiculo;
 
-        public Task<ResultadoCelda> EjecutarAsync(ContextoCelda contexto, CancellationToken ct) =>
+        public override Task<ResultadoCelda> EjecutarAsync(ContextoCelda contexto, CancellationToken ct) =>
             Task.FromResult(Interlocked.Increment(ref _llamadas) == 1
                 ? ResultadoCelda.Error("RESPUESTA_INVALIDA")
                 : ResultadoCelda.Completado("{}", DateTimeOffset.UtcNow));

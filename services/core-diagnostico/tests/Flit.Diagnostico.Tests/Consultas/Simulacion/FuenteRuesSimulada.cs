@@ -1,10 +1,13 @@
+using Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 using Flit.Diagnostico.Domain.Consultas;
 
-namespace Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
+namespace Flit.Diagnostico.Tests.Consultas;
 
 /// <summary>
+/// Doble de prueba de core-consultas (ADR-0075, U3 = a): la simulación de LOCAL y DEV vive en core-consultas; en las pruebas
+/// responde los trabajos de <see cref="BusDePrueba"/>. Lo que sigue es su comportamiento heredado de la fuente de Diagnóstico.
 /// RUES simulado (HU #13792): solo con <c>Diagnostico:Simulacion:Habilitada=true</c> en LOCAL o DEV
-/// (<see cref="SeleccionAdaptadores"/>). Determinista por el último dígito del NIT; datos inventados, sin razón social, y nada
+/// (<c>SeleccionAdaptadores</c>). Determinista por el último dígito del NIT; datos inventados, sin razón social, y nada
 /// sale del servicio:
 /// <list type="table">
 /// <item><term>6</term><description>matrícula cancelada</description></item>

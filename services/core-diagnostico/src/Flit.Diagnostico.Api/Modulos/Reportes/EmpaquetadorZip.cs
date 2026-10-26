@@ -74,7 +74,7 @@ internal sealed record PlanZip(string Huella, IReadOnlyList<VehiculoDelZip> Vehi
 /// <summary>
 /// Empaquetador del ZIP del lote (HU #13850, decisiones Q2, Q5 y Q7 del 2026-10-22): toma un ZIP de la cola
 /// (<see cref="ColaEvidencias"/>, entre compañías) y lo genera con un contexto de datos FIJADO a la empresa de la fila (como
-/// <c>ProcesadorConsultas</c> con cada celda): todo lo que lee o escribe después de la toma (cabecera, celdas, personas, PDF del
+/// el consumidor de resultados de consultas con cada celda): todo lo que lee o escribe después de la toma (cabecera, celdas, personas, PDF del
 /// vehículo, almacén) queda acotado por el filtro global a esa empresa, y la cabecera además se exige con su <c>tenant_id</c>.
 /// <list type="number">
 /// <item>Recalcula el plan con lo actual (<see cref="PlanZip"/>); si nada se puede emitir, ERROR <see cref="ErrorSinVehiculos"/>.</item>

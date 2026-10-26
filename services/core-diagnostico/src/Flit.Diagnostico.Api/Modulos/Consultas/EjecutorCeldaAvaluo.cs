@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text.Json;
+using Flit.Consultas.Grpc.V1;
 using Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
+using Flit.Diagnostico.Api.Modulos.Consultas.Mapeos;
 using Flit.Diagnostico.Api.Modulos.Vehiculos;
 using Flit.Diagnostico.Domain.Consultas;
 using Microsoft.EntityFrameworkCore;
@@ -8,16 +10,17 @@ using Microsoft.EntityFrameworkCore;
 namespace Flit.Diagnostico.Api.Modulos.Consultas;
 
 /// <summary>
-/// Ejecutor de la celda AVALUO (HU #13795, F05-C1, F05-C7, F05-C8): una celda por vehículo, consultada con
-/// <see cref="IFuenteAvaluo"/> a nombre de la empresa de la celda con la placa y el VIN que dejó el RUNT
+/// Celda AVALUO (HU #13795, F05-C1, F05-C7, F05-C8; desde ADR-0075 «construir solicitud / aplicar respuesta»): una celda por
+/// vehículo, consultada con un trabajo <c>avaluo</c> a nombre de la empresa de la celda (respuesta aplicada con
+/// <see cref="Mapeos.MapeoAvaluo"/>) con la placa y el VIN que dejó el RUNT
 /// (<c>vehiculos.placa</c>/<c>vin</c>) y los datos técnicos del bien de <c>datos_consolidados.vehiculo</c> (modelo, cilindraje,
 /// combustible y pasajeros; los que falten van vacíos). Solo se toma cuando el RUNT la liberó (bloqueo de #13730,
 /// <see cref="OrquestadorVehiculo"/>). Con valor completa con <see cref="ResultadoAvaluo"/> en snake_case (valor sugerido,
 /// fuente principal y valor y fecha de cada fuente). Sin valor en ninguna fuente completa con <c>sin_valor_comercial=true</c>:
 /// no es ERROR, así que no se reprocesa ni se llena a mano (decisión Q4 = b). Un error de la fuente devuelve su código tal cual:
-/// el procesador reintenta los transitorios (#13737) y, agotados, la celda queda en ERROR reprocesable sin bloquear el
+/// el consumidor de resultados reintenta los transitorios (#13737) y, agotados, la celda queda en ERROR reprocesable sin bloquear el
 /// vehículo (solo RUNT bloquea). La reutilización del mismo día de la misma compañía (#13739, por placa y fuente) es la del
-/// motor. Sin placa ni VIN queda en ERROR <see cref="SinIdentificador"/>, definitivo, sin llamar. Los logs llevan ids y tipo
+/// publicador. Sin placa ni VIN queda en ERROR <see cref="SinIdentificador"/>, definitivo, sin llamar. Los logs llevan ids y tipo
 /// de error; el avalúo no tiene datos de personas.
 /// </summary>
 /// <example>
@@ -25,7 +28,7 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// services.AddScoped&lt;IEjecutorCelda, EjecutorCeldaAvaluo&gt;();
 /// </code>
 /// </example>
-internal sealed partial class EjecutorCeldaAvaluo(IFuenteAvaluo fuente, TimeProvider reloj, ILogger<EjecutorCeldaAvaluo> log) : IEjecutorCelda
+internal sealed partial class EjecutorCeldaAvaluo(ILogger<EjecutorCeldaAvaluo> log) : IEjecutorCelda
 {
     /// <summary><c>tipo_error</c> si el vehículo no tiene placa ni VIN tras el RUNT (definitivo).</summary>
     public const string SinIdentificador = "SIN_IDENTIFICADOR";
@@ -35,41 +38,41 @@ internal sealed partial class EjecutorCeldaAvaluo(IFuenteAvaluo fuente, TimeProv
 
     public Fuente Fuente => Fuente.Avaluo;
 
-    public async Task<ResultadoCelda> EjecutarAsync(ContextoCelda contexto, CancellationToken ct)
+    /// <summary>Sin placa ni VIN tras el RUNT el constructor no arma la consulta: ERROR <see cref="SinIdentificador"/>, definitivo.</summary>
+    public Task<ResultadoCelda> SinConsultaAsync(ContextoCelda contexto, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(contexto);
+        AvaluoEnError(log, contexto.Celda.Id, SinIdentificador);
+        return Task.FromResult(ResultadoCelda.Error(SinIdentificador) with { Intento = new DatosIntento(null, null, null, "El vehículo no tiene placa ni VIN tras el RUNT.") });
+    }
+
+    public async Task<ResultadoCelda> AplicarAsync(ContextoCelda contexto, RespuestaConsulta respuesta, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(contexto);
+        ArgumentNullException.ThrowIfNull(respuesta);
         var celda = contexto.Celda;
         var vehiculo = await contexto.Db.Set<VehiculoDiagnostico>().AsNoTracking()
             .Where(v => v.TenantId == celda.TenantId && v.Id == celda.VehiculoId)
-            .Select(v => new { v.Placa, v.Vin, v.DatosConsolidados })
+            .Select(v => new { v.Placa, v.Vin })
             .SingleOrDefaultAsync(ct).ConfigureAwait(false);
-        var placa = Limpio(vehiculo?.Placa);
-        var vin = Limpio(vehiculo?.Vin);
-        if (placa is null && vin is null)
-        {
-            AvaluoEnError(log, celda.Id, SinIdentificador);
-            return ResultadoCelda.Error(SinIdentificador) with { Intento = new DatosIntento(null, null, null, "El vehículo no tiene placa ni VIN tras el RUNT.") };
-        }
-
-        var solicitud = Solicitud(placa, vin, vehiculo!.DatosConsolidados);
-        var respuesta = await fuente.ConsultarAsync(celda.TenantId, solicitud, ct).ConfigureAwait(false);
-        var consultado = placa ?? vin;
-        var error = respuesta.Error ?? (respuesta.Resultado is null ? new ErrorConsulta(ErroresFuentePersona.RespuestaInvalida, "El avalúo respondió sin resultado.") : null);
+        var consultado = Limpio(vehiculo?.Placa) ?? Limpio(vehiculo?.Vin);
+        var r = respuesta.Mapear<ConsultarAvaluosResponse, ResultadoAvaluo>(MapeoAvaluo.Mapear, MapeoAvaluo.Error);
+        var error = r.Error ?? (r.Resultado is null ? new ErrorConsulta(ErroresFuentePersona.RespuestaInvalida, "El avalúo respondió sin resultado.") : null);
         if (error is not null)
         {
             AvaluoEnError(log, celda.Id, error.TipoError);
             return ResultadoCelda.Error(error.TipoError) with
             {
-                Intento = new DatosIntento(consultado, respuesta.Servicio, respuesta.TransaccionProveedorId, error.Mensaje),
+                Intento = new DatosIntento(consultado, r.Servicio, r.TransaccionProveedorId, error.Mensaje),
             };
         }
 
-        var ahora = reloj.GetUtcNow();
-        var resultado = respuesta.Resultado!.ConFecha(DateOnly.FromDateTime(ahora.ToOffset(HoraColombia).DateTime));
+        var ahora = respuesta.Fin;
+        var resultado = r.Resultado!.ConFecha(DateOnly.FromDateTime(ahora.ToOffset(HoraColombia).DateTime));
         AvaluoCompletado(log, celda.Id, resultado.SinValorComercial);
         return ResultadoCelda.Completado(JsonSerializer.Serialize(resultado, EjecutorPorPersonas.Json), ahora) with
         {
-            Intento = new DatosIntento(consultado, respuesta.Servicio, respuesta.TransaccionProveedorId, null),
+            Intento = new DatosIntento(consultado, r.Servicio, r.TransaccionProveedorId, null),
         };
     }
 
