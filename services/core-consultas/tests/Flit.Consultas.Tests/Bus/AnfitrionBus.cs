@@ -44,7 +44,7 @@ public class AnfitrionBus : IAsyncLifetime
 
     public WebApplication App { get; private set; } = null!;
 
-    public async ValueTask InitializeAsync()
+    public virtual async ValueTask InitializeAsync()
     {
         var server = Environment.GetEnvironmentVariable("ConnectionStrings__Core") ?? $"Host=127.0.0.1;Port=5432;Username={Environment.UserName}";
         _database = new NpgsqlConnectionStringBuilder(server) { Database = $"flit_svc_{Guid.NewGuid():N}"[..30] }.ConnectionString;
@@ -59,7 +59,7 @@ public class AnfitrionBus : IAsyncLifetime
         await Program.MigrateAsync(App);
     }
 
-    public async ValueTask DisposeAsync()
+    public virtual async ValueTask DisposeAsync()
     {
         if (App is not null)
             await App.DisposeAsync();

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Flit.Consultas.Api.Grpc;
 using Flit.Consultas.Api.RuntIntempo;
+using Flit.Consultas.Api.Simulacion;
 using Flit.Consultas.Grpc.V1;
 using Flit.Platform.Sdk.Grpc;
 using Google.Protobuf;
@@ -27,6 +28,8 @@ internal sealed record EjecucionTrabajo(IMessage? Respuesta, StatusCode? Error, 
 /// <item>Pasado <see cref="OpcionesConsumidoresDiagnostico.TiempoMaximo"/> → <see cref="StatusCode.DeadlineExceeded"/>.</item>
 /// <item>Cualquier otra excepción → <see cref="StatusCode.Internal"/> (definitiva).</item>
 /// </list>
+/// Con <see cref="OpcionesSimulacion.Habilitada"/> (solo LOCAL y DEV) responde <see cref="SimuladorConsultas"/>, medido con el
+/// proveedor <see cref="SimuladorConsultas.Proveedor"/>; la validación de la solicitud y los códigos de error son los mismos.
 /// Solo la cancelación del consumidor (el servicio se detiene) se propaga, para que el mensaje vuelva a la cola. Los logs llevan
 /// el trabajo, el rpc, el código y el tipo de la excepción: nunca la solicitud, la respuesta ni el mensaje de la excepción.
 /// </summary>
@@ -38,7 +41,10 @@ internal sealed record EjecucionTrabajo(IMessage? Respuesta, StatusCode? Error, 
 internal sealed class EjecutorTrabajo(
     ConsultasGrpcService consultas,
     RuntIntempoGrpcService intempo,
+    ConsumoRecorder consumo,
     OpcionesConsumidoresDiagnostico opciones,
+    OpcionesSimulacion simulacion,
+    SimuladorConsultas simulador,
     TimeProvider time,
     ILogger<EjecutorTrabajo> logger)
 {
@@ -80,24 +86,46 @@ internal sealed class EjecutorTrabajo(
 
     private async Task<IMessage> LlamarAsync(TrabajoConsultaDiagnostico trabajo, PlatformServiceCaller caller, DateTime deadline, CancellationToken ct)
     {
-        var json = trabajo.Solicitud.GetRawText();
-        return trabajo.Rpc switch
+        var solicitud = Solicitud(trabajo);
+
+        // HU #13727 (U3 = a): en LOCAL y DEV responde el proveedor simulado, por el mismo camino (medición, minimización y
+        // resultado), sin salir a ningún proveedor.
+        if (simulacion.Habilitada)
         {
-            RpcConsultas.PorPlaca => await intempo.ConsultarPorPlacaCore(Lector.Parse<ConsultarPorPlacaRequest>(json), caller, ct).ConfigureAwait(false),
-            RpcConsultas.PorVin => await intempo.ConsultarPorVinCore(Lector.Parse<ConsultarPorVinRequest>(json), caller, ct).ConfigureAwait(false),
-            RpcConsultas.Conductor => await consultas.ConsultarConductor(Lector.Parse<ConsultarConductorRequest>(json), caller, deadline, ct).ConfigureAwait(false),
-            RpcConsultas.Multas => await consultas.ConsultarMultas(Lector.Parse<ConsultarMultasRequest>(json), caller, ct).ConfigureAwait(false),
-            RpcConsultas.Rues => await consultas.ConsultarRues(Lector.Parse<ConsultarRuesRequest>(json), caller, ct).ConfigureAwait(false),
-            RpcConsultas.Avaluos => await consultas.ConsultarAvaluos(Lector.Parse<ConsultarAvaluosRequest>(json), caller, ct).ConfigureAwait(false),
+            return await consumo.MedirAsync(caller, trabajo.Fuente, () => Task.FromResult(simulador.Responder(trabajo.Rpc, solicitud)),
+                _ => (SimuladorConsultas.Proveedor, SimuladorConsultas.Proveedor, false), ct).ConfigureAwait(false);
+        }
+
+        return solicitud switch
+        {
+            ConsultarPorPlacaRequest r => await intempo.ConsultarPorPlacaCore(r, caller, ct).ConfigureAwait(false),
+            ConsultarPorVinRequest r => await intempo.ConsultarPorVinCore(r, caller, ct).ConfigureAwait(false),
+            ConsultarConductorRequest r => await consultas.ConsultarConductor(r, caller, deadline, ct).ConfigureAwait(false),
+            ConsultarMultasRequest r => await consultas.ConsultarMultas(r, caller, ct).ConfigureAwait(false),
+            ConsultarRuesRequest r => await consultas.ConsultarRues(r, caller, ct).ConfigureAwait(false),
+            ConsultarAvaluosRequest r => await consultas.ConsultarAvaluos(r, caller, ct).ConfigureAwait(false),
             // HU #13860: contrato primero; el servicio no lo implementa hasta C3 y por gRPC responde UNIMPLEMENTED. La solicitud
-            // se valida igual, para que un trabajo mal formado sea INVALID_ARGUMENT y no se confunda con la falta de la consulta.
-            RpcConsultas.Impuesto => NoImplementado(Lector.Parse<ConsultarImpuestoVehicularRequest>(json)),
-            _ => NoImplementado(null),
+            // se validó igual, para que un trabajo mal formado sea INVALID_ARGUMENT y no se confunda con la falta de la consulta.
+            _ => throw new RpcException(new Status(StatusCode.Unimplemented, "Rpc sin implementación en core-consultas.")),
         };
     }
 
-    private static IMessage NoImplementado(IMessage? solicitudValida) =>
-        throw new RpcException(new Status(StatusCode.Unimplemented, solicitudValida is null ? "Rpc desconocido." : "Rpc sin implementación en core-consultas."));
+    /// <summary>El <c>*Request</c> del rpc del trabajo; un rpc fuera del contrato es <see cref="StatusCode.Unimplemented"/>.</summary>
+    private static IMessage Solicitud(TrabajoConsultaDiagnostico trabajo)
+    {
+        var json = trabajo.Solicitud.GetRawText();
+        return trabajo.Rpc switch
+        {
+            RpcConsultas.PorPlaca => Lector.Parse<ConsultarPorPlacaRequest>(json),
+            RpcConsultas.PorVin => Lector.Parse<ConsultarPorVinRequest>(json),
+            RpcConsultas.Conductor => Lector.Parse<ConsultarConductorRequest>(json),
+            RpcConsultas.Multas => Lector.Parse<ConsultarMultasRequest>(json),
+            RpcConsultas.Rues => Lector.Parse<ConsultarRuesRequest>(json),
+            RpcConsultas.Avaluos => Lector.Parse<ConsultarAvaluosRequest>(json),
+            RpcConsultas.Impuesto => Lector.Parse<ConsultarImpuestoVehicularRequest>(json),
+            _ => throw new RpcException(new Status(StatusCode.Unimplemented, "Rpc desconocido.")),
+        };
+    }
 
     private static bool DesdeCache(IMessage respuesta) => respuesta switch
     {

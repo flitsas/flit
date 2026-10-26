@@ -73,14 +73,23 @@ public static class Program
         builder.Services.AddScoped<ConsumoRecorder>(); // HU #13345
 
         // HU #13876 (ADR-0075): los trabajos del diagnóstico llegan por el bus y se atienden con los mismos *Core de los servicios
-        // gRPC (registrados en el contenedor para que el ejecutor los use con el llamador del sobre).
-        builder.Services.AddSingleton(Bus.OpcionesConsumidoresDiagnostico.Desde(builder.Configuration));
+        // gRPC (registrados en el contenedor para que el ejecutor los use con el llamador del sobre). Dos colas con su propio
+        // consumidor (lotes y Express, D1/brecha 3), solo para mensajes que publicó el usuario «diagnostico» del broker (Q3 = 3a).
+        // HU #13727 (U3 = a): la simulación de LOCAL y DEV vive aquí; en otro ambiente el servicio no arranca con ella.
+        var consumidores = Bus.OpcionesConsumidoresDiagnostico.Desde(builder.Configuration);
+        builder.Services.AddSingleton(consumidores);
+        builder.Services.AddSingleton(Simulacion.OpcionesSimulacion.Desde(builder.Configuration));
+        builder.Services.AddSingleton<Simulacion.SimuladorConsultas>();
         builder.Services.AddScoped<ConsultasGrpcService>();
         builder.Services.AddScoped<RuntIntempo.RuntIntempoGrpcService>();
         builder.Services.AddScoped<Bus.EjecutorTrabajo>();
         builder.Services.AddScoped<Bus.PublicadorResultado>();
-        builder.Services.AddScoped<Bus.ConsumidorTrabajosLote>();
-        builder.Services.AddScoped<Bus.ConsumidorTrabajosExpress>();
+        builder.Services.AddFlitConsumer<ConsultasDb, Bus.ConsumidorTrabajosLote, Bus.TrabajoConsultaDiagnostico>(
+            builder.Configuration, Bus.TrabajoConsultaDiagnostico.ColaLote, ServicioSettings.Codigo, [Bus.TrabajoConsultaDiagnostico.Patron(esExpress: false)],
+            o => consumidores.Lote.Aplicar(o, consumidores.ProductoresPermitidos));
+        builder.Services.AddFlitConsumer<ConsultasDb, Bus.ConsumidorTrabajosExpress, Bus.TrabajoConsultaDiagnostico>(
+            builder.Configuration, Bus.TrabajoConsultaDiagnostico.ColaExpress, ServicioSettings.Codigo, [Bus.TrabajoConsultaDiagnostico.Patron(esExpress: true)],
+            o => consumidores.Express.Aplicar(o, consumidores.ProductoresPermitidos));
 
         // HU #13520: fuentes de Gestión de Comparendos (separadas de ConsultarMultas). Verifik SIMIT con las mismas
         // credenciales de Trámites; el simulado solo en DEV (Development o Consultations:ComparendosSimulados=true).

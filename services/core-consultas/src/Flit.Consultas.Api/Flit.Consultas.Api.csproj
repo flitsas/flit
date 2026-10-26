@@ -34,4 +34,9 @@
     <InternalsVisibleTo Include="Flit.Consultas.Tests" />
   </ItemGroup>
 
+  <!-- HU #13727 (ADR-0075, U3 = a): respuestas inventadas de Intempo para la simulación de LOCAL y DEV (copiadas de core-diagnostico; sin PII, rango ficticio). -->
+  <ItemGroup>
+    <EmbeddedResource Include="Simulacion\Fixtures\intempo-*.json" LogicalName="$(RootNamespace).Simulacion.Fixtures.%(Filename)%(Extension)" />
+  </ItemGroup>
+
 </Project>
