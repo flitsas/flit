@@ -44,6 +44,15 @@ public sealed class PlatformConsumerOptions
     /// usa su propio scope y su propia transacción.
     /// </summary>
     public ushort Concurrencia { get; set; } = 1;
+
+    /// <summary>
+    /// Servicios cuyos mensajes acepta la cola (ADR-0075, Q3=3a), p. ej. <c>["diagnostico"]</c>. Vacía (por defecto): se acepta
+    /// cualquiera, como siempre. Con elementos, el <c>user_id</c> del mensaje (que RabbitMQ valida contra el usuario que lo
+    /// publicó) debe ser igual al <c>producer</c> del sobre y estar en la lista; si no, el mensaje va directo a
+    /// <c>&lt;cola&gt;.dlq</c> con el motivo <see cref="VerificacionProductor.MotivoNoAutorizado"/>, sin reintentos y sin
+    /// llamar al efecto.
+    /// </summary>
+    public IList<string> ProductoresPermitidos { get; } = [];
 }
 
 /// <summary>Métricas del bus (OpenTelemetry las exporta si está encendido): la de mensajes muertos es la de alertar.</summary>
@@ -83,6 +92,10 @@ internal sealed class PlatformConsumer<TContext, THandler, TData>(
 
     private IConnection? _connection;
     private IChannel? _channel;
+    private string? _usuarioPropio;
+
+    /// <summary>Usuario del broker de este consumidor: el <c>user_id</c> con que republica a reintento o DLQ.</summary>
+    private string UsuarioPropio => _usuarioPropio ??= Fabrica().UserName;
 
     internal string RetryQueue(int index) => $"{consumer.Queue}.retry.{index + 1}";
 
@@ -207,6 +220,21 @@ internal sealed class PlatformConsumer<TContext, THandler, TData>(
             return;
         }
 
+        // HU #13727 (ADR-0075): con productores permitidos, el que publicó (user_id validado por el broker) debe ser el
+        // productor del sobre y estar en la lista. Reintentar no lo arregla: directo a la DLQ, sin llamar al efecto.
+        if (consumer.ProductoresPermitidos.Count > 0
+            && !VerificacionProductor.Autorizado(
+                VerificacionProductor.Verificado(delivery.BasicProperties, UsuarioPropio), envelope.Producer, consumer.ProductoresPermitidos))
+        {
+            ConsumerLog.Unauthorized(logger, envelope.EventId, consumer.Queue, envelope.Producer);
+            await ForwardAsync(channel, delivery, DeadLetterQueue, attempt, VerificacionProductor.MotivoNoAutorizado,
+                "El mensaje no lo publicó el productor del sobre o ese productor no está permitido en la cola.", ct).ConfigureAwait(false);
+            PlatformMessagingMetrics.DeadLetteredCounter.Add(1,
+                new KeyValuePair<string, object?>("queue", consumer.Queue),
+                new KeyValuePair<string, object?>("type", envelope.Type));
+            return;
+        }
+
         try
         {
             await ProcessAsync(envelope, ct).ConfigureAwait(false);
@@ -285,19 +313,16 @@ internal sealed class PlatformConsumer<TContext, THandler, TData>(
 
     /// <summary>Republica el mensaje a otra cola de esta suscripción (por su exchange de reintentos) y confirma el original.</summary>
     private Task ForwardAsync(IChannel channel, BasicDeliverEventArgs delivery, string queue, int attempt, string? reason, string? error, CancellationToken ct) =>
-        ForwardAsync(channel, RetryExchange, delivery, queue, attempt, reason, error, time.GetUtcNow(), ct);
+        ForwardAsync(channel, RetryExchange, UsuarioPropio, delivery, queue, attempt, reason, error, time.GetUtcNow(), ct);
 
     private static async Task ForwardAsync(
-        IChannel channel, string retryExchange, BasicDeliverEventArgs delivery, string queue, int attempt, string? reason, string? error, DateTimeOffset now, CancellationToken ct)
+        IChannel channel, string retryExchange, string usuarioPropio, BasicDeliverEventArgs delivery, string queue, int attempt, string? reason, string? error,
+        DateTimeOffset now, CancellationToken ct)
     {
-        var properties = new BasicProperties(delivery.BasicProperties)
-        {
-            DeliveryMode = DeliveryModes.Persistent,
-            Headers = new Dictionary<string, object?>(delivery.BasicProperties.Headers ?? new Dictionary<string, object?>())
-            {
-                [AttemptHeader] = attempt,
-            },
-        };
+        // HU #13727: el user_id pasa a ser el de este consumidor (el broker rechaza otro) y el verificado viaja en su cabecera.
+        var properties = VerificacionProductor.Reenvio(delivery.BasicProperties, usuarioPropio);
+        properties.DeliveryMode = DeliveryModes.Persistent;
+        properties.Headers![AttemptHeader] = attempt;
         if (reason is not null)
         {
             // HU #13357: lo que la pantalla de mensajes muertos muestra (último error y cuándo murió).
@@ -351,4 +376,64 @@ internal static partial class ConsumerLog
 
     [LoggerMessage(EventId = 7315, Level = LogLevel.Error, Message = "Consumidor {Queue}: mensaje que no es un sobre válido; va a la DLQ")]
     public static partial void Poison(ILogger logger, string queue, Exception ex);
+
+    [LoggerMessage(EventId = 7316, Level = LogLevel.Error, Message = "Consumidor {Queue}: {EventId} no lo publicó el productor {Producer} del sobre o ese productor no está permitido; va a la DLQ")]
+    public static partial void Unauthorized(ILogger logger, Guid eventId, string queue, string producer);
+}
+
+/// <summary>
+/// Quién publicó un mensaje (HU #13727, ADR-0075, Q3=3a). El publicador del SDK pone <c>user_id</c> = usuario de su conexión y
+/// RabbitMQ rechaza un <c>user_id</c> que no sea el del usuario autenticado, así que ese valor lo garantiza el broker. Al
+/// republicar a <c>&lt;cola&gt;.retry.n</c> o a la DLQ, el consumidor no puede conservar el <c>user_id</c> ajeno (el broker lo
+/// rechazaría): pone el suyo y lleva el verificado en <see cref="UserIdHeader"/>. Esa cabecera solo cuenta cuando el
+/// <c>user_id</c> es el del propio consumidor, porque nadie más puede publicar con él.
+/// </summary>
+public static class VerificacionProductor
+{
+    /// <summary>Motivo en la DLQ de un mensaje de un productor que la cola no acepta.</summary>
+    public const string MotivoNoAutorizado = "productor_no_autorizado";
+
+    /// <summary>Cabecera con el <c>user_id</c> verificado del mensaje original, en los reenvíos del consumidor.</summary>
+    public const string UserIdHeader = "x-flit-user-id";
+
+    /// <summary>
+    /// El usuario que publicó el mensaje original: el de la cabecera si el mensaje lo reenvió este consumidor
+    /// (<c>user_id</c> = <paramref name="usuarioPropio"/>), el <c>user_id</c> en otro caso; null si no hay ninguno.
+    /// </summary>
+    public static string? Verificado(IReadOnlyBasicProperties propiedades, string usuarioPropio)
+    {
+        ArgumentNullException.ThrowIfNull(propiedades);
+        object? cabecera = null;
+        var reenviado = string.Equals(propiedades.UserId, usuarioPropio, StringComparison.Ordinal)
+            && propiedades.Headers is { } headers && headers.TryGetValue(UserIdHeader, out cabecera);
+        var valor = reenviado ? Texto(cabecera) : propiedades.UserId;
+        return string.IsNullOrEmpty(valor) ? null : valor;
+    }
+
+    /// <summary>Lista vacía: cualquiera. Si no, el verificado es el productor del sobre y está en la lista.</summary>
+    public static bool Autorizado(string? verificado, string productor, IList<string> permitidos)
+    {
+        ArgumentNullException.ThrowIfNull(permitidos);
+        return permitidos.Count == 0
+            || (verificado is not null && string.Equals(verificado, productor, StringComparison.Ordinal) && permitidos.Contains(productor, StringComparer.Ordinal));
+    }
+
+    /// <summary>Propiedades para republicar el mensaje desde el consumidor: su <c>user_id</c> y el verificado en la cabecera.</summary>
+    public static BasicProperties Reenvio(IReadOnlyBasicProperties original, string usuarioPropio)
+    {
+        ArgumentNullException.ThrowIfNull(original);
+        ArgumentException.ThrowIfNullOrEmpty(usuarioPropio);
+        var headers = new Dictionary<string, object?>(original.Headers ?? new Dictionary<string, object?>())
+        {
+            [UserIdHeader] = Verificado(original, usuarioPropio) ?? string.Empty,
+        };
+        return new BasicProperties(original) { UserId = usuarioPropio, Headers = headers };
+    }
+
+    private static string? Texto(object? valor) => valor switch
+    {
+        byte[] bytes => Encoding.UTF8.GetString(bytes),
+        string texto => texto,
+        _ => null,
+    };
 }

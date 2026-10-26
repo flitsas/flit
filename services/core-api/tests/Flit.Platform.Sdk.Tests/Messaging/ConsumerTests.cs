@@ -316,9 +316,128 @@ public sealed class ConsumerTests(MessagingFixture fixture) : IClassFixture<Mess
         registrar.Should().Throw<InvalidOperationException>().WithMessage("*Concurrencia*");
     }
 
+    // ── HU #13727 (ADR-0075, Q3=3a): productores permitidos con el user_id que valida RabbitMQ ──────────────────────
+
+    [Fact]
+    public async Task HU13727_ProductorPermitido_SeProcesa()
+    {
+        fixture.SkipIfUnavailable();
+        var comportamiento = new Comportamiento();
+        await using var consumidor = await ConsumidorExtra.ArrancarAsync<EfectoDePrueba>(
+            fixture, Config(), TipoProductor, s => s.AddSingleton(comportamiento), o => o.ProductoresPermitidos.Add(UsuarioDelBroker));
+        var evento = Sobre(TipoProductor, UsuarioDelBroker);
+
+        await PublicarAsync(evento);
+
+        await Eventually(async () => await EfectosAsync(evento.EventId) == 1);
+        (await consumidor.MuertosAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task HU13727_ProductorFueraDeLaLista_VaALaDlq_SinLlamarAlEfecto()
+    {
+        fixture.SkipIfUnavailable();
+        var comportamiento = new Comportamiento();
+        await using var consumidor = await ConsumidorExtra.ArrancarAsync<EfectoDePrueba>(
+            fixture, Config(), TipoProductor, s => s.AddSingleton(comportamiento), o => o.ProductoresPermitidos.Add("diagnostico"));
+        var evento = Sobre(TipoProductor, UsuarioDelBroker);
+
+        await PublicarAsync(evento);
+
+        await Eventually(async () => await consumidor.MuertosAsync() == 1);
+        comportamiento.Intentos(evento.EventId).Should().Be(0, "el efecto no se llama");
+        (await consumidor.MotivoDelMuertoAsync()).Should().Be(VerificacionProductor.MotivoNoAutorizado);
+    }
+
+    [Fact]
+    public async Task HU13727_UserIdDistintoDelProductorDelSobre_VaALaDlq()
+    {
+        fixture.SkipIfUnavailable();
+        var comportamiento = new Comportamiento();
+        await using var consumidor = await ConsumidorExtra.ArrancarAsync<EfectoDePrueba>(
+            fixture, Config(), TipoProductor, s => s.AddSingleton(comportamiento), o => o.ProductoresPermitidos.Add("otro-servicio"));
+        // El sobre dice «otro-servicio», pero RabbitMQ autenticó y validó el user_id del usuario de la conexión.
+        var evento = Sobre(TipoProductor, "otro-servicio");
+
+        await PublicarAsync(evento);
+
+        await Eventually(async () => await consumidor.MuertosAsync() == 1);
+        comportamiento.Intentos(evento.EventId).Should().Be(0);
+        (await consumidor.MotivoDelMuertoAsync()).Should().Be(VerificacionProductor.MotivoNoAutorizado);
+    }
+
+    [Fact]
+    public async Task HU13727_SinProductoresPermitidos_ElComportamientoEsElDeHoy()
+    {
+        fixture.SkipIfUnavailable();
+        var comportamiento = new Comportamiento();
+        await using var consumidor = await ConsumidorExtra.ArrancarAsync<EfectoDePrueba>(
+            fixture, Config(), TipoProductor, s => s.AddSingleton(comportamiento), _ => { });
+        var evento = Sobre(TipoProductor, "cualquiera");
+
+        await PublicarAsync(evento);
+
+        await Eventually(async () => await EfectosAsync(evento.EventId) == 1);
+        (await consumidor.MuertosAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public void HU13727_ProductoresPermitidos_VaciaPorDefecto()
+    {
+        new PlatformConsumerOptions().ProductoresPermitidos.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("", "diagnostico", "diagnostico", true)]
+    [InlineData("", null, "diagnostico", true)]
+    [InlineData("diagnostico", "diagnostico", "diagnostico", true)]
+    [InlineData("diagnostico", "tramites", "tramites", false)]
+    [InlineData("diagnostico", "tramites", "diagnostico", false)]
+    [InlineData("diagnostico", null, "diagnostico", false)]
+    [InlineData("diagnostico,tramites", "tramites", "tramites", true)]
+    public void HU13727_Autorizado_SoloSiElUserIdEsElProductorYEstaEnLaLista(string permitidos, string? userId, string productor, bool esperado)
+    {
+        var lista = permitidos.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
+
+        VerificacionProductor.Autorizado(userId, productor, lista).Should().Be(esperado);
+    }
+
+    [Fact]
+    public void HU13727_AlReenviarAReintentoODlq_ElUserIdEsElDelConsumidor_YElProductorVerificadoSeConserva()
+    {
+        var original = new BasicProperties { UserId = "diagnostico", MessageId = "m-1" };
+
+        var primera = VerificacionProductor.Reenvio(original, "consultas");
+        var segunda = VerificacionProductor.Reenvio(primera, "consultas");
+
+        primera.UserId.Should().Be("consultas", "RabbitMQ rechaza un user_id distinto del usuario que republica");
+        primera.MessageId.Should().Be("m-1");
+        VerificacionProductor.Verificado(primera, "consultas").Should().Be("diagnostico");
+        VerificacionProductor.Verificado(segunda, "consultas").Should().Be("diagnostico", "el segundo reenvío no lo pierde");
+        VerificacionProductor.Verificado(original, "consultas").Should().Be("diagnostico");
+    }
+
+    [Fact]
+    public void HU13727_LaCabeceraDelProductorVerificado_SoloValeEnUnReenvioDelPropioConsumidor()
+    {
+        // Otro servicio publica con su user_id (validado) y una cabecera que dice «diagnostico»: manda el user_id.
+        var falsa = new BasicProperties
+        {
+            UserId = "tramites",
+            Headers = new Dictionary<string, object?> { [VerificacionProductor.UserIdHeader] = Encoding.UTF8.GetBytes("diagnostico") },
+        };
+
+        VerificacionProductor.Verificado(falsa, "consultas").Should().Be("tramites");
+        VerificacionProductor.Verificado(new BasicProperties(), "consultas").Should().BeNull();
+    }
+
     // ── Apoyo ────────────────────────────────────────────────────────────────────────────────────────────────────
 
     private const string TipoConcurrente = "prueba-consumo.pedido.concurrente";
+    private const string TipoProductor = "prueba-consumo.pedido.verificado";
+
+    /// <summary>Usuario de la conexión de las pruebas: el user_id que pone el publicador y que valida RabbitMQ.</summary>
+    private string UsuarioDelBroker => Uri.UnescapeDataString(new Uri(fixture.RabbitMq).UserInfo.Split(':')[0]);
 
     private PlatformConsumer<PruebaDb, EfectoDePrueba, PedidoCreado> Consumidor(PlatformConsumerOptions opciones) => new(
         new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
