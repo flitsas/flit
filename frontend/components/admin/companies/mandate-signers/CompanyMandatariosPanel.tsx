@@ -7,7 +7,9 @@ import { useToast } from "@/components/admin/Toast";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { Pagination } from "@/components/atom/Pagination";
 import { RowActions } from "@/components/atom/RowActions";
-import { TablaFiltrosBar, TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
+import { EncabezadoFiltrable } from "@/components/atom/FiltroColumna";
+import { SearchInput } from "@/components/atom/SearchInput";
+import { TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import {
   TABLA_HEADER_BG,
@@ -285,21 +287,27 @@ export function CompanyMandatariosPanel({
   const { setPage } = pg;
   const volverAPrimeraPagina = useCallback(() => setPage(1), [setPage]);
   const filtros = useTablaFiltros({ columnas: columnasFiltro, onCambio: volverAPrimeraPagina });
-  const filtrados = useMemo(
-    () =>
-      filtrarFilas(signers, filtros.condicionesTotales, filtros.busqueda, {
-        columnas: {
-          mandatario: (x) => x.fullName,
-          documento: (x) => x.documentNumber,
-          modelo: (x) => modeloDe(x),
-          vigencia: (x) => claveVigencia(x),
-          validacion: (x) => claveValidacion(x),
-          organismos: (x) => x.transitOfficeIds ?? [],
-        },
-        busqueda: (x) => [x.fullName, x.documentNumber],
-      }),
-    [signers, filtros.condicionesTotales, filtros.busqueda],
-  );
+  // Buscador de arriba (tal cual estaba antes de la épica): nombre o documento, sin puntos ni espacios.
+  const [search, setSearch] = useState("");
+  const normaliza = (v: string) => v.toLowerCase().replace(/[\s.\-]/g, "");
+  const filtrados = useMemo(() => {
+    const q = normaliza(search.trim());
+    // Embudos del encabezado (AND entre columnas); el buscador de arriba se combina con ellos.
+    const porColumna = filtrarFilas(signers, filtros.condicionesTotales, "", {
+      columnas: {
+        mandatario: (x) => x.fullName,
+        documento: (x) => x.documentNumber,
+        modelo: (x) => modeloDe(x),
+        vigencia: (x) => claveVigencia(x),
+        validacion: (x) => claveValidacion(x),
+        organismos: (x) => x.transitOfficeIds ?? [],
+      },
+    });
+    if (!q) return porColumna;
+    return porColumna.filter(
+      (x) => normaliza(x.fullName).includes(q) || normaliza(x.documentNumber ?? "").includes(q),
+    );
+  }, [signers, filtros.condicionesTotales, search]);
   // AC3 — el aviso cuenta sobre TODOS los mandatarios, no sobre los filtrados.
   const sinValidar = signers.filter(
     (x) => x.isActive && requiereValidacionPropia(x) && x.identityStatus !== "valid",
@@ -376,12 +384,15 @@ export function CompanyMandatariosPanel({
           skeletonRows={4}
         >
           <div className="flex flex-wrap items-center gap-3">
-            <TablaFiltrosBar
-              filtros={filtros}
-              buscador={{
-                placeholder: "Buscar por nombre o documento…",
-                ariaLabel: "Buscar mandatarios",
+            <SearchInput
+              value={search}
+              onChange={(v) => {
+                setSearch(v);
+                pg.setPage(1);
               }}
+              label="Buscar mandatarios"
+              placeholder="Buscar por nombre o documento…"
+              className="max-w-md flex-1"
             />
             <p
               className="text-xs text-[#59677D] dark:text-white/70"
@@ -394,7 +405,10 @@ export function CompanyMandatariosPanel({
 
           {filtrados.length === 0 ? (
             <TablaFiltrosVacio
-              onLimpiar={filtros.limpiar}
+              onLimpiar={() => {
+                filtros.limpiar();
+                setSearch("");
+              }}
               mensaje="Ningún mandatario coincide con los filtros"
             />
           ) : (
@@ -412,42 +426,54 @@ export function CompanyMandatariosPanel({
                         className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`}
                         style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                       >
-                        Mandatario
+                        <EncabezadoFiltrable filtros={filtros} columnaId="mandatario">
+                          Mandatario
+                        </EncabezadoFiltrable>
                       </th>
                       <th
                         scope="col"
                         className={`${TABLA_HEADER_CELL_CLS}`}
                         style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                       >
-                        Documento
+                        <EncabezadoFiltrable filtros={filtros} columnaId="documento">
+                          Documento
+                        </EncabezadoFiltrable>
                       </th>
                       <th
                         scope="col"
                         className={`${TABLA_HEADER_CELL_CLS}`}
                         style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                       >
-                        Modelo
+                        <EncabezadoFiltrable filtros={filtros} columnaId="modelo">
+                          Modelo
+                        </EncabezadoFiltrable>
                       </th>
                       <th
                         scope="col"
                         className={`${TABLA_HEADER_CELL_CLS}`}
                         style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                       >
-                        Vigencia
+                        <EncabezadoFiltrable filtros={filtros} columnaId="vigencia">
+                          Vigencia
+                        </EncabezadoFiltrable>
                       </th>
                       <th
                         scope="col"
                         className={`${TABLA_HEADER_CELL_CLS}`}
                         style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                       >
-                        Validación
+                        <EncabezadoFiltrable filtros={filtros} columnaId="validacion">
+                          Validación
+                        </EncabezadoFiltrable>
                       </th>
                       <th
                         scope="col"
                         className={`${TABLA_HEADER_CELL_CLS}`}
                         style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                       >
-                        Organismos
+                        <EncabezadoFiltrable filtros={filtros} columnaId="organismos">
+                          Organismos
+                        </EncabezadoFiltrable>
                       </th>
                       <th
                         scope="col"
