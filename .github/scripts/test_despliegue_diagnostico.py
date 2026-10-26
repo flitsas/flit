@@ -32,7 +32,8 @@ DOCKERFILE_WEB = RAIZ / "frontend-diagnostico" / "Dockerfile"
 API_DEV, API_QA, API_PDN = "4029", "5029", "6029"
 WEB_DEV, WEB_QA, WEB_PDN = "4024", "5024", "6024"
 GRPC = "8087"
-INTERPOLACION_VACIA = re.compile(r"^\$\{[A-Z0-9_]+:-\}$")
+# Sin valor por defecto: vacía (${VAR:-}) u obligatoria (${VAR:?mensaje}, p. ej. RABBITMQ_URL_DIAGNOSTICO, ADR-0075).
+INTERPOLACION_VACIA = re.compile(r"^\$\{[A-Z0-9_]+(:-|:\?[^}]*)\}$")
 
 
 def _texto(ruta: Path) -> str:

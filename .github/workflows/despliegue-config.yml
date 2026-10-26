@@ -58,6 +58,7 @@ jobs:
           CORS_ORIGIN: https://dev.flitsas.online
           RABBITMQ_URL_PLATAFORMA: amqp://ci:ci@rabbitmq:5672/flit
           RABBITMQ_URL_TRAMITES: amqp://ci:ci@rabbitmq:5672/flit
+          RABBITMQ_URL_DIAGNOSTICO: amqp://ci:ci@rabbitmq:5672/flit
           SVC_TRAMITES_CLIENT_SECRET: ci-relleno
         run: |
           docker compose -f docker-compose.prod.yml config --quiet
