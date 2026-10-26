@@ -52,9 +52,10 @@ const BASIC_CATALOG = [
 ];
 
 async function applyFilter(column: string, fill: (dialog: HTMLElement) => Promise<void>) {
-  await userEvent.click(screen.getByRole("button", { name: /\+ filtro/i }));
-  const panel = screen.getByRole("dialog", { name: /filtros de la tabla/i });
-  await userEvent.click(within(panel).getByRole("button", { name: column }));
+  await userEvent.click(
+    screen.getByRole("button", { name: new RegExp("filtrar por " + column, "i") }),
+  );
+  const panel = screen.getByRole("dialog", { name: "Filtro de " + column });
   await fill(panel);
   await userEvent.click(within(panel).getByRole("button", { name: "Aplicar" }));
 }
@@ -137,12 +138,11 @@ describe("CompanyDocumentParamsPanel", () => {
     expect(screen.queryByText("licencia")).not.toBeInTheDocument();
 
     // Por código
-    await userEvent.click(screen.getByRole("button", { name: /\+ filtro \(1\)/i }));
-    await userEvent.click(screen.getByRole("button", { name: /Documento: «paz»/ }));
-    const input = screen.getByLabelText(/documento contiene/i);
-    await userEvent.clear(input);
-    await userEvent.type(input, "lice");
-    await userEvent.click(screen.getByRole("button", { name: "Aplicar" }));
+    await applyFilter("Documento", async (p) => {
+      const input = within(p).getByLabelText(/documento contiene/i);
+      await userEvent.clear(input);
+      await userEvent.type(input, "lice");
+    });
     expect(screen.getByText("licencia")).toBeInTheDocument();
     expect(screen.queryByText("cepd")).not.toBeInTheDocument();
   });
