@@ -182,6 +182,11 @@ describe("AdminCompaniesPage — panel de arriba + filtros por columna (HU #1399
     fetchCompaniesIndex.mockResolvedValue({ data: [], totalCount: 0, page: 1, pageSize: 10 });
     await filtrarTexto(user, "NIT", "000");
     const limpiar = await screen.findByRole("button", { name: "Limpiar filtros" });
+    // La tabla sigue montada con sus embudos y los filtros de arriba (la fila vacía ocupa todas las columnas).
+    expect(screen.getByRole("table", { name: "Compañías" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /filtrar por nit/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /filtrar por razón social/i })).toBeInTheDocument();
+    expect(screen.getByLabelText("Razón Social")).toBeInTheDocument();
 
     fetchCompaniesIndex.mockResolvedValue({ data: [ITEM], totalCount: 1, page: 1, pageSize: 10 });
     await user.click(limpiar);
@@ -189,6 +194,22 @@ describe("AdminCompaniesPage — panel de arriba + filtros por columna (HU #1399
     await esperarListado();
     expect(lastParams()).not.toHaveProperty("nit");
     expect(lastParams()).toMatchObject({ page: 1 });
+  });
+
+  it("AC3: con 0 filas se puede quitar un solo filtro desde su embudo y vuelven las filas", async () => {
+    const user = userEvent.setup();
+    render(<AdminCompaniesPage />);
+    await esperarListado();
+
+    fetchCompaniesIndex.mockResolvedValue({ data: [], totalCount: 0, page: 1, pageSize: 10 });
+    await filtrarTexto(user, "NIT", "000");
+    await screen.findByRole("button", { name: "Limpiar filtros" });
+
+    fetchCompaniesIndex.mockResolvedValue({ data: [ITEM], totalCount: 1, page: 1, pageSize: 10 });
+    await abrirEmbudo(user, "NIT");
+    await user.click(screen.getByRole("button", { name: "Quitar filtro" }));
+    await esperarListado();
+    expect(lastParams()).not.toHaveProperty("nit");
   });
 
   it("AC3: «Limpiar filtros» quita solo los de columna; el «Limpiar» del panel, los suyos", async () => {

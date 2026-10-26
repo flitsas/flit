@@ -31,7 +31,6 @@ import {
   type CompanyListItem,
   type CompanyPagedResult,
 } from "@/lib/api/types";
-import { TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
 import { condicionesAParams } from "@/lib/tablas/filtrar-filas";
 import { useTablaFiltros } from "@/lib/tablas/useTablaFiltros";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -151,6 +150,19 @@ function CompaniesList() {
     setFilters(next);
   };
 
+  const hayFiltrosActivos = filtros.hayFiltros || Object.keys(filters).length > 0;
+  // «Limpiar filtros» del vacío quita SOLO los de columna; si no hay ninguno (el vacío viene del panel
+  // superior) limpia el panel para que el botón nunca quede sin efecto.
+  const limpiarVacio = () => {
+    if (filtros.hayFiltros) {
+      filtros.limpiar();
+      return;
+    }
+    setFilters({});
+    setPanelKey((k) => k + 1);
+    setPage(1);
+  };
+
   const handleCreated = (razonSocial: string) => {
     setCreateOpen(false);
     show(`Compañía «${razonSocial}» creada.`, "success");
@@ -221,14 +233,9 @@ function CompaniesList() {
       <div className={ADMIN_CONTENT_SURFACE_CLS}>
         {status === "loading" ? (
           <CarLoaderModal label="Cargando compañías…" />
-        ) : status === "empty" && filtros.hayFiltros ? (
-          <TablaFiltrosVacio
-            onLimpiar={filtros.limpiar}
-            mensaje="Ninguna compañía coincide con los filtros"
-          />
         ) : (
           <UiStateBoundary
-            status={status}
+            status={status === "empty" && hayFiltrosActivos ? "ready" : status}
             onRetry={() => void load()}
             emptyMessage="No se encontraron compañías B2B con los filtros aplicados."
             errorMessage="No se pudo cargar el listado de compañías."
@@ -245,6 +252,7 @@ function CompaniesList() {
                 onEdit={openEdit}
                 onToggleStatus={setToggleTarget}
                 filtros={filtros}
+                onLimpiarFiltros={hayFiltrosActivos ? limpiarVacio : undefined}
               />
             )}
           </UiStateBoundary>

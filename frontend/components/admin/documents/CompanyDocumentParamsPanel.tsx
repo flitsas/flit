@@ -345,9 +345,7 @@ export function CompanyDocumentParamsPanel({
           emptyMessage="No hay documentos activos en el catálogo."
         >
           <div className="space-y-3">
-            {filtradoVacio ? (
-              <TablaFiltrosVacio onLimpiar={filtros.limpiar} />
-            ) : (
+            {(
               /* HU #13918 — paginación estándar: con una sola página solo se ven el resumen y
                  «Filas por página». */
               <DataTable
@@ -356,6 +354,9 @@ export function CompanyDocumentParamsPanel({
                 rows={pg.paginar(visibles)}
                 getRowKey={(row) => row.code}
                 allowHorizontalScroll
+                emptyContent={
+                  filtradoVacio ? <TablaFiltrosVacio onLimpiar={filtros.limpiar} /> : undefined
+                }
                 pagination={{
                   page: pg.page,
                   pageSize: pg.pageSize,
