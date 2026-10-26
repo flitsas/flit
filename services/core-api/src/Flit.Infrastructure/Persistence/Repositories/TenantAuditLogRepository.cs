@@ -73,16 +73,36 @@ internal sealed class TenantAuditLogRepository : ITenantAuditLogRepository
             query = query.Where(a => a.ChangedAt < toUtc);
         }
 
+        var keys = filter.FieldKeys is { Count: > 0 } k ? k.ToList() : null;
         if (filter.Field is { } field)
         {
             var needle = field.ToLower();
-            query = query.Where(a =>
-                a.FieldName.ToLower().Contains(needle) || a.EntityName.ToLower().Contains(needle));
+            query = keys is null
+                ? query.Where(a =>
+                    a.FieldName.ToLower().Contains(needle) || a.EntityName.ToLower().Contains(needle))
+                : query.Where(a =>
+                    a.FieldName.ToLower().Contains(needle) || a.EntityName.ToLower().Contains(needle)
+                    || keys.Contains(a.FieldName.ToLower()) || keys.Contains(a.EntityName.ToLower()));
+        }
+        else if (keys is not null)
+        {
+            query = query.Where(a => keys.Contains(a.FieldName.ToLower()) || keys.Contains(a.EntityName.ToLower()));
         }
 
+        var oldTerms = new List<string>();
         if (filter.OldValue is { } oldValue)
         {
-            query = query.Where(OldValueContains(oldValue));
+            oldTerms.Add(oldValue);
+        }
+
+        if (filter.OldValueAlternatives is { Count: > 0 } alts)
+        {
+            oldTerms.AddRange(alts);
+        }
+
+        if (oldTerms.Count > 0)
+        {
+            query = query.Where(OldValueContainsAny(oldTerms));
         }
 
         if (filter.Operator is { } op)
@@ -105,18 +125,37 @@ internal sealed class TenantAuditLogRepository : ITenantAuditLogRepository
     /// así que se compara su forma de texto con <c>ILIKE</c> en una subconsulta. El proveedor
     /// InMemory de los tests de aplicación guarda el valor como texto y conserva el LINQ.
     /// </summary>
-    private System.Linq.Expressions.Expression<Func<Entities.Admin.TenantConfigAuditLog, bool>> OldValueContains(
-        string oldValue)
+    private System.Linq.Expressions.Expression<Func<Entities.Admin.TenantConfigAuditLog, bool>> OldValueContainsAny(
+        List<string> terms)
     {
         if (!_context.Database.IsNpgsql())
         {
-            var needle = oldValue.ToLower();
-            return a => a.OldValue != null && a.OldValue.ToLower().Contains(needle);
+            // OR armado como árbol de expresiones: InMemory no traduce Any() con lambda anidada.
+            var param = System.Linq.Expressions.Expression.Parameter(typeof(Entities.Admin.TenantConfigAuditLog), "a");
+            var oldValue = System.Linq.Expressions.Expression.Property(param, nameof(Entities.Admin.TenantConfigAuditLog.OldValue));
+            var toLower = typeof(string).GetMethod(nameof(string.ToLower), Type.EmptyTypes)!;
+            var contains = typeof(string).GetMethod(nameof(string.Contains), [typeof(string)])!;
+            var lowered = System.Linq.Expressions.Expression.Call(oldValue, toLower);
+            System.Linq.Expressions.Expression body = System.Linq.Expressions.Expression.Constant(false);
+            foreach (var term in terms)
+            {
+                body = System.Linq.Expressions.Expression.OrElse(
+                    body,
+                    System.Linq.Expressions.Expression.Call(
+                        lowered, contains, System.Linq.Expressions.Expression.Constant(term.ToLower())));
+            }
+
+            var notNull = System.Linq.Expressions.Expression.NotEqual(
+                oldValue, System.Linq.Expressions.Expression.Constant(null, typeof(string)));
+            return System.Linq.Expressions.Expression.Lambda<Func<Entities.Admin.TenantConfigAuditLog, bool>>(
+                System.Linq.Expressions.Expression.AndAlso(notNull, body), param);
         }
 
-        var pattern = "%" + oldValue.Replace(@"\", @"\\").Replace("%", @"\%").Replace("_", @"\_") + "%";
+        var patterns = terms
+            .Select(t => "%" + t.Replace(@"\", @"\\").Replace("%", @"\%").Replace("_", @"\_") + "%")
+            .ToArray();
         var ids = _context.Database.SqlQuery<Guid>(
-            $"""SELECT id AS "Value" FROM admin.tenant_config_audit_logs WHERE old_value::text ILIKE {pattern}""");
+            $"""SELECT id AS "Value" FROM admin.tenant_config_audit_logs WHERE old_value::text ILIKE ANY ({patterns})""");
         return a => ids.Contains(a.Id);
     }
 }

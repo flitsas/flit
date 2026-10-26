@@ -167,6 +167,74 @@ public sealed class TenantAuditLogFilterTests : IClassFixture<WebApplicationFact
     }
 
     [Fact]
+    public async Task AC1_CampoClaves_EncuentraPorClaveExacta_YSeSumaAlTextoConOr()
+    {
+        var (db, tenant) = (NewDbName(), Guid.NewGuid());
+        var now = DateTimeOffset.UtcNow;
+        await Seed(db,
+            Row(tenant, "l", now, field: "login"),
+            Row(tenant, "t", now, field: "terms_accepted"),
+            Row(tenant, "n", now, field: "legal_name"),
+            Row(tenant, "x", now, field: "otro"));
+
+        var soloClaves = await Run(db, new GetTenantAuditLogQuery { TenantId = tenant, CampoClaves = " LOGIN , ,terms_accepted," });
+        soloClaves.Data.Select(e => e.NewValue).Should().BeEquivalentTo("l", "t");
+
+        var parcial = await Run(db, new GetTenantAuditLogQuery { TenantId = tenant, CampoClaves = "log" });
+        parcial.TotalCount.Should().Be(0);
+
+        var conTexto = await Run(db, new GetTenantAuditLogQuery { TenantId = tenant, Campo = "legal", CampoClaves = "login" });
+        conTexto.Data.Select(e => e.NewValue).Should().BeEquivalentTo("l", "n");
+
+        // Clave por entityName.
+        var porEntidad = await Run(db, new GetTenantAuditLogQuery { TenantId = tenant, CampoClaves = "tenant_settings" });
+        porEntidad.TotalCount.Should().Be(4);
+
+        var vacias = await Run(db, new GetTenantAuditLogQuery { TenantId = tenant, CampoClaves = " , " });
+        vacias.TotalCount.Should().Be(4);
+    }
+
+    [Fact]
+    public async Task AC1_ValorAnteriorAlternativas_SeSumanConOr()
+    {
+        var (db, tenant) = (NewDbName(), Guid.NewGuid());
+        var now = DateTimeOffset.UtcNow;
+        await Seed(db,
+            Row(tenant, "f", now, oldValue: "false"),
+            Row(tenant, "a", now, oldValue: "ACME"),
+            Row(tenant, "z", now, oldValue: "otro"));
+
+        var soloAlt = await Run(db, new GetTenantAuditLogQuery { TenantId = tenant, ValorAnteriorAlternativas = "false" });
+        soloAlt.Data.Select(e => e.NewValue).Should().BeEquivalentTo("f");
+
+        var conValor = await Run(db, new GetTenantAuditLogQuery { TenantId = tenant, ValorAnterior = "acme", ValorAnteriorAlternativas = "FALSE,,x1" });
+        conValor.Data.Select(e => e.NewValue).Should().BeEquivalentTo("f", "a");
+    }
+
+    [Fact]
+    public async Task AC2_DemasiadasClaves_Responde422()
+    {
+        var db = NewDbName();
+        var tooMany = string.Join(',', Enumerable.Range(0, GetTenantAuditLogHandler.MaxListItems + 1).Select(i => $"k{i}"));
+
+        var ex1 = (await ((Func<Task>)(() => Run(db, new GetTenantAuditLogQuery { TenantId = Guid.NewGuid(), CampoClaves = tooMany })))
+            .Should().ThrowAsync<InvalidAuditLogFilterException>()).Which;
+        ex1.Errors.Should().ContainSingle().Which.Field.Should().Be("campoClaves");
+
+        var ex2 = (await ((Func<Task>)(() => Run(db, new GetTenantAuditLogQuery { TenantId = Guid.NewGuid(), ValorAnteriorAlternativas = tooMany })))
+            .Should().ThrowAsync<InvalidAuditLogFilterException>()).Which;
+        ex2.Errors.Should().ContainSingle().Which.Field.Should().Be("valorAnteriorAlternativas");
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", TestTokenFactory.CreateToken("SuperAdmin"));
+        var response = await client.GetAsync(
+            $"/api/v1/admin/companies/{Guid.NewGuid()}/audit-log?campoClaves={tooMany}",
+            TestContext.Current.CancellationToken);
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+    }
+
+    [Fact]
     public async Task AC2_FechaDesdePosteriorAFechaHasta_LanzaValidacion()
     {
         var db = NewDbName();

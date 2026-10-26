@@ -54,8 +54,37 @@ public sealed class GetTenantAuditLogHandler
     /// <summary>Mensaje de validación cuando el rango de fechas está invertido.</summary>
     public const string InvalidDateRangeMessage = "La fecha desde no puede ser posterior a la fecha hasta.";
 
+    /// <summary>Tope de claves/alternativas por filtro.</summary>
+    public const int MaxListItems = 50;
+
+    /// <summary>Mensaje de validación cuando se excede <see cref="MaxListItems"/>.</summary>
+    public const string TooManyItemsMessage = "Se permiten como máximo 50 elementos en esta lista.";
+
+    private static List<string>? ParseList(string? csv, string field)
+    {
+        if (string.IsNullOrWhiteSpace(csv))
+        {
+            return null;
+        }
+
+        var items = csv.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => s.ToLowerInvariant())
+            .Distinct()
+            .ToList();
+
+        if (items.Count > MaxListItems)
+        {
+            throw new InvalidAuditLogFilterException([new CompanyValidationError(field, TooManyItemsMessage)]);
+        }
+
+        return items.Count == 0 ? null : items;
+    }
+
     private static TenantAuditLogFilter BuildFilter(GetTenantAuditLogQuery query)
     {
+        var fieldKeys = ParseList(query.CampoClaves, "campoClaves");
+        var oldAlternatives = ParseList(query.ValorAnteriorAlternativas, "valorAnteriorAlternativas");
+
         if (query.FechaDesde is { } d && query.FechaHasta is { } h && d > h)
         {
             throw new InvalidAuditLogFilterException(
@@ -77,7 +106,9 @@ public sealed class GetTenantAuditLogHandler
             toExclusive,
             Normalize(query.Campo),
             Normalize(query.ValorAnterior),
-            Normalize(query.Operador));
+            Normalize(query.Operador),
+            fieldKeys,
+            oldAlternatives);
     }
 
     private static string? Normalize(string? text) =>

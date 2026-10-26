@@ -8,13 +8,17 @@ namespace Flit.Admin.Domain.Companies.TransitOffices;
 /// <param name="ChangedToExclusive">Instante final exclusivo (<c>changed_at &lt;</c>).</param>
 /// <param name="Field">Contiene en el campo modificado (<c>field_name</c> o <c>entity_name</c>).</param>
 /// <param name="OldValue">Contiene en el valor anterior.</param>
+/// <param name="FieldKeys">Claves técnicas exactas (minúsculas) que se suman por OR al «contiene» de campo (<c>lower(field_name)</c> o <c>lower(entity_name)</c>).</param>
+/// <param name="OldValueAlternatives">Textos alternativos (minúsculas) que se suman por OR al «contiene» del valor anterior.</param>
 /// <param name="Operator">Contiene en el operador: id de usuario, nombre o correo.</param>
 public sealed record TenantAuditLogFilter(
     DateTimeOffset? ChangedFromInclusive = null,
     DateTimeOffset? ChangedToExclusive = null,
     string? Field = null,
     string? OldValue = null,
-    string? Operator = null)
+    string? Operator = null,
+    IReadOnlyList<string>? FieldKeys = null,
+    IReadOnlyList<string>? OldValueAlternatives = null)
 {
     public static TenantAuditLogFilter None { get; } = new();
 }

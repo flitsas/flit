@@ -44,6 +44,8 @@ public sealed class FiltrosPorColumnaPostgresTests(PostgresDatabaseFixture fixtu
         await ctx.SaveChangesAsync(TestContext.Current.CancellationToken);
         ctx.TenantConfigAuditLogs.Add(NewAudit(0xA1, TenantA, "legal_name", "\"Razón vieja\"", Dia1, UserAna));
         ctx.TenantConfigAuditLogs.Add(NewAudit(0xA2, TenantA, "tax_id", "\"900123\"", Dia2, UserLuis));
+        // HU #14004 (ajuste): old_value jsonb booleano `false` (el frontend lo muestra «Deshabilitada»), sin operador.
+        ctx.TenantConfigAuditLogs.Add(NewAudit(0xA3, TenantA, "login", "false", Dia1, null));
         // Mismo campo y operador en OTRA compañía: nunca debe aparecer en la auditoría de A.
         ctx.TenantConfigAuditLogs.Add(NewAudit(0xB1, TenantB, "legal_name", "\"Razón vieja\"", Dia1, UserAna));
         await ctx.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -92,6 +94,40 @@ public sealed class FiltrosPorColumnaPostgresTests(PostgresDatabaseFixture fixtu
         dia2.Items.Should().ContainSingle().Which.FieldName.Should().Be("tax_id");
     }
 
+    [PostgresFact]
+    public async Task HU14004_CampoClavesYValorAnteriorAlternativas_SeTraducenEnPostgres()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var repo = new TenantAuditLogRepository(NewContext());
+
+        // Solo claves: exacta, sin distinguir mayúsculas.
+        var soloClaves = await repo.ListPagedAsync(TenantA, 1, 20, new TenantAuditLogFilter(FieldKeys: ["login", "no_existe"]), ct);
+        soloClaves.Items.Should().ContainSingle().Which.FieldName.Should().Be("login");
+
+        // La clave exacta NO es «contiene»: "log" no encuentra "login".
+        var parcial = await repo.ListPagedAsync(TenantA, 1, 20, new TenantAuditLogFilter(FieldKeys: ["log"]), ct);
+        parcial.Items.Should().BeEmpty();
+
+        // Texto «contiene» OR claves.
+        var campoOClaves = await repo.ListPagedAsync(TenantA, 1, 20, new TenantAuditLogFilter(Field: "legal", FieldKeys: ["login"]), ct);
+        campoOClaves.Items.Select(i => i.FieldName).Should().BeEquivalentTo("legal_name", "login");
+        campoOClaves.TotalCount.Should().Be(2);
+
+        // Alternativas solas: `false` contra jsonb false.
+        var soloAlt = await repo.ListPagedAsync(TenantA, 1, 20, new TenantAuditLogFilter(OldValueAlternatives: ["false"]), ct);
+        soloAlt.Items.Should().ContainSingle().Which.FieldName.Should().Be("login");
+
+        // valorAnterior OR alternativas, con comodines escapados (100%_ no coincide con nada).
+        var valorOAlt = await repo.ListPagedAsync(TenantA, 1, 20, new TenantAuditLogFilter(OldValue: "razón", OldValueAlternatives: ["false", "100%_"]), ct);
+        valorOAlt.Items.Select(i => i.FieldName).Should().BeEquivalentTo("legal_name", "login");
+
+        // AND entre columnas y aislamiento por tenant.
+        var andCols = await repo.ListPagedAsync(TenantA, 1, 20, new TenantAuditLogFilter(FieldKeys: ["legal_name"], OldValueAlternatives: ["false"]), ct);
+        andCols.Items.Should().BeEmpty();
+        var otroTenant = await repo.ListPagedAsync(TenantB, 1, 20, new TenantAuditLogFilter(FieldKeys: ["login"], OldValueAlternatives: ["false"]), ct);
+        otroTenant.Items.Should().BeEmpty();
+    }
+
     private static CompanyListFilter Filtro(string? codigo = null, IReadOnlyList<string>? tipos = null) => new()
     {
         Codigo = codigo,
@@ -111,7 +147,7 @@ public sealed class FiltrosPorColumnaPostgresTests(PostgresDatabaseFixture fixtu
         CreatedAt = DateTimeOffset.UtcNow,
     };
 
-    private static TenantConfigAuditLog NewAudit(int n, Guid tenant, string field, string oldValue, DateTimeOffset at, Guid by) => new()
+    private static TenantConfigAuditLog NewAudit(int n, Guid tenant, string field, string oldValue, DateTimeOffset at, Guid? by) => new()
     {
         Id = Guid.Parse($"0199b000-0000-7000-8000-0000000ac0{n:x2}"),
         TenantId = tenant,

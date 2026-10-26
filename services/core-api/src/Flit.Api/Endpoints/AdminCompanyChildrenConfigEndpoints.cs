@@ -224,7 +224,9 @@ public static class AdminCompanyChildrenConfigEndpoints
         [FromQuery] DateOnly? fechaHasta = null,
         [FromQuery] string? campo = null,
         [FromQuery] string? valorAnterior = null,
-        [FromQuery] string? operador = null)
+        [FromQuery] string? operador = null,
+        [FromQuery] string? campoClaves = null,
+        [FromQuery] string? valorAnteriorAlternativas = null)
     {
         var forbid = await GuardChildWriteAsync(user, headTenantId, childTenantId, hierarchy, cancellationToken)
             .ConfigureAwait(false);
@@ -245,6 +247,8 @@ public static class AdminCompanyChildrenConfigEndpoints
                 Campo = campo,
                 ValorAnterior = valorAnterior,
                 Operador = operador,
+                CampoClaves = campoClaves,
+                ValorAnteriorAlternativas = valorAnteriorAlternativas,
             },
             cancellationToken).ConfigureAwait(false);
     }
