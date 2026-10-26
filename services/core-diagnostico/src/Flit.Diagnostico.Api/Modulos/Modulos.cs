@@ -120,6 +120,8 @@ public static class Modulos
         services.AddScoped<Consultas.Bus.IConstructorSolicitud, Consultas.Bus.ConstructorSolicitudAvaluo>();
         services.AddScoped<Consultas.Bus.IConstructorSolicitud, Consultas.Bus.ConstructorSolicitudImpuesto>();
         services.AddScoped<Consultas.Bus.PublicadorCeldas>();
+        // HU #13737 (ADR-0075, Q4): los reintentos los decide Diagnóstico; core-consultas consulta una sola vez.
+        services.AddSingleton<Consultas.Bus.ProgramadorReintentos>();
         // HU #13737 (D-12): reintentos de transitorios, configuración global validada al arrancar en [0, 3].
         services.AddOptions<Consultas.OpcionesConsultas>()
             .Bind(configuration.GetSection(Consultas.OpcionesConsultas.Seccion))

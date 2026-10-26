@@ -88,12 +88,19 @@ internal sealed class EscritorCeldas(DiagnosticoDb db, TimeProvider reloj)
     /// Sube la versión del tablero del lote y la devuelve. El UPDATE bloquea la fila de la cabecera hasta el fin de la
     /// transacción, así que dos celdas del mismo lote nunca leen la misma versión.
     /// </summary>
-    private async Task<long> SubirVersionAsync(Guid diagnosticoId, CancellationToken ct)
+    private Task<long> SubirVersionAsync(Guid diagnosticoId, CancellationToken ct) => SubirVersionTableroAsync(db, diagnosticoId, ct);
+
+    /// <summary>
+    /// Sube la versión del tablero del lote en <paramref name="contexto"/> (con la empresa de la celda) y la devuelve; deja la
+    /// cabecera bloqueada hasta el fin de la transacción.
+    /// </summary>
+    internal static async Task<long> SubirVersionTableroAsync(DiagnosticoDb contexto, Guid diagnosticoId, CancellationToken ct)
     {
-        var filas = await db.Set<CabeceraDiagnostico>().Where(c => c.Id == diagnosticoId)
+        ArgumentNullException.ThrowIfNull(contexto);
+        var filas = await contexto.Set<CabeceraDiagnostico>().Where(c => c.Id == diagnosticoId)
             .ExecuteUpdateAsync(s => s.SetProperty(c => c.VersionTablero, c => c.VersionTablero + 1), ct).ConfigureAwait(false);
         if (filas != 1)
             throw new InvalidOperationException("La celda no tiene su cabecera en la empresa del contexto.");
-        return await db.Set<CabeceraDiagnostico>().Where(c => c.Id == diagnosticoId).Select(c => c.VersionTablero).SingleAsync(ct).ConfigureAwait(false);
+        return await contexto.Set<CabeceraDiagnostico>().Where(c => c.Id == diagnosticoId).Select(c => c.VersionTablero).SingleAsync(ct).ConfigureAwait(false);
     }
 }
