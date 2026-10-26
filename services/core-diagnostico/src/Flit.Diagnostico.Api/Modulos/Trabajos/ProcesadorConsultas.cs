@@ -2,7 +2,7 @@ using Flit.Diagnostico.Api.Modulos.Consultas;
 using Flit.Diagnostico.Api.Modulos.Tablero;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Domain.Consultas;
-using Microsoft.EntityFrameworkCore;
+using Flit.Platform.Sdk.Messaging;
 using Microsoft.Extensions.Options;
 
 namespace Flit.Diagnostico.Api.Modulos.Trabajos;
@@ -106,8 +106,9 @@ internal sealed partial class ProcesadorConsultas(
         // RUNT va primero (HU #13730): su cierre libera o bloquea las demás celdas del vehículo en la misma transacción (y las
         // liberadas publican su trabajo con el publicador del scope, ADR-0075). Un reintento no es un cierre: las demás siguen esperando.
         resultado = OrquestadorVehiculo.TrasEjecutar(celda, resultado, reloj, scope.ServiceProvider.GetRequiredService<Consultas.Bus.PublicadorCeldas>());
-        // HU #13743: tras cada celda terminal, el estado global del lote se recalcula en la misma transacción de cierre.
-        resultado = RecalculadorEstado.TrasCerrar(celda, resultado, reloj);
+        // HU #13743: tras cada celda terminal, el estado global del lote se recalcula en la misma transacción de cierre (y, si
+        // queda terminado, diagnostico.lote.terminado sale por la outbox del scope, ADR-0075).
+        resultado = RecalculadorEstado.TrasCerrar(celda, resultado, reloj, scope.ServiceProvider.GetRequiredService<IPlatformOutbox>());
         if (!await new EscritorCeldas(db, reloj).CerrarAsync(celda, resultado, ct, intentos).ConfigureAwait(false))
         {
             LeasePerdido(log, celda.Id, celda.Fuente);

@@ -4,6 +4,7 @@ using Flit.Diagnostico.Api.Modulos.Trabajos;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Diagnosticos;
+using Flit.Platform.Sdk.Messaging;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Diagnostico.Api.Modulos.Tablero;
@@ -16,16 +17,22 @@ namespace Flit.Diagnostico.Api.Modulos.Tablero;
 /// <c>cerrado_en</c> y una fila del historial AUTO sin usuario (<see cref="EstadoGlobalLote"/>); con alguna en ERROR sigue
 /// EN_PROCESO hasta el cierre del panel. Un reintento (la celda vuelve a PENDIENTE) no recalcula. Como el escritor de celdas
 /// ya subió la versión del tablero con un UPDATE de la cabecera, la fila está bloqueada hasta el commit: dos celdas del mismo
-/// lote que cierran a la vez se recalculan una detrás de otra y la transición ocurre una sola vez.
+/// lote que cierran a la vez se recalculan una detrás de otra y la transición ocurre una sola vez. Cuando esa transición deja el
+/// lote en COMPLETADO o INCOMPLETO, la misma transacción encola el evento <see cref="LoteTerminado"/> (HU #13743, ADR-0075) en la
+/// outbox del contexto de la celda; un lote reabierto (reproceso) que se vuelve a cerrar lo emite otra vez con su nueva versión.
 /// </summary>
 internal static class RecalculadorEstado
 {
-    /// <summary>El resultado con el recálculo sumado al final de sus efectos; sin cambios si la celda no queda terminal.</summary>
-    public static ResultadoCelda TrasCerrar(CeldaTomada celda, ResultadoCelda resultado, TimeProvider reloj)
+    /// <summary>
+    /// El resultado con el recálculo sumado al final de sus efectos; sin cambios si la celda no queda terminal. <paramref name="outbox"/>
+    /// es la del mismo contexto con que se cierra la celda (la del scope del procesador).
+    /// </summary>
+    public static ResultadoCelda TrasCerrar(CeldaTomada celda, ResultadoCelda resultado, TimeProvider reloj, IPlatformOutbox outbox)
     {
         ArgumentNullException.ThrowIfNull(celda);
         ArgumentNullException.ThrowIfNull(resultado);
         ArgumentNullException.ThrowIfNull(reloj);
+        ArgumentNullException.ThrowIfNull(outbox);
         if (resultado.Estado is not (EstadoCelda.Completado or EstadoCelda.Error or EstadoCelda.Na) || resultado.ReintentarDesde is not null)
             return resultado;
 
@@ -36,7 +43,11 @@ internal static class RecalculadorEstado
             {
                 if (propios is not null)
                     await propios(db, version, ct).ConfigureAwait(false);
-                await RecalcularAsync(db, celda.DiagnosticoId, reloj.GetUtcNow(), ct).ConfigureAwait(false);
+                var ahora = reloj.GetUtcNow();
+                var transicion = await RecalcularAsync(db, celda.DiagnosticoId, ahora, ct).ConfigureAwait(false);
+                // HU #13743 (ADR-0075, Q8): el lote terminado sale en la transacción de su cierre.
+                if (transicion?.Nuevo is EstadoDiagnostico.Completado or EstadoDiagnostico.Incompleto)
+                    await LoteTerminado.EncolarAsync(db, outbox, celda.DiagnosticoId, version, ahora, ct).ConfigureAwait(false);
             },
         };
     }
