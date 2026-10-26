@@ -92,7 +92,7 @@ export function CompanyMandatariosPanel({
   const { show } = useToast();
   const [status, setStatus] = useState<UiStatus>("loading");
   // Bug #13055 — paginación en cliente con filas por página, como el listado de trámites.
-  const pg = usePaginacion();
+  const pg = usePaginacion("mandate-signers.CompanyMandatariosPanel");
   const [signers, setSigners] = useState<MandateSigner[]>([]);
   const [offices, setOffices] = useState<CompanyTransitOfficeOption[]>([]);
   const [formOpen, setFormOpen] = useState(false);

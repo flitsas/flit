@@ -825,7 +825,7 @@ function DeletedUsersTable({
   onRestore: (user: OtUserItem) => void;
 }) {
   // Bug #13055 — tabla homologada con el modelo de trámites: paginación en cliente con filas por página.
-  const pg = usePaginacion();
+  const pg = usePaginacion("transit-offices.OtUsersSection");
   const columns: DataTableColumn<OtUserItem>[] = useMemo(
     () => [
       {

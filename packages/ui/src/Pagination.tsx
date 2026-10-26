@@ -13,10 +13,9 @@ export interface PaginationProps {
   /**
    * Cambio de «Filas por página». Con este manejador se muestra el selector (el estándar: todas las
    * tablas lo llevan, Bug #13055); el cambio debe volver a la página 1 — `usePaginacion` ya lo hace.
+   * Las opciones son SIEMPRE {@link TAMANOS_DE_PAGINA} (HU #13916): ninguna tabla elige las suyas.
    */
   onPageSizeChange?: (pageSize: number) => void;
-  /** Tamaños ofrecidos. Por defecto los de trámites: 10, 25, 50, 100. */
-  pageSizeOptions?: readonly number[];
   /** Nombre accesible de la navegación; distingue varias paginaciones en una misma pantalla. */
   ariaLabel?: string;
   /** Qué se cuenta, para la línea vacía («Sin representantes que mostrar»). Default: «registros». */
@@ -32,7 +31,7 @@ const SELECT_CLS =
 /**
  * Paginación ESTÁNDAR de las tablas FLIT (Bug #13055): la misma del listado de trámites.
  * «Filas por página» a la izquierda y, a la derecha, «Mostrando X–Y de N» con la navegación
- * numerada ‹ 1 2 … N › ({@link PageNav}). Antes había dos paginaciones: esta solo ofrecía
+ * numerada « ‹ 1 2 … N › » ({@link PageNav}). Antes había dos paginaciones: esta solo ofrecía
  * Anterior / Siguiente con «1 / 39», y la de trámites, numerada; cada módulo se veía distinto.
  *
  * El conteo se muestra siempre; los botones de página, solo si hay más de una.
@@ -44,7 +43,6 @@ export function Pagination({
   onPageChange,
   className = "",
   onPageSizeChange,
-  pageSizeOptions = TAMANOS_DE_PAGINA,
   ariaLabel = "Paginación",
   noun = "registros",
 }: PaginationProps) {
@@ -54,9 +52,8 @@ export function Pagination({
   const to = Math.min(actual * pageSize, totalCount);
   // Un tamaño que no está en la lista (una pantalla con tamaño propio) se ofrece igual, para que el
   // selector no mienta sobre lo que se está mostrando.
-  const opciones = pageSizeOptions.includes(pageSize)
-    ? pageSizeOptions
-    : [...pageSizeOptions, pageSize].sort((a, b) => a - b);
+  const estandar: readonly number[] = TAMANOS_DE_PAGINA;
+  const opciones = estandar.includes(pageSize) ? estandar : [...estandar, pageSize].sort((a, b) => a - b);
 
   return (
     <div className={`flex flex-wrap items-center justify-between gap-4 ${className}`}>

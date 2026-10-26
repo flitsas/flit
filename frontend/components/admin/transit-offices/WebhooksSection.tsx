@@ -50,9 +50,9 @@ export function WebhooksSection() {
   const [logTotal, setLogTotal] = useState(0);
   // Bitácora: paginación de servidor con «Filas por página».
   const { page: logPage, setPage: setLogPage, pageSize: logPageSize, setPageSize: setLogPageSize } =
-    usePaginacion();
+    usePaginacion("transit-offices.WebhooksSection");
   // Lista de webhooks: paginación en cliente.
-  const pgWebhooks = usePaginacion();
+  const pgWebhooks = usePaginacion("transit-offices.WebhooksSection.webhooks");
   const [selectedLog, setSelectedLog] = useState<OtApiCallLog | null>(null);
 
   const [direction, setDirection] = useState("outbound");

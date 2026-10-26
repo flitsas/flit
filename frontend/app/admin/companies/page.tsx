@@ -46,7 +46,7 @@ function CompaniesList() {
   const { isSuperAdmin, isAdminCompany, tenantId } = usePermissions();
   const [filters, setFilters] = useState<CompanyFilters>({});
   // Bug #13055 — tabla homologada con el modelo de trámites: filas por página elegibles.
-  const { page, pageSize, setPage, setPageSize } = usePaginacion();
+  const { page, pageSize, setPage, setPageSize } = usePaginacion("admin.companies");
   // HU #11227 — solo SuperAdmin; desactivado = excluir OT (default).
   const [includeTransitOffices, setIncludeTransitOffices] = useState(false);
   const [status, setStatus] = useState<UiStatus>("loading");

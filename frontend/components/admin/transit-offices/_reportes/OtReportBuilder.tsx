@@ -89,7 +89,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
   const [sortBy, setSortBy] = useState<OtReportSort>(OT_REPORT_SORT.radicado);
   const [desc, setDesc] = useState(true);
   // Bug #13055 — paginación de servidor con «Filas por página» (misma del modelo de trámites).
-  const { page, setPage, pageSize, setPageSize } = usePaginacion();
+  const { page, setPage, pageSize, setPageSize } = usePaginacion("_reportes.OtReportBuilder");
 
   const [visibleColumns, setVisibleColumns] = useState<string[]>(defaultVisibleColumns);
   const [report, setReport] = useState<OtReport | null>(null);

@@ -33,7 +33,7 @@ export function ImprontaHistorialSection() {
   const [rows, setRows] = useState<ImprontaHistorialItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   // Bug #13055: paginación estándar con «Filas por página» (10/25/50/100), de servidor.
-  const { page, pageSize, setPage, setPageSize } = usePaginacion();
+  const { page, pageSize, setPage, setPageSize } = usePaginacion("improntas.ImprontaHistorialSection");
 
   const [placaInput, setPlacaInput] = useState("");
   const [dateFromInput, setDateFromInput] = useState("");

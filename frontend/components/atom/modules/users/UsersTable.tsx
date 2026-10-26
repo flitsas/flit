@@ -169,7 +169,7 @@ export function UsersTable({
   // Bug #13055 — tabla homologada con el modelo de trámites: `<table>` semántica (antes una grilla de
   // div). La columna Acciones se ajusta al contenido (`w-px whitespace-nowrap`), así que los botones
   // ya no se desbordan hacia la celda Fecha como pasaba con el ancho fijo por acción.
-  const pg = usePaginacion();
+  const pg = usePaginacion("users.UsersTable");
   const { setPage } = pg;
 
   const columnas = showTenantColumn

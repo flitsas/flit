@@ -31,7 +31,7 @@ export function MandatosFormatosTable({
   onPreview,
   onResetTemplate,
 }: MandatosFormatosTableProps) {
-  const pg = usePaginacion();
+  const pg = usePaginacion("plataforma.MandatosFormatosTable");
   const pageRows = pg.paginar([...formatos]);
 
   const columns: DataTableColumn<MandatoFormatView>[] = [

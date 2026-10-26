@@ -8,7 +8,7 @@ import { ChevronRight, X } from "lucide-react";
 import { ModuleTitle } from "./ModuleTitle";
 import { Pagination } from "@/components/atom/Pagination";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
-import { usePaginacion } from "@/components/atom/usePaginacion";
+import { TAMANO_DE_PAGINA_POR_DEFECTO, usePaginacion } from "@/components/atom/usePaginacion";
 import {
   TABLA_HEADER_BG,
   TABLA_HEADER_CELL_CLS,
@@ -47,7 +47,7 @@ import { DetalleTramiteIct } from "@/components/ict/DetalleTramiteIct";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { getToken } from "@/lib/api/client";
 
-const TAMANO_PAGINA = 10;
+const TAMANO_PAGINA = TAMANO_DE_PAGINA_POR_DEFECTO;
 
 /**
  * Tamaño de página al exportar. El backend acota el suyo a 200; pedir más no trae más filas y sí
@@ -133,7 +133,7 @@ export function IctTrazabilidad() {
   const [filtros, setFiltros] = useState<Filtros>(filtrosIniciales);
   const [aplicados, setAplicados] = useState<Filtros>(filtrosIniciales);
   // Bug #13055 — paginación de servidor estándar, con «Filas por página».
-  const { page, pageSize, setPage, setPageSize } = usePaginacion(TAMANO_PAGINA);
+  const { page, pageSize, setPage, setPageSize } = usePaginacion("modulos.IctTrazabilidad");
   const [pagina, setPagina] = useState<PaginaTramitesIct | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);

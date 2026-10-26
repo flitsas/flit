@@ -6,12 +6,9 @@ import { tramitesClient } from '@/lib/api/tramites-client';
 import type { IdentityAuditEvent } from '@/lib/api/types/procedure-runtime';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { FLIT } from '@/lib/flit-design-tokens';
-import {
-  TABLA_HEADER_BG,
-  TABLA_HEADER_CELL_CLS,
-  TABLA_HEADER_FG,
-  TABLA_ROW_HOVER_CLS,
-} from '@/components/atom/table-styles';
+import { DataTable, type DataTableColumn } from '@/components/atom/DataTable';
+import { Pagination } from '@/components/atom/Pagination';
+import { usePaginacion } from '@/components/atom/usePaginacion';
 
 import { formatFechaHora } from '@/lib/format/date';
 /**
@@ -189,6 +186,65 @@ export function IdentityValidationTrackingPanel({
   const [referenced, setReferenced] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // HU #13919 — la bitácora se pagina (10/20/30/50) igual que el resto de tablas; una validación con
+  // reenvíos y reconsultas acumula decenas de eventos.
+  const pg = usePaginacion('atom.IdentityValidationTrackingPanel');
+  // Los eventos no traen id: el índice (sobre la lista completa, no sobre la página) hace de clave.
+  const filas = (events ?? []).map((e, i) => ({ e, i }));
+  const filasVisibles = pg.paginar(filas);
+  const paginacion = (
+    <Pagination
+      page={pg.page}
+      pageSize={pg.pageSize}
+      totalCount={filas.length}
+      onPageChange={pg.setPage}
+      onPageSizeChange={pg.setPageSize}
+      ariaLabel="Paginación de la bitácora"
+    />
+  );
+  const columnas: DataTableColumn<{ e: IdentityAuditEvent; i: number }>[] = [
+    {
+      key: 'fecha',
+      header: 'Fecha',
+      cellClassName: 'whitespace-nowrap align-top',
+      render: ({ e }) => <span className="opacity-70">{formatFecha(e.occurredAt)}</span>,
+    },
+    {
+      key: 'etapa',
+      header: 'Etapa',
+      cellClassName: 'font-medium align-top',
+      render: ({ e }) => auditStageLabel(e.stage, detailLayout),
+    },
+    {
+      key: 'resultado',
+      header: 'Resultado',
+      cellClassName: 'font-semibold align-top',
+      render: ({ e }) =>
+        detailLayout ? (
+          <StatusBadge
+            label={auditOutcomeLabel(e)}
+            tone={auditOutcomeTone(e)}
+            ariaLabel={`Resultado: ${auditOutcomeLabel(e)}`}
+          />
+        ) : (
+          <span style={eventoCorrecto(e) ? { color: 'var(--flit-success-ink)' } : undefined}>
+            {auditOutcomeLabel(e)}
+          </span>
+        ),
+    },
+    {
+      key: 'cifrado',
+      header: 'Cifrado',
+      cellClassName: 'whitespace-nowrap align-top',
+      render: ({ e }) => auditCifradoText(e, detailLayout),
+    },
+    {
+      key: 'detalle',
+      header: detailLayout ? 'Detalle técnico' : 'Detalle',
+      cellClassName: 'align-top',
+      render: ({ e }) => <span className="opacity-70">{auditDetailText(e)}</span>,
+    },
+  ];
 
   const loadAudit = useCallback(async () => {
     setLoading(true);
@@ -267,7 +323,7 @@ export function IdentityValidationTrackingPanel({
           )}
           {events && events.length > 0 && compacto && (
             <ul className="space-y-2" aria-label="Bitácora de la validación">
-              {events.map((e, i) => (
+              {filasVisibles.map(({ e, i }) => (
                 <li key={i} className="rounded-xl border bg-white px-3 py-2.5 text-xs dark:bg-[#0B0F14]" style={{ borderColor: '#DFE5ED' }}>
                   <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                     <span className="font-semibold">{auditStageLabel(e.stage, true)}</span>
@@ -283,66 +339,25 @@ export function IdentityValidationTrackingPanel({
               ))}
             </ul>
           )}
+          {events && events.length > 0 && compacto && paginacion}
           {events && events.length > 0 && !compacto && (
             // La referencia del diseño reserva un ancho mínimo y deja que la tabla ruede en
             // horizontal: son cinco columnas y la última es texto largo. Sin el mínimo, «Detalle»
             // se estrangula hasta una palabra por línea en cuanto la tarjeta va a media pantalla.
-            <div className="overflow-x-auto">
-              {/* Bug #13055 — tabla homologada con el modelo de trámites (bitácora corta del panel: sin
-                  paginación). */}
-              <table
-                className="min-w-[520px] text-left text-xs"
-                style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px' }}
-              >
-                <thead>
-                  <tr>
-                    {['Fecha', 'Etapa', 'Resultado', 'Cifrado', detailLayout ? 'Detalle técnico' : 'Detalle'].map(
-                      (col, i, arr) => (
-                        <th
-                          key={col}
-                          scope="col"
-                          className={`${TABLA_HEADER_CELL_CLS} ${i === 0 ? 'rounded-l-xl' : ''} ${i === arr.length - 1 ? 'rounded-r-xl' : ''}`}
-                          style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
-                        >
-                          {col}
-                        </th>
-                      ),
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {events.map((e, i) => {
-                    const celda = 'border-y px-4 py-3 align-top';
-                    const estilo = { borderColor: '#DFE5ED' };
-                    return (
-                      <tr key={i} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
-                        <td className={`${celda} whitespace-nowrap rounded-l-xl border-l`} style={estilo}>
-                          <span className="opacity-70">{formatFecha(e.occurredAt)}</span>
-                        </td>
-                        <td className={`${celda} font-medium`} style={estilo}>{auditStageLabel(e.stage, detailLayout)}</td>
-                        <td className={`${celda} font-semibold`} style={estilo}>
-                          {detailLayout ? (
-                            <StatusBadge
-                              label={auditOutcomeLabel(e)}
-                              tone={auditOutcomeTone(e)}
-                              ariaLabel={`Resultado: ${auditOutcomeLabel(e)}`}
-                            />
-                          ) : (
-                            <span style={eventoCorrecto(e) ? { color: 'var(--flit-success-ink)' } : undefined}>
-                              {auditOutcomeLabel(e)}
-                            </span>
-                          )}
-                        </td>
-                        <td className={`${celda} whitespace-nowrap`} style={estilo}>{auditCifradoText(e, detailLayout)}</td>
-                        <td className={`${celda} rounded-r-xl border-r`} style={estilo}>
-                          <span className="opacity-70">{auditDetailText(e)}</span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              columns={columnas}
+              rows={filasVisibles}
+              getRowKey={({ i }) => String(i)}
+              minWidth={520}
+              ariaLabel="Bitácora de la validación"
+              pagination={{
+                page: pg.page,
+                pageSize: pg.pageSize,
+                totalCount: filas.length,
+                onPageChange: pg.setPage,
+                onPageSizeChange: pg.setPageSize,
+              }}
+            />
           )}
           {events && events.length > 0 && !embebido && (
             <button

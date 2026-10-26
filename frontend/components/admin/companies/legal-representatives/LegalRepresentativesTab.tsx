@@ -87,7 +87,7 @@ export function LegalRepresentativesTab({
   // Bug #13055 — filas por página elegibles. El directorio de una compañía es corto: se carga completo
   // (páginas de 100 contra la misma API) y se busca y pagina en cliente, de modo que el resumen y la
   // búsqueda cubren a TODOS los representantes y no solo la página visible.
-  const { page, pageSize, setPage, setPageSize, paginar } = usePaginacion();
+  const { page, pageSize, setPage, setPageSize, paginar } = usePaginacion("legal-representatives.LegalRepresentativesTab");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<UiStatus>("loading");
   const [items, setItems] = useState<LegalRepresentativeItem[]>([]);

@@ -8,13 +8,9 @@ import { CreateButton } from "@/components/atom/CreateButton";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { StatusBadge } from "@/components/atom/StatusBadge";
-import {
-  TABLA_CELDA_SECUNDARIA_CLS,
-  TABLA_HEADER_BG,
-  TABLA_HEADER_CELL_CLS,
-  TABLA_HEADER_FG,
-  TABLA_ROW_HOVER_CLS,
-} from "@/components/atom/table-styles";
+import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+import { TABLA_CELDA_SECUNDARIA_CLS } from "@/components/atom/table-styles";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { controlCls } from "@/components/operacion/tramites-control-styles";
 import { fetchIctJobCatalog } from "@/lib/api/admin-ict-job-catalog";
 import { fetchIctJobSettings } from "@/lib/api/admin-ict-job-settings";
@@ -33,13 +29,13 @@ const FILTERS: { id: ModuleFilter; label: string }[] = [
   { id: "Quipux", label: "Quipux" },
 ];
 
-const BORDER = "#DFE5ED";
-
 export function JobsCatalog() {
   const router = useRouter();
   const [status, setStatus] = useState<UiStatus>("loading");
   const [rows, setRows] = useState<UnifiedJobRow[]>([]);
   const [filter, setFilter] = useState<ModuleFilter>("all");
+  // HU #13918 — paginación estándar en cliente: el catálogo llega completo.
+  const pg = usePaginacion("jobs.JobsCatalog");
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setStatus("loading");
@@ -95,7 +91,10 @@ export function JobsCatalog() {
               type="button"
               className={controlCls(filter === item.id)}
               aria-pressed={filter === item.id}
-              onClick={() => setFilter(item.id)}
+              onClick={() => {
+                setFilter(item.id);
+                pg.setPage(1);
+              }}
             >
               {item.label}
             </button>
@@ -128,95 +127,77 @@ export function JobsCatalog() {
           errorMessage="No se pudo cargar el catálogo de procesos periódicos."
           onRetry={() => void load()}
         >
-          <JobsTable rows={visible} />
+          <DataTable<UnifiedJobRow>
+            ariaLabel="Procesos periódicos"
+            columns={JOB_COLUMNS}
+            rows={pg.paginar(visible)}
+            getRowKey={(row) => row.key}
+            pagination={{
+              page: pg.page,
+              pageSize: pg.pageSize,
+              totalCount: visible.length,
+              onPageChange: pg.setPage,
+              onPageSizeChange: pg.setPageSize,
+            }}
+          />
         </UiStateBoundary>
       )}
     </div>
   );
 }
 
-function JobsTable({ rows }: { rows: UnifiedJobRow[] }) {
-  return (
-    <div className="overflow-x-auto">
-      <table
-        aria-label="Procesos periódicos"
-        style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
-      >
-        <thead>
-          <tr>
-            <HeaderCell first>Proceso</HeaderCell>
-            <HeaderCell>Módulo</HeaderCell>
-            <HeaderCell>Qué hace</HeaderCell>
-            <HeaderCell>Estado</HeaderCell>
-            <HeaderCell>Cadencia</HeaderCell>
-            <HeaderCell last>Último run</HeaderCell>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.key} className={`bg-white text-xs dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
-              <td
-                className="rounded-l-xl border-y border-l px-4 py-3 align-middle"
-                style={{ borderColor: BORDER }}
-              >
-                <span className="block font-semibold text-flit-primary dark:text-white">{row.displayName}</span>
-                <span className={`mt-0.5 block ${TABLA_CELDA_SECUNDARIA_CLS}`}>{row.technicalName}</span>
-              </td>
-              <td className="border-y px-4 py-3 align-middle" style={{ borderColor: BORDER }}>
-                <StatusBadge
-                  label={row.module}
-                  tone={row.module === "ICT" ? "info" : "neutral"}
-                  ariaLabel={`Módulo ${row.module}`}
-                />
-              </td>
-              <td className="border-y px-4 py-3 align-middle" style={{ borderColor: BORDER }}>
-                <span className="flex flex-wrap gap-1">
-                  {row.typeLabels.map((label) => (
-                    <StatusBadge key={label} label={label} tone="neutral" />
-                  ))}
-                </span>
-              </td>
-              <td className="border-y px-4 py-3 align-middle" style={{ borderColor: BORDER }}>
-                <StatusBadge label={row.enabledLabel} tone={row.enabledTone} />
-              </td>
-              <td className="border-y px-4 py-3 align-middle font-medium" style={{ borderColor: BORDER }}>
-                {row.intervalLabel}
-              </td>
-              <td
-                className="rounded-r-xl border-y border-r px-4 py-3 align-middle"
-                style={{ borderColor: BORDER }}
-              >
-                <span className="flex min-w-0 flex-col items-start gap-0.5">
-                  <StatusBadge label={row.lastRunPrimary} tone={row.lastRunTone} />
-                  {row.lastRunSecondary ? (
-                    <span className={TABLA_CELDA_SECUNDARIA_CLS}>{row.lastRunSecondary}</span>
-                  ) : null}
-                </span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function HeaderCell({
-  children,
-  first,
-  last,
-}: {
-  children: string;
-  first?: boolean;
-  last?: boolean;
-}) {
-  return (
-    <th
-      scope="col"
-      className={`${TABLA_HEADER_CELL_CLS} ${first ? "rounded-l-xl" : ""} ${last ? "rounded-r-xl" : ""}`}
-      style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
-    >
-      {children}
-    </th>
-  );
-}
+const JOB_COLUMNS: DataTableColumn<UnifiedJobRow>[] = [
+  {
+    key: "proceso",
+    header: "Proceso",
+    render: (row) => (
+      <>
+        <span className="block font-semibold text-flit-primary dark:text-white">{row.displayName}</span>
+        <span className={`mt-0.5 block ${TABLA_CELDA_SECUNDARIA_CLS}`}>{row.technicalName}</span>
+      </>
+    ),
+  },
+  {
+    key: "modulo",
+    header: "Módulo",
+    render: (row) => (
+      <StatusBadge
+        label={row.module}
+        tone={row.module === "ICT" ? "info" : "neutral"}
+        ariaLabel={`Módulo ${row.module}`}
+      />
+    ),
+  },
+  {
+    key: "que-hace",
+    header: "Qué hace",
+    render: (row) => (
+      <span className="flex flex-wrap gap-1">
+        {row.typeLabels.map((label) => (
+          <StatusBadge key={label} label={label} tone="neutral" />
+        ))}
+      </span>
+    ),
+  },
+  {
+    key: "estado",
+    header: "Estado",
+    render: (row) => <StatusBadge label={row.enabledLabel} tone={row.enabledTone} />,
+  },
+  {
+    key: "cadencia",
+    header: "Cadencia",
+    cellClassName: "font-medium",
+    render: (row) => row.intervalLabel,
+  },
+  {
+    key: "ultimo-run",
+    header: "Último run",
+    render: (row) => (
+      <span className="flex min-w-0 flex-col items-start gap-0.5">
+        <StatusBadge label={row.lastRunPrimary} tone={row.lastRunTone} />
+        {row.lastRunSecondary ? <span className={TABLA_CELDA_SECUNDARIA_CLS}>{row.lastRunSecondary}</span> : null}
+      </span>
+    ),
+  },
+];

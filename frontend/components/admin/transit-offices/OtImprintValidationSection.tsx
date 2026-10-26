@@ -64,8 +64,8 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
   >({});
   const [openingPdfId, setOpeningPdfId] = useState<string | null>(null);
   // Bug #13055 — tablas homologadas con el modelo de trámites: paginación en cliente con filas por página.
-  const pgRows = usePaginacion();
-  const pgHistory = usePaginacion();
+  const pgRows = usePaginacion("transit-offices.OtImprintValidationSection.rows");
+  const pgHistory = usePaginacion("transit-offices.OtImprintValidationSection.history");
   const { setPage: setHistoryPage } = pgHistory;
 
   const [modalRow, setModalRow] = useState<ImprintSignatureDto | null>(null);

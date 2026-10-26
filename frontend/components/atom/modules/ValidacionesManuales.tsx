@@ -56,7 +56,7 @@ export function ValidacionesManuales({
   onDetailClose?: () => void;
 }) {
   const api = client ?? getManualReviewClient();
-  const pg = usePaginacion();
+  const pg = usePaginacion("modulos.ValidacionesManuales");
   const { page, pageSize, setPage } = pg;
 
   const [status, setStatus] = useState<ManualStatus | ''>('');

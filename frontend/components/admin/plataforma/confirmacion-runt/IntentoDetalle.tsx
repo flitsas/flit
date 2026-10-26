@@ -3,12 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Ban, Check, CircleDashed, Hourglass, X, type LucideIcon } from "lucide-react";
 import { InlineAlert } from "@/components/atom/InlineAlert";
-import {
-  TABLA_HEADER_BG,
-  TABLA_HEADER_CELL_CLS,
-  TABLA_HEADER_FG,
-  TABLA_ROW_HOVER_CLS,
-} from "@/components/atom/table-styles";
+import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import {
@@ -392,65 +388,7 @@ function RespuestaBloque({ titulo, vista, conTitulo }: { titulo: string; vista: 
           ) : vista.solicitudes.length === 0 ? (
             <p className="text-[11px] italic opacity-55">Sin solicitudes registradas.</p>
           ) : (
-            <div className="overflow-x-auto">
-              {/* Bug #13055 — tabla homologada con el modelo de trámites (subtabla fija, sin paginación). */}
-              <table
-                aria-label="Solicitudes ante el RUNT"
-                className="min-w-[520px] text-[11px]"
-                style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
-              >
-                <thead>
-                  <tr>
-                    <th
-                      scope="col"
-                      className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`}
-                      style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
-                    >
-                      Fecha
-                    </th>
-                    <th
-                      scope="col"
-                      className={`${TABLA_HEADER_CELL_CLS}`}
-                      style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
-                    >
-                      Trámite(s)
-                    </th>
-                    <th
-                      scope="col"
-                      className={`${TABLA_HEADER_CELL_CLS}`}
-                      style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
-                    >
-                      Estado
-                    </th>
-                    <th
-                      scope="col"
-                      className={`${TABLA_HEADER_CELL_CLS}`}
-                      style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
-                    >
-                      Entidad
-                    </th>
-                    <th
-                      scope="col"
-                      className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl`}
-                      style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
-                    >
-                      N.º
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {vista.solicitudes.map((s) => (
-                    <tr key={`${s.noSolicitud}-${s.fecha}`} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
-                    <td className="border-y px-4 py-3 rounded-l-xl border-l font-mono tabular-nums" style={{ borderColor: "#DFE5ED" }}>{s.fecha}</td>
-                    <td className="border-y px-4 py-3 font-medium" style={{ borderColor: "#DFE5ED" }}>{s.tramites}</td>
-                    <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}><EstadoSolicitud estado={s.estado} /></td>
-                    <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>{s.entidad}</td>
-                    <td className="border-y px-4 py-3 rounded-r-xl border-r font-mono opacity-70" style={{ borderColor: "#DFE5ED" }}>{s.noSolicitud}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <SolicitudesTabla solicitudes={vista.solicitudes} />
           )}
         </section>
       </div>
@@ -468,6 +406,37 @@ function RespuestaBloque({ titulo, vista, conTitulo }: { titulo: string; vista: 
         </section>
       ) : null}
     </div>
+  );
+}
+
+type Solicitud = RuntRespuestaVista["solicitudes"][number];
+
+const SOLICITUD_COLUMNS: DataTableColumn<Solicitud>[] = [
+  { key: "fecha", header: "Fecha", cellClassName: "font-mono tabular-nums", render: (s) => s.fecha },
+  { key: "tramites", header: "Trámite(s)", cellClassName: "font-medium", render: (s) => s.tramites },
+  { key: "estado", header: "Estado", render: (s) => <EstadoSolicitud estado={s.estado} /> },
+  { key: "entidad", header: "Entidad", render: (s) => s.entidad },
+  { key: "numero", header: "N.º", cellClassName: "font-mono opacity-70", render: (s) => s.noSolicitud },
+];
+
+/** HU #13918 — historial de solicitudes con la tabla estándar y paginación en cliente (llega completo). */
+function SolicitudesTabla({ solicitudes }: { solicitudes: Solicitud[] }) {
+  const pg = usePaginacion("confirmacion-runt.IntentoDetalle.solicitudes");
+  return (
+    <DataTable<Solicitud>
+      ariaLabel="Solicitudes ante el RUNT"
+      columns={SOLICITUD_COLUMNS}
+      rows={pg.paginar(solicitudes)}
+      getRowKey={(s) => `${s.noSolicitud}-${s.fecha}`}
+      minWidth={520}
+      pagination={{
+        page: pg.page,
+        pageSize: pg.pageSize,
+        totalCount: solicitudes.length,
+        onPageChange: pg.setPage,
+        onPageSizeChange: pg.setPageSize,
+      }}
+    />
   );
 }
 
