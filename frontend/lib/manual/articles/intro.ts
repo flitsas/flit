@@ -380,9 +380,19 @@ export const INTRO_ARTICLES: ManualArticle[] = [
       "página siguiente",
       "página anterior",
       "cuántos registros",
+      "filtrar",
+      "filtro",
+      "filtros",
+      "filtrar una tabla",
+      "filtro por columna",
+      "buscar en una tabla",
+      "más filtro",
+      "limpiar filtros",
+      "empezar de cero",
+      "periodo",
     ],
     summary:
-      "Todas las tablas de FLIT se ven y se usan igual: cómo cambiar de página, ir al principio o al final y elegir cuántas filas ver.",
+      "Todas las tablas de FLIT se ven y se usan igual: cómo filtrar por columna, cambiar de página, ir al principio o al final y elegir cuántas filas ver.",
     blocks: [
       {
         id: "mismo-diseno",
@@ -418,8 +428,28 @@ export const INTRO_ARTICLES: ManualArticle[] = [
         ],
       },
       {
+        id: "filtrar-tabla",
+        title: "4. Cómo filtrar una tabla",
+        paragraphs: [
+          "Encima de cada tabla hay una línea con los filtros. Es la misma en Trámites, Compañías, Usuarios, Auditoría y las demás listas: aprendes una vez y la usas en todas.",
+        ],
+        bullets: [
+          "Buscador (solo en algunas tablas): escribe parte de un nombre, un documento o un código y la tabla se reduce mientras escribes.",
+          "«Periodo» (solo si la tabla tiene una fecha): elige un periodo de la lista o un rango propio con fecha inicial y final. La fecha inicial no puede ser posterior a la final; si lo es, verás un aviso.",
+          "«+ Filtro»: pulsa el botón, elige la columna que quieres filtrar, escribe el texto o marca una o varias opciones y pulsa «Aplicar». Puedes añadir tantos filtros como necesites.",
+          "Los filtros se suman: la tabla muestra solo lo que cumple todos a la vez.",
+          "El botón «+ Filtro» te dice cuántos filtros hay activos. Para quitarlos todos, pulsa «Empezar de cero».",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Si ningún registro cumple los filtros, la tabla muestra «Ningún registro coincide con los filtros» y el botón «Limpiar filtros» para volver a ver todo.",
+          },
+        ],
+      },
+      {
         id: "filtros",
-        title: "4. Filtros y exportaciones",
+        title: "5. Filtros y exportaciones",
         paragraphs: [
           "Las páginas se calculan sobre el resultado filtrado: si aplicas un filtro que deja pocos registros, la tabla te lleva a la página que existe en vez de mostrarte una vacía. Exportar a Excel o CSV siempre incluye todo el resultado del filtro, no solo la página que estás viendo.",
         ],
