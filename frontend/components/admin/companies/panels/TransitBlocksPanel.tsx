@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Ban } from "lucide-react";
+import { Ban, Search } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { RowActions } from "@/components/atom/RowActions";
@@ -9,7 +9,8 @@ import { usePaginacion } from "@/components/atom/usePaginacion";
 import { useToast } from "@/components/admin/Toast";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { StatusBadge } from "@/components/atom/StatusBadge";
-import { TablaFiltrosBar, TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
+import { EncabezadoFiltrable } from "@/components/atom/FiltroColumna";
+import { TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
 import { OtScopeConfirmDialog } from "@/components/admin/companies/OtScopeConfirmDialog";
 import {
   addTransitBlock,
@@ -56,6 +57,8 @@ export function TransitBlocksPanel({
     columnas: COLUMNAS_FILTRO_BLOQUEOS,
     onCambio: () => pg.setPage(1),
   });
+  // Buscador de arriba (nombre o código): se combina con los embudos del encabezado.
+  const [search, setSearch] = useState("");
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -102,16 +105,15 @@ export function TransitBlocksPanel({
     [offices, operationalById],
   );
 
-  const filtered = useMemo(
-    () =>
-      filtrarBloqueos(
-        operableOffices,
-        filtros.condicionesTotales,
-        filtros.busqueda,
-        new Set(blockedIds),
-      ),
-    [operableOffices, filtros.condicionesTotales, filtros.busqueda, blockedIds],
-  );
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const buscados = q
+      ? operableOffices.filter(
+          (o) => o.name.toLowerCase().includes(q) || o.code.toLowerCase().includes(q),
+        )
+      : operableOffices;
+    return filtrarBloqueos(buscados, filtros.condicionesTotales, "", new Set(blockedIds));
+  }, [operableOffices, search, filtros.condicionesTotales, blockedIds]);
 
   const lastPage = Math.max(1, Math.ceil(filtered.length / pg.pageSize));
   const safePage = Math.min(pg.page, lastPage);
@@ -156,17 +158,29 @@ export function TransitBlocksPanel({
   const columns: DataTableColumn<TransitOffice>[] = [
     {
       key: "name",
-      header: "Organismo",
+      header: (
+        <EncabezadoFiltrable filtros={filtros} columnaId="name">
+          Organismo
+        </EncabezadoFiltrable>
+      ),
       render: (office) => <span className="font-semibold">{office.name}</span>,
     },
     {
       key: "code",
-      header: "Código",
+      header: (
+        <EncabezadoFiltrable filtros={filtros} columnaId="code">
+          Código
+        </EncabezadoFiltrable>
+      ),
       render: (office) => <span className="font-mono opacity-60">{office.code}</span>,
     },
     {
       key: "estado",
-      header: "Estado en red",
+      header: (
+        <EncabezadoFiltrable filtros={filtros} columnaId="estado">
+          Estado en red
+        </EncabezadoFiltrable>
+      ),
       render: (office) => {
         const blocked = blockedIds.includes(office.id);
         return (
@@ -229,16 +243,30 @@ export function TransitBlocksPanel({
             errorMessage="No se pudieron cargar los bloqueos de organismos."
             skeletonRows={3}
           >
-            <TablaFiltrosBar
-              filtros={filtros}
-              buscador={{
-                placeholder: "Buscar por nombre o código…",
-                ariaLabel: "Buscar organismo de tránsito",
-              }}
-            />
+            <div className="flex max-w-md items-center gap-2 rounded-xl border bg-white p-2.5 focus-within:outline focus-within:outline-2 focus-within:outline-flit-brand dark:bg-[#0B0F14]">
+              <Search className="h-4 w-4 opacity-60" aria-hidden />
+              <label htmlFor="ot-blocks-search" className="sr-only">
+                Buscar organismo de tránsito
+              </label>
+              <input
+                id="ot-blocks-search"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  pg.setPage(1);
+                }}
+                placeholder="Buscar por nombre o código…"
+                className="flex-1 bg-transparent text-xs outline-none"
+              />
+            </div>
 
             {filtros.hayFiltros && filtered.length === 0 ? (
-              <TablaFiltrosVacio onLimpiar={filtros.limpiar} />
+              <TablaFiltrosVacio
+                onLimpiar={() => {
+                  filtros.limpiar();
+                  setSearch("");
+                }}
+              />
             ) : (
               <DataTable
                 columns={columns}
