@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { usePaginacion } from "@/components/atom/usePaginacion";
-import { TablaFiltrosBar, TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
+import { TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
 import { AuditLogTable } from "@/components/admin/companies/AuditLogTable";
 import { fetchAuditLog, type AuditLogFilters } from "@/lib/api/admin-companies";
 import { ApiValidationError, type AuditLogPageResponse } from "@/lib/api/types";
@@ -12,8 +12,8 @@ import { condicionesAParams, type ColumnaFiltro } from "@/lib/tablas/filtrar-fil
 import { useTablaFiltros } from "@/lib/tablas/useTablaFiltros";
 
 // Filtros por columna del historial (HU #14005, Feature #13996). Los resuelve el SERVIDOR (HU #14004):
-// Fecha = Periodo (fechaDesde/fechaHasta), el resto «contiene». «Valor nuevo» no tiene filtro porque
-// el endpoint no lo expone.
+// Fecha = Periodo (fechaDesde/fechaHasta), el resto «contiene». El panel de fecha del embudo valida
+// Desde ≤ Hasta. «Valor nuevo» no tiene filtro porque el endpoint no lo expone.
 const COLUMNAS: ColumnaFiltro[] = [
   {
     id: "fecha",
@@ -26,8 +26,6 @@ const COLUMNAS: ColumnaFiltro[] = [
   { id: "valorAnterior", label: "Valor anterior", tipo: "texto" },
   { id: "operador", label: "Operador", tipo: "texto" },
 ];
-
-const MSG_RANGO_INVERTIDO = "La fecha inicial no puede ser posterior a la fecha final.";
 
 // Slot del historial de auditoría (HU #10194, AC5). Se monta al abrir la pestaña
 // "Historial de Cambios" → carga diferida. Paginación y filtros server-side.
@@ -47,7 +45,6 @@ export function AuditLogPanel({
   const volverAPrimera = useCallback(() => setPage(1), [setPage]);
   const filtros = useTablaFiltros({
     columnas: COLUMNAS,
-    periodoColumnaId: "fecha",
     onCambio: volverAPrimera,
   });
 
@@ -55,8 +52,6 @@ export function AuditLogPanel({
     () => condicionesAParams(filtros.condicionesTotales, COLUMNAS) as AuditLogFilters,
     [filtros.condicionesTotales],
   );
-  const rangoInvertido =
-    !!params.fechaDesde && !!params.fechaHasta && params.fechaDesde > params.fechaHasta;
   // Clave estable: la identidad del objeto cambia en cada render del hook, su contenido no.
   const paramsKey = JSON.stringify(params);
 
@@ -95,29 +90,24 @@ export function AuditLogPanel({
   );
 
   useEffect(() => {
-    // Rango propio con fecha inicial posterior a la final: no se consulta la API (AC2).
-    if (rangoInvertido) return;
     const controller = new AbortController();
     // Carga inicial de datos al montar: el skeleton (setStatus loading) es intencional.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load(controller.signal);
     return () => controller.abort();
-  }, [load, rangoInvertido]);
+  }, [load]);
 
   // Primera carga: solo el loader. Al paginar/filtrar se conserva la barra montada.
   if (status === "loading" && !result) {
     return <CarLoaderModal label="Cargando historial de cambios…" />;
   }
 
-  const mensajeFiltro = rangoInvertido ? MSG_RANGO_INVERTIDO : errorFiltro;
-
   return (
     <div className="flex flex-col gap-3">
       {status === "loading" ? <CarLoaderModal label="Cargando historial de cambios…" /> : null}
-      <TablaFiltrosBar filtros={filtros} />
-      {mensajeFiltro ? (
+      {errorFiltro ? (
         <p role="alert" className="text-xs font-semibold text-[#C2410C]">
-          {mensajeFiltro}
+          {errorFiltro}
         </p>
       ) : null}
       {status === "empty" && filtros.hayFiltros ? (
@@ -137,6 +127,7 @@ export function AuditLogPanel({
               pageSize={result.pageSize}
               onPageChange={setPage}
               onPageSizeChange={setPageSize}
+              filtros={filtros}
             />
           )}
         </UiStateBoundary>
