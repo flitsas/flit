@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Flit.Diagnostico.Api.Modulos.Backoffice;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
 using Flit.Diagnostico.Api.Modulos.Tablero;
+using Flit.Diagnostico.Api.Modulos.Vehiculos;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Api.Persistence.Configuraciones;
 using Flit.Diagnostico.Api.Plataforma;
@@ -11,6 +12,7 @@ using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Diagnosticos;
 using Flit.Diagnostico.Domain.Personas;
 using Flit.Diagnostico.Domain.Vehiculos;
+using Flit.Platform.Sdk.Messaging;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Diagnostico.Api.Modulos.Consultas;
@@ -85,7 +87,7 @@ internal sealed record PersonaEnErrorDto(
 /// </code>
 /// </example>
 internal sealed partial class LlenadoManual(
-    DiagnosticoDb db, UsuarioActual usuario, IProtectorDocumentoPersona protector, TimeProvider reloj, ILogger<LlenadoManual> logger)
+    DiagnosticoDb db, UsuarioActual usuario, IProtectorDocumentoPersona protector, TimeProvider reloj, IPlatformOutbox outbox, ILogger<LlenadoManual> logger)
 {
     public const string CodigoFuenteNoAdmite = "FUENTE_NO_ADMITE_MANUAL";
     public const string CodigoPersonaNoEnError = "PERSONA_NO_EN_ERROR";
@@ -141,11 +143,12 @@ internal sealed partial class LlenadoManual(
             {
                 await db.GuardarDeLaEmpresaAsync(empresa, TiposDelLlenado, ct).ConfigureAwait(false);
                 // R-8: con la celda ya COMPLETADO, el estado global del lote se recalcula en la misma transacción. El historial
-                // ordena por fecha: el cierre va después de la reapertura.
+                // ordena por fecha: el cierre va después de la reapertura. Si completa el lote, diagnostico.lote.terminado sale con
+                // la empresa de la celda en esta misma transacción (HU #13743, ADR-0075).
                 var cierre = reloj.GetUtcNow();
                 await RecalculadorEstado.RecalcularAsync(
-                    db, db.ParaEditarDeLaEmpresa<CabeceraDiagnostico>(empresa), db.DeLaEmpresa<CeldaConsulta>(empresa), celda.DiagnosticoId,
-                    cierre > ahora ? cierre : ahora.AddTicks(10), ct).ConfigureAwait(false);
+                    db, outbox, db.ParaEditarDeLaEmpresa<CabeceraDiagnostico>(empresa), db.DeLaEmpresa<CeldaConsulta>(empresa),
+                    db.DeLaEmpresa<VehiculoDiagnostico>(empresa), celda.DiagnosticoId, version, cierre > ahora ? cierre : ahora.AddTicks(10), ct).ConfigureAwait(false);
                 await db.GuardarDeLaEmpresaAsync(empresa, TiposDelLlenado, ct).ConfigureAwait(false);
             }
             catch (DbUpdateConcurrencyException)

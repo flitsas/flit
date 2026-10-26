@@ -19,7 +19,7 @@ namespace Flit.Diagnostico.Api.Modulos.Tablero;
 /// </summary>
 /// <example>
 /// <code>
-/// await LoteTerminado.EncolarAsync(db, outbox, diagnosticoId, versionTablero, ahora, ct); // dentro de la transacción del cierre
+/// await LoteTerminado.EncolarAsync(db, outbox, cabecera, db.Set&lt;CeldaConsulta&gt;(), db.Set&lt;VehiculoDiagnostico&gt;(), version, ahora, ct);
 /// </code>
 /// </example>
 public sealed record LoteTerminado(
@@ -33,28 +33,34 @@ public sealed record LoteTerminado(
     public const int VersionContrato = 1;
 
     /// <summary>
-    /// Calcula los totales del lote con el contexto de su empresa (las celdas que el contexto sigue cuentan con su valor en memoria:
-    /// la que se está cerrando y las que se acaban de liberar o bloquear) y encola el evento en la outbox de ese contexto, sin
-    /// guardar: lo guarda quien cierra la celda, en su transacción.
+    /// Calcula los totales del lote leyendo <paramref name="celdas"/> y <paramref name="vehiculos"/> (las de la empresa del lote; las
+    /// celdas que el contexto sigue cuentan con su valor en memoria: la que se está cerrando y las que se acaban de liberar o
+    /// bloquear) y encola el evento en la outbox del mismo contexto, sin guardar: lo guarda quien abrió la transacción. Una sola
+    /// vez por transición: si el contexto ya tiene encolado el de este lote con esta versión, no repite y devuelve null.
     /// </summary>
-    internal static async Task<LoteTerminado> EncolarAsync(
-        DiagnosticoDb db, IPlatformOutbox outbox, Guid diagnosticoId, long versionTablero, DateTimeOffset terminadoEn, CancellationToken ct)
+    internal static async Task<LoteTerminado?> EncolarAsync(
+        DiagnosticoDb db, IPlatformOutbox outbox, CabeceraDiagnostico cabecera, IQueryable<CeldaConsulta> celdas, IQueryable<VehiculoDiagnostico> vehiculos,
+        long versionTablero, DateTimeOffset terminadoEn, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(outbox);
-        var cabecera = await db.Set<CabeceraDiagnostico>().SingleAsync(c => c.Id == diagnosticoId, ct).ConfigureAwait(false);
+        ArgumentNullException.ThrowIfNull(cabecera);
+        ArgumentNullException.ThrowIfNull(celdas);
+        ArgumentNullException.ThrowIfNull(vehiculos);
         if (cabecera.Estado is not (EstadoDiagnostico.Completado or EstadoDiagnostico.Incompleto))
             throw new InvalidOperationException("El lote terminado solo se emite con el lote en COMPLETADO o INCOMPLETO.");
+        if (YaEncolado(db, cabecera.Id, versionTablero))
+            return null;
 
         var enMemoria = db.ChangeTracker.Entries<CeldaConsulta>()
-            .Where(e => e.Entity.DiagnosticoId == diagnosticoId)
+            .Where(e => e.Entity.DiagnosticoId == cabecera.Id)
             .ToDictionary(e => e.Entity.Id, e => (e.Entity.Estado, e.Entity.TipoError));
-        var deBase = await db.Set<CeldaConsulta>().AsNoTracking()
-            .Where(c => c.DiagnosticoId == diagnosticoId)
+        var deBase = await celdas.AsNoTracking()
+            .Where(c => c.DiagnosticoId == cabecera.Id)
             .Select(c => new { c.Id, c.Estado, c.TipoError })
             .ToListAsync(ct).ConfigureAwait(false);
-        var celdas = deBase.Select(c => enMemoria.TryGetValue(c.Id, out var actual) ? actual : (c.Estado, c.TipoError)).ToList();
-        var vehiculos = await db.Set<VehiculoDiagnostico>().CountAsync(v => v.DiagnosticoId == diagnosticoId, ct).ConfigureAwait(false);
+        var estados = deBase.Select(c => enMemoria.TryGetValue(c.Id, out var actual) ? actual : (c.Estado, c.TipoError)).ToList();
+        var cuantos = await vehiculos.CountAsync(v => v.DiagnosticoId == cabecera.Id, ct).ConfigureAwait(false);
 
         var evento = new LoteTerminado(
             cabecera.Id,
@@ -63,11 +69,18 @@ public sealed record LoteTerminado(
             versionTablero,
             // El mismo instante que queda en cerrado_en (Postgres guarda microsegundos).
             terminadoEn.AddTicks(-(terminadoEn.Ticks % (TimeSpan.TicksPerMillisecond / 1000))),
-            vehiculos,
-            celdas.GroupBy(c => CodigosDeEnum.Codigo(c.Estado)).OrderBy(g => g.Key, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Count()),
-            celdas.Where(c => c.Estado == EstadoCelda.Error && !string.IsNullOrEmpty(c.TipoError))
+            cuantos,
+            estados.GroupBy(c => CodigosDeEnum.Codigo(c.Estado)).OrderBy(g => g.Key, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Count()),
+            estados.Where(c => c.Estado == EstadoCelda.Error && !string.IsNullOrEmpty(c.TipoError))
                 .GroupBy(c => c.TipoError!).OrderBy(g => g.Key, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Count()));
         outbox.Enqueue(Tipo, VersionContrato, cabecera.TenantId, evento);
         return evento;
     }
+
+    /// <summary>Si el contexto ya tiene sin guardar el evento de este lote con esta versión (una transición, un evento).</summary>
+    private static bool YaEncolado(DiagnosticoDb db, Guid diagnosticoId, long versionTablero) =>
+        db.ChangeTracker.Entries<OutboxMessage>()
+            .Where(e => e.State == EntityState.Added && e.Entity.RoutingKey == Tipo)
+            .Select(e => EventEnvelope.FromJson(System.Text.Encoding.UTF8.GetBytes(e.Entity.Payload)).Data)
+            .Any(d => d.GetProperty("diagnosticoId").GetGuid() == diagnosticoId && d.GetProperty("version").GetInt64() == versionTablero);
 }

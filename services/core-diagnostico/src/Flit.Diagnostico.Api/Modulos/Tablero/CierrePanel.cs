@@ -1,10 +1,12 @@
 using System.Text.Json.Serialization;
 using Flit.Diagnostico.Api.Modulos.Consultas;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
+using Flit.Diagnostico.Api.Modulos.Vehiculos;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Api.Persistence.Configuraciones;
 using Flit.Diagnostico.Api.Plataforma;
 using Flit.Diagnostico.Domain.Diagnosticos;
+using Flit.Platform.Sdk.Messaging;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Diagnostico.Api.Modulos.Tablero;
@@ -23,7 +25,7 @@ public sealed record CierrePanelDto(
 /// toca el lote entre la lectura y el guardado (<c>xmin</c>), 409 <c>LOTE_MODIFICADO</c>: el cliente vuelve a leer la grilla.
 /// Misma visibilidad que la grilla (<see cref="AccesoLote"/>): otra compañía o un lote ajeno con PROPIOS, 404.
 /// </summary>
-internal sealed class CierrePanel(DiagnosticoDb db, UsuarioActual usuario, TimeProvider reloj)
+internal sealed class CierrePanel(DiagnosticoDb db, UsuarioActual usuario, TimeProvider reloj, IPlatformOutbox outbox)
 {
     public const string CodigoLoteNoEnProceso = "LOTE_NO_EN_PROCESO";
     public const string CodigoCeldasSinTerminar = "CELDAS_SIN_TERMINAR";
@@ -51,18 +53,9 @@ internal sealed class CierrePanel(DiagnosticoDb db, UsuarioActual usuario, TimeP
         var ahora = reloj.GetUtcNow();
         var transicion = TransicionesLote.Transicionar(
             cabecera.Estado, EstadoGlobalLote.Calcular(cabecera.Estado, estados, cierrePanel: true), DisparadorEstado.CierrePanel);
-        cabecera.Estado = transicion.Nuevo;
-        cabecera.CerradoEn = ahora;
-        db.Add(new HistorialEstadoDiagnostico
-        {
-            TenantId = cabecera.TenantId,
-            DiagnosticoId = cabecera.Id,
-            EstadoAnterior = transicion.Anterior,
-            EstadoNuevo = transicion.Nuevo,
-            Disparador = transicion.Disparador,
-            UsuarioId = autor,
-            En = ahora,
-        });
+        // HU #13743 (ADR-0075): el punto común de la transición; el INCOMPLETO emite diagnostico.lote.terminado en esta transacción.
+        await RecalculadorEstado.AplicarTransicionAsync(
+            db, outbox, cabecera, transicion, ahora, autor, db.Set<CeldaConsulta>(), db.Set<VehiculoDiagnostico>(), cabecera.VersionTablero, ct).ConfigureAwait(false);
         try
         {
             await db.SaveChangesAsync(ct).ConfigureAwait(false);

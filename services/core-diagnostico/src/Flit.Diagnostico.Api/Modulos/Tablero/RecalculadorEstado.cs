@@ -1,6 +1,7 @@
 using Flit.Diagnostico.Api.Modulos.Consultas;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
 using Flit.Diagnostico.Api.Modulos.Trabajos;
+using Flit.Diagnostico.Api.Modulos.Vehiculos;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Diagnosticos;
@@ -17,9 +18,10 @@ namespace Flit.Diagnostico.Api.Modulos.Tablero;
 /// <c>cerrado_en</c> y una fila del historial AUTO sin usuario (<see cref="EstadoGlobalLote"/>); con alguna en ERROR sigue
 /// EN_PROCESO hasta el cierre del panel. Un reintento (la celda vuelve a PENDIENTE) no recalcula. Como el escritor de celdas
 /// ya subió la versión del tablero con un UPDATE de la cabecera, la fila está bloqueada hasta el commit: dos celdas del mismo
-/// lote que cierran a la vez se recalculan una detrás de otra y la transición ocurre una sola vez. Cuando esa transición deja el
-/// lote en COMPLETADO o INCOMPLETO, la misma transacción encola el evento <see cref="LoteTerminado"/> (HU #13743, ADR-0075) en la
-/// outbox del contexto de la celda; un lote reabierto (reproceso) que se vuelve a cerrar lo emite otra vez con su nueva versión.
+/// lote que cierran a la vez se recalculan una detrás de otra y la transición ocurre una sola vez. Cuando una transición deja el
+/// lote en COMPLETADO o INCOMPLETO (aquí, por el llenado manual o por el cierre del panel: todos pasan por
+/// <see cref="AplicarTransicionAsync"/>), la misma transacción encola el evento <see cref="LoteTerminado"/> (HU #13743, ADR-0075);
+/// un lote reabierto (reproceso, llenado manual) que se vuelve a cerrar lo emite otra vez con su nueva versión.
 /// </summary>
 internal static class RecalculadorEstado
 {
@@ -43,11 +45,7 @@ internal static class RecalculadorEstado
             {
                 if (propios is not null)
                     await propios(db, version, ct).ConfigureAwait(false);
-                var ahora = reloj.GetUtcNow();
-                var transicion = await RecalcularAsync(db, celda.DiagnosticoId, ahora, ct).ConfigureAwait(false);
-                // HU #13743 (ADR-0075, Q8): el lote terminado sale en la transacción de su cierre.
-                if (transicion?.Nuevo is EstadoDiagnostico.Completado or EstadoDiagnostico.Incompleto)
-                    await LoteTerminado.EncolarAsync(db, outbox, celda.DiagnosticoId, version, ahora, ct).ConfigureAwait(false);
+                await RecalcularAsync(db, outbox, celda.DiagnosticoId, version, reloj.GetUtcNow(), ct).ConfigureAwait(false);
             },
         };
     }
@@ -55,21 +53,24 @@ internal static class RecalculadorEstado
     /// <summary>
     /// Aplica la transición del lote si sus celdas la piden (sin guardar: lo hace quien cierra la celda) y la devuelve; null si
     /// el estado no cambia. Las celdas seguidas por el contexto cuentan con su valor en memoria (la que se está cerrando y las
-    /// que el orquestador acaba de liberar o bloquear).
+    /// que el orquestador acaba de liberar o bloquear). Si el lote queda terminado, encola <see cref="LoteTerminado"/> con
+    /// <paramref name="versionTablero"/> en <paramref name="outbox"/> (la del mismo contexto).
     /// </summary>
-    public static Task<TransicionLote?> RecalcularAsync(DiagnosticoDb db, Guid diagnosticoId, DateTimeOffset ahora, CancellationToken ct)
+    public static Task<TransicionLote?> RecalcularAsync(
+        DiagnosticoDb db, IPlatformOutbox outbox, Guid diagnosticoId, long versionTablero, DateTimeOffset ahora, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
-        return RecalcularAsync(db, db.Set<CabeceraDiagnostico>(), db.Set<CeldaConsulta>(), diagnosticoId, ahora, ct);
+        return RecalcularAsync(db, outbox, db.Set<CabeceraDiagnostico>(), db.Set<CeldaConsulta>(), db.Set<VehiculoDiagnostico>(), diagnosticoId, versionTablero, ahora, ct);
     }
 
     /// <summary>
-    /// El mismo recálculo leyendo el lote y sus celdas de <paramref name="cabeceras"/> y <paramref name="celdas"/> (con
-    /// seguimiento de cambios en la cabecera): el llenado manual del backoffice (HU #13800) pasa las filas de la empresa
-    /// explícita (<c>EscrituraEntreEmpresas</c>), porque su contexto es el de la compañía FLIT.
+    /// El mismo recálculo leyendo el lote, sus celdas y sus vehículos de <paramref name="cabeceras"/>, <paramref name="celdas"/> y
+    /// <paramref name="vehiculos"/> (con seguimiento de cambios en la cabecera): el llenado manual del backoffice (HU #13800) pasa
+    /// las filas de la empresa explícita (<c>EscrituraEntreEmpresas</c>), porque su contexto es el de la compañía FLIT.
     /// </summary>
     internal static async Task<TransicionLote?> RecalcularAsync(
-        DiagnosticoDb db, IQueryable<CabeceraDiagnostico> cabeceras, IQueryable<CeldaConsulta> celdas, Guid diagnosticoId, DateTimeOffset ahora, CancellationToken ct)
+        DiagnosticoDb db, IPlatformOutbox outbox, IQueryable<CabeceraDiagnostico> cabeceras, IQueryable<CeldaConsulta> celdas,
+        IQueryable<VehiculoDiagnostico> vehiculos, Guid diagnosticoId, long versionTablero, DateTimeOffset ahora, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(cabeceras);
@@ -94,6 +95,24 @@ internal static class RecalculadorEstado
 
         var transicion = TransicionesLote.Transicionar(estadoActual, nuevo, DisparadorEstado.Auto);
         var cabecera = await cabeceras.SingleAsync(c => c.Id == diagnosticoId, ct).ConfigureAwait(false);
+        await AplicarTransicionAsync(db, outbox, cabecera, transicion, ahora, null, celdas, vehiculos, versionTablero, ct).ConfigureAwait(false);
+        return transicion;
+    }
+
+    /// <summary>
+    /// Punto común de los tres caminos que cambian el estado del lote al cerrar (el automático de <see cref="TrasCerrar"/>, el
+    /// llenado manual y el cierre del panel, HU #13743): fija el estado y <c>cerrado_en</c>, agrega el historial y, si el lote queda
+    /// en COMPLETADO o INCOMPLETO, encola <see cref="LoteTerminado"/> en la outbox del mismo contexto, una sola vez por transición
+    /// (ADR-0075, Q8). No guarda: lo hace quien abrió la transacción.
+    /// </summary>
+    internal static async Task AplicarTransicionAsync(
+        DiagnosticoDb db, IPlatformOutbox outbox, CabeceraDiagnostico cabecera, TransicionLote transicion, DateTimeOffset ahora, Guid? usuarioId,
+        IQueryable<CeldaConsulta> celdas, IQueryable<VehiculoDiagnostico> vehiculos, long versionTablero, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(outbox);
+        ArgumentNullException.ThrowIfNull(cabecera);
+        ArgumentNullException.ThrowIfNull(transicion);
         cabecera.Estado = transicion.Nuevo;
         cabecera.CerradoEn = ahora;
         db.Add(new HistorialEstadoDiagnostico
@@ -103,8 +122,10 @@ internal static class RecalculadorEstado
             EstadoAnterior = transicion.Anterior,
             EstadoNuevo = transicion.Nuevo,
             Disparador = transicion.Disparador,
+            UsuarioId = usuarioId,
             En = ahora,
         });
-        return transicion;
+        if (transicion.Nuevo is EstadoDiagnostico.Completado or EstadoDiagnostico.Incompleto)
+            await LoteTerminado.EncolarAsync(db, outbox, cabecera, celdas, vehiculos, versionTablero, ahora, ct).ConfigureAwait(false);
     }
 }
