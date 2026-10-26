@@ -20,7 +20,8 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 /// <item>Si hay consultas: <c>trabajo_id</c> nuevo (UUIDv7, <see cref="CeldaConsulta.TrabajoId"/>), la celda queda EN_CURSO con
 /// <c>disponible_desde</c> = ahora (el reconciliador mide desde ahí) y en la outbox del scope un trabajo
 /// <c>consultas.diagnostico[-express].&lt;fuente&gt;</c> por consulta (en las celdas de persona, uno por persona con el mismo
-/// <c>trabajo_id</c>, y el payload conserva solo a las que ya respondieron OK), con la solicitud en proto-JSON y en claro (U1 = b).
+/// <c>trabajo_id</c>, y el payload conserva solo a las que ya respondieron OK más, en ERROR, las que no tienen documento consultable),
+/// con la solicitud en proto-JSON y en claro (U1 = b).
 /// El prefijo <c>-express</c> sale de <see cref="CabeceraDiagnostico.EsExpress"/> del lote.</item>
 /// </list>
 /// <see cref="CerrarAsync"/> cierra la celda (<see cref="EscritorCeldas"/>) con sus intentos y efectos; al cerrar la RUNT libera
@@ -105,7 +106,13 @@ internal sealed partial class PublicadorCeldas(
         celda.ActualizadoEn = ahora;
         celda.Republicaciones = 0;
         if (EjecutorPorPersonas.EsPorPersona(celda.Fuente))
-            celda.Payload = EjecutorPorPersonas.SoloRespondidas(celda.Payload);
+        {
+            // Las personas sin documento consultable no publican: entran al payload en ERROR para no bloquear el cierre (HU #13727).
+            celda.Payload = Ejecutor(celda.Fuente) is EjecutorPorPersonas porPersonas
+                ? porPersonas.AlPublicar(celda.Payload, await EjecutorPorPersonas.PersonasDelRolAsync(db, celda, ct).ConfigureAwait(false),
+                    solicitudes.Select(s => s.PersonaId).OfType<Guid>().ToHashSet())
+                : EjecutorPorPersonas.SoloRespondidas(celda.Payload);
+        }
         foreach (var solicitud in solicitudes)
         {
             outbox.EnqueueJob(TrabajoConsultaDiagnostico.Clave(solicitud.Fuente, esExpress), TrabajoConsultaDiagnostico.VersionContrato,

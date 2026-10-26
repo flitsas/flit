@@ -177,7 +177,7 @@ internal abstract class ConstructorPorPersonas(IProtectorDocumentoPersona protec
         var respondieron = EjecutorPorPersonas.Leer(celda.Payload)?.Personas
             .Where(p => p.Estado == EjecutorPorPersonas.EstadoOk).Select(p => p.PersonaId).ToHashSet() ?? [];
         var solicitudes = new List<SolicitudConsulta>();
-        foreach (var persona in await PersonasAsync(db, celda, ct).ConfigureAwait(false))
+        foreach (var persona in await EjecutorPorPersonas.PersonasDelRolAsync(db, celda, ct).ConfigureAwait(false))
         {
             if (respondieron.Contains(persona.Id))
                 continue;
@@ -186,17 +186,6 @@ internal abstract class ConstructorPorPersonas(IProtectorDocumentoPersona protec
         }
 
         return solicitudes;
-    }
-
-    private async Task<List<PersonaVehiculo>> PersonasAsync(DiagnosticoDb db, CeldaConsulta celda, CancellationToken ct)
-    {
-        var rol = EjecutorPorPersonas.RolDe(Fuente);
-        var guardadas = await DocumentosVehiculo.PersonasDelVehiculoAsync(db, celda.TenantId, celda.VehiculoId, ct, rol).ConfigureAwait(false);
-        var nuevas = db.ChangeTracker.Entries<PersonaVehiculo>()
-            .Where(e => e.State == EntityState.Added && e.Entity.TenantId == celda.TenantId && e.Entity.VehiculoId == celda.VehiculoId && e.Entity.Rol == rol)
-            .Select(e => e.Entity)
-            .Where(n => guardadas.TrueForAll(g => g.Id != n.Id));
-        return [.. guardadas.Concat(nuevas).OrderBy(p => p.Orden)];
     }
 }
 

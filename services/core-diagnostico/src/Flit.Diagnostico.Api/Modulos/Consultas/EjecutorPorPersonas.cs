@@ -44,7 +44,9 @@ internal sealed record PayloadPersonas(IReadOnlyList<ResultadoPorPersona> Person
 /// <c>tipo_error</c> lleva ese transitorio para que el consumidor decida el reintento (#13737) y
 /// <see cref="ResultadoCelda.TipoErrorSinReintento"/> el código final si ya no se reintenta.</item>
 /// <item>El reintento y el reproceso (#13746) solo vuelven a pedir a las personas que no respondieron OK: las que respondieron no
-/// se vuelven a consumir (el publicador conserva solo ésas en el payload, <see cref="SoloRespondidas"/>).</item>
+/// se vuelven a consumir (el publicador conserva solo ésas en el payload, <see cref="AlPublicar"/>).</item>
+/// <item>Una persona sin documento consultable (NIT sin dígitos) no publica trabajo: al publicar queda en el payload en ERROR
+/// definitivo <c>ESTADO_NO_OK</c>, como antes del bus, para que no bloquee el cierre con la última respuesta de las demás.</item>
 /// </list>
 /// Su ERROR no bloquea al vehículo (solo RUNT bloquea, <see cref="OrquestadorVehiculo"/>). La reutilización del mismo día
 /// (<see cref="ReutilizacionMismoDia"/>) solo copia una celda de persona si el RUNT del vehículo vino del mismo origen.
@@ -116,9 +118,7 @@ internal abstract partial class EjecutorPorPersonas(TimeProvider reloj, ILogger 
 
         var previas = await PreviasAsync(contexto.Db, celda.Id, ct).ConfigureAwait(false);
         var resultados = personas
-            .Select(p => previas.TryGetValue(p.Id, out var previa) && previa.Estado == EstadoOk
-                ? previa with { Orden = p.Orden }
-                : new ResultadoPorPersona(p.Id, p.Orden, ConsultaPorDefecto, EstadoError, null, FallaInesperada, null))
+            .Select(p => previas.TryGetValue(p.Id, out var previa) && previa.Estado == EstadoOk ? previa with { Orden = p.Orden } : SinDocumento(p))
             .ToList();
         return Cierre(celda.Id, resultados, [], reloj.GetUtcNow());
     }
@@ -165,6 +165,43 @@ internal abstract partial class EjecutorPorPersonas(TimeProvider reloj, ILogger 
         var ok = Leer(payload)?.Personas.Where(p => p.Estado == EstadoOk).ToList();
         return ok is { Count: > 0 } ? JsonSerializer.Serialize(new PayloadPersonas(ok), Json) : null;
     }
+
+    /// <summary>
+    /// El payload al publicar el trabajo (HU #13727): las personas del rol que ya respondieron OK y, en ERROR definitivo
+    /// <c>ESTADO_NO_OK</c>, las que no tienen solicitud en <paramref name="consultadas"/> (sin documento consultable), igual que en
+    /// <see cref="SinConsultaAsync"/>. Así la celda se cierra con la última respuesta de las consultadas; null si no queda ninguna.
+    /// </summary>
+    internal string? AlPublicar(string? payload, IReadOnlyList<PersonaVehiculo> personas, IReadOnlySet<Guid> consultadas)
+    {
+        ArgumentNullException.ThrowIfNull(personas);
+        ArgumentNullException.ThrowIfNull(consultadas);
+        var ok = Leer(payload)?.Personas.Where(p => p.Estado == EstadoOk).GroupBy(p => p.PersonaId).ToDictionary(g => g.Key, g => g.First()) ?? [];
+        var resultados = personas
+            .Where(p => ok.ContainsKey(p.Id) || !consultadas.Contains(p.Id))
+            .Select(p => ok.TryGetValue(p.Id, out var previa) ? previa with { Orden = p.Orden } : SinDocumento(p))
+            .ToList();
+        return resultados.Count == 0 ? null : JsonSerializer.Serialize(new PayloadPersonas(resultados), Json);
+    }
+
+    /// <summary>
+    /// Las personas del rol de la celda: las guardadas y las que la RUNT acaba de registrar en el mismo contexto y todavía no se
+    /// guardaron, en su orden (lo que usan el constructor de solicitudes y el publicador).
+    /// </summary>
+    internal static async Task<List<PersonaVehiculo>> PersonasDelRolAsync(DiagnosticoDb db, CeldaConsulta celda, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        ArgumentNullException.ThrowIfNull(celda);
+        var rol = RolDe(celda.Fuente);
+        var guardadas = await DocumentosVehiculo.PersonasDelVehiculoAsync(db, celda.TenantId, celda.VehiculoId, ct, rol).ConfigureAwait(false);
+        var nuevas = db.ChangeTracker.Entries<PersonaVehiculo>()
+            .Where(e => e.State == EntityState.Added && e.Entity.TenantId == celda.TenantId && e.Entity.VehiculoId == celda.VehiculoId && e.Entity.Rol == rol)
+            .Select(e => e.Entity)
+            .Where(n => guardadas.TrueForAll(g => g.Id != n.Id));
+        return [.. guardadas.Concat(nuevas).OrderBy(p => p.Orden)];
+    }
+
+    private ResultadoPorPersona SinDocumento(PersonaVehiculo persona) =>
+        new(persona.Id, persona.Orden, ConsultaPorDefecto, EstadoError, null, FallaInesperada, null);
 
     /// <summary>
     /// El payload copiado de otra celda con los <c>persona_id</c> traducidos a las personas del vehículo nuevo (reutilización del
