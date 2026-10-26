@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Building2 } from "lucide-react";
 import { CreateButton } from "@/components/atom/CreateButton";
@@ -9,10 +9,7 @@ import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { ToastProvider, useToast } from "@/components/admin/Toast";
-import {
-  CompanyFiltersPanel,
-  type CompanyFilters,
-} from "@/components/admin/companies/CompanyFiltersPanel";
+import { COLUMNAS_LISTADO_COMPANIAS } from "@/components/admin/companies/company-filter-columns";
 import { CompanyListTable } from "@/components/admin/companies/CompanyListTable";
 import { CompanyStatusDialog } from "@/components/admin/companies/CompanyStatusDialog";
 import { CreateCompanyDialog } from "@/components/admin/companies/CreateCompanyDialog";
@@ -24,10 +21,17 @@ import {
   fetchCompanyChildren,
   updateCompany,
 } from "@/lib/api/admin-companies";
-import { isHeadTenantType, type CompanyListItem, type CompanyPagedResult } from "@/lib/api/types";
+import {
+  isHeadTenantType,
+  type CompaniesIndexParams,
+  type CompanyListItem,
+  type CompanyPagedResult,
+} from "@/lib/api/types";
+import { TablaFiltrosBar, TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
+import { condicionesAParams } from "@/lib/tablas/filtrar-filas";
+import { useTablaFiltros } from "@/lib/tablas/useTablaFiltros";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ADMIN_BACK_LINK_CLS, ADMIN_CONTENT_SURFACE_CLS } from "@/components/admin/admin-ui-styles";
-
 
 // Consola admin — listado de compañías (HU #10194, AC1/AC7) + alta de compañías
 // (#10118). Filtrado y paginación server-side; 4 estados UI vía UiStateBoundary.
@@ -44,9 +48,25 @@ function CompaniesList() {
   const router = useRouter();
   const { show } = useToast();
   const { isSuperAdmin, isAdminCompany, tenantId } = usePermissions();
-  const [filters, setFilters] = useState<CompanyFilters>({});
   // Bug #13055 — tabla homologada con el modelo de trámites: filas por página elegibles.
   const { page, pageSize, setPage, setPageSize } = usePaginacion("admin.companies");
+  // HU #13999 — filtros por columna (estándar HU #13997), resueltos en el servidor.
+  const filtros = useTablaFiltros({
+    columnas: COLUMNAS_LISTADO_COMPANIAS,
+    periodoColumnaId: "fechaCreacion",
+    onCambio: () => setPage(1),
+  });
+  const filterParams = useMemo<CompaniesIndexParams>(() => {
+    const raw = condicionesAParams(filtros.condicionesTotales, COLUMNAS_LISTADO_COMPANIAS);
+    const { estadoActivo, ...rest } = raw;
+    // Estado es booleano: Activa + Inactiva a la vez = sin filtro de estado.
+    return {
+      ...rest,
+      ...(estadoActivo === "true" || estadoActivo === "false"
+        ? { estadoActivo: estadoActivo === "true" }
+        : {}),
+    };
+  }, [filtros.condicionesTotales]);
   // HU #11227 — solo SuperAdmin; desactivado = excluir OT (default).
   const [includeTransitOffices, setIncludeTransitOffices] = useState(false);
   const [status, setStatus] = useState<UiStatus>("loading");
@@ -72,7 +92,7 @@ function CompaniesList() {
       try {
         const data = await fetchCompaniesIndex(
           {
-            ...filters,
+            ...filterParams,
             page,
             pageSize,
             // SuperAdmin: toggle; cualquier otro caso (defensa) excluye OT.
@@ -91,7 +111,7 @@ function CompaniesList() {
         }
       }
     },
-    [filters, page, pageSize, includeTransitOffices, isSuperAdmin, isAdminCompany],
+    [filterParams, page, pageSize, includeTransitOffices, isSuperAdmin, isAdminCompany],
   );
 
   useEffect(() => {
@@ -106,34 +126,30 @@ function CompaniesList() {
     setEditTarget(company);
     if (isHeadTenantType(company.tenantType)) {
       void fetchCompanyChildren(company.id)
-        .then((children) => setEditActiveChildrenCount(children.filter((c) => c.estadoActivo).length))
+        .then((children) =>
+          setEditActiveChildrenCount(children.filter((c) => c.estadoActivo).length),
+        )
         .catch(() => setEditActiveChildrenCount(0));
     } else {
       setEditActiveChildrenCount(0);
     }
   };
 
-  const handleApplyFilters = (next: CompanyFilters) => {
-    setPage(1);
-    setFilters(next);
-  };
-
   const handleCreated = (razonSocial: string) => {
     setCreateOpen(false);
     show(`Compañía «${razonSocial}» creada.`, "success");
     // Vuelve a la primera página (orden por fecha DESC → la nueva aparece arriba).
+    const habiaFiltros = filtros.hayFiltros;
+    filtros.limpiar();
     setPage(1);
-    setFilters({});
-    void load();
+    if (!habiaFiltros && page === 1) void load();
   };
 
   // Reemplaza la fila tocada con la compañía ya actualizada (update optimista local:
   // evita recargar todo el listado solo por un cambio de estado).
   const handleStatusConfirmed = (updated: CompanyListItem) => {
     setResult((prev) =>
-      prev
-        ? { ...prev, data: prev.data.map((c) => (c.id === updated.id ? updated : c)) }
-        : prev,
+      prev ? { ...prev, data: prev.data.map((c) => (c.id === updated.id ? updated : c)) } : prev,
     );
     setToggleTarget(null);
     show(
@@ -145,9 +161,7 @@ function CompaniesList() {
   // Reemplaza la fila editada con la compañía actualizada (update optimista local).
   const handleEdited = (updated: CompanyListItem) => {
     setResult((prev) =>
-      prev
-        ? { ...prev, data: prev.data.map((c) => (c.id === updated.id ? updated : c)) }
-        : prev,
+      prev ? { ...prev, data: prev.data.map((c) => (c.id === updated.id ? updated : c)) } : prev,
     );
     setEditTarget(null);
     show(`Compañía «${updated.razonSocial}» actualizada.`, "success");
@@ -162,7 +176,13 @@ function CompaniesList() {
       <ModuleTitle
         title="Administración de compañías"
         subtitle="Parametriza políticas operativas y supervisa la auditoría de cada compañía B2B."
-        action={<CreateButton label="Crear compañía" icon={Building2} onClick={() => setCreateOpen(true)} />}
+        action={
+          <CreateButton
+            label="Crear compañía"
+            icon={Building2}
+            onClick={() => setCreateOpen(true)}
+          />
+        }
       />
 
       {isSuperAdmin && (
@@ -178,32 +198,37 @@ function CompaniesList() {
         />
       )}
 
-      <CompanyFiltersPanel onApply={handleApplyFilters} initialValue={filters} />
+      <TablaFiltrosBar filtros={filtros} />
 
       <div className={ADMIN_CONTENT_SURFACE_CLS}>
         {status === "loading" ? (
           <CarLoaderModal label="Cargando compañías…" />
+        ) : status === "empty" && filtros.hayFiltros ? (
+          <TablaFiltrosVacio
+            onLimpiar={filtros.limpiar}
+            mensaje="Ninguna compañía coincide con los filtros"
+          />
         ) : (
-        <UiStateBoundary
-          status={status}
-          onRetry={() => void load()}
-          emptyMessage="No se encontraron compañías B2B con los filtros aplicados."
-          errorMessage="No se pudo cargar el listado de compañías."
-        >
-          {result && (
-            <CompanyListTable
-              items={result.data}
-              totalCount={result.totalCount}
-              page={result.page}
-              pageSize={result.pageSize}
-              onPageChange={setPage}
-              onPageSizeChange={setPageSize}
-              onConfigure={(tenantId) => router.push(`/admin/companies/${tenantId}`)}
-              onEdit={openEdit}
-              onToggleStatus={setToggleTarget}
-            />
-          )}
-        </UiStateBoundary>
+          <UiStateBoundary
+            status={status}
+            onRetry={() => void load()}
+            emptyMessage="No se encontraron compañías B2B con los filtros aplicados."
+            errorMessage="No se pudo cargar el listado de compañías."
+          >
+            {result && (
+              <CompanyListTable
+                items={result.data}
+                totalCount={result.totalCount}
+                page={result.page}
+                pageSize={result.pageSize}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                onConfigure={(tenantId) => router.push(`/admin/companies/${tenantId}`)}
+                onEdit={openEdit}
+                onToggleStatus={setToggleTarget}
+              />
+            )}
+          </UiStateBoundary>
         )}
       </div>
 
