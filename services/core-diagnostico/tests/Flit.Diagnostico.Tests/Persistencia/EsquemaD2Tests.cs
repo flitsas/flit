@@ -326,6 +326,37 @@ public sealed partial class EsquemaD2Tests
         }
     }
 
+    // HU #13727 (ADR-0075, D5_ConsultasPorBus) — trabajo vigente y republicación única del reconciliador: trabajo_id uuid nulo y
+    // republicaciones smallint no nulo con defecto 0; ck_consultas_republicaciones acepta 0 y 1 y rechaza 2.
+    [Fact]
+    public async Task Columnas_de_consultas_por_bus_trabajo_id_y_republicaciones()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        await using var conexion = await AbrirAsync(api, ct);
+
+        (await ListarAsync(
+                conexion,
+                "SELECT column_name || ' ' || data_type || ' ' || is_nullable || ' ' || COALESCE(column_default, '-') FROM information_schema.columns " +
+                "WHERE table_schema = 'diagnostico' AND table_name = 'consultas' AND column_name IN ('trabajo_id', 'republicaciones')",
+                ct))
+            .Should().BeEquivalentTo("trabajo_id uuid YES -", "republicaciones smallint NO 0");
+
+        var (tenant, lote, vehiculo) = await SembrarVehiculoAsync(conexion, Guid.NewGuid(), ct);
+        var celda = await InsertarCeldaAsync(conexion, tenant, lote, vehiculo, ct);
+        (await ListarAsync(conexion, $"SELECT republicaciones::text || ' ' || (trabajo_id IS NULL)::text FROM diagnostico.consultas WHERE id = '{celda}'", ct))
+            .Should().Equal("0 true");
+
+        await EjecutarAsync(conexion, "UPDATE diagnostico.consultas SET republicaciones = 1, trabajo_id = gen_random_uuid() WHERE id = @id", celda, ct);
+        await DebeViolarAsync(
+            () => EjecutarAsync(conexion, "UPDATE diagnostico.consultas SET republicaciones = 2 WHERE id = @id", celda, ct),
+            "ck_consultas_republicaciones");
+        await DebeViolarAsync(
+            () => EjecutarAsync(conexion, "UPDATE diagnostico.consultas SET republicaciones = -1 WHERE id = @id", celda, ct),
+            "ck_consultas_republicaciones");
+    }
+
     private static bool EsInit(PropertyInfo propiedad) =>
         propiedad.SetMethod!.ReturnParameter.GetRequiredCustomModifiers().Any(m => m.FullName == "System.Runtime.CompilerServices.IsExternalInit");
 

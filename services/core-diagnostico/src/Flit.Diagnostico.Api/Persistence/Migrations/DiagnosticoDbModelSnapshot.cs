@@ -432,6 +432,12 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasColumnName("reproceso_usuario_id")
                         .HasComment("@pii:low Usuario del reproceso pendiente (claim sub, HU #13746, R-1): la siguiente ejecución deja su intento con disparador REPROCESO y este usuario; null si no hay reproceso pendiente.");
 
+                    b.Property<short>("Republicaciones")
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)0)
+                        .HasColumnName("republicaciones")
+                        .HasComment("Republicaciones del reconciliador (ADR-0075, D3): 0 o 1 (ck_consultas_republicaciones); a la segunda huérfana la celda cierra en ERROR.");
+
                     b.Property<Guid?>("ReutilizadaDeId")
                         .HasColumnType("uuid")
                         .HasColumnName("reutilizada_de_id")
@@ -447,6 +453,11 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("tipo_error")
                         .HasComment("Causa del ERROR (HU #13730): código de TipoErrorFuente o BLOQUEADA_POR_RUNT; solo con estado ERROR.");
+
+                    b.Property<Guid?>("TrabajoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("trabajo_id")
+                        .HasComment("Trabajo vigente de la consulta por RabbitMQ (ADR-0075): descarta trabajos y resultados viejos o duplicados y reconoce un resultado demorado; null sin trabajo publicado.");
 
                     b.Property<Guid?>("UsuarioManualId")
                         .HasColumnType("uuid")
@@ -512,6 +523,8 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                             t.HasCheckConstraint("ck_consultas_payload_objeto", "payload IS NULL OR jsonb_typeof(payload) = 'object'");
 
                             t.HasCheckConstraint("ck_consultas_reproceso_usuario", "reproceso_usuario_id IS NULL OR estado IN ('PENDIENTE', 'EN_CURSO')");
+
+                            t.HasCheckConstraint("ck_consultas_republicaciones", "republicaciones BETWEEN 0 AND 1");
 
                             t.HasCheckConstraint("ck_consultas_tipo_error", "tipo_error IS NULL OR estado = 'ERROR'");
 

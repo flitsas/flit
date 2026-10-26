@@ -66,6 +66,18 @@ public sealed class CeldaConsulta : IEntidadDeEmpresa
     /// </summary>
     public Guid? ReprocesoUsuarioId { get; set; }
 
+    /// <summary>
+    /// Trabajo vigente de la celda en la consulta por RabbitMQ (ADR-0075): descarta trabajos y resultados viejos o duplicados y
+    /// reconoce un resultado demorado. Null si la celda no tiene trabajo publicado. Aún no lo lee ni escribe el motor.
+    /// </summary>
+    public Guid? TrabajoId { get; set; }
+
+    /// <summary>
+    /// Republicaciones del reconciliador (ADR-0075, D3): 0 o 1; a la segunda huérfana la celda se cierra en ERROR.
+    /// Aún no lo lee ni escribe el motor.
+    /// </summary>
+    public short Republicaciones { get; set; }
+
     /// <summary>Último cambio de la celda.</summary>
     public DateTimeOffset ActualizadoEn { get; set; }
 

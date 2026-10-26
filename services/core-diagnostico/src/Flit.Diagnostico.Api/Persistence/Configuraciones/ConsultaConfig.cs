@@ -38,6 +38,8 @@ internal sealed class ConsultaConfig : IEntityTypeConfiguration<CeldaConsulta>
             t.HasCheckConstraint(
                 "ck_consultas_origen_manual",
                 $"(COALESCE(origen, '') = '{CodigosDeEnum.Codigo(OrigenCelda.Manual)}') = (usuario_manual_id IS NOT NULL)");
+            // ADR-0075 (D3): el reconciliador republica una sola vez; a la siguiente cierra la celda en ERROR.
+            t.HasCheckConstraint("ck_consultas_republicaciones", "republicaciones BETWEEN 0 AND 1");
         });
         builder.HasKey(x => x.Id).HasName("pk_consultas");
         builder.HasAlternateKey(x => new { x.TenantId, x.Id }).HasName("uq_consultas_tenant_id");
@@ -75,6 +77,12 @@ internal sealed class ConsultaConfig : IEntityTypeConfiguration<CeldaConsulta>
             .HasComment("Cola: intentos automáticos hechos (reintentos de errores transitorios, D-12).");
         builder.Property(x => x.ReprocesoUsuarioId)
             .HasComment("@pii:low Usuario del reproceso pendiente (claim sub, HU #13746, R-1): la siguiente ejecución deja su intento con disparador REPROCESO y este usuario; null si no hay reproceso pendiente.");
+        // ADR-0075 (HU #13727): sin índice propio; el reconciliador recorre las celdas en cola por ix_cola.
+        builder.Property(x => x.TrabajoId)
+            .HasComment("Trabajo vigente de la consulta por RabbitMQ (ADR-0075): descarta trabajos y resultados viejos o duplicados y reconoce un resultado demorado; null sin trabajo publicado.");
+        builder.Property(x => x.Republicaciones)
+            .HasDefaultValue((short)0).ValueGeneratedNever()
+            .HasComment("Republicaciones del reconciliador (ADR-0075, D3): 0 o 1 (ck_consultas_republicaciones); a la segunda huérfana la celda cierra en ERROR.");
         builder.Property(x => x.ActualizadoEn).HasComment("Último cambio de la celda (timestamptz).");
         builder.Property(x => x.VersionTablero).HasComment("Versión del tablero del lote en el último cambio (polling ?desde=).");
         builder.Property(x => x.DiagnosticoId).Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
