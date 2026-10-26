@@ -6,7 +6,7 @@
 // Rediseño: tabla del modelo único + modal FLIT para editar; el error de carga muestra el
 // motivo real (antes un `catch {}` lo tragaba y siempre salía el mismo texto).
 // HU #14000 (Feature #13996): la tabla lista TODOS los documentos activos del catálogo cruzados con los
-// parámetros (sin parámetro = «Base») y lleva filtros por columna (Documento, Estado). «Agregar
+// parámetros (sin parámetro = «Base») y se filtra con embudos en el encabezado (Documento, Estado). «Agregar
 // parámetro» se retiró: editar la fila del documento es un paso menos que abrir un selector.
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import {
@@ -25,7 +25,7 @@ import { usePaginacion } from "@/components/atom/usePaginacion";
 import { Modal } from "@/components/atom/Modal";
 import { RowActions } from "@/components/atom/RowActions";
 import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
-import { TablaFiltrosBar, TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
+import { EncabezadoFiltrable, TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import {
   fetchCompanyDocumentParams,
@@ -251,10 +251,10 @@ export function CompanyDocumentParamsPanel({
 
   const visibles = useMemo(
     () =>
-      filtrarFilas(rows, filtros.condicionesTotales, filtros.busqueda, {
+      filtrarFilas(rows, filtros.condicionesTotales, "", {
         columnas: { documento: (r) => [r.name, r.code], estado: (r) => r.state },
       }),
-    [rows, filtros.condicionesTotales, filtros.busqueda],
+    [rows, filtros.condicionesTotales],
   );
 
   const handleSaved = useCallback((saved: CompanyDocumentParam) => {
@@ -268,7 +268,11 @@ export function CompanyDocumentParamsPanel({
   const columns: DataTableColumn<DocRow>[] = [
     {
       key: "document",
-      header: "Documento",
+      header: (
+        <EncabezadoFiltrable filtros={filtros} columnaId="documento">
+          Documento
+        </EncabezadoFiltrable>
+      ),
       render: (row) => (
         <div className="min-w-0">
           <p className="font-medium text-flit-primary dark:text-white">{row.name}</p>
@@ -278,7 +282,11 @@ export function CompanyDocumentParamsPanel({
     },
     {
       key: "state",
-      header: "Estado",
+      header: (
+        <EncabezadoFiltrable filtros={filtros} columnaId="estado">
+          Estado
+        </EncabezadoFiltrable>
+      ),
       render: (row) => {
         const meta = STATE_META[row.state] ?? STATE_META.OPCIONAL;
         const Icon = meta.icon;
@@ -337,7 +345,6 @@ export function CompanyDocumentParamsPanel({
           emptyMessage="No hay documentos activos en el catálogo."
         >
           <div className="space-y-3">
-            <TablaFiltrosBar filtros={filtros} />
             {filtradoVacio ? (
               <TablaFiltrosVacio onLimpiar={filtros.limpiar} />
             ) : (
