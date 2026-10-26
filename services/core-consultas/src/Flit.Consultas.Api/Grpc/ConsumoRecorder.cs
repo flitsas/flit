@@ -15,11 +15,23 @@ namespace Flit.Consultas.Api.Grpc;
 /// </summary>
 internal sealed class ConsumoRecorder(ConsultasDb db, IPlatformOutbox outbox, TimeProvider time, ILogger<ConsumoRecorder> logger)
 {
-    public async Task<T> MedirAsync<T>(ServerCallContext context, string fuente, Func<Task<T>> consulta, Func<T, (string Proveedor, string Resultado, bool DesdeCache)> resumen)
+    public Task<T> MedirAsync<T>(ServerCallContext context, string fuente, Func<Task<T>> consulta, Func<T, (string Proveedor, string Resultado, bool DesdeCache)> resumen)
     {
+        ArgumentNullException.ThrowIfNull(context);
+        return MedirAsync(PlatformServiceCaller.From(context), fuente, consulta, resumen, context.CancellationToken);
+    }
+
+    /// <summary>
+    /// La misma medición con un llamador explícito (HU #13876, ADR-0075): el consumidor del bus pasa el del sobre
+    /// (<c>svc-&lt;producer&gt;</c> y la empresa del <c>tenantId</c>). Una consulta cancelada por <paramref name="ct"/> no se mide,
+    /// igual que una llamada gRPC cancelada.
+    /// </summary>
+    public async Task<T> MedirAsync<T>(
+        PlatformServiceCaller caller, string fuente, Func<Task<T>> consulta, Func<T, (string Proveedor, string Resultado, bool DesdeCache)> resumen, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(caller);
         ArgumentNullException.ThrowIfNull(consulta);
         ArgumentNullException.ThrowIfNull(resumen);
-        var caller = PlatformServiceCaller.From(context);
         var reloj = Stopwatch.StartNew();
         try
         {
@@ -28,7 +40,7 @@ internal sealed class ConsumoRecorder(ConsultasDb db, IPlatformOutbox outbox, Ti
             await GuardarAsync(caller, fuente, proveedor, resultado, desdeCache, reloj.Elapsed).ConfigureAwait(false);
             return respuesta;
         }
-        catch (Exception) when (!context.CancellationToken.IsCancellationRequested)
+        catch (Exception) when (!ct.IsCancellationRequested)
         {
             await GuardarAsync(caller, fuente, string.Empty, "error", false, reloj.Elapsed).ConfigureAwait(false);
             throw;

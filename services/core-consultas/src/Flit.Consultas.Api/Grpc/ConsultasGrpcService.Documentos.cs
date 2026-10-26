@@ -14,8 +14,10 @@ namespace Flit.Consultas.Api.Grpc;
 /// </summary>
 internal sealed partial class ConsultasGrpcService
 {
-    public override Task<ConsultarVehiculoCrudoResponse> ConsultarVehiculoCrudo(ConsultarVehiculoCrudoRequest request, ServerCallContext context) =>
-        consumo.MedirAsync(context, "vehiculo_crudo", () => ConsultarVehiculoCrudoCore(request, context), r => (
+    public override Task<ConsultarVehiculoCrudoResponse> ConsultarVehiculoCrudo(ConsultarVehiculoCrudoRequest request, ServerCallContext context)
+    {
+        var caller = Llamador(context);
+        return consumo.MedirAsync(caller, "vehiculo_crudo", () => ConsultarVehiculoCrudoCore(request, context.CancellationToken), r => (
             request.Proveedor,
             r.Resultado switch
             {
@@ -23,15 +25,25 @@ internal sealed partial class ConsultasGrpcService
                 ResultadoCrudo.NoEncontrado => "rojo",
                 _ => "error",
             },
-            false));
+            false), context.CancellationToken);
+    }
 
-    public override Task<GenerarImprontaResponse> GenerarImpronta(GenerarImprontaRequest request, ServerCallContext context) =>
-        consumo.MedirAsync(context, "impronta", () => GenerarImprontaCore(request, context), r => ("kyverum_runt", r.Error is null ? "verde" : "error", false));
+    public override Task<GenerarImprontaResponse> GenerarImpronta(GenerarImprontaRequest request, ServerCallContext context)
+    {
+        var caller = Llamador(context);
+        return consumo.MedirAsync(caller, "impronta", () => GenerarImprontaCore(request, context.CancellationToken),
+            r => ("kyverum_runt", r.Error is null ? "verde" : "error", false), context.CancellationToken);
+    }
 
-    public override Task<GenerarCertificadoRuesResponse> GenerarCertificadoRues(GenerarCertificadoRuesRequest request, ServerCallContext context) =>
-        consumo.MedirAsync(context, "certificado_rues", () => GenerarCertificadoRuesCore(request, context), r => ("rues", r.Habilitado && r.Error is null ? "verde" : "error", false));
+    public override Task<GenerarCertificadoRuesResponse> GenerarCertificadoRues(GenerarCertificadoRuesRequest request, ServerCallContext context)
+    {
+        var caller = Llamador(context);
+        return consumo.MedirAsync(caller, "certificado_rues", () => GenerarCertificadoRuesCore(request, context.CancellationToken),
+            r => ("rues", r.Habilitado && r.Error is null ? "verde" : "error", false), context.CancellationToken);
+    }
 
-    private async Task<ConsultarVehiculoCrudoResponse> ConsultarVehiculoCrudoCore(ConsultarVehiculoCrudoRequest request, ServerCallContext context)
+    // HU #13876: los *Core reciben la cancelación, no el ServerCallContext (no dependen de la empresa: no reciben el llamador).
+    private async Task<ConsultarVehiculoCrudoResponse> ConsultarVehiculoCrudoCore(ConsultarVehiculoCrudoRequest request, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
         if (!RuntConfirmationProviderKeys.IsValid(request.Proveedor))
@@ -47,7 +59,7 @@ internal sealed partial class ConsultasGrpcService
         else
             throw Invalido("Se necesita el VIN, o la placa con el documento del propietario.");
 
-        var resultado = await runtCrudo.ConsultAsync(request.Proveedor, query, context.CancellationToken).ConfigureAwait(false);
+        var resultado = await runtCrudo.ConsultAsync(request.Proveedor, query, ct).ConfigureAwait(false);
         var response = new ConsultarVehiculoCrudoResponse
         {
             Resultado = resultado.Outcome switch
@@ -64,7 +76,7 @@ internal sealed partial class ConsultasGrpcService
         return response;
     }
 
-    private async Task<GenerarImprontaResponse> GenerarImprontaCore(GenerarImprontaRequest request, ServerCallContext context)
+    private async Task<GenerarImprontaResponse> GenerarImprontaCore(GenerarImprontaRequest request, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
         if (string.IsNullOrWhiteSpace(request.Documento))
@@ -87,7 +99,7 @@ internal sealed partial class ConsultasGrpcService
                     request.HasOrgCiudad ? request.OrgCiudad : null,
                     request.Operador,
                     request.HasVin ? request.Vin : null),
-                context.CancellationToken).ConfigureAwait(false);
+                ct).ConfigureAwait(false);
             return new GenerarImprontaResponse { PdfDataUri = r.PdfDataUri, Hash = r.Hash, Radicado = r.Radicado, FechaImpresa = r.FechaImpresa };
         }
         catch (ImprontaRuntException ex)
@@ -96,7 +108,7 @@ internal sealed partial class ConsultasGrpcService
         }
     }
 
-    private async Task<GenerarCertificadoRuesResponse> GenerarCertificadoRuesCore(GenerarCertificadoRuesRequest request, ServerCallContext context)
+    private async Task<GenerarCertificadoRuesResponse> GenerarCertificadoRuesCore(GenerarCertificadoRuesRequest request, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
         if (string.IsNullOrWhiteSpace(request.Nit))
@@ -109,7 +121,7 @@ internal sealed partial class ConsultasGrpcService
         try
         {
             var r = await cliente.GenerarAsync(
-                new RuesExternalRequest(request.Nit, request.HasRazonSocial ? request.RazonSocial : null), context.CancellationToken).ConfigureAwait(false);
+                new RuesExternalRequest(request.Nit, request.HasRazonSocial ? request.RazonSocial : null), ct).ConfigureAwait(false);
             var response = new GenerarCertificadoRuesResponse { Habilitado = true, PdfDataUri = r.PdfDataUri };
             if (r.Radicado is not null)
                 response.Radicado = r.Radicado;
