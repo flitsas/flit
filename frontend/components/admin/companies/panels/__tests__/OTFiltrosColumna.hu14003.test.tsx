@@ -234,6 +234,9 @@ describe("HU #14003 AC4 — sin resultados (Organismos de tránsito)", () => {
     expect(
       await screen.findByText(/ningún registro coincide con los filtros/i),
     ).toBeInTheDocument();
+    // La tabla sigue montada con su embudo (activo) en el encabezado.
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /filtrar por organismo/i })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /limpiar filtros/i }));
     expect(await screen.findByText("Secretaría Bogotá")).toBeInTheDocument();
     expect(screen.getByText("Tránsito Cali")).toBeInTheDocument();
@@ -315,6 +318,9 @@ describe("HU #14003 AC2/AC3/AC4 — Bloqueos editable (TransitBlocksPanel)", () 
     expect(
       await screen.findByText(/ningún registro coincide con los filtros/i),
     ).toBeInTheDocument();
+    // La tabla sigue montada con su embudo (activo) en el encabezado.
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /filtrar por organismo/i })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /limpiar filtros/i }));
     expect(await screen.findByText("Secretaría Bogotá")).toBeInTheDocument();
   });
@@ -350,6 +356,9 @@ describe("HU #14003 AC2/AC4 — Bloqueos solo lectura (TransitBlocksReadOnlySect
     expect(
       await screen.findByText(/ningún registro coincide con los filtros/i),
     ).toBeInTheDocument();
+    // La tabla sigue montada con su embudo (activo) en el encabezado.
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /filtrar por organismo bloqueado/i })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /limpiar filtros/i }));
     expect(await screen.findByText("Secretaría Bogotá")).toBeInTheDocument();
   });

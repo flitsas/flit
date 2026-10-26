@@ -416,10 +416,11 @@ export function OTConfigTable({
         />
       </div>
 
-      {filtros.hayFiltros && filtered.length === 0 ? (
-        <TablaFiltrosVacio onLimpiar={limpiarTodo} />
-      ) : (
+      {(
         <DataTable
+          emptyContent={
+            filtros.hayFiltros ? <TablaFiltrosVacio onLimpiar={limpiarTodo} /> : undefined
+          }
           columns={columns}
           rows={paginaControlada ? filtered : pg.paginar(filtered)}
           getRowKey={(office) => office.id}

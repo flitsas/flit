@@ -6,6 +6,7 @@ import type { CompanyListItem } from "@/lib/api/types";
 import { SwitchToggle } from "@/components/ui/SwitchToggle";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { RowActions } from "@/components/atom/RowActions";
+import { TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
 import { Pagination } from "@/components/atom/Pagination";
 import { EncabezadoFiltrable } from "@/components/atom/FiltroColumna";
 import type { TablaFiltrosEstado } from "@/lib/tablas/useTablaFiltros";
@@ -35,6 +36,8 @@ export interface CompanyListTableProps {
   onToggleStatus: (company: CompanyListItem) => void;
   /** Filtros por columna (embudo en el encabezado, HU #13999). Sin esto, encabezados planos. */
   filtros?: TablaFiltrosEstado;
+  /** Si se pasa y no hay filas, la tabla sigue montada (embudos visibles) con una fila de «sin coincidencias». */
+  onLimpiarFiltros?: () => void;
 }
 
 export function CompanyListTable({
@@ -48,6 +51,7 @@ export function CompanyListTable({
   onEdit,
   onToggleStatus,
   filtros,
+  onLimpiarFiltros,
 }: CompanyListTableProps) {
   const enc = (id: string, titulo: string) =>
     filtros ? (
@@ -92,6 +96,16 @@ export function CompanyListTable({
           </tr>
         </thead>
         <tbody>
+          {items.length === 0 && onLimpiarFiltros ? (
+            <tr>
+              <td colSpan={7}>
+                <TablaFiltrosVacio
+                  onLimpiar={onLimpiarFiltros}
+                  mensaje="Ninguna compañía coincide con los filtros"
+                />
+              </td>
+            </tr>
+          ) : null}
           {items.map((c) => {
             // Solo las compañías del catálogo B2B son editables; los tenants de tipo
             // heredado (sistema / organismos de tránsito) se muestran solo-lectura.
@@ -167,6 +181,7 @@ export function CompanyListTable({
       </table>
       </div>
 
+      {items.length === 0 && onLimpiarFiltros ? null : (
       <Pagination
         page={page}
         pageSize={pageSize}
@@ -175,6 +190,7 @@ export function CompanyListTable({
         onPageSizeChange={onPageSizeChange}
         className="mt-auto"
       />
+      )}
     </div>
   );
 }

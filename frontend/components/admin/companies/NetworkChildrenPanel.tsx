@@ -179,9 +179,7 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
           errorMessage="No se pudo cargar tu red de clientes."
           skeletonRows={4}
         >
-          {visibles.length === 0 && filtros.hayFiltros ? (
-            <TablaFiltrosVacio onLimpiar={filtros.limpiar} />
-          ) : (
+          {(
             <>
               <div className="overflow-x-auto">
                 {/* Bug #13055 — tabla homologada con el modelo de trámites */}
@@ -247,6 +245,13 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
                     </tr>
                   </thead>
                   <tbody>
+                    {visibles.length === 0 && filtros.hayFiltros ? (
+                      <tr>
+                        <td colSpan={6}>
+                          <TablaFiltrosVacio onLimpiar={filtros.limpiar} />
+                        </td>
+                      </tr>
+                    ) : null}
                     {pg.paginar(visibles).map((child) => (
                       <tr
                         key={child.id}
@@ -318,14 +323,16 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
                 </table>
               </div>
               {/* Bug #13055 — paginación en cliente con filas por página, como el listado de trámites */}
-              <Pagination
-                page={pg.page}
-                pageSize={pg.pageSize}
-                totalCount={visibles.length}
-                onPageChange={pg.setPage}
-                onPageSizeChange={pg.setPageSize}
-                noun="clientes"
-              />
+              {visibles.length > 0 && (
+                <Pagination
+                  page={pg.page}
+                  pageSize={pg.pageSize}
+                  totalCount={visibles.length}
+                  onPageChange={pg.setPage}
+                  onPageSizeChange={pg.setPageSize}
+                  noun="clientes"
+                />
+              )}
             </>
           )}
         </UiStateBoundary>

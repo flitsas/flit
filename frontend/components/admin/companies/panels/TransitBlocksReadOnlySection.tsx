@@ -122,10 +122,11 @@ export function TransitBlocksReadOnlySection({
           errorMessage="No se pudieron cargar los organismos bloqueados."
           skeletonRows={2}
         >
-          {filtros.hayFiltros && filtered.length === 0 ? (
-            <TablaFiltrosVacio onLimpiar={filtros.limpiar} />
-          ) : (
+          {(
             <DataTable
+              emptyContent={
+                filtros.hayFiltros ? <TablaFiltrosVacio onLimpiar={filtros.limpiar} /> : undefined
+              }
               columns={columns}
               rows={pg.paginar(filtered)}
               getRowKey={(office) => office.id}

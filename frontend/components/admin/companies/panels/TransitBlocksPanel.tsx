@@ -260,15 +260,18 @@ export function TransitBlocksPanel({
               />
             </div>
 
-            {filtros.hayFiltros && filtered.length === 0 ? (
-              <TablaFiltrosVacio
-                onLimpiar={() => {
-                  filtros.limpiar();
-                  setSearch("");
-                }}
-              />
-            ) : (
+            {(
               <DataTable
+                emptyContent={
+                  filtros.hayFiltros ? (
+                    <TablaFiltrosVacio
+                      onLimpiar={() => {
+                        filtros.limpiar();
+                        setSearch("");
+                      }}
+                    />
+                  ) : undefined
+                }
                 columns={columns}
                 rows={pageRows}
                 getRowKey={(office) => office.id}

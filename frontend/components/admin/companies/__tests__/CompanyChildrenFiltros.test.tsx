@@ -136,8 +136,14 @@ describe.each(casos)("$nombre — filtros por columna (HU #13999)", ({ texto, ta
     await user.type(screen.getByLabelText(/nit contiene/i), "zzz");
     await user.click(screen.getByRole("button", { name: "Aplicar" }));
 
-    await user.click(await screen.findByRole("button", { name: "Limpiar filtros" }));
+    const limpiar = await screen.findByRole("button", { name: "Limpiar filtros" });
+    // La tabla y los embudos siguen visibles; se puede quitar solo el filtro desde su embudo.
+    expect(screen.getByRole("table", { name: tabla })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /filtrar por nit/i })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /filtrar por nit/i }));
+    await user.click(screen.getByRole("button", { name: "Quitar filtro" }));
     expect(nombres()).toEqual(["Alfa Ltda", "Beta SAS", "Gamma SAS"]);
+    expect(limpiar).not.toBeInTheDocument();
   });
 
   it("AC2: quitar el filtro desde el embudo restaura las filas y no hay barra «+ Filtro» arriba", async () => {

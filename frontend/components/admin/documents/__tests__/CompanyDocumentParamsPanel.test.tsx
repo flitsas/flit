@@ -264,6 +264,9 @@ describe("CompanyDocumentParamsPanel", () => {
     });
     expect(screen.getByText(/ningún registro coincide con los filtros/i)).toBeInTheDocument();
     expect(screen.queryByText("soat")).not.toBeInTheDocument();
+    // La tabla y el embudo del encabezado siguen visibles.
+    expect(screen.getByRole("table", { name: "Parámetros documentales" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /filtrar por documento/i })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Limpiar filtros" }));
     expect(await screen.findByText("soat")).toBeInTheDocument();
