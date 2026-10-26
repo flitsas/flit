@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Settings2 } from "lucide-react";
+import { Check, Search, Settings2 } from "lucide-react";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { ActionsMenu } from "@/components/atom/ActionsMenu";
 import { StatusBadge } from "@/components/atom/StatusBadge";
-import { TablaFiltrosBar, TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
+import { EncabezadoFiltrable } from "@/components/atom/FiltroColumna";
+import { TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import { SwitchToggle } from "@/components/ui/SwitchToggle";
 import type { TransitOffice } from "@/lib/api/types";
@@ -52,11 +53,37 @@ export interface OTConfigTableProps {
   /** HU #12357 AC7 — deshabilita switches y menú de configuración. */
   readOnly?: boolean;
   /**
-   * Filtros controlados por el contenedor (HU #14003). Cuando el contenedor pagina, tiene que filtrar
-   * ANTES de cortar la página (Bug #13055): la tabla pinta la barra y ya no filtra. Sin esta prop la
-   * tabla filtra sobre `offices` con su propio estado. Columnas: `columnasFiltroOtConfig`.
+   * Búsqueda controlada por el contenedor (Bug #13055). Cuando el contenedor pagina, tiene que filtrar
+   * ANTES de cortar la página: la tabla solo pinta el campo y ya no filtra por término. Sin estas props
+   * la tabla busca sobre `offices` como antes.
+   */
+  search?: string;
+  onSearchChange?: (value: string) => void;
+  /**
+   * Filtros por columna controlados por el contenedor (HU #14003): embudo en el encabezado de cada
+   * columna. Mismo criterio: el contenedor filtra ANTES de paginar. Sin esta prop la tabla filtra
+   * sobre `offices` con su propio estado. Columnas: `columnasFiltroOtConfig`.
    */
   filtros?: TablaFiltrosEstado;
+}
+
+/** ¿El organismo coincide con el término? Nombre o código, sin mayúsculas ni tildes. */
+export function officeMatchesSearch(office: TransitOffice, term: string): boolean {
+  const folded = fold(term);
+  return !folded || fold(office.name).includes(folded) || fold(office.code).includes(folded);
+}
+
+/** Normaliza para comparación: minúsculas + sin tildes españolas. */
+function fold(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[áàäâã]/g, "a")
+    .replace(/[éèëê]/g, "e")
+    .replace(/[íìïî]/g, "i")
+    .replace(/[óòöôõ]/g, "o")
+    .replace(/[úùüû]/g, "u")
+    .replace(/ñ/g, "n");
 }
 
 /** Deriva si un OT es operable y, si no, la razón para el badge. */
@@ -86,6 +113,8 @@ export function OTConfigTable({
   onOpenConfig,
   onError,
   readOnly = false,
+  search: searchProp,
+  onSearchChange,
   filtros: filtrosProp,
 }: OTConfigTableProps) {
   // HU #13918 — paginación estándar en cliente SOLO cuando la tabla filtra por su cuenta. Con filtros
@@ -101,6 +130,22 @@ export function OTConfigTable({
     onCambio: () => pg.setPage(1),
   });
   const filtros = filtrosProp ?? filtrosPropios;
+  const [searchState, setSearchState] = useState("");
+  const searchControlled = searchProp !== undefined;
+  const search = searchControlled ? searchProp : searchState;
+  const setSearch = searchControlled
+    ? (value: string) => onSearchChange?.(value)
+    : (value: string) => {
+        setSearchState(value);
+        pg.setPage(1);
+      };
+  // La página la corta el contenedor cuando controla el buscador o los embudos.
+  const paginaControlada = filtrosControlados || searchControlled;
+  // «Limpiar filtros» quita también el buscador de arriba.
+  const limpiarTodo = () => {
+    filtros.limpiar();
+    setSearch("");
+  };
   const [granted, setGranted] = useState<Set<string>>(() => new Set(grantedIds));
   const [pending, setPending] = useState<Set<string>>(() => new Set());
   // IDs con confirmación "Guardado" visible unos segundos tras persistir con éxito.
@@ -141,21 +186,21 @@ export function OTConfigTable({
   const filtered = useMemo(() => {
     const base = readOnly ? offices.filter((o) => granted.has(o.id)) : offices;
     // Controlados: el contenedor ya filtró sobre la lista completa.
-    if (filtrosControlados) {
+    if (paginaControlada) {
       return base;
     }
     return filtrarOrganismosOtConfig(
-      base,
+      base.filter((o) => officeMatchesSearch(o, search)),
       filtros.condicionesTotales,
-      filtros.busqueda,
+      "",
       granted,
       agreements,
     );
   }, [
     offices,
+    search,
     filtros.condicionesTotales,
-    filtros.busqueda,
-    filtrosControlados,
+    paginaControlada,
     readOnly,
     granted,
     agreements,
@@ -215,17 +260,29 @@ export function OTConfigTable({
   const columns: DataTableColumn<TransitOffice>[] = [
     {
       key: "name",
-      header: "Organismo",
+      header: (
+        <EncabezadoFiltrable filtros={filtros} columnaId="name">
+          Organismo
+        </EncabezadoFiltrable>
+      ),
       render: (office) => <span className="font-semibold">{office.name}</span>,
     },
     {
       key: "code",
-      header: "Código",
+      header: (
+        <EncabezadoFiltrable filtros={filtros} columnaId="code">
+          Código
+        </EncabezadoFiltrable>
+      ),
       render: (office) => <span className="font-mono opacity-60">{office.code}</span>,
     },
     {
       key: "estado",
-      header: "Estado",
+      header: (
+        <EncabezadoFiltrable filtros={filtros} columnaId="estado">
+          Estado
+        </EncabezadoFiltrable>
+      ),
       render: (office) => {
         const checked = granted.has(office.id);
         if (readOnly) {
@@ -281,7 +338,11 @@ export function OTConfigTable({
       ? [
           {
             key: "convenio",
-            header: "Convenio",
+            header: (
+              <EncabezadoFiltrable filtros={filtros} columnaId="convenio">
+                Convenio
+              </EncabezadoFiltrable>
+            ),
             render: (office: TransitOffice) => {
               const checked = agreements.has(office.id);
               const isPending = pendingAgreement.has(office.id);
@@ -341,26 +402,32 @@ export function OTConfigTable({
         </p>
       </div>
 
-      <TablaFiltrosBar
-        filtros={filtros}
-        buscador={{
-          placeholder: "Buscar por nombre o código…",
-          ariaLabel: "Buscar organismo de tránsito",
-        }}
-      />
+      <div className="flex max-w-md items-center gap-2 rounded-xl border bg-white p-2.5 focus-within:outline focus-within:outline-2 focus-within:outline-flit-brand dark:bg-[#0B0F14]">
+        <Search className="h-4 w-4 opacity-60" />
+        <label htmlFor="ot-config-search" className="sr-only">
+          Buscar organismo de tránsito
+        </label>
+        <input
+          id="ot-config-search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar por nombre o código…"
+          className="flex-1 bg-transparent text-xs outline-none"
+        />
+      </div>
 
       {filtros.hayFiltros && filtered.length === 0 ? (
-        <TablaFiltrosVacio onLimpiar={filtros.limpiar} />
+        <TablaFiltrosVacio onLimpiar={limpiarTodo} />
       ) : (
         <DataTable
           columns={columns}
-          rows={filtrosControlados ? filtered : pg.paginar(filtered)}
+          rows={paginaControlada ? filtered : pg.paginar(filtered)}
           getRowKey={(office) => office.id}
           emptyMessage="Ningún organismo coincide con la búsqueda."
           ariaLabel="Organismos de tránsito"
           minWidth={640}
           pagination={
-            filtrosControlados
+            paginaControlada
               ? undefined
               : {
                   page: pg.page,

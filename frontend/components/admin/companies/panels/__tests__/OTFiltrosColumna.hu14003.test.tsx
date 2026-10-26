@@ -1,5 +1,5 @@
 // HU #14003 — filtros por columna en «Organismos de tránsito» (OTConfigTablePanel) y «Bloqueos»
-// (TransitBlocksPanel editable y TransitBlocksReadOnlySection). Usa la barra genérica de la HU #13997.
+// (TransitBlocksPanel editable y TransitBlocksReadOnlySection). Estándar final: buscador de consulta de arriba (como en develop) + embudo en el encabezado de cada columna (HU #13997).
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -71,15 +71,16 @@ function activos(): TransitOfficeOperationalStatus[] {
   }));
 }
 
-/** «+ Filtro» → columna → valor → Aplicar. `valor` string = texto; string[] = opciones a marcar. */
+/** Abre el embudo del encabezado «Filtrar por X» → valor → Aplicar. string = texto; string[] = casillas. */
 async function aplicarFiltro(
   user: ReturnType<typeof userEvent.setup>,
   columna: string,
   valor: string | string[],
 ) {
-  await user.click(screen.getByRole("button", { name: /\+ filtro/i }));
-  const dialog = await screen.findByRole("dialog", { name: /filtros de la tabla/i });
-  await user.click(within(dialog).getByRole("button", { name: columna }));
+  await user.click(
+    screen.getByRole("button", { name: new RegExp(`^Filtrar por ${columna}`, "i") }),
+  );
+  const dialog = await screen.findByRole("dialog", { name: `Filtro de ${columna}` });
   if (typeof valor === "string") {
     await user.type(within(dialog).getByLabelText(new RegExp(`${columna} contiene`, "i")), valor);
   } else {
@@ -90,10 +91,19 @@ async function aplicarFiltro(
   await user.click(within(dialog).getByRole("button", { name: /^aplicar$/i }));
 }
 
-async function columnasFiltrables(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole("button", { name: /\+ filtro/i }));
-  const lista = within(await screen.findByRole("list", { name: /columnas filtrables/i }));
-  return lista.queryAllByRole("button").map((b) => b.textContent);
+/** Columnas con embudo en el encabezado (nombre del embudo sin el prefijo). */
+function columnasFiltrables(): string[] {
+  return screen
+    .getAllByRole("button", { name: /^filtrar por /i })
+    .map((b) => (b.getAttribute("aria-label") ?? "").replace(/^Filtrar por /i, ""));
+}
+
+function embudoActivo(columna: string): boolean {
+  return (
+    screen
+      .getByRole("button", { name: new RegExp(`^Filtrar por ${columna}`, "i") })
+      .getAttribute("data-activo") === "true"
+  );
 }
 
 function arrangeOt() {
@@ -112,10 +122,9 @@ describe("HU #14003 AC1 — Organismos de tránsito: filtros por columna", () =>
   });
 
   it("ofrece Organismo, Código, Estado y Convenio, y nunca Acciones", async () => {
-    const user = userEvent.setup();
     render(<OTConfigTablePanel tenantId={TENANT} />);
     await screen.findByText("Secretaría Bogotá");
-    expect(await columnasFiltrables(user)).toEqual(["Organismo", "Código", "Estado", "Convenio"]);
+    expect(columnasFiltrables()).toEqual(["Organismo", "Código", "Estado", "Convenio"]);
   });
 
   it("filtra por Organismo", async () => {
@@ -152,11 +161,31 @@ describe("HU #14003 AC1 — Organismos de tránsito: filtros por columna", () =>
     expect(screen.getByText("Secretaría Bogotá")).toBeInTheDocument();
   });
 
-  it("modo solo lectura: sin columna Convenio, tampoco su filtro", async () => {
+  it("el buscador de arriba filtra y se combina (AND) con los embudos; Acciones no tiene embudo", async () => {
     const user = userEvent.setup();
+    render(<OTConfigTablePanel tenantId={TENANT} />);
+    await screen.findByText("Secretaría Bogotá");
+    expect(
+      screen.queryByRole("button", { name: /^filtrar por acciones/i }),
+    ).not.toBeInTheDocument();
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Buscar organismo de tránsito" }),
+      "secretaria",
+    );
+    await waitFor(() => expect(screen.queryByText("Tránsito Cali")).not.toBeInTheDocument());
+    expect(screen.getByText("Secretaría Bogotá")).toBeInTheDocument();
+    expect(screen.getByText("Secretaría Medellín")).toBeInTheDocument();
+
+    await aplicarFiltro(user, "Convenio", ["Con convenio"]);
+    await waitFor(() => expect(screen.queryByText("Secretaría Medellín")).not.toBeInTheDocument());
+    expect(screen.getByText("Secretaría Bogotá")).toBeInTheDocument();
+  });
+
+  it("modo solo lectura: sin columna Convenio, tampoco su filtro", async () => {
     render(<OTConfigTablePanel tenantId={TENANT} mode="readonly-concession-inherited" />);
     await screen.findByText("Secretaría Bogotá");
-    expect(await columnasFiltrables(user)).toEqual(["Organismo", "Código", "Estado"]);
+    expect(columnasFiltrables()).toEqual(["Organismo", "Código", "Estado"]);
   });
 });
 
@@ -188,7 +217,7 @@ describe("HU #14003 AC3 — acciones con filtros aplicados (Organismos de tráns
     ).toBeChecked();
 
     // El filtro sigue aplicado: contador en el disparador y las demás filas siguen fuera.
-    expect(screen.getByRole("button", { name: /\+ filtro \(1\)/i })).toBeInTheDocument();
+    expect(embudoActivo("Organismo")).toBe(true);
     expect(screen.queryByText("Secretaría Bogotá")).not.toBeInTheDocument();
   });
 });
@@ -220,10 +249,9 @@ describe("HU #14003 AC2/AC3/AC4 — Bloqueos editable (TransitBlocksPanel)", () 
   });
 
   it("ofrece Organismo, Código y Estado en red", async () => {
-    const user = userEvent.setup();
     render(<TransitBlocksPanel tenantId={TENANT} />);
     await screen.findByText("Secretaría Bogotá");
-    expect(await columnasFiltrables(user)).toEqual(["Organismo", "Código", "Estado en red"]);
+    expect(columnasFiltrables()).toEqual(["Organismo", "Código", "Estado en red"]);
   });
 
   it("filtra por Organismo y por Código", async () => {
@@ -261,8 +289,22 @@ describe("HU #14003 AC2/AC3/AC4 — Bloqueos editable (TransitBlocksPanel)", () 
     await waitFor(() => expect(addTransitBlock).toHaveBeenCalledWith(TENANT, "o3"));
     expect(await screen.findByText("Bloqueado")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /desbloquear tránsito cali/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /\+ filtro \(1\)/i })).toBeInTheDocument();
+    expect(embudoActivo("Organismo")).toBe(true);
     expect(screen.queryByText("Secretaría Bogotá")).not.toBeInTheDocument();
+  });
+
+  it("el buscador de arriba filtra y se combina (AND) con el embudo de Estado en red", async () => {
+    const user = userEvent.setup();
+    render(<TransitBlocksPanel tenantId={TENANT} />);
+    await screen.findByText("Secretaría Bogotá");
+    await user.type(
+      screen.getByRole("textbox", { name: "Buscar organismo de tránsito" }),
+      "secretar",
+    );
+    await waitFor(() => expect(screen.queryByText("Tránsito Cali")).not.toBeInTheDocument());
+    await aplicarFiltro(user, "Estado en red", ["Bloqueado"]);
+    await waitFor(() => expect(screen.queryByText("Secretaría Bogotá")).not.toBeInTheDocument());
+    expect(screen.getByText("Secretaría Medellín")).toBeInTheDocument();
   });
 
   it("AC4 — sin resultados muestra «Limpiar filtros»", async () => {
@@ -290,8 +332,7 @@ describe("HU #14003 AC2/AC4 — Bloqueos solo lectura (TransitBlocksReadOnlySect
     render(<TransitBlocksReadOnlySection tenantId={TENANT} />);
     await screen.findByText("Secretaría Bogotá");
 
-    expect(await columnasFiltrables(user)).toEqual(["Organismo bloqueado", "Código", "Estado"]);
-    await user.keyboard("{Escape}");
+    expect(columnasFiltrables()).toEqual(["Organismo bloqueado", "Código", "Estado"]);
 
     await aplicarFiltro(user, "Código", "05001");
     await waitFor(() => expect(screen.queryByText("Secretaría Bogotá")).not.toBeInTheDocument());

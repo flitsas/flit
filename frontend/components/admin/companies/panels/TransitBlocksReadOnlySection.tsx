@@ -7,7 +7,8 @@ import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import { StatusBadge } from "@/components/atom/StatusBadge";
-import { TablaFiltrosBar, TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
+import { EncabezadoFiltrable } from "@/components/atom/FiltroColumna";
+import { TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
 import { fetchTransitBlocks, fetchTransitOffices } from "@/lib/api/admin-companies";
 import type { TransitOffice } from "@/lib/api/types";
 import {
@@ -73,21 +74,33 @@ export function TransitBlocksReadOnlySection({
     () => [
       {
         key: "name",
-        header: "Organismo bloqueado",
+        header: (
+          <EncabezadoFiltrable filtros={filtros} columnaId="name">
+            Organismo bloqueado
+          </EncabezadoFiltrable>
+        ),
         render: (office) => <span className="font-semibold">{office.name}</span>,
       },
       {
         key: "code",
-        header: "Código",
+        header: (
+          <EncabezadoFiltrable filtros={filtros} columnaId="code">
+            Código
+          </EncabezadoFiltrable>
+        ),
         render: (office) => <span className="font-mono opacity-60">{office.code}</span>,
       },
       {
         key: "estado",
-        header: "Estado",
+        header: (
+          <EncabezadoFiltrable filtros={filtros} columnaId="estado">
+            Estado
+          </EncabezadoFiltrable>
+        ),
         render: () => <StatusBadge label="Bloqueado" tone="warning" />,
       },
     ],
-    [],
+    [filtros],
   );
 
   return (
@@ -109,13 +122,6 @@ export function TransitBlocksReadOnlySection({
           errorMessage="No se pudieron cargar los organismos bloqueados."
           skeletonRows={2}
         >
-          <TablaFiltrosBar
-            filtros={filtros}
-            buscador={{
-              placeholder: "Buscar por nombre o código…",
-              ariaLabel: "Buscar organismo bloqueado",
-            }}
-          />
           {filtros.hayFiltros && filtered.length === 0 ? (
             <TablaFiltrosVacio onLimpiar={filtros.limpiar} />
           ) : (
