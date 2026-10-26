@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Mail, Settings2, UserPlus } from "lucide-react";
 import { CreateButton } from "@/components/atom/CreateButton";
@@ -11,10 +11,18 @@ import { StatusBadge } from "@/components/atom/StatusBadge";
 import { RowActions } from "@/components/atom/RowActions";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { InviteUserModal } from "@/components/atom/modules/users/InviteUserModal";
-import { createChildCompany, fetchCompanyChildren, inviteChildCompanyUser } from "@/lib/api/admin-companies";
+import {
+  createChildCompany,
+  fetchCompanyChildren,
+  inviteChildCompanyUser,
+} from "@/lib/api/admin-companies";
 import { getRoles, type TenantRole } from "@/lib/api/security";
 import { tenantTypeLabel } from "@/lib/api/types";
 import type { CompanyChildListItem, CompanyListItem } from "@/lib/api/types";
+import { TablaFiltrosBar, TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
+import { filtrarFilas, type AccesoresFiltro } from "@/lib/tablas/filtrar-filas";
+import { useTablaFiltros } from "@/lib/tablas/useTablaFiltros";
+import { columnasHijas } from "./company-filter-columns";
 import { ChildCompanyStatusDialog } from "./ChildCompanyStatusDialog";
 import { CreateChildCompanyDialog } from "./CreateChildCompanyDialog";
 
@@ -25,8 +33,18 @@ import {
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
 } from "@/components/atom/table-styles";
-export interface NetworkChildrenPanelProps {
+const COLUMNAS = columnasHijas("Cliente");
+const ACCESORES: AccesoresFiltro<CompanyChildListItem> = {
+  columnas: {
+    razonSocial: (c) => c.razonSocial,
+    nit: (c) => c.nit,
+    tipo: (c) => c.tenantType,
+    estado: (c) => String(c.estadoActivo),
+    vinculacion: (c) => c.fechaVinculacion,
+  },
+};
 
+export interface NetworkChildrenPanelProps {
   headTenantId: string;
   headTenantType: string;
 }
@@ -36,26 +54,40 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
   const router = useRouter();
   const [status, setStatus] = useState<UiStatus>("loading");
   const pg = usePaginacion("companies.NetworkChildrenPanel");
+  // HU #13999 — filtros por columna en cliente (estándar HU #13997).
+  const { setPage } = pg;
+  const filtros = useTablaFiltros({
+    columnas: COLUMNAS,
+    periodoColumnaId: "vinculacion",
+    onCambio: () => setPage(1),
+  });
   const [children, setChildren] = useState<CompanyChildListItem[]>([]);
+  const visibles = useMemo(
+    () => filtrarFilas(children, filtros.condicionesTotales, filtros.busqueda, ACCESORES),
+    [children, filtros.condicionesTotales, filtros.busqueda],
+  );
   const [createOpen, setCreateOpen] = useState(false);
   const [statusTarget, setStatusTarget] = useState<CompanyChildListItem | null>(null);
   const [inviteTarget, setInviteTarget] = useState<CompanyChildListItem | null>(null);
   const [roles, setRoles] = useState<TenantRole[]>([]);
   const [rolesLoading, setRolesLoading] = useState(false);
 
-  const load = useCallback(async (signal?: AbortSignal) => {
-    setStatus("loading");
-    try {
-      const data = await fetchCompanyChildren(headTenantId, signal);
-      if (signal?.aborted) return;
-      setChildren(data);
-      setStatus(data.length === 0 ? "empty" : "ready");
-    } catch {
-      if (!signal?.aborted) {
-        setStatus("error");
+  const load = useCallback(
+    async (signal?: AbortSignal) => {
+      setStatus("loading");
+      try {
+        const data = await fetchCompanyChildren(headTenantId, signal);
+        if (signal?.aborted) return;
+        setChildren(data);
+        setStatus(data.length === 0 ? "empty" : "ready");
+      } catch {
+        if (!signal?.aborted) {
+          setStatus("error");
+        }
       }
-    }
-  }, [headTenantId]);
+    },
+    [headTenantId],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -113,121 +145,181 @@ export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkCh
         <div>
           <h1 className="text-lg font-bold">Red de clientes</h1>
           <p className="text-xs opacity-70">
-            Administra los clientes hijos de tu cabeza de grupo. No incluye vincular clientes existentes
-            (solo el SuperAdmin puede hacerlo).
+            Administra los clientes hijos de tu cabeza de grupo. No incluye vincular clientes
+            existentes (solo el SuperAdmin puede hacerlo).
           </p>
         </div>
-        <CreateButton label="Agregar cliente a la red" icon={UserPlus} onClick={() => setCreateOpen(true)} />
+        <CreateButton
+          label="Agregar cliente a la red"
+          icon={UserPlus}
+          onClick={() => setCreateOpen(true)}
+        />
       </div>
 
       {status === "loading" ? (
         <CarLoaderModal label="Cargando tu red de clientes…" />
       ) : (
-      <UiStateBoundary
-        status={status}
-        onRetry={() => void load()}
-        emptyMessage="Aún no tienes clientes en tu red. Crea el primero."
-        emptyCta={
-          <button
-            type="button"
-            onClick={() => setCreateOpen(true)}
-            className="mt-3 rounded-xl px-4 py-2 text-xs font-semibold text-white"
-            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
-          >
-            Agregar cliente a la red
-          </button>
-        }
-        errorMessage="No se pudo cargar tu red de clientes."
-        skeletonRows={4}
-      >
-        <div className="overflow-x-auto">
-          {/* Bug #13055 — tabla homologada con el modelo de trámites */}
-<table
- aria-label="Red de clientes"
- className="min-w-[720px] text-xs"
- style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
->
-            <thead>
-              <tr>
-                <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-                  Cliente
-                </th>
-                <th scope="col" className={`${TABLA_HEADER_CELL_CLS}`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-                  NIT
-                </th>
-                <th scope="col" className={`${TABLA_HEADER_CELL_CLS}`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-                  Tipo
-                </th>
-                <th scope="col" className={`${TABLA_HEADER_CELL_CLS}`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-                  Estado
-                </th>
-                <th scope="col" className={`${TABLA_HEADER_CELL_CLS}`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-                  Vinculación
-                </th>
-                <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl text-right`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-                  Acciones
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {pg.paginar(children).map((child) => (
-                <tr key={child.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
-                  <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold" style={{ borderColor: "#DFE5ED" }}>{child.razonSocial}</td>
-                  <td className="border-y px-4 py-3 font-mono" style={{ borderColor: "#DFE5ED" }}>{child.nit}</td>
-                  <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>{tenantTypeLabel(child.tenantType)}</td>
-                  <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
-                    {child.estadoActivo ? (
-                      <StatusBadge label="Activo" tone="success" />
-                    ) : (
-                      <StatusBadge label="Inactivo" tone="danger" />
-                    )}
-                  </td>
-                  <td className="border-y px-4 py-3 opacity-70" style={{ borderColor: "#DFE5ED" }}>{formatDate(child.fechaVinculacion)}</td>
-                  <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "#DFE5ED" }}>
-                    <RowActions
-                      actions={[
-                        {
-                          icon: Settings2,
-                          label: `Abrir configuración de ${child.razonSocial}`,
-                          tone: "primary",
-                          onClick: () =>
-                            router.push(
-                              `/admin/companies/${child.id}?networkHead=${headTenantId}`,
-                            ),
-                        },
-                        {
-                          icon: Mail,
-                          label: `Invitar usuario a ${child.razonSocial}`,
-                          tone: "primary",
-                          onClick: () => setInviteTarget(child),
-                        },
-                        {
-                          icon: UserPlus,
-                          label: child.estadoActivo
-                            ? `Desactivar ${child.razonSocial}`
-                            : `Activar ${child.razonSocial}`,
-                          tone: child.estadoActivo ? "danger" : "primary",
-                          onClick: () => setStatusTarget(child),
-                        },
-                      ]}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {/* Bug #13055 — paginación en cliente con filas por página, como el listado de trámites */}
-        <Pagination
-          page={pg.page}
-          pageSize={pg.pageSize}
-          totalCount={children.length}
-          onPageChange={pg.setPage}
-          onPageSizeChange={pg.setPageSize}
-          noun="clientes"
-        />
-
-      </UiStateBoundary>
+        <UiStateBoundary
+          status={status}
+          onRetry={() => void load()}
+          emptyMessage="Aún no tienes clientes en tu red. Crea el primero."
+          emptyCta={
+            <button
+              type="button"
+              onClick={() => setCreateOpen(true)}
+              className="mt-3 rounded-xl px-4 py-2 text-xs font-semibold text-white"
+              style={{
+                background:
+                  "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))",
+              }}
+            >
+              Agregar cliente a la red
+            </button>
+          }
+          errorMessage="No se pudo cargar tu red de clientes."
+          skeletonRows={4}
+        >
+          <TablaFiltrosBar filtros={filtros} />
+          {visibles.length === 0 && filtros.hayFiltros ? (
+            <TablaFiltrosVacio onLimpiar={filtros.limpiar} />
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                {/* Bug #13055 — tabla homologada con el modelo de trámites */}
+                <table
+                  aria-label="Red de clientes"
+                  className="min-w-[720px] text-xs"
+                  style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
+                >
+                  <thead>
+                    <tr>
+                      <th
+                        scope="col"
+                        className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`}
+                        style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                      >
+                        Cliente
+                      </th>
+                      <th
+                        scope="col"
+                        className={`${TABLA_HEADER_CELL_CLS}`}
+                        style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                      >
+                        NIT
+                      </th>
+                      <th
+                        scope="col"
+                        className={`${TABLA_HEADER_CELL_CLS}`}
+                        style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                      >
+                        Tipo
+                      </th>
+                      <th
+                        scope="col"
+                        className={`${TABLA_HEADER_CELL_CLS}`}
+                        style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                      >
+                        Estado
+                      </th>
+                      <th
+                        scope="col"
+                        className={`${TABLA_HEADER_CELL_CLS}`}
+                        style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                      >
+                        Vinculación
+                      </th>
+                      <th
+                        scope="col"
+                        className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl text-right`}
+                        style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                      >
+                        Acciones
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pg.paginar(visibles).map((child) => (
+                      <tr
+                        key={child.id}
+                        className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
+                      >
+                        <td
+                          className="rounded-l-xl border-y border-l px-4 py-3 font-semibold"
+                          style={{ borderColor: "#DFE5ED" }}
+                        >
+                          {child.razonSocial}
+                        </td>
+                        <td
+                          className="border-y px-4 py-3 font-mono"
+                          style={{ borderColor: "#DFE5ED" }}
+                        >
+                          {child.nit}
+                        </td>
+                        <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                          {tenantTypeLabel(child.tenantType)}
+                        </td>
+                        <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                          {child.estadoActivo ? (
+                            <StatusBadge label="Activo" tone="success" />
+                          ) : (
+                            <StatusBadge label="Inactivo" tone="danger" />
+                          )}
+                        </td>
+                        <td
+                          className="border-y px-4 py-3 opacity-70"
+                          style={{ borderColor: "#DFE5ED" }}
+                        >
+                          {formatDate(child.fechaVinculacion)}
+                        </td>
+                        <td
+                          className="rounded-r-xl border-y border-r px-4 py-3 text-right"
+                          style={{ borderColor: "#DFE5ED" }}
+                        >
+                          <RowActions
+                            actions={[
+                              {
+                                icon: Settings2,
+                                label: `Abrir configuración de ${child.razonSocial}`,
+                                tone: "primary",
+                                onClick: () =>
+                                  router.push(
+                                    `/admin/companies/${child.id}?networkHead=${headTenantId}`,
+                                  ),
+                              },
+                              {
+                                icon: Mail,
+                                label: `Invitar usuario a ${child.razonSocial}`,
+                                tone: "primary",
+                                onClick: () => setInviteTarget(child),
+                              },
+                              {
+                                icon: UserPlus,
+                                label: child.estadoActivo
+                                  ? `Desactivar ${child.razonSocial}`
+                                  : `Activar ${child.razonSocial}`,
+                                tone: child.estadoActivo ? "danger" : "primary",
+                                onClick: () => setStatusTarget(child),
+                              },
+                            ]}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {/* Bug #13055 — paginación en cliente con filas por página, como el listado de trámites */}
+              <Pagination
+                page={pg.page}
+                pageSize={pg.pageSize}
+                totalCount={visibles.length}
+                onPageChange={pg.setPage}
+                onPageSizeChange={pg.setPageSize}
+                noun="clientes"
+              />
+            </>
+          )}
+        </UiStateBoundary>
       )}
 
       <CreateChildCompanyDialog

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link2, Unlink } from "lucide-react";
 import { CreateButton } from "@/components/atom/CreateButton";
 import { RowActions } from "@/components/atom/RowActions";
@@ -12,6 +12,10 @@ import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBounda
 import { fetchCompanyChildren } from "@/lib/api/admin-companies";
 import { isHeadTenantType, tenantTypeLabel } from "@/lib/api/types";
 import type { CompanyChildListItem, CompanyListItem } from "@/lib/api/types";
+import { TablaFiltrosBar, TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
+import { filtrarFilas, type AccesoresFiltro } from "@/lib/tablas/filtrar-filas";
+import { useTablaFiltros } from "@/lib/tablas/useTablaFiltros";
+import { columnasHijas } from "./company-filter-columns";
 import { LinkCompanyDialog } from "./LinkCompanyDialog";
 import { UnlinkCompanyDialog } from "./UnlinkCompanyDialog";
 
@@ -22,8 +26,18 @@ import {
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
 } from "@/components/atom/table-styles";
-export interface CompanyChildrenSectionProps {
+const COLUMNAS = columnasHijas("Razón social");
+const ACCESORES: AccesoresFiltro<CompanyChildListItem> = {
+  columnas: {
+    razonSocial: (c) => c.razonSocial,
+    nit: (c) => c.nit,
+    tipo: (c) => c.tenantType,
+    estado: (c) => String(c.estadoActivo),
+    vinculacion: (c) => c.fechaVinculacion,
+  },
+};
 
+export interface CompanyChildrenSectionProps {
   company: CompanyListItem;
 }
 
@@ -31,23 +45,33 @@ export interface CompanyChildrenSectionProps {
 export function CompanyChildrenSection({ company }: CompanyChildrenSectionProps) {
   const [status, setStatus] = useState<UiStatus>("loading");
   const pg = usePaginacion("companies.CompanyChildrenSection");
+  // HU #13999 — filtros por columna en cliente (estándar HU #13997).
+  const { setPage } = pg;
+  const filtros = useTablaFiltros({
+    columnas: COLUMNAS,
+    periodoColumnaId: "vinculacion",
+    onCambio: () => setPage(1),
+  });
   const [children, setChildren] = useState<CompanyChildListItem[]>([]);
   const [linkOpen, setLinkOpen] = useState(false);
   const [unlinkTarget, setUnlinkTarget] = useState<CompanyChildListItem | null>(null);
 
-  const load = useCallback(async (signal?: AbortSignal) => {
-    setStatus("loading");
-    try {
-      const data = await fetchCompanyChildren(company.id, signal);
-      if (signal?.aborted) return;
-      setChildren(data);
-      setStatus(data.length === 0 ? "empty" : "ready");
-    } catch {
-      if (!signal?.aborted) {
-        setStatus("error");
+  const load = useCallback(
+    async (signal?: AbortSignal) => {
+      setStatus("loading");
+      try {
+        const data = await fetchCompanyChildren(company.id, signal);
+        if (signal?.aborted) return;
+        setChildren(data);
+        setStatus(data.length === 0 ? "empty" : "ready");
+      } catch {
+        if (!signal?.aborted) {
+          setStatus("error");
+        }
       }
-    }
-  }, [company.id]);
+    },
+    [company.id],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -56,6 +80,11 @@ export function CompanyChildrenSection({ company }: CompanyChildrenSectionProps)
     return () => controller.abort();
   }, [load]);
 
+  const visibles = useMemo(
+    () => filtrarFilas(children, filtros.condicionesTotales, filtros.busqueda, ACCESORES),
+    [children, filtros.condicionesTotales, filtros.busqueda],
+  );
+
   if (!isHeadTenantType(company.tenantType) && !company.isGroupParent) {
     return null;
   }
@@ -63,8 +92,7 @@ export function CompanyChildrenSection({ company }: CompanyChildrenSectionProps)
   const activeCount = children.filter((c) => c.estadoActivo).length;
 
   return (
-    <section className="mt-6" aria-labelledby="children-section-title"
-    >
+    <section className="mt-6" aria-labelledby="children-section-title">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 id="children-section-title" className="text-sm font-bold">
@@ -76,90 +104,149 @@ export function CompanyChildrenSection({ company }: CompanyChildrenSectionProps)
               : "Clientes de la Concesión vinculados por el SuperAdmin."}
           </p>
         </div>
-        <CreateButton label="Vincular cliente existente" icon={Link2} onClick={() => setLinkOpen(true)} />
+        <CreateButton
+          label="Vincular cliente existente"
+          icon={Link2}
+          onClick={() => setLinkOpen(true)}
+        />
       </div>
 
       {status === "loading" ? (
         <CarLoaderModal label="Cargando clientes hijos…" />
       ) : (
-      <UiStateBoundary
-        status={status}
-        onRetry={() => void load()}
-        emptyMessage="Aún no hay clientes vinculados a esta cabeza de grupo."
-        errorMessage="No se pudo cargar el listado de clientes hijos."
-        skeletonRows={3}
-      >
-        <div className="overflow-x-auto">
-          {/* Bug #13055 — tabla homologada con el modelo de trámites */}
-<table
- aria-label="Clientes hijos"
- className="min-w-[560px] text-xs"
- style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
->
-            <thead>
-              <tr>
-                <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-                  Razón social
-                </th>
-                <th scope="col" className={`${TABLA_HEADER_CELL_CLS}`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-                  NIT
-                </th>
-                <th scope="col" className={`${TABLA_HEADER_CELL_CLS}`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-                  Tipo
-                </th>
-                <th scope="col" className={`${TABLA_HEADER_CELL_CLS}`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-                  Estado
-                </th>
-                <th scope="col" className={`${TABLA_HEADER_CELL_CLS}`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-                  Vinculación
-                </th>
-                <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl text-right`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-                  Acciones
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {pg.paginar(children).map((child) => (
-                <tr key={child.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
-                  <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold" style={{ borderColor: "#DFE5ED" }}>{child.razonSocial}</td>
-                  <td className="border-y px-4 py-3 font-mono" style={{ borderColor: "#DFE5ED" }}>{child.nit}</td>
-                  <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>{tenantTypeLabel(child.tenantType)}</td>
-                  <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
-                    {child.estadoActivo ? (
-                      <StatusBadge label="Activo" tone="success" />
-                    ) : (
-                      <StatusBadge label="Inactivo" tone="danger" />
-                    )}
-                  </td>
-                  <td className="border-y px-4 py-3 opacity-70" style={{ borderColor: "#DFE5ED" }}>{formatDate(child.fechaVinculacion)}</td>
-                  <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "#DFE5ED" }}>
-                    <RowActions
-                      actions={[
-                        {
-                          icon: Unlink,
-                          label: `Desvincular ${child.razonSocial}`,
-                          onClick: () => setUnlinkTarget(child),
-                          tone: "danger",
-                        },
-                      ]}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {/* Bug #13055 — paginación en cliente con filas por página, como el listado de trámites */}
-        <Pagination
-          page={pg.page}
-          pageSize={pg.pageSize}
-          totalCount={children.length}
-          onPageChange={pg.setPage}
-          onPageSizeChange={pg.setPageSize}
-          noun="clientes"
-        />
-
-      </UiStateBoundary>
+        <UiStateBoundary
+          status={status}
+          onRetry={() => void load()}
+          emptyMessage="Aún no hay clientes vinculados a esta cabeza de grupo."
+          errorMessage="No se pudo cargar el listado de clientes hijos."
+          skeletonRows={3}
+        >
+          <div className="mb-3">
+            <TablaFiltrosBar filtros={filtros} />
+          </div>
+          {visibles.length === 0 && filtros.hayFiltros ? (
+            <TablaFiltrosVacio onLimpiar={filtros.limpiar} />
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                {/* Bug #13055 — tabla homologada con el modelo de trámites */}
+                <table
+                  aria-label="Clientes hijos"
+                  className="min-w-[560px] text-xs"
+                  style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
+                >
+                  <thead>
+                    <tr>
+                      <th
+                        scope="col"
+                        className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`}
+                        style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                      >
+                        Razón social
+                      </th>
+                      <th
+                        scope="col"
+                        className={`${TABLA_HEADER_CELL_CLS}`}
+                        style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                      >
+                        NIT
+                      </th>
+                      <th
+                        scope="col"
+                        className={`${TABLA_HEADER_CELL_CLS}`}
+                        style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                      >
+                        Tipo
+                      </th>
+                      <th
+                        scope="col"
+                        className={`${TABLA_HEADER_CELL_CLS}`}
+                        style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                      >
+                        Estado
+                      </th>
+                      <th
+                        scope="col"
+                        className={`${TABLA_HEADER_CELL_CLS}`}
+                        style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                      >
+                        Vinculación
+                      </th>
+                      <th
+                        scope="col"
+                        className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl text-right`}
+                        style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                      >
+                        Acciones
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pg.paginar(visibles).map((child) => (
+                      <tr
+                        key={child.id}
+                        className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
+                      >
+                        <td
+                          className="rounded-l-xl border-y border-l px-4 py-3 font-semibold"
+                          style={{ borderColor: "#DFE5ED" }}
+                        >
+                          {child.razonSocial}
+                        </td>
+                        <td
+                          className="border-y px-4 py-3 font-mono"
+                          style={{ borderColor: "#DFE5ED" }}
+                        >
+                          {child.nit}
+                        </td>
+                        <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                          {tenantTypeLabel(child.tenantType)}
+                        </td>
+                        <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+                          {child.estadoActivo ? (
+                            <StatusBadge label="Activo" tone="success" />
+                          ) : (
+                            <StatusBadge label="Inactivo" tone="danger" />
+                          )}
+                        </td>
+                        <td
+                          className="border-y px-4 py-3 opacity-70"
+                          style={{ borderColor: "#DFE5ED" }}
+                        >
+                          {formatDate(child.fechaVinculacion)}
+                        </td>
+                        <td
+                          className="rounded-r-xl border-y border-r px-4 py-3 text-right"
+                          style={{ borderColor: "#DFE5ED" }}
+                        >
+                          <RowActions
+                            actions={[
+                              {
+                                icon: Unlink,
+                                label: `Desvincular ${child.razonSocial}`,
+                                onClick: () => setUnlinkTarget(child),
+                                tone: "danger",
+                              },
+                            ]}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {/* Bug #13055 — paginación en cliente con filas por página, como el listado de trámites */}
+              <Pagination
+                page={pg.page}
+                pageSize={pg.pageSize}
+                totalCount={visibles.length}
+                onPageChange={pg.setPage}
+                onPageSizeChange={pg.setPageSize}
+                noun="clientes"
+              />
+            </>
+          )}
+        </UiStateBoundary>
       )}
 
       {linkOpen && (
