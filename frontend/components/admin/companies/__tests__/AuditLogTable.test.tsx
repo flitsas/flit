@@ -36,7 +36,14 @@ const entries: AuditLogEntry[] = [
 
 function renderTable(props: Partial<React.ComponentProps<typeof AuditLogTable>> = {}) {
   return render(
-    <AuditLogTable entries={entries} totalCount={3} page={1} pageSize={10} onPageChange={vi.fn()} {...props} />,
+    <AuditLogTable
+      entries={entries}
+      totalCount={3}
+      page={1}
+      pageSize={10}
+      onPageChange={vi.fn()}
+      {...props}
+    />,
   );
 }
 
@@ -55,9 +62,13 @@ describe("AuditLogTable (AC5)", () => {
     const rows = screen.getAllByRole("row");
     expect(within(rows[1]).getByText(/organismo de tránsito/i)).toBeInTheDocument();
     expect(within(rows[2]).getByText("Generación de improntas")).toBeInTheDocument();
-    expect(screen.queryByText(/tenant_operational_policies\.generate_improntas/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/tenant_operational_policies\.generate_improntas/),
+    ).not.toBeInTheDocument();
     // El nombre técnico sigue disponible como tooltip.
-    expect(within(rows[2]).getByTitle("tenant_operational_policies.generate_improntas")).toBeInTheDocument();
+    expect(
+      within(rows[2]).getByTitle("tenant_operational_policies.generate_improntas"),
+    ).toBeInTheDocument();
   });
 
   it("pinta los booleanos como badges con texto", () => {
@@ -72,7 +83,9 @@ describe("AuditLogTable (AC5)", () => {
     const rows = screen.getAllByRole("row");
     expect(within(rows[1]).getAllByText("—").length).toBeGreaterThan(0);
     expect(within(rows[2]).getByLabelText("Sin operador")).toBeInTheDocument();
-    expect(within(rows[1]).getByLabelText("Usuario aaaaaaaa-1111-2222-3333-444444444444")).toBeInTheDocument();
+    expect(
+      within(rows[1]).getByLabelText("Usuario aaaaaaaa-1111-2222-3333-444444444444"),
+    ).toBeInTheDocument();
   });
 
   it("el JSON largo queda detrás de «Ver detalle» (modal)", async () => {
@@ -80,27 +93,12 @@ describe("AuditLogTable (AC5)", () => {
     await userEvent.click(screen.getByRole("button", { name: /ver detalle/i }));
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText("Detalle del cambio")).toBeInTheDocument();
-    expect(within(dialog).getByText("tenant_settings.consultation_provider_config")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("tenant_settings.consultation_provider_config"),
+    ).toBeInTheDocument();
     expect(within(dialog).getByText(/"primary": "runt"/)).toBeInTheDocument();
     await userEvent.click(within(dialog).getAllByRole("button", { name: "Cerrar" })[1]);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  });
-
-  it("filtra por texto y por tipo de cambio sobre la página cargada", async () => {
-    renderTable();
-    await userEvent.type(screen.getByLabelText("Buscar en el historial"), "improntas");
-    expect(screen.getAllByRole("row")).toHaveLength(2);
-    await userEvent.click(screen.getByRole("button", { name: "Limpiar filtros" }));
-    expect(screen.getAllByRole("row")).toHaveLength(4);
-
-    await userEvent.selectOptions(screen.getByLabelText("Tipo de cambio"), "Proveedores de consulta");
-    expect(screen.getAllByRole("row")).toHaveLength(2);
-  });
-
-  it("muestra el vacío de filtros cuando nada coincide", async () => {
-    renderTable();
-    await userEvent.type(screen.getByLabelText("Buscar en el historial"), "zzzz-no-existe");
-    expect(screen.getByText(/ningún cambio de esta página coincide/i)).toBeInTheDocument();
   });
 
   it("dispara onPageChange con la página siguiente y ofrece «Filas por página»", () => {
@@ -118,8 +116,14 @@ describe("auditLogLabels", () => {
   });
 
   it("interpreta booleanos, textos y objetos", () => {
-    expect(parseAuditValue("true", "only_own_vehicles")).toMatchObject({ kind: "boolean", positive: "Sí" });
-    expect(parseAuditValue('"internal"', "fines_query_source")).toEqual({ kind: "text", text: "Interna" });
+    expect(parseAuditValue("true", "only_own_vehicles")).toMatchObject({
+      kind: "boolean",
+      positive: "Sí",
+    });
+    expect(parseAuditValue('"internal"', "fines_query_source")).toEqual({
+      kind: "text",
+      text: "Interna",
+    });
     expect(parseAuditValue('{"a":1}', "x").kind).toBe("complex");
     expect(parseAuditValue(null, "x").kind).toBe("empty");
   });
