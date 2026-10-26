@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
 using Flit.Diagnostico.Api.Modulos.Tablero;
 using Flit.Diagnostico.Api.Persistence;
@@ -25,7 +26,9 @@ public sealed record ReprocesoDto(
 /// escribe datos de resultado: el endpoint no lee cuerpo. La celda sube <c>version_tablero</c> (el sondeo del tablero la ve
 /// volver a gris). Si el lote estaba COMPLETADO o INCOMPLETO vuelve a EN_PROCESO, sin <c>cerrado_en</c> y con una fila del
 /// historial REPROCESO con el usuario; al terminar, <see cref="RecalculadorEstado"/> fija el estado final. Todo en una
-/// transacción, con la cabecera bloqueada por la subida de la versión (como <see cref="EscritorCeldas"/>).
+/// transacción, con la cabecera bloqueada por la subida de la versión (como <see cref="EscritorCeldas"/>). Desde ADR-0075 (HU #13746)
+/// la celda publica en esa misma transacción su trabajo de consulta con un <c>trabajo_id</c> nuevo (<see cref="PublicadorCeldas"/>):
+/// un resultado del trabajo anterior ya no es el vigente.
 /// <para>
 /// No procede (409, nada cambia): celda que no está en ERROR (<see cref="CodigoNoEnError"/>); celda
 /// <see cref="OrquestadorVehiculo.BloqueadaPorRunt"/> mientras la RUNT del vehículo no esté COMPLETADO
@@ -39,7 +42,7 @@ public sealed record ReprocesoDto(
 /// var dto = await reproceso.ReprocesarAsync(consultaId, ct); // 202 { id, diagnostico_id, estado: "PENDIENTE", estado_lote, version }
 /// </code>
 /// </example>
-internal sealed class Reproceso(DiagnosticoDb db, UsuarioActual usuario, TimeProvider reloj)
+internal sealed class Reproceso(DiagnosticoDb db, UsuarioActual usuario, TimeProvider reloj, PublicadorCeldas publicador)
 {
     public const string CodigoNoEnError = "CELDA_NO_EN_ERROR";
     public const string CodigoBloqueadaPorRunt = "CELDA_BLOQUEADA_POR_RUNT";
@@ -75,6 +78,8 @@ internal sealed class Reproceso(DiagnosticoDb db, UsuarioActual usuario, TimePro
             celda.ReprocesoUsuarioId = autor;
             celda.ActualizadoEn = ahora;
             celda.VersionTablero = version;
+            // ADR-0075: trabajo nuevo de la celda (trabajo_id nuevo), en la misma transacción del reproceso.
+            await publicador.PublicarAsync(celda, ct).ConfigureAwait(false);
             try
             {
                 await db.SaveChangesAsync(ct).ConfigureAwait(false);

@@ -25,7 +25,8 @@ namespace Flit.Diagnostico.Tests.Consultas;
 /// usuario del producto recibe 403 y otra compañía 404. Una celda BLOQUEADA_POR_RUNT con la RUNT en ERROR responde 409; al
 /// reprocesar la RUNT en OK, sus bloqueadas vuelven a PENDIENTE en la misma transacción y corren con el usuario del reproceso.
 /// Un lote cerrado vuelve a EN_PROCESO con historial REPROCESO y el recalculador fija el estado final. PostgreSQL real; placas
-/// del simulador: TST##1 natural, TST##8 respuesta inválida (error definitivo).
+/// del simulador: TST##1 natural, TST##8 respuesta inválida (error definitivo). Desde ADR-0075 (HU #13746) el reproceso publica
+/// el trabajo de consulta de la celda con un <c>trabajo_id</c> nuevo, en su misma transacción.
 /// </summary>
 /// <example>
 /// <code>
@@ -337,6 +338,30 @@ public sealed class ReprocesoTests
         (despues.Estado, despues.VersionTablero).Should().Be((EstadoCelda.Error, 7L));
         (await Cabeceras.LeerAsync(api, empresas.B.Id, deB.Id, ct)).Estado.Should().Be(EstadoDiagnostico.Incompleto);
         (await HistorialAsync(empresas.B, deB.Id, ct)).Should().BeEmpty();
+    }
+
+    // ADR-0075 (HU #13746) — el reproceso publica un trabajo con un trabajo_id nuevo, distinto del anterior, que queda en la celda.
+    [Fact]
+    public async Task Reproceso_publica_un_trabajo_con_trabajo_id_nuevo()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await TableroAyudas.SembrarAsync(empresa, ct, version: 3, vehiculos:
+            [new("TST211", [new(Fuente.Runt, EstadoCelda.Completado, 2), new(Fuente.SimitVehiculo, EstadoCelda.Error, 3)])]);
+        var celda = lote.Celda("TST211", Fuente.SimitVehiculo);
+        var anterior = Guid.CreateVersion7();
+        await Motor.EjecutarAsync(api, $"UPDATE diagnostico.consultas SET trabajo_id = '{anterior}' WHERE id = '{celda.Id}'", ct);
+
+        var respuesta = await api.Cliente(Admin(api, empresa)).PostAsync(Ruta(celda.Id), null, ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.Accepted, await respuesta.Content.ReadAsStringAsync(ct));
+        var reprocesada = await CeldaAsync(empresa, celda.Id, ct);
+        reprocesada.TrabajoId.Should().NotBeNull().And.NotBe(anterior);
+        var trabajo = (await OutboxDePrueba.TrabajosAsync(api, ct)).Should().ContainSingle().Subject;
+        (trabajo.RoutingKey, trabajo.ConsultaId, trabajo.TrabajoId).Should().Be(("consultas.diagnostico.simit_vehiculo", celda.Id, reprocesada.TrabajoId!.Value));
+        trabajo.Data.GetProperty("solicitud").GetProperty("placa").GetProperty("valor").GetString().Should().Be("TST211");
     }
 
     private static string Ruta(Guid consulta) => $"{Program.Prefijo}/consultas/{consulta}/reprocesar";
