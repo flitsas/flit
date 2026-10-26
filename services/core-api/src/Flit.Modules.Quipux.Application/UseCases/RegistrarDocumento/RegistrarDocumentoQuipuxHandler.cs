@@ -17,8 +17,8 @@ using Flit.Tramites.Domain.Enums;
 namespace Flit.Modules.Quipux.Application.UseCases.RegistrarDocumento;
 
 /// <summary>
-/// Radica en Quipux una submission pendiente y, si Quipux la acepta (código 81), transiciona el
-/// trámite <c>preparado → entregado</c>.
+/// Radica en Quipux una submission pendiente y, si Quipux la acepta (código 081) o confirma que
+/// ya existía (082), transiciona el trámite <c>preparado → entregado</c>.
 /// </summary>
 /// <remarks>
 /// <para>Corrige, respecto a FLIT 1.0, cuatro defectos verificados en su código:</para>
@@ -238,27 +238,52 @@ public sealed class RegistrarDocumentoQuipuxHandler
                 QuipuxCodigos.RegistroError, QuipuxStage.RegistroError, command, cancellationToken);
         }
 
-        if (!QuipuxCodigos.EsRegistroExitoso(respuesta.Codigo))
-        {
-            await _audit.WriteAsync(
-                submission.TenantId, submission.Id, QuipuxStage.RegistroRespuesta,
-                QuipuxOutcome.ErrorTransitorio,
-                new
-                {
-                    codigo = respuesta.Codigo,
-                    duration_ms = ElapsedMs(inicioRegistro),
-                    origen = QuipuxJobNames.Register,
-                },
-                command.CorrelationId, cancellationToken);
+        var clasificacion = QuipuxRegistroDocumentoRespuesta.Clasificar(respuesta.Codigo);
 
+        if (clasificacion is QuipuxRegistroClasificacion.Exitoso
+            or QuipuxRegistroClasificacion.YaRegistrado)
+        {
+            return await MarcarRegistradoAsync(
+                submission,
+                respuesta.Codigo,
+                yaEstabaEnQuipux: clasificacion == QuipuxRegistroClasificacion.YaRegistrado,
+                ElapsedMs(inicioRegistro),
+                command,
+                cancellationToken);
+        }
+
+        var mensajeCatalogo = QuipuxRegistroDocumentoRespuesta.MensajeCatalogo(respuesta.Codigo);
+        await _audit.WriteAsync(
+            submission.TenantId, submission.Id, QuipuxStage.RegistroRespuesta,
+            clasificacion == QuipuxRegistroClasificacion.Reintentable
+                ? QuipuxOutcome.ErrorTransitorio
+                : QuipuxOutcome.ErrorDefinitivo,
+            new
+            {
+                codigo = respuesta.Codigo,
+                descripcion = respuesta.Descripcion ?? mensajeCatalogo,
+                clasificacion = clasificacion.ToString(),
+                duration_ms = ElapsedMs(inicioRegistro),
+                origen = QuipuxJobNames.Register,
+            },
+            command.CorrelationId, cancellationToken);
+
+        if (clasificacion == QuipuxRegistroClasificacion.Reintentable)
+        {
             return await ErrorReintentableAsync(
                 submission, settings, RegistrarDocumentoQuipuxMotivos.RespuestaNoExitosa,
                 respuesta.Codigo, QuipuxStage.RegistroError, command, cancellationToken);
         }
 
-        return await MarcarRegistradoAsync(
-            submission, respuesta.Codigo, yaEstabaEnQuipux: false, ElapsedMs(inicioRegistro),
-            command, cancellationToken);
+        // Definitivo (061–070, 083, 084, …): sin más POST; dead-letter inmediato.
+        return await DeadLetterAsync(
+            submission,
+            RegistrarDocumentoQuipuxMotivos.RespuestaNoExitosa,
+            QuipuxStage.RegistroError,
+            command,
+            cancellationToken,
+            codigo: respuesta.Codigo,
+            descripcion: respuesta.Descripcion ?? mensajeCatalogo);
     }
 
     /// <summary>
@@ -483,18 +508,25 @@ public sealed class RegistrarDocumentoQuipuxHandler
         string motivo,
         string stage,
         RegistrarDocumentoQuipuxCommand command,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int? codigo = null,
+        string? descripcion = null)
     {
         var ahora = DateTimeOffset.UtcNow;
         submission.Status = QuipuxSubmissionEstado.Fallido;
         submission.CompletedAt = ahora;
         submission.UpdatedAt = ahora;
+        if (codigo is not null)
+        {
+            submission.QxRegisterCode = codigo;
+        }
 
         await _submissions.UpdateAsync(
             submission,
             NuevoEvento(
                 submission, QuipuxStage.DeadLetter, QuipuxOutcome.ErrorDefinitivo,
-                new { motivo, stage_origen = stage }, command.CorrelationId, ahora),
+                new { motivo, stage_origen = stage, codigo, descripcion },
+                command.CorrelationId, ahora),
             cancellationToken);
 
         RegistrarDocumentoQuipuxLog.DeadLetter(
