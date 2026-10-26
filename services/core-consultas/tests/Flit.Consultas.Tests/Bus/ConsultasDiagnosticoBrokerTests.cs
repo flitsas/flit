@@ -123,17 +123,20 @@ public sealed class AnfitrionBrokerDiagnostico : AnfitrionBus
     /// <summary>Publica <paramref name="sobre"/> en <c>flit.consultas</c> como el administrador (su propio <c>user_id</c>).</summary>
     public Task PublicarComoAdministradorAsync(EventEnvelope sobre) => PublicarAsync(sobre, Amqp(Usuario, Contrasena), Usuario);
 
-    /// <summary>El resultado del trabajo <paramref name="trabajoId"/> leído de <see cref="ColaResultados"/> (los de otros trabajos se guardan).</summary>
+    /// <summary>
+    /// El resultado del trabajo <paramref name="trabajoId"/> leído de <see cref="ColaResultados"/>: todo lo que se lee de la cola se
+    /// guarda por <c>trabajo_id</c> y se puede volver a pedir.
+    /// </summary>
     public async Task<MensajeBroker?> ResultadoAsync(Guid trabajoId, TimeSpan espera)
     {
         var limite = DateTime.UtcNow + espera;
         do
         {
-            if (_resultados.TryRemove(trabajoId, out var guardado))
+            if (_resultados.TryGetValue(trabajoId, out var guardado))
                 return guardado;
             while (await TomarAsync(ColaResultados, TimeSpan.Zero) is { } m)
                 _resultados[m.Sobre.Data.GetProperty("trabajoId").GetGuid()] = m;
-            if (_resultados.TryRemove(trabajoId, out var leido))
+            if (_resultados.TryGetValue(trabajoId, out var leido))
                 return leido;
             await Task.Delay(100, TestContext.Current.CancellationToken);
         }
