@@ -1,0 +1,29 @@
+{
+  "eventId": "0192f3a0-0000-7000-8000-000000000102",
+  "type": "consultas.resultado.diagnostico",
+  "version": 1,
+  "occurredAt": "2026-10-26T15:00:02+00:00",
+  "tenantId": "0192f3a0-0000-7000-8000-0000000000e1",
+  "producer": "consultas",
+  "correlationId": "corr-fixture-trabajo",
+  "data": {
+    "trabajoId": "0192f3a0-0000-7000-8000-000000000201",
+    "consultaId": "0192f3a0-0000-7000-8000-000000000301",
+    "personaId": null,
+    "fuente": "runt",
+    "estado": "OK",
+    "grpcStatus": null,
+    "respuesta": {
+      "proveedor": "intempo",
+      "resultado": "RESULTADO_RUNT_INTEMPO_ENCONTRADO",
+      "vehiculo": {
+        "plate": "TST001",
+        "vin": "9ZZPRUEBA00000001",
+        "informacionGeneral": { "marca": "MARCA PRUEBA", "linea": "LINEA PRUEBA", "modelo": "2020", "cilidraje": "1600", "tipoServicio": "PARTICULAR", "organismoTransito": "ORGANISMO DE PRUEBA" }
+      },
+      "duracionMs": 812
+    },
+    "duracionMs": 1234,
+    "desdeCache": false
+  }
+}

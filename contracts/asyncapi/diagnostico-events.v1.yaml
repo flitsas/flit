@@ -1,0 +1,53 @@
+asyncapi: '2.6.0'
+info:
+  title: FLIT — eventos de Diagnóstico
+  version: 1.0.0
+  description: |
+    Eventos que publica Diagnóstico Vehicular (core-diagnostico) en el exchange `flit.diagnostico` (ADR-0064,
+    ADR-0075). Mensajes en JSON con el sobre común (comun/sobre.v1.yaml). Sin datos personales: ids, estados y totales.
+    Los trabajos de consulta que Diagnóstico deja a Consultas están en consultas-events.v1.yaml.
+defaultContentType: application/json
+
+channels:
+  diagnostico.lote.terminado:
+    description: |
+      Un diagnóstico (lote o Express) llegó a COMPLETADO o INCOMPLETO (HU #13743, ADR-0075). Se publica por la outbox en
+      la misma transacción del cierre. Si un reproceso o un llenado manual lo reabre y lo vuelve a cerrar, se publica otra
+      vez con una `version` mayor: los consumidores deduplican por `(diagnosticoId, version)`. Por ahora sin consumidor.
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.diagnostico, type: topic, durable: true, autoDelete: false, vhost: flit }
+    subscribe:
+      operationId: loteTerminado
+      message:
+        $ref: '#/components/messages/LoteTerminado'
+
+components:
+  messages:
+    LoteTerminado:
+      name: diagnostico.lote.terminado
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              data:
+                type: object
+                additionalProperties: false
+                required: [diagnosticoId, estado, esExpress, version, terminadoEn, vehiculos, celdas, erroresPorTipo]
+                properties:
+                  diagnosticoId: { type: string, format: uuid }
+                  estado: { type: string, enum: [COMPLETADO, INCOMPLETO] }
+                  esExpress: { type: boolean }
+                  version: { type: integer, minimum: 1, description: version_tablero del lote en el cierre. }
+                  terminadoEn: { type: string, format: date-time, description: cerrado_en del lote. }
+                  vehiculos: { type: integer, minimum: 0, description: Vehículos del lote. }
+                  celdas:
+                    type: object
+                    description: Celdas por estado (códigos de diagnostico.consultas.estado); solo los estados que tienen celdas.
+                    additionalProperties: { type: integer, minimum: 1 }
+                  erroresPorTipo:
+                    type: object
+                    description: Celdas en ERROR por tipo_error (TIMEOUT, RED, BLOQUEADA_POR_RUNT…); vacío si no hay.
+                    additionalProperties: { type: integer, minimum: 1 }

@@ -8,9 +8,12 @@ sale de FLIT por REST (`contracts/openapi`).
 |---|---|---|
 | [`plataforma-events.v1.yaml`](plataforma-events.v1.yaml) | `flit.plataforma` | Productos encendidos, suspensiones y cambios de roles |
 | [`tramites-events.v1.yaml`](tramites-events.v1.yaml) | `flit.tramites` | Cambio de estado del trámite y validaciones de identidad |
-| [`consultas-events.v1.yaml`](consultas-events.v1.yaml) | `flit.consultas` | Medición de cada consulta a proveedores |
+| [`consultas-events.v1.yaml`](consultas-events.v1.yaml) | `flit.consultas` | Medición de cada consulta a proveedores; trabajos de consulta del Diagnóstico y su resultado (ADR-0075) |
+| [`diagnostico-events.v1.yaml`](diagnostico-events.v1.yaml) | `flit.diagnostico` | Cierre de un diagnóstico (`diagnostico.lote.terminado`, totales sin datos personales) |
 | [`notificaciones-events.v1.yaml`](notificaciones-events.v1.yaml) | `flit.notificaciones` | Trabajos en cola que recibe Notificaciones (correo y webhooks salientes) |
 | [`domain-events.v1.yaml`](domain-events.v1.yaml) | — | Webhooks HTTP salientes al Organismo de Tránsito y a FLITO (no son del bus) |
+
+Fixtures de contrato compartidos entre servicios (un JSON por mensaje, sobre completo y datos inventados): [`../fixtures/bus/`](../fixtures/bus/). Las pruebas de los dos lados los leen para comprobar las claves y el formato.
 
 Todos los mensajes del bus usan el sobre común [`comun/sobre.v1.yaml`](comun/sobre.v1.yaml): `eventId` (UUIDv7,
 llave de idempotencia), `type`, `version`, `occurredAt`, `tenantId`, `producer`, `correlationId` y `data`.

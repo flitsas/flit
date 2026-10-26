@@ -1,11 +1,15 @@
 asyncapi: '2.6.0'
 info:
   title: FLIT — eventos de Consultas
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Eventos que publica Consultas (core-consultas) en el exchange `flit.consultas` (ADR-0065, ADR-0064).
     Mensajes en JSON con el sobre común (comun/sobre.v1.yaml). Sin datos del consultado: solo la medición, salvo
     los avisos de proveedores, que llevan el cuerpo del aviso para el servicio que pidió la validación.
+    Desde 1.1.0 (ADR-0075) también los TRABAJOS de consulta que deja Diagnóstico (core-diagnostico) en `flit.consultas`
+    y el resultado que Consultas le devuelve. Esos dos mensajes llevan, en claro, solo los identificadores que pide el
+    proveedor (placa, VIN, tipo y número de documento, NIT) y la respuesta minimizada: nunca nombres, direcciones ni
+    datos de contacto. Sus colas de mensajes muertos se purgan a los 7 días (política `dlq-7d` del broker).
 defaultContentType: application/json
 
 channels:
@@ -36,7 +40,65 @@ channels:
       message:
         $ref: '#/components/messages/AvisoKyverumVerify'
 
+  consultas.diagnostico.{fuente}:
+    description: |
+      Trabajo de consulta de una celda de un diagnóstico por lote (ADR-0075, HU #13727). Lo deja Diagnóstico con su
+      outbox (`EnqueueJob`, `producer = diagnostico`) en la misma transacción que la celda, y lo atiende la cola
+      `consultas.diagnostico` de Consultas (FIFO del broker, sin cupo por empresa). La fuente va en la llave de ruteo para
+      poder aislar una fuente lenta en su propia cola sin cambiar el contrato. La empresa es el `tenantId` del sobre.
+      Consultas consulta una sola vez y publica `consultas.resultado.diagnostico`; los reintentos los decide Diagnóstico.
+    parameters:
+      fuente:
+        $ref: '#/components/parameters/FuenteDiagnostico'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.consultas, type: topic, durable: true, autoDelete: false, vhost: flit }
+    publish:
+      operationId: trabajoConsultaDiagnostico
+      message:
+        $ref: '#/components/messages/TrabajoConsultaDiagnostico'
+
+  consultas.diagnostico-express.{fuente}:
+    description: |
+      El mismo trabajo para un Diagnóstico Express (la cabecera tiene `es_express`). Va a la cola aparte
+      `consultas.diagnostico-express`, con su propio consumidor, para no esperar detrás de los lotes.
+    parameters:
+      fuente:
+        $ref: '#/components/parameters/FuenteDiagnostico'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.consultas, type: topic, durable: true, autoDelete: false, vhost: flit }
+    publish:
+      operationId: trabajoConsultaDiagnosticoExpress
+      message:
+        $ref: '#/components/messages/TrabajoConsultaDiagnostico'
+
+  consultas.resultado.diagnostico:
+    description: |
+      Resultado de un trabajo `consultas.diagnostico[-express].{fuente}` (ADR-0075). Lo publica Consultas en su exchange y
+      lo consume la cola `diagnostico.consultas-resultados` de Diagnóstico, que cierra la celda o la reintenta. Un
+      resultado cuyo `trabajoId` ya no es el vigente de la celda se descarta.
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.consultas, type: topic, durable: true, autoDelete: false, vhost: flit }
+    subscribe:
+      operationId: resultadoConsultaDiagnostico
+      message:
+        $ref: '#/components/messages/ResultadoConsultaDiagnostico'
+
 components:
+  parameters:
+    FuenteDiagnostico:
+      description: |
+        Qué se consulta. `runt_propietario` y `runt_locatario` van a RUNT persona; la persona con NIT de esas celdas va a
+        `rues`. `impuesto` es el impuesto vehicular departamental.
+      schema:
+        type: string
+        enum: [runt, runt_propietario, runt_locatario, simit_vehiculo, simit_propietario, simit_locatario, rues, avaluo, impuesto]
+
   messages:
     ConsultaRealizada:
       name: consultas.consulta.realizada
@@ -73,3 +135,78 @@ components:
                   producto: { type: string, description: Servicio que pidió la validación (dueño del resultado). }
                   avisoId: { type: string, format: uuid, description: Fila del aviso en consultas.avisos. }
                   cuerpo: { type: string, description: Cuerpo del aviso tal como llegó (JSON de Kyverum en texto). }
+    TrabajoConsultaDiagnostico:
+      name: consultas.diagnostico.{fuente}
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              data:
+                type: object
+                additionalProperties: false
+                required: [trabajoId, consultaId, personaId, fuente, rpc, solicitud]
+                properties:
+                  trabajoId:
+                    type: string
+                    format: uuid
+                    description: Trabajo vigente de la celda (UUIDv7). Un reproceso o un reintento publica otro.
+                  consultaId: { type: string, format: uuid, description: Celda (diagnostico.consultas.id). }
+                  personaId:
+                    type: [string, 'null']
+                    format: uuid
+                    description: |
+                      Persona de la celda (diagnostico.personas_vehiculo.id) en las fuentes por persona: una celda de
+                      persona publica un trabajo por persona, todos con el mismo `trabajoId`. Null en las fuentes por
+                      vehículo.
+                  fuente:
+                    $ref: '#/components/parameters/FuenteDiagnostico/schema'
+                  rpc:
+                    type: string
+                    enum:
+                      - RuntIntempoService/ConsultarPorPlaca
+                      - RuntIntempoService/ConsultarPorVin
+                      - ConsultasService/ConsultarConductor
+                      - ConsultasService/ConsultarMultas
+                      - ConsultasService/ConsultarRues
+                      - ConsultasService/ConsultarAvaluos
+                      - ConsultasService/ConsultarImpuestoVehicular
+                    description: El rpc de core-consultas (contracts/proto/flit/consultas/v1) que atiende el trabajo.
+                  solicitud:
+                    type: object
+                    description: |
+                      El `*Request` proto del rpc en proto-JSON (Google.Protobuf JsonFormatter), en claro y mínimo: solo
+                      placa o VIN, tipo y número de documento o NIT cuando la fuente lo exige, los datos técnicos del
+                      avalúo (modelo, cilindraje, combustible, pasajeros) o el departamento del impuesto. Nunca nombres ni
+                      direcciones.
+    ResultadoConsultaDiagnostico:
+      name: consultas.resultado.diagnostico
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              data:
+                type: object
+                additionalProperties: false
+                required: [trabajoId, consultaId, personaId, fuente, estado, grpcStatus, respuesta, duracionMs, desdeCache]
+                properties:
+                  trabajoId: { type: string, format: uuid, description: El del trabajo que se atendió. }
+                  consultaId: { type: string, format: uuid }
+                  personaId: { type: [string, 'null'], format: uuid, description: El del trabajo; null en las fuentes por vehículo. }
+                  fuente:
+                    $ref: '#/components/parameters/FuenteDiagnostico/schema'
+                  estado: { type: string, enum: [OK, ERROR] }
+                  grpcStatus:
+                    type: [string, 'null']
+                    description: |
+                      Solo con estado ERROR: el nombre del StatusCode de gRPC que hoy viajaría en la RpcException
+                      (Unavailable, DeadlineExceeded, FailedPrecondition…), para que Diagnóstico lo traduzca como siempre.
+                      Nunca el mensaje de la excepción ni el detalle del proveedor.
+                  respuesta:
+                    type: [object, 'null']
+                    description: |
+                      Solo con estado OK: el `*Response` proto del rpc en proto-JSON, con los campos de nombre, dirección y
+                      contacto ya vaciados (minimización por rpc, lista cerrada).
+                  duracionMs: { type: integer, minimum: 0 }
+                  desdeCache: { type: boolean, description: La respuesta salió de la caché de proveedor de Consultas. }
