@@ -4,7 +4,7 @@ namespace Flit.Admin.Domain.Companies.TransitOffices;
 
 /// <summary>
 /// Lectura paginada del historial de auditoría de gobernanza de un tenant
-/// (HU #10192, AC4). Orden por <c>changed_at</c> descendente.
+/// (HU #10192, AC4; filtros HU #14004). Orden por <c>changed_at</c> descendente.
 /// </summary>
 public interface ITenantAuditLogRepository
 {
@@ -12,5 +12,6 @@ public interface ITenantAuditLogRepository
         Guid tenantId,
         int page,
         int pageSize,
+        TenantAuditLogFilter? filter = null,
         CancellationToken cancellationToken = default);
 }

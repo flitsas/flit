@@ -61,7 +61,7 @@ public sealed class SetTransitOfficeTenantStatusHandlerTests
 
         // Consultable vía el repositorio de historial de gobernanza del tenant.
         var readRepo = new TenantAuditLogRepository(ctx);
-        var page = await readRepo.ListPagedAsync(tenantId, 1, 20, TestContext.Current.CancellationToken);
+        var page = await readRepo.ListPagedAsync(tenantId, 1, 20, null, TestContext.Current.CancellationToken);
         page.TotalCount.Should().Be(1);
         page.Items.Single().FieldName.Should().Be("is_active");
     }
