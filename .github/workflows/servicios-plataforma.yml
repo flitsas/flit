@@ -2,7 +2,7 @@ name: Servicios de plataforma (.NET 10)
 
 # Epic #13316 (HU #13341): CI de todos los servicios que nacieron de la plantilla (services/core-plantilla). Se
 # descubren solos (.github/scripts/servicios-plataforma.sh): un servicio nuevo no edita este archivo. Por cada uno:
-# exige su contrato en contracts/proto, compila y corre sus pruebas contra Postgres.
+# exige su contrato en contracts/proto, compila y corre sus pruebas contra Postgres y RabbitMQ.
 
 on:
   push:
@@ -80,6 +80,21 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      # ADR-0075 (H11): broker real para las pruebas de bus de los servicios (consultas, diagnóstico, notificaciones), igual
+      # que en core-api.yml: servicio del job, sin Testcontainers, con usuario propio porque guest solo entra desde
+      # loopback dentro del contenedor. Con CI=true las pruebas de broker no se saltan: fallan si no lo alcanzan.
+      rabbitmq:
+        image: rabbitmq:4.1-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: flit
+          RABBITMQ_DEFAULT_PASS: flit-prueba
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 5s
+          --health-timeout 10s
+          --health-retries 20
     steps:
       - uses: actions/checkout@v4
 
@@ -94,6 +109,7 @@ jobs:
       - name: Build y pruebas
         env:
           ConnectionStrings__Core: "Host=localhost;Port=5432;Database=flit_dev;Username=postgres;Password=postgres"
+          FLIT_TEST_RABBITMQ: "amqp://flit:flit-prueba@localhost:5672/"
         run: |
           solucion=$(.github/scripts/servicios-plataforma.sh solucion "${{ matrix.servicio }}")
           dotnet restore "$solucion"
