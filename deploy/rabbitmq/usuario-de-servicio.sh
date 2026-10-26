@@ -11,6 +11,7 @@
 #   CLAVE="$(openssl rand -base64 32)"   # va al .env del ambiente (RABBITMQ_URL_<SERVICIO>), nunca al repo
 #   deploy/rabbitmq/usuario-de-servicio.sh consultas "$CLAVE"
 #   deploy/rabbitmq/usuario-de-servicio.sh tramites "$CLAVE" notificaciones   # deja trabajos de correo
+#   deploy/rabbitmq/usuario-de-servicio.sh diagnostico "$CLAVE" consultas    # deja trabajos de consulta (ADR-0075)
 #
 # Variables opcionales: COMPOSE (por defecto "docker compose -f docker-compose.prod.yml"), VHOST (por defecto flit).
 set -euo pipefail

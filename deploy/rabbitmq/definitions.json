@@ -8,9 +8,26 @@
     { "name": "flit.notificaciones", "vhost": "flit", "type": "topic", "durable": true, "auto_delete": false, "internal": false, "arguments": {} },
     { "name": "flit.diagnostico", "vhost": "flit", "type": "topic", "durable": true, "auto_delete": false, "internal": false, "arguments": {} }
   ],
-  "queues": [],
-  "bindings": [],
+  "queues": [
+    { "name": "consultas.diagnostico", "vhost": "flit", "durable": true, "auto_delete": false, "arguments": {} },
+    { "name": "consultas.diagnostico-express", "vhost": "flit", "durable": true, "auto_delete": false, "arguments": {} },
+    { "name": "diagnostico.consultas-resultados", "vhost": "flit", "durable": true, "auto_delete": false, "arguments": {} }
+  ],
+  "bindings": [
+    { "source": "flit.consultas", "vhost": "flit", "destination": "consultas.diagnostico", "destination_type": "queue", "routing_key": "consultas.diagnostico.*", "arguments": {} },
+    { "source": "flit.consultas", "vhost": "flit", "destination": "consultas.diagnostico-express", "destination_type": "queue", "routing_key": "consultas.diagnostico-express.*", "arguments": {} },
+    { "source": "flit.consultas", "vhost": "flit", "destination": "diagnostico.consultas-resultados", "destination_type": "queue", "routing_key": "consultas.resultado.diagnostico", "arguments": {} }
+  ],
   "users": [],
   "permissions": [],
-  "policies": []
+  "policies": [
+    {
+      "vhost": "flit",
+      "name": "dlq-7d",
+      "pattern": "^(consultas\\.diagnostico|consultas\\.diagnostico-express|diagnostico\\.consultas-resultados)\\.dlq$",
+      "apply-to": "queues",
+      "priority": 10,
+      "definition": { "message-ttl": 604800000 }
+    }
+  ]
 }
