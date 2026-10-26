@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Companies.CreateCompany;
 using Flit.Admin.Domain.Companies.TransitOffices;
 
 namespace Flit.Admin.Application.Companies.TransitOffices.GetTenantAuditLog;
@@ -34,8 +35,10 @@ public sealed class GetTenantAuditLogHandler
         var page = NormalizePage(query.Page);
         var pageSize = NormalizePageSize(query.PageSize);
 
+        var filter = BuildFilter(query);
+
         var result = await _repository
-            .ListPagedAsync(query.TenantId, page, pageSize, cancellationToken)
+            .ListPagedAsync(query.TenantId, page, pageSize, filter, cancellationToken)
             .ConfigureAwait(false);
 
         IReadOnlyList<AuditLogEntryResponse> data =
@@ -46,6 +49,41 @@ public sealed class GetTenantAuditLogHandler
 
         return new GetTenantAuditLogResult(data, result.TotalCount, page, pageSize);
     }
+
+    /// <summary>Mensaje de validación cuando el rango de fechas está invertido.</summary>
+    public const string InvalidDateRangeMessage = "La fecha desde no puede ser posterior a la fecha hasta.";
+
+    // Colombia no tiene horario de verano: offset fijo UTC-5 (la API compila con
+    // InvariantGlobalization y no puede depender de TimeZoneInfo "America/Bogota").
+    private static readonly TimeSpan BogotaOffset = TimeSpan.FromHours(-5);
+
+    private static TenantAuditLogFilter BuildFilter(GetTenantAuditLogQuery query)
+    {
+        if (query.FechaDesde is { } d && query.FechaHasta is { } h && d > h)
+        {
+            throw new InvalidAuditLogFilterException(
+                [new CompanyValidationError("fechaDesde", InvalidDateRangeMessage)]);
+        }
+
+        DateTimeOffset? from = query.FechaDesde is { } desde
+            ? new DateTimeOffset(desde.ToDateTime(TimeOnly.MinValue), BogotaOffset)
+            : null;
+
+        // Inclusivo del día completo: < 00:00 local del día siguiente.
+        DateTimeOffset? toExclusive = query.FechaHasta is { } hasta
+            ? new DateTimeOffset(hasta.AddDays(1).ToDateTime(TimeOnly.MinValue), BogotaOffset)
+            : null;
+
+        return new TenantAuditLogFilter(
+            from,
+            toExclusive,
+            Normalize(query.Campo),
+            Normalize(query.ValorAnterior),
+            Normalize(query.Operador));
+    }
+
+    private static string? Normalize(string? text) =>
+        string.IsNullOrWhiteSpace(text) ? null : text.Trim();
 
     private static int NormalizePage(int? page) =>
         page is null || page < 1 ? DefaultPage : page.Value;

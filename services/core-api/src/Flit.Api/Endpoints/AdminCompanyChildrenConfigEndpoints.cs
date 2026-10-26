@@ -219,7 +219,12 @@ public static class AdminCompanyChildrenConfigEndpoints
         [FromServices] GetTenantAuditLogHandler handler,
         CancellationToken cancellationToken,
         [FromQuery] int? page = null,
-        [FromQuery] int? pageSize = null)
+        [FromQuery] int? pageSize = null,
+        [FromQuery] DateOnly? fechaDesde = null,
+        [FromQuery] DateOnly? fechaHasta = null,
+        [FromQuery] string? campo = null,
+        [FromQuery] string? valorAnterior = null,
+        [FromQuery] string? operador = null)
     {
         var forbid = await GuardChildWriteAsync(user, headTenantId, childTenantId, hierarchy, cancellationToken)
             .ConfigureAwait(false);
@@ -228,11 +233,20 @@ public static class AdminCompanyChildrenConfigEndpoints
             return forbid;
         }
 
-        var result = await handler.HandleAsync(
-            new GetTenantAuditLogQuery { TenantId = childTenantId, Page = page, PageSize = pageSize },
+        return await TenantAuditLogResponses.ExecuteAsync(
+            handler,
+            new GetTenantAuditLogQuery
+            {
+                TenantId = childTenantId,
+                Page = page,
+                PageSize = pageSize,
+                FechaDesde = fechaDesde,
+                FechaHasta = fechaHasta,
+                Campo = campo,
+                ValorAnterior = valorAnterior,
+                Operador = operador,
+            },
             cancellationToken).ConfigureAwait(false);
-
-        return Results.Ok(result);
     }
 
     internal static Guid? ResolveUserId(ClaimsPrincipal user)

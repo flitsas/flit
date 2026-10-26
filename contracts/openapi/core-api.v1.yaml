@@ -4581,9 +4581,34 @@ paths:
           in: query
           required: false
           schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: fechaDesde
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          description: Día local America/Bogota inicial, inclusivo (yyyy-MM-dd).
+        - name: fechaHasta
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          description: Día local America/Bogota final, inclusivo (incluye todo ese día).
+        - name: campo
+          in: query
+          required: false
+          schema: { type: string }
+          description: Campo modificado (contiene, sin distinguir mayúsculas; sobre fieldName o entityName).
+        - name: valorAnterior
+          in: query
+          required: false
+          schema: { type: string }
+          description: Valor anterior (contiene, sin distinguir mayúsculas).
+        - name: operador
+          in: query
+          required: false
+          schema: { type: string }
+          description: Operador (contiene, sin distinguir mayúsculas; id de usuario, nombre o correo).
       responses:
         "200":
-          description: Página del historial de auditoría.
+          description: Página del historial de auditoría (totalCount sobre el resultado filtrado).
           content:
             application/json:
               schema:
@@ -4596,6 +4621,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: fechaDesde posterior a fechaHasta.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorResponse"
 
   /api/v1/admin/companies/{tenantId}/ot-consultation-restrictions:
     parameters:
