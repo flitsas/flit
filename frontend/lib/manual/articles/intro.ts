@@ -385,6 +385,9 @@ export const INTRO_ARTICLES: ManualArticle[] = [
       "filtros",
       "filtrar una tabla",
       "filtro por columna",
+      "embudo",
+      "filtro de columna",
+      "quitar filtro",
       "buscar en una tabla",
       "más filtro",
       "limpiar filtros",
@@ -431,19 +434,21 @@ export const INTRO_ARTICLES: ManualArticle[] = [
         id: "filtrar-tabla",
         title: "4. Cómo filtrar una tabla",
         paragraphs: [
-          "Encima de cada tabla hay una línea con los filtros. Es la misma en Trámites, Compañías, Usuarios, Auditoría y las demás listas: aprendes una vez y la usas en todas.",
+          "Hay dos lugares para filtrar, y se usan igual en Compañías, Usuarios, Auditoría y las demás listas: aprendes una vez y la usas en todas.",
         ],
         bullets: [
-          "Buscador (solo en algunas tablas): escribe parte de un nombre, un documento o un código y la tabla se reduce mientras escribes.",
-          "«Periodo» (solo si la tabla tiene una fecha): elige un periodo de la lista o un rango propio con fecha inicial y final. La fecha inicial no puede ser posterior a la final; si lo es, verás un aviso.",
-          "«+ Filtro»: pulsa el botón, elige la columna que quieres filtrar, escribe el texto o marca una o varias opciones y pulsa «Aplicar». Puedes añadir tantos filtros como necesites.",
-          "Los filtros se suman: la tabla muestra solo lo que cumple todos a la vez.",
-          "El botón «+ Filtro» te dice cuántos filtros hay activos. Para quitarlos todos, pulsa «Empezar de cero».",
+          "En cada columna: todas las columnas con datos tienen un pequeño embudo en su encabezado (la columna Acciones no lo tiene). Al pulsarlo se despliega el filtro de esa columna.",
+          "Si la columna es de texto (nombre, documento, código…), escribe lo que buscas en la caja «X contiene»: el cursor ya queda ahí. Pulsa Enter o «Aplicar».",
+          "Si la columna tiene opciones (estado, tipo, catálogos), marca una o varias casillas y pulsa «Aplicar».",
+          "Si la columna es una fecha, elige un periodo: Sin periodo, Hoy, Últimos 7 días, Últimos 30 días, Últimos 90 días, Mes actual, Mes anterior o Rango propio con fecha inicial y final. Si la fecha inicial es posterior a la final, te avisa y no aplica el filtro.",
+          "Para quitar un filtro, abre el embudo de esa columna y pulsa «Quitar filtro». Cuando una columna tiene filtro, su embudo se pinta en azul para que lo reconozcas de un vistazo.",
+          "Arriba de la tabla: cada pantalla conserva los filtros que ya tenía (por ejemplo, el panel de NIT, Razón social, Estado y fechas con «Buscar» y «Limpiar» en el listado de Compañías, o un buscador por nombre, documento o código en otras listas). No hay un botón «+ Filtro» ni un «Periodo» arriba: lo de las columnas se hace desde el embudo.",
+          "Los filtros de arriba y los de las columnas se combinan: la tabla muestra solo lo que cumple todos a la vez."
         ],
         callouts: [
           {
             variant: "info",
-            text: "Si ningún registro cumple los filtros, la tabla muestra «Ningún registro coincide con los filtros» y el botón «Limpiar filtros» para volver a ver todo.",
+            text: "Si ningún registro cumple los filtros, la tabla sigue mostrando sus encabezados y filtros, y avisa «Ningún registro coincide con los filtros» con el botón «Limpiar filtros» para volver a ver todo. También puedes quitar un solo filtro desde su embudo.",
           },
         ],
       },
