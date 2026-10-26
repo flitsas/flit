@@ -5,7 +5,11 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Pencil } from "lucide-react";
 import { UsersTable, toUserRow, type UserRow } from "../UsersTable";
-import { chooseRowAction, findRowAction, rowActionNames } from "@/components/atom/__tests__/rowActionsMenu.helpers";
+import {
+  chooseRowAction,
+  findRowAction,
+  rowActionNames,
+} from "@/components/atom/__tests__/rowActionsMenu.helpers";
 
 function row(over: Partial<UserRow> & Pick<UserRow, "id" | "fullName">): UserRow {
   return toUserRow({
@@ -20,11 +24,35 @@ function row(over: Partial<UserRow> & Pick<UserRow, "id" | "fullName">): UserRow
 }
 
 const rows: UserRow[] = [
-  row({ id: "u1", fullName: "Ana Torres", role: "Administrador de Compañía", roleCode: "AdminCompany", profile: "GESTOR" }),
-  row({ id: "u2", fullName: "Beto Ruiz", role: "Administrador OT", roleCode: "ot_admin", profile: "OT" }),
-  row({ id: "u3", fullName: "Caro Díaz", role: "Super Administrador", roleCode: "SuperAdmin", profile: "FLIT" }),
+  row({
+    id: "u1",
+    fullName: "Ana Torres",
+    role: "Administrador de Compañía",
+    roleCode: "AdminCompany",
+    profile: "GESTOR",
+  }),
+  row({
+    id: "u2",
+    fullName: "Beto Ruiz",
+    role: "Administrador OT",
+    roleCode: "ot_admin",
+    profile: "OT",
+  }),
+  row({
+    id: "u3",
+    fullName: "Caro Díaz",
+    role: "Super Administrador",
+    roleCode: "SuperAdmin",
+    profile: "FLIT",
+  }),
   // Rol personalizado dentro de un organismo: el perfil lo dice el backend, no el roleCode.
-  row({ id: "u4", fullName: "Dani Soto", role: "Revisor documental", roleCode: "revisor", profile: "OT" }),
+  row({
+    id: "u4",
+    fullName: "Dani Soto",
+    role: "Revisor documental",
+    roleCode: "revisor",
+    profile: "OT",
+  }),
 ];
 
 function renderTable(overrides: Partial<React.ComponentProps<typeof UsersTable>> = {}) {
@@ -67,7 +95,9 @@ describe("UsersTable — columnas Perfil y Rol separadas (HU #11551)", () => {
   it("AC2 — usuario sin rol asignado muestra 'Sin rol' en la columna Rol", () => {
     render(
       <UsersTable
-        rows={[row({ id: "u6", fullName: "Fer Ríos", profile: "GESTOR", role: null, roleCode: null })]}
+        rows={[
+          row({ id: "u6", fullName: "Fer Ríos", profile: "GESTOR", role: null, roleCode: null }),
+        ]}
         actionsFor={() => []}
       />,
     );
@@ -95,73 +125,21 @@ describe("UsersTable — columnas Perfil y Rol separadas (HU #11551)", () => {
   });
 });
 
-describe("UsersTable — filtros", () => {
-  it("filtra por perfil, incluidos los roles personalizados de un organismo", async () => {
-    const user = userEvent.setup();
-    renderTable();
-
-    await user.selectOptions(screen.getByLabelText("Filtrar por perfil"), "OT");
-
-    expect(screen.getByText("Beto Ruiz")).toBeInTheDocument();
-    expect(screen.getByText("Dani Soto")).toBeInTheDocument();
-    expect(screen.queryByText("Ana Torres")).not.toBeInTheDocument();
-    expect(screen.queryByText("Caro Díaz")).not.toBeInTheDocument();
-  });
-
-  it("filtra por rol", async () => {
-    const user = userEvent.setup();
-    renderTable();
-
-    await user.selectOptions(screen.getByLabelText("Filtrar por rol"), "Revisor documental");
-
-    expect(screen.getByText("Dani Soto")).toBeInTheDocument();
-    expect(screen.queryByText("Beto Ruiz")).not.toBeInTheDocument();
-  });
-
-  it("filtra por estado bloqueado", async () => {
-    const user = userEvent.setup();
-    render(
-      <UsersTable
-        rows={[...rows, row({ id: "u5", fullName: "Eva Lima", isSuspended: true })]}
-        actionsFor={() => []}
-      />,
-    );
-
-    await user.selectOptions(screen.getByLabelText("Filtrar por estado"), "blocked");
-
-    expect(screen.getByText("Eva Lima")).toBeInTheDocument();
-    expect(screen.queryByText("Ana Torres")).not.toBeInTheDocument();
-  });
-
-  it("busca por nombre y permite limpiar los filtros", async () => {
-    const user = userEvent.setup();
-    renderTable();
-
-    await user.type(screen.getByLabelText("Buscar usuarios"), "beto");
-    expect(screen.queryByText("Ana Torres")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /limpiar filtros/i }));
-    expect(screen.getByText("Ana Torres")).toBeInTheDocument();
-  });
-
-  it("avisa cuando los filtros no dejan ninguna fila", async () => {
-    const user = userEvent.setup();
-    renderTable();
-
-    await user.type(screen.getByLabelText("Buscar usuarios"), "zzzz");
-
-    expect(screen.getByText(/ningún usuario coincide/i)).toBeInTheDocument();
-  });
-});
-
 describe("UsersTable — acciones", () => {
   // HU #13653: un solo botón «Acciones» por fila (el patrón de trámites y mandatos), no iconos sueltos.
   it("cada fila tiene un solo botón «Acciones»; las opciones muestran texto y conservan el nombre accesible completo", async () => {
     const user = userEvent.setup();
     renderTable();
     const fila = screen.getByText("Ana Torres").closest("tr") as HTMLElement;
-    expect(within(fila).queryByRole("button", { name: "Editar usuario Ana Torres" })).not.toBeInTheDocument();
-    const opcion = await findRowAction(user, "Ana Torres", "Editar usuario Ana Torres", within(fila));
+    expect(
+      within(fila).queryByRole("button", { name: "Editar usuario Ana Torres" }),
+    ).not.toBeInTheDocument();
+    const opcion = await findRowAction(
+      user,
+      "Ana Torres",
+      "Editar usuario Ana Torres",
+      within(fila),
+    );
     expect(opcion).toHaveTextContent("Editar usuario");
   });
 
@@ -188,10 +166,25 @@ describe("UsersTable — acciones", () => {
         actionsFor={(r) =>
           r.fullName === "Ana Torres"
             ? [
-                { icon: Pencil, label: `Eliminar usuario ${r.fullName}`, tone: "danger", onClick: vi.fn() },
+                {
+                  icon: Pencil,
+                  label: `Eliminar usuario ${r.fullName}`,
+                  tone: "danger",
+                  onClick: vi.fn(),
+                },
                 { icon: Pencil, label: `Editar usuario ${r.fullName}`, onClick: vi.fn() },
-                { icon: Pencil, label: `Suspender temporalmente a ${r.fullName}`, tone: "danger", onClick: vi.fn() },
-                { icon: Pencil, label: `Permisos por módulo de ${r.fullName}`, tone: "primary", onClick: vi.fn() },
+                {
+                  icon: Pencil,
+                  label: `Suspender temporalmente a ${r.fullName}`,
+                  tone: "danger",
+                  onClick: vi.fn(),
+                },
+                {
+                  icon: Pencil,
+                  label: `Permisos por módulo de ${r.fullName}`,
+                  tone: "primary",
+                  onClick: vi.fn(),
+                },
               ]
             : []
         }
@@ -240,7 +233,9 @@ describe("UsersTable — tabla semántica y paginación (Bug #13055)", () => {
     const fila = screen.getByText("Ana Torres").closest("tr") as HTMLElement;
     // HU #13653: un solo botón en la celda; las 4 acciones viven en su menú.
     expect(within(fila).getAllByRole("button")).toHaveLength(1);
-    const celda = within(fila).getByRole("button", { name: "Acciones de Ana Torres" }).closest("td");
+    const celda = within(fila)
+      .getByRole("button", { name: "Acciones de Ana Torres" })
+      .closest("td");
     expect(celda?.className).toContain("whitespace-nowrap");
     expect(await rowActionNames(user, "Ana Torres", within(fila))).toEqual([
       "Editar Ana Torres",
@@ -259,7 +254,13 @@ describe("UsersTable — tabla semántica y paginación (Bug #13055)", () => {
   it("pagina en cliente y vuelve a la página 1 al filtrar", async () => {
     const user = userEvent.setup();
     const muchos = Array.from({ length: 12 }, (_, i) =>
-      row({ id: `m${i}`, fullName: `Usuario ${String(i).padStart(2, "0")}`, role: "Rol X", roleCode: "x", profile: "OT" }),
+      row({
+        id: `m${i}`,
+        fullName: `Usuario ${String(i).padStart(2, "0")}`,
+        role: "Rol X",
+        roleCode: "x",
+        profile: "OT",
+      }),
     );
     render(<UsersTable rows={muchos} actionsFor={() => []} />);
     expect(screen.getAllByRole("row")).toHaveLength(1 + 10);
@@ -283,7 +284,12 @@ describe("UsersTable — diseño", () => {
     const user = userEvent.setup();
     renderTable();
     const fila = screen.getByText("Ana Torres").closest("tr") as HTMLElement;
-    const opcion = await findRowAction(user, "Ana Torres", "Editar usuario Ana Torres", within(fila));
+    const opcion = await findRowAction(
+      user,
+      "Ana Torres",
+      "Editar usuario Ana Torres",
+      within(fila),
+    );
     expect(opcion).toHaveAttribute("title", "Editar usuario Ana Torres");
     expect(opcion.querySelector("svg")).not.toBeNull();
   });

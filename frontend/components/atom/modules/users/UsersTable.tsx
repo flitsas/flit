@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { Pagination } from "@/components/atom/Pagination";
-import { SearchInput } from "@/components/atom/SearchInput";
+import { TablaFiltrosBar, TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import {
   TABLA_HEADER_BG,
@@ -15,13 +15,10 @@ import type { RowAction } from "@/components/atom/RowActions";
 import { RowActionsMenu, destructivasAlFinal } from "@/components/atom/RowActionsMenu";
 import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
 import { ProfileCell, RoleCell } from "./ProfileRoleCell";
-import {
-  USER_PROFILE_ORDER,
-  profileShortLabel,
-  resolveProfile,
-  type UserProfileKind,
-} from "@/lib/users/profiles";
+import { USER_PROFILE_ORDER, profileShortLabel, resolveProfile } from "@/lib/users/profiles";
 
+import { filtrarFilas, type ColumnaFiltro } from "@/lib/tablas/filtrar-filas";
+import { useTablaFiltros } from "@/lib/tablas/useTablaFiltros";
 import { formatFechaHora } from "@/lib/format/date";
 /**
 
@@ -157,11 +154,6 @@ export function UsersTable({
   emptyMessage = "No hay usuarios para mostrar.",
   toolbar,
 }: UsersTableProps) {
-  const [search, setSearch] = useState("");
-  const [profileFilter, setProfileFilter] = useState<"" | UserProfileKind>("");
-  const [roleFilter, setRoleFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState<UserStatusFilter>("");
-
   // Perfil y Rol viven en columnas separadas (HU #11551): antes se apilaban en una sola celda
   // y el chip de Perfil (siempre "Gestor" para cualquier usuario de compañía) eclipsaba el rol
   // real, dando la impresión de que todos los usuarios tenían el mismo rol.
@@ -185,113 +177,66 @@ export function UsersTable({
     return Array.from(names).sort((a, b) => a.localeCompare(b, "es"));
   }, [rows]);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return rows.filter((row) => {
-      if (q) {
-        const haystack = `${row.fullName} ${row.email} ${row.tenantName ?? ""}`.toLowerCase();
-        if (!haystack.includes(q)) return false;
-      }
-      if (profileFilter && resolveProfile(row) !== profileFilter) return false;
-      if (roleFilter && (row.role ?? "") !== roleFilter) return false;
-      if (statusFilter === "blocked") {
-        if (!row.isSuspended) return false;
-      } else if (statusFilter) {
-        if (row.isSuspended || row.status !== statusFilter) return false;
-      }
-      return true;
-    });
-  }, [rows, search, profileFilter, roleFilter, statusFilter]);
+  // HU #14006: un filtro por cada columna con datos (estándar HU #13997). Siguen a las columnas
+  // visibles: «Empresa» solo existe en los listados cross-tenant. «Acciones» nunca se filtra.
+  const columnasFiltro = useMemo<ColumnaFiltro[]>(
+    () => [
+      { id: "nombre", label: "Nombre", tipo: "texto" },
+      { id: "correo", label: "Correo", tipo: "texto" },
+      ...(showTenantColumn
+        ? [{ id: "empresa", label: "Empresa", tipo: "texto" } as ColumnaFiltro]
+        : []),
+      {
+        id: "perfil",
+        label: "Perfil",
+        tipo: "seleccion",
+        opciones: USER_PROFILE_ORDER.map((p) => ({ value: p, label: profileShortLabel(p) })),
+      },
+      {
+        id: "rol",
+        label: "Rol",
+        tipo: "seleccion",
+        opciones: roleOptions.map((r) => ({ value: r, label: r })),
+      },
+      { id: "estado", label: "Estado", tipo: "seleccion", opciones: STATUS_OPTIONS },
+      { id: "fecha", label: "Fecha", tipo: "fecha" },
+    ],
+    [showTenantColumn, roleOptions],
+  );
 
-  // Los filtros vuelven a la página 1 (cada `onChange` llama a `setPage(1)`) y la paginación se aplica
-  // DESPUÉS de filtrar.
+  // Cada cambio de filtro vuelve a la página 1; la paginación se aplica DESPUÉS de filtrar.
+  const filtros = useTablaFiltros({
+    columnas: columnasFiltro,
+    periodoColumnaId: "fecha",
+    onCambio: () => setPage(1),
+  });
+
+  const filtered = useMemo(
+    () =>
+      filtrarFilas(rows, filtros.condicionesTotales, filtros.busqueda, {
+        columnas: {
+          nombre: (r) => r.fullName,
+          correo: (r) => r.email,
+          empresa: (r) => r.tenantName,
+          perfil: (r) => resolveProfile(r),
+          rol: (r) => r.role,
+          estado: (r) => (r.isSuspended ? "blocked" : r.status),
+          fecha: (r) => r.createdAt,
+        },
+        busqueda: (r) => [r.fullName, r.email, r.tenantName],
+      }),
+    [rows, filtros.condicionesTotales, filtros.busqueda],
+  );
+
   const visibles = pg.paginar(filtered);
-
-  const hasActiveFilters = Boolean(search || profileFilter || roleFilter || statusFilter);
-
-  function clearFilters() {
-    setSearch("");
-    setProfileFilter("");
-    setRoleFilter("");
-    setStatusFilter("");
-    setPage(1);
-  }
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <SearchInput
-          value={search}
-          onChange={(v) => { setSearch(v); setPage(1); }}
-          placeholder="Buscar por nombre o correo…"
-          label="Buscar usuarios"
-          className="flex-1"
-        />
-
-        <label className="flex items-center gap-1.5 text-xs">
-          <span className="font-semibold opacity-60">Perfil</span>
-          <select
-            value={profileFilter}
-            onChange={(e) => { setProfileFilter(e.target.value as "" | UserProfileKind); setPage(1); }}
-            aria-label="Filtrar por perfil"
-            className="rounded-lg border bg-transparent px-2 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand/40"
-          >
-            <option value="">Todos</option>
-            {USER_PROFILE_ORDER.map((p) => (
-              <option key={p} value={p}>
-                {profileShortLabel(p)}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="flex items-center gap-1.5 text-xs">
-          <span className="font-semibold opacity-60">Rol</span>
-          <select
-            value={roleFilter}
-            onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
-            aria-label="Filtrar por rol"
-            className="max-w-[170px] rounded-lg border bg-transparent px-2 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand/40"
-          >
-            <option value="">Todos</option>
-            {roleOptions.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="flex items-center gap-1.5 text-xs">
-          <span className="font-semibold opacity-60">Estado</span>
-          <select
-            value={statusFilter}
-            onChange={(e) => { setStatusFilter(e.target.value as UserStatusFilter); setPage(1); }}
-            aria-label="Filtrar por estado"
-            className="rounded-lg border bg-transparent px-2 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand/40"
-          >
-            <option value="">Todos</option>
-            {STATUS_OPTIONS.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        {hasActiveFilters && (
-          <button
-            type="button"
-            onClick={clearFilters}
-            className="rounded text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand/40"
-            style={{ color: "var(--color-flit-brand)" }}
-          >
-            Limpiar filtros
-          </button>
-        )}
-
-        {toolbar}
-      </div>
+      <TablaFiltrosBar
+        filtros={filtros}
+        buscador={{ placeholder: "Buscar por nombre o correo…", ariaLabel: "Buscar usuarios" }}
+        acciones={toolbar}
+      />
 
       {loading && <CarLoaderModal label="Cargando usuarios…" />}
 
@@ -308,7 +253,10 @@ export function UsersTable({
               type="button"
               onClick={onRetry}
               className="rounded-xl px-3 py-1.5 text-xs font-semibold text-white"
-              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+              style={{
+                background:
+                  "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))",
+              }}
             >
               Reintentar
             </button>
@@ -323,9 +271,10 @@ export function UsersTable({
       )}
 
       {!loading && !error && rows.length > 0 && filtered.length === 0 && (
-        <div className="py-12 text-center text-sm opacity-60">
-          Ningún usuario coincide con la búsqueda o los filtros.
-        </div>
+        <TablaFiltrosVacio
+          onLimpiar={filtros.limpiar}
+          mensaje="Ningún usuario coincide con la búsqueda o los filtros"
+        />
       )}
 
       {!loading && !error && filtered.length > 0 && (
@@ -360,14 +309,20 @@ export function UsersTable({
               {visibles.map((row) => {
                 const badge = row.isSuspended ? SUSPENDED_BADGE : STATUS_BADGE[row.status];
                 return (
-                  <tr key={row.rowKey} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+                  <tr
+                    key={row.rowKey}
+                    className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
+                  >
                     <td className={`${CELDA} rounded-l-xl border-l`} style={CELDA_STYLE}>
                       <p className="truncate font-semibold">{row.fullName}</p>
                       <p className="truncate text-xs opacity-60">{row.email}</p>
                     </td>
                     {showTenantColumn && (
                       <td className={CELDA} style={CELDA_STYLE}>
-                        <span className="block truncate opacity-70" title={row.tenantName ?? undefined}>
+                        <span
+                          className="block truncate opacity-70"
+                          title={row.tenantName ?? undefined}
+                        >
                           {row.tenantName ?? "—"}
                         </span>
                       </td>

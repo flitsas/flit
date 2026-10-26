@@ -226,7 +226,11 @@ describe("Usuarios — invitación cancelada, estado vivo y reversible (#11552, 
     await screen.findByText("Sofía Nieto");
     expect(screen.getByText("Ana Torres")).toBeInTheDocument();
 
-    await user.selectOptions(screen.getByLabelText("Filtrar por estado"), "cancelled");
+    // HU #14006: el estado se filtra desde «+ Filtro» del estándar de tablas (TablaFiltrosBar).
+    await user.click(screen.getByRole("button", { name: /^\+ Filtro/ }));
+    await user.click(screen.getByRole("button", { name: "Estado" }));
+    await user.click(screen.getByRole("checkbox", { name: "Cancelada" }));
+    await user.click(screen.getByRole("button", { name: "Aplicar" }));
 
     expect(screen.getByText("Sofía Nieto")).toBeInTheDocument();
     expect(screen.queryByText("Ana Torres")).not.toBeInTheDocument();
