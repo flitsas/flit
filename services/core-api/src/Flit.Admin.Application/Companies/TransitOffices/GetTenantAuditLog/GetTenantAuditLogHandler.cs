@@ -1,5 +1,6 @@
 using Flit.Admin.Application.Companies.CreateCompany;
 using Flit.Admin.Domain.Companies.TransitOffices;
+using Flit.Queries.Domain.Time;
 
 namespace Flit.Admin.Application.Companies.TransitOffices.GetTenantAuditLog;
 
@@ -53,10 +54,6 @@ public sealed class GetTenantAuditLogHandler
     /// <summary>Mensaje de validación cuando el rango de fechas está invertido.</summary>
     public const string InvalidDateRangeMessage = "La fecha desde no puede ser posterior a la fecha hasta.";
 
-    // Colombia no tiene horario de verano: offset fijo UTC-5 (la API compila con
-    // InvariantGlobalization y no puede depender de TimeZoneInfo "America/Bogota").
-    private static readonly TimeSpan BogotaOffset = TimeSpan.FromHours(-5);
-
     private static TenantAuditLogFilter BuildFilter(GetTenantAuditLogQuery query)
     {
         if (query.FechaDesde is { } d && query.FechaHasta is { } h && d > h)
@@ -65,13 +62,14 @@ public sealed class GetTenantAuditLogHandler
                 [new CompanyValidationError("fechaDesde", InvalidDateRangeMessage)]);
         }
 
+        // Días locales de Colombia (ColombiaTime.Offset, fuente única del desfase).
         DateTimeOffset? from = query.FechaDesde is { } desde
-            ? new DateTimeOffset(desde.ToDateTime(TimeOnly.MinValue), BogotaOffset)
+            ? new DateTimeOffset(desde.ToDateTime(TimeOnly.MinValue), ColombiaTime.Offset)
             : null;
 
         // Inclusivo del día completo: < 00:00 local del día siguiente.
         DateTimeOffset? toExclusive = query.FechaHasta is { } hasta
-            ? new DateTimeOffset(hasta.AddDays(1).ToDateTime(TimeOnly.MinValue), BogotaOffset)
+            ? new DateTimeOffset(hasta.AddDays(1).ToDateTime(TimeOnly.MinValue), ColombiaTime.Offset)
             : null;
 
         return new TenantAuditLogFilter(
