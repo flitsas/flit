@@ -1,4 +1,4 @@
-/** HU #13999 — Compañías: filtros por columna en el listado (servidor). */
+/** HU #13999 — Compañías: panel de consulta de siempre (arriba) + embudo por columna (servidor). */
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -51,18 +51,18 @@ async function esperarListado() {
   await waitFor(() => expect(screen.getByRole("table", { name: "Compañías" })).toBeInTheDocument());
 }
 
-async function filtrarTexto(
-  user: ReturnType<typeof userEvent.setup>,
-  columna: string,
-  valor: string,
-) {
-  await user.click(screen.getByRole("button", { name: /\+ filtro/i }));
-  await user.click(screen.getByRole("button", { name: columna }));
+type User = ReturnType<typeof userEvent.setup>;
+
+const abrirEmbudo = (user: User, columna: string) =>
+  user.click(screen.getByRole("button", { name: new RegExp(`^Filtrar por ${columna}`) }));
+
+async function filtrarTexto(user: User, columna: string, valor: string) {
+  await abrirEmbudo(user, columna);
   await user.type(screen.getByLabelText(new RegExp(`${columna} contiene`, "i")), valor);
   await user.click(screen.getByRole("button", { name: "Aplicar" }));
 }
 
-describe("AdminCompaniesPage — filtros por columna (HU #13999)", () => {
+describe("AdminCompaniesPage — panel de arriba + filtros por columna (HU #13999)", () => {
   beforeEach(() => {
     fetchCompaniesIndex.mockReset();
     permissionsState.isSuperAdmin = true;
@@ -70,7 +70,7 @@ describe("AdminCompaniesPage — filtros por columna (HU #13999)", () => {
     fetchCompaniesIndex.mockResolvedValue({ data: [ITEM], totalCount: 1, page: 1, pageSize: 10 });
   });
 
-  it("AC1: Código, NIT y Razón social se envían como codigo/nit/razonSocial sin recargar", async () => {
+  it("AC1: Código, NIT y Razón social (embudo) se envían como codigo/nit/razonSocial sin recargar", async () => {
     const user = userEvent.setup();
     render(<AdminCompaniesPage />);
     await esperarListado();
@@ -89,27 +89,24 @@ describe("AdminCompaniesPage — filtros por columna (HU #13999)", () => {
     render(<AdminCompaniesPage />);
     await esperarListado();
 
-    await user.click(screen.getByRole("button", { name: /\+ filtro/i }));
-    await user.click(screen.getByRole("button", { name: "Tipo" }));
+    await abrirEmbudo(user, "Tipo");
     await user.click(screen.getByRole("checkbox", { name: "Radicadora" }));
     await user.click(screen.getByRole("checkbox", { name: "Concesión" }));
     await user.click(screen.getByRole("button", { name: "Aplicar" }));
     await waitFor(() => expect(lastParams().tenantType).toBe("RENTING,CONCESION"));
 
-    await user.click(screen.getByRole("button", { name: /\+ filtro/i }));
-    await user.click(screen.getByRole("button", { name: "Estado" }));
+    await abrirEmbudo(user, "Estado");
     await user.click(screen.getByRole("checkbox", { name: "Inactiva" }));
     await user.click(screen.getByRole("button", { name: "Aplicar" }));
     await waitFor(() => expect(lastParams().estadoActivo).toBe(false));
   });
 
-  it("AC1: Activa + Inactiva a la vez no envía estadoActivo", async () => {
+  it("AC1: Activa + Inactiva a la vez en la columna no envía estadoActivo", async () => {
     const user = userEvent.setup();
     render(<AdminCompaniesPage />);
     await esperarListado();
 
-    await user.click(screen.getByRole("button", { name: /\+ filtro/i }));
-    await user.click(screen.getByRole("button", { name: "Estado" }));
+    await abrirEmbudo(user, "Estado");
     await user.click(screen.getByRole("checkbox", { name: "Activa" }));
     await user.click(screen.getByRole("checkbox", { name: "Inactiva" }));
     await user.click(screen.getByRole("button", { name: "Aplicar" }));
@@ -118,15 +115,15 @@ describe("AdminCompaniesPage — filtros por columna (HU #13999)", () => {
     expect(lastParams()).not.toHaveProperty("estadoActivo");
   });
 
-  it("AC1: Fecha de creación (Periodo) se envía como fechaDesde/fechaHasta", async () => {
+  it("AC1: Fecha de creación (Periodo del embudo) se envía como fechaDesde/fechaHasta", async () => {
     const user = userEvent.setup();
     render(<AdminCompaniesPage />);
     await esperarListado();
 
-    await user.click(screen.getByRole("button", { name: /periodo/i }));
-    await user.selectOptions(screen.getByLabelText("Periodo"), "Rango propio");
-    await user.type(screen.getByLabelText("Fecha inicial del rango propio"), "2026-01-01");
-    await user.type(screen.getByLabelText("Fecha final del rango propio"), "2026-01-31");
+    await abrirEmbudo(user, "Fecha creación");
+    await user.click(screen.getByRole("radio", { name: "Rango propio" }));
+    await user.type(screen.getByLabelText("Desde"), "2026-01-01");
+    await user.type(screen.getByLabelText("Hasta"), "2026-01-31");
     await user.click(screen.getByRole("button", { name: "Aplicar" }));
 
     await waitFor(() =>
@@ -134,11 +131,47 @@ describe("AdminCompaniesPage — filtros por columna (HU #13999)", () => {
     );
   });
 
-  it("AC1: el panel antiguo ya no se usa", async () => {
+  it("AC1: el panel de arriba de siempre está y la barra nueva (+ Filtro / Periodo) ya no", async () => {
     render(<AdminCompaniesPage />);
     await esperarListado();
-    expect(screen.queryByRole("button", { name: /^buscar$/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /\+ filtro/i })).toBeInTheDocument();
+    expect(screen.getByRole("form", { name: "Filtros de compañías" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^buscar$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /\+ filtro/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^periodo/i })).not.toBeInTheDocument();
+  });
+
+  it("AC1: el panel de arriba filtra con «Buscar» y se combina (AND) con el embudo; la columna gana si repite parámetro", async () => {
+    const user = userEvent.setup();
+    render(<AdminCompaniesPage />);
+    await esperarListado();
+
+    await user.type(screen.getByLabelText("NIT", { selector: "#filter-nit" }), "9001");
+    await user.selectOptions(screen.getByLabelText("Estado", { selector: "#filter-estado" }), "true");
+    await user.click(screen.getByRole("button", { name: /^buscar$/i }));
+    await waitFor(() => expect(lastParams()).toMatchObject({ nit: "9001", estadoActivo: true }));
+
+    await filtrarTexto(user, "Razón social", "Alfa");
+    await waitFor(() =>
+      expect(lastParams()).toMatchObject({ nit: "9001", estadoActivo: true, razonSocial: "Alfa" }),
+    );
+    await filtrarTexto(user, "NIT", "777");
+    await waitFor(() => expect(lastParams()).toMatchObject({ nit: "777", razonSocial: "Alfa" }));
+  });
+
+  it("AC1: quitar el filtro de una columna lo retira de la API y deja el panel intacto", async () => {
+    const user = userEvent.setup();
+    render(<AdminCompaniesPage />);
+    await esperarListado();
+
+    await user.type(screen.getByLabelText("NIT", { selector: "#filter-nit" }), "9001");
+    await user.click(screen.getByRole("button", { name: /^buscar$/i }));
+    await filtrarTexto(user, "Código", "COMP-0001");
+    await waitFor(() => expect(lastParams()).toMatchObject({ nit: "9001", codigo: "COMP-0001" }));
+
+    await abrirEmbudo(user, "Código");
+    await user.click(screen.getByRole("button", { name: "Quitar filtro" }));
+    await waitFor(() => expect(lastParams()).not.toHaveProperty("codigo"));
+    expect(lastParams()).toMatchObject({ nit: "9001" });
   });
 
   it("AC3: sin resultados muestra «Limpiar filtros» y al limpiar vuelve el listado completo en página 1", async () => {
@@ -156,6 +189,27 @@ describe("AdminCompaniesPage — filtros por columna (HU #13999)", () => {
     await esperarListado();
     expect(lastParams()).not.toHaveProperty("nit");
     expect(lastParams()).toMatchObject({ page: 1 });
+  });
+
+  it("AC3: «Limpiar filtros» quita solo los de columna; el «Limpiar» del panel, los suyos", async () => {
+    const user = userEvent.setup();
+    render(<AdminCompaniesPage />);
+    await esperarListado();
+
+    await user.type(screen.getByLabelText("Razón Social"), "Beta");
+    await user.click(screen.getByRole("button", { name: /^buscar$/i }));
+    fetchCompaniesIndex.mockResolvedValue({ data: [], totalCount: 0, page: 1, pageSize: 10 });
+    await filtrarTexto(user, "NIT", "000");
+    const limpiarColumnas = await screen.findByRole("button", { name: "Limpiar filtros" });
+
+    fetchCompaniesIndex.mockResolvedValue({ data: [ITEM], totalCount: 1, page: 1, pageSize: 10 });
+    await user.click(limpiarColumnas);
+    await esperarListado();
+    expect(lastParams().nit).toBeUndefined();
+    expect(lastParams()).toMatchObject({ razonSocial: "Beta" });
+
+    await user.click(screen.getByRole("button", { name: /^limpiar$/i }));
+    await waitFor(() => expect(lastParams().razonSocial).toBeUndefined());
   });
 
   it("AC4: los filtros se combinan con «Incluir organismos de tránsito» y no lo reinician", async () => {

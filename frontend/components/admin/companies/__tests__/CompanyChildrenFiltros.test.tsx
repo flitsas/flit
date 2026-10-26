@@ -1,4 +1,4 @@
-/** HU #13999 — filtros por columna en Compañías hijas y Panel de red (modo cliente). */
+/** HU #13999 — embudos por columna en Compañías hijas y Panel de red (modo cliente). */
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -73,6 +73,9 @@ describe.each(casos)("$nombre — filtros por columna (HU #13999)", ({ texto, ta
     vi.mocked(fetchCompanyChildren).mockResolvedValue(HIJOS);
   });
 
+  const abrirEmbudo = (user: ReturnType<typeof userEvent.setup>, columna: string) =>
+    user.click(screen.getByRole("button", { name: new RegExp("^Filtrar por " + columna) }));
+
   const nombres = () =>
     within(screen.getByRole("table", { name: tabla }))
       .getAllByRole("row")
@@ -84,14 +87,12 @@ describe.each(casos)("$nombre — filtros por columna (HU #13999)", ({ texto, ta
     montar();
     await screen.findByRole("table", { name: tabla });
 
-    await user.click(screen.getByRole("button", { name: /\+ filtro/i }));
-    await user.click(screen.getByRole("button", { name: texto }));
+    await abrirEmbudo(user, texto);
     await user.type(screen.getByLabelText(new RegExp(`${texto} contiene`, "i")), "sas");
     await user.click(screen.getByRole("button", { name: "Aplicar" }));
     expect(nombres()).toEqual(["Beta SAS", "Gamma SAS"]);
 
-    await user.click(screen.getByRole("button", { name: /\+ filtro/i }));
-    await user.click(screen.getByRole("button", { name: "NIT" }));
+    await abrirEmbudo(user, "NIT");
     await user.type(screen.getByLabelText(/nit contiene/i), "3333");
     await user.click(screen.getByRole("button", { name: "Aplicar" }));
     expect(nombres()).toEqual(["Gamma SAS"]);
@@ -102,14 +103,12 @@ describe.each(casos)("$nombre — filtros por columna (HU #13999)", ({ texto, ta
     montar();
     await screen.findByRole("table", { name: tabla });
 
-    await user.click(screen.getByRole("button", { name: /\+ filtro/i }));
-    await user.click(screen.getByRole("button", { name: "Tipo" }));
+    await abrirEmbudo(user, "Tipo");
     await user.click(screen.getByRole("checkbox", { name: "Cliente concesión" }));
     await user.click(screen.getByRole("button", { name: "Aplicar" }));
     expect(nombres()).toEqual(["Beta SAS", "Gamma SAS"]);
 
-    await user.click(screen.getByRole("button", { name: /\+ filtro/i }));
-    await user.click(screen.getByRole("button", { name: "Estado" }));
+    await abrirEmbudo(user, "Estado");
     await user.click(screen.getByRole("checkbox", { name: "Activo" }));
     await user.click(screen.getByRole("button", { name: "Aplicar" }));
     expect(nombres()).toEqual(["Gamma SAS"]);
@@ -120,10 +119,10 @@ describe.each(casos)("$nombre — filtros por columna (HU #13999)", ({ texto, ta
     montar();
     await screen.findByRole("table", { name: tabla });
 
-    await user.click(screen.getByRole("button", { name: /periodo/i }));
-    await user.selectOptions(screen.getByLabelText("Periodo"), "Rango propio");
-    await user.type(screen.getByLabelText("Fecha inicial del rango propio"), "2026-03-01");
-    await user.type(screen.getByLabelText("Fecha final del rango propio"), "2026-03-31");
+    await abrirEmbudo(user, "Vinculación");
+    await user.click(screen.getByRole("radio", { name: "Rango propio" }));
+    await user.type(screen.getByLabelText("Desde"), "2026-03-01");
+    await user.type(screen.getByLabelText("Hasta"), "2026-03-31");
     await user.click(screen.getByRole("button", { name: "Aplicar" }));
     expect(nombres()).toEqual(["Beta SAS"]);
   });
@@ -133,12 +132,27 @@ describe.each(casos)("$nombre — filtros por columna (HU #13999)", ({ texto, ta
     montar();
     await screen.findByRole("table", { name: tabla });
 
-    await user.click(screen.getByRole("button", { name: /\+ filtro/i }));
-    await user.click(screen.getByRole("button", { name: "NIT" }));
+    await abrirEmbudo(user, "NIT");
     await user.type(screen.getByLabelText(/nit contiene/i), "zzz");
     await user.click(screen.getByRole("button", { name: "Aplicar" }));
 
     await user.click(await screen.findByRole("button", { name: "Limpiar filtros" }));
+    expect(nombres()).toEqual(["Alfa Ltda", "Beta SAS", "Gamma SAS"]);
+  });
+
+  it("AC2: quitar el filtro desde el embudo restaura las filas y no hay barra «+ Filtro» arriba", async () => {
+    const user = userEvent.setup();
+    montar();
+    await screen.findByRole("table", { name: tabla });
+    expect(screen.queryByRole("button", { name: /\+ filtro/i })).not.toBeInTheDocument();
+
+    await abrirEmbudo(user, "NIT");
+    await user.type(screen.getByLabelText(/nit contiene/i), "2222");
+    await user.click(screen.getByRole("button", { name: "Aplicar" }));
+    expect(nombres()).toEqual(["Beta SAS"]);
+
+    await abrirEmbudo(user, "NIT");
+    await user.click(screen.getByRole("button", { name: "Quitar filtro" }));
     expect(nombres()).toEqual(["Alfa Ltda", "Beta SAS", "Gamma SAS"]);
   });
 });

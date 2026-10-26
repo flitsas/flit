@@ -12,7 +12,8 @@ import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBounda
 import { fetchCompanyChildren } from "@/lib/api/admin-companies";
 import { isHeadTenantType, tenantTypeLabel } from "@/lib/api/types";
 import type { CompanyChildListItem, CompanyListItem } from "@/lib/api/types";
-import { TablaFiltrosBar, TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
+import { TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
+import { EncabezadoFiltrable } from "@/components/atom/FiltroColumna";
 import { filtrarFilas, type AccesoresFiltro } from "@/lib/tablas/filtrar-filas";
 import { useTablaFiltros } from "@/lib/tablas/useTablaFiltros";
 import { columnasHijas } from "./company-filter-columns";
@@ -49,7 +50,6 @@ export function CompanyChildrenSection({ company }: CompanyChildrenSectionProps)
   const { setPage } = pg;
   const filtros = useTablaFiltros({
     columnas: COLUMNAS,
-    periodoColumnaId: "vinculacion",
     onCambio: () => setPage(1),
   });
   const [children, setChildren] = useState<CompanyChildListItem[]>([]);
@@ -121,9 +121,6 @@ export function CompanyChildrenSection({ company }: CompanyChildrenSectionProps)
           errorMessage="No se pudo cargar el listado de clientes hijos."
           skeletonRows={3}
         >
-          <div className="mb-3">
-            <TablaFiltrosBar filtros={filtros} />
-          </div>
           {visibles.length === 0 && filtros.hayFiltros ? (
             <TablaFiltrosVacio onLimpiar={filtros.limpiar} />
           ) : (
@@ -142,35 +139,45 @@ export function CompanyChildrenSection({ company }: CompanyChildrenSectionProps)
                         className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`}
                         style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                       >
-                        Razón social
+                        <EncabezadoFiltrable filtros={filtros} columnaId="razonSocial">
+                          Razón social
+                        </EncabezadoFiltrable>
                       </th>
                       <th
                         scope="col"
                         className={`${TABLA_HEADER_CELL_CLS}`}
                         style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                       >
-                        NIT
+                        <EncabezadoFiltrable filtros={filtros} columnaId="nit">
+                          NIT
+                        </EncabezadoFiltrable>
                       </th>
                       <th
                         scope="col"
                         className={`${TABLA_HEADER_CELL_CLS}`}
                         style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                       >
-                        Tipo
+                        <EncabezadoFiltrable filtros={filtros} columnaId="tipo">
+                          Tipo
+                        </EncabezadoFiltrable>
                       </th>
                       <th
                         scope="col"
                         className={`${TABLA_HEADER_CELL_CLS}`}
                         style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                       >
-                        Estado
+                        <EncabezadoFiltrable filtros={filtros} columnaId="estado">
+                          Estado
+                        </EncabezadoFiltrable>
                       </th>
                       <th
                         scope="col"
                         className={`${TABLA_HEADER_CELL_CLS}`}
                         style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                       >
-                        Vinculación
+                        <EncabezadoFiltrable filtros={filtros} columnaId="vinculacion">
+                          Vinculación
+                        </EncabezadoFiltrable>
                       </th>
                       <th
                         scope="col"

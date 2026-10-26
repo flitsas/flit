@@ -7,6 +7,8 @@ import { SwitchToggle } from "@/components/ui/SwitchToggle";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { RowActions } from "@/components/atom/RowActions";
 import { Pagination } from "@/components/atom/Pagination";
+import { EncabezadoFiltrable } from "@/components/atom/FiltroColumna";
+import type { TablaFiltrosEstado } from "@/lib/tablas/useTablaFiltros";
 import {
   TABLA_HEADER_BG,
   TABLA_HEADER_CELL_CLS,
@@ -31,6 +33,8 @@ export interface CompanyListTableProps {
   onEdit: (company: CompanyListItem) => void;
   /** Solicita activar/desactivar la compañía (el contenedor muestra la confirmación). */
   onToggleStatus: (company: CompanyListItem) => void;
+  /** Filtros por columna (embudo en el encabezado, HU #13999). Sin esto, encabezados planos. */
+  filtros?: TablaFiltrosEstado;
 }
 
 export function CompanyListTable({
@@ -43,7 +47,16 @@ export function CompanyListTable({
   onConfigure,
   onEdit,
   onToggleStatus,
+  filtros,
 }: CompanyListTableProps) {
+  const enc = (id: string, titulo: string) =>
+    filtros ? (
+      <EncabezadoFiltrable filtros={filtros} columnaId={id}>
+        {titulo}
+      </EncabezadoFiltrable>
+    ) : (
+      titulo
+    );
   return (
     <div className="flex flex-1 flex-col">
       <div className="overflow-x-auto">
@@ -56,22 +69,22 @@ export function CompanyListTable({
         <thead>
           <tr>
             <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-              Código
+              {enc("codigo", "Código")}
             </th>
             <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-              NIT
+              {enc("nit", "NIT")}
             </th>
             <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-              Razón Social
+              {enc("razonSocial", "Razón Social")}
             </th>
             <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-              Tipo
+              {enc("tipo", "Tipo")}
             </th>
             <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-              Estado
+              {enc("estado", "Estado")}
             </th>
             <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-              Fecha creación
+              {enc("fechaCreacion", "Fecha creación")}
             </th>
             <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl text-right`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
               Acciones
