@@ -5,10 +5,13 @@ import { ArrowRight, CheckCircle2, Eye, MinusCircle, ShieldAlert } from "lucide-
 import type { AuditLogEntry } from "@/lib/api/types";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { DateRangePicker } from "@/components/atom/DateRangePicker";
+import { EncabezadoFiltrable } from "@/components/atom/FiltroColumna";
 import { Modal } from "@/components/atom/Modal";
 import { SearchInput } from "@/components/atom/SearchInput";
 import { StatusBadge } from "@/components/atom/StatusBadge";
+import { TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
 import { esRangoVacio, sinRango, type DateRange } from "@/components/atom/modules/_reportes/range";
+import type { TablaFiltrosEstado } from "@/lib/tablas/useTablaFiltros";
 import { formatFechaHora } from "@/lib/format/date";
 import {
   auditValueText,
@@ -22,7 +25,9 @@ import {
 // anterior, Valor nuevo, Operador. El orden DESC por fecha lo garantiza el backend; la tabla
 // preserva el orden recibido. Los nombres técnicos se traducen a etiquetas legibles (el nombre de
 // base de datos queda en el tooltip y en el detalle). El API no filtra: los filtros (fechas, tipo
-// de evento y texto) se aplican en cliente sobre la página cargada.
+// de evento y texto) se aplican en cliente sobre la página cargada. Además, el encabezado de Fecha,
+// Campo modificado, Valor anterior y Operador lleva un embudo (HU #14005) que filtra en el SERVIDOR
+// todo el historial; ambos filtros se combinan (AND). «Valor nuevo» no tiene embudo: la API no lo filtra.
 export interface AuditLogTableProps {
   entries: AuditLogEntry[];
   totalCount: number;
@@ -31,6 +36,8 @@ export interface AuditLogTableProps {
   onPageChange: (page: number) => void;
   /** Filas por página (Bug #13055). */
   onPageSizeChange?: (pageSize: number) => void;
+  /** Filtros por columna (servidor). Sin ellos, los encabezados son solo títulos. */
+  filtros?: TablaFiltrosEstado;
 }
 
 const FIELD_CLS =
@@ -47,7 +54,16 @@ export function AuditLogTable({
   pageSize,
   onPageChange,
   onPageSizeChange,
+  filtros,
 }: AuditLogTableProps) {
+  const titulo = (columnaId: string, texto: string) =>
+    filtros ? (
+      <EncabezadoFiltrable filtros={filtros} columnaId={columnaId}>
+        {texto}
+      </EncabezadoFiltrable>
+    ) : (
+      texto
+    );
   const [range, setRange] = useState<DateRange>(sinRango());
   const [eventFilter, setEventFilter] = useState(ALL_EVENTS);
   const [query, setQuery] = useState("");
@@ -98,13 +114,13 @@ export function AuditLogTable({
   const columns: DataTableColumn<AuditLogEntry>[] = [
     {
       key: "date",
-      header: "Fecha",
+      header: titulo("fecha", "Fecha"),
       cellClassName: "whitespace-nowrap opacity-80",
       render: (entry) => formatDateTime(entry.changedAt),
     },
     {
       key: "field",
-      header: "Campo modificado",
+      header: titulo("campo", "Campo modificado"),
       render: (entry) => (
         <span
           className="font-medium text-flit-primary dark:text-white"
@@ -116,7 +132,7 @@ export function AuditLogTable({
     },
     {
       key: "old",
-      header: "Valor anterior",
+      header: titulo("valorAnterior", "Valor anterior"),
       render: (entry) => (
         <AuditValue raw={entry.oldValue} fieldName={entry.fieldName} onDetail={() => setDetail(entry)} />
       ),
@@ -135,7 +151,7 @@ export function AuditLogTable({
     },
     {
       key: "operator",
-      header: "Operador",
+      header: titulo("operador", "Operador"),
       align: "right",
       render: (entry) => <Operator changedBy={entry.changedBy} />,
     },
@@ -199,6 +215,16 @@ export function AuditLogTable({
         getRowKey={(entry) => `${entry.changedAt}|${entry.entityName}|${entry.fieldName}|${entry.newValue ?? ""}|${entry.changedBy ?? ""}`}
         emptyMessage={
           filtersActive ? "Ningún cambio de esta página coincide con los filtros." : "Aún no hay cambios registrados."
+        }
+        emptyContent={
+          entries.length === 0 && filtros?.hayFiltros ? (
+            <TablaFiltrosVacio
+              onLimpiar={() => {
+                filtros?.limpiar();
+                clearFilters();
+              }}
+            />
+          ) : undefined
         }
         minWidth={720}
         pagination={{

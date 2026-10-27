@@ -106,6 +106,18 @@ internal sealed class CompanyReadRepository : ICompanyReadRepository
             query = query.Where(t => t.LegalName.ToLower().Contains(razon));
         }
 
+        if (!string.IsNullOrWhiteSpace(filter.Codigo))
+        {
+            var codigo = filter.Codigo.Trim().ToLower();
+            query = query.Where(t => t.Code.ToLower().Contains(codigo));
+        }
+
+        if (filter.TenantTypes is { Count: > 0 } tipos)
+        {
+            var tiposArr = tipos.ToArray();
+            query = query.Where(t => tiposArr.Contains(t.TenantType));
+        }
+
         if (filter.EstadoActivo is { } estado)
         {
             query = query.Where(t => t.IsActive == estado);
