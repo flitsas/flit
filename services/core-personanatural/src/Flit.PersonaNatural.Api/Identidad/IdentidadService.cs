@@ -31,6 +31,11 @@ public sealed record ResultadoIdentidad(
         new(false, http, codigo, mensaje, Estado: estado, Campo: campo, EsperaSegundos: espera);
 }
 
+/// <summary>Una parte de la solicitud con la identidad que se le exige y su estado.</summary>
+public sealed record ParteIdentidad(string Parte, short Ordinal, string Estado, bool PuedeReenviar, int ReenviosRestantes, int EsperaSegundos);
+
+/// <summary>Estado de la identidad de todas las partes obligadas de una solicitud.</summary>
+public sealed record EstadoIdentidad(Guid SolicitudId, bool Completa, IReadOnlyList<ParteIdentidad> Partes);
 
 public sealed class IdentidadOptions
 {
@@ -54,7 +59,7 @@ public sealed class IdentidadOptions
 }
 
 /// <summary>
-/// Validación de identidad de las partes de una solicitud del portal (HU #14044, ADR-0075). El BFF no valida nada:
+/// Validación de identidad de las partes de una solicitud del portal (HU #14044 y #14045, ADR-0075). El BFF no valida nada:
 /// pide el enlace a FLIT 2 (<see cref="IFachadaIdentidad"/>), que es el dueño del proveedor y de la captura, y refleja el
 /// estado. Decisión del PO (2026-10-27): cada solicitud pide una validación nueva a cada parte; el estado guardado vale solo
 /// para su solicitud y no tiene vigencia en días. El contacto se lee únicamente por <see cref="PersonaService"/> y no se
@@ -94,6 +99,113 @@ public sealed partial class IdentidadService(
             return ResultadoIdentidad.Error(StatusCodes.Status409Conflict, "validacion_en_curso", "Ya hay una validación en curso para esta persona.", persona.ValidacionEstado);
 
         return await EnviarAsync(persona, rol, preparado.Datos!, nuevaValidacion: true, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// <c>POST /solicitudes/{id}/identidad/{parte}/reenviar</c>: reenvía el enlace de la misma validación (a un correo corregido
+    /// si se indica). Tope: 5 reenvíos por parte y 60 s entre uno y otro (429). Una aprobada no se reenvía (409).
+    /// </summary>
+    public async Task<ResultadoIdentidad> ReenviarAsync(Guid solicitudId, string parte, short ordinal, string? correoNuevo, CancellationToken ct)
+    {
+        var preparado = await PrepararAsync(solicitudId, parte, ordinal, ct).ConfigureAwait(false);
+        if (preparado.Error is not null)
+            return preparado.Error;
+        var (persona, rol) = (preparado.Persona!, preparado.Rol!);
+
+        if (persona.ValidacionEstado == EstadosIdentidad.Aprobada)
+            return ResultadoIdentidad.Error(StatusCodes.Status409Conflict, "identidad_aprobada", "La identidad de esta persona ya fue validada.", persona.ValidacionEstado);
+        if (persona.ValidacionEstado == EstadosIdentidad.SinSolicitar)
+            return ResultadoIdentidad.Error(StatusCodes.Status409Conflict, "validacion_no_solicitada", "Primero solicite la validación de esta persona.", persona.ValidacionEstado);
+
+        var correoCorregido = string.IsNullOrWhiteSpace(correoNuevo) ? null : correoNuevo.Trim();
+        if (correoCorregido is not null && !CorreoValido(correoCorregido))
+            return ResultadoIdentidad.Error(StatusCodes.Status422UnprocessableEntity, "contacto_invalido", "El correo no tiene un formato válido.", campo: "correo");
+
+        var ahora = reloj.GetUtcNow();
+        if (persona.Reenvios >= _opciones.MaxReenvios)
+            return ResultadoIdentidad.Error(StatusCodes.Status429TooManyRequests, "reenvios_agotados", "Ya se reenvió el enlace el máximo de veces.", persona.ValidacionEstado);
+        if (persona.UltimoReenvioEn is { } ultimo && ahora - ultimo < TimeSpan.FromSeconds(_opciones.EsperaReenvioSegundos))
+        {
+            var espera = (int)Math.Ceiling((TimeSpan.FromSeconds(_opciones.EsperaReenvioSegundos) - (ahora - ultimo)).TotalSeconds);
+            return ResultadoIdentidad.Error(StatusCodes.Status429TooManyRequests, "reenvio_muy_pronto", "Espere un momento antes de reenviar de nuevo.", persona.ValidacionEstado, espera: espera);
+        }
+
+        // Sin enlace todavía (FLIT 2 no había respondido): reenviar es hacer el envío pendiente, no cuenta como reenvío.
+        if (persona.ValidacionEstado == EstadosIdentidad.PendienteEnvio || persona.ValidacionId is null)
+        {
+            if (correoCorregido is not null)
+                await GuardarCorreoAsync(persona.SolicitudId, preparado.Datos!, correoCorregido, ct).ConfigureAwait(false);
+            return await EnviarAsync(persona, rol, preparado.Datos!, nuevaValidacion: false, ct).ConfigureAwait(false);
+        }
+
+        string estado;
+        try
+        {
+            estado = await fachada.ReenviarAsync(persona.ValidacionId.Value, correoCorregido, ct).ConfigureAwait(false);
+        }
+        catch (FachadaException ex)
+        {
+            return Traducir(ex, persona.ValidacionEstado);
+        }
+
+        // Correo sincronizado: lo que quedó guardado es el correo al que salió el enlace nuevo.
+        if (correoCorregido is not null)
+            await GuardarCorreoAsync(persona.SolicitudId, preparado.Datos!, correoCorregido, ct).ConfigureAwait(false);
+        persona.Reenvios++;
+        persona.UltimoReenvioEn = ahora;
+        await espejo.CambiarAsync(persona, estado, "ciudadano", null, ct).ConfigureAwait(false);
+        return ResultadoIdentidad.Ok(rol, ordinal, estado);
+    }
+
+    /// <summary>
+    /// <c>GET /solicitudes/{id}/identidad</c>: estado de la identidad de cada parte que el tipo obliga a validar (aunque aún
+    /// no se haya pedido), con lo que le queda por reenviar a cada una.
+    /// </summary>
+    public async Task<EstadoIdentidad?> EstadoAsync(Guid solicitudId, CancellationToken ct)
+    {
+        var definidas = await reglas.LeerAsync(solicitudId, ct).ConfigureAwait(false);
+        if (definidas is null)
+            return null;
+
+        if (_opciones.ReconciliarAlConsultar)
+            await ReconciliarAsync(solicitudId, ct).ConfigureAwait(false);
+
+        var ahora = reloj.GetUtcNow();
+        var filas = await db.Set<PersonaSolicitante>().AsNoTracking().Where(p => p.SolicitudId == solicitudId).ToListAsync(ct).ConfigureAwait(false);
+        var partes = new List<ParteIdentidad>();
+        foreach (var regla in definidas.RolesConIdentidad)
+        {
+            var delRol = filas.Where(p => string.Equals(p.Parte, regla.Rol, StringComparison.OrdinalIgnoreCase)).OrderBy(p => p.Ordinal).ToList();
+            partes.AddRange(delRol.Select(p => new ParteIdentidad(
+                regla.Rol, p.Ordinal, p.ValidacionEstado, PuedeReenviar(p, ahora), Math.Max(_opciones.MaxReenvios - p.Reenvios, 0), Espera(p, ahora))));
+            for (var faltante = delRol.Count + 1; faltante <= regla.Min; faltante++)
+                partes.Add(new ParteIdentidad(regla.Rol, (short)faltante, EstadosIdentidad.SinSolicitar, false, _opciones.MaxReenvios, 0));
+        }
+
+        return new EstadoIdentidad(solicitudId, partes.Count > 0 && partes.All(p => p.Estado == EstadosIdentidad.Aprobada), partes);
+    }
+
+    /// <summary>
+    /// Pregunta a FLIT 2 por las validaciones abiertas de la solicitud y refleja lo que cambió. Es la red de seguridad del
+    /// espejo por evento (que depende de que el bus de Trámites esté encendido): no sustituye al evento, lo cubre. Un fallo de
+    /// FLIT 2 deja el estado local como está (la compuerta lo trata como pendiente, que es lo seguro).
+    /// </summary>
+    public async Task ReconciliarAsync(Guid solicitudId, CancellationToken ct)
+    {
+        var abiertas = await db.Set<PersonaSolicitante>().Where(p => p.SolicitudId == solicitudId && p.ValidacionId != null && p.ValidacionEstado == EstadosIdentidad.Pendiente)
+            .ToListAsync(ct).ConfigureAwait(false);
+        foreach (var persona in abiertas)
+        {
+            try
+            {
+                var estado = await fachada.ObtenerEstadoAsync(persona.ValidacionId!.Value, ct).ConfigureAwait(false);
+                await espejo.CambiarAsync(persona, estado, "sondeo", null, ct).ConfigureAwait(false);
+            }
+            catch (FachadaException ex)
+            {
+                SondeoFallido(logger, ex.Codigo, solicitudId);
+            }
+        }
     }
 
     /// <summary>
@@ -200,6 +312,9 @@ public sealed partial class IdentidadService(
         }
     }
 
+    private async Task GuardarCorreoAsync(Guid solicitudId, DatosPersona datos, string correo, CancellationToken ct) =>
+        await personas.GuardarAsync(solicitudId, datos with { Correo = correo }, ct).ConfigureAwait(false);
+
     private static ResultadoIdentidad Traducir(FachadaException ex, string estadoActual) => ex.Codigo switch
     {
         "persona_juridica_no_soportada" => ResultadoIdentidad.Error(ex.EstadoHttp, ex.Codigo, ex.Message),
@@ -211,6 +326,15 @@ public sealed partial class IdentidadService(
 
     private static Preparado Falla(int http, string codigo, string mensaje, string? campo = null) =>
         new(ResultadoIdentidad.Error(http, codigo, mensaje, campo: campo), null, null, null);
+
+    private bool PuedeReenviar(PersonaSolicitante p, DateTimeOffset ahora) =>
+        p.ValidacionEstado is EstadosIdentidad.Pendiente or EstadosIdentidad.Vencida or EstadosIdentidad.Rechazada
+        && p.Reenvios < _opciones.MaxReenvios && Espera(p, ahora) == 0;
+
+    private int Espera(PersonaSolicitante p, DateTimeOffset ahora) =>
+        p.UltimoReenvioEn is { } ultimo && ahora - ultimo < TimeSpan.FromSeconds(_opciones.EsperaReenvioSegundos)
+            ? (int)Math.Ceiling((TimeSpan.FromSeconds(_opciones.EsperaReenvioSegundos) - (ahora - ultimo)).TotalSeconds)
+            : 0;
 
     internal static bool CorreoValido(string? correo) =>
         !string.IsNullOrWhiteSpace(correo) && correo.Length <= 320
@@ -224,6 +348,9 @@ public sealed partial class IdentidadService(
             digitos = digitos[2..];
         return digitos.Length == 10 && digitos[0] == '3' && digitos.All(char.IsAsciiDigit);
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "No se pudo consultar a FLIT 2 el estado de una validación de la solicitud {SolicitudId}: {Codigo}")]
+    private static partial void SondeoFallido(ILogger logger, string codigo, Guid solicitudId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "FLIT 2 no respondió al pedir la validación de una parte de la solicitud {SolicitudId}; queda pendiente_envio")]
     private static partial void EnvioPendiente(ILogger logger, Guid solicitudId);

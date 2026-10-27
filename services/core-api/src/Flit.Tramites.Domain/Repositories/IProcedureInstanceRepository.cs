@@ -487,6 +487,13 @@ public interface IProcedureInstanceRepository
         Guid tenantId, string solicitudRef, string parte, string documentNumber, CancellationToken ct = default);
 
     /// <summary>
+    /// HU #14044 — una validación del portal por id (solo las que tienen <c>portal_solicitud_ref</c>), aislada por tenant y
+    /// TRACKEADA (para reenviar). Null si no existe, es de otro tenant o no es del portal.
+    /// </summary>
+    Task<ProcedureInstanceBiometricValidation?> GetPortalValidationByIdAsync(
+        Guid tenantId, Guid validationId, CancellationToken ct = default);
+
+    /// <summary>
     /// Cuenta un intento rechazado de Kyverum de forma ATÓMICA e idempotente: en un ÚNICO <c>UPDATE</c>
     /// incrementa <c>attempts</c>, sella <c>last_attempt_at</c> con la clave del intento y REINICIA
     /// <c>reconcile_poll_count</c>, con la guarda <c>status = en_proceso AND last_attempt_at &lt;&gt; @key</c>.

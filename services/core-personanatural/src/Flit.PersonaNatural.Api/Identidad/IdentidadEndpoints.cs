@@ -1,19 +1,28 @@
 using System.Globalization;
 using Flit.PersonaNatural.Api.Abuso;
 using Flit.PersonaNatural.Api.Cotizaciones;
+using Flit.PersonaNatural.Api.Persistence;
 using Flit.PersonaNatural.Api.Sesiones;
+using Flit.Platform.Sdk;
+using Flit.Platform.Sdk.Messaging;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Flit.PersonaNatural.Api.Identidad;
 
 /// <summary>
-/// Validación de identidad de las partes de una solicitud (HU #14044, ADR-0075). Rutas de la solicitud: exigen la
+/// Validación de identidad de las partes de una solicitud (HU #14044 y #14045, ADR-0075). Rutas de la solicitud: exigen la
 /// sesión de ESA solicitud (<see cref="SesionEndpoints.ConSesionDeLaSolicitud"/>) y el límite por IP; no llevan captcha (ya hay
 /// sesión). Errores <c>application/problem+json</c> con un <c>code</c> estable y, cuando aplica, el <c>field</c> que falla.
 /// </summary>
 public static class IdentidadEndpoints
 {
-    /// <summary>Registra el servicio, el espejo y el job que reintenta los envíos pendientes.</summary>
+    /// <summary>Cola del consumidor del evento de FLIT 2 (<c>&lt;consumidor&gt;.&lt;propósito&gt;</c>, contrato §7).</summary>
+    public const string Cola = "personanatural.identidad";
+
+    /// <summary>Evento de FLIT 2 con el que una validación queda resuelta (<c>contracts/asyncapi/tramites-events.v1.yaml</c>).</summary>
+    public const string EventoCompletada = "tramites.identity_validation.completed";
+
+    /// <summary>Registra el servicio, el espejo, el job de reintento y el consumidor del evento de FLIT 2.</summary>
     public static IServiceCollection AddIdentidadPortal(this IServiceCollection services, IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -31,6 +40,10 @@ public static class IdentidadEndpoints
             ? new FachadaIdentidadGrpc(cliente)
             : new FachadaIdentidadNoConfigurada());
 
+        // Espejo por evento: FLIT 2 publica tramites.identity_validation.completed en flit.tramites (con Tramites:Bus encendido).
+        // La bandeja del SDK ignora un evento repetido; el sondeo de EstadoAsync y de la compuerta cubre el bus apagado.
+        services.AddFlitConsumer<PersonaNaturalDb, ValidacionCompletadaConsumer, ValidacionCompletada>(
+            configuration, Cola, producer: "tramites", [EventoCompletada]);
         return services;
     }
 
@@ -39,9 +52,23 @@ public static class IdentidadEndpoints
         ArgumentNullException.ThrowIfNull(app);
         var grupo = app.MapGroup($"{SesionEndpoints.Base}/solicitudes/{{id:guid}}/identidad").AllowAnonymous().RequireRateLimiting(AbusoEndpoints.PoliticaPorIp);
 
+        // HU #14045: estado de las validaciones de la solicitud (el front lo sondea).
+        grupo.MapGet(string.Empty, async (Guid id, IdentidadService servicio, CancellationToken ct) =>
+        {
+            var estado = await servicio.EstadoAsync(id, ct).ConfigureAwait(false);
+            return estado is null
+                ? Problema(StatusCodes.Status404NotFound, "No encontrado", SesionEndpoints.MensajeNoEncontrada, SesionEndpoints.CodigoNoEncontrada)
+                : Results.Ok(estado);
+        }).AddEndpointFilter(SesionEndpoints.ConSesionDeLaSolicitud);
+
         // HU #14044: pide la validación de una parte. El cuerpo es opcional (la posición del actor si el rol admite varios).
         grupo.MapPost("/{parte}", async (Guid id, string parte, HttpContext http, IdentidadService servicio, CancellationToken ct, ParteRequest? body) =>
             Responder(http, await servicio.SolicitarAsync(id, parte, body?.Ordinal ?? 1, ct).ConfigureAwait(false)))
+            .AddEndpointFilter(SesionEndpoints.ConSesionDeLaSolicitud);
+
+        // HU #14045: reenvía el enlace (opcionalmente a un correo corregido).
+        grupo.MapPost("/{parte}/reenviar", async (Guid id, string parte, HttpContext http, IdentidadService servicio, CancellationToken ct, ReenviarRequest? body) =>
+            Responder(http, await servicio.ReenviarAsync(id, parte, body?.Ordinal ?? 1, body?.Correo, ct).ConfigureAwait(false)))
             .AddEndpointFilter(SesionEndpoints.ConSesionDeLaSolicitud);
 
         return app;
@@ -72,7 +99,43 @@ public static class IdentidadEndpoints
 
 public sealed record ParteRequest(short? Ordinal);
 
+public sealed record ReenviarRequest(short? Ordinal, string? Correo);
+
 public sealed record ParteResponse(string Parte, short Ordinal, string Estado);
+
+/// <summary>Datos del evento <c>tramites.identity_validation.completed</c> (sanitizados: solo ids y estado, sin datos personales).</summary>
+public sealed record ValidacionCompletada(Guid ValidationId, string? Estado, string? Parte, Guid? ProcedureInstanceId, string? Provider, string? ProviderStatus, int? Score);
+
+/// <summary>
+/// Espejo por evento (HU #14045 AC4 y AC5): cuando FLIT 2 resuelve la validación, el estado de la parte pasa a aprobada o
+/// rechazada y queda en <c>auditoria_identidad</c>. Solo atiende a la empresa de Persona Natural (el exchange <c>flit.tramites</c>
+/// lleva los eventos de todas) y a las validaciones que el portal conoce. Un evento repetido lo ignora la bandeja del SDK y,
+/// además, <see cref="EspejoDeIdentidad"/> es idempotente: el mismo estado no se audita dos veces.
+/// </summary>
+public sealed class ValidacionCompletadaConsumer(EspejoDeIdentidad espejo) : IEventConsumer<ValidacionCompletada>
+{
+    public async Task HandleAsync(EventEnvelope envelope, ValidacionCompletada data, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(envelope);
+        ArgumentNullException.ThrowIfNull(data);
+        if (envelope.TenantId != PlatformTenants.PersonaNatural)
+            return;
+
+        var estado = data.Estado switch
+        {
+            "aprobado" => EstadosIdentidad.Aprobada,
+            "rechazado" => EstadosIdentidad.Rechazada,
+            _ => null,
+        };
+        if (estado is null)
+            return;
+
+        // Sin una persona con ese id (el aviso llegó antes de que el BFF guardara el id, o no es del portal) no se pierde nada:
+        // el sondeo de GET /identidad y la compuerta lo reconcilian contra FLIT 2.
+        await espejo.AplicarAsync(data.ValidationId, estado, "evento", envelope.EventId, ct).ConfigureAwait(false);
+    }
+}
+
 /// <summary>
 /// Job periódico (in-process) que reintenta los envíos de enlace que quedaron en <c>pendiente_envio</c> porque FLIT 2 no
 /// respondió. Un fallo no lo tumba. El envío es idempotente en FLIT 2, así que dos réplicas o un reintento tras una respuesta

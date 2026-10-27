@@ -214,7 +214,7 @@ public sealed class PersonaNaturalGrpcService(
 
     // ── Pendientes de su HU: contrato publicado, sin implementación ─────────────────────────────────────────────────
 
-    // ── Identidad de las partes (HU C1): el caso de uso vive en PersonaNaturalIdentidadService ─────────────────
+    // ── Identidad de las partes (HU C1 y C2): el caso de uso vive en PersonaNaturalIdentidadService ─────────────────
 
     /// <summary>
     /// Pide una validación NUEVA para la parte de esa solicitud (HU #14044). Idempotente por (solicitud, parte, documento);
@@ -227,12 +227,21 @@ public sealed class PersonaNaturalGrpcService(
         return Identidad(context).SolicitarAsync(request, context.CancellationToken);
     }
 
-    public override Task<ReenviarValidacionIdentidadResponse> ReenviarValidacionIdentidad(ReenviarValidacionIdentidadRequest request, ServerCallContext context) =>
-        Pendiente<ReenviarValidacionIdentidadResponse>(context, "HU C2");
+    /// <summary>Reenvía el enlace de la MISMA validación (HU #14045), opcionalmente a un correo corregido.</summary>
+    public override Task<ReenviarValidacionIdentidadResponse> ReenviarValidacionIdentidad(ReenviarValidacionIdentidadRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Verificar(context);
+        return Identidad(context).ReenviarAsync(request, context.CancellationToken);
+    }
 
-    public override Task<ObtenerEstadoValidacionIdentidadResponse> ObtenerEstadoValidacionIdentidad(ObtenerEstadoValidacionIdentidadRequest request, ServerCallContext context) =>
-        Pendiente<ObtenerEstadoValidacionIdentidadResponse>(context, "HU C2");
-
+    /// <summary>Estado de una validación del portal (HU #14045): pendiente | aprobada | rechazada | vencida.</summary>
+    public override Task<ObtenerEstadoValidacionIdentidadResponse> ObtenerEstadoValidacionIdentidad(ObtenerEstadoValidacionIdentidadRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Verificar(context);
+        return Identidad(context).ObtenerEstadoAsync(request, context.CancellationToken);
+    }
 
     private static PersonaNaturalIdentidadService Identidad(ServerCallContext context) =>
         ActivatorUtilities.CreateInstance<PersonaNaturalIdentidadService>(context.GetHttpContext().RequestServices);

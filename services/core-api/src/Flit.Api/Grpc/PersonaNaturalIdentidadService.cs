@@ -14,10 +14,10 @@ using Microsoft.EntityFrameworkCore;
 namespace Flit.Api.Grpc;
 
 /// <summary>
-/// HU #14044 (Feature #14023, Épica #14021, ADR-0075) — la validación de identidad de las partes de una solicitud
+/// HU #14044 y #14045 (Feature #14023, Épica #14021, ADR-0075) — la validación de identidad de las partes de una solicitud
 /// del portal de Persona Natural, detrás de la fachada gRPC. Adaptador delgado: el envío del enlace, el proveedor
-/// (Kyverum o mock), el webhook y la outbox son los de la prevalidación de FLIT 2
-/// (<see cref="IniciarPrevalidacionHandler.HandlePortalAsync"/>); aquí solo
+/// (Kyverum o mock), el webhook, la outbox y el reenvío son los de la prevalidación de FLIT 2
+/// (<see cref="IniciarPrevalidacionHandler.HandlePortalAsync"/> y <see cref="ReenviarValidacionPortalHandler"/>); aquí solo
 /// se valida la entrada, se fija la empresa de Persona Natural y se traduce el desenlace.
 /// <para>
 /// Decisión del PO (2026-10-27): cada solicitud pide una validación NUEVA a cada parte; nada se reutiliza entre trámites ni
@@ -28,7 +28,8 @@ namespace Flit.Api.Grpc;
 /// </summary>
 internal sealed class PersonaNaturalIdentidadService(
     FlitDbContext db,
-    IniciarPrevalidacionHandler iniciar)
+    IniciarPrevalidacionHandler iniciar,
+    ReenviarValidacionPortalHandler reenviar)
 {
     /// <summary>Estados de la validación que ve el portal (el proto: pendiente | aprobada | rechazada | vencida).</summary>
     public const string Pendiente = "pendiente";
@@ -69,6 +70,44 @@ internal sealed class PersonaNaturalIdentidadService(
             ValidacionId = resultado.Validation.Id.ToString(),
             Estado = EstadoDelPortal(resultado.Validation.Status, resultado.Validation.ExpiresAt, DateTimeOffset.UtcNow),
         };
+    }
+
+    public async Task<ReenviarValidacionIdentidadResponse> ReenviarAsync(ReenviarValidacionIdentidadRequest request, CancellationToken ct)
+    {
+        var id = IdValido(request.ValidacionId);
+        var correo = Texto(request.Correo);
+        if (correo is not null && !EsCorreoValido(correo))
+            throw PlatformRpcErrors.ToRpcException("contacto_invalido_correo", "El correo no tiene un formato válido.", StatusCode.InvalidArgument);
+
+        var (resultado, error) = await EnEmpresaAsync(() => reenviar.HandleAsync(PlatformTenants.PersonaNatural, id, correo, ct), ct).ConfigureAwait(false);
+        if (error is not null || resultado is null)
+            throw error switch
+            {
+                "not_found" => NoEncontrada(),
+                "identidad_aprobada" => PlatformRpcErrors.ToRpcException("identidad_aprobada", "La identidad ya fue validada.", StatusCode.FailedPrecondition),
+                "validacion_en_curso" => PlatformRpcErrors.ToRpcException("validacion_en_curso", "Ya hay una validación en curso.", StatusCode.AlreadyExists),
+                _ => PlatformRpcErrors.ToRpcException("proveedor_no_disponible", "No fue posible reenviar el enlace por ahora.", StatusCode.Unavailable),
+            };
+
+        return new ReenviarValidacionIdentidadResponse
+        {
+            Estado = EstadoDelPortal(resultado.Validation.Status, resultado.Validation.ExpiresAt, DateTimeOffset.UtcNow),
+            Expira = Timestamp.FromDateTimeOffset(resultado.Validation.ExpiresAt),
+        };
+    }
+
+    public async Task<ObtenerEstadoValidacionIdentidadResponse> ObtenerEstadoAsync(ObtenerEstadoValidacionIdentidadRequest request, CancellationToken ct)
+    {
+        var id = IdValido(request.ValidacionId);
+
+        // Solo lectura y solo de las validaciones del portal de ESTA empresa: con otro id (de FLIT 2) responde no encontrada.
+        var fila = await db.ProcedureInstanceBiometricValidations.AsNoTracking()
+            .Where(v => v.Id == id && v.TenantId == PlatformTenants.PersonaNatural && v.PortalSolicitudRef != null)
+            .Select(v => new { v.Status, v.ExpiresAt })
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false) ?? throw NoEncontrada();
+
+        // Sin vigente_hasta: el portal no tiene vigencia en días (decisión del PO).
+        return new ObtenerEstadoValidacionIdentidadResponse { Estado = EstadoDelPortal(fila.Status, fila.ExpiresAt, DateTimeOffset.UtcNow) };
     }
 
     /// <summary>

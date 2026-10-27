@@ -1827,6 +1827,11 @@ internal sealed partial class ProcedureInstanceRepository(
             .FirstOrDefaultAsync(ct);
     }
 
+    public Task<ProcedureInstanceBiometricValidation?> GetPortalValidationByIdAsync(
+        Guid tenantId, Guid validationId, CancellationToken ct = default) =>
+        db.ProcedureInstanceBiometricValidations
+            .FirstOrDefaultAsync(v => v.Id == validationId && v.TenantId == tenantId && v.PortalSolicitudRef != null, ct);
+
     // UPDATE atómico e idempotente del conteo de intentos Kyverum. La guarda `last_attempt_at <> @key`
     // (más el row-lock del UPDATE) garantiza que dos entregas paralelas del MISMO intento cuenten una sola vez.
     public async Task<bool> TryCountKyverumAttemptAsync(

@@ -19,7 +19,7 @@ using Cliente = Flit.Tramites.Grpc.V1.PersonaNaturalService.PersonaNaturalServic
 namespace Flit.Admin.Tests.Identity;
 
 /// <summary>
-/// HU #14044 (Feature #14023, Épica #14021, ADR-0075) — la validación de identidad de las partes de una solicitud
+/// HU #14044 y #14045 (Feature #14023, Épica #14021, ADR-0075) — la validación de identidad de las partes de una solicitud
 /// del portal, detrás de la fachada gRPC y con el servidor OIDC real de los tests. Decisión del PO (2026-10-27): cada
 /// solicitud pide una validación NUEVA; nada se reutiliza entre trámites ni vence por días. Requiere la base con las
 /// migraciones aplicadas (DDL 152 y 160); el proveedor es el mock del ambiente de pruebas.
@@ -176,7 +176,7 @@ public sealed class PersonaNaturalIdentidadGrpcTests(WebApplicationFactory<Progr
     }
 
     [Fact]
-    public async Task ConOtraEmpresa_SolicitarRespondeInvalidTenant()
+    public async Task ConOtraEmpresa_LosTresMetodosDeIdentidadRespondenInvalidTenant()
     {
         var ct = TestContext.Current.CancellationToken;
         using var host = Host();
@@ -186,10 +186,111 @@ public sealed class PersonaNaturalIdentidadGrpcTests(WebApplicationFactory<Progr
         var llamadas = new Func<Task>[]
         {
             () => ajeno.SolicitarValidacionIdentidadAsync(Pedido(solicitud, "vendedor", cedula), cancellationToken: ct).ResponseAsync,
+            () => ajeno.ReenviarValidacionIdentidadAsync(new ReenviarValidacionIdentidadRequest { ValidacionId = Guid.NewGuid().ToString() }, cancellationToken: ct).ResponseAsync,
+            () => ajeno.ObtenerEstadoValidacionIdentidadAsync(new ObtenerEstadoValidacionIdentidadRequest { ValidacionId = Guid.NewGuid().ToString() }, cancellationToken: ct).ResponseAsync,
         };
         foreach (var llamada in llamadas)
             PlatformRpcErrors.Reason((await llamada.Should().ThrowAsync<RpcException>()).Which).Should().Be("invalid_tenant");
         (await ContarAsync(host, solicitud, ct)).Should().Be(0);
+    }
+
+    // ── C2: reenviar y estado ────────────────────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Reenviar_SaleElEnlaceNuevoEnLaMismaFila_YSincronizaElCorreoNuevo()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        var cliente = await ClienteAsync(host, ct);
+        var (solicitud, cedula) = Nueva();
+        var creada = await cliente.SolicitarValidacionIdentidadAsync(Pedido(solicitud, "comprador", cedula), cancellationToken: ct);
+        var antes = await FilaAsync(host, creada.ValidacionId, ct);
+
+        var respuesta = await cliente.ReenviarValidacionIdentidadAsync(
+            new ReenviarValidacionIdentidadRequest { ValidacionId = creada.ValidacionId, Correo = "corregido@ejemplo.test" }, cancellationToken: ct);
+
+        respuesta.Estado.Should().Be("pendiente");
+        respuesta.Expira.Should().NotBeNull();
+        var despues = await FilaAsync(host, creada.ValidacionId, ct);
+        despues.ResendCount.Should().Be(antes.ResendCount + 1);
+        despues.TokenHash.Should().NotBe(antes.TokenHash, "el enlace anterior deja de ser válido");
+        despues.Email.Should().Be("corregido@ejemplo.test");
+        despues.RegisteredEmail.Should().Be(antes.RegisteredEmail, "el correo original es inmutable");
+        (await ContarAsync(host, solicitud, ct)).Should().Be(1, "reenviar no crea otra validación");
+    }
+
+    [Fact]
+    public async Task Reenviar_UnaYaAprobada_NoSeReenvia()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        var cliente = await ClienteAsync(host, ct);
+        var (solicitud, cedula) = Nueva();
+        var creada = await cliente.SolicitarValidacionIdentidadAsync(Pedido(solicitud, "vendedor", cedula), cancellationToken: ct);
+        await MarcarAsync(host, creada.ValidacionId, BiometricEstados.Aprobado, ct);
+
+        var error = (await ((Func<Task>)(() => cliente.ReenviarValidacionIdentidadAsync(new ReenviarValidacionIdentidadRequest { ValidacionId = creada.ValidacionId }, cancellationToken: ct).ResponseAsync)).Should().ThrowAsync<RpcException>()).Which;
+
+        PlatformRpcErrors.Reason(error).Should().Be("identidad_aprobada");
+    }
+
+    [Fact]
+    public async Task Reenviar_UnaVencida_LaReabreConEnlaceNuevo()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        var cliente = await ClienteAsync(host, ct);
+        var (solicitud, cedula) = Nueva();
+        var creada = await cliente.SolicitarValidacionIdentidadAsync(Pedido(solicitud, "vendedor", cedula), cancellationToken: ct);
+        await MarcarAsync(host, creada.ValidacionId, BiometricEstados.Expirado, ct);
+
+        var respuesta = await cliente.ReenviarValidacionIdentidadAsync(new ReenviarValidacionIdentidadRequest { ValidacionId = creada.ValidacionId }, cancellationToken: ct);
+
+        respuesta.Estado.Should().Be("pendiente");
+    }
+
+    [Fact]
+    public async Task ReenviarYEstado_ConUnIdInexistenteODeFlit2_RespondenNoEncontrada()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        var cliente = await ClienteAsync(host, ct);
+        var deFlit2 = await SembrarValidacionDeFlit2Async(host, ct);
+
+        foreach (var id in new[] { Guid.NewGuid().ToString(), deFlit2.ToString() })
+        {
+            var reenvio = (await ((Func<Task>)(() => cliente.ReenviarValidacionIdentidadAsync(new ReenviarValidacionIdentidadRequest { ValidacionId = id }, cancellationToken: ct).ResponseAsync)).Should().ThrowAsync<RpcException>()).Which;
+            var estado = (await ((Func<Task>)(() => cliente.ObtenerEstadoValidacionIdentidadAsync(new ObtenerEstadoValidacionIdentidadRequest { ValidacionId = id }, cancellationToken: ct).ResponseAsync)).Should().ThrowAsync<RpcException>()).Which;
+            reenvio.StatusCode.Should().Be(StatusCode.NotFound);
+            estado.StatusCode.Should().Be(StatusCode.NotFound);
+        }
+    }
+
+    [Fact]
+    public async Task ObtenerEstado_TraduceLosEstadosDeFlit2_AlVocabularioDelPortal()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        var cliente = await ClienteAsync(host, ct);
+        var casos = new (string Estado, string Esperado)[]
+        {
+            (BiometricEstados.Enviado, "pendiente"),
+            (BiometricEstados.EnProceso, "pendiente"),
+            (BiometricEstados.Aprobado, "aprobada"),
+            (BiometricEstados.Rechazado, "rechazada"),
+            (BiometricEstados.Expirado, "vencida"),
+        };
+        foreach (var (estado, esperado) in casos)
+        {
+            var (solicitud, cedula) = Nueva();
+            var creada = await cliente.SolicitarValidacionIdentidadAsync(Pedido(solicitud, "vendedor", cedula), cancellationToken: ct);
+            await MarcarAsync(host, creada.ValidacionId, estado, ct);
+
+            var respuesta = await cliente.ObtenerEstadoValidacionIdentidadAsync(new ObtenerEstadoValidacionIdentidadRequest { ValidacionId = creada.ValidacionId }, cancellationToken: ct);
+
+            respuesta.Estado.Should().Be(esperado, $"el estado {estado} de FLIT 2");
+            respuesta.VigenteHasta.Should().BeNull();
+        }
     }
 
     [Fact]
@@ -277,5 +378,41 @@ public sealed class PersonaNaturalIdentidadGrpcTests(WebApplicationFactory<Progr
             .SetProperty(v => v.Status, estado)
             .SetProperty(v => v.ValidatedAt, estado == BiometricEstados.Aprobado ? ahora : (DateTimeOffset?)null)
             .SetProperty(v => v.ValidUntil, estado == BiometricEstados.Aprobado ? ahora.AddDays(30) : (DateTimeOffset?)null), ct);
+    }
+
+    /// <summary>Una validación de FLIT 2 (de un usuario de otra empresa, sin ancla de portal): la fachada no debe verla.</summary>
+    private static async Task<Guid> SembrarValidacionDeFlit2Async(WebApplicationFactory<Program> host, CancellationToken ct)
+    {
+        using var scope = host.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
+        var tenant = await db.Tenants.Where(t => t.Id != PlatformTenants.PersonaNatural).OrderBy(t => t.Code).Select(t => t.Id).FirstAsync(ct);
+        var persona = new Person
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            DocumentType = "CC",
+            DocumentNumber = $"8{Random.Shared.NextInt64(10_000_000, 99_999_999)}",
+            FullName = "Persona de FLIT 2",
+            Email = "flit2@ejemplo.test",
+        };
+        var validacion = new ProcedureInstanceBiometricValidation
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            PersonId = persona.Id,
+            Name = persona.FullName,
+            DocumentType = persona.DocumentType,
+            DocumentNumber = persona.DocumentNumber,
+            Email = persona.Email,
+            RegisteredEmail = persona.Email,
+            Status = BiometricEstados.Enviado,
+            TokenHash = Guid.NewGuid().ToString("N"),
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(24),
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        db.Add(persona);
+        db.Add(validacion);
+        await db.SaveChangesAsync(ct);
+        return validacion.Id;
     }
 }
