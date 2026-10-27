@@ -256,7 +256,7 @@ class ClienteDeServicio(unittest.TestCase):
         cliente = clientes["svc-diagnostico"]
         self.assertEqual(cliente["Secret"], "")
         self.assertEqual(
-            sorted(cliente["Scopes"]), sorted(["platform.manifest", "platform.identidad.read", "platform.tramites.catalogos"])
+            sorted(cliente["Scopes"]), sorted(["platform.manifest", "platform.identidad.read", "platform.tramites.catalogos", "platform.identidad.empresas"])
         )
 
     def test_variables_de_diagnostico_sin_valores_en_el_ejemplo(self):

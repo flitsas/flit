@@ -245,7 +245,8 @@ Debe quedar por debajo de 20. Si llega al tope, el log dice `too many connection
 ## 3. Cliente de servicio `svc-diagnostico`
 
 Declarado en `services/core-api/src/Flit.Api/appsettings.json` con `platform.manifest` (manifiesto),
-`platform.identidad.read` (suscripción por petición) y `platform.tramites.catalogos` (tipos de trámite publicados).
+`platform.identidad.read` (suscripción por petición), `platform.tramites.catalogos` (tipos de trámite publicados) y
+`platform.identidad.empresas` (lista de empresas con Diagnóstico para el editor de contrato del backoffice, HU #13741).
 Falta el secreto, el mismo valor en los dos lados:
 
 ```

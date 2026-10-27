@@ -34,9 +34,11 @@ internal static partial class EmpresasBackofficeEndpoints
         {
             empresas = await plataforma.ListarAsync(ct).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        catch (Exception ex) when (EsFallaDeIdentidad(ex) && !ct.IsCancellationRequested)
         {
-            // Token de servicio, red o RpcException: el motivo va al log (sin nombres ni NIT); al cliente, un 503 explícito.
+            // Solo transporte/proveedor: el motivo va al log (sin nombres ni NIT); al cliente, un 503 explícito. Cualquier otra
+            // excepción (error de programación, DI) sigue por el pipeline normal como 500 con su log completo, y la
+            // cancelación del cliente se propaga.
             LogNoDisponible(logs.CreateLogger(typeof(EmpresasBackofficeEndpoints)), ex is RpcException rpc ? rpc.StatusCode.ToString() : ex.GetType().Name);
             throw new ReglaException(CodigoNoDisponible, "No se pudo leer la lista de empresas de Identidad. Intenta de nuevo en unos segundos.",
                 StatusCodes.Status503ServiceUnavailable)
@@ -55,6 +57,15 @@ internal static partial class EmpresasBackofficeEndpoints
             .ThenBy(e => e.Id)
             .Select(e => new EmpresaBackofficeDto(e.Id, e.Nombre, e.Nit)));
     }
+
+    /// <summary>
+    /// Fallas de Identidad que merecen 503: <see cref="RpcException"/> (Identidad caída, plazo vencido, circuito abierto del
+    /// SDK y también el token de servicio rechazado o sin respuesta: Grpc.Net.Client envuelve en <see cref="RpcException"/>
+    /// lo que lanza el <c>ServiceTokenProvider</c> del SDK dentro de las credenciales de la llamada) y
+    /// <see cref="HttpRequestException"/> (red). Nada más: un <see cref="InvalidOperationException"/> suelto es un error de
+    /// programación, no una caída.
+    /// </summary>
+    internal static bool EsFallaDeIdentidad(Exception ex) => ex is RpcException or HttpRequestException;
 
     /// <summary>
     /// Clave de orden alfabético estable sin depender de ICU (la imagen alpine corre en modo invariante): mayúsculas y

@@ -128,6 +128,69 @@ public sealed class EmpresasBackofficeTests
         respuesta.Headers.RetryAfter.Should().NotBeNull();
     }
 
+    // H2 (security-agent) — un error de programación no es «Identidad no responde»: llega como 500 por el pipeline normal,
+    // nunca como 503 IDENTIDAD_NO_DISPONIBLE con Retry-After (que invitaría a reintentar algo que no se arregla solo).
+    [Fact]
+    public async Task Error_que_no_es_de_transporte_responde_500_y_no_503()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var identidad = new EmpresasFalso { Lanza = new InvalidOperationException("error de programación de prueba") };
+        await using var api = await ConIdentidadAsync(identidad);
+
+        var respuesta = await api.Cliente(TokenContrato(api, "FLIT")).GetAsync(Url, ct);
+
+        var texto = await respuesta.Content.ReadAsStringAsync(ct);
+        respuesta.StatusCode.Should().Be(HttpStatusCode.InternalServerError, texto);
+        texto.Should().NotContain(EmpresasBackofficeEndpoints.CodigoNoDisponible);
+        respuesta.Headers.RetryAfter.Should().BeNull();
+    }
+
+    // H2 — el token de servicio rechazado por Identidad (el SDK lanza al pedirlo) sí es una falla de Identidad: 503 con code.
+    // Camino real: cliente gRPC del SDK con sus credenciales; solo el endpoint de tokens es un doble.
+    [Fact]
+    public async Task Token_de_servicio_rechazado_responde_503_con_code()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ConIdentidadRealAsync(new EndpointTokens(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized)));
+
+        var respuesta = await api.Cliente(TokenContrato(api, "FLIT")).GetAsync(Url, ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable, await respuesta.Content.ReadAsStringAsync(ct));
+        (await respuesta.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("code").GetString().Should().Be("IDENTIDAD_NO_DISPONIBLE");
+        respuesta.Headers.RetryAfter.Should().NotBeNull();
+    }
+
+    // H2 — el endpoint de tokens no responde (HttpRequestException del HttpClient del SDK): 503 con code.
+    [Fact]
+    public async Task Endpoint_de_tokens_caido_responde_503_con_code()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ConIdentidadRealAsync(new EndpointTokens(_ => throw new HttpRequestException("sin conexión de prueba")));
+
+        var respuesta = await api.Cliente(TokenContrato(api, "FLIT")).GetAsync(Url, ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable, await respuesta.Content.ReadAsStringAsync(ct));
+        (await respuesta.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("code").GetString().Should().Be("IDENTIDAD_NO_DISPONIBLE");
+    }
+
+    /// <summary>
+    /// API sin base con Identidad configurada y el registro real del SDK (cliente gRPC + <c>ServiceTokenProvider</c>); el
+    /// HttpClient del endpoint de tokens responde con <paramref name="tokens"/>.
+    /// </summary>
+    private static Task<ApiDePrueba> ConIdentidadRealAsync(EndpointTokens tokens) =>
+        ApiDePrueba.SinBaseAsync(configurar: (WebApplicationBuilder b) =>
+        {
+            b.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { [GuardSuscripcionExtensions.IdentidadAddressKey] = Direccion });
+            b.Services.AddHttpClient(Flit.Platform.Sdk.Grpc.ServiceTokenProvider.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => tokens);
+        });
+
+    /// <summary>Doble del endpoint <c>/connect/token</c> de Identidad.</summary>
+    private sealed class EndpointTokens(Func<HttpRequestMessage, HttpResponseMessage> responder) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(responder(request));
+    }
+
     /// <summary>
     /// API sin base con <c>Diagnostico:Identidad:Address</c> configurada y el adaptador real sobre el doble del cliente gRPC
     /// de empresas. El doble se le pasa al adaptador (registro previo, que <c>TryAdd</c> respeta) porque
@@ -152,15 +215,20 @@ public sealed class EmpresasBackofficeTests
 
         public StatusCode? FallaSiempre { get; init; }
 
+        /// <summary>Excepción que no es de transporte (error de programación) con la que falla la llamada.</summary>
+        public Exception? Lanza { get; init; }
+
         public override AsyncUnaryCall<ListarEmpresasConProductoResponse> ListarEmpresasConProductoAsync(ListarEmpresasConProductoRequest request, CallOptions options)
         {
             lock (Productos)
                 Productos.Add(request.Producto);
             var r = new ListarEmpresasConProductoResponse();
             r.Empresas.AddRange(Empresas);
-            var respuesta = FallaSiempre is { } codigo
-                ? Task.FromException<ListarEmpresasConProductoResponse>(new RpcException(new Status(codigo, "falla de prueba")))
-                : Task.FromResult(r);
+            var respuesta = Lanza is not null
+                ? Task.FromException<ListarEmpresasConProductoResponse>(Lanza)
+                : FallaSiempre is { } codigo
+                    ? Task.FromException<ListarEmpresasConProductoResponse>(new RpcException(new Status(codigo, "falla de prueba")))
+                    : Task.FromResult(r);
             return new AsyncUnaryCall<ListarEmpresasConProductoResponse>(respuesta, Task.FromResult(new Metadata()), () => Status.DefaultSuccess, () => [], () => { });
         }
     }
