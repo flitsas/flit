@@ -21,6 +21,12 @@ public sealed record VehiculoMinimo(
     bool TieneRestricciones);
 
 /// <summary>
+/// Licencia de un conductor para un ciudadano anónimo (HU #14040): solo si existe, el estado y si está vigente. Sin nombres,
+/// fechas de nacimiento, dirección, categorías, multas ni sanciones: ni siquiera el nombre enmascarado.
+/// </summary>
+public sealed record ConductorMinimo(bool Existe, string? EstadoLicencia, string? Vigencia);
+
+/// <summary>
 /// Proyección del <see cref="ResultadoConsulta"/> de core-consultas a los DTO del portal. Es una LISTA BLANCA: solo se leen
 /// las claves de campo que el DTO necesita; el resto del resultado (propietario, documento, nombres, SOAT, multas…) no se
 /// toca, no se copia y no se registra. Código puro: sin red ni base, para probarlo con resultados armados a mano.
@@ -74,6 +80,28 @@ public static class ProyeccionMinima
         return new VehiculoMinimo(
             true, placaConsultada ?? Texto(resultado, CampoPlaca), clase, marca, linea, Texto(resultado, CampoModelo), servicio,
             estado?.ToUpperInvariant(), prenda, limitacion, prenda || limitacion);
+    }
+
+    internal const string CampoLicenciaActiva = "person_has_active_license";
+    internal const string CampoLicenciaEstado = "person_license_status";
+
+    public const string Vigente = "vigente";
+    public const string NoVigente = "no_vigente";
+
+    /// <summary>
+    /// Licencia del conductor. «Sin licencia» (<c>existe = false</c>) es la persona que el RUNT no halla o la que no tiene
+    /// ningún registro de licencia: ni estado del conductor ni una licencia activa. Con licencia, la vigencia es
+    /// <c>vigente</c> si hay al menos una licencia activa y <c>no_vigente</c> si no.
+    /// </summary>
+    public static ConductorMinimo Conductor(ResultadoConsulta resultado)
+    {
+        ArgumentNullException.ThrowIfNull(resultado);
+        var estado = Texto(resultado, CampoLicenciaEstado);
+        var activa = string.Equals(Texto(resultado, CampoLicenciaActiva), "true", StringComparison.OrdinalIgnoreCase);
+        if (estado is null && !activa)
+            return new ConductorMinimo(false, null, null);
+
+        return new ConductorMinimo(true, estado?.ToUpperInvariant(), activa ? Vigente : NoVigente);
     }
 
     /// <summary>Prenda o gravamen: cualquier bandera afirmativa del RUNT o al menos una garantía con datos.</summary>

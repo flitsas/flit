@@ -22,16 +22,35 @@ public sealed class ConsultaVehiculoService(IConsultasRunt runt)
     }
 }
 
+/// <summary>
+/// Consulta de conductor del portal (HU #14040): mismo patrón que el vehículo. core-consultas resuelve la caché por TTL
+/// (que solo reutiliza una persona con consentimiento, y el adaptador lo envía) y mide el consumo a nombre de la empresa.
+/// </summary>
+public sealed class ConsultaConductorService(IConsultasRunt runt)
+{
+    /// <exception cref="ProveedorNoDisponibleException">core-consultas no respondió o el proveedor del RUNT estaba caído.</exception>
+    public async Task<ConductorMinimo> ConsultarAsync(DocumentoConsulta documento, string? referencia, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(documento);
+        var resultado = await runt.ConsultarConductorAsync(documento, referencia, ct).ConfigureAwait(false);
+        if (ProyeccionMinima.ProveedorCaido(resultado))
+            throw new ProveedorNoDisponibleException("El proveedor del RUNT no respondió.");
+
+        return ProyeccionMinima.Conductor(resultado);
+    }
+}
+
 /// <summary>Registro de las consultas del portal (una extensión por HU para no pisar <c>Program.cs</c>).</summary>
 public static class ConsultasPortalExtensions
 {
-    /// <summary>HU #14039 (B1): cliente de core-consultas y consulta de vehículo.</summary>
+    /// <summary>HU #14039 y #14040: cliente de core-consultas y consultas de vehículo y de conductor.</summary>
     public static IServiceCollection AddConsultasPortal(this IServiceCollection services, IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
         services.AddConsultasRunt(configuration);
         services.AddScoped<ConsultaVehiculoService>();
+        services.AddScoped<ConsultaConductorService>();
         return services;
     }
 }
