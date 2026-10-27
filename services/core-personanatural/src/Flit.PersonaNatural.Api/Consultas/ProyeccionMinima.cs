@@ -21,6 +21,21 @@ public sealed record VehiculoMinimo(
     bool TieneRestricciones);
 
 /// <summary>
+/// Vehículo para un actor con identidad validada dentro de SU trámite (nivel N2 del diseño §8): el dato mínimo más los
+/// atributos del vehículo que el expediente necesita. Sigue sin traer propietario, documentos, comparendos, SOAT ni valores.
+/// El acreedor prendario es el único dato de un tercero y solo existe aquí (HU #14041, riesgo Habeas Data).
+/// </summary>
+public sealed record VehiculoDetalle(
+    VehiculoMinimo Vehiculo,
+    string? Vin,
+    string? NumeroMotor,
+    string? NumeroSerie,
+    string? Color,
+    string? Combustible,
+    string? Cilindraje,
+    string? Acreedor);
+
+/// <summary>
 /// Licencia de un conductor para un ciudadano anónimo (HU #14040): solo si existe, el estado y si está vigente. Sin nombres,
 /// fechas de nacimiento, dirección, categorías, multas ni sanciones: ni siquiera el nombre enmascarado.
 /// </summary>
@@ -80,6 +95,28 @@ public static class ProyeccionMinima
         return new VehiculoMinimo(
             true, placaConsultada ?? Texto(resultado, CampoPlaca), clase, marca, linea, Texto(resultado, CampoModelo), servicio,
             estado?.ToUpperInvariant(), prenda, limitacion, prenda || limitacion);
+    }
+
+    internal const string CampoVin = "vin";
+    internal const string CampoMotor = "vehicle_engine_number";
+    internal const string CampoSerie = "vehicle_series";
+    internal const string CampoColor = "vehicle_color";
+    internal const string CampoCombustible = "vehicle_fuel";
+    internal const string CampoCilindraje = "vehicle_engine_displacement";
+    internal const string CampoAcreedor = "runt_nombre_acreedor";
+
+    /// <summary>
+    /// Detalle ampliado (N2). Solo se llama con la identidad ya validada: esta proyección no decide quién puede verlo. Si el
+    /// vehículo no existe, no hay detalle: solo el <c>existe = false</c> del dato mínimo.
+    /// </summary>
+    public static VehiculoDetalle Detalle(ResultadoConsulta resultado, string? placaConsultada)
+    {
+        var minimo = Vehiculo(resultado, placaConsultada);
+        return minimo.Existe
+            ? new VehiculoDetalle(
+                minimo, Texto(resultado, CampoVin), Texto(resultado, CampoMotor), Texto(resultado, CampoSerie), Texto(resultado, CampoColor),
+                Texto(resultado, CampoCombustible), Texto(resultado, CampoCilindraje), minimo.TienePrenda ? Texto(resultado, CampoAcreedor) : null)
+            : new VehiculoDetalle(minimo, null, null, null, null, null, null, null);
     }
 
     internal const string CampoLicenciaActiva = "person_has_active_license";
