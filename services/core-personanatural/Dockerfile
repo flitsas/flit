@@ -1,4 +1,4 @@
-# core-personanatural — servicio de plataforma (personanatural, Epic #13316, HU #13340).
+# core-personanatural — BFF del portal Persona Natural (Epic #14021, HU #14038), nacido de la plantilla de servicio (Epic #13316).
 # Build context: services/   +   contexto con nombre «contracts» = contracts/proto
 #   docker build -f services/core-personanatural/Dockerfile --build-context contracts=contracts/proto services
 #
