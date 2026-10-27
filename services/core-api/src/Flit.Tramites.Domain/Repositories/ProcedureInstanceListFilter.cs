@@ -74,6 +74,9 @@ public sealed record ProcedureInstanceListFilter
     /// </summary>
     public string? TipoCodigo { get; init; }
 
+    /// <summary>HU #13664 — solo estas familias (códigos de <c>ProcedureFamilyCodes</c>); <c>null</c> = todas; vacío = ninguna.</summary>
+    public IReadOnlyList<string>? AllowedFamilies { get; init; }
+
     /// <summary>
     /// Condiciones armadas con la gramática de Consultas (HU #12106): campo del catálogo, operador y
     /// valores. Es la vía por la que crece el filtro de aquí en adelante — cada campo nuevo se declara

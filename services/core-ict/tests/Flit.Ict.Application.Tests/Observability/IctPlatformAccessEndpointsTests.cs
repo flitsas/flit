@@ -1,7 +1,5 @@
-using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Headers;
-using System.Security.Claims;
 using Flit.Ict.Api.Authorization;
 using Flit.Ict.Api.Endpoints;
 using Flit.Ict.Domain.Abstractions;
@@ -64,7 +62,11 @@ public sealed class IctPlatformAccessEndpointsTests : IAsyncLifetime
         builder.Services.AddSingleton(Substitute.For<ILogTramiteQuery>());
         builder.Services.AddSingleton(_revelar);
 
+        builder.Configuration["Jwt:PublicKeyPem"] = PlatformTokenTestKit.PublicKeyPem;
+        builder.Services.AddIctPlatformTokenValidation(builder.Configuration, builder.Environment);
+
         _app = builder.Build();
+        _app.UseIctPlatformToken();
         _app.MapIctObservabilityEndpoints();
         _app.MapIctTrazabilidadEndpoints();
         await _app.StartAsync(Ct);
@@ -222,9 +224,9 @@ public sealed class IctPlatformAccessEndpointsTests : IAsyncLifetime
     // ── Contrato de PlatformAccessReader ──────────────────────────────────────────────────────
 
     [Fact]
-    public void Reader_ConIctTrazabilidadRead_SoloAbreTrazabilidad()
+    public async Task Reader_ConIctTrazabilidadRead_SoloAbreTrazabilidad()
     {
-        var access = Read(Token("admin_tramites", TenantId, "ict.trazabilidad.read"));
+        var access = await Read(Token("admin_tramites", TenantId, "ict.trazabilidad.read"));
 
         access.HasIctTrazabilidadAccess.Should().BeTrue();
         access.IsSuperAdmin.Should().BeFalse();
@@ -234,9 +236,9 @@ public sealed class IctPlatformAccessEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public void Reader_ConSuperAdmin_AbreTodo()
+    public async Task Reader_ConSuperAdmin_AbreTodo()
     {
-        var access = Read(Token("SuperAdmin", null));
+        var access = await Read(Token("SuperAdmin", null));
 
         access.IsSuperAdmin.Should().BeTrue();
         access.HasIctTrazabilidadAccess.Should().BeTrue();
@@ -262,31 +264,16 @@ public sealed class IctPlatformAccessEndpointsTests : IAsyncLifetime
         return client;
     }
 
-    private static PlatformAccess Read(string token)
+    private async Task<PlatformAccess> Read(string token)
     {
-        var context = new DefaultHttpContext();
+        using var scope = _app!.Services.CreateScope();
+        var context = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
         context.Request.Headers.Authorization = $"Bearer {token}";
+        await PlatformTokenAuthentication.AuthenticateAsync(context);
         return PlatformAccessReader.Read(context);
     }
 
-    /// <summary>JWT de plataforma sin firmar: core-ict solo lo decodifica (el Gateway ya aplicó JwtRequired).</summary>
-    private static string Token(string role, Guid? tenantId, params string[] permissions)
-    {
-        var claims = new List<Claim>
-        {
-            new("sub", "11111111-1111-1111-1111-111111111111"),
-            new("role", role),
-            new("role_code", role),
-        };
-        if (tenantId is { } tenant)
-        {
-            claims.Add(new Claim("tenant_id", tenant.ToString()));
-        }
-
-        claims.AddRange(permissions.Select(p => new Claim("permissions", p)));
-
-        return new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(
-            claims: claims,
-            expires: DateTime.UtcNow.AddHours(1)));
-    }
+    /// <summary>JWT de plataforma firmado con la llave de pruebas (core-ict valida firma, emisor, audiencia y vencimiento).</summary>
+    private static string Token(string role, Guid? tenantId, params string[] permissions) =>
+        PlatformTokenTestKit.Sign(role, tenantId, permissions);
 }

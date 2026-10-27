@@ -8,7 +8,11 @@ namespace Flit.Analytics.Application.Queries;
 /// nulos o vacíos = sin filtro.
 /// </summary>
 public sealed record GetProcedureDetailsQuery(
-    Guid TenantId, DateOnly From, DateOnly To, string? Category, string? Status, int Page, int PageSize);
+    Guid TenantId, DateOnly From, DateOnly To, string? Category, string? Status, int Page, int PageSize)
+{
+    /// <summary>HU #13664 — Ver por familia: códigos visibles (<c>ProcedureFamilyCodes</c>); <c>null</c> = sin restricción.</summary>
+    public IReadOnlyList<string>? AllowedFamilies { get; init; }
+}
 
 /// <summary>
 /// Valida el rango, acota la paginación y delega la consulta. Error <c>invalid_range</c> cuando
@@ -31,7 +35,7 @@ public sealed class GetProcedureDetailsHandler(IAnalyticsReadRepository repo)
         var status = Normalize(query.Status);
 
         var result = await repo.GetProcedureDetailsAsync(
-            query.TenantId, query.From, query.To, category, status, page, pageSize, ct);
+            query.TenantId, query.From, query.To, category, status, page, pageSize, query.AllowedFamilies, ct);
         return (result, null);
     }
 

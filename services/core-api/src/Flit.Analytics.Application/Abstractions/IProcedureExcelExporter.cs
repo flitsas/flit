@@ -2,7 +2,11 @@ namespace Flit.Analytics.Application.Abstractions;
 
 /// <summary>Filtro normalizado para el export de detalle de trámites (HU #10245).</summary>
 public sealed record ProcedureExportFilter(
-    Guid TenantId, DateOnly From, DateOnly To, string? Category, string? Status);
+    Guid TenantId, DateOnly From, DateOnly To, string? Category, string? Status)
+{
+    /// <summary>HU #13664 — Ver por familia: códigos visibles (<c>ProcedureFamilyCodes</c>); <c>null</c> = sin restricción.</summary>
+    public IReadOnlyList<string>? AllowedFamilies { get; init; }
+}
 
 /// <summary>
 /// Genera el Excel (.xlsx) del detalle de trámites escribiéndolo de forma incremental

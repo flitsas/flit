@@ -57,6 +57,7 @@ internal sealed class ProcedureExcelExporter : IProcedureExcelExporter
                             WriteRow(writer, ToCells(row));
                             return Task.CompletedTask;
                         },
+                        filter.AllowedFamilies, // HU #13664 — Ver por familia
                         ct).ConfigureAwait(false);
 
                     writer.WriteEndElement(); // SheetData

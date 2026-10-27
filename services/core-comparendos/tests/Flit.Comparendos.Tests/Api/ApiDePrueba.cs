@@ -210,7 +210,7 @@ public sealed class EmpresasDePrueba : Flit.Comparendos.Api.Plataforma.IEmpresas
 
     public bool Caida { get; set; }
 
-    public void Agregar(Guid id, string nombre, string? nit = null) => _empresas[id] = new(id, nombre, nit);
+    public void Agregar(Guid id, string nombre, string? nit = null, Flit.Comparendos.Domain.Modelo.CanalCorreo? canal = null) => _empresas[id] = new(id, nombre, nit, canal);
 
     public Task<IReadOnlyList<Flit.Comparendos.Api.Plataforma.EmpresaPlataforma>?> ListarAsync(CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<Flit.Comparendos.Api.Plataforma.EmpresaPlataforma>?>(Caida ? null : [.. _empresas.Values]);

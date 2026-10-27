@@ -6,6 +6,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { rowActionNames } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 import { Usuarios } from "../Usuarios";
 import { getUsers, restoreUser } from "@/lib/api/security";
 import type { TenantUser } from "@/lib/api/security";
@@ -178,14 +179,11 @@ describe("Usuarios — pestaña Eliminados (#10624, SuperAdmin)", () => {
     vi.mocked(getUsers).mockImplementation(async (onlyDeleted?: boolean) =>
       onlyDeleted ? [deletedUser] : [activeUser],
     );
+    const user = userEvent.setup();
     render(<Usuarios />);
     await screen.findByText("Carlos Ruiz");
-    expect(
-      screen.getByRole("button", { name: /eliminar usuario carlos ruiz/i }),
-    ).toBeInTheDocument();
+    expect(await rowActionNames(user, "Carlos Ruiz")).toContainEqual(expect.stringMatching(/eliminar usuario carlos ruiz/i));
     // Y también las acciones de bloqueo (suspender / desactivar), exclusivas de SuperAdmin.
-    expect(
-      screen.getByRole("button", { name: /suspender temporalmente a carlos ruiz/i }),
-    ).toBeInTheDocument();
+    expect(await rowActionNames(user, "Carlos Ruiz")).toContainEqual(expect.stringMatching(/suspender temporalmente a carlos ruiz/i));
   });
 });

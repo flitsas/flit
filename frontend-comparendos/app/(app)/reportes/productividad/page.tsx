@@ -77,7 +77,7 @@ function Contenido() {
     <section className="flex flex-col gap-6">
       <Encabezado
         titulo="Productividad"
-        descripcion="Acciones hechas por cada usuario en el periodo. Lo automático (API, scheduler, favorable automático) no se atribuye a nadie. Haz clic en una cifra para ver sus comparendos."
+        descripcion="Acciones hechas por cada usuario en el periodo. Lo automático (consultas, envíos programados y favorables automáticos) no se atribuye a nadie. Haz clic en una cifra para ver sus comparendos."
         acciones={
           <button type="button" className={controlCls(false)} onClick={exportar} disabled={filas.length === 0}>
             <Download className="h-3.5 w-3.5" aria-hidden />

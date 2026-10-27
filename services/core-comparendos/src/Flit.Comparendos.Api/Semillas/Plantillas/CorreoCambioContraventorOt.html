@@ -1,6 +1,9 @@
 <!-- nombre: Correo de la solicitud de cambio de contraventor al OT -->
 <!-- asunto: Solicitud de cambio de contraventor — comparendo {{comparendo.numero}} -->
-<p>Señores {{ot.nombre}}:</p>
-<p>Adjunto encontrarán la solicitud de cambio de contraventor del comparendo <b>{{comparendo.numero}}</b> (placa {{comparendo.placa}}) presentada por {{peticionario.nombre}}, con la cédula y la licencia del conductor y el certificado de representación de la empresa.</p>
-<p>Agradecemos su respuesta al correo {{empresa.correo_respuesta}}.</p>
-<p>Atentamente,<br>{{rl.nombres}}<br>{{rl.cargo}} — {{peticionario.nombre}}</p>
+<h1 style="margin:4px 0 18px;text-align:center;color:#2F6FED;font-size:19px;letter-spacing:0.02em">SOLICITUD DE CAMBIO DE CONTRAVENTOR</h1>
+<p style="margin:0 0 12px">Señores <strong>{{ot.nombre}}</strong>:</p>
+<p style="margin:0 0 12px">La empresa <strong>{{peticionario.nombre}}</strong> solicita el cambio de contraventor del siguiente comparendo:</p>
+<p style="margin:0 0 12px"><strong style="color:#2F6FED">Número de comparendo:</strong> {{comparendo.numero}}<br><strong style="color:#2F6FED">Placa del vehículo:</strong> {{comparendo.placa}}<br><strong style="color:#2F6FED">Fecha de envío:</strong> {{hoy}}</p>
+<p style="margin:0 0 12px"><strong style="color:#2F6FED">Conductor:</strong> {{conductor.nombres}}<br><strong style="color:#2F6FED">Tipo de documento:</strong> {{conductor.tipo_documento}}<br><strong style="color:#2F6FED">Número de documento:</strong> {{conductor.numero_documento}}</p>
+<p style="margin:0 0 12px">Adjuntamos el formato de cambio de contraventor, la cédula y la licencia del conductor y el certificado de representación y el poder de la empresa.{{#si empresa.correo_respuesta}} Agradecemos su respuesta al correo {{empresa.correo_respuesta}}.{{/si}}</p>
+<p style="margin:0 0 12px">Atentamente,<br>{{rl.nombres}}<br>{{rl.cargo}} — {{peticionario.nombre}}</p>

@@ -56,6 +56,8 @@ const mocks = vi.hoisted(() => ({
   adminCambiarEstado: vi.fn(),
   adminAnular: vi.fn(),
   adminReenviarValidacionIdentidad: vi.fn(),
+  adminReenviarValidacionesLote: vi.fn(),
+  adminListValidacionesReenviables: vi.fn(),
   adminReasignarGestor: vi.fn(),
   adminListGestoresDisponibles: vi.fn(),
 }));
@@ -72,6 +74,7 @@ const ESCRITURAS = [
   'adminCambiarEstado',
   'adminAnular',
   'adminReenviarValidacionIdentidad',
+  'adminReenviarValidacionesLote',
   'adminReasignarGestor',
 ] as const;
 

@@ -3,6 +3,11 @@
 import { ActionsMenu } from "@/components/atom/ActionsMenu";
 import type { RowAction } from "@/components/atom/RowActions";
 
+/** Ordena las acciones dejando al final las destructivas (tono `danger`), sin cambiar el orden dentro de cada grupo. */
+export function destructivasAlFinal(actions: RowAction[]): RowAction[] {
+  return [...actions.filter((a) => a.tone !== "danger"), ...actions.filter((a) => a.tone === "danger")];
+}
+
 /**
  * Acciones de una fila en UN solo botón «Acciones» con menú, como en el resto de los módulos (bandeja de
  * trámites, organismos…). Recibe las mismas acciones que <c>RowActions</c>; el texto visible de cada ítem es la

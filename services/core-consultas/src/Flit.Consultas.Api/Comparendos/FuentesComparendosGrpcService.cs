@@ -67,5 +67,15 @@ internal sealed class FuentesComparendosGrpcService(IEnumerable<IProveedorCompar
             }, false));
     }
 
+    /// <summary>HU #13843: solo el inicio de sesión con la API de contratos; nunca consulta una placa.</summary>
+    public override Task<ProbarContratoConductorResponse> ProbarContratoConductor(ProbarContratoConductorRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(context);
+        if (request.Proveedor != ProveedorContratosRenting.ClaveProveedor)
+            throw new RpcException(new Status(StatusCode.FailedPrecondition, $"Proveedor de contratos desconocido: «{request.Proveedor}»."));
+        return contratos.ProbarAsync(context.CancellationToken);
+    }
+
     private static RpcException Invalido(string mensaje) => new(new Status(StatusCode.InvalidArgument, mensaje));
 }

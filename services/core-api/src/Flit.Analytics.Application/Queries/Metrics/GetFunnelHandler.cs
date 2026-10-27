@@ -15,7 +15,11 @@ public sealed record GetFunnelQuery(
     Guid? OperatorUserId = null,
     string? Status = null,
     string? Reason = null,
-    string? CompareWith = null);
+    string? CompareWith = null)
+{
+    /// <summary>HU #13664 — Ver por familia: códigos visibles (<c>ProcedureFamilyCodes</c>); <c>null</c> = sin restricción.</summary>
+    public IReadOnlyList<string>? AllowedFamilies { get; init; }
+}
 
 /// <summary>
 /// Compone el funnel operacional (<see cref="IAnalyticsMetricsReadRepository"/>) con los pasos del
@@ -37,7 +41,8 @@ public sealed class GetFunnelHandler(
         var filter = new MetricsFilter(
             query.TenantId, query.From, query.To,
             query.TransitOfficeId, query.ProcedureTypeId, query.OperatorUserId,
-            query.Status, query.Reason);
+            query.Status, query.Reason)
+        { AllowedFamilies = query.AllowedFamilies };
 
         var current = await BuildAsync(filter, ct);
 

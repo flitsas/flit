@@ -36,6 +36,10 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
         + "ELSE 'otros' "
         + "END";
 
+    // HU #13664 — Ver por familia (ver AnalyticsFamilyFilter): alias locales para el barrido de interpolación SQL.
+    private const string FamilyByType = AnalyticsFamilyFilter.ByType;
+    private const string FamilyByHistory = AnalyticsFamilyFilter.ByHistory;
+
     // ── Overview ────────────────────────────────────────────────────────────────────────────────────
     // Consulta directa sobre tramites.procedure_instances (fuente de verdad) en lugar de las
     // tablas pre-agregadas analytics.* — éstas solo se poblaban mediante refresh_procedure_aggregates
@@ -54,6 +58,7 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
           AND pi.deleted_at IS NULL
           AND (@from::date IS NULL OR pi.created_at::date >= @from::date)
           AND (@to::date   IS NULL OR pi.created_at::date <= @to::date)
+          AND {FamilyByType}
         GROUP BY 1, pi.status
         ORDER BY 1, pi.status;
         """;
@@ -68,6 +73,7 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
         WHERE pi.deleted_at IS NULL
           AND (@from::date IS NULL OR pi.created_at::date >= @from::date)
           AND (@to::date   IS NULL OR pi.created_at::date <= @to::date)
+          AND {FamilyByType}
         GROUP BY 1, pi.status
         ORDER BY 1, pi.status;
         """;
@@ -80,7 +86,7 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
     // En vivo desde status_history (misma semántica que el extinto refresh, vocabulario N 03: submitted =
     // entregado; approved = aprobado; rejected = rechazado|anulado). El HAVING preserva el contrato previo
     // (solo usuarios con al menos una radicación en el rango). Requiere changed_by poblado (HU #10431).
-    private const string TopProducersSql = """
+    private const string TopProducersSql = $"""
         SELECT h.changed_by AS user_id, u.display_name,
                count(*) FILTER (WHERE h.to_status = 'entregado')::int                      AS submitted,
                count(*) FILTER (WHERE h.to_status = 'aprobado')::int     AS approved,
@@ -90,13 +96,14 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
         WHERE h.tenant_id = @tenant
           AND h.changed_by IS NOT NULL
           AND h.changed_at::date BETWEEN @from AND @to
+          AND {FamilyByHistory}
         GROUP BY h.changed_by, u.display_name
         HAVING count(*) FILTER (WHERE h.to_status = 'entregado') > 0
         ORDER BY count(*) FILTER (WHERE h.to_status = 'entregado') DESC, u.display_name ASC
         LIMIT @limit;
         """;
 
-    private const string TopProducersGlobalSql = """
+    private const string TopProducersGlobalSql = $"""
         SELECT h.changed_by AS user_id, u.display_name,
                count(*) FILTER (WHERE h.to_status = 'entregado')::int                      AS submitted,
                count(*) FILTER (WHERE h.to_status = 'aprobado')::int     AS approved,
@@ -105,6 +112,7 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
         JOIN identity.users u ON u.id = h.changed_by
         WHERE h.changed_by IS NOT NULL
           AND h.changed_at::date BETWEEN @from AND @to
+          AND {FamilyByHistory}
         GROUP BY h.changed_by, u.display_name
         HAVING count(*) FILTER (WHERE h.to_status = 'entregado') > 0
         ORDER BY count(*) FILTER (WHERE h.to_status = 'entregado') DESC, u.display_name ASC
@@ -125,6 +133,7 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
         WHERE pi.tenant_id = @tenant
           AND pi.deleted_at IS NULL
           AND pi.created_at::date BETWEEN @from AND @to
+          AND {FamilyByType}
         GROUP BY 1, 2, 3
         ORDER BY 1, 2, 3;
         """;
@@ -138,6 +147,7 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
         JOIN tramites.procedure_types pt ON pt.id = pi.procedure_type_id
         WHERE pi.deleted_at IS NULL
           AND pi.created_at::date BETWEEN @from AND @to
+          AND {FamilyByType}
         GROUP BY 1, 2, 3
         ORDER BY 1, 2, 3;
         """;
@@ -160,6 +170,7 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
             WHERE pi.tenant_id = @tenant
               AND pi.deleted_at IS NULL
               AND pi.created_at::date BETWEEN @from AND @to
+              AND {FamilyByType}
         )
         """;
 
@@ -179,7 +190,8 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
     // ── IAnalyticsReadRepository ──────────────────────────────────────────────────────────────────────
 
     public async Task<IReadOnlyList<CategoryMetricsDto>> GetOverviewAsync(
-        Guid? tenantId, DateOnly? fromDate, DateOnly? toDate, CancellationToken ct = default)
+        Guid? tenantId, DateOnly? fromDate, DateOnly? toDate,
+        IReadOnlyList<string>? allowedFamilies = null, CancellationToken ct = default)
     {
         if (tenantId.HasValue)
         {
@@ -189,6 +201,7 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
                 AddParam(cmd, "tenant", tenantId.Value);
                 AddDateParam(cmd, "from", fromDate);
                 AddDateParam(cmd, "to", toDate);
+                AnalyticsFamilyFilter.AddParam(cmd, allowedFamilies);
                 return await ReadCategoryMetricsAsync(cmd, ct).ConfigureAwait(false);
             }, ct).ConfigureAwait(false);
         }
@@ -198,11 +211,13 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
         await using var globalCmd = CreateCommand(conn, null!, OverviewGlobalSql);
         AddDateParam(globalCmd, "from", fromDate);
         AddDateParam(globalCmd, "to", toDate);
+        AnalyticsFamilyFilter.AddParam(globalCmd, allowedFamilies);
         return await ReadCategoryMetricsAsync(globalCmd, ct).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<TopProducerDto>> GetTopProducersAsync(
-        Guid? tenantId, DateOnly fromDate, DateOnly toDate, int limit, CancellationToken ct = default)
+        Guid? tenantId, DateOnly fromDate, DateOnly toDate, int limit,
+        IReadOnlyList<string>? allowedFamilies = null, CancellationToken ct = default)
     {
         if (tenantId.HasValue)
         {
@@ -213,6 +228,7 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
                 AddParam(cmd, "from", fromDate);
                 AddParam(cmd, "to", toDate);
                 AddParam(cmd, "limit", limit);
+                AnalyticsFamilyFilter.AddParam(cmd, allowedFamilies);
                 return await ReadTopProducersAsync(cmd, ct).ConfigureAwait(false);
             }, ct).ConfigureAwait(false);
         }
@@ -223,12 +239,14 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
         AddParam(globalCmd, "from", fromDate);
         AddParam(globalCmd, "to", toDate);
         AddParam(globalCmd, "limit", limit);
+        AnalyticsFamilyFilter.AddParam(globalCmd, allowedFamilies);
         return await ReadTopProducersAsync(globalCmd, ct).ConfigureAwait(false);
     }
 
     public Task<ProcedureDetailsPageDto> GetProcedureDetailsAsync(
         Guid tenantId, DateOnly fromDate, DateOnly toDate,
-        string? category, string? status, int page, int pageSize, CancellationToken ct = default) =>
+        string? category, string? status, int page, int pageSize,
+        IReadOnlyList<string>? allowedFamilies = null, CancellationToken ct = default) =>
         ExecuteWithTenantAsync(tenantId, async (conn, tx) =>
         {
             // 1) Total del universo filtrado.
@@ -238,6 +256,7 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
             AddParam(countCmd, "to", toDate);
             AddParam(countCmd, "category", (object?)category ?? DBNull.Value);
             AddParam(countCmd, "status", (object?)status ?? DBNull.Value);
+            AnalyticsFamilyFilter.AddParam(countCmd, allowedFamilies);
             var total = Convert.ToInt32(await countCmd.ExecuteScalarAsync(ct).ConfigureAwait(false));
 
             // 2) Página solicitada (más recientes primero). Desempate por id (PK única): ORDER BY
@@ -253,6 +272,7 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
             AddParam(pageCmd, "to", toDate);
             AddParam(pageCmd, "category", (object?)category ?? DBNull.Value);
             AddParam(pageCmd, "status", (object?)status ?? DBNull.Value);
+            AnalyticsFamilyFilter.AddParam(pageCmd, allowedFamilies);
             AddParam(pageCmd, "pageSize", pageSize);
             AddParam(pageCmd, "offset", (page - 1) * pageSize);
 
@@ -276,7 +296,8 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
 
     public async Task ExportProcedureDetailsAsync(
         Guid tenantId, DateOnly fromDate, DateOnly toDate, string? category, string? status,
-        Func<ProcedureDetailDto, CancellationToken, Task> onRowAsync, CancellationToken ct = default)
+        Func<ProcedureDetailDto, CancellationToken, Task> onRowAsync,
+        IReadOnlyList<string>? allowedFamilies = null, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(onRowAsync);
         await ExecuteWithTenantAsync(tenantId, async (conn, tx) =>
@@ -291,6 +312,7 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
             AddParam(cmd, "to", toDate);
             AddParam(cmd, "category", (object?)category ?? DBNull.Value);
             AddParam(cmd, "status", (object?)status ?? DBNull.Value);
+            AnalyticsFamilyFilter.AddParam(cmd, allowedFamilies);
 
             await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
             while (await reader.ReadAsync(ct).ConfigureAwait(false))
@@ -308,7 +330,8 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
     }
 
     public async Task<IReadOnlyList<MonthlyTrendPointDto>> GetMonthlyTrendAsync(
-        Guid? tenantId, DateOnly fromDate, DateOnly toDate, CancellationToken ct = default)
+        Guid? tenantId, DateOnly fromDate, DateOnly toDate,
+        IReadOnlyList<string>? allowedFamilies = null, CancellationToken ct = default)
     {
         if (tenantId.HasValue)
         {
@@ -318,6 +341,7 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
                 AddParam(cmd, "tenant", tenantId.Value);
                 AddParam(cmd, "from", fromDate);
                 AddParam(cmd, "to", toDate);
+                AnalyticsFamilyFilter.AddParam(cmd, allowedFamilies);
                 return await ReadMonthlyTrendAsync(cmd, ct).ConfigureAwait(false);
             }, ct).ConfigureAwait(false);
         }
@@ -327,6 +351,7 @@ internal sealed class AnalyticsReadRepository : IAnalyticsReadRepository
         await using var globalCmd = CreateCommand(conn, null!, MonthlyTrendGlobalSql);
         AddParam(globalCmd, "from", fromDate);
         AddParam(globalCmd, "to", toDate);
+        AnalyticsFamilyFilter.AddParam(globalCmd, allowedFamilies);
         return await ReadMonthlyTrendAsync(globalCmd, ct).ConfigureAwait(false);
     }
 

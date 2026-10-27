@@ -214,8 +214,8 @@ public sealed class RunPreflightHandler(
             }
             else
             {
-                await RunSimitAsync(registry, checks, providersUsed, "simit_comprador", "SIMIT comprador", comprador, tenantOverride, ct);
-                await RunSimitAsync(registry, checks, providersUsed, "simit_vendedor", "SIMIT vendedor", vendedor, tenantOverride, ct);
+                await RunSimitAsync(registry, checks, providersUsed, "simit_comprador", "SIMIT comprador", comprador, instance.Id, tenantId, tenantOverride, ct);
+                await RunSimitAsync(registry, checks, providersUsed, "simit_vendedor", "SIMIT vendedor", vendedor, instance.Id, tenantId, tenantOverride, ct);
             }
         }
         else if (modalidad == ProcedureFamily.Otros)
@@ -236,7 +236,7 @@ public sealed class RunPreflightHandler(
             }
             else
             {
-                await RunSimitAsync(registry, checks, providersUsed, "simit_comprador", "SIMIT propietario", comprador, tenantOverride, ct);
+                await RunSimitAsync(registry, checks, providersUsed, "simit_comprador", "SIMIT propietario", comprador, instance.Id, tenantId, tenantOverride, ct);
             }
         }
         else
@@ -821,6 +821,8 @@ public sealed class RunPreflightHandler(
         string fallbackKey,
         string fallbackLabel,
         ActorRef? actor,
+        Guid instanceId,
+        Guid tenantId,
         ConsultationTenantOverride? tenantOverride,
         CancellationToken ct)
     {
@@ -852,7 +854,10 @@ public sealed class RunPreflightHandler(
             ["owner_document_number"] = actor.DocumentNumber,
         };
 
-        await RunProviderAsync(checks, provider, fv, ct, keyPrefix: fallbackKey);
+        // Tras HU #13348 SIMIT va a core-consultas por gRPC y exige x-flit-tenant-id: el TenantId del
+        // contexto NO puede ser Guid.Empty (si no, Consultas responde InvalidArgument y el check
+        // queda como «Consulta no disponible»). Misma regla que RunVehiculoAsync.
+        await RunProviderAsync(checks, provider, instanceId, tenantId, fv, ct, keyPrefix: fallbackKey);
     }
 
     // RNMC aplica solo a personas naturales. Usa PersonType (HU #10542) y, si no está seteado,
@@ -872,13 +877,15 @@ public sealed class RunPreflightHandler(
     private static async Task<IReadOnlyList<HydratedField>> RunProviderAsync(
         List<PreflightCheckDto> checks,
         IConsultationProvider provider,
+        Guid instanceId,
+        Guid tenantId,
         IReadOnlyDictionary<string, string?> fieldValues,
         CancellationToken ct,
         string? keyPrefix = null)
     {
         try
         {
-            var ctx = new ConsultationContext(Guid.Empty, Guid.Empty, provider.Key, fieldValues);
+            var ctx = new ConsultationContext(instanceId, tenantId, provider.Key, fieldValues);
             var result = await provider.ConsultAsync(ctx, ct);
             foreach (var c in result.Checks)
             {

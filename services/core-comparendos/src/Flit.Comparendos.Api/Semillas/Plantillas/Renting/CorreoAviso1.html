@@ -1,0 +1,32 @@
+<!-- nombre: Aviso 1 al conductor (Renting) -->
+<!-- asunto: Información sobre la fotomulta N° {{comparendo.numero}} asociada al vehículo con placa {{comparendo.placa}} -->
+<p style="margin:0 0 12px">Hola, <strong>{{conductor.nombres}}</strong>. Es un gusto saludarte.</p>
+<p style="margin:0 0 12px">Hemos identificado una fotomulta asociada a un vehículo rentado con <strong>Renting Colombia</strong>.</p>
+<p style="margin:25px 0 10px;font-weight:bold">Detalle Comparendo:</p>
+<ul style="margin:10px 0 20px 20px;padding:0">
+<li style="margin-bottom:6px"><strong>Número de comparendo:</strong> {{comparendo.numero}}</li>
+<li style="margin-bottom:6px"><strong>Placa:</strong> {{comparendo.placa}}</li>
+<li style="margin-bottom:6px"><strong>Fecha de infracción:</strong> {{comparendo.fecha_imposicion}}</li>
+<li style="margin-bottom:6px"><strong>Código infracción:</strong> {{comparendo.codigo_infraccion}} {{comparendo.descripcion_infraccion}}.</li>
+<li style="margin-bottom:6px"><strong>Organismo de tránsito:</strong> {{ot.nombre}}</li>
+</ul>
+<p style="margin:25px 0 10px;font-weight:bold">Información del Infractor:</p>
+<ul style="margin:10px 0 20px 20px;padding:0">
+<li style="margin-bottom:6px"><strong>Tipo de documento:</strong> {{conductor.tipo_documento}}</li>
+<li style="margin-bottom:6px"><strong>Número de documento:</strong> {{conductor.numero_documento}}</li>
+<li style="margin-bottom:6px"><strong>Cliente:</strong> {{conductor.nombres}}</li>
+</ul>
+<p style="margin:25px 0 10px;font-weight:bold">Lo que debes saber:</p>
+<p style="margin:0 0 12px">{{#si comparendo.tiene_notificacion}}El organismo de tránsito notificó la fotomulta el {{comparendo.fecha_notificacion}}. Es posible consultarla aquí:{{#sino}}Hasta el momento, no contamos con un aviso oficial del tránsito ni soporte formal para la fotomulta. Sin embargo, es posible consultarla aquí:{{/si}} <strong><a href="https://www.fcm.org.co/simit" target="_blank">Simit | Federación Colombiana de Municipios</a></strong> o en el sitio web del organismo de tránsito de la ciudad donde fue impuesta.</p>
+{{#si descuento.porcentaje == "50"}}<p style="margin:0 0 12px">Hoy puedes pagarla con el 50% de descuento haciendo el cambio de contraventor y el curso dentro de los primeros 11 días hábiles, hasta el {{descuento.fecha_fin_50}}. Si se te pasa ese plazo, puedes acceder al 25% haciendo el curso dentro de los primeros 20 días hábiles, hasta el {{descuento.fecha_fin_25}}.</p>{{/si}}
+{{#si descuento.porcentaje == "25"}}<p style="margin:0 0 12px">Hoy puedes pagarla con el 25% de descuento haciendo el cambio de contraventor en los primeros 11 días hábiles y el curso dentro de los primeros 20 días hábiles, hasta el {{descuento.fecha_fin_25}}.</p>{{/si}}
+{{#si descuento.porcentaje == "0"}}<p style="margin:0 0 12px">Los plazos de descuento ya terminaron; el valor a pagar es el 100%.</p>{{/si}}
+<p style="margin:25px 0 10px;font-weight:bold">Para tu conocimiento:</p>
+<p style="margin:0 0 12px">Este será el proceso de información sobre la fotomulta:</p>
+<ol style="margin:10px 0 20px 20px;padding:0">
+<li style="margin-bottom:6px"><strong>Aviso Inicial:</strong> Te informamos la fotomulta apenas la identificamos, para que puedas aprovechar los descuentos. Con el presente comunicado queremos informarte oportunamente sobre esta situación, con el fin de que puedas tomar las medidas necesarias para subsanar la infracción directamente ante la autoridad de tránsito.<br><br>Adjunto encontrarás los documentos que el conductor debe diligenciar y presentar ante el Organismo de Tránsito para gestionar el cambio de contraventor.</li>
+<li style="margin-bottom:6px"><strong>Segundo Aviso:</strong> Si al terminar el plazo del 50% no hemos recibido confirmación, te recordaremos el descuento que aún queda.</li>
+<li style="margin-bottom:6px"><strong>Recordatorio de pago:</strong> Si no recibimos confirmación de pago dentro del plazo o si el descuento expira, Renting Colombia o Localiza realizará el pago total de la fotomulta. Este valor se reflejará en tu próxima factura o se gestionará según nuestros procesos.</li>
+</ol>
+<p style="margin:0 0 12px;font-size:13px;color:#555555">Si tienes alguna pregunta, por favor escríbenos al correo <strong><a href="mailto:tramitesvehiculos@rentingcolombia.com">tramitesvehiculos@rentingcolombia.com</a></strong></p>
+<p style="margin:0 0 12px;font-size:13px;color:#555555">¡Hasta pronto!</p>

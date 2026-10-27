@@ -18,7 +18,11 @@ public sealed record MetricsFilter(
     Guid? OperatorUserId = null,
     string? Status = null,
     string? Reason = null,
-    int StuckDays = 7);
+    int StuckDays = 7)
+{
+    /// <summary>HU #13664 — Ver por familia: códigos visibles (<c>ProcedureFamilyCodes</c>); <c>null</c> = sin restricción.</summary>
+    public IReadOnlyList<string>? AllowedFamilies { get; init; }
+}
 
 /// <summary>Ventana de comparación aplicada (<c>previous_period</c> | <c>previous_year</c>).</summary>
 public sealed record ComparisonInfoDto(string Mode, DateOnly From, DateOnly To);

@@ -144,6 +144,50 @@ internal sealed class ProveedorContratosRenting(IHttpClientFactory http, Renting
         }
     }
 
+    /// <summary>
+    /// HU #13843: prueba la conexión con un inicio de sesión nuevo (descarta el token guardado). No consulta ninguna placa:
+    /// no toca datos personales.
+    /// </summary>
+    public async Task<ProbarContratoConductorResponse> ProbarAsync(CancellationToken ct)
+    {
+        var r = new ProbarContratoConductorResponse { Proveedor = ClaveProveedor, ContactoDesviado = !opciones.ContactoReal };
+        if (!opciones.ContactoReal && opciones.CorreoDesvio is { } desvio)
+            r.CorreoDesvio = desvio;
+        if (NoConectado is { } motivo)
+        {
+            r.Motivo = motivo;
+            return r;
+        }
+
+        r.Configurado = true;
+        var reloj = Stopwatch.StartNew();
+        try
+        {
+            _token = null;
+            await TokenAsync(ct).ConfigureAwait(false);
+            r.Conectado = true;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (TaskCanceledException)
+        {
+            r.Motivo = "Renting no respondió a tiempo.";
+        }
+        catch (HttpRequestException)
+        {
+            r.Motivo = "Error de red o de certificado con la API de Renting.";
+        }
+        catch (ErrorLoginRenting ex)
+        {
+            (r.Motivo, r.HttpStatus) = (ex.Message, ex.Codigo);
+        }
+
+        r.DuracionMs = (int)reloj.ElapsedMilliseconds;
+        return r;
+    }
+
     private Task<HttpResponseMessage> PedirAsync(string token, string placa, DateOnly fecha, CancellationToken ct)
     {
         // Mediodía UTC: la fecha del comparendo no cambia de día en ningún huso de Colombia.

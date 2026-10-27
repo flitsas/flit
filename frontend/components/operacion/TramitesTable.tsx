@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatFechaHora } from '@/lib/format/date';
 import { useRouter } from 'next/navigation';
 import {
@@ -32,6 +32,7 @@ import { useMostrarLoteDescarga } from '@/components/shared/LoteDescargaTracker'
 import type { LoteConsolidados, TipoDocumentoLote } from '@/lib/api/types-consolidado-lotes';
 import { consolidadoLotesClient } from '@/lib/api/consolidado-lotes-client';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useFamilyAccess } from '@/hooks/useFamilyAccess';
 import {
   ETIQUETA_CLIENTE_HIJO,
   ETIQUETA_CLIENTE_PROPIO,
@@ -111,6 +112,7 @@ import {
   TABLA_ROW_HOVER_CLS,
 } from '@/components/atom/table-styles';
 import { PageNav } from '@/components/atom/PageNav';
+import { TAMANOS_DE_PAGINA, useTamanoDePagina } from '@/components/atom/usePaginacion';
 import { Modal } from '@/components/atom/Modal';
 import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
 import { ColumnSelector } from '@/components/atom/ColumnSelector';
@@ -284,7 +286,7 @@ function IdentidadChip({ chip, ayuda, tipId }: { chip: Chip; ayuda: string; tipI
         <span
           id={tipId}
           role="tooltip"
-          className="absolute left-0 top-full z-30 mt-1.5 w-64 rounded-xl border bg-white p-2.5 text-left text-xs leading-snug text-flit-primary shadow-lg dark:bg-[#162744] dark:text-white/90"
+          className="absolute left-0 top-full z-30 mt-1.5 w-64 rounded-xl border bg-white p-2.5 text-left text-xs leading-snug text-flit-primary shadow-lg dark:bg-flit-primary dark:text-white/90"
           style={{ borderColor: '#DFE5ED' }}
         >
           {ayuda}
@@ -307,47 +309,12 @@ function shortDate(iso: string): string {
 // construcción sin importar cuántas columnas se oculten.
 
 /**
- * HU #12188 — tamaños de página que ofrece el selector, y el de arranque.
- *
- * <p>Hasta esta HU la tabla hacía UNA llamada de 200 filas y paginaba en memoria. Con 5.000
- * trámites llegaban 200 y punto: cambiar de página no volvía a pedir nada, y la búsqueda filtraba
- * sobre esas 200 —devolviendo «sin resultados» para trámites que sí existen— mientras los
- * contadores de estado, que sí salían del servidor, reportaban el universo completo. La pantalla
- * se contradecía sola.</p>
- *
- * <p>El tope de 100 no es una preferencia: es el techo que admite el endpoint por página razonable.
- * Pedir más no acerca a nadie a su trámite —para eso están los filtros y la búsqueda— y sí alarga
- * cada carga.</p>
+ * HU #12188 — la tabla pagina contra el servidor: antes hacía UNA llamada de 200 filas y paginaba
+ * en memoria, así que la búsqueda filtraba sobre esas 200 y devolvía «sin resultados» para trámites
+ * que sí existen. Los tamaños ofrecidos y el recuerdo por sesión son los ESTÁNDAR de toda tabla
+ * (`TAMANOS_DE_PAGINA` / `useTamanoDePagina`, HU #13916 y #13917).
  */
-const TAMANOS_DE_PAGINA = [10, 25, 50, 100] as const;
-const PAGE_SIZE_POR_DEFECTO = 10;
-
-/**
- * Dónde se recuerda el tamaño de página. El requerimiento pide «durante la sesión», así que va en
- * `sessionStorage` y no en la preferencia de usuario del servidor: es una comodidad del rato, no
- * una decisión que deba seguir a la persona a otro equipo. Se lee con guarda porque en una ventana
- * privada el acceso puede lanzar.
- */
-const CLAVE_PAGE_SIZE = 'tramites.pageSize';
-
-/**
- * `useSyncExternalStore` exige una suscripción; aquí no hay ninguna a la que suscribirse —
- * `sessionStorage` solo lo cambia esta misma pantalla, y cuando lo hace ya actualiza su estado.
- */
-function suscripcionInerte(): () => void {
-  return () => {};
-}
-
-function leerPageSizeGuardado(): number {
-  try {
-    const guardado = Number(sessionStorage.getItem(CLAVE_PAGE_SIZE));
-    return TAMANOS_DE_PAGINA.includes(guardado as (typeof TAMANOS_DE_PAGINA)[number])
-      ? guardado
-      : PAGE_SIZE_POR_DEFECTO;
-  } catch {
-    return PAGE_SIZE_POR_DEFECTO;
-  }
-}
+const CLAVE_TABLA = 'tramites.lista';
 
 interface TramitesTableProps {
   /** Cambia (incrementa) para forzar un refetch — p. ej. al volver del wizard. */
@@ -364,6 +331,9 @@ interface TramitesTableProps {
 
 export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: TramitesTableProps) {
   const router = useRouter();
+  // HU #13665 — Ver / Crear por familia: pestañas visibles y botón «Nuevo trámite».
+  const familyAccess = useFamilyAccess();
+  const puedeCrearAlguna = familyAccess.creatable.length > 0;
   const [items, setItems] = useState<InstanceSummary[]>([]);
   /** Conteo por estado del UNIVERSO filtrado — lo sirve el backend, no se deriva de `items`. */
   const [estadoCounts, setEstadoCounts] = useState<Record<string, number>>({});
@@ -594,21 +564,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   /** Total del universo filtrado, tal y como lo cuenta el servidor. */
   const [total, setTotal] = useState(0);
 
-  /**
-   * El tamaño de página: lo que el gestor eligió en ESTA pantalla, y si no, lo que dejó guardado.
-   *
-   * <p>El guardado se lee con `useSyncExternalStore` y no en el inicializador de un `useState`
-   * porque `sessionStorage` no existe en el render del servidor: leerlo ahí daría una hidratación
-   * distinta a la del cliente. Es el primitivo previsto para esto —tiene una lectura para el
-   * servidor y otra para el cliente— y evita tener que arreglarlo después con un efecto.</p>
-   */
-  const pageSizeGuardado = useSyncExternalStore(
-    suscripcionInerte,
-    leerPageSizeGuardado,
-    () => PAGE_SIZE_POR_DEFECTO,
-  );
-  const [pageSizeElegido, setPageSizeElegido] = useState<number | null>(null);
-  const pageSize = pageSizeElegido ?? pageSizeGuardado;
+  /** Tamaño de página: el elegido en esta pantalla o el que el gestor dejó en la sesión. */
+  const [pageSize, recordarPageSize] = useTamanoDePagina(CLAVE_TABLA);
   /** Popover de motivo OT / subsanación abierto (un solo id a la vez). */
   const [openPopoverId, setOpenPopoverId] = useState<string | null>(null);
   /**
@@ -1122,14 +1079,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
    * describe el mismo tramo, así que quedarse en ella llevaría a un sitio que el gestor no eligió.
    */
   const handlePageSizeChange = (v: number) => {
-    setPageSizeElegido(v);
+    recordarPageSize(v);
     setPage(1);
-    try {
-      sessionStorage.setItem(CLAVE_PAGE_SIZE, String(v));
-    } catch {
-      // Ventana privada o almacenamiento bloqueado: el tamaño vale para esta pantalla y no se
-      // recuerda. Es una comodidad, no un dato: no merece un aviso.
-    }
   };
 
   // HU #10536 — marca/desmarca la prioridad con actualización optimista; revierte si el backend falla.
@@ -1401,6 +1352,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
         {/* flit-tramites-chrome: tabs + filtros ANTES de KPIs */}
         <TramitesListToolbar
           modalidad={modalidad}
+          familias={familyAccess.readable}
           onModalidadChange={handleModalidadChange}
           onRefresh={handleRefresh}
           loading={loading}
@@ -1486,7 +1438,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                 </button>
               }
               bulkUploadAction={
-                onBulkUpload ? (
+                onBulkUpload && puedeCrearAlguna ? (
                   <button
                     type="button"
                     onClick={() => onBulkUpload()}
@@ -1544,6 +1496,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
               />
             </div>
           ) : null}
+          {puedeCrearAlguna ? (
           <button
             type="button"
             onClick={() => onNewTramite?.()}
@@ -1562,6 +1515,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
               trámite
             </span>
           </button>
+          ) : null}
         </div>
 
         {hayCambios && !loading ? <AvisoHayCambios onActualizar={() => void load()} /> : null}
@@ -1771,7 +1725,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
           aria-labelledby="procesar-plate-title"
         >
           <div
-            className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#162744]"
+            className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-flit-primary"
             style={{ border: '1px solid #DFE5ED' }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1972,7 +1926,7 @@ function SortableHeaderCell({
           ref={panelRef}
           role="menu"
           aria-label={`Ordenar por, en ${column.label}`}
-          className="absolute left-0 top-full z-50 mt-1.5 w-[18rem] overflow-hidden rounded-xl border border-[#DFE5ED] bg-white normal-case shadow-xl dark:border-white/10 dark:bg-[#162744]"
+          className="absolute left-0 top-full z-50 mt-1.5 w-[18rem] overflow-hidden rounded-xl border border-[#DFE5ED] bg-white normal-case shadow-xl dark:border-white/10 dark:bg-flit-primary"
         >
           <p className="border-b border-[#EEF2F7] px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#7B8794] dark:border-white/10 dark:text-white/50">
             Ordenar por
@@ -2957,7 +2911,7 @@ function TramiteRow({
               <div
                 role="dialog"
                 aria-label={`Detalle de rechazo de ${item.referenceNumber}`}
-                className="absolute left-0 top-full z-20 mt-1 w-72 rounded-xl border bg-white p-3 shadow-lg dark:bg-[#162744]"
+                className="absolute left-0 top-full z-20 mt-1 w-72 rounded-xl border bg-white p-3 shadow-lg dark:bg-flit-primary"
                 style={{ borderColor: 'rgba(255,78,0,0.28)' }}
                 onClick={(e) => e.stopPropagation()}
               >
@@ -3015,7 +2969,7 @@ function TramiteRow({
             Solo se pinta si no hay revocatoria activa (ver `muestraPausado` — uno a la vez). */}
         {muestraPausado ? (
           <span
-            className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-flit-primary/20 bg-[#162744]/[0.06] px-2 py-0.5 text-xs font-semibold text-flit-primary/70 dark:border-white/20 dark:bg-white/10 dark:text-white/70"
+            className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-flit-primary/20 bg-flit-primary/[0.06] px-2 py-0.5 text-xs font-semibold text-flit-primary/70 dark:border-white/20 dark:bg-white/10 dark:text-white/70"
             title={item.pausedObservation ?? 'Trámite pausado'}
             aria-label={
               item.pausedObservation
@@ -3179,7 +3133,7 @@ function TramiteRow({
   return (
     <tr
       onClick={handleOpen}
-      className={`group cursor-pointer bg-white text-xs dark:bg-[#162744] ${TABLA_ROW_HOVER_CLS}`}
+      className={`group cursor-pointer bg-white text-xs dark:bg-flit-primary ${TABLA_ROW_HOVER_CLS}`}
     >
       {/* ICT — checkbox de selección solo si la tabla reservó la pista (hay borradores ICT). Como
           <tr> no admite border-radius, el borde/radio de "tarjeta" vive en cada <td>. */}
@@ -3233,7 +3187,7 @@ function TramiteRow({
         <ActionsMenu
           ariaLabel={`Acciones del trámite ${item.referenceNumber}`}
           items={actionItems}
-          className="bg-white dark:bg-[#162744]"
+          className="bg-white dark:bg-flit-primary"
           attention={puedeEnviarAlOt}
           attentionHint="Pendiente por enviar al OT: la placa ya está asignada"
         />
@@ -3246,7 +3200,7 @@ function TramiteRow({
         onClose={() => setConfirmPauseOpen(false)}
         title="Trámite pausado"
         icon={Pause}
-        iconBg="#162744"
+        iconBg="var(--color-flit-primary)"
         description={`Trámite ${item.referenceNumber}`}
         size="sm"
       >
@@ -3258,7 +3212,7 @@ function TramiteRow({
           <button
             type="button"
             onClick={() => setConfirmPauseOpen(false)}
-            className="rounded-full border border-[#DFE5ED] px-4 py-1.5 text-xs font-semibold text-flit-primary transition hover:bg-[#162744]/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/20 dark:text-white"
+            className="rounded-full border border-[#DFE5ED] px-4 py-1.5 text-xs font-semibold text-flit-primary transition hover:bg-flit-primary/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/20 dark:text-white"
           >
             Cancelar
           </button>

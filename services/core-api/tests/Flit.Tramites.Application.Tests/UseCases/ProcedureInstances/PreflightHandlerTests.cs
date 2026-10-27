@@ -1429,6 +1429,30 @@ public sealed class PreflightHandlerTests
     }
 
     [Fact]
+    public async Task Post_Traspaso_Simit_PropagaTenantEInstanceIdAlProveedor()
+    {
+        // Regresión QA ICT→trámite: con TenantId=Guid.Empty, core-consultas rechaza Multas
+        // (InvalidArgument x-flit-tenant-id) y el preflight muestra «Consulta no disponible» en
+        // simit_comprador/simit_vendedor. El contexto debe llevar la empresa y la instancia reales.
+        var ct = TestContext.Current.CancellationToken;
+        var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
+        _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
+
+        var verifikSimit = new CapturingProvider("verifik_simit", Result("green", Check("ok")));
+        var handler = HandlerWith(FuenteDeComparendos("external"),
+            ("verifik", new StubProvider("verifik", Result("green", Check("ok")))),
+            ("verifik_simit", verifikSimit));
+
+        var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        verifikSimit.LastContext.Should().NotBeNull();
+        verifikSimit.LastContext!.TenantId.Should().Be(instance.TenantId).And.NotBe(Guid.Empty);
+        verifikSimit.LastContext.InstanceId.Should().Be(instance.Id).And.NotBe(Guid.Empty);
+    }
+
+    [Fact]
     public async Task Post_Traspaso_SinOverrideDeTenant_CaeAExterna()
     {
         // AC4: compañía sin fila de configuración operativa (GetAsync ⇒ null) ⇒ fuente externa,

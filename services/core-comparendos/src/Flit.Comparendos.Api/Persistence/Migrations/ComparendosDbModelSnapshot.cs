@@ -2082,6 +2082,10 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("procesado_en");
 
+                    b.Property<Guid?>("PromptVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("prompt_version_id");
+
                     b.Property<string>("ProveedorModelo")
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)")
@@ -2090,6 +2094,10 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     b.Property<DateTimeOffset?>("ProximoIntentoEn")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("proximo_intento_en");
+
+                    b.Property<short>("Reprocesos")
+                        .HasColumnType("smallint")
+                        .HasColumnName("reprocesos");
 
                     b.Property<string>("RespuestaLlm")
                         .HasColumnType("jsonb")

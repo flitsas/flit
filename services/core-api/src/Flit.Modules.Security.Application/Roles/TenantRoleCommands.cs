@@ -3,11 +3,12 @@ namespace Flit.Modules.Security.Application.Roles;
 /// <summary>
 /// HU #13441 — alta de un rol propio del tenant por su Admin de Compañía.
 /// <paramref name="CallerPermissions"/> son los slugs del JWT del caller: el techo de lo que puede otorgar.
+/// HU #13666: <paramref name="Code"/> es opcional; vacío o ausente, el servidor lo genera a partir del nombre.
 /// </summary>
 public sealed record CreateTenantRoleCommand(
     Guid TenantId,
     string TargetEntityType,
-    string Code,
+    string? Code,
     string Name,
     string? Description,
     string ProductCode,

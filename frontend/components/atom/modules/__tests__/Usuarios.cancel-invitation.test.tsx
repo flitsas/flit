@@ -4,6 +4,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { chooseRowAction, rowActionNames } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 import { Usuarios } from "../Usuarios";
 import { getUsers, cancelInvitation } from "@/lib/api/security";
 import { ApiError } from "@/lib/api/types";
@@ -92,29 +93,23 @@ describe("Usuarios — botón Cancelar invitación (#10628)", () => {
 
   it("AC2: SOLO muestra 'Cancelar invitación' (no 'Eliminar usuario') en una fila Pendiente", async () => {
     vi.mocked(getUsers).mockResolvedValue([pendingUser]);
+    const user = userEvent.setup();
     render(<Usuarios />);
 
     await screen.findByText("Carlos Ruiz");
-    expect(
-      screen.getByRole("button", { name: /cancelar invitación a carlos ruiz/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /eliminar usuario carlos ruiz/i }),
-    ).not.toBeInTheDocument();
+    expect(await rowActionNames(user, "Carlos Ruiz")).toContainEqual(expect.stringMatching(/cancelar invitación a carlos ruiz/i));
+    expect(await rowActionNames(user, "Carlos Ruiz")).not.toContainEqual(expect.stringMatching(/eliminar usuario carlos ruiz/i));
   });
 
   it("AC2: SOLO muestra 'Eliminar usuario' (no 'Cancelar invitación') en una fila NO Pendiente (SuperAdmin)", async () => {
     perms.current = { ...SUPER_ADMIN_PERMS };
     vi.mocked(getUsers).mockResolvedValue([activeUser]);
+    const user = userEvent.setup();
     render(<Usuarios />);
 
     await screen.findByText("Ana Torres");
-    expect(
-      screen.getByRole("button", { name: /eliminar usuario ana torres/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /cancelar invitación a ana torres/i }),
-    ).not.toBeInTheDocument();
+    expect(await rowActionNames(user, "Ana Torres")).toContainEqual(expect.stringMatching(/eliminar usuario ana torres/i));
+    expect(await rowActionNames(user, "Ana Torres")).not.toContainEqual(expect.stringMatching(/cancelar invitación a ana torres/i));
   });
 
   it("AC1: cancelación exitosa llama a cancelInvitation y la fila desaparece de la lista", async () => {
@@ -126,7 +121,7 @@ describe("Usuarios — botón Cancelar invitación (#10628)", () => {
     render(<Usuarios />);
 
     await screen.findByText("Carlos Ruiz");
-    await user.click(screen.getByRole("button", { name: /cancelar invitación a carlos ruiz/i }));
+    await chooseRowAction(user, "Carlos Ruiz", /cancelar invitación a carlos ruiz/i);
     await user.click(screen.getByRole("button", { name: /^cancelar invitación$/i }));
 
     await waitFor(() => expect(cancelInvitation).toHaveBeenCalledWith("invitation-1"));
@@ -144,7 +139,7 @@ describe("Usuarios — botón Cancelar invitación (#10628)", () => {
     render(<Usuarios />);
 
     await screen.findByText("Carlos Ruiz");
-    await user.click(screen.getByRole("button", { name: /cancelar invitación a carlos ruiz/i }));
+    await chooseRowAction(user, "Carlos Ruiz", /cancelar invitación a carlos ruiz/i);
     await user.click(screen.getByRole("button", { name: /^cancelar invitación$/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/ya no existe/i);
@@ -162,7 +157,7 @@ describe("Usuarios — botón Cancelar invitación (#10628)", () => {
     render(<Usuarios />);
 
     await screen.findByText("Carlos Ruiz");
-    await user.click(screen.getByRole("button", { name: /cancelar invitación a carlos ruiz/i }));
+    await chooseRowAction(user, "Carlos Ruiz", /cancelar invitación a carlos ruiz/i);
     await user.click(screen.getByRole("button", { name: /^cancelar invitación$/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/ya no está pendiente/i);

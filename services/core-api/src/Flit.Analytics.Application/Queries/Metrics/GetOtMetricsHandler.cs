@@ -17,7 +17,11 @@ public sealed record GetOtMetricsQuery(
     string? Status = null,
     string? Reason = null,
     string? CompareWith = null,
-    int? StuckDays = null);
+    int? StuckDays = null)
+{
+    /// <summary>HU #13664 — Ver por familia: códigos visibles (<c>ProcedureFamilyCodes</c>); <c>null</c> = sin restricción.</summary>
+    public IReadOnlyList<string>? AllowedFamilies { get; init; }
+}
 
 /// <summary>
 /// Valida rango/compareWith/stuckDays, consulta la ventana actual (y la de comparación, si se
@@ -39,7 +43,8 @@ public sealed class GetOtMetricsHandler(IAnalyticsMetricsReadRepository repo)
         var filter = new MetricsFilter(
             query.TenantId, query.From, query.To,
             query.TransitOfficeId, query.ProcedureTypeId, query.OperatorUserId,
-            query.Status, query.Reason, stuckDays);
+            query.Status, query.Reason, stuckDays)
+        { AllowedFamilies = query.AllowedFamilies };
 
         var current = await repo.GetOtMetricsAsync(filter, ct);
 

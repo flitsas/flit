@@ -20,7 +20,7 @@ public sealed class GetLiveOverviewHandlerTests
 
     public GetLiveOverviewHandlerTests()
     {
-        _repo.GetLiveOverviewAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _repo.GetLiveOverviewAsync(Arg.Any<Guid>(), Arg.Any<int>(), null, Arg.Any<CancellationToken>())
             .Returns(MetricsTestData.LiveOverview());
     }
 
@@ -40,7 +40,7 @@ public sealed class GetLiveOverviewHandlerTests
         result.PendingIdentityValidations.Should().Be(3);
         result.IntegrationsLastHour.Calls.Should().Be(25);
         result.LastActivityAt.Should().Be(DateTimeOffset.Parse("2026-07-07T13:59:01Z"));
-        await _repo.Received(1).GetLiveOverviewAsync(Tenant, 7, Ct);
+        await _repo.Received(1).GetLiveOverviewAsync(Tenant, 7, null, Ct);
     }
 
     [Fact] // stuckDays explícito en rango → se propaga tal cual
@@ -50,7 +50,7 @@ public sealed class GetLiveOverviewHandlerTests
             .HandleAsync(new GetLiveOverviewQuery(Tenant, StuckDays: 30), Ct);
 
         error.Should().BeNull();
-        await _repo.Received(1).GetLiveOverviewAsync(Tenant, 30, Ct);
+        await _repo.Received(1).GetLiveOverviewAsync(Tenant, 30, null, Ct);
     }
 
     [Theory] // stuckDays fuera de 1..90 → invalid_stuck_days sin tocar el repo
@@ -74,8 +74,8 @@ public sealed class GetLiveOverviewHandlerTests
         await new GetLiveOverviewHandler(_repo)
             .HandleAsync(new GetLiveOverviewQuery(otherTenant), Ct);
 
-        await _repo.Received(1).GetLiveOverviewAsync(otherTenant, 7, Ct);
+        await _repo.Received(1).GetLiveOverviewAsync(otherTenant, 7, null, Ct);
         await _repo.DidNotReceive().GetLiveOverviewAsync(
-            Arg.Is<Guid>(t => t != otherTenant), Arg.Any<int>(), Arg.Any<CancellationToken>());
+            Arg.Is<Guid>(t => t != otherTenant), Arg.Any<int>(), null, Arg.Any<CancellationToken>());
     }
 }

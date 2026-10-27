@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type { ProcedureFamily, ProcedureTypeSummary } from '@/lib/api/types/procedure-parametrization';
+import { useFamilyAccess } from '@/hooks/useFamilyAccess';
 import { FAMILY_ORDER } from '@/lib/api/types/procedure-parametrization';
 
 type Status = 'loading' | 'success' | 'error';
@@ -24,6 +25,7 @@ export interface FamiliaConTipos {
  * habilitados sencillamente no aparece.
  */
 export function useTiposHabilitados() {
+  const { canCreate } = useFamilyAccess();
   const [familias, setFamilias] = useState<FamiliaConTipos[]>([]);
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +37,8 @@ export function useTiposHabilitados() {
       const data = await tramitesClient.listPublishedProcedureTypes();
       const habilitados = data.filter((t) => t.wizardEnabled);
 
-      const agrupadas = FAMILY_ORDER.map((family) => ({
+      // HU #13665 — solo se ofrecen las familias con permiso Crear.
+      const agrupadas = FAMILY_ORDER.filter(canCreate).map((family) => ({
         family,
         tipos: habilitados
           .filter((t) => t.family === family)
@@ -48,7 +51,7 @@ export function useTiposHabilitados() {
       setError(err instanceof Error ? err.message : 'No fue posible cargar los tipos de trámite');
       setStatus('error');
     }
-  }, []);
+  }, [canCreate]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial del catálogo operable

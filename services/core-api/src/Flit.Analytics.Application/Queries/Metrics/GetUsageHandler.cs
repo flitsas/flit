@@ -12,7 +12,11 @@ public sealed record GetUsageQuery(
     Guid? OperatorUserId = null,
     string? Status = null,
     string? Reason = null,
-    string? CompareWith = null);
+    string? CompareWith = null)
+{
+    /// <summary>HU #13664 — Ver por familia: códigos visibles (<c>ProcedureFamilyCodes</c>); <c>null</c> = sin restricción.</summary>
+    public IReadOnlyList<string>? AllowedFamilies { get; init; }
+}
 
 /// <summary>
 /// Compone las métricas de uso: <c>moduleUsage/wizardSteps/peakHours</c> y duración del wizard
@@ -36,7 +40,8 @@ public sealed class GetUsageHandler(
         var filter = new MetricsFilter(
             query.TenantId, query.From, query.To,
             query.TransitOfficeId, query.ProcedureTypeId, query.OperatorUserId,
-            query.Status, query.Reason);
+            query.Status, query.Reason)
+        { AllowedFamilies = query.AllowedFamilies };
 
         var current = await BuildAsync(filter, ct);
 

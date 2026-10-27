@@ -2,7 +2,11 @@ namespace Flit.Modules.Security.Domain.Auth;
 
 public interface IInvitationRepository
 {
-    Task<bool> ExistsPendingAsync(Guid tenantId, string email, CancellationToken cancellationToken);
+    /// <summary>
+    /// HU #13811 — ¿hay una invitación pendiente para el correo en CUALQUIER compañía? La regla es global: una
+    /// sola invitación pendiente por correo en toda la plataforma (<c>uq_user_invitations_email_pending</c>).
+    /// </summary>
+    Task<bool> ExistsPendingAsync(string email, CancellationToken cancellationToken);
 
     Task<bool> UserExistsWithEmailAsync(string email, CancellationToken cancellationToken);
 
@@ -61,8 +65,8 @@ public interface IInvitationRepository
     /// HU #11552 / ADR-0048: revive una invitación cancelada a <c>pending</c> con un token
     /// SIEMPRE nuevo (nunca reutiliza <c>TokenHash</c>) y actualiza <c>LastSentAt</c> como un
     /// reenvío (comparte el cooldown anti-abuso con <c>ResendAsync</c>). El índice único parcial
-    /// <c>uq_user_invitations_tenant_email_pending</c> es el guardarraíl duro: si otra invitación
-    /// del mismo (tenant, email) ya está "pending", el <c>UPDATE</c> revienta con 23505 y la
+    /// <c>uq_user_invitations_email_pending</c> es el guardarraíl duro: si otra invitación
+    /// del mismo correo ya está "pending", el <c>UPDATE</c> revienta con 23505 y la
     /// implementación lo traduce a <see cref="InvitationAlreadyPendingException"/> — el handler
     /// ya pre-valida con <c>ExistsPendingAsync</c>, esto es la red de la condición de carrera.
     /// </summary>

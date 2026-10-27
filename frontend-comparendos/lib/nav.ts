@@ -7,7 +7,6 @@ import {
   CalendarDays,
   ClipboardList,
   Cog,
-  Download,
   FileSearch,
   FileStack,
   FileText,
@@ -78,7 +77,6 @@ export function comparendosNav(caps: Capacidades): NavCatalog {
           { key: "productividad", label: "Productividad", href: "/reportes/productividad", section: "reportes", icon: Users, permission: P.productividadVer },
         ]
       : []),
-    { key: "exportaciones", label: "Mis exportaciones", href: "/exportaciones", section: "reportes", icon: Download },
     { key: "monitoreo", label: "NITs y placas", href: "/configuracion/monitoreo", section: "configuracion", icon: FileSearch, permission: P.monitoreoVer },
     { key: "representantes", label: "Representantes legales", href: "/configuracion/representantes", section: "configuracion", icon: ShieldCheck, permission: P.representantesVer },
     { key: "ots", label: "Organismos de tránsito", href: "/configuracion/organismos", section: "configuracion", icon: Landmark, permission: P.otsGestionar },

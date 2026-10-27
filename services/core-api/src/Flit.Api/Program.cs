@@ -90,6 +90,13 @@ builder.Services.AddScoped<ITransitOfficeTenantProbe, TransitOfficeTenantProbe>(
 
 // Handler de autorización por permisos del JWT (HU #10165).
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
+builder.Services.Configure<Flit.Api.Authorization.OtPermissionEnforcementOptions>(builder.Configuration.GetSection(Flit.Api.Authorization.OtPermissionEnforcementOptions.Section)); // HU #13639
+builder.Services.Configure<Flit.Api.Authorization.ModulePermissionEnforcementOptions>(builder.Configuration.GetSection(Flit.Api.Authorization.ModulePermissionEnforcementOptions.Section)); // Feature #13105
+builder.Services.AddSingleton<IAuthorizationHandler, Flit.Api.Authorization.ModulePermissionAuthorizationHandler>();
+builder.Services.AddScoped<Flit.Tramites.Domain.Integration.IProcedureFamilyPermissionGate, Flit.Api.Authorization.HttpProcedureFamilyPermissionGate>(); // HU #13664
+builder.Services.AddSingleton<Flit.Api.Authorization.IFlaggedPermissionSource, Flit.Api.Authorization.FamilyFlaggedPermissionSource>(); // HU #13664: Ver/Crear por familia siguen el flag de módulos
+// Hallazgo review Épica #12753: ¿la API exige hoy este slug? (flags OT/módulos + IFlaggedPermissionSource). Ver PermissionEnforcementState.
+builder.Services.AddSingleton<Flit.Modules.Security.Domain.PermissionOverrides.IPermissionEnforcementState, Flit.Api.Authorization.PermissionEnforcementState>();
 
 // Handler para la policy AdminCompany (roles de empresa + SuperAdmin bypass).
 builder.Services.AddSingleton<IAuthorizationHandler, AdminCompanyAuthorizationHandler>();
@@ -254,6 +261,10 @@ app.UseMiddleware<Flit.Api.Authorization.DomainBindingMiddleware>();
 
 app.UseAuthorization();
 
+// HU #13639 (Feature #13100 FA-4, Anexo A) — slug OT por ruta en AND con la policy de rol; apagado por defecto
+// (Security:OtPermissionEnforcement:Enabled). Ver OtPermissionMap.
+app.UseMiddleware<Flit.Api.Authorization.OtPermissionEnforcementMiddleware>();
+
 // HU #13085 (Épica #12737) — cuota por cliente externo (120/min por client_id). Va DESPUÉS de la autorización:
 // el client_id solo es fiable con el pase ya validado, y los 401/403 no consumen cuota.
 app.UseMiddleware<Flit.Api.RateLimiting.ExternalClientQuotaMiddleware>();
@@ -267,6 +278,12 @@ app.UseMiddleware<Flit.Api.Middleware.TenantEnforcementMiddleware>();
 // la red no otorga escritura sobre los hijos. Va DESPUÉS del enforcement (usa el TenantScope de Items) y
 // cubre /api/v1/tramites/instances/{id}/** y /api/v1/admin/tramites/{id}/** en todos los verbos de escritura.
 app.UseMiddleware<Flit.Api.Middleware.TenantWriteGuardMiddleware>();
+
+// HU #13664 (Feature #13636 F-F, Épica #12753) — «Ver por familia» en un solo punto: toda ruta por id de trámite
+// (/instances/{id}/**, /network/instances/{id}/**, /{tramiteId}/document-requirements) exige el «.read» de la familia del
+// trámite cuando Security:ModulePermissionEnforcement:Enabled está encendido; apagado, pasa sin consultar. Va tras el enforcement
+// de tenant (usa su alcance) y del enrutamiento.
+app.UseMiddleware<Flit.Api.Middleware.FamilyReadEnforcementMiddleware>();
 
 app.UseMiddleware<Flit.Api.Middleware.UsageTelemetryMiddleware>(); // Reportes2 HU-A
 app.UseMiddleware<Flit.Api.Platform.RequireProductMiddleware>(); // FLIT Suite · HU #12966 — RequireProduct (Suite:ProductAccess:Enforce)

@@ -5,6 +5,7 @@ import { Check, Search, Settings2 } from "lucide-react";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { ActionsMenu } from "@/components/atom/ActionsMenu";
 import { StatusBadge } from "@/components/atom/StatusBadge";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { SwitchToggle } from "@/components/ui/SwitchToggle";
 import type { TransitOffice } from "@/lib/api/types";
 import { ApiValidationError } from "@/lib/api/types";
@@ -88,10 +89,18 @@ export function OTConfigTable({
   search: searchProp,
   onSearchChange,
 }: OTConfigTableProps) {
+  // HU #13918 — paginación estándar en cliente SOLO cuando la tabla busca por su cuenta. Con búsqueda
+  // controlada el contenedor (OTConfigTablePanel) ya filtra y corta la página, con su propia clave.
+  const pg = usePaginacion("companies.OTConfigTable");
   const [searchState, setSearchState] = useState("");
   const searchControlled = searchProp !== undefined;
   const search = searchControlled ? searchProp : searchState;
-  const setSearch = searchControlled ? (value: string) => onSearchChange?.(value) : setSearchState;
+  const setSearch = searchControlled
+    ? (value: string) => onSearchChange?.(value)
+    : (value: string) => {
+        setSearchState(value);
+        pg.setPage(1);
+      };
   const [granted, setGranted] = useState<Set<string>>(() => new Set(grantedIds));
   const [pending, setPending] = useState<Set<string>>(() => new Set());
   // IDs con confirmación "Guardado" visible unos segundos tras persistir con éxito.
@@ -334,11 +343,22 @@ export function OTConfigTable({
 
       <DataTable
         columns={columns}
-        rows={filtered}
+        rows={searchControlled ? filtered : pg.paginar(filtered)}
         getRowKey={(office) => office.id}
         emptyMessage="Ningún organismo coincide con la búsqueda."
         ariaLabel="Organismos de tránsito"
         minWidth={640}
+        pagination={
+          searchControlled
+            ? undefined
+            : {
+                page: pg.page,
+                pageSize: pg.pageSize,
+                totalCount: filtered.length,
+                onPageChange: pg.setPage,
+                onPageSizeChange: pg.setPageSize,
+              }
+        }
       />
     </section>
   );

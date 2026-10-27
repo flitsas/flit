@@ -8,6 +8,8 @@
 // medio módulo. Una pieza con dos definiciones acaba con dos aspectos, y son el mismo producto.
 
 import type { ReactNode } from "react";
+import { Pagination } from "@/components/atom/Pagination";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import {
   CARDLIST_CELL,
   CARDLIST_HEAD_ROW,
@@ -172,40 +174,56 @@ export function Bar({
   );
 }
 
+/**
+ * Tabla de los tableros. HU #13923 — lleva la paginación estándar con «Filas por página»: la clave
+ * identifica la tabla para recordar su tamaño; cada pantalla pasa la suya.
+ */
 export function Table({
   headers,
   rows,
+  claveTabla = "_reportes.shared.Table",
 }: {
   headers: string[];
   rows: { key: string; cells: string[] }[];
+  claveTabla?: string;
 }) {
+  const pg = usePaginacion(claveTabla);
   return (
-    <div className={CARDLIST_SCROLL}>
-      <table className={`min-w-[34rem] ${CARDLIST_TABLE}`}>
-        <thead>
-          <tr className={CARDLIST_HEAD_ROW}>
-            {headers.map((h) => (
-              <th key={h} scope="col" className={CARDLIST_TH}>
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.key} className={CARDLIST_ROW}>
-              {row.cells.map((cell, i) => (
-                <td
-                  key={headers[i]}
-                  className={`${CARDLIST_CELL} ${i === 0 ? "" : "tabular-nums"}`}
-                >
-                  {cell}
-                </td>
+    <>
+      <div className={CARDLIST_SCROLL}>
+        <table className={`min-w-[34rem] ${CARDLIST_TABLE}`}>
+          <thead>
+            <tr className={CARDLIST_HEAD_ROW}>
+              {headers.map((h) => (
+                <th key={h} scope="col" className={CARDLIST_TH}>
+                  {h}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {pg.paginar(rows).map((row) => (
+              <tr key={row.key} className={CARDLIST_ROW}>
+                {row.cells.map((cell, i) => (
+                  <td
+                    key={headers[i]}
+                    className={`${CARDLIST_CELL} ${i === 0 ? "" : "tabular-nums"}`}
+                  >
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <Pagination
+        page={pg.page}
+        pageSize={pg.pageSize}
+        totalCount={rows.length}
+        onPageChange={pg.setPage}
+        onPageSizeChange={pg.setPageSize}
+      />
+    </>
   );
 }

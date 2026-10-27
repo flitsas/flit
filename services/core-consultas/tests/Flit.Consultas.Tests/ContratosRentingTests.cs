@@ -156,6 +156,45 @@ public sealed class ContratosRentingTests
             .NotContain(n => n.Contains("Cruda", StringComparison.OrdinalIgnoreCase), "el contrato trae datos personales de clientes reales");
     }
 
+    [Fact]
+    public async Task HU13843_Probar_SoloHaceLogin_ConTokenNuevo_YNoConsultaPlacas()
+    {
+        var (p, renting, _) = Crear();
+        await p.ConsultarAsync("LZO227", Fecha, TestContext.Current.CancellationToken);
+        var r = await p.ProbarAsync(TestContext.Current.CancellationToken);
+
+        (r.Conectado, r.Configurado, r.HasMotivo, r.ContactoDesviado, r.CorreoDesvio).Should().Be((true, true, false, true, "buzon.pruebas@flitsas.com"));
+        renting.Logins.Should().Be(2, "la prueba descarta el token guardado y vuelve a iniciar sesión");
+        renting.Pedidos.Skip(2).Should().ContainSingle().Which.Url.Should().Contain("TokenForThird", "probar no consulta ninguna placa");
+    }
+
+    [Fact]
+    public async Task HU13843_Probar_LoginRechazado_DiceElCodigo_SinLaLlave()
+    {
+        var (p, renting, _) = Crear();
+        renting.LoginFalla = true;
+        var r = await p.ProbarAsync(TestContext.Current.CancellationToken);
+        (r.Conectado, r.Configurado, r.HttpStatus).Should().Be((false, true, 401));
+        r.Motivo.Should().Contain("401").And.NotContain(Llave);
+    }
+
+    [Fact]
+    public async Task HU13843_Probar_SinConfiguracion_NoLlamaARenting_YDiceQueFalta()
+    {
+        var vacia = RentingContratosOpciones.Desde(new ConfigurationBuilder().Build());
+        var r = await new ProveedorContratosRenting(null!, vacia, null, TimeProvider.System).ProbarAsync(TestContext.Current.CancellationToken);
+        (r.Conectado, r.Configurado, r.DuracionMs).Should().Be((false, false, 0));
+        r.Motivo.Should().StartWith("Falta configurar la API de contratos de Renting: RENTING_API_BASE_URL");
+    }
+
+    [Fact]
+    public async Task HU13843_Probar_ConContactoReal_NoDiceBuzon()
+    {
+        var (p, _, _) = Crear(contactoReal: true);
+        var r = await p.ProbarAsync(TestContext.Current.CancellationToken);
+        (r.Conectado, r.ContactoDesviado, r.HasCorreoDesvio).Should().Be((true, false, false));
+    }
+
     private sealed class RelojFalso : TimeProvider
     {
         private DateTimeOffset _ahora = new(2026, 10, 20, 12, 0, 0, TimeSpan.Zero);

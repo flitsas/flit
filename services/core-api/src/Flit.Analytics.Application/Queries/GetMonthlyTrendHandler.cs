@@ -7,7 +7,11 @@ namespace Flit.Analytics.Application.Queries;
 /// Consulta de tendencia mensual por categoría (Dashboard).
 /// <see cref="TenantId"/> null = vista global de todas las compañías (solo SuperAdmin).
 /// </summary>
-public sealed record GetMonthlyTrendQuery(Guid? TenantId, DateOnly From, DateOnly To);
+public sealed record GetMonthlyTrendQuery(Guid? TenantId, DateOnly From, DateOnly To)
+{
+    /// <summary>HU #13664 — Ver por familia: códigos visibles (<c>ProcedureFamilyCodes</c>); <c>null</c> = sin restricción.</summary>
+    public IReadOnlyList<string>? AllowedFamilies { get; init; }
+}
 
 /// <summary>
 /// Valida el rango y retorna la tendencia mensual agrupada por (año, mes, categoría).
@@ -21,7 +25,7 @@ public sealed class GetMonthlyTrendHandler(IAnalyticsReadRepository repo)
         if (query.From > query.To)
             return (null, "invalid_range");
 
-        var items = await repo.GetMonthlyTrendAsync(query.TenantId, query.From, query.To, ct);
+        var items = await repo.GetMonthlyTrendAsync(query.TenantId, query.From, query.To, query.AllowedFamilies, ct);
         return (items, null);
     }
 }

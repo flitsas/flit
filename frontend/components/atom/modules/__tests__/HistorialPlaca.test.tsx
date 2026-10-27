@@ -214,14 +214,7 @@ describe("registro del módulo en la navegación SPA", () => {
     expect(ALL_MODULE_IDS).toContain("historial-placa");
     expect(SPA_DOCK_MODULE_IDS).toContain("historial-placa");
 
-    const ctx = {
-      isSuperAdmin: false,
-      isOtAdmin: false,
-      canReadLogQx: false,
-      canReadIctLogs: false,
-      canReadIctTrazabilidad: false,
-      canReadIctReportes: false,
-    };
+    const ctx = { claims: { sub: "u1", roles: [], permissions: [] } };
     expect(
       resolveNavigableModuleIds({ ...ctx, accessibleCodes: ["historial-placa"] }),
     ).toContain("historial-placa");

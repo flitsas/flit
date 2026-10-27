@@ -118,4 +118,24 @@ describe("ActivateAccountForm (HU #10179)", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/inválido o ya fue utilizado/i);
   });
+
+  // HU #13811/#13812 — otra compañía activó antes el mismo correo: 409 con el mensaje único.
+  it("error 409 EMAIL_ALREADY_IN_USE muestra que el usuario ya existe", async () => {
+    activateMock.mockRejectedValue(
+      new ApiError(409, "Conflict", { code: "EMAIL_ALREADY_IN_USE", message: "x" }),
+    );
+    render(<ActivateAccountForm token="valid-token" />);
+
+    fireEvent.change(screen.getByLabelText(/nueva contraseña/i), {
+      target: { value: "FlitPass1!" },
+    });
+    fireEvent.change(screen.getByLabelText(/confirmar contraseña/i), {
+      target: { value: "FlitPass1!" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /activar mi cuenta/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "El usuario ya se encuentra previamente creado",
+    );
+  });
 });

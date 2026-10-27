@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Flit.Analytics.Application.Queries;
 using Flit.Api.Authorization;
+using Flit.Tramites.Domain.Integration;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
@@ -23,6 +24,7 @@ public static class DetailedReportEndpoints
             .WithTags("Analytics · Reportes detallados (Feature #10813)");
 
         group.MapGet("/procedures", GetProceduresAsync)
+            .RequireModulePermission("reportes.detallados.read")
             .WithName("DetailedReportProcedures")
             .WithSummary("Consulta paginada del reporte detallado con filtros por atributos del trámite")
             .Produces(StatusCodes.Status200OK)
@@ -30,6 +32,7 @@ public static class DetailedReportEndpoints
 
         group.MapGet("/procedures/export", ExportExcelAsync)
             .RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
+            .RequireModulePermission("reportes.detallados.export")
             .WithName("DetailedReportExportExcel")
             .WithSummary("Exporta a Excel el reporte detallado filtrado")
             .Produces(StatusCodes.Status200OK, contentType: ExcelContentType)
@@ -43,6 +46,7 @@ public static class DetailedReportEndpoints
         DateOnly from,
         DateOnly to,
         GetDetailedProceduresHandler handler,
+        IProcedureFamilyPermissionGate familyGate,
         CancellationToken ct,
         [FromQuery] Guid? tenantId = null,
         [FromQuery] Guid? transitOfficeId = null,
@@ -64,7 +68,10 @@ public static class DetailedReportEndpoints
             new GetDetailedProceduresQuery(
                 tenant, from, to, transitOfficeId, procedureTypeId, category, status,
                 referenceNumber, personDocument, personName, hasTransformation, isLeasing,
-                page ?? 1, pageSize ?? GetDetailedProceduresHandler.DefaultPageSize),
+                page ?? 1, pageSize ?? GetDetailedProceduresHandler.DefaultPageSize)
+            {
+                AllowedFamilies = familyGate.ReadableFamilyCodes(), // HU #13664 — Ver por familia
+            },
             ct).ConfigureAwait(false);
 
         return err switch
@@ -79,6 +86,7 @@ public static class DetailedReportEndpoints
         DateOnly from,
         DateOnly to,
         IDetailedReportExcelExporter exporter,
+        IProcedureFamilyPermissionGate familyGate,
         [FromQuery] Guid? tenantId = null,
         [FromQuery] Guid? transitOfficeId = null,
         [FromQuery] Guid? procedureTypeId = null,
@@ -96,7 +104,10 @@ public static class DetailedReportEndpoints
         var (filter, err) = ExportDetailedProceduresHandler.Validate(
             new ExportDetailedProceduresQuery(
                 tenant, from, to, transitOfficeId, procedureTypeId, category, status,
-                referenceNumber, personDocument, personName, hasTransformation, isLeasing));
+                referenceNumber, personDocument, personName, hasTransformation, isLeasing)
+            {
+                AllowedFamilies = familyGate.ReadableFamilyCodes(), // HU #13664 — Ver por familia
+            });
 
         return err switch
         {

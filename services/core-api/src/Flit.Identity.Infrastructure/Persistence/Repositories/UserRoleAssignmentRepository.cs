@@ -45,9 +45,16 @@ public sealed class UserRoleAssignmentRepository(IIdentityDb db) : IUserRoleAssi
         return await db.Roles
             .AsNoTracking()
             .Where(r => r.Id == roleId && r.IsActive && r.DeletedAt == null)
-            .Select(r => new RoleForAssignmentSnapshot(r.Id, r.TargetEntityType, r.TenantId))
+            .Select(r => new RoleForAssignmentSnapshot(r.Id, r.TargetEntityType, r.TenantId, r.ProductCode))
             .FirstOrDefaultAsync(ct);
     }
+
+    public async Task<string?> GetRoleProductCodeAsync(Guid roleId, CancellationToken ct) =>
+        await db.Roles
+            .AsNoTracking()
+            .Where(r => r.Id == roleId)
+            .Select(r => r.ProductCode)
+            .FirstOrDefaultAsync(ct);
 
     public async Task<string> GetTenantTargetEntityTypeAsync(Guid tenantId, CancellationToken ct)
     {

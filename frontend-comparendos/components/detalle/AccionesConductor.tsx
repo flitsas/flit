@@ -67,7 +67,7 @@ function ModalConductor({ ctx, onCerrar }: { ctx: ContextoDetalle; onCerrar: () 
       busy={ocupado}
       size="lg"
       title={actual ? "Cambiar conductor" : "Asignar conductor"}
-      description={actual ? `Conductor actual: ${actual.nombres} (${actual.origen === "Api" ? "API" : "manual"}).` : "Quién tenía el vehículo en la fecha de la infracción."}
+      description={actual ? `Conductor actual: ${actual.nombres} (${actual.origen === "Api" ? "automático" : "manual"}).` : "Quién tenía el vehículo en la fecha de la infracción."}
       footer={
         <div className="flex justify-end gap-2">
           <button type="button" className={controlCls(false)} onClick={onCerrar}>
@@ -183,7 +183,7 @@ function CompletarDocumento({ ctx }: { ctx: ContextoDetalle }) {
   return (
     <InlineAlert tone="warning" title="Falta el documento del conductor">
       <p className="mb-2 text-xs">
-        La API de contratos trae el nombre y el correo, pero no el documento. Complétalo para poder solicitar el cambio de
+        La consulta automática trae el nombre y el correo, pero no el documento. Complétalo para poder solicitar el cambio de
         contraventor.
       </p>
       <div className="flex flex-wrap items-end gap-2">
@@ -233,7 +233,7 @@ export function AccionesConductor({ ctx }: { ctx: ContextoDetalle }) {
       }
       setConfirmar(null);
       toast.show(
-        r.resultado === "Encontrado" ? "La API de contratos encontró el conductor." : r.resultado === "NoEncontrado" ? "La API no encontró conductor: asígnalo a mano." : r.mensaje ?? "La consulta falló.",
+        r.resultado === "Encontrado" ? "Se encontró el conductor." : r.resultado === "NoEncontrado" ? "No se encontró el conductor: asígnalo a mano." : "No se pudo consultar el conductor: inténtalo más tarde o asígnalo a mano.",
         r.resultado === "Error" ? "error" : r.resultado === "NoEncontrado" ? "warning" : "success",
       );
       ctx.recargar();
@@ -265,7 +265,7 @@ export function AccionesConductor({ ctx }: { ctx: ContextoDetalle }) {
         {puedeConsultar && (
           <button type="button" className={controlCls(false)} disabled={consultando} onClick={() => consultar()}>
             <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-            {consultando ? "Consultando…" : "Consultar API"}
+            {consultando ? "Consultando…" : "Consultar conductor"}
           </button>
         )}
         {puedeDocumentos && <CargarDocumento ctx={ctx} />}
@@ -277,7 +277,7 @@ export function AccionesConductor({ ctx }: { ctx: ContextoDetalle }) {
       {confirmar && (
         <InlineAlert
           tone="warning"
-          title="La API encontró otro conductor"
+          title="La consulta encontró otro conductor"
           action={
             <div className="flex gap-2">
               <button type="button" className={controlCls(false)} onClick={() => setConfirmar(null)}>

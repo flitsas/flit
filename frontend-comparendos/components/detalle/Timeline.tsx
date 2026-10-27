@@ -8,7 +8,7 @@ import { useSesion } from "@/components/ComparendosShell";
 import { useToast } from "@/components/Toast";
 import { BOTON_PRIMARIO_CLS, INPUT_CLS, TEXTAREA_CLS } from "@/components/ui/estilos";
 import { apiFetch } from "@/lib/api";
-import { EVENTO_TIMELINE } from "@/lib/etiquetas";
+import { EVENTO_TIMELINE, nombreActor, textoParaGestora } from "@/lib/etiquetas";
 import { formatoFechaHora } from "@/lib/format/date";
 import { P } from "@/lib/nav";
 import { tienePermiso } from "@/lib/sesion";
@@ -117,10 +117,10 @@ export function Timeline({
             <div className="flex flex-wrap items-baseline gap-x-2">
               <span className="text-xs font-semibold">{EVENTO_TIMELINE[e.tipo] ?? e.tipo}</span>
               <span className="text-[11px] opacity-60">
-                {formatoFechaHora(e.ocurridoEn)} · {e.actorNombre}
+                {formatoFechaHora(e.ocurridoEn)} · {nombreActor(e.actorNombre)}
               </span>
             </div>
-            <p className="whitespace-pre-wrap text-xs text-[#334155] dark:text-slate-300">{e.descripcion}</p>
+            <p className="whitespace-pre-wrap text-xs text-[#334155] dark:text-slate-300">{textoParaGestora(e.descripcion)}</p>
             {/* §7.2: el evento lleva a lo que lo originó: el correo al Centro de mensajes; el DP, el pago y los documentos a su sección del detalle. */}
             {e.relacionadoTipo === "comunicacion_saliente" && e.relacionadoId && verMensajes && (
               <Link href={`/mensajes?mensaje=${e.relacionadoId}`} className="text-[11px] font-semibold text-flit-brand hover:underline">

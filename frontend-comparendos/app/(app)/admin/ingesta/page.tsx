@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Play } from "lucide-react";
+import { Play, X } from "lucide-react";
 import { DataTable, InlineAlert, Modal, StatusBadge, enabledTone, usePaginacion } from "@flit/ui";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
@@ -11,6 +11,21 @@ import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/compo
 import { apiDownload, apiFetch } from "@/lib/api";
 import { CANAL, canal, opciones, RESULTADO_CICLO, resultadoCiclo, TRABAJO } from "@/lib/etiquetas";
 import { formatoFechaHora } from "@/lib/format/date";
+import {
+  CADA_MINUTOS,
+  canalDeIngesta,
+  construirCron,
+  describirProgramacion,
+  DIAS_SEMANA,
+  ejecucionManual,
+  errorProgramacion,
+  leerCron,
+  MODOS,
+  PROGRAMACION_INICIAL,
+  siguienteHora,
+  type ModoProgramacion,
+  type Programacion,
+} from "@/lib/programacion";
 import type { Ciclo, DetalleCiclo, Pagina, Trabajo } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
 
@@ -20,19 +35,29 @@ function siguiente(valor: string | null): string {
   return formatoFechaHora(`${valor}:00-05:00`);
 }
 
+const CHIP_DIA_CLS = "rounded-full border px-3 py-1 text-xs font-semibold";
+
+/** HU #13814 (B14-6): días y horas en vez de expresión cron. La base sigue en cron; esta pantalla la traduce. */
 function EditarTrabajo({ trabajo, onCerrar, onGuardado }: { trabajo: Trabajo | null; onCerrar: () => void; onGuardado: () => void }) {
-  const [cron, setCron] = useState(trabajo?.expresionCron ?? "");
+  const leida = trabajo ? leerCron(trabajo.expresionCron) : null;
+  // Lo que el selector no sabe representar se mantiene tal cual mientras no se elija reemplazarlo.
+  const [mantener, setMantener] = useState(leida === null);
+  const [prog, setProg] = useState<Programacion>(leida ?? PROGRAMACION_INICIAL);
   const [activo, setActivo] = useState(trabajo?.activo ?? true);
   const [habiles, setHabiles] = useState(trabajo?.soloDiasHabiles ?? false);
   const [error, setError] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  const falta = mantener ? null : errorProgramacion(prog);
+  const cambiar = (cambios: Partial<Programacion>) => setProg((p) => ({ ...p, ...cambios }));
+  const alternarDia = (d: number) => cambiar({ dias: prog.dias.includes(d) ? prog.dias.filter((x) => x !== d) : [...prog.dias, d] });
 
   const guardar = async () => {
-    if (!trabajo) return;
+    if (!trabajo || falta) return;
     setOcupado(true);
     setError(null);
     try {
-      await apiFetch(`/admin/ingesta/trabajos/${trabajo.tipo}`, { method: "PATCH", body: { expresionCron: cron, activo, soloDiasHabiles: habiles } });
+      const body = { activo, soloDiasHabiles: habiles, ...(mantener ? {} : { expresionCron: construirCron(prog) }) };
+      await apiFetch(`/admin/ingesta/trabajos/${trabajo.tipo}`, { method: "PATCH", body });
       onGuardado();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo guardar.");
@@ -47,30 +72,126 @@ function EditarTrabajo({ trabajo, onCerrar, onGuardado }: { trabajo: Trabajo | n
       onClose={onCerrar}
       busy={ocupado}
       title={trabajo ? TRABAJO[trabajo.tipo] ?? trabajo.tipo : "Trabajo"}
-      description="La expresión cron va en hora de Colombia: minuto hora día mes día-de-la-semana. Ejemplo: «0 7,13 * * *» = todos los días a las 7:00 y 13:00."
+      description="Elige cuándo corre. Las horas son de Colombia."
       footer={
         <div className="flex justify-end gap-2">
           <button type="button" className={controlCls(false)} onClick={onCerrar}>
             Cancelar
           </button>
-          <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado} onClick={guardar}>
+          <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado || falta !== null} onClick={guardar}>
             {ocupado ? "Guardando…" : "Guardar"}
           </button>
         </div>
       }
     >
       <div className="flex flex-col gap-3">
-        <label className={ETIQUETA_CLS}>
-          Expresión cron
-          <input className={`${INPUT_CLS} font-mono`} value={cron} onChange={(e) => setCron(e.target.value)} />
-        </label>
+        {leida === null && trabajo && (
+          <InlineAlert tone="info" compact>
+            {mantener
+              ? `La programación actual (${trabajo.programacion ?? trabajo.expresionCron}) no se puede editar con días y horas. Puedes dejarla así o reemplazarla.`
+              : "Vas a reemplazar la programación actual. Si cancelas, queda como estaba."}
+          </InlineAlert>
+        )}
+        {leida === null && (
+          <label className="flex items-center gap-2 text-xs font-semibold">
+            <input type="checkbox" checked={!mantener} onChange={(e) => setMantener(!e.target.checked)} />
+            Reemplazar por días y horas
+          </label>
+        )}
+        {!mantener && (
+          <>
+            <label className={ETIQUETA_CLS}>
+              Cuándo
+              <select className={INPUT_CLS} value={prog.modo} onChange={(e) => cambiar({ modo: e.target.value as ModoProgramacion })}>
+                {MODOS.map((m) => (
+                  <option key={m.valor} value={m.valor}>
+                    {m.texto}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {prog.modo === "minutos" && (
+              <label className={ETIQUETA_CLS}>
+                Cada
+                <select className={INPUT_CLS} value={prog.cada} onChange={(e) => cambiar({ cada: Number(e.target.value) })}>
+                  {[...new Set([...CADA_MINUTOS, prog.cada])].sort((x, y) => x - y).map((n) => (
+                    <option key={n} value={n}>
+                      {n} minutos
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {prog.modo === "semana" && (
+              <div className={ETIQUETA_CLS}>
+                Días
+                <div className="flex flex-wrap gap-1.5">
+                  {DIAS_SEMANA.map((d) => {
+                    const marcado = prog.dias.includes(d.valor);
+                    return (
+                      <button
+                        key={d.valor}
+                        type="button"
+                        aria-pressed={marcado}
+                        className={`${CHIP_DIA_CLS} ${marcado ? "border-[#3B4FD6] bg-[#3B4FD6] text-white" : "border-current/20 opacity-70"}`}
+                        onClick={() => alternarDia(d.valor)}
+                      >
+                        {d.corto}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            {prog.modo === "diaMes" && (
+              <label className={ETIQUETA_CLS}>
+                Día del mes (1 a 28)
+                <input className={`${INPUT_CLS} w-24`} type="number" min={1} max={28} value={prog.diaMes} onChange={(e) => cambiar({ diaMes: Number(e.target.value) })} />
+              </label>
+            )}
+            {prog.modo !== "minutos" && (
+              <div className={ETIQUETA_CLS}>
+                {prog.horas.length > 1 ? "Horas" : "Hora"}
+                <div className="flex flex-wrap items-center gap-2">
+                  {prog.horas.map((h, i) => (
+                    <span key={i} className="flex items-center gap-1">
+                      <input
+                        className={`${INPUT_CLS} w-32`}
+                        type="time"
+                        aria-label={`Hora ${i + 1}`}
+                        value={h}
+                        onChange={(e) => cambiar({ horas: prog.horas.map((x, j) => (j === i ? e.target.value : x)) })}
+                      />
+                      {prog.horas.length > 1 && (
+                        <button type="button" className="text-xs opacity-60 hover:opacity-100" aria-label={`Quitar la hora ${i + 1}`} onClick={() => cambiar({ horas: prog.horas.filter((_, j) => j !== i) })}>
+                          <X className="h-3.5 w-3.5" aria-hidden />
+                        </button>
+                      )}
+                    </span>
+                  ))}
+                  <button type="button" className="text-xs font-semibold text-[#3B4FD6] hover:underline" onClick={() => cambiar({ horas: [...prog.horas, siguienteHora(prog.horas)] })}>
+                    + Otra hora
+                  </button>
+                </div>
+              </div>
+            )}
+            {falta ? (
+              <InlineAlert tone="warning" compact>{falta}</InlineAlert>
+            ) : (
+              <p className="text-sm">
+                Quedará: <span className="font-semibold">{describirProgramacion(prog)}</span>
+                {habiles ? ", solo en días hábiles" : ""}.
+              </p>
+            )}
+          </>
+        )}
         <label className="flex items-center gap-2 text-xs font-semibold">
           <input type="checkbox" checked={activo} onChange={(e) => setActivo(e.target.checked)} />
           Activo
         </label>
         <label className="flex items-center gap-2 text-xs font-semibold">
           <input type="checkbox" checked={habiles} onChange={(e) => setHabiles(e.target.checked)} />
-          Solo en días hábiles
+          Solo en días hábiles (no corre sábados, domingos ni festivos)
         </label>
         {error && <InlineAlert tone="error" compact>{error}</InlineAlert>}
       </div>
@@ -78,10 +199,67 @@ function EditarTrabajo({ trabajo, onCerrar, onGuardado }: { trabajo: Trabajo | n
   );
 }
 
-function EjecutarAhora({ abierto, onCerrar }: { abierto: boolean; onCerrar: () => void }) {
+/** HU #13815 (B14-5): lanzar a mano un trabajo que no es de ingesta, con confirmación. */
+function EjecutarTrabajo({ trabajo, onCerrar, onLanzado }: { trabajo: Trabajo | null; onCerrar: () => void; onLanzado: () => void }) {
   const toast = useToast();
   const [empresa, setEmpresa] = useState<string | null>(null);
-  const [canalElegido, setCanal] = useState("SimitNit");
+  const [ocupado, setOcupado] = useState(false);
+  const info = ejecucionManual(trabajo?.tipo ?? "");
+  const nombre = trabajo ? TRABAJO[trabajo.tipo] ?? trabajo.tipo : "";
+
+  const ejecutar = async () => {
+    if (!trabajo) return;
+    setOcupado(true);
+    try {
+      await apiFetch(`/admin/ingesta/trabajos/${trabajo.tipo}/ejecutar`, { method: "POST", query: { empresaId: empresa } });
+      toast.show(`«${nombre}» quedó en marcha. Su última ejecución se actualiza al terminar.`, "success");
+      onLanzado();
+    } catch (e) {
+      toast.show(e instanceof Error ? e.message : "No se pudo ejecutar.", "error");
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={trabajo !== null}
+      onClose={onCerrar}
+      busy={ocupado}
+      title={`¿Ejecutar «${nombre}» ahora?`}
+      description={info.texto}
+      footer={
+        <div className="flex justify-end gap-2">
+          <button type="button" className={controlCls(false)} onClick={onCerrar}>
+            Cancelar
+          </button>
+          <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado} onClick={ejecutar}>
+            {ocupado ? "Ejecutando…" : "Sí, ejecutar"}
+          </button>
+        </div>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        {info.correos && (
+          <InlineAlert tone="warning" compact>
+            Se enviarán correos reales a sus destinatarios.
+          </InlineAlert>
+        )}
+        {info.porEmpresa && (
+          <div className="flex flex-col gap-1">
+            <SelectorEmpresa valor={empresa} onCambio={setEmpresa} />
+            <p className="text-xs opacity-60">Sin empresa elegida, corre para todas.</p>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function EjecutarAhora({ abierto, canalInicial, onCerrar }: { abierto: boolean; canalInicial: string; onCerrar: () => void }) {
+  const toast = useToast();
+  const [empresa, setEmpresa] = useState<string | null>(null);
+  const [canalElegido, setCanal] = useState(canalInicial);
   const [ocupado, setOcupado] = useState(false);
 
   const ejecutar = async () => {
@@ -211,7 +389,9 @@ function DetalleDeCiclo({ id, onCerrar }: { id: string | null; onCerrar: () => v
 export default function Ingesta() {
   const toast = useToast();
   const [editar, setEditar] = useState<Trabajo | null>(null);
-  const [ejecutar, setEjecutar] = useState(false);
+  // Diálogo de ingesta: null cerrado, si no el canal con el que abre (HU #13815: desde la fila de un trabajo de ingesta).
+  const [ejecutar, setEjecutar] = useState<string | null>(null);
+  const [lanzar, setLanzar] = useState<Trabajo | null>(null);
   const [ciclo, setCiclo] = useState<string | null>(null);
   const [filtroCanal, setFiltroCanal] = useState("");
   const [filtroResultado, setFiltroResultado] = useState("");
@@ -237,7 +417,7 @@ export default function Ingesta() {
           titulo="Trabajos e ingesta"
           descripcion="Cuándo se consultan SIMIT y la fuente municipal, y qué pasó en cada ciclo."
           acciones={
-            <button type="button" className={BOTON_PRIMARIO_CLS} onClick={() => setEjecutar(true)}>
+            <button type="button" className={BOTON_PRIMARIO_CLS} onClick={() => setEjecutar("SimitNit")}>
               <Play className="h-3.5 w-3.5" aria-hidden />
               Ejecutar ahora
             </button>
@@ -253,22 +433,32 @@ export default function Ingesta() {
           onRowClick={(t) => setEditar(t)}
           columns={[
             { key: "tipo", header: "Trabajo", render: (t) => <span className="font-semibold">{TRABAJO[t.tipo] ?? t.tipo}</span> },
-            {
-              key: "cron",
-              header: "Programación",
-              // B4-2: en palabras, con la expresión debajo para quien la edita.
-              render: (t) => (
-                <span className="flex flex-col">
-                  <span>{t.programacion ?? t.expresionCron}</span>
-                  {t.programacion && <span className="font-mono text-[11px] opacity-60">{t.expresionCron}</span>}
-                </span>
-              ),
-            },
+            { key: "cron", header: "Programación", render: (t) => t.programacion ?? t.expresionCron },
             { key: "sig", header: "Siguiente ejecución", render: (t) => (t.activo ? siguiente(t.siguiente) : "—") },
             { key: "habiles", header: "Solo días hábiles", render: (t) => (t.soloDiasHabiles ? "Sí" : "No") },
             { key: "activo", header: "Estado", render: (t) => <StatusBadge label={t.activo ? "Activo" : "Apagado"} tone={enabledTone(t.activo)} /> },
             { key: "ultima", header: "Última ejecución", render: (t) => formatoFechaHora(t.ultimaEjecucionEn) },
             { key: "res", header: "Último resultado", render: (t) => (t.ultimoResultado ? <Chip e={resultadoCiclo(t.ultimoResultado)} /> : "—") },
+            {
+              key: "accion",
+              header: "",
+              align: "right",
+              render: (t) => (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-[#3B4FD6] hover:underline"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const c = canalDeIngesta(t.tipo);
+                    if (c) setEjecutar(c);
+                    else setLanzar(t);
+                  }}
+                >
+                  <Play className="h-3 w-3" aria-hidden />
+                  Ejecutar ahora
+                </button>
+              ),
+            },
           ]}
         />
 
@@ -327,7 +517,20 @@ export default function Ingesta() {
             }}
           />
         )}
-        <EjecutarAhora abierto={ejecutar} onCerrar={() => { setEjecutar(false); ciclos.recargar(); }} />
+        {ejecutar && <EjecutarAhora key={ejecutar} abierto canalInicial={ejecutar} onCerrar={() => { setEjecutar(null); ciclos.recargar(); }} />}
+        {lanzar && (
+          <EjecutarTrabajo
+            key={lanzar.tipo}
+            trabajo={lanzar}
+            onCerrar={() => setLanzar(null)}
+            onLanzado={() => {
+              setLanzar(null);
+              trabajos.recargar();
+              // La última ejecución se escribe al terminar; una segunda lectura la trae en los trabajos cortos.
+              setTimeout(trabajos.recargar, 5000);
+            }}
+          />
+        )}
         <DetalleDeCiclo id={ciclo} onCerrar={() => setCiclo(null)} />
       </section>
     </Requiere>

@@ -72,11 +72,12 @@ public sealed class DescargarCertificadoIdentidadHandler(
     private async Task<bool> EsIdentidadEfectivaDelTramiteAsync(
         Guid instanceId, Guid tenantId, ProcedureInstanceBiometricValidation bio, CancellationToken ct)
     {
-        if (!BiometricRules.EsAprobadaVigente(bio, DateTimeOffset.UtcNow))
-            return false;
-
         var instance = await repo.GetByIdWithBiometricsAndActorsAsync(instanceId, tenantId, ct);
         if (instance is null)
+            return false;
+
+        // HU #13824 — un trámite fuera de borrador conserva su certificado aunque la identidad se haya vencido a mano.
+        if (!BiometricRules.EsAprobadaVigenteParaTramite(bio, instance.Status, DateTimeOffset.UtcNow))
             return false;
 
         return instance.Actors.Any(a =>

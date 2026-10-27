@@ -66,7 +66,7 @@ export function adminBlockUser(email: string, days: number): Promise<void> {
   });
 }
 
-/** POST /api/v1/auth/activate → 200 | 400 (INVITATION_INVALID | WEAK_PASSWORD). */
+/** POST /api/v1/auth/activate → 200 | 400 (INVITATION_INVALID | WEAK_PASSWORD) | 409 (EMAIL_ALREADY_IN_USE). */
 export function activateAccount(token: string, password: string): Promise<void> {
   return apiFetch<void>("/api/v1/auth/activate", {
     method: "POST",

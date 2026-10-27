@@ -46,6 +46,23 @@ public sealed class NumeroComparendoTests
     [InlineData("---", null)]
     public void Normalizar_conserva_prefijo_y_quita_separadores(string texto, string? esperado) =>
         NumeroComparendo.Normalizar(texto).Should().Be(esperado);
+
+    [Theory]
+    [InlineData("7600100000005652501", 19)]
+    [InlineData("760010000000565250170", 21)]
+    [InlineData("7600-1000.0000565 2501", 19)]
+    [InlineData("76001000000056525017", null)]
+    [InlineData("D05001000000054280231", null)]
+    [InlineData("1100128527016", null)]
+    [InlineData(null, null)]
+    public void AvisoDeLectura_SoloCon19o21Digitos(string? texto, int? digitos)
+    {
+        var aviso = NumeroComparendo.AvisoDeLectura(texto);
+        if (digitos is null)
+            aviso.Should().BeNull();
+        else
+            aviso.Should().Contain($"{digitos} dígitos");
+    }
 }
 
 public sealed class TextoNormalizadoTests

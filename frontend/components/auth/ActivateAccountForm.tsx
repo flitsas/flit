@@ -7,6 +7,11 @@ import { getToken } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/types";
 import { clearToken } from "@/lib/auth/session";
 import { isPasswordCompliant, PASSWORD_POLICY_HINT } from "@/lib/auth/password-policy";
+import {
+  EMAIL_ALREADY_ASSOCIATED_MESSAGE,
+  emailConflictErrorCode,
+  isEmailConflictCode,
+} from "@/lib/users/emailConflict";
 
 const INPUT_CLASS =
   "w-full bg-white border border-flit-gray rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20";
@@ -70,9 +75,12 @@ export function ActivateAccountForm({ token }: { token: string | null }) {
     } catch (err) {
       const apiErr = err as ApiError;
       setError(
-        apiErr.status === 400
-          ? "El enlace de activación es inválido o ya fue utilizado."
-          : "No se pudo activar la cuenta. Inténtalo de nuevo.",
+        // HU #13811/#13812 — el correo ya lo usa otra cuenta (otra compañía lo activó antes): 409.
+        isEmailConflictCode(emailConflictErrorCode(apiErr.body))
+          ? EMAIL_ALREADY_ASSOCIATED_MESSAGE
+          : apiErr.status === 400
+            ? "El enlace de activación es inválido o ya fue utilizado."
+            : "No se pudo activar la cuenta. Inténtalo de nuevo.",
       );
     } finally {
       setLoading(false);

@@ -9,6 +9,7 @@ import { OtUsersSection } from "../OtUsersSection";
 import { fetchOtUsers, cancelOtInvitation } from "@/lib/api/admin-ot-security";
 import { ApiError } from "@/lib/api/types";
 import type { OtUserItem } from "@/lib/api/admin-ot-security";
+import { chooseRowAction, rowActionNames } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 
 vi.mock("@/lib/api/admin-ot-security", () => ({
   fetchOtUsers: vi.fn(),
@@ -90,29 +91,26 @@ describe("OtUsersSection — botón Cancelar invitación (#10628)", () => {
 
   it("AC2: SOLO muestra 'Cancelar invitación' (no 'Eliminar usuario') en una fila Pendiente", async () => {
     vi.mocked(fetchOtUsers).mockResolvedValue({ data: [pendingUser] });
+    const user = userEvent.setup();
     renderSection();
 
     await screen.findByText("Marta Gómez");
-    expect(
-      screen.getByRole("button", { name: /cancelar invitación a marta gómez/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /eliminar usuario marta gómez/i }),
-    ).not.toBeInTheDocument();
+    // HU #13653: las acciones viven en el menú «Acciones» de la fila.
+    const names = await rowActionNames(user, "Marta Gómez");
+    expect(names).toContainEqual(expect.stringMatching(/cancelar invitación a marta gómez/i));
+    expect(names).not.toContainEqual(expect.stringMatching(/eliminar usuario marta gómez/i));
   });
 
   it("AC2: SOLO muestra 'Eliminar usuario' (no 'Cancelar invitación') en una fila NO Pendiente (SuperAdmin)", async () => {
     perms.current = { ...SUPER_ADMIN_PERMS };
     vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser] });
+    const user = userEvent.setup();
     renderSection();
 
     await screen.findByText("Laura García");
-    expect(
-      screen.getByRole("button", { name: /eliminar usuario laura garcía/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /cancelar invitación a laura garcía/i }),
-    ).not.toBeInTheDocument();
+    const names = await rowActionNames(user, "Laura García");
+    expect(names).toContainEqual(expect.stringMatching(/eliminar usuario laura garcía/i));
+    expect(names).not.toContainEqual(expect.stringMatching(/cancelar invitación a laura garcía/i));
   });
 
   it("AC1: cancelación exitosa llama a cancelOtInvitation con el scope OT y la fila desaparece", async () => {
@@ -124,7 +122,7 @@ describe("OtUsersSection — botón Cancelar invitación (#10628)", () => {
     renderSection();
 
     await screen.findByText("Marta Gómez");
-    await user.click(screen.getByRole("button", { name: /cancelar invitación a marta gómez/i }));
+    await chooseRowAction(user, "Marta Gómez", /cancelar invitación a marta gómez/i);
     await user.click(screen.getByRole("button", { name: /^cancelar invitación$/i }));
 
     await waitFor(() =>
@@ -145,7 +143,7 @@ describe("OtUsersSection — botón Cancelar invitación (#10628)", () => {
     renderSection();
 
     await screen.findByText("Marta Gómez");
-    await user.click(screen.getByRole("button", { name: /cancelar invitación a marta gómez/i }));
+    await chooseRowAction(user, "Marta Gómez", /cancelar invitación a marta gómez/i);
     await user.click(screen.getByRole("button", { name: /^cancelar invitación$/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/ya no existe/i);
@@ -163,7 +161,7 @@ describe("OtUsersSection — botón Cancelar invitación (#10628)", () => {
     renderSection();
 
     await screen.findByText("Marta Gómez");
-    await user.click(screen.getByRole("button", { name: /cancelar invitación a marta gómez/i }));
+    await chooseRowAction(user, "Marta Gómez", /cancelar invitación a marta gómez/i);
     await user.click(screen.getByRole("button", { name: /^cancelar invitación$/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/ya no está pendiente/i);

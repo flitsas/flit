@@ -18,6 +18,12 @@ public enum ResultadoContrato
 public sealed record RespuestaContrato(ResultadoContrato Resultado, ConductorEncontrado? Conductor, string? Mensaje, string? CuerpoCrudo);
 
 /// <summary>
+/// Resultado de «Probar conexión» (HU #13843): solo el inicio de sesión con la API de contratos. <c>Simulada</c>: el
+/// ambiente no está conectado y las consultas usan respuestas simuladas (DEV).
+/// </summary>
+public sealed record PruebaContratos(bool Conectado, string? Motivo, int? HttpStatus, int DuracionMs, bool ContactoDesviado, string? CorreoDesvio, bool Simulada);
+
+/// <summary>
 /// API de contratos de la gestora: quién tenía el vehículo en una fecha (ADO #12978). Hoy solo existe la de Renting
 /// [Excel P12, P3] y su contrato se recibe al final; por eso el modo simulado: placa terminada en número par → conductor
 /// de prueba; impar → no encontrado; terminada en 0 → error.
@@ -25,6 +31,9 @@ public sealed record RespuestaContrato(ResultadoContrato Resultado, ConductorEnc
 public interface IApiContratos
 {
     Task<RespuestaContrato> ConsultarAsync(Guid tenantId, string placa, DateOnly fecha, CancellationToken ct);
+
+    /// <summary>HU #13843: prueba la conexión sin consultar ninguna placa.</summary>
+    Task<PruebaContratos> ProbarAsync(CancellationToken ct);
 }
 
 /// <summary>Fuera de DEV, mientras no se conecte la API real: responde error (se reintenta) y nunca inventa un conductor.</summary>
@@ -32,10 +41,16 @@ internal sealed class ApiContratosNoConectada : IApiContratos
 {
     public Task<RespuestaContrato> ConsultarAsync(Guid tenantId, string placa, DateOnly fecha, CancellationToken ct) =>
         Task.FromResult(new RespuestaContrato(ResultadoContrato.Error, null, "La API de contratos no está conectada en este ambiente.", null));
+
+    public Task<PruebaContratos> ProbarAsync(CancellationToken ct) =>
+        Task.FromResult(new PruebaContratos(false, "Comparendos no tiene configurada la dirección de core-consultas (Comparendos:Consultas:Address).", null, 0, false, null, false));
 }
 
 internal sealed class ApiContratosSimulada : IApiContratos
 {
+    public Task<PruebaContratos> ProbarAsync(CancellationToken ct) =>
+        Task.FromResult(new PruebaContratos(false, "Este ambiente no tiene conexión con core-consultas: las consultas usan respuestas simuladas.", null, 0, false, null, true));
+
     public Task<RespuestaContrato> ConsultarAsync(Guid tenantId, string placa, DateOnly fecha, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(placa);
@@ -79,6 +94,28 @@ internal sealed class ApiContratosCoreConsultas(FuentesComparendosService.Fuente
             return new RespuestaContrato(ResultadoContrato.Error, null, $"core-consultas: {ex.Status.Detail}", null);
         }
 
+        return Convertir(r, placa, fecha);
+    }
+
+    public async Task<PruebaContratos> ProbarAsync(CancellationToken ct)
+    {
+        ProbarContratoConductorResponse r;
+        try
+        {
+            r = await cliente.ProbarContratoConductorAsync(new ProbarContratoConductorRequest { Proveedor = "renting" }, cancellationToken: ct).ConfigureAwait(false);
+        }
+        catch (RpcException ex) when (ex.StatusCode != StatusCode.Cancelled || !ct.IsCancellationRequested)
+        {
+            return new PruebaContratos(false, $"No se pudo hablar con core-consultas: {ex.Status.Detail}", null, 0, false, null, false);
+        }
+
+        // Sin conexión real, en DEV las consultas caen a la simulada (ver ConsultarAsync): la prueba lo dice.
+        return new PruebaContratos(r.Conectado, r.HasMotivo ? r.Motivo : null, r.HasHttpStatus ? r.HttpStatus : null, r.DuracionMs, r.ContactoDesviado,
+            r.HasCorreoDesvio ? r.CorreoDesvio : null, !r.Configurado && simulada is not null);
+    }
+
+    private static RespuestaContrato Convertir(ConsultarContratoConductorResponse r, string placa, DateOnly fecha)
+    {
         switch (r.Resultado)
         {
             case ResultadoContratoConductor.Encontrado when r.Conductor is { } k:

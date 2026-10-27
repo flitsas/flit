@@ -34,6 +34,8 @@ public sealed class StateMachineTests
         // decide la placa.
         (TramiteEstado.Rechazado, TramiteEstado.Entregado),
         (TramiteEstado.Rechazado, TramiteEstado.Preasignacion),
+        // Bug #13912 — re-radicación Quipux: vuelve a preparado para encolar.
+        (TramiteEstado.Rechazado, TramiteEstado.Preparado),
         // HU #12166 (Feature #12156) — única salida de 'aprobado': el OT revoca su propia aprobación.
         (TramiteEstado.Aprobado, TramiteEstado.Revocado),
     ];
@@ -53,6 +55,7 @@ public sealed class StateMachineTests
     [InlineData("rechazado", "anulado")]
     [InlineData("rechazado", "entregado")]
     [InlineData("rechazado", "preasignacion")]
+    [InlineData("rechazado", "preparado")]
     [InlineData("aprobado", "revocado")]
     public void Negocio_TransicionesValidasRf02(string from, string to)
     {

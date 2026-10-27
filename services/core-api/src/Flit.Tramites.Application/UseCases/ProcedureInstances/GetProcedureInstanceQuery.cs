@@ -79,7 +79,10 @@ public sealed record ProcedureInstanceEventDto(
     // revocatoria_aprobada / revocatoria_rechazada (HU #12576/#12577, Feature #12565) — motivo de la
     // DECISIÓN del OT, distinto de RevocationReason (que es el motivo original del gestor al pedirla).
     // Ambos tipos reutilizan RevocationAttemptNumber de arriba.
-    string? RevocationDecisionReason = null);
+    string? RevocationDecisionReason = null,
+    // reenvio_validacion_admin (HU #13821) — correo que tenía la persona antes de corregirlo en el reenvío
+    // (null si no cambió), para que el tracking muestre «anterior → nuevo». En claro, igual que CorreoDestino.
+    string? CorreoAnterior = null);
 
 /// <summary>
 /// HU #12575 (Feature #12565, AC1) — sub-estado ACTIVO de revocatoria sobre un trámite
@@ -211,7 +214,9 @@ public sealed class GetProcedureInstanceHandler(
     // que ya usan varios tests existentes (Integration.Tests, Application.Tests): sin ellos, el handler
     // sigue funcionando igual, solo que RevocationEligibility queda null (degradación segura).
     IProcedureRevocationRequestRepository? revocationRepo = null,
-    IBusinessDayCalculator? businessDayCalculator = null)
+    IBusinessDayCalculator? businessDayCalculator = null,
+    // HU #13664 — Ver por familia: sin el «.read» de la familia del trámite el detalle responde 403.
+    Flit.Tramites.Domain.Integration.IProcedureFamilyPermissionGate? familyPermissions = null)
 {
     /// <summary>Tipos de <see cref="ProcedureInstanceEvent"/> que el dashboard muestra en el tracking
     /// (ver XML doc de <see cref="ProcedureInstanceEventDto"/> sobre por qué solo estos tres).</summary>
@@ -238,6 +243,8 @@ public sealed class GetProcedureInstanceHandler(
         var instance = await repo.GetByIdWithDetailsAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
+        if (familyPermissions is not null && !familyPermissions.CanRead(instance.Family))
+            return (null, "family_forbidden");
 
         var revocationEligibility = await BuildRevocationEligibilityAsync(instance, tenantId, ct).ConfigureAwait(false);
         var activeRevocationRequest = await BuildActiveRevocationRequestAsync(instance, tenantId, ct).ConfigureAwait(false);
@@ -515,12 +522,16 @@ public sealed class GetProcedureInstanceHandler(
             var correo = payload.TryGetProperty("correo_destino", out var cd) && cd.ValueKind == JsonValueKind.String
                 ? cd.GetString()
                 : null;
+            var correoAnterior = payload.TryGetProperty("correo_anterior", out var cp) && cp.ValueKind == JsonValueKind.String
+                ? cp.GetString()
+                : null;
             return new ProcedureInstanceEventDto(
                 e.Tipo, e.CreatedAt, createdByName,
                 PartyRole: partyRole,
                 EmailActualizado: emailActualizado,
                 CorreoDestino: correo,
-                CreatedByCompania: createdByCompania);
+                CreatedByCompania: createdByCompania,
+                CorreoAnterior: correoAnterior);
         }).ToList();
     }
 

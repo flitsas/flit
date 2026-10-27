@@ -18,7 +18,7 @@ namespace Flit.Comparendos.Api.Modulos.Monitoreo;
 public static class MonitoreoEndpoints
 {
     public sealed record NitDto(Guid Id, string TipoDocumento, string NumeroBase, short? DigitoVerificacion, string Numero, string? NombreTitular, bool Activo, DateTimeOffset CreadoEn, int ComparendosActivos = 0,
-        bool ConsultaContratoApi = false);
+        bool ConsultaContratoApi = false, bool ConsultaAutomatica = false);
 
     public sealed record PlacaDto(Guid Id, string Placa, bool Activo, string OrigenRegistro, DateTimeOffset CreadoEn, int ComparendosActivos = 0);
 
@@ -86,7 +86,10 @@ public static class MonitoreoEndpoints
         var lista = await q.OrderByDescending(n => n.Activo).ThenBy(n => n.NumeroBase).ToListAsync(ct).ConfigureAwait(false);
         var activos = await db.Comparendos.AsNoTracking().Where(c => c.TenantId == tenant && c.Activo && c.IdentificacionMonitoreadaId != null)
             .GroupBy(c => c.IdentificacionMonitoreadaId!.Value).Select(g => new { g.Key, Cantidad = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Cantidad, ct).ConfigureAwait(false);
-        return Results.Ok(lista.Select(n => ANit(n) with { ComparendosActivos = activos.GetValueOrDefault(n.Id) }));
+        // HU #13844: lo que de verdad pasa con el conductor de sus comparendos (la empresa lo ve; solo el SuperAdmin lo cambia).
+        var config = await db.ConfiguracionesEmpresa.AsNoTracking().FirstOrDefaultAsync(c => c.TenantId == tenant, ct).ConfigureAwait(false);
+        var automatica = config is not null && Contraventor.ConsultaPorApi.EmpresaLaUsa(config);
+        return Results.Ok(lista.Select(n => ANit(n) with { ComparendosActivos = activos.GetValueOrDefault(n.Id), ConsultaAutomatica = automatica && n.ConsultaContratoApi }));
     }
 
     private static async Task<IResult> CrearNit(NuevoNit pedido, UsuarioActual usuario, ComparendosDb db, Auditoria auditoria, Reloj reloj, CancellationToken ct)

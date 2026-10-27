@@ -20,29 +20,20 @@ public sealed class PermissionAuthorizationHandler
         AuthorizationHandlerContext context,
         PermissionRequirement requirement)
     {
-        // AC4 — SuperAdmin bypass total. Multi-rol (HU #10506): el JWT emite un claim
-        // "role_code" POR CADA rol activo, en orden no determinístico — FindFirstValue solo
-        // evalúa el primero y puede negar el bypass si SuperAdmin no quedó primero. Se evalúan
-        // TODOS los claims "role_code" (fix post-review #10504).
-        var isSuperAdmin = context.User.Claims.Any(c =>
-            c.Type == "role_code" && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
-        if (isSuperAdmin)
-        {
-            context.Succeed(requirement);
-            return Task.CompletedTask;
-        }
-
-        // AC2 — permiso presente en el JWT
-        var hasPermission = context.User.Claims
-            .Where(c => c.Type == "permissions")
-            .Any(c => string.Equals(c.Value, requirement.Slug, StringComparison.OrdinalIgnoreCase));
-
-        if (hasPermission)
+        // AC2/AC4 — permiso presente en el JWT o SuperAdmin; si no, no se llama Succeed y ASP.NET Core emite 403 (AC3).
+        if (Grants(context.User, requirement.Slug))
         {
             context.Succeed(requirement);
         }
-        // AC3 — sin el permiso: no se llama Succeed; ASP.NET Core emite 403 automáticamente.
 
         return Task.CompletedTask;
     }
+
+    /// <summary>
+    /// SuperAdmin (bypass total, AC4) o slug presente en el claim "permissions" (AC2). Multi-rol (HU #10506): el JWT emite
+    /// un claim "role_code" POR CADA rol activo, en orden no determinístico; se evalúan TODOS (fix post-review #10504).
+    /// </summary>
+    internal static bool Grants(ClaimsPrincipal user, string slug) =>
+        user.Claims.Any(c => c.Type == "role_code" && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase))
+        || user.Claims.Any(c => c.Type == "permissions" && string.Equals(c.Value, slug, StringComparison.OrdinalIgnoreCase));
 }

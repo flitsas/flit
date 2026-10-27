@@ -43,7 +43,7 @@ public sealed class AnalyticsOverviewRangoOpcionalTests
         _factory = factory;
         _factory.Repo.ClearReceivedCalls();
         _factory.Repo
-            .GetOverviewAsync(Arg.Any<Guid?>(), Arg.Any<DateOnly?>(), Arg.Any<DateOnly?>(), Arg.Any<CancellationToken>())
+            .GetOverviewAsync(Arg.Any<Guid?>(), Arg.Any<DateOnly?>(), Arg.Any<DateOnly?>(), null, Arg.Any<CancellationToken>())
             .Returns(new List<CategoryMetricsDto>());
     }
 
@@ -62,7 +62,7 @@ public sealed class AnalyticsOverviewRangoOpcionalTests
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         await _factory.Repo.Received(1).GetOverviewAsync(
-            Arg.Any<Guid?>(), null, null, Arg.Any<CancellationToken>());
+            Arg.Any<Guid?>(), null, null, null, Arg.Any<CancellationToken>());
     }
 
     [Theory] // Cada extremo acota por su lado; el otro queda abierto.
@@ -77,7 +77,7 @@ public sealed class AnalyticsOverviewRangoOpcionalTests
             Arg.Any<Guid?>(),
             desde is null ? null : DateOnly.Parse(desde, System.Globalization.CultureInfo.InvariantCulture),
             hasta is null ? null : DateOnly.Parse(hasta, System.Globalization.CultureInfo.InvariantCulture),
-            Arg.Any<CancellationToken>());
+            null, Arg.Any<CancellationToken>());
     }
 
     [Fact] // Regresión: el rango completo sigue funcionando igual que antes.
@@ -88,7 +88,7 @@ public sealed class AnalyticsOverviewRangoOpcionalTests
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         await _factory.Repo.Received(1).GetOverviewAsync(
-            Arg.Any<Guid?>(), new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), Arg.Any<CancellationToken>());
+            Arg.Any<Guid?>(), new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), null, Arg.Any<CancellationToken>());
     }
 
     [Fact] // El par incoherente sigue siendo 400: es lo ÚNICO que el rango puede tener de inválido.

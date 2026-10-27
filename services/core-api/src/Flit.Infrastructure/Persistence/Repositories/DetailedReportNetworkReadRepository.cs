@@ -36,9 +36,12 @@ internal sealed class DetailedReportNetworkReadRepository : INetworkDetailedRepo
 {
     private const string TenantsParameter = "tenants";
 
+    // HU #13664 — Ver por familia (ver AnalyticsFamilyFilter): alias local para el barrido de interpolación SQL.
+    private const string FamilyByDetailView = AnalyticsFamilyFilter.ByDetailView;
+
     // Los saltos de línea inicial y final son OBLIGATORIOS (ver DetailedReportReadRepository): el
     // fragmento se concatena con la proyección y con las cláusulas finales.
-    private const string BaseFrom = "\n" + """
+    private const string BaseFrom = "\n" + $"""
         FROM analytics.v_procedure_detail_report v
         JOIN identity.tenants t ON t.id = v.tenant_id
         WHERE v.tenant_id = ANY(@tenants)
@@ -52,6 +55,7 @@ internal sealed class DetailedReportNetworkReadRepository : INetworkDetailedRepo
           AND (@personName::text IS NULL OR v.person_full_name ILIKE '%' || @personName::text || '%')
           AND (@hasTransformation::boolean IS NULL OR v.has_transformation = @hasTransformation::boolean)
           AND (@isLeasing::boolean IS NULL OR v.is_leasing = @isLeasing::boolean)
+          AND {FamilyByDetailView}
         """ + "\n";
 
     private const string RowProjection = """
@@ -255,6 +259,7 @@ internal sealed class DetailedReportNetworkReadRepository : INetworkDetailedRepo
         AddParam(cmd, "personName", (object?)filter.PersonName ?? DBNull.Value);
         AddParam(cmd, "hasTransformation", filter.HasTransformation.HasValue ? filter.HasTransformation.Value : DBNull.Value);
         AddParam(cmd, "isLeasing", filter.IsLeasing.HasValue ? filter.IsLeasing.Value : DBNull.Value);
+        AnalyticsFamilyFilter.AddParam(cmd, filter.AllowedFamilies);
     }
 
     /// <summary>

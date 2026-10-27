@@ -236,6 +236,24 @@ public sealed class RoleRepositoryTenantScopeTests
         infos.Select(i => i.Slug).Should().Equal("vivo.read");
     }
 
+    // HU #13666: los permisos otorgables traen el nombre legible del módulo (el del Panel SA), no solo su código.
+    [Fact]
+    public async Task ListGrantablePermissions_TraeElNombreLegibleDelModulo()
+    {
+        var (db, repo) = Build();
+        var modulo = new SecurityModule { Id = Guid.NewGuid(), Code = "consolidado-masivo", Name = "Descarga masiva de consolidados", ProductCode = "tramites", IsActive = true, CreatedAt = DateTimeOffset.UtcNow };
+        var accion = new RbacAction { Id = Guid.NewGuid(), ModuleId = modulo.Id, Slug = "consolidado-masivo.download", Name = "Descargar", HttpMethod = "GET", RoutePattern = "/z", IsActive = true, CreatedAt = DateTimeOffset.UtcNow };
+        db.SecurityModules.Add(modulo);
+        db.RbacActions.Add(accion);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var infos = await repo.ListGrantablePermissionsAsync(["tramites"], TestContext.Current.CancellationToken);
+
+        infos.Should().ContainSingle();
+        infos[0].ModuleCode.Should().Be("consolidado-masivo");
+        infos[0].ModuleName.Should().Be("Descarga masiva de consolidados");
+    }
+
     [Theory]
     [MemberData(nameof(Errores))]
     public void TenantRoleErrors_TraduceCadaExcepcionAlStatusEsperado(Exception ex, int status)

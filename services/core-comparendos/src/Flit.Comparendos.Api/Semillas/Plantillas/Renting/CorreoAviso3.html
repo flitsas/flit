@@ -1,0 +1,31 @@
+<!-- nombre: Aviso 3 al conductor (Renting) -->
+<!-- asunto: Recordatorio pago fotomulta N° {{comparendo.numero}} asociada al vehículo con placa {{comparendo.placa}} -->
+<p style="margin:0 0 12px">Hola, <strong>{{conductor.nombres}}</strong>. Recibe un cordial saludo.</p>
+<p style="margin:0 0 12px"><strong>Renting Colombia</strong> identificó y te brindó aviso sobre la fotomulta en asunto. En correos anteriores, te enviamos información sobre cómo pagar y acceder a los descuentos dentro de los tiempos que la ley dispone.</p>
+<p style="margin:0 0 12px">Hasta la fecha, no hemos recibido confirmación de tu pago. Sabemos que estas situaciones pueden ser complicadas; sin embargo, dado que ya no es posible acceder a los descuentos, te solicitamos realizar el pago completo lo antes posible para evitar cargos adicionales.</p>
+<p style="margin:0 0 12px">Si ya realizaste el pago, por favor envíanos el comprobante o el cierre del trámite a <strong><a href="mailto:tramitesvehiculos@rentingcolombia.com">tramitesvehiculos@rentingcolombia.com</a></strong>.</p>
+<p style="margin:25px 0 10px;font-weight:bold">Aún tienes tiempo de pagar:</p>
+<ul style="margin:10px 0 20px 20px;padding:0">
+<li style="margin-bottom:6px">Puedes hacerlo directamente en el organismo de tránsito donde fue emitida la fotomulta o a través de: <strong><a href="https://www.fcm.org.co/simit/" target="_blank">SIMIT | Inicio Federación Colombiana de Municipios</a></strong>.</li>
+<li style="margin-bottom:6px">Puedes solicitar el pago a través de <strong>Renting Colombia</strong> con un valor adicional de $29.953 (IVA incluido). Para utilizar esta opción, escríbenos a <strong><a href="mailto:tramitesvehiculos@rentingcolombia.com">tramitesvehiculos@rentingcolombia.com</a></strong> autorizando el pago. Este se realizará por el 100% de la fotomulta.</li>
+<li style="margin-bottom:6px">Adjunto a este correo encontrarás nuevamente el poder y formato para diligenciar y gestionar el cambio de contraventor. Te sugerimos acercarte al organismo de tránsito para que, de acuerdo con sus lineamientos, determinen si aún es posible o no realizar el cambio de contraventor.</li>
+</ul>
+<p style="margin:0 0 12px">Recuerda que estamos aquí para asesorarte en este proceso. Si tienes alguna pregunta, por favor escríbenos a <strong><a href="mailto:tramitesvehiculos@rentingcolombia.com">tramitesvehiculos@rentingcolombia.com</a></strong>.</p>
+<p style="margin:25px 0 10px;font-weight:bold">Información del comparendo:</p>
+<ul style="margin:10px 0 20px 20px;padding:0">
+<li style="margin-bottom:6px"><strong>Organismo de tránsito:</strong> {{ot.nombre}}</li>
+<li style="margin-bottom:6px"><strong>Placa:</strong> {{comparendo.placa}}</li>
+<li style="margin-bottom:6px"><strong>Número de comparendo:</strong> {{comparendo.numero}}</li>
+<li style="margin-bottom:6px"><strong>Código de Infracción:</strong> {{comparendo.codigo_infraccion}} {{comparendo.descripcion_infraccion}}.</li>
+<li style="margin-bottom:6px"><strong>Fecha de infracción:</strong> {{comparendo.fecha_imposicion}}</li>
+<li style="margin-bottom:6px"><strong>Fecha de aviso a Renting Colombia:</strong> {{comparendo.fecha_notificacion}}</li>
+<li style="margin-bottom:6px"><strong>Cliente:</strong> {{conductor.nombres}}</li>
+</ul>
+<p style="margin:25px 0 10px;font-weight:bold">Información del Infractor:</p>
+<ul style="margin:10px 0 20px 20px;padding:0">
+<li style="margin-bottom:6px"><strong>Tipo de documento:</strong> {{conductor.tipo_documento}}</li>
+<li style="margin-bottom:6px"><strong>Número de documento:</strong> {{conductor.numero_documento}}</li>
+<li style="margin-bottom:6px"><strong>Cliente:</strong> {{conductor.nombres}}</li>
+</ul>
+<p style="margin:0 0 12px">Si ya has resuelto este asunto, por favor hacer caso omiso a este mensaje. Si no, te recomendamos tomar las medidas necesarias para evitar posibles cobros.</p>
+<p style="margin:0 0 12px;font-size:13px;color:#555555">Saludos.</p>

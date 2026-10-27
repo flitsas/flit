@@ -333,6 +333,12 @@ public sealed class DocumentoOcr
     public DateTimeOffset? RevisadoEn { get; set; }
     public Guid? DescartadoPor { get; set; }
     public string? MotivoDescarte { get; set; }
+
+    /// <summary>Versión del prompt con que se leyó por última vez (HU #13828); null en los leídos antes, que usan la del paquete.</summary>
+    public Guid? PromptVersionId { get; set; }
+
+    /// <summary>Cuántas veces lo pidió reprocesar el operador (HU #13828, tope <see cref="Modulos.Ocr.ServicioOcr.MaximoReprocesos"/>).</summary>
+    public short Reprocesos { get; set; }
 }
 
 public sealed class DocumentoOcrCampo

@@ -23,11 +23,12 @@ namespace Flit.Api.Endpoints;
 /// </summary>
 internal static class UserEmailConflictMessages
 {
-    public const string EmailAlreadyInUse = "El correo utilizado ya se encuentra asociado a otra cuenta";
+    // HU #13811: la fuente es EmailConflict (dominio de Seguridad), compartida con la activación de core-identity.
+    public const string EmailAlreadyInUse = Flit.Modules.Security.Domain.Auth.EmailConflict.Message;
 
     /// <summary>
     /// Código HTTP único que ve el cliente ante cualquiera de las tres causas de conflicto de
     /// correo (invitación pendiente, cuenta activa, cuenta eliminada). HU #11580 AC1/AC2.
     /// </summary>
-    public const string EmailAlreadyInUseCode = "EMAIL_ALREADY_IN_USE";
+    public const string EmailAlreadyInUseCode = Flit.Modules.Security.Domain.Auth.EmailConflict.Code;
 }

@@ -54,7 +54,7 @@ public sealed class ReactivateInvitationHandlerTests
         _email.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(EmailSendResult.Sent));
         // Camino feliz por defecto: correo libre y rol vigente.
-        _repo.ExistsPendingAsync(Arg.Any<Guid>(), Email, Arg.Any<CancellationToken>()).Returns(false);
+        _repo.ExistsPendingAsync(Email, Arg.Any<CancellationToken>()).Returns(false);
         _repo.UserExistsWithEmailAsync(Email, Arg.Any<CancellationToken>()).Returns(false);
         _repo.RoleExistsInTenantAsync(Arg.Any<Guid>(), RoleId, Arg.Any<CancellationToken>()).Returns(true);
     }
@@ -172,7 +172,7 @@ public sealed class ReactivateInvitationHandlerTests
     {
         _repo.FindForReactivateAsync(InvitationId, TenantId, Arg.Any<CancellationToken>())
             .Returns(Cancelled(TenantId));
-        _repo.ExistsPendingAsync(TenantId, Email, Arg.Any<CancellationToken>()).Returns(true);
+        _repo.ExistsPendingAsync(Email, Arg.Any<CancellationToken>()).Returns(true);
 
         await _handler
             .Invoking(h => h.HandleAsync(

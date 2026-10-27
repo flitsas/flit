@@ -41,7 +41,6 @@ export interface ListaLotesBackofficeProps {
 type Carga = { tipo: "cargando" } | { tipo: "error"; error: unknown } | { tipo: "listo"; lista: ListaDiagnosticosBackoffice };
 
 const ESTADOS: EstadoDiagnostico[] = ["CREADO", "EN_PROCESO", "COMPLETADO", "INCOMPLETO"];
-const TAMANOS = [25, 50, 100, 200] as const;
 const TAMANO_INICIAL = 50;
 
 interface Filtros {
@@ -200,7 +199,6 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
           totalCount={lista.total}
           onPageChange={(pagina) => aplicar({ pagina })}
           onPageSizeChange={(tamano) => aplicar({ tamano, pagina: 1 })}
-          pageSizeOptions={TAMANOS}
           ariaLabel="Paginación de lotes"
           noun="lotes"
         />

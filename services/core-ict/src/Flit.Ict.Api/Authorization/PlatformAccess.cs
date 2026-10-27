@@ -1,4 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 
 namespace Flit.Ict.Api.Authorization;
 
@@ -26,47 +26,43 @@ public sealed record PlatformAccess(
     string Subject = "",
     string Role = "");
 
+
 /// <summary>
-/// Lee el JWT de plataforma reenviado por el Gateway (que ya aplicó su policy JwtRequired) para los
-/// submódulos ICT de plataforma (observabilidad + administración de clientes). En el estado transitorio
-/// de FLIT 2.0 el token no valida firma en el borde; aquí solo se decodifica para el gate de permiso
-/// (ict.trazabilidad.read / ict.clients.manage / ict.pii.reveal) y el tenant.
-/// TODO(ICT-LOG-AUTH): validar firma con la llave pública de plataforma cuando deje de ser transitorio.
+/// Evalúa el acceso del token de plataforma para los submódulos ICT de plataforma (observabilidad + administración de
+/// clientes). Los claims salen SOLO del principal que <see cref="PlatformTokenAuthentication"/> ya validó (firma,
+/// emisor, audiencia y vencimiento); un token sin validar nunca concede nada.
 /// </summary>
 public static class PlatformAccessReader
 {
     public const string TrazabilidadPermission = "ict.trazabilidad.read";
     private const string ClientsManagePermission = "ict.clients.manage";
     private const string PiiRevealPermission = "ict.pii.reveal";
+    private const string SuperAdminRole = "SuperAdmin";
 
     public static PlatformAccess Read(HttpContext context)
     {
-        var header = context.Request.Headers.Authorization.ToString();
-        if (string.IsNullOrWhiteSpace(header) || !header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-        {
-            return new PlatformAccess(false, false, null);
-        }
+        ArgumentNullException.ThrowIfNull(context);
+        return PlatformTokenAuthentication.GetValidatedPrincipal(context) is { } principal
+            ? FromPrincipal(principal)
+            : new PlatformAccess(false, false, null);
+    }
 
-        var raw = header["Bearer ".Length..].Trim();
-        var handler = new JwtSecurityTokenHandler();
-        if (!handler.CanReadToken(raw))
-        {
-            return new PlatformAccess(false, false, null);
-        }
+    internal static PlatformAccess FromPrincipal(ClaimsPrincipal principal)
+    {
+        var claims = principal.Claims.ToList();
 
-        var token = handler.ReadJwtToken(raw);
+        // Igualdad exacta con el rol (como core-api); nunca Contains: "SUPERVISOR" o "NOTSUPERADMIN" no son SuperAdmin.
+        var isSuperAdmin = claims.Any(c =>
+            c.Type is "role" or "role_code"
+            && string.Equals(c.Value, SuperAdminRole, StringComparison.OrdinalIgnoreCase));
 
-        var isSuperAdmin = token.Claims.Any(c =>
-            (c.Type is "role" or "role_code")
-            && c.Value.Contains("SUPER", StringComparison.OrdinalIgnoreCase));
+        var hasTrazabilidad = claims.Any(c => c.Type == "permissions" && c.Value == TrazabilidadPermission);
+        var hasClientAdmin = claims.Any(c => c.Type == "permissions" && c.Value == ClientsManagePermission);
+        var hasPiiReveal = claims.Any(c => c.Type == "permissions" && c.Value == PiiRevealPermission);
+        var subject = claims.FirstOrDefault(c => c.Type is "sub" or "nameid")?.Value ?? string.Empty;
+        var role = claims.FirstOrDefault(c => c.Type is "role" or "role_code")?.Value ?? string.Empty;
 
-        var hasTrazabilidad = token.Claims.Any(c => c.Type == "permissions" && c.Value == TrazabilidadPermission);
-        var hasClientAdmin = token.Claims.Any(c => c.Type == "permissions" && c.Value == ClientsManagePermission);
-        var hasPiiReveal = token.Claims.Any(c => c.Type == "permissions" && c.Value == PiiRevealPermission);
-        var subject = token.Claims.FirstOrDefault(c => c.Type is "sub" or "nameid")?.Value ?? string.Empty;
-        var role = token.Claims.FirstOrDefault(c => c.Type is "role" or "role_code")?.Value ?? string.Empty;
-
-        Guid? tenantId = Guid.TryParse(token.Claims.FirstOrDefault(c => c.Type == "tenant_id")?.Value, out var parsed)
+        Guid? tenantId = Guid.TryParse(claims.FirstOrDefault(c => c.Type == "tenant_id")?.Value, out var parsed)
             ? parsed
             : null;
 

@@ -20,6 +20,7 @@ import {
   EMAIL_ALREADY_ASSOCIATED_MESSAGE,
   emailConflictErrorCode,
   isEmailConflictCode,
+  normalizeEmail,
 } from "@/lib/users/emailConflict";
 
 const SUPER_ADMIN_ROLE_CODE = "superadmin";
@@ -79,6 +80,8 @@ export function InviteUserModal({
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "done_no_email">("idle");
   const [error, setError] = useState<string | null>(null);
+  // HU #13812 — el conflicto de correo marca el campo como inválido, no solo el mensaje general.
+  const emailInUse = error === EMAIL_ALREADY_ASSOCIATED_MESSAGE;
   const [invitedEmail, setInvitedEmail] = useState("");
 
   const isFlitProfile = profile === "FLIT";
@@ -200,8 +203,8 @@ export function InviteUserModal({
     setStatus("loading");
     try {
       const result = submitInvitation
-        ? await submitInvitation({ email: email.trim(), fullName: fullName.trim(), roleIds })
-        : await createInvitation(email.trim(), fullName.trim(), roleIds, targetTenantId);
+        ? await submitInvitation({ email: normalizeEmail(email), fullName: fullName.trim(), roleIds })
+        : await createInvitation(normalizeEmail(email), fullName.trim(), roleIds, targetTenantId);
       setInvitedEmail(result.email);
       setStatus(result.emailSent ? "done" : "done_no_email");
       onSuccess();
@@ -365,9 +368,15 @@ export function InviteUserModal({
                 type="email"
                 required
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (emailInUse) setError(null);
+                }}
                 placeholder="correo@empresa.com"
+                aria-invalid={emailInUse || undefined}
+                aria-describedby={emailInUse ? "invite-error" : undefined}
                 className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-sm outline-none focus:border-flit-brand"
+                style={emailInUse ? { borderColor: "#FF4E00" } : undefined}
               />
             </div>
 
@@ -422,6 +431,7 @@ export function InviteUserModal({
 
             {error && (
               <p
+                id="invite-error"
                 role="alert"
                 className="rounded-xl px-3 py-2 text-xs font-medium"
                 style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}

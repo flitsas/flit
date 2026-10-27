@@ -35,12 +35,12 @@ public sealed class NetworkAnalyticsHandlersTests
 
     public NetworkAnalyticsHandlersTests()
     {
-        _repo.GetNetworkOverviewAsync(Arg.Any<IReadOnlySet<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+        _repo.GetNetworkOverviewAsync(Arg.Any<IReadOnlySet<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), null, Arg.Any<CancellationToken>())
             .Returns(new NetworkAnalyticsResult<IReadOnlyList<CategoryMetricsDto>>(
                 [new("matriculas", 6, [new("borrador", 3), new("entregado", 3)])], [C1, C2]));
-        _repo.GetNetworkTopProducersAsync(Arg.Any<IReadOnlySet<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _repo.GetNetworkTopProducersAsync(Arg.Any<IReadOnlySet<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<int>(), null, Arg.Any<CancellationToken>())
             .Returns(new NetworkAnalyticsResult<IReadOnlyList<TopProducerDto>>([new(Guid.NewGuid(), "Gestor", 3, 1, 0)], [C1]));
-        _repo.GetNetworkMonthlyTrendAsync(Arg.Any<IReadOnlySet<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
+        _repo.GetNetworkMonthlyTrendAsync(Arg.Any<IReadOnlySet<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), null, Arg.Any<CancellationToken>())
             .Returns(new NetworkAnalyticsResult<IReadOnlyList<MonthlyTrendPointDto>>([new(2026, 9, "matriculas", 6)], [C1, C2]));
     }
 
@@ -59,7 +59,7 @@ public sealed class NetworkAnalyticsHandlersTests
         result.Response.Scope.TenantIds.Should().Equal(new[] { P, C1, C2 }.OrderBy(t => t));
         result.ReachedTenantIds.Should().Equal(C1, C2);
         await _repo.Received(1).GetNetworkOverviewAsync(
-            Arg.Is<IReadOnlySet<Guid>>(s => s.SetEquals(new[] { P, C1, C2 })), From, To, Arg.Any<CancellationToken>());
+            Arg.Is<IReadOnlySet<Guid>>(s => s.SetEquals(new[] { P, C1, C2 })), From, To, null, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -72,7 +72,7 @@ public sealed class NetworkAnalyticsHandlersTests
         result!.Response.TenantId.Should().Be(C1);
         result.Response.Scope.TenantIds.Should().Equal(C1);
         await _repo.Received(1).GetNetworkOverviewAsync(
-            Arg.Is<IReadOnlySet<Guid>>(s => s.Count == 1 && s.Contains(C1)), From, To, Arg.Any<CancellationToken>());
+            Arg.Is<IReadOnlySet<Guid>>(s => s.Count == 1 && s.Contains(C1)), From, To, null, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -85,8 +85,8 @@ public sealed class NetworkAnalyticsHandlersTests
 
         porDefecto!.Response.Items.Should().HaveCount(1);
         tope!.Response.Scope.TenantIds.Should().Equal(C2);
-        await _repo.Received(1).GetNetworkTopProducersAsync(Arg.Any<IReadOnlySet<Guid>>(), From, To, GetTopProducersHandler.DefaultLimit, Arg.Any<CancellationToken>());
-        await _repo.Received(1).GetNetworkTopProducersAsync(Arg.Any<IReadOnlySet<Guid>>(), From, To, GetTopProducersHandler.MaxLimit, Arg.Any<CancellationToken>());
+        await _repo.Received(1).GetNetworkTopProducersAsync(Arg.Any<IReadOnlySet<Guid>>(), From, To, GetTopProducersHandler.DefaultLimit, null, Arg.Any<CancellationToken>());
+        await _repo.Received(1).GetNetworkTopProducersAsync(Arg.Any<IReadOnlySet<Guid>>(), From, To, GetTopProducersHandler.MaxLimit, null, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -183,8 +183,8 @@ public sealed class NetworkAnalyticsHandlersTests
 
     private async Task AssertRepoNotCalled()
     {
-        await _repo.DidNotReceive().GetNetworkOverviewAsync(Arg.Any<IReadOnlySet<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>());
-        await _repo.DidNotReceive().GetNetworkTopProducersAsync(Arg.Any<IReadOnlySet<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
-        await _repo.DidNotReceive().GetNetworkMonthlyTrendAsync(Arg.Any<IReadOnlySet<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().GetNetworkOverviewAsync(Arg.Any<IReadOnlySet<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), null, Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().GetNetworkTopProducersAsync(Arg.Any<IReadOnlySet<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), Arg.Any<int>(), null, Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().GetNetworkMonthlyTrendAsync(Arg.Any<IReadOnlySet<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<DateOnly>(), null, Arg.Any<CancellationToken>());
     }
 }

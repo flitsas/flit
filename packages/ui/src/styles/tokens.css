@@ -158,6 +158,11 @@
   --table-row-border: #dfe5ed;
   --table-row-hover: #f4f8ff;
 
+  /* Permisos por módulo (HU #13652): estado habilitado / deshabilitado de un permiso de usuario.
+     Siempre acompañados de texto o icono (no solo color). Contraste sobre blanco: 4.6:1 y 5.7:1. */
+  --permiso-habilitado: #4f74c9;
+  --permiso-deshabilitado: #59677d;
+
   /* Dock inferior flotante — Contrato D (GUIA-DOCK-INFERIOR-FLOTANTE) × flit_design_tokens.
      Solo presentación: no cambia catálogo, permisos ni layout de navegación. */
   --nav-vidrio: rgba(255, 255, 255, 0.94);

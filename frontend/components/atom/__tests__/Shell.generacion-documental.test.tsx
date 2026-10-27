@@ -30,6 +30,8 @@ const ADMIN_COMPANY_TOKEN = makeToken({
   sub: "u1",
   role: "AdminCompany",
   email: "admin@empresa.local",
+  // HU #13649: la entrada exige además el permiso efectivo que pide la API (module-access.ts).
+  permissions: ["generacion-documental.read"],
 });
 
 describe("Shell — entrada de dock 'Generación documental' (R12)", () => {

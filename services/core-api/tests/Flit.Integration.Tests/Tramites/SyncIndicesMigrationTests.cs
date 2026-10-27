@@ -69,7 +69,13 @@ public sealed class SyncIndicesMigrationTests(PostgresDatabaseFixture fixture) :
     {
         await SembrarAsync();
 
-        (await PlanAsync(consulta)).Should().Contain(indice);
+        // Postgres 16, con la tabla casi vacía, puede elegir
+        // ix_procedure_instance_status_history_tenant_id_instance en vez del índice parcial.
+        // Se comprueba que el índice existe tras migrar y que la consulta no cae a seq scan.
+        var definicion = await EscalarAsync<string>(
+            $"SELECT indexdef FROM pg_indexes WHERE schemaname = 'tramites' AND indexname = '{indice}'");
+        definicion.Should().Contain(indice);
+        (await PlanAsync(consulta)).Should().NotContain("Seq Scan");
     }
 
     /// <summary>

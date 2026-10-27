@@ -5,6 +5,7 @@ using Flit.Tramites.Application.UseCases.Persons;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -166,6 +167,11 @@ public sealed class AdminReenviarValidacionIdentidadHandler(
         validation.Name = subject.Nombre;
         validation.Email = emailDestino;
 
+        // HU #13821 (Épica #13817) — el correo corregido también queda en el ACTOR del trámite: si solo se
+        // guardaba en la validación, el siguiente disparo de identidad (o el FUR) volvía a leer el correo viejo.
+        var actorActualizado = emailActualizado
+            && await SincronizarCorreoDelActorAsync(command, validation, emailDestino, ct).ConfigureAwait(false);
+
         // Habeas Data — bitácora TÉCNICA del ciclo de identidad. Correo SIEMPRE enmascarado.
         await audit.LogAsync(new IdentityValidationAuditEntry(
             IdentityValidationAuditStages.Resend,
@@ -196,7 +202,9 @@ public sealed class AdminReenviarValidacionIdentidadHandler(
                 validation_id = validation.Id,
                 party_role = validation.PartyRole,
                 email_actualizado = emailActualizado,
+                correo_anterior = emailActualizado ? emailActual : null,
                 correo_destino = emailDestino,
+                actor_actualizado = actorActualizado,
                 encolado = queued,
             }),
             CreatedAt = now,
@@ -217,5 +225,45 @@ public sealed class AdminReenviarValidacionIdentidadHandler(
 
         var dto = IniciarBiometriaHandler.ToDto(validation, now);
         return (new AdminReenviarValidacionIdentidadResult(dto, captureUrl, emailActualizado, queued), null, null, null);
+    }
+
+    /// <summary>
+    /// Escribe <paramref name="email"/> donde el trámite guarda el correo del SUJETO de identidad
+    /// (<see cref="IdentitySubjectResolver"/>): persona natural → <c>actor.Email</c>; persona jurídica → el
+    /// correo del representante legal en <c>actor.metadata</c> (nunca el de la empresa). El actor se empareja
+    /// por rol + documento del sujeto, sin caer al principal: con copropietarios, un emparejamiento flojo le
+    /// cambiaría el correo a otra persona. Sin coincidencia exacta no toca nada.
+    /// </summary>
+    private async Task<bool> SincronizarCorreoDelActorAsync(
+        AdminReenviarValidacionIdentidadCommand command,
+        ProcedureInstanceBiometricValidation validation,
+        string email,
+        CancellationToken ct)
+    {
+        var conActores = await repo.GetByIdWithActorsAsync(command.InstanceId, command.TenantId, ct).ConfigureAwait(false);
+        if (conActores is null || string.IsNullOrWhiteSpace(validation.DocumentNumber))
+            return false;
+
+        // Filas sin rol: legado de matrícula, donde la única parte que valida es el comprador.
+        var parte = validation.PartyRole ?? BiometricRules.ParteComprador;
+        var documento = validation.DocumentNumber.Trim();
+        var actor = conActores.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(IdentitySubjectResolver.For(a).NumeroDocumento?.Trim(), documento, StringComparison.OrdinalIgnoreCase));
+        if (actor is null)
+            return false;
+
+        if (ActorPersonTypes.IsJuridical(actor.PersonType))
+        {
+            var (ciudad, direccion, rl, mandante) = ActorMetadataReader.Parse(actor.Metadata);
+            if (rl is null)
+                return false;
+            actor.Metadata = ActorMetadataReader.Serialize(
+                ciudad, direccion, rl with { Email = email }, mandante, ActorMetadataReader.GetOrigen(actor.Metadata));
+            return true;
+        }
+
+        actor.Email = email;
+        return true;
     }
 }

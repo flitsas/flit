@@ -102,6 +102,9 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       "quien firmara el mandato",
       "sin mandatario configurado",
       "no se puede radicar mandatario",
+      "secretaria de transito matricula",
+      "el runt no reporta el organismo",
+      "vehiculo con placa asignada",
     ],
     summary: "Guía paso a paso para iniciar un trámite desde el módulo Trámites.",
     blocks: [
@@ -111,6 +114,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         paragraphs: [
           "Confirma que tu compañía tiene habilitado el tipo de trámite (lo define su configuración operativa). Si la matrícula inicial está apagada, no verás esa modalidad al crear.",
           "Necesitas permiso tramites.create además de tramites.read. Sin create solo puedes consultar trámites existentes.",
+          "Los permisos de ver y crear se otorgan por familia de trámite (Matrículas, Traspaso y Otros trámites). Solo verás las pestañas de las familias que puedes ver, y el asistente de «Nuevo trámite» solo ofrece las familias que puedes crear. Si tienes permiso para ver una familia pero no para crearla, puedes consultar sus trámites pero esa opción no aparece al crear. Si no puedes ver ninguna familia, al abrir Trámites volverás al inicio con el aviso «No tienes acceso a este módulo.».",
         ],
         bullets: [
           "Ten a mano documentos de identidad de las partes (vendedor, comprador, mandante, etc.).",
@@ -126,6 +130,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "Abre Trámites desde el dock inferior.",
           "Pulsa «Nuevo trámite». Antes de continuar debes aceptar los Términos y Condiciones (casilla con enlace al documento vigente); la aceptación queda registrada con el trámite.",
           "El sistema crea una instancia en estado Borrador y te lleva al asistente; el tipo de trámite se elige dentro del paso 1.",
+          "En matrícula, después de consultar el VIN, la tarjeta «Organismo de Tránsito y Radicación» indica dónde se radica. Si el vehículo no tiene placa, escoge la secretaría y el dígito de preasignación. Si ya tiene placa y el RUNT reporta su organismo, ambos se muestran sin poder cambiarlos. Si tiene placa pero el RUNT no reporta el organismo, verás «El RUNT no reporta el organismo de tránsito del vehículo» y debes escoger la secretaría para poder continuar.",
           "Completa cada paso que el servidor expone: actores, datos del vehículo, consultas externas (RUNT, SIMIT, RUES…), adjuntos, validación de identidad si aplica.",
           "Revisa los bloqueos en la barra del asistente. Solo cuando estén resueltos podrás firmar o radicar.",
         ],
@@ -336,9 +341,15 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       "subsanacion",
       "entregado",
       "anulado",
+      "reenviar validacion",
+      "reenviar validacion de identidad",
+      "copiar enlace",
+      "corregir correo",
+      "no le llego el correo",
+      "copropietarios",
     ],
     summary:
-      "Cómo encontrar un trámite (radicado, placa, VIN, filtros), qué significa cada estado y qué hacer en cada uno.",
+      "Cómo encontrar un trámite (radicado, placa, VIN, filtros), qué significa cada estado, qué hacer en cada uno y cómo reenviar la validación de identidad a quien falta por firmar.",
     blocks: [
       {
         id: "buscar",
@@ -394,6 +405,38 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         title: "4. Búsqueda con DR. FLIT",
         paragraphs: [
           "Abre el chat flotante y elige buscar por placa, VIN, trámite (radicado) o cliente (nombre o documento). Cada resultado muestra radicado, fecha de radicación, estado con una pista de qué sigue, y abre el detalle. Al buscar por placa también te ofrece el historial completo de esa placa.",
+        ],
+      },
+      {
+        id: "reenviar-validacion",
+        title: "5. Reenviar la validación de identidad",
+        paragraphs: [
+          "Si una persona del trámite no recibió el correo de validación de identidad, o el correo estaba mal escrito, puedes reenviárselo desde el menú de la fila (tres rayas) → «Reenviar validación». La opción aparece si tu rol tiene el permiso «Reenviar validación de identidad»; el administrador de tu compañía puede asignarlo.",
+          "Validar la identidad es firmar el trámite. Por eso el cuadro solo muestra a las personas que todavía no han firmado: si el comprador ya validó y el vendedor no, solo verás al vendedor.",
+        ],
+        bullets: [
+          "Paso 1: abre las tres rayas del trámite y elige «Reenviar validación».",
+          "Paso 2: marca a quién reenviar. Hay una casilla por persona («Vendedor · nombre», «Comprador · nombre»); si hay varios propietarios, cada uno aparece por separado. Puedes marcar una o varias.",
+          "Paso 3 (opcional): si el correo registrado está mal, escribe el correcto en «Nuevo correo» de esa persona. Se guarda en el trámite y en Validaciones de Identidad, y el enlace sale a ese correo. Si lo dejas vacío, se envía al correo de siempre.",
+          "Paso 4: pulsa «Reenviar». El cuadro no se cierra: te muestra el resultado de cada persona y el enlace nuevo con «Copiar enlace», por si prefieres enviárselo tú.",
+          "Si la persona ya tiene un enlace vigente, puedes copiarlo con «Copiar enlace» sin reenviar.",
+          "Matrícula: solo aparece el comprador. Otros trámites: aparecen las personas que ese trámite pide validar.",
+          "Cada reenvío queda en el seguimiento del trámite: quién lo hizo, a qué persona y, si se corrigió, el correo anterior y el nuevo.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            title: "Mensajes que puedes ver",
+            text: "«El comprador ya firmó…» (matrícula y otros trámites, que tienen un solo actor) o «Comprador y vendedor ya firmaron…» (traspaso): todas las personas ya validaron. «Correo inválido.»: revisa el correo escrito. «El reenvío quedó en cola…»: el proveedor tuvo una falla momentánea y se reintenta solo; el enlace aparecerá después. «En validación manual…»: esa persona está en captura manual y su enlace se regenera desde la revisión manual.",
+          },
+          {
+            variant: "tip",
+            text: "Si una persona ya validó su identidad en otro trámite y sigue vigente, no aparece para reenviar: para este trámite ya cuenta como firmada.",
+          },
+          {
+            variant: "warning",
+            text: "Un trámite aprobado, anulado o revocado no admite reenviar la validación.",
+          },
         ],
       },
     ],
@@ -571,9 +614,13 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       "red",
       "toda la red",
       "solo lectura",
+      "vencer identidad",
+      "vencer validacion",
+      "repetir validacion",
+      "quitar vigencia",
     ],
     summary:
-      "Qué muestra el módulo Identidad, cómo buscar una persona, leer estados y vigencias y desatascar una validación.",
+      "Qué muestra el módulo Identidad, cómo buscar una persona, leer estados y vigencias, desatascar una validación y quién puede vencer una identidad aprobada.",
     blocks: [
       {
         id: "que-es",
@@ -602,11 +649,17 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "«Nueva» crea una prevalidación de persona natural: se envía un enlace de captura al correo indicado y el resultado queda disponible para trámites posteriores.",
           "Abre una fila para ver el detalle en un panel lateral (drawer): proceso ante el proveedor, reintentos y línea de tiempo del registro.",
           "«Ver alertas de validación» abre el panel de validaciones atascadas (sin respuesta del proveedor), agrupadas por persona, con opción de reintentar todas de una vez o una por una.",
+          "«Vencer» (solo Super Admin de FLIT, en el menú «Acciones» de una validación aprobada y vigente): termina la vigencia en ese momento para que la persona repita la validación. En el mismo paso se le envía un enlace nuevo, que queda en pantalla con «Copiar enlace». El certificado anterior se conserva en el historial.",
         ],
         callouts: [
           {
             variant: "info",
             text: "Una validación aprobada tiene vigencia. Al acercarse la fecha, el sistema la marca; una validación vencida no sirve para firmar y hay que repetirla.",
+          },
+          {
+            variant: "warning",
+            title: "Qué pasa al vencer una identidad",
+            text: "Los trámites en borrador que usaban esa identidad quedan sin firmar para esa persona: hasta que apruebe la validación nueva no se pueden radicar. Los trámites que ya salieron de borrador conservan la firma con la que salieron. Si ningún trámite en borrador la necesita, se vence sin enviar enlace y el aviso lo dice. Si tu compañía necesita vencer una identidad, pídeselo al equipo FLIT.",
           },
         ],
       },
@@ -842,6 +895,10 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       "suspender",
       "desactivar",
       "bloquear",
+      "permisos por modulo",
+      "permisos individuales",
+      "fuera de tu tope",
+      "auditoria de permisos",
     ],
     summary: "Las pestañas del módulo Usuarios, cómo invitar y gestionar personas, y qué es Clientes ICT.",
     blocks: [
@@ -854,7 +911,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         bullets: [
           "Usuarios: invitar, editar y gestionar el acceso de las personas de tu compañía.",
           "Roles y permisos: crea y edita los roles de tu compañía y consulta los roles de FLIT. Solo la ve el Administrador de la compañía.",
-          "Clientes ICT: solo si tu compañía integra con terceros y tienes el permiso correspondiente (ver bloque 4).",
+          "Clientes ICT: solo si tu compañía integra con terceros y tienes el permiso correspondiente (ver bloque 7).",
         ],
         media: [
           {
@@ -876,10 +933,10 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         id: "gestionar",
         title: "3. Gestionar usuarios existentes",
         paragraphs: [
-          "Como Administrador de la compañía puedes editar, restablecer contraseña, y suspender o desactivar un usuario. Eliminar un usuario de forma definitiva (y restaurarlo desde Eliminados) es exclusivo del equipo FLIT.",
+          "Como Administrador de la compañía puedes editar, restablecer contraseña, y suspender o desactivar un usuario. Eliminar un usuario de forma definitiva (y restaurarlo desde Eliminados) es exclusivo del equipo FLIT. Todas estas acciones están en el botón «Acciones» de la fila del usuario: ábrelo y elige la que necesitas.",
         ],
         bullets: [
-          "Editar: cambia nombre, perfil o roles.",
+          "Editar: cambia nombre, perfil o roles. Al cambiar el rol de una persona que tiene permisos individuales, el sistema te avisa antes, por ejemplo «Este usuario tiene 3 permisos individuales que se eliminarán al cambiar su rol.»: el rol solo cambia si confirmas con «Cambiar rol»; con «Mantener rol actual» no cambia nada. Si no tiene permisos individuales, el cambio es directo y no aparece aviso.",
           "Restablecer contraseña: envía instrucciones de cambio al correo del usuario.",
           "Suspender: bloquea el acceso temporalmente; puedes reactivarlo cuando corresponda.",
           "Desactivar: bloquea el acceso de forma indefinida.",
@@ -888,16 +945,49 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         ],
       },
       {
-        id: "roles",
-        title: "4. Roles y permisos",
+        id: "permisos-modulo",
+        title: "4. Permisos por módulo de una persona",
         paragraphs: [
-          "Esta pestaña es solo del Administrador de la compañía. Aquí ves los roles que puedes asignar a tu equipo: los tuyos, marcados como «Propio», y los de FLIT, marcados como «FLIT · solo lectura». Los roles de FLIT se pueden asignar, pero no cambiar. Los usuarios con otros roles no ven la pestaña, aunque siguen pudiendo elegir un rol al invitar o editar a una persona.",
+          "Además del rol, puedes ajustar los permisos de una persona de tu compañía sin cambiarle el rol. En la fila del usuario abre «Acciones» y elige «Permisos por módulo»: verás cada módulo y cada acción con su origen: «Heredado del rol» (lo que dicta su rol), «Individual» (un permiso que se le dio o quitó solo a esa persona) o «Parcial» (un módulo con acciones de ambos orígenes).",
         ],
         bullets: [
-          "1. Pulsa «Nuevo rol».",
-          "2. Escribe un código (letras, números, punto, guion o guion bajo; no se cambia después) y un nombre.",
-          "3. Marca los permisos del rol. La lista solo muestra los que tú tienes y que están habilitados para tu compañía; los permisos de plataforma (como los banners) no se pueden dar.",
-          "4. Pulsa «Crear rol». Para cambiarlo después usa el lápiz de su fila; para quitarlo, el icono de papelera.",
+          "1. En la fila de la persona abre «Acciones» y elige «Permisos por módulo». La ficha es una sola lista: primero «Módulos» y después «Tipos de servicio».",
+          "2. Activa o desactiva una acción con su interruptor, o usa «Habilitar módulo» y «Denegar módulo» para todo el módulo a la vez.",
+          "3. «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo.",
+          "4. En «Tipos de servicio», «Trámites: Matrículas», «Traspasos» y «Otros trámites» tienen cada uno «Ver» y «Crear»: «Crear» solo se habilita si «Ver» está habilitado y, al apagar «Ver», también se apaga «Crear».",
+          "«Reenviar validación de identidad» (módulo de gestión avanzada de trámites) lo puedes dar a cualquier persona o rol de tu compañía: con él ve la opción «Reenviar validación» en las tres rayas del trámite, corrige el correo y copia el enlace. Las demás acciones avanzadas (cambiar estado, anular, consolidado, reasignar gestor) siguen siendo del Super Admin. La persona ve el permiso al volver a ingresar.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Los permisos de otro administrador, y los tuyos, solo se pueden ver: la pantalla aparece en solo lectura con el aviso «Solo el Super Admin puede modificar los permisos de un administrador.». Si la persona no tiene rol de administrador, los controles están habilitados.",
+          },
+          {
+            variant: "warning",
+            text: "Solo puedes dar permisos que tú mismo tienes (tu tope). Lo que queda fuera de tu tope aparece deshabilitado, y «Habilitar módulo» solo aplica las acciones que sí están dentro de tu tope. Si una persona ya tiene un permiso que otro administrador le dio y que está fuera de tu tope, verás la etiqueta «Fuera de tu tope»: puedes quitarlo, pero no volver a otorgarlo.",
+          },
+        ],
+      },
+      {
+        id: "auditoria-permisos",
+        title: "5. Auditoría de permisos",
+        paragraphs: [
+          "La pestaña «Auditoría de permisos» del módulo Usuarios lista cada cambio de permisos individuales hecho en tu compañía: fecha y hora (DD/MM/AAAA HH:mm), el administrador que lo hizo, la persona afectada, el permiso, la acción (otorgó, denegó, volvió al rol) y el valor antes y después. Los intentos rechazados quedan registrados con su motivo.",
+          "Solo ves los registros de las personas de tu compañía. Puedes filtrar por usuario y por administrador (no hay filtro de compañía, porque siempre es la tuya) y la lista se pagina con «Filas por página». Si ningún registro coincide con los filtros, la tabla te lo avisa. Si el servicio no responde, verás un aviso de error con el botón «Reintentar».",
+        ],
+      },
+      {
+        id: "roles",
+        title: "6. Roles y permisos",
+        paragraphs: [
+          "Esta pestaña es solo del Administrador de la compañía. Aquí ves los roles que puedes asignar a tu equipo: los tuyos, marcados como «Propio», y los de FLIT, marcados como «FLIT · solo lectura». Los roles de FLIT se pueden asignar, pero no cambiar. Los usuarios con otros roles no ven la pestaña, aunque siguen pudiendo elegir un rol al invitar o editar a una persona.",
+          "La tabla muestra el nombre, el tipo, la cantidad de permisos y las acciones de cada rol. Un rol se identifica por su nombre: no tienes que escribir ningún código, la plataforma asigna uno interno por debajo. Al crear o editar un rol, cada módulo y cada permiso aparecen con su nombre, igual que en el resto de la plataforma.",
+        ],
+        bullets: [
+          "1. Pulsa «Nuevo rol». El editor es una sola lista: «Datos del rol», «Módulos» y «Tipos de servicio».",
+          "2. En «Datos del rol» escribe el nombre y, si quieres, una descripción.",
+          "3. En «Módulos» y «Tipos de servicio» marca los permisos del rol. La lista solo muestra los que tú tienes y que están habilitados para tu compañía; los permisos de plataforma (como los banners) no se pueden dar. En «Trámites: Matrículas», «Traspasos» y «Otros trámites» cada tipo de servicio tiene «Ver» y «Crear»: «Crear» solo se habilita si «Ver» está marcado y, al quitar «Ver», también se quita «Crear».",
+          "4. Pulsa «Crear rol»: guarda todo. Si falta el nombre, ves el aviso debajo del campo y el cursor queda allí. Para cambiarlo o quitarlo después, abre «Acciones» en su fila y elige «Editar» o «Eliminar»; en un rol de FLIT, «Ver permisos».",
         ],
         callouts: [
           {
@@ -908,7 +998,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       },
       {
         id: "ict",
-        title: "5. Clientes ICT (si tu compañía integra con terceros)",
+        title: "7. Clientes ICT (si tu compañía integra con terceros)",
         paragraphs: [
           "Son credenciales que usan integraciones externas para registrar pre-trámites en tu nombre. Cada cliente tiene un usuario y un secreto que el sistema genera y muestra una sola vez (no se puede recuperar después); si lo pierdes, usa «Regenerar secreto».",
         ],

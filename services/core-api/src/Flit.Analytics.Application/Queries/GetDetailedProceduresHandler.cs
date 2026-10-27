@@ -17,7 +17,11 @@ public sealed record GetDetailedProceduresQuery(
     bool? HasTransformation,
     bool? IsLeasing,
     int Page,
-    int PageSize);
+    int PageSize)
+{
+    /// <summary>HU #13664 — Ver por familia: códigos visibles (<c>ProcedureFamilyCodes</c>); <c>null</c> = sin restricción.</summary>
+    public IReadOnlyList<string>? AllowedFamilies { get; init; }
+}
 
 /// <summary>Consulta paginada del reporte detallado (HU #10815).</summary>
 public sealed class GetDetailedProceduresHandler(IDetailedReportReadRepository repo)
@@ -47,7 +51,8 @@ public sealed class GetDetailedProceduresHandler(IDetailedReportReadRepository r
             Normalize(query.PersonDocument),
             Normalize(query.PersonName),
             query.HasTransformation,
-            query.IsLeasing);
+            query.IsLeasing)
+        { AllowedFamilies = query.AllowedFamilies };
 
         var result = await repo.GetProceduresAsync(filter, page, pageSize, ct).ConfigureAwait(false);
         return (result, null);

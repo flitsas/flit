@@ -215,6 +215,16 @@ public sealed class EncolarEnvioQuipuxHandler
             return EncolarEnvioQuipuxResult.YaEncolada(submission.Id, submission.DocumentName);
         }
 
+        // Bug #13894 — la submission es nueva (EnqueueIfAbsentAsync hizo db.Add sin SaveChanges).
+        // QuipuxSubmissionAuditLog.WriteAsync abre su PROPIO scope + DbContext via IServiceScopeFactory:
+        // cuando intenta insertar en quipux_submission_events, la FK submission_id apunta a una fila
+        // que aún no existe en BD → PostgreSQL devuelve 23503 (FK violation). El audit lo traga en
+        // silencio (Warning), pero el db.Add se pierde al dispose del scope: tramites.quipux_submissions
+        // queda vacío y el LOG QX muestra «Sin encolar» eternamente. Fix: persistir con SaveChanges
+        // ANTES del audit. UpdateAsync(submission, auditEvent: null) llama SaveChangesAsync sobre la
+        // entidad en estado Added → INSERT confirmado → FK del evento es válida.
+        await _submissions.UpdateAsync(submission, auditEvent: null, cancellationToken);
+
         await _audit.WriteAsync(
             command.TenantId,
             submission.Id,

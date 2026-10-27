@@ -1,0 +1,20 @@
+<!-- nombre: Autorización de cambio de infractor (Renting) -->
+<p style="font-size:9px">Renting Colombia Clasificación Pública</p>
+<p>Medellín, {{hoy}}</p>
+<p>Señores</p>
+<h2>{{ot.nombre}}</h2>
+<p>Asunto: <b>AUTORIZACIÓN CAMBIO DE INFRACTOR</b></p>
+<p style="text-align:justify">Yo, <b>{{rl.nombres}}</b> en mi condición como {{rl.cargo}} de <b>{{peticionario.nombre}}</b> NIT <b>{{peticionario.numero_documento}}</b>, estando dentro del término concedido por su despacho, mediante el presente escrito me dirijo a ustedes para presentar descargos en relación con la notificación referente a una presunta infracción cometida; para ello solicito sean tenidos en cuenta los siguientes argumentos jurídicos y fácticos:</p>
+<p style="text-align:justify"><b>{{peticionario.nombre}}</b> es propietario inscrito del vehículo relacionado a continuación; dicho automotor fue entregado en arrendamiento operativo así:</p>
+<table>
+<tr><th>Placa</th><th>Comparendo</th><th>Conductor</th><th>Documento</th></tr>
+<tr><td>{{comparendo.placa}}</td><td>{{comparendo.numero}}</td><td>{{conductor.nombres}}</td><td>{{conductor.tipo_documento}} {{conductor.numero_documento}}</td></tr>
+</table>
+<h3 style="text-align:center">PETICIONES</h3>
+<p>De acuerdo con lo anteriormente expresado, le solicito a su despacho lo siguiente:</p>
+<ol>
+<li><b>CERRAR</b> el proceso contravencional referido en contra de la empresa <b>{{peticionario.nombre}}</b> y abstenerse de imponer alguna sanción por la presunta infracción.</li>
+<li><b>PERMITIR</b> que el conductor acuda a su despacho para pagar o apelar el comparendo.</li>
+</ol>
+{{rl.firma_imagen}}
+<p><b>{{rl.nombres}}</b><br><b>{{rl.cargo}}</b></p>

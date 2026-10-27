@@ -22,6 +22,31 @@ public static class Formato
     public static string? Pesos(decimal? v) =>
         v is { } x ? "$ " + Math.Round(x, 0, MidpointRounding.AwayFromZero).ToString("#,0", CultureInfo.InvariantCulture).Replace(',', '.') : null;
 
+    private static readonly HashSet<string> Conectores = new(StringComparer.Ordinal) { "de", "del", "la", "las", "los", "y", "e", "en" };
+
+    /// <summary>
+    /// Hallazgo del 22-oct (HU #13883): los nombres llegan del SIMIT o de la API en MAYÚSCULAS. Solo si todo el texto viene
+    /// en mayúsculas se pasa a nombre propio: «LAURA GÓMEZ DE LA ROSA» → «Laura Gómez de la Rosa». Las siglas con punto
+    /// («S.A.S.») y las palabras con números se conservan, y un texto escrito a mano se deja como está.
+    /// </summary>
+    public static string? NombrePropio(string? texto)
+    {
+        if (string.IsNullOrWhiteSpace(texto) || texto.Any(char.IsLower))
+            return texto?.Trim();
+        var palabras = texto.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        for (var i = 0; i < palabras.Length; i++)
+        {
+            var p = palabras[i];
+            // Siglas con punto («S.A.S.») y códigos con números (una placa) quedan como vienen.
+            if (p.Contains('.', StringComparison.Ordinal) || !p.Any(char.IsLetter) || p.Any(char.IsDigit))
+                continue;
+            var minuscula = p.ToLowerInvariant();
+            palabras[i] = i > 0 && Conectores.Contains(minuscula) ? minuscula : char.ToUpperInvariant(minuscula[0]) + minuscula[1..];
+        }
+
+        return string.Join(' ', palabras);
+    }
+
     public static string EstadoLegal(EstadoLegal e) => e switch
     {
         Domain.Plazos.EstadoLegal.EnTiempo => "En tiempo",
@@ -73,6 +98,7 @@ public sealed class ContextoPlantilla(ComparendosDb db, CalendarioService calend
             ["comparendo.placa"] = c.Placa,
             ["comparendo.fecha_imposicion"] = Formato.Fecha(c.FechaImposicion),
             ["comparendo.fecha_notificacion"] = Formato.Fecha(c.FechaNotificacion) ?? "(sin fecha de notificación)",
+            ["comparendo.tiene_notificacion"] = c.FechaNotificacion is null ? null : "sí",
             ["comparendo.codigo_infraccion"] = c.CodigoInfraccion,
             ["comparendo.descripcion_infraccion"] = c.DescripcionInfraccion?.TrimEnd().TrimEnd('.'), // va entre paréntesis o a mitad de frase: sin punto final (B9-3)
             ["comparendo.direccion_infraccion"] = c.DireccionInfraccion,
@@ -90,7 +116,8 @@ public sealed class ContextoPlantilla(ComparendosDb db, CalendarioService calend
             ["ot.codigo"] = ot?.Codigo,
             ["ot.municipio"] = ot?.Municipio,
             ["ot.departamento"] = ot?.Departamento,
-            ["peticionario.nombre"] = c.NombreInfractor ?? nit?.NombreTitular ?? config?.EmpresaNombre,
+            // Hallazgo del 22-oct (HU #13883): el SIMIT corta el nombre («RENTING COLOMBIA S»); primero el titular del NIT registrado.
+            ["peticionario.nombre"] = Formato.NombrePropio(nit?.NombreTitular ?? c.NombreInfractor ?? config?.EmpresaNombre),
             ["peticionario.tipo_documento"] = peticionarioTipo.ToString(),
             ["peticionario.numero_documento"] = peticionarioDocumento,
             ["peticionario.direccion"] = rl?.DireccionNotificacion,
@@ -107,7 +134,7 @@ public sealed class ContextoPlantilla(ComparendosDb db, CalendarioService calend
             ["dp.fecha"] = Formato.Fecha(extras.FechaDp ?? hoy),
             ["dp.tipologia_nombre"] = extras.Tipologia?.Nombre,
             ["dp.fundamento"] = extras.Tipologia?.DescripcionJuridica,
-            ["conductor.nombres"] = conductor?.Nombres,
+            ["conductor.nombres"] = Formato.NombrePropio(conductor?.Nombres),
             ["conductor.tipo_documento"] = conductor?.TipoDocumento?.ToString(),
             ["conductor.numero_documento"] = conductor?.NumeroDocumento,
             ["conductor.correo"] = conductor?.Correo,

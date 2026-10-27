@@ -1,6 +1,7 @@
 "use client";
 
 import { BRAND_BTN } from "@/lib/captura-manual/styles";
+import { TABLA_HEADER_BG, TABLA_HEADER_CELL_CLS, TABLA_HEADER_FG } from "@/components/atom/table-styles";
 import { useId, useState } from "react";
 import {
   CAPTURE_TIPS,
@@ -82,20 +83,50 @@ export function PasoDatos({
         </p>
       </div>
 
-      <table className="w-full border-collapse text-base">
+      {/* HU #13919 — ficha de pares fijos con el MISMO diseño de toda tabla (cabecera gris y filas-
+          tarjeta); no se pagina porque no recorre ninguna colección. */}
+      <table className="w-full border-separate border-spacing-y-2 text-base">
         <caption className="sr-only">Tus datos</caption>
+        <thead>
+          <tr>
+            <th
+              scope="col"
+              colSpan={2}
+              className={`${TABLA_HEADER_CELL_CLS} rounded-xl`}
+              style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+            >
+              Tus datos
+            </th>
+          </tr>
+        </thead>
         <tbody>
-          <tr className="border-b border-flit-gray">
-            <th scope="row" className="py-2 pr-3 text-left text-sm font-medium text-muted-foreground">
+          <tr className="bg-white dark:bg-[#0B0F14]">
+            <th
+              scope="row"
+              className="rounded-l-xl border-y border-l px-4 py-3 text-left text-sm font-medium text-muted-foreground"
+              style={{ borderColor: "var(--table-row-border)" }}
+            >
               Nombre
             </th>
-            <td className="py-2 text-right font-semibold text-flit-primary">{view.fullName}</td>
+            <td
+              className="rounded-r-xl border-y border-r px-4 py-3 text-right font-semibold text-flit-primary"
+              style={{ borderColor: "var(--table-row-border)" }}
+            >
+              {view.fullName}
+            </td>
           </tr>
-          <tr className="border-b border-flit-gray">
-            <th scope="row" className="py-2 pr-3 text-left text-sm font-medium text-muted-foreground">
+          <tr className="bg-white dark:bg-[#0B0F14]">
+            <th
+              scope="row"
+              className="rounded-l-xl border-y border-l px-4 py-3 text-left text-sm font-medium text-muted-foreground"
+              style={{ borderColor: "var(--table-row-border)" }}
+            >
               Documento
             </th>
-            <td className="py-2 text-right font-semibold text-flit-primary">
+            <td
+              className="rounded-r-xl border-y border-r px-4 py-3 text-right font-semibold text-flit-primary"
+              style={{ borderColor: "var(--table-row-border)" }}
+            >
               {view.documentType} {view.documentNumber}
             </td>
           </tr>

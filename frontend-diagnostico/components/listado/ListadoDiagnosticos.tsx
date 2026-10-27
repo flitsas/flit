@@ -24,7 +24,6 @@ import {
   idCorto,
   listarDiagnosticos,
   nombreModo,
-  TAMANOS_LISTADO,
   traducirErrorListado,
   urlListado,
   type ErrorListado,
@@ -220,7 +219,6 @@ export function ListadoDiagnosticos() {
           totalCount={lista.total}
           onPageChange={(pagina) => aplicar({ pagina })}
           onPageSizeChange={(tamano) => aplicar({ tamano, pagina: 1 })}
-          pageSizeOptions={TAMANOS_LISTADO}
           ariaLabel="Paginación de diagnósticos"
           noun="diagnósticos"
         />

@@ -40,6 +40,7 @@ public static class Modulos
         services.AddScoped<Portal.ServicioPortal>();
         services.AddScoped<Avisos.ServicioAvisos>();
         services.AddScoped<Avisos.FotoFotomulta>();
+        services.AddScoped<Avisos.AdjuntosAviso>();
         services.AddSingleton<Avisos.IDescargaFoto, Avisos.DescargaFotoHttp>();
         services.AddHttpClient(Avisos.DescargaFotoHttp.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(15))
             .ConfigurePrimaryHttpMessageHandler(Avisos.DescargaFotoHttp.Manejador);
@@ -161,7 +162,6 @@ public static class Modulos
             services.AddHostedService<Trabajos.ProgramadorTrabajos>();
             services.AddHostedService<Trabajos.ProcesadorTrabajos>();
             services.AddHostedService(sp => sp.GetRequiredService<Correo.DespachadorCorreos>());
-            services.AddHostedService<Bandeja.ExportadorEnSegundoPlano>();
             services.AddHostedService(sp => sp.GetRequiredService<DerechosPeticion.ProcesadorLotesDp>());
             services.AddHostedService(sp => sp.GetRequiredService<Ocr.ProcesadorOcr>());
             services.AddHostedService(sp => sp.GetRequiredService<Ocr.EvaluadorPromptOcr>());

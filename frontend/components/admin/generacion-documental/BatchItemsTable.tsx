@@ -45,7 +45,7 @@ export function BatchItemsTable({ batchId, refreshKey = 0 }: BatchItemsTableProp
   const [rows, setRows] = useState<StandaloneBatchItem[]>([]);
   const [status, setStatus] = useState<UiStatus>("loading");
   // Bug #13055: paginación estándar con «Filas por página» (10/25/50/100), de servidor.
-  const { page, pageSize, setPage, setPageSize } = usePaginacion();
+  const { page, pageSize, setPage, setPageSize } = usePaginacion("generacion-documental.BatchItemsTable");
   const [totalCount, setTotalCount] = useState(0);
 
   const load = useCallback(

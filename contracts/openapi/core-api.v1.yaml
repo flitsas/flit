@@ -154,6 +154,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthErrorResponse'
+  /api/v1/auth/session-policy:
+    get:
+      operationId: authGetSessionPolicy
+      tags: [Auth]
+      summary: Vigencia de la sesión (cuándo entra en vigor un cambio de permisos)
+      description: >
+        HU #13651 (Feature #13102, Épica #12753). El token lleva los permisos efectivos y solo se recalcula al emitir
+        uno nuevo; este endpoint dice cuánto puede tardar un cambio de permisos de un usuario en aplicarse.
+        Modo `legacy` (sin OIDC): un solo JWT que dura `Jwt:TokenLifetimeHours`; `maxMinutes` = horas × 60.
+        Modo `oidc` (`Suite:Oidc:Enabled`): el access token dura `Suite:Oidc:AccessTokenMinutes` y se renueva solo.
+        El valor sale de la configuración vigente, nunca de un literal. Vive en /auth (no en /security) para que
+        el Gateway lo enrute a core-identity o a core-api igual que el resto del login: llega en ambos modos.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Política de sesión vigente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionPolicyResponse'
+        '401':
+          description: No autenticado o sesión expirada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthErrorResponse'
   /api/v1/auth/forgot-password:
     post:
       operationId: authForgotPassword
@@ -2194,6 +2221,21 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
 
+  /api/v1/internal/jwks.json:
+    get:
+      tags: [Internal]
+      operationId: internalJwks
+      summary: >-
+        USO INTERNO — JWKS con la llave PÚBLICA (kid Jwt:SigningKeyId, p. ej. flit-api-v1) con que core-api firma el
+        token de usuario. Lo lee core-ict (Jwt:JwksUri) por la red interna; YARP no publica /api/v1/internal/*.
+      security: []
+      responses:
+        "200":
+          description: Conjunto de llaves públicas (solo n y e; sin parámetros privados).
+          content:
+            application/json:
+              schema: { type: object }
+
   /api/v1/internal/domains/active:
     get:
       tags: [Internal]
@@ -3204,12 +3246,12 @@ paths:
       operationId: adminOtInviteUser
       summary: Invita un usuario al tenant OT (self-service, refactor adminOT)
       description: >
-        Crea una invitación por email con el rol ot_admin del tenant resuelto.
+        Crea una invitación por email con el rol elegido del catálogo TRANSIT_OFFICE.
         ot_admin invita colaboradores de su propio tenant (JWT); SuperAdmin debe
         indicar `?transitOfficeId=` (oficina del catálogo) para invitar al primer
-        adminOT de un tenant recién creado. El rol se resuelve automáticamente:
-        un tenant OT solo tiene el rol de sistema ot_admin (sin roles
-        personalizados). Requiere JWT con rol SuperAdmin u ot_admin (OtModulePolicy).
+        adminOT de un tenant recién creado. HU #13655: el rol es obligatorio para
+        todos (sin rol responde 400 ROLE_REQUIRED; ya no se asigna ot_admin por
+        defecto). Requiere JWT con rol SuperAdmin u ot_admin (OtModulePolicy).
       security:
         - bearerAuth: []
       parameters:
@@ -3234,7 +3276,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/InviteOtUserResponse"
         "400":
-          description: SuperAdmin no indicó transitOfficeId.
+          description: SuperAdmin no indicó transitOfficeId, falta el rol (ROLE_REQUIRED) o llegó más de uno (SINGLE_ROLE_ONLY).
           content:
             application/json:
               schema:
@@ -3512,6 +3554,294 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/security/permission-overrides/grantable:
+    get:
+      tags: [Security]
+      operationId: securityListGrantablePermissionOverrides
+      summary: Catalogo de permisos que el caller puede otorgar a un usuario (HU #13644)
+      description: >
+        Super Admin recibe todos los permisos con `enforced = 'true'`; los demas administradores
+        (AdminCompany, ot_admin, admin_tramites) solo su tope: la union de los permisos de sus roles en el
+        tenant, menos los que tengan denegados. Sus `allow` individuales no amplian el tope.
+        Se excluyen los permisos cuyo flag de enforcement esta apagado (`Security:OtPermissionEnforcement`,
+        `Security:ModulePermissionEnforcement`, fuentes de familia): la API aun no los exige, asi que
+        otorgarlos o denegarlos no tendria efecto.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tenantId
+          in: query
+          required: false
+          description: Solo Super Admin; para los demas se usa el tenant del JWT.
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Permisos otorgables.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string, format: uuid }
+                    slug: { type: string }
+                    name: { type: string }
+                    moduleCode: { type: string }
+                    productCode: { type: string }
+                    superAdminOnly:
+                      type: boolean
+                      description: >
+                        HU #13653 (aditivo). `true` si NINGUN administrador del tenant destino (AdminCompany, ot_admin,
+                        admin_tramites) tiene el permiso en su tope (roles menos sus deny): un administrador no puede otorgarlo.
+                        Solo se calcula cuando el Super Admin envia `?tenantId=`; en cualquier otro caso es `false`.
+        "401": { description: No autenticado. }
+        "403": { description: "El caller no es administrador, o rechazo de ambito (HU #13645): `OUT_OF_SCOPE`." }
+        "404": { description: "`USER_NOT_FOUND`." }
+
+  /api/v1/security/users/{userId}/permission-overrides:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: tenantId
+        in: query
+        required: false
+        description: Solo Super Admin; para los demas se usa el tenant del JWT.
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Security]
+      operationId: securityListUserPermissionOverrides
+      summary: Permisos individuales activos de un usuario (HU #13644)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Overrides activos (allow o deny).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserPermissionOverrideItem"
+        "401": { description: No autenticado. }
+        "403": { description: "El caller no es administrador, o rechazo de ambito (HU #13645): `OUT_OF_SCOPE`." }
+        "404": { description: "`USER_NOT_FOUND`." }
+
+  /api/v1/security/users/{userId}/permission-overrides/count:
+    get:
+      tags: [Security]
+      operationId: securityCountUserPermissionOverrides
+      summary: Cuantos permisos individuales tiene el usuario (HU #13646)
+      description: >-
+        Consulta previa al cambio de rol: al cambiar el rol del usuario se eliminan sus permisos individuales del producto
+        del rol nuevo (auditoria ROLE_CHANGE_PURGE). Mismas reglas de lectura que el listado (existencia y ambito).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: productCode
+          in: query
+          required: false
+          description: Producto a contar (p. ej. `tramites`); sin valor cuenta todos los productos.
+          schema: { type: string }
+        - name: tenantId
+          in: query
+          required: false
+          description: Solo Super Admin; para los demas se usa el tenant del JWT.
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Cantidad de permisos individuales activos.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count]
+                properties:
+                  count: { type: integer, minimum: 0 }
+        "401": { description: No autenticado. }
+        "403": { description: "El caller no es administrador, o rechazo de ambito (HU #13645): `OUT_OF_SCOPE`." }
+        "404": { description: "`USER_NOT_FOUND`." }
+
+  /api/v1/security/permission-audit:
+    get:
+      tags: [Security]
+      operationId: securityListPermissionAudit
+      summary: Auditoria de permisos individuales segun el ambito (HU #13647)
+      description: >-
+        Super Admin ve todo (tenantId opcional). Los demas administradores solo su tenant del JWT;
+        pedir otro tenant responde 403 `OUT_OF_SCOPE`. Orden created_at DESC.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: userId, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: tenantId, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: actorId, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: from, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: to, in: query, required: false, schema: { type: string, format: date-time } }
+        - { name: page, in: query, required: false, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        "200":
+          description: Pagina de registros.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionAuditPage"
+        "401": { description: No autenticado. }
+        "403": { description: "No es administrador o tenant fuera del ambito: `OUT_OF_SCOPE`." }
+
+  /api/v1/security/users/{userId}/permission-overrides/{permissionId}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: permissionId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: tenantId
+        in: query
+        required: false
+        description: Solo Super Admin; para los demas se usa el tenant del JWT.
+        schema: { type: string, format: uuid }
+    put:
+      tags: [Security]
+      operationId: securitySetUserPermissionOverride
+      summary: Otorga (allow) o deniega (deny) un permiso puntual dentro del tope del admin (HU #13644)
+      description: >
+        `allow` exige que el permiso tenga `enforced = 'true'` y este dentro del tope del administrador
+        (403 `NOT_ENFORCED` / `OUT_OF_CAP`). Tanto `allow` como `deny` sobre un permiso cuyo flag de enforcement
+        esta apagado responden 403 `NOT_ENFORCED` (falsa revocacion); quitar el override siempre se puede. Cada intento, aceptado o rechazado,
+        queda en la bitacora `security.user_permission_audit`.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [effect]
+              properties:
+                effect: { type: string, enum: [allow, deny] }
+                piiConfirmed:
+                  type: boolean
+                  description: >
+                    HU #13653 (aditivo, FB-17). Confirmacion Ley 1581 de 2012. Obligatorio en `true` para `allow` sobre
+                    `ict.pii.reveal` (sin el: 400 `PII_CONFIRMATION_REQUIRED`, nada cambia). Al aplicarse escribe, en la misma
+                    operacion que el GRANT, una fila `PII_REVEAL_CONFIRMED` en `security.user_permission_audit`.
+                    El modulo completo NO otorga `ict.pii.reveal` (cuenta en `excluded`).
+      responses:
+        "200":
+          description: Aplicado (`changed = false` si el usuario ya tenia ese efecto).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  permissionId: { type: string, format: uuid }
+                  effect: { type: string, enum: [allow, deny] }
+                  changed: { type: boolean }
+        "400":
+          description: "`INVALID_EFFECT`, `PII_CONFIRMATION_REQUIRED` (HU #13653: `allow` de `ict.pii.reveal` sin `piiConfirmed: true`; nada cambia) o `FAMILY_CREATE_REQUIRES_READ` (HU #13666): `allow` de `<familia>.create` (`matriculas`, `traspasos`, `otros-tramites`) cuando el permiso efectivo del usuario (rol + individuales) no incluye `<familia>.read`. Queda auditado como REJECTED. `deny` de `<familia>.read` apaga tambien `<familia>.create`: retira su allow individual y, si el rol lo da, lo deniega."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionOverrideError"
+        "401": { description: No autenticado. }
+        "403":
+          description: "Fuera del tope o no otorgable (`OUT_OF_CAP`, `NOT_ENFORCED`) o regla de HU #13645: `SELF`, `TARGET_SUPERADMIN`, `TARGET_IS_ADMIN`, `OUT_OF_SCOPE`, `EXCLUDED`. Todo rechazo queda auditado."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionOverrideError"
+        "404": { description: "`PERMISSION_NOT_FOUND` o `USER_NOT_FOUND`." }
+        "409": { description: "`INVITATION_PENDING`: el usuario aun no acepto su invitacion (HU #13645)." }
+    delete:
+      tags: [Security]
+      operationId: securityRemoveUserPermissionOverride
+      summary: Quita el permiso individual (vuelve a lo que dicta el rol) (HU #13644)
+      description: >
+        Un admin siempre puede quitar un `allow`. Quitar un `deny` devuelve lo que dicta el rol: 403
+        `OUT_OF_CAP` si el rol del usuario lo da y queda fuera del tope del admin. Quitar el `allow` de `<familia>.read` arrastra el `allow` individual de `<familia>.create` si el rol no da `.read` (HU #13666).
+      security:
+        - bearerAuth: []
+      responses:
+        "204": { description: Quitado (baja logica; queda en la bitacora como REVOKE). }
+        "401": { description: No autenticado. }
+        "403":
+          description: Volver al rol dejaria un permiso fuera del tope (`OUT_OF_CAP`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionOverrideError"
+        "404": { description: "`OVERRIDE_NOT_FOUND` o `PERMISSION_NOT_FOUND`." }
+
+  /api/v1/security/users/{userId}/permission-overrides/modules/{moduleCode}:
+    post:
+      tags: [Security]
+      operationId: securityGrantModulePermissionOverrides
+      summary: Otorga (o deniega) un modulo completo como foto, limitado al tope (HU #13644)
+      description: >
+        Crea un override por cada accion activa del modulo hoy. Con `allow` solo se otorgan las acciones
+        con `enforced = 'true'` dentro del tope (`outOfCap` cuenta el resto); si no se otorga ninguna, 403.
+        Las acciones cuyo flag de enforcement esta apagado no se otorgan ni se deniegan (`notEnforced`); si todo
+        lo que tocaria esta apagado, 403 `NOT_ENFORCED` auditado.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: moduleCode
+          in: path
+          required: true
+          schema: { type: string }
+        - name: tenantId
+          in: query
+          required: false
+          description: Solo Super Admin; para los demas se usa el tenant del JWT.
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [effect]
+              properties:
+                effect: { type: string, enum: [allow, deny] }
+      responses:
+        "200":
+          description: Foto aplicada.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  productCode: { type: string }
+                  batchId: { type: string, format: uuid }
+                  created: { type: integer }
+                  skipped: { type: integer }
+                  outOfCap: { type: integer }
+                  notEnforced: { type: integer }
+        "400": { description: "`INVALID_EFFECT`." }
+        "403":
+          description: Ninguna accion cabe en el tope (`OUT_OF_CAP`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionOverrideError"
+        "404": { description: "`MODULE_NOT_FOUND`." }
 
   /api/v1/security/users:
     get:
@@ -7039,6 +7369,50 @@ paths:
           description: Validación de identidad no encontrada.
         "409":
           description: "flujo_manual_no_activo (la validación no espera captura: ni manual_activo ni rechazado con motivo)."
+  /api/v1/tramites/biometric-validations/{id}/vencer:
+    post:
+      operationId: vencerIdentidad
+      tags: [Tramites, Identidad]
+      summary: Vencer una identidad aprobada y vigente (solo Super Admin) — HU #13824, Épica #13817
+      description: >
+        Termina AHORA la vigencia de una validación de identidad aprobada y vigente (trámite o prevalidación standalone):
+        `validUntil` pasa a ser el instante del vencimiento; la fila, el certificado y el estado `aprobado` se conservan.
+        Los trámites EN BORRADOR que usaban esa identidad quedan sin firmar para esa persona (deben revalidar para radicar);
+        los trámites que ya NO están en borrador conservan su firma hasta el fin de vigencia que la identidad tenía antes.
+        En el mismo paso abre una validación NUEVA en el trámite en borrador más reciente que usaba la identidad (se identifica
+        por el documento del sujeto: el actor, o su representante legal) y la envía con el mismo inicio de validación del
+        trámite (Kyverum o mock); `enlaceCaptura` trae el enlace para copiar. Sin borradores que la usen, vence igual y no
+        envía nada (`enlaceEnviado` false, `motivoSinEnlace` = `sin_borradores`). Si el inicio de la validación nueva falla
+        (`validacion_en_curso`, `proveedor_error`, `proveedor_no_disponible`, `datos_incompletos`, `actor_requerido`…) la
+        identidad queda vencida de todos modos y el motivo viaja en `motivoSinEnlace`. Si el proveedor estaba caído y la
+        validación quedó encolada, `enCola` es true y aún no hay enlace. Queda en el tracking del trámite
+        (`vencimiento_identidad_admin`) y en la bitácora técnica de identidad (`vencida_admin`, correo y documento
+        enmascarados). Solo Super Admin (rol + permiso `identidad.validaciones.vencer`, que ningún rol de compañía trae); el
+        tenant sale de la fila (NO se usa X-Tenant-Id).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Identidad vencida; trae el resultado del envío de la validación nueva (si la hubo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VencerIdentidadResult"
+        "401":
+          description: Sin sesión.
+        "403":
+          description: El usuario no es Super Admin (rol de compañía, aunque tenga el permiso asignado).
+        "404":
+          description: Validación de identidad no encontrada.
+        "409":
+          description: "no_aprobada_vigente — «Esta validación no está aprobada y vigente. No hay nada que vencer.»"
+        "422":
+          description: "fuera_de_alcance — la identidad de un mandatario no se vence desde este módulo."
   /api/v1/tramites/biometric-validations/{id}/manual-detail:
     get:
       operationId: getManualIdentityValidationDetail
@@ -11045,6 +11419,121 @@ paths:
         "502": { description: "El proveedor de validación de identidad rechazó la solicitud." }
         "503": { description: "El proveedor de validación de identidad no está disponible." }
 
+  # ── Admin · Trámites · Reenviar validación por persona (Épica #13817, HU #13821) ────────────────
+
+  /api/v1/admin/tramites/{id}/validaciones-identidad/reenviables:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Admin · Trámites · Gestión avanzada]
+      summary: Personas del trámite a las que se puede reenviar la validación de identidad
+      operationId: adminTramiteListValidacionesReenviables
+      security:
+        - bearerAuth: []
+      description: >
+        Una entrada por PERSONA (actor que valida identidad según el perfil del tipo de trámite,
+        incluidos copropietarios) que todavía no firmó, con su validación PROPIA más reciente sin
+        aprobar. No incluye a quien tiene identidad aprobada y vigente (propia o reutilizada de otro
+        trámite), a quien está cubierto por la firma del baúl, ni a quien no tiene fila propia (no se
+        inventa la persona). `esFlujoManual` marca validaciones en captura manual, que no se reenvían
+        al proveedor automático. Requiere el permiso `AdminTramiteReenviarValidacion`.
+      responses:
+        "200":
+          description: Personas reenviables (lista vacía si todas firmaron).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  personas:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        validationId: { type: string, format: uuid }
+                        partyRole: { type: string, example: vendedor }
+                        ordinal: { type: integer, minimum: 1, maximum: 4 }
+                        name: { type: string, nullable: true }
+                        email: { type: string, nullable: true }
+                        status: { type: string }
+                        captureUrl: { type: string, nullable: true }
+                        captureExpiresAt: { type: string, format: date-time, nullable: true }
+                        esFlujoManual: { type: boolean }
+        "400": { description: "Falta el header X-Tenant-Id." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin el permiso AdminTramiteReenviarValidacion." }
+        "404": { description: "Trámite no encontrado." }
+
+  /api/v1/admin/tramites/{id}/validaciones-identidad/reenviar:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin · Trámites · Gestión avanzada]
+      summary: Reenvía la validación de identidad a una o varias personas del trámite
+      operationId: adminTramiteReenviarValidacionesIdentidad
+      security:
+        - bearerAuth: []
+      description: >
+        Reenvío múltiple (máximo 8 personas). Cada persona sigue las mismas reglas que el reenvío
+        individual (tope, cooldown, flujo manual, identidad aprobada) y su fallo no frena a las demás:
+        la respuesta trae el resultado POR PERSONA. `email` opcional por persona: si cambia, se guarda en
+        la validación y en el actor del trámite (persona jurídica: el correo del representante legal) y
+        el historial del trámite registra el correo anterior y el nuevo. Un trámite `aprobado`,
+        `anulado` o `revocado` rechaza toda la solicitud (422). Requiere el permiso
+        `AdminTramiteReenviarValidacion`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  minItems: 1
+                  maxItems: 8
+                  items:
+                    type: object
+                    required: [validationId]
+                    properties:
+                      validationId: { type: string, format: uuid }
+                      email: { type: string, format: email, nullable: true }
+      responses:
+        "200":
+          description: Resultado por persona.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        validationId: { type: string, format: uuid }
+                        ok: { type: boolean }
+                        queued: { type: boolean }
+                        captureUrl: { type: string, nullable: true, description: "Solo si el enlace ya existe (no en cola)." }
+                        emailActualizado: { type: boolean }
+                        email: { type: string, nullable: true }
+                        error: { type: string, nullable: true }
+                        mensaje: { type: string, nullable: true, description: "Texto para el usuario cuando ok es false." }
+        "400": { description: "Falta el header X-Tenant-Id, solicitud vacía o más de 8 personas." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin el permiso AdminTramiteReenviarValidacion." }
+        "404": { description: "Trámite no encontrado (o de otro tenant)." }
+        "422": { description: "El trámite está en 'aprobado', 'anulado' o 'revocado' (identidad no accionable)." }
+
   # ── Admin · Trámites · Reasignar gestor (Feature #12155, HU #12162) ─────────────────────────────
 
   /api/v1/admin/tramites/{id}/reasignar-gestor:
@@ -14603,6 +15092,22 @@ components:
         loginUrl:
           type: string
           example: https://app.movilidadandina.com/login
+    SessionPolicyResponse:
+      type: object
+      description: Vigencia de la sesión del usuario autenticado (HU #13651).
+      required: [mode, maxMinutes]
+      properties:
+        mode:
+          type: string
+          enum: [legacy, oidc]
+          description: >
+            legacy = JWT único de `Jwt:TokenLifetimeHours` (sin renovación); oidc = access token de
+            `Suite:Oidc:AccessTokenMinutes` con renovación.
+        maxMinutes:
+          type: integer
+          minimum: 1
+          description: Máximo de minutos hasta que el usuario recibe un token con los permisos recalculados.
+          example: 720
     CurrentUserResponse:
       type: object
       required: [userId, email, tenantId, roles, permissions, companyName, companyNit, entityType]
@@ -14815,6 +15320,66 @@ components:
       properties:
         error: { type: string }
       required: [error]
+
+    PermissionOverrideError:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, description: "OUT_OF_CAP | NOT_ENFORCED | ..." }
+        message: { type: string }
+        permission: { type: string, nullable: true }
+
+    UserPermissionOverrideItem:
+      type: object
+      properties:
+        permissionId: { type: string, format: uuid }
+        slug: { type: string }
+        productCode: { type: string }
+        effect: { type: string, enum: [allow, deny] }
+        source: { type: string, enum: [INDIVIDUAL, MODULE_SNAPSHOT] }
+        grantedBy: { type: string, format: uuid }
+        name: { type: string, nullable: true, description: "Nombre del permiso (HU #13655)." }
+        moduleCode: { type: string, nullable: true, description: "Codigo del modulo del permiso (HU #13655)." }
+        moduleName: { type: string, nullable: true, description: "Nombre del modulo, para mostrar un permiso fuera del tope de quien consulta (HU #13655)." }
+        grantedByName: { type: string, nullable: true, description: "Nombre de quien otorgo el permiso (HU #13647)." }
+        grantedAt: { type: string, format: date-time, nullable: true, description: "Fecha UTC en que se otorgo (HU #13647)." }
+
+    PermissionAuditRecord:
+      type: object
+      description: Registro de la bitacora de permisos individuales (HU #13647). Fechas en UTC.
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        tenantName: { type: string, nullable: true }
+        actorUserId: { type: string, format: uuid }
+        actorName: { type: string, nullable: true }
+        actorEmail: { type: string, nullable: true }
+        targetUserId: { type: string, format: uuid }
+        targetName: { type: string, nullable: true }
+        targetEmail: { type: string, nullable: true }
+        productCode: { type: string, nullable: true }
+        moduleCode: { type: string, nullable: true }
+        permissionSlug: { type: string, nullable: true }
+        permissionName: { type: string, nullable: true, description: Nombre legible del permiso (el que se muestra). }
+        moduleName: { type: string, nullable: true, description: Nombre legible del módulo (el que se muestra). }
+        action: { type: string, description: "Ej. GRANT, DENY, REMOVE, PII_REVEAL_CONFIRMED." }
+        outcome: { type: string, enum: [OK, REJECTED] }
+        reasonCode: { type: string, nullable: true }
+        valueBefore: { type: string, nullable: true }
+        valueAfter: { type: string, nullable: true }
+        batchId: { type: string, format: uuid, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    PermissionAuditPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PermissionAuditRecord"
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
 
     BrandAssetValidationError:
       type: object
@@ -16026,7 +16591,13 @@ components:
       properties:
         email: { type: string, format: email }
         fullName: { type: string, nullable: true }
-      required: [email]
+        roleIds:
+          type: array
+          description: Rol del invitado (exactamente uno, del catálogo TRANSIT_OFFICE).
+          minItems: 1
+          maxItems: 1
+          items: { type: string, format: uuid }
+      required: [email, roleIds]
 
     InviteOtUserResponse:
       type: object
@@ -18216,6 +18787,25 @@ components:
             Origen de la validación (HU #13285). `mandatario` = fila con MandateSignerId (se conserva);
             `representante_legal` = prevalidación standalone de persona jurídica.
         emailEnviado: { type: boolean, description: false si el correo con el enlace no salió (titular sin correo o fallo de envío); el Super Admin puede regenerar el enlace. }
+    VencerIdentidadResult:
+      type: object
+      description: Resultado de vencer una identidad aprobada y vigente (HU #13824).
+      properties:
+        validationId: { type: string, format: uuid, description: "La validación vencida (se conserva la fila)." }
+        tenantId: { type: string, format: uuid }
+        procedureInstanceId: { type: string, format: uuid, nullable: true, description: "Trámite dueño de la validación; null si es una prevalidación standalone." }
+        vencidaAt: { type: string, format: date-time, description: "Instante del vencimiento (igual al nuevo validUntil)." }
+        borradoresAfectados: { type: integer, description: "Trámites en borrador del tenant que usaban esa identidad y quedan sin firmar para esa persona." }
+        enlaceEnviado: { type: boolean, description: "true si se abrió una validación nueva y se envió el enlace (también cuando quedó encolada)." }
+        nuevaValidacionId: { type: string, format: uuid, nullable: true }
+        tramiteBorradorId: { type: string, format: uuid, nullable: true, description: "Trámite en borrador más reciente que usaba la identidad (destino de la validación nueva)." }
+        tramiteBorradorReferencia: { type: string, nullable: true, description: "Número de referencia del trámite destino." }
+        enlaceCaptura: { type: string, nullable: true, description: "Enlace para copiar (URL de captura del proveedor o ruta /biometric/{token} con el proveedor mock). Null si no se envió o quedó encolada." }
+        enCola: { type: boolean, description: "true si el proveedor estaba caído y la validación quedó en pendiente_envio (el worker la enviará)." }
+        motivoSinEnlace:
+          type: string
+          nullable: true
+          description: Por qué no se envió enlace. `sin_borradores` (ningún trámite en borrador la usaba), `validacion_en_curso`, `proveedor_error`, `proveedor_no_disponible`, `datos_incompletos`, `actor_requerido`, etc.
     RegenerarEnlaceManualResult:
       type: object
       description: Estado resultante de regenerar el enlace de captura manual (HU #13287). No incluye el token del enlace.

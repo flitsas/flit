@@ -38,7 +38,7 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
   const [ocultarSinNovedad, setOcultarSinNovedad] = useState(true);
   const [soloErrores, setSoloErrores] = useState(false);
   // Bug #13055 — paginación de servidor estándar, con «Filas por página».
-  const { page, pageSize, setPage, setPageSize } = usePaginacion();
+  const { page, pageSize, setPage, setPageSize } = usePaginacion("logqx.LogCompleto");
 
   const [data, setData] = useState<LogQxEventosPage | null>(null);
   const [error, setError] = useState<string | null>(null);

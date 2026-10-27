@@ -3379,13 +3379,19 @@ function ConsultaStep({
   const rutaCorta = muestraDigitoPlaca && (rutaRunt?.route === 'corta' || vehiculoConPlacaRunt);
   /** Organismo de la Ruta Corta: el resuelto por el preview o, con trámite creado, el del expediente. */
   const organismoRutaCorta =
-    rutaRunt?.transitOffice?.name ??
-    fieldValues.find((f) => f.fieldKey === 'transit_office_name')?.valueText?.trim() ??
+    rutaRunt?.transitOffice?.name ||
+    fieldValues.find((f) => f.fieldKey === 'transit_office_name')?.valueText?.trim() ||
     null;
+  /**
+   * Ruta Corta CON organismo del RUNT: el único caso en que el gestor no elige la secretaría. Si el
+   * RUNT trae placa pero no organismo, el backend radica en la secretaría elegida
+   * (`CreateFromConsultaCommand`), así que aquí se ofrece el selector como en la Ruta Larga.
+   */
+  const organismoFijadoPorRunt = rutaCorta && organismoRutaCorta !== null;
 
-  // Epic #12550 — en Ruta Corta la lista no gatea nada: el organismo ya lo trajo el RUNT.
+  // Epic #12550 — con el organismo fijado por el RUNT la lista no gatea nada.
   const secretariaListaGateOk =
-    !eligeSecretaria || rutaCorta || (secretariasLoaded && secretarias.length > 0);
+    !eligeSecretaria || organismoFijadoPorRunt || (secretariasLoaded && secretarias.length > 0);
 
   useEffect(() => {
     onSecretariaListaGateChange?.(secretariaListaGateOk);
@@ -3738,8 +3744,8 @@ function ConsultaStep({
   useEffect(() => {
     if (!deferred) return;
     if (!pendingPreview) return;
-    // Epic #12550 — en Ruta Corta el organismo lo fija el RUNT: no se exige ni se envía el elegido.
-    const eligeAqui = eligeSecretaria && !rutaCorta;
+    // Epic #12550 — con el organismo fijado por el RUNT no se exige ni se envía el elegido.
+    const eligeAqui = eligeSecretaria && !organismoFijadoPorRunt;
     if (eligeAqui && !transitOfficeId) {
       onPreviewDone?.(null);
       return;
@@ -3751,7 +3757,7 @@ function ConsultaStep({
     // `onPreviewDone` es un callback del shell recreado en cada render: incluirlo re-emitiría en
     // bucle. Lo que gobierna la emisión es la consulta, la ruta y el organismo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deferred, pendingPreview, eligeSecretaria, rutaCorta, transitOfficeId]);
+  }, [deferred, pendingPreview, eligeSecretaria, organismoFijadoPorRunt, transitOfficeId]);
 
   // Seguimiento post-HU #12131/#12129 — «sin prenda que levantar» ya no bloquea (backend: check
   // `prenda_ausente` en warn), pero enterarse solo por la lista de "Advertencias de la verificación"
@@ -4058,7 +4064,7 @@ function ConsultaStep({
         <div id="wizard-ot-radicacion">
         <WizardAccordion title="Organismo de Tránsito y Radicación" defaultOpen>
           {rutaChip}
-          {rutaCorta ? (
+          {organismoFijadoPorRunt ? (
             /* Epic #12550 — Ruta Corta: placa y organismo vienen del RUNT y no se editan. Sin
                selector de secretaría ni dígito: no hay nada que el gestor deba decidir aquí. */
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -4077,7 +4083,7 @@ function ConsultaStep({
                   className="rounded-xl border border-dashed px-3 py-2 text-sm opacity-90"
                   data-testid="ruta-corta-organismo"
                 >
-                  {organismoRutaCorta ?? 'El RUNT no reporta el organismo: se radicará en la secretaría que elijas en el paso final.'}
+                  {organismoRutaCorta}
                 </p>
                 <p className="mt-1 text-xs leading-tight opacity-70">
                   Los dos vienen del RUNT y no se pueden modificar.
@@ -4089,7 +4095,9 @@ function ConsultaStep({
           <p className="text-xs opacity-70 mb-3">
             {secretariaAntesDeConsultar
               ? 'Selecciona la secretaría de DESTINO: es donde quedará radicada la cuenta y quien aprueba el trámite. Escógela antes de consultar el vehículo.'
-              : 'Selecciona la secretaría donde se radicará el expediente.'}
+              : rutaCorta
+                ? 'El RUNT no reporta el organismo de tránsito del vehículo. Selecciona la secretaría donde se radicará el expediente.'
+                : 'Selecciona la secretaría donde se radicará el expediente.'}
           </p>
           {/* Tres columnas en matrícula (secretaría · dígito · prioridad); una sola donde el trámite
               solo escoge organismo, para no dejar dos huecos con el campo estirado a un tercio. */}

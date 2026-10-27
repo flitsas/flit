@@ -49,7 +49,7 @@ public sealed class CreateInvitationHandlerTests
     [Fact]
     public async Task HandleAsync_ValidEmailAndRole_CreatesInvitationAndSendsEmail()
     {
-        _repo.ExistsPendingAsync(TenantId, Email, Arg.Any<CancellationToken>()).Returns(false);
+        _repo.ExistsPendingAsync(Email, Arg.Any<CancellationToken>()).Returns(false);
 
         var result = await _handler.HandleAsync(
             new CreateInvitationCommand(TenantId, Email, FullName, [RoleId], InvitedBy),
@@ -76,7 +76,7 @@ public sealed class CreateInvitationHandlerTests
     [Fact]
     public async Task HandleAsync_MultipleRoles_ValidatesAllAndCreatesInvitationWithAllRoleIds()
     {
-        _repo.ExistsPendingAsync(TenantId, Email, Arg.Any<CancellationToken>()).Returns(false);
+        _repo.ExistsPendingAsync(Email, Arg.Any<CancellationToken>()).Returns(false);
 
         var result = await _handler.HandleAsync(
             new CreateInvitationCommand(TenantId, Email, FullName, [RoleId, SecondRoleId], InvitedBy),
@@ -112,7 +112,7 @@ public sealed class CreateInvitationHandlerTests
     [Fact]
     public async Task HandleAsync_EmailSenderFails_InvitationRemainingPendingAndEmailSentFalse()
     {
-        _repo.ExistsPendingAsync(TenantId, Email, Arg.Any<CancellationToken>()).Returns(false);
+        _repo.ExistsPendingAsync(Email, Arg.Any<CancellationToken>()).Returns(false);
         _email.SendAsync(Arg.Any<EmailMessage>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(EmailSendResult.Failed(EmailSendOutcome.ProviderUnavailable)));
 
@@ -129,7 +129,7 @@ public sealed class CreateInvitationHandlerTests
     [Fact]
     public async Task HandleAsync_SendsMessageWithCommandTenantId()
     {
-        _repo.ExistsPendingAsync(TenantId, Email, Arg.Any<CancellationToken>()).Returns(false);
+        _repo.ExistsPendingAsync(Email, Arg.Any<CancellationToken>()).Returns(false);
 
         await _handler.HandleAsync(
             new CreateInvitationCommand(TenantId, Email, FullName, [RoleId], InvitedBy),
@@ -143,7 +143,7 @@ public sealed class CreateInvitationHandlerTests
     [Fact]
     public async Task HandleAsync_PendingExists_ThrowsInvitationAlreadyPending()
     {
-        _repo.ExistsPendingAsync(TenantId, Email, Arg.Any<CancellationToken>()).Returns(true);
+        _repo.ExistsPendingAsync(Email, Arg.Any<CancellationToken>()).Returns(true);
 
         await _handler
             .Invoking(h => h.HandleAsync(
@@ -162,7 +162,7 @@ public sealed class CreateInvitationHandlerTests
     public async Task HandleAsync_PreviousAcceptedInvitation_AllowsNewPending()
     {
         // El repo devuelve false porque la invitación accepted no cuenta como pending
-        _repo.ExistsPendingAsync(TenantId, Email, Arg.Any<CancellationToken>()).Returns(false);
+        _repo.ExistsPendingAsync(Email, Arg.Any<CancellationToken>()).Returns(false);
 
         var result = await _handler.HandleAsync(
             new CreateInvitationCommand(TenantId, Email, FullName, [RoleId], InvitedBy),
@@ -178,7 +178,7 @@ public sealed class CreateInvitationHandlerTests
     [Fact]
     public async Task HandleAsync_EmailOnlyUsedByDeletedAccount_CreatesInvitation()
     {
-        _repo.ExistsPendingAsync(TenantId, Email, Arg.Any<CancellationToken>()).Returns(false);
+        _repo.ExistsPendingAsync(Email, Arg.Any<CancellationToken>()).Returns(false);
         // UserExistsWithEmailAsync filtra DeletedAt == null: la cuenta eliminada no cuenta.
         _repo.UserExistsWithEmailAsync(Email, Arg.Any<CancellationToken>()).Returns(false);
 
@@ -196,7 +196,7 @@ public sealed class CreateInvitationHandlerTests
     [Fact]
     public async Task HandleAsync_EmailUsedByLiveUser_StillThrowsUserAlreadyExists()
     {
-        _repo.ExistsPendingAsync(TenantId, Email, Arg.Any<CancellationToken>()).Returns(false);
+        _repo.ExistsPendingAsync(Email, Arg.Any<CancellationToken>()).Returns(false);
         _repo.UserExistsWithEmailAsync(Email, Arg.Any<CancellationToken>()).Returns(true);
 
         await _handler

@@ -58,7 +58,8 @@ export interface ResultadoDescarga {
 }
 
 /** Descarga un archivo (Excel, PDF) de la API y lo entrega al navegador con el nombre que diga el servidor. */
-export async function apiDownload(path: string, fallbackName: string, query?: Query): Promise<ResultadoDescarga> {
+/** `nombreFijo` gana sobre el nombre que manda el servidor (las partes de la exportación de la bandeja lo arman aquí). */
+export async function apiDownload(path: string, fallbackName: string, query?: Query, nombreFijo = false): Promise<ResultadoDescarga> {
   const response = await fetch(buildUrl(path, query));
   if (response.status === 202) {
     const data = (await safeJson(response)) as { mensaje?: string } | null;
@@ -68,7 +69,7 @@ export async function apiDownload(path: string, fallbackName: string, query?: Qu
   const blob = await response.blob();
   const disposition = response.headers.get("content-disposition") ?? "";
   const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
-  const name = match ? decodeURIComponent(match[1]) : fallbackName;
+  const name = match && !nombreFijo ? decodeURIComponent(match[1]) : fallbackName;
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

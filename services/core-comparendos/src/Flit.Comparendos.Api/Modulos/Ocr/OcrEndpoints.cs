@@ -2,6 +2,7 @@ using Flit.Comparendos.Api.Modulos.Comparendos;
 using Flit.Comparendos.Api.Persistence;
 using Flit.Comparendos.Api.Persistence.Modelo;
 using Flit.Comparendos.Api.Plataforma;
+using Flit.Comparendos.Domain.Identificadores;
 using Flit.Comparendos.Domain.Modelo;
 using Microsoft.EntityFrameworkCore;
 
@@ -23,11 +24,13 @@ public static class OcrEndpoints
         g.MapPost("/paquetes/{id:guid}/iniciar", Iniciar).RequirePermiso(Permisos.OcrGestionar);
         g.MapPost("/paquetes/{id:guid}/registrar-completos", RegistrarCompletos).RequirePermiso(Permisos.OcrGestionar);
         g.MapPost("/paquetes/{id:guid}/descartar-fallidos", DescartarFallidos).RequirePermiso(Permisos.OcrGestionar);
+        g.MapPost("/paquetes/{id:guid}/reprocesar-incompletos", ReprocesarIncompletos).RequirePermiso(Permisos.OcrGestionar);
         g.MapGet("/documentos/{id:guid}", Documento).RequirePermiso(Permisos.OcrVer);
         g.MapPut("/documentos/{id:guid}/campos", Corregir).RequirePermiso(Permisos.OcrGestionar);
         g.MapPost("/documentos/{id:guid}/registrar", Registrar).RequirePermiso(Permisos.OcrGestionar);
         g.MapPost("/documentos/{id:guid}/descartar", Descartar).RequirePermiso(Permisos.OcrGestionar);
         g.MapPost("/documentos/{id:guid}/reintentar", Reintentar).RequirePermiso(Permisos.OcrGestionar);
+        g.MapPost("/documentos/{id:guid}/reprocesar", Reprocesar).RequirePermiso(Permisos.OcrGestionar);
         g.MapGet("/estadisticas", Estadisticas).RequirePermiso(Permisos.OcrVer);
     }
 
@@ -110,7 +113,11 @@ public static class OcrEndpoints
         var documentos = await q.OrderBy(d => d.Id).Select(d => new
         {
             d.Id, d.NombreArchivo, d.TipoArchivo, d.ArchivoId, estado = d.Estado.ToString(), d.Intentos, d.NumeroComparendoExtraido, d.CamposFaltantes,
-            tipoFallo = d.TipoFallo.HasValue ? d.TipoFallo.Value.ToString() : null, d.MensajeError, d.FuenteDuplicado, d.ComparendoId, d.ProcesadoEn,
+            // El mensaje técnico del fallo es para el SuperAdmin; la gestora ve la etiqueta del tipo de fallo.
+            tipoFallo = d.TipoFallo.HasValue ? d.TipoFallo.Value.ToString() : null, mensajeError = usuario.EsSuperAdmin ? d.MensajeError : null, d.FuenteDuplicado, d.ComparendoId, d.ProcesadoEn,
+            d.MotivoDescarte, d.Reprocesos, avisoNumero = NumeroComparendo.AvisoDeLectura(d.NumeroComparendoExtraido),
+            reprocesable = d.Reprocesos < ServicioOcr.MaximoReprocesos
+                && (d.Estado == EstadoDocumentoOcr.Incompleto || (d.Estado == EstadoDocumentoOcr.Fallido && d.TipoFallo == TipoFalloOcr.Ilegible)),
         }).ToListAsync(ct).ConfigureAwait(false);
         return Results.Ok(new { paquete = Resumen(p), documentos });
     }
@@ -155,6 +162,21 @@ public static class OcrEndpoints
         return Results.Ok(new { descartados = docs.Count });
     }
 
+    /// <summary>HU #13828: encola de nuevo los INCOMPLETOS del paquete que no agotaron sus reprocesos.</summary>
+    private static async Task<IResult> ReprocesarIncompletos(Guid id, UsuarioActual usuario, ComparendosDb db, ServicioOcr servicio, Capacidades capacidades, CancellationToken ct)
+    {
+        var p = await PaqueteAsync(db, id, usuario, operar: true, capacidades, ct).ConfigureAwait(false);
+        var docs = await db.DocumentosOcr.Where(d => d.PaqueteId == p.Id && d.Estado == EstadoDocumentoOcr.Incompleto).OrderBy(d => d.Id).ToListAsync(ct).ConfigureAwait(false);
+        var encolados = 0;
+        foreach (var d in docs.Where(d => ServicioOcr.MotivoNoReprocesable(d) is null))
+        {
+            await servicio.ReprocesarAsync(d, usuario.Id, ct, usuario.Nombre).ConfigureAwait(false);
+            encolados++;
+        }
+
+        return Results.Ok(new { encolados, omitidos = docs.Count - encolados });
+    }
+
     private static async Task<IResult> Documento(Guid id, UsuarioActual usuario, ComparendosDb db, Capacidades capacidades, CancellationToken ct)
     {
         var d = await DocumentoAsync(db, id, usuario, operar: false, capacidades, ct).ConfigureAwait(false);
@@ -162,9 +184,19 @@ public static class OcrEndpoints
         var orden = CamposOcr.Todos.Select((n, i) => (n, i)).ToDictionary(x => x.n, x => x.i);
         var ediciones = await db.DocumentoOcrEdiciones.AsNoTracking().Where(e => e.DocumentoOcrId == id).OrderBy(e => e.EditadoEn)
             .Select(e => new { e.Campo, e.ValorAnterior, e.ValorNuevo, e.UsuarioId, e.UsuarioNombre, e.EditadoEn, e.Motivo }).ToListAsync(ct).ConfigureAwait(false);
-        var intentos = await db.DocumentoOcrIntentos.AsNoTracking().Where(i => i.DocumentoOcrId == id).OrderBy(i => i.Numero)
-            .Select(i => new { i.Numero, i.Resultado, tipoError = i.TipoError.HasValue ? i.TipoError.Value.ToString() : null, i.MensajeError, i.IntentadoEn, i.ProximoReintentoEn })
+        var intentos = await db.DocumentoOcrIntentos.AsNoTracking().Where(i => i.DocumentoOcrId == id).OrderBy(i => i.IntentadoEn).ThenBy(i => i.Numero)
+            .Select(i => new
+            {
+                i.Numero, i.Resultado, tipoError = i.TipoError.HasValue ? i.TipoError.Value.ToString() : null,
+                mensajeError = usuario.EsSuperAdmin || i.Resultado == "REPROCESO" ? i.MensajeError : null, i.IntentadoEn, i.ProximoReintentoEn,
+            })
             .ToListAsync(ct).ConfigureAwait(false);
+
+        // HU #13828: con qué versión del prompt se leyó (la del documento; los leídos antes de la HU, la del paquete). Solo
+        // para el SuperAdmin, como el proveedor y el modelo: la gestora no ve cómo funciona la lectura por dentro.
+        var promptId = d.PromptVersionId ?? await db.PaquetesOcr.AsNoTracking().Where(p => p.Id == d.PaqueteId).Select(p => (Guid?)p.PromptVersionId).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        var versionPrompt = d.ProcesadoEn is null || !usuario.EsSuperAdmin ? null
+            : await db.PromptsOcr.AsNoTracking().Where(p => p.Id == promptId).Select(p => (int?)p.NumeroVersion).FirstOrDefaultAsync(ct).ConfigureAwait(false);
 
         object? duplicado = null;
         if (d.DuplicadoDeComparendoId is { } cid)
@@ -188,7 +220,9 @@ public static class OcrEndpoints
             d.Id, d.PaqueteId, d.NombreArchivo, d.TipoArchivo, d.ArchivoId, d.ArchivoOriginalId, estado = d.Estado.ToString(), d.Intentos,
             // El proveedor y el modelo son información interna de FLIT: la gestora nunca los ve.
             proveedorModelo = usuario.EsSuperAdmin ? d.ProveedorModelo : null, d.NumeroComparendoExtraido,
-            d.CamposFaltantes, tipoFallo = d.TipoFallo?.ToString(), d.MensajeError, reintentable = d.Estado == EstadoDocumentoOcr.Fallido && ResultadoOcr.EsTecnico(d.TipoFallo),
+            d.CamposFaltantes, tipoFallo = d.TipoFallo?.ToString(), mensajeError = usuario.EsSuperAdmin ? d.MensajeError : null, reintentable = d.Estado == EstadoDocumentoOcr.Fallido && ResultadoOcr.EsTecnico(d.TipoFallo),
+            avisoNumero = NumeroComparendo.AvisoDeLectura(d.NumeroComparendoExtraido),
+            d.Reprocesos, maximoReprocesos = ServicioOcr.MaximoReprocesos, motivoNoReprocesable = ServicioOcr.MotivoNoReprocesable(d), versionPrompt,
             d.ComparendoId, d.ProcesadoEn, d.RevisadoPor, d.RevisadoEn, d.MotivoDescarte, d.FuenteDuplicado, duplicado,
             campos = campos.OrderBy(c => orden.GetValueOrDefault(c.NombreCampo, 99)).Select(c => new
             {
@@ -222,6 +256,13 @@ public static class OcrEndpoints
     {
         var d = await DocumentoAsync(db, id, usuario, operar: true, capacidades, ct).ConfigureAwait(false);
         await servicio.ReintentarAsync(d, ct).ConfigureAwait(false);
+        return Results.Accepted();
+    }
+
+    private static async Task<IResult> Reprocesar(Guid id, UsuarioActual usuario, ComparendosDb db, ServicioOcr servicio, Capacidades capacidades, CancellationToken ct)
+    {
+        var d = await DocumentoAsync(db, id, usuario, operar: true, capacidades, ct).ConfigureAwait(false);
+        await servicio.ReprocesarAsync(d, usuario.Id, ct, usuario.Nombre).ConfigureAwait(false);
         return Results.Accepted();
     }
 

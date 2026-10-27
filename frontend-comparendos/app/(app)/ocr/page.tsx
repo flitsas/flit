@@ -281,7 +281,7 @@ function Paquetes() {
     <section className="flex flex-col gap-6">
       <Encabezado
         titulo="Paquetes OCR"
-        descripcion="Carga comparendos físicos en lotes: un modelo de lenguaje lee cada archivo, tú revisas lo extraído y lo registras."
+        descripcion="Carga comparendos físicos en lotes: el sistema lee cada archivo, tú revisas lo extraído y lo registras."
         acciones={
           <>
             <button type="button" className={controlCls(false)} onClick={lista.recargar}>

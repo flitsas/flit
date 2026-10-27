@@ -4,6 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { rowActionNames } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 import { Usuarios } from "../Usuarios";
 import { getUsers } from "@/lib/api/security";
 
@@ -133,6 +134,7 @@ describe("Usuarios — tabla con columnas Perfil y Rol separadas (AC4)", () => {
       },
     ]);
 
+    const user = userEvent.setup();
     render(<Usuarios />);
 
     const fila = (await screen.findByText("Gina Paredes")).closest("tr") as HTMLElement;
@@ -143,9 +145,7 @@ describe("Usuarios — tabla con columnas Perfil y Rol separadas (AC4)", () => {
     // los usuarios de la compañía tenían el mismo rol.
     expect(within(fila).getByText("Gestor · Admin")).toBeInTheDocument();
     expect(within(fila).getByText("Administrador de Compañía")).toBeInTheDocument();
-    expect(
-      within(fila).getByRole("button", { name: /editar usuario gina paredes/i }),
-    ).toBeInTheDocument();
+    expect(await rowActionNames(user, "Gina Paredes", within(fila))).toContainEqual(expect.stringMatching(/editar usuario gina paredes/i));
   });
 
   it("el chip de un usuario que no es administrador queda solo con el perfil (Bug #13055)", async () => {

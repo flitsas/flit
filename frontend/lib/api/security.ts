@@ -14,6 +14,8 @@ export interface TenantUser {
   role: string | null;
   roleCode: string | null;
   roleId: string | null;
+  /** HU #13647: todos los roles activos del usuario en el tenant (la fila muestra uno solo). */
+  roleIds?: string[];
   /** HU #11552 / ADR-0048: "cancelled" es un cuarto valor — invitación cancelada, visible y
    *  reactivable. El `id` de la fila sigue siendo el `invitationId` en "pending" y "cancelled". */
   status: "active" | "inactive" | "pending" | "cancelled";
@@ -62,6 +64,8 @@ export interface GrantablePermission {
   name: string;
   moduleCode: string;
   productCode: string;
+  /** HU #13666: nombre legible del módulo (el mismo del Panel SA). */
+  moduleName?: string;
 }
 
 /** HU #13441: detalle de un rol visible para la compañía (permisos asignados incluidos). */
@@ -78,7 +82,8 @@ export interface TenantRoleDetail {
 }
 
 export interface NewTenantRole {
-  code: string;
+  /** HU #13666: opcional y la pantalla no lo envía; el servidor lo genera a partir del nombre. */
+  code?: string;
   name: string;
   description?: string | null;
   productCode?: string;

@@ -139,27 +139,91 @@ public sealed class BandejaTests(ApiConFuente api) : IClassFixture<ApiConFuente>
     }
 
     [Fact]
-    public async Task E4_MisExportaciones_MuestranLosFiltrosConQueSePidieron()
+    public async Task HU13871_ExportaPorPartes_ConLasColumnasVisibles()
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var ct = TestContext.Current.CancellationToken;
-        var empresa = Guid.NewGuid();
-        var usuario = new UsuarioDePrueba(empresa, Lectura);
-        var bogota = Guid.Parse("aaaaaaaa-0001-4000-8000-000000000001");
-        var filtros = new Flit.Comparendos.Api.Modulos.Bandeja.FiltrosBandeja { Placa = "ABC123", Organismos = [bogota], Rapido = "Radar" };
-        await api.EnDbAsync(async db =>
+        var (_, cliente) = await PrepararAsync();
+        async Task<List<List<string>>> Hoja(string query)
         {
-            db.Exportaciones.Add(new Flit.Comparendos.Api.Persistence.Modelo.Exportacion
-            {
-                Id = Guid.NewGuid(), TenantId = empresa, SolicitadaPor = usuario.Id, CreadoEn = DateTimeOffset.UtcNow,
-                Filtros = Flit.Comparendos.Api.Modulos.Bandeja.ExportacionBandeja.Serializar(empresa, filtros, usuario.Email),
-            });
-            await db.SaveChangesAsync(ct);
-        });
+            var r = await cliente.GetAsync($"/api/v1/comparendos/comparendos/excel?{query}", ct);
+            r.StatusCode.Should().Be(HttpStatusCode.OK);
+            return LeerHoja(await r.Content.ReadAsByteArrayAsync(ct));
+        }
 
-        var e = (await api.Cliente(usuario).GetFromJsonAsync<JsonElement>("/api/v1/comparendos/exportaciones", ct)).EnumerateArray().Single();
-        e.GetProperty("filtros").GetProperty("placa").GetString().Should().Be("ABC123");
-        e.GetProperty("filtros").GetProperty("rapido").GetString().Should().Be("Radar");
-        e.GetProperty("nombres").GetProperty(bogota.ToString()).GetString().Should().NotBeNullOrWhiteSpace("el organismo se muestra con su nombre");
+        var completa = await Hoja("orden=numero");
+        completa[0].Should().HaveCount(23, "sin columnas pedidas salen todas, incluidas las que la tabla trae ocultas");
+        completa.Skip(1).Select(f => f[0]).Should().Equal("A-1", "B-2", "C-3", "D-4");
+
+        var visibles = await Hoja("orden=numero&columnas=numero,ot,titular,inventada");
+        visibles[0].Should().Equal("Número", "Organismo de tránsito", "NIT consultado", "Titular");
+        visibles.Should().HaveCount(5);
+
+        (await Hoja("orden=numero&parte=2&columnas=numero")).Should().HaveCount(1, "con 4 filas la parte 2 queda vacía: cada parte es de 5.000");
+        (await Hoja("estadoLegal=Vencido&columnas=numero,semaforo")).Should().BeEquivalentTo(new List<List<string>> { new() { "Número", "Estado legal", "Días hábiles restantes" }, new() { "B-2", "Vencido" } });
+        (await cliente.GetAsync("/api/v1/comparendos/exportaciones", ct)).StatusCode.Should().Be(HttpStatusCode.NotFound, "«Mis exportaciones» ya no existe");
+    }
+
+    /// <summary>Las celdas de la primera hoja de un .xlsx, fila por fila, sin las vacías.</summary>
+    private static List<List<string>> LeerHoja(byte[] xlsx)
+    {
+        using var zip = new System.IO.Compression.ZipArchive(new MemoryStream(xlsx));
+        using var hoja = zip.GetEntry("xl/worksheets/sheet1.xml")!.Open();
+        var xml = System.Xml.Linq.XDocument.Load(hoja);
+        System.Xml.Linq.XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+        return xml.Descendants(ns + "row").Select(r => r.Elements(ns + "c").Select(c => c.Value).Where(v => v.Length > 0).ToList()).ToList();
+    }
+
+    [Fact]
+    public async Task HU13870_AC1_BuscaEnNumeroYPlacaALaVez()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, cliente) = await PrepararAsync();
+        await api.EnDbAsync(db => db.Comparendos.Where(c => c.TenantId == empresa && c.NumeroNormalizado == "C3").ExecuteUpdateAsync(u => u.SetProperty(c => c.Placa, "XYZ987"), ct));
+
+        (await Numeros(cliente, "buscar=a-1")).Should().Equal("A-1");
+        (await Numeros(cliente, "buscar=xyz")).Should().Equal(["C-3"], "la placa también se busca");
+        (await Numeros(cliente, "buscar=bnd")).Should().BeEquivalentTo("A-1", "B-2", "D-4");
+        (await Numeros(cliente, "buscar=no-existe")).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task HU13868_AC3_ListasPegadas_YNoEs()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, cliente) = await PrepararAsync();
+        await api.EnDbAsync(db => db.Comparendos.Where(c => c.TenantId == empresa && c.NumeroNormalizado == "C3").ExecuteUpdateAsync(u => u.SetProperty(c => c.Placa, "XYZ987"), ct));
+        var bogota = await api.EnDbAsync(db => db.Comparendos.Where(c => c.TenantId == empresa).Select(c => c.OrganismoTransitoId).FirstAsync(ct));
+
+        (await Numeros(cliente, "numeros=a-1,B2")).Should().BeEquivalentTo("A-1", "B-2");
+        (await Numeros(cliente, "numeros=A1")).Should().Equal("A-1");
+        (await Numeros(cliente, "numeros=A")).Should().BeEmpty("la lista pegada coincide completa, no por parte");
+        (await Numeros(cliente, "numeros=A-1,B-2&negar=numeros")).Should().BeEquivalentTo("C-3", "D-4");
+        (await Numeros(cliente, "placas=xyz987")).Should().Equal("C-3");
+        (await Numeros(cliente, "placas=xyz987&negar=placas")).Should().BeEquivalentTo("A-1", "B-2", "D-4");
+        (await Numeros(cliente, $"organismos={bogota}&negar=organismos")).Should().BeEmpty();
+        (await Numeros(cliente, "fuente=Ocr&negar=fuente")).Should().HaveCount(4);
+        (await Numeros(cliente, "fuente=Simit&negar=fuente")).Should().BeEmpty();
+        (await Numeros(cliente, "negar=fuente")).Should().HaveCount(4, "«no es» sin valores no filtra");
+    }
+
+    [Fact]
+    public async Task HU13869_AC1_ConteoPorEstadoLegal_RespetaLosDemasFiltros()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (_, cliente) = await PrepararAsync();
+        async Task<Dictionary<string, int>> Estados(string query) =>
+            (await cliente.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/comparendos/contadores?{query}", ct)).GetProperty("estadosLegales")
+                .EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetInt32());
+
+        (await Estados(string.Empty)).Should().BeEquivalentTo(new Dictionary<string, int> { ["SinNotificar"] = 1, ["EnTiempo"] = 2, ["Vencido"] = 1, ["Caducado"] = 0, ["Prescrito"] = 0 });
+        (await Estados("estadoLegal=Vencido"))["EnTiempo"].Should().Be(2, "cada tarjeta cuenta sin el filtro de estado legal");
+        var proximos = await Estados("rapido=ProximosAVencer");
+        proximos["EnTiempo"].Should().Be(1, "el atajo elegido sí se respeta");
+        proximos["Vencido"].Should().Be(0);
+        (await Estados("buscar=a1"))["EnTiempo"].Should().Be(1);
     }
 }

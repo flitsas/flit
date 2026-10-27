@@ -176,10 +176,12 @@ Cabecera gris de marca, filas cómodas, badges y acciones compactas. No usar tab
 | Progreso | Barra horizontal con color semántico y porcentaje si aplica |
 | **Semántica** | `<table>`, `<thead>`, `<th scope>` reales. Una grilla de `div` con `role="button"` por fila **no** es una tabla y rompe el lector de pantalla |
 
-### Modelo único de tabla (Bug #13055 — obligatorio en toda tabla nueva o tocada)
+### Modelo único de tabla (Bug #13055, Feature #13915 — obligatorio en TODA tabla, existente o nueva)
 
 La referencia canónica es el listado de trámites (`components/operacion/TramitesTable.tsx`). Toda
-tabla de datos del producto se ve y se comporta igual; no hay variantes por módulo.
+tabla de datos del producto se ve y se comporta igual; no hay variantes por módulo ni lista de
+excepciones. La prueba `frontend/__tests__/hu13920-estandar-tablas.test.ts` lo hace cumplir en CI:
+una tabla nueva fuera del modelo rompe el build.
 
 | Pieza | Cómo se implementa |
 |---|---|
@@ -187,12 +189,14 @@ tabla de datos del producto se ve y se comporta igual; no hay variantes por mód
 | Contenedor | **Sin tarjeta blanca envolvente**: la tabla va directa sobre el fondo; cada fila ya es su propia tarjeta |
 | Filas | `border-collapse: separate; border-spacing: 0 8px`; celda inicial `rounded-l-xl border-l`, final `rounded-r-xl border-r`, borde `#DFE5ED`; `bg-white dark:bg-[#0B0F14]` + `TABLA_ROW_HOVER_CLS` (sombra azul, no cambio de borde) |
 | Cabecera | `TABLA_HEADER_CELL_CLS` con `TABLA_HEADER_BG` / `TABLA_HEADER_FG` (`@/components/atom/table-styles`): gris `#DFE5ED`, versalita de 10px, **fija** al hacer scroll |
-| Acciones | `RowActions` (iconos con `aria-label` + tooltip, objetivo de 40 px). Prohibidos los botones de texto por fila |
-| Paginación | `Pagination` (`@/components/atom/Pagination`) con `onPageSizeChange`: «Filas por página» (10/25/50/100) a la izquierda y «Mostrando X–Y de N ‹ 1 2 … N ›» a la derecha. Estado con `usePaginacion`. Prohibido el paginador «Anterior / Siguiente» o uno propio |
+| Acciones | `RowActions` (iconos con `aria-label` + tooltip, objetivo de 40 px) o el menú desplegable «Acciones» del listado de trámites, cuando la fila tiene muchas acciones. Ambos son estándar (decisión del usuario, Feature #13915). Prohibidos los botones de texto sueltos por fila |
+| Paginación | `Pagination` (`@/components/atom/Pagination`) con `onPageSizeChange`: «Filas por página» (**10/20/30/50**, por defecto 10, HU #13916) a la izquierda y «Mostrando X–Y de N  «Primera ‹ 1 2 … N › Última»» a la derecha: los extremos llevan su nombre a la vista («Primera» / «Última»), no solo « y ». Estado con `usePaginacion("<carpeta>.<Componente>")`: la clave es obligatoria, única por tabla, y recuerda el tamaño en la sesión (HU #13917). Prohibidos el paginador «Anterior / Siguiente», uno propio y tamaños propios (`pageSizeOptions` ya no existe) |
 | Estados | Carga con `CarLoaderModal`; vacío y error con `UiStateBoundary` |
 
-Excepción: tablas fijas y cortas que no son listados (una matriz de configuración, una tabla dentro
-de un documento o del manual) no llevan paginación, pero sí cabecera y filas del modelo.
+Toda tabla cuyas filas salen de una colección (`.map` en el `<tbody>` o `DataTable`) lleva la
+paginación, aunque hoy tenga pocas filas: con una sola página se ven el resumen y el selector, sin
+botones. Solo una ficha de pares fijos campo/valor (sin colección) se queda sin paginación, y aun
+así lleva cabecera y filas del modelo.
 
 ## Reglas de wizards y trámites
 

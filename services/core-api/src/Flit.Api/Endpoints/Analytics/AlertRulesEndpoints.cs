@@ -21,6 +21,7 @@ public static class AlertRulesEndpoints
         var group = app
             .MapGroup("/api/v1/analytics")
             .RequireAuthorization(AdminAuthorization.AdminCompanyPolicy)
+            .RequireModulePermission(ReportesPermissions.Programacion)
             .WithTags("Analytics · Alertas por umbral (Reportes 2.0)");
 
         group.MapGet("/alert-rules", ListAsync)

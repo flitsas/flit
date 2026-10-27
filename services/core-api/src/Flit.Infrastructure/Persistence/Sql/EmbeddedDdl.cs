@@ -16,6 +16,17 @@ internal static class EmbeddedDdl
         return StripHeaderComments(sql);
     }
 
+    /// <summary>
+    /// HU #13641 / Feature #13105: scripts del marcador <c>security.permissions.enforced</c> (nombre con <c>enforced</c>),
+    /// en orden numérico. El 139 clasifica el catálogo; cada HU que instrumenta un módulo agrega el suyo.
+    /// </summary>
+    public static IReadOnlyList<string> EnforcedMarkerScripts() =>
+        typeof(EmbeddedDdl).Assembly.GetManifestResourceNames()
+            .Where(n => n.StartsWith(ResourcePrefix, StringComparison.Ordinal) && n.Contains("enforced", StringComparison.Ordinal))
+            .Select(n => n[ResourcePrefix.Length..])
+            .OrderBy(n => int.Parse(n[..n.IndexOf('-')], System.Globalization.CultureInfo.InvariantCulture))
+            .ToList();
+
     private static string LoadResource(string scriptFileName)
     {
         var assembly = typeof(EmbeddedDdl).Assembly;

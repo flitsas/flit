@@ -4,7 +4,10 @@
 // Uso de ejemplo:
 //   evaluateAdminAccess(token, "/admin/plataforma/confirmacion-runt/historial") → { allowed: true }
 import { describe, expect, it } from "vitest";
-import { evaluateAdminAccess, FORBIDDEN_PATH, RUNT_CONFIRMATION_BASE_PATH } from "../guard";
+import { evaluateAdminAccess, RUNT_CONFIRMATION_BASE_PATH } from "../guard";
+
+// HU #13650: sesión válida sin el permiso → inicio con el aviso (no /403, que queda para fallos de sesión).
+const ACCESO_DENEGADO = /^\/\?acceso=denegado/;
 
 function makeToken(payload: Record<string, unknown>): string {
   const header = Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString("base64url");
@@ -37,13 +40,13 @@ describe("evaluateAdminAccess — /admin/plataforma/confirmacion-runt", () => {
     ).toBe(true);
   });
 
-  it("redirige a /403 a un usuario SIN ninguno de los dos permisos", () => {
+  it("redirige al inicio con aviso a un usuario SIN ninguno de los dos permisos", () => {
     const decision = evaluateAdminAccess(
       makeToken({ sub: "u1", role: "AdminCompany", permissions: ["security.users.read"] }),
       RUNT_CONFIRMATION_BASE_PATH,
     );
     expect(decision.allowed).toBe(false);
-    expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+    expect(decision.redirectTo).toMatch(ACCESO_DENEGADO);
   });
 
   it("no abre el resto de Plataforma por tener los permisos del submódulo", () => {

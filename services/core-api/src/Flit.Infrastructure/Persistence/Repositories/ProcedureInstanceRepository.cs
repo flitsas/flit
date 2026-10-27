@@ -605,8 +605,35 @@ internal sealed partial class ProcedureInstanceRepository(
                     || v.Status == BiometricEstados.EnProceso))
             .WhereDocumentoVigenteCandidato(tipoDoc, documento)
             .WhereInstanciaVigente()
+            // Bug #13885 — una validación en vuelo de un trámite anulado o revocado no representa a la persona: no
+            // debe encauzar el reenvío hacia un trámite muerto. El inicio la cierra antes de crear la nueva
+            // (ListInFlightBlockersByDocumentAsync), así que excluirla aquí no choca con el índice único.
+            .Where(v => v.ProcedureInstanceId == null
+                || (v.ProcedureInstance!.Status != TramiteEstado.Anulado && v.ProcedureInstance.Status != TramiteEstado.Revocado))
             .OrderByDescending(v => v.UpdatedAt ?? v.CreatedAt)
             .Take(20)
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<ProcedureInstanceBiometricValidation>> ListInFlightBlockersByDocumentAsync(
+        Guid tenantId, string tipoDoc, string documento, CancellationToken ct = default)
+    {
+        // Bug #13885 — MISMO predicado que el índice único uq_biometric_validations_inflight_doc_norm (tenant,
+        // upper(btrim(tipo)), upper(btrim(número)), en vuelo, sin mandatario): todas las filas que impedirían guardar una
+        // validación nueva de este documento, sin filtrar por trámite ni quedarse con la más reciente. Rastreadas y con el
+        // trámite cargado para que el caso de uso decida cuáles cerrar.
+        var tipo = (tipoDoc ?? string.Empty).Trim().ToUpperInvariant();
+        var numero = (documento ?? string.Empty).Trim().ToUpperInvariant();
+        return await db.ProcedureInstanceBiometricValidations
+            .Include(v => v.ProcedureInstance)
+            .Where(v => v.TenantId == tenantId
+                && v.MandateSignerId == null
+                && (v.Status == BiometricEstados.PendienteEnvio
+                    || v.Status == BiometricEstados.Enviado
+                    || v.Status == BiometricEstados.EnProceso)
+                && v.DocumentType.Trim().ToUpper() == tipo
+                && v.DocumentNumber.Trim().ToUpper() == numero)
+            .OrderBy(v => v.CreatedAt)
             .ToListAsync(ct);
     }
 
@@ -643,6 +670,79 @@ internal sealed partial class ProcedureInstanceRepository(
                 keys.Add(BiometricRules.IdentidadKey(v.TenantId, v.DocumentType, v.DocumentNumber));
 
         return keys;
+    }
+
+    public async Task<ProcedureInstanceBiometricValidation?> FindProtegidaPorVencimientoManualAsync(
+        Guid tenantId, string tipoDoc, string documento, DateTimeOffset now, CancellationToken ct)
+    {
+        // HU #13824 — identidad vencida a mano que los trámites fuera de borrador siguen honrando hasta su fin previo.
+        var candidates = await db.ProcedureInstanceBiometricValidations
+            .AsNoTracking()
+            .Where(v => v.TenantId == tenantId
+                && v.Status == BiometricEstados.Aprobado
+                && v.ExpiredManuallyAt != null
+                && (v.ValidUntilPrevious == null || v.ValidUntilPrevious > now))
+            .WhereDocumentoVigenteCandidato(tipoDoc, documento)
+            .WhereInstanciaVigente()
+            .OrderByDescending(v => v.ValidatedAt)
+            .Take(10)
+            .ToListAsync(ct);
+
+        // Estado "no borrador" cualquiera: la protección solo depende de que el trámite ya no sea borrador.
+        return candidates.FirstOrDefault(v => BiometricRules.EsAprobadaVigenteParaTramite(v, TramiteEstado.Entregado, now));
+    }
+
+    public async Task<IReadOnlySet<string>> ListProtegidasPorVencimientoManualKeysAsync(
+        IReadOnlyCollection<Guid> tenantIds, DateTimeOffset now, CancellationToken ct)
+    {
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        if (tenantIds.Count == 0)
+            return keys;
+
+        // Usa el índice parcial ix_biometric_validations_expired_manually (solo filas vencidas a mano).
+        var candidates = await db.ProcedureInstanceBiometricValidations
+            .AsNoTracking()
+            .Where(v => tenantIds.Contains(v.TenantId)
+                && v.MandateSignerId == null
+                && v.Status == BiometricEstados.Aprobado
+                && v.ExpiredManuallyAt != null
+                && (v.ValidUntilPrevious == null || v.ValidUntilPrevious > now)
+                && v.DocumentType != null
+                && v.DocumentNumber != null
+                && (v.ProcedureInstanceId == null
+                    || (v.ProcedureInstance != null && v.ProcedureInstance.DeletedAt == null)))
+            .ToListAsync(ct);
+
+        foreach (var v in candidates)
+            if (BiometricRules.EsAprobadaVigenteParaTramite(v, TramiteEstado.Entregado, now))
+                keys.Add(BiometricRules.IdentidadKey(v.TenantId, v.DocumentType, v.DocumentNumber));
+
+        return keys;
+    }
+
+    public async Task<IReadOnlyList<ProcedureInstance>> ListBorradoresConActorDocumentoAsync(
+        Guid tenantId, string tipoDoc, string documento, CancellationToken ct)
+    {
+        var (_, numero) = DocumentCanonicalNormalization.Normalize(tipoDoc, documento);
+
+        // Prefiltro grueso en SQL: el actor tiene ese número de documento, o es una persona jurídica (su sujeto de
+        // identidad —el representante legal— vive en actor.metadata, jsonb). El emparejamiento exacto con el
+        // sujeto lo hace la capa de aplicación (IdentitySubjectResolver).
+        return await db.ProcedureInstances
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(x => x.Actors)
+            .Include(x => x.ProcedureType)
+            .Include(x => x.BiometricValidations)
+            .Where(x => x.TenantId == tenantId
+                && x.DeletedAt == null
+                && x.Status == TramiteEstado.Borrador
+                && x.Actors.Any(a => a.DocumentNumber.Trim().ToUpper() == numero
+                    || (a.PersonType != null && a.PersonType.ToLower() == ActorPersonTypes.Juridical)
+                    || a.DocumentType.Trim().ToUpper() == "NIT"))
+            .OrderByDescending(x => x.UpdatedAt ?? x.CreatedAt)
+            .Take(200)
+            .ToListAsync(ct);
     }
 
     public async Task<IReadOnlyDictionary<string, IReadOnlyList<LinkedProcedureSummary>>> ListLinkedProceduresByIdentityDocumentsAsync(
@@ -2662,6 +2762,13 @@ internal sealed partial class ProcedureInstanceRepository(
             {
                 query = query.Where(x => normalizados.Contains(x.Status.ToLower()));
             }
+        }
+
+        if (filter.AllowedFamilies is { } familiasPermitidas)
+        {
+            // HU #13664 — la familia vive en el tipo (ADR-0050); vacío = ninguna familia visible.
+            var familias = familiasPermitidas.Select(f => f.Trim().ToUpperInvariant()).ToList();
+            query = query.Where(x => x.ProcedureType != null && familias.Contains(x.ProcedureType.Family.ToUpper()));
         }
 
         if (!string.IsNullOrWhiteSpace(filter.Modalidad))

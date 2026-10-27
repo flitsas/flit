@@ -4,15 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ModuleId } from "@/components/atom/Shell";
 import { getToken } from "@/lib/api/client";
 import type { JwtPayload } from "@/lib/auth/jwt";
-import {
-  canReadIctLogs,
-  canReadIctReportes,
-  canReadIctTrazabilidad,
-  canReadLogQx,
-  decodeJwtPayload,
-  isOtAdmin,
-  isSuperAdmin,
-} from "@/lib/auth/jwt";
+import { decodeJwtPayload } from "@/lib/auth/jwt";
 import { resolveNavigableModuleIds } from "@/lib/nav/modules";
 import { useAccessibleModules } from "./useAccessibleModules";
 
@@ -54,19 +46,10 @@ export function useNavigableModules(enabled = true): {
   const codesKey = codes.join("\0");
 
   const ids = useMemo(
-    () =>
-      resolveNavigableModuleIds({
-        accessibleCodes: codes,
-        isSuperAdmin: isSuperAdmin(claims),
-        isOtAdmin: isOtAdmin(claims),
-        canReadLogQx: canReadLogQx(claims),
-        canReadIctLogs: canReadIctLogs(claims),
-        canReadIctTrazabilidad: canReadIctTrazabilidad(claims),
-        canReadIctReportes: canReadIctReportes(claims),
-      }),
+    () => resolveNavigableModuleIds({ accessibleCodes: ready ? codes : null, claims }),
     // `codesKey` mantiene estable la dependencia: `codes` es un array nuevo en cada render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [codesKey, claims],
+    [codesKey, claims, ready],
   );
 
   return { ids, ready, loading };

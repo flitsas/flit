@@ -42,9 +42,17 @@ public interface IQuipuxSubmissionRepository
     /// Encola una radicación. Idempotente: si el trámite ya tiene una submission activa devuelve
     /// la existente sin insertar. El chequeo previo es deliberado — el índice único parcial
     /// <c>uq_quipux_submissions_activa</c> es la red de seguridad, pero llegar a violarlo lanzaría
-    /// un 23505 que, al compartir <c>SaveChanges</c>, abortaría el caso de uso completo (la misma
-    /// trampa documentada en <c>IdentityValidationOutboxWriter</c>).
+    /// un 23505 que abortaría el caso de uso completo (la misma trampa documentada en
+    /// <c>IdentityValidationOutboxWriter</c>).
     /// </summary>
+    /// <remarks>
+    /// <para><b>Sin <c>SaveChanges</c> propio:</b> cuando inserta una fila nueva llama a
+    /// <c>db.Add</c> pero NO hace <c>SaveChangesAsync</c>. El llamador (<c>EncolarEnvioQuipuxHandler</c>)
+    /// es responsable de persistir con <c>UpdateAsync(submission, auditEvent: null)</c> ANTES de
+    /// invocar a <see cref="IQuipuxAuditLog"/>. Esa llamada explícita es necesaria porque el audit
+    /// usa su propio scope + DbContext (<c>IServiceScopeFactory</c>): si la fila no existe en BD al
+    /// momento del INSERT del evento, PostgreSQL lanza FK 23503 (Bug #13894).</para>
+    /// </remarks>
     Task<QuipuxSubmission> EnqueueIfAbsentAsync(
         QuipuxSubmission submission,
         CancellationToken cancellationToken = default);

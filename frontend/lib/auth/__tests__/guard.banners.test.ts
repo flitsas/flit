@@ -5,8 +5,11 @@
 // Uso de ejemplo:
 //   evaluateAdminAccess(token, "/admin/banners") → { allowed: true } solo si role === "SuperAdmin"
 import { describe, expect, it } from "vitest";
-import { evaluateAdminAccess, FORBIDDEN_PATH } from "../guard";
+import { evaluateAdminAccess } from "../guard";
 import { canManageBanners, decodeJwtPayload } from "../jwt";
+
+// HU #13650: sesión válida sin el permiso → inicio con el aviso (no /403, que queda para fallos de sesión).
+const ACCESO_DENEGADO = /^\/\?acceso=denegado/;
 
 function makeToken(payload: Record<string, unknown>): string {
   const header = Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString("base64url");
@@ -21,28 +24,28 @@ describe("evaluateAdminAccess — /admin/banners (solo SuperAdmin)", () => {
     expect(evaluateAdminAccess(makeToken({ sub: "u1", role: "SuperAdmin" }), PATH).allowed).toBe(true);
   });
 
-  it("AC3: redirige a /403 a un AdminCompany aunque tenga el permiso banners.manage", () => {
+  it("AC3: redirige al inicio con aviso a un AdminCompany aunque tenga el permiso banners.manage", () => {
     const decision = evaluateAdminAccess(
       makeToken({ sub: "u1", role: "AdminCompany", permissions: ["banners.manage"] }),
       PATH,
     );
     expect(decision.allowed).toBe(false);
-    expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+    expect(decision.redirectTo).toMatch(ACCESO_DENEGADO);
   });
 
-  it("AC3: redirige a /403 a un rol personalizado con el permiso banners.manage", () => {
+  it("AC3: redirige al inicio con aviso a un rol personalizado con el permiso banners.manage", () => {
     const decision = evaluateAdminAccess(
       makeToken({ sub: "u1", role: "Gerente", permissions: ["banners.manage"] }),
       PATH,
     );
     expect(decision.allowed).toBe(false);
-    expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+    expect(decision.redirectTo).toMatch(ACCESO_DENEGADO);
   });
 
-  it("AC3: redirige a /403 a un AdminCompany sin el permiso", () => {
+  it("AC3: redirige al inicio con aviso a un AdminCompany sin el permiso", () => {
     const decision = evaluateAdminAccess(makeToken({ sub: "u1", role: "AdminCompany" }), PATH);
     expect(decision.allowed).toBe(false);
-    expect(decision.redirectTo).toBe(FORBIDDEN_PATH);
+    expect(decision.redirectTo).toMatch(ACCESO_DENEGADO);
   });
 
   it("AC3: también bloquea las subrutas de banners", () => {

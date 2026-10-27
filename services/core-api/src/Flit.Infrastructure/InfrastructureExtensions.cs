@@ -34,6 +34,7 @@ using Flit.Modules.Security.Application.Auth;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Modules.Security.Domain.Modules;
+using Flit.Modules.Security.Domain.PermissionOverrides;
 using Flit.Modules.Security.Domain.Permissions;
 using Flit.Modules.Security.Domain.Roles;
 using Flit.Modules.Security.Domain.UiPreferences;
@@ -101,6 +102,8 @@ public static class InfrastructureExtensions
         services.AddScoped<ISavepointScope, Persistence.EfSavepointScope>();
         // HU #12358 — dueño de un trámite por id, solo para el guard de escritura de la red (TenantWriteGuard).
         services.AddScoped<IProcedureInstanceOwnerLookup, ProcedureInstanceOwnerLookup>();
+        // HU #13664 — familia del trámite por id, para el guard de «Ver por familia» (FamilyReadEnforcementMiddleware).
+        services.AddScoped<IProcedureInstanceFamilyLookup, ProcedureInstanceFamilyLookup>();
         // HU #12361 - auditoria del acceso consolidado (tramites.network_access_audit): escritura
         // best-effort con scope propio y lectura para el hijo / SuperAdmin.
         services.AddScoped<Flit.Tramites.Application.Auditing.INetworkAccessAuditWriter, Auditing.NetworkAccessAuditWriter>();
@@ -298,6 +301,10 @@ public static class InfrastructureExtensions
         services.AddScoped<IUserManagementRepository, UserManagementRepository>();
         // Preferencias de UI por usuario (base compartida: elegir columnas visibles en tablas).
         services.AddScoped<IUserUiPreferenceRepository, UserUiPreferenceRepository>();
+        services.AddScoped<IUserPermissionOverrideRepository, UserPermissionOverrideRepository>(); // HU #13642
+        services.AddScoped<IOverrideTargetDirectory, OverrideTargetDirectory>(); // HU #13645
+        services.AddScoped<IRoleChangeOverridesPurger, RoleChangeOverridesPurger>(); // HU #13646
+        services.AddScoped<IPermissionAuditReader, PermissionAuditReader>(); // HU #13647
 
         services.AddSecurityApplication();
 

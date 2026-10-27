@@ -16,6 +16,7 @@ namespace Flit.Analytics.Application.Abstractions;
 ///   traduce en «sin filtro».</item>
 ///   <item>Cada resultado lleva los clientes DISTINTOS del conjunto con datos en el agregado
 ///   (<see cref="NetworkAnalyticsResult{T}.ReachedTenantIds"/>) para la auditoría de acceso (HU #12361).</item>
+///   <item>HU #13664 — <c>allowedFamilies</c>: familias con Ver; <c>null</c> = sin restricción, vacío = ninguna.</item>
 /// </list>
 /// </summary>
 public interface INetworkAnalyticsReadRepository
@@ -23,13 +24,16 @@ public interface INetworkAnalyticsReadRepository
     /// <summary>Conteos por categoría y estado del universo de <paramref name="tenantIds"/> en el rango.</summary>
     /// <remarks>BUG #12588 — fechas null = sin acotar; mismo criterio que el overview propio.</remarks>
     Task<NetworkAnalyticsResult<IReadOnlyList<CategoryMetricsDto>>> GetNetworkOverviewAsync(
-        IReadOnlySet<Guid> tenantIds, DateOnly? fromDate, DateOnly? toDate, CancellationToken ct = default);
+        IReadOnlySet<Guid> tenantIds, DateOnly? fromDate, DateOnly? toDate,
+        IReadOnlyList<string>? allowedFamilies = null, CancellationToken ct = default);
 
     /// <summary>Top de radicadores de la red (ranking único por usuario, sumando sus radicaciones en cualquier cliente del conjunto).</summary>
     Task<NetworkAnalyticsResult<IReadOnlyList<TopProducerDto>>> GetNetworkTopProducersAsync(
-        IReadOnlySet<Guid> tenantIds, DateOnly fromDate, DateOnly toDate, int limit, CancellationToken ct = default);
+        IReadOnlySet<Guid> tenantIds, DateOnly fromDate, DateOnly toDate, int limit,
+        IReadOnlyList<string>? allowedFamilies = null, CancellationToken ct = default);
 
     /// <summary>Tendencia mensual por categoría del universo de <paramref name="tenantIds"/> en el rango.</summary>
     Task<NetworkAnalyticsResult<IReadOnlyList<MonthlyTrendPointDto>>> GetNetworkMonthlyTrendAsync(
-        IReadOnlySet<Guid> tenantIds, DateOnly fromDate, DateOnly toDate, CancellationToken ct = default);
+        IReadOnlySet<Guid> tenantIds, DateOnly fromDate, DateOnly toDate,
+        IReadOnlyList<string>? allowedFamilies = null, CancellationToken ct = default);
 }

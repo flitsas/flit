@@ -7,6 +7,7 @@ import { ToastProvider } from "@/components/admin/Toast";
 import { OtUsersSection } from "../OtUsersSection";
 import { fetchOtUsers, deleteOtUser } from "@/lib/api/admin-ot-security";
 import type { OtUserItem } from "@/lib/api/admin-ot-security";
+import { chooseRowAction, rowActionNames } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 
 vi.mock("@/lib/api/admin-ot-security", () => ({
   fetchOtUsers: vi.fn(),
@@ -87,15 +88,15 @@ describe("OtUsersSection — botón Eliminar (#10623)", () => {
 
   it("AC2: no muestra el botón Eliminar sobre la propia fila del usuario autenticado", async () => {
     vi.mocked(fetchOtUsers).mockResolvedValue({ data: [selfUser, activeUser] });
+    const user = userEvent.setup();
     renderSection();
 
     await screen.findByText("Laura García");
-    expect(
-      screen.queryByRole("button", { name: /eliminar usuario yo mismo/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /eliminar usuario laura garcía/i }),
-    ).toBeInTheDocument();
+    // HU #13653: las acciones viven en el menú «Acciones» de la fila.
+    expect(await rowActionNames(user, "Yo Mismo")).not.toContainEqual(expect.stringMatching(/eliminar usuario/i));
+    expect(await rowActionNames(user, "Laura García")).toContainEqual(
+      expect.stringMatching(/eliminar usuario laura garcía/i),
+    );
   });
 
   it("AC1: abre la confirmación con el aviso de que solo un Super Admin puede restaurar", async () => {
@@ -104,7 +105,7 @@ describe("OtUsersSection — botón Eliminar (#10623)", () => {
     renderSection();
 
     await screen.findByText("Laura García");
-    await user.click(screen.getByRole("button", { name: /eliminar usuario laura garcía/i }));
+    await chooseRowAction(user, "Laura García", /eliminar usuario laura garcía/i);
 
     // El texto está partido por un <strong>, se busca por el textContent del párrafo completo.
     expect(
@@ -121,7 +122,7 @@ describe("OtUsersSection — botón Eliminar (#10623)", () => {
     renderSection();
 
     await screen.findByText("Laura García");
-    await user.click(screen.getByRole("button", { name: /eliminar usuario laura garcía/i }));
+    await chooseRowAction(user, "Laura García", /eliminar usuario laura garcía/i);
     await user.click(screen.getByRole("button", { name: /^eliminar usuario$/i }));
 
     await waitFor(() =>
@@ -137,13 +138,14 @@ describe("OtUsersSection — botón Eliminar (#10623)", () => {
   it("AC4: ot_admin no ve el botón 'Ver eliminados' (exclusivo de SuperAdmin) ni el botón Eliminar", async () => {
     perms.current = { ...OT_ADMIN_PERMS };
     vi.mocked(fetchOtUsers).mockResolvedValue({ data: [activeUser] });
+    const user = userEvent.setup();
     renderSection();
 
     await screen.findByText("Laura García");
     expect(screen.queryByRole("button", { name: /ver eliminados/i })).not.toBeInTheDocument();
-    // Eliminar es exclusivo de SuperAdmin: el ot_admin no debe ver el botón.
-    expect(
-      screen.queryByRole("button", { name: /eliminar usuario laura garcía/i }),
-    ).not.toBeInTheDocument();
+    // Eliminar es exclusivo de SuperAdmin: el ot_admin no debe ver la opción.
+    expect(await rowActionNames(user, "Laura García")).not.toContainEqual(
+      expect.stringMatching(/eliminar usuario laura garcía/i),
+    );
   });
 });

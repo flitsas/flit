@@ -7,6 +7,9 @@ import { resolveNavigableModuleIds } from '@/lib/nav/modules';
 import { COPY, copyForOtAndGestor, isNaCopyKey } from '../copy-catalog';
 
 describe('homologación dock e Identidad (HU #12699)', () => {
+  // HU #13649: el catálogo navegable se decide con claims (rol ot_admin de un organismo de tránsito).
+  const otAdmin = { sub: 'u1', roles: [{ code: 'ot_admin' }], permissions: [], entity_type: 'TRANSIT_OFFICE' };
+
   it('AC1 — píldora del dock y H1 del módulo usan COPY.A17 (Identidad)', () => {
     expect(COPY.A17).toBe('Identidad');
     expect(IDENTIDAD_MODULE_TITLE).toBe(COPY.A17);
@@ -18,23 +21,13 @@ describe('homologación dock e Identidad (HU #12699)', () => {
   it('AC2 — Admin OT sin validaciones.read no ve Identidad (RN-07, no es conflicto)', () => {
     const withoutRead = resolveNavigableModuleIds({
       accessibleCodes: ['tramites', 'reportes', 'usuarios'],
-      isSuperAdmin: false,
-      isOtAdmin: true,
-      canReadLogQx: false,
-      canReadIctLogs: false,
-      canReadIctTrazabilidad: false,
-      canReadIctReportes: false,
+      claims: otAdmin,
     });
     expect(withoutRead).not.toContain('validaciones');
 
     const withRead = resolveNavigableModuleIds({
       accessibleCodes: ['tramites', 'reportes', 'usuarios', 'validaciones'],
-      isSuperAdmin: false,
-      isOtAdmin: true,
-      canReadLogQx: false,
-      canReadIctLogs: false,
-      canReadIctTrazabilidad: false,
-      canReadIctReportes: false,
+      claims: otAdmin,
     });
     expect(withRead).toContain('validaciones');
   });

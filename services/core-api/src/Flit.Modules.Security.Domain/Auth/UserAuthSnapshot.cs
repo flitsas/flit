@@ -36,7 +36,17 @@ public sealed class UserAuthSnapshot
     /// </summary>
     public int TotalAssignedRolesCount { get; init; }
 
+    /// <summary>
+    /// Permisos EFECTIVOS para el token heredado (HU #13643): los de los roles activos + permisos individuales
+    /// <c>allow</c> - <c>deny</c> del tenant, con los <c>allow</c> filtrados por productos habilitados.
+    /// </summary>
     public IReadOnlyList<string> PermissionSlugs { get; init; } = [];
+
+    /// <summary>
+    /// Permisos individuales VIGENTES del usuario en <see cref="TenantId"/> (HU #13643). Vacío para el SuperAdmin.
+    /// Los usa la ruta OIDC, que parte de los permisos por producto y aplica el mismo calculador.
+    /// </summary>
+    public IReadOnlyList<Flit.Modules.Security.Domain.PermissionOverrides.EffectivePermissionOverride> PermissionOverrides { get; init; } = [];
 
     public string TenantName { get; init; } = string.Empty;
 

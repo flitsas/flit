@@ -112,6 +112,7 @@ export function CompanyUsersPanel({ tenantId, networkHeadId }: CompanyUsersPanel
               isSystem: r.isSystem,
               permissionCount: r.permissionCount,
               createdAt: r.createdAt,
+              productCode: r.productCode,
             })),
         );
       })
@@ -243,6 +244,7 @@ export function CompanyUsersPanel({ tenantId, networkHeadId }: CompanyUsersPanel
           roleSection={{
             currentRoleName: editTarget.role,
             currentRoleId: editTarget.roleId,
+            tenantId,
             roles: editRoles,
             rolesLoading: editRolesLoading,
             onAssignRole: async (roleId) => {

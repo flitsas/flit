@@ -64,7 +64,7 @@ export function AlertsSection({ tenantId, needsCompany = false, otTransitOfficeI
   const [confirmDelete, setConfirmDelete] = useState<AlertRule | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   // Bug #13055 — las reglas pueden crecer: paginación en cliente con «Filas por página».
-  const pg = usePaginacion();
+  const pg = usePaginacion("scheduling.AlertsSection");
 
   const load = useCallback(async () => {
     if (needsCompany) return;

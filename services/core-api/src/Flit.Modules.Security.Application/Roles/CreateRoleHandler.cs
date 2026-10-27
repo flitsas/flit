@@ -14,6 +14,20 @@ public sealed class CreateRoleHandler(IRoleRepository repository)
         if (!ProductCodes.All.Contains(command.ProductCode, StringComparer.Ordinal))
             throw new InvalidRoleProductException();
 
+        // HU #13653: sin code, el servidor lo genera a partir del nombre (identificador interno, no se ve en pantalla).
+        if (string.IsNullOrWhiteSpace(command.Code))
+        {
+            return await RoleCodeGenerator.CreateWithGeneratedCodeAsync(
+                repository,
+                tenantId: null,
+                command.TargetEntityType,
+                command.Name,
+                reserved: [],
+                code => new CreateRoleData(command.TargetEntityType, code, command.Name, command.Description, command.ProductCode),
+                ct);
+        }
+
+        // Compatibilidad: un code explícito (clientes o scripts existentes) se respeta como antes.
         var codeExists = await repository.CodeExistsAsync(command.TargetEntityType, command.Code, ct);
         if (codeExists)
             throw new RoleCodeDuplicateException();

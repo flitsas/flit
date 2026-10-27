@@ -44,33 +44,15 @@ internal static class AdminReenviarValidacionEndpoints
                 id, validationId, tenantId.Value, request?.Email, ResolveUserId(http.User));
             var (result, error, errorDetail, _) = await handler.HandleAsync(command, ct);
 
-            return error switch
+            if (error is null)
             {
-                null => result!.Queued
+                return result!.Queued
                     ? Results.Accepted($"/api/v1/tramites/instances/{id}/biometric/{validationId}", result)
-                    : Results.Ok(result),
-                TramiteEstadoErrores.NoEncontrado => Results.Problem(
-                    statusCode: 404, title: "Not Found", detail: "Trámite o validación de identidad no encontrada."),
-                AdminReenviarValidacionIdentidadHandler.IdentidadAprobada => Results.Problem(
-                    statusCode: 409, title: error,
-                    detail: "La identidad ya está aprobada. Para revalidar, inicia una validación nueva."),
-                // HU #13286 — la validación es del flujo manual: no se reenvía a Kyverum.
-                "identidad_manual" => Results.Problem(
-                    statusCode: 409, title: error,
-                    detail: "La validación está en el flujo manual: no se reenvía a Kyverum."),
-                "validacion_en_curso" => Results.Problem(
-                    statusCode: 409, title: error,
-                    detail: "Ya existe otra validación de identidad en curso para este mismo documento. Espera a que finalice antes de reenviar."),
-                "proveedor_error" => Results.Problem(
-                    statusCode: 502, title: "Bad Gateway",
-                    detail: "El proveedor de validación de identidad rechazó la solicitud."),
-                "proveedor_no_disponible" => Results.Problem(
-                    statusCode: 503, title: "Service Unavailable",
-                    detail: "El proveedor de validación de identidad no está disponible. Reintenta más tarde."),
-                _ => Results.Problem(
-                    statusCode: 422, title: error,
-                    detail: errorDetail ?? "No se pudo reenviar la validación de identidad."),
-            };
+                    : Results.Ok(result);
+            }
+
+            var (status, title, detail) = DescribirError(error, errorDetail);
+            return Results.Problem(statusCode: status, title: title, detail: detail);
         })
         .RequirePermission(AdminTramiteAuthorization.ReenviarValidacionSlug)
         .WithName("AdminTramiteReenviarValidacionIdentidad")
@@ -87,8 +69,101 @@ internal static class AdminReenviarValidacionEndpoints
         .Produces(StatusCodes.Status502BadGateway)
         .Produces(StatusCodes.Status503ServiceUnavailable);
 
+        // GET /api/v1/admin/tramites/{id}/validaciones-identidad/reenviables
+        // HU #13821 (Épica #13817) — una entrada por PERSONA que no ha firmado, con la validación propia sobre
+        // la que se reenvía. Sin firmadas, sin baúl y sin identidades reutilizadas de otro trámite.
+        group.MapGet("/{id:guid}/validaciones-identidad/reenviables", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            ListValidacionesReenviablesHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, ct);
+            return error is null
+                ? Results.Ok(result)
+                : Results.Problem(statusCode: 404, title: "Not Found", detail: "Trámite no encontrado.");
+        })
+        .RequirePermission(AdminTramiteAuthorization.ReenviarValidacionSlug)
+        .WithName("AdminTramiteListValidacionesReenviables")
+        .WithSummary("Personas del trámite a las que se puede reenviar la validación de identidad")
+        .Produces<ValidacionesReenviablesResult>(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status400BadRequest)
+        .Produces(StatusCodes.Status401Unauthorized)
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound);
+
+        // POST /api/v1/admin/tramites/{id}/validaciones-identidad/reenviar
+        // HU #13821 — reenvío a una o varias personas en un solo paso. 200 con el resultado POR PERSONA (el
+        // fallo de una no frena a las demás); el trámite aprobado/anulado/revocado rechaza toda la solicitud.
+        group.MapPost("/{id:guid}/validaciones-identidad/reenviar", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            AdminReenviarValidacionesLoteRequest? request,
+            HttpContext http,
+            AdminReenviarValidacionesLoteHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var items = (request?.Items ?? [])
+                .Select(i => new AdminReenviarValidacionLoteItem(i.ValidationId, i.Email))
+                .ToList();
+            var (result, error, errorDetail) = await handler.HandleAsync(
+                new AdminReenviarValidacionesLoteCommand(id, tenantId.Value, items, ResolveUserId(http.User)), ct);
+
+            if (error is not null)
+            {
+                var (status, title, detail) = error is AdminReenviarValidacionesLoteHandler.SolicitudVacia
+                    or AdminReenviarValidacionesLoteHandler.DemasiadasPersonas
+                    ? (400, error, errorDetail ?? "Solicitud inválida.")
+                    : DescribirError(error, errorDetail);
+                return Results.Problem(statusCode: status, title: title, detail: detail);
+            }
+
+            return Results.Ok(new AdminReenviarValidacionesLoteResponse(result!.Items
+                .Select(i => i.Error is null
+                    ? new AdminReenviarValidacionLoteItemResponse(
+                        i.ValidationId, true, i.Result!.Queued, i.Result.Queued ? null : i.Result.CaptureUrl,
+                        i.Result.EmailActualizado, i.Result.Validation.Email, null, null)
+                    : new AdminReenviarValidacionLoteItemResponse(
+                        i.ValidationId, false, false, null, false, null, i.Error, DescribirError(i.Error, i.ErrorDetail).Detail))
+                .ToList()));
+        })
+        .RequirePermission(AdminTramiteAuthorization.ReenviarValidacionSlug)
+        .WithName("AdminTramiteReenviarValidacionesIdentidad")
+        .WithSummary("Reenvía la validación de identidad a una o varias personas del trámite, con correo opcional por persona")
+        .Produces<AdminReenviarValidacionesLoteResponse>(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status400BadRequest)
+        .Produces(StatusCodes.Status401Unauthorized)
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound)
+        .Produces(StatusCodes.Status422UnprocessableEntity);
+
         return app;
     }
+
+    /// <summary>
+    /// Código de error del reenvío → respuesta HTTP y mensaje para el usuario. Compartido por el reenvío
+    /// individual (como Problem) y el múltiple (como mensaje por persona), para que digan lo mismo.
+    /// </summary>
+    private static (int Status, string Title, string Detail) DescribirError(string error, string? errorDetail) => error switch
+    {
+        TramiteEstadoErrores.NoEncontrado => (404, "Not Found", "Trámite o validación de identidad no encontrada."),
+        AdminReenviarValidacionIdentidadHandler.IdentidadAprobada => (409, error,
+            "La identidad ya está aprobada. Para revalidar, inicia una validación nueva."),
+        // HU #13286 — la validación es del flujo manual: no se reenvía a Kyverum.
+        "identidad_manual" => (409, error, "La validación está en el flujo manual: no se reenvía a Kyverum."),
+        "validacion_en_curso" => (409, error,
+            "Ya existe otra validación de identidad en curso para este mismo documento. Espera a que finalice antes de reenviar."),
+        "proveedor_error" => (502, "Bad Gateway", "El proveedor de validación de identidad rechazó la solicitud."),
+        "proveedor_no_disponible" => (503, "Service Unavailable",
+            "El proveedor de validación de identidad no está disponible. Reintenta más tarde."),
+        _ => (422, error, errorDetail ?? "No se pudo reenviar la validación de identidad."),
+    };
 
     /// <summary>Usuario autenticado (claim <c>sub</c>), para la trazabilidad en <c>ProcedureInstanceEvent</c>.</summary>
     private static Guid? ResolveUserId(System.Security.Claims.ClaimsPrincipal user)
@@ -105,3 +180,27 @@ internal static class AdminReenviarValidacionEndpoints
 /// reenvía al nuevo destinatario (AC2).
 /// </summary>
 internal sealed record AdminReenviarValidacionRequest(string? Email);
+
+/// <summary>
+/// Body de <c>POST /api/v1/admin/tramites/{id}/validaciones-identidad/reenviar</c> (HU #13821): una entrada
+/// por persona; <c>Email</c> opcional por persona, misma semántica que el reenvío individual.
+/// </summary>
+internal sealed record AdminReenviarValidacionesLoteRequest(IReadOnlyList<AdminReenviarValidacionLoteItemRequest>? Items);
+
+internal sealed record AdminReenviarValidacionLoteItemRequest(Guid ValidationId, string? Email);
+
+/// <summary>
+/// Resultado por persona. <c>CaptureUrl</c> solo cuando el enlace ya existe (no en cola). <c>Mensaje</c> es el
+/// texto para el usuario cuando <c>Ok</c> es false.
+/// </summary>
+internal sealed record AdminReenviarValidacionLoteItemResponse(
+    Guid ValidationId,
+    bool Ok,
+    bool Queued,
+    string? CaptureUrl,
+    bool EmailActualizado,
+    string? Email,
+    string? Error,
+    string? Mensaje);
+
+internal sealed record AdminReenviarValidacionesLoteResponse(IReadOnlyList<AdminReenviarValidacionLoteItemResponse> Items);

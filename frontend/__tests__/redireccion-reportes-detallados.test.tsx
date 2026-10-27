@@ -35,9 +35,12 @@ vi.mock("@/hooks/useAccessibleModules", () => ({
 }));
 vi.mock("@/lib/api/client", () => ({ getToken: () => null }));
 vi.mock("@/lib/auth/jwt", () => ({
-  decodeJwtPayload: () => null,
+  // HU #13649: el menú se decide con claims; sin claims legibles solo hay Inicio y Ayuda.
+  decodeJwtPayload: () => ({ sub: "u1", roles: [], permissions: [] }),
   isSuperAdmin: () => false,
   isOtUser: () => false,
+  hasPermission: () => false,
+  hasRoleCode: () => false,
   canReadLogQx: () => false,
   canReadIctLogs: () => false,
   canReadIctReportes: () => false,
@@ -84,7 +87,7 @@ describe("HU #13582 AC3 — los enlaces antiguos redirigen a la pestaña", () =>
 
     await waitFor(() => expect(h.replace).toHaveBeenCalledWith(NUEVA, { scroll: false }));
     expect(h.replace).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText("No tienes acceso a ese módulo.")).not.toBeInTheDocument();
+    expect(screen.queryByText("No tienes acceso a este módulo.")).not.toBeInTheDocument();
   });
 
   it("sin sesión no redirige: deja que el control de sesión lleve al login (no queda en blanco)", async () => {
@@ -120,7 +123,7 @@ describe("HU #13582 AC4 — enlace antiguo sin permiso (negativo)", () => {
     h.search = "m=reportes&reportesTab=detallados";
     rerender(<HomePage />);
 
-    expect(await screen.findByText("No tienes acceso a ese módulo.")).toBeInTheDocument();
+    expect(await screen.findByText("No tienes acceso a este módulo.")).toBeInTheDocument();
     await waitFor(() => expect(h.replace).toHaveBeenLastCalledWith("/?m=dashboard", { scroll: false }));
     expect(screen.queryByTestId("modulo-reportes")).not.toBeInTheDocument();
   });
@@ -128,12 +131,7 @@ describe("HU #13582 AC4 — enlace antiguo sin permiso (negativo)", () => {
   it("contrato: el gate deniega `reportes` a quien no tiene el módulo", () => {
     const ids = resolveNavigableModuleIds({
       accessibleCodes: ["tramites"],
-      isSuperAdmin: false,
-      isOtAdmin: false,
-      canReadLogQx: false,
-      canReadIctLogs: false,
-      canReadIctTrazabilidad: false,
-      canReadIctReportes: false,
+      claims: { sub: "u1", roles: [], permissions: [] },
     });
     expect(planSpaModuleAccess("reportes", ids)).toEqual(expect.objectContaining({ denied: true, replaceTo: "/?m=dashboard" }));
   });

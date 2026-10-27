@@ -84,9 +84,6 @@ function buildApiFilters(f: AuditoriaUiFilters): Omit<AdminAuditLogQuery, 'page'
   };
 }
 
-/** Bug #13055 — tamaño inicial dentro del estándar de filas por página (10/25/50/100). */
-const DEFAULT_PAGE_SIZE = 10;
-
 export function Auditoria() {
   const [entries, setEntries] = useState<AdminAuditLogEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -94,7 +91,7 @@ export function Auditoria() {
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   // Paginación server-side.
-  const { page, pageSize, setPage, setPageSize } = usePaginacion(DEFAULT_PAGE_SIZE);
+  const { page, pageSize, setPage, setPageSize } = usePaginacion("modulos.Auditoria");
   const [total, setTotal] = useState(0);
   // Refs "latest value": se sincronizan en un efecto (nunca escribiendo `.current` en
   // render, para no violar las reglas de refs de React) y se leen dentro de `load` para

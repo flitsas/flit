@@ -38,7 +38,8 @@ public sealed class CreateProcedureInstanceHandler(
     IOtOperabilityGate? otOperability = null,
     ITransitOfficeGrantGate? companyGrant = null,
     IProcedureFamilyCreationGate? familyCreationGate = null,
-    IProcedureRadicationGate? radicationGate = null)
+    IProcedureRadicationGate? radicationGate = null,
+    IProcedureFamilyPermissionGate? familyPermissions = null)
 {
     // M0: mapeo modalidad → código canónico del procedure_type sembrado (dev seed).
     // matricula_inicial → MATRICULA_NUEVA (familia MATRICULAS), traspaso → TRASPASO_STANDARD (familia TRASPASO).
@@ -95,6 +96,10 @@ public sealed class CreateProcedureInstanceHandler(
             if (procedureType is null)
                 return (null, "modalidad_not_available");
         }
+
+        // HU #13664 — Crear por familia (AND con tramites.create de la ruta); sin exigencia activa siempre pasa.
+        if (familyPermissions is not null && !familyPermissions.CanCreate(ProcedureFamilyCodes.FromCodeOrOtros(procedureType.Family)))
+            return (null, "family_permission_denied");
 
         // ADR-0050 — barrera de operación del tipo. Publicado significa que existe en el catálogo;
         // habilitado, que su recorrido ya se puede recorrer. Sin este corte la barrera era solo un

@@ -146,7 +146,7 @@ export function NotificacionesBankPanel() {
     [templates],
   );
 
-  const pg = usePaginacion();
+  const pg = usePaginacion("plataforma.NotificacionesBankPanel");
 
   const senderText = (row: BankRow): string => {
     if (row.kind === "kyverum") {

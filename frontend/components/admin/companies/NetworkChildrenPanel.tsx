@@ -35,7 +35,7 @@ export interface NetworkChildrenPanelProps {
 export function NetworkChildrenPanel({ headTenantId, headTenantType }: NetworkChildrenPanelProps) {
   const router = useRouter();
   const [status, setStatus] = useState<UiStatus>("loading");
-  const pg = usePaginacion();
+  const pg = usePaginacion("companies.NetworkChildrenPanel");
   const [children, setChildren] = useState<CompanyChildListItem[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [statusTarget, setStatusTarget] = useState<CompanyChildListItem | null>(null);

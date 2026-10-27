@@ -29,7 +29,7 @@ public sealed class GetAnalyticsOverviewHandlerTests
         {
             new("matriculas", 3, new List<StatusCountDto> { new("submitted", 3) }),
         };
-        _repo.GetOverviewAsync(Tenant, From, To, Ct).Returns(categorias);
+        _repo.GetOverviewAsync(Tenant, From, To, null, Ct).Returns(categorias);
 
         var (dto, error) = await new GetAnalyticsOverviewHandler(_repo)
             .HandleAsync(new GetAnalyticsOverviewQuery(Tenant, From, To), Ct);
@@ -56,7 +56,7 @@ public sealed class GetAnalyticsOverviewHandlerTests
     [Fact] // Contrato: mismo día (from == to) es rango válido
     public async Task HandleAsync_MismoDia_EsValido()
     {
-        _repo.GetOverviewAsync(Tenant, From, From, Ct).Returns(new List<CategoryMetricsDto>());
+        _repo.GetOverviewAsync(Tenant, From, From, null, Ct).Returns(new List<CategoryMetricsDto>());
 
         var (dto, error) = await new GetAnalyticsOverviewHandler(_repo)
             .HandleAsync(new GetAnalyticsOverviewQuery(Tenant, From, From), Ct);
@@ -78,7 +78,7 @@ public sealed class GetAnalyticsOverviewHandlerTests
             new("matriculas", 21, new List<StatusCountDto> { new("aprobado", 21) }),
             new("otros", 4, new List<StatusCountDto> { new("entregado", 4) }),
         };
-        _repo.GetOverviewAsync(Tenant, null, null, Ct).Returns(categorias);
+        _repo.GetOverviewAsync(Tenant, null, null, null, Ct).Returns(categorias);
 
         var (dto, error) = await new GetAnalyticsOverviewHandler(_repo)
             .HandleAsync(new GetAnalyticsOverviewQuery(Tenant, null, null), Ct);
@@ -88,7 +88,7 @@ public sealed class GetAnalyticsOverviewHandlerTests
         dto!.From.Should().BeNull("sin rango, la respuesta no inventa un periodo");
         dto.To.Should().BeNull();
         dto.Categories.Sum(c => c.Total).Should().Be(25);
-        await _repo.Received(1).GetOverviewAsync(Tenant, null, null, Ct);
+        await _repo.Received(1).GetOverviewAsync(Tenant, null, null, null, Ct);
     }
 
     [Theory] // Cada extremo acota por su lado: uno suelto NO es un rango a medio llenar
@@ -98,7 +98,7 @@ public sealed class GetAnalyticsOverviewHandlerTests
     {
         DateOnly? desde = conDesde ? From : null;
         DateOnly? hasta = conHasta ? To : null;
-        _repo.GetOverviewAsync(Tenant, desde, hasta, Ct).Returns(new List<CategoryMetricsDto>());
+        _repo.GetOverviewAsync(Tenant, desde, hasta, null, Ct).Returns(new List<CategoryMetricsDto>());
 
         var (dto, error) = await new GetAnalyticsOverviewHandler(_repo)
             .HandleAsync(new GetAnalyticsOverviewQuery(Tenant, desde, hasta), Ct);
@@ -107,7 +107,7 @@ public sealed class GetAnalyticsOverviewHandlerTests
         dto.Should().NotBeNull();
         dto!.From.Should().Be(desde);
         dto.To.Should().Be(hasta);
-        await _repo.Received(1).GetOverviewAsync(Tenant, desde, hasta, Ct);
+        await _repo.Received(1).GetOverviewAsync(Tenant, desde, hasta, null, Ct);
     }
 
     [Fact] // El par incoherente sigue siendo 400: lo único que el backend rechaza

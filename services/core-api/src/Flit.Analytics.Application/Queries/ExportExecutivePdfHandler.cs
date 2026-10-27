@@ -3,7 +3,11 @@ using Flit.Analytics.Application.Abstractions;
 namespace Flit.Analytics.Application.Queries;
 
 /// <summary>Parámetros del Resumen Ejecutivo PDF (HU #10246).</summary>
-public sealed record ExportExecutivePdfQuery(Guid TenantId, DateOnly From, DateOnly To);
+public sealed record ExportExecutivePdfQuery(Guid TenantId, DateOnly From, DateOnly To)
+{
+    /// <summary>HU #13664 — Ver por familia: códigos visibles (<c>ProcedureFamilyCodes</c>); <c>null</c> = sin restricción.</summary>
+    public IReadOnlyList<string>? AllowedFamilies { get; init; }
+}
 
 /// <summary>
 /// Ensambla el Resumen Ejecutivo: valida el rango, consulta totales por categoría (overview) y
@@ -20,8 +24,8 @@ public sealed class ExportExecutivePdfHandler(IAnalyticsReadRepository repo, IEx
         if (query.From > query.To)
             return (null, "invalid_range");
 
-        var categories = await repo.GetOverviewAsync(query.TenantId, query.From, query.To, ct);
-        var top = await repo.GetTopProducersAsync(query.TenantId, query.From, query.To, TopLimit, ct);
+        var categories = await repo.GetOverviewAsync(query.TenantId, query.From, query.To, query.AllowedFamilies, ct);
+        var top = await repo.GetTopProducersAsync(query.TenantId, query.From, query.To, TopLimit, query.AllowedFamilies, ct);
 
         var bytes = pdf.Generate(new ExecutiveSummaryData(query.TenantId, query.From, query.To, categories, top));
         return (bytes, null);

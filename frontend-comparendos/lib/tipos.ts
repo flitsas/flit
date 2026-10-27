@@ -51,6 +51,8 @@ export interface Contadores {
   proximosAVencer: number;
   sinContraventor: number;
   rechazadosOt: number;
+  /** HU #13869: cuántos comparendos hay en cada estado legal con los demás filtros aplicados. */
+  estadosLegales: Record<string, number>;
 }
 
 export interface EmpresaResumen {
@@ -70,6 +72,8 @@ export interface Nit {
   comparendosActivos: number;
   /** HU #13712: el conductor de sus comparendos se consulta en la API de contratos. Solo lo cambia el SuperAdmin. */
   consultaContratoApi: boolean;
+  /** HU #13844: lo que de verdad pasa con el conductor (integración de la empresa + consulta encendida + casilla del NIT). */
+  consultaAutomatica: boolean;
 }
 
 export interface PlacaMonitoreada {
@@ -340,17 +344,6 @@ export interface AliasOt {
   organismoTransitoId: string;
   organismo: string;
   origen: string;
-}
-
-export interface Exportacion {
-  id: string;
-  filtros: import("@/lib/filtros").FiltrosGuardados;
-  nombres: Record<string, string>;
-  totalFilas: number | null;
-  estado: string;
-  creadoEn: string;
-  terminadoEn: string | null;
-  expiraEn: string | null;
 }
 
 // ── Parametrizador (HU #13473-#13475) ──────────────────────────────────────────────────────────────────────────────

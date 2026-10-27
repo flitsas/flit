@@ -28,6 +28,7 @@ public interface IAnalyticsMetricsReadRepository
         MetricsFilter filter, CancellationToken ct = default);
 
     /// <summary>Panorama en vivo (§4.5) en UNA sola ronda de queries (batch multi-resultset).</summary>
+    /// <remarks>HU #13664 — <paramref name="allowedFamilies"/>: familias con Ver; <c>null</c> = sin restricción, vacío = ninguna.</remarks>
     Task<LiveOverviewDataDto> GetLiveOverviewAsync(
-        Guid tenantId, int stuckDays, CancellationToken ct = default);
+        Guid tenantId, int stuckDays, IReadOnlyList<string>? allowedFamilies = null, CancellationToken ct = default);
 }

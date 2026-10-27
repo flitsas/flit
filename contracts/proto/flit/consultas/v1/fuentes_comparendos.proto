@@ -23,6 +23,10 @@ service FuentesComparendosService {
   // Conductor que tenía el vehículo en una fecha según la API de contratos de la gestora (HU #13712; hoy solo Renting).
   // FAILED_PRECONDITION si el proveedor no está conectado en el ambiente; INVALID_ARGUMENT si falta la placa o la fecha.
   rpc ConsultarContratoConductor(ConsultarContratoConductorRequest) returns (ConsultarContratoConductorResponse);
+
+  // Prueba la conexión con la API de contratos (HU #13843): solo el inicio de sesión, con un token nuevo; no consulta
+  // ninguna placa ni toca datos personales. Responde siempre: si falta configuración, conectado = false con el motivo.
+  rpc ProbarContratoConductor(ProbarContratoConductorRequest) returns (ProbarContratoConductorResponse);
 }
 
 enum CanalComparendos {
@@ -164,6 +168,25 @@ message ConductorDeContrato {
   optional string ciudad = 7;
   optional string sucursal = 8;
   optional string tipo_contrato = 9;
+}
+
+message ProbarContratoConductorRequest {
+  // Clave del proveedor de contratos: renting.
+  string proveedor = 1;
+}
+
+message ProbarContratoConductorResponse {
+  string proveedor = 1;
+  bool conectado = 2;
+  // Por qué no: variables que faltan (nombres, nunca valores), certificado, rechazo del login, tiempo agotado o red.
+  optional string motivo = 3;
+  optional int32 http_status = 4;
+  int32 duracion_ms = 5;
+  // El ambiente desvía el contacto de los conductores al buzón de pruebas (correo_desvio).
+  bool contacto_desviado = 6;
+  optional string correo_desvio = 7;
+  // Las variables y el certificado están completos (aunque el login falle). Sin esto, las consultas no salen.
+  bool configurado = 8;
 }
 
 // Sin respuesta cruda a propósito: el contrato trae datos personales de clientes reales.

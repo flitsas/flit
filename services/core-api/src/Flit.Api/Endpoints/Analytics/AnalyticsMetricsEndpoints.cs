@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Flit.Analytics.Application.Queries.Metrics;
 using Flit.Api.Authorization;
+using Flit.Tramites.Domain.Integration;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
@@ -27,6 +28,7 @@ public static class AnalyticsMetricsEndpoints
             .WithTags("Analytics · Métricas (Reportes 2.0)");
 
         group.MapGet("/ot-metrics", GetOtMetricsAsync)
+            .RequireAnyModulePermission(ReportesPermissions.Ot, ReportesPermissions.Operacion) // OperacionTab también lee las métricas OT
             .WithName("AnalyticsOtMetrics")
             .WithSummary("Métricas del Organismo de Tránsito: rechazos, tiempos de decisión, reincidencia, ranking y atascados")
             .Produces(StatusCodes.Status200OK)
@@ -35,6 +37,7 @@ public static class AnalyticsMetricsEndpoints
             .Produces(StatusCodes.Status403Forbidden);
 
         group.MapGet("/funnel", GetFunnelAsync)
+            .RequireModulePermission(ReportesPermissions.Operacion)
             .WithName("AnalyticsFunnel")
             .WithSummary("Funnel de estados del trámite (instancias que alcanzaron cada etapa) y pasos del wizard")
             .Produces(StatusCodes.Status200OK)
@@ -43,6 +46,7 @@ public static class AnalyticsMetricsEndpoints
             .Produces(StatusCodes.Status403Forbidden);
 
         group.MapGet("/usage", GetUsageAsync)
+            .RequireModulePermission(ReportesPermissions.Uso)
             .WithName("AnalyticsUsage")
             .WithSummary("Uso del aplicativo: módulos, wizard, horas pico, reemplazos de documentos e integraciones externas")
             .Produces(StatusCodes.Status200OK)
@@ -51,6 +55,7 @@ public static class AnalyticsMetricsEndpoints
             .Produces(StatusCodes.Status403Forbidden);
 
         group.MapGet("/live-overview", GetLiveOverviewAsync)
+            .RequireAnyModulePermission(ReportesPermissions.CualquierPestana)
             .WithName("AnalyticsLiveOverview")
             .WithSummary("Panorama en vivo del tenant: actividad de hoy, atascados, validaciones pendientes e integraciones")
             .Produces(StatusCodes.Status200OK)
@@ -66,6 +71,7 @@ public static class AnalyticsMetricsEndpoints
         DateOnly from,
         DateOnly to,
         GetOtMetricsHandler handler,
+        IProcedureFamilyPermissionGate familyGate,
         CancellationToken ct,
         [FromQuery] Guid? tenantId = null,
         [FromQuery] Guid? transitOfficeId = null,
@@ -82,7 +88,10 @@ public static class AnalyticsMetricsEndpoints
         var (result, err) = await handler.HandleAsync(
             new GetOtMetricsQuery(
                 tenant, from, to, transitOfficeId, procedureTypeId, operatorUserId,
-                status, reason, compareWith, stuckDays),
+                status, reason, compareWith, stuckDays)
+            {
+                AllowedFamilies = familyGate.ReadableFamilyCodes(), // HU #13664 — Ver por familia
+            },
             ct);
 
         return err is not null ? MapError(err) : Results.Ok(result);
@@ -93,6 +102,7 @@ public static class AnalyticsMetricsEndpoints
         DateOnly from,
         DateOnly to,
         GetFunnelHandler handler,
+        IProcedureFamilyPermissionGate familyGate,
         CancellationToken ct,
         [FromQuery] Guid? tenantId = null,
         [FromQuery] Guid? transitOfficeId = null,
@@ -108,7 +118,10 @@ public static class AnalyticsMetricsEndpoints
         var (result, err) = await handler.HandleAsync(
             new GetFunnelQuery(
                 tenant, from, to, transitOfficeId, procedureTypeId, operatorUserId,
-                status, reason, compareWith),
+                status, reason, compareWith)
+            {
+                AllowedFamilies = familyGate.ReadableFamilyCodes(), // HU #13664 — Ver por familia
+            },
             ct);
 
         return err is not null ? MapError(err) : Results.Ok(result);
@@ -119,6 +132,7 @@ public static class AnalyticsMetricsEndpoints
         DateOnly from,
         DateOnly to,
         GetUsageHandler handler,
+        IProcedureFamilyPermissionGate familyGate,
         CancellationToken ct,
         [FromQuery] Guid? tenantId = null,
         [FromQuery] Guid? transitOfficeId = null,
@@ -134,7 +148,10 @@ public static class AnalyticsMetricsEndpoints
         var (result, err) = await handler.HandleAsync(
             new GetUsageQuery(
                 tenant, from, to, transitOfficeId, procedureTypeId, operatorUserId,
-                status, reason, compareWith),
+                status, reason, compareWith)
+            {
+                AllowedFamilies = familyGate.ReadableFamilyCodes(), // HU #13664 — Ver por familia (reemplazos de documentos)
+            },
             ct);
 
         return err is not null ? MapError(err) : Results.Ok(result);
@@ -143,6 +160,7 @@ public static class AnalyticsMetricsEndpoints
     private static async Task<IResult> GetLiveOverviewAsync(
         HttpContext httpContext,
         GetLiveOverviewHandler handler,
+        IProcedureFamilyPermissionGate familyGate,
         CancellationToken ct,
         [FromQuery] Guid? tenantId = null,
         [FromQuery] int? stuckDays = null)
@@ -150,7 +168,8 @@ public static class AnalyticsMetricsEndpoints
         if (!TryResolveRequiredTenant(httpContext.User, tenantId, out var tenant, out var error))
             return error!;
 
-        var (result, err) = await handler.HandleAsync(new GetLiveOverviewQuery(tenant, stuckDays), ct);
+        var (result, err) = await handler.HandleAsync(
+            new GetLiveOverviewQuery(tenant, stuckDays) { AllowedFamilies = familyGate.ReadableFamilyCodes() }, ct); // HU #13664
 
         return err is not null ? MapError(err) : Results.Ok(result);
     }

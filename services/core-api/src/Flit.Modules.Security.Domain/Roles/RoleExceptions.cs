@@ -109,3 +109,15 @@ public sealed class InvalidRoleInputException : Exception
     {
     }
 }
+
+/// <summary>
+/// HU #13644: los permisos del organismo de tránsito (<c>ot.*</c>) solo tienen efecto en un organismo; un rol de
+/// compañía no los lleva (misma regla que <c>OT_NOT_APPLICABLE</c> en los permisos por usuario).
+/// </summary>
+public sealed class OtPermissionNotApplicableToRoleException : Exception
+{
+    public OtPermissionNotApplicableToRoleException()
+        : base("A company role cannot include transit office (OT) permissions.")
+    {
+    }
+}

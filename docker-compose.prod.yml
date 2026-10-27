@@ -593,6 +593,8 @@ services:
       SMARTCLOUD_URL_IDENTIFICACION: ${SMARTCLOUD_URL_IDENTIFICACION:-}
       SMARTCLOUD_URL_PLACA: ${SMARTCLOUD_URL_PLACA:-}
       SMARTCLOUD_TIMEOUT_SECONDS: ${SMARTCLOUD_TIMEOUT_SECONDS:-60}
+      # Proxy SOLO para SmartCloud (http://usuario:clave@host:puerto). En PDN (169) el WAF del SIMIT da 403 a la IP: sale por flit-egress de la 177.
+      SMARTCLOUD_PROXY_URL: ${SMARTCLOUD_PROXY_URL:-}
       MUNICIPAL_INFRACCIONES_BASE_URL: ${MUNICIPAL_INFRACCIONES_BASE_URL:-}
       MUNICIPAL_INFRACCIONES_PATH: ${MUNICIPAL_INFRACCIONES_PATH:-}
       MUNICIPAL_INFRACCIONES_TIMEOUT_SECONDS: ${MUNICIPAL_INFRACCIONES_TIMEOUT_SECONDS:-60}
@@ -765,6 +767,12 @@ services:
       CoreApiGrpc__Address: http://core-api:${CORE_API_GRPC_PORT:-8082}
       # Secreto HMAC compartido con core-api (canal directo e inverso).
       Ict__ServiceToken__Secret: ${ICT_SERVICE_TOKEN_SECRET:-}
+      # Token de plataforma (Logs/Trazabilidad/Clientes ICT): core-ict ya NO acepta JWT sin firma. Valida firma RS256,
+      # emisor, audiencia y vencimiento con la llave publica con que core-api firma el token de usuario (kid flit-api-v1):
+      # JWKS interno de core-api (no pasa por YARP; /api/v1/internal/* no se publica). Mismo interruptor que core-api: JWT_VALIDATE_ISSUED_TOKENS (def. true);
+      # poner false SOLO en un ambiente Development. Sin llave y validando, core-ict no arranca (fail-fast).
+      Jwt__JwksUri: ${ICT_JWT_JWKS_URI:-http://core-api:${CORE_API_PORT:-4003}/api/v1/internal/jwks.json}
+      Jwt__ValidateIssuedTokens: ${JWT_VALIDATE_ISSUED_TOKENS:-true}
       # Epic #13316 (HU #13335/#13348): core-ict pide su token a Identidad (cliente svc-ict, mismo secreto que
       # SVC_ICT_CLIENT_SECRET): lo necesita para consultar en core-consultas.
       Ict__ServiceToken__UseIdentity: "true"

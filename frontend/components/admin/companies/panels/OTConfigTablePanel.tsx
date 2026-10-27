@@ -95,7 +95,7 @@ export function OTConfigTablePanel({
   const [prendaOptionalPolicies, setPrendaOptionalPolicies] = useState<OtPrendaDocumentPolicy[]>([]);
   const [configOffice, setConfigOffice] = useState<TransitOffice | null>(null);
   // Bug #13055 — tabla homologada con el modelo de trámites: filas por página elegibles.
-  const pg = usePaginacion();
+  const pg = usePaginacion("panels.OTConfigTablePanel");
   const [search, setSearch] = useState("");
   const [pendingGrant, setPendingGrant] = useState<PendingGrantAction | null>(null);
   const [grantBusy, setGrantBusy] = useState(false);

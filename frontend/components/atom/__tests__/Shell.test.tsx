@@ -147,11 +147,17 @@ describe("Shell — usuario de organismo de tránsito", () => {
     expect(within(dock()).getAllByRole("link", { name: "Trámites" })).toHaveLength(1);
   });
 
-  // HU #12860 — Documentos y Usuarios solo para ot_admin.
+  // HU #12860 — Documentos y Usuarios no salen a un rol OT no administrador sin su permiso (HU #13655: van por permiso).
   it.each(["gestor_tramites_ot", "otro_rol_ot"])("un %s no ve Documentos ni Usuarios", async (role) => {
     window.localStorage.setItem(
       TOKEN_STORAGE_KEY,
-      makeToken({ sub: "u1", role, entity_type: "TRANSIT_OFFICE", email: "ot@transito.gov.co" }),
+      makeToken({
+        sub: "u1",
+        role,
+        entity_type: "TRANSIT_OFFICE",
+        email: "ot@transito.gov.co",
+        permissions: ["ot.tramites.manage", "ot.reportes.manage"],
+      }),
     );
     renderShell();
     await within(dock()).findByRole("link", { name: "Trámites" });
@@ -161,6 +167,40 @@ describe("Shell — usuario de organismo de tránsito", () => {
     if (admin) {
       await userEvent.click(admin);
       expect(within(dock()).queryByRole("link", { name: "Documentos" })).not.toBeInTheDocument();
+    }
+  });
+
+  // HU #13655 — el Gestor OT ve cada pestaña del organismo solo con su permiso; el Admin OT se las puede otorgar.
+  it("un Gestor OT ve la bandeja y el Inicio de su rol, y Documentos solo con el permiso individual", async () => {
+    const base = { sub: "u1", role: "gestor_tramites_ot", entity_type: "TRANSIT_OFFICE", email: "g@transito.gov.co" };
+    window.localStorage.setItem(
+      TOKEN_STORAGE_KEY,
+      makeToken({ ...base, permissions: ["ot.tramites.manage", "ot.reportes.manage", "ot.documentos.manage"] }),
+    );
+    renderShell();
+
+    await within(dock()).findByRole("link", { name: "Trámites" });
+    expect(within(dock()).getByRole("link", { name: "Reportes" })).toBeInTheDocument();
+    for (const name of ["Mandatos", "Validar impronta", "Usuarios"]) {
+      expect(within(dock()).queryByRole("link", { name })).not.toBeInTheDocument();
+    }
+    const admin = within(dock()).queryByRole("button", { name: "Administración" });
+    if (admin) await userEvent.click(admin);
+    expect(within(dock()).getByRole("link", { name: "Documentos" })).toHaveAttribute(
+      "href",
+      "/admin/transit-offices/ot-1/documents",
+    );
+  });
+
+  it("un rol OT sin permisos del organismo no ve sus pestañas", async () => {
+    window.localStorage.setItem(
+      TOKEN_STORAGE_KEY,
+      makeToken({ sub: "u1", role: "gestor_tramites_ot", entity_type: "TRANSIT_OFFICE", email: "g@transito.gov.co" }),
+    );
+    renderShell();
+    await screen.findByRole("button", { name: "Menú de usuario" });
+    for (const name of ["Trámites", "Reportes", "Mandatos", "Validar impronta"]) {
+      expect(within(dock()).queryByRole("link", { name })).not.toBeInTheDocument();
     }
   });
 

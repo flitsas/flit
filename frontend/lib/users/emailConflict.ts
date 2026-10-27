@@ -22,7 +22,18 @@
  * (409, mismo mensaje) para que la respuesta sea indistinguible.
  */
 export const EMAIL_ALREADY_ASSOCIATED_MESSAGE =
-  "El correo utilizado ya se encuentra asociado a otra cuenta";
+  "El usuario ya se encuentra previamente creado";
+
+/**
+ * Forma canónica del correo (HU #13812, Épica #13516): sin espacios alrededor y
+ * en minúsculas. Es la misma que guarda y exige el backend (`EmailNormalizer`
+ * + `CHECK` en base de datos), así que se envía ya normalizado.
+ *
+ * Uso de ejemplo: `normalizeEmail(" Juan@X.com ")` → `"juan@x.com"`.
+ */
+export function normalizeEmail(raw: string): string {
+  return raw.trim().toLowerCase();
+}
 
 /**
  * Código de error que representa el conflicto: el correo ya está asociado a

@@ -47,3 +47,35 @@ export function armarAsignacion(f: FormConductor) {
     declaracionTratamientoDatos: f.declaracion,
   };
 }
+
+/** Respuesta de «Probar conexión» con la API de contratos (HU #13843, solo SuperAdmin). */
+export interface PruebaContratos {
+  conectado: boolean;
+  motivo: string | null;
+  httpStatus: number | null;
+  duracionMs: number;
+  contactoDesviado: boolean;
+  correoDesvio: string | null;
+  simulada: boolean;
+}
+
+/** Título, tono y detalle del resultado de la prueba. */
+export function resumenPrueba(p: PruebaContratos): { titulo: string; tono: "success" | "warning" | "error"; detalle: string[] } {
+  if (p.conectado) {
+    return {
+      titulo: `Conectado: Renting respondió el inicio de sesión en ${p.duracionMs.toLocaleString("es-CO")} ms`,
+      tono: "success",
+      detalle: [
+        p.contactoDesviado
+          ? `El contacto de los conductores se desvía a ${p.correoDesvio ?? "el buzón de pruebas"}: ningún aviso le llega al cliente de Renting.`
+          : "Contacto real encendido: los avisos le llegan al conductor (solo debe pasar en producción).",
+        "La prueba no consulta ninguna placa.",
+      ],
+    };
+  }
+  return {
+    titulo: p.simulada ? "No conectado: este ambiente usa respuestas simuladas" : "No conectado",
+    tono: p.simulada ? "warning" : "error",
+    detalle: [p.motivo ?? "Sin motivo.", ...(p.httpStatus ? [`Código de respuesta: ${p.httpStatus}.`] : [])],
+  };
+}

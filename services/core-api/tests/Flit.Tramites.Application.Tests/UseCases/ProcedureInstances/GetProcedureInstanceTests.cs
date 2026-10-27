@@ -406,6 +406,54 @@ public sealed class GetProcedureInstanceTests
         evento.EmailActualizado.Should().BeTrue();
         evento.CorreoDestino.Should().Be("nueva@dominio.com");
         evento.CreatedByCompania.Should().Be("Renting Colombia S.A.S");
+        evento.CorreoAnterior.Should().BeNull("los eventos anteriores a HU #13821 no traen correo_anterior");
+    }
+
+    // HU #13821 AC5 — el tracking muestra «correo anterior → nuevo» cuando el reenvío corrigió el correo.
+    [Fact]
+    public async Task HU13821_AC5_ReenvioConCambioDeCorreo_ExponeElCorreoAnterior()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+        var instance = new ProcedureInstance
+        {
+            ProcedureType = ProcedureTypeFixture.Traspaso,
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureTypeId = Guid.NewGuid(),
+            ReferenceNumber = "TRM-2026-013821",
+            Status = "borrador",
+            CreatedAt = DateTimeOffset.UtcNow,
+            Events =
+            {
+                new ProcedureInstanceEvent
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    Tipo = "reenvio_validacion_admin",
+                    Payload = JsonSerializer.Serialize(new
+                    {
+                        validation_id = Guid.NewGuid(),
+                        party_role = "vendedor",
+                        email_actualizado = true,
+                        correo_anterior = "a@x.com",
+                        correo_destino = "b@x.com",
+                        actor_actualizado = true,
+                        encolado = false,
+                    }),
+                    CreatedAt = DateTimeOffset.UtcNow,
+                },
+            },
+        };
+        _repo.GetByIdWithDetailsAsync(instance.Id, tenantId, ct).Returns(instance);
+
+        var (result, error) = await _sut.HandleAsync(instance.Id, tenantId, ct);
+
+        error.Should().BeNull();
+        var evento = result!.Events.Should().ContainSingle().Subject;
+        evento.PartyRole.Should().Be("vendedor");
+        evento.CorreoAnterior.Should().Be("a@x.com");
+        evento.CorreoDestino.Should().Be("b@x.com");
     }
 
     // Bug #12376 — solo reenvío/reasignación se exponen en Events; el resto de tipos (p.ej.

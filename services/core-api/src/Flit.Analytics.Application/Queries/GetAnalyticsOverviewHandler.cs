@@ -8,7 +8,11 @@ namespace Flit.Analytics.Application.Queries;
 /// <see cref="TenantId"/> null = vista global de todas las compañías (solo SuperAdmin).
 /// </summary>
 /// <remarks>BUG #12588 — From/To null = sin acotar por fecha (universo completo del tenant).</remarks>
-public sealed record GetAnalyticsOverviewQuery(Guid? TenantId, DateOnly? From, DateOnly? To);
+public sealed record GetAnalyticsOverviewQuery(Guid? TenantId, DateOnly? From, DateOnly? To)
+{
+    /// <summary>HU #13664 — Ver por familia: códigos visibles (<c>ProcedureFamilyCodes</c>); <c>null</c> = sin restricción.</summary>
+    public IReadOnlyList<string>? AllowedFamilies { get; init; }
+}
 
 /// <summary>
 /// Valida el rango y arma <see cref="AnalyticsOverviewDto"/> a partir de los agregados.
@@ -23,7 +27,7 @@ public sealed class GetAnalyticsOverviewHandler(IAnalyticsReadRepository repo)
         if (query.From is { } desde && query.To is { } hasta && desde > hasta)
             return (null, "invalid_range");
 
-        var categories = await repo.GetOverviewAsync(query.TenantId, query.From, query.To, ct);
+        var categories = await repo.GetOverviewAsync(query.TenantId, query.From, query.To, query.AllowedFamilies, ct);
         // TenantId null indica vista global (SuperAdmin); Guid.Empty es el centinela en el DTO.
         var dto = new AnalyticsOverviewDto(query.TenantId ?? Guid.Empty, query.From, query.To, categories);
         return (dto, null);

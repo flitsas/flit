@@ -21,6 +21,8 @@ builder.Host.UseDefaultServiceProvider(options =>
 builder.Services.AddIctInfrastructure(builder.Configuration);
 builder.Services.AddIctApplication();
 builder.Services.AddIctApiSecurity(builder.Configuration);
+// Token de plataforma (Logs/Trazabilidad/Clientes): firma, emisor, audiencia y vencimiento; fail-fast sin llave.
+builder.Services.AddIctPlatformTokenValidation(builder.Configuration, builder.Environment);
 builder.Services.AddGrpc();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -35,6 +37,7 @@ if (app.Configuration.GetValue("Swagger:Enabled", app.Environment.IsDevelopment(
 }
 
 app.UseAuthentication();
+app.UseIctPlatformToken();
 app.UseAuthorization();
 
 // Logging de requests entrantes de cliente ICT (rutas v1, redactado, en scope propio). Tras la auth para

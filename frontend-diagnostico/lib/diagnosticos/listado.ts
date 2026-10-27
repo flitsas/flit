@@ -50,7 +50,6 @@ export type ErrorListado =
   | { tipo: "AVISO"; mensaje: string; reiniciarPagina: boolean };
 
 export const TAMANO_POR_DEFECTO = 25;
-export const TAMANOS_LISTADO = [10, 25, 50, 100] as const;
 /** maxLength del filtro nombre en el contrato. */
 export const NOMBRE_FILTRO_MAXIMO = 100;
 

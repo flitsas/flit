@@ -46,6 +46,9 @@ namespace Flit.Infrastructure.Migrations
                     b.ToView("v_active_network_domains", "admin");
                 });
 
+
+
+
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.Banner", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5950,6 +5953,195 @@ namespace Flit.Infrastructure.Migrations
                         .HasName("pk_user_invitations");
 
                     b.ToTable("user_invitations", "security");
+                });
+
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Security.UserPermissionAuditEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("action");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_user_id");
+
+                    b.Property<Guid?>("BatchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("batch_id");
+
+                    b.Property<Guid?>("CorrelationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("correlation_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("ModuleCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("module_code");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasDefaultValue("OK")
+                        .HasColumnName("outcome");
+
+                    b.Property<string>("PermissionSlug")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("permission_slug");
+
+                    b.Property<string>("ProductCode")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("product_code");
+
+                    b.Property<string>("ReasonCode")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("reason_code");
+
+                    b.Property<Guid>("TargetUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("target_user_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("ValueAfter")
+                        .HasMaxLength(5)
+                        .HasColumnType("character varying(5)")
+                        .HasColumnName("value_after");
+
+                    b.Property<string>("ValueBefore")
+                        .HasMaxLength(5)
+                        .HasColumnType("character varying(5)")
+                        .HasColumnName("value_before");
+
+                    b.HasKey("Id")
+                        .HasName("pk_user_permission_audit");
+
+                    b.HasIndex("TenantId", "ActorUserId", "CreatedAt")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_user_permission_audit_tenant_actor");
+
+                    b.HasIndex("TenantId", "TargetUserId", "CreatedAt")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("ix_user_permission_audit_tenant_target");
+
+                    b.ToTable("user_permission_audit", "security");
+                });
+
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Security.UserPermissionOverrideEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<Guid?>("BatchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("batch_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<string>("Effect")
+                        .IsRequired()
+                        .HasMaxLength(5)
+                        .HasColumnType("character varying(5)")
+                        .HasColumnName("effect");
+
+                    b.Property<Guid>("GrantedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("granted_by");
+
+                    b.Property<Guid>("PermissionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("permission_id");
+
+                    b.Property<string>("ProductCode")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("product_code");
+
+                    b.Property<long>("RowVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("row_version");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("INDIVIDUAL")
+                        .HasColumnName("source");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_user_permission_overrides");
+
+                    b.HasIndex("PermissionId")
+                        .HasDatabaseName("ix_user_permission_overrides_permission_id");
+
+                    b.HasIndex("ProductCode")
+                        .HasDatabaseName("ix_user_permission_overrides_product_code");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_user_permission_overrides_user_id");
+
+                    b.HasIndex("TenantId", "UserId", "ProductCode", "PermissionId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_user_permission_overrides_active")
+                        .HasFilter("deleted_at IS NULL");
+
+                    b.ToTable("user_permission_overrides", "security");
                 });
 
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Security.UserRoleAssignment", b =>

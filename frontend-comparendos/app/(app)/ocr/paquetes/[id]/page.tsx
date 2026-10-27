@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, CheckCheck, Play, RefreshCw, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCheck, Download, Play, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import { DataTable, InlineAlert, Modal, usePaginacion } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { DetalleComparendo } from "@/components/detalle/DetalleComparendo";
@@ -16,9 +16,10 @@ import { BOTON_PELIGRO_CLS, BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_
 import { apiFetch } from "@/lib/api";
 import { formatoFechaHora } from "@/lib/format/date";
 import { P } from "@/lib/nav";
-import { ESTADO_DOCUMENTO, ESTADO_PAQUETE, ESTADOS_DOCUMENTO, ETIQUETA_CAMPO, FUENTE_DUPLICADO, hayEnCurso, motivoFallo, TIPO_FALLO } from "@/lib/ocr";
+import { type DocumentoPaquete, ESTADO_DOCUMENTO, ESTADO_PAQUETE, ESTADOS_DOCUMENTO, hayEnCurso, hojaPaquete, motivoDocumento, TIPO_FALLO } from "@/lib/ocr";
 import { tienePermiso } from "@/lib/sesion";
 import { useCarga } from "@/lib/useCarga";
+import { buildXlsx, XLSX_MIME } from "@/lib/xlsx";
 
 interface Paquete {
   id: string;
@@ -37,19 +38,12 @@ interface Paquete {
   cerradoEn: string | null;
 }
 
-interface DocumentoFila {
+interface DocumentoFila extends DocumentoPaquete {
   id: string;
-  nombreArchivo: string;
   tipoArchivo: string;
-  estado: string;
   intentos: number;
-  numeroComparendoExtraido: string | null;
-  camposFaltantes: string[];
-  tipoFallo: string | null;
-  mensajeError: string | null;
-  fuenteDuplicado: string | null;
-  comparendoId: string | null;
   procesadoEn: string | null;
+  reprocesable: boolean;
 }
 
 interface ResultadoRegistro {
@@ -69,6 +63,7 @@ function Detalle({ id }: { id: string }) {
   const [descartando, setDescartando] = useState(false);
   const [verComparendo, setVerComparendo] = useState<string | null>(null);
   const [motivo, setMotivo] = useState("Ilegible o no es un comparendo");
+  const [reprocesando, setReprocesando] = useState(false);
   const pg = usePaginacion(25);
   const carga = useCarga(`ocr-paquete:${id}:${estado}`, (signal) =>
     apiFetch<{ paquete: Paquete; documentos: DocumentoFila[] }>(`/ocr/paquetes/${id}`, { signal, query: { estado } }),
@@ -109,9 +104,35 @@ function Detalle({ id }: { id: string }) {
       toast.show(`${r.descartados} documentos descartados.`, "success");
     });
 
+  const reprocesarIncompletos = () =>
+    accion(async () => {
+      const r = await apiFetch<{ encolados: number; omitidos: number }>(`/ocr/paquetes/${id}/reprocesar-incompletos`, { method: "POST" });
+      setReprocesando(false);
+      toast.show(
+        r.encolados === 1
+          ? `1 documento volvió a la cola${r.omitidos ? `; ${r.omitidos} ya llegaron al máximo de reprocesos` : ""}.`
+          : `${r.encolados} documentos volvieron a la cola${r.omitidos ? `; ${r.omitidos} ya llegaron al máximo de reprocesos` : ""}.`,
+        r.encolados ? "success" : "error",
+      );
+    });
+
+  // HU #13831: siempre el paquete completo, aunque la tabla esté filtrada por estado.
+  const exportar = () =>
+    accion(async () => {
+      const todo = await apiFetch<{ paquete: Paquete; documentos: DocumentoFila[] }>(`/ocr/paquetes/${id}`);
+      const url = URL.createObjectURL(new Blob([buildXlsx(hojaPaquete(todo.paquete, todo.documentos))], { type: XLSX_MIME }));
+      const enlace = document.createElement("a");
+      enlace.href = url;
+      enlace.download = `paquete-ocr-${todo.paquete.creadoEn.slice(0, 10)}.xlsx`;
+      enlace.click();
+      URL.revokeObjectURL(url);
+    });
+
   if (carga.estado === "error" && !p) return <InlineAlert tone="error">{carga.error}</InlineAlert>;
   if (!p) return <p className="text-sm opacity-60">Cargando paquete…</p>;
   const cerrado = p.estado === "Cerrado";
+  // Con el filtro puesto la lista puede no traer los incompletos: el botón se guía por el contador del paquete.
+  const reprocesables = estado && estado !== "Incompleto" ? p.cantidadIncompletos : docs.filter((d) => d.estado === "Incompleto" && d.reprocesable).length;
 
   return (
     <section className="flex flex-col gap-6">
@@ -135,6 +156,16 @@ function Detalle({ id }: { id: string }) {
               <RefreshCw className="h-3.5 w-3.5" aria-hidden />
               Actualizar
             </button>
+            <button type="button" className={controlCls(false)} disabled={ocupado} onClick={exportar}>
+              <Download className="h-3.5 w-3.5" aria-hidden />
+              Exportar
+            </button>
+            {opera && !cerrado && reprocesables > 0 && (
+              <button type="button" className={controlCls(false)} disabled={ocupado} onClick={() => setReprocesando(true)}>
+                <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+                Reprocesar incompletos
+              </button>
+            )}
             {opera && p.estado === "Pendiente" && (
               <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado} onClick={iniciar}>
                 <Play className="h-3.5 w-3.5" aria-hidden />
@@ -215,20 +246,34 @@ function Detalle({ id }: { id: string }) {
           columns={[
             { key: "archivo", header: "Archivo", render: (d) => <span className="font-semibold">{d.nombreArchivo}</span> },
             { key: "estado", header: "Estado", render: (d) => <EstadoDocumento estado={d.estado} /> },
-            { key: "numero", header: "Número extraído", render: (d) => d.numeroComparendoExtraido ?? "—" },
+            {
+              key: "numero",
+              header: "Número extraído",
+              render: (d) => (
+                <span className="flex flex-col">
+                  {d.numeroComparendoExtraido ?? "—"}
+                  {d.avisoNumero && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#B45309]" title={d.avisoNumero}>
+                      <AlertTriangle className="h-3 w-3" aria-hidden />
+                      Verificar número
+                    </span>
+                  )}
+                </span>
+              ),
+            },
             {
               key: "detalle",
               header: "Faltantes / motivo",
-              render: (d) =>
-                d.estado === "Fallido" ? (
-                  <span className="text-[#B42318]" title={d.tipoFallo ? TIPO_FALLO[d.tipoFallo] : undefined}>{motivoFallo(d.tipoFallo, d.mensajeError)}</span>
-                ) : d.estado === "Duplicado" ? (
-                  <span className="text-[#6D28D9]">{(d.fuenteDuplicado && FUENTE_DUPLICADO[d.fuenteDuplicado]) ?? "Ya existe"}</span>
-                ) : d.camposFaltantes.length ? (
-                  <span className="text-[#B45309]">{d.camposFaltantes.map((c) => ETIQUETA_CAMPO[c] ?? c).join(", ")}</span>
-                ) : (
-                  "—"
-                ),
+              render: (d) => {
+                const texto = motivoDocumento(d);
+                if (!texto) return "—";
+                const tono = d.estado === "Fallido" ? "text-[#B42318]" : d.estado === "Duplicado" ? "text-[#6D28D9]" : d.estado === "Descartado" ? "opacity-60" : "text-[#B45309]";
+                return (
+                  <span className={tono} title={d.estado === "Fallido" && d.tipoFallo ? TIPO_FALLO[d.tipoFallo] : undefined}>
+                    {texto}
+                  </span>
+                );
+              },
             },
             { key: "intentos", header: "Intentos", align: "right", render: (d) => d.intentos },
             {
@@ -257,6 +302,28 @@ function Detalle({ id }: { id: string }) {
       </div>
 
       <DetalleComparendo id={verComparendo} onCerrar={() => setVerComparendo(null)} />
+
+      {reprocesando && (
+        <Modal
+          open
+          onClose={() => setReprocesando(false)}
+          busy={ocupado}
+          title="Reprocesar los documentos incompletos"
+          description="Se vuelven a leer los documentos incompletos. Lo que ya corregiste a mano se conserva; cada documento se reprocesa máximo 3 veces."
+          footer={
+            <div className="flex justify-end gap-2">
+              <button type="button" className={controlCls(false)} onClick={() => setReprocesando(false)}>
+                Cancelar
+              </button>
+              <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado} onClick={reprocesarIncompletos}>
+                Reprocesar
+              </button>
+            </div>
+          }
+        >
+          <p className="text-sm">Los que ya se reprocesaron 3 veces se omiten.</p>
+        </Modal>
+      )}
 
       {descartando && (
         <Modal

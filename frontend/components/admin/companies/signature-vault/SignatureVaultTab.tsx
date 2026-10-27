@@ -37,7 +37,7 @@ import {
 export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
   const { show } = useToast();
   const [status, setStatus] = useState<UiStatus>("loading");
-  const pg = usePaginacion();
+  const pg = usePaginacion("signature-vault.SignatureVaultTab");
   const [items, setItems] = useState<SignatureVaultItem[]>([]);
   const [formOpen, setFormOpen] = useState(false);
   const [detail, setDetail] = useState<SignatureVaultItem | null>(null);

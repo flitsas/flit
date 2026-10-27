@@ -1229,15 +1229,23 @@ public sealed class GenerarFurHandler(
         // referenciada mientras el sello estamparía otro documento/certificado — inconsistencia en el FUR.
         var own = instance.BiometricValidations.FirstOrDefault(v =>
             string.Equals(v.PartyRole, role, StringComparison.OrdinalIgnoreCase)
-            && BiometricRules.EsAprobadaVigente(v, now)
+            && BiometricRules.EsAprobadaVigenteParaTramite(v, instance.Status, now)
             && BiometricRules.DocumentoCoincide(v, subject?.TipoDocumento, subject?.NumeroDocumento));
         if (own is not null)
             return own;
 
         // Identidad vigente REFERENCIADA por documento del sujeto (HU #10350, sin clonar).
         if (subject is not null && !string.IsNullOrWhiteSpace(subject.TipoDocumento) && !string.IsNullOrWhiteSpace(subject.NumeroDocumento))
-            return await repo.FindVigenteApprovedByDocumentAsync(
+        {
+            var referenciada = await repo.FindVigenteApprovedByDocumentAsync(
                 instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), now, ct);
+            // HU #13824 — fuera de borrador el FUR conserva el sello de una identidad que un Super Admin venció a mano.
+            if (referenciada is null
+                && !string.Equals(instance.Status, TramiteEstado.Borrador, StringComparison.OrdinalIgnoreCase))
+                referenciada = await repo.FindProtegidaPorVencimientoManualAsync(
+                    instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), now, ct);
+            return referenciada;
+        }
 
         return null;
     }

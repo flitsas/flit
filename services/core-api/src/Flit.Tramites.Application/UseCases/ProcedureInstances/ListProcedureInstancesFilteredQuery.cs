@@ -38,6 +38,9 @@ public sealed record ProcedureInstanceListRequest
     /// <summary>Código del tipo concreto de trámite, no la familia.</summary>
     public string? TipoCodigo { get; init; }
 
+    /// <summary>HU #13664 — familias que el usuario puede VER (códigos de <c>ProcedureFamilyCodes</c>); <c>null</c> = todas. Lo pone el endpoint.</summary>
+    public IReadOnlyList<string>? AllowedFamilies { get; init; }
+
     /// <summary>HU #12187 — texto libre transversal (radicado exacto; el resto por subcadena).</summary>
     public string? Busqueda { get; init; }
 
@@ -265,6 +268,7 @@ public sealed class ListProcedureInstancesFilteredHandler(
             Modalidad = request.Modalidad,
             OrganismoTransito = request.OrganismoTransito,
             TipoCodigo = request.TipoCodigo,
+            AllowedFamilies = request.AllowedFamilies,
             Busqueda = request.Busqueda,
             Prioritario = request.Prioritario,
             Condiciones = request.Condiciones,
@@ -296,6 +300,11 @@ public sealed class ListProcedureInstancesFilteredHandler(
         IReadOnlySet<string> identidadKeys = await repo.ListVigenteApprovedIdentityKeysAsync(
             instances.Select(i => i.TenantId).Distinct().ToList(), now, ct) ?? new HashSet<string>();
 
+        // HU #13824 — identidades vencidas a mano por un Super Admin que los trámites fuera de borrador siguen honrando
+        // (una consulta en lote sobre el índice parcial de las filas vencidas a mano).
+        IReadOnlySet<string> protegidasKeys = await repo.ListProtegidasPorVencimientoManualKeysAsync(
+            instances.Select(i => i.TenantId).Distinct().ToList(), now, ct) ?? new HashSet<string>();
+
         var hoy = DateOnly.FromDateTime(now.ToOffset(ColombiaTime.Offset).DateTime);
         IReadOnlyDictionary<string, bool> firmaBaul = await repo.ListFirmaBaulVigenciaKeysAsync(
             instances.Select(i => i.TenantId).Distinct().ToList(), hoy, ct) ?? EmptyFirmaBaul;
@@ -314,7 +323,7 @@ public sealed class ListProcedureInstancesFilteredHandler(
         var items = instances
             .Select(e => ListProcedureInstancesHandler.ToSummary(
                 e,
-                IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now, firmaBaul),
+                IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now, firmaBaul, protegidasKeys),
                 nombres.GetValueOrDefault(e.TenantId),
                 gestores.GetValueOrDefault(e.GestorEfectivoUserId),
                 firmaBaul,
@@ -355,6 +364,7 @@ public sealed class CountProcedureInstancesByStatusHandler(
             Modalidad = request.Modalidad,
             OrganismoTransito = request.OrganismoTransito,
             TipoCodigo = request.TipoCodigo,
+            AllowedFamilies = request.AllowedFamilies,
             // La búsqueda y el marcado prioritario SÍ acotan las tarjetas: si la tabla dice «3
             // resultados» para un texto y la tarjeta de borradores dice 40, la pantalla se
             // contradice — que es justo el defecto que esta HU corrige.

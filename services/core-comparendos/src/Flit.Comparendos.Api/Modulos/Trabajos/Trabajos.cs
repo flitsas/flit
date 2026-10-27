@@ -115,25 +115,34 @@ internal sealed partial class ProgramadorTrabajos(IServiceScopeFactory scopes, C
 internal sealed partial class ProcesadorTrabajos(IServiceScopeFactory scopes, ColaTrabajos cola, ILogger<ProcesadorTrabajos> logger) : BackgroundService
 {
     protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        Parallel.ForEachAsync(cola.LeerAsync(stoppingToken), new ParallelOptions { MaxDegreeOfParallelism = 2, CancellationToken = stoppingToken }, async (solicitud, ct) =>
-        {
-            try
-            {
-                await using var scope = scopes.CreateAsyncScope();
-                var ejecutor = scope.ServiceProvider.GetServices<IEjecutorTrabajo>().FirstOrDefault(e => e.Atiende(solicitud.Tipo));
-                if (ejecutor is null)
-                {
-                    LogSinEjecutor(logger, solicitud.Tipo);
-                    return;
-                }
+        Parallel.ForEachAsync(cola.LeerAsync(stoppingToken), new ParallelOptions { MaxDegreeOfParallelism = 2, CancellationToken = stoppingToken }, ProcesarAsync);
 
-                await ejecutor.EjecutarAsync(solicitud, ct).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+    internal async ValueTask ProcesarAsync(SolicitudTrabajo solicitud, CancellationToken ct)
+    {
+        try
+        {
+            await using var scope = scopes.CreateAsyncScope();
+            var ejecutor = scope.ServiceProvider.GetServices<IEjecutorTrabajo>().FirstOrDefault(e => e.Atiende(solicitud.Tipo));
+            if (ejecutor is null)
             {
-                LogFallo(logger, solicitud.Tipo, ex);
+                LogSinEjecutor(logger, solicitud.Tipo);
+                return;
             }
-        });
+
+            await ejecutor.EjecutarAsync(solicitud, ct).ConfigureAwait(false);
+            // HU #13815: la ejecución manual también cuenta como «última ejecución» del trabajo (la ingesta lleva la suya por ciclo).
+            if (solicitud.Disparo == Disparo.Manual && Ingesta.CicloDeIngesta.Canal(solicitud.Tipo) is null)
+            {
+                var ahora = scope.ServiceProvider.GetRequiredService<Reloj>().Ahora;
+                await scope.ServiceProvider.GetRequiredService<ComparendosDb>().TrabajosProgramados.Where(t => t.Tipo == solicitud.Tipo)
+                    .ExecuteUpdateAsync(u => u.SetProperty(t => t.UltimaEjecucionEn, ahora), ct).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogFallo(logger, solicitud.Tipo, ex);
+        }
+    }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "No hay quien ejecute el trabajo {Tipo}.")]
     private static partial void LogSinEjecutor(ILogger logger, TipoTrabajo tipo);

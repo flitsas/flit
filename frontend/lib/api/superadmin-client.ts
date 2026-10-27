@@ -297,7 +297,8 @@ export const superadminClient = {
     request<RbacRole[]>(`/api/v1/superadmin/roles?targetEntityType=${targetEntityType}`),
   getRole: (id: string) =>
     request<RbacRoleDetail>(`/api/v1/superadmin/roles/${id}`),
-  createRole: (body: { targetEntityType: RoleTargetEntityType; code: string; name: string; description?: string }) =>
+  // HU #13653: `code` es opcional y la pantalla no lo envía; el servidor lo genera a partir del nombre.
+  createRole: (body: { targetEntityType: RoleTargetEntityType; code?: string; name: string; description?: string }) =>
     request<{ id: string }>('/api/v1/superadmin/roles', { method: 'POST', body: JSON.stringify(body) }),
   deleteRole: (id: string) =>
     request<void>(`/api/v1/superadmin/roles/${id}`, { method: 'DELETE' }),

@@ -269,31 +269,31 @@ internal static class CoveredQueries
 
             case "Q15":
                 {
-                    var categories = await new AnalyticsReadRepository(ctx).GetOverviewAsync(reader, From, To, ct);
+                    var categories = await new AnalyticsReadRepository(ctx).GetOverviewAsync(reader, From, To, null, ct);
                     return Scalar(categories.Sum(c => c.Total));
                 }
 
             case "Q16":
                 {
-                    var producers = await new AnalyticsReadRepository(ctx).GetTopProducersAsync(reader, From, To, 100, ct);
+                    var producers = await new AnalyticsReadRepository(ctx).GetTopProducersAsync(reader, From, To, 100, null, ct);
                     return Rows(producers.Select(p => p.UserId));
                 }
 
             case "Q17":
                 {
-                    var points = await new AnalyticsReadRepository(ctx).GetMonthlyTrendAsync(reader, From, To, ct);
+                    var points = await new AnalyticsReadRepository(ctx).GetMonthlyTrendAsync(reader, From, To, null, ct);
                     return Scalar(points.Sum(p => p.Total));
                 }
 
             case "Q18":
                 {
-                    var page = await new AnalyticsReadRepository(ctx).GetProcedureDetailsAsync(tenant, From, To, null, null, 1, 100, ct);
+                    var page = await new AnalyticsReadRepository(ctx).GetProcedureDetailsAsync(tenant, From, To, null, null, 1, 100, null, ct);
                     return Rows(page.Items.Select(i => i.Id));
                 }
 
             case "Q19":
                 {
-                    var live = await new AnalyticsMetricsReadRepository(ctx).GetLiveOverviewAsync(tenant, 7, ct);
+                    var live = await new AnalyticsMetricsReadRepository(ctx).GetLiveOverviewAsync(tenant, 7, null, ct);
                     return Scalar(live.Today.ByStatus.Sum(s => s.Count));
                 }
 

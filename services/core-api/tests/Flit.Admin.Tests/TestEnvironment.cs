@@ -41,4 +41,16 @@ internal static class TestEnvironment
     {
         Environment.SetEnvironmentVariable("Platform__ServiceClient__ClientSecret", "secreto-de-pruebas");
     }
+
+    /// <summary>
+    /// Los controles de permisos vienen encendidos por defecto en la API. Las pruebas que no los ejercitan se
+    /// escribieron con el comportamiento previo (solo la policy de rol): aquí arrancan apagados y las pruebas de exigencia
+    /// los encienden explícitamente con <c>UseSetting</c>/configuración en memoria, que tiene prioridad sobre estas variables.
+    /// </summary>
+    [ModuleInitializer]
+    public static void ControlesDePermisosApagadosSalvoQueLaPruebaLosEncienda()
+    {
+        Environment.SetEnvironmentVariable("Security__OtPermissionEnforcement__Enabled", "false");
+        Environment.SetEnvironmentVariable("Security__ModulePermissionEnforcement__Enabled", "false");
+    }
 }

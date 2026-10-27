@@ -101,7 +101,7 @@ export const INTRO_ARTICLES: ManualArticle[] = [
         title: `1. Perfil ${COPY.A06} (empresa cliente)`,
         paragraphs: [
           "Corresponde a usuarios de una compañía que radica trámites vehiculares (concesionario, renting, gestoría). En el dock típico de un operador (rol Radicador) verás Inicio, Trámites y Ayuda.",
-          "Módulos adicionales (Identidad, Reportes, Usuarios) solo aparecen si tu rol custom tiene los permisos RBAC correspondientes.",
+          "Módulos adicionales (Identidad, Reportes, Usuarios) solo aparecen en el menú si tienes el permiso correspondiente, ya sea por tu rol o porque el administrador te lo asignó a ti directamente. Mientras FLIT carga tus permisos, el menú solo muestra Inicio y Ayuda.",
         ],
         bullets: [
           "Ruta principal de trámites: /tramites",
@@ -191,6 +191,8 @@ export const INTRO_ARTICLES: ManualArticle[] = [
       "recuperar contraseña",
       "restablecer contraseña",
       "activar invitación",
+      "usuario ya creado",
+      "correo duplicado",
       "activar cuenta",
       "cambiar contraseña",
       "cerrar sesión",
@@ -233,6 +235,7 @@ export const INTRO_ARTICLES: ManualArticle[] = [
         paragraphs: [
           "Cuando el administrador de tu compañía (o el equipo FLIT) crea tu usuario, te llega un correo con un enlace de activación. Ese enlace te lleva a la pantalla «Activa tu cuenta», donde defines tu contraseña por primera vez.",
           "Con eso queda lista tu cuenta y puedes iniciar sesión de inmediato con tu correo y la contraseña que acabas de definir.",
+          "Si al activar ves «El usuario ya se encuentra previamente creado», tu correo ya tiene una cuenta en FLIT: inicia sesión con ella (o recupera la contraseña desde «¿Olvidó su contraseña?») en lugar de activar la invitación.",
         ],
       },
       {
@@ -254,7 +257,8 @@ export const INTRO_ARTICLES: ManualArticle[] = [
         title: "6. Sesión expirada y acceso denegado",
         paragraphs: [
           "Si dejas la sesión inactiva por mucho tiempo, verás una ventana que dice «Tu sesión expiró. Por seguridad, tu sesión se cerró. Vuelve a iniciar sesión para continuar». Pulsa «Ir a iniciar sesión», escribe tus datos otra vez y FLIT te devuelve a donde estabas.",
-          "Si entras a una sección para la que no tienes permiso, verás la pantalla «Acceso restringido»: no significa que algo esté dañado, sino que tu perfil no incluye ese módulo. Pídele acceso al administrador de tu compañía o, si crees que es un error, escríbele al equipo FLIT.",
+          "Si escribes o abres la dirección de un módulo para el que no tienes permiso, FLIT te devuelve al inicio y te avisa con el mensaje «No tienes acceso a este módulo.»: no significa que algo esté dañado, sino que tu perfil no incluye ese módulo. Puedes cerrar el aviso con la X. Pídele acceso al administrador de tu compañía o, si crees que es un error, escríbele al equipo FLIT.",
+          "En otros casos (por ejemplo, si tu sesión ya no es válida) verás la pantalla «Acceso restringido».",
         ],
         callouts: [
           {
@@ -269,6 +273,7 @@ export const INTRO_ARTICLES: ManualArticle[] = [
         paragraphs: [],
         bullets: [
           "No me llega el correo de recuperación o de invitación: revisa la carpeta de spam o correo no deseado antes de pedir uno nuevo.",
+          "Al iniciar sesión no importa si escribes tu correo con mayúsculas o con espacios al inicio o al final: la plataforma lo reconoce igual.",
           "El enlace de recuperación o de activación ya venció: pide uno nuevo (recuperación desde «¿Olvidó su contraseña?»; invitación, pídele al administrador que te la reenvíe).",
           "Mi cuenta está bloqueada temporalmente: verás el aviso «Tu cuenta está bloqueada temporalmente». Contacta al administrador de tu compañía para que la reactive.",
           "Mi usuario está suspendido: no podrás iniciar sesión aunque la contraseña sea correcta; solo el administrador de tu compañía puede reactivarlo.",
@@ -355,6 +360,68 @@ export const INTRO_ARTICLES: ManualArticle[] = [
           "Le rechazaron la foto en la validación biométrica: el sistema le indica el motivo y cuántos intentos le quedan. Repite la foto siguiendo los consejos de buena luz y rostro despejado.",
           "El documento que subió se ve ilegible o incompleto: pídele que vuelva a fotografiarlo o escanearlo completo, sin brillos ni recortes, y que lo suba de nuevo con «Reemplazar».",
           "El participante dice que no le ha llegado ningún correo: confírmale al gestor que el correo registrado en el trámite sea el correcto y, si es así, pídele al gestor que reenvíe el enlace desde el trámite.",
+        ],
+      },
+    ],
+  },
+  {
+    slug: "0-introduccion/7-tablas-y-paginacion",
+    title: "Tablas: cómo leerlas y moverte entre páginas",
+    audience: "Todos",
+    sectionId: "introduccion",
+    keywords: [
+      "tabla",
+      "tablas",
+      "paginación",
+      "filas por página",
+      "registros por página",
+      "primera página",
+      "última página",
+      "página siguiente",
+      "página anterior",
+      "cuántos registros",
+    ],
+    summary:
+      "Todas las tablas de FLIT se ven y se usan igual: cómo cambiar de página, ir al principio o al final y elegir cuántas filas ver.",
+    blocks: [
+      {
+        id: "mismo-diseno",
+        title: "1. Todas las tablas funcionan igual",
+        paragraphs: [
+          "Trámites, usuarios, compañías, reportes, auditoría o cualquier otra lista: todas las tablas de FLIT tienen el mismo aspecto y los mismos controles. La cabecera gris se queda fija al bajar, cada fila es una tarjeta que se ilumina al pasar el puntero y las acciones de la fila son iconos con su nombre al acercar el puntero.",
+        ],
+      },
+      {
+        id: "navegar",
+        title: "2. Moverte entre páginas",
+        paragraphs: ["Al pie de cada tabla, a la derecha, está la barra de páginas:"],
+        bullets: [
+          "«Primera» lleva a la primera página.",
+          "‹ y › van a la página anterior y a la siguiente.",
+          "Los números saltan directo a esa página; la página en la que estás se ve resaltada en azul.",
+          "«Última» lleva a la última página.",
+          "Si ya estás en la primera página, «Primera» y ‹ se ven apagados; en la última, › y «Última» también.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "El texto «Mostrando 21–30 de 95» te dice qué registros estás viendo y cuántos hay en total. Si todo cabe en una sola página, no aparecen los botones de navegación.",
+          },
+        ],
+      },
+      {
+        id: "filas-por-pagina",
+        title: "3. Elegir cuántas filas ver",
+        paragraphs: [
+          "A la izquierda del pie, «Filas por página» deja elegir 10, 20, 30 o 50 registros. Toda tabla abre con 10. Al cambiar la cantidad, la tabla vuelve a la primera página para que no te pierdas.",
+          "Tu elección se recuerda mientras tengas abierta la sesión del navegador: si eliges 50 en Usuarios, sales a otro módulo y vuelves, sigues viendo 50. Cada tabla recuerda lo suyo, así que cambiar Usuarios no cambia Auditoría. Al cerrar la pestaña y entrar de nuevo, todas vuelven a 10.",
+        ],
+      },
+      {
+        id: "filtros",
+        title: "4. Filtros y exportaciones",
+        paragraphs: [
+          "Las páginas se calculan sobre el resultado filtrado: si aplicas un filtro que deja pocos registros, la tabla te lleva a la página que existe en vez de mostrarte una vacía. Exportar a Excel o CSV siempre incluye todo el resultado del filtro, no solo la página que estás viendo.",
         ],
       },
     ],

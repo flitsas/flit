@@ -4,7 +4,9 @@
 // el guarda de `actionsFor`).
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { CompanyUsersPanel } from "../CompanyUsersPanel";
+import { rowActionNames } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 import { getUsers } from "@/lib/api/security";
 
 vi.mock("@/hooks/usePermissions", () => ({
@@ -56,11 +58,9 @@ describe("CompanyUsersPanel — invitación cancelada (#11552)", () => {
 
     await screen.findByText("Iván Cortés");
     expect(screen.getByRole("status", { name: /^Estado: Cancelada$/i })).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /editar usuario iván cortés/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /ver historial de iván cortés/i }),
-    ).not.toBeInTheDocument();
+    // HU #13653: las acciones de la fila viven en su menú «Acciones».
+    const acciones = await rowActionNames(userEvent.setup(), "Iván Cortés");
+    expect(acciones).not.toContainEqual(expect.stringMatching(/editar usuario/i));
+    expect(acciones).not.toContainEqual(expect.stringMatching(/ver historial/i));
   });
 });

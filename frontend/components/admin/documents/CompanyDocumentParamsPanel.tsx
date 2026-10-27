@@ -10,6 +10,7 @@ import { AlertTriangle, CheckCircle2, EyeOff, FilePlus, MinusCircle, Pencil, typ
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { CreateButton } from "@/components/atom/CreateButton";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { Modal } from "@/components/atom/Modal";
 import { RowActions } from "@/components/atom/RowActions";
 import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
@@ -102,6 +103,7 @@ export function CompanyDocumentParamsPanel({
   networkHeadId,
 }: CompanyDocumentParamsPanelProps) {
   const [items, setItems] = useState<CompanyDocumentParam[]>([]);
+  const pg = usePaginacion("documents.CompanyDocumentParamsPanel");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<DocumentType[]>([]);
@@ -240,13 +242,21 @@ export function CompanyDocumentParamsPanel({
           emptyMessage="Sin parámetros: se aplica el comportamiento base."
           emptyCta={addButton}
         >
-          {/* Parámetros por gestora: lista corta, sin paginar */}
+          {/* HU #13918 — también esta lista corta lleva la paginación estándar: con una sola página
+              solo se ven el resumen y «Filas por página». */}
           <DataTable
             ariaLabel="Parámetros documentales"
             columns={columns}
-            rows={items}
+            rows={pg.paginar(items)}
             getRowKey={(item) => item.id}
             allowHorizontalScroll
+            pagination={{
+              page: pg.page,
+              pageSize: pg.pageSize,
+              totalCount: items.length,
+              onPageChange: pg.setPage,
+              onPageSizeChange: pg.setPageSize,
+            }}
           />
         </UiStateBoundary>
       )}

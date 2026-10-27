@@ -38,18 +38,9 @@ import {
 import type { NavCatalog, NavIcon, NavItem } from "@flit/shell/nav";
 import { OT_ADM_DOCK, otHubListPath, otHubModulePath } from "@/components/admin/transit-offices/ot-nav";
 import { CONFIRMACION_RUNT_BASE_PATH } from "@/components/admin/plataforma/confirmacion-runt/confirmacion-runt-nav";
-import {
-  GENERACION_DOCUMENTAL_BASE_PATH,
-  GENERACION_DOCUMENTAL_MODULE_CODE,
-} from "@/components/admin/generacion-documental/generacion-documental-nav";
-import {
-  ICT_REPORTES_READ_PERMISSION,
-  ICT_TRAZABILIDAD_READ_PERMISSION,
-  LOG_QX_READ_PERMISSION,
-  RUNT_CONFIRMATION_HISTORY_READ_PERMISSION,
-  RUNT_CONFIRMATION_SETTINGS_MANAGE_PERMISSION,
-} from "@/lib/auth/jwt";
+import { GENERACION_DOCUMENTAL_BASE_PATH } from "@/components/admin/generacion-documental/generacion-documental-nav";
 import { OT_ADMIN_SPA_OMIT } from "@/lib/nav/modules";
+import { navGatingFor, otHubNavGating, type OtHubDelegableTab } from "@/lib/nav/module-access";
 import { COPY } from "@/lib/copy/copy-catalog";
 import {
   DOCK_GROUP_ICON,
@@ -64,7 +55,7 @@ import {
 export interface TramitesNavContext {
   /** Cualquier rol de un organismo de tránsito: opera la superficie del organismo. */
   isOtUser: boolean;
-  /** `ot_admin`: además ve Documentos y Usuarios del organismo. */
+  /** `ot_admin`: ve todas las pestañas del organismo; los demás roles OT, solo las de sus permisos OT (HU #13655). */
   isOtAdmin: boolean;
   isAdminCompany: boolean;
   isGroupParent: boolean;
@@ -91,7 +82,8 @@ const spa = (id: keyof typeof SPA_DOCK_ITEM_LABEL, icon: NavIcon, href = `/?m=${
   label: SPA_DOCK_ITEM_LABEL[id],
   href,
   icon,
-  module: id,
+  // Quién lo ve sale de la tabla de acceso (ADR-0074), no de una regla propia del dock.
+  ...navGatingFor(id),
 });
 
 export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
@@ -128,8 +120,8 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
     superAdmin("admin-improntas", "Improntas", "/admin/improntas", Fingerprint),
     superAdmin("admin-quipux", "Quipux", "/admin/quipux", Send),
     superAdmin("admin-jobs", "Procesos periódicos", "/admin/jobs", Timer),
-    superAdmin("rbac", "RBAC Admin", "/?m=rbac", Lock),
-    superAdmin("auditoria", "Auditoría", "/?m=auditoria", ScrollText),
+    { key: "rbac", label: "RBAC Admin", href: "/?m=rbac", icon: Lock, ...navGatingFor("rbac") },
+    { key: "auditoria", label: "Auditoría", href: "/?m=auditoria", icon: ScrollText, ...navGatingFor("auditoria") },
     {
       // Plataforma es contenedor: lo núcleo es del SuperAdmin; Confirmación RUNT (HU #12313, justo después de Tipos de
       // trámites) va por permiso, así que un rol con solo ese permiso ve Plataforma con esa entrada. Banners es solo SuperAdmin.
@@ -144,7 +136,7 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
           label: "Confirmación RUNT",
           href: CONFIRMACION_RUNT_BASE_PATH,
           icon: BadgeCheck,
-          permission: [RUNT_CONFIRMATION_SETTINGS_MANAGE_PERMISSION, RUNT_CONFIRMATION_HISTORY_READ_PERMISSION],
+          ...navGatingFor("admin-confirmacion-runt"),
         },
         superAdmin("admin-mandatos", "Mandatos", "/admin/plataforma/mandatos", FileSignature),
         superAdmin("admin-fur", "FUR", "/admin/plataforma/fur", FileText),
@@ -164,31 +156,35 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
       label: "Generación documental",
       href: GENERACION_DOCUMENTAL_BASE_PATH,
       icon: FileText,
-      module: GENERACION_DOCUMENTAL_MODULE_CODE,
+      ...navGatingFor("admin-generacion-documental"),
     },
   );
 
-  // Usuario OT: pestañas del hub del organismo en el dock. Documentos y Usuarios solo para ot_admin (su API es de
-  // administradores). Reglas, Requisitos y Configuración son del SuperAdmin (HU #12856) y Preasignación ya no existe.
+  // Usuario OT: pestañas del hub del organismo en el dock. El ot_admin las ve todas. Cualquier otro rol del organismo
+  // (p. ej. Gestor OT, HU #13655) ve cada pestaña solo con su permiso OT, que el Admin OT le puede otorgar por usuario.
+  // Reglas, Requisitos y Configuración son del SuperAdmin (HU #12856) y Preasignación ya no existe.
   const officeId = ctx.otTransitOfficeId;
   if (ctx.isOtUser && officeId) {
-    const ot = (key: string, label: string, tab: Parameters<typeof otHubModulePath>[1], icon: NavIcon): Entry => ({
+    // La regla de cada pestaña vive en la tabla de acceso (`OT_HUB_TAB_PERMISSION`), la misma que gobierna la ruta.
+    const ot = (key: string, label: string, tab: OtHubDelegableTab, icon: NavIcon): Entry => ({
       key,
       label,
       href: otHubModulePath(officeId, tab),
       icon,
+      ...otHubNavGating(tab, ctx.isOtAdmin),
     });
     entries.push(
       ot(OT_ADM_DOCK.tramites, COPY.B21Tramites, "client-procedures", FileStack),
-      ...(ctx.isOtAdmin
-        ? [ot(OT_ADM_DOCK.documents, "Documentos", "documents", FileText), ot(OT_ADM_DOCK.usuarios, COPY.B21Usuarios, "usuarios", Users)]
-        : []),
+      ot(OT_ADM_DOCK.documents, "Documentos", "documents", FileText),
+      ot(OT_ADM_DOCK.usuarios, COPY.B21Usuarios, "usuarios", Users),
       ot(OT_ADM_DOCK.reportes, COPY.B21Reportes, "reportes", BarChart3),
       ot(OT_ADM_DOCK.mandatos, "Mandatos", "mandatos", FileSignature),
       ot(OT_ADM_DOCK.imprintValidation, "Validar impronta", "imprint-validation", Fingerprint),
     );
   }
 
+  // (La tabla de acceso declara el requisito de rol de «mi-empresa» / «admin-network» —AdminCompany—; aquí se decide con
+  // `ctx.isAdminCompany`, que sale del mismo claim, porque además dependen de `isGroupParent` y `tenantId`.)
   // Gestor: una sola entrada «Administración» a la consola de su compañía (/admin/companies lleva a su empresa).
   if (ctx.isAdminCompany) {
     entries.push({ key: "mi-empresa", label: "Administración", href: "/admin/companies", icon: Building2 });
@@ -198,7 +194,7 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
   }
 
   entries.push(
-    { key: "log-qx", label: "Log QX", href: "/?m=log-qx", icon: Radar, permission: LOG_QX_READ_PERMISSION },
+    { key: "log-qx", label: "Log QX", href: "/?m=log-qx", icon: Radar, ...navGatingFor("log-qx") },
     {
       // ICT es contenedor: nombra el sistema y luego qué se quiere de él (HU #11619). Sin permiso propio, como
       // Plataforma: `buildDock` lo muestra solo si le queda algún hijo visible. Log ICT es solo del SuperAdmin;
@@ -208,9 +204,9 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
       href: "",
       icon: Network,
       children: [
-        superAdmin("ict-logs", "Log ICT", "/?m=ict-logs", Network),
-        { key: "ict-trazabilidad", label: "Trazabilidad ICT", href: "/?m=ict-trazabilidad", icon: Route, permission: ICT_TRAZABILIDAD_READ_PERMISSION },
-        { key: "ict-reportes", label: "Reportes ICT", href: "/?m=ict-reportes", icon: BarChart3, permission: ICT_REPORTES_READ_PERMISSION },
+        { key: "ict-logs", label: "Log ICT", href: "/?m=ict-logs", icon: Network, ...navGatingFor("ict-logs") },
+        { key: "ict-trazabilidad", label: "Trazabilidad ICT", href: "/?m=ict-trazabilidad", icon: Route, ...navGatingFor("ict-trazabilidad") },
+        { key: "ict-reportes", label: "Reportes ICT", href: "/?m=ict-reportes", icon: BarChart3, ...navGatingFor("ict-reportes") },
       ],
     },
   );

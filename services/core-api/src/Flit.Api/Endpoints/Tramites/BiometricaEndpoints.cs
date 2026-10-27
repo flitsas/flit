@@ -728,6 +728,48 @@ internal static class BiometricaEndpoints
         .Produces(StatusCodes.Status404NotFound)
         .Produces(StatusCodes.Status409Conflict);
 
+        // POST vencer una identidad aprobada y vigente (HU #13824, Feature #13820, Épica #13817). SOLO Super Admin: policy real
+        // por rol del JWT (401 sin sesión, 403 a cualquier otro rol, incluido AdminCompany) + permiso propio
+        // `identidad.validaciones.vencer` (concedido solo a SuperAdmin). Sirve a validaciones de trámite y a prevalidaciones
+        // standalone. Cross-tenant: NO lee X-Tenant-Id; el tenant sale de la fila. Termina la vigencia ahora, abre una validación
+        // nueva en el trámite en borrador más reciente que usaba la identidad y devuelve el enlace para copiar.
+        group.MapPost("/biometric-validations/{id:guid}/vencer", async (
+            Guid id,
+            HttpContext http,
+            VencerIdentidadHandler handler,
+            CancellationToken ct) =>
+        {
+            var raw = http.User.FindFirst("sub")?.Value
+                ?? http.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(raw, out var userId) || userId == Guid.Empty)
+                return Results.Problem(statusCode: 401, title: "Unauthorized",
+                    detail: "No se pudo identificar al usuario que vence la identidad.");
+
+            var (result, error) = await handler.HandleAsync(new VencerIdentidadCommand(id, userId), ct);
+            return error switch
+            {
+                null => Results.Ok(result),
+                VencerIdentidadHandler.NoEncontrada => Results.Problem(
+                    statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada."),
+                VencerIdentidadHandler.NoAprobadaVigente => Results.Problem(
+                    statusCode: 409, title: error, detail: VencerIdentidadHandler.MensajeNoAprobadaVigente),
+                VencerIdentidadHandler.FueraDeAlcance => Results.Problem(
+                    statusCode: 422, title: error,
+                    detail: "La identidad de un mandatario no se vence desde este módulo."),
+                _ => Results.Problem(statusCode: 422, title: error, detail: "No se pudo vencer la identidad."),
+            };
+        })
+        .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+        .RequirePermission(IdentidadAdminAuthorization.VencerSlug)
+        .WithName("VencerIdentidad")
+        .WithSummary("Vence una identidad aprobada y vigente (solo Super Admin); abre una validación nueva en el borrador más reciente")
+        .Produces<VencerIdentidadResult>(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status401Unauthorized)
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound)
+        .Produces(StatusCodes.Status409Conflict)
+        .Produces(StatusCodes.Status422UnprocessableEntity);
+
         return app;
     }
 

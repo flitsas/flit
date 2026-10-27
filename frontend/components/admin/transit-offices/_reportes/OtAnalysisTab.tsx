@@ -173,6 +173,7 @@ function PerformancePanel({ performance }: { performance: OtPerformance }) {
           <Empty>Ninguna empresa entregó trámites en el periodo seleccionado.</Empty>
         ) : (
           <Table
+            claveTabla="_reportes.OtAnalysisTab"
             headers={["Empresa", "Entregados", "Aprobados", "Pasan a la primera", "Devoluciones promedio"]}
             rows={performance.empresas.map((e, i) => ({
               key: e.tenantId || `${e.name}-${i}`,

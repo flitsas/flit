@@ -39,6 +39,10 @@ internal sealed class AnalyticsNetworkReadRepository : INetworkAnalyticsReadRepo
     /// <summary>Misma normalización familia → categoría que las consultas de siempre (una sola definición).</summary>
     private const string CategoriaCase = AnalyticsReadRepository.CategoriaCase;
 
+    // HU #13664 — Ver por familia (ver AnalyticsFamilyFilter): alias locales para el barrido de interpolación SQL.
+    private const string FamilyByType = AnalyticsFamilyFilter.ByType;
+    private const string FamilyByHistory = AnalyticsFamilyFilter.ByHistory;
+
     // ── Overview (red) ───────────────────────────────────────────────────────────────────────────────
     // Igual que OverviewSql pero sobre el conjunto y con tenant_id proyectado; la suma por
     // (categoría, estado) se hace en memoria preservando el orden del SQL.
@@ -53,6 +57,7 @@ internal sealed class AnalyticsNetworkReadRepository : INetworkAnalyticsReadRepo
           AND pi.deleted_at IS NULL
           AND (@from::date IS NULL OR pi.created_at::date >= @from::date)
           AND (@to::date   IS NULL OR pi.created_at::date <= @to::date)
+          AND {FamilyByType}
         GROUP BY pi.tenant_id, 2, pi.status
         ORDER BY 2, pi.status, pi.tenant_id;
         """;
@@ -60,7 +65,7 @@ internal sealed class AnalyticsNetworkReadRepository : INetworkAnalyticsReadRepo
     // ── Top Producers (red) ──────────────────────────────────────────────────────────────────────────
     // Mismo vocabulario que TopProducersSql (N 03). Un usuario es UNA fila del ranking aunque haya
     // radicado en varios clientes del conjunto; tenant_ids dice en cuáles.
-    private const string TopProducersNetworkSql = """
+    private const string TopProducersNetworkSql = $"""
         SELECT h.changed_by AS user_id, u.display_name,
                count(*) FILTER (WHERE h.to_status = 'entregado')::int                      AS submitted,
                count(*) FILTER (WHERE h.to_status = 'aprobado')::int                       AS approved,
@@ -71,6 +76,7 @@ internal sealed class AnalyticsNetworkReadRepository : INetworkAnalyticsReadRepo
         WHERE h.tenant_id = ANY(@tenants)
           AND h.changed_by IS NOT NULL
           AND h.changed_at::date BETWEEN @from AND @to
+          AND {FamilyByHistory}
         GROUP BY h.changed_by, u.display_name
         HAVING count(*) FILTER (WHERE h.to_status = 'entregado') > 0
         ORDER BY count(*) FILTER (WHERE h.to_status = 'entregado') DESC, u.display_name ASC
@@ -89,6 +95,7 @@ internal sealed class AnalyticsNetworkReadRepository : INetworkAnalyticsReadRepo
         WHERE pi.tenant_id = ANY(@tenants)
           AND pi.deleted_at IS NULL
           AND pi.created_at::date BETWEEN @from AND @to
+          AND {FamilyByType}
         GROUP BY pi.tenant_id, 2, 3, 4
         ORDER BY 2, 3, 4, pi.tenant_id;
         """;
@@ -103,7 +110,8 @@ internal sealed class AnalyticsNetworkReadRepository : INetworkAnalyticsReadRepo
     // ── INetworkAnalyticsReadRepository ──────────────────────────────────────────────────────────────
 
     public async Task<NetworkAnalyticsResult<IReadOnlyList<CategoryMetricsDto>>> GetNetworkOverviewAsync(
-        IReadOnlySet<Guid> tenantIds, DateOnly? fromDate, DateOnly? toDate, CancellationToken ct = default)
+        IReadOnlySet<Guid> tenantIds, DateOnly? fromDate, DateOnly? toDate,
+        IReadOnlyList<string>? allowedFamilies = null, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(tenantIds);
         if (tenantIds.Count == 0)
@@ -114,6 +122,7 @@ internal sealed class AnalyticsNetworkReadRepository : INetworkAnalyticsReadRepo
         AddTenantsParam(cmd, tenantIds);
         AddDateParam(cmd, "from", fromDate);
         AddDateParam(cmd, "to", toDate);
+        AnalyticsFamilyFilter.AddParam(cmd, allowedFamilies);
 
         // Suma en memoria por (categoría, estado) preservando el orden del SQL; tenant_id solo alimenta «alcanzados».
         var reached = new HashSet<Guid>();
@@ -148,7 +157,8 @@ internal sealed class AnalyticsNetworkReadRepository : INetworkAnalyticsReadRepo
     }
 
     public async Task<NetworkAnalyticsResult<IReadOnlyList<TopProducerDto>>> GetNetworkTopProducersAsync(
-        IReadOnlySet<Guid> tenantIds, DateOnly fromDate, DateOnly toDate, int limit, CancellationToken ct = default)
+        IReadOnlySet<Guid> tenantIds, DateOnly fromDate, DateOnly toDate, int limit,
+        IReadOnlyList<string>? allowedFamilies = null, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(tenantIds);
         if (tenantIds.Count == 0)
@@ -160,6 +170,7 @@ internal sealed class AnalyticsNetworkReadRepository : INetworkAnalyticsReadRepo
         AddParam(cmd, "from", fromDate);
         AddParam(cmd, "to", toDate);
         AddParam(cmd, "limit", limit);
+        AnalyticsFamilyFilter.AddParam(cmd, allowedFamilies);
 
         var reached = new HashSet<Guid>();
         var items = new List<TopProducerDto>();
@@ -180,7 +191,8 @@ internal sealed class AnalyticsNetworkReadRepository : INetworkAnalyticsReadRepo
     }
 
     public async Task<NetworkAnalyticsResult<IReadOnlyList<MonthlyTrendPointDto>>> GetNetworkMonthlyTrendAsync(
-        IReadOnlySet<Guid> tenantIds, DateOnly fromDate, DateOnly toDate, CancellationToken ct = default)
+        IReadOnlySet<Guid> tenantIds, DateOnly fromDate, DateOnly toDate,
+        IReadOnlyList<string>? allowedFamilies = null, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(tenantIds);
         if (tenantIds.Count == 0)
@@ -191,6 +203,7 @@ internal sealed class AnalyticsNetworkReadRepository : INetworkAnalyticsReadRepo
         AddTenantsParam(cmd, tenantIds);
         AddParam(cmd, "from", fromDate);
         AddParam(cmd, "to", toDate);
+        AnalyticsFamilyFilter.AddParam(cmd, allowedFamilies);
 
         var reached = new HashSet<Guid>();
         var points = new List<MonthlyTrendPointDto>();

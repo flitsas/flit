@@ -92,7 +92,7 @@ export function SchedulesSection({
   const [confirmDelete, setConfirmDelete] = useState<ReportSchedule | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   // Bug #13055 — los informes pueden crecer: paginación en cliente con «Filas por página».
-  const pg = usePaginacion();
+  const pg = usePaginacion("scheduling.SchedulesSection");
   // Copia LOCAL del preset activo: la prop se limpia (onConsumePreset) apenas se lee, pero el
   // formulario sigue abierto y necesita seguir sabiendo con qué consulta se prellenó.
   const [activePreset, setActivePreset] = useState<SchedulePresetConsulta | null>(null);

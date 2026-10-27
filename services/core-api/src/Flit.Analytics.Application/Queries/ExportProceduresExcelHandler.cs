@@ -4,7 +4,11 @@ namespace Flit.Analytics.Application.Queries;
 
 /// <summary>Parámetros del export Excel de detalle de trámites (HU #10245).</summary>
 public sealed record ExportProceduresExcelQuery(
-    Guid TenantId, DateOnly From, DateOnly To, string? Category, string? Status);
+    Guid TenantId, DateOnly From, DateOnly To, string? Category, string? Status)
+{
+    /// <summary>HU #13664 — Ver por familia: códigos visibles (<c>ProcedureFamilyCodes</c>); <c>null</c> = sin restricción.</summary>
+    public IReadOnlyList<string>? AllowedFamilies { get; init; }
+}
 
 /// <summary>
 /// Valida el rango y normaliza los filtros del export (sin tocar BD: la escritura del archivo
@@ -20,6 +24,6 @@ public static class ExportProceduresExcelHandler
 
         var category = string.IsNullOrWhiteSpace(query.Category) ? null : query.Category.Trim().ToLowerInvariant();
         var status = string.IsNullOrWhiteSpace(query.Status) ? null : query.Status.Trim();
-        return (new ProcedureExportFilter(query.TenantId, query.From, query.To, category, status), null);
+        return (new ProcedureExportFilter(query.TenantId, query.From, query.To, category, status) { AllowedFamilies = query.AllowedFamilies }, null);
     }
 }

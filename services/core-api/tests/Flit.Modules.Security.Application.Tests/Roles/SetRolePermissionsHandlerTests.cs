@@ -85,4 +85,30 @@ public sealed class SetRolePermissionsHandlerTests
 
         await _repo.Received(1).SetPermissionsAsync(RoleId, Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>());
     }
+
+    // HU #13644 — un rol de compañía no lleva permisos OT; un rol OT sí.
+    [Theory]
+    [InlineData("COMPANY", "ot.mandatos.manage", "ot-mandatos", true)]
+    [InlineData("COMPANY", "tramites.view", "tramites", false)]
+    [InlineData("TRANSIT_OFFICE", "ot.mandatos.manage", "ot-mandatos", false)]
+    public async Task HandleAsync_PermisoOt_solo_se_rechaza_en_un_rol_de_compania(string target, string slug, string module, bool rechaza)
+    {
+        var role = new RoleDetail(RoleId, target, "R", "Rol", null, false, true, []);
+        _repo.GetByIdAsync(RoleId, Arg.Any<CancellationToken>()).Returns(role);
+        _repo.GetPermissionInfosAsync(Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns([new PermissionInfo(PermissionId, slug, slug, module, "tramites")]);
+        _repo.GetPermissionProductCodesAsync(Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>()).Returns(["tramites"]);
+
+        var act = () => _handler.HandleAsync(new SetRolePermissionsCommand(RoleId, [PermissionId]), CancellationToken.None);
+
+        if (rechaza)
+        {
+            await act.Should().ThrowAsync<OtPermissionNotApplicableToRoleException>();
+            await _repo.DidNotReceiveWithAnyArgs().SetPermissionsAsync(Arg.Any<Guid>(), Arg.Any<IReadOnlyList<Guid>>(), Arg.Any<CancellationToken>());
+        }
+        else
+        {
+            await act.Should().NotThrowAsync();
+        }
+    }
 }
