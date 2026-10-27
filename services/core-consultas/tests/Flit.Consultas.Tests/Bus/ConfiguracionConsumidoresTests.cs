@@ -81,6 +81,19 @@ public sealed class ConfiguracionConsumidoresTests
         consumidores.Should().OnlyContain(t => t.GetGenericArguments()[2] == typeof(TrabajoConsultaDiagnostico));
     }
 
+    // ADR-0072 R-2 (Habeas Data): consultas.outbox lleva documentos de personas; las filas publicadas se purgan a las 24 h.
+    [Fact]
+    public void La_outbox_purga_las_filas_publicadas_a_las_24_horas()
+    {
+        using var app = Program.Build([], b => Base(b));
+
+        app.Configuration["Platform:Messaging:RetencionPublicados"].Should().NotBeNull("appsettings.json enciende la retención");
+        TimeSpan.Parse(app.Configuration["Platform:Messaging:RetencionPublicados"]!, System.Globalization.CultureInfo.InvariantCulture)
+            .Should().Be(TimeSpan.FromHours(24));
+        app.Services.GetServices<IHostedService>().Select(s => s.GetType().Name)
+            .Should().ContainSingle(n => n.StartsWith("OutboxPurgeService", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData("QA")]
     [InlineData("PDN")]
