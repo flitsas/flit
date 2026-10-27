@@ -98,13 +98,86 @@ docker compose -f docker-compose.prod.yml exec -T rabbitmq rabbitmqctl list_bind
 docker compose -f docker-compose.prod.yml exec -T rabbitmq rabbitmqctl list_policies -p flit
 ```
 
-Deben aparecer las tres colas, sus tres bindings y la política `dlq-7d` con prioridad 10. Cuando los consumidores ya
-arrancaron, las tres `.dlq` muestran `dlq-7d` en la columna `policy`. RabbitMQ aplica **una sola** política por cola,
-la de mayor prioridad. Si en el ambiente hay otra política cuyo patrón alcance estas `.dlq` (`list_policies`), tiene
-que repetir el `message-ttl` o tener una prioridad menor que 10.
+Deben aparecer las tres colas, sus tres bindings, la política `dlq-7d` y las tres `ttl-*` de §2.2.1, todas con
+prioridad 10. Cuando los consumidores ya arrancaron, las tres `.dlq` muestran `dlq-7d` en la columna `policy` y cada
+cola principal muestra su `ttl-*`. RabbitMQ aplica **una sola** política por cola, la de mayor prioridad. Si en el
+ambiente hay otra política cuyo patrón alcance estas colas o sus `.dlq` (`list_policies`), tiene que repetir lo que
+definen estas o tener una prioridad menor que 10.
 
-**Volver atrás:** `rabbitmqctl clear_policy -p flit dlq-7d` quita la retención. **No borrar las colas**: se perderían
-los trabajos pendientes. Para volver a una versión de los servicios sin consumidores, ver §7.
+**Volver atrás:** no hay vuelta atrás de `dlq-7d`. Es el control de retención de Ley 1581 sobre datos en claro (U1 de
+ADR-0075) y un rollback no lo apaga: si la política estorba, se corrige con otro PR sobre `definitions.json`, revisado
+por el security-agent, nunca con `clear_policy`. **No borrar las colas**: se perderían los trabajos pendientes. Para
+volver a una versión de los servicios sin consumidores, ver §7.
+
+#### 2.2.1 TTL de las colas principales
+
+Las tres colas principales tienen un TTL de **24 h** (decisión 6 del usuario sobre el reconciliador). Un trabajo o un
+resultado que nadie consumió en ese tiempo sale de la cola hacia su `.dlq`, donde `dlq-7d` lo purga a los 7 días. No
+se pierde en silencio y la cola no crece sin límite si su consumidor no vuelve. Son tres políticas en
+`definitions.json`, una por cola, con patrón exacto para no chocar con `dlq-7d`:
+
+| Política | Cola | `message-ttl` | `dead-letter-exchange` → `dead-letter-routing-key` |
+|---|---|---|---|
+| `ttl-consultas-diagnostico` | `consultas.diagnostico` | 86400000 | `consultas.diagnostico.reintentos` → `consultas.diagnostico.dlq` |
+| `ttl-consultas-diagnostico-express` | `consultas.diagnostico-express` | 86400000 | `consultas.diagnostico-express.reintentos` → `consultas.diagnostico-express.dlq` |
+| `ttl-diagnostico-consultas-resultados` | `diagnostico.consultas-resultados` | 86400000 | `diagnostico.consultas-resultados.reintentos` → `diagnostico.consultas-resultados.dlq` |
+
+El destino es el exchange directo de reintentos y DLQ que declara el SDK de cada consumidor al arrancar
+(`PlatformConsumer`). La cola principal se declara sin argumentos, por eso la DLQ va en la política. Si el consumidor
+nunca arrancó, ese exchange no existe y lo vencido se descarta. Por eso este paso va con los consumidores ya
+desplegados (§2.3 y §4).
+
+core-diagnostico necesita el mismo valor: con
+`Diagnostico:Consultas:Reconciliador:TtlTrabajo` (por defecto `1.00:00:00`), el reconciliador cierra en ERROR
+reprocesable, aunque core-consultas esté caído, toda celda cuyo trabajo se publicó hace más de TTL + `Margen` (30 min).
+Ese mensaje ya no está en la cola y no puede duplicarse. El servicio no arranca si `TtlTrabajo <= Margen`.
+**Política y opción deben coincidir.** Con un TTL del broker menor que la opción, una celda cuyo trabajo ya venció
+esperaría hasta la opción. Con uno mayor, se cerraría en ERROR un trabajo que todavía está en la cola, y si después se
+reprocesa, la consulta se duplica.
+
+En la misma sección viven `ToleranciaOrden` (15 min) y la marca de agua. Una celda solo se republica si core-consultas
+ya devolvió trabajos de su misma cola publicados más de 15 min después que el suyo. Un lote grande que espera su turno
+no se toca.
+
+**Cambiar el TTL en un ambiente** (ejemplo: 12 h = 43200000 ms):
+
+1. En core-diagnostico, la variable `Diagnostico__Consultas__Reconciliador__TtlTrabajo=12:00:00` (compose o
+   `flit-gitops/services/flit2-<amb>/`). Reiniciar el servicio.
+2. En el broker, las tres políticas con el nuevo `message-ttl`, sin cambiar lo demás:
+
+   ```bash
+   MQ="docker compose -f docker-compose.prod.yml exec -T rabbitmq rabbitmqctl set_policy -p flit --apply-to queues --priority 10"
+   $MQ ttl-consultas-diagnostico '^consultas\.diagnostico$' \
+     '{"message-ttl":43200000,"dead-letter-exchange":"consultas.diagnostico.reintentos","dead-letter-routing-key":"consultas.diagnostico.dlq"}'
+   $MQ ttl-consultas-diagnostico-express '^consultas\.diagnostico-express$' \
+     '{"message-ttl":43200000,"dead-letter-exchange":"consultas.diagnostico-express.reintentos","dead-letter-routing-key":"consultas.diagnostico-express.dlq"}'
+   $MQ ttl-diagnostico-consultas-resultados '^diagnostico\.consultas-resultados$' \
+     '{"message-ttl":43200000,"dead-letter-exchange":"diagnostico.consultas-resultados.reintentos","dead-letter-routing-key":"diagnostico.consultas-resultados.dlq"}'
+   ```
+
+   `definitions.json` es uno solo para todos los ambientes. Un `import_definitions` posterior vuelve a dejar las 24 h
+   del archivo. Si el cambio es para todos, va por PR al archivo **y** al valor por defecto de `TtlTrabajo`. Una
+   prueba (`ReconciliadorTests.El_TTL_por_defecto_es_el_de_la_politica_del_broker_y_lo_vencido_va_a_la_DLQ`) falla si
+   no coinciden.
+
+**Comprobar:**
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T rabbitmq rabbitmqctl list_policies -p flit | grep -e ttl- -e dlq-7d
+docker compose -f docker-compose.prod.yml exec -T rabbitmq rabbitmqctl list_queues -p flit name policy effective_policy_definition | grep -e consultas.diagnostico -e consultas-resultados
+```
+
+Cada cola principal debe mostrar su `ttl-*` con `message-ttl` y su `dead-letter-exchange`. Cada `.dlq` debe mostrar
+`dlq-7d`. En el log de arranque de core-diagnostico aparece `Reconciliador de consultas en marcha: … TTL <valor>`
+(evento 137280), y ese valor tiene que coincidir. Los vencidos llegan a la `.dlq` con la cabecera
+`x-first-death-reason: expired` y hacen sonar la alerta de DLQ. El reconciliador registra cada cierre por TTL con el
+evento 137287.
+
+**Volver atrás del TTL** (solo del TTL, nunca de `dlq-7d`):
+`rabbitmqctl clear_policy -p flit ttl-consultas-diagnostico` (y las otras dos). Las colas vuelven a no vencer. Sin TTL
+en el broker, un trabajo que espera más que `TtlTrabajo` + `Margen` se cerraría en ERROR aunque siga en la cola. Por
+eso se sube también `Diagnostico__Consultas__Reconciliador__TtlTrabajo` a un valor muy alto (por ejemplo,
+`30.00:00:00`) hasta reponer las políticas.
 
 ### 2.3 Usuario `diagnostico` con destino `consultas`
 
@@ -274,7 +347,8 @@ stack no depende de ellos. `RABBITMQ_URL_DIAGNOSTICO` se queda en el `.env`, por
 **Volver a una versión sin consultas por el bus** (imagen **y** compose anteriores de core-diagnostico y
 core-consultas): el trabajador de Postgres vuelve a atender las celdas. Los mensajes que queden en
 `consultas.diagnostico`, `consultas.diagnostico-express` y `diagnostico.consultas-resultados` ya no los consume nadie.
-Si la versión anterior todavía **publica** trabajos (tanda A de ADR-0075, sin consumidores), esas colas crecen sin
-límite. En ese caso, con confirmación del líder técnico, vaciarlas con `rabbitmqctl purge_queue -p flit <cola>`: son
+Si la versión anterior todavía **publica** trabajos (tanda A de ADR-0075, sin consumidores), esas colas crecen
+durante 24 h, hasta su TTL (§2.2.1). Si la topología de sus consumidores no se declaró nunca, lo vencido se descarta;
+si sí se declaró, pasa a la `.dlq`. En ese caso, con confirmación del líder técnico, vaciarlas con `rabbitmqctl purge_queue -p flit <cola>`: son
 copias de trabajos que ya atiende el trabajador de Postgres. No se borran las colas ni la política, y el usuario puede
 conservar su destino.
