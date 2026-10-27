@@ -33,13 +33,17 @@ BEGIN
             CHECK ((portal_solicitud_ref IS NULL) = (portal_parte IS NULL));
     END IF;
 
-    -- Ancla: persona, trámite, ficha del mandatario o solicitud del portal.
+    -- Ancla: persona, trámite, ficha del mandatario o solicitud del portal. NOT VALID + VALIDATE: el ADD no recorre la
+    -- tabla (solo toma el bloqueo un instante) y la validación posterior usa un bloqueo que no frena lecturas ni
+    -- escrituras; toda fila existente cumple la versión anterior y por tanto esta (que solo agrega una alternativa).
     ALTER TABLE tramites.procedure_instance_biometric_validations
         DROP CONSTRAINT IF EXISTS ck_biometric_validation_anchor;
     ALTER TABLE tramites.procedure_instance_biometric_validations
         ADD CONSTRAINT ck_biometric_validation_anchor
         CHECK (person_id IS NOT NULL OR procedure_instance_id IS NOT NULL OR mandate_signer_id IS NOT NULL
-               OR portal_solicitud_ref IS NOT NULL);
+               OR portal_solicitud_ref IS NOT NULL) NOT VALID;
+    ALTER TABLE tramites.procedure_instance_biometric_validations
+        VALIDATE CONSTRAINT ck_biometric_validation_anchor;
 END
 $mig$;
 
@@ -60,8 +64,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_biometric_validations_inflight_doc_norm
       AND mandate_signer_id IS NULL
       AND portal_solicitud_ref IS NULL;
 
+-- Con tenant_id primero (misma regla que el resto de índices por empresa). DROP previo: si el índice ya existía con la
+-- forma anterior (sin tenant_id), IF NOT EXISTS lo dejaría como estaba.
+DROP INDEX IF EXISTS tramites.uq_biometric_validations_inflight_portal;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_biometric_validations_inflight_portal
     ON tramites.procedure_instance_biometric_validations (
+        tenant_id,
         portal_solicitud_ref,
         portal_parte,
         upper(btrim(document_number))
@@ -75,4 +83,4 @@ COMMENT ON COLUMN tramites.procedure_instance_biometric_validations.portal_solic
 COMMENT ON COLUMN tramites.procedure_instance_biometric_validations.portal_parte IS
     'HU14044 · Rol del actor en la solicitud del portal (vendedor, comprador, titular…); va junto con portal_solicitud_ref.';
 COMMENT ON INDEX tramites.uq_biometric_validations_inflight_portal IS
-    'HU14044 · A lo sumo una validación en vuelo por solicitud, rol y documento del portal (idempotencia de la fachada).';
+    'HU14044 · A lo sumo una validación en vuelo por empresa, solicitud, rol y documento del portal (idempotencia de la fachada).';
