@@ -9,6 +9,7 @@ import {
   idCorto,
   listarDiagnosticos,
   nombreModo,
+  TAMANO_POR_DEFECTO,
   traducirErrorListado,
   urlListado,
 } from "@/lib/diagnosticos/listado";
@@ -16,7 +17,7 @@ import { llamadas, simularApi } from "@/lib/tablero/__tests__/datos";
 import { diagnostico, filtros, lista } from "./datosListado";
 
 // Uso de ejemplo: const f = filtrosDesdeUrl(new URLSearchParams("estado=COMPLETADO&nombre=flota"));
-// listarDiagnosticos(f) pide GET /api/v1/diagnostico/diagnosticos?estado=COMPLETADO&nombre=flota&pagina=1&tamano=25 y
+// listarDiagnosticos(f) pide GET /api/v1/diagnostico/diagnosticos?estado=COMPLETADO&nombre=flota&pagina=1&tamano=10 y
 // urlListado(f) da «/?estado=COMPLETADO&nombre=flota», la URL del inicio que se comparte o a la que se vuelve atrás.
 
 afterEach(() => vi.unstubAllGlobals());
@@ -24,7 +25,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe("filtros del listado — consulta desde la URL (AC2)", () => {
   it("lee desde, hasta, modo, estado, nombre y pagina de la URL", () => {
     const f = filtrosDesdeUrl(new URLSearchParams("desde=2026-10-01&hasta=2026-10-22&modo=SIMPLE&estado=COMPLETADO&nombre=Flota&pagina=3"));
-    expect(f).toEqual({ desde: "2026-10-01", hasta: "2026-10-22", modo: "SIMPLE", estado: "COMPLETADO", nombre: "Flota", pagina: 3, tamano: 25 });
+    expect(f).toEqual({ desde: "2026-10-01", hasta: "2026-10-22", modo: "SIMPLE", estado: "COMPLETADO", nombre: "Flota", pagina: 3, tamano: 10 });
   });
 
   it("descarta valores que la API no admite: CREADO, minúsculas, fechas mal formadas y páginas no válidas", () => {
@@ -33,9 +34,19 @@ describe("filtros del listado — consulta desde la URL (AC2)", () => {
     expect(filtrosDesdeUrl(new URLSearchParams(""))).toEqual(filtros());
   });
 
+  it("el tamaño por defecto es el estándar (10) y la URL solo admite 10/20/30/50 (HU #13916)", () => {
+    expect(TAMANO_POR_DEFECTO).toBe(10);
+    expect(filtrosDesdeUrl(new URLSearchParams("")).tamano).toBe(10);
+    expect(filtrosDesdeUrl(new URLSearchParams("tamano=25")).tamano).toBe(10);
+    expect(filtrosDesdeUrl(new URLSearchParams("tamano=100")).tamano).toBe(10);
+    for (const n of [10, 20, 30, 50]) expect(filtrosDesdeUrl(new URLSearchParams(`tamano=${n}`)).tamano).toBe(n);
+    expect(urlListado(filtros({ tamano: 10 }))).toBe("/");
+    expect(urlListado(filtros({ tamano: 30 }))).toBe("/?tamano=30");
+  });
+
   it("la consulta a la API omite los filtros vacíos, recorta el nombre y lleva siempre página y tamaño", () => {
     const q = new URLSearchParams(consultaListado(filtros({ estado: "COMPLETADO", nombre: "  Flota  ", pagina: 2 })));
-    expect(Object.fromEntries(q)).toEqual({ estado: "COMPLETADO", nombre: "Flota", pagina: "2", tamano: "25" });
+    expect(Object.fromEntries(q)).toEqual({ estado: "COMPLETADO", nombre: "Flota", pagina: "2", tamano: "10" });
   });
 
   it("la URL del inicio refleja los filtros y omite la página 1 y el tamaño por defecto", () => {
@@ -63,7 +74,7 @@ describe("listarDiagnosticos — contrato GET /diagnosticos (HU #13845)", () => 
     const r = await listarDiagnosticos(filtros({ modo: "SIMPLE", nombre: "Flota" }));
     expect(r).toEqual(respuesta);
     const [[url]] = llamadas(fetchMock, "GET", "/diagnosticos");
-    expect(Object.fromEntries(new URL(String(url), "http://localhost").searchParams)).toEqual({ modo: "SIMPLE", nombre: "Flota", pagina: "1", tamano: "25" });
+    expect(Object.fromEntries(new URL(String(url), "http://localhost").searchParams)).toEqual({ modo: "SIMPLE", nombre: "Flota", pagina: "1", tamano: "10" });
   });
 
   it("rechaza una respuesta sin la lista de diagnósticos", async () => {

@@ -40,7 +40,7 @@ const sesion = {
 /** GET /sesion responde la sesión y GET /diagnosticos (listado del inicio, HU #13852) una lista vacía. */
 const apiDePrueba = () =>
   vi.fn(async (entrada: string) =>
-    String(entrada).includes("/diagnosticos") ? Response.json({ pagina: 1, tamano: 25, total: 0, diagnosticos: [] }) : Response.json(sesion),
+    String(entrada).includes("/diagnosticos") ? Response.json({ pagina: 1, tamano: 10, total: 0, diagnosticos: [] }) : Response.json(sesion),
   );
 
 beforeEach(() => vi.stubEnv("FLIT_HUB_URL", "https://dev.flitsas.online"));

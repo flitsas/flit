@@ -17,9 +17,9 @@ export function diagnostico(n: number, cambios: Partial<DiagnosticoListado> = {}
 }
 
 export function lista(diagnosticos: DiagnosticoListado[], cambios: Partial<ListaDiagnosticos> = {}): ListaDiagnosticos {
-  return { pagina: 1, tamano: 25, total: diagnosticos.length, diagnosticos, ...cambios };
+  return { pagina: 1, tamano: 10, total: diagnosticos.length, diagnosticos, ...cambios };
 }
 
 export function filtros(cambios: Partial<FiltrosListado> = {}): FiltrosListado {
-  return { desde: "", hasta: "", modo: null, estado: null, nombre: "", pagina: 1, tamano: 25, ...cambios };
+  return { desde: "", hasta: "", modo: null, estado: null, nombre: "", pagina: 1, tamano: 10, ...cambios };
 }

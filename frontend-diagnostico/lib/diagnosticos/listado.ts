@@ -2,6 +2,7 @@
 // (operationId listarDiagnosticos en contracts/openapi/diagnostico.v1.yaml, schemas ListaDiagnosticos y DiagnosticoListado),
 // en snake_case. La compañía es siempre la del token: nunca viaja en la consulta. Los filtros viven en la URL del inicio
 // (?desde=&hasta=&modo=&estado=&nombre=&pagina=) para compartirla y volver atrás.
+import { TAMANO_DE_PAGINA_POR_DEFECTO, TAMANOS_DE_PAGINA } from "@flit/ui/usePaginacion";
 import { ApiError, apiFetch } from "@/lib/api";
 import type { EstadoDiagnostico, ModoDiagnostico } from "@/lib/diagnosticos/api";
 
@@ -49,7 +50,8 @@ export type ErrorListado =
   /** El resto: aviso con Reintentar (PAGINACION_INVALIDA reintenta desde la página 1). */
   | { tipo: "AVISO"; mensaje: string; reiniciarPagina: boolean };
 
-export const TAMANO_POR_DEFECTO = 25;
+/** El estándar de las tablas FLIT (HU #13916); el API también usa 10 si la consulta no lo trae. */
+export const TAMANO_POR_DEFECTO = TAMANO_DE_PAGINA_POR_DEFECTO;
 /** maxLength del filtro nombre en el contrato. */
 export const NOMBRE_FILTRO_MAXIMO = 100;
 
@@ -76,7 +78,11 @@ function entero(valor: string | null): number | null {
   return Number.parseInt(valor, 10);
 }
 
-/** Filtros de la URL del inicio. Lo que la API no admite (CREADO, minúsculas, fechas mal formadas, páginas no válidas) se descarta. */
+/**
+ * Filtros de la URL del inicio. Lo que la API no admite (CREADO, minúsculas, fechas mal formadas, páginas no válidas) se descarta.
+ * El tamaño solo puede ser uno de los estándar (10/20/30/50): otro (un 25 o un 100 de un enlace viejo) vuelve al de por defecto,
+ * como hace `usePaginacion` con lo recordado, para no pintar un selector que no lo ofrece.
+ */
 export function filtrosDesdeUrl(params: URLSearchParams): FiltrosListado {
   const f = vacios();
   const desde = params.get("desde") ?? "";
@@ -91,7 +97,7 @@ export function filtrosDesdeUrl(params: URLSearchParams): FiltrosListado {
   const pagina = entero(params.get("pagina"));
   if (pagina !== null && pagina >= 1) f.pagina = pagina;
   const tamano = entero(params.get("tamano"));
-  if (tamano !== null && tamano >= 1 && tamano <= 100) f.tamano = tamano;
+  if (tamano !== null && (TAMANOS_DE_PAGINA as readonly number[]).includes(tamano)) f.tamano = tamano;
   return f;
 }
 

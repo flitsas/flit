@@ -67,7 +67,7 @@ describe("ListadoDiagnosticos — AC1: tabla con las columnas y la fila abre el 
     const fetchMock = simularApi({ "GET /diagnosticos": () => Response.json(lista([diagnostico(1)])) });
     render(<ListadoDiagnosticos />);
     await tabla();
-    expect(consultas(fetchMock)[0]).toEqual({ pagina: "1", tamano: "25" });
+    expect(consultas(fetchMock)[0]).toEqual({ pagina: "1", tamano: "10" });
   });
 
   it("mientras carga muestra el loader; si falla, el aviso con Reintentar", async () => {
@@ -103,7 +103,7 @@ describe("ListadoDiagnosticos — AC2: filtros en la URL y vuelta a la página 1
     await waitFor(() => expect(h.replace).toHaveBeenLastCalledWith("/?estado=COMPLETADO&nombre=Flota", { scroll: false }), { timeout: 2000 });
 
     await waitFor(() => expect(within(screen.getByRole("table", { name: "Diagnósticos de la compañía" })).queryByText("Flota de prueba 001")).toBeNull());
-    expect(consultas(fetchMock).at(-1)).toEqual({ estado: "COMPLETADO", nombre: "Flota", pagina: "1", tamano: "25" });
+    expect(consultas(fetchMock).at(-1)).toEqual({ estado: "COMPLETADO", nombre: "Flota", pagina: "1", tamano: "10" });
     expect(within(screen.getByRole("table", { name: "Diagnósticos de la compañía" })).getByText("Flota completa")).toBeInTheDocument();
   });
 
@@ -112,7 +112,7 @@ describe("ListadoDiagnosticos — AC2: filtros en la URL y vuelta a la página 1
     const fetchMock = simularApi({ "GET /diagnosticos": () => Response.json(lista([diagnostico(1, { estado: "INCOMPLETO", modo: "SIMPLE", tipo_tramite: null })])) });
     render(<ListadoDiagnosticos />);
     await tabla();
-    expect(consultas(fetchMock)[0]).toEqual({ desde: "2026-10-01", hasta: "2026-10-22", modo: "SIMPLE", estado: "INCOMPLETO", nombre: "TST", pagina: "1", tamano: "25" });
+    expect(consultas(fetchMock)[0]).toEqual({ desde: "2026-10-01", hasta: "2026-10-22", modo: "SIMPLE", estado: "INCOMPLETO", nombre: "TST", pagina: "1", tamano: "10" });
     expect(screen.getByLabelText("Desde")).toHaveValue("2026-10-01");
     expect(screen.getByLabelText("Hasta")).toHaveValue("2026-10-22");
     expect(screen.getByLabelText("Tipo")).toHaveValue("SIMPLE");
@@ -182,6 +182,34 @@ describe("ListadoDiagnosticos — AC4: creador «No disponible»", () => {
   });
 });
 
+describe("ListadoDiagnosticos — paginación estándar 10/20/30/50 (HU #13916)", () => {
+  const opciones = () => Array.from((screen.getByLabelText("Filas por página") as HTMLSelectElement).options).map((o) => o.value);
+  const conTamano = (url: URL) => Response.json(lista([diagnostico(1)], { tamano: Number(url.searchParams.get("tamano")), total: 60 }));
+
+  it("un enlace viejo con tamano=25 o tamano=100 cae al estándar 10 y el selector ofrece 10/20/30/50", async () => {
+    for (const viejo of ["25", "100"]) {
+      h.params = new URLSearchParams(`tamano=${viejo}`);
+      const fetchMock = simularApi({ "GET /diagnosticos": conTamano });
+      const { unmount } = render(<ListadoDiagnosticos />);
+      await tabla();
+      expect(consultas(fetchMock)[0]).toEqual({ pagina: "1", tamano: "10" });
+      expect(opciones()).toEqual(["10", "20", "30", "50"]);
+      expect(screen.getByLabelText("Filas por página")).toHaveValue("10");
+      unmount();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("tamano=30 en la URL se respeta en la consulta y en el selector", async () => {
+    h.params = new URLSearchParams("tamano=30");
+    const fetchMock = simularApi({ "GET /diagnosticos": conTamano });
+    render(<ListadoDiagnosticos />);
+    await tabla();
+    expect(consultas(fetchMock)[0]).toEqual({ pagina: "1", tamano: "30" });
+    expect(screen.getByLabelText("Filas por página")).toHaveValue("30");
+  });
+});
+
 describe("ListadoDiagnosticos — AC5 (negativo): sin resultados con filtros vs compañía sin diagnósticos", () => {
   it("con filtros y sin resultados: «No hay diagnósticos con estos filtros» con «Limpiar filtros», no el vacío de compañía", async () => {
     h.params = new URLSearchParams("estado=COMPLETADO&nombre=zzz");
@@ -192,7 +220,7 @@ describe("ListadoDiagnosticos — AC5 (negativo): sin resultados con filtros vs 
 
     fireEvent.click(screen.getByRole("button", { name: "Limpiar filtros" }));
     expect(h.replace).toHaveBeenLastCalledWith("/", { scroll: false });
-    await waitFor(() => expect(consultas(fetchMock).at(-1)).toEqual({ pagina: "1", tamano: "25" }));
+    await waitFor(() => expect(consultas(fetchMock).at(-1)).toEqual({ pagina: "1", tamano: "10" }));
     expect(screen.getByLabelText("Estado")).toHaveValue("");
     expect(screen.getByLabelText("Nombre")).toHaveValue("");
   });
