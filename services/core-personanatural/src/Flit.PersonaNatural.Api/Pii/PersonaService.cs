@@ -22,6 +22,9 @@ public sealed class PersonaService(PersonaNaturalDb db, CifradoPii cifrado, PiiH
     private const string CtxCelular = "persona.celular";
     private const string CtxDireccion = "persona.direccion";
 
+    /// <summary>AAD de cada columna: ligado a la solicitud y a la parte (<c>parte:ordinal</c>) de ESA fila.</summary>
+    private static ContextoCifrado Ctx(string columna, Guid solicitudId, string parte, short ordinal) => new(columna, solicitudId, parte, ordinal);
+
     /// <summary>Crea o reemplaza la persona de esa parte y posición en la solicitud.</summary>
     public async Task<Guid> GuardarAsync(Guid solicitudId, DatosPersona datos, CancellationToken ct)
     {
@@ -49,12 +52,12 @@ public sealed class PersonaService(PersonaNaturalDb db, CifradoPii cifrado, PiiH
         }
 
         persona.TipoDocumento = datos.TipoDocumento;
-        persona.DocumentoCifrado = cifrado.Cifrar(datos.Documento, CtxDocumento)!;
+        persona.DocumentoCifrado = cifrado.Cifrar(datos.Documento, Ctx(CtxDocumento, solicitudId, datos.Parte, datos.Ordinal))!;
         persona.DocumentoHash = hashNuevo;
-        persona.NombreCifrado = cifrado.Cifrar(datos.Nombre, CtxNombre);
-        persona.CorreoCifrado = cifrado.Cifrar(datos.Correo, CtxCorreo);
-        persona.CelularCifrado = cifrado.Cifrar(datos.Celular, CtxCelular);
-        persona.DireccionCifrada = cifrado.Cifrar(datos.Direccion, CtxDireccion);
+        persona.NombreCifrado = cifrado.Cifrar(datos.Nombre, Ctx(CtxNombre, solicitudId, datos.Parte, datos.Ordinal));
+        persona.CorreoCifrado = cifrado.Cifrar(datos.Correo, Ctx(CtxCorreo, solicitudId, datos.Parte, datos.Ordinal));
+        persona.CelularCifrado = cifrado.Cifrar(datos.Celular, Ctx(CtxCelular, solicitudId, datos.Parte, datos.Ordinal));
+        persona.DireccionCifrada = cifrado.Cifrar(datos.Direccion, Ctx(CtxDireccion, solicitudId, datos.Parte, datos.Ordinal));
         persona.UpdatedAt = ahora;
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         return persona.Id;
@@ -72,10 +75,10 @@ public sealed class PersonaService(PersonaNaturalDb db, CifradoPii cifrado, PiiH
 
         return personas.Select(p => new DatosPersona(
             p.Parte, p.Ordinal, p.TipoDocumento,
-            cifrado.Descifrar(p.DocumentoCifrado, CtxDocumento) ?? string.Empty,
-            cifrado.Descifrar(p.NombreCifrado, CtxNombre),
-            cifrado.Descifrar(p.CorreoCifrado, CtxCorreo),
-            cifrado.Descifrar(p.CelularCifrado, CtxCelular),
-            cifrado.Descifrar(p.DireccionCifrada, CtxDireccion))).ToList();
+            cifrado.Descifrar(p.DocumentoCifrado, Ctx(CtxDocumento, solicitudId, p.Parte, p.Ordinal)) ?? string.Empty,
+            cifrado.Descifrar(p.NombreCifrado, Ctx(CtxNombre, solicitudId, p.Parte, p.Ordinal)),
+            cifrado.Descifrar(p.CorreoCifrado, Ctx(CtxCorreo, solicitudId, p.Parte, p.Ordinal)),
+            cifrado.Descifrar(p.CelularCifrado, Ctx(CtxCelular, solicitudId, p.Parte, p.Ordinal)),
+            cifrado.Descifrar(p.DireccionCifrada, Ctx(CtxDireccion, solicitudId, p.Parte, p.Ordinal)))).ToList();
     }
 }

@@ -5,10 +5,33 @@ using System.Text;
 namespace Flit.PersonaNatural.Api.Pii;
 
 /// <summary>
+/// Dato autenticado (AAD) de AES-GCM: de qué columna es el valor y, si aplica, de qué solicitud y de qué parte
+/// (<c>parte:ordinal</c>). Un valor copiado a otra fila o a otra columna no se descifra (S-M10). Con solo la columna
+/// (<see cref="DeColumna"/>) el AAD es esa cadena, como antes.
+/// </summary>
+public readonly record struct ContextoCifrado(string Columna, Guid? SolicitudId = null, string? Parte = null, int Ordinal = 0)
+{
+    public static ContextoCifrado DeColumna(string columna) => new(columna);
+
+    public static implicit operator ContextoCifrado(string columna) => DeColumna(columna);
+
+    /// <summary>Bytes del AAD: <c>columna|solicitud|parte:ordinal</c> (sin solicitud ni parte, solo la columna).</summary>
+    public byte[] ComoAad()
+    {
+        ArgumentException.ThrowIfNullOrEmpty(Columna);
+        var texto = SolicitudId is null && Parte is null
+            ? Columna
+            : string.Create(CultureInfo.InvariantCulture, $"{Columna}|{SolicitudId:N}|{Parte}:{Ordinal}");
+        return Encoding.UTF8.GetBytes(texto);
+    }
+}
+
+/// <summary>
 /// Cifrado de datos personales en reposo con AES-256-GCM (HU #14037, Ley 1581). Cada valor sale como
 /// <c>[versión de llave][nonce de 12][etiqueta de 16][cifrado]</c>: la versión viaja con el dato, así una llave nueva cifra
-/// lo nuevo y las anteriores siguen abriendo lo viejo (rotación sin migrar datos). El contexto (por ejemplo
-/// <c>persona.correo</c>) entra como dato autenticado: un valor copiado a otra columna no se puede descifrar.
+/// lo nuevo y las anteriores siguen abriendo lo viejo (rotación sin migrar datos). El contexto (<see cref="ContextoCifrado"/>:
+/// columna, solicitud y <c>parte:ordinal</c>) entra como dato autenticado: un valor copiado a otra columna o a otra fila no se
+/// puede descifrar. Formato v2 del AAD (HU #14037): lo cifrado con el AAD de solo columna ya no abre; aún no hay datos productivos.
 /// Las llaves salen de la configuración (<c>Pii:Cifrado:Llaves:{versión}</c>, base64 de 32 bytes) y nunca del repositorio.
 /// </summary>
 public sealed class CifradoPii
@@ -42,7 +65,7 @@ public sealed class CifradoPii
 
     public byte VersionActiva { get; }
 
-    public byte[]? Cifrar(string? texto, string contexto)
+    public byte[]? Cifrar(string? texto, ContextoCifrado contexto)
     {
         if (texto is null)
             return null;
@@ -53,12 +76,12 @@ public sealed class CifradoPii
         var nonce = salida.AsSpan(1, Nonce);
         RandomNumberGenerator.Fill(nonce);
         using var aes = new AesGcm(_llaves[VersionActiva], Etiqueta);
-        aes.Encrypt(nonce, claro, salida.AsSpan(1 + Nonce + Etiqueta), salida.AsSpan(1 + Nonce, Etiqueta), Encoding.UTF8.GetBytes(contexto));
+        aes.Encrypt(nonce, claro, salida.AsSpan(1 + Nonce + Etiqueta), salida.AsSpan(1 + Nonce, Etiqueta), contexto.ComoAad());
         return salida;
     }
 
-    /// <summary>Abre un valor cifrado con la llave de su versión. Si lo tocaron o es de otra columna, lanza <see cref="CryptographicException"/>.</summary>
-    public string? Descifrar(byte[]? cifrado, string contexto)
+    /// <summary>Abre un valor cifrado con la llave de su versión. Si lo tocaron o es de otra columna o fila, lanza <see cref="CryptographicException"/>.</summary>
+    public string? Descifrar(byte[]? cifrado, ContextoCifrado contexto)
     {
         if (cifrado is null || cifrado.Length == 0)
             return null;
@@ -67,7 +90,7 @@ public sealed class CifradoPii
 
         var claro = new byte[cifrado.Length - 1 - Nonce - Etiqueta];
         using var aes = new AesGcm(llave, Etiqueta);
-        aes.Decrypt(cifrado.AsSpan(1, Nonce), cifrado.AsSpan(1 + Nonce + Etiqueta), cifrado.AsSpan(1 + Nonce, Etiqueta), claro, Encoding.UTF8.GetBytes(contexto));
+        aes.Decrypt(cifrado.AsSpan(1, Nonce), cifrado.AsSpan(1 + Nonce + Etiqueta), cifrado.AsSpan(1 + Nonce, Etiqueta), claro, contexto.ComoAad());
         return Encoding.UTF8.GetString(claro);
     }
 
