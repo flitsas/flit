@@ -244,7 +244,7 @@ public sealed class ConsultasEndpointsTests : IAsyncLifetime
     public async Task ConIdentidadValidada_ElDetalleDelVehiculoDelTramiteSeEntrega()
     {
         if (!await IniciarAsync()) return;
-        var (solicitud, token) = await SembrarAsync(("vendedor", "validada", null));
+        var (solicitud, token) = await SembrarAsync(("vendedor", "aprobada", null));
         _runt.Vehiculo = () => ResultadosFalsos.VehiculoCompleto(prenda: true);
 
         var respuesta = await DetalleAsync(solicitud, token);
@@ -290,7 +290,7 @@ public sealed class ConsultasEndpointsTests : IAsyncLifetime
     public async Task LaIdentidadValidadaDeOtraParte_NoSirveParaLaParteQueSePide()
     {
         if (!await IniciarAsync()) return;
-        var (solicitud, token) = await SembrarAsync(("vendedor", "pendiente", null), ("comprador", "validada", null));
+        var (solicitud, token) = await SembrarAsync(("vendedor", "pendiente", null), ("comprador", "aprobada", null));
 
         var pideVendedor = await DetalleAsync(solicitud, token, "vendedor");
         var pideComprador = await DetalleAsync(solicitud, token, "comprador");
@@ -303,8 +303,8 @@ public sealed class ConsultasEndpointsTests : IAsyncLifetime
     public async Task ElDetalleExigeLaSesionDeEsaSolicitud()
     {
         if (!await IniciarAsync()) return;
-        var (solicitud, token) = await SembrarAsync(("vendedor", "validada", null));
-        var (otra, _) = await SembrarAsync(("vendedor", "validada", null));
+        var (solicitud, token) = await SembrarAsync(("vendedor", "aprobada", null));
+        var (otra, _) = await SembrarAsync(("vendedor", "aprobada", null));
 
         var sinToken = await DetalleAsync(solicitud, null);
         var tokenAjeno = await DetalleAsync(otra, token);
@@ -320,7 +320,7 @@ public sealed class ConsultasEndpointsTests : IAsyncLifetime
     public async Task ElDetalleConProveedorCaido_Responde503_YUnVinNoNecesitaElPropietario()
     {
         if (!await IniciarAsync()) return;
-        var (solicitud, token) = await SembrarAsync(("vendedor", "validada", null));
+        var (solicitud, token) = await SembrarAsync(("vendedor", "aprobada", null));
         _runt.Vehiculo = ResultadosFalsos.ProveedorCaido;
 
         var caido = await DetalleAsync(solicitud, token);
@@ -345,7 +345,7 @@ public sealed class ConsultasEndpointsTests : IAsyncLifetime
     public async Task ElDetalleConUnaPlacaIlegibleYSinVin_Responde409()
     {
         if (!await IniciarAsync()) return;
-        var (solicitud, token) = await SembrarAsync(("vendedor", "validada", null));
+        var (solicitud, token) = await SembrarAsync(("vendedor", "aprobada", null));
         await using (var db = NuevaDb())
         {
             (await db.Set<SolicitudTramite>().SingleAsync(TestContext.Current.CancellationToken)).Placa = "???";

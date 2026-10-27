@@ -232,7 +232,7 @@ public sealed class RadicacionTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task LaCompuertaRegistradaEsLaQueManda_PorEncimaDeLaPorDefecto()
+    public async Task LaCompuertaDeRadicacion_EsSustituibleYSuResultadoManda()
     {
         var bloqueo = new CompuertaFalsa(ResultadoCompuerta.Bloqueada("identidad_pendiente", [new ParteFaltante("comprador", 1, "pendiente")]));
         await IniciarAsync(bloqueo);

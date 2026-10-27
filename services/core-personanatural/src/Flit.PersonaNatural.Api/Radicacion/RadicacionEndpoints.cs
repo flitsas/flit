@@ -15,14 +15,14 @@ public static class RadicacionEndpoints
     public const string CabeceraIdempotencia = "Idempotency-Key";
 
     /// <summary>
-    /// Registra el servicio y la compuerta por defecto. <c>TryAdd</c>: la compuerta completa de la HU C3 se registra antes (o la
-    /// reemplaza) y esta no entra; ver <see cref="ICompuertaDeRadicacion"/>.
+    /// Registra el servicio de radicar y su compuerta de identidad (HU C3, <see cref="ICompuertaDeRadicacion"/>): una sola
+    /// implementación, sin respaldo más débil que pueda ganar por el orden de registro.
     /// </summary>
     public static IServiceCollection AddRadicacionPortal(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
         services.AddScoped<RadicacionService>();
-        services.TryAddScoped<ICompuertaDeRadicacion, CompuertaDePartesAprobadas>();
+        services.AddCompuertaDeRadicacion();
         return services;
     }
 

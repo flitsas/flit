@@ -87,9 +87,6 @@ public static class Program
         // HU #14044 y #14045: validación de identidad de las partes por enlace (fachada gRPC de core-api, espejo por evento).
         builder.Services.AddIdentidadPortal(builder.Configuration);
 
-        // HU #14046: compuerta de radicación (no radicar sin identidad aprobada de todas las partes obligadas).
-        builder.Services.AddCompuertaDeRadicacion();
-
         // HU #14078: definición del tipo de trámite (estructura del wizard) desde la fachada de core-api.
         builder.Services.AddDefinicionesPortal();
 

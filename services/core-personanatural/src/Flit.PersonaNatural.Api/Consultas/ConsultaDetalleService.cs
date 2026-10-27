@@ -27,7 +27,7 @@ public sealed record ResultadoDetalle(EstadoDetalle Estado, VehiculoDetalle? Det
 public sealed class ConsultaDetalleService(PersonaNaturalDb db, PersonaService personas, IConsultasRunt runt, MedicionConsultasService medicion)
 {
     /// <summary>Estados que cuentan como identidad validada: «validada» es el espejo del BFF y «aprobada» el estado de FLIT 2 (diseño §5).</summary>
-    private static readonly string[] EstadosValidados = ["validada", "aprobada"];
+    private static readonly string[] EstadosValidados = [Identidad.EstadosIdentidad.Aprobada];
 
     private static readonly string[] PartesDelVehiculo = ["vendedor", "propietario", "titular"];
 
