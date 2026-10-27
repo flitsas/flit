@@ -71,6 +71,24 @@ El compose lo pasa a core-api (`Suite__Oidc__ServiceClients__svc-personanatural_
 (`Platform__ServiceClient__ClientSecret`). **Reiniciar core-api.** La empresa «Persona Natural» (id fijo) la siembra el
 DDL 152 al arrancar core-api.
 
+## 3b. Consultas, catálogo y correo (direcciones internas)
+
+El compose ya trae los valores por defecto de la red de Docker; solo se cambian si el ambiente es distinto:
+
+```
+CONSULTAS_REMOTO_ADDRESS=http://core-consultas:8084        # consulta de vehículo y conductor
+PERSONANATURAL_CORE_API_ADDRESS=http://core-api:8082       # fachada gRPC de core-api (catálogo y cotización)
+NOTIFICACIONES_REMOTO_ADDRESS=http://core-notificaciones:8085   # envío de la cotización por correo
+```
+
+- El cliente `svc-personanatural` suma los scopes `platform.consultas` y `platform.notificaciones.send` (declarados en
+  `appsettings.json` de core-api); requieren reiniciar core-api.
+- **Tarifas:** la tabla `admin.persona_natural_tariffs` nace vacía. Sin una tarifa vigente la cotización responde
+  `tarifa_no_vigente` y el catálogo no ofrece tipos: hay que cargarlas con la pantalla del Feature J (J1) o, mientras tanto,
+  con la función `admin.persona_natural_tariff_new_version(...)`. No hay precios inventados.
+- **Cadena de proveedores de «Persona Natural»:** hoy usa la de por defecto de core-consultas; se configura desde core-api.
+- **Organismos:** el catálogo solo ofrece los organismos con permiso (grant) para la empresa «Persona Natural».
+
 ## 4. Secretos de datos personales y captcha
 
 ```
