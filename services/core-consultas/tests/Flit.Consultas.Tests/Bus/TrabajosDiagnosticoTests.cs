@@ -178,7 +178,10 @@ public sealed class TrabajosDiagnosticoTests(AnfitrionBus bus) : IClassFixture<A
         TipoPersona = TipoPersona.Natural,
     };
 
-    /// <summary>El proveedor falso que respondió (campo «respondio» de la respuesta publicada).</summary>
+    /// <summary>
+    /// El proveedor falso que respondió: <c>resultado.proveedor</c> de la respuesta publicada (la clave «respondio» que también
+    /// siembra el falso no viaja: la minimización solo deja las claves que lee Diagnóstico).
+    /// </summary>
     private static string Respondio(IReadOnlyList<EventEnvelope> resultados)
     {
         var datos = resultados.Should().ContainSingle().Subject.DataAs<ResultadoConsultaDiagnostico>();
@@ -189,6 +192,7 @@ public sealed class TrabajosDiagnosticoTests(AnfitrionBus bus) : IClassFixture<A
             : datos.Fuente == FuentesBus.RuntPropietario
                 ? JsonParser.Default.Parse<ConsultarConductorResponse>(json).Resultado
                 : JsonParser.Default.Parse<ConsultarMultasResponse>(json).Resultado;
-        return resultado.Campos.Single(c => c.Clave == "respondio").ValorTexto;
+        resultado.Campos.Should().NotContain(c => c.Clave == "respondio" || c.Clave == "person_full_name");
+        return resultado.Proveedor;
     }
 }
