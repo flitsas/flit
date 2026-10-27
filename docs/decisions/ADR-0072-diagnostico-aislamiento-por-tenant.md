@@ -157,7 +157,8 @@ ya la tienen (HU #13723, ver excepciones por tabla).
     re-publica o la cierra en ERROR (Tradeoff aceptado, «jobs sin usuario»). No toma ni bloquea filas: la ejecución va
     por el bus.
   - **Los consumidores del bus no leen entre empresas.** Fijan la empresa del sobre (`tenantId`) antes de tocar la celda.
-  - **Se borran en la tanda B de ADR-0075:** `ColaConsultas.TomarAsync`, el procesador de Postgres y su lease.
+  - **Se borran en la tanda B de ADR-0075:** `ColaConsultas.TomarAsync`, el procesador de Postgres y su lease. Hecho,
+    salvo la columna `lease_hasta`: queda sin uso (solo se limpia a `NULL`) hasta una migración de limpieza aparte.
 - **`consultas`, unicidad `(vehiculo_id, fuente)`.** Se materializa como `ux_consulta_vehiculo_fuente (tenant_id,
   vehiculo_id, fuente)`: como el vehículo fija la empresa, la unicidad es la misma, y el índice cubre la FK compuesta
   al vehículo (igual que `ux_vehiculo_por_lote`).
@@ -194,6 +195,12 @@ inserción y FK con `RESTRICT`. Y es lo que dice R-18 del plan («No se borra na
   (HU #13735) y se protege con un certificado que está **fuera de la base**: quien lea la base no lee los documentos.
 - **Fuera de logs y eventos.** El documento nunca va en logs, eventos del outbox, DTO de listado ni prompt del LLM (R-2).
   El contenido de las filas de carga no se escribe en logs.
+  - **Enmendado por [ADR-0075](ADR-0075-diagnostico-consultas-por-rabbitmq.md)** (Propuesto, Dec. 7, HU #13727; ver
+    «Enmienda del control R-2 de ADR-0072» allí). Excepción única: los trabajos de consulta del diagnóstico
+    (`consultas.diagnostico[-express].<fuente>`) y sus resultados (`consultas.resultado.diagnostico`) llevan el
+    documento **en claro** en `diagnostico.outbox` y `consultas.outbox`, y en el broker. La outbox de esos dos servicios
+    purga lo ya publicado a las 24 h (`Platform:Messaging:RetencionPublicados`). Logs, DTO de listado, prompt del LLM y
+    cualquier otro evento de la outbox siguen bajo R-2 sin cambios.
 - **Enmascarado en las respuestas** («****» y los 4 últimos), también en el detalle de celda (R-13).
 - **Acceso por permiso y aislamiento por empresa.** Las lecturas pasan por el permiso de la ruta y por el filtro global
   de la Parte 1.
@@ -294,4 +301,5 @@ aquí; hasta entonces, ningún endpoint de backoffice escribe entre empresas.
 - ADR-0069: lectura entre compañías, acotada y auditada.
 - ADR-0070: gRPC entre servicios y REST hacia afuera.
 - ADR-0075: consultas del diagnóstico por RabbitMQ. Enmienda la excepción A11 de `consultas` (el dueño de `ix_cola` pasa
-  a ser el reconciliador).
+  a ser el reconciliador) y el control R-2 de la retención (documento en claro en la outbox de diagnóstico y de
+  consultas hasta 24 h tras publicarse; ver «Retención de datos personales»).

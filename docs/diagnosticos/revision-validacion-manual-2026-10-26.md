@@ -2,6 +2,8 @@
 
 > Revisión de código sobre la rama `feature/AB-12881-diagnostico-d0-d2` (último commit `cecab44cc`). Responde los tres
 > hallazgos de la validación manual. Las anclas `archivo:línea` derivan rápido: reverificarlas antes de citarlas.
+> **§3 y la fila 3 del resumen se reescribieron sobre `63e0fe89c`** (consultas por RabbitMQ, ADR-0075). §1, §2 y §4
+> siguen con el estado de `cecab44cc`.
 
 ## Resumen
 
@@ -9,7 +11,7 @@
 |---|----------|--------|-------|----------------|
 | 1 | No se ve la carga masiva ni la plantilla | **Implementada, sin entrada en el menú.** La plantilla existe pero **no trae instrucciones** | Ninguna pantalla de producción enlaza a `/diagnosticos/nuevo`, que es por donde se llega a la carga | Defecto de la HU #13754: botón «Nuevo diagnóstico (lote)». Ajuste nuevo: hoja de instrucciones en la plantilla |
 | 2 | Solo se ve el RUNT; no aparecen SIMIT, impuesto, avalúo ni el semáforo | **Es configuración local.** Las fuentes están implementadas. El semáforo **por celda** existe; el **semáforo global** (dictamen) **no existe**: es la ola D6 | Sin simulación encendida y sin dirección de core-consultas, todas las fuentes salvo el RUNT quedan «no conectadas» y el backend no las ofrece | Encender el modo simulado en local (§2.3) y habilitar las fuentes en el contrato de la compañía |
-| 3 | ¿Las consultas van por RabbitMQ o directo a core-consultas? | **Ninguna pasa por RabbitMQ.** La cola es una tabla de Postgres; un trabajador interno llama a core-consultas por **gRPC directo**, una llamada por celda | Decisión de arquitectura del plan v2 (ADR «cola durable en Postgres con SKIP LOCKED», HU #13727) | Nada. RabbitMQ está conectado al servicio, pero ninguna consulta pasa por él (§3.3) |
+| 3 | ¿Las consultas van por RabbitMQ o directo a core-consultas? | **Actualizado el 2026-10-26 (`63e0fe89c`): todas van por RabbitMQ.** Diagnóstico publica un trabajo por celda en `flit.consultas`, core-consultas lo consume y publica el resultado, y diagnóstico cierra la celda. Diagnóstico ya no llama por gRPC a las fuentes; solo a `ListarDepartamentosImpuesto` | La cola en Postgres del plan v2 la reemplazó ADR-0075 (Propuesto): con core-consultas caído las celdas pasaban a ERROR, y el acta con el LT exige que los trabajos esperen en la cola | Levantar RabbitMQ y core-consultas, y preparar el broker (§3.3). Pendiente de PR y de la revisión del LT |
 
 ---
 
@@ -150,42 +152,79 @@ Con el modo simulado del §2.3, el tablero muestra una columna por fuente elegid
 
 ## 3. ¿RabbitMQ o directo a core-consultas?
 
+> **Reescrita el 2026-10-26 sobre `63e0fe89c`.** La versión anterior de esta sección describía la cola en Postgres y el
+> polling de `TrabajadorConsultas` (decisión (a) A2 del plan v2). Esa decisión la reemplazó
+> [ADR-0075](../decisions/ADR-0075-diagnostico-consultas-por-rabbitmq.md) (Propuesto) y el trabajador ya no existe.
+> Diseño completo: `docs/diagnosticos/diseno-consultas-por-rabbitmq.md`.
+
 ### 3.1 Respuesta
 
-**Directo, por gRPC, con una cola propia en Postgres.** Ninguna consulta pasa por RabbitMQ.
+**Todas las consultas de fuentes van por RabbitMQ.** core-diagnostico publica un trabajo por celda (o por persona) en
+`flit.consultas`; core-consultas lo consume, llama al proveedor **una sola vez** y publica el resultado en su propio
+exchange; core-diagnostico consume el resultado y cierra la celda. `diagnostico.consultas` sigue siendo el **estado** de
+cada celda (lo que lee el tablero), pero ya no es una cola: nadie la recorre con `FOR UPDATE SKIP LOCKED`.
 
-1. Al confirmar el lote o crear un Express, `EncoladorConsultas` (`Modulos/Consultas/EncoladorConsultas.cs`) inserta,
-   **dentro de la misma transacción**, una celda `PENDIENTE` por vehículo y fuente en `diagnostico.consultas`. Esa tabla
-   **es la cola**. La celda RUNT queda disponible de inmediato y las demás nacen **diferidas** (`disponible_desde =
-   9999-12-31`) hasta que el RUNT del vehículo termine.
-2. `TrabajadorConsultas` (BackgroundService, uno por réplica; `Diagnostico:Procesador:Habilitado=true` por defecto)
-   reclama hasta 20 celdas cada 2 s con `SELECT … FOR UPDATE SKIP LOCKED`, respetando un límite de 5 vehículos en
-   vuelo por empresa, y las pasa a `EN_CURSO` con un *lease* de 2 min (`Modulos/Trabajos/ColaConsultas.cs:46-71`).
-3. `ProcesadorConsultas` llama a la fuente. En modo real es un **gRPC unario a core-consultas** con token de servicio
-   (scope `platform.consultas`) y `x-flit-tenant-id` (`Fuentes/ClienteConsultas.cs:100-138`):
+**Diagnóstico ya no llama por gRPC a ninguna fuente.** El único rpc que le queda hacia core-consultas es
+`ListarDepartamentosImpuesto`, el catálogo diario de departamentos con impuesto, global y síncrono
+(`Modulos/Catalogos/CapacidadImpuestoPlataforma.cs:31`, por `ClienteConsultas.LlamarGlobalAsync`).
 
-   | Fuente | rpc |
+1. **Encolado.** Al confirmar el lote o crear un Express, `EncoladorConsultas` inserta en la misma transacción una celda
+   por vehículo y fuente. La RUNT de cada vehículo se publica de inmediato con `PublicadorCeldas.PublicarAsync`
+   (`EncoladorConsultas.cs:91`); las demás nacen **diferidas** hasta que termine la RUNT. Publicar es:
+   - si la compañía ya tiene hoy el dato de esa placa y fuente, copiarlo y cerrar la celda sin mensaje;
+   - si no, `trabajo_id` nuevo (UUIDv7), la celda pasa a **EN_CURSO** y la outbox recibe un trabajo
+     `consultas.diagnostico.<fuente>` (o `consultas.diagnostico-express.<fuente>` si el lote es Express) con el
+     `*Request` proto en proto-JSON, en claro y con lo mínimo: placa o VIN, y tipo y número de documento cuando la
+     fuente lo exige (`PublicadorCeldas.cs:102-121`). En las celdas de persona sale un trabajo por persona, con el mismo
+     `trabajo_id`. Una persona sin documento consultable no publica: queda en ERROR `ESTADO_NO_OK`.
+2. **Envío.** El publicador de la outbox de diagnóstico lo manda a `flit.consultas` con `user_id = diagnostico`, que el
+   broker valida. Las colas están declaradas por adelantado en `deploy/rabbitmq/definitions.json`: si core-consultas
+   está caído, el trabajo **espera** en la cola (hasta 24 h; después pasa a la `.dlq`).
+3. **Ejecución en core-consultas.** `ConsumidorTrabajosLote` (cola `consultas.diagnostico`, 8 a la vez) y
+   `ConsumidorTrabajosExpress` (cola `consultas.diagnostico-express`, 4 a la vez) solo aceptan trabajos del productor
+   `diagnostico`. `EjecutorTrabajo` llama a los mismos métodos que atienden el gRPC en línea, con el llamador
+   `svc-diagnostico` y la empresa del sobre, así que la medición de consumo, el proveedor por empresa y la caché no
+   cambian:
+
+   | Fuente | rpc que atiende el trabajo |
    |--------|-----|
-   | RUNT vehículo | `RuntIntempoService.ConsultarPorPlaca` / `ConsultarPorVin` (`FuenteRuntReal.cs:38-39`) |
-   | RUNT persona (propietario, locatario) | `ConsultasService.ConsultarConductor` (`FuenteRuntPersonaReal.cs:29`) |
-   | SIMIT (vehículo, propietario, locatario) | `ConsultasService.ConsultarMultas` (`FuenteSimitReal.cs:25`) |
-   | RUES | `ConsultasService.ConsultarRues` (`FuenteRuesReal.cs:18`) |
-   | Avalúo | `ConsultasService.ConsultarAvaluos` (`FuenteAvaluoReal.cs:28`) |
-   | Impuesto | `ConsultasService.ConsultarImpuestoVehicular` (`FuenteImpuestoReal.cs:41`) |
+   | RUNT vehículo | `RuntIntempoService/ConsultarPorPlaca` o `ConsultarPorVin` |
+   | RUNT persona (propietario, locatario) | `ConsultasService/ConsultarConductor` |
+   | SIMIT (vehículo, propietario, locatario) | `ConsultasService/ConsultarMultas` |
+   | RUES | `ConsultasService/ConsultarRues` |
+   | Avalúo | `ConsultasService/ConsultarAvaluos` |
+   | Impuesto | `ConsultasService/ConsultarImpuestoVehicular` |
 
-4. core-consultas llama al proveedor (Intempo, SIMIT, etc.) por **HTTP síncrono** dentro del mismo handler gRPC
-   (`core-consultas/.../RuntIntempo/ProveedorRuntIntempo.cs:88`).
-5. La respuesta o la `RpcException` se traduce a un tipo de error (`TraductorErroresConsultas`):
-   `Unavailable` → RED y `DeadlineExceeded` → TIMEOUT, ambos transitorios; `FailedPrecondition` y `Unimplemented` →
-   NO_CONECTADO; `Unauthenticated` y `PermissionDenied` → AUTENTICACION; el resto → ESTADO_NO_OK.
-6. `PoliticaReintentos` decide: si el error es **transitorio**, la celda vuelve a `PENDIENTE` con *backoff*. Si es
-   **definitivo** o la consulta salió **OK**, `EscritorCeldas` la cierra y sube `version_tablero`
-   (`ProcesadorConsultas.cs:92-110`).
-7. Cuando se cierra el RUNT de un vehículo, `OrquestadorVehiculo` **libera** sus celdas diferidas. Si el RUNT quedó en
-   ERROR, las marca `ERROR / BLOQUEADA_POR_RUNT`.
-8. Si una réplica muere, sus celdas `EN_CURSO` las retoma otra cuando vence el *lease*.
-9. El front hace **polling incremental** cada 3 s a `GET /diagnosticos/{id}/grilla?desde=<versión>` mientras quede alguna
-   celda `PENDIENTE` o `EN_CURSO` (`frontend-diagnostico/lib/tablero/api.ts:77-79`, `useGrillaIncremental`).
+   Consulta **una sola vez**, con un tope de 90 s. El proveedor (Intempo, SIMIT, etc.) se sigue llamando por HTTP desde
+   core-consultas.
+4. **Resultado.** `PublicadorResultado` deja en la outbox de core-consultas el evento `consultas.resultado.diagnostico`:
+   `OK` con el `*Response` proyectado a la lista de campos que diagnóstico lee (`MinimizadorRespuesta`; sin nombres,
+   direcciones ni contacto), o `ERROR` con el código gRPC (`PublicadorResultado.cs:27-29`). Si core-diagnostico está
+   caído, el resultado **espera** en `diagnostico.consultas-resultados`.
+5. **Cierre en diagnóstico.** `ConsumidorResultados` (cola `diagnostico.consultas-resultados`, 4 a la vez, solo del
+   productor `consultas`) fija la empresa del sobre, descarta el resultado si su `trabajo_id` ya no es el vigente y lo
+   traduce con `TraductorErroresConsultas`: `Unavailable` → RED y `DeadlineExceeded` → TIMEOUT, ambos transitorios;
+   `FailedPrecondition` y `Unimplemented` → NO_CONECTADO; `Unauthenticated` y `PermissionDenied` → AUTENTICACION; el
+   resto → ESTADO_NO_OK.
+6. **Reintentos.** Los decide diagnóstico con `PoliticaReintentos` (`Diagnostico:Consultas:MaxReintentos`, 1 por
+   defecto). Un transitorio con reintentos disponibles deja la celda en **PENDIENTE** con su `trabajo_id`, el resultado
+   espera en la cola de reintentos y, al vencer la espera, se publica un trabajo nuevo. Efectivo: 5 s (y 15 y 35 s si
+   se configuran 2 o 3 reintentos). Si es **definitivo**, se agotaron los reintentos o la consulta salió **OK**,
+   `EscritorCeldas` cierra la celda y sube `version_tablero`.
+7. **Orden RUNT → demás.** Cuando cierra la RUNT de un vehículo, `OrquestadorVehiculo` **libera** sus celdas diferidas y
+   las **publica** en la misma transacción, ya con los datos de la RUNT (modelo, cilindraje, departamento). Si la RUNT
+   quedó en ERROR, las marca `ERROR / BLOQUEADA_POR_RUNT` y no publica nada.
+8. **Fin del lote.** Si con esa celda el lote queda COMPLETADO o INCOMPLETO (también al cerrar el panel o por llenado
+   manual), sale el evento `diagnostico.lote.terminado` (totales, sin datos personales) en la misma transacción. Por
+   ahora no tiene consumidor.
+9. **Red de seguridad.** `ReconciliadorConsultas` corre cada 60 s. Una celda con trabajo y sin resultado tras 30 min solo
+   se toca si su cola ya devolvió trabajos publicados más de 15 min después que el suyo; entonces la republica una vez
+   y, a la siguiente, la cierra en ERROR reprocesable. No hace nada si core-consultas no devolvió ningún resultado en
+   10 min (está caído y los trabajos esperan). Pasadas 24 h + 30 min desde la publicación, el trabajo ya venció en el
+   broker y la celda se cierra en ERROR reprocesable.
+10. El front hace **polling incremental** cada 3 s a `GET /diagnosticos/{id}/grilla?desde=<versión>` mientras quede
+    alguna celda `PENDIENTE` o `EN_CURSO` (`frontend-diagnostico/lib/tablero/api.ts:77-79`, `useGrillaIncremental`).
+    Sin cambios.
 
 ### 3.2 Diagrama de flujo
 
@@ -196,33 +235,48 @@ flowchart TD
     GW --> API[core-diagnostico API]
 
     API -->|misma transacción| ENC[EncoladorConsultas]
-    ENC -->|RUNT: PENDIENTE disponible ya<br/>demás fuentes: PENDIENTE diferida| Q[(Postgres<br/>diagnostico.consultas<br/>= la cola)]
+    ENC -->|celdas: RUNT EN_CURSO,<br/>demás PENDIENTE diferidas| DB[(Postgres<br/>diagnostico.consultas<br/>= estado de la celda)]
+    ENC --> PUB[PublicadorCeldas<br/>¿dato de hoy? copia y cierra<br/>si no: trabajo_id UUIDv7]
+    PUB -->|outbox, misma transacción| OBD[(diagnostico.outbox<br/>purga a 24 h)]
 
-    subgraph W[core-diagnostico · TrabajadorConsultas, uno por réplica]
-        T[cada 2 s] --> TOMA[ColaConsultas.TomarAsync<br/>FOR UPDATE SKIP LOCKED<br/>máx. 20 celdas · 5 vehículos por empresa]
-        TOMA --> PROC[ProcesadorConsultas]
+    OBD -->|user_id = diagnostico| X1{{RabbitMQ<br/>exchange flit.consultas}}
+    X1 -->|consultas.diagnostico.*| QL[[cola consultas.diagnostico<br/>TTL 24 h]]
+    X1 -->|consultas.diagnostico-express.*| QE[[cola consultas.diagnostico-express<br/>TTL 24 h]]
+
+    subgraph CC[core-consultas]
+        CL[ConsumidorTrabajosLote · 8] --> EJ[EjecutorTrabajo<br/>una sola llamada, tope 90 s]
+        CE[ConsumidorTrabajosExpress · 4] --> EJ
+        EJ --> MIN[MinimizadorRespuesta<br/>lista permitida por rpc]
+        MIN --> OBC[(consultas.outbox<br/>purga a 24 h)]
     end
-    Q --> TOMA
-    TOMA -->|EN_CURSO + lease 2 min| Q
+    QL --> CL
+    QE --> CE
+    EJ -->|HTTP| EXT[[Intempo · SIMIT · RUES ·<br/>avalúo · impuesto]]
+    EXT --> EJ
 
-    PROC -->|gRPC unario<br/>token de servicio + x-flit-tenant-id| CC[core-consultas]
-    CC -->|HTTP síncrono| EXT[[Intempo · SIMIT · RUES ·<br/>avalúo · impuesto]]
-    EXT --> CC
-    CC -->|respuesta o RpcException| PROC
+    OBC -->|user_id = consultas<br/>consultas.resultado.diagnostico| X1
+    X1 --> QR[[cola diagnostico.consultas-resultados<br/>TTL 24 h]]
+    QR --> CR[ConsumidorResultados · 4<br/>empresa del sobre · trabajo_id vigente]
 
-    PROC --> DEC{¿Resultado?}
-    DEC -->|transitorio: RED, TIMEOUT, 5xx| RET[vuelve a PENDIENTE<br/>con backoff] --> Q
-    DEC -->|OK o definitivo| ESC[EscritorCeldas: cierra la celda<br/>sube version_tablero] --> Q
-    ESC -->|si era el RUNT del vehículo| ORQ[OrquestadorVehiculo]
-    ORQ -->|RUNT OK: libera las diferidas| Q
-    ORQ -->|RUNT en ERROR: BLOQUEADA_POR_RUNT| Q
+    CR --> DEC{¿Resultado?}
+    DEC -->|transitorio con reintentos| RET[PENDIENTE + espera 5 s…<br/>luego trabajo nuevo] --> PUB
+    DEC -->|OK, definitivo o agotado| ESC[EscritorCeldas: cierra la celda<br/>sube version_tablero] --> DB
+    ESC -->|si era la RUNT| ORQ[OrquestadorVehiculo]
+    ORQ -->|RUNT OK: libera y publica las diferidas| PUB
+    ORQ -->|RUNT en ERROR: BLOQUEADA_POR_RUNT| DB
+    ESC -->|lote COMPLETADO o INCOMPLETO| LT[outbox: diagnostico.lote.terminado<br/>sin PII, sin consumidor]
+
+    REC[ReconciliadorConsultas · 60 s<br/>marca de agua FIFO · pausa si consultas mudo · vencidas a 24 h] -.-> DB
+    REC -.->|republica una vez| PUB
+
+    QL -. vencidos .-> DLQ[[.dlq · 7 días]]
+    QE -. vencidos .-> DLQ
+    QR -. vencidos .-> DLQ
+
+    API -.->|una vez al día, gRPC| LDI[core-consultas<br/>ListarDepartamentosImpuesto]
 
     FE -.->|polling cada 3 s<br/>GET /grilla?desde=versión| API
     API -.->|solo celdas cambiadas| FE
-
-    MQ[(RabbitMQ<br/>exchange flit.diagnostico)]
-    API -. outbox conectado,<br/>sin publicaciones .-> MQ
-    style MQ stroke-dasharray: 5 5
 ```
 
 ```mermaid
@@ -230,48 +284,49 @@ sequenceDiagram
     autonumber
     participant FE as frontend-diagnostico
     participant API as core-diagnostico API
-    participant DB as Postgres (diagnostico.consultas)
-    participant W as TrabajadorConsultas
+    participant DB as Postgres (diagnostico)
+    participant MQ as RabbitMQ (flit.consultas)
     participant CC as core-consultas
     participant P as Proveedor (Intempo…)
+    participant R as ConsumidorResultados
 
     FE->>API: POST /diagnosticos/{id}/vehiculos
-    API->>DB: INSERT celdas (RUNT disponible, demás diferidas)
+    API->>DB: TX: celdas (RUNT EN_CURSO + trabajo_id, demás diferidas) + outbox trabajo RUNT
     API-->>FE: 202 Accepted
-    loop cada 2 s
-        W->>DB: SELECT … FOR UPDATE SKIP LOCKED → EN_CURSO + lease
-        W->>CC: gRPC ConsultarPorPlaca (RUNT)
-        CC->>P: HTTP POST
-        P-->>CC: JSON
-        CC-->>W: respuesta tipada
-        W->>DB: cierra la celda RUNT, libera SIMIT/avalúo/impuesto
-        W->>CC: gRPC ConsultarMultas / ConsultarAvaluos / …
-        CC-->>W: respuesta o RpcException
-        W->>DB: cierra o reprograma con backoff
-    end
+    DB-->>MQ: outbox → consultas.diagnostico.runt (user_id diagnostico)
+    MQ->>CC: trabajo (si consultas está caído, espera en la cola)
+    CC->>P: HTTP (una sola vez)
+    P-->>CC: JSON
+    CC->>MQ: TX consultas: consumo + outbox consultas.resultado.diagnostico (minimizado) → ack
+    MQ->>R: resultado (si diagnóstico está caído, espera en la cola)
+    R->>DB: TX: cierra la RUNT, libera SIMIT/avalúo/impuesto + outbox de sus trabajos
+    DB-->>MQ: outbox → consultas.diagnostico.simit_vehiculo, .avaluo, …
+    MQ->>CC: trabajos de las demás fuentes
+    CC->>MQ: resultados
+    MQ->>R: resultados
+    R->>DB: cierra o deja PENDIENTE para reintento · si el lote terminó, outbox diagnostico.lote.terminado
     loop mientras haya PENDIENTE/EN_CURSO
         FE->>API: GET /grilla?desde=v
         API-->>FE: celdas con versión > v
     end
 ```
 
-### 3.3 ¿Y RabbitMQ?
+### 3.3 Qué hace falta para verlo funcionar
 
-El servicio **sí** tiene RabbitMQ conectado: `Platform:Messaging:ConnectionString` sale de `RABBITMQ_URL_DIAGNOSTICO`
-(`ServicioSettings.cs:21`), registra el outbox de la plataforma (`AddFlitOutbox<DiagnosticoDb>`, `Program.cs:81`) y la
-base trae las tablas outbox e inbox del SDK (`Persistence/DiagnosticoDb.cs:53`). Pero **ningún módulo publica ni consume
-mensajes**: buscando `Outbox`, `Publish`, `Consumer` y `Enqueue` en `Modulos/` no aparece ningún resultado. Es
-infraestructura lista para eventos futuros (por ejemplo «diagnóstico terminado» hacia otros productos o FLITO). No hace
-falta para las consultas, y que RabbitMQ esté caído no detiene un diagnóstico.
-
-Por qué no se usó RabbitMQ para las consultas (plan v2, ADR «a», HU #13727):
-
-- la cola vive en la **misma transacción** que crea los vehículos, así que no hay celdas huérfanas ni mensajes sin fila;
-- el **límite por empresa** y el **orden RUNT → demás** se resuelven con SQL sobre la misma tabla;
-- el **reintento con backoff** y la **recuperación por lease** no necesitan colas de reintento ni *dead-letter*;
-- el **tablero** lee el estado de la misma tabla.
-
-La misma técnica se usa para generar los ZIP de evidencias (`Modulos/Trabajos/ColaEvidencias.cs`).
+- **RabbitMQ y core-consultas arriba.** Sin core-consultas no se cierra ninguna celda: quedan EN_CURSO esperando (en
+  local, hasta que se levante; el reconciliador no las toca mientras consultas no devuelva resultados).
+- **Usuario `diagnostico` con destino `consultas`** en el broker (`deploy/rabbitmq/usuario-de-servicio.sh diagnostico
+  <clave> consultas`) y `RABBITMQ_URL_DIAGNOSTICO` definida; si no, la outbox de diagnóstico no puede publicar.
+- **Colas declaradas** con `definitions.json` antes de publicar (`import_definitions`); sin cola, el broker descarta el
+  mensaje.
+- **Simulación en local o DEV:** ahora vive en core-consultas (`Consultas:Simulacion:Habilitada=true` con
+  `Consultas:Ambiente` = `LOCAL` o `DEV`; en otro ambiente no arranca). Las claves `Diagnostico:Simulacion:*` y
+  `Diagnostico:Procesador:*` ya no existen.
+- **Por qué cambió** (frente al plan v2): con la cola en Postgres, si core-consultas estaba caído las celdas pasaban a
+  ERROR a los ~35 s. El acta con el LT exige que los trabajos esperen en la cola (§3.2, §3.4) y que las integraciones
+  vivan en Consultas (§3.5). El costo aceptado es que placa, VIN y documentos viajan en claro por el broker y la outbox,
+  con retención acotada (riesgo U1 registrado en ADR-0075).
+- La cola del ZIP de evidencias (`Modulos/Trabajos/ColaEvidencias.cs`) **no cambió**: sigue en Postgres.
 
 ---
 
