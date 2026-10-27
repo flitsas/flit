@@ -233,6 +233,35 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                     b.ToTable("historial_estado", "personanatural");
                 });
 
+            modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.IntentoReanudar", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<byte[]>("Clave")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("clave");
+
+                    b.Property<DateTimeOffset>("OcurrioEn")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ocurrio_en")
+                        .HasDefaultValueSql("now()");
+
+                    b.HasKey("Id")
+                        .HasName("pk_intento_reanudar");
+
+                    b.HasIndex("Clave", "OcurrioEn")
+                        .HasDatabaseName("ix_intento_reanudar_clave_fecha");
+
+                    b.ToTable("intento_reanudar", "personanatural");
+                });
+
             modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.PersonaSolicitante", b =>
                 {
                     b.Property<Guid>("Id")

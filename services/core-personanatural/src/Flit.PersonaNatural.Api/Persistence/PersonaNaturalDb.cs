@@ -157,6 +157,17 @@ public sealed class PersonaNaturalDb(DbContextOptions<PersonaNaturalDb> options)
             e.HasIndex(h => new { h.SolicitudId, h.OcurrioEn }).HasDatabaseName("ix_historial_solicitud_fecha");
         });
 
+        // Intentos fallidos de reanudar, por radicado (HU #14035): sin llaves foráneas, porque también cuentan los radicados que no existen.
+        modelBuilder.Entity<IntentoReanudar>(e =>
+        {
+            e.ToTable("intento_reanudar");
+            e.HasKey(i => i.Id).HasName("pk_intento_reanudar");
+            e.Property(i => i.Id).HasColumnName("id").UseIdentityAlwaysColumn();
+            e.Property(i => i.Clave).HasColumnName("clave").IsRequired();
+            e.Property(i => i.OcurrioEn).HasColumnName("ocurrio_en").HasDefaultValueSql("now()");
+            e.HasIndex(i => new { i.Clave, i.OcurrioEn }).HasDatabaseName("ix_intento_reanudar_clave_fecha");
+        });
+
         // Solo inserción y sin llaves foráneas: debe sobrevivir a la solicitud que audita.
         modelBuilder.Entity<AccesoPiiLog>(e =>
         {

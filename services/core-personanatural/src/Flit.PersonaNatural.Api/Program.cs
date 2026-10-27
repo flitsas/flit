@@ -1,11 +1,13 @@
 using Flit.Api.Telemetry;
 using Flit.PersonaNatural.Api;
 using Flit.PersonaNatural.Api.Persistence;
+using Flit.PersonaNatural.Api.Sesiones;
 using Flit.Platform.Sdk.Authentication;
 using Flit.Platform.Sdk.Grpc;
 using Flit.Platform.Sdk.Messaging;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Flit.PersonaNatural.Api;
 
@@ -44,6 +46,12 @@ public static class Program
         builder.Services.AddFlitGrpcServer();
         builder.Services.AddFlitOutbox<PersonaNaturalDb>(builder.Configuration);
 
+        // HU #14035: sesión efímera por trámite (el portal no tiene cuentas) y huellas HMAC de la cédula y la IP.
+        builder.Services.Configure<SesionOptions>(builder.Configuration.GetSection(SesionOptions.SectionName));
+        builder.Services.TryAddSingleton(TimeProvider.System);
+        builder.Services.AddSingleton<PiiHasher>();
+        builder.Services.AddScoped<SesionService>();
+
         // h2c necesita un endpoint solo HTTP/2: se vuelven a declarar las URLs del REST (Kestrel ignora ASPNETCORE_URLS
         // cuando se declaran endpoints por código) y se suma el del gRPC.
         builder.WebHost.ConfigureKestrel((context, options) =>
@@ -66,6 +74,7 @@ public static class Program
         app.UseAuthentication();
         app.UseAuthorization();
 
+        app.MapSesionEndpoints();
         app.MapGet("/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();
         app.MapGet("/health/ready", async (PersonaNaturalDb db, CancellationToken ct) =>
             await db.Database.CanConnectAsync(ct).ConfigureAwait(false)

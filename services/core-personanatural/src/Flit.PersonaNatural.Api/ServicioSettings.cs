@@ -20,6 +20,7 @@ internal static class ServicioSettings
         ("Platform:Auth:Issuers:0", "FLIT_HUB_URL"),
         ("Platform:Messaging:ConnectionString", "RABBITMQ_URL_PERSONANATURAL"),
         (GrpcPortKey, "CORE_PERSONANATURAL_GRPC_PORT"),
+        ("Pii:ClaveHmac", "PERSONANATURAL_PII_HMAC_KEY (mínimo 32 caracteres; huellas de cédula e IP)"),
     ];
 
     public static void Validate(IConfiguration configuration)

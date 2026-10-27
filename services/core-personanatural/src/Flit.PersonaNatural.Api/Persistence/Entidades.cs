@@ -142,3 +142,14 @@ public sealed class AccesoPiiLog
     public Guid? SolicitudId { get; set; }
     public byte[]? IpHash { get; set; }
 }
+
+/// <summary>Intento fallido de reanudar con radicado y cédula. Sirve para bloquear el radicado tras varios fallos seguidos.</summary>
+public sealed class IntentoReanudar
+{
+    public long Id { get; set; }
+
+    /// <summary>SHA-256 del radicado normalizado, exista o no: bloquear solo los que existen revelaría cuáles existen.</summary>
+    public byte[] Clave { get; set; } = [];
+
+    public DateTimeOffset OcurrioEn { get; set; }
+}

@@ -125,6 +125,31 @@ public sealed class ServicioHostTests : IAsyncLifetime
             .Which.Message.Should().NotContain("RABBITMQ_URL", "solo nombra lo que falta");
     }
 
+    [Fact]
+    public void SinLaLlaveDeHuellas_NoArranca_YNombraLaVariable()
+    {
+        var settings = Settings();
+        settings.Remove("Pii:ClaveHmac");
+
+        var act = () => Program.Build([], b =>
+        {
+            b.WebHost.UseTestServer();
+            b.Configuration.AddInMemoryCollection(settings);
+        });
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*Pii__ClaveHmac*PERSONANATURAL_PII_HMAC_KEY*");
+    }
+
+    [Fact]
+    public void UnaLlaveDeHuellasCorta_SeRechaza()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Pii:ClaveHmac"] = "corta" }).Build();
+
+        var act = () => new Flit.PersonaNatural.Api.Sesiones.PiiHasher(config);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*al menos 32 caracteres*");
+    }
+
     private Dictionary<string, string?> Settings() => new()
     {
         ["ConnectionStrings:Servicio"] = _database,
@@ -133,6 +158,7 @@ public sealed class ServicioHostTests : IAsyncLifetime
         ["Platform:Auth:JwksUri"] = "http://core-identity/.well-known/jwks.json",
         ["Platform:Auth:Issuers:0"] = "https://hub.prueba/",
         ["Platform:Messaging:ConnectionString"] = "amqp://flit:x@127.0.0.1:1/",
+        ["Pii:ClaveHmac"] = "clave-de-prueba-de-al-menos-32-caracteres!",
         [ServicioSettings.GrpcPortKey] = GrpcPort.ToString(System.Globalization.CultureInfo.InvariantCulture),
     };
 }
