@@ -7,7 +7,7 @@ import { expect, test, type Page } from "@playwright/test";
  * app en 4024). Excluido de `tsc` y de Vitest; se corre con Playwright desde la raíz del repo, por ejemplo:
  *
  *   DIAGNOSTICO_URL=http://127.0.0.1:4024 E2E_ADMIN=... E2E_CLAVE_ADMIN=... \
- *   E2E_USUARIO=... E2E_CLAVE=... E2E_BACKOFFICE=... E2E_CLAVE_BACKOFFICE=... E2E_EMPRESA_CLIENTE=<uuid> \
+ *   E2E_USUARIO=... E2E_CLAVE=... E2E_BACKOFFICE=... E2E_CLAVE_BACKOFFICE=... E2E_EMPRESA_CLIENTE_NOMBRE=<nombre> \
  *   pnpm --dir frontend exec playwright test ../frontend-diagnostico/e2e/configuracion.spec.ts
  *
  * Las credenciales son de usuarios de prueba del ambiente DEV y entran solo por variables de entorno.
@@ -47,7 +47,7 @@ test.describe("pantalla 10", () => {
     const contrato = page.getByRole("tabpanel", { name: "Contrato" });
     await expect(contrato.getByText("Límite de vehículos por lote")).toBeVisible();
     await expect(contrato.getByRole("checkbox")).toHaveCount(0);
-    await expect(page.getByLabel("Identificador de la empresa")).toHaveCount(0);
+    await expect(page.getByRole("combobox", { name: "Empresa" })).toHaveCount(0);
 
     // Escenario 3: Operación editable con teclado.
     await page.getByRole("tab", { name: "Contrato" }).focus();
@@ -69,16 +69,19 @@ test.describe("pantalla 10", () => {
     await sinCamposAjenos(page);
   });
 
-  test("backoffice FLIT: edita el contrato de la empresa indicada", async ({ page }) => {
+  test("backoffice FLIT: elige la empresa en el selector y edita su contrato", async ({ page }) => {
     test.skip(
-      !process.env.E2E_BACKOFFICE || !process.env.E2E_CLAVE_BACKOFFICE || !process.env.E2E_EMPRESA_CLIENTE,
-      "Faltan E2E_BACKOFFICE / E2E_CLAVE_BACKOFFICE / E2E_EMPRESA_CLIENTE",
+      !process.env.E2E_BACKOFFICE || !process.env.E2E_CLAVE_BACKOFFICE || !process.env.E2E_EMPRESA_CLIENTE_NOMBRE,
+      "Faltan E2E_BACKOFFICE / E2E_CLAVE_BACKOFFICE / E2E_EMPRESA_CLIENTE_NOMBRE",
     );
     await entrar(page, process.env.E2E_BACKOFFICE!, process.env.E2E_CLAVE_BACKOFFICE!);
 
-    // Escenario 2.
-    await page.getByLabel("Identificador de la empresa").fill(process.env.E2E_EMPRESA_CLIENTE!);
-    await page.getByRole("button", { name: "Cargar contrato" }).click();
+    // Escenarios 2 y 7: la empresa se busca por nombre en el selector (GET /backoffice/empresas), sin escribir su uuid.
+    const nombre = process.env.E2E_EMPRESA_CLIENTE_NOMBRE!;
+    const selector = page.getByRole("combobox", { name: "Empresa" });
+    await selector.fill(nombre);
+    await page.getByRole("option").filter({ hasText: nombre }).first().click();
+    await expect(page.getByRole("heading", { name: nombre })).toBeVisible();
     await expect(page.getByRole("spinbutton", { name: "Límite de vehículos por lote" })).toBeVisible();
     await expect(page.getByRole("switch", { name: "Suspender la redacción con IA" })).toBeVisible();
     await expect(page.getByRole("checkbox", { name: "RUNT vehículo" })).toBeVisible();

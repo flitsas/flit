@@ -134,6 +134,38 @@ function rutaContrato(empresa: string): string {
   return `/backoffice/empresas/${encodeURIComponent(empresa)}/configuracion/contrato`;
 }
 
+/** Empresa con Diagnóstico encendido, según Identidad (esquema EmpresaBackoffice, HU #13741). */
+export interface EmpresaBackoffice {
+  id: string;
+  nombre: string;
+  nit: string | null;
+}
+
+/** 503 de GET /backoffice/empresas: el servicio no tiene la dirección de Identidad (sin Retry-After). */
+export const CODIGO_IDENTIDAD_NO_CONFIGURADA = "IDENTIDAD_NO_CONFIGURADA";
+
+/** Texto del NIT en el selector y en el encabezado del editor: «NIT 900000001» o «sin NIT». */
+export function etiquetaNit(nit: string | null): string {
+  const valor = nit?.trim();
+  return valor ? `NIT ${valor}` : "sin NIT";
+}
+
+/**
+ * Empresas para el selector del editor de contrato (GET /backoffice/empresas, operación listarEmpresasBackoffice), ya
+ * ordenadas por nombre. Misma autorización que el contrato: solo se llama con la capacidad editarContrato. Descarta las
+ * filas sin un id de empresa válido, porque su contrato no se podría pedir.
+ */
+export async function listarEmpresasBackoffice(signal?: AbortSignal): Promise<EmpresaBackoffice[]> {
+  const datos = await apiFetch<unknown>("/backoffice/empresas", { signal });
+  // Un cuerpo que no es arreglo es un contrato roto, no una lista vacía: se muestra como error, nunca como «sin empresas».
+  if (!Array.isArray(datos)) throw new Error("El listado de empresas llegó con un formato inesperado.");
+  return datos.flatMap((e: Partial<Record<keyof EmpresaBackoffice, unknown>> | null) =>
+    e && typeof e.id === "string" && esEmpresaValida(e.id) && typeof e.nombre === "string"
+      ? [{ id: e.id, nombre: e.nombre, nit: typeof e.nit === "string" ? e.nit : null }]
+      : [],
+  );
+}
+
 export function obtenerContratoEmpresa(empresa: string, signal?: AbortSignal): Promise<ContratoBackoffice> {
   return apiFetch<ContratoBackoffice>(rutaContrato(empresa), { signal });
 }

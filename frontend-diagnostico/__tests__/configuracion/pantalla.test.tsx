@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { DiagnosticoShell } from "@/components/DiagnosticoShell";
 import ConfiguracionPagina from "@/app/(app)/configuracion/page";
 import type { CapacidadesDiagnostico } from "@/lib/sesion";
-import { ADMIN, BACKOFFICE, USUARIO, configuracion, sesion } from "./datos";
+import { ADMIN, BACKOFFICE, EMPRESAS_BACKOFFICE, URL_EMPRESAS, USUARIO, configuracion, sesion } from "./datos";
 
 // Uso de ejemplo: dentro del shell, <ConfiguracionPagina /> pide GET /configuracion y arma las pestañas Contrato y
 // Operación según las capacidades de GET /sesion.
@@ -21,6 +21,7 @@ function simularApi(capacidades: Partial<CapacidadesDiagnostico>, respuestaConfi
   const fetchMock = vi.fn((url: string) => {
     if (url === "/api/v1/diagnostico/sesion") return Promise.resolve(Response.json(sesion(capacidades, capacidades.editarContrato ? "FLIT" : "COMPANY")));
     if (url === "/api/v1/diagnostico/configuracion") return respuestaConfiguracion();
+    if (url === URL_EMPRESAS) return Promise.resolve(Response.json(EMPRESAS_BACKOFFICE));
     return Promise.resolve(Response.json({}, { status: 404 }));
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -39,7 +40,7 @@ const AJENOS = /usuario|rol(es)?\b|suscripci|retenci|purga/i;
 
 describe("pantalla 10", () => {
   it("admin de la compañía: pestañas Contrato (solo lectura) y Operación, sin editor del backoffice", async () => {
-    simularApi(ADMIN);
+    const fetchMock = simularApi(ADMIN);
     montar();
 
     const tablist = await screen.findByRole("tablist", { name: "Configuración de Diagnóstico" });
@@ -49,15 +50,17 @@ describe("pantalla 10", () => {
     const panel = screen.getByRole("tabpanel", { name: "Contrato" });
     expect(within(panel).getByText("500")).toBeInTheDocument();
     expect(within(panel).queryAllByRole("checkbox")).toHaveLength(0);
-    expect(screen.queryByLabelText("Identificador de la empresa")).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Empresa" })).toBeNull();
+    expect(fetchMock.mock.calls.map((c) => c[0])).not.toContain(URL_EMPRESAS);
   });
 
-  it("backoffice FLIT: la pestaña Contrato trae el editor de la empresa indicada", async () => {
-    simularApi(BACKOFFICE);
+  it("backoffice FLIT: la pestaña Contrato trae el selector de empresas del editor (escenario 7)", async () => {
+    const fetchMock = simularApi(BACKOFFICE);
     montar();
 
     await screen.findByRole("tablist");
-    expect(screen.getByLabelText("Identificador de la empresa")).toBeInTheDocument();
+    expect(await screen.findByRole("combobox", { name: "Empresa" })).toBeInTheDocument();
+    expect(fetchMock.mock.calls.map((c) => c[0])).toContain(URL_EMPRESAS);
   });
 
   it("navegación por teclado entre pestañas (flechas, Inicio y Fin) con roles ARIA de tabs", async () => {
@@ -158,7 +161,7 @@ describe("pantalla 10", () => {
 
     const tabs = within(await screen.findByRole("tablist")).getAllByRole("tab");
     expect(tabs.map((t) => t.textContent)).toEqual(["Contrato"]);
-    expect(screen.getByLabelText("Identificador de la empresa")).toBeInTheDocument();
+    expect(await screen.findByRole("combobox", { name: "Empresa" })).toBeInTheDocument();
     expect(fetchMock.mock.calls.map((c) => c[0])).not.toContain("/api/v1/diagnostico/configuracion");
   });
 });

@@ -4,6 +4,16 @@ import type { CapacidadesDiagnostico, SesionDiagnostico } from "@/lib/sesion";
 
 export const EMPRESA = "00000000-0000-7000-8000-0000000000e1";
 export const EMPRESA_CLIENTE = "00000000-0000-7000-8000-0000000000c2";
+export const EMPRESA_SIN_NIT = "00000000-0000-7000-8000-0000000000c3";
+export const EMPRESA_ANDINA = "00000000-0000-7000-8000-0000000000c4";
+
+/** GET /backoffice/empresas (HU #13741, esquema EmpresaBackoffice): nombres y NIT inventados, ya ordenados por nombre. */
+export const URL_EMPRESAS = "/api/v1/diagnostico/backoffice/empresas";
+export const EMPRESAS_BACKOFFICE = [
+  { id: EMPRESA_ANDINA, nombre: "Logística Andina SAS", nit: "900000001" },
+  { id: EMPRESA_SIN_NIT, nombre: "Óptima Carga SAS", nit: null },
+  { id: EMPRESA_CLIENTE, nombre: "Transportes Cliente SAS", nit: "900000002" },
+];
 
 /** Disponibles sin C3 (HU #13863): todas menos IMPUESTO_DEPARTAMENTAL, en el orden del enum. */
 export const DISPONIBLES_SIN_IMPUESTO: Fuente[] = ["RUNT", "RUNT_PROPIETARIO", "RUNT_LOCATARIO", "SIMIT_VEHICULO", "SIMIT_PROPIETARIO", "SIMIT_LOCATARIO", "AVALUO"];
