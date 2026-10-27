@@ -2,6 +2,7 @@ using Flit.Api.Telemetry;
 using Flit.PersonaNatural.Api.Cotizaciones;
 using Flit.PersonaNatural.Api.Abuso;
 using Flit.PersonaNatural.Api.Adjuntos;
+using Flit.PersonaNatural.Api.Consentimientos;
 using Flit.PersonaNatural.Api.Consultas;
 using Flit.PersonaNatural.Api.Identidad;
 using Flit.PersonaNatural.Api.Definiciones;
@@ -71,6 +72,9 @@ public static class Program
 
         // HU #14036: captcha, límite por IP y topes de consultas por cédula y globales.
         builder.Services.AddAbusoPortal(builder.Configuration);
+
+        // HU #14041/#14047: versiones vigentes del texto de consentimiento y constancia de las consultas públicas.
+        builder.Services.AddConsentimientosPortal();
 
         // HU #14042: consulta pública de radicado con macro-estados.
         builder.Services.AddRadicadosPortal();

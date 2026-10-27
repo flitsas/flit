@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Flit.PersonaNatural.Api.Consultas;
 using Flit.PersonaNatural.Api.Cotizaciones;
 using Flit.PersonaNatural.Api.Definiciones;
+using Flit.PersonaNatural.Api.Consentimientos;
 using Flit.PersonaNatural.Api.Persistence;
 using Flit.PersonaNatural.Api.Pii;
 using Flit.PersonaNatural.Api.Sesiones;
@@ -47,13 +48,13 @@ public sealed partial class SolicitudesService(
     CotizacionesService catalogo,
     IFachadaRequisitos requisitos,
     IEnumerable<ILimpiadorDeSolicitud> limpiadores,
-    TimeProvider reloj)
+    TimeProvider reloj,
+    ConsentimientoVersiones versionesConsentimiento)
 {
     public const string CodigoTipoNoDisponible = "tipo_no_disponible";
     public const string CodigoNoPermiteCambio = "estado_no_permite_cambio";
     public const string CodigoConflictoVersion = "conflicto_version";
     public const string TipoComprobantePago = "comprobante_pago";
-    public const string VersionConsentimientoPorDefecto = "v1";
 
     private static readonly JsonSerializerOptions JsonOpciones = new(JsonSerializerDefaults.Web);
 
@@ -83,6 +84,10 @@ public sealed partial class SolicitudesService(
             throw ReglaDeNegocioException.Invalido(errores);
         if (!body!.Consentimiento)
             throw new ReglaDeNegocioException(StatusCodes.Status400BadRequest, ConsultasEndpoints.CodigoConsentimiento, "Falta el consentimiento", "Acepte el tratamiento de sus datos personales para continuar.");
+
+        // La versión del texto la valida el servidor contra las vigentes: una desconocida es 422, no se guarda tal cual.
+        var versionConsentimiento = versionesConsentimiento.Normalizar(body.ConsentimientoVersion)
+            ?? throw new ReglaDeNegocioException(StatusCodes.Status422UnprocessableEntity, ConsentimientoVersiones.CodigoVersionDesconocida, "Versión del consentimiento desconocida", "El texto de consentimiento que aceptó ya no está vigente. Recargue la página y vuelva a aceptarlo.");
 
         DefinicionTipoDto def;
         try
@@ -126,7 +131,7 @@ public sealed partial class SolicitudesService(
             Id = Guid.CreateVersion7(),
             SolicitudId = solicitud.Id,
             DocumentoHash = solicitud.CedulaSolicitanteHash,
-            TextoVersion = string.IsNullOrWhiteSpace(body.ConsentimientoVersion) ? VersionConsentimientoPorDefecto : body.ConsentimientoVersion.Trim()[..Math.Min(40, body.ConsentimientoVersion.Trim().Length)],
+            TextoVersion = versionConsentimiento,
             AceptadoEn = ahora,
             IpHash = ipHash,
         });

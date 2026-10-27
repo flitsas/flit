@@ -1,5 +1,6 @@
 using System.Globalization;
 using Flit.PersonaNatural.Api.Abuso;
+using Flit.PersonaNatural.Api.Consentimientos;
 using Flit.PersonaNatural.Api.Sesiones;
 
 namespace Flit.PersonaNatural.Api.Consultas;
@@ -11,9 +12,9 @@ public sealed record DocumentoRequest(string? Tipo, string? Numero);
 /// Consulta pública de vehículo: por VIN, o por placa con el documento del propietario (core-consultas no consulta una placa
 /// suelta). <c>consentimiento</c> es el de tratamiento de datos del documento consultado y es obligatorio.
 /// </summary>
-public sealed record ConsultaVehiculoRequest(string? Placa, string? Vin, DocumentoRequest? Propietario, bool Consentimiento);
+public sealed record ConsultaVehiculoRequest(string? Placa, string? Vin, DocumentoRequest? Propietario, bool Consentimiento, string? ConsentimientoVersion = null);
 
-public sealed record ConsultaPersonaRequest(DocumentoRequest? Documento, bool Consentimiento);
+public sealed record ConsultaPersonaRequest(DocumentoRequest? Documento, bool Consentimiento, string? ConsentimientoVersion = null);
 
 /// <summary><c>parte</c> es el rol del actor que respalda la consulta; si falta vale cualquiera con identidad validada.</summary>
 public sealed record DetalleVehiculoRequest(string? Parte);
@@ -54,13 +55,20 @@ public static class ConsultasEndpoints
 
         // El orden de los filtros es el de ejecución: captcha primero, luego los topes. Un dato mal formado no gasta tope
         // (el extractor devuelve null y el endpoint responde 400): la IP ya está limitada por el grupo.
-        grupo.MapPost("/consultas/vehiculo", async (ConsultaVehiculoRequest body, HttpContext http, ConsultaVehiculoService vehiculos, MedicionConsultasService medicion, CancellationToken ct) =>
+        grupo.MapPost("/consultas/vehiculo", async (ConsultaVehiculoRequest body, HttpContext http, ConsultaVehiculoService vehiculos, MedicionConsultasService medicion, ConsentimientoVersiones versiones, ConsentimientoService consentimientos, PiiHasher hasher, CancellationToken ct) =>
         {
             if (body is null || !body.Consentimiento)
                 return SinConsentimiento();
             var entrada = ValidarVehiculo(body);
             if (entrada is null)
                 return DatosInvalidos("Indique la placa y el documento del propietario, o el VIN del vehículo.");
+            if (versiones.Normalizar(body.ConsentimientoVersion) is not { } version)
+                return VersionDesconocida();
+
+            // Constancia mínima: huella del documento del propietario (o del VIN si se consulta por VIN), versión, fecha y huella de IP.
+            await consentimientos.RegistrarConsultaAsync(
+                entrada.Propietario is { } p ? hasher.HashCedula(p.Numero) : hasher.HashVehiculo(entrada.Vin!), version,
+                hasher.HashIp(http.Connection.RemoteIpAddress?.ToString()), ct).ConfigureAwait(false);
 
             return await ConsultarAsync(http, medicion, MedicionConsultasService.TipoVehiculo,
                 () => vehiculos.ConsultarAsync(entrada.Placa, entrada.Vin, entrada.Propietario, null, ct), ct).ConfigureAwait(false);
@@ -70,13 +78,18 @@ public static class ConsultasEndpoints
             return body is { Consentimiento: true } ? ValidarVehiculo(body)?.ClaveTope : null;
         });
 
-        grupo.MapPost("/consultas/persona", async (ConsultaPersonaRequest body, HttpContext http, ConsultaConductorService conductores, MedicionConsultasService medicion, CancellationToken ct) =>
+        grupo.MapPost("/consultas/persona", async (ConsultaPersonaRequest body, HttpContext http, ConsultaConductorService conductores, MedicionConsultasService medicion, ConsentimientoVersiones versiones, ConsentimientoService consentimientos, PiiHasher hasher, CancellationToken ct) =>
         {
             if (body is null || !body.Consentimiento)
                 return SinConsentimiento();
             var documento = EntradaConsulta.Documento(body.Documento?.Tipo, body.Documento?.Numero);
             if (documento is null)
                 return DatosInvalidos("Indique el tipo y el número del documento.");
+            if (versiones.Normalizar(body.ConsentimientoVersion) is not { } version)
+                return VersionDesconocida();
+
+            await consentimientos.RegistrarConsultaAsync(
+                hasher.HashCedula(documento.Numero), version, hasher.HashIp(http.Connection.RemoteIpAddress?.ToString()), ct).ConfigureAwait(false);
 
             return await ConsultarAsync(http, medicion, MedicionConsultasService.TipoPersona,
                 () => conductores.ConsultarAsync(documento, null, ct), ct).ConfigureAwait(false);
@@ -140,6 +153,10 @@ public static class ConsultasEndpoints
             StatusCodes.Status503ServiceUnavailable, "Consulta no disponible",
             "No pudimos consultar el RUNT en este momento. Intente de nuevo en unos minutos.", CodigoProveedor);
     }
+
+    private static IResult VersionDesconocida() => SesionEndpoints.Problema(
+        StatusCodes.Status422UnprocessableEntity, "Versión del consentimiento desconocida",
+        "El texto de consentimiento que aceptó ya no está vigente. Recargue la página y vuelva a aceptarlo.", ConsentimientoVersiones.CodigoVersionDesconocida);
 
     private static IResult SinConsentimiento() => SesionEndpoints.Problema(
         StatusCodes.Status400BadRequest, "Consentimiento requerido", "Acepte el tratamiento de datos personales para consultar.", CodigoConsentimiento);

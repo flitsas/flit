@@ -29,6 +29,9 @@ public sealed class PiiHasher
 
     public byte[] HashIp(string? ip) => Hmac("ip:" + (ip ?? string.Empty));
 
+    /// <summary>Huella de un VIN consultado (consentimiento de una consulta pública sin documento de persona).</summary>
+    public byte[] HashVehiculo(string vin) => Hmac("vehiculo:" + NormalizarDocumento(vin));
+
     /// <summary>SHA-256 plano (no HMAC): para el token opaco, que ya es aleatorio de 256 bits y no necesita llave.</summary>
     public static byte[] HashToken(string token) => SHA256.HashData(Encoding.UTF8.GetBytes(token));
 
