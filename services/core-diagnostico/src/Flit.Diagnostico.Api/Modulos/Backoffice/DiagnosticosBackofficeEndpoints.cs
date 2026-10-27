@@ -34,7 +34,7 @@ internal static class DiagnosticosBackofficeEndpoints
     public const string RutaHistorial = Ruta + "/{id:guid}/historial";
     public const string CodigoEstadoInvalido = "ESTADO_INVALIDO";
     public const string CodigoPaginacionInvalida = "PAGINACION_INVALIDA";
-    public const int TamanoPorDefecto = 50;
+    public const int TamanoPorDefecto = 10;
     public const int TamanoMaximo = 200;
 
     public static void Map(RouteGroupBuilder backoffice)

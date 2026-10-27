@@ -1977,7 +1977,7 @@ paths:
             type: integer
             minimum: 1
             maximum: 200
-            default: 50
+            default: 10
       responses:
         "200":
           description: Página de lotes de la compañía indicada.
@@ -3291,7 +3291,7 @@ components:
       example:
         empresa: 7b1f0c2e-6d1a-4c55-9a43-2f6f0d1b9e10
         pagina: 1
-        tamano: 50
+        tamano: 10
         total: 1
         diagnosticos:
           - { id: 0199f3a1-1111-7000-8000-000000000001, nombre: Lote octubre, estado: EN_PROCESO, creado_en: "2026-10-22T14:00:00+00:00", vehiculos: 2, celdas_en_error: 2 }

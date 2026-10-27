@@ -61,6 +61,7 @@ public sealed class DiagnosticosBackofficeTests
         lista.GetProperty("empresa").GetGuid().Should().Be(empresas.A.Id);
         lista.GetProperty("total").GetInt32().Should().Be(1);
         lista.GetProperty("pagina").GetInt32().Should().Be(1);
+        lista.GetProperty("tamano").GetInt32().Should().Be(10, "la paginación estándar del monorepo (HU #13916) arranca en 10 si no se envía tamano");
         var lote = lista.GetProperty("diagnosticos").EnumerateArray().Should().ContainSingle().Subject;
         lote.GetProperty("id").GetGuid().Should().Be(conError.Id);
         lote.GetProperty("nombre").GetString().Should().Be("Lote con error");
