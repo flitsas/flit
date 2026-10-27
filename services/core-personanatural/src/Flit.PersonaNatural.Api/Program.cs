@@ -3,6 +3,7 @@ using Flit.PersonaNatural.Api.Abuso;
 using Flit.PersonaNatural.Api;
 using Flit.PersonaNatural.Api.Persistence;
 using Flit.PersonaNatural.Api.Pii;
+using Flit.PersonaNatural.Api.Radicados;
 using Flit.PersonaNatural.Api.Sesiones;
 using Flit.Platform.Sdk.Authentication;
 using Flit.Platform.Sdk.Grpc;
@@ -64,6 +65,9 @@ public static class Program
         // HU #14036: captcha, límite por IP y topes de consultas por cédula y globales.
         builder.Services.AddAbusoPortal(builder.Configuration);
 
+        // HU #14042: consulta pública de radicado con macro-estados.
+        builder.Services.AddRadicadosPortal();
+
         // h2c necesita un endpoint solo HTTP/2: se vuelven a declarar las URLs del REST (Kestrel ignora ASPNETCORE_URLS
         // cuando se declaran endpoints por código) y se suma el del gRPC.
         builder.WebHost.ConfigureKestrel((context, options) =>
@@ -90,6 +94,7 @@ public static class Program
         app.UseAuthorization();
 
         app.MapSesionEndpoints();
+        app.MapRadicadoEndpoints();
         app.MapGet("/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();
         app.MapGet("/health/ready", async (PersonaNaturalDb db, CancellationToken ct) =>
             await db.Database.CanConnectAsync(ct).ConfigureAwait(false)
