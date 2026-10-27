@@ -26,6 +26,9 @@ public static class PlatformMessagingExtensions
         services.TryAddSingleton<IEventPublisher, RabbitMqEventPublisher>();
         services.AddScoped<IPlatformOutbox, PlatformOutbox<TContext>>();
         services.AddHostedService<OutboxPublisherService<TContext>>();
+        // HU #13727 (ADR-0072 R-2): purga opt-in de las filas publicadas.
+        if (options.RetencionPublicados is not null)
+            services.AddHostedService<OutboxPurgeService<TContext>>();
         return services;
     }
 
