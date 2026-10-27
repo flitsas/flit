@@ -51,6 +51,7 @@ internal sealed class VerifikConductorConsultationProvider(
 
     private async Task<ConsultationResult> SendAsync(string url, CancellationToken ct)
     {
+        HttpStatusCode? estado = null;
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -59,16 +60,17 @@ internal sealed class VerifikConductorConsultationProvider(
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
             using var response = await http.SendAsync(request, ct);
+            estado = response.StatusCode;
 
             if (response.StatusCode == HttpStatusCode.NotFound)
                 return NotFound();
 
             if (!response.IsSuccessStatusCode)
-                return ProviderUnavailable();
+                return ProviderUnavailable(ClasificadorFalloHttp.PorEstado(response.StatusCode));
 
             var payload = await response.Content.ReadFromJsonAsync<VerifikConductorResponse>(JsonOptions, ct);
             if (payload is null)
-                return ProviderUnavailable();
+                return ProviderUnavailable(ClasificadorFalloHttp.CuerpoIlegible(response.StatusCode));
 
             return VerifikConductorResultMapper.Map(payload);
         }
@@ -78,15 +80,15 @@ internal sealed class VerifikConductorConsultationProvider(
         }
         catch (TaskCanceledException)
         {
-            return ProviderUnavailable();
+            return ProviderUnavailable(ClasificadorFalloHttp.Timeout());
         }
         catch (HttpRequestException)
         {
-            return ProviderUnavailable();
+            return ProviderUnavailable(ClasificadorFalloHttp.Red());
         }
         catch (JsonException)
         {
-            return ProviderUnavailable();
+            return ProviderUnavailable(ClasificadorFalloHttp.CuerpoIlegible(estado));
         }
     }
 
@@ -143,6 +145,9 @@ internal sealed class VerifikConductorConsultationProvider(
         new(Key_, "yellow",
             [new ConsultationCheck("conductor", "Persona en RUNT", "unknown", Key_, "Persona no encontrada en RUNT")],
             []);
+
+    /// <summary>El <c>ProviderUnavailable</c> de siempre, con la clase del fallo (resolvedor del Diagnóstico).</summary>
+    private static ConsultationResult ProviderUnavailable(FalloProveedor fallo) => ProviderUnavailable() with { Fallo = fallo };
 
     // No se pudo consultar la persona en el RUNT (no-200/timeout/red/respuesta ilegible).
     // Check "error" (contrato consistente); el lookup de persona solo lee HydratedFields y cae

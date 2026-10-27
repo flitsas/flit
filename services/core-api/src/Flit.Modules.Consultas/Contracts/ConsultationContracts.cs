@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Flit.Tramites.Domain.Certifications;
 
 namespace Flit.Tramites.Application.UseCases.Consultations;
@@ -34,7 +35,52 @@ public sealed record ConsultationResult(
     bool FromCache = false,
     DateTimeOffset? QueriedAt = null,
     CertificationBundle? Certifications = null,
-    RawProviderPayload? RawPayload = null);
+    RawProviderPayload? RawPayload = null,
+    [property: JsonIgnore] FalloProveedor? Fallo = null);
+
+/// <summary>
+/// Por qué no respondió el proveedor (resolvedor de errores del Diagnóstico). Lo llenan los proveedores HTTP en cada
+/// <c>ProviderUnavailable</c>; no cambia <see cref="ConsultationResult.Overall"/>, los checks ni el mensaje, y no se serializa
+/// (<see cref="JsonIgnore"/>): Trámites y Comparendos reciben exactamente lo mismo. Solo core-consultas lo lee, dentro de un
+/// trabajo del bus del Diagnóstico, para publicar <c>motivoFallo</c>.
+/// </summary>
+/// <param name="Clase">Clase del fallo.</param>
+/// <param name="HttpStatus">Código HTTP del proveedor, si hubo respuesta.</param>
+public sealed record FalloProveedor(ClaseFalloProveedor Clase, int? HttpStatus = null)
+{
+    /// <summary>Código estable del fallo: <c>CREDENCIALES|LIMITE|RECHAZO|CAIDA|RED|TIMEOUT</c>.</summary>
+    public string Codigo => Clase switch
+    {
+        ClaseFalloProveedor.Credenciales => "CREDENCIALES",
+        ClaseFalloProveedor.Limite => "LIMITE",
+        ClaseFalloProveedor.Rechazo => "RECHAZO",
+        ClaseFalloProveedor.Caida => "CAIDA",
+        ClaseFalloProveedor.Red => "RED",
+        _ => "TIMEOUT",
+    };
+}
+
+/// <summary>Clase del fallo de un proveedor externo.</summary>
+public enum ClaseFalloProveedor
+{
+    /// <summary>401/403: credencial vencida o sin permiso (error de configuración).</summary>
+    Credenciales,
+
+    /// <summary>429: límite de peticiones del proveedor.</summary>
+    Limite,
+
+    /// <summary>400/422: el proveedor rechazó la solicitud.</summary>
+    Rechazo,
+
+    /// <summary>5xx, cualquier otro no-2xx, o 2xx con cuerpo ilegible.</summary>
+    Caida,
+
+    /// <summary>Error de red (DNS, conexión, reset).</summary>
+    Red,
+
+    /// <summary>Timeout del cliente HTTP.</summary>
+    Timeout,
+}
 
 /// <summary>
 /// Un check individual de la consulta. Status ∈ {"ok","warn","fail","unknown","error"}.

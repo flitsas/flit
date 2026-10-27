@@ -14,7 +14,9 @@ namespace Flit.Consultas.Api.Bus;
 /// <see cref="Error"/> (ERROR). Un proveedor caído que el servicio ya informa dentro de su respuesta (chequeo en ERROR,
 /// <c>RESULTADO_RUNT_INTEMPO_ERROR</c>) es OK: lo decide Diagnóstico con sus mapeos, como hoy.
 /// </summary>
-internal sealed record EjecucionTrabajo(IMessage? Respuesta, StatusCode? Error, bool DesdeCache, TimeSpan Duracion);
+/// <remarks><see cref="MotivoFallo"/>: con OK y el proveedor caído, el <see cref="Flit.Tramites.Application.UseCases.Consultations.FalloProveedor.Codigo"/>
+/// del último resultado del proveedor (<see cref="RegistroFallosProveedor"/>); null si respondió o no lo informa.</remarks>
+internal sealed record EjecucionTrabajo(IMessage? Respuesta, StatusCode? Error, bool DesdeCache, TimeSpan Duracion, string? MotivoFallo = null);
 
 /// <summary>
 /// Ejecuta un trabajo del diagnóstico (ADR-0075, Q3 y Q4 con U2 = a): parsea la <see cref="TrabajoConsultaDiagnostico.Solicitud"/>
@@ -59,10 +61,11 @@ internal sealed class EjecutorTrabajo(
         using var limite = CancellationTokenSource.CreateLinkedTokenSource(ct);
         limite.CancelAfter(opciones.TiempoMaximo);
         var deadline = time.GetUtcNow().UtcDateTime + opciones.TiempoMaximo;
+        using var fallos = RegistroFallosProveedor.Abrir();
         try
         {
             var respuesta = await LlamarAsync(trabajo, caller, deadline, limite.Token).ConfigureAwait(false);
-            return new EjecucionTrabajo(respuesta, null, DesdeCache(respuesta), reloj.Elapsed);
+            return new EjecucionTrabajo(respuesta, null, DesdeCache(respuesta), reloj.Elapsed, RegistroFallosProveedor.Motivo());
         }
         catch (RpcException ex) when (ex.StatusCode != StatusCode.Cancelled || !ct.IsCancellationRequested)
         {

@@ -52,6 +52,7 @@
       "errores": []
     },
     "duracionMs": 1234,
-    "desdeCache": false
+    "desdeCache": false,
+    "motivoFallo": null
   }
 }

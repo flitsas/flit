@@ -213,3 +213,12 @@ components:
                       listas vacías). @pii:high — trae nombres, direcciones, contacto, histórico y terceros del proveedor.
                   duracionMs: { type: integer, minimum: 0 }
                   desdeCache: { type: boolean, description: La respuesta salió de la caché de proveedor de Consultas. }
+                  motivoFallo:
+                    type: [string, 'null']
+                    enum: [CREDENCIALES, LIMITE, RECHAZO, CAIDA, RED, TIMEOUT, null]
+                    description: |
+                      Opcional y compatible (resolvedor de errores del Diagnóstico): con estado OK y el proveedor caído (chequeo en
+                      ESTADO_CHEQUEO_ERROR), por qué no respondió el proveedor. CREDENCIALES = 401/403 (error de configuración,
+                      definitivo), LIMITE = 429, RECHAZO = 400/422, CAIDA = 5xx u otro no-2xx o cuerpo ilegible, RED = error de red,
+                      TIMEOUT = timeout del cliente HTTP. null si no hubo fallo, si el proveedor no lo informa o con estado ERROR.
+                      Un consumidor que no lo conozca lo ignora; ausente equivale a null. Nunca el mensaje ni el cuerpo del proveedor.

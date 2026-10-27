@@ -190,6 +190,7 @@ internal sealed partial class ConsultasGrpcService(
 
         var result = await chain.ConsultAsync(kind, new ConsultationContext(Guid.Empty, caller.TenantId, plantilla, campos), ajustado, ct)
             .ConfigureAwait(false);
+        Bus.RegistroFallosProveedor.Anotar(result);
         return ResultadoConsultaMapper.ToProto(result, opciones?.IncluirRespuestaCruda == true);
     }
 
@@ -199,6 +200,8 @@ internal sealed partial class ConsultasGrpcService(
         var provider = registry.Resolve(clave) ?? throw Invalido($"Proveedor desconocido: {clave}.");
         var result = await provider.ConsultAsync(new ConsultationContext(Guid.Empty, caller.TenantId, provider.Key, campos), ct)
             .ConfigureAwait(false);
+        // Resolvedor del Diagnóstico: solo dentro de un trabajo del bus; por gRPC es un no-op y la respuesta no cambia.
+        Bus.RegistroFallosProveedor.Anotar(result);
         return ResultadoConsultaMapper.ToProto(result, opciones?.IncluirRespuestaCruda == true);
     }
 

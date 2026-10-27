@@ -57,22 +57,24 @@ internal sealed class FlitFinesConsultationProvider(
 
     private async Task<ConsultationResult> SendAsync(string url, CancellationToken ct)
     {
+        HttpStatusCode? estado = null;
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
             using var response = await http.SendAsync(request, ct);
+            estado = response.StatusCode;
 
             if (response.StatusCode == HttpStatusCode.NotFound)
                 return NotFound();
 
             if (!response.IsSuccessStatusCode)
-                return ProviderUnavailable();
+                return ProviderUnavailable(ClasificadorFalloHttp.PorEstado(response.StatusCode));
 
             var payload = await response.Content.ReadFromJsonAsync<FlitFinesResponse>(JsonOptions, ct);
             if (payload is null)
-                return ProviderUnavailable();
+                return ProviderUnavailable(ClasificadorFalloHttp.CuerpoIlegible(response.StatusCode));
 
             return FlitFinesResultMapper.Map(payload);
         }
@@ -82,15 +84,15 @@ internal sealed class FlitFinesConsultationProvider(
         }
         catch (TaskCanceledException)
         {
-            return ProviderUnavailable();
+            return ProviderUnavailable(ClasificadorFalloHttp.Timeout());
         }
         catch (HttpRequestException)
         {
-            return ProviderUnavailable();
+            return ProviderUnavailable(ClasificadorFalloHttp.Red());
         }
         catch (JsonException)
         {
-            return ProviderUnavailable();
+            return ProviderUnavailable(ClasificadorFalloHttp.CuerpoIlegible(estado));
         }
     }
 
@@ -103,6 +105,9 @@ internal sealed class FlitFinesConsultationProvider(
             [new ConsultationCheck(FinesCheckFactory.KeyMultas, FinesCheckFactory.LabelMultas, "ok", Key_,
                 "Sin registros SIMIT")],
             []);
+
+    /// <summary>El <c>ProviderUnavailable</c> de siempre, con la clase del fallo (resolvedor del Diagnóstico).</summary>
+    private static ConsultationResult ProviderUnavailable(FalloProveedor fallo) => ProviderUnavailable() with { Fallo = fallo };
 
     // No se pudo verificar (no-200/timeout/red/respuesta ilegible). Dato crítico: check "error"
     // (bloqueo DURO, no subsanable) con mensaje amigable que no expone el proveedor.

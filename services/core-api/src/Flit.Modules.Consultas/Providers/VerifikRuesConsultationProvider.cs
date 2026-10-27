@@ -47,6 +47,7 @@ internal sealed class VerifikRuesConsultationProvider(
         if (string.IsNullOrWhiteSpace(nit))
             return InputError("Se requiere el NIT para consultar RUES");
 
+        HttpStatusCode? estado = null;
         try
         {
             // Endpoint real Verifik RUES v3 (misma config que RUNT por Verifik: BaseUrl/ApiToken/AuthScheme).
@@ -59,12 +60,13 @@ internal sealed class VerifikRuesConsultationProvider(
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
             using var response = await http.SendAsync(request, ct);
+            estado = response.StatusCode;
 
             if (response.StatusCode == HttpStatusCode.NotFound)
                 return NotFound(nit);
 
             if (!response.IsSuccessStatusCode)
-                return ProviderUnavailable();
+                return ProviderUnavailable(ClasificadorFalloHttp.PorEstado(response.StatusCode));
 
             // HU #11306 — se lee como texto y se deserializa desde ahí para conservar el JSON tal como
             // llegó. Aquí importa el doble: el bloque `legalRepresentatives` trae una lista
@@ -75,7 +77,7 @@ internal sealed class VerifikRuesConsultationProvider(
             var raw = await response.Content.ReadAsStringAsync(ct);
             var payload = JsonSerializer.Deserialize<VerifikRuesResponse>(raw, JsonOptions);
             if (payload is null)
-                return ProviderUnavailable();
+                return ProviderUnavailable(ClasificadorFalloHttp.CuerpoIlegible(response.StatusCode));
 
             return Map(payload, nit) with
             {
@@ -93,15 +95,15 @@ internal sealed class VerifikRuesConsultationProvider(
         }
         catch (TaskCanceledException)
         {
-            return ProviderUnavailable();
+            return ProviderUnavailable(ClasificadorFalloHttp.Timeout());
         }
         catch (HttpRequestException)
         {
-            return ProviderUnavailable();
+            return ProviderUnavailable(ClasificadorFalloHttp.Red());
         }
         catch (JsonException)
         {
-            return ProviderUnavailable();
+            return ProviderUnavailable(ClasificadorFalloHttp.CuerpoIlegible(estado));
         }
     }
 
@@ -278,6 +280,9 @@ internal sealed class VerifikRuesConsultationProvider(
             [new ConsultationCheck("rues", "Consulta RUES", "unknown", Key_,
                 $"No se encontró la empresa con NIT {nit} en RUES")],
             []);
+
+    /// <summary>El <c>ProviderUnavailable</c> de siempre, con la clase del fallo (resolvedor del Diagnóstico).</summary>
+    private static ConsultationResult ProviderUnavailable(FalloProveedor fallo) => ProviderUnavailable() with { Fallo = fallo };
 
     // No se pudo verificar RUES (no-200/timeout/red/respuesta ilegible): check "error"
     // (bloqueo duro, no subsanable) con mensaje amigable que no expone el proveedor.

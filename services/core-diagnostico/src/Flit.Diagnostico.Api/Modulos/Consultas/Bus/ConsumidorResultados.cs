@@ -100,6 +100,8 @@ internal sealed partial class ConsumidorResultados(
 
         var enCurso = CeldaEnCurso.De(celda);
         var respuesta = data.Leer(envelope.OccurredAt);
+        if (string.Equals(data.MotivoFallo, Fuentes.TraductorErroresConsultas.MotivoCredenciales, StringComparison.OrdinalIgnoreCase))
+            ConfiguracionProveedor(log, celda.Id, celda.Fuente, data.TrabajoId);
         ResultadoCelda resultado;
         try
         {
@@ -158,6 +160,10 @@ internal sealed partial class ConsumidorResultados(
 
     [LoggerMessage(EventId = 137278, Level = LogLevel.Information, Message = "La celda {CeldaId} de {Fuente} cerró en {Estado} ({TipoError})")]
     private static partial void Cerrada(ILogger logger, Guid celdaId, Fuente fuente, EstadoCelda estado, string tipoError);
+
+    [LoggerMessage(EventId = 137279, Level = LogLevel.Error,
+        Message = "Error de configuración del proveedor: la celda {CeldaId} de {Fuente} (trabajo {TrabajoId}) recibió credenciales rechazadas (401/403); no se reintenta")]
+    private static partial void ConfiguracionProveedor(ILogger logger, Guid celdaId, Fuente fuente, Guid trabajoId);
 
     [LoggerMessage(EventId = 137270, Level = LogLevel.Warning, Message = "La celda {CeldaId} de {Fuente} no pudo aplicar la respuesta ({TipoError}) y queda en ERROR")]
     private static partial void AplicacionFallida(ILogger logger, Guid celdaId, Fuente fuente, string tipoError);

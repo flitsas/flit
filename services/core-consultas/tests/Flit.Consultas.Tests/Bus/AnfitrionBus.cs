@@ -96,6 +96,7 @@ public class AnfitrionBus : IAsyncLifetime
             s.AddTransient<IConsultationProvider>(_ => new Falso(clave, Llamadas));
         s.AddTransient<IConsultationProvider>(_ => new Explota(Llamadas));
         s.AddTransient<IConsultationProvider>(_ => new Lento(Llamadas));
+        s.AddTransient<IConsultationProvider>(_ => new SinCredenciales());
     });
 
     /// <summary>El efecto de <typeparamref name="TConsumidor"/> en un scope con su transacción, como el consumidor del SDK.</summary>
@@ -219,6 +220,24 @@ public class AnfitrionBus : IAsyncLifetime
             llamadas.Sumar(Clave);
             throw new InvalidOperationException("detalle interno con DOCUMENTO 9999900011");
         }
+    }
+
+    /// <summary>
+    /// Proveedor de multas con la credencial vencida (403 <c>token_expired</c>): responde como el SIMIT de Verifik caído, con el
+    /// <see cref="ConsultationResult.Fallo"/> que anota el proveedor real.
+    /// </summary>
+    public sealed class SinCredenciales : IConsultationProvider
+    {
+        public const string Clave = "falso_sin_credenciales";
+
+        public static ConsultationResult Resultado { get; } = new(Clave, "red",
+            [new ConsultationCheck("provider", "Consulta SIMIT", "error", Clave,
+                "No fue posible verificar la información en SIMIT en este momento. Vuelve a intentarlo en unos minutos.")],
+            [], Fallo: new FalloProveedor(ClaseFalloProveedor.Credenciales, 403));
+
+        public string Key => Clave;
+
+        public Task<ConsultationResult> ConsultAsync(ConsultationContext ctx, CancellationToken ct) => Task.FromResult(Resultado);
     }
 
     /// <summary>No responde hasta que lo cancelen.</summary>

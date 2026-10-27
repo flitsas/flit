@@ -32,7 +32,7 @@ internal sealed class PublicadorResultado(IPlatformOutbox outbox)
         ArgumentNullException.ThrowIfNull(trabajo);
         ArgumentNullException.ThrowIfNull(ejecucion);
         var datos = ejecucion is { Error: null, Respuesta: { } respuesta }
-            ? ResultadoConsultaDiagnostico.Exito(trabajo, ProtoJson(respuesta), ejecucion.Duracion, ejecucion.DesdeCache)
+            ? ResultadoConsultaDiagnostico.Exito(trabajo, ProtoJson(respuesta), ejecucion.Duracion, ejecucion.DesdeCache, ejecucion.MotivoFallo)
             : ResultadoConsultaDiagnostico.Fallo(trabajo, ejecucion.Error ?? StatusCode.Internal, ejecucion.Duracion);
         return outbox.Enqueue(ResultadoConsultaDiagnostico.Tipo, ResultadoConsultaDiagnostico.VersionContrato, tenantId, datos);
     }

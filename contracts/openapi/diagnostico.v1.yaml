@@ -2429,8 +2429,10 @@ components:
           nullable: true
           description: >
             Código del error (null si SUCCESS). Transitorios, que se reintentan con backoff 5 s × 2^(n−1) hasta
-            Diagnostico:Consultas:MaxReintentos ∈ [0, 3] (por defecto 1): TIMEOUT, RED, HTTP_5XX. Definitivos:
-            RESPUESTA_INVALIDA, AUTENTICACION, ESTADO_NO_OK, NO_CONECTADO y cualquier otro.
+            Diagnostico:Consultas:MaxReintentos ∈ [0, 3] (por defecto 1): TIMEOUT, RED, HTTP_5XX, LIMITE_PROVEEDOR (el
+            proveedor respondió 429). Definitivos: RESPUESTA_INVALIDA, AUTENTICACION (también credencial del proveedor
+            rechazada, 401/403: error de configuración), ESTADO_NO_OK (también solicitud rechazada por el proveedor, 400/422),
+            NO_CONECTADO y cualquier otro.
         mensaje_error:
           type: string
           nullable: true

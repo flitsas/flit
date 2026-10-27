@@ -9,7 +9,8 @@ namespace Flit.Consultas.Api.Bus;
 /// proto COMPLETO en proto-JSON con los nombres del .proto y los valores por defecto, HU #14087 AC8, <see cref="PublicadorResultado"/>)
 /// o <see cref="Error"/> con el <see cref="GrpcStatus"/>
 /// (el nombre del <see cref="StatusCode"/> que viajaría en la <see cref="RpcException"/>). Nunca lleva el mensaje de la excepción ni
-/// el detalle del proveedor. Espejo del record de core-diagnostico, validado contra
+/// el detalle del proveedor. <see cref="MotivoFallo"/> (opcional, resolvedor de errores del Diagnóstico): con OK y el proveedor
+/// caído, por qué no respondió: <c>CREDENCIALES|LIMITE|RECHAZO|CAIDA|RED|TIMEOUT</c>; null si no hubo fallo. Espejo del record de core-diagnostico, validado contra
 /// <c>contracts/fixtures/bus/resultado-consulta-diagnostico.v1.json</c>.
 /// </summary>
 public sealed record ResultadoConsultaDiagnostico(
@@ -21,7 +22,8 @@ public sealed record ResultadoConsultaDiagnostico(
     string? GrpcStatus,
     JsonElement? Respuesta,
     int DuracionMs,
-    bool DesdeCache)
+    bool DesdeCache,
+    string? MotivoFallo = null)
 {
     /// <summary>Tipo (y llave de ruteo) del evento, en el exchange propio <c>flit.consultas</c>.</summary>
     public const string Tipo = "consultas.resultado.diagnostico";
@@ -33,10 +35,11 @@ public sealed record ResultadoConsultaDiagnostico(
     public const string Error = "ERROR";
 
     /// <summary>Resultado OK del <paramref name="trabajo"/> con la respuesta completa en proto-JSON.</summary>
-    public static ResultadoConsultaDiagnostico Exito(TrabajoConsultaDiagnostico trabajo, JsonElement respuesta, TimeSpan duracion, bool desdeCache)
+    public static ResultadoConsultaDiagnostico Exito(
+        TrabajoConsultaDiagnostico trabajo, JsonElement respuesta, TimeSpan duracion, bool desdeCache, string? motivoFallo = null)
     {
         ArgumentNullException.ThrowIfNull(trabajo);
-        return new(trabajo.TrabajoId, trabajo.ConsultaId, trabajo.PersonaId, trabajo.Fuente, Ok, null, respuesta, Milisegundos(duracion), desdeCache);
+        return new(trabajo.TrabajoId, trabajo.ConsultaId, trabajo.PersonaId, trabajo.Fuente, Ok, null, respuesta, Milisegundos(duracion), desdeCache, motivoFallo);
     }
 
     /// <summary>Resultado ERROR del <paramref name="trabajo"/> con el código gRPC, sin respuesta.</summary>

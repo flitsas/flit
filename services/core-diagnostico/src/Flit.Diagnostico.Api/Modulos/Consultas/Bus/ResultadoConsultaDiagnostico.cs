@@ -13,7 +13,8 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 /// <see cref="Respuesta"/>: el <c>*Response</c> proto COMPLETO del rpc en proto-JSON (HU #14087 AC8: sin minimizar, con los nombres
 /// del .proto y los valores por defecto; trae datos personales), en claro en el broker y cifrado al guardarlo
 /// (<see cref="RespuestaFuenteCelda"/>); con ERROR trae <see cref="GrpcStatus"/>: el nombre del <see cref="StatusCode"/> que hoy viajaría en el
-/// <c>RpcException</c>, nunca el mensaje ni el detalle del proveedor. Lo valida el fixture compartido
+/// <c>RpcException</c>, nunca el mensaje ni el detalle del proveedor. <see cref="MotivoFallo"/> (opcional; ausente en mensajes viejos)
+/// dice por qué no respondió el proveedor (<c>CREDENCIALES|LIMITE|RECHAZO|CAIDA|RED|TIMEOUT</c>). Lo valida el fixture compartido
 /// <c>contracts/fixtures/bus/resultado-consulta-diagnostico.v1.json</c>.
 /// </summary>
 /// <example>
@@ -23,7 +24,7 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 /// </example>
 public sealed record ResultadoConsultaDiagnostico(
     Guid TrabajoId, Guid ConsultaId, Guid? PersonaId, string Fuente, string Estado, string? GrpcStatus, JsonElement? Respuesta, long DuracionMs,
-    bool DesdeCache)
+    bool DesdeCache, string? MotivoFallo = null)
 {
     /// <summary>Tipo del sobre y llave de ruteo en <c>flit.consultas</c>.</summary>
     public const string Tipo = "consultas.resultado.diagnostico";
@@ -49,7 +50,7 @@ public sealed record ResultadoConsultaDiagnostico(
     {
         var inicio = terminadoEn - TimeSpan.FromMilliseconds(Math.Max(DuracionMs, 0));
         if (string.Equals(Estado, EstadoOk, StringComparison.OrdinalIgnoreCase))
-            return new RespuestaConsulta(PersonaId, Fuente, LeerRespuesta(), null, inicio, terminadoEn, DesdeCache);
+            return new RespuestaConsulta(PersonaId, Fuente, LeerRespuesta(), null, inicio, terminadoEn, DesdeCache, MotivoFallo);
 
         return new RespuestaConsulta(PersonaId, Fuente, null, Codigo(GrpcStatus), inicio, terminadoEn, DesdeCache);
     }

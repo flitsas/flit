@@ -53,8 +53,13 @@ public sealed record ContextoCelda(CeldaEnCurso Celda, DiagnosticoDb Db);
 /// <param name="Inicio">Inicio de la consulta (fin menos su duración).</param>
 /// <param name="Fin">Cuándo terminó la consulta (el <c>occurredAt</c> del resultado).</param>
 /// <param name="DesdeCache">La respuesta salió de la caché de proveedor de core-consultas.</param>
+/// <param name="MotivoFallo">
+/// <c>motivoFallo</c> del bus (<c>CREDENCIALES|LIMITE|RECHAZO|CAIDA|RED|TIMEOUT</c>): por qué no respondió el proveedor; null en
+/// mensajes viejos o sin fallo.
+/// </param>
 public sealed record RespuestaConsulta(
-    Guid? PersonaId, string Fuente, IMessage? Respuesta, StatusCode? Codigo, DateTimeOffset Inicio, DateTimeOffset Fin, bool DesdeCache)
+    Guid? PersonaId, string Fuente, IMessage? Respuesta, StatusCode? Codigo, DateTimeOffset Inicio, DateTimeOffset Fin, bool DesdeCache,
+    string? MotivoFallo = null)
 {
     /// <summary>Error de un resultado OK sin respuesta legible (definitivo).</summary>
     public static ErrorConsulta Invalida { get; } =
@@ -70,7 +75,14 @@ public sealed record RespuestaConsulta(
     {
         ArgumentNullException.ThrowIfNull(ok);
         ArgumentNullException.ThrowIfNull(error);
-        return Respuesta is TRespuesta r ? ok(r) : Codigo is { } codigo ? error(codigo) : RespuestaFuente<T>.Fallo(Invalida);
+        if (Respuesta is TRespuesta r)
+        {
+            // Resolvedor de errores: el proveedor caído deja de ser siempre HTTP_5XX si core-consultas dijo por qué.
+            var mapeada = ok(r);
+            return MotivoFallo is null ? mapeada : mapeada with { Error = TraductorErroresConsultas.ConMotivo(mapeada.Error, MotivoFallo) };
+        }
+
+        return Codigo is { } codigo ? error(codigo) : RespuestaFuente<T>.Fallo(Invalida);
     }
 }
 

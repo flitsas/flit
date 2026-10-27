@@ -108,6 +108,7 @@ internal sealed class VerifikConsultationProvider(
     /// </summary>
     private async Task<(ConsultationResult Result, bool Transient)> SendOnceAsync(string url, CancellationToken ct)
     {
+        HttpStatusCode? estado = null;
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -118,6 +119,7 @@ internal sealed class VerifikConsultationProvider(
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
             using var response = await http.SendAsync(request, ct);
+            estado = response.StatusCode;
 
             if (response.StatusCode == HttpStatusCode.NotFound)
                 return (VehicleNotFound(), false);
@@ -127,12 +129,12 @@ internal sealed class VerifikConsultationProvider(
                 // 5xx (502/503/504) = el gateway de Verifik no obtuvo respuesta del RUNT:
                 // transitorio, vale la pena reintentar. 4xx (auth/bad request) es definitivo.
                 var transient = (int)response.StatusCode >= 500;
-                return (ProviderUnavailable(), transient);
+                return (ProviderUnavailable(ClasificadorFalloHttp.PorEstado(response.StatusCode)), transient);
             }
 
             var payload = await response.Content.ReadFromJsonAsync<VerifikVehicleResponse>(JsonOptions, ct);
             if (payload is null)
-                return (ProviderUnavailable(), false);
+                return (ProviderUnavailable(ClasificadorFalloHttp.CuerpoIlegible(response.StatusCode)), false);
 
             return (VerifikResultMapper.MapVehicle(payload), false);
         }
@@ -143,16 +145,16 @@ internal sealed class VerifikConsultationProvider(
         catch (TaskCanceledException)
         {
             // Timeout del HttpClient (no cancelación del caller): transitorio.
-            return (ProviderUnavailable(), true);
+            return (ProviderUnavailable(ClasificadorFalloHttp.Timeout()), true);
         }
         catch (HttpRequestException)
         {
             // Error de red (DNS/conexión/reset): transitorio.
-            return (ProviderUnavailable(), true);
+            return (ProviderUnavailable(ClasificadorFalloHttp.Red()), true);
         }
         catch (JsonException)
         {
-            return (ProviderUnavailable(), false);
+            return (ProviderUnavailable(ClasificadorFalloHttp.CuerpoIlegible(estado)), false);
         }
     }
 
@@ -232,6 +234,9 @@ internal sealed class VerifikConsultationProvider(
                 new ConsultationCheck("vehiculo", "Vehículo RUNT", "fail", "verifik", "Vehículo no encontrado en RUNT")
             ],
             []);
+
+    /// <summary>El <c>ProviderUnavailable</c> de siempre, con la clase del fallo (resolvedor del Diagnóstico).</summary>
+    private static ConsultationResult ProviderUnavailable(FalloProveedor fallo) => ProviderUnavailable() with { Fallo = fallo };
 
     // No se pudo verificar el vehículo en el RUNT (no-200/timeout/red/respuesta ilegible).
     // El dato es crítico para el trámite: se emite un check "error" (bloqueo DURO, overall red,
