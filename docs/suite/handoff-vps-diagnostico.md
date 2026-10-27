@@ -22,8 +22,9 @@ modelo que [handoff-vps-comparendos.md](handoff-vps-comparendos.md).
 La API y el gRPC no se publican: viven en la red de Docker. Los puertos los exporta el CD por ambiente
 ([despliegue-y-puertos.md](../despliegue-y-puertos.md) §2.d).
 
-**DEV y QA por GitOps.** DEV y QA se despliegan con `deploy-gitops` (Argo CD en la 177) y su
-configuración vive en `flit-gitops/services/flit2-<ambiente>/`. Ese job todavía **no** lleva las imágenes de
+**Los tres ambientes por GitOps.** DEV, QA (Argo CD en la 177) y PDN (Argo CD en la 169) se despliegan con
+`deploy-gitops`; el antiguo despliegue por SSH (`deploy-to-vps`) ya no existe en `cd.yml`. La configuración vive en
+`flit-gitops/services/flit2-<ambiente>/`, no en el compose ni en el `.env`. Ese job todavía **no** lleva las imágenes de
 Diagnóstico: antes de sumarlas a su lista, la `kustomization.yaml` de cada ambiente tiene que declarar
 `ghcr.io/flitsas/flitdev/core-diagnostico` y `ghcr.io/flitsas/flitdev/frontend-diagnostico` (si no, `yq -e` corta el
 despliegue de todo el ambiente) y los manifiestos tienen que traer las variables de abajo.

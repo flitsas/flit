@@ -187,21 +187,6 @@ class JobsDeCd(unittest.TestCase):
         self.assertEqual(build["file"], "./frontend-diagnostico/Dockerfile")
         self._cubre(job, DOCKERFILE_WEB, "")
 
-    def test_despliegue_por_vps_conoce_los_dos_servicios(self):
-        job = self._job("deploy-to-vps")
-        for build in ("build-core-diagnostico", "build-frontend-diagnostico"):
-            self.assertIn(build, job["needs"])
-        script = next(p["with"]["script"] for p in job["steps"] if "script" in p.get("with", {}))
-        servicios = re.search(r'SERVICES="([^"]+)"', script).group(1).split()
-        for svc, var in (("core-diagnostico", "CORE_DIAGNOSTICO"), ("frontend-diagnostico", "FRONTEND_DIAGNOSTICO")):
-            self.assertIn(svc, servicios)
-            self.assertIn(f"export {var}_TAG=", script)
-            self.assertIn(f"{svc}) echo \"${{{{ needs.build-{svc}.result }}}}\"", script)
-            self.assertIn(f"{svc}) echo \"${{{{ needs.build-{svc}.outputs.digest }}}}\"", script)
-            self.assertIn(f"{svc}) echo {var}_TAG", script)
-        self.assertIn("export DIAGNOSTICO_PORT=${{ needs.setup.outputs.diagnostico_port }}", script)
-        self.assertIn("export CORE_DIAGNOSTICO_PORT=${{ needs.setup.outputs.core_diagnostico_port }}", script)
-
     def test_setup_exporta_los_puertos_por_ambiente(self):
         script = self._job("setup")["steps"][0]["run"]
         for web, api in ((WEB_PDN, API_PDN), (WEB_QA, API_QA), (WEB_DEV, API_DEV)):
