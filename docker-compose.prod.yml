@@ -1149,6 +1149,32 @@ services:
     cpus: ${FRONTEND_COMPARENDOS_CPUS:-0}
     logging: *default-logging
 
+  # ── frontend-personanatural (Epic #14021, HU #14052) — PERSONANATURAL_PORT, solo en 127.0.0.1 (nginx publica el dominio) ──
+  # App web del portal Persona Natural (Next.js, una imagen para todos los ambientes). No usa el login del hub: habla con
+  # el gateway (/api/v1/persona-natural/*) por su propio proxy, que guarda la sesión del trámite en cookie HttpOnly.
+  # Perfil propio: no arranca hasta que el ambiente lo pida (COMPOSE_PROFILES=…,personanatural).
+  frontend-personanatural:
+    profiles: ["personanatural"]
+    image: ghcr.io/flitsas/flitdev/frontend-personanatural:${FRONTEND_PERSONANATURAL_TAG:-latest}
+    environment:
+      PORT: "${PERSONANATURAL_PORT:-4031}"
+      HOSTNAME: "0.0.0.0"
+      CORE_API_ORIGIN: http://gateway:${GATEWAY_PORT:-4002}
+    ports:
+      - "127.0.0.1:${PERSONANATURAL_PORT:-4031}:${PERSONANATURAL_PORT:-4031}"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:${PERSONANATURAL_PORT:-4031}/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    depends_on:
+      - gateway
+    restart: *restart
+    mem_limit: ${FRONTEND_PERSONANATURAL_MEM_LIMIT:-0}
+    cpus: ${FRONTEND_PERSONANATURAL_CPUS:-0}
+    logging: *default-logging
+
   # HU #13332 (Epic #13316) — colector OpenTelemetry + Tempo (trazas) + Loki (logs) + Grafana en un contenedor. Solo
   # con el perfil `observabilidad`. Para usarlo: COMPOSE_PROFILES=...,observabilidad y
   # OTEL_EXPORTER_OTLP_ENDPOINT=http://observabilidad:4317 en el .env. Grafana queda solo en 127.0.0.1 (túnel SSH o

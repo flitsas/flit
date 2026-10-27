@@ -152,6 +152,7 @@ no se reutilizan.
 | Comparendos (`frontend-comparendos`) | `4023` | `5023` | `6023` |
 | API de Comparendos (`core-comparendos`, sin publicar) | `4028` | `5028` | `6028` |
 | BFF del portal Persona Natural (`core-personanatural`, sin publicar; propuesto) | `4029` | `5029` | `6029` |
+| Portal Persona Natural (`frontend-personanatural`, la app web; propuesto) | `4031` | `5031` | `6031` |
 | Diagnóstico (`frontend-diagnostico`) | `4024` | `5024` | `6024` |
 | `core-identity` | `4025` | `5025` | `6025` |
 

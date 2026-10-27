@@ -4,9 +4,12 @@
 trae qué hacer, cómo comprobarlo y cómo volver atrás. Se aplica **primero en DEV**; QA y PDN solo con aprobación del
 líder y después de que DEV esté estable.
 
-**Qué llega.** Un contenedor nuevo, `core-personanatural` (.NET 10), en el perfil `personanatural` del compose: el BFF
-del portal público de personas naturales. Crea y consulta trámites en FLIT 2 sin cuenta de usuario, con una sesión
-efímera por trámite. Su front (`transfer-step-trail`) vive en otro repositorio y llega con el Feature E.
+**Qué llega.** Dos contenedores nuevos en el perfil `personanatural` del compose:
+
+- `core-personanatural` (.NET 10): el BFF del portal público de personas naturales. Crea y consulta trámites en FLIT 2
+  sin cuenta de usuario, con una sesión efímera por trámite.
+- `frontend-personanatural` (Next.js, vive en este monorepo con la estructura de `frontend-comparendos`): la app web del
+  portal. No usa el login del hub; habla con el gateway por su propio proxy, que guarda la sesión en una cookie HttpOnly.
 
 **Por qué es seguro fusionar antes de encender.**
 
@@ -19,13 +22,14 @@ efímera por trámite. Su front (`transfer-step-trail`) vive en otro repositorio
 
 ## Puertos (propuestos, por confirmar con el líder)
 
-| Ambiente | API interna (`CORE_PERSONANATURAL_PORT`) | gRPC (`CORE_PERSONANATURAL_GRPC_PORT`) |
-|---|---|---|
-| DEV | 4029 | 8087 |
-| QA | 5029 | 8087 |
-| PDN | 6029 | 8087 |
+| Ambiente | Web (`PERSONANATURAL_PORT`) | API interna (`CORE_PERSONANATURAL_PORT`) | gRPC (`CORE_PERSONANATURAL_GRPC_PORT`) |
+|---|---|---|---|
+| DEV | 4031 | 4029 | 8087 |
+| QA | 5031 | 5029 | 8087 |
+| PDN | 6031 | 6029 | 8087 |
 
-Ni el REST ni el gRPC se publican: viven en la red de Docker. Hacia afuera solo se llega por el gateway
+Ni el REST ni el gRPC del BFF se publican: viven en la red de Docker. La web escucha solo en `127.0.0.1` y nginx publica
+el dominio del portal (vhost nuevo, por definir) hacia ese puerto; al BFF solo se llega por el gateway
 (`/api/v1/persona-natural/*`).
 
 ## 1. Base de datos: usuario dueño del esquema `personanatural`
@@ -82,13 +86,14 @@ PERSONANATURAL_CAPTCHA_SECRET=<secreto del sitio del proveedor>
 - **Nunca** `PERSONANATURAL_CAPTCHA_PROVEEDOR=deshabilitado` en la VPS: corre como Development y dejaría el portal abierto.
 - Sin alguna de estas variables el contenedor no arranca y el log dice cuál falta.
 
-## 5. Origen del front (CORS)
+## 5. Origen del front (CORS) y dominio
 
 ```
-CORS_ORIGIN_PERSONA_NATURAL=https://<dominio-del-front-persona-natural>
+CORS_ORIGIN_PERSONA_NATURAL=https://<dominio-del-portal>
 ```
 
-Se suma a los orígenes del gateway (`Cors__AllowedOrigins__3`). La política CORS del gateway es **global**: el origen
+El navegador llama al proxy del propio portal (mismo origen), así que el CORS del gateway solo hace falta si algún día el
+front llama al gateway directo. Se deja el origen previsto: se suma a los orígenes del gateway (`Cors__AllowedOrigins__3`). La política CORS del gateway es **global**: el origen
 queda permitido en todas sus rutas, que ya exigen su propia credencial (el portal no usa cookies). Si se quiere CORS por
 ruta, hay que tocar `Flit.Gateway/Program.cs` (queda como mejora, no es parte de esta HU).
 
@@ -107,14 +112,15 @@ quedan sin efecto.
 
 ## 7. Despliegue GitOps (cuando el portal salga de DEV)
 
-1. En `flit-gitops/services/flit2-<ambiente>/kustomization.yaml`, agregar la imagen `ghcr.io/flitsas/flitdev/core-personanatural`.
-2. En `cd.yml` (`deploy-gitops`): sumar `build-core-personanatural` a `needs`, el par `R_`/`D_` y la línea
-   `"core-personanatural:${{ env.CORE_PERSONANATURAL_IMAGE }}:CORE_PERSONANATURAL"` a la lista. **No hacerlo antes del
+1. En `flit-gitops/services/flit2-<ambiente>/kustomization.yaml`, agregar las imágenes `ghcr.io/flitsas/flitdev/core-personanatural` y `ghcr.io/flitsas/flitdev/frontend-personanatural`.
+2. En `cd.yml` (`deploy-gitops`): sumar `build-core-personanatural` y `build-frontend-personanatural` a `needs`, sus pares
+   `R_`/`D_` y las líneas `"core-personanatural:${{ env.CORE_PERSONANATURAL_IMAGE }}:CORE_PERSONANATURAL"` y
+   `"frontend-personanatural:${{ env.FRONTEND_PERSONANATURAL_IMAGE }}:FRONTEND_PERSONANATURAL"` a la lista. **No hacerlo antes del
    paso 1**: el despliegue de todo FLIT 2 fallaría.
 3. ConfigMap y sealed-secret con las variables de los pasos 1 a 5.
 
 ## Pendiente de confirmar
 
 - Puertos 4029/5029/6029 y gRPC 8087.
-- Dominio del front y su vhost de nginx (el front es otro repositorio).
+- Dominio del portal y su vhost de nginx; puertos 4031/5031/6031 de la web.
 - Dirección gRPC de core-api que usará el BFF para consultar y crear trámites (se agrega con las HU del Feature B/D).
