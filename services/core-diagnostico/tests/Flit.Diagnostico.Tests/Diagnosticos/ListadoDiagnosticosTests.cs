@@ -57,7 +57,7 @@ public sealed class ListadoDiagnosticosTests
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
         var json = JsonDocument.Parse(cuerpo).RootElement;
         json.GetProperty("pagina").GetInt32().Should().Be(1);
-        json.GetProperty("tamano").GetInt32().Should().Be(25);
+        json.GetProperty("tamano").GetInt32().Should().Be(10, "la paginación estándar del monorepo (HU #13916) arranca en 10 si no se envía tamano");
         json.GetProperty("total").GetInt32().Should().Be(3);
         var items = json.GetProperty("diagnosticos").EnumerateArray().ToList();
         items.Select(i => i.GetProperty("id").GetGuid()).Should().Equal(reciente.Id, medio.Id, antiguo.Id);

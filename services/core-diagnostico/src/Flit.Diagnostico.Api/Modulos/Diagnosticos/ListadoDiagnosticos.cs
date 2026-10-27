@@ -20,7 +20,7 @@ internal sealed record FiltroListado(
     public const string CodigoRangoInvalido = "RANGO_INVALIDO";
     public const string CodigoFiltroInvalido = "FILTRO_INVALIDO";
     public const string CodigoPaginacionInvalida = "PAGINACION_INVALIDA";
-    public const int TamanoPorDefecto = 25;
+    public const int TamanoPorDefecto = 10;
     public const int TamanoMaximo = 100;
     public const int NombreMaximo = 100;
 

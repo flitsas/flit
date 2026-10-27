@@ -285,7 +285,7 @@ paths:
             type: integer
             minimum: 1
             maximum: 100
-            default: 25
+            default: 10
       responses:
         "200":
           description: Página de lotes visibles para el usuario.
@@ -3213,7 +3213,7 @@ components:
             $ref: "#/components/schemas/DiagnosticoListado"
       example:
         pagina: 1
-        tamano: 25
+        tamano: 10
         total: 2
         diagnosticos:
           - id: 0199f3a1-2222-7000-8000-000000000002
