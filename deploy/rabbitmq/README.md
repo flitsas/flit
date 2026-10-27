@@ -26,6 +26,8 @@ contenedor por ambiente (hasta k3s), virtual host `flit`, un usuario por servici
 
    Servicios y su exchange: `tramites` (core-api, `flit.tramites`), `plataforma` (core-identity, `flit.plataforma`),
    `consultas` (core-consultas), `notificaciones` (core-notificaciones), `diagnostico` (core-diagnostico, HU #13734).
+   El script rechaza los nombres reservados `flit` (su patrón propio abarcaría todos los `flit.*`) y `guest` (usuario
+   por defecto del broker), como servicio y como destino de trabajos.
 
 ## Permisos
 
