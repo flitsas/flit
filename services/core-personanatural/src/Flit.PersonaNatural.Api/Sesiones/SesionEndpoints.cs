@@ -1,4 +1,5 @@
 using System.Globalization;
+using Flit.PersonaNatural.Api.Abuso;
 using Flit.PersonaNatural.Api.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -27,7 +28,7 @@ public static class SesionEndpoints
     public static IEndpointRouteBuilder MapSesionEndpoints(this IEndpointRouteBuilder app)
     {
         ArgumentNullException.ThrowIfNull(app);
-        var grupo = app.MapGroup(Base).AllowAnonymous();
+        var grupo = app.MapGroup(Base).AllowAnonymous().RequireRateLimiting(AbusoEndpoints.PoliticaPorIp);
 
         grupo.MapPost("/sesiones/reanudar", async (ReanudarRequest body, HttpContext http, SesionService sesiones, PiiHasher hasher, CancellationToken ct) =>
         {
@@ -48,7 +49,7 @@ public static class SesionEndpoints
                 default:
                     return Problema(StatusCodes.Status404NotFound, "No encontrado", MensajeNoEncontrada, CodigoNoEncontrada);
             }
-        });
+        }).ConCaptcha();
 
         // El estado del borrador, para rehidratar el wizard. Solo con la sesión de ESA solicitud.
         grupo.MapGet("/solicitudes/{id:guid}", async (Guid id, PersonaNaturalDb db, CancellationToken ct) =>
@@ -102,7 +103,7 @@ public static class SesionEndpoints
         return await siguiente(contexto).ConfigureAwait(false);
     }
 
-    private static IResult Problema(int estado, string titulo, string detalle, string codigo) =>
+    internal static IResult Problema(int estado, string titulo, string detalle, string codigo) =>
         Results.Problem(statusCode: estado, title: titulo, detail: detalle, extensions: new Dictionary<string, object?> { ["code"] = codigo });
 }
 

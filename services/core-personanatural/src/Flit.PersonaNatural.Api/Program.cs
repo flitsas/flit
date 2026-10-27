@@ -1,4 +1,5 @@
 using Flit.Api.Telemetry;
+using Flit.PersonaNatural.Api.Abuso;
 using Flit.PersonaNatural.Api;
 using Flit.PersonaNatural.Api.Persistence;
 using Flit.PersonaNatural.Api.Sesiones;
@@ -30,6 +31,7 @@ public static class Program
         var builder = WebApplication.CreateBuilder(args);
         configure?.Invoke(builder);
         ServicioSettings.Validate(builder.Configuration);
+        CaptchaOptions.Validar(builder.Configuration, builder.Environment.IsDevelopment());
         var grpcPort = builder.Configuration.GetValue<int>(ServicioSettings.GrpcPortKey);
 
         builder.Host.UseDefaultServiceProvider(o =>
@@ -52,6 +54,9 @@ public static class Program
         builder.Services.AddSingleton<PiiHasher>();
         builder.Services.AddScoped<SesionService>();
 
+        // HU #14036: captcha, límite por IP y topes de consultas por cédula y globales.
+        builder.Services.AddAbusoPortal(builder.Configuration);
+
         // h2c necesita un endpoint solo HTTP/2: se vuelven a declarar las URLs del REST (Kestrel ignora ASPNETCORE_URLS
         // cuando se declaran endpoints por código) y se suma el del gRPC.
         builder.WebHost.ConfigureKestrel((context, options) =>
@@ -70,7 +75,10 @@ public static class Program
         });
 
         var app = builder.Build();
+        if (app.Configuration.GetValue<bool>($"{AbusoOptions.SectionName}:{nameof(AbusoOptions.ConfiarEnXForwardedFor)}"))
+            app.UseForwardedHeaders();
         app.UseFlitCorrelationId();
+        app.UseRateLimiter();
         app.UseAuthentication();
         app.UseAuthorization();
 

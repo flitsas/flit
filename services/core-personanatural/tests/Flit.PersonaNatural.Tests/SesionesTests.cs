@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Flit.PersonaNatural.Api;
+using Flit.PersonaNatural.Api.Abuso;
 using Flit.PersonaNatural.Api.Persistence;
 using Flit.PersonaNatural.Api.Sesiones;
 using FluentAssertions;
@@ -56,6 +57,7 @@ public sealed class SesionesTests : IAsyncLifetime
             b.WebHost.UseTestServer();
             b.Configuration.AddInMemoryCollection(Settings());
             b.Services.AddSingleton<TimeProvider>(_reloj);
+            b.Services.AddSingleton<IProveedorCaptcha, CaptchaFalso>();
         });
         await _app.StartAsync();
         await Program.MigrateAsync(_app);
@@ -286,6 +288,7 @@ public sealed class SesionesTests : IAsyncLifetime
         ["Platform:Messaging:ConnectionString"] = "amqp://flit:x@127.0.0.1:1/",
         [ServicioSettings.GrpcPortKey] = "5998",
         ["Pii:ClaveHmac"] = ClaveHmac,
+        ["Captcha:SecretKey"] = "secreto-de-captcha",
     };
 
     private PersonaNaturalDb NuevaDb()
@@ -334,8 +337,12 @@ public sealed class SesionesTests : IAsyncLifetime
         return await _http.SendAsync(peticion, TestContext.Current.CancellationToken);
     }
 
-    private Task<HttpResponseMessage> ReanudarAsync(string radicado, string cedula) =>
-        _http.PostAsJsonAsync($"{SesionEndpoints.Base}/sesiones/reanudar", new ReanudarRequest(radicado, cedula), TestContext.Current.CancellationToken);
+    private async Task<HttpResponseMessage> ReanudarAsync(string radicado, string cedula)
+    {
+        using var peticion = new HttpRequestMessage(HttpMethod.Post, $"{SesionEndpoints.Base}/sesiones/reanudar") { Content = JsonContent.Create(new ReanudarRequest(radicado, cedula)) };
+        peticion.Headers.Add(AbusoEndpoints.CabeceraCaptcha, CaptchaFalso.TokenValido);
+        return await _http.SendAsync(peticion, TestContext.Current.CancellationToken);
+    }
 
     private static async Task<string?> CodigoAsync(HttpResponseMessage respuesta)
     {
