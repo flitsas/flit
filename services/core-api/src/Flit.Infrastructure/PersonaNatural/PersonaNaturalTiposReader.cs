@@ -14,7 +14,8 @@ public sealed record TipoPersonaNatural(
     string Familia,
     int Version,
     ProcedureTypeGateProfile Perfil,
-    ResultadoElegibilidad Elegibilidad);
+    ResultadoElegibilidad Elegibilidad,
+    bool WizardHabilitado = true);
 
 /// <summary>
 /// HU #14079 (Épica #14021) — lee los tipos publicados y su matriz documental y le aplica
@@ -48,7 +49,7 @@ public sealed class PersonaNaturalTiposReader(FlitDbContext db)
             var obligatorios = porTipo.GetValueOrDefault(t.Id) ?? [];
             var eleg = ElegibilidadPersonaNatural.Evaluar(new PerfilTipoParaElegibilidad(
                 t.Code, t.Family, Publicado: true, t.IsActive, t.WizardEnabled, perfil, obligatorios));
-            return new TipoPersonaNatural(t.Id, t.Code, t.Name, t.Family, t.Version, perfil, eleg);
+            return new TipoPersonaNatural(t.Id, t.Code, t.Name, t.Family, t.Version, perfil, eleg, t.WizardEnabled);
         }).ToList();
     }
 }

@@ -3,6 +3,7 @@ using Flit.PersonaNatural.Api.Cotizaciones;
 using Flit.PersonaNatural.Api.Abuso;
 using Flit.PersonaNatural.Api.Consultas;
 using Flit.PersonaNatural.Api.Identidad;
+using Flit.PersonaNatural.Api.Definiciones;
 using Flit.PersonaNatural.Api;
 using Flit.PersonaNatural.Api.Persistence;
 using Flit.PersonaNatural.Api.Pii;
@@ -87,6 +88,9 @@ public static class Program
         // HU #14046: compuerta de radicación (no radicar sin identidad aprobada de todas las partes obligadas).
         builder.Services.AddCompuertaDeRadicacion();
 
+        // HU #14078: definición del tipo de trámite (estructura del wizard) desde la fachada de core-api.
+        builder.Services.AddDefinicionesPortal();
+
         // h2c necesita un endpoint solo HTTP/2: se vuelven a declarar las URLs del REST (Kestrel ignora ASPNETCORE_URLS
         // cuando se declaran endpoints por código) y se suma el del gRPC.
         builder.WebHost.ConfigureKestrel((context, options) =>
@@ -118,6 +122,7 @@ public static class Program
 
         app.MapCotizacionesEndpoints();
         app.MapIdentidadEndpoints();
+        app.MapDefinicionesEndpoints();
         app.MapGet("/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();
         app.MapGet("/health/ready", async (PersonaNaturalDb db, CancellationToken ct) =>
             await db.Database.CanConnectAsync(ct).ConfigureAwait(false)

@@ -1,9 +1,11 @@
+using Flit.Admin.Domain.DocumentOrderOverrides;
 using Flit.Api.Authorization;
 using Flit.Infrastructure.PersonaNatural;
 using Flit.Infrastructure.Persistence;
 using Flit.Platform.Sdk;
 using Flit.Platform.Sdk.Grpc;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Application.UseCases.ProcedureTypes;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Tramites.PersonaNatural;
 using Flit.Tramites.Domain.Tramites.Services;
@@ -26,7 +28,8 @@ namespace Flit.Api.Grpc;
 /// </para>
 /// </summary>
 public sealed class PersonaNaturalGrpcService(
-    FlitDbContext db, RunPreflightPreviewHandler preview, PersonaNaturalTiposReader tiposReader, PersonaNaturalPortalReader portal)
+    FlitDbContext db, RunPreflightPreviewHandler preview, PersonaNaturalTiposReader tiposReader, PersonaNaturalPortalReader portal,
+    GetProcedureStepsHandler pasosHandler, IResolvedDocumentMatrixResolver matriz)
     : PersonaNaturalService.PersonaNaturalServiceBase
 {
     /// <summary>Razón estable de un método que todavía no tiene implementación.</summary>
@@ -206,6 +209,42 @@ public sealed class PersonaNaturalGrpcService(
         return respuesta;
     }
 
+    /// <summary>
+    /// HU #14078 — estructura del wizard de un tipo (pasos, campos, actores, documentos y capacidades). Compone lo que FLIT 2
+    /// ya resuelve y no evalúa reglas (<see cref="PersonaNaturalDefinicionMapper"/>). Errores estables, sin datos parciales:
+    /// <c>tipo_no_disponible</c> (no existe, no está publicado o su wizard está apagado) y <c>organismo_no_habilitado</c>.
+    /// Un tipo con wizard encendido pero no elegible para el portal SÍ se devuelve, con <c>disponible_pn = false</c> y su
+    /// motivo: así el BFF puede mostrarlo como «Próximamente».
+    /// </summary>
+    public override async Task<ObtenerDefinicionTipoTramiteResponse> ObtenerDefinicionTipoTramite(ObtenerDefinicionTipoTramiteRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Verificar(context);
+        var codigo = Texto(request.Codigo) ?? throw Invalido("codigo es obligatorio.");
+        Guid? organismo = null;
+        if (Texto(request.OrganismoId) is { } organismoTexto)
+        {
+            if (!Guid.TryParse(organismoTexto, out var parsed))
+                throw Invalido("organismo_id no es un identificador válido.");
+            organismo = parsed;
+        }
+
+        var ct = context.CancellationToken;
+        var tipos = await tiposReader.ListarAsync(ct, codigo).ConfigureAwait(false);
+        var tipo = tipos.FirstOrDefault(t => string.Equals(t.Codigo, codigo, StringComparison.OrdinalIgnoreCase));
+        if (tipo is null || !tipo.WizardHabilitado)
+            throw PlatformRpcErrors.ToRpcException("tipo_no_disponible", "El tipo de trámite no está disponible.", StatusCode.NotFound);
+        if (organismo is { } org && !await portal.OrganismoHabilitadoAsync(org, ct).ConfigureAwait(false))
+            throw PlatformRpcErrors.ToRpcException("organismo_no_habilitado", "El organismo de tránsito no está habilitado para el portal.", StatusCode.FailedPrecondition);
+
+        var (pasos, error) = await pasosHandler.HandleAsync(tipo.Id, ct).ConfigureAwait(false);
+        if (pasos is null || error is not null)
+            throw PlatformRpcErrors.ToRpcException("tipo_no_disponible", "El tipo de trámite no está disponible.", StatusCode.NotFound);
+        var documentos = await matriz.ResolveAsync(tipo.Id, organismo, ct).ConfigureAwait(false);
+
+        return new ObtenerDefinicionTipoTramiteResponse { Definicion = PersonaNaturalDefinicionMapper.Armar(tipo, pasos, documentos) };
+    }
+
     /// <summary>Un tipo se ofrece en un organismo solo si los dos renglones base tienen tarifa vigente.</summary>
     private static bool TieneTarifaBase(Guid tipoId, Guid organismoId, IReadOnlyCollection<TarifaVigente> tarifas) =>
         CotizadorPersonaNatural.Resolver(ConceptosTarifa.DerechosTransito, tipoId, organismoId, tarifas) is not null
@@ -245,9 +284,6 @@ public sealed class PersonaNaturalGrpcService(
 
     private static PersonaNaturalIdentidadService Identidad(ServerCallContext context) =>
         ActivatorUtilities.CreateInstance<PersonaNaturalIdentidadService>(context.GetHttpContext().RequestServices);
-
-    public override Task<ObtenerDefinicionTipoTramiteResponse> ObtenerDefinicionTipoTramite(ObtenerDefinicionTipoTramiteRequest request, ServerCallContext context) =>
-        Pendiente<ObtenerDefinicionTipoTramiteResponse>(context, "HU K1");
 
     public override Task<ObtenerConfiguracionPortalResponse> ObtenerConfiguracionPortal(ObtenerConfiguracionPortalRequest request, ServerCallContext context) =>
         Pendiente<ObtenerConfiguracionPortalResponse>(context, "HU J3");

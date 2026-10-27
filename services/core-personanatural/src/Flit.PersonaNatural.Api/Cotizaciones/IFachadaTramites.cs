@@ -80,7 +80,7 @@ internal sealed class FachadaTramitesGrpc(PersonaNaturalService.PersonaNaturalSe
     }
 
     /// <summary>Traduce el estado gRPC a un error con código estable y estado HTTP; nada del detalle interno sale al ciudadano.</summary>
-    private static async Task<T> Llamar<T>(Func<Task<T>> llamada)
+    internal static async Task<T> Llamar<T>(Func<Task<T>> llamada)
     {
         try
         {

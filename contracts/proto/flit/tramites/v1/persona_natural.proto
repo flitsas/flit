@@ -125,11 +125,15 @@ message DefinicionTipoTramite {
   repeated ActorRol actores = 8;
   repeated DocumentoRequerido documentos = 9;
   FlagsTipo flags = 10;
+  // Huella (SHA-256 hex) del contenido de la definición. `version` solo cambia al versionar el tipo; la matriz documental o
+  // la configuración pueden cambiar sin ella, así que el BFF usa (codigo, organismo, version, huella) como clave de caché y
+  // la solicitud congela ambas. [HU K1]
+  string huella = 11;
 }
 message Paso {
   string clave = 1;
   string titulo = 2;
-  repeated string section_types = 3;       // consulta | documentos | actores | prenda | identidad | fur | generico
+  repeated string section_types = 3;       // catálogo cerrado de FLIT 2 tal cual: vehicle_query | document_checklist | actor_form | commercial | biometric | signature_fur | plate_request | prenda_decision | generic_form
   repeated Campo campos = 4;
 }
 message Campo {
