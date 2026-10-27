@@ -2,18 +2,20 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import Inicio from "@/app/page";
+import { Landing } from "@/components/landing/Landing";
 import { MobilityLoader } from "@/components/MobilityLoader";
+import { fetchFalso, json, renderConQuery } from "./utilidades";
 
 const css = readFileSync(path.resolve(__dirname, "../app/globals.css"), "utf8");
 const referencia = path.resolve(__dirname, "../../../transfer-step-trail/src/styles.css");
 
 describe("base visual portada del diseño de referencia", () => {
-  it("la página de humo pinta cabecera, contenido y pie con las clases del diseño", () => {
-    const { container } = render(<Inicio />);
+  it("la landing pinta cabecera, contenido y pie con las clases del diseño", () => {
+    const { cliente } = fetchFalso({ "/organismos": () => json([]), "/tipos-tramite": () => json([]) });
+    const { container } = renderConQuery(<Landing cliente={cliente} />);
 
     expect(container.querySelector("header.dashboard-header")).not.toBeNull();
-    expect(container.querySelector("main.dashboard-layout")).not.toBeNull();
+    expect(container.querySelector(".dashboard-layout main.dashboard-main")).not.toBeNull();
     expect(container.querySelector("footer.dashboard-footer")).not.toBeNull();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Trámites de tránsito 100% en línea");
   });
