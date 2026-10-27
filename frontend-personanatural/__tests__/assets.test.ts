@@ -14,6 +14,13 @@ describe("imágenes propias del diseño", () => {
     expect(readFileSync(archivo, "utf8")).toContain("<svg");
   });
 
+  it.each(ASSETS.banners.map((b) => [b.src, b]))("banner %s existe, es JPEG y tiene texto alternativo", (_src, banner) => {
+    const bytes = readFileSync(path.join(publico, banner.src));
+
+    expect([bytes[0], bytes[1]]).toEqual([0xff, 0xd8]);
+    expect(banner.alt.length).toBeGreaterThan(20);
+  });
+
   it("los SVG no traen scripts ni referencias externas", () => {
     for (const ruta of rutas) {
       const svg = readFileSync(path.join(publico, ruta), "utf8");
