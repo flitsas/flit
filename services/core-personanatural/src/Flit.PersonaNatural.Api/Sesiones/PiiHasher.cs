@@ -35,6 +35,10 @@ public sealed class PiiHasher
     /// <summary>Clave de intentos de un radicado: normalizado y con huella, exista o no.</summary>
     public static byte[] ClaveRadicado(string radicado) => SHA256.HashData(Encoding.UTF8.GetBytes("radicado:" + NormalizarRadicado(radicado)));
 
+    /// <summary>Clave de intentos de un radicado desde una IP: el segundo contador del bloqueo (ver BloqueoPorRadicado).</summary>
+    public static byte[] ClaveRadicadoIp(byte[] claveRadicado, byte[]? ipHash) =>
+        SHA256.HashData([.. Encoding.UTF8.GetBytes("radicado-ip:"), .. claveRadicado, .. (ipHash ?? [])]);
+
     public static string NormalizarRadicado(string radicado) => (radicado ?? string.Empty).Trim().ToUpperInvariant();
 
     public static string NormalizarDocumento(string documento) =>

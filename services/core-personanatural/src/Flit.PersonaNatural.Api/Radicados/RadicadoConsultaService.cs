@@ -45,7 +45,7 @@ public sealed class RadicadoConsultaService(
     public async Task<ResultadoConsultaRadicado> ConsultarAsync(string radicado, string cedula, string? placa, byte[]? ipHash, CancellationToken ct)
     {
         var clave = PiiHasher.ClaveRadicado(radicado);
-        if (await bloqueo.EsperaAsync(clave, ct).ConfigureAwait(false) is { } espera)
+        if (await bloqueo.ReservarIntentoAsync(clave, ipHash, ct).ConfigureAwait(false) is { } espera)
             return new ResultadoConsultaRadicado.Bloqueado(espera);
 
         var codigo = PiiHasher.NormalizarRadicado(radicado);
@@ -77,10 +77,10 @@ public sealed class RadicadoConsultaService(
 
         if (solicitud is null || !(esPrincipal | esParte) || !placaCoincide)
         {
-            await bloqueo.RegistrarFalloAsync(clave, ct).ConfigureAwait(false);
             return new ResultadoConsultaRadicado.NoEncontrado();
         }
 
+        await bloqueo.LiberarAsync(clave, ipHash, ct).ConfigureAwait(false);
         var externo = await fuente.ObtenerAsync(
             new SolicitudParaEstado(solicitud.Id, solicitud.ProcedureInstanceId, solicitud.ReferenceNumber, solicitud.EstadoTramite, solicitud.SubsanacionActiva, solicitud.SubsanacionMotivo), ct)
             .ConfigureAwait(false);

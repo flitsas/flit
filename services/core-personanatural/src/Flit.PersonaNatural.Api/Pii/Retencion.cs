@@ -29,6 +29,26 @@ public sealed class RetencionService(PersonaNaturalDb db, TimeProvider reloj, IE
         return await db.Database.CreateExecutionStrategy().ExecuteAsync(ct2 => AnonimizarLoteAsync(config, ct2), ct).ConfigureAwait(false);
     }
 
+    /// <summary>Cuánto se conservan los datos efímeros que ya no sirven para decidir nada (intentos, sesiones vencidas, contadores diarios).</summary>
+    public static readonly TimeSpan GraciaEfimeros = TimeSpan.FromDays(1);
+
+    /// <summary>
+    /// Depura lo efímero: intentos de reanudar fuera de toda ventana, sesiones vencidas o revocadas hace más de un día y
+    /// contadores de cuota de días anteriores. No toca borradores ni datos personales (eso es
+    /// <see cref="AnonimizarAbandonadosAsync"/>). Es idempotente y devuelve cuántas filas borró.
+    /// </summary>
+    public async Task<int> PurgarEfimerosAsync(CancellationToken ct)
+    {
+        var ahora = reloj.GetUtcNow();
+        var limite = ahora - GraciaEfimeros;
+        var dia = DateOnly.FromDateTime(limite.UtcDateTime);
+
+        var intentos = await db.Set<IntentoReanudar>().Where(i => i.OcurrioEn < limite).ExecuteDeleteAsync(ct).ConfigureAwait(false);
+        var sesiones = await db.Set<SesionTramite>().Where(s => s.ExpiraEn < limite || (s.Revocada && s.CreatedAt < limite)).ExecuteDeleteAsync(ct).ConfigureAwait(false);
+        var cuotas = await db.Set<CuotaConsulta>().Where(c => c.Dia < dia).ExecuteDeleteAsync(ct).ConfigureAwait(false);
+        return intentos + sesiones + cuotas;
+    }
+
     private async Task<int> AnonimizarLoteAsync(ConfiguracionRetencion config, CancellationToken ct)
     {
         var ahora = reloj.GetUtcNow();
@@ -109,6 +129,9 @@ public sealed partial class RetencionJob(IServiceScopeFactory scopes, IConfigura
                 var total = await retencion.AnonimizarAbandonadosAsync(stoppingToken).ConfigureAwait(false);
                 if (total > 0)
                     CicloTerminado(logger, total);
+                var depurados = await retencion.PurgarEfimerosAsync(stoppingToken).ConfigureAwait(false);
+                if (depurados > 0)
+                    EfimerosDepurados(logger, depurados);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -125,6 +148,9 @@ public sealed partial class RetencionJob(IServiceScopeFactory scopes, IConfigura
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Retención: {Total} borradores abandonados anonimizados")]
     private static partial void CicloTerminado(ILogger logger, int total);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Retención: {Total} filas efímeras depuradas (intentos, sesiones vencidas, cuotas)")]
+    private static partial void EfimerosDepurados(ILogger logger, int total);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Retención: el ciclo falló y se reintenta en el siguiente")]
     private static partial void CicloFallido(ILogger logger, Exception ex);

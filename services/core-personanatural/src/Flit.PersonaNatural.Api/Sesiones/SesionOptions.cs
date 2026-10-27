@@ -15,7 +15,11 @@ public sealed class SesionOptions
     public int TopeAbsolutoHoras { get; init; } = 24;
 
     /// <summary>Intentos fallidos de reanudar sobre un mismo radicado antes de bloquearlo.</summary>
+    /// <summary>Intentos fallidos de reanudar sobre un mismo radicado y desde una misma IP antes de bloquear a esa IP sobre ese radicado.</summary>
     public int MaxIntentosFallidos { get; init; } = 5;
+
+    /// <summary>Intentos fallidos sobre un radicado, desde cualquier IP, antes de bloquearlo para todos (patrón de ataque distribuido).</summary>
+    public int MaxIntentosPorRadicado { get; init; } = 20;
 
     /// <summary>Ventana, en minutos, en la que se cuentan esos intentos y dura el bloqueo.</summary>
     public int VentanaIntentosMinutos { get; init; } = 15;

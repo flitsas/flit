@@ -73,7 +73,7 @@ public sealed class AbusoTests : IAsyncLifetime
         bueno.StatusCode.Should().Be(HttpStatusCode.NotFound, "con captcha válido la acción corre y responde lo suyo");
 
         await using var db = NuevaDb();
-        (await db.Set<IntentoReanudar>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(1, "solo la petición con captcha válido llegó a reanudar");
+        (await db.Set<IntentoReanudar>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(2, "solo la petición con captcha válido llegó a reanudar (un intento = dos contadores: por IP y por radicado)");
     }
 
     // ── AC2: límite por IP ───────────────────────────────────────────────────────────────────────────────────────────

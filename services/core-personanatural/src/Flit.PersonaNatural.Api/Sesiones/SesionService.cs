@@ -1,4 +1,5 @@
 using Flit.PersonaNatural.Api.Persistence;
+using Flit.PersonaNatural.Api.Radicados;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -34,7 +35,7 @@ public abstract record ResultadoReanudar
 /// lea la base no puede usar ninguna sesión. Abre únicamente SU solicitud, vive <see cref="SesionOptions.VigenciaMinutos"/>
 /// desde el último uso y nunca más de <see cref="SesionOptions.TopeAbsolutoHoras"/>.
 /// </summary>
-public sealed class SesionService(PersonaNaturalDb db, PiiHasher hasher, TimeProvider reloj, IOptions<SesionOptions> options)
+public sealed class SesionService(PersonaNaturalDb db, PiiHasher hasher, TimeProvider reloj, IOptions<SesionOptions> options, BloqueoPorRadicado bloqueo)
 {
     private readonly SesionOptions _opciones = options.Value;
 
@@ -89,23 +90,14 @@ public sealed class SesionService(PersonaNaturalDb db, PiiHasher hasher, TimePro
 
     /// <summary>
     /// Reanuda con radicado y cédula. La respuesta es la misma, y de tiempo parecido, si el radicado no existe o la cédula
-    /// no coincide; cinco fallos seguidos sobre un radicado (exista o no) lo bloquean durante la ventana, incluso para quien
-    /// ya traiga los datos correctos.
+    /// no coincide; cinco fallos seguidos desde una IP sobre un radicado (exista o no) la bloquean durante la ventana, incluso
+    /// con los datos correctos. La política completa (con el tope por radicado) vive en <see cref="BloqueoPorRadicado"/>.
     /// </summary>
     public async Task<ResultadoReanudar> ReanudarAsync(string radicado, string cedula, byte[]? ipHash, CancellationToken ct)
     {
-        var ahora = reloj.GetUtcNow();
         var clave = PiiHasher.ClaveRadicado(radicado);
-        var ventana = TimeSpan.FromMinutes(_opciones.VentanaIntentosMinutos);
-        var desde = ahora - ventana;
-
-        var intentos = await db.Set<IntentoReanudar>().Where(i => i.Clave == clave && i.OcurrioEn > desde)
-            .OrderBy(i => i.OcurrioEn).Select(i => i.OcurrioEn).ToListAsync(ct).ConfigureAwait(false);
-        if (intentos.Count >= _opciones.MaxIntentosFallidos)
-        {
-            var libera = intentos[intentos.Count - _opciones.MaxIntentosFallidos] + ventana;
-            return new ResultadoReanudar.Bloqueado(libera > ahora ? libera - ahora : TimeSpan.FromSeconds(1));
-        }
+        if (await bloqueo.ReservarIntentoAsync(clave, ipHash, ct).ConfigureAwait(false) is { } espera)
+            return new ResultadoReanudar.Bloqueado(espera);
 
         var codigo = PiiHasher.NormalizarRadicado(radicado);
         var solicitud = await db.Set<SolicitudTramite>().AsNoTracking()
@@ -119,13 +111,9 @@ public sealed class SesionService(PersonaNaturalDb db, PiiHasher hasher, TimePro
         var coincide = PiiHasher.Iguales(huella, esperada) & solicitud is not null;
 
         if (!coincide)
-        {
-            db.Add(new IntentoReanudar { Clave = clave, OcurrioEn = ahora });
-            await db.SaveChangesAsync(ct).ConfigureAwait(false);
-            return new ResultadoReanudar.NoEncontrada();
-        }
+            return new ResultadoReanudar.NoEncontrada(); // el intento ya quedó reservado (y contado) antes de validar
 
-        await db.Set<IntentoReanudar>().Where(i => i.Clave == clave).ExecuteDeleteAsync(ct).ConfigureAwait(false);
+        await bloqueo.LiberarAsync(clave, ipHash, ct).ConfigureAwait(false);
         var sesion = await IniciarAsync(solicitud!.Id, ipHash, ct).ConfigureAwait(false);
         return new ResultadoReanudar.Exito(sesion, new SolicitudReanudada(solicitud.Id, solicitud.CodigoPublico, solicitud.Estado, solicitud.TipoTramiteCodigo));
     }
