@@ -170,10 +170,25 @@ public class AnfitrionBus : IAsyncLifetime
                 return _porClave.GetValueOrDefault(clave);
         }
 
+        private readonly List<(string Clave, IReadOnlyDictionary<string, string?> Campos)> _campos = [];
+
         internal void Sumar(string clave)
         {
             lock (_porClave)
                 _porClave[clave] = _porClave.GetValueOrDefault(clave) + 1;
+        }
+
+        /// <summary>Los campos que recibió cada llamada al proveedor falso <paramref name="clave"/> (Bug SIMIT por placa).</summary>
+        public IReadOnlyList<IReadOnlyDictionary<string, string?>> CamposDe(string clave)
+        {
+            lock (_campos)
+                return [.. _campos.Where(c => c.Clave == clave).Select(c => c.Campos)];
+        }
+
+        internal void Registrar(string clave, IReadOnlyDictionary<string, string?> campos)
+        {
+            lock (_campos)
+                _campos.Add((clave, new Dictionary<string, string?>(campos, StringComparer.OrdinalIgnoreCase)));
         }
     }
 
@@ -185,6 +200,7 @@ public class AnfitrionBus : IAsyncLifetime
         public Task<ConsultationResult> ConsultAsync(ConsultationContext ctx, CancellationToken ct)
         {
             llamadas.Sumar(key);
+            llamadas.Registrar(key, ctx.FieldValues);
             return Task.FromResult(new ConsultationResult(key, "green",
                 [new ConsultationCheck("conductor_identidad", "Persona en RUNT", "ok", key, null)],
                 [new HydratedField("respondio", key, null), new HydratedField("person_full_name", "NOMBRE FICTICIO PRUEBA", null)]));

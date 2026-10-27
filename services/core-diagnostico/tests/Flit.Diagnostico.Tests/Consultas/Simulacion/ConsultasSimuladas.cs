@@ -97,9 +97,11 @@ internal static class ConsultasSimuladas
                     var r = JsonParser.Default.Parse<ConsultarMultasRequest>(solicitud);
                     if (servicios.GetService<IFuenteSimit>() is not { } fuente)
                         return RespuestaSimulada.Fallo(StatusCode.Unimplemented);
-                    var simit = r.Documento is { } documento
-                        ? SolicitudSimit.PorDocumento(new DocumentoPersona(documento.Tipo, documento.Numero))
-                        : SolicitudSimit.PorPlaca(r.Placa.Valor);
+                    // Como core-consultas con el proveedor por placa (Bug SIMIT por placa, 2026-10-27): con placa consulta el
+                    // vehículo aunque venga el documento del propietario; sin placa, la persona.
+                    var simit = r.Placa is { Valor.Length: > 0 }
+                        ? SolicitudSimit.PorPlaca(r.Placa.Valor)
+                        : SolicitudSimit.PorDocumento(new DocumentoPersona(r.Documento.Tipo, r.Documento.Numero));
                     return Respuesta(await fuente.ConsultarAsync(empresa, simit, ct), Multas);
                 }
 

@@ -114,6 +114,28 @@ public sealed class ConstructoresSolicitudTests
         (await constructor.ConstruirAsync(db, celda, ct)).Should().BeEmpty("la persona que ya respondió no se vuelve a consumir");
     }
 
+    [Fact]
+    public async Task SIMIT_VEHICULO_sin_propietario_del_RUNT_lleva_solo_la_placa()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await MotorNa.ArrancarAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await LoteConRuntAsync(api, empresa, ct);
+        await Motor.EjecutarAsync(api,
+            $"DELETE FROM diagnostico.personas_vehiculo p USING diagnostico.vehiculos v WHERE p.vehiculo_id = v.id AND v.diagnostico_id = '{lote}' AND v.identificador_norm = 'TST001'", ct);
+        await using var scope = OutboxDePrueba.Scope(api, empresa.Id);
+        var db = scope.ServiceProvider.GetRequiredService<DiagnosticoDb>();
+        var vehiculo = await db.Set<VehiculoDiagnostico>().SingleAsync(v => v.DiagnosticoId == lote && v.IdentificadorNorm == "TST001", ct);
+        var celda = await db.Set<CeldaConsulta>().SingleAsync(c => c.VehiculoId == vehiculo.Id && c.Fuente == Fuente.SimitVehiculo, ct);
+        var constructor = scope.ServiceProvider.GetServices<IConstructorSolicitud>().Single(c => c.Fuente == Fuente.SimitVehiculo);
+
+        var solicitud = (await constructor.ConstruirAsync(db, celda, ct)).Should().ContainSingle().Subject;
+
+        solicitud.Solicitud.Should().Be(new ConsultarMultasRequest { Opciones = new OpcionesConsulta(), Placa = new Placa { Valor = vehiculo.Placa } },
+            "sin propietario registrado, la placa sola basta para el proveedor por placa");
+    }
+
     /// <summary>
     /// Lote con RUNT y todas las fuentes de D3 para TST001, TST003 y el VIN de prueba; atiende solo los trabajos de la RUNT (las
     /// demás nacen diferidas y se publican al liberarse, sin respuesta todavía) y deja el departamento del impuesto soportado en
@@ -151,7 +173,14 @@ public sealed class ConstructoresSolicitudTests
             Fuente.RuntLocatario => tst003
                 ? [(RpcConsultas.Conductor, new ConsultarConductorRequest { Opciones = opciones, Documento = new DocumentoIdentidad { Tipo = "CC", Numero = Locatario } })]
                 : [],
-            Fuente.SimitVehiculo => [(RpcConsultas.Multas, new ConsultarMultasRequest { Opciones = opciones, Placa = new Placa { Valor = v.Placa } })],
+            // Bug SIMIT por placa (2026-10-27): la placa y el documento del primer propietario del RUNT (para el proveedor que lo exige),
+            // sin tipo de persona: el proveedor externo se elige como por placa.
+            Fuente.SimitVehiculo => [(RpcConsultas.Multas, new ConsultarMultasRequest
+            {
+                Opciones = opciones,
+                Placa = new Placa { Valor = v.Placa },
+                Documento = tst003 ? new DocumentoIdentidad { Tipo = "NIT", Numero = Nit } : new DocumentoIdentidad { Tipo = "CC", Numero = Natural },
+            })],
             Fuente.SimitPropietario => tst003
                 ? [(RpcConsultas.Multas, PorDocumento("NIT", Nit, TipoPersona.Juridica))]
                 : [(RpcConsultas.Multas, PorDocumento("CC", Natural, TipoPersona.Natural))],

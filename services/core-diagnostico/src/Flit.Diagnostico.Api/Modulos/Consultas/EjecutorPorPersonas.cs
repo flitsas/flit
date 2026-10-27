@@ -187,11 +187,17 @@ internal abstract partial class EjecutorPorPersonas(TimeProvider reloj, ILogger 
     /// Las personas del rol de la celda: las guardadas y las que la RUNT acaba de registrar en el mismo contexto y todavía no se
     /// guardaron, en su orden (lo que usan el constructor de solicitudes y el publicador).
     /// </summary>
-    internal static async Task<List<PersonaVehiculo>> PersonasDelRolAsync(DiagnosticoDb db, CeldaConsulta celda, CancellationToken ct)
+    internal static Task<List<PersonaVehiculo>> PersonasDelRolAsync(DiagnosticoDb db, CeldaConsulta celda, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(celda);
+        return PersonasDelRolAsync(db, celda, RolDe(celda.Fuente), ct);
+    }
+
+    /// <summary>Las personas de <paramref name="rol"/> del vehículo de la celda (guardadas y recién registradas), por <c>orden</c>.</summary>
+    internal static async Task<List<PersonaVehiculo>> PersonasDelRolAsync(DiagnosticoDb db, CeldaConsulta celda, RolPersona rol, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(celda);
-        var rol = RolDe(celda.Fuente);
         var guardadas = await DocumentosVehiculo.PersonasDelVehiculoAsync(db, celda.TenantId, celda.VehiculoId, ct, rol).ConfigureAwait(false);
         var nuevas = db.ChangeTracker.Entries<PersonaVehiculo>()
             .Where(e => e.State == EntityState.Added && e.Entity.TenantId == celda.TenantId && e.Entity.VehiculoId == celda.VehiculoId && e.Entity.Rol == rol)

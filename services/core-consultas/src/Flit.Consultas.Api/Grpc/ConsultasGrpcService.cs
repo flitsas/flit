@@ -107,14 +107,29 @@ internal sealed partial class ConsultasGrpcService(
     private async Task<ConsultarMultasResponse> ConsultarMultasCore(ConsultarMultasRequest request, PlatformServiceCaller caller, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var documento = Documento(request.Documento);
+        var placa = request.Placa?.Valor;
+        var documento = request.Documento is { Numero.Length: > 0 } d ? d : null;
+        if (documento is null && string.IsNullOrWhiteSpace(placa))
+            throw Invalido("Se necesita el documento (tipo y número) o la placa.");
+
         var tenantOverride = await overrides.GetAsync(caller.TenantId, ct).ConfigureAwait(false);
 
         // FEATURE 05: la fuente de la empresa manda; el tipo de persona solo elige el proveedor externo.
         var proveedor = string.IsNullOrWhiteSpace(request.Opciones?.Proveedor)
             ? FinesProviderResolver.Resolve(tenantOverride?.FinesQuerySource, request.TipoPersona != TipoPersona.Juridica)
             : request.Opciones.Proveedor;
-        var campos = Campos(("owner_document_type", documento.Tipo), ("owner_document_number", documento.Numero), ("plate", request.Placa?.Valor));
+
+        // Bug SIMIT por placa (2026-10-27): con placa, el proveedor que consulta por placa (Verifik SIMIT) recibe SOLO la placa, aunque
+        // llegue el documento del propietario: es la consulta del vehículo, no la de la persona. Los que exigen documento (flit_fines,
+        // kyverum_fines) usan el recibido (el del propietario del RUNT) y sin él es un InvalidArgument propio.
+        Dictionary<string, string?> campos;
+        if (!string.IsNullOrWhiteSpace(placa) && ConsultaMultasPorPlaca(proveedor))
+            campos = Campos(("plate", placa));
+        else if (documento is null)
+            throw Invalido($"El proveedor de multas {proveedor} no consulta por placa: se necesita el documento (tipo y número).");
+        else
+            campos = Campos(("owner_document_type", documento.Tipo), ("owner_document_number", documento.Numero), ("plate", placa));
+
         var resultado = await ConsultarProveedorAsync(proveedor, campos, request.Opciones, caller, ct).ConfigureAwait(false);
         return new ConsultarMultasResponse { Resultado = resultado };
     }
@@ -208,6 +223,10 @@ internal sealed partial class ConsultasGrpcService(
 
     private static Flit.Platform.Grpc.V1.DocumentoIdentidad Documento(Flit.Platform.Grpc.V1.DocumentoIdentidad? documento) =>
         documento is { Numero.Length: > 0 } ? documento : throw Invalido("Se necesita el documento (tipo y número).");
+
+    /// <summary>Proveedores de multas que consultan por placa sin documento (Verifik SIMIT: <c>/v2/co/simit/consultar/placa</c>).</summary>
+    private static bool ConsultaMultasPorPlaca(string proveedor) =>
+        string.Equals(proveedor, FinesProviderResolver.VerifikSimit, StringComparison.OrdinalIgnoreCase);
 
     private static string? Numero(int valor) => valor > 0 ? valor.ToString(System.Globalization.CultureInfo.InvariantCulture) : null;
 

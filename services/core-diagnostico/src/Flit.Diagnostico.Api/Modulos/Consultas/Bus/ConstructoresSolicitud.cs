@@ -104,17 +104,32 @@ internal sealed class ConstructorSolicitudRunt : IConstructorSolicitud
     }
 }
 
-/// <summary>SIMIT por la placa definitiva del RUNT (<see cref="EjecutorCeldaSimitVehiculo"/>).</summary>
-internal sealed class ConstructorSolicitudSimitVehiculo : IConstructorSolicitud
+/// <summary>
+/// SIMIT por la placa definitiva del RUNT (<see cref="EjecutorCeldaSimitVehiculo"/>). Bug SIMIT por placa (2026-10-27): además de la
+/// placa lleva el documento del primer propietario (por <c>orden</c>) que registró el RUNT, descifrado solo en memoria, para el
+/// proveedor de multas que exige documento (core-consultas manda solo la placa al que consulta por placa). Sin tipo de persona: el
+/// proveedor externo se elige como en la consulta por placa. Sin propietario registrado, solo la placa.
+/// </summary>
+internal sealed class ConstructorSolicitudSimitVehiculo(IProtectorDocumentoPersona protector) : IConstructorSolicitud
 {
     public Fuente Fuente => Fuente.SimitVehiculo;
 
     public async Task<IReadOnlyList<SolicitudConsulta>> ConstruirAsync(DiagnosticoDb db, CeldaConsulta celda, CancellationToken ct)
     {
         var placa = DatosDeLaCelda.Limpio((await DatosDeLaCelda.VehiculoAsync(db, celda, ct).ConfigureAwait(false))?.Placa);
-        return placa is null
-            ? []
-            : [new SolicitudConsulta(FuentesBus.SimitVehiculo, RpcConsultas.Multas, SolicitudesProto.Multas(SolicitudSimit.PorPlaca(placa)))];
+        if (placa is null)
+            return [];
+
+        var request = SolicitudesProto.Multas(SolicitudSimit.PorPlaca(placa));
+        var propietario = (await EjecutorPorPersonas.PersonasDelRolAsync(db, celda, RolPersona.Propietario, ct).ConfigureAwait(false)).FirstOrDefault();
+        if (propietario is not null)
+        {
+            var documento = EjecutorCeldaSimitPersona.Normalizar(new DocumentoPersona(propietario.DocTipo, protector.Desproteger(propietario.DocCifrado)));
+            if (documento.Numero.Length > 0)
+                request.Documento = new DocumentoIdentidad { Tipo = documento.Tipo, Numero = documento.Numero };
+        }
+
+        return [new SolicitudConsulta(FuentesBus.SimitVehiculo, RpcConsultas.Multas, request)];
     }
 }
 

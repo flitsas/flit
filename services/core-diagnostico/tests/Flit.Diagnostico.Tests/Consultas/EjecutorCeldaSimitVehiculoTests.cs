@@ -129,7 +129,7 @@ public sealed class EjecutorCeldaSimitVehiculoTests
     }
 
     // AC5 (F05-C11, F05-C14, fuga) — la compañía B consultó hoy SIMIT_VEHICULO de TST102: A hace su propia consulta (con su
-    // empresa en la metadata, por placa y sin documento) y no reutiliza el dato de B; un segundo lote de A el mismo día sí
+    // empresa en la metadata, por placa y con el documento del propietario del RUNT) y no reutiliza el dato de B; un segundo lote de A el mismo día sí
     // reutiliza el dato de A sin llamar.
     [Fact]
     public async Task Reutiliza_el_dato_del_mismo_dia_de_la_misma_compania_y_no_de_otra()
@@ -153,8 +153,8 @@ public sealed class EjecutorCeldaSimitVehiculoTests
         await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
         grpc.Llamadas.Should().BeEquivalentTo(
-            [(dos.B.Id.ToString(), "TST102", false, TipoPersona.Unspecified), (dos.A.Id.ToString(), "TST102", false, TipoPersona.Unspecified)],
-            "cada compañía consulta por su cuenta, por placa y sin documento");
+            [(dos.B.Id.ToString(), "TST102", true, TipoPersona.Unspecified), (dos.A.Id.ToString(), "TST102", true, TipoPersona.Unspecified)],
+            "cada compañía consulta por su cuenta, por placa y con el documento del propietario del RUNT para el proveedor que lo exija (Bug SIMIT por placa)");
         var celdaB = await MotorPersonas.CeldaAsync(api, dos.B, deB, "TST102", Fuente.SimitVehiculo, ct);
         var celdaA = await MotorPersonas.CeldaAsync(api, dos.A, deA, "TST102", Fuente.SimitVehiculo, ct);
         (celdaA.Estado, celdaA.ReutilizadaDeId).Should().Be((EstadoCelda.Completado, (Guid?)null), "nunca se reutiliza el dato de otra compañía");
