@@ -1586,6 +1586,53 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorRegla"
 
+  /api/v1/diagnostico/backoffice/empresas:
+    get:
+      tags: [Backoffice, Configuracion]
+      operationId: listarEmpresasBackoffice
+      summary: Empresas con Diagnóstico para el selector del editor de contrato (backoffice FLIT)
+      description: >
+        HU #13741 (escenarios 15 y 16). Mismos permisos que el contrato: política diagnostico.backoffice
+        (diagnostico.backoffice.ver + tenant_type=FLIT) y además diagnostico.configuracion.contrato.editar.
+        Devuelve las empresas activas con Diagnóstico encendido tal como las tiene Identidad
+        (EmpresasService.ListarEmpresasConProducto, producto diagnostico), ordenadas por nombre (sin distinguir
+        mayúsculas ni tildes). Solo lectura de la plataforma: no lleva empresa explícita ni se registra en
+        lecturas_backoffice. Nunca responde una lista vacía cuando Identidad no está configurada o no responde:
+        en esos casos, 503 con `code`.
+      responses:
+        "200":
+          description: Empresas con Diagnóstico encendido (puede ser vacía solo si Identidad respondió sin ninguna).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EmpresaBackoffice"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >
+            No es backoffice FLIT o le falta diagnostico.configuracion.contrato.editar (sin cuerpo);
+            SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "503":
+          description: >
+            `code` = IDENTIDAD_NO_CONFIGURADA: el servicio no tiene Diagnostico:Identidad:Address (sin Retry-After).
+            `code` = IDENTIDAD_NO_DISPONIBLE: Identidad no respondió o rechazó al cliente de servicio (con Retry-After).
+          headers:
+            Retry-After:
+              description: Segundos antes de reintentar (solo con IDENTIDAD_NO_DISPONIBLE).
+              schema:
+                type: integer
+                example: 30
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
   /api/v1/diagnostico/backoffice/empresas/{empresa}/configuracion/contrato:
     parameters:
       - name: empresa
@@ -2476,6 +2523,25 @@ components:
       example:
         visibilidad_usuario: PROPIOS
         estimado_consultas: ANTES_DE_LANZAR
+
+    EmpresaBackoffice:
+      type: object
+      description: Una empresa con Diagnóstico encendido, según Identidad (HU #13741).
+      required: [id, nombre, nit]
+      properties:
+        id:
+          type: string
+          format: uuid
+        nombre:
+          type: string
+        nit:
+          type: string
+          nullable: true
+          description: NIT tal como lo tiene Identidad; null si no lo informa.
+      example:
+        id: 3f2a9c1e-0000-4000-8000-000000000001
+        nombre: Empresa Ficticia SAS
+        nit: "900000001"
 
     ContratoBackoffice:
       type: object

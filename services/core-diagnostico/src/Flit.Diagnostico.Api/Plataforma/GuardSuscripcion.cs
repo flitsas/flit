@@ -49,7 +49,9 @@ public static class GuardSuscripcionExtensions
     /// Con <see cref="IdentidadAddressKey"/>: Identidad por gRPC (scope <c>platform.identidad.read</c>, plazo 5 s). Sin
     /// ella: ninguna compañía tiene Diagnóstico, salvo <see cref="SimularSuscripcionKey"/>=true explícito. Un registro
     /// previo de <see cref="IProductosHabilitados"/> (pruebas) se respeta. El mismo cliente resuelve el nombre de los
-    /// usuarios (<see cref="IResolutorNombresUsuario"/>, HU #13845); sin Identidad, respaldo fijo «No disponible».
+    /// usuarios (<see cref="IResolutorNombresUsuario"/>, HU #13845); sin Identidad, respaldo fijo «No disponible». La misma
+    /// dirección sirve la lista de empresas (<see cref="IEmpresasPlataforma"/>, HU #13741, scope
+    /// <c>platform.identidad.empresas</c>); sin Identidad no hay lista (el endpoint responde 503).
     /// </summary>
     public static IServiceCollection AddSuscripcionDiagnostico(this IServiceCollection services, IConfiguration configuration)
     {
@@ -61,11 +63,16 @@ public static class GuardSuscripcionExtensions
                 configuration, new Uri(identidad), "platform.identidad.read", o => o.Deadline = TimeSpan.FromSeconds(5));
             services.TryAddSingleton<IProductosHabilitados, ProductosHabilitadosIdentidad>();
             services.TryAddSingleton<IResolutorNombresUsuario, ResolutorNombresUsuario>();
+            // Lista global de empresas para el editor de contrato del backoffice (HU #13741, escenario 15): su propio scope.
+            services.AddFlitGrpcClient<Flit.Identidad.Grpc.V1.EmpresasService.EmpresasServiceClient>(
+                configuration, new Uri(identidad), "platform.identidad.empresas", o => o.Deadline = TimeSpan.FromSeconds(5));
+            services.TryAddScoped<IEmpresasPlataforma, EmpresasPlataformaIdentidad>();
         }
         else
         {
             services.TryAddSingleton<IProductosHabilitados>(new ProductosSinIdentidad(configuration.GetValue(SimularSuscripcionKey, false)));
             services.TryAddSingleton<IResolutorNombresUsuario, ResolutorNombresSinIdentidad>();
+            services.TryAddSingleton<IEmpresasPlataforma, EmpresasPlataformaNoConectada>();
         }
 
         return services;
