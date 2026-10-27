@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 using Xunit;
 
@@ -111,6 +112,8 @@ internal sealed class PortalHost : IAsyncDisposable
 
     public FachadaFalsa Catalogo { get; } = new();
 
+    public RegistroDeLogs Logs { get; } = new();
+
     /// <summary>Arma el host. <paramref name="servicios"/> reemplaza o suma servicios de prueba antes de construirlo.</summary>
     public static async Task<PortalHost> IniciarAsync(
         string prefijo, Action<IServiceCollection, PortalHost>? servicios = null, params (string Clave, string Valor)[] ajustes)
@@ -156,6 +159,7 @@ internal sealed class PortalHost : IAsyncDisposable
             b.Services.AddSingleton<IProveedorCaptcha, CaptchaFalso>();
             b.Services.AddSingleton<IFachadaTramites>(host.Catalogo);
             b.Services.AddSingleton<IFachadaDefiniciones>(host.Definiciones);
+            b.Logging.AddProvider(host.Logs);
             servicios?.Invoke(b.Services, host);
         });
         await host.App.StartAsync();

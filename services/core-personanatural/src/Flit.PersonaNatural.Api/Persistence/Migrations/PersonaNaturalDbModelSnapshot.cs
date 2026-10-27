@@ -23,6 +23,8 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.HasSequence("codigo_publico_seq", "personanatural");
+
             modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.AccesoPiiLog", b =>
                 {
                     b.Property<long>("Id")

@@ -12,6 +12,7 @@ namespace Flit.PersonaNatural.Api.Persistence;
 public sealed class PersonaNaturalDb(DbContextOptions<PersonaNaturalDb> options) : DbContext(options)
 {
     public const string Schema = ServicioSettings.Codigo;
+    public const string SecuenciaCodigoPublico = "codigo_publico_seq";
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -19,6 +20,9 @@ public sealed class PersonaNaturalDb(DbContextOptions<PersonaNaturalDb> options)
         modelBuilder.HasDefaultSchema(Schema);
         modelBuilder.AddFlitOutbox(Schema);
         modelBuilder.AddFlitInbox(Schema);
+
+        // HU #14047: consecutivo del radicado visible (PN-AAAA-NNNNNN); una secuencia no se repite entre réplicas ni tras un fallo.
+        modelBuilder.HasSequence<long>(SecuenciaCodigoPublico, Schema).StartsAt(1).IncrementsBy(1);
 
         modelBuilder.Entity<SolicitudTramite>(e =>
         {

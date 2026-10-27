@@ -51,16 +51,6 @@ public static class SesionEndpoints
             }
         }).ConCaptcha();
 
-        // El estado del borrador, para rehidratar el wizard. Solo con la sesión de ESA solicitud.
-        grupo.MapGet("/solicitudes/{id:guid}", async (Guid id, PersonaNaturalDb db, CancellationToken ct) =>
-        {
-            var solicitud = await db.Set<SolicitudTramite>().AsNoTracking().Where(s => s.Id == id)
-                .Select(s => new SolicitudResponse(s.Id, s.CodigoPublico, s.Estado, s.TipoTramiteCodigo)).FirstOrDefaultAsync(ct).ConfigureAwait(false);
-            return solicitud is null
-                ? Problema(StatusCodes.Status404NotFound, "No encontrado", MensajeNoEncontrada, CodigoNoEncontrada)
-                : Results.Ok(solicitud);
-        }).AddEndpointFilter(ConSesionDeLaSolicitud);
-
         return app;
     }
 

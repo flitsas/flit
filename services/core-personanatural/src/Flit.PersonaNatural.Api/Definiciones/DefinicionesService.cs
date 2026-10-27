@@ -59,11 +59,16 @@ public sealed class DefinicionesService(IFachadaDefiniciones fachada, IMemoryCac
     {
         try
         {
-            return JsonSerializer.Deserialize<DefinicionTipoDto>(snapshot, Json);
+            var d = JsonSerializer.Deserialize<DefinicionTipoDto>(snapshot, Json);
+            return d is { Pasos: not null, Actores: not null, Documentos: not null, Flags: not null } ? d : null;
         }
         catch (JsonException)
         {
             return null;
         }
     }
+
+    /// <summary>Una definición sin estructura: lo que se usa para pintar un borrador cuyo snapshot no se puede leer.</summary>
+    public static DefinicionTipoDto Vacia(string codigo, int version) =>
+        new(codigo, codigo, string.Empty, version, string.Empty, false, string.Empty, [], [], [], new FlagsTipoDto(string.Empty, false, false, false, false, false, false));
 }
