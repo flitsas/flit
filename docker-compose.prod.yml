@@ -915,10 +915,6 @@ services:
       # Tercer origen (opcional): dominio alternativo de la app en PDN (https://app.flitsas.com, mismo front que
       # CORS_ORIGIN). Vacío en DEV/QA: el gateway descarta un Origin vacío, así que no cambia nada.
       Cors__AllowedOrigins__2: ${CORS_ORIGIN_ALT:-}
-      # Cuarto origen (opcional): el front del portal Persona Natural. Vacío si no se despliega: el gateway descarta un
-      # Origin vacío. La política CORS del gateway es global: el origen queda permitido en todas sus rutas, que ya exigen
-      # su propia credencial (el portal no usa cookies).
-      Cors__AllowedOrigins__3: ${CORS_ORIGIN_PERSONA_NATURAL:-}
       # Destinos internos del YARP: apuntan al puerto interno de cada servicio.
       # (sobrescriben appsettings.json, que trae los puertos por defecto)
       ReverseProxy__Clusters__core-api-cluster__Destinations__core-api-1__Address: http://core-api:${CORE_API_PORT:-4003}/
