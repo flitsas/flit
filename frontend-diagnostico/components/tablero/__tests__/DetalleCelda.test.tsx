@@ -14,10 +14,13 @@ import {
   impuestoNa,
   impuestoSinVigencias,
   persona,
+  respuestaFuentePersona,
+  respuestaFuenteRunt,
   runtLocatarioDeclarado,
   runtPropietarioConError,
   runtTresPropietarios,
   runtVehiculo,
+  runtVehiculoConRespuesta,
   simitVehiculo,
 } from "@/lib/tablero/__tests__/datosDetalle";
 
@@ -346,28 +349,93 @@ describe("DetalleCelda — R-20 (negativo): nada distingue una celda llenada a m
     }
   });
 
-  it("aunque el resultado traiga proveedor, transacción, origen o departamento, el detalle no los muestra", async () => {
-    const conFuga = {
+  it("fuera de resultado y respuesta_fuente las claves extra no se pintan; dentro, todo se pinta verbatim (decisión «todo»)", async () => {
+    const conExtra = {
       ...impuestoConVigencias(),
-      proveedor: "PROVEEDOR-FICTICIO-ZETA",
       transaccion_proveedor_id: "TX-FICTICIA-0099",
       origen: "API",
       departamento_codigo: "05",
-      resultado: {
-        monto_total: 350000,
-        proveedor: "PROVEEDOR-FICTICIO-ZETA",
-        vigencias: [
-          { anio: 2025, valor: 180000, pagada: true, proveedor: "PROVEEDOR-FICTICIO-ZETA" },
-          { anio: 2026, valor: 350000, pagada: false },
-        ],
-      },
+      resultado: { monto_total: 350000, proveedor: "PROVEEDOR-FICTICIO-ZETA", vigencias: [{ anio: 2025, valor: 180000, pagada: true, departamento: "DEPTO PRUEBA" }] },
     } as unknown as Detalle;
-    const a = await pintarDetalle(impuestoConVigencias());
-    const htmlLimpio = limpiar(a.dialogo.innerHTML);
+    const { dialogo } = await pintarDetalle(conExtra);
+    expect(dialogo.textContent).not.toMatch(/TX-FICTICIA-0099|departamento_codigo|origen/i);
+    expect(valorDe(within(dialogo).getByRole("table", { name: "Respuesta de la fuente" }), "proveedor")).toBe("PROVEEDOR-FICTICIO-ZETA");
+    expect(within(within(dialogo).getByRole("table", { name: "vigencias" })).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["anio", "valor", "pagada", "departamento"]);
+  });
+});
+
+const AVISO_RESUMIDO =
+  "Esta consulta no tiene guardada la respuesta completa de la fuente (es anterior al cambio, se reutilizó o se registró sin consulta). Se muestra el resultado resumido.";
+
+describe("DetalleCelda — HU #14087 AC8 ajustado: respuesta completa de la fuente (respuesta_fuente)", () => {
+  it("con respuesta_fuente pinta todos sus campos (no el resultado resumido) y sin aviso", async () => {
+    const { dialogo } = await pintarDetalle(runtVehiculoConRespuesta() as Detalle);
+    const r = respuesta(dialogo);
+    const tabla = within(r).getByRole("table", { name: "Respuesta de la fuente" });
+    expect(valorDe(tabla, "proveedor")).toBe("PROVEEDOR-FICTICIO");
+    expect(valorDe(tabla, "http_status")).toBe("200");
+    expect(within(r).getByRole("region", { name: "vehiculo" })).toBeInTheDocument();
+    expect(within(r).getByRole("region", { name: "soat (2)" })).toBeInTheDocument();
+    expect(within(r).getByRole("table", { name: "direcciones" })).toHaveTextContent("DEPTO PRUEBA");
+    expect(within(r).queryByRole("table", { name: "propietarios" })).not.toBeInTheDocument();
+    expect(r).not.toHaveTextContent(AVISO_RESUMIDO);
+  });
+
+  it("sin respuesta_fuente (null o ausente) pero con resultado: aviso neutro y el resultado resumido", async () => {
+    for (const d of [runtVehiculo(), { ...runtVehiculo(), respuesta_fuente: null } as Detalle]) {
+      const { dialogo, unmount } = await pintarDetalle(d);
+      const aviso = within(respuesta(dialogo)).getByRole("status");
+      expect(aviso).toHaveTextContent(AVISO_RESUMIDO);
+      expect(within(dialogo).queryByRole("alert")).not.toBeInTheDocument();
+      expect(valorDe(within(respuesta(dialogo)).getByRole("table", { name: "Respuesta de la fuente" }), "vin")).toBe("9ZZPRUEBA00000001");
+      unmount();
+    }
+  });
+
+  it("por persona: cada persona pinta su respuesta_fuente; sin ella, su resultado con el aviso (una sola vez)", async () => {
+    const d = detalle("RUNT_PROPIETARIO", {
+      personas: [
+        { ...persona(1), respuesta_fuente: respuestaFuentePersona("PERSONA FICTICIA UNO") },
+        { ...persona(2), respuesta_fuente: respuestaFuentePersona("PERSONA FICTICIA DOS") },
+      ],
+    } as Partial<Detalle>);
+    const a = await pintarDetalle(d);
+    const [p1, p2] = within(respuesta(a.dialogo)).getAllByRole("region", { name: /^propietario \d/i });
+    expect(valorDe(within(p1).getByRole("table", { name: "Respuesta de la fuente · Propietario 1" }), "proveedor")).toBe("PROVEEDOR-FICTICIO");
+    expect(within(p1).getByRole("region", { name: "persona" })).toHaveTextContent("PERSONA FICTICIA UNO");
+    expect(within(p2).getByRole("region", { name: "persona" })).toHaveTextContent("PERSONA FICTICIA DOS");
+    expect(within(p1).getByRole("table", { name: "licencias" })).toHaveTextContent("DEPTO PRUEBA");
+    expect(respuesta(a.dialogo)).not.toHaveTextContent(AVISO_RESUMIDO);
     a.unmount();
-    const b = await pintarDetalle(conFuga);
-    expect(b.dialogo.textContent).not.toMatch(/PROVEEDOR-FICTICIO-ZETA|TX-FICTICIA-0099|proveedor|transacci|origen|departamento/i);
-    expect(limpiar(b.dialogo.innerHTML)).toBe(htmlLimpio);
+    const b = await pintarDetalle(runtTresPropietarios());
+    expect(within(respuesta(b.dialogo)).getAllByText(AVISO_RESUMIDO)).toHaveLength(1);
+    expect(valorDe(within(respuesta(b.dialogo)).getByRole("table", { name: "Respuesta de la fuente · Propietario 1" }), "inscrito")).toBe("true");
+  });
+
+  it("Error o Novedad con respuesta_fuente: igual que hoy, mensaje sin campos", async () => {
+    for (const d of [
+      { ...detalle("RUNT", { estado: "ERROR", tipo_error: "TIMEOUT", dato_obtenido_en: null }), respuesta_fuente: respuestaFuenteRunt() },
+      { ...detalle("RUNT", { estado: "NA", motivo_na: "SERVICIO_PUBLICO", dato_obtenido_en: null }), respuesta_fuente: respuestaFuenteRunt() },
+    ] as Detalle[]) {
+      const { dialogo, unmount } = await pintarDetalle(d);
+      expect(within(respuesta(dialogo)).queryByRole("table")).not.toBeInTheDocument();
+      expect(dialogo.textContent).not.toContain("PROVEEDOR-FICTICIO");
+      unmount();
+    }
+  });
+
+  it("los títulos plegables entran en el foco atrapado: Tab en el último summary vuelve al primero", async () => {
+    render(
+      <DetalleCelda loteId={ID} vehiculoId="vehiculo-1" fuente="RUNT" nombreFuente="RUNT vehículo" identificador="TST001" onClose={() => {}} cargar={async () => runtVehiculoConRespuesta() as Detalle} />,
+    );
+    const dialogo = await screen.findByRole("dialog");
+    await within(dialogo).findByRole("region", { name: "vehiculo" });
+    const summaries = dialogo.querySelectorAll("summary");
+    const ultimo = summaries[summaries.length - 1] as HTMLElement;
+    const primero = within(dialogo).getAllByRole("button")[0];
+    ultimo.focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement).toBe(primero);
   });
 });
 

@@ -1,4 +1,8 @@
-import { useId, type ReactNode } from "react";
+"use client";
+
+import { createContext, memo, useCallback, useContext, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { ChevronRight } from "lucide-react";
+import { FOCO_CLS } from "@/components/configuracion/estilos";
 import {
   CABECERA_TABLA_CLS,
   CABECERA_TABLA_ESTILO,
@@ -10,11 +14,12 @@ import {
 // (DTO cerrado, R-13/R-20). Pinta TODOS los campos tal como llegan: nombres verbatim (snake_case del JSON) y valores verbatim
 // (null → «null», true/false, números sin formato, textos tal cual). Objeto → tabla campo/valor; array de objetos → tabla con
 // una columna por clave (unión de claves, en orden de aparición); array de primitivos → lista; objeto anidado → subsección con
-// el nombre del campo como título; array vacío → «[]». No omite, modifica ni inventa campos del contrato.
+// el nombre del campo como título; array vacío → «[]». No omite, modifica ni inventa campos.
 //
-// Defensa en profundidad de R-20: el contrato nunca trae proveedor, transacción, origen, usuario ni departamento consultado; si
-// por error llegara una de esas claves, no se pinta (ninguna clave del DTO cerrado coincide con este patrón).
-const CLAVES_RESERVADAS_R20 = /proveedor|transacci|origen|usuario|departamento/i;
+// AC8 ajustado: pinta la respuesta completa (respuesta_fuente, proto-JSON del rpc) sin filtrar ninguna clave: por decisión del
+// usuario se ve todo, incluidos datos personales, proveedor o departamento. El origen manual de la celda (R-20) no viaja en la
+// respuesta. Para respuestas grandes, las subsecciones de primer nivel son plegables y abren por defecto, las de segundo nivel
+// son plegables y arrancan cerradas, cada lista lleva su número de elementos y hay un «Expandir todo / Contraer todo».
 
 type Objeto = Record<string, unknown>;
 
@@ -23,7 +28,13 @@ const esPrimitivo = (v: unknown) => v === null || typeof v !== "object";
 /** Va en una fila de la tabla campo/valor: primitivo, array vacío o array de primitivos. */
 const vaEnFila = (v: unknown) => esPrimitivo(v) || (Array.isArray(v) && v.every(esPrimitivo));
 
-const camposVisibles = (o: Objeto) => Object.entries(o).filter(([clave]) => !CLAVES_RESERVADAS_R20.test(clave));
+const camposVisibles = (o: Objeto) => Object.entries(o);
+
+/** Profundidades con subsección plegable: 0 (abierta por defecto) y 1 (cerrada). */
+const PROFUNDIDAD_PLEGABLE = 1;
+
+/** Avisa al contenedor de que un plegable cambió, para que el botón «Expandir/Contraer todo» diga lo correcto. */
+const AlCambiarPlegable = createContext<() => void>(() => {});
 
 /** Valor primitivo verbatim: null → «null», booleano → «true»/«false», número sin formato, texto tal cual. */
 function textoPrimitivo(v: unknown): string {
@@ -36,6 +47,9 @@ const CAMPO_CLS = "px-3 py-2 align-top text-left font-mono text-xs font-medium t
 const VALOR_CLS = `${CELDA_TABLA_CLS} whitespace-pre-wrap break-words font-mono`;
 const CONTENEDOR_TABLA_CLS = "overflow-x-auto rounded-xl border border-[var(--color-flit-gray)] dark:border-white/10";
 const TITULO_CLS = "font-mono text-xs font-semibold text-flit-primary dark:text-white";
+/** Botón secundario compacto (mismos tokens que BOTON_SECUNDARIO_CLS, a la escala de 12px del detalle). */
+const BOTON_PLEGAR_CLS = `inline-flex items-center justify-center self-end rounded-full border border-[var(--color-flit-gray)] bg-white px-3 py-1 text-xs font-semibold text-flit-primary transition dark:border-white/15 dark:bg-transparent dark:text-white ${FOCO_CLS}`;
+const SUMMARY_CLS = `flex cursor-pointer list-none items-center gap-1 rounded-lg py-0.5 [&::-webkit-details-marker]:hidden ${FOCO_CLS}`;
 
 function Titulo({ nivel, id, children }: { nivel: number; id: string; children: ReactNode }) {
   const Etiqueta = `h${Math.min(Math.max(nivel, 2), 6)}` as "h2" | "h3" | "h4" | "h5" | "h6";
@@ -143,19 +157,41 @@ function TablaArreglo({ nombre, items }: { nombre: string; items: Objeto[] }) {
   );
 }
 
-function Subseccion({ nombre, valor, nivel }: { nombre: string; valor: unknown; nivel: number }) {
+function Subseccion({ nombre, valor, nivel, profundidad }: { nombre: string; valor: unknown; nivel: number; profundidad: number }) {
   const id = useId();
+  const alCambiar = useContext(AlCambiarPlegable);
+  const titulo = Array.isArray(valor) ? `${nombre} (${valor.length})` : nombre;
+  const contenido = esObjeto(valor) ? (
+    <Bloque etiqueta={nombre} datos={valor} nivel={nivel + 1} profundidad={profundidad + 1} />
+  ) : (
+    <Valor nombre={nombre} valor={valor} />
+  );
+  if (profundidad > PROFUNDIDAD_PLEGABLE) {
+    return (
+      <section aria-labelledby={id} className="flex flex-col gap-2">
+        <Titulo nivel={nivel} id={id}>
+          {titulo}
+        </Titulo>
+        {contenido}
+      </section>
+    );
+  }
   return (
-    <section aria-labelledby={id} className="flex flex-col gap-2">
-      <Titulo nivel={nivel} id={id}>
-        {nombre}
-      </Titulo>
-      {esObjeto(valor) ? <Bloque etiqueta={nombre} datos={valor} nivel={nivel + 1} /> : <Valor nombre={nombre} valor={valor} />}
+    <section aria-labelledby={id}>
+      <details open={profundidad === 0} onToggle={alCambiar} className="group flex flex-col">
+        <summary className={SUMMARY_CLS}>
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-flit-primary transition-transform group-open:rotate-90 dark:text-white" aria-hidden="true" />
+          <Titulo nivel={nivel} id={id}>
+            {titulo}
+          </Titulo>
+        </summary>
+        <div className="mt-2 flex flex-col gap-2">{contenido}</div>
+      </details>
     </section>
   );
 }
 
-function Bloque({ etiqueta, datos, nivel }: { etiqueta: string; datos: Objeto; nivel: number }) {
+function Bloque({ etiqueta, datos, nivel, profundidad }: { etiqueta: string; datos: Objeto; nivel: number; profundidad: number }) {
   const campos = camposVisibles(datos);
   if (campos.length === 0) return <p className={VALOR_CLS}>{"{}"}</p>;
   const filas = campos.filter(([, v]) => vaEnFila(v));
@@ -164,14 +200,14 @@ function Bloque({ etiqueta, datos, nivel }: { etiqueta: string; datos: Objeto; n
     <div className="flex flex-col gap-3">
       {filas.length > 0 && <TablaCampos etiqueta={etiqueta} campos={filas} />}
       {secciones.map(([clave, valor]) => (
-        <Subseccion key={clave} nombre={clave} valor={valor} nivel={nivel} />
+        <Subseccion key={clave} nombre={clave} valor={valor} nivel={nivel} profundidad={profundidad} />
       ))}
     </div>
   );
 }
 
 export interface RespuestaFuenteProps {
-  /** `resultado` del detalle de la celda (o `personas[i].resultado`), tal como llega del API. */
+  /** `respuesta_fuente` del detalle de la celda (o de la persona) o, si no la hay, su `resultado`, tal como llega del API. */
   datos: object;
   /** Nombre accesible de la tabla principal campo/valor. */
   etiqueta: string;
@@ -179,7 +215,35 @@ export interface RespuestaFuenteProps {
   nivel?: number;
 }
 
-/** Todos los campos de la respuesta de la fuente, verbatim (HU #14087 AC8). */
-export function RespuestaFuente({ datos, etiqueta, nivel = 4 }: RespuestaFuenteProps) {
-  return <Bloque etiqueta={etiqueta} datos={datos as Objeto} nivel={nivel} />;
-}
+/**
+ * Todos los campos de la respuesta de la fuente, verbatim (HU #14087 AC8). El árbol se memoiza: abrir o cerrar plegables, o
+ * pulsar «Expandir/Contraer todo», no lo vuelve a construir (los <details> se abren y cierran en el DOM, sin re-render).
+ */
+export const RespuestaFuente = memo(function RespuestaFuente({ datos, etiqueta, nivel = 4 }: RespuestaFuenteProps) {
+  const contenedor = useRef<HTMLDivElement>(null);
+  const [todoAbierto, setTodoAbierto] = useState(false);
+  const hayPlegables = useMemo(() => Object.values(datos as Objeto).some((v) => !vaEnFila(v)), [datos]);
+  const plegables = () => Array.from(contenedor.current?.querySelectorAll("details") ?? []);
+  const recalcular = useCallback(() => {
+    const lista = Array.from(contenedor.current?.querySelectorAll("details") ?? []);
+    setTodoAbierto(lista.length > 0 && lista.every((d) => d.open));
+  }, []);
+  const arbol = useMemo(() => <Bloque etiqueta={etiqueta} datos={datos as Objeto} nivel={nivel} profundidad={0} />, [datos, etiqueta, nivel]);
+
+  function alternarTodo() {
+    const abrir = !todoAbierto;
+    for (const d of plegables()) d.open = abrir;
+    setTodoAbierto(abrir);
+  }
+
+  return (
+    <div ref={contenedor} className="flex flex-col gap-3">
+      {hayPlegables && (
+        <button type="button" onClick={alternarTodo} className={BOTON_PLEGAR_CLS}>
+          {todoAbierto ? "Contraer todo" : "Expandir todo"}
+        </button>
+      )}
+      <AlCambiarPlegable.Provider value={recalcular}>{arbol}</AlCambiarPlegable.Provider>
+    </div>
+  );
+});

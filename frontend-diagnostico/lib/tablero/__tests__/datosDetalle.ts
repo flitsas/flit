@@ -137,3 +137,45 @@ export const runtPropietarioConError = () =>
       persona(2, { tipo_documento: "NIT", documento_enmascarado: "****4567", consulta: "RUES", estado: "ERROR", tipo_error: "TIMEOUT", consultado_en: null, resultado: null }),
     ],
   });
+
+/**
+ * Respuesta completa del RUNT (HU #14087 AC8 ajustado): proto-JSON ficticio del ConsultarVehiculoCrudoResponse, con nombres
+ * snake_case y valores por defecto (false, 0, "", []). Nombres, documentos y direcciones inventados.
+ */
+export const respuestaFuenteRunt = (): Record<string, unknown> => ({
+  proveedor: "PROVEEDOR-FICTICIO",
+  resultado: { proveedor: "PROVEEDOR-FICTICIO", desde_cache: false, chequeos: [] },
+  vehiculo: {
+    plate: "TST001",
+    vin: "9ZZPRUEBA00000001",
+    informacion_general: { marca: "MARCA PRUEBA", modelo: 2020, blindado: false, cilindraje: 0, color: "" },
+    soat: [
+      { numero_poliza: "POL-0001", vigente: true },
+      { numero_poliza: "POL-0002", vigente: false },
+    ],
+    tecno_mecanica: [],
+    propietarios_actuales: [
+      {
+        nombre_completo: "PERSONA FICTICIA UNO",
+        direcciones: [{ direccion: "CALLE FALSA 123", departamento: "DEPTO PRUEBA" }],
+        locatarios: [],
+      },
+    ],
+    accident_rate: [{ campos: { siniestros: "0", aseguradora: "ASEGURADORA PRUEBA" } }],
+  },
+  tipo_error: "",
+  mensaje_error: "",
+  http_status: 200,
+  duracion_ms: 0,
+  errores: [],
+});
+
+/** RUNT del vehículo con la respuesta completa guardada (además del resultado resumido). */
+export const runtVehiculoConRespuesta = () => ({ ...runtVehiculo(), respuesta_fuente: respuestaFuenteRunt() });
+
+/** Respuesta completa ficticia del RUNT de una persona. */
+export const respuestaFuentePersona = (nombre: string): Record<string, unknown> => ({
+  proveedor: "PROVEEDOR-FICTICIO",
+  persona: { nombre_completo: nombre, inscrito: true, licencias: [{ categoria: "B1", departamento: "DEPTO PRUEBA" }] },
+  tipo_error: "",
+});

@@ -67,8 +67,9 @@ test.describe("impuesto departamental en el tablero", () => {
     } else {
       await expect(respuesta.getByRole("row", { name: /vigencias\s*\[\]/ })).toBeVisible();
     }
-    // R-20: ni proveedor ni transacción en el detalle.
-    await expect(dialogo.getByText(/proveedor|transacci|SIM-IMPUESTO/i)).toHaveCount(0);
+    // HU #14087 AC8 ajustado: con la respuesta completa guardada se ve todo lo que respondió la fuente (también resultado.proveedor);
+    // sin ella, el aviso de resultado resumido. Nada delata un dato manual (R-20).
+    await expect(dialogo.getByText(/manual|a mano/i)).toHaveCount(0);
 
     await page.keyboard.press("Escape");
     await expect(dialogo).toHaveCount(0);

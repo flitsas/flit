@@ -50,7 +50,7 @@ export interface DetalleCeldaProps {
 
 type Carga = { tipo: "cargando" } | { tipo: "error"; error: ErrorDetalle } | { tipo: "listo"; detalle: Detalle };
 
-const ENFOCABLES = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+const ENFOCABLES = 'a[href],summary,button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
 /**
  * Atrapa el foco dentro del diálogo que contiene `ancla`, lo pone en su primer control y lo devuelve al cerrar. También lo usa
@@ -193,17 +193,33 @@ function Auditoria({ detalle }: { detalle: Detalle }) {
   );
 }
 
-/** Respuesta de una persona: todos los campos de su resultado, o que la fuente no respondió nada para ella. */
+/**
+ * Aviso cuando no hay respuesta completa guardada (HU #14087 AC8 ajustado). Mismo texto para consulta anterior al cambio,
+ * reutilizada o llenada a mano: no revela el origen manual (R-20).
+ */
+export const AVISO_RESULTADO_RESUMIDO =
+  "Esta consulta no tiene guardada la respuesta completa de la fuente (es anterior al cambio, se reutilizó o se registró sin consulta). Se muestra el resultado resumido.";
+
+function AvisoResumido() {
+  return <InlineAlert tone="info">{AVISO_RESULTADO_RESUMIDO}</InlineAlert>;
+}
+
+/** Lo que se pinta de una persona: su respuesta completa o, si falta, su resultado resumido. */
+const datosDePersona = (p: PersonaDetalle): object | null => p.respuesta_fuente ?? p.resultado;
+const personaResumida = (p: PersonaDetalle) => !p.respuesta_fuente && p.resultado !== null;
+
+/** Respuesta de una persona: todos los campos de su respuesta completa (o de su resultado), o que no hay nada para ella. */
 function RespuestaPersona({ persona }: { persona: PersonaDetalle }) {
   const id = useId();
   const titulo = `${ROLES[persona.rol] ?? persona.rol} ${persona.orden}`;
+  const datos = datosDePersona(persona);
   return (
     <section aria-labelledby={id} className="flex flex-col gap-2">
       <h4 id={id} className={TITULO_SECCION_CLS}>
         {titulo}
       </h4>
-      {persona.resultado ? (
-        <RespuestaFuente datos={persona.resultado} etiqueta={`Respuesta de la fuente · ${titulo}`} nivel={5} />
+      {datos ? (
+        <RespuestaFuente datos={datos} etiqueta={`Respuesta de la fuente · ${titulo}`} nivel={5} />
       ) : (
         <Vacio>Sin respuesta de la fuente para esta persona.</Vacio>
       )}
@@ -211,7 +227,22 @@ function RespuestaPersona({ persona }: { persona: PersonaDetalle }) {
   );
 }
 
-/** «Respuesta de la fuente»: lo que devuelve el API de detalle, verbatim (RespuestaFuente); sin resultado, solo el mensaje. */
+/** Personas con su respuesta y, una sola vez arriba, el aviso si alguna se muestra con el resultado resumido. */
+function RespuestasPersonas({ personas }: { personas: PersonaDetalle[] }) {
+  return (
+    <>
+      {personas.some(personaResumida) && <AvisoResumido />}
+      {personas.map((p) => (
+        <RespuestaPersona key={p.orden} persona={p} />
+      ))}
+    </>
+  );
+}
+
+/**
+ * «Respuesta de la fuente» (HU #14087 AC8 ajustado): la respuesta completa (`respuesta_fuente`) con todos sus campos; si no
+ * está guardada, el `resultado` resumido con un aviso; sin resultado (Sin ejecutar, Novedad, Error), solo el mensaje.
+ */
 function Respuesta({ detalle }: { detalle: Detalle }) {
   const porPersona = FUENTES_PERSONA.has(detalle.fuente) || detalle.personas !== null;
   const personas = detalle.personas ?? [];
@@ -226,17 +257,22 @@ function Respuesta({ detalle }: { detalle: Detalle }) {
         <InlineAlert tone="error" title="La consulta terminó en error">
           {textoTipoError(detalle.tipo_error)}
         </InlineAlert>
-        {personas.map((p) => (
-          <RespuestaPersona key={p.orden} persona={p} />
-        ))}
+        {personas.length > 0 && <RespuestasPersonas personas={personas} />}
       </>
     );
   } else if (porPersona && personas.length === 0) {
     cuerpo = <Vacio>{`El vehículo no tiene ${detalle.fuente.endsWith("LOCATARIO") ? "locatarios" : "propietarios"} para esta consulta.`}</Vacio>;
   } else if (porPersona) {
-    cuerpo = personas.map((p) => <RespuestaPersona key={p.orden} persona={p} />);
+    cuerpo = <RespuestasPersonas personas={personas} />;
+  } else if (detalle.respuesta_fuente) {
+    cuerpo = <RespuestaFuente datos={detalle.respuesta_fuente} etiqueta="Respuesta de la fuente" />;
   } else if (detalle.resultado) {
-    cuerpo = <RespuestaFuente datos={detalle.resultado} etiqueta="Respuesta de la fuente" />;
+    cuerpo = (
+      <>
+        <AvisoResumido />
+        <RespuestaFuente datos={detalle.resultado} etiqueta="Respuesta de la fuente" />
+      </>
+    );
   } else {
     cuerpo = <Vacio>Esta consulta no trae campos de respuesta para mostrar.</Vacio>;
   }
@@ -245,7 +281,7 @@ function Respuesta({ detalle }: { detalle: Detalle }) {
 
 /**
  * Cuerpo del detalle ya cargado (HU #14087): «Auditoría de consulta» y «Respuesta de la fuente». Solo lee las claves del
- * contrato (DTO cerrado, R-20): las claves de más que llegaran fuera de `resultado` no se pintan.
+ * contrato (DTO cerrado, R-20): las claves de más que llegaran fuera de `resultado` y `respuesta_fuente` no se pintan.
  */
 export function VistaDetalleCelda({ detalle }: { detalle: Detalle }) {
   return (

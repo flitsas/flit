@@ -87,12 +87,19 @@ test.describe("tablero del lote", () => {
     const auditoria = dialogo.getByRole("region", { name: "Auditoría de consulta" });
     await expect(auditoria.getByText(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/)).toBeVisible();
     await expect(auditoria.getByText("Ejecutado (OK)")).toBeVisible();
-    const respuesta = dialogo.getByRole("table", { name: "Respuesta de la fuente" });
-    await expect(respuesta.getByRole("rowheader", { name: "cantidad_comparendos" })).toBeVisible();
-    // Comparendos como tabla con sus claves, o «[]» si la simulación no trae ninguno.
-    const tabla = dialogo.getByRole("table", { name: "comparendos" });
-    if (await tabla.count()) await expect(tabla.getByRole("columnheader", { name: "valor" })).toBeVisible();
-    else await expect(respuesta.getByRole("row", { name: /comparendos\s*\[\]/ })).toBeVisible();
+    // AC8 ajustado: con la respuesta completa guardada (ConsultarMultasResponse) se pinta su subsección «resultado» plegable;
+    // sin ella, el aviso de resultado resumido y el resultado con cantidad_comparendos y la tabla de comparendos (o «[]»).
+    const seccionRespuesta = dialogo.getByRole("region", { name: "Respuesta de la fuente" });
+    if (await seccionRespuesta.getByText(/no tiene guardada la respuesta completa/).count()) {
+      const respuesta = seccionRespuesta.getByRole("table", { name: "Respuesta de la fuente" });
+      await expect(respuesta.getByRole("rowheader", { name: "cantidad_comparendos" })).toBeVisible();
+      const tabla = dialogo.getByRole("table", { name: "comparendos" });
+      if (await tabla.count()) await expect(tabla.getByRole("columnheader", { name: "valor" })).toBeVisible();
+      else await expect(respuesta.getByRole("row", { name: /comparendos\s*\[\]/ })).toBeVisible();
+    } else {
+      await expect(seccionRespuesta.getByRole("region", { name: "resultado" })).toBeVisible();
+      await expect(seccionRespuesta.getByRole("button", { name: /Expandir todo|Contraer todo/ })).toBeVisible();
+    }
     // AC5: nada que delate un dato manual.
     await expect(dialogo.getByText(/manual/i)).toHaveCount(0);
 

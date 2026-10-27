@@ -1,7 +1,8 @@
 // Detalle de una celda del tablero (HU #13801, F06-H4). Tipos del contrato de HU #13798 (operationId obtenerDetalleCelda
 // en contracts/openapi/diagnostico.v1.yaml): GET /diagnosticos/{id}/vehiculos/{vid}/consultas/{fuente}, en snake_case.
-// El DTO es cerrado: nunca trae origen, usuario manual, proveedor, transacción, nombres ni documentos completos (R-20), así
-// que la vista de la compañía no tiene con qué distinguir una celda llenada a mano (Q5).
+// El DTO es cerrado fuera de `resultado` y `respuesta_fuente`: nunca trae origen ni usuario manual (R-20), así que la vista de
+// la compañía no tiene con qué distinguir una celda llenada a mano (Q5). `respuesta_fuente` (HU #14087 AC8 ajustado) trae TODO
+// lo que respondió la fuente, incluidos datos personales, por decisión del usuario.
 import { ApiError, apiFetch } from "@/lib/api";
 import type { Fuente } from "@/lib/configuracion";
 import type { EstadoCelda, MotivoNa } from "@/lib/tablero/api";
@@ -97,7 +98,16 @@ export interface PersonaDetalle {
   tipo_error: string | null;
   consultado_en: string | null;
   resultado: ResultadoRuntPersona | ResultadoRues | ResultadoSimitDetalle | null;
+  /** Respuesta completa de la fuente para esta persona (HU #14087 AC8); ver `DetalleCelda.respuesta_fuente`. */
+  respuesta_fuente?: RespuestaFuenteCompleta | null;
 }
+
+/**
+ * Respuesta completa de la fuente (HU #14087 AC8 ajustado): el proto-JSON del *Response del rpc, con los nombres snake_case
+ * del .proto y los valores por defecto (false, 0, "", []). Ausente o null en consultas anteriores al cambio, reutilizadas sin
+ * respuesta o llenadas a mano.
+ */
+export type RespuestaFuenteCompleta = Record<string, unknown>;
 
 export interface DetalleCelda {
   id: string;
@@ -112,6 +122,8 @@ export interface DetalleCelda {
   resultado: ResultadoRuntDetalle | ResultadoSimitDetalle | ResultadoAvaluoDetalle | ResultadoImpuestoDetalle | null;
   /** Solo en las fuentes de persona; una entrada por persona del rol, en orden. */
   personas: PersonaDetalle[] | null;
+  /** Respuesta completa de la fuente (HU #14087 AC8 ajustado); si falta, el detalle muestra `resultado` con un aviso. */
+  respuesta_fuente?: RespuestaFuenteCompleta | null;
 }
 
 /** Carga el detalle de una celda; la pantalla de backoffice (F06-H5) pasa la suya con `?empresa=`. */
