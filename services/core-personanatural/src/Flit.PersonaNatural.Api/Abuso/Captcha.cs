@@ -47,7 +47,7 @@ public sealed partial class ProveedorCaptchaHttp(HttpClient http, IOptions<Captc
     private sealed record RespuestaCaptcha([property: JsonPropertyName("success")] bool Success);
 }
 
-/// <summary>Solo para Development: acepta cualquier token no vacío. <see cref="CaptchaOptions.Validar"/> impide usarlo en otro ambiente.</summary>
+/// <summary>Solo para el equipo del desarrollador: acepta cualquier token no vacío. <see cref="CaptchaOptions.Validar"/> exige Development y Captcha__PermitirDeshabilitado=true.</summary>
 public sealed class ProveedorCaptchaDeshabilitado : IProveedorCaptcha
 {
     public Task<bool> VerificarAsync(string token, string? ip, CancellationToken ct) => Task.FromResult(!string.IsNullOrWhiteSpace(token));

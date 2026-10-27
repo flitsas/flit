@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Threading.RateLimiting;
 using Flit.PersonaNatural.Api.Sesiones;
-using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Flit.PersonaNatural.Api.Abuso;
@@ -52,16 +51,8 @@ public static class AbusoEndpoints
             };
         });
 
-        if (abuso.ConfiarEnXForwardedFor)
-        {
-            services.Configure<ForwardedHeadersOptions>(o =>
-            {
-                o.ForwardedHeaders = ForwardedHeaders.XForwardedFor;
-                o.KnownIPNetworks.Clear();
-                o.KnownProxies.Clear();
-            });
-        }
-
+        // Saltos de confianza reales, errores sin detalle y tope de cuerpo: ver AntiAbusoHttp.
+        services.AddAntiAbusoHttp(configuration);
         return services;
     }
 

@@ -193,12 +193,13 @@ public sealed class AbusoTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData("desconocido", "x", false, "*Proveedor de captcha desconocido*")]
-    [InlineData("turnstile", "", false, "*Captcha__SecretKey*")]
-    [InlineData("deshabilitado", "", false, "*solo se permite en Development*")]
-    public void UnCaptchaMalConfigurado_ImpideArrancar(string proveedor, string secreto, bool development, string mensaje)
+    [InlineData("desconocido", "x", false, "*Proveedor de captcha desconocido*", false)]
+    [InlineData("turnstile", "", false, "*Captcha__SecretKey*", false)]
+    [InlineData("deshabilitado", "", false, "*solo se permite en Development*", true)]
+    [InlineData("deshabilitado", "", true, "*PermitirDeshabilitado=true explícito*", false)]
+    public void UnCaptchaMalConfigurado_ImpideArrancar(string proveedor, string secreto, bool development, string mensaje, bool permitir)
     {
-        var config = Config(proveedor, secreto);
+        var config = Config(proveedor, secreto, permitir);
 
         var act = () => CaptchaOptions.Validar(config, development);
 
@@ -206,12 +207,12 @@ public sealed class AbusoTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData("turnstile", "s", false)]
-    [InlineData("recaptcha", "s", false)]
-    [InlineData("deshabilitado", "", true)]
-    public void UnCaptchaBienConfigurado_Arranca(string proveedor, string secreto, bool development)
+    [InlineData("turnstile", "s", false, false)]
+    [InlineData("recaptcha", "s", false, false)]
+    [InlineData("deshabilitado", "", true, true)]
+    public void UnCaptchaBienConfigurado_Arranca(string proveedor, string secreto, bool development, bool permitir)
     {
-        var act = () => CaptchaOptions.Validar(Config(proveedor, secreto), development);
+        var act = () => CaptchaOptions.Validar(Config(proveedor, secreto, permitir), development);
 
         act.Should().NotThrow();
     }
@@ -302,10 +303,11 @@ public sealed class AbusoTests : IAsyncLifetime
         return cuerpo.TryGetProperty("code", out var codigo) ? codigo.GetString() : null;
     }
 
-    private static IConfiguration Config(string proveedor, string secreto) => new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+    private static IConfiguration Config(string proveedor, string secreto, bool permitir = false) => new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
     {
         ["Captcha:Proveedor"] = proveedor,
         ["Captcha:SecretKey"] = secreto,
+        ["Captcha:PermitirDeshabilitado"] = permitir ? "true" : "false",
     }).Build();
 
     private static ProveedorCaptchaHttp NuevoProveedor(ManejadorFalso manejador, CaptchaOptions opciones) =>

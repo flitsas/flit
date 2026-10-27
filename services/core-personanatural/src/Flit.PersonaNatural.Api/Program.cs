@@ -117,8 +117,7 @@ public static class Program
         });
 
         var app = builder.Build();
-        if (app.Configuration.GetValue<bool>($"{AbusoOptions.SectionName}:{nameof(AbusoOptions.ConfiarEnXForwardedFor)}"))
-            app.UseForwardedHeaders();
+        app.UseAntiAbusoHttp(); // HU #14036: errores sin detalle, IP real por saltos de confianza y tope de cuerpo
         app.UseFlitCorrelationId();
         app.UseRateLimiter();
         app.UseAuthentication();

@@ -22,6 +22,12 @@ public sealed class AbusoOptions
     /// cualquiera podría falsear su IP y saltarse el límite.
     /// </summary>
     public bool ConfiarEnXForwardedFor { get; init; }
+
+    /// <summary>Máximo de saltos de confianza que se recorren (nginx → Next → gateway/YARP → servicio); es el <c>ForwardLimit</c>.</summary>
+    public int SaltosDeConfianza { get; init; } = 3;
+
+    /// <summary>Tope global del cuerpo de una petición JSON, en bytes; los archivos (multipart: adjuntos y comprobante) tienen su propio tope.</summary>
+    public int MaxCuerpoJsonBytes { get; init; } = 64 * 1024;
 }
 
 /// <summary>Proveedor de captcha por configuración (sección <c>Captcha</c>): cambiarlo no requiere tocar código.</summary>
@@ -39,6 +45,12 @@ public sealed class CaptchaOptions
     /// <summary>Solo para apuntar a un proveedor propio o a un simulador; por defecto sale del nombre del proveedor.</summary>
     public string? UrlVerificacion { get; init; }
 
+    /// <summary>
+    /// Segundo seguro para el proveedor «deshabilitado»: los VPS corren como Development, así que el ambiente por sí solo no
+    /// basta. Hay que pedirlo explícito (<c>Captcha__PermitirDeshabilitado=true</c>), solo en el equipo del desarrollador.
+    /// </summary>
+    public bool PermitirDeshabilitado { get; init; }
+
     public static string UrlPorDefecto(string proveedor) => (proveedor ?? string.Empty).Trim().ToLowerInvariant() switch
     {
         Turnstile => "https://challenges.cloudflare.com/turnstile/v0/siteverify",
@@ -47,8 +59,8 @@ public sealed class CaptchaOptions
     };
 
     /// <summary>
-    /// Falla al arrancar si el captcha quedó mal configurado. «deshabilitado» solo se permite en Development: en cualquier
-    /// otro ambiente un olvido dejaría el portal abierto sin que nadie se entere.
+    /// Falla al arrancar si el captcha quedó mal configurado. «deshabilitado» exige Development Y PermitirDeshabilitado=true:
+    /// los VPS corren como Development, así que solo el ambiente no basta y un olvido dejaría el portal abierto.
     /// </summary>
     public static void Validar(IConfiguration configuration, bool esDevelopment)
     {
@@ -57,8 +69,9 @@ public sealed class CaptchaOptions
         var proveedor = (opciones.Proveedor ?? string.Empty).Trim().ToLowerInvariant();
         if (proveedor == Deshabilitado)
         {
-            if (!esDevelopment)
-                throw new InvalidOperationException("Captcha__Proveedor=deshabilitado solo se permite en Development; use turnstile o recaptcha.");
+            if (!esDevelopment || !opciones.PermitirDeshabilitado)
+                throw new InvalidOperationException(
+                    "Captcha__Proveedor=deshabilitado solo se permite en Development y con Captcha__PermitirDeshabilitado=true explícito; use turnstile o recaptcha.");
             return;
         }
 

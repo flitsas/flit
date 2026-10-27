@@ -101,8 +101,31 @@ PERSONANATURAL_CAPTCHA_SECRET=<secreto del sitio del proveedor>
 - **Guardar las dos llaves en el gestor de secretos del ambiente.** Perder la de cifrado deja ilegibles los datos
   personales ya guardados; perder la HMAC impide reanudar los trámites existentes.
 - Rotar el cifrado: agregar `Pii__Cifrado__Llaves__2` y `Pii__Cifrado__VersionActiva=2`; conservar la versión 1 para leer lo viejo.
-- **Nunca** `PERSONANATURAL_CAPTCHA_PROVEEDOR=deshabilitado` en la VPS: corre como Development y dejaría el portal abierto.
+- **Nunca** `PERSONANATURAL_CAPTCHA_PROVEEDOR=deshabilitado` en la VPS: corre como Development y dejaría el portal abierto. Desde la HU #14036 el servicio ni arranca con «deshabilitado» si no existe además `Captcha__PermitirDeshabilitado=true` (solo para el equipo del desarrollador; no está en el compose).
 - Sin alguna de estas variables el contenedor no arranca y el log dice cuál falta.
+
+### 4.1 IP del ciudadano detrás de los proxies (límite por IP, huella de IP)
+
+El límite por IP y la huella de IP usan la IP que ve el servicio. Cadena real: **nginx → proxy de Next → gateway (YARP) → core-personanatural**.
+El servicio (`Abuso__ConfiarEnXForwardedFor=true`, ya en el compose) recorre `X-Forwarded-For` de derecha a izquierda **solo
+mientras el salto sea de una red de confianza** y hasta `Abuso__SaltosDeConfianza` saltos (3 por defecto); se detiene en el primer
+salto público, que es la IP del ciudadano. Las redes de confianza salen de `Abuso__RedesDeConfianza` (CIDR, lista indexada
+`Abuso__RedesDeConfianza__0=…` o CSV en una variable); por defecto loopback, 10/8, 172.16/12, 192.168/16 y fc00::/7 (Docker y RFC1918).
+Una lista vacía (`Abuso__RedesDeConfianza__0=`) no confía en nadie: la cabecera se ignora.
+
+Lo que debe cumplir la infraestructura para que esto sea correcto:
+
+- **nginx debe SOBRESCRIBIR `X-Forwarded-For`** con la IP de conexión, no sumarla: `proxy_set_header X-Forwarded-For $remote_addr;`
+  (no `$proxy_add_x_forwarded_for`, que conserva lo que mande el cliente). Así el cliente no puede anteponer direcciones falsas.
+- **El proxy del front debe tomar el último salto de confianza**: al reenviar al gateway debe **sumar** la dirección del salto que le
+  llegó (nginx) a la cabecera, nunca reemplazarla ni copiar la que el navegador envíe tal cual, y no confiar en un `X-Forwarded-For`
+  que no venga de nginx.
+- Si se añade o quita un salto (CDN, otro balanceador), ajustar `Abuso__SaltosDeConfianza` y, si sus IP no son privadas, `Abuso__RedesDeConfianza`.
+- El servicio nunca debe quedar expuesto directo a Internet con `ConfiarEnXForwardedFor`: lo alcanza solo el gateway por la red interna.
+
+Otros topes de la HU #14036: las excepciones no manejadas responden `application/problem+json` con `code=error_interno` (sin trazas ni
+rutas, incluso en Development) y el cuerpo JSON no puede pasar de `Abuso__MaxCuerpoJsonBytes` (65536); los archivos (adjuntos y
+comprobante) conservan su propio tope.
 
 ## 5. Origen del front (CORS) y dominio
 
