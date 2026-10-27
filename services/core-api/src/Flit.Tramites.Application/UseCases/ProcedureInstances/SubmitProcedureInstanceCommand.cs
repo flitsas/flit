@@ -1,4 +1,5 @@
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Quipux;
@@ -20,10 +21,10 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// por <c>entregado</c>. Los flags de preasignación de compañía/OT ya NO deciden la ruta.
 /// </para>
 /// <para>
-/// Bug #13912 — canal Quipux: el submit NO avanza a <c>entregado</c>/<c>preasignacion</c>. Tras
-/// <c>borrador→preparado</c> (o <c>rechazado→preparado</c> con subsanación) el trámite permanece en
-/// <c>preparado</c> para que el worker encole <c>registroDocumento</c>; <c>entregado</c> solo ocurre
-/// tras código 081/082 (actor Quipux).
+/// Bug #13912 — canal Quipux activo solo si el tipo tiene <c>external_refs.quipux</c> <b>y</b> la
+/// secretaría destino tiene DIVIPO + bandera de familia (misma regla que el worker). Entonces el
+/// submit NO avanza a <c>entregado</c>/<c>preasignacion</c>: queda en <c>preparado</c> para encolar.
+/// Si el OT no está integrado (flags off / DIVIPO vacío), se radica por el canal gestor/OT normal.
 /// </para>
 /// <para>
 /// Desde <c>rechazado</c> con subsanación activa (HU #10870) este MISMO handler re-radica:
@@ -37,9 +38,12 @@ public sealed class SubmitProcedureInstanceHandler(
     ITramiteLifecycleService lifecycle,
     IProcedureInstanceRepository repo,
     ILogger<SubmitProcedureInstanceHandler> logger,
+    ITransitOfficeQuipuxCanalReader? quipuxCanalReader = null,
     FirmarImprontaManualSiListaHandler? firmaImpronta = null)
 {
     private readonly ILogger<SubmitProcedureInstanceHandler> _logger = logger;
+    private readonly ITransitOfficeQuipuxCanalReader _quipuxCanal =
+        quipuxCanalReader ?? NullTransitOfficeQuipuxCanalReader.Instance;
 
     public async Task<(ProcedureInstanceSummary? Result, string? Error)> HandleAsync(
         Guid id,
@@ -65,7 +69,7 @@ public sealed class SubmitProcedureInstanceHandler(
         if (instance.IsPaused)
             return (null, TramiteEstadoErrores.TramitePausado);
 
-        var esQuipux = ProcedureTypeQuipuxGate.EstaParametrizadoParaQuipux(instance.ProcedureType?.ExternalRefs);
+        var esQuipux = await EsCanalQuipuxActivoAsync(instance, ct).ConfigureAwait(false);
 
         // La resolución de identidad por persona (HU #10350, #87) y los gates OT viven en
         // TramiteLifecycleService — este orquestador solo encadena las transiciones.
@@ -79,7 +83,7 @@ public sealed class SubmitProcedureInstanceHandler(
             if (!preparado.Success)
                 return (null, preparado.ErrorCode);
 
-            // Quipux: listo para encolar — no radicar a entregado/preasignacion desde el gestor.
+            // Quipux integrado: listo para encolar — no radicar a entregado/preasignacion desde el gestor.
             if (esQuipux)
             {
                 SubmitLog.DestinoQuipuxPreparado(_logger, id, tenantId, "borrador");
@@ -150,6 +154,29 @@ public sealed class SubmitProcedureInstanceHandler(
         }
 
         return (CreateProcedureInstanceHandler.ToSummary(final.Instance!), null);
+    }
+
+    /// <summary>
+    /// Canal Quipux = tipo parametrizado + OT destino integrado (DIVIPO + bandera de familia).
+    /// Sin <c>TransitOfficeId</c> o sin flags → canal gestor/OT (no atrapa en preparado).
+    /// </summary>
+    private async Task<bool> EsCanalQuipuxActivoAsync(
+        Domain.Entities.ProcedureInstance instance,
+        CancellationToken ct)
+    {
+        if (instance.TransitOfficeId is not { } otId)
+            return false;
+
+        var canal = await _quipuxCanal.GetAsync(otId, ct).ConfigureAwait(false);
+        if (canal is null)
+            return false;
+
+        return ProcedureTypeQuipuxGate.CanalActivoParaSecretaria(
+            instance.ProcedureType?.ExternalRefs,
+            canal.DivipoCode,
+            canal.QuipuxRegistration,
+            canal.QuipuxTransfer,
+            canal.QuipuxOther);
     }
 }
 

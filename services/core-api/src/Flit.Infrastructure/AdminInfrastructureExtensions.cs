@@ -408,6 +408,9 @@ public static class AdminInfrastructureExtensions
         // empresa por nombre (grants + catálogo) para poblar transit_office_id en el preflight.
         services.AddScoped<ITransitOfficeResolver, TransitOfficeResolver>();
 
+        // Bug #13912 — DIVIPO + banderas Quipux de la secretaría destino (submit → preparado solo si integrado).
+        services.AddScoped<ITransitOfficeQuipuxCanalReader, TransitOfficeQuipuxCanalReader>();
+
         // HU #12538 (Feature #12519) — la carga masiva resuelve el representante legal de un actor
         // con NIT contra el directorio de la empresa, con el mismo caso de uso de la precarga del wizard.
         services.AddScoped<
