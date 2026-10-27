@@ -1,4 +1,5 @@
 using Flit.Api.Telemetry;
+using Flit.PersonaNatural.Api.Cotizaciones;
 using Flit.PersonaNatural.Api.Abuso;
 using Flit.PersonaNatural.Api.Consultas;
 using Flit.PersonaNatural.Api;
@@ -75,6 +76,9 @@ public static class Program
         // HU #14041: endpoints públicos de consulta, detalle ampliado con identidad validada y medición de consumo.
         builder.Services.AddConsultasPublicas();
 
+        // HU #14043: catálogo de organismos y tipos, cotización de 2 líneas y envío por correo (fachada gRPC de core-api).
+        builder.Services.AddCotizacionesPortal(builder.Configuration);
+
         // h2c necesita un endpoint solo HTTP/2: se vuelven a declarar las URLs del REST (Kestrel ignora ASPNETCORE_URLS
         // cuando se declaran endpoints por código) y se suma el del gRPC.
         builder.WebHost.ConfigureKestrel((context, options) =>
@@ -103,6 +107,8 @@ public static class Program
         app.MapSesionEndpoints();
         app.MapRadicadoEndpoints();
         app.MapConsultasEndpoints();
+
+        app.MapCotizacionesEndpoints();
         app.MapGet("/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();
         app.MapGet("/health/ready", async (PersonaNaturalDb db, CancellationToken ct) =>
             await db.Database.CanConnectAsync(ct).ConfigureAwait(false)
