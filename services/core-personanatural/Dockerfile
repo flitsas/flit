@@ -12,6 +12,8 @@ COPY core-api/Directory.Build.props core-api/Directory.Packages.props /services/
 COPY core-api/src/Flit.Platform.Sdk/ /services/core-api/src/Flit.Platform.Sdk/
 COPY core-identity/Directory.Build.props core-identity/Directory.Packages.props /services/core-identity/
 COPY core-identity/src/Flit.Platform.Grpc.Contracts/ /services/core-identity/src/Flit.Platform.Grpc.Contracts/
+COPY core-consultas/Directory.Build.props core-consultas/Directory.Packages.props /services/core-consultas/
+COPY core-consultas/src/Flit.Consultas.Grpc.Contracts/ /services/core-consultas/src/Flit.Consultas.Grpc.Contracts/
 COPY --from=contracts . /contracts/proto/
 COPY core-personanatural/src/ ./src/
 RUN dotnet publish src/Flit.PersonaNatural.Api/Flit.PersonaNatural.Api.csproj \

@@ -1,5 +1,6 @@
 using Flit.Api.Telemetry;
 using Flit.PersonaNatural.Api.Abuso;
+using Flit.PersonaNatural.Api.Consultas;
 using Flit.PersonaNatural.Api;
 using Flit.PersonaNatural.Api.Persistence;
 using Flit.PersonaNatural.Api.Pii;
@@ -67,6 +68,9 @@ public static class Program
 
         // HU #14042: consulta pública de radicado con macro-estados.
         builder.Services.AddRadicadosPortal();
+
+        // HU #14039 y #14040: consultas de vehículo y conductor a core-consultas, proyectadas a dato mínimo.
+        builder.Services.AddConsultasPortal(builder.Configuration);
 
         // h2c necesita un endpoint solo HTTP/2: se vuelven a declarar las URLs del REST (Kestrel ignora ASPNETCORE_URLS
         // cuando se declaran endpoints por código) y se suma el del gRPC.
