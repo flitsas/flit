@@ -24,9 +24,10 @@ namespace Flit.Diagnostico.Tests.Bus;
 /// <summary>
 /// Un RabbitMQ REAL para una prueba (ADR-0075, T12): <c>FLIT_TEST_RABBITMQ</c> (usuario administrador; en CI, el servicio del job)
 /// con un vhost desechable propio, creado y borrado por la API de administración (<c>FLIT_TEST_RABBITMQ_ADMIN</c>, por defecto el
-/// puerto 15672 del mismo host). Declara la topología de <c>deploy/rabbitmq/definitions.json</c> (los cinco exchanges, las tres
-/// colas del diagnóstico con sus llaves y la política <c>dlq-7d</c>), porque el broker del CI no carga las definiciones y una cola
-/// que nadie declaró pierde los mensajes. Para publicar como OTRO servicio crea un usuario desechable con la etiqueta
+/// puerto 15672 del mismo host). Declara la topología de <c>deploy/rabbitmq/definitions.json</c> leída del propio archivo
+/// (<see cref="DefinicionesBroker"/>: los exchanges, las colas del diagnóstico con sus llaves y TODAS las políticas, la
+/// <c>dlq-7d</c> y el TTL de las colas principales), porque el broker del CI no carga las definiciones y una cola que nadie
+/// declaró pierde los mensajes. Para publicar como OTRO servicio crea un usuario desechable con la etiqueta
 /// <c>impersonator</c> (solo puede escribir en <c>flit.consultas</c> de este vhost): el broker le acepta un <c>user_id</c> ajeno, así
 /// que las pruebas publican con el <c>user_id</c> real del productor (<c>consultas</c>, <c>diagnostico</c>) sin tocar los usuarios de
 /// los servicios. Sin broker la prueba se omite en local y FALLA con <c>CI=true</c>, como el fixture del SDK.
@@ -43,8 +44,6 @@ public sealed class BrokerDePrueba : IAsyncDisposable
     public const string ColaLote = "consultas.diagnostico";
     public const string ColaExpress = "consultas.diagnostico-express";
     public const string ColaResultados = "diagnostico.consultas-resultados";
-
-    private static readonly string[] Exchanges = ["flit.plataforma", "flit.tramites", "flit.consultas", "flit.notificaciones", "flit.diagnostico"];
 
     private readonly Uri _rabbit = new(Environment.GetEnvironmentVariable("FLIT_TEST_RABBITMQ") ?? "amqp://flit:flit-prueba@127.0.0.1:5672/");
     private readonly HttpClient _admin;
@@ -87,13 +86,8 @@ public sealed class BrokerDePrueba : IAsyncDisposable
             await broker.PutAsync($"api/permissions/{E(broker.Vhost)}/{E(broker.Usuario)}", new { configure = ".*", write = ".*", read = ".*" });
             await broker.PutAsync($"api/users/{E(broker.Suplente)}", new { password = broker.ClaveSuplente, tags = "impersonator" });
             await broker.PutAsync($"api/permissions/{E(broker.Vhost)}/{E(broker.Suplente)}", new { configure = "", write = "^flit\\.consultas$", read = "" });
-            await broker.PutAsync($"api/policies/{E(broker.Vhost)}/dlq-7d", new Dictionary<string, object>
-            {
-                ["pattern"] = "^(consultas\\.diagnostico|consultas\\.diagnostico-express|diagnostico\\.consultas-resultados)\\.dlq$",
-                ["apply-to"] = "queues",
-                ["priority"] = 10,
-                ["definition"] = new Dictionary<string, object> { ["message-ttl"] = 604800000 },
-            });
+            foreach (var politica in DefinicionesBroker.Politicas)
+                await broker.AplicarPoliticaAsync(politica);
         }
         catch (HttpRequestException ex)
         {
@@ -116,6 +110,33 @@ public sealed class BrokerDePrueba : IAsyncDisposable
         return broker;
     }
 
+    /// <summary>
+    /// Aplica <paramref name="politica"/> de <c>definitions.json</c> en el vhost de la prueba; con <paramref name="ttlMs"/>, con ese
+    /// <c>message-ttl</c> en vez del suyo (para ver vencer un mensaje sin esperar 24 h). El resto de la definición no cambia.
+    /// </summary>
+    public async Task AplicarPoliticaAsync(PoliticaBroker politica, long? ttlMs = null)
+    {
+        ArgumentNullException.ThrowIfNull(politica);
+        var definicion = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(politica.Definicion.GetRawText())!
+            .ToDictionary(p => p.Key, p => (object)p.Value);
+        if (ttlMs is { } ttl)
+            definicion["message-ttl"] = ttl;
+        await PutAsync($"api/policies/{E(Vhost)}/{E(politica.Nombre)}", new Dictionary<string, object>
+        {
+            ["pattern"] = politica.Patron,
+            ["apply-to"] = politica.AplicaA,
+            ["priority"] = politica.Prioridad,
+            ["definition"] = definicion,
+        });
+    }
+
+    /// <summary>La política que el broker aplica hoy a <paramref name="cola"/> (null si ninguna), según la API de administración.</summary>
+    public async Task<string?> PoliticaEfectivaAsync(string cola)
+    {
+        var info = await _admin.GetFromJsonAsync<JsonElement>($"api/queues/{E(Vhost)}/{E(cola)}", TestContext.Current.CancellationToken);
+        return info.TryGetProperty("policy", out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() : null;
+    }
+
     public string Amqp(string usuario, string clave) =>
         $"amqp://{Uri.EscapeDataString(usuario)}:{Uri.EscapeDataString(clave)}@{_rabbit.Host}:{_rabbit.Port}/{Uri.EscapeDataString(Vhost)}";
 
@@ -136,7 +157,8 @@ public sealed class BrokerDePrueba : IAsyncDisposable
             if (await canal.BasicGetAsync(cola, autoAck: true, TestContext.Current.CancellationToken) is { } m)
             {
                 var motivo = m.BasicProperties.Headers?.TryGetValue(PlatformDeadLetters.ReasonHeader, out var v) == true && v is byte[] b ? Encoding.UTF8.GetString(b) : null;
-                return new MensajeBroker(EventEnvelope.FromJson(m.Body.Span), m.RoutingKey, m.BasicProperties.UserId, motivo);
+                var muerte = m.BasicProperties.Headers?.TryGetValue("x-first-death-reason", out var x) == true && x is byte[] r ? Encoding.UTF8.GetString(r) : null;
+                return new MensajeBroker(EventEnvelope.FromJson(m.Body.Span), m.RoutingKey, m.BasicProperties.UserId, motivo, muerte);
             }
 
             if (espera > TimeSpan.Zero)
@@ -191,18 +213,12 @@ public sealed class BrokerDePrueba : IAsyncDisposable
     {
         await using var conexion = await Fabrica().CreateConnectionAsync(TestContext.Current.CancellationToken);
         await using var canal = await conexion.CreateChannelAsync(cancellationToken: TestContext.Current.CancellationToken);
-        foreach (var exchange in Exchanges)
+        foreach (var exchange in DefinicionesBroker.Exchanges)
             await canal.ExchangeDeclareAsync(exchange, ExchangeType.Topic, durable: true, autoDelete: false, cancellationToken: TestContext.Current.CancellationToken);
-        foreach (var (cola, llave) in new[]
-        {
-            (ColaLote, "consultas.diagnostico.*"),
-            (ColaExpress, "consultas.diagnostico-express.*"),
-            (ColaResultados, ResultadoConsultaDiagnostico.Tipo),
-        })
-        {
+        foreach (var cola in DefinicionesBroker.Colas)
             await canal.QueueDeclareAsync(cola, durable: true, exclusive: false, autoDelete: false, cancellationToken: TestContext.Current.CancellationToken);
-            await canal.QueueBindAsync(cola, "flit.consultas", llave, cancellationToken: TestContext.Current.CancellationToken);
-        }
+        foreach (var (origen, cola, llave) in DefinicionesBroker.Bindings)
+            await canal.QueueBindAsync(cola, origen, llave, cancellationToken: TestContext.Current.CancellationToken);
     }
 
     private static async Task PublicarAsync(EventEnvelope sobre, string uri, string userId)
@@ -219,8 +235,11 @@ public sealed class BrokerDePrueba : IAsyncDisposable
     private static string E(string valor) => Uri.EscapeDataString(valor);
 }
 
-/// <summary>Un mensaje leído del broker: el sobre, la llave, el <c>user_id</c> que validó el broker y el motivo de DLQ si lo hay.</summary>
-public sealed record MensajeBroker(EventEnvelope Sobre, string RoutingKey, string? UserId, string? Motivo);
+/// <summary>
+/// Un mensaje leído del broker: el sobre, la llave, el <c>user_id</c> que validó el broker, el motivo de DLQ que puso el SDK si lo
+/// hay y, si lo llevó el propio broker a la DLQ, su <c>x-first-death-reason</c> (<c>expired</c> si venció el TTL de la cola).
+/// </summary>
+public sealed record MensajeBroker(EventEnvelope Sobre, string RoutingKey, string? UserId, string? Motivo, string? MuerteBroker = null);
 
 /// <summary>
 /// HU #13727 (ADR-0075, T12, Q4–Q6) — del lado de core-diagnostico, con broker real: el servicio ARRANCADO (outbox publicando,
@@ -229,8 +248,9 @@ public sealed record MensajeBroker(EventEnvelope Sobre, string RoutingKey, strin
 /// de las pruebas (<see cref="ConsultasSimuladas"/>) y publica <c>consultas.resultado.diagnostico</c> con el <c>user_id</c> real
 /// <c>consultas</c>. Cubre punta a punta (la RUNT libera la diferida y el lote termina), consultas caído (el trabajo espera y se
 /// procesa al volver, sin ERROR), diagnóstico caído (el resultado espera en su cola y se aplica al volver), Express en su cola
-/// aparte con el lote lleno, productor no autorizado a la DLQ sin efecto y el reconciliador en pausa con consultas mudo y
-/// republicando al volver. core-consultas real atendiendo estos trabajos es la otra mitad
+/// aparte con el lote lleno, productor no autorizado a la DLQ sin efecto, el reconciliador sin tocar nada con consultas mudo y
+/// republicando cuando vuelve un trabajo publicado después (marca de agua FIFO), y un mensaje que vence el TTL de su cola
+/// (política de <c>definitions.json</c>) en la DLQ. core-consultas real atendiendo estos trabajos es la otra mitad
 /// (<c>Flit.Consultas.Tests.Bus.ConsultasDiagnosticoBrokerTests</c>).
 /// </summary>
 /// <example>
@@ -369,7 +389,8 @@ public sealed class ConsultasDiagnosticoBrokerTests
         var reloj = new RelojManual();
         await using var api = await ArrancarAsync(broker, reloj);
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
-        var empresa = DosEmpresas.En(api).A;
+        var empresas = DosEmpresas.En(api);
+        var empresa = empresas.A;
         var reconciliador = api.App.Services.GetRequiredService<ReconciliadorConsultas>();
         var lote = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST005"), Lotes.Fila("TST006")], ct);
         await BrokerDePrueba.EsperarAsync(async () => (await broker.ColaAsync(BrokerDePrueba.ColaLote)).Mensajes == 2, "los dos trabajos en la cola");
@@ -379,21 +400,58 @@ public sealed class ConsultasDiagnosticoBrokerTests
         reloj.Avanzar(TimeSpan.FromMinutes(31));
         var mudo = await reconciliador.ReconciliarAsync(ct);
 
-        (mudo.Revisadas, mudo.EnPausa, mudo.Republicadas, mudo.Cerradas).Should().Be((2, 2, 0, 0), "sin resultados en la ventana, consultas está caído");
+        (mudo.Republicadas, mudo.Cerradas).Should().Be((0, 0), "sin resultados, consultas está caído y los trabajos esperan su turno");
         await Task.Delay(TimeSpan.FromSeconds(2), ct);
         (await broker.ColaAsync(BrokerDePrueba.ColaLote)).Mensajes.Should().Be(1, "no duplica el trabajo que espera");
 
+        // Vuelve consultas y atiende la cola en orden: el otro trabajo del lote y uno de un lote publicado 20 min después.
         var celdaPerdida = perdido.Sobre.Data.GetProperty("consultaId").GetGuid();
+        reloj.Avanzar(TimeSpan.FromMinutes(20));
+        var posterior = await MotorRunt.LoteAsync(api, empresas.B, [Lotes.Fila("TST001")], ct);
         await consultas.AtenderHastaAsync(
-            async () => (await Motor.CeldasAsync(api, empresa.Id, lote, ct)).Count(c => c.Estado == EstadoCelda.Completado) == 1, BrokerDePrueba.ColaLote);
+            async () => (await Motor.CeldasAsync(api, empresa.Id, lote, ct)).Count(c => c.Estado == EstadoCelda.Completado) == 1
+                && (await Motor.CeldasAsync(api, empresas.B.Id, posterior, ct)).Single().Estado == EstadoCelda.Completado,
+            BrokerDePrueba.ColaLote);
         var vivo = await reconciliador.ReconciliarAsync(ct);
 
-        (vivo.Revisadas, vivo.Republicadas, vivo.EnPausa).Should().Be((1, 1, 0), "con resultados fluyendo, la huérfana se republica una vez");
+        (vivo.Revisadas, vivo.Republicadas, vivo.EnPausa).Should().Be((1, 1, 0),
+            "consultas ya devolvió un trabajo publicado después del perdido (más allá de la tolerancia): se republica una vez");
         await consultas.AtenderHastaAsync(async () => (await Motor.CeldasAsync(api, empresa.Id, lote, ct)).All(c => c.Estado == EstadoCelda.Completado), BrokerDePrueba.ColaLote);
         var republicado = consultas.Atendidos.Last().Sobre.DataAs<TrabajoConsultaDiagnostico>();
         republicado.ConsultaId.Should().Be(celdaPerdida);
         republicado.TrabajoId.Should().NotBe(perdido.Sobre.Data.GetProperty("trabajoId").GetGuid(), "trabajo_id nuevo");
         (await Motor.CeldasAsync(api, empresa.Id, lote, ct)).Single(c => c.Id == celdaPerdida).Republicaciones.Should().Be(1);
+    }
+
+    // Dec. 6 (TTL): la política de definitions.json de la cola de resultados, con la topología que declara el SDK de diagnóstico
+    // al arrancar, lleva a su .dlq el mensaje que nadie consumió en el TTL (aquí 1 s en vez de 24 h); no se pierde en silencio.
+    [Fact]
+    public async Task Un_mensaje_que_vence_el_TTL_de_su_cola_va_a_la_DLQ()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var broker = await BrokerDePrueba.CrearAsync("diagnostico");
+        Assert.SkipWhen(broker.Omitir is not null, broker.Omitir ?? string.Empty);
+        await using var api = await ArrancarAsync(broker);
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var consumidor = ConsumidorDeResultados(api);
+        await BrokerDePrueba.EsperarAsync(async () => (await broker.ColaAsync(BrokerDePrueba.ColaResultados)).Consumidores == 1, "el SDK declaró su topología");
+        await consumidor.StopAsync(ct);
+        await BrokerDePrueba.EsperarAsync(async () => (await broker.ColaAsync(BrokerDePrueba.ColaResultados)).Consumidores == 0, "el consumidor de resultados apagado");
+        var politica = DefinicionesBroker.PoliticaDe(BrokerDePrueba.ColaResultados) ?? throw new InvalidOperationException("sin política de TTL");
+        await BrokerDePrueba.EsperarAsync(async () => await broker.PoliticaEfectivaAsync(BrokerDePrueba.ColaResultados) == politica.Nombre,
+            "el broker aplica la política de TTL de definitions.json a la cola principal");
+        await broker.AplicarPoliticaAsync(politica, ttlMs: 1000);
+
+        var lote = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST001")], ct);
+        var consultas = new ConsultasDelBroker(broker, api);
+        var resultado = await consultas.ResultadoAsync(await consultas.TomarAsync(BrokerDePrueba.ColaLote), ct);
+        await broker.PublicarAsync(resultado, userId: OpcionesBus.Productor);
+
+        var muerto = await broker.TomarAsync(BrokerDePrueba.ColaResultados + ".dlq", TimeSpan.FromSeconds(20)) ?? throw new TimeoutException("el vencido no llegó a la DLQ");
+        (muerto.MuerteBroker, muerto.Sobre.EventId).Should().Be(("expired", resultado.EventId), "lo vencido sale por el exchange de la cola hacia su .dlq");
+        (await broker.ColaAsync(BrokerDePrueba.ColaResultados)).Mensajes.Should().Be(0);
+        (await Motor.CeldasAsync(api, empresa.Id, lote, ct)).Single().Estado.Should().Be(EstadoCelda.EnCurso, "sin efecto: el reconciliador la cerrará al vencer TTL + margen");
     }
 
     /// <summary>core-diagnostico con el broker de la prueba, el consumidor de resultados encendido y el reconciliador sin vueltas solas.</summary>

@@ -36,6 +36,11 @@
     <None Include="..\..\..\..\contracts\fixtures\bus\*.v1.json" Link="Fixtures\bus\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- Topología del broker (ADR-0075, H5): las pruebas la leen en vez de copiarla a mano (colas, bindings y políticas). -->
+  <ItemGroup>
+    <None Include="..\..\..\..\deploy\rabbitmq\definitions.json" Link="Fixtures\rabbitmq\definitions.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <!--
     Respuestas inventadas de Intempo (HU #13725; sin PII, rango ficticio en FixturesSinPiiTests): desde ADR-0075 (U3 = a) la
     simulación de LOCAL y DEV vive en core-consultas y aquí solo responden por core-consultas en BusDePrueba.

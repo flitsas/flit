@@ -28,6 +28,30 @@
       "apply-to": "queues",
       "priority": 10,
       "definition": { "message-ttl": 604800000 }
+    },
+    {
+      "vhost": "flit",
+      "name": "ttl-consultas-diagnostico",
+      "pattern": "^consultas\\.diagnostico$",
+      "apply-to": "queues",
+      "priority": 10,
+      "definition": { "message-ttl": 86400000, "dead-letter-exchange": "consultas.diagnostico.reintentos", "dead-letter-routing-key": "consultas.diagnostico.dlq" }
+    },
+    {
+      "vhost": "flit",
+      "name": "ttl-consultas-diagnostico-express",
+      "pattern": "^consultas\\.diagnostico-express$",
+      "apply-to": "queues",
+      "priority": 10,
+      "definition": { "message-ttl": 86400000, "dead-letter-exchange": "consultas.diagnostico-express.reintentos", "dead-letter-routing-key": "consultas.diagnostico-express.dlq" }
+    },
+    {
+      "vhost": "flit",
+      "name": "ttl-diagnostico-consultas-resultados",
+      "pattern": "^diagnostico\\.consultas-resultados$",
+      "apply-to": "queues",
+      "priority": 10,
+      "definition": { "message-ttl": 86400000, "dead-letter-exchange": "diagnostico.consultas-resultados.reintentos", "dead-letter-routing-key": "diagnostico.consultas-resultados.dlq" }
     }
   ]
 }
