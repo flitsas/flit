@@ -12,7 +12,7 @@ public enum EstadoDetalle
     /// <summary>La solicitud todavía no tiene placa ni VIN: no hay vehículo del cual dar detalle.</summary>
     SinVehiculo,
 
-    /// <summary>Ningún actor del trámite (o el pedido) tiene la identidad validada y vigente. NO se llamó a FLIT 2.</summary>
+    /// <summary>Ningún actor del trámite (o el pedido) tiene la identidad validada en esta solicitud (el portal no reutiliza validaciones ni usa vigencia en días). NO se llamó a FLIT 2.</summary>
     IdentidadRequerida,
 }
 
@@ -24,7 +24,7 @@ public sealed record ResultadoDetalle(EstadoDetalle Estado, VehiculoDetalle? Det
 /// lee tal cual. El orden importa: primero la identidad y solo después, si pasa, la llamada a core-consultas; sin identidad
 /// no se gasta ni una consulta.
 /// </summary>
-public sealed class ConsultaDetalleService(PersonaNaturalDb db, PersonaService personas, IConsultasRunt runt, MedicionConsultasService medicion, TimeProvider reloj)
+public sealed class ConsultaDetalleService(PersonaNaturalDb db, PersonaService personas, IConsultasRunt runt, MedicionConsultasService medicion)
 {
     /// <summary>Estados que cuentan como identidad validada: «validada» es el espejo del BFF y «aprobada» el estado de FLIT 2 (diseño §5).</summary>
     private static readonly string[] EstadosValidados = ["validada", "aprobada"];
@@ -45,11 +45,9 @@ public sealed class ConsultaDetalleService(PersonaNaturalDb db, PersonaService p
         if (solicitud is null)
             return new ResultadoDetalle(EstadoDetalle.SolicitudNoEncontrada);
 
-        var ahora = reloj.GetUtcNow();
         var parteNormalizada = string.IsNullOrWhiteSpace(parte) ? null : parte.Trim().ToLowerInvariant();
         var candidatos = await db.Set<PersonaSolicitante>().AsNoTracking()
-            .Where(p => p.SolicitudId == solicitudId && EstadosValidados.Contains(p.ValidacionEstado)
-                && (p.ValidacionVigenteHasta == null || p.ValidacionVigenteHasta > ahora))
+            .Where(p => p.SolicitudId == solicitudId && EstadosValidados.Contains(p.ValidacionEstado))
             .Select(p => new { p.Parte, p.Ordinal }).ToListAsync(ct).ConfigureAwait(false);
         var actor = candidatos.Where(c => parteNormalizada is null || string.Equals(c.Parte, parteNormalizada, StringComparison.OrdinalIgnoreCase)).OrderBy(c => PartesDelVehiculo.Contains(c.Parte.ToLowerInvariant()) ? 0 : 1).ThenBy(c => c.Parte, StringComparer.Ordinal).ThenBy(c => c.Ordinal).FirstOrDefault();
         if (actor is null)

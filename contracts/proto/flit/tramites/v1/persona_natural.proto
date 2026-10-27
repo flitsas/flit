@@ -15,7 +15,8 @@ option csharp_namespace = "Flit.Tramites.Grpc.V1";
 // acepta la de «Persona Natural»: con otra responde `invalid_tenant`. Los métodos que todavía no tienen implementación
 // responden UNIMPLEMENTED con `ErrorInfo.reason = NO_IMPLEMENTADO`.
 service PersonaNaturalService {
-  // Prevalidación de identidad standalone anclada a la persona; reutilizable al radicar. Idempotente por
+  // Prevalidación de identidad anclada a la persona y a la solicitud; se usa al radicar. NUNCA reutiliza una validación
+  // de otro trámite ni tiene vigencia en días (decisión del PO, 2026-10-27): siempre crea una nueva. Idempotente por
   // (solicitud_id, parte, documento). [HU C1]
   rpc SolicitarValidacionIdentidad(SolicitarValidacionIdentidadRequest) returns (SolicitarValidacionIdentidadResponse);
   // Reenvía el enlace de validación de una persona. [HU C2]
@@ -62,7 +63,7 @@ message SolicitarValidacionIdentidadRequest {
 }
 message SolicitarValidacionIdentidadResponse {
   string validacion_id = 1;
-  string estado = 2;             // pendiente | aprobada (vigente reutilizada) | rechazada
+  string estado = 2;             // pendiente | aprobada | rechazada (siempre de esta solicitud: nunca una validación reutilizada)
   google.protobuf.Timestamp vigente_hasta = 3;
 }
 

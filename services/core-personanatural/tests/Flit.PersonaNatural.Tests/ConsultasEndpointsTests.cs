@@ -273,7 +273,6 @@ public sealed class ConsultasEndpointsTests : IAsyncLifetime
     [InlineData("sin_solicitar", false, "sin solicitar")]
     [InlineData("rechazada", false, "rechazada")]
     [InlineData("vencida", false, "vencida")]
-    [InlineData("validada", true, "validada pero con la vigencia vencida")]
     public async Task SinIdentidadValidada_Responde403IdentityRequired_YNoConsultaAFlit2(string estado, bool vencida, string porque)
     {
         if (!await IniciarAsync()) return;
