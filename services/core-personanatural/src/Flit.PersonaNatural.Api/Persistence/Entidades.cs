@@ -69,7 +69,18 @@ public sealed class PersonaSolicitante
     public byte[]? DireccionCifrada { get; set; }
     public Guid? ValidacionId { get; set; }
     public string ValidacionEstado { get; set; } = "sin_solicitar";
+
+    /// <summary>
+    /// Reservado y sin uso: en el portal la identidad no tiene vigencia en días (decisión del PO, 2026-10-27); una
+    /// validación vale solo para esta solicitud. Queda NULL.
+    /// </summary>
     public DateTimeOffset? ValidacionVigenteHasta { get; set; }
+
+    /// <summary>HU #14045 — reenvíos del enlace de validación de esta persona (tope 5 por solicitud y parte).</summary>
+    public short Reenvios { get; set; }
+
+    /// <summary>HU #14045 — cuándo se reenvió por última vez (60 s de espera entre reenvíos).</summary>
+    public DateTimeOffset? UltimoReenvioEn { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
@@ -168,5 +179,25 @@ public sealed class IntentoReanudar
     /// <summary>SHA-256 del radicado normalizado, exista o no: bloquear solo los que existen revelaría cuáles existen.</summary>
     public byte[] Clave { get; set; } = [];
 
+    public DateTimeOffset OcurrioEn { get; set; }
+}
+
+/// <summary>
+/// HU #14045 — auditoría de los cambios de estado de la validación de identidad de una parte (lo que reflejó el evento o el
+/// sondeo de FLIT 2, lo que pidió el ciudadano). No guarda ningún dato personal: solo solicitud, rol y estados. Solo inserción.
+/// </summary>
+public sealed class AuditoriaIdentidad
+{
+    public long Id { get; set; }
+    public Guid SolicitudId { get; set; }
+    public string Parte { get; set; } = string.Empty;
+    public short Ordinal { get; set; } = 1;
+    public string? Desde { get; set; }
+    public string Hasta { get; set; } = string.Empty;
+
+    /// <summary><c>evento</c> (bus), <c>sondeo</c> (consulta a FLIT 2), <c>ciudadano</c> (solicitud o reenvío) o <c>servicio</c> (reintento).</summary>
+    public string Origen { get; set; } = string.Empty;
+
+    public Guid? EventId { get; set; }
     public DateTimeOffset OcurrioEn { get; set; }
 }

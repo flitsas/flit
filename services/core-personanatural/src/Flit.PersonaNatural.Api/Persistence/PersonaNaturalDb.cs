@@ -78,6 +78,8 @@ public sealed class PersonaNaturalDb(DbContextOptions<PersonaNaturalDb> options)
             e.Property(p => p.ValidacionId).HasColumnName("validacion_id");
             e.Property(p => p.ValidacionEstado).HasColumnName("validacion_estado").HasMaxLength(20).HasDefaultValue("sin_solicitar").IsRequired();
             e.Property(p => p.ValidacionVigenteHasta).HasColumnName("validacion_vigente_hasta");
+            e.Property(p => p.Reenvios).HasColumnName("reenvios").HasDefaultValue((short)0);
+            e.Property(p => p.UltimoReenvioEn).HasColumnName("ultimo_reenvio_en");
             e.Property(p => p.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("now()");
             e.Property(p => p.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("now()");
             e.HasOne<SolicitudTramite>().WithMany().HasForeignKey(p => p.SolicitudId).OnDelete(DeleteBehavior.Cascade).HasConstraintName("fk_persona_solicitud");
@@ -179,6 +181,24 @@ public sealed class PersonaNaturalDb(DbContextOptions<PersonaNaturalDb> options)
             e.Property(c => c.Lote).HasColumnName("lote");
             e.Property(c => c.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("now()");
             e.HasData(new ConfiguracionRetencion { Id = 1, UpdatedAt = new DateTimeOffset(2026, 10, 27, 0, 0, 0, TimeSpan.Zero) });
+        });
+
+        // HU #14045: cambios de estado de la identidad de cada parte, sin datos personales.
+        modelBuilder.Entity<AuditoriaIdentidad>(e =>
+        {
+            e.ToTable("auditoria_identidad");
+            e.HasKey(a => a.Id).HasName("pk_auditoria_identidad");
+            e.Property(a => a.Id).HasColumnName("id").UseIdentityAlwaysColumn();
+            e.Property(a => a.SolicitudId).HasColumnName("solicitud_id");
+            e.Property(a => a.Parte).HasColumnName("parte").HasMaxLength(40).IsRequired();
+            e.Property(a => a.Ordinal).HasColumnName("ordinal").HasDefaultValue((short)1);
+            e.Property(a => a.Desde).HasColumnName("desde").HasMaxLength(20);
+            e.Property(a => a.Hasta).HasColumnName("hasta").HasMaxLength(20).IsRequired();
+            e.Property(a => a.Origen).HasColumnName("origen").HasMaxLength(20).IsRequired();
+            e.Property(a => a.EventId).HasColumnName("event_id");
+            e.Property(a => a.OcurrioEn).HasColumnName("ocurrio_en").HasDefaultValueSql("now()");
+            e.HasOne<SolicitudTramite>().WithMany().HasForeignKey(a => a.SolicitudId).OnDelete(DeleteBehavior.Cascade).HasConstraintName("fk_auditoria_identidad_solicitud");
+            e.HasIndex(a => new { a.SolicitudId, a.OcurrioEn }).HasDatabaseName("ix_auditoria_identidad_solicitud_fecha");
         });
 
         // Solo inserción y sin llaves foráneas: debe sobrevivir a la solicitud que audita.

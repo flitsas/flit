@@ -35,9 +35,22 @@ public sealed class PersonaService(PersonaNaturalDb db, CifradoPii cifrado, PiiH
             db.Add(persona);
         }
 
+        // HU #14044: la validación de identidad es de ESA persona. Con otro documento deja de valer: se olvida la validación
+        // (y sus reenvíos) para que hubiera que pedir una nueva; si no, cambiar la cédula de una parte ya aprobada la dejaría
+        // «validada» sin haberlo sido.
+        var hashNuevo = hasher.HashCedula(datos.Documento);
+        if (persona.DocumentoHash.Length > 0 && !persona.DocumentoHash.AsSpan().SequenceEqual(hashNuevo))
+        {
+            persona.ValidacionId = null;
+            persona.ValidacionEstado = "sin_solicitar";
+            persona.ValidacionVigenteHasta = null;
+            persona.Reenvios = 0;
+            persona.UltimoReenvioEn = null;
+        }
+
         persona.TipoDocumento = datos.TipoDocumento;
         persona.DocumentoCifrado = cifrado.Cifrar(datos.Documento, CtxDocumento)!;
-        persona.DocumentoHash = hasher.HashCedula(datos.Documento);
+        persona.DocumentoHash = hashNuevo;
         persona.NombreCifrado = cifrado.Cifrar(datos.Nombre, CtxNombre);
         persona.CorreoCifrado = cifrado.Cifrar(datos.Correo, CtxCorreo);
         persona.CelularCifrado = cifrado.Cifrar(datos.Celular, CtxCelular);

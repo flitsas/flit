@@ -126,6 +126,67 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                     b.ToTable("adjunto", "personanatural");
                 });
 
+            modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.AuditoriaIdentidad", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Desde")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("desde");
+
+                    b.Property<Guid?>("EventId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("event_id");
+
+                    b.Property<string>("Hasta")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("hasta");
+
+                    b.Property<DateTimeOffset>("OcurrioEn")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ocurrio_en")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<short>("Ordinal")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)1)
+                        .HasColumnName("ordinal");
+
+                    b.Property<string>("Origen")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("origen");
+
+                    b.Property<string>("Parte")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("parte");
+
+                    b.Property<Guid>("SolicitudId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("solicitud_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_auditoria_identidad");
+
+                    b.HasIndex("SolicitudId", "OcurrioEn")
+                        .HasDatabaseName("ix_auditoria_identidad_solicitud_fecha");
+
+                    b.ToTable("auditoria_identidad", "personanatural");
+                });
+
             modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.ConfiguracionRetencion", b =>
                 {
                     b.Property<short>("Id")
@@ -360,6 +421,12 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .HasColumnType("character varying(40)")
                         .HasColumnName("parte");
 
+                    b.Property<short>("Reenvios")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)0)
+                        .HasColumnName("reenvios");
+
                     b.Property<Guid>("SolicitudId")
                         .HasColumnType("uuid")
                         .HasColumnName("solicitud_id");
@@ -369,6 +436,10 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)")
                         .HasColumnName("tipo_documento");
+
+                    b.Property<DateTimeOffset?>("UltimoReenvioEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ultimo_reenvio_en");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .ValueGeneratedOnAdd()
@@ -694,6 +765,16 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_adjunto_solicitud");
+                });
+
+            modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.AuditoriaIdentidad", b =>
+                {
+                    b.HasOne("Flit.PersonaNatural.Api.Persistence.SolicitudTramite", null)
+                        .WithMany()
+                        .HasForeignKey("SolicitudId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_auditoria_identidad_solicitud");
                 });
 
             modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.Consentimiento", b =>

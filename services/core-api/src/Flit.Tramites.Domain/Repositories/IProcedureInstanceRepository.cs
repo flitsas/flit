@@ -479,6 +479,14 @@ public interface IProcedureInstanceRepository
         Guid id, Guid tenantId, CancellationToken ct = default);
 
     /// <summary>
+    /// HU #14044 (Épica #14021) — la validación MÁS RECIENTE del portal de Persona Natural para (solicitud, rol, documento),
+    /// en cualquier estado, aislada por tenant y TRACKEADA. Solo mira lo de ESA solicitud: una validación de otra solicitud
+    /// de la misma cédula nunca se devuelve (decisión del PO: no se reutiliza entre trámites).
+    /// </summary>
+    Task<ProcedureInstanceBiometricValidation?> FindPortalValidationAsync(
+        Guid tenantId, string solicitudRef, string parte, string documentNumber, CancellationToken ct = default);
+
+    /// <summary>
     /// Cuenta un intento rechazado de Kyverum de forma ATÓMICA e idempotente: en un ÚNICO <c>UPDATE</c>
     /// incrementa <c>attempts</c>, sella <c>last_attempt_at</c> con la clave del intento y REINICIA
     /// <c>reconcile_poll_count</c>, con la guarda <c>status = en_proceso AND last_attempt_at &lt;&gt; @key</c>.

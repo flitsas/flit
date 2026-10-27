@@ -1812,6 +1812,21 @@ internal sealed partial class ProcedureInstanceRepository(
             .Include(x => x.Person)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
 
+    // HU #14044 — solo filas con ancla de portal: la búsqueda por (solicitud, rol, documento) nunca alcanza a una validación
+    // de otra solicitud ni a las de FLIT 2 (decisión del PO: no se reutilizan).
+    public Task<ProcedureInstanceBiometricValidation?> FindPortalValidationAsync(
+        Guid tenantId, string solicitudRef, string parte, string documentNumber, CancellationToken ct = default)
+    {
+        var documento = documentNumber.Trim().ToUpperInvariant();
+        return db.ProcedureInstanceBiometricValidations
+            .Where(v => v.TenantId == tenantId
+                && v.PortalSolicitudRef == solicitudRef
+                && v.PortalParte == parte
+                && v.DocumentNumber.Trim().ToUpper() == documento)
+            .OrderByDescending(v => v.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+    }
+
     // UPDATE atómico e idempotente del conteo de intentos Kyverum. La guarda `last_attempt_at <> @key`
     // (más el row-lock del UPDATE) garantiza que dos entregas paralelas del MISMO intento cuenten una sola vez.
     public async Task<bool> TryCountKyverumAttemptAsync(
@@ -2054,11 +2069,15 @@ internal sealed partial class ProcedureInstanceRepository(
     /// <summary>HU #13246 — a lo sumo una validación en vuelo por mandatario (DDL 129).</summary>
     private const string BiometricInFlightMandatarioIndex = "uq_biometric_validations_inflight_mandate_signer";
 
+    /// <summary>HU #14044 — a lo sumo una validación en vuelo por (solicitud, rol, documento) del portal (DDL 160).</summary>
+    private const string BiometricInFlightPortalIndex = "uq_biometric_validations_inflight_portal";
+
     private static bool IsBiometricInFlightUniqueViolation(DbUpdateException ex) =>
         ex.InnerException is PostgresException pg
         && pg.SqlState == PostgresErrorCodes.UniqueViolation
         && (string.Equals(pg.ConstraintName, BiometricInFlightUniqueIndex, StringComparison.Ordinal)
-            || string.Equals(pg.ConstraintName, BiometricInFlightMandatarioIndex, StringComparison.Ordinal));
+            || string.Equals(pg.ConstraintName, BiometricInFlightMandatarioIndex, StringComparison.Ordinal)
+            || string.Equals(pg.ConstraintName, BiometricInFlightPortalIndex, StringComparison.Ordinal));
 
     /// <summary>HU #11029 — ver <see cref="IProcedureInstanceRepository.ResetTracking"/>.</summary>
     public void ResetTracking() => db.ChangeTracker.Clear();

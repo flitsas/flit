@@ -214,14 +214,28 @@ public sealed class PersonaNaturalGrpcService(
 
     // ── Pendientes de su HU: contrato publicado, sin implementación ─────────────────────────────────────────────────
 
-    public override Task<SolicitarValidacionIdentidadResponse> SolicitarValidacionIdentidad(SolicitarValidacionIdentidadRequest request, ServerCallContext context) =>
-        Pendiente<SolicitarValidacionIdentidadResponse>(context, "HU C1");
+    // ── Identidad de las partes (HU C1): el caso de uso vive en PersonaNaturalIdentidadService ─────────────────
+
+    /// <summary>
+    /// Pide una validación NUEVA para la parte de esa solicitud (HU #14044). Idempotente por (solicitud, parte, documento);
+    /// nunca reutiliza una validación de otra solicitud (decisión del PO). Persona jurídica: <c>persona_juridica_no_soportada</c>.
+    /// </summary>
+    public override Task<SolicitarValidacionIdentidadResponse> SolicitarValidacionIdentidad(SolicitarValidacionIdentidadRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Verificar(context);
+        return Identidad(context).SolicitarAsync(request, context.CancellationToken);
+    }
 
     public override Task<ReenviarValidacionIdentidadResponse> ReenviarValidacionIdentidad(ReenviarValidacionIdentidadRequest request, ServerCallContext context) =>
         Pendiente<ReenviarValidacionIdentidadResponse>(context, "HU C2");
 
     public override Task<ObtenerEstadoValidacionIdentidadResponse> ObtenerEstadoValidacionIdentidad(ObtenerEstadoValidacionIdentidadRequest request, ServerCallContext context) =>
         Pendiente<ObtenerEstadoValidacionIdentidadResponse>(context, "HU C2");
+
+
+    private static PersonaNaturalIdentidadService Identidad(ServerCallContext context) =>
+        ActivatorUtilities.CreateInstance<PersonaNaturalIdentidadService>(context.GetHttpContext().RequestServices);
 
     public override Task<ObtenerDefinicionTipoTramiteResponse> ObtenerDefinicionTipoTramite(ObtenerDefinicionTipoTramiteRequest request, ServerCallContext context) =>
         Pendiente<ObtenerDefinicionTipoTramiteResponse>(context, "HU K1");
