@@ -622,12 +622,15 @@ internal sealed partial class ProcedureInstanceRepository(
         // upper(btrim(tipo)), upper(btrim(número)), en vuelo, sin mandatario): todas las filas que impedirían guardar una
         // validación nueva de este documento, sin filtrar por trámite ni quedarse con la más reciente. Rastreadas y con el
         // trámite cargado para que el caso de uso decida cuáles cerrar.
-        var tipo = (tipoDoc ?? string.Empty).Trim().ToUpperInvariant();
+        // HU #14044 — el índice excluye además las filas del portal (portal_solicitud_ref IS NOT NULL, que tienen su
+        // propio índice por solicitud/parte): este método también las ignora para no cerrar validaciones del portal.
+        var tipo =(tipoDoc ?? string.Empty).Trim().ToUpperInvariant();
         var numero = (documento ?? string.Empty).Trim().ToUpperInvariant();
         return await db.ProcedureInstanceBiometricValidations
             .Include(v => v.ProcedureInstance)
             .Where(v => v.TenantId == tenantId
                 && v.MandateSignerId == null
+                && v.PortalSolicitudRef == null
                 && (v.Status == BiometricEstados.PendienteEnvio
                     || v.Status == BiometricEstados.Enviado
                     || v.Status == BiometricEstados.EnProceso)
@@ -652,6 +655,7 @@ internal sealed partial class ProcedureInstanceRepository(
             .AsNoTracking()
             .Where(v => tenantIds.Contains(v.TenantId)
                 && v.MandateSignerId == null
+                && v.PortalSolicitudRef == null
                 && v.Status == BiometricEstados.Aprobado
                 && v.DocumentType != null
                 && v.DocumentNumber != null
@@ -704,6 +708,7 @@ internal sealed partial class ProcedureInstanceRepository(
             .AsNoTracking()
             .Where(v => tenantIds.Contains(v.TenantId)
                 && v.MandateSignerId == null
+                && v.PortalSolicitudRef == null
                 && v.Status == BiometricEstados.Aprobado
                 && v.ExpiredManuallyAt != null
                 && (v.ValidUntilPrevious == null || v.ValidUntilPrevious > now)
