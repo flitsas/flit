@@ -890,6 +890,7 @@ Flit.Tramites.Domain.Integration.IRevocationRequestNotifier => Flit.Infrastructu
 Flit.Tramites.Domain.Integration.IRnmcRequirementPolicy => Flit.Infrastructure.OtRules.RnmcRequirementPolicy (Scoped)
 Flit.Tramites.Domain.Integration.ISignatureVaultPolicy => Flit.Infrastructure.OtRules.SignatureVaultPolicy (Scoped)
 Flit.Tramites.Domain.Integration.ITransitOfficeGrantGate => Flit.Infrastructure.OtRules.TransitOfficeGrantGate (Scoped)
+Flit.Tramites.Domain.Integration.ITransitOfficeQuipuxCanalReader => Flit.Infrastructure.OtRules.TransitOfficeQuipuxCanalReader (Scoped)
 Flit.Tramites.Domain.Integration.ITransitOfficeResolver => Flit.Infrastructure.OtRules.TransitOfficeResolver (Scoped)
 Flit.Tramites.Domain.Repositories.IBulkTramitesBatchRepository => Flit.Infrastructure.Persistence.Repositories.BulkTramitesBatchRepository (Scoped)
 Flit.Tramites.Domain.Repositories.ICatalogRepository => Flit.Infrastructure.Persistence.Repositories.CatalogRepository (Scoped)
