@@ -1,9 +1,11 @@
 using Flit.Api.Authorization;
+using Flit.Infrastructure.PersonaNatural;
 using Flit.Infrastructure.Persistence;
 using Flit.Platform.Sdk;
 using Flit.Platform.Sdk.Grpc;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Tramites.PersonaNatural;
 using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Flit.Tramites.Grpc.V1;
@@ -23,7 +25,8 @@ namespace Flit.Api.Grpc;
 /// para que un llamante ajeno no distinga qué existe.
 /// </para>
 /// </summary>
-public sealed class PersonaNaturalGrpcService(FlitDbContext db, RunPreflightPreviewHandler preview)
+public sealed class PersonaNaturalGrpcService(
+    FlitDbContext db, RunPreflightPreviewHandler preview, PersonaNaturalTiposReader tiposReader, PersonaNaturalPortalReader portal)
     : PersonaNaturalService.PersonaNaturalServiceBase
 {
     /// <summary>Razón estable de un método que todavía no tiene implementación.</summary>
@@ -105,6 +108,109 @@ public sealed class PersonaNaturalGrpcService(FlitDbContext db, RunPreflightPrev
         }));
         return respuesta;
     }
+    /// <summary>
+    /// Organismos ofrecidos a Persona Natural: los que tienen grant habilitado para su empresa. Sin ninguno devuelve lista
+    /// vacía, no un error. El enlace de tarifas del organismo no existe todavía como dato (HU J): viaja vacío.
+    /// </summary>
+    public override async Task<ListarOrganismosResponse> ListarOrganismos(ListarOrganismosRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Verificar(context);
+        var organismos = await portal.ListarOrganismosAsync(context.CancellationToken).ConfigureAwait(false);
+        var respuesta = new ListarOrganismosResponse();
+        respuesta.Organismos.AddRange(organismos.Select(o => new OrganismoPortal
+        {
+            Id = o.Id.ToString(),
+            Codigo = o.Codigo,
+            Nombre = o.Nombre,
+            Municipio = o.Municipio,
+            Departamento = o.Departamento,
+            EnlaceTarifas = string.Empty,
+        }));
+        return respuesta;
+    }
+
+    /// <summary>
+    /// Tipos del portal con su elegibilidad (<see cref="ElegibilidadPersonaNatural"/>, del perfil del tipo). Sin organismo,
+    /// todos con su motivo («Próximamente»). Con organismo, solo los que se ofrecen ahí: elegibles y con tarifa vigente.
+    /// </summary>
+    public override async Task<ListarTiposDisponiblesResponse> ListarTiposDisponibles(ListarTiposDisponiblesRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Verificar(context);
+        Guid? organismo = null;
+        if (Texto(request.OrganismoId) is { } organismoTexto)
+        {
+            if (!Guid.TryParse(organismoTexto, out var parsed))
+                throw Invalido("organismo_id no es un identificador válido.");
+            if (!await portal.OrganismoHabilitadoAsync(parsed, context.CancellationToken).ConfigureAwait(false))
+                throw PlatformRpcErrors.ToRpcException("organismo_no_habilitado", "El organismo de tránsito no está habilitado para el portal.", StatusCode.FailedPrecondition);
+            organismo = parsed;
+        }
+
+        var tipos = await tiposReader.ListarAsync(context.CancellationToken).ConfigureAwait(false);
+        var respuesta = new ListarTiposDisponiblesResponse();
+        if (organismo is { } org)
+        {
+            var tarifas = await portal.TarifasVigentesAsync(portal.HoyColombia(), context.CancellationToken).ConfigureAwait(false);
+            tipos = tipos.Where(t => t.Elegibilidad.Elegible && TieneTarifaBase(t.Id, org, tarifas)).ToList();
+        }
+
+        respuesta.Tipos.AddRange(tipos.Select(t => new TipoTramiteResumen
+        {
+            Codigo = t.Codigo,
+            Nombre = t.Nombre,
+            Familia = t.Familia,
+            Version = t.Version,
+            DisponiblePn = t.Elegibilidad.Elegible,
+            MotivoNoDisponible = t.Elegibilidad.Motivo,
+        }));
+        return respuesta;
+    }
+
+    /// <summary>
+    /// Cotización de 2 líneas (Servicio de tránsito y Servicio FLIT) más los adicionales que el tipo permite. ES el único
+    /// cálculo: la landing y el paso de pago llaman a este mismo RPC, así que el total no puede diferir
+    /// (<see cref="CotizadorPersonaNatural"/>). Solo lee tarifas: nunca inventa un valor. Errores estables:
+    /// <c>tipo_no_disponible</c>, <c>organismo_no_habilitado</c>, <c>tipo_no_habilitado</c> y <c>tarifa_no_vigente</c>.
+    /// </summary>
+    public override async Task<CotizarResponse> Cotizar(CotizarRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Verificar(context);
+        var codigo = Texto(request.TipoTramiteCodigo) ?? throw Invalido("tipo_tramite_codigo es obligatorio.");
+        if (!Guid.TryParse(Texto(request.OrganismoId), out var organismo))
+            throw Invalido("organismo_id es obligatorio y debe ser un identificador válido.");
+        if (request.Adicionales.Count > ConceptosTarifa.Adicionales.Count)
+            throw Invalido("Demasiados conceptos adicionales.");
+
+        var ct = context.CancellationToken;
+        var tipos = await tiposReader.ListarAsync(ct, codigo).ConfigureAwait(false);
+        if (tipos.Count == 0)
+            throw PlatformRpcErrors.ToRpcException("tipo_no_disponible", "El tipo de trámite no está disponible.", StatusCode.NotFound);
+        var tipo = tipos[0];
+        if (!await portal.OrganismoHabilitadoAsync(organismo, ct).ConfigureAwait(false))
+            throw PlatformRpcErrors.ToRpcException("organismo_no_habilitado", "El organismo de tránsito no está habilitado para el portal.", StatusCode.FailedPrecondition);
+        if (!tipo.Elegibilidad.Elegible)
+            throw PlatformRpcErrors.ToRpcException("tipo_no_habilitado", "El tipo de trámite no está habilitado para Persona Natural en este organismo.", StatusCode.FailedPrecondition);
+
+        var tarifas = await portal.TarifasVigentesAsync(portal.HoyColombia(), ct).ConfigureAwait(false);
+        var resultado = CotizadorPersonaNatural.Calcular(
+            tipo.Id, organismo, tipo.Perfil.ComplementaryTransformationsAllowed(tipo.Familia), request.Adicionales, tarifas);
+        if (resultado.Cotizacion is not { } cotizacion)
+            throw PlatformRpcErrors.ToRpcException(CotizadorPersonaNatural.TarifaNoVigente, "No hay tarifa vigente para este organismo y tipo de trámite.", StatusCode.FailedPrecondition);
+
+        var respuesta = new CotizarResponse { TotalCop = cotizacion.TotalCop, VersionTarifa = cotizacion.VersionTarifa };
+        respuesta.Lineas.AddRange(cotizacion.Lineas.Select(l => new LineaCobro { Codigo = l.Codigo, Nombre = l.Nombre, Subtitulo = l.Subtitulo, ValorCop = l.ValorCop }));
+        respuesta.AdicionalesNoAplicados.AddRange(cotizacion.AdicionalesNoAplicados);
+        return respuesta;
+    }
+
+    /// <summary>Un tipo se ofrece en un organismo solo si los dos renglones base tienen tarifa vigente.</summary>
+    private static bool TieneTarifaBase(Guid tipoId, Guid organismoId, IReadOnlyCollection<TarifaVigente> tarifas) =>
+        CotizadorPersonaNatural.Resolver(ConceptosTarifa.DerechosTransito, tipoId, organismoId, tarifas) is not null
+        && CotizadorPersonaNatural.Resolver(ConceptosTarifa.ServicioFlit, tipoId, organismoId, tarifas) is not null;
+
 
     // ── Pendientes de su HU: contrato publicado, sin implementación ─────────────────────────────────────────────────
 
@@ -117,14 +223,8 @@ public sealed class PersonaNaturalGrpcService(FlitDbContext db, RunPreflightPrev
     public override Task<ObtenerEstadoValidacionIdentidadResponse> ObtenerEstadoValidacionIdentidad(ObtenerEstadoValidacionIdentidadRequest request, ServerCallContext context) =>
         Pendiente<ObtenerEstadoValidacionIdentidadResponse>(context, "HU C2");
 
-    public override Task<ListarTiposDisponiblesResponse> ListarTiposDisponibles(ListarTiposDisponiblesRequest request, ServerCallContext context) =>
-        Pendiente<ListarTiposDisponiblesResponse>(context, "HU K2");
-
     public override Task<ObtenerDefinicionTipoTramiteResponse> ObtenerDefinicionTipoTramite(ObtenerDefinicionTipoTramiteRequest request, ServerCallContext context) =>
         Pendiente<ObtenerDefinicionTipoTramiteResponse>(context, "HU K1");
-
-    public override Task<CotizarResponse> Cotizar(CotizarRequest request, ServerCallContext context) =>
-        Pendiente<CotizarResponse>(context, "HU B5");
 
     public override Task<ObtenerConfiguracionPortalResponse> ObtenerConfiguracionPortal(ObtenerConfiguracionPortalRequest request, ServerCallContext context) =>
         Pendiente<ObtenerConfiguracionPortalResponse>(context, "HU J3");

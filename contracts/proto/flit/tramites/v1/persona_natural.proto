@@ -23,7 +23,11 @@ service PersonaNaturalService {
   // Estado de una validación de identidad. [HU C2]
   rpc ObtenerEstadoValidacionIdentidad(ObtenerEstadoValidacionIdentidadRequest) returns (ObtenerEstadoValidacionIdentidadResponse);
 
-  // Tipos de trámite que el portal puede ofrecer hoy (lista blanca de la HU J2, publicado y con el wizard habilitado). [HU K2]
+  // Organismos de tránsito habilitados para la empresa «Persona Natural» (con grant vigente). Sin grants, lista vacía. [HU B5]
+  rpc ListarOrganismos(ListarOrganismosRequest) returns (ListarOrganismosResponse);
+
+  // Tipos de trámite del portal con su elegibilidad calculada desde el perfil del tipo; con organismo_id, solo los que el
+  // portal ofrece en ese organismo (elegibles y con tarifa vigente). [HU K2, B5]
   rpc ListarTiposDisponibles(ListarTiposDisponiblesRequest) returns (ListarTiposDisponiblesResponse);
 
   // Estructura del wizard de un tipo: pasos, campos, roles de actor, documentos y flags. Solo estructura, sin reglas
@@ -77,7 +81,20 @@ message ObtenerEstadoValidacionIdentidadResponse {
   google.protobuf.Timestamp vigente_hasta = 2;
 }
 
-message ListarTiposDisponiblesRequest {}
+message ListarOrganismosRequest {}
+message ListarOrganismosResponse { repeated OrganismoPortal organismos = 1; }
+message OrganismoPortal {
+  string id = 1;
+  string codigo = 2;
+  string nombre = 3;
+  string municipio = 4;
+  string departamento = 5;
+  string enlace_tarifas = 6;               // vacío mientras no exista el dato (HU J)
+}
+
+message ListarTiposDisponiblesRequest {
+  string organismo_id = 1;                 // opcional; con valor, solo los tipos ofrecidos en ese organismo
+}
 message ListarTiposDisponiblesResponse { repeated TipoTramiteResumen tipos = 1; }
 message TipoTramiteResumen {
   string codigo = 1;                       // tramites.procedure_types.code
@@ -173,10 +190,16 @@ message Requisito {
 message CotizarRequest {
   string tipo_tramite_codigo = 1;
   string organismo_id = 2;
+  // Conceptos adicionales pedidos: CAMBIO_COLOR | CONVERSION_COMBUSTIBLE | CAMBIO_CARROCERIA | ENVIO_DOCUMENTO. Las
+  // transformaciones solo suman si la definición del tipo las permite.
+  repeated string adicionales = 3;
 }
+// Errores estables (ErrorInfo.reason): tipo_no_disponible, organismo_no_habilitado, tipo_no_habilitado, tarifa_no_vigente.
 message CotizarResponse {
-  repeated LineaCobro lineas = 1;
+  repeated LineaCobro lineas = 1;        // Servicio de tránsito, Servicio FLIT y los adicionales que sumaron
   int64 total_cop = 2;
+  string version_tarifa = 3;             // versiones de tarifa usadas; la solicitud las congela
+  repeated string adicionales_no_aplicados = 4;
 }
 message LineaCobro {
   string codigo = 1;

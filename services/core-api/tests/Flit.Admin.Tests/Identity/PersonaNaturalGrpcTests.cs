@@ -150,11 +150,11 @@ public sealed class PersonaNaturalGrpcTests(WebApplicationFactory<Program> facto
         var bueno = await ClienteAsync(host, Portal, PlatformTenants.PersonaNatural, ct);
         var ajeno = await ClienteAsync(host, Portal, Guid.NewGuid(), ct);
 
-        var pendiente = (await ((Func<Task>)(() => bueno.CotizarAsync(new CotizarRequest(), cancellationToken: ct).ResponseAsync)).Should().ThrowAsync<RpcException>()).Which;
+        var pendiente = (await ((Func<Task>)(() => bueno.ObtenerConfiguracionPortalAsync(new ObtenerConfiguracionPortalRequest(), cancellationToken: ct).ResponseAsync)).Should().ThrowAsync<RpcException>()).Which;
         pendiente.StatusCode.Should().Be(StatusCode.Unimplemented);
         PlatformRpcErrors.Reason(pendiente).Should().Be(PersonaNaturalGrpcService.NoImplementado);
 
-        var conOtraEmpresa = (await ((Func<Task>)(() => ajeno.CotizarAsync(new CotizarRequest(), cancellationToken: ct).ResponseAsync)).Should().ThrowAsync<RpcException>()).Which;
+        var conOtraEmpresa = (await ((Func<Task>)(() => ajeno.ObtenerConfiguracionPortalAsync(new ObtenerConfiguracionPortalRequest(), cancellationToken: ct).ResponseAsync)).Should().ThrowAsync<RpcException>()).Which;
         PlatformRpcErrors.Reason(conOtraEmpresa).Should().Be("invalid_tenant", "el candado va antes: un llamante ajeno no distingue qué existe");
     }
 
