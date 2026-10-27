@@ -168,6 +168,19 @@ public sealed class PersonaNaturalDb(DbContextOptions<PersonaNaturalDb> options)
             e.HasIndex(i => new { i.Clave, i.OcurrioEn }).HasDatabaseName("ix_intento_reanudar_clave_fecha");
         });
 
+        modelBuilder.Entity<ConfiguracionRetencion>(e =>
+        {
+            e.ToTable("configuracion_retencion", t => t.HasCheckConstraint("ck_configuracion_retencion", "id = 1 AND dias_retencion_borrador >= 1 AND intervalo_minutos >= 1 AND lote >= 1"));
+            e.HasKey(c => c.Id).HasName("pk_configuracion_retencion");
+            e.Property(c => c.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(c => c.Habilitado).HasColumnName("habilitado");
+            e.Property(c => c.DiasRetencionBorrador).HasColumnName("dias_retencion_borrador");
+            e.Property(c => c.IntervaloMinutos).HasColumnName("intervalo_minutos");
+            e.Property(c => c.Lote).HasColumnName("lote");
+            e.Property(c => c.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("now()");
+            e.HasData(new ConfiguracionRetencion { Id = 1, UpdatedAt = new DateTimeOffset(2026, 10, 27, 0, 0, 0, TimeSpan.Zero) });
+        });
+
         // Solo inserción y sin llaves foráneas: debe sobrevivir a la solicitud que audita.
         modelBuilder.Entity<AccesoPiiLog>(e =>
         {

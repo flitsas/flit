@@ -143,6 +143,23 @@ public sealed class AccesoPiiLog
     public byte[]? IpHash { get; set; }
 }
 
+/// <summary>
+/// Fila única con la política de retención (estándar de jobs periódicos: la cadencia vive en la base y se relee en cada ciclo,
+/// no en appsettings). Si la fila falta, el servicio usa los valores por defecto del código.
+/// </summary>
+public sealed class ConfiguracionRetencion
+{
+    public short Id { get; set; } = 1;
+    public bool Habilitado { get; set; } = true;
+
+    /// <summary>Días sin actividad tras los cuales un borrador abandonado se anonimiza (plazo por validar con el PO y legal).</summary>
+    public int DiasRetencionBorrador { get; set; } = 30;
+
+    public int IntervaloMinutos { get; set; } = 1440;
+    public int Lote { get; set; } = 200;
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
 /// <summary>Intento fallido de reanudar con radicado y cédula. Sirve para bloquear el radicado tras varios fallos seguidos.</summary>
 public sealed class IntentoReanudar
 {

@@ -2,6 +2,7 @@ using Flit.Api.Telemetry;
 using Flit.PersonaNatural.Api.Abuso;
 using Flit.PersonaNatural.Api;
 using Flit.PersonaNatural.Api.Persistence;
+using Flit.PersonaNatural.Api.Pii;
 using Flit.PersonaNatural.Api.Sesiones;
 using Flit.Platform.Sdk.Authentication;
 using Flit.Platform.Sdk.Grpc;
@@ -53,6 +54,12 @@ public static class Program
         builder.Services.TryAddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<PiiHasher>();
         builder.Services.AddScoped<SesionService>();
+
+        // HU #14037: cifrado AES-GCM de los datos personales, auditoría de lectura y retención de borradores abandonados.
+        builder.Services.AddSingleton<CifradoPii>();
+        builder.Services.AddScoped<PersonaService>();
+        builder.Services.AddScoped<RetencionService>();
+        builder.Services.AddHostedService<RetencionJob>();
 
         // HU #14036: captcha, límite por IP y topes de consultas por cédula y globales.
         builder.Services.AddAbusoPortal(builder.Configuration);

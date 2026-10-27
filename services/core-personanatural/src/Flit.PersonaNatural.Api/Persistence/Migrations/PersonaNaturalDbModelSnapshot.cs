@@ -126,6 +126,54 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                     b.ToTable("adjunto", "personanatural");
                 });
 
+            modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.ConfiguracionRetencion", b =>
+                {
+                    b.Property<short>("Id")
+                        .HasColumnType("smallint")
+                        .HasColumnName("id");
+
+                    b.Property<int>("DiasRetencionBorrador")
+                        .HasColumnType("integer")
+                        .HasColumnName("dias_retencion_borrador");
+
+                    b.Property<bool>("Habilitado")
+                        .HasColumnType("boolean")
+                        .HasColumnName("habilitado");
+
+                    b.Property<int>("IntervaloMinutos")
+                        .HasColumnType("integer")
+                        .HasColumnName("intervalo_minutos");
+
+                    b.Property<int>("Lote")
+                        .HasColumnType("integer")
+                        .HasColumnName("lote");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.HasKey("Id")
+                        .HasName("pk_configuracion_retencion");
+
+                    b.ToTable("configuracion_retencion", "personanatural", t =>
+                        {
+                            t.HasCheckConstraint("ck_configuracion_retencion", "id = 1 AND dias_retencion_borrador >= 1 AND intervalo_minutos >= 1 AND lote >= 1");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Id = (short)1,
+                            DiasRetencionBorrador = 30,
+                            Habilitado = true,
+                            IntervaloMinutos = 1440,
+                            Lote = 200,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 10, 27, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        });
+                });
+
             modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.Consentimiento", b =>
                 {
                     b.Property<Guid>("Id")

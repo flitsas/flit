@@ -160,6 +160,7 @@ public sealed class ServicioHostTests : IAsyncLifetime
         ["Platform:Messaging:ConnectionString"] = "amqp://flit:x@127.0.0.1:1/",
         ["Pii:ClaveHmac"] = "clave-de-prueba-de-al-menos-32-caracteres!",
         ["Captcha:SecretKey"] = "secreto-de-captcha",
+        ["Pii:Cifrado:Llaves:1"] = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
         [ServicioSettings.GrpcPortKey] = GrpcPort.ToString(System.Globalization.CultureInfo.InvariantCulture),
     };
 }

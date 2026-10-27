@@ -257,6 +257,7 @@ public sealed class AbusoTests : IAsyncLifetime
             [ServicioSettings.GrpcPortKey] = "5997",
             ["Pii:ClaveHmac"] = "clave-de-prueba-de-al-menos-32-caracteres!",
             ["Captcha:SecretKey"] = "secreto-de-captcha",
+            ["Pii:Cifrado:Llaves:1"] = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
         };
         foreach (var (clave, valor) in ajustes)
             settings[clave] = valor;

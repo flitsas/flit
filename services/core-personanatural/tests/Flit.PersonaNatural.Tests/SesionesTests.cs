@@ -289,6 +289,7 @@ public sealed class SesionesTests : IAsyncLifetime
         [ServicioSettings.GrpcPortKey] = "5998",
         ["Pii:ClaveHmac"] = ClaveHmac,
         ["Captcha:SecretKey"] = "secreto-de-captcha",
+        ["Pii:Cifrado:Llaves:1"] = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
     };
 
     private PersonaNaturalDb NuevaDb()
