@@ -9,7 +9,7 @@ namespace Flit.PersonaNatural.Api.Pii;
 /// se vacían, la solicitud queda cancelada (ya no se puede reanudar), se revocan sus sesiones y queda la traza en
 /// <c>acceso_pii_log</c>. Es idempotente: una solicitud ya cancelada no vuelve a entrar.
 /// </summary>
-public sealed class RetencionService(PersonaNaturalDb db, TimeProvider reloj)
+public sealed class RetencionService(PersonaNaturalDb db, TimeProvider reloj, IEnumerable<Flit.PersonaNatural.Api.Solicitudes.ILimpiadorDeSolicitud> limpiadores)
 {
     public const string ActorRetencion = "retencion";
     public const string AccionAnonimizada = "anonimizada_por_retencion";
@@ -63,6 +63,23 @@ public sealed class RetencionService(PersonaNaturalDb db, TimeProvider reloj)
             .SetProperty(s => s.FieldValues, "{}")
             .SetProperty(s => s.Datos, "{}")
             .SetProperty(s => s.UpdatedAt, _ => ahora), ct).ConfigureAwait(false);
+
+        // Los archivos que subió el ciudadano (cédulas, certificados) también son datos personales: salen del almacenamiento y de la base.
+        // Si el almacenamiento falla, el borrador igual se anonimiza y las referencias se borran; el objeto huérfano lo recupera su limpieza.
+        foreach (var id in ids)
+        {
+            try
+            {
+                foreach (var limpiador in limpiadores)
+                    await limpiador.LimpiarAsync(id, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException and not Npgsql.NpgsqlException)
+            {
+                // se sigue con el siguiente borrador
+            }
+        }
+
+        await db.Set<Adjunto>().Where(a => ids.Contains(a.SolicitudId)).ExecuteDeleteAsync(ct).ConfigureAwait(false);
 
         db.AddRange(ids.Select(id => new AccesoPiiLog { Actor = ActorRetencion, Accion = AccionAnonimizada, SolicitudId = id, OcurrioEn = ahora }));
         await db.SaveChangesAsync(ct).ConfigureAwait(false);

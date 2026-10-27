@@ -334,7 +334,7 @@ public sealed partial class SolicitudesService(
     /// Carga la solicitud para editarla: que exista, que no haya entrado a la cola, que la versión sea la que el cliente leyó y
     /// que el tipo siga disponible. La definición con la que se valida es la congelada, no la viva.
     /// </summary>
-    private async Task<(SolicitudTramite Solicitud, DefinicionTipoDto Definicion)> CargarParaEditarAsync(Guid id, long? version, CancellationToken ct)
+    internal async Task<(SolicitudTramite Solicitud, DefinicionTipoDto Definicion)> CargarParaEditarAsync(Guid id, long? version, CancellationToken ct)
     {
         var s = await db.Set<SolicitudTramite>().FirstOrDefaultAsync(x => x.Id == id, ct).ConfigureAwait(false) ?? throw NoEncontrada();
         if (!EsEditable(s.Estado))
@@ -360,7 +360,7 @@ public sealed partial class SolicitudesService(
         return (s, def);
     }
 
-    private async Task GuardarAsync(SolicitudTramite s, CancellationToken ct, bool tocar = true)
+    internal async Task GuardarAsync(SolicitudTramite s, CancellationToken ct, bool tocar = true)
     {
         if (tocar)
             Tocar(s);
@@ -413,7 +413,9 @@ public sealed partial class SolicitudesService(
         var def = DefinicionesService.Leer(s.DefinicionSnapshot) ?? DefinicionesService.Vacia(s.TipoTramiteCodigo, s.DefinicionVersion);
         var filas = await db.Set<PersonaSolicitante>().AsNoTracking().Where(p => p.SolicitudId == s.Id)
             .OrderBy(p => p.Parte).ThenBy(p => p.Ordinal).Select(p => new { p.Parte, p.Ordinal, p.ValidacionEstado }).ToListAsync(ct).ConfigureAwait(false);
-        var tiposAdjuntos = await db.Set<Adjunto>().AsNoTracking().Where(a => a.SolicitudId == s.Id).Select(a => a.Tipo).ToListAsync(ct).ConfigureAwait(false);
+        var adjuntos = await db.Set<Adjunto>().AsNoTracking().Where(a => a.SolicitudId == s.Id).OrderBy(a => a.CreatedAt)
+            .Select(a => new AdjuntoDto(a.Id, a.Tipo, a.NombreArchivo, a.MimeType, a.TamanoBytes, a.Sha256, a.CreatedAt)).ToListAsync(ct).ConfigureAwait(false);
+        var tiposAdjuntos = adjuntos.Select(a => a.Tipo).ToList();
 
         var detalle = conPersonas && filas.Count > 0
             ? (await personas.LeerAsync(s.Id, "sesion", ct).ConfigureAwait(false)).ToDictionary(p => (p.Parte, p.Ordinal))
@@ -432,7 +434,7 @@ public sealed partial class SolicitudesService(
 
         return new SolicitudDto(
             s.Id, s.CodigoPublico, s.Estado, s.TipoTramiteCodigo, s.DefinicionVersion, def.Huella, s.RowVersion, s.OrganismoId, s.OrganismoNombre,
-            s.Placa, s.Vin, campos, datos, actores, pasos, pendientes, pendientes.Count == 0, cambio);
+            s.Placa, s.Vin, campos, datos, actores, adjuntos, pasos, pendientes, pendientes.Count == 0, cambio);
     }
 
     internal static ReglaDeNegocioException NoEncontrada() =>

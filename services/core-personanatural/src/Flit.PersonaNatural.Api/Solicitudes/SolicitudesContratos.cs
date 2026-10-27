@@ -31,6 +31,9 @@ public sealed record PendienteDto(string Codigo, string? Referencia, string? Pas
 
 public sealed record PasoEstadoDto(string Clave, string Titulo, bool Completo, IReadOnlyList<PendienteDto> Pendientes);
 
+/// <summary>Un archivo cargado: solo metadatos (la referencia al almacenamiento no sale del servicio).</summary>
+public sealed record AdjuntoDto(Guid Id, string Tipo, string NombreArchivo, string MimeType, long TamanoBytes, string Sha256, DateTimeOffset CreadoEn);
+
 public sealed record ActorEstadoDto(string Rol, short Ordinal, string ValidacionEstado, string? TipoDocumento, string? NumeroDocumento, string? Nombre, string? Correo, string? Celular, string? Direccion);
 
 /// <summary>Qué cambió en la definición del tipo mientras el borrador estaba guardado y qué se hizo con los datos.</summary>
@@ -55,6 +58,7 @@ public sealed record SolicitudDto(
     IReadOnlyDictionary<string, string> FieldValues,
     DatosSolicitud Datos,
     IReadOnlyList<ActorEstadoDto> Actores,
+    IReadOnlyList<AdjuntoDto> Adjuntos,
     IReadOnlyList<PasoEstadoDto> Pasos,
     IReadOnlyList<PendienteDto> Pendientes,
     bool Completo,

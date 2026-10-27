@@ -197,6 +197,21 @@ internal sealed class PortalHost : IAsyncDisposable
         return await Http.SendAsync(peticion, TestContext.Current.CancellationToken);
     }
 
+    /// <summary>Sube un archivo como multipart (<c>archivo</c> y, si se da, <c>tipo</c>) con la sesión indicada.</summary>
+    public async Task<HttpResponseMessage> SubirAsync(string ruta, string? token, byte[] contenido, string nombre, string? tipo = null)
+    {
+        using var form = new MultipartFormDataContent();
+        var archivo = new ByteArrayContent(contenido);
+        archivo.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+        form.Add(archivo, "archivo", nombre);
+        if (tipo is not null)
+            form.Add(new StringContent(tipo), "tipo");
+        using var peticion = new HttpRequestMessage(HttpMethod.Post, ruta) { Content = form };
+        if (token is not null)
+            peticion.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        return await Http.SendAsync(peticion, TestContext.Current.CancellationToken);
+    }
+
     public static async Task<JsonDocument> JsonAsync(HttpResponseMessage r) =>
         JsonDocument.Parse(await r.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
 
