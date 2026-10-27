@@ -6,6 +6,7 @@ using Flit.PersonaNatural.Api.Identidad;
 using Flit.PersonaNatural.Api;
 using Flit.PersonaNatural.Api.Persistence;
 using Flit.PersonaNatural.Api.Pii;
+using Flit.PersonaNatural.Api.Radicacion;
 using Flit.PersonaNatural.Api.Radicados;
 using Flit.PersonaNatural.Api.Sesiones;
 using Flit.Platform.Sdk.Authentication;
@@ -80,8 +81,11 @@ public static class Program
         // HU #14043: catálogo de organismos y tipos, cotización de 2 líneas y envío por correo (fachada gRPC de core-api).
         builder.Services.AddCotizacionesPortal(builder.Configuration);
 
-        // HU #14044: validación de identidad de las partes por enlace (fachada gRPC de core-api); #14045 suma el espejo por evento.
+        // HU #14044 y #14045: validación de identidad de las partes por enlace (fachada gRPC de core-api, espejo por evento).
         builder.Services.AddIdentidadPortal(builder.Configuration);
+
+        // HU #14046: compuerta de radicación (no radicar sin identidad aprobada de todas las partes obligadas).
+        builder.Services.AddCompuertaDeRadicacion();
 
         // h2c necesita un endpoint solo HTTP/2: se vuelven a declarar las URLs del REST (Kestrel ignora ASPNETCORE_URLS
         // cuando se declaran endpoints por código) y se suma el del gRPC.
