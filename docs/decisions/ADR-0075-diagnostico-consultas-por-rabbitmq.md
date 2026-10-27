@@ -7,6 +7,9 @@
 **Épica / HU**: #12881 · trabajo sobre #13727, #13730, #13737, #13743, #13746 y #13876, sin work items nuevos
 **Supersedes**: la decisión **(a) A2 «cola durable por vehículo en Postgres con lease + `FOR UPDATE SKIP LOCKED`»** del plan v2 (`docs/diagnosticos/plan-implementacion-diagnostico-vehicular-v2.md` §4). Nunca se versionó como ADR.
 **Enmienda** ADR-0072 (Propuesto) en dos puntos: la excepción A11 de `ix_cola` (el dueño pasa a ser el reconciliador) y el control **R-2** de la retención de datos personales (el documento puede estar en claro en la outbox hasta 24 h después de publicarse; ver «Enmienda del control R-2 de ADR-0072»).
+**Enmendado por** [ADR-0076](ADR-0076-diagnostico-respuesta-completa-de-la-fuente-con-pii-cifrada.md) (Propuesto,
+HU #14087 AC8): la vuelta deja de ir minimizada (U1 = b en la vuelta y C3) y lleva el `*Response` completo, con datos
+personales; core-diagnostico lo guarda cifrado aparte de `payload`. La ida no cambia.
 **Diseño**: `docs/diagnosticos/diseno-consultas-por-rabbitmq.md` (revisión 5)
 **Estado de la implementación**: implementado en `feature/AB-12881-diagnostico-d0-d2` (`3dbb299e7..63e0fe89c`, 37 commits, sin push), pendiente de PR, de la re-revisión del security-agent y de la revisión del LT.
 
@@ -211,6 +214,10 @@ igual. Un servicio nuevo que ponga datos personales en su outbox necesita su pro
 
 **Decisión:** U1 = b, aceptada por el usuario el 2026-10-26. La acepta formalmente el Líder Técnico al pasar este ADR a
 Aceptado.
+
+> **Enmienda (ADR-0076, Propuesto).** La «Vuelta» de este registro queda reemplazada: viaja el `*Response` completo
+> (salvo `respuesta_cruda`), con nombres, direcciones y contacto. La ida, los lugares, la retención y los controles de
+> este registro siguen vigentes.
 
 **Qué datos.** Identificadores en claro, sin nombres, direcciones, teléfonos ni correos:
 
