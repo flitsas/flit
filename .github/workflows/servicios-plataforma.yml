@@ -83,15 +83,20 @@ jobs:
       # ADR-0075 (H11): broker real para las pruebas de bus de los servicios (consultas, diagnóstico, notificaciones), igual
       # que en core-api.yml: servicio del job, sin Testcontainers, con usuario propio porque guest solo entra desde
       # loopback dentro del contenedor. Con CI=true las pruebas de broker no se saltan: fallan si no lo alcanzan.
+      # Imagen con el plugin de administración y 15672 publicado: las pruebas T12 (ConsultasDiagnosticoBrokerTests de
+      # diagnóstico y consultas, ConsumidoresDiagnosticoBrokerTests) crean y borran vhosts y usuarios desechables por la
+      # API HTTP (FLIT_TEST_RABBITMQ_ADMIN), autenticadas con el usuario de FLIT_TEST_RABBITMQ (el por defecto, con la
+      # etiqueta administrator). El healthcheck espera a que escuchen AMQP y la API, no solo a que el nodo arranque.
       rabbitmq:
-        image: rabbitmq:4.1-alpine
+        image: rabbitmq:4.1-management-alpine
         env:
           RABBITMQ_DEFAULT_USER: flit
           RABBITMQ_DEFAULT_PASS: flit-prueba
         ports:
           - 5672:5672
+          - 15672:15672
         options: >-
-          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-cmd "rabbitmq-diagnostics -q check_port_listener 5672 && rabbitmq-diagnostics -q check_port_listener 15672"
           --health-interval 5s
           --health-timeout 10s
           --health-retries 20
@@ -110,6 +115,7 @@ jobs:
         env:
           ConnectionStrings__Core: "Host=localhost;Port=5432;Database=flit_dev;Username=postgres;Password=postgres"
           FLIT_TEST_RABBITMQ: "amqp://flit:flit-prueba@localhost:5672/"
+          FLIT_TEST_RABBITMQ_ADMIN: "http://localhost:15672/"
         run: |
           solucion=$(.github/scripts/servicios-plataforma.sh solucion "${{ matrix.servicio }}")
           dotnet restore "$solucion"
