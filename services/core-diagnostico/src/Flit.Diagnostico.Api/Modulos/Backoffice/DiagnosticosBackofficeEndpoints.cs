@@ -8,6 +8,7 @@ using Flit.Diagnostico.Api.Persistence.Configuraciones;
 using Flit.Diagnostico.Api.Plataforma;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Diagnosticos;
+using Flit.Diagnostico.Domain.Personas;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -92,13 +93,13 @@ internal static class DiagnosticosBackofficeEndpoints
             [.. lotes.Select(l => new DiagnosticoBackofficeDto(l.Id, l.Nombre, CodigosDeEnum.Codigo(l.Estado), l.CreadoEn, l.Vehiculos, l.Errores))]));
     }
 
-    private static async Task<IResult> Grilla(Guid id, long? desde, HttpContext http, DiagnosticoDb db, CancellationToken ct)
+    private static async Task<IResult> Grilla(Guid id, long? desde, HttpContext http, DiagnosticoDb db, IProtectorDocumentoPersona protector, CancellationToken ct)
     {
         var empresa = EmpresaExplicita.De(http);
         var version = desde ?? 0;
         ConsultaGrilla.ValidarDesde(version);
         var cabecera = await CabeceraAsync(db, empresa, id, ct).ConfigureAwait(false);
-        var grilla = await ConsultaGrilla.LeerAsync(new LecturaDeLaEmpresa(db, empresa), cabecera, version, ct).ConfigureAwait(false);
+        var grilla = await ConsultaGrilla.LeerAsync(new LecturaDeLaEmpresa(db, empresa), cabecera, version, protector, ct).ConfigureAwait(false);
         return Results.Ok(GrillaBackofficeDto.De(empresa, grilla));
     }
 

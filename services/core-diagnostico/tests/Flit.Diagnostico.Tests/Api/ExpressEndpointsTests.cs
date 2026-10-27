@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -80,10 +79,10 @@ public sealed class ExpressEndpointsTests
         (await Cabeceras.ContarAsync(api, empresa.Id, ct)).Should().Be(1);
     }
 
-    // Escenario 2 (F01-C10) — sin nombre (o solo espacios) se compone «Express <identificador> <dd/mm/aaaa>» (hora de Colombia);
-    // un nombre enviado se valida como en F01 (máximo 150).
+    // Escenario 2 (F01-C10) — sin nombre (o solo espacios) se compone «Express <identificador>», sin fecha (HU #14087 AC2: la
+    // fecha ya está en creado_en); un nombre enviado se valida como en F01 (máximo 150).
     [Fact]
-    public async Task Sin_nombre_se_autogenera_con_el_identificador_y_la_fecha()
+    public async Task Sin_nombre_se_autogenera_con_el_identificador_sin_fecha()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var api = await ApiDePrueba.ConBaseAsync();
@@ -102,8 +101,7 @@ public sealed class ExpressEndpointsTests
             respuesta.StatusCode.Should().Be(HttpStatusCode.Created, texto);
             var json = JsonDocument.Parse(texto).RootElement;
             var cabecera = await Cabeceras.LeerAsync(api, empresa.Id, json.GetProperty("id").GetGuid(), ct);
-            var fecha = cabecera.CreadoEn.ToOffset(TimeSpan.FromHours(-5)).ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
-            cabecera.Nombre.Should().Be($"Express {identificador} {fecha}");
+            cabecera.Nombre.Should().Be($"Express {identificador}");
             json.GetProperty("nombre").GetString().Should().Be(cabecera.Nombre);
         }
 

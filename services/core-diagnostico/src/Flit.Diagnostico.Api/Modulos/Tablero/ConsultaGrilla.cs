@@ -10,6 +10,7 @@ using Flit.Diagnostico.Domain.Configuracion;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Diagnosticos;
 using Flit.Diagnostico.Domain.Estimacion;
+using Flit.Diagnostico.Domain.Personas;
 using Flit.Diagnostico.Domain.Vehiculos;
 using Microsoft.EntityFrameworkCore;
 
@@ -39,7 +40,8 @@ internal sealed class LecturaDeLaCompania(DiagnosticoDb db) : ILecturaTablero
 /// <c>desde=N</c> solo las celdas con <c>version_tablero &gt; N</c> (polling cada 3 s, ADR c) y la versión actual del lote.
 /// El estado global, las columnas del alcance agrupadas y el avance van siempre. La compañía lee con el contexto de la petición
 /// (filtro de la compañía del token) y la visibilidad de <see cref="AccesoLote"/>; su DTO nunca proyecta el origen, el usuario
-/// manual, el payload ni los documentos (R-20). El backoffice (HU #13799) arma la misma grilla con <see cref="LeerAsync"/> y su
+/// manual, el payload ni documentos en claro (R-20): de cada fila solo el documento declarado y los propietarios, con su tipo y
+/// enmascarados aquí (HU #14087). El backoffice (HU #13799) arma la misma grilla con <see cref="LeerAsync"/> y su
 /// propia <see cref="ILecturaTablero"/>, y proyecta además el origen y el usuario manual de cada celda. Con
 /// <c>estimado_consultas=AL_FINALIZAR</c> en la copia de configuración del lote y el lote cerrado (COMPLETADO o INCOMPLETO),
 /// agrega el estimado de <see cref="EstimadorConsultas"/> (HU #13747) frente a lo consumido: intentos con <c>desde_cache=false</c>
@@ -47,7 +49,7 @@ internal sealed class LecturaDeLaCompania(DiagnosticoDb db) : ILecturaTablero
 /// vehículos del lote, por rol y solo de la compañía del lote; lo consumido ya es un intento por persona
 /// (<c>intentos_consulta.persona_id</c>).
 /// </summary>
-internal sealed class ConsultaGrilla(DiagnosticoDb db, UsuarioActual usuario)
+internal sealed class ConsultaGrilla(DiagnosticoDb db, UsuarioActual usuario, IProtectorDocumentoPersona protector)
 {
     public const string CodigoDesdeInvalido = "DESDE_INVALIDO";
 
@@ -56,12 +58,13 @@ internal sealed class ConsultaGrilla(DiagnosticoDb db, UsuarioActual usuario)
     {
         ValidarDesde(desde);
         var cabecera = await AccesoLote.LeerVisibleAsync(db, usuario, id, seguir: false, ct).ConfigureAwait(false);
-        var grilla = await LeerAsync(new LecturaDeLaCompania(db), cabecera, desde, ct).ConfigureAwait(false);
+        var grilla = await LeerAsync(new LecturaDeLaCompania(db), cabecera, desde, protector, ct).ConfigureAwait(false);
         return new GrillaDto(
             grilla.Cabecera.Id, grilla.Cabecera.Nombre, CodigosDeEnum.Codigo(grilla.Cabecera.Estado), grilla.Cabecera.VersionTablero,
             grilla.Desde, grilla.Columnas, grilla.Avance,
             [.. grilla.Vehiculos.Select(v => new FilaVehiculoDto(
-                v.Id, v.Orden, v.Identificador, v.TipoIdentificador, v.Placa, v.Vin, v.Terminado, [.. v.Celdas.Select(Dto)]))],
+                v.Id, v.Orden, v.Identificador, v.TipoIdentificador, v.Placa, v.Vin, v.Terminado, [.. v.Celdas.Select(Dto)],
+                v.DocumentoDeclarado, v.Propietarios))],
             grilla.Estimado);
     }
 
@@ -74,12 +77,16 @@ internal sealed class ConsultaGrilla(DiagnosticoDb db, UsuarioActual usuario)
 
     /// <summary>
     /// Lee la grilla de <paramref name="cabecera"/> desde la versión dada con <paramref name="lectura"/> (la cabecera ya pasó el
-    /// control de acceso de quien llama). Las celdas traen el origen y el usuario manual: cada llamador decide qué proyecta.
+    /// control de acceso de quien llama). Las celdas traen el origen y el usuario manual: cada llamador decide qué proyecta. Los
+    /// documentos de las filas que viajan (HU #14087) salen ya enmascarados con <paramref name="protector"/>, leídos en UNA
+    /// consulta para todas las filas (sin N+1).
     /// </summary>
-    public static async Task<GrillaLeida> LeerAsync(ILecturaTablero lectura, CabeceraDiagnostico cabecera, long desde, CancellationToken ct)
+    public static async Task<GrillaLeida> LeerAsync(
+        ILecturaTablero lectura, CabeceraDiagnostico cabecera, long desde, IProtectorDocumentoPersona protector, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(lectura);
         ArgumentNullException.ThrowIfNull(cabecera);
+        ArgumentNullException.ThrowIfNull(protector);
         var id = cabecera.Id;
         var celdas = await lectura.Filas<CeldaConsulta>()
             .Where(c => c.DiagnosticoId == id)
@@ -95,20 +102,67 @@ internal sealed class ConsultaGrilla(DiagnosticoDb db, UsuarioActual usuario)
         var totalVehiculos = await vehiculos.CountAsync(ct).ConfigureAwait(false);
         var filas = await (desde == 0 ? vehiculos : vehiculos.Where(v => idsCambiados.Contains(v.Id)))
             .OrderBy(v => v.Orden)
-            .Select(v => new { v.Id, v.Orden, v.IdentificadorNorm, v.TipoIdentificador, v.Placa, v.Vin })
+            .Select(v => new
+            {
+                v.Id,
+                v.Orden,
+                v.IdentificadorNorm,
+                v.TipoIdentificador,
+                v.Placa,
+                v.Vin,
+                Captura = new DocumentoCapturado(
+                    v.LocatarioDocOrigen, v.LocatarioDocTipo, v.LocatarioDocCifrado, v.LocatarioDeclaradoDocTipo, v.LocatarioDeclaradoDocCifrado),
+            })
             .ToListAsync(ct).ConfigureAwait(false);
+        var documentos = await DocumentosAsync(lectura, cabecera.TenantId, [.. filas.Select(v => (v.Id, v.Captura))], protector, ct).ConfigureAwait(false);
 
         var ordenFuente = cabecera.Alcance.Distinct().Select((f, i) => (f, i)).ToDictionary(x => x.f, x => x.i);
         var cambiadasPorVehiculo = cambiadas.ToLookup(c => c.VehiculoId);
         var filasLeidas = filas.Select(v => new VehiculoLeido(
             v.Id, v.Orden, v.IdentificadorNorm, CodigosDeEnum.Codigo(v.TipoIdentificador), v.Placa, v.Vin,
             AvanceVehiculo.Terminado(porVehiculo.GetValueOrDefault(v.Id, []).Select(c => c.Estado)),
-            [.. cambiadasPorVehiculo[v.Id].OrderBy(c => ordenFuente.GetValueOrDefault(c.Fuente, int.MaxValue))])).ToList();
+            [.. cambiadasPorVehiculo[v.Id].OrderBy(c => ordenFuente.GetValueOrDefault(c.Fuente, int.MaxValue))],
+            documentos[v.Id].Declarado, documentos[v.Id].Propietarios)).ToList();
         var terminados = porVehiculo.Values.Count(c => AvanceVehiculo.Terminado(c.Select(x => x.Estado)));
 
         return new GrillaLeida(
             cabecera, desde, AlcanceDto.De(Alcance.Agrupar(cabecera.Alcance)), new AvanceLoteDto(totalVehiculos, terminados), filasLeidas,
             await EstimadoAsync(lectura, cabecera, ct).ConfigureAwait(false));
+    }
+
+    /// <summary>
+    /// Documentos de las filas que viajan (HU #14087), en UNA consulta a <c>personas_vehiculo</c>: los PROPIETARIO en su orden y el
+    /// declarado por el cliente. El declarado es la persona con origen <c>DECLARADO_CLIENTE</c>; si el vehículo aún no tiene
+    /// personas (RUNT sin cerrar) o el proveedor trajo su locatario, el de la captura (<c>locatario_doc_*</c> si sigue siendo el
+    /// declarado; si no, su respaldo <c>locatario_declarado_doc_*</c>). Todo se enmascara aquí; el número en claro no sale.
+    /// </summary>
+    private static async Task<Dictionary<Guid, DocumentosFila>> DocumentosAsync(
+        ILecturaTablero lectura, Guid tenant, IReadOnlyList<(Guid Id, DocumentoCapturado Captura)> filas, IProtectorDocumentoPersona protector,
+        CancellationToken ct)
+    {
+        if (filas.Count == 0)
+            return [];
+        var ids = filas.Select(f => f.Id).ToList();
+        var personas = await lectura.Filas<PersonaVehiculo>()
+            .Where(p => p.TenantId == tenant && ids.Contains(p.VehiculoId)
+                && (p.Rol == RolPersona.Propietario || p.Origen == OrigenDocumento.DeclaradoCliente))
+            .OrderBy(p => p.Rol).ThenBy(p => p.Orden)
+            .Select(p => new { p.VehiculoId, p.Rol, p.DocTipo, p.DocCifrado, p.Origen })
+            .ToListAsync(ct).ConfigureAwait(false);
+        var porVehiculo = personas.ToLookup(p => p.VehiculoId);
+        return filas.ToDictionary(f => f.Id, f =>
+        {
+            var propias = porVehiculo[f.Id].ToList();
+            var declarada = propias.FirstOrDefault(p => p.Origen == OrigenDocumento.DeclaradoCliente);
+            var declarado = declarada is not null
+                ? new DocumentoDeclaradoDto(CodigosDeEnum.Codigo(declarada.Rol), declarada.DocTipo, EnmascaradorDocumento.EnmascararCifrado(protector, declarada.DocCifrado))
+                : f.Captura.Declarado() is { } capturado
+                    ? new DocumentoDeclaradoDto(CodigosDeEnum.Codigo(RolPersona.Locatario), capturado.Tipo, EnmascaradorDocumento.EnmascararCifrado(protector, capturado.Cifrado))
+                    : null;
+            return new DocumentosFila(declarado, [.. propias
+                .Where(p => p.Rol == RolPersona.Propietario)
+                .Select(p => new PropietarioGrillaDto(p.DocTipo, EnmascaradorDocumento.EnmascararCifrado(protector, p.DocCifrado)))]);
+        });
     }
 
     private static CeldaGrillaDto Dto(CeldaLeida c) => new(
@@ -169,9 +223,30 @@ internal sealed record GrillaLeida(
     CabeceraDiagnostico Cabecera, long Desde, AlcanceDto Columnas, AvanceLoteDto Avance, IReadOnlyList<VehiculoLeido> Vehiculos,
     IReadOnlyList<EstimadoVsConsumidoDto>? Estimado);
 
-/// <summary>Un vehículo de la grilla con sus celdas cambiadas desde <c>desde</c>, en el orden del alcance.</summary>
+/// <summary>
+/// Un vehículo de la grilla con sus celdas cambiadas desde <c>desde</c>, en el orden del alcance, y sus documentos ya
+/// enmascarados (HU #14087).
+/// </summary>
 internal sealed record VehiculoLeido(
-    Guid Id, int Orden, string Identificador, string TipoIdentificador, string? Placa, string? Vin, bool Terminado, IReadOnlyList<CeldaLeida> Celdas);
+    Guid Id, int Orden, string Identificador, string TipoIdentificador, string? Placa, string? Vin, bool Terminado, IReadOnlyList<CeldaLeida> Celdas,
+    DocumentoDeclaradoDto? DocumentoDeclarado, IReadOnlyList<PropietarioGrillaDto> Propietarios);
+
+/// <summary>Documentos enmascarados de una fila (HU #14087).</summary>
+internal sealed record DocumentosFila(DocumentoDeclaradoDto? Declarado, IReadOnlyList<PropietarioGrillaDto> Propietarios);
+
+/// <summary>
+/// El locatario de la captura guardado en el vehículo (columnas <c>locatario_doc_*</c> y su respaldo), cifrado. Solo para resolver el
+/// documento declarado de la fila cuando aún no hay personas (HU #14087).
+/// </summary>
+internal sealed record DocumentoCapturado(
+    OrigenDocumento? Origen, string? Tipo, byte[]? Cifrado, string? TipoRespaldo, byte[]? CifradoRespaldo)
+{
+    /// <summary>El declarado vigente o, si el proveedor lo reemplazó, su respaldo; null si el cliente no declaró ninguno.</summary>
+    public (string Tipo, byte[] Cifrado)? Declarado() =>
+        Origen == OrigenDocumento.DeclaradoCliente && Tipo is { } tipo && Cifrado is { } cifrado ? (tipo, cifrado)
+        : TipoRespaldo is { } tipoRespaldo && CifradoRespaldo is { } cifradoRespaldo ? (tipoRespaldo, cifradoRespaldo)
+        : null;
+}
 
 /// <summary>
 /// Una celda leída, con el origen del dato y el usuario del llenado manual: solo el DTO del backoffice los proyecta; el de la

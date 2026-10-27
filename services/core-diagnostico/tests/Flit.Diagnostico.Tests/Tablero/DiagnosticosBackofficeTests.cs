@@ -6,10 +6,13 @@ using Flit.Diagnostico.Api.Modulos.Diagnosticos;
 using Flit.Diagnostico.Api.Plataforma;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Diagnosticos;
+using Flit.Diagnostico.Domain.Personas;
+using Flit.Diagnostico.Domain.Vehiculos;
 using Flit.Diagnostico.Tests.Aislamiento;
 using Flit.Diagnostico.Tests.Api;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Flit.Diagnostico.Tests.Tablero;
@@ -146,6 +149,42 @@ public sealed class DiagnosticosBackofficeTests
         var sinAuditoria = api.Token(empresa: Guid.NewGuid(), permisos: [Permisos.BackofficeVer], roles: ["backoffice_diagnostico"], tipoEmpresa: "FLIT");
         (await api.Cliente(sinAuditoria).GetAsync(Historial(lote.Id, empresas.A.Id), ct)).StatusCode
             .Should().Be(HttpStatusCode.Forbidden, "el historial real exige diagnostico.auditoria.ver");
+    }
+
+    // HU #14087 AC4 — la fila de la grilla del backoffice lleva los mismos documentos que la de la compañía: el declarado y los
+    // propietarios, solo tipo y enmascarado; nunca el número en claro.
+    [Fact]
+    public async Task Grilla_incluye_documentos_enmascarados_de_la_fila()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresas = DosEmpresas.En(api);
+        var lote = await Tablero.SembrarAsync(empresas.A, ct, vehiculos: [new("TST621", [new(Fuente.Runt, EstadoCelda.Completado, 1)])]);
+        var protector = api.App.Services.GetRequiredService<IProtectorDocumentoPersona>();
+        var vehiculo = lote.Vehiculos.Single().Id;
+        await using (var db = empresas.A.Db())
+        {
+            db.AddRange(
+                GrillaTests.Persona(protector, vehiculo, RolPersona.Propietario, 1, "CC", "1098765432", OrigenDocumento.Proveedor),
+                GrillaTests.Persona(protector, vehiculo, RolPersona.Locatario, 1, "NIT", "800111222-3", OrigenDocumento.DeclaradoCliente));
+            await db.SaveChangesAsync(ct);
+        }
+
+        var token = api.Token(empresa: Guid.NewGuid(), permisos: [Permisos.BackofficeVer, Permisos.AuditoriaVer], roles: ["backoffice_diagnostico"], tipoEmpresa: "FLIT");
+        var respuesta = await api.Cliente(token).GetAsync(Grilla(lote.Id, empresas.A.Id), ct);
+
+        var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
+        cuerpo.Should().NotContainAny(["1098765432", "800111222"]);
+        var fila = JsonDocument.Parse(cuerpo).RootElement.GetProperty("vehiculos").EnumerateArray().Single();
+        var declarado = fila.GetProperty("documento_declarado");
+        declarado.GetProperty("rol").GetString().Should().Be("LOCATARIO");
+        declarado.GetProperty("tipo_documento").GetString().Should().Be("NIT");
+        declarado.GetProperty("documento_enmascarado").GetString().Should().Be("****2223");
+        fila.GetProperty("propietarios").EnumerateArray()
+            .Select(p => $"{p.GetProperty("tipo_documento").GetString()} {p.GetProperty("documento_enmascarado").GetString()}")
+            .Should().Equal("CC ****5432");
     }
 
     // AC3 — sin ?empresa= la lista, la grilla y el historial responden 400 EMPRESA_REQUERIDA y nada se audita.

@@ -8,7 +8,8 @@ namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 /// <summary>
 /// Respuesta de <c>GET /backoffice/diagnosticos/{id}/grilla?empresa=&amp;desde=</c> (HU #13799, F06-C6): la grilla de la compañía
 /// (<see cref="GrillaDto"/>, misma semántica de <c>desde</c>/<c>version</c>) más la empresa consultada y, en cada celda, el
-/// origen del dato y el usuario del llenado manual. Sin payload ni documentos. El DTO de la compañía no cambia.
+/// origen del dato y el usuario del llenado manual. Sin payload ni documentos en claro: cada fila lleva, como la de la
+/// compañía, el documento declarado y los propietarios enmascarados (HU #14087).
 /// </summary>
 internal sealed record GrillaBackofficeDto(
     [property: JsonPropertyName("empresa")] Guid Empresa,
@@ -30,12 +31,13 @@ internal sealed record GrillaBackofficeDto(
             empresa, g.Cabecera.Id, g.Cabecera.Nombre, CodigosDeEnum.Codigo(g.Cabecera.Estado), g.Cabecera.VersionTablero, g.Desde,
             g.Columnas, g.Avance,
             [.. g.Vehiculos.Select(v => new FilaVehiculoBackofficeDto(
-                v.Id, v.Orden, v.Identificador, v.TipoIdentificador, v.Placa, v.Vin, v.Terminado, [.. v.Celdas.Select(CeldaGrillaBackofficeDto.De)]))],
+                v.Id, v.Orden, v.Identificador, v.TipoIdentificador, v.Placa, v.Vin, v.Terminado, [.. v.Celdas.Select(CeldaGrillaBackofficeDto.De)],
+                v.DocumentoDeclarado, v.Propietarios))],
             g.Estimado);
     }
 }
 
-/// <summary>Una fila de la grilla del backoffice: igual a <see cref="FilaVehiculoDto"/> con celdas del backoffice.</summary>
+/// <summary>Una fila de la grilla del backoffice: igual a <see cref="FilaVehiculoDto"/> (documentos enmascarados incluidos) con celdas del backoffice.</summary>
 internal sealed record FilaVehiculoBackofficeDto(
     [property: JsonPropertyName("id")] Guid Id,
     [property: JsonPropertyName("orden")] int Orden,
@@ -44,7 +46,9 @@ internal sealed record FilaVehiculoBackofficeDto(
     [property: JsonPropertyName("placa")] string? Placa,
     [property: JsonPropertyName("vin")] string? Vin,
     [property: JsonPropertyName("terminado")] bool Terminado,
-    [property: JsonPropertyName("celdas")] IReadOnlyList<CeldaGrillaBackofficeDto> Celdas);
+    [property: JsonPropertyName("celdas")] IReadOnlyList<CeldaGrillaBackofficeDto> Celdas,
+    [property: JsonPropertyName("documento_declarado")] DocumentoDeclaradoDto? DocumentoDeclarado,
+    [property: JsonPropertyName("propietarios")] IReadOnlyList<PropietarioGrillaDto> Propietarios);
 
 /// <summary>
 /// Una celda para el backoffice: las claves de <see cref="CeldaGrillaDto"/> más <c>origen</c> (<c>API</c> consulta a la fuente,

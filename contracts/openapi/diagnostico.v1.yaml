@@ -746,7 +746,8 @@ paths:
         `vehiculos` van solo los vehículos con alguna celda cambiada y, de cada uno, solo esas celdas; `terminado` se
         calcula con todas sus celdas (COMPLETADO o NA, R-7). El cliente guarda `version`, la manda como `desde` en el
         siguiente sondeo y fusiona por `vehiculos[].id` y `celdas[].fuente`. DTO de cliente: nunca lleva el origen de
-        la celda, el usuario que la llenó a mano, el payload ni documentos (R-20). Con estimado_consultas=AL_FINALIZAR
+        la celda, el usuario que la llenó a mano, el payload ni documentos en claro (R-20); cada fila que viaja lleva
+        sus documentos actuales enmascarados en el servidor (`documento_declarado`, `propietarios`, HU #14087). Con estimado_consultas=AL_FINALIZAR
         en la copia de configuración del lote y el lote COMPLETADO o INCOMPLETO trae `estimado_consultas` (estimado por
         fuente frente a consumidas: intentos con desde_cache=false, sin los de llenado manual); en otro caso la clave
         no viene. Otra compañía, o un lote de otro usuario con visibilidad_usuario=PROPIOS, responde 404.
@@ -1496,8 +1497,8 @@ paths:
         POST /diagnosticos/{id}/vehiculos (documento del locatario cifrado con origen DECLARADO_CLIENTE, estimado en la
         cabecera, entrega al motor de consultas, que crea las celdas y deja el lote EN_PROCESO, HU #13727; por eso
         `estado` llega EN_PROCESO). Si algo falla no queda cabecera ni vehículo. Sin nombre (o solo
-        espacios) se autogenera «Express IDENTIFICADOR dd/mm/aaaa» con el identificador normalizado y la fecha de
-        Colombia; un nombre enviado se valida como en POST /diagnosticos (máximo 150).
+        espacios) se autogenera «Express IDENTIFICADOR» con el identificador normalizado, sin fecha (HU #14087; los
+        nombres ya guardados no cambian); un nombre enviado se valida como en POST /diagnosticos (máximo 150).
       requestBody:
         required: true
         content:
@@ -2063,7 +2064,8 @@ paths:
       description: >
         HU #13799 (F06-H2, F06-C5/C6). Misma política y empresa explícita que listarDiagnosticosBackoffice (la lectura
         queda auditada). Es la grilla de obtenerGrillaDiagnostico (misma semántica de `desde`/`version`, columnas, avance
-        y estimado_consultas) más `empresa` y, en cada celda, `origen` y `usuario_manual_id`. Sin payload ni documentos.
+        y estimado_consultas) más `empresa` y, en cada celda, `origen` y `usuario_manual_id`. Sin payload ni documentos
+        en claro: cada fila lleva, como la de la compañía, `documento_declarado` y `propietarios` enmascarados (HU #14087).
         No aplica la visibilidad_usuario de la compañía. El DTO de la compañía no cambia.
       parameters:
         - name: empresa
@@ -2983,7 +2985,7 @@ components:
           type: string
           nullable: true
           maxLength: 150
-          description: Vacío o ausente se autogenera «Express IDENTIFICADOR dd/mm/aaaa».
+          description: Vacío o ausente se autogenera «Express IDENTIFICADOR» (sin fecha, HU #14087).
         modo:
           $ref: "#/components/schemas/ModoDiagnostico"
         tipo_tramite_codigo:
@@ -3098,7 +3100,7 @@ components:
 
     FilaVehiculo:
       type: object
-      required: [id, orden, identificador, tipo_identificador, placa, vin, terminado, celdas]
+      required: [id, orden, identificador, tipo_identificador, placa, vin, terminado, celdas, documento_declarado, propietarios]
       properties:
         id:
           type: string
@@ -3125,6 +3127,49 @@ components:
           description: Solo las celdas cambiadas desde `desde`, en el orden del alcance.
           items:
             $ref: "#/components/schemas/CeldaGrilla"
+        documento_declarado:
+          allOf:
+            - $ref: "#/components/schemas/DocumentoDeclaradoGrilla"
+          nullable: true
+          description: >
+            HU #14087. El documento que declaró el cliente para el vehículo (hoy el locatario de la captura masiva o
+            Express); null si no declaró ninguno. Es el origen del documento, no el de la celda (que sigue sin viajar, R-20).
+        propietarios:
+          type: array
+          description: >
+            HU #14087. Los propietarios que trajo el RUNT, en su orden; siempre presente, vacío mientras el RUNT no
+            los registre. Solo tipo y número enmascarado.
+          items:
+            $ref: "#/components/schemas/PropietarioGrilla"
+
+    DocumentoDeclaradoGrilla:
+      type: object
+      description: Documento declarado por el cliente, enmascarado en el servidor («****» + 4 últimos alfanuméricos).
+      required: [rol, tipo_documento, documento_enmascarado]
+      properties:
+        rol:
+          type: string
+          enum: [PROPIETARIO, LOCATARIO]
+        tipo_documento:
+          type: string
+          example: CC
+        documento_enmascarado:
+          type: string
+          example: "****5678"
+          description: Nunca el número en claro; «****» si tiene 4 caracteres o menos o no se puede leer.
+
+    PropietarioGrilla:
+      type: object
+      description: Un propietario del RUNT, enmascarado en el servidor («****» + 4 últimos alfanuméricos).
+      required: [tipo_documento, documento_enmascarado]
+      properties:
+        tipo_documento:
+          type: string
+          example: NIT
+        documento_enmascarado:
+          type: string
+          example: "****4567"
+          description: Nunca el número en claro.
 
     CeldaGrilla:
       type: object
@@ -3289,6 +3334,7 @@ components:
             tipo_tramite: { codigo: TRASPASO_STANDARD, nombre: TRASPASO }
             estado: EN_PROCESO
             usuario_creador: { id: 5f0c7a2e-1b2c-4d3e-8f90-0a1b2c3d4e5f, nombre: Ana Prueba }
+            es_express: false
           - id: 0199f3a1-1111-7000-8000-000000000001
             nombre: Lote sin lanzar
             creado_en: "2026-10-21T13:00:00+00:00"
@@ -3296,10 +3342,11 @@ components:
             tipo_tramite: null
             estado: CREADO
             usuario_creador: { id: 6a1d8b3f-2c3d-4e5f-9a01-1b2c3d4e5f60, nombre: No disponible }
+            es_express: false
 
     DiagnosticoListado:
       type: object
-      required: [id, nombre, creado_en, modo, tipo_tramite, estado, usuario_creador]
+      required: [id, nombre, creado_en, modo, tipo_tramite, estado, usuario_creador, es_express]
       properties:
         id:
           type: string
@@ -3333,6 +3380,9 @@ components:
             nombre:
               type: string
               description: Nombre visible según Identidad; «No disponible» si no se pudo resolver.
+        es_express:
+          type: boolean
+          description: HU #14087. true si el lote nació del Diagnóstico Express (columna «Modalidad»); false en el masivo.
 
     ListaDiagnosticosBackoffice:
       type: object
@@ -3399,7 +3449,7 @@ components:
                 $ref: "#/components/schemas/FilaVehiculoBackoffice"
 
     FilaVehiculoBackoffice:
-      description: FilaVehiculo con celdas del backoffice.
+      description: FilaVehiculo (documentos enmascarados incluidos, HU #14087) con celdas del backoffice.
       allOf:
         - $ref: "#/components/schemas/FilaVehiculo"
         - type: object

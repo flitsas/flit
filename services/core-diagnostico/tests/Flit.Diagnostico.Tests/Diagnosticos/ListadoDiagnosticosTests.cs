@@ -282,6 +282,24 @@ public sealed class ListadoDiagnosticosTests
         respuesta.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await respuesta.Content.ReadAsStringAsync(ct)).Should().BeEmpty();
     }
+
+    // HU #14087 AC1 — cada lote del listado trae es_express (requerido) desde la cabecera: true en el Express, false en el masivo.
+    [Fact]
+    public async Task Cada_lote_indica_si_es_express()
+    {
+        await using var api = await ListadoDePrueba.ArrancarAsync(new UsuariosIdentidadDePrueba());
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var masivo = await ListadoDePrueba.LoteAsync(empresa, "Lote masivo", ListadoDePrueba.Instante("2026-10-20T08:00:00-05:00"), ct);
+        var express = await ListadoDePrueba.LoteAsync(empresa, "Express TST201", ListadoDePrueba.Instante("2026-10-21T08:00:00-05:00"), ct, esExpress: true);
+
+        var items = await ListadoDePrueba.DiagnosticosAsync(await empresa.Cliente().GetAsync(ListadoDePrueba.Ruta, ct), ct);
+
+        items.Select(i => i.GetProperty("id").GetGuid()).Should().Equal(express.Id, masivo.Id);
+        items.Select(i => i.TryGetProperty("es_express", out var valor) ? valor.ValueKind : JsonValueKind.Undefined)
+            .Should().Equal([JsonValueKind.True, JsonValueKind.False], "es_express va siempre, como booleano");
+    }
 }
 
 /// <summary>Ayudas del listado (HU #13845): la API con Identidad de prueba, la siembra de cabeceras y la lectura de la respuesta.</summary>
@@ -310,12 +328,14 @@ internal static class ListadoDePrueba
     /// <summary>Siembra una cabecera de la empresa con la fecha de creación dada (sin vehículos).</summary>
     public static async Task<CabeceraDiagnostico> LoteAsync(
         EmpresaDePrueba empresa, string nombre, DateTimeOffset creadoEn, CancellationToken ct, Guid? creador = null,
-        ModoDiagnostico modo = ModoDiagnostico.Simple, string? tipo = null, EstadoDiagnostico estado = EstadoDiagnostico.EnProceso)
+        ModoDiagnostico modo = ModoDiagnostico.Simple, string? tipo = null, EstadoDiagnostico estado = EstadoDiagnostico.EnProceso,
+        bool esExpress = false)
     {
         var cabecera = new CabeceraDiagnostico
         {
             Nombre = nombre,
             Modo = modo,
+            EsExpress = esExpress,
             TipoTramiteCodigo = tipo,
             Alcance = [Fuente.Runt],
             Configuracion = Tablero.Tablero.Configuracion(),

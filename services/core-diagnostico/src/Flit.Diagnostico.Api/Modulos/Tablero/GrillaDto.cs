@@ -9,7 +9,8 @@ namespace Flit.Diagnostico.Api.Modulos.Tablero;
 /// celdas con <c>version</c> mayor (con <c>desde=0</c>, todo). <c>vehiculos</c> trae solo los vehículos con alguna celda
 /// cambiada y, de cada uno, solo esas celdas; <c>terminado</c> se calcula con TODAS sus celdas (R-7). El estado global,
 /// las columnas y el avance van siempre. DTO de cliente: nunca lleva el origen de la celda, el usuario que la llenó a mano,
-/// el payload ni documentos (R-20; <c>GrillaTests</c> lo verifica por reflexión). <c>estimado_consultas</c> solo aparece con
+/// el payload ni documentos en claro (R-20; <c>GrillaTests</c> lo verifica por reflexión). Desde HU #14087 cada fila lleva el
+/// documento declarado y el de cada propietario, solo con su tipo y ENMASCARADO en el servidor. <c>estimado_consultas</c> solo aparece con
 /// <c>estimado_consultas=AL_FINALIZAR</c> en la copia de configuración del lote y el lote cerrado (R-11b).
 /// </summary>
 public sealed record GrillaDto(
@@ -29,7 +30,10 @@ public sealed record AvanceLoteDto(
     [property: JsonPropertyName("vehiculos")] int Vehiculos,
     [property: JsonPropertyName("terminados")] int Terminados);
 
-/// <summary>Una fila de la grilla: el vehículo y sus celdas (solo las cambiadas desde <c>desde</c>).</summary>
+/// <summary>
+/// Una fila de la grilla: el vehículo, sus celdas (solo las cambiadas desde <c>desde</c>) y sus documentos actuales (HU #14087):
+/// el declarado por el cliente (null si no hay) y los propietarios del RUNT en su orden (vacío si aún no hay), enmascarados.
+/// </summary>
 public sealed record FilaVehiculoDto(
     [property: JsonPropertyName("id")] Guid Id,
     [property: JsonPropertyName("orden")] int Orden,
@@ -38,7 +42,24 @@ public sealed record FilaVehiculoDto(
     [property: JsonPropertyName("placa")] string? Placa,
     [property: JsonPropertyName("vin")] string? Vin,
     [property: JsonPropertyName("terminado")] bool Terminado,
-    [property: JsonPropertyName("celdas")] IReadOnlyList<CeldaGrillaDto> Celdas);
+    [property: JsonPropertyName("celdas")] IReadOnlyList<CeldaGrillaDto> Celdas,
+    [property: JsonPropertyName("documento_declarado")] DocumentoDeclaradoDto? DocumentoDeclarado,
+    [property: JsonPropertyName("propietarios")] IReadOnlyList<PropietarioGrillaDto> Propietarios);
+
+/// <summary>
+/// El documento que declaró el cliente para el vehículo (HU #14087; hoy el locatario de la captura masiva o Express): rol
+/// (<c>PROPIETARIO</c> o <c>LOCATARIO</c>), tipo y número enmascarado (<c>****</c> + 4 últimos). Es el origen del DOCUMENTO,
+/// que la compañía ya ve; el origen de la celda (API/MANUAL) sigue sin viajar (R-20).
+/// </summary>
+public sealed record DocumentoDeclaradoDto(
+    [property: JsonPropertyName("rol")] string Rol,
+    [property: JsonPropertyName("tipo_documento")] string TipoDocumento,
+    [property: JsonPropertyName("documento_enmascarado")] string DocumentoEnmascarado);
+
+/// <summary>Un propietario que trajo el RUNT (HU #14087): tipo y número enmascarado; nunca el número en claro.</summary>
+public sealed record PropietarioGrillaDto(
+    [property: JsonPropertyName("tipo_documento")] string TipoDocumento,
+    [property: JsonPropertyName("documento_enmascarado")] string DocumentoEnmascarado);
 
 /// <summary>
 /// Una celda del semáforo: fuente, estado, motivo de N/A, tipo de error y la fecha y hora del dato (D-10; en la reutilizada,

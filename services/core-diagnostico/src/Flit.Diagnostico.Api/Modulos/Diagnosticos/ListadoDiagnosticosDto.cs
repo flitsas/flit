@@ -15,7 +15,8 @@ public sealed record ListadoDiagnosticosDto(
 
 /// <summary>
 /// Un lote del listado: <c>estado</c> es el código del lote (CREADO = «Sin lanzar» en la interfaz), <c>tipo_tramite</c> es null
-/// en el modo SIMPLE y <c>usuario_creador.nombre</c> lo da Identidad («No disponible» si no responde).
+/// en el modo SIMPLE, <c>usuario_creador.nombre</c> lo da Identidad («No disponible» si no responde) y <c>es_express</c> dice si
+/// el lote nació del Diagnóstico Express (columna «Modalidad», HU #14087).
 /// </summary>
 public sealed record DiagnosticoListadoDto(
     [property: JsonPropertyName("id")] Guid Id,
@@ -24,7 +25,8 @@ public sealed record DiagnosticoListadoDto(
     [property: JsonPropertyName("modo")] string Modo,
     [property: JsonPropertyName("tipo_tramite")] TipoTramiteListadoDto? TipoTramite,
     [property: JsonPropertyName("estado")] string Estado,
-    [property: JsonPropertyName("usuario_creador")] UsuarioCreadorDto UsuarioCreador);
+    [property: JsonPropertyName("usuario_creador")] UsuarioCreadorDto UsuarioCreador,
+    [property: JsonPropertyName("es_express")] bool EsExpress);
 
 /// <summary>Tipo de trámite del lote Con Análisis IA; si el código ya no está publicado en la etapa, el nombre es el código.</summary>
 public sealed record TipoTramiteListadoDto(

@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using Flit.Diagnostico.Domain.Personas;
+
 namespace Flit.Diagnostico.Api.Modulos.Tablero;
 
 /// <summary>
@@ -22,5 +25,23 @@ internal static class EnmascaradorDocumento
             return Mascara;
         var limpio = new string([.. documento.Where(char.IsLetterOrDigit)]);
         return limpio.Length <= Visibles ? Mascara : Mascara + limpio[^Visibles..];
+    }
+
+    /// <summary>
+    /// El documento cifrado, descifrado SOLO para enmascararlo (HU #14087, grilla); si no se puede descifrar, solo la máscara.
+    /// El número en claro no sale de este método.
+    /// </summary>
+    public static string EnmascararCifrado(IProtectorDocumentoPersona protector, byte[] cifrado)
+    {
+        ArgumentNullException.ThrowIfNull(protector);
+        ArgumentNullException.ThrowIfNull(cifrado);
+        try
+        {
+            return Enmascarar(protector.Desproteger(cifrado));
+        }
+        catch (CryptographicException)
+        {
+            return Mascara;
+        }
     }
 }

@@ -1,4 +1,3 @@
-using System.Globalization;
 using Flit.Diagnostico.Api.Modulos.Carga;
 using Flit.Diagnostico.Api.Modulos.Configuracion;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
@@ -21,7 +20,7 @@ namespace Flit.Diagnostico.Api.Modulos.Express;
 /// <see cref="ServicioCabecera"/> (<c>es_express=true</c>, reglas de F01-H4) y confirma el vehículo con
 /// <see cref="ServicioConfirmacionVehiculos"/> (documento del locatario cifrado con origen DECLARADO_CLIENTE, estimado en la
 /// cabecera y entrega al encolador); si algo falla no queda cabecera huérfana. Sin nombre, se autogenera
-/// «Express &lt;identificador&gt; &lt;dd/mm/aaaa&gt;» con la fecha de Colombia, igual que la app (#13752). El estimado de vista
+/// «Express &lt;identificador&gt;», sin fecha (HU #14087: la fecha ya está en <c>creado_en</c>; los nombres guardados no cambian). El estimado de vista
 /// previa usa la configuración vigente de la compañía y no persiste nada. Los logs solo llevan el id.
 /// </summary>
 internal sealed partial class ServicioExpress(
@@ -29,15 +28,11 @@ internal sealed partial class ServicioExpress(
     UsuarioActual usuario,
     ServicioCabecera cabeceras,
     ServicioConfirmacionVehiculos confirmacion,
-    TimeProvider reloj,
     ILogger<ServicioExpress> log)
 {
     public const string CampoIdentificador = "identificador";
     public const string CampoTipoDocumento = "tipo_documento_locatario";
     public const string CampoDocumento = "documento_locatario";
-
-    /// <summary>Colombia no tiene horario de verano: UTC-5 todo el año.</summary>
-    private static readonly TimeSpan HoraColombia = TimeSpan.FromHours(-5);
 
     public async Task<(CabeceraDiagnostico Cabecera, ConfirmacionLote Confirmacion)> CrearAsync(ExpressEntradaDto entrada, CancellationToken ct)
     {
@@ -50,7 +45,7 @@ internal sealed partial class ServicioExpress(
             throw new ReglaException(error.Codigo, error.Mensaje) { Campo = Campo(error.Campo) };
         }
 
-        var nombre = string.IsNullOrWhiteSpace(entrada.Nombre) ? NombreAutogenerado(fila.Normalizado, reloj.GetUtcNow()) : entrada.Nombre;
+        var nombre = string.IsNullOrWhiteSpace(entrada.Nombre) ? NombreAutogenerado(fila.Normalizado) : entrada.Nombre;
         var cabeceraEntrada = new CabeceraEntradaDto(nombre, entrada.Modo, entrada.TipoTramiteCodigo, entrada.Alcance);
         VehiculoCapturado[] capturados = [new(entrada.Identificador, entrada.TipoDocumentoLocatario, entrada.DocumentoLocatario)];
 
@@ -91,9 +86,8 @@ internal sealed partial class ServicioExpress(
         return new EstimadoExpressDto(true, [.. estimado.Select(EstimadoFuenteDto.De)]);
     }
 
-    /// <summary>«Express &lt;identificador normalizado&gt; &lt;dd/mm/aaaa&gt;» con el día en la hora de Colombia.</summary>
-    internal static string NombreAutogenerado(string identificadorNorm, DateTimeOffset ahora) =>
-        $"Express {identificadorNorm} {ahora.ToOffset(HoraColombia).ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)}";
+    /// <summary>«Express &lt;identificador normalizado&gt;», sin fecha (HU #14087).</summary>
+    internal static string NombreAutogenerado(string identificadorNorm) => $"Express {identificadorNorm}";
 
     private static string Campo(CampoFilaVehiculo campo) => campo switch
     {

@@ -136,7 +136,7 @@ internal sealed class ListadoDiagnosticos(DiagnosticoDb db, UsuarioActual usuari
         var lotes = await cabeceras
             .OrderByDescending(c => c.CreadoEn).ThenByDescending(c => c.Id)
             .Skip((filtro.Pagina - 1) * filtro.Tamano).Take(filtro.Tamano)
-            .Select(c => new { c.Id, c.Nombre, c.CreadoEn, c.Modo, c.TipoTramiteCodigo, c.Estado, c.UsuarioCreadorId })
+            .Select(c => new { c.Id, c.Nombre, c.CreadoEn, c.Modo, c.TipoTramiteCodigo, c.Estado, c.UsuarioCreadorId, c.EsExpress })
             .ToListAsync(ct).ConfigureAwait(false);
 
         var creadores = lotes.Count == 0
@@ -148,7 +148,8 @@ internal sealed class ListadoDiagnosticos(DiagnosticoDb db, UsuarioActual usuari
             l.Id, l.Nombre, l.CreadoEn, CodigosDeEnum.Codigo(l.Modo),
             l.TipoTramiteCodigo is { } codigo ? new TipoTramiteListadoDto(codigo, tipos.GetValueOrDefault(codigo, codigo)) : null,
             CodigosDeEnum.Codigo(l.Estado),
-            new UsuarioCreadorDto(l.UsuarioCreadorId, creadores.GetValueOrDefault(l.UsuarioCreadorId, ResolutorNombresUsuario.NoDisponible))))]);
+            new UsuarioCreadorDto(l.UsuarioCreadorId, creadores.GetValueOrDefault(l.UsuarioCreadorId, ResolutorNombresUsuario.NoDisponible)),
+            l.EsExpress))]);
     }
 
     /// <summary>Código → nombre de los tipos publicados en la etapa; vacío si el catálogo no está disponible (el nombre será el código).</summary>
