@@ -24,11 +24,11 @@ describe("lib/backoffice/api — toda llamada lleva ?empresa=", () => {
   it("lista de lotes con empresa, estado, con_errores, pagina y tamano", async () => {
     const fetchMock = simularApi({ "GET /backoffice/diagnosticos": () => Response.json(listaLotes([lote(1)])) });
 
-    const lista = await listarLotesBackoffice(EMPRESA_A, { estado: "INCOMPLETO", conErrores: true, pagina: 2, tamano: 25 });
+    const lista = await listarLotesBackoffice(EMPRESA_A, { estado: "INCOMPLETO", conErrores: true, pagina: 2, tamano: 30 });
 
     const url = urlDe(fetchMock);
     expect(url.pathname).toBe("/api/v1/diagnostico/backoffice/diagnosticos");
-    expect(Object.fromEntries(url.searchParams)).toEqual({ empresa: EMPRESA_A, estado: "INCOMPLETO", con_errores: "true", pagina: "2", tamano: "25" });
+    expect(Object.fromEntries(url.searchParams)).toEqual({ empresa: EMPRESA_A, estado: "INCOMPLETO", con_errores: "true", pagina: "2", tamano: "30" });
     expect(lista.diagnosticos).toHaveLength(1);
   });
 

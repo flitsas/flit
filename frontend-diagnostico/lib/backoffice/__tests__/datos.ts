@@ -96,7 +96,7 @@ export function lote(n: number, cambios: Partial<DiagnosticoBackoffice> = {}): D
 }
 
 export function listaLotes(diagnosticos: DiagnosticoBackoffice[], cambios: Partial<ListaDiagnosticosBackoffice> = {}): ListaDiagnosticosBackoffice {
-  return { empresa: EMPRESA_A, pagina: 1, tamano: 50, total: diagnosticos.length, diagnosticos, ...cambios };
+  return { empresa: EMPRESA_A, pagina: 1, tamano: 10, total: diagnosticos.length, diagnosticos, ...cambios };
 }
 
 export function formulario(fuente: Fuente, cambios: Partial<FormularioManual> = {}): FormularioManual {

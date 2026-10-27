@@ -7,6 +7,7 @@ import { Building2, ClipboardList } from "lucide-react";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { Pagination } from "@flit/ui/Pagination";
+import { TAMANO_DE_PAGINA_POR_DEFECTO } from "@flit/ui/usePaginacion";
 import {
   BOTON_REINTENTAR_CLS,
   CAMPO_CLS,
@@ -41,7 +42,8 @@ export interface ListaLotesBackofficeProps {
 type Carga = { tipo: "cargando" } | { tipo: "error"; error: unknown } | { tipo: "listo"; lista: ListaDiagnosticosBackoffice };
 
 const ESTADOS: EstadoDiagnostico[] = ["CREADO", "EN_PROCESO", "COMPLETADO", "INCOMPLETO"];
-const TAMANO_INICIAL = 50;
+/** El estándar de las tablas FLIT (HU #13916). Solo cambia desde el selector, que ofrece 10/20/30/50; no viaja si es este. */
+const TAMANO_INICIAL = TAMANO_DE_PAGINA_POR_DEFECTO;
 
 interface Filtros {
   empresa: string;

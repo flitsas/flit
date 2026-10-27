@@ -71,6 +71,24 @@ describe("ListaLotesBackoffice — AC1: compañía elegida y filtro «con errore
     expect(consultas(fetchMock)[0]).toEqual({ empresa: EMPRESA_A, estado: "INCOMPLETO", con_errores: "true", pagina: "1" });
   });
 
+  it("paginación estándar (HU #13916): selector 10/20/30/50; 10 es el defecto y no viaja, 30 sí", async () => {
+    const fetchMock = simularApi({
+      "GET /backoffice/diagnosticos": (url) => Response.json(listaLotes([lote(1)], { tamano: Number(url.searchParams.get("tamano") ?? 10), total: 60 })),
+    });
+    montar({ empresa: EMPRESA_A });
+    await screen.findByRole("table", { name: /lotes de la compañía/i });
+    expect(consultas(fetchMock)[0]).not.toHaveProperty("tamano");
+    const selector = screen.getByLabelText("Filas por página") as HTMLSelectElement;
+    expect(Array.from(selector.options).map((o) => o.value)).toEqual(["10", "20", "30", "50"]);
+    expect(selector).toHaveValue("10");
+
+    fireEvent.change(selector, { target: { value: "30" } });
+    await waitFor(() => expect(consultas(fetchMock).at(-1)).toMatchObject({ tamano: "30", pagina: "1" }));
+    fireEvent.change(await screen.findByLabelText("Filas por página"), { target: { value: "10" } });
+    await waitFor(() => expect(consultas(fetchMock)).toHaveLength(3));
+    expect(consultas(fetchMock).at(-1)).not.toHaveProperty("tamano");
+  });
+
   it("vacío: la compañía no tiene lotes con esos filtros", async () => {
     simularApi({ "GET /backoffice/diagnosticos": () => Response.json(listaLotes([])) });
     montar({ empresa: EMPRESA_A });
