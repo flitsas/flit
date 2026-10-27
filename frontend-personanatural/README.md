@@ -19,3 +19,27 @@ CORE_API_ORIGIN=http://localhost:4002 pnpm --filter @flit/frontend-personanatura
 ```
 
 Variable de entorno (servidor, por ambiente): `CORE_API_ORIGIN` = gateway que enruta `/api/v1/persona-natural/*`.
+
+## IP del ciudadano detrás de nginx
+
+El BFF limita por IP, así que el proxy del portal (`lib/server/ip.ts`) NO confía en el primer valor de `X-Forwarded-For`
+(lo controla el cliente). Orden: `X-Real-IP`; si falta, el salto de `X-Forwarded-For` número `TRUSTED_PROXY_HOPS`
+contando desde la derecha (variable de servidor, por defecto `1`).
+
+nginx debe **sobrescribir** ambas cabeceras con la IP que él ve, nunca anexar a lo que trae el cliente:
+
+```nginx
+proxy_set_header X-Real-IP       $remote_addr;
+proxy_set_header X-Forwarded-For $remote_addr;   # no usar $proxy_add_x_forwarded_for
+```
+
+Si hay otro proxy propio delante de nginx, ajustar `TRUSTED_PROXY_HOPS` al número de proxies propios.
+
+## Cabeceras de seguridad
+
+`next.config.ts` aplica a todas las rutas (incluida `/api/...`) la política de `lib/seguridad/cabeceras.ts`: CSP,
+HSTS, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` y `Permissions-Policy`. El captcha permitido en
+`script-src`/`frame-src` es una lista fija: Cloudflare Turnstile (`https://challenges.cloudflare.com`) y Google
+reCAPTCHA (`https://www.google.com/recaptcha/`, `https://www.gstatic.com/recaptcha/`). Límite conocido: las páginas son
+estáticas, sin nonce por petición, por lo que `script-src` y `style-src` llevan `'unsafe-inline'` (scripts de arranque
+de Next y estilos en línea); no se permite `unsafe-eval` en producción.

@@ -1,6 +1,7 @@
 import { cookies, headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { portalConfig } from "@/lib/config.server";
+import { ipDelCliente } from "@/lib/server/ip";
 import { COOKIE_SESION, reenviarAlBff } from "@/lib/server/proxy";
 
 // /api/v1/persona-natural/* del navegador → gateway → BFF del portal. El token de la sesión del trámite vive en una
@@ -14,7 +15,7 @@ async function handle(request: Request, context: Context): Promise<Response> {
   const config = portalConfig();
   const jar = await cookies();
   const cabeceras = await headers();
-  const ip = cabeceras.get("x-forwarded-for")?.split(",")[0]?.trim() || cabeceras.get("x-real-ip") || undefined;
+  const ip = ipDelCliente(cabeceras, config.saltosProxyConfianza);
 
   const resultado = await reenviarAlBff(request, path, {
     apiOrigin: config.apiOrigin,
