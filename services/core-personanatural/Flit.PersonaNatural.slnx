@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Flit.PersonaNatural.Api/Flit.PersonaNatural.Api.csproj" />
+    <Project Path="src/Flit.PersonaNatural.Grpc.Contracts/Flit.PersonaNatural.Grpc.Contracts.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Flit.PersonaNatural.Tests/Flit.PersonaNatural.Tests.csproj" />
+  </Folder>
+</Solution>

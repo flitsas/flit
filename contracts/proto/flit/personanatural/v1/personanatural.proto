@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package flit.personanatural.v1;
+
+option csharp_namespace = "Flit.PersonaNatural.Grpc.V1";
+
+// Lo que core-personanatural (el servicio del portal de persona natural, ADR-0075) ofrece a otros servicios de FLIT.
+// El portal es un BFF: su front habla con él por REST; este contrato es solo para llamadas internas de plataforma
+// (contrato v1.3 §6.1), por ejemplo para que FLIT 2 lea el estado de una solicitud.
+//
+// Autenticación: token de servicio con `aud=personanatural`. La empresa viaja en la metadata `x-flit-tenant-id`.
+service SolicitudesService {
+  // Estado de una solicitud del portal. NOT_FOUND con `reason = solicitud_no_encontrada` si no existe.
+  rpc ObtenerEstadoSolicitud(ObtenerEstadoSolicitudRequest) returns (ObtenerEstadoSolicitudResponse);
+}
+
+message ObtenerEstadoSolicitudRequest {
+  // Id de la solicitud en el portal.
+  string solicitud_id = 1;
+}
+
+message ObtenerEstadoSolicitudResponse {
+  string solicitud_id = 1;
+  // Radicado visible para el ciudadano antes de que exista el trámite en FLIT 2.
+  string codigo_publico = 2;
+  // borrador | pendiente_validacion | en_cola | creada | rechazada_creacion | cancelada
+  string estado = 3;
+  // Código del tipo de trámite (el mismo de tramites.procedure_types).
+  string tipo_tramite_codigo = 4;
+  // Vacío mientras el trámite no exista en FLIT 2.
+  string procedure_instance_id = 5;
+}
