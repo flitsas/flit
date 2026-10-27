@@ -15,8 +15,8 @@ public sealed class EsquemaDelPortalTests : IAsyncLifetime
 {
     private static readonly string[] TablasDelPortal =
     [
-        "solicitud_tramite", "persona_solicitante", "adjunto", "sesion_tramite", "cuota_consulta",
-        "consentimiento", "historial_estado", "acceso_pii_log", "intento_reanudar", "outbox", "inbox",
+        "procedure_request", "requester_person", "attachment", "procedure_session", "query_quota",
+        "consent", "status_history", "pii_access_log", "resume_attempt", "retention_config", "identity_audit", "outbox", "inbox",
     ];
 
     private string _database = string.Empty;
@@ -104,7 +104,7 @@ public sealed class EsquemaDelPortalTests : IAsyncLifetime
             await act.Should().NotThrowAsync();
         else
             (await act.Should().ThrowAsync<DbUpdateException>()).WithInnerException<PostgresException>()
-                .Which.ConstraintName.Should().Be("ck_solicitud_estado");
+                .Which.ConstraintName.Should().Be("ck_procedure_request_status");
     }
 
     [Fact]
@@ -114,7 +114,7 @@ public sealed class EsquemaDelPortalTests : IAsyncLifetime
         await using var sinNada = NuevaDb();
         sinNada.Add(Solicitud("borrador"));
         (await ((Func<Task>)(() => sinNada.SaveChangesAsync(TestContext.Current.CancellationToken))).Should().ThrowAsync<DbUpdateException>())
-            .WithInnerException<PostgresException>().Which.ConstraintName.Should().Be("ck_solicitud_vehiculo");
+            .WithInnerException<PostgresException>().Which.ConstraintName.Should().Be("ck_procedure_request_vehicle");
 
         await using var soloVin = NuevaDb();
         soloVin.Add(Solicitud("borrador", vin: "9BWZZZ377VT004251"));
@@ -135,7 +135,7 @@ public sealed class EsquemaDelPortalTests : IAsyncLifetime
         await using var db2 = NuevaDb();
         db2.Add(b);
         (await ((Func<Task>)(() => db2.SaveChangesAsync(TestContext.Current.CancellationToken))).Should().ThrowAsync<DbUpdateException>())
-            .WithInnerException<PostgresException>().Which.ConstraintName.Should().Be("uq_solicitud_idem");
+            .WithInnerException<PostgresException>().Which.ConstraintName.Should().Be("uq_procedure_request_idempotency");
 
         await using var db3 = NuevaDb();
         var c = Solicitud("borrador", placa: "CCC333"); c.TenantId = empresa;

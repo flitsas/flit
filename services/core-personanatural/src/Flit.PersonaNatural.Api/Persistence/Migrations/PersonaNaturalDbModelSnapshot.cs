@@ -23,7 +23,7 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.HasSequence("codigo_publico_seq", "personanatural");
+            modelBuilder.HasSequence("public_code_seq", "personanatural");
 
             modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.AccesoPiiLog", b =>
                 {
@@ -38,7 +38,7 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(60)
                         .HasColumnType("character varying(60)")
-                        .HasColumnName("accion");
+                        .HasColumnName("action");
 
                     b.Property<string>("Actor")
                         .IsRequired()
@@ -48,25 +48,29 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
 
                     b.Property<byte[]>("IpHash")
                         .HasColumnType("bytea")
-                        .HasColumnName("ip_hash");
+                        .HasColumnName("ip_hash")
+                        .HasComment("@pii:medium Huella HMAC de la IP (no es la IP).");
 
                     b.Property<DateTimeOffset>("OcurrioEn")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("ocurrio_en")
+                        .HasColumnName("occurred_at")
                         .HasDefaultValueSql("now()");
 
                     b.Property<Guid?>("SolicitudId")
                         .HasColumnType("uuid")
-                        .HasColumnName("solicitud_id");
+                        .HasColumnName("procedure_request_id");
 
                     b.HasKey("Id")
-                        .HasName("pk_acceso_pii_log");
+                        .HasName("pk_pii_access_log");
 
                     b.HasIndex("SolicitudId", "OcurrioEn")
-                        .HasDatabaseName("ix_acceso_pii_solicitud_fecha");
+                        .HasDatabaseName("ix_pii_access_log_request_occurred");
 
-                    b.ToTable("acceso_pii_log", "personanatural");
+                    b.ToTable("pii_access_log", "personanatural", t =>
+                        {
+                            t.HasComment("Auditoría de acceso a datos personales. Solo inserción, sin llaves foráneas ni disparadores (como el registro de acceso externo, ADR-0067).");
+                        });
                 });
 
             modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.Adjunto", b =>
@@ -91,7 +95,8 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")
-                        .HasColumnName("nombre_archivo");
+                        .HasColumnName("file_name")
+                        .HasComment("@pii:medium Nombre del archivo que subió el ciudadano; puede contener su nombre.");
 
                     b.Property<string>("Sha256")
                         .IsRequired()
@@ -101,7 +106,7 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
 
                     b.Property<Guid>("SolicitudId")
                         .HasColumnType("uuid")
-                        .HasColumnName("solicitud_id");
+                        .HasColumnName("procedure_request_id");
 
                     b.Property<string>("StoragePath")
                         .IsRequired()
@@ -111,21 +116,24 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
 
                     b.Property<long>("TamanoBytes")
                         .HasColumnType("bigint")
-                        .HasColumnName("tamano_bytes");
+                        .HasColumnName("size_bytes");
 
                     b.Property<string>("Tipo")
                         .IsRequired()
                         .HasMaxLength(60)
                         .HasColumnType("character varying(60)")
-                        .HasColumnName("tipo");
+                        .HasColumnName("attachment_type");
 
                     b.HasKey("Id")
-                        .HasName("pk_adjunto");
+                        .HasName("pk_attachment");
 
                     b.HasIndex("SolicitudId")
-                        .HasDatabaseName("ix_adjunto_solicitud");
+                        .HasDatabaseName("ix_attachment_procedure_request");
 
-                    b.ToTable("adjunto", "personanatural");
+                    b.ToTable("attachment", "personanatural", t =>
+                        {
+                            t.HasComment("Archivo adjunto de una solicitud; solo se guarda la referencia opaca al almacenamiento.");
+                        });
                 });
 
             modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.AuditoriaIdentidad", b =>
@@ -140,7 +148,7 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                     b.Property<string>("Desde")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
-                        .HasColumnName("desde");
+                        .HasColumnName("from_status");
 
                     b.Property<Guid?>("EventId")
                         .HasColumnType("uuid")
@@ -150,12 +158,12 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
-                        .HasColumnName("hasta");
+                        .HasColumnName("to_status");
 
                     b.Property<DateTimeOffset>("OcurrioEn")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("ocurrio_en")
+                        .HasColumnName("occurred_at")
                         .HasDefaultValueSql("now()");
 
                     b.Property<short>("Ordinal")
@@ -168,25 +176,28 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
-                        .HasColumnName("origen");
+                        .HasColumnName("source");
 
                     b.Property<string>("Parte")
                         .IsRequired()
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)")
-                        .HasColumnName("parte");
+                        .HasColumnName("party_role");
 
                     b.Property<Guid>("SolicitudId")
                         .HasColumnType("uuid")
-                        .HasColumnName("solicitud_id");
+                        .HasColumnName("procedure_request_id");
 
                     b.HasKey("Id")
-                        .HasName("pk_auditoria_identidad");
+                        .HasName("pk_identity_audit");
 
                     b.HasIndex("SolicitudId", "OcurrioEn")
-                        .HasDatabaseName("ix_auditoria_identidad_solicitud_fecha");
+                        .HasDatabaseName("ix_identity_audit_request_occurred");
 
-                    b.ToTable("auditoria_identidad", "personanatural");
+                    b.ToTable("identity_audit", "personanatural", t =>
+                        {
+                            t.HasComment("Auditoría de los cambios de estado de la validación de identidad de cada parte. Sin datos personales; solo inserción.");
+                        });
                 });
 
             modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.ConfiguracionRetencion", b =>
@@ -197,19 +208,19 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
 
                     b.Property<int>("DiasRetencionBorrador")
                         .HasColumnType("integer")
-                        .HasColumnName("dias_retencion_borrador");
+                        .HasColumnName("draft_retention_days");
 
                     b.Property<bool>("Habilitado")
                         .HasColumnType("boolean")
-                        .HasColumnName("habilitado");
+                        .HasColumnName("enabled");
 
                     b.Property<int>("IntervaloMinutos")
                         .HasColumnType("integer")
-                        .HasColumnName("intervalo_minutos");
+                        .HasColumnName("interval_minutes");
 
                     b.Property<int>("Lote")
                         .HasColumnType("integer")
-                        .HasColumnName("lote");
+                        .HasColumnName("batch_size");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .ValueGeneratedOnAdd()
@@ -218,11 +229,13 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .HasDefaultValueSql("now()");
 
                     b.HasKey("Id")
-                        .HasName("pk_configuracion_retencion");
+                        .HasName("pk_retention_config");
 
-                    b.ToTable("configuracion_retencion", "personanatural", t =>
+                    b.ToTable("retention_config", "personanatural", t =>
                         {
-                            t.HasCheckConstraint("ck_configuracion_retencion", "id = 1 AND dias_retencion_borrador >= 1 AND intervalo_minutos >= 1 AND lote >= 1");
+                            t.HasComment("Fila única con la política de retención de borradores; la cadencia vive en la base y se relee en cada ciclo.");
+
+                            t.HasCheckConstraint("ck_retention_config", "id = 1 AND draft_retention_days >= 1 AND interval_minutes >= 1 AND batch_size >= 1");
                         });
 
                     b.HasData(
@@ -245,34 +258,39 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
 
                     b.Property<DateTimeOffset>("AceptadoEn")
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("aceptado_en");
+                        .HasColumnName("accepted_at");
 
                     b.Property<byte[]>("DocumentoHash")
                         .IsRequired()
                         .HasColumnType("bytea")
-                        .HasColumnName("documento_hash");
+                        .HasColumnName("document_hash")
+                        .HasComment("@pii:medium Huella HMAC del documento de quien acepta (no es el documento).");
 
                     b.Property<byte[]>("IpHash")
                         .HasColumnType("bytea")
-                        .HasColumnName("ip_hash");
+                        .HasColumnName("ip_hash")
+                        .HasComment("@pii:medium Huella HMAC de la IP (no es la IP).");
 
                     b.Property<Guid?>("SolicitudId")
                         .HasColumnType("uuid")
-                        .HasColumnName("solicitud_id");
+                        .HasColumnName("procedure_request_id");
 
                     b.Property<string>("TextoVersion")
                         .IsRequired()
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)")
-                        .HasColumnName("texto_version");
+                        .HasColumnName("text_version");
 
                     b.HasKey("Id")
-                        .HasName("pk_consentimiento");
+                        .HasName("pk_consent");
 
                     b.HasIndex("SolicitudId")
-                        .HasDatabaseName("ix_consentimiento_solicitud");
+                        .HasDatabaseName("ix_consent_procedure_request");
 
-                    b.ToTable("consentimiento", "personanatural");
+                    b.ToTable("consent", "personanatural", t =>
+                        {
+                            t.HasComment("Constancia del consentimiento de tratamiento de datos (Ley 1581): texto aceptado, momento y huella de quien acepta.");
+                        });
                 });
 
             modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.CuotaConsulta", b =>
@@ -280,20 +298,24 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                     b.Property<string>("Clave")
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)")
-                        .HasColumnName("clave");
+                        .HasColumnName("quota_key")
+                        .HasComment("@pii:medium Clave del contador; puede incluir la huella HMAC del documento o de la IP (no el dato).");
 
                     b.Property<DateOnly>("Dia")
                         .HasColumnType("date")
-                        .HasColumnName("dia");
+                        .HasColumnName("quota_date");
 
                     b.Property<int>("Usadas")
                         .HasColumnType("integer")
-                        .HasColumnName("usadas");
+                        .HasColumnName("used_count");
 
                     b.HasKey("Clave", "Dia")
-                        .HasName("pk_cuota_consulta");
+                        .HasName("pk_query_quota");
 
-                    b.ToTable("cuota_consulta", "personanatural");
+                    b.ToTable("query_quota", "personanatural", t =>
+                        {
+                            t.HasComment("Contador diario para los límites por documento, IP y global; persistente para sobrevivir a los reinicios.");
+                        });
                 });
 
             modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.HistorialEstado", b =>
@@ -305,7 +327,7 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                     b.Property<string>("Desde")
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)")
-                        .HasColumnName("desde");
+                        .HasColumnName("from_status");
 
                     b.Property<Guid?>("EventId")
                         .HasColumnType("uuid")
@@ -315,33 +337,36 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)")
-                        .HasColumnName("hasta");
+                        .HasColumnName("to_status");
 
                     b.Property<string>("Motivo")
                         .HasColumnType("text")
-                        .HasColumnName("motivo");
+                        .HasColumnName("reason");
 
                     b.Property<DateTimeOffset>("OcurrioEn")
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("ocurrio_en");
+                        .HasColumnName("occurred_at");
 
                     b.Property<string>("Origen")
                         .IsRequired()
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)")
-                        .HasColumnName("origen");
+                        .HasColumnName("source");
 
                     b.Property<Guid>("SolicitudId")
                         .HasColumnType("uuid")
-                        .HasColumnName("solicitud_id");
+                        .HasColumnName("procedure_request_id");
 
                     b.HasKey("Id")
-                        .HasName("pk_historial_estado");
+                        .HasName("pk_status_history");
 
                     b.HasIndex("SolicitudId", "OcurrioEn")
-                        .HasDatabaseName("ix_historial_solicitud_fecha");
+                        .HasDatabaseName("ix_status_history_request_occurred");
 
-                    b.ToTable("historial_estado", "personanatural");
+                    b.ToTable("status_history", "personanatural", t =>
+                        {
+                            t.HasComment("Historial de cambios de estado de una solicitud, tanto del portal como los que llegan de FLIT 2.");
+                        });
                 });
 
             modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.IntentoReanudar", b =>
@@ -356,21 +381,25 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                     b.Property<byte[]>("Clave")
                         .IsRequired()
                         .HasColumnType("bytea")
-                        .HasColumnName("clave");
+                        .HasColumnName("code_hash")
+                        .HasComment("SHA-256 del radicado normalizado, exista o no (no es un dato personal).");
 
                     b.Property<DateTimeOffset>("OcurrioEn")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("ocurrio_en")
+                        .HasColumnName("occurred_at")
                         .HasDefaultValueSql("now()");
 
                     b.HasKey("Id")
-                        .HasName("pk_intento_reanudar");
+                        .HasName("pk_resume_attempt");
 
                     b.HasIndex("Clave", "OcurrioEn")
-                        .HasDatabaseName("ix_intento_reanudar_clave_fecha");
+                        .HasDatabaseName("ix_resume_attempt_code_hash_occurred");
 
-                    b.ToTable("intento_reanudar", "personanatural");
+                    b.ToTable("resume_attempt", "personanatural", t =>
+                        {
+                            t.HasComment("Intento fallido de reanudar con radicado y documento; sirve para bloquear el radicado tras varios fallos seguidos.");
+                        });
                 });
 
             modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.PersonaSolicitante", b =>
@@ -381,11 +410,13 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
 
                     b.Property<byte[]>("CelularCifrado")
                         .HasColumnType("bytea")
-                        .HasColumnName("celular_cifrado");
+                        .HasColumnName("phone_encrypted")
+                        .HasComment("@pii:medium Celular cifrado (AES-GCM).");
 
                     b.Property<byte[]>("CorreoCifrado")
                         .HasColumnType("bytea")
-                        .HasColumnName("correo_cifrado");
+                        .HasColumnName("email_encrypted")
+                        .HasComment("@pii:medium Correo electrónico cifrado (AES-GCM).");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -395,21 +426,25 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
 
                     b.Property<byte[]>("DireccionCifrada")
                         .HasColumnType("bytea")
-                        .HasColumnName("direccion_cifrada");
+                        .HasColumnName("address_encrypted")
+                        .HasComment("@pii:high Dirección cifrada (AES-GCM).");
 
                     b.Property<byte[]>("DocumentoCifrado")
                         .IsRequired()
                         .HasColumnType("bytea")
-                        .HasColumnName("documento_cifrado");
+                        .HasColumnName("document_encrypted")
+                        .HasComment("@pii:high Número de documento cifrado (AES-GCM).");
 
                     b.Property<byte[]>("DocumentoHash")
                         .IsRequired()
                         .HasColumnType("bytea")
-                        .HasColumnName("documento_hash");
+                        .HasColumnName("document_hash")
+                        .HasComment("@pii:medium Huella HMAC del documento (no es el documento); sirve para búsquedas por igualdad.");
 
                     b.Property<byte[]>("NombreCifrado")
                         .HasColumnType("bytea")
-                        .HasColumnName("nombre_cifrado");
+                        .HasColumnName("name_encrypted")
+                        .HasComment("@pii:high Nombre completo cifrado (AES-GCM).");
 
                     b.Property<short>("Ordinal")
                         .ValueGeneratedOnAdd()
@@ -421,27 +456,27 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)")
-                        .HasColumnName("parte");
+                        .HasColumnName("party_role");
 
                     b.Property<short>("Reenvios")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("smallint")
                         .HasDefaultValue((short)0)
-                        .HasColumnName("reenvios");
+                        .HasColumnName("resend_count");
 
                     b.Property<Guid>("SolicitudId")
                         .HasColumnType("uuid")
-                        .HasColumnName("solicitud_id");
+                        .HasColumnName("procedure_request_id");
 
                     b.Property<string>("TipoDocumento")
                         .IsRequired()
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)")
-                        .HasColumnName("tipo_documento");
+                        .HasColumnName("document_type");
 
                     b.Property<DateTimeOffset?>("UltimoReenvioEn")
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("ultimo_reenvio_en");
+                        .HasColumnName("last_resend_at");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .ValueGeneratedOnAdd()
@@ -455,27 +490,30 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasDefaultValue("sin_solicitar")
-                        .HasColumnName("validacion_estado");
+                        .HasColumnName("identity_validation_status");
 
                     b.Property<Guid?>("ValidacionId")
                         .HasColumnType("uuid")
-                        .HasColumnName("validacion_id");
+                        .HasColumnName("identity_validation_id");
 
                     b.Property<DateTimeOffset?>("ValidacionVigenteHasta")
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("validacion_vigente_hasta");
+                        .HasColumnName("identity_validation_valid_until");
 
                     b.HasKey("Id")
-                        .HasName("pk_persona_solicitante");
+                        .HasName("pk_requester_person");
 
                     b.HasIndex("DocumentoHash")
-                        .HasDatabaseName("ix_persona_documento_hash");
+                        .HasDatabaseName("ix_requester_person_document_hash");
 
                     b.HasIndex("SolicitudId", "Parte", "Ordinal")
                         .IsUnique()
-                        .HasDatabaseName("uq_persona_solicitud_parte_ordinal");
+                        .HasDatabaseName("uq_requester_person_request_role_ordinal");
 
-                    b.ToTable("persona_solicitante", "personanatural");
+                    b.ToTable("requester_person", "personanatural", t =>
+                        {
+                            t.HasComment("Persona de una solicitud (vendedor, comprador, titular…). Datos personales cifrados en la aplicación (AES-GCM).");
+                        });
                 });
 
             modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.SesionTramite", b =>
@@ -492,36 +530,41 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
 
                     b.Property<DateTimeOffset>("ExpiraEn")
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("expira_en");
+                        .HasColumnName("expires_at");
 
                     b.Property<byte[]>("IpHash")
                         .HasColumnType("bytea")
-                        .HasColumnName("ip_hash");
+                        .HasColumnName("ip_hash")
+                        .HasComment("@pii:medium Huella HMAC de la IP (no es la IP).");
 
                     b.Property<bool>("Revocada")
                         .HasColumnType("boolean")
-                        .HasColumnName("revocada");
+                        .HasColumnName("revoked");
 
                     b.Property<Guid>("SolicitudId")
                         .HasColumnType("uuid")
-                        .HasColumnName("solicitud_id");
+                        .HasColumnName("procedure_request_id");
 
                     b.Property<byte[]>("TokenHash")
                         .IsRequired()
                         .HasColumnType("bytea")
-                        .HasColumnName("token_hash");
+                        .HasColumnName("token_hash")
+                        .HasComment("@pii:medium Hash del token de sesión (el token nunca se guarda).");
 
                     b.HasKey("Id")
-                        .HasName("pk_sesion_tramite");
+                        .HasName("pk_procedure_session");
 
                     b.HasIndex("SolicitudId")
-                        .HasDatabaseName("ix_sesion_solicitud");
+                        .HasDatabaseName("ix_procedure_session_procedure_request");
 
                     b.HasIndex("TokenHash")
                         .IsUnique()
-                        .HasDatabaseName("uq_sesion_token_hash");
+                        .HasDatabaseName("uq_procedure_session_token_hash");
 
-                    b.ToTable("sesion_tramite", "personanatural");
+                    b.ToTable("procedure_session", "personanatural", t =>
+                        {
+                            t.HasComment("Sesión efímera por trámite (el portal no tiene cuentas). Solo se guarda el hash del token.");
+                        });
                 });
 
             modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.SolicitudTramite", b =>
@@ -533,13 +576,14 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                     b.Property<byte[]>("CedulaSolicitanteHash")
                         .IsRequired()
                         .HasColumnType("bytea")
-                        .HasColumnName("cedula_solicitante_hash");
+                        .HasColumnName("requester_document_hash")
+                        .HasComment("@pii:medium Huella HMAC del documento del solicitante (no es el documento); sirve para reanudar el borrador.");
 
                     b.Property<string>("CodigoPublico")
                         .IsRequired()
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)")
-                        .HasColumnName("codigo_publico");
+                        .HasColumnName("public_code");
 
                     b.Property<Guid>("CorrelationId")
                         .HasColumnType("uuid")
@@ -555,39 +599,41 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("jsonb")
-                        .HasColumnName("datos")
-                        .HasDefaultValueSql("'{}'::jsonb");
+                        .HasColumnName("data")
+                        .HasDefaultValueSql("'{}'::jsonb")
+                        .HasComment("@pii:high Datos complementarios del trámite; pueden traer datos personales y se vacían al anonimizar el borrador.");
 
                     b.Property<string>("DefinicionSnapshot")
                         .IsRequired()
                         .HasColumnType("jsonb")
-                        .HasColumnName("definicion_snapshot");
+                        .HasColumnName("definition_snapshot");
 
                     b.Property<int>("DefinicionVersion")
                         .HasColumnType("integer")
-                        .HasColumnName("definicion_version");
+                        .HasColumnName("definition_version");
 
                     b.Property<string>("Estado")
                         .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)")
-                        .HasColumnName("estado");
+                        .HasColumnName("status");
 
                     b.Property<string>("EstadoTramite")
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)")
-                        .HasColumnName("estado_tramite");
+                        .HasColumnName("procedure_status");
 
                     b.Property<DateTimeOffset?>("ExpiraBorradorEn")
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("expira_borrador_en");
+                        .HasColumnName("draft_expires_at");
 
                     b.Property<string>("FieldValues")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("jsonb")
                         .HasColumnName("field_values")
-                        .HasDefaultValueSql("'{}'::jsonb");
+                        .HasDefaultValueSql("'{}'::jsonb")
+                        .HasComment("@pii:high Valores del formulario; pueden traer datos personales y se vacían al anonimizar el borrador.");
 
                     b.Property<string>("IdempotencyKey")
                         .HasMaxLength(100)
@@ -596,18 +642,18 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
 
                     b.Property<Guid>("OrganismoId")
                         .HasColumnType("uuid")
-                        .HasColumnName("organismo_id");
+                        .HasColumnName("transit_office_id");
 
                     b.Property<string>("OrganismoNombre")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
-                        .HasColumnName("organismo_nombre");
+                        .HasColumnName("transit_office_name");
 
                     b.Property<string>("Placa")
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)")
-                        .HasColumnName("placa");
+                        .HasColumnName("plate");
 
                     b.Property<Guid?>("ProcedureInstanceId")
                         .HasColumnType("uuid")
@@ -627,11 +673,11 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
 
                     b.Property<bool>("SubsanacionActiva")
                         .HasColumnType("boolean")
-                        .HasColumnName("subsanacion_activa");
+                        .HasColumnName("rectification_active");
 
                     b.Property<string>("SubsanacionMotivo")
                         .HasColumnType("text")
-                        .HasColumnName("subsanacion_motivo");
+                        .HasColumnName("rectification_reason");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
@@ -641,7 +687,7 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)")
-                        .HasColumnName("tipo_tramite_codigo");
+                        .HasColumnName("procedure_type_code");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .ValueGeneratedOnAdd()
@@ -655,30 +701,32 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .HasColumnName("vin");
 
                     b.HasKey("Id")
-                        .HasName("pk_solicitud_tramite");
+                        .HasName("pk_procedure_request");
 
                     b.HasIndex("CedulaSolicitanteHash")
-                        .HasDatabaseName("ix_solicitud_cedula_hash");
+                        .HasDatabaseName("ix_procedure_request_requester_document_hash");
 
                     b.HasIndex("CodigoPublico")
                         .IsUnique()
-                        .HasDatabaseName("uq_solicitud_codigo_publico");
+                        .HasDatabaseName("uq_procedure_request_public_code");
 
                     b.HasIndex("ProcedureInstanceId")
-                        .HasDatabaseName("ix_solicitud_procedure_instance");
+                        .HasDatabaseName("ix_procedure_request_procedure_instance");
 
                     b.HasIndex("TenantId", "IdempotencyKey")
                         .IsUnique()
-                        .HasDatabaseName("uq_solicitud_idem");
+                        .HasDatabaseName("uq_procedure_request_idempotency");
 
-                    b.HasIndex("TipoTramiteCodigo", "DefinicionVersion")
-                        .HasDatabaseName("ix_solicitud_tipo");
+                    b.HasIndex("TenantId", "TipoTramiteCodigo", "DefinicionVersion")
+                        .HasDatabaseName("ix_procedure_request_type");
 
-                    b.ToTable("solicitud_tramite", "personanatural", t =>
+                    b.ToTable("procedure_request", "personanatural", t =>
                         {
-                            t.HasCheckConstraint("ck_solicitud_estado", "estado IN ('borrador', 'pendiente_validacion', 'en_cola', 'creada', 'rechazada_creacion', 'cancelada')");
+                            t.HasComment("Solicitud de un ciudadano para radicar un trámite en FLIT 2 (portal persona natural).");
 
-                            t.HasCheckConstraint("ck_solicitud_vehiculo", "placa IS NOT NULL OR vin IS NOT NULL");
+                            t.HasCheckConstraint("ck_procedure_request_status", "status IN ('borrador', 'pendiente_validacion', 'en_cola', 'creada', 'rechazada_creacion', 'cancelada')");
+
+                            t.HasCheckConstraint("ck_procedure_request_vehicle", "plate IS NOT NULL OR vin IS NOT NULL");
                         });
                 });
 
@@ -766,7 +814,7 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .HasForeignKey("SolicitudId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_adjunto_solicitud");
+                        .HasConstraintName("fk_attachment_procedure_request");
                 });
 
             modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.AuditoriaIdentidad", b =>
@@ -776,7 +824,7 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .HasForeignKey("SolicitudId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_auditoria_identidad_solicitud");
+                        .HasConstraintName("fk_identity_audit_procedure_request");
                 });
 
             modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.Consentimiento", b =>
@@ -785,7 +833,7 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("SolicitudId")
                         .OnDelete(DeleteBehavior.SetNull)
-                        .HasConstraintName("fk_consentimiento_solicitud");
+                        .HasConstraintName("fk_consent_procedure_request");
                 });
 
             modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.HistorialEstado", b =>
@@ -795,7 +843,7 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .HasForeignKey("SolicitudId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_historial_solicitud");
+                        .HasConstraintName("fk_status_history_procedure_request");
                 });
 
             modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.PersonaSolicitante", b =>
@@ -805,7 +853,7 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .HasForeignKey("SolicitudId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_persona_solicitud");
+                        .HasConstraintName("fk_requester_person_procedure_request");
                 });
 
             modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.SesionTramite", b =>
@@ -815,7 +863,7 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .HasForeignKey("SolicitudId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_sesion_solicitud");
+                        .HasConstraintName("fk_procedure_session_procedure_request");
                 });
 #pragma warning restore 612, 618
         }

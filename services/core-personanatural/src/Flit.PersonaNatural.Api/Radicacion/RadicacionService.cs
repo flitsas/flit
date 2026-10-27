@@ -39,7 +39,7 @@ public sealed class RadicacionService(
     public const string CodigoIdentidadPendiente = "identity_pending";
     public const string ContextoActores = "radicacion.actores";
     public const int MaxLlave = 100;
-    private const string IndiceLlave = "uq_solicitud_idem";
+    private const string IndiceLlave = "uq_procedure_request_idempotency";
 
     public async Task<RadicacionAceptada> RadicarAsync(Guid id, string? llave, CancellationToken ct)
     {

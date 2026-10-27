@@ -140,7 +140,7 @@ public sealed partial class SolicitudesService(
     /// <summary>Radicado visible <c>PN-AAAA-NNNNNN</c>: el consecutivo sale de una secuencia, no se repite entre réplicas.</summary>
     private async Task<string> SiguienteCodigoAsync(DateTimeOffset ahora, CancellationToken ct)
     {
-        var n = await db.Database.SqlQuery<long>($"SELECT nextval('personanatural.codigo_publico_seq') AS \"Value\"").SingleAsync(ct).ConfigureAwait(false);
+        var n = await db.Database.SqlQuery<long>($"SELECT nextval('personanatural.public_code_seq') AS \"Value\"").SingleAsync(ct).ConfigureAwait(false);
         return $"PN-{ahora.Year}-{n:D6}";
     }
 

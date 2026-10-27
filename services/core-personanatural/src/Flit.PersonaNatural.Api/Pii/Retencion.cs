@@ -38,8 +38,8 @@ public sealed class RetencionService(PersonaNaturalDb db, TimeProvider reloj, IE
 
         // SKIP LOCKED: con varias réplicas, cada una toma lotes distintos y ninguna espera a la otra.
         var sql = $"""
-            SELECT id AS "Value" FROM {PersonaNaturalDb.Schema}.solicitud_tramite
-            WHERE estado = @estado AND updated_at < @limite
+            SELECT id AS "Value" FROM {PersonaNaturalDb.Schema}.procedure_request
+            WHERE status = @estado AND updated_at < @limite
             ORDER BY updated_at LIMIT @lote FOR UPDATE SKIP LOCKED
             """;
         var ids = await db.Database.SqlQueryRaw<Guid>(sql,

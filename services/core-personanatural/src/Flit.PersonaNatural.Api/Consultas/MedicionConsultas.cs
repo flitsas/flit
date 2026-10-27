@@ -38,8 +38,8 @@ public sealed partial class MedicionConsultasService(PersonaNaturalDb db, TimePr
         ArgumentException.ThrowIfNullOrWhiteSpace(tipo);
         var dia = DateOnly.FromDateTime(reloj.GetUtcNow().UtcDateTime);
         var sql = $"""
-            INSERT INTO {PersonaNaturalDb.Schema}.cuota_consulta (clave, dia, usadas) VALUES (@clave, @dia, 1)
-            ON CONFLICT (clave, dia) DO UPDATE SET usadas = cuota_consulta.usadas + 1
+            INSERT INTO {PersonaNaturalDb.Schema}.query_quota (quota_key, quota_date, used_count) VALUES (@clave, @dia, 1)
+            ON CONFLICT (quota_key, quota_date) DO UPDATE SET used_count = query_quota.used_count + 1
             """;
         try
         {

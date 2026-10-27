@@ -56,9 +56,9 @@ public sealed class CuotaService(PersonaNaturalDb db, PiiHasher hasher, TimeProv
     private async Task<int> ConsumirAsync(string clave, DateOnly dia, CancellationToken ct)
     {
         var sql = $"""
-            INSERT INTO {PersonaNaturalDb.Schema}.cuota_consulta (clave, dia, usadas) VALUES (@clave, @dia, 1)
-            ON CONFLICT (clave, dia) DO UPDATE SET usadas = cuota_consulta.usadas + 1
-            RETURNING usadas AS "Value"
+            INSERT INTO {PersonaNaturalDb.Schema}.query_quota (quota_key, quota_date, used_count) VALUES (@clave, @dia, 1)
+            ON CONFLICT (quota_key, quota_date) DO UPDATE SET used_count = query_quota.used_count + 1
+            RETURNING used_count AS "Value"
             """;
         // El INSERT … RETURNING no se puede componer con otro operador de LINQ: se materializa la fila tal cual.
         var filas = await db.Database.SqlQueryRaw<int>(sql, new NpgsqlParameter("clave", clave), new NpgsqlParameter("dia", dia))
