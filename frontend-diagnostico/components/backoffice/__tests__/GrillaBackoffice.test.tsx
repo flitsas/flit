@@ -77,6 +77,17 @@ describe("GrillaBackoffice — cuatro estados y empresa explícita", () => {
   });
 });
 
+describe("GrillaBackoffice — HU #14087 AC6: la misma tabla por pilares que la compañía", () => {
+  it("cabecera por pilar, columnas de vehículo y documentos, y las 8 fuentes en cada fila", async () => {
+    const { container } = montar();
+    const t = await tabla();
+    expect(within(t).getByRole("columnheader", { name: "RUNT" })).toHaveAttribute("colspan", "3");
+    expect(within(t).getByRole("columnheader", { name: "SIMIT" })).toHaveAttribute("colspan", "3");
+    for (const nombre of ["Placa o VIN", "Documento declarado", "Documento del propietario"]) expect(within(t).getByRole("columnheader", { name: nombre })).toBeInTheDocument();
+    expect(container.querySelector('[data-vehiculo="vehiculo-1"]')!.querySelectorAll("[data-fuente]")).toHaveLength(8);
+  });
+});
+
 describe("GrillaBackoffice — marca de origen manual solo en esta grilla", () => {
   it("la celda de origen MANUAL lleva el texto «Manual»; la de API no", async () => {
     const { container } = montar();
@@ -119,7 +130,7 @@ describe("GrillaBackoffice — «Llenar a mano» solo en celdas en ERROR no bloq
 });
 
 describe("GrillaBackoffice — AC2: llenar SIMIT vehículo y ver la celda en verde con la marca manual", () => {
-  it("al confirmar, la celda pasa a Completada con «Manual» y el lote se vuelve a leer desde su versión", async () => {
+  it("al confirmar, la celda pasa a «Ejecutado (OK)» con «Manual» y el lote se vuelve a leer desde su versión", async () => {
     const llena = celdaBo(1, "SIMIT_VEHICULO", "COMPLETADO", { origen: "MANUAL", usuario_manual_id: "u", version: 21 });
     const cambios = grillaBo({ version: 21, estado: "EN_PROCESO", vehiculos: [vehiculoBo(1, [llena])] });
     let lecturas = 0;
@@ -138,7 +149,7 @@ describe("GrillaBackoffice — AC2: llenar SIMIT vehículo y ver la celda en ver
 
     await waitFor(() => expect(td(container, "celda-1-simit_vehiculo")).toHaveAttribute("data-estado", "COMPLETADO"));
     const celda = td(container, "celda-1-simit_vehiculo");
-    expect(within(celda).getByText("Completada")).toBeInTheDocument();
+    expect(within(celda).getByText("Ejecutado (OK)")).toBeInTheDocument();
     expect(within(celda).getByText("Manual")).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: /llenar a mano/i })).toBeNull();
     expect(screen.getByText(/se llenó a mano SIMIT vehículo de TST001/i)).toBeInTheDocument();

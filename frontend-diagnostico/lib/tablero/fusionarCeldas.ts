@@ -1,6 +1,7 @@
 // Fusión incremental de la grilla del lote (HU #13748, F04-C3). Cada sondeo trae solo los vehículos y las celdas con versión
 // mayor que la que ya tiene el cliente; el estado global, las columnas y el avance vienen siempre. Fusiona por vehículo
-// (`vehiculos[].id`) y, dentro de él, por fuente (`celdas[].fuente`); lo no recibido se conserva tal cual.
+// (`vehiculos[].id`) y, dentro de él, por fuente (`celdas[].fuente`); lo no recibido se conserva tal cual. Los datos de la fila
+// (documento declarado y propietarios, HU #14087) son los de la última versión recibida de la fila.
 import type { CeldaGrilla, FilaVehiculo, Grilla } from "@/lib/tablero/api";
 
 const porOrden = (a: FilaVehiculo, b: FilaVehiculo) => a.orden - b.orden;

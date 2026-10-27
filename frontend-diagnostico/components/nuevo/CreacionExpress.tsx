@@ -36,9 +36,9 @@ type ErrorGeneral = { titulo: string; mensaje: string; reintentar?: () => void }
 /** Botón «Anterior» del prototipo: azul marino. */
 const BOTON_ANTERIOR_CLS = BOTON_PRIMARIO_CLS.replace("bg-[var(--flit-brand-ink)]", "bg-flit-primary");
 
-/** Nombre autogenerado del Express («Express <placa> <dd/mm/aaaa>», HU #13752 F01-C10); vacío sin una placa válida. */
-export function nombreAutogenerado(placa: string, fecha: Date = new Date()): string {
-  return errorIdentificador(placa) ? "" : nombreExpress(placa, fecha);
+/** Nombre autogenerado del Express («Express <placa>», HU #13752 F01-C10, sin fecha desde HU #14087); vacío sin una placa válida. */
+export function nombreAutogenerado(placa: string): string {
+  return errorIdentificador(placa) ? "" : nombreExpress(placa);
 }
 
 export interface CreacionExpressProps {

@@ -34,7 +34,10 @@ import { FiltrosListado } from "./FiltrosListado";
 
 type Carga = { tipo: "cargando" } | { tipo: "error"; error: ErrorListado } | { tipo: "listo"; lista: ListaDiagnosticos };
 
-const COLUMNAS = ["ID", "Nombre", "Creado", "Tipo", "Trámite", "Estado", "Creador"] as const;
+const COLUMNAS = ["ID", "Nombre", "Creado", "Modalidad", "Tipo", "Trámite", "Estado", "Creador"] as const;
+
+/** HU #14087: modalidad del lote según `es_express`; «Tipo» (Simple / Con análisis IA) sigue aparte. */
+const modalidad = (esExpress: boolean) => (esExpress ? "Express" : "Masivo");
 
 const TEXTO_SECUNDARIO = "max-w-md text-sm text-[var(--nav-texto)] dark:text-slate-300";
 
@@ -51,7 +54,7 @@ function Vacio({ titulo, Icono, children }: { titulo: string; Icono: typeof Clip
 /**
  * Listado de diagnósticos de la compañía en el inicio (HU #13852, F08-H2; F08-C1/C2/C5/C6/C7), debajo de la captura
  * Express. Los filtros (fechas, tipo, estado y nombre) salen de la URL y cada cambio la reescribe y vuelve a la página 1.
- * Tabla con ID corto, nombre, fecha (hora Colombia), tipo, trámite, chip de estado («Sin lanzar» para CREADO) y creador
+ * Tabla con ID corto, nombre, fecha (hora Colombia), modalidad (Express o Masivo, HU #14087), tipo, trámite, chip de estado («Sin lanzar» para CREADO) y creador
  * tal como llega («No disponible» incluido). Clic en la fila o Enter en su enlace abre el tablero, o la carga de vehículos
  * si el lote está sin lanzar. Cuatro estados: cargando, error (400 con campo junto a su filtro, 403 a la página de acceso
  * negado, el resto con Reintentar), vacío (compañía sin diagnósticos, distinto de filtros sin resultados) y lleno.
@@ -157,7 +160,7 @@ export function ListadoDiagnosticos() {
     contenido = (
       <div className="flex flex-col gap-3">
         <div className="overflow-x-auto rounded-xl border border-[var(--color-flit-gray)] dark:border-white/10">
-          <table aria-label="Diagnósticos de la compañía" className="w-full min-w-[860px] border-collapse text-sm">
+          <table aria-label="Diagnósticos de la compañía" className="w-full min-w-[940px] border-collapse text-sm">
             <thead>
               <tr>
                 {COLUMNAS.map((t) => (
@@ -193,6 +196,7 @@ export function ListadoDiagnosticos() {
                       </Link>
                     </td>
                     <td className={`${CELDA_TABLA_CLS} whitespace-nowrap tabular-nums`}>{fechaDelDato(d.creado_en)}</td>
+                    <td className={CELDA_TABLA_CLS}>{modalidad(d.es_express)}</td>
                     <td className={CELDA_TABLA_CLS}>{nombreModo(d.modo)}</td>
                     <td className={CELDA_TABLA_CLS}>
                       {d.tipo_tramite ? (

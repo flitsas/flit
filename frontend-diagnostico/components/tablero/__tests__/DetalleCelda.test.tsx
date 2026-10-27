@@ -21,10 +21,11 @@ import {
   simitVehiculo,
 } from "@/lib/tablero/__tests__/datosDetalle";
 
-// Uso de ejemplo: en el tablero, cada semáforo es un botón «Ver detalle de {fuente} de {placa}»; al pulsarlo (clic, Enter o
-// Espacio) GrillaSemaforos abre <DetalleCelda loteId vehiculoId fuente … onClose devolverFocoA={semáforo} />, un diálogo
-// accesible que pide GET /diagnosticos/{id}/vehiculos/{vid}/consultas/{fuente} y pinta la vista de esa fuente: datos del RUNT,
-// comparendos del SIMIT, avalúo («sin valor comercial») o una sección por persona con su documento enmascarado.
+// Uso de ejemplo: en el tablero, cada semáforo es un botón «Ver detalle de {fuente} de {placa}: {estado}»; al pulsarlo (clic,
+// Enter o Espacio) GrillaSemaforos abre <DetalleCelda loteId vehiculoId fuente … onClose devolverFocoA={semáforo} />, un
+// diálogo accesible que pide GET /diagnosticos/{id}/vehiculos/{vid}/consultas/{fuente} y pinta (HU #14087) la «Auditoría de
+// consulta» (fecha y hora en Colombia, estado con el chip de la tabla y, por persona, rol, documento enmascarado, consultado_en
+// y estado) y la «Respuesta de la fuente» con TODOS los campos del resultado tal como llegan (RespuestaFuente).
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -75,6 +76,18 @@ async function pintarDetalle(d: Detalle) {
   return { ...utils, dialogo };
 }
 
+const region = (dialogo: HTMLElement, nombre: string | RegExp) => within(dialogo).getByRole("region", { name: nombre });
+const auditoria = (dialogo: HTMLElement) => region(dialogo, "Auditoría de consulta");
+const respuesta = (dialogo: HTMLElement) => region(dialogo, "Respuesta de la fuente");
+/** Valor de la fila «campo» de una tabla campo/valor de RespuestaFuente. */
+const valorDe = (tabla: HTMLElement, campo: string) => {
+  const fila = within(tabla)
+    .getAllByRole("row")
+    .find((r) => r.querySelector("th[scope='row']")?.textContent === campo);
+  if (!fila) throw new Error(`Sin campo ${campo}`);
+  return within(fila).getByRole("cell").textContent;
+};
+
 describe("DetalleCelda — el semáforo abre el detalle", () => {
   it("cada semáforo es un botón con nombre accesible de fuente, vehículo y estado, y anuncia que abre un diálogo", () => {
     simularApi({});
@@ -91,77 +104,68 @@ describe("DetalleCelda — el semáforo abre el detalle", () => {
   });
 });
 
-describe("DetalleCelda — AC1: SIMIT con comparendos, valores, estados y fecha del dato", () => {
-  it("pinta la tabla de comparendos con número, fecha, valor en pesos, estado y organismo, y la fecha del dato", async () => {
-    const { dialogo } = await abrir("SIMIT_VEHICULO", simitVehiculo([comparendo(1), comparendo(2, { valor: "1250000", estado: "PAGADO" })]));
-    const tabla = within(dialogo).getByRole("table", { name: /comparendos/i });
-    const filas = within(tabla).getAllByRole("row").slice(1);
-    expect(filas).toHaveLength(2);
-    expect(filas[0]).toHaveTextContent("C-0001");
-    expect(filas[0]).toHaveTextContent("02/01/2026");
-    expect(filas[0].textContent?.replace(/\s/g, " ")).toContain("$ 500.000");
-    expect(filas[0]).toHaveTextContent("PENDIENTE");
-    expect(filas[1].textContent?.replace(/\s/g, " ")).toContain("$ 1.250.000");
-    expect(filas[1]).toHaveTextContent("PAGADO");
-    expect(within(dialogo).getByText(/2 comparendos/i)).toBeInTheDocument();
-    expect(within(dialogo).getByText("Dato del 22/10/2026 10:00")).toBeInTheDocument();
+describe("DetalleCelda — HU #14087 AC7: auditoría de consulta", () => {
+  it("fecha y hora de la consulta en hora de Colombia y el estado con el mismo chip de la tabla", async () => {
+    const { dialogo } = await abrir("SIMIT_VEHICULO", simitVehiculo());
+    const a = await within(dialogo).findByRole("region", { name: "Auditoría de consulta" });
+    expect(within(a).getByRole("heading", { name: "Auditoría de consulta" })).toBeInTheDocument();
+    expect(a).toHaveTextContent("Fecha y hora de la consulta");
+    expect(a).toHaveTextContent("22/10/2026 10:00");
+    expect(within(a).getByText("Ejecutado (OK)").closest("[data-tono]")).toHaveAttribute("data-tono", "success");
+    expect(a).not.toHaveTextContent(/dato original/i);
   });
 
-  it("sin comparendos lo dice en vez de pintar una tabla vacía", async () => {
-    const { dialogo } = await pintarDetalle(simitVehiculo([]));
-    expect(within(dialogo).queryByRole("table")).not.toBeInTheDocument();
-    expect(within(dialogo).getByText("Sin comparendos registrados.")).toBeInTheDocument();
+  it("reutilizada: indica que la fecha es la del dato original", async () => {
+    const { dialogo } = await pintarDetalle({ ...runtVehiculo(), reutilizada: true });
+    expect(auditoria(dialogo)).toHaveTextContent("22/10/2026 10:00");
+    expect(auditoria(dialogo)).toHaveTextContent(/fecha del dato original/i);
   });
 
-  it("una lista larga se limita a 10 y se expande con un botón que informa su estado", async () => {
-    const lista = Array.from({ length: 30 }, (_, i) => comparendo(i + 1));
-    const { dialogo } = await pintarDetalle(simitVehiculo(lista));
-    const tabla = within(dialogo).getByRole("table", { name: /comparendos/i });
-    expect(within(tabla).getAllByRole("row").slice(1)).toHaveLength(10);
-    const ver = within(dialogo).getByRole("button", { name: "Ver los 30 comparendos" });
-    expect(ver).toHaveAttribute("aria-expanded", "false");
-    fireEvent.click(ver);
-    expect(within(tabla).getAllByRole("row").slice(1)).toHaveLength(30);
-    expect(within(dialogo).getByRole("button", { name: "Ver menos" })).toHaveAttribute("aria-expanded", "true");
+  it("sin fecha (pendiente) muestra «—» y el chip «Sin ejecutar»", async () => {
+    const { dialogo } = await pintarDetalle(detalle("SIMIT_VEHICULO", { estado: "PENDIENTE", dato_obtenido_en: null }));
+    expect(auditoria(dialogo)).toHaveTextContent("Fecha y hora de la consulta—");
+    expect(within(auditoria(dialogo)).getByText("Sin ejecutar")).toBeInTheDocument();
   });
 
-  it("avisa cuando la API cortó la lista (comparendos_truncados)", async () => {
-    const lista = Array.from({ length: 100 }, (_, i) => comparendo(i + 1));
-    const { dialogo } = await pintarDetalle(simitVehiculo(lista, true, 250));
-    expect(within(dialogo).getByText(/se muestran 100 de 250 comparendos/i)).toBeInTheDocument();
-  });
-});
-
-describe("DetalleCelda — vistas por fuente", () => {
-  it("RUNT del vehículo: placa, VIN, servicio, clase, organismo y propietarios", async () => {
-    const { dialogo } = await pintarDetalle(runtVehiculo());
-    for (const texto of ["TST001", "9ZZPRUEBA00000001", "PARTICULAR", "AUTOMOVIL", "STRIA PRUEBA"]) expect(within(dialogo).getByText(texto)).toBeInTheDocument();
-    expect(within(dialogo).getByText(/1 propietario/i)).toBeInTheDocument();
+  it("novedad: chip «Novedad» con su motivo", async () => {
+    const { dialogo } = await pintarDetalle(detalle("RUNT_LOCATARIO", { estado: "NA", motivo_na: "SIN_DOCUMENTO_LOCATARIO", dato_obtenido_en: null, personas: [] }));
+    expect(within(auditoria(dialogo)).getByText("Novedad")).toBeInTheDocument();
+    expect(auditoria(dialogo)).toHaveTextContent(/sin el documento del locatario/i);
   });
 
-  it("avalúo con valor: valor sugerido y una fila por fuente", async () => {
-    const { dialogo } = await pintarDetalle(avaluoConValor());
-    expect(within(dialogo).getAllByText((_, el) => el?.textContent?.replace(/\s/g, " ") === "$ 45.000.000").length).toBeGreaterThan(0);
-    const tabla = within(dialogo).getByRole("table", { name: /fuentes del avalúo/i });
-    expect(within(tabla).getAllByRole("row").slice(1)).toHaveLength(2);
-    expect(within(tabla).getByText("Fasecolda")).toBeInTheDocument();
-    expect(within(tabla).getByText("Mercado Libre")).toBeInTheDocument();
+  it("por persona: rol, documento enmascarado tal cual, consultado_en y estado mapeado", async () => {
+    const d = detalle("RUNT_PROPIETARIO", {
+      personas: [
+        persona(1, { documento_enmascarado: "****1222" }),
+        persona(2, { tipo_documento: "NIT", documento_enmascarado: "****4567", estado: "SIN_RESULTADO", resultado: null }),
+        persona(3, { documento_enmascarado: "****", estado: "ERROR", tipo_error: "TIMEOUT", consultado_en: null, resultado: null }),
+      ],
+    });
+    const { dialogo } = await pintarDetalle(d);
+    const tabla = within(auditoria(dialogo)).getByRole("table", { name: "Personas consultadas" });
+    expect(within(tabla).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Persona", "Rol", "Documento", "Consultado en", "Estado"]);
+    for (const c of within(tabla).getAllByRole("columnheader")) expect(c).toHaveAttribute("scope", "col");
+    const [p1, p2, p3] = within(tabla).getAllByRole("row").slice(1);
+    expect(p1).toHaveTextContent("Propietario");
+    expect(p1).toHaveTextContent("C ****1222");
+    expect(p1).toHaveTextContent("22/10/2026 10:00");
+    expect(p1).toHaveTextContent("Ejecutado (OK)");
+    expect(p2).toHaveTextContent("NIT ****4567");
+    expect(p2).toHaveTextContent("Novedad");
+    expect(p2).toHaveTextContent("Sin resultado");
+    expect(p3).toHaveTextContent("C ****");
+    expect(p3.textContent).not.toMatch(/\*{4}\d/);
+    expect(p3).toHaveTextContent("Error");
+    expect(p3).toHaveTextContent(/no respondió a tiempo/i);
+    expect(p3).toHaveTextContent("—");
   });
-});
 
-describe("DetalleCelda — AC2: documento declarado por el cliente", () => {
-  it("el documento aparece enmascarado tal cual llega con el rótulo «declarado por el cliente»", async () => {
+  it("el documento declarado por el cliente lleva el rótulo; el no declarado no", async () => {
     const { dialogo } = await abrir("RUNT_LOCATARIO", runtLocatarioDeclarado());
-    const seccion = within(dialogo).getByRole("region", { name: /locatario 1/i });
-    expect(within(seccion).getByText("****5678")).toBeInTheDocument();
-    expect(within(seccion).getByText(/declarado por el cliente/i)).toBeInTheDocument();
-  });
-
-  it("un documento corto llega como «****» y así se muestra, sin intentar reconstruirlo", async () => {
-    const { dialogo } = await pintarDetalle(detalle("RUNT_LOCATARIO", { personas: [persona(1, { rol: "LOCATARIO", documento_enmascarado: "****" })] }));
-    const seccion = within(dialogo).getByRole("region", { name: /locatario 1/i });
-    expect(within(seccion).getByText("****")).toBeInTheDocument();
-    expect(seccion.textContent).not.toMatch(/\*{4}\d/);
+    const tabla = await within(dialogo).findByRole("table", { name: "Personas consultadas" });
+    expect(tabla).toHaveTextContent("C ****5678");
+    expect(tabla).toHaveTextContent("Locatario");
+    expect(within(tabla).getByText(/declarado por el cliente/i)).toBeInTheDocument();
   });
 
   it("sin declarar no lleva el rótulo", async () => {
@@ -170,62 +174,161 @@ describe("DetalleCelda — AC2: documento declarado por el cliente", () => {
   });
 });
 
-describe("DetalleCelda — AC3: una sección por persona", () => {
-  it("tres propietarios, uno por RUES: tres secciones con su documento enmascarado y su resultado", async () => {
-    const { dialogo } = await abrir("RUNT_PROPIETARIO", runtTresPropietarios());
-    const secciones = within(dialogo).getAllByRole("region", { name: /^propietario \d/i });
-    expect(secciones).toHaveLength(3);
-    expect(within(secciones[0]).getByText("****1222")).toBeInTheDocument();
-    expect(within(secciones[0]).getByText("Inscrito en el RUNT")).toBeInTheDocument();
-    expect(within(secciones[0]).getByText(/B1/)).toBeInTheDocument();
-    expect(within(secciones[1]).getByText("****3344")).toBeInTheDocument();
-    expect(within(secciones[1]).getByText("No inscrito en el RUNT")).toBeInTheDocument();
-    expect(within(secciones[2]).getByText("****4567")).toBeInTheDocument();
-    expect(within(secciones[2]).getByText(/consultado en el RUES/i)).toBeInTheDocument();
-    expect(within(secciones[2]).getByText("ACTIVA")).toBeInTheDocument();
-    for (const s of secciones) expect(within(s).getByText("Consultada")).toBeInTheDocument();
+describe("DetalleCelda — HU #14087 AC8: respuesta de la fuente con todos los campos verbatim", () => {
+  it("SIMIT vehículo: semaforo, cantidad, truncados y la tabla de comparendos con sus claves y valores tal cual", async () => {
+    const { dialogo } = await abrir("SIMIT_VEHICULO", simitVehiculo([comparendo(1), comparendo(2, { valor: "1250000", estado: "PAGADO" })]));
+    const r = await within(dialogo).findByRole("region", { name: "Respuesta de la fuente" });
+    const tabla = within(r).getByRole("table", { name: "Respuesta de la fuente" });
+    expect(valorDe(tabla, "semaforo")).toBe("ROJO");
+    expect(valorDe(tabla, "cantidad_comparendos")).toBe("2");
+    expect(valorDe(tabla, "comparendos_truncados")).toBe("false");
+    const comparendos = within(r).getByRole("table", { name: "comparendos" });
+    expect(within(comparendos).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["numero", "fecha", "valor", "estado", "organismo"]);
+    const filas = within(comparendos).getAllByRole("row").slice(1);
+    expect(within(filas[0]).getAllByRole("cell").map((c) => c.textContent)).toEqual(["C-0001", "2026-01-02", "500000", "PENDIENTE", "ORGANISMO PRUEBA"]);
+    expect(within(filas[1]).getAllByRole("cell").map((c) => c.textContent)).toEqual(["C-0002", "2026-01-02", "1250000", "PAGADO", "ORGANISMO PRUEBA"]);
   });
 
-  it("SIMIT por persona reutiliza la vista de comparendos", async () => {
+  it("una lista larga de comparendos se pinta completa (100), sin cortar ni inventar", async () => {
+    const lista = Array.from({ length: 100 }, (_, i) => comparendo(i + 1));
+    const { dialogo } = await pintarDetalle(simitVehiculo(lista, true, 250));
+    expect(within(within(dialogo).getByRole("table", { name: "comparendos" })).getAllByRole("row").slice(1)).toHaveLength(100);
+    const tabla = within(dialogo).getByRole("table", { name: "Respuesta de la fuente" });
+    expect(valorDe(tabla, "cantidad_comparendos")).toBe("250");
+    expect(valorDe(tabla, "comparendos_truncados")).toBe("true");
+  });
+
+  it("sin comparendos: «[]»", async () => {
+    const { dialogo } = await pintarDetalle(simitVehiculo([]));
+    expect(valorDe(within(dialogo).getByRole("table", { name: "Respuesta de la fuente" }), "comparendos")).toBe("[]");
+  });
+
+  it("RUNT del vehículo: todos sus campos y la tabla de propietarios", async () => {
+    const { dialogo } = await pintarDetalle(runtVehiculo());
+    const tabla = within(respuesta(dialogo)).getByRole("table", { name: "Respuesta de la fuente" });
+    expect(within(tabla).getAllByRole("rowheader").map((c) => c.textContent)).toEqual(["placa", "vin", "servicio", "clase", "organismo", "locatarios"]);
+    expect(valorDe(tabla, "vin")).toBe("9ZZPRUEBA00000001");
+    expect(valorDe(tabla, "locatarios")).toBe("0");
+    const propietarios = within(respuesta(dialogo)).getByRole("table", { name: "propietarios" });
+    expect(within(propietarios).getAllByRole("cell").map((c) => c.textContent)).toEqual(["C", "PROPIA"]);
+  });
+
+  it("avalúo: valores numéricos sin formato y null verbatim", async () => {
+    const { dialogo } = await pintarDetalle(avaluoConValor());
+    const tabla = within(respuesta(dialogo)).getByRole("table", { name: "Respuesta de la fuente" });
+    expect(valorDe(tabla, "sin_valor_comercial")).toBe("false");
+    expect(valorDe(tabla, "valor_sugerido")).toBe("45000000");
+    expect(valorDe(tabla, "fuente_principal")).toBe("fasecolda");
+    const fuentes = within(respuesta(dialogo)).getByRole("table", { name: "fuentes" });
+    const filas = within(fuentes).getAllByRole("row").slice(1);
+    expect(within(filas[0]).getAllByRole("cell").map((c) => c.textContent)).toEqual(["fasecolda", "OK", "45000000", "null", "2026-10-22"]);
+    expect(dialogo.textContent).not.toMatch(/\$\s?45/);
+  });
+
+  it("avalúo sin valor comercial: sin_valor_comercial true y valor_sugerido null", async () => {
+    const { dialogo } = await abrir("AVALUO", avaluoSinValor());
+    const tabla = await within(dialogo).findByRole("table", { name: "Respuesta de la fuente" });
+    expect(valorDe(tabla, "sin_valor_comercial")).toBe("true");
+    expect(valorDe(tabla, "valor_sugerido")).toBe("null");
+  });
+
+  it("impuesto: monto_total y la tabla de vigencias con anio, valor y pagada tal cual", async () => {
+    const { dialogo } = await pintarDetalle(impuestoConVigencias());
+    expect(valorDe(within(dialogo).getByRole("table", { name: "Respuesta de la fuente" }), "monto_total")).toBe("350000");
+    const vigencias = within(dialogo).getByRole("table", { name: "vigencias" });
+    expect(within(vigencias).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["anio", "valor", "pagada"]);
+    expect(within(vigencias).getAllByRole("row").slice(1).map((f) => within(f).getAllByRole("cell").map((c) => c.textContent))).toEqual([
+      ["2025", "180000", "true"],
+      ["2026", "350000", "false"],
+    ]);
+  });
+
+  it("impuesto sin vigencias: «[]»", async () => {
+    const { dialogo } = await pintarDetalle(impuestoSinVigencias());
+    expect(valorDe(within(dialogo).getByRole("table", { name: "Respuesta de la fuente" }), "vigencias")).toBe("[]");
+  });
+
+  it("fuentes de persona: una subsección por persona con todos los campos de su resultado", async () => {
+    const { dialogo } = await abrir("RUNT_PROPIETARIO", runtTresPropietarios());
+    const r = await within(dialogo).findByRole("region", { name: "Respuesta de la fuente" });
+    const secciones = within(r).getAllByRole("region", { name: /^propietario \d/i });
+    expect(secciones).toHaveLength(3);
+    const t1 = within(secciones[0]).getByRole("table", { name: "Respuesta de la fuente · Propietario 1" });
+    expect(valorDe(t1, "inscrito")).toBe("true");
+    expect(valorDe(t1, "estado_conductor")).toBe("ACTIVO");
+    expect(within(within(secciones[0]).getByRole("table", { name: "licencias" })).getAllByRole("cell").map((c) => c.textContent)).toEqual(["B1", "VIGENTE", "2030-01-01"]);
+    const t2 = within(secciones[1]).getByRole("table", { name: "Respuesta de la fuente · Propietario 2" });
+    expect(valorDe(t2, "inscrito")).toBe("false");
+    expect(valorDe(t2, "estado_conductor")).toBe("null");
+    expect(valorDe(t2, "licencias")).toBe("[]");
+    const t3 = within(secciones[2]).getByRole("table", { name: "Respuesta de la fuente · Propietario 3" });
+    expect(valorDe(t3, "encontrada")).toBe("true");
+    expect(valorDe(t3, "estado_matricula")).toBe("ACTIVA");
+    expect(valorDe(t3, "ultima_renovacion")).toBe("2026");
+  });
+
+  it("SIMIT por persona: los comparendos de la persona como tabla", async () => {
     const simit = simitVehiculo([comparendo(7)]).resultado as ResultadoSimitDetalle;
     const { dialogo } = await pintarDetalle(detalle("SIMIT_PROPIETARIO", { personas: [persona(1, { consulta: "SIMIT", resultado: simit })] }));
-    const seccion = within(dialogo).getByRole("region", { name: /propietario 1/i });
-    expect(within(seccion).getByRole("table", { name: /comparendos/i })).toHaveTextContent("C-0007");
-  });
-
-  it("celda ERROR PERSONAS_CON_ERROR: muestra lo que sí respondió y el error de cada persona que falló", async () => {
-    const { dialogo } = await pintarDetalle(runtPropietarioConError());
-    expect(within(dialogo).getByText(/personas no se pudieron consultar/i)).toBeInTheDocument();
-    const [ok, fallida] = within(dialogo).getAllByRole("region", { name: /^propietario \d/i });
-    expect(within(ok).getByText("Consultada")).toBeInTheDocument();
-    expect(within(ok).getByText("Inscrito en el RUNT")).toBeInTheDocument();
-    expect(within(fallida).getByText("Error")).toBeInTheDocument();
-    expect(within(fallida).getByText(/no respondió a tiempo/i)).toBeInTheDocument();
-    expect(within(fallida).getByText("****4567")).toBeInTheDocument();
+    const seccion = within(respuesta(dialogo)).getByRole("region", { name: /propietario 1/i });
+    expect(within(seccion).getByRole("table", { name: "comparendos" })).toHaveTextContent("C-0007");
   });
 
   it("sin personas del rol: estado vacío claro", async () => {
     const { dialogo } = await pintarDetalle(detalle("RUNT_LOCATARIO", { personas: [] }));
-    expect(within(dialogo).getByText("El vehículo no tiene locatarios para esta consulta.")).toBeInTheDocument();
+    expect(respuesta(dialogo)).toHaveTextContent("El vehículo no tiene locatarios para esta consulta.");
   });
 });
 
-describe("DetalleCelda — AC4: avalúo sin valor", () => {
-  it("se lee «Sin valor comercial»", async () => {
-    const { dialogo } = await abrir("AVALUO", avaluoSinValor());
-    expect(within(dialogo).getByText("Sin valor comercial")).toBeInTheDocument();
-    expect(within(dialogo).queryByText(/\$\s?\d/)).not.toBeInTheDocument();
+describe("DetalleCelda — HU #14087 AC8: sin resultado no hay campos", () => {
+  it("Sin ejecutar: lo dice y no pinta campos", async () => {
+    const { dialogo } = await pintarDetalle(detalle("SIMIT_VEHICULO", { estado: "EN_CURSO", dato_obtenido_en: null }));
+    expect(respuesta(dialogo)).toHaveTextContent(/todavía no se ha ejecutado/i);
+    expect(within(respuesta(dialogo)).queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  it("Novedad: lo dice con su motivo y no pinta campos", async () => {
+    const { dialogo } = await pintarDetalle(impuestoNa("SERVICIO_PUBLICO"));
+    expect(respuesta(dialogo)).toHaveTextContent("El vehículo es de servicio público: esta consulta no aplica.");
+    expect(respuesta(dialogo)).toHaveTextContent(/sin respuesta de la fuente/i);
+    expect(within(respuesta(dialogo)).queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  it("Error: el código traducido (nunca crudo) y sin campos", async () => {
+    const { dialogo } = await pintarDetalle(detalle("SIMIT_VEHICULO", { estado: "ERROR", tipo_error: "TIMEOUT", dato_obtenido_en: null }));
+    expect(within(dialogo).getByRole("alert")).toHaveTextContent(/no respondió a tiempo/i);
+    expect(dialogo.textContent).not.toContain("TIMEOUT");
+    expect(within(respuesta(dialogo)).queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  it("Error bloqueado por el RUNT lo explica", async () => {
+    const { dialogo } = await pintarDetalle(detalle("AVALUO", { estado: "ERROR", tipo_error: "BLOQUEADA_POR_RUNT", dato_obtenido_en: null }));
+    expect(within(dialogo).getByRole("alert")).toHaveTextContent(/RUNT del vehículo/i);
+  });
+
+  it("ERROR PERSONAS_CON_ERROR: muestra lo que sí respondió y, en la persona que falló, que no hay respuesta", async () => {
+    const { dialogo } = await pintarDetalle(runtPropietarioConError());
+    expect(within(dialogo).getByRole("alert")).toHaveTextContent(/personas no se pudieron consultar/i);
+    const [ok, fallida] = within(respuesta(dialogo)).getAllByRole("region", { name: /^propietario \d/i });
+    expect(valorDe(within(ok).getByRole("table", { name: /Propietario 1$/ }), "inscrito")).toBe("true");
+    expect(within(fallida).queryByRole("table")).not.toBeInTheDocument();
+    expect(fallida).toHaveTextContent(/sin respuesta de la fuente/i);
+  });
+
+  it("completada sin resultado (backoffice): lo dice sin inventar campos", async () => {
+    const { dialogo } = await pintarDetalle(detalle("SIMIT_VEHICULO", { resultado: null }));
+    expect(respuesta(dialogo)).toHaveTextContent(/no trae campos/i);
+    expect(within(respuesta(dialogo)).queryByRole("table")).not.toBeInTheDocument();
   });
 });
 
-describe("DetalleCelda — AC5 (negativo): nada distingue una celda llenada a mano", () => {
+describe("DetalleCelda — R-20 (negativo): nada distingue una celda llenada a mano ni sale crudo del proveedor", () => {
   const SOSPECHOSOS = /manual|a mano|backoffice|origen|usuario|proveedor|transacci/i;
+  const limpiar = (html: string) => html.replace(/\s(id|aria-labelledby|aria-describedby|aria-controls)="[^"]*"/g, "");
 
   it("ni texto ni icono ni estilo: el DOM es idéntico al de una consultada por API aunque llegaran claves extra", async () => {
     const api = runtTresPropietarios();
     const manual = { ...runtTresPropietarios(), origen: "MANUAL", usuario_id: "u-1", proveedor: "x" } as unknown as Detalle;
-    const limpiar = (html: string) => html.replace(/\s(id|aria-labelledby|aria-describedby|aria-controls)="[^"]*"/g, "");
-
     const a = await pintarDetalle(api);
     const htmlApi = limpiar(a.dialogo.innerHTML);
     a.unmount();
@@ -235,40 +338,40 @@ describe("DetalleCelda — AC5 (negativo): nada distingue una celda llenada a ma
     expect(b.dialogo.querySelector("[data-origen]")).toBeNull();
   });
 
-  it("tampoco en el SIMIT ni en el avalúo", async () => {
+  it("tampoco en el SIMIT, el avalúo ni el RUNT", async () => {
     for (const d of [simitVehiculo(), avaluoSinValor(), runtVehiculo()]) {
       const { dialogo, unmount } = await pintarDetalle({ ...d, origen: "MANUAL" } as unknown as Detalle);
       expect(dialogo.textContent).not.toMatch(SOSPECHOSOS);
       unmount();
     }
   });
+
+  it("aunque el resultado traiga proveedor, transacción, origen o departamento, el detalle no los muestra", async () => {
+    const conFuga = {
+      ...impuestoConVigencias(),
+      proveedor: "PROVEEDOR-FICTICIO-ZETA",
+      transaccion_proveedor_id: "TX-FICTICIA-0099",
+      origen: "API",
+      departamento_codigo: "05",
+      resultado: {
+        monto_total: 350000,
+        proveedor: "PROVEEDOR-FICTICIO-ZETA",
+        vigencias: [
+          { anio: 2025, valor: 180000, pagada: true, proveedor: "PROVEEDOR-FICTICIO-ZETA" },
+          { anio: 2026, valor: 350000, pagada: false },
+        ],
+      },
+    } as unknown as Detalle;
+    const a = await pintarDetalle(impuestoConVigencias());
+    const htmlLimpio = limpiar(a.dialogo.innerHTML);
+    a.unmount();
+    const b = await pintarDetalle(conFuga);
+    expect(b.dialogo.textContent).not.toMatch(/PROVEEDOR-FICTICIO-ZETA|TX-FICTICIA-0099|proveedor|transacci|origen|departamento/i);
+    expect(limpiar(b.dialogo.innerHTML)).toBe(htmlLimpio);
+  });
 });
 
-describe("DetalleCelda — N/A y ERROR", () => {
-  it("N/A muestra el motivo", async () => {
-    const { dialogo } = await pintarDetalle(detalle("RUNT_LOCATARIO", { estado: "NA", motivo_na: "SIN_DOCUMENTO_LOCATARIO", dato_obtenido_en: null, personas: [] }));
-    expect(within(dialogo).getByText("No aplica")).toBeInTheDocument();
-    expect(within(dialogo).getByText(/sin el documento del locatario/i)).toBeInTheDocument();
-  });
-
-  it("ERROR muestra el código traducido, no el código crudo", async () => {
-    const { dialogo } = await pintarDetalle(detalle("SIMIT_VEHICULO", { estado: "ERROR", tipo_error: "TIMEOUT", dato_obtenido_en: null }));
-    expect(within(dialogo).getByRole("alert")).toHaveTextContent(/no respondió a tiempo/i);
-    expect(dialogo.textContent).not.toContain("TIMEOUT");
-  });
-
-  it("ERROR bloqueado por el RUNT lo explica", async () => {
-    const { dialogo } = await pintarDetalle(detalle("AVALUO", { estado: "ERROR", tipo_error: "BLOQUEADA_POR_RUNT", dato_obtenido_en: null }));
-    expect(within(dialogo).getByRole("alert")).toHaveTextContent(/RUNT del vehículo/i);
-  });
-
-  it("pendiente: dice que la consulta todavía no termina", async () => {
-    const { dialogo } = await pintarDetalle(detalle("SIMIT_VEHICULO", { estado: "EN_CURSO", dato_obtenido_en: null }));
-    expect(within(dialogo).getByText(/todavía no termina/i)).toBeInTheDocument();
-  });
-});
-
-describe("DetalleCelda — AC6 (negativo) y los otros estados de carga", () => {
+describe("DetalleCelda — los otros estados de carga", () => {
   it("404: el panel dice que no está disponible y no muestra datos", async () => {
     const { dialogo } = await abrir("SIMIT_VEHICULO", Response.json({ code: "NO_ENCONTRADO", error: "No existe" }, { status: 404 }));
     expect(await within(dialogo).findByText(/este detalle no está disponible/i)).toBeInTheDocument();
@@ -312,6 +415,13 @@ describe("DetalleCelda — accesibilidad del diálogo", () => {
     await waitFor(() => expect(dialogo.contains(document.activeElement)).toBe(true));
   });
 
+  it("las secciones son h3 bajo el título del diálogo y las tablas llevan scope", async () => {
+    const { dialogo } = await pintarDetalle(runtTresPropietarios());
+    expect(within(dialogo).getByRole("heading", { level: 3, name: "Auditoría de consulta" })).toBeInTheDocument();
+    expect(within(dialogo).getByRole("heading", { level: 3, name: "Respuesta de la fuente" })).toBeInTheDocument();
+    for (const th of within(dialogo).getAllByRole("columnheader")) expect(th).toHaveAttribute("scope", "col");
+  });
+
   it("Escape cierra y devuelve el foco al semáforo", async () => {
     const { boton } = await abrir("RUNT", runtVehiculo());
     act(() => {
@@ -329,10 +439,22 @@ describe("DetalleCelda — accesibilidad del diálogo", () => {
   });
 
   it("el foco queda atrapado: Tab en el último vuelve al primero y Shift+Tab en el primero va al último", async () => {
-    const lista = Array.from({ length: 30 }, (_, i) => comparendo(i + 1));
-    const { dialogo } = await abrir("SIMIT_VEHICULO", simitVehiculo(lista));
-    await within(dialogo).findByRole("button", { name: "Ver los 30 comparendos" });
+    render(
+      <DetalleCelda
+        loteId={ID}
+        vehiculoId="vehiculo-1"
+        fuente="SIMIT_VEHICULO"
+        nombreFuente="SIMIT vehículo"
+        identificador="TST001"
+        onClose={() => {}}
+        cargar={async () => simitVehiculo()}
+        acciones={<button type="button">Acción de prueba</button>}
+      />,
+    );
+    const dialogo = await screen.findByRole("dialog");
+    await within(dialogo).findByRole("region", { name: "Respuesta de la fuente" });
     const enfocables = within(dialogo).getAllByRole("button");
+    expect(enfocables.length).toBeGreaterThan(1);
     const primero = enfocables[0];
     const ultimo = enfocables[enfocables.length - 1];
     ultimo.focus();
@@ -350,12 +472,9 @@ describe("DetalleCelda — accesibilidad del diálogo", () => {
   });
 });
 
-// HU #13866 (F09-H7): celda y detalle del impuesto departamental. Uso de ejemplo: el semáforo «Ver detalle de Impuesto
-// departamental de TST001» abre el diálogo con «Total adeudado» en pesos enteros y la tabla Vigencia / Valor / Estado, o el
-// texto del motivo cuando la celda es N/A (servicio público; departamento no soportado o sin departamento derivado).
+// HU #13866 (F09-H7) con HU #14087: celda y detalle del impuesto departamental. El semáforo «Ver detalle de Impuesto
+// departamental de TST001» abre el diálogo con la auditoría y los campos verbatim, o el motivo cuando es Novedad.
 describe("DetalleCelda — HU #13866: impuesto departamental", () => {
-  const texto = (el: Element) => (el.textContent ?? "").replace(/\s/g, " ");
-
   /** Grilla de TST001 con RUNT completado y el impuesto en el estado pedido. */
   function grillaImpuesto(impuesto: ReturnType<typeof celda>, puedeReprocesar = false) {
     const v = vehiculo(1, [celda(1, "RUNT", "COMPLETADO"), impuesto]);
@@ -364,96 +483,27 @@ describe("DetalleCelda — HU #13866: impuesto departamental", () => {
     );
   }
 
-  it("AC1: desde el semáforo verde pide el detalle del impuesto y pinta «Total adeudado» con $ 350.000 y la tabla de vigencias con su estado", async () => {
+  it("desde el semáforo verde pide el detalle del impuesto y pinta monto_total y vigencias", async () => {
     const api = simularApi({ [rutaDetalle("IMPUESTO_DEPARTAMENTAL")]: () => Response.json(impuestoConVigencias()) });
     grillaImpuesto(celda(1, "IMPUESTO_DEPARTAMENTAL", "COMPLETADO"));
-    fireEvent.click(screen.getByRole("button", { name: /^Ver detalle de Impuesto departamental de TST001: Completada$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Ver detalle de Impuesto departamental de TST001: Ejecutado \(OK\)$/ }));
     const dialogo = await screen.findByRole("dialog", { name: "Impuesto departamental · TST001" });
     expect(llamadas(api, "GET", `/diagnosticos/${ID}/vehiculos/vehiculo-1/consultas/IMPUESTO_DEPARTAMENTAL`)).toHaveLength(1);
-
-    const total = await within(dialogo).findByText("Total adeudado");
-    expect(texto(total.parentElement!)).toContain("$ 350.000");
-
-    const tabla = within(dialogo).getByRole("table", { name: "Vigencias del impuesto" });
-    expect(within(tabla).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Vigencia", "Valor", "Estado"]);
-    for (const c of within(tabla).getAllByRole("columnheader")) expect(c).toHaveAttribute("scope", "col");
-    const filas = within(tabla).getAllByRole("row").slice(1);
-    expect(filas).toHaveLength(2);
-    expect(filas[0]).toHaveTextContent("2025");
-    expect(texto(filas[0])).toContain("$ 180.000");
-    expect(filas[0]).toHaveTextContent("Pagada");
-    expect(filas[1]).toHaveTextContent("2026");
-    expect(texto(filas[1])).toContain("$ 350.000");
-    expect(filas[1]).toHaveTextContent("Pendiente");
+    const tabla = await within(dialogo).findByRole("table", { name: "Respuesta de la fuente" });
+    expect(valorDe(tabla, "monto_total")).toBe("350000");
+    expect(within(dialogo).getByRole("table", { name: "vigencias" })).toBeInTheDocument();
   });
 
-  it("AC1: los montos se muestran en pesos enteros con el formato del avalúo, sin decimales", async () => {
-    const { dialogo } = await pintarDetalle(impuestoConVigencias([{ anio: 2026, valor: 1234567, pagada: false }], 1234567));
-    expect(texto(dialogo)).toContain("$ 1.234.567");
-    expect(texto(dialogo)).not.toMatch(/1\.234\.567,\d/);
-  });
-
-  it("AC1 (vacío): sin vigencias dice «No registra vigencias» en vez de pintar una tabla vacía", async () => {
-    const { dialogo } = await pintarDetalle(impuestoSinVigencias());
-    expect(within(dialogo).getByText("No registra vigencias")).toBeInTheDocument();
-    expect(within(dialogo).queryByRole("table")).not.toBeInTheDocument();
-    expect(texto(within(dialogo).getByText("Total adeudado").parentElement!)).toContain("$ 0");
-  });
-
-  it("AC2: servicio público — el detalle explica el motivo con el texto existente y el chip «No aplica»", async () => {
-    const { dialogo } = await pintarDetalle(impuestoNa("SERVICIO_PUBLICO"));
-    expect(within(dialogo).getByText("No aplica")).toBeInTheDocument();
-    expect(within(dialogo).getByText("El vehículo es de servicio público: esta consulta no aplica.")).toBeInTheDocument();
-    expect(within(dialogo).queryByText("Total adeudado")).not.toBeInTheDocument();
-  });
-
-  it("AC2: desde la grilla, el chip N/A «Servicio público» del impuesto abre su detalle con el motivo", async () => {
-    simularApi({ [rutaDetalle("IMPUESTO_DEPARTAMENTAL")]: () => Response.json(impuestoNa("SERVICIO_PUBLICO")) });
-    const { container } = grillaImpuesto(celda(1, "IMPUESTO_DEPARTAMENTAL", "NA", { motivo_na: "SERVICIO_PUBLICO" }));
-    expect(container.querySelector('[data-celda="celda-1-impuesto_departamental"]')).toHaveTextContent("Servicio público");
-    fireEvent.click(screen.getByRole("button", { name: /^Ver detalle de Impuesto departamental de TST001: No aplica$/ }));
-    const dialogo = await screen.findByRole("dialog", { name: "Impuesto departamental · TST001" });
-    expect(await within(dialogo).findByText("El vehículo es de servicio público: esta consulta no aplica.")).toBeInTheDocument();
-  });
-
-  it("AC3 (negativo): departamento no soportado — texto existente, sin error ni botón de reprocesar", async () => {
+  it("la «Novedad» por departamento no soportado abre su detalle con el motivo, sin error ni reproceso", async () => {
     simularApi({ [rutaDetalle("IMPUESTO_DEPARTAMENTAL")]: () => Response.json(impuestoNa("DEPARTAMENTO_NO_SOPORTADO")) });
-    grillaImpuesto(celda(1, "IMPUESTO_DEPARTAMENTAL", "NA", { motivo_na: "DEPARTAMENTO_NO_SOPORTADO" }), true);
+    const { container } = grillaImpuesto(celda(1, "IMPUESTO_DEPARTAMENTAL", "NA", { motivo_na: "DEPARTAMENTO_NO_SOPORTADO" }), true);
+    expect(container.querySelector('[data-celda="celda-1-impuesto_departamental"]')).toHaveTextContent("Departamento no soportado");
     expect(screen.queryByRole("button", { name: /reprocesar/i })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /^Ver detalle de Impuesto departamental de TST001: No aplica$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Ver detalle de Impuesto departamental de TST001: Novedad$/ }));
     const dialogo = await screen.findByRole("dialog", { name: "Impuesto departamental · TST001" });
-    expect(await within(dialogo).findByText("El departamento del vehículo todavía no está soportado.")).toBeInTheDocument();
+    expect((await within(dialogo).findAllByText(/El departamento del vehículo todavía no está soportado\./)).length).toBeGreaterThan(0);
     expect(within(dialogo).queryByRole("alert")).not.toBeInTheDocument();
     expect(within(dialogo).queryByRole("button", { name: /reprocesar|reintentar/i })).not.toBeInTheDocument();
     expect(within(dialogo).queryByText(/error/i)).not.toBeInTheDocument();
-  });
-
-  it("R-20: aunque el payload traiga un proveedor ficticio, transacción, origen o departamento, el detalle no los muestra", async () => {
-    const limpio = impuestoConVigencias();
-    const conFuga = {
-      ...impuestoConVigencias(),
-      proveedor: "PROVEEDOR-FICTICIO-ZETA",
-      transaccion_proveedor_id: "TX-FICTICIA-0099",
-      origen: "API",
-      departamento_codigo: "05",
-      resultado: {
-        monto_total: 350000,
-        proveedor: "PROVEEDOR-FICTICIO-ZETA",
-        vigencias: [
-          { anio: 2025, valor: 180000, pagada: true, proveedor: "PROVEEDOR-FICTICIO-ZETA" },
-          { anio: 2026, valor: 350000, pagada: false },
-        ],
-      },
-    } as unknown as Detalle;
-    const limpiar = (html: string) => html.replace(/\s(id|aria-labelledby|aria-describedby|aria-controls)="[^"]*"/g, "");
-
-    const a = await pintarDetalle(limpio);
-    await within(a.dialogo).findByText("Total adeudado");
-    const htmlLimpio = limpiar(a.dialogo.innerHTML);
-    a.unmount();
-    const b = await pintarDetalle(conFuga);
-    await within(b.dialogo).findByText("Total adeudado");
-    expect(b.dialogo.textContent).not.toMatch(/PROVEEDOR-FICTICIO-ZETA|TX-FICTICIA-0099|proveedor|transacci|origen|departamento/i);
-    expect(limpiar(b.dialogo.innerHTML)).toBe(htmlLimpio);
   });
 });

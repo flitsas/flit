@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Info } from "lucide-react";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { Modal } from "@flit/ui/Modal";
+import { DocumentoDeclarado, enmascararDocumento } from "@/components/comun/DocumentoDeclarado";
 import { BOTON_REINTENTAR_CLS } from "@/components/configuracion/estilos";
 import type { Fuente } from "@/lib/configuracion";
+import type { EstadoCelda } from "@/lib/tablero/api";
 import {
   FUENTES_PERSONA,
   obtenerDetalleCelda,
@@ -16,18 +18,19 @@ import {
   type CargadorDetalle,
   type DetalleCelda as Detalle,
   type ErrorDetalle,
-  type ResultadoAvaluoDetalle,
-  type ResultadoImpuestoDetalle,
-  type ResultadoRuntDetalle,
-  type ResultadoSimitDetalle,
+  type EstadoPersona,
+  type PersonaDetalle,
 } from "@/lib/tablero/detalle";
 import { ChipEstadoCelda, fechaDelDato } from "./CeldaSemaforo";
-import { Vacio } from "./vistasDetalle/comun";
-import { DetalleAvaluo } from "./vistasDetalle/DetalleAvaluo";
-import { DetalleImpuesto } from "./vistasDetalle/DetalleImpuesto";
-import { SeccionesPersonas } from "./vistasDetalle/DetallePersonaRunt";
-import { DetalleRunt } from "./vistasDetalle/DetalleRunt";
-import { DetalleSimit } from "./vistasDetalle/DetalleSimit";
+import { RespuestaFuente } from "./RespuestaFuente";
+import {
+  CABECERA_TABLA_CLS,
+  CABECERA_TABLA_ESTILO,
+  CELDA_TABLA_CLS,
+  FILA_TABLA_CLS,
+  TARJETA_DETALLE_CLS,
+  Vacio,
+} from "./vistasDetalle/comun";
 
 export interface DetalleCeldaProps {
   loteId: string;
@@ -87,55 +90,168 @@ export function useFocoAtrapado(ancla: React.RefObject<HTMLElement | null>, devo
   }, [ancla, devolverFocoA]);
 }
 
-function Resultado({ detalle }: { detalle: Detalle }) {
-  if (FUENTES_PERSONA.has(detalle.fuente) || detalle.personas)
-    return (
-      <SeccionesPersonas personas={detalle.personas ?? []} rol={detalle.fuente.endsWith("LOCATARIO") ? "LOCATARIO" : "PROPIETARIO"} />
-    );
-  const r = detalle.resultado;
-  if (!r) return <Vacio>Esta consulta no trae detalle para mostrar.</Vacio>;
-  if (detalle.fuente === "SIMIT_VEHICULO") return <DetalleSimit resultado={r as ResultadoSimitDetalle} />;
-  if (detalle.fuente === "AVALUO") return <DetalleAvaluo resultado={r as ResultadoAvaluoDetalle} />;
-  if (detalle.fuente === "RUNT") return <DetalleRunt resultado={r as ResultadoRuntDetalle} />;
-  if (detalle.fuente === "IMPUESTO_DEPARTAMENTAL") return <DetalleImpuesto resultado={r as ResultadoImpuestoDetalle} />;
-  return <Vacio>Esta consulta no trae detalle para mostrar.</Vacio>;
+const TITULO_SECCION_CLS = "text-sm font-semibold text-flit-primary dark:text-white";
+const ROTULO_CLS = "text-xs text-[var(--nav-texto)] dark:text-slate-300";
+const ROLES: Record<PersonaDetalle["rol"], string> = { PROPIETARIO: "Propietario", LOCATARIO: "Locatario" };
+
+/** Estado de una persona con el mismo chip de la tabla: OK → Ejecutado (OK), ERROR → Error, SIN_RESULTADO → Novedad. */
+const ESTADO_PERSONA: Record<EstadoPersona, EstadoCelda> = { OK: "COMPLETADO", ERROR: "ERROR", SIN_RESULTADO: "NA" };
+
+const fechaOGuion = (iso: string | null) => (iso ? fechaDelDato(iso) : "—");
+
+/** Sección del detalle con su título h3 (región con nombre accesible). */
+function Seccion({ titulo, children }: { titulo: string; children: ReactNode }) {
+  const id = useId();
+  return (
+    <section aria-labelledby={id} className={`${TARJETA_DETALLE_CLS} flex flex-col gap-3`}>
+      <h3 id={id} className={TITULO_SECCION_CLS}>
+        {titulo}
+      </h3>
+      {children}
+    </section>
+  );
 }
 
-/** Cuerpo del detalle ya cargado, según el estado de la celda. Solo lee las claves del contrato (DTO cerrado, R-20). */
-export function VistaDetalleCelda({ detalle }: { detalle: Detalle }) {
+function DocumentoPersona({ persona }: { persona: PersonaDetalle }) {
+  if (persona.declarado_por_cliente) return <DocumentoDeclarado tipo={persona.tipo_documento} documento={persona.documento_enmascarado} />;
+  return (
+    <span className="font-mono text-xs font-medium text-flit-primary dark:text-white">{`${persona.tipo_documento} ${enmascararDocumento(persona.documento_enmascarado)}`}</span>
+  );
+}
+
+function EstadoDePersona({ persona }: { persona: PersonaDetalle }) {
+  return (
+    <span className="flex flex-col items-start gap-1">
+      <ChipEstadoCelda estado={ESTADO_PERSONA[persona.estado]} />
+      {persona.estado === "SIN_RESULTADO" && <span className={ROTULO_CLS}>Sin resultado</span>}
+      {persona.estado === "ERROR" && <span className={ROTULO_CLS}>{textoTipoError(persona.tipo_error)}</span>}
+    </span>
+  );
+}
+
+/** Auditoría por persona: rol, documento enmascarado, consultado_en y estado mapeado (HU #14087 AC7). */
+function TablaPersonas({ personas }: { personas: PersonaDetalle[] }) {
+  return (
+    <div className="overflow-x-auto rounded-xl border border-[var(--color-flit-gray)] dark:border-white/10">
+      <table aria-label="Personas consultadas" className="w-full border-collapse text-xs">
+        <thead>
+          <tr>
+            {["Persona", "Rol", "Documento", "Consultado en", "Estado"].map((t) => (
+              <th key={t} scope="col" className={CABECERA_TABLA_CLS} style={CABECERA_TABLA_ESTILO}>
+                {t}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {personas.map((p) => (
+            <tr key={p.orden} className={FILA_TABLA_CLS}>
+              <td className={`${CELDA_TABLA_CLS} tabular-nums`}>{p.orden}</td>
+              <td className={CELDA_TABLA_CLS}>{ROLES[p.rol] ?? p.rol}</td>
+              <td className={CELDA_TABLA_CLS}>
+                <DocumentoPersona persona={p} />
+              </td>
+              <td className={`${CELDA_TABLA_CLS} whitespace-nowrap tabular-nums`}>{fechaOGuion(p.consultado_en)}</td>
+              <td className={CELDA_TABLA_CLS}>
+                <EstadoDePersona persona={p} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** «Auditoría de consulta»: fecha y hora en Colombia (la del dato original si es reutilizada) y estado; por persona, su tabla. */
+function Auditoria({ detalle }: { detalle: Detalle }) {
+  return (
+    <Seccion titulo="Auditoría de consulta">
+      <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+        <div className="flex flex-col items-start gap-1">
+          <dt className={ROTULO_CLS}>Estado</dt>
+          <dd className="flex flex-col items-start gap-1">
+            <ChipEstadoCelda estado={detalle.estado} />
+            {detalle.estado === "NA" && <span className={ROTULO_CLS}>{textoMotivoNa(detalle.motivo_na)}</span>}
+          </dd>
+        </div>
+        <div className="flex flex-col gap-1">
+          <dt className={ROTULO_CLS}>Fecha y hora de la consulta</dt>
+          <dd className="flex flex-col gap-1">
+            <span className="text-sm font-medium tabular-nums text-flit-primary dark:text-white">{fechaOGuion(detalle.dato_obtenido_en)}</span>
+            {detalle.reutilizada && (
+              <span className={`inline-flex items-center gap-1 ${ROTULO_CLS}`}>
+                <Info className="h-3.5 w-3.5" aria-hidden="true" />
+                Fecha del dato original: reutilizado de una consulta del mismo día
+              </span>
+            )}
+          </dd>
+        </div>
+      </dl>
+      {detalle.personas && detalle.personas.length > 0 && <TablaPersonas personas={detalle.personas} />}
+    </Seccion>
+  );
+}
+
+/** Respuesta de una persona: todos los campos de su resultado, o que la fuente no respondió nada para ella. */
+function RespuestaPersona({ persona }: { persona: PersonaDetalle }) {
+  const id = useId();
+  const titulo = `${ROLES[persona.rol] ?? persona.rol} ${persona.orden}`;
+  return (
+    <section aria-labelledby={id} className="flex flex-col gap-2">
+      <h4 id={id} className={TITULO_SECCION_CLS}>
+        {titulo}
+      </h4>
+      {persona.resultado ? (
+        <RespuestaFuente datos={persona.resultado} etiqueta={`Respuesta de la fuente · ${titulo}`} nivel={5} />
+      ) : (
+        <Vacio>Sin respuesta de la fuente para esta persona.</Vacio>
+      )}
+    </section>
+  );
+}
+
+/** «Respuesta de la fuente»: lo que devuelve el API de detalle, verbatim (RespuestaFuente); sin resultado, solo el mensaje. */
+function Respuesta({ detalle }: { detalle: Detalle }) {
+  const porPersona = FUENTES_PERSONA.has(detalle.fuente) || detalle.personas !== null;
+  const personas = detalle.personas ?? [];
   let cuerpo: ReactNode;
-  if (detalle.estado === "NA") {
-    cuerpo = <Vacio>{textoMotivoNa(detalle.motivo_na)}</Vacio>;
-  } else if (detalle.estado === "PENDIENTE" || detalle.estado === "EN_CURSO") {
-    cuerpo = <Vacio>La consulta todavía no termina. Vuelve a abrir el detalle en un momento.</Vacio>;
+  if (detalle.estado === "PENDIENTE" || detalle.estado === "EN_CURSO") {
+    cuerpo = <Vacio>La consulta todavía no se ha ejecutado: no hay respuesta de la fuente. Vuelve a abrir el detalle en un momento.</Vacio>;
+  } else if (detalle.estado === "NA") {
+    cuerpo = <Vacio>{`${textoMotivoNa(detalle.motivo_na)} Sin respuesta de la fuente.`}</Vacio>;
   } else if (detalle.estado === "ERROR") {
     cuerpo = (
       <>
         <InlineAlert tone="error" title="La consulta terminó en error">
           {textoTipoError(detalle.tipo_error)}
         </InlineAlert>
-        {detalle.personas && detalle.personas.length > 0 && <Resultado detalle={detalle} />}
+        {personas.map((p) => (
+          <RespuestaPersona key={p.orden} persona={p} />
+        ))}
       </>
     );
+  } else if (porPersona && personas.length === 0) {
+    cuerpo = <Vacio>{`El vehículo no tiene ${detalle.fuente.endsWith("LOCATARIO") ? "locatarios" : "propietarios"} para esta consulta.`}</Vacio>;
+  } else if (porPersona) {
+    cuerpo = personas.map((p) => <RespuestaPersona key={p.orden} persona={p} />);
+  } else if (detalle.resultado) {
+    cuerpo = <RespuestaFuente datos={detalle.resultado} etiqueta="Respuesta de la fuente" />;
   } else {
-    cuerpo = <Resultado detalle={detalle} />;
+    cuerpo = <Vacio>Esta consulta no trae campos de respuesta para mostrar.</Vacio>;
   }
+  return <Seccion titulo="Respuesta de la fuente">{cuerpo}</Seccion>;
+}
 
+/**
+ * Cuerpo del detalle ya cargado (HU #14087): «Auditoría de consulta» y «Respuesta de la fuente». Solo lee las claves del
+ * contrato (DTO cerrado, R-20): las claves de más que llegaran fuera de `resultado` no se pintan.
+ */
+export function VistaDetalleCelda({ detalle }: { detalle: Detalle }) {
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <ChipEstadoCelda estado={detalle.estado} />
-        {detalle.dato_obtenido_en && (
-          <span className="text-xs text-[var(--nav-texto)] dark:text-slate-300">{`Dato del ${fechaDelDato(detalle.dato_obtenido_en)}`}</span>
-        )}
-        {detalle.reutilizada && (
-          <span className="inline-flex items-center gap-1 text-xs text-[var(--nav-texto)] dark:text-slate-300">
-            <Info className="h-3.5 w-3.5" aria-hidden="true" />
-            Reutilizado de una consulta del mismo día
-          </span>
-        )}
-      </div>
-      {cuerpo}
+      <Auditoria detalle={detalle} />
+      <Respuesta detalle={detalle} />
     </div>
   );
 }
@@ -144,7 +260,8 @@ export function VistaDetalleCelda({ detalle }: { detalle: Detalle }) {
  * Detalle de una celda del tablero (HU #13801, F06-H4; F06-C1..C4/C12/C13). Diálogo de @flit/ui (overlay con blur, título
  * por aria-labelledby, X y Escape cierran) con el foco atrapado y devuelto al semáforo al cerrar. Cuatro estados: cargando
  * (loader de @flit/ui), error (404 «no disponible» sin datos, 403 sin permiso, otro con Reintentar), vacío (sin personas o
- * sin resultado) y lleno (vista por fuente). La vista de la compañía no tiene ningún indicador de origen manual (Q5).
+ * sin resultado) y lleno (auditoría de consulta y respuesta de la fuente verbatim, HU #14087). La vista de la compañía no
+ * tiene ningún indicador de origen manual (Q5).
  */
 export function DetalleCelda({ loteId, vehiculoId, fuente, nombreFuente, identificador, onClose, cargar = obtenerDetalleCelda, acciones, devolverFocoA }: DetalleCeldaProps) {
   const [carga, setCarga] = useState<Carga>({ tipo: "cargando" });

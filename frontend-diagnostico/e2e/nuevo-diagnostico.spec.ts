@@ -46,7 +46,7 @@ test.describe("pantalla única de creación", () => {
 
     const vehiculos = page.getByRole("region", { name: "Vehículos" });
     const parametros = page.getByRole("region", { name: "Parámetros" });
-    await expect(parametros.getByRole("textbox", { name: "Nombre del diagnóstico" })).toHaveValue(new RegExp(`^Express ${PLACA} `));
+    await expect(parametros.getByRole("textbox", { name: "Nombre del diagnóstico" })).toHaveValue(new RegExp(`^Express ${PLACA}$`));
     const [v, p] = [await vehiculos.boundingBox(), await parametros.boundingBox()];
     expect(v && p && p.x > v.x + v.width - 1).toBeTruthy();
     expect(await parametros.evaluate((el) => getComputedStyle(el).position)).toBe("sticky");

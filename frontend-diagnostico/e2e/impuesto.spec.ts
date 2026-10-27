@@ -32,7 +32,7 @@ async function entrar(page: Page, usuario: string, clave: string) {
 }
 
 test.describe("impuesto departamental en el tablero", () => {
-  test("un Express con el impuesto llega a verde y su detalle muestra el total adeudado y las vigencias", async ({ page }) => {
+  test("un Express con el impuesto llega a verde y su detalle muestra monto_total y las vigencias (HU #14087)", async ({ page }) => {
     test.skip(!process.env.E2E_USUARIO || !process.env.E2E_CLAVE, "Faltan E2E_USUARIO / E2E_CLAVE");
     await entrar(page, process.env.E2E_USUARIO!, process.env.E2E_CLAVE!);
 
@@ -41,28 +41,31 @@ test.describe("impuesto departamental en el tablero", () => {
 
     const grilla = page.getByRole("table", { name: /semáforo de consultas/i });
     await expect(grilla).toBeVisible();
+    // HU #14087: las 8 fuentes salen siempre; sin el impuesto pedido su celda dice «Sin solicitar» y no es botón.
     test.skip(
-      (await grilla.getByRole("columnheader", { name: "Impuesto departamental" }).count()) === 0,
+      (await grilla.getByRole("button", { name: new RegExp(`^Ver detalle de Impuesto departamental de ${PLACA}`) }).count()) === 0,
       "El Express no incluye el impuesto: revisar la bandera ImpuestoDisponible y el contrato de la compañía",
     );
 
     // AC1: sin recargar, el semáforo del impuesto llega a verde (o a N/A si el RUNT simulado no deriva un departamento soportado).
     const semaforo = grilla.getByRole("button", { name: new RegExp(`^Ver detalle de Impuesto departamental de ${PLACA}`) });
-    await expect(semaforo).toHaveAccessibleName(/(Completada|No aplica)$/, { timeout: 60_000 });
-    test.skip(/No aplica$/.test((await semaforo.getAttribute("aria-label")) ?? ""), "El vehículo simulado quedó en un departamento no soportado");
+    await expect(semaforo).toHaveAccessibleName(/(Ejecutado \(OK\)|Novedad)$/, { timeout: 60_000 });
+    test.skip(/Novedad$/.test((await semaforo.getAttribute("aria-label")) ?? ""), "El vehículo simulado quedó en un departamento no soportado");
 
     await semaforo.focus();
     await page.keyboard.press("Enter");
     const dialogo = page.getByRole("dialog", { name: `Impuesto departamental · ${PLACA}` });
     await expect(dialogo).toBeVisible();
-    await expect(dialogo.getByText("Total adeudado")).toBeVisible();
-    await expect(dialogo.getByText(/^\$\s?\d{1,3}(\.\d{3})*$/).first()).toBeVisible();
-    const tabla = dialogo.getByRole("table", { name: "Vigencias del impuesto" });
+    // HU #14087: la respuesta de la fuente pinta los campos verbatim (monto_total sin formato, vigencias con anio/valor/pagada).
+    const respuesta = dialogo.getByRole("table", { name: "Respuesta de la fuente" });
+    await expect(respuesta.getByRole("rowheader", { name: "monto_total" })).toBeVisible();
+    await expect(respuesta.getByRole("row", { name: /monto_total\s*\d+$/ })).toBeVisible();
+    const tabla = dialogo.getByRole("table", { name: "vigencias" });
     if (await tabla.count()) {
-      await expect(tabla.getByRole("columnheader", { name: "Estado" })).toBeVisible();
-      await expect(tabla.getByText(/^(Pagada|Pendiente)$/).first()).toBeVisible();
+      await expect(tabla.getByRole("columnheader", { name: "pagada" })).toBeVisible();
+      await expect(tabla.getByText(/^(true|false)$/).first()).toBeVisible();
     } else {
-      await expect(dialogo.getByText("No registra vigencias")).toBeVisible();
+      await expect(respuesta.getByRole("row", { name: /vigencias\s*\[\]/ })).toBeVisible();
     }
     // R-20: ni proveedor ni transacción en el detalle.
     await expect(dialogo.getByText(/proveedor|transacci|SIM-IMPUESTO/i)).toHaveCount(0);

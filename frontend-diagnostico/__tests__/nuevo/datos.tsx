@@ -25,7 +25,7 @@ export interface Navegacion {
 export function expressCreado(cambios: Partial<ExpressCreado> = {}): ExpressCreado {
   return {
     id: ID_EXPRESS,
-    nombre: "Express TST123 21/10/2026",
+    nombre: "Express TST123",
     modo: "SIMPLE",
     es_express: true,
     estado: "EN_PROCESO",

@@ -84,3 +84,28 @@ describe("hayPendientes — HU #13748 AC2 (cuándo detener el sondeo)", () => {
     expect(hayPendientes(null)).toBe(false);
   });
 });
+
+// HU #14087: la fila solo viaja en el sondeo cuando cambia una celda; los documentos son los de la última versión recibida.
+describe("fusionarCeldas — HU #14087: documentos de la fila", () => {
+  it("toma el documento declarado y los propietarios de la última versión recibida de la fila", () => {
+    const anterior = grilla({
+      vehiculos: [vehiculo(1, [celda(1, "RUNT", "PENDIENTE")], { documento_declarado: null, propietarios: [] })],
+    });
+    const recibido = vehiculo(1, [celda(1, "RUNT", "COMPLETADO", { version: 13 })], {
+      documento_declarado: { rol: "LOCATARIO", tipo_documento: "C", documento_enmascarado: "****5678" },
+      propietarios: [
+        { tipo_documento: "C", documento_enmascarado: "****1222" },
+        { tipo_documento: "NIT", documento_enmascarado: "****4567" },
+      ],
+    });
+    const vigente = fusionarCeldas(anterior, grilla({ version: 13, vehiculos: [recibido] }));
+    expect(vigente.vehiculos[0].documento_declarado).toEqual({ rol: "LOCATARIO", tipo_documento: "C", documento_enmascarado: "****5678" });
+    expect(vigente.vehiculos[0].propietarios).toEqual(recibido.propietarios);
+  });
+
+  it("un sondeo que no trae la fila conserva sus documentos", () => {
+    const conDocs = vehiculo(1, [celda(1, "RUNT", "COMPLETADO")], { propietarios: [{ tipo_documento: "C", documento_enmascarado: "****1222" }] });
+    const vigente = fusionarCeldas(grilla({ vehiculos: [conDocs, V2] }), grilla({ version: 13, vehiculos: [vehiculo(2, [celda(2, "RUNT", "ERROR", { version: 13 })])] }));
+    expect(vigente.vehiculos[0].propietarios).toEqual([{ tipo_documento: "C", documento_enmascarado: "****1222" }]);
+  });
+});

@@ -63,7 +63,7 @@ test.describe("backoffice: llenado manual", () => {
     await form.getByRole("button", { name: "Confirmar llenado" }).click();
 
     await expect(celda).toHaveAttribute("data-estado", "COMPLETADO");
-    await expect(celda.getByText("Completada")).toBeVisible();
+    await expect(celda.getByText("Ejecutado (OK)")).toBeVisible();
     await expect(celda.getByText("Manual")).toBeVisible();
   });
 

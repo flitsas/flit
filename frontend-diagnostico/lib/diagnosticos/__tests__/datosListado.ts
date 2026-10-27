@@ -9,6 +9,7 @@ export function diagnostico(n: number, cambios: Partial<DiagnosticoListado> = {}
     nombre: `Flota de prueba ${sufijo}`,
     creado_en: "2026-10-22T14:00:00+00:00",
     modo: "CON_ANALISIS",
+    es_express: false,
     tipo_tramite: { codigo: "TRASPASO_STANDARD", nombre: "TRASPASO" },
     estado: "EN_PROCESO",
     usuario_creador: { id: "00000000-0000-7000-8000-0000000000c1", nombre: "Ana Prueba" },

@@ -2,23 +2,29 @@
 
 import { useState, type ReactNode } from "react";
 import { CheckCircle2 } from "lucide-react";
+import { enmascararDocumento } from "@/components/comun/DocumentoDeclarado";
 import { nombreFuente, type Fuente } from "@/lib/configuracion";
-import type { CeldaGrilla, ColumnasGrilla, FilaVehiculo, Grilla } from "@/lib/tablero/api";
+import type { CeldaGrilla, FilaVehiculo, Grilla } from "@/lib/tablero/api";
 import type { CargadorDetalle } from "@/lib/tablero/detalle";
+import { FUENTES_TABLA, PILARES, fuentesPedidas } from "@/lib/tablero/pilares";
 import { CeldaSemaforo, type CeldaSemaforoProps } from "./CeldaSemaforo";
 import { DetalleCelda } from "./DetalleCelda";
-
-const GRUPOS: ReadonlyArray<{ clave: keyof ColumnasGrilla; nombre: string }> = [
-  { clave: "por_vehiculo", nombre: "Por vehículo" },
-  { clave: "por_propietario", nombre: "Por propietario" },
-  { clave: "por_locatario", nombre: "Por locatario" },
-];
 
 /** Cabecera de tabla del sistema: barra gris de marca (--table-header-*), versalita de 10px. */
 const CABECERA_CLS = "px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider";
 const CABECERA_ESTILO = { background: "var(--table-header-bg)", color: "var(--table-header-fg)" } as const;
+/** Separador vertical entre columnas de la cabecera. */
+const SEPARADOR_CLS = "border-l border-white/60 dark:border-white/10";
+const TEXTO_SECUNDARIO_CLS = "text-xs text-[var(--nav-texto)] dark:text-slate-300";
+const DOCUMENTO_CLS = "whitespace-nowrap font-mono text-xs font-medium text-flit-primary dark:text-white";
+const TD_CLS = "px-3 py-2.5 align-top";
 
 const RESUELTAS: ReadonlySet<CeldaGrilla["estado"]> = new Set(["COMPLETADO", "NA", "ERROR"]);
+
+const ROLES: Record<string, string> = { PROPIETARIO: "Propietario", LOCATARIO: "Locatario" };
+
+/** Pilares con más de una fuente: su cabecera agrupa (colgroup) y sus fuentes van en el segundo nivel. */
+const PILARES_AGRUPADOS = PILARES.filter((p) => p.fuentes.length > 1);
 
 export interface GrillaSemaforosProps extends Pick<CeldaSemaforoProps, "onReprocesada" | "onErrorReproceso"> {
   grilla: Grilla;
@@ -43,12 +49,23 @@ interface Seleccion {
   disparador: HTMLElement;
 }
 
-function EncabezadoVehiculo({ vehiculo, total }: { vehiculo: FilaVehiculo; total: number }) {
-  const resueltas = vehiculo.celdas.filter((c) => RESUELTAS.has(c.estado)).length;
+/** «—» con nombre accesible cuando el dato no existe. */
+function SinDato({ etiqueta }: { etiqueta: string }) {
+  return (
+    <span role="img" aria-label={etiqueta} className={TEXTO_SECUNDARIO_CLS}>
+      —
+    </span>
+  );
+}
+
+function EncabezadoVehiculo({ vehiculo, pedidas }: { vehiculo: FilaVehiculo; pedidas: ReadonlySet<Fuente> }) {
+  const resueltas = vehiculo.celdas.filter((c) => pedidas.has(c.fuente) && RESUELTAS.has(c.estado)).length;
   return (
     <th scope="row" className="px-3 py-2.5 text-left align-top font-normal">
-      <span className="block font-mono text-sm font-bold uppercase tracking-wider text-flit-primary dark:text-white">{vehiculo.identificador}</span>
-      <span className="mt-1 block text-xs text-[var(--nav-texto)] dark:text-slate-300">{`${resueltas} de ${total} consultas`}</span>
+      <span className="block font-mono text-sm font-bold uppercase tracking-wider text-flit-primary dark:text-white">
+        {vehiculo.placa || vehiculo.vin || vehiculo.identificador}
+      </span>
+      <span className={`mt-1 block ${TEXTO_SECUNDARIO_CLS}`}>{`${resueltas} de ${pedidas.size} consultas`}</span>
       {vehiculo.terminado && (
         <span
           className="mt-1 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold"
@@ -62,11 +79,50 @@ function EncabezadoVehiculo({ vehiculo, total }: { vehiculo: FilaVehiculo; total
   );
 }
 
+/** Documento que declaró el cliente: tipo y número enmascarado (nunca completo) y su rol. */
+function CeldaDocumentoDeclarado({ vehiculo }: { vehiculo: FilaVehiculo }) {
+  const d = vehiculo.documento_declarado;
+  return (
+    <td data-columna="documento-declarado" className={TD_CLS}>
+      {d ? (
+        <span className="flex flex-col gap-0.5">
+          <span className={DOCUMENTO_CLS}>{`${d.tipo_documento} ${enmascararDocumento(d.documento_enmascarado)}`}</span>
+          <span className={TEXTO_SECUNDARIO_CLS}>{ROLES[d.rol] ?? d.rol}</span>
+        </span>
+      ) : (
+        <SinDato etiqueta="Sin documento declarado" />
+      )}
+    </td>
+  );
+}
+
+/** Documentos de los propietarios del vehículo, uno por línea, enmascarados. */
+function CeldaDocumentosPropietario({ vehiculo }: { vehiculo: FilaVehiculo }) {
+  const propietarios = vehiculo.propietarios ?? [];
+  return (
+    <td data-columna="documento-propietario" className={TD_CLS}>
+      {propietarios.length > 0 ? (
+        <ul className="flex flex-col gap-0.5">
+          {propietarios.map((p, i) => (
+            <li key={`${i}-${p.documento_enmascarado}`} className={DOCUMENTO_CLS}>
+              {`${p.tipo_documento} ${enmascararDocumento(p.documento_enmascarado)}`}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <SinDato etiqueta="Sin documentos del propietario" />
+      )}
+    </td>
+  );
+}
+
 /**
- * Grilla vehículo × fuente del tablero (HU #13748, F04-C1/C2/C8/C9/C10/C11): una fila por vehículo con su avance (terminado
- * apenas todas sus celdas están en verde o N/A, sin esperar a los demás) y columnas agrupadas Por vehículo, Por propietario y
- * Por locatario según el alcance del lote. El usuario no ve acciones; el admin, «Reprocesar» solo en las rojas. Cada
- * semáforo abre el detalle de su celda (HU #13801).
+ * Tabla de resultados del lote (HU #13748; rediseño HU #14087), la misma para Express (1 vehículo), Masivo y backoffice. Por
+ * fila: placa (o VIN) con su avance «n de m consultas» (m = fuentes pedidas) y el badge «Terminado», el documento declarado y
+ * los documentos del propietario. Luego SIEMPRE las 8 fuentes agrupadas por pilar (RUNT, SIMIT, Avalúo comercial, Impuesto
+ * departamental) en el orden de FUENTES: la no pedida dice «Sin solicitar»; la pedida sin celda todavía, «Sin ejecutar». El
+ * usuario no ve acciones; el admin, «Reprocesar» solo en las rojas. Cada semáforo con consulta abre el detalle (HU #13801).
+ * El desborde horizontal queda dentro del contenedor de la tabla, nunca en la página.
  */
 export function GrillaSemaforos({
   grilla,
@@ -79,31 +135,43 @@ export function GrillaSemaforos({
   accionVehiculo,
 }: GrillaSemaforosProps) {
   const [seleccion, setSeleccion] = useState<Seleccion | null>(null);
-  const grupos = GRUPOS.map((g) => ({ ...g, fuentes: grilla.columnas[g.clave] ?? [] })).filter((g) => g.fuentes.length > 0);
-  const fuentes: Fuente[] = grupos.flatMap((g) => g.fuentes);
+  const pedidas = fuentesPedidas(grilla.columnas);
 
   return (
     <div className="overflow-x-auto rounded-xl border border-[var(--color-flit-gray)] dark:border-white/10">
-      <table aria-label="Semáforo de consultas del lote" className="w-full min-w-[640px] border-collapse text-sm">
+      <table aria-label="Semáforo de consultas del lote" className="w-full min-w-[1280px] border-collapse text-sm">
         <thead>
           <tr>
             <th scope="col" rowSpan={2} className={`${CABECERA_CLS} align-bottom`} style={CABECERA_ESTILO}>
-              Vehículo
+              Placa o VIN
             </th>
-            {grupos.map((g) => (
-              <th key={g.clave} scope="colgroup" colSpan={g.fuentes.length} className={`${CABECERA_CLS} border-l border-white/60 dark:border-white/10`} style={CABECERA_ESTILO}>
-                {g.nombre}
-              </th>
-            ))}
+            <th scope="col" rowSpan={2} className={`${CABECERA_CLS} ${SEPARADOR_CLS} align-bottom`} style={CABECERA_ESTILO}>
+              Documento declarado
+            </th>
+            <th scope="col" rowSpan={2} className={`${CABECERA_CLS} ${SEPARADOR_CLS} align-bottom`} style={CABECERA_ESTILO}>
+              Documento del propietario
+            </th>
+            {PILARES.map((p) =>
+              p.fuentes.length > 1 ? (
+                <th key={p.nombre} scope="colgroup" colSpan={p.fuentes.length} className={`${CABECERA_CLS} ${SEPARADOR_CLS}`} style={CABECERA_ESTILO}>
+                  {p.nombre}
+                </th>
+              ) : (
+                // Pilar de una sola fuente con su mismo nombre: una cabecera que ocupa los dos niveles, sin repetir el rótulo.
+                <th key={p.nombre} scope="col" rowSpan={2} className={`${CABECERA_CLS} ${SEPARADOR_CLS} align-bottom`} style={CABECERA_ESTILO}>
+                  {p.nombre}
+                </th>
+              ),
+            )}
             {accionVehiculo && (
-              <th scope="col" rowSpan={2} className={`${CABECERA_CLS} border-l border-white/60 align-bottom dark:border-white/10`} style={CABECERA_ESTILO}>
+              <th scope="col" rowSpan={2} className={`${CABECERA_CLS} ${SEPARADOR_CLS} align-bottom`} style={CABECERA_ESTILO}>
                 Reporte
               </th>
             )}
           </tr>
           <tr>
-            {fuentes.map((f) => (
-              <th key={f} scope="col" className={`${CABECERA_CLS} border-l border-white/60 normal-case tracking-normal dark:border-white/10`} style={CABECERA_ESTILO}>
+            {PILARES_AGRUPADOS.flatMap((p) => p.fuentes).map((f) => (
+              <th key={f} scope="col" className={`${CABECERA_CLS} ${SEPARADOR_CLS} normal-case tracking-normal`} style={CABECERA_ESTILO}>
                 {nombreFuente(f)}
               </th>
             ))}
@@ -114,24 +182,29 @@ export function GrillaSemaforos({
             const porFuente = new Map(v.celdas.map((c) => [c.fuente, c]));
             return (
               <tr key={v.id} data-vehiculo={v.id} className="border-t border-[var(--table-row-border)] bg-white dark:bg-transparent">
-                <EncabezadoVehiculo vehiculo={v} total={fuentes.length} />
-                {fuentes.map((f) => {
-                  const celda = porFuente.get(f);
+                <EncabezadoVehiculo vehiculo={v} pedidas={pedidas} />
+                <CeldaDocumentoDeclarado vehiculo={v} />
+                <CeldaDocumentosPropietario vehiculo={v} />
+                {FUENTES_TABLA.map((f) => {
+                  const solicitada = pedidas.has(f);
+                  const celda = solicitada ? porFuente.get(f) : undefined;
                   return (
-                  <CeldaSemaforo
-                    key={f}
-                    celda={celda}
-                    nombreFuente={nombreFuente(f)}
-                    identificador={v.identificador}
-                    puedeReprocesar={puedeReprocesar}
-                    onReprocesada={onReprocesada}
-                    onErrorReproceso={onErrorReproceso}
-                    onAbrirDetalle={(c, disparador) => setSeleccion({ celda: c, vehiculo: v, disparador })}
-                    marca={celda && marcaCelda ? marcaCelda(celda) : undefined}
-                  />
+                    <CeldaSemaforo
+                      key={f}
+                      fuente={f}
+                      celda={celda}
+                      solicitada={solicitada}
+                      nombreFuente={nombreFuente(f)}
+                      identificador={v.identificador}
+                      puedeReprocesar={puedeReprocesar}
+                      onReprocesada={onReprocesada}
+                      onErrorReproceso={onErrorReproceso}
+                      onAbrirDetalle={(c, disparador) => setSeleccion({ celda: c, vehiculo: v, disparador })}
+                      marca={celda && marcaCelda ? marcaCelda(celda) : undefined}
+                    />
                   );
                 })}
-                {accionVehiculo && <td className="px-3 py-2.5 align-top">{accionVehiculo(v)}</td>}
+                {accionVehiculo && <td className={TD_CLS}>{accionVehiculo(v)}</td>}
               </tr>
             );
           })}

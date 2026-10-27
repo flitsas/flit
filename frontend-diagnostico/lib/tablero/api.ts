@@ -24,6 +24,19 @@ export interface CeldaGrilla {
   version: number;
 }
 
+/** Documento de persona que declaró el cliente en el lote (HU #14087); llega enmascarado («****» y los 4 últimos). */
+export interface DocumentoDeclaradoFila {
+  rol: "PROPIETARIO" | "LOCATARIO";
+  tipo_documento: string;
+  documento_enmascarado: string;
+}
+
+/** Documento de un propietario del vehículo según el RUNT (HU #14087); llega enmascarado. */
+export interface DocumentoPropietarioFila {
+  tipo_documento: string;
+  documento_enmascarado: string;
+}
+
 export interface FilaVehiculo {
   id: string;
   orden: number;
@@ -33,6 +46,13 @@ export interface FilaVehiculo {
   vin: string | null;
   /** Todas sus celdas en COMPLETADO o NA (R-7), calculado con todas, no solo con las recibidas. */
   terminado: boolean;
+  /**
+   * HU #14087: documento declarado por el cliente (null si no declaró ninguno). Opcional en el tipo porque la fila solo viaja
+   * en el sondeo cuando cambia una celda y la grilla del backoffice puede no traerlo: sin la clave, la pantalla pinta «—».
+   */
+  documento_declarado?: DocumentoDeclaradoFila | null;
+  /** HU #14087: documentos de los propietarios del vehículo, en orden; vacío si aún no se conocen. */
+  propietarios?: DocumentoPropietarioFila[];
   celdas: CeldaGrilla[];
 }
 

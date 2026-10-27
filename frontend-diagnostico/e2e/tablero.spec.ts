@@ -49,7 +49,7 @@ test.describe("tablero del lote", () => {
       if (frame === page.mainFrame()) recargas++;
     });
     await expect(runt).toHaveAttribute("data-estado", "COMPLETADO", { timeout: 30_000 });
-    await expect(runt.getByText("Completada")).toBeVisible();
+    await expect(runt.getByText("Ejecutado (OK)")).toBeVisible();
     expect(recargas).toBe(0);
 
     // AC4: el usuario sin rol admin no ve ningún botón de acción en la grilla (desde HU #13801 cada semáforo es un botón
@@ -68,23 +68,31 @@ test.describe("tablero del lote", () => {
 
     const grilla = page.getByRole("table", { name: /semáforo de consultas/i });
     await expect(grilla).toBeVisible();
-    test.skip((await grilla.getByRole("columnheader", { name: "SIMIT vehículo" }).count()) === 0, "El Express de este ambiente no incluye SIMIT vehículo");
+    // HU #14087: las 8 fuentes salen siempre; si el Express no pidió SIMIT vehículo su celda dice «Sin solicitar» y no es botón.
+    test.skip(
+      (await grilla.getByRole("button", { name: new RegExp(`^Ver detalle de SIMIT vehículo de ${PLACA}`) }).count()) === 0,
+      "El Express de este ambiente no incluye SIMIT vehículo",
+    );
 
     // Con la simulación encendida, SIMIT del vehículo termina en verde (COMPLETADO) sin recargar.
     const semaforo = grilla.getByRole("button", { name: new RegExp(`^Ver detalle de SIMIT vehículo de ${PLACA}`) });
-    await expect(semaforo).toHaveAccessibleName(/Completada$/, { timeout: 60_000 });
+    await expect(semaforo).toHaveAccessibleName(/Ejecutado \(OK\)$/, { timeout: 60_000 });
 
     // Se abre con el teclado: Enter sobre el semáforo enfocado.
     await semaforo.focus();
     await page.keyboard.press("Enter");
     const dialogo = page.getByRole("dialog", { name: `SIMIT vehículo · ${PLACA}` });
     await expect(dialogo).toBeVisible();
-    await expect(dialogo.getByText(/^Dato del \d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/)).toBeVisible();
-    await expect(dialogo.getByText(/^\d+ comparendos?$/)).toBeVisible();
-    // Comparendos con valor y estado, o el vacío explícito si la simulación no trae ninguno.
-    const tabla = dialogo.getByRole("table", { name: /comparendos/i });
-    if (await tabla.count()) await expect(tabla.getByRole("columnheader", { name: "Valor" })).toBeVisible();
-    else await expect(dialogo.getByText("Sin comparendos registrados.")).toBeVisible();
+    // HU #14087: auditoría con la fecha y hora de la consulta y la respuesta de la fuente con sus campos verbatim.
+    const auditoria = dialogo.getByRole("region", { name: "Auditoría de consulta" });
+    await expect(auditoria.getByText(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/)).toBeVisible();
+    await expect(auditoria.getByText("Ejecutado (OK)")).toBeVisible();
+    const respuesta = dialogo.getByRole("table", { name: "Respuesta de la fuente" });
+    await expect(respuesta.getByRole("rowheader", { name: "cantidad_comparendos" })).toBeVisible();
+    // Comparendos como tabla con sus claves, o «[]» si la simulación no trae ninguno.
+    const tabla = dialogo.getByRole("table", { name: "comparendos" });
+    if (await tabla.count()) await expect(tabla.getByRole("columnheader", { name: "valor" })).toBeVisible();
+    else await expect(respuesta.getByRole("row", { name: /comparendos\s*\[\]/ })).toBeVisible();
     // AC5: nada que delate un dato manual.
     await expect(dialogo.getByText(/manual/i)).toHaveCount(0);
 

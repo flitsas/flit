@@ -16,7 +16,7 @@ vi.mock("next/navigation", () => ({
 beforeEach(() => {
   nav.push.mockReset();
   nav.replace.mockReset();
-  // Solo el reloj de Date: el nombre autogenerado lleva el día; los temporizadores siguen siendo reales.
+  // Solo el reloj de Date (el nombre autogenerado ya no lleva el día desde HU #14087); los temporizadores siguen siendo reales.
   vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
   vi.setSystemTime(FECHA);
 });
@@ -40,16 +40,16 @@ const tipoDocumento = () => screen.getByRole("combobox", { name: /tipo de docume
 const continuar = async () => fireEvent.click(await screen.findByRole("button", { name: "Continuar" }));
 
 describe("Express — placa y nombre autogenerado (AC2)", () => {
-  it("con ?placa= precarga la placa normalizada y el nombre «Express TST123 21/10/2026»", async () => {
+  it("con ?placa= precarga la placa normalizada y el nombre «Express TST123»", async () => {
     montar({ query: "modo=express&placa=tst 123" });
     expect(await placa()).toHaveValue("TST123");
-    expect(await nombre()).toHaveValue("Express TST123 21/10/2026");
+    expect(await nombre()).toHaveValue("Express TST123");
   });
 
   it("el nombre sigue a la placa mientras no se edite y, editado, se conserva y viaja", async () => {
     const api = montar();
     fireEvent.change(await placa(), { target: { value: "tst124" } });
-    expect(await nombre()).toHaveValue("Express TST124 21/10/2026");
+    expect(await nombre()).toHaveValue("Express TST124");
     fireEvent.change(await nombre(), { target: { value: "Revisión flota" } });
     fireEvent.change(await placa(), { target: { value: "TST125" } });
     expect(await nombre()).toHaveValue("Revisión flota");
@@ -132,7 +132,7 @@ describe("Express — placa y nombre autogenerado (AC2)", () => {
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith(`/diagnosticos/${ID_EXPRESS}`));
     expect(llamadas(api, "POST", "/express/estimado")).toHaveLength(0);
     expect(cuerpoDe(llamadas(api, "POST", "/express")[0])).toEqual({
-      nombre: "Express TST123 21/10/2026",
+      nombre: "Express TST123",
       modo: "CON_ANALISIS",
       tipo_tramite_codigo: "TRASPASO_STANDARD",
       alcance: { por_vehiculo: ["RUNT", "SIMIT_VEHICULO"], por_propietario: [], por_locatario: [] },

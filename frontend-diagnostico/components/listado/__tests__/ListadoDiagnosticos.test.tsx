@@ -35,7 +35,7 @@ describe("ListadoDiagnosticos — AC1: tabla con las columnas y la fila abre el 
 
     const t = await tabla();
     const cabeceras = within(t).getAllByRole("columnheader").map((c) => c.textContent);
-    expect(cabeceras).toEqual(["ID", "Nombre", "Creado", "Tipo", "Trámite", "Estado", "Creador"]);
+    expect(cabeceras).toEqual(["ID", "Nombre", "Creado", "Modalidad", "Tipo", "Trámite", "Estado", "Creador"]);
     within(t).getAllByRole("columnheader").forEach((c) => expect(c).toHaveAttribute("scope", "col"));
 
     const fila = within(t).getByRole("row", { name: /Flota de prueba 001/ });
@@ -50,6 +50,27 @@ describe("ListadoDiagnosticos — AC1: tabla con las columnas y la fila abre el 
     expect(within(simple).getByText("Diagnóstico Simple")).toBeInTheDocument();
     expect(within(simple).getByText("Completado")).toBeInTheDocument();
     expect(within(simple).getByLabelText("Sin trámite")).toBeInTheDocument();
+  });
+
+  it("HU #14087 AC1: la columna «Modalidad» dice Express o Masivo según es_express y «Tipo» se conserva", async () => {
+    simularApi({
+      "GET /diagnosticos": () =>
+        Response.json(lista([diagnostico(1, { es_express: true, nombre: "Express TST001" }), diagnostico(2, { es_express: false, modo: "SIMPLE", tipo_tramite: null })])),
+    });
+    render(<ListadoDiagnosticos />);
+    const t = await tabla();
+    const columnas = within(t).getAllByRole("columnheader").map((c) => c.textContent);
+    const iModalidad = columnas.indexOf("Modalidad");
+    const iTipo = columnas.indexOf("Tipo");
+    expect(iModalidad).toBeGreaterThan(-1);
+    expect(iTipo).toBeGreaterThan(-1);
+
+    const express = within(t).getByRole("row", { name: /Express TST001/ });
+    expect(within(express).getAllByRole("cell")[iModalidad]).toHaveTextContent(/^Express$/);
+    expect(within(express).getAllByRole("cell")[iTipo]).toHaveTextContent("Con Análisis IA");
+    const masivo = within(t).getByRole("row", { name: /Flota de prueba 002/ });
+    expect(within(masivo).getAllByRole("cell")[iModalidad]).toHaveTextContent(/^Masivo$/);
+    expect(within(masivo).getAllByRole("cell")[iTipo]).toHaveTextContent("Diagnóstico Simple");
   });
 
   it("clic en la fila abre su tablero y el nombre es un enlace al tablero (Enter con el teclado)", async () => {
@@ -175,9 +196,9 @@ describe("ListadoDiagnosticos — AC4: creador «No disponible»", () => {
     render(<ListadoDiagnosticos />);
     const fila = within(await tabla()).getByRole("row", { name: /Flota de prueba 001/ });
     const celdas = within(fila).getAllByRole("cell");
-    expect(celdas).toHaveLength(7);
-    expect(celdas[6]).toHaveTextContent("No disponible");
-    for (const texto of ["0192F0A1", "Flota de prueba 001", "22/10/2026 09:00", "Con Análisis IA", "TRASPASO", "En proceso"])
+    expect(celdas).toHaveLength(8);
+    expect(celdas[7]).toHaveTextContent("No disponible");
+    for (const texto of ["0192F0A1", "Flota de prueba 001", "22/10/2026 09:00", "Masivo", "Con Análisis IA", "TRASPASO", "En proceso"])
       expect(within(fila).getByText(texto)).toBeInTheDocument();
   });
 });

@@ -114,7 +114,7 @@ describe("/diagnosticos/{id} — AC2: se actualiza sola sin recargar", () => {
     await avanzar(INTERVALO_SONDEO_MS);
     expect(desdesPedidos(api)).toEqual([0, 12]);
     const fila = screen.getByRole("rowheader", { name: /TST003/ }).closest("tr")!;
-    expect(within(fila).getByText("Completada")).toBeInTheDocument();
+    expect(within(fila).getByText("Ejecutado (OK)")).toBeInTheDocument();
     expect(navegacion.push).not.toHaveBeenCalled();
     expect(navegacion.refresh).not.toHaveBeenCalled();
   });
@@ -148,7 +148,7 @@ describe("/diagnosticos/{id} — AC4/AC5: acciones por perfil", () => {
     expect(llamadas(api, "POST", "/consultas/celda-4-runt/reprocesar")).toHaveLength(1);
     const runt = document.querySelector<HTMLElement>('[data-celda="celda-4-runt"]')!;
     expect(runt).toHaveAttribute("data-estado", "PENDIENTE");
-    expect(within(runt).getByText("Pendiente")).toBeInTheDocument();
+    expect(within(runt).getByText("Sin ejecutar")).toBeInTheDocument();
     expect(estadoGlobal()).toHaveTextContent("En proceso");
 
     await avanzar(INTERVALO_SONDEO_MS);

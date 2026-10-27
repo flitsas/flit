@@ -14,6 +14,8 @@ export interface DiagnosticoListado {
   nombre: string;
   creado_en: string;
   modo: ModoDiagnostico;
+  /** HU #14087: true si nació como Diagnóstico Express (columna «Modalidad»: Express o Masivo). */
+  es_express: boolean;
   /** null en SIMPLE; si el código ya no está publicado, `nombre` es el código. */
   tipo_tramite: { codigo: string; nombre: string } | null;
   estado: EstadoDiagnostico;
