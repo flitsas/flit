@@ -65,6 +65,8 @@ internal sealed class ConsultaConfig : IEntityTypeConfiguration<CeldaConsulta>
         builder.Property(x => x.Payload)
             .HasColumnType("jsonb")
             .HasComment("@pii:medium Resultado normalizado de la fuente (objeto JSON), nunca el crudo del proveedor (R-13); sin documentos en claro.");
+        builder.Property(x => x.RespuestaFuenteCifrada)
+            .HasComment("@pii:high Respuesta completa de la fuente (proto-JSON del bus; en las fuentes de persona, objeto por orden) cifrada con Data Protection, propósito Flit.Diagnostico.RespuestaFuente.v1 (HU #14087 AC8). Null sin respuesta de la fuente. Solo la lee el detalle de la celda.");
         builder.Property(x => x.UsuarioManualId).HasComment("@pii:low Usuario del backoffice que la llenó a mano (claim sub); nunca en DTO de cliente.");
         builder.Property(x => x.DatoObtenidoEn).HasComment("Fecha y hora del dato que muestra la celda (D-10); la de la celda origen si se reutilizó.");
         builder.Property(x => x.ReutilizadaDeId).HasComment("Celda de la misma empresa y del mismo día cuyo dato se reutilizó sin consumo (D-10).");

@@ -32,6 +32,8 @@ internal static class EscritorCeldas
 
         celda.Estado = resultado.Estado;
         celda.Payload = resultado.Payload;
+        // HU #14087 AC8: la respuesta completa (cifrada) va con el resultado; sin respuesta de la fuente queda en null.
+        celda.RespuestaFuenteCifrada = resultado.RespuestaFuenteCifrada;
         celda.MotivoNa = resultado.MotivoNa;
         celda.TipoError = resultado.Estado == EstadoCelda.Error ? resultado.TipoError : null;
         celda.Origen = resultado.Origen;

@@ -124,6 +124,13 @@ public sealed record ResultadoCelda(
     /// celda queda con este código (<c>PERSONAS_CON_ERROR</c> o la causa común). Null: queda <see cref="TipoError"/>.
     /// </summary>
     public string? TipoErrorSinReintento { get; init; }
+
+    /// <summary>
+    /// La respuesta completa de la fuente, ya cifrada, con que queda <c>consultas.respuesta_fuente_cifrada</c> (HU #14087 AC8,
+    /// <see cref="RespuestaFuenteCelda"/>): la pone el consumidor de resultados, la copia la reutilización del mismo día y la
+    /// conservan (solo las personas OK) el cierre sin consulta y el reconciliador en las celdas de persona. Null: sin respuesta.
+    /// </summary>
+    public byte[]? RespuestaFuenteCifrada { get; init; }
 }
 
 /// <summary>

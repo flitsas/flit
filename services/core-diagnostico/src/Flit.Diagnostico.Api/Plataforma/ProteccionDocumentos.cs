@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using Flit.Diagnostico.Api.Persistence;
+using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Personas;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -39,6 +40,8 @@ internal static class ProteccionDocumentos
             .PersistKeysToDbContext<DiagnosticoDb>()
             .ProtectKeysWithCertificate(certificado);
         services.TryAddSingleton<IProtectorDocumentoPersona, ProtectorDocumentoPersona>();
+        // HU #14087 AC8: la respuesta completa de la fuente, con el mismo anillo de llaves y un propósito propio.
+        services.TryAddSingleton<IProtectorRespuestaFuente, ProtectorRespuestaFuente>();
         return services;
     }
 
@@ -99,6 +102,36 @@ internal sealed class ProtectorDocumentoPersona : IProtectorDocumentoPersona
     {
         ArgumentNullException.ThrowIfNull(numero);
         return _protector.Protect(Encoding.UTF8.GetBytes(numero));
+    }
+
+    public string Desproteger(byte[] cifrado)
+    {
+        ArgumentNullException.ThrowIfNull(cifrado);
+        return Encoding.UTF8.GetString(_protector.Unprotect(cifrado));
+    }
+}
+
+/// <summary>
+/// <see cref="IProtectorRespuestaFuente"/> sobre la Data Protection API (HU #14087 AC8) con el propósito <see cref="Proposito"/>,
+/// distinto del de los documentos: la respuesta completa de la fuente se cifra antes de guardarla en
+/// <c>consultas.respuesta_fuente_cifrada</c> y solo se descifra en memoria para el detalle. Nunca se loguea.
+/// </summary>
+internal sealed class ProtectorRespuestaFuente : IProtectorRespuestaFuente
+{
+    public const string Proposito = "Flit.Diagnostico.RespuestaFuente.v1";
+
+    private readonly IDataProtector _protector;
+
+    public ProtectorRespuestaFuente(IDataProtectionProvider provider)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        _protector = provider.CreateProtector(Proposito);
+    }
+
+    public byte[] Proteger(string texto)
+    {
+        ArgumentNullException.ThrowIfNull(texto);
+        return _protector.Protect(Encoding.UTF8.GetBytes(texto));
     }
 
     public string Desproteger(byte[] cifrado)

@@ -209,10 +209,12 @@ internal sealed partial class ReconciliadorConsultas(
             .Select(i => i.TipoError)
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
         var enCurso = CeldaEnCurso.De(celda);
-        // Las celdas de persona conservan lo que sí respondió.
-        var resultado = new ResultadoCelda(EstadoCelda.Error, EjecutorPorPersonas.EsPorPersona(celda.Fuente) ? celda.Payload : null, null, null, null, tipo)
+        // Las celdas de persona conservan lo que sí respondió (también su respuesta completa cifrada, HU #14087 AC8).
+        var porPersona = EjecutorPorPersonas.EsPorPersona(celda.Fuente);
+        var resultado = new ResultadoCelda(EstadoCelda.Error, porPersona ? celda.Payload : null, null, null, null, tipo)
         {
             Intento = new DatosIntento(null, null, null, mensaje),
+            RespuestaFuenteCifrada = porPersona ? celda.RespuestaFuenteCifrada : null,
         };
         await publicador.CerrarAsync(celda, resultado, RegistroIntentos.CrearTodos(enCurso, ahora, ahora, resultado), versionTablero: null, ct).ConfigureAwait(false);
         return tipo;

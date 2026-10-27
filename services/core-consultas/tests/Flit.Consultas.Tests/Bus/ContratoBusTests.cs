@@ -54,6 +54,23 @@ public sealed class ContratoBusTests
         fixture.Version.Should().Be(ResultadoConsultaDiagnostico.VersionContrato);
     }
 
+    // HU #14087 AC8: el fixture compartido muestra la respuesta como la publica ahora PublicadorResultado: completa, con los nombres
+    // del .proto (snake_case) y con los valores por defecto (un false, un 0 y una lista vacía).
+    [Fact]
+    public void La_respuesta_del_fixture_usa_los_nombres_del_proto_y_trae_los_valores_por_defecto()
+    {
+        var respuesta = Fixture("resultado-consulta-diagnostico.v1.json").Data.GetProperty("respuesta");
+
+        var vehiculo = respuesta.GetProperty("vehiculo");
+        vehiculo.TryGetProperty("informacion_general", out var general).Should().BeTrue("nombres del .proto, no lowerCamelCase");
+        vehiculo.TryGetProperty("informacionGeneral", out _).Should().BeFalse();
+        general.GetProperty("color").GetString().Should().NotBeNullOrEmpty("un campo que antes descartaba la minimización");
+        vehiculo.GetProperty("propietarios_actuales")[0].GetProperty("nombre_completo").GetString().Should().NotBeNullOrEmpty();
+        vehiculo.GetProperty("garantias_mobiliarias").GetArrayLength().Should().Be(0, "la lista vacía viaja");
+        respuesta.GetProperty("http_status").GetInt32().Should().Be(200);
+        JsonParser.Default.Parse<ConsultarVehiculoIntempoResponse>(respuesta.GetRawText()).Vehiculo.Plate.Should().Be("TST001");
+    }
+
     [Fact]
     public void El_resultado_ERROR_lleva_el_nombre_del_StatusCode_y_respuesta_null()
     {

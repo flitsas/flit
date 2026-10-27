@@ -38,8 +38,16 @@ public sealed class CeldaConsulta : IEntidadDeEmpresa
     /// <summary>De dónde salió el dato; null mientras no hay dato.</summary>
     public OrigenCelda? Origen { get; set; }
 
-    /// <summary>Resultado normalizado (objeto JSON), nunca el crudo del proveedor (R-13).</summary>
+    /// <summary>Resultado normalizado (objeto JSON), nunca el crudo del proveedor (R-13); lo leen tablero, reportes y dictamen.</summary>
     public string? Payload { get; set; }
+
+    /// <summary>
+    /// Respuesta COMPLETA de la fuente (HU #14087 AC8), cifrada con <c>IProtectorRespuestaFuente</c> (<c>@pii:high</c>): en las
+    /// fuentes por vehículo, el texto exacto del proto-JSON que llegó por el bus; en las de persona, un objeto
+    /// <c>{"&lt;orden&gt;": "&lt;proto-JSON de esa persona&gt;"}</c> (<see cref="RespuestaFuenteCelda"/>). Null sin respuesta de la
+    /// fuente (ERROR, N/A, llenado manual o celda anterior al AC8). Solo la lee el detalle de la celda; nunca el payload.
+    /// </summary>
+    public byte[]? RespuestaFuenteCifrada { get; set; }
 
     /// <summary>Usuario del backoffice que la llenó a mano; nunca va en un DTO de cliente.</summary>
     public Guid? UsuarioManualId { get; set; }

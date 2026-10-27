@@ -87,7 +87,8 @@ internal sealed record PersonaEnErrorDto(
 /// </code>
 /// </example>
 internal sealed partial class LlenadoManual(
-    DiagnosticoDb db, UsuarioActual usuario, IProtectorDocumentoPersona protector, TimeProvider reloj, IPlatformOutbox outbox, ILogger<LlenadoManual> logger)
+    DiagnosticoDb db, UsuarioActual usuario, IProtectorDocumentoPersona protector, IProtectorRespuestaFuente protectorRespuesta, TimeProvider reloj,
+    IPlatformOutbox outbox, ILogger<LlenadoManual> logger)
 {
     public const string CodigoFuenteNoAdmite = "FUENTE_NO_ADMITE_MANUAL";
     public const string CodigoPersonaNoEnError = "PERSONA_NO_EN_ERROR";
@@ -126,6 +127,11 @@ internal sealed partial class LlenadoManual(
             if (cabecera.Estado is EstadoDiagnostico.Completado or EstadoDiagnostico.Incompleto)
                 Reabrir(cabecera, autor, ahora);
 
+            // HU #14087 AC8: lo llenado a mano no es respuesta de la fuente. En una de persona solo queda la de las que
+            // respondieron OK por API (antes del llenado); en una del vehículo, ninguna.
+            celda.RespuestaFuenteCifrada = EjecutorPorPersonas.EsPorPersona(celda.Fuente)
+                ? RespuestaFuenteCelda.SoloRespondidas(protectorRespuesta, celda.RespuestaFuenteCifrada, celda.Payload)
+                : null;
             celda.Estado = EstadoCelda.Completado;
             celda.Payload = payload;
             celda.TipoError = null;

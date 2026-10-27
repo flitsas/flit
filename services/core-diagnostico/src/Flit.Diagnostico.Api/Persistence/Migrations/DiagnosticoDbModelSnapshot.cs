@@ -438,6 +438,11 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasColumnName("republicaciones")
                         .HasComment("Republicaciones del reconciliador (ADR-0075, D3): 0 o 1 (ck_consultas_republicaciones); a la segunda huérfana la celda cierra en ERROR.");
 
+                    b.Property<byte[]>("RespuestaFuenteCifrada")
+                        .HasColumnType("bytea")
+                        .HasColumnName("respuesta_fuente_cifrada")
+                        .HasComment("@pii:high Respuesta completa de la fuente (proto-JSON del bus; en las fuentes de persona, objeto por orden) cifrada con Data Protection, propósito Flit.Diagnostico.RespuestaFuente.v1 (HU #14087 AC8). Null sin respuesta de la fuente. Solo la lee el detalle de la celda.");
+
                     b.Property<Guid?>("ReutilizadaDeId")
                         .HasColumnType("uuid")
                         .HasColumnName("reutilizada_de_id")

@@ -14,7 +14,8 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// normal (<see cref="Bus.PublicadorCeldas.CerrarAsync"/>: sube la versión del tablero, libera las demás celdas si es RUNT y
 /// recalcula el estado del lote), con un intento <c>desde_cache=true</c>, sin mensaje y sin consumo. En RUNT copia además los datos del
 /// vehículo, los documentos cifrados (<see cref="DocumentosVehiculo.Copiar"/>, sin descifrar) y las personas del vehículo de
-/// origen (<see cref="DocumentosVehiculo.CopiarPersonas"/>, HU #13790).
+/// origen (<see cref="DocumentosVehiculo.CopiarPersonas"/>, HU #13790). Copia también la respuesta completa cifrada de la celda
+/// original (HU #14087 AC8), los mismos bytes: en las de persona va por orden, que es como casan las personas.
 /// <para>
 /// Reglas: la búsqueda filtra por <c>tenant_id</c> de forma EXPLÍCITA, además del filtro global del contexto de la celda (el
 /// publicador también corre fuera de una petición), y la FK compuesta <c>fk_consultas_consultas_reutilizada_de</c> impide apuntar a una
@@ -110,6 +111,7 @@ internal static class ReutilizacionMismoDia
         return new ResultadoCelda(EstadoCelda.Completado, original.Payload, null, OrigenCelda.Api, original.DatoObtenidoEn, null, efectos)
         {
             ReutilizadaDeId = original.Id,
+            RespuestaFuenteCifrada = original.RespuestaFuenteCifrada,
             Intento = new DatosIntento(EsPorPersona(celda.Fuente) ? null : placa, null, null, null),
         };
     }
@@ -159,6 +161,7 @@ internal static class ReutilizacionMismoDia
         return new ResultadoCelda(EstadoCelda.Completado, payload, null, OrigenCelda.Api, original.DatoObtenidoEn, null)
         {
             ReutilizadaDeId = original.Id,
+            RespuestaFuenteCifrada = original.RespuestaFuenteCifrada,
             Intento = sinLlamada,
             IntentosPorPersona = [.. nuevas.Select(p => new IntentoPersona(p.Id, ahora, ahora, null, sinLlamada))],
         };

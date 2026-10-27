@@ -97,6 +97,30 @@ public sealed class ReutilizacionTests
             .Should().Be(EstadoDiagnostico.Completado, "la celda reutilizada es terminal: el estado global se recalcula en su cierre");
     }
 
+    // HU #14087 AC8 — la celda que reutiliza el dato del mismo día copia también la respuesta cifrada de la original (los mismos
+    // bytes: sin descifrar para copiar).
+    [Fact]
+    public async Task Reutilizar_copia_la_respuesta_cifrada_de_la_original()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (api, reloj, _) = await ArrancarAsync();
+        await using var _api = api;
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+
+        IrA(reloj, 8, 0);
+        var primero = await LoteProcesadoAsync(api, empresa, [Lotes.Fila("TST001")], ct);
+        IrA(reloj, 15, 0);
+        var segundo = await LoteProcesadoAsync(api, empresa, [Lotes.Fila("TST001")], ct);
+
+        var original = (await Motor.CeldasAsync(api, empresa.Id, primero, ct)).Single();
+        var reutilizada = (await Motor.CeldasAsync(api, empresa.Id, segundo, ct)).Single();
+        reutilizada.ReutilizadaDeId.Should().Be(original.Id);
+        var deOriginal = await RespuestaFuenteTests.CifradaAsync(api, original.Id, ct);
+        deOriginal.Should().NotBeNull("la original guardó la respuesta de la fuente");
+        (await RespuestaFuenteTests.CifradaAsync(api, reutilizada.Id, ct)).Should().Equal(deOriginal!, "se copia el cifrado tal cual");
+    }
+
     // AC3 (F03-C13, prueba de fuga) — B consultó hoy la placa: A consulta la fuente y nunca recibe el dato de B; un lote
     // posterior de A reutiliza el de A aunque B tenga uno más nuevo.
     [Fact]

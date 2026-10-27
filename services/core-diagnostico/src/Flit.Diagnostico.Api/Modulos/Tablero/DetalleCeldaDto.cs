@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Flit.Diagnostico.Api.Modulos.Tablero;
@@ -5,11 +6,17 @@ namespace Flit.Diagnostico.Api.Modulos.Tablero;
 /// <summary>
 /// Respuesta de <c>GET /diagnosticos/{id}/vehiculos/{vid}/consultas/{fuente}</c> (HU #13798, F06-H1, F06-C1..C4/C12): el
 /// resultado normalizado de UNA celda para la compañía. Es un DTO propio y cerrado: no tiene origen, usuario manual,
-/// proveedor, transacción, payload ni documentos completos (R-20), así que exponer uno de ellos obliga a cambiar este tipo
-/// (lo verifica <c>DetalleCeldaTests</c> por reflexión). Una celda llenada a mano y una consultada por API tienen las mismas
+/// transacción ni payload en campos propios (R-20), así que exponer uno de ellos obliga a cambiar este tipo (lo verifica
+/// <c>DetalleCeldaTests</c> por reflexión). Una celda llenada a mano y una consultada por API tienen las mismas
 /// claves. Todas las claves van siempre (con <c>null</c> si no aplican): <c>resultado</c> en las fuentes del vehículo
 /// (RUNT, SIMIT_VEHICULO, AVALUO, IMPUESTO_DEPARTAMENTAL) con la celda COMPLETADO; <c>personas</c> en las fuentes de persona (RUNT_PROPIETARIO,
 /// RUNT_LOCATARIO, SIMIT_PROPIETARIO, SIMIT_LOCATARIO), null en las demás.
+/// <para>
+/// HU #14087 AC8 (decisión del usuario 2026-10-27; enmienda de ADR-0075 en Propuesto): <c>respuesta_fuente</c> es la respuesta
+/// COMPLETA de la fuente (el <c>*Response</c> del rpc en proto-JSON, nombres del .proto en snake_case y valores por defecto),
+/// descifrada, tal cual: con datos personales y lo que la fuente responda. En la celda solo en las fuentes del vehículo; en las de
+/// persona va en cada <see cref="PersonaDetalleDto"/>. Null sin respuesta guardada o si no se puede descifrar.
+/// </para>
 /// </summary>
 public sealed record DetalleCeldaDto(
     [property: JsonPropertyName("id")] Guid Id,
@@ -21,14 +28,16 @@ public sealed record DetalleCeldaDto(
     [property: JsonPropertyName("dato_obtenido_en")] DateTimeOffset? DatoObtenidoEn,
     [property: JsonPropertyName("reutilizada")] bool Reutilizada,
     [property: JsonPropertyName("resultado")] ResultadoDetalleDto? Resultado,
-    [property: JsonPropertyName("personas")] IReadOnlyList<PersonaDetalleDto>? Personas);
+    [property: JsonPropertyName("personas")] IReadOnlyList<PersonaDetalleDto>? Personas,
+    [property: JsonPropertyName("respuesta_fuente")] JsonElement? RespuestaFuente);
 
 /// <summary>
 /// Una persona de una celda de persona: su posición y rol, el tipo de documento, el documento enmascarado (<c>****</c> más
 /// los cuatro últimos caracteres; nunca completo, <see cref="EnmascaradorDocumento"/>), si lo declaró el cliente, qué se
 /// consultó (<c>RUNT_PERSONA</c>, <c>RUES</c> o <c>SIMIT</c>), su estado (<c>OK</c>, <c>ERROR</c> o <c>SIN_RESULTADO</c>
-/// si la celda aún no tiene dato de esa persona), el tipo de error, la fecha del dato y su resultado normalizado. Nunca el
-/// nombre ni el id interno de la persona.
+/// si la celda aún no tiene dato de esa persona), el tipo de error, la fecha del dato y su resultado normalizado. Nunca el id
+/// interno de la persona. <c>respuesta_fuente</c> (HU #14087 AC8): la respuesta completa de la fuente para esa persona, descifrada
+/// (con nombre y lo que la fuente responda); null si no hay.
 /// </summary>
 public sealed record PersonaDetalleDto(
     [property: JsonPropertyName("orden")] int Orden,
@@ -40,7 +49,8 @@ public sealed record PersonaDetalleDto(
     [property: JsonPropertyName("estado")] string Estado,
     [property: JsonPropertyName("tipo_error")] string? TipoError,
     [property: JsonPropertyName("consultado_en")] DateTimeOffset? ConsultadoEn,
-    [property: JsonPropertyName("resultado")] ResultadoDetalleDto? Resultado);
+    [property: JsonPropertyName("resultado")] ResultadoDetalleDto? Resultado,
+    [property: JsonPropertyName("respuesta_fuente")] JsonElement? RespuestaFuente = null);
 
 /// <summary>
 /// Resultado normalizado de una fuente en el detalle. Conjunto cerrado de tipos (polimorfismo de solo escritura, sin

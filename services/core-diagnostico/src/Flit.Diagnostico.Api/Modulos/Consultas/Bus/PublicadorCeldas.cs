@@ -39,7 +39,7 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 /// </example>
 internal sealed partial class PublicadorCeldas(
     DiagnosticoDb db, IPlatformOutbox outbox, IEnumerable<IConstructorSolicitud> constructores, IEnumerable<IEjecutorCelda> ejecutores,
-    TimeProvider reloj, ILogger<PublicadorCeldas> log)
+    IProtectorRespuestaFuente protector, TimeProvider reloj, ILogger<PublicadorCeldas> log)
 {
     private readonly Dictionary<Guid, bool> _express = [];
 
@@ -92,6 +92,9 @@ internal sealed partial class PublicadorCeldas(
         {
             celda.TrabajoId = null;
             sinConsulta ??= await Ejecutor(celda.Fuente).SinConsultaAsync(contexto, ct).ConfigureAwait(false);
+            // HU #14087 AC8: en las de persona se conserva la respuesta de las que ya respondieron OK (las que siguen en el payload).
+            if (EjecutorPorPersonas.EsPorPersona(celda.Fuente))
+                sinConsulta = sinConsulta with { RespuestaFuenteCifrada = RespuestaFuenteCelda.SoloRespondidas(protector, celda.RespuestaFuenteCifrada, sinConsulta.Payload) };
             await CerrarAsync(celda, sinConsulta, RegistroIntentos.CrearTodos(contexto.Celda, ahora, ahora, sinConsulta), versionTablero, ct, recalcular)
                 .ConfigureAwait(false);
             return 0;
@@ -113,6 +116,8 @@ internal sealed partial class PublicadorCeldas(
                 ? porPersonas.AlPublicar(celda.Payload, await EjecutorPorPersonas.PersonasDelRolAsync(db, celda, ct).ConfigureAwait(false),
                     solicitudes.Select(s => s.PersonaId).OfType<Guid>().ToHashSet())
                 : EjecutorPorPersonas.SoloRespondidas(celda.Payload);
+            // HU #14087 AC8: la respuesta completa, como el payload, solo de las personas que ya respondieron OK.
+            celda.RespuestaFuenteCifrada = RespuestaFuenteCelda.SoloRespondidas(protector, celda.RespuestaFuenteCifrada, celda.Payload);
         }
         foreach (var solicitud in solicitudes)
         {

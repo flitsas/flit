@@ -27,10 +27,18 @@ namespace Flit.Diagnostico.Api.Modulos.Tablero;
 /// <item>SIMIT trae como mucho <see cref="TopeComparendos"/> comparendos por resultado; <c>cantidad_comparendos</c> es el total
 /// y <c>comparendos_truncados</c> avisa del corte.</item>
 /// </list>
-/// Nunca origen, usuario manual, proveedor, transacción, nombres ni documentos completos: una celda manual y una de API tienen
-/// las mismas claves (R-20).
+/// Nunca origen ni usuario manual en campos propios: una celda manual y una de API tienen las mismas claves (R-20).
+/// <para>
+/// HU #14087 AC8 (decisión del usuario 2026-10-27; enmienda de ADR-0075 en Propuesto): <c>respuesta_fuente</c> trae además la
+/// respuesta COMPLETA de la fuente tal como llegó de core-consultas (proto-JSON con los nombres del .proto), descifrada de
+/// <c>consultas.respuesta_fuente_cifrada</c> (<see cref="RespuestaFuenteCelda"/>): en la celda en las fuentes del vehículo y en
+/// cada persona en las de persona, solo con la celda COMPLETADO o ERROR. Incluye datos personales y lo que la fuente responda
+/// (nombres, direcciones, documentos, proveedor). Null sin respuesta guardada (llenado manual, ERROR sin respuesta, celda anterior
+/// al AC8) o si no se puede descifrar (warning sin datos; nunca 500).
+/// </para>
 /// </summary>
-internal sealed class DetalleCelda(DiagnosticoDb db, UsuarioActual usuario, IProtectorDocumentoPersona protector)
+internal sealed partial class DetalleCelda(
+    DiagnosticoDb db, UsuarioActual usuario, IProtectorDocumentoPersona protector, IProtectorRespuestaFuente protectorRespuesta, ILogger<DetalleCelda> log)
 {
     /// <summary>Máximo de comparendos por resultado SIMIT en el detalle (la HU no pide paginar; SIMIT por persona puede traer decenas).</summary>
     public const int TopeComparendos = 100;
@@ -47,30 +55,49 @@ internal sealed class DetalleCelda(DiagnosticoDb db, UsuarioActual usuario, IPro
         var cabecera = await AccesoLote.LeerVisibleAsync(db, usuario, id, seguir: false, ct).ConfigureAwait(false);
         var celda = await db.Set<CeldaConsulta>().AsNoTracking()
             .Where(c => c.DiagnosticoId == id && c.VehiculoId == vehiculoId && c.Fuente == codigo)
-            .Select(c => new { c.Id, c.Estado, c.MotivoNa, c.TipoError, c.DatoObtenidoEn, Reutilizada = c.ReutilizadaDeId != null, c.Payload })
+            .Select(c => new { c.Id, c.Estado, c.MotivoNa, c.TipoError, c.DatoObtenidoEn, Reutilizada = c.ReutilizadaDeId != null, c.Payload, c.RespuestaFuenteCifrada })
             .SingleOrDefaultAsync(ct).ConfigureAwait(false)
             ?? throw ReglaException.NoEncontrado("La celda");
 
         var conDato = celda.Estado is EstadoCelda.Completado or EstadoCelda.Error;
         IReadOnlyList<PersonaDetalleDto>? personas = null;
         ResultadoDetalleDto? resultado = null;
+        JsonElement? respuestaFuente = null;
+        var cifrada = conDato ? celda.RespuestaFuenteCifrada : null;
         if (EjecutorPorPersonas.EsPorPersona(codigo))
-            personas = await PersonasAsync(cabecera.TenantId, vehiculoId, codigo, conDato ? celda.Payload : null, ct).ConfigureAwait(false);
-        else if (celda.Estado == EstadoCelda.Completado)
-            resultado = ProyectorDetalleCelda.ResultadoVehiculo(codigo, celda.Payload);
+        {
+            if (!RespuestaFuenteCelda.TryLeerPersonas(protectorRespuesta, cifrada, out var respuestas))
+                RespuestaIlegible(log, celda.Id, codigo);
+            personas = await PersonasAsync(cabecera.TenantId, vehiculoId, codigo, conDato ? celda.Payload : null, respuestas, ct).ConfigureAwait(false);
+        }
+        else
+        {
+            if (celda.Estado == EstadoCelda.Completado)
+                resultado = ProyectorDetalleCelda.ResultadoVehiculo(codigo, celda.Payload);
+            if (!RespuestaFuenteCelda.TryLeerVehiculo(protectorRespuesta, cifrada, out respuestaFuente))
+                RespuestaIlegible(log, celda.Id, codigo);
+        }
 
         return new DetalleCeldaDto(
             celda.Id, vehiculoId, CodigosDeEnum.Codigo(codigo), CodigosDeEnum.Codigo(celda.Estado),
             celda.MotivoNa is { } motivo ? CodigosDeEnum.Codigo(motivo) : null, celda.TipoError, celda.DatoObtenidoEn, celda.Reutilizada,
-            resultado, personas);
+            resultado, personas, respuestaFuente);
     }
 
-    /// <summary>Las personas del rol de la fuente, en orden, con su resultado del payload si la celda ya tiene dato.</summary>
-    private async Task<IReadOnlyList<PersonaDetalleDto>> PersonasAsync(Guid empresa, Guid vehiculoId, Fuente fuente, string? payload, CancellationToken ct)
+    /// <summary>
+    /// Las personas del rol de la fuente, en orden, con su resultado del payload si la celda ya tiene dato y su respuesta completa
+    /// de la fuente por orden (HU #14087 AC8).
+    /// </summary>
+    private async Task<IReadOnlyList<PersonaDetalleDto>> PersonasAsync(
+        Guid empresa, Guid vehiculoId, Fuente fuente, string? payload, IReadOnlyDictionary<int, JsonElement> respuestas, CancellationToken ct)
     {
         var filas = await DocumentosVehiculo.PersonasDelVehiculoAsync(db, empresa, vehiculoId, ct, EjecutorPorPersonas.RolDe(fuente)).ConfigureAwait(false);
-        return ProyectorDetalleCelda.Personas(filas, payload, protector);
+        return ProyectorDetalleCelda.Personas(filas, payload, protector, respuestas);
     }
+
+    [LoggerMessage(EventId = 140878, Level = LogLevel.Warning,
+        Message = "La respuesta de la fuente de la celda {CeldaId} ({Fuente}) no se pudo descifrar o leer: el detalle va con respuesta_fuente = null")]
+    private static partial void RespuestaIlegible(ILogger logger, Guid celdaId, Fuente fuente);
 }
 
 /// <summary>
@@ -85,9 +112,11 @@ internal static class ProyectorDetalleCelda
 
     /// <summary>
     /// Las personas <paramref name="filas"/> (ya del rol de la fuente, en orden) con su resultado del payload de la celda
-    /// (<paramref name="payload"/> null si la celda aún no tiene dato: todas <see cref="DetalleCelda.SinResultado"/>).
+    /// (<paramref name="payload"/> null si la celda aún no tiene dato: todas <see cref="DetalleCelda.SinResultado"/>) y, si se dan,
+    /// sus respuestas completas de la fuente por orden (<paramref name="respuestas"/>, HU #14087 AC8; null en los reportes).
     /// </summary>
-    public static IReadOnlyList<PersonaDetalleDto> Personas(IEnumerable<PersonaVehiculo> filas, string? payload, IProtectorDocumentoPersona protector)
+    public static IReadOnlyList<PersonaDetalleDto> Personas(
+        IEnumerable<PersonaVehiculo> filas, string? payload, IProtectorDocumentoPersona protector, IReadOnlyDictionary<int, JsonElement>? respuestas = null)
     {
         ArgumentNullException.ThrowIfNull(filas);
         ArgumentNullException.ThrowIfNull(protector);
@@ -98,7 +127,8 @@ internal static class ProyectorDetalleCelda
             return new PersonaDetalleDto(
                 p.Orden, CodigosDeEnum.Codigo(p.Rol), p.DocTipo, Enmascarado(protector, p.DocCifrado), p.Origen == OrigenDocumento.DeclaradoCliente,
                 leido?.Consulta, leido?.Estado ?? DetalleCelda.SinResultado, leido?.TipoError, leido?.ConsultadoEn,
-                leido is { Estado: EjecutorPorPersonas.EstadoOk, Resultado: { } r } ? ResultadoPersona(leido.Consulta, r) : null);
+                leido is { Estado: EjecutorPorPersonas.EstadoOk, Resultado: { } r } ? ResultadoPersona(leido.Consulta, r) : null,
+                respuestas is not null && respuestas.TryGetValue(p.Orden, out var respuesta) ? respuesta : null);
         })];
     }
 

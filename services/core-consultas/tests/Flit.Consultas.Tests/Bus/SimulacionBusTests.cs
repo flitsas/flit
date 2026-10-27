@@ -20,14 +20,14 @@ public sealed class AnfitrionBusSimulado : AnfitrionBus
 
 /// <summary>
 /// HU #13727 (ADR-0075, U3 = a; T10) — con <c>Consultas:Simulacion:Habilitada</c> en DEV, los trabajos del diagnóstico recorren el
-/// mismo camino del bus (parseo, medición con el llamador del sobre, minimización y resultado en la outbox) pero responde el
+/// mismo camino del bus (parseo, medición con el llamador del sobre y resultado completo en la outbox, HU #14087 AC8) pero responde el
 /// proveedor simulado: nada sale a Intempo ni a otro proveedor.
 /// <para>Uso de ejemplo: <c>await _bus.EjecutarAsync&lt;ConsumidorTrabajosLote&gt;(AnfitrionBus.Trabajo(empresa, "runt", RpcConsultas.PorPlaca, new ConsultarPorPlacaRequest { Placa = "TST003" }))</c>.</para>
 /// </summary>
 public sealed class SimulacionBusTests(AnfitrionBusSimulado bus) : IClassFixture<AnfitrionBusSimulado>
 {
     [Fact]
-    public async Task RUNT_simulado_no_llama_a_Intempo_publica_el_fixture_minimizado_y_mide_como_simulado()
+    public async Task RUNT_simulado_no_llama_a_Intempo_publica_el_fixture_completo_y_mide_como_simulado()
     {
         var empresa = Guid.NewGuid();
         var sobre = AnfitrionBus.Trabajo(empresa, FuentesBus.Runt, RpcConsultas.PorPlaca, new ConsultarPorPlacaRequest { Placa = "TST003" });
@@ -40,9 +40,9 @@ public sealed class SimulacionBusTests(AnfitrionBusSimulado bus) : IClassFixture
         var json = datos.Respuesta!.Value.GetRawText();
         var respuesta = JsonParser.Default.Parse<ConsultarVehiculoIntempoResponse>(json);
         respuesta.Vehiculo.Plate.Should().Be("TST003");
-        respuesta.Vehiculo.PropietariosActuales.Single().Should().BeEquivalentTo(new { NoDocumento = "999990003", DetallePropiedad = "LEASING", NombreCompleto = "" },
+        respuesta.Vehiculo.PropietariosActuales.Single().Should().BeEquivalentTo(new { NoDocumento = "999990003", DetallePropiedad = "LEASING", NombreCompleto = "LEASING FICTICIO SA" },
             o => o.ExcludingMissingMembers());
-        json.Should().NotContain("FICTICIO").And.NotContain("PRUEBA DOS");
+        json.Should().Contain("\"nombre_completo\"", "HU #14087 AC8: la respuesta va completa, con los nombres del .proto");
         (await bus.ConsumosAsync(empresa)).Should().ContainSingle().Which.Should().BeEquivalentTo(
             new { Producto = "diagnostico", Fuente = FuentesBus.Runt, Proveedor = SimuladorConsultas.Proveedor });
     }

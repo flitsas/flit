@@ -10,8 +10,9 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 /// <c>data</c> de <c>consultas.resultado.diagnostico</c> v1 (ADR-0075, Q2 = 2a, U1 = b): lo publica core-consultas en su exchange
 /// (<c>flit.consultas</c>) por cada trabajo <c>consultas.diagnostico[-express].&lt;fuente&gt;</c> que atendió, y lo consume la cola
 /// <c>diagnostico.consultas-resultados</c> (<see cref="ConsumidorResultados"/>). Con <see cref="Estado"/> OK trae
-/// <see cref="Respuesta"/>: el <c>*Response</c> proto del rpc en proto-JSON, en claro y ya minimizado (sin nombres, direcciones ni
-/// contacto); con ERROR trae <see cref="GrpcStatus"/>: el nombre del <see cref="StatusCode"/> que hoy viajaría en el
+/// <see cref="Respuesta"/>: el <c>*Response</c> proto COMPLETO del rpc en proto-JSON (HU #14087 AC8: sin minimizar, con los nombres
+/// del .proto y los valores por defecto; trae datos personales), en claro en el broker y cifrado al guardarlo
+/// (<see cref="RespuestaFuenteCelda"/>); con ERROR trae <see cref="GrpcStatus"/>: el nombre del <see cref="StatusCode"/> que hoy viajaría en el
 /// <c>RpcException</c>, nunca el mensaje ni el detalle del proveedor. Lo valida el fixture compartido
 /// <c>contracts/fixtures/bus/resultado-consulta-diagnostico.v1.json</c>.
 /// </summary>
@@ -35,7 +36,7 @@ public sealed record ResultadoConsultaDiagnostico(
 
     /// <summary>
     /// Lector del proto-JSON de la respuesta: tolera campos que core-consultas agregue después (el contrato de los proto crece sin
-    /// romper a Diagnóstico); los campos vaciados por la minimización llegan vacíos.
+    /// romper a Diagnóstico); acepta los nombres del .proto (snake_case, los que publica core-consultas) y los lowerCamelCase.
     /// </summary>
     private static readonly JsonParser Lector = new(JsonParser.Settings.Default.WithIgnoreUnknownFields(true));
 

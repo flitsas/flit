@@ -177,7 +177,7 @@ public class AnfitrionBus : IAsyncLifetime
         }
     }
 
-    /// <summary>Proveedor falso: verde, con su clave como proveedor y dos campos (quién respondió y un nombre) que la minimización quita.</summary>
+    /// <summary>Proveedor falso: verde, con su clave como proveedor y dos campos (quién respondió y un nombre) que viajan en el resultado (HU #14087 AC8: respuesta completa).</summary>
     private sealed class Falso(string key, Contador llamadas) : IConsultationProvider
     {
         public string Key => key;

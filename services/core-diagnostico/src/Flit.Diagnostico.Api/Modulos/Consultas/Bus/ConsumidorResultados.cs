@@ -23,7 +23,9 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 /// <see cref="ProgramadorReintentos.ReanudarAsync"/> publica el trabajo nuevo o le da otra vuelta. Si no está EN_CURSO, se
 /// descarta.</item>
 /// <item>Lee el <c>*Response</c> (proto-JSON) o el <c>grpcStatus</c> y lo aplica con el <see cref="IEjecutorCelda"/> de la fuente
-/// (<c>Mapeos/*</c>). En una celda de persona que aún espera a otras solo guarda la respuesta de esa persona y su intento.</item>
+/// (<c>Mapeos/*</c>). En una celda de persona que aún espera a otras solo guarda la respuesta de esa persona y su intento. Desde
+/// HU #14087 AC8 también guarda la respuesta COMPLETA tal como llegó, cifrada (<see cref="RespuestaFuenteCelda"/>), junto al
+/// payload normalizado (que no cambia).</item>
 /// <item>Un ERROR transitorio con reintentos disponibles (<see cref="ProgramadorReintentos.Politica"/>) se programa en un scope
 /// propio y lanza <see cref="ReintentoProgramadoException"/> (el SDK lleva el resultado a la cola de reintentos de 5, 10 y 20 s).
 /// Lo demás (OK, definitivo o reintentos agotados) cierra la celda con <see cref="PublicadorCeldas.CerrarAsync"/>: intentos, datos
@@ -31,7 +33,7 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 /// </list>
 /// Nunca lanza por errores del proveedor: solo la señal de reintento o fallas de infraestructura (la base), que el SDK reintenta.
 /// Una falla inesperada al aplicar la respuesta deja la celda en ERROR (definitivo, reprocesable). Los logs llevan ids, fuente y
-/// tipo de error; nunca placa, VIN, documentos, la respuesta ni <c>ex.Message</c>.
+/// tipo de error; nunca placa, VIN, documentos, la respuesta (ni la cifrada) ni <c>ex.Message</c>.
 /// </summary>
 /// <example>
 /// <code>
@@ -41,7 +43,8 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 /// </example>
 internal sealed partial class ConsumidorResultados(
     EmpresaDelTrabajo empresa, DiagnosticoDb db, PublicadorCeldas publicador, IEnumerable<IEjecutorCelda> ejecutores, ProgramadorReintentos programador,
-    PulsoConsultas pulso, TimeProvider reloj, ILogger<ConsumidorResultados> log) : IEventConsumer<ResultadoConsultaDiagnostico>
+    PulsoConsultas pulso, IProtectorRespuestaFuente protector, TimeProvider reloj, ILogger<ConsumidorResultados> log)
+    : IEventConsumer<ResultadoConsultaDiagnostico>
 {
     public async Task HandleAsync(EventEnvelope envelope, ResultadoConsultaDiagnostico data, CancellationToken ct)
     {
@@ -114,11 +117,18 @@ internal sealed partial class ConsumidorResultados(
             resultado = ResultadoCelda.Error() with { Intento = new DatosIntento(null, null, null, $"Falla inesperada al aplicar la respuesta ({ex.GetType().Name}).") };
         }
 
+        // HU #14087 AC8: la respuesta completa, tal como llegó, cifrada; el payload normalizado no cambia.
+        resultado = resultado with
+        {
+            RespuestaFuenteCifrada = RespuestaFuenteCelda.AlAplicar(
+                protector, celda.Fuente, celda.RespuestaFuenteCifrada, data.PersonaId, RespuestaFuenteCelda.Cruda(data), resultado.Payload),
+        };
         var intentos = RegistroIntentos.CrearTodos(enCurso, respuesta.Inicio, respuesta.Fin, resultado);
         if (resultado.Estado == EstadoCelda.EnCurso)
         {
             // HU #13792: una persona de la celda respondió y faltan otras; la celda sigue en curso con lo que ya hay.
             celda.Payload = resultado.Payload;
+            celda.RespuestaFuenteCifrada = resultado.RespuestaFuenteCifrada;
             celda.ActualizadoEn = ahora;
             db.AddRange(intentos);
             return;

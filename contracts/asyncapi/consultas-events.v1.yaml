@@ -7,9 +7,11 @@ info:
     Mensajes en JSON con el sobre común (comun/sobre.v1.yaml). Sin datos del consultado: solo la medición, salvo
     los avisos de proveedores, que llevan el cuerpo del aviso para el servicio que pidió la validación.
     Desde 1.1.0 (ADR-0075) también los TRABAJOS de consulta que deja Diagnóstico (core-diagnostico) en `flit.consultas`
-    y el resultado que Consultas le devuelve. Esos dos mensajes llevan, en claro, solo los identificadores que pide el
-    proveedor (placa, VIN, tipo y número de documento, NIT) y la respuesta minimizada: nunca nombres, direcciones ni
-    datos de contacto. Sus colas de mensajes muertos se purgan a los 7 días (política `dlq-7d` del broker).
+    y el resultado que Consultas le devuelve. El trabajo lleva, en claro, solo los identificadores que pide el proveedor
+    (placa, VIN, tipo y número de documento, NIT). Desde HU #14087 AC8 (decisión del usuario 2026-10-27, enmienda de
+    ADR-0075 en Propuesto) el resultado lleva la respuesta COMPLETA del proveedor, incluidos datos personales (nombres,
+    direcciones, contacto, histórico, terceros); Diagnóstico la guarda cifrada. Sus colas de mensajes muertos se purgan a
+    los 7 días (política `dlq-7d` del broker).
 defaultContentType: application/json
 
 channels:
@@ -206,7 +208,8 @@ components:
                   respuesta:
                     type: [object, 'null']
                     description: |
-                      Solo con estado OK: el `*Response` proto del rpc en proto-JSON, con los campos de nombre, dirección y
-                      contacto ya vaciados (minimización por rpc, lista cerrada).
+                      Solo con estado OK: el `*Response` proto COMPLETO del rpc en proto-JSON (HU #14087 AC8), sin
+                      proyección: nombres de campo del .proto (snake_case) y valores por defecto incluidos (false, 0, "" y
+                      listas vacías). @pii:high — trae nombres, direcciones, contacto, histórico y terceros del proveedor.
                   duracionMs: { type: integer, minimum: 0 }
                   desdeCache: { type: boolean, description: La respuesta salió de la caché de proveedor de Consultas. }

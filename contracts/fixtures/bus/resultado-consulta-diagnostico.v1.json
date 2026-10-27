@@ -19,9 +19,37 @@
       "vehiculo": {
         "plate": "TST001",
         "vin": "9ZZPRUEBA00000001",
-        "informacionGeneral": { "marca": "MARCA PRUEBA", "linea": "LINEA PRUEBA", "modelo": "2020", "cilidraje": "1600", "tipoServicio": "PARTICULAR", "organismoTransito": "ORGANISMO DE PRUEBA" }
+        "informacion_general": {
+          "no_placa": "TST001",
+          "no_vin": "9ZZPRUEBA00000001",
+          "marca": "MARCA PRUEBA",
+          "linea": "LINEA PRUEBA",
+          "modelo": "2020",
+          "color": "ROJO FICTICIO",
+          "cilidraje": "1600",
+          "tipo_servicio": "PARTICULAR",
+          "organismo_transito": "ORGANISMO DE PRUEBA"
+        },
+        "soat": [ { "no_poliza": "POL-TST-0001", "fecha_expedicion": "", "fecha_vigencia": "", "fecha_vencimiento": "", "entidad_expide_soat": "ASEGURADORA FICTICIA", "estado": "VIGENTE" } ],
+        "garantias_mobiliarias": [],
+        "propietarios_actuales": [
+          {
+            "id": "1",
+            "id_tipo_documento": "C",
+            "tipo_documento": "Cédula Ciudadanía",
+            "no_documento": "9999900001",
+            "nombre_completo": "PERSONA PRUEBA UNO",
+            "tipo_propiedad": 0,
+            "detalle_propiedad": "PROPIO",
+            "direcciones": [],
+            "locatarios": []
+          }
+        ]
       },
-      "duracionMs": 812
+      "tipo_error": "TIPO_ERROR_FUENTE_UNSPECIFIED",
+      "http_status": 200,
+      "duracion_ms": 812,
+      "errores": []
     },
     "duracionMs": 1234,
     "desdeCache": false

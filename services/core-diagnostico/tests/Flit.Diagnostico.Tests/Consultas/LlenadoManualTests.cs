@@ -397,6 +397,33 @@ public sealed class LlenadoManualTests
         detalle.GetProperty("personas").EnumerateArray().Select(p => p.GetProperty("estado").GetString()).Should().Equal("OK", "OK");
     }
 
+    // HU #14087 AC8 — el llenado manual deja la celda del vehículo sin respuesta de la fuente (null) y, en una de persona, quita la
+    // de las personas llenadas a mano y conserva la de las que respondieron por API.
+    [Fact]
+    public async Task Llenado_manual_deja_sin_respuesta_de_la_fuente_lo_llenado_a_mano()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresas = DosEmpresas.En(api);
+        var lote = await TableroAyudas.SembrarAsync(empresas.A, ct, vehiculos:
+            [new("TST721", [new(Fuente.Runt, EstadoCelda.Completado, 1), new(Fuente.SimitVehiculo, EstadoCelda.Error, 1)])]);
+        var celda = lote.Celda("TST721", Fuente.SimitVehiculo);
+        await RespuestaFuenteTests.GuardarCifradaAsync(api, celda.Id, RespuestaFuenteTests.Cifrar(api, """{"resultado":{"proveedor":"verifik_simit"}}"""), ct);
+        var (_, dePersonas, _, segundo) = await CeldaDePersonasAsync(api, empresas.A, "TST722", ct);
+        await RespuestaFuenteTests.GuardarCifradaAsync(api, dePersonas.Id,
+            RespuestaFuenteTests.Cifrar(api, JsonSerializer.Serialize(new Dictionary<string, string> { ["1"] = "{\"a\":1}", ["2"] = "{\"b\":2}" })), ct);
+        var token = TokenLlenado(api);
+
+        (await Llenar(api, token, celda.Id, empresas.A.Id, Cuerpo(1, SimitManual), ct)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await Llenar(api, token, dePersonas.Id, empresas.A.Id, $$"""{"version":2,"personas":[{"persona_id":"{{segundo}}","resultado":{{SimitManual}}}]}""", ct))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await RespuestaFuenteTests.CifradaAsync(api, celda.Id, ct)).Should().BeNull("el dato manual no es respuesta de la fuente");
+        var mapa = JsonDocument.Parse(RespuestaFuenteTests.Descifrar(api, (await RespuestaFuenteTests.CifradaAsync(api, dePersonas.Id, ct))!)).RootElement;
+        mapa.EnumerateObject().Select(p => p.Name).Should().Equal(["1"], "solo queda la de la persona que respondió por API");
+    }
+
     // Contrato para F06-H5 — GET del formulario: la celda, su versión y SOLO las personas en error, con el documento enmascarado.
     [Fact]
     public async Task Formulario_trae_solo_las_personas_en_error_enmascaradas()

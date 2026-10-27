@@ -67,6 +67,8 @@ internal sealed partial class ProgramadorReintentos(
             var version = await EscritorCeldas.SubirVersionTableroAsync(db, fila.DiagnosticoId, ct).ConfigureAwait(false);
             fila.Estado = EstadoCelda.Pendiente;
             fila.Payload = resultado.Payload;
+            // HU #14087 AC8: con el payload, la respuesta completa (en las de persona, la de las que ya respondieron).
+            fila.RespuestaFuenteCifrada = resultado.RespuestaFuenteCifrada;
             fila.TipoError = null;
             fila.DisponibleDesde = desde;
             fila.IntentosAuto = decision.IntentosAuto;

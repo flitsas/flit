@@ -272,7 +272,14 @@ public sealed class BusDePrueba
     /// <summary>Marca como ya atendidos los trabajos que hay en la outbox (sin responderlos): simulan trabajos perdidos.</summary>
     public async Task<IReadOnlyList<TrabajoAtendido>> DescartarTrabajosAsync(CancellationToken ct) => await TrabajosNuevosAsync(ct);
 
-    /// <summary>El resultado de <paramref name="trabajo"/> con <paramref name="respuesta"/>, como lo publicaría core-consultas.</summary>
+    /// <summary>
+    /// El resultado de <paramref name="trabajo"/> con <paramref name="respuesta"/>, como lo publica core-consultas desde HU #14087 AC8:
+    /// la respuesta completa en proto-JSON con los nombres del .proto y los valores por defecto (<see cref="FormatoConsultas"/>).
+    /// </summary>
+    /// <summary>El formato de <c>PublicadorResultado</c> de core-consultas (HU #14087 AC8).</summary>
+    public static JsonFormatter FormatoConsultas { get; } =
+        new(JsonFormatter.Settings.Default.WithFormatDefaultValues(true).WithPreserveProtoFieldNames(true));
+
     public EventEnvelope Resultado(TrabajoAtendido trabajo, RespuestaSimulada respuesta)
     {
         ArgumentNullException.ThrowIfNull(trabajo);
@@ -280,7 +287,7 @@ public sealed class BusDePrueba
         JsonElement? json = null;
         if (respuesta.Error is null && respuesta.Respuesta is { } mensaje)
         {
-            using var documento = JsonDocument.Parse(JsonFormatter.Default.Format(mensaje));
+            using var documento = JsonDocument.Parse(FormatoConsultas.Format(mensaje));
             json = documento.RootElement.Clone();
         }
 

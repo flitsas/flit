@@ -16,6 +16,7 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using static Flit.Diagnostico.Tests.Configuracion.ConfiguracionOperativaTests;
+using RespuestaFuente = Flit.Diagnostico.Tests.Consultas.RespuestaFuenteTests;
 
 namespace Flit.Diagnostico.Tests.Tablero;
 
@@ -241,6 +242,9 @@ public sealed class DetalleCeldaTests
         nombres.Should().Contain(["resultado", "personas", "documento_enmascarado", "sin_valor_comercial", "comparendos", "licencias", "estado_matricula"],
             "la reflexión recorre los tipos de resultado");
         nombres.Should().NotContain(n => ClavesProhibidas.Any(p => n.Contains(p, StringComparison.OrdinalIgnoreCase)));
+        // HU #14087 AC8 (decisión del usuario 2026-10-27, enmienda de ADR-0075): la ÚNICA clave nueva permitida es respuesta_fuente
+        // (la respuesta completa de la fuente, en la celda y en cada persona); origen, usuario manual y transacción siguen fuera.
+        nombres.Where(n => n == "respuesta_fuente").Should().HaveCount(2, "en DetalleCeldaDto y en PersonaDetalleDto");
 
         await using var api = await ApiDePrueba.ConBaseAsync();
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
@@ -260,6 +264,82 @@ public sealed class DetalleCeldaTests
             respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
             cuerpo.Should().NotContainAny(["INTEMPO", "TX-SECRETA-401", "servicio_que_resolvio", "id_transaccion", "CRUDO-SECRETO", "TX-SIMIT-9", "NOMBRE FICTICIO", "respuesta_cruda"]);
         }
+    }
+
+    // HU #14087 AC8 — respuesta_fuente trae el proto-JSON completo de la fuente, descifrado, en la celda del vehículo y en cada
+    // persona (por su orden), con los datos que el resultado normalizado no tiene (color, nombre del propietario).
+    [Fact]
+    public async Task Respuesta_fuente_trae_el_objeto_completo_en_la_celda_y_en_cada_persona()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, vehiculos:
+            [new("TST461", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.RuntPropietario, EstadoCelda.Pendiente, 1)])]);
+        var vehiculo = lote.Vehiculos.Single().Id;
+        var runt = lote.Celda("TST461", Fuente.Runt);
+        var propietarios = lote.Celda("TST461", Fuente.RuntPropietario);
+        var primero = await PersonaAsync(api, empresa, vehiculo, RolPersona.Propietario, 1, "C", "9999900461", ct);
+        var segundo = await PersonaAsync(api, empresa, vehiculo, RolPersona.Propietario, 2, "C", "9999900462", ct);
+        await Tablero.PayloadAsync(empresa, runt, PayloadRunt, ct);
+        await Tablero.PayloadAsync(empresa, propietarios, Personas(
+            (primero.Id, 1, "RUNT_PERSONA", "OK", """{"inscrito":true,"licencias":[]}""", null),
+            (segundo.Id, 2, "RUNT_PERSONA", "ERROR", null, "TIMEOUT")), ct, EstadoCelda.Error, "PERSONAS_CON_ERROR");
+        const string Cruda = """{"proveedor":"intempo","resultado":"RESULTADO_RUNT_INTEMPO_ENCONTRADO","vehiculo":{"plate":"TST461","informacion_general":{"color":"ROJO FICTICIO","linea":""},"propietarios_actuales":[{"nombre_completo":"PROPIETARIO FICTICIO","tipo_propiedad":0}],"garantias_mobiliarias":[]},"http_status":200}""";
+        const string CrudaPersona = """{"resultado":{"proveedor":"kyverum_runt","desde_cache":false,"campos":[{"clave":"person_full_name","valor_texto":"PERSONA FICTICIA UNO"}]}}""";
+        await RespuestaFuente.GuardarCifradaAsync(api, runt.Id, RespuestaFuente.Cifrar(api, Cruda), ct);
+        await RespuestaFuente.GuardarCifradaAsync(api, propietarios.Id,
+            RespuestaFuente.Cifrar(api, JsonSerializer.Serialize(new Dictionary<string, string> { ["1"] = CrudaPersona })), ct);
+
+        var detalle = await DetalleAsync(empresa.Cliente(), lote.Id, vehiculo, "RUNT", ct);
+
+        var respuesta = detalle.GetProperty("respuesta_fuente");
+        JsonElement.DeepEquals(respuesta, JsonDocument.Parse(Cruda).RootElement).Should().BeTrue("el objeto va tal cual, descifrado");
+        respuesta.GetProperty("vehiculo").GetProperty("informacion_general").GetProperty("color").GetString().Should().Be("ROJO FICTICIO");
+        detalle.GetProperty("resultado").GetProperty("placa").GetString().Should().Be("TST401", "el resultado normalizado no cambia");
+
+        var deLasPersonas = await DetalleAsync(empresa.Cliente(), lote.Id, vehiculo, "RUNT_PROPIETARIO", ct);
+        deLasPersonas.GetProperty("respuesta_fuente").ValueKind.Should().Be(JsonValueKind.Null, "en las fuentes de persona va en cada persona");
+        var personas = deLasPersonas.GetProperty("personas").EnumerateArray().ToList();
+        JsonElement.DeepEquals(personas[0].GetProperty("respuesta_fuente"), JsonDocument.Parse(CrudaPersona).RootElement).Should().BeTrue();
+        personas[1].GetProperty("respuesta_fuente").ValueKind.Should().Be(JsonValueKind.Null, "la persona 2 no tiene respuesta guardada");
+        deLasPersonas.GetRawText().Should().NotContainAny([primero.Id.ToString(), segundo.Id.ToString(), "9999900461"]);
+    }
+
+    // HU #14087 AC8 — sin respuesta guardada (celda manual o de antes del AC8) respuesta_fuente es null; si no se puede descifrar,
+    // también null y el detalle responde 200 (nunca 500).
+    [Fact]
+    public async Task Respuesta_fuente_es_null_sin_respuesta_guardada_o_si_no_se_puede_descifrar()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, vehiculos:
+        [
+            new("TST471", [new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1), new(Fuente.SimitPropietario, EstadoCelda.Pendiente, 1)]),
+            new("TST472", [new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1)]),
+        ]);
+        var v1 = lote.Vehiculos.Single(v => v.Placa == "TST471").Id;
+        var v2 = lote.Vehiculos.Single(v => v.Placa == "TST472").Id;
+        var persona = await PersonaAsync(api, empresa, v1, RolPersona.Propietario, 1, "C", "9999900471", ct);
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST471", Fuente.SimitVehiculo), Simit(1, "ROJO"), ct);
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST472", Fuente.SimitVehiculo), Simit(1, "ROJO"), ct, manual: true);
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST471", Fuente.SimitPropietario), Personas(
+            (persona.Id, 1, "SIMIT", "OK", Simit(0, "VERDE"), null)), ct);
+        await RespuestaFuente.GuardarCifradaAsync(api, lote.Celda("TST471", Fuente.SimitVehiculo).Id, [1, 2, 3, 4], ct);
+        await RespuestaFuente.GuardarCifradaAsync(api, lote.Celda("TST471", Fuente.SimitPropietario).Id, [9, 9, 9], ct);
+
+        var corrupta = await DetalleAsync(empresa.Cliente(), lote.Id, v1, "SIMIT_VEHICULO", ct);
+        var manual = await DetalleAsync(empresa.Cliente(), lote.Id, v2, "SIMIT_VEHICULO", ct);
+        var personaCorrupta = await DetalleAsync(empresa.Cliente(), lote.Id, v1, "SIMIT_PROPIETARIO", ct);
+
+        corrupta.GetProperty("respuesta_fuente").ValueKind.Should().Be(JsonValueKind.Null, "no se pudo descifrar: null, no 500");
+        corrupta.GetProperty("resultado").GetProperty("semaforo").GetString().Should().Be("ROJO");
+        manual.GetProperty("respuesta_fuente").ValueKind.Should().Be(JsonValueKind.Null, "la celda manual no tiene respuesta de la fuente");
+        personaCorrupta.GetProperty("personas")[0].GetProperty("respuesta_fuente").ValueKind.Should().Be(JsonValueKind.Null);
+        personaCorrupta.GetProperty("personas")[0].GetProperty("estado").GetString().Should().Be("OK");
     }
 
     // AC5 (F06-C4) — el detalle de un diagnóstico de la compañía B pedido por A responde 404 sin datos; un vehículo de otro lote

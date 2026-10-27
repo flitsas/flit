@@ -150,8 +150,10 @@ public sealed class SimulacionTests
         Codigo(() => _simulador.Responder(RpcConsultas.Impuesto, Impuesto("TST007"))).Should().Be(StatusCode.DeadlineExceeded);
     }
 
+    // HU #14087 AC8: sin minimización, cada respuesta simulada se publica entera (con los nombres ficticios de los fixtures) y
+    // core-diagnostico la lee de vuelta igual.
     [Fact]
-    public void Cada_respuesta_simulada_tiene_su_regla_de_minimizacion_y_sale_sin_los_nombres_de_los_fixtures()
+    public void Cada_respuesta_simulada_se_publica_completa_y_se_lee_de_vuelta_igual()
     {
         var solicitudes = new (string Rpc, IMessage Solicitud)[]
         {
@@ -163,12 +165,21 @@ public sealed class SimulacionTests
             (RpcConsultas.Avaluos, Avaluo("TST001")),
             (RpcConsultas.Impuesto, Impuesto("TST001")),
         };
+        var publicador = new PublicadorResultado(new OutboxCapturada());
+        var trabajo = new TrabajoConsultaDiagnostico(Guid.CreateVersion7(), Guid.CreateVersion7(), null, FuentesBus.Runt, RpcConsultas.PorPlaca,
+            System.Text.Json.JsonDocument.Parse("{}").RootElement.Clone());
 
         foreach (var (rpc, solicitud) in solicitudes)
         {
-            var publicable = JsonFormatter.Default.Format(MinimizadorRespuesta.Minimizar(rpc, _simulador.Responder(rpc, solicitud)));
-            publicable.Should().NotContain("FICTICI").And.NotContain("PRUEBA DOS").And.NotContain("PERSONA PRUEBA").And.NotContain("\"name\"", rpc);
+            var respuesta = _simulador.Responder(rpc, solicitud);
+            var datos = publicador.Publicar(Guid.NewGuid(), trabajo with { Rpc = rpc }, new EjecucionTrabajo(respuesta, null, false, TimeSpan.Zero))
+                .DataAs<ResultadoConsultaDiagnostico>();
+            JsonParser.Default.Parse(datos.Respuesta!.Value.GetRawText(), respuesta.Descriptor).Should().Be(respuesta, rpc);
         }
+
+        var intempo = publicador.Publicar(Guid.NewGuid(), trabajo, new EjecucionTrabajo(_simulador.Responder(RpcConsultas.PorPlaca, solicitudes[0].Solicitud), null, false, TimeSpan.Zero))
+            .DataAs<ResultadoConsultaDiagnostico>().Respuesta!.Value.GetRawText();
+        intempo.Should().Contain("FICTICI", "los nombres ficticios de los fixtures viajan: la respuesta va completa");
     }
 
     [Fact]

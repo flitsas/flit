@@ -13,14 +13,14 @@ namespace Flit.Consultas.Tests.Bus;
 /// HU #13876 (ADR-0075, Q3, Q4 con U2 = a) — los consumidores de trabajos del diagnóstico de core-consultas: parsean el
 /// <c>*Request</c>, ejecutan UNA vez el <c>*Core</c> del rpc con el llamador del sobre (<c>svc-diagnostico</c> y la empresa del
 /// <c>tenantId</c>), miden el consumo, aplican los overrides de esa empresa y publican <c>consultas.resultado.diagnostico</c> con la
-/// respuesta minimizada en la misma transacción. Un error nunca sale como excepción: es un resultado ERROR con su
+/// respuesta COMPLETA (HU #14087 AC8: proto-JSON con los nombres del .proto y los valores por defecto) en la misma transacción. Un error nunca sale como excepción: es un resultado ERROR con su
 /// <c>grpcStatus</c>, sin el mensaje.
 /// <para>Uso de ejemplo: <c>await _bus.EjecutarAsync&lt;ConsumidorTrabajosLote&gt;(AnfitrionBus.Trabajo(empresa, "runt", RpcConsultas.PorPlaca, new ConsultarPorPlacaRequest { Placa = "TST401" }))</c>.</para>
 /// </summary>
 public sealed class TrabajosDiagnosticoTests(AnfitrionBus bus) : IClassFixture<AnfitrionBus>
 {
     [Fact]
-    public async Task RUNT_por_placa_publica_OK_con_la_respuesta_minimizada_y_mide_con_el_llamador_del_sobre()
+    public async Task RUNT_por_placa_publica_OK_con_la_respuesta_completa_y_mide_con_el_llamador_del_sobre()
     {
         var empresa = Guid.NewGuid();
         var sobre = AnfitrionBus.Trabajo(empresa, FuentesBus.Runt, RpcConsultas.PorPlaca, new ConsultarPorPlacaRequest { Placa = AnfitrionBus.PlacaEncontrada });
@@ -36,6 +36,7 @@ public sealed class TrabajosDiagnosticoTests(AnfitrionBus bus) : IClassFixture<A
         datos.DuracionMs.Should().BeGreaterThanOrEqualTo(0);
         var respuesta = JsonParser.Default.Parse<ConsultarVehiculoIntempoResponse>(datos.Respuesta!.Value.GetRawText());
         (respuesta.Resultado, respuesta.Vehiculo.Plate).Should().Be((ResultadoRuntIntempo.Encontrado, AnfitrionBus.PlacaEncontrada));
+        datos.Respuesta!.Value.GetProperty("vehiculo").TryGetProperty("informacion_general", out _).Should().BeTrue("HU #14087 AC8: nombres del .proto");
 
         var consumo = (await bus.ConsumosAsync(empresa)).Should().ContainSingle().Subject;
         (consumo.Producto, consumo.Fuente, consumo.Proveedor, consumo.Resultado).Should().Be(("diagnostico", "runt_intempo_placa", "intempo", "con_datos"));
@@ -77,7 +78,9 @@ public sealed class TrabajosDiagnosticoTests(AnfitrionBus bus) : IClassFixture<A
         datos.Estado.Should().Be("OK");
         var respuesta = JsonParser.Default.Parse<ConsultarVehiculoIntempoResponse>(datos.Respuesta!.Value.GetRawText());
         respuesta.Resultado.Should().Be(ResultadoRuntIntempo.Error);
-        respuesta.HasMensajeError.Should().BeFalse("el detalle del proveedor no viaja");
+        // HU #14087 AC8: el resultado OK lleva la respuesta completa, también el mensaje técnico del proveedor dentro del *Response
+        // (antes lo quitaba la minimización). Un ERROR sigue sin respuesta ni mensaje: solo el grpcStatus.
+        respuesta.HasMensajeError.Should().BeTrue("la respuesta OK viaja completa");
     }
 
     public static TheoryData<string, string, string, string> Errores => new()
@@ -138,7 +141,7 @@ public sealed class TrabajosDiagnosticoTests(AnfitrionBus bus) : IClassFixture<A
     }
 
     [Fact]
-    public async Task RUNT_persona_usa_la_cadena_de_la_empresa_y_publica_sin_el_nombre()
+    public async Task RUNT_persona_usa_la_cadena_de_la_empresa_y_publica_la_respuesta_completa()
     {
         var empresa = Guid.NewGuid();
         await bus.SembrarEmpresaAsync(empresa, "external");
@@ -149,7 +152,7 @@ public sealed class TrabajosDiagnosticoTests(AnfitrionBus bus) : IClassFixture<A
 
         var resultado = (await bus.ResultadosAsync(sobre)).Single();
         Respondio([resultado]).Should().Be("falso_conductor");
-        resultado.Data.GetRawText().Should().NotContain("NOMBRE FICTICIO PRUEBA", "la minimización quita person_full_name");
+        resultado.Data.GetRawText().Should().Contain("NOMBRE FICTICIO PRUEBA", "HU #14087 AC8: person_full_name viaja (sin minimización)");
         (await bus.ConsumosAsync(empresa)).Should().ContainSingle().Which.Should().BeEquivalentTo(new { Producto = "diagnostico", Fuente = "conductor" });
     }
 
@@ -179,8 +182,8 @@ public sealed class TrabajosDiagnosticoTests(AnfitrionBus bus) : IClassFixture<A
     };
 
     /// <summary>
-    /// El proveedor falso que respondió: <c>resultado.proveedor</c> de la respuesta publicada (la clave «respondio» que también
-    /// siembra el falso no viaja: la minimización solo deja las claves que lee Diagnóstico).
+    /// El proveedor falso que respondió: <c>resultado.proveedor</c> de la respuesta publicada; desde HU #14087 AC8 la respuesta va
+    /// completa, así que la clave «respondio» que también siembra el falso viaja y dice lo mismo.
     /// </summary>
     private static string Respondio(IReadOnlyList<EventEnvelope> resultados)
     {
@@ -192,7 +195,7 @@ public sealed class TrabajosDiagnosticoTests(AnfitrionBus bus) : IClassFixture<A
             : datos.Fuente == FuentesBus.RuntPropietario
                 ? JsonParser.Default.Parse<ConsultarConductorResponse>(json).Resultado
                 : JsonParser.Default.Parse<ConsultarMultasResponse>(json).Resultado;
-        resultado.Campos.Should().NotContain(c => c.Clave == "respondio" || c.Clave == "person_full_name");
+        resultado.Campos.Should().Contain(c => c.Clave == "respondio" && c.ValorTexto == resultado.Proveedor, "la respuesta va completa");
         return resultado.Proveedor;
     }
 }

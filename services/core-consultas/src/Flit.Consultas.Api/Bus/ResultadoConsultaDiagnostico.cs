@@ -6,7 +6,8 @@ namespace Flit.Consultas.Api.Bus;
 /// <summary>
 /// <c>data</c> del evento <c>consultas.resultado.diagnostico</c> v1 (ADR-0075, Q2 = 2a): el resultado de UNA ejecución del trabajo
 /// (U2 = a: Consultas no reintenta). <see cref="Estado"/> es <see cref="Ok"/> con la <see cref="Respuesta"/> (el <c>*Response</c>
-/// proto en proto-JSON, ya minimizado por <see cref="MinimizadorRespuesta"/>) o <see cref="Error"/> con el <see cref="GrpcStatus"/>
+/// proto COMPLETO en proto-JSON con los nombres del .proto y los valores por defecto, HU #14087 AC8, <see cref="PublicadorResultado"/>)
+/// o <see cref="Error"/> con el <see cref="GrpcStatus"/>
 /// (el nombre del <see cref="StatusCode"/> que viajaría en la <see cref="RpcException"/>). Nunca lleva el mensaje de la excepción ni
 /// el detalle del proveedor. Espejo del record de core-diagnostico, validado contra
 /// <c>contracts/fixtures/bus/resultado-consulta-diagnostico.v1.json</c>.
@@ -31,7 +32,7 @@ public sealed record ResultadoConsultaDiagnostico(
 
     public const string Error = "ERROR";
 
-    /// <summary>Resultado OK del <paramref name="trabajo"/> con la respuesta ya minimizada en proto-JSON.</summary>
+    /// <summary>Resultado OK del <paramref name="trabajo"/> con la respuesta completa en proto-JSON.</summary>
     public static ResultadoConsultaDiagnostico Exito(TrabajoConsultaDiagnostico trabajo, JsonElement respuesta, TimeSpan duracion, bool desdeCache)
     {
         ArgumentNullException.ThrowIfNull(trabajo);
