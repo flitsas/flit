@@ -61,9 +61,16 @@ export function fechaDelDato(iso: string): string {
   return `${partes.day}/${partes.month}/${partes.year} ${partes.hour}:${partes.minute}`;
 }
 
+/** Nota corta bajo el chip de una celda en ERROR, por tipo_error; el resto dice «No se pudo consultar». */
+const NOTAS_ERROR: Record<string, string> = {
+  [BLOQUEADA_POR_RUNT]: "Espera al RUNT del vehículo",
+  AUTENTICACION: "Credenciales del proveedor rechazadas",
+  LIMITE_PROVEEDOR: "Límite del proveedor",
+};
+
 function detalle(celda: CeldaGrilla): string | null {
   if (celda.estado === "NA") return celda.motivo_na ? MOTIVOS_NA[celda.motivo_na] : null;
-  if (celda.estado === "ERROR") return celda.tipo_error === BLOQUEADA_POR_RUNT ? "Espera al RUNT del vehículo" : "No se pudo consultar";
+  if (celda.estado === "ERROR") return (celda.tipo_error && NOTAS_ERROR[celda.tipo_error]) || "No se pudo consultar";
   if (celda.estado === "COMPLETADO" && celda.reutilizada && celda.dato_obtenido_en) return `Dato del ${fechaDelDato(celda.dato_obtenido_en)}`;
   return null;
 }

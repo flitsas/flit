@@ -162,6 +162,8 @@ const TIPOS_ERROR: Record<string, string> = {
   FUENTE_NO_DISPONIBLE: "La fuente no estaba disponible.",
   RESPUESTA_INVALIDA: "La fuente respondió con datos que no se pudieron leer.",
   ESTADO_NO_OK: "La fuente rechazó la consulta.",
+  AUTENTICACION: "El proveedor rechazó las credenciales de FLIT. Avísale al administrador para que las renueve; luego puedes reprocesar la consulta.",
+  LIMITE_PROVEEDOR: "El proveedor limitó las consultas por ahora. Se reintentará automáticamente.",
   NO_CONECTADO: "Esta fuente no está conectada en este ambiente.",
   PERSONAS_CON_ERROR: "Algunas personas no se pudieron consultar; lo que sí respondió se muestra abajo.",
   BLOQUEADA_POR_RUNT: "Depende del RUNT del vehículo, que también falló. Se resuelve al reprocesar el RUNT.",

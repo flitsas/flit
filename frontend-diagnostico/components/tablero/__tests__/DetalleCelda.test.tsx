@@ -304,6 +304,24 @@ describe("DetalleCelda — HU #14087 AC8: sin resultado no hay campos", () => {
     expect(within(respuesta(dialogo)).queryByRole("table")).not.toBeInTheDocument();
   });
 
+  it.each([
+    ["AUTENTICACION", "El proveedor rechazó las credenciales de FLIT. Avísale al administrador para que las renueve; luego puedes reprocesar la consulta."],
+    ["LIMITE_PROVEEDOR", "El proveedor limitó las consultas por ahora. Se reintentará automáticamente."],
+  ])("Error %s del proveedor: el texto claro, nunca el código crudo", async (tipo, texto) => {
+    const { dialogo } = await pintarDetalle(detalle("SIMIT_VEHICULO", { estado: "ERROR", tipo_error: tipo, dato_obtenido_en: null }));
+    expect(within(dialogo).getByRole("alert")).toHaveTextContent(texto);
+    expect(dialogo.textContent).not.toContain(tipo);
+  });
+
+  it("persona en ERROR por AUTENTICACION muestra el texto del proveedor bajo su fila", async () => {
+    const d = detalle("RUNT_PROPIETARIO", {
+      personas: [persona(1, { documento_enmascarado: "****", estado: "ERROR", tipo_error: "AUTENTICACION", consultado_en: null, resultado: null })],
+    });
+    const { dialogo } = await pintarDetalle(d);
+    expect(within(auditoria(dialogo)).getByText(/rechazó las credenciales de FLIT/)).toBeInTheDocument();
+    expect(dialogo.textContent).not.toContain("AUTENTICACION");
+  });
+
   it("Error bloqueado por el RUNT lo explica", async () => {
     const { dialogo } = await pintarDetalle(detalle("AVALUO", { estado: "ERROR", tipo_error: "BLOQUEADA_POR_RUNT", dato_obtenido_en: null }));
     expect(within(dialogo).getByRole("alert")).toHaveTextContent(/RUNT del vehículo/i);

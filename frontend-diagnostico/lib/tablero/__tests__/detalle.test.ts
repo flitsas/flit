@@ -68,6 +68,13 @@ describe("detalle — textos de error, N/A y pesos", () => {
     expect(textoTipoError(codigo)).toMatch(texto);
   });
 
+  it.each([
+    ["AUTENTICACION", "El proveedor rechazó las credenciales de FLIT. Avísale al administrador para que las renueve; luego puedes reprocesar la consulta."],
+    ["LIMITE_PROVEEDOR", "El proveedor limitó las consultas por ahora. Se reintentará automáticamente."],
+  ])("%s (fallo del proveedor) tiene su texto exacto", (codigo, texto) => {
+    expect(textoTipoError(codigo)).toBe(texto);
+  });
+
   it("un código desconocido o nulo da un texto genérico, sin mostrar el código crudo", () => {
     expect(textoTipoError("ALGO_NUEVO")).toBe("La fuente respondió con un error.");
     expect(textoTipoError(null)).toBe("La fuente respondió con un error.");

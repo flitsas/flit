@@ -263,6 +263,21 @@ describe("GrillaSemaforos — AC6: el admin ve «Reprocesar» solo en las rojas"
   });
 });
 
+describe("GrillaSemaforos — fallos del proveedor: AUTENTICACION y LIMITE_PROVEEDOR", () => {
+  it.each([
+    ["AUTENTICACION", "Credenciales del proveedor rechazadas"],
+    ["LIMITE_PROVEEDOR", "Límite del proveedor"],
+    ["TIMEOUT", "No se pudo consultar"],
+  ])("la celda en ERROR %s dice «%s» bajo el chip y conserva «Reprocesar»", (tipo, nota) => {
+    const g = grilla({ vehiculos: [vehiculo(2, [celda(2, "RUNT", "COMPLETADO"), celda(2, "SIMIT_PROPIETARIO", "ERROR", { tipo_error: tipo })])] });
+    const { container } = pintar(g, true);
+    const td = celdaDe(container, "celda-2-simit_propietario");
+    expect(td).toHaveTextContent(nota);
+    expect(td.textContent).not.toContain(tipo);
+    expect(accionesDe().map((b) => b.getAttribute("aria-label") ?? b.textContent)).toContainEqual(expect.stringMatching(/Reprocesar SIMIT propietario de TST002/));
+  });
+});
+
 describe("GrillaSemaforos — AC6: dato reutilizado y sin indicador manual", () => {
   it("la celda reutilizada muestra la fecha y la hora del dato (hora de Colombia)", () => {
     const { container } = pintar();
