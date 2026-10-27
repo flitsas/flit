@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { lanzarExpress } from "./express";
 
 /**
  * HU #13852 (F08-H2) — listado de diagnósticos con filtros en el inicio.
@@ -34,12 +35,8 @@ test.describe("listado de diagnósticos del inicio", () => {
 
     // Nombre único para encontrarlo sin depender de los diagnósticos que ya tenga la compañía.
     const nombre = `E2E listado ${Date.now()}`;
-    await page.getByLabel(/placa o vin/i).fill(PLACA);
-    await page.getByRole("button", { name: "Diagnosticar" }).click();
-    const campoNombre = page.getByLabel(/nombre del diagnóstico/i);
-    await campoNombre.fill(nombre);
-    await page.getByRole("button", { name: "Lanzar diagnóstico" }).click();
-    await page.waitForURL(/\/diagnosticos\/[0-9a-f-]{36}$/i);
+    // HU #14085: el inicio abre la pantalla única en Express con la placa precargada.
+    await lanzarExpress(page, PLACA, nombre);
     const tablero = page.url();
 
     // AC2: el filtro por nombre se refleja en la URL y la tabla solo muestra lo que cumple.

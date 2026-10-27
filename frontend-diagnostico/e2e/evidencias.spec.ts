@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { lanzarExpress } from "./express";
 
 /**
  * HU #13851 (F07-H6) — descargas del tablero: PDF del vehículo y Excel del lote.
@@ -32,10 +33,8 @@ test.describe("descargas del tablero", () => {
     test.skip(!process.env.E2E_USUARIO || !process.env.E2E_CLAVE, "Faltan E2E_USUARIO / E2E_CLAVE");
     await entrar(page, process.env.E2E_USUARIO!, process.env.E2E_CLAVE!);
 
-    await page.getByLabel(/placa o vin/i).fill(PLACA);
-    await page.getByRole("button", { name: "Diagnosticar" }).click();
-    await page.getByRole("button", { name: "Lanzar diagnóstico" }).click();
-    await page.waitForURL(/\/diagnosticos\/[0-9a-f-]{36}$/i);
+    // HU #14085: el inicio abre la pantalla única en Express con la placa precargada.
+    await lanzarExpress(page, PLACA);
 
     const grilla = page.getByRole("table", { name: /semáforo de consultas/i });
     await expect(grilla).toBeVisible();

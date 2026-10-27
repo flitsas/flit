@@ -20,7 +20,7 @@ import { ResumenValidacion } from "./ResumenValidacion";
 import { SubidaArchivo } from "./SubidaArchivo";
 import { TABLA_FILAS_ID, TablaFilasCorregibles } from "./TablaFilasCorregibles";
 
-interface Analisis {
+export interface Analisis {
   /** El archivo analizado, solo en memoria: la confirmación lo reenvía (trae el documento del locatario completo). */
   archivo: File;
   /** Resumen original de la carga (duplicados, límite, estimado). */

@@ -45,15 +45,16 @@ function campoDe(error: unknown): keyof ErroresCabecera | null {
 }
 
 /**
- * Estado compartido del formulario de parametrización y de su versión compacta (HU #13752): nombre, modo, tipo de
- * trámite y alcance, con las fuentes ofrecidas según el contrato y `fuentes_disponibles` del backend (HU #13865), las
- * por defecto premarcadas, RUNT siempre y las obligatorias del tipo (solo en Con Análisis IA). Carga el catálogo de tipos y, si responde 503, espera Retry-After antes
- * de permitir el reintento.
+ * Estado de la parametrización del diagnóstico (HU #13752; pantalla única Express | Masivo, HU #14085): modo, tipo de
+ * trámite y alcance, compartidos por los dos modos para que cambiar de modo los conserve. El nombre lo lleva quien la
+ * usa (autogenerado en Express, digitado en Masivo) y se valida aquí. Las fuentes ofrecidas salen del contrato y de
+ * `fuentes_disponibles` del backend (HU #13865), con las por defecto premarcadas, RUNT siempre y las obligatorias del
+ * tipo (solo en Con Análisis IA). Carga el catálogo de tipos y, si responde 503, espera Retry-After antes de permitir el
+ * reintento.
  */
-export function useParametrizacion(configuracion: Configuracion, nombreInicial = "") {
+export function useParametrizacion(configuracion: Configuracion) {
   const disponibles = configuracion.fuentes_disponibles;
   const habilitadas = useMemo(() => fuentesOfrecidas(configuracion.contrato.fuentes_habilitadas, configuracion.fuentes_disponibles), [configuracion]);
-  const [nombre, setNombreCrudo] = useState(nombreInicial);
   const [modo, setModoCrudo] = useState<ModoDiagnostico>("SIMPLE");
   const [tipoCodigo, setTipoCrudo] = useState("");
   const [seleccionadas, setSeleccionadas] = useState<Fuente[]>(() =>
@@ -117,8 +118,8 @@ export function useParametrizacion(configuracion: Configuracion, nombreInicial =
 
   const limpiar = (campo: keyof ErroresCabecera) => setErrores((actual) => (actual[campo] ? { ...actual, [campo]: undefined } : actual));
 
-  function setNombre(valor: string) {
-    setNombreCrudo(valor);
+  /** Quien lleva el nombre lo avisa al cambiarlo: se limpia su error. */
+  function limpiarNombre() {
     limpiar("nombre");
   }
   function setModo(valor: ModoDiagnostico) {
@@ -136,14 +137,14 @@ export function useParametrizacion(configuracion: Configuracion, nombreInicial =
   }
 
   /** Valida en pantalla lo mismo que la API valida primero; devuelve false y pinta los errores si algo falta. */
-  function validar(): boolean {
+  function validar(nombre: string): boolean {
     const nuevos: ErroresCabecera = { nombre: errorNombre(nombre) };
     if (modo === "CON_ANALISIS" && !tipoCodigo) nuevos.tipo = "Elige el tipo de trámite.";
     setErrores(nuevos);
     return !nuevos.nombre && !nuevos.tipo;
   }
 
-  function cabecera(): CabeceraEntrada {
+  function cabecera(nombre: string): CabeceraEntrada {
     return {
       nombre: nombre.trim(),
       modo,
@@ -161,8 +162,7 @@ export function useParametrizacion(configuracion: Configuracion, nombreInicial =
   }
 
   return {
-    nombre,
-    setNombre,
+    limpiarNombre,
     modo,
     setModo,
     tipoCodigo,
@@ -180,3 +180,5 @@ export function useParametrizacion(configuracion: Configuracion, nombreInicial =
     aplicarErrorApi,
   };
 }
+
+export type Parametrizacion = ReturnType<typeof useParametrizacion>;

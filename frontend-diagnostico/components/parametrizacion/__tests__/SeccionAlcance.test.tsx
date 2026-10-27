@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { SeccionAlcance, type SeccionAlcanceProps } from "@/components/parametrizacion/SeccionAlcance";
-import { FormularioParametrizacion } from "@/components/parametrizacion/FormularioParametrizacion";
-import { DISPONIBLES_CON_IMPUESTO, DISPONIBLES_SIN_IMPUESTO, configuracion, simularApi, tiposOk } from "./datos";
+import { DISPONIBLES_CON_IMPUESTO, DISPONIBLES_SIN_IMPUESTO } from "./datos";
 
 // Uso de ejemplo: <SeccionAlcance habilitadas={["RUNT", "SIMIT_VEHICULO"]} seleccionadas={["RUNT"]} obligatorias={[]}
 // disponibles={configuracion.fuentes_disponibles} onAlternar={(f) => ...} /> pinta los tres grupos con solo las fuentes contratadas.
@@ -109,25 +108,5 @@ describe("SeccionAlcance — impuesto según fuentes_disponibles (HU #13865)", (
     montar({ habilitadas: ["RUNT", "SIMIT_VEHICULO", "IMPUESTO_DEPARTAMENTAL"], disponibles: DISPONIBLES_SIN_IMPUESTO });
     expect(screen.queryByRole("checkbox", { name: "Impuesto departamental" })).toBeNull();
     expect(screen.getAllByRole("checkbox").map((c) => c.getAttribute("value"))).toEqual(["RUNT", "SIMIT_VEHICULO"]);
-  });
-
-  it("AC1 en el formulario: la configuración con el impuesto habilitado y disponible lo ofrece en el alcance del lote", async () => {
-    const api = simularApi({ "GET /tipos-tramite": tiposOk });
-    render(
-      <FormularioParametrizacion
-        configuracion={configuracion({ contrato: { fuentes_habilitadas: ["RUNT", "IMPUESTO_DEPARTAMENTAL"] }, fuentes_disponibles: DISPONIBLES_CON_IMPUESTO })}
-      />,
-    );
-    const impuesto = within(screen.getByRole("group", { name: "Por Vehículo" })).getByRole("checkbox", { name: "Impuesto departamental" });
-    fireEvent.click(impuesto);
-    expect(impuesto).toBeChecked();
-    await waitFor(() => expect(api).toHaveBeenCalled());
-  });
-
-  it("AC2 en el formulario: la configuración sin el impuesto en fuentes_disponibles no lo ofrece", async () => {
-    const api = simularApi({ "GET /tipos-tramite": tiposOk });
-    render(<FormularioParametrizacion configuracion={configuracion({ contrato: { fuentes_habilitadas: ["RUNT", "IMPUESTO_DEPARTAMENTAL"] } })} />);
-    expect(screen.queryByRole("checkbox", { name: "Impuesto departamental" })).toBeNull();
-    await waitFor(() => expect(api).toHaveBeenCalled());
   });
 });

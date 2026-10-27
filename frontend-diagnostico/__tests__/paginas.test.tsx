@@ -69,6 +69,8 @@ describe("sin formulario propio", () => {
         join("components", "express"),
         join("components", "backoffice"),
         join("components", "listado"),
+        // Pantalla única de creación (HU #14085): placa o VIN, documento del locatario y archivo de vehículos.
+        join("components", "nuevo"),
       ];
       if (!conCampos.some((carpeta) => archivo.includes(carpeta))) expect(codigo, archivo).not.toMatch(/<input\b/);
       expect(codigo, archivo).not.toMatch(/autoComplete=["'](username|current-password)["']/);
