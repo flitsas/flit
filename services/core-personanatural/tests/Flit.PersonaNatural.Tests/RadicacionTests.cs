@@ -224,11 +224,11 @@ public sealed class RadicacionTests : IAsyncLifetime
 
         var rechazada = await Radicar(id, token, "k-1");
         await using (var db = _host.NuevaDb())
-            await db.Set<PersonaSolicitante>().Where(p => p.Parte == "comprador").ExecuteUpdateAsync(set => set.SetProperty(p => p.ValidacionEstado, "validada"), TestContext.Current.CancellationToken);
+            await db.Set<PersonaSolicitante>().Where(p => p.Parte == "comprador").ExecuteUpdateAsync(set => set.SetProperty(p => p.ValidacionEstado, "aprobada").SetProperty(p => p.ValidacionId, Guid.NewGuid()), TestContext.Current.CancellationToken);
         var validada = await Radicar(id, token, "k-2");
 
         (await PortalHost.JsonAsync(rechazada)).RootElement.GetProperty("motivo").GetString().Should().Be("identidad_rechazada");
-        validada.StatusCode.Should().Be(HttpStatusCode.Accepted, "«validada» y «aprobada» cuentan igual");
+        validada.StatusCode.Should().Be(HttpStatusCode.Accepted, "con la validación aprobada de esta solicitud ya puede radicar");
     }
 
     [Fact]
@@ -351,7 +351,7 @@ public sealed class RadicacionTests : IAsyncLifetime
         if (validar)
         {
             await using var db = _host.NuevaDb();
-            await db.Set<PersonaSolicitante>().Where(p => p.SolicitudId == id).ExecuteUpdateAsync(set => set.SetProperty(p => p.ValidacionEstado, "aprobada"), TestContext.Current.CancellationToken);
+            await db.Set<PersonaSolicitante>().Where(p => p.SolicitudId == id).ExecuteUpdateAsync(set => set.SetProperty(p => p.ValidacionEstado, "aprobada").SetProperty(p => p.ValidacionId, Guid.NewGuid()), TestContext.Current.CancellationToken);
         }
 
         return (id, token);
