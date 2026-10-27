@@ -98,7 +98,8 @@ internal sealed partial class PublicadorCeldas(
         }
 
         var esExpress = await EsExpressAsync(celda.DiagnosticoId, ct).ConfigureAwait(false);
-        var trabajo = Guid.CreateVersion7();
+        // Dec. 6: el UUIDv7 lleva el instante de publicación con el reloj inyectado (= disponible_desde): la marca de agua del reconciliador.
+        var trabajo = Guid.CreateVersion7(ahora);
         celda.TrabajoId = trabajo;
         celda.Estado = EstadoCelda.EnCurso;
         celda.TipoError = null;

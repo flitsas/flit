@@ -100,7 +100,7 @@ public static class Modulos
         services.TryAddSingleton<Consultas.Bus.PulsoConsultas>();
         services.AddOptions<Trabajos.OpcionesReconciliador>()
             .Bind(configuration.GetSection(Trabajos.OpcionesReconciliador.Seccion))
-            .Validate(o => o.Errores().Count == 0, $"{Trabajos.OpcionesReconciliador.Seccion} tiene valores fuera de rango (Intervalo > 0, Margen >= 1 min, VentanaVida > 0, Maximo 1-5000).")
+            .Validate(o => o.Errores().Count == 0, $"{Trabajos.OpcionesReconciliador.Seccion} tiene valores fuera de rango (Intervalo > 0, Margen >= 1 min, VentanaVida > 0, Maximo 1-5000, TtlTrabajo > Margen, 1 min <= ToleranciaOrden < TtlTrabajo).")
             .ValidateOnStart();
         services.AddSingleton<Trabajos.ReconciliadorConsultas>();
         var bus = new Consultas.Bus.OpcionesBus();

@@ -1,4 +1,5 @@
 using System.Data.Common;
+using Flit.Diagnostico.Api.Modulos.Diagnosticos;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Api.Plataforma;
 using Flit.Diagnostico.Domain.Consultas;
@@ -13,7 +14,8 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 /// <c>eventId</c> repetido no repite el efecto) y solo acepta mensajes del productor <c>consultas</c> con su <c>user_id</c> validado.
 /// Por cada resultado:
 /// <list type="number">
-/// <item>Marca el pulso de core-consultas (<see cref="PulsoConsultas"/>, para el reconciliador) y fija la empresa del sobre
+/// <item>Marca el pulso de core-consultas (<see cref="PulsoConsultas"/>, para el reconciliador; con la celda leída, también la marca
+/// de agua FIFO de su cola, lote o Express, con el <c>trabajo_id</c> del resultado) y fija la empresa del sobre
 /// (<see cref="EmpresaDelTrabajo"/>), lo primero: el contexto, la outbox y el publicador del scope la
 /// usan; una celda de otra empresa no se ve y el resultado se descarta.</item>
 /// <item>Correlación por <c>trabajo_id</c>: si el del resultado ya no es el vigente de la celda (reproceso, republicación o un
@@ -61,6 +63,11 @@ internal sealed partial class ConsumidorResultados(
             Descartado(log, data.ConsultaId, data.TrabajoId, "SIN_CELDA");
             return;
         }
+
+        // Dec. 6: marca de agua FIFO de la cola del trabajo (la del lote o la del Express), también si el resultado se descarta.
+        var esExpress = await db.Set<CabeceraDiagnostico>().AsNoTracking()
+            .Where(c => c.Id == celda.DiagnosticoId).Select(c => c.EsExpress).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        pulso.RegistrarAtendido(esExpress, data.TrabajoId);
 
         if (celda.TrabajoId is null || celda.TrabajoId != data.TrabajoId)
         {
