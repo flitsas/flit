@@ -10,6 +10,9 @@ import {
   type OtProcedureAttachment,
 } from "@/lib/api/admin-ot";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
+import type { StatusHistory } from "@/lib/api/types/procedure-runtime";
+import { TimelineTrackPanel } from "@/components/operacion/detalle/TimelineTrackPanel";
+import { mapStatusHistoryToTimelineNodes } from "@/components/operacion/detalle/timeline-mappers";
 import { OtDetalleAcordeon } from "./detalle/OtDetalleAcordeon";
 import { OtDetalleActores } from "./detalle/OtDetalleActores";
 import { OtDetalleShell } from "./detalle/OtDetalleShell";
@@ -37,6 +40,9 @@ import { COPY } from "@/lib/copy/copy-catalog";
  */
 export type OtDetalleSeccionId = "vehiculo" | "actores" | "documentos";
 
+/** HU #14157 — panel de tracking (solo línea de tiempo; Trazabilidad de Identidad fuera de alcance). */
+export type OtDetalleTrackingPanel = "timeline";
+
 export const OT_DETALLE_SECCIONES: { id: OtDetalleSeccionId; titulo: string }[] = [
   { id: "vehiculo", titulo: "Detalles del trámite y vehículo" },
   { id: "actores", titulo: COPY.A07 },
@@ -58,6 +64,11 @@ export interface ClientProcedureDetailModalProps {
    * «ver documentos»— y ambas llevan a este modal: la segunda simplemente abre el suyo.
    */
   initialSection?: OtDetalleSeccionId;
+  /**
+   * HU #14157 — si viene `timeline`, el modal abre con la línea de tiempo visible (clic en Estado
+   * de la bandeja).
+   */
+  initialPanel?: OtDetalleTrackingPanel | null;
   /**
    * Decisión del organismo desde el pie del modal (HU #12062). Son LOS MISMOS manejadores que ya
    * recibe la tabla de la bandeja: el modal es hermano suyo dentro de `ClientProceduresSection`, así
@@ -83,8 +94,8 @@ export interface ClientProcedureDetailModalProps {
  * vehículo y la sección «Datos comerciales» (fuera por decisión de producto: el organismo no decide
  * sobre el precio de la operación).
  *
- * Ya NO comparte nada con `components/operacion/detalle/**`. El detalle del gestor sigue su propio
- * camino y este el del prototipo; con módulos comunes, tocar uno movía el otro.
+ * El armazón OT no comparte paneles del gestor salvo la línea de tiempo (HU #14157): reutiliza
+ * `TimelineTrackPanel` + `mapStatusHistoryToTimelineNodes` para paridad visual con operación.
  */
 export function ClientProcedureDetailModal({
   open,
@@ -93,6 +104,7 @@ export function ClientProcedureDetailModal({
   scope,
   readOnly = false,
   initialSection = "vehiculo",
+  initialPanel = null,
   onApprove,
   onReject,
   onAssignPlate,
@@ -109,6 +121,9 @@ export function ClientProcedureDetailModal({
     actores: false,
     documentos: false,
   });
+  const [panelTracking, setPanelTracking] = useState<OtDetalleTrackingPanel | null>(
+    initialPanel ?? null,
+  );
 
   /**
    * Trámite cuyo estado inicial ya se sembró. Distingue «abrir otro trámite» de «el mismo trámite
@@ -138,6 +153,7 @@ export function ClientProcedureDetailModal({
           actores: initialSection === "actores",
           documentos: initialSection === "documentos",
         });
+        setPanelTracking(initialPanel ?? null);
         setDocs([]);
       }
       setDetailLoading(true);
@@ -164,13 +180,16 @@ export function ClientProcedureDetailModal({
 
     void load();
     return () => controller.abort();
-  }, [open, procedure, scope, initialSection]);
+  }, [open, procedure, scope, initialSection, initialPanel]);
 
   const row = detail ?? procedure;
   if (!open || !row) return null;
 
   const alternar = (id: OtDetalleSeccionId) =>
     setAbiertos((prev) => ({ ...prev, [id]: !prev[id] }));
+
+  const toggleTimeline = () =>
+    setPanelTracking((prev) => (prev === "timeline" ? null : "timeline"));
 
   /**
    * ADR-0059 — lo que el organismo puede decidir depende del estado, y las dos decisiones no van
@@ -198,6 +217,10 @@ export function ClientProcedureDetailModal({
     (a): a is string => a !== null,
   );
   const titulo = "Gestión y Aprobación del Trámite";
+  const estadoLabel = formatOtProcedureStatus(row.status);
+  const timelineActive = panelTracking === "timeline";
+  const history = (row.statusHistory ?? []) as StatusHistory[];
+  const timelineNodes = mapStatusHistoryToTimelineNodes(history);
 
   const header = ({ titleId }: { titleId: string }) => (
     <div className="flex flex-wrap items-start justify-between gap-3 px-1 py-1">
@@ -210,12 +233,17 @@ export function ClientProcedureDetailModal({
           >
             {titulo}
           </h2>
-          {/* El prototipo asume un trámite pendiente; la bandeja también lista aprobados y
-              rechazados, y sin el sello no habría forma de distinguirlos dentro del modal. */}
-          <StatusBadge
-            label={formatOtProcedureStatus(row.status)}
-            {...procedureStatusChip(row.status)}
-          />
+          {/* HU #14157 — el chip de estado abre/cierra la línea de tiempo (paridad Gestor). */}
+          <button
+            type="button"
+            onClick={toggleTimeline}
+            aria-pressed={timelineActive}
+            aria-label={`Estado: ${estadoLabel}. Ver línea de tiempo del trámite`}
+            title="Ver línea de tiempo del trámite"
+            className="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+          >
+            <StatusBadge label={estadoLabel} {...procedureStatusChip(row.status)} />
+          </button>
         </div>
         <p className="mt-1 text-[12px] text-slate-600 dark:text-white/60">
           Radicado: <span className="font-mono">{row.referenceNumber}</span> · Tipo de trámite:{" "}
@@ -223,15 +251,30 @@ export function ClientProcedureDetailModal({
           {row.vin?.trim() || "—"}
         </p>
       </div>
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Cerrar"
-        className="rounded-xl border bg-white p-2 dark:border-white/5 dark:bg-[#0B0F14]"
-        style={{ borderColor: OT_BORDER, color: OT_NAVY }}
-      >
-        <X className="h-4 w-4" aria-hidden="true" />
-      </button>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={toggleTimeline}
+          aria-pressed={timelineActive}
+          className="rounded-xl border-2 px-4 py-2.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+          style={
+            timelineActive
+              ? { background: OT_BLUE, borderColor: OT_BLUE, color: "#fff" }
+              : { borderColor: OT_BORDER, color: OT_NAVY, background: "transparent" }
+          }
+        >
+          Línea de Tiempo del Trámite
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Cerrar"
+          className="rounded-xl border bg-white p-2 dark:border-white/5 dark:bg-[#0B0F14]"
+          style={{ borderColor: OT_BORDER, color: OT_NAVY }}
+        >
+          <X className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </div>
 
       {/* Banda de aviso del prototipo. Los pendientes (Bug #11585) viven AQUÍ y no dentro de un
           acordeón: son la razón por la que el trámite todavía no se puede resolver, y plegados
@@ -374,6 +417,33 @@ export function ClientProcedureDetailModal({
         <p className="m-0 text-[11px]" style={{ color: "#B45309" }} role="alert">
           {detailError}
         </p>
+      ) : null}
+
+      {timelineActive ? (
+        <div className="mb-3" data-testid="ot-timeline-panel">
+          {detailLoading && history.length === 0 ? (
+            <OtCargando etiqueta="Cargando la línea de tiempo del trámite" filas={3} />
+          ) : detailError && history.length === 0 ? (
+            <div
+              className="rounded-2xl border border-[#DFE5ED] bg-white p-5 dark:border-white/10 dark:bg-[#162744]"
+              role="alert"
+            >
+              <p className="text-sm font-semibold" style={{ color: OT_NAVY }}>
+                No se pudo cargar el historial de estados
+              </p>
+              <p className="mt-1 text-xs opacity-70">
+                El resto del detalle sigue disponible. Cierra y vuelve a abrir el trámite, o reintenta
+                más tarde.
+              </p>
+            </div>
+          ) : (
+            <TimelineTrackPanel
+              title="Línea de tiempo del trámite"
+              nodes={timelineNodes}
+              emptyMessage="Este trámite aún no tiene cambios de estado registrados."
+            />
+          )}
+        </div>
       ) : null}
 
       {SECCIONES.map((s) => (

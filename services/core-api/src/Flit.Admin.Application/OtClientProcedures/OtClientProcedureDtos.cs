@@ -54,6 +54,9 @@ public sealed class OtClientProcedureResponse
     /// <summary>Detalle: actores (GET by id). Vacío en listados.</summary>
     public IReadOnlyList<OtClientProcedureActorResponse> Actors { get; init; } = [];
 
+    /// <summary>HU #14156 — historial de estados (GET by id). Arreglo vacío si no hay filas; vacío en listados.</summary>
+    public IReadOnlyList<OtClientProcedureStatusHistoryResponse> StatusHistory { get; init; } = [];
+
     public string? Placa { get; init; }
     public string? Vin { get; init; }
     /// <summary>Propietario/vendedor (null en matrícula inicial).</summary>
@@ -159,6 +162,19 @@ public sealed class OtClientProcedureActorResponse
     public string? PersonType { get; init; }
 }
 
+/// <summary>HU #14156 — entrada de línea de tiempo en el detalle OT (paridad con StatusHistory del Gestor).</summary>
+public sealed class OtClientProcedureStatusHistoryResponse
+{
+    public string? FromStatus { get; init; }
+    public string ToStatus { get; init; } = string.Empty;
+    public DateTimeOffset ChangedAt { get; init; }
+    public string? Reason { get; init; }
+    public string? Metadata { get; init; }
+    public string? ChangedByName { get; init; }
+    public string? ChangedByEmail { get; init; }
+    public string? ChangedByCompania { get; init; }
+}
+
 public sealed class RejectOtClientProcedureRequest
 {
     /// <summary>
@@ -229,6 +245,17 @@ internal static class OtClientProcedureMapper
                 Email = a.Email,
                 Phone = a.Phone,
                 PersonType = a.PersonType,
+            }).ToList(),
+            StatusHistory = procedure.StatusHistory.Select(h => new OtClientProcedureStatusHistoryResponse
+            {
+                FromStatus = h.FromStatus,
+                ToStatus = h.ToStatus,
+                ChangedAt = h.ChangedAt,
+                Reason = h.Reason,
+                Metadata = h.Metadata,
+                ChangedByName = h.ChangedByName,
+                ChangedByEmail = h.ChangedByEmail,
+                ChangedByCompania = h.ChangedByCompania,
             }).ToList(),
             Placa = procedure.Placa,
             Vin = procedure.Vin,
