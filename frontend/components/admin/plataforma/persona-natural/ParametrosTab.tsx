@@ -7,6 +7,7 @@
 // Sin datos bancarios ni de pago (decisión del PO: otra épica).
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCcw, RotateCcw, Save } from "lucide-react";
+import type { ReactNode } from "react";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
@@ -22,7 +23,9 @@ import {
   type GuardarParametrosPn,
   type ParametrosPn,
 } from "@/lib/api/admin-pn-config";
-import { PN_FIELD_ERROR_CLS, PN_HINT_CLS, PN_INPUT_CLS, PN_INPUT_ERROR_CLS, PN_LABEL_CLS } from "./pn-ui";
+import { ConfigCard, FIELD_CLASS, FIELD_LABEL, HELP_TEXT } from "@/components/admin/companies/ConfigUi";
+import { CreateButton } from "@/components/atom/CreateButton";
+import { ADMIN_BRAND_OUTLINE_BTN_CLS } from "@/components/admin/admin-ui-styles";
 import { PnButton } from "./pn-componentes";
 import { pnError } from "./pnErrors";
 
@@ -121,6 +124,53 @@ function validar(f: Formulario): { errores: Errores; payload: GuardarParametrosP
   };
 }
 
+function CampoTexto({
+  id,
+  label,
+  type = "text",
+  value,
+  max,
+  error,
+  ayuda,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  type?: string;
+  value: string;
+  max: number;
+  error?: string;
+  ayuda: ReactNode;
+  onChange: (v: string) => void;
+}) {
+  const hintId = `${id}-hint`;
+  return (
+    <div>
+      <label htmlFor={id} className={FIELD_LABEL}>
+        {label}
+      </label>
+      <input
+        id={id}
+        type={type}
+        value={value}
+        maxLength={max}
+        onChange={(e) => onChange(e.target.value)}
+        aria-invalid={Boolean(error)}
+        aria-describedby={hintId}
+        className={FIELD_CLASS}
+        style={{ borderColor: error ? "#FF4E00" : "#DFE5ED" }}
+      />
+      <p
+        id={hintId}
+        role={error ? "alert" : undefined}
+        className={`mt-1 ${error ? "text-xs font-semibold text-[#C2410C]" : HELP_TEXT}`}
+      >
+        {error ?? ayuda}
+      </p>
+    </div>
+  );
+}
+
 export function ParametrosTab() {
   const { show } = useToast();
   const [servidor, setServidor] = useState<ParametrosPn | null>(null);
@@ -217,11 +267,15 @@ export function ParametrosTab() {
       onRetry={() => void load()}
     >
       {form && servidor && (
-        <form onSubmit={guardar} noValidate className="flex max-w-3xl flex-col gap-6" aria-label="Ajustes del portal">
+        <form
+          onSubmit={guardar}
+          noValidate
+          className="flex max-w-5xl flex-col gap-6 pb-28"
+          aria-label="Ajustes del portal"
+        >
           <p className="text-sm text-[#59677D] dark:text-white/78">
             Estos ajustes definen cómo se comporta el portal para el ciudadano. Si dejas un campo vacío, el portal usa su
             valor habitual.
-            {servidor.actualizadoEn && <> Última actualización: {formatFechaHora(servidor.actualizadoEn)}.</>}
           </p>
 
           {conflicto && (
@@ -239,96 +293,139 @@ export function ParametrosTab() {
             </InlineAlert>
           )}
 
-          <fieldset className="grid gap-4 sm:grid-cols-2">
-            <legend className="mb-2 text-sm font-bold text-flit-primary dark:text-white">Tiempos y límites</legend>
-            {CAMPOS_NUMERICOS.map(({ campo, label, ayuda }) => {
-              const r = RANGOS_PARAMETROS[campo];
-              const hintId = `pn-param-${campo}-hint`;
-              return (
-                <label key={campo} className={PN_LABEL_CLS}>
-                  {label}
-                  <input
-                    inputMode="numeric"
-                    autoComplete="off"
-                    value={form[campo]}
-                    onChange={(e) => cambiar(campo, e.target.value)}
-                    placeholder="Valor habitual"
-                    aria-invalid={Boolean(errores[campo])}
-                    aria-describedby={hintId}
-                    className={`${PN_INPUT_CLS} ${errores[campo] ? PN_INPUT_ERROR_CLS : ""}`}
-                  />
-                  <span id={hintId} className={errores[campo] ? PN_FIELD_ERROR_CLS : PN_HINT_CLS} role={errores[campo] ? "alert" : undefined}>
-                    {errores[campo] ?? `${ayuda} Permitido: de ${r.min} a ${r.max} ${r.unidad}.`}
-                  </span>
-                </label>
-              );
-            })}
-            <label className={PN_LABEL_CLS}>
-              Verificación anti-robots (captcha)
-              <select value={form.captcha} onChange={(e) => cambiar("captcha", e.target.value as Formulario["captcha"])} className={PN_INPUT_CLS}>
+          <ConfigCard
+            id="pn-ajustes-tiempos"
+            title="Tiempos y límites"
+            description="Cuánto dura la sesión de una persona, cuánto se guarda un trámite sin enviar y cuántas consultas se permiten."
+          >
+            <div className="grid gap-4 md:grid-cols-2">
+              {CAMPOS_NUMERICOS.map(({ campo, label, ayuda }) => {
+                const r = RANGOS_PARAMETROS[campo];
+                const hintId = `pn-param-${campo}-hint`;
+                const inputId = `pn-param-${campo}`;
+                return (
+                  <div key={campo}>
+                    <label htmlFor={inputId} className={FIELD_LABEL}>
+                      {label}
+                    </label>
+                    <div className="relative">
+                      <input
+                        id={inputId}
+                        inputMode="numeric"
+                        autoComplete="off"
+                        value={form[campo]}
+                        onChange={(e) => cambiar(campo, e.target.value)}
+                        aria-invalid={Boolean(errores[campo])}
+                        aria-describedby={hintId}
+                        className={`${FIELD_CLASS} pr-24`}
+                        style={{ borderColor: errores[campo] ? "#FF4E00" : "#DFE5ED" }}
+                      />
+                      <span
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs font-semibold text-[#59677D] dark:text-white/70"
+                      >
+                        {r.unidad}
+                      </span>
+                    </div>
+                    <p
+                      id={hintId}
+                      role={errores[campo] ? "alert" : undefined}
+                      className={`mt-1 ${errores[campo] ? "text-xs font-semibold text-[#C2410C]" : HELP_TEXT}`}
+                    >
+                      {errores[campo] ??
+                        `${ayuda} Permitido: de ${r.min} a ${r.max} ${r.unidad}. Vacío: usa el valor habitual del portal.`}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </ConfigCard>
+
+          <ConfigCard
+            id="pn-ajustes-captcha"
+            title="Verificación anti-robots"
+            description="Pide a la persona demostrar que no es un programa automático antes de usar el portal."
+          >
+            <div className="max-w-sm">
+              <label htmlFor="pn-param-captcha" className={FIELD_LABEL}>
+                Verificación anti-robots (captcha)
+              </label>
+              <select
+                id="pn-param-captcha"
+                value={form.captcha}
+                onChange={(e) => cambiar("captcha", e.target.value as Formulario["captcha"])}
+                className={FIELD_CLASS}
+                style={{ borderColor: "#DFE5ED" }}
+              >
                 <option value="">Lo habitual del portal</option>
                 <option value="si">Activada</option>
                 <option value="no">Desactivada</option>
               </select>
-              <span className={PN_HINT_CLS}>Pide a la persona demostrar que no es un programa automático.</span>
-            </label>
-          </fieldset>
+              <p className={`mt-1 ${HELP_TEXT}`}>«Lo habitual del portal» deja que el portal decida.</p>
+            </div>
+          </ConfigCard>
 
-          <fieldset className="grid gap-4 sm:grid-cols-2">
-            <legend className="mb-2 text-sm font-bold text-flit-primary dark:text-white">Contacto de soporte</legend>
-            <p className="-mt-1 text-xs text-[#59677D] sm:col-span-2 dark:text-white/70">
-              Datos para que el ciudadano pueda pedir ayuda. Son opcionales.
-            </p>
-            <label className={PN_LABEL_CLS}>
-              Correo de soporte
-              <input
+          <ConfigCard
+            id="pn-ajustes-soporte"
+            title="Contacto de soporte"
+            description="Datos para que el ciudadano pueda pedir ayuda. Son opcionales."
+          >
+            <div className="grid gap-4 md:grid-cols-2">
+              <CampoTexto
+                id="pn-param-correo"
+                label="Correo de soporte"
                 type="email"
                 value={form.soporteCorreo}
-                onChange={(e) => cambiar("soporteCorreo", e.target.value)}
-                maxLength={SOPORTE_CORREO_MAX}
-                aria-invalid={Boolean(errores.soporteCorreo)}
-                className={`${PN_INPUT_CLS} ${errores.soporteCorreo ? PN_INPUT_ERROR_CLS : ""}`}
+                max={SOPORTE_CORREO_MAX}
+                error={errores.soporteCorreo}
+                ayuda="Por ejemplo: soporte@empresa.com"
+                onChange={(v) => cambiar("soporteCorreo", v)}
               />
-              {errores.soporteCorreo && <span role="alert" className={PN_FIELD_ERROR_CLS}>{errores.soporteCorreo}</span>}
-            </label>
-            <label className={PN_LABEL_CLS}>
-              Teléfono de soporte
-              <input
+              <CampoTexto
+                id="pn-param-telefono"
+                label="Teléfono de soporte"
                 type="tel"
                 value={form.soporteTelefono}
-                onChange={(e) => cambiar("soporteTelefono", e.target.value)}
-                maxLength={SOPORTE_TELEFONO_MAX}
-                aria-invalid={Boolean(errores.soporteTelefono)}
-                className={`${PN_INPUT_CLS} ${errores.soporteTelefono ? PN_INPUT_ERROR_CLS : ""}`}
+                max={SOPORTE_TELEFONO_MAX}
+                error={errores.soporteTelefono}
+                ayuda="Con indicativo si aplica."
+                onChange={(v) => cambiar("soporteTelefono", v)}
               />
-              {errores.soporteTelefono && <span role="alert" className={PN_FIELD_ERROR_CLS}>{errores.soporteTelefono}</span>}
-            </label>
-            <label className={`${PN_LABEL_CLS} sm:col-span-2`}>
-              Horario de atención
-              <input
-                value={form.soporteHorario}
-                onChange={(e) => cambiar("soporteHorario", e.target.value)}
-                maxLength={SOPORTE_HORARIO_MAX}
-                aria-invalid={Boolean(errores.soporteHorario)}
-                className={`${PN_INPUT_CLS} ${errores.soporteHorario ? PN_INPUT_ERROR_CLS : ""}`}
-              />
-              <span className={PN_HINT_CLS}>Por ejemplo: lunes a viernes, 8:00 a. m. a 5:00 p. m.</span>
-              {errores.soporteHorario && <span role="alert" className={PN_FIELD_ERROR_CLS}>{errores.soporteHorario}</span>}
-            </label>
-          </fieldset>
+              <div className="md:col-span-2">
+                <CampoTexto
+                  id="pn-param-horario"
+                  label="Horario de atención"
+                  value={form.soporteHorario}
+                  max={SOPORTE_HORARIO_MAX}
+                  error={errores.soporteHorario}
+                  ayuda="Por ejemplo: lunes a viernes, 8:00 a. m. a 5:00 p. m."
+                  onChange={(v) => cambiar("soporteHorario", v)}
+                />
+              </div>
+            </div>
+          </ConfigCard>
 
           {errorGeneral && <InlineAlert tone="error">{errorGeneral}</InlineAlert>}
 
-          <div className="flex flex-wrap items-center gap-3">
-            <PnButton type="submit" variant="primary" icon={Save} loading={busy} disabled={!hayCambios}>
-              Guardar ajustes
-            </PnButton>
-            {hayCambios && (
-              <PnButton variant="secondary" icon={RotateCcw} onClick={descartar} disabled={busy}>
-                Descartar cambios
-              </PnButton>
-            )}
-            {!hayCambios && <span className={PN_HINT_CLS}>No hay cambios por guardar.</span>}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-[#DFE5ED] bg-white px-4 py-3 shadow-[0_8px_24px_rgba(22,39,68,0.08)] dark:border-white/10 dark:bg-[#0B0F14]">
+            <p className={HELP_TEXT} role="status">
+              {hayCambios ? "Hay cambios sin guardar." : "No hay cambios por guardar."}
+              {servidor.actualizadoEn && <> Última actualización: {formatFechaHora(servidor.actualizadoEn)}.</>}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              {hayCambios && (
+                <button type="button" onClick={descartar} disabled={busy} className={ADMIN_BRAND_OUTLINE_BTN_CLS}>
+                  <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                  Descartar cambios
+                </button>
+              )}
+              <CreateButton
+                type="submit"
+                icon={Save}
+                label={busy ? "Guardando…" : "Guardar ajustes"}
+                disabled={busy || !hayCambios}
+              />
+            </div>
           </div>
         </form>
       )}

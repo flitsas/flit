@@ -47,7 +47,7 @@ describe("ParametrosTab (#14075)", () => {
     expect(screen.getByText(/permitido: de 15 a 1440 minutos/i)).toBeInTheDocument();
     expect(screen.getByText(/permitido: de 1 a 90 días/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/días que se guarda un trámite/i)).toHaveValue("");
-    expect(screen.getByLabelText(/verificación anti-robots/i)).toHaveValue("si");
+    expect(screen.getByLabelText(/captcha/i)).toHaveValue("si");
     expect(screen.getByText(/última actualización: 20\/10\/2026/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /guardar ajustes/i })).toBeDisabled();
   });
