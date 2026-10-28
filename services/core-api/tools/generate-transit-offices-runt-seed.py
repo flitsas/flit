@@ -253,14 +253,18 @@ def render_sql(rows: list[dict], source_label: str, renames: list[dict[str, str]
         lines.append("")
 
     # Dev grant: Funza (ejemplo traspaso RUNT) para tenant FLITDEV.
+    # HU #12895 (A-02): solo si FLITDEV existe; el catálogo corre también en bases
+    # sin datos demo, donde ese tenant no está.
     lines.extend(
         [
-            "-- Grant opcional dev: Funza habilitado para FLITDEV (pruebas B11 auto-bind).",
+            "-- Grant opcional dev: Funza habilitado para FLITDEV (pruebas B11 auto-bind). HU #12895 (A-02): solo si FLITDEV existe;",
+            "-- el catálogo corre también en bases sin datos demo, donde ese tenant no está.",
             "INSERT INTO admin.tenant_transit_office_grants (id, tenant_id, transit_office_id, is_enabled, created_at)",
             "SELECT uuidv7(), "
             f"{sql_str(FLITDEV_TENANT)}::uuid, id, true, now()",
             "FROM catalogs.transit_offices",
             "WHERE code = '25286000'",
+            f"  AND EXISTS (SELECT 1 FROM identity.tenants WHERE id = {sql_str(FLITDEV_TENANT)}::uuid)",
             "ON CONFLICT (tenant_id, transit_office_id) DO NOTHING;",
             "",
             "COMMIT;",
