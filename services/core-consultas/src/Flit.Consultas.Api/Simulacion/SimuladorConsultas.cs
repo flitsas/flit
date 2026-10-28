@@ -9,7 +9,7 @@ namespace Flit.Consultas.Api.Simulacion;
 /// <summary>
 /// Proveedor simulado por fuente para LOCAL y DEV (ADR-0075, U3 = a; T10): responde el <c>*Response</c> proto de cada rpc del
 /// diagnóstico, determinista por el ÚLTIMO carácter del identificador, con los mismos escenarios que tenían las fuentes simuladas de
-/// core-diagnostico. Solo lo usa <see cref="EjecutorTrabajo"/> con <see cref="OpcionesSimulacion.Habilitada"/>; no llama a ningún
+/// core-diagnostico. Solo lo usa <see cref="EjecutorTrabajo"/> con <see cref="OpcionesSimulacion.Habilitada"/> o las fuentes de <see cref="OpcionesSimulacion.Fuentes"/>; no llama a ningún
 /// proveedor ni registra nada. Los errores van como los daría el servicio real: un tiempo agotado es <see cref="RpcException"/>
 /// <see cref="StatusCode.DeadlineExceeded"/> (Diagnóstico lo traduce como <c>TIMEOUT</c>) y una «respuesta sin la forma esperada»
 /// es un <c>*Response</c> sin resultado (<c>RESPUESTA_INVALIDA</c>).

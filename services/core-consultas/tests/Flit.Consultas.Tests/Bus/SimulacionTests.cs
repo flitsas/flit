@@ -42,6 +42,40 @@ public sealed class SimulacionTests
         OpcionesSimulacion.Desde(Config(null, "PDN")).Habilitada.Should().BeFalse();
 
     [Fact]
+    public void Habilitada_simula_todas_las_fuentes()
+    {
+        var simulacion = OpcionesSimulacion.Desde(Config(true, "LOCAL"));
+
+        simulacion.Simula(FuentesBus.Runt).Should().BeTrue();
+        simulacion.Simula(FuentesBus.Avaluo).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("avaluo")]
+    [InlineData(" AVALUO , ")]
+    public void Con_fuentes_en_LOCAL_simula_solo_esas_y_las_demas_van_al_proveedor_real(string fuentes)
+    {
+        var simulacion = OpcionesSimulacion.Desde(Config(null, "LOCAL", fuentes));
+
+        simulacion.Habilitada.Should().BeFalse("la simulación total sigue apagada");
+        simulacion.Simula(FuentesBus.Avaluo).Should().BeTrue();
+        simulacion.Simula(FuentesBus.Runt).Should().BeFalse();
+        simulacion.Simula(FuentesBus.SimitVehiculo).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("QA")]
+    [InlineData("PDN")]
+    [InlineData(null)]
+    public void Fuentes_simuladas_en_otro_ambiente_impiden_arrancar_y_dicen_que_quitar(string? ambiente) =>
+        FluentActions.Invoking(() => OpcionesSimulacion.Desde(Config(null, ambiente, "avaluo")))
+            .Should().Throw<InvalidOperationException>().WithMessage("*Consultas__Simulacion__Fuentes*LOCAL o DEV*");
+
+    [Fact]
+    public void Sin_habilitar_ni_fuentes_no_simula_ninguna() =>
+        OpcionesSimulacion.Desde(Config(null, "LOCAL")).Simula(FuentesBus.Avaluo).Should().BeFalse();
+
+    [Fact]
     public void Los_fixtures_de_Intempo_son_proto_JSON_estricto_de_la_respuesta()
     {
         var fixtures = FixturesIntempo.Todos();
@@ -188,10 +222,11 @@ public sealed class SimulacionTests
 
     // ── Apoyo ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-    private static IConfiguration Config(bool? habilitada, string? ambiente) => new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+    private static IConfiguration Config(bool? habilitada, string? ambiente, string? fuentes = null) => new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
     {
         [OpcionesSimulacion.ClaveHabilitada] = habilitada?.ToString(),
         [OpcionesSimulacion.ClaveAmbiente] = ambiente,
+        [OpcionesSimulacion.ClaveFuentes] = fuentes,
     }).Build();
 
     private static StatusCode Codigo(Action accion)

@@ -27,23 +27,41 @@ internal sealed class OpcionesSimulacion
 
     public string? Ambiente { get; init; }
 
+    /// <summary>
+    /// Fuentes del bus (<see cref="Bus.FuentesBus"/>) que se simulan aunque <see cref="ClaveHabilitada"/> esté apagada, separadas por
+    /// coma (p. ej. «avaluo» cuando el proveedor real falla en local). Misma regla de ambiente que la simulación total.
+    /// </summary>
+    public const string ClaveFuentes = "Consultas:Simulacion:Fuentes";
+
+    /// <summary>Fuentes simuladas una a una (vacío si no hay).</summary>
+    public IReadOnlySet<string> Fuentes { get; init; } = new HashSet<string>();
+
+    /// <summary>Si el trabajo de <paramref name="fuente"/> lo responde el simulador: todas con la simulación total, o las de <see cref="Fuentes"/>.</summary>
+    public bool Simula(string fuente) => Habilitada || Fuentes.Contains(fuente);
+
     /// <summary>Lee y valida la configuración; lanza <see cref="InvalidOperationException"/> si el servicio no debe arrancar.</summary>
     public static OpcionesSimulacion Desde(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         var ambiente = configuration[ClaveAmbiente]?.Trim();
-        if (!configuration.GetValue(ClaveHabilitada, false))
+        var habilitada = configuration.GetValue(ClaveHabilitada, false);
+        var fuentes = (configuration[ClaveFuentes] ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(f => f.ToLowerInvariant())
+            .ToHashSet(StringComparer.Ordinal);
+        if (!habilitada && fuentes.Count == 0)
             return new OpcionesSimulacion { Habilitada = false, Ambiente = ambiente };
 
         if (!AmbientesConSimulacion.Contains(ambiente, StringComparer.OrdinalIgnoreCase))
         {
+            var clave = Variable(habilitada ? ClaveHabilitada : ClaveFuentes);
             throw new InvalidOperationException(
-                $"core-{ServicioSettings.Codigo} no puede arrancar: {Variable(ClaveHabilitada)}=true solo se admite en LOCAL o DEV " +
+                $"core-{ServicioSettings.Codigo} no puede arrancar: {clave} solo se admite en LOCAL o DEV " +
                 $"({Variable(ClaveAmbiente)}=DEV o LOCAL; valor actual: «{(string.IsNullOrEmpty(ambiente) ? "sin definir" : ambiente)}»). " +
-                $"En QA y PDN quite {Variable(ClaveHabilitada)}: la simulación responde con documentos inventados.");
+                $"En QA y PDN quite {clave}: la simulación responde con documentos inventados.");
         }
 
-        return new OpcionesSimulacion { Habilitada = true, Ambiente = ambiente!.ToUpperInvariant() };
+        return new OpcionesSimulacion { Habilitada = habilitada, Fuentes = fuentes, Ambiente = ambiente!.ToUpperInvariant() };
     }
 
     private static string Variable(string clave) => clave.Replace(":", "__", StringComparison.Ordinal);

@@ -30,7 +30,7 @@ internal sealed record EjecucionTrabajo(IMessage? Respuesta, StatusCode? Error, 
 /// <item>Pasado <see cref="OpcionesConsumidoresDiagnostico.TiempoMaximo"/> → <see cref="StatusCode.DeadlineExceeded"/>.</item>
 /// <item>Cualquier otra excepción → <see cref="StatusCode.Internal"/> (definitiva).</item>
 /// </list>
-/// Con <see cref="OpcionesSimulacion.Habilitada"/> (solo LOCAL y DEV) responde <see cref="SimuladorConsultas"/>, medido con el
+/// Con <see cref="OpcionesSimulacion.Habilitada"/>, o con la fuente en <see cref="OpcionesSimulacion.Fuentes"/> (solo LOCAL y DEV), responde <see cref="SimuladorConsultas"/>, medido con el
 /// proveedor <see cref="SimuladorConsultas.Proveedor"/>; la validación de la solicitud y los códigos de error son los mismos.
 /// Solo la cancelación del consumidor (el servicio se detiene) se propaga, para que el mensaje vuelva a la cola. Los logs llevan
 /// el trabajo, el rpc, el código y el tipo de la excepción: nunca la solicitud, la respuesta ni el mensaje de la excepción.
@@ -93,7 +93,7 @@ internal sealed class EjecutorTrabajo(
 
         // HU #13727 (U3 = a): en LOCAL y DEV responde el proveedor simulado, por el mismo camino (medición, minimización y
         // resultado), sin salir a ningún proveedor.
-        if (simulacion.Habilitada)
+        if (simulacion.Simula(trabajo.Fuente))
         {
             return await consumo.MedirAsync(caller, trabajo.Fuente, () => Task.FromResult(simulador.Responder(trabajo.Rpc, solicitud)),
                 _ => (SimuladorConsultas.Proveedor, SimuladorConsultas.Proveedor, false), ct).ConfigureAwait(false);
