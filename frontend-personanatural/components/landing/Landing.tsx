@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { portal, type ClientePortal } from "@/lib/api/cliente";
+import { CotizarModal } from "@/components/modales/CotizarModal";
+import { portal, type ClientePortal, type Organismo } from "@/lib/api/cliente";
 import { TEXTO_POLITICAS } from "@/lib/landing/contenido";
 import { AccionesPrincipales } from "./AccionesPrincipales";
 import { AvisoModal, type Aviso } from "./AvisoModal";
@@ -22,6 +23,8 @@ export function Landing({ cliente = portal }: { cliente?: ClientePortal }) {
   const tipos = useTiposTramite(cliente);
   const [aviso, setAviso] = useState<Aviso | null>(null);
   const [consultando, setConsultando] = useState(false);
+  // `null` = cerrado; con valor = abierto (y, si viene de «Ver tarifas», con ese organismo elegido).
+  const [cotizando, setCotizando] = useState<{ organismo: Organismo | null } | null>(null);
   const proximamente = (titulo: string) => setAviso({ titulo, tipo: "proximamente" });
 
   return (
@@ -32,14 +35,14 @@ export function Landing({ cliente = portal }: { cliente?: ClientePortal }) {
           {/* El diseño no muestra un h1; este queda solo para lectores de pantalla. */}
           <h1 className="sr-only">Trámites de tránsito 100% en línea</h1>
           <CarruselBanners />
-          <AccionesPrincipales tipos={tipos} onConsultar={() => setConsultando(true)} />
+          <AccionesPrincipales tipos={tipos} onConsultar={() => setConsultando(true)} onCotizar={() => setCotizando({ organismo: null })} />
           <PasosTramite />
           <VideoExplicativo />
           <SomosFlit />
         </main>
         <aside className="dashboard-side" aria-label="Servicios y organismos">
           <ServiciosAdicionales onAbrir={proximamente} />
-          <OrganismosIntegrados organismos={organismos} />
+          <OrganismosIntegrados organismos={organismos} onVerTarifas={(organismo) => setCotizando({ organismo })} />
         </aside>
         <div className="dashboard-fullwidth">
           <OtrosServicios onAbrir={proximamente} />
@@ -58,6 +61,7 @@ export function Landing({ cliente = portal }: { cliente?: ClientePortal }) {
           setAviso({ titulo: "Corregir mi trámite", tipo: "proximamente" });
         }}
       />
+      <CotizarModal abierto={cotizando !== null} onCerrar={() => setCotizando(null)} cliente={cliente} organismoInicial={cotizando?.organismo ?? null} />
       <AvisoModal aviso={aviso} onCerrar={() => setAviso(null)} />
     </div>
   );

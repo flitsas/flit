@@ -3,6 +3,7 @@
 import { Search } from "lucide-react";
 import { useState } from "react";
 import { MobilityLoader } from "@/components/MobilityLoader";
+import type { Organismo } from "@/lib/api/cliente";
 import { mensajeDe } from "@/lib/api/errores";
 import { filtrarOrganismos } from "@/lib/landing/catalogos";
 import { boton } from "./estilos";
@@ -12,9 +13,10 @@ type Organismos = ReturnType<typeof useOrganismos>;
 
 /**
  * Columna «Organismos de tránsito integrados». Cuatro estados: cargando, error (con reintento manual), vacío y lleno.
- * «Ver tarifas» queda deshabilitado: el BFF aún no expone las tarifas por organismo (llegan con la cotización, HU E4).
+ * «Ver tarifas» abre el modal de cotizar con ese organismo elegido: el BFF no expone un listado de tarifas por organismo,
+ * solo la cotización de un tipo en un organismo (HU E4). Sin manejador queda deshabilitado.
  */
-export function OrganismosIntegrados({ organismos }: { organismos: Organismos }) {
+export function OrganismosIntegrados({ organismos, onVerTarifas }: { organismos: Organismos; onVerTarifas?: (organismo: Organismo) => void }) {
   const [consulta, setConsulta] = useState("");
   const lista = filtrarOrganismos(organismos.data ?? [], consulta);
 
@@ -37,7 +39,11 @@ export function OrganismosIntegrados({ organismos }: { organismos: Organismos })
           {lista.map((o) => (
             <li key={o.id} className="flex items-center justify-between gap-3 border-b border-border py-2.5 last:border-0">
               <p className="min-w-0 text-sm font-medium">{o.nombre}</p>
-              <button type="button" disabled title="Próximamente" aria-label={`Ver tarifas de ${o.nombre} (próximamente)`} className={boton("link", "h-11 shrink-0 p-0 text-[11px]", "none")}>Ver tarifas</button>
+              {onVerTarifas ? (
+                <button type="button" aria-haspopup="dialog" aria-label={`Ver tarifas de ${o.nombre}`} onClick={() => onVerTarifas(o)} className={boton("link", "h-11 shrink-0 p-0 text-[11px]", "none")}>Ver tarifas</button>
+              ) : (
+                <button type="button" disabled title="Próximamente" aria-label={`Ver tarifas de ${o.nombre} (próximamente)`} className={boton("link", "h-11 shrink-0 p-0 text-[11px]", "none")}>Ver tarifas</button>
+              )}
             </li>
           ))}
           {lista.length === 0 && <li className="py-2 text-sm">No hay organismos que coincidan.</li>}

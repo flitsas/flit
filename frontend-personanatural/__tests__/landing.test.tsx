@@ -138,7 +138,7 @@ describe("landing: tipos de trámite desde el BFF", () => {
     renderConQuery(<Landing cliente={cliente} />);
 
     expect(screen.getByRole("button", { name: "Consultar mi trámite" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Cotizar mi trámite (próximamente)" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cotizar mi trámite" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Iniciar trámite" })).toHaveAccessibleDescription("El inicio del trámite estará disponible próximamente.");
   });
 
