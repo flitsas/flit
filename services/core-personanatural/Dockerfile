@@ -26,6 +26,8 @@ RUN dotnet publish src/Flit.PersonaNatural.Api/Flit.PersonaNatural.Api.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
 WORKDIR /app
 COPY --from=build /app ./
+# Sin root (HU #14038): la imagen aspnet trae el usuario app (APP_UID); los puertos 8080 y del gRPC son altos, no necesitan privilegios.
+USER $APP_UID
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s \
