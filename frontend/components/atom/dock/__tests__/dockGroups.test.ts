@@ -50,6 +50,7 @@ describe("catálogo de Trámites", () => {
       "Documentos",
       "Mandatos",
       "Validar impronta",
+      "Webhooks",
     ]);
     // Los módulos homónimos de la SPA se omiten: el único Trámites es el del organismo.
     expect(groups[0].items.map((i) => i.href)).toEqual(["/admin/transit-offices/ot-1/client-procedures"]);
