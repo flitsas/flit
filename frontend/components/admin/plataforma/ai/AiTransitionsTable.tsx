@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { listAiTransitions, type AiProviderTransitionView, type AiToolCode } from "@/lib/api/admin-plataforma-ai";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { formatFechaHora } from "@/lib/format/date";
 import { etiquetaMotivoTransicion, etiquetaProveedor } from "./labels";
 
-const PAGE_SIZE = 20;
-
 /**
- * HU #13512 AC2 — historial paginado de transiciones (pageSize 20).
+ * HU #13512 AC2 — historial paginado de transiciones.
+ * HU #13918 — paginación estándar de servidor: «Filas por página» 10/20/30/50 (antes fija en 20) y
+ * el tamaño elegido se recuerda en la sesión.
  * Ante 404 del endpoint (aún no en backend), muestra vacío sin romper la sección.
  * Remontar con `key` desde el padre para resetear página / recargar tras cambios.
  */
@@ -20,7 +21,8 @@ export function AiTransitionsTable({
   toolCode: AiToolCode;
   toolLabel: string;
 }) {
-  const [page, setPage] = useState(1);
+  const pg = usePaginacion("plataforma.AiTransitionsTable");
+  const { page, pageSize } = pg;
   const [status, setStatus] = useState<"loading" | "error" | "ready">("loading");
   const [items, setItems] = useState<AiProviderTransitionView[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -29,7 +31,7 @@ export function AiTransitionsTable({
   useEffect(() => {
     const controller = new AbortController();
     // Loading inicial / al cambiar página o reintentar desde handlers (no setState síncrono aquí).
-    listAiTransitions(toolCode, page, PAGE_SIZE, controller.signal)
+    listAiTransitions(toolCode, page, pageSize, controller.signal)
       .then((data) => {
         if (controller.signal.aborted) return;
         setItems(data.items);
@@ -49,7 +51,7 @@ export function AiTransitionsTable({
         setStatus("error");
       });
     return () => controller.abort();
-  }, [toolCode, page, retryTick]);
+  }, [toolCode, page, pageSize, retryTick]);
 
   const columns: DataTableColumn<AiProviderTransitionView>[] = useMemo(
     () => [
@@ -106,11 +108,15 @@ export function AiTransitionsTable({
         minWidth={720}
         pagination={{
           page,
-          pageSize: PAGE_SIZE,
+          pageSize,
           totalCount,
           onPageChange: (next) => {
             setStatus("loading");
-            setPage(next);
+            pg.setPage(next);
+          },
+          onPageSizeChange: (next) => {
+            setStatus("loading");
+            pg.setPageSize(next);
           },
         }}
       />

@@ -3,7 +3,9 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { Pagination } from "@/components/atom/Pagination";
+import { EncabezadoFiltrable } from "@/components/atom/FiltroColumna";
 import { SearchInput } from "@/components/atom/SearchInput";
+import { FilaVaciaFiltros } from "@/components/atom/FilaVaciaFiltros";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import {
   TABLA_HEADER_BG,
@@ -22,6 +24,8 @@ import {
   type UserProfileKind,
 } from "@/lib/users/profiles";
 
+import { filtrarFilas, type ColumnaFiltro } from "@/lib/tablas/filtrar-filas";
+import { useTablaFiltros } from "@/lib/tablas/useTablaFiltros";
 import { formatFechaHora } from "@/lib/format/date";
 /**
 
@@ -114,6 +118,16 @@ function formatDateTime(iso: string | null | undefined): string {
   return formatFechaHora(parsed);
 }
 
+/** Columnas con filtro en el encabezado -> id de su `ColumnaFiltro`. «Acciones» no se filtra. */
+const FILTRABLES: Record<string, string> = {
+  Usuario: "usuario",
+  Empresa: "empresa",
+  Perfil: "perfil",
+  Rol: "rol",
+  Estado: "estado",
+  Fecha: "fecha",
+};
+
 const CELDA = "border-y px-4 py-3";
 const CELDA_STYLE = { borderColor: "#DFE5ED" };
 
@@ -169,7 +183,7 @@ export function UsersTable({
   // Bug #13055 — tabla homologada con el modelo de trámites: `<table>` semántica (antes una grilla de
   // div). La columna Acciones se ajusta al contenido (`w-px whitespace-nowrap`), así que los botones
   // ya no se desbordan hacia la celda Fecha como pasaba con el ancho fijo por acción.
-  const pg = usePaginacion();
+  const pg = usePaginacion("users.UsersTable");
   const { setPage } = pg;
 
   const columnas = showTenantColumn
@@ -185,9 +199,42 @@ export function UsersTable({
     return Array.from(names).sort((a, b) => a.localeCompare(b, "es"));
   }, [rows]);
 
+  // HU #14006: además de los filtros de consulta de siempre (arriba), cada columna con datos lleva su
+  // filtro en el encabezado (estándar HU #13997). Ambos se combinan con AND. «Usuario» muestra nombre
+  // y correo en la misma celda, así que su filtro de texto busca en los dos a la vez.
+  const columnasFiltro = useMemo<ColumnaFiltro[]>(
+    () => [
+      { id: "usuario", label: "Usuario", tipo: "texto" },
+      ...(showTenantColumn
+        ? [{ id: "empresa", label: "Empresa", tipo: "texto" } as ColumnaFiltro]
+        : []),
+      {
+        id: "perfil",
+        label: "Perfil",
+        tipo: "seleccion",
+        opciones: USER_PROFILE_ORDER.map((p) => ({ value: p, label: profileShortLabel(p) })),
+      },
+      {
+        id: "rol",
+        label: "Rol",
+        tipo: "seleccion",
+        opciones: roleOptions.map((r) => ({ value: r, label: r })),
+      },
+      { id: "estado", label: "Estado", tipo: "seleccion", opciones: STATUS_OPTIONS },
+      { id: "fecha", label: "Fecha", tipo: "fecha" },
+    ],
+    [showTenantColumn, roleOptions],
+  );
+
+  const filtros = useTablaFiltros({
+    columnas: columnasFiltro,
+    periodoColumnaId: "fecha",
+    onCambio: () => setPage(1),
+  });
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return rows.filter((row) => {
+    const previas = rows.filter((row) => {
       if (q) {
         const haystack = `${row.fullName} ${row.email} ${row.tenantName ?? ""}`.toLowerCase();
         if (!haystack.includes(q)) return false;
@@ -201,12 +248,22 @@ export function UsersTable({
       }
       return true;
     });
-  }, [rows, search, profileFilter, roleFilter, statusFilter]);
+    return filtrarFilas(previas, filtros.condicionesTotales, "", {
+      columnas: {
+        usuario: (r) => `${r.fullName} ${r.email}`,
+        empresa: (r) => r.tenantName,
+        perfil: (r) => resolveProfile(r),
+        rol: (r) => r.role,
+        estado: (r) => (r.isSuspended ? "blocked" : r.status),
+        fecha: (r) => r.createdAt,
+      },
+    });
+  }, [rows, search, profileFilter, roleFilter, statusFilter, filtros.condicionesTotales]);
 
-  // Los filtros vuelven a la página 1 (cada `onChange` llama a `setPage(1)`) y la paginación se aplica
-  // DESPUÉS de filtrar.
   const visibles = pg.paginar(filtered);
 
+  // Sin resultados, el «Limpiar filtros» del estado vacío sustituye al de la barra (un solo botón).
+  const sinResultados = !loading && !error && rows.length > 0 && filtered.length === 0;
   const hasActiveFilters = Boolean(search || profileFilter || roleFilter || statusFilter);
 
   function clearFilters() {
@@ -217,12 +274,21 @@ export function UsersTable({
     setPage(1);
   }
 
+  // «Limpiar filtros» del estado vacío limpia los de arriba y los de las columnas.
+  function limpiarTodo() {
+    clearFilters();
+    filtros.limpiar();
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput
           value={search}
-          onChange={(v) => { setSearch(v); setPage(1); }}
+          onChange={(v) => {
+            setSearch(v);
+            setPage(1);
+          }}
           placeholder="Buscar por nombre o correo…"
           label="Buscar usuarios"
           className="flex-1"
@@ -232,7 +298,10 @@ export function UsersTable({
           <span className="font-semibold opacity-60">Perfil</span>
           <select
             value={profileFilter}
-            onChange={(e) => { setProfileFilter(e.target.value as "" | UserProfileKind); setPage(1); }}
+            onChange={(e) => {
+              setProfileFilter(e.target.value as "" | UserProfileKind);
+              setPage(1);
+            }}
             aria-label="Filtrar por perfil"
             className="rounded-lg border bg-transparent px-2 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand/40"
           >
@@ -249,7 +318,10 @@ export function UsersTable({
           <span className="font-semibold opacity-60">Rol</span>
           <select
             value={roleFilter}
-            onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setRoleFilter(e.target.value);
+              setPage(1);
+            }}
             aria-label="Filtrar por rol"
             className="max-w-[170px] rounded-lg border bg-transparent px-2 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand/40"
           >
@@ -266,7 +338,10 @@ export function UsersTable({
           <span className="font-semibold opacity-60">Estado</span>
           <select
             value={statusFilter}
-            onChange={(e) => { setStatusFilter(e.target.value as UserStatusFilter); setPage(1); }}
+            onChange={(e) => {
+              setStatusFilter(e.target.value as UserStatusFilter);
+              setPage(1);
+            }}
             aria-label="Filtrar por estado"
             className="rounded-lg border bg-transparent px-2 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand/40"
           >
@@ -279,7 +354,7 @@ export function UsersTable({
           </select>
         </label>
 
-        {hasActiveFilters && (
+        {hasActiveFilters && !sinResultados && (
           <button
             type="button"
             onClick={clearFilters}
@@ -308,7 +383,10 @@ export function UsersTable({
               type="button"
               onClick={onRetry}
               className="rounded-xl px-3 py-1.5 text-xs font-semibold text-white"
-              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+              style={{
+                background:
+                  "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))",
+              }}
             >
               Reintentar
             </button>
@@ -322,13 +400,7 @@ export function UsersTable({
         </div>
       )}
 
-      {!loading && !error && rows.length > 0 && filtered.length === 0 && (
-        <div className="py-12 text-center text-sm opacity-60">
-          Ningún usuario coincide con la búsqueda o los filtros.
-        </div>
-      )}
-
-      {!loading && !error && filtered.length > 0 && (
+      {!loading && !error && rows.length > 0 && (
         <div className="overflow-x-auto">
           <table
             aria-label="Usuarios"
@@ -351,23 +423,42 @@ export function UsersTable({
                     }`}
                     style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
                   >
-                    {col}
+                    {FILTRABLES[col] ? (
+                      <EncabezadoFiltrable filtros={filtros} columnaId={FILTRABLES[col]}>
+                        {col}
+                      </EncabezadoFiltrable>
+                    ) : (
+                      col
+                    )}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
+              {filtered.length === 0 ? (
+                <FilaVaciaFiltros
+                  columnas={columnas.length}
+                  onLimpiar={limpiarTodo}
+                  mensaje="Ningún usuario coincide con la búsqueda o los filtros"
+                />
+              ) : null}
               {visibles.map((row) => {
                 const badge = row.isSuspended ? SUSPENDED_BADGE : STATUS_BADGE[row.status];
                 return (
-                  <tr key={row.rowKey} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+                  <tr
+                    key={row.rowKey}
+                    className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
+                  >
                     <td className={`${CELDA} rounded-l-xl border-l`} style={CELDA_STYLE}>
                       <p className="truncate font-semibold">{row.fullName}</p>
                       <p className="truncate text-xs opacity-60">{row.email}</p>
                     </td>
                     {showTenantColumn && (
                       <td className={CELDA} style={CELDA_STYLE}>
-                        <span className="block truncate opacity-70" title={row.tenantName ?? undefined}>
+                        <span
+                          className="block truncate opacity-70"
+                          title={row.tenantName ?? undefined}
+                        >
                           {row.tenantName ?? "—"}
                         </span>
                       </td>

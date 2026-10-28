@@ -43,7 +43,7 @@ export function MandatosCatalogPanel() {
   const formatos = useMandatoFormatos();
   const [search, setSearch] = useState("");
   // Bug #13055 — tabla homologada con el modelo de trámites: filas por página elegibles.
-  const pg = usePaginacion();
+  const pg = usePaginacion("plataforma.MandatosCatalogPanel");
   const [rows, setRows] = useState<MandateOtConfigView[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [previewing, setPreviewing] = useState<string | null>(null);

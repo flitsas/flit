@@ -34,6 +34,37 @@ describe("DataTable", () => {
     expect(screen.getByText("Sin registros.")).toBeInTheDocument();
   });
 
+  it("emptyContent: con 0 filas mantiene el thead y pinta una fila colSpan sin paginación", () => {
+    render(
+      <DataTable
+        columns={columns}
+        rows={[]}
+        getRowKey={(r) => r.id}
+        emptyMessage="Sin registros."
+        emptyContent={<span>Ningún registro coincide</span>}
+        pagination={{ page: 1, pageSize: 10, totalCount: 0, onPageChange: vi.fn() }}
+      />,
+    );
+    expect(screen.getByRole("columnheader", { name: "Nombre" })).toBeInTheDocument();
+    const celda = screen.getByText("Ningún registro coincide").closest("td");
+    expect(celda).toHaveAttribute("colspan", "2");
+    expect(screen.queryByText("Sin registros.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
+  });
+
+  it("emptyContent: con filas no se usa", () => {
+    render(
+      <DataTable
+        columns={columns}
+        rows={rows}
+        getRowKey={(r) => r.id}
+        emptyContent={<span>Ningún registro coincide</span>}
+      />,
+    );
+    expect(screen.queryByText("Ningún registro coincide")).not.toBeInTheDocument();
+    expect(screen.getByText("Alfa")).toBeInTheDocument();
+  });
+
   it("dispara onRowClick", async () => {
     const onRowClick = vi.fn();
     render(

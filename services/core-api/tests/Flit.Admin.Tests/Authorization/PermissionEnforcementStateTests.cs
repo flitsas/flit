@@ -11,8 +11,42 @@ namespace Flit.Admin.Tests.Authorization;
 /// Hallazgo review Épica #12753: <see cref="IPermissionEnforcementState"/> descubre de los endpoints reales los slugs que solo se
 /// exigen con <c>Security:ModulePermissionEnforcement:Enabled</c> (sin lista a mano) y los <c>ot.*</c> con el flag OT.
 /// </summary>
-public sealed class PermissionEnforcementStateTests
+public sealed class PermissionEnforcementStateTests(PermissionEnforcementStateTests.Hosts hosts) : IClassFixture<PermissionEnforcementStateTests.Hosts>
 {
+    /// <summary>
+    /// Las pruebas solo leen el estado (un singleton calculado al arrancar), así que los hosts se comparten por
+    /// configuración: 3 en lugar de uno o dos por prueba (21). Sin la bandera, ambas quedan apagadas por TestEnvironment.
+    /// </summary>
+    public sealed class Hosts : IDisposable
+    {
+        private readonly Lazy<WebApplicationFactory<Program>> _modulos = Host(("Security:ModulePermissionEnforcement:Enabled", "true"), ("Security:OtPermissionEnforcement:Enabled", "false"));
+        private readonly Lazy<WebApplicationFactory<Program>> _ot = Host(("Security:OtPermissionEnforcement:Enabled", "true"), ("Security:ModulePermissionEnforcement:Enabled", "false"));
+        private readonly Lazy<WebApplicationFactory<Program>> _ninguno = Host(("Security:ModulePermissionEnforcement:Enabled", "false"), ("Security:OtPermissionEnforcement:Enabled", "false"));
+
+        private static Lazy<WebApplicationFactory<Program>> Host(params (string Key, string Value)[] settings) => new(() =>
+            new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
+            {
+                foreach (var (key, value) in settings)
+                    b.UseSetting(key, value);
+            }));
+
+        /// <summary>Bandera de módulos encendida, la de OT apagada.</summary>
+        public WebApplicationFactory<Program> Modulos => _modulos.Value;
+
+        /// <summary>Bandera OT encendida, la de módulos apagada.</summary>
+        public WebApplicationFactory<Program> Ot => _ot.Value;
+
+        /// <summary>Las dos banderas apagadas.</summary>
+        public WebApplicationFactory<Program> Ninguno => _ninguno.Value;
+
+        public void Dispose()
+        {
+            foreach (var host in new[] { _modulos, _ot, _ninguno })
+                if (host.IsValueCreated)
+                    host.Value.Dispose();
+        }
+    }
+
     private static IPermissionEnforcementState State(WebApplicationFactory<Program> f) =>
         f.Services.GetRequiredService<IPermissionEnforcementState>();
 
@@ -22,10 +56,7 @@ public sealed class PermissionEnforcementStateTests
     [InlineData("reportes.programacion.manage")]
     public void Con_el_flag_de_modulos_apagado_los_slugs_de_modulo_no_se_exigen(string slug)
     {
-        using var host = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
-            b.UseSetting("Security:ModulePermissionEnforcement:Enabled", "false"));
-
-        State(host).IsEffectivelyEnforced(slug).Should().BeFalse();
+        State(hosts.Ninguno).IsEffectivelyEnforced(slug).Should().BeFalse();
     }
 
     [Theory]
@@ -34,31 +65,20 @@ public sealed class PermissionEnforcementStateTests
     [InlineData("reportes.programacion.manage")]
     public void Con_el_flag_de_modulos_encendido_los_slugs_de_modulo_se_exigen(string slug)
     {
-        using var host = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
-            b.UseSetting("Security:ModulePermissionEnforcement:Enabled", "true"));
-
-        State(host).IsEffectivelyEnforced(slug).Should().BeTrue();
+        State(hosts.Modulos).IsEffectivelyEnforced(slug).Should().BeTrue();
     }
 
     [Fact]
     public void Los_slugs_ot_dependen_del_flag_OT_y_no_del_de_modulos()
     {
-        using var apagado = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
-            b.UseSetting("Security:OtPermissionEnforcement:Enabled", "false").UseSetting("Security:ModulePermissionEnforcement:Enabled", "true"));
-        using var encendido = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
-            b.UseSetting("Security:OtPermissionEnforcement:Enabled", "true").UseSetting("Security:ModulePermissionEnforcement:Enabled", "false"));
-
-        State(apagado).IsEffectivelyEnforced(OtPermissionMap.Tramites).Should().BeFalse();
-        State(encendido).IsEffectivelyEnforced(OtPermissionMap.Tramites).Should().BeTrue();
+        State(hosts.Modulos).IsEffectivelyEnforced(OtPermissionMap.Tramites).Should().BeFalse();
+        State(hosts.Ot).IsEffectivelyEnforced(OtPermissionMap.Tramites).Should().BeTrue();
     }
 
     [Fact]
     public void Un_slug_sin_flag_siempre_se_exige()
     {
-        using var host = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
-            b.UseSetting("Security:ModulePermissionEnforcement:Enabled", "false").UseSetting("Security:OtPermissionEnforcement:Enabled", "false"));
-
-        State(host).IsEffectivelyEnforced("ict.pii.reveal").Should().BeTrue();
+        State(hosts.Ninguno).IsEffectivelyEnforced("ict.pii.reveal").Should().BeTrue();
     }
 
     [Theory]
@@ -70,12 +90,7 @@ public sealed class PermissionEnforcementStateTests
     [InlineData("otros-tramites.create")]
     public void Los_permisos_por_familia_siguen_el_flag_de_modulos(string slug)
     {
-        using var apagado = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
-            b.UseSetting("Security:ModulePermissionEnforcement:Enabled", "false"));
-        using var encendido = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
-            b.UseSetting("Security:ModulePermissionEnforcement:Enabled", "true"));
-
-        State(apagado).IsEffectivelyEnforced(slug).Should().BeFalse();
-        State(encendido).IsEffectivelyEnforced(slug).Should().BeTrue();
+        State(hosts.Ninguno).IsEffectivelyEnforced(slug).Should().BeFalse();
+        State(hosts.Modulos).IsEffectivelyEnforced(slug).Should().BeTrue();
     }
 }

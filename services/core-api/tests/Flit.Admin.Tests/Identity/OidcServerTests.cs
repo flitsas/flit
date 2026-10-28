@@ -24,8 +24,14 @@ namespace Flit.Admin.Tests.Identity;
 /// HU #12990 (FLIT Suite A-05) — servidor OIDC del hub contra la API real y PostgreSQL: emisor por host sellado,
 /// authorization code con PKCE, JWKS, refresh, client credentials, login del hub y la bandera apagada.
 /// </summary>
-public sealed class OidcServerTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
+public sealed class OidcServerTests : IClassFixture<OidcServerTests.Host>, IDisposable
 {
+    /// <summary>Un host con OIDC para toda la clase (<see cref="HostPorClase"/>): cada prueba siembra su propio usuario.</summary>
+    public sealed class Host : HostPorClase
+    {
+        protected override WebApplicationFactory<Program> Configurar(WebApplicationFactory<Program> factory) => WithOidc(factory);
+    }
+
     internal const string Hub = "dev.flitsas.online";
     internal const string Callback = "https://dev.tramites.flitsas.online/auth/callback";
     internal const string ServiceSecret = "secreto-de-prueba-oidc";
@@ -39,10 +45,10 @@ public sealed class OidcServerTests : IClassFixture<WebApplicationFactory<Progra
     private readonly Guid _roleId = Guid.NewGuid();
     private string Email => $"oidc-{_suffix}@flit.local";
 
-    public OidcServerTests(WebApplicationFactory<Program> factory)
+    public OidcServerTests(Host host)
     {
-        _base = factory;
-        _factory = WithOidc(factory);
+        _base = host.Base;
+        _factory = host.Factory;
         SeedAsync().GetAwaiter().GetResult();
     }
 

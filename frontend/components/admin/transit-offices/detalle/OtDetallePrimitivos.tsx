@@ -1,6 +1,13 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { Pagination } from "@/components/atom/Pagination";
+import { usePaginacion } from "@/components/atom/usePaginacion";
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+} from "@/components/atom/table-styles";
 import { OT_BANDA, OT_BLUE, OT_CARD, OT_MARCO, OT_NAVY } from "./ot-detalle-visual";
 
 /**
@@ -117,6 +124,10 @@ export function OtError({
  * con `<table>` el reparto lo decide el navegador según el contenido: la misma columna cambiaba de
  * ancho entre un trámite y el siguiente. Los roles dejan la semántica intacta para quien navega con
  * lector de pantalla.
+ *
+ * HU #13919 — por defecto se dibuja con el estilo estándar de las tablas (cabecera gris en píldora y
+ * una tarjeta por fila, sin marco que las envuelva), el mismo de `DataTable`. `ficha` conserva la
+ * banda azul enmarcada, que es la de las fichas de pares campo/valor (`OtFichaCampos`) y no un listado.
  */
 export function OtRejilla({
   etiqueta,
@@ -124,6 +135,7 @@ export function OtRejilla({
   filas,
   plantilla,
   conMarco = true,
+  ficha = false,
 }: {
   /** Nombre accesible de la tabla; nunca se omite. */
   etiqueta: string;
@@ -131,12 +143,55 @@ export function OtRejilla({
   filas: ReactNode[][];
   /** `grid-template-columns` a medida; por defecto todas las columnas iguales. */
   plantilla?: string;
-  /** A false, la rejilla no dibuja su propio borde: la envuelve otra. */
+  /** Solo en modo `ficha`: a false, la rejilla no dibuja su propio borde porque la envuelve otra. */
   conMarco?: boolean;
+  /** Fila única de pares campo/valor con banda azul (ficha), no una tabla de listado. */
+  ficha?: boolean;
 }) {
   const estilo = {
     gridTemplateColumns: plantilla ?? `repeat(${columnas.length}, minmax(0, 1fr))`,
   };
+
+  if (!ficha) {
+    return (
+      <div role="table" aria-label={etiqueta} className="flex flex-col gap-2">
+        <div
+          role="row"
+          className="grid rounded-xl"
+          style={{ ...estilo, background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+        >
+          {columnas.map((c) => (
+            <div
+              key={c}
+              role="columnheader"
+              className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider"
+            >
+              {c}
+            </div>
+          ))}
+        </div>
+        {filas.map((fila, i) => (
+          <div
+            key={i}
+            role="row"
+            className={`grid rounded-xl border bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
+            style={{ ...estilo, borderColor: "var(--table-row-border)" }}
+          >
+            {fila.map((celda, j) => (
+              <div
+                key={j}
+                role="cell"
+                className="self-center break-words px-4 py-3 text-xs font-semibold"
+                style={{ color: OT_NAVY }}
+              >
+                <span className="dark:text-white">{celda}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div role="table" aria-label={etiqueta} className={conMarco ? OT_MARCO : undefined}>
@@ -170,6 +225,31 @@ export function OtRejilla({
           ))}
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * `OtRejilla` de una COLECCIÓN (actores, documentos…) con la paginación estándar y «Filas por
+ * página» (HU #13919). `clave` identifica la tabla para recordar su tamaño: `"<carpeta>.<Componente>"`.
+ * Las rejillas de una sola fila (fichas) no se paginan y siguen usando `OtRejilla`.
+ */
+export function OtRejillaPaginada({
+  clave,
+  ...props
+}: Omit<Parameters<typeof OtRejilla>[0], "ficha"> & { clave: string }) {
+  const pg = usePaginacion(clave);
+  return (
+    <div className="flex flex-col">
+      <OtRejilla {...props} filas={pg.paginar(props.filas)} />
+      <Pagination
+        page={pg.page}
+        pageSize={pg.pageSize}
+        totalCount={props.filas.length}
+        onPageChange={pg.setPage}
+        onPageSizeChange={pg.setPageSize}
+        ariaLabel={`Paginación de ${props.etiqueta.toLowerCase()}`}
+      />
     </div>
   );
 }
@@ -209,6 +289,7 @@ export function OtFichaCampos({
             // para que los valores no se estiren y desalineen la ficha entera.
             plantilla={`repeat(${porFila}, minmax(0, 1fr))`}
             conMarco={false}
+            ficha
           />
         </div>
       ))}

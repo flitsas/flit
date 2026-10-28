@@ -56,7 +56,8 @@ public static class AdminCompaniesEndpoints
                 + "estado y rango de fechas de creación. Requiere SuperAdmin.")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
-            .Produces(StatusCodes.Status403Forbidden);
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
 
         // GET /api/v1/admin/companies/{tenantId} — identidad de la compañía (#11062). Alimenta el
         // encabezado de la consola de configuración: razón social + NIT visibles en toda la pantalla.
@@ -275,7 +276,10 @@ public static class AdminCompaniesEndpoints
             .WithName("AdminCompanyGetAuditLog")
             .WithSummary("Lista el historial de auditoría del tenant")
             .WithDescription("Historial de gobernanza (cambios de settings, whitelist y grants) paginado. "
+                + "Filtros opcionales: fechaDesde/fechaHasta (yyyy-MM-dd, día America/Bogota inclusivo), "
+                + "campo, valorAnterior, operador (contiene, sin distinguir mayúsculas). "
                 + "Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status422UnprocessableEntity)
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
@@ -382,6 +386,8 @@ public static class AdminCompaniesEndpoints
         CancellationToken cancellationToken,
         [FromQuery] string? nit = null,
         [FromQuery] string? razonSocial = null,
+        [FromQuery] string? codigo = null,
+        [FromQuery] string[]? tenantType = null,
         [FromQuery] bool? estadoActivo = null,
         [FromQuery] DateOnly? fechaDesde = null,
         [FromQuery] DateOnly? fechaHasta = null,
@@ -398,6 +404,8 @@ public static class AdminCompaniesEndpoints
         {
             Nit = nit,
             RazonSocial = razonSocial,
+            Codigo = codigo,
+            TenantType = tenantType,
             EstadoActivo = estadoActivo,
             FechaDesde = fechaDesde,
             FechaHasta = fechaHasta,
@@ -408,7 +416,11 @@ public static class AdminCompaniesEndpoints
 
         var result = await handler.HandleAsync(query, cancellationToken).ConfigureAwait(false);
 
-        return Results.Ok(result);
+        return result.IsValid
+            ? Results.Ok(result)
+            : Results.Json(
+                new CompanyValidationErrorResponse(result.Errors),
+                statusCode: StatusCodes.Status422UnprocessableEntity);
     }
 
     private static async Task<IResult> CreateCompanyAsync(
@@ -808,15 +820,31 @@ public static class AdminCompaniesEndpoints
         [FromServices] GetTenantAuditLogHandler handler,
         CancellationToken cancellationToken,
         [FromQuery] int? page = null,
-        [FromQuery] int? pageSize = null)
+        [FromQuery] int? pageSize = null,
+        [FromQuery] DateOnly? fechaDesde = null,
+        [FromQuery] DateOnly? fechaHasta = null,
+        [FromQuery] string? campo = null,
+        [FromQuery] string? valorAnterior = null,
+        [FromQuery] string? operador = null,
+        [FromQuery] string? campoClaves = null,
+        [FromQuery] string? valorAnteriorAlternativas = null)
     {
-        var result = await handler
-            .HandleAsync(
-                new GetTenantAuditLogQuery { TenantId = tenantId, Page = page, PageSize = pageSize },
-                cancellationToken)
-            .ConfigureAwait(false);
-
-        return Results.Ok(result);
+        return await TenantAuditLogResponses.ExecuteAsync(
+            handler,
+            new GetTenantAuditLogQuery
+            {
+                TenantId = tenantId,
+                Page = page,
+                PageSize = pageSize,
+                FechaDesde = fechaDesde,
+                FechaHasta = fechaHasta,
+                Campo = campo,
+                ValorAnterior = valorAnterior,
+                Operador = operador,
+                CampoClaves = campoClaves,
+                ValorAnteriorAlternativas = valorAnteriorAlternativas,
+            },
+            cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task<IResult> GetOtConsultationRestrictionsAsync(

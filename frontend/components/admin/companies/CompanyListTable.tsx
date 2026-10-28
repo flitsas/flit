@@ -6,7 +6,10 @@ import type { CompanyListItem } from "@/lib/api/types";
 import { SwitchToggle } from "@/components/ui/SwitchToggle";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { RowActions } from "@/components/atom/RowActions";
+import { TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
 import { Pagination } from "@/components/atom/Pagination";
+import { EncabezadoFiltrable } from "@/components/atom/FiltroColumna";
+import type { TablaFiltrosEstado } from "@/lib/tablas/useTablaFiltros";
 import {
   TABLA_HEADER_BG,
   TABLA_HEADER_CELL_CLS,
@@ -31,6 +34,10 @@ export interface CompanyListTableProps {
   onEdit: (company: CompanyListItem) => void;
   /** Solicita activar/desactivar la compañía (el contenedor muestra la confirmación). */
   onToggleStatus: (company: CompanyListItem) => void;
+  /** Filtros por columna (embudo en el encabezado, HU #13999). Sin esto, encabezados planos. */
+  filtros?: TablaFiltrosEstado;
+  /** Si se pasa y no hay filas, la tabla sigue montada (embudos visibles) con una fila de «sin coincidencias». */
+  onLimpiarFiltros?: () => void;
 }
 
 export function CompanyListTable({
@@ -43,7 +50,17 @@ export function CompanyListTable({
   onConfigure,
   onEdit,
   onToggleStatus,
+  filtros,
+  onLimpiarFiltros,
 }: CompanyListTableProps) {
+  const enc = (id: string, titulo: string) =>
+    filtros ? (
+      <EncabezadoFiltrable filtros={filtros} columnaId={id}>
+        {titulo}
+      </EncabezadoFiltrable>
+    ) : (
+      titulo
+    );
   return (
     <div className="flex flex-1 flex-col">
       <div className="overflow-x-auto">
@@ -56,22 +73,22 @@ export function CompanyListTable({
         <thead>
           <tr>
             <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-              Código
+              {enc("codigo", "Código")}
             </th>
             <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-              NIT
+              {enc("nit", "NIT")}
             </th>
             <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-              Razón Social
+              {enc("razonSocial", "Razón Social")}
             </th>
             <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-              Tipo
+              {enc("tipo", "Tipo")}
             </th>
             <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-              Estado
+              {enc("estado", "Estado")}
             </th>
             <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-              Fecha creación
+              {enc("fechaCreacion", "Fecha creación")}
             </th>
             <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl text-right`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
               Acciones
@@ -79,6 +96,16 @@ export function CompanyListTable({
           </tr>
         </thead>
         <tbody>
+          {items.length === 0 && onLimpiarFiltros ? (
+            <tr>
+              <td colSpan={7}>
+                <TablaFiltrosVacio
+                  onLimpiar={onLimpiarFiltros}
+                  mensaje="Ninguna compañía coincide con los filtros"
+                />
+              </td>
+            </tr>
+          ) : null}
           {items.map((c) => {
             // Solo las compañías del catálogo B2B son editables; los tenants de tipo
             // heredado (sistema / organismos de tránsito) se muestran solo-lectura.
@@ -154,6 +181,7 @@ export function CompanyListTable({
       </table>
       </div>
 
+      {items.length === 0 && onLimpiarFiltros ? null : (
       <Pagination
         page={page}
         pageSize={pageSize}
@@ -162,6 +190,7 @@ export function CompanyListTable({
         onPageSizeChange={onPageSizeChange}
         className="mt-auto"
       />
+      )}
     </div>
   );
 }

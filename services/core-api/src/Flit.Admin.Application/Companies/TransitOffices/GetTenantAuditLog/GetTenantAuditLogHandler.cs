@@ -1,4 +1,6 @@
+using Flit.Admin.Application.Companies.CreateCompany;
 using Flit.Admin.Domain.Companies.TransitOffices;
+using Flit.Queries.Domain.Time;
 
 namespace Flit.Admin.Application.Companies.TransitOffices.GetTenantAuditLog;
 
@@ -34,8 +36,10 @@ public sealed class GetTenantAuditLogHandler
         var page = NormalizePage(query.Page);
         var pageSize = NormalizePageSize(query.PageSize);
 
+        var filter = BuildFilter(query);
+
         var result = await _repository
-            .ListPagedAsync(query.TenantId, page, pageSize, cancellationToken)
+            .ListPagedAsync(query.TenantId, page, pageSize, filter, cancellationToken)
             .ConfigureAwait(false);
 
         IReadOnlyList<AuditLogEntryResponse> data =
@@ -46,6 +50,69 @@ public sealed class GetTenantAuditLogHandler
 
         return new GetTenantAuditLogResult(data, result.TotalCount, page, pageSize);
     }
+
+    /// <summary>Mensaje de validación cuando el rango de fechas está invertido.</summary>
+    public const string InvalidDateRangeMessage = "La fecha desde no puede ser posterior a la fecha hasta.";
+
+    /// <summary>Tope de claves/alternativas por filtro.</summary>
+    public const int MaxListItems = 50;
+
+    /// <summary>Mensaje de validación cuando se excede <see cref="MaxListItems"/>.</summary>
+    public const string TooManyItemsMessage = "Se permiten como máximo 50 elementos en esta lista.";
+
+    private static List<string>? ParseList(string? csv, string field)
+    {
+        if (string.IsNullOrWhiteSpace(csv))
+        {
+            return null;
+        }
+
+        var items = csv.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => s.ToLowerInvariant())
+            .Distinct()
+            .ToList();
+
+        if (items.Count > MaxListItems)
+        {
+            throw new InvalidAuditLogFilterException([new CompanyValidationError(field, TooManyItemsMessage)]);
+        }
+
+        return items.Count == 0 ? null : items;
+    }
+
+    private static TenantAuditLogFilter BuildFilter(GetTenantAuditLogQuery query)
+    {
+        var fieldKeys = ParseList(query.CampoClaves, "campoClaves");
+        var oldAlternatives = ParseList(query.ValorAnteriorAlternativas, "valorAnteriorAlternativas");
+
+        if (query.FechaDesde is { } d && query.FechaHasta is { } h && d > h)
+        {
+            throw new InvalidAuditLogFilterException(
+                [new CompanyValidationError("fechaDesde", InvalidDateRangeMessage)]);
+        }
+
+        // Días locales de Colombia (ColombiaTime.Offset, fuente única del desfase).
+        DateTimeOffset? from = query.FechaDesde is { } desde
+            ? new DateTimeOffset(desde.ToDateTime(TimeOnly.MinValue), ColombiaTime.Offset)
+            : null;
+
+        // Inclusivo del día completo: < 00:00 local del día siguiente.
+        DateTimeOffset? toExclusive = query.FechaHasta is { } hasta
+            ? new DateTimeOffset(hasta.AddDays(1).ToDateTime(TimeOnly.MinValue), ColombiaTime.Offset)
+            : null;
+
+        return new TenantAuditLogFilter(
+            from,
+            toExclusive,
+            Normalize(query.Campo),
+            Normalize(query.ValorAnterior),
+            Normalize(query.Operador),
+            fieldKeys,
+            oldAlternatives);
+    }
+
+    private static string? Normalize(string? text) =>
+        string.IsNullOrWhiteSpace(text) ? null : text.Trim();
 
     private static int NormalizePage(int? page) =>
         page is null || page < 1 ? DefaultPage : page.Value;

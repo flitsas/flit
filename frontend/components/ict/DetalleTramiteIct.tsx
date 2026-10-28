@@ -23,6 +23,8 @@ import {
 } from "@/lib/api/ict-trazabilidad";
 import { formatearDuracion } from "@/lib/ict/trazabilidad";
 import { RowActions } from "@/components/atom/RowActions";
+import { Pagination } from "@/components/atom/Pagination";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import {
   TABLA_HEADER_BG,
   TABLA_HEADER_CELL_CLS,
@@ -30,13 +32,14 @@ import {
   TABLA_ROW_HOVER_CLS,
 } from "@/components/atom/table-styles";
 
-// Bug #13055 — las subtablas de este detalle (consultas a fuentes y log del trámite) son tablas cortas,
-// no listados: llevan la cabecera y las filas del modelo de trámites, sin paginación.
+// Bug #13055 / HU #13919 — las subtablas de este detalle (consultas a fuentes y log del trámite) llevan
+// la cabecera y las filas del modelo de trámites y, como toda tabla de colección, la paginación común
+// con «Filas por página». No usan `DataTable`: la fila bloqueante de consultas pinta su propio fondo.
 const TH_CLS = TABLA_HEADER_CELL_CLS;
 const TH_STYLE = { background: TABLA_HEADER_BG, color: TABLA_HEADER_FG };
 const TD_CLS = "border-y px-4 py-3";
-const TD_STYLE = { borderColor: "#DFE5ED" };
-const TABLA_STYLE = { width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" } as const;
+const TD_STYLE = { borderColor: "var(--table-row-border)" };
+const TABLA_CLS = "w-full border-separate border-spacing-y-2 text-xs";
 
 import { formatFechaHora } from "@/lib/format/date";
 type Pestana = "recorrido" | "consultas" | "datos" | "log";
@@ -300,6 +303,7 @@ function mensajeSinConsultas(estado: string): string {
 function PanelConsultas({ numero, estado }: { numero: number; estado: string }) {
   const { dato, status, reintentar } = useCargaPerezosa<ConsultaFuenteIct[]>(fetchConsultasFuenteIct, numero);
   const [abierta, setAbierta] = useState<string | null>(null);
+  const pg = usePaginacion("ict.DetalleTramiteIct.consultas");
 
   const bloqueante = dato?.find((c) => c.bloquea);
 
@@ -325,7 +329,7 @@ function PanelConsultas({ numero, estado }: { numero: number; estado: string }) 
             </p>
           )}
           <div className="overflow-x-auto">
-            <table className="min-w-[640px] text-xs" style={TABLA_STYLE}>
+            <table className={`min-w-[640px] ${TABLA_CLS}`}>
               <thead>
                 <tr>
                   {["Nivel", "Consulta", "Documento o placa", "Consultada", "Válida", "Intentos", "Respuesta"].map(
@@ -343,7 +347,7 @@ function PanelConsultas({ numero, estado }: { numero: number; estado: string }) 
                 </tr>
               </thead>
               <tbody>
-                {dato.map((c) => (
+                {pg.paginar(dato).map((c) => (
                   <tr
                     key={c.id}
                     className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
@@ -381,6 +385,14 @@ function PanelConsultas({ numero, estado }: { numero: number; estado: string }) 
               </tbody>
             </table>
           </div>
+          <Pagination
+            page={pg.page}
+            pageSize={pg.pageSize}
+            totalCount={dato.length}
+            onPageChange={pg.setPage}
+            onPageSizeChange={pg.setPageSize}
+            ariaLabel="Paginación de consultas a fuentes"
+          />
 
           {abierta && (
             <pre className="max-h-64 overflow-auto rounded-lg border border-[#DFE5ED] bg-[#F4F7FC] p-3 font-mono text-[11px] leading-relaxed dark:border-white/10 dark:bg-white/[0.03]">
@@ -538,6 +550,7 @@ function PanelDatos({ numero }: { numero: number }) {
 
 function PanelLog({ numero }: { numero: number }) {
   const { dato, status, reintentar } = useCargaPerezosa<EventoLogTramiteIct[]>(fetchLogTramiteIct, numero);
+  const pg = usePaginacion("ict.DetalleTramiteIct.log");
 
   return (
     <UiStateBoundary
@@ -554,7 +567,7 @@ function PanelLog({ numero }: { numero: number }) {
             el módulo Log ICT.
           </p>
           <div className="overflow-x-auto">
-            <table className="min-w-[680px] text-xs" style={TABLA_STYLE}>
+            <table className={`min-w-[680px] ${TABLA_CLS}`}>
               <thead>
                 <tr>
                   {["Hora", "Tipo", "Método", "Destino", "Código", "Duración"].map((col, i, arr) => (
@@ -570,7 +583,7 @@ function PanelLog({ numero }: { numero: number }) {
                 </tr>
               </thead>
               <tbody>
-                {dato.map((e) => (
+                {pg.paginar(dato).map((e) => (
                   <tr key={e.id} className={`bg-white align-top dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
                     <td className={`${TD_CLS} rounded-l-xl border-l font-mono tabular-nums`} style={TD_STYLE}>
                       {formatFechaHora(new Date(e.ocurrido))}
@@ -610,6 +623,14 @@ function PanelLog({ numero }: { numero: number }) {
               </tbody>
             </table>
           </div>
+          <Pagination
+            page={pg.page}
+            pageSize={pg.pageSize}
+            totalCount={dato.length}
+            onPageChange={pg.setPage}
+            onPageSizeChange={pg.setPageSize}
+            ariaLabel="Paginación del log del trámite"
+          />
         </div>
       )}
     </UiStateBoundary>

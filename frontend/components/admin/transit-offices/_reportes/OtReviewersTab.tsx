@@ -82,7 +82,8 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
   const [report, setReport] = useState<OtReviewersReport | null>(null);
   const [busy, setBusy] = useState(false);
   // Bug #13055 — tabla homologada con el modelo de trámites: paginación en cliente con filas por página.
-  const pg = usePaginacion();
+  const pg = usePaginacion("_reportes.OtReviewersTab");
+  const setPagina = pg.setPage;
   const [error, setError] = useState<string | null>(null);
   const [exportState, setExportState] = useState<{ busy: boolean; notice: string | null }>({
     busy: false,
@@ -137,6 +138,8 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
         const data = await fetchOtReviewers({ ...params, sortBy, desc }, signal);
         if (signal?.aborted) return;
         setReport(data);
+        // HU #13923 — un filtro o un orden nuevo reemplaza el resultado: se vuelve a la página 1.
+        setPagina(1);
       } catch (e: unknown) {
         if (signal?.aborted) return;
         setError(e instanceof Error ? e.message : "No se pudo generar el informe de revisores.");
@@ -144,7 +147,7 @@ export function OtReviewersTab({ transitOfficeId, companies, tiposTramite, revie
         if (!signal?.aborted) setBusy(false);
       }
     },
-    [params, sortBy, desc],
+    [params, sortBy, desc, setPagina],
   );
 
   useEffect(() => {

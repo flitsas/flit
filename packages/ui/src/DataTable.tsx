@@ -35,7 +35,6 @@ export interface DataTablePagination {
   pageSize: number;
   totalCount: number;
   onPageChange: (page: number) => void;
-  pageSizeOptions?: readonly number[];
   onPageSizeChange?: (pageSize: number) => void;
 }
 
@@ -61,6 +60,13 @@ export interface DataTableProps<T> {
   /** Contenido expandible bajo una fila (p. ej. permisos de un módulo RBAC). Si
    *  devuelve algo distinto de null, se renderiza como fila a todo el ancho. */
   renderExpanded?: (row: T) => ReactNode;
+  /**
+   * Contenido para el cuerpo cuando `rows` está vacío (p. ej. «Ningún registro coincide con los
+   * filtros»). Si se pasa, la tabla sigue montada con su `<thead>` (embudos de filtro visibles) y el
+   * cuerpo muestra UNA fila `colSpan` con este contenido; sin él, se usa `UiStateBoundary` como siempre.
+   * Solo aplica cuando el estado es `ready`/`empty` (no en `loading`/`error`); la paginación se oculta.
+   */
+  emptyContent?: ReactNode;
 }
 
 const ALIGN: Record<CellAlign, string> = {
@@ -83,6 +89,7 @@ export function DataTable<T>({
   pagination,
   ariaLabel,
   renderExpanded,
+  emptyContent,
 }: DataTableProps<T>) {
   // `ready` con 0 filas → `empty`. Sin `status`, se infiere de `rows`.
   const effectiveStatus: UiStatus =
@@ -92,11 +99,15 @@ export function DataTable<T>({
         : "ready"
       : status;
   const last = columns.length - 1;
+  const showEmptyContent =
+    emptyContent != null &&
+    rows.length === 0 &&
+    (status === undefined || status === "ready" || status === "empty");
 
   return (
     <div className="flex flex-1 flex-col">
       <UiStateBoundary
-        status={effectiveStatus}
+        status={showEmptyContent ? "ready" : effectiveStatus}
         emptyMessage={emptyMessage}
         errorMessage={errorMessage}
         onRetry={onRetry}
@@ -127,6 +138,13 @@ export function DataTable<T>({
               </tr>
             </thead>
             <tbody>
+              {showEmptyContent && (
+                <tr>
+                  <td colSpan={columns.length} className="px-4 py-6 text-center">
+                    {emptyContent}
+                  </td>
+                </tr>
+              )}
               {rows.map((row) => {
                 const expanded = renderExpanded?.(row);
                 return (
@@ -145,13 +163,12 @@ export function DataTable<T>({
         </div>
       </UiStateBoundary>
 
-      {pagination && effectiveStatus === "ready" && (
+      {pagination && effectiveStatus === "ready" && !showEmptyContent && (
         <Pagination
           page={pagination.page}
           pageSize={pagination.pageSize}
           totalCount={pagination.totalCount}
           onPageChange={pagination.onPageChange}
-          pageSizeOptions={pagination.pageSizeOptions}
           onPageSizeChange={pagination.onPageSizeChange}
           ariaLabel={ariaLabel ? `Paginación de ${ariaLabel.toLowerCase()}` : undefined}
           className="mt-auto"

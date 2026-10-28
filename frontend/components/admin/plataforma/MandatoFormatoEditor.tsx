@@ -4,6 +4,9 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { AlertTriangle, Eye, FileSignature, History } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+import { RowActions } from "@/components/atom/RowActions";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import {
   getMandatoFormat,
   getMandatoFormatVersion,
@@ -11,6 +14,7 @@ import {
   readFormatError,
   updateMandatoFormat,
   type MandatoFormatDetail,
+  type MandatoFormatVersionInfo,
   type MandatoFormatView,
   type MandatoUnknownVariable,
   type UpdateMandatoFormatBody,
@@ -68,6 +72,8 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
   const [showHistory, setShowHistory] = useState(false);
   const [oldVersion, setOldVersion] = useState<{ number: number; body: string } | null>(null);
   const [loadingVersion, setLoadingVersion] = useState<number | null>(null);
+  // HU #13918 — el historial de versiones es una colección: tabla estándar con paginación en cliente.
+  const pgVersiones = usePaginacion("plataforma.MandatoFormatoEditor");
 
   const load = useCallback(
     async (keepDrafts: boolean) => {
@@ -196,6 +202,35 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
       setLoadingVersion(null);
     }
   };
+
+  const versionColumns: DataTableColumn<MandatoFormatVersionInfo>[] = [
+    { key: "version", header: "Versión", cellClassName: "font-semibold", render: (v) => `v${v.versionNumber}` },
+    {
+      key: "autor",
+      header: "Autor",
+      cellClassName: "font-mono text-[11px]",
+      render: (v) => <span title={v.createdBy ?? undefined}>{v.createdBy ? v.createdBy.slice(0, 8) : "Sistema"}</span>,
+    },
+    { key: "fecha", header: "Fecha", render: (v) => formatFechaHora(v.createdAt) },
+    {
+      key: "texto",
+      header: "Texto",
+      align: "right",
+      render: (v) => (
+        <RowActions
+          actions={[
+            {
+              icon: Eye,
+              label: `Ver el texto de la versión ${v.versionNumber}`,
+              onClick: () => void openVersion(v.versionNumber),
+              tone: "primary",
+              disabled: busy || loadingVersion !== null,
+            },
+          ]}
+        />
+      ),
+    },
+  ];
 
   const title = format ? `Editar formato: ${format.name}` : "Editar formato";
 
@@ -378,54 +413,21 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
                 </button>
                 {showHistory ? (
                   detail && detail.versions.length > 0 ? (
-                    <table
-                      className="w-full border-collapse text-left"
-                      data-testid="mandato-formato-historial"
-                    >
-                      <caption className="sr-only">Versiones publicadas de la plantilla</caption>
-                      <thead>
-                        <tr className="text-[11px] text-[#59677D]">
-                          <th scope="col" className="py-1 pr-3 font-semibold">
-                            Versión
-                          </th>
-                          <th scope="col" className="py-1 pr-3 font-semibold">
-                            Autor
-                          </th>
-                          <th scope="col" className="py-1 pr-3 font-semibold">
-                            Fecha
-                          </th>
-                          <th scope="col" className="py-1 text-right font-semibold">
-                            Texto
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {detail.versions.map((v) => (
-                          <tr key={v.versionNumber} className="border-t border-[#DFE5ED]">
-                            <td className="py-1.5 pr-3 font-semibold">v{v.versionNumber}</td>
-                            <td
-                              className="py-1.5 pr-3 font-mono text-[11px]"
-                              title={v.createdBy ?? undefined}
-                            >
-                              {v.createdBy ? v.createdBy.slice(0, 8) : "Sistema"}
-                            </td>
-                            <td className="py-1.5 pr-3">{formatFechaHora(v.createdAt)}</td>
-                            <td className="py-1.5 text-right">
-                              <button
-                                type="button"
-                                onClick={() => void openVersion(v.versionNumber)}
-                                disabled={busy || loadingVersion !== null}
-                                aria-label={`Ver el texto de la versión ${v.versionNumber}`}
-                                className="inline-flex items-center gap-1 font-semibold text-flit-brand disabled:opacity-50"
-                              >
-                                <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-                                Ver
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <div data-testid="mandato-formato-historial">
+                      <DataTable<MandatoFormatVersionInfo>
+                        ariaLabel="Versiones publicadas de la plantilla"
+                        columns={versionColumns}
+                        rows={pgVersiones.paginar(detail.versions)}
+                        getRowKey={(v) => String(v.versionNumber)}
+                        pagination={{
+                          page: pgVersiones.page,
+                          pageSize: pgVersiones.pageSize,
+                          totalCount: detail.versions.length,
+                          onPageChange: pgVersiones.setPage,
+                          onPageSizeChange: pgVersiones.setPageSize,
+                        }}
+                      />
+                    </div>
                   ) : (
                     <p className="text-[#59677D]">Este formato aún no tiene versiones publicadas.</p>
                   )

@@ -79,7 +79,7 @@ public static class RegistrarDocumentoQuipuxMotivos
     /// <summary>La consulta previa al reintento falló: no se radica sin saber si Quipux ya lo tiene.</summary>
     public const string ConsultaPreviaFallida = "consulta_previa_fallida";
 
-    /// <summary>Quipux respondió un código distinto de 81.</summary>
+    /// <summary>Quipux respondió un código distinto de 081/082 (no éxito ni ya-registrado).</summary>
     public const string RespuestaNoExitosa = "respuesta_no_exitosa";
 
     /// <summary>Quipux aceptó la radicación pero el trámite no pudo transicionar a <c>entregado</c>.</summary>

@@ -50,7 +50,7 @@ export function RbacAdmin() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [permissions, setPermissions] = useState<Record<string, RbacPermission[]>>({});
   // Bug #13055 — tabla homologada con el modelo de trámites: pagina en cliente con «Filas por página».
-  const pgModules = usePaginacion();
+  const pgModules = usePaginacion("modulos.RbacAdmin.modules");
   const [showCreateModule, setShowCreateModule] = useState(false);
   const [createPermissionForModule, setCreatePermissionForModule] = useState<RbacModule | null>(null);
 
@@ -319,8 +319,8 @@ function RolesTabContent() {
   const [companyRoles, setCompanyRoles] = useState<RbacRole[]>([]);
   const [otRoles, setOtRoles] = useState<RbacRole[]>([]);
   // Bug #13055 — cada tabla de roles pagina en cliente.
-  const pgCompany = usePaginacion();
-  const pgOt = usePaginacion();
+  const pgCompany = usePaginacion("modulos.RbacAdmin.company");
+  const pgOt = usePaginacion("modulos.RbacAdmin.ot");
   const [companyStatus, setCompanyStatus] = useState<"loading" | "error" | "ready">("loading");
   const [otStatus, setOtStatus] = useState<"loading" | "error" | "ready">("loading");
   const [busyIds, setBusyIds] = useState<Record<string, boolean>>({});
