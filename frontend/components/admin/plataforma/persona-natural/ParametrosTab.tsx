@@ -6,7 +6,8 @@
 // cambió la configuración (409) se avisa con la opción de recargar y NO se pierde lo escrito hasta que se decida.
 // Sin datos bancarios ni de pago (decisión del PO: otra épica).
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, RefreshCcw, Save } from "lucide-react";
+import { RefreshCcw, RotateCcw, Save } from "lucide-react";
+import { InlineAlert } from "@/components/atom/InlineAlert";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -21,26 +22,32 @@ import {
   type GuardarParametrosPn,
   type ParametrosPn,
 } from "@/lib/api/admin-pn-config";
-import {
-  PN_FIELD_ERROR_CLS,
-  PN_HINT_CLS,
-  PN_INPUT_CLS,
-  PN_INPUT_ERROR_CLS,
-  PN_LABEL_CLS,
-  PN_NOTICE_CLS,
-  PN_NOTICE_STYLE,
-  PN_PRIMARY_BTN_CLS,
-  PN_PRIMARY_BTN_STYLE,
-  PN_CANCEL_BTN_CLS,
-} from "./pn-ui";
+import { PN_FIELD_ERROR_CLS, PN_HINT_CLS, PN_INPUT_CLS, PN_INPUT_ERROR_CLS, PN_LABEL_CLS } from "./pn-ui";
+import { PnButton } from "./pn-componentes";
 import { pnError } from "./pnErrors";
 
 type CampoNumerico = keyof typeof RANGOS_PARAMETROS;
 const CAMPOS_NUMERICOS: { campo: CampoNumerico; label: string; ayuda: string }[] = [
-  { campo: "sesionVigenciaMinutos", label: "Vigencia de la sesión (minutos)", ayuda: "Cuánto dura la sesión de una persona en el portal." },
-  { campo: "borradorVigenciaDias", label: "Vigencia del borrador (días)", ayuda: "Cuánto se conserva un trámite sin radicar." },
-  { campo: "topeConsultasCiudadanoDia", label: "Consultas por ciudadano al día", ayuda: "Tope diario de consultas de una misma persona." },
-  { campo: "topeConsultasGlobalDia", label: "Consultas globales al día", ayuda: "Tope diario de consultas de todo el portal." },
+  {
+    campo: "sesionVigenciaMinutos",
+    label: "Duración de la sesión (minutos)",
+    ayuda: "Cuánto tiempo puede una persona usar el portal antes de tener que ingresar de nuevo.",
+  },
+  {
+    campo: "borradorVigenciaDias",
+    label: "Días que se guarda un trámite sin enviar",
+    ayuda: "Cuánto tiempo se conserva un trámite empezado y no enviado.",
+  },
+  {
+    campo: "topeConsultasCiudadanoDia",
+    label: "Consultas por persona al día",
+    ayuda: "Máximo de consultas que una misma persona puede hacer en un día.",
+  },
+  {
+    campo: "topeConsultasGlobalDia",
+    label: "Consultas de todo el portal al día",
+    ayuda: "Máximo de consultas que puede recibir el portal en un día, entre todas las personas.",
+  },
 ];
 
 /** Estado del formulario: todo como texto, para conservar lo que la persona escribió aunque sea inválido. */
@@ -85,21 +92,21 @@ function validar(f: Formulario): { errores: Errores; payload: GuardarParametrosP
     }
     const n = Number(texto);
     if (!/^\d+$/.test(texto) || n < r.min || n > r.max) {
-      errores[campo] = `Debe ser un número entero entre ${r.min} y ${r.max} ${r.unidad}.`;
+      errores[campo] = `Escribe un número entero entre ${r.min} y ${r.max} ${r.unidad}.`;
     } else {
       numeros[campo] = n;
     }
   }
   const correo = f.soporteCorreo.trim();
   if (correo && (correo.length > SOPORTE_CORREO_MAX || !CORREO.test(correo))) {
-    errores.soporteCorreo = "El correo de soporte no tiene un formato válido.";
+    errores.soporteCorreo = "Escribe un correo válido, por ejemplo soporte@empresa.com.";
   }
   const telefono = f.soporteTelefono.trim();
   if (telefono && !TELEFONO.test(telefono)) {
-    errores.soporteTelefono = `Use de 7 a ${SOPORTE_TELEFONO_MAX} caracteres: dígitos, +, paréntesis, guiones y espacios.`;
+    errores.soporteTelefono = `Escribe un teléfono de 7 a ${SOPORTE_TELEFONO_MAX} caracteres: solo números, +, paréntesis, guiones y espacios.`;
   }
   if (f.soporteHorario.trim().length > SOPORTE_HORARIO_MAX) {
-    errores.soporteHorario = `El horario admite hasta ${SOPORTE_HORARIO_MAX} caracteres.`;
+    errores.soporteHorario = `El horario puede tener hasta ${SOPORTE_HORARIO_MAX} caracteres.`;
   }
   if (Object.keys(errores).length > 0) return { errores, payload: null };
   return {
@@ -170,7 +177,7 @@ export function ParametrosTab() {
       setServidor(guardado);
       setForm(aFormulario(guardado));
       setConflicto(null);
-      show("Parámetros guardados.", "success");
+      show("Ajustes guardados. El portal ya usa los valores nuevos.", "success");
     } catch (err) {
       const info = pnError(err);
       if (info.status === 409 && info.body?.actual) {
@@ -186,6 +193,13 @@ export function ParametrosTab() {
     }
   }
 
+  function descartar() {
+    if (!servidor) return;
+    setForm(aFormulario(servidor));
+    setErrores({});
+    setErrorGeneral(null);
+  }
+
   function recargarActual() {
     if (!conflicto) return;
     setServidor(conflicto);
@@ -194,37 +208,39 @@ export function ParametrosTab() {
     setConflicto(null);
   }
 
-  if (status === "loading") return <CarLoaderModal label="Cargando parámetros…" />;
+  if (status === "loading") return <CarLoaderModal label="Cargando ajustes…" />;
 
   return (
     <UiStateBoundary
       status={status}
-      errorMessage="No se pudieron cargar los parámetros del portal."
+      errorMessage="No se pudieron cargar los ajustes del portal."
       onRetry={() => void load()}
     >
       {form && servidor && (
-        <form onSubmit={guardar} noValidate className="flex max-w-3xl flex-col gap-6" aria-label="Parámetros del portal">
+        <form onSubmit={guardar} noValidate className="flex max-w-3xl flex-col gap-6" aria-label="Ajustes del portal">
           <p className="text-sm text-[#59677D] dark:text-white/78">
-            Un campo vacío usa el valor predeterminado del portal.
+            Estos ajustes definen cómo se comporta el portal para el ciudadano. Si dejas un campo vacío, el portal usa su
+            valor habitual.
             {servidor.actualizadoEn && <> Última actualización: {formatFechaHora(servidor.actualizadoEn)}.</>}
           </p>
 
           {conflicto && (
-            <div role="alert" className={`${PN_NOTICE_CLS} flex flex-col gap-2`} style={PN_NOTICE_STYLE}>
-              <p>
-                Otra persona cambió esta configuración mientras usted editaba (versión {conflicto.rowVersion}). Lo que
-                escribió se conserva en pantalla, pero para guardarlo debe recargar los valores actuales y volver a
-                aplicar sus cambios.
-              </p>
-              <button type="button" onClick={recargarActual} className={`${PN_CANCEL_BTN_CLS} w-fit bg-white`}>
-                <RefreshCcw className="mr-1.5 inline h-3.5 w-3.5" aria-hidden="true" />
-                Recargar valores actuales
-              </button>
-            </div>
+            <InlineAlert
+              tone="warning"
+              title="Alguien más cambió estos ajustes"
+              action={
+                <PnButton variant="secondary" icon={RefreshCcw} onClick={recargarActual}>
+                  Cargar valores actuales
+                </PnButton>
+              }
+            >
+              Otra persona guardó cambios mientras editabas. Lo que escribiste sigue en pantalla, pero para guardarlo
+              debes cargar los valores actuales y volver a aplicar tus cambios.
+            </InlineAlert>
           )}
 
           <fieldset className="grid gap-4 sm:grid-cols-2">
-            <legend className="mb-2 text-sm font-bold text-flit-primary dark:text-white">Vigencias y topes</legend>
+            <legend className="mb-2 text-sm font-bold text-flit-primary dark:text-white">Tiempos y límites</legend>
             {CAMPOS_NUMERICOS.map(({ campo, label, ayuda }) => {
               const r = RANGOS_PARAMETROS[campo];
               const hintId = `pn-param-${campo}-hint`;
@@ -236,30 +252,33 @@ export function ParametrosTab() {
                     autoComplete="off"
                     value={form[campo]}
                     onChange={(e) => cambiar(campo, e.target.value)}
-                    placeholder="Predeterminado"
+                    placeholder="Valor habitual"
                     aria-invalid={Boolean(errores[campo])}
                     aria-describedby={hintId}
                     className={`${PN_INPUT_CLS} ${errores[campo] ? PN_INPUT_ERROR_CLS : ""}`}
                   />
                   <span id={hintId} className={errores[campo] ? PN_FIELD_ERROR_CLS : PN_HINT_CLS} role={errores[campo] ? "alert" : undefined}>
-                    {errores[campo] ?? `${ayuda} Rango permitido: ${r.min} a ${r.max} ${r.unidad}.`}
+                    {errores[campo] ?? `${ayuda} Permitido: de ${r.min} a ${r.max} ${r.unidad}.`}
                   </span>
                 </label>
               );
             })}
             <label className={PN_LABEL_CLS}>
-              Captcha
+              Verificación anti-robots (captcha)
               <select value={form.captcha} onChange={(e) => cambiar("captcha", e.target.value as Formulario["captcha"])} className={PN_INPUT_CLS}>
-                <option value="">Predeterminado del portal</option>
-                <option value="si">Activo</option>
-                <option value="no">Inactivo</option>
+                <option value="">Lo habitual del portal</option>
+                <option value="si">Activada</option>
+                <option value="no">Desactivada</option>
               </select>
-              <span className={PN_HINT_CLS}>Protección contra automatizaciones en el portal.</span>
+              <span className={PN_HINT_CLS}>Pide a la persona demostrar que no es un programa automático.</span>
             </label>
           </fieldset>
 
           <fieldset className="grid gap-4 sm:grid-cols-2">
             <legend className="mb-2 text-sm font-bold text-flit-primary dark:text-white">Contacto de soporte</legend>
+            <p className="-mt-1 text-xs text-[#59677D] sm:col-span-2 dark:text-white/70">
+              Datos para que el ciudadano pueda pedir ayuda. Son opcionales.
+            </p>
             <label className={PN_LABEL_CLS}>
               Correo de soporte
               <input
@@ -298,22 +317,17 @@ export function ParametrosTab() {
             </label>
           </fieldset>
 
-          {errorGeneral && (
-            <p role="alert" className="text-sm font-semibold text-[#C2410C]">
-              {errorGeneral}
-            </p>
-          )}
+          {errorGeneral && <InlineAlert tone="error">{errorGeneral}</InlineAlert>}
 
-          <div className="flex items-center gap-3">
-            <button
-              type="submit"
-              disabled={busy || !hayCambios}
-              className={PN_PRIMARY_BTN_CLS}
-              style={PN_PRIMARY_BTN_STYLE}
-            >
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Save className="h-4 w-4" aria-hidden="true" />}
-              Guardar parámetros
-            </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <PnButton type="submit" variant="primary" icon={Save} loading={busy} disabled={!hayCambios}>
+              Guardar ajustes
+            </PnButton>
+            {hayCambios && (
+              <PnButton variant="secondary" icon={RotateCcw} onClick={descartar} disabled={busy}>
+                Descartar cambios
+              </PnButton>
+            )}
             {!hayCambios && <span className={PN_HINT_CLS}>No hay cambios por guardar.</span>}
           </div>
         </form>
