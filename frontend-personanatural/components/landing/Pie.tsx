@@ -1,4 +1,4 @@
-import { TEXTO_POLITICAS } from "@/lib/landing/contenido";
+import { TEXTO_POLITICAS } from "@/lib/legal";
 import { boton } from "./estilos";
 
 export function Pie({ onAbrirPoliticas }: { onAbrirPoliticas: () => void }) {

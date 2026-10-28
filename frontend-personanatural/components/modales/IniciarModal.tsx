@@ -12,7 +12,7 @@ import { portal, type ClientePortal, type Organismo, type SesionTramite } from "
 import { mensajeDe } from "@/lib/api/errores";
 import { useBloqueo } from "@/lib/api/useBloqueo";
 import { CONSENTIMIENTO_VERSION } from "@/lib/consentimiento";
-import { TEXTO_POLITICAS } from "@/lib/landing/contenido";
+import { TEXTO_POLITICAS } from "@/lib/legal";
 import { ModalFlit } from "./ModalFlit";
 
 /** Lo que el ciudadano escribió en la tarjeta «Iniciar mi trámite». Solo vive en memoria. */

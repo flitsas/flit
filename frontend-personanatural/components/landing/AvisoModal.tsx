@@ -2,6 +2,7 @@
 
 import { CircleHelp, X } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { TEXTO_DOCUMENTO_NO_DISPONIBLE } from "@/lib/legal";
 import { boton } from "./estilos";
 
 export type Aviso = { titulo: string; tipo: "proximamente" | "documento" };
@@ -49,7 +50,7 @@ export function AvisoModal({ aviso, onCerrar }: { aviso: Aviso | null; onCerrar:
             {aviso.tipo === "proximamente" ? (
               <span className="inline-block rounded-full bg-primary/10 px-4 py-1 text-sm font-semibold text-primary">Próximamente</span>
             ) : (
-              <span className="text-sm">El documento oficial aún no está disponible.</span>
+              <span className="text-sm">{TEXTO_DOCUMENTO_NO_DISPONIBLE}</span>
             )}
           </p>
           <button type="button" onClick={onCerrar} className={boton("flit", "mx-auto mt-5 flex h-11 px-10", "none")}>Cerrar</button>

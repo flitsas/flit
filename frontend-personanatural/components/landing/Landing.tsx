@@ -6,11 +6,12 @@ import { ConsultarModal } from "@/components/modales/ConsultarModal";
 import { CotizarModal } from "@/components/modales/CotizarModal";
 import { IniciarModal, type DatosInicio } from "@/components/modales/IniciarModal";
 import { portal, type ClientePortal, type Organismo } from "@/lib/api/cliente";
-import { TEXTO_POLITICAS } from "@/lib/landing/contenido";
+import { TEXTO_POLITICAS } from "@/lib/legal";
 import { fijarContexto } from "@/lib/tramite/contexto";
 import { rutaDelTramite } from "@/lib/tramite/ruta";
 import { AccionesPrincipales } from "./AccionesPrincipales";
 import { AvisoModal, type Aviso } from "./AvisoModal";
+import { DrFlit } from "@/components/chat/DrFlit";
 import { Cabecera } from "./Cabecera";
 import { CarruselBanners } from "./CarruselBanners";
 import { OrganismosIntegrados } from "./OrganismosIntegrados";
@@ -64,6 +65,8 @@ export function Landing({ cliente = portal }: { cliente?: ClientePortal }) {
           <PreguntasFrecuentes />
         </div>
       </div>
+      {/* Asistente simulado (S4): sin servicio externo; solo lee los nombres de los catálogos reales para sus respuestas. */}
+      <DrFlit contexto={{ tipos: tipos.data?.map((t) => t.name), organismos: organismos.data?.map((o) => o.nombre) }} />
       <Pie onAbrirPoliticas={() => setAviso({ titulo: TEXTO_POLITICAS, tipo: "documento" })} />
       <ConsultarModal
         abierto={consultando}

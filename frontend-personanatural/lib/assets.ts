@@ -19,3 +19,12 @@ export const ASSETS = {
     { src: "/assets/banners/banner-f-23.jpg", ancho: 3967, alto: 908, alt: "Recuerda que para realizar un trámite debes estar a paz y salvo. Conoce más aquí: curso de infractores, impuestos y más." },
   ],
 } as const;
+
+// Imágenes del asistente Dr. FLIT (`dr-flit`, `dr-flit-full`, `chatbot_dr_flit_1-02`): AÚN NO se han entregado. Mientras una sea `null`
+// el chat dibuja un marcador accesible (ícono de lucide en un círculo). Para enchufarlas, copiar el archivo a /public/assets/flit y
+// poner aquí su ruta; no hace falta tocar ningún componente.
+export const ASSETS_DR_FLIT: { lanzador: string | null; avatar: string | null; completo: string | null } = {
+  lanzador: null, // chatbot_dr_flit_1-02: foto de la pestaña flotante (56 px, redonda)
+  avatar: null, // dr-flit: avatar de la cabecera del chat (40 px, redondo)
+  completo: null, // dr-flit-full: cuerpo completo (aún sin uso en el diseño del portal)
+};

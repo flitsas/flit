@@ -78,5 +78,3 @@ export const PREGUNTAS_FRECUENTES = [
       "Recibirás un enlace seguro a tu correo electrónico o celular para tomar una fotografía de tu rostro y la foto de tu cédula por ambos lados en cuestión de minutos.",
   },
 ] as const;
-
-export const TEXTO_POLITICAS = "Políticas de Privacidad y Términos de Uso";
