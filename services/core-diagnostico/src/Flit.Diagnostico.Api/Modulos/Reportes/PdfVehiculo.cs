@@ -20,7 +20,7 @@ namespace Flit.Diagnostico.Api.Modulos.Reportes;
 /// identificación (Diagnóstico ID, placa —o VIN— y fecha de generación en hora Colombia) y la tabla «DATOS DEL DIAGNÓSTICO» (lote,
 /// tipo de análisis, fecha de creación, empresa, creador y VIN); luego una sección por fuente del contenido de F07-H2 en el orden de
 /// la grilla, con título centrado en mayúsculas y las tablas de <see cref="TablaFlit"/>; al final el recuadro NOTA; y en el pie
-/// «Certificado de Diagnóstico» y «Página X de Y». Las secciones RUNT ampliadas se enchufan en <see cref="SeccionesRuntAmpliadas"/>.
+/// «Certificado de Diagnóstico» y «Página X de Y». Las secciones RUNT ampliadas (detalle del RUNT) salen de <see cref="SeccionesRuntAmpliadas"/>.
 /// Pinta SOLO lo que trae <see cref="ContenidoReporteVehiculo"/> (R-20): sin origen, usuario manual, proveedor, transacción ni tipo
 /// de error; una fuente en ERROR sale «consulta no disponible» y los documentos de persona ya vienen enmascarados. Función pura de
 /// su entrada: F07-H5 (ZIP) la reutiliza con el contenido de <c>LectorContenidoReporte</c>. QuestPDF con licencia Community
@@ -115,7 +115,8 @@ internal static partial class PdfVehiculo
                     {
                         var seccion = contenido.Secciones[i];
                         var sobretitulo = i == 0 ? "Datos del vehículo" : null;
-                        col.Item().Element(c => Seccion(c, seccion, sobretitulo));
+                        var detalle = seccion.Fuente == "RUNT" ? contenido.DetalleRunt : null;
+                        col.Item().Element(c => Seccion(c, seccion, sobretitulo, detalle));
                         if (seccion.Fuente == "RUNT")
                             SeccionesRuntAmpliadas(col, contenido, seccion);
                     }
@@ -135,19 +136,102 @@ internal static partial class PdfVehiculo
     }
 
     /// <summary>
-    /// Punto de enchufe de las secciones RUNT ampliadas (Información general, Datos teóricos, SOAT, RTM, Solicitudes, Garantías a
-    /// favor, Accidentalidad, Póliza RC): se llama justo después de la sección «Información del vehículo» (fuente <c>RUNT</c>) y antes
-    /// de las de personas y SIMIT, con el contenido completo y la sección RUNT. Cada sección nueva se agrega como
-    /// <c>col.Item().Element(c =&gt; SeccionConTitulo(c, "Título", dato, cuerpo))</c>, con sus tablas en <see cref="Tabla"/>
-    /// (etiqueta-valor en bloques de 3) o <see cref="Grilla"/> y sus estados sin dato en <see cref="Aviso"/>. Hoy no pinta nada: el
-    /// modelo de contenido aún no trae esos datos.
+    /// Secciones RUNT ampliadas del diseño v2 (ajuste 2026-10-27), justo después de «Información del vehículo» y antes de personas y
+    /// SIMIT: Información general, Datos teóricos, Datos SOAT, Datos revisión tecno-mecánica, Solicitudes (una sola vez), Garantías a
+    /// favor, Accidentalidad y Póliza de responsabilidad civil, con lo que trae <see cref="ContenidoReporteVehiculo.DetalleRunt"/> y
+    /// nada más (R-20). Solo con la sección RUNT COMPLETADO (si no, la sección RUNT ya dice su estado). Lista vacía o RUNT sin
+    /// detalle (consultas anteriores al 2026-10-27) ⇒ la sección con su encabezado y una fila «No registra».
     /// </summary>
     private static void SeccionesRuntAmpliadas(ColumnDescriptor col, ContenidoReporteVehiculo contenido, SeccionReporte runt)
     {
-        _ = col;
-        _ = contenido;
-        _ = runt;
+        if (runt.Estado != EstadoSeccion.Completado)
+            return;
+        var d = contenido.DetalleRunt;
+
+        col.Item().Element(c => SeccionConTitulo(c, "Información general", null, cuerpo =>
+        {
+            if (d?.General is not { } g)
+            {
+                cuerpo.Item().Element(x => TablaFlit.SinDatos(x, NoRegistra));
+                return;
+            }
+
+            cuerpo.Item().Element(x => Tabla(x,
+            [
+                ("Marca", R(g.Marca)), ("Línea", R(g.Linea)), ("Cilindraje", R(g.Cilindraje)),
+                ("Color", R(g.Color)), ("Tipo de combustible", R(g.TipoCombustible)), ("Tipo de carrocería", R(g.TipoCarroceria)),
+                ("Puertas", R(g.Puertas)), ("Clásico antiguo", R(g.ClasicoAntiguo)), ("Repotenciado", R(g.Repotenciado)),
+                ("VIN", R(g.Vin)), ("N.º motor", R(g.NumeroMotor)), ("N.º chasis", R(g.NumeroChasis)),
+                ("Regrabado VIN", R(g.RegrabadoVin)), ("Regrabado motor", R(g.RegrabadoMotor)), ("Regrabado chasis", R(g.RegrabadoChasis)),
+                ("Regrabado serie", R(g.RegrabadoSerie)), ("Estado del vehículo", R(g.EstadoVehiculo)),
+            ]));
+        }));
+
+        var t = d?.DatosTecnicos;
+        GrillaRunt(col, "Datos teóricos", ["N.º ejes", "Capacidad de carga", "Pasajeros sentados", "Peso bruto vehicular"],
+            t is null ? [] : [[R(t.NumeroEjes), R(t.CapacidadCarga), R(t.PasajerosSentados), R(t.PesoBrutoVehicular)]]);
+        GrillaRunt(col, "Datos SOAT", ["Estado", "N.º póliza", "Vigencia", "Expedición", "Vencimiento", "Entidad"],
+            [.. (d?.Soat ?? []).Select(s => new[] { Estado(s.Estado), R(s.NumeroPoliza), R(s.FechaVigencia), R(s.FechaExpedicion), R(s.FechaVencimiento), R(s.Entidad) })]);
+        GrillaRunt(col, "Datos revisión tecno-mecánica", ["Estado", "N.º certificado", "Vigencia", "Expedición", "CDA"],
+            [.. (d?.Rtm ?? []).Select(r => new[] { Estado(r.Estado), R(r.NumeroCertificado), R(r.FechaVigencia), R(r.FechaExpedicion), R(r.Cda) })]);
+        GrillaRunt(col, "Solicitudes", ["Estado", "Entidad", "N.º solicitud", "Fecha solicitud", "Trámites realizados"],
+            [.. (d?.Solicitudes ?? []).Select(s => new[] { R(s.Estado), R(s.Entidad), R(s.NumeroSolicitud), R(s.Fecha), R(s.TramitesRealizados) })]);
+        GrillaRunt(col, "Garantías a favor", ["Acreedor", "Confecámaras", "Fecha inscripción", "Tipo y N.º de documento acreedor"],
+            [.. (d?.GarantiasAFavor ?? []).Select(g => new[] { R(g.Acreedor), R(g.Confecamaras), R(g.FechaInscripcion), DocumentoAcreedor(g) })]);
+
+        var accidentalidad = d?.Accidentalidad ?? [];
+        col.Item().Element(c => SeccionConTitulo(c, "Accidentalidad", null, cuerpo =>
+        {
+            if (accidentalidad.Count == 0)
+                cuerpo.Item().Element(x => TablaFlit.SinDatos(x, NoRegistra));
+            else
+                cuerpo.Item().Element(x => Tabla(x, [.. accidentalidad.Select(a => (a.Etiqueta, a.Valor))]));
+        }));
+
+        GrillaRunt(col, "Póliza de responsabilidad civil", ["Estado", "N.º póliza", "Tipo póliza", "Expedición", "Vencimiento", "Entidad"],
+            [.. (d?.PolizasResponsabilidadCivil ?? []).Select(p => new[] { Estado(p.Estado), R(p.NumeroPoliza), R(p.Tipo), R(p.FechaExpedicion), R(p.FechaVencimiento), R(p.Entidad) })]);
     }
+
+    /// <summary>Sección RUNT ampliada con una grilla; sin filas, una sola fila «No registra» a todo el ancho.</summary>
+    private static void GrillaRunt(ColumnDescriptor col, string titulo, IReadOnlyList<string> columnas, IReadOnlyList<string[]> filas) =>
+        col.Item().Element(c => SeccionConTitulo(c, titulo, null, cuerpo => cuerpo.Item().Element(x => TablaFlit.Grilla(x, columnas, filas, NoRegistra))));
+
+    /// <summary>
+    /// «Información del vehículo» con el detalle del RUNT (diseño v2): Placa · Licencia de tránsito · Tipo de servicio / Clasificación ·
+    /// Clase vehículo · Modelo / Fecha matrícula · Organismo de tránsito (a dos columnas) / Titulares · Locatarios registrados.
+    /// </summary>
+    private static void InformacionVehiculo(IContainer contenedor, DetalleRuntVehiculo v, ResultadoRuntDetalle runt) => TablaFlit.Campos(contenedor,
+    [
+        ("Placa", R(v.Placa ?? runt.Placa), 1), ("Licencia de tránsito", R(v.LicenciaTransito), 1), ("Tipo de servicio", R(v.TipoServicio ?? runt.Servicio), 1),
+        ("Clasificación", R(v.Clasificacion), 1), ("Clase vehículo", R(v.Clase ?? runt.Clase), 1), ("Modelo", R(v.Modelo), 1),
+        ("Fecha matrícula", R(v.FechaMatricula), 1), ("Organismo de tránsito", R(v.OrganismoTransito ?? runt.Organismo), 2),
+        ("Titulares", Titulares(runt), 1), ("Locatarios registrados", runt.Locatarios.ToString(CultureInfo.InvariantCulture), 1),
+    ]);
+
+    private static string Titulares(ResultadoRuntDetalle runt) => runt.Propietarios is { Count: > 0 } titulares
+        ? string.Join(", ", titulares.Select(t => $"{t.TipoDocumento ?? NoRegistra} ({t.TipoPropiedad ?? NoRegistra})"))
+        : NoRegistra;
+
+    /// <summary>Estado de SOAT/RTM/póliza en tipo oración: VIGENTE → «Vigente», NO VIGENTE → «No vigente», NO REQUIERE → «No requiere»; null → «No registra».</summary>
+    internal static string Estado(string? estado) => string.IsNullOrWhiteSpace(estado)
+        ? NoRegistra
+        : estado.Trim().ToUpperInvariant() switch
+        {
+            "VIGENTE" => "Vigente",
+            "NO VIGENTE" => "No vigente",
+            "NO REQUIERE" => "No requiere",
+            _ => estado.Trim(),
+        };
+
+    /// <summary>«{Tipo} {Número}» del acreedor (el número de persona natural ya viene enmascarado); sin ninguno, «No registra».</summary>
+    private static string DocumentoAcreedor(DetalleRuntGarantia g)
+    {
+        var texto = string.Join(' ', new[] { g.TipoDocumento, g.NumeroDocumento }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        return texto.Length == 0 ? NoRegistra : texto;
+    }
+
+    /// <summary>El valor o «No registra».</summary>
+    private static string R(string? valor) => string.IsNullOrWhiteSpace(valor) ? NoRegistra : valor;
 
     /// <summary>
     /// Pie: la banda del membrete y, encima a la derecha, una sola línea con «Certificado de Diagnóstico» en azul y «Página X de Y» en
@@ -232,11 +316,14 @@ internal static partial class PdfVehiculo
     private static void Aviso(IContainer contenedor, string texto) =>
         contenedor.AlignCenter().Text(texto).FontSize(TablaFlit.TamanoTexto).FontColor(FlitDocumentTheme.Gris);
 
-    private static void Seccion(IContainer contenedor, SeccionReporte seccion, string? sobretitulo) => SeccionConTitulo(contenedor,
+    private static void Seccion(IContainer contenedor, SeccionReporte seccion, string? sobretitulo, DetalleRuntReporte? detalle) => SeccionConTitulo(contenedor,
         Titulos.GetValueOrDefault(seccion.Fuente, seccion.Fuente), seccion.DatoObtenidoEn, col =>
         {
             switch (seccion.Estado)
             {
+                case EstadoSeccion.Completado when seccion.Resultado is ResultadoRuntDetalle runt && detalle is not null:
+                    col.Item().Element(c => InformacionVehiculo(c, detalle.Vehiculo, runt));
+                    break;
                 case EstadoSeccion.Completado when seccion.Resultado is { } resultado:
                     col.Item().Element(c => Resultado(c, resultado));
                     break;
@@ -301,9 +388,7 @@ internal static partial class PdfVehiculo
                     ("Servicio", runt.Servicio ?? NoRegistra),
                     ("Clase", runt.Clase ?? NoRegistra),
                     ("Organismo de tránsito", runt.Organismo ?? NoRegistra),
-                    ("Titulares", runt.Propietarios is { Count: > 0 } titulares
-                        ? string.Join(", ", titulares.Select(t => $"{t.TipoDocumento ?? NoRegistra} ({t.TipoPropiedad ?? NoRegistra})"))
-                        : NoRegistra),
+                    ("Titulares", Titulares(runt)),
                     ("Locatarios registrados", runt.Locatarios.ToString(CultureInfo.InvariantCulture)),
                 ]);
                 break;

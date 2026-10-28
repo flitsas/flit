@@ -49,9 +49,20 @@ internal static class TablaFlit
     /// </summary>
     public static void Campos(IContainer contenedor, IReadOnlyList<(string Etiqueta, string Valor)> campos)
     {
+        ArgumentNullException.ThrowIfNull(campos);
+        Campos(contenedor, [.. campos.Select(c => (c.Etiqueta, c.Valor, 1))]);
+    }
+
+    /// <summary>
+    /// Como <see cref="Campos(IContainer, IReadOnlyList{ValueTuple{string, string}})"/>, pero cada campo ocupa <c>Columnas</c>
+    /// columnas del bloque (1 a <see cref="ColumnasCampos"/>; p. ej. «Organismo de tránsito» a dos columnas en el diseño v2). Un
+    /// campo que no cabe en lo que queda del bloque abre el siguiente.
+    /// </summary>
+    public static void Campos(IContainer contenedor, IReadOnlyList<(string Etiqueta, string Valor, int Columnas)> campos)
+    {
         ArgumentNullException.ThrowIfNull(contenedor);
         ArgumentNullException.ThrowIfNull(campos);
-        var bloques = campos.Chunk(ColumnasCampos).ToList();
+        var bloques = Bloques(campos);
         contenedor.Column(col =>
         {
             col.Spacing(Separador);
@@ -63,30 +74,64 @@ internal static class TablaFlit
                 col.Item().ShowEntire().Column(par =>
                 {
                     par.Spacing(Separador);
-                    par.Item().Element(c => Fila(c, [.. bloque.Select(x => x.Etiqueta)], ColumnasCampos, encabezado: true, arriba: primero, abajo: false));
-                    par.Item().Element(c => Fila(c, [.. bloque.Select(x => x.Valor)], ColumnasCampos, encabezado: false, arriba: false, abajo: ultimo));
+                    par.Item().Element(c => Fila(c, [.. bloque.Select(x => (x.Etiqueta, x.Columnas))], ColumnasCampos, encabezado: true, arriba: primero, abajo: false));
+                    par.Item().Element(c => Fila(c, [.. bloque.Select(x => (x.Valor, x.Columnas))], ColumnasCampos, encabezado: false, arriba: false, abajo: ultimo));
                 });
             }
         });
     }
 
-    /// <summary>Grilla: encabezado degradado (se repite si la tabla se parte entre páginas) y una fila por elemento (nunca partida).</summary>
-    public static void Grilla(IContainer contenedor, IReadOnlyList<string> columnas, IReadOnlyList<string[]> filas)
+    /// <summary>
+    /// Grilla: encabezado degradado (se repite si la tabla se parte entre páginas) y una fila por elemento (nunca partida). Sin filas
+    /// y con <paramref name="sinFilas"/>, una sola fila con ese texto que abarca todas las columnas.
+    /// </summary>
+    public static void Grilla(IContainer contenedor, IReadOnlyList<string> columnas, IReadOnlyList<string[]> filas, string? sinFilas = null)
     {
         ArgumentNullException.ThrowIfNull(contenedor);
         ArgumentNullException.ThrowIfNull(columnas);
         ArgumentNullException.ThrowIfNull(filas);
+        List<IReadOnlyList<(string, int)>> datos = filas.Count == 0 && sinFilas is not null
+            ? [[(sinFilas, columnas.Count)]]
+            : filas.Select(f => (IReadOnlyList<(string, int)>)[.. f.Select(t => (t, 1))]).ToList();
         contenedor.Table(tabla =>
         {
             tabla.ColumnsDefinition(c => c.RelativeColumn());
-            tabla.Header(h => h.Cell().Element(c => Fila(c, columnas, columnas.Count, encabezado: true, arriba: true, abajo: filas.Count == 0)));
-            for (var i = 0; i < filas.Count; i++)
+            tabla.Header(h => h.Cell().Element(c => Fila(c, [.. columnas.Select(t => (t, 1))], columnas.Count, encabezado: true, arriba: true, abajo: datos.Count == 0)));
+            for (var i = 0; i < datos.Count; i++)
             {
-                var fila = filas[i];
-                var ultima = i == filas.Count - 1;
+                var fila = datos[i];
+                var ultima = i == datos.Count - 1;
                 tabla.Cell().PaddingTop(Separador).ShowEntire().Element(c => Fila(c, fila, columnas.Count, encabezado: false, arriba: false, abajo: ultima));
             }
         });
+    }
+
+    /// <summary>Una sola fila de dato a todo el ancho, con las cuatro esquinas redondeadas (p. ej. «No registra» de una tabla etiqueta-valor sin datos).</summary>
+    public static void SinDatos(IContainer contenedor, string texto)
+    {
+        ArgumentNullException.ThrowIfNull(contenedor);
+        Fila(contenedor, [(texto, 1)], 1, encabezado: false, arriba: true, abajo: true);
+    }
+
+    /// <summary>Reparte los campos en bloques de <see cref="ColumnasCampos"/> columnas según lo que ocupa cada uno.</summary>
+    private static List<List<(string Etiqueta, string Valor, int Columnas)>> Bloques(IReadOnlyList<(string Etiqueta, string Valor, int Columnas)> campos)
+    {
+        var bloques = new List<List<(string Etiqueta, string Valor, int Columnas)>>();
+        var ocupadas = ColumnasCampos;
+        foreach (var campo in campos)
+        {
+            var ancho = Math.Clamp(campo.Columnas, 1, ColumnasCampos);
+            if (ocupadas + ancho > ColumnasCampos)
+            {
+                bloques.Add([]);
+                ocupadas = 0;
+            }
+
+            bloques[^1].Add((campo.Etiqueta, campo.Valor, ancho));
+            ocupadas += ancho;
+        }
+
+        return bloques;
     }
 
     /// <summary>
@@ -115,39 +160,38 @@ internal static class TablaFlit
     }
 
     /// <summary>
-    /// Una fila de <paramref name="totalColumnas"/> columnas de igual ancho con los <paramref name="textos"/> en las primeras (las
-    /// sobrantes quedan vacías, sin fondo). <paramref name="arriba"/>/<paramref name="abajo"/> redondean las esquinas de los extremos
-    /// de lo ocupado.
+    /// Una fila de <paramref name="totalColumnas"/> columnas de igual ancho con las <paramref name="celdas"/> en las primeras, cada
+    /// una ocupando sus <c>Columnas</c> (las sobrantes quedan vacías, sin fondo). <paramref name="arriba"/>/<paramref name="abajo"/>
+    /// redondean las esquinas de los extremos de lo ocupado.
     /// </summary>
-    private static void Fila(IContainer contenedor, IReadOnlyList<string> textos, int totalColumnas, bool encabezado, bool arriba, bool abajo) =>
+    private static void Fila(IContainer contenedor, IReadOnlyList<(string Texto, int Columnas)> celdas, int totalColumnas, bool encabezado, bool arriba, bool abajo) =>
         contenedor.Row(fila =>
         {
             fila.Spacing(Separador);
-            for (var i = 0; i < totalColumnas; i++)
+            var inicio = 0;
+            for (var i = 0; i < celdas.Count; i++)
             {
-                if (i >= textos.Count)
-                {
-                    fila.RelativeItem();
-                    continue;
-                }
-
-                var indice = i;
+                var (texto, columnas) = celdas[i];
                 var esquinas = new Esquinas(
-                    Tl: arriba && indice == 0, Tr: arriba && indice == textos.Count - 1,
-                    Br: abajo && indice == textos.Count - 1, Bl: abajo && indice == 0);
-                var desde = (float)indice / totalColumnas;
-                var hasta = (float)(indice + 1) / totalColumnas;
-                fila.RelativeItem().Layers(capas =>
+                    Tl: arriba && i == 0, Tr: arriba && i == celdas.Count - 1,
+                    Br: abajo && i == celdas.Count - 1, Bl: abajo && i == 0);
+                var desde = (float)inicio / totalColumnas;
+                var hasta = (float)(inicio + columnas) / totalColumnas;
+                inicio += columnas;
+                fila.RelativeItem(columnas).Layers(capas =>
                 {
                     capas.Layer().Svg(tamano => CeldaSvg(tamano.Width, tamano.Height, esquinas, encabezado, desde, hasta));
-                    var texto = capas.PrimaryLayer().PaddingVertical(4).PaddingHorizontal(5).AlignCenter().AlignMiddle().Text(textos[indice])
+                    var celda = capas.PrimaryLayer().PaddingVertical(4).PaddingHorizontal(5).AlignCenter().AlignMiddle().Text(texto)
                         .FontSize(TamanoTexto);
                     if (encabezado)
-                        texto.FontFamily(FlitDocumentTheme.FontMedium).FontColor(FlitDocumentTheme.Blanco);
+                        celda.FontFamily(FlitDocumentTheme.FontMedium).FontColor(FlitDocumentTheme.Blanco);
                     else
-                        texto.FontColor(EstadosFavorables.Contains(textos[indice].Trim()) ? FlitDocumentTheme.Verde : FlitDocumentTheme.TextoTabla);
+                        celda.FontColor(EstadosFavorables.Contains(texto.Trim()) ? FlitDocumentTheme.Verde : FlitDocumentTheme.TextoTabla);
                 });
             }
+
+            for (var i = inicio; i < totalColumnas; i++)
+                fila.RelativeItem();
         });
 
     /// <summary>Esquinas redondeadas de una celda (superior izquierda, superior derecha, inferior derecha, inferior izquierda).</summary>

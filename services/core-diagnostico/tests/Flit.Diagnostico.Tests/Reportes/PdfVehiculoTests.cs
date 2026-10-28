@@ -92,7 +92,7 @@ public sealed class PdfVehiculoTests
         foreach (var esperado in new[]
                  {
                      lote.Id.ToString(), "Flota octubre", "Ana Prueba", "Empresa de prueba", "22/10/2026 14:30", "Diagnóstico Simple", "TST301",
-                     "Página 1 de 1", "Fecha de generación", "Certificado de Diagnóstico",
+                     "Página 1 de ", "Fecha de generación", "Certificado de Diagnóstico",
                  })
             PdfDePrueba.Tiene(texto, esperado).Should().BeTrue($"el texto del PDF trae «{esperado}»: {texto}");
 
@@ -694,7 +694,7 @@ internal static class PdfDePrueba
 /// dotnet test services/core-diagnostico/tests/Flit.Diagnostico.Tests --no-build --filter FullyQualifiedName~PdfVehiculoDisenoV2Tests
 /// </code>
 /// </example>
-public sealed class PdfVehiculoDisenoV2Tests
+public sealed partial class PdfVehiculoDisenoV2Tests
 {
     private static readonly Guid Id = Guid.Parse("0192ab34-5c6d-7e8f-9a0b-1c2d3e4f5a6b");
 
@@ -763,7 +763,7 @@ public sealed class PdfVehiculoDisenoV2Tests
     {
         var destino = Environment.GetEnvironmentVariable("FLIT_PDF_MUESTRA");
         Assert.SkipWhen(string.IsNullOrWhiteSpace(destino), "Sin FLIT_PDF_MUESTRA: no se escribe el PDF de muestra.");
-        var documento = PdfVehiculo.Documento(Contenido("ABC123"), GeneradoEn);
+        var documento = PdfVehiculo.Documento(ContenidoConDetalle("ABC123"), GeneradoEn);
         File.WriteAllBytes(destino!, QuestPDF.Fluent.GenerateExtensions.GeneratePdf(documento));
         var pagina = 0;
         foreach (var imagen in QuestPDF.Fluent.GenerateExtensions.GenerateImages(documento, new QuestPDF.Infrastructure.ImageGenerationSettings { RasterDpi = 110 }))
