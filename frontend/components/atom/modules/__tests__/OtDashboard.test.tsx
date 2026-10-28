@@ -11,6 +11,13 @@ import userEvent from "@testing-library/user-event";
 import type { OtOperationalPanel } from "@/lib/api/ot-metrics";
 import { OtDashboard } from "../OtDashboard";
 
+const tokenHolder = vi.hoisted(() => ({ current: null as string | null }));
+
+vi.mock("@/lib/api/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/client")>();
+  return { ...actual, getToken: () => tokenHolder.current };
+});
+
 const fetchOtProfile = vi.fn();
 const fetchOtOperationalPanel = vi.fn();
 const fetchOtReport = vi.fn();
@@ -81,6 +88,7 @@ async function renderReady(datos: OtOperationalPanel = panel()) {
 describe("OtDashboard — vista inicial del organismo", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    tokenHolder.current = null;
     // `resolveOtTransitOfficeId` cachea el id en sessionStorage; sin limpiarlo, el segundo test
     // nunca pediría el perfil y la aserción de AC1 quedaría midiendo la caché.
     window.sessionStorage.clear();
@@ -234,6 +242,26 @@ describe("OtDashboard — vista inicial del organismo", () => {
     await userEvent.click(screen.getByRole("button", { name: /Reintentar/i }));
 
     expect(await screen.findByText("Pendientes en total")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("Bug #14010 H-08: sin ot.reportes.manage no pide la cola ni muestra un error de carga", async () => {
+    const body = Buffer.from(
+      JSON.stringify({
+        sub: "u1",
+        entity_type: "TRANSIT_OFFICE",
+        roles: [{ code: "gestor_tramites_ot" }],
+        permissions: ["ot.tramites.manage"],
+      }),
+    ).toString("base64url");
+    tokenHolder.current = `e30.${body}.x`;
+    render(<OtDashboard />);
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "No tienes permiso para ver esta información.",
+    );
+    expect(fetchOtOperationalPanel).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /Reintentar/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

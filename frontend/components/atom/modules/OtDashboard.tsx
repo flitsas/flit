@@ -43,6 +43,9 @@ import {
 } from "lucide-react";
 import { fetchOtProfile } from "@/lib/api/admin-ot";
 import { fetchTransitOffices } from "@/lib/api/admin-companies";
+import { getToken } from "@/lib/api/client";
+import { ApiError } from "@/lib/api/types";
+import { decodeJwtPayload, hasPermission, isOtAdmin, isOtUser, isSuperAdmin } from "@/lib/auth/jwt";
 import {
   fetchOtDrilldown,
   fetchOtOperationalPanel,
@@ -80,7 +83,15 @@ const VENTANA_MEDIANA_DIAS = 30;
 /** Ventana de la franja de actividad. Corta a propósito: aquí se mira el ritmo, no la historia. */
 const ACTIVIDAD_DIAS = 14;
 
-type Estado = "cargando" | "listo" | "error";
+type Estado = "cargando" | "listo" | "error" | "sin-permiso";
+
+const MENSAJE_SIN_PERMISO_COLA = "No tienes permiso para ver esta información.";
+
+function sinPermisoDeCola(): boolean {
+  const claims = decodeJwtPayload(getToken());
+  if (!claims || !isOtUser(claims) || isSuperAdmin(claims) || isOtAdmin(claims)) return false;
+  return !hasPermission(claims, "ot.reportes.manage");
+}
 
 /** Abre el detalle de un bloque del panel. `null` en los indicadores que no son navegables. */
 type AbrirBloque = (bucket: OtDrilldownBucket, label: string) => void;
@@ -98,6 +109,12 @@ export function OtDashboard() {
     const controller = new AbortController();
 
     async function cargar() {
+      if (sinPermisoDeCola()) {
+        setPanel(null);
+        setMensajeError(null);
+        setEstado("sin-permiso");
+        return;
+      }
       setEstado("cargando");
       try {
         // El id del organismo sale del perfil, con la caché de sesión que ya usa el dock.
@@ -114,6 +131,10 @@ export function OtDashboard() {
         setEstado("listo");
       } catch (err) {
         if (controller.signal.aborted || (err as Error)?.name === "AbortError") return;
+        if (err instanceof ApiError && err.status === 403) {
+          setEstado("sin-permiso");
+          return;
+        }
         setMensajeError(
           err instanceof Error && err.message
             ? err.message
@@ -184,20 +205,24 @@ export function OtDashboard() {
           organismo={organismo}
           panel={estado === "listo" ? panel : null}
           banners={activeBanners}
-          className={estado === "error" ? "md:col-span-3" : "md:col-span-2"}
+          className={estado === "error" || estado === "sin-permiso" ? "md:col-span-3" : "md:col-span-2"}
         />
-        {estado !== "error" && (
+        {estado !== "error" && estado !== "sin-permiso" && (
           <PanelOperativoKpis panel={estado === "listo" ? panel : null} onAbrir={abrirBloque} />
         )}
       </div>
 
-      {estado === "error" ? (
+      {estado === "sin-permiso" ? (
+        <p role="status" className="rounded-2xl border border-[#DFE5ED] bg-white px-5 py-4 text-sm text-[#6B7280] dark:border-white/15 dark:bg-white/5 dark:text-white/70">
+          {MENSAJE_SIN_PERMISO_COLA}
+        </p>
+      ) : estado === "error" ? (
         <ErrorPanel message={mensajeError} onRetry={reintentar} />
       ) : (
         <PanelOperativoResto panel={estado === "listo" ? panel : null} onAbrir={abrirBloque} />
       )}
 
-      <PeriodoReciente transitOfficeId={params?.transitOfficeId} />
+      {estado !== "sin-permiso" && <PeriodoReciente transitOfficeId={params?.transitOfficeId} />}
 
       <DrilldownPanel
         state={drilldown}

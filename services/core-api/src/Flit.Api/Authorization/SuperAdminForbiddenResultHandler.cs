@@ -44,8 +44,11 @@ public sealed class SuperAdminForbiddenResultHandler : IAuthorizationMiddlewareR
 
             // Si el fallo incluye un PermissionRequirement, usar el formato de permisos (HU #10165).
             var failedRequirements = authorizeResult.AuthorizationFailure?.FailedRequirements;
+            // ModulePermissionRequirement (Feature #13105) es un permiso, no un rol: el mismo mensaje
+            // que PermissionRequirement. Si no, un 403 de reportes o de crear trámite decía «se requiere rol SuperAdmin».
             var isPermissionFailure = failedRequirements is not null
-                && failedRequirements.OfType<PermissionRequirement>().Any();
+                && (failedRequirements.OfType<PermissionRequirement>().Any()
+                    || failedRequirements.OfType<ModulePermissionRequirement>().Any());
 
             if (isPermissionFailure)
             {

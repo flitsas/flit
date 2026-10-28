@@ -1,6 +1,6 @@
 // HU #10236 — Layout hub: pestañas solo SuperAdmin; Admin OT navega por dock.
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { OtHubLayout } from "../OtHubLayout";
 
@@ -31,6 +31,7 @@ vi.mock("@/lib/api/admin-ot", () => ({
   }),
 }));
 
+import { fetchOtProfile } from "@/lib/api/admin-ot";
 import {
   fetchTransitOfficesOperationalStatus,
 } from "@/lib/api/admin-transit-office-tenants";
@@ -108,6 +109,18 @@ describe("OtHubLayout — HU #10236", () => {
       </OtHubLayout>,
     );
     expect(screen.queryByRole("tab", { name: "Preasignación" })).not.toBeInTheDocument();
+  });
+
+  it("Bug #14010 H-05: el Admin OT no consulta el estado operativo de organismos", async () => {
+    jwtMocks.isSuperAdmin.mockReturnValue(false);
+    jwtMocks.isOtUser.mockReturnValue(true);
+    render(
+      <OtHubLayout transitOfficeId="ot-1" activeTab="client-procedures" moduleTitle="Test OT">
+        <p>Contenido módulo</p>
+      </OtHubLayout>,
+    );
+    await waitFor(() => expect(fetchOtProfile).toHaveBeenCalled());
+    expect(fetchTransitOfficesOperationalStatus).not.toHaveBeenCalled();
   });
 
   it("Admin OT: no muestra pestañas ni volver al listado (navegación en dock)", () => {
