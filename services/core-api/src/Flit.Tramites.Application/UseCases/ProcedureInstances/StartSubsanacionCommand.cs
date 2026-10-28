@@ -1,3 +1,4 @@
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
@@ -10,7 +11,11 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// <c>subsanacion_activa</c>, incrementa el contador y captura el snapshot de campos como
 /// baseline del diff de re-radicación. NO cambia el status de negocio.
 /// </summary>
-public sealed class StartSubsanacionHandler(IProcedureInstanceRepository repo)
+/// <remarks>
+/// HU #14051: <paramref name="publisher"/> es opcional (sin él, el comportamiento es el de siempre). Con él, justo antes de
+/// guardar se avisa que se abrió la subsanación, en la misma unidad de trabajo (outbox).
+/// </remarks>
+public sealed class StartSubsanacionHandler(IProcedureInstanceRepository repo, ITramiteSubsanacionPublisher? publisher = null)
 {
     public async Task<(ProcedureInstanceSummary? Result, string? Error)> HandleAsync(
         Guid id,
@@ -53,6 +58,9 @@ public sealed class StartSubsanacionHandler(IProcedureInstanceRepository repo)
         // es una transición: antes se escribía una fila rechazado → rechazado solo para transportar
         // este snapshot, y el timeline del trámite la mostraba como un segundo rechazo.
         instance.SubsanacionBaseline = observation.ToJson();
+
+        if (publisher is not null)
+            await publisher.EnqueueAsync(instance, ct).ConfigureAwait(false);
 
         var committed = await repo.SaveChangesWithConcurrencyGuardAsync(ct).ConfigureAwait(false);
         if (!committed)

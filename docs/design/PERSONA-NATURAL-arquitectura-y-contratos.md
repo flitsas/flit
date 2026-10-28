@@ -925,3 +925,17 @@ El código de las ramas del portal se apartó de este documento en lo siguiente;
 - **Cotización:** tarifas en `admin.persona_natural_tariffs` (J1 mínimo, nace vacía); error `tarifa_no_vigente`; `ListarOrganismos`
   vive en `PersonaNaturalService` y no en `CatalogosGrpcService`.
 - **Front:** vive en el monorepo como `frontend-personanatural` (decisión del PO), no en el repo de referencia.
+- **Creación del trámite (HU #14050):** el consumidor de core-api (`Flit.Api/PersonaNatural/`) no corre en la transacción de la bandeja
+  del SDK: los casos de uso de FLIT 2 (gates del organismo) abren transacciones propias por tenant y no se anidan. Corre en un alcance
+  propio (conexión propia, un guardado por paso, como ICT); la idempotencia sale de `external_ref = solicitudId` (un reintento retoma
+  el borrador) y un rechazo posterior a la creación deja el borrador `anulado` con el código en su motivo. No hay `IntakePersonaNaturalHandler`
+  compartido con la fachada (la fachada no escribe trámites). No hubo DDL: `origin` y `external_ref` ya existían (ICT).
+- **Resultado y estado de vuelta (HU #14050 y #14051):** no se usa el exchange `flit.persona-natural` ni un `persona-natural-events.v1.yaml`: los
+  eventos `tramites.persona_natural.solicitud_resuelta` y `tramites.persona_natural.estado_cambiado` están en `tramites-events.v1.yaml`
+  (v1.3.0). `estado_cambiado` se deriva de `tramites.procedure.state_changed` (cola propia en core-api) y de la apertura de la
+  subsanación (que no es una transición: hook opcional `ITramiteSubsanacionPublisher` en `StartSubsanacionHandler`). El BFF actualiza
+  `procedure_status`, `rectification_*`, `reference_number` y `procedure_instance_id` con `status_history` (origen `flit2`) y ordena por
+  `ocurrioEn`; no se llama a `ObtenerEstadoTramite` por gRPC (el §4.5 lo proponía) porque el evento ya trae el indicador y el motivo.
+- **Feed de Flito (AC8):** el feed de sincronización externa y el despachador de avisos a FLITO excluyen la empresa «Persona Natural»;
+  el resto de empresas no cambia.
+- **Pendiente de D5:** `POST …/solicitudes/{id}/subsanar` (corregir y reenviar) y la regla `campo_no_editable` (AC4 y AC5).

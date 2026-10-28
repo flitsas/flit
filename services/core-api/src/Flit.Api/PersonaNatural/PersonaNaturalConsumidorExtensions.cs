@@ -37,6 +37,8 @@ internal static class PersonaNaturalConsumidorExtensions
         services.AddScoped<IPersonaNaturalRadicador, PersonaNaturalRadicacionHandler>();
         services.AddFlitConsumer<FlitDbContext, RadicacionSolicitadaConsumer, RadicacionSolicitadaDatos>(
             configuration, RadicacionSolicitadaConsumer.Cola, PersonaNaturalEventos.Productor, [PersonaNaturalEventos.RadicacionSolicitada]);
-        return services;
+
+        // HU #14051: espejo de estado de vuelta (cambios de estado y apertura de subsanación de los trámites del portal).
+        return services.AddPersonaNaturalEstadoDeVuelta(configuration);
     }
 }

@@ -91,6 +91,9 @@ public static class Program
         // HU #14044 y #14045: validación de identidad de las partes por enlace (fachada gRPC de core-api, espejo por evento).
         builder.Services.AddIdentidadPortal(builder.Configuration);
 
+        // HU #14050 y #14051: espejo de lo que core-api resuelve (trámite creado o rechazado) y de los cambios de estado del trámite.
+        builder.Services.AddEstadoDeVueltaPortal(builder.Configuration);
+
         // HU #14078: definición del tipo de trámite (estructura del wizard) desde la fachada de core-api.
         builder.Services.AddDefinicionesPortal();
 

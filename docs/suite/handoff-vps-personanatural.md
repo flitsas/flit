@@ -101,6 +101,30 @@ NOTIFICACIONES_REMOTO_ADDRESS=http://core-notificaciones:8085   # envío de la c
 - **Cadena de proveedores de «Persona Natural»:** hoy usa la de por defecto de core-consultas; se configura desde core-api.
 - **Organismos:** el catálogo solo ofrece los organismos con permiso (grant) para la empresa «Persona Natural».
 
+## 3c. Consumidor de core-api: crear el trámite y devolver su estado (HU #14050 y #14051)
+
+core-api consume `tramites.persona_natural.radicacion_solicitada`, lee la solicitud por pull al BFF (RPC
+`RadicacionService/ObtenerSolicitudParaRadicar`), crea el trámite con los casos de uso de FLIT 2 y publica
+`tramites.persona_natural.solicitud_resuelta` y `tramites.persona_natural.estado_cambiado`. **Apagado por defecto**: sin la
+bandera, core-api no registra colas, cliente ni publicador y se comporta exactamente como antes. Encender SOLO con la empresa
+«Persona Natural» creada (sección 3), el RabbitMQ del servicio (sección 2) y el bus de Trámites encendido
+(`Tramites__Bus__Habilitado=true`, ya lo está):
+
+```
+PersonaNatural__Consumidor__Habilitado=true                       # en core-api (hoy el compose no lo pasa: agregarlo al environment)
+PersonaNatural__Portal__Address=http://core-personanatural:8087   # gRPC del BFF (CORE_PERSONANATURAL_GRPC_PORT)
+PersonaNatural__Portal__DeadlineSegundos=15                       # opcional
+```
+
+- El cliente `svc-tramites` suma el scope `platform.personanatural.leer` (audiencia `personanatural`), ya declarado en
+  `appsettings.json` de core-api; requiere reiniciar core-api (y core-identity si emite los tokens por su cuenta).
+- Colas nuevas: en core-api `tramites.personanatural-radicacion` y `tramites.personanatural-estado` (cada una con su
+  `.dlq`); en el BFF `personanatural.resolucion` y `personanatural.estado`. Los mensajes agotados quedan en la `.dlq` de la
+  cola, visibles en la pantalla de mensajes muertos.
+- El usuario del broker del BFF necesita escritura en `flit.tramites` (`usuario-de-servicio.sh personanatural <clave> tramites`).
+- Si FLIT 2 todavía debe generar el FUR o la firma de la compraventa, el trámite queda creado en `borrador` (la solicitud
+  pasa a `creada` con ese estado); un rechazo de negocio deja el borrador `anulado` con el código en su motivo.
+
 ## 4. Secretos de datos personales y captcha
 
 ```
