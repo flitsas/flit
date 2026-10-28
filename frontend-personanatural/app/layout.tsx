@@ -14,7 +14,7 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: "FLIT 2.0",
+  title: "FLIT Persona Natural",
   description: "Trámites de tránsito 100% en línea.",
 };
 

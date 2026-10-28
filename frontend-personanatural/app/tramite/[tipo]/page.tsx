@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { PaginaTramite } from "@/components/tramite/PaginaTramite";
 
 export const metadata: Metadata = {
-  title: "Tu trámite | FLIT 2.0",
+  title: "Tu trámite | FLIT Persona Natural",
   robots: { index: false, follow: false },
 };
 
