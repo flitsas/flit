@@ -37,6 +37,11 @@ import {
   type TransitOfficeOperationalStatus,
 } from "@/lib/api/admin-transit-office-tenants";
 import {
+  columnasFiltroOtConfig,
+  filtrarOrganismosOtConfig,
+} from "@/lib/companies/ot-config-filtros";
+import { useTablaFiltros } from "@/lib/tablas/useTablaFiltros";
+import {
   otConfigPanelLegend,
   otConfigPanelReadOnly,
   type OtConfigPanelMode,
@@ -92,10 +97,16 @@ export function OTConfigTablePanel({
   const [operationalById, setOperationalById] = useState<Record<string, OtOperationalInfo>>({});
   const [policies, setPolicies] = useState<OtBlockingPolicy[]>([]);
   const [restrictions, setRestrictions] = useState<OtConsultationRestriction[]>([]);
-  const [prendaOptionalPolicies, setPrendaOptionalPolicies] = useState<OtPrendaDocumentPolicy[]>([]);
+  const [prendaOptionalPolicies, setPrendaOptionalPolicies] = useState<OtPrendaDocumentPolicy[]>(
+    [],
+  );
   const [configOffice, setConfigOffice] = useState<TransitOffice | null>(null);
   // Bug #13055 — tabla homologada con el modelo de trámites: filas por página elegibles.
-  const pg = usePaginacion();
+  const pg = usePaginacion("panels.OTConfigTablePanel");
+  // HU #14003 — filtros por columna (Organismo, Código, Estado y Convenio cuando la tabla lo pinta).
+  const columnasFiltro = useMemo(() => columnasFiltroOtConfig(!readOnly), [readOnly]);
+  const filtros = useTablaFiltros({ columnas: columnasFiltro, onCambio: () => pg.setPage(1) });
+  // Buscador de arriba (nombre o código): se combina con los embudos del encabezado.
   const [search, setSearch] = useState("");
   const [pendingGrant, setPendingGrant] = useState<PendingGrantAction | null>(null);
   const [grantBusy, setGrantBusy] = useState(false);
@@ -113,27 +124,39 @@ export function OTConfigTablePanel({
         // En Marca Blanca la lista se calcula como operables menos bloqueados: los grants no se usan.
         const needsGrants = !showMarcaBlocks && !marcaBlancaEditable;
 
-        const [catalog, grants, agreements, opStatus, blockingRows, restrictionRows, prendaRows, blocks] =
-          await Promise.all([
-            fetchTransitOffices(undefined, signal),
-            needsGrants
-              ? fetchTransitGrants(effectiveGrantsTenantId, signal)
-              : Promise.resolve({ transitOfficeIds: [] as string[] }),
-            needsPolicies
-              ? fetchTransitAgreements(tenantId, signal).catch(() => ({ transitOfficeIds: [] }))
-              : Promise.resolve({ transitOfficeIds: [] }),
-            fetchTransitOfficesOperationalStatus(signal).catch(
-              () => [] as TransitOfficeOperationalStatus[],
-            ),
-            needsPolicies ? fetchOtBlockingPolicies(tenantId, signal) : Promise.resolve([]),
-            needsPolicies ? fetchOtConsultationRestrictions(tenantId, signal) : Promise.resolve([]),
-            needsPolicies
-              ? fetchOtPrendaDocumentPolicies(tenantId, signal).catch(() => [] as OtPrendaDocumentPolicy[])
-              : Promise.resolve([]),
-            needsBlocks
-              ? fetchTransitBlocks(effectiveBlocksTenantId, signal).catch(() => ({ transitOfficeIds: [] }))
-              : Promise.resolve({ transitOfficeIds: [] }),
-          ]);
+        const [
+          catalog,
+          grants,
+          agreements,
+          opStatus,
+          blockingRows,
+          restrictionRows,
+          prendaRows,
+          blocks,
+        ] = await Promise.all([
+          fetchTransitOffices(undefined, signal),
+          needsGrants
+            ? fetchTransitGrants(effectiveGrantsTenantId, signal)
+            : Promise.resolve({ transitOfficeIds: [] as string[] }),
+          needsPolicies
+            ? fetchTransitAgreements(tenantId, signal).catch(() => ({ transitOfficeIds: [] }))
+            : Promise.resolve({ transitOfficeIds: [] }),
+          fetchTransitOfficesOperationalStatus(signal).catch(
+            () => [] as TransitOfficeOperationalStatus[],
+          ),
+          needsPolicies ? fetchOtBlockingPolicies(tenantId, signal) : Promise.resolve([]),
+          needsPolicies ? fetchOtConsultationRestrictions(tenantId, signal) : Promise.resolve([]),
+          needsPolicies
+            ? fetchOtPrendaDocumentPolicies(tenantId, signal).catch(
+                () => [] as OtPrendaDocumentPolicy[],
+              )
+            : Promise.resolve([]),
+          needsBlocks
+            ? fetchTransitBlocks(effectiveBlocksTenantId, signal).catch(() => ({
+                transitOfficeIds: [],
+              }))
+            : Promise.resolve({ transitOfficeIds: [] }),
+        ]);
 
         if (signal?.aborted) return;
 
@@ -154,7 +177,14 @@ export function OTConfigTablePanel({
         if (!signal?.aborted) setStatus("error");
       }
     },
-    [tenantId, readOnly, showMarcaBlocks, marcaBlancaEditable, effectiveBlocksTenantId, effectiveGrantsTenantId],
+    [
+      tenantId,
+      readOnly,
+      showMarcaBlocks,
+      marcaBlancaEditable,
+      effectiveBlocksTenantId,
+      effectiveGrantsTenantId,
+    ],
   );
 
   useEffect(() => {
@@ -167,7 +197,9 @@ export function OTConfigTablePanel({
   const handleToggleAgreement = async (officeId: string, active: boolean) => {
     await setTransitAgreement(tenantId, officeId, active);
     setAgreementIds((current) =>
-      active ? Array.from(new Set([...current, officeId])) : current.filter((id) => id !== officeId),
+      active
+        ? Array.from(new Set([...current, officeId]))
+        : current.filter((id) => id !== officeId),
     );
   };
 
@@ -179,7 +211,9 @@ export function OTConfigTablePanel({
         await addTransitBlock(tenantId, officeId);
       }
       setBlockedIds((current) =>
-        enabled ? current.filter((id) => id !== officeId) : Array.from(new Set([...current, officeId])),
+        enabled
+          ? current.filter((id) => id !== officeId)
+          : Array.from(new Set([...current, officeId])),
       );
       return;
     }
@@ -189,7 +223,9 @@ export function OTConfigTablePanel({
       await removeTransitGrant(tenantId, officeId);
     }
     setGrantedIds((current) =>
-      enabled ? Array.from(new Set([...current, officeId])) : current.filter((id) => id !== officeId),
+      enabled
+        ? Array.from(new Set([...current, officeId]))
+        : current.filter((id) => id !== officeId),
     );
   };
 
@@ -253,7 +289,15 @@ export function OTConfigTablePanel({
       const op = operationalById[office.id];
       return Boolean(op?.hasTenant && op.estadoActivo);
     });
-  }, [offices, grantedIds, operationalById, inheritedOnly, showMarcaBlocks, marcaBlancaEditable, blockedIds]);
+  }, [
+    offices,
+    grantedIds,
+    operationalById,
+    inheritedOnly,
+    showMarcaBlocks,
+    marcaBlancaEditable,
+    blockedIds,
+  ]);
 
   const displayGrantedIds = useMemo(() => {
     if (showMarcaBlocks) {
@@ -269,21 +313,23 @@ export function OTConfigTablePanel({
     return grantedIds;
   }, [showMarcaBlocks, marcaBlancaEditable, visibleOffices, inheritedOnly, grantedIds, blockedIds]);
 
-  // Bug #13055 — la búsqueda filtra la lista COMPLETA antes de paginar; antes filtraba solo las
-  // 10 filas de la página visible.
+  // Bug #13055 — la búsqueda y los embudos filtran la lista COMPLETA antes de paginar; antes
+  // filtraba solo las 10 filas de la página visible.
   const searchedOffices = useMemo(
-    () => visibleOffices.filter((office) => officeMatchesSearch(office, search)),
-    [visibleOffices, search],
+    () =>
+      filtrarOrganismosOtConfig(
+        visibleOffices.filter((office) => officeMatchesSearch(office, search)),
+        filtros.condicionesTotales,
+        "",
+        new Set(displayGrantedIds),
+        new Set(readOnly ? [] : agreementIds),
+      ),
+    [visibleOffices, search, filtros.condicionesTotales, displayGrantedIds, readOnly, agreementIds],
   );
 
   const lastPage = Math.max(1, Math.ceil(searchedOffices.length / pg.pageSize));
   const safePage = Math.min(pg.page, lastPage);
   const pageOffices = pg.paginar(searchedOffices);
-
-  const handleSearchChange = (value: string) => {
-    setSearch(value);
-    pg.setPage(1);
-  };
 
   const handleToggleBlocking = async (
     transitOfficeId: string,
@@ -292,7 +338,9 @@ export function OTConfigTablePanel({
   ) => {
     await setOtBlockingPolicy(tenantId, transitOfficeId, criterion, blocks);
     setPolicies((current) => [
-      ...current.filter((p) => !(p.transitOfficeId === transitOfficeId && p.criterion === criterion)),
+      ...current.filter(
+        (p) => !(p.transitOfficeId === transitOfficeId && p.criterion === criterion),
+      ),
       { transitOfficeId, criterion, blocks },
     ]);
   };
@@ -304,7 +352,9 @@ export function OTConfigTablePanel({
   ) => {
     await setOtConsultationRestriction(tenantId, transitOfficeId, kind, enabled);
     setRestrictions((current) => [
-      ...current.filter((r) => !(r.transitOfficeId === transitOfficeId && r.consultationKind === kind)),
+      ...current.filter(
+        (r) => !(r.transitOfficeId === transitOfficeId && r.consultationKind === kind),
+      ),
       { transitOfficeId, consultationKind: kind, enabled },
     ]);
   };
@@ -328,7 +378,10 @@ export function OTConfigTablePanel({
       {legend && (
         <div
           className="mb-3 flex items-start gap-2 rounded-xl border px-3 py-2 text-xs"
-          style={{ borderColor: "#DFE5ED", background: "color-mix(in srgb, var(--color-flit-brand) 4%, transparent)" }}
+          style={{
+            borderColor: "#DFE5ED",
+            background: "color-mix(in srgb, var(--color-flit-brand) 4%, transparent)",
+          }}
           role="note"
           aria-live="polite"
         >
@@ -340,35 +393,39 @@ export function OTConfigTablePanel({
       {status === "loading" ? (
         <CarLoaderModal label="Cargando organismos de tránsito…" />
       ) : (
-      <UiStateBoundary
-        status={status === "ready" && visibleOffices.length === 0 ? "empty" : status}
-        onRetry={() => void load()}
-        emptyMessage={emptyMessage}
-        errorMessage="No se pudieron cargar los organismos de tránsito."
-        skeletonRows={4}
-      >
-        <OTConfigTable
-          offices={pageOffices}
-          grantedIds={displayGrantedIds}
-          agreementIds={readOnly ? [] : agreementIds}
-          onToggleAgreement={readOnly ? undefined : handleToggleAgreement}
-          operationalById={operationalById}
-          onToggleGrant={readOnly ? async () => {} : requestGrantToggle}
-          onOpenConfig={readOnly ? () => {} : (office) => setConfigOffice(office)}
-          onError={(message) => show(message, "error")}
-          readOnly={readOnly}
-          search={search}
-          onSearchChange={handleSearchChange}
-        />
-        <Pagination
-          page={safePage}
-          pageSize={pg.pageSize}
-          totalCount={searchedOffices.length}
-          onPageChange={pg.setPage}
-          onPageSizeChange={pg.setPageSize}
-          noun="organismos"
-        />
-      </UiStateBoundary>
+        <UiStateBoundary
+          status={status === "ready" && visibleOffices.length === 0 ? "empty" : status}
+          onRetry={() => void load()}
+          emptyMessage={emptyMessage}
+          errorMessage="No se pudieron cargar los organismos de tránsito."
+          skeletonRows={4}
+        >
+          <OTConfigTable
+            offices={pageOffices}
+            grantedIds={displayGrantedIds}
+            agreementIds={readOnly ? [] : agreementIds}
+            onToggleAgreement={readOnly ? undefined : handleToggleAgreement}
+            operationalById={operationalById}
+            onToggleGrant={readOnly ? async () => {} : requestGrantToggle}
+            onOpenConfig={readOnly ? () => {} : (office) => setConfigOffice(office)}
+            onError={(message) => show(message, "error")}
+            readOnly={readOnly}
+            search={search}
+            onSearchChange={(value) => {
+              setSearch(value);
+              pg.setPage(1);
+            }}
+            filtros={filtros}
+          />
+          <Pagination
+            page={safePage}
+            pageSize={pg.pageSize}
+            totalCount={searchedOffices.length}
+            onPageChange={pg.setPage}
+            onPageSizeChange={pg.setPageSize}
+            noun="organismos"
+          />
+        </UiStateBoundary>
       )}
 
       {showMarcaBlocks && (

@@ -172,12 +172,35 @@ public sealed class TramiteTransitionPolicyTests
     [Theory]
     [InlineData("preasignacion", false)]
     [InlineData("entregado", true)]
+    [InlineData("preparado", true)]
     public void Ac5_RechazadoDirecto_SinSubsanacionActiva_SeRechaza(string to, bool tienePlaca)
     {
         var verdict = TramiteTransitionPolicy.Evaluate(
             TramiteEstado.Rechazado, to, Ctx(TramiteActor.Gestor, tienePlaca: tienePlaca, subsanacion: false));
 
         verdict.ErrorCode.Should().Be(TramiteEstadoErrores.TransicionNoPermitida);
+    }
+
+    [Fact]
+    public void Bug13912_RechazadoAPreparado_ConSubsanacion_Gestor_Permitida()
+    {
+        var verdict = TramiteTransitionPolicy.Evaluate(
+            TramiteEstado.Rechazado,
+            TramiteEstado.Preparado,
+            Ctx(TramiteActor.Gestor, pidePlaca: false, subsanacion: true));
+
+        verdict.Allowed.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Bug13912_RechazadoAPreparado_Ot_Denegada()
+    {
+        var verdict = TramiteTransitionPolicy.Evaluate(
+            TramiteEstado.Rechazado,
+            TramiteEstado.Preparado,
+            Ctx(TramiteActor.Ot, pidePlaca: false, subsanacion: true));
+
+        verdict.ErrorCode.Should().Be(TramiteEstadoErrores.TransicionSoloGestor);
     }
 
     [Theory]

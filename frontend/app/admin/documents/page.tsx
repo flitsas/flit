@@ -52,7 +52,7 @@ function DocumentsCatalog() {
   const router = useRouter();
   const { show } = useToast();
   // Bug #13055 — tabla homologada con el modelo de trámites: filas por página elegibles.
-  const { page, pageSize, setPage, setPageSize } = usePaginacion();
+  const { page, pageSize, setPage, setPageSize } = usePaginacion("admin.documents");
   const [draftFilters, setDraftFilters] = useState<DocumentTypeCatalogFilters>(EMPTY_DOCUMENT_TYPE_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState<DocumentTypeCatalogFilters>(EMPTY_DOCUMENT_TYPE_FILTERS);
   const [status, setStatus] = useState<UiStatus>("loading");

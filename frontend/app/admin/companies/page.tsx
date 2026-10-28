@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Building2 } from "lucide-react";
 import { CreateButton } from "@/components/atom/CreateButton";
@@ -13,6 +13,7 @@ import {
   CompanyFiltersPanel,
   type CompanyFilters,
 } from "@/components/admin/companies/CompanyFiltersPanel";
+import { COLUMNAS_LISTADO_COMPANIAS } from "@/components/admin/companies/company-filter-columns";
 import { CompanyListTable } from "@/components/admin/companies/CompanyListTable";
 import { CompanyStatusDialog } from "@/components/admin/companies/CompanyStatusDialog";
 import { CreateCompanyDialog } from "@/components/admin/companies/CreateCompanyDialog";
@@ -24,10 +25,16 @@ import {
   fetchCompanyChildren,
   updateCompany,
 } from "@/lib/api/admin-companies";
-import { isHeadTenantType, type CompanyListItem, type CompanyPagedResult } from "@/lib/api/types";
+import {
+  isHeadTenantType,
+  type CompaniesIndexParams,
+  type CompanyListItem,
+  type CompanyPagedResult,
+} from "@/lib/api/types";
+import { condicionesAParams } from "@/lib/tablas/filtrar-filas";
+import { useTablaFiltros } from "@/lib/tablas/useTablaFiltros";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ADMIN_BACK_LINK_CLS, ADMIN_CONTENT_SURFACE_CLS } from "@/components/admin/admin-ui-styles";
-
 
 // Consola admin — listado de compañías (HU #10194, AC1/AC7) + alta de compañías
 // (#10118). Filtrado y paginación server-side; 4 estados UI vía UiStateBoundary.
@@ -44,9 +51,32 @@ function CompaniesList() {
   const router = useRouter();
   const { show } = useToast();
   const { isSuperAdmin, isAdminCompany, tenantId } = usePermissions();
-  const [filters, setFilters] = useState<CompanyFilters>({});
   // Bug #13055 — tabla homologada con el modelo de trámites: filas por página elegibles.
-  const { page, pageSize, setPage, setPageSize } = usePaginacion();
+  const { page, pageSize, setPage, setPageSize } = usePaginacion("admin.companies");
+  // Panel de consulta de siempre (NIT, Razón social, Estado, fechas): se confirma con «Buscar».
+  const [filters, setFilters] = useState<CompanyFilters>({});
+  const [panelKey, setPanelKey] = useState(0);
+  // HU #13999 — filtros por columna (embudo del encabezado, estándar HU #13997), resueltos en el
+  // servidor. Se combinan con AND con el panel; si ambos fijan el mismo parámetro gana la columna.
+  // «Limpiar filtros» (vacío de la tabla) quita SOLO los de columna; el «Limpiar» del panel, los suyos.
+  const filtros = useTablaFiltros({
+    columnas: COLUMNAS_LISTADO_COMPANIAS,
+    onCambio: () => setPage(1),
+  });
+  const filterParams = useMemo<CompaniesIndexParams>(() => {
+    const raw = condicionesAParams(filtros.condicionesTotales, COLUMNAS_LISTADO_COMPANIAS);
+    const { estadoActivo, ...rest } = raw;
+    // Estado es booleano: Activa + Inactiva a la vez = la columna no filtra estado.
+    const estado =
+      estadoActivo === "true" || estadoActivo === "false"
+        ? estadoActivo === "true"
+        : filters.estadoActivo;
+    return {
+      ...filters,
+      ...rest,
+      ...(estado === undefined ? {} : { estadoActivo: estado }),
+    };
+  }, [filtros.condicionesTotales, filters]);
   // HU #11227 — solo SuperAdmin; desactivado = excluir OT (default).
   const [includeTransitOffices, setIncludeTransitOffices] = useState(false);
   const [status, setStatus] = useState<UiStatus>("loading");
@@ -72,7 +102,7 @@ function CompaniesList() {
       try {
         const data = await fetchCompaniesIndex(
           {
-            ...filters,
+            ...filterParams,
             page,
             pageSize,
             // SuperAdmin: toggle; cualquier otro caso (defensa) excluye OT.
@@ -91,7 +121,7 @@ function CompaniesList() {
         }
       }
     },
-    [filters, page, pageSize, includeTransitOffices, isSuperAdmin, isAdminCompany],
+    [filterParams, page, pageSize, includeTransitOffices, isSuperAdmin, isAdminCompany],
   );
 
   useEffect(() => {
@@ -106,7 +136,9 @@ function CompaniesList() {
     setEditTarget(company);
     if (isHeadTenantType(company.tenantType)) {
       void fetchCompanyChildren(company.id)
-        .then((children) => setEditActiveChildrenCount(children.filter((c) => c.estadoActivo).length))
+        .then((children) =>
+          setEditActiveChildrenCount(children.filter((c) => c.estadoActivo).length),
+        )
         .catch(() => setEditActiveChildrenCount(0));
     } else {
       setEditActiveChildrenCount(0);
@@ -118,22 +150,36 @@ function CompaniesList() {
     setFilters(next);
   };
 
+  const hayFiltrosActivos = filtros.hayFiltros || Object.keys(filters).length > 0;
+  // «Limpiar filtros» del vacío quita SOLO los de columna; si no hay ninguno (el vacío viene del panel
+  // superior) limpia el panel para que el botón nunca quede sin efecto.
+  const limpiarVacio = () => {
+    if (filtros.hayFiltros) {
+      filtros.limpiar();
+      return;
+    }
+    setFilters({});
+    setPanelKey((k) => k + 1);
+    setPage(1);
+  };
+
   const handleCreated = (razonSocial: string) => {
     setCreateOpen(false);
     show(`Compañía «${razonSocial}» creada.`, "success");
     // Vuelve a la primera página (orden por fecha DESC → la nueva aparece arriba).
-    setPage(1);
+    const habiaFiltros = filtros.hayFiltros || Object.keys(filters).length > 0;
+    filtros.limpiar();
     setFilters({});
-    void load();
+    setPanelKey((k) => k + 1);
+    setPage(1);
+    if (!habiaFiltros && page === 1) void load();
   };
 
   // Reemplaza la fila tocada con la compañía ya actualizada (update optimista local:
   // evita recargar todo el listado solo por un cambio de estado).
   const handleStatusConfirmed = (updated: CompanyListItem) => {
     setResult((prev) =>
-      prev
-        ? { ...prev, data: prev.data.map((c) => (c.id === updated.id ? updated : c)) }
-        : prev,
+      prev ? { ...prev, data: prev.data.map((c) => (c.id === updated.id ? updated : c)) } : prev,
     );
     setToggleTarget(null);
     show(
@@ -145,9 +191,7 @@ function CompaniesList() {
   // Reemplaza la fila editada con la compañía actualizada (update optimista local).
   const handleEdited = (updated: CompanyListItem) => {
     setResult((prev) =>
-      prev
-        ? { ...prev, data: prev.data.map((c) => (c.id === updated.id ? updated : c)) }
-        : prev,
+      prev ? { ...prev, data: prev.data.map((c) => (c.id === updated.id ? updated : c)) } : prev,
     );
     setEditTarget(null);
     show(`Compañía «${updated.razonSocial}» actualizada.`, "success");
@@ -162,7 +206,13 @@ function CompaniesList() {
       <ModuleTitle
         title="Administración de compañías"
         subtitle="Parametriza políticas operativas y supervisa la auditoría de cada compañía B2B."
-        action={<CreateButton label="Crear compañía" icon={Building2} onClick={() => setCreateOpen(true)} />}
+        action={
+          <CreateButton
+            label="Crear compañía"
+            icon={Building2}
+            onClick={() => setCreateOpen(true)}
+          />
+        }
       />
 
       {isSuperAdmin && (
@@ -178,32 +228,34 @@ function CompaniesList() {
         />
       )}
 
-      <CompanyFiltersPanel onApply={handleApplyFilters} initialValue={filters} />
+      <CompanyFiltersPanel key={panelKey} onApply={handleApplyFilters} initialValue={filters} />
 
       <div className={ADMIN_CONTENT_SURFACE_CLS}>
         {status === "loading" ? (
           <CarLoaderModal label="Cargando compañías…" />
         ) : (
-        <UiStateBoundary
-          status={status}
-          onRetry={() => void load()}
-          emptyMessage="No se encontraron compañías B2B con los filtros aplicados."
-          errorMessage="No se pudo cargar el listado de compañías."
-        >
-          {result && (
-            <CompanyListTable
-              items={result.data}
-              totalCount={result.totalCount}
-              page={result.page}
-              pageSize={result.pageSize}
-              onPageChange={setPage}
-              onPageSizeChange={setPageSize}
-              onConfigure={(tenantId) => router.push(`/admin/companies/${tenantId}`)}
-              onEdit={openEdit}
-              onToggleStatus={setToggleTarget}
-            />
-          )}
-        </UiStateBoundary>
+          <UiStateBoundary
+            status={status === "empty" && hayFiltrosActivos ? "ready" : status}
+            onRetry={() => void load()}
+            emptyMessage="No se encontraron compañías B2B con los filtros aplicados."
+            errorMessage="No se pudo cargar el listado de compañías."
+          >
+            {result && (
+              <CompanyListTable
+                items={result.data}
+                totalCount={result.totalCount}
+                page={result.page}
+                pageSize={result.pageSize}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                onConfigure={(tenantId) => router.push(`/admin/companies/${tenantId}`)}
+                onEdit={openEdit}
+                onToggleStatus={setToggleTarget}
+                filtros={filtros}
+                onLimpiarFiltros={hayFiltrosActivos ? limpiarVacio : undefined}
+              />
+            )}
+          </UiStateBoundary>
         )}
       </div>
 

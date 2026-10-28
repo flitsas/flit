@@ -31,6 +31,7 @@ public sealed class SubmitProcedureInstanceTests
     private readonly IProcedureTypeRepository _typeRepo = Substitute.For<IProcedureTypeRepository>();
     private readonly ITransitOfficeGrantGate _grantGate = Substitute.For<ITransitOfficeGrantGate>();
     private readonly IOtOperabilityGate _operabilityGate = Substitute.For<IOtOperabilityGate>();
+    private readonly ITransitOfficeQuipuxCanalReader _quipuxCanal = Substitute.For<ITransitOfficeQuipuxCanalReader>();
     private readonly RecordingTransitionRecorder _recorder = new();
     private readonly RecordingTransitionPublisher _publisher = new();
     private readonly SubmitProcedureInstanceHandler _sut;
@@ -46,6 +47,10 @@ public sealed class SubmitProcedureInstanceTests
             .IsOperableAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(true);
         _repo.SaveChangesWithConcurrencyGuardAsync(Arg.Any<CancellationToken>()).Returns(true);
+        // Por defecto: OT sin integración Quipux (como Funza/Manizales en QA sin DIVIPO/flags).
+        _quipuxCanal
+            .GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns((TransitOfficeQuipuxCanal?)null);
 
         var lifecycle = new TramiteLifecycleService(
             _repo,
@@ -56,7 +61,7 @@ public sealed class SubmitProcedureInstanceTests
             _recorder,
             _publisher);
         _sut = new SubmitProcedureInstanceHandler(
-            lifecycle, _repo, NullLogger<SubmitProcedureInstanceHandler>.Instance);
+            lifecycle, _repo, NullLogger<SubmitProcedureInstanceHandler>.Instance, _quipuxCanal);
     }
 
     private static ProcedureInstance Instance(Guid id, Guid tenantId, string status) =>
@@ -603,12 +608,153 @@ public sealed class SubmitProcedureInstanceTests
             _repo, Substitute.For<IExpedienteConsolidadoMerger>(), Substitute.For<IAttachmentStorage>(),
             Substitute.For<IImprontaManualStamper>());
         var sutConFirma = new SubmitProcedureInstanceHandler(
-            lifecycle, _repo, NullLogger<SubmitProcedureInstanceHandler>.Instance, firmaImpronta);
+            lifecycle, _repo, NullLogger<SubmitProcedureInstanceHandler>.Instance, _quipuxCanal, firmaImpronta);
 
         var (result, error) = await sutConFirma.HandleAsync(id, tenantId, changedBy: null, ct);
 
         error.Should().BeNull();
         result!.Status.Should().Be(TramiteEstado.Entregado);
         await _repo.Received(1).GetByIdWithFurGraphAsync(id, tenantId, Arg.Any<CancellationToken>());
+    }
+
+    // ── Bug #13912 — canal Quipux solo si el OT destino está integrado ─────────────
+
+    /// <summary>
+    /// Clona el tipo con bloque <c>quipux</c> + familia — no mutar el singleton de
+    /// <see cref="ProcedureTypeFixture"/> (contaminaría el resto de la suite).
+    /// </summary>
+    private static void MarcarTipoConBloqueQuipux(ProcedureInstance instance)
+    {
+        var original = instance.ProcedureType
+            ?? throw new InvalidOperationException("La instancia de prueba requiere ProcedureType.");
+        instance.ProcedureType = new ProcedureType
+        {
+            Id = original.Id,
+            Code = original.Code,
+            Name = original.Name,
+            Family = original.Family,
+            GateProfile = original.GateProfile,
+            Steps = original.Steps,
+            PublicationStatus = original.PublicationStatus,
+            WizardEnabled = original.WizardEnabled,
+            CreatedAt = original.CreatedAt,
+            ExternalRefs =
+                """{"quipux":{"tipoTramite":"MATRICULA","codigoTramite":"01","familia":"MATRICULA"}}""",
+        };
+    }
+
+    private void WireOtIntegradoQuipux(ProcedureInstance instance, CancellationToken ct)
+    {
+        var otId = Guid.NewGuid();
+        instance.TransitOfficeId = otId;
+        MarcarTipoConBloqueQuipux(instance);
+        _quipuxCanal
+            .GetAsync(otId, ct)
+            .Returns(new TransitOfficeQuipuxCanal("05001", QuipuxRegistration: true, QuipuxTransfer: false, QuipuxOther: false));
+        Wire(instance, ct);
+    }
+
+    [Fact]
+    public async Task HandleAsync_Quipux_OtIntegrado_DesdeBorrador_QuedaEnPreparado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = ConPlaca(FullyGated(id, tenantId));
+        WireOtIntegradoQuipux(instance, ct);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
+
+        error.Should().BeNull();
+        result!.Status.Should().Be(TramiteEstado.Preparado);
+        instance.Status.Should().Be(TramiteEstado.Preparado);
+        _recorder.Records.Should().ContainSingle(r =>
+            r.FromStatus == TramiteEstado.Borrador && r.ToStatus == TramiteEstado.Preparado);
+        _recorder.Records.Should().NotContain(r => r.ToStatus == TramiteEstado.Entregado);
+    }
+
+    [Fact]
+    public async Task HandleAsync_Quipux_OtIntegrado_YaPreparado_EsIdempotente()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = ConPlaca(FullyGated(id, tenantId));
+        WireOtIntegradoQuipux(instance, ct);
+        instance.Status = TramiteEstado.Preparado;
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
+
+        error.Should().BeNull();
+        result!.Status.Should().Be(TramiteEstado.Preparado);
+        _recorder.Records.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task HandleAsync_Quipux_OtIntegrado_ReRadicarDesdeRechazado_QuedaEnPreparado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = ConPlaca(FullyGated(id, tenantId));
+        WireOtIntegradoQuipux(instance, ct);
+        instance.Status = TramiteEstado.Rechazado;
+        instance.SubsanacionActiva = true;
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
+
+        error.Should().BeNull();
+        result!.Status.Should().Be(TramiteEstado.Preparado);
+        instance.SubsanacionActiva.Should().BeFalse("reabrir a preparado cierra la ventana de subsanación");
+        _recorder.Records.Should().ContainSingle(r =>
+            r.FromStatus == TramiteEstado.Rechazado && r.ToStatus == TramiteEstado.Preparado);
+        _recorder.Records.Should().NotContain(r => r.ToStatus == TramiteEstado.Entregado);
+    }
+
+    [Fact]
+    public async Task HandleAsync_TipoConBloqueQuipux_PeroOtSinIntegrar_RadicaAEntregado()
+    {
+        // Caso QA Funza/Sabaneta: tipo MATRICULA_NUEVA tiene external_refs.quipux, pero el OT
+        // no tiene DIVIPO ni banderas → canal gestor → entregado (no atrapar en preparado).
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var otId = Guid.NewGuid();
+        var instance = ConPlaca(FullyGated(id, tenantId));
+        instance.TransitOfficeId = otId;
+        MarcarTipoConBloqueQuipux(instance);
+        _quipuxCanal
+            .GetAsync(otId, ct)
+            .Returns(new TransitOfficeQuipuxCanal(null, false, false, false));
+        Wire(instance, ct);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
+
+        error.Should().BeNull();
+        result!.Status.Should().Be(TramiteEstado.Entregado);
+        _recorder.Records.Should().Contain(r => r.ToStatus == TramiteEstado.Entregado);
+    }
+
+    [Fact]
+    public async Task HandleAsync_YaPreparado_OtSinIntegrar_AlReenviarPasaAEntregado()
+    {
+        // Remediación de trámites atrapados tras el falso positivo del submit.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var otId = Guid.NewGuid();
+        var instance = ConPlaca(FullyGated(id, tenantId));
+        instance.TransitOfficeId = otId;
+        instance.Status = TramiteEstado.Preparado;
+        MarcarTipoConBloqueQuipux(instance);
+        _quipuxCanal
+            .GetAsync(otId, ct)
+            .Returns(new TransitOfficeQuipuxCanal("", false, false, false));
+        Wire(instance, ct);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
+
+        error.Should().BeNull();
+        result!.Status.Should().Be(TramiteEstado.Entregado);
     }
 }

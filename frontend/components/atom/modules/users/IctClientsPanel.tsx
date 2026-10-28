@@ -72,7 +72,7 @@ function parseScopes(scopes: string): string {
 }
 
 export function IctClientsPanel({ isSuperAdmin, tenantId }: Props) {
-  const pg = usePaginacion();
+  const pg = usePaginacion("users.IctClientsPanel");
   const [clients, setClients] = useState<IctClient[]>([]);
   const [status, setStatus] = useState<UiStatus>("loading");
   const [companies, setCompanies] = useState<CompanyListItem[]>([]);

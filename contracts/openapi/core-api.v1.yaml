@@ -415,6 +415,26 @@ paths:
           required: false
           schema: { type: string }
           description: Coincidencia parcial e insensible a mayúsculas sobre la razón social.
+        - name: codigo
+          in: query
+          required: false
+          schema: { type: string }
+          description: Coincidencia parcial e insensible a mayúsculas sobre el código de compañía (COMP-XXXX).
+        - name: tenantType
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [RENTING, CONCESIONARIO, FLIT, CONCESION, MARCA_BLANCA]
+          description: >
+            Tipo(s) de compañía (selección múltiple, OR). Se acepta repetido
+            (`tenantType=RENTING&tenantType=FLIT`) o separado por comas
+            (`tenantType=RENTING,FLIT`); insensible a mayúsculas. Un valor fuera del catálogo
+            responde 422 sin ejecutar la consulta.
         - name: estadoActivo
           in: query
           required: false
@@ -460,6 +480,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: "tenantType fuera del catálogo; cuerpo `{ errors: [{ field: \"tenantType\", message }] }`."
 
   /api/v1/admin/transit-offices/{transitOfficeId}/mandate-signers/{mandateSignerId}:
     delete:
@@ -4559,9 +4581,48 @@ paths:
           in: query
           required: false
           schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: fechaDesde
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          description: Día local America/Bogota inicial, inclusivo (yyyy-MM-dd).
+        - name: fechaHasta
+          in: query
+          required: false
+          schema: { type: string, format: date }
+          description: Día local America/Bogota final, inclusivo (incluye todo ese día).
+        - name: campo
+          in: query
+          required: false
+          schema: { type: string }
+          description: Campo modificado (contiene, sin distinguir mayúsculas; sobre fieldName o entityName).
+        - name: valorAnterior
+          in: query
+          required: false
+          schema: { type: string }
+          description: Valor anterior (contiene, sin distinguir mayúsculas).
+        - name: campoClaves
+          in: query
+          required: false
+          schema: { type: string }
+          description: >-
+            Claves técnicas separadas por comas (máx. 50, 422 si se excede). Se suman por OR a `campo`:
+            coincide si lower(fieldName) o lower(entityName) es igual a alguna. Vacías se ignoran.
+        - name: valorAnteriorAlternativas
+          in: query
+          required: false
+          schema: { type: string }
+          description: >-
+            Textos alternativos separados por comas (máx. 50, 422 si se excede). Se suman por OR a
+            `valorAnterior` (contiene, sin distinguir mayúsculas).
+        - name: operador
+          in: query
+          required: false
+          schema: { type: string }
+          description: Operador (contiene, sin distinguir mayúsculas; id de usuario, nombre o correo).
       responses:
         "200":
-          description: Página del historial de auditoría.
+          description: Página del historial de auditoría (totalCount sobre el resultado filtrado).
           content:
             application/json:
               schema:
@@ -4574,6 +4635,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: fechaDesde posterior a fechaHasta.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorResponse"
 
   /api/v1/admin/companies/{tenantId}/ot-consultation-restrictions:
     parameters:

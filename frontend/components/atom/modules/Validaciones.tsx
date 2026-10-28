@@ -6,7 +6,6 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
   type ReactNode,
 } from 'react';
 import {
@@ -109,6 +108,7 @@ import type {
 import { familiaLabel } from '@/lib/api/types/familia-labels';
 
 import { ZONA_COLOMBIA, formatFechaHora } from '@/lib/format/date';
+import { useTamanoDePagina } from '@/components/atom/usePaginacion';
 /**
 
  * Módulo ÚNICO de Identidad: validaciones y prevalidaciones viven aquí (antes había una pantalla
@@ -199,28 +199,8 @@ function vigenciaBadge(dias: number | null): { label: string; color: string; bg:
 /** Cadencia del auto-refresco en vivo de la grilla (fase 2). 15 s: fresco sin presionar el backend. */
 const AUTO_REFRESH_MS = 15_000;
 
-/**
- * HU #12707 (AC9) — mismo pie que Trámites: 10, 25, 50 o 100 filas, recordado durante la sesión
- * (`sessionStorage`, no preferencia de servidor: es una comodidad del rato).
- */
-const TAMANOS_DE_PAGINA = [10, 25, 50, 100] as const;
-const PAGE_SIZE_POR_DEFECTO = 10;
-const CLAVE_PAGE_SIZE = 'identidad.pageSize';
-
-function suscripcionInerte(): () => void {
-  return () => {};
-}
-
-function leerPageSizeGuardado(): number {
-  try {
-    const guardado = Number(sessionStorage.getItem(CLAVE_PAGE_SIZE));
-    return TAMANOS_DE_PAGINA.includes(guardado as (typeof TAMANOS_DE_PAGINA)[number])
-      ? guardado
-      : PAGE_SIZE_POR_DEFECTO;
-  } catch {
-    return PAGE_SIZE_POR_DEFECTO;
-  }
-}
+/** Tabla para recordar «Filas por página» en la sesión (estándar de toda tabla, HU #13917). */
+const CLAVE_TABLA = 'identidad.validaciones';
 
 /** Retardo del buscador: se aplica al dejar de teclear, como hacía el panel anterior. */
 const SEARCH_DEBOUNCE_MS = 300;
@@ -556,9 +536,7 @@ function ValidacionesLista({
   // Paginación server-side (el listado ya NO se topa a 500; se navega por páginas).
   const [page, setPage] = useState(1);
   // Tamaño recordado en la sesión; se lee sin efecto (mismo patrón que Trámites).
-  const pageSizeGuardado = useSyncExternalStore(suscripcionInerte, leerPageSizeGuardado, () => PAGE_SIZE_POR_DEFECTO);
-  const [pageSizeElegido, setPageSizeElegido] = useState<number | null>(null);
-  const pageSize = pageSizeElegido ?? pageSizeGuardado;
+  const [pageSize, recordarPageSize] = useTamanoDePagina(CLAVE_TABLA);
   const [total, setTotal] = useState(0);
   const pageRef = useRef(page);
   pageRef.current = page;
@@ -842,12 +820,7 @@ function ValidacionesLista({
 
   const handlePageChange = useCallback((p: number) => setPage(Math.max(1, p)), []);
   const handlePageSizeChange = useCallback((size: number) => {
-    setPageSizeElegido(size);
-    try {
-      sessionStorage.setItem(CLAVE_PAGE_SIZE, String(size));
-    } catch {
-      /* ventana privada: se recuerda solo en memoria */
-    }
+    recordarPageSize(size);
     setPage(1); // cambiar el tamaño reinicia a la primera página
   }, []);
 

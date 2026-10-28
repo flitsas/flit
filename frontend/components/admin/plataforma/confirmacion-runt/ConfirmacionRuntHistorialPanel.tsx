@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Download, RefreshCw } from "lucide-react";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
@@ -25,24 +25,11 @@ import { formatFechaHora } from "@/lib/format/date";
 import { HISTORIAL_EXPORT_COLUMNS, HISTORIAL_EXPORT_IDS, proveedorLabel, VERDICT_TONE, vehiculoDe } from "./historial-columns";
 import { IntentoDetalle } from "./IntentoDetalle";
 import { UltimaCorridaResumen } from "./UltimaCorridaResumen";
+import { useTamanoDePagina } from "@/components/atom/usePaginacion";
 
-/** Mismos tamaños que /tramites; el elegido se recuerda durante la sesión (sessionStorage, con guarda). */
-const TAMANOS_DE_PAGINA = [10, 25, 50, 100] as const;
-const PAGE_SIZE_POR_DEFECTO = 10;
-const CLAVE_PAGE_SIZE = "confirmacion-runt.historial.pageSize";
+/** Tabla para recordar «Filas por página» en la sesión (estándar de toda tabla, HU #13917). */
+const CLAVE_TABLA = "plataforma.confirmacionRunt.historial";
 
-function suscripcionInerte(): () => void {
-  return () => {};
-}
-
-function leerPageSizeGuardado(): number {
-  try {
-    const guardado = Number(sessionStorage.getItem(CLAVE_PAGE_SIZE));
-    return TAMANOS_DE_PAGINA.includes(guardado as (typeof TAMANOS_DE_PAGINA)[number]) ? guardado : PAGE_SIZE_POR_DEFECTO;
-  } catch {
-    return PAGE_SIZE_POR_DEFECTO;
-  }
-}
 const VERDICTS: RuntConfirmationVerdict[] = ["confirmed", "pending", "discrepancy", "unverifiable", "error"];
 
 type Estado = "loading" | "error" | "ready";
@@ -111,11 +98,8 @@ export function ConfirmacionRuntHistorialPanel() {
   const [exportando, setExportando] = useState(false);
   const [exportAviso, setExportAviso] = useState<string | null>(null);
 
-  // Tamaño de página como en /tramites: se lee con useSyncExternalStore porque sessionStorage no
-  // existe en el render del servidor.
-  const pageSizeGuardado = useSyncExternalStore(suscripcionInerte, leerPageSizeGuardado, () => PAGE_SIZE_POR_DEFECTO);
-  const [pageSizeElegido, setPageSizeElegido] = useState<number | null>(null);
-  const pageSize = pageSizeElegido ?? pageSizeGuardado;
+  // Tamaño de página recordado en la sesión, como toda tabla (HU #13917).
+  const [pageSize, recordarPageSize] = useTamanoDePagina(CLAVE_TABLA);
 
   const aplicar = useCallback(
     (cambios: Partial<FiltrosUrl>) => {
@@ -128,15 +112,10 @@ export function ConfirmacionRuntHistorialPanel() {
 
   const cambiarPageSize = useCallback(
     (n: number) => {
-      setPageSizeElegido(n);
-      try {
-        sessionStorage.setItem(CLAVE_PAGE_SIZE, String(n));
-      } catch {
-        // ventana privada: se queda en memoria y ya
-      }
+      recordarPageSize(n);
       if (filtros.page !== 1) aplicar({ page: 1 });
     },
-    [aplicar, filtros.page],
+    [aplicar, filtros.page, recordarPageSize],
   );
 
   const filtroApi = useMemo<RuntConfirmationAttemptsFilter>(
@@ -411,7 +390,6 @@ export function ConfirmacionRuntHistorialPanel() {
           pageSize,
           totalCount: total,
           onPageChange: (page) => aplicar({ page }),
-          pageSizeOptions: TAMANOS_DE_PAGINA,
           onPageSizeChange: cambiarPageSize,
         }}
         renderExpanded={(r) =>

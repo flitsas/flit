@@ -20,6 +20,10 @@
 // 10 px fija al hacer scroll y fila blanca que se eleva con sombra azul al pasar el puntero, en vez
 // del cambio de fondo por celda. Antes había dos recetas y los reportes se veían distintos.
 
+// Feature #13915 — la sombra de la fila sale de `table-styles`: una sola fuente para las dos recetas,
+// así cambiarla en un sitio cambia toda tabla del producto.
+import { TABLA_ROW_HOVER_CLS } from "./table-styles";
+
 /** Envoltorio con desplazamiento horizontal. Va por fuera de la `<table>`. */
 export const CARDLIST_SCROLL = "overflow-x-auto";
 
@@ -38,8 +42,7 @@ export const CARDLIST_TH =
   "text-[color:var(--table-header-fg)] first:rounded-l-xl last:rounded-r-xl";
 
 /** El `<tr>` de una fila. `group` habilita el resaltado al pasar por encima si la fila se pulsa. */
-export const CARDLIST_ROW =
-  "group bg-white transition hover:shadow-[0_8px_24px_color-mix(in_srgb,var(--color-flit-brand)_18%,transparent)] dark:bg-[#0B0F14]";
+export const CARDLIST_ROW = `group bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`;
 
 /** Cada `<td>`. El borde completo de la tarjeta sale de los cuatro lados repartidos entre celdas. */
 export const CARDLIST_CELL =

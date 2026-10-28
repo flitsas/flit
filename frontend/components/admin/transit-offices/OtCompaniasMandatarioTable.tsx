@@ -35,7 +35,7 @@ export function OtCompaniasMandatarioTable({
   sinMandatarioOf?: (companyTenantId: string) => boolean;
   onEdit: (company: AssociableCompany) => void;
 }) {
-  const pg = usePaginacion();
+  const pg = usePaginacion("transit-offices.OtCompaniasMandatarioTable");
   const { page, pageSize, setPage } = pg;
   const [entrada, setEntrada] = useState("");
   const [termino, setTermino] = useState("");

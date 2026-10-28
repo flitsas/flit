@@ -39,7 +39,7 @@ export function AlertEventsHistory({ rules, tenantId, otTransitOfficeId }: Alert
   const [events, setEvents] = useState<AlertEvent[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   // Bug #13055 — paginación estándar con «Filas por página» (10/25/50/100), de servidor.
-  const { page, pageSize, setPage, setPageSize } = usePaginacion();
+  const { page, pageSize, setPage, setPageSize } = usePaginacion("scheduling.AlertEventsHistory");
   const [ruleId, setRuleId] = useState<string>("");
   const [status, setStatus] = useState<UiStatus>("loading");
   const [acking, setAcking] = useState<string | null>(null);

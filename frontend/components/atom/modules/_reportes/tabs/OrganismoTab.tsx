@@ -5,28 +5,37 @@
 // ranking de agilidad y bloque de reincidencia. Todo de GET /ot-metrics.
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
-import { fetchOtMetrics, variationPct } from "@/lib/api/analytics-v2";
+import { fetchOtMetrics, variationPct, type OfficeRankingItem } from "@/lib/api/analytics-v2";
 import { BarList } from "../BarList";
 import { CompanyNotice } from "../CompanyNotice";
 import { toMetricsParams, type ReportFilters } from "../filters";
 import { formatHours, formatInt, formatNumber, formatPct } from "../format";
 import { KpiCard } from "../KpiCard";
 import { useAnalyticsQuery } from "../useAnalyticsQuery";
-import {
-  CARDLIST_CELL,
-  CARDLIST_HEAD_ROW,
-  CARDLIST_ROW,
-  CARDLIST_SCROLL,
-  CARDLIST_TABLE,
-  CARDLIST_TH,
-} from "@/components/atom/table-cardlist";
+import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 
 export interface OrganismoTabProps {
   filters: ReportFilters;
   needsCompany: boolean;
 }
 
+// HU #13923 — columnas del ranking de agilidad con el DataTable estándar.
+const RANKING_COLUMNS: DataTableColumn<OfficeRankingItem>[] = [
+  {
+    key: "rank",
+    header: "#",
+    cellClassName: "font-bold",
+    render: (o) => <span style={{ color: o.rank <= 3 ? "#8CC63F" : undefined }}>{o.rank}</span>,
+  },
+  { key: "organismo", header: "Organismo", cellClassName: "font-medium", render: (o) => o.transitOfficeName },
+  { key: "p50", header: "p50", render: (o) => formatHours(o.p50Hours) },
+  { key: "rechazo", header: "Rechazo", render: (o) => formatPct(o.rejectionRatePct) },
+  { key: "volumen", header: "Volumen", cellClassName: "opacity-80", render: (o) => formatInt(o.volumen) },
+];
+
 export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
+  const pg = usePaginacion("tabs.OrganismoTab");
   const params = toMetricsParams(filters);
   const metrics = useAnalyticsQuery(
     (signal) => fetchOtMetrics(params, signal),
@@ -235,36 +244,23 @@ export function OrganismoTab({ filters, needsCompany }: OrganismoTabProps) {
               <h2 id="ranking-title" className="text-sm font-bold mb-3" title="Orden por mediana de tiempo de decisión ascendente; desempata la tasa de rechazo.">
                 Ranking de agilidad
               </h2>
-              {metrics.data.current.officeRanking.length === 0 ? (
-                <p className="text-xs opacity-60">Sin organismos con decisiones en el periodo.</p>
-              ) : (
-                <div className={CARDLIST_SCROLL}>
-                  <table className={CARDLIST_TABLE} data-testid="ranking-ot" aria-labelledby="ranking-title">
-                    <thead>
-                      <tr className={CARDLIST_HEAD_ROW}>
-                        <th scope="col" className={CARDLIST_TH}>#</th>
-                        <th scope="col" className={CARDLIST_TH}>Organismo</th>
-                        <th scope="col" className={CARDLIST_TH}>p50</th>
-                        <th scope="col" className={CARDLIST_TH}>Rechazo</th>
-                        <th scope="col" className={CARDLIST_TH}>Volumen</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {metrics.data.current.officeRanking.map((o) => (
-                        <tr key={o.transitOfficeId} className={CARDLIST_ROW}>
-                          <td className={`${CARDLIST_CELL} font-bold`} style={{ color: o.rank <= 3 ? "#8CC63F" : undefined }}>
-                            {o.rank}
-                          </td>
-                          <td className={`${CARDLIST_CELL} font-medium`}>{o.transitOfficeName}</td>
-                          <td className={CARDLIST_CELL}>{formatHours(o.p50Hours)}</td>
-                          <td className={CARDLIST_CELL}>{formatPct(o.rejectionRatePct)}</td>
-                          <td className={`${CARDLIST_CELL} opacity-80`}>{formatInt(o.volumen)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              {/* HU #13923 — paginación estándar con «Filas por página»; el texto vacío se conserva. */}
+              <div data-testid="ranking-ot">
+                <DataTable
+                  columns={RANKING_COLUMNS}
+                  rows={pg.paginar(metrics.data.current.officeRanking)}
+                  getRowKey={(o) => o.transitOfficeId}
+                  ariaLabel="Ranking de agilidad"
+                  emptyMessage="Sin organismos con decisiones en el periodo."
+                  pagination={{
+                    page: pg.page,
+                    pageSize: pg.pageSize,
+                    totalCount: metrics.data.current.officeRanking.length,
+                    onPageChange: pg.setPage,
+                    onPageSizeChange: pg.setPageSize,
+                  }}
+                />
+              </div>
             </section>
 
             <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="reincidencia-title">

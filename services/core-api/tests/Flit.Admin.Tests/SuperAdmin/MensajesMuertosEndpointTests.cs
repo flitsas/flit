@@ -24,8 +24,26 @@ namespace Flit.Admin.Tests.SuperAdmin;
 /// reemplaza por un CallInvoker falso; que el mensaje reintentado vuelve a su cola y se procesa (AC1) lo prueban
 /// core-notificaciones y el SDK contra el broker real.
 /// </summary>
-public sealed class MensajesMuertosEndpointTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
+public sealed class MensajesMuertosEndpointTests(MensajesMuertosEndpointTests.Host host) : IClassFixture<MensajesMuertosEndpointTests.Host>
 {
+    /// <summary>
+    /// Un host para toda la clase (<see cref="HostPorClase"/>). core-notificaciones y la auditoría van por un doble que
+    /// delega en el de la prueba en curso: las pruebas de la clase corren en serie y cada una pone el suyo en <c>Client</c>.
+    /// </summary>
+    public sealed class Host : HostPorClase
+    {
+        internal NotificacionesFalso Invoker { get; set; } = new();
+
+        internal AuditoriaFalsa Auditoria { get; set; } = new();
+
+        protected override WebApplicationFactory<Program> Configurar(WebApplicationFactory<Program> factory) =>
+            factory.WithWebHostBuilder(b => b.ConfigureTestServices(s =>
+            {
+                s.AddSingleton(new MensajesMuertosService.MensajesMuertosServiceClient(new InvocadorDeLaPrueba(this)));
+                s.AddScoped<IAdminAuditWriter>(_ => Auditoria);
+            }));
+    }
+
     private const string Base = "/api/v1/superadmin/notificaciones/mensajes-muertos";
     private static readonly SymmetricSecurityKey DummyKey = new(Encoding.UTF8.GetBytes("clave-de-prueba-de-al-menos-32-bytes!!"));
 
@@ -98,13 +116,10 @@ public sealed class MensajesMuertosEndpointTests(WebApplicationFactory<Program> 
 
     private HttpClient Client(NotificacionesFalso invoker, string role, AuditoriaFalsa? auditoria = null)
     {
-        var host = factory.WithWebHostBuilder(b => b.ConfigureTestServices(s =>
-        {
-            s.AddSingleton(new MensajesMuertosService.MensajesMuertosServiceClient(invoker));
-            if (auditoria is not null)
-                s.AddScoped<IAdminAuditWriter>(_ => auditoria);
-        }));
-        var client = host.CreateClient();
+        host.Invoker = invoker;
+        // Sin auditoría propia, una que nadie mira (antes, la real: ninguna de esas pruebas la revisaba).
+        host.Auditoria = auditoria ?? new AuditoriaFalsa();
+        var client = host.Factory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token(role));
         return client;
     }
@@ -119,7 +134,7 @@ public sealed class MensajesMuertosEndpointTests(WebApplicationFactory<Program> 
     });
 
     /// <summary>Guarda lo que el filtro de auditoría escribiría (la escritura real la cubren las pruebas de auditoría).</summary>
-    private sealed class AuditoriaFalsa : IAdminAuditWriter
+    internal sealed class AuditoriaFalsa : IAdminAuditWriter
     {
         public List<AdminAuditEntry> Entradas { get; } = [];
 
@@ -132,7 +147,26 @@ public sealed class MensajesMuertosEndpointTests(WebApplicationFactory<Program> 
     }
 
     /// <summary>Hace de core-notificaciones: guarda lo que le piden y responde un mensaje muerto de ejemplo.</summary>
-    private sealed class NotificacionesFalso : CallInvoker
+    /// <summary>Lo que el host registra una sola vez: reenvía cada llamada al <see cref="NotificacionesFalso"/> de la prueba en curso.</summary>
+    private sealed class InvocadorDeLaPrueba(Host host) : CallInvoker
+    {
+        public override AsyncUnaryCall<TResponse> AsyncUnaryCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host1, CallOptions options, TRequest request) =>
+            host.Invoker.AsyncUnaryCall(method, host1, options, request);
+
+        public override TResponse BlockingUnaryCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host1, CallOptions options, TRequest request) =>
+            host.Invoker.BlockingUnaryCall(method, host1, options, request);
+
+        public override AsyncServerStreamingCall<TResponse> AsyncServerStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host1, CallOptions options, TRequest request) =>
+            host.Invoker.AsyncServerStreamingCall(method, host1, options, request);
+
+        public override AsyncClientStreamingCall<TRequest, TResponse> AsyncClientStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host1, CallOptions options) =>
+            host.Invoker.AsyncClientStreamingCall(method, host1, options);
+
+        public override AsyncDuplexStreamingCall<TRequest, TResponse> AsyncDuplexStreamingCall<TRequest, TResponse>(Method<TRequest, TResponse> method, string? host1, CallOptions options) =>
+            host.Invoker.AsyncDuplexStreamingCall(method, host1, options);
+    }
+
+    internal sealed class NotificacionesFalso : CallInvoker
     {
         public bool NoEsta { get; init; }
 

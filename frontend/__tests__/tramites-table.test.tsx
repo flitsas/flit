@@ -318,19 +318,19 @@ describe('TramitesTable — paginación', () => {
     const { unmount } = render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('P0001');
 
-    await userEvent.selectOptions(screen.getByLabelText('Filas por página'), '25');
+    await userEvent.selectOptions(screen.getByLabelText('Filas por página'), '30');
 
     expect(await screen.findByText('P0023')).toBeInTheDocument();
     await waitFor(() =>
       expect(mocks.searchInstances).toHaveBeenLastCalledWith(
-        expect.objectContaining({ skip: 0, take: 25 }),
+        expect.objectContaining({ skip: 0, take: 30 }),
       ),
     );
 
-    // Se recuerda «durante la sesión»: al volver a la pantalla sigue en 25.
+    // Se recuerda «durante la sesión»: al volver a la pantalla sigue en 30.
     unmount();
     render(<ToastProvider><TramitesTable /></ToastProvider>);
-    expect(await screen.findByLabelText('Filas por página')).toHaveValue('25');
+    expect(await screen.findByLabelText('Filas por página')).toHaveValue('30');
   });
 });
 

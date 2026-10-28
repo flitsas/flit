@@ -268,7 +268,7 @@ function ReasonsTable({
   onEdit: (reason: RejectionReason) => void;
   onToggle: (reason: RejectionReason) => void;
 }) {
-  const pg = usePaginacion();
+  const pg = usePaginacion("rejection-reasons.RejectionReasonsConsole");
   const head = { background: TABLA_HEADER_BG, color: TABLA_HEADER_FG } as const;
   const cell = { borderColor: "#DFE5ED" } as const;
 

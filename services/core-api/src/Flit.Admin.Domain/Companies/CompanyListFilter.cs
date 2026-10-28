@@ -14,6 +14,12 @@ public sealed class CompanyListFilter
     /// <summary>Coincidencia parcial e insensible a mayúsculas sobre Razón Social. Opcional.</summary>
     public string? RazonSocial { get; init; }
 
+    /// <summary>Coincidencia parcial e insensible a mayúsculas sobre el código (<c>code</c>). Opcional.</summary>
+    public string? Codigo { get; init; }
+
+    /// <summary>Tipos de compañía permitidos (OR), ya normalizados y validados. Nulo/vacío = sin filtro.</summary>
+    public IReadOnlyList<string>? TenantTypes { get; init; }
+
     /// <summary>Filtro exacto por estado activo. Opcional.</summary>
     public bool? EstadoActivo { get; init; }
 

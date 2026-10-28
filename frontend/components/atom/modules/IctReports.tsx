@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarClock, FileSpreadsheet, Loader2 } from "lucide-react";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { Pagination } from "@/components/atom/Pagination";
+import { usePaginacion, useTamanoDePagina } from "@/components/atom/usePaginacion";
 import {
   CARDLIST_CELL,
   CARDLIST_HEAD_ROW,
@@ -151,19 +152,25 @@ function initialParam(name: string): string {
  */
 function usePagedFilters(
   filtersKey: string,
+  claveTabla: string,
 ): [number, (page: number) => void, number, (pageSize: number) => void] {
   // Bug #13055 — el tamaño de página es elegible («Filas por página»); cambiarlo vuelve a la página 1.
-  const [state, setState] = useState({ key: filtersKey, page: 1, pageSize: 10 });
+  // HU #13919 — el tamaño sale del estándar (10/20/30/50) y se recuerda por tabla (`claveTabla`) en la sesión.
+  const [pageSize, cambiarTamano] = useTamanoDePagina(claveTabla);
+  const [state, setState] = useState({ key: filtersKey, page: 1 });
   const page = state.key === filtersKey ? state.page : 1;
   const setPage = useCallback(
-    (next: number) => setState((prev) => ({ ...prev, key: filtersKey, page: next })),
+    (next: number) => setState({ key: filtersKey, page: next }),
     [filtersKey],
   );
   const setPageSize = useCallback(
-    (next: number) => setState({ key: filtersKey, page: 1, pageSize: next }),
-    [filtersKey],
+    (next: number) => {
+      cambiarTamano(next);
+      setState({ key: filtersKey, page: 1 });
+    },
+    [filtersKey, cambiarTamano],
   );
-  return [page, setPage, state.pageSize, setPageSize];
+  return [page, setPage, pageSize, setPageSize];
 }
 
 /** Refleja un valor en la dirección sin recargar ni apilar historial. */
@@ -428,7 +435,7 @@ function describeExportError(error: unknown): string {
   return "No se pudo generar la exportación. Inténtalo de nuevo.";
 }
 
-/** Sección de contenido: misma tarjeta blanca con título que usan las pestañas de empresa. */
+/** Sección de contenido: título y tabla de detalle, sin tarjeta que las envuelva. */
 function ReportSection({
   title,
   hint,
@@ -441,7 +448,8 @@ function ReportSection({
   testId?: string;
 }) {
   return (
-    <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" data-testid={testId}>
+    // HU #13919 — sin tarjeta blanca envolvente: la tabla va directa sobre el fondo, como la de trámites.
+    <section data-testid={testId}>
       <h2 className="text-sm font-bold mb-3" title={hint}>
         {title}
       </h2>
@@ -575,7 +583,10 @@ function NovedadesTab({
   tenantId?: string;
   onTotal: (tab: TabId, total: number) => void;
 }) {
-  const [page, setPage, pageSize, setPageSize] = usePagedFilters(`${range.from}|${range.to}|${tenantId ?? ""}`);
+  const [page, setPage, pageSize, setPageSize] = usePagedFilters(
+    `${range.from}|${range.to}|${tenantId ?? ""}`,
+    "modules.IctReports.novedades",
+  );
   const q = useAnalyticsQuery<IctNovedadesReport>(
     (signal) => fetchIctNovedadesReport(range, tenantId, { page, pageSize }, signal),
     [range.from, range.to, tenantId, page, pageSize],
@@ -662,7 +673,7 @@ function AtascadosTab({
   tenantId?: string;
   onTotal: (tab: TabId, total: number) => void;
 }) {
-  const [page, setPage, pageSize, setPageSize] = usePagedFilters(tenantId ?? "");
+  const [page, setPage, pageSize, setPageSize] = usePagedFilters(tenantId ?? "", "modules.IctReports.atascados");
   const q = useAnalyticsQuery<IctAtascadosReport>(
     (signal) => fetchIctAtascadosReport(tenantId, { page, pageSize }, signal),
     [tenantId, page, pageSize],
@@ -735,7 +746,9 @@ function JobsTab({
   range: DateRange;
   onTotal: (tab: TabId, total: number) => void;
 }) {
-  const [page, setPage, pageSize, setPageSize] = usePagedFilters(`${range.from}|${range.to}`);
+  const [page, setPage, pageSize, setPageSize] = usePagedFilters(`${range.from}|${range.to}`, "modules.IctReports.jobsFueraDeSla");
+  // HU #13919 — el resumen por job también es una tabla de colección: se pagina en cliente.
+  const pgResumen = usePaginacion("modules.IctReports.jobsResumen");
   const q = useAnalyticsQuery<IctJobsReport>(
     (signal) => fetchIctJobsReport(range, { page, pageSize }, signal),
     [range.from, range.to, page, pageSize],
@@ -781,7 +794,7 @@ function JobsTab({
           >
             <DetailTable
               headers={["Job", "Corridas", "Duración prom.", "Duración máx.", "% fuera de SLA"]}
-              rows={report.resumenPorJob.map((r) => ({
+              rows={pgResumen.paginar(report.resumenPorJob).map((r) => ({
                 key: r.job,
                 cells: [
                   r.job,
@@ -792,8 +805,15 @@ function JobsTab({
                 ],
               }))}
             />
-            {/* Sin aviso de truncamiento aquí: el resumen por job trae una fila por job, no se
-                pagina ni cabe cortarlo. El aviso va abajo, con la lista que sí puede cortarse. */}
+            <DetailPagination
+              page={pgResumen.page}
+              pageSize={pgResumen.pageSize}
+              total={report.resumenPorJob.length}
+              onPageChange={pgResumen.setPage}
+              onPageSizeChange={pgResumen.setPageSize}
+            />
+            {/* Sin aviso de truncamiento aquí: el resumen por job trae una fila por job y no se
+                corta. El aviso va abajo, con la lista que sí puede cortarse. */}
           </ReportSection>
 
           {report.totalFueraDeSla > 0 && (
@@ -834,7 +854,10 @@ function WebhooksTab({
   tenantId?: string;
   onTotal: (tab: TabId, total: number) => void;
 }) {
-  const [page, setPage, pageSize, setPageSize] = usePagedFilters(`${range.from}|${range.to}|${tenantId ?? ""}`);
+  const [page, setPage, pageSize, setPageSize] = usePagedFilters(
+    `${range.from}|${range.to}|${tenantId ?? ""}`,
+    "modules.IctReports.webhooks",
+  );
   const q = useAnalyticsQuery<IctWebhooksReport>(
     (signal) => fetchIctWebhooksReport(range, tenantId, { page, pageSize }, signal),
     [range.from, range.to, tenantId, page, pageSize],

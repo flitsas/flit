@@ -146,7 +146,7 @@ export function QueryConsole<TRow>({
 
   const [result, setResult] = useState<QueryResult<TRow> | null>(null);
   // Bug #13055 — paginación de servidor estándar, con «Filas por página» (reemplaza Anterior/Siguiente).
-  const { page, pageSize, setPage, setPageSize } = usePaginacion();
+  const { page, pageSize, setPage, setPageSize } = usePaginacion("consultas.QueryConsole");
   const [busy, setBusy] = useState(false);
   // El export tiene su propio estado: compartirlo con el contador dejaría el botón inservible cada
   // vez que se refresca la cifra, que es todo el rato mientras alguien ajusta los filtros.
