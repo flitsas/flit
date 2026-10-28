@@ -29,6 +29,8 @@ describe("ClientProceduresTable — HU #14157 timeline desde Estado", () => {
         pageSize={20}
         onPageChange={vi.fn()}
         onPageSizeChange={vi.fn()}
+        onApprove={vi.fn()}
+        onReject={vi.fn()}
         showApprovalActions={false}
         onVerDetalle={onVerDetalle}
       />,
