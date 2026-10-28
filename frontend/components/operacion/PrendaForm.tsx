@@ -363,9 +363,29 @@ function hasRuntDetail(s: RuntPrendaSummary): boolean {
   );
 }
 
-function hasRuntAcreedorDetail(s: RuntPrendaSummary): boolean {
+/**
+ * ¿Hay alguna pista de detalle RUNT (prendario, nombre o al menos un ítem)?
+ * Sirve para abrir el panel / sugerir decisión; un ítem solo con `idPrenda` también cuenta.
+ */
+export function hasRuntAcreedorDetail(s: RuntPrendaSummary): boolean {
   return Boolean(s.prendario || s.nombreAcreedor || s.items.length > 0);
 }
+
+/**
+ * HU #14152 — ¿trajo PII de acreedor (nombre/documento/prendario)?
+ * Si el RUNT solo marca gravamen sin estos datos, el gestor digita a mano.
+ */
+export function hasRuntAcreedorPii(s: RuntPrendaSummary): boolean {
+  return Boolean(
+    s.prendario?.trim() ||
+      s.nombreAcreedor?.trim() ||
+      s.items.some((i) => Boolean(i.acreedor?.trim() || i.documentoAcreedor?.trim())),
+  );
+}
+
+/** Copy del aviso cuando hay gravamen RUNT sin detalle de acreedor (InlineAlert tone info). */
+export const RUNT_SIN_DETALLE_ACREEDOR_AVISO =
+  'El RUNT marcó gravamen o prenda, pero no entregó el detalle del acreedor. Digita el nombre y el documento del acreedor abajo.';
 
 /** Hay detalle de acreedor en ítems: el resumen no debe repetir el mismo nombre. */
 function itemsHaveAcreedorDetail(s: RuntPrendaSummary): boolean {
@@ -695,8 +715,18 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
   // queda vacío Y bloqueado — justo lo contrario de lo que promete el aviso "RUNT sin gravamen
   // registrado" (captura manual). Solo se bloquea cuando el RUNT SÍ confirmó el gravamen que se va a
   // levantar; sin esa confirmación, el gestor puede escribir el acreedor a mano.
-  const acreedorReadOnly = decision === 'levantar' && runtHasGravamen;
+  // HU #14152 — si el RUNT marca gravamen pero NO trae PII de acreedor, tampoco bloquear:
+  // el gestor digita nombre/documento (mismo caso FT3-0000224).
+  const runtTrajoAcreedorPii = Boolean(runtSummary && hasRuntAcreedorPii(runtSummary));
+  const acreedorReadOnly = decision === 'levantar' && runtHasGravamen && runtTrajoAcreedorPii;
+  const debeAvisarSinDetalleAcreedor =
+    decision === 'levantar' && runtHasGravamen && !runtTrajoAcreedorPii;
   const acreedorDeshabilitado = acreedorReadOnly || omitiendo;
+  const avisoSinDetalleAcreedor = debeAvisarSinDetalleAcreedor ? (
+    <InlineAlert tone="info" compact className="mt-1.5">
+      {RUNT_SIN_DETALLE_ACREEDOR_AVISO}
+    </InlineAlert>
+  ) : null;
   /** Gris de campo deshabilitado (patrón `text-[#59677D] dark:text-white/70`, 5,7:1 sobre blanco). */
   const acreedorInputClass = omitiendo
     ? `${INPUT_BASE} text-[#59677D] dark:text-white/70`
@@ -1072,19 +1102,16 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                       </ul>
                     )}
 
-                    {!hasRuntAcreedorDetail(summary) && (
-                      <p className="opacity-70">
-                        El RUNT marcó gravamen o prenda, pero esta consulta no trajo el detalle del
-                        acreedor (puede hacer falta volver a consultar el vehículo). Declara la
-                        decisión abajo con la información que tengas.
-                      </p>
+                    {!hasRuntAcreedorPii(summary) && (
+                      <InlineAlert tone="info" compact>
+                        {RUNT_SIN_DETALLE_ACREEDOR_AVISO}
+                      </InlineAlert>
                     )}
                   </>
                 ) : (
-                  <p className="opacity-70">
-                    El RUNT marcó gravamen o prenda, pero no entregó el detalle del acreedor en esta
-                    consulta. Declara la decisión abajo con la información que tengas.
-                  </p>
+                  <InlineAlert tone="info" compact>
+                    {RUNT_SIN_DETALLE_ACREEDOR_AVISO}
+                  </InlineAlert>
                 )}
               </div>
             )}
@@ -1150,6 +1177,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
               </div>
               {muestraAcreedor && (
                 <div className="min-w-0 space-y-4 md:self-end">
+                  {avisoSinDetalleAcreedor}
                   <div>
                     <label htmlFor="prenda-acreedor-nombre" className="text-xs font-semibold mb-1.5 block">
                       Acreedor (beneficiario)
@@ -1225,6 +1253,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
               )}
               {!decisionFija && ayudaOmitir}
               {avisoRetiro}
+              {muestraAcreedor && avisoSinDetalleAcreedor}
               {muestraAcreedor && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
