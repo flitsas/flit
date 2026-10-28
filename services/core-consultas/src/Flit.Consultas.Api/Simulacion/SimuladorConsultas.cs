@@ -18,10 +18,12 @@ namespace Flit.Consultas.Api.Simulacion;
 /// 4 leasing con locatario N, 5 servicio público, 6 departamento no soportado, 7 error <c>TIMEOUT</c>, 8 respuesta inválida, otro
 /// persona natural; el vehículo lleva la placa o el VIN consultado.</description></item>
 /// <item><term>RUNT persona</term><description>2 inscrita sin licencias, 3 licencia suspendida, 7 tiempo agotado, 8 respuesta
-/// inválida, otro inscrita con licencia B1.</description></item>
+/// inválida, otro inscrita con licencia B1. Con <c>incluir_respuesta_cruda</c> (HU #14153) trae la respuesta cruda de Kyverum de
+/// <see cref="FixturesProveedor"/>: licencia activa, vencida y suspendida (sin licencias en el escenario 2).</description></item>
 /// <item><term>SIMIT</term><description>2 rojo con 2 comparendos, 3 amarillo con acuerdo de pago, 6 rojo con 60, 7 tiempo agotado, 8
 /// respuesta inválida, otro verde.</description></item>
-/// <item><term>RUES</term><description>6 cancelada, 7 tiempo agotado, 8 respuesta inválida, otro activa.</description></item>
+/// <item><term>RUES</term><description>6 cancelada, 7 tiempo agotado, 8 respuesta inválida, otro activa. Con
+/// <c>incluir_respuesta_cruda</c> (HU #14153) trae la respuesta cruda de Verifik con representantes legales y actividades CIIU.</description></item>
 /// <item><term>Avalúo</term><description>2 solo Fasecolda (48 M), 4 sin datos, 7 tiempo agotado, otro tres fuentes (52 M).</description></item>
 /// <item><term>Impuesto</term><description>0 pagado, 7 tiempo agotado, otro con deuda (400 000).</description></item>
 /// </list>
@@ -62,9 +64,9 @@ internal sealed class SimuladorConsultas(TimeProvider time)
         {
             (RpcConsultas.PorPlaca, ConsultarPorPlacaRequest r) => Runt(r.Placa, esVin: false),
             (RpcConsultas.PorVin, ConsultarPorVinRequest r) => Runt(r.Vin, esVin: true),
-            (RpcConsultas.Conductor, ConsultarConductorRequest r) => Conductor(r.Documento?.Numero),
+            (RpcConsultas.Conductor, ConsultarConductorRequest r) => Conductor(r.Documento?.Numero, r.Opciones?.IncluirRespuestaCruda == true),
             (RpcConsultas.Multas, ConsultarMultasRequest r) => Multas(r.Placa?.Valor ?? r.Documento?.Numero),
-            (RpcConsultas.Rues, ConsultarRuesRequest r) => Rues(r.Nit),
+            (RpcConsultas.Rues, ConsultarRuesRequest r) => Rues(r.Nit, r.Opciones?.IncluirRespuestaCruda == true),
             (RpcConsultas.Avaluos, ConsultarAvaluosRequest r) => Avaluos(r.Placa?.Valor ?? r.Vin?.Valor),
             (RpcConsultas.Impuesto, ConsultarImpuestoVehicularRequest r) => Impuesto(r.Placa?.Valor),
             _ => throw new RpcException(new Status(StatusCode.Unimplemented, "Rpc sin simulación.")),
@@ -94,7 +96,7 @@ internal sealed class SimuladorConsultas(TimeProvider time)
         return respuesta;
     }
 
-    private ConsultarConductorResponse Conductor(string? documento)
+    private ConsultarConductorResponse Conductor(string? documento, bool incluirCruda)
     {
         ResultadoConsulta Inscrita(string estado, string? categorias)
         {
@@ -103,6 +105,14 @@ internal sealed class SimuladorConsultas(TimeProvider time)
             r.Campos.Add(new Campo { Clave = "person_license_status", ValorTexto = estado });
             if (categorias is not null)
                 r.Campos.Add(new Campo { Clave = "person_license_categories", ValorTexto = categorias });
+
+            // HU #14153 AC3: como el servicio real, el crudo solo viaja si se pide (Diagnóstico lo pide en runt_propietario y runt_locatario).
+            if (incluirCruda)
+            {
+                var fixture = categorias is null ? FixturesProveedor.ConductorSinLicencias : FixturesProveedor.Conductor;
+                r.RespuestaCruda = Cruda("kyverum_runt_conductor", "person", documento, FixturesProveedor.Con(fixture, ("documento", documento)));
+            }
+
             return r;
         }
 
@@ -142,11 +152,15 @@ internal sealed class SimuladorConsultas(TimeProvider time)
         };
     }
 
-    private ConsultarRuesResponse Rues(string? nit)
+    private ConsultarRuesResponse Rues(string? nit, bool incluirCruda)
     {
         ConsultarRuesResponse Con(string estado, string renovacion)
         {
             var r = Resultado("verifik_rues", Semaforo.Verde);
+
+            // HU #14153 AC3: crudo de Verifik RUES (representantes legales y CIIU) solo si se pide, con el estado y la renovación del escenario.
+            if (incluirCruda)
+                r.RespuestaCruda = Cruda("verifik_rues", "company", nit, FixturesProveedor.Con(FixturesProveedor.Rues, ("nit", nit), ("estado", estado), ("renovacion", renovacion)));
             r.Certificaciones = new Certificaciones();
             r.Certificaciones.MatriculasMercantiles.Add(new MatriculaMercantil
             {
@@ -209,6 +223,14 @@ internal sealed class SimuladorConsultas(TimeProvider time)
 
     private ResultadoConsulta Resultado(string proveedor, Semaforo semaforo) =>
         new() { Proveedor = proveedor, Semaforo = semaforo, ConsultadoEn = Timestamp.FromDateTimeOffset(time.GetUtcNow()) };
+
+    private static RespuestaCruda Cruda(string proveedor, string tipoSujeto, string? claveSujeto, string json)
+    {
+        var cruda = new RespuestaCruda { Proveedor = proveedor, TipoSujeto = tipoSujeto, Json = json };
+        if (claveSujeto is not null)
+            cruda.ClaveSujeto = claveSujeto;
+        return cruda;
+    }
 
     private static RpcException TiempoAgotado() => new(new Status(StatusCode.DeadlineExceeded, "Proveedor simulado: tiempo de espera agotado."));
 

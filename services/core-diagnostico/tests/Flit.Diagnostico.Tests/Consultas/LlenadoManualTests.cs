@@ -424,6 +424,29 @@ public sealed class LlenadoManualTests
         mapa.EnumerateObject().Select(p => p.Name).Should().Equal(["1"], "solo queda la de la persona que respondió por API");
     }
 
+    // HU #14153 AC5 — el llenado manual deja vacía la respuesta cruda de la persona llenada a mano y conserva la de la que respondió
+    // por API (con su resultado.respuesta_cruda intacto).
+    [Fact]
+    public async Task HU14153_AC5_Llenado_manual_deja_vacia_la_respuesta_cruda_de_la_persona_llenada_a_mano()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresas = DosEmpresas.En(api);
+        var (_, dePersonas, _, segundo) = await CeldaDePersonasAsync(api, empresas.A, "TST723", ct);
+        const string ConCrudoUno = """{"resultado":{"proveedor":"kyverum_runt","respuesta_cruda":{"proveedor":"kyverum_runt_conductor","tipo_sujeto":"person","json":"{\"licencias\":[{\"numeroLicencia\":\"99999000301\"}]}"}}}""";
+        const string ConCrudoDos = """{"resultado":{"proveedor":"kyverum_runt","respuesta_cruda":{"proveedor":"kyverum_runt_conductor","tipo_sujeto":"person","json":"{\"licencias\":[{\"numeroLicencia\":\"99999000302\"}]}"}}}""";
+        await RespuestaFuenteTests.GuardarCifradaAsync(api, dePersonas.Id,
+            RespuestaFuenteTests.Cifrar(api, JsonSerializer.Serialize(new Dictionary<string, string> { ["1"] = ConCrudoUno, ["2"] = ConCrudoDos })), ct);
+
+        (await Llenar(api, TokenLlenado(api), dePersonas.Id, empresas.A.Id, $$"""{"version":2,"personas":[{"persona_id":"{{segundo}}","resultado":{{SimitManual}}}]}""", ct))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var mapa = JsonDocument.Parse(RespuestaFuenteTests.Descifrar(api, (await RespuestaFuenteTests.CifradaAsync(api, dePersonas.Id, ct))!)).RootElement;
+        mapa.EnumerateObject().Select(p => p.Name).Should().Equal(["1"], "la persona llenada a mano queda sin respuesta cruda");
+        mapa.GetProperty("1").GetString().Should().Be(ConCrudoUno, "la de la persona que respondió por API queda intacta");
+    }
+
     // Contrato para F06-H5 — GET del formulario: la celda, su versión y SOLO las personas en error, con el documento enmascarado.
     [Fact]
     public async Task Formulario_trae_solo_las_personas_en_error_enmascaradas()

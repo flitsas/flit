@@ -1,0 +1,40 @@
+{
+  "data": {
+    "category": "RM",
+    "commercialRegistry": {
+      "NIT": "{{nit}}",
+      "acronym": "FICTICIA SAS",
+      "businessName": "EMPRESA FICTICIA DE PRUEBA S.A.S.",
+      "chamberCity": "Ciudad de Prueba",
+      "chamberCommerce": "CAMARA DE COMERCIO DE PRUEBA",
+      "chamberDepartment": "Departamento de Prueba",
+      "commercialAddress": "CL 0 No 0 - 00",
+      "companyLocation": "CIUDAD DE PRUEBA",
+      "companyType": "SOCIEDADES POR ACCIONES SIMPLIFICADAS SAS",
+      "email": "contacto@empresa-ficticia.test",
+      "enrollmentDate": "2020-02-14",
+      "idRm": "99999000000077",
+      "lastRenewedYear": "2026",
+      "lastUpdatedDate": "{{renovacion}}",
+      "legalRepresentatives": {
+        "faculty": "** NOMBRAMIENTOS ** POR DOCUMENTO PRIVADO DE ASAMBLEA DE ACCIONISTAS FUE (RON) NOMBRADO (S): REPRESENTANTE LEGAL PERSONA FICTICIA RL UNO C.C. 9999900901 REPRESENTANTE LEGAL SUPLENTE PERSONA FICTICIA RL DOS C.C. 9999900902",
+        "legalRepresentatives": [
+          { "documentNumber": "9999900901", "documentType": "CC", "name": "PERSONA FICTICIA RL UNO", "role": "Representante Legal" },
+          { "documentNumber": "9999900902", "documentType": "CC", "name": "PERSONA FICTICIA RL DOS", "role": "Representante Legal Suplente" }
+        ]
+      },
+      "organizationType": "SOCIEDAD ó PERSONA JURIDICA PRINCIPAL ó ESAL",
+      "reasonForCancellation": "",
+      "registrationNumber": "9999900077",
+      "registrationStatus": "{{estado}}",
+      "renewalDate": "{{renovacion}}"
+    },
+    "economicActivities": [
+      { "code": "4923", "description": "Transporte de carga por carretera", "name": "ciiu_act_econ_pri" },
+      { "code": "4520", "description": "Mantenimiento y reparación de vehículos automotores", "name": "ciiu_act_econ_sec" },
+      { "code": "7710", "description": "Alquiler y arrendamiento de vehículos automotores", "name": "ciiu3" }
+    ]
+  },
+  "signature": { "dateTime": "October 28, 2026 9:00 AM", "message": "Certified by Verifik.co (simulado)" },
+  "id": "SIMULADO1"
+}

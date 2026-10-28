@@ -87,7 +87,9 @@ message RespuestaCruda {
   // "vehicle" | "company" | "person".
   string tipo_sujeto = 2;
   optional string clave_sujeto = 3;
-  // JSON sanitizado.
+  // El cuerpo de la respuesta del proveedor como texto JSON, TAL CUAL llegó: core-consultas no lo sanea. Solo viaja si la
+  // solicitud pide incluir_respuesta_cruda. En el camino hacia Diagnóstico (ConsultarConductor y ConsultarRues, HU #14153) llega
+  // sin sanear, con datos personales, y core-diagnostico lo guarda cifrado; Trámites sanea lo que persiste en su almacén canónico.
   string json = 4;
 }
 

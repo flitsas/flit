@@ -15,6 +15,7 @@ using Flit.Diagnostico.Tests.Api;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Xunit;
 using static Flit.Diagnostico.Tests.Configuracion.ConfiguracionOperativaTests;
 using RespuestaFuente = Flit.Diagnostico.Tests.Consultas.RespuestaFuenteTests;
@@ -51,7 +52,9 @@ public sealed class DetalleCeldaTests
     /// HU #14087 (página del detalle en pestaña nueva): claves exactas permitidas aunque contengan una prohibida. <c>nombre_diagnostico</c>
     /// es el nombre del lote (no de una persona); origen, usuario manual y transacción siguen fuera (R-20).
     /// </summary>
-    private static readonly string[] ClavesPermitidas = ["nombre_diagnostico"];
+    /// <para>HU #14153 (decisión del usuario 2026-10-28): <c>respuesta_proveedor</c> es la respuesta íntegra del proveedor por persona
+    /// (contiene «proveedor» en el nombre, no es el código del proveedor que resolvió).</para>
+    private static readonly string[] ClavesPermitidas = ["nombre_diagnostico", "respuesta_proveedor"];
 
     private static bool Prohibida(string clave) =>
         !ClavesPermitidas.Any(p => clave == p || clave.EndsWith("/" + p, StringComparison.Ordinal))
@@ -257,6 +260,8 @@ public sealed class DetalleCeldaTests
         // HU #14087 AC8 (decisión del usuario 2026-10-27, enmienda de ADR-0075): la ÚNICA clave nueva permitida es respuesta_fuente
         // (la respuesta completa de la fuente, en la celda y en cada persona); origen, usuario manual y transacción siguen fuera.
         nombres.Where(n => n == "respuesta_fuente").Should().HaveCount(2, "en DetalleCeldaDto y en PersonaDetalleDto");
+        // HU #14153 AC6: la respuesta íntegra del proveedor, solo en cada persona.
+        nombres.Where(n => n == "respuesta_proveedor").Should().HaveCount(1, "solo en PersonaDetalleDto");
 
         await using var api = await ApiDePrueba.ConBaseAsync();
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
@@ -353,6 +358,101 @@ public sealed class DetalleCeldaTests
         personaCorrupta.GetProperty("personas")[0].GetProperty("respuesta_fuente").ValueKind.Should().Be(JsonValueKind.Null);
         personaCorrupta.GetProperty("personas")[0].GetProperty("estado").GetString().Should().Be("OK");
     }
+
+    // HU #14153 AC6 — cada persona de RUNT_PROPIETARIO (conductor y RUES) trae respuesta_proveedor: el JSON de
+    // resultado.respuesta_cruda.json parseado como OBJETO, con todas las claves y valores del proveedor (ids, firma, campos técnicos,
+    // nulos, números y listas) sin quitar ninguno; respuesta_fuente sigue igual (el texto del crudo dentro).
+    [Fact]
+    public async Task HU14153_AC6_Cada_persona_trae_respuesta_proveedor_como_objeto_completo()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, vehiculos: [new("TST481", [new(Fuente.RuntPropietario, EstadoCelda.Pendiente, 1)])]);
+        var vehiculo = lote.Vehiculos.Single().Id;
+        var celda = lote.Celda("TST481", Fuente.RuntPropietario);
+        var natural = await PersonaAsync(api, empresa, vehiculo, RolPersona.Propietario, 1, "C", "9999900481", ct);
+        var juridica = await PersonaAsync(api, empresa, vehiculo, RolPersona.Propietario, 2, "N", "999990482", ct);
+        await Tablero.PayloadAsync(empresa, celda, Personas(
+            (natural.Id, 1, "RUNT_PERSONA", "OK", """{"inscrito":true,"estado_conductor":"ACTIVO","licencias":[]}""", null),
+            (juridica.Id, 2, "RUES", "OK", """{"encontrada":true,"estado_matricula":"ACTIVA","ultima_renovacion":"2026-03-31"}""", null)), ct);
+        const string ProveedorConductor = """{"ok":true,"id_interno":"KY-99999","identidad":{"nombreCompleto":"PERSONA FICTICIA DETALLE"},"persona":{"documento":"9999900481","tieneLicencias":true},"licencias":[{"numeroLicencia":"99999000401","estadoLicencia":"ACTIVA","detalleLicencia":[{"categoria":"B1","fechaVencimiento":"2034-01-15"}]},{"numeroLicencia":"99999000402","estadoLicencia":"VENCIDA","detalleLicencia":[{"categoria":"C1","fechaVencimiento":"2022-06-01"}]},{"numeroLicencia":"99999000403","estadoLicencia":"SUSPENDIDA","detalleLicencia":[]}],"multas":null,"fromCache":false,"total":3,"puntaje":1.5}""";
+        const string ProveedorRues = """{"data":{"commercialRegistry":{"NIT":"999990482","legalRepresentatives":{"faculty":"TEXTO FICTICIO","legalRepresentatives":[{"documentNumber":"9999900901","documentType":"CC","name":"PERSONA FICTICIA RL","role":"Representante Legal"}]}},"economicActivities":[{"code":"4923","description":"Transporte de carga por carretera","name":"ciiu_act_econ_pri"}]},"signature":{"dateTime":"October 28, 2026 9:00 AM","message":"Certified by Verifik.co"},"id":"FICTICIO482"}""";
+        await RespuestaFuente.GuardarCifradaAsync(api, celda.Id, RespuestaFuente.Cifrar(api, JsonSerializer.Serialize(new Dictionary<string, string>
+        {
+            ["1"] = ConCrudo("kyverum_runt", "kyverum_runt_conductor", "person", ProveedorConductor),
+            ["2"] = ConCrudo("verifik_rues", "verifik_rues", "company", ProveedorRues),
+        })), ct);
+
+        var personas = (await DetalleAsync(empresa.Cliente(), lote.Id, vehiculo, "RUNT_PROPIETARIO", ct)).GetProperty("personas").EnumerateArray().ToList();
+
+        var conductor = personas[0].GetProperty("respuesta_proveedor");
+        conductor.ValueKind.Should().Be(JsonValueKind.Object, "un objeto JSON, no un texto");
+        JsonElement.DeepEquals(conductor, JsonDocument.Parse(ProveedorConductor).RootElement).Should().BeTrue("todas las claves y valores del proveedor, sin quitar ninguno");
+        conductor.GetProperty("licencias").GetArrayLength().Should().Be(3);
+        conductor.GetProperty("id_interno").GetString().Should().Be("KY-99999", "ni los identificadores internos se filtran (decisión literal)");
+        var rues = personas[1].GetProperty("respuesta_proveedor");
+        JsonElement.DeepEquals(rues, JsonDocument.Parse(ProveedorRues).RootElement).Should().BeTrue();
+        rues.GetProperty("signature").GetProperty("message").GetString().Should().Be("Certified by Verifik.co");
+        personas[0].GetProperty("respuesta_fuente").GetProperty("resultado").GetProperty("respuesta_cruda").GetProperty("json").GetString()
+            .Should().Be(ProveedorConductor, "respuesta_fuente se queda como está");
+    }
+
+    // HU #14153 AC7 — sin crudo, con un crudo que no es JSON válido o que no es un objeto: respuesta_proveedor = null, el detalle responde
+    // 200 y el log avisa SIN el contenido del crudo.
+    [Fact]
+    public async Task HU14153_AC7_Sin_crudo_o_con_crudo_invalido_respuesta_proveedor_es_null_y_el_log_no_trae_el_contenido()
+    {
+        var logs = new LogsEnMemoria();
+        await using var api = await ApiDePrueba.ConBaseAsync(configurar: b =>
+        {
+            b.Logging.AddProvider(logs);
+            b.Logging.AddFilter<LogsEnMemoria>(null, Microsoft.Extensions.Logging.LogLevel.Trace);
+        });
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, vehiculos: [new("TST491", [new(Fuente.RuntPropietario, EstadoCelda.Pendiente, 1)])]);
+        var vehiculo = lote.Vehiculos.Single().Id;
+        var celda = lote.Celda("TST491", Fuente.RuntPropietario);
+        var ids = new List<Guid>();
+        for (var orden = 1; orden <= 3; orden++)
+            ids.Add((await PersonaAsync(api, empresa, vehiculo, RolPersona.Propietario, orden, "C", $"999990049{orden}", ct)).Id);
+        await Tablero.PayloadAsync(empresa, celda, Personas(
+            (ids[0], 1, "RUNT_PERSONA", "OK", """{"inscrito":true,"licencias":[]}""", null),
+            (ids[1], 2, "RUNT_PERSONA", "OK", """{"inscrito":true,"licencias":[]}""", null),
+            (ids[2], 3, "RUNT_PERSONA", "OK", """{"inscrito":true,"licencias":[]}""", null)), ct);
+        await RespuestaFuente.GuardarCifradaAsync(api, celda.Id, RespuestaFuente.Cifrar(api, JsonSerializer.Serialize(new Dictionary<string, string>
+        {
+            ["1"] = """{"resultado":{"proveedor":"kyverum_runt","campos":[]}}""",
+            ["2"] = ConCrudo("kyverum_runt", "kyverum_runt_conductor", "person", "{no es json CRUDO-SECRETO-491"),
+            ["3"] = ConCrudo("kyverum_runt", "kyverum_runt_conductor", "person", """["CRUDO-LISTA-491"]"""),
+        })), ct);
+
+        var detalle = await DetalleAsync(empresa.Cliente(), lote.Id, vehiculo, "RUNT_PROPIETARIO", ct);
+
+        var personas = detalle.GetProperty("personas").EnumerateArray().ToList();
+        personas.Should().HaveCount(3);
+        personas.Should().OnlyContain(p => p.GetProperty("respuesta_proveedor").ValueKind == JsonValueKind.Null);
+        personas[0].GetProperty("respuesta_fuente").ValueKind.Should().Be(JsonValueKind.Object, "la respuesta de la fuente sigue llegando");
+        var avisos = logs.Mensajes.Where(m => m.Contains("respuesta_proveedor", StringComparison.Ordinal)).ToList();
+        avisos.Should().HaveCount(2, "se registra el crudo inválido (2) y el que no es objeto (3), no la persona sin crudo");
+        avisos.Should().OnlyContain(m => m.Contains(celda.Id.ToString(), StringComparison.Ordinal));
+        logs.Mensajes.Should().NotContain(m => m.Contains("CRUDO-SECRETO-491", StringComparison.Ordinal) || m.Contains("CRUDO-LISTA-491", StringComparison.Ordinal),
+            "el log nunca lleva el contenido del crudo");
+    }
+
+    /// <summary>La respuesta de una persona (proto-JSON del bus) con <paramref name="json"/> en <c>resultado.respuesta_cruda.json</c>.</summary>
+    private static string ConCrudo(string proveedorResultado, string proveedorCrudo, string tipoSujeto, string json) => JsonSerializer.Serialize(new
+    {
+        resultado = new
+        {
+            proveedor = proveedorResultado,
+            desde_cache = false,
+            respuesta_cruda = new { proveedor = proveedorCrudo, tipo_sujeto = tipoSujeto, json },
+        },
+    });
 
     // HU #14087 (detalle en pestaña nueva) — el detalle trae identificador (la placa; sin placa, el VIN) y nombre_diagnostico (el
     // nombre del lote), en las fuentes del vehículo y en las de persona, para que la página se titule sola.

@@ -1,8 +1,8 @@
 using System.Net;
 using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Text.Json;
 using Flit.Tramites.Application.UseCases.Consultations;
+using Flit.Tramites.Domain.Certifications;
 using Microsoft.Extensions.Options;
 
 namespace Flit.Infrastructure.Consultations;
@@ -46,10 +46,10 @@ internal sealed class VerifikConductorConsultationProvider(
         var url = $"/v2/co/runt/conductor?documentType={Uri.EscapeDataString(documentType)}" +
                   $"&documentNumber={Uri.EscapeDataString(documentNumber)}";
 
-        return await SendAsync(url, ct);
+        return await SendAsync(url, documentNumber, ct);
     }
 
-    private async Task<ConsultationResult> SendAsync(string url, CancellationToken ct)
+    private async Task<ConsultationResult> SendAsync(string url, string documentNumber, CancellationToken ct)
     {
         HttpStatusCode? estado = null;
         try
@@ -68,11 +68,23 @@ internal sealed class VerifikConductorConsultationProvider(
             if (!response.IsSuccessStatusCode)
                 return ProviderUnavailable(ClasificadorFalloHttp.PorEstado(response.StatusCode));
 
-            var payload = await response.Content.ReadFromJsonAsync<VerifikConductorResponse>(JsonOptions, ct);
+            // HU #14153 AC1 — se lee como texto y se deserializa desde ahí (patrón de verifik_rues) para conservar el cuerpo tal
+            // cual llegó: el Diagnóstico muestra la respuesta íntegra del proveedor. Trámites no lo persiste (sin Certifications,
+            // la ingesta canónica no corre).
+            var raw = await response.Content.ReadAsStringAsync(ct);
+            var payload = JsonSerializer.Deserialize<VerifikConductorResponse>(raw, JsonOptions);
             if (payload is null)
                 return ProviderUnavailable(ClasificadorFalloHttp.CuerpoIlegible(response.StatusCode));
 
-            return VerifikConductorResultMapper.Map(payload);
+            return VerifikConductorResultMapper.Map(payload) with
+            {
+                RawPayload = new RawProviderPayload(
+                    ProviderKey: Key_,
+                    SubjectKind: RawProviderPayload.PersonSubject,
+                    SubjectKey: documentNumber,
+                    PayloadJson: raw,
+                    QueriedAt: DateTimeOffset.UtcNow),
+            };
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

@@ -75,6 +75,8 @@ internal sealed partial class DetalleCelda(
             if (!RespuestaFuenteCelda.TryLeerPersonas(protectorRespuesta, cifrada, out var respuestas))
                 RespuestaIlegible(log, celda.Id, codigo);
             personas = await PersonasAsync(cabecera.TenantId, vehiculoId, codigo, conDato ? celda.Payload : null, respuestas, ct).ConfigureAwait(false);
+            foreach (var orden in ProyectorDetalleCelda.ConCrudoIlegible(respuestas))
+                CrudoIlegible(log, celda.Id, codigo, orden);
         }
         else
         {
@@ -104,6 +106,11 @@ internal sealed partial class DetalleCelda(
     [LoggerMessage(EventId = 140878, Level = LogLevel.Warning,
         Message = "La respuesta de la fuente de la celda {CeldaId} ({Fuente}) no se pudo descifrar o leer: el detalle va con respuesta_fuente = null")]
     private static partial void RespuestaIlegible(ILogger logger, Guid celdaId, Fuente fuente);
+
+    // HU #14153 AC7: sin el contenido del crudo (datos personales): solo la celda, la fuente y el orden de la persona.
+    [LoggerMessage(EventId = 141531, Level = LogLevel.Warning,
+        Message = "La respuesta cruda del proveedor de la persona {Orden} de la celda {CeldaId} ({Fuente}) no es un objeto JSON válido: el detalle va con respuesta_proveedor = null")]
+    private static partial void CrudoIlegible(ILogger logger, Guid celdaId, Fuente fuente, int orden);
 }
 
 /// <summary>
@@ -134,8 +141,50 @@ internal static class ProyectorDetalleCelda
                 p.Orden, CodigosDeEnum.Codigo(p.Rol), p.DocTipo, Enmascarado(protector, p.DocCifrado), p.Origen == OrigenDocumento.DeclaradoCliente,
                 leido?.Consulta, leido?.Estado ?? DetalleCelda.SinResultado, leido?.TipoError, leido?.ConsultadoEn,
                 leido is { Estado: EjecutorPorPersonas.EstadoOk, Resultado: { } r } ? ResultadoPersona(leido.Consulta, r) : null,
-                respuestas is not null && respuestas.TryGetValue(p.Orden, out var respuesta) ? respuesta : null);
+                respuestas is not null && respuestas.TryGetValue(p.Orden, out var respuesta) ? respuesta : null,
+                respuestas is not null && respuestas.TryGetValue(p.Orden, out var deLaFuente) ? RespuestaProveedor(deLaFuente, out _) : null);
         })];
+    }
+
+    /// <summary>
+    /// HU #14153 AC6/AC7 — la respuesta íntegra del proveedor dentro de la respuesta de la fuente de una persona: el texto de
+    /// <c>resultado.respuesta_cruda.json</c> parseado como objeto JSON, tal cual (sin quitar claves). Null sin crudo; null y
+    /// <paramref name="ilegible"/> = true si hay crudo pero no es JSON válido o no es un objeto.
+    /// </summary>
+    public static JsonElement? RespuestaProveedor(JsonElement respuestaFuente, out bool ilegible)
+    {
+        ilegible = false;
+        if (respuestaFuente.ValueKind != JsonValueKind.Object
+            || !respuestaFuente.TryGetProperty("resultado", out var resultado) || resultado.ValueKind != JsonValueKind.Object
+            || !resultado.TryGetProperty("respuesta_cruda", out var cruda) || cruda.ValueKind != JsonValueKind.Object
+            || !cruda.TryGetProperty("json", out var json) || json.ValueKind != JsonValueKind.String
+            || json.GetString() is not { Length: > 0 } texto)
+            return null;
+        try
+        {
+            using var documento = JsonDocument.Parse(texto);
+            if (documento.RootElement.ValueKind == JsonValueKind.Object)
+                return documento.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            // Cae a ilegible: el contenido nunca se registra.
+        }
+
+        ilegible = true;
+        return null;
+    }
+
+    /// <summary>Los órdenes de las personas de <paramref name="respuestas"/> con un crudo del proveedor que no es un objeto JSON válido.</summary>
+    public static IEnumerable<int> ConCrudoIlegible(IReadOnlyDictionary<int, JsonElement> respuestas)
+    {
+        ArgumentNullException.ThrowIfNull(respuestas);
+        foreach (var (orden, respuesta) in respuestas.OrderBy(r => r.Key))
+        {
+            RespuestaProveedor(respuesta, out var ilegible);
+            if (ilegible)
+                yield return orden;
+        }
     }
 
     /// <summary>El documento descifrado solo para enmascararlo; si no se puede descifrar, solo la máscara.</summary>

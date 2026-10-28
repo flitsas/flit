@@ -95,6 +95,7 @@ public class AnfitrionBus : IAsyncLifetime
         foreach (var clave in new[] { FinesProviderResolver.FlitFines, FinesProviderResolver.VerifikSimit, "verifik_rues", "falso_conductor" })
             s.AddTransient<IConsultationProvider>(_ => new Falso(clave, Llamadas));
         s.AddTransient<IConsultationProvider>(_ => new Explota(Llamadas));
+        s.AddTransient<IConsultationProvider>(_ => new CrudoGrande(Llamadas));
         s.AddTransient<IConsultationProvider>(_ => new Lento(Llamadas));
         s.AddTransient<IConsultationProvider>(_ => new SinCredenciales());
     });
@@ -205,6 +206,38 @@ public class AnfitrionBus : IAsyncLifetime
             return Task.FromResult(new ConsultationResult(key, "green",
                 [new ConsultationCheck("conductor_identidad", "Persona en RUNT", "ok", key, null)],
                 [new HydratedField("respondio", key, null), new HydratedField("person_full_name", "NOMBRE FICTICIO PRUEBA", null)]));
+        }
+    }
+
+    /// <summary>
+    /// HU #14153 AC8: conductor con una respuesta cruda de <see cref="Bytes"/> bytes o más (JSON válido, datos ficticios), para probar que
+    /// viaja por la outbox y el broker sin truncarse.
+    /// </summary>
+    public sealed class CrudoGrande(Contador llamadas) : IConsultationProvider
+    {
+        public const string Clave = "falso_crudo_grande";
+
+        public const int Bytes = 256 * 1024;
+
+        public string Key => Clave;
+
+        /// <summary>El crudo: una lista de licencias ficticias hasta pasar de <see cref="Bytes"/>, terminada en una marca de fin.</summary>
+        public static string Json { get; } = Armar();
+
+        public Task<ConsultationResult> ConsultAsync(ConsultationContext ctx, CancellationToken ct)
+        {
+            llamadas.Sumar(Clave);
+            return Task.FromResult(new ConsultationResult(Clave, "green",
+                [new ConsultationCheck("conductor_identidad", "Persona en RUNT", "ok", Clave, null)], [],
+                RawPayload: new Flit.Tramites.Domain.Certifications.RawProviderPayload(Clave, "person", ctx.FieldValues.GetValueOrDefault("document_number"), Json, DateTimeOffset.UtcNow)));
+        }
+
+        private static string Armar()
+        {
+            var sb = new StringBuilder("{\"ok\":true,\"licencias\":[");
+            for (var i = 0; sb.Length < Bytes; i++)
+                sb.Append(i == 0 ? string.Empty : ",").Append($$"""{"numeroLicencia":"99999{{i:D6}}","estadoLicencia":"ACTIVA","detalleLicencia":[{"categoria":"B1","fechaVencimiento":"2034-01-15"}]}""");
+            return sb.Append("],\"fin\":\"FIN-DEL-CRUDO\"}").ToString();
         }
     }
 

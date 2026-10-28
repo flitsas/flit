@@ -1,0 +1,26 @@
+{
+  "ok": true,
+  "identidad": {
+    "primerNombre": "PERSONA",
+    "segundoNombre": "",
+    "primerApellido": "FICTICIA",
+    "segundoApellido": "DOS",
+    "nombreCompleto": "PERSONA FICTICIA DOS"
+  },
+  "persona": {
+    "nombres": "P****A",
+    "apellidos": "F****A D**",
+    "nombreCompleto": "PERSONA FICTICIA DOS",
+    "tipoDocumento": "C",
+    "documento": "{{documento}}",
+    "estadoPersona": "ACTIVA",
+    "estadoConductor": "ACTIVO",
+    "tieneLicencias": false
+  },
+  "licencias": [],
+  "multas": {
+    "tieneMultas": "NO",
+    "nroPazYSalvo": "PZ-SIMULADO"
+  },
+  "fromCache": false
+}

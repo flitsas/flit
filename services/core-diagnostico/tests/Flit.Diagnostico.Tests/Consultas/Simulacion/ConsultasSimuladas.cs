@@ -81,7 +81,8 @@ internal static class ConsultasSimuladas
                     var r = JsonParser.Default.Parse<ConsultarConductorRequest>(solicitud);
                     if (servicios.GetService<IFuenteRuntPersona>() is not { } fuente)
                         return RespuestaSimulada.Fallo(StatusCode.Unimplemented);
-                    return Respuesta(await fuente.ConsultarAsync(empresa, new DocumentoPersona(r.Documento.Tipo, r.Documento.Numero), ct), Conductor);
+                    var conductor = Respuesta(await fuente.ConsultarAsync(empresa, new DocumentoPersona(r.Documento.Tipo, r.Documento.Numero), ct), Conductor);
+                    return r.Opciones?.IncluirRespuestaCruda == true ? ConCrudo(conductor, "kyverum_runt_conductor", "person", CrudoConductor(r.Documento.Numero)) : conductor;
                 }
 
             case RpcConsultas.Rues:
@@ -89,7 +90,8 @@ internal static class ConsultasSimuladas
                     var r = JsonParser.Default.Parse<ConsultarRuesRequest>(solicitud);
                     if (servicios.GetService<IFuenteRues>() is not { } fuente)
                         return RespuestaSimulada.Fallo(StatusCode.Unimplemented);
-                    return Respuesta(await fuente.ConsultarAsync(empresa, r.Nit, ct), Rues);
+                    var rues = Respuesta(await fuente.ConsultarAsync(empresa, r.Nit, ct), Rues);
+                    return r.Opciones?.IncluirRespuestaCruda == true ? ConCrudo(rues, "verifik_rues", "company", CrudoRues(r.Nit)) : rues;
                 }
 
             case RpcConsultas.Multas:
@@ -233,6 +235,32 @@ internal static class ConsultasSimuladas
         "NO_CONECTADO" => StatusCode.Unimplemented,
         _ => StatusCode.InvalidArgument,
     };
+
+    /// <summary>
+    /// HU #14153 — la respuesta cruda FICTICIA del conductor (forma de Kyverum RUNT persona) que el doble pone en
+    /// <c>resultado.respuesta_cruda.json</c> cuando el trabajo pide <c>incluir_respuesta_cruda</c>.
+    /// </summary>
+    public static string CrudoConductor(string documento) =>
+        $$"""{"ok":true,"identidad":{"nombreCompleto":"PERSONA FICTICIA DOBLE"},"persona":{"documento":"{{documento}}","estadoConductor":"ACTIVO"},"licencias":[{"numeroLicencia":"99999000201","estadoLicencia":"ACTIVA","detalleLicencia":[{"categoria":"B1","fechaVencimiento":"2034-01-15"}]},{"numeroLicencia":"99999000202","estadoLicencia":"VENCIDA","detalleLicencia":[{"categoria":"C1","fechaVencimiento":"2022-06-01"}]}],"fromCache":false}""";
+
+    /// <summary>HU #14153 — la respuesta cruda FICTICIA de una empresa (forma de Verifik RUES) con representantes legales y CIIU.</summary>
+    public static string CrudoRues(string nit) =>
+        $$$"""{"data":{"commercialRegistry":{"NIT":"{{{nit}}}","businessName":"EMPRESA FICTICIA DOBLE S.A.S.","legalRepresentatives":{"legalRepresentatives":[{"documentNumber":"9999900901","documentType":"CC","name":"PERSONA FICTICIA RL","role":"Representante Legal"}]}},"economicActivities":[{"code":"4923","name":"ciiu_act_econ_pri"}]},"id":"DOBLE1"}""";
+
+    /// <summary>La respuesta OK <paramref name="simulada"/> con la respuesta cruda del proveedor en su resultado (un ERROR queda igual).</summary>
+    public static RespuestaSimulada ConCrudo(RespuestaSimulada simulada, string proveedor, string tipoSujeto, string json)
+    {
+        ArgumentNullException.ThrowIfNull(simulada);
+        var resultado = simulada.Respuesta switch
+        {
+            ConsultarConductorResponse c => c.Resultado,
+            ConsultarRuesResponse r => r.Resultado,
+            _ => null,
+        };
+        if (resultado is not null)
+            resultado.RespuestaCruda = new RespuestaCruda { Proveedor = proveedor, TipoSujeto = tipoSujeto, Json = json };
+        return simulada;
+    }
 
     public static IMessage Conductor(ResultadoPersonaRunt r, string? proveedor)
     {

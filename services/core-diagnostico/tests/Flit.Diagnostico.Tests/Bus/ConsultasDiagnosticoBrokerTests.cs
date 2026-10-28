@@ -284,6 +284,54 @@ public sealed class ConsultasDiagnosticoBrokerTests
         (await broker.ColaAsync(BrokerDePrueba.ColaResultados)).Mensajes.Should().Be(0);
     }
 
+    /// <summary>
+    /// HU #14153 AC8 — la respuesta cruda del proveedor de cada persona de RUNT_PROPIETARIO (256 KB o más) viaja por el broker real
+    /// hasta el consumidor de resultados y queda guardada cifrada en <c>respuesta_fuente_cifrada</c> (bytea) COMPLETA: el mismo texto
+    /// del crudo, byte a byte, con su marca de fin.
+    /// </summary>
+    [Fact]
+    public async Task HU14153_AC8_Un_crudo_de_256_KB_por_el_broker_queda_guardado_completo()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var broker = await BrokerDePrueba.CrearAsync("diagnostico");
+        Assert.SkipWhen(broker.Omitir is not null, broker.Omitir ?? string.Empty);
+        await using var api = await MotorPersonas.ArrancarAsync(null, b =>
+        {
+            Configurar(b, broker);
+            b.Services.AddSingleton<IFuenteRuntPersona, FuenteRuntPersonaSimulada>();
+            b.Services.AddSingleton<IFuenteRues, FuenteRuesSimulada>();
+        });
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var grande = CrudoGrande();
+        grande.Length.Should().BeGreaterThanOrEqualTo(200 * 1024);
+        var consultas = new ConsultasDelBroker(broker, api)
+        {
+            Ajustar = respuesta => ConsultasSimuladas.ConCrudo(respuesta, "kyverum_runt_conductor", "person", grande),
+        };
+
+        var lote = await MotorPersonas.LoteAsync(api, empresa, [Lotes.Fila("TST001")], ct);
+        await consultas.AtenderHastaAsync(async () =>
+            (await MotorPersonas.CeldaAsync(api, empresa, lote, "TST001", Fuente.RuntPropietario, ct)).Estado == EstadoCelda.Completado, BrokerDePrueba.ColaLote);
+
+        consultas.Atendidos.Should().Contain(a => a.Sobre.Data.GetProperty("rpc").GetString() == RpcConsultas.Conductor);
+        var celda = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST001", Fuente.RuntPropietario, ct);
+        var mapa = JsonDocument.Parse(RespuestaFuenteTests.Descifrar(api, (await RespuestaFuenteTests.CifradaAsync(api, celda.Id, ct))!)).RootElement;
+        var guardado = mapa.EnumerateObject().Should().ContainSingle().Subject.Value.GetString()!;
+        var crudo = JsonDocument.Parse(guardado).RootElement.GetProperty("resultado").GetProperty("respuesta_cruda").GetProperty("json").GetString()!;
+        crudo.Length.Should().Be(grande.Length, "sin truncar");
+        crudo.Should().Be(grande).And.EndWith("\"fin\":\"FIN-DEL-CRUDO\"}");
+    }
+
+    /// <summary>Crudo ficticio de 256 KB o más (licencias 99999…), terminado en una marca de fin.</summary>
+    private static string CrudoGrande()
+    {
+        var sb = new StringBuilder("{\"ok\":true,\"licencias\":[");
+        for (var i = 0; sb.Length < 256 * 1024; i++)
+            sb.Append(i == 0 ? string.Empty : ",").Append($$"""{"numeroLicencia":"99999{{i:D6}}","estadoLicencia":"ACTIVA","detalleLicencia":[{"categoria":"B1","fechaVencimiento":"2034-01-15"}]}""");
+        return sb.Append("],\"fin\":\"FIN-DEL-CRUDO\"}").ToString();
+    }
+
     [Fact]
     public async Task Con_consultas_caido_el_trabajo_espera_en_la_cola_y_se_procesa_al_volver_sin_ERROR()
     {
@@ -458,17 +506,21 @@ public sealed class ConsultasDiagnosticoBrokerTests
     private static Task<ApiDePrueba> ArrancarAsync(BrokerDePrueba broker, RelojManual? reloj = null) =>
         MotorRunt.ArrancarAsync(b =>
         {
-            b.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Platform:Messaging:ConnectionString"] = broker.AmqpAdministrador,
-                ["Platform:Messaging:PollInterval"] = "00:00:00.200",
-                ["Diagnostico:Consultas:Bus:ConsumidorHabilitado"] = "true",
-                // Las pruebas llaman al reconciliador directo: su vuelta automática no llega durante la prueba.
-                ["Diagnostico:Consultas:Reconciliador:Intervalo"] = "01:00:00",
-            });
+            Configurar(b, broker);
             b.Services.AddSingleton<IFuenteSimit>(new FuenteSimitSimulada());
             if (reloj is not null)
                 b.Services.AddSingleton<TimeProvider>(reloj);
+        });
+
+    /// <summary>El broker de la prueba, el consumidor de resultados encendido y el reconciliador sin vueltas solas.</summary>
+    private static void Configurar(WebApplicationBuilder b, BrokerDePrueba broker) =>
+        b.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Platform:Messaging:ConnectionString"] = broker.AmqpAdministrador,
+            ["Platform:Messaging:PollInterval"] = "00:00:00.200",
+            ["Diagnostico:Consultas:Bus:ConsumidorHabilitado"] = "true",
+            // Las pruebas llaman al reconciliador directo: su vuelta automática no llega durante la prueba.
+            ["Diagnostico:Consultas:Reconciliador:Intervalo"] = "01:00:00",
         });
 
     private static IHostedService ConsumidorDeResultados(ApiDePrueba api) =>
@@ -501,13 +553,17 @@ public sealed class ConsultasDiagnosticoBrokerTests
     {
         public List<MensajeBroker> Atendidos { get; } = [];
 
+        /// <summary>HU #14153: transforma la respuesta simulada antes de publicarla (null = tal cual).</summary>
+        public Func<RespuestaSimulada, RespuestaSimulada>? Ajustar { get; init; }
+
         public async Task<MensajeBroker> TomarAsync(string cola) =>
             await broker.TomarAsync(cola, TimeSpan.FromSeconds(15)) ?? throw new TimeoutException($"sin trabajo en {cola}");
 
         public async Task<EventEnvelope> ResultadoAsync(MensajeBroker trabajo, CancellationToken ct)
         {
             var atendido = new TrabajoAtendido(trabajo.Sobre.EventId, trabajo.RoutingKey, trabajo.Sobre);
-            return new BusDePrueba(api).Resultado(atendido, await ConsultasSimuladas.ResponderAsync(api, atendido, ct));
+            var respuesta = await ConsultasSimuladas.ResponderAsync(api, atendido, ct);
+            return new BusDePrueba(api).Resultado(atendido, Ajustar?.Invoke(respuesta) ?? respuesta);
         }
 
         /// <summary>Atiende los trabajos de <paramref name="cola"/> hasta que se cumpla <paramref name="listo"/>.</summary>

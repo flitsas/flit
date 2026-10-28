@@ -218,6 +218,36 @@ public sealed class EjecutorCeldaRuntPersonaTests
     }
 
     /// <summary>Lote con RUNT y RUNT_PROPIETARIO procesado hasta vaciar la cola; la configuración se siembra solo la primera vez.</summary>
+    // HU #14153 AC5 — la celda de persona reutilizada el mismo día copia también la respuesta cruda del proveedor (los mismos bytes
+    // cifrados de la original, que llevan resultado.respuesta_cruda de cada persona).
+    [Fact]
+    public async Task HU14153_AC5_Reutilizar_persona_copia_la_respuesta_cruda_del_proveedor()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var reloj = new RelojManual();
+        var fuentes = new FuentesPersonaProgramables();
+        await using var api = await MotorPersonas.ArrancarAsync(fuentes, b => b.Services.AddSingleton<TimeProvider>(reloj));
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+
+        IrA(reloj, 8, 0);
+        var primero = await LoteRepetibleAsync(api, empresa, "TST301", ct);
+        IrA(reloj, 9, 0);
+        var segundo = await LoteRepetibleAsync(api, empresa, "TST301", ct);
+
+        var original = await MotorPersonas.CeldaAsync(api, empresa, primero, "TST301", Fuente.RuntPropietario, ct);
+        var copia = await MotorPersonas.CeldaAsync(api, empresa, segundo, "TST301", Fuente.RuntPropietario, ct);
+        copia.ReutilizadaDeId.Should().Be(original.Id);
+        var deOriginal = await RespuestaFuenteTests.CifradaAsync(api, original.Id, ct);
+        deOriginal.Should().NotBeNull();
+        (await RespuestaFuenteTests.CifradaAsync(api, copia.Id, ct)).Should().Equal(deOriginal!, "se copia el cifrado tal cual");
+        var mapa = JsonDocument.Parse(RespuestaFuenteTests.Descifrar(api, deOriginal!)).RootElement;
+        var conCrudo = mapa.EnumerateObject()
+            .Select(p => JsonDocument.Parse(p.Value.GetString()!).RootElement.GetProperty("resultado").TryGetProperty("respuesta_cruda", out var c) && c.ValueKind == JsonValueKind.Object)
+            .ToList();
+        conCrudo.Should().NotBeEmpty().And.OnlyContain(c => c, "lo copiado lleva la respuesta cruda de cada persona");
+    }
+
     private static async Task<Guid> LoteRepetibleAsync(ApiDePrueba api, EmpresaDePrueba empresa, string identificador, CancellationToken ct)
     {
         bool sembrada;

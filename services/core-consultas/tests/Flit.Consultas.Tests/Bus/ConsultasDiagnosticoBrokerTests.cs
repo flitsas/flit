@@ -284,6 +284,34 @@ public sealed class ConsultasDiagnosticoBrokerTests(AnfitrionBrokerDiagnostico b
         (await broker.ConsumosAsync(empresa)).Should().ContainSingle().Which.Producto.Should().Be(Diagnostico);
     }
 
+    /// <summary>
+    /// HU #14153 AC8 — una respuesta cruda de 256 KB (ConsultarConductor con <c>incluir_respuesta_cruda</c>) sale por la outbox de
+    /// core-consultas (columna <c>text</c>) y el broker real y llega a <c>diagnostico.consultas-resultados</c> completa: el mismo texto,
+    /// byte a byte, con su marca de fin.
+    /// </summary>
+    [Fact]
+    public async Task HU14153_AC8_Un_crudo_de_256_KB_llega_completo_por_la_outbox_y_el_broker()
+    {
+        Assert.SkipWhen(broker.SkipReason is not null, broker.SkipReason ?? string.Empty);
+        var empresa = Guid.NewGuid();
+        var sobre = AnfitrionBus.Trabajo(empresa, FuentesBus.RuntPropietario, RpcConsultas.Conductor, new ConsultarConductorRequest
+        {
+            Opciones = new OpcionesConsulta { Proveedor = AnfitrionBus.CrudoGrande.Clave, IncluirRespuestaCruda = true },
+            Documento = new Flit.Platform.Grpc.V1.DocumentoIdentidad { Tipo = "CC", Numero = "9999900801" },
+        });
+
+        await broker.PublicarAsync(sobre, userId: Diagnostico);
+
+        var mensaje = await broker.ResultadoAsync(sobre.DataAs<TrabajoConsultaDiagnostico>().TrabajoId, TimeSpan.FromSeconds(30));
+        mensaje.Should().NotBeNull("el resultado llega a diagnostico.consultas-resultados");
+        var datos = mensaje!.Sobre.DataAs<ResultadoConsultaDiagnostico>();
+        datos.Estado.Should().Be(ResultadoConsultaDiagnostico.Ok);
+        var crudo = datos.Respuesta!.Value.GetProperty("resultado").GetProperty("respuesta_cruda").GetProperty("json").GetString()!;
+        AnfitrionBus.CrudoGrande.Json.Length.Should().BeGreaterThanOrEqualTo(200 * 1024);
+        crudo.Length.Should().Be(AnfitrionBus.CrudoGrande.Json.Length, "sin truncar");
+        crudo.Should().Be(AnfitrionBus.CrudoGrande.Json).And.EndWith("\"fin\":\"FIN-DEL-CRUDO\"}");
+    }
+
     [Fact]
     public async Task Con_consultas_caido_el_trabajo_espera_en_su_cola_y_se_procesa_al_volver_sin_ERROR()
     {

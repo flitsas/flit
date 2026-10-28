@@ -39,4 +39,9 @@
     <EmbeddedResource Include="Simulacion\Fixtures\intempo-*.json" LogicalName="$(RootNamespace).Simulacion.Fixtures.%(Filename)%(Extension)" />
   </ItemGroup>
 
+  <!-- HU #14153 AC3: respuestas crudas inventadas de Kyverum conductor y Verifik RUES para la simulacion (sin PII, rango ficticio 99999...). -->
+  <ItemGroup>
+    <EmbeddedResource Include="Simulacion\Fixtures\proveedor-*.json" LogicalName="$(RootNamespace).Simulacion.Fixtures.%(Filename)%(Extension)" />
+  </ItemGroup>
+
 </Project>

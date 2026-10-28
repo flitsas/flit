@@ -1076,6 +1076,17 @@ paths:
                             desde_cache: false
                             campos:
                               - { clave: person_full_name, valor_texto: PERSONA PRUEBA UNO }
+                            respuesta_cruda:
+                              proveedor: kyverum_runt_conductor
+                              tipo_sujeto: person
+                              json: '{"ok":true,"licencias":[{"numeroLicencia":"99999000101","estadoLicencia":"ACTIVA","detalleLicencia":[{"categoria":"B1","fechaVencimiento":"2034-01-15"}]}]}'
+                        respuesta_proveedor:
+                          ok: true
+                          licencias:
+                            - numeroLicencia: "99999000101"
+                              estadoLicencia: ACTIVA
+                              detalleLicencia:
+                                - { categoria: B1, fechaVencimiento: "2034-01-15" }
                       - orden: 2
                         rol: PROPIETARIO
                         tipo_documento: NIT
@@ -1087,6 +1098,7 @@ paths:
                         consultado_en: null
                         resultado: null
                         respuesta_fuente: null
+                        respuesta_proveedor: null
                     respuesta_fuente: null
         "400":
           description: "`code` = FUENTE_INVALIDA (`campo` = fuente): el código de fuente no existe."
@@ -3631,7 +3643,7 @@ components:
         Una persona de una celda de persona. El documento va enmascarado en `documento_enmascarado`; desde HU #14087 AC8
         `respuesta_fuente` trae la respuesta completa de la fuente para esa persona (con nombre, documento y lo que la
         fuente responda).
-      required: [orden, rol, tipo_documento, documento_enmascarado, declarado_por_cliente, consulta, estado, tipo_error, consultado_en, resultado, respuesta_fuente]
+      required: [orden, rol, tipo_documento, documento_enmascarado, declarado_por_cliente, consulta, estado, tipo_error, consultado_en, resultado, respuesta_fuente, respuesta_proveedor]
       properties:
         orden:
           type: integer
@@ -3680,6 +3692,17 @@ components:
             HU #14087 AC8 — la respuesta COMPLETA de la fuente para esta persona (el `*Response` del rpc en proto-JSON, nombres
             del .proto en snake_case y valores por defecto incluidos), con datos personales. Null si la persona no tiene
             respuesta guardada (llenado manual, error sin respuesta, celda anterior al AC8) o no se pudo descifrar.
+        respuesta_proveedor:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: >
+            HU #14153 (decisión del usuario 2026-10-28) — la respuesta ÍNTEGRA del proveedor para esta persona: el texto de
+            `respuesta_fuente.resultado.respuesta_cruda.json` parseado como objeto JSON, tal cual lo devolvió el proveedor
+            (Kyverum/Verifik conductor en RUNT_PERSONA, Verifik en RUES), sin quitar ningún dato: identificadores internos,
+            firma y campos técnicos incluidos. Objeto libre (su forma es la del proveedor). Incluye datos personales (licencias de
+            conducción, representantes legales). Null si no hay respuesta cruda guardada (consulta anterior a la HU, llenado
+            manual, error, otras fuentes), si no es JSON válido o si no es un objeto (se registra en el log sin el contenido).
 
     ResultadoRuntDetalle:
       type: object

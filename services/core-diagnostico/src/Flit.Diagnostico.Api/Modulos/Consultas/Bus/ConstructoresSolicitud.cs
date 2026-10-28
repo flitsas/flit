@@ -207,7 +207,9 @@ internal abstract class ConstructorPorPersonas(IProtectorDocumentoPersona protec
 /// <summary>
 /// RUNT_PROPIETARIO y RUNT_LOCATARIO (<see cref="EjecutorCeldaRuntPersona"/>): la persona natural a <c>ConsultarConductor</c> con
 /// el tipo en mayúsculas; la persona con NIT a <c>ConsultarRues</c> con el NIT sin dígito de verificación (fuente del bus
-/// <see cref="FuentesBus.Rues"/>).
+/// <see cref="FuentesBus.Rues"/>). HU #14153 AC4 (decisión del usuario 2026-10-28): las dos solicitudes piden además la respuesta cruda
+/// del proveedor (<c>incluir_respuesta_cruda</c>), que llega en <c>resultado.respuesta_cruda</c> y queda cifrada con la respuesta de
+/// la persona (<see cref="RespuestaFuenteCelda"/>); el detalle la expone como <c>respuesta_proveedor</c>. Las demás fuentes no la piden.
 /// </summary>
 internal sealed class ConstructorSolicitudRuntPersona : ConstructorPorPersonas
 {
@@ -228,16 +230,19 @@ internal sealed class ConstructorSolicitudRuntPersona : ConstructorPorPersonas
             var nit = EjecutorCeldaRuntPersona.NitSinDigito(documento.Numero);
             return nit.Length == 0
                 ? null
-                : new SolicitudConsulta(FuentesBus.Rues, RpcConsultas.Rues, new ConsultarRuesRequest { Opciones = new OpcionesConsulta(), Nit = nit }, personaId);
+                : new SolicitudConsulta(FuentesBus.Rues, RpcConsultas.Rues, new ConsultarRuesRequest { Opciones = ConRespuestaCruda(), Nit = nit }, personaId);
         }
 
         var request = new ConsultarConductorRequest
         {
-            Opciones = new OpcionesConsulta(),
+            Opciones = ConRespuestaCruda(),
             Documento = new DocumentoIdentidad { Tipo = documento.Tipo.Trim().ToUpperInvariant(), Numero = documento.Numero },
         };
         return new SolicitudConsulta(FuentesBus.De(Fuente), RpcConsultas.Conductor, request, personaId);
     }
+
+    /// <summary>Las opciones de RUNT persona y RUES: la respuesta íntegra del proveedor (core-consultas no la sirve desde caché).</summary>
+    private static OpcionesConsulta ConRespuestaCruda() => new() { IncluirRespuestaCruda = true };
 }
 
 /// <summary>SIMIT_PROPIETARIO y SIMIT_LOCATARIO por documento (<see cref="EjecutorCeldaSimitPersona"/>): NIT como persona jurídica.</summary>

@@ -42,8 +42,9 @@ public sealed class ConstructoresSolicitudTests
     {
         [RpcConsultas.PorPlaca] = ["placa"],
         [RpcConsultas.PorVin] = ["vin"],
-        [RpcConsultas.Conductor] = ["opciones", "documento", "documento.tipo", "documento.numero"],
-        [RpcConsultas.Rues] = ["opciones", "nit"],
+        // HU #14153 AC4: RUNT persona y RUES piden además la respuesta cruda del proveedor (una opción, no un dato de identificación).
+        [RpcConsultas.Conductor] = ["opciones", "opciones.incluirRespuestaCruda", "documento", "documento.tipo", "documento.numero"],
+        [RpcConsultas.Rues] = ["opciones", "opciones.incluirRespuestaCruda", "nit"],
         [RpcConsultas.Multas] = ["opciones", "documento", "documento.tipo", "documento.numero", "tipoPersona", "placa", "placa.valor"],
         [RpcConsultas.Avaluos] = ["opciones", "placa", "placa.valor", "vin", "vin.valor", "modelo", "cilindraje", "combustible", "pasajeros"],
         [RpcConsultas.Impuesto] = ["opciones", "placa", "placa.valor", "departamentoCodigo"],
@@ -92,6 +93,43 @@ public sealed class ConstructoresSolicitudTests
             [RpcConsultas.Impuesto] = 3,
         }, "cada fuente del alcance tiene su solicitud en los tres vehículos");
     }
+
+    // HU #14153 AC4 — solo RUNT_PROPIETARIO y RUNT_LOCATARIO (ConsultarConductor y, con NIT, ConsultarRues) llevan
+    // incluir_respuesta_cruda=true; RUNT del vehículo, SIMIT, avalúo e impuesto se construyen igual que hoy (sin la opción).
+    [Fact]
+    public async Task HU14153_AC4_Solo_RUNT_persona_y_RUES_piden_la_respuesta_cruda()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await MotorNa.ArrancarAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await LoteConRuntAsync(api, empresa, ct);
+        await using var scope = OutboxDePrueba.Scope(api, empresa.Id);
+        var db = scope.ServiceProvider.GetRequiredService<DiagnosticoDb>();
+        var constructores = scope.ServiceProvider.GetServices<IConstructorSolicitud>().ToList();
+
+        var porFuente = new List<(Fuente Fuente, string Rpc, bool Crudo)>();
+        foreach (var celda in await db.Set<CeldaConsulta>().Where(c => c.DiagnosticoId == lote).ToListAsync(ct))
+        {
+            foreach (var s in await constructores.Single(c => c.Fuente == celda.Fuente).ConstruirAsync(db, celda, ct))
+                porFuente.Add((celda.Fuente, s.Rpc, Opciones(s.Solicitud)?.IncluirRespuestaCruda == true));
+        }
+
+        porFuente.Where(p => p.Crudo).Select(p => p.Fuente).Distinct().Should().BeEquivalentTo([Fuente.RuntPropietario, Fuente.RuntLocatario]);
+        porFuente.Where(p => p.Crudo).Select(p => p.Rpc).Distinct().Should().BeEquivalentTo([RpcConsultas.Conductor, RpcConsultas.Rues]);
+        porFuente.Where(p => p.Fuente is Fuente.RuntPropietario or Fuente.RuntLocatario).Should().OnlyContain(p => p.Crudo, "toda solicitud de esas dos fuentes la pide");
+        porFuente.Where(p => p.Fuente is not (Fuente.RuntPropietario or Fuente.RuntLocatario)).Should().NotBeEmpty().And.OnlyContain(p => !p.Crudo);
+    }
+
+    private static OpcionesConsulta? Opciones(IMessage solicitud) => solicitud switch
+    {
+        ConsultarConductorRequest r => r.Opciones,
+        ConsultarRuesRequest r => r.Opciones,
+        ConsultarMultasRequest r => r.Opciones,
+        ConsultarAvaluosRequest r => r.Opciones,
+        ConsultarImpuestoVehicularRequest r => r.Opciones,
+        _ => null,
+    };
 
     [Fact]
     public async Task Una_celda_de_persona_solo_pide_las_personas_que_no_respondieron()
@@ -162,16 +200,17 @@ public sealed class ConstructoresSolicitudTests
         var tst003 = v.IdentificadorNorm == "TST003";
         var porVin = v.IdentificadorNorm == Vin;
         var opciones = new OpcionesConsulta();
+        var conCrudo = new OpcionesConsulta { IncluirRespuestaCruda = true };
         return fuente switch
         {
             Fuente.Runt => porVin
                 ? [(RpcConsultas.PorVin, new ConsultarPorVinRequest { Vin = Vin })]
                 : [(RpcConsultas.PorPlaca, new ConsultarPorPlacaRequest { Placa = v.IdentificadorNorm })],
             Fuente.RuntPropietario => tst003
-                ? [(RpcConsultas.Rues, new ConsultarRuesRequest { Opciones = opciones, Nit = Nit })]
-                : [(RpcConsultas.Conductor, new ConsultarConductorRequest { Opciones = opciones, Documento = new DocumentoIdentidad { Tipo = "CC", Numero = Natural } })],
+                ? [(RpcConsultas.Rues, new ConsultarRuesRequest { Opciones = conCrudo, Nit = Nit })]
+                : [(RpcConsultas.Conductor, new ConsultarConductorRequest { Opciones = conCrudo, Documento = new DocumentoIdentidad { Tipo = "CC", Numero = Natural } })],
             Fuente.RuntLocatario => tst003
-                ? [(RpcConsultas.Conductor, new ConsultarConductorRequest { Opciones = opciones, Documento = new DocumentoIdentidad { Tipo = "CC", Numero = Locatario } })]
+                ? [(RpcConsultas.Conductor, new ConsultarConductorRequest { Opciones = conCrudo, Documento = new DocumentoIdentidad { Tipo = "CC", Numero = Locatario } })]
                 : [],
             // Bug SIMIT por placa (2026-10-27): la placa y el documento del primer propietario del RUNT (para el proveedor que lo exige),
             // sin tipo de persona: el proveedor externo se elige como por placa.

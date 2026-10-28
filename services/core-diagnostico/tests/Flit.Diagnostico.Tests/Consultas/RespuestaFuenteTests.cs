@@ -112,6 +112,50 @@ public sealed class RespuestaFuenteTests
         }
     }
 
+    // HU #14153 AC5 — RUNT persona (ConsultarConductor) y RUES piden la respuesta cruda; el consumidor la guarda cifrada DENTRO de la
+    // respuesta de cada persona (resultado.respuesta_cruda.json del proto-JSON), con el mecanismo de #14087: nada en claro en la
+    // columna y el texto exacto del proveedor.
+    [Fact]
+    public async Task HU14153_AC5_RUNT_persona_y_RUES_guardan_la_respuesta_cruda_del_proveedor_cifrada_por_persona()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await MotorPersonas.ArrancarAsync(null, b =>
+        {
+            b.Services.AddSingleton<IFuenteRuntPersona, FuenteRuntPersonaSimulada>();
+            b.Services.AddSingleton<IFuenteRues, FuenteRuesSimulada>();
+        });
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await MotorPersonas.LoteAsync(api, empresa, [Lotes.Fila("TST301")], ct);
+        var bus = Motor.Bus(api);
+        (await bus.ProcesarLoteAsync(ct)).Should().Be(1, "primero la RUNT");
+        var trabajos = await bus.DescartarTrabajosAsync(ct);
+        trabajos.Should().NotBeEmpty();
+        foreach (var trabajo in trabajos)
+            (await bus.EntregarAsync(bus.Resultado(trabajo, await ConsultasSimuladas.ResponderAsync(api, trabajo, ct)), ct)).Should().BeTrue();
+
+        var celda = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST301", Fuente.RuntPropietario, ct);
+        var cifrada = (await CifradaAsync(api, celda.Id, ct))!;
+        Encoding.UTF8.GetString(cifrada).Should().NotContainAny(["FICTICIA DOBLE", "licencias", "legalRepresentatives"], "va cifrada, nunca en claro");
+        var mapa = JsonDocument.Parse(Descifrar(api, cifrada)).RootElement;
+        var crudas = mapa.EnumerateObject()
+            .Select(p => JsonDocument.Parse(p.Value.GetString()!).RootElement.GetProperty("resultado").GetProperty("respuesta_cruda"))
+            .ToList();
+        crudas.Should().HaveCount(trabajos.Count, "cada persona guarda su respuesta con el crudo del proveedor");
+        foreach (var cruda in crudas)
+        {
+            var proveedor = cruda.GetProperty("proveedor").GetString();
+            var json = cruda.GetProperty("json").GetString()!;
+            if (proveedor == "verifik_rues")
+                json.Should().Be(ConsultasSimuladas.CrudoRues(JsonDocument.Parse(json).RootElement.GetProperty("data").GetProperty("commercialRegistry").GetProperty("NIT").GetString()!),
+                    "el texto exacto del proveedor");
+            else
+                json.Should().Be(ConsultasSimuladas.CrudoConductor(JsonDocument.Parse(json).RootElement.GetProperty("persona").GetProperty("documento").GetString()!));
+        }
+
+        crudas.Select(c => c.GetProperty("proveedor").GetString()).Should().Contain("kyverum_runt_conductor");
+    }
+
     // ── Apoyo (también lo usan DetalleCeldaTests, ReutilizacionTests y LlenadoManualTests) ─────────────────────────
 
     internal static IDataProtector Protector(ApiDePrueba api) =>

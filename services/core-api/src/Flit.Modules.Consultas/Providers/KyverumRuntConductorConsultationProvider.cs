@@ -1,5 +1,6 @@
 using Flit.Infrastructure.KyverumRunt;
 using Flit.Tramites.Application.UseCases.Consultations;
+using Flit.Tramites.Domain.Certifications;
 
 namespace Flit.Infrastructure.Consultations;
 
@@ -25,9 +26,20 @@ internal sealed class KyverumRuntConductorConsultationProvider(KyverumRuntApiCli
 
         try
         {
-            var response = await client.ConsultarPersonaAsync(
+            var (response, raw) = await client.ConsultarPersonaConCrudoAsync(
                 new KyverumRuntPersonaQuery(documentNumber, KyverumRuntDocType.Normalize(documentType)), ct);
-            return KyverumRuntConductorResultMapper.Map(response);
+
+            // HU #14153 AC1 — el cuerpo HTTP tal cual, para que el Diagnóstico muestre la respuesta íntegra del proveedor. Trámites
+            // no lo persiste: el mapper de conductor no produce Certifications y la ingesta canónica solo corre con ellas.
+            return KyverumRuntConductorResultMapper.Map(response) with
+            {
+                RawPayload = new RawProviderPayload(
+                    ProviderKey: Key_,
+                    SubjectKind: RawProviderPayload.PersonSubject,
+                    SubjectKey: documentNumber,
+                    PayloadJson: raw,
+                    QueriedAt: DateTimeOffset.UtcNow),
+            };
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

@@ -45,6 +45,9 @@ public sealed record DetalleCeldaDto(
 /// si la celda aún no tiene dato de esa persona), el tipo de error, la fecha del dato y su resultado normalizado. Nunca el id
 /// interno de la persona. <c>respuesta_fuente</c> (HU #14087 AC8): la respuesta completa de la fuente para esa persona, descifrada
 /// (con nombre y lo que la fuente responda); null si no hay.
+/// <para>HU #14153 (decisión del usuario 2026-10-28, literal): <c>respuesta_proveedor</c> es el JSON que devolvió el proveedor
+/// (<c>resultado.respuesta_cruda.json</c> de <c>respuesta_fuente</c>) parseado como objeto, sin quitar ningún dato: RUNT persona
+/// (Kyverum/Verifik conductor) y RUES. Null si no hay crudo, si no es JSON válido o si no es un objeto (log sin el contenido).</para>
 /// </summary>
 public sealed record PersonaDetalleDto(
     [property: JsonPropertyName("orden")] int Orden,
@@ -57,7 +60,8 @@ public sealed record PersonaDetalleDto(
     [property: JsonPropertyName("tipo_error")] string? TipoError,
     [property: JsonPropertyName("consultado_en")] DateTimeOffset? ConsultadoEn,
     [property: JsonPropertyName("resultado")] ResultadoDetalleDto? Resultado,
-    [property: JsonPropertyName("respuesta_fuente")] JsonElement? RespuestaFuente = null);
+    [property: JsonPropertyName("respuesta_fuente")] JsonElement? RespuestaFuente = null,
+    [property: JsonPropertyName("respuesta_proveedor")] JsonElement? RespuestaProveedor = null);
 
 /// <summary>
 /// Resultado normalizado de una fuente en el detalle. Conjunto cerrado de tipos (polimorfismo de solo escritura, sin
