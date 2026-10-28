@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useRef, useState } from "react";
 import { Captcha } from "@/components/Captcha";
 import { boton } from "@/components/landing/estilos";
@@ -8,6 +8,7 @@ import type { ClientePortal, Cotizacion } from "@/lib/api/cliente";
 import { ApiError, esperaDe, mensajeDe } from "@/lib/api/errores";
 import { useBloqueo } from "@/lib/api/useBloqueo";
 import { formatearPesos } from "@/lib/formato";
+import { claveCotizacion } from "@/lib/tramite/cotizacion";
 
 export const MENSAJE_SIN_TARIFA = "Este organismo no tiene tarifa para este trámite";
 const CODIGOS_SIN_TARIFA = new Set(["tarifa_no_vigente", "tipo_no_habilitado"]);
@@ -28,6 +29,7 @@ interface Props {
 export function ValorTramite({ cliente, organismoId, tipoCodigo, onSinTarifa }: Props) {
   const idValor = useId();
   const bloqueo = useBloqueo();
+  const queryClient = useQueryClient();
   const [pidiendo, setPidiendo] = useState(false);
   const [captcha, setCaptcha] = useState<string | null>(null);
   const [reinicio, setReinicio] = useState(0);
@@ -35,6 +37,8 @@ export function ValorTramite({ cliente, organismoId, tipoCodigo, onSinTarifa }: 
 
   const cotizacion = useMutation<Cotizacion, unknown, string>({
     mutationFn: (token) => cliente.cotizaciones.cotizar({ organismoId, tipoCodigo }, { captcha: token }),
+    // El valor base queda en la caché para que el paso Requisitos lo muestre sin pedir otra verificación.
+    onSuccess: (c) => queryClient.setQueryData(claveCotizacion(organismoId, tipoCodigo, []), c),
     onError: (error) => bloqueo.registrar(error),
     onSettled: () => {
       setCaptcha(null);

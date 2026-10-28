@@ -6,7 +6,7 @@ import { useWizard, type PropsSeccion } from "@/components/tramite/ContextoWizar
 import { grupoDePendiente, GRUPO_POR_SECCION, type GrupoPaso } from "@/lib/tramite/pasos";
 
 /**
- * Marcador de una sección cuyo renderer aún no está construido (actores, requisitos y pago: HU F3 a F5; envío: F6). No dibuja
+ * Marcador de una sección cuyo renderer aún no está construido (pago: HU F5; envío: F6). No dibuja
  * campos a medias ni inventa un diseño: avisa con un estado accesible y deja avanzar solo si el back ya da por completo lo que
  * esa sección pide (por ejemplo, un borrador reanudado), para no atrapar a nadie.
  */
