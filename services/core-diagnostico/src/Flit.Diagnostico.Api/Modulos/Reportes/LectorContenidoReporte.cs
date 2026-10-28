@@ -31,7 +31,14 @@ namespace Flit.Diagnostico.Api.Modulos.Reportes;
 /// var delZip = await lector.VehiculoAsync(cabecera, vehiculoId, evidencia.EmpresaNombre, ct); // ZIP (F07-H5)
 /// </code>
 /// </example>
-internal sealed class LectorContenidoReporte(DiagnosticoDb db, IProtectorDocumentoPersona protector, IResolutorNombresUsuario nombres, ICatalogoTiposTramite catalogo)
+/// <remarks>
+/// Detalle del RUNT (PDF v2, ajuste 2026-10-27): solo en el contenido del vehículo (PDF y ZIP), con la respuesta completa de la
+/// fuente de la celda RUNT COMPLETADO, descifrada en memoria con <see cref="IProtectorRespuestaFuente"/> y proyectada por
+/// <see cref="LectorDetalleRunt"/> (acreedores persona natural sin nombre y enmascarados). El contenido del lote (Excel) no la lee.
+/// </remarks>
+internal sealed class LectorContenidoReporte(
+    DiagnosticoDb db, IProtectorDocumentoPersona protector, IProtectorRespuestaFuente protectorRespuesta, IResolutorNombresUsuario nombres,
+    ICatalogoTiposTramite catalogo)
 {
     /// <summary>Texto de cada motivo de N/A (los mismos del detalle de celda de la interfaz).</summary>
     public static readonly IReadOnlyDictionary<MotivoNa, string> TextoMotivoNa = new Dictionary<MotivoNa, string>
@@ -68,12 +75,32 @@ internal sealed class LectorContenidoReporte(DiagnosticoDb db, IProtectorDocumen
             .OrderBy(p => p.Rol).ThenBy(p => p.Orden)
             .ToListAsync(ct).ConfigureAwait(false);
         var lote = await EncabezadoAsync(cabecera, empresa, ct).ConfigureAwait(false);
+        var detalle = await DetalleRuntAsync(cabecera, vehiculoId, celdas, ct).ConfigureAwait(false);
 
         return new ContenidoReporteVehiculo(
             new EncabezadoReporte(
                 lote.DiagnosticoId, lote.NombreLote, lote.Empresa, lote.UsuarioCreador, lote.CreadoEn, lote.TipoAnalisis,
                 vehiculo.Identificador, CodigosDeEnum.Codigo(vehiculo.Tipo), vehiculo.Placa, vehiculo.Vin),
-            Secciones(cabecera, celdas, personas));
+            Secciones(cabecera, celdas, personas),
+            detalle);
+    }
+
+    /// <summary>
+    /// El detalle del RUNT del vehículo: solo si el RUNT está en el alcance y su celda está COMPLETADO; la respuesta cifrada se lee
+    /// aparte (una fila, una columna) para no traerla en el resto de las lecturas. Null si no hay o no se puede leer.
+    /// </summary>
+    private async Task<DetalleRuntReporte?> DetalleRuntAsync(CabeceraDiagnostico cabecera, Guid vehiculoId, IReadOnlyList<CeldaLeidaReporte> celdas, CancellationToken ct)
+    {
+        if (!Alcance.Agrupar(cabecera.Alcance).Fuentes.Contains(Fuente.Runt)
+            || !celdas.Any(c => c.Fuente == Fuente.Runt && c.Estado == EstadoCelda.Completado))
+            return null;
+        var id = cabecera.Id;
+        var tenant = cabecera.TenantId;
+        var cifrada = await db.Set<CeldaConsulta>().AsNoTracking()
+            .Where(c => c.DiagnosticoId == id && c.TenantId == tenant && c.VehiculoId == vehiculoId && c.Fuente == Fuente.Runt && c.Estado == EstadoCelda.Completado)
+            .Select(c => c.RespuestaFuenteCifrada)
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        return LectorDetalleRunt.Leer(protectorRespuesta, cifrada);
     }
 
     /// <summary>El contenido del lote para la compañía del token, con su visibilidad y la empresa del claim.</summary>

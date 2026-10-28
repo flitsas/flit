@@ -16,18 +16,27 @@ namespace Flit.Diagnostico.Api.Modulos.Reportes;
 /// var entrada = await HuellaEvidencia.LeerEntradaAsync(db, ClaveEvidencia.Pdf(diagnosticoId, vehiculoId), 1, contenido.ParaHuella(), ct);
 /// </code>
 /// </example>
-public sealed record ContenidoReporteVehiculo(EncabezadoReporte Encabezado, IReadOnlyList<SeccionReporte> Secciones)
+/// <param name="Encabezado">Encabezado del reporte.</param>
+/// <param name="Secciones">Una sección por fuente del alcance, en el orden de la grilla.</param>
+/// <param name="DetalleRunt">
+/// Detalle completo del RUNT (PDF v2, ajuste 2026-10-27) leído de la respuesta de la fuente guardada en la celda RUNT; null si la
+/// celda no está COMPLETADO, no guardó respuesta (celdas anteriores al 2026-10-27), el cifrado no se puede leer o el RUNT no
+/// encontró el vehículo. El PDF dice «No registra». El Excel del lote no lo usa.
+/// </param>
+public sealed record ContenidoReporteVehiculo(EncabezadoReporte Encabezado, IReadOnlyList<SeccionReporte> Secciones, DetalleRuntReporte? DetalleRunt = null)
 {
     /// <summary>
     /// Lo que sale en el archivo y no viene de las celdas ni de la cabecera, para el <c>Encabezado</c> de
-    /// <see cref="EntradaHuella"/> (HU #13846): empresa, creador, tipo de análisis, fecha de creación, identificación del vehículo
-    /// y cada persona enmascarada. Cambiar cualquiera de estos textos cambia la huella e invalida el archivo guardado.
+    /// <see cref="EntradaHuella"/> (HU #13846): empresa, creador, tipo de análisis, fecha de creación, identificación del vehículo,
+    /// cada persona enmascarada y, si hay, el detalle del RUNT (claves <c>runt/…</c>; sin detalle no se agrega ninguna). Cambiar
+    /// cualquiera de estos textos cambia la huella e invalida el archivo guardado.
     /// </summary>
     public IReadOnlyDictionary<string, string?> ParaHuella()
     {
         var claves = new Dictionary<string, string?>(StringComparer.Ordinal);
         Encabezado.Agregar(claves);
         SeccionReporte.AgregarPersonas(claves, "persona", Secciones);
+        DetalleRunt?.Agregar(claves);
         return claves;
     }
 }
