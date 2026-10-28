@@ -563,5 +563,5 @@ html { scroll-behavior: smooth; scrollbar-color: var(--primary) var(--background
 @media (min-width: 901px) {
   .dashboard-two-col .dashboard-side { display: flex; flex-direction: column; align-self: stretch; }
   .dashboard-side .ot-module { flex: 1 1 auto; margin-bottom: 31px; display: flex; flex-direction: column; }
-  .dashboard-side .ot-module .ot-list { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: space-between; }
+  .dashboard-side .ot-module .ot-list { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: flex-start; }
 }
