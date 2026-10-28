@@ -12,14 +12,8 @@ import { formatFechaHora } from "@/lib/format/date";
 import { fetchVersionesPn, type ResumenVersionContenidoPn } from "@/lib/api/admin-pn-contenido";
 
 const columns: DataTableColumn<ResumenVersionContenidoPn>[] = [
-  { key: "version", header: "Versión", cellClassName: "font-semibold", render: (v) => v.version },
-  { key: "fecha", header: "Publicada", cellClassName: "whitespace-nowrap", render: (v) => formatFechaHora(v.publicadoEn) },
-  {
-    key: "usuario",
-    header: "Usuario",
-    cellClassName: "font-mono",
-    render: (v) => <span title={v.publicadoPor ?? undefined}>{v.publicadoPor ? v.publicadoPor.slice(0, 8) : "—"}</span>,
-  },
+  { key: "version", header: "N.º", cellClassName: "font-semibold", render: (v) => v.version },
+  { key: "fecha", header: "Publicada el", cellClassName: "whitespace-nowrap", render: (v) => formatFechaHora(v.publicadoEn) },
   { key: "preguntas", header: "Preguntas", render: (v) => v.preguntas },
   { key: "banners", header: "Banners", render: (v) => v.banners },
 ];
@@ -49,18 +43,18 @@ export function VersionesModal({ onClose }: { onClose: () => void }) {
   }, [load]);
 
   return (
-    <Modal open onClose={onClose} title="Historial de versiones" description="Versiones publicadas, de la más reciente a la más antigua." icon={History} size="lg">
+    <Modal open onClose={onClose} title="Publicaciones anteriores" description="Cada vez que publicas queda aquí, de la más reciente a la más antigua." icon={History} size="lg">
       {status === "loading" ? (
-        <CarLoaderModal label="Cargando versiones…" />
+        <CarLoaderModal label="Cargando publicaciones…" />
       ) : (
         <UiStateBoundary
           status={status}
-          emptyMessage="Aún no se ha publicado ninguna versión."
-          errorMessage="No se pudo cargar el historial de versiones."
+          emptyMessage="Todavía no has publicado nada."
+          errorMessage="No se pudieron cargar las publicaciones anteriores."
           onRetry={() => void load()}
         >
           <DataTable<ResumenVersionContenidoPn>
-            ariaLabel="Versiones publicadas del contenido"
+            ariaLabel="Publicaciones anteriores del contenido"
             columns={columns}
             rows={pg.paginar(versiones)}
             getRowKey={(v) => String(v.version)}

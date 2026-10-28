@@ -105,26 +105,26 @@ export function VistaPreviaModal({ onClose }: { onClose: () => void }) {
     <Modal
       open
       onClose={onClose}
-      title="Vista previa del portal"
+      title="Así lo vería el ciudadano"
       description={
         borrador
           ? borrador.hayCambiosSinPublicar
-            ? "Así se vería con los cambios del borrador. Todavía no está publicado."
-            : "El borrador es igual a lo publicado."
+            ? "Así quedaría con tus cambios. Todavía no está publicado."
+            : "Es igual a lo que ya está publicado."
           : undefined
       }
       icon={Eye}
       size="xl"
     >
       {status === "loading" ? (
-        <CarLoaderModal label="Cargando vista previa…" />
+        <CarLoaderModal label="Cargando cómo quedaría…" />
       ) : (
         <UiStateBoundary status={status} errorMessage="No se pudo cargar la vista previa." onRetry={() => void load()}>
           {borrador && (
             <div className="flex flex-col gap-3">
               <p className="text-xs text-[#59677D] dark:text-white/70">
-                {borrador.versionPublicada !== null ? `Versión publicada: ${borrador.versionPublicada}.` : "Aún no se ha publicado ninguna versión."}
-                {" "}Consultado el {formatFechaHora(new Date())}.
+                {borrador.versionPublicada !== null ? "Ya hay una publicación en el portal." : "Todavía no has publicado nada."} Consultado el{" "}
+                {formatFechaHora(new Date())}.
               </p>
               <PortalPreview contenido={borrador.contenido} />
             </div>

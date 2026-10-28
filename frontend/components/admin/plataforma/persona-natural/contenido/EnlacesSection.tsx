@@ -4,7 +4,8 @@
 // legal sin documento oficial se muestra como «Sin documento oficial»: el portal conserva su aviso actual y no se
 // inventa texto legal. Cada guardado queda en el borrador. Tabla estándar con RowActions y los cuatro estados.
 import { useCallback, useEffect, useState } from "react";
-import { Link2, Loader2, Pencil } from "lucide-react";
+import { Link2, Pencil, Save } from "lucide-react";
+import { InlineAlert } from "@/components/atom/InlineAlert";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -22,16 +23,8 @@ import {
   fetchEnlacesPn,
   type EnlacePn,
 } from "@/lib/api/admin-pn-contenido";
-import {
-  PN_CANCEL_BTN_CLS,
-  PN_FIELD_ERROR_CLS,
-  PN_HINT_CLS,
-  PN_INPUT_CLS,
-  PN_INPUT_ERROR_CLS,
-  PN_LABEL_CLS,
-  PN_PRIMARY_BTN_CLS,
-  PN_PRIMARY_BTN_STYLE,
-} from "../pn-ui";
+import { PN_FIELD_ERROR_CLS, PN_HINT_CLS, PN_INPUT_CLS, PN_INPUT_ERROR_CLS, PN_LABEL_CLS } from "../pn-ui";
+import { PnButton, PnSeccionHeader } from "../pn-componentes";
 import { pnErrorMessage } from "../pnErrors";
 import { validarEnlace } from "./contenidoReglas";
 
@@ -70,24 +63,23 @@ function EnlaceFormModal({ enlace, onClose, onSave }: { enlace: EnlacePn; onClos
       onClose={onClose}
       busy={busy}
       title={`Editar: ${ENLACE_LABEL[enlace.codigo]}`}
-      description="El cambio queda en el borrador hasta que lo publique."
+      description="El ciudadano verá el cambio cuando publiques el contenido."
       icon={Link2}
       size="md"
       footer={
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} disabled={busy} className={PN_CANCEL_BTN_CLS}>
+          <PnButton variant="secondary" onClick={onClose} disabled={busy}>
             Cancelar
-          </button>
-          <button type="submit" form="pn-enlace-form" disabled={busy} className={PN_PRIMARY_BTN_CLS} style={PN_PRIMARY_BTN_STYLE}>
-            {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+          </PnButton>
+          <PnButton type="submit" form="pn-enlace-form" variant="primary" icon={Save} loading={busy}>
             Guardar enlace
-          </button>
+          </PnButton>
         </div>
       }
     >
       <form id="pn-enlace-form" onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
         <label className={PN_LABEL_CLS}>
-          Dirección (URL)
+          Dirección web del enlace
           <input
             value={url}
             onChange={(e) => setUrl(e.target.value)}
@@ -99,18 +91,14 @@ function EnlaceFormModal({ enlace, onClose, onSave }: { enlace: EnlacePn; onClos
           />
           <span id="pn-enlace-hint" className={PN_HINT_CLS}>
             {legal
-              ? "Déjelo vacío si no hay documento oficial: el portal conserva su aviso actual."
+              ? "Déjalo vacío si no hay documento oficial: el portal conserva su aviso actual."
               : enlace.codigo === "CONTACTO_VENTAS"
-                ? "Una página web, un correo (mailto:) o un teléfono (tel:). Vacío = sin valor."
-                : "Dirección del video. Vacío = sin valor."}
+                ? "Una página web, o un correo o teléfono con el formato mailto: o tel:. Vacío = sin valor."
+                : "Dirección web del video. Vacío = sin valor."}
           </span>
           {error && <span role="alert" className={PN_FIELD_ERROR_CLS}>{error}</span>}
         </label>
-        {general && (
-          <p role="alert" className="text-sm font-semibold text-[#C2410C]">
-            {general}
-          </p>
-        )}
+        {general && <InlineAlert tone="error">{general}</InlineAlert>}
       </form>
     </Modal>
   );
@@ -146,7 +134,7 @@ export function EnlacesSection({ onCambio }: { onCambio: () => void }) {
     { key: "enlace", header: "Enlace", cellClassName: "font-semibold", render: (e) => ENLACE_LABEL[e.codigo] },
     {
       key: "valor",
-      header: "Valor",
+      header: "Dirección",
       cellClassName: "max-w-[420px] break-all text-xs",
       render: (e) => {
         const v = valorEnlace(e);
@@ -171,14 +159,11 @@ export function EnlacesSection({ onCambio }: { onCambio: () => void }) {
 
   return (
     <section aria-labelledby="pn-enlaces-titulo" className="flex flex-col gap-3">
-      <div>
-        <h2 id="pn-enlaces-titulo" className="text-base font-bold text-flit-primary dark:text-white">
-          Enlaces
-        </h2>
-        <p className="text-xs text-[#59677D] dark:text-white/70">
-          Política de datos, términos, contacto de ventas y video. Sin documento oficial, el portal conserva su aviso actual.
-        </p>
-      </div>
+      <PnSeccionHeader
+        id="pn-enlaces-titulo"
+        titulo="Enlaces del portal"
+        descripcion="Política de datos, términos y condiciones, contacto de ventas y video. Sin documento oficial, el portal conserva su aviso actual."
+      />
       {status === "loading" ? (
         <CarLoaderModal label="Cargando enlaces…" />
       ) : (
@@ -212,7 +197,7 @@ export function EnlacesSection({ onCambio }: { onCambio: () => void }) {
             const guardado = await establecerEnlacePn(editando.codigo, url);
             setEnlaces((prev) => prev.map((e) => (e.codigo === guardado.codigo ? guardado : e)));
             setEditando(null);
-            show("Enlace guardado en el borrador.", "success");
+            show("Enlace guardado. El ciudadano lo verá cuando publiques.", "success");
             onCambio();
           }}
         />

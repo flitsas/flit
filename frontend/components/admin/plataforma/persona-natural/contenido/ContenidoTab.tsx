@@ -1,23 +1,26 @@
 "use client";
 
 // HU #14076 (Feature #14070, Épica #14021) — Pestaña «Contenido» de Plataforma > Persona Natural: preguntas frecuentes,
-// banners y enlaces del portal con el flujo borrador → vista previa → publicar. Todo lo que se edita es el BORRADOR; el
-// portal solo ve lo publicado. La barra de estado dice si hay cambios sin publicar (`hayCambiosSinPublicar`), abre la
-// vista previa y el historial de versiones, y «Publicar» pide confirmación y muestra la fecha de publicación.
+// banners y enlaces del portal con el flujo editar → ver cómo queda → publicar. Todo lo que se edita es un borrador: el
+// ciudadano solo ve lo publicado. El panel de arriba dice si hay cambios sin publicar (`hayCambiosSinPublicar`), abre la
+// vista previa y las publicaciones anteriores, y «Publicar cambios» pide confirmación explicando qué cambia para el
+// ciudadano. Una publicación reemplaza las preguntas y los banners que el portal muestra por defecto y no se edita.
 import { useCallback, useEffect, useState } from "react";
-import { Eye, History, Loader2, Send } from "lucide-react";
+import { Eye, History, Send } from "lucide-react";
 import { useToast } from "@/components/admin/Toast";
-import { Modal } from "@/components/atom/Modal";
+import { InlineAlert } from "@/components/atom/InlineAlert";
 import { StatusBadge } from "@/components/atom/StatusBadge";
-import { formatFechaHora } from "@/lib/format/date";
 import { fetchBorradorPn, publicarContenidoPn, type BorradorContenidoPn } from "@/lib/api/admin-pn-contenido";
-import { PN_CANCEL_BTN_CLS, PN_PRIMARY_BTN_CLS, PN_PRIMARY_BTN_STYLE } from "../pn-ui";
-import { pnError } from "../pnErrors";
+import { PnButton, PnConfirmDialog } from "../pn-componentes";
 import { BannersSection } from "./BannersSection";
 import { EnlacesSection } from "./EnlacesSection";
 import { PreguntasSection } from "./PreguntasSection";
 import { VersionesModal } from "./VersionesModal";
 import { VistaPreviaModal } from "./VistaPreviaModal";
+
+function plural(n: number, uno: string, varios: string): string {
+  return `${n} ${n === 1 ? uno : varios}`;
+}
 
 function PublicarDialog({
   borrador,
@@ -28,56 +31,32 @@ function PublicarDialog({
   onClose: () => void;
   onPublicar: () => Promise<void>;
 }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function confirmar() {
-    setBusy(true);
-    setError(null);
-    try {
-      await onPublicar();
-    } catch (err) {
-      setError(pnError(err).message);
-      setBusy(false);
-    }
-  }
-
+  const preguntas = borrador.contenido.preguntas.length;
+  const banners = borrador.contenido.banners.length;
   return (
-    <Modal
-      open
-      onClose={onClose}
-      busy={busy}
-      title="Publicar el contenido"
+    <PnConfirmDialog
+      title="Publicar los cambios"
       icon={Send}
-      size="sm"
-      footer={
-        <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} disabled={busy} className={PN_CANCEL_BTN_CLS}>
-            Cancelar
-          </button>
-          <button type="button" onClick={() => void confirmar()} disabled={busy} className={PN_PRIMARY_BTN_CLS} style={PN_PRIMARY_BTN_STYLE}>
-            {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-            Publicar ahora
-          </button>
-        </div>
-      }
+      confirmLabel="Sí, publicar"
+      confirmIcon={Send}
+      onClose={onClose}
+      onConfirm={onPublicar}
     >
-      <div className="flex flex-col gap-3 text-sm text-flit-primary dark:text-white">
-        <p>
-          El portal pasará a mostrar el borrador actual: {borrador.contenido.preguntas.length}{" "}
-          {borrador.contenido.preguntas.length === 1 ? "pregunta activa" : "preguntas activas"} y{" "}
-          {borrador.contenido.banners.length} {borrador.contenido.banners.length === 1 ? "banner activo" : "banners activos"}.
-        </p>
-        <p className="text-xs text-[#59677D] dark:text-white/70">
-          Se crea una versión nueva ({(borrador.versionPublicada ?? 0) + 1}); la anterior queda en el historial.
-        </p>
-        {error && (
-          <p role="alert" className="text-sm font-semibold text-[#C2410C]">
-            {error}
-          </p>
-        )}
-      </div>
-    </Modal>
+      <p>
+        Desde ahora el ciudadano verá en el portal {plural(preguntas, "pregunta visible", "preguntas visibles")} y{" "}
+        {plural(banners, "banner visible", "banners visibles")}.
+      </p>
+      <InlineAlert tone="warning" title="Qué cambia para el ciudadano">
+        Lo que publicas reemplaza las preguntas y los banners que el portal muestra por defecto. Una publicación no se
+        puede editar: si después quieres cambiar algo, haz el cambio y publica otra vez. La anterior queda en las
+        publicaciones anteriores.
+      </InlineAlert>
+      {preguntas === 0 && (
+        <InlineAlert tone="warning" compact>
+          No hay preguntas visibles: el ciudadano no verá preguntas frecuentes.
+        </InlineAlert>
+      )}
+    </PnConfirmDialog>
   );
 }
 
@@ -109,53 +88,64 @@ export function ContenidoTab() {
 
   return (
     <div className="flex flex-col gap-8">
-      <section aria-label="Estado de publicación" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#DFE5ED] bg-white px-4 py-3 dark:border-white/10 dark:bg-[#0B0F14]">
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          {errorEstado ? (
-            <>
-              <StatusBadge label="No se pudo consultar el estado" tone="danger" />
-              <button
-                type="button"
-                onClick={() => void refrescar()}
-                className="rounded-md text-xs font-semibold text-[color:var(--flit-brand-ink)] underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-              >
-                Reintentar
-              </button>
-            </>
-          ) : borrador ? (
-            <>
-              <StatusBadge
-                label={sinPublicar ? "Hay cambios sin publicar" : "Sin cambios por publicar"}
-                tone={sinPublicar ? "warning" : "success"}
-              />
-              <span className="text-xs text-[#59677D] dark:text-white/70">
-                {borrador.versionPublicada !== null ? `Versión publicada: ${borrador.versionPublicada}` : "Aún no se ha publicado nada"}
-              </span>
-            </>
-          ) : (
-            <span className="text-xs text-[#59677D] dark:text-white/70">Consultando el estado de publicación…</span>
-          )}
+      <section
+        aria-labelledby="pn-publicacion-titulo"
+        className="flex flex-col gap-3 rounded-[18px] border border-[#DFE5ED] bg-white p-4 dark:border-white/10 dark:bg-[#162744]"
+      >
+        <div>
+          <h2 id="pn-publicacion-titulo" className="text-base font-bold text-flit-primary dark:text-white">
+            Publicación del contenido
+          </h2>
+          <p className="text-sm text-[#59677D] dark:text-white/78">
+            Lo que cambies aquí no lo ve el ciudadano hasta que lo publiques. Antes de publicar puedes ver cómo quedaría.
+          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => setVista("previa")} className={PN_CANCEL_BTN_CLS}>
-            <Eye className="mr-1.5 inline h-4 w-4" aria-hidden="true" />
-            Vista previa
-          </button>
-          <button type="button" onClick={() => setVista("versiones")} className={PN_CANCEL_BTN_CLS}>
-            <History className="mr-1.5 inline h-4 w-4" aria-hidden="true" />
-            Historial de versiones
-          </button>
-          <button
-            type="button"
-            onClick={() => setVista("publicar")}
-            disabled={!sinPublicar}
-            title={sinPublicar ? undefined : "No hay cambios por publicar"}
-            className={PN_PRIMARY_BTN_CLS}
-            style={PN_PRIMARY_BTN_STYLE}
-          >
-            <Send className="h-4 w-4" aria-hidden="true" />
-            Publicar
-          </button>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-col gap-1 text-sm">
+            {errorEstado ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge label="No se pudo consultar el estado" tone="danger" />
+                <PnButton variant="secondary" onClick={() => void refrescar()}>
+                  Reintentar
+                </PnButton>
+              </div>
+            ) : borrador ? (
+              <>
+                <div>
+                  <StatusBadge
+                    label={sinPublicar ? "Hay cambios sin publicar" : "Todo está publicado"}
+                    tone={sinPublicar ? "warning" : "success"}
+                  />
+                </div>
+                <span className="text-xs text-[#59677D] dark:text-white/70">
+                  {borrador.versionPublicada === null
+                    ? "Todavía no has publicado nada: el portal muestra sus preguntas y banners de siempre."
+                    : sinPublicar
+                      ? "El portal sigue mostrando tu última publicación hasta que publiques estos cambios."
+                      : "El portal muestra tu última publicación."}
+                </span>
+              </>
+            ) : (
+              <span className="text-xs text-[#59677D] dark:text-white/70">Consultando el estado de publicación…</span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <PnButton variant="secondary" icon={Eye} onClick={() => setVista("previa")}>
+              Ver cómo quedaría
+            </PnButton>
+            <PnButton variant="secondary" icon={History} onClick={() => setVista("versiones")}>
+              Publicaciones anteriores
+            </PnButton>
+            <PnButton
+              variant="primary"
+              icon={Send}
+              onClick={() => setVista("publicar")}
+              disabled={!sinPublicar}
+              title={sinPublicar ? undefined : "No hay cambios por publicar"}
+            >
+              Publicar cambios
+            </PnButton>
+          </div>
         </div>
       </section>
 
@@ -170,9 +160,9 @@ export function ContenidoTab() {
           borrador={borrador}
           onClose={() => setVista(null)}
           onPublicar={async () => {
-            const publicada = await publicarContenidoPn();
+            await publicarContenidoPn();
             setVista(null);
-            show(`Contenido publicado el ${formatFechaHora(publicada.publicadoEn)} (versión ${publicada.version}).`, "success");
+            show("Contenido publicado. El ciudadano ya lo ve en el portal.", "success");
             await refrescar();
           }}
         />

@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ImageIcon, Pencil, Power } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
-import { ActionsMenu } from "@/components/atom/ActionsMenu";
+import { CreateButton } from "@/components/atom/CreateButton";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { RowActions, type RowAction } from "@/components/atom/RowActions";
@@ -25,7 +25,7 @@ import {
   ordenarBannersPn,
   type BannerPn,
 } from "@/lib/api/admin-pn-contenido";
-import { PN_PRIMARY_BTN_CLS, PN_PRIMARY_BTN_STYLE } from "../pn-ui";
+import { PnSeccionHeader } from "../pn-componentes";
 import { pnErrorMessage } from "../pnErrors";
 import { BannerFormModal } from "./BannerFormModal";
 import { BannerImagen } from "./BannerImagen";
@@ -38,8 +38,8 @@ const COLUMNAS_FILTRO: ColumnaFiltro[] = [
     label: "Estado",
     tipo: "seleccion",
     opciones: [
-      { value: "activo", label: "Activo" },
-      { value: "inactivo", label: "Inactivo" },
+      { value: "activo", label: "Visible" },
+      { value: "inactivo", label: "Oculto" },
     ],
   },
 ];
@@ -108,7 +108,7 @@ export function BannersSection({ onCambio }: { onCambio: () => void }) {
     try {
       const actualizado = await establecerBannerActivoPn(banner.id, !banner.activo);
       setBanners((prev) => prev.map((b) => (b.id === banner.id ? actualizado : b)));
-      show(`Banner ${actualizado.activo ? "activado" : "desactivado"}.`, "success");
+      show(`Banner ${actualizado.activo ? "visible" : "oculto"}. El ciudadano verá el cambio cuando publiques.`, "success");
       onCambio();
     } catch (err) {
       show(pnErrorMessage(err), "error");
@@ -121,7 +121,7 @@ export function BannersSection({ onCambio }: { onCambio: () => void }) {
     const n = `«${b.titulo}»`;
     return [
       { icon: Pencil, label: `Editar el banner ${n}`, tone: "primary", onClick: () => setForm({ banner: b }) },
-      { icon: Power, label: `${b.activo ? "Desactivar" : "Activar"} el banner ${n}`, tone: b.activo ? "danger" : "primary", disabled: ocupado, onClick: () => void alternar(b) },
+      { icon: Power, label: `${b.activo ? "Ocultar" : "Mostrar"} el banner ${n}`, tone: b.activo ? "danger" : "primary", disabled: ocupado, onClick: () => void alternar(b) },
       { icon: ArrowUp, label: `Subir el banner ${n}`, disabled: ocupado || indice === 0, disabledTitle: "Ya es el primero", onClick: () => void mover(b, -1) },
       { icon: ArrowDown, label: `Bajar el banner ${n}`, disabled: ocupado || indice === banners.length - 1, disabledTitle: "Ya es el último", onClick: () => void mover(b, 1) },
     ];
@@ -145,7 +145,7 @@ export function BannersSection({ onCambio }: { onCambio: () => void }) {
       render: (b) => (
         <>
           <span className="block font-semibold">{b.titulo}</span>
-          <span className="block text-xs text-[#59677D] dark:text-white/70">Texto alternativo: {b.textoAlternativo}</span>
+          <span className="block text-xs text-[#59677D] dark:text-white/70">Descripción: {b.textoAlternativo}</span>
         </>
       ),
     },
@@ -157,7 +157,7 @@ export function BannersSection({ onCambio }: { onCambio: () => void }) {
           Estado
         </EncabezadoFiltrable>
       ),
-      render: (b) => <StatusBadge label={b.activo ? "Activo" : "Inactivo"} tone={b.activo ? "success" : "neutral"} />,
+      render: (b) => <StatusBadge label={b.activo ? "Visible" : "Oculto"} tone={b.activo ? "success" : "neutral"} />,
     },
     { key: "acciones", header: "Acciones", align: "right", render: (b) => <RowActions actions={actionsFor(b, banners.indexOf(b))} /> },
   ];
@@ -166,28 +166,18 @@ export function BannersSection({ onCambio }: { onCambio: () => void }) {
 
   return (
     <section aria-labelledby="pn-banners-titulo" className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 id="pn-banners-titulo" className="text-base font-bold text-flit-primary dark:text-white">
-            Banners
-          </h2>
-          <p className="text-xs text-[#59677D] dark:text-white/70">
-            Se publican en este orden. JPG, PNG o WEBP de hasta 2 MB, con texto alternativo.
-          </p>
-        </div>
-        <ActionsMenu ariaLabel="Acciones de banners" items={[{ key: "nuevo", label: "Nuevo banner", icon: ImageIcon, onSelect: nuevo }]} />
-      </div>
+      <PnSeccionHeader
+        id="pn-banners-titulo"
+        titulo="Banners"
+        descripcion="Imágenes destacadas del portal, en este orden. Usa JPG, PNG o WEBP de hasta 2 MB. Los ocultos no aparecen."
+        accion={<CreateButton label="Nuevo banner" icon={ImageIcon} onClick={nuevo} />}
+      />
       {status === "loading" ? (
         <CarLoaderModal label="Cargando banners…" />
       ) : (
         <UiStateBoundary
           status={status}
-          emptyMessage="Aún no hay banners. Cree el primero."
-          emptyCta={
-            <button type="button" onClick={nuevo} className={PN_PRIMARY_BTN_CLS} style={PN_PRIMARY_BTN_STYLE}>
-              Nuevo banner
-            </button>
-          }
+          emptyMessage="Aún no hay banners. Crea el primero."
           errorMessage="No se pudieron cargar los banners."
           onRetry={() => void load()}
         >
@@ -222,7 +212,7 @@ export function BannersSection({ onCambio }: { onCambio: () => void }) {
               setStatus("ready");
             }
             setForm(null);
-            show("Banner guardado en el borrador.", "success");
+            show("Banner guardado. El ciudadano lo verá cuando publiques.", "success");
             onCambio();
           }}
         />

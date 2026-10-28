@@ -12,9 +12,9 @@ const ETIQUETA_HTML = /<[A-Za-z/!?]/;
 /** Texto obligatorio, plano y acotado. Devuelve el mensaje de error o `null` si es válido. */
 export function validarTextoPlano(texto: string, nombre: string, max: number): string | null {
   const limpio = texto.trim();
-  if (limpio === "") return `${nombre} es obligatorio.`;
+  if (limpio === "") return `Escribe ${nombre.toLowerCase()}.`;
   if (limpio.length > max) return `${nombre} admite hasta ${max} caracteres.`;
-  if (ETIQUETA_HTML.test(limpio)) return `${nombre} es texto simple: no se acepta HTML.`;
+  if (ETIQUETA_HTML.test(limpio)) return `${nombre} debe ser texto simple, sin formato ni código.`;
   return null;
 }
 

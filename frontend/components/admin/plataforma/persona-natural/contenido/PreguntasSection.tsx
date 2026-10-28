@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, HelpCircle, Pencil, Power } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
-import { ActionsMenu } from "@/components/atom/ActionsMenu";
+import { CreateButton } from "@/components/atom/CreateButton";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { RowActions, type RowAction } from "@/components/atom/RowActions";
@@ -24,7 +24,7 @@ import {
   ordenarFaqsPn,
   type FaqPn,
 } from "@/lib/api/admin-pn-contenido";
-import { PN_PRIMARY_BTN_CLS, PN_PRIMARY_BTN_STYLE } from "../pn-ui";
+import { PnSeccionHeader } from "../pn-componentes";
 import { pnErrorMessage } from "../pnErrors";
 import { PreguntaFormModal } from "./PreguntaFormModal";
 
@@ -35,8 +35,8 @@ const COLUMNAS_FILTRO: ColumnaFiltro[] = [
     label: "Estado",
     tipo: "seleccion",
     opciones: [
-      { value: "activa", label: "Activa" },
-      { value: "inactiva", label: "Inactiva" },
+      { value: "activa", label: "Visible" },
+      { value: "inactiva", label: "Oculta" },
     ],
   },
 ];
@@ -113,7 +113,7 @@ export function PreguntasSection({ onCambio }: { onCambio: () => void }) {
     try {
       const actualizada = await establecerFaqActivaPn(faq.id, !faq.activa);
       setFaqs((prev) => prev.map((f) => (f.id === faq.id ? actualizada : f)));
-      show(`Pregunta ${actualizada.activa ? "activada" : "desactivada"}.`, "success");
+      show(`Pregunta ${actualizada.activa ? "visible" : "oculta"}. El ciudadano verá el cambio cuando publiques.`, "success");
       onCambio();
     } catch (err) {
       show(pnErrorMessage(err), "error");
@@ -127,7 +127,7 @@ export function PreguntasSection({ onCambio }: { onCambio: () => void }) {
       { icon: Pencil, label: `Editar la pregunta «${resumen(faq.pregunta, 40)}»`, tone: "primary", onClick: () => setForm({ faq }) },
       {
         icon: Power,
-        label: `${faq.activa ? "Desactivar" : "Activar"} la pregunta «${resumen(faq.pregunta, 40)}»`,
+        label: `${faq.activa ? "Ocultar" : "Mostrar"} la pregunta «${resumen(faq.pregunta, 40)}»`,
         tone: faq.activa ? "danger" : "primary",
         disabled: ocupado,
         onClick: () => void alternar(faq),
@@ -163,7 +163,7 @@ export function PreguntasSection({ onCambio }: { onCambio: () => void }) {
           Estado
         </EncabezadoFiltrable>
       ),
-      render: (f) => <StatusBadge label={f.activa ? "Activa" : "Inactiva"} tone={f.activa ? "success" : "neutral"} />,
+      render: (f) => <StatusBadge label={f.activa ? "Visible" : "Oculta"} tone={f.activa ? "success" : "neutral"} />,
     },
     { key: "acciones", header: "Acciones", align: "right", render: (f) => <RowActions actions={actionsFor(f, faqs.indexOf(f))} /> },
   ];
@@ -172,31 +172,18 @@ export function PreguntasSection({ onCambio }: { onCambio: () => void }) {
 
   return (
     <section aria-labelledby="pn-faqs-titulo" className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 id="pn-faqs-titulo" className="text-base font-bold text-flit-primary dark:text-white">
-            Preguntas frecuentes
-          </h2>
-          <p className="text-xs text-[#59677D] dark:text-white/70">
-            Se publican en este orden. Las inactivas no aparecen en el portal.
-          </p>
-        </div>
-        <ActionsMenu
-          ariaLabel="Acciones de preguntas frecuentes"
-          items={[{ key: "nueva", label: "Nueva pregunta", icon: HelpCircle, onSelect: nueva }]}
-        />
-      </div>
+      <PnSeccionHeader
+        id="pn-faqs-titulo"
+        titulo="Preguntas frecuentes"
+        descripcion="Las respuestas a las dudas más comunes. Se muestran en este orden; las ocultas no aparecen en el portal."
+        accion={<CreateButton label="Nueva pregunta" icon={HelpCircle} onClick={nueva} />}
+      />
       {status === "loading" ? (
         <CarLoaderModal label="Cargando preguntas frecuentes…" />
       ) : (
         <UiStateBoundary
           status={status}
-          emptyMessage="Aún no hay preguntas frecuentes. Cree la primera."
-          emptyCta={
-            <button type="button" onClick={nueva} className={PN_PRIMARY_BTN_CLS} style={PN_PRIMARY_BTN_STYLE}>
-              Nueva pregunta
-            </button>
-          }
+          emptyMessage="Aún no hay preguntas frecuentes. Crea la primera."
           errorMessage="No se pudieron cargar las preguntas frecuentes."
           onRetry={() => void load()}
         >
@@ -231,7 +218,7 @@ export function PreguntasSection({ onCambio }: { onCambio: () => void }) {
               setStatus("ready");
             }
             setForm(null);
-            show("Pregunta guardada en el borrador.", "success");
+            show("Pregunta guardada. El ciudadano la verá cuando publiques.", "success");
             onCambio();
           }}
         />

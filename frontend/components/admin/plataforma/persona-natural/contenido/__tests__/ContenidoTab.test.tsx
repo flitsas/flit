@@ -1,5 +1,5 @@
 // HU #14076 — Pestaña «Contenido»: listas administrables con orden editable (AC1), banner con validación de imagen y
-// texto alternativo (AC2), borrador → vista previa → publicar con confirmación y fecha (AC3), enlaces legales sin
+// descripción (AC2), cambios sin publicar → ver cómo quedaría → publicar con confirmación (AC3), enlaces legales sin
 // documento oficial (AC4) y los cuatro estados de cada sección (AC5). La API (HU #14073) es un doble.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
@@ -145,7 +145,8 @@ describe("ContenidoTab (#14076)", () => {
     expect(within(enlaces).getByText("https://flit.test/terminos")).toBeInTheDocument();
     expect(within(enlaces).getByText("02/10/2026 07:00")).toBeInTheDocument();
     const preguntas = screen.getByRole("table", { name: /preguntas frecuentes del portal/i });
-    expect(within(preguntas).getByText("Inactiva")).toBeInTheDocument();
+    expect(within(preguntas).getByText("Oculta")).toBeInTheDocument();
+    expect(within(preguntas).getByText("Visible")).toBeInTheDocument();
     expect(within(preguntas).getByText("¿Cuánto demora?")).toBeInTheDocument();
   });
 
@@ -165,14 +166,13 @@ describe("ContenidoTab (#14076)", () => {
     vi.mocked(crearFaqPn).mockResolvedValue(faq({ id: "f3", pregunta: "¿Cómo pago?", respuesta: "Por transferencia.", orden: 3 }));
     renderTab();
     await screen.findByRole("table", { name: /preguntas frecuentes del portal/i });
-    await ue.click(screen.getByRole("button", { name: /acciones de preguntas frecuentes/i }));
-    await ue.click(await screen.findByRole("menuitem", { name: /nueva pregunta/i }));
+    await ue.click(screen.getByRole("button", { name: /^nueva pregunta$/i }));
     const dialog = await screen.findByRole("dialog", { name: /nueva pregunta frecuente/i });
 
     await ue.type(within(dialog).getByLabelText(/^Pregunta/), "<b>¿Cómo pago?</b>");
     await ue.type(within(dialog).getByLabelText(/^Respuesta/), "Por transferencia.");
     await ue.click(within(dialog).getByRole("button", { name: /guardar pregunta/i }));
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent(/es texto simple: no se acepta html/i);
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(/debe ser texto simple, sin formato ni código/i);
     expect(crearFaqPn).not.toHaveBeenCalled();
 
     const campo = within(dialog).getByLabelText(/^Pregunta/);
@@ -189,9 +189,9 @@ describe("ContenidoTab (#14076)", () => {
     vi.mocked(actualizarFaqPn).mockResolvedValue(faq({ pregunta: "¿Cuánto vale?" }));
     renderTab();
     const tabla = await screen.findByRole("table", { name: /preguntas frecuentes del portal/i });
-    await ue.click(within(tabla).getByRole("button", { name: /desactivar la pregunta «¿cuánto cuesta el trámite\?»/i }));
+    await ue.click(within(tabla).getByRole("button", { name: /ocultar la pregunta «¿cuánto cuesta el trámite\?»/i }));
     await waitFor(() => expect(establecerFaqActivaPn).toHaveBeenCalledWith("f1", false));
-    await waitFor(() => expect(within(tabla).getAllByText("Inactiva")).toHaveLength(2));
+    await waitFor(() => expect(within(tabla).getAllByText("Oculta")).toHaveLength(2));
 
     await ue.click(within(tabla).getByRole("button", { name: /editar la pregunta «¿cuánto cuesta el trámite\?»/i }));
     const dialog = await screen.findByRole("dialog", { name: /editar pregunta frecuente/i });
@@ -202,12 +202,11 @@ describe("ContenidoTab (#14076)", () => {
     await waitFor(() => expect(actualizarFaqPn).toHaveBeenCalledWith("f1", expect.objectContaining({ pregunta: "¿Cuánto vale?" })));
   });
 
-  it("AC2: un banner con imagen que no es JPG/PNG/WEBP, de más de 2 MB o sin texto alternativo no se guarda", async () => {
+  it("AC2: un banner con imagen que no es JPG/PNG/WEBP, de más de 2 MB o sin descripción no se guarda", async () => {
     const ue = userEvent.setup({ applyAccept: false });
     renderTab();
     await screen.findByRole("table", { name: /banners del portal/i });
-    await ue.click(screen.getByRole("button", { name: /acciones de banners/i }));
-    await ue.click(await screen.findByRole("menuitem", { name: /nuevo banner/i }));
+    await ue.click(screen.getByRole("button", { name: /^nuevo banner$/i }));
     const dialog = await screen.findByRole("dialog", { name: /nuevo banner/i });
     await ue.type(within(dialog).getByLabelText(/^Título/), "Promo nueva");
 
@@ -221,21 +220,20 @@ describe("ContenidoTab (#14076)", () => {
     expect(await within(dialog).findByText("La imagen no puede pesar más de 2 MB.")).toBeInTheDocument();
 
     await ue.click(within(dialog).getByRole("button", { name: /guardar banner/i }));
-    expect(await within(dialog).findByText(/el texto alternativo es obligatorio/i)).toBeInTheDocument();
+    expect(await within(dialog).findByText(/escribe la descripción de la imagen/i)).toBeInTheDocument();
     expect(crearBannerPn).not.toHaveBeenCalled();
   });
 
-  it("AC2: un banner válido se crea con su imagen, texto alternativo y vigencia en hora de Colombia", async () => {
+  it("AC2: un banner válido se crea con su imagen, descripción y vigencia en hora de Colombia", async () => {
     const ue = userEvent.setup();
     vi.mocked(crearBannerPn).mockResolvedValue(banner({ id: "b3", titulo: "Promo nueva", orden: 3 }));
     renderTab();
     await screen.findByRole("table", { name: /banners del portal/i });
-    await ue.click(screen.getByRole("button", { name: /acciones de banners/i }));
-    await ue.click(await screen.findByRole("menuitem", { name: /nuevo banner/i }));
+    await ue.click(screen.getByRole("button", { name: /^nuevo banner$/i }));
     const dialog = await screen.findByRole("dialog", { name: /nuevo banner/i });
 
     await ue.type(within(dialog).getByLabelText(/^Título/), "Promo nueva");
-    await ue.type(within(dialog).getByLabelText(/^Texto alternativo/), "Una persona sonriendo");
+    await ue.type(within(dialog).getByLabelText(/^Descripción de la imagen/), "Una persona sonriendo");
     const imagen = new File(["x"], "promo.webp", { type: "image/webp" });
     await ue.upload(within(dialog).getByLabelText("Imagen del banner"), imagen);
     expect(await within(dialog).findByAltText(/vista previa de la imagen elegida/i)).toBeInTheDocument();
@@ -256,7 +254,7 @@ describe("ContenidoTab (#14076)", () => {
     vi.mocked(establecerBannerActivoPn).mockResolvedValue(banner({ activo: false }));
     renderTab();
     const tabla = await screen.findByRole("table", { name: /banners del portal/i });
-    await ue.click(within(tabla).getByRole("button", { name: /desactivar el banner «traspasos sin filas»/i }));
+    await ue.click(within(tabla).getByRole("button", { name: /ocultar el banner «traspasos sin filas»/i }));
     await waitFor(() => expect(establecerBannerActivoPn).toHaveBeenCalledWith("b1", false));
   });
 
@@ -284,8 +282,8 @@ describe("ContenidoTab (#14076)", () => {
     const ue = userEvent.setup();
     renderTab();
     await screen.findByRole("table", { name: /banners del portal/i });
-    await ue.click(screen.getByRole("button", { name: /vista previa/i }));
-    const dialog = await screen.findByRole("dialog", { name: /vista previa del portal/i });
+    await ue.click(screen.getByRole("button", { name: /ver cómo quedaría/i }));
+    const dialog = await screen.findByRole("dialog", { name: /así lo vería el ciudadano/i });
     const portal = await within(dialog).findByTestId("pn-portal-preview");
     expect(within(portal).getByText("Traspasos sin filas")).toBeInTheDocument();
     expect(within(portal).getByText("¿Cuánto cuesta el trámite?")).toBeInTheDocument();
@@ -294,7 +292,7 @@ describe("ContenidoTab (#14076)", () => {
     expect(publicarContenidoPn).not.toHaveBeenCalled();
   });
 
-  it("AC3: Publicar pide confirmación, publica y muestra la fecha; sin cambios queda deshabilitado", async () => {
+  it("AC3: Publicar pide confirmación, explica qué cambia para el ciudadano, publica y avisa; sin cambios queda deshabilitado", async () => {
     const ue = userEvent.setup();
     vi.mocked(publicarContenidoPn).mockResolvedValue({
       version: 3,
@@ -303,21 +301,50 @@ describe("ContenidoTab (#14076)", () => {
       contenido: borrador().contenido,
     });
     renderTab();
-    const publicar = await screen.findByRole("button", { name: /^publicar$/i });
+    const publicar = await screen.findByRole("button", { name: /^publicar cambios$/i });
     await waitFor(() => expect(publicar).toBeEnabled());
     expect(screen.getByText("Hay cambios sin publicar")).toBeInTheDocument();
-    expect(screen.getByText("Versión publicada: 2")).toBeInTheDocument();
+    expect(screen.getByText(/el portal sigue mostrando tu última publicación/i)).toBeInTheDocument();
+    expect(screen.queryByText(/versión publicada/i)).not.toBeInTheDocument();
 
     vi.mocked(fetchBorradorPn).mockResolvedValue(borrador({ hayCambiosSinPublicar: false, versionPublicada: 3 }));
     await ue.click(publicar);
-    const dialog = await screen.findByRole("dialog", { name: /publicar el contenido/i });
-    expect(within(dialog).getByText(/versión nueva \(3\)/i)).toBeInTheDocument();
+    const dialog = await screen.findByRole("dialog", { name: /publicar los cambios/i });
+    expect(within(dialog).getByText(/1 pregunta visible y 1 banner visible/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/qué cambia para el ciudadano/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/reemplaza las preguntas y los banners que el portal muestra por defecto/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/no se puede editar/i)).toBeInTheDocument();
     expect(publicarContenidoPn).not.toHaveBeenCalled(); // todavía no: pidió confirmación
-    await ue.click(within(dialog).getByRole("button", { name: /publicar ahora/i }));
+    await ue.click(within(dialog).getByRole("button", { name: /sí, publicar/i }));
 
-    expect(await screen.findByText(/contenido publicado el 28\/10\/2026 15:15 \(versión 3\)/i)).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByText("Sin cambios por publicar")).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: /^publicar$/i })).toBeDisabled();
+    expect(await screen.findByText(/contenido publicado\. el ciudadano ya lo ve en el portal/i)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("Todo está publicado")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: /^publicar cambios$/i })).toBeDisabled();
+  });
+
+  it("AC3: cancelar la confirmación no publica nada", async () => {
+    const ue = userEvent.setup();
+    renderTab();
+    const publicar = await screen.findByRole("button", { name: /^publicar cambios$/i });
+    await waitFor(() => expect(publicar).toBeEnabled());
+    await ue.click(publicar);
+    await ue.click(within(await screen.findByRole("dialog")).getByRole("button", { name: /cancelar/i }));
+    expect(publicarContenidoPn).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("avisa en la confirmación cuando no hay ninguna pregunta visible y explica el estado sin publicaciones previas", async () => {
+    const ue = userEvent.setup();
+    vi.mocked(fetchBorradorPn).mockResolvedValue(
+      borrador({ versionPublicada: null, contenido: { ...borrador().contenido, preguntas: [] } }),
+    );
+    renderTab();
+    expect(await screen.findByText(/todavía no has publicado nada: el portal muestra sus preguntas y banners de siempre/i)).toBeInTheDocument();
+    const publicar = await screen.findByRole("button", { name: /^publicar cambios$/i });
+    await waitFor(() => expect(publicar).toBeEnabled());
+    await ue.click(publicar);
+    const dialog = await screen.findByRole("dialog", { name: /publicar los cambios/i });
+    expect(within(dialog).getByText(/el ciudadano no verá preguntas frecuentes/i)).toBeInTheDocument();
   });
 
   it("AC3: un 409 «sin cambios por publicar» se explica dentro de la confirmación", async () => {
@@ -326,22 +353,22 @@ describe("ContenidoTab (#14076)", () => {
       new ApiError(409, "sin_cambios_por_publicar", { error: "sin_cambios_por_publicar", message: "No hay cambios por publicar: el contenido ya es el publicado." }),
     );
     renderTab();
-    const publicar = await screen.findByRole("button", { name: /^publicar$/i });
+    const publicar = await screen.findByRole("button", { name: /^publicar cambios$/i });
     await waitFor(() => expect(publicar).toBeEnabled());
     await ue.click(publicar);
-    const dialog = await screen.findByRole("dialog", { name: /publicar el contenido/i });
-    await ue.click(within(dialog).getByRole("button", { name: /publicar ahora/i }));
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent(/no hay cambios por publicar/i);
+    const dialog = await screen.findByRole("dialog", { name: /publicar los cambios/i });
+    await ue.click(within(dialog).getByRole("button", { name: /sí, publicar/i }));
+    expect(await within(dialog).findByText(/no hay cambios por publicar: el contenido ya es el publicado/i)).toBeInTheDocument();
   });
 
-  it("AC3: el historial de versiones lista cuándo y quién publicó", async () => {
+  it("AC3: las publicaciones anteriores listan cuándo se publicó cada una, sin identificadores", async () => {
     const ue = userEvent.setup();
     renderTab();
     await screen.findByRole("table", { name: /banners del portal/i });
-    await ue.click(screen.getByRole("button", { name: /historial de versiones/i }));
-    const tabla = await screen.findByRole("table", { name: /versiones publicadas del contenido/i });
+    await ue.click(screen.getByRole("button", { name: /publicaciones anteriores/i }));
+    const tabla = await screen.findByRole("table", { name: /publicaciones anteriores del contenido/i });
     expect(within(tabla).getByText("15/10/2026 10:30")).toBeInTheDocument();
-    expect(within(tabla).getByText("abcdef12")).toBeInTheDocument();
+    expect(within(tabla).queryByText("abcdef12")).not.toBeInTheDocument();
   });
 
   it("AC5: cada sección muestra su vacío, su error con reintento y su carga", async () => {
@@ -362,7 +389,7 @@ describe("ContenidoTab (#14076)", () => {
     vi.mocked(fetchBorradorPn).mockRejectedValueOnce(new Error("caído"));
     renderTab();
     expect(await screen.findByText("No se pudo consultar el estado")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^publicar$/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^publicar cambios$/i })).toBeDisabled();
     await ue.click(screen.getByRole("button", { name: "Reintentar" }));
     expect(await screen.findByText("Hay cambios sin publicar")).toBeInTheDocument();
   });

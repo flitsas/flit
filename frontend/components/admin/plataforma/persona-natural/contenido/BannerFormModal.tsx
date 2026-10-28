@@ -4,7 +4,8 @@
 // crear y opcional al editar; el texto alternativo es obligatorio. Cada regla se valida aquí con un mensaje claro y
 // no se guarda nada mientras algo falle. La vigencia es opcional, con hora de Colombia. Texto plano, sin HTML.
 import { useEffect, useRef, useState } from "react";
-import { ImageIcon, Loader2, UploadCloud } from "lucide-react";
+import { ImageIcon, Save, UploadCloud } from "lucide-react";
+import { InlineAlert } from "@/components/atom/InlineAlert";
 import { Modal } from "@/components/atom/Modal";
 import {
   BANNER_IMAGEN_TIPOS,
@@ -14,17 +15,8 @@ import {
   type BannerPn,
   type GuardarBanner,
 } from "@/lib/api/admin-pn-contenido";
-import {
-  PN_CANCEL_BTN_CLS,
-  PN_FIELD_ERROR_CLS,
-  PN_HINT_CLS,
-  PN_INFO_NOTICE_CLS,
-  PN_INPUT_CLS,
-  PN_INPUT_ERROR_CLS,
-  PN_LABEL_CLS,
-  PN_PRIMARY_BTN_CLS,
-  PN_PRIMARY_BTN_STYLE,
-} from "../pn-ui";
+import { PN_FIELD_ERROR_CLS, PN_HINT_CLS, PN_INPUT_CLS, PN_INPUT_ERROR_CLS, PN_LABEL_CLS } from "../pn-ui";
+import { PnButton } from "../pn-componentes";
 import { pnErrorMessage } from "../pnErrors";
 import { BannerImagen } from "./BannerImagen";
 import { validarEnlace, validarImagenBanner, validarTextoPlano } from "./contenidoReglas";
@@ -85,11 +77,11 @@ export function BannerFormModal({ banner, onClose, onSave }: BannerFormModalProp
     const nuevos: Errores = {
       titulo: validarTextoPlano(titulo, "El título", BANNER_TITULO_MAX) ?? undefined,
       textoAlternativo:
-        validarTextoPlano(textoAlternativo, "El texto alternativo", BANNER_TEXTO_ALTERNATIVO_MAX) ?? undefined,
+        validarTextoPlano(textoAlternativo, "La descripción de la imagen", BANNER_TEXTO_ALTERNATIVO_MAX) ?? undefined,
       enlaceUrl: validarEnlace(enlaceUrl) ?? undefined,
       archivo: errores.archivo,
     };
-    if (!banner && !archivo && !nuevos.archivo) nuevos.archivo = "Suba la imagen del banner (JPG, PNG o WEBP de hasta 2 MB).";
+    if (!banner && !archivo && !nuevos.archivo) nuevos.archivo = "Sube la imagen del banner (JPG, PNG o WEBP de hasta 2 MB).";
     if (vigenteDesde && vigenteHasta && vigenteHasta < vigenteDesde) {
       nuevos.vigencia = "La fecha de fin no puede ser anterior a la de inicio.";
     }
@@ -112,18 +104,17 @@ export function BannerFormModal({ banner, onClose, onSave }: BannerFormModalProp
       onClose={onClose}
       busy={busy}
       title={banner ? "Editar banner" : "Nuevo banner"}
-      description="El cambio queda en el borrador hasta que lo publique."
+      description="El ciudadano lo verá cuando publiques el contenido."
       icon={ImageIcon}
       size="lg"
       footer={
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} disabled={busy} className={PN_CANCEL_BTN_CLS}>
+          <PnButton variant="secondary" onClick={onClose} disabled={busy}>
             Cancelar
-          </button>
-          <button type="submit" form="pn-banner-form" disabled={busy} className={PN_PRIMARY_BTN_CLS} style={PN_PRIMARY_BTN_STYLE}>
-            {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+          </PnButton>
+          <PnButton type="submit" form="pn-banner-form" variant="primary" icon={Save} loading={busy}>
             Guardar banner
-          </button>
+          </PnButton>
         </div>
       }
     >
@@ -142,7 +133,9 @@ export function BannerFormModal({ banner, onClose, onSave }: BannerFormModalProp
 
         <div className="flex flex-col gap-2">
           <span className="text-sm font-semibold text-flit-primary dark:text-white">Imagen</span>
-          <p className={PN_INFO_NOTICE_CLS}>JPG, PNG o WEBP, de hasta 2 MB.</p>
+          <InlineAlert tone="info" compact>
+            JPG, PNG o WEBP, de hasta 2 MB.
+          </InlineAlert>
           <div className="flex flex-wrap items-center gap-3">
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-flit-brand px-4 py-2 text-xs font-semibold text-[color:var(--flit-brand-ink)] focus-within:ring-2 focus-within:ring-flit-brand focus-within:ring-offset-2 hover:bg-[#F4F8FF] dark:hover:bg-white/5">
               <UploadCloud className="h-4 w-4" aria-hidden="true" />
@@ -169,7 +162,7 @@ export function BannerFormModal({ banner, onClose, onSave }: BannerFormModalProp
         </div>
 
         <label className={PN_LABEL_CLS}>
-          Texto alternativo
+          Descripción de la imagen
           <input
             value={textoAlternativo}
             onChange={(e) => setTextoAlternativo(e.target.value)}
@@ -179,7 +172,7 @@ export function BannerFormModal({ banner, onClose, onSave }: BannerFormModalProp
             className={`${PN_INPUT_CLS} ${errores.textoAlternativo ? PN_INPUT_ERROR_CLS : ""}`}
           />
           <span id="pn-banner-alt-hint" className={PN_HINT_CLS}>
-            Describe la imagen para quien no puede verla (obligatorio).
+            Cuenta en una frase qué muestra la imagen, para quienes no pueden verla (obligatorio).
           </span>
           {errores.textoAlternativo && <span role="alert" className={PN_FIELD_ERROR_CLS}>{errores.textoAlternativo}</span>}
         </label>
@@ -199,11 +192,11 @@ export function BannerFormModal({ banner, onClose, onSave }: BannerFormModalProp
 
         <div className="grid gap-4 sm:grid-cols-2">
           <label className={PN_LABEL_CLS}>
-            Vigente desde (opcional)
+            Mostrar desde (opcional)
             <input type="datetime-local" value={vigenteDesde} onChange={(e) => setVigenteDesde(e.target.value)} className={PN_INPUT_CLS} />
           </label>
           <label className={PN_LABEL_CLS}>
-            Vigente hasta (opcional)
+            Mostrar hasta (opcional)
             <input
               type="datetime-local"
               value={vigenteHasta}
@@ -213,19 +206,15 @@ export function BannerFormModal({ banner, onClose, onSave }: BannerFormModalProp
             />
           </label>
           {errores.vigencia && <span role="alert" className={`${PN_FIELD_ERROR_CLS} sm:col-span-2`}>{errores.vigencia}</span>}
-          <p className={`${PN_HINT_CLS} sm:col-span-2`}>Hora de Colombia. Sin fechas, el banner se muestra siempre que esté activo.</p>
+          <p className={`${PN_HINT_CLS} sm:col-span-2`}>Hora de Colombia. Sin fechas, el banner se muestra siempre que esté visible.</p>
         </div>
 
         <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-flit-primary dark:text-white">
           <input type="checkbox" checked={activo} onChange={(e) => setActivo(e.target.checked)} className="h-4 w-4 accent-[color:var(--color-flit-brand)]" />
-          Activo (se publica en el portal)
+          Mostrar este banner en el portal
         </label>
 
-        {errores.general && (
-          <p role="alert" className="text-sm font-semibold text-[#C2410C]">
-            {errores.general}
-          </p>
-        )}
+        {errores.general && <InlineAlert tone="error">{errores.general}</InlineAlert>}
       </form>
     </Modal>
   );

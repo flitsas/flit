@@ -3,19 +3,12 @@
 // HU #14076 AC1 — Alta y edición de una pregunta frecuente (texto plano, sin HTML). Modal normal; si falla conserva
 // lo escrito y muestra el motivo. La pregunta nueva va al final de la lista.
 import { useState } from "react";
-import { HelpCircle, Loader2 } from "lucide-react";
+import { HelpCircle, Save } from "lucide-react";
+import { InlineAlert } from "@/components/atom/InlineAlert";
 import { Modal } from "@/components/atom/Modal";
 import { PREGUNTA_MAX, RESPUESTA_MAX, type FaqPn, type GuardarFaq } from "@/lib/api/admin-pn-contenido";
-import {
-  PN_CANCEL_BTN_CLS,
-  PN_FIELD_ERROR_CLS,
-  PN_HINT_CLS,
-  PN_INPUT_CLS,
-  PN_INPUT_ERROR_CLS,
-  PN_LABEL_CLS,
-  PN_PRIMARY_BTN_CLS,
-  PN_PRIMARY_BTN_STYLE,
-} from "../pn-ui";
+import { PN_FIELD_ERROR_CLS, PN_HINT_CLS, PN_INPUT_CLS, PN_INPUT_ERROR_CLS, PN_LABEL_CLS } from "../pn-ui";
+import { PnButton } from "../pn-componentes";
 import { pnErrorMessage } from "../pnErrors";
 import { validarTextoPlano } from "./contenidoReglas";
 
@@ -57,18 +50,17 @@ export function PreguntaFormModal({ faq, onClose, onSave }: PreguntaFormModalPro
       onClose={onClose}
       busy={busy}
       title={faq ? "Editar pregunta frecuente" : "Nueva pregunta frecuente"}
-      description="Texto simple: no se acepta HTML. El cambio queda en el borrador hasta que lo publique."
+      description="Escribe en texto simple, sin formato ni código. El ciudadano lo verá cuando publiques el contenido."
       icon={HelpCircle}
       size="lg"
       footer={
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} disabled={busy} className={PN_CANCEL_BTN_CLS}>
+          <PnButton variant="secondary" onClick={onClose} disabled={busy}>
             Cancelar
-          </button>
-          <button type="submit" form="pn-faq-form" disabled={busy} className={PN_PRIMARY_BTN_CLS} style={PN_PRIMARY_BTN_STYLE}>
-            {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+          </PnButton>
+          <PnButton type="submit" form="pn-faq-form" variant="primary" icon={Save} loading={busy}>
             Guardar pregunta
-          </button>
+          </PnButton>
         </div>
       }
     >
@@ -104,13 +96,9 @@ export function PreguntaFormModal({ faq, onClose, onSave }: PreguntaFormModalPro
             onChange={(e) => setActiva(e.target.checked)}
             className="h-4 w-4 accent-[color:var(--color-flit-brand)]"
           />
-          Activa (se publica en el portal)
+          Mostrar esta pregunta en el portal
         </label>
-        {errores.general && (
-          <p role="alert" className="text-sm font-semibold text-[#C2410C]">
-            {errores.general}
-          </p>
-        )}
+        {errores.general && <InlineAlert tone="error">{errores.general}</InlineAlert>}
       </form>
     </Modal>
   );
