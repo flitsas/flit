@@ -8,7 +8,9 @@ import {
   avaluoConValor,
   avaluoSinValor,
   comparendo,
+  conductorProveedor,
   detalle,
+  empresaProveedor,
   impuestoConVigencias,
   impuestoNa,
   impuestoSinVigencias,
@@ -380,7 +382,8 @@ describe("PaginaDetalleConsulta — R-20: nada distingue una celda llenada a man
     a.unmount();
     const b = await pintarDetalle({ ...runtTresPropietarios(), origen: "MANUAL", usuario_id: "u-1", proveedor: "x" } as unknown as Detalle);
     expect(limpiar(b.pagina.innerHTML)).toBe(htmlApi);
-    expect(b.pagina.textContent).not.toMatch(SOSPECHOSOS);
+    // HU #14154 AC5: el aviso literal de «sin respuesta del proveedor» sale igual en API y manual; no delata el origen.
+    expect(b.pagina.textContent?.replaceAll("Esta consulta no tiene la respuesta completa del proveedor. Para verla, vuelve a consultar.", "")).not.toMatch(SOSPECHOSOS);
   });
 
   it("dentro del resultado, el proveedor tampoco sale; el resto se traduce", async () => {
@@ -465,5 +468,141 @@ describe("PaginaDetalleConsulta — HU #13866: impuesto departamental", () => {
     expect((await within(pagina).findAllByText(/El departamento del vehículo todavía no está soportado\./)).length).toBeGreaterThan(0);
     expect(within(pagina).queryByRole("alert")).not.toBeInTheDocument();
     expect(within(pagina).queryByRole("button", { name: /reprocesar|reintentar/i })).not.toBeInTheDocument();
+  });
+});
+
+const AVISO_SIN_PROVEEDOR = "Esta consulta no tiene la respuesta completa del proveedor. Para verla, vuelve a consultar.";
+const proveedorDe = (pagina: HTMLElement) => within(respuesta(pagina)).queryAllByRole("region", { name: /^Respuesta del proveedor/ });
+
+/** RUNT_PROPIETARIO con un conductor y una empresa (NIT, RUES) que traen la respuesta íntegra del proveedor. */
+const runtConProveedor = (fuente: "RUNT_PROPIETARIO" | "RUNT_LOCATARIO" = "RUNT_PROPIETARIO") => {
+  const rol = fuente === "RUNT_PROPIETARIO" ? "PROPIETARIO" : "LOCATARIO";
+  return detalle(fuente, {
+    personas: [
+      { ...persona(1, { rol, documento_enmascarado: "****1222" }), respuesta_proveedor: conductorProveedor() },
+      {
+        ...persona(2, { rol, tipo_documento: "NIT", documento_enmascarado: "****4567", consulta: "RUES", resultado: { encontrada: true, estado_matricula: "ACTIVA", ultima_renovacion: "2026" } }),
+        respuesta_proveedor: empresaProveedor(),
+      },
+    ],
+  } as Partial<Detalle>);
+};
+
+describe("PaginaDetalleConsulta — HU #14154: respuesta íntegra del proveedor en RUNT persona y RUES", () => {
+  it("AC1: la persona con respuesta_proveedor tiene «Respuesta del proveedor» con todas sus claves (ids, firma y técnicos)", async () => {
+    for (const fuente of ["RUNT_PROPIETARIO", "RUNT_LOCATARIO"] as const) {
+      const { pagina, unmount } = await pintarDetalle(runtConProveedor(fuente));
+      const [p1] = proveedorDe(pagina);
+      expect(p1).toBeDefined();
+      const tabla = within(p1).getByRole("table", { name: /^Respuesta del proveedor/ });
+      expect(valorDe(tabla, "id_consulta")).toBe("CONS-FICT-0001");
+      expect(valorDe(tabla, "Estado HTTP")).toBe("200");
+      expect(within(p1).getByRole("region", { name: "Firma" })).toHaveTextContent("Certified by PROVEEDOR-FICTICIO");
+      expect(within(p1).getByRole("table", { name: "Licencias" })).toHaveTextContent("L-1");
+      expect(respuesta(pagina)).not.toHaveTextContent(AVISO_SIN_PROVEEDOR);
+      unmount();
+    }
+  });
+
+  it("AC1: sustituye la vista filtrada de esa persona (no se pinta además su respuesta de la fuente)", async () => {
+    const d = runtConProveedor();
+    d.personas![0].respuesta_fuente = { persona: { nombre_completo: "PERSONA FILTRADA" } };
+    const { pagina } = await pintarDetalle(d);
+    expect(within(respuesta(pagina)).queryByRole("table", { name: "Respuesta de la fuente · Propietario 1" })).not.toBeInTheDocument();
+    expect(respuesta(pagina)).not.toHaveTextContent("PERSONA FILTRADA");
+  });
+
+  it("AC4: una sección por persona, identificada con su rol y su documento enmascarado", async () => {
+    const { pagina, unmount } = await pintarDetalle(runtConProveedor());
+    const secciones = proveedorDe(pagina);
+    expect(secciones).toHaveLength(2);
+    expect(secciones[0]).toHaveAccessibleName("Respuesta del proveedor · Propietario · C ****1222");
+    expect(secciones[1]).toHaveAccessibleName("Respuesta del proveedor · Propietario · NIT ****4567");
+    expect(within(secciones[1]).getByRole("table", { name: "Representantes legales" })).toHaveTextContent("REPRESENTANTE FICTICIO DOS");
+    expect(within(secciones[0]).queryByRole("table", { name: "Representantes legales" })).not.toBeInTheDocument();
+    unmount();
+    const locatario = await pintarDetalle(runtConProveedor("RUNT_LOCATARIO"));
+    expect(proveedorDe(locatario.pagina)[0]).toHaveAccessibleName("Respuesta del proveedor · Locatario · C ****1222");
+  });
+
+  it("AC4: un documento que llegara completo se enmascara en el título («****» y los 4 últimos)", async () => {
+    const d = runtConProveedor();
+    d.personas![0].documento_enmascarado = "1000001222";
+    const { pagina } = await pintarDetalle(d);
+    expect(proveedorDe(pagina)[0]).toHaveAccessibleName("Respuesta del proveedor · Propietario · C ****1222");
+  });
+
+  it("AC5: sin respuesta_proveedor (null o ausente) se pinta lo de hoy y el aviso exacto, por persona", async () => {
+    const d = detalle("RUNT_PROPIETARIO", {
+      personas: [
+        { ...persona(1, { documento_enmascarado: "****1222" }), respuesta_proveedor: conductorProveedor() },
+        { ...persona(2, { documento_enmascarado: "****3344" }), respuesta_proveedor: null },
+        persona(3, { tipo_documento: "NIT", documento_enmascarado: "****4567", consulta: "RUES", resultado: { encontrada: true, estado_matricula: "ACTIVA", ultima_renovacion: "2026" } }),
+      ],
+    } as Partial<Detalle>);
+    const { pagina } = await pintarDetalle(d);
+    const [, p2, p3] = within(respuesta(pagina)).getAllByRole("region", { name: /^propietario \d/i });
+    expect(within(p2).getByText(AVISO_SIN_PROVEEDOR)).toBeInTheDocument();
+    expect(valorDe(within(p2).getByRole("table", { name: "Respuesta de la fuente · Propietario 2" }), "Inscrito")).toBe("Sí");
+    expect(within(p3).getByText(AVISO_SIN_PROVEEDOR)).toBeInTheDocument();
+    expect(valorDe(within(p3).getByRole("table", { name: "Respuesta de la fuente · Propietario 3" }), "Estado de la matrícula")).toBe("ACTIVA");
+    expect(proveedorDe(pagina)).toHaveLength(1);
+    expect(within(respuesta(pagina)).getAllByText(AVISO_SIN_PROVEEDOR)).toHaveLength(2);
+  });
+
+  it("AC6: SIMIT por persona no cambia aunque llegara respuesta_proveedor; RUNT del vehículo tampoco", async () => {
+    const simit = simitVehiculo([comparendo(7)]).resultado as ResultadoSimitDetalle;
+    const a = await pintarDetalle(detalle("SIMIT_PROPIETARIO", { personas: [{ ...persona(1, { consulta: "SIMIT", resultado: simit }), respuesta_proveedor: conductorProveedor() }] } as Partial<Detalle>));
+    expect(proveedorDe(a.pagina)).toHaveLength(0);
+    expect(respuesta(a.pagina)).not.toHaveTextContent(AVISO_SIN_PROVEEDOR);
+    expect(respuesta(a.pagina)).not.toHaveTextContent("CONS-FICT-0001");
+    expect(within(respuesta(a.pagina)).getByRole("table", { name: "Comparendos" })).toHaveTextContent("C-0007");
+    a.unmount();
+    const b = await pintarDetalle(runtVehiculoConRespuesta() as Detalle);
+    expect(proveedorDe(b.pagina)).toHaveLength(0);
+    expect(respuesta(b.pagina)).not.toHaveTextContent(AVISO_SIN_PROVEEDOR);
+    expect(respuesta(b.pagina)).not.toHaveTextContent(/PROVEEDOR-FICTICIO|Estado HTTP/);
+  });
+
+  it("AC7 vacío: una respuesta del proveedor sin datos lo dice explícitamente", async () => {
+    const d = detalle("RUNT_PROPIETARIO", { personas: [{ ...persona(1), respuesta_proveedor: {} }] } as Partial<Detalle>);
+    const { pagina } = await pintarDetalle(d);
+    expect(proveedorDe(pagina)[0]).toHaveTextContent("El proveedor no devolvió datos para esta persona.");
+  });
+
+  it("AC7 cargando y error: el loader mientras llega y el error con Reintentar", async () => {
+    let n = 0;
+    let soltar: (d: Detalle) => void = () => {};
+    const cargar = vi.fn(() => {
+      n++;
+      if (n === 1) return Promise.reject(new Error("Diagnóstico no respondió. Intenta de nuevo en un momento."));
+      return new Promise<Detalle>((r) => (soltar = r));
+    });
+    render(<PaginaDetalleConsulta loteId={ID} vehiculoId="vehiculo-1" fuente="RUNT_PROPIETARIO" cargar={cargar} />);
+    const alerta = await screen.findByRole("alert");
+    expect(screen.queryAllByRole("region", { name: /^Respuesta del proveedor/ })).toHaveLength(0);
+    fireEvent.click(within(alerta).getByRole("button", { name: "Reintentar" }));
+    expect(await screen.findByRole("status", { name: /cargando/i })).toBeInTheDocument();
+    soltar(runtConProveedor());
+    await waitFor(() => expect(screen.getAllByRole("region", { name: /^Respuesta del proveedor/ })).toHaveLength(2));
+  });
+
+  it("AC7: «Expandir todo» y «Contraer todo» abren y cierran las subsecciones de «Respuesta del proveedor»", async () => {
+    const { pagina } = await pintarDetalle(runtConProveedor());
+    const [p1] = proveedorDe(pagina);
+    const plegables = () => Array.from(p1.querySelectorAll("details"));
+    fireEvent.click(within(p1).getByRole("button", { name: "Expandir todo" }));
+    expect(plegables().length).toBeGreaterThan(0);
+    expect(plegables().every((x) => x.open)).toBe(true);
+    fireEvent.click(within(p1).getByRole("button", { name: "Contraer todo" }));
+    expect(plegables().every((x) => !x.open)).toBe(true);
+  });
+
+  it("AC7 accesibilidad: h4 de la sección bajo el h3 de la persona y tablas con encabezados", async () => {
+    const { pagina } = await pintarDetalle(runtConProveedor());
+    const [p1] = proveedorDe(pagina);
+    expect(p1.querySelector("h4")).toHaveTextContent("Respuesta del proveedor · Propietario · C ****1222");
+    for (const th of p1.querySelectorAll("thead th")) expect(th).toHaveAttribute("scope", "col");
+    for (const t of within(p1).getAllByRole("table")) expect(t).toHaveAccessibleName();
   });
 });

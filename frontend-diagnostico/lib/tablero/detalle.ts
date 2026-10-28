@@ -102,7 +102,16 @@ export interface PersonaDetalle {
   resultado: ResultadoRuntPersona | ResultadoRues | ResultadoSimitDetalle | null;
   /** Respuesta completa de la fuente para esta persona (HU #14087 AC8); ver `DetalleCelda.respuesta_fuente`. */
   respuesta_fuente?: RespuestaFuenteCompleta | null;
+  /**
+   * Respuesta íntegra del proveedor para esta persona (HU #14154; RUNT persona y RUES): el JSON del proveedor ya parseado, sin
+   * quitar nada (ids internos, firma y campos técnicos incluidos). Ausente o null en consultas anteriores al cambio, servidas
+   * desde caché o llenadas a mano. Solo la pintan RUNT_PROPIETARIO y RUNT_LOCATARIO (FUENTES_RESPUESTA_PROVEEDOR).
+   */
+  respuesta_proveedor?: RespuestaProveedor | null;
 }
+
+/** JSON del proveedor tal cual: normalmente un objeto, pero se trata como valor JSON arbitrario por robustez. */
+export type RespuestaProveedor = unknown;
 
 /**
  * Respuesta completa de la fuente (HU #14087 AC8 ajustado): el proto-JSON del *Response del rpc, con los nombres snake_case
@@ -217,3 +226,9 @@ export function fechaCorta(fecha: string | null): string {
 
 /** Fuentes cuyo detalle es una sección por persona. */
 export const FUENTES_PERSONA: ReadonlySet<Fuente> = new Set<Fuente>(["RUNT_PROPIETARIO", "RUNT_LOCATARIO", "SIMIT_PROPIETARIO", "SIMIT_LOCATARIO"]);
+
+/**
+ * Fuentes cuyas personas pintan la respuesta íntegra del proveedor (HU #14154): RUNT de persona y, para los NIT, RUES (la
+ * consulta de la persona). Las demás fuentes, incluido SIMIT por persona, siguen con la respuesta de la fuente filtrada.
+ */
+export const FUENTES_RESPUESTA_PROVEEDOR: ReadonlySet<Fuente> = new Set<Fuente>(["RUNT_PROPIETARIO", "RUNT_LOCATARIO"]);

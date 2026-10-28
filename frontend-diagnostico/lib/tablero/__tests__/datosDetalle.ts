@@ -183,3 +183,63 @@ export const respuestaFuentePersona = (nombre: string): Record<string, unknown> 
   persona: { nombre_completo: nombre, inscrito: true, licencias: [{ categoria: "B1", departamento: "DEPTO PRUEBA" }] },
   tipo_error: "",
 });
+
+/**
+ * Respuesta íntegra del proveedor del RUNT de una persona (HU #14154): JSON ficticio del proveedor tal como llega en
+ * `respuesta_proveedor`, con ids internos, firma, campos técnicos y claves sin traducir. Conductor con tres licencias
+ * (activa, vencida y suspendida) cuyas filas no traen las mismas claves. Nombres y documentos inventados.
+ */
+export const conductorProveedor = (): Record<string, unknown> => ({
+  ok: true,
+  message: "",
+  id_consulta: "CONS-FICT-0001",
+  persona: {
+    tipoDocumento: "CC",
+    documento: "1000001222",
+    nombres: "PERSONA",
+    apellidos: "FICTICIA UNO",
+    estadoPersona: "VIVO",
+    estadoConductor: "ACTIVO",
+    nroPazYSalvo: null,
+    tieneLicencias: true,
+    tieneMultas: false,
+    identidad: { id_tipo_documento: "1", verificada: true },
+  },
+  licencias: [
+    { numeroLicencia: "LIC-FICT-0001", categoria: "B1", estadoLicencia: "ACTIVA", fechaVencimiento: "2030-01-01", id_licencia: "L-1" },
+    { numeroLicencia: "LIC-FICT-0002", categoria: "C1", estadoLicencia: "VENCIDA", fechaVencimiento: "2020-01-01", restricciones: ["LENTES"] },
+    { numeroLicencia: "LIC-FICT-0003", categoria: "A2", estadoLicencia: "SUSPENDIDA", fechaVencimiento: "", motivoSuspension: "SANCION FICTICIA" },
+  ],
+  multas: [],
+  restricciones_generales: ["USO DE LENTES", "AUDIFONOS"],
+  signature: { message: "Certified by PROVEEDOR-FICTICIO", hash: "ZmlybWEtZmljdGljaWE=" },
+  http_status: 200,
+  duracion_ms: 812,
+  campo_sin_traducir: "valor-x",
+  observaciones: null,
+  metadatos: {},
+});
+
+/** Respuesta íntegra ficticia del RUES de una empresa (HU #14154): registro, actividades CIIU y representantes legales. */
+export const empresaProveedor = (): Record<string, unknown> => ({
+  data: {
+    commercialRegistry: {
+      NIT: "900000001",
+      businessName: "EMPRESA FICTICIA S.A.S.",
+      registrationStatus: "ACTIVA",
+      registrationNumber: "0000000001",
+      chamberCommerce: "CAMARA FICTICIA",
+      idRm: "RM-FICT-1",
+    },
+    economicActivities: [
+      { code: "4511", description: "COMERCIO DE VEHICULOS FICTICIO", category: "PRINCIPAL" },
+      { code: "4520", description: "MANTENIMIENTO FICTICIO" },
+    ],
+    legalRepresentatives: [
+      { name: "REPRESENTANTE FICTICIO UNO", documentType: "CC", documentNumber: "1000009999", position: "GERENTE" },
+      { name: "REPRESENTANTE FICTICIO DOS", position: "SUPLENTE", faculty: "FACULTADES FICTICIAS" },
+    ],
+  },
+  signature: { message: "Certified by PROVEEDOR-FICTICIO" },
+  id: "FICT1",
+});

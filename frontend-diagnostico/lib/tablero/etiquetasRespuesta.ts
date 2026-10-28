@@ -340,3 +340,90 @@ export function camposVisibles(objeto: Objeto, enChequeo = false): [string, unkn
   agregar(objeto);
   return [...salida];
 }
+
+// Respuesta íntegra del proveedor (HU #14154: RUNT de persona y RUES de empresa). Aquí no se oculta ni se aplana nada: el
+// renderizador recorre el JSON tal cual (Object.entries), con ids internos, firma y campos técnicos. Solo cambia cómo se
+// llaman las claves en pantalla (español si se conocen; el nombre original si no) y cómo se lee un valor vacío.
+
+/** Nombres en español de las claves del JSON de los proveedores de RUNT persona (conductor) y RUES (camelCase). */
+export const ETIQUETAS_PROVEEDOR: Readonly<Record<string, string>> = {
+  // Comunes y técnicos
+  ok: "OK",
+  message: "Mensaje",
+  observaciones: "Observaciones",
+  metadatos: "Metadatos",
+  http_status: "Estado HTTP",
+  duracion_ms: "Duración (ms)",
+  signature: "Firma",
+  hash: "Hash",
+  dateTime: "Fecha y hora",
+  data: "Datos",
+  // RUNT de persona (conductor)
+  identidad: "Identidad",
+  persona: "Persona",
+  tipoDocumento: "Tipo de documento",
+  documento: "Documento",
+  nombres: "Nombres",
+  apellidos: "Apellidos",
+  nombreCompleto: "Nombre completo",
+  primerNombre: "Primer nombre",
+  segundoNombre: "Segundo nombre",
+  primerApellido: "Primer apellido",
+  segundoApellido: "Segundo apellido",
+  estadoPersona: "Estado de la persona",
+  estadoConductor: "Estado del conductor",
+  nroPazYSalvo: "N.º de paz y salvo",
+  tieneLicencias: "Tiene licencias",
+  tieneMultas: "Tiene multas",
+  licencias: "Licencias",
+  detalleLicencia: "Detalle de la licencia",
+  numeroLicencia: "Número de licencia",
+  estadoLicencia: "Estado de la licencia",
+  fechaExpedicion: "Fecha de expedición",
+  fechaVencimiento: "Fecha de vencimiento",
+  restricciones: "Restricciones",
+  restricciones_generales: "Restricciones generales",
+  multas: "Multas",
+  // RUES de empresa
+  commercialRegistry: "Registro mercantil",
+  NIT: "NIT",
+  businessName: "Razón social",
+  acronym: "Sigla",
+  registrationStatus: "Estado de la matrícula",
+  registrationNumber: "Número de matrícula",
+  chamberCommerce: "Cámara de comercio",
+  chamberCity: "Ciudad de la cámara",
+  chamberDepartment: "Departamento de la cámara",
+  idRm: "Id del registro mercantil",
+  enrollmentDate: "Fecha de matrícula",
+  lastRenewedYear: "Último año renovado",
+  renewalDate: "Fecha de renovación",
+  commercialAddress: "Dirección comercial",
+  companyLocation: "Ubicación de la empresa",
+  organizationType: "Tipo de organización",
+  companyType: "Tipo de sociedad",
+  lastUpdatedDate: "Fecha de última actualización",
+  reasonForCancellation: "Motivo de cancelación",
+  economicActivities: "Actividades económicas",
+  category: "Categoría",
+  legalRepresentatives: "Representantes legales",
+  documentType: "Tipo de documento",
+  documentNumber: "Número de documento",
+  position: "Cargo",
+  faculty: "Facultades",
+};
+
+/** Nombre de una clave de la respuesta del proveedor: en español si se conoce; si no, el nombre original (nunca se descarta). */
+export function etiquetaCampoProveedor(clave: string): string {
+  return ETIQUETAS_PROVEEDOR[clave] ?? ETIQUETAS_RESPUESTA[clave] ?? clave;
+}
+
+/** Texto de un valor del proveedor: «—» vacío, null u objeto vacío; «Sin registros» lista vacía; Sí/No; el resto, tal cual. */
+export function textoValorProveedor(v: unknown): string {
+  if (v === null || v === undefined || v === "") return "—";
+  if (v === true) return "Sí";
+  if (v === false) return "No";
+  if (Array.isArray(v)) return v.length === 0 ? "Sin registros" : v.map(textoValorProveedor).join(", ");
+  if (typeof v === "object") return Object.keys(v).length === 0 ? "—" : JSON.stringify(v);
+  return String(v);
+}
