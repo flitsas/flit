@@ -130,3 +130,35 @@ describe("proxy hacia el BFF: archivos (multipart)", () => {
     expect(resultado.status).toBe(201);
   });
 });
+
+describe("proxy: configuración pública del portal (HU #14073)", () => {
+  it("la reenvía anónima: sin token de sesión, con If-None-Match, y devuelve ETag y Cache-Control", async () => {
+    const fetchImpl = vi.fn(async () => new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "content-type": "image/png", etag: '"abc"', "cache-control": "public, max-age=60" } }));
+    const request = new Request("https://portal/api/v1/persona-natural/configuracion/banners/b1/imagen?v=abc", { headers: { "if-none-match": '"abc"', cookie: "pn_sesion=t" } });
+
+    const r = await reenviarAlBff(request, ["configuracion", "banners", "b1", "imagen"], { apiOrigin: ORIGEN, tokenSesion: "tok-cookie", fetchImpl });
+
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [URL, RequestInit];
+    expect(String(url)).toBe(`${ORIGEN}/api/v1/persona-natural/configuracion/banners/b1/imagen?v=abc`);
+    expect((init.headers as Headers).get("authorization")).toBeNull();
+    expect((init.headers as Headers).get("if-none-match")).toBe('"abc"');
+    expect(r.headers.get("content-type")).toBe("image/png");
+    expect(r.headers.get("etag")).toBe('"abc"');
+    expect(r.headers.get("cache-control")).toBe("public, max-age=60");
+  });
+
+  it("un 304 se devuelve sin cuerpo", async () => {
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 304, headers: { etag: '"abc"' } }));
+    const r = await reenviarAlBff(new Request("https://portal/api/v1/persona-natural/configuracion/banners/b1/imagen"), ["configuracion", "banners", "b1", "imagen"], { apiOrigin: ORIGEN, fetchImpl });
+    expect(r.status).toBe(304);
+    expect(r.cuerpo).toBeNull();
+  });
+
+  it("fuera de /configuracion no reenvía If-None-Match ni Cache-Control", async () => {
+    const fetchImpl = vi.fn(async () => new Response("{}", { status: 200, headers: { "content-type": "application/json", "cache-control": "no-store" } }));
+    const r = await reenviarAlBff(new Request("https://portal/api/v1/persona-natural/organismos", { headers: { "if-none-match": "x" } }), ["organismos"], { apiOrigin: ORIGEN, fetchImpl });
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [URL, RequestInit];
+    expect((init.headers as Headers).get("if-none-match")).toBeNull();
+    expect(r.headers.get("cache-control")).toBeNull();
+  });
+});

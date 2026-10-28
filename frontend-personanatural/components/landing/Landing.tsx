@@ -21,6 +21,7 @@ import { PreguntasFrecuentes } from "./PreguntasFrecuentes";
 import { OtrosServicios, ServiciosAdicionales } from "./Servicios";
 import { SomosFlit } from "./SomosFlit";
 import { useOrganismos, useTiposTramite } from "./useCatalogos";
+import { useConfiguracion } from "./useConfiguracion";
 
 export { rutaDelTramite };
 
@@ -29,6 +30,8 @@ export function Landing({ cliente = portal }: { cliente?: ClientePortal }) {
   const router = useRouter();
   const organismos = useOrganismos(cliente);
   const tipos = useTiposTramite(cliente);
+  // Contenido publicado (preguntas, banners, enlaces, soporte): si no hay nada o falla, rige el contenido fijo de siempre.
+  const { contenido } = useConfiguracion(cliente);
   const [aviso, setAviso] = useState<Aviso | null>(null);
   const [consultando, setConsultando] = useState(false);
   // `null` = cerrado; con valor = abierto (y, si viene de «Ver tarifas», con ese organismo elegido).
@@ -36,6 +39,12 @@ export function Landing({ cliente = portal }: { cliente?: ClientePortal }) {
   // Datos de la tarjeta «Iniciar mi trámite» mientras el modal de requisitos está abierto. Solo en memoria.
   const [iniciando, setIniciando] = useState<DatosInicio | null>(null);
   const proximamente = (titulo: string) => setAviso({ titulo, tipo: "proximamente" });
+  // Políticas: con URL publicada abre el documento en una pestaña nueva; sin ella, el aviso «documento aún no disponible».
+  const abrirPoliticas = () => {
+    const url = contenido.enlaces.POLITICA_DATOS ?? contenido.enlaces.TERMINOS ?? null;
+    if (url) window.open(url, "_blank", "noopener,noreferrer");
+    else setAviso({ titulo: TEXTO_POLITICAS, tipo: "documento" });
+  };
 
   return (
     <div className="dashboard-shell bg-background font-sans text-foreground">
@@ -44,7 +53,7 @@ export function Landing({ cliente = portal }: { cliente?: ClientePortal }) {
         <main className="dashboard-main">
           {/* El diseño no muestra un h1; este queda solo para lectores de pantalla. */}
           <h1 className="sr-only">Trámites de tránsito 100% en línea</h1>
-          <CarruselBanners />
+          <CarruselBanners banners={contenido.banners} />
           <AccionesPrincipales
             tipos={tipos}
             cliente={cliente}
@@ -53,7 +62,7 @@ export function Landing({ cliente = portal }: { cliente?: ClientePortal }) {
             onCotizar={() => setCotizando({ organismo: null })}
           />
           <PasosTramite />
-          <VideoExplicativo />
+          <VideoExplicativo url={contenido.enlaces.VIDEO ?? null} />
           <SomosFlit />
         </main>
         <aside className="dashboard-side" aria-label="Servicios y organismos">
@@ -62,12 +71,12 @@ export function Landing({ cliente = portal }: { cliente?: ClientePortal }) {
         </aside>
         <div className="dashboard-fullwidth">
           <OtrosServicios onAbrir={proximamente} />
-          <PreguntasFrecuentes />
+          <PreguntasFrecuentes preguntas={contenido.preguntas ?? undefined} />
         </div>
       </div>
       {/* Asistente simulado (S4): sin servicio externo; solo lee los nombres de los catálogos reales para sus respuestas. */}
-      <DrFlit contexto={{ tipos: tipos.data?.map((t) => t.name), organismos: organismos.data?.map((o) => o.nombre) }} />
-      <Pie onAbrirPoliticas={() => setAviso({ titulo: TEXTO_POLITICAS, tipo: "documento" })} />
+      <DrFlit contexto={{ tipos: tipos.data?.map((t) => t.name), organismos: organismos.data?.map((o) => o.nombre), soporte: contenido.soporte }} />
+      <Pie onAbrirPoliticas={abrirPoliticas} enlaces={contenido.enlaces} soporte={contenido.soporte} />
       <ConsultarModal
         abierto={consultando}
         onCerrar={() => setConsultando(false)}
@@ -86,7 +95,7 @@ export function Landing({ cliente = portal }: { cliente?: ClientePortal }) {
         onCerrar={() => setIniciando(null)}
         cliente={cliente}
         datos={iniciando}
-        onAbrirPoliticas={() => setAviso({ titulo: TEXTO_POLITICAS, tipo: "documento" })}
+        onAbrirPoliticas={abrirPoliticas}
         onSesion={(sesion, datos, organismoId) => {
           fijarContexto({ intencion: "iniciar", tipoCodigo: sesion.tipoTramiteCodigo, solicitudId: sesion.solicitudId, radicado: sesion.codigoPublico, organismoId, cedula: datos.cedula, placa: datos.placa, vin: datos.vin });
           router.push(rutaDelTramite(sesion.tipoTramiteCodigo));

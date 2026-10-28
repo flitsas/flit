@@ -11,6 +11,11 @@ export const PREFIJO_BFF = "/api/v1/persona-natural";
 /** Cabeceras del navegador que sí se reenvían al BFF. Todo lo demás (cookies, Host, Authorization) se descarta. */
 const CABECERAS_PERMITIDAS = ["content-type", "accept", "x-captcha-token", "idempotency-key", "x-correlation-id"];
 
+/** Contenido público del portal (HU #14073): anónimo, sin sesión; la imagen de los banners se revalida con ETag. */
+function esConfiguracionPublica(path: string[]): boolean {
+  return path[0] === "configuracion";
+}
+
 export interface OpcionesProxy {
   apiOrigin: string;
   tokenSesion?: string;
@@ -43,7 +48,13 @@ export async function reenviarAlBff(request: Request, path: string[], opciones: 
     const valor = request.headers.get(nombre);
     if (valor) cabeceras.set(nombre, valor);
   }
-  if (opciones.tokenSesion) cabeceras.set("authorization", `Bearer ${opciones.tokenSesion}`);
+  const publica = esConfiguracionPublica(path);
+  if (publica) {
+    const condicional = request.headers.get("if-none-match");
+    if (condicional) cabeceras.set("if-none-match", condicional);
+  }
+  // La configuración pública es anónima: no lleva el token de la sesión del trámite.
+  if (opciones.tokenSesion && !publica) cabeceras.set("authorization", `Bearer ${opciones.tokenSesion}`);
   if (opciones.ipCliente) cabeceras.set("x-forwarded-for", opciones.ipCliente);
 
   const tieneCuerpo = request.method !== "GET" && request.method !== "HEAD";
@@ -61,7 +72,8 @@ export async function reenviarAlBff(request: Request, path: string[], opciones: 
   }
 
   const headers = new Headers();
-  for (const nombre of ["content-type", "retry-after", "content-disposition"]) {
+  const reenviables = ["content-type", "retry-after", "content-disposition", ...(publica ? ["etag", "cache-control"] : [])];
+  for (const nombre of reenviables) {
     const valor = respuesta.headers.get(nombre);
     if (valor) headers.set(nombre, valor);
   }
@@ -73,7 +85,7 @@ export async function reenviarAlBff(request: Request, path: string[], opciones: 
   return {
     status: respuesta.status,
     headers,
-    cuerpo: respuesta.status === 204 ? null : await respuesta.arrayBuffer(),
+    cuerpo: respuesta.status === 204 || respuesta.status === 304 ? null : await respuesta.arrayBuffer(),
     cookie: sesionPerdida ? { accion: "borrar" } : undefined,
   };
 }

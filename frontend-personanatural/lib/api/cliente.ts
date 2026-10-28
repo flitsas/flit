@@ -26,6 +26,50 @@ export interface TipoTramite {
   motivoNoDisponible?: string;
 }
 
+// ── Configuración publicada del portal (GET /configuracion, HU #14073) ───────────────────────────────────────────
+
+export interface PreguntaPublicada {
+  id: string;
+  pregunta: string;
+  respuesta: string;
+  orden: number;
+}
+
+export interface BannerPublicado {
+  id: string;
+  titulo: string;
+  /** Texto alternativo obligatorio de la imagen. */
+  textoAlternativo: string;
+  enlaceUrl?: string | null;
+  orden: number;
+  /** Ruta relativa del BFF que sirve la imagen; `?v=` lleva la versión de la imagen. */
+  imagenUrl: string;
+}
+
+/** `codigo`: POLITICA_DATOS, TERMINOS, CONTACTO_VENTAS o VIDEO. Sin `conDocumento` el portal conserva su aviso actual. */
+export interface EnlacePublicado {
+  codigo: string;
+  url?: string | null;
+  conDocumento: boolean;
+}
+
+export interface SoportePublicado {
+  correo?: string | null;
+  telefono?: string | null;
+  horario?: string | null;
+}
+
+/** `version` «0» = nada publicado: el portal conserva su contenido fijo. Son GET anónimos: no viaja ningún dato del ciudadano. */
+export interface ConfiguracionPortal {
+  version: string;
+  publicadoEn?: string | null;
+  preguntas: PreguntaPublicada[];
+  banners: BannerPublicado[];
+  enlaces: EnlacePublicado[];
+  soporte: SoportePublicado;
+  borradorVigenciaDias?: number | null;
+}
+
 // ── Cotización (POST /cotizaciones y /cotizaciones/enviar-correo) ────────────────────────────────────────────────
 
 export interface CotizacionRequest {
@@ -463,6 +507,9 @@ export function crearCliente({ base = BASE_BFF, fetchImpl }: OpcionesCliente = {
       tiposTramite: (o?: OpcionesLlamada) => solicitar<TipoTramite[]>("GET", `/tipos-tramite${consultaOrganismo(o)}`, undefined, o),
       definicion: (code: string, o?: OpcionesLlamada) =>
         solicitar<DefinicionTipo>("GET", `/tipos-tramite/${encodeURIComponent(code)}/definicion${consultaOrganismo(o)}`, undefined, o),
+    },
+    configuracion: {
+      obtener: (o?: OpcionesLlamada) => solicitar<ConfiguracionPortal>("GET", "/configuracion", undefined, o),
     },
     cotizaciones: {
       cotizar: (datos: CotizacionRequest, o?: OpcionesLlamada) => solicitar<Cotizacion>("POST", "/cotizaciones", datos, o),

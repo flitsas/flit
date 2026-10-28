@@ -11,6 +11,17 @@ export const AVISO_DEMOSTRACION = "Asistente de demostración: no usa inteligenc
 export interface ContextoChat {
   tipos?: readonly string[];
   organismos?: readonly string[];
+  /** Canal de soporte publicado en la configuración (HU #14073). Sin él no se inventa ninguno. */
+  soporte?: { correo?: string | null; telefono?: string | null; horario?: string | null } | null;
+}
+
+/** Respuesta por defecto: si hay canal de soporte publicado lo menciona; si no, el texto de siempre. */
+export function textoSinInformacion(contexto: ContextoChat = {}): string {
+  const s = contexto.soporte;
+  const canales = [s?.correo ? `escribe a ${s.correo}` : null, s?.telefono ? `llama al ${s.telefono}` : null].filter((c): c is string => c !== null);
+  if (canales.length === 0) return SIN_INFORMACION;
+  const horario = s?.horario ? ` (${s.horario})` : "";
+  return `Por ahora no tengo esa información; ${canales.join(" o ")}${horario}.`;
 }
 
 export interface Tema {
@@ -120,7 +131,7 @@ export interface Respuesta {
 
 export function responder(texto: string, contexto: ContextoChat = {}): Respuesta {
   const tema = buscarTema(texto);
-  if (!tema) return { texto: SIN_INFORMACION, sugerencias: PREGUNTAS_SUGERIDAS.slice(0, 3) };
+  if (!tema) return { texto: textoSinInformacion(contexto), sugerencias: PREGUNTAS_SUGERIDAS.slice(0, 3) };
   const sugerencias = tema.relacionados.map((id) => TEMAS.find((t) => t.id === id)?.pregunta).filter((p): p is string => Boolean(p));
   return { texto: tema.respuesta(contexto), sugerencias };
 }
