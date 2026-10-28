@@ -20,6 +20,10 @@ namespace Flit.Tramites.Application.UseCases.Consultations;
 /// lo que certificó en <b>vocabulario canónico</b>, sin que ningún consumidor tenga que volver a
 /// interpretar el texto libre de <see cref="HydratedFields"/>.</para>
 ///
+/// <para>HU #14153 (hallazgo H1 de seguridad): <see cref="RawPayload"/> no se serializa (<see cref="JsonIgnore"/>, igual que
+/// <see cref="Fallo"/>). Es el crudo sin sanear del proveedor —con el conductor incluye licencias y el documento— y la API de
+/// Trámites devuelve este objeto tal cual; solo viaja en memoria y por el mapper proto de core-consultas.</para>
+///
 /// <para>La costura es esta y no otra por dos razones. Un normalizador central sobre
 /// <see cref="HydratedFields"/> sería un segundo mapeo sobre el primero y perdería lo que el mapper ya
 /// sabe. Y fusionar entre proveedores en el resolutor de cadena exigiría llamar a más de uno, y
@@ -35,7 +39,7 @@ public sealed record ConsultationResult(
     bool FromCache = false,
     DateTimeOffset? QueriedAt = null,
     CertificationBundle? Certifications = null,
-    RawProviderPayload? RawPayload = null,
+    [property: JsonIgnore] RawProviderPayload? RawPayload = null,
     [property: JsonIgnore] FalloProveedor? Fallo = null);
 
 /// <summary>
