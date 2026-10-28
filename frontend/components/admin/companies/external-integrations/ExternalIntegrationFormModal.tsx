@@ -3,7 +3,9 @@
 // HU #14068 AC2 — Alta de la integración de Persona Natural de la compañía: modal normal (no lateral) con nombre y
 // finalidad opcionales (la API pone valores por defecto). Si falla, conserva lo escrito y muestra el motivo.
 import { useState } from "react";
-import { Loader2, PlugZap } from "lucide-react";
+import { PlugZap } from "lucide-react";
+import { InlineAlert } from "@/components/atom/InlineAlert";
+import { PnButton } from "@/components/admin/plataforma/persona-natural/pn-componentes";
 import { Modal } from "@/components/atom/Modal";
 import type { NewExternalIntegration } from "@/lib/api/external-integrations";
 import { externalIntegrationErrorMessage } from "./externalIntegrationErrors";
@@ -54,30 +56,18 @@ export function ExternalIntegrationFormModal({ onClose, onCreate }: ExternalInte
       open
       onClose={onClose}
       busy={busy}
-      title="Crear integración Persona Natural"
-      description="Conecta el portal de Persona Natural con esta compañía. El secreto se genera al crear y se muestra una sola vez."
+      title="Crear conexión de Persona Natural"
+      description="Conecta el portal de Persona Natural con esta compañía. La clave secreta se genera al crear y se muestra una sola vez."
       icon={PlugZap}
       size="md"
       footer={
         <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={busy}
-            className="rounded-full border border-[#DFE5ED] px-5 py-2.5 text-sm font-semibold text-flit-primary hover:bg-[#F4F8FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-70 dark:border-white/15 dark:text-white dark:hover:bg-white/5"
-          >
+          <PnButton variant="secondary" onClick={onClose} disabled={busy}>
             Cancelar
-          </button>
-          <button
-            type="submit"
-            form="external-integration-form"
-            disabled={busy}
-            className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(79,116,201,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-70"
-            style={{ background: "linear-gradient(135deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%)" }}
-          >
-            {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-            Crear integración
-          </button>
+          </PnButton>
+          <PnButton type="submit" form="external-integration-form" variant="primary" icon={PlugZap} loading={busy}>
+            Crear conexión
+          </PnButton>
         </div>
       }
     >
@@ -107,18 +97,13 @@ export function ExternalIntegrationFormModal({ onClose, onCreate }: ExternalInte
             aria-describedby="external-integration-purpose-hint"
           />
           <span id="external-integration-purpose-hint" className={HINT_CLS}>
-            Opcional. Para qué se usa esta integración (hasta {PURPOSE_MAX} caracteres).
+            Opcional. Para qué se usa esta conexión (hasta {PURPOSE_MAX} caracteres).
           </span>
         </label>
-        <p className="rounded-[10px] border border-[#DFE5ED] bg-[#EEF5FF] px-3 py-2 text-xs text-flit-primary dark:border-white/15 dark:bg-white/5 dark:text-white">
-          Permiso fijo: <span className="font-mono">platform.tramites.persona_natural</span> (solo lectura de la
-          fachada del portal).
-        </p>
-        {error && (
-          <p role="alert" className="text-sm font-semibold text-[#C2410C]">
-            {error}
-          </p>
-        )}
+        <InlineAlert tone="info">
+          Esta conexión solo puede consultar la información del portal: no puede modificar nada en FLIT.
+        </InlineAlert>
+        {error && <InlineAlert tone="error">{error}</InlineAlert>}
       </form>
     </Modal>
   );

@@ -4,8 +4,10 @@
 // anterior al instante), bloquear, desbloquear y desactivar. Toda acción pide confirmación con un mensaje claro; si
 // la API la rechaza (409), el motivo se muestra aquí mismo y el diálogo no se cierra.
 import { useState } from "react";
-import { Loader2, LockKeyhole, LockOpen, Power, RefreshCcw, type LucideIcon } from "lucide-react";
+import { KeyRound, LockKeyhole, LockOpen, Power, type LucideIcon } from "lucide-react";
+import { InlineAlert } from "@/components/atom/InlineAlert";
 import { Modal } from "@/components/atom/Modal";
+import { PnButton } from "@/components/admin/plataforma/persona-natural/pn-componentes";
 import type { ExternalIntegration } from "@/lib/api/external-integrations";
 import { externalIntegrationErrorMessage } from "./externalIntegrationErrors";
 
@@ -20,42 +22,42 @@ interface Copy {
   danger: boolean;
 }
 
-const PASES_VIGENTES = "Los pases que ya obtuvo siguen valiendo hasta que vencen (máximo 30 minutos).";
+const PASES_VIGENTES = "Los accesos que ya tiene siguen valiendo hasta que vencen (máximo 30 minutos).";
 
 function copyFor(action: ExternalIntegrationAction, integration: ExternalIntegration): Copy {
   const name = `«${integration.displayName || integration.clientId}»`;
   switch (action) {
     case "rotate":
       return {
-        title: "Rotar secreto",
-        icon: RefreshCcw,
-        body: `Se genera un secreto nuevo para ${name} y se muestra una sola vez. Entréguelo al servicio del portal por un canal seguro.`,
-        confirm: "Rotar secreto",
+        title: "Generar una clave nueva",
+        icon: KeyRound,
+        body: `Se genera una clave secreta nueva para ${name} y se muestra una sola vez. Entrégala al servicio del portal por un canal seguro.`,
+        confirm: "Generar clave nueva",
         danger: false,
       };
     case "block":
       return {
-        title: "Bloquear integración",
+        title: "Bloquear conexión",
         icon: LockKeyhole,
-        body: `${name} no podrá obtener pases nuevos hasta que usted la desbloquee.`,
+        body: `${name} no podrá obtener accesos nuevos hasta que la desbloquees.`,
         warning: PASES_VIGENTES,
         confirm: "Bloquear",
         danger: true,
       };
     case "unblock":
       return {
-        title: "Desbloquear integración",
+        title: "Desbloquear conexión",
         icon: LockOpen,
-        body: `${name} podrá volver a pedir pases de inmediato con su secreto vigente.`,
+        body: `${name} podrá volver a pedir accesos de inmediato con su clave vigente.`,
         confirm: "Desbloquear",
         danger: false,
       };
     case "deactivate":
     default:
       return {
-        title: "Desactivar integración",
+        title: "Desactivar conexión",
         icon: Power,
-        body: `${name} se desactiva de forma definitiva: no podrá obtener pases y no se puede volver a activar. Para reconectar el portal tendrá que crear una integración nueva.`,
+        body: `${name} se desactiva de forma definitiva: no podrá obtener accesos y no se puede volver a activar. Para reconectar el portal tendrás que crear una conexión nueva.`,
         warning: PASES_VIGENTES,
         confirm: "Desactivar",
         danger: true,
@@ -104,28 +106,17 @@ export function ExternalIntegrationActionDialog({
       size="sm"
       footer={
         <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={busy}
-            className="rounded-full border border-[#DFE5ED] px-5 py-2.5 text-sm font-semibold text-flit-primary hover:bg-[#F4F8FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-70 dark:border-white/15 dark:text-white dark:hover:bg-white/5"
-          >
+          <PnButton variant="secondary" onClick={onClose} disabled={busy}>
             Cancelar
-          </button>
-          <button
-            type="button"
+          </PnButton>
+          <PnButton
+            variant={copy.danger ? "danger" : "primary"}
+            icon={copy.icon}
+            loading={busy}
             onClick={() => void handleConfirm()}
-            disabled={busy}
-            className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-70"
-            style={{
-              background: copy.danger
-                ? "linear-gradient(135deg, #FF4E00 0%, #E43D30 100%)"
-                : "linear-gradient(135deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%)",
-            }}
           >
-            {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
             {copy.confirm}
-          </button>
+          </PnButton>
         </div>
       }
     >
@@ -140,31 +131,15 @@ export function ExternalIntegrationActionDialog({
               className="mt-0.5 h-4 w-4 accent-[#FF4E00] focus-visible:outline-none"
             />
             <span>
-              <span className="font-semibold">Revocar el secreto anterior de inmediato</span>
+              <span className="font-semibold">Dejar sin efecto la clave anterior ahora mismo</span>
               <span className="block text-xs text-[#59677D] dark:text-white/70">
-                Úselo si el secreto se filtró. Si no lo marca, el anterior sigue valiendo 24 horas para que el portal
-                alcance a cambiarlo.
+                Márcalo si la clave se filtró. Si no lo marcas, la anterior sigue valiendo 24 horas para que el portal alcance a cambiarla.
               </span>
             </span>
           </label>
         )}
-        {copy.warning && (
-          <p
-            className="rounded-[10px] border px-3 py-2 text-xs font-semibold"
-            style={{
-              background: "var(--badge-warning-bg)",
-              color: "var(--badge-warning-fg)",
-              borderColor: "var(--badge-warning-border)",
-            }}
-          >
-            {copy.warning}
-          </p>
-        )}
-        {error && (
-          <p role="alert" className="text-sm font-semibold text-[#C2410C]">
-            {error}
-          </p>
-        )}
+        {copy.warning && <InlineAlert tone="warning">{copy.warning}</InlineAlert>}
+        {error && <InlineAlert tone="error">{error}</InlineAlert>}
       </div>
     </Modal>
   );

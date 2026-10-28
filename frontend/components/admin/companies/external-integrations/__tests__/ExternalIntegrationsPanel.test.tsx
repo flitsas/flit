@@ -1,4 +1,4 @@
-// HU #14068 — Pestaña «Integraciones externas» de la ficha de la compañía. Cubre la tabla con sus cuatro estados
+// HU #14068 — Pestaña «Integraciones externas» de la ficha de la compañía (el texto habla de «conexión»). Cubre la tabla con sus cuatro estados
 // (AC1/AC4), el alta con el secreto mostrado una sola vez (AC2), las acciones con confirmación y los 409 (AC3) y
 // que un rol que no es SuperAdmin no ve la pestaña (AC5). La API (HU #14064) es un doble.
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -65,11 +65,11 @@ describe("ExternalIntegrationsPanel (#14068)", () => {
     vi.mocked(fetchExternalIntegrations).mockResolvedValue([activa, bloqueada, desactivada]);
   });
 
-  it("AC1: lista las integraciones con estado, alcance de solo lectura y último pase, sin ningún secreto", async () => {
+  it("AC1: lista las conexiones con estado, alcance de solo lectura y último acceso, sin ningún secreto", async () => {
     render(<ExternalIntegrationsPanel companyId={COMPANY} />);
-    const table = await screen.findByRole("table", { name: /integraciones externas de la compañía/i });
+    const table = await screen.findByRole("table", { name: /conexiones externas de la compañía/i });
     expect(within(table).getAllByRole("columnheader").map((h) => h.textContent)).toEqual([
-      expect.stringContaining("Integración"), "Tipo", "Finalidad", "Alcance", expect.stringContaining("Estado"), "Último pase", "Alta", "Acciones",
+      expect.stringContaining("Conexión"), "Tipo", "Finalidad", "Alcance", expect.stringContaining("Estado"), "Último acceso", "Creada el", "Acciones",
     ]);
     expect(fetchExternalIntegrations).toHaveBeenCalledWith(COMPANY, expect.anything());
     expect(within(fila("pn-0123456789abcdef")).getByText("Activa")).toBeInTheDocument();
@@ -82,13 +82,13 @@ describe("ExternalIntegrationsPanel (#14068)", () => {
   it("AC4: estados vacío y error (con reintento)", async () => {
     vi.mocked(fetchExternalIntegrations).mockResolvedValueOnce([]);
     const { unmount } = render(<ExternalIntegrationsPanel companyId={COMPANY} />);
-    expect(await screen.findByText(/no tiene integraciones externas/i)).toBeInTheDocument();
+    expect(await screen.findByText(/todavía no tiene conexiones/i)).toBeInTheDocument();
     unmount();
 
     vi.mocked(fetchExternalIntegrations).mockRejectedValueOnce(new Error("caído"));
     const ue = userEvent.setup();
     render(<ExternalIntegrationsPanel companyId={COMPANY} />);
-    expect(await screen.findByText(/no se pudieron cargar las integraciones externas/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no se pudieron cargar las conexiones/i)).toBeInTheDocument();
     await ue.click(screen.getByRole("button", { name: /reintentar/i }));
     expect(await screen.findByRole("table")).toBeInTheDocument();
   });
@@ -96,10 +96,10 @@ describe("ExternalIntegrationsPanel (#14068)", () => {
   it("AC4: mientras carga muestra el CarLoaderModal", () => {
     vi.mocked(fetchExternalIntegrations).mockReturnValue(new Promise(() => {}));
     render(<ExternalIntegrationsPanel companyId={COMPANY} />);
-    expect(screen.getByText(/cargando integraciones/i)).toBeInTheDocument();
+    expect(screen.getByText(/cargando conexiones/i)).toBeInTheDocument();
   });
 
-  it("AC2: el alta (sin integración activa) muestra el secreto una sola vez, se copia y al cerrar desaparece", async () => {
+  it("AC2: el alta (sin conexión activa) muestra el secreto una sola vez, se copia y al cerrar desaparece", async () => {
     const ue = userEvent.setup();
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
@@ -111,12 +111,14 @@ describe("ExternalIntegrationsPanel (#14068)", () => {
     render(<ExternalIntegrationsPanel companyId={COMPANY} />);
     await screen.findByRole("table");
 
-    await ue.click(screen.getByRole("button", { name: /acciones de integraciones externas/i }));
-    await ue.click(await screen.findByRole("menuitem", { name: /crear integración persona natural/i }));
-    const dialog = await screen.findByRole("dialog");
+    await ue.click(screen.getByRole("button", { name: /^crear conexión$/i }));
+    const dialog = await screen.findByRole("dialog", { name: /crear conexión de persona natural/i });
+    // Texto de negocio: sin el nombre técnico del permiso.
+    expect(within(dialog).getByText(/solo puede consultar la información del portal/i)).toBeInTheDocument();
+    expect(dialog).not.toHaveTextContent("platform.tramites.persona_natural");
     await ue.type(within(dialog).getByLabelText(/nombre/i), "Mi portal");
     await ue.type(within(dialog).getByLabelText(/finalidad/i), "Consultas");
-    await ue.click(within(dialog).getByRole("button", { name: /crear integración/i }));
+    await ue.click(within(dialog).getByRole("button", { name: /^crear conexión$/i }));
 
     expect(createExternalIntegration).toHaveBeenCalledWith(COMPANY, {
       tipo: "persona_natural",
@@ -126,11 +128,11 @@ describe("ExternalIntegrationsPanel (#14068)", () => {
     const secretDialog = await screen.findByRole("dialog", { name: /credenciales de «pn-nueva»/i });
     expect(within(secretDialog).getByTestId("external-integration-secret")).toHaveTextContent(SECRETO);
     expect(within(secretDialog).getByText(/no se podrá ver de nuevo/i)).toBeInTheDocument();
-    await ue.click(within(secretDialog).getByRole("button", { name: /copiar secreto/i }));
+    await ue.click(within(secretDialog).getByRole("button", { name: /copiar clave/i }));
     expect(writeText).toHaveBeenCalledWith(SECRETO);
-    expect(await within(secretDialog).findByText("Copiado")).toBeInTheDocument();
+    expect(await within(secretDialog).findByText("Copiada")).toBeInTheDocument();
 
-    await ue.click(within(secretDialog).getByRole("button", { name: /ya lo copié/i }));
+    await ue.click(within(secretDialog).getByRole("button", { name: /ya la copié/i }));
     await waitFor(() => expect(screen.queryByTestId("external-integration-secret")).not.toBeInTheDocument());
     expect(document.body.textContent).not.toContain(SECRETO);
     // No queda guardado en el almacenamiento del navegador.
@@ -139,13 +141,11 @@ describe("ExternalIntegrationsPanel (#14068)", () => {
     expect(fila("pn-nueva")).toBeInTheDocument();
   });
 
-  it("AC2: con una integración activa «Crear» queda deshabilitado con el motivo", async () => {
-    const ue = userEvent.setup();
+  it("AC2: con una conexión activa «Crear conexión» queda deshabilitado y se explica el motivo", async () => {
     render(<ExternalIntegrationsPanel companyId={COMPANY} />);
     await screen.findByRole("table");
-    await ue.click(screen.getByRole("button", { name: /acciones de integraciones externas/i }));
-    const item = await screen.findByRole("menuitem", { name: /crear integración persona natural/i });
-    expect(item).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: /^crear conexión$/i })).toBeDisabled();
+    expect(screen.getByText(/ya tiene una conexión activa\. para crear otra, desactiva primero la actual/i)).toBeInTheDocument();
   });
 
   it("AC3: un 409 del alta muestra el motivo claro sin cerrar el formulario ni perder lo escrito", async () => {
@@ -153,28 +153,27 @@ describe("ExternalIntegrationsPanel (#14068)", () => {
     vi.mocked(fetchExternalIntegrations).mockResolvedValue([]);
     vi.mocked(createExternalIntegration).mockRejectedValue(apiError(409, "integracion_ya_activa"));
     render(<ExternalIntegrationsPanel companyId={COMPANY} />);
-    await screen.findByText(/no tiene integraciones externas/i);
-    await ue.click(screen.getByRole("button", { name: /acciones de integraciones externas/i }));
-    await ue.click(await screen.findByRole("menuitem", { name: /crear integración persona natural/i }));
+    await screen.findByText(/todavía no tiene conexiones/i);
+    await ue.click(screen.getByRole("button", { name: /^crear conexión$/i }));
     const dialog = await screen.findByRole("dialog");
     await ue.type(within(dialog).getByLabelText(/nombre/i), "Mi portal");
-    await ue.click(within(dialog).getByRole("button", { name: /crear integración/i }));
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent(/ya tiene una integración activa/i);
+    await ue.click(within(dialog).getByRole("button", { name: /^crear conexión$/i }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(/ya tiene una conexión activa/i);
     expect(within(dialog).getByLabelText(/nombre/i)).toHaveValue("Mi portal");
     expect(screen.queryByTestId("external-integration-secret")).not.toBeInTheDocument();
   });
 
-  it("AC3: rotar pide confirmación, permite revocar el anterior al instante y muestra el secreto nuevo una vez", async () => {
+  it("AC3: generar una clave nueva pide confirmación, permite dejar sin efecto la anterior al instante y muestra la clave nueva una vez", async () => {
     const ue = userEvent.setup();
     vi.mocked(rotateExternalIntegrationSecret).mockResolvedValue({ client: activa, clientSecret: SECRETO });
     render(<ExternalIntegrationsPanel companyId={COMPANY} />);
     await screen.findByRole("table");
 
-    await ue.click(within(fila("pn-0123456789abcdef")).getByRole("button", { name: /rotar secreto de pn-0123456789abcdef/i }));
-    const dialog = await screen.findByRole("dialog", { name: /rotar secreto/i });
+    await ue.click(within(fila("pn-0123456789abcdef")).getByRole("button", { name: /generar clave nueva para pn-0123456789abcdef/i }));
+    const dialog = await screen.findByRole("dialog", { name: /generar una clave nueva/i });
     expect(within(dialog).getByText(/24 horas/i)).toBeInTheDocument();
-    await ue.click(within(dialog).getByRole("checkbox", { name: /revocar el secreto anterior de inmediato/i }));
-    await ue.click(within(dialog).getByRole("button", { name: "Rotar secreto" }));
+    await ue.click(within(dialog).getByRole("checkbox", { name: /dejar sin efecto la clave anterior ahora mismo/i }));
+    await ue.click(within(dialog).getByRole("button", { name: "Generar clave nueva" }));
 
     expect(rotateExternalIntegrationSecret).toHaveBeenCalledWith(COMPANY, "int-1", true);
     expect(await screen.findByTestId("external-integration-secret")).toHaveTextContent(SECRETO);
@@ -197,7 +196,7 @@ describe("ExternalIntegrationsPanel (#14068)", () => {
 
     expect(within(fila("pn-vieja")).getByRole("button", { name: /pn-vieja está desactivada/i })).toBeDisabled();
     // La bloqueada no permite rotar hasta desbloquearla.
-    expect(within(fila("pn-0123456789abcdef")).getByRole("button", { name: /rotar secreto de pn-0123456789abcdef/i })).toBeDisabled();
+    expect(within(fila("pn-0123456789abcdef")).getByRole("button", { name: /generar clave nueva para pn-0123456789abcdef/i })).toBeDisabled();
   });
 
   it("AC3: desactivar pide confirmación y un 409 se muestra en el mismo diálogo", async () => {
@@ -208,10 +207,10 @@ describe("ExternalIntegrationsPanel (#14068)", () => {
     await screen.findByRole("table");
 
     await ue.click(within(fila("pn-0123456789abcdef")).getByRole("button", { name: /desactivar pn-0123456789abcdef/i }));
-    const dialog = await screen.findByRole("dialog", { name: /desactivar integración/i });
+    const dialog = await screen.findByRole("dialog", { name: /desactivar conexión/i });
     expect(within(dialog).getByText(/de forma definitiva/i)).toBeInTheDocument();
     await ue.click(within(dialog).getByRole("button", { name: "Desactivar" }));
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent(/está desactivada/i);
+    expect(await within(dialog).findByText(/esta conexión está desactivada y no se puede modificar/i)).toBeInTheDocument();
 
     await ue.click(within(dialog).getByRole("button", { name: "Desactivar" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());

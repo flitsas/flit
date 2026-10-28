@@ -6,9 +6,9 @@
 // desactivar. Mismo modelo de tabla que Trámites: DataTable + RowActions + paginación numerada + filtros por
 // columna. El secreto vive solo en memoria mientras se muestra su modal.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Ban, LockKeyhole, LockOpen, PlugZap, Power, RefreshCcw } from "lucide-react";
+import { Ban, KeyRound, LockKeyhole, LockOpen, PlugZap, Power } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
-import { ActionsMenu } from "@/components/atom/ActionsMenu";
+import { CreateButton } from "@/components/atom/CreateButton";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { EncabezadoFiltrable, TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
@@ -40,7 +40,7 @@ const ESTADO_LABEL: Record<ExternalIntegrationStatus, string> = {
 };
 
 const COLUMNAS_FILTRO: ColumnaFiltro[] = [
-  { id: "integracion", label: "Integración", tipo: "texto" },
+  { id: "integracion", label: "Conexión", tipo: "texto" },
   {
     id: "estado",
     label: "Estado",
@@ -149,11 +149,11 @@ export function ExternalIntegrationsPanel({ companyId }: ExternalIntegrationsPan
     }
     const actions: RowAction[] = [
       {
-        icon: RefreshCcw,
-        label: `Rotar secreto de ${name}`,
+        icon: KeyRound,
+        label: `Generar clave nueva para ${name}`,
         tone: "primary",
         disabled: estado === "blocked",
-        disabledTitle: "Desbloquee la integración para rotar su secreto",
+        disabledTitle: "Desbloquea la conexión para generar una clave nueva",
         onClick: () => setPending({ action: "rotate", integration }),
       },
     ];
@@ -186,7 +186,7 @@ export function ExternalIntegrationsPanel({ companyId }: ExternalIntegrationsPan
       key: "integracion",
       header: (
         <EncabezadoFiltrable filtros={filtros} columnaId="integracion">
-          Integración
+          Conexión
         </EncabezadoFiltrable>
       ),
       render: (i) => (
@@ -229,7 +229,7 @@ export function ExternalIntegrationsPanel({ companyId }: ExternalIntegrationsPan
             {estado === "inactive" && <StatusBadge label="Desactivada" tone="neutral" />}
             {estado === "blocked" && <StatusBadge label={blockedLabel(i)} tone="danger" ariaLabel={`Estado: ${blockedLabel(i)}`} />}
             {i.isActive && i.mustRotate && (
-              <StatusBadge label="Debe rotar" tone="warning" ariaLabel="Debe rotar el secreto" />
+              <StatusBadge label="Debe cambiar la clave" tone="warning" ariaLabel="Debe cambiar la clave secreta" />
             )}
           </div>
         );
@@ -237,13 +237,13 @@ export function ExternalIntegrationsPanel({ companyId }: ExternalIntegrationsPan
     },
     {
       key: "ultimo-pase",
-      header: "Último pase",
+      header: "Último acceso",
       cellClassName: "whitespace-nowrap text-xs",
       render: (i) => formatOptional(i.lastTokenAt),
     },
     {
       key: "alta",
-      header: "Alta",
+      header: "Creada el",
       cellClassName: "whitespace-nowrap text-xs",
       render: (i) => formatOptional(i.createdAt),
     },
@@ -257,37 +257,37 @@ export function ExternalIntegrationsPanel({ companyId }: ExternalIntegrationsPan
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="max-w-3xl text-sm text-[#59677D] dark:text-white/78">
-          Integraciones externas de esta compañía. La de Persona Natural conecta el portal público con FLIT 2 con un
-          permiso de solo lectura. El secreto se muestra una sola vez al crear o rotar.
-        </p>
-        <ActionsMenu
-          ariaLabel="Acciones de integraciones externas"
-          items={[
-            {
-              key: "crear-persona-natural",
-              label: "Crear integración Persona Natural",
-              icon: PlugZap,
-              onSelect: () => setCreating(true),
-              disabled: hasActive,
-              disabledReason: "La compañía ya tiene una integración activa de Persona Natural. Desactívela para crear otra.",
-            },
-          ]}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex max-w-3xl flex-col gap-1">
+          <p className="text-sm text-[#59677D] dark:text-white/78">
+            Aquí conectas el portal público de Persona Natural con esta compañía. La conexión solo puede consultar
+            información, no modificarla. Al crearla o cambiar su clave, la clave secreta se muestra una sola vez.
+          </p>
+          {hasActive && (
+            <p className="text-xs text-[#59677D] dark:text-white/70">
+              Esta compañía ya tiene una conexión activa. Para crear otra, desactiva primero la actual.
+            </p>
+          )}
+        </div>
+        <CreateButton
+          label="Crear conexión"
+          icon={PlugZap}
+          onClick={() => setCreating(true)}
+          disabled={hasActive}
         />
       </div>
 
       {status === "loading" ? (
-        <CarLoaderModal label="Cargando integraciones…" />
+        <CarLoaderModal label="Cargando conexiones…" />
       ) : (
         <UiStateBoundary
           status={status}
-          emptyMessage="Esta compañía no tiene integraciones externas. Cree la de Persona Natural desde «Acciones»."
-          errorMessage="No se pudieron cargar las integraciones externas."
+          emptyMessage="Esta compañía todavía no tiene conexiones. Crea la de Persona Natural con el botón «Crear conexión»."
+          errorMessage="No se pudieron cargar las conexiones."
           onRetry={() => void load()}
         >
           <DataTable<ExternalIntegration>
-            ariaLabel="Integraciones externas de la compañía"
+            ariaLabel="Conexiones externas de la compañía"
             columns={columns}
             rows={pg.paginar(visibles)}
             getRowKey={(i) => i.id}
