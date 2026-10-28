@@ -1,22 +1,44 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Captcha, proveedorConfigurado, TOKEN_MODO_DESARROLLO } from "@/components/Captcha";
+import { Captcha, TOKEN_MODO_DESARROLLO } from "@/components/Captcha";
+import { ConfigPublica } from "@/components/ConfigPublica";
+import { resolverProveedor } from "@/lib/captcha";
+import { portalConfig } from "@/lib/config.server";
 
 afterEach(() => {
-  vi.unstubAllEnvs();
   delete (window as unknown as { turnstile?: unknown }).turnstile;
   delete (window as unknown as { grecaptcha?: unknown }).grecaptcha;
 });
 
-describe("Captcha: proveedor por variable", () => {
-  it("sin variable, en desarrollo y pruebas usa el modo dev; en producción no hay proveedor", () => {
-    expect(proveedorConfigurado()).toBe("dev");
-    vi.stubEnv("NODE_ENV", "production");
-    expect(proveedorConfigurado()).toBe("ninguno");
-    vi.stubEnv("NEXT_PUBLIC_CAPTCHA_PROVIDER", "turnstile");
-    expect(proveedorConfigurado()).toBe("turnstile");
-    vi.stubEnv("NEXT_PUBLIC_CAPTCHA_PROVIDER", "otro");
-    expect(proveedorConfigurado()).toBe("ninguno");
+describe("Captcha: proveedor por variable de servidor", () => {
+  it("sin variable, fuera de producción usa el modo dev; en producción no hay proveedor", () => {
+    expect(resolverProveedor(undefined, "test")).toBe("dev");
+    expect(resolverProveedor(undefined, "production")).toBe("ninguno");
+    expect(resolverProveedor("turnstile", "production")).toBe("turnstile");
+    expect(resolverProveedor("recaptcha", "production")).toBe("recaptcha");
+    expect(resolverProveedor("otro", "production")).toBe("ninguno");
+  });
+
+  it("el servidor lee CAPTCHA_PROVIDER y CAPTCHA_SITE_KEY al pedirlas, sin prefijo NEXT_PUBLIC_", () => {
+    const env = (o: Record<string, string>) => o as unknown as NodeJS.ProcessEnv;
+    expect(portalConfig(env({ NODE_ENV: "production", CAPTCHA_PROVIDER: "turnstile", CAPTCHA_SITE_KEY: "clave-publica" })).captcha).toEqual({ proveedor: "turnstile", siteKey: "clave-publica" });
+    expect(portalConfig(env({ NODE_ENV: "production" })).captcha).toEqual({ proveedor: "ninguno", siteKey: undefined });
+  });
+
+  it("el componente toma proveedor y clave del contexto que entrega el layout", () => {
+    render(
+      <ConfigPublica captcha={{ proveedor: "turnstile", siteKey: "" }}>
+        <Captcha onToken={() => {}} />
+      </ConfigPublica>,
+    );
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    cleanup();
+    render(
+      <ConfigPublica captcha={{ proveedor: "dev" }}>
+        <Captcha onToken={() => {}} />
+      </ConfigPublica>,
+    );
+    expect(screen.getByLabelText("Verificación de seguridad")).toBeInTheDocument();
   });
 
   it("modo dev: la casilla entrega un token fijo y se desmarca al reiniciar", () => {

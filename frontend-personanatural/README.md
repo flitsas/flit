@@ -18,7 +18,14 @@ pnpm --filter @flit/frontend-personanatural dev        # http://127.0.0.1:4031
 CORE_API_ORIGIN=http://localhost:4002 pnpm --filter @flit/frontend-personanatural start
 ```
 
-Variable de entorno (servidor, por ambiente): `CORE_API_ORIGIN` = gateway que enruta `/api/v1/persona-natural/*`.
+Variables de entorno (servidor, por ambiente; ninguna lleva prefijo `NEXT_PUBLIC_`, nada se incrusta en el build):
+
+- `CORE_API_ORIGIN` = gateway que enruta `/api/v1/persona-natural/*`.
+- `CAPTCHA_PROVIDER` = `turnstile` | `recaptcha` | `dev`. Sin valor: `dev` fuera de producción y sin captcha (no se envía) en producción.
+- `CAPTCHA_SITE_KEY` = clave pública del sitio (Turnstile o reCAPTCHA); no es un secreto.
+
+El layout se renderiza por petición (`connection()`), lee `lib/config.server.ts` y entrega el proveedor y la clave pública del
+sitio al navegador por el contexto `ConfigPublica`: la misma imagen sirve en DEV, QA y PDN.
 
 ## IP del ciudadano detrás de nginx
 

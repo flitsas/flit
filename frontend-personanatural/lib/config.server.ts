@@ -2,6 +2,7 @@
 // de esto se hornea en el build ni lleva prefijo NEXT_PUBLIC_. El front no conoce ninguna URL de FLIT 2: solo la del
 // gateway, que enruta /api/v1/persona-natural/* al BFF del portal.
 import "server-only";
+import { resolverProveedor, type ConfigCaptcha } from "@/lib/captcha";
 import { parsearSaltosConfianza } from "@/lib/server/ip";
 
 export interface PortalConfig {
@@ -11,6 +12,8 @@ export interface PortalConfig {
   cookieSegura: boolean;
   /** Proxies propios delante del portal (nginx = 1); define qué salto de X-Forwarded-For es la IP real. */
   saltosProxyConfianza: number;
+  /** Captcha de los endpoints públicos: proveedor (`CAPTCHA_PROVIDER`) y clave pública del sitio (`CAPTCHA_SITE_KEY`). */
+  captcha: ConfigCaptcha;
 }
 
 export function portalConfig(env: NodeJS.ProcessEnv = process.env): PortalConfig {
@@ -18,6 +21,7 @@ export function portalConfig(env: NodeJS.ProcessEnv = process.env): PortalConfig
     apiOrigin: trimSlash(env.CORE_API_ORIGIN || "http://localhost:4002"),
     cookieSegura: env.NODE_ENV === "production",
     saltosProxyConfianza: parsearSaltosConfianza(env.TRUSTED_PROXY_HOPS),
+    captcha: { proveedor: resolverProveedor(env.CAPTCHA_PROVIDER, env.NODE_ENV), siteKey: env.CAPTCHA_SITE_KEY || undefined },
   };
 }
 

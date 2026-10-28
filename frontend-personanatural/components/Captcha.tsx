@@ -1,16 +1,18 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { useConfigCaptcha } from "@/components/ConfigPublica";
+import type { ProveedorCaptcha } from "@/lib/captcha";
 
 // Verificación de seguridad (captcha) de los endpoints públicos del BFF: el token sale por `onToken` y el formulario lo
-// manda en la cabecera X-Captcha-Token. El proveedor se elige por variable de entorno (sin inventar claves):
-//   NEXT_PUBLIC_CAPTCHA_PROVIDER = turnstile | recaptcha | dev
-//   NEXT_PUBLIC_CAPTCHA_SITE_KEY = clave pública del sitio (turnstile y recaptcha)
+// manda en la cabecera X-Captcha-Token. El proveedor y la clave pública del sitio los
+// resuelve el SERVIDOR al atender cada petición (CAPTCHA_PROVIDER = turnstile | recaptcha | dev, CAPTCHA_SITE_KEY) y llegan
+// por el contexto de `ConfigPublica` (layout): nada se incrusta al compilar (una imagen para todos los ambientes).
 // Sin variable, en desarrollo se usa el modo `dev` (una casilla que entrega un token fijo, solo válido contra un BFF con
 // el captcha deshabilitado); en producción sin proveedor configurado no se entrega ningún token y el formulario no envía.
 // Los tokens son de un solo uso: tras cada envío el formulario sube `reinicio` para pedir uno nuevo.
 
-export type ProveedorCaptcha = "turnstile" | "recaptcha" | "dev" | "ninguno";
+export type { ProveedorCaptcha };
 
 export const TOKEN_MODO_DESARROLLO = "dev-captcha-token";
 
@@ -18,12 +20,6 @@ const SCRIPTS: Record<"turnstile" | "recaptcha", string> = {
   turnstile: "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit",
   recaptcha: "https://www.google.com/recaptcha/api.js?render=explicit",
 };
-
-export function proveedorConfigurado(): ProveedorCaptcha {
-  const valor = process.env.NEXT_PUBLIC_CAPTCHA_PROVIDER;
-  if (valor === "turnstile" || valor === "recaptcha" || valor === "dev") return valor;
-  return process.env.NODE_ENV === "production" ? "ninguno" : "dev";
-}
 
 interface WidgetApi {
   render: (el: HTMLElement, opciones: Record<string, unknown>) => string | number;
@@ -66,7 +62,10 @@ interface Props {
   siteKey?: string;
 }
 
-export function Captcha({ onToken, reinicio = 0, proveedor = proveedorConfigurado(), siteKey = process.env.NEXT_PUBLIC_CAPTCHA_SITE_KEY }: Props) {
+export function Captcha({ onToken, reinicio = 0, proveedor: proveedorProp, siteKey: siteKeyProp }: Props) {
+  const config = useConfigCaptcha();
+  const proveedor = proveedorProp ?? config.proveedor;
+  const siteKey = siteKeyProp ?? config.siteKey;
   const idAyuda = useId();
   const contenedor = useRef<HTMLDivElement>(null);
   const widget = useRef<string | number | null>(null);
