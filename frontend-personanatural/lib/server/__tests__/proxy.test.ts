@@ -100,3 +100,33 @@ describe("proxy hacia el BFF", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
+
+describe("proxy hacia el BFF: archivos (multipart)", () => {
+  it("reenvía un multipart de 20 MB intacto, con su boundary, sin recortar ni convertir el cuerpo", async () => {
+    const frontera = "----pn-frontera";
+    const archivo = new Uint8Array(20 * 1024 * 1024).fill(7);
+    const cabeza = new TextEncoder().encode(`--${frontera}\r\nContent-Disposition: form-data; name="tipo"\r\n\r\npaz_salvo\r\n--${frontera}\r\nContent-Disposition: form-data; name="archivo"; filename="a.pdf"\r\nContent-Type: application/pdf\r\n\r\n`);
+    const cola = new TextEncoder().encode(`\r\n--${frontera}--\r\n`);
+    const cuerpo = new Uint8Array(cabeza.length + archivo.length + cola.length);
+    cuerpo.set(cabeza, 0);
+    cuerpo.set(archivo, cabeza.length);
+    cuerpo.set(cola, cabeza.length + archivo.length);
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ id: "a1" }), { status: 201, headers: { "content-type": "application/json" } }));
+    const request = new Request("https://portal/api/v1/persona-natural/solicitudes/s1/adjuntos", {
+      method: "POST",
+      body: cuerpo,
+      headers: { "content-type": `multipart/form-data; boundary=${frontera}` },
+    });
+
+    const resultado = await reenviarAlBff(request, ["solicitudes", "s1", "adjuntos"], { apiOrigin: ORIGEN, tokenSesion: "tok", fetchImpl });
+
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [URL, RequestInit];
+    expect((init.headers as Headers).get("content-type")).toBe(`multipart/form-data; boundary=${frontera}`);
+    expect((init.headers as Headers).get("authorization")).toBe("Bearer tok");
+    const enviado = new Uint8Array(init.body as ArrayBuffer);
+    expect(enviado.length).toBe(cuerpo.length);
+    expect(Array.from(enviado.subarray(0, cabeza.length))).toEqual(Array.from(cabeza));
+    expect(enviado[cabeza.length + 1000]).toBe(7);
+    expect(resultado.status).toBe(201);
+  });
+});

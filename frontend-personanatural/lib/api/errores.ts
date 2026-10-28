@@ -8,6 +8,10 @@ export class ApiError extends Error {
     readonly status: number,
     /** Segundos que indicó `Retry-After` (429 y 503), si vino. */
     readonly reintentarEnSegundos?: number,
+    /** Errores por campo de un 422 `datos_invalidos` (`actores[0].correo` → mensajes). Son textos fijos del back, nunca el valor escrito. */
+    readonly errores?: Readonly<Record<string, readonly string[]>>,
+    /** Estado que informa el back en algunos conflictos (`state`), p. ej. el de la validación de identidad. */
+    readonly estado?: string,
   ) {
     super(title);
     this.name = "ApiError";
@@ -34,6 +38,23 @@ const MENSAJES_POR_CODIGO: Record<string, string> = {
   correo_rate_limited: "Ese correo ya recibió varias cotizaciones. Intenta más tarde.",
   correo_invalido: "Escribe un correo válido.",
   envio_fallido: "No pudimos enviar el correo. Intenta de nuevo.",
+  persona_juridica_no_soportada: "Este trámite en línea es solo para personas naturales: no admite NIT ni personas jurídicas.",
+  contacto_invalido: "Revisa el correo y el celular de esta persona.",
+  reenvio_muy_pronto: "Espera un momento antes de reenviar el enlace de nuevo.",
+  reenvios_agotados: "Ya se reenvió el enlace el máximo de veces.",
+  validacion_en_curso: "Ya hay una validación en curso para esta persona.",
+  identidad_aprobada: "La identidad de esta persona ya fue validada.",
+  validacion_no_solicitada: "Primero solicita la validación de esta persona.",
+  actor_no_registrado: "Guarda primero a esta persona en el trámite.",
+  rol_sin_validacion: "Este rol no necesita validar su identidad.",
+  rol_desconocido: "Ese rol no existe en este trámite.",
+  solicitud_no_editable: "Este trámite ya no admite cambios.",
+  datos_invalidos: "Revisa los datos marcados e inténtalo de nuevo.",
+  adjunto_no_permitido: "Solo se aceptan archivos PDF, JPG, PNG o WEBP de hasta 20 MB.",
+  documento_no_pertenece_al_tipo: "Ese documento no hace parte de este trámite.",
+  limite_de_adjuntos: "Alcanzaste el máximo de archivos del trámite.",
+  almacenamiento_no_disponible: "No pudimos guardar el archivo. Intenta de nuevo.",
+  adjunto_no_encontrado: "No encontramos ese archivo.",
 };
 
 const MENSAJES_POR_ESTADO: Record<number, string> = {
@@ -42,6 +63,8 @@ const MENSAJES_POR_ESTADO: Record<number, string> = {
   403: "No tienes acceso a este trámite.",
   404: "No encontramos lo que buscas.",
   409: "Este trámite cambió mientras lo editabas. Recarga e inténtalo de nuevo.",
+  413: "El archivo supera los 20 MB permitidos.",
+  415: "Solo se aceptan archivos PDF, JPG, PNG o WEBP.",
   422: "Algunos datos no son válidos. Revísalos e inténtalo de nuevo.",
   429: "Demasiados intentos. Vuelve a intentarlo en unos minutos.",
   503: "El servicio no está disponible en este momento. Intenta de nuevo en unos minutos.",
@@ -62,13 +85,27 @@ export function esperaDe(error: unknown): number | undefined {
 export async function errorDeRespuesta(respuesta: Response): Promise<ApiError> {
   let code = `http_${respuesta.status}`;
   let title = respuesta.statusText || "Error";
+  let errores: Record<string, string[]> | undefined;
+  let estado: string | undefined;
   try {
-    const datos = (await respuesta.json()) as { code?: unknown; title?: unknown };
+    const datos = (await respuesta.json()) as { code?: unknown; title?: unknown; errors?: unknown; state?: unknown };
     if (typeof datos.code === "string") code = datos.code;
     if (typeof datos.title === "string") title = datos.title;
+    if (typeof datos.state === "string") estado = datos.state;
+    errores = erroresPorCampo(datos.errors);
   } catch {
     // Cuerpo vacío o que no es JSON: queda el código por estado.
   }
   const espera = Number(respuesta.headers.get("retry-after"));
-  return new ApiError(code, title, respuesta.status, Number.isFinite(espera) && espera > 0 ? espera : undefined);
+  return new ApiError(code, title, respuesta.status, Number.isFinite(espera) && espera > 0 ? espera : undefined, errores, estado);
+}
+
+/** `errors` de un 422: campo → mensajes (cadenas). Cualquier otra forma se ignora. */
+function erroresPorCampo(valor: unknown): Record<string, string[]> | undefined {
+  if (typeof valor !== "object" || valor === null || Array.isArray(valor)) return undefined;
+  const salida: Record<string, string[]> = {};
+  for (const [campo, mensajes] of Object.entries(valor)) {
+    if (Array.isArray(mensajes)) salida[campo] = mensajes.filter((m): m is string => typeof m === "string");
+  }
+  return Object.keys(salida).length > 0 ? salida : undefined;
 }

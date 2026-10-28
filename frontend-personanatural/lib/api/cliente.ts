@@ -359,6 +359,35 @@ export interface ConductorMinimo {
   vigencia: string | null;
 }
 
+// ── Identidad por parte (POST/GET /solicitudes/{id}/identidad) ───────────────────────────────────────────────────
+
+/** Estados de la validación de una parte: sin_solicitar, pendiente_envio, pendiente, aprobada, rechazada y vencida. */
+export type EstadoValidacion = "sin_solicitar" | "pendiente_envio" | "pendiente" | "aprobada" | "rechazada" | "vencida" | (string & {});
+
+/** Una parte que el tipo obliga a validar, con lo que le queda por reenviar (tope de 5 reenvíos y 60 s entre uno y otro). */
+export interface ParteIdentidad {
+  /** Rol de la definición. */
+  parte: string;
+  ordinal: number;
+  estado: EstadoValidacion;
+  puedeReenviar: boolean;
+  reenviosRestantes: number;
+  esperaSegundos: number;
+}
+
+export interface EstadoIdentidad {
+  solicitudId: string;
+  /** Todas las partes obligadas tienen la identidad aprobada. */
+  completa: boolean;
+  partes: ParteIdentidad[];
+}
+
+export interface ResultadoParte {
+  parte: string;
+  ordinal: number;
+  estado: EstadoValidacion;
+}
+
 // ── Cliente ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
 export interface OpcionesCliente {
@@ -383,7 +412,9 @@ function consultaOrganismo(o?: OpcionesLlamada): string {
 export function crearCliente({ base = BASE_BFF, fetchImpl }: OpcionesCliente = {}) {
   async function solicitar<T>(metodo: string, ruta: string, cuerpo?: unknown, opciones: OpcionesLlamada = {}): Promise<T> {
     const cabeceras: Record<string, string> = { accept: "application/json" };
-    if (cuerpo !== undefined) cabeceras["content-type"] = "application/json";
+    // Un FormData (archivos) viaja tal cual: el navegador pone el content-type con su boundary; a mano se rompería.
+    const esFormulario = typeof FormData !== "undefined" && cuerpo instanceof FormData;
+    if (cuerpo !== undefined && !esFormulario) cabeceras["content-type"] = "application/json";
     if (opciones.captcha) cabeceras["x-captcha-token"] = opciones.captcha;
     if (opciones.idempotencyKey) cabeceras["idempotency-key"] = opciones.idempotencyKey;
 
@@ -391,7 +422,7 @@ export function crearCliente({ base = BASE_BFF, fetchImpl }: OpcionesCliente = {
     const respuesta = await (fetchImpl ?? fetch)(`${base}${ruta}`, {
       method: metodo,
       headers: cabeceras,
-      body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
+      body: cuerpo === undefined ? undefined : esFormulario ? (cuerpo as FormData) : JSON.stringify(cuerpo),
       credentials: "same-origin",
       cache: "no-store",
       signal: opciones.signal,
@@ -445,6 +476,26 @@ export function crearCliente({ base = BASE_BFF, fetchImpl }: OpcionesCliente = {
       radicar: (id: string, idempotencyKey: string, o?: OpcionesLlamada) =>
         solicitar<ResultadoRadicar>("POST", `/solicitudes/${encodeURIComponent(id)}/radicar`, undefined, { ...o, idempotencyKey }),
       cancelar: (id: string, o?: OpcionesLlamada) => solicitar<void>("DELETE", `/solicitudes/${encodeURIComponent(id)}`, undefined, o),
+    },
+    adjuntos: {
+      /** Sube un archivo (multipart: `archivo` y `tipo` = `docCode` del documento de la definición). Devuelve solo sus metadatos. */
+      subir: (id: string, tipo: string, archivo: File, o?: OpcionesLlamada) => {
+        const formulario = new FormData();
+        formulario.append("tipo", tipo);
+        formulario.append("archivo", archivo, archivo.name);
+        return solicitar<Adjunto>("POST", `/solicitudes/${encodeURIComponent(id)}/adjuntos`, formulario, o);
+      },
+      eliminar: (id: string, adjuntoId: string, o?: OpcionesLlamada) =>
+        solicitar<void>("DELETE", `/solicitudes/${encodeURIComponent(id)}/adjuntos/${encodeURIComponent(adjuntoId)}`, undefined, o),
+    },
+    identidad: {
+      /** Estado de la validación de cada parte que el tipo obliga a validar (se sondea). */
+      estado: (id: string, o?: OpcionesLlamada) => solicitar<EstadoIdentidad>("GET", `/solicitudes/${encodeURIComponent(id)}/identidad`, undefined, o),
+      /** Pide la validación de la parte (rol) en la posición `ordinal`; el actor debe estar guardado. 202 = FLIT 2 sin respuesta (`pendiente_envio`). */
+      solicitar: (id: string, parte: string, ordinal: number, o?: OpcionesLlamada) =>
+        solicitar<ResultadoParte>("POST", `/solicitudes/${encodeURIComponent(id)}/identidad/${encodeURIComponent(parte)}`, { ordinal }, o),
+      reenviar: (id: string, parte: string, ordinal: number, o?: OpcionesLlamada) =>
+        solicitar<ResultadoParte>("POST", `/solicitudes/${encodeURIComponent(id)}/identidad/${encodeURIComponent(parte)}/reenviar`, { ordinal }, o),
     },
   };
 }

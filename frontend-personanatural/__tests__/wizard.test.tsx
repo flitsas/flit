@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { describe, expect, it } from "vitest";
 import { useWizard, type PropsSeccion, type RegistroRenderers } from "@/components/tramite/ContextoWizard";
 import { REGISTRO_RENDERERS } from "@/components/tramite/renderers/registro";
+import { SeccionPendiente } from "@/components/tramite/renderers/SeccionPendiente";
 import { fijarContexto, obtenerContexto } from "@/lib/tramite/contexto";
 import { definicionDe, solicitudDe } from "./fixtures-wizard";
 import { CONTEXTO, cuerpo, DIAGNOSTICO_OK, guardado, montar, nodo, wizardAbierto } from "./montar-wizard";
@@ -139,7 +140,7 @@ describe("avance bloqueado, guardado y conflictos", () => {
   });
 
   it("un paso cuya sección aún no está construida avisa con un estado accesible y no deja continuar", async () => {
-    await wizardAbierto({ "GET /solicitudes/s-1": () => json(guardado(DIAGNOSTICO_OK)) });
+    await wizardAbierto({ "GET /solicitudes/s-1": () => json(guardado(DIAGNOSTICO_OK)) }, { registro: { ...REGISTRO_RENDERERS, actor_form: SeccionPendiente } });
 
     const slide = document.querySelectorAll(".wizard-slide")[1] as HTMLElement;
     expect(within(slide).getByRole("status")).toHaveTextContent("Esta sección aún no está disponible en el portal");

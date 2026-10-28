@@ -38,5 +38,13 @@ export function useBloqueo(ahora: () => number = Date.now) {
     [ahora],
   );
 
-  return { bloqueado: hasta !== null, segundosRestantes, registrar };
+  /** Arranca una espera conocida de antemano (p. ej. los 60 s entre dos reenvíos del enlace). */
+  const iniciar = useCallback(
+    (segundos: number) => {
+      if (segundos > 0) setHasta(ahora() + segundos * 1000);
+    },
+    [ahora],
+  );
+
+  return { bloqueado: hasta !== null, segundosRestantes, registrar, iniciar };
 }

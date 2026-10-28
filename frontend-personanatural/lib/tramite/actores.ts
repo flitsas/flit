@@ -1,0 +1,222 @@
+// Paso Actores (HU F3 y K5). Módulo puro, sin React ni red: arma las filas de actores por rol a partir de la definición del tipo y
+// del borrador, valida su formato y decide qué falta. Ningún rol ni tipo de trámite está nombrado aquí: todo sale de la definición.
+import type { ActorEstado, ActorRequest, ActorRol, DefinicionTipo, EstadoIdentidad, EstadoValidacion, ParteIdentidad } from "@/lib/api/cliente";
+
+export type TipoDocumento = "CC" | "CE" | "NIT";
+
+/** Tipos del diseño de referencia. El NIT es persona jurídica: se ofrece (como en el diseño) pero el portal no lo admite. */
+export const TIPOS_DOCUMENTO: readonly { valor: TipoDocumento; etiqueta: string }[] = [
+  { valor: "CC", etiqueta: "Cédula de ciudadanía" },
+  { valor: "CE", etiqueta: "Cédula de extranjería" },
+  { valor: "NIT", etiqueta: "NIT" },
+];
+
+export const MENSAJE_PERSONA_JURIDICA = "Este trámite no admite personas jurídicas en este rol";
+export const MENSAJE_CONSULTAR = "Consulta el documento de esta persona";
+export const MENSAJE_ROL_NO_PERMITIDO = "Este rol no puede ser una persona natural en el portal, así que no se puede continuar con este trámite en línea.";
+
+/** Lo que el ciudadano escribe de una persona, en memoria de la pantalla (nunca en el navegador ni en la URL). */
+export interface FilaActor {
+  /** Id local estable de la fila (no viaja al back). */
+  clave: string;
+  rol: string;
+  /** Posición dentro del rol (1 a `max`): es la llave que el back usa para esta persona. */
+  ordinal: number;
+  tipoDocumento: TipoDocumento;
+  numeroDocumento: string;
+  nombre: string;
+  correo: string;
+  celular: string;
+  direccion: string;
+  /** El documento ya se consultó (o ya estaba guardado): los demás campos quedan habilitados. */
+  consultado: boolean;
+  /** Dato mínimo de la consulta de conductor (solo lo que el BFF devuelve). */
+  licencia: { estado: string | null; vigencia: string | null } | null;
+}
+
+export type CampoActor = "tipoDocumento" | "numeroDocumento" | "nombre" | "correo" | "celular" | "direccion";
+export type ErroresActor = Partial<Record<CampoActor, string>>;
+
+// ── Formato ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+export const telefonoInvalido = (v: string): boolean => !/^\d{7,10}$/.test(v);
+
+export const correoInvalido = (v: string): boolean => {
+  const c = v.trim();
+  return c.length === 0 || c.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c);
+};
+
+/** Cédulas: solo dígitos (4 a 15), igual que el back. */
+export const documentoInvalido = (v: string): boolean => !/^\d{4,15}$/.test(v);
+
+const soloDigitos = (v: string): string => v.replace(/\D/g, "");
+export { soloDigitos };
+
+/** Errores de una fila. `consultado = false` solo exige el documento: lo demás está deshabilitado hasta consultarlo. */
+export function validarFila(fila: FilaActor, rol: ActorRol): ErroresActor {
+  const e: ErroresActor = {};
+  if (!rol.personaNaturalPermitida || fila.tipoDocumento === "NIT") e.numeroDocumento = MENSAJE_PERSONA_JURIDICA;
+  else if (fila.numeroDocumento === "") e.numeroDocumento = "Escribe el número de documento";
+  else if (documentoInvalido(fila.numeroDocumento)) e.numeroDocumento = "El número de documento debe tener entre 4 y 15 dígitos";
+  else if (!fila.consultado) e.numeroDocumento = MENSAJE_CONSULTAR;
+  if (!fila.consultado) return e;
+  if (fila.nombre.trim() === "" || fila.nombre.trim().length > 150) e.nombre = "Escribe el nombre completo";
+  if (telefonoInvalido(fila.celular)) e.celular = "Ingresa un teléfono válido";
+  if (correoInvalido(fila.correo)) e.correo = "Ingresa un correo electrónico válido";
+  if (fila.direccion.trim().length > 200) e.direccion = "La dirección es demasiado larga";
+  return e;
+}
+
+// ── Máscaras (Habeas Data: el dato de un tercero se muestra mínimo) ─────────────────────────────────────────────────
+
+/** «ju•••@dominio.com»: deja la primera parte casi oculta y el dominio visible para que se reconozca el destino. */
+export function enmascararCorreo(correo: string): string {
+  const [local = "", dominio = ""] = correo.trim().split("@");
+  if (!dominio) return "••••";
+  return `${local.slice(0, 2)}•••@${dominio}`;
+}
+
+/** «MA••• RO•••»: dos letras de cada palabra. */
+export function enmascararNombre(nombre: string): string {
+  return nombre
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((p) => `${p.slice(0, 2)}•••`)
+    .join(" ");
+}
+
+// ── Filas ───────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+let consecutivo = 0;
+const claveNueva = (): string => `a-${++consecutivo}`;
+
+export function filaVacia(rol: string, ordinal: number): FilaActor {
+  return { clave: claveNueva(), rol, ordinal, tipoDocumento: "CC", numeroDocumento: "", nombre: "", correo: "", celular: "", direccion: "", consultado: false, licencia: null };
+}
+
+function filaDeActor(a: ActorEstado): FilaActor {
+  const tipo = a.tipoDocumento === "CE" ? "CE" : "CC";
+  // Un actor que el back ya tiene guardado se tomó de una consulta antes: queda habilitado.
+  return {
+    clave: claveNueva(),
+    rol: a.rol,
+    ordinal: a.ordinal,
+    tipoDocumento: tipo,
+    numeroDocumento: a.numeroDocumento ?? "",
+    nombre: a.nombre ?? "",
+    correo: a.correo ?? "",
+    celular: (a.celular ?? "").replace(/\D/g, ""),
+    direccion: a.direccion ?? "",
+    consultado: Boolean(a.numeroDocumento),
+    licencia: null,
+  };
+}
+
+/**
+ * Filas iniciales: las del borrador (agrupadas por rol y ordenadas por posición) y, por cada rol, las vacías que falten hasta su
+ * mínimo. Un rol que el borrador trae con más personas que el máximo de la definición se recorta al máximo.
+ */
+export function filasIniciales(definicion: DefinicionTipo, guardados: readonly ActorEstado[]): FilaActor[] {
+  const filas: FilaActor[] = [];
+  for (const rol of definicion.actores) {
+    const delRol = guardados.filter((a) => a.rol === rol.rol).sort((a, b) => a.ordinal - b.ordinal).slice(0, Math.max(rol.max, 0)).map(filaDeActor);
+    for (let i = delRol.length + 1; i <= rol.min; i++) delRol.push(filaVacia(rol.rol, ordinalLibre(delRol, rol)));
+    filas.push(...delRol);
+  }
+  return filas;
+}
+
+/** Primera posición libre del rol (1 a `max`), o `max + 1` si no queda ninguna. */
+export function ordinalLibre(filas: readonly FilaActor[], rol: ActorRol): number {
+  const usados = new Set(filas.filter((f) => f.rol === rol.rol).map((f) => f.ordinal));
+  for (let n = 1; n <= rol.max; n++) if (!usados.has(n)) return n;
+  return rol.max + 1;
+}
+
+export const puedeAgregar = (filas: readonly FilaActor[], rol: ActorRol): boolean => rol.personaNaturalPermitida && filas.filter((f) => f.rol === rol.rol).length < rol.max;
+export const puedeQuitar = (filas: readonly FilaActor[], rol: ActorRol): boolean => filas.filter((f) => f.rol === rol.rol).length > rol.min;
+
+/** Lo que se manda a PATCH /actores: las filas con documento, con el contacto ya normalizado. */
+export function actoresParaGuardar(filas: readonly FilaActor[]): ActorRequest[] {
+  return filas
+    .filter((f) => f.consultado)
+    .map((f) => ({
+      rol: f.rol,
+      ordinal: f.ordinal,
+      tipoDocumento: f.tipoDocumento,
+      numeroDocumento: f.numeroDocumento,
+      nombre: f.nombre.trim(),
+      correo: f.correo.trim(),
+      celular: f.celular,
+      ...(f.direccion.trim() ? { direccion: f.direccion.trim() } : {}),
+    }));
+}
+
+/**
+ * Pasa los errores por campo de un 422 (`actores[2].correo`) a la fila que corresponde. `indices` dice qué fila ocupó cada posición
+ * del arreglo enviado.
+ */
+export function erroresDeServidor(errores: Readonly<Record<string, readonly string[]>> | undefined, indices: readonly string[]): Record<string, ErroresActor> {
+  const salida: Record<string, ErroresActor> = {};
+  for (const [llave, mensajes] of Object.entries(errores ?? {})) {
+    const m = /^actores\[(\d+)\]\.(\w+)$/.exec(llave);
+    if (!m) continue;
+    const clave = indices[Number(m[1])];
+    const campo = m[2] === "ordinal" || m[2] === "rol" ? "numeroDocumento" : (m[2] as CampoActor);
+    if (clave && mensajes[0]) salida[clave] = { ...salida[clave], [campo]: mensajes[0] };
+  }
+  return salida;
+}
+
+// ── Identidad ───────────────────────────────────────────────────────────────────────────────────────────────────────
+
+export const llaveParte = (rol: string, ordinal: number): string => `${rol}:${ordinal}`;
+
+/** Estado de la validación de una fila: el sondeo manda; sin él, el que trae el borrador. */
+export function estadoDeFila(fila: Pick<FilaActor, "rol" | "ordinal">, identidad: EstadoIdentidad | undefined, guardados: readonly ActorEstado[]): EstadoValidacion {
+  const parte = identidad?.partes.find((p) => p.parte === fila.rol && p.ordinal === fila.ordinal);
+  if (parte) return parte.estado;
+  return guardados.find((a) => a.rol === fila.rol && a.ordinal === fila.ordinal)?.validacionEstado ?? "sin_solicitar";
+}
+
+export const enCurso = (estado: EstadoValidacion): boolean => estado === "pendiente" || estado === "pendiente_envio";
+
+export function parteDe(fila: Pick<FilaActor, "rol" | "ordinal">, identidad: EstadoIdentidad | undefined): ParteIdentidad | undefined {
+  return identidad?.partes.find((p) => p.parte === fila.rol && p.ordinal === fila.ordinal);
+}
+
+export const ETIQUETA_VALIDACION: Readonly<Record<string, string>> = {
+  sin_solicitar: "sin enviar",
+  pendiente_envio: "enviando enlace",
+  pendiente: "pendiente",
+  aprobada: "aprobada",
+  rechazada: "rechazada",
+  vencida: "vencida",
+};
+
+export const TONO_VALIDACION = (estado: EstadoValidacion): "success" | "warning" | "info" => (estado === "aprobada" ? "success" : estado === "sin_solicitar" ? "info" : "warning");
+
+// ── Qué falta ───────────────────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Primer motivo por el que el paso no está completo, o `undefined` si lo está. Cada rol se revisa en el orden de la definición:
+ * mínimo de personas, datos válidos de cada una y, para los roles que exigen validar la identidad, que todas estén aprobadas.
+ */
+export function motivoIncompleto(
+  definicion: DefinicionTipo,
+  filas: readonly FilaActor[],
+  estadoDe: (fila: FilaActor) => EstadoValidacion,
+): string | undefined {
+  for (const rol of definicion.actores) {
+    const delRol = filas.filter((f) => f.rol === rol.rol);
+    if (!rol.personaNaturalPermitida && rol.min > 0) return MENSAJE_ROL_NO_PERMITIDO;
+    if (delRol.length < rol.min) return `Registra a ${rol.etiqueta}.`;
+    for (const f of delRol) {
+      if (Object.keys(validarFila(f, rol)).length > 0) return `Completa los datos de ${rol.etiqueta}.`;
+    }
+  }
+  const sinAprobar = definicion.actores.filter((rol) => rol.biometria && filas.some((f) => f.rol === rol.rol && estadoDe(f) !== "aprobada"));
+  if (sinAprobar.length > 0) return `Falta validar la identidad de: ${sinAprobar.map((r) => r.etiqueta).join(", ")}.`;
+  return undefined;
+}

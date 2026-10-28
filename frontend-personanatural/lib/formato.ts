@@ -20,3 +20,9 @@ export function formatearFechaHora(iso: string | null | undefined): string | nul
   const local = new Date(instante.getTime() + UTC_COLOMBIA_HORAS * 3_600_000);
   return `${dos(local.getUTCDate())}/${dos(local.getUTCMonth() + 1)}/${local.getUTCFullYear()} ${dos(local.getUTCHours())}:${dos(local.getUTCMinutes())}`;
 }
+
+/** «dd/mm/aaaa» de una fecha ISO con o sin hora (se lee del texto: una fecha sin hora no se corre por la zona horaria), o null. */
+export function formatearFecha(iso: string | null | undefined): string | null {
+  const m = iso ? /^(\d{4})-(\d{2})-(\d{2})/.exec(iso) : null;
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : null;
+}
