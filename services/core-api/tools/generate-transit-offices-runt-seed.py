@@ -1,29 +1,41 @@
 #!/usr/bin/env python3
 """Generate RUNT-aligned transit office catalog seed for FLIT 2.0 (HU #10659 / B11).
 
-Source: context/traffic_secretaries_example/traffic_secreataries.txt
+Preferred source (PDN-aligned, Oct 2026 OT remediation):
+  services/core-api/tools/data/transit_offices_canonical.csv
 
-Cleaning rules:
+Fallback source (legacy RUNT dump, may be absent in sparse checkouts):
+  context/traffic_secretaries_example/traffic_secreataries.txt
+
+Also applies code renames from:
+  services/core-api/tools/data/transit_offices_code_renames.json
+so environments that still have legacy …000 codes converge to Excel …001.
+
+Cleaning rules (TSV fallback only):
 - Exclude TEST rows and non-numeric traffic_agency_code.
-- Normalize code_dane_municipality to 5 digits (zfill); derive from traffic_agency_code if 00000/missing.
-- Derive department_dane_code from city when missing.
-- Deduplicate by name (case-insensitive): prefer traffic_agency_code ending in '000'.
+- Normalize code_dane_municipality to 5 digits (zfill).
+- Deduplicate by name: prefer traffic_agency_code ending in '001' (Excel),
+  then '000', then lexicographic min.
 
 Output: Persistence/Sql/Ddl/27-HU10659-transit-offices-runt-catalog-seed.sql
 
-Regenerate after editing the TSV:
-  python3 services/core-api/tools/generate-transit-offices-runt-seed.py
+Regenerate:
+  python services/core-api/tools/generate-transit-offices-runt-seed.py
 """
 
 from __future__ import annotations
 
 import csv
+import json
 import re
 import uuid
 from collections import defaultdict
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+DATA_DIR = Path(__file__).resolve().parent / "data"
+CANONICAL_CSV = DATA_DIR / "transit_offices_canonical.csv"
+RENAMES_JSON = DATA_DIR / "transit_offices_code_renames.json"
 TSV = REPO_ROOT / "context/traffic_secretaries_example/traffic_secreataries.txt"
 OUT = (
     REPO_ROOT
@@ -58,6 +70,17 @@ def sql_str(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
+def sql_bool(value: bool) -> str:
+    return "true" if value else "false"
+
+
+def parse_bool(raw: str | bool | None) -> bool:
+    if isinstance(raw, bool):
+        return raw
+    s = str(raw or "").strip().lower()
+    return s in {"1", "t", "true", "yes", "y"}
+
+
 def clean_row(raw: dict[str, str]) -> dict[str, str] | None:
     name = (raw.get("name") or "").strip()
     code = (raw.get("traffic_agency_code") or "").strip()
@@ -81,14 +104,20 @@ def clean_row(raw: dict[str, str]) -> dict[str, str] | None:
     dept = dept.zfill(2)[:2]
 
     return {
+        "id": office_id(code),
         "name": name,
         "code": code,
         "city_code": city,
         "department_code": dept,
+        "is_active": True,
     }
 
 
 def pick_duplicate(group: list[dict[str, str]]) -> dict[str, str]:
+    # Excel oficial prioriza …001 sobre …000 cuando hay homónimos.
+    ending_001 = [g for g in group if g["code"].endswith("001")]
+    if ending_001:
+        return min(ending_001, key=lambda g: g["code"])
     ending_000 = [g for g in group if g["code"].endswith("000")]
     if ending_000:
         return min(ending_000, key=lambda g: g["code"])
@@ -99,12 +128,52 @@ def office_id(code: str) -> str:
     return FIXED_IDS.get(code, str(uuid.uuid5(UUID_NS, code)))
 
 
-def load_rows() -> list[dict[str, str]]:
+def load_renames() -> list[dict[str, str]]:
+    if not RENAMES_JSON.exists():
+        return []
+    data = json.loads(RENAMES_JSON.read_text(encoding="utf-8"))
+    out: list[dict[str, str]] = []
+    for row in data:
+        old_code = str(row.get("old_code") or "").strip()
+        new_code = str(row.get("new_code") or "").strip()
+        if old_code and new_code and old_code != new_code:
+            out.append({"old_code": old_code, "new_code": new_code})
+    return out
+
+
+def load_rows_from_canonical() -> list[dict]:
+    with CANONICAL_CSV.open(encoding="utf-8", newline="") as f:
+        raw_rows = list(csv.DictReader(f))
+
+    rows: list[dict] = []
+    for raw in raw_rows:
+        code = (raw.get("code") or "").strip()
+        name = (raw.get("name") or "").strip()
+        if not code or not name:
+            continue
+        oid = (raw.get("id") or "").strip() or office_id(code)
+        # Keep FIXED_IDS for the six E2E cities even if CSV differs.
+        oid = FIXED_IDS.get(code, oid)
+        rows.append(
+            {
+                "id": oid,
+                "code": code,
+                "name": name,
+                "department_code": (raw.get("department_code") or "").strip(),
+                "city_code": (raw.get("city_code") or "").strip(),
+                "is_active": parse_bool(raw.get("is_active")),
+            }
+        )
+    rows.sort(key=lambda r: r["code"])
+    return rows
+
+
+def load_rows_from_tsv() -> list[dict]:
     with TSV.open(encoding="utf-8") as f:
         raw_rows = list(csv.DictReader(f, delimiter="\t"))
 
     cleaned = [row for r in raw_rows if (row := clean_row(r))]
-    by_name: dict[str, list[dict[str, str]]] = defaultdict(list)
+    by_name: dict[str, list[dict]] = defaultdict(list)
     for row in cleaned:
         by_name[row["name"].upper()].append(row)
 
@@ -113,15 +182,26 @@ def load_rows() -> list[dict[str, str]]:
     return deduped
 
 
-def render_sql(rows: list[dict[str, str]]) -> str:
+def load_rows() -> tuple[list[dict], str]:
+    if CANONICAL_CSV.exists():
+        return load_rows_from_canonical(), "tools/data/transit_offices_canonical.csv"
+    if TSV.exists():
+        return load_rows_from_tsv(), "context/traffic_secretaries_example/traffic_secreataries.txt"
+    raise FileNotFoundError(
+        f"No catalog source found. Expected {CANONICAL_CSV} or {TSV}"
+    )
+
+
+def render_sql(rows: list[dict], source_label: str, renames: list[dict[str, str]]) -> str:
     lines: list[str] = [
         "-- HU #10659 (DEV) — Catálogo RUNT de organismos de tránsito (B11)",
-        "-- ⚠️  DEV/QA: alinea nombres reales del RUNT para auto-bind en traspaso.",
-        "-- Fuente: context/traffic_secretaries_example/traffic_secreataries.txt",
+        "-- ⚠️  DEV/QA: alinea nombres/códigos oficiales (Excel OT) + estado PDN.",
+        f"-- Fuente: {source_label}",
         "-- Generado por: services/core-api/tools/generate-transit-offices-runt-seed.py",
-        f"-- Filas: {len(rows)} (deduplicadas por nombre, excluye TEST)",
+        f"-- Filas: {len(rows)}",
         "-- Idempotente: UPSERT por catalogs.transit_offices.code (uq_transit_offices_code).",
         "-- Los 6 UUID fijos (aaaaaaaa-…001–006) se conservan para E2E HU #10133.",
+        "-- Incluye renombres …000→…001 y is_active=false para OT Calera legacy 25377001.",
         "",
         "BEGIN;",
         "",
@@ -131,7 +211,7 @@ def render_sql(rows: list[dict[str, str]]) -> str:
         "-- Conserva los UUID fijos referenciados por grants/E2E.",
     ]
 
-    row_by_id = {office_id(r["code"]): r for r in rows}
+    row_by_id = {r["id"]: r for r in rows}
     for legacy_id, runt_code in LEGACY_DEV_CODE_UPDATES:
         row = row_by_id.get(legacy_id)
         if row is None:
@@ -142,18 +222,28 @@ def render_sql(rows: list[dict[str, str]]) -> str:
         )
     lines.append("")
 
+    if renames:
+        lines.append("-- Remediación OT 2026-10: códigos Excel (…001) sobre legacy …000.")
+        for r in renames:
+            lines.append(
+                "UPDATE catalogs.transit_offices "
+                f"SET code = {sql_str(r['new_code'])}, updated_at = NOW() "
+                f"WHERE code = {sql_str(r['old_code'])} "
+                f"AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = {sql_str(r['new_code'])});"
+            )
+        lines.append("")
+
     for row in rows:
-        oid = office_id(row["code"])
         lines.append(
             "INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)"
         )
         lines.append("VALUES (")
-        lines.append(f"    {sql_str(oid)}::uuid,")
+        lines.append(f"    {sql_str(row['id'])}::uuid,")
         lines.append(f"    {sql_str(row['code'])},")
         lines.append(f"    {sql_str(row['name'])},")
         lines.append(f"    {sql_str(row['department_code'])},")
         lines.append(f"    {sql_str(row['city_code'])},")
-        lines.append("    true")
+        lines.append(f"    {sql_bool(bool(row['is_active']))}")
         lines.append(")")
         lines.append("ON CONFLICT (code) DO UPDATE SET")
         lines.append("    name = EXCLUDED.name,")
@@ -181,10 +271,15 @@ def render_sql(rows: list[dict[str, str]]) -> str:
 
 
 def main() -> None:
-    rows = load_rows()
+    rows, source_label = load_rows()
+    renames = load_renames()
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(render_sql(rows), encoding="utf-8")
-    print(f"Wrote {len(rows)} offices → {OUT.relative_to(REPO_ROOT)}")
+    OUT.write_text(render_sql(rows, source_label, renames), encoding="utf-8")
+    inactive = sum(1 for r in rows if not r["is_active"])
+    print(
+        f"Wrote {len(rows)} offices ({inactive} inactive, {len(renames)} renames) "
+        f"from {source_label} → {OUT.relative_to(REPO_ROOT)}"
+    )
 
 
 if __name__ == "__main__":

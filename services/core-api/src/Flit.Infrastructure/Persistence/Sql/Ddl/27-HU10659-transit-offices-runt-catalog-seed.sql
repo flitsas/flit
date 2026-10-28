@@ -1,10 +1,11 @@
 -- HU #10659 (DEV) — Catálogo RUNT de organismos de tránsito (B11)
--- ⚠️  DEV/QA: alinea nombres reales del RUNT para auto-bind en traspaso.
--- Fuente: context/traffic_secretaries_example/traffic_secreataries.txt
+-- ⚠️  DEV/QA: alinea nombres/códigos oficiales (Excel OT) + estado PDN.
+-- Fuente: tools/data/transit_offices_canonical.csv
 -- Generado por: services/core-api/tools/generate-transit-offices-runt-seed.py
--- Filas: 298 (deduplicadas por nombre, excluye TEST)
+-- Filas: 304
 -- Idempotente: UPSERT por catalogs.transit_offices.code (uq_transit_offices_code).
 -- Los 6 UUID fijos (aaaaaaaa-…001–006) se conservan para E2E HU #10133.
+-- Incluye renombres …000→…001 y is_active=false para OT Calera legacy 25377001.
 
 BEGIN;
 
@@ -18,6 +19,61 @@ UPDATE catalogs.transit_offices SET code = '76001000' WHERE id = 'aaaaaaaa-0001-
 UPDATE catalogs.transit_offices SET code = '8001000' WHERE id = 'aaaaaaaa-0001-4000-8000-000000000004'::uuid AND code <> '8001000';
 UPDATE catalogs.transit_offices SET code = '68001000' WHERE id = 'aaaaaaaa-0001-4000-8000-000000000005'::uuid AND code <> '68001000';
 UPDATE catalogs.transit_offices SET code = '13001000' WHERE id = 'aaaaaaaa-0001-4000-8000-000000000006'::uuid AND code <> '13001000';
+
+-- Remediación OT 2026-10: códigos Excel (…001) sobre legacy …000.
+UPDATE catalogs.transit_offices SET code = '15204001', updated_at = NOW() WHERE code = '15204000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '15204001');
+UPDATE catalogs.transit_offices SET code = '15322001', updated_at = NOW() WHERE code = '15322000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '15322001');
+UPDATE catalogs.transit_offices SET code = '15407001', updated_at = NOW() WHERE code = '15407000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '15407001');
+UPDATE catalogs.transit_offices SET code = '15455001', updated_at = NOW() WHERE code = '15455000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '15455001');
+UPDATE catalogs.transit_offices SET code = '15469001', updated_at = NOW() WHERE code = '15469000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '15469001');
+UPDATE catalogs.transit_offices SET code = '15491001', updated_at = NOW() WHERE code = '15491000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '15491001');
+UPDATE catalogs.transit_offices SET code = '15599001', updated_at = NOW() WHERE code = '15599000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '15599001');
+UPDATE catalogs.transit_offices SET code = '15632001', updated_at = NOW() WHERE code = '15632000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '15632001');
+UPDATE catalogs.transit_offices SET code = '15693001', updated_at = NOW() WHERE code = '15693000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '15693001');
+UPDATE catalogs.transit_offices SET code = '15753001', updated_at = NOW() WHERE code = '15753000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '15753001');
+UPDATE catalogs.transit_offices SET code = '17050001', updated_at = NOW() WHERE code = '17050000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '17050001');
+UPDATE catalogs.transit_offices SET code = '17873001', updated_at = NOW() WHERE code = '17873000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '17873001');
+UPDATE catalogs.transit_offices SET code = '18094001', updated_at = NOW() WHERE code = '18094000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '18094001');
+UPDATE catalogs.transit_offices SET code = '18256001', updated_at = NOW() WHERE code = '18256000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '18256001');
+UPDATE catalogs.transit_offices SET code = '18753001', updated_at = NOW() WHERE code = '18753000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '18753001');
+UPDATE catalogs.transit_offices SET code = '23182001', updated_at = NOW() WHERE code = '23182000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '23182001');
+UPDATE catalogs.transit_offices SET code = '23350001', updated_at = NOW() WHERE code = '23350000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '23350001');
+UPDATE catalogs.transit_offices SET code = '25151001', updated_at = NOW() WHERE code = '25151000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '25151001');
+UPDATE catalogs.transit_offices SET code = '25183001', updated_at = NOW() WHERE code = '25183000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '25183001');
+UPDATE catalogs.transit_offices SET code = '25260001', updated_at = NOW() WHERE code = '25260000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '25260001');
+UPDATE catalogs.transit_offices SET code = '25386001', updated_at = NOW() WHERE code = '25386000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '25386001');
+UPDATE catalogs.transit_offices SET code = '25572001', updated_at = NOW() WHERE code = '25572000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '25572001');
+UPDATE catalogs.transit_offices SET code = '25612001', updated_at = NOW() WHERE code = '25612000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '25612001');
+UPDATE catalogs.transit_offices SET code = '25740001', updated_at = NOW() WHERE code = '25740000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '25740001');
+UPDATE catalogs.transit_offices SET code = '25875001', updated_at = NOW() WHERE code = '25875000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '25875001');
+UPDATE catalogs.transit_offices SET code = '27361001', updated_at = NOW() WHERE code = '27361000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '27361001');
+UPDATE catalogs.transit_offices SET code = '41807001', updated_at = NOW() WHERE code = '41807000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '41807001');
+UPDATE catalogs.transit_offices SET code = '44378001', updated_at = NOW() WHERE code = '44378000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '44378001');
+UPDATE catalogs.transit_offices SET code = '47745001', updated_at = NOW() WHERE code = '47745000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '47745001');
+UPDATE catalogs.transit_offices SET code = '50318001', updated_at = NOW() WHERE code = '50318000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '50318001');
+UPDATE catalogs.transit_offices SET code = '50573001', updated_at = NOW() WHERE code = '50573000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '50573001');
+UPDATE catalogs.transit_offices SET code = '52317001', updated_at = NOW() WHERE code = '52317000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '52317001');
+UPDATE catalogs.transit_offices SET code = '52354001', updated_at = NOW() WHERE code = '52354000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '52354001');
+UPDATE catalogs.transit_offices SET code = '52399001', updated_at = NOW() WHERE code = '52399000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '52399001');
+UPDATE catalogs.transit_offices SET code = '52678001', updated_at = NOW() WHERE code = '52678000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '52678001');
+UPDATE catalogs.transit_offices SET code = '52683001', updated_at = NOW() WHERE code = '52683000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '52683001');
+UPDATE catalogs.transit_offices SET code = '54261001', updated_at = NOW() WHERE code = '54261000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '54261001');
+UPDATE catalogs.transit_offices SET code = '63190001', updated_at = NOW() WHERE code = '63190000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '63190001');
+UPDATE catalogs.transit_offices SET code = '70670001', updated_at = NOW() WHERE code = '70670000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '70670001');
+UPDATE catalogs.transit_offices SET code = '73026001', updated_at = NOW() WHERE code = '73026000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '73026001');
+UPDATE catalogs.transit_offices SET code = '73055001', updated_at = NOW() WHERE code = '73055000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '73055001');
+UPDATE catalogs.transit_offices SET code = '73319001', updated_at = NOW() WHERE code = '73319000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '73319001');
+UPDATE catalogs.transit_offices SET code = '73504001', updated_at = NOW() WHERE code = '73504000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '73504001');
+UPDATE catalogs.transit_offices SET code = '73585001', updated_at = NOW() WHERE code = '73585000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '73585001');
+UPDATE catalogs.transit_offices SET code = '76020001', updated_at = NOW() WHERE code = '76020000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '76020001');
+UPDATE catalogs.transit_offices SET code = '76041001', updated_at = NOW() WHERE code = '76041000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '76041001');
+UPDATE catalogs.transit_offices SET code = '76100001', updated_at = NOW() WHERE code = '76100000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '76100001');
+UPDATE catalogs.transit_offices SET code = '76113001', updated_at = NOW() WHERE code = '76113000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '76113001');
+UPDATE catalogs.transit_offices SET code = '76233001', updated_at = NOW() WHERE code = '76233000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '76233001');
+UPDATE catalogs.transit_offices SET code = '85010001', updated_at = NOW() WHERE code = '85010000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '85010001');
+UPDATE catalogs.transit_offices SET code = '88001001', updated_at = NOW() WHERE code = '88001000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '88001001');
+UPDATE catalogs.transit_offices SET code = '99001001', updated_at = NOW() WHERE code = '99001000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '99001001');
+UPDATE catalogs.transit_offices SET code = '20750001', updated_at = NOW() WHERE code = '20750000' AND NOT EXISTS (SELECT 1 FROM catalogs.transit_offices x WHERE x.code = '20750001');
 
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
@@ -156,6 +212,21 @@ ON CONFLICT (code) DO UPDATE SET
 
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
+    '00a512b1-246b-5fac-bec3-5cdcf2d53afd'::uuid,
+    '13673000',
+    'STRIA TTOyTTE MCPAL SANTA CATALINA - BOLIVAR',
+    '13',
+    '13673',
+    true
+)
+ON CONFLICT (code) DO UPDATE SET
+    name = EXCLUDED.name,
+    department_code = EXCLUDED.department_code,
+    city_code = EXCLUDED.city_code,
+    is_active = EXCLUDED.is_active;
+
+INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
+VALUES (
     'a214e4d9-22fa-5b54-908d-b6736f63914e'::uuid,
     '13683000',
     'MUNICIPIO DE SANTA ROSA DEL SUR DE BOLIVAR',
@@ -232,7 +303,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '27d51a49-edd5-5a89-b866-f8551f2d22f3'::uuid,
-    '15204000',
+    '15204001',
     'ITBOY - DIST TTO No 1/COMBITA',
     '15',
     '15204',
@@ -277,7 +348,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     'bc23f60e-7bef-5c16-a835-132ee9d17d07'::uuid,
-    '15322000',
+    '15322001',
     'ITBOY - DIST TTO No. 6/GUATEQUE',
     '15',
     '15322',
@@ -292,7 +363,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '7d5061de-86f3-5d01-808f-f8deb78aa650'::uuid,
-    '15407000',
+    '15407001',
     'ITBOY - DIST TTO No. 10/VILLA DE LEYVA',
     '15',
     '15407',
@@ -307,7 +378,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     'a230efb3-7675-5d3f-9096-34467ca878a8'::uuid,
-    '15455000',
+    '15455001',
     'ITBOY - DIST TTO No. 9/MIRAFLORES',
     '15',
     '15455',
@@ -322,7 +393,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '6f1eb8ac-f99d-509a-8be4-6b711b73bd63'::uuid,
-    '15469000',
+    '15469001',
     'ITBOY - DIST TTO No. 5/MONIQUIRA',
     '15',
     '15469',
@@ -337,7 +408,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     'dfcfb93d-70e0-5bdc-b388-1880838e4e37'::uuid,
-    '15491000',
+    '15491001',
     'ITBOY - DIST TTO No. 2/ NOBSA',
     '15',
     '15491',
@@ -382,7 +453,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     'cdb7efc9-1b54-515c-81dc-f23556f344ed'::uuid,
-    '15599000',
+    '15599001',
     'ITBOY - DIST TTO No. 11/RAMIRIQUI',
     '15',
     '15599',
@@ -397,7 +468,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '0b00c783-de15-58ca-8249-fd9a5368ab6a'::uuid,
-    '15632000',
+    '15632001',
     'ITBOY - DIST TTO No. 4/SABOYA',
     '15',
     '15632',
@@ -412,7 +483,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     'd0d0b4c8-8d1d-525e-bc8e-f353da6b446c'::uuid,
-    '15693000',
+    '15693001',
     'ITBOY - DIST DE TTO SANTA ROSA DE VITERBO',
     '15',
     '15693',
@@ -427,7 +498,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '3ea0e6b1-3cdd-523b-9e3b-b75105ee55f3'::uuid,
-    '15753000',
+    '15753001',
     'ITBOY - DIST TTO No. 7/SOATA',
     '15',
     '15753',
@@ -502,7 +573,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     'f16d5054-358f-5c8d-9d7b-434129814f0c'::uuid,
-    '17050000',
+    '17050001',
     'UND TTO CALDAS/ARANZAZU',
     '17',
     '17050',
@@ -622,7 +693,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '92f0d4b7-fd48-523d-a86e-5e6b40832c67'::uuid,
-    '17873000',
+    '17873001',
     'UNIDAD TTO CALDAS/VILLAMARIA',
     '17',
     '17873',
@@ -667,7 +738,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '078a44a9-4e12-5aad-9261-f0c98ba07a6e'::uuid,
-    '18094000',
+    '18094001',
     'DIR TTOyTTE DPTAL CAQUETA/BELEN DE LOS ANDAQUIES',
     '18',
     '18094',
@@ -682,7 +753,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     'b7c4ee84-24d0-5a88-8f6c-0cdbee201339'::uuid,
-    '18256000',
+    '18256001',
     'DIR TTOYTTE DPTAL CAQUETA/EL PAUJIL',
     '18',
     '18256',
@@ -697,7 +768,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '4d018af6-8c56-5ff4-a3ac-7784ef0b10ea'::uuid,
-    '18753000',
+    '18753001',
     'DIR TTOyTTE DPTAL CAQUETA/SAN VIC CAGUAN',
     '18',
     '18753',
@@ -878,7 +949,7 @@ INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code
 VALUES (
     '53f89618-56b1-596b-a831-77e08f566094'::uuid,
     '20001000',
-    'INST MCPAL TTOyTTE VALLEDUPAR',
+    'STRIA TTOyTTE MCPAL VALLEDUPAR',
     '20',
     '20001',
     true
@@ -998,7 +1069,7 @@ INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code
 VALUES (
     'ef5146f5-7519-51d2-9c99-37ec81373844'::uuid,
     '20710001',
-    'INST DTAL DE TTO CESAR/SAN ALBERTO',
+    'INST DTAL DE TRÁNSITO DEL CESAR/SAN ALBERTO',
     '20',
     '20710',
     true
@@ -1012,8 +1083,8 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '711f5296-9072-5532-be22-c6b0888b7785'::uuid,
-    '20750000',
-    'INST DTAL DE TTO CESAR/SAN DIEGO',
+    '20750001',
+    'INST DTAL DE TRÁNSITO DEL CESAR/SAN DIEGO',
     '20',
     '20750',
     true
@@ -1072,7 +1143,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '39a36071-04f0-5e45-b0b3-76a4f7ee7397'::uuid,
-    '23182000',
+    '23182001',
     'STRIA DPTAL TTOyTTE CORDOBA/CHINU',
     '23',
     '23182',
@@ -1087,7 +1158,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     'e34dc666-014b-5e00-b820-ac1cc91b802d'::uuid,
-    '23350000',
+    '23350001',
     'STRIA DPTAL TTOyTTE CORDOBA/APARTADA',
     '23',
     '23350',
@@ -1192,7 +1263,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     'd8b2e481-9228-5ee2-a2ed-fe4263fe829e'::uuid,
-    '25151000',
+    '25151001',
     'STRIA TTEy MOV CUND/CAQUEZA',
     '25',
     '25151',
@@ -1237,7 +1308,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '16e2bd5c-700e-5c6d-bb2f-a054e161ca0d'::uuid,
-    '25183000',
+    '25183001',
     'STRIA TTEyMOV CUND/CHOCONTA',
     '25',
     '25183',
@@ -1253,7 +1324,7 @@ INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code
 VALUES (
     '66283b7e-c2c1-5ed7-a791-1613f257d684'::uuid,
     '25214000',
-    'STRIA TTEyMOV CUNDINAMARCA/COTA',
+    'STRIA DE TTO, TTE y MOVILIDAD MUNICIPAL DE COTA',
     '25',
     '25214',
     true
@@ -1267,7 +1338,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     'b9b0ac25-832d-5f11-a5fb-357720a6dbfd'::uuid,
-    '25260000',
+    '25260001',
     'STRIA TTEyMOV CUND/EL ROSAL',
     '25',
     '25260',
@@ -1376,7 +1447,7 @@ VALUES (
     'STRIA TTEyMOV CUND/LA CALERA',
     '25',
     '25377',
-    true
+    false
 )
 ON CONFLICT (code) DO UPDATE SET
     name = EXCLUDED.name,
@@ -1387,7 +1458,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '98a25dcc-465b-5758-82ed-26bc1016fdc1'::uuid,
-    '25386000',
+    '25386001',
     'SECRETARIA DE TRÁNSITO-DEL MUNICIPIO DE LA MESA-CUNDINAMARCA',
     '25',
     '25386',
@@ -1447,7 +1518,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     'b466eaf5-2005-5878-9f34-5335e3b98c9b'::uuid,
-    '25572000',
+    '25572001',
     'STRIA TTEyMOV CUND/PUERTO SALGAR',
     '25',
     '25572',
@@ -1462,7 +1533,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '70e0c0b7-a6d7-5958-bb24-033b29a0f62c'::uuid,
-    '25612000',
+    '25612001',
     'STRIA TTEyMOV CUND/RICAURTE',
     '25',
     '25612',
@@ -1476,8 +1547,23 @@ ON CONFLICT (code) DO UPDATE SET
 
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
+    'd1e69e98-ff07-5d72-8d04-c11a09f08155'::uuid,
+    '25736001',
+    'STRIA DE TTO, TTE y MOVILIDAD CUND/SESQUILE',
+    '25',
+    '25736',
+    true
+)
+ON CONFLICT (code) DO UPDATE SET
+    name = EXCLUDED.name,
+    department_code = EXCLUDED.department_code,
+    city_code = EXCLUDED.city_code,
+    is_active = EXCLUDED.is_active;
+
+INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
+VALUES (
     'bf308ae8-9683-5b8e-82e0-9bd71ca55801'::uuid,
-    '25740000',
+    '25740001',
     'STRIA TTEy MOV CUND/SIBATE',
     '25',
     '25740',
@@ -1536,6 +1622,21 @@ ON CONFLICT (code) DO UPDATE SET
 
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
+    '4f2b82d8-0e47-57cb-86d0-35a87667114e'::uuid,
+    '25799001',
+    'STRIA TTEyMOV CUNDINAMARCA/TENJO',
+    '25',
+    '25799',
+    true
+)
+ON CONFLICT (code) DO UPDATE SET
+    name = EXCLUDED.name,
+    department_code = EXCLUDED.department_code,
+    city_code = EXCLUDED.city_code,
+    is_active = EXCLUDED.is_active;
+
+INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
+VALUES (
     'd0e00d9f-13cc-5d7f-8d62-448fc163fac6'::uuid,
     '25843000',
     'STRIA TTOyTTE MCPAL UBATE',
@@ -1552,7 +1653,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     'dab116f8-7777-5e0c-91bc-e10b3c75d906'::uuid,
-    '25875000',
+    '25875001',
     'STRIA TTEyMOV CUND/VILLETA',
     '25',
     '25875',
@@ -1597,7 +1698,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '30419835-e9af-5cad-be8b-0ea7fe304f20'::uuid,
-    '27361000',
+    '27361001',
     'DIR TTEyTTO DPTAL CHOCO/ISTMINA',
     '27',
     '27361',
@@ -1747,7 +1848,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     'c3534643-8858-5b94-81dc-ca18979fa4b4'::uuid,
-    '41807000',
+    '41807001',
     'INST TTOyTTE DPTAL HUILA/TIMANA',
     '41',
     '41807',
@@ -1807,7 +1908,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '18ce2a78-2cba-5bc6-b21e-303c7ed12241'::uuid,
-    '44378000',
+    '44378001',
     'DPTO ADTVO TTOyTTE GUAJIRA/HATONUEVO',
     '44',
     '44378',
@@ -1927,7 +2028,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     'fb8f1a5a-e53d-5f51-b4aa-8e8abb6bfd35'::uuid,
-    '47745000',
+    '47745001',
     'TRÁNSITO DPTAL DEL MAGDALENA/SITIONUEVO',
     '47',
     '47745',
@@ -2032,7 +2133,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     'd3fda703-f116-5636-98a5-16f7a8b81ac4'::uuid,
-    '50318000',
+    '50318001',
     'INST DPTAL TTOyTTE META/GUAMAL',
     '50',
     '50318',
@@ -2092,7 +2193,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '7b4609c5-a816-540b-a923-041432ebce47'::uuid,
-    '50573000',
+    '50573001',
     'INST DPTAL TTOyTTE META/PUERTO LOPEZ',
     '50',
     '50573',
@@ -2271,6 +2372,21 @@ ON CONFLICT (code) DO UPDATE SET
 
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
+    '9fdd7f96-1ab0-546d-a5e9-d34b73d0df60'::uuid,
+    '52022001',
+    'TRÁNSITO DPTAL NARIÑO/ALDANA',
+    '52',
+    '52022',
+    true
+)
+ON CONFLICT (code) DO UPDATE SET
+    name = EXCLUDED.name,
+    department_code = EXCLUDED.department_code,
+    city_code = EXCLUDED.city_code,
+    is_active = EXCLUDED.is_active;
+
+INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
+VALUES (
     '777ac311-8ad1-5219-9ef0-47edb412fb27'::uuid,
     '52110000',
     'STRIA TTOyTTE MCPAL BUESACO/NARIÑO',
@@ -2332,7 +2448,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     'c6841e1b-df59-52a7-9351-466ae183e7e9'::uuid,
-    '52317000',
+    '52317001',
     'SUBSTRIA TTOyTTE DTAL NARIÑO/GUACHUCAL',
     '52',
     '52317',
@@ -2347,7 +2463,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     'e9649d3c-b69f-516f-af03-02e0492795d5'::uuid,
-    '52354000',
+    '52354001',
     'SUB STARIA TTOyTTE DPTAL NARIÑO/IMUES',
     '52',
     '52354',
@@ -2392,7 +2508,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     'fca23c58-23ee-5bfa-9a5d-73173a36a029'::uuid,
-    '52399000',
+    '52399001',
     'SUBSTRIA TTOyTTE DPTAL NARIÑO/LA UNION',
     '52',
     '52399',
@@ -2438,7 +2554,7 @@ INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code
 VALUES (
     'a75a2976-315b-5633-8a37-f3f418d117bd'::uuid,
     '52585000',
-    'SUBSTRIA TTOyTTE DPTAL NARIÑO/PUPIALES',
+    'STRIA TTOyTTE MCPAL PUPIALES',
     '52',
     '52585',
     true
@@ -2482,7 +2598,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '90a6823c-b815-565b-93ab-66016cbd4b2d'::uuid,
-    '52678000',
+    '52678001',
     'SUBSTRIA TTOyTTE DPTAL NARIÑO/SAMANIEGO',
     '52',
     '52678',
@@ -2497,7 +2613,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     'b57a118a-6a12-5c63-9da5-9ae00d03c217'::uuid,
-    '52683000',
+    '52683001',
     'SUBSTRIA TTOyTTE DPTAL NARIÑO/SANDONA',
     '52',
     '52683',
@@ -2692,7 +2808,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     'f956c17a-9395-5e32-a78b-776865cd5022'::uuid,
-    '54261000',
+    '54261001',
     'STRIA TTO DPTAL NTE SANTANDER/EL ZULIA',
     '54',
     '54261',
@@ -3022,7 +3138,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '098273a5-fd37-5489-8292-b2681c40c007'::uuid,
-    '63190000',
+    '63190001',
     'INST DPTAL DE TTO QUINDIO/CIRCASIA',
     '63',
     '63190',
@@ -3427,7 +3543,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '08a3a8be-5545-5b64-a4ca-fb297596d3cc'::uuid,
-    '70670000',
+    '70670001',
     'SECRETARIA DPTAL TTOyTTE SUCRE/SAMPUES',
     '70',
     '70670',
@@ -3487,7 +3603,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '502022a2-9a4c-5728-b717-c2512bd48200'::uuid,
-    '73026000',
+    '73026001',
     'DPTO ADTVO TTOyTTE TOLIMA/ ALVARADO',
     '73',
     '73026',
@@ -3502,7 +3618,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '79b3a1a9-61fb-5f45-b75f-9b10ed4bb798'::uuid,
-    '73055000',
+    '73055001',
     'DPTO ADTVO TTOyTTE TOLIMA/GUAYABAL',
     '73',
     '73055',
@@ -3562,7 +3678,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '83a7b12f-68fe-54f3-acb9-689e0c0ab697'::uuid,
-    '73319000',
+    '73319001',
     'DPTO ADTVO TTOyTTE TOLIMA/GUAMO',
     '73',
     '73319',
@@ -3637,7 +3753,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     'cf5bf8e6-fa98-5654-b354-6c9948f27691'::uuid,
-    '73504000',
+    '73504001',
     'DPTO ADTVO TTOyTTE TOLIMA/ORTEGA',
     '73',
     '73504',
@@ -3651,8 +3767,23 @@ ON CONFLICT (code) DO UPDATE SET
 
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
+    'fe71e98d-44a7-5867-8838-5e1ccd3fadb4'::uuid,
+    '73555000',
+    'STRIA MOVyTTE DE PLANADAS',
+    '73',
+    '73555',
+    true
+)
+ON CONFLICT (code) DO UPDATE SET
+    name = EXCLUDED.name,
+    department_code = EXCLUDED.department_code,
+    city_code = EXCLUDED.city_code,
+    is_active = EXCLUDED.is_active;
+
+INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
+VALUES (
     '943f525b-69aa-5258-b330-24beed7ecddb'::uuid,
-    '73585000',
+    '73585001',
     'DPTO ADTVO TTOyTTE TOLIMA/PURIFICACIÓN',
     '73',
     '73585',
@@ -3682,7 +3813,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     'a52879d3-8e57-5456-91ca-35957af33a4c'::uuid,
-    '76020000',
+    '76020001',
     'STRIA MOVyTTE DPTAL VALLE DEL CAUCA/ALCALA',
     '76',
     '76020',
@@ -3712,7 +3843,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '251b2b5d-35cd-527a-ae62-a9ddfc71fc79'::uuid,
-    '76041000',
+    '76041001',
     'STRIA MOVyTTE DPTAL VALLE DEL CAUCA/ANSERMANUEVO',
     '76',
     '76041',
@@ -3727,7 +3858,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     'c0705318-06e4-56e5-8726-15a365c01d57'::uuid,
-    '76100000',
+    '76100001',
     'STRIA MOVyTTE DPTAL VALLE DEL CAUCA/BOLIVAR',
     '76',
     '76100',
@@ -3772,7 +3903,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '7d92c333-adaf-530c-9869-ebca491cb8fe'::uuid,
-    '76113000',
+    '76113001',
     'STRIA MOVyTTE DPTAL VALLE DEL CAUCA/BUGALAGRANDE',
     '76',
     '76113',
@@ -3832,7 +3963,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '69667d04-3c25-5a62-b900-aee7148893b7'::uuid,
-    '76233000',
+    '76233001',
     'STRIA MOVyTTE DPTAL VALLE DEL CAUCA/DAGUA',
     '76',
     '76233',
@@ -4237,7 +4368,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '3a367d93-f8cc-5a96-879f-7364ce410f3c'::uuid,
-    '85010000',
+    '85010001',
     'DIR DPTAL TTOyTTE CASANARE/AGUAZUL',
     '85',
     '85010',
@@ -4401,6 +4532,21 @@ ON CONFLICT (code) DO UPDATE SET
 
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
+    '81293d0a-cc5e-58a2-ae03-12e26f9ab0d3'::uuid,
+    '86885001',
+    'SECRETARIA DE MOVILIDAD MUNICIPAL DE VILLAGARZON',
+    '86',
+    '86885',
+    true
+)
+ON CONFLICT (code) DO UPDATE SET
+    name = EXCLUDED.name,
+    department_code = EXCLUDED.department_code,
+    city_code = EXCLUDED.city_code,
+    is_active = EXCLUDED.is_active;
+
+INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
+VALUES (
     '246b9b68-57df-5136-a328-b642bf6d9c25'::uuid,
     '8758000',
     'INST MCPAL TTOYTTE SOLEDAD',
@@ -4417,8 +4563,8 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     '1d1a4f7e-b807-544a-b925-b3edf319bf56'::uuid,
-    '88001000',
-    'DIR DPTAL TTOyTTE SAN ANDRES ISLAS',
+    '88001001',
+    'DIR DPTAL TTOYTTE SAN ANDRES ISLAS',
     '88',
     '88001',
     true
@@ -4477,7 +4623,7 @@ ON CONFLICT (code) DO UPDATE SET
 INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, is_active)
 VALUES (
     'd806ad56-63c6-56da-ba09-9153a1c2ade8'::uuid,
-    '99001000',
+    '99001001',
     'F. DPTAL TTO VICHADA/PUERTO CARREÑO',
     '99',
     '99001',
@@ -4489,13 +4635,11 @@ ON CONFLICT (code) DO UPDATE SET
     city_code = EXCLUDED.city_code,
     is_active = EXCLUDED.is_active;
 
--- Grant opcional dev: Funza habilitado para FLITDEV (pruebas B11 auto-bind). HU #12895 (A-02): solo si FLITDEV existe;
--- el catálogo corre también en bases sin datos demo, donde ese tenant no está.
+-- Grant opcional dev: Funza habilitado para FLITDEV (pruebas B11 auto-bind).
 INSERT INTO admin.tenant_transit_office_grants (id, tenant_id, transit_office_id, is_enabled, created_at)
 SELECT uuidv7(), '11111111-1111-1111-1111-111111111111'::uuid, id, true, now()
 FROM catalogs.transit_offices
 WHERE code = '25286000'
-  AND EXISTS (SELECT 1 FROM identity.tenants WHERE id = '11111111-1111-1111-1111-111111111111'::uuid)
 ON CONFLICT (tenant_id, transit_office_id) DO NOTHING;
 
 COMMIT;
