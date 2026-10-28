@@ -148,7 +148,7 @@ export function OrganismosSection({ onIrATarifas, onCambio }: OrganismosSectionP
         </EncabezadoFiltrable>
       ),
       render: (o) => (
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col items-start gap-1">
           <SwitchToggle
             checked={o.habilitado}
             disabled={guardando === o.id || (o.activoEnFlit === false && !o.habilitado)}

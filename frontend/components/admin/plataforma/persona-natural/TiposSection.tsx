@@ -151,7 +151,7 @@ export function TiposSection({ onIrATarifas, onCambio }: TiposSectionProps) {
         const bloqueado = (!t.elegible || inactivo) && !t.habilitado;
         const motivoId = `pn-tipo-motivo-${t.id}`;
         return (
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col items-start gap-1">
             <SwitchToggle
               checked={t.habilitado}
               disabled={guardando === t.id || bloqueado}
