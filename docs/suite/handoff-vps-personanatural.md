@@ -139,16 +139,14 @@ Otros topes de la HU #14036: las excepciones no manejadas responden `application
 rutas, incluso en Development) y el cuerpo JSON no puede pasar de `Abuso__MaxCuerpoJsonBytes` (65536); los archivos (adjuntos y
 comprobante) conservan su propio tope.
 
-## 5. Origen del front (CORS) y dominio
+## 5. Dominio del portal (sin CORS en el gateway)
 
-```
-CORS_ORIGIN_PERSONA_NATURAL=https://<dominio-del-portal>
-```
+El navegador llama al proxy del propio portal (`/api/v1/persona-natural/*` en su mismo host), que reenvía al gateway de servidor a
+servidor: **no se registra el origen del portal en el CORS del gateway** (la política es global y con credenciales; abrirla
+daría al front acceso con credenciales a todas las rutas de FLIT 2). Lo que sí hace falta:
 
-El navegador llama al proxy del propio portal (mismo origen), así que el CORS del gateway solo hace falta si algún día el
-front llama al gateway directo. Se deja el origen previsto: se suma a los orígenes del gateway (`Cors__AllowedOrigins__3`). La política CORS del gateway es **global**: el origen
-queda permitido en todas sus rutas, que ya exigen su propia credencial (el portal no usa cookies). Si se quiere CORS por
-ruta, hay que tocar `Flit.Gateway/Program.cs` (queda como mejora, no es parte de esta HU).
+- el vhost de nginx del dominio del portal hacia `127.0.0.1:${PERSONANATURAL_PORT}` (4031/5031/6031, propuestos);
+- que nginx **sobrescriba** `X-Real-IP` y `X-Forwarded-For` con `$remote_addr` (ver §4.1 y el README de `frontend-personanatural`).
 
 ## 6. Encender
 
