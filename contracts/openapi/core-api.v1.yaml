@@ -13409,6 +13409,116 @@ paths:
         "400": { description: Falta la versión o X-Tenant-Id. }
         "401": { description: No autenticado. }
         "409": { description: "La versión enviada no es la vigente (code consent_version_mismatch, version vigente en el cuerpo)." }
+  /api/v1/admin/plataforma/persona-natural/tarifas:
+    get:
+      operationId: adminPnTarifasList
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Tarifas del portal de Persona Natural — HU #14071, Épica #14021
+      description: >
+        Versiones de tarifa del portal (todas, o solo las vigentes a una fecha con `soloVigentes=true`). Una fila es UNA
+        versión de UN concepto para un ámbito (tipo de trámite y organismo; `null` = valor general). `estado` se mide a
+        `fecha` (por defecto hoy en Colombia): `vigente`, `futura` o `cerrada` (historial, inmutable). Exclusivo del Super
+        Admin FLIT (rol + permiso `platform.persona_natural.manage`); configuración global, no usa X-Tenant-Id.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: soloVigentes, in: query, schema: { type: boolean, default: false } }
+        - { name: tipoTramiteId, in: query, schema: { type: string, format: uuid } }
+        - { name: organismoId, in: query, schema: { type: string, format: uuid } }
+        - name: concepto
+          in: query
+          schema: { type: string, enum: [DERECHOS_TRANSITO, SERVICIO_FLIT, CAMBIO_COLOR, CONVERSION_COMBUSTIBLE, CAMBIO_CARROCERIA, ENVIO_DOCUMENTO] }
+        - { name: fecha, in: query, description: Fecha de referencia (yyyy-MM-dd); por defecto hoy en Colombia., schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: Versiones de tarifa.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PersonaNaturalTarifa" }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+    post:
+      operationId: adminPnTarifasVersionar
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Registrar una versión nueva de tarifa — HU #14071, Épica #14021
+      description: >
+        Registra, en UNA transacción, una versión nueva por cada concepto de `valores` para el ámbito (`tipoTramiteId`,
+        `organismoId` opcionales). Cierra la versión abierta anterior el día anterior a `vigenteDesde` y abre la nueva; la
+        anterior queda en el historial y ya no se edita. Valores en pesos enteros 0 a 1.000.000.000. `DERECHOS_TRANSITO` y
+        `SERVICIO_FLIT` exigen tipo; los demás conceptos pueden valer para cualquier tipo (`tipoTramiteId` nulo). Un
+        organismo con valor propio manda sobre el general. `vigenteDesde` no puede ser anterior a hoy (las cotizaciones ya
+        emitidas no cambian: la solicitud congela las versiones con las que cotizó). Cada concepto queda en la auditoría
+        con actor, valor anterior y valor nuevo.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PersonaNaturalVersionarTarifasRequest" }
+      responses:
+        "201":
+          description: Versiones creadas.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PersonaNaturalTarifa" }
+        "400":
+          description: "valores_vacios | concepto_invalido | concepto_repetido | valor_invalido | tipo_obligatorio | fecha_inicio_invalida | fecha_inicio_pasada (cuerpo `{ error, message }`)."
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+        "404": { description: "tipo_no_existe | organismo_no_existe." }
+        "409": { description: "tarifa_solapada — ya existe una versión del mismo ámbito que se cruza con esas fechas; no se guarda nada." }
+  /api/v1/admin/plataforma/persona-natural/tarifas/vigente:
+    get:
+      operationId: adminPnTarifaVigente
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Tarifa vigente de un tipo en un organismo — HU #14071, Épica #14021
+      description: >
+        Por cada concepto, el valor que se aplicaría a una fecha, con la misma precedencia que la cotización del portal
+        (tipo+organismo, tipo, organismo, general). Un concepto sin valor no aparece; sin `DERECHOS_TRANSITO` y `SERVICIO_FLIT`
+        el portal responde `tarifa_no_vigente` y no ofrece el organismo para ese tipo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: tipoTramiteId, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: organismoId, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: fecha, in: query, schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: Valores vigentes.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PersonaNaturalTarifa" }
+        "400": { description: parametros_obligatorios. }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+  /api/v1/admin/plataforma/persona-natural/tarifas/{id}/historial:
+    get:
+      operationId: adminPnTarifaHistorial
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Historial de versiones de una tarifa — HU #14071, Épica #14021
+      description: Todas las versiones del mismo ámbito (concepto, tipo y organismo) de la versión indicada, de la más reciente a la más antigua. Solo lectura.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Versiones del ámbito.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PersonaNaturalTarifa" }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+        "404": { description: tarifa_no_encontrada. }
 
 components:
   securitySchemes:
@@ -20091,3 +20201,42 @@ components:
           type: boolean
           description: true = encendido; false = apagado (degradación segura, sin tocar la jerarquía).
       required: [isEnabled]
+
+    # ── Admin · Plataforma · Persona Natural (Feature J, Épica #14021) ─────────
+    PersonaNaturalTarifa:
+      type: object
+      description: Una versión de un concepto de tarifa del portal para un ámbito (tipo y organismo; null = valor general).
+      properties:
+        id: { type: string, format: uuid }
+        concepto: { type: string, enum: [DERECHOS_TRANSITO, SERVICIO_FLIT, CAMBIO_COLOR, CONVERSION_COMBUSTIBLE, CAMBIO_CARROCERIA, ENVIO_DOCUMENTO] }
+        tipoTramiteId: { type: string, format: uuid, nullable: true }
+        tipoTramiteCodigo: { type: string, nullable: true }
+        tipoTramiteNombre: { type: string, nullable: true }
+        organismoId: { type: string, format: uuid, nullable: true }
+        organismoCodigo: { type: string, nullable: true }
+        organismoNombre: { type: string, nullable: true }
+        valorCop: { type: integer, format: int64, minimum: 0, description: Pesos colombianos enteros. }
+        vigenteDesde: { type: string, format: date }
+        vigenteHasta: { type: string, format: date, nullable: true, description: Nulo = abierta. }
+        estado: { type: string, enum: [vigente, futura, cerrada] }
+        creadaEn: { type: string, format: date-time }
+        creadaPor: { type: string, format: uuid, nullable: true }
+        actualizadaEn: { type: string, format: date-time, nullable: true }
+        actualizadaPor: { type: string, format: uuid, nullable: true }
+      required: [id, concepto, valorCop, vigenteDesde, estado]
+    PersonaNaturalVersionarTarifasRequest:
+      type: object
+      properties:
+        tipoTramiteId: { type: string, format: uuid, nullable: true, description: Obligatorio con DERECHOS_TRANSITO o SERVICIO_FLIT. }
+        organismoId: { type: string, format: uuid, nullable: true, description: Nulo = valor general; con valor = excepción de ese organismo. }
+        vigenteDesde: { type: string, format: date, description: No anterior a hoy (hora de Colombia). }
+        valores:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            properties:
+              concepto: { type: string, enum: [DERECHOS_TRANSITO, SERVICIO_FLIT, CAMBIO_COLOR, CONVERSION_COMBUSTIBLE, CAMBIO_CARROCERIA, ENVIO_DOCUMENTO] }
+              valorCop: { type: integer, format: int64, minimum: 0, maximum: 1000000000 }
+            required: [concepto, valorCop]
+      required: [vigenteDesde, valores]

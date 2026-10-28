@@ -83,6 +83,7 @@ internal static class ApiEndpoints
         app.MapAdminBannersEndpoints();
         app.MapAdminExternalClientsEndpoints(); // HU #13088 (Épica #12737) — clientes de integración externos (SuperAdmin)
         app.MapAdminExternalIntegrationsEndpoints(); // HU #14067 (Épica #14021) — integraciones externas por compañía (SuperAdmin)
+        app.MapAdminPlataformaPersonaNaturalEndpoints(); // Feature J (Épica #14021) — tarifas, configuración y contenido del portal (SuperAdmin)
         app.MapAdminRejectionReasonsEndpoints();
         app.MapAdminProcedureDocumentRequirementsEndpoints();
         app.MapAdminDocumentOrderOverridesEndpoints();

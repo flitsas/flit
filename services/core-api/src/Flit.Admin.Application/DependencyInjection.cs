@@ -484,6 +484,12 @@ public static class DependencyInjection
         services.AddScoped<GetIctJobCatalogHandler>();
         services.AddScoped<GetIctJobRunsHandler>();
 
+        // HU #14071 (Feature J, Épica #14021) — tarifas del portal de Persona Natural (SuperAdmin Plataforma).
+        services.AddScoped<Plataforma.PersonaNatural.ListarTarifasPnHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.HistorialTarifaPnHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.TarifaVigentePnHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.VersionarTarifasPnHandler>();
+
         // Feature #13508 (HU #13509 / #13512) — configuración multi-proveedor IA (SuperAdmin Plataforma).
         services.AddScoped<Plataforma.Ai.ListAiToolsHandler>();
         services.AddScoped<Plataforma.Ai.GetAiToolSettingsHandler>();
