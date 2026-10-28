@@ -42,6 +42,13 @@ public sealed record VehiculoDetalle(
 public sealed record ConductorMinimo(bool Existe, string? EstadoLicencia, string? Vigencia);
 
 /// <summary>
+/// Persona para el actor con sesión de la solicitud (consulta de detalle, el mismo prellenado de FLIT 2): SOLO lo que sirve para
+/// rellenar los campos del actor. Nada de licencias, sanciones, fechas de nacimiento ni otros datos del RUNT. <c>Ciudad</c> queda
+/// siempre vacía: en FLIT 2 sale del histórico de actores de la empresa, que el portal no conoce ni debe exponer.
+/// </summary>
+public sealed record PersonaDetalle(bool Existe, string? Nombres, string? Apellidos, string? NombreCompleto, string? Ciudad);
+
+/// <summary>
 /// Proyección del <see cref="ResultadoConsulta"/> de core-consultas a los DTO del portal. Es una LISTA BLANCA: solo se leen
 /// las claves de campo que el DTO necesita; el resto del resultado (propietario, documento, nombres, SOAT, multas…) no se
 /// toca, no se copia y no se registra. Código puro: sin red ni base, para probarlo con resultados armados a mano.
@@ -139,6 +146,36 @@ public static class ProyeccionMinima
             return new ConductorMinimo(false, null, null);
 
         return new ConductorMinimo(true, estado?.ToUpperInvariant(), activa ? Vigente : NoVigente);
+    }
+
+    internal const string CampoNombreCompleto = "person_full_name";
+    internal const string CampoPrimerNombre = "person_first_name";
+    internal const string CampoSegundoNombre = "person_second_name";
+    internal const string CampoPrimerApellido = "person_first_last_name";
+    internal const string CampoSegundoApellido = "person_second_last_name";
+    internal const string CampoApellidos = "person_last_name";
+
+    /// <summary>
+    /// Nombres de la persona, como los usa FLIT 2 para rellenar el actor: nombres de pila juntos, apellidos juntos y nombre
+    /// completo. Como allí, «existe» es que haya nombre; un valor enmascarado (con <c>*</c>) no es un nombre y se descarta.
+    /// </summary>
+    public static PersonaDetalle PersonaConNombres(ResultadoConsulta resultado)
+    {
+        ArgumentNullException.ThrowIfNull(resultado);
+        var nombres = Unir(Nombre(resultado, CampoPrimerNombre), Nombre(resultado, CampoSegundoNombre));
+        var apellidos = Nombre(resultado, CampoApellidos) ?? Unir(Nombre(resultado, CampoPrimerApellido), Nombre(resultado, CampoSegundoApellido));
+        var completo = Nombre(resultado, CampoNombreCompleto) ?? Unir(nombres, apellidos);
+        return completo is null
+            ? new PersonaDetalle(false, null, null, null, null)
+            : new PersonaDetalle(true, nombres, apellidos, completo, null);
+    }
+
+    private static string? Nombre(ResultadoConsulta resultado, string clave) => Texto(resultado, clave) is { } t && !t.Contains('*', StringComparison.Ordinal) ? t : null;
+
+    private static string? Unir(params string?[] partes)
+    {
+        var unido = string.Join(' ', partes.Where(p => !string.IsNullOrWhiteSpace(p)));
+        return unido.Length == 0 ? null : unido;
     }
 
     /// <summary>Prenda o gravamen: cualquier bandera afirmativa del RUNT o al menos una garantía con datos.</summary>

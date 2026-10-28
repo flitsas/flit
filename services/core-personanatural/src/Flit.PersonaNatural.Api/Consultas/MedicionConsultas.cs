@@ -25,7 +25,9 @@ public sealed partial class MedicionConsultasService(PersonaNaturalDb db, TimePr
     public const string TipoPersona = "persona";
     public const string TipoVehiculoDetalle = "vehiculo_detalle";
 
-    public static readonly IReadOnlyList<string> Tipos = [TipoVehiculo, TipoPersona, TipoVehiculoDetalle];
+    public const string TipoPersonaDetalle = "persona_detalle";
+
+    public static readonly IReadOnlyList<string> Tipos = [TipoVehiculo, TipoPersona, TipoVehiculoDetalle, TipoPersonaDetalle];
 
     internal const string PrefijoClave = "med:";
 

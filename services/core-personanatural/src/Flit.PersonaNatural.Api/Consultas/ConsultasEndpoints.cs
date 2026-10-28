@@ -20,12 +20,20 @@ public sealed record ConsultaPersonaRequest(DocumentoRequest? Documento, bool Co
 public sealed record DetalleVehiculoRequest(string? Parte);
 
 /// <summary>
+/// Consulta de persona con nombres para rellenar el actor (HU #14060): documento, rol del actor en la definición de la solicitud y
+/// el consentimiento de tratamiento de datos del documento consultado (obligatorio, como en las otras consultas).
+/// </summary>
+public sealed record PersonaDetalleRequest(string? TipoDocumento, string? Documento, string? Rol, bool Consentimiento, string? ConsentimientoVersion = null);
+
+/// <summary>
 /// Endpoints de consulta del BFF (HU #14041; diseño §6.1). Catálogo cerrado: un endpoint por consulta, sin proxy genérico
 /// hacia FLIT 2 ni rutas arbitrarias. El front nunca habla con FLIT 2.
 /// <list type="bullet">
 /// <item><c>POST /consultas/vehiculo</c> y <c>POST /consultas/persona</c> (conductor): públicos, con captcha, límite por IP y
 /// topes por documento y globales; devuelven el dato mínimo.</item>
 /// <item><c>POST /solicitudes/{id}/consultas/vehiculo-detalle</c>: con la sesión de ESA solicitud y un actor con identidad validada.</item>
+/// <item><c>POST /solicitudes/{id}/consultas/persona-detalle</c>: con la sesión de ESA solicitud mientras sea editable; devuelve los
+/// nombres de la persona para rellenar el actor, con topes por solicitud, documento y globales.</item>
 /// </list>
 /// </summary>
 public static class ConsultasEndpoints
@@ -35,6 +43,8 @@ public static class ConsultasEndpoints
     public const string CodigoProveedor = "proveedor_no_disponible";
     public const string CodigoIdentidad = "identity_required";
     public const string CodigoSinVehiculo = "vehiculo_no_definido";
+    public const string CodigoRolInvalido = "rol_invalido";
+    public const string CodigoDetalleAgotado = "detalle_agotado";
 
     /// <summary>Segundos que se le pide esperar al ciudadano cuando el proveedor no responde.</summary>
     public const int EsperaProveedorSegundos = 30;
@@ -45,6 +55,7 @@ public static class ConsultasEndpoints
         ArgumentNullException.ThrowIfNull(services);
         services.AddScoped<MedicionConsultasService>();
         services.AddScoped<ConsultaDetalleService>();
+        services.AddScoped<ConsultaPersonaDetalleService>();
         return services;
     }
 
@@ -122,6 +133,52 @@ public static class ConsultasEndpoints
                     StatusCodes.Status409Conflict, "Sin vehículo", "El trámite todavía no tiene placa ni VIN.", CodigoSinVehiculo),
                 _ => SesionEndpoints.Problema(StatusCodes.Status404NotFound, "No encontrado", SesionEndpoints.MensajeNoEncontrada, SesionEndpoints.CodigoNoEncontrada),
             };
+        }).AddEndpointFilter(Radicacion.SesionTrasRadicar.Filtro);
+
+        // Con sesión de la solicitud y solo mientras el borrador sea editable (el filtro responde 401, 403 o 409 antes que el handler).
+        // Sin captcha (ya hay sesión), pero con el límite por IP del grupo; los topes por solicitud, documento y globales viven en el servicio.
+        grupo.MapPost("/solicitudes/{id:guid}/consultas/persona-detalle", async (Guid id, PersonaDetalleRequest? body, HttpContext http, ConsultaPersonaDetalleService detalle, ConsentimientoVersiones versiones, PiiHasher hasher, CancellationToken ct) =>
+        {
+            if (body is null || !body.Consentimiento)
+                return SinConsentimiento();
+            var tipo = (body.TipoDocumento ?? string.Empty).Trim().ToUpperInvariant();
+            var documento = ConsultaPersonaDetalleService.TiposDocumento.Contains(tipo) ? EntradaConsulta.Documento(tipo, body.Documento) : null;
+            if (documento is null)
+                return DatosInvalidos("Indique el tipo (CC, CE, PAS o TI) y el número del documento.");
+            var rol = (body.Rol ?? string.Empty).Trim().ToLowerInvariant();
+            if (rol.Length == 0)
+                return DatosInvalidos("Indique el rol del actor.");
+            if (versiones.Normalizar(body.ConsentimientoVersion) is not { } version)
+                return VersionDesconocida();
+
+            // Datos de un tercero: la respuesta no se guarda en ninguna caché (ni del navegador ni de un intermediario).
+            http.Response.Headers.CacheControl = "no-store";
+            ResultadoPersonaDetalle resultado;
+            try
+            {
+                resultado = await detalle.ConsultarAsync(id, documento, rol, version, hasher.HashIp(http.Connection.RemoteIpAddress?.ToString()), ct).ConfigureAwait(false);
+            }
+            catch (ProveedorNoDisponibleException)
+            {
+                return ProveedorNoDisponible(http);
+            }
+
+            switch (resultado.Estado)
+            {
+                case EstadoPersonaDetalle.Ok:
+                    return Results.Ok(resultado.Persona);
+                case EstadoPersonaDetalle.RolInvalido:
+                    return SesionEndpoints.Problema(StatusCodes.Status422UnprocessableEntity, "Rol inválido", "Este trámite no tiene ese rol para una persona natural.", CodigoRolInvalido);
+                case EstadoPersonaDetalle.DetalleAgotado:
+                    return SesionEndpoints.Problema(StatusCodes.Status429TooManyRequests, "Consultas agotadas", "Ya usó las consultas de personas disponibles para este trámite. Escriba los datos a mano.", CodigoDetalleAgotado);
+                case EstadoPersonaDetalle.DocumentoExcedido:
+                    http.Response.Headers.RetryAfter = "3600";
+                    return SesionEndpoints.Problema(StatusCodes.Status429TooManyRequests, "Demasiadas consultas", "Se alcanzó el máximo de consultas por hora para este documento.", AbusoEndpoints.CodigoCedulaLimitada);
+                case EstadoPersonaDetalle.TopeGlobal:
+                    return SesionEndpoints.Problema(StatusCodes.Status503ServiceUnavailable, "Consultas no disponibles", "Las consultas están pausadas por hoy. Intente de nuevo mañana.", AbusoEndpoints.CodigoSinConsultas);
+                default:
+                    return SesionEndpoints.Problema(StatusCodes.Status404NotFound, "No encontrado", SesionEndpoints.MensajeNoEncontrada, SesionEndpoints.CodigoNoEncontrada);
+            }
         }).AddEndpointFilter(Radicacion.SesionTrasRadicar.Filtro);
 
         return app;

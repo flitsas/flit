@@ -81,6 +81,24 @@ internal static class ResultadosFalsos
         return r;
     }
 
+    /// <summary>Conductor con el nombre desglosado como lo hidrata core-consultas (dos nombres y dos apellidos).</summary>
+    public static ResultadoConsulta ConductorConNombres()
+    {
+        var r = Conductor();
+        r.Campos.Clear();
+        Texto(r, "person_full_name", "ANA MARIA GOMEZ RUIZ");
+        Texto(r, "person_first_name", "ANA");
+        Texto(r, "person_second_name", "MARIA");
+        Texto(r, "person_first_last_name", "GOMEZ");
+        Texto(r, "person_second_last_name", "RUIZ");
+        Texto(r, "person_last_name", "GOMEZ RUIZ");
+        Texto(r, "person_birth_date", "1990-05-17");
+        Texto(r, "person_license_status", "ACTIVO");
+        Texto(r, "person_has_pending_fines", "true");
+        Texto(r, "person_paz_y_salvo", "PYS-FICTICIO-9");
+        return r;
+    }
+
     /// <summary>Persona que el RUNT no halla: chequeo UNKNOWN y ningún campo.</summary>
     public static ResultadoConsulta ConductorInexistente()
     {
