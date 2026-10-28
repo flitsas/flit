@@ -5,11 +5,12 @@
 // entonces) y se conserva montada, así una tabla recuerda su búsqueda y su página al volver a ella.
 import { useCallback, useState } from "react";
 import { SectionTabs, type SectionTab } from "@/components/atom/SectionTabs";
+import { ContenidoTab } from "./contenido/ContenidoTab";
 import { OrganismosYTiposTab } from "./OrganismosYTiposTab";
 import { ParametrosTab } from "./ParametrosTab";
 import { TarifasTab } from "./TarifasTab";
 
-type TabId = "tarifas" | "organismos" | "parametros";
+type TabId = "tarifas" | "organismos" | "parametros" | "contenido";
 
 export function PersonaNaturalConsole() {
   const [active, setActive] = useState<TabId>("tarifas");
@@ -28,6 +29,7 @@ export function PersonaNaturalConsole() {
       render: () => <OrganismosYTiposTab onIrATarifas={() => onChange("tarifas")} />,
     },
     { id: "parametros", label: "Parámetros", render: () => <ParametrosTab /> },
+    { id: "contenido", label: "Contenido", render: () => <ContenidoTab /> },
   ];
 
   const tabs: SectionTab<TabId>[] = pestanas.map((t) => ({

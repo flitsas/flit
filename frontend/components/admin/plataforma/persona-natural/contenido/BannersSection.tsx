@@ -1,0 +1,232 @@
+"use client";
+
+// HU #14076 AC1/AC2/AC5 — Banners del borrador: tabla estándar con la imagen, el texto alternativo, la vigencia, RowActions
+// (editar, activar o desactivar, subir y bajar), orden editable y los cuatro estados. La imagen del borrador se
+// descarga con la sesión del administrador (el endpoint exige Authorization).
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowDown, ArrowUp, ImageIcon, Pencil, Power } from "lucide-react";
+import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
+import { useToast } from "@/components/admin/Toast";
+import { ActionsMenu } from "@/components/atom/ActionsMenu";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+import { RowActions, type RowAction } from "@/components/atom/RowActions";
+import { StatusBadge } from "@/components/atom/StatusBadge";
+import { EncabezadoFiltrable, TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
+import { usePaginacion } from "@/components/atom/usePaginacion";
+import { formatFechaHora } from "@/lib/format/date";
+import { filtrarFilas, type ColumnaFiltro } from "@/lib/tablas/filtrar-filas";
+import { useTablaFiltros } from "@/lib/tablas/useTablaFiltros";
+import {
+  actualizarBannerPn,
+  crearBannerPn,
+  establecerBannerActivoPn,
+  fetchBannersPn,
+  ordenarBannersPn,
+  type BannerPn,
+} from "@/lib/api/admin-pn-contenido";
+import { PN_PRIMARY_BTN_CLS, PN_PRIMARY_BTN_STYLE } from "../pn-ui";
+import { pnErrorMessage } from "../pnErrors";
+import { BannerFormModal } from "./BannerFormModal";
+import { BannerImagen } from "./BannerImagen";
+import { moverId } from "./PreguntasSection";
+
+const COLUMNAS_FILTRO: ColumnaFiltro[] = [
+  { id: "banner", label: "Banner", tipo: "texto" },
+  {
+    id: "estado",
+    label: "Estado",
+    tipo: "seleccion",
+    opciones: [
+      { value: "activo", label: "Activo" },
+      { value: "inactivo", label: "Inactivo" },
+    ],
+  },
+];
+
+function vigencia(b: BannerPn): string {
+  if (!b.vigenteDesde && !b.vigenteHasta) return "Siempre";
+  return `${b.vigenteDesde ? formatFechaHora(b.vigenteDesde) : "Sin inicio"} → ${b.vigenteHasta ? formatFechaHora(b.vigenteHasta) : "Sin fin"}`;
+}
+
+export function BannersSection({ onCambio }: { onCambio: () => void }) {
+  const { show } = useToast();
+  const [banners, setBanners] = useState<BannerPn[]>([]);
+  const [status, setStatus] = useState<UiStatus>("loading");
+  const [form, setForm] = useState<{ banner?: BannerPn } | null>(null);
+  const [ocupado, setOcupado] = useState(false);
+  const pg = usePaginacion("pn.contenido.banners");
+  const { setPage } = pg;
+  const volverAPrimeraPagina = useCallback(() => setPage(1), [setPage]);
+  const filtros = useTablaFiltros({ columnas: COLUMNAS_FILTRO, onCambio: volverAPrimeraPagina });
+
+  const load = useCallback(async (signal?: AbortSignal) => {
+    setStatus("loading");
+    try {
+      const list = await fetchBannersPn(signal);
+      if (signal?.aborted) return;
+      setBanners([...list].sort((a, b) => a.orden - b.orden));
+      setStatus(list.length === 0 ? "empty" : "ready");
+    } catch {
+      if (!signal?.aborted) setStatus("error");
+    }
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial: skeleton intencional
+    void load(controller.signal);
+    return () => controller.abort();
+  }, [load]);
+
+  const visibles = useMemo(
+    () =>
+      filtrarFilas(banners, filtros.condicionesTotales, "", {
+        columnas: { banner: (b) => [b.titulo, b.textoAlternativo], estado: (b) => (b.activo ? "activo" : "inactivo") },
+      }),
+    [banners, filtros.condicionesTotales],
+  );
+
+  async function mover(banner: BannerPn, delta: -1 | 1) {
+    const ids = banners.map((b) => b.id);
+    const nuevo = moverId(ids, ids.indexOf(banner.id), delta);
+    setOcupado(true);
+    try {
+      await ordenarBannersPn(nuevo);
+      setBanners((prev) => nuevo.map((id, i) => ({ ...(prev.find((b) => b.id === id) as BannerPn), orden: i + 1 })));
+      onCambio();
+    } catch (err) {
+      show(pnErrorMessage(err), "error");
+      void load();
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function alternar(banner: BannerPn) {
+    setOcupado(true);
+    try {
+      const actualizado = await establecerBannerActivoPn(banner.id, !banner.activo);
+      setBanners((prev) => prev.map((b) => (b.id === banner.id ? actualizado : b)));
+      show(`Banner ${actualizado.activo ? "activado" : "desactivado"}.`, "success");
+      onCambio();
+    } catch (err) {
+      show(pnErrorMessage(err), "error");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  function actionsFor(b: BannerPn, indice: number): RowAction[] {
+    const n = `«${b.titulo}»`;
+    return [
+      { icon: Pencil, label: `Editar el banner ${n}`, tone: "primary", onClick: () => setForm({ banner: b }) },
+      { icon: Power, label: `${b.activo ? "Desactivar" : "Activar"} el banner ${n}`, tone: b.activo ? "danger" : "primary", disabled: ocupado, onClick: () => void alternar(b) },
+      { icon: ArrowUp, label: `Subir el banner ${n}`, disabled: ocupado || indice === 0, disabledTitle: "Ya es el primero", onClick: () => void mover(b, -1) },
+      { icon: ArrowDown, label: `Bajar el banner ${n}`, disabled: ocupado || indice === banners.length - 1, disabledTitle: "Ya es el último", onClick: () => void mover(b, 1) },
+    ];
+  }
+
+  const columns: DataTableColumn<BannerPn>[] = [
+    { key: "orden", header: "Orden", cellClassName: "w-16 font-semibold", render: (b) => banners.indexOf(b) + 1 },
+    {
+      key: "imagen",
+      header: "Imagen",
+      render: (b) => <BannerImagen key={b.imagenSha256} id={b.id} alt={b.textoAlternativo} className="h-12 w-24 rounded-lg border border-[#DFE5ED] object-cover" />,
+    },
+    {
+      key: "banner",
+      header: (
+        <EncabezadoFiltrable filtros={filtros} columnaId="banner">
+          Banner
+        </EncabezadoFiltrable>
+      ),
+      cellClassName: "max-w-[320px]",
+      render: (b) => (
+        <>
+          <span className="block font-semibold">{b.titulo}</span>
+          <span className="block text-xs text-[#59677D] dark:text-white/70">Texto alternativo: {b.textoAlternativo}</span>
+        </>
+      ),
+    },
+    { key: "vigencia", header: "Vigencia", cellClassName: "text-xs", render: (b) => vigencia(b) },
+    {
+      key: "estado",
+      header: (
+        <EncabezadoFiltrable filtros={filtros} columnaId="estado">
+          Estado
+        </EncabezadoFiltrable>
+      ),
+      render: (b) => <StatusBadge label={b.activo ? "Activo" : "Inactivo"} tone={b.activo ? "success" : "neutral"} />,
+    },
+    { key: "acciones", header: "Acciones", align: "right", render: (b) => <RowActions actions={actionsFor(b, banners.indexOf(b))} /> },
+  ];
+
+  const nuevo = () => setForm({});
+
+  return (
+    <section aria-labelledby="pn-banners-titulo" className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 id="pn-banners-titulo" className="text-base font-bold text-flit-primary dark:text-white">
+            Banners
+          </h2>
+          <p className="text-xs text-[#59677D] dark:text-white/70">
+            Se publican en este orden. JPG, PNG o WEBP de hasta 2 MB, con texto alternativo.
+          </p>
+        </div>
+        <ActionsMenu ariaLabel="Acciones de banners" items={[{ key: "nuevo", label: "Nuevo banner", icon: ImageIcon, onSelect: nuevo }]} />
+      </div>
+      {status === "loading" ? (
+        <CarLoaderModal label="Cargando banners…" />
+      ) : (
+        <UiStateBoundary
+          status={status}
+          emptyMessage="Aún no hay banners. Cree el primero."
+          emptyCta={
+            <button type="button" onClick={nuevo} className={PN_PRIMARY_BTN_CLS} style={PN_PRIMARY_BTN_STYLE}>
+              Nuevo banner
+            </button>
+          }
+          errorMessage="No se pudieron cargar los banners."
+          onRetry={() => void load()}
+        >
+          <DataTable<BannerPn>
+            ariaLabel="Banners del portal"
+            columns={columns}
+            rows={pg.paginar(visibles)}
+            getRowKey={(b) => b.id}
+            emptyContent={<TablaFiltrosVacio onLimpiar={filtros.limpiar} />}
+            pagination={{
+              page: pg.page,
+              pageSize: pg.pageSize,
+              totalCount: visibles.length,
+              onPageChange: pg.setPage,
+              onPageSizeChange: pg.setPageSize,
+            }}
+          />
+        </UiStateBoundary>
+      )}
+
+      {form && (
+        <BannerFormModal
+          banner={form.banner}
+          onClose={() => setForm(null)}
+          onSave={async (input) => {
+            if (form.banner) {
+              const guardado = await actualizarBannerPn(form.banner.id, input);
+              setBanners((prev) => prev.map((b) => (b.id === guardado.id ? guardado : b)));
+            } else {
+              const creado = await crearBannerPn(input);
+              setBanners((prev) => [...prev, creado]);
+              setStatus("ready");
+            }
+            setForm(null);
+            show("Banner guardado en el borrador.", "success");
+            onCambio();
+          }}
+        />
+      )}
+    </section>
+  );
+}
