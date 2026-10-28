@@ -90,12 +90,26 @@ describe("calcularResumen", () => {
 });
 
 describe("PersonaNaturalConsole (#14021)", () => {
+  it("con los tres pasos hechos el estado es compacto, se expande con «Ver pasos» y se vuelve a ocultar", async () => {
+    const ue = userEvent.setup();
+    vi.mocked(fetchTiposPn).mockResolvedValue([tipo({})]);
+    vi.mocked(fetchOrganismosPn).mockResolvedValue([organismo({})]);
+    renderConsola();
+    expect(await screen.findByText(/configuración completa\. hoy el ciudadano puede iniciar 1 tipo de trámite en 1 organismo/i)).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: /pasos de la configuración/i })).not.toBeInTheDocument();
+    await ue.click(screen.getByRole("button", { name: /ver pasos/i }));
+    expect(screen.getByRole("list", { name: /pasos de la configuración/i })).toBeInTheDocument();
+    await ue.click(screen.getByRole("button", { name: /ocultar pasos/i }));
+    expect(screen.queryByRole("list", { name: /pasos de la configuración/i })).not.toBeInTheDocument();
+  });
+
   it("los botones del estado abren la pestaña correcta y llevan el foco a su título", async () => {
     const ue = userEvent.setup();
     vi.mocked(fetchTiposPn).mockResolvedValue([tipo({})]);
     vi.mocked(fetchOrganismosPn).mockResolvedValue([organismo({})]);
     renderConsola();
-    await screen.findByText(/hoy el ciudadano puede iniciar/i);
+    await screen.findByText(/configuración completa/i);
+    await ue.click(screen.getByRole("button", { name: /ver pasos/i }));
     await ue.click(screen.getByRole("button", { name: /elegir organismos/i }));
     expect(screen.getByRole("tab", { name: "Organismos", selected: true })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("heading", { name: /organismos de tránsito/i })).toHaveFocus());
@@ -114,6 +128,8 @@ describe("PersonaNaturalConsole (#14021)", () => {
 
   it("con todo configurado dice los tres pasos hechos y cuántos trámites y organismos ve el ciudadano", async () => {
     renderConsola();
+    await screen.findByText(/configuración completa/i);
+    await userEvent.setup().click(screen.getByRole("button", { name: /ver pasos/i }));
     expect(await screen.findByRole("heading", { name: /estado de la configuración/i })).toBeInTheDocument();
     expect(await screen.findByText(/hoy el ciudadano puede iniciar 1 tipo de trámite en 1 organismo de tránsito/i)).toBeInTheDocument();
     const lista = screen.getByRole("list", { name: /pasos de la configuración/i });

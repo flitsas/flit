@@ -133,19 +133,49 @@ export function PnEstadoConfiguracion({
   onIr: (paso: PasoConfiguracion) => void;
 }) {
   const pasos = resumen ? pasosDe(resumen) : null;
+  const [verPasos, setVerPasos] = useState(false);
+  const completo = pasos !== null && pasos.every((p) => p.hecho);
+  if (resumen && pasos && completo && !verPasos) {
+    return (
+      <section
+        aria-labelledby="pn-estado-titulo"
+        className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] border border-[#DFE5ED] bg-white px-4 py-3 dark:border-white/10 dark:bg-[#162744]"
+      >
+        <h2 id="pn-estado-titulo" className="sr-only">
+          Estado de la configuración
+        </h2>
+        <p className="flex items-center gap-2 text-sm font-semibold text-flit-primary dark:text-white">
+          <span aria-hidden="true" className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#8CC63F] text-white">
+            <Check className="h-4 w-4" />
+          </span>
+          <span>Configuración completa. {frasePortal(resumen, pasos)}</span>
+        </p>
+        <PnButton variant="secondary" aria-expanded={false} onClick={() => setVerPasos(true)}>
+          Ver pasos
+        </PnButton>
+      </section>
+    );
+  }
 
   return (
     <section
       aria-labelledby="pn-estado-titulo"
       className="flex flex-col gap-4 rounded-[18px] border border-[#DFE5ED] bg-white p-4 dark:border-white/10 dark:bg-[#162744]"
     >
-      <div>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
         <h2 id="pn-estado-titulo" className="text-base font-bold text-flit-primary dark:text-white">
           Estado de la configuración
         </h2>
         <p className="text-sm text-[#59677D] dark:text-white/78">
           Para que el portal ofrezca un trámite al ciudadano necesitas tres cosas. Cada paso te lleva a donde se resuelve.
         </p>
+        </div>
+        {completo && (
+          <PnButton variant="secondary" aria-expanded={true} onClick={() => setVerPasos(false)}>
+            Ocultar pasos
+          </PnButton>
+        )}
       </div>
 
       {error && !resumen && (

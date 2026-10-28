@@ -31,6 +31,7 @@ import {
 } from "@/lib/api/admin-pn-tarifas";
 import { fetchOrganismosPn, fetchTiposPn, type OrganismoPn, type TipoPn } from "@/lib/api/admin-pn-config";
 import { PN_FIELD_ERROR_CLS } from "./pn-ui";
+import { nombrePropio } from "./formato";
 import { PnSeccionHeader } from "./pn-componentes";
 import { TarifaFormModal, type TarifaFormMode } from "./TarifaFormModal";
 import { ESTADO_TARIFA_LABEL, ESTADO_TARIFA_TONE, TarifaHistorialModal } from "./TarifaHistorialModal";
@@ -60,7 +61,6 @@ export function TarifasTab({ onCambio }: { onCambio?: () => void } = {}) {
   const { show } = useToast();
   const [tarifas, setTarifas] = useState<TarifaPn[]>([]);
   const [status, setStatus] = useState<UiStatus>("loading");
-  const [incluirCerradas, setIncluirCerradas] = useState(false);
   const [tipos, setTipos] = useState<TipoPn[]>([]);
   const [organismos, setOrganismos] = useState<OrganismoPn[]>([]);
   const [catalogoError, setCatalogoError] = useState<string | null>(null);
@@ -76,7 +76,7 @@ export function TarifasTab({ onCambio }: { onCambio?: () => void } = {}) {
     try {
       const list = await fetchTarifasPn({}, signal);
       if (signal?.aborted) return;
-      setTarifas(list);
+      setTarifas(list.map((t) => ({ ...t, organismoNombre: t.organismoNombre ? nombrePropio(t.organismoNombre) : t.organismoNombre })));
       setStatus(list.length === 0 ? "empty" : "ready");
     } catch {
       if (!signal?.aborted) setStatus("error");
@@ -97,7 +97,9 @@ export function TarifasTab({ onCambio }: { onCambio?: () => void } = {}) {
       .then(([t, o]) => {
         if (controller.signal.aborted) return;
         setTipos(t);
-        setOrganismos(o);
+        setOrganismos(
+          o.map((x) => ({ ...x, nombre: nombrePropio(x.nombre), municipio: nombrePropio(x.municipio), departamento: nombrePropio(x.departamento) })),
+        );
       })
       .catch(() => {
         if (!controller.signal.aborted) setCatalogoError("No se pudieron cargar los trámites y organismos para el formulario.");
@@ -105,9 +107,11 @@ export function TarifasTab({ onCambio }: { onCambio?: () => void } = {}) {
     return () => controller.abort();
   }, []);
 
+  // Por defecto solo se ven las vigentes y próximas; con el filtro de Estado se pueden ver también las anteriores.
+  const filtraPorEstado = filtros.condicionDe("estado") !== undefined;
   const grupos = useMemo(
-    () => agruparTarifas(tarifas).filter((g) => incluirCerradas || g.estado !== "cerrada"),
-    [tarifas, incluirCerradas],
+    () => agruparTarifas(tarifas).filter((g) => filtraPorEstado || g.estado !== "cerrada"),
+    [tarifas, filtraPorEstado],
   );
 
   const visibles = useMemo(
@@ -216,7 +220,7 @@ export function TarifasTab({ onCambio }: { onCambio?: () => void } = {}) {
         id="pn-tarifas-titulo"
         paso={3}
         titulo="Tarifas del portal"
-        descripcion="Cuánto paga el ciudadano por cada trámite: derechos de tránsito, servicio digital y otros cargos. Si necesitas otro valor, registra un cambio: el anterior queda en el historial y no se edita."
+        descripcion="Cuánto paga el ciudadano por cada trámite: derechos de tránsito, servicio digital y otros cargos. Si necesitas otro valor, registra un cambio: el anterior queda en el historial y no se edita. Se ven las tarifas vigentes y próximas; para ver las anteriores, filtra por Estado."
         accion={
           <CreateButton label="Nueva tarifa" icon={ReceiptText} onClick={() => abrirFormulario({ kind: "create" })} />
         }
@@ -226,18 +230,6 @@ export function TarifasTab({ onCambio }: { onCambio?: () => void } = {}) {
         fecha de inicio.
       </InlineAlert>
 
-      <label className="flex w-fit cursor-pointer items-center gap-2 text-sm font-semibold text-flit-primary dark:text-white">
-        <input
-          type="checkbox"
-          checked={incluirCerradas}
-          onChange={(e) => {
-            setIncluirCerradas(e.target.checked);
-            setPage(1);
-          }}
-          className="h-4 w-4 accent-[color:var(--color-flit-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
-        />
-        Mostrar también las tarifas anteriores (ya no rigen)
-      </label>
       {catalogoError && (
         <p role="status" className={PN_FIELD_ERROR_CLS}>
           {catalogoError} Recarga la página para crear o cambiar tarifas.
@@ -261,7 +253,7 @@ export function TarifasTab({ onCambio }: { onCambio?: () => void } = {}) {
             emptyContent={
               grupos.length === 0 && !filtros.hayFiltros ? (
                 <p className="text-sm text-[#59677D] dark:text-white/70">
-                  No hay tarifas vigentes ni próximas. Marca «Mostrar también las tarifas anteriores» para verlas.
+                  No hay tarifas vigentes ni próximas. Para ver las anteriores, filtra por Estado en el encabezado de la columna.
                 </p>
               ) : (
                 <TablaFiltrosVacio onLimpiar={filtros.limpiar} />

@@ -21,6 +21,7 @@ import { filtrarFilas, normalizarTexto, type ColumnaFiltro } from "@/lib/tablas/
 import { useTablaFiltros } from "@/lib/tablas/useTablaFiltros";
 import { establecerOrganismoPn, fetchOrganismosPn, type OrganismoPn } from "@/lib/api/admin-pn-config";
 import { PN_FIELD_ERROR_CLS } from "./pn-ui";
+import { nombrePropio } from "./formato";
 import { PnConfirmDialog, PnLinkButton, PnSeccionHeader } from "./pn-componentes";
 import { pnError } from "./pnErrors";
 
@@ -66,7 +67,15 @@ export function OrganismosSection({ onIrATarifas, onCambio }: OrganismosSectionP
     try {
       const list = await fetchOrganismosPn(signal);
       if (signal?.aborted) return;
-      setOrganismos(list);
+      // Solo cambia cómo se ve el texto; la búsqueda ignora mayúsculas y tildes, y las acciones usan el id.
+      setOrganismos(
+        list.map((o) => ({
+          ...o,
+          nombre: nombrePropio(o.nombre),
+          municipio: nombrePropio(o.municipio),
+          departamento: nombrePropio(o.departamento),
+        })),
+      );
       setStatus(list.length === 0 ? "empty" : "ready");
     } catch {
       if (!signal?.aborted) setStatus("error");

@@ -111,8 +111,13 @@ describe("TarifasTab (#14074)", () => {
     expect(screen.getByRole("heading", { name: /tarifas del portal/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^nueva tarifa$/i })).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("checkbox", { name: /mostrar también las tarifas anteriores/i }));
-    expect(await screen.findByText("Anterior")).toBeInTheDocument();
+    // Sin casilla suelta: las anteriores se ven con el filtro de Estado del encabezado.
+    expect(screen.queryByRole("checkbox", { name: /tarifas anteriores/i })).not.toBeInTheDocument();
+    const ue2 = userEvent.setup();
+    await ue2.click(screen.getByRole("button", { name: (n) => n === "Filtrar por Estado" || n.startsWith("Filtrar por Estado (") }));
+    await ue2.click(screen.getByRole("checkbox", { name: "Anterior" }));
+    await ue2.click(screen.getByRole("button", { name: "Aplicar" }));
+    expect(await screen.findByText("Anterior", { selector: "span" })).toBeInTheDocument();
   });
 
   it("AC5: estado vacío con la acción para crear, error con reintento y cargando con el CarLoaderModal", async () => {
