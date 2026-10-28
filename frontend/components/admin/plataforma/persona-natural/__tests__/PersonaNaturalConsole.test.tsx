@@ -64,6 +64,16 @@ function renderConsola() {
 }
 
 describe("calcularResumen", () => {
+  it("no cuenta como hechos los trámites no elegibles ni los organismos que ya no están activos en FLIT", () => {
+    const r = calcularResumen(
+      [tipo({ elegible: false, ofrecible: true }), tipo({ id: "t2", activoEnFlit: false }), tipo({ id: "t3" })],
+      [organismo({ activoEnFlit: false }), organismo({ id: "o2" })],
+    );
+    expect(r.tiposActivos).toBe(1);
+    expect(r.organismosHabilitados).toBe(1);
+    expect(r.organismosConTarifa).toBe(1);
+  });
+
   it("cuenta solo lo que el ciudadano puede ver: trámites activados con tarifa y organismos habilitados con tarifa", () => {
     const r = calcularResumen(
       [tipo({}), tipo({ id: "t2", organismosConTarifaVigente: 0 }), tipo({ id: "t3", habilitado: false, ofrecible: false })],
@@ -80,6 +90,20 @@ describe("calcularResumen", () => {
 });
 
 describe("PersonaNaturalConsole (#14021)", () => {
+  it("los botones del estado abren la pestaña correcta y llevan el foco a su título", async () => {
+    const ue = userEvent.setup();
+    vi.mocked(fetchTiposPn).mockResolvedValue([tipo({})]);
+    vi.mocked(fetchOrganismosPn).mockResolvedValue([organismo({})]);
+    renderConsola();
+    await screen.findByText(/hoy el ciudadano puede iniciar/i);
+    await ue.click(screen.getByRole("button", { name: /elegir organismos/i }));
+    expect(screen.getByRole("tab", { name: "Organismos", selected: true })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("heading", { name: /organismos de tránsito/i })).toHaveFocus());
+    await ue.click(screen.getByRole("button", { name: /elegir trámites/i }));
+    expect(screen.getByRole("tab", { name: "Trámites", selected: true })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("heading", { name: /trámites que ofrece el portal/i })).toHaveFocus());
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(fetchTiposPn).mockResolvedValue([tipo({})]);
@@ -116,7 +140,7 @@ describe("PersonaNaturalConsole (#14021)", () => {
     vi.mocked(fetchTiposPn).mockResolvedValue([tipo({ organismosConTarifaVigente: 0 })]);
     renderConsola();
     await screen.findByText(/falta: una tarifa vigente/i);
-    expect(screen.getByRole("tab", { name: "Organismos y trámites", selected: true })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Trámites", selected: true })).toBeInTheDocument();
     await ue.click(screen.getByRole("button", { name: /configurar tarifas/i }));
     expect(screen.getByRole("tab", { name: "Tarifas", selected: true })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("heading", { name: /tarifas del portal/i })).toHaveFocus());
@@ -146,6 +170,6 @@ describe("PersonaNaturalConsole (#14021)", () => {
   it("las pestañas usan nombres de negocio y el orden sigue los pasos", async () => {
     renderConsola();
     const nombres = screen.getAllByRole("tab").map((t) => t.textContent);
-    expect(nombres).toEqual(["Organismos y trámites", "Tarifas", "Ajustes del portal", "Contenido"]);
+    expect(nombres).toEqual(["Trámites", "Organismos", "Tarifas", "Ajustes del portal", "Contenido"]);
   });
 });

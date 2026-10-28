@@ -501,7 +501,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
   },
   {
     slug: "4-superadmin/7-plataforma-persona-natural",
-    title: "Plataforma: Persona Natural (organismos y trámites, tarifas, ajustes y contenido del portal)",
+    title: "Plataforma: Persona Natural (trámites, organismos, tarifas, ajustes y contenido del portal)",
     audience: "Super Admin",
     sectionId: "superadmin",
     keywords: [
@@ -523,7 +523,9 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
       "dejar de ofrecer",
       "tramites que ofrece el portal",
       "falta tarifa",
-      "oficina de transito activa",
+      "activo en flit",
+      "ya no esta activo en flit",
+      "tramite no disponible",
       "ajustes del portal",
       "duracion de la sesion",
       "limite de consultas",
@@ -548,28 +550,23 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         paragraphs: [
           "Plataforma → «Persona Natural». Es la pantalla desde la que el equipo FLIT decide qué trámites puede hacer una persona natural desde el portal público, en qué organismos de tránsito y cuánto cuestan. Solo la ve el Super Admin con el permiso de administrar Persona Natural: los demás perfiles no tienen la entrada en el menú y, si abren la dirección directa, ven el mensaje «No tienes permiso para administrar el portal de Persona Natural.».",
           "Arriba está el «Estado de la configuración». Dice que para ofrecer un trámite al ciudadano necesitas tres cosas, y muestra cada una como «Hecho» o «Pendiente» con un botón que te lleva directo a donde se resuelve: 1. «Un tipo de trámite» (botón «Elegir trámites»), 2. «Un organismo de tránsito» (botón «Elegir organismos») y 3. «Una tarifa vigente» (botón «Configurar tarifas»). Debajo, una frase resume lo que el ciudadano ve hoy, por ejemplo «Hoy el ciudadano puede iniciar 2 tipos de trámite en 5 organismos de tránsito», o qué falta si todavía no puede iniciar ninguno. Si hay organismos habilitados sin tarifa, un aviso lo dice. El estado se actualiza solo cuando cambias algo.",
-          "Debajo hay cuatro pestañas, en el orden de los pasos: «Organismos y trámites», «Tarifas», «Ajustes del portal» y «Contenido». Cada una carga cuando entras en ella y muestra los cuatro estados de siempre: cargando, vacío, error con «Reintentar» y con datos. Para conectar el portal con una compañía se usa, además, la pestaña «Integraciones externas» de la ficha de la compañía (ver «Compañías, organismos de tránsito y causales»).",
+          "Debajo hay cinco pestañas, en el orden de los pasos: «Trámites» (paso 1), «Organismos» (paso 2), «Tarifas» (paso 3), «Ajustes del portal» y «Contenido». Un trámite que no está listo o un organismo que ya no está activo en FLIT no cuentan como «Hecho». Cada una carga cuando entras en ella y muestra los cuatro estados de siempre: cargando, vacío, error con «Reintentar» y con datos. Para conectar el portal con una compañía se usa, además, la pestaña «Integraciones externas» de la ficha de la compañía (ver «Compañías, organismos de tránsito y causales»).",
         ],
       },
       {
         id: "organismos-tramites",
-        title: "2. Organismos y trámites",
+        title: "2. Trámites y organismos",
         paragraphs: [
-          "Aquí decides qué se ofrece en el portal. Una regla manda sobre todo lo demás, y la pantalla la recuerda arriba: un trámite aparece cuando está activado, el organismo está habilitado y existe una tarifa vigente para esa combinación. Si falta algo, el ciudadano no lo ve.",
-          "La pestaña tiene dos tablas. «Trámites que ofrece el portal» (paso 1) muestra cada trámite con su categoría, su disponibilidad («Listo para ofrecer» o «Aún no disponible»: un trámite aún no disponible todavía no está terminado en FLIT 2 y no se puede activar), el interruptor «Ofrecer en el portal», si «Lo ve el ciudadano» (Sí, No o «Falta tarifa») y en cuántos organismos tiene tarifa. «Organismos de tránsito» (paso 2) muestra cada organismo con su municipio y departamento, el interruptor «Ofrecer en el portal» y cuántos trámites tiene con tarifa; tiene un buscador por nombre, municipio o departamento y filtros por Organismo, Departamento y «Ofrecer en el portal». Ambas tablas tienen paginación con «Filas por página».",
+          "Aquí decides qué se ofrece en el portal, en dos pestañas separadas. Una regla manda sobre todo lo demás, y la pestaña «Trámites» la recuerda arriba: un trámite aparece cuando está activado, el organismo está habilitado y existe una tarifa vigente para esa combinación. Si falta algo, el ciudadano no lo ve.",
+          "«Trámites» (paso 1, «Trámites que ofrece el portal») lista los trámites activos y publicados en FLIT 2. Cada uno muestra su categoría, su disponibilidad («Listo para ofrecer», «Aún no disponible» o «Ya no está activo en FLIT»), el interruptor «Ofrecer en el portal», si «Lo ve el ciudadano» (Sí, No o «Falta tarifa») y en cuántos organismos tiene tarifa. Un trámite no disponible no se puede activar: su interruptor queda bloqueado y se lee el motivo. Uno que ya no está activo en FLIT sigue en la lista solo para que puedas dejar de ofrecerlo.",
+          "«Organismos» (paso 2, «Organismos de tránsito») lista solo los organismos de tránsito activos en FLIT. Cada uno muestra su municipio y departamento, el interruptor «Ofrecer en el portal» y cuántos trámites tiene con tarifa. Si un organismo habilitado deja de estar activo en FLIT, sigue en la lista marcado «Ya no está activo en FLIT» y solo puedes dejar de ofrecerlo. Tiene un buscador por nombre, municipio o departamento y filtros por Organismo, Departamento y «Ofrecer en el portal». Ambas tablas tienen paginación con «Filas por página».",
         ],
         bullets: [
           "Ofrecer un trámite u organismo: usa el interruptor de la fila. Verás un aviso como «… ahora se ofrece en el portal.».",
           "Dejar de ofrecerlo: apaga el interruptor. Antes se abre una confirmación que explica que el ciudadano dejará de verlo hasta que lo vuelvas a activar (las tarifas ya configuradas se conservan); confirma con «Dejar de ofrecer» o cancela y no cambia nada.",
           "Aviso «Falta tarifa»: el trámite o el organismo está activado pero no tiene tarifa vigente, así que el ciudadano no puede cotizar. El botón «Crear tarifa» de ese aviso te lleva a la pestaña «Tarifas».",
-          "Un trámite que aún no está disponible tiene el interruptor bloqueado con el aviso «Solo se pueden ofrecer los trámites listos.»",
         ],
         callouts: [
-          {
-            variant: "warning",
-            title: "Solo las oficinas de tránsito activas pueden recibir trámites",
-            text: "FLIT no puede comprobar en esta pantalla si un organismo tiene su oficina de tránsito activa. Si habilitas uno que no la tiene, el portal se lo ofrecerá al ciudadano pero FLIT rechazará su solicitud. Habilita solo organismos con oficina activa.",
-          },
           {
             variant: "tip",
             text: "Habilitar un organismo no basta: también necesita una tarifa vigente. Si no ves un trámite en el portal, revisa primero las tres condiciones de la regla o mira el «Estado de la configuración».",

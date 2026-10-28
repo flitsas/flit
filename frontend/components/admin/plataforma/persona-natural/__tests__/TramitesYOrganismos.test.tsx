@@ -1,11 +1,12 @@
-// HU #14075 — Pestaña «Organismos y trámites»: ofrecer y dejar de ofrecer (con confirmación) con la tabla estándar (AC1),
+// HU #14075 — Pestañas «Trámites» y «Organismos» (se montan juntas aquí para probar los dos pasos): ofrecer y dejar de ofrecer (con confirmación) con la tabla estándar (AC1),
 // aviso «Falta tarifa» con botón a Tarifas, 422 `tipo_no_elegible`, y los cuatro estados (AC5). La API (HU #14072) es un doble.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ToastProvider } from "@/components/admin/Toast";
 import { ApiError } from "@/lib/api/types";
-import { OrganismosYTiposTab } from "../OrganismosYTiposTab";
+import { OrganismosTab } from "../OrganismosTab";
+import { TramitesTab } from "../TramitesTab";
 import {
   establecerOrganismoPn,
   establecerTipoPn,
@@ -55,10 +56,18 @@ const ORGANISMOS: OrganismoPn[] = [
   organismo({ id: "o3", codigo: "CAL", nombre: "Movilidad de Cali", municipio: "Cali", departamento: "Valle del Cauca", habilitado: false, tiposConTarifaVigente: 0 }),
 ];
 
+function Ambas({ onIrATarifas, onCambio }: { onIrATarifas: () => void; onCambio: () => void }) {
+  return (
+    <>
+      <TramitesTab onIrATarifas={onIrATarifas} onCambio={onCambio} />
+      <OrganismosTab onIrATarifas={onIrATarifas} onCambio={onCambio} />
+    </>
+  );
+}
 function renderTab(onIrATarifas = vi.fn(), onCambio = vi.fn()) {
   render(
     <ToastProvider>
-      <OrganismosYTiposTab onIrATarifas={onIrATarifas} onCambio={onCambio} />
+      <Ambas onIrATarifas={onIrATarifas} onCambio={onCambio} />
     </ToastProvider>,
   );
   return onIrATarifas;
@@ -88,11 +97,49 @@ describe("OrganismosYTiposTab (#14075)", () => {
     expect(screen.queryByText("BOG")).not.toBeInTheDocument();
   });
 
-  it("avisa que solo las oficinas de tránsito activas pueden recibir trámites", async () => {
+  it("avisa que aquí solo aparecen los organismos activos en FLIT", async () => {
     renderTab();
     await screen.findByRole("table", { name: /organismos del portal/i });
-    const aviso = screen.getByText(/solo las oficinas de tránsito activas pueden recibir trámites/i).closest("[role='alert']");
-    expect(aviso).toHaveTextContent(/FLIT rechazará su solicitud/i);
+    expect(screen.getByText(/solo organismos activos en flit/i)).toBeInTheDocument();
+    expect(screen.getByText(/aquí solo aparecen los organismos de tránsito que están activos en flit/i)).toBeInTheDocument();
+    expect(screen.queryByText(/oficinas de tránsito activas pueden recibir/i)).not.toBeInTheDocument();
+  });
+
+  it("un organismo que ya no está activo en FLIT lo dice y solo se puede apagar", async () => {
+    vi.mocked(fetchOrganismosPn).mockResolvedValue([
+      ...ORGANISMOS,
+      organismo({ id: "o4", nombre: "Tránsito Viejo", habilitado: true, activoEnFlit: false, tiposConTarifaVigente: 1 }),
+      organismo({ id: "o5", nombre: "Tránsito Cerrado", habilitado: false, activoEnFlit: false, tiposConTarifaVigente: 0 }),
+    ]);
+    renderTab();
+    await screen.findByRole("table", { name: /organismos del portal/i });
+    const viejo = fila(/tránsito viejo/i);
+    expect(within(viejo).getByText("Ya no está activo en FLIT")).toBeInTheDocument();
+    expect(within(viejo).getByText(/solo puedes dejar de ofrecerlo/i)).toBeInTheDocument();
+    expect(within(viejo).getByRole("switch", { name: /dejar de ofrecer tránsito viejo/i })).toBeEnabled();
+    const cerrado = fila(/tránsito cerrado/i);
+    expect(within(cerrado).getByRole("switch", { name: /^ofrecer tránsito cerrado/i })).toBeDisabled();
+    expect(within(cerrado).getByText(/no se puede ofrecer/i)).toBeInTheDocument();
+  });
+
+  it("un trámite no elegible muestra su motivo y no se puede encender; uno inactivo en FLIT solo se puede apagar", async () => {
+    vi.mocked(fetchTiposPn).mockResolvedValue([
+      ...TIPOS,
+      tipo({ id: "t5", nombre: "Trámite Retirado", elegible: false, motivo: "", habilitado: true, ofrecible: false, activoEnFlit: false }),
+      tipo({ id: "t6", nombre: "Trámite Cerrado", elegible: false, habilitado: false, ofrecible: false, activoEnFlit: false }),
+    ]);
+    renderTab();
+    await screen.findByRole("table", { name: /trámites del portal de persona natural/i });
+    const prenda = fila(/inscripción de prenda/i);
+    expect(within(prenda).getByText(/no se puede ofrecer todavía: el asistente no está publicado/i)).toBeInTheDocument();
+    expect(within(prenda).getByRole("switch", { name: /^ofrecer inscripción de prenda/i })).toBeDisabled();
+    const retirado = fila(/trámite retirado/i);
+    expect(within(retirado).getByText("Ya no está activo en FLIT")).toBeInTheDocument();
+    expect(within(retirado).getByText(/solo puedes dejar de ofrecerlo/i)).toBeInTheDocument();
+    expect(within(retirado).getByRole("switch", { name: /dejar de ofrecer trámite retirado/i })).toBeEnabled();
+    const cerrado = fila(/trámite cerrado/i);
+    expect(within(cerrado).getByText(/ya no está activo en flit: no se puede ofrecer/i)).toBeInTheDocument();
+    expect(within(cerrado).getByRole("switch", { name: /^ofrecer trámite cerrado/i })).toBeDisabled();
   });
 
   it("AC1: un organismo habilitado sin tarifa vigente avisa «Falta tarifa» con botón a Tarifas", async () => {
@@ -157,7 +204,7 @@ describe("OrganismosYTiposTab (#14075)", () => {
     expect(within(matricula).getByRole("button", { name: /crear tarifa para matrícula inicial/i })).toBeInTheDocument();
     const prenda = fila(/inscripción de prenda/i);
     expect(within(prenda).getByText("Aún no disponible")).toBeInTheDocument();
-    expect(within(prenda).getByText(/todavía no está terminado en flit 2/i)).toBeInTheDocument();
+    expect(within(prenda).getByText(/no se puede ofrecer todavía/i)).toBeInTheDocument();
     expect(within(prenda).getByRole("switch", { name: /^ofrecer inscripción de prenda/i })).toBeDisabled();
   });
 
@@ -208,7 +255,7 @@ describe("OrganismosYTiposTab (#14075)", () => {
     vi.mocked(fetchOrganismosPn).mockRejectedValueOnce(new Error("caído"));
     const { unmount } = render(
       <ToastProvider>
-        <OrganismosYTiposTab onIrATarifas={vi.fn()} onCambio={vi.fn()} />
+        <Ambas onIrATarifas={vi.fn()} onCambio={vi.fn()} />
       </ToastProvider>,
     );
     expect(await screen.findByText(/todavía no hay trámites listos para persona natural/i)).toBeInTheDocument();

@@ -131,11 +131,10 @@ export function TiposSection({ onIrATarifas, onCambio }: TiposSectionProps) {
       header: "Disponibilidad",
       render: (t) => (
         <div className="flex flex-col gap-1">
-          <StatusBadge label={t.elegible ? "Listo para ofrecer" : "Aún no disponible"} tone={t.elegible ? "success" : "neutral"} />
-          {!t.elegible && (
-            <span className="max-w-[260px] text-xs text-[#59677D] dark:text-white/70">
-              Todavía no está terminado en FLIT 2, por eso no se puede activar.
-            </span>
+          {t.activoEnFlit === false ? (
+            <StatusBadge label="Ya no está activo en FLIT" tone="warning" />
+          ) : (
+            <StatusBadge label={t.elegible ? "Listo para ofrecer" : "Aún no disponible"} tone={t.elegible ? "success" : "neutral"} />
           )}
         </div>
       ),
@@ -148,7 +147,8 @@ export function TiposSection({ onIrATarifas, onCambio }: TiposSectionProps) {
         </EncabezadoFiltrable>
       ),
       render: (t) => {
-        const bloqueado = !t.elegible && !t.habilitado;
+        const inactivo = t.activoEnFlit === false;
+        const bloqueado = (!t.elegible || inactivo) && !t.habilitado;
         const motivoId = `pn-tipo-motivo-${t.id}`;
         return (
           <div className="flex flex-col gap-1">
@@ -160,8 +160,15 @@ export function TiposSection({ onIrATarifas, onCambio }: TiposSectionProps) {
               onChange={(next) => (next ? void encender(t) : setApagando(t))}
             />
             {bloqueado && (
-              <span id={motivoId} className="text-xs text-[#59677D] dark:text-white/70">
-                Solo se pueden ofrecer los trámites listos.
+              <span id={motivoId} className="max-w-[260px] text-xs text-[#59677D] dark:text-white/70">
+                {inactivo
+                  ? "Ya no está activo en FLIT: no se puede ofrecer."
+                  : `No se puede ofrecer todavía: ${t.motivo.trim() || "no está terminado en FLIT 2"}`}
+              </span>
+            )}
+            {t.habilitado && inactivo && (
+              <span className="max-w-[260px] text-xs text-[#59677D] dark:text-white/70">
+                Ya no está activo en FLIT: solo puedes dejar de ofrecerlo.
               </span>
             )}
             {errorFila?.id === t.id && (
@@ -212,7 +219,7 @@ export function TiposSection({ onIrATarifas, onCambio }: TiposSectionProps) {
         id="pn-tipos-titulo"
         paso={1}
         titulo="Trámites que ofrece el portal"
-        descripcion="Activa los trámites que una persona natural puede iniciar. Solo se pueden activar los que ya están listos en FLIT 2."
+        descripcion="Activa los trámites que una persona natural puede iniciar. Aquí aparecen los trámites activos y publicados en FLIT 2; solo se pueden activar los que ya están listos."
       />
       {status === "loading" ? (
         <CarLoaderModal label="Cargando trámites…" />

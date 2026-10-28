@@ -25,8 +25,9 @@ export interface ResumenConfiguracion {
 }
 
 export function calcularResumen(tipos: readonly TipoPn[], organismos: readonly OrganismoPn[]): ResumenConfiguracion {
-  const activos = tipos.filter((t) => t.ofrecible);
-  const habilitados = organismos.filter((o) => o.habilitado);
+  // Un trámite no elegible o un organismo que ya no está activo en FLIT no cuentan como «hechos».
+  const activos = tipos.filter((t) => t.ofrecible && t.elegible && t.activoEnFlit !== false);
+  const habilitados = organismos.filter((o) => o.habilitado && o.activoEnFlit !== false);
   return {
     tiposActivos: activos.length,
     tiposConTarifa: activos.filter((t) => t.organismosConTarifaVigente > 0).length,

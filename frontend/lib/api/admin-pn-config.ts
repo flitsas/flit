@@ -46,6 +46,8 @@ export interface OrganismoPn {
   habilitado: boolean;
   /** Tipos habilitados y elegibles con derechos de tránsito y servicio digital vigentes en el organismo. */
   tiposConTarifaVigente: number;
+  /** `false` = el organismo ya no está activo en FLIT (sigue en la lista solo para poder apagarlo). Ausente = activo. */
+  activoEnFlit?: boolean;
 }
 
 export interface TipoPn {
@@ -59,6 +61,8 @@ export interface TipoPn {
   /** Elegible y habilitado: lo que el portal ofrece de verdad. */
   ofrecible: boolean;
   organismosConTarifaVigente: number;
+  /** `false` = el trámite ya no está activo en FLIT (sigue en la lista solo para poder apagarlo). Ausente = activo. */
+  activoEnFlit?: boolean;
 }
 
 export function fetchParametrosPn(signal?: AbortSignal): Promise<ParametrosPn> {

@@ -7,22 +7,23 @@
 import { useCallback, useState } from "react";
 import { SectionTabs, type SectionTab } from "@/components/atom/SectionTabs";
 import { ContenidoTab } from "./contenido/ContenidoTab";
-import { OrganismosYTiposTab } from "./OrganismosYTiposTab";
+import { OrganismosTab } from "./OrganismosTab";
 import { ParametrosTab } from "./ParametrosTab";
 import { PnEstadoConfiguracion, usePnResumen, type PasoConfiguracion } from "./PnEstadoConfiguracion";
 import { TarifasTab } from "./TarifasTab";
+import { TramitesTab } from "./TramitesTab";
 
-type TabId = "organismos" | "tarifas" | "parametros" | "contenido";
+type TabId = "tramites" | "organismos" | "tarifas" | "parametros" | "contenido";
 
 const PASO_A_PESTANA: Record<PasoConfiguracion, { tab: TabId; ancla: string }> = {
-  tipos: { tab: "organismos", ancla: "pn-tipos-titulo" },
+  tipos: { tab: "tramites", ancla: "pn-tipos-titulo" },
   organismos: { tab: "organismos", ancla: "pn-organismos-titulo" },
   tarifas: { tab: "tarifas", ancla: "pn-tarifas-titulo" },
 };
 
 export function PersonaNaturalConsole() {
-  const [active, setActive] = useState<TabId>("organismos");
-  const [visited, setVisited] = useState<ReadonlySet<TabId>>(() => new Set<TabId>(["organismos"]));
+  const [active, setActive] = useState<TabId>("tramites");
+  const [visited, setVisited] = useState<ReadonlySet<TabId>>(() => new Set<TabId>(["tramites"]));
   const { resumen, error, refrescar } = usePnResumen();
 
   const onChange = useCallback((id: TabId) => {
@@ -48,10 +49,16 @@ export function PersonaNaturalConsole() {
 
   const pestanas: { id: TabId; label: string; title: string; render: () => React.ReactNode }[] = [
     {
+      id: "tramites",
+      label: "Trámites",
+      title: "Qué trámites ofrece el portal",
+      render: () => <TramitesTab onIrATarifas={() => irAlPaso("tarifas")} onCambio={refrescar} />,
+    },
+    {
       id: "organismos",
-      label: "Organismos y trámites",
-      title: "Dónde y qué trámites ofrece el portal",
-      render: () => <OrganismosYTiposTab onIrATarifas={() => irAlPaso("tarifas")} onCambio={refrescar} />,
+      label: "Organismos",
+      title: "En qué organismos de tránsito se ofrecen",
+      render: () => <OrganismosTab onIrATarifas={() => irAlPaso("tarifas")} onCambio={refrescar} />,
     },
     {
       id: "tarifas",

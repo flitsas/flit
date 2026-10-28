@@ -3,8 +3,8 @@
 // HU #14075 AC1 — Organismos de tránsito habilitados para el portal de Persona Natural (~1100). Buscador por nombre,
 // municipio o departamento, filtros por columna y paginación numerada. Un organismo habilitado sin tarifa vigente
 // muestra «Falta tarifa» con un botón a la pestaña Tarifas (el portal no puede cotizar ahí). Dejar de ofrecer uno pide
-// confirmación. Solo los organismos con oficina de tránsito activa pueden recibir trámites: el dato no viene en esta
-// lista, así que se avisa con un texto fijo en vez de inventar un indicador por fila.
+// confirmación. La lista trae solo los organismos activos en FLIT (y los ya habilitados que dejaron de serlo, marcados
+// «Ya no está activo en FLIT», que solo se pueden apagar).
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EyeOff } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
@@ -126,6 +126,7 @@ export function OrganismosSection({ onIrATarifas, onCambio }: OrganismosSectionP
       render: (o) => (
         <>
           <span className="block font-semibold">{o.nombre}</span>
+          {o.activoEnFlit === false && <StatusBadge label="Ya no está activo en FLIT" tone="warning" />}
         </>
       ),
     },
@@ -150,10 +151,15 @@ export function OrganismosSection({ onIrATarifas, onCambio }: OrganismosSectionP
         <div className="flex flex-col gap-1">
           <SwitchToggle
             checked={o.habilitado}
-            disabled={guardando === o.id}
+            disabled={guardando === o.id || (o.activoEnFlit === false && !o.habilitado)}
             label={`${o.habilitado ? "Dejar de ofrecer" : "Ofrecer"} ${o.nombre} en el portal`}
             onChange={(next) => (next ? void encender(o) : setApagando(o))}
           />
+          {o.activoEnFlit === false && (
+            <span className="max-w-[240px] text-xs text-[#59677D] dark:text-white/70">
+              {o.habilitado ? "Solo puedes dejar de ofrecerlo." : "No se puede ofrecer."}
+            </span>
+          )}
           {errorFila?.id === o.id && (
             <span role="alert" className={PN_FIELD_ERROR_CLS}>
               {errorFila.mensaje}
@@ -191,10 +197,9 @@ export function OrganismosSection({ onIrATarifas, onCambio }: OrganismosSectionP
         titulo="Organismos de tránsito"
         descripcion="Habilita los organismos donde el ciudadano podrá hacer sus trámites. Habilitar un organismo no basta: también necesita una tarifa vigente."
       />
-      <InlineAlert tone="warning" title="Solo las oficinas de tránsito activas pueden recibir trámites">
-        FLIT no puede comprobar aquí si el organismo tiene su oficina de tránsito activa. Si habilitas uno que no la
-        tiene, el portal se lo ofrecerá al ciudadano pero FLIT rechazará su solicitud. Habilita solo organismos con
-        oficina activa.
+      <InlineAlert tone="info" title="Solo organismos activos en FLIT">
+        Aquí solo aparecen los organismos de tránsito que están activos en FLIT. Si uno deja de estar activo, sigue en la
+        lista marcado «Ya no está activo en FLIT» y solo podrás dejar de ofrecerlo.
       </InlineAlert>
       <SearchInput
         label="Buscar organismo"
