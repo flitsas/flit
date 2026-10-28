@@ -59,11 +59,12 @@ interface PendingRoleChange {
 
 export function roleChangeWarning(count: number | null): string {
   if (count === null) {
-    return "No pudimos verificar si este usuario tiene permisos individuales. Si los tiene, se eliminarán al cambiar su rol.";
+    return "No pudimos verificar si este usuario tiene permisos individuales de este producto. Si los tiene, se eliminarán al cambiar su rol. Los de otros productos se conservan.";
   }
-  return count === 1
-    ? "Este usuario tiene 1 permiso individual que se eliminará al cambiar su rol."
-    : `Este usuario tiene ${count} permisos individuales que se eliminarán al cambiar su rol.`;
+  const detail = count === 1
+    ? "Este usuario tiene 1 permiso individual de este producto que se eliminará al cambiar su rol."
+    : `Este usuario tiene ${count} permisos individuales de este producto que se eliminarán al cambiar su rol.`;
+  return `${detail} Los de otros productos se conservan.`;
 }
 
 export interface EditUserModalProps {
@@ -139,8 +140,7 @@ export function EditUserModal({
     setRoleBusy(true);
     setRoleError(null);
     setRoleNotice(null);
-    // HU #13657: al cambiar de rol el backend borra los permisos individuales del producto del rol nuevo y de los roles que
-    // se cierran; se consulta cuántos son (por roleId, la misma regla) para avisar ANTES de aplicar. Sin ellos no hay aviso (AC2).
+    // HU #13657 / Bug #14010 H-10: se consulta cuántos permisos del producto del rol nuevo se borrarían, para avisar ANTES de aplicar.
     const newRole = roleSection.roles.find((r) => r.id === roleId);
     let count: number | null = null;
     try {

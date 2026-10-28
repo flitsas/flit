@@ -81,11 +81,12 @@ describe('Trámites por familia (HU #13665)', () => {
     expect(screen.getByText('Otros Trámites')).toBeInTheDocument();
   });
 
-  it('compatibilidad: token anterior a la migración (solo tramites.read/create) muestra y crea las tres familias', async () => {
+  it('Bug #14010 H-01: sin slugs de familia no ofrece crear ninguna', async () => {
     token = jwt(['tramites.read', 'tramites.create']);
     render(<NuevoTramiteModalContent onElegir={vi.fn()} tituloEnContenedor />);
-    await waitFor(() => expect(screen.getByText('Matrícula Inicial')).toBeInTheDocument());
-    expect(screen.getByText('Traspaso')).toBeInTheDocument();
-    expect(screen.getByText('Otros Trámites')).toBeInTheDocument();
+    expect(await screen.findByText(/No hay tipos de trámite habilitados para crear/)).toBeInTheDocument();
+    expect(screen.queryByText('Matrícula Inicial')).not.toBeInTheDocument();
+    expect(screen.queryByText('Traspaso')).not.toBeInTheDocument();
+    expect(screen.queryByText('Otros Trámites')).not.toBeInTheDocument();
   });
 });

@@ -54,6 +54,26 @@ public sealed class ForbiddenResultHandlerBodyTests
             "el body de permisos no debe incluir el campo 'error' de SuperAdmin");
     }
 
+    [Fact]
+    public async Task Bug14010_H03_ModulePermissionRequirementFail_UsesInsufficientPermissionMessage()
+    {
+        var (httpContext, responseBody) = BuildHttpContext();
+        var requirement = new ModulePermissionRequirement("reportes.detallados.read");
+        var failure = AuthorizationFailure.Failed([requirement]);
+        var authorizeResult = PolicyAuthorizationResult.Forbid(failure);
+        var policy = new AuthorizationPolicyBuilder()
+            .RequireAuthenticatedUser()
+            .AddRequirements(requirement)
+            .Build();
+
+        await _handler.HandleAsync(_ => Task.CompletedTask, httpContext, policy, authorizeResult);
+
+        httpContext.Response.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        var json = JsonDocument.Parse(responseBody.ToArray());
+        json.RootElement.GetProperty("message").GetString().Should().Be("Permisos insuficientes");
+        json.RootElement.TryGetProperty("error", out _).Should().BeFalse();
+    }
+
     // ── AC3 retrocompatibilidad: otro requirement → body { error } ───────────
     // Nota (HU #10508): el requirement usado aquí solo necesita NO ser un PermissionRequirement
     // para ejercer la rama "retrocompatibilidad" del handler — no necesita ser el requirement real

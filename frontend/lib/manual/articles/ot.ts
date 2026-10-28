@@ -28,7 +28,7 @@ export const OT_ARTICLES: ManualArticle[] = [
         id: "que-ves",
         title: "1. Qué ves al entrar",
         paragraphs: [
-          "Con rol de organismo de tránsito, al iniciar sesión entras directo a «Tu cola de trabajo»: no es el panel del gestor, porque aquí no se mide producción de una empresa sino el trabajo pendiente del organismo.",
+          "Con rol de organismo de tránsito, al iniciar sesión entras directo a «Tu cola de trabajo»: no es el panel del gestor, porque aquí no se mide producción de una empresa sino el trabajo pendiente del organismo. Si no tienes el permiso de reportes del organismo, en lugar de la cola ves «No tienes permiso para ver esta información.»: no es una falla del sistema y reintentar no la va a cargar.",
           "Arriba rota un carrusel de mensajes: el primero siempre es fijo y resume tu cola en palabras («Tienes N trámites esperando tu decisión, M llevan más de 7 días esperando» y tu mediana de decisión de hoy); detrás pueden aparecer los banners activos que publique el equipo FLIT. Los datos son del día calendario de Bogotá.",
         ],
         media: [
@@ -295,7 +295,7 @@ export const OT_ARTICLES: ManualArticle[] = [
           "Verifica que el correo sea institucional del OT cuando la política lo exija.",
           "Cada correo corresponde a un solo usuario en toda la plataforma, sin importar la compañía ni las mayúsculas (Juan@empresa.com y juan@empresa.com son el mismo). El correo se guarda siempre en minúsculas. Si ya existe un usuario con ese correo, o ya hay una invitación pendiente para él en cualquier compañía, la invitación no se crea, ves «El usuario ya se encuentra previamente creado» y el campo de correo queda marcado en rojo; corrige el correo para continuar.",
           "Una invitación pendiente se reenvía con el ícono «Reenviar invitación» de su fila y se cancela desde «Acciones» → «Cancelar invitación».",
-          "Al cambiar el rol de una persona desde «Editar usuario», si tiene permisos individuales el sistema te avisa cuántos se eliminarán («Este usuario tiene 3 permisos individuales que se eliminarán al cambiar su rol.»). El rol solo cambia si confirmas con «Cambiar rol»; «Mantener rol actual» no cambia nada.",
+          "Al cambiar el rol de una persona desde «Editar usuario», si tiene permisos individuales de ese producto el sistema te avisa cuántos se eliminarán («Este usuario tiene 3 permisos individuales de este producto que se eliminarán al cambiar su rol. Los de otros productos se conservan.»). El rol solo cambia si confirmas con «Cambiar rol»; «Mantener rol actual» no cambia nada. El aviso de un permiso individual dice que entra en vigor en el siguiente refresco de la sesión, como máximo 15 minutos.",
         ],
       },
       {
@@ -308,8 +308,8 @@ export const OT_ARTICLES: ManualArticle[] = [
           "1. Dock → Usuarios; en la fila de la persona abre «Acciones» y elige «Permisos por módulo».",
           "2. Activa o desactiva una acción con su interruptor, o usa «Habilitar módulo» y «Denegar módulo» para todo el módulo.",
           "3. «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo.",
-          "Un Gestor OT entra con la bandeja de trámites y el Inicio. Para que use otro módulo (por ejemplo Documentos o Mandatos), habilítaselo aquí; aparece en su dock al volver a ingresar.",
-          "Aquí solo ves los módulos del organismo.",
+          "Un Gestor OT entra con la bandeja de trámites y el Inicio. Para que use otro módulo (por ejemplo Documentos, Mandatos o Webhooks), habilítaselo aquí; aparece en su dock al volver a ingresar. Webhooks está en Administración cuando la persona tiene ese permiso.",
+          "Aquí ves los módulos del organismo y, si puedes otorgarlo, «Reenviar validación de identidad».",
         ],
         callouts: [
           {
