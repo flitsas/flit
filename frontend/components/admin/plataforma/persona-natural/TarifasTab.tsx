@@ -8,7 +8,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { History, PencilLine, ReceiptText } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
-import { ActionsMenu } from "@/components/atom/ActionsMenu";
+import { CreateButton } from "@/components/atom/CreateButton";
+import { InlineAlert } from "@/components/atom/InlineAlert";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { RowActions, type RowAction } from "@/components/atom/RowActions";
@@ -29,7 +30,8 @@ import {
   type TarifaPn,
 } from "@/lib/api/admin-pn-tarifas";
 import { fetchOrganismosPn, fetchTiposPn, type OrganismoPn, type TipoPn } from "@/lib/api/admin-pn-config";
-import { PN_FIELD_ERROR_CLS, PN_INFO_NOTICE_CLS, PN_PRIMARY_BTN_CLS, PN_PRIMARY_BTN_STYLE } from "./pn-ui";
+import { PN_FIELD_ERROR_CLS } from "./pn-ui";
+import { PnSeccionHeader } from "./pn-componentes";
 import { TarifaFormModal, type TarifaFormMode } from "./TarifaFormModal";
 import { ESTADO_TARIFA_LABEL, ESTADO_TARIFA_TONE, TarifaHistorialModal } from "./TarifaHistorialModal";
 
@@ -54,7 +56,7 @@ function valorDe(g: GrupoTarifa, concepto: ConceptoTarifa): string {
   return t ? formatPesos(t.valorCop) : "—";
 }
 
-export function TarifasTab() {
+export function TarifasTab({ onCambio }: { onCambio?: () => void } = {}) {
   const { show } = useToast();
   const [tarifas, setTarifas] = useState<TarifaPn[]>([]);
   const [status, setStatus] = useState<UiStatus>("loading");
@@ -98,7 +100,7 @@ export function TarifasTab() {
         setOrganismos(o);
       })
       .catch(() => {
-        if (!controller.signal.aborted) setCatalogoError("No se pudieron cargar los tipos y organismos para el formulario.");
+        if (!controller.signal.aborted) setCatalogoError("No se pudieron cargar los trámites y organismos para el formulario.");
       });
     return () => controller.abort();
   }, []);
@@ -112,8 +114,8 @@ export function TarifasTab() {
     () =>
       filtrarFilas(grupos, filtros.condicionesTotales, "", {
         columnas: {
-          organismo: (g) => g.organismoNombre ?? "Valor general",
-          tipo: (g) => g.tipoTramiteNombre ?? "Todos los tipos",
+          organismo: (g) => g.organismoNombre ?? "Todos los organismos",
+          tipo: (g) => g.tipoTramiteNombre ?? "Todos los trámites",
           estado: (g) => g.estado,
           desde: (g) => g.vigenteDesde,
         },
@@ -130,14 +132,14 @@ export function TarifasTab() {
   }
 
   function actionsFor(g: GrupoTarifa): RowAction[] {
-    const nombre = `${g.tipoTramiteNombre ?? "todos los tipos"} en ${g.organismoNombre ?? "valor general"}`;
+    const nombre = `${g.tipoTramiteNombre ?? "todos los trámites"} en ${g.organismoNombre ?? "todos los organismos"}`;
     const actions: RowAction[] = [
-      { icon: History, label: `Historial de ${nombre}`, onClick: () => setHistorial(g) },
+      { icon: History, label: `Ver historial de ${nombre}`, onClick: () => setHistorial(g) },
     ];
     if (g.estado !== "cerrada") {
       actions.push({
         icon: PencilLine,
-        label: `Nueva versión de ${nombre}`,
+        label: `Cambiar valores de ${nombre}`,
         tone: "primary",
         onClick: () => abrirFormulario({ kind: "version", grupo: g }),
       });
@@ -153,23 +155,23 @@ export function TarifasTab() {
           Organismo
         </EncabezadoFiltrable>
       ),
-      render: (g) => g.organismoNombre ?? <span className="text-[#59677D] dark:text-white/70">Valor general</span>,
+      render: (g) => g.organismoNombre ?? <span className="text-[#59677D] dark:text-white/70">Todos los organismos</span>,
     },
     {
       key: "tipo",
       header: (
         <EncabezadoFiltrable filtros={filtros} columnaId="tipo">
-          Tipo
+          Trámite
         </EncabezadoFiltrable>
       ),
-      render: (g) => g.tipoTramiteNombre ?? <span className="text-[#59677D] dark:text-white/70">Todos los tipos</span>,
+      render: (g) => g.tipoTramiteNombre ?? <span className="text-[#59677D] dark:text-white/70">Todos los trámites</span>,
     },
     { key: "derechos", header: "Derechos de tránsito", cellClassName: "whitespace-nowrap", render: (g) => valorDe(g, "DERECHOS_TRANSITO") },
-    { key: "servicio", header: "Servicio digital", cellClassName: "whitespace-nowrap", render: (g) => valorDe(g, "SERVICIO_FLIT") },
+    { key: "servicio", header: "Servicio digital FLIT", cellClassName: "whitespace-nowrap", render: (g) => valorDe(g, "SERVICIO_FLIT") },
     { key: "envio", header: "Envío", cellClassName: "whitespace-nowrap", render: (g) => valorDe(g, "ENVIO_DOCUMENTO") },
     {
       key: "otros",
-      header: "Otros conceptos",
+      header: "Otros cargos",
       cellClassName: "text-xs",
       render: (g) => {
         const otros = CONCEPTOS_ADICIONALES.filter((c) => g.porConcepto[c]);
@@ -210,25 +212,21 @@ export function TarifasTab() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex max-w-3xl flex-col gap-2">
-          <p className="text-sm text-[#59677D] dark:text-white/78">
-            Tarifas que el portal usa para cotizar. Cada cambio registra una versión nueva: la anterior queda en el
-            historial y no se edita.
-          </p>
-          <p className={PN_INFO_NOTICE_CLS}>
-            Las cotizaciones ya emitidas no cambian cuando se registra una tarifa nueva.
-          </p>
-        </div>
-        <ActionsMenu
-          ariaLabel="Acciones de tarifas"
-          items={[
-            { key: "nueva", label: "Nueva tarifa", icon: ReceiptText, onSelect: () => abrirFormulario({ kind: "create" }) },
-          ]}
-        />
-      </div>
+      <PnSeccionHeader
+        id="pn-tarifas-titulo"
+        paso={3}
+        titulo="Tarifas del portal"
+        descripcion="Cuánto paga el ciudadano por cada trámite: derechos de tránsito, servicio digital y otros cargos. Si necesitas otro valor, registra un cambio: el anterior queda en el historial y no se edita."
+        accion={
+          <CreateButton label="Nueva tarifa" icon={ReceiptText} onClick={() => abrirFormulario({ kind: "create" })} />
+        }
+      />
+      <InlineAlert tone="info">
+        Las cotizaciones que ya se emitieron no cambian cuando registras una tarifa nueva: la nueva solo aplica desde su
+        fecha de inicio.
+      </InlineAlert>
 
-      <label className="flex w-fit cursor-pointer items-center gap-2 text-xs font-semibold text-flit-primary dark:text-white">
+      <label className="flex w-fit cursor-pointer items-center gap-2 text-sm font-semibold text-flit-primary dark:text-white">
         <input
           type="checkbox"
           checked={incluirCerradas}
@@ -238,11 +236,11 @@ export function TarifasTab() {
           }}
           className="h-4 w-4 accent-[color:var(--color-flit-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
         />
-        Incluir tarifas cerradas
+        Mostrar también las tarifas anteriores (ya no rigen)
       </label>
       {catalogoError && (
         <p role="status" className={PN_FIELD_ERROR_CLS}>
-          {catalogoError} Recargue la página para crear o versionar tarifas.
+          {catalogoError} Recarga la página para crear o cambiar tarifas.
         </p>
       )}
 
@@ -251,18 +249,7 @@ export function TarifasTab() {
       ) : (
         <UiStateBoundary
           status={status}
-          emptyMessage="Aún no hay tarifas del portal. Cree la primera para que el portal pueda cotizar."
-          emptyCta={
-            <button
-              type="button"
-              onClick={() => abrirFormulario({ kind: "create" })}
-              className={PN_PRIMARY_BTN_CLS}
-              style={PN_PRIMARY_BTN_STYLE}
-            >
-              <ReceiptText className="h-4 w-4" aria-hidden="true" />
-              Nueva tarifa
-            </button>
-          }
+          emptyMessage="Aún no hay tarifas. Crea la primera para que el portal pueda cotizar los trámites."
           errorMessage="No se pudieron cargar las tarifas."
           onRetry={() => void load()}
         >
@@ -274,7 +261,7 @@ export function TarifasTab() {
             emptyContent={
               grupos.length === 0 && !filtros.hayFiltros ? (
                 <p className="text-sm text-[#59677D] dark:text-white/70">
-                  No hay tarifas vigentes ni futuras. Active «Incluir tarifas cerradas» para ver el historial.
+                  No hay tarifas vigentes ni próximas. Marca «Mostrar también las tarifas anteriores» para verlas.
                 </p>
               ) : (
                 <TablaFiltrosVacio onLimpiar={filtros.limpiar} />
@@ -300,10 +287,11 @@ export function TarifasTab() {
           onSaved={(nuevas) => {
             setForm(null);
             show(
-              nuevas.length === 1 ? "Tarifa registrada." : `Tarifa registrada: ${nuevas.length} conceptos nuevos.`,
+              nuevas.length === 1 ? "Tarifa guardada." : `Tarifa guardada: ${nuevas.length} cargos nuevos.`,
               "success",
             );
             void load();
+            onCambio?.();
           }}
         />
       )}

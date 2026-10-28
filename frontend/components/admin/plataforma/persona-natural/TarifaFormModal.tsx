@@ -5,7 +5,9 @@
 // campo. Una excepción por organismo se registra eligiendo el organismo sobre el mismo tipo (prevalece sobre el valor
 // general). Al versionar, el ámbito (tipo y organismo) queda fijo y solo se envían los conceptos que cambiaron.
 import { useMemo, useState } from "react";
-import { Loader2, ReceiptText } from "lucide-react";
+import { ReceiptText, Save } from "lucide-react";
+import { InlineAlert } from "@/components/atom/InlineAlert";
+import { formatFechaCalendario } from "@/lib/format/date";
 import { Modal } from "@/components/atom/Modal";
 import { SearchableSelect } from "@/components/atom/SearchableSelect";
 import {
@@ -21,17 +23,8 @@ import {
   type TarifaPn,
 } from "@/lib/api/admin-pn-tarifas";
 import type { OrganismoPn, TipoPn } from "@/lib/api/admin-pn-config";
-import {
-  PN_CANCEL_BTN_CLS,
-  PN_FIELD_ERROR_CLS,
-  PN_HINT_CLS,
-  PN_INFO_NOTICE_CLS,
-  PN_INPUT_CLS,
-  PN_INPUT_ERROR_CLS,
-  PN_LABEL_CLS,
-  PN_PRIMARY_BTN_CLS,
-  PN_PRIMARY_BTN_STYLE,
-} from "./pn-ui";
+import { PN_FIELD_ERROR_CLS, PN_HINT_CLS, PN_INPUT_CLS, PN_INPUT_ERROR_CLS, PN_LABEL_CLS } from "./pn-ui";
+import { PnButton } from "./pn-componentes";
 import { pnError } from "./pnErrors";
 
 export type TarifaFormMode = { kind: "create" } | { kind: "version"; grupo: GrupoTarifa };
@@ -76,7 +69,7 @@ export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: T
     const nuevos: Errores = {};
     const enviar: { concepto: ConceptoTarifa; valorCop: number }[] = [];
 
-    if (!fecha) nuevos.fecha = "Indique desde qué fecha rige la tarifa.";
+    if (!fecha) nuevos.fecha = "Indica desde qué fecha rige la tarifa.";
     else if (fecha < hoy) nuevos.fecha = "La fecha de inicio no puede ser anterior a hoy.";
 
     for (const concepto of CONCEPTOS_TARIFA) {
@@ -91,15 +84,15 @@ export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: T
       const vigente = grupo?.porConcepto[concepto]?.valorCop;
       if (versionando && vigente === r.valor) continue;
       if (!tipoId && CONCEPTOS_QUE_EXIGEN_TIPO.includes(concepto)) {
-        nuevos.tipo = "Derechos de tránsito y servicio digital se registran siempre para un tipo de trámite.";
+        nuevos.tipo = "Los derechos de tránsito y el servicio digital se registran siempre para un trámite concreto: elige el trámite.";
       }
       enviar.push({ concepto, valorCop: r.valor });
     }
 
     if (enviar.length === 0 && Object.keys(nuevos).length === 0) {
       nuevos.valores = versionando
-        ? "Cambie al menos un valor para registrar una versión nueva."
-        : "Escriba el valor de al menos un concepto.";
+        ? "Cambia al menos un valor para registrar el cambio."
+        : "Escribe el valor de al menos un cargo.";
     }
     setErrores(nuevos);
     if (Object.keys(nuevos).length > 0) return;
@@ -134,41 +127,34 @@ export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: T
       open
       onClose={onClose}
       busy={busy}
-      title={versionando ? "Nueva versión de la tarifa" : "Nueva tarifa"}
+      title={versionando ? "Cambiar valores de la tarifa" : "Nueva tarifa"}
       description={
         versionando
-          ? `${grupo?.tipoTramiteNombre ?? "Todos los tipos"} · ${grupo?.organismoNombre ?? "valor general"}`
-          : "Registre los valores por concepto y la fecha desde la que rigen."
+          ? `${grupo?.tipoTramiteNombre ?? "Todos los trámites"} · ${grupo?.organismoNombre ?? "Todos los organismos"}`
+          : "Elige el trámite, escribe los valores en pesos y la fecha desde la que rigen."
       }
       icon={ReceiptText}
       size="lg"
       footer={
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} disabled={busy} className={PN_CANCEL_BTN_CLS}>
+          <PnButton variant="secondary" onClick={onClose} disabled={busy}>
             Cancelar
-          </button>
-          <button
-            type="submit"
-            form="pn-tarifa-form"
-            disabled={busy}
-            className={PN_PRIMARY_BTN_CLS}
-            style={PN_PRIMARY_BTN_STYLE}
-          >
-            {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+          </PnButton>
+          <PnButton type="submit" form="pn-tarifa-form" variant="primary" icon={Save} loading={busy}>
             Guardar tarifa
-          </button>
+          </PnButton>
         </div>
       }
     >
       <form id="pn-tarifa-form" onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-        <p className={PN_INFO_NOTICE_CLS}>
-          Las cotizaciones ya emitidas no cambian: la tarifa nueva solo aplica a las cotizaciones que se generen desde
-          su fecha de inicio. La versión anterior se cierra el día anterior.
-        </p>
+        <InlineAlert tone="info">
+          Las cotizaciones ya emitidas no cambian: la tarifa nueva solo aplica desde su fecha de inicio. La tarifa
+          anterior deja de regir el día anterior.
+        </InlineAlert>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <label className={PN_LABEL_CLS}>
-            Tipo de trámite
+            Trámite
             <select
               value={tipoId}
               onChange={(e) => setTipoId(e.target.value)}
@@ -176,7 +162,7 @@ export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: T
               aria-invalid={Boolean(errores.tipo)}
               className={`${PN_INPUT_CLS} ${errores.tipo ? PN_INPUT_ERROR_CLS : ""}`}
             >
-              <option value="">Todos los tipos (solo conceptos adicionales)</option>
+              <option value="">Todos los trámites (solo cargos adicionales)</option>
               {tipos.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.nombre}
@@ -195,19 +181,19 @@ export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: T
             options={opcionesOrganismo}
             value={organismoId}
             onChange={setOrganismoId}
-            defaultLabel="Valor general (todos los organismos)"
+            defaultLabel="Todos los organismos (valor general)"
             disabled={versionando}
             placeholder="Buscar organismo…"
           />
         </div>
         {!versionando && (
           <p className={PN_HINT_CLS}>
-            Para una excepción por organismo elija el organismo: su valor prevalece sobre el valor general del tipo.
+            Si el valor es distinto en un organismo, elígelo aquí: su valor tiene prioridad sobre el valor general del trámite.
           </p>
         )}
 
         <label className={PN_LABEL_CLS}>
-          Vigente desde
+          Rige desde
           <input
             type="date"
             value={fecha}
@@ -216,15 +202,21 @@ export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: T
             aria-invalid={Boolean(errores.fecha)}
             className={`${PN_INPUT_CLS} sm:max-w-[220px] ${errores.fecha ? PN_INPUT_ERROR_CLS : ""}`}
           />
-          {errores.fecha && (
+          {errores.fecha ? (
             <span role="alert" className={PN_FIELD_ERROR_CLS}>
               {errores.fecha}
             </span>
+          ) : (
+            fecha && (
+              <span className={PN_HINT_CLS}>
+                Desde el {formatFechaCalendario(fecha)} el portal cotiza con estos valores.
+              </span>
+            )
           )}
         </label>
 
         <fieldset className="flex flex-col gap-3">
-          <legend className="mb-1 text-sm font-semibold text-flit-primary dark:text-white">Valores en pesos</legend>
+          <legend className="mb-1 text-sm font-semibold text-flit-primary dark:text-white">Valores en pesos colombianos</legend>
           <div className="grid gap-3 sm:grid-cols-2">
             {CONCEPTOS_TARIFA.map((concepto) => {
               const actual = grupo?.porConcepto[concepto];
@@ -236,12 +228,16 @@ export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: T
                     autoComplete="off"
                     value={valores[concepto]}
                     onChange={(e) => actualizaValor(concepto, e.target.value)}
-                    placeholder="Sin cambios"
+                    onBlur={() => {
+                      const r = parsePesos(valores[concepto]);
+                      if (r.ok) actualizaValor(concepto, formatPesos(r.valor).slice(2));
+                    }}
+                    placeholder={versionando ? "Sin cambios" : "Ej.: 250.000"}
                     aria-invalid={Boolean(errores[concepto])}
                     className={`${PN_INPUT_CLS} ${errores[concepto] ? PN_INPUT_ERROR_CLS : ""}`}
                   />
                   {actual && versionando && (
-                    <span className={PN_HINT_CLS}>Vigente: {formatPesos(actual.valorCop)}</span>
+                    <span className={PN_HINT_CLS}>Hoy: {formatPesos(actual.valorCop)}</span>
                   )}
                   {errores[concepto] && (
                     <span role="alert" className={PN_FIELD_ERROR_CLS}>
@@ -259,11 +255,7 @@ export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: T
           )}
         </fieldset>
 
-        {errores.general && (
-          <p role="alert" className="text-sm font-semibold text-[#C2410C]">
-            {errores.general}
-          </p>
-        )}
+        {errores.general && <InlineAlert tone="error">{errores.general}</InlineAlert>}
       </form>
     </Modal>
   );

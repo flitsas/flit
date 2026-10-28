@@ -26,8 +26,8 @@ import { PN_LABEL_CLS, PN_INPUT_CLS } from "./pn-ui";
 
 export const ESTADO_TARIFA_LABEL: Record<EstadoTarifa, string> = {
   vigente: "Vigente",
-  futura: "Futura",
-  cerrada: "Cerrada",
+  futura: "Próxima",
+  cerrada: "Anterior",
 };
 export const ESTADO_TARIFA_TONE: Record<EstadoTarifa, "success" | "info" | "neutral"> = {
   vigente: "success",
@@ -48,13 +48,7 @@ const columnas: DataTableColumn<TarifaPn>[] = [
     header: "Estado",
     render: (v) => <StatusBadge label={ESTADO_TARIFA_LABEL[v.estado]} tone={ESTADO_TARIFA_TONE[v.estado]} />,
   },
-  { key: "registrada", header: "Registrada", cellClassName: "whitespace-nowrap", render: (v) => formatFechaHora(v.creadaEn) },
-  {
-    key: "usuario",
-    header: "Usuario",
-    cellClassName: "font-mono",
-    render: (v) => <span title={v.creadaPor ?? undefined}>{v.creadaPor ? v.creadaPor.slice(0, 8) : "—"}</span>,
-  },
+  { key: "registrada", header: "Registrada el", cellClassName: "whitespace-nowrap", render: (v) => formatFechaHora(v.creadaEn) },
 ];
 
 export function TarifaHistorialModal({ grupo, onClose }: { grupo: GrupoTarifa; onClose: () => void }) {
@@ -88,14 +82,14 @@ export function TarifaHistorialModal({ grupo, onClose }: { grupo: GrupoTarifa; o
       open
       onClose={onClose}
       title="Historial de la tarifa"
-      description={`${grupo.tipoTramiteNombre ?? "Todos los tipos"} · ${grupo.organismoNombre ?? "valor general"}`}
+      description={`${grupo.tipoTramiteNombre ?? "Todos los trámites"} · ${grupo.organismoNombre ?? "Todos los organismos"}`}
       icon={History}
       size="xl"
     >
       <div className="flex flex-col gap-4">
         {conceptos.length > 1 && (
           <label className={`${PN_LABEL_CLS} sm:max-w-xs`}>
-            Concepto
+            Cargo
             <select
               value={concepto}
               onChange={(e) => setConcepto(e.target.value as ConceptoTarifa)}
@@ -118,7 +112,7 @@ export function TarifaHistorialModal({ grupo, onClose }: { grupo: GrupoTarifa; o
         ) : (
           <UiStateBoundary
             status={status}
-            emptyMessage="Esta tarifa no tiene versiones anteriores."
+            emptyMessage="Esta tarifa todavía no tiene cambios registrados."
             errorMessage="No se pudo cargar el historial."
             onRetry={() => setIntento((n) => n + 1)}
           >

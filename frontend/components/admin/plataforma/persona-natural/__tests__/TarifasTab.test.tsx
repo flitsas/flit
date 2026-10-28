@@ -1,4 +1,4 @@
-// HU #14074 — Pestaña «Tarifas»: cuatro estados (AC5), columnas del estándar de tablas (AC2), crear y versionar con
+// HU #14074 — Pestaña «Tarifas»: cuatro estados (AC5), columnas del estándar de tablas (AC2), crear y cambiar valores con
 // validación por campo y manejo de tarifa_solapada / vigencia pasada (AC3), historial de solo lectura (AC4) y la
 // puerta de la página (AC1). La API (HU #14071) es un doble; las reglas puras se usan reales.
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -63,10 +63,10 @@ function apiError(status: number, error: string, message = "x") {
   return new ApiError(status, error, { error, message });
 }
 
-function renderTab() {
+function renderTab(onCambio = vi.fn()) {
   return render(
     <ToastProvider>
-      <TarifasTab />
+      <TarifasTab onCambio={onCambio} />
     </ToastProvider>,
   );
 }
@@ -89,11 +89,11 @@ describe("TarifasTab (#14074)", () => {
     const table = await screen.findByRole("table", { name: /tarifas del portal de persona natural/i });
     expect(within(table).getAllByRole("columnheader").map((h) => h.textContent)).toEqual([
       expect.stringContaining("Organismo"),
-      expect.stringContaining("Tipo"),
+      expect.stringContaining("Trámite"),
       "Derechos de tránsito",
-      "Servicio digital",
+      "Servicio digital FLIT",
       "Envío",
-      "Otros conceptos",
+      "Otros cargos",
       expect.stringContaining("Vigente desde"),
       expect.stringContaining("Estado"),
       "Acciones",
@@ -104,19 +104,22 @@ describe("TarifasTab (#14074)", () => {
     expect(within(vigente).getByText("$ 18.500")).toBeInTheDocument();
     expect(within(vigente).getByText("15/01/2026")).toBeInTheDocument();
     expect(within(vigente).getByText("Vigente")).toBeInTheDocument();
-    expect(screen.getByText("Futura")).toBeInTheDocument();
-    expect(screen.queryByText("Cerrada")).not.toBeInTheDocument();
-    expect(screen.getByText(/las cotizaciones ya emitidas no cambian/i)).toBeInTheDocument();
+    expect(screen.getByText("Próxima")).toBeInTheDocument();
+    expect(screen.queryByText("Anterior")).not.toBeInTheDocument();
+    expect(screen.getByText(/las cotizaciones que ya se emitieron no cambian/i)).toBeInTheDocument();
+    // El «Todos los organismos» reemplaza al «valor general» técnico y no se ven nombres de campos.
+    expect(screen.getByRole("heading", { name: /tarifas del portal/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^nueva tarifa$/i })).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("checkbox", { name: /incluir tarifas cerradas/i }));
-    expect(await screen.findByText("Cerrada")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("checkbox", { name: /mostrar también las tarifas anteriores/i }));
+    expect(await screen.findByText("Anterior")).toBeInTheDocument();
   });
 
   it("AC5: estado vacío con la acción para crear, error con reintento y cargando con el CarLoaderModal", async () => {
     const ue = userEvent.setup();
     vi.mocked(fetchTarifasPn).mockResolvedValueOnce([]);
     const { unmount } = renderTab();
-    expect(await screen.findByText(/aún no hay tarifas del portal/i)).toBeInTheDocument();
+    expect(await screen.findByText(/aún no hay tarifas\. crea la primera/i)).toBeInTheDocument();
     await ue.click(screen.getByRole("button", { name: /^nueva tarifa$/i }));
     expect(await screen.findByRole("dialog", { name: /nueva tarifa/i })).toBeInTheDocument();
     unmount();
@@ -137,12 +140,12 @@ describe("TarifasTab (#14074)", () => {
     const ue = userEvent.setup();
     renderTab();
     await screen.findByRole("table");
-    await ue.click(screen.getByRole("button", { name: /acciones de tarifas/i }));
-    await ue.click(await screen.findByRole("menuitem", { name: /nueva tarifa/i }));
+    await ue.click(screen.getByRole("button", { name: /^nueva tarifa$/i }));
     const dialog = await screen.findByRole("dialog", { name: /nueva tarifa/i });
     expect(within(dialog).getByText(/las cotizaciones ya emitidas no cambian/i)).toBeInTheDocument();
+    expect(within(dialog).getByRole("option", { name: /todos los trámites \(solo cargos adicionales\)/i })).toBeInTheDocument();
 
-    await ue.selectOptions(within(dialog).getByLabelText("Tipo de trámite"), TIPO);
+    await ue.selectOptions(within(dialog).getByLabelText("Trámite"), TIPO);
     await ue.type(within(dialog).getByLabelText(/^Derechos de tránsito/), "-5");
     await ue.type(within(dialog).getByLabelText(/^Servicio digital/), "abc");
     await ue.click(within(dialog).getByRole("button", { name: /guardar tarifa/i }));
@@ -158,11 +161,10 @@ describe("TarifasTab (#14074)", () => {
     vi.mocked(registrarTarifasPn).mockResolvedValue([tarifa({ id: "n1" }), tarifa({ id: "n2", concepto: "SERVICIO_FLIT" })]);
     renderTab();
     await screen.findByRole("table");
-    await ue.click(screen.getByRole("button", { name: /acciones de tarifas/i }));
-    await ue.click(await screen.findByRole("menuitem", { name: /nueva tarifa/i }));
+    await ue.click(screen.getByRole("button", { name: /^nueva tarifa$/i }));
     const dialog = await screen.findByRole("dialog", { name: /nueva tarifa/i });
 
-    await ue.selectOptions(within(dialog).getByLabelText("Tipo de trámite"), TIPO);
+    await ue.selectOptions(within(dialog).getByLabelText("Trámite"), TIPO);
     await ue.type(within(dialog).getByLabelText(/^Derechos de tránsito/), "260.000");
     await ue.type(within(dialog).getByLabelText(/^Servicio digital/), "$ 65000");
     await ue.click(within(dialog).getByRole("button", { name: /guardar tarifa/i }));
@@ -176,7 +178,7 @@ describe("TarifasTab (#14074)", () => {
       { concepto: "DERECHOS_TRANSITO", valorCop: 260000 },
       { concepto: "SERVICIO_FLIT", valorCop: 65000 },
     ]);
-    expect(await screen.findByText(/tarifa registrada: 2 conceptos nuevos/i)).toBeInTheDocument();
+    expect(await screen.findByText(/tarifa guardada: 2 cargos nuevos/i)).toBeInTheDocument();
     await waitFor(() => expect(fetchTarifasPn).toHaveBeenCalledTimes(2));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
@@ -185,16 +187,15 @@ describe("TarifasTab (#14074)", () => {
     const ue = userEvent.setup();
     renderTab();
     await screen.findByRole("table");
-    await ue.click(screen.getByRole("button", { name: /acciones de tarifas/i }));
-    await ue.click(await screen.findByRole("menuitem", { name: /nueva tarifa/i }));
+    await ue.click(screen.getByRole("button", { name: /^nueva tarifa$/i }));
     const dialog = await screen.findByRole("dialog", { name: /nueva tarifa/i });
 
     await ue.click(within(dialog).getByRole("button", { name: /guardar tarifa/i }));
-    expect(await within(dialog).findByText(/escriba el valor de al menos un concepto/i)).toBeInTheDocument();
+    expect(await within(dialog).findByText(/escribe el valor de al menos un cargo/i)).toBeInTheDocument();
 
     await ue.type(within(dialog).getByLabelText(/^Derechos de tránsito/), "1000");
     await ue.click(within(dialog).getByRole("button", { name: /guardar tarifa/i }));
-    expect(await within(dialog).findByText(/se registran siempre para un tipo de trámite/i)).toBeInTheDocument();
+    expect(await within(dialog).findByText(/se registran siempre para un trámite concreto/i)).toBeInTheDocument();
     expect(registrarTarifasPn).not.toHaveBeenCalled();
   });
 
@@ -203,16 +204,16 @@ describe("TarifasTab (#14074)", () => {
     vi.mocked(registrarTarifasPn).mockRejectedValue(apiError(409, "tarifa_solapada"));
     renderTab();
     await screen.findByRole("table");
-    await ue.click(screen.getByRole("button", { name: /acciones de tarifas/i }));
-    await ue.click(await screen.findByRole("menuitem", { name: /nueva tarifa/i }));
+    await ue.click(screen.getByRole("button", { name: /^nueva tarifa$/i }));
     const dialog = await screen.findByRole("dialog", { name: /nueva tarifa/i });
-    await ue.selectOptions(within(dialog).getByLabelText("Tipo de trámite"), TIPO);
+    await ue.selectOptions(within(dialog).getByLabelText("Trámite"), TIPO);
     await ue.type(within(dialog).getByLabelText(/^Derechos de tránsito/), "1000");
     await ue.click(within(dialog).getByRole("button", { name: /guardar tarifa/i }));
 
-    expect(await within(dialog).findByText(/ya existe una tarifa para ese concepto, tipo y organismo/i)).toBeInTheDocument();
-    expect(within(dialog).getByLabelText(/^Vigente desde/)).toHaveAttribute("aria-invalid", "true");
-    expect(within(dialog).getByLabelText(/^Derechos de tránsito/)).toHaveValue("1000");
+    expect(await within(dialog).findByText(/ya hay una tarifa para este trámite y organismo/i)).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/^Rige desde/)).toHaveAttribute("aria-invalid", "true");
+    // Al salir del campo el valor se escribe con puntos de miles.
+    expect(within(dialog).getByLabelText(/^Derechos de tránsito/)).toHaveValue("1.000");
   });
 
   it("AC3: una fecha anterior a hoy se rechaza en el formulario y, si el servidor la rechaza, también", async () => {
@@ -220,13 +221,12 @@ describe("TarifasTab (#14074)", () => {
     vi.mocked(registrarTarifasPn).mockRejectedValue(apiError(400, "fecha_inicio_pasada"));
     renderTab();
     await screen.findByRole("table");
-    await ue.click(screen.getByRole("button", { name: /acciones de tarifas/i }));
-    await ue.click(await screen.findByRole("menuitem", { name: /nueva tarifa/i }));
+    await ue.click(screen.getByRole("button", { name: /^nueva tarifa$/i }));
     const dialog = await screen.findByRole("dialog", { name: /nueva tarifa/i });
-    await ue.selectOptions(within(dialog).getByLabelText("Tipo de trámite"), TIPO);
+    await ue.selectOptions(within(dialog).getByLabelText("Trámite"), TIPO);
     await ue.type(within(dialog).getByLabelText(/^Derechos de tránsito/), "1000");
 
-    const fecha = within(dialog).getByLabelText(/^Vigente desde/);
+    const fecha = within(dialog).getByLabelText(/^Rige desde/);
     await ue.clear(fecha);
     await ue.type(fecha, "2020-01-01");
     await ue.click(within(dialog).getByRole("button", { name: /guardar tarifa/i }));
@@ -240,14 +240,14 @@ describe("TarifasTab (#14074)", () => {
     renderTab();
     await screen.findByRole("table");
     const fila = screen.getByRole("row", { name: /secretaría de movilidad de bogotá/i });
-    await ue.click(within(fila).getByRole("button", { name: /nueva versión de traspaso en secretaría de movilidad de bogotá/i }));
-    const dialog = await screen.findByRole("dialog", { name: /nueva versión de la tarifa/i });
+    await ue.click(within(fila).getByRole("button", { name: /cambiar valores de traspaso en secretaría de movilidad de bogotá/i }));
+    const dialog = await screen.findByRole("dialog", { name: /cambiar valores de la tarifa/i });
 
-    expect(within(dialog).getByLabelText("Tipo de trámite")).toBeDisabled();
-    expect(within(dialog).getByText("Vigente: $ 245.000")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Trámite")).toBeDisabled();
+    expect(within(dialog).getByText("Hoy: $ 245.000")).toBeInTheDocument();
     // Sin cambios no se envía nada.
     await ue.click(within(dialog).getByRole("button", { name: /guardar tarifa/i }));
-    expect(await within(dialog).findByText(/cambie al menos un valor/i)).toBeInTheDocument();
+    expect(await within(dialog).findByText(/cambia al menos un valor/i)).toBeInTheDocument();
 
     const derechos = within(dialog).getByLabelText(/^Derechos de tránsito/);
     await ue.clear(derechos);
@@ -270,13 +270,15 @@ describe("TarifasTab (#14074)", () => {
     renderTab();
     await screen.findByRole("table");
     const fila = screen.getByRole("row", { name: /secretaría de movilidad de bogotá/i });
-    await ue.click(within(fila).getByRole("button", { name: /historial de traspaso/i }));
+    await ue.click(within(fila).getByRole("button", { name: /ver historial de traspaso/i }));
 
     const dialog = await screen.findByRole("dialog", { name: /historial de la tarifa/i });
     const tabla = await within(dialog).findByRole("table", { name: /versiones de la tarifa/i });
     expect(within(tabla).getByText("$ 190.000")).toBeInTheDocument();
     expect(within(tabla).getByText("14/01/2026")).toBeInTheDocument();
-    expect(within(tabla).getAllByText("abcdef12")).toHaveLength(2);
+    // No se muestran identificadores internos del usuario.
+    expect(within(tabla).queryByText("abcdef12")).not.toBeInTheDocument();
+    expect(within(tabla).queryByRole("columnheader", { name: /usuario/i })).not.toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: /editar|guardar|eliminar/i })).not.toBeInTheDocument();
     expect(fetchHistorialTarifaPn).toHaveBeenCalledWith("a", expect.anything());
   });
@@ -288,10 +290,30 @@ describe("TarifasTab (#14074)", () => {
     expect(fetchTarifasPn).not.toHaveBeenCalled();
   });
 
-  it("AC1: el superadministrador ve la consola con su pestaña «Tarifas»", async () => {
+  it("al escribir un valor en pesos lo muestra con puntos de miles, avisa desde cuándo rige y avisa a la consola al guardar", async () => {
+    const ue = userEvent.setup();
+    const onCambio = vi.fn();
+    vi.mocked(registrarTarifasPn).mockResolvedValue([tarifa({ id: "n1", valorCop: 1250000 })]);
+    renderTab(onCambio);
+    await screen.findByRole("table");
+    await ue.click(screen.getByRole("button", { name: /^nueva tarifa$/i }));
+    const dialog = await screen.findByRole("dialog", { name: /nueva tarifa/i });
+    expect(within(dialog).getByText(/desde el \d{2}\/\d{2}\/\d{4} el portal cotiza con estos valores/i)).toBeInTheDocument();
+
+    await ue.selectOptions(within(dialog).getByLabelText("Trámite"), TIPO);
+    const derechos = within(dialog).getByLabelText(/^Derechos de tránsito/);
+    await ue.type(derechos, "1250000");
+    await ue.tab();
+    expect(derechos).toHaveValue("1.250.000");
+    await ue.click(within(dialog).getByRole("button", { name: /guardar tarifa/i }));
+    await waitFor(() => expect(registrarTarifasPn).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(registrarTarifasPn).mock.calls[0][0].valores).toEqual([{ concepto: "DERECHOS_TRANSITO", valorCop: 1250000 }]);
+    await waitFor(() => expect(onCambio).toHaveBeenCalledTimes(1));
+  });
+
+  it("AC1: la página muestra el título y el estado de la configuración antes de las pestañas", async () => {
     render(<AdminPersonaNaturalPage />);
     expect(await screen.findByRole("heading", { name: "Persona Natural" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Tarifas", selected: true })).toBeInTheDocument();
-    expect(await screen.findByRole("table", { name: /tarifas del portal/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /estado de la configuración/i })).toBeInTheDocument();
   });
 });
