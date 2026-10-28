@@ -141,6 +141,17 @@ describe("HU #14154 AC3 — etiquetas en español y claves desconocidas con su n
     expect(rotulos(registro)).toEqual(["NIT", "Razón social", "Estado de la matrícula", "Número de matrícula", "Cámara de comercio", "Id del registro mercantil"]);
     expect(valorDe(registro, "Razón social").textContent).toBe("EMPRESA FICTICIA S.A.S.");
   });
+  it("H4: claves constructor, toString, __proto__ y hasOwnProperty con su nombre original y su valor pintado", () => {
+    const datos: unknown = JSON.parse('{"constructor":"VALOR-A","toString":"VALOR-B","__proto__":"VALOR-C","hasOwnProperty":"VALOR-D"}');
+    render(<RespuestaProveedor datos={datos} etiqueta={ETIQUETA} />);
+    const tabla = screen.getByRole("table", { name: ETIQUETA });
+    expect(rotulos(tabla)).toEqual(["constructor", "toString", "__proto__", "hasOwnProperty"]);
+    expect(valorDe(tabla, "constructor").textContent).toBe("VALOR-A");
+    expect(valorDe(tabla, "toString").textContent).toBe("VALOR-B");
+    expect(valorDe(tabla, "__proto__").textContent).toBe("VALOR-C");
+    expect(valorDe(tabla, "hasOwnProperty").textContent).toBe("VALOR-D");
+    expect(tabla.innerHTML).not.toContain("native code");
+  });
 });
 
 describe("HU #14154 AC7 — expandir/contraer y accesibilidad", () => {

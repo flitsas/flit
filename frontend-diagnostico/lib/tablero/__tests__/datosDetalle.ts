@@ -195,7 +195,7 @@ export const conductorProveedor = (): Record<string, unknown> => ({
   id_consulta: "CONS-FICT-0001",
   persona: {
     tipoDocumento: "CC",
-    documento: "1000001222",
+    documento: "9999901222",
     nombres: "PERSONA",
     apellidos: "FICTICIA UNO",
     estadoPersona: "VIVO",
@@ -224,10 +224,10 @@ export const conductorProveedor = (): Record<string, unknown> => ({
 export const empresaProveedor = (): Record<string, unknown> => ({
   data: {
     commercialRegistry: {
-      NIT: "900000001",
+      NIT: "999990001",
       businessName: "EMPRESA FICTICIA S.A.S.",
       registrationStatus: "ACTIVA",
-      registrationNumber: "0000000001",
+      registrationNumber: "9999900001",
       chamberCommerce: "CAMARA FICTICIA",
       idRm: "RM-FICT-1",
     },
@@ -236,7 +236,7 @@ export const empresaProveedor = (): Record<string, unknown> => ({
       { code: "4520", description: "MANTENIMIENTO FICTICIO" },
     ],
     legalRepresentatives: [
-      { name: "REPRESENTANTE FICTICIO UNO", documentType: "CC", documentNumber: "1000009999", position: "GERENTE" },
+      { name: "REPRESENTANTE FICTICIO UNO", documentType: "CC", documentNumber: "9999909999", position: "GERENTE" },
       { name: "REPRESENTANTE FICTICIO DOS", position: "SUPLENTE", faculty: "FACULTADES FICTICIAS" },
     ],
   },

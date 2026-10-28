@@ -527,7 +527,7 @@ describe("PaginaDetalleConsulta — HU #14154: respuesta íntegra del proveedor 
 
   it("AC4: un documento que llegara completo se enmascara en el título («****» y los 4 últimos)", async () => {
     const d = runtConProveedor();
-    d.personas![0].documento_enmascarado = "1000001222";
+    d.personas![0].documento_enmascarado = "9999901222";
     const { pagina } = await pintarDetalle(d);
     expect(proveedorDe(pagina)[0]).toHaveAccessibleName("Respuesta del proveedor · Propietario · C ****1222");
   });

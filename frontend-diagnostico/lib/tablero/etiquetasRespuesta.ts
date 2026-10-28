@@ -292,13 +292,21 @@ const VALORES: Readonly<Record<string, string>> = {
   VIGENCIA_NO_APLICA: "No aplica",
 };
 
+/**
+ * Valor propio de un diccionario por clave. Las claves llegan del proveedor o de la respuesta (`constructor`, `toString`,
+ * `__proto__`…), así que el lookup no puede heredar de Object.prototype.
+ */
+function propio(diccionario: Readonly<Record<string, string>>, clave: string): string | undefined {
+  return Object.hasOwn(diccionario, clave) ? diccionario[clave] : undefined;
+}
+
 /** Texto de un valor: Sí/No, «—» para vacío o null, «Sin registros» para listas vacías, enums traducidos; el resto tal cual. */
 export function textoValor(v: unknown): string {
   if (v === null || v === undefined || v === "") return "—";
   if (v === true) return "Sí";
   if (v === false) return "No";
   if (Array.isArray(v)) return v.length === 0 ? "Sin registros" : v.map(textoValor).join(", ");
-  if (typeof v === "string") return VALORES[v] ?? v;
+  if (typeof v === "string") return propio(VALORES, v) ?? v;
   if (typeof v === "object") return Object.keys(v).length === 0 ? "Sin registros" : JSON.stringify(v);
   return String(v);
 }
@@ -315,7 +323,7 @@ function humanizar(clave: string): string {
 
 /** Nombre en español de un campo; si no está en el diccionario (p. ej. claves libres de un mapa), humanizado. */
 export function etiquetaCampo(clave: string): string {
-  return ETIQUETAS_RESPUESTA[clave] ?? humanizar(clave);
+  return propio(ETIQUETAS_RESPUESTA, clave) ?? humanizar(clave);
 }
 
 const oculta = (clave: string, enChequeo: boolean) =>
@@ -415,7 +423,7 @@ export const ETIQUETAS_PROVEEDOR: Readonly<Record<string, string>> = {
 
 /** Nombre de una clave de la respuesta del proveedor: en español si se conoce; si no, el nombre original (nunca se descarta). */
 export function etiquetaCampoProveedor(clave: string): string {
-  return ETIQUETAS_PROVEEDOR[clave] ?? ETIQUETAS_RESPUESTA[clave] ?? clave;
+  return propio(ETIQUETAS_PROVEEDOR, clave) ?? propio(ETIQUETAS_RESPUESTA, clave) ?? clave;
 }
 
 /** Texto de un valor del proveedor: «—» vacío, null u objeto vacío; «Sin registros» lista vacía; Sí/No; el resto, tal cual. */

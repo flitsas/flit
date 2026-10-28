@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CLAVES_OCULTAS, ETIQUETAS_PROVEEDOR, etiquetaCampoProveedor, textoValorProveedor } from "@/lib/tablero/etiquetasRespuesta";
+import { CLAVES_OCULTAS, ETIQUETAS_PROVEEDOR, etiquetaCampo, etiquetaCampoProveedor, textoValor, textoValorProveedor } from "@/lib/tablero/etiquetasRespuesta";
 
 // Uso de ejemplo: etiquetaCampoProveedor("legalRepresentatives") → «Representantes legales»; etiquetaCampoProveedor("x_raro")
 // → «x_raro» (HU #14154: en la respuesta íntegra del proveedor las claves desconocidas salen con su nombre original).
@@ -48,5 +48,24 @@ describe("HU #14154 AC2 — textoValorProveedor", () => {
   it("AC6: las claves ocultas de la respuesta de la fuente siguen definidas (no se tocan)", () => {
     expect(CLAVES_OCULTAS.has("http_status")).toBe(true);
     expect(CLAVES_OCULTAS.has("id")).toBe(true);
+  });
+});
+
+describe("HU #14154 H4 — claves que coinciden con Object.prototype no heredan sus propiedades", () => {
+  const CLAVES = ["constructor", "toString", "__proto__", "hasOwnProperty", "valueOf"];
+
+  it("etiquetaCampoProveedor devuelve el nombre original de la clave", () => {
+    for (const clave of CLAVES) expect(etiquetaCampoProveedor(clave)).toBe(clave);
+  });
+
+  it("etiquetaCampo las humaniza (no devuelve funciones ni objetos del prototipo)", () => {
+    expect(etiquetaCampo("constructor")).toBe("Constructor");
+    expect(etiquetaCampo("toString")).toBe("To string");
+    expect(etiquetaCampo("hasOwnProperty")).toBe("Has own property");
+    for (const clave of CLAVES) expect(typeof etiquetaCampo(clave)).toBe("string");
+  });
+
+  it("textoValor no traduce textos que coinciden con Object.prototype", () => {
+    for (const clave of CLAVES) expect(textoValor(clave)).toBe(clave);
   });
 });
