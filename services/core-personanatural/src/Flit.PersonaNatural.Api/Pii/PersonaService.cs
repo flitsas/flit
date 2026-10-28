@@ -16,6 +16,9 @@ public sealed class PersonaService(PersonaNaturalDb db, CifradoPii cifrado, PiiH
 {
     public const string AccionLectura = "lectura_persona";
 
+    /// <summary>Acción de la auditoría cuando core-api lee las partes por RPC para crear el trámite (HU #14049).</summary>
+    public const string AccionLecturaParaRadicar = "lectura_para_radicar";
+
     private const string CtxDocumento = "persona.documento";
     private const string CtxNombre = "persona.nombre";
     private const string CtxCorreo = "persona.correo";
@@ -64,13 +67,14 @@ public sealed class PersonaService(PersonaNaturalDb db, CifradoPii cifrado, PiiH
     }
 
     /// <summary>Lee y descifra las personas de la solicitud y deja constancia de quién las leyó.</summary>
-    public async Task<IReadOnlyList<DatosPersona>> LeerAsync(Guid solicitudId, string actor, CancellationToken ct)
+    public async Task<IReadOnlyList<DatosPersona>> LeerAsync(Guid solicitudId, string actor, CancellationToken ct, string accion = AccionLectura)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(actor);
+        ArgumentException.ThrowIfNullOrWhiteSpace(accion);
         var personas = await db.Set<PersonaSolicitante>().AsNoTracking().Where(p => p.SolicitudId == solicitudId)
             .OrderBy(p => p.Parte).ThenBy(p => p.Ordinal).ToListAsync(ct).ConfigureAwait(false);
 
-        db.Add(new AccesoPiiLog { Actor = actor.Length > 120 ? actor[..120] : actor, Accion = AccionLectura, SolicitudId = solicitudId, OcurrioEn = reloj.GetUtcNow() });
+        db.Add(new AccesoPiiLog { Actor = actor.Length > 120 ? actor[..120] : actor, Accion = accion, SolicitudId = solicitudId, OcurrioEn = reloj.GetUtcNow() });
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
 
         return personas.Select(p => new DatosPersona(

@@ -55,7 +55,7 @@ public static class Program
         builder.Services.AddDbContext<PersonaNaturalDb>(o => PersonaNaturalDb.Configure(o, connectionString));
         builder.Services.AddFlitPlatformAuthentication(builder.Configuration);
         builder.Services.AddAuthorization();
-        builder.Services.AddFlitGrpcServer();
+        builder.Services.AddFlitGrpcServer().AddRadicacionGrpc(); // HU #14049: lectura por pull para radicar (token de svc-tramites)
         builder.Services.AddFlitOutbox<PersonaNaturalDb>(builder.Configuration);
 
         // HU #14035: sesión efímera por trámite (el portal no tiene cuentas) y huellas HMAC de la cédula y la IP.
@@ -147,6 +147,7 @@ public static class Program
         // gRPC solo en su puerto: los servicios gRPC del dominio se mapean aquí con .RequireHost(grpcHost).
         var grpcHost = $"*:{grpcPort}";
         app.MapFlitGrpcPlatform(app.Environment, grpcHost);
+        app.MapRadicacionGrpc(grpcHost);
         return app;
     }
 
