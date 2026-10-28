@@ -122,8 +122,13 @@ PersonaNatural__Portal__DeadlineSegundos=15                       # opcional
   `.dlq`); en el BFF `personanatural.resolucion` y `personanatural.estado`. Los mensajes agotados quedan en la `.dlq` de la
   cola, visibles en la pantalla de mensajes muertos.
 - El usuario del broker del BFF necesita escritura en `flit.tramites` (`usuario-de-servicio.sh personanatural <clave> tramites`).
-- Si FLIT 2 todavía debe generar el FUR o la firma de la compraventa, el trámite queda creado en `borrador` (la solicitud
-  pasa a `creada` con ese estado); un rechazo de negocio deja el borrador `anulado` con el código en su motivo.
+- El trámite queda SIEMPRE en `borrador` en FLIT 2 (decisión del PO: el pago está en otra épica): core-api crea el borrador con
+  partes, campos, adjuntos y validaciones del portal y se detiene, sin preflight ni radicación. La solicitud pasa a `creada`
+  con `procedure_status=borrador`, su referencia y el `procedure_instance_id`; un rechazo de negocio (tipo u organismo no
+  habilitado, parte no soportada, error de un caso de uso) deja el borrador `anulado` con el código en su motivo.
+- Consulta de persona con nombres (BFF, HU #14060): `POST /solicitudes/{id}/consultas/persona-detalle` solo con la sesión de la
+  solicitud editable. Tope por solicitud `Consultas__MaxDetallePorSolicitud` (6 por defecto); comparte los topes por documento
+  y globales (`Abuso__*`) con las consultas públicas. Sin configuración nueva obligatoria.
 
 ## 4. Secretos de datos personales y captcha
 

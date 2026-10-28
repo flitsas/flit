@@ -155,17 +155,20 @@ public sealed class PersonaNaturalRadicacionPostgresTests(WebApplicationFactory<
         tramite.ExternalRef.Should().Be(e.SolicitudId.ToString());
         tramite.TenantId.Should().Be(PlatformTenants.PersonaNatural);
         tramite.TransitOfficeId.Should().Be(e.Organismo);
+        tramite.Status.Should().Be("borrador", "decisión del PO: el trámite del portal queda siempre en borrador (el pago es de otra épica)");
+        primera.NumeroRadicado.Should().Be(tramite.ReferenceNumber);
+        (await e.TramitesAsync(ct)).Should().OnlyContain(t => t.SubmittedAt == null, "no se llama a la radicación");
         (await e.ActoresAsync(tramite.Id, ct)).Should().Be(2);
         (await e.ValidacionesLigadasAsync(ct)).Should().Be(2, "cada validación de ESTA solicitud queda referenciada por el trámite");
 
-        // Reintento (otro eventId): no crea un segundo trámite. Si el primero quedó en borrador (lo completa FLIT 2) se retoma el mismo.
+        // Reintento (otro eventId): no crea un segundo trámite; el borrador ya creado se retoma.
         var segunda = await e.ProcesarAsync(portal, e.Evento(), ct);
 
         segunda.Creada.Should().BeTrue();
         segunda.ProcedureInstanceId.Should().Be(primera.ProcedureInstanceId);
         (await e.TramitesAsync(ct)).Should().HaveCount(1);
         segunda.Estado.Should().Be(primera.Estado);
-        primera.Estado.Should().Be("borrador", "el FUR y la firma de la compraventa los genera FLIT 2: su ausencia no rechaza, deja el trámite en borrador para completarlo");
+        primera.Estado.Should().Be("borrador", "el resultado «creada» lleva el estado real del trámite: borrador");
     }
 
     [Fact]

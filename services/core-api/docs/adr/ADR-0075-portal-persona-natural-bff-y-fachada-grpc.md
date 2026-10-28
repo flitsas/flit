@@ -132,7 +132,9 @@ Lo que ya existe y condiciona la decisión:
     contra la versión vigente y, si cambió de forma incompatible, devuelve `definicion_obsoleta` (el ciudadano
     reinicia con la definición nueva). El consumidor crea el trámite para el `tipo_tramite_codigo` de la solicitud con
     los mismos handlers (`CreateProcedureInstanceHandler`, `PatchFieldValuesHandler`, `PutActorsHandler`,
-    `PutCommercialHandler`, `RegistrarPrendaHandler`, `RunPreflightHandler`), sin rama por tipo en el portal.
+    `PutCommercialHandler`, `RegistrarPrendaHandler`), sin rama por tipo en el portal. Decisión del PO: el trámite queda
+    SIEMPRE en `borrador` en FLIT 2 (sin preflight, radicación ni transiciones posteriores); el pago y el resto del ciclo
+    son de otra épica.
 
 ## Alternativas consideradas
 

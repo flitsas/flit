@@ -56,9 +56,14 @@ internal sealed class PersonaNaturalRadicacionHandler(IServiceScopeFactory scope
 /// <summary>
 /// HU #14050 (Feature #14024, Épica #14021, ADR-0075 decisión 14) — crea el trámite de una solicitud radicada en el portal de
 /// persona natural. Adaptador sobre los casos de uso de FLIT 2 (los mismos que usa la integración con ICT): crear el borrador,
-/// sembrar campos y organismo, actores, comercial, prenda, adjuntos por referencia, preflight y radicar. NO reimplementa
-/// ninguna regla: cualquier error de un caso de uso es un rechazo de negocio (sin datos técnicos) y una excepción es un fallo
-/// técnico que el consumidor reintenta.
+/// sembrar campos y organismo, actores, comercial, prenda y adjuntos por referencia. NO reimplementa ninguna regla: cualquier
+/// error de un caso de uso es un rechazo de negocio (sin datos técnicos) y una excepción es un fallo técnico que el consumidor
+/// reintenta.
+/// <para>
+/// Decisión del PO: el trámite queda SIEMPRE en <c>borrador</c>. Aquí no hay preflight, radicación ni transiciones (el pago y el
+/// resto del ciclo son de otra épica); solo la anulación de un borrador rechazado. El resultado «creada» lleva el estado real
+/// del trámite (<c>borrador</c>).
+/// </para>
 /// <para>
 /// Un rechazo posterior a la creación del borrador lo deja <c>anulado</c> con el código del rechazo en su historial (así no
 /// quedan borradores huérfanos y un reintento del mismo evento devuelve el mismo rechazo). Un reintento tras una falla
@@ -82,8 +87,6 @@ internal sealed class PersonaNaturalCreador(
     PutCommercialHandler comercial,
     RegistrarPrendaHandler prenda,
     RegisterIntegrationAttachmentHandler adjuntos,
-    RunPreflightHandler preflight,
-    SubmitProcedureInstanceHandler radicar,
     TransitionProcedureInstanceHandler transicion,
     ILogger<PersonaNaturalCreador> logger)
 {
@@ -94,15 +97,6 @@ internal sealed class PersonaNaturalCreador(
 
     /// <summary>Roles de parte que el portal entrega y que FLIT 2 sabe guardar (<c>ParteRol</c>).</summary>
     private static readonly HashSet<string> RolesSoportados = new(StringComparer.Ordinal) { "comprador", "vendedor", "locatario" };
-
-    /// <summary>
-    /// Requisitos que FLIT 2 resuelve con su propio ciclo (FUR, firma de la compraventa, impronta): no los puede aportar el
-    /// ciudadano, así que su ausencia NO rechaza la solicitud; el trámite queda creado en borrador para completarlo.
-    /// </summary>
-    private static readonly HashSet<string> RequisitosInternos = new(StringComparer.Ordinal)
-    {
-        SubmitGate.FurRequerido, SubmitGate.FirmaCompraventaRequerida, SubmitGate.ImprontaRequerida,
-    };
 
     public async Task<ResultadoRadicacionPortal> ProcesarAsync(RadicacionSolicitadaDatos evento, CancellationToken ct)
     {
@@ -172,7 +166,7 @@ internal sealed class PersonaNaturalCreador(
         return resultado;
     }
 
-    /// <summary>Pasos posteriores a crear el borrador. Todos idempotentes (upsert, dedup por sha256, reglas de FLIT 2).</summary>
+    /// <summary>Pasos posteriores a crear el borrador, hasta dejarlo completo. Todos idempotentes (upsert, dedup por sha256, reglas de FLIT 2).</summary>
     private async Task<ResultadoRadicacionPortal> CompletarAsync(Guid id, SolicitudPortal s, ResolvedTransitOffice oficina, Guid creador, CancellationToken ct)
     {
         var empresa = PlatformTenants.PersonaNatural;
@@ -249,34 +243,12 @@ internal sealed class PersonaNaturalCreador(
                 return Rechazo("adjunto_invalido");
         }
 
-        // 6. Preflight (RUNT, comparendos, duplicidad…) con las mismas reglas del wizard.
-        if (s.Vin is not null || s.Placa is not null)
-        {
-            db.ChangeTracker.Clear();
-            var (snapshot, errorPreflight, _, _) = await preflight.HandleAsync(id, empresa, null, null, ct).ConfigureAwait(false);
-            if (errorPreflight is not null)
-                return Rechazo(errorPreflight);
-            if (snapshot is not null && string.Equals(snapshot.Overall, "red", StringComparison.Ordinal))
-            {
-                // Un proveedor caído llega como chequeo «error»: es transitorio y se reintenta; solo un «fail» es un requisito que falta.
-                if (!snapshot.Checks.Any(c => string.Equals(c.Status, "fail", StringComparison.Ordinal)))
-                    throw new InvalidOperationException("El preflight del trámite del portal no pudo completarse (proveedor sin respuesta); se reintenta.");
-                return Rechazo(MotivosDeRechazo.RequisitoFaltante);
-            }
-        }
-
-        // 7. Radicación: desde borrador pasa por los gates de identidad y documentos y entra a la cola del organismo.
-        db.ChangeTracker.Clear();
-        var (radicado, errorRadicar) = await radicar.HandleAsync(id, empresa, creador, ct).ConfigureAwait(false);
-        if (errorRadicar is not null && !RequisitosInternos.Contains(errorRadicar))
-            return Rechazo(errorRadicar);
-
+        // Decisión del PO: aquí el trámite SIEMPRE se queda en borrador. Ni preflight ni radicación ni transiciones: el pago y el
+        // resto del ciclo son de otra épica y los continúa FLIT 2 desde el borrador.
         db.ChangeTracker.Clear();
         var fila = await db.Set<ProcedureInstance>().AsNoTracking().Where(x => x.Id == id)
             .Select(x => new { x.ReferenceNumber, x.Status }).FirstAsync(ct).ConfigureAwait(false);
-        if (errorRadicar is not null)
-            RadicacionLog.QuedaEnBorrador(logger, s.SolicitudId, id, errorRadicar);
-        return ResultadoRadicacionPortal.Nueva(id, fila.ReferenceNumber, radicado?.Status ?? fila.Status);
+        return ResultadoRadicacionPortal.Nueva(id, fila.ReferenceNumber, fila.Status);
     }
 
     /// <summary>
@@ -389,7 +361,6 @@ internal static class MotivosDeRechazo
     public const string OrganismoNoHabilitado = "organismo_no_habilitado";
     public const string ParteNoSoportada = "parte_no_soportada";
     public const string IdentidadNoValidada = "identidad_no_validada";
-    public const string RequisitoFaltante = "requisito_faltante";
     public const string Generico = "no_fue_posible_crear";
 
     private static readonly Dictionary<string, string> Motivos = new(StringComparer.Ordinal)
@@ -405,7 +376,6 @@ internal static class MotivosDeRechazo
         [SubmitGate.IdentidadNoAprobada] = "Falta validar la identidad de alguna de las partes del trámite.",
         [SubmitGate.DocumentosIncompletos] = "Faltan documentos obligatorios del trámite.",
         ["adjunto_invalido"] = "Alguno de los documentos adjuntos no se pudo registrar. Cárguelo de nuevo.",
-        [RequisitoFaltante] = "El vehículo o las partes no cumplen alguno de los requisitos del trámite.",
         [InitialProcedureValidationGate.DuplicateActiveProcedure] = "Ya existe un trámite en proceso para este vehículo.",
         [VehicleStatePolicy.ErrorCode] = "El vehículo ya se encuentra matriculado: no es válido para este tipo de trámite.",
         [VehicleBodyTypePolicy.ErrorCode] = "El vehículo no tiene carrocería registrada: no es posible radicar este trámite.",
@@ -432,9 +402,6 @@ internal static partial class RadicacionLog
 {
     [LoggerMessage(EventId = 14050, Level = LogLevel.Information, Message = "Portal Persona Natural: la solicitud {SolicitudId} no se puede leer para radicar ({Razon}); no hay nada que crear.")]
     public static partial void SolicitudNoLeible(ILogger logger, Guid solicitudId, string razon);
-
-    [LoggerMessage(EventId = 14051, Level = LogLevel.Warning, Message = "Portal Persona Natural: la solicitud {SolicitudId} creó el trámite {ProcedureInstanceId} pero queda en borrador ({Requisito}): lo completa FLIT 2.")]
-    public static partial void QuedaEnBorrador(ILogger logger, Guid solicitudId, Guid procedureInstanceId, string requisito);
 
     [LoggerMessage(EventId = 14052, Level = LogLevel.Information, Message = "Portal Persona Natural: la solicitud {SolicitudId} resuelta como {Resultado} ({Codigo}).")]
     public static partial void Resuelta(ILogger logger, Guid solicitudId, string resultado, string? codigo);
