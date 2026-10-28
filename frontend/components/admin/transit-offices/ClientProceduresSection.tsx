@@ -584,6 +584,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   // Sección con la que abre el modal de detalle: la bandeja tiene dos entradas al mismo trámite
   // («ver detalle» y «ver documentos») y las dos llevan al mismo modal.
   const [detailSection, setDetailSection] = useState<OtDetalleSeccionId>("vehiculo");
+  /** HU #14157 — panel de tracking al abrir el detalle (p. ej. clic en Estado → timeline). */
+  const [detailInitialPanel, setDetailInitialPanel] = useState<"timeline" | null>(null);
   // Panel lateral derecho — detalle del trámite
   const [detailProcedure, setDetailProcedure] = useState<OtClientProcedure | null>(null);
   // Previsualización inline del consolidado (sin forzar descarga).
@@ -1838,10 +1840,12 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           consolidadoActingId={consolidadoActingId}
           onVerDocumentos={(row) => {
             setDetailSection("documentos");
+            setDetailInitialPanel(null);
             setDetailProcedure(row);
           }}
-          onVerDetalle={(row) => {
+          onVerDetalle={(row, options) => {
             setDetailSection("vehiculo");
+            setDetailInitialPanel(options?.panel === "timeline" ? "timeline" : null);
             setDetailProcedure(row);
           }}
           seleccionable={puedeLote}
@@ -2400,10 +2404,14 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       <ClientProcedureDetailModal
         open={!!detailProcedure}
         procedure={detailProcedure}
-        onClose={() => setDetailProcedure(null)}
+        onClose={() => {
+          setDetailProcedure(null);
+          setDetailInitialPanel(null);
+        }}
         scope={scope}
         readOnly={isReadOnly}
         initialSection={detailSection}
+        initialPanel={detailInitialPanel}
         // HU #12062 — LOS MISMOS manejadores que recibe la tabla: decidir desde el detalle abre el
         // mismo diálogo que decidir desde la fila, sin una segunda vía de aprobación.
         onApprove={(row) => {

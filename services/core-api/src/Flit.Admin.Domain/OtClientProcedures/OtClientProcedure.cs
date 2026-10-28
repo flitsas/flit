@@ -69,6 +69,12 @@ public sealed record OtClientProcedure
     /// <summary>Detalle (GET by id): actores del trámite. Vacío en listados.</summary>
     public IReadOnlyList<OtClientProcedureActor> Actors { get; init; } = [];
 
+    /// <summary>
+    /// HU #14156 — historial de transiciones de estado (línea de tiempo OT). Solo en GET by id;
+    /// vacío en listados y en respuestas de acciones que no recargan el detalle completo.
+    /// </summary>
+    public IReadOnlyList<OtClientProcedureStatusHistory> StatusHistory { get; init; } = [];
+
     /// <summary>Placa denormalizada (también en listado de bandeja).</summary>
     public string? Placa { get; init; }
 
@@ -243,4 +249,22 @@ public sealed class OtClientProcedureActor
     public string? Email { get; init; }
     public string? Phone { get; init; }
     public string? PersonType { get; init; }
+}
+
+/// <summary>
+/// HU #14156 — una transición de <c>procedure_instance_status_history</c> proyectada al detalle OT,
+/// alineada al contrato del Gestor (<c>ProcedureInstanceStatusHistoryDto</c> / bug #12526): sin inventar
+/// actor cuando la transición fue automática o el usuario ya no existe.
+/// </summary>
+public sealed class OtClientProcedureStatusHistory
+{
+    public string? FromStatus { get; init; }
+    public string ToStatus { get; init; } = string.Empty;
+    public DateTimeOffset ChangedAt { get; init; }
+    public string? Reason { get; init; }
+    /// <summary>Observación de subsanación recortada (motivo + items); null si no aplica.</summary>
+    public string? Metadata { get; init; }
+    public string? ChangedByName { get; init; }
+    public string? ChangedByEmail { get; init; }
+    public string? ChangedByCompania { get; init; }
 }
