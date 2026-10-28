@@ -304,6 +304,9 @@ public static class AdminInfrastructureExtensions
         // HU #14072 — configuración del portal (lista blanca de tipos, parámetros y organismos).
         services.AddScoped<Flit.Admin.Domain.Plataforma.PersonaNatural.IPersonaNaturalConfigRepository,
             Flit.Infrastructure.PersonaNatural.PersonaNaturalConfigRepository>();
+        // HU #14073 — contenido administrable del portal (preguntas, banners, enlaces y versiones publicadas).
+        services.AddScoped<Flit.Admin.Domain.Plataforma.PersonaNatural.IPersonaNaturalContenidoRepository,
+            Flit.Infrastructure.PersonaNatural.PersonaNaturalContenidoRepository>();
 
         // HU #13084 (Épica #12737) — clientes de integración externos (integrations.external_clients).
         // Entidad de plataforma sin tenant: la administra el SuperAdmin y el login la busca por client_id.

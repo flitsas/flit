@@ -93,6 +93,9 @@ public static class InfrastructureExtensions
         services.AddScoped<PersonaNatural.PersonaNaturalTiposReader>();
         services.AddScoped(sp => new PersonaNatural.PersonaNaturalPortalReader(
             sp.GetRequiredService<Persistence.FlitDbContext>(), sp.GetService<TimeProvider>()));
+        // HU #14073 — contenido publicado y parámetros públicos del portal (solo lectura).
+        services.AddScoped(sp => new PersonaNatural.PersonaNaturalConfiguracionPublicaReader(
+            sp.GetRequiredService<Persistence.FlitDbContext>(), sp.GetService<TimeProvider>()));
         // FEATURE-08 / HU-BE-06 (CFD-09) — feature flag F08_DynamicProcedures (por tenant, ot_feature_flags).
         services.AddScoped<Flit.Tramites.Application.UseCases.ProcedureInstances.IDynamicProceduresPolicy,
             OtRules.DynamicProceduresPolicy>();

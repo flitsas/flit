@@ -44,6 +44,9 @@ service PersonaNaturalService {
   // Contenido publicado y parámetros públicos del portal (preguntas frecuentes, banners, enlaces). [HU J3]
   rpc ObtenerConfiguracionPortal(ObtenerConfiguracionPortalRequest) returns (ObtenerConfiguracionPortalResponse);
 
+  // Imagen de un banner PUBLICADO y vigente (bytes y ETag = sha256) para que el BFF la sirva con caché corta. [HU J3]
+  rpc ObtenerImagenBannerPortal(ObtenerImagenBannerPortalRequest) returns (ObtenerImagenBannerPortalResponse);
+
   // Estado actual del trámite creado a partir de la solicitud (conciliación y subsanación). [HU A3]
   rpc ObtenerEstadoTramite(ObtenerEstadoTramiteRequest) returns (ObtenerEstadoTramiteResponse);
 }
@@ -214,9 +217,63 @@ message LineaCobro {
 }
 
 message ObtenerConfiguracionPortalRequest {}
+// Contenido PUBLICADO y vigente del portal más los parámetros públicos (HU J3). Solo texto plano. NO lleva datos bancarios ni
+// parámetros de protección (topes, captcha, sesión): esos no salen de core-api hacia el ciudadano. Sin contenido publicado
+// responde version = "0" y listas vacías (el portal conserva su contenido actual); los enlaces vienen siempre (url vacía =
+// sin documento oficial, y el portal conserva su aviso en lugar de inventar texto legal).
 message ObtenerConfiguracionPortalResponse {
-  // El detalle (preguntas, banners, enlaces, parámetros) lo define la HU J3; hoy solo se reserva el contrato.
-  string version = 1;
+  string version = 1;                                  // versión publicada del contenido ("0" = nada publicado)
+  google.protobuf.Timestamp publicado_en = 2;          // ausente si nada publicado
+  repeated PreguntaFrecuentePortal preguntas = 3;      // activas y en el orden configurado
+  repeated BannerPortal banners = 4;                   // vigentes ahora y en el orden configurado
+  repeated EnlacePortal enlaces = 5;                   // POLITICA_DATOS, TERMINOS, CONTACTO_VENTAS, VIDEO
+  ContactoSoportePortal soporte = 6;
+  ParametrosPublicosPortal parametros = 7;
+}
+
+message PreguntaFrecuentePortal {
+  string id = 1;
+  string pregunta = 2;       // texto simple
+  string respuesta = 3;      // texto simple
+  int32 orden = 4;
+}
+
+message BannerPortal {
+  string id = 1;
+  string titulo = 2;
+  string texto_alternativo = 3;
+  string enlace_url = 4;     // vacío = el banner no enlaza
+  int32 orden = 5;
+  string imagen_sha256 = 6;  // versión de la imagen (ETag)
+  string imagen_content_type = 7;
+}
+
+message EnlacePortal {
+  string codigo = 1;         // POLITICA_DATOS | TERMINOS | CONTACTO_VENTAS | VIDEO
+  string url = 2;            // vacío = sin documento oficial / sin valor
+  bool con_documento = 3;
+}
+
+message ContactoSoportePortal {
+  string correo = 1;
+  string telefono = 2;
+  string horario = 3;
+}
+
+message ParametrosPublicosPortal {
+  int32 borrador_vigencia_dias = 1;   // 0 = predeterminado del BFF
+}
+
+message ObtenerImagenBannerPortalRequest {
+  string banner_id = 1;
+  string if_none_match = 2;  // sha256 que el cliente ya tiene
+}
+message ObtenerImagenBannerPortalResponse {
+  bool encontrado = 1;
+  bool no_modificado = 2;    // if_none_match coincide: sin bytes
+  string sha256 = 3;
+  string content_type = 4;
+  bytes contenido = 5;
 }
 
 message ObtenerEstadoTramiteRequest { string solicitud_id = 1; }   // external_ref del trámite

@@ -29,7 +29,8 @@ namespace Flit.Api.Grpc;
 /// </summary>
 public sealed class PersonaNaturalGrpcService(
     FlitDbContext db, RunPreflightPreviewHandler preview, PersonaNaturalTiposReader tiposReader, PersonaNaturalPortalReader portal,
-    GetProcedureStepsHandler pasosHandler, IResolvedDocumentMatrixResolver matriz)
+    GetProcedureStepsHandler pasosHandler, IResolvedDocumentMatrixResolver matriz,
+    PersonaNaturalConfiguracionPublicaReader configuracionPublica, Flit.Admin.Application.Banners.Ports.IBannerImageStorage imagenesBanner)
     : PersonaNaturalService.PersonaNaturalServiceBase
 {
     /// <summary>Razón estable de un método que todavía no tiene implementación.</summary>
@@ -135,7 +136,8 @@ public sealed class PersonaNaturalGrpcService(
 
     /// <summary>
     /// Tipos del portal con su elegibilidad (<see cref="ElegibilidadPersonaNatural"/>, del perfil del tipo). Sin organismo,
-    /// todos con su motivo («Próximamente»). Con organismo, solo los que se ofrecen ahí: elegibles y con tarifa vigente.
+    /// todos con su motivo («Próximamente»). Con organismo, solo los que se ofrecen ahí: elegibles, habilitados por el
+    /// superadministrador (lista blanca, HU #14072) y con tarifa vigente.
     /// </summary>
     public override async Task<ListarTiposDisponiblesResponse> ListarTiposDisponibles(ListarTiposDisponiblesRequest request, ServerCallContext context)
     {
@@ -289,8 +291,70 @@ public sealed class PersonaNaturalGrpcService(
     private static PersonaNaturalIdentidadService Identidad(ServerCallContext context) =>
         ActivatorUtilities.CreateInstance<PersonaNaturalIdentidadService>(context.GetHttpContext().RequestServices);
 
-    public override Task<ObtenerConfiguracionPortalResponse> ObtenerConfiguracionPortal(ObtenerConfiguracionPortalRequest request, ServerCallContext context) =>
-        Pendiente<ObtenerConfiguracionPortalResponse>(context, "HU J3");
+    /// <summary>
+    /// HU #14073 — contenido PUBLICADO y vigente del portal y parámetros públicos. Solo lee la última versión publicada
+    /// (nunca el borrador) y el contacto de soporte; NO devuelve datos bancarios ni parámetros de protección. Sin contenido
+    /// publicado responde versión «0» y listas vacías: el portal conserva su contenido actual. Los textos son texto plano.
+    /// </summary>
+    public override async Task<ObtenerConfiguracionPortalResponse> ObtenerConfiguracionPortal(ObtenerConfiguracionPortalRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Verificar(context);
+        var c = await configuracionPublica.LeerAsync(context.CancellationToken).ConfigureAwait(false);
+        var respuesta = new ObtenerConfiguracionPortalResponse
+        {
+            Version = c.Version.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            Soporte = new ContactoSoportePortal { Correo = c.SoporteCorreo ?? string.Empty, Telefono = c.SoporteTelefono ?? string.Empty, Horario = c.SoporteHorario ?? string.Empty },
+            Parametros = new ParametrosPublicosPortal { BorradorVigenciaDias = c.BorradorVigenciaDias ?? 0 },
+        };
+        if (c.PublicadoEn is { } publicado)
+            respuesta.PublicadoEn = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTimeOffset(publicado);
+        respuesta.Preguntas.AddRange(c.Preguntas.Select(p => new PreguntaFrecuentePortal { Id = p.Id.ToString(), Pregunta = p.Pregunta, Respuesta = p.Respuesta, Orden = p.Orden }));
+        respuesta.Banners.AddRange(c.Banners.Select(b => new BannerPortal
+        {
+            Id = b.Id.ToString(),
+            Titulo = b.Titulo,
+            TextoAlternativo = b.TextoAlternativo,
+            EnlaceUrl = b.EnlaceUrl ?? string.Empty,
+            Orden = b.Orden,
+            ImagenSha256 = b.ImagenSha256,
+            ImagenContentType = b.ImagenContentType,
+        }));
+        respuesta.Enlaces.AddRange(c.Enlaces.Select(e => new EnlacePortal { Codigo = e.Codigo, Url = e.Url ?? string.Empty, ConDocumento = !string.IsNullOrEmpty(e.Url) }));
+        return respuesta;
+    }
+
+    /// <summary>
+    /// HU #14073 — bytes de la imagen de un banner publicado y vigente, con su sha256 como ETag: si el cliente ya lo tiene
+    /// responde <c>no_modificado</c> sin abrir el archivo. Un banner que no está publicado, venció o perdió su archivo responde
+    /// <c>encontrado = false</c> (sin distinguir el motivo).
+    /// </summary>
+    public override async Task<ObtenerImagenBannerPortalResponse> ObtenerImagenBannerPortal(ObtenerImagenBannerPortalRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Verificar(context);
+        if (!Guid.TryParse(Texto(request.BannerId), out var id))
+            throw Invalido("banner_id es obligatorio y debe ser un identificador válido.");
+        var ct = context.CancellationToken;
+        if (await configuracionPublica.BannerVigenteAsync(id, ct).ConfigureAwait(false) is not { } banner)
+            return new ObtenerImagenBannerPortalResponse { Encontrado = false };
+        if (string.Equals(Texto(request.IfNoneMatch), banner.ImagenSha256, StringComparison.OrdinalIgnoreCase))
+            return new ObtenerImagenBannerPortalResponse { Encontrado = true, NoModificado = true, Sha256 = banner.ImagenSha256, ContentType = banner.ImagenContentType };
+
+        var stream = await imagenesBanner.OpenReadAsync(banner.ImagenPath, ct).ConfigureAwait(false);
+        if (stream is null)
+            return new ObtenerImagenBannerPortalResponse { Encontrado = false };
+        await using (stream.ConfigureAwait(false))
+        {
+            return new ObtenerImagenBannerPortalResponse
+            {
+                Encontrado = true,
+                Sha256 = banner.ImagenSha256,
+                ContentType = banner.ImagenContentType,
+                Contenido = await Google.Protobuf.ByteString.FromStreamAsync(stream, ct).ConfigureAwait(false),
+            };
+        }
+    }
 
     // ── Soporte ─────────────────────────────────────────────────────────────────────────────────────────────────────
 

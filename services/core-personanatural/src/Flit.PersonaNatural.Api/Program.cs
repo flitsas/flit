@@ -1,4 +1,5 @@
 using Flit.Api.Telemetry;
+using Flit.PersonaNatural.Api.Configuracion;
 using Flit.PersonaNatural.Api.Cotizaciones;
 using Flit.PersonaNatural.Api.Abuso;
 using Flit.PersonaNatural.Api.Adjuntos;
@@ -96,6 +97,7 @@ public static class Program
 
         // HU #14078: definición del tipo de trámite (estructura del wizard) desde la fachada de core-api.
         builder.Services.AddDefinicionesPortal();
+        builder.Services.AddConfiguracionPortal(); // HU #14073: contenido público del portal (preguntas, banners, enlaces y contacto)
 
         // HU #14047: borrador del trámite (sesión por solicitud, actores, campos, comercial, requisitos y cancelación).
         builder.Services.AddSolicitudesPortal();
@@ -137,6 +139,7 @@ public static class Program
         app.MapCotizacionesEndpoints();
         app.MapIdentidadEndpoints();
         app.MapDefinicionesEndpoints();
+        app.MapConfiguracionEndpoints();
         app.MapSolicitudesEndpoints();
         app.MapAdjuntosEndpoints();
         app.MapRadicacionEndpoints();

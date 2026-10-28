@@ -143,16 +143,17 @@ public sealed class PersonaNaturalGrpcTests(WebApplicationFactory<Program> facto
     }
 
     [Fact]
-    public async Task LosMetodosPendientes_RespondenNoImplementado_PeroSoloTrasElCandado()
+    public async Task ObtenerConfiguracionPortal_YaNoEstaPendiente_PeroElCandadoVaPrimero()
     {
         var ct = TestContext.Current.CancellationToken;
         using var host = Host(habilitada: true);
         var bueno = await ClienteAsync(host, Portal, PlatformTenants.PersonaNatural, ct);
         var ajeno = await ClienteAsync(host, Portal, Guid.NewGuid(), ct);
 
-        var pendiente = (await ((Func<Task>)(() => bueno.ObtenerConfiguracionPortalAsync(new ObtenerConfiguracionPortalRequest(), cancellationToken: ct).ResponseAsync)).Should().ThrowAsync<RpcException>()).Which;
-        pendiente.StatusCode.Should().Be(StatusCode.Unimplemented);
-        PlatformRpcErrors.Reason(pendiente).Should().Be(PersonaNaturalGrpcService.NoImplementado);
+        // HU #14073: ya se implementa (ya no responde NO_IMPLEMENTADO); sin contenido publicado la versión es «0».
+        var respuesta = await bueno.ObtenerConfiguracionPortalAsync(new ObtenerConfiguracionPortalRequest(), cancellationToken: ct);
+        respuesta.Version.Should().NotBeNullOrWhiteSpace();
+        respuesta.Enlaces.Should().HaveCount(4, "los cuatro enlaces vienen siempre");
 
         var conOtraEmpresa = (await ((Func<Task>)(() => ajeno.ObtenerConfiguracionPortalAsync(new ObtenerConfiguracionPortalRequest(), cancellationToken: ct).ResponseAsync)).Should().ThrowAsync<RpcException>()).Which;
         PlatformRpcErrors.Reason(conOtraEmpresa).Should().Be("invalid_tenant", "el candado va antes: un llamante ajeno no distingue qué existe");

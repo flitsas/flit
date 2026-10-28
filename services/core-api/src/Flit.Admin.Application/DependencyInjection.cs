@@ -493,6 +493,8 @@ public static class DependencyInjection
         services.AddScoped<Plataforma.PersonaNatural.ParametrosPnHandler>();
         services.AddScoped<Plataforma.PersonaNatural.OrganismosPnHandler>();
         services.AddScoped<Plataforma.PersonaNatural.TiposPnHandler>();
+        // HU #14073 — contenido del portal: preguntas, banners, enlaces y publicación.
+        services.AddScoped<Plataforma.PersonaNatural.ContenidoPnHandler>();
 
         // Feature #13508 (HU #13509 / #13512) — configuración multi-proveedor IA (SuperAdmin Plataforma).
         services.AddScoped<Plataforma.Ai.ListAiToolsHandler>();

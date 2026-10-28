@@ -13655,6 +13655,375 @@ paths:
         "403": { description: No es Super Admin. }
         "404": { description: tipo_no_existe (al deshabilitar un tipo inexistente). }
         "422": { description: tipo_no_elegible — solo se habilitan tipos elegibles con el asistente encendido. }
+  /api/v1/admin/plataforma/persona-natural/contenido/preguntas:
+    get:
+      operationId: adminPnFaqList
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Preguntas frecuentes del borrador — HU #14073, Épica #14021
+      description: >
+        Preguntas del contenido de TRABAJO (borrador), en su orden, activas e inactivas. El portal solo ve lo publicado
+        (`POST .../contenido/publicar`). Texto plano: no se acepta HTML. Exclusivo del Super Admin FLIT (rol + permiso
+        `platform.persona_natural.manage`).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Preguntas.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PersonaNaturalPregunta" }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+    post:
+      operationId: adminPnFaqCreate
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Crear una pregunta frecuente — HU #14073, Épica #14021
+      description: La pregunta nueva va al final de la lista. Pregunta hasta 300 caracteres y respuesta hasta 2000; texto simple (sin HTML). Queda auditada.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PersonaNaturalGuardarPreguntaRequest" }
+      responses:
+        "201":
+          description: Pregunta creada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonaNaturalPregunta" }
+        "400": { description: "texto_invalido | html_no_permitido (cuerpo `{ error, message }`)." }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+  /api/v1/admin/plataforma/persona-natural/contenido/preguntas/orden:
+    put:
+      operationId: adminPnFaqReorder
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Ordenar las preguntas — HU #14073, Épica #14021
+      description: La lista debe traer TODAS las preguntas, cada una una sola vez; el orden pasa a ser la posición en la lista.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PersonaNaturalOrdenRequest" }
+      responses:
+        "204": { description: Ordenadas. }
+        "400": { description: orden_invalido. }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+  /api/v1/admin/plataforma/persona-natural/contenido/preguntas/{id}:
+    put:
+      operationId: adminPnFaqUpdate
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Editar una pregunta frecuente — HU #14073, Épica #14021
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PersonaNaturalGuardarPreguntaRequest" }
+      responses:
+        "200":
+          description: Pregunta editada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonaNaturalPregunta" }
+        "400": { description: "texto_invalido | html_no_permitido." }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+        "404": { description: no_encontrado. }
+  /api/v1/admin/plataforma/persona-natural/contenido/preguntas/{id}/activa:
+    patch:
+      operationId: adminPnFaqSetActive
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Activar o desactivar una pregunta — HU #14073, Épica #14021
+      description: "Una pregunta desactivada no se borra: deja de publicarse en la próxima publicación."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                activa: { type: boolean }
+              required: [activa]
+      responses:
+        "200":
+          description: Pregunta con su estado nuevo.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonaNaturalPregunta" }
+        "400": { description: activa_obligatorio. }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+        "404": { description: no_encontrado. }
+  /api/v1/admin/plataforma/persona-natural/contenido/banners:
+    get:
+      operationId: adminPnBannerList
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Banners del borrador — HU #14073, Épica #14021
+      description: Banners del contenido de trabajo, en su orden. La ruta del archivo en el almacenamiento no sale por la API; la imagen se pide en `.../banners/{id}/imagen`.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Banners.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PersonaNaturalBanner" }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+    post:
+      operationId: adminPnBannerCreate
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Crear un banner — HU #14073, Épica #14021
+      description: >
+        Multipart. La imagen es obligatoria: JPG, PNG o WEBP de hasta 2 MB (se valida el tipo declarado, el tamaño y los
+        primeros bytes del archivo) y se guarda en el almacenamiento de banners de FLIT 2. El texto alternativo es obligatorio
+        (una imagen sin él se rechaza). La vigencia (`vigenteDesde` y `vigenteHasta`) es opcional pero van las dos o ninguna.
+        Queda en el borrador hasta que se publique.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: "#/components/schemas/PersonaNaturalGuardarBannerForm" }
+      responses:
+        "201":
+          description: Banner creado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonaNaturalBanner" }
+        "400": { description: "banner_invalido | imagen_obligatoria | imagen_invalida | texto_invalido | html_no_permitido." }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+  /api/v1/admin/plataforma/persona-natural/contenido/banners/orden:
+    put:
+      operationId: adminPnBannerReorder
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Ordenar los banners — HU #14073, Épica #14021
+      description: La lista debe traer TODOS los banners, cada uno una sola vez.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PersonaNaturalOrdenRequest" }
+      responses:
+        "204": { description: Ordenados. }
+        "400": { description: orden_invalido. }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+  /api/v1/admin/plataforma/persona-natural/contenido/banners/{id}:
+    put:
+      operationId: adminPnBannerUpdate
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Editar un banner — HU #14073, Épica #14021
+      description: Multipart como la creación; la imagen es opcional (sin ella se conserva la actual).
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: "#/components/schemas/PersonaNaturalGuardarBannerForm" }
+      responses:
+        "200":
+          description: Banner editado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonaNaturalBanner" }
+        "400": { description: "banner_invalido | imagen_invalida | texto_invalido | html_no_permitido." }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+        "404": { description: no_encontrado. }
+  /api/v1/admin/plataforma/persona-natural/contenido/banners/{id}/activo:
+    patch:
+      operationId: adminPnBannerSetActive
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Activar o desactivar un banner — HU #14073, Épica #14021
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                activo: { type: boolean }
+              required: [activo]
+      responses:
+        "200":
+          description: Banner con su estado nuevo.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonaNaturalBanner" }
+        "400": { description: activo_obligatorio. }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+        "404": { description: no_encontrado. }
+  /api/v1/admin/plataforma/persona-natural/contenido/banners/{id}/imagen:
+    get:
+      operationId: adminPnBannerImage
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Imagen del banner del borrador — HU #14073, Épica #14021
+      description: Bytes de la imagen del banner de trabajo (vista previa del administrador), con ETag = sha256.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Imagen (image/png, image/jpeg o image/webp).
+          content:
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+        "404": { description: no_encontrado. }
+  /api/v1/admin/plataforma/persona-natural/contenido/enlaces:
+    get:
+      operationId: adminPnLinkList
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Enlaces del portal — HU #14073, Épica #14021
+      description: Siempre los cuatro (`POLITICA_DATOS`, `TERMINOS`, `CONTACTO_VENTAS`, `VIDEO`); `url` nula = sin documento oficial / sin valor.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Enlaces.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PersonaNaturalEnlace" }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+  /api/v1/admin/plataforma/persona-natural/contenido/enlaces/{codigo}:
+    put:
+      operationId: adminPnLinkSet
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Guardar un enlace del portal — HU #14073, Épica #14021
+      description: >
+        URL absoluta http/https (el contacto de ventas admite además `mailto:` y `tel:`). Una URL vacía deja el enlace «sin
+        documento oficial»: el portal conserva su aviso actual y NO se inventa texto legal.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: codigo, in: path, required: true, schema: { type: string, enum: [POLITICA_DATOS, TERMINOS, CONTACTO_VENTAS, VIDEO] } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url: { type: string, nullable: true, maxLength: 2048 }
+      responses:
+        "200":
+          description: Enlace guardado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonaNaturalEnlace" }
+        "400": { description: "enlace_invalido | codigo_enlace_invalido." }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+  /api/v1/admin/plataforma/persona-natural/contenido/borrador:
+    get:
+      operationId: adminPnContentDraft
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Vista previa del contenido — HU #14073, Épica #14021
+      description: >
+        El contenido tal como lo vería el portal si se publicara hoy (preguntas y banners ACTIVOS, en su orden, y los cuatro
+        enlaces), `versionPublicada` (nulo si nada se ha publicado) y `hayCambiosSinPublicar`. Las imágenes de la vista previa
+        se piden en `.../banners/{id}/imagen`.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Borrador.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonaNaturalBorrador" }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+  /api/v1/admin/plataforma/persona-natural/contenido/publicar:
+    post:
+      operationId: adminPnContentPublish
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Publicar el contenido — HU #14073, Épica #14021
+      description: >
+        Congela el borrador como una versión nueva e inmutable (número, fecha y usuario); la versión anterior sigue consultable.
+        El portal lee solo lo publicado, y filtra la vigencia de los banners al leer. Sin cambios respecto de lo publicado
+        responde 409 `sin_cambios_por_publicar`.
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Versión publicada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonaNaturalVersionContenido" }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+        "409": { description: sin_cambios_por_publicar. }
+  /api/v1/admin/plataforma/persona-natural/contenido/versiones:
+    get:
+      operationId: adminPnContentVersions
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Versiones publicadas del contenido — HU #14073, Épica #14021
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Versiones, de la más reciente a la más antigua.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PersonaNaturalResumenVersion" }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+  /api/v1/admin/plataforma/persona-natural/contenido/versiones/{version}:
+    get:
+      operationId: adminPnContentVersion
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Una versión publicada del contenido — HU #14073, Épica #14021
+      description: "Solo lectura: una versión publicada es historial y no se edita ni se borra."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: version, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: Versión.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonaNaturalVersionContenido" }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+        "404": { description: no_encontrado. }
 
 components:
   securitySchemes:
@@ -20435,3 +20804,122 @@ components:
       properties:
         habilitado: { type: boolean }
       required: [habilitado]
+
+    PersonaNaturalPregunta:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        pregunta: { type: string, maxLength: 300 }
+        respuesta: { type: string, maxLength: 2000 }
+        orden: { type: integer }
+        activa: { type: boolean }
+        rowVersion: { type: integer, format: int64 }
+        creadaEn: { type: string, format: date-time }
+        actualizadaEn: { type: string, format: date-time, nullable: true }
+      required: [id, pregunta, respuesta, orden, activa]
+    PersonaNaturalGuardarPreguntaRequest:
+      type: object
+      properties:
+        pregunta: { type: string, maxLength: 300, description: Texto simple (sin HTML). }
+        respuesta: { type: string, maxLength: 2000, description: Texto simple (sin HTML). }
+        activa: { type: boolean, nullable: true }
+      required: [pregunta, respuesta]
+    PersonaNaturalOrdenRequest:
+      type: object
+      properties:
+        ids:
+          type: array
+          items: { type: string, format: uuid }
+          description: Todos los ids, en el orden deseado.
+      required: [ids]
+    PersonaNaturalBanner:
+      type: object
+      description: Banner del contenido de trabajo. La ruta del archivo en el almacenamiento no se expone.
+      properties:
+        id: { type: string, format: uuid }
+        titulo: { type: string, maxLength: 200 }
+        textoAlternativo: { type: string, maxLength: 250 }
+        enlaceUrl: { type: string, nullable: true, maxLength: 2048 }
+        orden: { type: integer }
+        vigenteDesde: { type: string, format: date-time, nullable: true }
+        vigenteHasta: { type: string, format: date-time, nullable: true }
+        activo: { type: boolean }
+        imagenSha256: { type: string }
+        imagenContentType: { type: string, enum: [image/png, image/jpeg, image/webp] }
+        imagenBytes: { type: integer, format: int64, maximum: 2097152 }
+        rowVersion: { type: integer, format: int64 }
+        creadoEn: { type: string, format: date-time }
+        actualizadoEn: { type: string, format: date-time, nullable: true }
+      required: [id, titulo, textoAlternativo, orden, activo, imagenSha256, imagenContentType]
+    PersonaNaturalGuardarBannerForm:
+      type: object
+      properties:
+        titulo: { type: string, maxLength: 200 }
+        textoAlternativo: { type: string, maxLength: 250, description: Obligatorio. }
+        enlaceUrl: { type: string, nullable: true, description: URL http/https. }
+        orden: { type: integer, nullable: true }
+        vigenteDesde: { type: string, format: date-time, nullable: true }
+        vigenteHasta: { type: string, format: date-time, nullable: true, description: Van las dos fechas o ninguna; la segunda posterior a la primera. }
+        activo: { type: boolean, nullable: true }
+        file: { type: string, format: binary, description: JPG, PNG o WEBP de hasta 2 MB. Obligatoria al crear; opcional al editar. }
+      required: [titulo, textoAlternativo]
+    PersonaNaturalEnlace:
+      type: object
+      properties:
+        codigo: { type: string, enum: [POLITICA_DATOS, TERMINOS, CONTACTO_VENTAS, VIDEO] }
+        url: { type: string, nullable: true, description: Nula = sin documento oficial / sin valor. }
+        actualizadoEn: { type: string, format: date-time, nullable: true }
+      required: [codigo]
+    PersonaNaturalContenido:
+      type: object
+      properties:
+        preguntas:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              pregunta: { type: string }
+              respuesta: { type: string }
+              orden: { type: integer }
+        banners:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              titulo: { type: string }
+              textoAlternativo: { type: string }
+              enlaceUrl: { type: string, nullable: true }
+              orden: { type: integer }
+              vigenteDesde: { type: string, format: date-time, nullable: true }
+              vigenteHasta: { type: string, format: date-time, nullable: true }
+              imagenSha256: { type: string }
+              imagenContentType: { type: string }
+        enlaces:
+          type: array
+          items: { $ref: "#/components/schemas/PersonaNaturalEnlace" }
+    PersonaNaturalBorrador:
+      type: object
+      properties:
+        contenido: { $ref: "#/components/schemas/PersonaNaturalContenido" }
+        versionPublicada: { type: integer, nullable: true }
+        hayCambiosSinPublicar: { type: boolean }
+      required: [contenido, hayCambiosSinPublicar]
+    PersonaNaturalVersionContenido:
+      type: object
+      properties:
+        version: { type: integer, minimum: 1 }
+        publicadoEn: { type: string, format: date-time }
+        publicadoPor: { type: string, format: uuid, nullable: true }
+        contenido: { $ref: "#/components/schemas/PersonaNaturalContenido" }
+      required: [version, publicadoEn, contenido]
+    PersonaNaturalResumenVersion:
+      type: object
+      properties:
+        version: { type: integer }
+        publicadoEn: { type: string, format: date-time }
+        publicadoPor: { type: string, format: uuid, nullable: true }
+        preguntas: { type: integer }
+        banners: { type: integer }
+      required: [version, publicadoEn, preguntas, banners]
