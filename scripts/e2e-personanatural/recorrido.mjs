@@ -96,10 +96,10 @@ await paso("1b. GET /tipos-tramite ofrece el tipo habilitado con tarifa", async 
   return `disponibles: ${disp.map((t) => t.code).join(", ")} (de ${r.json.length} tipos listados)`;
 });
 
-await paso("1c. GET /configuracion publica el contenido (pregunta de prueba)", async () => {
+await paso("1c. GET /configuracion responde (version 0 = contenido fijo del portal; otra = publicado)", async () => {
   const r = await pn("GET", "/configuracion", { captcha: false });
-  verifica(r.status === 200 && r.json.version !== "0" && r.json.preguntas.length > 0, `HTTP ${r.status} ${resumen(r.json, 200)}`);
-  return `version ${r.json.version}, ${r.json.preguntas.length} pregunta(s): «${r.json.preguntas[0].pregunta.slice(0, 40)}»`;
+  verifica(r.status === 200 && Array.isArray(r.json.preguntas), `HTTP ${r.status} ${resumen(r.json, 200)}`);
+  return `version ${r.json.version}, ${r.json.preguntas.length} pregunta(s) publicadas`;
 });
 
 await paso("2a. POST /cotizaciones: 2 lineas + total", async () => {

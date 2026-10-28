@@ -53,12 +53,15 @@ if (vigentes.some((v) => v.concepto === "DERECHOS_TRANSITO") && vigentes.some((v
   console.log(`tarifas de prueba creadas desde ${hoy}: DERECHOS_TRANSITO=100, SERVICIO_FLIT=50`);
 }
 
-// 4. Contenido: una pregunta frecuente y publicar
-const preguntas = ok(await llamar("GET", `${base}/contenido/preguntas`, undefined, t), "preguntas");
-if (!preguntas.some((p) => p.pregunta.startsWith("[PRUEBA E2E]"))) {
-  ok(await llamar("POST", `${base}/contenido/preguntas`, { pregunta: "[PRUEBA E2E] ¿Cuanto tarda un traspaso?", respuesta: "Texto de prueba del entorno local.", activa: true }, t), "crear pregunta");
+// 4. Contenido (opcional): una pregunta de prueba publicada. Sin ella el portal muestra su contenido fijo (preguntas del diseño).
+// Una versión publicada es inmutable y reemplaza ese contenido, así que solo se siembra con SEMBRAR_CONTENIDO=1.
+if (process.env.SEMBRAR_CONTENIDO === "1") {
+  const preguntas = ok(await llamar("GET", `${base}/contenido/preguntas`, undefined, t), "preguntas");
+  if (!preguntas.some((p) => p.pregunta.startsWith("[PRUEBA E2E]"))) {
+    ok(await llamar("POST", `${base}/contenido/preguntas`, { pregunta: "[PRUEBA E2E] ¿Cuanto tarda un traspaso?", respuesta: "Texto de prueba del entorno local.", activa: true }, t), "crear pregunta");
+  }
+  const pub = await llamar("POST", `${base}/contenido/publicar`, undefined, t);
+  console.log(`publicar contenido: HTTP ${pub.status}${pub.status === 409 ? " (sin cambios por publicar)" : ""}`);
 }
-const pub = await llamar("POST", `${base}/contenido/publicar`, undefined, t);
-console.log(`publicar contenido: HTTP ${pub.status}${pub.status === 409 ? " (sin cambios por publicar)" : ""}`);
 
 console.log(JSON.stringify({ organismoId: org.id, tipoCodigo: tipo.codigo, tipoId: tipo.id }));
