@@ -323,7 +323,7 @@ public sealed class PersonaNaturalIdentidadGrpcTests(WebApplicationFactory<Progr
             b.UseSetting("PersonaNatural:Fachada:Habilitada", "true");
             b.UseSetting($"Suite:Oidc:ServiceClients:{Portal}:Secret", OidcServerTests.ServiceSecret);
             b.UseSetting($"Suite:Oidc:ServiceClients:{Portal}:Scopes:0", Scope);
-        });
+        }).ConEmpresaPersonaNatural();
 
     private static async Task<Cliente> ClienteAsync(WebApplicationFactory<Program> host, CancellationToken ct, Guid? empresa = null)
     {

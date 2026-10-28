@@ -57,10 +57,23 @@ deploy/rabbitmq/usuario-de-servicio.sh personanatural <clave>
 
 En el `.env`: `RABBITMQ_URL_PERSONANATURAL=amqp://personanatural:<clave>@rabbitmq:5672/flit`.
 
-## 3. Cliente de servicio `svc-personanatural` y fachada
+## 3. Empresa «Persona Natural», cliente de servicio `svc-personanatural` y fachada
 
-El cliente está declarado en `appsettings.json` de core-api con el scope `platform.tramites.persona_natural` y el secreto
-vacío. Falta el secreto, el mismo valor en los dos lados:
+**Primero, la empresa.** Todo trámite del portal nace a nombre de la empresa «Persona Natural» (id fijo
+`00000000-0000-0000-0000-0000000f1171`). Por decisión del PO ya **no** la siembra una migración: se crea una vez por
+ambiente, **antes de encender la fachada**, con un usuario que escriba en `identity.tenants`:
+
+```
+psql "$CONNECTION_STRING_CORE_ADMIN" -v ON_ERROR_STOP=1 -f deploy/postgres/crear-empresa-persona-natural.sql
+```
+
+Es idempotente (si la fila ya existe no cambia nada; los ambientes donde la sembró el DDL 152 retirado no necesitan
+correrlo). **Comprobar:** `SELECT id, code, is_active FROM identity.tenants WHERE id = '00000000-0000-0000-0000-0000000f1171'`
+devuelve una fila con `code` `COMP-XXXX` y `is_active = true`. Sin la fila, la fachada responde con error al crear
+cualquier trámite o validación.
+
+**Después, el cliente.** Está declarado en `appsettings.json` de core-api con el scope
+`platform.tramites.persona_natural` y el secreto vacío. Falta el secreto, el mismo valor en los dos lados:
 
 ```
 SVC_PERSONANATURAL_CLIENT_SECRET=<openssl rand -base64 48>
@@ -68,8 +81,7 @@ PERSONA_NATURAL_FACHADA_HABILITADA=true
 ```
 
 El compose lo pasa a core-api (`Suite__Oidc__ServiceClients__svc-personanatural__Secret`) y a core-personanatural
-(`Platform__ServiceClient__ClientSecret`). **Reiniciar core-api.** La empresa «Persona Natural» (id fijo) la siembra el
-DDL 152 al arrancar core-api.
+(`Platform__ServiceClient__ClientSecret`). **Reiniciar core-api.**
 
 ## 3b. Consultas, catálogo y correo (direcciones internas)
 

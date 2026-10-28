@@ -230,7 +230,7 @@ public sealed class PersonaNaturalGrpcTests(WebApplicationFactory<Program> facto
                 b.UseSetting($"Suite:Oidc:ServiceClients:{cliente}:Secret", OidcServerTests.ServiceSecret);
                 b.UseSetting($"Suite:Oidc:ServiceClients:{cliente}:Scopes:0", scope);
             }
-        });
+        }).ConEmpresaPersonaNatural();
 
     private static async Task<Cliente> ClienteAsync(WebApplicationFactory<Program> host, string clientId, Guid? empresa, CancellationToken ct)
     {
@@ -272,8 +272,9 @@ public sealed class PersonaNaturalGrpcTests(WebApplicationFactory<Program> facto
     {
         using var scope = host.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
-        var tipo = db.ProcedureTypes.OrderBy(t => t.Code).First();
-        var organismo = db.TransitOffices.OrderBy(o => o.Code).Select(o => (Guid?)o.Id).FirstOrDefault();
+        var tipo = db.ProcedureTypes.Where(t => !t.Code.StartsWith("PN_")).OrderBy(t => t.Code).First();
+        // Sin los organismos que otras pruebas en paralelo crean y borran (código «PN…»): en una base limpia el catálogo puede venir vacío.
+        var organismo = db.TransitOffices.Where(o => !o.Code.StartsWith("PN")).OrderBy(o => o.Code).Select(o => (Guid?)o.Id).FirstOrDefault();
         var tenant = empresa ?? db.Tenants.Where(t => t.Id != PlatformTenants.PersonaNatural).OrderBy(t => t.Code).Select(t => t.Id).First();
         var instancia = new ProcedureInstance
         {
