@@ -489,6 +489,10 @@ public static class DependencyInjection
         services.AddScoped<Plataforma.PersonaNatural.HistorialTarifaPnHandler>();
         services.AddScoped<Plataforma.PersonaNatural.TarifaVigentePnHandler>();
         services.AddScoped<Plataforma.PersonaNatural.VersionarTarifasPnHandler>();
+        // HU #14072 — configuración del portal: parámetros, organismos y lista blanca de tipos.
+        services.AddScoped<Plataforma.PersonaNatural.ParametrosPnHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.OrganismosPnHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.TiposPnHandler>();
 
         // Feature #13508 (HU #13509 / #13512) — configuración multi-proveedor IA (SuperAdmin Plataforma).
         services.AddScoped<Plataforma.Ai.ListAiToolsHandler>();

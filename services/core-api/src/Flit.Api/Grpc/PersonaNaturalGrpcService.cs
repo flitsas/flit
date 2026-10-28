@@ -151,7 +151,10 @@ public sealed class PersonaNaturalGrpcService(
             organismo = parsed;
         }
 
-        var tipos = await tiposReader.ListarAsync(context.CancellationToken).ConfigureAwait(false);
+        // «Habilitado = elegible + habilitado por el superadministrador (HU #14072) + tarifa vigente».
+        var tipos = PersonaNaturalPortalReader.AplicarListaBlanca(
+            await tiposReader.ListarAsync(context.CancellationToken).ConfigureAwait(false),
+            await portal.TiposHabilitadosAsync(context.CancellationToken).ConfigureAwait(false));
         var respuesta = new ListarTiposDisponiblesResponse();
         if (organismo is { } org)
         {
@@ -191,7 +194,8 @@ public sealed class PersonaNaturalGrpcService(
         var tipos = await tiposReader.ListarAsync(ct, codigo).ConfigureAwait(false);
         if (tipos.Count == 0)
             throw PlatformRpcErrors.ToRpcException("tipo_no_disponible", "El tipo de trámite no está disponible.", StatusCode.NotFound);
-        var tipo = tipos[0];
+        // La lista blanca del superadministrador (HU #14072) manda sobre la elegibilidad calculada.
+        var tipo = PersonaNaturalPortalReader.AplicarListaBlanca(tipos, await portal.TiposHabilitadosAsync(ct).ConfigureAwait(false))[0];
         if (!await portal.OrganismoHabilitadoAsync(organismo, ct).ConfigureAwait(false))
             throw PlatformRpcErrors.ToRpcException("organismo_no_habilitado", "El organismo de tránsito no está habilitado para el portal.", StatusCode.FailedPrecondition);
         if (!tipo.Elegibilidad.Elegible)

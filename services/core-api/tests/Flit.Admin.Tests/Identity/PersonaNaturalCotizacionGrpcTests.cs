@@ -187,6 +187,32 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
         PlatformRpcErrors.Reason(await Error(() => ajeno.ListarOrganismosAsync(new ListarOrganismosRequest(), cancellationToken: ct).ResponseAsync)).Should().Be("invalid_tenant");
     }
 
+    [Fact]
+    public async Task ListaBlanca_UnTipoElegibleSinHabilitarNoSeOfreceNiSeCotiza_AunConTarifa_YAlHabilitarloSi()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        await using var e = await Escenario.CrearAsync(host, ct);
+        await e.TarifaAsync("DERECHOS_TRANSITO", e.TipoSinListaBlanca, null, 10_000, ct);
+        await e.TarifaAsync("SERVICIO_FLIT", e.TipoSinListaBlanca, null, 5_000, ct);
+        var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
+
+        var enOrganismo = await cliente.ListarTiposDisponiblesAsync(new ListarTiposDisponiblesRequest { OrganismoId = e.Organismo.ToString() }, cancellationToken: ct);
+        var todos = await cliente.ListarTiposDisponiblesAsync(new ListarTiposDisponiblesRequest(), cancellationToken: ct);
+        var error = await Error(() => cliente.CotizarAsync(Pedir(e.CodigoSinListaBlanca, e.Organismo), cancellationToken: ct).ResponseAsync);
+
+        enOrganismo.Tipos.Select(t => t.Codigo).Should().NotContain(e.CodigoSinListaBlanca, "es elegible y tiene tarifa, pero el superadministrador no lo habilitó");
+        todos.Tipos.Single(t => t.Codigo == e.CodigoSinListaBlanca).DisponiblePn.Should().BeFalse();
+        todos.Tipos.Single(t => t.Codigo == e.CodigoSinListaBlanca).MotivoNoDisponible.Should().Contain("habilitado");
+        PlatformRpcErrors.Reason(error).Should().Be("tipo_no_habilitado");
+
+        await e.HabilitarAsync(e.TipoSinListaBlanca, ct);
+
+        (await cliente.ListarTiposDisponiblesAsync(new ListarTiposDisponiblesRequest { OrganismoId = e.Organismo.ToString() }, cancellationToken: ct))
+            .Tipos.Select(t => t.Codigo).Should().Contain(e.CodigoSinListaBlanca);
+        (await cliente.CotizarAsync(Pedir(e.CodigoSinListaBlanca, e.Organismo), cancellationToken: ct)).TotalCop.Should().Be(15_000);
+    }
+
     // ── Soporte ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
     private static CotizarRequest Pedir(string codigo, Guid organismo, params string[] adicionales)
@@ -242,10 +268,12 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
         public Guid TipoSinTransformaciones { get; } = Guid.NewGuid();
         public Guid TipoApagado { get; } = Guid.NewGuid();
         public Guid TipoSinTarifa { get; } = Guid.NewGuid();
+        public Guid TipoSinListaBlanca { get; } = Guid.NewGuid();
         public string CodigoElegible => "PN_T_" + _sufijo + "_A";
         public string CodigoSinTransformaciones => "PN_T_" + _sufijo + "_B";
         public string CodigoApagado => "PN_T_" + _sufijo + "_C";
         public string CodigoSinTarifa => "PN_T_" + _sufijo + "_D";
+        public string CodigoSinListaBlanca => "PN_T_" + _sufijo + "_E";
 
         private Escenario(IServiceScope scope)
         {
@@ -274,6 +302,10 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
             await e.TipoAsync(e.TipoSinTransformaciones, e.CodigoSinTransformaciones, "OTROS", wizard: true, ct);
             await e.TipoAsync(e.TipoApagado, e.CodigoApagado, "OTROS", wizard: false, ct);
             await e.TipoAsync(e.TipoSinTarifa, e.CodigoSinTarifa, "OTROS", wizard: true, ct);
+            await e.TipoAsync(e.TipoSinListaBlanca, e.CodigoSinListaBlanca, "OTROS", wizard: true, ct);
+            // HU #14072: «habilitado = elegible + habilitado por el superadministrador + tarifa vigente»; el E queda fuera a propósito.
+            foreach (var habilitado in new[] { e.TipoElegible, e.TipoSinTransformaciones, e.TipoApagado, e.TipoSinTarifa })
+                await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO admin.persona_natural_enabled_types (procedure_type_id) VALUES ({habilitado})", ct);
             return e;
         }
 
@@ -289,6 +321,9 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
                 VALUES ({concepto}, {tipo}, {organismo}, {valor}, {Hoy}::date)
                 """, ct);
 
+        public Task<int> HabilitarAsync(Guid tipo, CancellationToken ct) =>
+            _db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO admin.persona_natural_enabled_types (procedure_type_id) VALUES ({tipo})", ct);
+
         public async ValueTask DisposeAsync()
         {
             try
@@ -296,7 +331,8 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
                 // Las versiones de tarifa son historial inmutable por trigger: solo un superusuario (la base de pruebas) puede retirarlas.
                 await using var tx = await _db.Database.BeginTransactionAsync();
                 await _db.Database.ExecuteSqlRawAsync("SET LOCAL session_replication_role = replica");
-                var ids = new[] { TipoElegible, TipoSinTransformaciones, TipoApagado, TipoSinTarifa };
+                var ids = new[] { TipoElegible, TipoSinTransformaciones, TipoApagado, TipoSinTarifa, TipoSinListaBlanca };
+                await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.persona_natural_enabled_types WHERE procedure_type_id = ANY({ids})");
                 var orgs = new[] { Organismo, OrganismoSinGrant };
                 await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.persona_natural_tariffs WHERE procedure_type_id = ANY({ids}) OR transit_office_id = ANY({orgs})");
                 // Las tarifas sin tipo (adicionales generales) de la prueba: las del escenario son de valor único por concepto y ámbito.

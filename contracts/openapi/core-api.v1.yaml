@@ -13519,6 +13519,142 @@ paths:
         "401": { description: Sin sesión. }
         "403": { description: No es Super Admin. }
         "404": { description: tarifa_no_encontrada. }
+  /api/v1/admin/plataforma/persona-natural/configuracion/parametros:
+    get:
+      operationId: adminPnParametrosGet
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Parámetros generales del portal — HU #14072, Épica #14021
+      description: >
+        Parámetros de uso y protección del portal y contacto de soporte, con la versión (`rowVersion`) para el control de
+        concurrencia. Un valor nulo = rige el predeterminado del BFF. NO incluye datos bancarios (el pago está en otra épica).
+        Exclusivo del Super Admin FLIT (rol + permiso `platform.persona_natural.manage`).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Parámetros vigentes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonaNaturalParametros" }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+    put:
+      operationId: adminPnParametrosPut
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Guardar los parámetros generales del portal — HU #14072, Épica #14021
+      description: >
+        Reemplaza los parámetros (nulo = predeterminado). Cada valor se valida contra su rango: sesión 15 a 1440 minutos,
+        borrador 1 a 90 días, tope por ciudadano 1 a 100 consultas/día, tope global 1 a 100000 consultas/día; el mensaje de un
+        valor fuera de rango indica el rango. `rowVersion` es obligatorio: si otra persona guardó antes, responde 409 con la
+        configuración vigente en `actual` y no se pierde ningún cambio. El cambio queda en la auditoría con actor y valores
+        anterior y nuevo.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PersonaNaturalGuardarParametrosRequest" }
+      responses:
+        "200":
+          description: Parámetros guardados (con la versión nueva).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonaNaturalParametros" }
+        "400": { description: "valor_fuera_de_rango | correo_invalido | telefono_invalido | texto_demasiado_largo (cuerpo `{ error, campo, message }`) o row_version_obligatorio." }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+        "409": { description: "conflicto_de_version — cuerpo `{ error, message, actual }`." }
+  /api/v1/admin/plataforma/persona-natural/organismos:
+    get:
+      operationId: adminPnOrganismosList
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Organismos y su habilitación para el portal — HU #14072, Épica #14021
+      description: >
+        Organismos de tránsito activos con `habilitado` (el grant de la empresa Persona Natural, el mismo que usa
+        `ListarOrganismos` del portal) y `tiposConTarifaVigente` (cuántos tipos ofrecibles tienen derechos de tránsito y
+        servicio FLIT vigentes ahí hoy). Un organismo habilitado con 0 se avisa «Sin tarifa vigente» y el portal no ofrece
+        ningún tipo en él.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: soloHabilitados, in: query, schema: { type: boolean, default: false } }
+      responses:
+        "200":
+          description: Organismos.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PersonaNaturalOrganismo" }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+  /api/v1/admin/plataforma/persona-natural/organismos/{organismoId}:
+    put:
+      operationId: adminPnOrganismoSet
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Habilitar o deshabilitar un organismo para el portal — HU #14072, Épica #14021
+      description: Crea o actualiza el grant del organismo para la empresa Persona Natural (origen SYSTEM). Cada cambio queda auditado; repetir el estado no cambia nada.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: organismoId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PersonaNaturalHabilitarRequest" }
+      responses:
+        "204": { description: Aplicado. }
+        "400": { description: habilitado_obligatorio. }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+        "404": { description: organismo_no_existe (inexistente o inactivo). }
+  /api/v1/admin/plataforma/persona-natural/tipos:
+    get:
+      operationId: adminPnTiposList
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Tipos de trámite candidatos para el portal — HU #14072, Épica #14021
+      description: >
+        Tipos elegibles para persona natural (regla K2: publicados, con el wizard encendido y sin capacidades que el portal no
+        soporta) con `habilitado` (la lista blanca del superadministrador) y `ofrecible` (= elegible Y habilitado). Un tipo
+        habilitado que dejó de ser elegible sigue en la lista, con su `motivo`, para poder apagarlo; el portal ya no lo ofrece.
+        Un tipo no elegible o con el wizard apagado no aparece para habilitar. «Habilitado = elegible + habilitado + tarifa
+        vigente».
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Tipos.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PersonaNaturalTipo" }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+  /api/v1/admin/plataforma/persona-natural/tipos/{tipoTramiteId}:
+    put:
+      operationId: adminPnTipoSet
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Habilitar o deshabilitar un tipo de trámite para el portal — HU #14072, Épica #14021
+      description: Habilitar solo es posible para tipos elegibles (422 `tipo_no_elegible` en otro caso); deshabilitar siempre. Cada cambio queda auditado. La lista nace vacía (el portal no ofrece ningún tipo hasta que se habilite alguno).
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: tipoTramiteId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PersonaNaturalHabilitarRequest" }
+      responses:
+        "204": { description: Aplicado. }
+        "400": { description: habilitado_obligatorio. }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+        "404": { description: tipo_no_existe (al deshabilitar un tipo inexistente). }
+        "422": { description: tipo_no_elegible — solo se habilitan tipos elegibles con el asistente encendido. }
 
 components:
   securitySchemes:
@@ -20240,3 +20376,62 @@ components:
               valorCop: { type: integer, format: int64, minimum: 0, maximum: 1000000000 }
             required: [concepto, valorCop]
       required: [vigenteDesde, valores]
+
+    PersonaNaturalParametros:
+      type: object
+      description: Parámetros generales del portal (nulo = predeterminado del BFF). Sin datos bancarios.
+      properties:
+        sesionVigenciaMinutos: { type: integer, nullable: true, minimum: 15, maximum: 1440 }
+        borradorVigenciaDias: { type: integer, nullable: true, minimum: 1, maximum: 90 }
+        topeConsultasCiudadanoDia: { type: integer, nullable: true, minimum: 1, maximum: 100 }
+        topeConsultasGlobalDia: { type: integer, nullable: true, minimum: 1, maximum: 100000 }
+        captchaActivo: { type: boolean, nullable: true }
+        soporteCorreo: { type: string, nullable: true, maxLength: 254 }
+        soporteTelefono: { type: string, nullable: true, maxLength: 30 }
+        soporteHorario: { type: string, nullable: true, maxLength: 120 }
+        rowVersion: { type: integer, format: int64, description: Versión para el control de concurrencia (409 si está desactualizada). }
+        actualizadoEn: { type: string, format: date-time, nullable: true }
+        actualizadoPor: { type: string, format: uuid, nullable: true }
+      required: [rowVersion]
+    PersonaNaturalGuardarParametrosRequest:
+      type: object
+      properties:
+        sesionVigenciaMinutos: { type: integer, nullable: true }
+        borradorVigenciaDias: { type: integer, nullable: true }
+        topeConsultasCiudadanoDia: { type: integer, nullable: true }
+        topeConsultasGlobalDia: { type: integer, nullable: true }
+        captchaActivo: { type: boolean, nullable: true }
+        soporteCorreo: { type: string, nullable: true }
+        soporteTelefono: { type: string, nullable: true }
+        soporteHorario: { type: string, nullable: true }
+        rowVersion: { type: integer, format: int64, description: La versión leída; obligatoria. }
+      required: [rowVersion]
+    PersonaNaturalOrganismo:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        codigo: { type: string }
+        nombre: { type: string }
+        municipio: { type: string }
+        departamento: { type: string }
+        habilitado: { type: boolean }
+        tiposConTarifaVigente: { type: integer, description: Tipos ofrecibles con derechos de tránsito y servicio FLIT vigentes en este organismo hoy. }
+      required: [id, codigo, nombre, habilitado, tiposConTarifaVigente]
+    PersonaNaturalTipo:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        codigo: { type: string }
+        nombre: { type: string }
+        familia: { type: string }
+        elegible: { type: boolean, description: Regla K2 (perfil del tipo, publicado, wizard encendido). }
+        motivo: { type: string, description: Por qué no es elegible (vacío si lo es). }
+        habilitado: { type: boolean, description: Lista blanca del superadministrador. }
+        ofrecible: { type: boolean, description: elegible Y habilitado. }
+        organismosConTarifaVigente: { type: integer, description: Organismos habilitados donde el tipo tiene tarifa base vigente hoy. }
+      required: [id, codigo, nombre, elegible, habilitado, ofrecible]
+    PersonaNaturalHabilitarRequest:
+      type: object
+      properties:
+        habilitado: { type: boolean }
+      required: [habilitado]

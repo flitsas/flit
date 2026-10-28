@@ -31,6 +31,7 @@ public static partial class AdminPlataformaPersonaNaturalEndpoints
             .RequirePermission(PersonaNaturalAdminAuthorization.ManageSlug);
 
         MapTarifas(group);
+        MapConfiguracion(group);
         return app;
     }
 
@@ -123,7 +124,7 @@ public static partial class AdminPlataformaPersonaNaturalEndpoints
         TarifaPnErrores.ValoresVacios => "Indique al menos un concepto con su valor.",
         TarifaPnErrores.ConceptoInvalido => $"Concepto inválido: use {string.Join(", ", ConceptosTarifaPn.Todos)}.",
         TarifaPnErrores.ConceptoRepetido => "Un concepto no puede repetirse en la misma versión.",
-        TarifaPnErrores.ValorInvalido => $"Cada valor debe ser un entero en pesos entre 0 y {VersionarTarifasPnHandler.ValorMaximoCop:N0}.",
+        TarifaPnErrores.ValorInvalido => $"Cada valor debe ser un entero en pesos entre 0 y {VersionarTarifasPnHandler.ValorMaximoCop}.",
         TarifaPnErrores.TipoObligatorio => "Derechos de tránsito y servicio FLIT se registran siempre para un tipo de trámite.",
         TarifaPnErrores.FechaInicioInvalida => "Indique la fecha de inicio de la vigencia.",
         TarifaPnErrores.FechaInicioPasada => "La fecha de inicio no puede ser anterior a hoy.",

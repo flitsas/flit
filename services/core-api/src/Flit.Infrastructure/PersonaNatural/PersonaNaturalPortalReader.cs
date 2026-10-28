@@ -53,6 +53,37 @@ public sealed class PersonaNaturalPortalReader(FlitDbContext db, TimeProvider? r
         return filas.Select(f => new TarifaVigente(f.Concept, f.ProcedureTypeId, f.TransitOfficeId, f.AmountCop, f.Id)).ToList();
     }
 
+    /// <summary>
+    /// HU #14072 — ids de los tipos que el superadministrador habilitó para el portal (lista blanca explícita). La tabla nace
+    /// vacía: mientras no se habilite ninguno, el portal no ofrece ningún tipo.
+    /// </summary>
+    public async Task<IReadOnlySet<Guid>> TiposHabilitadosAsync(CancellationToken ct)
+    {
+        var ids = await db.Database.SqlQuery<Guid>($"""
+            SELECT procedure_type_id AS "Value" FROM admin.persona_natural_enabled_types WHERE is_enabled
+            """).ToListAsync(ct).ConfigureAwait(false);
+        return ids.ToHashSet();
+    }
+
+    /// <summary>Motivo de un tipo elegible que el superadministrador aún no habilitó.</summary>
+    public const string MotivoNoHabilitado = "Aún no está habilitado para el portal.";
+
+    /// <summary>
+    /// «Habilitado = elegible + habilitado por el superadministrador + tarifa vigente» (ADR-0075 decisión 11): un tipo elegible
+    /// que no está en la lista blanca pasa a no elegible, con su motivo. Es la ÚNICA aplicación de la lista blanca: la usan
+    /// <c>ListarTiposDisponibles</c> y <c>Cotizar</c>.
+    /// </summary>
+    public static IReadOnlyList<TipoPersonaNatural> AplicarListaBlanca(IReadOnlyList<TipoPersonaNatural> tipos, IReadOnlySet<Guid> habilitados)
+    {
+        ArgumentNullException.ThrowIfNull(tipos);
+        ArgumentNullException.ThrowIfNull(habilitados);
+        return tipos
+            .Select(t => t.Elegibilidad.Elegible && !habilitados.Contains(t.Id)
+                ? t with { Elegibilidad = new ResultadoElegibilidad(false, [MotivoNoHabilitado]) }
+                : t)
+            .ToList();
+    }
+
     /// <summary>Forma de la fila leída por SQL (alias = nombre de propiedad).</summary>
     public sealed class TarifaFila
     {
