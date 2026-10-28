@@ -1,12 +1,12 @@
 // Pasos del wizard a partir de la definición del tipo (GET /tipos-tramite/{code}/definicion). Módulo puro, sin React ni red.
 //
-// El portal muestra SIEMPRE los mismos cinco pasos (Diagnóstico, Actores, Requisitos, Pago y Envío); lo que cambia por tipo
+// El portal muestra SIEMPRE los mismos cinco pasos (Diagnóstico, Actores, Requisitos, Resumen y Envío); lo que cambia por tipo
 // es lo que se pinta dentro de cada uno. Cada sección de la definición (`section_type` del catálogo cerrado de FLIT 2) cae en
 // uno de esos pasos y la dibuja su renderer del registro. Aquí no hay ningún tipo de trámite nombrado: todo sale de la
 // definición. Un `section_type` sin renderer vuelve al tipo «no disponible» entero; nunca se pinta una parte.
 import type { DefinicionTipo, PasoDefinicion, Pendiente, Solicitud } from "@/lib/api/cliente";
 
-export type GrupoPaso = "diagnostico" | "actores" | "requisitos" | "pago" | "envio";
+export type GrupoPaso = "diagnostico" | "actores" | "requisitos" | "resumen" | "envio";
 
 export interface PasoBase {
   id: GrupoPaso;
@@ -14,7 +14,7 @@ export interface PasoBase {
   titulo: string;
   /** Nombre en las migas (el último paso se muestra como «Confirmación»). */
   miga: string;
-  /** Pago y Envío son del portal: no vienen de la definición del tipo. */
+  /** Resumen y Envío son del portal: no vienen de la definición del tipo. */
   propio: boolean;
 }
 
@@ -22,8 +22,8 @@ export const PASOS_BASE: readonly PasoBase[] = [
   { id: "diagnostico", titulo: "Diagnóstico", miga: "Diagnóstico", propio: false },
   { id: "actores", titulo: "Actores", miga: "Actores", propio: false },
   { id: "requisitos", titulo: "Requisitos", miga: "Requisitos", propio: false },
-  { id: "pago", titulo: "Pago", miga: "Pago", propio: true },
-  { id: "envio", titulo: "Envío", miga: "Confirmación", propio: true },
+  { id: "resumen", titulo: "Resumen", miga: "Resumen", propio: true },
+  { id: "envio", titulo: "Envío", miga: "Envío", propio: true },
 ];
 
 /** Paso del portal al que pertenece cada `section_type` de FLIT 2. La validación de identidad vive dentro de la tarjeta de actor. */
@@ -78,7 +78,7 @@ export function armarPasos(definicion: DefinicionTipo, soportados: ReadonlySet<s
   return { ok: true, pasos };
 }
 
-/** Los `section_type` de los pasos propios del portal (Pago y Envío) también tienen renderer en el registro. */
+/** Los `section_type` de los pasos propios del portal (Resumen y Envío) también tienen renderer en el registro. */
 export const SECCIONES_PROPIAS: readonly string[] = PASOS_BASE.filter((p) => p.propio).map((p) => p.id);
 
 // ── Qué falta, por paso ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -89,7 +89,9 @@ const GRUPO_DE_PENDIENTE: Readonly<Record<string, GrupoPaso>> = {
   prenda_acreedor_requerido: "requisitos",
   prenda_nit_requerido: "requisitos",
   documento_requerido: "requisitos",
-  comprobante_pago_requerido: "pago",
+  // El back de hoy aún lo pide al radicar (el cobro está fuera de esta entrega): no hay dónde corregirlo en el portal, así que
+  // se atiende en el paso Envío, que lo muestra como un requisito que el portal no gestiona.
+  comprobante_pago_requerido: "envio",
 };
 
 /** Paso del portal al que pertenece un pendiente que informa el back. */
@@ -107,10 +109,11 @@ export function pendientesDelGrupo(grupo: GrupoPaso, definicion: DefinicionTipo,
 
 /**
  * Si el paso ya está completo según lo que el back guardó (para reanudar). El diagnóstico cuenta como hecho solo si el tipo lo
- * pide y su último resultado no tiene bloqueos. Pago y Envío no se dan por completos desde un borrador.
+ * pide y su último resultado no tiene bloqueos. Resumen y Envío no se dan por completos desde un borrador: el ciudadano debe
+ * revisar y confirmar de nuevo.
  */
 export function pasoCompletoGuardado(paso: PasoWizard, definicion: DefinicionTipo, solicitud: Solicitud): boolean {
-  if (paso.id === "envio") return false;
+  if (paso.id === "resumen" || paso.id === "envio") return false;
   if (pendientesDelGrupo(paso.id, definicion, solicitud).length > 0) return false;
   if (paso.id === "diagnostico" && paso.secciones.some((s) => s.sectionType === "vehicle_query")) return solicitud.datos.diagnostico?.puedeContinuar === true;
   return true;

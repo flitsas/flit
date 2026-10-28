@@ -28,7 +28,7 @@ describe("estructura del wizard (F1)", () => {
     expect(within(lateral).getByLabelText("Valor del trámite")).toBeInTheDocument();
 
     const pasos = within(screen.getByRole("list", { name: "Pasos del trámite" })).getAllByRole("button");
-    expect(pasos.map((b) => b.textContent?.replace(/\s+/g, " ").trim())).toEqual(["1Paso 1 · Diagnóstico", "2Paso 2 · Actores", "3Paso 3 · Requisitos", "4Paso 4 · Pago", "5Paso 5 · Envío"]);
+    expect(pasos.map((b) => b.textContent?.replace(/\s+/g, " ").trim())).toEqual(["1Paso 1 · Diagnóstico", "2Paso 2 · Actores", "3Paso 3 · Requisitos", "4Paso 4 · Resumen", "5Paso 5 · Envío"]);
     expect(nodo(1)).toHaveAttribute("aria-current", "step");
     for (const n of [2, 3, 4, 5]) expect(nodo(n)).toBeDisabled();
   });

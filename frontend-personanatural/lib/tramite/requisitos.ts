@@ -31,7 +31,7 @@ export function adjuntoDe(adjuntos: readonly Adjunto[], docCode: string): Adjunt
 /** Un documento con condición (texto que el back evalúa al crear el trámite) no se exige aquí: se ofrece como opcional. */
 export const esExigible = (d: DocumentoRequerido): boolean => d.obligatorio && d.condicion.trim() === "";
 
-/** El comprobante de pago se carga en el paso Pago (HU F5): no se ofrece en Requisitos aunque la definición lo liste. */
+/** El cobro está fuera de esta entrega del portal: el comprobante de pago no se ofrece en Requisitos aunque la definición lo liste. */
 export const DOC_COMPROBANTE_PAGO = "comprobante_pago";
 
 /** Los documentos de este paso, por su orden en la definición. */

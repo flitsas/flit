@@ -2,7 +2,7 @@
 
 import { createContext, useContext, type ComponentType } from "react";
 import type { ClientePortal, DefinicionTipo, Solicitud } from "@/lib/api/cliente";
-import type { SeccionWizard } from "@/lib/tramite/pasos";
+import type { GrupoPaso, SeccionWizard } from "@/lib/tramite/pasos";
 import type { ContextoTramite } from "@/lib/tramite/contexto";
 
 /** Lo que una sección le informa al cascarón para decidir si se puede avanzar. */
@@ -42,6 +42,8 @@ export interface ApiWizard {
   registrarGuardado: (clave: string, guardar: (() => Promise<void>) | null) => void;
   /** Cualquier error de una petición pasa por aquí para que el cascarón atienda la sesión vencida. */
   reportarError: (error: unknown) => void;
+  /** Lleva al paso de ese grupo (solo hacia atrás, a uno ya alcanzado): «Editar» del resumen y los enlaces de lo que falta. */
+  irAPaso: (grupo: GrupoPaso) => void;
 }
 
 const Contexto = createContext<ApiWizard | null>(null);

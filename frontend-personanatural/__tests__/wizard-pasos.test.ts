@@ -10,8 +10,8 @@ describe("pasos del wizard desde la definición del tipo", () => {
 
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.pasos.map((p) => p.titulo)).toEqual(["Diagnóstico", "Actores", "Requisitos", "Pago", "Envío"]);
-    expect(r.pasos.map((p) => p.miga).at(-1)).toBe("Confirmación");
+    expect(r.pasos.map((p) => p.titulo)).toEqual(["Diagnóstico", "Actores", "Requisitos", "Resumen", "Envío"]);
+    expect(r.pasos.map((p) => p.miga).at(-1)).toBe("Envío");
     expect(PASOS_BASE).toHaveLength(5);
   });
 
@@ -25,7 +25,7 @@ describe("pasos del wizard desde la definición del tipo", () => {
     expect(tipos(1)).toEqual(["actor_form"]);
     expect(tipos(2)).toEqual(["commercial", "prenda_decision", "document_checklist", "generic_form"]);
     expect(r.pasos[0].secciones[0].paso?.clave).toBe("p1");
-    expect(r.pasos[3].secciones).toEqual([{ clave: "portal:pago", sectionType: "pago", paso: null }]);
+    expect(r.pasos[3].secciones).toEqual([{ clave: "portal:resumen", sectionType: "resumen", paso: null }]);
   });
 
   it("un tipo sin vehículo que consultar deja el paso Diagnóstico sin secciones, pero el paso sigue estando", () => {
@@ -83,10 +83,31 @@ describe("dónde se reanuda un borrador", () => {
     expect(pasoInicial(pasos, definicion, solicitudDe({ estado: "en_cola" }))).toBe(4);
   });
 
-  it("los pendientes del back se reparten por paso: actores, requisitos, pago y campos por el paso que los declara", () => {
+  it("los pendientes del back se reparten por paso: actores, requisitos, envío y campos por el paso que los declara", () => {
     expect(grupoDePendiente({ codigo: "actor_requerido", referencia: "vendedor", paso: null }, definicion)).toBe("actores");
     expect(grupoDePendiente({ codigo: "documento_requerido", referencia: "cedula", paso: "p3" }, definicion)).toBe("requisitos");
-    expect(grupoDePendiente({ codigo: "comprobante_pago_requerido", referencia: null, paso: null }, definicion)).toBe("pago");
+    expect(grupoDePendiente({ codigo: "comprobante_pago_requerido", referencia: null, paso: null }, definicion)).toBe("envio");
     expect(grupoDePendiente({ codigo: "campo_requerido", referencia: "color", paso: "p1" }, definicion)).toBe("diagnostico");
+  });
+});
+
+describe("Resumen y Envío no se dan por completos desde un borrador", () => {
+  const definicion = definicionDe([["vehicle_query"], ["actor_form"], ["document_checklist"]]);
+  const r = armarPasos(definicion, SOPORTADOS);
+  const pasos = r.ok ? r.pasos : [];
+
+  it("con los tres primeros pasos completos reabre en el Resumen, para revisar y confirmar de nuevo", () => {
+    const solicitud = solicitudDe({ datos: { diagnostico: { fecha: "2026-10-28T15:00:00Z", puedeContinuar: true, requisitos: [] } } });
+
+    expect(pasoInicial(pasos, definicion, solicitud)).toBe(3);
+  });
+
+  it("el requisito de cobro que aún pide el back no atrapa al ciudadano en un paso anterior", () => {
+    const solicitud = solicitudDe({
+      datos: { diagnostico: { fecha: "2026-10-28T15:00:00Z", puedeContinuar: true, requisitos: [] } },
+      pendientes: [{ codigo: "comprobante_pago_requerido", referencia: null, paso: null }],
+    });
+
+    expect(pasoInicial(pasos, definicion, solicitud)).toBe(3);
   });
 });

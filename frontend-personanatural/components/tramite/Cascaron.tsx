@@ -15,7 +15,7 @@ import type { ClientePortal, DefinicionTipo, Solicitud } from "@/lib/api/cliente
 import { ApiError, mensajeDe } from "@/lib/api/errores";
 import { ASSETS } from "@/lib/assets";
 import type { ContextoTramite } from "@/lib/tramite/contexto";
-import { esEditable, pasoInicial, type PasoWizard, type SeccionWizard } from "@/lib/tramite/pasos";
+import { esEditable, pasoInicial, type GrupoPaso, type PasoWizard, type SeccionWizard } from "@/lib/tramite/pasos";
 
 interface Props {
   cliente: ClientePortal;
@@ -77,6 +77,15 @@ export function Cascaron({ cliente, definicion, solicitud, pasos, registro, cont
   const reportarError = useCallback((error: unknown) => {
     if (error instanceof ApiError && error.code.startsWith("session_")) setVencida(true);
   }, []);
+  // `irA` se vuelve a crear en cada render; el contexto guarda una función estable que llama a la más reciente.
+  const irAlPaso = useRef<(destino: number) => void>(() => undefined);
+  const irAPaso = useCallback(
+    (grupo: GrupoPaso) => {
+      const destino = pasos.findIndex((p) => p.id === grupo);
+      if (destino >= 0) irAlPaso.current(destino);
+    },
+    [pasos],
+  );
 
   const api = useMemo<ApiWizard>(
     () => ({
@@ -94,8 +103,9 @@ export function Cascaron({ cliente, definicion, solicitud, pasos, registro, cont
         else guardadores.current.delete(clave);
       },
       reportarError,
+      irAPaso,
     }),
-    [cliente, definicion, solicitud, contexto, queryClient, idSolicitud, reportarError],
+    [cliente, definicion, solicitud, contexto, queryClient, idSolicitud, reportarError, irAPaso],
   );
 
   // ── Validez y navegación ──────────────────────────────────────────────────────────────────────────────────────────
@@ -119,6 +129,12 @@ export function Cascaron({ cliente, definicion, solicitud, pasos, registro, cont
     if (reducirMovimiento()) setSaliendo(null);
     else temporizador.current = setTimeout(() => setSaliendo(null), DURACION_SLIDE_MS);
   };
+
+  useEffect(() => {
+    irAlPaso.current = (destino) => {
+      if (editable) irA(destino);
+    };
+  });
 
   // Tras cambiar de paso el foco pasa al título del paso (lectores de pantalla y teclado).
   useEffect(() => {
@@ -155,7 +171,10 @@ export function Cascaron({ cliente, definicion, solicitud, pasos, registro, cont
   /** Avanza un paso (o hasta `destino` ya alcanzado) si el actual está completo; si no, marca lo que falta. */
   const avanzar = async (destino = paso + 1) => {
     if (!editable || guardando || destino > ultimo || destino <= paso) return;
-    if (!pasoValido(paso) || sinTarifa) {
+    // Al saltar varios pasos (desde el navegador de pasos) no se puede pasar por encima de un paso del portal sin completarlo: el
+    // resumen exige la confirmación del ciudadano.
+    const propiosSaltados = Array.from({ length: destino - paso - 1 }, (_, k) => paso + 1 + k).every((i) => !pasos[i].propio || pasoValido(i));
+    if (!pasoValido(paso) || !propiosSaltados || sinTarifa) {
       setIntento((n) => n + 1);
       return;
     }
@@ -194,7 +213,7 @@ export function Cascaron({ cliente, definicion, solicitud, pasos, registro, cont
   const motivo = bloqueoDe(paso);
   const siguienteDeshabilitado = motivo !== undefined;
   const base = pasos[paso];
-  const etiquetaSiguiente = base.id === "pago" ? "Enviar trámite" : base.id === "requisitos" ? "Siguiente" : "Continuar";
+  const etiquetaSiguiente = base.id === "requisitos" ? "Siguiente" : "Continuar";
 
   return (
     <ProveedorWizard value={api}>
@@ -358,7 +377,6 @@ export function Cascaron({ cliente, definicion, solicitud, pasos, registro, cont
                   onBack={retroceder}
                   onNext={() => void avanzar()}
                   nextLabel={etiquetaSiguiente}
-                  positive={base.id === "pago"}
                   nextDisabled={siguienteDeshabilitado}
                   motivo={siguienteDeshabilitado ? motivo : undefined}
                   idMotivo={idMotivo}
