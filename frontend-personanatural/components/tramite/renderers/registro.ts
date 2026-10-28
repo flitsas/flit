@@ -1,6 +1,7 @@
 import type { RegistroRenderers } from "@/components/tramite/ContextoWizard";
 import { ConsultaVehiculo } from "./ConsultaVehiculo";
 import { FormularioActores, ValidacionIdentidad } from "./FormularioActores";
+import { EnvioTramite } from "./EnvioTramite";
 import { FormularioRequisitos } from "./FormularioRequisitos";
 import { ResumenTramite } from "./ResumenTramite";
 import { SeccionPendiente } from "./SeccionPendiente";
@@ -25,5 +26,5 @@ export const REGISTRO_RENDERERS: RegistroRenderers = {
   generic_form: FormularioRequisitos,
   // Pasos propios del portal.
   resumen: ResumenTramite,
-  envio: SeccionPendiente,
+  envio: EnvioTramite,
 };

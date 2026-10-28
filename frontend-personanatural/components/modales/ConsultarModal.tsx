@@ -23,21 +23,23 @@ interface Props {
   tipos?: readonly TipoTramite[];
   /** El ciudadano pulsó la alerta de subsanación (la costura al wizard de la HU F7). */
   onCorregir?: (radicado: EstadoRadicado, cedula: string) => void;
+  /** Radicado con el que se abre el campo (p. ej. el que acaba de entregarse en el wizard). La cédula nunca se precarga. */
+  radicadoInicial?: string;
 }
 
 /** Modal «Consultar mi trámite»: radicado + cédula (+ placa opcional), tracking de 5 pasos y alerta de subsanación. */
-export function ConsultarModal({ abierto, onCerrar, cliente = portal, tipos = [], onCorregir }: Props) {
+export function ConsultarModal({ abierto, onCerrar, cliente = portal, tipos = [], onCorregir, radicadoInicial = "" }: Props) {
   return (
     <ModalFlit abierto={abierto} onCerrar={onCerrar} titulo="Consultar mi trámite" icono={Search} descripcion="Ingresa el número de radicado y la cédula del solicitante. La placa es opcional.">
-      <ContenidoConsulta cliente={cliente} tipos={tipos} onCerrar={onCerrar} onCorregir={onCorregir} />
+      <ContenidoConsulta cliente={cliente} tipos={tipos} onCerrar={onCerrar} onCorregir={onCorregir} radicadoInicial={radicadoInicial} />
     </ModalFlit>
   );
 }
 
-function ContenidoConsulta({ cliente, tipos, onCerrar, onCorregir }: { cliente: ClientePortal; tipos: readonly TipoTramite[]; onCerrar: () => void; onCorregir?: Props["onCorregir"] }) {
+function ContenidoConsulta({ cliente, tipos, onCerrar, onCorregir, radicadoInicial }: { cliente: ClientePortal; tipos: readonly TipoTramite[]; onCerrar: () => void; onCorregir?: Props["onCorregir"]; radicadoInicial: string }) {
   const idAyuda = useId();
   const [placa, setPlaca] = useState("");
-  const [radicado, setRadicado] = useState("");
+  const [radicado, setRadicado] = useState(radicadoInicial);
   const [cedula, setCedula] = useState("");
   const [captcha, setCaptcha] = useState<string | null>(null);
   const [reinicio, setReinicio] = useState(0);

@@ -100,7 +100,7 @@ describe("mensajes para el ciudadano", () => {
   it("el error tipado solo guarda código, título y estado: ni cuerpo ni datos personales", () => {
     const error = new ApiError("x", "t", 400);
 
-    // `errores` y `estado` son textos fijos del back (nunca el valor escrito por el ciudadano).
-    expect(Object.keys(error).sort()).toEqual(["code", "errores", "estado", "name", "reintentarEnSegundos", "status", "title"]);
+    // `errores`, `estado` y `fallas` son textos fijos del back (códigos, claves de campo y roles; nunca el valor escrito por el ciudadano).
+    expect(Object.keys(error).sort()).toEqual(["code", "errores", "estado", "fallas", "name", "reintentarEnSegundos", "status", "title"]);
   });
 });

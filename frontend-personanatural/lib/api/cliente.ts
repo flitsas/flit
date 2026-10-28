@@ -139,6 +139,11 @@ export interface EstadoSolicitud {
   estado: string;
   tipoTramiteCodigo: string;
   actualizadoEn: string;
+  /**
+   * Número del trámite en FLIT 2 una vez creado. Hoy el BFF no lo incluye en este DTO (solo lo guarda en su espejo interno):
+   * el campo es opcional y la pantalla lo muestra solo si llega.
+   */
+  numeroReferencia?: string | null;
 }
 
 /** Algo que falta: código estable, a qué se refiere (clave de campo, rol o documento) y en qué paso de la definición se corrige. */
@@ -251,8 +256,10 @@ export interface DiagnosticoRequest {
   propietario?: { tipoDocumento: string; numeroDocumento: string };
 }
 
+/** Respuesta 202 de radicar: la solicitud queda en cola (`en_cola`); FLIT 2 la crea de forma asíncrona. */
 export interface ResultadoRadicar {
   solicitudId: string;
+  codigoPublico: string;
   estado: string;
 }
 

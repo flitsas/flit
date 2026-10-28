@@ -1,6 +1,26 @@
 // Errores del BFF: application/problem+json (RFC 7807) con un `code` estable. El error tipado guarda SOLO código, título
 // y estado HTTP: nunca el cuerpo de la petición ni datos personales, para que pueda mostrarse o reportarse sin riesgo.
 
+/** Parte obligada sin identidad aprobada (409 `identity_pending`): rol, posición y estado de su validación. Nunca datos personales. */
+export interface ParteSinIdentidad {
+  parte: string;
+  ordinal: number;
+  estado: string;
+}
+
+export interface PendienteDeRadicacion {
+  codigo: string;
+  referencia: string | null;
+  paso: string | null;
+}
+
+export interface FallasDeRadicacion {
+  pendientes?: PendienteDeRadicacion[];
+  /** `identidad_pendiente` o `identidad_rechazada`. */
+  motivo?: string;
+  partes?: ParteSinIdentidad[];
+}
+
 export class ApiError extends Error {
   constructor(
     readonly code: string,
@@ -12,6 +32,8 @@ export class ApiError extends Error {
     readonly errores?: Readonly<Record<string, readonly string[]>>,
     /** Estado que informa el back en algunos conflictos (`state`), p. ej. el de la validación de identidad. */
     readonly estado?: string,
+    /** Lo que informa el back al rechazar radicar: los pendientes (422 `requisitos_incompletos`) o las partes sin identidad (409 `identity_pending`). */
+    readonly fallas?: FallasDeRadicacion,
   ) {
     super(title);
     this.name = "ApiError";
@@ -55,6 +77,11 @@ const MENSAJES_POR_CODIGO: Record<string, string> = {
   limite_de_adjuntos: "Alcanzaste el máximo de archivos del trámite.",
   almacenamiento_no_disponible: "No pudimos guardar el archivo. Intenta de nuevo.",
   adjunto_no_encontrado: "No encontramos ese archivo.",
+  requisitos_incompletos: "Falta información para enviar el trámite.",
+  identity_pending: "Todas las personas del trámite deben validar su identidad antes de enviarlo.",
+  idempotency_conflicto: "No pudimos procesar el envío. Vuelve a intentarlo.",
+  idempotency_key_requerida: "No pudimos procesar el envío. Vuelve a intentarlo.",
+  estado_no_permite_cambio: "Este trámite ya fue enviado o cancelado y no admite cambios.",
 };
 
 const MENSAJES_POR_ESTADO: Record<number, string> = {
@@ -87,17 +114,39 @@ export async function errorDeRespuesta(respuesta: Response): Promise<ApiError> {
   let title = respuesta.statusText || "Error";
   let errores: Record<string, string[]> | undefined;
   let estado: string | undefined;
+  let fallas: FallasDeRadicacion | undefined;
   try {
-    const datos = (await respuesta.json()) as { code?: unknown; title?: unknown; errors?: unknown; state?: unknown };
+    const datos = (await respuesta.json()) as { code?: unknown; title?: unknown; errors?: unknown; state?: unknown; pendientes?: unknown; motivo?: unknown; partes?: unknown };
     if (typeof datos.code === "string") code = datos.code;
     if (typeof datos.title === "string") title = datos.title;
     if (typeof datos.state === "string") estado = datos.state;
     errores = erroresPorCampo(datos.errors);
+    fallas = fallasDe(datos);
   } catch {
     // Cuerpo vacío o que no es JSON: queda el código por estado.
   }
   const espera = Number(respuesta.headers.get("retry-after"));
-  return new ApiError(code, title, respuesta.status, Number.isFinite(espera) && espera > 0 ? espera : undefined, errores, estado);
+  return new ApiError(code, title, respuesta.status, Number.isFinite(espera) && espera > 0 ? espera : undefined, errores, estado, fallas);
+}
+
+const esTexto = (v: unknown): v is string => typeof v === "string";
+const esObjeto = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
+
+/** `pendientes`, `motivo` y `partes` de un rechazo de radicación. Solo se aceptan cadenas y números: cualquier otra forma se ignora. */
+function fallasDe(datos: { pendientes?: unknown; motivo?: unknown; partes?: unknown }): FallasDeRadicacion | undefined {
+  const fallas: FallasDeRadicacion = {};
+  if (Array.isArray(datos.pendientes)) {
+    fallas.pendientes = datos.pendientes
+      .filter((p): p is Record<string, unknown> => esObjeto(p) && esTexto(p.codigo))
+      .map((p) => ({ codigo: p.codigo as string, referencia: esTexto(p.referencia) ? p.referencia : null, paso: esTexto(p.paso) ? p.paso : null }));
+  }
+  if (esTexto(datos.motivo)) fallas.motivo = datos.motivo;
+  if (Array.isArray(datos.partes)) {
+    fallas.partes = datos.partes
+      .filter((p): p is Record<string, unknown> => esObjeto(p) && esTexto(p.parte))
+      .map((p) => ({ parte: p.parte as string, ordinal: typeof p.ordinal === "number" ? p.ordinal : 1, estado: esTexto(p.estado) ? p.estado : "sin_solicitar" }));
+  }
+  return Object.keys(fallas).length > 0 ? fallas : undefined;
 }
 
 /** `errors` de un 422: campo → mensajes (cadenas). Cualquier otra forma se ignora. */
