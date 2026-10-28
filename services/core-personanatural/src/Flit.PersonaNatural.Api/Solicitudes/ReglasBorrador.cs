@@ -320,15 +320,15 @@ public static partial class ReglasBorrador
 
     /// <summary>
     /// Qué le falta al borrador y en qué paso se corrige. Un documento condicional (<c>condicion</c> con texto) no bloquea:
-    /// la condición se evalúa en servidor al crear el trámite, no aquí. El comprobante de pago es siempre requisito (S1).
+    /// la condición se evalúa en servidor al crear el trámite, no aquí. El comprobante de pago NO es requisito: el pago está en otra épica y el
+    /// trámite se entrega a FLIT 2 como borrador (decisión del PO); el endpoint de comprobante sigue disponible como adjunto opcional.
     /// </summary>
     public static (IReadOnlyList<PasoEstadoDto> Pasos, IReadOnlyList<PendienteDto> Pendientes) Completitud(
         DefinicionTipoDto def,
         IReadOnlyDictionary<string, string> campos,
         DatosSolicitud datos,
         IReadOnlyList<(string Rol, short Ordinal)> personas,
-        IReadOnlySet<string> documentosCargados,
-        bool hayComprobante)
+        IReadOnlySet<string> documentosCargados)
     {
         string? PasoDe(string sectionType) => def.Pasos.FirstOrDefault(p => p.SectionTypes.Contains(sectionType, StringComparer.Ordinal))?.Clave;
 
@@ -353,9 +353,6 @@ public static partial class ReglasBorrador
 
         foreach (var doc in def.Documentos.Where(d => d.Obligatorio && string.IsNullOrWhiteSpace(d.Condicion) && !documentosCargados.Contains(d.DocCode)))
             pendientes.Add(new PendienteDto("documento_requerido", doc.DocCode, PasoDe("document_checklist")));
-
-        if (!hayComprobante)
-            pendientes.Add(new PendienteDto("comprobante_pago_requerido", null, null));
 
         var pasos = def.Pasos.Select(p =>
         {

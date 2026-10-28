@@ -450,7 +450,7 @@ public sealed partial class SolicitudesService(
         var datos = DatosSolicitud.Leer(s.Datos);
         var (pasos, pendientes) = ReglasBorrador.Completitud(
             def, campos, datos, [.. filas.Select(f => (f.Parte, f.Ordinal))],
-            tiposAdjuntos.ToHashSet(StringComparer.Ordinal), tiposAdjuntos.Contains(TipoComprobantePago));
+            tiposAdjuntos.ToHashSet(StringComparer.Ordinal));
 
         return new SolicitudDto(
             s.Id, s.CodigoPublico, s.Estado, s.TipoTramiteCodigo, s.DefinicionVersion, def.Huella, s.RowVersion, s.OrganismoId, s.OrganismoNombre,

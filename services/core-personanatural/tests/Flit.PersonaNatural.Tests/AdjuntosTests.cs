@@ -207,7 +207,7 @@ public sealed class AdjuntosTests : IAsyncLifetime
     {
         await IniciarAsync();
         var (id, token) = await Sesion();
-        (await Pendientes(id, token)).Should().Contain("comprobante_pago_requerido:");
+        (await Pendientes(id, token)).Should().NotContain("comprobante_pago_requerido:", "el comprobante ya no es requisito del borrador");
 
         var primero = await _host.SubirAsync($"{Base}/solicitudes/{id}/pago/comprobante", token, Archivos.Pdf(), "pago1.pdf");
         var segundo = await _host.SubirAsync($"{Base}/solicitudes/{id}/pago/comprobante", token, Archivos.Png(), "pago2.png");

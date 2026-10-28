@@ -126,6 +126,7 @@ PersonaNatural__Portal__DeadlineSegundos=15                       # opcional
   partes, campos, adjuntos y validaciones del portal y se detiene, sin preflight ni radicación. La solicitud pasa a `creada`
   con `procedure_status=borrador`, su referencia y el `procedure_instance_id`; un rechazo de negocio (tipo u organismo no
   habilitado, parte no soportada, error de un caso de uso) deja el borrador `anulado` con el código en su motivo.
+- El comprobante de pago NO es requisito para radicar (el BFF ya no agrega `comprobante_pago_requerido`); `POST /solicitudes/{id}/pago/comprobante` y el tipo de adjunto `comprobante_pago` se conservan como carga opcional.
 - Consulta de persona con nombres (BFF, HU #14060): `POST /solicitudes/{id}/consultas/persona-detalle` solo con la sesión de la
   solicitud editable. Tope por solicitud `Consultas__MaxDetallePorSolicitud` (6 por defecto); comparte los topes por documento
   y globales (`Abuso__*`) con las consultas públicas. Sin configuración nueva obligatoria.

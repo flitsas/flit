@@ -88,6 +88,22 @@ public sealed class RadicacionTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task UnBorradorCompletoSinComprobanteDePago_SeRadicaConEstado202_YElEventoNoLlevaComprobante()
+    {
+        await IniciarAsync();
+        var (id, token) = await Completa(conComprobante: false);
+
+        var r = await Radicar(id, token, "k-1");
+
+        r.StatusCode.Should().Be(HttpStatusCode.Accepted, "el pago está en otra épica: el comprobante no es requisito");
+        await using var db = _host.NuevaDb();
+        var payload = (await db.Set<OutboxMessage>().SingleAsync(TestContext.Current.CancellationToken)).Payload;
+        var data = JsonDocument.Parse(payload).RootElement.GetProperty("data");
+        data.GetProperty("adjuntos").EnumerateArray().Select(a => a.GetProperty("tipo").GetString()).Should().NotContain("comprobante_pago");
+        data.GetProperty("comprobantePagoId").ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [Fact]
     public async Task ElEvento_LlevaSoloIdentificadoresYReferencias_SinDatosPersonalesNiCifrados()
     {
         await IniciarAsync();
@@ -259,6 +275,7 @@ public sealed class RadicacionTests : IAsyncLifetime
     {
         await IniciarAsync();
         var (id, token) = await Completa(conComprobante: false, conKm: false);
+        // Sin comprobante: no es requisito, así que el único pendiente es el campo que se dejó vacío.
 
         var r = await Radicar(id, token, "k-1");
 
@@ -266,7 +283,7 @@ public sealed class RadicacionTests : IAsyncLifetime
         (await PortalHost.CodigoAsync(r)).Should().Be("requisitos_incompletos");
         var pendientes = (await PortalHost.JsonAsync(r)).RootElement.GetProperty("pendientes").EnumerateArray()
             .Select(p => $"{p.GetProperty("codigo").GetString()}:{(p.TryGetProperty("referencia", out var x) ? x.GetString() : null)}").ToList();
-        pendientes.Should().BeEquivalentTo("campo_requerido:km", "comprobante_pago_requerido:");
+        pendientes.Should().BeEquivalentTo("campo_requerido:km");
         await using var db = _host.NuevaDb();
         (await db.Set<OutboxMessage>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(0);
         (await db.Set<SolicitudTramite>().SingleAsync(TestContext.Current.CancellationToken)).Estado.Should().Be("borrador");

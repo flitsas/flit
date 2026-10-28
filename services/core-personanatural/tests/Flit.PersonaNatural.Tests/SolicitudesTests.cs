@@ -156,7 +156,8 @@ public sealed class SolicitudesTests : IAsyncLifetime
         json.GetProperty("completo").GetBoolean().Should().BeFalse();
         var pendientes = json.GetProperty("pendientes").EnumerateArray().Select(p => (p.GetProperty("codigo").GetString(), p.TryGetProperty("referencia", out var x) ? x.GetString() : null)).ToList();
         pendientes.Should().Contain(("campo_requerido", "km")).And.Contain(("actor_requerido", "vendedor")).And.Contain(("actor_requerido", "comprador"))
-            .And.Contain(("comercial_requerido", "valorComercial")).And.Contain(("documento_requerido", "compraventa")).And.Contain(("comprobante_pago_requerido", null));
+            .And.Contain(("comercial_requerido", "valorComercial")).And.Contain(("documento_requerido", "compraventa"));
+        pendientes.Should().NotContain(p => p.Item1 == "comprobante_pago_requerido", "el pago está en otra épica");
         pendientes.Should().NotContain(p => p.Item2 == "poder_tramitador", "un documento condicional no bloquea: la condición se evalúa en servidor");
         json.GetProperty("pasos").EnumerateArray().Single(p => p.GetProperty("clave").GetString() == "datos").GetProperty("completo").GetBoolean().Should().BeFalse();
         json.GetProperty("pasos").EnumerateArray().Single(p => p.GetProperty("clave").GetString() == "consulta").GetProperty("completo").GetBoolean().Should().BeTrue();
