@@ -1,0 +1,81 @@
+name: Contratos → Flit Atlas
+
+# Publica los 23 contratos de FLIT 2.0 (5 OpenAPI, 5 AsyncAPI y 13 proto de contracts/) en Flit Atlas con el workflow
+# reutilizable de flit-atlas (atlas-publicar.yml, ATLAS-ADR-0035 de Atlas). Un job por contrato:
+#   - pull_request: solo valida (vacuum y, en OpenAPI, oasdiff breaking contra la rama release o la rama base).
+#   - push a develop, staging o release (y workflow_dispatch): valida y publica con el token OIDC de GitHub Actions,
+#     sin secretos. develop publica X.Y.Z-dev.<sha7>, staging X.Y.Z-rc.<sha7> y release la versión estable X.Y.Z.
+# Sin la variable ATLAS_URL (de la organización o del repo) solo valida.
+#
+# La versión de OpenAPI y AsyncAPI es info.version del spec: súbela cuando cambie el contrato (en release, un spec
+# distinto con la misma versión falla; un breaking sin subir la MAJOR falla siempre). En proto la versión va en la matriz
+# (MAJOR = la vN del paquete): súbela al cambiar el .proto.
+#
+# Lo que valida aquí no reemplaza contracts.yml (redocly, @asyncapi/parser y buf lint/breaking siguen allí).
+# modo_lint: advertencia mientras los contratos no cumplen el ruleset de Atlas (los errores se ven como aviso).
+
+on:
+  push:
+    branches: [develop, staging, release]
+    paths:
+      - 'contracts/**'
+      - '.github/workflows/atlas-publicar-contratos.yml'
+  pull_request:
+    paths:
+      - 'contracts/**'
+      - '.github/workflows/atlas-publicar-contratos.yml'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: atlas-contratos-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  contrato:
+    name: ${{ matrix.contrato }} (${{ matrix.tipo }})
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # OpenAPI. Compartibles (los usan clientes de integración): external-api y core-ict.
+          - { contrato: core-api, aplicativo: flit2-core-api, tipo: openapi, ruta: contracts/openapi/core-api.v1.yaml, ruleset: interno, lint: advertencia }
+          - { contrato: core-ict, aplicativo: flit2-core-ict, tipo: openapi, ruta: contracts/openapi/core-ict.v1.yaml, ruleset: compartible, lint: advertencia }
+          - { contrato: external-api, aplicativo: flit2-core-api, tipo: openapi, ruta: contracts/openapi/external-api.v1.json, ruleset: compartible, lint: advertencia }
+          - { contrato: platform, aplicativo: flit2-core-api, tipo: openapi, ruta: contracts/openapi/platform.v1.yaml, ruleset: interno, lint: advertencia }
+          - { contrato: python-ml, aplicativo: flit2-python-ml, tipo: openapi, ruta: contracts/openapi/python-ml.v1.yaml, ruleset: interno, lint: advertencia }
+          # AsyncAPI 2.6 (ruleset de Atlas por defecto; vacuum no revisa 2.x). comun/sobre.v1.yaml no es un contrato:
+          # el workflow reutilizable resuelve sus $ref y publica cada documento completo.
+          - { contrato: consultas-events, aplicativo: flit2-core-consultas, tipo: asyncapi, ruta: contracts/asyncapi/consultas-events.v1.yaml }
+          - { contrato: domain-events, aplicativo: flit2-core-api, tipo: asyncapi, ruta: contracts/asyncapi/domain-events.v1.yaml }
+          - { contrato: notificaciones-events, aplicativo: flit2-core-notificaciones, tipo: asyncapi, ruta: contracts/asyncapi/notificaciones-events.v1.yaml }
+          - { contrato: plataforma-events, aplicativo: flit2-core-identity, tipo: asyncapi, ruta: contracts/asyncapi/plataforma-events.v1.yaml }
+          - { contrato: tramites-events, aplicativo: flit2-core-api, tipo: asyncapi, ruta: contracts/asyncapi/tramites-events.v1.yaml }
+          # proto (un archivo por contrato; los import entre archivos son advertencias en Atlas). Versión obligatoria.
+          - { contrato: comparendos, aplicativo: flit2-core-comparendos, tipo: proto, ruta: contracts/proto/flit/comparendos/v1/comparendos.proto, version: 1.0.0 }
+          - { contrato: consultas-administracion, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/administracion.proto, version: 1.0.0 }
+          - { contrato: consultas-certificaciones, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/certificaciones.proto, version: 1.0.0 }
+          - { contrato: consultas, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/consultas.proto, version: 1.0.0 }
+          - { contrato: consultas-fuentes-comparendos, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/fuentes_comparendos.proto, version: 1.0.0 }
+          - { contrato: consultas-resultado, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/resultado.proto, version: 1.0.0 }
+          - { contrato: consultas-validacion-identidad, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/validacion_identidad.proto, version: 1.0.0 }
+          - { contrato: identidad, aplicativo: flit2-core-identity, tipo: proto, ruta: contracts/proto/flit/identidad/v1/identidad.proto, version: 1.0.0 }
+          - { contrato: notificaciones-mensajes-muertos, aplicativo: flit2-core-notificaciones, tipo: proto, ruta: contracts/proto/flit/notificaciones/v1/mensajes_muertos.proto, version: 1.0.0 }
+          - { contrato: notificaciones, aplicativo: flit2-core-notificaciones, tipo: proto, ruta: contracts/proto/flit/notificaciones/v1/notificaciones.proto, version: 1.0.0 }
+          - { contrato: platform-errores, aplicativo: flit2-plataforma, tipo: proto, ruta: contracts/proto/flit/platform/v1/errores.proto, version: 1.0.0 }
+          - { contrato: platform-tipos, aplicativo: flit2-plataforma, tipo: proto, ruta: contracts/proto/flit/platform/v1/tipos.proto, version: 1.0.0 }
+          - { contrato: tramites-catalogos, aplicativo: flit2-core-api, tipo: proto, ruta: contracts/proto/flit/tramites/v1/catalogos.proto, version: 1.0.0 }
+    uses: flitsas/flit-atlas/.github/workflows/atlas-publicar.yml@v1
+    with:
+      aplicativo: ${{ matrix.aplicativo }}
+      contrato: ${{ matrix.contrato }}
+      tipo: ${{ matrix.tipo }}
+      ruta: ${{ matrix.ruta }}
+      version: ${{ matrix.version || '' }}
+      ruleset: ${{ matrix.ruleset || '' }}
+      modo_lint: ${{ matrix.lint || 'error' }}
+      atlas_url: ${{ vars.ATLAS_URL }}
