@@ -8,6 +8,7 @@ using Flit.Api.Notificaciones;
 using Flit.Api.Platform;
 using Flit.Api.RateLimiting;
 using Flit.Api.Consultas;
+using Flit.Api.PersonaNatural;
 using Flit.Api.Telemetry;
 using Flit.Api.Identity;
 using Flit.Platform.Sdk.Grpc;
@@ -194,6 +195,7 @@ builder.Services.AddFlitOidc(builder.Configuration); // Frente A · HU #12990 (S
 builder.AddFlitTelemetry("flit-core-api"); // Epic #13316 · HU #13332 (solo con OTEL_EXPORTER_OTLP_ENDPOINT)
 builder.Services.AddConsultasRemoto(builder.Configuration); // Epic #13316 · HU #13348: consultas, avalúos y documentos por core-consultas
 builder.Services.AddNotificacionesRemoto(builder.Configuration); // Epic #13316 · HU #13359: canales, buzón de pruebas, entregas y mensajes muertos por core-notificaciones
+builder.Services.AddPersonaNaturalConsumidor(builder.Configuration); // Épica #14021 · HU #14050/#14051: crea los trámites del portal y devuelve su estado (apagado por defecto)
 
 var app = builder.Build();
 

@@ -217,6 +217,9 @@ jobs:
             services/core-notificaciones/Directory.Build.props
             services/core-notificaciones/Directory.Packages.props
             services/core-notificaciones/src/Flit.Notificaciones.Grpc.Contracts
+            services/core-personanatural/Directory.Build.props
+            services/core-personanatural/Directory.Packages.props
+            services/core-personanatural/src/Flit.PersonaNatural.Grpc.Contracts
             contracts/proto
 
       - name: Extract metadata — core-api

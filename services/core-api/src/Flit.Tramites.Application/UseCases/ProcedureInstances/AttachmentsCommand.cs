@@ -512,10 +512,23 @@ public sealed class RegisterIntegrationAttachmentHandler(IProcedureInstanceRepos
     /// instancia (mismo patrón de lista que PutActorsHandler/PatchFieldValuesHandler). Devuelve los DTOs
     /// registrados y la lista de warnings por adjunto (no fatales: el borrador ya existe).
     /// </summary>
+    public Task<(IReadOnlyList<AttachmentDto> Registered, IReadOnlyList<string> Warnings)> HandleBatchAsync(
+        Guid id,
+        Guid tenantId,
+        IReadOnlyList<RegisterAttachmentInput> inputs,
+        Guid? uploadedBy = null,
+        CancellationToken ct = default) =>
+        HandleBatchAsync(id, tenantId, inputs, "ict", uploadedBy, ct);
+
+    /// <summary>
+    /// Igual que el lote de ICT, con el origen (<c>source</c>) del adjunto elegido por quien llama. HU #14050: el portal de
+    /// persona natural registra «portal»; ICT sigue con «ict» (el otro método).
+    /// </summary>
     public async Task<(IReadOnlyList<AttachmentDto> Registered, IReadOnlyList<string> Warnings)> HandleBatchAsync(
         Guid id,
         Guid tenantId,
         IReadOnlyList<RegisterAttachmentInput> inputs,
+        string source,
         Guid? uploadedBy = null,
         CancellationToken ct = default)
     {
@@ -576,7 +589,8 @@ public sealed class RegisterIntegrationAttachmentHandler(IProcedureInstanceRepos
                 SizeBytes = input.SizeBytes,
                 Sha256 = sha,
                 StoragePath = input.StoragePath.Trim(),
-                Source = "ict",
+                // Por defecto «ict» (único llamador hasta HU #14050); el portal de persona natural registra «portal».
+                Source = string.IsNullOrWhiteSpace(source) ? "ict" : source.Trim().ToLowerInvariant(),
                 UploadedAt = now,
                 UploadedBy = uploadedBy,
             };
