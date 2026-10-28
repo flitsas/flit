@@ -114,10 +114,11 @@ public sealed record DetalleRuntRtm(string? Estado, string? NumeroCertificado, s
 public sealed record DetalleRuntSolicitud(string? Estado, string? Entidad, string? NumeroSolicitud, string? Fecha, string? TramitesRealizados);
 
 /// <summary>
-/// Una garantía a favor de un acreedor. Persona jurídica (tipo NIT): razón social y NIT completos. Persona natural (cualquier otro
-/// tipo, o sin tipo): <see cref="Acreedor"/> = <see cref="PersonaNatural"/> y <see cref="NumeroDocumento"/> enmascarado
-/// (<see cref="EnmascaradorDocumento"/>, «****» + 4 últimos, el mismo de las personas del reporte). <see cref="TipoDocumento"/> en
-/// código del producto (NIT, CC, CE, PAS, TI).
+/// Una garantía a favor de un acreedor. Persona jurídica (tipo NIT con número en el rango DIAN de personas jurídicas, ver
+/// <c>LectorDetalleRunt.EsNitPersonaJuridica</c>): razón social y NIT completos. Cualquier otro caso (otro tipo, sin tipo o un NIT de
+/// persona natural, p. ej. la cédula usada como NIT): <see cref="Acreedor"/> = <see cref="PersonaNatural"/> y
+/// <see cref="NumeroDocumento"/> enmascarado (<see cref="EnmascaradorDocumento"/>, «****» + 4 últimos, el mismo de las personas del
+/// reporte). <see cref="TipoDocumento"/> en código del producto (NIT, CC, CE, PAS, TI).
 /// </summary>
 public sealed record DetalleRuntGarantia(string? Acreedor, string? TipoDocumento, string? NumeroDocumento, string? Confecamaras, string? FechaInscripcion)
 {
@@ -125,7 +126,10 @@ public sealed record DetalleRuntGarantia(string? Acreedor, string? TipoDocumento
     public const string PersonaNatural = "Persona natural";
 }
 
-/// <summary>Un par etiqueta/valor de la accidentalidad (la fuente no le da forma fija).</summary>
+/// <summary>
+/// Un par etiqueta/valor de la accidentalidad. La fuente no le da forma fija, así que solo salen las claves del catálogo cerrado de
+/// <c>LectorDetalleRunt</c> con su etiqueta fija en español.
+/// </summary>
 public sealed record DetalleRuntDato(string Etiqueta, string Valor);
 
 /// <summary>
@@ -138,35 +142,62 @@ public sealed record DetalleRuntPoliza(string? Estado, string? NumeroPoliza, str
 /// Lee el <see cref="DetalleRuntReporte"/> de la respuesta cifrada de la celda RUNT: la descifra con
 /// <see cref="RespuestaFuenteCelda.TryLeerVehiculo"/> y la interpreta como <see cref="ConsultarVehiculoIntempoResponse"/> con el
 /// lector de proto-JSON tolerante (nombres del .proto o lowerCamelCase, campos nuevos ignorados). Sin respuesta, cifrado ilegible,
-/// JSON que no es del contrato o resultado distinto de ENCONTRADO ⇒ <c>null</c>, nunca una excepción. Puro y sin logs (la respuesta
-/// trae datos personales).
+/// JSON que no es del contrato, resultado distinto de ENCONTRADO o cualquier fallo no previsto (salvo la cancelación) ⇒ <c>null</c>,
+/// nunca una excepción. Puro y sin logs: ni el mensaje ni la excepción se registran, porque pueden citar la respuesta en claro (trae
+/// datos personales).
+/// <para>
+/// Accidentalidad por lista de PERMITIDOS (revisión de seguridad 2026-10-27): la clave del origen se normaliza (sin tildes,
+/// minúsculas invariantes, sin <c>_</c>, <c>-</c>, espacios ni puntos) y se compara exacta contra <see cref="CatalogoAccidentalidad"/>;
+/// lo que no está (incluido el texto libre: descripción, observación, detalle) no sale. Etiqueta fija por entrada y orden del catálogo.
+/// </para>
 /// </summary>
 internal static class LectorDetalleRunt
 {
     private static readonly JsonParser Lector = new(JsonParser.Settings.Default.WithIgnoreUnknownFields(true));
 
-    /// <summary>Claves de accidentalidad que pueden traer datos de persona o de auditoría del proveedor: no salen.</summary>
-    private static readonly string[] ClavesExcluidas =
-        ["nombre", "documento", "cedula", "identificacion", "direccion", "telefono", "email", "correo", "conductor", "propietario",
-            "serialversion", "url", "transaccion", "proveedor"];
+    /// <summary>
+    /// Catálogo cerrado de la accidentalidad, en el orden de salida: etiqueta fija en español y claves normalizadas aceptadas (ver
+    /// <see cref="Normalizar"/>). Agregar un dato = agregar una entrada aquí; nunca derivar la etiqueta de la clave del origen.
+    /// </summary>
+    internal static readonly IReadOnlyList<(string Etiqueta, string[] Claves)> CatalogoAccidentalidad =
+    [
+        ("Fecha", ["fecha", "fechaaccidente"]),
+        ("Gravedad", ["gravedad"]),
+        ("Clase de accidente", ["claseaccidente", "clase"]),
+        ("Tipo de accidente", ["tipoaccidente", "tipo"]),
+        ("Con heridos", ["conheridos"]),
+        ("Con muertos", ["conmuertos", "confallecidos"]),
+        ("Municipio", ["municipio"]),
+        ("Departamento", ["departamento"]),
+        ("Organismo de tránsito", ["organismo", "organismotransito", "secretaria", "secretariatransito"]),
+    ];
 
-    /// <summary>El detalle de la respuesta cifrada; null si no hay o no se puede leer.</summary>
+    /// <summary>Equivalencias explícitas de vocales con tilde, ñ y ü: no dependen de los datos de ICU (globalización invariante).</summary>
+    private static readonly Dictionary<char, char> SinTilde = new()
+    {
+        ['á'] = 'a', ['é'] = 'e', ['í'] = 'i', ['ó'] = 'o', ['ú'] = 'u', ['à'] = 'a', ['è'] = 'e', ['ì'] = 'i', ['ò'] = 'o', ['ù'] = 'u',
+        ['ä'] = 'a', ['ë'] = 'e', ['ï'] = 'i', ['ö'] = 'o', ['ü'] = 'u', ['ñ'] = 'n', ['Á'] = 'a', ['É'] = 'e', ['Í'] = 'i', ['Ó'] = 'o',
+        ['Ú'] = 'u', ['À'] = 'a', ['È'] = 'e', ['Ì'] = 'i', ['Ò'] = 'o', ['Ù'] = 'u', ['Ä'] = 'a', ['Ë'] = 'e', ['Ï'] = 'i', ['Ö'] = 'o',
+        ['Ü'] = 'u', ['Ñ'] = 'n',
+    };
+
+    /// <summary>El detalle de la respuesta cifrada; null si no hay o no se puede leer (la cancelación sí se propaga).</summary>
     public static DetalleRuntReporte? Leer(IProtectorRespuestaFuente protector, byte[]? cifrada)
     {
         ArgumentNullException.ThrowIfNull(protector);
-        if (cifrada is null || !RespuestaFuenteCelda.TryLeerVehiculo(protector, cifrada, out var json) || json is not { } respuesta)
+        if (cifrada is null)
             return null;
-        ConsultarVehiculoIntempoResponse mensaje;
         try
         {
-            mensaje = Lector.Parse<ConsultarVehiculoIntempoResponse>(respuesta.GetRawText());
+            if (!RespuestaFuenteCelda.TryLeerVehiculo(protector, cifrada, out var json) || json is not { } respuesta)
+                return null;
+            return Desde(Lector.Parse<ConsultarVehiculoIntempoResponse>(respuesta.GetRawText()));
         }
-        catch (Exception ex) when (ex is InvalidJsonException or InvalidProtocolBufferException)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            // Sin registrar ni el mensaje ni la excepción: pueden citar el JSON descifrado (datos personales).
             return null;
         }
-
-        return Desde(mensaje);
     }
 
     /// <summary>El detalle de la respuesta tipada; null si no es ENCONTRADO con vehículo.</summary>
@@ -196,8 +227,7 @@ internal static class LectorDetalleRunt
                 .Where(r => r != new DetalleRuntRtm(null, null, null, null, null))],
             [],
             [.. v.GarantiasFavorDe.Select(Garantia).Where(x => x is not null).Select(x => x!)],
-            [.. v.AccidentRate.SelectMany(a => a.Campos).Where(c => Visible(c.Key) && T(c.Value) is not null)
-                .Select(c => new DetalleRuntDato(Etiqueta(c.Key), T(c.Value)!)).Distinct()],
+            [.. v.AccidentRate.SelectMany(Accidente).Distinct()],
             []);
     }
 
@@ -208,7 +238,7 @@ internal static class LectorDetalleRunt
         var acreedor = T(g.Acreedor);
         if (tipo is null && numero is null && acreedor is null && T(g.Confecamaras) is null && T(g.FechaInscripcion) is null)
             return null;
-        var juridica = string.Equals(tipo, "NIT", StringComparison.Ordinal);
+        var juridica = string.Equals(tipo, "NIT", StringComparison.Ordinal) && EsNitPersonaJuridica(numero);
         return new DetalleRuntGarantia(
             juridica ? acreedor : DetalleRuntGarantia.PersonaNatural,
             tipo,
@@ -225,33 +255,80 @@ internal static class LectorDetalleRunt
         var otro => otro,
     };
 
-    private static bool Visible(string clave)
+    /// <summary>
+    /// NIT de persona jurídica según el rango que asigna la DIAN: quitando todo lo no numérico y el dígito de verificación (cuando
+    /// viene separado por guion, o cuando quedan 10 dígitos), el número tiene 9 dígitos y empieza por 8 o 9. Una persona natural
+    /// usa como NIT su cédula (nunca en ese rango), así que cualquier otro número se trata como persona natural.
+    /// </summary>
+    internal static bool EsNitPersonaJuridica(string? numero)
     {
-        var minuscula = clave.ToLowerInvariant();
-        return ClavesExcluidas.All(x => !minuscula.Contains(x, StringComparison.Ordinal));
+        if (numero is null)
+            return false;
+        var guion = numero.LastIndexOf('-');
+        var cuerpo = guion > 0 ? numero[..guion] : numero;
+        var digitos = new string([.. cuerpo.Where(char.IsAsciiDigit)]);
+        if (guion <= 0 && digitos.Length == 10)
+            digitos = digitos[..9];
+        return digitos.Length == 9 && digitos[0] is '8' or '9';
     }
 
-    /// <summary><c>fechaAccidente</c> o <c>fecha_accidente</c> → «Fecha accidente».</summary>
-    private static string Etiqueta(string clave)
+    /// <summary>Los datos permitidos de un accidente, en el orden del catálogo: uno por etiqueta (la primera clave con valor).</summary>
+    private static IEnumerable<DetalleRuntDato> Accidente(AccidenteIntempo accidente)
     {
-        var texto = new StringBuilder();
-        for (var i = 0; i < clave.Length; i++)
+        var campos = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (clave, valor) in accidente.Campos)
         {
-            var c = clave[i];
-            if (c is '_' or '-' or ' ')
-            {
-                if (texto.Length > 0 && texto[^1] != ' ')
-                    texto.Append(' ');
-                continue;
-            }
-
-            if (char.IsUpper(c) && texto.Length > 0 && texto[^1] != ' ' && i > 0 && !char.IsUpper(clave[i - 1]))
-                texto.Append(' ');
-            texto.Append(texto.Length == 0 ? char.ToUpperInvariant(c) : char.ToLowerInvariant(c));
+            if (T(valor) is { } texto)
+                campos.TryAdd(Normalizar(clave), texto);
         }
 
-        return texto.ToString().Trim();
+        foreach (var (etiqueta, claves) in CatalogoAccidentalidad)
+        {
+            foreach (var clave in claves)
+            {
+                if (campos.TryGetValue(clave, out var valor))
+                {
+                    yield return new DetalleRuntDato(etiqueta, Booleano(valor));
+                    break;
+                }
+            }
+        }
     }
+
+    /// <summary>
+    /// Clave comparable: sin tildes (tabla explícita y, si la plataforma la soporta, descomposición Unicode quitando las marcas),
+    /// minúsculas invariantes y sin <c>_</c>, <c>-</c>, espacios ni puntos: <c>fechaAccidente</c>, <c>fecha_accidente</c> y
+    /// <c>FECHA ACCIDENTE</c> dan <c>fechaaccidente</c>; <c>Dirección</c> da <c>direccion</c>.
+    /// </summary>
+    internal static string Normalizar(string clave)
+    {
+        var descompuesta = clave;
+        try
+        {
+            descompuesta = clave.Normalize(NormalizationForm.FormD);
+        }
+        catch (PlatformNotSupportedException)
+        {
+            // Sin datos de normalización: queda la tabla explícita de abajo.
+        }
+
+        var texto = new StringBuilder(descompuesta.Length);
+        foreach (var c in descompuesta)
+        {
+            if (c is '_' or '-' or '.' || char.IsWhiteSpace(c) || CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark)
+                continue;
+            texto.Append(SinTilde.TryGetValue(c, out var simple) ? simple : char.ToLowerInvariant(c));
+        }
+
+        return texto.ToString();
+    }
+
+    private static string Booleano(string valor) => valor.ToUpperInvariant() switch
+    {
+        "TRUE" => "Sí",
+        "FALSE" => "No",
+        _ => valor,
+    };
 
     private static string? T(string? valor) => string.IsNullOrWhiteSpace(valor) ? null : valor.Trim();
 }

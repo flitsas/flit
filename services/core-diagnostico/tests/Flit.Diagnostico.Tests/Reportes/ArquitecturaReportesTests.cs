@@ -75,6 +75,48 @@ public sealed class ArquitecturaReportesTests
             .Should().NotContain(n => n.Contains("Proveedor", StringComparison.OrdinalIgnoreCase) || n.Contains("Departamento", StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// Fragmentos prohibidos en el nombre de una propiedad del detalle del RUNT (ajuste 2026-10-27, R-20): proveedor, transacción,
+    /// cifrado, payload, auditoría de la fuente y nombre de persona. <c>Acreedor</c> está permitido a propósito: el lector solo deja
+    /// la razón social cuando el NIT está en el rango DIAN de personas jurídicas; si no, sale «Persona natural» con el documento
+    /// enmascarado (<see cref="DetalleRuntGarantia.PersonaNatural"/>).
+    /// </summary>
+    private static readonly string[] ProhibidasDetalle =
+        ["Proveedor", "Transaccion", "Cifrad", "Payload", "SerialVersion", "Url", "InformacionConsistente", "Nombre", "RazonSocial",
+            "Propietario", "Conductor", "Origen"];
+
+    // R-20 (ajuste 2026-10-27) — todos los tipos DetalleRunt* del ensamblado cuelgan del contenido del vehículo y ninguno tiene
+    // propiedades de proveedor, transacción, cifrado, payload ni nombre de persona.
+    [Fact]
+    public void Tipos_del_detalle_runt_no_tienen_proveedor_cifrado_ni_nombre_de_persona()
+    {
+        var detalle = typeof(ContenidoReporteVehiculo).Assembly.GetTypes()
+            .Where(t => t.Name.StartsWith("DetalleRunt", StringComparison.Ordinal) && !t.IsAbstract && !t.IsInterface)
+            .ToList();
+        var alcanzables = Propiedades([typeof(ContenidoReporteVehiculo)]).Select(p => p.DeclaringType!).ToHashSet();
+
+        detalle.Select(t => t.Name).Should().Contain(
+            ["DetalleRuntReporte", "DetalleRuntVehiculo", "DetalleRuntGeneral", "DetalleRuntTecnico", "DetalleRuntSoat", "DetalleRuntRtm",
+                "DetalleRuntSolicitud", "DetalleRuntGarantia", "DetalleRuntDato", "DetalleRuntPoliza"]);
+        detalle.Where(t => !alcanzables.Contains(t)).Select(t => t.Name).Should().BeEmpty("todo DetalleRunt* llega al renderizador y se revisa");
+        ViolacionesDetalle(detalle).Should().BeEmpty();
+        Propiedades([typeof(DetalleRuntGarantia)]).Select(p => p.Name).Should().Contain(nameof(DetalleRuntGarantia.Acreedor), "permitido: pasa por la regla del NIT");
+    }
+
+    // R-20 (negativo) — un tipo del detalle con un nombre de persona o un dato del proveedor hace fallar la prueba.
+    [Fact]
+    public void Un_detalle_con_nombre_o_proveedor_hace_fallar_la_prueba()
+    {
+        ViolacionesDetalle([typeof(DetalleConNombre)]).Should().BeEquivalentTo(
+            ["DetalleConNombre.NombreCompleto", "DetalleConNombre.RazonSocialPersona", "DetalleConNombre.ProveedorId", "DetalleConNombre.PayloadCifrado"]);
+    }
+
+    private static IReadOnlyList<string> ViolacionesDetalle(IEnumerable<Type> tipos) =>
+        [.. Propiedades(tipos)
+            .Select(p => $"{p.DeclaringType!.Name}.{p.Name}")
+            .Where(n => ProhibidasDetalle.Any(x => n[(n.IndexOf('.', StringComparison.Ordinal) + 1)..].Contains(x, StringComparison.OrdinalIgnoreCase)))
+            .Distinct()];
+
     private static IEnumerable<string> Json(Type tipo) =>
         tipo.GetProperties(BindingFlags.Public | BindingFlags.Instance)
             .Where(p => p.Name != "EqualityContract")
@@ -119,4 +161,6 @@ public sealed class ArquitecturaReportesTests
     internal sealed record ReporteConOrigen(string Origen, IReadOnlyList<SeccionConUsuarioManual> Secciones);
 
     internal sealed record SeccionConUsuarioManual(Guid? UsuarioManualId, byte[] DocCifrado, string Fuente);
+
+    internal sealed record DetalleConNombre(string NombreCompleto, string RazonSocialPersona, string ProveedorId, string PayloadCifrado, string Acreedor);
 }

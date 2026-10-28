@@ -89,7 +89,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
         PdfDePrueba.Tiene(garantias, "CC ****5678").Should().BeTrue(garantias);
         texto.Should().NotContainAny([PdfDePrueba.Plano(NombreAcreedorNatural), DocumentoAcreedorNatural, "FICTICIOACREEDOR"]);
 
-        PdfDePrueba.Tiene(Tramo(texto, "ACCIDENTALIDAD", "PÓLIZA DE RESPONSABILIDAD CIVIL"), "Fecha accidente Gravedad 02/02/2025 SOLO DAÑOS").Should().BeTrue(texto);
+        PdfDePrueba.Tiene(Tramo(texto, "ACCIDENTALIDAD", "PÓLIZA DE RESPONSABILIDAD CIVIL"), "Fecha Gravedad 02/02/2025 SOLO DAÑOS").Should().BeTrue(texto);
     }
 
     [Fact]

@@ -83,25 +83,31 @@ internal static class TablaFlit
 
     /// <summary>
     /// Grilla: encabezado degradado (se repite si la tabla se parte entre páginas) y una fila por elemento (nunca partida). Sin filas
-    /// y con <paramref name="sinFilas"/>, una sola fila con ese texto que abarca todas las columnas.
+    /// y con <paramref name="sinFilas"/>, una sola fila con ese texto que abarca todas las columnas. <paramref name="anchos"/>
+    /// (opcional, uno por columna, enteros ≥ 1): ancho relativo de cada columna; sin él, todas iguales.
     /// </summary>
-    public static void Grilla(IContainer contenedor, IReadOnlyList<string> columnas, IReadOnlyList<string[]> filas, string? sinFilas = null)
+    public static void Grilla(
+        IContainer contenedor, IReadOnlyList<string> columnas, IReadOnlyList<string[]> filas, string? sinFilas = null, IReadOnlyList<int>? anchos = null)
     {
         ArgumentNullException.ThrowIfNull(contenedor);
         ArgumentNullException.ThrowIfNull(columnas);
         ArgumentNullException.ThrowIfNull(filas);
+        if (anchos is not null && (anchos.Count != columnas.Count || anchos.Any(a => a < 1)))
+            throw new ArgumentException("Un ancho entero ≥ 1 por columna.", nameof(anchos));
+        var pesos = anchos ?? [.. columnas.Select(_ => 1)];
+        var total = pesos.Sum();
         List<IReadOnlyList<(string, int)>> datos = filas.Count == 0 && sinFilas is not null
-            ? [[(sinFilas, columnas.Count)]]
-            : filas.Select(f => (IReadOnlyList<(string, int)>)[.. f.Select(t => (t, 1))]).ToList();
+            ? [[(sinFilas, total)]]
+            : filas.Select(f => (IReadOnlyList<(string, int)>)[.. f.Select((t, i) => (t, i < pesos.Count ? pesos[i] : 1))]).ToList();
         contenedor.Table(tabla =>
         {
             tabla.ColumnsDefinition(c => c.RelativeColumn());
-            tabla.Header(h => h.Cell().Element(c => Fila(c, [.. columnas.Select(t => (t, 1))], columnas.Count, encabezado: true, arriba: true, abajo: datos.Count == 0)));
+            tabla.Header(h => h.Cell().Element(c => Fila(c, [.. columnas.Select((t, i) => (t, pesos[i]))], total, encabezado: true, arriba: true, abajo: datos.Count == 0)));
             for (var i = 0; i < datos.Count; i++)
             {
                 var fila = datos[i];
                 var ultima = i == datos.Count - 1;
-                tabla.Cell().PaddingTop(Separador).ShowEntire().Element(c => Fila(c, fila, columnas.Count, encabezado: false, arriba: false, abajo: ultima));
+                tabla.Cell().PaddingTop(Separador).ShowEntire().Element(c => Fila(c, fila, total, encabezado: false, arriba: false, abajo: ultima));
             }
         });
     }
@@ -196,6 +202,9 @@ internal static class TablaFlit
 
     /// <summary>Esquinas redondeadas de una celda (superior izquierda, superior derecha, inferior derecha, inferior izquierda).</summary>
     internal readonly record struct Esquinas(bool Tl, bool Tr, bool Br, bool Bl);
+
+    // SVG dinámico (CeldaSvg, RecuadroSvg, Envolver): solo números y colores del tema. Nunca interpolar texto de la fuente; si algún
+    // día entra, escaparlo antes con SecurityElement.Escape.
 
     /// <summary>
     /// SVG del fondo de una celda de <paramref name="ancho"/> × <paramref name="alto"/>: degradado entre el color de la fila en

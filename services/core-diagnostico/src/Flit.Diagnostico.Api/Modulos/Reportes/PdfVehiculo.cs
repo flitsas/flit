@@ -171,13 +171,13 @@ internal static partial class PdfVehiculo
         GrillaRunt(col, "Datos teóricos", ["N.º ejes", "Capacidad de carga", "Pasajeros sentados", "Peso bruto vehicular"],
             t is null ? [] : [[R(t.NumeroEjes), R(t.CapacidadCarga), R(t.PasajerosSentados), R(t.PesoBrutoVehicular)]]);
         GrillaRunt(col, "Datos SOAT", ["Estado", "N.º póliza", "Vigencia", "Expedición", "Vencimiento", "Entidad"],
-            [.. (d?.Soat ?? []).Select(s => new[] { Estado(s.Estado), R(s.NumeroPoliza), R(s.FechaVigencia), R(s.FechaExpedicion), R(s.FechaVencimiento), R(s.Entidad) })]);
+            [.. (d?.Soat ?? []).Select(s => new[] { Estado(s.Estado), R(s.NumeroPoliza), R(s.FechaVigencia), R(s.FechaExpedicion), R(s.FechaVencimiento), R(s.Entidad) })], [4, 4, 4, 4, 5, 6]);
         GrillaRunt(col, "Datos revisión tecno-mecánica", ["Estado", "N.º certificado", "Vigencia", "Expedición", "CDA"],
-            [.. (d?.Rtm ?? []).Select(r => new[] { Estado(r.Estado), R(r.NumeroCertificado), R(r.FechaVigencia), R(r.FechaExpedicion), R(r.Cda) })]);
+            [.. (d?.Rtm ?? []).Select(r => new[] { Estado(r.Estado), R(r.NumeroCertificado), R(r.FechaVigencia), R(r.FechaExpedicion), R(r.Cda) })], [1, 1, 1, 1, 2]);
         GrillaRunt(col, "Solicitudes", ["Estado", "Entidad", "N.º solicitud", "Fecha solicitud", "Trámites realizados"],
             [.. (d?.Solicitudes ?? []).Select(s => new[] { R(s.Estado), R(s.Entidad), R(s.NumeroSolicitud), R(s.Fecha), R(s.TramitesRealizados) })]);
         GrillaRunt(col, "Garantías a favor", ["Acreedor", "Confecámaras", "Fecha inscripción", "Tipo y N.º de documento acreedor"],
-            [.. (d?.GarantiasAFavor ?? []).Select(g => new[] { R(g.Acreedor), R(g.Confecamaras), R(g.FechaInscripcion), DocumentoAcreedor(g) })]);
+            [.. (d?.GarantiasAFavor ?? []).Select(g => new[] { R(g.Acreedor), R(g.Confecamaras), R(g.FechaInscripcion), DocumentoAcreedor(g) })], [3, 2, 2, 3]);
 
         var accidentalidad = d?.Accidentalidad ?? [];
         col.Item().Element(c => SeccionConTitulo(c, "Accidentalidad", null, cuerpo =>
@@ -189,12 +189,16 @@ internal static partial class PdfVehiculo
         }));
 
         GrillaRunt(col, "Póliza de responsabilidad civil", ["Estado", "N.º póliza", "Tipo póliza", "Expedición", "Vencimiento", "Entidad"],
-            [.. (d?.PolizasResponsabilidadCivil ?? []).Select(p => new[] { Estado(p.Estado), R(p.NumeroPoliza), R(p.Tipo), R(p.FechaExpedicion), R(p.FechaVencimiento), R(p.Entidad) })]);
+            [.. (d?.PolizasResponsabilidadCivil ?? []).Select(p => new[] { Estado(p.Estado), R(p.NumeroPoliza), R(p.Tipo), R(p.FechaExpedicion), R(p.FechaVencimiento), R(p.Entidad) })], [4, 4, 4, 4, 5, 6]);
     }
 
-    /// <summary>Sección RUNT ampliada con una grilla; sin filas, una sola fila «No registra» a todo el ancho.</summary>
-    private static void GrillaRunt(ColumnDescriptor col, string titulo, IReadOnlyList<string> columnas, IReadOnlyList<string[]> filas) =>
-        col.Item().Element(c => SeccionConTitulo(c, titulo, null, cuerpo => cuerpo.Item().Element(x => TablaFlit.Grilla(x, columnas, filas, NoRegistra))));
+    /// <summary>
+    /// Sección RUNT ampliada con una grilla; sin filas, una sola fila «No registra» a todo el ancho. <paramref name="anchos"/>: ancho
+    /// relativo por columna (más ancho para los nombres de entidad, CDA y documentos, que si no se parten a mitad de palabra).
+    /// </summary>
+    private static void GrillaRunt(
+        ColumnDescriptor col, string titulo, IReadOnlyList<string> columnas, IReadOnlyList<string[]> filas, IReadOnlyList<int>? anchos = null) =>
+        col.Item().Element(c => SeccionConTitulo(c, titulo, null, cuerpo => cuerpo.Item().Element(x => TablaFlit.Grilla(x, columnas, filas, NoRegistra, anchos))));
 
     /// <summary>
     /// «Información del vehículo» con el detalle del RUNT (diseño v2): Placa · Licencia de tránsito · Tipo de servicio / Clasificación ·
