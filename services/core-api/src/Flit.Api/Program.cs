@@ -288,6 +288,9 @@ app.UseMiddleware<Flit.Api.Middleware.FamilyReadEnforcementMiddleware>();
 app.UseMiddleware<Flit.Api.Middleware.UsageTelemetryMiddleware>(); // Reportes2 HU-A
 app.UseMiddleware<Flit.Api.Platform.RequireProductMiddleware>(); // FLIT Suite · HU #12966 — RequireProduct (Suite:ProductAccess:Enforce)
 
+// Bug #14010 H-02 — un parámetro obligatorio ausente no debe devolver la excepción interna del binder.
+app.UseMiddleware<Flit.Api.Middleware.BadHttpRequestMiddleware>();
+
 // Liveness: el healthcheck de Docker (docker-compose.prod.yml) y el /ready del
 // Gateway sondean este endpoint. Debe existir en core-api, no solo en el Gateway.
 app.MapGet("/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();

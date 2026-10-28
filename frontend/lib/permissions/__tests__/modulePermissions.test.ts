@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adminReadOnlyFor, buildModuleViews, isOtModuleCode, outOfCapOverrideIds, withOverrideActions } from "../modulePermissions";
+import { adminReadOnlyFor, buildModuleViews, isOtModuleCode, outOfCapOverrideIds, withGrantableActions, withOverrideActions } from "../modulePermissions";
 import type { AccessibleModule } from "@/lib/api/security";
 import type { GrantablePermissionItem, UserPermissionOverride } from "@/lib/api/permission-overrides";
 
@@ -137,10 +137,29 @@ describe("HU #13655 (FD2-3) — withOverrideActions: lo que está fuera del tope
 });
 
 describe("HU #13655 — isOtModuleCode: módulos que el Admin OT configura en sus usuarios", () => {
-  it("acepta los módulos del organismo y la descarga masiva", () => {
-    for (const code of ["ot-tramites", "ot-documentos", "OT-Usuarios", "consolidado-masivo"]) {
+  it("acepta los módulos del organismo, la descarga masiva y reenviar validación", () => {
+    for (const code of ["ot-tramites", "ot-documentos", "OT-Usuarios", "consolidado-masivo", "admin-tramites-avanzado"]) {
       expect(isOtModuleCode(code)).toBe(true);
     }
+  });
+
+  it("Bug #14010 H-04: un permiso otorgable que no está en el catálogo se muestra en su módulo", () => {
+    const grantableItem = {
+      id: "reenviar",
+      slug: "AdminTramiteReenviarValidacion",
+      name: "Reenviar validación de identidad",
+      moduleCode: "admin-tramites-avanzado",
+      productCode: "tramites",
+    };
+    const merged = withGrantableActions([], [grantableItem]);
+    expect(merged).toEqual([
+      expect.objectContaining({
+        code: "admin-tramites-avanzado",
+        name: "Gestión avanzada de trámites",
+        actions: [expect.objectContaining({ id: "reenviar", slug: "AdminTramiteReenviarValidacion" })],
+      }),
+    ]);
+    expect(isOtModuleCode(merged[0].code)).toBe(true);
   });
 
   it("descarta los de compañía y los Ver/Crear por familia de trámites", () => {
