@@ -34,6 +34,12 @@ const COLUMNAS_FILTRO: ColumnaFiltro[] = [
   },
 ];
 
+/** «TRASPASO» / «traspaso» → «Traspaso»: la categoría llega en mayúsculas o minúsculas según el catálogo. */
+function legible(texto: string): string {
+  const t = texto.trim().toLowerCase().replace(/_/g, " ");
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
 export interface TiposSectionProps {
   /** Lleva a la pestaña Tarifas (botón «Crear tarifa» del aviso «Falta tarifa»). */
   onIrATarifas: () => void;
@@ -116,7 +122,7 @@ export function TiposSection({ onIrATarifas, onCambio }: TiposSectionProps) {
       render: (t) => (
         <>
           <span className="block font-semibold">{t.nombre}</span>
-          <span className="block text-xs text-[#59677D] dark:text-white/70">{t.familia}</span>
+          <span className="block text-xs text-[#59677D] dark:text-white/70">{legible(t.familia)}</span>
         </>
       ),
     },
