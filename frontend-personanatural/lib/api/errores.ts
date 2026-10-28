@@ -51,6 +51,8 @@ const MENSAJES_POR_CODIGO: Record<string, string> = {
   rate_limited: "Demasiados intentos. Vuelve a intentarlo en unos minutos.",
   cedula_rate_limited: "Alcanzaste el máximo de consultas por hora para este documento. Intenta más tarde.",
   consultas_no_disponibles: "Las consultas están pausadas por hoy. Intenta de nuevo mañana.",
+  detalle_agotado: "Alcanzaste el máximo de consultas para este trámite; escribe los datos manualmente.",
+  rol_invalido: "Este trámite no admite a esta persona en ese rol.",
   tipo_no_habilitado: "Este trámite no está habilitado en el organismo elegido.",
   tarifa_no_vigente: "Este trámite aún no tiene tarifa en el organismo elegido.",
   tipo_no_disponible: "Este tipo de trámite ya no está disponible en el portal.",

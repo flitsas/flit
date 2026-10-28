@@ -5,6 +5,7 @@ import { definicionDe, solicitudDe } from "./fixtures-wizard";
 import { cuerpo, DIAGNOSTICO_OK, guardado, nodo, wizardAbierto, type Manejador } from "./montar-wizard";
 import { json } from "./utilidades";
 
+const RUTA_DETALLE = "POST /solicitudes/s-1/consultas/persona-detalle";
 const RUTA_DEFINICION = "GET /tipos-tramite/TIPO_A/definicion?organismoId=o-1";
 const CEDULA_SOLICITANTE = "1020456789"; // la del contexto del wizard (CONTEXTO)
 const comun = { firma: false, personaNaturalPermitida: true };
@@ -53,9 +54,14 @@ function consultarSolicitante(card: HTMLElement) {
 async function consultarTercero(card: HTMLElement, documento: string) {
   fireEvent.change(within(card).getByLabelText(/Número de documento/), { target: { value: documento } });
   fireEvent.click(within(card).getByRole("button", { name: "Consultar" }));
-  fireEvent.click(await within(card).findByLabelText("Verificación de seguridad"));
   await waitFor(() => expect(within(card).getByLabelText(/Teléfono/)).toBeEnabled());
 }
+
+const detalle = (extra: Record<string, unknown> = {}) => json({ existe: true, nombres: "ANA MARIA", apellidos: "RUIZ PEREZ", nombreCompleto: "ANA MARIA RUIZ PEREZ", ciudad: null, ...extra });
+const consultar = (card: HTMLElement, documento = "52123456") => {
+  fireEvent.change(within(card).getByLabelText(/Número de documento/), { target: { value: documento } });
+  fireEvent.click(within(card).getByRole("button", { name: "Consultar" }));
+};
 
 afterEach(() => {
   vi.useRealTimers();
@@ -125,54 +131,122 @@ describe("validación de formato y consulta del documento (F3 AC1 y AC2, K5 AC5)
     expect(continuar()).toBeDisabled();
   });
 
-  it("consulta a un tercero con captcha y consentimiento: habilita los campos y muestra el dato mínimo de la licencia", async () => {
-    const { llamadas } = await abrir({
-      "POST /consultas/persona": () => json({ existe: true, estadoLicencia: "VIGENTE", vigencia: "2029-03-12" }),
-    });
+  it("consulta a un tercero con la sesión de la solicitud, sin captcha: rellena el nombre y lo deja de solo lectura", async () => {
+    const { llamadas } = await abrir({ [RUTA_DETALLE]: () => detalle() });
     const card = tarjeta("Comprador");
     await consultarTercero(card, "52123456");
 
-    const llamada = llamadas.find((l) => l.clave === "POST /consultas/persona");
-    expect(JSON.parse(String(llamada?.init.body))).toMatchObject({ documento: { tipo: "CC", numero: "52123456" }, consentimiento: true });
-    expect((llamada?.init.headers as Record<string, string>)["x-captcha-token"]).toBeTruthy();
-    // Con el documento ya consultado, el tipo y el número quedan de solo lectura y el nombre se escribe (la consulta no lo devuelve).
+    const llamada = llamadas.find((l) => l.clave === RUTA_DETALLE);
+    expect(JSON.parse(String(llamada?.init.body))).toEqual({ tipoDocumento: "CC", documento: "52123456", rol: "comprador", consentimiento: true, consentimientoVersion: "v1" });
+    expect((llamada?.init.headers as Record<string, string>)["x-captcha-token"]).toBeUndefined();
+    expect(within(card).queryByLabelText("Verificación de seguridad")).toBeNull();
+    expect(llamadas.some((l) => l.clave === "POST /consultas/persona")).toBe(false);
     expect(within(card).getByLabelText(/Número de documento/)).toBeDisabled();
+    const nombre = within(card).getByLabelText(/Nombre completo/);
+    expect(nombre).toHaveValue("ANA MARIA RUIZ PEREZ");
+    expect(nombre).toHaveAttribute("readonly");
+    expect(within(card).getByLabelText(/Teléfono/)).toBeEnabled();
+  });
+
+  it("con la identidad pendiente el nombre consultado se muestra enmascarado", async () => {
+    await abrir({
+      [RUTA_DETALLE]: () => detalle(),
+      "GET /solicitudes/s-1/identidad": () => json(identidad([parte("vendedor", "sin_solicitar"), parte("comprador", "pendiente")])),
+    });
+    const card = tarjeta("Comprador");
+    await consultarTercero(card, "52123456");
+    await waitFor(() => expect(within(card).getByLabelText(/Nombre completo/)).toHaveValue("AN••• MA••• RU••• PE•••"));
+  });
+
+  it("un documento sin coincidencia avisa bajo los campos y deja escribir el nombre a mano", async () => {
+    await abrir({ [RUTA_DETALLE]: () => json({ existe: false, nombres: null, apellidos: null, nombreCompleto: null, ciudad: null }) });
+    const card = tarjeta("Comprador");
+    await consultarTercero(card, "52123456");
+
+    expect(within(card).getByText(/No encontramos los datos de esta persona; escribe su nombre manualmente/)).toBeInTheDocument();
+    const nombre = within(card).getByLabelText(/Nombre completo/);
+    expect(nombre).toBeEnabled();
+    expect(nombre).not.toHaveAttribute("readonly");
+    fireEvent.change(nombre, { target: { value: "ANA RUIZ" } });
+    expect(nombre).toHaveValue("ANA RUIZ");
+    expect(within(card).getByLabelText(/Número de documento/)).toBeDisabled();
+  });
+
+  it("si solo vienen nombres y apellidos arma el nombre completo", async () => {
+    await abrir({ [RUTA_DETALLE]: () => detalle({ nombreCompleto: null }) });
+    const card = tarjeta("Comprador");
+    await consultarTercero(card, "52123456");
+    expect(within(card).getByLabelText(/Nombre completo/)).toHaveValue("ANA MARIA RUIZ PEREZ");
+  });
+
+  it("«Cambiar documento» borra el nombre consultado y vuelve a pedir la consulta", async () => {
+    await abrir({ [RUTA_DETALLE]: () => detalle() });
+    const card = tarjeta("Comprador");
+    await consultarTercero(card, "52123456");
+    fireEvent.click(within(card).getByRole("button", { name: "Cambiar documento" }));
+
+    expect(within(card).getByLabelText(/Número de documento/)).toBeEnabled();
+    expect(within(card).getByLabelText(/Nombre completo/)).toHaveValue("");
+    expect(within(card).getByRole("button", { name: "Consultar" })).toBeInTheDocument();
+  });
+
+  it("429 detalle_agotado degrada a captura manual con el aviso, sin bloquear la consulta", async () => {
+    await abrir({ [RUTA_DETALLE]: () => problema(429, "detalle_agotado") });
+    const card = tarjeta("Comprador");
+    await consultarTercero(card, "52123456");
+
+    expect(within(card).getByText("Alcanzaste el máximo de consultas para este trámite; escribe los datos manualmente.")).toBeInTheDocument();
     expect(within(card).getByLabelText(/Nombre completo/)).toBeEnabled();
-    expect(within(card).getByText("Licencia vigente · 12/03/2029")).toBeInTheDocument();
+    expect(within(card).queryByText(/Podrás intentarlo de nuevo/)).toBeNull();
   });
 
-  it("un documento que no existe muestra el error bajo el campo y deja los demás deshabilitados", async () => {
-    await abrir({ "POST /consultas/persona": () => json({ existe: false, estadoLicencia: null, vigencia: null }) });
+  it("429 cedula_rate_limited con Retry-After muestra la espera y no habilita los campos", async () => {
+    await abrir({ [RUTA_DETALLE]: () => problema(429, "cedula_rate_limited", { "retry-after": "3600" }) });
     const card = tarjeta("Comprador");
-    fireEvent.change(within(card).getByLabelText(/Número de documento/), { target: { value: "52123456" } });
-    fireEvent.click(within(card).getByRole("button", { name: "Consultar" }));
-    fireEvent.click(await within(card).findByLabelText("Verificación de seguridad"));
+    consultar(card);
 
-    expect(await within(card).findByText(/No encontramos a esta persona con ese documento/)).toBeInTheDocument();
-    expect(within(card).getByLabelText(/Número de documento/)).toHaveAttribute("aria-invalid", "true");
+    expect(await within(card).findByText(/máximo de consultas por hora para este documento/)).toBeInTheDocument();
+    expect(within(card).getByText(/Podrás intentarlo de nuevo en/)).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: "Consultar" })).toBeDisabled();
     expect(within(card).getByLabelText(/Teléfono/)).toBeDisabled();
-    expect(within(card).getByLabelText(/Correo electrónico/)).toBeDisabled();
   });
 
-  it("un error del servicio al consultar se explica y no habilita los campos", async () => {
-    await abrir({ "POST /consultas/persona": () => problema(503, "proveedor_no_disponible", { "retry-after": "20" }) });
+  it("un 503 proveedor_no_disponible se explica, muestra la espera y no habilita los campos", async () => {
+    await abrir({ [RUTA_DETALLE]: () => problema(503, "proveedor_no_disponible", { "retry-after": "20" }) });
     const card = tarjeta("Comprador");
-    fireEvent.change(within(card).getByLabelText(/Número de documento/), { target: { value: "52123456" } });
-    fireEvent.click(within(card).getByRole("button", { name: "Consultar" }));
-    fireEvent.click(await within(card).findByLabelText("Verificación de seguridad"));
+    consultar(card);
 
     expect(await within(card).findByText(/El servicio no está disponible en este momento/)).toBeInTheDocument();
     expect(within(card).getByLabelText(/Teléfono/)).toBeDisabled();
     expect(within(card).getByText(/Podrás intentarlo de nuevo en/)).toBeInTheDocument();
   });
 
-  it("la persona que abrió el trámite no se vuelve a consultar: no hay captcha ni llamada de consulta", async () => {
+  it("un 503 consultas_no_disponibles se explica sin habilitar los campos", async () => {
+    await abrir({ [RUTA_DETALLE]: () => problema(503, "consultas_no_disponibles") });
+    const card = tarjeta("Comprador");
+    consultar(card);
+
+    expect(await within(card).findByText("Las consultas están pausadas por hoy. Intenta de nuevo mañana.")).toBeInTheDocument();
+    expect(within(card).getByLabelText(/Teléfono/)).toBeDisabled();
+  });
+
+  it("un 422 rol_invalido se explica bajo el documento", async () => {
+    await abrir({ [RUTA_DETALLE]: () => problema(422, "rol_invalido") });
+    const card = tarjeta("Comprador");
+    consultar(card);
+
+    expect(await within(card).findByText("Este trámite no admite a esta persona en ese rol.")).toBeInTheDocument();
+    expect(within(card).getByLabelText(/Número de documento/)).toHaveAttribute("aria-invalid", "true");
+    expect(within(card).getByLabelText(/Teléfono/)).toBeDisabled();
+  });
+
+  it("la persona que abrió el trámite no se vuelve a consultar: no hay llamada de consulta", async () => {
     const { llamadas } = await abrir();
     const card = tarjeta("Propietario (vendedor)");
     consultarSolicitante(card);
 
     await waitFor(() => expect(within(card).getByLabelText(/Teléfono/)).toBeEnabled());
-    expect(llamadas.some((l) => l.clave === "POST /consultas/persona")).toBe(false);
+    expect(llamadas.some((l) => l.clave === RUTA_DETALLE || l.clave === "POST /consultas/persona")).toBe(false);
     expect(within(card).queryByLabelText("Verificación de seguridad")).toBeNull();
   });
 
@@ -186,7 +260,7 @@ describe("validación de formato y consulta del documento (F3 AC1 y AC2, K5 AC5)
     expect(within(card).getByText("Este trámite no admite personas jurídicas en este rol")).toBeInTheDocument();
     expect(within(card).getByLabelText(/Número de documento/)).toHaveAttribute("aria-invalid", "true");
     expect(within(card).queryByLabelText("Verificación de seguridad")).toBeNull();
-    expect(llamadas.some((l) => l.clave === "POST /consultas/persona")).toBe(false);
+    expect(llamadas.some((l) => l.clave === RUTA_DETALLE)).toBe(false);
     expect(continuar()).toBeDisabled();
   });
 
@@ -513,5 +587,18 @@ describe("Habeas Data en el paso Actores", () => {
     expect(window.location.href).not.toContain(CEDULA_SOLICITANTE);
     expect(localStorage.length).toBe(0);
     expect(sessionStorage.length).toBe(0);
+  });
+
+  it("el documento y el nombre de un tercero consultado no salen en la URL, el almacenamiento ni la consola", async () => {
+    const consola = [vi.spyOn(console, "log"), vi.spyOn(console, "info"), vi.spyOn(console, "warn"), vi.spyOn(console, "error")];
+    const { llamadas } = await abrir({ [RUTA_DETALLE]: () => detalle() });
+    await consultarTercero(tarjeta("Comprador"), "52123456");
+
+    for (const { clave } of llamadas) for (const s of ["52123456", "ANA", "RUIZ"]) expect(clave).not.toContain(s);
+    expect(window.location.href).not.toMatch(/52123456|ANA|RUIZ/);
+    expect(localStorage.length).toBe(0);
+    expect(sessionStorage.length).toBe(0);
+    for (const espia of consola) expect(JSON.stringify(espia.mock.calls)).not.toMatch(/52123456|RUIZ/);
+    vi.restoreAllMocks();
   });
 });

@@ -360,6 +360,25 @@ export interface VehiculoMinimo {
   tieneRestricciones: boolean;
 }
 
+/** POST /solicitudes/{id}/consultas/persona-detalle: consulta de una persona con nombres, con la sesión de la solicitud (sin captcha). */
+export interface ConsultaPersonaDetalleRequest {
+  tipoDocumento: string;
+  documento: string;
+  /** Rol del actor dentro de la definición del trámite («comprador»). */
+  rol: string;
+  consentimiento: boolean;
+  consentimientoVersion?: string;
+}
+
+/** Sin coincidencia: `existe = false` y el resto `null`. Son datos de un tercero: solo viven en memoria de la pantalla. */
+export interface PersonaDetalle {
+  existe: boolean;
+  nombres: string | null;
+  apellidos: string | null;
+  nombreCompleto: string | null;
+  ciudad: string | null;
+}
+
 export interface ConductorMinimo {
   existe: boolean;
   estadoLicencia: string | null;
@@ -453,6 +472,9 @@ export function crearCliente({ base = BASE_BFF, fetchImpl }: OpcionesCliente = {
     consultas: {
       vehiculo: (datos: ConsultaVehiculoRequest, o?: OpcionesLlamada) => solicitar<VehiculoMinimo>("POST", "/consultas/vehiculo", datos, o),
       persona: (datos: ConsultaPersonaRequest, o?: OpcionesLlamada) => solicitar<ConductorMinimo>("POST", "/consultas/persona", datos, o),
+      /** Con la sesión de la solicitud y sin captcha: devuelve los nombres para rellenar al actor. */
+      personaDetalle: (solicitudId: string, datos: ConsultaPersonaDetalleRequest, o?: OpcionesLlamada) =>
+        solicitar<PersonaDetalle>("POST", `/solicitudes/${encodeURIComponent(solicitudId)}/consultas/persona-detalle`, datos, o),
     },
     radicados: {
       consultar: (datos: ConsultaRadicadoRequest, o?: OpcionesLlamada) => solicitar<EstadoRadicado>("POST", "/radicados/consulta", datos, o),

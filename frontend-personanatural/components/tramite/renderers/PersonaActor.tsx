@@ -3,10 +3,9 @@
 import { useMutation } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Captcha } from "@/components/Captcha";
 import { AddressField } from "@/components/tramite/AddressField";
 import { Badge, Btn, Field } from "@/components/tramite/piezas";
-import type { ActorRol, ClientePortal, ConductorMinimo, EstadoValidacion, ParteIdentidad } from "@/lib/api/cliente";
+import type { ActorRol, ClientePortal, EstadoValidacion, ParteIdentidad, PersonaDetalle } from "@/lib/api/cliente";
 import { ApiError, esperaDe, mensajeDe } from "@/lib/api/errores";
 import { useBloqueo } from "@/lib/api/useBloqueo";
 import {
@@ -34,7 +33,7 @@ interface Props {
   titulo?: string;
   solicitudId: string;
   cliente: ClientePortal;
-  /** Cédula con la que se abrió el trámite: esa persona ya se identificó y no necesita consulta ni captcha. */
+  /** Cédula con la que se abrió el trámite: esa persona ya se identificó y no necesita consulta. */
   cedulaSolicitante?: string;
   /** El ciudadano intentó avanzar con el paso incompleto: se muestran todos los errores. */
   mostrarErrores: boolean;
@@ -78,15 +77,13 @@ export function PersonaActor({
   reportarError,
 }: Props) {
   const [tocados, setTocados] = useState<Partial<Record<CampoActor, boolean>>>({});
-  const [pidiendoCaptcha, setPidiendoCaptcha] = useState(false);
-  const [captcha, setCaptcha] = useState<string | null>(null);
-  const [reinicio, setReinicio] = useState(0);
   const [errorConsulta, setErrorConsulta] = useState<string | null>(null);
+  /** Aviso bajo los campos cuando el nombre se escribe a mano porque la consulta no lo trajo (no es un error). */
+  const [avisoManual, setAvisoManual] = useState<string | null>(null);
   const [aviso, setAviso] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const bloqueoConsulta = useBloqueo();
   const esperaReenvio = useBloqueo();
-  const tokenUsado = useRef<string | null>(null);
   const idCampo = (n: string) => `${fila.clave}-${n}`;
 
   const errores = validarFila(fila, rol);
@@ -106,38 +103,33 @@ export function PersonaActor({
 
   // ── Consulta del documento ──────────────────────────────────────────────────────────────────────────────────────────
 
-  const consulta = useMutation<ConductorMinimo | null, unknown, string>({
-    mutationFn: (token) => cliente.consultas.persona({ documento: { tipo: fila.tipoDocumento, numero: fila.numeroDocumento }, ...consentimientoDeConsulta }, { captcha: token }),
+  // La consulta lleva el rol de la tarjeta y la sesión de la solicitud (sin captcha); devuelve los nombres para rellenar al actor.
+  const consulta = useMutation<PersonaDetalle, unknown, void>({
+    mutationFn: () =>
+      cliente.consultas.personaDetalle(solicitudId, { tipoDocumento: fila.tipoDocumento, documento: fila.numeroDocumento, rol: fila.rol, ...consentimientoDeConsulta }),
     onSuccess: (r) => {
-      if (r?.existe) {
-        setErrorConsulta(null);
-        onCambio({ consultado: true, licencia: { estado: r.estadoLicencia, vigencia: r.vigencia } });
+      setErrorConsulta(null);
+      const nombre = (r.existe ? (r.nombreCompleto ?? [r.nombres, r.apellidos].filter(Boolean).join(" ")) : "").trim();
+      if (nombre) {
+        setAvisoManual(null);
+        onCambio({ consultado: true, nombreConsultado: true, nombre, licencia: null });
       } else {
-        setErrorConsulta("No encontramos a esta persona con ese documento. Revisa el número e inténtalo de nuevo.");
+        setAvisoManual("No encontramos los datos de esta persona; escribe su nombre manualmente.");
+        onCambio({ consultado: true, nombreConsultado: false, nombre: "", licencia: null });
       }
     },
     onError: (e) => {
-      bloqueoConsulta.registrar(e);
       reportarError(e);
+      if (e instanceof ApiError && e.code === "detalle_agotado") {
+        // Sin consultas disponibles: se sigue a mano, como cuando no hay coincidencia.
+        setAvisoManual(mensajeDe(e));
+        onCambio({ consultado: true, nombreConsultado: false, nombre: "", licencia: null });
+        return;
+      }
+      bloqueoConsulta.registrar(e);
       setErrorConsulta(mensajeDe(e));
     },
-    onSettled: () => {
-      setCaptcha(null);
-      setPidiendoCaptcha(false);
-      setReinicio((n) => n + 1);
-    },
   });
-
-  const mutar = consulta.mutate;
-  useEffect(() => {
-    if (!captcha) {
-      tokenUsado.current = null;
-      return;
-    }
-    if (!pidiendoCaptcha || consulta.isPending || bloqueoConsulta.bloqueado || tokenUsado.current === captcha) return;
-    tokenUsado.current = captcha;
-    mutar(captcha);
-  }, [captcha, pidiendoCaptcha, consulta.isPending, bloqueoConsulta.bloqueado, mutar]);
 
   const alConsultar = () => {
     tocar("numeroDocumento");
@@ -149,7 +141,7 @@ export function PersonaActor({
       onCambio({ consultado: true });
       return;
     }
-    setPidiendoCaptcha(true);
+    consulta.mutate();
   };
 
   // ── Validación de identidad ─────────────────────────────────────────────────────────────────────────────────────────
@@ -268,12 +260,15 @@ export function PersonaActor({
         </Field>
         <div className="flex flex-wrap items-end gap-2">
           {!fila.consultado && (
-            <Btn onClick={alConsultar} disabled={consulta.isPending || bloqueoConsulta.bloqueado || pidiendoCaptcha}>
+            <Btn onClick={alConsultar} disabled={consulta.isPending || bloqueoConsulta.bloqueado}>
               {consulta.isPending ? "Consultando..." : "Consultar"}
             </Btn>
           )}
           {puedeCambiarDocumento && (
-            <Btn tone="secondary" onClick={() => onCambio({ consultado: false, licencia: null })}>
+            <Btn tone="secondary" onClick={() => {
+                setAvisoManual(null);
+                onCambio({ consultado: false, licencia: null, nombreConsultado: false, ...(fila.nombreConsultado ? { nombre: "" } : {}) });
+              }}>
               Cambiar documento
             </Btn>
           )}
@@ -283,7 +278,7 @@ export function PersonaActor({
             className="field"
             autoComplete="off"
             disabled={!fila.consultado}
-            readOnly={documentoBloqueado}
+            readOnly={documentoBloqueado || fila.nombreConsultado}
             aria-invalid={error("nombre") ? true : undefined}
             value={nombreMostrado}
             onChange={(e) => onCambio({ nombre: e.target.value })}
@@ -327,10 +322,10 @@ export function PersonaActor({
         </div>
       </div>
 
-      {pidiendoCaptcha && !consulta.isPending && (
-        <div>
-          <Captcha onToken={setCaptcha} reinicio={reinicio} />
-        </div>
+      {fila.consultado && avisoManual && (
+        <p role="status" className="text-xs">
+          {avisoManual}
+        </p>
       )}
       {bloqueoConsulta.bloqueado && (
         <p role="status" className="text-xs">

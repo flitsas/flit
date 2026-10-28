@@ -30,6 +30,8 @@ export interface FilaActor {
   direccion: string;
   /** El documento ya se consultó (o ya estaba guardado): los demás campos quedan habilitados. */
   consultado: boolean;
+  /** El nombre salió de la consulta de persona de la solicitud: queda de solo lectura (si no se encontró, se escribe a mano). */
+  nombreConsultado: boolean;
   /** Dato mínimo de la consulta de conductor (solo lo que el BFF devuelve). */
   licencia: { estado: string | null; vigencia: string | null } | null;
 }
@@ -92,7 +94,7 @@ let consecutivo = 0;
 const claveNueva = (): string => `a-${++consecutivo}`;
 
 export function filaVacia(rol: string, ordinal: number): FilaActor {
-  return { clave: claveNueva(), rol, ordinal, tipoDocumento: "CC", numeroDocumento: "", nombre: "", correo: "", celular: "", direccion: "", consultado: false, licencia: null };
+  return { clave: claveNueva(), rol, ordinal, tipoDocumento: "CC", numeroDocumento: "", nombre: "", correo: "", celular: "", direccion: "", consultado: false, nombreConsultado: false, licencia: null };
 }
 
 function filaDeActor(a: ActorEstado): FilaActor {
@@ -109,6 +111,7 @@ function filaDeActor(a: ActorEstado): FilaActor {
     celular: (a.celular ?? "").replace(/\D/g, ""),
     direccion: a.direccion ?? "",
     consultado: Boolean(a.numeroDocumento),
+    nombreConsultado: false,
     licencia: null,
   };
 }
