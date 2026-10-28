@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Captcha, TOKEN_MODO_DESARROLLO } from "@/components/Captcha";
 import { ConfigPublica } from "@/components/ConfigPublica";
@@ -38,21 +38,19 @@ describe("Captcha: proveedor por variable de servidor", () => {
         <Captcha onToken={() => {}} />
       </ConfigPublica>,
     );
-    expect(screen.getByLabelText("Verificación de seguridad")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Verificación de seguridad")).toBeNull();
   });
 
-  it("modo dev: la casilla entrega un token fijo y se desmarca al reiniciar", () => {
+  it("modo dev: no dibuja casilla y entrega el token fijo solo, al montar y tras cada reinicio", () => {
     const onToken = vi.fn();
-    const { rerender } = render(<Captcha onToken={onToken} proveedor="dev" />);
-    const casilla = screen.getByLabelText("Verificación de seguridad");
+    const { container, rerender } = render(<Captcha onToken={onToken} proveedor="dev" />);
 
-    fireEvent.click(casilla);
+    expect(container).toBeEmptyDOMElement();
     expect(onToken).toHaveBeenLastCalledWith(TOKEN_MODO_DESARROLLO);
-    expect(casilla).toBeChecked();
 
+    onToken.mockClear();
     rerender(<Captcha onToken={onToken} proveedor="dev" reinicio={1} />);
-    expect(casilla).not.toBeChecked();
-    expect(onToken).toHaveBeenLastCalledWith(null);
+    expect(onToken).toHaveBeenLastCalledWith(TOKEN_MODO_DESARROLLO);
   });
 
   it("sin proveedor configurado (producción) avisa con role=alert y nunca entrega token", () => {

@@ -78,7 +78,6 @@ async function prepararInicio(rutas: Record<string, Manejador> = {}) {
   abrirRequisitos();
   const dialogo = await elegirOrganismo();
   fireEvent.click(within(dialogo).getByLabelText("Acepto el tratamiento de mis datos personales."));
-  fireEvent.click(within(dialogo).getByLabelText("Verificación de seguridad"));
   return { ...montado, dialogo };
 }
 
@@ -215,7 +214,6 @@ describe("modal de requisitos", () => {
     await llenarTarjeta();
     abrirRequisitos();
     const dialogo = await elegirOrganismo();
-    fireEvent.click(within(dialogo).getByLabelText("Verificación de seguridad"));
 
     const consentimiento = within(dialogo).getByLabelText("Acepto el tratamiento de mis datos personales.");
     expect(consentimiento).toBeRequired();
@@ -226,20 +224,17 @@ describe("modal de requisitos", () => {
     expect(within(dialogo).getByRole("button", { name: "Iniciar ahora" })).toBeEnabled();
   });
 
-  it("sin organismo o sin captcha tampoco se puede iniciar", async () => {
+  it("sin organismo no se puede iniciar", async () => {
     montar();
     await llenarTarjeta();
     abrirRequisitos();
     const dialogo = await screen.findByRole("dialog", { name: "Requisitos para tu trámite" });
     fireEvent.click(within(dialogo).getByLabelText("Acepto el tratamiento de mis datos personales."));
-    fireEvent.click(within(dialogo).getByLabelText("Verificación de seguridad"));
     expect(within(dialogo).getByRole("button", { name: "Iniciar ahora" })).toBeDisabled(); // falta el organismo
 
     fireEvent.click(await within(dialogo).findByRole("button", { name: "Selecciona un organismo" }));
     fireEvent.click(within(dialogo).getByRole("button", { name: "Ciudad Uno" }));
     expect(within(dialogo).getByRole("button", { name: "Iniciar ahora" })).toBeEnabled();
-    fireEvent.click(within(dialogo).getByLabelText("Verificación de seguridad")); // la desmarca
-    expect(within(dialogo).getByRole("button", { name: "Iniciar ahora" })).toBeDisabled();
   });
 
   it("el aviso «Políticas de Privacidad y Términos de Uso» abre el diálogo de documento no disponible", async () => {
@@ -285,7 +280,6 @@ describe("Iniciar ahora: sesión efímera", () => {
     abrirRequisitos();
     const dialogo = await elegirOrganismo();
     fireEvent.click(within(dialogo).getByLabelText("Acepto el tratamiento de mis datos personales."));
-    fireEvent.click(within(dialogo).getByLabelText("Verificación de seguridad"));
 
     fireEvent.click(within(dialogo).getByRole("button", { name: "Iniciar ahora" }));
 
@@ -319,7 +313,6 @@ describe("Iniciar ahora: sesión efímera", () => {
     abrirRequisitos();
     const dialogo = await elegirOrganismo();
     fireEvent.click(within(dialogo).getByLabelText("Acepto el tratamiento de mis datos personales."));
-    fireEvent.click(within(dialogo).getByLabelText("Verificación de seguridad"));
 
     fireEvent.click(within(dialogo).getByRole("button", { name: "Iniciar ahora" }));
 
@@ -327,8 +320,6 @@ describe("Iniciar ahora: sesión efímera", () => {
     expect(routerPush).not.toHaveBeenCalled();
     expect(posts(montado.llamadas)).toHaveLength(1);
     expect(screen.getByLabelText("Número de Cédula")).toHaveValue("1020456789");
-    expect(within(dialogo).getByLabelText("Verificación de seguridad")).not.toBeChecked(); // el token usado no se reutiliza
-    expect(within(dialogo).getByRole("button", { name: "Iniciar ahora" })).toBeDisabled();
   });
 
   it("429: avisa, bloquea el reintento durante la espera y no navega", async () => {
@@ -337,13 +328,11 @@ describe("Iniciar ahora: sesión efímera", () => {
     abrirRequisitos();
     const dialogo = await elegirOrganismo();
     fireEvent.click(within(dialogo).getByLabelText("Acepto el tratamiento de mis datos personales."));
-    fireEvent.click(within(dialogo).getByLabelText("Verificación de seguridad"));
 
     fireEvent.click(within(dialogo).getByRole("button", { name: "Iniciar ahora" }));
 
     expect(await within(dialogo).findByRole("alert")).toHaveTextContent("Demasiados intentos. Vuelve a intentarlo en unos minutos.");
     expect(await within(dialogo).findByText(/Podrás intentarlo de nuevo en \d+ s/)).toBeInTheDocument();
-    fireEvent.click(within(dialogo).getByLabelText("Verificación de seguridad"));
     expect(within(dialogo).getByRole("button", { name: "Iniciar ahora" })).toBeDisabled();
     expect(routerPush).not.toHaveBeenCalled();
   });
@@ -355,12 +344,10 @@ describe("Iniciar ahora: sesión efímera", () => {
     abrirRequisitos();
     const dialogo = await elegirOrganismo();
     fireEvent.click(within(dialogo).getByLabelText("Acepto el tratamiento de mis datos personales."));
-    fireEvent.click(within(dialogo).getByLabelText("Verificación de seguridad"));
     fireEvent.click(within(dialogo).getByRole("button", { name: "Iniciar ahora" }));
     expect(await within(dialogo).findByRole("alert")).toHaveTextContent("El servicio no está disponible en este momento");
 
     falla = false;
-    fireEvent.click(within(dialogo).getByLabelText("Verificación de seguridad"));
     fireEvent.click(within(dialogo).getByRole("button", { name: "Iniciar ahora" }));
 
     await waitFor(() => expect(routerPush).toHaveBeenCalledWith("/tramite/TIPO_A"));
@@ -372,7 +359,6 @@ describe("Iniciar ahora: sesión efímera", () => {
     abrirRequisitos();
     const dialogo = await elegirOrganismo();
     fireEvent.click(within(dialogo).getByLabelText("Acepto el tratamiento de mis datos personales."));
-    fireEvent.click(within(dialogo).getByLabelText("Verificación de seguridad"));
 
     fireEvent.click(within(dialogo).getByRole("button", { name: "Iniciar ahora" }));
 
@@ -400,7 +386,6 @@ describe("costura con «Consultar mi trámite» (subsanación)", () => {
     const dialogo = await screen.findByRole("dialog", { name: "Consultar mi trámite" });
     fireEvent.change(within(dialogo).getByLabelText("Número de radicado"), { target: { value: "pn-2026-0007" } });
     fireEvent.change(within(dialogo).getByLabelText("Cédula del solicitante"), { target: { value: "1020456789" } });
-    fireEvent.click(within(dialogo).getByLabelText("Verificación de seguridad"));
     fireEvent.click(within(dialogo).getByRole("button", { name: "Consultar" }));
 
     fireEvent.click(await within(dialogo).findByRole("button", { name: /Causal de rechazo/ }));

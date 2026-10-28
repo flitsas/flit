@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import type { RegistroRenderers } from "@/components/tramite/ContextoWizard";
 import { PaginaTramite } from "@/components/tramite/PaginaTramite";
 import { REGISTRO_RENDERERS } from "@/components/tramite/renderers/registro";
@@ -58,5 +58,5 @@ export async function wizardAbierto(rutas: Record<string, Manejador> = {}, opcio
   return m;
 }
 
-/** Resuelve el captcha del modo de desarrollo del paso activo (la casilla «Verificación de seguridad» visible). */
-export const resolverCaptcha = () => fireEvent.click(screen.getAllByLabelText("Verificación de seguridad")[0]);
+/** Resuelve el captcha del modo de desarrollo del paso activo (ya no hay casilla: el token se entrega solo). */
+export const resolverCaptcha = () => {};

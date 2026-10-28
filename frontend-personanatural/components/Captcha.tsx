@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useConfigCaptcha } from "@/components/ConfigPublica";
 import type { ProveedorCaptcha } from "@/lib/captcha";
 
@@ -8,7 +8,7 @@ import type { ProveedorCaptcha } from "@/lib/captcha";
 // manda en la cabecera X-Captcha-Token. El proveedor y la clave pública del sitio los
 // resuelve el SERVIDOR al atender cada petición (CAPTCHA_PROVIDER = turnstile | recaptcha | dev, CAPTCHA_SITE_KEY) y llegan
 // por el contexto de `ConfigPublica` (layout): nada se incrusta al compilar (una imagen para todos los ambientes).
-// Sin variable, en desarrollo se usa el modo `dev` (una casilla que entrega un token fijo, solo válido contra un BFF con
+// Sin variable, en desarrollo se usa el modo `dev` (sin casilla visible: entrega sola un token fijo, solo válido contra un BFF con
 // el captcha deshabilitado); en producción sin proveedor configurado no se entrega ningún token y el formulario no envía.
 // Los tokens son de un solo uso: tras cada envío el formulario sube `reinicio` para pedir uno nuevo.
 
@@ -66,14 +66,10 @@ export function Captcha({ onToken, reinicio = 0, proveedor: proveedorProp, siteK
   const config = useConfigCaptcha();
   const proveedor = proveedorProp ?? config.proveedor;
   const siteKey = siteKeyProp ?? config.siteKey;
-  const idAyuda = useId();
   const contenedor = useRef<HTMLDivElement>(null);
   const widget = useRef<string | number | null>(null);
   const aviso = useRef(onToken);
   const [fallo, setFallo] = useState(false);
-  // La casilla del modo de desarrollo vale solo para el `reinicio` en el que se marcó: al subirlo vuelve a quedar sin marcar.
-  const [marcadoEn, setMarcadoEn] = useState<number | null>(null);
-  const marcado = marcadoEn === reinicio;
 
   useEffect(() => {
     aviso.current = onToken;
@@ -121,6 +117,11 @@ export function Captcha({ onToken, reinicio = 0, proveedor: proveedorProp, siteK
     aviso.current(null);
   }, [reinicio, externo, proveedor]);
 
+  // Modo de desarrollo: sin casilla visible; entrega el token fijo al montar y tras cada reinicio.
+  useEffect(() => {
+    if (proveedor === "dev") aviso.current(TOKEN_MODO_DESARROLLO);
+  }, [proveedor, reinicio]);
+
   if (sinConfigurar || fallo) {
     return (
       <p role="alert" className="text-center text-sm text-alert">
@@ -129,26 +130,8 @@ export function Captcha({ onToken, reinicio = 0, proveedor: proveedorProp, siteK
     );
   }
 
-  if (proveedor === "dev") {
-    return (
-      <div className="flex flex-col items-center gap-1">
-        <label className="flex min-h-11 items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="h-5 w-5 accent-primary"
-            checked={marcado}
-            aria-describedby={idAyuda}
-            onChange={(e) => {
-              setMarcadoEn(e.target.checked ? reinicio : null);
-              onToken(e.target.checked ? TOKEN_MODO_DESARROLLO : null);
-            }}
-          />
-          Verificación de seguridad
-        </label>
-        <p id={idAyuda} className="text-xs text-foreground/70">Modo de desarrollo: sin proveedor de captcha configurado.</p>
-      </div>
-    );
-  }
+  // Modo de desarrollo: no se dibuja nada; el token fijo se entrega solo (ver el efecto de arriba).
+  if (proveedor === "dev") return null;
 
   return <div ref={contenedor} className="flex min-h-[65px] justify-center" aria-label="Verificación de seguridad" />;
 }

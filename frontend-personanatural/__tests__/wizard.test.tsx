@@ -92,7 +92,6 @@ describe("sin sesión: reanudar", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "Reanuda tu trámite" })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Número de radicado"), { target: { value: "pn-2026-0042" } });
     fireEvent.change(screen.getByLabelText("Cédula del solicitante"), { target: { value: "1020456789" } });
-    fireEvent.click(screen.getByLabelText("Verificación de seguridad"));
     fireEvent.click(screen.getByRole("button", { name: "Reanudar" }));
 
     expect(await screen.findByRole("heading", { level: 1, name: "Trámite de Trámite A" })).toBeInTheDocument();
@@ -124,7 +123,6 @@ describe("sin sesión: reanudar", () => {
     await screen.findByLabelText("Número de radicado");
     fireEvent.change(screen.getByLabelText("Número de radicado"), { target: { value: "PN-2026-0009" } });
     fireEvent.change(screen.getByLabelText("Cédula del solicitante"), { target: { value: "1020456789" } });
-    fireEvent.click(screen.getByLabelText("Verificación de seguridad"));
     fireEvent.click(screen.getByRole("button", { name: "Reanudar" }));
 
     await waitFor(() => expect(routerPush).toHaveBeenCalledWith("/tramite/TIPO_C"));
@@ -268,7 +266,6 @@ describe("valor del trámite", () => {
     const lateral = screen.getByRole("complementary", { name: "Resumen y navegación del trámite" });
 
     fireEvent.click(within(lateral).getByRole("button", { name: "Calcular valor" }));
-    fireEvent.click(within(lateral).getByLabelText("Verificación de seguridad"));
 
     await waitFor(() => expect(within(lateral).getByLabelText("Valor del trámite")).toHaveValue("$ 285.400 COP"));
     expect(cuerpo(llamadas, "POST /cotizaciones")).toEqual({ organismoId: "o-1", tipoCodigo: "TIPO_A" });
@@ -282,7 +279,6 @@ describe("valor del trámite", () => {
     const lateral = screen.getByRole("complementary", { name: "Resumen y navegación del trámite" });
 
     fireEvent.click(within(lateral).getByRole("button", { name: "Calcular valor" }));
-    fireEvent.click(within(lateral).getByLabelText("Verificación de seguridad"));
 
     expect(await within(lateral).findByText("Este organismo no tiene tarifa para este trámite")).toBeInTheDocument();
     fireEvent.click(nodo(1));

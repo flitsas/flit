@@ -48,7 +48,7 @@ async function elegirOrganismoYTipo(organismo = "Ciudad Uno", tipo = "Trámite A
   fireEvent.click(within(screen.getByRole("listbox", { name: "Tipo de trámite" })).getByRole("option", { name: tipo }));
 }
 
-const marcarCaptcha = () => fireEvent.click(screen.getByLabelText("Verificación de seguridad"));
+const marcarCaptcha = () => {}; // en modo dev el token se entrega solo
 const calcular = () => fireEvent.click(screen.getByRole("button", { name: "Calcular" }));
 
 describe("modal Cotizar: selección", () => {
@@ -78,12 +78,10 @@ describe("modal Cotizar: selección", () => {
     expect(llamadas.map((l) => l.clave)).toContain("GET /tipos-tramite?organismoId=o-1");
   });
 
-  it("Calcular se habilita con organismo, tipo y captcha", async () => {
+  it("Calcular se habilita con organismo y tipo", async () => {
     montar(BASE);
 
     await elegirOrganismoYTipo();
-    expect(screen.getByRole("button", { name: "Calcular" })).toBeDisabled();
-    marcarCaptcha();
 
     expect(screen.getByRole("button", { name: "Calcular" })).toBeEnabled();
   });
@@ -172,7 +170,6 @@ describe("modal Cotizar: cálculo", () => {
     fireEvent.click(within(screen.getByRole("listbox", { name: "Tipo de trámite" })).getByRole("option", { name: "Trámite C" }));
 
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Calcular" })).toBeDisabled(); // el captcha usado ya no sirve
   });
 
   it("cambiar el organismo oculta la tabla y limpia el tipo", async () => {

@@ -326,7 +326,6 @@ describe("transformaciones y total (F4 AC5)", () => {
     fireEvent.click(within(tarjeta("Transformaciones del vehículo")).getByRole("switch", { name: "Cambio de carrocería" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Calcular valor total" }));
-    fireEvent.click(await screen.findByLabelText("Verificación de seguridad"));
 
     expect(await screen.findByText("Valor total liquidado: $ 426.000 COP")).toBeInTheDocument();
     const peticion = llamadas.find((l) => l.clave === "POST /cotizaciones");
@@ -338,7 +337,6 @@ describe("transformaciones y total (F4 AC5)", () => {
     const { llamadas } = await abrir({ "POST /cotizaciones": () => json({ lineas: [], totalCop: 366000, versionTarifa: "v1", adicionalesNoAplicados: [] }) });
 
     fireEvent.click(screen.getByRole("button", { name: "Calcular valor total" }));
-    fireEvent.click(await screen.findByLabelText("Verificación de seguridad"));
 
     expect(await screen.findByText("Valor total liquidado: $ 366.000 COP")).toBeInTheDocument();
     expect(JSON.parse(String(llamadas.find((l) => l.clave === "POST /cotizaciones")?.init.body))).toEqual({ organismoId: "o-1", tipoCodigo: "TIPO_A" });

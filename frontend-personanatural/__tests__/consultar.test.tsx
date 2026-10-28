@@ -51,17 +51,16 @@ function montar(manejador: (url: string, init: RequestInit) => Response | Promis
   return { fetchImpl: fetchImpl as unknown as ReturnType<typeof vi.fn>, onCerrar };
 }
 
-function llenar({ radicado = "pn-2026-0001", cedula = "1020456789", placa = "", captcha = true } = {}) {
+function llenar({ radicado = "pn-2026-0001", cedula = "1020456789", placa = "" } = {}) {
   if (placa) fireEvent.change(screen.getByLabelText("Placa (opcional)"), { target: { value: placa } });
   fireEvent.change(screen.getByLabelText("Número de radicado"), { target: { value: radicado } });
   fireEvent.change(screen.getByLabelText("Cédula del solicitante"), { target: { value: cedula } });
-  if (captcha) fireEvent.click(screen.getByLabelText("Verificación de seguridad"));
 }
 
 const consultar = () => fireEvent.click(screen.getByRole("button", { name: "Consultar" }));
 
 describe("modal Consultar: formulario", () => {
-  it("abre como diálogo con título y descripción, y el botón solo se habilita con radicado, cédula y captcha", () => {
+  it("abre como diálogo con título y descripción, y el botón solo se habilita con radicado y cédula", () => {
     montar(() => json(respuesta()));
 
     const dialogo = screen.getByRole("dialog", { name: "Consultar mi trámite" });
@@ -76,8 +75,6 @@ describe("modal Consultar: formulario", () => {
     expect(boton).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText("Cédula del solicitante"), { target: { value: "1020456789" } });
-    expect(boton).toBeDisabled(); // falta el captcha
-    fireEvent.click(screen.getByLabelText("Verificación de seguridad"));
     expect(boton).toBeEnabled();
   });
 
@@ -241,7 +238,6 @@ describe("modal Consultar: envío y estados", () => {
     const texto = primera.textContent;
 
     fireEvent.change(screen.getByLabelText("Cédula del solicitante"), { target: { value: "999999" } });
-    fireEvent.click(screen.getByLabelText("Verificación de seguridad"));
     consultar();
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("No encontramos un trámite con esos datos."));
 
@@ -257,7 +253,6 @@ describe("modal Consultar: envío y estados", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Demasiados intentos. Vuelve a intentarlo en unos minutos.");
     expect(await screen.findByText(/Podrás consultar de nuevo en \d+ s/)).toBeInTheDocument();
-    fireEvent.click(screen.getByLabelText("Verificación de seguridad"));
     expect(screen.getByRole("button", { name: "Consultar" })).toBeDisabled();
   });
 
@@ -269,23 +264,10 @@ describe("modal Consultar: envío y estados", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("El servicio no está disponible en este momento");
 
     falla = false;
-    fireEvent.click(screen.getByLabelText("Verificación de seguridad")); // el token usado ya no sirve: pide otro
     consultar();
 
     await screen.findByRole("heading", { name: "Tu trámite está en proceso" });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
-  });
-
-  it("después de cada envío el captcha se reinicia: no se reutiliza el token", async () => {
-    montar(() => json(respuesta()));
-    llenar();
-    expect(screen.getByLabelText("Verificación de seguridad")).toBeChecked();
-
-    consultar();
-    await screen.findByRole("heading", { name: "Tu trámite está en proceso" });
-
-    expect(screen.getByLabelText("Verificación de seguridad")).not.toBeChecked();
-    expect(screen.getByRole("button", { name: "Consultar" })).toBeDisabled();
   });
 
   it("cambiar un campo oculta el resultado anterior", async () => {
