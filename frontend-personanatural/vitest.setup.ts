@@ -2,7 +2,15 @@
 // las gráficas y limpieza del DOM entre pruebas. Mismo arreglo que frontend/vitest.setup.ts.
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
-import { afterEach, beforeEach } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
+import { limpiarContexto } from "./lib/tramite/contexto";
+import { routerPush } from "./__tests__/router";
+
+// La landing navega con el router de Next, que no existe fuera de la app: se simula y las pruebas miran `routerPush`.
+vi.mock("next/navigation", async () => {
+  const { routerPush } = await import("./__tests__/router");
+  return { useRouter: () => ({ push: routerPush, replace: routerPush, back: vi.fn(), prefetch: vi.fn(), refresh: vi.fn() }) };
+});
 
 class MemoryStorage implements Storage {
   private store = new Map<string, string>();
@@ -45,4 +53,6 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  limpiarContexto();
+  routerPush.mockClear();
 });

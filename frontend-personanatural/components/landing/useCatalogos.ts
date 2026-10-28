@@ -15,6 +15,19 @@ export function useOrganismos(cliente: ClientePortal = portal) {
   });
 }
 
+/**
+ * Definición del tipo elegido (GET /tipos-tramite/{code}/definicion): requisitos y modo de identificar el vehículo. Con el
+ * organismo, los documentos son los de ese organismo. Sin tipo no pide nada.
+ */
+export function useDefinicion(cliente: ClientePortal, code: string, organismoId?: string) {
+  return useQuery({
+    queryKey: ["pn", "definicion", code, organismoId ?? null],
+    enabled: code !== "",
+    queryFn: ({ signal }) => cliente.catalogos.definicion(code, { organismoId, signal }),
+    staleTime: CINCO_MINUTOS,
+  });
+}
+
 /** Tipos de trámite que el portal puede atender hoy (GET /tipos-tramite, solo los disponibles). */
 export function useTiposTramite(cliente: ClientePortal = portal) {
   return useQuery({

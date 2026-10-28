@@ -133,13 +133,13 @@ describe("landing: tipos de trámite desde el BFF", () => {
     expect(screen.getByText("Villa Dos")).toBeInTheDocument();
   });
 
-  it("los controles que aún no están conectados quedan deshabilitados y lo dicen", () => {
+  it("las filas de consultar y cotizar están activas; «Iniciar trámite» espera a tener los tres datos", () => {
     const { cliente } = fetchFalso(OK);
     renderConQuery(<Landing cliente={cliente} />);
 
     expect(screen.getByRole("button", { name: "Consultar mi trámite" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Cotizar mi trámite" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Iniciar trámite" })).toHaveAccessibleDescription("El inicio del trámite estará disponible próximamente.");
+    expect(screen.getByRole("button", { name: "Iniciar trámite" })).toBeDisabled();
   });
 
   it("cédula solo dígitos y placa en mayúsculas, sin guardarlos en el navegador", () => {
