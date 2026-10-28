@@ -1,14 +1,13 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { enmascararDocumento } from "@/components/comun/DocumentoDeclarado";
 import { nombreFuente, type Fuente } from "@/lib/configuracion";
 import type { CeldaGrilla, FilaVehiculo, Grilla } from "@/lib/tablero/api";
-import type { CargadorDetalle } from "@/lib/tablero/detalle";
+import { rutaPaginaDetalle } from "@/lib/tablero/detalle";
 import { FUENTES_TABLA, PILARES, fuentesPedidas } from "@/lib/tablero/pilares";
 import { CeldaSemaforo, type CeldaSemaforoProps } from "./CeldaSemaforo";
-import { DetalleCelda } from "./DetalleCelda";
 
 /** Cabecera de tabla del sistema: barra gris de marca (--table-header-*), versalita de 10px. */
 const CABECERA_CLS = "px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider";
@@ -30,10 +29,13 @@ export interface GrillaSemaforosProps extends Pick<CeldaSemaforoProps, "onReproc
   grilla: Grilla;
   /** Capacidad `reprocesarConsultas` de la sesión (admin): solo entonces hay «Reprocesar» en las celdas rojas. */
   puedeReprocesar: boolean;
-  /** Cargador del detalle de la celda; el backoffice (F06-H5) pasa el suyo con `?empresa=`. Por defecto, el de la compañía. */
-  cargarDetalle?: CargadorDetalle;
-  /** Acciones extra al pie del detalle (p. ej. «Llenar a mano» en el backoffice); `cerrar` cierra el detalle. */
-  accionesDetalle?: (celda: CeldaGrilla, vehiculo: FilaVehiculo, cerrar: () => void) => ReactNode;
+  /**
+   * Página del detalle de una celda, que el semáforo abre en una pestaña nueva (HU #14087). Por defecto, la de la compañía
+   * (/diagnosticos/{id}/vehiculos/{vid}/consultas/{fuente}); el backoffice pasa la suya con `?empresa=`.
+   */
+  hrefDetalle?: (celda: CeldaGrilla, vehiculo: FilaVehiculo) => string;
+  /** Acción extra bajo el semáforo de una celda (p. ej. «Llenar a mano» en el backoffice, que abre su modal). */
+  accionCelda?: (celda: CeldaGrilla, vehiculo: FilaVehiculo) => ReactNode;
   /** Marca bajo el semáforo de cada celda: solo el backoffice (origen manual, HU #13802); la compañía nunca (Q5). */
   marcaCelda?: (celda: CeldaGrilla) => ReactNode;
   /**
@@ -41,12 +43,6 @@ export interface GrillaSemaforosProps extends Pick<CeldaSemaforoProps, "onReproc
    * `descargarReportes`). Sin ella la columna no existe (backoffice y compañía sin la capacidad).
    */
   accionVehiculo?: (vehiculo: FilaVehiculo) => ReactNode;
-}
-
-interface Seleccion {
-  celda: CeldaGrilla;
-  vehiculo: FilaVehiculo;
-  disparador: HTMLElement;
 }
 
 /** «—» con nombre accesible cuando el dato no existe. */
@@ -121,7 +117,8 @@ function CeldaDocumentosPropietario({ vehiculo }: { vehiculo: FilaVehiculo }) {
  * fila: placa (o VIN) con su avance «n de m consultas» (m = fuentes pedidas) y el badge «Terminado», el documento declarado y
  * los documentos del propietario. Luego SIEMPRE las 8 fuentes agrupadas por pilar (RUNT, SIMIT, Avalúo comercial, Impuesto
  * departamental) en el orden de FUENTES: la no pedida dice «Sin solicitar»; la pedida sin celda todavía, «Sin ejecutar». El
- * usuario no ve acciones; el admin, «Reprocesar» solo en las rojas. Cada semáforo con consulta abre el detalle (HU #13801).
+ * usuario no ve acciones; el admin, «Reprocesar» solo en las rojas. Cada semáforo con consulta abre su detalle (HU #13801)
+ * en una pestaña nueva (HU #14087), ya sin modal.
  * El desborde horizontal queda dentro del contenedor de la tabla, nunca en la página.
  */
 export function GrillaSemaforos({
@@ -129,12 +126,11 @@ export function GrillaSemaforos({
   puedeReprocesar,
   onReprocesada,
   onErrorReproceso,
-  cargarDetalle,
-  accionesDetalle,
+  hrefDetalle,
+  accionCelda,
   marcaCelda,
   accionVehiculo,
 }: GrillaSemaforosProps) {
-  const [seleccion, setSeleccion] = useState<Seleccion | null>(null);
   const pedidas = fuentesPedidas(grilla.columnas);
 
   return (
@@ -199,8 +195,9 @@ export function GrillaSemaforos({
                       puedeReprocesar={puedeReprocesar}
                       onReprocesada={onReprocesada}
                       onErrorReproceso={onErrorReproceso}
-                      onAbrirDetalle={(c, disparador) => setSeleccion({ celda: c, vehiculo: v, disparador })}
+                      hrefDetalle={celda ? (hrefDetalle?.(celda, v) ?? rutaPaginaDetalle(grilla.id, v.id, celda.fuente)) : undefined}
                       marca={celda && marcaCelda ? marcaCelda(celda) : undefined}
+                      accion={celda && accionCelda ? accionCelda(celda, v) : undefined}
                     />
                   );
                 })}
@@ -210,20 +207,6 @@ export function GrillaSemaforos({
           })}
         </tbody>
       </table>
-      {seleccion && (
-        <DetalleCelda
-          key={seleccion.celda.id}
-          loteId={grilla.id}
-          vehiculoId={seleccion.vehiculo.id}
-          fuente={seleccion.celda.fuente}
-          nombreFuente={nombreFuente(seleccion.celda.fuente)}
-          identificador={seleccion.vehiculo.identificador}
-          cargar={cargarDetalle}
-          acciones={accionesDetalle?.(seleccion.celda, seleccion.vehiculo, () => setSeleccion(null))}
-          devolverFocoA={seleccion.disparador}
-          onClose={() => setSeleccion(null)}
-        />
-      )}
     </div>
   );
 }

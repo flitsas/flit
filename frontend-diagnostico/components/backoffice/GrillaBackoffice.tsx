@@ -16,13 +16,13 @@ import {
   aplicarLlenado,
   esLlenable,
   obtenerGrillaBackoffice,
+  rutaDetalleBackoffice,
   type CeldaGrillaBackoffice,
   type GrillaBackoffice as TGrillaBackoffice,
   type RespuestaLlenado,
 } from "@/lib/backoffice/api";
 import { nombreFuente } from "@/lib/configuracion";
 import type { CeldaGrilla, FilaVehiculo, Grilla } from "@/lib/tablero/api";
-import type { CargadorDetalle, DetalleCelda } from "@/lib/tablero/detalle";
 import { fusionarCeldas } from "@/lib/tablero/fusionarCeldas";
 import { FormularioLlenadoManual } from "./FormularioLlenadoManual";
 
@@ -41,11 +41,14 @@ interface Llenado {
   disparador: HTMLElement | null;
 }
 
+/** «Llenar a mano» compacto en la celda: el CTA primario de pastilla a la escala de 12px de la grilla. */
+const BOTON_LLENAR_CLS = BOTON_PRIMARIO_CLS.replace("px-5 py-2 text-sm", "px-3 py-1 text-xs");
+
 /** Ruta de la lista de lotes de la compañía elegida. */
 const rutaLista = (empresa: string) => `/backoffice/diagnosticos?empresa=${encodeURIComponent(empresa)}`;
 
-/** Marca de origen manual (texto e icono, nunca solo color). Solo existe en esta pantalla (Q5). */
-function MarcaManual() {
+/** Marca de origen manual (texto e icono, nunca solo color). Solo existe en el backoffice (Q5). */
+export function MarcaManual() {
   return (
     <Etiqueta tono="info">
       <PencilLine className="h-3 w-3" aria-hidden="true" />
@@ -69,9 +72,9 @@ function Vacio({ titulo, children, Icono = ClipboardList }: { titulo: string; ch
 /**
  * Grilla de un lote para el backoffice FLIT (HU #13802, F06-H5; F06-C6..C9, C14) en /backoffice/diagnosticos/{id}?empresa=.
  * Lee GET /backoffice/diagnosticos/{id}/grilla?empresa=&desde= y reutiliza GrillaSemaforos (HU #13748) con la marca «Manual»
- * en las celdas de origen MANUAL, visible solo aquí (Q5). Cada semáforo abre DetalleCelda (HU #13801); el backoffice no tiene
- * ruta de detalle propia, así que el detalle se arma con lo que trae la grilla (estado, error, fecha) y, en una celda en ERROR
- * llenable (no RUNT ni impuesto, no bloqueada por el RUNT) y con la capacidad llenarConsultas, ofrece «Llenar a mano». Al
+ * en las celdas de origen MANUAL, visible solo aquí (Q5). Cada semáforo abre en una pestaña nueva la página del detalle del
+ * backoffice (HU #14087, con ?empresa=) y, en una celda en ERROR llenable (no RUNT ni impuesto, no bloqueada por el RUNT) y con
+ * la capacidad llenarConsultas, la celda ofrece «Llenar a mano», que abre FormularioLlenadoManual como modal. Al
  * confirmar, la celda pasa a verde con la marca y el lote se vuelve a leer desde su versión. Cuatro estados: cargando, error
  * (404 no encontrado en la compañía, 403 a la página 403, otro con Reintentar), vacío (sin vehículos) y lleno.
  */
@@ -139,55 +142,24 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
     if (actual) void releer();
   }
 
-  /** El backoffice no tiene ruta de detalle de celda: el detalle se arma con la celda de la grilla, sin resultado. */
-  const cargarDetalle: CargadorDetalle = useCallback(async (_lote, vehiculoId, fuente) => {
-    const v = grillaRef.current?.vehiculos.find((x) => x.id === vehiculoId);
-    const c = v?.celdas.find((x) => x.fuente === fuente);
-    if (!v || !c) throw new ApiError(404, "No se encontró la celda.", "NO_ENCONTRADO");
-    const detalle: DetalleCelda = {
-      id: c.id,
-      vehiculo_id: v.id,
-      fuente: c.fuente,
-      estado: c.estado,
-      motivo_na: c.motivo_na,
-      tipo_error: c.tipo_error,
-      dato_obtenido_en: c.dato_obtenido_en,
-      reutilizada: c.reutilizada,
-      resultado: null,
-      personas: null,
-    };
-    return detalle;
-  }, []);
-
   const origenDe = (celda: CeldaGrilla) => (celda as CeldaGrillaBackoffice).origen ?? null;
 
-  function accionesDetalle(celda: CeldaGrilla, vehiculo: FilaVehiculo, cerrar: () => void) {
-    const manual = origenDe(celda) === "MANUAL";
-    const llenar = puedeLlenar && esLlenable(celda);
-    if (!manual && !llenar && celda.estado !== "COMPLETADO") return undefined;
+  /** «Llenar a mano» en la celda (antes en el pie del modal de detalle): abre FormularioLlenadoManual como modal. */
+  function accionCelda(celda: CeldaGrilla, vehiculo: FilaVehiculo) {
+    if (!puedeLlenar || !esLlenable(celda)) return null;
     return (
-      <>
-        {celda.estado === "COMPLETADO" && (
-          <span className={`${TEXTO_SECUNDARIO_CLS} mr-auto self-center`}>
-            {manual ? "Dato llenado a mano desde el backoffice." : "El backoffice no tiene todavía una ruta para ver el resultado de esta consulta."}
-          </span>
-        )}
-        {llenar && (
-          <button
-            type="button"
-            className={BOTON_PRIMARIO_CLS}
-            onClick={() => {
-              cerrar();
-              setExito(null);
-              const disparador = contenedor.current?.querySelector<HTMLElement>(`[data-celda="${celda.id}"] button`) ?? null;
-              setLlenado({ celda, vehiculo, disparador });
-            }}
-          >
-            <PencilLine className="h-4 w-4" aria-hidden="true" />
-            Llenar a mano
-          </button>
-        )}
-      </>
+      <button
+        type="button"
+        aria-label={`Llenar a mano ${nombreFuente(celda.fuente)} de ${vehiculo.identificador}`}
+        className={BOTON_LLENAR_CLS}
+        onClick={(e) => {
+          setExito(null);
+          setLlenado({ celda, vehiculo, disparador: e.currentTarget });
+        }}
+      >
+        <PencilLine className="h-3.5 w-3.5" aria-hidden="true" />
+        Llenar a mano
+      </button>
     );
   }
 
@@ -256,8 +228,8 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
               <GrillaSemaforos
                 grilla={grilla as unknown as Grilla}
                 puedeReprocesar={false}
-                cargarDetalle={cargarDetalle}
-                accionesDetalle={accionesDetalle}
+                hrefDetalle={(celda, v) => rutaDetalleBackoffice(grilla.id, v.id, celda.fuente, empresa)}
+                accionCelda={accionCelda}
                 marcaCelda={(celda) => (origenDe(celda) === "MANUAL" ? <MarcaManual /> : null)}
               />
             </div>

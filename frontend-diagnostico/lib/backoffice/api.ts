@@ -6,7 +6,7 @@ import { ApiError, apiFetch } from "@/lib/api";
 import { esEmpresaValida, type Fuente } from "@/lib/configuracion";
 import type { EstadoDiagnostico } from "@/lib/diagnosticos/api";
 import { BLOQUEADA_POR_RUNT, type CeldaGrilla, type EstadoCelda, type FilaVehiculo, type Grilla } from "@/lib/tablero/api";
-import type { ConsultaPersona } from "@/lib/tablero/detalle";
+import type { CargadorDetalle, ConsultaPersona, DetalleCelda } from "@/lib/tablero/detalle";
 
 export type OrigenCelda = "API" | "MANUAL";
 
@@ -135,6 +135,43 @@ export async function listarLotesBackoffice(empresa: string, filtros: FiltrosLot
 export async function obtenerGrillaBackoffice(id: string, empresa: string, desde: number, signal?: AbortSignal): Promise<GrillaBackoffice> {
   const q = consulta(empresa, { desde });
   return apiFetch<GrillaBackoffice>(`${BASE}/diagnosticos/${seg(id)}/grilla?${q}`, { signal });
+}
+
+/** Detalle de una celda del backoffice con su origen (solo el backoffice lo muestra, Q5). */
+export type DetalleCeldaBackoffice = DetalleCelda & { origen: OrigenCelda | null };
+
+/** Página del detalle del backoffice (HU #14087), que el semáforo abre en una pestaña nueva, con la compañía en ?empresa=. */
+export function rutaDetalleBackoffice(id: string, vehiculoId: string, fuente: Fuente, empresa: string): string {
+  return `${BASE}/diagnosticos/${seg(id)}/vehiculos/${seg(vehiculoId)}/consultas/${seg(fuente)}?${new URLSearchParams({ empresa })}`;
+}
+
+/**
+ * Cargador del detalle del backoffice: el backoffice no tiene ruta de detalle de celda, así que lo arma con la celda de su
+ * grilla (GET /backoffice/diagnosticos/{id}/grilla?empresa=&desde=0): estado, error, fecha, origen, identificador del vehículo
+ * y nombre del lote, sin resultado. 404 si la celda no está en la grilla.
+ */
+export function cargadorDetalleBackoffice(empresa: string): CargadorDetalle {
+  return async (loteId, vehiculoId, fuente, signal): Promise<DetalleCeldaBackoffice> => {
+    const grilla = await obtenerGrillaBackoffice(loteId, empresa, 0, signal);
+    const v = grilla.vehiculos.find((x) => x.id === vehiculoId);
+    const c = v?.celdas.find((x) => x.fuente === fuente);
+    if (!v || !c) throw new ApiError(404, "No se encontró la celda.", "NO_ENCONTRADO");
+    return {
+      id: c.id,
+      vehiculo_id: v.id,
+      identificador: v.identificador,
+      nombre_diagnostico: grilla.nombre,
+      fuente: c.fuente,
+      estado: c.estado,
+      motivo_na: c.motivo_na,
+      tipo_error: c.tipo_error,
+      dato_obtenido_en: c.dato_obtenido_en,
+      reutilizada: c.reutilizada,
+      resultado: null,
+      personas: null,
+      origen: c.origen ?? null,
+    };
+  };
 }
 
 /** GET /backoffice/consultas/{cid}/manual?empresa=: versión, si admite el llenado y las personas en error. */

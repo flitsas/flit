@@ -27,9 +27,10 @@ const fuenteDe = (fila: HTMLElement, fuente: string) => fila.querySelector<HTMLE
 
 const chipDe = (td: HTMLElement) => td.querySelector<HTMLElement>("[data-tono]")!;
 
-/** Botones de acción: todos menos el semáforo, que desde HU #13801 es un botón «Ver detalle de …» que abre el detalle. */
-const accionesDe = (raiz: Pick<typeof screen, "queryAllByRole"> = screen) =>
-  raiz.queryAllByRole("button").filter((b) => !/^Ver detalle de /.test(b.getAttribute("aria-label") ?? ""));
+/** Botones de acción: desde HU #14087 el semáforo es un enlace a la pestaña del detalle, así que todo botón es una acción. */
+const accionesDe = (raiz: Pick<typeof screen, "queryAllByRole"> = screen) => raiz.queryAllByRole("button");
+
+const NUEVA = " (se abre en una pestaña nueva)";
 
 describe("GrillaSemaforos — HU #14087 AC3: columnas agrupadas por pilar, las 8 fuentes siempre", () => {
   it("cabecera de dos niveles: RUNT y SIMIT agrupan sus 3 fuentes; Avalúo comercial e Impuesto departamental, la suya", () => {
@@ -63,7 +64,7 @@ describe("GrillaSemaforos — HU #14087 AC3: columnas agrupadas por pilar, las 8
         expect(within(td).queryByRole("button")).not.toBeInTheDocument();
       }
     }
-    expect(screen.queryAllByRole("button", { name: /^Ver detalle de (RUNT propietario|SIMIT vehículo|SIMIT locatario|Avalúo comercial) /i })).toHaveLength(0);
+    expect(screen.queryAllByRole("link", { name: /^Ver detalle de (RUNT propietario|SIMIT vehículo|SIMIT locatario|Avalúo comercial) /i })).toHaveLength(0);
   });
 
   it("la fuente pedida cuya celda aún no llegó dice «Sin ejecutar», sin botón y sin romper la fila", () => {
@@ -197,15 +198,37 @@ describe("GrillaSemaforos — HU #14087 AC5: estados con icono y texto", () => {
     ["celda-1-runt_locatario", "Sin documento del locatario"],
   ])("la novedad %s muestra su motivo «%s» debajo", (id, motivo) => {
     const { container } = pintar();
-    expect(celdaDe(container, id)).toHaveTextContent(`Novedad${motivo}`);
+    // El enlace del semáforo lleva además el aviso sr-only de pestaña nueva (HU #14087): el motivo va justo después.
+    expect(celdaDe(container, id)).toHaveTextContent(`Novedad(se abre en una pestaña nueva)${motivo}`);
   });
 
-  it("el nombre accesible del botón de la celda lleva fuente, identificador y estado nuevo", () => {
+  it("el nombre accesible del enlace de la celda lleva fuente, identificador, estado y que abre una pestaña nueva", () => {
     pintar();
-    expect(screen.getByRole("button", { name: "Ver detalle de RUNT vehículo de TST002: Ejecutado (OK)" })).toHaveAttribute("aria-haspopup", "dialog");
-    expect(screen.getByRole("button", { name: "Ver detalle de Impuesto departamental de TST001: Novedad" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Ver detalle de RUNT vehículo de TST003: Sin ejecutar" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Ver detalle de SIMIT propietario de TST002: Error" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST002: Ejecutado (OK)${NUEVA}` })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: `Ver detalle de Impuesto departamental de TST001: Novedad${NUEVA}` })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST003: Sin ejecutar${NUEVA}` })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: `Ver detalle de SIMIT propietario de TST002: Error${NUEVA}` })).toBeInTheDocument();
+  });
+
+  it("HU #14087: el semáforo es un enlace a la página del detalle en pestaña nueva (target _blank, noopener noreferrer, texto sr-only)", () => {
+    const { container } = pintar();
+    const enlace = screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST002: Ejecutado (OK)${NUEVA}` });
+    const td = enlace.closest("td")!;
+    const vehiculoId = td.closest("tr")!.getAttribute("data-vehiculo")!;
+    expect(enlace).toHaveAttribute("href", `/diagnosticos/${grilla().id}/vehiculos/${vehiculoId}/consultas/RUNT`);
+    expect(enlace).toHaveAttribute("target", "_blank");
+    expect(enlace).toHaveAttribute("rel", "noopener noreferrer");
+    expect(enlace).not.toHaveAttribute("aria-haspopup");
+    expect(within(enlace).getByText("(se abre en una pestaña nueva)")).toHaveClass("sr-only");
+    expect(container.querySelector("[role='dialog']")).toBeNull();
+    fireEvent.click(enlace);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("con hrefDetalle propio (backoffice) el enlace va a esa ruta", () => {
+    pintar(grilla(), false, { hrefDetalle: (c, v) => `/backoffice/x/${v.id}/${c.fuente}?empresa=e` });
+    const enlace = screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST002: Ejecutado (OK)${NUEVA}` });
+    expect(enlace.getAttribute("href")).toMatch(/^\/backoffice\/x\/.+\/RUNT\?empresa=e$/);
   });
 });
 
@@ -321,7 +344,7 @@ describe("GrillaSemaforos — HU #14087 AC9: accesibilidad y desborde", () => {
     for (const th of within(screen.getByRole("table")).getAllByRole("columnheader")) expect(th.getAttribute("scope")).toMatch(/^(col|colgroup)$/);
     for (const th of screen.getAllByRole("rowheader")) expect(th).toHaveAttribute("scope", "row");
     expect(screen.getByRole("table").parentElement).toHaveClass("overflow-x-auto");
-    for (const b of within(container).getAllByRole("button", { name: /^Ver detalle de / })) expect(b.className).toMatch(/focus-visible/);
+    for (const b of within(container).getAllByRole("link", { name: /^Ver detalle de / })) expect(b.className).toMatch(/focus-visible/);
   });
 });
 
@@ -343,13 +366,13 @@ describe("GrillaSemaforos — HU #13866: columna del impuesto departamental", ()
     expect(chipDe(td)).toHaveTextContent("Novedad");
     expect(td).toHaveTextContent(textoMotivo);
     expect(accionesDe()).toHaveLength(0);
-    expect(within(td).getByRole("button", { name: "Ver detalle de Impuesto departamental de TST007: Novedad" })).toBeInTheDocument();
+    expect(within(td).getByRole("link", { name: `Ver detalle de Impuesto departamental de TST007: Novedad${NUEVA}` })).toBeInTheDocument();
   });
 
   it("el impuesto completado se pinta en verde («Ejecutado (OK)») y su semáforo abre el detalle", () => {
     const { container } = pintar(conImpuesto("COMPLETADO"));
     const td = celdaDe(container, "celda-7-impuesto_departamental");
     expect(chipDe(td)).toHaveAttribute("data-tono", "success");
-    expect(within(td).getByRole("button", { name: "Ver detalle de Impuesto departamental de TST007: Ejecutado (OK)" })).toHaveAttribute("aria-haspopup", "dialog");
+    expect(within(td).getByRole("link", { name: `Ver detalle de Impuesto departamental de TST007: Ejecutado (OK)${NUEVA}` })).toHaveAttribute("target", "_blank");
   });
 });

@@ -9,17 +9,19 @@ import {
   CELDA_TABLA_CLS,
   FILA_TABLA_CLS,
 } from "@/components/tablero/vistasDetalle/comun";
+import { camposVisibles, etiquetaCampo, textoValor } from "@/lib/tablero/etiquetasRespuesta";
 
-// Respuesta de la fuente (HU #14087 AC8): renderizador genérico y reutilizable de lo que devuelve el API de detalle de la celda
-// (DTO cerrado, R-13/R-20). Pinta TODOS los campos tal como llegan: nombres verbatim (snake_case del JSON) y valores verbatim
-// (null → «null», true/false, números sin formato, textos tal cual). Objeto → tabla campo/valor; array de objetos → tabla con
-// una columna por clave (unión de claves, en orden de aparición); array de primitivos → lista; objeto anidado → subsección con
-// el nombre del campo como título; array vacío → «[]». No omite, modifica ni inventa campos.
-//
-// AC8 ajustado: pinta la respuesta completa (respuesta_fuente, proto-JSON del rpc) sin filtrar ninguna clave: por decisión del
-// usuario se ve todo, incluidos datos personales, proveedor o departamento. El origen manual de la celda (R-20) no viaja en la
-// respuesta. Para respuestas grandes, las subsecciones de primer nivel son plegables y abren por defecto, las de segundo nivel
-// son plegables y arrancan cerradas, cada lista lleva su número de elementos y hay un «Expandir todo / Contraer todo».
+// Respuesta de la fuente (HU #14087, página del detalle en pestaña nueva): renderizador genérico de lo que devuelve el API de
+// detalle de la celda (respuesta_fuente, proto-JSON del rpc, o el resultado resumido). La API no cambia; aquí se pintan SOLO
+// los datos propios de la consulta y TODO en español (lib/tablero/etiquetasRespuesta): se oculta la auditoría del proveedor y
+// los campos internos en cualquier nivel (proveedor, semaforo, desde_cache, consultado_en, respuesta_cruda, http_status,
+// duracion_ms, errores, tipo_error, mensaje_error, serialVersionUID, id e id_*, `campos` de ResultadoConsulta y, en los
+// chequeos, clave y fuente); el `resultado` objeto que envuelve a ResultadoConsulta se aplana y el `resultado` enum del RUNT
+// Intempo se oculta. Nombres de campo con el diccionario (desconocidos humanizados); valores: enums en español, Sí/No, «—» para
+// null o vacío, «Sin registros» para listas vacías; los textos de la fuente, tal cual. Objeto → tabla campo/valor; array de
+// objetos → tabla con una columna por clave visible; array de primitivos → lista; objeto anidado → subsección. Las de primer
+// nivel son plegables y abren por defecto, las de segundo nivel arrancan cerradas, cada lista lleva su número de elementos y
+// hay un «Expandir todo / Contraer todo». El origen manual de la celda (R-20) no viaja en la respuesta.
 
 type Objeto = Record<string, unknown>;
 
@@ -28,7 +30,8 @@ const esPrimitivo = (v: unknown) => v === null || typeof v !== "object";
 /** Va en una fila de la tabla campo/valor: primitivo, array vacío o array de primitivos. */
 const vaEnFila = (v: unknown) => esPrimitivo(v) || (Array.isArray(v) && v.every(esPrimitivo));
 
-const camposVisibles = (o: Objeto) => Object.entries(o);
+/** Los chequeos de ResultadoConsulta ocultan además su clave y su fuente. */
+const CHEQUEOS = "chequeos";
 
 /** Profundidades con subsección plegable: 0 (abierta por defecto) y 1 (cerrada). */
 const PROFUNDIDAD_PLEGABLE = 1;
@@ -36,17 +39,10 @@ const PROFUNDIDAD_PLEGABLE = 1;
 /** Avisa al contenedor de que un plegable cambió, para que el botón «Expandir/Contraer todo» diga lo correcto. */
 const AlCambiarPlegable = createContext<() => void>(() => {});
 
-/** Valor primitivo verbatim: null → «null», booleano → «true»/«false», número sin formato, texto tal cual. */
-function textoPrimitivo(v: unknown): string {
-  if (v === null) return "null";
-  if (v === undefined) return "";
-  return String(v);
-}
-
-const CAMPO_CLS = "px-3 py-2 align-top text-left font-mono text-xs font-medium text-[var(--nav-texto)] dark:text-slate-300";
-const VALOR_CLS = `${CELDA_TABLA_CLS} whitespace-pre-wrap break-words font-mono`;
+const CAMPO_CLS = "px-3 py-2 align-top text-left text-xs font-medium text-[var(--nav-texto)] dark:text-slate-300";
+const VALOR_CLS = `${CELDA_TABLA_CLS} whitespace-pre-wrap break-words`;
 const CONTENEDOR_TABLA_CLS = "overflow-x-auto rounded-xl border border-[var(--color-flit-gray)] dark:border-white/10";
-const TITULO_CLS = "font-mono text-xs font-semibold text-flit-primary dark:text-white";
+const TITULO_CLS = "text-xs font-semibold text-flit-primary dark:text-white";
 /** Botón secundario compacto (mismos tokens que BOTON_SECUNDARIO_CLS, a la escala de 12px del detalle). */
 const BOTON_PLEGAR_CLS = `inline-flex items-center justify-center self-end rounded-full border border-[var(--color-flit-gray)] bg-white px-3 py-1 text-xs font-semibold text-flit-primary transition dark:border-white/15 dark:bg-transparent dark:text-white ${FOCO_CLS}`;
 const SUMMARY_CLS = `flex cursor-pointer list-none items-center gap-1 rounded-lg py-0.5 [&::-webkit-details-marker]:hidden ${FOCO_CLS}`;
@@ -64,23 +60,23 @@ function ListaPrimitivos({ items }: { items: unknown[] }) {
   return (
     <ul className="flex flex-col gap-0.5">
       {items.map((item, i) => (
-        <li key={i}>{textoPrimitivo(item)}</li>
+        <li key={i}>{textoValor(item)}</li>
       ))}
     </ul>
   );
 }
 
-/** Valor dentro de una celda de tabla: primitivo, «[]», lista o tabla anidada (sin perder campos). */
+/** Valor dentro de una celda de tabla: primitivo, «Sin registros», lista o tabla anidada. `nombre` es la clave cruda. */
 function Valor({ nombre, valor }: { nombre: string; valor: unknown }) {
-  if (esPrimitivo(valor)) return <>{textoPrimitivo(valor)}</>;
+  if (esPrimitivo(valor)) return <>{textoValor(valor)}</>;
   if (Array.isArray(valor)) {
-    if (valor.length === 0) return <>[]</>;
+    if (valor.length === 0) return <>{textoValor(valor)}</>;
     if (valor.every(esPrimitivo)) return <ListaPrimitivos items={valor} />;
     if (valor.every(esObjeto)) return <TablaArreglo nombre={nombre} items={valor} />;
     return <ListaMixta nombre={nombre} items={valor} />;
   }
   const campos = camposVisibles(valor as Objeto);
-  return campos.length === 0 ? <>{"{}"}</> : <TablaCampos etiqueta={nombre} campos={campos} />;
+  return campos.length === 0 ? <>{textoValor({})}</> : <TablaCampos etiqueta={etiquetaCampo(nombre)} campos={campos} />;
 }
 
 function ListaMixta({ nombre, items }: { nombre: string; items: unknown[] }) {
@@ -88,7 +84,7 @@ function ListaMixta({ nombre, items }: { nombre: string; items: unknown[] }) {
     <ul className="flex flex-col gap-1">
       {items.map((item, i) => (
         <li key={i}>
-          <Valor nombre={`${nombre}[${i}]`} valor={item} />
+          <Valor nombre={nombre} valor={item} />
         </li>
       ))}
     </ul>
@@ -113,7 +109,7 @@ function TablaCampos({ etiqueta, campos }: { etiqueta: string; campos: [string, 
           {campos.map(([clave, valor]) => (
             <tr key={clave} className={FILA_TABLA_CLS}>
               <th scope="row" className={CAMPO_CLS}>
-                {clave}
+                {etiquetaCampo(clave)}
               </th>
               <td className={VALOR_CLS}>
                 <Valor nombre={clave} valor={valor} />
@@ -126,27 +122,29 @@ function TablaCampos({ etiqueta, campos }: { etiqueta: string; campos: [string, 
   );
 }
 
+/** Array de objetos → tabla con una columna por clave visible (unión, en orden de aparición). */
 function TablaArreglo({ nombre, items }: { nombre: string; items: Objeto[] }) {
+  const filas = items.map((item) => new Map(camposVisibles(item, nombre === CHEQUEOS)));
   const columnas: string[] = [];
-  for (const item of items) for (const [clave] of camposVisibles(item)) if (!columnas.includes(clave)) columnas.push(clave);
+  for (const fila of filas) for (const clave of fila.keys()) if (!columnas.includes(clave)) columnas.push(clave);
   return (
     <div className={CONTENEDOR_TABLA_CLS}>
-      <table aria-label={nombre} className="w-full border-collapse text-xs">
+      <table aria-label={etiquetaCampo(nombre)} className="w-full border-collapse text-xs">
         <thead>
           <tr>
             {columnas.map((c) => (
-              <th key={c} scope="col" className={`${CABECERA_TABLA_CLS} normal-case tracking-normal font-mono`} style={CABECERA_TABLA_ESTILO}>
-                {c}
+              <th key={c} scope="col" className={`${CABECERA_TABLA_CLS} normal-case tracking-normal`} style={CABECERA_TABLA_ESTILO}>
+                {etiquetaCampo(c)}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {items.map((item, i) => (
+          {filas.map((fila, i) => (
             <tr key={i} className={FILA_TABLA_CLS}>
               {columnas.map((c) => (
                 <td key={c} className={VALOR_CLS}>
-                  {Object.prototype.hasOwnProperty.call(item, c) ? <Valor nombre={c} valor={item[c]} /> : null}
+                  {fila.has(c) ? <Valor nombre={c} valor={fila.get(c)} /> : null}
                 </td>
               ))}
             </tr>
@@ -160,9 +158,10 @@ function TablaArreglo({ nombre, items }: { nombre: string; items: Objeto[] }) {
 function Subseccion({ nombre, valor, nivel, profundidad }: { nombre: string; valor: unknown; nivel: number; profundidad: number }) {
   const id = useId();
   const alCambiar = useContext(AlCambiarPlegable);
-  const titulo = Array.isArray(valor) ? `${nombre} (${valor.length})` : nombre;
+  const etiqueta = etiquetaCampo(nombre);
+  const titulo = Array.isArray(valor) ? `${etiqueta} (${valor.length})` : etiqueta;
   const contenido = esObjeto(valor) ? (
-    <Bloque etiqueta={nombre} datos={valor} nivel={nivel + 1} profundidad={profundidad + 1} />
+    <Bloque etiqueta={etiqueta} datos={valor} nivel={nivel + 1} profundidad={profundidad + 1} />
   ) : (
     <Valor nombre={nombre} valor={valor} />
   );
@@ -193,7 +192,7 @@ function Subseccion({ nombre, valor, nivel, profundidad }: { nombre: string; val
 
 function Bloque({ etiqueta, datos, nivel, profundidad }: { etiqueta: string; datos: Objeto; nivel: number; profundidad: number }) {
   const campos = camposVisibles(datos);
-  if (campos.length === 0) return <p className={VALOR_CLS}>{"{}"}</p>;
+  if (campos.length === 0) return <p className={VALOR_CLS}>{textoValor({})}</p>;
   const filas = campos.filter(([, v]) => vaEnFila(v));
   const secciones = campos.filter(([, v]) => !vaEnFila(v));
   return (
@@ -211,18 +210,18 @@ export interface RespuestaFuenteProps {
   datos: object;
   /** Nombre accesible de la tabla principal campo/valor. */
   etiqueta: string;
-  /** Nivel de encabezado de las subsecciones (el diálogo es h2 y sus secciones h3: por defecto, h4). */
+  /** Nivel de encabezado de las subsecciones (la página es h1 y sus secciones h2: por defecto, h3). */
   nivel?: number;
 }
 
 /**
- * Todos los campos de la respuesta de la fuente, verbatim (HU #14087 AC8). El árbol se memoiza: abrir o cerrar plegables, o
- * pulsar «Expandir/Contraer todo», no lo vuelve a construir (los <details> se abren y cierran en el DOM, sin re-render).
+ * Los datos de la consulta en la respuesta de la fuente, en español (HU #14087). El árbol se memoiza: abrir o cerrar
+ * plegables, o pulsar «Expandir/Contraer todo», no lo vuelve a construir (los <details> se abren y cierran en el DOM).
  */
-export const RespuestaFuente = memo(function RespuestaFuente({ datos, etiqueta, nivel = 4 }: RespuestaFuenteProps) {
+export const RespuestaFuente = memo(function RespuestaFuente({ datos, etiqueta, nivel = 3 }: RespuestaFuenteProps) {
   const contenedor = useRef<HTMLDivElement>(null);
   const [todoAbierto, setTodoAbierto] = useState(false);
-  const hayPlegables = useMemo(() => Object.values(datos as Objeto).some((v) => !vaEnFila(v)), [datos]);
+  const hayPlegables = useMemo(() => camposVisibles(datos as Objeto).some(([, v]) => !vaEnFila(v)), [datos]);
   const plegables = () => Array.from(contenedor.current?.querySelectorAll("details") ?? []);
   const recalcular = useCallback(() => {
     const lista = Array.from(contenedor.current?.querySelectorAll("details") ?? []);

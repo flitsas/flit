@@ -52,14 +52,14 @@ test.describe("tablero del lote", () => {
     await expect(runt.getByText("Ejecutado (OK)")).toBeVisible();
     expect(recargas).toBe(0);
 
-    // AC4: el usuario sin rol admin no ve ningún botón de acción en la grilla (desde HU #13801 cada semáforo es un botón
-    // «Ver detalle de …», que no es una acción sobre la celda).
+    // AC4: el usuario sin rol admin no ve ningún botón de acción en la grilla (desde HU #14087 cada semáforo es un enlace
+    // «Ver detalle de …» a la pestaña del detalle, que no es una acción sobre la celda).
     await expect(grilla.getByRole("button", { name: /reprocesar/i })).toHaveCount(0);
     // AC6: ningún indicador de dato manual.
     await expect(grilla.getByText(/manual/i)).toHaveCount(0);
   });
 
-  test("HU #13801 AC1: clic en el semáforo verde de SIMIT vehículo abre el detalle con sus comparendos", async ({ page }) => {
+  test("HU #13801 AC1 / HU #14087: el semáforo verde de SIMIT vehículo abre el detalle en una pestaña nueva", async ({ page, context }) => {
     test.skip(!process.env.E2E_USUARIO || !process.env.E2E_CLAVE, "Faltan E2E_USUARIO / E2E_CLAVE");
     await entrar(page, process.env.E2E_USUARIO!, process.env.E2E_CLAVE!);
 
@@ -68,44 +68,51 @@ test.describe("tablero del lote", () => {
 
     const grilla = page.getByRole("table", { name: /semáforo de consultas/i });
     await expect(grilla).toBeVisible();
-    // HU #14087: las 8 fuentes salen siempre; si el Express no pidió SIMIT vehículo su celda dice «Sin solicitar» y no es botón.
+    // HU #14087: las 8 fuentes salen siempre; si el Express no pidió SIMIT vehículo su celda dice «Sin solicitar» y no es enlace.
     test.skip(
-      (await grilla.getByRole("button", { name: new RegExp(`^Ver detalle de SIMIT vehículo de ${PLACA}`) }).count()) === 0,
+      (await grilla.getByRole("link", { name: new RegExp(`^Ver detalle de SIMIT vehículo de ${PLACA}`) }).count()) === 0,
       "El Express de este ambiente no incluye SIMIT vehículo",
     );
 
     // Con la simulación encendida, SIMIT del vehículo termina en verde (COMPLETADO) sin recargar.
-    const semaforo = grilla.getByRole("button", { name: new RegExp(`^Ver detalle de SIMIT vehículo de ${PLACA}`) });
-    await expect(semaforo).toHaveAccessibleName(/Ejecutado \(OK\)$/, { timeout: 60_000 });
+    const semaforo = grilla.getByRole("link", { name: new RegExp(`^Ver detalle de SIMIT vehículo de ${PLACA}`) });
+    await expect(semaforo).toHaveAccessibleName(/Ejecutado \(OK\) \(se abre en una pestaña nueva\)$/, { timeout: 60_000 });
+    await expect(semaforo).toHaveAttribute("target", "_blank");
+    await expect(semaforo).toHaveAttribute("rel", "noopener noreferrer");
 
-    // Se abre con el teclado: Enter sobre el semáforo enfocado.
+    // Se abre con el teclado (Enter sobre el semáforo enfocado) en una pestaña nueva; el tablero sigue en la suya, sin modal.
     await semaforo.focus();
-    await page.keyboard.press("Enter");
-    const dialogo = page.getByRole("dialog", { name: `SIMIT vehículo · ${PLACA}` });
-    await expect(dialogo).toBeVisible();
-    // HU #14087: auditoría con la fecha y hora de la consulta y la respuesta de la fuente con sus campos verbatim.
-    const auditoria = dialogo.getByRole("region", { name: "Auditoría de consulta" });
+    const [pestana] = await Promise.all([context.waitForEvent("page"), page.keyboard.press("Enter")]);
+    await pestana.waitForLoadState();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(pestana).toHaveURL(/\/diagnosticos\/[0-9a-f-]{36}\/vehiculos\/[0-9a-f-]{36}\/consultas\/SIMIT_VEHICULO$/i);
+    await expect(pestana.getByRole("heading", { level: 1, name: `SIMIT vehículo · ${PLACA}` })).toBeVisible();
+    const migas = pestana.getByRole("navigation", { name: "Migas de pan" });
+    await expect(migas.getByRole("link", { name: "Diagnósticos" })).toBeVisible();
+    await expect(migas.getByText(`SIMIT vehículo · ${PLACA}`)).toHaveAttribute("aria-current", "page");
+    // Auditoría de consulta de FLIT: fecha y hora de la consulta y el estado.
+    const auditoria = pestana.getByRole("region", { name: "Auditoría de consulta" });
     await expect(auditoria.getByText(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/)).toBeVisible();
     await expect(auditoria.getByText("Ejecutado (OK)")).toBeVisible();
-    // AC8 ajustado: con la respuesta completa guardada (ConsultarMultasResponse) se pinta su subsección «resultado» plegable;
-    // sin ella, el aviso de resultado resumido y el resultado con cantidad_comparendos y la tabla de comparendos (o «[]»).
-    const seccionRespuesta = dialogo.getByRole("region", { name: "Respuesta de la fuente" });
+    // Respuesta de la fuente: solo datos de la consulta, en español; sin la auditoría del proveedor ni nombres crudos.
+    const seccionRespuesta = pestana.getByRole("region", { name: "Respuesta de la fuente" });
     if (await seccionRespuesta.getByText(/no tiene guardada la respuesta completa/).count()) {
       const respuesta = seccionRespuesta.getByRole("table", { name: "Respuesta de la fuente" });
-      await expect(respuesta.getByRole("rowheader", { name: "cantidad_comparendos" })).toBeVisible();
-      const tabla = dialogo.getByRole("table", { name: "comparendos" });
-      if (await tabla.count()) await expect(tabla.getByRole("columnheader", { name: "valor" })).toBeVisible();
-      else await expect(respuesta.getByRole("row", { name: /comparendos\s*\[\]/ })).toBeVisible();
+      await expect(respuesta.getByRole("rowheader", { name: "Cantidad de comparendos" })).toBeVisible();
+      const tabla = pestana.getByRole("table", { name: "Comparendos" });
+      if (await tabla.count()) await expect(tabla.getByRole("columnheader", { name: "Valor" })).toBeVisible();
+      else await expect(respuesta.getByRole("row", { name: /Comparendos\s*Sin registros/ })).toBeVisible();
     } else {
-      await expect(seccionRespuesta.getByRole("region", { name: "resultado" })).toBeVisible();
-      await expect(seccionRespuesta.getByRole("button", { name: /Expandir todo|Contraer todo/ })).toBeVisible();
+      await expect(seccionRespuesta.getByRole("region", { name: /^resultado$/i })).toHaveCount(0);
     }
+    await expect(seccionRespuesta.getByText(/proveedor|desde_cache|http_status|duracion_ms|semaforo/i)).toHaveCount(0);
     // AC5: nada que delate un dato manual.
-    await expect(dialogo.getByText(/manual/i)).toHaveCount(0);
+    await expect(pestana.getByText(/manual/i)).toHaveCount(0);
 
-    // Escape cierra y el foco vuelve al semáforo.
-    await page.keyboard.press("Escape");
-    await expect(dialogo).toHaveCount(0);
-    await expect(semaforo).toBeFocused();
+    // «Volver al diagnóstico» lleva al tablero del lote.
+    await pestana.getByRole("link", { name: "Volver al diagnóstico" }).click();
+    await expect(pestana).toHaveURL(/\/diagnosticos\/[0-9a-f-]{36}$/i);
+    await expect(pestana.getByRole("link", { name: "Volver a diagnósticos" })).toHaveAttribute("href", "/");
+    await pestana.close();
   });
 });

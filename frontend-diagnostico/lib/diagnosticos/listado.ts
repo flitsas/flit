@@ -131,6 +131,23 @@ export function urlListado(f: FiltrosListado): string {
   return texto ? `/?${texto}` : "/";
 }
 
+/**
+ * Destino de una fila del listado con sus filtros en ?desde= (HU #14087), para que el tablero vuelva al listado filtrado. Sin
+ * filtros, el destino tal cual. La carga de vehículos (lote sin lanzar) no tiene «volver»: va sin ?desde=.
+ */
+export function destinoConFiltros(destino: string, f: FiltrosListado): string {
+  const consulta = urlListado(f).replace(/^\/\??/, "");
+  return consulta && !destino.endsWith("/carga") ? `${destino}?desde=${encodeURIComponent(consulta)}` : destino;
+}
+
+/**
+ * «Volver a diagnósticos» del tablero (HU #14087): reconstruye SOLO los filtros conocidos del listado como search params de /.
+ * El valor de ?desde= nunca se usa como URL (sin open redirect): lo que no es un filtro válido se descarta.
+ */
+export function urlVolverAlListado(desde: string | null | undefined): string {
+  return desde ? urlListado(filtrosDesdeUrl(new URLSearchParams(desde))) : "/";
+}
+
 /** Algún filtro activo (la página y el tamaño no cuentan): separa «sin resultados» de «compañía sin diagnósticos». */
 export function hayFiltros(f: FiltrosListado): boolean {
   return Boolean(f.desde || f.hasta || f.modo || f.estado || f.nombre.trim());

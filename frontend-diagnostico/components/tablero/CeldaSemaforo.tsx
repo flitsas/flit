@@ -113,15 +113,20 @@ export interface CeldaSemaforoProps extends Pick<BotonReprocesarProps, "onReproc
   identificador: string;
   puedeReprocesar: boolean;
   /**
-   * Abre el detalle de la celda (HU #13801). Con él, el semáforo es un botón (clic, Enter o Espacio); se le pasa el botón
-   * para devolverle el foco al cerrar el diálogo.
+   * Página del detalle de la celda (HU #13801; en pestaña nueva desde HU #14087). Con ella, el semáforo es un enlace con
+   * target="_blank" y rel="noopener noreferrer" que avisa a los lectores de pantalla que abre una pestaña nueva.
    */
-  onAbrirDetalle?: (celda: CeldaGrilla, disparador: HTMLElement) => void;
+  hrefDetalle?: string;
   /** Marca bajo el semáforo. Solo la pasa la grilla del backoffice (origen manual, HU #13802); la compañía nunca (Q5). */
   marca?: ReactNode;
+  /** Acción extra bajo el semáforo. Solo la pasa el backoffice («Llenar a mano», HU #13802). */
+  accion?: ReactNode;
 }
 
 const TD_CLS = "px-3 py-2.5 align-top";
+
+/** Aviso para lectores de pantalla del enlace al detalle (HU #14087): va en el nombre accesible y como texto sr-only. */
+const NUEVA_PESTANA = "(se abre en una pestaña nueva)";
 
 /**
  * Una celda vehículo × fuente del tablero (HU #13748; estados de HU #14087). En la vista de la compañía, sin ningún indicador
@@ -137,8 +142,9 @@ export function CeldaSemaforo({
   puedeReprocesar,
   onReprocesada,
   onErrorReproceso,
-  onAbrirDetalle,
+  hrefDetalle,
   marca,
+  accion,
 }: CeldaSemaforoProps) {
   if (!solicitada || !celda)
     return (
@@ -151,21 +157,23 @@ export function CeldaSemaforo({
   return (
     <td data-fuente={fuente} data-celda={celda.id} data-estado={celda.estado} className={TD_CLS}>
       <div className="flex flex-col items-start gap-1">
-        {onAbrirDetalle ? (
-          <button
-            type="button"
-            aria-haspopup="dialog"
-            aria-label={`Ver detalle de ${nombreFuente} de ${identificador}: ${ESTADOS[celda.estado].texto}`}
-            onClick={(e) => onAbrirDetalle(celda, e.currentTarget)}
-            className={`cursor-pointer rounded-full transition hover:opacity-90 ${FOCO_CLS}`}
+        {hrefDetalle ? (
+          <a
+            href={hrefDetalle}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Ver detalle de ${nombreFuente} de ${identificador}: ${ESTADOS[celda.estado].texto} ${NUEVA_PESTANA}`}
+            className={`inline-flex cursor-pointer items-center gap-1 rounded-full transition hover:opacity-90 ${FOCO_CLS}`}
           >
             <ChipEstadoCelda estado={celda.estado} />
-          </button>
+            <span className="sr-only">{NUEVA_PESTANA}</span>
+          </a>
         ) : (
           <ChipEstadoCelda estado={celda.estado} />
         )}
         {marca}
         {nota && <span className="text-xs text-[var(--nav-texto)] dark:text-slate-300">{nota}</span>}
+        {accion}
         {puedeReprocesar && esReprocesable(celda) && (
           <BotonReprocesar
             celda={celda}

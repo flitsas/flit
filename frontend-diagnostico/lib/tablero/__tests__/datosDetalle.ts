@@ -9,6 +9,8 @@ export function detalle(fuente: Fuente, cambios: Partial<DetalleCelda> = {}): De
   return {
     id: `celda-1-${fuente.toLowerCase()}`,
     vehiculo_id: "vehiculo-1",
+    identificador: "TST001",
+    nombre_diagnostico: "Lote de prueba",
     fuente,
     estado: "COMPLETADO",
     motivo_na: null,
@@ -139,25 +141,27 @@ export const runtPropietarioConError = () =>
   });
 
 /**
- * Respuesta completa del RUNT (HU #14087 AC8 ajustado): proto-JSON ficticio del ConsultarVehiculoCrudoResponse, con nombres
- * snake_case y valores por defecto (false, 0, "", []). Nombres, documentos y direcciones inventados.
+ * Respuesta completa del RUNT (HU #14087): proto-JSON ficticio del ConsultarVehiculoIntempoResponse, con nombres snake_case,
+ * valores por defecto (0, "", []) y la auditoría del proveedor que la página oculta. Nombres, documentos y direcciones inventados.
  */
 export const respuestaFuenteRunt = (): Record<string, unknown> => ({
   proveedor: "PROVEEDOR-FICTICIO",
-  resultado: { proveedor: "PROVEEDOR-FICTICIO", desde_cache: false, chequeos: [] },
+  resultado: "RESULTADO_RUNT_INTEMPO_ENCONTRADO",
   vehiculo: {
     plate: "TST001",
     vin: "9ZZPRUEBA00000001",
-    informacion_general: { marca: "MARCA PRUEBA", modelo: 2020, blindado: false, cilindraje: 0, color: "" },
+    informacion_general: { marca: "MARCA PRUEBA", modelo: "2020", cilidraje: "1600", color: "", serialVersionUID: "1" },
     soat: [
-      { numero_poliza: "POL-0001", vigente: true },
-      { numero_poliza: "POL-0002", vigente: false },
+      { no_poliza: "POL-0001", estado: "VIGENTE" },
+      { no_poliza: "POL-0002", estado: "VENCIDO" },
     ],
     tecno_mecanica: [],
     propietarios_actuales: [
       {
+        id: 101,
+        id_tipo_documento: "1",
         nombre_completo: "PERSONA FICTICIA UNO",
-        direcciones: [{ direccion: "CALLE FALSA 123", departamento: "DEPTO PRUEBA" }],
+        direcciones: [{ id: 7, direccion: "CALLE FALSA 123", id_departamento: "05", departamento: "DEPTO PRUEBA" }],
         locatarios: [],
       },
     ],

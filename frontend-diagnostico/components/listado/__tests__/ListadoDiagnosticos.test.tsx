@@ -84,6 +84,18 @@ describe("ListadoDiagnosticos — AC1: tabla con las columnas y la fila abre el 
     expect(h.push).toHaveBeenCalledWith(`/diagnosticos/${d.id}`);
   });
 
+  it("HU #14087: con filtros en la URL, el tablero recibe ?desde= con ellos para volver al listado filtrado", async () => {
+    h.params = new URLSearchParams("estado=EN_PROCESO&nombre=Flota");
+    const d = diagnostico(1);
+    simularApi({ "GET /diagnosticos": () => Response.json(lista([d])) });
+    render(<ListadoDiagnosticos />);
+    const fila = within(await tabla()).getByRole("row", { name: /Flota de prueba 001/ });
+    const destino = `/diagnosticos/${d.id}?desde=${encodeURIComponent("estado=EN_PROCESO&nombre=Flota")}`;
+    expect(within(fila).getByRole("link", { name: "Flota de prueba 001" })).toHaveAttribute("href", destino);
+    fireEvent.click(within(fila).getByText("Ana Prueba"));
+    expect(h.push).toHaveBeenCalledWith(destino);
+  });
+
   it("sin filtros en la URL pide la página 1 sin filtros", async () => {
     const fetchMock = simularApi({ "GET /diagnosticos": () => Response.json(lista([diagnostico(1)])) });
     render(<ListadoDiagnosticos />);

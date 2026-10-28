@@ -25,11 +25,11 @@ const avanzar = (ms = 0) => act(async () => {
 
 type Rutas = Parameters<typeof simularApi>[0];
 
-async function montar(rutas: Rutas, capacidades: Partial<CapacidadesDiagnostico> = USUARIO, id = ID) {
+async function montar(rutas: Rutas, capacidades: Partial<CapacidadesDiagnostico> = USUARIO, id = ID, desde?: string | string[]) {
   const api = simularApi({ "GET /sesion": () => Response.json(sesion(capacidades)), ...rutas });
   render(
     <DiagnosticoShell user={{ email: "ana@empresa-prueba.co", permissions: [], roles: [], isSuperAdmin: false }} tramitesUrl="">
-      {await TableroDiagnostico({ params: Promise.resolve({ id }) })}
+      {await TableroDiagnostico({ params: Promise.resolve({ id }), searchParams: Promise.resolve(desde === undefined ? {} : { desde }) })}
     </DiagnosticoShell>,
   );
   await avanzar();
@@ -123,9 +123,8 @@ describe("/diagnosticos/{id} — AC2: se actualiza sola sin recargar", () => {
 describe("/diagnosticos/{id} — AC4/AC5: acciones por perfil", () => {
   it("AC4: el usuario sin capacidad de reprocesar no ve botones en la grilla", async () => {
     await montar({ [GRILLA]: () => Response.json(loteTerminadoConErrores({ estado: "INCOMPLETO" })) });
-    // Desde HU #13801 cada semáforo es un botón «Ver detalle de …»; acciones (Reprocesar) no hay ninguna.
-    const botones = within(screen.getByRole("table")).queryAllByRole("button");
-    expect(botones.filter((b) => !/^Ver detalle de /.test(b.getAttribute("aria-label") ?? ""))).toHaveLength(0);
+    // Desde HU #14087 cada semáforo es un enlace a la pestaña del detalle; acciones (Reprocesar) no hay ninguna.
+    expect(within(screen.getByRole("table")).queryAllByRole("button")).toHaveLength(0);
   });
 
   it("AC5: el admin reprocesa una roja de un lote INCOMPLETO: la celda vuelve a gris, el lote a EN_PROCESO y el sondeo se reanuda", async () => {
@@ -256,5 +255,48 @@ describe("/diagnosticos/{id} — HU #13851: descargas del tablero", () => {
     expect(screen.queryByRole("columnheader", { name: "Reporte" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /descargar/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /descargar/i })).not.toBeInTheDocument();
+  });
+});
+
+describe("/diagnosticos/{id} — HU #14087: migas y «Volver a diagnósticos» con los filtros del listado", () => {
+  const volver = () => screen.getByRole("link", { name: "Volver a diagnósticos" });
+
+  it("migas «Diagnósticos › {nombre del lote}» con el último en aria-current", async () => {
+    await montar({ [GRILLA]: () => Response.json(grilla()) });
+    const migas = screen.getByRole("navigation", { name: "Migas de pan" });
+    const items = within(migas).getAllByRole("listitem");
+    expect(items.map((i) => i.textContent?.replace("›", "").trim())).toEqual(["Diagnósticos", grilla().nombre]);
+    expect(within(migas).getByRole("link", { name: "Diagnósticos" })).toHaveAttribute("href", "/");
+    expect(within(items[1]).getByText(grilla().nombre)).toHaveAttribute("aria-current", "page");
+  });
+
+  it("sin ?desde= vuelve a /", async () => {
+    await montar({ [GRILLA]: () => Response.json(grilla()) });
+    expect(volver()).toHaveAttribute("href", "/");
+  });
+
+  it("con ?desde= vuelve al listado con sus filtros como search params de /", async () => {
+    await montar({ [GRILLA]: () => Response.json(grilla()) }, USUARIO, ID, "desde=2026-10-01&estado=EN_PROCESO&nombre=Flota+prueba&pagina=2");
+    const href = volver().getAttribute("href")!;
+    expect(href.startsWith("/?")).toBe(true);
+    const q = new URL(href, "http://localhost").searchParams;
+    expect(q.get("desde")).toBe("2026-10-01");
+    expect(q.get("estado")).toBe("EN_PROCESO");
+    expect(q.get("nombre")).toBe("Flota prueba");
+    expect(q.get("pagina")).toBe("2");
+    expect(within(screen.getByRole("navigation", { name: "Migas de pan" })).getByRole("link", { name: "Diagnósticos" })).toHaveAttribute("href", href);
+  });
+
+  it.each(["https://malicioso.example/robo", "//malicioso.example", "javascript:alert(1)", "/\malicioso.example"])("sin open redirect: ?desde=%s nunca sale de /", async (malo) => {
+    await montar({ [GRILLA]: () => Response.json(grilla()) }, USUARIO, ID, malo);
+    const href = volver().getAttribute("href")!;
+    expect(href === "/" || href.startsWith("/?")).toBe(true);
+    expect(new URL(href, "http://localhost").origin).toBe("http://localhost");
+    expect(href).not.toMatch(/malicioso|javascript/);
+  });
+
+  it("también en los estados de error: el botón de volver está siempre", async () => {
+    await montar({ [GRILLA]: () => Response.json({ error: "x" }, { status: 500 }) });
+    expect(volver()).toHaveAttribute("href", "/");
   });
 });

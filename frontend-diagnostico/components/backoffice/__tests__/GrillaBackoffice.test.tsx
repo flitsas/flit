@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { GrillaBackoffice } from "@/components/backoffice/GrillaBackoffice";
 import { GrillaSemaforos } from "@/components/tablero/GrillaSemaforos";
+import PaginaConsultaBackoffice from "@/app/(app)/backoffice/diagnosticos/[id]/vehiculos/[vehiculoId]/consultas/[fuente]/page";
 import { sesion } from "@/__tests__/configuracion/datos";
 import type { GrillaBackoffice as TGrilla } from "@/lib/backoffice/api";
 import type { Grilla } from "@/lib/tablero/api";
@@ -9,8 +10,9 @@ import { EMPRESA_A, LOTE, celdaBo, grillaBo, llamadas, respuestaLlenado, simular
 
 // Uso de ejemplo: <GrillaBackoffice diagnosticoId={id} empresa={empresa} /> en /backoffice/diagnosticos/{id}?empresa= pide
 // GET /backoffice/diagnosticos/{id}/grilla?empresa=&desde=0 y reutiliza GrillaSemaforos con la marca «Manual» en las celdas de
-// origen MANUAL (solo aquí, Q5). Cada semáforo abre DetalleCelda; en las celdas en ERROR llenables, con la capacidad
-// llenarConsultas, el pie trae «Llenar a mano», que abre FormularioLlenadoManual.
+// origen MANUAL (solo aquí, Q5). Cada semáforo abre en una pestaña nueva /backoffice/diagnosticos/{id}/vehiculos/{vid}/
+// consultas/{fuente}?empresa= (HU #14087); en las celdas en ERROR llenables, con la capacidad llenarConsultas, la celda trae
+// «Llenar a mano», que abre FormularioLlenadoManual como modal.
 
 const h = vi.hoisted(() => ({ capacidades: { backoffice: true, llenarConsultas: true } as Record<string, boolean>, replace: vi.fn() }));
 vi.mock("@/components/DiagnosticoShell", () => ({ useSesion: () => ({ sesion: sesion(h.capacidades), cargando: false, error: null, recargar: () => {} }) }));
@@ -32,13 +34,8 @@ function montar(g: TGrilla = grillaBo(), extra: Parameters<typeof simularApi>[0]
 
 const tabla = () => screen.findByRole("table", { name: /semáforo de consultas/i });
 const td = (container: HTMLElement, id: string) => container.querySelector<HTMLElement>(`[data-celda="${id}"]`)!;
-const semaforo = (fuente: string, placa: string) => screen.getByRole("button", { name: new RegExp(`^Ver detalle de ${fuente} de ${placa}`) });
-
-async function abrirDetalle(fuente: string, placa: string) {
-  await tabla();
-  fireEvent.click(semaforo(fuente, placa));
-  return screen.findByRole("dialog");
-}
+const semaforo = (fuente: string, placa: string) => screen.getByRole("link", { name: new RegExp(`^Ver detalle de ${fuente} de ${placa}`) });
+const llenar = (fuente: string, placa: string) => screen.queryByRole("button", { name: `Llenar a mano ${fuente} de ${placa}` });
 
 describe("GrillaBackoffice — cuatro estados y empresa explícita", () => {
   it("cargando y luego la grilla, leída con ?empresa= y desde=0", async () => {
@@ -103,11 +100,24 @@ describe("GrillaBackoffice — marca de origen manual solo en esta grilla", () =
 });
 
 describe("GrillaBackoffice — «Llenar a mano» solo en celdas en ERROR no bloqueadas de fuentes llenables", () => {
-  it("SIMIT vehículo en ERROR: el detalle trae «Llenar a mano» y no pide el detalle de la compañía", async () => {
-    const { fetchMock } = montar();
-    const d = await abrirDetalle("SIMIT vehículo", "TST001");
-    expect(within(d).getByRole("button", { name: "Llenar a mano" })).toBeInTheDocument();
+  it("SIMIT vehículo en ERROR: la celda trae «Llenar a mano» y no pide el detalle de la compañía", async () => {
+    const { fetchMock, container } = montar();
+    await tabla();
+    const boton = within(td(container, "celda-1-simit_vehiculo")).getByRole("button", { name: "Llenar a mano SIMIT vehículo de TST001" });
+    expect(boton).toHaveTextContent("Llenar a mano");
     expect(fetchMock.mock.calls.some(([u]) => String(u).includes("/vehiculos/"))).toBe(false);
+  });
+
+  it("HU #14087: el semáforo abre el detalle del backoffice en una pestaña nueva, con ?empresa=", async () => {
+    montar();
+    await tabla();
+    const enlace = semaforo("SIMIT vehículo", "TST001");
+    expect(enlace).toHaveAttribute("href", `/backoffice/diagnosticos/${LOTE}/vehiculos/vehiculo-1/consultas/SIMIT_VEHICULO?empresa=${EMPRESA_A}`);
+    expect(enlace).toHaveAttribute("target", "_blank");
+    expect(enlace).toHaveAttribute("rel", "noopener noreferrer");
+    expect(enlace).toHaveAccessibleName(/\(se abre en una pestaña nueva\)$/);
+    fireEvent.click(enlace);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it.each([
@@ -117,15 +127,15 @@ describe("GrillaBackoffice — «Llenar a mano» solo en celdas en ERROR no bloq
     ["SIMIT vehículo", "TST002", "ya llenada a mano"],
   ])("%s de %s (%s): sin «Llenar a mano»", async (fuente, placa) => {
     montar();
-    const d = await abrirDetalle(fuente, placa);
-    expect(within(d).queryByRole("button", { name: "Llenar a mano" })).toBeNull();
+    await tabla();
+    expect(llenar(fuente, placa)).toBeNull();
   });
 
   it("sin la capacidad llenarConsultas no hay «Llenar a mano» en ninguna celda", async () => {
     h.capacidades = { backoffice: true, llenarConsultas: false };
     montar();
-    const d = await abrirDetalle("SIMIT vehículo", "TST001");
-    expect(within(d).queryByRole("button", { name: "Llenar a mano" })).toBeNull();
+    await tabla();
+    expect(screen.queryAllByRole("button", { name: /^Llenar a mano/ })).toHaveLength(0);
   });
 });
 
@@ -141,8 +151,8 @@ describe("GrillaBackoffice — AC2: llenar SIMIT vehículo y ver la celda en ver
       "PUT /backoffice/consultas/celda-1-simit_vehiculo/manual": () => Response.json(respuestaLlenado("SIMIT_VEHICULO")),
     });
 
-    const d = await abrirDetalle("SIMIT vehículo", "TST001");
-    fireEvent.click(within(d).getByRole("button", { name: "Llenar a mano" }));
+    await tabla();
+    fireEvent.click(llenar("SIMIT vehículo", "TST001")!);
     const form = await screen.findByRole("dialog", { name: /llenar a mano/i });
     fireEvent.change(await within(form).findByLabelText("Semáforo"), { target: { value: "VERDE" } });
     fireEvent.click(within(form).getByRole("button", { name: "Confirmar llenado" }));
@@ -162,8 +172,8 @@ describe("GrillaBackoffice — AC2: llenar SIMIT vehículo y ver la celda en ver
       "GET /backoffice/consultas/celda-1-avaluo/manual": () =>
         Response.json({ id: "celda-1-avaluo", diagnostico_id: LOTE, vehiculo_id: "vehiculo-1", fuente: "AVALUO", estado: "ERROR", tipo_error: "HTTP_5XX", version: 10, admite_manual: true, motivo: null, personas: null }),
     });
-    const d = await abrirDetalle("Avalúo comercial", "TST001");
-    fireEvent.click(within(d).getByRole("button", { name: "Llenar a mano" }));
+    await tabla();
+    fireEvent.click(llenar("Avalúo comercial", "TST001")!);
     const form = await screen.findByRole("dialog", { name: /llenar a mano/i });
     fireEvent.change(await within(form).findByLabelText("Valor sugerido (pesos)"), { target: { value: "-5" } });
     fireEvent.click(within(form).getByRole("button", { name: "Confirmar llenado" }));
@@ -171,5 +181,48 @@ describe("GrillaBackoffice — AC2: llenar SIMIT vehículo y ver la celda en ver
     await waitFor(() => expect(within(form).getByLabelText("Valor sugerido (pesos)")).toHaveAttribute("aria-invalid", "true"));
     expect(llamadas(fetchMock, "PUT", "/backoffice/consultas/celda-1-avaluo/manual")).toHaveLength(0);
     expect(td(container, "celda-1-avaluo")).toHaveAttribute("data-estado", "ERROR");
+  });
+});
+
+describe("Backoffice — HU #14087: página del detalle en pestaña nueva", () => {
+  async function abrirPagina(vehiculoId: string, fuente: string, g: TGrilla = grillaBo()) {
+    const fetchMock = simularApi({ [RUTA_GRILLA]: () => Response.json(g) });
+    const r = render(await PaginaConsultaBackoffice({ params: Promise.resolve({ id: LOTE, vehiculoId, fuente }), searchParams: Promise.resolve({ empresa: EMPRESA_A }) }));
+    return { fetchMock, ...r };
+  }
+
+  it("lee con el cargador del backoffice (?empresa=) y titula con la fuente y la placa", async () => {
+    const { fetchMock } = await abrirPagina("vehiculo-1", "SIMIT_VEHICULO");
+    expect(await screen.findByRole("heading", { level: 1, name: "SIMIT vehículo · TST001" })).toBeInTheDocument();
+    const url = new URL(String(fetchMock.mock.calls[0][0]), "http://localhost");
+    expect(url.pathname).toMatch(new RegExp(`/backoffice/diagnosticos/${LOTE}/grilla$`));
+    expect(url.searchParams.get("empresa")).toBe(EMPRESA_A);
+    expect(screen.getByRole("region", { name: "Auditoría de consulta" })).toHaveTextContent("Error");
+  });
+
+  it("migas y «Volver al diagnóstico» se quedan en el backoffice con la compañía", async () => {
+    await abrirPagina("vehiculo-1", "RUNT");
+    await screen.findByRole("heading", { level: 1, name: "RUNT vehículo · TST001" });
+    const migas = screen.getByRole("navigation", { name: "Migas de pan" });
+    expect(within(migas).getByRole("link", { name: "Diagnósticos" })).toHaveAttribute("href", `/backoffice/diagnosticos?empresa=${EMPRESA_A}`);
+    expect(within(migas).getByRole("link", { name: "Lote octubre" })).toHaveAttribute("href", `/backoffice/diagnosticos/${LOTE}?empresa=${EMPRESA_A}`);
+    expect(screen.getByRole("link", { name: "Volver al diagnóstico" })).toHaveAttribute("href", `/backoffice/diagnosticos/${LOTE}?empresa=${EMPRESA_A}`);
+  });
+
+  it("el indicador de origen MANUAL sale solo aquí, en el backoffice", async () => {
+    await abrirPagina("vehiculo-2", "SIMIT_VEHICULO");
+    await screen.findByRole("heading", { level: 1, name: "SIMIT vehículo · TST002" });
+    expect(screen.getByText(/llenado a mano desde el backoffice/i)).toBeInTheDocument();
+  });
+
+  it("celda que no está en la grilla: no disponible", async () => {
+    await abrirPagina("vehiculo-9", "RUNT");
+    expect(await screen.findByText(/este detalle no está disponible/i)).toBeInTheDocument();
+  });
+
+  it("403 de la API lleva a la página 403 del backoffice", async () => {
+    simularApi({ [RUTA_GRILLA]: () => new Response(null, { status: 403 }) });
+    render(await PaginaConsultaBackoffice({ params: Promise.resolve({ id: LOTE, vehiculoId: "vehiculo-1", fuente: "RUNT" }), searchParams: Promise.resolve({ empresa: EMPRESA_A }) }));
+    await waitFor(() => expect(h.replace).toHaveBeenCalledWith("/403?code=SIN_PERMISO_BACKOFFICE"));
   });
 });

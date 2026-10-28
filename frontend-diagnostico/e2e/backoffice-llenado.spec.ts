@@ -52,12 +52,14 @@ test.describe("backoffice: llenado manual", () => {
     await page.waitForURL(/\/backoffice\/diagnosticos\/[0-9a-f-]{36}\?empresa=/i);
     const grilla = page.getByRole("table", { name: /semáforo de consultas/i });
     await expect(grilla).toBeVisible();
-    const semaforo = grilla.getByRole("button", { name: /^Ver detalle de SIMIT vehículo de .+: Error$/ }).first();
+    // HU #14087: el semáforo es un enlace a la pestaña del detalle; «Llenar a mano» está en la celda y abre su modal.
+    const semaforo = grilla.getByRole("link", { name: /^Ver detalle de SIMIT vehículo de .+: Error \(se abre en una pestaña nueva\)$/ }).first();
     test.skip((await semaforo.count()) === 0, "El lote elegido no tiene SIMIT vehículo en error");
+    await expect(semaforo).toHaveAttribute("target", "_blank");
+    await expect(semaforo).toHaveAttribute("href", /\/backoffice\/diagnosticos\/[0-9a-f-]{36}\/vehiculos\/[0-9a-f-]{36}\/consultas\/SIMIT_VEHICULO\?empresa=/i);
     const celda = grilla.locator("[data-celda]").filter({ has: semaforo });
 
-    await semaforo.click();
-    await page.getByRole("dialog").getByRole("button", { name: "Llenar a mano" }).click();
+    await celda.getByRole("button", { name: /^Llenar a mano SIMIT vehículo de / }).click();
     const form = page.getByRole("dialog", { name: /llenar a mano/i });
     await form.getByLabel("Semáforo").selectOption("VERDE");
     await form.getByRole("button", { name: "Confirmar llenado" }).click();

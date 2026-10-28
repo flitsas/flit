@@ -3,13 +3,15 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ClipboardCheck, ClipboardList, SearchX } from "lucide-react";
+import { ArrowLeft, ClipboardCheck, ClipboardList, SearchX } from "lucide-react";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { useSesion } from "@/components/DiagnosticoShell";
+import { Migas } from "@/components/comun/Migas";
 import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { ApiError } from "@/lib/api";
 import { accesoNegado } from "@/lib/carga/api";
+import { urlVolverAlListado } from "@/lib/diagnosticos/listado";
 import { cerrarPanel, mensajeCierre, type CeldaGrilla, type Grilla } from "@/lib/tablero/api";
 import { hayPendientes, marcarReprocesada } from "@/lib/tablero/fusionarCeldas";
 import { useGrillaIncremental } from "@/lib/tablero/useGrillaIncremental";
@@ -38,9 +40,11 @@ function Vacio({ titulo, children, Icono = ClipboardList }: { titulo: string; ch
  * Tablero del lote (HU #13748, F04-H2) en /diagnosticos/{id}, a donde navegan la confirmación de la carga y el Express:
  * tarjeta título con el nombre del lote, estado global y avance, la grilla de semáforos con sondeo incremental cada 3 s,
  * «Reprocesar» para el admin en las rojas y «Cerrar panel» cuando el lote terminó con errores. Cuatro estados: cargando,
- * error (con Reintentar; 404 como no encontrado), vacío (sin vehículos o sin permiso) y lleno.
+ * error (con Reintentar; 404 como no encontrado), vacío (sin vehículos o sin permiso) y lleno. Arriba, migas «Diagnósticos ›
+ * {lote}» y «Volver a diagnósticos» al listado con los filtros que traía (?desde=, solo como search params de /, HU #14087).
+ * Cada semáforo abre su detalle en una pestaña nueva.
  */
-export function TableroLote({ diagnosticoId }: { diagnosticoId: string }) {
+export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: string; desde?: string | null }) {
   const router = useRouter();
   const { sesion } = useSesion();
   const puedeVer = sesion?.capacidades.verDiagnosticos ?? false;
@@ -53,6 +57,7 @@ export function TableroLote({ diagnosticoId }: { diagnosticoId: string }) {
   });
   const [aviso, setAviso] = useState<string | null>(null);
   const [cerrando, setCerrando] = useState(false);
+  const volver = urlVolverAlListado(desde);
 
   const codigo403 = accesoNegado(error);
   useEffect(() => {
@@ -173,18 +178,25 @@ export function TableroLote({ diagnosticoId }: { diagnosticoId: string }) {
   return (
     <>
       <section aria-labelledby="tablero-titulo" className={`${TARJETA_CLS} flex flex-wrap items-start justify-between gap-3`}>
-        <div>
+        <div className="flex min-w-0 flex-col gap-2">
+          <Migas migas={[{ texto: "Diagnósticos", href: volver }, { texto: grilla?.nombre ?? "Tablero del diagnóstico" }]} />
           <h1 id="tablero-titulo" className="text-2xl font-semibold text-flit-primary dark:text-white">
             {grilla?.nombre ?? "Tablero del diagnóstico"}
           </h1>
           {sesion?.empresa.nombre && <p className="mt-1 text-sm font-medium text-[var(--nav-texto)] dark:text-slate-300">{sesion.empresa.nombre}</p>}
         </div>
-        {grilla && puedeCerrarPanel(grilla) && (
-          <button type="button" onClick={() => void cerrar()} disabled={cerrando} aria-busy={cerrando} className={BOTON_SECUNDARIO_CLS}>
-            <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
-            Cerrar panel
-          </button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          <Link href={volver} className={BOTON_SECUNDARIO_CLS}>
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            Volver a diagnósticos
+          </Link>
+          {grilla && puedeCerrarPanel(grilla) && (
+            <button type="button" onClick={() => void cerrar()} disabled={cerrando} aria-busy={cerrando} className={BOTON_SECUNDARIO_CLS}>
+              <ClipboardCheck className="h-4 w-4" aria-hidden="true" />
+              Cerrar panel
+            </button>
+          )}
+        </div>
       </section>
       {contenido}
     </>

@@ -2,9 +2,11 @@
 // en contracts/openapi/diagnostico.v1.yaml): GET /diagnosticos/{id}/vehiculos/{vid}/consultas/{fuente}, en snake_case.
 // El DTO es cerrado fuera de `resultado` y `respuesta_fuente`: nunca trae origen ni usuario manual (R-20), así que la vista de
 // la compañía no tiene con qué distinguir una celda llenada a mano (Q5). `respuesta_fuente` (HU #14087 AC8 ajustado) trae TODO
-// lo que respondió la fuente, incluidos datos personales, por decisión del usuario.
+// lo que respondió la fuente, incluidos datos personales, por decisión del usuario; la página del detalle solo pinta los datos
+// de la consulta, en español (lib/tablero/etiquetasRespuesta). El detalle trae además `identificador` y `nombre_diagnostico`
+// para que la página en pestaña nueva se titule sola (HU #14087).
 import { ApiError, apiFetch } from "@/lib/api";
-import type { Fuente } from "@/lib/configuracion";
+import { FUENTES, type Fuente } from "@/lib/configuracion";
 import type { EstadoCelda, MotivoNa } from "@/lib/tablero/api";
 
 export interface PropietarioRunt {
@@ -112,6 +114,10 @@ export type RespuestaFuenteCompleta = Record<string, unknown>;
 export interface DetalleCelda {
   id: string;
   vehiculo_id: string;
+  /** Placa del vehículo o, si no tiene, su VIN (HU #14087). */
+  identificador: string;
+  /** Nombre del lote (diagnóstico) al que pertenece la celda (HU #14087). */
+  nombre_diagnostico: string;
   fuente: Fuente;
   estado: EstadoCelda;
   motivo_na: MotivoNa | null;
@@ -141,6 +147,12 @@ export interface ErrorDetalle {
 export function rutaDetalleCelda(loteId: string, vehiculoId: string, fuente: Fuente): string {
   return `/diagnosticos/${encodeURIComponent(loteId)}/vehiculos/${encodeURIComponent(vehiculoId)}/consultas/${encodeURIComponent(fuente)}`;
 }
+
+/** Código de fuente válido (la ruta de la página trae el segmento crudo). */
+export const esFuente = (valor: string): valor is Fuente => FUENTES.some((f) => f.codigo === valor);
+
+/** Página del detalle en pestaña nueva (HU #14087): misma forma que la ruta de la API, bajo /diagnosticos. */
+export const rutaPaginaDetalle = (loteId: string, vehiculoId: string, fuente: Fuente) => rutaDetalleCelda(loteId, vehiculoId, fuente);
 
 /** GET /diagnosticos/{id}/vehiculos/{vid}/consultas/{fuente}. */
 export const obtenerDetalleCelda: CargadorDetalle = (loteId, vehiculoId, fuente, signal) =>

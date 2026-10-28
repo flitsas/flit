@@ -17,6 +17,7 @@ import {
   FILA_TABLA_CLS,
 } from "@/components/tablero/vistasDetalle/comun";
 import {
+  destinoConFiltros,
   destinoDiagnostico,
   etiquetaEstado,
   filtrosDesdeUrl,
@@ -172,7 +173,7 @@ export function ListadoDiagnosticos() {
             </thead>
             <tbody>
               {lista.diagnosticos.map((d) => {
-                const destino = destinoDiagnostico(d);
+                const destino = destinoConFiltros(destinoDiagnostico(d), filtros);
                 const estado = etiquetaEstado(d.estado);
                 return (
                   <tr
