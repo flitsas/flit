@@ -1,10 +1,11 @@
 "use client";
 
-// HU #14075 AC1 — Tipos de trámite candidatos para el portal de Persona Natural. Cada tipo trae su elegibilidad (regla
-// K2: perfil del tipo, asistente encendido y publicado) y el interruptor de habilitación. Solo se puede habilitar un
-// tipo elegible (la API responde 422 `tipo_no_elegible`); apagarlo siempre se puede. «Sin tarifa vigente» avisa de un
-// tipo habilitado que ningún organismo puede cotizar todavía.
+// HU #14075 AC1 — Tipos de trámite que el portal de Persona Natural puede ofrecer. Cada tipo trae si está listo en
+// FLIT 2 (regla K2: perfil del tipo, asistente encendido y publicado) y el interruptor «Ofrecer en el portal». Solo se
+// puede activar un tipo que esté listo (la API responde 422 `tipo_no_elegible`); dejar de ofrecerlo siempre se puede,
+// pero pide confirmación porque el ciudadano deja de verlo.
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { EyeOff } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -17,32 +18,36 @@ import { filtrarFilas, type ColumnaFiltro } from "@/lib/tablas/filtrar-filas";
 import { useTablaFiltros } from "@/lib/tablas/useTablaFiltros";
 import { establecerTipoPn, fetchTiposPn, type TipoPn } from "@/lib/api/admin-pn-config";
 import { PN_FIELD_ERROR_CLS } from "./pn-ui";
+import { PnConfirmDialog, PnLinkButton, PnSeccionHeader } from "./pn-componentes";
 import { pnError } from "./pnErrors";
 
 const COLUMNAS_FILTRO: ColumnaFiltro[] = [
-  { id: "tipo", label: "Tipo de trámite", tipo: "texto" },
+  { id: "tipo", label: "Trámite", tipo: "texto" },
   {
     id: "habilitado",
-    label: "Habilitado",
+    label: "Ofrecer en el portal",
     tipo: "seleccion",
     opciones: [
-      { value: "si", label: "Habilitado" },
-      { value: "no", label: "No habilitado" },
+      { value: "si", label: "Se ofrece" },
+      { value: "no", label: "No se ofrece" },
     ],
   },
 ];
 
 export interface TiposSectionProps {
-  /** Lleva a la pestaña Tarifas (enlace del aviso «Sin tarifa vigente»). */
+  /** Lleva a la pestaña Tarifas (botón «Crear tarifa» del aviso «Falta tarifa»). */
   onIrATarifas: () => void;
+  /** Avisa a la consola para refrescar el estado de la configuración. */
+  onCambio?: () => void;
 }
 
-export function TiposSection({ onIrATarifas }: TiposSectionProps) {
+export function TiposSection({ onIrATarifas, onCambio }: TiposSectionProps) {
   const { show } = useToast();
   const [tipos, setTipos] = useState<TipoPn[]>([]);
   const [status, setStatus] = useState<UiStatus>("loading");
   const [guardando, setGuardando] = useState<string | null>(null);
   const [errorFila, setErrorFila] = useState<{ id: string; mensaje: string } | null>(null);
+  const [apagando, setApagando] = useState<TipoPn | null>(null);
   const pg = usePaginacion("pn.tipos");
   const { setPage } = pg;
   const volverAPrimeraPagina = useCallback(() => setPage(1), [setPage]);
@@ -75,15 +80,21 @@ export function TiposSection({ onIrATarifas }: TiposSectionProps) {
     [tipos, filtros.condicionesTotales],
   );
 
-  async function cambiar(tipo: TipoPn, habilitado: boolean) {
+  /** Lanza el cambio; si falla lanza el error para que quien llama (fila o diálogo) lo muestre donde corresponde. */
+  async function aplicar(tipo: TipoPn, habilitado: boolean) {
+    await establecerTipoPn(tipo.id, habilitado);
+    setTipos((prev) =>
+      prev.map((t) => (t.id === tipo.id ? { ...t, habilitado, ofrecible: habilitado && t.elegible } : t)),
+    );
+    show(`«${tipo.nombre}» ${habilitado ? "ahora se ofrece" : "ya no se ofrece"} en el portal.`, "success");
+    onCambio?.();
+  }
+
+  async function encender(tipo: TipoPn) {
     setGuardando(tipo.id);
     setErrorFila(null);
     try {
-      await establecerTipoPn(tipo.id, habilitado);
-      setTipos((prev) =>
-        prev.map((t) => (t.id === tipo.id ? { ...t, habilitado, ofrecible: habilitado && t.elegible } : t)),
-      );
-      show(`«${tipo.nombre}» ${habilitado ? "habilitado" : "deshabilitado"} para el portal.`, "success");
+      await aplicar(tipo, true);
     } catch (err) {
       const info = pnError(err);
       setErrorFila({ id: tipo.id, mensaje: info.message });
@@ -99,24 +110,27 @@ export function TiposSection({ onIrATarifas }: TiposSectionProps) {
       key: "tipo",
       header: (
         <EncabezadoFiltrable filtros={filtros} columnaId="tipo">
-          Tipo de trámite
+          Trámite
         </EncabezadoFiltrable>
       ),
       render: (t) => (
         <>
           <span className="block font-semibold">{t.nombre}</span>
-          <span className="block font-mono text-[11px] text-[#59677D] dark:text-white/70">{t.codigo}</span>
+          <span className="block text-xs text-[#59677D] dark:text-white/70">{t.familia}</span>
         </>
       ),
     },
-    { key: "familia", header: "Familia", render: (t) => t.familia },
     {
       key: "elegible",
-      header: "Elegible",
+      header: "Disponibilidad",
       render: (t) => (
         <div className="flex flex-col gap-1">
-          <StatusBadge label={t.elegible ? "Elegible" : "No elegible"} tone={t.elegible ? "success" : "neutral"} />
-          {!t.elegible && t.motivo && <span className="max-w-[260px] text-[11px] text-[#59677D] dark:text-white/70">{t.motivo}</span>}
+          <StatusBadge label={t.elegible ? "Listo para ofrecer" : "Aún no disponible"} tone={t.elegible ? "success" : "neutral"} />
+          {!t.elegible && (
+            <span className="max-w-[260px] text-xs text-[#59677D] dark:text-white/70">
+              Todavía no está terminado en FLIT 2, por eso no se puede activar.
+            </span>
+          )}
         </div>
       ),
     },
@@ -124,7 +138,7 @@ export function TiposSection({ onIrATarifas }: TiposSectionProps) {
       key: "habilitado",
       header: (
         <EncabezadoFiltrable filtros={filtros} columnaId="habilitado">
-          Habilitado
+          Ofrecer en el portal
         </EncabezadoFiltrable>
       ),
       render: (t) => {
@@ -135,13 +149,13 @@ export function TiposSection({ onIrATarifas }: TiposSectionProps) {
             <SwitchToggle
               checked={t.habilitado}
               disabled={guardando === t.id || bloqueado}
-              label={`${t.habilitado ? "Deshabilitar" : "Habilitar"} ${t.nombre} en el portal`}
+              label={`${t.habilitado ? "Dejar de ofrecer" : "Ofrecer"} ${t.nombre} en el portal`}
               describedById={bloqueado ? motivoId : undefined}
-              onChange={(next) => void cambiar(t, next)}
+              onChange={(next) => (next ? void encender(t) : setApagando(t))}
             />
             {bloqueado && (
-              <span id={motivoId} className="text-[11px] text-[#59677D] dark:text-white/70">
-                Solo se habilitan los tipos elegibles.
+              <span id={motivoId} className="text-xs text-[#59677D] dark:text-white/70">
+                Solo se pueden ofrecer los trámites listos.
               </span>
             )}
             {errorFila?.id === t.id && (
@@ -154,55 +168,57 @@ export function TiposSection({ onIrATarifas }: TiposSectionProps) {
       },
     },
     {
+      key: "ofrecible",
+      header: "Lo ve el ciudadano",
+      render: (t) => {
+        if (!t.ofrecible) return <StatusBadge label="No" tone="neutral" />;
+        return t.organismosConTarifaVigente === 0 ? (
+          <StatusBadge label="Falta tarifa" tone="warning" />
+        ) : (
+          <StatusBadge label="Sí" tone="success" />
+        );
+      },
+    },
+    {
       key: "tarifa",
       header: "Tarifa vigente",
       render: (t) =>
         t.habilitado && t.elegible && t.organismosConTarifaVigente === 0 ? (
           <div className="flex flex-col items-start gap-1">
-            <StatusBadge label="Sin tarifa vigente" tone="warning" />
-            <button
-              type="button"
-              onClick={onIrATarifas}
-              className="rounded-md text-[11px] font-semibold text-[color:var(--flit-brand-ink)] underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-            >
-              Ir a Tarifas
-            </button>
+            <span className="text-xs">Ningún organismo tiene tarifa.</span>
+            <PnLinkButton onClick={onIrATarifas} ariaLabel={`Crear tarifa para ${t.nombre}`}>
+              Crear tarifa
+            </PnLinkButton>
           </div>
         ) : (
           <span className="text-xs">
-            {t.organismosConTarifaVigente} {t.organismosConTarifaVigente === 1 ? "organismo" : "organismos"}
+            {t.organismosConTarifaVigente === 0
+              ? "—"
+              : `En ${t.organismosConTarifaVigente} ${t.organismosConTarifaVigente === 1 ? "organismo" : "organismos"}`}
           </span>
         ),
-    },
-    {
-      key: "ofrecible",
-      header: "En el portal",
-      render: (t) => <StatusBadge label={t.ofrecible ? "Se ofrece" : "No se ofrece"} tone={t.ofrecible ? "success" : "neutral"} />,
     },
   ];
 
   return (
     <section aria-labelledby="pn-tipos-titulo" className="flex flex-col gap-3">
-      <div>
-        <h2 id="pn-tipos-titulo" className="text-base font-bold text-flit-primary dark:text-white">
-          Tipos de trámite
-        </h2>
-        <p className="text-xs text-[#59677D] dark:text-white/70">
-          Un trámite se ofrece en el portal cuando el tipo es elegible y está habilitado, el organismo está habilitado y
-          existe una tarifa vigente.
-        </p>
-      </div>
+      <PnSeccionHeader
+        id="pn-tipos-titulo"
+        paso={1}
+        titulo="Trámites que ofrece el portal"
+        descripcion="Activa los trámites que una persona natural puede iniciar. Solo se pueden activar los que ya están listos en FLIT 2."
+      />
       {status === "loading" ? (
-        <CarLoaderModal label="Cargando tipos de trámite…" />
+        <CarLoaderModal label="Cargando trámites…" />
       ) : (
         <UiStateBoundary
           status={status}
-          emptyMessage="No hay tipos de trámite elegibles para Persona Natural todavía."
-          errorMessage="No se pudieron cargar los tipos de trámite."
+          emptyMessage="Todavía no hay trámites listos para Persona Natural. Cuando el equipo de FLIT termine uno, aparecerá aquí."
+          errorMessage="No se pudieron cargar los trámites."
           onRetry={() => void load()}
         >
           <DataTable<TipoPn>
-            ariaLabel="Tipos de trámite del portal de Persona Natural"
+            ariaLabel="Trámites del portal de Persona Natural"
             columns={columns}
             rows={pg.paginar(visibles)}
             getRowKey={(t) => t.id}
@@ -217,6 +233,26 @@ export function TiposSection({ onIrATarifas }: TiposSectionProps) {
           />
         </UiStateBoundary>
       )}
+
+      {apagando && (
+        <PnConfirmDialog
+          title="Dejar de ofrecer este trámite"
+          icon={EyeOff}
+          tone="danger"
+          confirmLabel="Dejar de ofrecer"
+          onClose={() => setApagando(null)}
+          onConfirm={async () => {
+            await aplicar(apagando, false);
+            setApagando(null);
+          }}
+        >
+          <p>
+            «{apagando.nombre}» dejará de aparecer en el portal: los ciudadanos no podrán iniciar este trámite hasta que
+            lo vuelvas a activar. Las tarifas que ya configuraste se conservan.
+          </p>
+        </PnConfirmDialog>
+      )}
     </section>
   );
 }
+

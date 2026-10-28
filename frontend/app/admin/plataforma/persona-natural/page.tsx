@@ -47,7 +47,7 @@ function PersonaNaturalPage() {
 
       <ModuleTitle
         title="Persona Natural"
-        subtitle="Configura las tarifas, los organismos y tipos habilitados, los parámetros y el contenido del portal de Persona Natural."
+        subtitle="Decide qué trámites puede hacer una persona natural desde el portal público, en qué organismos de tránsito y cuánto cuestan."
       />
 
       <PersonaNaturalConsole />

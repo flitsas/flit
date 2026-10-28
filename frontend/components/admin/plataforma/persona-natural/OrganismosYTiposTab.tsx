@@ -1,20 +1,20 @@
 "use client";
 
-// HU #14075 AC1 — Pestaña «Organismos y tipos»: los tipos de trámite elegibles y los organismos de tránsito que el
-// portal de Persona Natural puede ofrecer. Sin pestaña de datos bancarios: están fuera de alcance (decisión del PO).
+// HU #14075 AC1 — Pestaña «Organismos y trámites»: qué trámites ofrece el portal de Persona Natural y en qué
+// organismos de tránsito. Sin pestaña de datos bancarios: están fuera de alcance (decisión del PO).
+import { InlineAlert } from "@/components/atom/InlineAlert";
 import { TiposSection } from "./TiposSection";
 import { OrganismosSection } from "./OrganismosSection";
-import { PN_INFO_NOTICE_CLS } from "./pn-ui";
 
-export function OrganismosYTiposTab({ onIrATarifas }: { onIrATarifas: () => void }) {
+export function OrganismosYTiposTab({ onIrATarifas, onCambio }: { onIrATarifas: () => void; onCambio?: () => void }) {
   return (
     <div className="flex flex-col gap-8">
-      <p className={PN_INFO_NOTICE_CLS}>
-        Regla: un trámite aparece en el portal cuando el tipo es elegible y está habilitado, el organismo está habilitado
-        y hay una tarifa vigente.
-      </p>
-      <TiposSection onIrATarifas={onIrATarifas} />
-      <OrganismosSection onIrATarifas={onIrATarifas} />
+      <InlineAlert tone="info" title="Cómo se decide qué ve el ciudadano">
+        Un trámite aparece en el portal cuando está activado, el organismo está habilitado y existe una tarifa vigente
+        para esa combinación. Si falta algo, el ciudadano no lo verá.
+      </InlineAlert>
+      <TiposSection onIrATarifas={onIrATarifas} onCambio={onCambio} />
+      <OrganismosSection onIrATarifas={onIrATarifas} onCambio={onCambio} />
     </div>
   );
 }
