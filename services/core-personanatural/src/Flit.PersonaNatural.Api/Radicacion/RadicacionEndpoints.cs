@@ -15,7 +15,7 @@ public static class RadicacionEndpoints
     public const string CabeceraIdempotencia = "Idempotency-Key";
 
     /// <summary>
-    /// Registra el servicio de radicar y su compuerta de identidad (HU C3, <see cref="ICompuertaDeRadicacion"/>): una sola
+    /// Registra el servicio de radicar y su compuerta de identidad (HU #14046, <see cref="ICompuertaDeRadicacion"/>): una sola
     /// implementación, sin respaldo más débil que pueda ganar por el orden de registro.
     /// </summary>
     public static IServiceCollection AddRadicacionPortal(this IServiceCollection services)

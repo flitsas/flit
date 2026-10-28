@@ -100,7 +100,7 @@ public static class Program
         // HU #14048: archivos del trámite y comprobante de pago (file-manager corporativo; sin él, 503 almacenamiento_no_disponible).
         builder.Services.AddAdjuntosPortal(builder.Configuration);
 
-        // HU #14049: radicar con outbox e Idempotency-Key (la compuerta de identidad por defecto la reemplaza la de la HU C3).
+        // HU #14049: radicar con outbox e Idempotency-Key (con la compuerta de identidad de la HU #14046: una sola implementación).
         builder.Services.AddRadicacionPortal();
 
         // h2c necesita un endpoint solo HTTP/2: se vuelven a declarar las URLs del REST (Kestrel ignora ASPNETCORE_URLS
