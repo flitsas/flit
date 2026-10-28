@@ -22,6 +22,12 @@ el contrato de `payload` y lo que muestran la grilla, el listado, el export y el
 **Estado de la implementación**: en curso en `feature/AB-12881-diagnostico-d0-d2` por otros agentes, sin PR. Este ADR
 documenta la decisión; no la implementa.
 
+**Registro de cambios**:
+- 2026-10-27 — versión inicial (HU #14087, AC8). Propuesto.
+- 2026-10-28 — «Enmienda 2026-10-28 — respuesta cruda del proveedor en RUNT persona y RUES» (HUs #14153 y #14154).
+  Cambia la Decisión 1 y la fila R-13 de «Qué cambia en otros ADR y reglas» **solo para tres fuentes**. Sigue en
+  Propuesto.
+
 ## Contexto
 
 Con ADR-0075, core-consultas proyecta cada `*Response` a una lista permitida por rpc (`MinimizadorRespuesta`, C3) y
@@ -236,6 +242,134 @@ día deben copiar también la respuesta de la consulta de origen (o mostrar el m
 - **Inventario del broker.** La revisión periódica de usuarios y bindings de `flit.consultas` de ADR-0075 gana
   importancia: ahora cualquier binding ajeno ve nombres y contacto.
 - **Sin cambios.** Configuración de colas, TTL, DLQ, reconciliador, ida y simulación.
+
+## Enmienda 2026-10-28 — respuesta cruda del proveedor en RUNT persona y RUES
+
+**Status**: Propuesto (como el resto del ADR). **HUs**: #14153 [BACKEND] y #14154 [FRONTEND], proyecto FLIT - DIAGNOSTICO,
+Feature #13720. **Decisión de producto** del usuario del 2026-10-28, literal: el detalle muestra todo el JSON del
+proveedor «sin quitar ningún dato», incluidos ids internos, firma y campos técnicos.
+
+### Contexto
+
+Con la decisión original, el detalle de persona muestra el `*Response` completo, pero ese `*Response` ya llega aplanado
+por los mappers de core-api: los proveedores de conductor (Kyverum y Verifik) **no** llenan `RawPayload` y reducen las
+licencias a unos pocos campos (`KyverumRuntConductorResultMapper.cs:116-131`); el DTO de Verifik RUES no lee la lista
+de representantes legales, aunque sí deja el cuerpo HTTP en `RawPayload` (`VerifikRuesConsultationProvider.cs:77-90`).
+core-diagnostico envía `OpcionesConsulta()` vacío (`ConstructoresSolicitud.cs:231,236`), así que `respuesta_cruda` nunca
+viaja. Al probar con documentos reales, el usuario pidió ver el JSON tal como lo entrega el proveedor.
+
+Dos hechos condicionan el diseño:
+
+- `RespuestaCruda.json` es un string JSON (`resultado.proto:85-92`) y su comentario dice «JSON sanitizado», pero en
+  este camino **no lo es**: `RawPayloadSanitizer` solo corre cuando core-api persiste el crudo en Trámites, no camino
+  al proto. El crudo que viaja a Diagnóstico va **sin sanear**.
+- La caché de core-api (`RunConsultationCommand.cs:250-257`) no restaura el crudo; un acierto de caché devolvería la
+  consulta sin él.
+
+### Decisión (opción a)
+
+Solo para las fuentes de bus `runt_propietario` y `runt_locatario` (rpc `ConsultarConductor`) y `rues` (rpc
+`ConsultarRues`, por NIT):
+
+1. **Ida.** core-diagnostico pide `incluir_respuesta_cruda = true` en `OpcionesConsulta`. El resto del `*Request` no
+   cambia (sigue mínimo, U1 = b ida). Para las demás fuentes sigue en `false`.
+2. **Proveedores.** Kyverum y Verifik conductor pasan a llenar `RawPayload` con el cuerpo HTTP. Es código compartido con
+   Trámites (`core-api/Flit.Modules.Consultas`): **Trámites no cambia de comportamiento** (AC1 de #14153); su camino de
+   persistencia sigue saneando con `RawPayloadSanitizer` y no expone nada nuevo.
+3. **Caché.** Cuando se pide crudo, core-consultas **no sirve desde caché ni guarda el crudo en caché** (decisión 3 = a
+   del usuario): va siempre al proveedor.
+4. **Vuelta.** El crudo viaja en `respuesta_cruda.json` dentro del resultado por RabbitMQ (outbox de core-consultas →
+   `diagnostico.consultas-resultados`), con el mismo tratamiento que el resto de la respuesta completa.
+5. **Persistencia.** core-diagnostico lo guarda **cifrado por persona** dentro de `respuesta_fuente_cifrada`
+   (`@pii:high`, mismo *purpose* de DataProtection). Sin columna nueva; `payload` no cambia.
+6. **Exposición.** `obtenerDetalleCelda` devuelve el crudo parseado como `PersonaDetalleDto.respuesta_proveedor`
+   (objeto JSON; `null` si no hay o no es JSON válido). El front lo pinta **íntegro** en «Respuesta del proveedor», sin
+   `CLAVES_OCULTAS` ni filtro `id_*` para estas tres fuentes. El enmascarado del documento se conserva **solo en el
+   encabezado de la sección**; dentro del bloque los valores van como los entrega el proveedor (resuelve la duda
+   abierta 4 para estas fuentes, sujeto al aval de PO y jurídico).
+7. **Sin crudo** (consulta anterior, celda manual, proveedor sin cuerpo, JSON inválido): el front pinta lo guardado hoy
+   (chequeos y certificaciones) y el aviso «Esta consulta no tiene la respuesta completa del proveedor. Para verla,
+   vuelve a consultar.». El aviso es el mismo para todos los motivos (R-20).
+8. **Contrato.** Se corrige el comentario de `RespuestaCruda.json` en `resultado.proto`: cuerpo del proveedor **sin
+   sanear** salvo que el consumidor lo sanee; `@pii:high`.
+
+**Datos personales nuevos que entran a Diagnóstico:** licencias de conducción completas (número, categorías, fechas de
+expedición y vencimiento, estado), estado de la persona y del conductor y, en RUES, la **lista de representantes
+legales** (nombre, documento, rol) además del registro mercantil completo. Más los ids internos y la firma del proveedor.
+
+### Alternativas consideradas
+
+**Opción a — crudo íntegro del proveedor (elegida por el usuario).**
+- Pros: cumple la decisión literal; cero mantenimiento al cambiar el proveedor; un solo contrato (`respuesta_cruda`) ya
+  existente en el proto, sin dependencia nueva; reutiliza el cifrado y la columna de la decisión original.
+- Contras: renuncia por completo a la minimización en estas fuentes; trae campos técnicos sin valor para el analista
+  (ids, firma); el detalle queda atado a la forma del JSON de cada proveedor (Kyverum ≠ Verifik); el crudo va sin
+  sanear.
+- Esfuerzo: M. Riesgos: hallazgo de Habeas Data; fuga por logs al tocar un cuerpo HTTP grande; regresión en Trámites
+  por el código compartido.
+
+**Opción b — campos tipados en el adaptador (`person_licenses_json`, `rues_representantes_json`).**
+- Pros: el proto declara qué PII viaja (inventario claro para la guarda por `Descriptor`); el front pinta un contrato
+  estable e independiente del proveedor; no viajan ids internos ni firma; se puede seguir cacheando.
+- Contras: **no cumple** «sin quitar ningún dato»; cada campo nuevo del proveedor exige cambio de proto, mapper y
+  pruebas; toca dos mappers compartidos con Trámites y el proto.
+- Esfuerzo: M–L. Riesgos: insatisfacción de producto; deriva entre lo que da el proveedor y lo que se modela.
+
+**Opción c — solo pintar `campos[]` del `*Response` actual.**
+- Pros: sin cambio de backend ni de bus; sin PII nueva; esfuerzo mínimo.
+- Contras: **no cumple** el pedido: los mappers ya aplanaron las licencias y no leen los representantes legales; lo que
+  falta no está en `campos[]`.
+- Esfuerzo: S. Riesgos: el analista sigue consultando la fuente por fuera de FLIT.
+
+**Tradeoff aceptado:** se elige **a** porque es la única que cumple la decisión literal del usuario y reutiliza un campo
+ya existente en el contrato. A cambio se acepta más PII (y de terceros, en los representantes legales) en el bus, en la
+base y en el payload HTTP, y más consultas facturables. Si security-agent o jurídico no la avalan, la salida natural es
+**b**.
+
+### Consecuencias
+
+- **Outbox de core-consultas.** El crudo sin sanear queda en `consultas.outbox` hasta la purga de 24 h (ADR-0075), en
+  las colas (24 h) y en la DLQ (7 días), **en claro**, legible por cualquier usuario de servicio del vhost mientras M4
+  no se aplique. Amplía otra vez el riesgo U1 de ADR-0075.
+- **Base de Diagnóstico.** Más PII en `respuesta_fuente_cifrada` (cifrada en reposo, mismo anillo).
+- **Payload HTTP del detalle.** El crudo descifrado sale en `respuesta_proveedor`, con el `no-store` de la decisión
+  original.
+- **Costo.** Pedir crudo = cache-miss: cada consulta de persona o RUES de Diagnóstico va al proveedor y se factura,
+  aunque haya una consulta reciente del mismo documento.
+- **Tamaño de mensaje.** El cuerpo de conductor (con licencias) y el de RUES (con representantes) agrandan el
+  resultado; revisar el máximo del broker y el volumen de la DLQ.
+- **Consultas anteriores.** Sin backfill: muestran lo resumido más el aviso hasta que se reconsulten.
+
+### Riesgos y controles
+
+| Riesgo | Control |
+|---|---|
+| Lectura del crudo en la base | Cifrado por persona con DataProtection, *purpose* propio, anillo protegido fuera de la base (fail-closed) |
+| Crudo en claro en el outbox de consultas | Purga de `consultas.outbox` a 24 h (ADR-0075); M4 recomendada antes de liberar (duda abierta 6) |
+| Crudo persistido en caché de consultas | Con `incluir_respuesta_cruda = true` no se lee ni se escribe caché |
+| Crudo en logs o excepciones | Prohibido registrar el cuerpo, fragmentos o el JSON en excepciones, manejador de errores, trazas de EF o consola del front |
+| Exposición del documento completo | Enmascarado en el encabezado de la sección; dentro del bloque, valores tal cual (pendiente aval PO/jurídico) |
+| Acceso indebido al detalle | `diagnostico.diagnosticos.ver` + `visibilidad_usuario`, filtro por empresa (ADR-0072), backoffice auditado (ADR-0073) |
+| Regresión en Trámites | AC1 de #14153: Trámites sin cambio observable; el saneo de `RawPayloadSanitizer` al persistir se mantiene |
+| Inferir el origen manual (R-20) | Aviso único ante cualquier ausencia de crudo |
+
+### Gates antes del merge (además de los de la decisión original)
+
+1. **security-agent**: revisión de Habeas Data y Ley 1581 sobre el crudo sin sanear (ida con crudo, caché, outbox,
+   cifrado, logs, endpoint y render íntegro en el front).
+2. **PO**: aval del render íntegro (ids, firma, campos técnicos) y del enmascarado solo en el encabezado.
+3. **Jurídico**: aval de la base de legitimación para las licencias completas y para los representantes legales
+   (terceros) del RUES.
+4. **Líder Técnico**: paso de este ADR, con la enmienda, a Aceptado.
+
+### Notas para agentes (enmienda)
+
+- **Backend Agent.** `incluir_respuesta_cruda = true` solo en las tres fuentes; `RawPayload` en ambos proveedores de
+  conductor sin cambio observable en Trámites; bypass de caché con crudo; corregir el comentario del proto.
+- **Frontend Agent.** «Respuesta del proveedor» íntegra para las tres fuentes; aviso único sin crudo; nada en
+  `localStorage`, consola ni telemetría.
+- **QA Agent.** Con y sin crudo, consulta repetida que no sale de caché, Trámites sin regresión, logs sin el cuerpo.
+- **Infra Agent.** Tamaño máximo de mensaje y volumen de DLQ con los cuerpos nuevos.
 
 ## ADRs relacionados
 
