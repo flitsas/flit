@@ -13,6 +13,7 @@ using Flit.Diagnostico.Domain.Vehiculos;
 using Flit.Diagnostico.Tests.Aislamiento;
 using Flit.Diagnostico.Tests.Api;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using static Flit.Diagnostico.Tests.Configuracion.ConfiguracionOperativaTests;
@@ -45,6 +46,16 @@ public sealed class DetalleCeldaTests
 
     private static readonly string[] ClavesProhibidas =
         ["origen", "usuario", "proveedor", "servicio_que_resolvio", "transaccion", "payload", "persona_id", "cifrado", "nombre"];
+
+    /// <summary>
+    /// HU #14087 (página del detalle en pestaña nueva): claves exactas permitidas aunque contengan una prohibida. <c>nombre_diagnostico</c>
+    /// es el nombre del lote (no de una persona); origen, usuario manual y transacción siguen fuera (R-20).
+    /// </summary>
+    private static readonly string[] ClavesPermitidas = ["nombre_diagnostico"];
+
+    private static bool Prohibida(string clave) =>
+        !ClavesPermitidas.Any(p => clave == p || clave.EndsWith("/" + p, StringComparison.Ordinal))
+        && ClavesProhibidas.Any(p => clave.Contains(p, StringComparison.OrdinalIgnoreCase));
 
     // AC1 (F06-C1) — cada fuente devuelve su resultado normalizado: RUNT, SIMIT_VEHICULO (con tope de comparendos), AVALUO y
     // SIMIT_PROPIETARIO con dos propietarios, una entrada por persona con su resultado. Fuente desconocida: 400.
@@ -228,7 +239,7 @@ public sealed class DetalleCeldaTests
             aMano.StatusCode.Should().Be(HttpStatusCode.OK, cuerpoManual);
 
             Claves(JsonDocument.Parse(cuerpoManual).RootElement).Should().Equal(Claves(JsonDocument.Parse(cuerpoApi).RootElement), $"{fuente}: misma forma");
-            Claves(JsonDocument.Parse(cuerpoManual).RootElement).Should().NotContain(c => ClavesProhibidas.Any(p => c.Contains(p, StringComparison.Ordinal)));
+            Claves(JsonDocument.Parse(cuerpoManual).RootElement).Should().NotContain(c => Prohibida(c));
             cuerpoManual.Should().NotContainAny(["MANUAL", "API", manual.UsuarioManualId!.Value.ToString(), runtManual.UsuarioManualId!.Value.ToString()]);
         }
     }
@@ -241,7 +252,8 @@ public sealed class DetalleCeldaTests
         var nombres = PropiedadesDe(typeof(DetalleCeldaDto)).Select(p => p.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name ?? p.Name).ToList();
         nombres.Should().Contain(["resultado", "personas", "documento_enmascarado", "sin_valor_comercial", "comparendos", "licencias", "estado_matricula"],
             "la reflexión recorre los tipos de resultado");
-        nombres.Should().NotContain(n => ClavesProhibidas.Any(p => n.Contains(p, StringComparison.OrdinalIgnoreCase)));
+        nombres.Should().NotContain(n => Prohibida(n));
+        nombres.Should().Contain(["identificador", "nombre_diagnostico"], "HU #14087: la página del detalle en pestaña nueva se titula sola");
         // HU #14087 AC8 (decisión del usuario 2026-10-27, enmienda de ADR-0075): la ÚNICA clave nueva permitida es respuesta_fuente
         // (la respuesta completa de la fuente, en la celda y en cada persona); origen, usuario manual y transacción siguen fuera.
         nombres.Where(n => n == "respuesta_fuente").Should().HaveCount(2, "en DetalleCeldaDto y en PersonaDetalleDto");
@@ -342,6 +354,46 @@ public sealed class DetalleCeldaTests
         personaCorrupta.GetProperty("personas")[0].GetProperty("estado").GetString().Should().Be("OK");
     }
 
+    // HU #14087 (detalle en pestaña nueva) — el detalle trae identificador (la placa; sin placa, el VIN) y nombre_diagnostico (el
+    // nombre del lote), en las fuentes del vehículo y en las de persona, para que la página se titule sola.
+    [Fact]
+    public async Task Detalle_trae_identificador_placa_o_vin_y_nombre_del_diagnostico()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, nombre: "Lote pestaña nueva", vehiculos:
+        [
+            new("TST481", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.SimitPropietario, EstadoCelda.Pendiente, 1)]),
+            new("TST482", [new(Fuente.Runt, EstadoCelda.Pendiente, 1)]),
+        ]);
+        var conPlaca = lote.Vehiculos.Single(v => v.Placa == "TST481").Id;
+        var sinPlaca = lote.Vehiculos.Single(v => v.Placa == "TST482").Id;
+        await using (var db = empresa.Db())
+        {
+            var vehiculo = await db.Set<Flit.Diagnostico.Api.Modulos.Vehiculos.VehiculoDiagnostico>().SingleAsync(v => v.Id == sinPlaca, ct);
+            vehiculo.IdentificadorOriginal = vehiculo.IdentificadorNorm = "9ZZPRUEBA00000482";
+            vehiculo.Placa = null;
+            vehiculo.Vin = "9ZZPRUEBA00000482";
+            vehiculo.TipoIdentificador = TipoIdentificador.Vin;
+            await db.SaveChangesAsync(ct);
+        }
+
+        var cliente = empresa.Cliente();
+        var runt = await DetalleAsync(cliente, lote.Id, conPlaca, "RUNT", ct);
+        runt.GetProperty("identificador").GetString().Should().Be("TST481", "con placa, la placa");
+        runt.GetProperty("nombre_diagnostico").GetString().Should().Be("Lote pestaña nueva");
+
+        var persona = await DetalleAsync(cliente, lote.Id, conPlaca, "SIMIT_PROPIETARIO", ct);
+        persona.GetProperty("identificador").GetString().Should().Be("TST481", "también en las fuentes de persona");
+        persona.GetProperty("nombre_diagnostico").GetString().Should().Be("Lote pestaña nueva");
+
+        var vin = await DetalleAsync(cliente, lote.Id, sinPlaca, "RUNT", ct);
+        vin.GetProperty("identificador").GetString().Should().Be("9ZZPRUEBA00000482", "sin placa, el VIN");
+        vin.GetProperty("nombre_diagnostico").GetString().Should().Be("Lote pestaña nueva");
+    }
+
     // AC5 (F06-C4) — el detalle de un diagnóstico de la compañía B pedido por A responde 404 sin datos; un vehículo de otro lote
     // o una fuente sin celda, también 404.
     [Fact]
@@ -436,7 +488,7 @@ public sealed class DetalleCeldaTests
         vigencias.Select(v => v.GetProperty("valor").GetInt64()).Should().Equal([180000L, 350000L]);
         vigencias.Select(v => v.GetProperty("pagada").GetBoolean()).Should().Equal([true, false]);
         vigencias.Should().AllSatisfy(v => v.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["anio", "valor", "pagada"]));
-        Claves(detalle).Should().NotContain(c => ClavesProhibidas.Any(p => c.Contains(p, StringComparison.Ordinal)) || c.Contains("departamento", StringComparison.Ordinal));
+        Claves(detalle).Should().NotContain(c => Prohibida(c) || c.Contains("departamento", StringComparison.Ordinal));
         cuerpo.Should().NotContainAny([ImpuestoDePrueba.ProveedorFicticio, ImpuestoDePrueba.TransaccionFicticia, "INTEMPO", "departamento_codigo", "id_transaccion", "\"API\""]);
     }
 

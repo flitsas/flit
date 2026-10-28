@@ -941,6 +941,8 @@ paths:
                     tipo_error: null
                     dato_obtenido_en: "2026-10-22T15:00:00+00:00"
                     reutilizada: false
+                    identificador: TST401
+                    nombre_diagnostico: Lote de prueba
                     resultado:
                       placa: TST401
                       vin: 9ZZPRUEBA00000401
@@ -972,6 +974,8 @@ paths:
                     tipo_error: null
                     dato_obtenido_en: "2026-10-22T15:00:00+00:00"
                     reutilizada: false
+                    identificador: TST401
+                    nombre_diagnostico: Lote de prueba
                     resultado:
                       semaforo: ROJO
                       cantidad_comparendos: 1
@@ -991,6 +995,8 @@ paths:
                     tipo_error: null
                     dato_obtenido_en: "2026-10-22T15:00:00+00:00"
                     reutilizada: false
+                    identificador: TST401
+                    nombre_diagnostico: Lote de prueba
                     resultado:
                       sin_valor_comercial: true
                       valor_sugerido: null
@@ -1010,6 +1016,8 @@ paths:
                     tipo_error: null
                     dato_obtenido_en: "2026-10-22T15:00:00+00:00"
                     reutilizada: false
+                    identificador: TST401
+                    nombre_diagnostico: Lote de prueba
                     resultado:
                       monto_total: 350000
                       vigencias:
@@ -1028,6 +1036,8 @@ paths:
                     tipo_error: null
                     dato_obtenido_en: null
                     reutilizada: false
+                    identificador: TST401
+                    nombre_diagnostico: Lote de prueba
                     resultado: null
                     personas: null
                     respuesta_fuente: null
@@ -1042,6 +1052,8 @@ paths:
                     tipo_error: PERSONAS_CON_ERROR
                     dato_obtenido_en: null
                     reutilizada: false
+                    identificador: TST401
+                    nombre_diagnostico: Lote de prueba
                     resultado: null
                     personas:
                       - orden: 1
@@ -3550,12 +3562,20 @@ components:
         Detalle de una celda (HU #13798). DTO cerrado: sin origen, usuario manual, transacción ni payload en campos
         propios (R-20). Todas las claves van siempre. Desde HU #14087 AC8 (decisión del usuario 2026-10-27, enmienda de
         ADR-0075 en Propuesto) `respuesta_fuente` trae además la respuesta COMPLETA de la fuente, con datos personales.
-      required: [id, vehiculo_id, fuente, estado, motivo_na, tipo_error, dato_obtenido_en, reutilizada, resultado, personas, respuesta_fuente]
+      required: [id, vehiculo_id, fuente, estado, motivo_na, tipo_error, dato_obtenido_en, reutilizada, resultado, personas, respuesta_fuente, identificador, nombre_diagnostico]
       properties:
         id:
           type: string
           format: uuid
           description: Id de la celda (el mismo de la grilla).
+        identificador:
+          type: string
+          description: >
+            HU #14087 (detalle en pestaña nueva): la placa del vehículo; sin placa, su VIN (y sin ninguno, el identificador
+            normalizado de la carga). Para que la página se titule sola.
+        nombre_diagnostico:
+          type: string
+          description: HU #14087 (detalle en pestaña nueva) — nombre del diagnóstico (lote) al que pertenece el vehículo.
         vehiculo_id:
           type: string
           format: uuid

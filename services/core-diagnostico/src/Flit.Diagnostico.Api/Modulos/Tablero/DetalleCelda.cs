@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Flit.Diagnostico.Api.Modulos.Consultas;
+using Flit.Diagnostico.Api.Modulos.Vehiculos;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Api.Persistence.Configuraciones;
 using Flit.Diagnostico.Api.Plataforma;
@@ -58,6 +59,11 @@ internal sealed partial class DetalleCelda(
             .Select(c => new { c.Id, c.Estado, c.MotivoNa, c.TipoError, c.DatoObtenidoEn, Reutilizada = c.ReutilizadaDeId != null, c.Payload, c.RespuestaFuenteCifrada })
             .SingleOrDefaultAsync(ct).ConfigureAwait(false)
             ?? throw ReglaException.NoEncontrado("La celda");
+        // HU #14087: la página del detalle en pestaña nueva se titula con la placa (o el VIN) y el nombre del lote.
+        var identificador = await db.Set<VehiculoDiagnostico>().AsNoTracking()
+            .Where(v => v.Id == vehiculoId && v.DiagnosticoId == id)
+            .Select(v => v.Placa ?? v.Vin ?? v.IdentificadorNorm)
+            .SingleAsync(ct).ConfigureAwait(false);
 
         var conDato = celda.Estado is EstadoCelda.Completado or EstadoCelda.Error;
         IReadOnlyList<PersonaDetalleDto>? personas = null;
@@ -81,7 +87,7 @@ internal sealed partial class DetalleCelda(
         return new DetalleCeldaDto(
             celda.Id, vehiculoId, CodigosDeEnum.Codigo(codigo), CodigosDeEnum.Codigo(celda.Estado),
             celda.MotivoNa is { } motivo ? CodigosDeEnum.Codigo(motivo) : null, celda.TipoError, celda.DatoObtenidoEn, celda.Reutilizada,
-            resultado, personas, respuestaFuente);
+            resultado, personas, respuestaFuente, identificador, cabecera.Nombre);
     }
 
     /// <summary>

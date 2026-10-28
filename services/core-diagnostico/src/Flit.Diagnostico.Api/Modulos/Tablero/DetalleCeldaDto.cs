@@ -17,6 +17,11 @@ namespace Flit.Diagnostico.Api.Modulos.Tablero;
 /// descifrada, tal cual: con datos personales y lo que la fuente responda. En la celda solo en las fuentes del vehículo; en las de
 /// persona va en cada <see cref="PersonaDetalleDto"/>. Null sin respuesta guardada o si no se puede descifrar.
 /// </para>
+/// <para>
+/// HU #14087 (detalle en pestaña nueva): <c>identificador</c> es la placa del vehículo o, sin placa, su VIN (y, sin ninguno de
+/// los dos, el identificador normalizado de la carga); <c>nombre_diagnostico</c> es el nombre del lote. Sirven para que la página
+/// se titule sola; no son origen, usuario ni transacción (R-20 sigue vigente).
+/// </para>
 /// </summary>
 public sealed record DetalleCeldaDto(
     [property: JsonPropertyName("id")] Guid Id,
@@ -29,7 +34,9 @@ public sealed record DetalleCeldaDto(
     [property: JsonPropertyName("reutilizada")] bool Reutilizada,
     [property: JsonPropertyName("resultado")] ResultadoDetalleDto? Resultado,
     [property: JsonPropertyName("personas")] IReadOnlyList<PersonaDetalleDto>? Personas,
-    [property: JsonPropertyName("respuesta_fuente")] JsonElement? RespuestaFuente);
+    [property: JsonPropertyName("respuesta_fuente")] JsonElement? RespuestaFuente,
+    [property: JsonPropertyName("identificador")] string Identificador,
+    [property: JsonPropertyName("nombre_diagnostico")] string NombreDiagnostico);
 
 /// <summary>
 /// Una persona de una celda de persona: su posición y rol, el tipo de documento, el documento enmascarado (<c>****</c> más
