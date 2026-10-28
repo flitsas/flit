@@ -25,7 +25,12 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const { captcha } = portalConfig();
   return (
     // suppressHydrationWarning: extensiones del navegador (p. ej. captura de firma) agregan atributos a <html> antes de hidratar.
-    <html lang="es" suppressHydrationWarning className={`${poppins.variable} h-full scroll-smooth`} style={{ ["--font-sans" as string]: "var(--font-poppins), Poppins, sans-serif" }}>
+    <html
+      lang="es"
+      suppressHydrationWarning
+      className={`${poppins.variable} h-full scroll-smooth`}
+      style={{ ["--font-sans" as string]: "var(--font-poppins), Poppins, sans-serif" }}
+    >
       <body className="h-full font-sans antialiased">
         <ConfigPublica captcha={captcha}>
           <Providers>{children}</Providers>
