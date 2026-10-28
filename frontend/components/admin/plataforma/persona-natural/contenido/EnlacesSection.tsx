@@ -13,7 +13,6 @@ import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { Modal } from "@/components/atom/Modal";
 import { RowActions } from "@/components/atom/RowActions";
 import { StatusBadge } from "@/components/atom/StatusBadge";
-import { usePaginacion } from "@/components/atom/usePaginacion";
 import { formatFechaHora } from "@/lib/format/date";
 import {
   ENLACES_LEGALES,
@@ -109,7 +108,6 @@ export function EnlacesSection({ onCambio }: { onCambio: () => void }) {
   const [enlaces, setEnlaces] = useState<EnlacePn[]>([]);
   const [status, setStatus] = useState<UiStatus>("loading");
   const [editando, setEditando] = useState<EnlacePn | null>(null);
-  const pg = usePaginacion("pn.contenido.enlaces");
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setStatus("loading");
@@ -168,7 +166,6 @@ export function EnlacesSection({ onCambio }: { onCambio: () => void }) {
     <section aria-labelledby="pn-enlaces-titulo" className="flex flex-col gap-3">
       <PnSeccionHeader
         id="pn-enlaces-titulo"
-        tarjeta
         contador={status === "ready" ? `${enlaces.filter((e) => e.url).length} de ${enlaces.length} configurados` : undefined}
         titulo="Enlaces legales y de contacto"
         descripcion="Política de datos, términos y condiciones, contacto de ventas y video. Las direcciones web deben empezar por http:// o https://. Sin documento oficial, el portal conserva su aviso actual."
@@ -185,15 +182,8 @@ export function EnlacesSection({ onCambio }: { onCambio: () => void }) {
           <DataTable<EnlacePn>
             ariaLabel="Enlaces del portal"
             columns={columns}
-            rows={pg.paginar(enlaces)}
+            rows={enlaces}
             getRowKey={(e) => e.codigo}
-            pagination={{
-              page: pg.page,
-              pageSize: pg.pageSize,
-              totalCount: enlaces.length,
-              onPageChange: pg.setPage,
-              onPageSizeChange: pg.setPageSize,
-            }}
           />
         </UiStateBoundary>
       )}

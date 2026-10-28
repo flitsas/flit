@@ -184,7 +184,6 @@ export function PreguntasSection({ onCambio }: { onCambio: () => void }) {
     <section aria-labelledby="pn-faqs-titulo" className="flex flex-col gap-3">
       <PnSeccionHeader
         id="pn-faqs-titulo"
-        tarjeta
         contador={status === "ready" || status === "empty" ? `${plural(faqs.length, "pregunta", "preguntas")} · ${plural(faqs.filter((f) => f.activa).length, "visible", "visibles")}` : undefined}
         titulo="Preguntas frecuentes"
         descripcion="Las respuestas a las dudas más comunes. Se muestran en este orden (usa las flechas para subir o bajar); las ocultas no aparecen en el portal."

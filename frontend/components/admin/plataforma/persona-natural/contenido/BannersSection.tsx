@@ -195,7 +195,6 @@ export function BannersSection({ onCambio }: { onCambio: () => void }) {
     <section aria-labelledby="pn-banners-titulo" className="flex flex-col gap-3">
       <PnSeccionHeader
         id="pn-banners-titulo"
-        tarjeta
         contador={status === "ready" || status === "empty" ? `${plural(banners.length, "banner", "banners")} · ${plural(banners.filter((b) => b.activo).length, "visible", "visibles")}` : undefined}
         titulo="Banners"
         descripcion="Imágenes destacadas del portal, en este orden (usa las flechas para subir o bajar). Usa JPG, PNG o WEBP de hasta 2 MB. Los ocultos o vencidos no aparecen."

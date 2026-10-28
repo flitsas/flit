@@ -83,7 +83,6 @@ export function PnSeccionHeader({
   paso,
   accion,
   contador,
-  tarjeta = false,
 }: {
   id: string;
   titulo: string;
@@ -93,18 +92,9 @@ export function PnSeccionHeader({
   accion?: ReactNode;
   /** Resumen corto junto al título, p. ej. «3 preguntas · 2 visibles». */
   contador?: string;
-  /** Presenta el encabezado como tarjeta (secciones de contenido); la tabla va debajo, sin envolver. */
-  tarjeta?: boolean;
 }) {
   return (
-    <div
-      className={
-        "flex flex-wrap items-start justify-between gap-3" +
-        (tarjeta
-          ? " rounded-[18px] border border-[#DFE5ED] bg-white p-4 shadow-[0_8px_24px_rgba(22,39,68,0.08)] dark:border-white/10 dark:bg-[#0B0F14]"
-          : "")
-      }
-    >
+    <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="flex items-start gap-3">
         {paso !== undefined && (
           <span
