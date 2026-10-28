@@ -106,3 +106,6 @@ public sealed record DatosSolicitud(ComercialDatos? Comercial = null, PrendaDato
 
     public string Serializar() => JsonSerializer.Serialize(this, Opciones);
 }
+
+/// <summary>Estado de la solicitud sin ningún dato personal (HU #14049): lo único que la sesión de solo estado puede sondear tras radicar.</summary>
+public sealed record EstadoSolicitudDto(Guid SolicitudId, string CodigoPublico, string Estado, string TipoTramiteCodigo, DateTimeOffset ActualizadoEn);

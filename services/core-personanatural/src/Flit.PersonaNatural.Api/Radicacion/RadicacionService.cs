@@ -1,8 +1,6 @@
-using System.Text.Json;
 using Flit.PersonaNatural.Api.Cotizaciones;
 using Flit.PersonaNatural.Api.Definiciones;
 using Flit.PersonaNatural.Api.Persistence;
-using Flit.PersonaNatural.Api.Pii;
 using Flit.PersonaNatural.Api.Solicitudes;
 using Flit.Platform.Sdk;
 using Flit.Platform.Sdk.Messaging;
@@ -24,11 +22,9 @@ public sealed record RadicacionAceptada(Guid SolicitudId, string CodigoPublico, 
 public sealed class RadicacionService(
     PersonaNaturalDb db,
     SolicitudesService solicitudes,
-    PersonaService personas,
     DefinicionesService definiciones,
     ICompuertaDeRadicacion compuerta,
     IPlatformOutbox outbox,
-    CifradoPii cifrado,
     TimeProvider reloj)
 {
     public const string TipoEvento = "tramites.persona_natural.radicacion_solicitada";
@@ -37,7 +33,6 @@ public sealed class RadicacionService(
     public const string CodigoIdempotenciaConflicto = "idempotency_conflicto";
     public const string CodigoRequisitosIncompletos = "requisitos_incompletos";
     public const string CodigoIdentidadPendiente = "identity_pending";
-    public const string ContextoActores = "radicacion.actores";
     public const int MaxLlave = 100;
     private const string IndiceLlave = "uq_procedure_request_idempotency";
 
@@ -103,7 +98,7 @@ public sealed class RadicacionService(
                 new Dictionary<string, object?> { ["motivo"] = veredicto.Motivo, ["partes"] = veredicto.Partes });
         }
 
-        var evento = await ArmarEventoAsync(s, borrador, ct).ConfigureAwait(false);
+        var evento = await ArmarEventoAsync(s, borrador, llave, ct).ConfigureAwait(false);
         var ahora = reloj.GetUtcNow();
         db.Add(new HistorialEstado { Id = Guid.CreateVersion7(), SolicitudId = s.Id, Desde = s.Estado, Hasta = EstadoSolicitud.EnCola, Origen = "bff", Motivo = "radicada", OcurrioEn = ahora });
         s.Estado = EstadoSolicitud.EnCola;
@@ -114,29 +109,18 @@ public sealed class RadicacionService(
         return new RadicacionAceptada(s.Id, s.CodigoPublico, s.Estado);
     }
 
-    /// <summary>Arma el trabajo para FLIT 2. Los datos personales se leen por <see cref="PersonaService"/> (queda en la auditoría) y salen cifrados.</summary>
-    private async Task<RadicacionSolicitada> ArmarEventoAsync(SolicitudTramite s, SolicitudDto borrador, CancellationToken ct)
+    /// <summary>
+    /// Arma el aviso para FLIT 2: solo identificadores y referencias, sin datos personales (ni cifrados). Los datos de las
+    /// partes los lee core-api por RPC (<c>RadicacionGrpcService</c>), que deja cada lectura en la auditoría.
+    /// </summary>
+    private async Task<RadicacionSolicitada> ArmarEventoAsync(SolicitudTramite s, SolicitudDto borrador, string llave, CancellationToken ct)
     {
-        var personasClaro = await personas.LeerAsync(s.Id, "radicacion", ct).ConfigureAwait(false);
-        var validaciones = await db.Set<PersonaSolicitante>().AsNoTracking().Where(p => p.SolicitudId == s.Id)
-            .Select(p => new { p.Parte, p.Ordinal, p.ValidacionId, p.ValidacionEstado }).ToListAsync(ct).ConfigureAwait(false);
-
-        var actores = personasClaro.Select(p =>
-        {
-            var v = validaciones.First(x => x.Parte == p.Parte && x.Ordinal == p.Ordinal);
-            return new ActorRadicado(p.Parte, p.Ordinal, p.TipoDocumento, v.ValidacionId, v.ValidacionEstado);
-        }).ToList();
-        var cifrados = cifrado.Cifrar(
-            JsonSerializer.Serialize(personasClaro.Select(p => new DatosParteRadicada(p.Parte, p.Ordinal, p.TipoDocumento, p.Documento, p.Nombre, p.Correo, p.Celular, p.Direccion)), EventEnvelope.JsonOptions),
-            ContextoActores)!;
-
         var adjuntos = await db.Set<Adjunto>().AsNoTracking().Where(a => a.SolicitudId == s.Id).OrderBy(a => a.CreatedAt).ToListAsync(ct).ConfigureAwait(false);
         var comprobante = adjuntos.LastOrDefault(a => a.Tipo == SolicitudesService.TipoComprobantePago);
         return new RadicacionSolicitada(
-            s.Id, s.CodigoPublico, s.TipoTramiteCodigo, s.DefinicionVersion, borrador.DefinicionHuella, s.OrganismoId, s.Placa, s.Vin,
-            borrador.FieldValues, borrador.Datos, actores, Convert.ToBase64String(cifrados),
-            [.. adjuntos.Select(a => new AdjuntoRadicado(a.Id, a.Tipo, a.NombreArchivo, a.MimeType, a.TamanoBytes, a.Sha256, a.StoragePath))],
-            comprobante?.Id);
+            s.Id, s.CodigoPublico, s.TipoTramiteCodigo, s.DefinicionVersion, borrador.DefinicionHuella, s.OrganismoId,
+            [.. adjuntos.Select(a => new AdjuntoRadicado(a.Id, a.Tipo, a.Sha256))],
+            comprobante?.Id, llave, s.CorrelationId);
     }
 
     private static ReglaDeNegocioException LlaveEnUso() =>

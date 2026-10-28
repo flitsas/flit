@@ -52,7 +52,7 @@ public static class AdjuntosEndpoints
     {
         ArgumentNullException.ThrowIfNull(app);
         var conSesion = app.MapGroup(SesionEndpoints.Base).AllowAnonymous().RequireRateLimiting(AbusoEndpoints.PoliticaPorIp).MapGroup("/solicitudes/{id:guid}");
-        conSesion.AddEndpointFilter(SesionEndpoints.ConSesionDeLaSolicitud);
+        conSesion.AddEndpointFilter(Radicacion.SesionTrasRadicar.Filtro);
 
         conSesion.MapPost("/adjuntos", (Guid id, HttpContext http, AdjuntosService s, IOptions<AdjuntosOptions> o, CancellationToken ct) =>
             Subir(http, o.Value, (tipo, nombre, bytes) => s.CargarAsync(id, tipo, nombre, bytes, ct), ct));

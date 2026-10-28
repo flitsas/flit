@@ -1,5 +1,6 @@
 using Flit.PersonaNatural.Api.Abuso;
 using Flit.PersonaNatural.Api.Cotizaciones;
+using Flit.PersonaNatural.Api.Radicacion;
 using Flit.PersonaNatural.Api.Sesiones;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -34,10 +35,13 @@ public static class SolicitudesEndpoints
                 await s.CrearAsync(body, hasher.HashIp(http.Connection.RemoteIpAddress?.ToString()), ct).ConfigureAwait(false)))).ConCaptcha();
 
         var conSesion = grupo.MapGroup("/solicitudes/{id:guid}");
-        conSesion.AddEndpointFilter(SesionEndpoints.ConSesionDeLaSolicitud);
+        conSesion.AddEndpointFilter(Radicacion.SesionTrasRadicar.Filtro);
 
         conSesion.MapGet(string.Empty, (Guid id, SolicitudesService s, CancellationToken ct) =>
-            Atender(async () => Results.Ok(await s.ObtenerAsync(id, ct).ConfigureAwait(false))));
+            Atender(async () => Results.Ok(await s.ObtenerAsync(id, ct).ConfigureAwait(false)))).WithMetadata(PermiteTrasRadicar.Instancia);
+        // HU #14049: estado sin datos personales; es lo que sondea el front tras radicar con la sesión de solo estado.
+        conSesion.MapGet("/estado", (Guid id, SolicitudesService s, CancellationToken ct) =>
+            Atender(async () => Results.Ok(await s.ObtenerEstadoAsync(id, ct).ConfigureAwait(false)))).WithMetadata(PermiteTrasRadicar.Instancia);
         conSesion.MapPatch("/actores", (Guid id, ActoresRequest body, SolicitudesService s, CancellationToken ct) =>
             Atender(async () => Results.Ok(await s.GuardarActoresAsync(id, body, ct).ConfigureAwait(false))));
         conSesion.MapPut("/campos", (Guid id, CamposRequest body, SolicitudesService s, CancellationToken ct) =>

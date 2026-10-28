@@ -158,9 +158,24 @@ public sealed partial class SolicitudesService(
     public async Task<SolicitudDto> ObtenerAsync(Guid id, CancellationToken ct)
     {
         var solicitud = await db.Set<SolicitudTramite>().FirstOrDefaultAsync(s => s.Id == id, ct).ConfigureAwait(false) ?? throw NoEncontrada();
+
+        // HU #14049 (B3): ya radicada (en cola o posterior) la sesión es de solo estado: sin datos personales descifrados ni
+        // nombres originales de archivo (pueden llevar el nombre de una persona), solo lo que no identifica a nadie.
+        if (!EsEditable(solicitud.Estado))
+        {
+            var sinPii = await ConstruirAsync(solicitud, conPersonas: false, null, ct).ConfigureAwait(false);
+            return sinPii with { Adjuntos = [.. sinPii.Adjuntos.Select(a => a with { NombreArchivo = a.Tipo })] };
+        }
+
         var cambio = await ReconciliarAsync(solicitud, ct).ConfigureAwait(false);
         return await ConstruirAsync(solicitud, conPersonas: true, cambio, ct).ConfigureAwait(false);
     }
+
+    /// <summary>Estado de la solicitud sin ningún dato personal: lo que sondea el front tras radicar (HU #14049).</summary>
+    public async Task<EstadoSolicitudDto> ObtenerEstadoAsync(Guid id, CancellationToken ct) =>
+        await db.Set<SolicitudTramite>().AsNoTracking().Where(s => s.Id == id)
+            .Select(s => new EstadoSolicitudDto(s.Id, s.CodigoPublico, s.Estado, s.TipoTramiteCodigo, s.UpdatedAt))
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false) ?? throw NoEncontrada();
 
     private async Task<DefinicionCambioDto?> ReconciliarAsync(SolicitudTramite s, CancellationToken ct)
     {

@@ -59,17 +59,19 @@ public static class IdentidadEndpoints
             return estado is null
                 ? Problema(StatusCodes.Status404NotFound, "No encontrado", SesionEndpoints.MensajeNoEncontrada, SesionEndpoints.CodigoNoEncontrada)
                 : Results.Ok(estado);
-        }).AddEndpointFilter(SesionEndpoints.ConSesionDeLaSolicitud);
+        }).AddEndpointFilter(Radicacion.SesionTrasRadicar.Filtro);
 
         // HU #14044: pide la validación de una parte. El cuerpo es opcional (la posición del actor si el rol admite varios).
         grupo.MapPost("/{parte}", async (Guid id, string parte, HttpContext http, IdentidadService servicio, CancellationToken ct, ParteRequest? body) =>
             Responder(http, await servicio.SolicitarAsync(id, parte, body?.Ordinal ?? 1, ct).ConfigureAwait(false)))
-            .AddEndpointFilter(SesionEndpoints.ConSesionDeLaSolicitud);
+            .WithMetadata(Radicacion.PermiteTrasRadicar.Instancia) // HU #14049: ya rechaza sola (409 solicitud_no_editable) y no expone nada
+            .AddEndpointFilter(Radicacion.SesionTrasRadicar.Filtro);
 
         // HU #14045: reenvía el enlace (opcionalmente a un correo corregido).
         grupo.MapPost("/{parte}/reenviar", async (Guid id, string parte, HttpContext http, IdentidadService servicio, CancellationToken ct, ReenviarRequest? body) =>
             Responder(http, await servicio.ReenviarAsync(id, parte, body?.Ordinal ?? 1, body?.Correo, ct).ConfigureAwait(false)))
-            .AddEndpointFilter(SesionEndpoints.ConSesionDeLaSolicitud);
+            .WithMetadata(Radicacion.PermiteTrasRadicar.Instancia)
+            .AddEndpointFilter(Radicacion.SesionTrasRadicar.Filtro);
 
         return app;
     }

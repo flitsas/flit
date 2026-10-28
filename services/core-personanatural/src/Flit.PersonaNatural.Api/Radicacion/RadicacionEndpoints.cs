@@ -30,11 +30,11 @@ public static class RadicacionEndpoints
     {
         ArgumentNullException.ThrowIfNull(app);
         var conSesion = app.MapGroup(SesionEndpoints.Base).AllowAnonymous().RequireRateLimiting(AbusoEndpoints.PoliticaPorIp).MapGroup("/solicitudes/{id:guid}");
-        conSesion.AddEndpointFilter(SesionEndpoints.ConSesionDeLaSolicitud);
+        conSesion.AddEndpointFilter(Radicacion.SesionTrasRadicar.Filtro);
 
         conSesion.MapPost("/radicar", (Guid id, HttpContext http, RadicacionService s, CancellationToken ct) =>
             SolicitudesEndpoints.Atender(async () =>
-                Results.Json(await s.RadicarAsync(id, http.Request.Headers[CabeceraIdempotencia].ToString(), ct).ConfigureAwait(false), statusCode: StatusCodes.Status202Accepted)));
+                Results.Json(await s.RadicarAsync(id, http.Request.Headers[CabeceraIdempotencia].ToString(), ct).ConfigureAwait(false), statusCode: StatusCodes.Status202Accepted))).WithMetadata(PermiteTrasRadicar.Instancia);
 
         return app;
     }

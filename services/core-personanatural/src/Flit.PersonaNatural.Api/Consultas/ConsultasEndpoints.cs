@@ -122,7 +122,7 @@ public static class ConsultasEndpoints
                     StatusCodes.Status409Conflict, "Sin vehículo", "El trámite todavía no tiene placa ni VIN.", CodigoSinVehiculo),
                 _ => SesionEndpoints.Problema(StatusCodes.Status404NotFound, "No encontrado", SesionEndpoints.MensajeNoEncontrada, SesionEndpoints.CodigoNoEncontrada),
             };
-        }).AddEndpointFilter(SesionEndpoints.ConSesionDeLaSolicitud);
+        }).AddEndpointFilter(Radicacion.SesionTrasRadicar.Filtro);
 
         return app;
     }

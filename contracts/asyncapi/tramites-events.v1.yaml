@@ -1,7 +1,7 @@
 asyncapi: '2.6.0'
 info:
   title: FLIT — eventos de Trámites
-  version: 1.1.0
+  version: 1.2.0
   description: |
     Eventos que publica Trámites (core-api) en el exchange `flit.tramites` (ADR-0064).
     Hoy existen como outbox en core-api (`tramites.procedure_state_change_outbox`,
@@ -10,7 +10,8 @@ info:
     El webhook saliente al OT se documenta aparte en domain-events.v1.yaml.
     Desde 1.1.0 también documenta el trabajo que RECIBE Trámites del portal de persona natural
     (`tramites.persona_natural.radicacion_solicitada`, HU #14049): a diferencia de un evento, lo deja otro servicio
-    (core-personanatural) vía su outbox en este exchange, y el `producer` del sobre es ese servicio.
+    (core-personanatural) vía su outbox en este exchange, y el `producer` del sobre es ese servicio. No lleva datos
+    personales: core-api los lee por pull con el RPC `RadicacionService/ObtenerSolicitudParaRadicar`.
 defaultContentType: application/json
 
 channels:
@@ -50,7 +51,8 @@ channels:
   tramites.persona_natural.radicacion_solicitada:
     description: |
       TRABAJO que recibe Trámites: el ciudadano radicó un trámite en el portal de persona natural (HU #14049). Lo deja
-      core-personanatural en su outbox, en la misma transacción que pasa la solicitud a `en_cola`; core-api lo consume con
+      core-personanatural en su outbox, en la misma transacción que pasa la solicitud a `en_cola` (sin datos personales: se leen
+      por pull por gRPC); core-api lo consume con
       bandeja idempotente por `eventId` (HU #14050) y crea el trámite con `origin = persona_natural` y
       `external_ref = solicitudId`. El broker caído no afecta la respuesta al ciudadano: el publicador entrega después.
       Aditivo: no cambia ningún mensaje existente. El usuario del broker de core-personanatural necesita permiso de
@@ -149,71 +151,34 @@ components:
               data:
                 type: object
                 additionalProperties: false
-                required: [solicitudId, codigoPublico, tipoTramiteCodigo, definicionVersion, definicionHuella, organismoId, fieldValues, datos, actores, actoresCifrados, adjuntos]
+                required: [solicitudId, codigoPublico, tipoTramiteCodigo, definicionVersion, definicionHuella, organismoId, adjuntos, idempotencyKey, correlationId]
                 description: |
-                  Identificadores, referencias y datos NO personales del trámite. Los datos personales de las partes
-                  (documento, nombre, correo, celular, dirección) viajan SOLO en `actoresCifrados`: la outbox guarda el
-                  mensaje tal cual y un dato personal en claro ahí quedaría para siempre (Ley 1581).
+                  AVISO de que hay una solicitud en cola: solo identificadores y referencias. NO lleva ningún dato
+                  personal, ni en claro ni cifrado (documento, nombre, correo, celular, dirección), ni nombres originales de
+                  archivo, ni placa, VIN o valores del trámite: la outbox guarda el mensaje tal cual y lo que quede ahí queda
+                  para siempre en la base del servicio (Ley 1581). core-api obtiene los datos POR PULL con el RPC gRPC
+                  `flit.personanatural.v1.RadicacionService/ObtenerSolicitudParaRadicar` (contracts/proto/flit/personanatural/v1),
+                  con token de servicio `svc-tramites`, `aud=personanatural`, scope `platform.personanatural.leer`, solo
+                  para solicitudes `en_cola` y con cada lectura auditada. La empresa (`tenantId`) y la correlación de la
+                  petición viajan en el sobre.
                 properties:
-                  solicitudId: { type: string, format: uuid, description: "Llave de idempotencia del trámite: va como `external_ref`." }
+                  solicitudId: { type: string, format: uuid, description: "Llave de idempotencia del trámite: va como `external_ref` y es el argumento del RPC." }
                   codigoPublico: { type: string, description: "Radicado visible del portal (PN-AAAA-NNNNNN)." }
                   tipoTramiteCodigo: { type: string, description: "tramites.procedure_types.code; el consumidor crea el trámite de ESE tipo." }
                   definicionVersion: { type: integer, description: "Versión del tipo con la que el ciudadano llenó el trámite." }
                   definicionHuella: { type: string, description: "SHA-256 de la definición congelada; el consumidor puede responder `definicion_obsoleta` si ya cambió." }
                   organismoId: { type: string, format: uuid }
-                  placa: { type: [string, 'null'] }
-                  vin: { type: [string, 'null'] }
-                  fieldValues:
-                    type: object
-                    additionalProperties: { type: string }
-                    description: Valores de los campos del tipo por `field_key`.
-                  datos:
-                    type: object
-                    description: Bloques que el tipo pide además de los campos (sin datos personales).
-                    properties:
-                      comercial: { type: [object, 'null'], properties: { valor: { type: [number, 'null'] } } }
-                      prenda:
-                        type: [object, 'null']
-                        properties:
-                          tiene: { type: boolean }
-                          acreedor: { type: [string, 'null'] }
-                          nitAcreedor: { type: [string, 'null'] }
-                      requisitos:
-                        type: [object, 'null']
-                        properties:
-                          transformaciones: { type: array, items: { type: string } }
-                          observaciones: { type: [string, 'null'] }
-                      diagnostico: { type: [object, 'null'] }
-                  actores:
-                    type: array
-                    items:
-                      type: object
-                      additionalProperties: false
-                      required: [rol, ordinal, tipoDocumento, validacionEstado]
-                      properties:
-                        rol: { type: string, description: "vendedor | comprador | locatario (rol de la definición del tipo)." }
-                        ordinal: { type: integer, minimum: 1, maximum: 4 }
-                        tipoDocumento: { type: string, enum: [CC, CE, PAS, TI] }
-                        validacionId: { type: [string, 'null'], format: uuid, description: "Validación de identidad de ESTA solicitud (nunca reutilizada)." }
-                        validacionEstado: { type: string }
-                  actoresCifrados:
-                    type: string
-                    description: |
-                      Base64 de AES-256-GCM (`[versión de llave][nonce][etiqueta][cifrado]`, contexto autenticado
-                      `radicacion.actores`) de un arreglo JSON de `{rol, ordinal, tipoDocumento, documento, nombre, correo,
-                      celular, direccion}`. Solo lo abre quien comparta la llave `Pii:Cifrado` del portal.
                   adjuntos:
                     type: array
+                    description: Archivos del trámite solo por identificador, tipo y huella; la referencia opaca al file-manager, el nombre y el tamaño salen por el RPC.
                     items:
                       type: object
                       additionalProperties: false
-                      required: [id, tipo, nombreArchivo, mimeType, tamanoBytes, sha256, referencia]
+                      required: [id, tipo, sha256]
                       properties:
                         id: { type: string, format: uuid }
                         tipo: { type: string, description: "`doc_code` del documento del tipo o `comprobante_pago`." }
-                        nombreArchivo: { type: string }
-                        mimeType: { type: string, enum: [application/pdf, image/jpeg, image/png, image/webp] }
-                        tamanoBytes: { type: integer }
                         sha256: { type: string }
-                        referencia: { type: string, description: "Referencia opaca al file-manager; no son los bytes." }
                   comprobantePagoId: { type: [string, 'null'], format: uuid, description: "Adjunto vigente del pago (supuesto S1: lo valida un operador FLIT)." }
+                  idempotencyKey: { type: string, description: "Idempotency-Key con la que el ciudadano radicó." }
+                  correlationId: { type: string, format: uuid, description: "Correlación propia de la solicitud (estable); distinta del `correlationId` del sobre, que es el de la petición." }

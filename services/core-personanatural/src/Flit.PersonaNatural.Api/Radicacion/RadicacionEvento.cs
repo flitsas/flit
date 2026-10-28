@@ -1,19 +1,17 @@
 namespace Flit.PersonaNatural.Api.Radicacion;
 
-/// <summary>Un archivo del trámite, por referencia: el consumidor lo registra, no recibe los bytes.</summary>
-public sealed record AdjuntoRadicado(Guid Id, string Tipo, string NombreArchivo, string MimeType, long TamanoBytes, string Sha256, string Referencia);
-
-/// <summary>Parte del trámite sin dato personal: rol, posición y el estado de su validación de identidad en esta solicitud.</summary>
-public sealed record ActorRadicado(string Rol, short Ordinal, string TipoDocumento, Guid? ValidacionId, string ValidacionEstado);
+/// <summary>Un archivo del trámite solo por identificador, tipo y huella: la referencia al almacenamiento, el nombre y el tamaño los pide core-api por RPC.</summary>
+public sealed record AdjuntoRadicado(Guid Id, string Tipo, string Sha256);
 
 /// <summary>
 /// <c>data</c> del trabajo <c>tramites.persona_natural.radicacion_solicitada</c> v1 (HU #14049, contrato en
-/// <c>contracts/asyncapi/tramites-events.v1.yaml</c>). Lleva identificadores, referencias y los datos NO personales del
-/// trámite. Los datos personales de las partes (documento, nombre, correo, celular, dirección) viajan SOLO dentro de
-/// <see cref="ActoresCifrados"/>: la outbox guarda el mensaje tal cual, y un dato personal en claro ahí quedaría para siempre
-/// en la base del servicio (Ley 1581).
+/// <c>contracts/asyncapi/tramites-events.v1.yaml</c>). Es un AVISO: lleva solo identificadores y referencias, NINGÚN dato
+/// personal (ni en claro ni cifrado), ningún nombre original de archivo y ningún valor del trámite. La outbox guarda el
+/// mensaje tal cual y lo que quede ahí queda para siempre en la base del servicio (Ley 1581); core-api obtiene los datos
+/// por PULL con <c>RadicacionService.ObtenerSolicitudParaRadicar</c> (gRPC autenticado y auditado). La empresa y la
+/// correlación de la petición viajan en el sobre.
 /// </summary>
-/// <param name="ActoresCifrados">Base64 de <c>CifradoPii.Cifrar(json de DatosPartes, "radicacion.actores")</c>; solo lo abre quien comparta la llave <c>Pii:Cifrado</c>.</param>
+/// <param name="CorrelationId">Correlación propia de la solicitud (estable); distinta de la de la petición que viaja en el sobre.</param>
 public sealed record RadicacionSolicitada(
     Guid SolicitudId,
     string CodigoPublico,
@@ -21,14 +19,7 @@ public sealed record RadicacionSolicitada(
     int DefinicionVersion,
     string DefinicionHuella,
     Guid OrganismoId,
-    string? Placa,
-    string? Vin,
-    IReadOnlyDictionary<string, string> FieldValues,
-    Solicitudes.DatosSolicitud Datos,
-    IReadOnlyList<ActorRadicado> Actores,
-    string ActoresCifrados,
     IReadOnlyList<AdjuntoRadicado> Adjuntos,
-    Guid? ComprobantePagoId);
-
-/// <summary>Los datos personales de una parte tal como se cifran dentro del evento.</summary>
-public sealed record DatosParteRadicada(string Rol, short Ordinal, string TipoDocumento, string Documento, string? Nombre, string? Correo, string? Celular, string? Direccion);
+    Guid? ComprobantePagoId,
+    string IdempotencyKey,
+    Guid CorrelationId);

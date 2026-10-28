@@ -88,7 +88,7 @@ public sealed class RadicacionTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ElEvento_LlevaIdentificadoresYReferencias_YLosDatosPersonalesSoloCifrados()
+    public async Task ElEvento_LlevaSoloIdentificadoresYReferencias_SinDatosPersonalesNiCifrados()
     {
         await IniciarAsync();
         var (id, token) = await Completa();
@@ -98,30 +98,107 @@ public sealed class RadicacionTests : IAsyncLifetime
         await using var db = _host.NuevaDb();
         var payload = (await db.Set<OutboxMessage>().SingleAsync(TestContext.Current.CancellationToken)).Payload;
         payload.Should().NotContain(Vendedor).And.NotContain(Comprador).And.NotContain("secreto").And.NotContain("Persona de Prueba").And.NotContain(PortalHost.Cedula, "ningún dato personal viaja en claro");
+        payload.Should().NotContain("example.org").And.NotContain("3001234567", "ni correo ni celular");
+        payload.Should().NotContain("compraventa.pdf").And.NotContain("pago.png", "ni nombres originales de archivo");
+        payload.Should().NotContain("ABC123", "ni la placa: core-api la pide por RPC");
         var sobre = JsonDocument.Parse(payload).RootElement;
         sobre.GetProperty("type").GetString().Should().Be("tramites.persona_natural.radicacion_solicitada");
         sobre.GetProperty("version").GetInt32().Should().Be(1);
         sobre.GetProperty("producer").GetString().Should().Be("personanatural");
+        sobre.GetProperty("tenantId").GetGuid().Should().NotBeEmpty();
         var data = sobre.GetProperty("data");
+        data.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(
+            "solicitudId", "codigoPublico", "tipoTramiteCodigo", "definicionVersion", "definicionHuella", "organismoId",
+            "adjuntos", "comprobantePagoId", "idempotencyKey", "correlationId");
+        data.TryGetProperty("actoresCifrados", out _).Should().BeFalse("el evento no lleva datos personales, ni siquiera cifrados");
+        data.TryGetProperty("actores", out _).Should().BeFalse();
         data.GetProperty("solicitudId").GetGuid().Should().Be(id);
         data.GetProperty("tipoTramiteCodigo").GetString().Should().Be("TRASPASO_STANDARD");
         data.GetProperty("definicionVersion").GetInt32().Should().Be(1);
         data.GetProperty("definicionHuella").GetString().Should().Be("h1");
-        data.GetProperty("placa").GetString().Should().Be("ABC123");
-        data.GetProperty("fieldValues").GetProperty("km").GetString().Should().Be("85000");
-        data.GetProperty("datos").GetProperty("comercial").GetProperty("valor").GetDecimal().Should().Be(45_000_000);
-        data.GetProperty("actores").EnumerateArray().Select(a => a.GetProperty("rol").GetString()).Should().BeEquivalentTo("vendedor", "comprador");
+        data.GetProperty("idempotencyKey").GetString().Should().Be("k-1");
+        data.GetProperty("correlationId").GetGuid().Should().NotBeEmpty();
         data.GetProperty("adjuntos").EnumerateArray().Select(a => a.GetProperty("tipo").GetString()).Should().BeEquivalentTo("compraventa", "soat", "comprobante_pago");
-        data.GetProperty("adjuntos")[0].GetProperty("referencia").GetString().Should().StartWith("ref-");
+        data.GetProperty("adjuntos").EnumerateArray().Select(a => string.Join(",", a.EnumerateObject().Select(p => p.Name).Order())).Should().OnlyContain(n => n == "id,sha256,tipo");
         data.GetProperty("comprobantePagoId").GetGuid().Should().NotBeEmpty();
+    }
 
-        // Quien comparte la llave abre los datos de las partes; el contexto autenticado impide abrirlos como otra cosa.
-        var cifrado = _host.App.Services.GetRequiredService<CifradoPii>();
-        var cifrados = Convert.FromBase64String(data.GetProperty("actoresCifrados").GetString()!);
-        var abierto = cifrado.Descifrar(cifrados, "radicacion.actores");
-        abierto.Should().Contain(Vendedor).And.Contain(CorreoVendedor);
-        var otroContexto = () => cifrado.Descifrar(cifrados, "persona.correo");
-        otroContexto.Should().Throw<System.Security.Cryptography.CryptographicException>();
+    [Fact]
+    public async Task RadicarNoLeeLosDatosPersonales_NoDejaConstanciaDeLecturaNiNecesitaLaLlaveDeCifrado()
+    {
+        await IniciarAsync();
+        var (id, token) = await Completa();
+        await using (var antes = _host.NuevaDb())
+            await antes.Set<AccesoPiiLog>().ExecuteDeleteAsync(TestContext.Current.CancellationToken);
+
+        await Radicar(id, token, "k-1");
+
+        await using var db = _host.NuevaDb();
+        (await db.Set<AccesoPiiLog>().CountAsync(a => a.Accion == "lectura_persona" && a.Actor == "radicacion", TestContext.Current.CancellationToken))
+            .Should().Be(0, "radicar ya no descifra a las partes: eso lo hace core-api por RPC y queda auditado allí");
+    }
+
+    // ── B3: sesión de solo estado tras radicar ───────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task TrasRadicar_LaSesionSoloSirveParaElEstado_YElDetalleNoDevuelveDatosPersonales()
+    {
+        await IniciarAsync();
+        var (id, token) = await Completa();
+        var antes = await _host.EnviarAsync(HttpMethod.Get, $"{Base}/solicitudes/{id}", token: token);
+        (await antes.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().Contain(Vendedor, "borrador: el wizard rehidrata con los datos");
+        await Radicar(id, token, "k-1");
+
+        var estado = await _host.EnviarAsync(HttpMethod.Get, $"{Base}/solicitudes/{id}/estado", token: token);
+        var detalle = await _host.EnviarAsync(HttpMethod.Get, $"{Base}/solicitudes/{id}", token: token);
+
+        estado.StatusCode.Should().Be(HttpStatusCode.OK);
+        var jsonEstado = (await PortalHost.JsonAsync(estado)).RootElement;
+        jsonEstado.GetProperty("estado").GetString().Should().Be("en_cola");
+        jsonEstado.GetProperty("codigoPublico").GetString().Should().StartWith("PN-");
+        detalle.StatusCode.Should().Be(HttpStatusCode.OK);
+        var texto = await detalle.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        texto.Should().NotContain(Vendedor).And.NotContain(Comprador).And.NotContain("secreto").And.NotContain("Persona de Prueba").And.NotContain("compraventa.pdf").And.NotContain("pago.png");
+        var actores = JsonDocument.Parse(texto).RootElement.GetProperty("actores").EnumerateArray().ToList();
+        actores.Should().HaveCount(2);
+        actores.Should().OnlyContain(a => a.GetProperty("numeroDocumento").ValueKind == JsonValueKind.Null && a.GetProperty("correo").ValueKind == JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task TrasRadicar_LaSesionNoAbreNingunaOtraRuta_PeroSiElReintentoIdempotenteDeRadicar()
+    {
+        await IniciarAsync();
+        var (id, token) = await Completa();
+        await Radicar(id, token, "k-1");
+
+        var rutas = new (HttpMethod Metodo, string Ruta, object? Cuerpo)[]
+        {
+            (HttpMethod.Patch, $"{Base}/solicitudes/{id}/actores", new { actores = Array.Empty<object>() }),
+            (HttpMethod.Put, $"{Base}/solicitudes/{id}/comercial", new { valorComercial = 1 }),
+            (HttpMethod.Post, $"{Base}/solicitudes/{id}/diagnostico", null),
+            (HttpMethod.Get, $"{Base}/solicitudes/{id}/identidad", null),
+            (HttpMethod.Delete, $"{Base}/solicitudes/{id}", null),
+        };
+        foreach (var (metodo, ruta, cuerpo) in rutas)
+        {
+            var r = await _host.EnviarAsync(metodo, ruta, cuerpo, token);
+            r.StatusCode.Should().Be(HttpStatusCode.Conflict, $"{metodo} {ruta}");
+            (await PortalHost.CodigoAsync(r)).Should().Be("estado_no_permite_cambio");
+        }
+
+        (await Radicar(id, token, "k-1")).StatusCode.Should().Be(HttpStatusCode.Accepted, "reintentar con la misma llave sigue funcionando");
+        (await _host.EnviarAsync(HttpMethod.Get, $"{Base}/solicitudes/{id}/estado")).StatusCode.Should().Be(HttpStatusCode.Unauthorized, "sin sesión no hay estado");
+    }
+
+    [Fact]
+    public async Task ElEstado_DeUnBorrador_TambienFunciona_YLaSesionAjenaNoLoLee()
+    {
+        await IniciarAsync();
+        var (id, token) = await Completa();
+        var (_, ajeno) = await Completa();
+
+        (await _host.EnviarAsync(HttpMethod.Get, $"{Base}/solicitudes/{id}/estado", token: token)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await _host.EnviarAsync(HttpMethod.Get, $"{Base}/solicitudes/{id}/estado", token: ajeno)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]
