@@ -19,10 +19,10 @@ export function useOrganismos(cliente: ClientePortal = portal) {
  * Definición del tipo elegido (GET /tipos-tramite/{code}/definicion): requisitos y modo de identificar el vehículo. Con el
  * organismo, los documentos son los de ese organismo. Sin tipo no pide nada.
  */
-export function useDefinicion(cliente: ClientePortal, code: string, organismoId?: string) {
+export function useDefinicion(cliente: ClientePortal, code: string, organismoId?: string, habilitada = true) {
   return useQuery({
     queryKey: ["pn", "definicion", code, organismoId ?? null],
-    enabled: code !== "",
+    enabled: code !== "" && habilitada,
     queryFn: ({ signal }) => cliente.catalogos.definicion(code, { organismoId, signal }),
     staleTime: CINCO_MINUTOS,
   });

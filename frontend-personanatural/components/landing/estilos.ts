@@ -6,6 +6,8 @@ const BASE =
 
 const VARIANTES = {
   flit: "rounded-full bg-primary text-primary-foreground font-semibold hover:bg-primary/90",
+  positive: "rounded-full bg-success text-primary-foreground font-semibold hover:bg-success/90",
+  alert: "rounded-full bg-alert text-primary-foreground font-semibold hover:bg-alert/90",
   back: "rounded-full bg-secondary text-secondary-foreground font-semibold hover:bg-secondary/90",
   institutional: "rounded-full bg-secondary-foreground text-secondary font-semibold hover:bg-secondary-foreground/90",
   ghost: "hover:bg-accent hover:text-accent-foreground",

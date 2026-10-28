@@ -38,6 +38,9 @@ const localStorageStub = new MemoryStorage();
 Object.defineProperty(globalThis, "localStorage", { value: localStorageStub, configurable: true });
 Object.defineProperty(globalThis, "sessionStorage", { value: new MemoryStorage(), configurable: true });
 
+// jsdom no implementa el desplazamiento de la ventana (el wizard sube al inicio al cambiar de paso).
+window.scrollTo = vi.fn() as unknown as typeof window.scrollTo;
+
 if (!("ResizeObserver" in globalThis)) {
   class ResizeObserverStub {
     observe(): void {}

@@ -8,6 +8,7 @@ import { IniciarModal, type DatosInicio } from "@/components/modales/IniciarModa
 import { portal, type ClientePortal, type Organismo } from "@/lib/api/cliente";
 import { TEXTO_POLITICAS } from "@/lib/landing/contenido";
 import { fijarContexto } from "@/lib/tramite/contexto";
+import { rutaDelTramite } from "@/lib/tramite/ruta";
 import { AccionesPrincipales } from "./AccionesPrincipales";
 import { AvisoModal, type Aviso } from "./AvisoModal";
 import { Cabecera } from "./Cabecera";
@@ -20,8 +21,7 @@ import { OtrosServicios, ServiciosAdicionales } from "./Servicios";
 import { SomosFlit } from "./SomosFlit";
 import { useOrganismos, useTiposTramite } from "./useCatalogos";
 
-/** Ruta del wizard de un tipo de trámite (la página es del Feature F). */
-export const rutaDelTramite = (tipoCodigo: string) => `/tramite/${encodeURIComponent(tipoCodigo)}`;
+export { rutaDelTramite };
 
 /** Landing del portal (diseño de referencia) conectada a los catálogos reales del BFF. */
 export function Landing({ cliente = portal }: { cliente?: ClientePortal }) {

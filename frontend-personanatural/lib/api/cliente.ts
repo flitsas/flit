@@ -132,11 +132,123 @@ export interface SesionTramite {
   definicionVersion?: number;
 }
 
+/** Estado de la solicitud sin ningún dato personal (GET /solicitudes/{id}/estado): lo único que se sondea tras radicar. */
+export interface EstadoSolicitud {
+  solicitudId: string;
+  codigoPublico: string;
+  estado: string;
+  tipoTramiteCodigo: string;
+  actualizadoEn: string;
+}
+
+/** Algo que falta: código estable, a qué se refiere (clave de campo, rol o documento) y en qué paso de la definición se corrige. */
+export interface Pendiente {
+  codigo: string;
+  referencia: string | null;
+  paso: string | null;
+}
+
+/** Avance de un paso de la definición, calculado por el back con la definición congelada de la solicitud. */
+export interface PasoEstado {
+  clave: string;
+  titulo: string;
+  completo: boolean;
+  pendientes: Pendiente[];
+}
+
+export interface Adjunto {
+  id: string;
+  tipo: string;
+  nombreArchivo: string;
+  mimeType: string;
+  tamanoBytes: number;
+  sha256: string;
+  creadoEn: string;
+}
+
+export interface ActorEstado {
+  rol: string;
+  ordinal: number;
+  validacionEstado: string;
+  tipoDocumento: string | null;
+  numeroDocumento: string | null;
+  nombre: string | null;
+  correo: string | null;
+  celular: string | null;
+  direccion: string | null;
+}
+
+/** Qué cambió en la definición del tipo mientras el borrador estaba guardado y qué se hizo con los datos. */
+export interface DefinicionCambio {
+  versionAnterior: number;
+  versionNueva: number;
+  camposDescartados: string[];
+  camposNuevos: string[];
+}
+
+/** Resultado de un requisito del diagnóstico: `estado` es cumple, falta o no_aplica. */
+export interface Requisito {
+  codigo: string;
+  descripcion: string;
+  estado: string;
+}
+
+export interface Diagnostico {
+  puedeContinuar: boolean;
+  requisitos: Requisito[];
+}
+
+/** Lo que el back guarda del diagnóstico en el borrador, con la fecha de la consulta (ISO 8601). */
+export interface DiagnosticoGuardado extends Diagnostico {
+  fecha: string;
+}
+
+export interface DatosSolicitud {
+  comercial?: { valor: number | null } | null;
+  prenda?: { tiene: boolean; acreedor: string | null; nitAcreedor: string | null } | null;
+  requisitos?: { transformaciones: string[]; observaciones: string | null } | null;
+  diagnostico?: DiagnosticoGuardado | null;
+}
+
+/**
+ * El borrador completo (GET /solicitudes/{id} y respuesta de cada escritura). `version` es la que hay que devolver al
+ * guardar: si ya cambió, el back responde 409 `conflicto_version`.
+ */
 export interface Solicitud {
   solicitudId: string;
   codigoPublico: string;
   estado: string;
   tipoTramiteCodigo: string;
+  definicionVersion: number;
+  definicionHuella: string;
+  version: number;
+  organismoId: string;
+  organismoNombre: string;
+  placa: string | null;
+  vin: string | null;
+  fieldValues: Record<string, string>;
+  datos: DatosSolicitud;
+  actores: ActorEstado[];
+  adjuntos: Adjunto[];
+  pasos: PasoEstado[];
+  pendientes: Pendiente[];
+  completo: boolean;
+  definicionCambio: DefinicionCambio | null;
+}
+
+export interface ActorRequest {
+  rol: string;
+  ordinal?: number;
+  tipoDocumento: string;
+  numeroDocumento: string;
+  nombre: string;
+  correo: string;
+  celular?: string;
+  direccion?: string;
+}
+
+export interface DiagnosticoRequest {
+  propietario?: { tipoDocumento: string; numeroDocumento: string };
 }
 
 export interface ResultadoRadicar {
@@ -314,7 +426,22 @@ export function crearCliente({ base = BASE_BFF, fetchImpl }: OpcionesCliente = {
     },
     solicitudes: {
       obtener: (id: string, o?: OpcionesLlamada) => solicitar<Solicitud>("GET", `/solicitudes/${encodeURIComponent(id)}`, undefined, o),
-      estado: (id: string, o?: OpcionesLlamada) => solicitar<Solicitud>("GET", `/solicitudes/${encodeURIComponent(id)}/estado`, undefined, o),
+      estado: (id: string, o?: OpcionesLlamada) => solicitar<EstadoSolicitud>("GET", `/solicitudes/${encodeURIComponent(id)}/estado`, undefined, o),
+      /** Preflight de requisitos del tipo (POST /solicitudes/{id}/diagnostico): lo guarda en el borrador y devuelve los resultados. */
+      diagnosticar: (id: string, datos?: DiagnosticoRequest, o?: OpcionesLlamada) =>
+        solicitar<Diagnostico>("POST", `/solicitudes/${encodeURIComponent(id)}/diagnostico`, datos, o),
+      /** Escrituras por paso: cada una lleva la `version` leída y devuelve el borrador completo (409 `conflicto_version` si ya cambió). */
+      guardarActores: (id: string, datos: { version: number; actores: ActorRequest[] }, o?: OpcionesLlamada) =>
+        solicitar<Solicitud>("PATCH", `/solicitudes/${encodeURIComponent(id)}/actores`, datos, o),
+      guardarCampos: (id: string, datos: { version: number; valores: Record<string, string | number | boolean | null> }, o?: OpcionesLlamada) =>
+        solicitar<Solicitud>("PUT", `/solicitudes/${encodeURIComponent(id)}/campos`, datos, o),
+      guardarComercial: (
+        id: string,
+        datos: { version: number; valorComercial?: number; prenda?: { tienePrenda: boolean; acreedor?: string; nitAcreedor?: string } },
+        o?: OpcionesLlamada,
+      ) => solicitar<Solicitud>("PUT", `/solicitudes/${encodeURIComponent(id)}/comercial`, datos, o),
+      guardarRequisitos: (id: string, datos: { version: number; transformaciones?: string[]; observaciones?: string }, o?: OpcionesLlamada) =>
+        solicitar<Solicitud>("PUT", `/solicitudes/${encodeURIComponent(id)}/requisitos`, datos, o),
       radicar: (id: string, idempotencyKey: string, o?: OpcionesLlamada) =>
         solicitar<ResultadoRadicar>("POST", `/solicitudes/${encodeURIComponent(id)}/radicar`, undefined, { ...o, idempotencyKey }),
       cancelar: (id: string, o?: OpcionesLlamada) => solicitar<void>("DELETE", `/solicitudes/${encodeURIComponent(id)}`, undefined, o),

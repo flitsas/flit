@@ -1,12 +1,12 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { TOKEN_MODO_DESARROLLO } from "@/components/Captcha";
 import { Landing } from "@/components/landing/Landing";
-import { TramitePreparando } from "@/components/tramite/TramitePreparando";
+
 import { crearCliente, type DefinicionTipo, type EstadoRadicado } from "@/lib/api/cliente";
 import { CONSENTIMIENTO_VERSION } from "@/lib/consentimiento";
 import { datosVehiculo, modoVehiculo, vehiculoValido } from "@/lib/landing/vehiculo";
-import { fijarContexto, obtenerContexto } from "@/lib/tramite/contexto";
+import { obtenerContexto } from "@/lib/tramite/contexto";
 import { routerPush } from "./router";
 import { json, ORGANISMOS, renderConQuery, TIPOS } from "./utilidades";
 
@@ -407,32 +407,6 @@ describe("costura con «Consultar mi trámite» (subsanación)", () => {
 
     expect(routerPush).toHaveBeenCalledWith("/tramite/TIPO_C");
     expect(obtenerContexto()).toMatchObject({ intencion: "subsanar", tipoCodigo: "TIPO_C", radicado: "PN-2026-0007", cedula: "1020456789" });
-  });
-});
-
-describe("ruta del wizard (marcador)", () => {
-  it("muestra «Estamos preparando tu trámite» con el radicado a la vista", () => {
-    fijarContexto({ intencion: "iniciar", tipoCodigo: "TIPO_A", radicado: "PN-2026-0042" });
-    render(<TramitePreparando />);
-
-    expect(screen.getByRole("heading", { level: 1, name: "Estamos preparando tu trámite" })).toBeInTheDocument();
-    expect(screen.getByText("PN-2026-0042")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Volver al inicio" })).toHaveAttribute("href", "/");
-  });
-
-  it("si se recargó la página (sin contexto) lo explica y no inventa un radicado", () => {
-    render(<TramitePreparando />);
-
-    expect(screen.getByRole("heading", { level: 1, name: "Estamos preparando tu trámite" })).toBeInTheDocument();
-    expect(screen.getByText(/Si recargaste la página/)).toBeInTheDocument();
-    expect(screen.queryByTestId("radicado")).not.toBeInTheDocument();
-  });
-
-  it("en modo subsanar cambia el título", () => {
-    fijarContexto({ intencion: "subsanar", tipoCodigo: "TIPO_A", radicado: "PN-1" });
-    render(<TramitePreparando />);
-
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("la corrección de tu trámite");
   });
 });
 
