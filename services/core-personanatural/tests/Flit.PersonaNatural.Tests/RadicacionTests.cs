@@ -172,6 +172,19 @@ public sealed class RadicacionTests : IAsyncLifetime
         var jsonEstado = (await PortalHost.JsonAsync(estado)).RootElement;
         jsonEstado.GetProperty("estado").GetString().Should().Be("en_cola");
         jsonEstado.GetProperty("codigoPublico").GetString().Should().StartWith("PN-");
+        jsonEstado.GetProperty("numeroReferencia").ValueKind.Should().Be(JsonValueKind.Null, "FLIT 2 aún no creó el trámite");
+        jsonEstado.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("solicitudId", "codigoPublico", "estado", "tipoTramiteCodigo", "actualizadoEn", "numeroReferencia");
+
+        await using (var db = _host.NuevaDb())
+        {
+            var fila = await db.Set<SolicitudTramite>().SingleAsync(TestContext.Current.CancellationToken);
+            fila.ReferenceNumber = "REF-0001";
+            fila.ProcedureInstanceId = Guid.CreateVersion7();
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+        var despues = (await PortalHost.JsonAsync(await _host.EnviarAsync(HttpMethod.Get, $"{Base}/solicitudes/{id}/estado", token: token))).RootElement;
+        despues.GetProperty("numeroReferencia").GetString().Should().Be("REF-0001");
+        despues.EnumerateObject().Select(p => p.Name).Should().NotContain("procedureInstanceId");
         detalle.StatusCode.Should().Be(HttpStatusCode.OK);
         var texto = await detalle.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         texto.Should().NotContain(Vendedor).And.NotContain(Comprador).And.NotContain("secreto").And.NotContain("Persona de Prueba").And.NotContain("compraventa.pdf").And.NotContain("pago.png");

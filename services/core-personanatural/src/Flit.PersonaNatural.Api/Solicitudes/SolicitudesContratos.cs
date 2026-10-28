@@ -107,5 +107,8 @@ public sealed record DatosSolicitud(ComercialDatos? Comercial = null, PrendaDato
     public string Serializar() => JsonSerializer.Serialize(this, Opciones);
 }
 
-/// <summary>Estado de la solicitud sin ningún dato personal (HU #14049): lo único que la sesión de solo estado puede sondear tras radicar.</summary>
-public sealed record EstadoSolicitudDto(Guid SolicitudId, string CodigoPublico, string Estado, string TipoTramiteCodigo, DateTimeOffset ActualizadoEn);
+/// <summary>
+/// Estado de la solicitud sin ningún dato personal (HU #14049): lo único que la sesión de solo estado puede sondear tras radicar.
+/// <c>NumeroReferencia</c>: referencia del trámite en FLIT 2; null mientras core-api no lo haya creado. No se expone el id interno.
+/// </summary>
+public sealed record EstadoSolicitudDto(Guid SolicitudId, string CodigoPublico, string Estado, string TipoTramiteCodigo, DateTimeOffset ActualizadoEn, string? NumeroReferencia);

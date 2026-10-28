@@ -174,7 +174,7 @@ public sealed partial class SolicitudesService(
     /// <summary>Estado de la solicitud sin ningún dato personal: lo que sondea el front tras radicar (HU #14049).</summary>
     public async Task<EstadoSolicitudDto> ObtenerEstadoAsync(Guid id, CancellationToken ct) =>
         await db.Set<SolicitudTramite>().AsNoTracking().Where(s => s.Id == id)
-            .Select(s => new EstadoSolicitudDto(s.Id, s.CodigoPublico, s.Estado, s.TipoTramiteCodigo, s.UpdatedAt))
+            .Select(s => new EstadoSolicitudDto(s.Id, s.CodigoPublico, s.Estado, s.TipoTramiteCodigo, s.UpdatedAt, s.ReferenceNumber))
             .FirstOrDefaultAsync(ct).ConfigureAwait(false) ?? throw NoEncontrada();
 
     private async Task<DefinicionCambioDto?> ReconciliarAsync(SolicitudTramite s, CancellationToken ct)
