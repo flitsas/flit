@@ -108,6 +108,7 @@ describe("catálogo de Trámites", () => {
       "Mensajes muertos",
       "Descarga masiva",
       "Banners",
+      "Persona Natural",
     ]);
   });
 
