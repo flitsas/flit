@@ -393,6 +393,163 @@ paths:
               schema:
                 $ref: "#/components/schemas/ResendCooldownErrorResponse"
 
+  /api/v1/admin/companies/{companyId}/external-integrations:
+    get:
+      tags: [Admin · Integraciones externas de la compañía]
+      operationId: adminExternalIntegrationList
+      summary: Integraciones externas de la compañía (HU 14067)
+      description: >
+        Lista las integraciones (activas o no, no dadas de baja) ligadas a la compañía, las más recientes primero.
+        Solo SuperAdmin (403 al resto). Ninguna fila lleva secreto ni hashes.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: companyId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Integraciones de la compañía.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ExternalIntegration' }
+        '401': { description: Sin token. }
+        '403': { description: El usuario no es SuperAdmin. }
+        '404': { description: La compañía no existe (`error=company_not_found`). }
+    post:
+      tags: [Admin · Integraciones externas de la compañía]
+      operationId: adminExternalIntegrationCreate
+      summary: Alta de una integración externa ligada a la compañía (HU 14067)
+      description: >
+        Crea una integración de tipo `persona_natural` con `clientId` generado (`pn-` + 16 hex) y secreto de
+        un solo uso (`clientSecret`, con `Cache-Control: no-store`). El alcance lo fija el tipo: solo
+        `platform.tramites.persona_natural` (la fachada del portal), nunca los permisos de lectura externa.
+        Solo una integración ACTIVA por tipo y compañía: la segunda responde 409 `integracion_ya_activa`.
+        Solo SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: companyId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tipo]
+              properties:
+                tipo: { type: string, enum: [persona_natural] }
+                displayName: { type: string, maxLength: 120, description: "Opcional; por defecto «Portal Persona Natural»." }
+                purpose: { type: string, maxLength: 300, description: "Opcional; finalidad del tratamiento de datos (Ley 1581)." }
+      responses:
+        '201':
+          description: Integración creada; el secreto se muestra una sola vez.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExternalIntegrationSecret' }
+        '400': { description: "Tipo, nombre o finalidad inválidos (`invalid_integration_type`, `invalid_display_name`, `invalid_purpose`)." }
+        '401': { description: Sin token. }
+        '403': { description: El usuario no es SuperAdmin. }
+        '404': { description: La compañía no existe (`company_not_found`). }
+        '409': { description: Ya hay una integración activa de ese tipo en la compañía (`integracion_ya_activa`). }
+  /api/v1/admin/companies/{companyId}/external-integrations/{id}/rotate-secret:
+    post:
+      tags: [Admin · Integraciones externas de la compañía]
+      operationId: adminExternalIntegrationRotateSecret
+      summary: Rota el secreto de la integración (HU 14067)
+      description: >
+        Genera un secreto nuevo (se devuelve una sola vez). Por defecto el anterior sigue valiendo 24 horas;
+        con `revocarAnterior=true` se anula al instante. 409 si la integración está desactivada
+        (`integracion_inactiva`) o bloqueada (`integracion_bloqueada`). Solo SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: companyId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                revocarAnterior: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Secreto nuevo.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExternalIntegrationSecret' }
+        '401': { description: Sin token. }
+        '403': { description: El usuario no es SuperAdmin. }
+        '404': { description: La integración no existe en la compañía (`integration_not_found`). }
+        '409': { description: Integración desactivada o bloqueada. }
+  /api/v1/admin/companies/{companyId}/external-integrations/{id}/block:
+    post:
+      tags: [Admin · Integraciones externas de la compañía]
+      operationId: adminExternalIntegrationBlock
+      summary: Bloquea la integración (HU 14067)
+      description: >
+        Bloqueo indefinido: no emite pases hasta `unblock` y sigue ocupando el cupo de una activa por tipo.
+        El cambio queda en la auditoría con el autor. Solo SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: companyId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Integración bloqueada (`lockedUntil` en el año 9999).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExternalIntegration' }
+        '401': { description: Sin token. }
+        '403': { description: El usuario no es SuperAdmin. }
+        '404': { description: La integración no existe en la compañía. }
+        '409': { description: La integración está desactivada (`integracion_inactiva`). }
+  /api/v1/admin/companies/{companyId}/external-integrations/{id}/unblock:
+    post:
+      tags: [Admin · Integraciones externas de la compañía]
+      operationId: adminExternalIntegrationUnblock
+      summary: Quita el bloqueo de la integración (HU 14067)
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: companyId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Integración sin bloqueo.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExternalIntegration' }
+        '401': { description: Sin token. }
+        '403': { description: El usuario no es SuperAdmin. }
+        '404': { description: La integración no existe en la compañía. }
+        '409': { description: La integración está desactivada (`integracion_inactiva`). }
+  /api/v1/admin/companies/{companyId}/external-integrations/{id}/deactivate:
+    post:
+      tags: [Admin · Integraciones externas de la compañía]
+      operationId: adminExternalIntegrationDeactivate
+      summary: Desactiva la integración (HU 14067)
+      description: >
+        `isActive=false`: deja de emitir pases y libera el cupo para dar de alta otra integración del mismo tipo.
+        No se reactiva (se crea otra). Idempotente. Queda auditado con el autor. Solo SuperAdmin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: companyId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Integración desactivada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExternalIntegration' }
+        '401': { description: Sin token. }
+        '403': { description: El usuario no es SuperAdmin. }
+        '404': { description: La integración no existe en la compañía. }
+
   /api/v1/admin/companies/index:
     get:
       tags: [Admin · Compañías]
@@ -13396,6 +13553,39 @@ components:
       description: Identificador del tenant (compañía) dueño del trámite.
 
   schemas:
+    # ── Admin · Integraciones externas por compañía (HU #14067, Épica #14021, ADR-0075) ────
+    ExternalIntegration:
+      type: object
+      description: Integración ligada a una compañía. Nunca incluye el secreto ni sus hashes.
+      required: [id, clientId, displayName, purpose, scopes, isActive, mustRotate, createdAt, tipo, companyId]
+      properties:
+        id: { type: string, format: uuid }
+        clientId: { type: string, example: pn-0123456789abcdef }
+        displayName: { type: string }
+        purpose: { type: string }
+        scopes:
+          type: array
+          items: { type: string }
+          description: Fijo por tipo; para `persona_natural` solo `platform.tramites.persona_natural`.
+        isActive: { type: boolean }
+        mustRotate: { type: boolean }
+        lockedUntil:
+          type: string
+          format: date-time
+          nullable: true
+          description: Con año 9999, bloqueo indefinido; si no, bloqueo temporal por intentos fallidos.
+        lastTokenAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        tipo: { type: string, enum: [persona_natural] }
+        companyId: { type: string, format: uuid }
+    ExternalIntegrationSecret:
+      type: object
+      required: [client, clientSecret]
+      properties:
+        client: { $ref: '#/components/schemas/ExternalIntegration' }
+        clientSecret:
+          type: string
+          description: Secreto en claro, 43 caracteres base64url. Se muestra UNA sola vez; no se guarda ni se vuelve a devolver.
     # ── Admin · Identidad de marca (HU #12412, Feature #12366, ADR-0060 D1) ────
     BrandColors:
       type: object

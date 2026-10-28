@@ -130,6 +130,12 @@ public static class DependencyInjection
         services.AddScoped<Integrations.Clients.RegenerateExternalClientSecretHandler>();
         services.AddScoped<Integrations.Clients.UnlockExternalClientHandler>();
 
+        // HU #14067 (Épica #14021) — integraciones externas ligadas a una compañía.
+        services.AddScoped<Integrations.Clients.ListExternalIntegrationsHandler>();
+        services.AddScoped<Integrations.Clients.CreateExternalIntegrationHandler>();
+        services.AddScoped<Integrations.Clients.RotateExternalIntegrationSecretHandler>();
+        services.AddScoped<Integrations.Clients.ChangeExternalIntegrationStateHandler>();
+
         // Alta de compañías (botón "Crear compañía" en la consola, #10118).
         services.AddScoped<CreateCompanyHandler>();
 
