@@ -1,4 +1,5 @@
 import type { RegistroRenderers } from "@/components/tramite/ContextoWizard";
+import { ConsultaVehiculo } from "./ConsultaVehiculo";
 import { SeccionPendiente } from "./SeccionPendiente";
 
 /**
@@ -6,10 +7,10 @@ import { SeccionPendiente } from "./SeccionPendiente";
  * el front decide qué sabe pintar: un tipo cuya definición traiga un `section_type` que no esté aquí se muestra como no
  * disponible entero (por ejemplo `signature_fur`, que no tiene diseño todavía).
  *
- * Todas apuntan al marcador accesible hasta que lleguen sus renderers (F2: consulta de vehículo; F3 a F6, K5 y K6).
+ * Construido: `vehicle_query` (HU F2). El resto apunta al marcador accesible hasta que lleguen sus HUs (F3 a F6, K5 y K6).
  */
 export const REGISTRO_RENDERERS: RegistroRenderers = {
-  vehicle_query: SeccionPendiente,
+  vehicle_query: ConsultaVehiculo,
   plate_request: SeccionPendiente,
   actor_form: SeccionPendiente,
   biometric: SeccionPendiente,
