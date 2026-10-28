@@ -221,7 +221,7 @@ describe("HU #13655 — las pestañas del organismo siguen el permiso OT de cada
 
   it("dock: el ot_admin ve todas las pestañas sin permisos OT en el token", () => {
     const labels = otDockLabels(true, []);
-    for (const name of [COPY.B21Tramites, "Documentos", COPY.B21Usuarios, COPY.B21Reportes, "Mandatos", "Validar impronta"]) {
+    for (const name of [COPY.B21Tramites, "Documentos", COPY.B21Usuarios, COPY.B21Reportes, "Mandatos", "Validar impronta", "Webhooks"]) {
       expect(labels).toContain(name);
     }
   });
@@ -229,10 +229,11 @@ describe("HU #13655 — las pestañas del organismo siguen el permiso OT de cada
   it("dock: el Gestor OT ve solo las pestañas de sus permisos", () => {
     const labels = otDockLabels(false, ["ot.tramites.manage", "ot.reportes.manage"]);
     expect(labels).toEqual(expect.arrayContaining([COPY.B21Tramites, COPY.B21Reportes]));
-    for (const name of ["Documentos", COPY.B21Usuarios, "Mandatos", "Validar impronta"]) expect(labels).not.toContain(name);
+    for (const name of ["Documentos", COPY.B21Usuarios, "Mandatos", "Validar impronta", "Webhooks"]) expect(labels).not.toContain(name);
     expect(otDockLabels(false, ["ot.mandatos.manage", "ot.improntas.manage", "ot.usuarios.manage"])).toEqual(
       expect.arrayContaining(["Mandatos", "Validar impronta", COPY.B21Usuarios]),
     );
+    expect(otDockLabels(false, ["ot.integracion.manage"])).toContain("Webhooks");
   });
 
   it("otHubNavGating: sin requisito para el ot_admin; el permiso de la pestaña para los demás", () => {

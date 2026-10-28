@@ -19,7 +19,7 @@ import {
   type OverrideEffect,
   type UserPermissionOverride,
 } from "@/lib/api/permission-overrides";
-import { buildModuleViews, outOfCapOverrideIds, withOverrideActions, type ActionView, type ModuleView, type PermissionOrigin } from "@/lib/permissions/modulePermissions";
+import { buildModuleViews, outOfCapOverrideIds, withGrantableActions, withOverrideActions, type ActionView, type ModuleView, type PermissionOrigin } from "@/lib/permissions/modulePermissions";
 import { formatFechaHora } from "@/lib/format/date";
 import { findFamilyPair, isServiceTypeModule, sortServiceTypeModules } from "@/lib/permissions/familyPairs";
 import { RoleEditorSections } from "./RoleEditorSections";
@@ -227,7 +227,7 @@ export function ModulePermissionsSection({
       ]);
       return {
         status: "ready",
-        modules: withOverrideActions(modules, overrides),
+        modules: withGrantableActions(withOverrideActions(modules, overrides), grantable),
         grantable,
         roleIds: roleSet,
         overrides,

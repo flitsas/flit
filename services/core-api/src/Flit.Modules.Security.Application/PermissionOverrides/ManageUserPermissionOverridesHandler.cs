@@ -274,8 +274,8 @@ public sealed class ManageUserPermissionOverridesHandler(
     }
 
     /// <summary>
-    /// Cuántos permisos individuales purgaría asignarle <paramref name="roleId"/>: los del producto del rol nuevo y los de cada rol
-    /// activo que el reemplazo cierra (misma regla que <c>AssignRoleHandler</c>). Para el aviso previo de FD2-5.
+    /// Cuántos permisos individuales purgaría asignarle <paramref name="roleId"/>: solo los del producto de ese rol
+    /// (misma regla que <c>AssignRoleHandler</c>, Bug #14010 H-10). Los de otros productos no entran en el aviso.
     /// </summary>
     public async Task<int> CountForRoleChangeAsync(
         Guid tenantId, OverrideActor actor, Guid targetUserId, Guid roleId, IUserRoleAssignmentRepository roles, CancellationToken ct)
@@ -283,15 +283,9 @@ public sealed class ManageUserPermissionOverridesHandler(
         ArgumentNullException.ThrowIfNull(actor);
         ArgumentNullException.ThrowIfNull(roles);
         await RunRulesAsync(tenantId, actor, targetUserId, PermissionOverrideActions.Read, null, null, null, ct).ConfigureAwait(false);
-        var products = new HashSet<string>(StringComparer.Ordinal)
-        {
-            RoleProductCode.Normalize(await roles.GetRoleProductCodeAsync(roleId, ct).ConfigureAwait(false)),
-        };
-        foreach (var assignment in await roles.GetActiveAssignmentsAsync(targetUserId, tenantId, ct).ConfigureAwait(false))
-            products.Add(RoleProductCode.Normalize(await roles.GetRoleProductCodeAsync(assignment.RoleId, ct).ConfigureAwait(false)));
-
+        var affected = RoleProductCode.Normalize(await roles.GetRoleProductCodeAsync(roleId, ct).ConfigureAwait(false));
         var active = await repository.ListActiveAsync(tenantId, targetUserId, ct).ConfigureAwait(false);
-        return active.Count(o => products.Contains(o.ProductCode));
+        return active.Count(o => o.ProductCode == affected);
     }
 
     /// <summary>Catálogo otorgable (AC5): Super Admin = todo lo <c>enforced = 'true'</c>; el resto, solo su tope.</summary>
