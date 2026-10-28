@@ -74,6 +74,7 @@ export function PreguntaFormModal({ faq, onClose, onSave }: PreguntaFormModalPro
             aria-invalid={Boolean(errores.pregunta)}
             className={`${PN_INPUT_CLS} ${errores.pregunta ? PN_INPUT_ERROR_CLS : ""}`}
           />
+          <span className={PN_HINT_CLS}>{pregunta.trim().length} de {PREGUNTA_MAX} caracteres.</span>
           {errores.pregunta && <span role="alert" className={PN_FIELD_ERROR_CLS}>{errores.pregunta}</span>}
         </label>
         <label className={PN_LABEL_CLS}>
@@ -89,6 +90,13 @@ export function PreguntaFormModal({ faq, onClose, onSave }: PreguntaFormModalPro
           <span className={PN_HINT_CLS}>{respuesta.trim().length} de {RESPUESTA_MAX} caracteres.</span>
           {errores.respuesta && <span role="alert" className={PN_FIELD_ERROR_CLS}>{errores.respuesta}</span>}
         </label>
+        {(pregunta.trim() || respuesta.trim()) && (
+          <div className="rounded-xl border border-[#DFE5ED] bg-[#F4F8FF] p-3 dark:border-white/10 dark:bg-white/5" aria-label="Así se verá en el portal" role="group">
+            <p className="mb-1 text-xs font-semibold text-[#59677D] dark:text-white/70">Así se verá en el portal</p>
+            <p className="text-sm font-semibold text-flit-primary dark:text-white">{pregunta.trim() || "Tu pregunta"}</p>
+            <p className="mt-1 whitespace-pre-line text-sm text-[#59677D] dark:text-white/78">{respuesta.trim() || "Tu respuesta"}</p>
+          </div>
+        )}
         <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-flit-primary dark:text-white">
           <input
             type="checkbox"

@@ -4,7 +4,7 @@
 // subir y bajar), orden editable, filtros por columna y los cuatro estados. Cada cambio avisa a la pestaña para
 // refrescar el estado «borrador / publicado».
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, HelpCircle, Pencil, Power } from "lucide-react";
+import { ArrowDown, ArrowUp, EyeOff, HelpCircle, Pencil } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { CreateButton } from "@/components/atom/CreateButton";
@@ -24,7 +24,8 @@ import {
   ordenarFaqsPn,
   type FaqPn,
 } from "@/lib/api/admin-pn-contenido";
-import { PnSeccionHeader } from "../pn-componentes";
+import { SwitchToggle } from "@/components/ui/SwitchToggle";
+import { PnConfirmDialog, PnSeccionHeader } from "../pn-componentes";
 import { pnErrorMessage } from "../pnErrors";
 import { PreguntaFormModal } from "./PreguntaFormModal";
 
@@ -50,6 +51,10 @@ export function moverId(ids: readonly string[], indice: number, delta: -1 | 1): 
   return copia;
 }
 
+function plural(n: number, uno: string, varios: string): string {
+  return `${n} ${n === 1 ? uno : varios}`;
+}
+
 function resumen(texto: string, max = 90): string {
   return texto.length > max ? `${texto.slice(0, max).trimEnd()}…` : texto;
 }
@@ -60,6 +65,7 @@ export function PreguntasSection({ onCambio }: { onCambio: () => void }) {
   const [status, setStatus] = useState<UiStatus>("loading");
   const [form, setForm] = useState<{ faq?: FaqPn } | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  const [ocultando, setOcultando] = useState<FaqPn | null>(null);
   const pg = usePaginacion("pn.contenido.preguntas");
   const { setPage } = pg;
   const volverAPrimeraPagina = useCallback(() => setPage(1), [setPage]);
@@ -108,7 +114,7 @@ export function PreguntasSection({ onCambio }: { onCambio: () => void }) {
     }
   }
 
-  async function alternar(faq: FaqPn) {
+  async function alternar(faq: FaqPn, propagar = false) {
     setOcupado(true);
     try {
       const actualizada = await establecerFaqActivaPn(faq.id, !faq.activa);
@@ -116,6 +122,7 @@ export function PreguntasSection({ onCambio }: { onCambio: () => void }) {
       show(`Pregunta ${actualizada.activa ? "visible" : "oculta"}. El ciudadano verá el cambio cuando publiques.`, "success");
       onCambio();
     } catch (err) {
+      if (propagar) throw err;
       show(pnErrorMessage(err), "error");
     } finally {
       setOcupado(false);
@@ -125,13 +132,6 @@ export function PreguntasSection({ onCambio }: { onCambio: () => void }) {
   function actionsFor(faq: FaqPn, indice: number): RowAction[] {
     return [
       { icon: Pencil, label: `Editar la pregunta «${resumen(faq.pregunta, 40)}»`, tone: "primary", onClick: () => setForm({ faq }) },
-      {
-        icon: Power,
-        label: `${faq.activa ? "Ocultar" : "Mostrar"} la pregunta «${resumen(faq.pregunta, 40)}»`,
-        tone: faq.activa ? "danger" : "primary",
-        disabled: ocupado,
-        onClick: () => void alternar(faq),
-      },
       { icon: ArrowUp, label: `Subir la pregunta «${resumen(faq.pregunta, 40)}»`, disabled: ocupado || indice === 0, disabledTitle: "Ya es la primera", onClick: () => void mover(faq, -1) },
       {
         icon: ArrowDown,
@@ -163,7 +163,17 @@ export function PreguntasSection({ onCambio }: { onCambio: () => void }) {
           Estado
         </EncabezadoFiltrable>
       ),
-      render: (f) => <StatusBadge label={f.activa ? "Visible" : "Oculta"} tone={f.activa ? "success" : "neutral"} />,
+      render: (f) => (
+        <div className="flex items-start gap-2">
+          <SwitchToggle
+            checked={f.activa}
+            disabled={ocupado}
+            label={`${f.activa ? "Ocultar" : "Mostrar"} la pregunta «${resumen(f.pregunta, 40)}» en el portal`}
+            onChange={(next) => (next ? void alternar(f) : setOcultando(f))}
+          />
+          <StatusBadge label={f.activa ? "Visible" : "Oculta"} tone={f.activa ? "success" : "neutral"} />
+        </div>
+      ),
     },
     { key: "acciones", header: "Acciones", align: "right", render: (f) => <RowActions actions={actionsFor(f, faqs.indexOf(f))} /> },
   ];
@@ -174,8 +184,10 @@ export function PreguntasSection({ onCambio }: { onCambio: () => void }) {
     <section aria-labelledby="pn-faqs-titulo" className="flex flex-col gap-3">
       <PnSeccionHeader
         id="pn-faqs-titulo"
+        tarjeta
+        contador={status === "ready" || status === "empty" ? `${plural(faqs.length, "pregunta", "preguntas")} · ${plural(faqs.filter((f) => f.activa).length, "visible", "visibles")}` : undefined}
         titulo="Preguntas frecuentes"
-        descripcion="Las respuestas a las dudas más comunes. Se muestran en este orden; las ocultas no aparecen en el portal."
+        descripcion="Las respuestas a las dudas más comunes. Se muestran en este orden (usa las flechas para subir o bajar); las ocultas no aparecen en el portal."
         accion={<CreateButton label="Nueva pregunta" icon={HelpCircle} onClick={nueva} />}
       />
       {status === "loading" ? (
@@ -202,6 +214,25 @@ export function PreguntasSection({ onCambio }: { onCambio: () => void }) {
             }}
           />
         </UiStateBoundary>
+      )}
+
+      {ocultando && (
+        <PnConfirmDialog
+          title="Ocultar esta pregunta"
+          icon={EyeOff}
+          tone="danger"
+          confirmLabel="Ocultar"
+          onClose={() => setOcultando(null)}
+          onConfirm={async () => {
+            await alternar(ocultando, true);
+            setOcultando(null);
+          }}
+        >
+          <p>
+            «{resumen(ocultando.pregunta, 80)}» dejará de mostrarse en el portal cuando publiques los cambios. Puedes volver a
+            mostrarla cuando quieras.
+          </p>
+        </PnConfirmDialog>
       )}
 
       {form && (

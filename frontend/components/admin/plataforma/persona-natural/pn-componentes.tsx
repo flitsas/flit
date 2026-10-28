@@ -82,6 +82,8 @@ export function PnSeccionHeader({
   descripcion,
   paso,
   accion,
+  contador,
+  tarjeta = false,
 }: {
   id: string;
   titulo: string;
@@ -89,9 +91,20 @@ export function PnSeccionHeader({
   /** Número del paso de la configuración al que pertenece (se ve como círculo numerado). */
   paso?: number;
   accion?: ReactNode;
+  /** Resumen corto junto al título, p. ej. «3 preguntas · 2 visibles». */
+  contador?: string;
+  /** Presenta el encabezado como tarjeta (secciones de contenido); la tabla va debajo, sin envolver. */
+  tarjeta?: boolean;
 }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3">
+    <div
+      className={
+        "flex flex-wrap items-start justify-between gap-3" +
+        (tarjeta
+          ? " rounded-[18px] border border-[#DFE5ED] bg-white p-4 shadow-[0_8px_24px_rgba(22,39,68,0.08)] dark:border-white/10 dark:bg-[#0B0F14]"
+          : "")
+      }
+    >
       <div className="flex items-start gap-3">
         {paso !== undefined && (
           <span
@@ -102,8 +115,13 @@ export function PnSeccionHeader({
           </span>
         )}
         <div className="flex max-w-3xl flex-col gap-0.5">
-          <h2 id={id} className="text-base font-bold text-flit-primary dark:text-white">
+          <h2 id={id} className="flex flex-wrap items-center gap-2 text-base font-bold text-flit-primary dark:text-white">
             {titulo}
+            {contador && (
+              <span className="rounded-full bg-[#EEF5FF] px-2.5 py-0.5 text-xs font-semibold text-[color:var(--flit-brand-ink)] dark:bg-white/10 dark:text-white">
+                {contador}
+              </span>
+            )}
           </h2>
           <p className="text-sm text-[#59677D] dark:text-white/78">{descripcion}</p>
         </div>

@@ -133,12 +133,19 @@ export function EnlacesSection({ onCambio }: { onCambio: () => void }) {
   const columns: DataTableColumn<EnlacePn>[] = [
     { key: "enlace", header: "Enlace", cellClassName: "font-semibold", render: (e) => ENLACE_LABEL[e.codigo] },
     {
+      key: "estado",
+      header: "Estado",
+      render: (e) => (
+        <StatusBadge label={e.url ? "Configurado" : "Falta configurar"} tone={e.url ? "success" : "warning"} />
+      ),
+    },
+    {
       key: "valor",
       header: "Dirección",
       cellClassName: "max-w-[420px] break-all text-xs",
       render: (e) => {
         const v = valorEnlace(e);
-        return v.vacio ? <StatusBadge label={v.texto} tone="neutral" /> : v.texto;
+        return v.vacio ? <span className="text-[#59677D] dark:text-white/70">{v.texto}</span> : v.texto;
       },
     },
     {
@@ -161,8 +168,10 @@ export function EnlacesSection({ onCambio }: { onCambio: () => void }) {
     <section aria-labelledby="pn-enlaces-titulo" className="flex flex-col gap-3">
       <PnSeccionHeader
         id="pn-enlaces-titulo"
-        titulo="Enlaces del portal"
-        descripcion="Política de datos, términos y condiciones, contacto de ventas y video. Sin documento oficial, el portal conserva su aviso actual."
+        tarjeta
+        contador={status === "ready" ? `${enlaces.filter((e) => e.url).length} de ${enlaces.length} configurados` : undefined}
+        titulo="Enlaces legales y de contacto"
+        descripcion="Política de datos, términos y condiciones, contacto de ventas y video. Las direcciones web deben empezar por http:// o https://. Sin documento oficial, el portal conserva su aviso actual."
       />
       {status === "loading" ? (
         <CarLoaderModal label="Cargando enlaces…" />

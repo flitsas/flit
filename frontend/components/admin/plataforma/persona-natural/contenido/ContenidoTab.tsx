@@ -10,7 +10,13 @@ import { Eye, History, Send } from "lucide-react";
 import { useToast } from "@/components/admin/Toast";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { StatusBadge } from "@/components/atom/StatusBadge";
-import { fetchBorradorPn, publicarContenidoPn, type BorradorContenidoPn } from "@/lib/api/admin-pn-contenido";
+import { formatFechaHora } from "@/lib/format/date";
+import {
+  fetchBorradorPn,
+  fetchVersionesPn,
+  publicarContenidoPn,
+  type BorradorContenidoPn,
+} from "@/lib/api/admin-pn-contenido";
 import { PnButton, PnConfirmDialog } from "../pn-componentes";
 import { BannersSection } from "./BannersSection";
 import { EnlacesSection } from "./EnlacesSection";
@@ -64,6 +70,7 @@ export function ContenidoTab() {
   const { show } = useToast();
   const [borrador, setBorrador] = useState<BorradorContenidoPn | null>(null);
   const [errorEstado, setErrorEstado] = useState(false);
+  const [ultimaPublicacion, setUltimaPublicacion] = useState<string | null>(null);
   const [vista, setVista] = useState<"previa" | "publicar" | "versiones" | null>(null);
 
   const refrescar = useCallback(async (signal?: AbortSignal) => {
@@ -72,6 +79,13 @@ export function ContenidoTab() {
       if (signal?.aborted) return;
       setBorrador(b);
       setErrorEstado(false);
+      // La fecha de la última publicación sale del historial; si no se puede leer, el panel sigue sin la fecha.
+      if (b.versionPublicada !== null) {
+        const versiones = await fetchVersionesPn(signal).catch(() => []);
+        if (!signal?.aborted) setUltimaPublicacion(versiones[0]?.publicadoEn ?? null);
+      } else {
+        setUltimaPublicacion(null);
+      }
     } catch {
       if (!signal?.aborted) setErrorEstado(true);
     }
@@ -117,13 +131,17 @@ export function ContenidoTab() {
                     tone={sinPublicar ? "warning" : "success"}
                   />
                 </div>
+                <p className="text-sm font-semibold text-flit-primary dark:text-white">Lo que ve hoy el ciudadano</p>
                 <span className="text-xs text-[#59677D] dark:text-white/70">
                   {borrador.versionPublicada === null
-                    ? "Todavía no has publicado nada: el portal muestra sus preguntas y banners de siempre."
-                    : sinPublicar
-                      ? "El portal sigue mostrando tu última publicación hasta que publiques estos cambios."
-                      : "El portal muestra tu última publicación."}
+                    ? "Todavía no has publicado nada: el portal muestra sus preguntas y banners de siempre (contenido por defecto)."
+                    : `Contenido publicado por ti${ultimaPublicacion ? ` el ${formatFechaHora(ultimaPublicacion)}` : ""}, que reemplaza el contenido por defecto del portal.`}
                 </span>
+                {sinPublicar && borrador.versionPublicada !== null && (
+                  <span className="text-xs text-[#59677D] dark:text-white/70">
+                    Tus cambios nuevos todavía no se ven: el portal sigue con esa publicación.
+                  </span>
+                )}
               </>
             ) : (
               <span className="text-xs text-[#59677D] dark:text-white/70">Consultando el estado de publicación…</span>

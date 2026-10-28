@@ -172,7 +172,7 @@ export function BannerFormModal({ banner, onClose, onSave }: BannerFormModalProp
             className={`${PN_INPUT_CLS} ${errores.textoAlternativo ? PN_INPUT_ERROR_CLS : ""}`}
           />
           <span id="pn-banner-alt-hint" className={PN_HINT_CLS}>
-            Cuenta en una frase qué muestra la imagen, para quienes no pueden verla (obligatorio).
+            Cuenta en una frase qué muestra la imagen, para personas con discapacidad visual que usan lector de pantalla (obligatorio).
           </span>
           {errores.textoAlternativo && <span role="alert" className={PN_FIELD_ERROR_CLS}>{errores.textoAlternativo}</span>}
         </label>

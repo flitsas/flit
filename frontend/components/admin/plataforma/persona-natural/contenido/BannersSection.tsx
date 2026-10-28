@@ -4,7 +4,7 @@
 // (editar, activar o desactivar, subir y bajar), orden editable y los cuatro estados. La imagen del borrador se
 // descarga con la sesión del administrador (el endpoint exige Authorization).
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ImageIcon, Pencil, Power } from "lucide-react";
+import { ArrowDown, ArrowUp, EyeOff, ImageIcon, Pencil } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { CreateButton } from "@/components/atom/CreateButton";
@@ -25,7 +25,8 @@ import {
   ordenarBannersPn,
   type BannerPn,
 } from "@/lib/api/admin-pn-contenido";
-import { PnSeccionHeader } from "../pn-componentes";
+import { SwitchToggle } from "@/components/ui/SwitchToggle";
+import { PnConfirmDialog, PnSeccionHeader } from "../pn-componentes";
 import { pnErrorMessage } from "../pnErrors";
 import { BannerFormModal } from "./BannerFormModal";
 import { BannerImagen } from "./BannerImagen";
@@ -44,6 +45,18 @@ const COLUMNAS_FILTRO: ColumnaFiltro[] = [
   },
 ];
 
+/** Vigente, Programado (aún no empieza), Vencido (ya terminó) u Oculto. */
+export function estadoBanner(b: BannerPn, ahora: Date = new Date()): { label: string; tone: "success" | "info" | "warning" | "neutral" } {
+  if (!b.activo) return { label: "Oculto", tone: "neutral" };
+  if (b.vigenteDesde && new Date(b.vigenteDesde) > ahora) return { label: "Programado", tone: "info" };
+  if (b.vigenteHasta && new Date(b.vigenteHasta) < ahora) return { label: "Vencido", tone: "warning" };
+  return { label: "Vigente", tone: "success" };
+}
+
+function plural(n: number, uno: string, varios: string): string {
+  return `${n} ${n === 1 ? uno : varios}`;
+}
+
 function vigencia(b: BannerPn): string {
   if (!b.vigenteDesde && !b.vigenteHasta) return "Siempre";
   return `${b.vigenteDesde ? formatFechaHora(b.vigenteDesde) : "Sin inicio"} → ${b.vigenteHasta ? formatFechaHora(b.vigenteHasta) : "Sin fin"}`;
@@ -55,6 +68,7 @@ export function BannersSection({ onCambio }: { onCambio: () => void }) {
   const [status, setStatus] = useState<UiStatus>("loading");
   const [form, setForm] = useState<{ banner?: BannerPn } | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  const [ocultando, setOcultando] = useState<BannerPn | null>(null);
   const pg = usePaginacion("pn.contenido.banners");
   const { setPage } = pg;
   const volverAPrimeraPagina = useCallback(() => setPage(1), [setPage]);
@@ -103,7 +117,7 @@ export function BannersSection({ onCambio }: { onCambio: () => void }) {
     }
   }
 
-  async function alternar(banner: BannerPn) {
+  async function alternar(banner: BannerPn, propagar = false) {
     setOcupado(true);
     try {
       const actualizado = await establecerBannerActivoPn(banner.id, !banner.activo);
@@ -111,6 +125,7 @@ export function BannersSection({ onCambio }: { onCambio: () => void }) {
       show(`Banner ${actualizado.activo ? "visible" : "oculto"}. El ciudadano verá el cambio cuando publiques.`, "success");
       onCambio();
     } catch (err) {
+      if (propagar) throw err;
       show(pnErrorMessage(err), "error");
     } finally {
       setOcupado(false);
@@ -121,7 +136,6 @@ export function BannersSection({ onCambio }: { onCambio: () => void }) {
     const n = `«${b.titulo}»`;
     return [
       { icon: Pencil, label: `Editar el banner ${n}`, tone: "primary", onClick: () => setForm({ banner: b }) },
-      { icon: Power, label: `${b.activo ? "Ocultar" : "Mostrar"} el banner ${n}`, tone: b.activo ? "danger" : "primary", disabled: ocupado, onClick: () => void alternar(b) },
       { icon: ArrowUp, label: `Subir el banner ${n}`, disabled: ocupado || indice === 0, disabledTitle: "Ya es el primero", onClick: () => void mover(b, -1) },
       { icon: ArrowDown, label: `Bajar el banner ${n}`, disabled: ocupado || indice === banners.length - 1, disabledTitle: "Ya es el último", onClick: () => void mover(b, 1) },
     ];
@@ -157,7 +171,20 @@ export function BannersSection({ onCambio }: { onCambio: () => void }) {
           Estado
         </EncabezadoFiltrable>
       ),
-      render: (b) => <StatusBadge label={b.activo ? "Visible" : "Oculto"} tone={b.activo ? "success" : "neutral"} />,
+      render: (b) => {
+        const e = estadoBanner(b);
+        return (
+          <div className="flex items-start gap-2">
+            <SwitchToggle
+              checked={b.activo}
+              disabled={ocupado}
+              label={`${b.activo ? "Ocultar" : "Mostrar"} el banner «${b.titulo}» en el portal`}
+              onChange={(next) => (next ? void alternar(b) : setOcultando(b))}
+            />
+            <StatusBadge label={e.label} tone={e.tone} />
+          </div>
+        );
+      },
     },
     { key: "acciones", header: "Acciones", align: "right", render: (b) => <RowActions actions={actionsFor(b, banners.indexOf(b))} /> },
   ];
@@ -168,8 +195,10 @@ export function BannersSection({ onCambio }: { onCambio: () => void }) {
     <section aria-labelledby="pn-banners-titulo" className="flex flex-col gap-3">
       <PnSeccionHeader
         id="pn-banners-titulo"
+        tarjeta
+        contador={status === "ready" || status === "empty" ? `${plural(banners.length, "banner", "banners")} · ${plural(banners.filter((b) => b.activo).length, "visible", "visibles")}` : undefined}
         titulo="Banners"
-        descripcion="Imágenes destacadas del portal, en este orden. Usa JPG, PNG o WEBP de hasta 2 MB. Los ocultos no aparecen."
+        descripcion="Imágenes destacadas del portal, en este orden (usa las flechas para subir o bajar). Usa JPG, PNG o WEBP de hasta 2 MB. Los ocultos o vencidos no aparecen."
         accion={<CreateButton label="Nuevo banner" icon={ImageIcon} onClick={nuevo} />}
       />
       {status === "loading" ? (
@@ -196,6 +225,25 @@ export function BannersSection({ onCambio }: { onCambio: () => void }) {
             }}
           />
         </UiStateBoundary>
+      )}
+
+      {ocultando && (
+        <PnConfirmDialog
+          title="Ocultar este banner"
+          icon={EyeOff}
+          tone="danger"
+          confirmLabel="Ocultar"
+          onClose={() => setOcultando(null)}
+          onConfirm={async () => {
+            await alternar(ocultando, true);
+            setOcultando(null);
+          }}
+        >
+          <p>
+            «{ocultando.titulo}» dejará de mostrarse en el portal cuando publiques los cambios. Puedes volver a mostrarlo
+            cuando quieras.
+          </p>
+        </PnConfirmDialog>
       )}
 
       {form && (

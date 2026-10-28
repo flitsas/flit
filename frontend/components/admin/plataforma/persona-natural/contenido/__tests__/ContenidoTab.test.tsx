@@ -8,6 +8,7 @@ import { ToastProvider } from "@/components/admin/Toast";
 import { ApiError } from "@/lib/api/types";
 import { ContenidoTab } from "../ContenidoTab";
 import { moverId } from "../PreguntasSection";
+import { estadoBanner } from "../BannersSection";
 import {
   actualizarFaqPn,
   crearBannerPn,
@@ -183,13 +184,16 @@ describe("ContenidoTab (#14076)", () => {
     expect(await screen.findByText("¿Cómo pago?")).toBeInTheDocument();
   });
 
-  it("AC1: editar y desactivar una pregunta llaman a la API y se reflejan en la fila", async () => {
+  it("AC1: ocultar una pregunta pide confirmación y se refleja en la fila; editar llama a la API", async () => {
     const ue = userEvent.setup();
     vi.mocked(establecerFaqActivaPn).mockResolvedValue(faq({ activa: false }));
     vi.mocked(actualizarFaqPn).mockResolvedValue(faq({ pregunta: "¿Cuánto vale?" }));
     renderTab();
     const tabla = await screen.findByRole("table", { name: /preguntas frecuentes del portal/i });
-    await ue.click(within(tabla).getByRole("button", { name: /ocultar la pregunta «¿cuánto cuesta el trámite\?»/i }));
+    await ue.click(within(tabla).getByRole("switch", { name: /ocultar la pregunta «¿cuánto cuesta el trámite\?»/i }));
+    const dlg = await screen.findByRole("dialog", { name: /ocultar esta pregunta/i });
+    expect(establecerFaqActivaPn).not.toHaveBeenCalled();
+    await ue.click(within(dlg).getByRole("button", { name: /^ocultar$/i }));
     await waitFor(() => expect(establecerFaqActivaPn).toHaveBeenCalledWith("f1", false));
     await waitFor(() => expect(within(tabla).getAllByText("Oculta")).toHaveLength(2));
 
@@ -249,12 +253,13 @@ describe("ContenidoTab (#14076)", () => {
     expect(await screen.findByText("Promo nueva")).toBeInTheDocument();
   });
 
-  it("AC2: desactivar un banner usa el PATCH dedicado", async () => {
+  it("AC2: ocultar un banner pide confirmación y usa el PATCH dedicado", async () => {
     const ue = userEvent.setup();
     vi.mocked(establecerBannerActivoPn).mockResolvedValue(banner({ activo: false }));
     renderTab();
     const tabla = await screen.findByRole("table", { name: /banners del portal/i });
-    await ue.click(within(tabla).getByRole("button", { name: /ocultar el banner «traspasos sin filas»/i }));
+    await ue.click(within(tabla).getByRole("switch", { name: /ocultar el banner «traspasos sin filas»/i }));
+    await ue.click(within(await screen.findByRole("dialog", { name: /ocultar este banner/i })).getByRole("button", { name: /^ocultar$/i }));
     await waitFor(() => expect(establecerBannerActivoPn).toHaveBeenCalledWith("b1", false));
   });
 
@@ -304,7 +309,9 @@ describe("ContenidoTab (#14076)", () => {
     const publicar = await screen.findByRole("button", { name: /^publicar cambios$/i });
     await waitFor(() => expect(publicar).toBeEnabled());
     expect(screen.getByText("Hay cambios sin publicar")).toBeInTheDocument();
-    expect(screen.getByText(/el portal sigue mostrando tu última publicación/i)).toBeInTheDocument();
+    expect(screen.getByText(/lo que ve hoy el ciudadano/i)).toBeInTheDocument();
+    expect(screen.getByText(/contenido publicado por ti el 15\/10\/2026 10:30, que reemplaza el contenido por defecto/i)).toBeInTheDocument();
+    expect(screen.getByText(/tus cambios nuevos todavía no se ven/i)).toBeInTheDocument();
     expect(screen.queryByText(/versión publicada/i)).not.toBeInTheDocument();
 
     vi.mocked(fetchBorradorPn).mockResolvedValue(borrador({ hayCambiosSinPublicar: false, versionPublicada: 3 }));
@@ -392,5 +399,42 @@ describe("ContenidoTab (#14076)", () => {
     expect(screen.getByRole("button", { name: /^publicar cambios$/i })).toBeDisabled();
     await ue.click(screen.getByRole("button", { name: "Reintentar" }));
     expect(await screen.findByText("Hay cambios sin publicar")).toBeInTheDocument();
+  });
+
+  it("las secciones son tarjetas con contador, y los enlaces dicen si están configurados", async () => {
+    renderTab();
+    await screen.findByRole("table", { name: /enlaces del portal/i });
+    expect(screen.getByText("2 preguntas · 1 visible")).toBeInTheDocument();
+    expect(screen.getByText("2 banners · 1 visible")).toBeInTheDocument();
+    expect(screen.getByText("1 de 4 configurados")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /enlaces legales y de contacto/i })).toBeInTheDocument();
+    const enlaces = screen.getByRole("table", { name: /enlaces del portal/i });
+    expect(within(enlaces).getAllByText("Falta configurar")).toHaveLength(3);
+    expect(within(enlaces).getByText("Configurado")).toBeInTheDocument();
+    // El botón de agregar está dentro de la tarjeta, visible, sin menú «Acciones».
+    expect(screen.getByRole("button", { name: /^nueva pregunta$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^acciones/i })).not.toBeInTheDocument();
+  });
+
+  it("el estado del banner distingue Vigente, Programado, Vencido y Oculto", () => {
+    const ahora = new Date("2026-10-28T12:00:00Z");
+    expect(estadoBanner(banner({}), ahora).label).toBe("Vigente");
+    expect(estadoBanner(banner({ vigenteDesde: "2026-11-01T00:00:00Z" }), ahora).label).toBe("Programado");
+    expect(estadoBanner(banner({ vigenteHasta: "2026-10-01T00:00:00Z" }), ahora).label).toBe("Vencido");
+    expect(estadoBanner(banner({ activo: false }), ahora).label).toBe("Oculto");
+  });
+
+  it("el formulario de pregunta cuenta los caracteres de la pregunta y muestra cómo se verá en el portal", async () => {
+    const ue = userEvent.setup();
+    renderTab();
+    await screen.findByRole("table", { name: /preguntas frecuentes del portal/i });
+    await ue.click(screen.getByRole("button", { name: /^nueva pregunta$/i }));
+    const dialog = await screen.findByRole("dialog", { name: /nueva pregunta frecuente/i });
+    await ue.type(within(dialog).getByLabelText(/^Pregunta/), "¿Dónde pago?");
+    expect(within(dialog).getByText("12 de 300 caracteres.")).toBeInTheDocument();
+    await ue.type(within(dialog).getByLabelText(/^Respuesta/), "En línea.");
+    const vista = within(dialog).getByRole("group", { name: /así se verá en el portal/i });
+    expect(within(vista).getByText("¿Dónde pago?")).toBeInTheDocument();
+    expect(within(vista).getByText("En línea.")).toBeInTheDocument();
   });
 });

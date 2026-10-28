@@ -33,7 +33,7 @@ type CampoNumerico = keyof typeof RANGOS_PARAMETROS;
 const CAMPOS_NUMERICOS: { campo: CampoNumerico; label: string; ayuda: string }[] = [
   {
     campo: "sesionVigenciaMinutos",
-    label: "Duración de la sesión (minutos)",
+    label: "Duración de la sesión",
     ayuda: "Cuánto tiempo puede una persona usar el portal antes de tener que ingresar de nuevo.",
   },
   {
