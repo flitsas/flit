@@ -133,11 +133,11 @@ describe("landing: tipos de trámite desde el BFF", () => {
     expect(screen.getByText("Villa Dos")).toBeInTheDocument();
   });
 
-  it("los tres controles que aún no tienen backend quedan deshabilitados y lo dicen", () => {
+  it("los controles que aún no están conectados quedan deshabilitados y lo dicen", () => {
     const { cliente } = fetchFalso(OK);
     renderConQuery(<Landing cliente={cliente} />);
 
-    expect(screen.getByRole("button", { name: "Consultar mi trámite (próximamente)" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Consultar mi trámite" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Cotizar mi trámite (próximamente)" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Iniciar trámite" })).toHaveAccessibleDescription("El inicio del trámite estará disponible próximamente.");
   });

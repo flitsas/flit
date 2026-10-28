@@ -23,7 +23,7 @@ function IconoAccion({ src }: { src: string }) {
  * de la pantalla (nunca en almacenamiento del navegador). Los modales de consultar, cotizar e iniciar llegan con las HU
  * E3 a E5: hasta entonces los tres controles están deshabilitados y lo dicen.
  */
-export function AccionesPrincipales({ tipos }: { tipos: Tipos }) {
+export function AccionesPrincipales({ tipos, onConsultar, onCotizar }: { tipos: Tipos; onConsultar?: () => void; onCotizar?: () => void }) {
   const idAviso = useId();
   const [cedula, setCedula] = useState("");
   const [placa, setPlaca] = useState("");
@@ -70,14 +70,23 @@ export function AccionesPrincipales({ tipos }: { tipos: Tipos }) {
         </form>
       </div>
       <div className="action-rows">
-        <ProximamenteAccion etiqueta="Consultar mi trámite" src={ASSETS.acciones.consultar} />
-        <ProximamenteAccion etiqueta="Cotizar mi trámite" src={ASSETS.acciones.cotizar} />
+        <AccionFila etiqueta="Consultar mi trámite" src={ASSETS.acciones.consultar} onClick={onConsultar} />
+        <AccionFila etiqueta="Cotizar mi trámite" src={ASSETS.acciones.cotizar} onClick={onCotizar} />
       </div>
     </section>
   );
 }
 
-function ProximamenteAccion({ etiqueta, src }: { etiqueta: string; src: string }) {
+/** Fila clicable del diseño. Sin acción conectada queda deshabilitada y lo dice. */
+function AccionFila({ etiqueta, src, onClick }: { etiqueta: string; src: string; onClick?: () => void }) {
+  if (onClick) {
+    return (
+      <button type="button" aria-label={etiqueta} aria-haspopup="dialog" onClick={onClick} className="dashboard-institutional-card action-row action-clickable">
+        <IconoAccion src={src} />
+        <span className="dashboard-title">{etiqueta}</span>
+      </button>
+    );
+  }
   return (
     <button type="button" disabled aria-label={`${etiqueta} (próximamente)`} className="dashboard-institutional-card action-row action-clickable disabled:cursor-not-allowed disabled:opacity-70">
       <IconoAccion src={src} />

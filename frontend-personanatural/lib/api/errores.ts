@@ -25,6 +25,15 @@ const MENSAJES_POR_CODIGO: Record<string, string> = {
   rate_limited: "Demasiados intentos. Vuelve a intentarlo en unos minutos.",
   cedula_rate_limited: "Alcanzaste el máximo de consultas por hora para este documento. Intenta más tarde.",
   consultas_no_disponibles: "Las consultas están pausadas por hoy. Intenta de nuevo mañana.",
+  tipo_no_habilitado: "Este trámite no está habilitado en el organismo elegido.",
+  tarifa_no_vigente: "Este trámite aún no tiene tarifa en el organismo elegido.",
+  tipo_no_disponible: "Este tipo de trámite ya no está disponible en el portal.",
+  organismo_no_habilitado: "El organismo de tránsito no está habilitado.",
+  consentimiento_requerido: "Acepta el tratamiento de tus datos personales para continuar.",
+  consentimiento_version_desconocida: "El texto de consentimiento cambió. Recarga la página y vuelve a aceptarlo.",
+  correo_rate_limited: "Ese correo ya recibió varias cotizaciones. Intenta más tarde.",
+  correo_invalido: "Escribe un correo válido.",
+  envio_fallido: "No pudimos enviar el correo. Intenta de nuevo.",
 };
 
 const MENSAJES_POR_ESTADO: Record<number, string> = {
