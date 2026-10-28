@@ -16,6 +16,7 @@ public static class ConfiguracionPnErrores
     public const string OrganismoNoExiste = "organismo_no_existe";
     public const string TipoNoExiste = "tipo_no_existe";
     public const string TipoNoElegible = "tipo_no_elegible";
+    public const string OrganismoNoOperable = "organismo_no_operable";
 }
 
 /// <summary>Rangos permitidos de los parámetros (los mismos CHECK del DDL 164) y validación de los textos de soporte.</summary>
@@ -131,18 +132,24 @@ public sealed class OrganismosPnHandler(IPersonaNaturalConfigRepository config, 
     public Task<IReadOnlyList<OrganismoPnView>> ListarAsync(bool soloHabilitados, CancellationToken ct = default) =>
         config.ListarOrganismosAsync(soloHabilitados, ct);
 
-    /// <returns><c>null</c> si el organismo no existe (o está inactivo); si no, el estado nuevo.</returns>
-    public async Task<bool?> EstablecerAsync(Guid organismoId, bool habilitado, Guid actor, CancellationToken ct = default)
+    /// <returns>Código de error (<see cref="ConfiguracionPnErrores"/>) o <c>null</c> si quedó aplicado. Habilitar exige que el
+    /// organismo esté operable en FLIT; apagarlo siempre se puede.</returns>
+    public async Task<string?> EstablecerAsync(Guid organismoId, bool habilitado, Guid actor, CancellationToken ct = default)
     {
+        if (habilitado && !await config.OrganismoEsOperableAsync(organismoId, ct).ConfigureAwait(false))
+            return await config.ExisteOrganismoAsync(organismoId, ct).ConfigureAwait(false)
+                ? ConfiguracionPnErrores.OrganismoNoOperable
+                : ConfiguracionPnErrores.OrganismoNoExiste;
+
         var cambio = await config.EstablecerOrganismoAsync(organismoId, habilitado, actor, ct).ConfigureAwait(false);
         if (!cambio.Existe)
-            return null;
+            return ConfiguracionPnErrores.OrganismoNoExiste;
         if (cambio.EstadoAnterior != habilitado)
             await PersonaNaturalAuditoria.EscribirAsync(
                 audit, "persona_natural_organismos", habilitado ? AuditVocabulary.Operations.Activate : AuditVocabulary.Operations.Deactivate,
                 actor, organismoId, PersonaNaturalAuditoria.Json(("habilitado", cambio.EstadoAnterior)),
                 PersonaNaturalAuditoria.Json(("habilitado", habilitado)), ct).ConfigureAwait(false);
-        return habilitado;
+        return null;
     }
 }
 

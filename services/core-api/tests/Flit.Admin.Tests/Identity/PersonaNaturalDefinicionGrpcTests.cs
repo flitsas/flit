@@ -248,6 +248,7 @@ public sealed class PersonaNaturalDefinicionGrpcTests(WebApplicationFactory<Prog
 
         public Guid Organismo { get; } = Guid.NewGuid();
         public Guid OrganismoSinGrant { get; } = Guid.NewGuid();
+        public Guid TenantOt { get; } = Guid.NewGuid();
         public Guid TipoTraspaso { get; } = Guid.NewGuid();
         public string CodigoTraspaso => "PN_D_" + _sufijo + "_A";
         public string CodigoUnTitular => "PN_D_" + _sufijo + "_B";
@@ -276,6 +277,13 @@ public sealed class PersonaNaturalDefinicionGrpcTests(WebApplicationFactory<Prog
                     VALUES ({id}, {code}, {"Organismo de prueba " + code}, '99', '999', 'Municipio de prueba', 'Departamento de prueba')
                     """, ct);
             }
+            // HU #14072: el organismo debe estar activo por FLIT (perfil OT + empresa OT activa) para ofrecerse.
+            var taxId = "7" + e._sufijo;
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO identity.tenants (id, legal_name, tax_id, tenant_type, is_active, created_at)
+                VALUES ({e.TenantOt}, {"OT de prueba " + e._sufijo}, {taxId}, 'FLIT', true, now())
+                """, ct);
+            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO admin.transit_office_profiles (tenant_id, transit_office_id) VALUES ({e.TenantOt}, {e.Organismo})", ct);
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO admin.tenant_transit_office_grants (tenant_id, transit_office_id, is_enabled, source)
                 VALUES ({PlatformTenants.PersonaNatural}, {e.Organismo}, true, 'CLIENT')
@@ -378,6 +386,8 @@ public sealed class PersonaNaturalDefinicionGrpcTests(WebApplicationFactory<Prog
                 await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM tramites.procedure_steps WHERE procedure_type_id = ANY({tipos})");
                 await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.tenant_transit_office_grants WHERE transit_office_id = ANY({orgs})");
                 await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM tramites.procedure_types WHERE id = ANY({tipos})");
+                await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.transit_office_profiles WHERE tenant_id = {TenantOt}");
+                await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM identity.tenants WHERE id = {TenantOt}");
                 await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM catalogs.transit_offices WHERE id = ANY({orgs})");
             }
             finally

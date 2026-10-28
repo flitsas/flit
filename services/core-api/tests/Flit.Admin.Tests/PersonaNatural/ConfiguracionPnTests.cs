@@ -2,6 +2,7 @@ using Flit.Admin.Application.Plataforma.PersonaNatural;
 using Flit.Admin.Domain.Plataforma.PersonaNatural;
 using Flit.Admin.Tests.Identity;
 using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.PersonaNatural;
 using Flit.Platform.Sdk;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -135,7 +136,7 @@ public sealed class ConfiguracionPnTests(WebApplicationFactory<Program> factory)
         var ct = TestContext.Current.CancellationToken;
         await using var e = await Escenario.CrearAsync(factory, ct);
 
-        (await e.Organismos.EstablecerAsync(e.Organismo, true, e.Actor, ct)).Should().BeTrue();
+        (await e.Organismos.EstablecerAsync(e.Organismo, true, e.Actor, ct)).Should().BeNull();
         var grant = await e.Db.Database.SqlQuery<GrantFila>($"""
             SELECT is_enabled, source FROM admin.tenant_transit_office_grants
              WHERE tenant_id = {PlatformTenants.PersonaNatural} AND transit_office_id = {e.Organismo}
@@ -154,7 +155,32 @@ public sealed class ConfiguracionPnTests(WebApplicationFactory<Program> factory)
              WHERE entity_name = 'persona_natural_organismos' AND target_entity_id = {e.Organismo}
             """).ToListAsync(ct);
         auditoria.Select(a => a.Operation).Should().BeEquivalentTo("activate", "deactivate");
-        (await e.Organismos.EstablecerAsync(Guid.NewGuid(), true, e.Actor, ct)).Should().BeNull("un organismo inexistente no se habilita");
+        (await e.Organismos.EstablecerAsync(Guid.NewGuid(), true, e.Actor, ct)).Should().Be(ConfiguracionPnErrores.OrganismoNoExiste, "un organismo inexistente no se habilita");
+    }
+
+    [Fact]
+    public async Task HU14072_SoloSeListanLosOrganismosActivosPorFlit_NoSeHabilitanLosNoOperables_YElHabilitadoQueDejoDeSerloSigueParaApagarlo()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var e = await Escenario.CrearAsync(factory, ct);
+
+        // El organismo B (sin perfil OT) existe en el catÃ¡logo pero no estÃ¡ activo por FLIT.
+        var lista = await e.Organismos.ListarAsync(false, ct);
+        lista.Single(o => o.Id == e.Organismo).ActivoEnFlit.Should().BeTrue();
+        lista.Should().NotContain(o => o.Id == e.OtroOrganismo, "no es operable en FLIT");
+        (await e.Organismos.EstablecerAsync(e.OtroOrganismo, true, e.Actor, ct)).Should().Be(ConfiguracionPnErrores.OrganismoNoOperable);
+        (await e.Organismos.EstablecerAsync(e.OtroOrganismo, false, e.Actor, ct)).Should().BeNull("apagar siempre se puede");
+
+        // Habilitado y luego la empresa OT se desactiva: sigue en la lista (inactivo en FLIT) y el portal ya no lo ofrece.
+        (await e.Organismos.EstablecerAsync(e.Organismo, true, e.Actor, ct)).Should().BeNull();
+        (await e.Portal.ListarOrganismosAsync(ct)).Select(o => o.Id).Should().Contain(e.Organismo);
+        (await e.Portal.OrganismoHabilitadoAsync(e.Organismo, ct)).Should().BeTrue();
+        await e.Db.Database.ExecuteSqlInterpolatedAsync($"UPDATE identity.tenants SET is_active = false WHERE id = {e.TenantOt}", ct);
+        (await e.Organismos.ListarAsync(false, ct)).Single(o => o.Id == e.Organismo)
+            .Should().Match<OrganismoPnView>(o => o.Habilitado && !o.ActivoEnFlit);
+        (await e.Portal.ListarOrganismosAsync(ct)).Select(o => o.Id).Should().NotContain(e.Organismo);
+        (await e.Portal.OrganismoHabilitadoAsync(e.Organismo, ct)).Should().BeFalse();
+        (await e.Organismos.EstablecerAsync(e.Organismo, false, e.Actor, ct)).Should().BeNull("apagar siempre se puede");
     }
 
     [Fact]
@@ -165,8 +191,15 @@ public sealed class ConfiguracionPnTests(WebApplicationFactory<Program> factory)
 
         var antes = await e.Tipos.ListarAsync(ct);
         antes.Single(t => t.Id == e.TipoElegible).Should().Match<TipoPnView>(t => t.Elegible && !t.Habilitado && !t.Ofrecible);
-        antes.Should().NotContain(t => t.Id == e.TipoApagado, "un tipo con el wizard apagado no aparece para habilitar");
+        // HU #14072: la lista trae TODOS los publicados; los no elegibles salen con su motivo y no se pueden habilitar.
+        antes.Single(t => t.Id == e.TipoApagado).Should().Match<TipoPnView>(
+            t => !t.Elegible && !t.Habilitado && !t.Ofrecible && t.Motivo.Contains("no está habilitado en FLIT 2"));
+        antes.Single(t => t.Id == e.TipoNoElegiblePerfil).Should().Match<TipoPnView>(
+            t => !t.Elegible && !t.Habilitado && !t.Ofrecible && t.Motivo == "El tipo exige leasing o locatario.");
+        antes.Should().NotContain(t => t.Id == e.TipoArchivado || t.Id == e.TipoBorrador, "archivados y borradores no se listan");
 
+        (await e.Tipos.EstablecerAsync(e.TipoNoElegiblePerfil, true, e.Actor, ct)).Should().Be(ConfiguracionPnErrores.TipoNoElegible);
+        (await e.Tipos.EstablecerAsync(e.TipoNoElegiblePerfil, false, e.Actor, ct)).Should().BeNull("apagar siempre se puede");
         (await e.Tipos.EstablecerAsync(e.TipoApagado, true, e.Actor, ct)).Should().Be(ConfiguracionPnErrores.TipoNoElegible);
         (await e.Tipos.EstablecerAsync(Guid.NewGuid(), true, e.Actor, ct)).Should().Be(ConfiguracionPnErrores.TipoNoElegible, "no es candidato");
         (await e.Tipos.EstablecerAsync(Guid.NewGuid(), false, e.Actor, ct)).Should().Be(ConfiguracionPnErrores.TipoNoExiste);
@@ -188,11 +221,26 @@ public sealed class ConfiguracionPnTests(WebApplicationFactory<Program> factory)
         var sinWizard = (await e.Tipos.ListarAsync(ct)).Single(t => t.Id == e.TipoElegible);
         sinWizard.Should().Match<TipoPnView>(t => t.Habilitado && !t.Elegible && !t.Ofrecible);
         (await e.Tipos.EstablecerAsync(e.TipoElegible, false, e.Actor, ct)).Should().BeNull("apagar siempre se puede");
-        (await e.Tipos.ListarAsync(ct)).Should().NotContain(t => t.Id == e.TipoElegible);
+        (await e.Tipos.ListarAsync(ct)).Single(t => t.Id == e.TipoElegible).Should().Match<TipoPnView>(t => !t.Habilitado && !t.Elegible && !t.Ofrecible);
     }
 
     // ── Soporte ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
+    [Fact]
+    public async Task HU14072_UnTipoHabilitadoQueDejoDeEstarActivoEnFlitSigueEnLaListaParaApagarlo_ConActivoEnFlitFalso()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var e = await Escenario.CrearAsync(factory, ct);
+
+        (await e.Tipos.EstablecerAsync(e.TipoElegible, true, e.Actor, ct)).Should().BeNull();
+        (await e.Tipos.ListarAsync(ct)).Single(t => t.Id == e.TipoElegible).ActivoEnFlit.Should().BeTrue();
+        await e.Db.Database.ExecuteSqlInterpolatedAsync($"UPDATE tramites.procedure_types SET is_active = false WHERE id = {e.TipoElegible}", ct);
+
+        (await e.Tipos.ListarAsync(ct)).Single(t => t.Id == e.TipoElegible)
+            .Should().Match<TipoPnView>(t => t.Habilitado && !t.ActivoEnFlit && !t.Elegible && !t.Ofrecible);
+        (await e.Tipos.EstablecerAsync(e.TipoElegible, false, e.Actor, ct)).Should().BeNull("apagar siempre se puede");
+        (await e.Tipos.ListarAsync(ct)).Should().NotContain(t => t.Id == e.TipoElegible, "ya no estÃ¡ habilitado ni activo");
+    }
     private static GuardarParametrosPnCommand Comando(int? sesion, int? borrador, int? ciudadano, int? global) =>
         new(sesion, borrador, ciudadano, global, null, null, null, null, 0, Guid.NewGuid());
 
@@ -223,8 +271,13 @@ public sealed class ConfiguracionPnTests(WebApplicationFactory<Program> factory)
         public Guid Actor { get; } = Guid.NewGuid();
         public Guid Organismo { get; } = Guid.NewGuid();
         public Guid OtroOrganismo { get; } = Guid.NewGuid();
+        public Guid TenantOt { get; } = Guid.NewGuid();
+        public PersonaNaturalPortalReader Portal { get; }
         public Guid TipoElegible { get; } = Guid.NewGuid();
         public Guid TipoApagado { get; } = Guid.NewGuid();
+        public Guid TipoNoElegiblePerfil { get; } = Guid.NewGuid();
+        public Guid TipoArchivado { get; } = Guid.NewGuid();
+        public Guid TipoBorrador { get; } = Guid.NewGuid();
 
         private Escenario(IServiceScope scope)
         {
@@ -234,6 +287,7 @@ public sealed class ConfiguracionPnTests(WebApplicationFactory<Program> factory)
             Parametros = sp.GetRequiredService<ParametrosPnHandler>();
             Organismos = sp.GetRequiredService<OrganismosPnHandler>();
             Tipos = sp.GetRequiredService<TiposPnHandler>();
+            Portal = sp.GetRequiredService<PersonaNaturalPortalReader>();
             Tarifas = sp.GetRequiredService<IPersonaNaturalTarifaRepository>();
         }
 
@@ -252,12 +306,29 @@ public sealed class ConfiguracionPnTests(WebApplicationFactory<Program> factory)
                     """, ct);
             }
 
-            foreach (var (id, wizard, n) in new[] { (e.TipoElegible, true, "A"), (e.TipoApagado, false, "B") })
+            // El organismo A es operable en FLIT (perfil OT + empresa OT activa); el B no tiene perfil.
+            var taxId = "9" + e._sufijo;
+            await e.Db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO identity.tenants (id, legal_name, tax_id, tenant_type, is_active, created_at)
+                VALUES ({e.TenantOt}, {"OT de prueba " + e._sufijo}, {taxId}, 'FLIT', true, now())
+                """, ct);
+            await e.Db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO admin.transit_office_profiles (tenant_id, transit_office_id) VALUES ({e.TenantOt}, {e.Organismo})
+                """, ct);
+
+            foreach (var (id, wizard, n, estado, perfil) in new[]
+            {
+                (e.TipoElegible, true, "A", "published", "{}"),
+                (e.TipoApagado, false, "B", "published", "{}"),
+                (e.TipoNoElegiblePerfil, true, "C", "published", """{"requiresLessee":true}"""),
+                (e.TipoArchivado, true, "D", "archived", "{}"),
+                (e.TipoBorrador, true, "E", "draft", "{}"),
+            })
             {
                 var code = $"PN_C_{e._sufijo}_{n}";
                 await e.Db.Database.ExecuteSqlInterpolatedAsync($"""
                     INSERT INTO tramites.procedure_types (id, code, name, family, version, gate_profile, publication_status, published_at, is_active, wizard_enabled, created_at)
-                    VALUES ({id}, {code}, {"Tipo de prueba " + code}, 'TRASPASO', 1, {"{}"}::jsonb, 'published', now(), true, {wizard}, now())
+                    VALUES ({id}, {code}, {"Tipo de prueba " + code}, 'TRASPASO', 1, {perfil}::jsonb, {estado}, now(), true, {wizard}, now())
                     """, ct);
             }
 
@@ -282,13 +353,15 @@ public sealed class ConfiguracionPnTests(WebApplicationFactory<Program> factory)
                 await using var tx = await Db.Database.BeginTransactionAsync();
                 await Db.Database.ExecuteSqlRawAsync("SET LOCAL session_replication_role = replica");
                 var orgs = new[] { Organismo, OtroOrganismo };
-                var tipos = new[] { TipoElegible, TipoApagado };
+                var tipos = new[] { TipoElegible, TipoApagado, TipoNoElegiblePerfil, TipoArchivado, TipoBorrador };
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.persona_natural_tariffs WHERE procedure_type_id = ANY({tipos})");
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.persona_natural_enabled_types WHERE procedure_type_id = ANY({tipos})");
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.tenant_transit_office_grants WHERE transit_office_id = ANY({orgs})");
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.tenant_config_audit_logs WHERE changed_by = {Actor}");
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM identity.users WHERE id = {Actor}");
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM tramites.procedure_types WHERE id = ANY({tipos})");
+                await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.transit_office_profiles WHERE tenant_id = {TenantOt}");
+                await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM identity.tenants WHERE id = {TenantOt}");
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM catalogs.transit_offices WHERE id = ANY({orgs})");
                 await tx.CommitAsync();
             }

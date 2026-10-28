@@ -25,7 +25,8 @@ public sealed record GuardarParametrosPnResultado(ParametrosPn? Parametros, bool
 /// tienen derechos de tránsito y servicio FLIT vigentes ahí: un organismo habilitado con cero se avisa «Sin tarifa vigente».
 /// </summary>
 public sealed record OrganismoPnView(
-    Guid Id, string Codigo, string Nombre, string Municipio, string Departamento, bool Habilitado, int TiposConTarifaVigente);
+    Guid Id, string Codigo, string Nombre, string Municipio, string Departamento, bool Habilitado, int TiposConTarifaVigente,
+    bool ActivoEnFlit = true);
 
 /// <summary>
 /// Un tipo candidato para el portal. <c>Elegible</c> sale de la regla K2 (perfil del tipo, wizard encendido y publicado);
@@ -34,7 +35,8 @@ public sealed record OrganismoPnView(
 /// </summary>
 public sealed record TipoPnView(
     Guid Id, string Codigo, string Nombre, string Familia, bool Elegible, string Motivo, bool Habilitado, bool Ofrecible,
-    int OrganismosConTarifaVigente);
+    int OrganismosConTarifaVigente,
+    bool ActivoEnFlit = true);
 
 /// <summary>Cambio de la lista blanca o de un grant: el estado anterior (para la auditoría) y si la entidad existe.</summary>
 public sealed record CambioHabilitacionPn(bool Existe, bool EstadoAnterior);
@@ -55,6 +57,12 @@ public interface IPersonaNaturalConfigRepository
 
     /// <summary>Habilita o deshabilita el organismo para la empresa Persona Natural. <c>Existe = false</c> si el organismo no existe o está inactivo.</summary>
     Task<CambioHabilitacionPn> EstablecerOrganismoAsync(Guid organismoId, bool habilitado, Guid actor, CancellationToken ct = default);
+
+    /// <summary>Un organismo es operable si está «activo por FLIT» (mismo criterio de <c>OtOperabilityGate</c>); solo esos se pueden habilitar.</summary>
+    Task<bool> OrganismoEsOperableAsync(Guid organismoId, CancellationToken ct = default);
+
+    /// <summary>El organismo existe y está activo en el catálogo.</summary>
+    Task<bool> ExisteOrganismoAsync(Guid organismoId, CancellationToken ct = default);
 
     Task<IReadOnlyList<TipoPnView>> ListarTiposAsync(CancellationToken ct = default);
 

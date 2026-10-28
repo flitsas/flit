@@ -42,6 +42,22 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     }
 
     [Fact]
+    public async Task ListarOrganismos_NoOfreceUnOrganismoHabilitadoQueDejoDeEstarActivoPorFlit()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        await using var e = await Escenario.CrearAsync(host, ct);
+        var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
+        (await cliente.ListarOrganismosAsync(new ListarOrganismosRequest(), cancellationToken: ct)).Organismos
+            .Select(o => o.Id).Should().Contain(e.Organismo.ToString());
+
+        await e.DesactivarEmpresaOtAsync(ct);
+
+        (await cliente.ListarOrganismosAsync(new ListarOrganismosRequest(), cancellationToken: ct)).Organismos
+            .Select(o => o.Id).Should().NotContain(e.Organismo.ToString());
+    }
+
+    [Fact]
     public async Task ListarTipos_ConOrganismo_SoloOfreceLosElegiblesConTarifaVigente_YSinOrganismoTodosConMotivo()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -264,6 +280,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
 
         public Guid Organismo { get; } = Guid.NewGuid();
         public Guid OrganismoSinGrant { get; } = Guid.NewGuid();
+        public Guid TenantOt { get; } = Guid.NewGuid();
         public Guid TipoElegible { get; } = Guid.NewGuid();
         public Guid TipoSinTransformaciones { get; } = Guid.NewGuid();
         public Guid TipoApagado { get; } = Guid.NewGuid();
@@ -293,6 +310,13 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
                     VALUES ({id}, {code}, {"Organismo de prueba " + code}, '99', '999', 'Municipio de prueba', 'Departamento de prueba')
                     """, ct);
             }
+            // HU #14072: el organismo ofrecido debe estar activo por FLIT (perfil OT + empresa OT activa).
+            var taxId = "8" + e._sufijo;
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO identity.tenants (id, legal_name, tax_id, tenant_type, is_active, created_at)
+                VALUES ({e.TenantOt}, {"OT de prueba " + e._sufijo}, {taxId}, 'FLIT', true, now())
+                """, ct);
+            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO admin.transit_office_profiles (tenant_id, transit_office_id) VALUES ({e.TenantOt}, {e.Organismo})", ct);
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO admin.tenant_transit_office_grants (tenant_id, transit_office_id, is_enabled, source)
                 VALUES ({PlatformTenants.PersonaNatural}, {e.Organismo}, true, 'CLIENT')
@@ -321,6 +345,9 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
                 VALUES ({concepto}, {tipo}, {organismo}, {valor}, {Hoy}::date)
                 """, ct);
 
+        public Task<int> DesactivarEmpresaOtAsync(CancellationToken ct) =>
+            _db.Database.ExecuteSqlInterpolatedAsync($"UPDATE identity.tenants SET is_active = false WHERE id = {TenantOt}", ct);
+
         public Task<int> HabilitarAsync(Guid tipo, CancellationToken ct) =>
             _db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO admin.persona_natural_enabled_types (procedure_type_id) VALUES ({tipo})", ct);
 
@@ -339,6 +366,8 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
                 await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.persona_natural_tariffs WHERE procedure_type_id IS NULL AND transit_office_id IS NULL AND valid_from = {Hoy}::date");
                 await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.tenant_transit_office_grants WHERE transit_office_id = ANY({orgs})");
                 await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM tramites.procedure_types WHERE id = ANY({ids})");
+                await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.transit_office_profiles WHERE tenant_id = {TenantOt}");
+                await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM identity.tenants WHERE id = {TenantOt}");
                 await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM catalogs.transit_offices WHERE id = ANY({orgs})");
                 await tx.CommitAsync();
             }

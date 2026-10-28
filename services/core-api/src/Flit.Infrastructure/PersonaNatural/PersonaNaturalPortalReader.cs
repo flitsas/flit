@@ -32,14 +32,48 @@ public sealed class PersonaNaturalPortalReader(FlitDbContext db, TimeProvider? r
                 orderby o.Name
                 select new { o.Id, o.Code, o.Name, o.CityName, o.DepartmentName })
             .ToListAsync(ct).ConfigureAwait(false);
-        return filas.Select(o => new OrganismoHabilitadoPn(o.Id, o.Code, o.Name, o.CityName ?? string.Empty, o.DepartmentName ?? string.Empty)).ToList();
+        // HU #14072: además del grant, el organismo debe estar operable en FLIT 2 (si no, core-api rechaza el trámite).
+        var operables = await OrganismosOperablesAsync(ct).ConfigureAwait(false);
+        return filas.Where(o => operables.Contains(o.Id))
+            .Select(o => new OrganismoHabilitadoPn(o.Id, o.Code, o.Name, o.CityName ?? string.Empty, o.DepartmentName ?? string.Empty)).ToList();
     }
 
     public async Task<bool> OrganismoHabilitadoAsync(Guid organismoId, CancellationToken ct) =>
         await db.TenantTransitOfficeGrants.AsNoTracking()
             .AnyAsync(g => g.TenantId == PlatformTenants.PersonaNatural && g.TransitOfficeId == organismoId && g.IsEnabled, ct)
             .ConfigureAwait(false)
-        && await db.TransitOffices.AsNoTracking().AnyAsync(o => o.Id == organismoId && o.IsActive, ct).ConfigureAwait(false);
+        && await db.TransitOffices.AsNoTracking().AnyAsync(o => o.Id == organismoId && o.IsActive, ct).ConfigureAwait(false)
+        && (await OrganismosOperablesAsync(ct).ConfigureAwait(false)).Contains(organismoId);
+
+    /// <summary>
+    /// Organismos «activos por FLIT»: el MISMO criterio de <c>OtOperabilityGate</c> — oficina activa del catálogo, con perfil
+    /// OT (<c>admin.transit_office_profiles</c>) cuyo tenant OT está activo. El perfil y el tenant son de OTRO tenant, por eso
+    /// la lectura desactiva RLS solo en su transacción (igual que el gate).
+    /// </summary>
+    public async Task<IReadOnlySet<Guid>> OrganismosOperablesAsync(CancellationToken ct)
+    {
+        async Task<HashSet<Guid>> Leer() => (await (
+                from o in db.TransitOffices.AsNoTracking()
+                join p in db.TransitOfficeProfiles.AsNoTracking() on o.Id equals p.TransitOfficeId
+                join t in db.Tenants.AsNoTracking() on p.TenantId equals t.Id
+                where o.IsActive && t.IsActive
+                select o.Id).ToListAsync(ct).ConfigureAwait(false)).ToHashSet();
+
+        if (!db.Database.IsRelational() || db.Database.CurrentTransaction is not null)
+            return await Leer().ConfigureAwait(false);
+
+        return await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+            await using (tx.ConfigureAwait(false))
+            {
+                await db.Database.ExecuteSqlRawAsync("SET LOCAL row_security = off", ct).ConfigureAwait(false);
+                var r = await Leer().ConfigureAwait(false);
+                await tx.CommitAsync(ct).ConfigureAwait(false);
+                return r;
+            }
+        }).ConfigureAwait(false);
+    }
 
     /// <summary>Tarifas vigentes en <paramref name="fecha"/> (inicio ≤ fecha ≤ fin o sin fin). La tabla es pequeña: se lee entera.</summary>
     public async Task<IReadOnlyList<TarifaVigente>> TarifasVigentesAsync(DateOnly fecha, CancellationToken ct)

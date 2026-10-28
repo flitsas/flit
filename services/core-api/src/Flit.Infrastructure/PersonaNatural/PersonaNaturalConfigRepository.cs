@@ -61,7 +61,10 @@ internal sealed class PersonaNaturalConfigRepository(
     public async Task<IReadOnlyList<OrganismoPnView>> ListarOrganismosAsync(bool soloHabilitados, CancellationToken ct = default)
     {
         var habilitados = await GrantsHabilitadosAsync(ct).ConfigureAwait(false);
-        var oficinas = await db.TransitOffices.AsNoTracking().Where(o => o.IsActive).OrderBy(o => o.Name)
+        // Solo los «activos por FLIT» (operables); un habilitado que dejó de serlo sigue en la lista para poder apagarlo.
+        var operables = await portal.OrganismosOperablesAsync(ct).ConfigureAwait(false);
+        var visibles = operables.Concat(habilitados).ToList();
+        var oficinas = await db.TransitOffices.AsNoTracking().Where(o => o.IsActive && visibles.Contains(o.Id)).OrderBy(o => o.Name)
             .Select(o => new { o.Id, o.Code, o.Name, o.CityName, o.DepartmentName })
             .ToListAsync(ct).ConfigureAwait(false);
         var ofrecibles = (await TiposAsync(ct).ConfigureAwait(false)).Where(t => t.Ofrecible).Select(t => t.Id).ToList();
@@ -71,9 +74,15 @@ internal sealed class PersonaNaturalConfigRepository(
             .Where(o => !soloHabilitados || habilitados.Contains(o.Id))
             .Select(o => new OrganismoPnView(
                 o.Id, o.Code, o.Name, o.CityName ?? string.Empty, o.DepartmentName ?? string.Empty, habilitados.Contains(o.Id),
-                ofrecibles.Count(t => TieneTarifaBase(t, o.Id, tarifas))))
+                ofrecibles.Count(t => TieneTarifaBase(t, o.Id, tarifas)), operables.Contains(o.Id)))
             .ToList();
     }
+
+    public async Task<bool> OrganismoEsOperableAsync(Guid organismoId, CancellationToken ct = default) =>
+        (await portal.OrganismosOperablesAsync(ct).ConfigureAwait(false)).Contains(organismoId);
+
+    public Task<bool> ExisteOrganismoAsync(Guid organismoId, CancellationToken ct = default) =>
+        db.TransitOffices.AsNoTracking().AnyAsync(o => o.Id == organismoId && o.IsActive, ct);
 
     public async Task<CambioHabilitacionPn> EstablecerOrganismoAsync(Guid organismoId, bool habilitado, Guid actor, CancellationToken ct = default)
     {
@@ -147,13 +156,14 @@ internal sealed class PersonaNaturalConfigRepository(
     /// </summary>
     private async Task<List<TipoPnView>> TiposAsync(CancellationToken ct)
     {
-        var tipos = await tiposReader.ListarAsync(ct).ConfigureAwait(false);
         var habilitados = await portal.TiposHabilitadosAsync(ct).ConfigureAwait(false);
+        var tipos = await tiposReader.ListarParaAdministracionAsync(habilitados, ct).ConfigureAwait(false);
+        // Un no elegible solo sale Habilitado si conserva una fila vieja en la lista blanca (para poder apagarlo); nunca es ofrecible.
         return tipos
-            .Where(t => t.Elegibilidad.Elegible || habilitados.Contains(t.Id))
             .Select(t => new TipoPnView(
-                t.Id, t.Codigo, t.Nombre, t.Familia, t.Elegibilidad.Elegible, t.Elegibilidad.Motivo, habilitados.Contains(t.Id),
-                t.Elegibilidad.Elegible && habilitados.Contains(t.Id), 0))
+                t.Id, t.Codigo, t.Nombre, t.Familia, t.Elegibilidad.Elegible, t.Elegibilidad.Motivo,
+                habilitados.Contains(t.Id),
+                t.Elegibilidad.Elegible && habilitados.Contains(t.Id), 0, t.ActivoEnFlit))
             .ToList();
     }
 

@@ -99,9 +99,14 @@ public static partial class AdminPlataformaPersonaNaturalEndpoints
         if (body.Habilitado is not { } habilitado)
             return Error(StatusCodes.Status400BadRequest, "habilitado_obligatorio", "Indique si el organismo queda habilitado o no.");
 
-        return await handler.EstablecerAsync(organismoId, habilitado, actor, ct).ConfigureAwait(false) is null
-            ? Error(StatusCodes.Status404NotFound, ConfiguracionPnErrores.OrganismoNoExiste, "El organismo de tránsito no existe o está inactivo.")
-            : Results.NoContent();
+        return await handler.EstablecerAsync(organismoId, habilitado, actor, ct).ConfigureAwait(false) switch
+        {
+            null => Results.NoContent(),
+            ConfiguracionPnErrores.OrganismoNoOperable => Error(
+                StatusCodes.Status422UnprocessableEntity, ConfiguracionPnErrores.OrganismoNoOperable,
+                "El organismo no está activo en FLIT: no tiene perfil de organismo con empresa activa. Actívelo en FLIT antes de habilitarlo."),
+            _ => Error(StatusCodes.Status404NotFound, ConfiguracionPnErrores.OrganismoNoExiste, "El organismo de tránsito no existe o está inactivo."),
+        };
     }
 
     private static async Task<IResult> ListarTiposAsync(TiposPnHandler handler, CancellationToken ct) =>
