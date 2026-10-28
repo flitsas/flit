@@ -7,6 +7,7 @@ using Flit.Diagnostico.Api.Modulos.Consultas;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
 using Flit.Diagnostico.Api.Modulos.Reportes;
 using Flit.Diagnostico.Api.Modulos.Reportes.Marca;
+using Flit.Diagnostico.Api.Modulos.Tablero;
 using Flit.Diagnostico.Api.Plataforma;
 using Flit.Diagnostico.Domain.Configuracion;
 using Flit.Diagnostico.Domain.Consultas;
@@ -54,9 +55,11 @@ public sealed class PdfVehiculoTests
     private const string PayloadAvaluo =
         """{"sin_valor_comercial":false,"valor_sugerido":48500000,"fuente_principal":"fasecolda","fuentes":[{"fuente":"fasecolda","estado":"OK","valor":48500000,"muestras":3,"fecha":"2026-10-22"}]}""";
 
-    private const string TituloSimit = "SIMIT — Comparendos del vehículo";
+    private const string TituloSimit = "COMPARENDOS DEL VEHÍCULO";
 
-    private const string TituloImpuesto = "Impuesto vehicular departamental";
+    private const string TituloImpuesto = "IMPUESTO VEHICULAR DEPARTAMENTAL";
+
+    private const string TituloAvaluo = "AVALÚO COMERCIAL";
 
     private static readonly DateTimeOffset Dato = new(2026, 10, 22, 15, 0, 0, TimeSpan.Zero);
 
@@ -88,8 +91,8 @@ public sealed class PdfVehiculoTests
         var texto = await PdfDePrueba.TextoAsync(respuesta, ct);
         foreach (var esperado in new[]
                  {
-                     lote.Id.ToString(), "Flota octubre", "Ana Prueba", "Empresa de prueba", "2026-10-22 14:30", "Diagnóstico Simple", "TST301",
-                     "Página 1 de 1", "Generado el",
+                     lote.Id.ToString(), "Flota octubre", "Ana Prueba", "Empresa de prueba", "22/10/2026 14:30", "Diagnóstico Simple", "TST301",
+                     "Página 1 de 1", "Fecha de generación", "Certificado de Diagnóstico",
                  })
             PdfDePrueba.Tiene(texto, esperado).Should().BeTrue($"el texto del PDF trae «{esperado}»: {texto}");
 
@@ -126,9 +129,9 @@ public sealed class PdfVehiculoTests
 
         texto.Should().NotContainAny(["Avalúo", "avalúo", "Avaluo", "AVALUO", "48.500.000", "fasecolda"], "AVALUO no está en el alcance");
         texto.Should().NotContainAny(
-            [PdfDePrueba.Plano("RUNT — Propietarios"), PdfDePrueba.Plano("RUNT — Locatarios"), PdfDePrueba.Plano("SIMIT — Comparendos de los")],
+            [PdfDePrueba.Plano("PROPIETARIOS"), PdfDePrueba.Plano("LOCATARIOS"), PdfDePrueba.Plano("COMPARENDOS DE LOS")],
             "ninguna fuente de persona en el alcance");
-        var runt = texto.IndexOf(PdfDePrueba.Plano("RUNT — Datos del vehículo"), StringComparison.Ordinal);
+        var runt = texto.IndexOf(PdfDePrueba.Plano("INFORMACIÓN DEL VEHÍCULO"), StringComparison.Ordinal);
         var simit = texto.IndexOf(PdfDePrueba.Plano(TituloSimit), StringComparison.Ordinal);
         runt.Should().BeGreaterThanOrEqualTo(0, texto);
         simit.Should().BeGreaterThan(runt, "el orden de las columnas de la grilla");
@@ -263,8 +266,8 @@ public sealed class PdfVehiculoTests
 
         var texto = await PdfDePrueba.TextoOkAsync(api, PdfDePrueba.Token(api, empresa.Id), lote.Id, vehiculo, ct);
 
-        foreach (var titulo in new[] { "RUNT — Datos del vehículo", "RUNT — Propietarios", "RUNT — Locatarios", TituloSimit,
-                     "SIMIT — Comparendos de los propietarios", "SIMIT — Comparendos de los locatarios", "Avalúo comercial", "48.500.000", "B1" })
+        foreach (var titulo in new[] { "INFORMACIÓN DEL VEHÍCULO", "PROPIETARIOS", "LOCATARIOS", TituloSimit,
+                     "COMPARENDOS DE LOS PROPIETARIOS", "COMPARENDOS DE LOS LOCATARIOS", "AVALÚO COMERCIAL", "48.500.000", "B1" })
             PdfDePrueba.Tiene(texto, titulo).Should().BeTrue($"el PDF trae «{titulo}»: {texto}");
         texto.Should().NotContainAny(["INTEMPO", "TX-", "servicio_que_resolvio", "NOMBRE FICTICIO", "NOMBREFICTICIO", "PROVEEDOR"]);
         texto.Should().NotContainAny([manual.UsuarioManualId!.Value.ToString(), propietario.Id.ToString(), locatario.Id.ToString()]);
@@ -449,17 +452,17 @@ public sealed class PdfVehiculoTests
 
         var texto = await PdfDePrueba.TextoOkAsync(api, token, lote.Id, lote.Vehiculos.Single(v => v.Placa == "TST371").Id, ct);
 
-        var avaluo = texto.IndexOf(PdfDePrueba.Plano("Avalúo comercial"), StringComparison.Ordinal);
+        var avaluo = texto.IndexOf(PdfDePrueba.Plano(TituloAvaluo), StringComparison.Ordinal);
         var titulo = texto.IndexOf(PdfDePrueba.Plano(TituloImpuesto), StringComparison.Ordinal);
         titulo.Should().BeGreaterThan(avaluo, $"la sección del impuesto va después del avalúo (orden de la grilla): {texto}");
         avaluo.Should().BeGreaterThanOrEqualTo(0, texto);
-        // La última sección puede partirse entre páginas (pie «Generado el … Página X de Y» en medio): se lee sin los pies.
+        // La última sección puede partirse entre páginas (pie «Certificado de Diagnóstico … Página X de Y» en medio): se lee sin los pies.
         var seccion = PdfDePrueba.SinPies(texto[titulo..]);
         foreach (var esperado in new[] { "Total adeudado", "$ 350.000", "Vigencia", "Valor", "Estado", "$ 180.000", "Pagada", "Pendiente" })
             PdfDePrueba.Tiene(seccion, esperado).Should().BeTrue($"la sección trae «{esperado}»: {seccion}");
         PdfDePrueba.Tiene(seccion, "Vigencia Valor Estado 2025 $ 180.000 Pagada 2026 $ 350.000 Pendiente")
             .Should().BeTrue($"la grilla va por año ascendente, fila a fila: {seccion}");
-        PdfDePrueba.Seccion(texto, "Avalúo comercial").Should().NotContain(PdfDePrueba.Plano("Total adeudado"), "el impuesto no se mezcla con el avalúo");
+        PdfDePrueba.Seccion(texto, TituloAvaluo).Should().NotContain(PdfDePrueba.Plano("Total adeudado"), "el impuesto no se mezcla con el avalúo");
         texto.Should().NotContainAny([ImpuestoDePrueba.ProveedorFicticio, PdfDePrueba.Plano(ImpuestoDePrueba.ProveedorFicticio), "TX-IMPUESTO", "INTEMPO", "IMPUESTO_DEPARTAMENTAL"]);
         foreach (var prohibido in new[] { "proveedor", "transacci", "origen" })
             texto.Should().NotContainEquivalentOf(prohibido);
@@ -612,7 +615,12 @@ public sealed class PdfVehiculoTests
 /// </example>
 internal static class PdfDePrueba
 {
-    private static readonly string[] FinesDeSeccion = ["RUNT—", "SIMIT—", "Avalúocomercial", "Impuestovehiculardepartamental", "Generadoel"];
+    /// <summary>Marcas aplanadas donde termina una sección: los títulos de sección (diseño v2, en mayúsculas), la nota final y el pie.</summary>
+    private static readonly string[] FinesDeSeccion =
+    [
+        "INFORMACIÓNDELVEHÍCULO", "PROPIETARIOS", "LOCATARIOS", "COMPARENDOSDEL", "AVALÚOCOMERCIAL", "IMPUESTOVEHICULARDEPARTAMENTAL",
+        "NOTA", "CertificadodeDiagnóstico", "Página",
+    ];
 
     public static string Ruta(Guid id, Guid vehiculo) => $"{Program.Prefijo}{DiagnosticosEndpoints.Ruta}/{id}/vehiculos/{vehiculo}/pdf";
 
@@ -651,12 +659,12 @@ internal static class PdfDePrueba
         return Texto(await BytesOkAsync(api.Cliente(token), id, vehiculo, ct));
     }
 
-    /// <summary>El texto aplanado sin los pies de página («Generado el … (hora Colombia) Página X de Y»), para leer una sección partida entre páginas.</summary>
+    /// <summary>El texto aplanado sin los pies de página («Certificado de Diagnóstico … Página X de Y»), para leer una sección partida entre páginas.</summary>
     public static string SinPies(string texto) =>
-        System.Text.RegularExpressions.Regex.Replace(texto, @"Generadoel.*?Página\d+de\d+", string.Empty, System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(5));
+        System.Text.RegularExpressions.Regex.Replace(texto, @"CertificadodeDiagnóstico.*?Página\d+de\d+", string.Empty, System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(5));
 
     /// <summary>
-    /// La sección que empieza en <paramref name="titulo"/>, hasta el título de la sección siguiente o el pie (<c>Generado el</c>), lo
+    /// La sección que empieza en <paramref name="titulo"/>, hasta el título de la sección siguiente, la nota o el pie, lo
     /// que llegue antes.
     /// </summary>
     public static string Seccion(string texto, string titulo)
@@ -669,5 +677,123 @@ internal static class PdfDePrueba
         var fin = FinesDeSeccion
             .Select(m => resto.IndexOf(m, StringComparison.Ordinal)).Where(i => i >= 0).DefaultIfEmpty(resto.Length).Min();
         return texto.Substring(inicio, Plano(titulo).Length + fin);
+    }
+}
+
+/// <summary>
+/// Diseño v2 del PDF del vehículo (ajuste Caso A, registro diferido 2026-10-27): renderiza <see cref="PdfVehiculo.Generar"/> en
+/// memoria, sin Postgres, y lee su texto. Bloque de identificación (Diagnóstico ID, Placa o VIN, fecha de generación en hora
+/// Colombia dd/MM/yyyy HH:mm:ss) antes de «DATOS DEL DIAGNÓSTICO», sobretítulo «DATOS DEL VEHÍCULO», títulos de sección en
+/// mayúsculas sin el prefijo de la fuente, tablas etiqueta-valor en bloques de 3 columnas (fila de etiquetas y luego fila de
+/// valores), nota final con la placa (o el VIN), el creador y la empresa, y pie «Certificado de Diagnóstico» + «Página X de Y»
+/// sin «Generado el» ni el título del documento. Con <c>FLIT_PDF_MUESTRA</c> apuntando a un archivo, escribe ahí el PDF de
+/// muestra de varias páginas para revisarlo a ojo (nunca dentro del repo).
+/// </summary>
+/// <example>
+/// <code>
+/// dotnet test services/core-diagnostico/tests/Flit.Diagnostico.Tests --no-build --filter FullyQualifiedName~PdfVehiculoDisenoV2Tests
+/// </code>
+/// </example>
+public sealed class PdfVehiculoDisenoV2Tests
+{
+    private static readonly Guid Id = Guid.Parse("0192ab34-5c6d-7e8f-9a0b-1c2d3e4f5a6b");
+
+    private static readonly DateTimeOffset GeneradoEn = new(2026, 10, 27, 15, 4, 5, TimeSpan.Zero);
+
+    private const string Vin = "9BWZZZ377VT004251";
+
+    [Fact]
+    public void Version_de_plantilla_es_2() => PdfVehiculo.VersionPlantilla.Should().Be(2);
+
+    [Fact]
+    public void Identificacion_datos_del_diagnostico_secciones_y_nota_en_orden()
+    {
+        var texto = PdfDePrueba.Texto(PdfVehiculo.Generar(Contenido("ABC123"), GeneradoEn));
+
+        var orden = new[]
+        {
+            $"Diagnóstico ID: {Id}", "Placa: ABC123", "Fecha de generación: 27/10/2026 10:04:05", "DATOS DEL DIAGNÓSTICO",
+            "Nombre del lote Tipo de análisis Fecha y hora de creación Flota octubre Diagnóstico Simple 22/10/2026 14:30",
+            $"Empresa Creado por VIN Empresa de prueba Ana Prueba {Vin}",
+            "DATOS DEL VEHÍCULO", "INFORMACIÓN DEL VEHÍCULO", "Placa VIN Servicio", "PROPIETARIOS", "Propietario 1",
+            "COMPARENDOS DEL VEHÍCULO", "Número Fecha Valor Estado Organismo", "COMPARENDOS DE LOS PROPIETARIOS", "No aplica.",
+            "AVALÚO COMERCIAL", "$ 48.500.000", "IMPUESTO VEHICULAR DEPARTAMENTAL", "Vigencia Valor Estado 2025 $ 180.000 Pagada", "NOTA",
+            "La información que se encuentra en este documento asociada a la placa ABC123 se genera por solicitud de Ana Prueba en nombre "
+            + "de la compañía Empresa de prueba.",
+        };
+        var desde = 0;
+        foreach (var literal in orden)
+        {
+            var i = PdfDePrueba.SinPies(texto).IndexOf(PdfDePrueba.Plano(literal), desde, StringComparison.Ordinal);
+            i.Should().BeGreaterThanOrEqualTo(0, $"«{literal}» aparece después del anterior: {texto}");
+            desde = i;
+        }
+
+        PdfDePrueba.Tiene(texto, "Consultado el 22/10/2026 10:00 (hora Colombia)").Should().BeTrue(texto);
+        PdfDePrueba.Tiene(texto, "depende netamente de la respuesta otorgada por los organismos consultados en la fecha de generación.").Should().BeTrue(texto);
+    }
+
+    [Fact]
+    public void Pie_trae_certificado_y_pagina_sin_generado_el_ni_titulo_visible()
+    {
+        var texto = PdfDePrueba.Texto(PdfVehiculo.Generar(Contenido("ABC123"), GeneradoEn));
+
+        PdfDePrueba.Tiene(texto, "Certificado de Diagnóstico").Should().BeTrue(texto);
+        System.Text.RegularExpressions.Regex.IsMatch(texto, @"Página1de[2-9]").Should().BeTrue($"el contenido de muestra ocupa varias páginas: {texto}");
+        texto.Should().NotContainAny([PdfDePrueba.Plano("Generado el"), PdfDePrueba.Plano(PdfVehiculo.Titulo), "RUNT—", "SIMIT—"]);
+    }
+
+    [Fact]
+    public void Sin_placa_identifica_por_vin_en_la_identificacion_y_en_la_nota()
+    {
+        var texto = PdfDePrueba.Texto(PdfVehiculo.Generar(Contenido(null), GeneradoEn));
+
+        PdfDePrueba.Tiene(texto, $"VIN: {Vin} Fecha de generación").Should().BeTrue(texto);
+        PdfDePrueba.Tiene(texto, $"asociada al VIN {Vin} se genera").Should().BeTrue(texto);
+        PdfDePrueba.Tiene(texto, "Placa:").Should().BeFalse("sin placa no hay línea de placa");
+    }
+
+    /// <summary>
+    /// PDF de muestra para revisión visual: solo con <c>FLIT_PDF_MUESTRA</c> (ruta absoluta del archivo a escribir, fuera del repo).
+    /// Junto al PDF deja un PNG por página (<c>{nombre}-{n}.png</c>) pintado por el mismo motor (Skia), porque los visores basados
+    /// en PyMuPDF pintan en negro los degradados SVG.
+    /// </summary>
+    [Fact]
+    public void Escribe_pdf_de_muestra_si_se_pide()
+    {
+        var destino = Environment.GetEnvironmentVariable("FLIT_PDF_MUESTRA");
+        Assert.SkipWhen(string.IsNullOrWhiteSpace(destino), "Sin FLIT_PDF_MUESTRA: no se escribe el PDF de muestra.");
+        var documento = PdfVehiculo.Documento(Contenido("ABC123"), GeneradoEn);
+        File.WriteAllBytes(destino!, QuestPDF.Fluent.GenerateExtensions.GeneratePdf(documento));
+        var pagina = 0;
+        foreach (var imagen in QuestPDF.Fluent.GenerateExtensions.GenerateImages(documento, new QuestPDF.Infrastructure.ImageGenerationSettings { RasterDpi = 110 }))
+            File.WriteAllBytes(Path.ChangeExtension(destino!, null) + $"-{++pagina}.png", imagen);
+    }
+
+    /// <summary>Contenido ficticio con todas las formas de sección (completada, persona, N/A, pendiente, no disponible).</summary>
+    private static ContenidoReporteVehiculo Contenido(string? placa)
+    {
+        var dato = new DateTimeOffset(2026, 10, 22, 15, 0, 0, TimeSpan.Zero);
+        var encabezado = new EncabezadoReporte(Id, "Flota octubre", "Empresa de prueba", "Ana Prueba",
+            new DateTimeOffset(2026, 10, 22, 19, 30, 0, TimeSpan.Zero), "Diagnóstico Simple", placa ?? Vin, placa is null ? "VIN" : "PLACA", placa, Vin);
+        var comparendos = Enumerable.Range(1, 14)
+            .Select(i => new ComparendoDetalle($"TST-C-{i:0000}", $"2026-09-{i:00}", "468500", i % 3 == 0 ? "PAGADO" : "PENDIENTE", "Organismo de prueba"))
+            .ToList();
+        var propietario = new PersonaReporte(1, "PROPIETARIO", "C", "****5678", false, null, "RUNT_PERSONA", EstadoPersonaReporte.Ok, dato,
+            new ResultadoRuntPersonaDetalle(true, "ACTIVO", [new LicenciaDetalle("B1", "Vigente", "2030-01-01"), new LicenciaDetalle("C1", "Vigente", "2029-06-30")]));
+        return new ContenidoReporteVehiculo(encabezado,
+        [
+            new("RUNT", "POR_VEHICULO", EstadoSeccion.Completado, null, null, dato,
+                new ResultadoRuntDetalle(placa, Vin, "PARTICULAR", "AUTOMOVIL", "STRIA PRUEBA", [new("C", "PROPIA")], 1), null),
+            new("RUNT_PROPIETARIO", "POR_PERSONA", EstadoSeccion.Completado, null, null, dato, null, [propietario]),
+            new("RUNT_LOCATARIO", "POR_PERSONA", EstadoSeccion.Pendiente, null, null, null, null, []),
+            new("SIMIT_VEHICULO", "POR_VEHICULO", EstadoSeccion.Completado, null, null, dato, new ResultadoSimitDetalle("AMARILLO", 16, comparendos, true), null),
+            new("SIMIT_PROPIETARIO", "POR_PERSONA", EstadoSeccion.NoAplica, "SIN_DOCUMENTO", "El vehículo está sin el documento del propietario.", null, null, []),
+            new("SIMIT_LOCATARIO", "POR_PERSONA", EstadoSeccion.NoDisponible, null, SeccionReporte.ConsultaNoDisponible, null, null, []),
+            new("AVALUO", "POR_VEHICULO", EstadoSeccion.Completado, null, null, dato, new ResultadoAvaluoDetalle(false, 48500000, "fasecolda",
+                [new("fasecolda", "OK", 48500000, 3, "2026-10-22"), new("mercado_libre", "OK", 47200000, 12, "2026-10-22")]), null),
+            new("IMPUESTO_DEPARTAMENTAL", "POR_VEHICULO", EstadoSeccion.Completado, null, null, dato,
+                new ResultadoImpuestoDetalle(350000, [new(2025, 180000, true), new(2026, 350000, false)]), null),
+        ]);
     }
 }

@@ -15,13 +15,16 @@ using QuestPDF.Infrastructure;
 namespace Flit.Diagnostico.Api.Modulos.Reportes;
 
 /// <summary>
-/// Renderizador del PDF corporativo de UN vehículo (HU #13848, F07-H3, F07-C1..C4/C9/C10): membrete FLIT (copia de la marca de
-/// core-api, <see cref="FlitLetterhead"/>), encabezado en tabla (ID, lote, empresa, creador, fecha de creación en hora Colombia,
-/// tipo de análisis e identificación), una sección por fuente del contenido de F07-H2 en el orden de la grilla y pie con «Generado
-/// el …» y «Página X de Y». Pinta SOLO lo que trae <see cref="ContenidoReporteVehiculo"/> (R-20): sin origen, usuario manual,
-/// proveedor, transacción ni tipo de error; una fuente en ERROR sale «consulta no disponible» y los documentos de persona ya vienen
-/// enmascarados. Función pura de su entrada: F07-H5 (ZIP) la reutiliza con el contenido de <c>LectorContenidoReporte</c>.
-/// QuestPDF con licencia Community declarada en el constructor estático (patrón de <c>FlitCoverPageGenerator</c> de core-api).
+/// Renderizador del PDF corporativo de UN vehículo (HU #13848, F07-H3, F07-C1..C4/C9/C10) con el diseño v2 (ajuste 2026-10-27):
+/// membrete FLIT (copia de la marca de core-api, <see cref="FlitLetterhead"/>) en todas las páginas; en la primera, el bloque de
+/// identificación (Diagnóstico ID, placa —o VIN— y fecha de generación en hora Colombia) y la tabla «DATOS DEL DIAGNÓSTICO» (lote,
+/// tipo de análisis, fecha de creación, empresa, creador y VIN); luego una sección por fuente del contenido de F07-H2 en el orden de
+/// la grilla, con título centrado en mayúsculas y las tablas de <see cref="TablaFlit"/>; al final el recuadro NOTA; y en el pie
+/// «Certificado de Diagnóstico» y «Página X de Y». Las secciones RUNT ampliadas se enchufan en <see cref="SeccionesRuntAmpliadas"/>.
+/// Pinta SOLO lo que trae <see cref="ContenidoReporteVehiculo"/> (R-20): sin origen, usuario manual, proveedor, transacción ni tipo
+/// de error; una fuente en ERROR sale «consulta no disponible» y los documentos de persona ya vienen enmascarados. Función pura de
+/// su entrada: F07-H5 (ZIP) la reutiliza con el contenido de <c>LectorContenidoReporte</c>. QuestPDF con licencia Community
+/// declarada en el constructor estático (patrón de <c>FlitCoverPageGenerator</c> de core-api).
 /// </summary>
 /// <example>
 /// <code>
@@ -31,27 +34,34 @@ namespace Flit.Diagnostico.Api.Modulos.Reportes;
 /// </example>
 internal static partial class PdfVehiculo
 {
-    /// <summary>Versión del diseño: entra en la huella (súbela al cambiar lo que se pinta o cómo).</summary>
-    public const int VersionPlantilla = 1;
+    /// <summary>Versión del diseño: entra en la huella (súbela al cambiar lo que se pinta o cómo). 2 = diseño v2 (2026-10-27).</summary>
+    public const int VersionPlantilla = 2;
 
     public const string ContentType = "application/pdf";
 
+    /// <summary>Título de los metadatos del PDF (desde el diseño v2 no se pinta en la página).</summary>
     public const string Titulo = "Reporte de diagnóstico vehicular";
+
+    /// <summary>Texto del pie de todas las páginas, junto a «Página X de Y».</summary>
+    public const string Certificado = "Certificado de Diagnóstico";
 
     private const string NoRegistra = "No registra";
 
     /// <summary>Impuesto sin vigencias registradas (HU #13864).</summary>
     public const string SinVigencias = "No registra vigencias";
 
-    /// <summary>Títulos de sección por código de fuente (los de la grilla).</summary>
+    /// <summary>
+    /// Títulos de sección por código de fuente (los de la grilla), sin el prefijo de la fuente («RUNT —», «SIMIT —»): el diseño v2
+    /// los pinta en mayúsculas (<see cref="TituloVisible"/>).
+    /// </summary>
     public static readonly IReadOnlyDictionary<string, string> Titulos = new Dictionary<string, string>(StringComparer.Ordinal)
     {
-        ["RUNT"] = "RUNT — Datos del vehículo",
-        ["RUNT_PROPIETARIO"] = "RUNT — Propietarios",
-        ["RUNT_LOCATARIO"] = "RUNT — Locatarios",
-        ["SIMIT_VEHICULO"] = "SIMIT — Comparendos del vehículo",
-        ["SIMIT_PROPIETARIO"] = "SIMIT — Comparendos de los propietarios",
-        ["SIMIT_LOCATARIO"] = "SIMIT — Comparendos de los locatarios",
+        ["RUNT"] = "Información del vehículo",
+        ["RUNT_PROPIETARIO"] = "Propietarios",
+        ["RUNT_LOCATARIO"] = "Locatarios",
+        ["SIMIT_VEHICULO"] = "Comparendos del vehículo",
+        ["SIMIT_PROPIETARIO"] = "Comparendos de los propietarios",
+        ["SIMIT_LOCATARIO"] = "Comparendos de los locatarios",
         ["AVALUO"] = "Avalúo comercial",
         ["IMPUESTO_DEPARTAMENTAL"] = "Impuesto vehicular departamental",
     };
@@ -63,6 +73,9 @@ internal static partial class PdfVehiculo
         ["mercado_libre"] = "Mercado Libre",
         ["base_gravable"] = "Base gravable",
     };
+
+    /// <summary>Alto (pt) desde el borde inferior de la hoja hasta el bloque de texto del pie, sobre la banda del membrete.</summary>
+    private const float PieDesdeAbajo = 30;
 
     private static readonly NumberFormatInfo Pesos = new() { NumberGroupSeparator = ".", NumberDecimalSeparator = ",", NumberGroupSizes = [3] };
 
@@ -79,8 +92,11 @@ internal static partial class PdfVehiculo
         return $"diagnostico-{encabezado.DiagnosticoId.ToString()[..8]}-{(identificacion.Length > 0 ? identificacion : "vehiculo")}.pdf";
     }
 
-    /// <summary>El PDF del contenido, con la fecha de generación <paramref name="generadoEn"/> en el pie (hora Colombia).</summary>
-    public static byte[] Generar(ContenidoReporteVehiculo contenido, DateTimeOffset generadoEn)
+    /// <summary>El PDF del contenido, con la fecha de generación <paramref name="generadoEn"/> en la identificación (hora Colombia).</summary>
+    public static byte[] Generar(ContenidoReporteVehiculo contenido, DateTimeOffset generadoEn) => Documento(contenido, generadoEn).GeneratePdf();
+
+    /// <summary>El documento QuestPDF sin generar (las pruebas lo exportan además como imágenes para revisar el diseño).</summary>
+    internal static IDocument Documento(ContenidoReporteVehiculo contenido, DateTimeOffset generadoEn)
     {
         ArgumentNullException.ThrowIfNull(contenido);
         FuentesFlit.Registrar();
@@ -89,29 +105,22 @@ internal static partial class PdfVehiculo
             {
                 FlitLetterhead.ApplyTo(page);
                 page.Header().Element(FlitLetterhead.Header);
-                page.Footer().Column(pie =>
-                {
-                    pie.Item().PaddingHorizontal(FlitDocumentTheme.MarginCm, Unit.Centimetre).Row(fila =>
-                    {
-                        fila.RelativeItem().Text($"Generado el {Fecha(generado)} (hora Colombia)").FontSize(7).FontColor(FlitDocumentTheme.Gris);
-                        fila.RelativeItem().AlignRight().Text(t =>
-                        {
-                            t.DefaultTextStyle(s => s.FontSize(7).FontColor(FlitDocumentTheme.Gris));
-                            t.Span("Página ");
-                            t.CurrentPageNumber();
-                            t.Span(" de ");
-                            t.TotalPages();
-                        });
-                    });
-                    pie.Item().Element(FlitLetterhead.Footer);
-                });
+                page.Footer().Element(Pie);
                 page.Content().PaddingHorizontal(FlitDocumentTheme.MarginCm, Unit.Centimetre).PaddingVertical(0.4f, Unit.Centimetre).Column(col =>
                 {
-                    col.Spacing(10);
-                    col.Item().Text(Titulo).FontFamily(FlitDocumentTheme.FontMedium).FontSize(14).FontColor(FlitDocumentTheme.PrimaryBlue);
-                    col.Item().Element(c => Encabezado(c, contenido.Encabezado));
-                    foreach (var seccion in contenido.Secciones)
-                        col.Item().Element(c => Seccion(c, seccion));
+                    col.Spacing(14);
+                    col.Item().Element(c => Identificacion(c, contenido.Encabezado, generado));
+                    col.Item().Element(c => DatosDelDiagnostico(c, contenido.Encabezado));
+                    for (var i = 0; i < contenido.Secciones.Count; i++)
+                    {
+                        var seccion = contenido.Secciones[i];
+                        var sobretitulo = i == 0 ? "Datos del vehículo" : null;
+                        col.Item().Element(c => Seccion(c, seccion, sobretitulo));
+                        if (seccion.Fuente == "RUNT")
+                            SeccionesRuntAmpliadas(col, contenido, seccion);
+                    }
+
+                    col.Item().PaddingTop(4).Element(c => TablaFlit.Nota(c, TextoNota(contenido.Encabezado)));
                 });
             }))
             .WithMetadata(new DocumentMetadata
@@ -122,68 +131,149 @@ internal static partial class PdfVehiculo
                 Producer = "FLIT Diagnóstico",
                 CreationDate = generado,
                 ModifiedDate = generado,
-            })
-            .GeneratePdf();
+            });
     }
 
-    private static void Encabezado(IContainer contenedor, EncabezadoReporte e) => Tabla(contenedor,
-    [
-        ("ID del diagnóstico", e.DiagnosticoId.ToString()),
-        ("Nombre del lote", e.NombreLote),
-        ("Empresa", e.Empresa),
-        ("Creado por", e.UsuarioCreador),
-        ("Fecha y hora de creación", $"{Fecha(e.CreadoEn)} (hora Colombia)"),
-        ("Tipo de análisis", e.TipoAnalisis),
-        ("Vehículo", e.Identificador),
-        ("Placa", e.Placa ?? NoRegistra),
-        ("VIN", e.Vin ?? NoRegistra),
-    ]);
-
-    private static void Seccion(IContainer contenedor, SeccionReporte seccion) => contenedor.Column(col =>
+    /// <summary>
+    /// Punto de enchufe de las secciones RUNT ampliadas (Información general, Datos teóricos, SOAT, RTM, Solicitudes, Garantías a
+    /// favor, Accidentalidad, Póliza RC): se llama justo después de la sección «Información del vehículo» (fuente <c>RUNT</c>) y antes
+    /// de las de personas y SIMIT, con el contenido completo y la sección RUNT. Cada sección nueva se agrega como
+    /// <c>col.Item().Element(c =&gt; SeccionConTitulo(c, "Título", dato, cuerpo))</c>, con sus tablas en <see cref="Tabla"/>
+    /// (etiqueta-valor en bloques de 3) o <see cref="Grilla"/> y sus estados sin dato en <see cref="Aviso"/>. Hoy no pinta nada: el
+    /// modelo de contenido aún no trae esos datos.
+    /// </summary>
+    private static void SeccionesRuntAmpliadas(ColumnDescriptor col, ContenidoReporteVehiculo contenido, SeccionReporte runt)
     {
-        col.Spacing(4);
-        col.Item().PaddingTop(4).BorderBottom(1).BorderColor(FlitDocumentTheme.PrimaryBlue).PaddingBottom(2)
-            .Text(Titulos.GetValueOrDefault(seccion.Fuente, seccion.Fuente)).FontFamily(FlitDocumentTheme.FontMedium).FontSize(11)
-            .FontColor(FlitDocumentTheme.PrimaryBlue);
-        if (seccion.DatoObtenidoEn is { } dato)
-            col.Item().Text($"Consultado el {Fecha(dato)} (hora Colombia)").FontSize(7).FontColor(FlitDocumentTheme.Gris);
-        switch (seccion.Estado)
-        {
-            case EstadoSeccion.Completado when seccion.Resultado is { } resultado:
-                col.Item().Element(c => Resultado(c, resultado));
-                break;
-            case EstadoSeccion.NoAplica:
-                col.Item().Text("No aplica. " + (seccion.Leyenda ?? string.Empty));
-                break;
-            case EstadoSeccion.NoDisponible:
-                col.Item().Text(SeccionReporte.ConsultaNoDisponible);
-                break;
-            case EstadoSeccion.Pendiente:
-                col.Item().Text("Pendiente: la consulta aún no termina.");
-                break;
-        }
+        _ = col;
+        _ = contenido;
+        _ = runt;
+    }
 
-        if (seccion.Personas is { Count: > 0 } personas)
+    /// <summary>
+    /// Pie: la banda del membrete y, encima a la derecha, una sola línea con «Certificado de Diagnóstico» en azul y «Página X de Y» en
+    /// gris. Va por encima de la banda degradada del arte (en dos líneas la segunda caía sobre la banda y el gris no se leía).
+    /// </summary>
+    private static void Pie(IContainer contenedor) => contenedor.Layers(capas =>
+    {
+        capas.PrimaryLayer().Element(FlitLetterhead.Footer);
+        capas.Layer().AlignBottom().PaddingBottom(PieDesdeAbajo).PaddingRight(FlitDocumentTheme.MarginCm, Unit.Centimetre).AlignRight().Text(t =>
         {
-            foreach (var persona in personas)
-                col.Item().Element(c => Persona(c, persona));
-        }
-        else if (seccion.Personas is not null && seccion.Estado == EstadoSeccion.Completado)
-        {
-            col.Item().Text("Sin personas para consultar.");
-        }
+            t.Span(Certificado).FontSize(8).FontColor(FlitDocumentTheme.PrimaryBlue);
+            t.Span("   Página ").FontSize(7).FontColor(FlitDocumentTheme.Gris);
+            t.CurrentPageNumber().FontSize(7).FontColor(FlitDocumentTheme.Gris);
+            t.Span(" de ").FontSize(7).FontColor(FlitDocumentTheme.Gris);
+            t.TotalPages().FontSize(7).FontColor(FlitDocumentTheme.Gris);
+        });
     });
 
-    private static void Persona(IContainer contenedor, PersonaReporte persona) => contenedor.PaddingLeft(8).Column(col =>
+    /// <summary>Identificación (solo página 1): Diagnóstico ID, Placa (o VIN si no hay placa) y fecha de generación con segundos.</summary>
+    private static void Identificacion(IContainer contenedor, EncabezadoReporte e, DateTimeOffset generado) => contenedor.Column(col =>
     {
-        col.Spacing(3);
+        col.Spacing(1);
+        col.Item().Element(c => Linea(c, "Diagnóstico ID", e.DiagnosticoId.ToString()));
+        col.Item().Element(c => Linea(c, e.Placa is null ? "VIN" : "Placa", e.Placa ?? e.Vin ?? e.Identificador));
+        col.Item().Element(c => Linea(c, "Fecha de generación", generado.ToString("dd/MM/yyyy HH:mm:ss", CultureInfo.InvariantCulture)));
+    });
+
+    /// <summary>Una línea «Etiqueta: valor» de la identificación: etiqueta azul oscuro regular, valor azul Poppins Bold, 11 pt.</summary>
+    private static void Linea(IContainer contenedor, string etiqueta, string valor) => contenedor.Text(t =>
+    {
+        t.DefaultTextStyle(s => s.FontSize(11));
+        t.Span(etiqueta + ": ").FontColor(FlitDocumentTheme.DarkNavy);
+        t.Span(valor).Bold().FontColor(FlitDocumentTheme.PrimaryBlue);
+    });
+
+    /// <summary>Lo del encabezado que no está en la identificación (AC de la HU #13848): lote, tipo, creación, empresa, creador y VIN.</summary>
+    private static void DatosDelDiagnostico(IContainer contenedor, EncabezadoReporte e) => SeccionConTitulo(contenedor, "Datos del diagnóstico", null,
+        col => col.Item().Element(c => Tabla(c,
+        [
+            ("Nombre del lote", e.NombreLote),
+            ("Tipo de análisis", e.TipoAnalisis),
+            ("Fecha y hora de creación", Fecha(e.CreadoEn)),
+            ("Empresa", e.Empresa),
+            ("Creado por", e.UsuarioCreador),
+            ("VIN", e.Vin ?? NoRegistra),
+        ])));
+
+    /// <summary>Texto del recuadro NOTA con la placa (o el VIN), el creador y la empresa del encabezado.</summary>
+    internal static string TextoNota(EncabezadoReporte e)
+    {
+        ArgumentNullException.ThrowIfNull(e);
+        var vehiculo = e.Placa is { } placa ? $"a la placa {placa}" : $"al VIN {e.Vin ?? e.Identificador}";
+        return $"La información que se encuentra en este documento asociada {vehiculo} se genera por solicitud de {e.UsuarioCreador} en "
+            + $"nombre de la compañía {e.Empresa}. Toda la información suministrada y relacionada en el presente documento se realiza sobre "
+            + "fuentes públicas y estatales; el resultado de estas consultas depende netamente de la respuesta otorgada por los organismos "
+            + "consultados en la fecha de generación.";
+    }
+
+    /// <summary>
+    /// El título de sección como se pinta: en mayúsculas. Invariante a propósito: el servicio corre con globalización invariante (no
+    /// hay culturas como es-CO) y desde .NET 8 ese modo igual pasa a mayúscula las vocales tildadas y la ñ.
+    /// </summary>
+    internal static string TituloVisible(string titulo) => titulo.ToUpperInvariant();
+
+    /// <summary>
+    /// Bloque de sección: sobretítulo opcional centrado en azul, título centrado en mayúsculas Poppins Bold azul oscuro, «Consultado
+    /// el …» pequeño gris si hay fecha del dato, y el cuerpo. Pide espacio al inicio para no dejar el título huérfano al pie.
+    /// </summary>
+    private static void SeccionConTitulo(IContainer contenedor, string titulo, DateTimeOffset? dato, Action<ColumnDescriptor> cuerpo, string? sobretitulo = null) =>
+        contenedor.EnsureSpace(90).Column(col =>
+        {
+            col.Spacing(5);
+            if (sobretitulo is not null)
+                col.Item().AlignCenter().Text(TituloVisible(sobretitulo)).Bold().FontSize(11).FontColor(FlitDocumentTheme.PrimaryBlue);
+            col.Item().AlignCenter().Text(TituloVisible(titulo)).Bold().FontSize(11).FontColor(FlitDocumentTheme.DarkNavy);
+            if (dato is { } d)
+                col.Item().AlignCenter().Text($"Consultado el {Fecha(d)} (hora Colombia)").FontSize(7.5f).FontColor(FlitDocumentTheme.Gris);
+            cuerpo(col);
+        });
+
+    /// <summary>Texto gris centrado de los estados sin dato (No aplica, consulta no disponible, pendiente, sin resultados).</summary>
+    private static void Aviso(IContainer contenedor, string texto) =>
+        contenedor.AlignCenter().Text(texto).FontSize(TablaFlit.TamanoTexto).FontColor(FlitDocumentTheme.Gris);
+
+    private static void Seccion(IContainer contenedor, SeccionReporte seccion, string? sobretitulo) => SeccionConTitulo(contenedor,
+        Titulos.GetValueOrDefault(seccion.Fuente, seccion.Fuente), seccion.DatoObtenidoEn, col =>
+        {
+            switch (seccion.Estado)
+            {
+                case EstadoSeccion.Completado when seccion.Resultado is { } resultado:
+                    col.Item().Element(c => Resultado(c, resultado));
+                    break;
+                case EstadoSeccion.NoAplica:
+                    col.Item().Element(c => Aviso(c, "No aplica. " + (seccion.Leyenda ?? string.Empty)));
+                    break;
+                case EstadoSeccion.NoDisponible:
+                    col.Item().Element(c => Aviso(c, SeccionReporte.ConsultaNoDisponible));
+                    break;
+                case EstadoSeccion.Pendiente:
+                    col.Item().Element(c => Aviso(c, "Pendiente: la consulta aún no termina."));
+                    break;
+            }
+
+            if (seccion.Personas is { Count: > 0 } personas)
+            {
+                foreach (var persona in personas)
+                    col.Item().PaddingTop(4).Element(c => Persona(c, persona));
+            }
+            else if (seccion.Personas is not null && seccion.Estado == EstadoSeccion.Completado)
+            {
+                col.Item().Element(c => Aviso(c, "Sin personas para consultar."));
+            }
+        }, sobretitulo);
+
+    /// <summary>Una persona de una sección de persona: subtítulo «Propietario n» / «Locatario n» en azul, su tabla y su resultado.</summary>
+    private static void Persona(IContainer contenedor, PersonaReporte persona) => contenedor.Column(col =>
+    {
+        col.Spacing(5);
         var rol = persona.Rol switch { "PROPIETARIO" => "Propietario", "LOCATARIO" => "Locatario", _ => persona.Rol };
-        col.Item().Text($"{rol} {persona.Orden.ToString(CultureInfo.InvariantCulture)}").FontFamily(FlitDocumentTheme.FontMedium).FontSize(10);
+        col.Item().AlignCenter().Text($"{rol} {persona.Orden.ToString(CultureInfo.InvariantCulture)}").FontFamily(FlitDocumentTheme.FontMedium)
+            .FontSize(10).FontColor(FlitDocumentTheme.PrimaryBlue);
         var filas = new List<(string, string)> { ("Documento", $"{persona.TipoDocumento} {persona.DocumentoEnmascarado}") };
         if (persona.RotuloDeclarado is { } rotulo)
             filas.Add(("Declaración", rotulo));
         if (persona.ConsultadoEn is { } consultado)
-            filas.Add(("Consultado el", $"{Fecha(consultado)} (hora Colombia)"));
+            filas.Add(("Consultado el", Fecha(consultado)));
         col.Item().Element(c => Tabla(c, filas));
         switch (persona.Estado)
         {
@@ -191,10 +281,10 @@ internal static partial class PdfVehiculo
                 col.Item().Element(c => Resultado(c, resultado));
                 break;
             case EstadoPersonaReporte.NoDisponible:
-                col.Item().Text(SeccionReporte.ConsultaNoDisponible);
+                col.Item().Element(c => Aviso(c, SeccionReporte.ConsultaNoDisponible));
                 break;
             default:
-                col.Item().Text("Sin resultado.");
+                col.Item().Element(c => Aviso(c, "Sin resultado."));
                 break;
         }
     });
@@ -229,7 +319,7 @@ internal static partial class PdfVehiculo
             case ResultadoRuntPersonaDetalle persona:
                 contenedor.Column(col =>
                 {
-                    col.Spacing(3);
+                    col.Spacing(5);
                     col.Item().Element(c => Tabla(c,
                     [
                         ("Inscrito en el RUNT", persona.Inscrito ? "Sí" : "No"),
@@ -242,7 +332,7 @@ internal static partial class PdfVehiculo
                     }
                     else
                     {
-                        col.Item().Text("Sin licencias de conducción.");
+                        col.Item().Element(c => Aviso(c, "Sin licencias de conducción."));
                     }
                 });
                 break;
@@ -259,7 +349,7 @@ internal static partial class PdfVehiculo
 
     private static void Simit(IContainer contenedor, ResultadoSimitDetalle simit) => contenedor.Column(col =>
     {
-        col.Spacing(3);
+        col.Spacing(5);
         col.Item().Element(c => Tabla(c,
         [
             ("Semáforo", simit.Semaforo ?? NoRegistra),
@@ -268,7 +358,7 @@ internal static partial class PdfVehiculo
         var comparendos = simit.Comparendos ?? [];
         if (comparendos.Count == 0)
         {
-            col.Item().Text("Sin comparendos.");
+            col.Item().Element(c => Aviso(c, "Sin comparendos."));
             return;
         }
 
@@ -279,15 +369,15 @@ internal static partial class PdfVehiculo
             })]));
         var restantes = simit.CantidadComparendos - comparendos.Count;
         if (simit.ComparendosTruncados || restantes > 0)
-            col.Item().Text($"y {Math.Max(restantes, 0).ToString(CultureInfo.InvariantCulture)} más").FontColor(FlitDocumentTheme.Gris);
+            col.Item().Element(c => Aviso(c, $"y {Math.Max(restantes, 0).ToString(CultureInfo.InvariantCulture)} más"));
     });
 
     private static void Avaluo(IContainer contenedor, ResultadoAvaluoDetalle avaluo) => contenedor.Column(col =>
     {
-        col.Spacing(3);
+        col.Spacing(5);
         if (avaluo.SinValorComercial)
         {
-            col.Item().Text("Sin valor comercial");
+            col.Item().Element(c => Aviso(c, "Sin valor comercial"));
         }
         else
         {
@@ -315,7 +405,7 @@ internal static partial class PdfVehiculo
     /// </summary>
     private static void Impuesto(IContainer contenedor, ResultadoImpuestoDetalle impuesto) => contenedor.Column(col =>
     {
-        col.Spacing(3);
+        col.Spacing(5);
         col.Item().Element(c => Tabla(c, [("Total adeudado", Moneda(impuesto.MontoTotal))]));
         if (impuesto.Vigencias is { Count: > 0 } vigencias)
         {
@@ -324,52 +414,20 @@ internal static partial class PdfVehiculo
         }
         else
         {
-            col.Item().Text(SinVigencias);
+            col.Item().Element(c => Aviso(c, SinVigencias));
         }
     });
 
-    /// <summary>Tabla de dos columnas: etiqueta y valor.</summary>
-    private static void Tabla(IContainer contenedor, IReadOnlyList<(string Etiqueta, string Valor)> filas) => contenedor.Table(tabla =>
-    {
-        tabla.ColumnsDefinition(c =>
-        {
-            c.RelativeColumn(2);
-            c.RelativeColumn(5);
-        });
-        foreach (var (etiqueta, valor) in filas)
-        {
-            tabla.Cell().Element(Etiqueta).Text(etiqueta).FontFamily(FlitDocumentTheme.FontMedium);
-            tabla.Cell().Element(Celda).Text(valor);
-        }
-    });
+    /// <summary>Tabla etiqueta-valor: bloques de 3 columnas, fila de etiquetas y debajo la de valores (<see cref="TablaFlit.Campos"/>).</summary>
+    private static void Tabla(IContainer contenedor, IReadOnlyList<(string Etiqueta, string Valor)> filas) => TablaFlit.Campos(contenedor, filas);
 
-    /// <summary>Tabla con encabezado de columnas y una fila por elemento.</summary>
-    private static void Grilla(IContainer contenedor, IReadOnlyList<string> columnas, IReadOnlyList<string[]> filas) => contenedor.Table(tabla =>
-    {
-        tabla.ColumnsDefinition(c =>
-        {
-            foreach (var _ in columnas)
-                c.RelativeColumn();
-        });
-        tabla.Header(h =>
-        {
-            foreach (var columna in columnas)
-                h.Cell().Element(Etiqueta).Text(columna).FontFamily(FlitDocumentTheme.FontMedium);
-        });
-        foreach (var fila in filas)
-        {
-            foreach (var valor in fila)
-                tabla.Cell().Element(Celda).Text(valor);
-        }
-    });
+    /// <summary>Tabla con encabezado de columnas y una fila por elemento (<see cref="TablaFlit.Grilla"/>).</summary>
+    private static void Grilla(IContainer contenedor, IReadOnlyList<string> columnas, IReadOnlyList<string[]> filas) =>
+        TablaFlit.Grilla(contenedor, columnas, filas);
 
-    private static IContainer Etiqueta(IContainer c) =>
-        c.Border(0.5f).BorderColor(FlitDocumentTheme.Gris).Background(FlitDocumentTheme.FondoEtiqueta).Padding(3);
-
-    private static IContainer Celda(IContainer c) => c.Border(0.5f).BorderColor(FlitDocumentTheme.Gris).Padding(3);
-
+    /// <summary>Fecha y hora (sin segundos) en hora Colombia: dd/MM/yyyy HH:mm.</summary>
     private static string Fecha(DateTimeOffset instante) =>
-        instante.ToOffset(VigenciaDelDia.OffsetColombia).ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+        instante.ToOffset(VigenciaDelDia.OffsetColombia).ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture);
 
     private static string Moneda(long valor) => "$ " + valor.ToString("#,0", Pesos);
 

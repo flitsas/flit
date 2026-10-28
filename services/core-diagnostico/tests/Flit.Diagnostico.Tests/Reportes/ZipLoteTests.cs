@@ -51,7 +51,7 @@ public sealed class ZipLoteTests
     private const string PayloadSimitManual =
         """{"semaforo":"ROJO","cantidad_comparendos":1,"comparendos":[{"numero":"TST-C-0502","fecha":"2026-10-01","valor":"1200000","estado":"PENDIENTE","organismo":"Organismo de prueba"}]}""";
 
-    private const string TituloSimit = "SIMIT — Comparendos del vehículo";
+    private const string TituloSimit = "COMPARENDOS DEL VEHÍCULO";
 
     private static readonly DateTimeOffset Dato = new(2026, 10, 22, 15, 0, 0, TimeSpan.Zero);
 
