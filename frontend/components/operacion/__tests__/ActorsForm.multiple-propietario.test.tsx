@@ -81,13 +81,6 @@ const COMPLETE_COMPRADOR = {
   ordinal: 1,
 };
 
-const COMPLETE_VENDEDOR = {
-  ...COMPLETE_COMPRADOR,
-  rol: 'vendedor' as const,
-  numeroDocumento: '22222222',
-  email: 'vendedor@example.com',
-};
-
 /** Espera a que Agregar esté habilitado (HU #14192: secuencia). */
 async function waitAddEnabled(sideLabel: string) {
   await waitFor(() => expect(addButton(sideLabel)).toBeEnabled());
