@@ -20793,7 +20793,7 @@ components:
         codigo: { type: string }
         nombre: { type: string }
         familia: { type: string }
-        elegible: { type: boolean, description: Regla K2 (perfil del tipo, publicado, wizard encendido). }
+        elegible: { type: boolean, description: "Regla K2 (perfil del tipo, publicado, wizard encendido)." }
         motivo: { type: string, description: Por qué no es elegible (vacío si lo es). }
         habilitado: { type: boolean, description: Lista blanca del superadministrador. }
         ofrecible: { type: boolean, description: elegible Y habilitado. }
@@ -20861,7 +20861,7 @@ components:
         vigenteDesde: { type: string, format: date-time, nullable: true }
         vigenteHasta: { type: string, format: date-time, nullable: true, description: Van las dos fechas o ninguna; la segunda posterior a la primera. }
         activo: { type: boolean, nullable: true }
-        file: { type: string, format: binary, description: JPG, PNG o WEBP de hasta 2 MB. Obligatoria al crear; opcional al editar. }
+        file: { type: string, format: binary, description: "JPG, PNG o WEBP de hasta 2 MB. Obligatoria al crear; opcional al editar." }
       required: [titulo, textoAlternativo]
     PersonaNaturalEnlace:
       type: object
