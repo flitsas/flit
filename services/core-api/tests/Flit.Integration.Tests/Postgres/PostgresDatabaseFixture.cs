@@ -115,6 +115,12 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
         // HU #13655 (DDL 147): permisos base del rol «Gestor OT» que crea la migración. Se trunca con roles y permisos;
         // la prueba que los necesite reaplica los DDL 137 y 147.
         "security.role_permissions",
+        // HU #14072 (DDL 164): fila única de parámetros del portal. Configuración, no catálogo (como
+        // runt_confirmation_settings): se trunca; la prueba que la necesite vuelve a insertar la fila.
+        "admin.persona_natural_settings",
+        // HU #14073 (DDL 166): las cinco preguntas frecuentes iniciales son contenido de trabajo, no catálogo.
+        // Se truncan; el portal y Plataforma las gestionan, y la prueba que las necesite las inserta.
+        "admin.persona_natural_faqs",
     };
 
     private const string MigrationsHistoryTable = "__EFMigrationsHistory";

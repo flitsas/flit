@@ -93,6 +93,33 @@ public sealed class ProcedureSyncReadRepositoryTests(PostgresDatabaseFixture fix
         ids.Should().Equal(propio);
     }
 
+    /// <summary>HU #14050 AC8 (Épica #14021): los trámites de la empresa «Persona Natural» no salen por el feed de Flito.</summary>
+    [PostgresFact]
+    public async Task AC8_LosTramitesDeLaEmpresaPersonaNatural_NoAparecenNiComoCambioNiComoBorrado_YLasDemasNoCambian()
+    {
+        await SembrarCompaniasAsync();
+        await using (var ctx = NewContext())
+        {
+            ctx.Tenants.Add(TenantSeed.New(Flit.Platform.Sdk.PlatformTenants.PersonaNatural, "IT-14050-PN", isGroupParent: false, parentId: null));
+            await ctx.SaveChangesAsync();
+        }
+
+        var propioA = await RadicadoAsync(CompaniaA, 1);
+        var portal = await RadicadoAsync(Flit.Platform.Sdk.PlatformTenants.PersonaNatural, 2);
+        var portalBorrado = await RadicadoAsync(Flit.Platform.Sdk.PlatformTenants.PersonaNatural, 3);
+        var propioB = await RadicadoAsync(CompaniaB, 4);
+        await EjecutarAsync("UPDATE tramites.procedure_instances SET deleted_at = now() WHERE id = @id", portalBorrado);
+        await ProcedureSyncTestWait.EsperarFeedEstableAsync(Fixture);
+
+        var cambios = (await LeerSinEsperarAsync(new(null, null, 100, SinVentana))).Select(c => c.ProcedureInstanceId);
+        var items = (await new ProcedureSyncReadRepository(NewContext()).ReadItemsAsync(new(null, null, 100, SinVentana), TestContext.Current.CancellationToken))
+            .Select(e => e.Item.Id);
+
+        cambios.Should().Equal(propioA, propioB);
+        cambios.Should().NotContain([portal, portalBorrado]);
+        items.Should().Equal(propioA, propioB);
+    }
+
     [PostgresFact]
     public async Task ElBorradoDeUnRadicadoPropioLlegaComoMarcaDeBorrado()
     {

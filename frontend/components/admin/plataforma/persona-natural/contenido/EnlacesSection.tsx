@@ -1,0 +1,206 @@
+"use client";
+
+// HU #14076 AC1/AC4/AC5 — Enlaces del portal (política de datos, términos, contacto de ventas y video). Un enlace
+// legal sin documento oficial se muestra como «Sin documento oficial»: el portal conserva su aviso actual y no se
+// inventa texto legal. Cada guardado queda en el borrador. Tabla estándar con RowActions y los cuatro estados.
+import { useCallback, useEffect, useState } from "react";
+import { Link2, Pencil, Save } from "lucide-react";
+import { InlineAlert } from "@/components/atom/InlineAlert";
+import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
+import { useToast } from "@/components/admin/Toast";
+import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+import { Modal } from "@/components/atom/Modal";
+import { RowActions } from "@/components/atom/RowActions";
+import { StatusBadge } from "@/components/atom/StatusBadge";
+import { formatFechaHora } from "@/lib/format/date";
+import {
+  ENLACES_LEGALES,
+  ENLACE_LABEL,
+  ENLACE_MAX,
+  establecerEnlacePn,
+  fetchEnlacesPn,
+  type EnlacePn,
+} from "@/lib/api/admin-pn-contenido";
+import { PN_FIELD_ERROR_CLS, PN_HINT_CLS, PN_INPUT_CLS, PN_INPUT_ERROR_CLS, PN_LABEL_CLS } from "../pn-ui";
+import { PnButton, PnSeccionHeader } from "../pn-componentes";
+import { pnErrorMessage } from "../pnErrors";
+import { validarEnlace } from "./contenidoReglas";
+
+/** Texto de la columna «Valor»: la URL, «Sin documento oficial» (legales) o «Sin valor» (los demás). */
+export function valorEnlace(e: EnlacePn): { texto: string; vacio: boolean } {
+  if (e.url) return { texto: e.url, vacio: false };
+  return { texto: ENLACES_LEGALES.includes(e.codigo) ? "Sin documento oficial" : "Sin valor", vacio: true };
+}
+
+function EnlaceFormModal({ enlace, onClose, onSave }: { enlace: EnlacePn; onClose: () => void; onSave: (url: string | null) => Promise<void> }) {
+  const legal = ENLACES_LEGALES.includes(enlace.codigo);
+  const [url, setUrl] = useState(enlace.url ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [general, setGeneral] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const invalido = validarEnlace(url, enlace.codigo);
+    setError(invalido);
+    setGeneral(null);
+    if (invalido) return;
+    setBusy(true);
+    try {
+      await onSave(url.trim() === "" ? null : url.trim());
+    } catch (err) {
+      setGeneral(pnErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      busy={busy}
+      title={`Editar: ${ENLACE_LABEL[enlace.codigo]}`}
+      description="El ciudadano verá el cambio cuando publiques el contenido."
+      icon={Link2}
+      size="md"
+      footer={
+        <div className="flex justify-end gap-2">
+          <PnButton variant="secondary" onClick={onClose} disabled={busy}>
+            Cancelar
+          </PnButton>
+          <PnButton type="submit" form="pn-enlace-form" variant="primary" icon={Save} loading={busy}>
+            Guardar enlace
+          </PnButton>
+        </div>
+      }
+    >
+      <form id="pn-enlace-form" onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+        <label className={PN_LABEL_CLS}>
+          Dirección web del enlace
+          <input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            maxLength={ENLACE_MAX}
+            placeholder="https://"
+            aria-invalid={Boolean(error)}
+            aria-describedby="pn-enlace-hint"
+            className={`${PN_INPUT_CLS} ${error ? PN_INPUT_ERROR_CLS : ""}`}
+          />
+          <span id="pn-enlace-hint" className={PN_HINT_CLS}>
+            {legal
+              ? "Déjalo vacío si no hay documento oficial: el portal conserva su aviso actual."
+              : enlace.codigo === "CONTACTO_VENTAS"
+                ? "Una página web, o un correo o teléfono con el formato mailto: o tel:. Vacío = sin valor."
+                : "Dirección web del video. Vacío = sin valor."}
+          </span>
+          {error && <span role="alert" className={PN_FIELD_ERROR_CLS}>{error}</span>}
+        </label>
+        {general && <InlineAlert tone="error">{general}</InlineAlert>}
+      </form>
+    </Modal>
+  );
+}
+
+export function EnlacesSection({ onCambio }: { onCambio: () => void }) {
+  const { show } = useToast();
+  const [enlaces, setEnlaces] = useState<EnlacePn[]>([]);
+  const [status, setStatus] = useState<UiStatus>("loading");
+  const [editando, setEditando] = useState<EnlacePn | null>(null);
+
+  const load = useCallback(async (signal?: AbortSignal) => {
+    setStatus("loading");
+    try {
+      const list = await fetchEnlacesPn(signal);
+      if (signal?.aborted) return;
+      setEnlaces(list);
+      setStatus(list.length === 0 ? "empty" : "ready");
+    } catch {
+      if (!signal?.aborted) setStatus("error");
+    }
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial: skeleton intencional
+    void load(controller.signal);
+    return () => controller.abort();
+  }, [load]);
+
+  const columns: DataTableColumn<EnlacePn>[] = [
+    { key: "enlace", header: "Enlace", cellClassName: "font-semibold", render: (e) => ENLACE_LABEL[e.codigo] },
+    {
+      key: "estado",
+      header: "Estado",
+      render: (e) => (
+        <StatusBadge label={e.url ? "Configurado" : "Falta configurar"} tone={e.url ? "success" : "warning"} />
+      ),
+    },
+    {
+      key: "valor",
+      header: "Dirección",
+      cellClassName: "max-w-[420px] break-all text-xs",
+      render: (e) => {
+        const v = valorEnlace(e);
+        return v.vacio ? <span className="text-[#59677D] dark:text-white/70">{v.texto}</span> : v.texto;
+      },
+    },
+    {
+      key: "actualizado",
+      header: "Actualizado",
+      cellClassName: "whitespace-nowrap text-xs",
+      render: (e) => (e.actualizadoEn ? formatFechaHora(e.actualizadoEn) : "—"),
+    },
+    {
+      key: "acciones",
+      header: "Acciones",
+      align: "right",
+      render: (e) => (
+        <RowActions actions={[{ icon: Pencil, label: `Editar ${ENLACE_LABEL[e.codigo]}`, tone: "primary", onClick: () => setEditando(e) }]} />
+      ),
+    },
+  ];
+
+  return (
+    <section aria-labelledby="pn-enlaces-titulo" className="flex flex-col gap-3">
+      <PnSeccionHeader
+        id="pn-enlaces-titulo"
+        contador={status === "ready" ? `${enlaces.filter((e) => e.url).length} de ${enlaces.length} configurados` : undefined}
+        titulo="Enlaces legales y de contacto"
+        descripcion="Política de datos, términos y condiciones, contacto de ventas y video. Las direcciones web deben empezar por http:// o https://. Sin documento oficial, el portal conserva su aviso actual."
+      />
+      {status === "loading" ? (
+        <CarLoaderModal label="Cargando enlaces…" />
+      ) : (
+        <UiStateBoundary
+          status={status}
+          emptyMessage="No hay enlaces para configurar."
+          errorMessage="No se pudieron cargar los enlaces."
+          onRetry={() => void load()}
+        >
+          <DataTable<EnlacePn>
+            ariaLabel="Enlaces del portal"
+            columns={columns}
+            rows={enlaces}
+            getRowKey={(e) => e.codigo}
+          />
+        </UiStateBoundary>
+      )}
+
+      {editando && (
+        <EnlaceFormModal
+          enlace={editando}
+          onClose={() => setEditando(null)}
+          onSave={async (url) => {
+            const guardado = await establecerEnlacePn(editando.codigo, url);
+            setEnlaces((prev) => prev.map((e) => (e.codigo === guardado.codigo ? guardado : e)));
+            setEditando(null);
+            show("Enlace guardado. El ciudadano lo verá cuando publiques.", "success");
+            onCambio();
+          }}
+        />
+      )}
+    </section>
+  );
+}

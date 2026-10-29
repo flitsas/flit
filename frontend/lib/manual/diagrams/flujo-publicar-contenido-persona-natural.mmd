@@ -1,0 +1,8 @@
+flowchart TD
+    A["El Super Admin edita preguntas,\nbanners o enlaces"] --> B["El cambio queda en el borrador:\n«Hay cambios sin publicar»"]
+    B --> C["Abre la «Vista previa»"]
+    C --> D{"¿Se ve como se espera?"}
+    D -- "No" --> A
+    D -- "Sí" --> E["Pulsa «Publicar» y confirma\n«Publicar ahora»"]
+    E --> F["Se crea una versión nueva\ny la anterior queda en el historial"]
+    F --> G["El ciudadano ve el contenido publicado"]

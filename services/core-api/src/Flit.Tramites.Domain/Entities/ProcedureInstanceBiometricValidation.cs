@@ -36,6 +36,18 @@ public sealed class ProcedureInstanceBiometricValidation
     /// </summary>
     public Guid? MandateSignerId { get; set; }
 
+    /// <summary>
+    /// HU #14044 (Feature #14023, Épica #14021) — solicitud del portal de Persona Natural (<c>external_ref</c> del trámite
+    /// que nacerá de ella) a la que pertenece esta validación. Decisión del PO (2026-10-27): en el portal una validación
+    /// vale SOLO para esa solicitud (no se reutiliza entre trámites ni tiene vigencia), por eso el ancla es la solicitud y no
+    /// la persona. Va siempre junto con <see cref="PortalParte"/> (CHECK en BD) y sin trámite ni persona del módulo Identidad.
+    /// Null en todo lo demás: FLIT 2 no la usa.
+    /// </summary>
+    public string? PortalSolicitudRef { get; set; }
+
+    /// <summary>HU #14044 — rol del actor en la solicitud del portal (vendedor, comprador, titular…); solo con <see cref="PortalSolicitudRef"/>.</summary>
+    public string? PortalParte { get; set; }
+
     public string Name { get; set; } = string.Empty;
     public string DocumentType { get; set; } = string.Empty;
     public string DocumentNumber { get; set; } = string.Empty;
