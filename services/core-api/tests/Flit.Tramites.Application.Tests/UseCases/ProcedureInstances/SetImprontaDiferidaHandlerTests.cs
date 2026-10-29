@@ -141,8 +141,8 @@ public sealed class SetImprontaDiferidaHandlerTests
     public async Task Diferir_NoDebilitaRadicacion_SubmitGateSigueExigiendoImprontaReal()
     {
         // Regresión clave: aunque la impronta quede "diferida" (flag manual en checklist_estado), el
-        // gate de radicación borrador→preparado sigue exigiendo el attachment REAL de impronta —
-        // SubmitGate.ImprontaGenerada ignora el flag manual.
+        // gate de radicación sigue exigiendo el attachment REAL cuando el ítem es obligatorio.
+        // El flag manual no cuenta. Si el catálogo la deja opcional, no se exige.
         var ct = TestContext.Current.CancellationToken;
         var instance = Instance(Guid.NewGuid(), Guid.NewGuid());
         SetupRepo(instance);
@@ -150,9 +150,12 @@ public sealed class SetImprontaDiferidaHandlerTests
         await _handler.HandleAsync(instance.Id, instance.TenantId, diferida: true, ct);
 
         instance.ChecklistEstado.Should().Contain("\"impronta\":true");
-        // Sin adjunto de impronta, la radicación sigue bloqueada por impronta_requerida.
         instance.Attachments.Should().NotContain(a => a.Tipo == "impronta");
-        var errors = SubmitGate.Evaluate(instance, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
-        errors.Should().Contain(SubmitGate.ImprontaRequerida);
+        var partes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // Catálogo opcional: diferir no inventa una exigencia.
+        SubmitGate.Evaluate(instance, partes).Should().NotContain(SubmitGate.ImprontaRequerida);
+        // Ítem obligatorio: el flag manual no reemplaza el archivo.
+        SubmitGate.Evaluate(instance, partes, improntaObligatoria: true)
+            .Should().Contain(SubmitGate.ImprontaRequerida);
     }
 }

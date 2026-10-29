@@ -50,7 +50,12 @@ import { useWizardTelemetry } from '@/hooks/useWizardTelemetry'; // Reportes2 HU
 import { PreflightPanel, preflightOverall } from './PreflightPanel';
 import { TransitOfficeSearchPicker } from './TransitOfficeSearchPicker';
 import { ActorsForm } from './ActorsForm';
-import { DocumentChecklist, DocumentUploadModeToggle, type DocumentUploadMode } from './DocumentChecklist';
+import {
+  DocumentChecklist,
+  DocumentUploadModeToggle,
+  improntaObligatoriaEnChecklist,
+  type DocumentUploadMode,
+} from './DocumentChecklist';
 import { CommercialForm } from './CommercialForm';
 import { PrendaForm, traspasoDecisions } from './PrendaForm';
 import { furObservationsPreview, furObservacionesDisponibles } from './fur-auto-observations';
@@ -1290,12 +1295,22 @@ export function TramiteWizard(props: Props) {
         } catch {
           // Puede existir ya; el consolidado fallará si realmente falta.
         }
-        // HU #13403 — con la generación deshabilitada la impronta se carga a mano: no se genera.
+        // Solo si el checklist la marca obligatoria. Opcional: el gestor la genera con el clic
+        // de la casilla; aquí un 409 o un fallo de Kyverum no debe ni intentarse.
         if (improntaGeneracionRef.current) {
+          let improntaObligatoria = false;
           try {
-            await tramitesClient.generarImpronta(id);
+            const chk = await tramitesClient.getChecklist(id);
+            improntaObligatoria = improntaObligatoriaEnChecklist(chk.items);
           } catch {
-            // Best-effort: sin impronta no bloquea el consolidado en backend (HU #11017).
+            improntaObligatoria = false;
+          }
+          if (improntaObligatoria) {
+            try {
+              await tramitesClient.generarImpronta(id);
+            } catch {
+              // Best-effort: sin impronta no bloquea el consolidado en backend (HU #11017).
+            }
           }
         }
         const result = await tramitesClient.generarConsolidado(id, undefined, true);
