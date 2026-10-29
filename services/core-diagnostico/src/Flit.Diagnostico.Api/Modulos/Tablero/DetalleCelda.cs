@@ -69,6 +69,7 @@ internal sealed partial class DetalleCelda(
         IReadOnlyList<PersonaDetalleDto>? personas = null;
         ResultadoDetalleDto? resultado = null;
         JsonElement? respuestaFuente = null;
+        JsonElement? respuestaProveedor = null;
         var cifrada = conDato ? celda.RespuestaFuenteCifrada : null;
         if (EjecutorPorPersonas.EsPorPersona(codigo))
         {
@@ -84,12 +85,19 @@ internal sealed partial class DetalleCelda(
                 resultado = ProyectorDetalleCelda.ResultadoVehiculo(codigo, celda.Payload);
             if (!RespuestaFuenteCelda.TryLeerVehiculo(protectorRespuesta, cifrada, out respuestaFuente))
                 RespuestaIlegible(log, celda.Id, codigo);
+            // HU #14183: solo SIMIT_VEHICULO expone el crudo a nivel de celda. RUNT, avalúo e impuesto quedan en null.
+            if (codigo == Fuente.SimitVehiculo && respuestaFuente is { } crudaDeLaCelda)
+            {
+                respuestaProveedor = ProyectorDetalleCelda.RespuestaProveedor(crudaDeLaCelda, out var ilegible);
+                if (ilegible)
+                    CrudoCeldaIlegible(log, celda.Id, codigo);
+            }
         }
 
         return new DetalleCeldaDto(
             celda.Id, vehiculoId, CodigosDeEnum.Codigo(codigo), CodigosDeEnum.Codigo(celda.Estado),
             celda.MotivoNa is { } motivo ? CodigosDeEnum.Codigo(motivo) : null, celda.TipoError, celda.DatoObtenidoEn, celda.Reutilizada,
-            resultado, personas, respuestaFuente, identificador, cabecera.Nombre);
+            resultado, personas, respuestaFuente, identificador, cabecera.Nombre, respuestaProveedor);
     }
 
     /// <summary>
@@ -111,6 +119,11 @@ internal sealed partial class DetalleCelda(
     [LoggerMessage(EventId = 141531, Level = LogLevel.Warning,
         Message = "La respuesta cruda del proveedor de la persona {Orden} de la celda {CeldaId} ({Fuente}) no es un objeto JSON válido: el detalle va con respuesta_proveedor = null")]
     private static partial void CrudoIlegible(ILogger logger, Guid celdaId, Fuente fuente, int orden);
+
+    // HU #14183: misma regla que la persona, sin el contenido del crudo.
+    [LoggerMessage(EventId = 141832, Level = LogLevel.Warning,
+        Message = "La respuesta cruda del proveedor de la celda {CeldaId} ({Fuente}) no es un objeto JSON válido: el detalle va con respuesta_proveedor = null")]
+    private static partial void CrudoCeldaIlegible(ILogger logger, Guid celdaId, Fuente fuente);
 }
 
 /// <summary>

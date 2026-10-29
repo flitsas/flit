@@ -39,7 +39,7 @@ internal static class SolicitudesProto
     public static ConsultarMultasRequest Multas(SolicitudSimit solicitud)
     {
         ArgumentNullException.ThrowIfNull(solicitud);
-        var request = new ConsultarMultasRequest { Opciones = new OpcionesConsulta() };
+        var request = new ConsultarMultasRequest { Opciones = ConRespuestaCruda() };
         if (solicitud.Documento is { } documento)
         {
             request.Documento = new DocumentoIdentidad { Tipo = documento.Tipo.Trim().ToUpperInvariant(), Numero = documento.Numero };
@@ -52,6 +52,9 @@ internal static class SolicitudesProto
 
         return request;
     }
+
+    /// <summary>Pide el cuerpo HTTP del proveedor (<c>incluir_respuesta_cruda</c>). Lo usan SIMIT, RUNT persona y RUES.</summary>
+    public static OpcionesConsulta ConRespuestaCruda() => new() { IncluirRespuestaCruda = true };
 
     /// <summary>La solicitud del avalúo: placa y VIN si los hay y los datos técnicos (0 o vacío si faltan).</summary>
     public static ConsultarAvaluosRequest Avaluos(SolicitudAvaluo solicitud)
@@ -242,7 +245,7 @@ internal sealed class ConstructorSolicitudRuntPersona : ConstructorPorPersonas
     }
 
     /// <summary>Las opciones de RUNT persona y RUES: la respuesta íntegra del proveedor (core-consultas no la sirve desde caché).</summary>
-    private static OpcionesConsulta ConRespuestaCruda() => new() { IncluirRespuestaCruda = true };
+    private static OpcionesConsulta ConRespuestaCruda() => SolicitudesProto.ConRespuestaCruda();
 }
 
 /// <summary>SIMIT_PROPIETARIO y SIMIT_LOCATARIO por documento (<see cref="EjecutorCeldaSimitPersona"/>): NIT como persona jurídica.</summary>

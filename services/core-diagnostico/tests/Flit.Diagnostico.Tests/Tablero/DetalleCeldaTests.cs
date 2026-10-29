@@ -260,8 +260,9 @@ public sealed class DetalleCeldaTests
         // HU #14087 AC8 (decisión del usuario 2026-10-27, enmienda de ADR-0075): la ÚNICA clave nueva permitida es respuesta_fuente
         // (la respuesta completa de la fuente, en la celda y en cada persona); origen, usuario manual y transacción siguen fuera.
         nombres.Where(n => n == "respuesta_fuente").Should().HaveCount(2, "en DetalleCeldaDto y en PersonaDetalleDto");
-        // HU #14153 AC6: la respuesta íntegra del proveedor, solo en cada persona.
-        nombres.Where(n => n == "respuesta_proveedor").Should().HaveCount(1, "solo en PersonaDetalleDto");
+        // HU #14153 AC6: la respuesta íntegra del proveedor en cada persona;
+        // HU #14183: también a nivel de celda para SIMIT_VEHICULO.
+        nombres.Where(n => n == "respuesta_proveedor").Should().HaveCount(2, "en PersonaDetalleDto Y en DetalleCeldaDto (para SIMIT_VEHICULO)");
 
         await using var api = await ApiDePrueba.ConBaseAsync();
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
@@ -618,6 +619,135 @@ public sealed class DetalleCeldaTests
             detalle.GetProperty("personas").ValueKind.Should().Be(JsonValueKind.Null);
             detalle.GetProperty("dato_obtenido_en").ValueKind.Should().Be(JsonValueKind.Null);
         }
+    }
+
+    // HU #14183 T3 — SIMIT_VEHICULO trae respuesta_proveedor a nivel de celda (no en personas): el JSON que devolvió
+    // el proveedor (resultado.respuesta_cruda.json de respuesta_fuente) parseado como OBJETO, sin quitar ninguna clave.
+    // Llenado manual → respuesta_proveedor null. Reutilización copia el crudo.
+    [Fact]
+    public async Task HU14183_SimitVehiculo_trae_respuesta_proveedor_a_nivel_de_celda()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, vehiculos:
+            [new("TST501", [new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1)])]);
+        var vehiculo = lote.Vehiculos.Single().Id;
+        var celda = lote.Celda("TST501", Fuente.SimitVehiculo);
+        await Tablero.PayloadAsync(empresa, celda, Simit(1, "ROJO"), ct);
+
+        const string ProveedorSimit = """{"data":{"multas":[{"estadoCartera":"Cobro coactivo","estadoComparendo":null,"valor":"344728"}],"plate":"TST501","totalMultasPagar":"1"},"signature":{"dateTime":"October 29, 2026","message":"Certified by Verifik.co"},"id":"TEST-501"}""";
+        var crudaFuente = ConCrudo("verifik_simit", "verifik_simit", "vehicle", ProveedorSimit);
+        await RespuestaFuente.GuardarCifradaAsync(api, celda.Id, RespuestaFuente.Cifrar(api, crudaFuente), ct);
+
+        var detalle = await DetalleAsync(empresa.Cliente(), lote.Id, vehiculo, "SIMIT_VEHICULO", ct);
+
+        var proveedor = detalle.GetProperty("respuesta_proveedor");
+        proveedor.ValueKind.Should().Be(JsonValueKind.Object, "un objeto JSON, no un texto");
+        JsonElement.DeepEquals(proveedor, JsonDocument.Parse(ProveedorSimit).RootElement).Should().BeTrue("todas las claves y valores del proveedor, sin quitar ninguno");
+        proveedor.GetProperty("signature").GetProperty("message").GetString().Should().Be("Certified by Verifik.co");
+        proveedor.GetProperty("data").GetProperty("multas").GetArrayLength().Should().Be(1);
+        detalle.GetProperty("personas").ValueKind.Should().Be(JsonValueKind.Null, "SIMIT_VEHICULO no tiene personas");
+    }
+
+    // HU #14183 T3 — sin crudo en SIMIT_VEHICULO (llenado manual), respuesta_proveedor = null; la celda responde 200.
+    [Fact]
+    public async Task HU14183_SimitVehiculo_sin_crudo_o_llenado_manual_respuesta_proveedor_es_null()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, vehiculos:
+        [
+            new("TST502", [new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1)]),
+            new("TST503", [new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1)]),
+        ]);
+        var v1 = lote.Vehiculos.Single(v => v.Placa == "TST502").Id;
+        var v2 = lote.Vehiculos.Single(v => v.Placa == "TST503").Id;
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST502", Fuente.SimitVehiculo), Simit(0, "VERDE"), ct);
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST503", Fuente.SimitVehiculo), Simit(0, "VERDE"), ct, manual: true);
+        // TST502: sin respuesta cifrada (no hay crudo)
+        // TST503: manual (sin respuesta cifrada)
+
+        var sinCrudo = await DetalleAsync(empresa.Cliente(), lote.Id, v1, "SIMIT_VEHICULO", ct);
+        var manual = await DetalleAsync(empresa.Cliente(), lote.Id, v2, "SIMIT_VEHICULO", ct);
+
+        sinCrudo.GetProperty("respuesta_proveedor").ValueKind.Should().Be(JsonValueKind.Null, "sin respuesta guardada: null");
+        sinCrudo.GetProperty("resultado").GetProperty("semaforo").GetString().Should().Be("VERDE");
+        manual.GetProperty("respuesta_proveedor").ValueKind.Should().Be(JsonValueKind.Null, "el llenado manual no tiene crudo del proveedor");
+    }
+
+    // HU #14183 T3 — crudo ausente, que no es JSON o que no es objeto: respuesta_proveedor = null, 200, y el log no lleva el contenido.
+    [Fact]
+    public async Task HU14183_SimitVehiculo_crudo_invalido_respuesta_proveedor_es_null_y_el_log_no_trae_el_contenido()
+    {
+        var logs = new LogsEnMemoria();
+        await using var api = await ApiDePrueba.ConBaseAsync(configurar: b =>
+        {
+            b.Logging.AddProvider(logs);
+            b.Logging.AddFilter<LogsEnMemoria>(null, Microsoft.Extensions.Logging.LogLevel.Trace);
+        });
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, vehiculos:
+        [
+            new("TST504", [new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1)]),
+            new("TST505", [new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1)]),
+            new("TST506", [new(Fuente.Runt, EstadoCelda.Pendiente, 1)]),
+        ]);
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST504", Fuente.SimitVehiculo), Simit(0, "VERDE"), ct);
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST505", Fuente.SimitVehiculo), Simit(0, "VERDE"), ct);
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST506", Fuente.Runt), PayloadRunt, ct);
+        await RespuestaFuente.GuardarCifradaAsync(api, lote.Celda("TST504", Fuente.SimitVehiculo).Id,
+            RespuestaFuente.Cifrar(api, ConCrudo("verifik_simit", "verifik_simit", "vehicle", "{no es json CRUDO-SECRETO-504")), ct);
+        await RespuestaFuente.GuardarCifradaAsync(api, lote.Celda("TST505", Fuente.SimitVehiculo).Id,
+            RespuestaFuente.Cifrar(api, ConCrudo("verifik_simit", "verifik_simit", "vehicle", """["CRUDO-LISTA-505"]""")), ct);
+        await RespuestaFuente.GuardarCifradaAsync(api, lote.Celda("TST506", Fuente.Runt).Id,
+            RespuestaFuente.Cifrar(api, ConCrudo("intempo", "intempo", "vehicle", """{"plate":"TST506"}""")), ct);
+
+        var ilegible = await DetalleAsync(empresa.Cliente(), lote.Id, lote.Vehiculos.Single(v => v.Placa == "TST504").Id, "SIMIT_VEHICULO", ct);
+        var lista = await DetalleAsync(empresa.Cliente(), lote.Id, lote.Vehiculos.Single(v => v.Placa == "TST505").Id, "SIMIT_VEHICULO", ct);
+        var runt = await DetalleAsync(empresa.Cliente(), lote.Id, lote.Vehiculos.Single(v => v.Placa == "TST506").Id, "RUNT", ct);
+
+        ilegible.GetProperty("respuesta_proveedor").ValueKind.Should().Be(JsonValueKind.Null);
+        ilegible.GetProperty("respuesta_fuente").ValueKind.Should().Be(JsonValueKind.Object, "la respuesta de la fuente sigue llegando");
+        lista.GetProperty("respuesta_proveedor").ValueKind.Should().Be(JsonValueKind.Null, "un JSON que no es objeto queda en null");
+        runt.GetProperty("respuesta_proveedor").ValueKind.Should().Be(JsonValueKind.Null, "solo SIMIT_VEHICULO llena la celda");
+        var avisos = logs.Mensajes.Where(m => m.Contains("respuesta_proveedor", StringComparison.Ordinal)).ToList();
+        avisos.Should().HaveCount(2, "se registra el crudo inválido y el que no es objeto; RUNT no");
+        logs.Mensajes.Should().NotContain(m => m.Contains("CRUDO-SECRETO-504", StringComparison.Ordinal) || m.Contains("CRUDO-LISTA-505", StringComparison.Ordinal),
+            "el log nunca lleva el contenido del crudo");
+    }
+
+    // HU #14183 T3 — en SIMIT de persona el crudo sigue en personas[].respuesta_proveedor; la celda queda en null.
+    [Fact]
+    public async Task HU14183_SimitPersona_trae_el_crudo_en_la_persona_y_no_en_la_celda()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, vehiculos:
+            [new("TST507", [new(Fuente.SimitPropietario, EstadoCelda.Pendiente, 1)])]);
+        var vehiculo = lote.Vehiculos.Single().Id;
+        var celda = lote.Celda("TST507", Fuente.SimitPropietario);
+        var persona = await PersonaAsync(api, empresa, vehiculo, RolPersona.Propietario, 1, "C", "9999900016", ct);
+        await Tablero.PayloadAsync(empresa, celda, Personas((persona.Id, 1, "SIMIT", "OK", Simit(1, "ROJO"), null)), ct);
+        const string Proveedor = """{"data":{"documentNumber":"9999900016","multas":[{"estadoCartera":"Cobro coactivo","estadoComparendo":null}]},"id":"EJEMPLO-PERSONA"}""";
+        await RespuestaFuente.GuardarCifradaAsync(api, celda.Id, RespuestaFuente.Cifrar(api, JsonSerializer.Serialize(new Dictionary<string, string>
+        {
+            ["1"] = ConCrudo("verifik_simit", "verifik_simit", "person", Proveedor),
+        })), ct);
+
+        var detalle = await DetalleAsync(empresa.Cliente(), lote.Id, vehiculo, "SIMIT_PROPIETARIO", ct);
+
+        detalle.GetProperty("respuesta_proveedor").ValueKind.Should().Be(JsonValueKind.Null, "en la celda de persona no se llena");
+        var deLaPersona = detalle.GetProperty("personas")[0].GetProperty("respuesta_proveedor");
+        deLaPersona.ValueKind.Should().Be(JsonValueKind.Object);
+        JsonElement.DeepEquals(deLaPersona, JsonDocument.Parse(Proveedor).RootElement).Should().BeTrue();
     }
 
     private static async Task<JsonElement> DetalleAsync(HttpClient cliente, Guid lote, Guid vehiculo, string fuente, CancellationToken ct)

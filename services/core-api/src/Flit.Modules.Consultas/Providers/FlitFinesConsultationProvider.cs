@@ -1,8 +1,8 @@
 using System.Net;
 using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Text.Json;
 using Flit.Tramites.Application.UseCases.Consultations;
+using Flit.Tramites.Domain.Certifications;
 using Microsoft.Extensions.Options;
 
 namespace Flit.Infrastructure.Consultations;
@@ -52,10 +52,10 @@ internal sealed class FlitFinesConsultationProvider(
                   $"?documentType={Uri.EscapeDataString(documentType)}" +
                   $"&documentNumber={Uri.EscapeDataString(documentNumber)}";
 
-        return await SendAsync(url, ct);
+        return await SendAsync(url, documentNumber, ct);
     }
 
-    private async Task<ConsultationResult> SendAsync(string url, CancellationToken ct)
+    private async Task<ConsultationResult> SendAsync(string url, string documentNumber, CancellationToken ct)
     {
         HttpStatusCode? estado = null;
         try
@@ -72,11 +72,16 @@ internal sealed class FlitFinesConsultationProvider(
             if (!response.IsSuccessStatusCode)
                 return ProviderUnavailable(ClasificadorFalloHttp.PorEstado(response.StatusCode));
 
-            var payload = await response.Content.ReadFromJsonAsync<FlitFinesResponse>(JsonOptions, ct);
+            // HU #14183: cuerpo HTTP tal cual (mismo patrón que conductor y RUES). El semáforo no cambia.
+            var raw = await response.Content.ReadAsStringAsync(ct);
+            var payload = JsonSerializer.Deserialize<FlitFinesResponse>(raw, JsonOptions);
             if (payload is null)
                 return ProviderUnavailable(ClasificadorFalloHttp.CuerpoIlegible(response.StatusCode));
 
-            return FlitFinesResultMapper.Map(payload);
+            return FlitFinesResultMapper.Map(payload) with
+            {
+                RawPayload = new RawProviderPayload(Key_, RawProviderPayload.PersonSubject, documentNumber, raw, DateTimeOffset.UtcNow),
+            };
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

@@ -171,6 +171,13 @@ public sealed class EjecutorCeldaSimitVehiculoTests
         (copia.Estado, copia.ReutilizadaDeId, copia.Payload).Should().Be((EstadoCelda.Completado, (Guid?)celdaA.Id, celdaA.Payload));
         var intento = (await MotorPersonas.IntentosAsync(dos.A, copia.Id, ct)).Should().ContainSingle().Subject;
         (intento.DesdeCache, intento.Servicio).Should().Be((true, (ServicioConsulta?)null));
+
+        // HU #14183 T3 — la reutilización del mismo día copia el crudo (los mismos bytes cifrados).
+        var cifradaOriginal = await RespuestaFuenteTests.CifradaAsync(api, celdaA.Id, ct);
+        var cifradaCopia = await RespuestaFuenteTests.CifradaAsync(api, copia.Id, ct);
+        cifradaCopia.Should().Equal(cifradaOriginal, "se copia el cifrado tal cual");
+        RespuestaFuenteTests.Descifrar(api, cifradaCopia!).Should().Contain("CRUDO-SIMIT-REUSO",
+            "la solicitud pidió incluir_respuesta_cruda y la copia conserva ese cuerpo");
     }
 
     /// <summary>API con el RUNT de <see cref="RuntParaSimit"/>; el ejecutor SIMIT es el real del servicio.</summary>
@@ -268,6 +275,17 @@ public sealed class MultasGrpcFalso : ConsultasService.ConsultasServiceClient
         _llamadas.Enqueue((options.Headers?.GetValue(PlatformServiceCallInterceptor.TenantMetadata), request.Placa?.Valor ?? string.Empty,
             request.Documento is not null, request.TipoPersona));
         var resultado = new ResultadoConsulta { Proveedor = "smartcloud_simit", Semaforo = Semaforo.Rojo };
+        if (request.Opciones?.IncluirRespuestaCruda == true)
+        {
+            resultado.RespuestaCruda = new RespuestaCruda
+            {
+                Proveedor = "verifik_simit",
+                TipoSujeto = "vehicle",
+                ClaveSujeto = request.Placa?.Valor ?? string.Empty,
+                Json = """{"data":{"multas":[],"plate":"TST102"},"id":"CRUDO-SIMIT-REUSO"}""",
+            };
+        }
+
         resultado.Campos.Add(new Campo { Clave = "person_full_name", ValorTexto = "PERSONA PRUEBA INFRACTORA" });
         var multas = new Chequeo { Clave = "multas", Etiqueta = "Multas", Estado = EstadoChequeo.Fail, Fuente = "SIMIT" };
         multas.Comparendos.Add(new Comparendo { Numero = "C-1021", Fecha = "2026-01-10", Valor = "604100.00", Estado = "PENDIENTE", Organismo = "TRANSITO FICTICIO" });

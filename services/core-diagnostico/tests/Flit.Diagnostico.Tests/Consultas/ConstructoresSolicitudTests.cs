@@ -45,7 +45,8 @@ public sealed class ConstructoresSolicitudTests
         // HU #14153 AC4: RUNT persona y RUES piden además la respuesta cruda del proveedor (una opción, no un dato de identificación).
         [RpcConsultas.Conductor] = ["opciones", "opciones.incluirRespuestaCruda", "documento", "documento.tipo", "documento.numero"],
         [RpcConsultas.Rues] = ["opciones", "opciones.incluirRespuestaCruda", "nit"],
-        [RpcConsultas.Multas] = ["opciones", "documento", "documento.tipo", "documento.numero", "tipoPersona", "placa", "placa.valor"],
+        // HU #14183 T3: SIMIT también lleva opciones.incluirRespuestaCruda=true.
+        [RpcConsultas.Multas] = ["opciones", "opciones.incluirRespuestaCruda", "documento", "documento.tipo", "documento.numero", "tipoPersona", "placa", "placa.valor"],
         [RpcConsultas.Avaluos] = ["opciones", "placa", "placa.valor", "vin", "vin.valor", "modelo", "cilindraje", "combustible", "pasajeros"],
         [RpcConsultas.Impuesto] = ["opciones", "placa", "placa.valor", "departamentoCodigo"],
     };
@@ -94,10 +95,10 @@ public sealed class ConstructoresSolicitudTests
         }, "cada fuente del alcance tiene su solicitud en los tres vehículos");
     }
 
-    // HU #14153 AC4 — solo RUNT_PROPIETARIO y RUNT_LOCATARIO (ConsultarConductor y, con NIT, ConsultarRues) llevan
-    // incluir_respuesta_cruda=true; RUNT del vehículo, SIMIT, avalúo e impuesto se construyen igual que hoy (sin la opción).
+    // HU #14153 AC4 (RUNT persona) + HU #14183 T3 (SIMIT) — RUNT_PROPIETARIO, RUNT_LOCATARIO y las tres fuentes SIMIT llevan
+    // incluir_respuesta_cruda=true; RUNT del vehículo, avalúo e impuesto NO (sin la opción).
     [Fact]
-    public async Task HU14153_AC4_Solo_RUNT_persona_y_RUES_piden_la_respuesta_cruda()
+    public async Task HU14183_SIMIT_y_RUNT_persona_piden_la_respuesta_cruda_y_el_resto_no()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var api = await MotorNa.ArrancarAsync();
@@ -115,10 +116,20 @@ public sealed class ConstructoresSolicitudTests
                 porFuente.Add((celda.Fuente, s.Rpc, Opciones(s.Solicitud)?.IncluirRespuestaCruda == true));
         }
 
-        porFuente.Where(p => p.Crudo).Select(p => p.Fuente).Distinct().Should().BeEquivalentTo([Fuente.RuntPropietario, Fuente.RuntLocatario]);
-        porFuente.Where(p => p.Crudo).Select(p => p.Rpc).Distinct().Should().BeEquivalentTo([RpcConsultas.Conductor, RpcConsultas.Rues]);
-        porFuente.Where(p => p.Fuente is Fuente.RuntPropietario or Fuente.RuntLocatario).Should().OnlyContain(p => p.Crudo, "toda solicitud de esas dos fuentes la pide");
-        porFuente.Where(p => p.Fuente is not (Fuente.RuntPropietario or Fuente.RuntLocatario)).Should().NotBeEmpty().And.OnlyContain(p => !p.Crudo);
+        // HU #14183 T3: las tres fuentes SIMIT también piden el crudo del proveedor.
+        var fuentesConCrudo = new[]
+        {
+            Fuente.RuntPropietario, Fuente.RuntLocatario,
+            Fuente.SimitVehiculo, Fuente.SimitPropietario, Fuente.SimitLocatario,
+        };
+        porFuente.Where(p => p.Crudo).Select(p => p.Fuente).Distinct()
+            .Should().BeEquivalentTo(fuentesConCrudo, "RUNT persona y todas las fuentes SIMIT piden el crudo");
+        porFuente.Where(p => p.Fuente is Fuente.SimitVehiculo or Fuente.SimitPropietario or Fuente.SimitLocatario)
+            .Should().OnlyContain(p => p.Crudo, "toda solicitud SIMIT pide incluir_respuesta_cruda");
+        porFuente.Where(p => p.Fuente is Fuente.RuntPropietario or Fuente.RuntLocatario)
+            .Should().OnlyContain(p => p.Crudo, "toda solicitud de RUNT persona la pide");
+        porFuente.Where(p => p.Fuente is Fuente.Runt or Fuente.Avaluo or Fuente.ImpuestoDepartamental)
+            .Should().NotBeEmpty().And.OnlyContain(p => !p.Crudo, "RUNT vehículo, avalúo e impuesto NO piden crudo");
     }
 
     private static OpcionesConsulta? Opciones(IMessage solicitud) => solicitud switch
@@ -170,8 +181,11 @@ public sealed class ConstructoresSolicitudTests
 
         var solicitud = (await constructor.ConstruirAsync(db, celda, ct)).Should().ContainSingle().Subject;
 
-        solicitud.Solicitud.Should().Be(new ConsultarMultasRequest { Opciones = new OpcionesConsulta(), Placa = new Placa { Valor = vehiculo.Placa } },
-            "sin propietario registrado, la placa sola basta para el proveedor por placa");
+        solicitud.Solicitud.Should().Be(new ConsultarMultasRequest
+        {
+            Opciones = new OpcionesConsulta { IncluirRespuestaCruda = true },
+            Placa = new Placa { Valor = vehiculo.Placa },
+        }, "sin propietario registrado, la placa sola basta y SIMIT igual pide la respuesta cruda");
     }
 
     /// <summary>
@@ -214,16 +228,17 @@ public sealed class ConstructoresSolicitudTests
                 : [],
             // Bug SIMIT por placa (2026-10-27): la placa y el documento del primer propietario del RUNT (para el proveedor que lo exige),
             // sin tipo de persona: el proveedor externo se elige como por placa.
+            // HU #14183 T3: las tres fuentes SIMIT usan conCrudo (IncluirRespuestaCruda=true).
             Fuente.SimitVehiculo => [(RpcConsultas.Multas, new ConsultarMultasRequest
             {
-                Opciones = opciones,
+                Opciones = conCrudo,
                 Placa = new Placa { Valor = v.Placa },
                 Documento = tst003 ? new DocumentoIdentidad { Tipo = "NIT", Numero = Nit } : new DocumentoIdentidad { Tipo = "CC", Numero = Natural },
             })],
             Fuente.SimitPropietario => tst003
-                ? [(RpcConsultas.Multas, PorDocumento("NIT", Nit, TipoPersona.Juridica))]
-                : [(RpcConsultas.Multas, PorDocumento("CC", Natural, TipoPersona.Natural))],
-            Fuente.SimitLocatario => tst003 ? [(RpcConsultas.Multas, PorDocumento("CC", Locatario, TipoPersona.Natural))] : [],
+                ? [(RpcConsultas.Multas, PorDocumento("NIT", Nit, TipoPersona.Juridica, crudo: true))]
+                : [(RpcConsultas.Multas, PorDocumento("CC", Natural, TipoPersona.Natural, crudo: true))],
+            Fuente.SimitLocatario => tst003 ? [(RpcConsultas.Multas, PorDocumento("CC", Locatario, TipoPersona.Natural, crudo: true))] : [],
             Fuente.Avaluo => [(RpcConsultas.Avaluos, Avaluo(v, tst003))],
             Fuente.ImpuestoDepartamental => [(RpcConsultas.Impuesto, new ConsultarImpuestoVehicularRequest
             {
@@ -235,9 +250,9 @@ public sealed class ConstructoresSolicitudTests
         };
     }
 
-    private static ConsultarMultasRequest PorDocumento(string tipo, string numero, TipoPersona tipoPersona) => new()
+    private static ConsultarMultasRequest PorDocumento(string tipo, string numero, TipoPersona tipoPersona, bool crudo = false) => new()
     {
-        Opciones = new OpcionesConsulta(),
+        Opciones = crudo ? new OpcionesConsulta { IncluirRespuestaCruda = true } : new OpcionesConsulta(),
         Documento = new DocumentoIdentidad { Tipo = tipo, Numero = numero },
         TipoPersona = tipoPersona,
     };

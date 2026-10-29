@@ -3,17 +3,20 @@ using System.Text.Json;
 namespace Flit.Consultas.Api.Simulacion;
 
 /// <summary>
-/// HU #14153 AC3 — respuestas crudas INVENTADAS de los proveedores de conductor (Kyverum RUNT persona) y RUES (Verifik), versionadas
-/// como recursos del ensamblado (<c>Simulacion/Fixtures/proveedor-*.json</c>), con la forma del JSON real según los DTO del módulo
-/// (<c>KyverumRuntPersonaResponse</c>, <c>VerifikRuesResponse</c>). Datos ficticios: documentos y NIT en el rango 99999…, nombres
-/// «FICTICI…». Nunca se construyen a partir de una muestra real. Las marcas <c>{{documento}}</c>, <c>{{nit}}</c>, <c>{{estado}}</c> y
-/// <c>{{renovacion}}</c> se reemplazan con el valor consultado (escapado como texto JSON) por <see cref="Con"/>.
+/// HU #14153 AC3 y HU #14183 T2 — respuestas crudas INVENTADAS de conductor (Kyverum), RUES (Verifik) y SIMIT (Verifik),
+/// versionadas como recursos del ensamblado (<c>Simulacion/Fixtures/proveedor-*.json</c>). SIMIT usa los cuerpos de la sección 3.1
+/// del plan (persona con cobro coactivo, vehículo sin multas y 404 sin registros): documentos 99999… y placas TST201/TST202.
+/// Nunca se construyen a partir de una muestra con identificadores reales. Las marcas <c>{{documento}}</c>, <c>{{nit}}</c>,
+/// <c>{{estado}}</c> y <c>{{renovacion}}</c> se reemplazan con el valor consultado (escapado como texto JSON) por <see cref="Con"/>.
 /// </summary>
 internal static class FixturesProveedor
 {
     public const string Conductor = "proveedor-kyverum-conductor.json";
     public const string ConductorSinLicencias = "proveedor-kyverum-conductor-sin-licencias.json";
     public const string Rues = "proveedor-verifik-rues.json";
+    public const string SimitPersona = "proveedor-verifik-simit-persona.json";
+    public const string SimitVehiculo = "proveedor-verifik-simit-vehiculo.json";
+    public const string SimitSinRegistros = "proveedor-verifik-simit-sin-registros.json";
 
     private static readonly string Prefijo = $"{typeof(FixturesProveedor).Assembly.GetName().Name}.Simulacion.Fixtures.";
 

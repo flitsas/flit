@@ -963,6 +963,7 @@ paths:
                           - { no_documento: "9999900401", nombre_completo: PERSONA PRUEBA UNO, tipo_propiedad: 0 }
                         garantias_mobiliarias: []
                       http_status: 200
+                    respuesta_proveedor: null
                 simitVehiculo:
                   summary: SIMIT del vehículo
                   value:
@@ -984,6 +985,12 @@ paths:
                       comparendos_truncados: false
                     personas: null
                     respuesta_fuente: null
+                    respuesta_proveedor:
+                      data:
+                        multas: []
+                        plate: TST202
+                        paramEntradaPlaca: true
+                      id: EJEMPLO-VEHICULO
                 avaluoSinValor:
                   summary: AVALUO sin valor comercial
                   value:
@@ -1005,6 +1012,7 @@ paths:
                         - { fuente: fasecolda, estado: SIN_DATOS, valor: null, muestras: null, fecha: "2026-10-22" }
                     personas: null
                     respuesta_fuente: null
+                    respuesta_proveedor: null
                 impuesto:
                   summary: IMPUESTO_DEPARTAMENTAL con 350.000 pendientes de 2026 y 2025 pagada (HU #13864)
                   value:
@@ -1025,6 +1033,7 @@ paths:
                         - { anio: 2026, valor: 350000, pagada: false }
                     personas: null
                     respuesta_fuente: null
+                    respuesta_proveedor: null
                 impuestoNoAplica:
                   summary: IMPUESTO_DEPARTAMENTAL en N/A por departamento no soportado (HU #13864)
                   value:
@@ -1041,6 +1050,7 @@ paths:
                     resultado: null
                     personas: null
                     respuesta_fuente: null
+                    respuesta_proveedor: null
                 runtPropietario:
                   summary: RUNT_PROPIETARIO con un natural en OK y un NIT (RUES) en error
                   value:
@@ -1100,6 +1110,7 @@ paths:
                         respuesta_fuente: null
                         respuesta_proveedor: null
                     respuesta_fuente: null
+                    respuesta_proveedor: null
         "400":
           description: "`code` = FUENTE_INVALIDA (`campo` = fuente): el código de fuente no existe."
           content:
@@ -3574,7 +3585,7 @@ components:
         Detalle de una celda (HU #13798). DTO cerrado: sin origen, usuario manual, transacción ni payload en campos
         propios (R-20). Todas las claves van siempre. Desde HU #14087 AC8 (decisión del usuario 2026-10-27, enmienda de
         ADR-0075 en Propuesto) `respuesta_fuente` trae además la respuesta COMPLETA de la fuente, con datos personales.
-      required: [id, vehiculo_id, fuente, estado, motivo_na, tipo_error, dato_obtenido_en, reutilizada, resultado, personas, respuesta_fuente, identificador, nombre_diagnostico]
+      required: [id, vehiculo_id, fuente, estado, motivo_na, tipo_error, dato_obtenido_en, reutilizada, resultado, personas, respuesta_fuente, identificador, nombre_diagnostico, respuesta_proveedor]
       properties:
         id:
           type: string
@@ -3636,6 +3647,16 @@ components:
             SIMIT_VEHICULO, AVALUO, IMPUESTO_DEPARTAMENTAL) con la celda COMPLETADO o ERROR; en las de persona va en cada
             `PersonaDetalle`. Null si no hay respuesta guardada (llenado manual, ERROR sin respuesta, celda anterior al
             AC8) o si no se pudo descifrar.
+        respuesta_proveedor:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: >
+            HU #14183 — misma semántica que `PersonaDetalle.respuesta_proveedor`: el texto de
+            `respuesta_fuente.resultado.respuesta_cruda.json` parseado como objeto JSON. Solo se llena en SIMIT_VEHICULO.
+            En las celdas de persona el crudo sigue en `personas[].respuesta_proveedor`. Null si no hay crudo (llenado
+            manual, consulta sin `incluir_respuesta_cruda`, otra fuente del vehículo), si no es JSON válido o si no es
+            un objeto (se registra en el log sin el contenido).
 
     PersonaDetalle:
       type: object
@@ -3699,7 +3720,8 @@ components:
           description: >
             HU #14153 (decisión del usuario 2026-10-28) — la respuesta ÍNTEGRA del proveedor para esta persona: el texto de
             `respuesta_fuente.resultado.respuesta_cruda.json` parseado como objeto JSON, tal cual lo devolvió el proveedor
-            (Kyverum/Verifik conductor en RUNT_PERSONA, Verifik en RUES), sin quitar ningún dato: identificadores internos,
+            (Kyverum/Verifik conductor en RUNT_PERSONA, Verifik en RUES, Verifik SIMIT en SIMIT_PROPIETARIO y
+            SIMIT_LOCATARIO), sin quitar ningún dato: identificadores internos,
             firma y campos técnicos incluidos. Objeto libre (su forma es la del proveedor). Incluye datos personales (licencias de
             conducción, representantes legales). Null si no hay respuesta cruda guardada (consulta anterior a la HU, llenado
             manual, error, otras fuentes), si no es JSON válido o si no es un objeto (se registra en el log sin el contenido).

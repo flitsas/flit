@@ -93,16 +93,97 @@ public sealed class RespuestaCrudaSimuladaTests
                 return lector.ReadToEnd();
             });
 
-        fixtures.Keys.Should().BeEquivalentTo("proveedor-kyverum-conductor.json", "proveedor-kyverum-conductor-sin-licencias.json", "proveedor-verifik-rues.json");
+        fixtures.Keys.Should().BeEquivalentTo(
+        "proveedor-kyverum-conductor.json", "proveedor-kyverum-conductor-sin-licencias.json", "proveedor-verifik-rues.json",
+        "proveedor-verifik-simit-persona.json", "proveedor-verifik-simit-vehiculo.json", "proveedor-verifik-simit-sin-registros.json");
         foreach (var (archivo, json) in fixtures)
         {
-            // Todo número de 6 o más dígitos es del rango ficticio 99999… (o una fecha/código CIIU corto); los nombres son FICTICI…
-            Regex.Matches(json, @"\d{6,}").Select(m => m.Value).Where(n => !n.StartsWith("99999", StringComparison.Ordinal)).Should().BeEmpty(archivo);
+            var esSimit = archivo.Contains("simit", StringComparison.Ordinal);
+            if (!esSimit)
+            {
+                // Todo número de 6 o más dígitos es del rango ficticio 99999… (o una fecha/código CIIU corto); los nombres son FICTICI…
+                Regex.Matches(json, @"\d{6,}").Select(m => m.Value).Where(n => !n.StartsWith("99999", StringComparison.Ordinal)).Should().BeEmpty(archivo);
+                json.Should().NotMatchRegex("[A-Z]{3}[0-9]{3}", $"{archivo} no trae placas");
+            }
+            else
+            {
+                // § 3.1: placas de prueba TST201/TST202 y montos del ejemplar saneado. Ningún otro documento ni placa.
+                Regex.Matches(json, "[A-Z]{3}[0-9]{3}").Select(m => m.Value).Except(["TST201", "TST202"]).Should().BeEmpty(archivo);
+                Regex.Matches(json, "\"(?:documentNumber|numeroDocumento)\"\\s*:\\s*\"(\\d+)\"").Select(m => m.Groups[1].Value)
+                    .Where(n => !n.StartsWith("99999", StringComparison.Ordinal)).Should().BeEmpty(archivo);
+            }
+
             foreach (var nombre in Regex.Matches(json, "\"(?:name|nombreCompleto|businessName)\"\\s*:\\s*\"([^\"]*)\"").Select(m => m.Groups[1].Value)
                 .Where(n => !n.StartsWith("ciiu", StringComparison.Ordinal)))
                 nombre.Should().Contain("FICTICI", $"{archivo}: «{nombre}» debe ser inventado");
-            json.Should().NotMatchRegex("[A-Z]{3}[0-9]{3}", $"{archivo} no trae placas");
         }
+    }
+
+    // HU #14183 T2 — la simulación de ConsultarMultas respeta incluir_respuesta_cruda.
+
+    [Fact]
+    public void Multas_simuladas_por_documento_traen_crudo_Verifik_SIMIT_persona_cuando_se_pide()
+    {
+        // Persona 9999900016: multa con estadoCartera cobro coactivo (fixture sección 3.1 del plan).
+        var r = (ConsultarMultasResponse)_simulador.Responder(RpcConsultas.Multas, Multas("9999900016", crudo: true));
+
+        var cruda = r.Resultado.RespuestaCruda;
+        cruda.Should().NotBeNull("Diagnóstico pidió la respuesta cruda para SIMIT persona");
+        (cruda.Proveedor, cruda.TipoSujeto, cruda.ClaveSujeto).Should().Be(("verifik_simit", "person", "9999900016"));
+        using var json = JsonDocument.Parse(cruda.Json);
+        json.RootElement.TryGetProperty("data", out var data).Should().BeTrue("el fixture tiene la forma real de Verifik SIMIT");
+        var multas = data.GetProperty("multas");
+        multas.GetArrayLength().Should().BeGreaterThan(0, "la persona ficticia tiene al menos una multa");
+        var multa = multas.EnumerateArray().First();
+        multa.GetProperty("estadoCartera").GetString().Should().Be("Cobro coactivo", "multa en cobro coactivo de la sección 3.1");
+        multa.GetProperty("estadoComparendo").ValueKind.Should().Be(JsonValueKind.Null, "estadoComparendo nulo (cobro coactivo)");
+        json.RootElement.TryGetProperty("signature", out _).Should().BeTrue("el fixture trae la firma de Verifik");
+    }
+
+    [Fact]
+    public void Multas_simuladas_por_placa_traen_crudo_Verifik_SIMIT_vehiculo_cuando_se_pide()
+    {
+        // Placa TST201: vehículo sin multas (fixture sección 3.1 del plan).
+        var r = (ConsultarMultasResponse)_simulador.Responder(RpcConsultas.Multas, Multas(placa: "TST201", crudo: true));
+
+        var cruda = r.Resultado.RespuestaCruda;
+        cruda.Should().NotBeNull("Diagnóstico pidió la respuesta cruda para SIMIT vehículo");
+        (cruda.Proveedor, cruda.TipoSujeto, cruda.ClaveSujeto).Should().Be(("verifik_simit", "vehicle", "TST201"));
+        using var json = JsonDocument.Parse(cruda.Json);
+        json.RootElement.TryGetProperty("data", out var data).Should().BeTrue("el fixture tiene la forma real de Verifik SIMIT");
+        data.GetProperty("multas").GetArrayLength().Should().Be(0, "el vehículo del fixture no tiene multas");
+        data.GetProperty("paramEntradaPlaca").GetBoolean().Should().BeTrue("consulta por placa");
+    }
+
+    [Fact]
+    public void Multas_sin_incluir_respuesta_cruda_no_hay_crudo()
+    {
+        ((ConsultarMultasResponse)_simulador.Responder(RpcConsultas.Multas, Multas("9999900016", crudo: false))).Resultado.RespuestaCruda.Should().BeNull();
+        ((ConsultarMultasResponse)_simulador.Responder(RpcConsultas.Multas, Multas(placa: "TST201", crudo: false))).Resultado.RespuestaCruda.Should().BeNull();
+    }
+
+    [Fact]
+    public void Multas_con_crudo_no_se_sirven_desde_cache()
+    {
+        // AC2 del criterio de #14153 aplicado a multas: cuando se pide el crudo, la respuesta no
+        // proviene de caché (desde_cache=false). Hoy no hay caché de multas en core-consultas: este
+        // test lo fija para que una futura caché no rompa el contrato sin actualizar este criterio.
+        var r = (ConsultarMultasResponse)_simulador.Responder(RpcConsultas.Multas, Multas("9999900016", crudo: true));
+
+        r.Resultado.DesdeCache.Should().BeFalse("las multas con crudo no salen de caché");
+    }
+
+    [Fact]
+    public void Multas_simuladas_escenario_sin_registros_usa_fixture_sin_registros()
+    {
+        // El escenario '4' (nuevo) simula la respuesta 404 de Verifik («sin registros»): verde con crudo del 404.
+        var r = (ConsultarMultasResponse)_simulador.Responder(RpcConsultas.Multas, Multas(placa: "TST204", crudo: true));
+
+        r.Resultado.RespuestaCruda.Should().NotBeNull();
+        r.Resultado.RespuestaCruda.Proveedor.Should().Be("verifik_simit");
+        using var json = JsonDocument.Parse(r.Resultado.RespuestaCruda.Json);
+        // El fixture «sin registros» es la respuesta 404 de Verifik: sin el campo «data».
+        json.RootElement.TryGetProperty("data", out _).Should().BeFalse("el 404 de Verifik no tiene data");
     }
 
     private static ConsultarConductorRequest Conductor(string numero, bool crudo) => new()
@@ -112,4 +193,14 @@ public sealed class RespuestaCrudaSimuladaTests
     };
 
     private static ConsultarRuesRequest Rues(string nit, bool crudo) => new() { Opciones = new OpcionesConsulta { IncluirRespuestaCruda = crudo }, Nit = nit };
+
+    private static ConsultarMultasRequest Multas(string? documento = null, string? placa = null, bool crudo = false)
+    {
+        var r = new ConsultarMultasRequest { Opciones = new OpcionesConsulta { IncluirRespuestaCruda = crudo } };
+        if (documento is not null)
+            r.Documento = new DocumentoIdentidad { Tipo = "CC", Numero = documento };
+        if (placa is not null)
+            r.Placa = new Placa { Valor = placa };
+        return r;
+    }
 }

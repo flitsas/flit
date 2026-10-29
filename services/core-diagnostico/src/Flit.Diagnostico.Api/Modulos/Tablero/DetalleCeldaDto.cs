@@ -22,6 +22,11 @@ namespace Flit.Diagnostico.Api.Modulos.Tablero;
 /// los dos, el identificador normalizado de la carga); <c>nombre_diagnostico</c> es el nombre del lote. Sirven para que la página
 /// se titule sola; no son origen, usuario ni transacción (R-20 sigue vigente).
 /// </para>
+/// <para>
+/// HU #14183: <c>respuesta_proveedor</c> a nivel de celda es el JSON de <c>resultado.respuesta_cruda.json</c> parseado como
+/// objeto, la misma regla que <see cref="PersonaDetalleDto.RespuestaProveedor"/>. Solo se llena en SIMIT_VEHICULO. En las
+/// celdas de persona sigue en <c>personas[].respuesta_proveedor</c>. Null si falta, no es JSON o no es un objeto.
+/// </para>
 /// </summary>
 public sealed record DetalleCeldaDto(
     [property: JsonPropertyName("id")] Guid Id,
@@ -36,7 +41,8 @@ public sealed record DetalleCeldaDto(
     [property: JsonPropertyName("personas")] IReadOnlyList<PersonaDetalleDto>? Personas,
     [property: JsonPropertyName("respuesta_fuente")] JsonElement? RespuestaFuente,
     [property: JsonPropertyName("identificador")] string Identificador,
-    [property: JsonPropertyName("nombre_diagnostico")] string NombreDiagnostico);
+    [property: JsonPropertyName("nombre_diagnostico")] string NombreDiagnostico,
+    [property: JsonPropertyName("respuesta_proveedor")] JsonElement? RespuestaProveedor = null);
 
 /// <summary>
 /// Una persona de una celda de persona: su posición y rol, el tipo de documento, el documento enmascarado (<c>****</c> más

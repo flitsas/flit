@@ -21,7 +21,8 @@ namespace Flit.Consultas.Api.Simulacion;
 /// inválida, otro inscrita con licencia B1. Con <c>incluir_respuesta_cruda</c> (HU #14153) trae la respuesta cruda de Kyverum de
 /// <see cref="FixturesProveedor"/>: licencia activa, vencida y suspendida (sin licencias en el escenario 2).</description></item>
 /// <item><term>SIMIT</term><description>2 rojo con 2 comparendos, 3 amarillo con acuerdo de pago, 6 rojo con 60, 7 tiempo agotado, 8
-/// respuesta inválida, otro verde.</description></item>
+/// respuesta inválida, otro verde. Con <c>incluir_respuesta_cruda</c> (HU #14183) adjunta el cuerpo de Verifik: persona con multa
+/// en cobro coactivo, vehículo sin multas, y el 4 el 404 «sin registros». El semáforo no cambia y <c>desde_cache</c> queda en false.</description></item>
 /// <item><term>RUES</term><description>6 cancelada, 7 tiempo agotado, 8 respuesta inválida, otro activa. Con
 /// <c>incluir_respuesta_cruda</c> (HU #14153) trae la respuesta cruda de Verifik con representantes legales y actividades CIIU.</description></item>
 /// <item><term>Avalúo</term><description>2 solo Fasecolda (48 M), 4 sin datos, 7 tiempo agotado, otro tres fuentes (52 M).</description></item>
@@ -65,7 +66,7 @@ internal sealed class SimuladorConsultas(TimeProvider time)
             (RpcConsultas.PorPlaca, ConsultarPorPlacaRequest r) => Runt(r.Placa, esVin: false),
             (RpcConsultas.PorVin, ConsultarPorVinRequest r) => Runt(r.Vin, esVin: true),
             (RpcConsultas.Conductor, ConsultarConductorRequest r) => Conductor(r.Documento?.Numero, r.Opciones?.IncluirRespuestaCruda == true),
-            (RpcConsultas.Multas, ConsultarMultasRequest r) => Multas(r.Placa?.Valor ?? r.Documento?.Numero),
+            (RpcConsultas.Multas, ConsultarMultasRequest r) => Multas(r.Placa?.Valor ?? r.Documento?.Numero, r.Opciones?.IncluirRespuestaCruda == true),
             (RpcConsultas.Rues, ConsultarRuesRequest r) => Rues(r.Nit, r.Opciones?.IncluirRespuestaCruda == true),
             (RpcConsultas.Avaluos, ConsultarAvaluosRequest r) => Avaluos(r.Placa?.Valor ?? r.Vin?.Valor),
             (RpcConsultas.Impuesto, ConsultarImpuestoVehicularRequest r) => Impuesto(r.Placa?.Valor),
@@ -126,7 +127,7 @@ internal sealed class SimuladorConsultas(TimeProvider time)
         };
     }
 
-    private ConsultarMultasResponse Multas(string? clave)
+    private ConsultarMultasResponse Multas(string? clave, bool incluirCruda)
     {
         ConsultarMultasResponse Con(Semaforo semaforo, params Comparendo[] comparendos)
         {
@@ -134,6 +135,8 @@ internal sealed class SimuladorConsultas(TimeProvider time)
             var chequeo = new Chequeo { Clave = "multas", Etiqueta = "Multas", Estado = comparendos.Length == 0 ? EstadoChequeo.Ok : EstadoChequeo.Fail, Fuente = "SIMIT" };
             chequeo.Comparendos.AddRange(comparendos);
             r.Chequeos.Add(chequeo);
+            if (incluirCruda)
+                r.RespuestaCruda = CrudoSimit(clave);
             return new ConsultarMultasResponse { Resultado = r };
         }
 
@@ -223,6 +226,23 @@ internal sealed class SimuladorConsultas(TimeProvider time)
 
     private ResultadoConsulta Resultado(string proveedor, Semaforo semaforo) =>
         new() { Proveedor = proveedor, Semaforo = semaforo, ConsultadoEn = Timestamp.FromDateTimeOffset(time.GetUtcNow()) };
+
+    /// <summary>
+    /// Cuerpo de Verifik SIMIT (§ 3.1): el 4 es el 404 sin registros; una placa usa el vehículo sin multas; un documento, la persona
+    /// con cobro coactivo. No sale de caché: <c>desde_cache</c> del resultado sigue en false.
+    /// </summary>
+    private static RespuestaCruda CrudoSimit(string? clave)
+    {
+        var esPlaca = clave is { Length: 6 }
+            && clave[..3].All(char.IsAsciiLetter)
+            && clave[3..].All(char.IsAsciiDigit);
+        var sinRegistros = UltimoCaracter(clave) == '4';
+        var archivo = sinRegistros
+            ? FixturesProveedor.SimitSinRegistros
+            : esPlaca ? FixturesProveedor.SimitVehiculo : FixturesProveedor.SimitPersona;
+        var tipo = esPlaca ? "vehicle" : "person";
+        return Cruda("verifik_simit", tipo, clave, FixturesProveedor.Todos()[archivo]);
+    }
 
     private static RespuestaCruda Cruda(string proveedor, string tipoSujeto, string? claveSujeto, string json)
     {
