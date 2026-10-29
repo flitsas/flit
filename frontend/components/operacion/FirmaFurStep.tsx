@@ -837,7 +837,10 @@ export function FirmaFurStep({
 
       {/* Borrador: la cronología vive en el resumen. Otros estados: modal de detalle / badge listado. */}
       {(detail?.status ?? 'borrador') === 'borrador' ? (
-        <ExpedienteCronologicoAccordion statusHistory={detail?.statusHistory ?? []} />
+        <ExpedienteCronologicoAccordion
+          statusHistory={detail?.statusHistory ?? []}
+          instanceId={instanceId ?? undefined}
+        />
       ) : null}
 
       {rnmcEnabled && <RnmcSection checks={rnmcChecks} loading={rnmcLoading} />}
