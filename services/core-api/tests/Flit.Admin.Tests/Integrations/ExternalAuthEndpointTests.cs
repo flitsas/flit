@@ -286,6 +286,19 @@ public sealed class ExternalAuthEndpointTests : IClassFixture<ExternalAuthEndpoi
 
         public void Put(ExternalClientCredentials client) => _byClientId[client.ClientId] = client;
 
+        // HU #14067 — integraciones por compañía: este doble solo cubre la ruta que prueba su clase.
+        public Task<bool> CompanyExistsAsync(Guid companyId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<ExternalClientView>> ListByCompanyAsync(Guid companyId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<ExternalClientView?> GetByCompanyAsync(Guid companyId, Guid id, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<ExternalClientView?> BlockAsync(Guid id, Guid? actor, DateTimeOffset now, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<ExternalClientCredentials?> GetCredentialsByClientIdAsync(string clientId, CancellationToken cancellationToken = default) =>
             Task.FromResult(_byClientId.TryGetValue(clientId, out var c) ? c : null);
 

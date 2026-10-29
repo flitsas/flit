@@ -34,6 +34,7 @@ import {
   Send,
   ShieldCheck,
   Timer,
+  UserRound,
   Users,
 } from "lucide-react";
 import type { NavCatalog, NavIcon, NavItem } from "@flit/shell/nav";
@@ -149,6 +150,13 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
         // HU #13420 — parámetros del motor de descarga masiva de consolidados (solo SuperAdmin).
         superAdmin("admin-descarga-masiva", "Descarga masiva", "/admin/plataforma/descarga-masiva", FileArchive),
         superAdmin("admin-banners", "Banners", "/admin/banners", ImageIcon),
+        // HU #14074 (Épica #14021) — tarifas, organismos y tipos, parámetros y contenido del portal de Persona Natural.
+        // Solo SuperAdmin: la API exige el rol y el permiso `platform.persona_natural.manage` (el SuperAdmin pasa todo);
+        // un rol con el permiso pero sin el rol de SuperAdmin no lo ve, igual que la ruta (regla `admin`).
+        {
+          ...superAdmin("admin-persona-natural", "Persona Natural", "/admin/plataforma/persona-natural", UserRound),
+          permission: ["platform.persona_natural.manage"],
+        },
       ],
     },
     // Generación documental (Feature #12201, R12): por módulo accesible, no por rol.

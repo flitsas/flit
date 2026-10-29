@@ -178,7 +178,9 @@ internal sealed partial class FlitoSignalDispatcher(
                 return Resultado.Aplazado;
             }
 
-            var enviar = aviso.Existe && !aviso.Migrado && aviso.Radicado;
+            // Épica #14021 · HU #14050 AC8: los trámites de la empresa «Persona Natural» no salen hacia FLITO (como no están en el
+            // feed, tampoco se avisa de ellos). El aviso se cierra sin enviar, igual que el de un migrado.
+            var enviar = aviso.Existe && !aviso.Migrado && aviso.Radicado && aviso.TenantId != Flit.Platform.Sdk.PlatformTenants.PersonaNatural;
             if (enviar)
             {
                 Encolar(outbox, o, aviso);

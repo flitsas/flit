@@ -37,6 +37,11 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
       "filtrar compañias",
       "filtros por columna",
       "buscar compania",
+      "integraciones externas",
+      "integracion persona natural",
+      "rotar secreto",
+      "bloquear integracion",
+      "identificador y secreto",
     ],
     summary:
       "Alta y ciclo de vida de compañías y organismos, la ficha completa de cada compañía, entrada al hub OT y catálogo de causales de rechazo.",
@@ -46,7 +51,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         title: "1. Compañías",
         paragraphs: [
           "Administradores → Compañías. Catálogo de compañías B2B con el toggle «incluir OT» para ver también los organismos de tránsito en el mismo listado. Arriba de la tabla está el panel con NIT, Razón social, Estado y Fecha desde/hasta, con «Buscar» y «Limpiar». Además, cada columna con datos tiene un embudo en su encabezado para filtrarla (ver «Tablas: cómo leerlas y moverte entre páginas»); los filtros del panel y los de las columnas se combinan. La primera columna, «Código», muestra el consecutivo de cada compañía (COMP-0001, COMP-0002…); las compañías que ya existían recibieron el suyo según su antigüedad. «Crear compañía»: razón social, NIT, tipo de compañía (normal, Concesión o Marca Blanca) y, para Marca Blanca, dominio propio. El código no se escribe: el sistema asigna el siguiente consecutivo (COMP-0001, COMP-0002…) al guardar. «Activar / Desactivar» cambia el estado con confirmación; una compañía de tipo de sistema no se edita desde aquí.",
-          "Abrir una fila lleva a la ficha completa de la compañía, con 8 pestañas:",
+          "Abrir una fila lleva a la ficha completa de la compañía, con 9 pestañas (más «Clientes hijos» y «Marca» si es cabeza de red):",
         ],
         bullets: [
           "Productos: enciende o apaga los productos de la suite para la compañía (Trámites, Comparendos, Diagnóstico). El cambio se aplica al instante, sin «Guardar todo», y queda en el historial. Cada producto muestra su estado escrito: Encendido, Apagado o Próximamente.",
@@ -56,6 +61,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
           "Representantes legales: un resumen de cuántos representantes no tienen firma ni identidad y paginación con «Filas por página». Encima hay un buscador por nombre o documento y, en el encabezado de cada columna (Representante, Documento, Trámites, Firma / Identidad), un embudo para filtrarla. La firma de cada representante se gestiona en su ficha.",
           "Mandatarios: el mismo formulario que ve el Administrador de la compañía, con modelo (Persona natural, Persona jurídica o Formato en blanco), forma de firma y vigencia. La lista muestra el modelo y la etiqueta de vigencia (Vigente, Por vencer, Vencido, Inactivo, Aún no vigente; guion en Persona jurídica y Formato en blanco). Tiene buscador por nombre o documento y un embudo en el encabezado de columnas como Mandatario, Documento, Modelo, Vigencia, Validación y Organismos; las acciones de cada fila son íconos (editar, dar de baja o reactivar, eliminar) con su nombre al pasar el mouse. Ver el artículo «Representantes legales y mandatarios» de Administrador de compañía.",
           "Usuarios: usuarios de la compañía con buscador y selectores de perfil, rol y estado arriba, un embudo en cada columna (Nombre, Correo, Perfil, Rol, Estado, Fecha) e «Invitar usuario».",
+          "Integraciones externas: la conexión del portal de Persona Natural con la compañía (solo la ve el Super Admin). Se explica en el apartado «5. Integraciones externas de la compañía».",
           "Historial de Cambios: quién cambió qué y cuándo, con el campo en lenguaje claro y el valor anterior y el nuevo como etiquetas. «Ver detalle» abre los valores extensos. Arriba hay fechas, tipo de cambio y buscador, que actúan sobre la página cargada. Los embudos de las columnas (Fecha, Campo modificado, Valor anterior, Operador) filtran todo el historial de la compañía, no solo la página que ves; puedes buscar por lo que se ve, por ejemplo «Inicio de sesión» en Campo modificado o «Deshabilitada» en Valor anterior. Si en el rango propio la fecha inicial es posterior a la final, te avisa y no aplica.",
         ],
         callouts: [
@@ -110,6 +116,39 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
             src: "/manual/screenshots/admin-causales.png",
             alt: "Consola de causales de rechazo con las familias de matrícula inicial y traspaso",
             caption: "Causales de rechazo: lo que el organismo elige al rechazar un trámite.",
+          },
+        ],
+      },
+      {
+        id: "integraciones-externas",
+        title: "5. Integraciones externas de la compañía",
+        paragraphs: [
+          "En la ficha de la compañía, la pestaña «Integraciones externas» (solo Super Admin; los demás perfiles no la ven) administra la conexión que permite al portal público de Persona Natural hablar con FLIT 2 en nombre de esa compañía. La conexión solo puede consultar información, no modificarla. Cada compañía puede tener una sola conexión de Persona Natural activa a la vez.",
+          "La tabla muestra, por cada conexión: el nombre y su identificador, el tipo (Persona Natural), la finalidad, el alcance (Solo lectura), el estado, el último acceso y la fecha en que se creó. Tiene filtros por Conexión y Estado, y paginación con «Filas por página». Los estados son: Activa; Bloqueada (indica hasta cuándo, o «Bloqueada hasta que se desbloquee» cuando la bloqueó una persona del equipo FLIT; también puede bloquearse sola por intentos fallidos) y Desactivada. Si una conexión activa aparece con la marca «Debe cambiar la clave», hay que generarle una clave nueva.",
+        ],
+        bullets: [
+          "Crear: botón «Crear conexión». Escribe el nombre y, si quieres, la finalidad (los dos son opcionales: sin nombre se usa uno por defecto) y confirma con «Crear conexión». El botón aparece desactivado, con su explicación al lado, si la compañía ya tiene una conexión activa: primero hay que desactivarla.",
+          "Ver la clave: al crear (y al generar una clave nueva) se abre una ventana con el identificador de la conexión y la clave secreta, y el botón «Copiar clave». La clave se muestra una sola vez: no se puede volver a ver ni recuperar. Cópiala, entrégala al servicio del portal por un canal seguro y cierra con «Ya la copié, cerrar». Si la pierdes, tendrás que generar una nueva.",
+          "Generar una clave nueva: ícono de la llave en la fila → «Generar clave nueva». Se crea una clave nueva y se muestra una sola vez. Por defecto la clave anterior sigue sirviendo 24 horas para que el portal alcance a cambiarla; si sospechas que se filtró, marca «Dejar sin efecto la clave anterior ahora mismo». No se puede generar una clave nueva en una conexión bloqueada: primero desbloquéala.",
+          "Bloquear y desbloquear: el candado de la fila. Bloquear impide que la conexión obtenga accesos nuevos hasta que alguien la desbloquee; los accesos que ya tenía siguen valiendo hasta que vencen (máximo 30 minutos). Desbloquear le permite volver a pedir accesos de inmediato con su clave vigente.",
+          "Desactivar: ícono de apagar → «Desactivar». Es definitivo: la conexión no podrá obtener accesos ni volver a activarse; para reconectar el portal hay que crear una nueva. Una conexión desactivada ya no ofrece acciones.",
+        ],
+        callouts: [
+          {
+            variant: "warning",
+            text: "Cada acción pide confirmación. Si el sistema no la puede aplicar (por ejemplo, otra persona ya la desactivó), el motivo se muestra en la misma ventana y no se cierra; recarga el listado para ver el estado actual.",
+          },
+          {
+            variant: "info",
+            text: "Si el listado no carga verás «No se pudieron cargar las conexiones» con la opción de reintentar; si la compañía aún no tiene conexiones, la pestaña te invita a crear la de Persona Natural con «Crear conexión».",
+          },
+        ],
+        media: [
+          {
+            kind: "diagram",
+            id: "flujo-rotar-secreto-integracion",
+            alt: "Flujo para generar una clave nueva de una conexión externa: se confirma, se decide si la clave anterior queda sin efecto al instante o a las 24 horas, y se copia la clave nueva, que se muestra una sola vez, para entregarla al servicio del portal",
+            caption: "Generar una clave nueva: la nueva se ve una sola vez.",
           },
         ],
       },
@@ -455,6 +494,152 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
           {
             variant: "info",
             text: "El tope diario de mensajes del chat y el modelo de inteligencia artificial se configuran por ambiente desde la operación de la plataforma; si el equipo necesita ajustarlos, es un cambio de configuración, no de código.",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "4-superadmin/7-plataforma-persona-natural",
+    title: "Plataforma: Persona Natural (trámites, organismos, tarifas, ajustes y contenido del portal)",
+    audience: "Super Admin",
+    sectionId: "superadmin",
+    keywords: [
+      "persona natural",
+      "portal persona natural",
+      "portal del ciudadano",
+      "estado de la configuracion",
+      "que falta para ofrecer un tramite",
+      "tarifas",
+      "tarifa vigente",
+      "nueva tarifa",
+      "cambiar valores de una tarifa",
+      "historial de tarifas",
+      "derechos de transito",
+      "servicio digital",
+      "cotizaciones",
+      "organismos habilitados",
+      "ofrecer en el portal",
+      "dejar de ofrecer",
+      "tramites que ofrece el portal",
+      "falta tarifa",
+      "activo en flit",
+      "ya no esta activo en flit",
+      "tramite no disponible",
+      "ajustes del portal",
+      "duracion de la sesion",
+      "limite de consultas",
+      "captcha",
+      "soporte del portal",
+      "preguntas frecuentes",
+      "banners del portal",
+      "enlaces legales",
+      "politica de datos",
+      "terminos y condiciones",
+      "ver como quedaria",
+      "publicar cambios",
+      "cambios sin publicar",
+      "publicaciones anteriores",
+    ],
+    summary:
+      "Cómo el Super Admin deja listo el portal de Persona Natural: qué trámites se ofrecen y en qué organismos, cuánto cuestan, los ajustes del portal y los textos que ve el ciudadano.",
+    blocks: [
+      {
+        id: "entrada",
+        title: "1. Dónde está y qué falta configurar",
+        paragraphs: [
+          "Plataforma → «Persona Natural». Es la pantalla desde la que el equipo FLIT decide qué trámites puede hacer una persona natural desde el portal público, en qué organismos de tránsito y cuánto cuestan. Solo la ve el Super Admin con el permiso de administrar Persona Natural: los demás perfiles no tienen la entrada en el menú y, si abren la dirección directa, ven el mensaje «No tienes permiso para administrar el portal de Persona Natural.».",
+          "Arriba está el «Estado de la configuración». Dice que para ofrecer un trámite al ciudadano necesitas tres cosas, y muestra cada una como «Hecho» o «Pendiente» con un botón que te lleva directo a donde se resuelve: 1. «Un tipo de trámite» (botón «Elegir trámites»), 2. «Un organismo de tránsito» (botón «Elegir organismos») y 3. «Una tarifa vigente» (botón «Configurar tarifas»). Debajo, una frase resume lo que el ciudadano ve hoy, por ejemplo «Hoy el ciudadano puede iniciar 2 tipos de trámite en 5 organismos de tránsito», o qué falta si todavía no puede iniciar ninguno. Si hay organismos habilitados sin tarifa, un aviso lo dice. Cuando los tres pasos están hechos, el panel se reduce a una sola línea («Configuración completa. Hoy el ciudadano puede iniciar…») con el botón «Ver pasos» para expandirlo; si falta algo, se muestra completo. El estado se actualiza solo cuando cambias algo.",
+          "Debajo hay cinco pestañas, en el orden de los pasos: «Trámites» (paso 1), «Organismos» (paso 2), «Tarifas» (paso 3), «Ajustes del portal» y «Contenido». Un trámite que no está listo o un organismo que ya no está activo en FLIT no cuentan como «Hecho». Cada una carga cuando entras en ella y muestra los cuatro estados de siempre: cargando, vacío, error con «Reintentar» y con datos. Para conectar el portal con una compañía se usa, además, la pestaña «Integraciones externas» de la ficha de la compañía (ver «Compañías, organismos de tránsito y causales»).",
+        ],
+      },
+      {
+        id: "organismos-tramites",
+        title: "2. Trámites y organismos",
+        paragraphs: [
+          "Aquí decides qué se ofrece en el portal, en dos pestañas separadas. Una regla manda sobre todo lo demás, y la pestaña «Trámites» la recuerda arriba: un trámite aparece cuando está activado, el organismo está habilitado y existe una tarifa vigente para esa combinación. Si falta algo, el ciudadano no lo ve.",
+          "«Trámites» (paso 1, «Trámites que ofrece el portal») lista los trámites activos y publicados en FLIT 2. Cada uno muestra su categoría, su disponibilidad («Listo para ofrecer», «Aún no disponible» o «Ya no está activo en FLIT»), el interruptor «Ofrecer en el portal», si «Lo ve el ciudadano» (Sí, No o «Falta tarifa») y en cuántos organismos tiene tarifa. Un trámite no disponible no se puede activar: su interruptor queda bloqueado y se lee el motivo. Uno que ya no está activo en FLIT sigue en la lista solo para que puedas dejar de ofrecerlo.",
+          "«Organismos» (paso 2, «Organismos de tránsito») lista solo los organismos de tránsito activos en FLIT. Cada uno muestra su municipio y departamento, el interruptor «Ofrecer en el portal» y cuántos trámites tiene con tarifa. Si un organismo habilitado deja de estar activo en FLIT, sigue en la lista marcado «Ya no está activo en FLIT» y solo puedes dejar de ofrecerlo. Tiene un buscador por nombre, municipio o departamento y filtros por Organismo, Departamento y «Ofrecer en el portal». Ambas tablas tienen paginación con «Filas por página».",
+        ],
+        bullets: [
+          "Ofrecer un trámite u organismo: usa el interruptor de la fila. Verás un aviso como «… ahora se ofrece en el portal.».",
+          "Dejar de ofrecerlo: apaga el interruptor. Antes se abre una confirmación que explica que el ciudadano dejará de verlo hasta que lo vuelvas a activar (las tarifas ya configuradas se conservan); confirma con «Dejar de ofrecer» o cancela y no cambia nada.",
+          "Aviso «Falta tarifa»: el trámite o el organismo está activado pero no tiene tarifa vigente, así que el ciudadano no puede cotizar. El botón «Crear tarifa» de ese aviso te lleva a la pestaña «Tarifas».",
+        ],
+        callouts: [
+          {
+            variant: "tip",
+            text: "Habilitar un organismo no basta: también necesita una tarifa vigente. Si no ves un trámite en el portal, revisa primero las tres condiciones de la regla o mira el «Estado de la configuración».",
+          },
+        ],
+      },
+      {
+        id: "tarifas",
+        title: "3. Tarifas",
+        paragraphs: [
+          "Lista cuánto paga el ciudadano por cada trámite en el portal, agrupado por organismo y trámite. Cada fila muestra el organismo (o «Todos los organismos» si el valor aplica a todos), el trámite, los Derechos de tránsito, el Servicio digital FLIT, el Envío, otros cargos, desde cuándo rige y su estado: Vigente, Próxima (aún no rige) o Anterior (ya no rige). Los valores se ven en pesos, con puntos de miles. Tiene filtros por Organismo, Trámite, «Vigente desde» y Estado, y por defecto no muestra las anteriores: para verlas, filtra por Estado en el encabezado de esa columna.",
+          "Una tarifa de un organismo tiene prioridad sobre el valor general del trámite. Los cargos que se pueden registrar son Derechos de tránsito, Servicio digital, Cambio de color, Conversión de combustible, Cambio de carrocería y Envío del documento.",
+        ],
+        bullets: [
+          "Crear una tarifa nueva: botón «Nueva tarifa». Elige el trámite y el organismo (o «Todos los organismos (valor general)»), indica desde qué fecha rige («Rige desde»; debajo ves «Desde el … el portal cotiza con estos valores») y escribe el valor en pesos de al menos un cargo; los puntos de miles se acomodan al escribir y también al borrar un dígito. Los Derechos de tránsito y el Servicio digital siempre se registran para un trámite concreto; «Todos los trámites (solo cargos adicionales)» sirve solo para los demás cargos.",
+          "Cambiar los valores de una tarifa: en la fila, el lápiz «Cambiar valores de…». No se edita la tarifa anterior: se registra una nueva con otra fecha. Cada campo muestra el valor de hoy y solo viajan los que cambies. La tarifa anterior deja de regir el día antes del inicio de la nueva. Las tarifas anteriores ya no ofrecen cambiar valores.",
+          "Fecha de inicio: puede ser hoy o una fecha futura; no se admite una fecha pasada.",
+          "Ver el historial: ícono de historial en la fila («Ver historial de…»). Muestra, por cargo, los valores anteriores con su vigencia, estado y la fecha en que se registraron.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Las cotizaciones que ya se emitieron no cambian: una tarifa nueva solo aplica desde su fecha de inicio.",
+          },
+          {
+            variant: "warning",
+            title: "Mensajes frecuentes",
+            text: "«La fecha de inicio no puede ser anterior a hoy.» Elige hoy o una fecha futura. «Ya hay una tarifa para este trámite y organismo que empieza ese mismo día o después. Elige una fecha de inicio posterior.» Cambia la fecha de inicio. «Cambia al menos un valor para registrar el cambio.» No modificaste ningún valor. «Los derechos de tránsito y el servicio digital se registran siempre para un trámite concreto: elige el trámite.»",
+          },
+        ],
+      },
+      {
+        id: "ajustes",
+        title: "4. Ajustes del portal",
+        paragraphs: [
+          "Ajustes generales de cómo se comporta el portal para el ciudadano, ordenados en tarjetas. Si dejas un campo vacío, el portal usa su valor habitual, y ese valor se lee debajo del campo junto con el rango permitido. La unidad (minutos, días, consultas) se ve dentro del campo.",
+          "Tres tarjetas: «Tiempos y límites» (Duración de la sesión, habitual 60 minutos; Días que se guarda un trámite sin enviar, habitual 30 días; Consultas por persona al día, habitual 10 consultas por hora; Consultas de todo el portal al día, habitual 2000 consultas), «Verificación anti-robots» (el captcha puede quedar en «Lo habitual del portal (activada)», «Activada» o «Desactivada») y «Contacto de soporte»: correo, teléfono y horario de atención (opcionales), pensados para que el ciudadano pida ayuda.",
+          "Abajo hay una barra con el estado («Hay cambios sin guardar» o «No hay cambios por guardar») y la fecha de la última actualización. Para guardar usa «Guardar ajustes»; el botón queda inactivo mientras no haya cambios. Si hay cambios, «Descartar cambios» devuelve el formulario a lo guardado. Si un valor está fuera de rango o el correo no es válido, el mensaje aparece bajo el campo y no se guarda nada.",
+        ],
+        callouts: [
+          {
+            variant: "warning",
+            title: "Si otra persona editó al mismo tiempo",
+            text: "Verás el aviso «Alguien más cambió estos ajustes». Lo que escribiste se conserva en pantalla, pero para guardarlo debes pulsar «Cargar valores actuales» y volver a aplicar tus cambios.",
+          },
+        ],
+      },
+      {
+        id: "contenido",
+        title: "5. Contenido del portal",
+        paragraphs: [
+          "Administra lo que el ciudadano lee en el portal sin intervención técnica, en tres secciones: «Preguntas frecuentes», «Banners» y «Enlaces legales y de contacto». Lo que cambias aquí no lo ve el ciudadano hasta que lo publiques. El panel «Publicación del contenido» muestra «Lo que ve hoy el ciudadano» (el contenido por defecto del portal, o el que publicaste con su fecha y hora), dice «Hay cambios sin publicar» o «Todo está publicado» y trae «Ver cómo quedaría», «Publicaciones anteriores» y «Publicar cambios». Cada sección tiene su encabezado con un contador (por ejemplo «3 preguntas · 2 visibles») y su botón de agregar, y la tabla debajo.",
+        ],
+        bullets: [
+          "Preguntas frecuentes: la lista abre con las preguntas que el portal ya muestra al ciudadano, para que puedas editarlas. «Nueva pregunta» pide la pregunta y la respuesta (texto simple, sin formato ni código) y si se muestra en el portal. En cada fila puedes editar, subir o bajar para cambiar el orden y usar el interruptor para mostrar u ocultar (ocultar pide confirmación). El formulario cuenta los caracteres (300 la pregunta, 2000 la respuesta) y muestra cómo se verá en el portal. Estado: Visible u Oculta. Filtra por Pregunta y Estado. El ciudadano sigue viendo el texto de siempre hasta que publiques.",
+          "Banners: «Nuevo banner» pide el título, la imagen (JPG, PNG o WEBP de hasta 2 MB), una descripción de la imagen para quienes no pueden verla, un enlace opcional y, si quieres, «Mostrar desde» y «Mostrar hasta». Cada banner se puede editar, mover de orden y mostrar u ocultar con su interruptor (ocultar pide confirmación). Su estado es Vigente, Programado (aún no empieza), Vencido (ya terminó) u Oculto. La descripción de la imagen es para personas con discapacidad visual que usan lector de pantalla.",
+          "Enlaces del portal: la Política de tratamiento de datos, los Términos y condiciones, el Contacto de ventas y el Video explicativo. Cada enlace dice «Configurado» o «Falta configurar»; son cuatro filas fijas, sin paginación. Edita cada uno con el lápiz (la dirección debe empezar por http:// o https://); en los dos enlaces legales, si no hay documento oficial déjalo vacío y el portal conserva su aviso actual. Los demás aceptan una página web, un correo o un teléfono según el caso.",
+          "Ver cómo quedaría: muestra cómo lo vería el ciudadano con tus cambios, sin publicarlos todavía.",
+          "Publicar cambios: pide confirmación y dice cuántas preguntas y banners visibles verá el ciudadano desde ahora. Avisa que lo que publicas reemplaza las preguntas y los banners que el portal muestra por defecto y que una publicación no se puede editar: para cambiar algo, haces el cambio y publicas otra vez. Confirma con «Sí, publicar». El botón está inactivo si no hay cambios por publicar.",
+          "Publicaciones anteriores: lista cada publicación con su fecha y cuántas preguntas y banners tenía, de la más reciente a la más antigua.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Cada cambio de una pregunta, banner o enlace dice «… guardado. El ciudadano lo verá cuando publiques». Nada llega al ciudadano hasta que pulses «Publicar cambios».",
+          },
+        ],
+        media: [
+          {
+            kind: "diagram",
+            id: "flujo-publicar-contenido-persona-natural",
+            alt: "Flujo de publicación del contenido del portal: se editan las preguntas, banners y enlaces, se revisa cómo quedaría, si está bien se publica y el ciudadano lo ve, y si no se vuelve a editar",
+            caption: "De los cambios a lo publicado: el ciudadano solo ve lo que se publicó.",
           },
         ],
       },

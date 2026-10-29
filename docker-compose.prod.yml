@@ -9,6 +9,7 @@
 #   gateway    GATEWAY_PORT      4002   5002   6002   (API publica YARP: /api, /hubs, /ml)
 #   core-api   CORE_API_PORT     4003   5003   6003   (Flit.Api interno/debug, detras de YARP)
 #   core-ict   CORE_ICT_PORT     4020   5020   6020   (Flit.Ict.Api interno, detras de YARP)
+#   core-personanatural CORE_PERSONANATURAL_PORT 4029 5029 6029 (BFF del portal Persona Natural, perfil personanatural, detras de YARP)
 #   python-ml  PYTHON_ML_PORT    4012   5012   6012   (FastAPI OCR/ML, detras de YARP)
 #   migracion  MIGRACION_API_PORT 4030  5030   6030   (Flit.DataMigration.Api, SOLO red interna)
 #
@@ -210,6 +211,11 @@ services:
       # Epic #12878 (GDC): core-comparendos registra su manifiesto y llama a Consultas y Notificaciones.
       Suite__Oidc__ServiceClients__svc-comparendos__Secret: ${SVC_COMPARENDOS_CLIENT_SECRET:-}
       Suite__Oidc__ServiceClients__svc-identidad__Secret: ${SVC_IDENTIDAD_CLIENT_SECRET:-}
+      # Epic #14021 (HU #14033/#14038): cliente del portal Persona Natural. Vacío = no se registra (como hasta ahora).
+      Suite__Oidc__ServiceClients__svc-personanatural__Secret: ${SVC_PERSONANATURAL_CLIENT_SECRET:-}
+      # Fachada gRPC que el portal usa para consultar y crear trámites (HU #14034). Apagada por defecto: solo se enciende
+      # al desplegar el portal, y aun así solo la atiende el cliente svc-personanatural para su empresa.
+      PersonaNatural__Fachada__Habilitada: ${PERSONA_NATURAL_FACHADA_HABILITADA:-false}
       # HU #13348 (Epic #13316): core-api ya no tiene proveedores (Verifik, Intempo, Fasecolda, Kyverum RUNT y Verify,
       # RUES): sus variables y secretos viven solo en core-consultas (abajo).
       # HU #10970 — modo por AMBIENTE de las validaciones transversales del ciclo de vida:
@@ -397,6 +403,56 @@ services:
       start_period: 40s
     restart: *restart
     mem_limit: ${RABBITMQ_MEM_LIMIT:-0}
+    logging: *default-logging
+
+  # ── core-personanatural (Epic #14021, HU #14038) — CORE_PERSONANATURAL_PORT / CORE_PERSONANATURAL_GRPC_PORT, sin publicar ──
+  # BFF del portal Persona Natural: el ciudadano crea y consulta trámites en FLIT 2 sin cuenta. Perfil propio: no arranca
+  # hasta que el ambiente lo pida (COMPOSE_PROFILES=…,personanatural), así que no cambia nada de lo que ya corre. Si falta
+  # configuración no arranca y el log dice qué variable falta. Es el único servicio que expone REST hacia afuera (por el
+  # gateway: /api/v1/persona-natural/*). Pasos de VPS en docs/suite/handoff-vps-personanatural.md.
+  core-personanatural:
+    profiles: ["personanatural"]
+    image: ghcr.io/flitsas/flitdev/core-personanatural:${CORE_PERSONANATURAL_TAG:-latest}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${FLIT_DOTNET_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:${CORE_PERSONANATURAL_PORT:-4029}
+      Servicio__GrpcPort: ${CORE_PERSONANATURAL_GRPC_PORT:-8087}
+      # Usuario de base dueño del esquema personanatural (deploy/postgres/servicio-con-esquema-propio.sql).
+      ConnectionStrings__Servicio: ${CONNECTION_STRING_PERSONANATURAL:-}
+      Platform__ServiceClient__ClientSecret: ${SVC_PERSONANATURAL_CLIENT_SECRET:-}
+      Platform__ServiceClient__TokenEndpoint: http://gateway:${GATEWAY_PORT:-4002}/connect/token
+      Platform__Auth__JwksUri: http://gateway:${GATEWAY_PORT:-4002}/.well-known/jwks.json
+      Platform__Auth__Issuers__0: ${FLIT_HUB_URL:-https://dev.flitsas.online}/
+      # Su usuario del broker (deploy/rabbitmq/usuario-de-servicio.sh personanatural).
+      Platform__Messaging__ConnectionString: ${RABBITMQ_URL_PERSONANATURAL:-}
+      # Datos personales (Ley 1581): huella HMAC y cifrado AES-256 (base64 de 32 bytes). Sin ellas no arranca.
+      Pii__ClaveHmac: ${PERSONANATURAL_PII_HMAC_KEY:-}
+      Pii__Cifrado__Llaves__1: ${PERSONANATURAL_PII_AES_KEY:-}
+      # Captcha de los puntos de entrada públicos: turnstile (por defecto) o recaptcha. «deshabilitado» solo para
+      # desarrollo local: en el VPS (que corre como Development) dejaría el portal abierto.
+      Captcha__Proveedor: ${PERSONANATURAL_CAPTCHA_PROVEEDOR:-turnstile}
+      Captcha__SecretKey: ${PERSONANATURAL_CAPTCHA_SECRET:-}
+      # Consultas de vehículo y conductor (HU #14039/#14040): core-consultas por gRPC. Sin dirección toda consulta responde
+      # proveedor_no_disponible. La fachada de core-api (catálogo y cotización, HU #14043) y core-notificaciones (envío de la
+      # cotización por correo): sin dirección esos endpoints responden 503 servicio_no_disponible.
+      Consultas__Remoto__Address: ${CONSULTAS_REMOTO_ADDRESS:-http://core-consultas:8084}
+      Cotizaciones__CoreApiAddress: ${PERSONANATURAL_CORE_API_ADDRESS:-http://core-api:${CORE_API_GRPC_PORT:-8082}}
+      Cotizaciones__NotificacionesAddress: ${NOTIFICACIONES_REMOTO_ADDRESS:-http://core-notificaciones:8085}
+      # Detrás del gateway: la IP real del ciudadano llega en X-Forwarded-For (límite por IP).
+      Abuso__ConfiarEnXForwardedFor: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    healthcheck:
+      # Listo = base alcanzable y sin migraciones pendientes (aplica las suyas al arrancar, solo su esquema).
+      test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_PERSONANATURAL_PORT:-4029}/health/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    restart: *restart
+    mem_limit: ${CORE_PERSONANATURAL_MEM_LIMIT:-0}
+    cpus: ${CORE_PERSONANATURAL_CPUS:-0}
     logging: *default-logging
 
   # ── core-comparendos (Epic #12878, GDC) — CORE_COMPARENDOS_PORT / CORE_COMPARENDOS_GRPC_PORT, sin publicar ──
@@ -866,6 +922,8 @@ services:
       ReverseProxy__Clusters__core-ict-cluster__Destinations__core-ict-1__Address: http://core-ict:${CORE_ICT_PORT:-4020}/
       # HU #13351: avisos de proveedores al receptor de core-consultas (/api/v1/consultas/avisos/*).
       ReverseProxy__Clusters__core-consultas-cluster__Destinations__core-consultas-1__Address: http://core-consultas:${CORE_CONSULTAS_PORT:-4026}/
+      # Epic #14021: BFF del portal Persona Natural (/api/v1/persona-natural/*).
+      ReverseProxy__Clusters__core-personanatural-cluster__Destinations__core-personanatural-1__Address: http://core-personanatural:${CORE_PERSONANATURAL_PORT:-4029}/
       # Epic #12878: API de Comparendos (/api/v1/comparendos/*).
       ReverseProxy__Clusters__core-comparendos-cluster__Destinations__core-comparendos-1__Address: http://core-comparendos:${CORE_COMPARENDOS_PORT:-4028}/
       # HU #13225/#13226 — rutas del login hacia core-identity. Apagada (por defecto) todo va a core-api como siempre;
@@ -1091,6 +1149,32 @@ services:
     restart: *restart
     mem_limit: ${FRONTEND_COMPARENDOS_MEM_LIMIT:-0}
     cpus: ${FRONTEND_COMPARENDOS_CPUS:-0}
+    logging: *default-logging
+
+  # ── frontend-personanatural (Epic #14021, HU #14052) — PERSONANATURAL_PORT, solo en 127.0.0.1 (nginx publica el dominio) ──
+  # App web del portal Persona Natural (Next.js, una imagen para todos los ambientes). No usa el login del hub: habla con
+  # el gateway (/api/v1/persona-natural/*) por su propio proxy, que guarda la sesión del trámite en cookie HttpOnly.
+  # Perfil propio: no arranca hasta que el ambiente lo pida (COMPOSE_PROFILES=…,personanatural).
+  frontend-personanatural:
+    profiles: ["personanatural"]
+    image: ghcr.io/flitsas/flitdev/frontend-personanatural:${FRONTEND_PERSONANATURAL_TAG:-latest}
+    environment:
+      PORT: "${PERSONANATURAL_PORT:-4031}"
+      HOSTNAME: "0.0.0.0"
+      CORE_API_ORIGIN: http://gateway:${GATEWAY_PORT:-4002}
+    ports:
+      - "127.0.0.1:${PERSONANATURAL_PORT:-4031}:${PERSONANATURAL_PORT:-4031}"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:${PERSONANATURAL_PORT:-4031}/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    depends_on:
+      - gateway
+    restart: *restart
+    mem_limit: ${FRONTEND_PERSONANATURAL_MEM_LIMIT:-0}
+    cpus: ${FRONTEND_PERSONANATURAL_CPUS:-0}
     logging: *default-logging
 
   # HU #13332 (Epic #13316) — colector OpenTelemetry + Tempo (trazas) + Loki (logs) + Grafana en un contenedor. Solo

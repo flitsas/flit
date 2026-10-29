@@ -33,6 +33,8 @@
     <ProjectReference Include="..\Flit.Tramites.Grpc.Contracts\Flit.Tramites.Grpc.Contracts.csproj" />
     <!-- HU #13357: cliente gRPC de core-notificaciones (mensajes muertos para el SuperAdmin). -->
     <ProjectReference Include="..\..\..\core-notificaciones\src\Flit.Notificaciones.Grpc.Contracts\Flit.Notificaciones.Grpc.Contracts.csproj" />
+    <!-- HU #14050 (Épica #14021): cliente gRPC de core-personanatural para leer por pull la solicitud radicada (RadicacionService). -->
+    <ProjectReference Include="..\..\..\core-personanatural\src\Flit.PersonaNatural.Grpc.Contracts\Flit.PersonaNatural.Grpc.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

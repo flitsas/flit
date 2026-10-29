@@ -8,8 +8,10 @@ using Flit.Api.Notificaciones;
 using Flit.Api.Platform;
 using Flit.Api.RateLimiting;
 using Flit.Api.Consultas;
+using Flit.Api.PersonaNatural;
 using Flit.Api.Telemetry;
 using Flit.Api.Identity;
+using Flit.Platform.Sdk.Grpc;
 using Flit.Infrastructure;
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Security;
@@ -149,7 +151,9 @@ builder.Services.AddCors(options => options.AddPolicy(
 
 // gRPC server para la orquestación desde core-ict (ICT): crear el borrador reutilizando los casos
 // de uso de trámites.
-builder.Services.AddGrpc();
+// HU #14034 (Épica #14021): la fachada del portal de persona natural exige token de servicio con su scope y la empresa en la metadata.
+builder.Services.AddGrpc()
+    .RequireServiceToken<Flit.Api.Grpc.PersonaNaturalGrpcService>("platform.tramites.persona_natural", ServiceAudiences.Tramites);
 
 // El gRPC (h2c) necesita un endpoint dedicado SOLO HTTP/2: Kestrel no multiplexa HTTP/1.1 y HTTP/2
 // en el mismo puerto en texto plano (el REST lo rechazaría con HTTP_1_1_REQUIRED). Es opt-in por
@@ -191,6 +195,7 @@ builder.Services.AddFlitOidc(builder.Configuration); // Frente A · HU #12990 (S
 builder.AddFlitTelemetry("flit-core-api"); // Epic #13316 · HU #13332 (solo con OTEL_EXPORTER_OTLP_ENDPOINT)
 builder.Services.AddConsultasRemoto(builder.Configuration); // Epic #13316 · HU #13348: consultas, avalúos y documentos por core-consultas
 builder.Services.AddNotificacionesRemoto(builder.Configuration); // Epic #13316 · HU #13359: canales, buzón de pruebas, entregas y mensajes muertos por core-notificaciones
+builder.Services.AddPersonaNaturalConsumidor(builder.Configuration); // Épica #14021 · HU #14050/#14051: crea los trámites del portal y devuelve su estado (apagado por defecto)
 
 var app = builder.Build();
 

@@ -1,0 +1,109 @@
+syntax = "proto3";
+
+package flit.personanatural.v1;
+
+option csharp_namespace = "Flit.PersonaNatural.Grpc.V1";
+
+// Lo que core-personanatural (el servicio del portal de persona natural, ADR-0075) ofrece a otros servicios de FLIT.
+// El portal es un BFF: su front habla con él por REST; este contrato es solo para llamadas internas de plataforma
+// (contrato v1.3 §6.1), por ejemplo para que FLIT 2 lea el estado de una solicitud.
+//
+// Autenticación: token de servicio con `aud=personanatural`. La empresa viaja en la metadata `x-flit-tenant-id`.
+service SolicitudesService {
+  // Estado de una solicitud del portal. NOT_FOUND con `reason = solicitud_no_encontrada` si no existe.
+  rpc ObtenerEstadoSolicitud(ObtenerEstadoSolicitudRequest) returns (ObtenerEstadoSolicitudResponse);
+}
+
+message ObtenerEstadoSolicitudRequest {
+  // Id de la solicitud en el portal.
+  string solicitud_id = 1;
+}
+
+message ObtenerEstadoSolicitudResponse {
+  string solicitud_id = 1;
+  // Radicado visible para el ciudadano antes de que exista el trámite en FLIT 2.
+  string codigo_publico = 2;
+  // borrador | pendiente_validacion | en_cola | creada | rechazada_creacion | cancelada
+  string estado = 3;
+  // Código del tipo de trámite (el mismo de tramites.procedure_types).
+  string tipo_tramite_codigo = 4;
+  // Vacío mientras el trámite no exista en FLIT 2.
+  string procedure_instance_id = 5;
+}
+
+// Lectura por PULL de lo que core-api necesita para crear el trámite de una solicitud radicada (HU #14049, D4).
+// El evento `tramites.persona_natural.radicacion_solicitada` NO lleva datos personales (ni siquiera cifrados): avisa
+// que hay una solicitud en cola y core-api viene por los datos con este RPC. Es un servicio aparte de SolicitudesService
+// a propósito: el scope que abre datos personales no se comparte con otras lecturas.
+//
+// Autenticación: token de servicio del cliente `svc-tramites` con `aud=personanatural` y scope
+// `platform.personanatural.leer`; la empresa viaja en `x-flit-tenant-id` y debe ser la de la solicitud. Cada llamada
+// queda en la auditoría de acceso a datos personales (quién, qué solicitud y cuándo; nunca los datos).
+service RadicacionService {
+  // Solo para solicitudes en estado `en_cola`: con otro estado, FAILED_PRECONDITION con `reason = solicitud_no_radicable`.
+  // NOT_FOUND con `reason = solicitud_no_encontrada` si no existe (o es de otra empresa).
+  rpc ObtenerSolicitudParaRadicar(ObtenerSolicitudParaRadicarRequest) returns (ObtenerSolicitudParaRadicarResponse);
+}
+
+message ObtenerSolicitudParaRadicarRequest {
+  // Id de la solicitud en el portal (el `solicitudId` del evento).
+  string solicitud_id = 1;
+}
+
+message ObtenerSolicitudParaRadicarResponse {
+  string solicitud_id = 1;
+  // Radicado visible para el ciudadano (PN-AAAA-NNNNNN).
+  string codigo_publico = 2;
+  // Código del tipo de trámite (tramites.procedure_types.code).
+  string tipo_tramite_codigo = 3;
+  // Versión de la definición con la que el ciudadano llenó el trámite y huella SHA-256 de esa definición congelada.
+  int32 definicion_version = 4;
+  string definicion_huella = 5;
+  string organismo_id = 6;
+  string organismo_nombre = 7;
+  // Vehículo; vacíos si el tipo no los pide.
+  string placa = 8;
+  string vin = 9;
+  // Valores de los campos del tipo por `field_key`.
+  map<string, string> field_values = 10;
+  // JSON de los bloques que el tipo pide además de los campos (comercial, prenda, requisitos, diagnóstico). Sin datos personales.
+  string datos_json = 11;
+  repeated ParteSolicitud partes = 12;
+  repeated AdjuntoSolicitud adjuntos = 13;
+  // Id del adjunto vigente del pago; vacío si no hay.
+  string comprobante_pago_id = 14;
+  // Llave de idempotencia con la que se radicó y correlación de la solicitud.
+  string idempotency_key = 15;
+  string correlation_id = 16;
+}
+
+// Una parte del trámite con sus datos personales en claro (solo viajan en este RPC autenticado y auditado).
+message ParteSolicitud {
+  // Rol según la definición del tipo (vendedor | comprador | locatario…) y posición dentro del rol.
+  string rol = 1;
+  int32 ordinal = 2;
+  // CC | CE | PAS | TI
+  string tipo_documento = 3;
+  string numero_documento = 4;
+  string nombre = 5;
+  string correo = 6;
+  string celular = 7;
+  string direccion = 8;
+  // Validación de identidad de ESTA solicitud (vacía si no hay) y su estado (aprobada, …).
+  string validacion_id = 9;
+  string validacion_estado = 10;
+  // Ciudad que eligió el ciudadano. Vacía si el borrador es anterior a este dato.
+  string ciudad = 11;
+}
+
+// Un archivo del trámite, por referencia opaca al almacenamiento: no son los bytes.
+message AdjuntoSolicitud {
+  string id = 1;
+  // `doc_code` del documento del tipo o `comprobante_pago`.
+  string tipo = 2;
+  string referencia = 3;
+  string sha256 = 4;
+  int64 tamano_bytes = 5;
+  string mime_type = 6;
+  string nombre_archivo = 7;
+}

@@ -298,6 +298,16 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Admin.Application.Banners.Ports.IBannerImageStorage,
             Flit.Infrastructure.Storage.BannerImageStorage>();
 
+        // HU #14071 (Feature J, Épica #14021) — tarifas del portal de Persona Natural (admin.persona_natural_tariffs).
+        services.AddScoped<Flit.Admin.Domain.Plataforma.PersonaNatural.IPersonaNaturalTarifaRepository,
+            Flit.Infrastructure.PersonaNatural.PersonaNaturalTarifaRepository>();
+        // HU #14072 — configuración del portal (lista blanca de tipos, parámetros y organismos).
+        services.AddScoped<Flit.Admin.Domain.Plataforma.PersonaNatural.IPersonaNaturalConfigRepository,
+            Flit.Infrastructure.PersonaNatural.PersonaNaturalConfigRepository>();
+        // HU #14073 — contenido administrable del portal (preguntas, banners, enlaces y versiones publicadas).
+        services.AddScoped<Flit.Admin.Domain.Plataforma.PersonaNatural.IPersonaNaturalContenidoRepository,
+            Flit.Infrastructure.PersonaNatural.PersonaNaturalContenidoRepository>();
+
         // HU #13084 (Épica #12737) — clientes de integración externos (integrations.external_clients).
         // Entidad de plataforma sin tenant: la administra el SuperAdmin y el login la busca por client_id.
         services.AddScoped<Flit.Admin.Domain.Integrations.IExternalClientRepository,

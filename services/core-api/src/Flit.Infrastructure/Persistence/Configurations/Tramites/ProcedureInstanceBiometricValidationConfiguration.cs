@@ -23,6 +23,13 @@ internal sealed class ProcedureInstanceBiometricValidationConfiguration
         builder.HasIndex(x => new { x.MandateSignerId, x.CreatedAt })
             .HasDatabaseName("ix_biometric_validations_mandate_signer")
             .HasFilter("mandate_signer_id IS NOT NULL");
+        // HU #14044 — ancla de las validaciones del portal de Persona Natural (DDL 160): la solicitud y el rol del actor.
+        // Los CHECKs (van juntas) y los índices únicos en vuelo viven en el DDL; aquí el mapeo y el índice de lectura.
+        builder.Property(x => x.PortalSolicitudRef).HasColumnName("portal_solicitud_ref").HasMaxLength(100);
+        builder.Property(x => x.PortalParte).HasColumnName("portal_parte").HasMaxLength(40);
+        builder.HasIndex(x => new { x.PortalSolicitudRef, x.PortalParte, x.CreatedAt })
+            .HasDatabaseName("ix_biometric_validations_portal_solicitud")
+            .HasFilter("portal_solicitud_ref IS NOT NULL");
         builder.Property(x => x.Name).HasColumnName("name").HasMaxLength(320).IsRequired(); // Bug #13304: = actors.full_name (DDL 132)
         builder.Property(x => x.DocumentType).HasColumnName("document_type").HasMaxLength(20).IsRequired();
         builder.Property(x => x.DocumentNumber).HasColumnName("document_number").HasMaxLength(40).IsRequired();
