@@ -734,7 +734,8 @@ public sealed class PutActorsHandler(
             if (efectivos.Count <= 1)
                 continue; // 1 actor en el rol: el porcentaje se ignora, sin bloque de reparto (§4.5).
 
-            if (efectivos.Any(x => x.Porcentaje is null or <= 0m))
+            // HU #14192 — cada cuota debe estar en (0, 100]; rechaza ≤0 y >100.
+            if (efectivos.Any(x => x.Porcentaje is null or <= 0m or > 100m))
                 return "porcentaje_en_cero";
 
             var suma = efectivos.Sum(x => x.Porcentaje!.Value);
