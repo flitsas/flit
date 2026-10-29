@@ -24,6 +24,7 @@ import {
   runtVehiculoConRespuesta,
   simitVehiculo,
 } from "@/lib/tablero/__tests__/datosDetalle";
+import { simitProveedorPersona, simitProveedorVehiculo } from "@/lib/tablero/__tests__/fixturesSimitProveedor";
 
 // Uso de ejemplo: el semáforo de la grilla abre en una pestaña nueva /diagnosticos/{id}/vehiculos/{vid}/consultas/{fuente};
 // la página monta <PaginaDetalleConsulta loteId vehiculoId fuente />, que pide GET /diagnosticos/{id}/vehiculos/{vid}/
@@ -550,14 +551,7 @@ describe("PaginaDetalleConsulta — HU #14154: respuesta íntegra del proveedor 
     expect(within(respuesta(pagina)).getAllByText(AVISO_SIN_PROVEEDOR)).toHaveLength(2);
   });
 
-  it("AC6: SIMIT por persona no cambia aunque llegara respuesta_proveedor; RUNT del vehículo tampoco", async () => {
-    const simit = simitVehiculo([comparendo(7)]).resultado as ResultadoSimitDetalle;
-    const a = await pintarDetalle(detalle("SIMIT_PROPIETARIO", { personas: [{ ...persona(1, { consulta: "SIMIT", resultado: simit }), respuesta_proveedor: conductorProveedor() }] } as Partial<Detalle>));
-    expect(proveedorDe(a.pagina)).toHaveLength(0);
-    expect(respuesta(a.pagina)).not.toHaveTextContent(AVISO_SIN_PROVEEDOR);
-    expect(respuesta(a.pagina)).not.toHaveTextContent("CONS-FICT-0001");
-    expect(within(respuesta(a.pagina)).getByRole("table", { name: "Comparendos" })).toHaveTextContent("C-0007");
-    a.unmount();
+  it("AC6: RUNT del vehículo no entra en el modo de respuesta del proveedor", async () => {
     const b = await pintarDetalle(runtVehiculoConRespuesta() as Detalle);
     expect(proveedorDe(b.pagina)).toHaveLength(0);
     expect(respuesta(b.pagina)).not.toHaveTextContent(AVISO_SIN_PROVEEDOR);
@@ -604,5 +598,104 @@ describe("PaginaDetalleConsulta — HU #14154: respuesta íntegra del proveedor 
     expect(p1.querySelector("h4")).toHaveTextContent("Respuesta del proveedor · Propietario · C ****1222");
     for (const th of p1.querySelectorAll("thead th")) expect(th).toHaveAttribute("scope", "col");
     for (const t of within(p1).getAllByRole("table")) expect(t).toHaveAccessibleName();
+  });
+});
+
+describe("PaginaDetalleConsulta — HU #14184: respuesta del proveedor en SIMIT", () => {
+  const simit = simitVehiculo([comparendo(7)]).resultado as ResultadoSimitDetalle;
+
+  const vehiculoConCrudo = () =>
+    detalle("SIMIT_VEHICULO", {
+      resultado: simit,
+      respuesta_proveedor: { ...simitProveedorVehiculo, claveNuevaProveedor: "se-ve" },
+    } as Partial<Detalle>);
+
+  const personaConCrudo = (fuente: "SIMIT_PROPIETARIO" | "SIMIT_LOCATARIO") => {
+    const rol = fuente === "SIMIT_PROPIETARIO" ? "PROPIETARIO" : "LOCATARIO";
+    return detalle(fuente, {
+      personas: [
+        {
+          ...persona(1, { rol, consulta: "SIMIT", resultado: simit, documento_enmascarado: "****0016" }),
+          respuesta_proveedor: simitProveedorPersona,
+        },
+      ],
+    } as Partial<Detalle>);
+  };
+
+  const personaSinCrudo = (fuente: "SIMIT_PROPIETARIO" | "SIMIT_LOCATARIO") => {
+    const rol = fuente === "SIMIT_PROPIETARIO" ? "PROPIETARIO" : "LOCATARIO";
+    return detalle(fuente, {
+      personas: [persona(1, { rol, consulta: "SIMIT", resultado: simit, documento_enmascarado: "****0016", respuesta_proveedor: null })],
+    } as Partial<Detalle>);
+  };
+
+  it("SIMIT vehículo pinta la respuesta del proveedor en tablas, con identificadores y una clave nueva", async () => {
+    const { pagina } = await pintarDetalle(vehiculoConCrudo());
+    const bloque = proveedorDe(pagina);
+    expect(bloque).toHaveLength(1);
+    expect(bloque[0]).toHaveAccessibleName("Respuesta del proveedor");
+    expect(respuesta(pagina)).not.toHaveTextContent(AVISO_SIN_PROVEEDOR);
+    const raiz = within(bloque[0]).getByRole("table", { name: "Respuesta del proveedor" });
+    expect(valorDe(raiz, "Id")).toBe("EJEMPLO-VEHICULO");
+    expect(valorDe(raiz, "claveNuevaProveedor")).toBe("se-ve");
+    const datos = within(bloque[0]).getByRole("table", { name: "Datos" });
+    expect(valorDe(datos, "Placa")).toBe("TST202");
+    expect(valorDe(datos, "Consulta por placa")).toBe("Sí");
+    expect(valorDe(datos, "Multas")).toBe("Sin registros");
+    expect(valorDe(datos, "Comparendos")).toBe("Sin registros");
+    expect(within(bloque[0]).getByRole("region", { name: "Firma" })).toHaveTextContent("Certified by Verifik.co");
+    expect(within(respuesta(pagina)).queryByRole("table", { name: "Comparendos" })).not.toBeInTheDocument();
+    for (const th of bloque[0].querySelectorAll("thead th")) expect(th).toHaveAttribute("scope", "col");
+    for (const t of within(bloque[0]).getAllByRole("table")) expect(t).toHaveAccessibleName();
+  });
+
+  it.each(["SIMIT_PROPIETARIO", "SIMIT_LOCATARIO"] as const)("%s pinta la respuesta del proveedor de la persona", async (fuente) => {
+    const { pagina } = await pintarDetalle(personaConCrudo(fuente));
+    const [bloque] = proveedorDe(pagina);
+    const rol = fuente === "SIMIT_PROPIETARIO" ? "Propietario" : "Locatario";
+    expect(bloque).toHaveAccessibleName(`Respuesta del proveedor · ${rol} · C ****0016`);
+    expect(respuesta(pagina)).not.toHaveTextContent(AVISO_SIN_PROVEEDOR);
+    const datos = within(bloque).getByRole("table", { name: "Datos" });
+    expect(valorDe(datos, "Número de documento")).toBe("9999900016");
+    expect(valorDe(datos, "Comparendos")).toBe("Sin registros");
+    expect(valorDe(datos, "Total de multas por pagar")).toBe("1");
+    const multas = within(bloque).getByRole("table", { name: "Multas" });
+    expect(within(multas).getByRole("columnheader", { name: "Estado de cartera" })).toBeInTheDocument();
+    expect(within(multas).getByRole("columnheader", { name: "Id del departamento" })).toBeInTheDocument();
+    expect(multas).toHaveTextContent("Cobro coactivo");
+    expect(multas).toHaveTextContent("119");
+    expect(multas).toHaveTextContent("C24");
+    expect(multas).toHaveTextContent("TST201");
+    expect(multas).toHaveTextContent("9999900016");
+    const rolNumero = fuente === "SIMIT_PROPIETARIO" ? "Propietario 1" : "Locatario 1";
+    expect(valorDe(within(bloque).getByRole("table", { name: `Respuesta del proveedor · ${rolNumero}` }), "Id")).toBe("EJEMPLO-PERSONA");
+    for (const th of bloque.querySelectorAll("thead th")) expect(th).toHaveAttribute("scope", "col");
+  });
+
+  it("SIMIT vehículo sin crudo muestra el aviso y el resultado resumido", async () => {
+    const { pagina } = await pintarDetalle(simitVehiculo([comparendo(7)]));
+    expect(proveedorDe(pagina)).toHaveLength(0);
+    expect(respuesta(pagina)).toHaveTextContent(AVISO_SIN_PROVEEDOR);
+    expect(within(respuesta(pagina)).getByRole("table", { name: "Comparendos" })).toHaveTextContent("C-0007");
+  });
+
+  it.each(["SIMIT_PROPIETARIO", "SIMIT_LOCATARIO"] as const)("%s sin crudo muestra el aviso y el resultado resumido", async (fuente) => {
+    const { pagina } = await pintarDetalle(personaSinCrudo(fuente));
+    expect(proveedorDe(pagina)).toHaveLength(0);
+    expect(respuesta(pagina)).toHaveTextContent(AVISO_SIN_PROVEEDOR);
+    expect(within(respuesta(pagina)).getByRole("table", { name: "Comparendos" })).toHaveTextContent("C-0007");
+  });
+
+  it("RUNT y avalúo no entran en el modo de respuesta del proveedor de la celda", async () => {
+    const runt = await pintarDetalle({ ...runtVehiculo(), respuesta_proveedor: simitProveedorVehiculo } as Detalle);
+    expect(proveedorDe(runt.pagina)).toHaveLength(0);
+    expect(respuesta(runt.pagina)).not.toHaveTextContent(AVISO_SIN_PROVEEDOR);
+    expect(respuesta(runt.pagina)).not.toHaveTextContent("EJEMPLO-VEHICULO");
+    expect(valorDe(within(respuesta(runt.pagina)).getByRole("table", { name: "Respuesta de la fuente" }), "VIN")).toBe("9ZZPRUEBA00000001");
+    runt.unmount();
+    const avaluo = await pintarDetalle({ ...avaluoConValor(), respuesta_proveedor: simitProveedorPersona } as Detalle);
+    expect(proveedorDe(avaluo.pagina)).toHaveLength(0);
+    expect(respuesta(avaluo.pagina)).not.toHaveTextContent(AVISO_SIN_PROVEEDOR);
+    expect(respuesta(avaluo.pagina)).not.toHaveTextContent("EJEMPLO-PERSONA");
   });
 });

@@ -185,8 +185,8 @@ function AvisoResumido() {
 }
 
 /**
- * Aviso de la persona de RUNT persona o RUES sin la respuesta íntegra del proveedor (HU #14154 AC5): consulta anterior al
- * cambio, servida desde caché o llenada a mano. Texto literal de la decisión del usuario.
+ * Aviso cuando falta la respuesta íntegra del proveedor (HU #14154 en RUNT persona y RUES; HU #14184 en SIMIT): consulta
+ * anterior al cambio, servida desde caché o llenada a mano. Texto literal de la decisión del usuario.
  */
 export const AVISO_SIN_RESPUESTA_PROVEEDOR = "Esta consulta no tiene la respuesta completa del proveedor. Para verla, vuelve a consultar.";
 
@@ -225,8 +225,9 @@ function RespuestaProveedorPersona({ persona, datos, titulo }: { persona: Person
 }
 
 /**
- * Respuesta de una persona: en RUNT persona y RUES, la respuesta íntegra del proveedor si la trae (HU #14154); si no, todos
- * los campos de su respuesta completa (o de su resultado) y, en esas fuentes, el aviso de que falta la del proveedor.
+ * Respuesta de una persona: en RUNT persona, RUES y SIMIT por persona, la respuesta íntegra del proveedor si la trae
+ * (HU #14154 y HU #14184); si no, todos los campos de su respuesta completa (o de su resultado) y, en esas fuentes, el
+ * aviso de que falta la del proveedor.
  */
 function RespuestaPersona({ persona, fuente }: { persona: PersonaDetalle; fuente: Fuente }) {
   const id = useId();
@@ -270,10 +271,34 @@ function RespuestasPersonas({ personas, fuente }: { personas: PersonaDetalle[]; 
   );
 }
 
+/** Objeto JSON del proveedor en la celda del vehículo. Solo SIMIT_VEHICULO; ausente o null no cuenta. */
+const proveedorDeCelda = (detalle: Detalle): unknown => {
+  if (detalle.fuente !== "SIMIT_VEHICULO") return undefined;
+  const valor = detalle.respuesta_proveedor;
+  if (valor === null || valor === undefined || typeof valor !== "object" || Array.isArray(valor)) return undefined;
+  return valor;
+};
+
+/**
+ * «Respuesta del proveedor» de SIMIT vehículo (HU #14184): un bloque de celda con el mismo renderizador que el conductor.
+ */
+function RespuestaProveedorCelda({ datos }: { datos: unknown }) {
+  const id = useId();
+  return (
+    <section aria-labelledby={id} className="flex flex-col gap-2">
+      <h3 id={id} className={TITULO_SECCION_CLS}>
+        Respuesta del proveedor
+      </h3>
+      <RespuestaProveedor datos={datos} etiqueta="Respuesta del proveedor" nivel={4} />
+    </section>
+  );
+}
+
 /**
  * «Respuesta de la fuente» (HU #14087): los datos de la consulta de la respuesta completa (`respuesta_fuente`), en español y
  * sin la auditoría del proveedor (RespuestaFuente); si no está guardada, el `resultado` resumido con un aviso; sin resultado
- * (Sin ejecutar, Novedad, Error), solo el mensaje.
+ * (Sin ejecutar, Novedad, Error), solo el mensaje. SIMIT vehículo (HU #14184) pinta `respuesta_proveedor` y, si falta, el
+ * aviso del proveedor más el resultado resumido.
  */
 function Respuesta({ detalle }: { detalle: Detalle }) {
   const porPersona = FUENTES_PERSONA.has(detalle.fuente) || detalle.personas !== null;
@@ -296,6 +321,15 @@ function Respuesta({ detalle }: { detalle: Detalle }) {
     cuerpo = <Vacio>{`El vehículo no tiene ${detalle.fuente.endsWith("LOCATARIO") ? "locatarios" : "propietarios"} para esta consulta.`}</Vacio>;
   } else if (porPersona) {
     cuerpo = <RespuestasPersonas personas={personas} fuente={detalle.fuente} />;
+  } else if (detalle.fuente === "SIMIT_VEHICULO" && proveedorDeCelda(detalle) !== undefined) {
+    cuerpo = <RespuestaProveedorCelda datos={proveedorDeCelda(detalle)} />;
+  } else if (detalle.fuente === "SIMIT_VEHICULO" && detalle.resultado) {
+    cuerpo = (
+      <>
+        <InlineAlert tone="info">{AVISO_SIN_RESPUESTA_PROVEEDOR}</InlineAlert>
+        <RespuestaFuente datos={detalle.resultado} etiqueta="Respuesta de la fuente" />
+      </>
+    );
   } else if (detalle.respuesta_fuente) {
     cuerpo = <RespuestaFuente datos={detalle.respuesta_fuente} etiqueta="Respuesta de la fuente" />;
   } else if (detalle.resultado) {

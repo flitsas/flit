@@ -51,6 +51,24 @@ describe("HU #14154 AC2 — textoValorProveedor", () => {
   });
 });
 
+describe("HU #14184 — etiquetas SIMIT (Verifik, Kyverum y fuente interna)", () => {
+  it("claves conocidas de Verifik, Kyverum y la fuente interna en español", () => {
+    expect(etiquetaCampoProveedor("estadoComparendo")).toBe("Estado del comparendo");
+    expect(etiquetaCampoProveedor("estadoCartera")).toBe("Estado de cartera");
+    expect(etiquetaCampoProveedor("paramEntradaPlaca")).toBe("Consulta por placa");
+    expect(etiquetaCampoProveedor("valorPagar")).toBe("Valor a pagar");
+    expect(etiquetaCampoProveedor("organismoTransito")).toBe("Organismo de tránsito");
+    expect(etiquetaCampoProveedor("codigoInfraccion")).toBe("Código de infracción");
+    expect(etiquetaCampoProveedor("idResolucion")).toBe("Id de la resolución");
+    expect(etiquetaCampoProveedor("plate")).toBe("Placa");
+  });
+
+  it("una clave nueva conserva su nombre original", () => {
+    expect(etiquetaCampoProveedor("campoNuevoDelProveedor")).toBe("campoNuevoDelProveedor");
+    expect(etiquetaCampoProveedor("campoAdicional")).toBe("campoAdicional");
+  });
+});
+
 describe("HU #14154 H4 — claves que coinciden con Object.prototype no heredan sus propiedades", () => {
   const CLAVES = ["constructor", "toString", "__proto__", "hasOwnProperty", "valueOf"];
 

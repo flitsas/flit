@@ -103,9 +103,10 @@ export interface PersonaDetalle {
   /** Respuesta completa de la fuente para esta persona (HU #14087 AC8); ver `DetalleCelda.respuesta_fuente`. */
   respuesta_fuente?: RespuestaFuenteCompleta | null;
   /**
-   * Respuesta íntegra del proveedor para esta persona (HU #14154; RUNT persona y RUES): el JSON del proveedor ya parseado, sin
-   * quitar nada (ids internos, firma y campos técnicos incluidos). Ausente o null en consultas anteriores al cambio, servidas
-   * desde caché o llenadas a mano. Solo la pintan RUNT_PROPIETARIO y RUNT_LOCATARIO (FUENTES_RESPUESTA_PROVEEDOR).
+   * Respuesta íntegra del proveedor para esta persona (HU #14154 RUNT persona y RUES; HU #14184 SIMIT propietario y
+   * locatario): el JSON del proveedor ya parseado, sin quitar nada (ids internos, firma y campos técnicos incluidos).
+   * Ausente o null en consultas anteriores al cambio, servidas desde caché o llenadas a mano. La pintan
+   * FUENTES_RESPUESTA_PROVEEDOR.
    */
   respuesta_proveedor?: RespuestaProveedor | null;
 }
@@ -139,6 +140,12 @@ export interface DetalleCelda {
   personas: PersonaDetalle[] | null;
   /** Respuesta completa de la fuente (HU #14087 AC8 ajustado); si falta, el detalle muestra `resultado` con un aviso. */
   respuesta_fuente?: RespuestaFuenteCompleta | null;
+  /**
+   * Respuesta íntegra del proveedor a nivel de celda (HU #14183 / #14184). Misma semántica que
+   * `PersonaDetalle.respuesta_proveedor`. Solo se llena en SIMIT_VEHICULO; en propietario y locatario vive en
+   * `personas[].respuesta_proveedor`. Null si no hay crudo, no es JSON o no es un objeto.
+   */
+  respuesta_proveedor?: RespuestaProveedor | null;
 }
 
 /** Carga el detalle de una celda; la pantalla de backoffice (F06-H5) pasa la suya con `?empresa=`. */
@@ -228,7 +235,12 @@ export function fechaCorta(fecha: string | null): string {
 export const FUENTES_PERSONA: ReadonlySet<Fuente> = new Set<Fuente>(["RUNT_PROPIETARIO", "RUNT_LOCATARIO", "SIMIT_PROPIETARIO", "SIMIT_LOCATARIO"]);
 
 /**
- * Fuentes cuyas personas pintan la respuesta íntegra del proveedor (HU #14154): RUNT de persona y, para los NIT, RUES (la
- * consulta de la persona). Las demás fuentes, incluido SIMIT por persona, siguen con la respuesta de la fuente filtrada.
+ * Fuentes cuyas personas pintan la respuesta íntegra del proveedor (HU #14154 y HU #14184): RUNT de persona, RUES en los
+ * NIT, y SIMIT de propietario y locatario. El vehículo SIMIT pinta `DetalleCelda.respuesta_proveedor`, no esta lista.
  */
-export const FUENTES_RESPUESTA_PROVEEDOR: ReadonlySet<Fuente> = new Set<Fuente>(["RUNT_PROPIETARIO", "RUNT_LOCATARIO"]);
+export const FUENTES_RESPUESTA_PROVEEDOR: ReadonlySet<Fuente> = new Set<Fuente>([
+  "RUNT_PROPIETARIO",
+  "RUNT_LOCATARIO",
+  "SIMIT_PROPIETARIO",
+  "SIMIT_LOCATARIO",
+]);
