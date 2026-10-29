@@ -9,6 +9,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
     getCamaraComercioRequirements: vi.fn(() => Promise.resolve([])),
     getInstance: vi.fn(),
     getAttachments: vi.fn(),
+    getStatusHistory: vi.fn(),
     listBiometricExpediente: vi.fn(),
     startSubsanacion: vi.fn(),
     requestRevocation: vi.fn(),
@@ -64,6 +65,14 @@ describe('TramiteDetalleModal', () => {
       actors: [],
     } as never);
     vi.mocked(tramitesClient.getAttachments).mockResolvedValue([]);
+    vi.mocked(tramitesClient.getStatusHistory).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 20,
+      modificaciones: [],
+      modificacionesTotal: 0,
+    });
     vi.mocked(tramitesClient.listBiometricExpediente).mockResolvedValue({
       validations: [],
       firmaBaulPartes: ['vendedor'],
@@ -92,6 +101,65 @@ describe('TramiteDetalleModal', () => {
     await user.click(screen.getByRole('button', { name: 'Línea de Tiempo del Trámite' }));
     expect(await screen.findByText('Línea de tiempo del trámite')).toBeInTheDocument();
     expect(screen.queryByLabelText('Datos del vehículo')).not.toBeInTheDocument();
+  });
+
+  it('en un trámite que no está en borrador, la línea de tiempo muestra cada modificación', async () => {
+    vi.mocked(tramitesClient.getStatusHistory).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 20,
+      modificaciones: [
+        {
+          id: 'm-color',
+          etiqueta: 'Color',
+          campo: 'vehicle_color',
+          anterior: 'GRIS GRAFITO',
+          nuevo: 'VERDE QA',
+          changedAt: '2026-10-29T15:54:00.000Z',
+          changedByUserId: 'u1',
+          changedByName: 'Usuario Demo',
+          changedByCompania: 'Empresa Demo FLIT',
+        },
+        {
+          id: 'm-estado',
+          etiqueta: 'Estado',
+          campo: 'estado',
+          anterior: '',
+          nuevo: 'borrador',
+          changedAt: '2026-10-08T22:05:00.000Z',
+          changedByUserId: 'u2',
+          changedByName: 'Admin Empresa Demo',
+          changedByCompania: 'Empresa Demo S.A.S',
+        },
+      ],
+      modificacionesTotal: 2,
+    });
+
+    render(
+      <TramiteDetalleModal
+        open
+        instanceId="inst-1"
+        item={ITEM}
+        initialPanel="timeline"
+        onClose={() => undefined}
+      />,
+    );
+
+    const lista = await screen.findByRole('list', { name: 'Línea de tiempo del trámite' });
+    const filas = within(lista).getAllByRole('listitem');
+    expect(filas).toHaveLength(2);
+    expect(filas[0]).toHaveTextContent('Borrador');
+    expect(filas[0]).toHaveTextContent('Gestor');
+    expect(filas[0]).toHaveTextContent('Correo');
+    expect(filas[0]).toHaveTextContent('Empresa');
+    expect(filas[0]).toHaveTextContent('Rol');
+    expect(filas[0]).toHaveTextContent('Fecha y hora');
+    expect(filas[1]).toHaveTextContent('Color');
+    expect(within(filas[1]).getByText('Usuario Demo')).toBeInTheDocument();
+    expect(within(filas[1]).getByText('Empresa Demo FLIT')).toBeInTheDocument();
+    expect(filas[1]).toHaveTextContent('GRIS GRAFITO → VERDE QA');
+    expect(screen.queryByText(/Entregado desde/i)).not.toBeInTheDocument();
   });
 
   it('HU #12726 (C.2) — initialPanel=timeline abre directo en la línea de tiempo', async () => {
@@ -189,9 +257,35 @@ describe('TramiteDetalleModal', () => {
     render(
       <TramiteDetalleModal open instanceId="inst-1" item={ITEM} onClose={() => undefined} />,
     );
+    vi.mocked(tramitesClient.getStatusHistory).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 20,
+      modificaciones: [
+        {
+          id: 'm-reasig',
+          etiqueta: 'Reasignación de gestor',
+          campo: 'reasignacion_gestor',
+          anterior: 'Carlos Gómez',
+          nuevo: 'Diana Ruiz',
+          changedAt: '2026-04-19T09:00:00Z',
+          changedByUserId: 'u1',
+          changedByName: 'Willyn Londoño',
+          changedByCompania: null,
+        },
+      ],
+      modificacionesTotal: 1,
+    });
     await user.click(screen.getByRole('button', { name: 'Línea de Tiempo del Trámite' }));
-    await user.click(await screen.findByText('Reasignación de gestor'));
-    expect(screen.getByText('De Carlos Gómez a Diana Ruiz')).toBeInTheDocument();
+    const lista = await screen.findByRole('list', { name: 'Línea de tiempo del trámite' });
+    expect(within(lista).getByText('Reasignación de gestor')).toBeInTheDocument();
+    expect(lista).toHaveTextContent('Gestor');
+    expect(lista).toHaveTextContent('Correo');
+    expect(lista).toHaveTextContent('Empresa');
+    expect(lista).toHaveTextContent('Rol');
+    expect(lista).toHaveTextContent('Fecha y hora');
+    expect(within(lista).getByText('Carlos Gómez → Diana Ruiz')).toBeInTheDocument();
   });
 
   // Bug #12376, defecto 3 — el reenvío de validación aparece en la trazabilidad de identidad como
@@ -481,14 +575,47 @@ describe('TramiteDetalleModal — sub-estado de revocatoria (HU #12575)', () => 
         },
       ],
     } as never);
+    vi.mocked(tramitesClient.getStatusHistory).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 20,
+      modificaciones: [
+        {
+          id: 'm-rev',
+          etiqueta: 'Solicitud de revocatoria',
+          campo: 'revocatoria',
+          anterior: '',
+          nuevo: 'Placa entregada con datos incorrectos',
+          changedAt: '2026-05-01T10:00:00Z',
+          changedByUserId: 'u1',
+          changedByName: 'Ana Administradora',
+          changedByCompania: null,
+        },
+        {
+          id: 'm-est',
+          etiqueta: 'Estado',
+          campo: 'estado',
+          anterior: 'entregado',
+          nuevo: 'aprobado',
+          changedAt: '2026-04-20T11:00:00Z',
+          changedByUserId: null,
+          changedByName: null,
+          changedByCompania: null,
+        },
+      ],
+      modificacionesTotal: 2,
+    });
     render(
       <TramiteDetalleModal open instanceId="inst-1" item={APROBADO} onClose={() => undefined} />,
     );
 
     await user.click(screen.getByRole('button', { name: 'Línea de Tiempo del Trámite' }));
-    expect(await screen.findByText('Solicitud de revocatoria · Intento 1')).toBeInTheDocument();
-    // El hito de estado "Aprobado" del historial sigue pintándose: el evento se AGREGA, no reemplaza.
-    expect(screen.getAllByText('Aprobado').length).toBeGreaterThan(0);
+    const lista = await screen.findByRole('list', { name: 'Línea de tiempo del trámite' });
+    expect(within(lista).getByText('Solicitud de revocatoria')).toBeInTheDocument();
+    expect(within(lista).getByText('Placa entregada con datos incorrectos')).toBeInTheDocument();
+    expect(within(lista).getByText('Aprobado desde Entregado')).toBeInTheDocument();
+    expect(within(lista).getAllByText('Gestor').length).toBeGreaterThan(0);
   });
 
   it('Bug #13780 — la línea de tiempo incluye el rechazo de la revocatoria', async () => {
@@ -516,14 +643,47 @@ describe('TramiteDetalleModal — sub-estado de revocatoria (HU #12575)', () => 
         },
       ],
     } as never);
+    vi.mocked(tramitesClient.getStatusHistory).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 20,
+      modificaciones: [
+        {
+          id: 'm-rech',
+          etiqueta: 'Revocatoria rechazada',
+          campo: 'revocatoria',
+          anterior: '',
+          nuevo: 'El soporte no acredita el error',
+          changedAt: '2026-05-02T15:00:00Z',
+          changedByUserId: 'u2',
+          changedByName: 'Otto Organismo',
+          changedByCompania: null,
+        },
+        {
+          id: 'm-sol',
+          etiqueta: 'Solicitud de revocatoria',
+          campo: 'revocatoria',
+          anterior: '',
+          nuevo: 'Placa entregada con datos incorrectos',
+          changedAt: '2026-05-01T10:00:00Z',
+          changedByUserId: 'u1',
+          changedByName: 'Ana Administradora',
+          changedByCompania: null,
+        },
+      ],
+      modificacionesTotal: 2,
+    });
     render(
       <TramiteDetalleModal open instanceId="inst-1" item={APROBADO} onClose={() => undefined} />,
     );
 
     await user.click(screen.getByRole('button', { name: 'Línea de Tiempo del Trámite' }));
-    expect(await screen.findByText('Revocatoria rechazada · Intento 1')).toBeInTheDocument();
-    expect(screen.getByText('El soporte no acredita el error')).toBeInTheDocument();
-    expect(screen.getByText('Solicitud de revocatoria · Intento 1')).toBeInTheDocument();
+    const lista = await screen.findByRole('list', { name: 'Línea de tiempo del trámite' });
+    expect(within(lista).getByText('Revocatoria rechazada')).toBeInTheDocument();
+    expect(within(lista).getByText('El soporte no acredita el error')).toBeInTheDocument();
+    expect(within(lista).getByText('Solicitud de revocatoria')).toBeInTheDocument();
+    expect(within(lista).getAllByText('Fecha y hora').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Aprobado').length).toBeGreaterThan(0);
   });
 });

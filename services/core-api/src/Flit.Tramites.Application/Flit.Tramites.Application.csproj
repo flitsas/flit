@@ -21,4 +21,8 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Flit.Tramites.Application.Tests" />
+  </ItemGroup>
+
 </Project>

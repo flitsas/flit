@@ -47,6 +47,9 @@ public sealed class SubmitProcedureInstanceTests
             .IsOperableAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(true);
         _repo.SaveChangesWithConcurrencyGuardAsync(Arg.Any<CancellationToken>()).Returns(true);
+        _repo.AddEventAsync(Arg.Any<ProcedureInstanceEvent>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        _repo.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
         // Por defecto: OT sin integración Quipux (como Funza/Manizales en QA sin DIVIPO/flags).
         _quipuxCanal
             .GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())

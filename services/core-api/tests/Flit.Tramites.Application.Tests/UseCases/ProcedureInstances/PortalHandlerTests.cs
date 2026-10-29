@@ -437,8 +437,8 @@ public sealed class PortalHandlerTests
         };
         inst.Signatures.Add(sig);
         var (_, token) = Seed(rol: "comprador", instance: inst);
-        // SimularFirmaHandler interno re-consulta por GetByIdWithSignaturesAsync.
-        _repo.GetByIdWithSignaturesAsync(inst.Id, inst.TenantId, Arg.Any<CancellationToken>()).Returns(inst);
+        // SimularFirmaHandler re-consulta el grafo (actores + firmas) para la bitácora.
+        _repo.GetByIdWithFurGraphAsync(inst.Id, inst.TenantId, Arg.Any<CancellationToken>()).Returns(inst);
 
         var (result, error) = await _firmaPortal.HandleAsync(token, ct);
 

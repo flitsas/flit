@@ -9,10 +9,14 @@ import {
   type OtApiScope,
   type OtProcedureAttachment,
 } from "@/lib/api/admin-ot";
-import type { OtClientProcedure } from "@/lib/api/types-ot";
-import type { StatusHistory } from "@/lib/api/types/procedure-runtime";
+import type { OtClientProcedure, OtClientProcedureModificacion } from "@/lib/api/types-ot";
+import type { StatusHistory, StatusHistoryModification } from "@/lib/api/types/procedure-runtime";
 import { TimelineTrackPanel } from "@/components/operacion/detalle/TimelineTrackPanel";
-import { mapStatusHistoryToTimelineNodes } from "@/components/operacion/detalle/timeline-mappers";
+import {
+  mapModificacionesToTimelineNodes,
+  mapStatusHistoryToTimelineNodes,
+  mergeTimelineNodesByTimestamp,
+} from "@/components/operacion/detalle/timeline-mappers";
 import { OtDetalleAcordeon } from "./detalle/OtDetalleAcordeon";
 import { OtDetalleActores } from "./detalle/OtDetalleActores";
 import { OtDetalleShell } from "./detalle/OtDetalleShell";
@@ -50,6 +54,39 @@ export const OT_DETALLE_SECCIONES: { id: OtDetalleSeccionId; titulo: string }[] 
 ];
 
 const SECCIONES = OT_DETALLE_SECCIONES;
+
+/**
+ * Misma transición de estado en las dos colecciones del detalle: la modificación (campo
+ * `estado`) ya es la tarjeta completa, así que el carril de `statusHistory` no la repite.
+ */
+function esMismaTransicionEstado(
+  entrada: { fromStatus: string | null; toStatus: string; changedAt: string },
+  modificacion: OtClientProcedureModificacion,
+): boolean {
+  if (modificacion.campo !== "estado") return false;
+  if (modificacion.anterior.trim() !== (entrada.fromStatus ?? "").trim()) return false;
+  if (modificacion.nuevo.trim() !== entrada.toStatus.trim()) return false;
+  const a = Date.parse(entrada.changedAt);
+  const b = Date.parse(modificacion.changedAt);
+  if (Number.isNaN(a) || Number.isNaN(b)) return entrada.changedAt === modificacion.changedAt;
+  return a === b;
+}
+
+/** La bitácora del OT usa actorNombre/actorCompania; el carril de tarjetas espera el DTO del gestor. */
+function modificacionesComoTarjetas(filas: OtClientProcedureModificacion[]) {
+  const rows: StatusHistoryModification[] = filas.map((m, i) => ({
+    id: `${m.changedAt}-${m.campo}-${i}`,
+    etiqueta: m.etiqueta,
+    campo: m.campo,
+    anterior: m.anterior,
+    nuevo: m.nuevo,
+    changedAt: m.changedAt,
+    changedByUserId: null,
+    changedByName: m.actorNombre ?? null,
+    changedByCompania: m.actorCompania ?? null,
+  }));
+  return mapModificacionesToTimelineNodes(rows);
+}
 
 export interface ClientProcedureDetailModalProps {
   open: boolean;
@@ -220,7 +257,19 @@ export function ClientProcedureDetailModal({
   const estadoLabel = formatOtProcedureStatus(row.status);
   const timelineActive = panelTracking === "timeline";
   const history = (row.statusHistory ?? []) as StatusHistory[];
-  const timelineNodes = mapStatusHistoryToTimelineNodes(history);
+  // Mientras el detalle carga o falla no hay modificaciones fiables: no se usan para ocultar estados.
+  const modsCargadas =
+    !detailLoading && detailError == null ? (row.modificaciones ?? []) : [];
+  const historyVisible = history.filter(
+    (entrada) => !modsCargadas.some((m) => esMismaTransicionEstado(entrada, m)),
+  );
+  const timelineNodes =
+    modsCargadas.length > 0
+      ? mergeTimelineNodesByTimestamp(
+          modificacionesComoTarjetas(modsCargadas),
+          mapStatusHistoryToTimelineNodes(historyVisible),
+        )
+      : mapStatusHistoryToTimelineNodes(history);
 
   const header = ({ titleId }: { titleId: string }) => (
     <div className="flex flex-wrap items-start justify-between gap-3 px-1 py-1">
@@ -420,7 +469,7 @@ export function ClientProcedureDetailModal({
       ) : null}
 
       {timelineActive ? (
-        <div className="mb-3" data-testid="ot-timeline-panel">
+        <div className="mb-3 space-y-3" data-testid="ot-timeline-panel">
           {detailLoading && history.length === 0 ? (
             <OtCargando etiqueta="Cargando la línea de tiempo del trámite" filas={3} />
           ) : detailError && history.length === 0 ? (
@@ -440,7 +489,11 @@ export function ClientProcedureDetailModal({
             <TimelineTrackPanel
               title="Línea de tiempo del trámite"
               nodes={timelineNodes}
-              emptyMessage="Este trámite aún no tiene cambios de estado registrados."
+              emptyMessage={
+                row.modificaciones != null
+                  ? "Todavía no hay modificaciones"
+                  : "Este trámite aún no tiene cambios de estado registrados."
+              }
             />
           )}
         </div>

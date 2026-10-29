@@ -341,6 +341,9 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       "subsanacion",
       "entregado",
       "anulado",
+      "modificaciones del tramite",
+      "expediente",
+      "trazabilidad",
       "reenviar validacion",
       "reenviar validacion de identidad",
       "copiar enlace",
@@ -397,6 +400,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         title: "3. El detalle del trámite",
         paragraphs: [
           "Al abrir una fila entras al detalle: el asistente (si sigue en borrador), la línea de tiempo de estados con fecha y hora, los documentos del expediente (también desde «Ver documentos» en la fila, sin entrar al asistente) y las observaciones del organismo cuando las hay.",
+          "Dentro del trámite abierto, en cualquier estado, cada cambio queda registrado: fecha y hora de Colombia, quién lo hizo (su nombre y su compañía, o Sistema), el dato, el valor anterior y el nuevo. Una bandera de transformación (color, carrocería, combustible o blindaje) se lee Sí o No. En borrador o en subsanación está en el acordeón «Expediente — Trazabilidad cronológica» del resumen, del más reciente al más antiguo. En los demás estados, la sección Expediente usa esa misma lista. «Línea de Tiempo del Trámite» conserva sus tarjetas: el título es el dato, y dentro van gestor, correo, empresa, rol, fecha y hora, y el detalle con el valor anterior y el nuevo. La tarjeta de más abajo es la vigente. Si no hay cambios dice «Todavía no hay modificaciones»; si está cargando o falla, lo dice y puedes pulsar «Reintentar». «Ver más» trae el resto. El recuadro «Estado del trámite», si lo abres sin entrar al detalle, solo muestra el estado y los actos administrativos.",
           "Todas las fechas de la plataforma se muestran en hora de Colombia con el formato DD/MM/YYYY HH:mm; las vigencias (SOAT, RTM, identidad) van sin hora.",
         ],
       },
