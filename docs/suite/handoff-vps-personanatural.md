@@ -191,14 +191,21 @@ CORE_PERSONANATURAL_TAG=dev
 (`captcha_required`). **Volver atrás:** quitar `personanatural` de `COMPOSE_PROFILES` y recrear; las demás variables
 quedan sin efecto.
 
-## 7. Despliegue GitOps (cuando el portal salga de DEV)
+## 7. Despliegue GitOps (VPS 177 / Argo CD)
 
-1. En `flit-gitops/services/flit2-<ambiente>/kustomization.yaml`, agregar las imágenes `ghcr.io/flitsas/flitdev/core-personanatural` y `ghcr.io/flitsas/flitdev/frontend-personanatural`.
-2. En `cd.yml` (`deploy-gitops`): sumar `build-core-personanatural` y `build-frontend-personanatural` a `needs`, sus pares
-   `R_`/`D_` y las líneas `"core-personanatural:${{ env.CORE_PERSONANATURAL_IMAGE }}:CORE_PERSONANATURAL"` y
-   `"frontend-personanatural:${{ env.FRONTEND_PERSONANATURAL_IMAGE }}:FRONTEND_PERSONANATURAL"` a la lista. **No hacerlo antes del
-   paso 1**: el despliegue de todo FLIT 2 fallaría.
-3. ConfigMap y sealed-secret con las variables de los pasos 1 a 5.
+DEV ya no usa compose para el portal: la prep vive en **flit-gitops**
+`docs/host-177/personanatural/` (Deployments replicas 0, ClusterIP `10.43.40.24`, nginx plantilla,
+script de sellado). Dominio: `dev.personas.flitsas.online` — **sin** subdominio de API (mismo patrón
+que Comparendos: proxy same-origin → gateway).
+
+1. Merge prep en `flit-gitops` (`services/flit2-dev/` + imágenes en kustomization).
+2. Datos en host (pasos 1–3 de este handoff: DB, Rabbit, empresa) + `gen-secretos-dev.sh` en la 177.
+3. nginx del host + DNS; luego corte (replicas 1, `PersonaNatural__Fachada__Habilitada=true`).
+4. `cd.yml` (`deploy-gitops`) ya puede listar PN: si la imagen **no** está en la kustomization del
+   ambiente (QA/PDN aún sin portal), el job **omite** ese digest sin fallar. En DEV sí actualiza.
+
+QA/PDN: repetir manifests por ambiente cuando DEV esté estable (`qa.personas.flitsas.online`,
+`personas.flitsas.com` en la 169).
 
 ## Pendiente de confirmar
 

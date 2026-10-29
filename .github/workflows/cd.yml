@@ -431,10 +431,9 @@ jobs:
           cache-to: type=gha,mode=max,scope=core-consultas
 
 
-  # Epic #14021 (HU #14038): core-personanatural, el BFF del portal Persona Natural (perfil «personanatural»).
-  # Solo construye y publica la imagen. NO está en los needs ni en la lista de deploy-gitops a propósito: ese despliegue
-  # falla si la imagen no está en la kustomization de flit-gitops, y agregarla allí es un paso del líder cuando se
-  # encienda el portal (docs/suite/handoff-vps-personanatural.md). Un fallo de este build no frena ningún despliegue.
+  # Epic #14021 (HU #14038): core-personanatural, el BFF del portal Persona Natural.
+  # deploy-gitops solo escribe digest si la imagen ya está en flit2-<ambiente>/kustomization.yaml
+  # (DEV primero; docs/host-177/personanatural/ en flit-gitops). Un fallo de este build no frena el deploy.
   build-core-personanatural:
     name: Build & push core-personanatural (.NET) image
     needs: setup
@@ -957,8 +956,8 @@ jobs:
           cache-from: type=gha,scope=frontend-comparendos
           cache-to: type=gha,mode=max,scope=frontend-comparendos
 
-  # Epic #14021 (HU #14052): app web del portal Persona Natural (config en runtime, sin build-args, sin paquetes @flit/*).
-  # Como el BFF, solo construye y publica la imagen: no entra al despliegue GitOps hasta que flit-gitops la tenga.
+  # Epic #14021 (HU #14052): app web del portal Persona Natural (config en runtime, sin build-args).
+  # Mismo criterio que core-personanatural: digest en GitOps solo si la kustomization ya lista la imagen.
   build-frontend-personanatural:
     name: Build & push frontend-personanatural image
     needs: setup
@@ -1208,7 +1207,7 @@ jobs:
   # Una variable nueva en el compose NO llega sola: hay que agregarla alla, en cada ambiente.
   deploy-gitops:
     name: Deploy ${{ needs.setup.outputs.env_name }} (GitOps → Argo CD)
-    needs: [setup, build-core-api, build-core-identity, build-core-consultas, build-core-notificaciones, build-core-comparendos, build-core-ict, build-frontend, build-frontend-hub, build-frontend-comparendos, build-python-ml]
+    needs: [setup, build-core-api, build-core-identity, build-core-consultas, build-core-notificaciones, build-core-comparendos, build-core-ict, build-frontend, build-frontend-hub, build-frontend-comparendos, build-frontend-personanatural, build-core-personanatural, build-python-ml]
     if: ${{ !cancelled() && needs.setup.result == 'success' && (github.ref_name == 'develop' || github.ref_name == 'staging' || github.ref_name == 'release') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -1238,6 +1237,10 @@ jobs:
       D_FRONTEND_HUB: ${{ needs.build-frontend-hub.outputs.digest }}
       R_FRONTEND_COMPARENDOS: ${{ needs.build-frontend-comparendos.result }}
       D_FRONTEND_COMPARENDOS: ${{ needs.build-frontend-comparendos.outputs.digest }}
+      R_CORE_PERSONANATURAL: ${{ needs.build-core-personanatural.result }}
+      D_CORE_PERSONANATURAL: ${{ needs.build-core-personanatural.outputs.digest }}
+      R_FRONTEND_PERSONANATURAL: ${{ needs.build-frontend-personanatural.result }}
+      D_FRONTEND_PERSONANATURAL: ${{ needs.build-frontend-personanatural.outputs.digest }}
       R_PYTHON_ML: ${{ needs.build-python-ml.result }}
       D_PYTHON_ML: ${{ needs.build-python-ml.outputs.digest }}
     steps:
@@ -1273,6 +1276,8 @@ jobs:
           FAILED=""
           MSG=""
           # servicio:imagen:variable (R_<variable> = resultado del build, D_<variable> = digest)
+          # Persona Natural: si la imagen aún no está en la kustomization del ambiente (QA/PDN), se omite
+          # sin fallar — el portal se enciende por ambiente (DEV primero).
           for entry in \
               "core-api:${{ env.CORE_API_IMAGE }}:CORE_API" \
               "core-identity:${{ env.CORE_IDENTITY_IMAGE }}:CORE_IDENTITY" \
@@ -1283,6 +1288,8 @@ jobs:
               "frontend:${{ env.FRONTEND_IMAGE }}:FRONTEND" \
               "frontend-hub:${{ env.FRONTEND_HUB_IMAGE }}:FRONTEND_HUB" \
               "frontend-comparendos:${{ env.FRONTEND_COMPARENDOS_IMAGE }}:FRONTEND_COMPARENDOS" \
+              "core-personanatural:${{ env.CORE_PERSONANATURAL_IMAGE }}:CORE_PERSONANATURAL" \
+              "frontend-personanatural:${{ env.FRONTEND_PERSONANATURAL_IMAGE }}:FRONTEND_PERSONANATURAL" \
               "python-ml:${{ env.PYTHON_ML_IMAGE }}:PYTHON_ML"; do
             svc=${entry%%:*}; rest=${entry#*:}; img=${rest%:*}; var=${rest##*:}
             r="R_$var"; d="D_$var"
@@ -1291,8 +1298,18 @@ jobs:
               FAILED="$FAILED $svc"
               continue
             fi
-            # Falla si la imagen no esta en la kustomization (evita un despliegue a medias).
-            yq -e "(.images[] | select(.name == \"$img\"))" "$K" > /dev/null
+            if ! yq -e "(.images[] | select(.name == \"$img\"))" "$K" > /dev/null 2>&1; then
+              case "$svc" in
+                core-personanatural|frontend-personanatural)
+                  echo "::notice::$svc: no listado en $K; omitido (portal no encendido en ${AMBIENTE})"
+                  continue
+                  ;;
+                *)
+                  # Falla si una imagen obligatoria no esta (evita un despliegue a medias).
+                  yq -e "(.images[] | select(.name == \"$img\"))" "$K" > /dev/null
+                  ;;
+              esac
+            fi
             yq -i "(.images[] | select(.name == \"$img\")).digest = \"${!d}\"" "$K"
             yq -i "del((.images[] | select(.name == \"$img\")).newTag)" "$K"
             MSG="$MSG"$'\n'"$svc ${!d}"
