@@ -25,7 +25,7 @@ public sealed class ErroresDeCampo
 }
 
 /// <summary>Un actor ya normalizado y validado, listo para guardarse cifrado.</summary>
-public sealed record ActorValidado(int Indice, string Rol, short Ordinal, string TipoDocumento, string Documento, string Nombre, string? Correo, string? Celular, string? Direccion);
+public sealed record ActorValidado(int Indice, string Rol, short Ordinal, string TipoDocumento, string Documento, string Nombre, string? Correo, string? Celular, string? Direccion, string? Ciudad = null);
 
 /// <summary>
 /// Reglas del borrador (HU #14047). TODAS salen de la definición congelada de la solicitud: ningún rol, campo, documento ni
@@ -153,8 +153,12 @@ public static partial class ReglasBorrador
             if (direccion is { Length: > 200 })
                 errores.Agregar($"{pre}.direccion", "La dirección es demasiado larga.");
 
+            var ciudad = a.Ciudad?.Trim();
+            if (ciudad is { Length: > 80 })
+                errores.Agregar($"{pre}.ciudad", "La ciudad es demasiado larga.");
+
             if (!errores.Hay)
-                salida.Add(new ActorValidado(i, rol, ordinal, tipo, documento, nombre, correo, string.IsNullOrEmpty(celular) ? null : celular, string.IsNullOrWhiteSpace(direccion) ? null : direccion));
+                salida.Add(new ActorValidado(i, rol, ordinal, tipo, documento, nombre, correo, string.IsNullOrEmpty(celular) ? null : celular, string.IsNullOrWhiteSpace(direccion) ? null : direccion, string.IsNullOrWhiteSpace(ciudad) ? null : ciudad));
         }
 
         return salida;
@@ -319,23 +323,31 @@ public static partial class ReglasBorrador
     // ── Completitud ──────────────────────────────────────────────────────────────────────────────────────────────────
 
     /// <summary>
+    /// Placa o VIN de la solicitud y documento del titular, ya capturados en el diagnóstico o en las personas.
+    /// El formulario del tipo los pide otra vez como campos; no hace falta volver a escribirlos.
+    /// </summary>
+    public readonly record struct CapturaConsulta(string? Placa, string? Vin, string? TipoDocumentoTitular, bool TitularTieneDocumento);
+
+    /// <summary>
     /// Qué le falta al borrador y en qué paso se corrige. Un documento condicional (<c>condicion</c> con texto) no bloquea:
     /// la condición se evalúa en servidor al crear el trámite, no aquí. El comprobante de pago NO es requisito: el pago está en otra épica y el
     /// trámite se entrega a FLIT 2 como borrador (decisión del PO); el endpoint de comprobante sigue disponible como adjunto opcional.
+    /// La placa, el VIN y el documento del titular cuentan como llenos si ya se capturaron al consultar o al registrar a la persona.
     /// </summary>
     public static (IReadOnlyList<PasoEstadoDto> Pasos, IReadOnlyList<PendienteDto> Pendientes) Completitud(
         DefinicionTipoDto def,
         IReadOnlyDictionary<string, string> campos,
         DatosSolicitud datos,
         IReadOnlyList<(string Rol, short Ordinal)> personas,
-        IReadOnlySet<string> documentosCargados)
+        IReadOnlySet<string> documentosCargados,
+        CapturaConsulta captura = default)
     {
         string? PasoDe(string sectionType) => def.Pasos.FirstOrDefault(p => p.SectionTypes.Contains(sectionType, StringComparer.Ordinal))?.Clave;
 
         var pendientes = new List<PendienteDto>();
         foreach (var paso in def.Pasos)
         {
-            foreach (var campo in paso.Campos.Where(c => c.Obligatorio && !(campos.TryGetValue(c.FieldKey, out var v) && !string.IsNullOrWhiteSpace(v))))
+            foreach (var campo in paso.Campos.Where(c => c.Obligatorio && !CampoCubierto(c.FieldKey, campos, captura)))
                 pendientes.Add(new PendienteDto("campo_requerido", campo.FieldKey, paso.Clave));
         }
 
@@ -360,5 +372,24 @@ public static partial class ReglasBorrador
             return new PasoEstadoDto(p.Clave, p.Titulo, propios.Count == 0, propios);
         }).ToList();
         return (pasos, pendientes);
+    }
+
+    /// <summary>
+    /// Un campo obligatorio ya está si el ciudadano lo escribió, o si es la placa, el VIN o el documento del titular
+    /// y ese dato ya quedó en la solicitud o en la persona.
+    /// </summary>
+    private static bool CampoCubierto(string fieldKey, IReadOnlyDictionary<string, string> campos, CapturaConsulta captura)
+    {
+        if (campos.TryGetValue(fieldKey, out var valor) && !string.IsNullOrWhiteSpace(valor))
+            return true;
+
+        return fieldKey switch
+        {
+            "plate" => !string.IsNullOrWhiteSpace(captura.Placa),
+            "vin" => !string.IsNullOrWhiteSpace(captura.Vin),
+            "owner_document_type" => !string.IsNullOrWhiteSpace(captura.TipoDocumentoTitular),
+            "owner_document_number" => captura.TitularTieneDocumento,
+            _ => false,
+        };
     }
 }

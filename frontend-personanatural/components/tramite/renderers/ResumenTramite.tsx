@@ -1,120 +1,234 @@
 "use client";
 
-import { skipToken, useQuery } from "@tanstack/react-query";
+import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
 import { TriangleAlert } from "lucide-react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { boton } from "@/components/landing/estilos";
 import { useWizard, type PropsSeccion } from "@/components/tramite/ContextoWizard";
-import { Card } from "@/components/tramite/piezas";
-import type { Cotizacion } from "@/lib/api/cliente";
+import { MobilityLoader } from "@/components/MobilityLoader";
+import { Btn, Card } from "@/components/tramite/piezas";
+import { claveSolicitud } from "@/components/tramite/useSolicitud";
+import type { Cotizacion, DefinicionTipo, Solicitud } from "@/lib/api/cliente";
+import { ApiError, mensajeDe, type FallasDeRadicacion } from "@/lib/api/errores";
+import { useBloqueo } from "@/lib/api/useBloqueo";
+import { EXIGIR_IDENTIDAD_AL_ENVIAR, ETIQUETA_VALIDACION } from "@/lib/tramite/actores";
 import { claveCotizacion } from "@/lib/tramite/cotizacion";
-import { grupoDePendiente, type GrupoPaso } from "@/lib/tramite/pasos";
-import { armarResumen, destinoDePendiente, pasoTieneSecciones, textoPendiente } from "@/lib/tramite/resumen";
+import { conservaLlave } from "@/lib/tramite/envio";
+import { formatearPesos } from "@/lib/formato";
+import { nuevaLlave } from "@/lib/idempotencia";
+import type { GrupoPaso } from "@/lib/tramite/pasos";
+import { destinoDePendiente, pasoTieneSecciones, textoPendiente } from "@/lib/tramite/resumen";
+import { recordarPresentacion } from "@/lib/tramite/presentacion";
 
-const MOTIVO_CONFIRMAR = "Confirma que revisaste la información para continuar.";
-
-const NOMBRE_PASO: Readonly<Record<GrupoPaso, string>> = {
-  diagnostico: "Diagnóstico",
+const NOMBRE_PASO: Readonly<Record<string, string>> = {
   actores: "Actores",
   requisitos: "Requisitos",
+  diagnostico: "Diagnóstico",
   resumen: "Resumen",
-  envio: "Envío",
 };
 
+type Falla = { tipo: "mensaje"; texto: string } | { tipo: "pendientes"; fallas: FallasDeRadicacion } | { tipo: "identidad"; fallas: FallasDeRadicacion };
+
 /**
- * Paso 4 «Resumen» (HU F5, reducida): lo que el ciudadano llenó, en solo lectura, con «Editar» por sección que vuelve al paso
- * donde se llenó. El documento, el correo y el celular de cada persona salen enmascarados. No hay cobro: el trámite se entrega
- * a FLIT 2 como borrador. Para pasar al envío hay que confirmar explícitamente; si algo cambia después (cambia la versión del
- * borrador), la confirmación se pide de nuevo.
+ * Paso anterior al envío: resume el trámite y radica con «Enviar trámite».
+ * Si el BFF responde identidad pendiente, se muestra qué parte falta.
  */
-export function ResumenTramite({ seccion, onEstado }: PropsSeccion) {
-  const { definicion, solicitud, irAPaso } = useWizard();
-  const idConfirmacion = useId();
-  const [confirmadaEn, setConfirmadaEn] = useState<number | null>(null);
-  const confirmada = confirmadaEn === solicitud.version;
+export function ResumenTramite({ onEstado }: PropsSeccion) {
+  const { cliente, definicion, solicitud, recargar, reportarError, irAPaso } = useWizard();
+  const queryClient = useQueryClient();
+  const bloqueo = useBloqueo();
+  const idBloqueo = useId();
+  const [enviando, setEnviando] = useState(false);
+  const [falla, setFalla] = useState<Falla | null>(null);
+  const llave = useRef<string | null>(null);
+  const enCurso = useRef(false);
 
-  // Solo lectura de la cotización que el ciudadano ya calculó en la barra lateral: aquí no se pide ninguna.
   const transformaciones = solicitud.datos.requisitos?.transformaciones ?? [];
-  const cotizacion = useQuery<Cotizacion>({ queryKey: claveCotizacion(solicitud.organismoId, definicion.code, transformaciones), queryFn: skipToken, staleTime: Infinity });
-  const valorInformativo = cotizacion.data?.totalCop ?? null;
+  const cotizacion = useQuery<Cotizacion>({
+    queryKey: claveCotizacion(solicitud.organismoId, definicion.code, transformaciones),
+    queryFn: skipToken,
+    staleTime: Infinity,
+  });
 
-  const secciones = useMemo(() => armarResumen(definicion, solicitud, valorInformativo), [definicion, solicitud, valorInformativo]);
-  const pendientes = solicitud.pendientes.filter((p) => grupoDePendiente(p, definicion) !== "envio");
+  const placa = solicitud.placa ?? solicitud.vin ?? "—";
 
   useEffect(() => {
-    onEstado({ completo: confirmada, bloqueo: confirmada ? undefined : MOTIVO_CONFIRMAR });
-  }, [confirmada, onEstado]);
+    onEstado({ completo: true });
+  }, [onEstado]);
+
+  const marcarEnviada = (estado: string) => {
+    queryClient.setQueryData<Solicitud>(claveSolicitud(solicitud.solicitudId), (prev) => (prev ? { ...prev, estado } : prev));
+  };
+
+  const enviar = async () => {
+    if (enCurso.current || bloqueo.bloqueado) return;
+    enCurso.current = true;
+    setEnviando(true);
+    setFalla(null);
+    llave.current ??= nuevaLlave();
+    recordarPresentacion(solicitud);
+    try {
+      const resultado = await cliente.solicitudes.radicar(solicitud.solicitudId, llave.current);
+      marcarEnviada(resultado.estado);
+      irAPaso("envio");
+      void recargar();
+    } catch (error) {
+      reportarError(error);
+      bloqueo.registrar(error);
+      if (!conservaLlave(error)) llave.current = null;
+      if (error instanceof ApiError && error.code === "estado_no_permite_cambio") {
+        marcarEnviada("en_cola");
+        irAPaso("envio");
+        void recargar();
+      } else {
+        if (error instanceof ApiError && error.code === "requisitos_incompletos") void recargar();
+        setFalla(fallaDe(error));
+      }
+    } finally {
+      enCurso.current = false;
+      setEnviando(false);
+    }
+  };
 
   return (
-    <Card title="Resumen de tu trámite" id={seccion.clave.replace(/[^a-z0-9]/gi, "-")}>
-      <p className="mb-4 text-sm text-muted-foreground">
-        Revisa que la información esté correcta antes de enviar. Por tu seguridad, el documento, el correo y el celular se muestran de forma parcial.
-      </p>
+    <div className="space-y-6" role="region" aria-label="Resumen del trámite">
+      <Card title="Datos del trámite" id="resumen-tramite">
+        <ul className="space-y-3">
+          <li className="flex justify-between gap-4">
+            <span>Placa</span>
+            <b>{placa}</b>
+          </li>
+          <li className="flex justify-between gap-4">
+            <span>Tipo de Trámite</span>
+            <b>{definicion.name}</b>
+          </li>
+          {(cotizacion.data?.lineas ?? []).map((linea) => (
+            <li key={linea.codigo} className="flex justify-between gap-4">
+              <span>{linea.nombre}</span>
+              <b>{formatearPesos(linea.valorCop)}</b>
+            </li>
+          ))}
+          <li className="flex justify-between gap-4 border-t border-border pt-3 text-lg">
+            <span className="font-bold">Valor del trámite</span>
+            <b className="text-primary">{cotizacion.data ? formatearPesos(cotizacion.data.totalCop) : "—"}</b>
+          </li>
+        </ul>
+      </Card>
 
-      {pendientes.length > 0 && (
-        <div role="status" className="mb-4 rounded-[9px] border border-alert bg-alert/10 p-3 text-sm text-alert">
-          <p className="flex items-center gap-2 font-semibold">
-            <TriangleAlert aria-hidden className="h-5 w-5 shrink-0" />
-            Aún falta información
-          </p>
-          <ul className="mt-2 space-y-1">
-            {pendientes.map((p, i) => {
-              const destino = destinoDePendiente(p, definicion);
-              return (
-                <li key={`${p.codigo}-${p.referencia ?? ""}-${i}`} className="flex flex-wrap items-center gap-2">
-                  <span>{textoPendiente(p, definicion)}</span>
-                  {destino && (
-                    <button type="button" className={boton("link", "h-auto p-0 text-alert", "none")} onClick={() => irAPaso(destino)}>
-                      Ir a {NOMBRE_PASO[destino]}
-                    </button>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+      <div aria-live="assertive">{falla && <FallaEnvio falla={falla} onIr={irAPaso} definicion={definicion} />}</div>
+      {bloqueo.bloqueado && (
+        <p id={idBloqueo} role="status" className="text-sm text-muted-foreground">
+          Podrás intentarlo de nuevo en {bloqueo.segundosRestantes} s.
+        </p>
       )}
 
-      <div className="space-y-4">
-        {secciones.map((s) => {
-          const idTitulo = `${idConfirmacion}-${s.id.replace(/[^a-z0-9]/gi, "-")}`;
-          const puedeEditar = s.editar !== null && pasoTieneSecciones(s.editar, definicion);
-          return (
-            <section key={s.id} aria-labelledby={idTitulo} className="rounded-[9px] border border-border p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h4 id={idTitulo} className="text-base font-bold text-primary">
-                  {s.titulo}
-                </h4>
-                {puedeEditar && s.editar && (
-                  <button type="button" className={boton("back", "h-9 px-4", "none")} onClick={() => irAPaso(s.editar as GrupoPaso)} aria-label={`Editar ${s.titulo}`}>
-                    Editar
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <Btn tone="secondary" onClick={() => irAPaso("requisitos")} disabled={enviando}>
+          Atrás
+        </Btn>
+        <Btn tone="positive" onClick={() => void enviar()} disabled={enviando || bloqueo.bloqueado} describedBy={bloqueo.bloqueado ? idBloqueo : undefined}>
+          Enviar trámite
+        </Btn>
+      </div>
+      {enviando && <CargadorDeEnvio />}
+    </div>
+  );
+}
+
+function fallaDe(error: unknown): Falla {
+  if (error instanceof ApiError) {
+    if (error.code === "requisitos_incompletos" && error.fallas?.pendientes?.length) return { tipo: "pendientes", fallas: error.fallas };
+    if (error.code === "identity_pending") {
+      if (!EXIGIR_IDENTIDAD_AL_ENVIAR) return { tipo: "mensaje", texto: "No pudimos enviar el trámite. Intenta de nuevo." };
+      return { tipo: "identidad", fallas: error.fallas ?? {} };
+    }
+  }
+  return { tipo: "mensaje", texto: mensajeDe(error) };
+}
+
+function FallaEnvio({ falla, onIr, definicion }: { falla: Falla; onIr: (grupo: GrupoPaso) => void; definicion: DefinicionTipo }) {
+  const marco = "mt-4 rounded-[9px] border border-alert bg-alert/10 p-3 text-sm text-alert";
+  const cabecera = (texto: string): ReactNode => (
+    <p className="flex items-center gap-2 font-semibold">
+      <TriangleAlert aria-hidden className="h-5 w-5 shrink-0" />
+      {texto}
+    </p>
+  );
+
+  if (falla.tipo === "mensaje") {
+    return (
+      <div role="alert" className={marco}>
+        {cabecera(falla.texto)}
+      </div>
+    );
+  }
+
+  if (falla.tipo === "pendientes") {
+    return (
+      <div role="alert" className={marco}>
+        {cabecera("Aún falta información para enviar tu trámite")}
+        <ul className="mt-2 space-y-1">
+          {(falla.fallas.pendientes ?? []).map((p, i) => {
+            const destino = destinoDePendiente(p, definicion);
+            return (
+              <li key={`${p.codigo}-${p.referencia ?? ""}-${i}`} className="flex flex-wrap items-center gap-2">
+                <span>{textoPendiente(p, definicion)}</span>
+                {destino && (
+                  <button type="button" className={boton("link", "h-auto p-0 text-alert", "none")} onClick={() => onIr(destino)}>
+                    Ir a {NOMBRE_PASO[destino]}
                   </button>
                 )}
-              </div>
-              <div className="mt-3 grid gap-4 md:grid-cols-2">
-                {s.bloques.map((b, i) => (
-                  <div key={`${b.titulo ?? "bloque"}-${i}`} className={s.bloques.length === 1 ? "md:col-span-2" : undefined}>
-                    {b.titulo && <p className="mb-1 text-sm font-semibold">{b.titulo}</p>}
-                    <dl className="grid min-w-0 grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-3 gap-y-1 text-sm">
-                      {b.filas.map((f) => (
-                        <div key={f.etiqueta} className="contents">
-                          <dt className="font-light text-muted-foreground">{f.etiqueta}</dt>
-                          <dd className="min-w-0 break-words font-medium">{f.valor}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                  </div>
-                ))}
-              </div>
-            </section>
-          );
-        })}
+              </li>
+            );
+          })}
+        </ul>
       </div>
+    );
+  }
 
-      <label htmlFor={idConfirmacion} className="mt-6 flex cursor-pointer items-start gap-3 text-sm font-medium">
-        <input id={idConfirmacion} type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-primary" checked={confirmada} onChange={(e) => setConfirmadaEn(e.target.checked ? solicitud.version : null)} />
-        <span>Revisé la información y autorizo el envío</span>
-      </label>
-    </Card>
+  const partes = falla.fallas.partes ?? [];
+  const rechazada = falla.fallas.motivo === "identidad_rechazada";
+  return (
+    <div role="alert" className={marco}>
+      {cabecera("Falta validar la identidad")}
+      <p className="mt-1">
+        {rechazada
+          ? "Alguna validación fue rechazada: reenvía el enlace desde Actores para que la persona vuelva a validar."
+          : "Todas las personas del trámite deben validar su identidad antes de enviarlo."}
+      </p>
+      {partes.length > 0 && (
+        <ul className="mt-2 list-disc space-y-1 pl-5">
+          {partes.map((p) => {
+            const rol = definicion.actores.find((r) => r.rol === p.parte);
+            const nombre = `${rol?.etiqueta || p.parte}${rol && rol.max > 1 ? ` ${p.ordinal}` : ""}`;
+            return (
+              <li key={`${p.parte}-${p.ordinal}`}>
+                {nombre}: validación {ETIQUETA_VALIDACION[p.estado] ?? p.estado}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {pasoTieneSecciones("actores", definicion) && (
+        <button type="button" className={boton("link", "mt-2 h-auto p-0 text-alert", "none")} onClick={() => onIr("actores")}>
+          Ir a Actores
+        </button>
+      )}
+    </div>
+  );
+}
+
+function CargadorDeEnvio() {
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div aria-busy="true" className="fixed inset-0 z-50 grid place-items-center bg-background/80 backdrop-blur-sm">
+      <div className="text-center">
+        <p className="text-lg font-semibold text-primary">Enviando tu trámite</p>
+        <MobilityLoader />
+        <p className="text-sm text-muted-foreground">No cierres esta ventana.</p>
+      </div>
+    </div>,
+    document.body,
   );
 }

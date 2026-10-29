@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { TOKEN_MODO_DESARROLLO } from "@/components/Captcha";
 import { Landing } from "@/components/landing/Landing";
 
-import { crearCliente, type DefinicionTipo, type EstadoRadicado } from "@/lib/api/cliente";
+import { crearCliente, type DefinicionTipo } from "@/lib/api/cliente";
 import { CONSENTIMIENTO_VERSION } from "@/lib/consentimiento";
 import { datosVehiculo, modoVehiculo, vehiculoValido } from "@/lib/landing/vehiculo";
 import { obtenerContexto } from "@/lib/tramite/contexto";
@@ -27,7 +27,7 @@ function definicion(entryMode = "PLATE", documentos: DefinicionTipo["documentos"
 }
 
 const doc = (docCode: string, nombre: string, orden: number, obligatorio = true) => ({ docCode, nombre, obligatorio, orden, instruccionCargue: "", condicion: "" });
-const DOCUMENTOS = [doc("cedula", "Cédula del propietario", 2), doc("tarjeta", "Tarjeta de propiedad", 1), doc("extra", "Certificado opcional", 3, false)];
+const DOCUMENTOS = [doc("cedula", "Cédula del propietario", 2), doc("tarjeta", "Tarjeta de propiedad", 1), doc("extra", "Certificado opcional", 3, false), { ...doc("leasing", "Contrato de leasing", 4), condicion: "si_leasing" }];
 
 const SESION = { solicitudId: "s-1", codigoPublico: "PN-2026-0042", estado: "borrador", tipoTramiteCodigo: "TIPO_A", expiraEn: "2026-10-28T20:00:00Z", definicionVersion: 1 };
 
@@ -65,18 +65,16 @@ async function llenarTarjeta({ cedula = "1020456789", vehiculo = "abc123", tipo 
 
 const abrirRequisitos = () => fireEvent.click(screen.getByRole("button", { name: "Iniciar trámite" }));
 
-async function elegirOrganismo(nombre = "Ciudad Uno") {
-  const dialogo = await screen.findByRole("dialog", { name: "Requisitos para tu trámite" });
-  fireEvent.click(await within(dialogo).findByRole("button", { name: "Selecciona un organismo" }));
-  fireEvent.click(within(dialogo).getByRole("button", { name: nombre }));
-  return dialogo;
+/** El modal de requisitos no pide el organismo: se elige en el paso 1. */
+async function dialogoDeRequisitos() {
+  return screen.findByRole("dialog", { name: "Requisitos para tu trámite" });
 }
 
 async function prepararInicio(rutas: Record<string, Manejador> = {}) {
   const montado = montar(rutas);
   await llenarTarjeta();
   abrirRequisitos();
-  const dialogo = await elegirOrganismo();
+  const dialogo = await dialogoDeRequisitos();
   fireEvent.click(within(dialogo).getByLabelText("Acepto el tratamiento de mis datos personales."));
   return { ...montado, dialogo };
 }
@@ -132,7 +130,7 @@ describe("tarjeta «Iniciar mi trámite»", () => {
 });
 
 describe("modal de requisitos", () => {
-  it("lista una tarjeta por documento obligatorio de la definición, ordenados, y pide el organismo", async () => {
+  it("lista una tarjeta por documento que el trámite siempre pide, sin organismo y sin los que tienen condición", async () => {
     const { llamadas } = montar();
     await llenarTarjeta();
 
@@ -143,9 +141,10 @@ describe("modal de requisitos", () => {
     const tarjetas = await within(dialogo).findAllByRole("listitem");
     expect(tarjetas.map((t) => t.textContent)).toEqual(["Tarjeta de propiedad", "Cédula del propietario"]);
     expect(within(dialogo).queryByText("Certificado opcional")).not.toBeInTheDocument();
+    expect(within(dialogo).queryByText("Contrato de leasing")).not.toBeInTheDocument();
+    expect(within(dialogo).queryByRole("button", { name: "Selecciona un organismo" })).not.toBeInTheDocument();
 
-    await elegirOrganismo();
-    await waitFor(() => expect(llamadas.map((l) => l.clave)).toContain("GET /tipos-tramite/TIPO_A/definicion?organismoId=o-1"));
+    await waitFor(() => expect(llamadas.map((l) => l.clave)).toContain("GET /tipos-tramite/TIPO_A/definicion"));
   });
 
   it("cargando: muestra el cargador mientras llega la definición", async () => {
@@ -213,7 +212,7 @@ describe("modal de requisitos", () => {
     montar();
     await llenarTarjeta();
     abrirRequisitos();
-    const dialogo = await elegirOrganismo();
+    const dialogo = await dialogoDeRequisitos();
 
     const consentimiento = within(dialogo).getByLabelText("Acepto el tratamiento de mis datos personales.");
     expect(consentimiento).toBeRequired();
@@ -224,28 +223,26 @@ describe("modal de requisitos", () => {
     expect(within(dialogo).getByRole("button", { name: "Iniciar ahora" })).toBeEnabled();
   });
 
-  it("sin organismo no se puede iniciar", async () => {
+  it("el organismo no se pide en este modal: con el consentimiento, «Iniciar ahora» se habilita", async () => {
     montar();
     await llenarTarjeta();
     abrirRequisitos();
     const dialogo = await screen.findByRole("dialog", { name: "Requisitos para tu trámite" });
+    expect(within(dialogo).queryByText("Organismo de tránsito")).not.toBeInTheDocument();
     fireEvent.click(within(dialogo).getByLabelText("Acepto el tratamiento de mis datos personales."));
-    expect(within(dialogo).getByRole("button", { name: "Iniciar ahora" })).toBeDisabled(); // falta el organismo
-
-    fireEvent.click(await within(dialogo).findByRole("button", { name: "Selecciona un organismo" }));
-    fireEvent.click(within(dialogo).getByRole("button", { name: "Ciudad Uno" }));
     expect(within(dialogo).getByRole("button", { name: "Iniciar ahora" })).toBeEnabled();
   });
 
-  it("el aviso «Políticas de Privacidad y Términos de Uso» abre el diálogo de documento no disponible", async () => {
+  it("el consentimiento enlaza la política pública de FLIT 2", async () => {
     montar();
     await llenarTarjeta();
     abrirRequisitos();
     const dialogo = await screen.findByRole("dialog", { name: "Requisitos para tu trámite" });
 
-    fireEvent.click(within(dialogo).getByRole("button", { name: "Políticas de Privacidad y Términos de Uso" }));
-
-    expect(await screen.findByText("El documento oficial aún no está disponible.")).toBeInTheDocument();
+    const politica = within(dialogo).getByRole("link", { name: /Política de tratamiento de datos personales/ });
+    expect(politica).toHaveAttribute("href", "https://flitsas.com.co/privacy-policy/");
+    expect(politica).toHaveAttribute("target", "_blank");
+    expect(politica).toHaveAttribute("rel", "noopener noreferrer");
   });
 });
 
@@ -259,7 +256,6 @@ describe("Iniciar ahora: sesión efímera", () => {
     const [post] = posts(llamadas);
     expect(JSON.parse(String(post.init.body))).toEqual({
       tipoCodigo: "TIPO_A",
-      organismoId: "o-1",
       cedula: "1020456789",
       placa: "ABC123",
       consentimiento: true,
@@ -268,7 +264,8 @@ describe("Iniciar ahora: sesión efímera", () => {
     expect(CONSENTIMIENTO_VERSION).toBe("v1");
     expect((post.init.headers as Record<string, string>)["x-captcha-token"]).toBe(TOKEN_MODO_DESARROLLO);
     expect(String(routerPush.mock.calls[0][0])).not.toMatch(/1020456789|ABC123/);
-    expect(obtenerContexto()).toMatchObject({ intencion: "iniciar", tipoCodigo: "TIPO_A", solicitudId: "s-1", radicado: "PN-2026-0042", cedula: "1020456789", placa: "ABC123", organismoId: "o-1" });
+    expect(obtenerContexto()).toMatchObject({ intencion: "iniciar", tipoCodigo: "TIPO_A", solicitudId: "s-1", radicado: "PN-2026-0042", cedula: "1020456789", placa: "ABC123" });
+    expect(obtenerContexto()?.organismoId).toBeUndefined();
     expect(localStorage.length).toBe(0);
     expect(sessionStorage.length).toBe(0);
   });
@@ -278,7 +275,7 @@ describe("Iniciar ahora: sesión efímera", () => {
     await llenarTarjeta({ vehiculo: "9bwzzz377vt004251" });
     await screen.findByLabelText("VIN del vehículo");
     abrirRequisitos();
-    const dialogo = await elegirOrganismo();
+    const dialogo = await dialogoDeRequisitos();
     fireEvent.click(within(dialogo).getByLabelText("Acepto el tratamiento de mis datos personales."));
 
     fireEvent.click(within(dialogo).getByRole("button", { name: "Iniciar ahora" }));
@@ -311,7 +308,7 @@ describe("Iniciar ahora: sesión efímera", () => {
     const montado = montar({ "POST /sesiones": () => json({ code: "captcha_required", title: "Captcha requerido", status: 400 }, 400) });
     await llenarTarjeta();
     abrirRequisitos();
-    const dialogo = await elegirOrganismo();
+    const dialogo = await dialogoDeRequisitos();
     fireEvent.click(within(dialogo).getByLabelText("Acepto el tratamiento de mis datos personales."));
 
     fireEvent.click(within(dialogo).getByRole("button", { name: "Iniciar ahora" }));
@@ -326,7 +323,7 @@ describe("Iniciar ahora: sesión efímera", () => {
     montar({ "POST /sesiones": () => new Response(JSON.stringify({ code: "rate_limited" }), { status: 429, headers: { "retry-after": "90" } }) });
     await llenarTarjeta();
     abrirRequisitos();
-    const dialogo = await elegirOrganismo();
+    const dialogo = await dialogoDeRequisitos();
     fireEvent.click(within(dialogo).getByLabelText("Acepto el tratamiento de mis datos personales."));
 
     fireEvent.click(within(dialogo).getByRole("button", { name: "Iniciar ahora" }));
@@ -342,7 +339,7 @@ describe("Iniciar ahora: sesión efímera", () => {
     montar({ "POST /sesiones": () => (falla ? json({ code: "servicio_no_disponible" }, 503) : json(SESION, 201)) });
     await llenarTarjeta();
     abrirRequisitos();
-    const dialogo = await elegirOrganismo();
+    const dialogo = await dialogoDeRequisitos();
     fireEvent.click(within(dialogo).getByLabelText("Acepto el tratamiento de mis datos personales."));
     fireEvent.click(within(dialogo).getByRole("button", { name: "Iniciar ahora" }));
     expect(await within(dialogo).findByRole("alert")).toHaveTextContent("El servicio no está disponible en este momento");
@@ -357,41 +354,12 @@ describe("Iniciar ahora: sesión efímera", () => {
     montar({ "POST /sesiones": () => json({ code: "tipo_no_disponible", title: "x", status: 409 }, 409) });
     await llenarTarjeta();
     abrirRequisitos();
-    const dialogo = await elegirOrganismo();
+    const dialogo = await dialogoDeRequisitos();
     fireEvent.click(within(dialogo).getByLabelText("Acepto el tratamiento de mis datos personales."));
 
     fireEvent.click(within(dialogo).getByRole("button", { name: "Iniciar ahora" }));
 
     expect(await within(dialogo).findByRole("alert")).toHaveTextContent("Este tipo de trámite ya no está disponible en el portal.");
-  });
-});
-
-describe("costura con «Consultar mi trámite» (subsanación)", () => {
-  const RECHAZADO: EstadoRadicado = {
-    radicado: "PN-2026-0007",
-    numeroReferencia: null,
-    placa: "XYZ987",
-    tipoTramite: "TIPO_C",
-    organismo: "Ciudad Uno",
-    macroEstado: { codigo: "subsanacion", etiqueta: "Subsanación", indice: 2 },
-    mensaje: "El Organismo de Tránsito devolvió la solicitud.",
-    pasos: [{ clave: "resolucion", titulo: "Rechazado", estado: "rejected", fecha: null }],
-    subsanacion: { motivo: "Falta el paz y salvo.", accionCorregir: true },
-    soloLectura: false,
-  };
-
-  it("al pulsar la alerta cierra el modal, deja el contexto en memoria y entra a la ruta del tipo sin datos en la URL", async () => {
-    montar({ "POST /radicados/consulta": () => json(RECHAZADO) });
-    fireEvent.click(screen.getByRole("button", { name: "Consultar mi trámite" }));
-    const dialogo = await screen.findByRole("dialog", { name: "Consultar mi trámite" });
-    fireEvent.change(within(dialogo).getByLabelText("Número de radicado"), { target: { value: "pn-2026-0007" } });
-    fireEvent.change(within(dialogo).getByLabelText("Cédula del solicitante"), { target: { value: "1020456789" } });
-    fireEvent.click(within(dialogo).getByRole("button", { name: "Consultar" }));
-
-    fireEvent.click(await within(dialogo).findByRole("button", { name: /Causal de rechazo/ }));
-
-    expect(routerPush).toHaveBeenCalledWith("/tramite/TIPO_C");
-    expect(obtenerContexto()).toMatchObject({ intencion: "subsanar", tipoCodigo: "TIPO_C", radicado: "PN-2026-0007", cedula: "1020456789" });
   });
 });
 

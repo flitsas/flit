@@ -6,8 +6,8 @@
 
 .DESCRIPTION
   Todo externo va simulado: biometría mock, consultas RUNT/Verifik mock, SMTP a consola, captcha deshabilitado y
-  file-manager simulado (stub-filemanager.mjs). Todos los secretos de este archivo son FICTICIOS, solo para local.
-  Guarda los PID exactos en .pids.json (junto a este script) para que apagar.ps1 los cierre POR PID.
+  file-manager simulado (stub-filemanager.mjs). Las claves locales se leen de .env.local (copia de .env.example);
+  no van en este archivo. Guarda los PID exactos en .pids.json para que apagar.ps1 los cierre POR PID.
 
   Uso (desde la raíz del repo):
     powershell -ExecutionPolicy Bypass -File scripts/e2e-personanatural/levantar.ps1 [-Base flit_pn_e2e] [-LogDir <ruta>] [-Compilar]
@@ -27,25 +27,44 @@ $Raiz = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $PidFile = Join-Path $PSScriptRoot '.pids.json'
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
-# ---------- Valores FICTICIOS de prueba (nunca reales) ----------
+# ---------- Claves locales: .env.local (no se versiona). Las del proceso ganan si ya vienen definidas. ----------
+$EnvLocal = Join-Path $PSScriptRoot '.env.local'
+if (Test-Path $EnvLocal) {
+  foreach ($linea in Get-Content $EnvLocal) {
+    $texto = $linea.Trim()
+    if ($texto -eq '' -or $texto.StartsWith('#')) { continue }
+    $corte = $texto.IndexOf('=')
+    if ($corte -lt 1) { continue }
+    $nombre = $texto.Substring(0, $corte).Trim()
+    $valor = $texto.Substring($corte + 1).Trim().Trim('"').Trim("'")
+    if (-not [Environment]::GetEnvironmentVariable($nombre, 'Process')) { Set-Item -Path "Env:$nombre" -Value $valor }
+  }
+}
+function Exigir([string]$nombre) {
+  $valor = [Environment]::GetEnvironmentVariable($nombre, 'Process')
+  if ([string]::IsNullOrWhiteSpace($valor)) { throw "Falta $nombre. Copia scripts/e2e-personanatural/.env.example a .env.local y completa las claves locales." }
+  return $valor
+}
+
 $Psql = 'C:\Program Files\PostgreSQL\17\bin\psql.exe'
 $Cadena = "Host=127.0.0.1;Port=5432;Database=$Base;Username=postgres;Password=$PgClave"
 $Sec = @{
-  tramites       = 'pn-e2e-secreto-svc-tramites-0000000000001'
-  consultas      = 'pn-e2e-secreto-svc-consultas-000000000001'
-  notificaciones = 'pn-e2e-secreto-svc-notificaciones-0000001'
-  personanatural = 'pn-e2e-secreto-svc-personanatural-00000001'
+  tramites       = Exigir 'PN_E2E_SEC_TRAMITES'
+  consultas      = Exigir 'PN_E2E_SEC_CONSULTAS'
+  notificaciones = Exigir 'PN_E2E_SEC_NOTIFICACIONES'
+  personanatural = Exigir 'PN_E2E_SEC_PERSONANATURAL'
 }
 $Mq = @{
-  tramites       = 'amqp://tramites:pn-e2e-tramites-clave-local-0001@127.0.0.1:5672/flit'
-  personanatural = 'amqp://personanatural:pn-e2e-pn-clave-local-0001@127.0.0.1:5672/flit'
-  consultas      = 'amqp://consultas:pn-e2e-consultas-clave-local-0001@127.0.0.1:5672/flit'
-  notificaciones = 'amqp://notificaciones:pn-e2e-notif-clave-local-0001@127.0.0.1:5672/flit'
+  tramites       = "amqp://tramites:$(Exigir 'PN_E2E_MQ_TRAMITES_CLAVE')@127.0.0.1:5672/flit"
+  personanatural = "amqp://personanatural:$(Exigir 'PN_E2E_MQ_PN_CLAVE')@127.0.0.1:5672/flit"
+  consultas      = "amqp://consultas:$(Exigir 'PN_E2E_MQ_CONSULTAS_CLAVE')@127.0.0.1:5672/flit"
+  notificaciones = "amqp://notificaciones:$(Exigir 'PN_E2E_MQ_NOTIF_CLAVE')@127.0.0.1:5672/flit"
 }
 # Emisor de los tokens de servicio: el que arma core-api con los Overrides de Suite (hub en 4022, aunque no corra).
 $Emisor = 'http://127.0.0.1:4022/'
-$PiiHmac = 'pn-e2e-clave-hmac-ficticia-de-prueba-0123456789abcdef'
-$PiiAes = [Convert]::ToBase64String([byte[]](1..32))   # 32 bytes ficticios
+$PiiHmac = Exigir 'PN_E2E_PII_HMAC'
+$KyverumRunt = Exigir 'PN_E2E_KYVERUM_RUNT_API_KEY'
+$PiiAes = [Convert]::ToBase64String([byte[]](1..32))   # 32 bytes ficticios, no es una clave de un ambiente
 
 $Pids = [ordered]@{}
 if (Test-Path $PidFile) {   # re-ejecutar no pierde los PID de lo que ya corre
@@ -105,7 +124,7 @@ if (-not $existe) { & $Psql -h 127.0.0.1 -U postgres -c "CREATE DATABASE $Base" 
 Iniciar 'stub-filemanager' $PSScriptRoot 'node' @('stub-filemanager.mjs') @{ STUB_FM_PORT = '4999' } 'http://127.0.0.1:4999/healthz' 30
 
 # ---------- 0b. Observador pasivo del bus (colas efimeras; solo lee) ----------
-Iniciar 'observar-bus' $Raiz 'dotnet' @('run', ("`"" + (Join-Path $PSScriptRoot 'observar-bus.cs') + "`""), '--', ("`"" + (Join-Path $LogDir 'bus-mensajes.log') + "`"")) @{} $null
+Iniciar 'observar-bus' $Raiz 'dotnet' @('run', ("`"" + (Join-Path $PSScriptRoot 'observar-bus.cs') + "`""), '--', ("`"" + (Join-Path $LogDir 'bus-mensajes.log') + "`"")) @{ PN_E2E_MQ_TRAMITES_CLAVE = (Exigir 'PN_E2E_MQ_TRAMITES_CLAVE') } $null
 
 # ---------- 1. core-api (migra la base, emite tokens de servicio, fachada gRPC, consumidor) ----------
 $api = "$Raiz\services\core-api\src\Flit.Api\bin\Debug\net10.0"
@@ -152,7 +171,7 @@ Iniciar 'core-consultas' "$Raiz\services\core-consultas\src\Flit.Consultas.Api\b
   VERIFIK_RUES_MODE = 'mock'; FASECOLDA_MODE = 'mock'; INTEMPO_MODE = 'mock'; KYVERUM_FINES_MODE = 'mock'
   # Kyverum RUNT no tiene modo mock y encabeza la cadena por defecto: llave FICTICIA, direccion muerta (nada sale a
   # internet) y cadena que empieza por los proveedores con mock (verifik).
-  KYVERUM_RUNT_API_KEY = 'pn-e2e-llave-ficticia-no-real'; KYVERUM_RUNT_BASE_URL = 'http://127.0.0.1:4998/'
+  KYVERUM_RUNT_API_KEY = $KyverumRunt; KYVERUM_RUNT_BASE_URL = 'http://127.0.0.1:4998/'
   Consultations__DefaultChains__vehicle_vin__0 = 'verifik'
   Consultations__DefaultChains__vehicle_plate__0 = 'verifik'
   Consultations__DefaultChains__conductor__0 = 'verifik_conductor'

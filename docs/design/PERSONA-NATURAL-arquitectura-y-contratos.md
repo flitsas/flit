@@ -444,14 +444,11 @@ endpoint reenvía a FLIT 2 de forma genérica.
 | `POST /solicitudes/{id}/identidad/{parte}` | Pide la validación de identidad de un actor (`parte` = rol del actor con `biometria=true` en la definición) |
 | `POST /solicitudes/{id}/identidad/{parte}/reenviar` | Reenvía el enlace |
 | `GET /solicitudes/{id}/identidad` | Estado de las validaciones |
-| `GET /solicitudes/{id}/resumen-cobro` | Facturación y totales del paso Pago |
-| `POST /solicitudes/{id}/pago/comprobante` | Comprobante de transferencia (S1) |
 | `POST /solicitudes/{id}/radicar` | Escritura por cola; exige `Idempotency-Key`; responde `202` |
 | `GET /solicitudes/{id}/estado` | Sondeo del estado y del radicado |
-| `POST /solicitudes/{id}/subsanar` | Reenvía los cambios de una subsanación (por cola) |
 | `DELETE /solicitudes/{id}` | Cancela el trámite antes de `en_cola` |
 
-Cabeceras: `X-Captcha-Token` (públicos), `Idempotency-Key` (radicar, subsanar, enviar-correo), `X-Correlation-Id`
+Cabeceras: `X-Captcha-Token` (públicos), `Idempotency-Key` (radicar, enviar-correo), `X-Correlation-Id`
 (opcional; el BFF genera uno y lo propaga a gRPC y eventos).
 
 ### 6.2 gRPC de la fachada — `contracts/proto/flit/tramites/v1/persona_natural.proto`

@@ -99,7 +99,9 @@ public sealed class ContenidoPnTests(WebApplicationFactory<Program> factory) : I
         // Borrador: nada se ve en el portal.
         (await e.Lector.LeerAsync(ct)).Preguntas.Should().NotContain(p => p.Id == p1.Id);
 
-        (await e.Contenido.ReordenarFaqsAsync([p3.Id, p1.Id, p2.Id], e.Actor, ct)).Error.Should().BeNull();
+        // La lista de orden tiene que traer todas las preguntas (también las iniciales del portal, si la base ya las cargó).
+        var resto = (await e.Contenido.ListarFaqsAsync(ct)).Select(f => f.Id).Where(id => id != p3.Id && id != p1.Id && id != p2.Id);
+        (await e.Contenido.ReordenarFaqsAsync([p3.Id, p1.Id, p2.Id, .. resto], e.Actor, ct)).Error.Should().BeNull();
         (await e.Contenido.EstablecerFaqActivaAsync(p2.Id, false, e.Actor, ct)).Error.Should().BeNull();
         (await e.Contenido.ActualizarFaqAsync(p1.Id, "Primera editada", "Respuesta 1 editada", null, e.Actor, ct)).Error.Should().BeNull();
         var publicada = await e.Contenido.PublicarAsync(e.Actor, ct);

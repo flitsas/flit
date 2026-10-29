@@ -3,6 +3,7 @@
 import { CircleHelp, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { TEXTO_DOCUMENTO_NO_DISPONIBLE } from "@/lib/legal";
+import { clicFueraDelDialogo } from "@/lib/ui/clic-dialogo";
 import { boton } from "./estilos";
 
 export type Aviso = { titulo: string; tipo: "proximamente" | "documento" };
@@ -31,7 +32,7 @@ export function AvisoModal({ aviso, onCerrar }: { aviso: Aviso | null; onCerrar:
       aria-describedby="aviso-descripcion"
       onClose={onCerrar}
       onClick={(e) => {
-        if (e.target === ref.current) onCerrar();
+        if (clicFueraDelDialogo(e)) onCerrar();
       }}
       className="m-auto w-[calc(100%-2rem)] max-w-md rounded-[9px] bg-card p-6 text-foreground backdrop:bg-primary/40 backdrop:backdrop-blur-sm"
     >

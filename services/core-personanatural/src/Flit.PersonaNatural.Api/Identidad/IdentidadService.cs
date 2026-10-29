@@ -50,6 +50,12 @@ public sealed class IdentidadOptions
     /// <summary>Con el bus apagado o un evento perdido, <c>GET /identidad</c> y la compuerta preguntan a FLIT 2 por lo pendiente.</summary>
     public bool ReconciliarAlConsultar { get; set; } = true;
 
+    /// <summary>
+    /// La compuerta de radicación. En verdadero (HU #14069 AC2) el envío responde 409 si alguna parte obligada no tiene
+    /// la identidad aprobada. Se puede apagar con <c>Identidad:ExigirAlRadicar=false</c>.
+    /// </summary>
+    public bool ExigirAlRadicar { get; set; } = true;
+
     /// <summary>Cada cuánto el servicio reintenta los envíos que quedaron en <c>pendiente_envio</c>.</summary>
     public int ReintentoSegundos { get; set; } = 30;
 

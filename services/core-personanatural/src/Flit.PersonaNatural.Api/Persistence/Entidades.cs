@@ -67,6 +67,7 @@ public sealed class PersonaSolicitante
     public byte[]? CorreoCifrado { get; set; }
     public byte[]? CelularCifrado { get; set; }
     public byte[]? DireccionCifrada { get; set; }
+    public byte[]? CiudadCifrada { get; set; }
     public Guid? ValidacionId { get; set; }
     public string ValidacionEstado { get; set; } = "sin_solicitar";
 

@@ -302,12 +302,23 @@ public sealed class RadicacionTests : IAsyncLifetime
         (await db.Set<SolicitudTramite>().SingleAsync(TestContext.Current.CancellationToken)).Estado.Should().Be("borrador");
     }
 
-    // ── AC4: compuerta de identidad ──────────────────────────────────────────────────────────────────────────────────
+    // ── AC4: compuerta de identidad (encendida; se apaga con Identidad:ExigirAlRadicar=false) ───────────────────────
+
+    [Fact]
+    public async Task SinExigirIdentidad_UnBorradorSinValidar_SeEncola()
+    {
+        await IniciarAsync(null, ("Identidad:ExigirAlRadicar", "false"));
+        var (id, token) = await Completa(validar: false);
+
+        var r = await Radicar(id, token, "k-sin-identidad");
+
+        r.StatusCode.Should().Be(HttpStatusCode.Accepted);
+    }
 
     [Fact]
     public async Task ConPartesSinValidar_Responde409IdentityPending_ConLosRolesQueFaltan_YNoEncola()
     {
-        await IniciarAsync();
+        await IniciarAsync(null, ("Identidad:ExigirAlRadicar", "true"));
         var (id, token) = await Completa(validar: false);
 
         var r = await Radicar(id, token, "k-1");
@@ -324,7 +335,7 @@ public sealed class RadicacionTests : IAsyncLifetime
     [Fact]
     public async Task UnaParteRechazadaOUnaSola_NoDejaPasar()
     {
-        await IniciarAsync();
+        await IniciarAsync(null, ("Identidad:ExigirAlRadicar", "true"));
         var (id, token) = await Completa();
         await using (var db = _host.NuevaDb())
             await db.Set<PersonaSolicitante>().Where(p => p.Parte == "comprador").ExecuteUpdateAsync(set => set.SetProperty(p => p.ValidacionEstado, "rechazada"), TestContext.Current.CancellationToken);
@@ -342,7 +353,7 @@ public sealed class RadicacionTests : IAsyncLifetime
     public async Task LaCompuertaDeRadicacion_EsSustituibleYSuResultadoManda()
     {
         var bloqueo = new CompuertaFalsa(ResultadoCompuerta.Bloqueada("identidad_pendiente", [new ParteFaltante("comprador", 1, "pendiente")]));
-        await IniciarAsync(bloqueo);
+        await IniciarAsync(bloqueo, ("Identidad:ExigirAlRadicar", "true"));
         var (id, token) = await Completa();
 
         var r = await Radicar(id, token, "k-1");

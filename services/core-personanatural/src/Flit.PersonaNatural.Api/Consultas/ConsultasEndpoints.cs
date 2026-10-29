@@ -31,6 +31,7 @@ public sealed record PersonaDetalleRequest(string? TipoDocumento, string? Docume
 /// <list type="bullet">
 /// <item><c>POST /consultas/vehiculo</c> y <c>POST /consultas/persona</c> (conductor): públicos, con captcha, límite por IP y
 /// topes por documento y globales; devuelven el dato mínimo.</item>
+/// <item><c>POST /solicitudes/{id}/consultas/vehiculo</c>: con la sesión de ESA solicitud y captcha; los atributos que FLIT 2 muestra al consultar, sin datos de terceros.</item>
 /// <item><c>POST /solicitudes/{id}/consultas/vehiculo-detalle</c>: con la sesión de ESA solicitud y un actor con identidad validada.</item>
 /// <item><c>POST /solicitudes/{id}/consultas/persona-detalle</c>: con la sesión de ESA solicitud mientras sea editable; devuelve los
 /// nombres de la persona para rellenar el actor, con topes por solicitud, documento y globales.</item>
@@ -84,6 +85,29 @@ public static class ConsultasEndpoints
             return await ConsultarAsync(http, medicion, MedicionConsultasService.TipoVehiculo,
                 () => vehiculos.ConsultarAsync(entrada.Placa, entrada.Vin, entrada.Propietario, null, ct), ct).ConfigureAwait(false);
         }).ConCaptcha().ConLimiteDeConsultas(c =>
+        {
+            var body = c.Arguments.OfType<ConsultaVehiculoRequest>().FirstOrDefault();
+            return body is { Consentimiento: true } ? ValidarVehiculo(body)?.ClaveTope : null;
+        });
+
+        grupo.MapPost("/solicitudes/{id:guid}/consultas/vehiculo", async (Guid id, ConsultaVehiculoRequest body, HttpContext http, ConsultaVehiculoService vehiculos, MedicionConsultasService medicion, ConsentimientoVersiones versiones, ConsentimientoService consentimientos, PiiHasher hasher, CancellationToken ct) =>
+        {
+            if (body is null || !body.Consentimiento)
+                return SinConsentimiento();
+            var entrada = ValidarVehiculo(body);
+            if (entrada is null)
+                return DatosInvalidos("Indique la placa y el documento del propietario, o el VIN del vehículo.");
+            if (versiones.Normalizar(body.ConsentimientoVersion) is not { } version)
+                return VersionDesconocida();
+
+            http.Response.Headers.CacheControl = "no-store";
+            await consentimientos.RegistrarConsultaAsync(
+                entrada.Propietario is { } p ? hasher.HashCedula(p.Numero) : hasher.HashVehiculo(entrada.Vin!), version,
+                hasher.HashIp(http.Connection.RemoteIpAddress?.ToString()), ct).ConfigureAwait(false);
+
+            return await ConsultarAsync(http, medicion, MedicionConsultasService.TipoVehiculo,
+                () => vehiculos.ConsultarDelTramiteAsync(entrada.Placa, entrada.Vin, entrada.Propietario, id.ToString(), ct), ct).ConfigureAwait(false);
+        }).ConCaptcha().AddEndpointFilter(Radicacion.SesionTrasRadicar.Filtro).ConLimiteDeConsultas(c =>
         {
             var body = c.Arguments.OfType<ConsultaVehiculoRequest>().FirstOrDefault();
             return body is { Consentimiento: true } ? ValidarVehiculo(body)?.ClaveTope : null;
@@ -238,7 +262,7 @@ public static class ConsultasEndpoints
         }
 
         var placa = EntradaConsulta.Placa(body.Placa);
-        var propietario = EntradaConsulta.Documento(body.Propietario?.Tipo, body.Propietario?.Numero);
+        var propietario = EntradaConsulta.DocumentoPropietario(body.Propietario?.Tipo, body.Propietario?.Numero);
         return placa is null || propietario is null ? null : new EntradaVehiculo(placa, null, propietario, propietario.Numero);
     }
 }

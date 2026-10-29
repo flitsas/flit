@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MobilityLoader } from "@/components/MobilityLoader";
 import { useWizard, type PropsSeccion } from "@/components/tramite/ContextoWizard";
 import { Btn, Card } from "@/components/tramite/piezas";
@@ -10,11 +10,15 @@ import { PersonaActor } from "@/components/tramite/renderers/PersonaActor";
 import type { EstadoIdentidad } from "@/lib/api/cliente";
 import { ApiError, mensajeDe } from "@/lib/api/errores";
 import {
+  actoresDeLaSeccion,
   actoresParaGuardar,
+  actoresYaGuardados,
   enCurso,
   erroresDeServidor,
   estadoDeFila,
   filasIniciales,
+  rolDeUnaPersona,
+  sembrarDocumentoInicial,
   filaVacia,
   motivoIncompleto,
   ordinalLibre,
@@ -24,6 +28,7 @@ import {
   type ErroresActor,
   type FilaActor,
 } from "@/lib/tramite/actores";
+import { recordarActor } from "@/lib/tramite/presentacion";
 
 export const claveIdentidad = (solicitudId: string) => ["pn", "identidad", solicitudId] as const;
 
@@ -34,15 +39,33 @@ const SONDEOS_RAPIDOS = 6;
 /**
  * Renderer de `actor_form` (HU F3 y K5): una tarjeta por rol de la definición con sus personas (mínimo y máximo, agregar y quitar),
  * la consulta de cada documento, el contacto, la dirección y, en los roles que exigen validar la identidad, el envío y el
- * reenvío del enlace con su estado en vivo. «Continuar» queda bloqueado hasta que todo lo obligatorio esté completo y aprobado.
+ * reenvío del enlace con su estado en vivo. «Continuar» exige los datos de cada persona; la identidad aprobada no lo traba
+ * mientras `EXIGIR_IDENTIDAD_PARA_CONTINUAR` esté apagado.
  * Lo que el ciudadano escribe vive solo en el estado de este componente y viaja únicamente al BFF.
  */
 export function FormularioActores({ seccion, activa, intentoAvance, onEstado }: PropsSeccion) {
   const { cliente, definicion, solicitud, contexto, guardarConVersion, registrarGuardado, reportarError } = useWizard();
-  const [filas, setFilas] = useState<FilaActor[]>(() => filasIniciales(definicion, solicitud.actores));
+  const definicionSeccion = useMemo(
+    () => ({ ...definicion, actores: actoresDeLaSeccion(definicion, seccion.paso?.clave) }),
+    [definicion, seccion.paso?.clave],
+  );
+  const incluyeAlTitular = definicionSeccion.actores.some((r) => r.rol === definicion.actores[0]?.rol);
+  const [filas, setFilas] = useState<FilaActor[]>(() => {
+    const iniciales = filasIniciales(definicionSeccion, solicitud.actores);
+    return incluyeAlTitular ? sembrarDocumentoInicial(iniciales, contexto?.propietario) : iniciales;
+  });
+  const documentoSembrado = useRef(Boolean(contexto?.propietario));
+  useEffect(() => {
+    if (documentoSembrado.current || !contexto?.propietario) return;
+    documentoSembrado.current = true;
+    setFilas((actuales) => sembrarDocumentoInicial(actuales, contexto.propietario));
+  }, [contexto?.propietario]);
   const [erroresServidor, setErroresServidor] = useState<Record<string, ErroresActor>>({});
   const idSolicitud = solicitud.solicitudId;
-  const hayIdentidad = definicion.actores.some((r) => r.biometria);
+  useEffect(() => {
+    for (const fila of filas) recordarActor(idSolicitud, fila.rol, fila.ordinal, fila.nombre);
+  }, [filas, idSolicitud]);
+  const hayIdentidad = definicionSeccion.actores.some((r) => r.biometria);
 
   const identidad = useQuery<EstadoIdentidad>({
     queryKey: claveIdentidad(idSolicitud),
@@ -66,7 +89,7 @@ export function FormularioActores({ seccion, activa, intentoAvance, onEstado }: 
   }, [identidad.error, reportarError]);
 
   const estadoDe = useCallback((f: FilaActor) => estadoDeFila(f, identidad.data, solicitud.actores), [identidad.data, solicitud.actores]);
-  const motivo = useMemo(() => motivoIncompleto(definicion, filas, estadoDe), [definicion, filas, estadoDe]);
+  const motivo = useMemo(() => motivoIncompleto(definicionSeccion, filas, estadoDe), [definicionSeccion, filas, estadoDe]);
   useEffect(() => {
     onEstado({ completo: motivo === undefined, bloqueo: motivo });
   }, [motivo, onEstado]);
@@ -82,11 +105,13 @@ export function FormularioActores({ seccion, activa, intentoAvance, onEstado }: 
         await guardarConVersion((version) => cliente.solicitudes.guardarActores(idSolicitud, { version, actores: actoresParaGuardar(seleccion) }));
         setErroresServidor({});
       } catch (error) {
+        // El reenvío de la identidad ya guardó a estas personas. Un 429 al repetir el mismo guardado no puede dejar el paso trabado.
+        if (error instanceof ApiError && error.status === 429 && actoresYaGuardados(seleccion, solicitud.actores)) return;
         if (error instanceof ApiError && error.errores) setErroresServidor(erroresDeServidor(error.errores, seleccion.map((f) => f.clave)));
         throw error;
       }
     },
-    [filas, cliente, idSolicitud, guardarConVersion],
+    [filas, cliente, idSolicitud, guardarConVersion, solicitud.actores],
   );
 
   useEffect(() => {
@@ -101,19 +126,21 @@ export function FormularioActores({ seccion, activa, intentoAvance, onEstado }: 
     setErroresServidor((e) => (e[clave] ? Object.fromEntries(Object.entries(e).filter(([k]) => k !== clave)) : e));
   };
   const agregar = (rolCodigo: string) => {
-    const rol = definicion.actores.find((r) => r.rol === rolCodigo);
-    if (!rol) return;
+    const definido = definicion.actores.find((r) => r.rol === rolCodigo);
+    if (!definido) return;
+    const rol = rolDeUnaPersona(definido);
     setFilas((actuales) => (puedeAgregar(actuales, rol) ? [...actuales, filaVacia(rolCodigo, ordinalLibre(actuales, rol))] : actuales));
   };
   const quitar = (clave: string) => {
     setFilas((actuales) => {
       const fila = actuales.find((f) => f.clave === clave);
-      const rol = fila && definicion.actores.find((r) => r.rol === fila.rol);
+      const definido = fila && definicion.actores.find((r) => r.rol === fila.rol);
+      const rol = definido && rolDeUnaPersona(definido);
       return fila && rol && puedeQuitar(actuales, rol) ? actuales.filter((f) => f.clave !== clave) : actuales;
     });
   };
 
-  if (definicion.actores.length === 0) {
+  if (definicionSeccion.actores.length === 0) {
     return (
       <Card title={seccion.paso?.titulo || undefined}>
         <p role="status" className="text-sm text-muted-foreground">
@@ -149,12 +176,13 @@ export function FormularioActores({ seccion, activa, intentoAvance, onEstado }: 
         {hayIdentidad && identidad.data ? (identidad.data.completa ? "Todas las identidades están aprobadas." : "Hay validaciones de identidad pendientes.") : ""}
       </p>
 
-      {definicion.actores.map((rol, indiceRol) => {
+      {definicionSeccion.actores.map((definido, indiceRol) => {
+        const rol = rolDeUnaPersona(definido);
         const delRol = filas.filter((f) => f.rol === rol.rol);
         const varias = rol.max > 1;
         // Con título la persona se puede quitar (rol con varias personas o con mínimo 0, que admite quedar vacío).
         const conTitulo = varias || rol.min === 0;
-        const id = `actor-rol-${indiceRol}`;
+        const id = `actor-${seccion.clave}-${indiceRol}`;
         return (
           <Card key={rol.rol} title={rol.etiqueta} id={id}>
             {rol.max > 1 && (
@@ -174,9 +202,9 @@ export function FormularioActores({ seccion, activa, intentoAvance, onEstado }: 
                   fila={fila}
                   rol={rol}
                   titulo={conTitulo ? (varias ? `${rol.etiqueta} ${i + 1}` : rol.etiqueta) : undefined}
+                  esPropietario={definicion.actores[0]?.rol === rol.rol && fila.ordinal === 1}
                   solicitudId={idSolicitud}
                   cliente={cliente}
-                  cedulaSolicitante={contexto?.cedula}
                   mostrarErrores={intentoAvance > 0}
                   erroresServidor={erroresServidor[fila.clave]}
                   estado={estadoDe(fila)}

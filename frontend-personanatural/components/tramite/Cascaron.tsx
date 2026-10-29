@@ -1,18 +1,21 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Bell, Car, Check, Info, LogOut, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, type TouchEvent } from "react";
 import { boton } from "@/components/landing/estilos";
+import { SelectorOrganismo } from "@/components/landing/SelectorOrganismo";
+import { useOrganismos } from "@/components/landing/useCatalogos";
 import { ModalFlit } from "@/components/modales/ModalFlit";
 import { ProveedorWizard, type ApiWizard, type EstadoSeccion, type RegistroRenderers } from "@/components/tramite/ContextoWizard";
 import { Nav } from "@/components/tramite/piezas";
 import { claveSolicitud } from "@/components/tramite/useSolicitud";
 import { MENSAJE_SIN_TARIFA, ValorTramite } from "@/components/tramite/ValorTramite";
-import type { ClientePortal, DefinicionTipo, Solicitud } from "@/lib/api/cliente";
+import type { ClientePortal, DefinicionTipo, Organismo, Solicitud } from "@/lib/api/cliente";
 import { ApiError, mensajeDe } from "@/lib/api/errores";
+import { organismoElegido } from "@/lib/tramite/diagnostico";
 import { ASSETS } from "@/lib/assets";
 import type { ContextoTramite } from "@/lib/tramite/contexto";
 import { esEditable, pasoInicial, type GrupoPaso, type PasoWizard, type SeccionWizard } from "@/lib/tramite/pasos";
@@ -156,7 +159,10 @@ export function Cascaron({ cliente, definicion, solicitud, pasos, registro, cont
     setGuardando(true);
     setErrorGuardado(null);
     try {
-      for (const [clave, guardar] of guardadores.current) if (claves.has(clave)) await guardar();
+      // Copia fija: al guardar, la sección se vuelve a registrar y, si se recorre el mapa en vivo, la clave
+      // reinsertada se visita otra vez. Con dos formularios de actor eso repite el guardado hasta el límite.
+      const pendientes = [...guardadores.current.entries()].filter(([clave]) => claves.has(clave));
+      for (const [, guardar] of pendientes) await guardar();
       return true;
     } catch (error) {
       if (error instanceof ApiError && error.status === 409 && error.code === "conflicto_version") setConflicto(true);
@@ -265,15 +271,14 @@ export function Cascaron({ cliente, definicion, solicitud, pasos, registro, cont
               </div>
               <div className="space-y-3 text-sm">
                 <p className="text-center font-bold text-primary">Configuración del trámite</p>
-                <div>
-                  <span className="mb-1 block text-xs font-light text-muted-foreground">Organismo de Tránsito</span>
-                  <input className="field" readOnly value={solicitud.organismoNombre} aria-label="Organismo de Tránsito" />
-                </div>
+                <OrganismoDelTramite cliente={cliente} solicitud={solicitud} editable={editable && paso === 0 && !solicitud.datos.diagnostico} />
                 <div>
                   <span className="mb-1 block text-xs font-light text-muted-foreground">Tipo de Trámite</span>
                   <input className="field" readOnly value={nombre} aria-label="Tipo de Trámite" />
                 </div>
-                <ValorTramite cliente={cliente} organismoId={solicitud.organismoId} tipoCodigo={definicion.code} onSinTarifa={setSinTarifa} />
+                {organismoElegido(solicitud.organismoId) && (
+                  <ValorTramite cliente={cliente} organismoId={solicitud.organismoId} tipoCodigo={definicion.code} onSinTarifa={setSinTarifa} />
+                )}
               </div>
               <hr className="border-border" />
               <ol className="wizard-step-nav space-y-1" aria-label="Pasos del trámite">
@@ -372,7 +377,7 @@ export function Cascaron({ cliente, definicion, solicitud, pasos, registro, cont
 
               <div aria-live="polite">{errorGuardado && <p role="alert" className="rounded-[9px] border border-alert bg-alert/10 p-3 text-sm text-alert">{errorGuardado}</p>}</div>
 
-              {paso < ultimo && editable && (
+              {paso < ultimo && editable && pasos[paso].id !== "resumen" && (
                 <Nav
                   onBack={retroceder}
                   onNext={() => void avanzar()}
@@ -416,6 +421,45 @@ interface SeccionProps {
   activa: boolean;
   intentoAvance: number;
   onEstado: React.Dispatch<React.SetStateAction<Record<string, EstadoSeccion>>>;
+}
+
+/**
+ * Organismo del paso 1. Si el trámite ya lo tiene, se muestra fijo. Si no, el ciudadano lo busca aquí
+ * (el modal de requisitos no lo pide) y queda fijo al consultar el vehículo.
+ */
+function OrganismoDelTramite({ cliente, solicitud, editable }: { cliente: ClientePortal; solicitud: Solicitud; editable: boolean }) {
+  const elegido = organismoElegido(solicitud.organismoId);
+  if (elegido || !editable) {
+    return (
+      <div>
+        <span className="mb-1 block text-xs font-light text-muted-foreground">Organismo de Tránsito</span>
+        <input className="field" readOnly value={solicitud.organismoNombre} aria-label="Organismo de Tránsito" />
+      </div>
+    );
+  }
+  return <ElegirOrganismo cliente={cliente} solicitud={solicitud} />;
+}
+
+function ElegirOrganismo({ cliente, solicitud }: { cliente: ClientePortal; solicitud: Solicitud }) {
+  const queryClient = useQueryClient();
+  const organismos = useOrganismos(cliente);
+  const asignar = useMutation({
+    mutationFn: (organismo: Organismo) => cliente.solicitudes.asignarOrganismo(solicitud.solicitudId, { organismoId: organismo.id, version: solicitud.version }),
+    onSuccess: (actualizada) => {
+      queryClient.setQueryData(claveSolicitud(solicitud.solicitudId), actualizada);
+    },
+  });
+
+  return (
+    <div>
+      <span className="mb-1 block text-xs font-light text-muted-foreground">Organismo de Tránsito</span>
+      {organismos.isSuccess && (
+        <SelectorOrganismo organismos={organismos.data ?? []} valor={null} onChange={(organismo) => asignar.mutate(organismo)} disabled={asignar.isPending} />
+      )}
+      {organismos.isPending && <p className="text-xs text-muted-foreground">Cargando organismos…</p>}
+      {(organismos.isError || asignar.isError) && <p role="alert" className="mt-1 text-xs text-alert">{mensajeDe(organismos.error ?? asignar.error)}</p>}
+    </div>
+  );
 }
 
 /** Monta el renderer de la sección y le da un `onEstado` estable que escribe en el mapa de estados del cascarón. */

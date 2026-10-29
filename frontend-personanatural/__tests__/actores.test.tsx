@@ -22,7 +22,7 @@ const sinSolicitar = () => identidad([parte("vendedor", "sin_solicitar"), parte(
 const problema = (status: number, code: string, headers: Record<string, string> = {}, extra: Record<string, unknown> = {}) =>
   new Response(JSON.stringify({ type: "about:blank", title: "t", status, code, ...extra }), { status, headers: { "content-type": "application/problem+json", ...headers } });
 
-const guardadoActor = (rol: string, doc: string, nombre: string, estado = "sin_solicitar"): ActorEstado => ({ rol, ordinal: 1, validacionEstado: estado, tipoDocumento: "CC", numeroDocumento: doc, nombre, correo: "ana@correo.co", celular: "3001234567", direccion: null });
+const guardadoActor = (rol: string, doc: string, nombre: string, estado = "sin_solicitar"): ActorEstado => ({ rol, ordinal: 1, validacionEstado: estado, tipoDocumento: "CC", numeroDocumento: doc, nombre, correo: "ana@correo.co", celular: "3001234567", direccion: null, ciudad: "Medellin" });
 
 /** Abre el wizard en el paso 2 (el borrador trae el diagnóstico hecho y falta un actor). */
 async function abrir(rutas: Record<string, Manejador> = {}, solicitud = guardado(DIAGNOSTICO_OK), definicion = DEFINICION) {
@@ -30,6 +30,7 @@ async function abrir(rutas: Record<string, Manejador> = {}, solicitud = guardado
     [RUTA_DEFINICION]: () => json(definicion),
     "GET /solicitudes/s-1": () => json(solicitud),
     "GET /solicitudes/s-1/identidad": () => json(sinSolicitar()),
+    [RUTA_DETALLE]: () => detalle(),
     ...rutas,
   });
   await screen.findByRole("region", { name: "Comprador" });
@@ -43,24 +44,25 @@ function llenarContacto(card: HTMLElement, correo = "ana@correo.co") {
   fireEvent.change(within(card).getByLabelText(/Nombre completo/), { target: { value: "ANA RUIZ" } });
   fireEvent.change(within(card).getByLabelText(/Teléfono/), { target: { value: "3001234567" } });
   fireEvent.change(within(card).getByLabelText(/Correo electrónico/), { target: { value: correo } });
+  fireEvent.change(within(card).getByLabelText(/^Ciudad/), { target: { value: "Medellin" } });
 }
 
-/** El vendedor es el solicitante (su cédula ya se identificó al abrir): no hay captcha ni consulta. */
+/** El vendedor usa la cédula con la que se abrió el trámite: se consulta igual que cualquier persona. */
 function consultarSolicitante(card: HTMLElement) {
   fireEvent.change(within(card).getByLabelText(/Número de documento/), { target: { value: CEDULA_SOLICITANTE } });
-  fireEvent.click(within(card).getByRole("button", { name: "Consultar" }));
+  fireEvent.click(within(card).getByRole("button", { name: /^Consultar/ }));
 }
 
 async function consultarTercero(card: HTMLElement, documento: string) {
   fireEvent.change(within(card).getByLabelText(/Número de documento/), { target: { value: documento } });
-  fireEvent.click(within(card).getByRole("button", { name: "Consultar" }));
+  fireEvent.click(within(card).getByRole("button", { name: /^Consultar/ }));
   await waitFor(() => expect(within(card).getByLabelText(/Teléfono/)).toBeEnabled());
 }
 
 const detalle = (extra: Record<string, unknown> = {}) => json({ existe: true, nombres: "ANA MARIA", apellidos: "RUIZ PEREZ", nombreCompleto: "ANA MARIA RUIZ PEREZ", ciudad: null, ...extra });
 const consultar = (card: HTMLElement, documento = "52123456") => {
   fireEvent.change(within(card).getByLabelText(/Número de documento/), { target: { value: documento } });
-  fireEvent.click(within(card).getByRole("button", { name: "Consultar" }));
+  fireEvent.click(within(card).getByRole("button", { name: /^Consultar/ }));
 };
 
 afterEach(() => {
@@ -75,8 +77,8 @@ describe("Paso 2 · una tarjeta por rol de la definición (F3 AC1, K5 AC1 y AC2)
     const comprador = tarjeta("Comprador");
     expect(within(comprador).getByLabelText("Tipo de documento")).toHaveValue("CC");
     expect(within(comprador).getByLabelText(/Número de documento/)).toBeEnabled();
-    for (const campo of [/Nombre completo/, /Teléfono/, /Correo electrónico/, /Dirección/]) expect(within(comprador).getByLabelText(campo)).toBeDisabled();
-    expect(within(comprador).getByRole("button", { name: "Consultar" })).toBeInTheDocument();
+    for (const campo of [/Nombre completo/, /Teléfono/, /Correo electrónico/, /^Ciudad/, /Dirección/]) expect(within(comprador).getByLabelText(campo)).toBeDisabled();
+    expect(within(comprador).getByRole("button", { name: /^Consultar/ })).toBeInTheDocument();
     expect(continuar()).toBeDisabled();
     expect(screen.getByText("Completa los datos de Propietario (vendedor).")).toBeInTheDocument();
   });
@@ -90,22 +92,41 @@ describe("Paso 2 · una tarjeta por rol de la definición (F3 AC1, K5 AC1 y AC2)
     expect(screen.queryByRole("region", { name: "Propietario (vendedor)" })).toBeNull();
   });
 
-  it("un rol con máximo mayor que uno agrega hasta el máximo y quita sin bajar del mínimo", async () => {
+  it("aunque la definición admita varios, el portal muestra una sola persona y no ofrece agregar otra", async () => {
     await abrir();
     const copro = tarjeta("Copropietario");
     expect(within(copro).getByText("Este rol es opcional: agrega una persona solo si aplica.")).toBeInTheDocument();
 
     fireEvent.click(within(copro).getByRole("button", { name: "Agregar Copropietario" }));
-    fireEvent.click(within(copro).getByRole("button", { name: "Agregar Copropietario" }));
-    expect(within(copro).getAllByRole("group")).toHaveLength(2);
-    expect(within(copro).getByRole("group", { name: "Copropietario 2" })).toBeInTheDocument();
-    expect(within(copro).queryByRole("button", { name: "Agregar Copropietario" })).toBeNull();
-
-    fireEvent.click(within(copro).getByRole("button", { name: "Quitar Copropietario 1" }));
     expect(within(copro).getAllByRole("group")).toHaveLength(1);
-    expect(within(copro).getByRole("button", { name: "Agregar Copropietario" })).toBeInTheDocument();
-    // Los roles con mínimo 1 y máximo 1 no se agregan ni se quitan.
+    expect(within(copro).queryByRole("button", { name: "Agregar Copropietario" })).toBeNull();
+    expect(within(copro).queryByText(/máximo/)).toBeNull();
     expect(within(tarjeta("Comprador")).queryByRole("button", { name: /Agregar|Quitar/ })).toBeNull();
+    expect(within(tarjeta("Comprador")).queryByText(/Comprador 1|máximo/)).toBeNull();
+  });
+
+  it("un traspaso con una sección por rol no repite el formulario del vendedor ni del comprador", async () => {
+    const definicion = definicionDe([["vehicle_query"]], {
+      actores: [
+        { rol: "vendedor", etiqueta: "Vendedor", min: 1, max: 1, biometria: false, ...comun },
+        { rol: "comprador", etiqueta: "Comprador", min: 1, max: 4, biometria: false, ...comun },
+      ],
+      pasos: [
+        { clave: "consulta", titulo: "Consulta", sectionTypes: ["vehicle_query"], campos: [] },
+        { clave: "vendedor", titulo: "Vendedor", sectionTypes: ["actor_form"], campos: [] },
+        { clave: "comprador", titulo: "Comprador", sectionTypes: ["actor_form"], campos: [] },
+      ],
+    });
+    await wizardAbierto({
+      [RUTA_DEFINICION]: () => json(definicion),
+      "GET /solicitudes/s-1": () => json(guardado(DIAGNOSTICO_OK)),
+      "GET /solicitudes/s-1/identidad": () => json(sinSolicitar()),
+    });
+    await screen.findByRole("region", { name: "Vendedor" });
+
+    expect(screen.getAllByRole("region", { name: "Vendedor" })).toHaveLength(1);
+    expect(screen.getAllByRole("region", { name: "Comprador" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: /Agregar/ })).toBeNull();
   });
 });
 
@@ -120,7 +141,7 @@ describe("validación de formato y consulta del documento (F3 AC1 y AC2, K5 AC5)
     fireEvent.change(tel, { target: { value: "30a0-12" } });
     expect(tel).toHaveValue("30012");
     fireEvent.blur(tel);
-    expect(within(card).getByText("Ingresa un teléfono válido")).toBeInTheDocument();
+    expect(within(card).getByText("Ingresa un celular de 10 dígitos que empiece por 3")).toBeInTheDocument();
     expect(tel).toHaveAttribute("aria-invalid", "true");
 
     const correo = within(card).getByLabelText(/Correo electrónico/);
@@ -148,14 +169,14 @@ describe("validación de formato y consulta del documento (F3 AC1 y AC2, K5 AC5)
     expect(within(card).getByLabelText(/Teléfono/)).toBeEnabled();
   });
 
-  it("con la identidad pendiente el nombre consultado se muestra enmascarado", async () => {
+  it("con la identidad pendiente el nombre consultado se muestra completo", async () => {
     await abrir({
       [RUTA_DETALLE]: () => detalle(),
       "GET /solicitudes/s-1/identidad": () => json(identidad([parte("vendedor", "sin_solicitar"), parte("comprador", "pendiente")])),
     });
     const card = tarjeta("Comprador");
     await consultarTercero(card, "52123456");
-    await waitFor(() => expect(within(card).getByLabelText(/Nombre completo/)).toHaveValue("AN••• MA••• RU••• PE•••"));
+    await waitFor(() => expect(within(card).getByLabelText(/Nombre completo/)).toHaveValue("ANA MARIA RUIZ PEREZ"));
   });
 
   it("un documento sin coincidencia avisa bajo los campos y deja escribir el nombre a mano", async () => {
@@ -187,7 +208,7 @@ describe("validación de formato y consulta del documento (F3 AC1 y AC2, K5 AC5)
 
     expect(within(card).getByLabelText(/Número de documento/)).toBeEnabled();
     expect(within(card).getByLabelText(/Nombre completo/)).toHaveValue("");
-    expect(within(card).getByRole("button", { name: "Consultar" })).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: /^Consultar/ })).toBeInTheDocument();
   });
 
   it("429 detalle_agotado degrada a captura manual con el aviso, sin bloquear la consulta", async () => {
@@ -207,7 +228,7 @@ describe("validación de formato y consulta del documento (F3 AC1 y AC2, K5 AC5)
 
     expect(await within(card).findByText(/máximo de consultas por hora para este documento/)).toBeInTheDocument();
     expect(within(card).getByText(/Podrás intentarlo de nuevo en/)).toBeInTheDocument();
-    expect(within(card).getByRole("button", { name: "Consultar" })).toBeDisabled();
+    expect(within(card).getByRole("button", { name: /^Consultar/ })).toBeDisabled();
     expect(within(card).getByLabelText(/Teléfono/)).toBeDisabled();
   });
 
@@ -240,13 +261,15 @@ describe("validación de formato y consulta del documento (F3 AC1 y AC2, K5 AC5)
     expect(within(card).getByLabelText(/Teléfono/)).toBeDisabled();
   });
 
-  it("la persona que abrió el trámite no se vuelve a consultar: no hay llamada de consulta", async () => {
+  it("la persona que abrió el trámite se consulta igual: el nombre llega de la consulta y no pide captcha", async () => {
     const { llamadas } = await abrir();
     const card = tarjeta("Propietario (vendedor)");
     consultarSolicitante(card);
 
-    await waitFor(() => expect(within(card).getByLabelText(/Teléfono/)).toBeEnabled());
-    expect(llamadas.some((l) => l.clave === RUTA_DETALLE || l.clave === "POST /consultas/persona")).toBe(false);
+    await waitFor(() => expect(within(card).getByLabelText(/Nombre completo/)).toHaveValue("ANA MARIA RUIZ PEREZ"));
+    expect(within(card).getByLabelText(/Teléfono/)).toBeEnabled();
+    expect(llamadas.some((l) => l.clave === RUTA_DETALLE)).toBe(true);
+    expect(llamadas.some((l) => l.clave === "POST /consultas/persona")).toBe(false);
     expect(within(card).queryByLabelText("Verificación de seguridad")).toBeNull();
   });
 
@@ -255,7 +278,7 @@ describe("validación de formato y consulta del documento (F3 AC1 y AC2, K5 AC5)
     const card = tarjeta("Comprador");
     fireEvent.change(within(card).getByLabelText("Tipo de documento"), { target: { value: "NIT" } });
     fireEvent.change(within(card).getByLabelText(/Número de documento/), { target: { value: "900123456" } });
-    fireEvent.click(within(card).getByRole("button", { name: "Consultar" }));
+    fireEvent.click(within(card).getByRole("button", { name: /^Consultar/ }));
 
     expect(within(card).getByText("Este trámite no admite personas jurídicas en este rol")).toBeInTheDocument();
     expect(within(card).getByLabelText(/Número de documento/)).toHaveAttribute("aria-invalid", "true");
@@ -304,7 +327,7 @@ describe("validación de identidad por actor (F3 AC5 y AC6, K5 AC3)", () => {
     return { ...m, card, ident };
   }
 
-  it("guarda a la persona con la versión y solicita su validación: queda pendiente y avisa el correo enmascarado", async () => {
+  it("guarda a la persona con la versión y solicita su validación: queda pendiente y avisa el correo completo", async () => {
     const ident = conIdentidad([parte("vendedor", "sin_solicitar"), parte("comprador", "sin_solicitar")]);
     const { llamadas, card } = await vendedorListo(
       {
@@ -316,22 +339,21 @@ describe("validación de identidad por actor (F3 AC5 y AC6, K5 AC3)", () => {
       },
       ident,
     );
-    expect(within(card).getByText("Validación: sin enviar")).toBeInTheDocument();
+    expect(within(card).getByText("Validación: pendiente")).toBeInTheDocument();
 
-    fireEvent.click(within(card).getByRole("button", { name: "Validar identidad" }));
+    fireEvent.click(within(card).getByRole("button", { name: "Reenviar Validación" }));
 
-    expect(await within(card).findByText("Enlace enviado a an•••@correo.co")).toBeInTheDocument();
+    expect(await within(card).findByText("Enlace enviado a ana@correo.co")).toBeInTheDocument();
     expect(within(card).getByText("Validación: pendiente")).toBeInTheDocument();
     const claves = llamadas.map((l) => l.clave);
     expect(claves.indexOf("PATCH /solicitudes/s-1/actores")).toBeLessThan(claves.indexOf("POST /solicitudes/s-1/identidad/vendedor"));
     expect(cuerpo(llamadas, "PATCH /solicitudes/s-1/actores")).toEqual({
       version: 4,
-      actores: [{ rol: "vendedor", ordinal: 1, tipoDocumento: "CC", numeroDocumento: CEDULA_SOLICITANTE, nombre: "ANA RUIZ", correo: "ana@correo.co", celular: "3001234567" }],
+      actores: [{ rol: "vendedor", ordinal: 1, tipoDocumento: "CC", numeroDocumento: CEDULA_SOLICITANTE, nombre: "ANA RUIZ", correo: "ana@correo.co", celular: "3001234567", ciudad: "Medellin" }],
     });
     expect(cuerpo(llamadas, "POST /solicitudes/s-1/identidad/vendedor")).toEqual({ ordinal: 1 });
-    // Con la validación en curso el documento y el nombre quedan protegidos (el nombre de un tercero se muestra enmascarado).
-    expect(within(card).getByLabelText(/Número de documento/)).toBeDisabled();
-    expect(within(card).getByLabelText(/Nombre completo/)).toHaveValue("AN••• RU•••");
+    expect(within(card).getByLabelText("Tipo y Número de Documento")).toBeDisabled();
+    expect(within(card).getByLabelText(/Nombre completo/)).toHaveValue("ANA RUIZ");
     expect(within(card).getByRole("button", { name: "Reenviar Validación" })).toBeDisabled();
     expect(within(card).getByText(/Podrás reenviar en \d+ s/)).toBeInTheDocument();
   });
@@ -348,7 +370,7 @@ describe("validación de identidad por actor (F3 AC5 y AC6, K5 AC3)", () => {
     const vendedor = tarjeta("Propietario (vendedor)");
     fireEvent.click(await within(vendedor).findByRole("button", { name: "Reenviar Validación" }));
 
-    expect(await within(vendedor).findByText("Enlace enviado a an•••@correo.co")).toBeInTheDocument();
+    expect(await within(vendedor).findByText("Enlace enviado a ana@correo.co")).toBeInTheDocument();
     expect(llamadas.some((l) => l.clave === "POST /solicitudes/s-1/identidad/comprador/reenviar")).toBe(false);
     expect(within(tarjeta("Comprador")).queryByRole("button", { name: "Reenviar Validación" })).toBeNull();
   });
@@ -383,13 +405,13 @@ describe("validación de identidad por actor (F3 AC5 y AC6, K5 AC3)", () => {
     await abrir();
     const copro = tarjeta("Copropietario");
     fireEvent.click(within(copro).getByRole("button", { name: "Agregar Copropietario" }));
-    const grupo = within(copro).getByRole("group", { name: "Copropietario 1" });
+    const grupo = within(copro).getByRole("group", { name: "Copropietario" });
     fireEvent.change(within(grupo).getByLabelText(/Número de documento/), { target: { value: CEDULA_SOLICITANTE } });
-    fireEvent.click(within(grupo).getByRole("button", { name: "Consultar" }));
+    fireEvent.click(within(grupo).getByRole("button", { name: /^Consultar/ }));
     await waitFor(() => expect(within(grupo).getByLabelText(/Teléfono/)).toBeEnabled());
 
     expect(within(grupo).queryByText(/Validación:/)).toBeNull();
-    expect(within(grupo).queryByRole("button", { name: /Validar identidad|Reenviar/ })).toBeNull();
+    expect(within(grupo).queryByRole("button", { name: /Reenviar Validación|Reenviar/ })).toBeNull();
   });
 
   it("un NIT que el back rechaza (persona jurídica no soportada) se explica en la tarjeta", async () => {
@@ -397,7 +419,7 @@ describe("validación de identidad por actor (F3 AC5 y AC6, K5 AC3)", () => {
       "PATCH /solicitudes/s-1/actores": () => json(solicitudDe({ version: 5 })),
       "POST /solicitudes/s-1/identidad/vendedor": () => problema(422, "persona_juridica_no_soportada"),
     });
-    fireEvent.click(within(card).getByRole("button", { name: "Validar identidad" }));
+    fireEvent.click(within(card).getByRole("button", { name: "Reenviar Validación" }));
 
     expect(await within(card).findByText(/solo para personas naturales/)).toBeInTheDocument();
   });
@@ -414,7 +436,7 @@ describe("validación de identidad por actor (F3 AC5 y AC6, K5 AC3)", () => {
       },
       ident,
     );
-    fireEvent.click(within(card).getByRole("button", { name: "Validar identidad" }));
+    fireEvent.click(within(card).getByRole("button", { name: "Reenviar Validación" }));
 
     expect(await within(card).findByText(/Aún no pudimos enviar el enlace/)).toBeInTheDocument();
     expect(await within(card).findByText("Validación: enviando enlace")).toBeInTheDocument();
@@ -427,7 +449,7 @@ describe("validación de identidad por actor (F3 AC5 y AC6, K5 AC3)", () => {
 
     expect(await within(card).findByText("Validación: rechazada")).toBeInTheDocument();
     expect(within(card).getByText(/fue rechazada/)).toBeInTheDocument();
-    expect(within(card).getByRole("button", { name: "Validar identidad" })).toBeEnabled();
+    expect(within(card).getByRole("button", { name: "Reenviar Validación" })).toBeEnabled();
   });
 });
 
@@ -445,9 +467,9 @@ describe("estado en vivo y compuerta de «Continuar» (F3 AC6)", () => {
     );
     const comprador = tarjeta("Comprador");
     await within(comprador).findByText("Validación: pendiente");
-    expect(continuar()).toBeDisabled();
-    expect(screen.getByText("Falta validar la identidad de: Comprador.")).toBeInTheDocument();
-    expect(within(comprador).getByLabelText(/Nombre completo/)).toHaveValue("MA••• RO•••");
+    expect(continuar()).toBeEnabled();
+    expect(screen.queryByText("Falta validar la identidad de: Comprador.")).toBeNull();
+    expect(within(comprador).getByLabelText(/Nombre completo/)).toHaveValue("MARIA RODRIGUEZ");
 
     partes = [parte("vendedor", "aprobada"), parte("comprador", "aprobada")];
     await act(async () => {
@@ -499,9 +521,65 @@ describe("estado en vivo y compuerta de «Continuar» (F3 AC6)", () => {
 
     await waitFor(() => expect(nodo(3)).toHaveAttribute("aria-current", "step"));
     const cuerpoGuardado = cuerpo(llamadas, "PATCH /solicitudes/s-1/actores");
+    expect(llamadas.filter((l) => l.clave === "PATCH /solicitudes/s-1/actores")).toHaveLength(1);
     expect(cuerpoGuardado.version).toBe(4);
     expect(cuerpoGuardado.actores).toHaveLength(2);
     expect(cuerpoGuardado.actores[1]).toMatchObject({ rol: "comprador", ordinal: 1, numeroDocumento: "52123456", nombre: "MARIA RODRIGUEZ", celular: "3001234567" });
+  });
+
+  it("con un formulario por rol, Continuar guarda una vez por persona y pasa de paso", async () => {
+    const definicion = definicionDe([["vehicle_query"]], {
+      actores: [
+        { rol: "vendedor", etiqueta: "Propietario (vendedor)", min: 1, max: 1, biometria: true, ...comun },
+        { rol: "comprador", etiqueta: "Comprador", min: 1, max: 1, biometria: true, ...comun },
+      ],
+      pasos: [
+        { clave: "consulta", titulo: "Consulta", sectionTypes: ["vehicle_query"], campos: [] },
+        { clave: "vendedor", titulo: "Vendedor", sectionTypes: ["actor_form"], campos: [] },
+        { clave: "comprador", titulo: "Comprador", sectionTypes: ["actor_form"], campos: [] },
+        { clave: "identidad", titulo: "Identidad", sectionTypes: ["biometric"], campos: [] },
+      ],
+    });
+    let parches = 0;
+    let version = 4;
+    const actores = con("sin_solicitar", "sin_solicitar");
+    await abrir(
+      {
+        "PATCH /solicitudes/s-1/actores": () =>
+          new Promise((resolve) => {
+            parches += 1;
+            if (parches > 4) {
+              resolve(problema(500, "bucle_guardado"));
+              return;
+            }
+            version += 1;
+            const respuesta = json(solicitudDe({ ...guardado(DIAGNOSTICO_OK), version, pendientes: [], actores }));
+            setTimeout(() => resolve(respuesta), 30);
+          }),
+      },
+      rehidratado("sin_solicitar", "sin_solicitar"),
+      definicion,
+    );
+    await waitFor(() => expect(continuar()).toBeEnabled());
+
+    fireEvent.click(continuar());
+
+    await waitFor(() => expect(nodo(3)).toHaveAttribute("aria-current", "step"));
+    expect(parches).toBe(2);
+  });
+
+  it("si las personas ya están guardadas, un límite de intentos al repetir el guardado deja pasar al siguiente paso", async () => {
+    await abrir(
+      {
+        "GET /solicitudes/s-1/identidad": () => json(identidad([parte("vendedor", "pendiente"), parte("comprador", "pendiente")])),
+        "PATCH /solicitudes/s-1/actores": () => problema(429, "rate_limited"),
+      },
+      rehidratado("pendiente", "pendiente"),
+    );
+    await waitFor(() => expect(continuar()).toBeEnabled());
+    fireEvent.click(continuar());
+
+    await waitFor(() => expect(nodo(3)).toHaveAttribute("aria-current", "step"));
   });
 
   it("un 409 de versión al guardar los actores avisa y ofrece recargar, sin pasar de paso", async () => {
@@ -579,7 +657,7 @@ describe("Habeas Data en el paso Actores", () => {
     consultarSolicitante(card);
     await waitFor(() => expect(within(card).getByLabelText(/Teléfono/)).toBeEnabled());
     llenarContacto(card);
-    fireEvent.click(within(card).getByRole("button", { name: "Validar identidad" }));
+    fireEvent.click(within(card).getByRole("button", { name: "Reenviar Validación" }));
     await within(card).findByText(/Enlace enviado/);
 
     const sensibles = [CEDULA_SOLICITANTE, "3001234567", "ana@correo.co", "ANA", "ana%40correo"];

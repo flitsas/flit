@@ -1,6 +1,5 @@
-// Único punto de los documentos legales del portal. Ningún texto legal se escribe en el código: mientras no exista el
-// documento oficial cada uno figura como «no disponible» y la interfaz solo muestra el aviso. Cuando se entregue, basta con
-// poner aquí su URL (y `disponible: true`); los enlaces del pie, del modal «Iniciar mi trámite» y del chat leen de este módulo.
+// Único punto de los documentos legales del portal. El documento por defecto es el mismo que usa FLIT 2
+// (`ProcedureTermsOptions.DefaultUrl` / `FLIT_PRIVACY_POLICY_URL`). La configuración publicada puede sustituir la URL.
 
 export interface DocumentoLegal {
   clave: string;
@@ -10,12 +9,15 @@ export interface DocumentoLegal {
   disponible: boolean;
 }
 
+/** Página pública de la política de privacidad de FLIT, la misma que abre el wizard de FLIT 2. */
+export const URL_POLITICA_FLIT = "https://flitsas.com.co/privacy-policy/";
+
 export const DOCUMENTOS_LEGALES = {
   politicas: {
     clave: "politicas",
     titulo: "Políticas de Privacidad y Términos de Uso",
-    url: null,
-    disponible: false,
+    url: URL_POLITICA_FLIT,
+    disponible: true,
   },
 } as const satisfies Record<string, DocumentoLegal>;
 

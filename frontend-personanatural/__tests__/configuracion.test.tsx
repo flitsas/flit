@@ -6,7 +6,7 @@ import { crearCliente, type ConfiguracionPortal } from "@/lib/api/cliente";
 import { textoSinInformacion } from "@/lib/chat/respuestas";
 import { resolverContenido, textoPlano } from "@/lib/configuracion";
 import { PREGUNTAS_FRECUENTES } from "@/lib/landing/contenido";
-import { urlPublicable } from "@/lib/legal";
+import { URL_POLITICA_FLIT, urlPublicable } from "@/lib/legal";
 import { fetchFalso, json, ORGANISMOS, renderConQuery, TIPOS } from "./utilidades";
 
 const IMG = "/api/v1/persona-natural/configuracion/banners/11111111-1111-1111-1111-111111111111/imagen?v=abc123";
@@ -38,7 +38,7 @@ const conConfig = (c: () => Response | Promise<Response>) => fetchFalso({ ...bas
 function esFija() {
   expect(screen.getByRole("button", { name: PREGUNTAS_FRECUENTES[0].pregunta })).toBeInTheDocument();
   expect(screen.getAllByRole("button", { name: /Ir al banner/ })).toHaveLength(2);
-  expect(screen.getByRole("button", { name: "Políticas de Privacidad y Términos de Uso" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: /Política de tratamiento de datos personales/ })).toHaveAttribute("href", URL_POLITICA_FLIT);
   expect(screen.queryByLabelText("Soporte")).not.toBeInTheDocument();
 }
 
@@ -131,7 +131,7 @@ describe("landing: configuración publicada (HU #14073)", () => {
     expect(screen.getByLabelText("Soporte")).toHaveTextContent("<i>24/7</i>");
   });
 
-  it("URL javascript:, ftp: o data: se rechaza y el pie conserva el aviso de documento no disponible", async () => {
+  it("URL javascript:, ftp: o data: se rechaza y el pie conserva la política de FLIT 2", async () => {
     const { cliente } = conConfig(() =>
       json(
         publicada({
@@ -146,10 +146,11 @@ describe("landing: configuración publicada (HU #14073)", () => {
     renderConQuery(<Landing cliente={cliente} />);
     await screen.findByRole("button", { name: "¿Primera publicada?" });
 
-    expect(screen.queryByRole("link", { name: /Política de tratamiento/ })).not.toBeInTheDocument();
+    const politica = screen.getByRole("link", { name: /Política de tratamiento/ });
+    expect(politica).toHaveAttribute("href", URL_POLITICA_FLIT);
+    expect(politica.getAttribute("href")).not.toMatch(/javascript:|ftp:|data:/);
     expect(screen.queryByRole("link", { name: /Ver video/ })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Políticas de Privacidad y Términos de Uso" }));
-    expect(await screen.findByText("El documento oficial aún no está disponible.")).toBeInTheDocument();
+    expect(screen.queryByText("El documento oficial aún no está disponible.")).not.toBeInTheDocument();
   });
 
   it("la petición es un GET anónimo: sin cuerpo ni datos del ciudadano", async () => {

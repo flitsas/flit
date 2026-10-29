@@ -2,9 +2,11 @@ using Flit.Api.Grpc;
 using Flit.Infrastructure.PersonaNatural;
 using Flit.Infrastructure.Persistence;
 using Flit.Platform.Sdk;
+using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
@@ -88,6 +90,8 @@ internal sealed class PersonaNaturalCreador(
     RegistrarPrendaHandler prenda,
     RegisterIntegrationAttachmentHandler adjuntos,
     TransitionProcedureInstanceHandler transicion,
+    IConsultationProviderChainResolver consultas,
+    IConfiguration configuracion,
     ILogger<PersonaNaturalCreador> logger)
 {
     private const string OrigenAdjuntos = "portal";
@@ -138,11 +142,12 @@ internal sealed class PersonaNaturalCreador(
             return ResultadoRadicacionPortal.SinEfecto;
         }
 
-        // Partes: roles que FLIT 2 sabe guardar e identidad aprobada de ESTA solicitud (la compuerta del portal ya lo exigió;
-        // se repite porque es lo que el trámite referencia).
+        // Partes: roles que FLIT 2 sabe guardar. La identidad aprobada solo se exige con
+        // PersonaNatural:Radicacion:ExigirIdentidadAlCrear=true; mientras está apagado el borrador se crea igual.
         if (solicitud.Partes.Any(p => !RolesSoportados.Contains(p.Rol.Trim().ToLowerInvariant())))
             return Rechazo(MotivosDeRechazo.ParteNoSoportada);
-        if (solicitud.Partes.Any(p => p.ValidacionId is null || !string.Equals(p.ValidacionEstado, "aprobada", StringComparison.Ordinal)))
+        if (configuracion.GetValue("PersonaNatural:Radicacion:ExigirIdentidadAlCrear", false)
+            && solicitud.Partes.Any(p => p.ValidacionId is null || !string.Equals(p.ValidacionEstado, "aprobada", StringComparison.Ordinal)))
             return Rechazo(MotivosDeRechazo.IdentidadNoValidada);
 
         var creador = await ResolverCreadorAsync(db, empresa, ct).ConfigureAwait(false);
@@ -160,29 +165,33 @@ internal sealed class PersonaNaturalCreador(
             id = resumen.Id;
         }
 
-        var resultado = await CompletarAsync(id.Value, solicitud, oficina, creador, ct).ConfigureAwait(false);
+        var resultado = await CompletarAsync(id.Value, solicitud, oficina, creador, tipo.Familia, ct).ConfigureAwait(false);
         if (!resultado.Creada)
             await AnularAsync(id.Value, creador, resultado.Codigo ?? MotivosDeRechazo.Generico, ct).ConfigureAwait(false);
         return resultado;
     }
 
     /// <summary>Pasos posteriores a crear el borrador, hasta dejarlo completo. Todos idempotentes (upsert, dedup por sha256, reglas de FLIT 2).</summary>
-    private async Task<ResultadoRadicacionPortal> CompletarAsync(Guid id, SolicitudPortal s, ResolvedTransitOffice oficina, Guid creador, CancellationToken ct)
+    private async Task<ResultadoRadicacionPortal> CompletarAsync(Guid id, SolicitudPortal s, ResolvedTransitOffice oficina, Guid creador, string familia, CancellationToken ct)
     {
         var empresa = PlatformTenants.PersonaNatural;
 
-        // 1. Campos del tipo, vehículo y documento del titular (el preflight por placa lo exige, igual que ICT).
+        // 1. Campos del tipo, vehículo y documento del titular. En traspaso el titular es el vendedor;
+        // en la familia OTROS (cambio de color, duplicado…) el titular se guarda como comprador.
         var items = s.Campos.Select(c => new FieldValueInput(null, c.Key, c.Value, null)).ToList();
         if (s.Vin is not null)
-            items.Add(new FieldValueInput(null, "vin", s.Vin, null));
+            items.Add(new FieldValueInput(null, VehicleFieldKeys.Vin, s.Vin, null));
         if (s.Placa is not null)
-            items.Add(new FieldValueInput(null, "plate", s.Placa, null));
-        var titular = s.Partes.FirstOrDefault(p => string.Equals(p.Rol.Trim(), "vendedor", StringComparison.OrdinalIgnoreCase));
+            items.Add(new FieldValueInput(null, VehicleFieldKeys.Plate, s.Placa, null));
+        var titular = TitularDeLaConsulta(s.Partes);
         if (titular is not null && !string.IsNullOrWhiteSpace(titular.NumeroDocumento))
         {
             items.Add(new FieldValueInput(null, "owner_document_type", titular.TipoDocumento.Trim().ToUpperInvariant(), null));
             items.Add(new FieldValueInput(null, "owner_document_number", titular.NumeroDocumento.Trim(), null));
         }
+
+        if (!string.IsNullOrWhiteSpace(s.Datos.Observaciones))
+            items.Add(new FieldValueInput(null, "observaciones", s.Datos.Observaciones.Trim(), null));
 
         if (items.Count > 0 && await Fallo(campos.HandleAsync(id, empresa, new PatchFieldValuesRequest(items), ct)).ConfigureAwait(false) is { } e1)
             return Rechazo(e1);
@@ -203,6 +212,11 @@ internal sealed class PersonaNaturalCreador(
         db.ChangeTracker.Clear();
         if (await Fallo(campos.HandleSystemSeedAsync(id, empresa, new PatchFieldValuesRequest(organismo), ct)).ConfigureAwait(false) is { } e2)
             return Rechazo(e2);
+
+        // La ficha del vehículo (marca, línea, color, carrocería…) la consulta el portal y el asistente de FLIT 2
+        // la espera en los campos del trámite. No se corre el preflight: no cambia el estado ni mueve el organismo
+        // que eligió el ciudadano. Si la consulta no responde, el borrador queda con lo que sí se guardó.
+        await SembrarVehiculoConsultadoAsync(id, empresa, familia, s, titular, items, ct).ConfigureAwait(false);
 
         // 2. Partes.
         db.ChangeTracker.Clear();
@@ -291,6 +305,99 @@ internal sealed class PersonaNaturalCreador(
         return error;
     }
 
+    /// <summary>
+    /// Propietario que la consulta por placa necesita. En traspaso es el vendedor; en OTROS el titular
+    /// se persiste como comprador; en leasing, el locatario.
+    /// </summary>
+    internal static ParteSolicitudPortal? TitularDeLaConsulta(IReadOnlyList<ParteSolicitudPortal> partes)
+    {
+        ArgumentNullException.ThrowIfNull(partes);
+        static string Rol(ParteSolicitudPortal p) => p.Rol.Trim().ToLowerInvariant();
+        return partes.FirstOrDefault(p => Rol(p) == "vendedor")
+            ?? partes.FirstOrDefault(p => Rol(p) == "comprador")
+            ?? partes.FirstOrDefault(p => Rol(p) == "locatario");
+    }
+
+    /// <summary>
+    /// Atributos del vehículo que hay que escribir a partir de la consulta, sin pisar lo que el ciudadano
+    /// ya envió ni el organismo que eligió. Color, combustible y carrocería dejan también el snapshot
+    /// <c>*_runt</c> con el valor consultado.
+    /// </summary>
+    internal static List<FieldValueInput> CamposDeLaConsulta(IReadOnlyList<HydratedField> campos, IReadOnlySet<string> yaEscritos)
+    {
+        ArgumentNullException.ThrowIfNull(campos);
+        ArgumentNullException.ThrowIfNull(yaEscritos);
+        var salida = new List<FieldValueInput>();
+        foreach (var campo in campos)
+        {
+            if (string.IsNullOrWhiteSpace(campo.FieldKey))
+                continue;
+            if (string.IsNullOrWhiteSpace(campo.ValueText) && string.IsNullOrWhiteSpace(campo.ValueJson))
+                continue;
+            if (campo.FieldKey.StartsWith("transit_office_", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (!yaEscritos.Contains(campo.FieldKey))
+                salida.Add(new FieldValueInput(null, campo.FieldKey, campo.ValueText, campo.ValueJson));
+
+            if (EsAtributoTransformable(campo.FieldKey))
+            {
+                var snapshot = campo.FieldKey + "_runt";
+                if (!yaEscritos.Contains(snapshot))
+                    salida.Add(new FieldValueInput(null, snapshot, campo.ValueText, campo.ValueJson));
+            }
+        }
+
+        return salida;
+    }
+
+    private async Task SembrarVehiculoConsultadoAsync(
+        Guid id, Guid empresa, string familia, SolicitudPortal s, ParteSolicitudPortal? titular, List<FieldValueInput> yaGuardados, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(s.Placa) && string.IsNullOrWhiteSpace(s.Vin))
+            return;
+
+        var kind = string.Equals(familia, ProcedureFamilyCodes.Matriculas, StringComparison.OrdinalIgnoreCase)
+            ? ConsultationKind.VehicleVin
+            : ConsultationKind.VehiclePlate;
+        var valores = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(s.Vin))
+            valores[VehicleFieldKeys.Vin] = s.Vin;
+        if (!string.IsNullOrWhiteSpace(s.Placa))
+            valores[VehicleFieldKeys.Plate] = s.Placa;
+        if (titular is not null && !string.IsNullOrWhiteSpace(titular.NumeroDocumento))
+        {
+            valores["owner_document_type"] = titular.TipoDocumento.Trim().ToUpperInvariant();
+            valores["owner_document_number"] = titular.NumeroDocumento.Trim();
+        }
+
+        ConsultationResult resultado;
+        try
+        {
+            resultado = await consultas.ConsultAsync(
+                kind, new ConsultationContext(id, empresa, "vehiculo", valores), tenantOverride: null, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            RadicacionLog.VehiculoNoSembrado(logger, id, "consulta_no_disponible");
+            return;
+        }
+
+        var yaEscritos = new HashSet<string>(yaGuardados.Select(i => i.FieldKey), StringComparer.OrdinalIgnoreCase);
+        var semilla = CamposDeLaConsulta(resultado.HydratedFields, yaEscritos);
+        if (semilla.Count == 0)
+            return;
+
+        db.ChangeTracker.Clear();
+        if (await Fallo(campos.HandleSystemSeedAsync(id, empresa, new PatchFieldValuesRequest(semilla), ct)).ConfigureAwait(false) is { } error)
+            RadicacionLog.VehiculoNoSembrado(logger, id, error);
+    }
+
+    private static bool EsAtributoTransformable(string clave) =>
+        clave.Equals(VehicleFieldKeys.Color, StringComparison.OrdinalIgnoreCase)
+        || clave.Equals(VehicleFieldKeys.Fuel, StringComparison.OrdinalIgnoreCase)
+        || clave.Equals(VehicleFieldKeys.BodyType, StringComparison.OrdinalIgnoreCase);
+
     internal static ActorInput MapearParte(ParteSolicitudPortal p)
     {
         ArgumentNullException.ThrowIfNull(p);
@@ -301,6 +408,7 @@ internal sealed class PersonaNaturalCreador(
             NombreCompleto: p.Nombre.Trim(),
             Email: p.Correo.Trim(),
             Telefono: string.IsNullOrWhiteSpace(p.Celular) ? null : p.Celular.Trim(),
+            Ciudad: string.IsNullOrWhiteSpace(p.Ciudad) ? null : p.Ciudad.Trim(),
             Direccion: string.IsNullOrWhiteSpace(p.Direccion) ? null : p.Direccion.Trim(),
             Ordinal: p.Ordinal < 1 ? 1 : p.Ordinal);
     }
@@ -408,4 +516,7 @@ internal static partial class RadicacionLog
 
     [LoggerMessage(EventId = 14054, Level = LogLevel.Warning, Message = "Portal Persona Natural: no se pudo anular el borrador {ProcedureInstanceId} de una solicitud rechazada ({Error}).")]
     public static partial void NoSePudoAnular(ILogger logger, Guid procedureInstanceId, string error);
+
+    [LoggerMessage(EventId = 14056, Level = LogLevel.Warning, Message = "Portal Persona Natural: no se sembró la ficha del vehículo del trámite {ProcedureInstanceId} ({Motivo}).")]
+    public static partial void VehiculoNoSembrado(ILogger logger, Guid procedureInstanceId, string motivo);
 }

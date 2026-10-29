@@ -34,24 +34,28 @@ describe("sondeo y estados finales", () => {
 describe("pasos del seguimiento", () => {
   const d = definicionCompleta();
 
-  it("en cola: enviado con su fecha y la creación en curso", () => {
+  it("en cola: el paso en curso es el envío al organismo, como en el diseño", () => {
     expect(pasosDeSeguimiento({ estado: "en_cola", actualizadoEn: MARCA }, d)).toEqual([
       { titulo: "Borrador del trámite", estado: "done", fecha: null },
       { titulo: "Validación de identidad", estado: "done", fecha: null },
-      { titulo: "Enviado a FLIT 2", estado: "done", fecha: "28/10/2026 10:30" },
-      { titulo: "Creado en FLIT 2", estado: "current", fecha: null },
+      { titulo: "Enviado al OT", estado: "current", fecha: "28/10/2026 10:30" },
+      { titulo: "En revisión", estado: "pending", fecha: null },
+      { titulo: "Aprobado / Rechazado", estado: "pending", fecha: null },
     ]);
   });
 
-  it("creada: la fecha del último cambio es la de la creación", () => {
+  it("creada: la fecha del último cambio queda en la revisión", () => {
     const p = pasosDeSeguimiento({ estado: "creada", actualizadoEn: MARCA }, d);
 
-    expect(p[3]).toEqual({ titulo: "Creado en FLIT 2", estado: "done", fecha: "28/10/2026 10:30" });
-    expect(p[2].fecha).toBeNull();
+    expect(p[2]).toEqual({ titulo: "Enviado al OT", estado: "done", fecha: null });
+    expect(p[3]).toEqual({ titulo: "En revisión", estado: "current", fecha: "28/10/2026 10:30" });
+    expect(p[4].estado).toBe("pending");
   });
 
-  it("rechazada la creación: el último paso queda rechazado", () => {
-    expect(pasosDeSeguimiento({ estado: "rechazada_creacion", actualizadoEn: MARCA }, d)[3].estado).toBe("rejected");
+  it("un rechazo interno de creación no se muestra como rechazo al ciudadano: sigue en «Enviado al OT»", () => {
+    const p = pasosDeSeguimiento({ estado: "rechazada_creacion", actualizadoEn: MARCA }, d);
+    expect(p[2]).toEqual({ titulo: "Enviado al OT", estado: "current", fecha: "28/10/2026 10:30" });
+    expect(p[4]).toEqual({ titulo: "Aprobado / Rechazado", estado: "pending", fecha: null });
   });
 
   it("si el tipo no exige validar la identidad, ese paso se muestra omitido", () => {

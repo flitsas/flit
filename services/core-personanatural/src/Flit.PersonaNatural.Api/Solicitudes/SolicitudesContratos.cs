@@ -7,7 +7,10 @@ namespace Flit.PersonaNatural.Api.Solicitudes;
 /// <summary>Abre el trámite. El consentimiento es obligatorio; placa o VIN según el modo de entrada del tipo.</summary>
 public sealed record CrearSolicitudRequest(string? TipoCodigo, string? OrganismoId, string? Cedula, string? Placa, string? Vin, bool Consentimiento, string? ConsentimientoVersion);
 
-public sealed record ActorRequest(string? Rol, short? Ordinal, string? TipoDocumento, string? NumeroDocumento, string? Nombre, string? Correo, string? Celular, string? Direccion);
+/// <summary>El ciudadano fija el organismo en el paso 1, antes de consultar el vehículo.</summary>
+public sealed record AsignarOrganismoRequest(string? OrganismoId, long? Version);
+
+public sealed record ActorRequest(string? Rol, short? Ordinal, string? TipoDocumento, string? NumeroDocumento, string? Nombre, string? Correo, string? Celular, string? Direccion, string? Ciudad = null);
 
 /// <summary><c>Version</c> es la que el cliente leyó: si ya cambió, la escritura responde 409 con la vigente.</summary>
 public sealed record ActoresRequest(long? Version, IReadOnlyList<ActorRequest>? Actores);
@@ -34,7 +37,7 @@ public sealed record PasoEstadoDto(string Clave, string Titulo, bool Completo, I
 /// <summary>Un archivo cargado: solo metadatos (la referencia al almacenamiento no sale del servicio).</summary>
 public sealed record AdjuntoDto(Guid Id, string Tipo, string NombreArchivo, string MimeType, long TamanoBytes, string Sha256, DateTimeOffset CreadoEn);
 
-public sealed record ActorEstadoDto(string Rol, short Ordinal, string ValidacionEstado, string? TipoDocumento, string? NumeroDocumento, string? Nombre, string? Correo, string? Celular, string? Direccion);
+public sealed record ActorEstadoDto(string Rol, short Ordinal, string ValidacionEstado, string? TipoDocumento, string? NumeroDocumento, string? Nombre, string? Correo, string? Celular, string? Direccion, string? Ciudad = null);
 
 /// <summary>Qué cambió en la definición del tipo mientras el borrador estaba guardado y qué se hizo con los datos.</summary>
 public sealed record DefinicionCambioDto(int VersionAnterior, int VersionNueva, IReadOnlyList<string> CamposDescartados, IReadOnlyList<string> CamposNuevos);

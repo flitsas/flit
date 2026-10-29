@@ -16,7 +16,7 @@ export const PASOS_TRAMITE = [
   { clave: "diagnostico", titulo: "Diagnóstico del vehículo" },
   { clave: "validacionDeIdentidad", titulo: "Validación de identidad" },
   { clave: "documentosDigitales", titulo: "Documentos digitales" },
-  { clave: "pagoFacil", titulo: "Pago fácil y rápido" },
+  { clave: "radicacion", titulo: "Radicación en línea" },
 ] as const;
 
 export const SOMOS_FLIT = [
@@ -59,13 +59,7 @@ export const PREGUNTAS_FRECUENTES = [
   {
     pregunta: "¿Cuánto tarda la aprobación de mi trámite?",
     respuesta:
-      "El tiempo estimado de respuesta por parte de la Secretaría de Movilidad es de 24 a 48 horas hábiles a partir del pago y validación biométrica de los participantes.",
-  },
-  {
-    pregunta: "¿Cómo hago el pago de mi trámite?",
-    // Copy propuesto (HU-E2 AC5): el pago es por transferencia Bancolombia con comprobante, ya no por PSE. Pendiente de aprobación del PO.
-    respuesta:
-      "Pagas los derechos de tránsito y el servicio digital por transferencia a la cuenta Bancolombia que verás en el Paso 4 del proceso de radicación, y cargas allí el comprobante del pago para que lo revisemos.",
+      "El tiempo estimado de respuesta por parte de la Secretaría de Movilidad es de 24 a 48 horas hábiles a partir de la radicación y la validación biométrica de los participantes.",
   },
   {
     pregunta: "¿Qué pasa si no tengo SOAT o Técnico-Mecánica vigente?",

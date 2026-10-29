@@ -11,7 +11,13 @@ using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
 var salida = args.Length > 0 ? args[0] : "bus-mensajes.log";
-var fabrica = new ConnectionFactory { HostName = "127.0.0.1", Port = 5672, VirtualHost = "flit", UserName = "tramites", Password = "pn-e2e-tramites-clave-local-0001" };
+var clave = Environment.GetEnvironmentVariable("PN_E2E_MQ_TRAMITES_CLAVE");
+if (string.IsNullOrWhiteSpace(clave))
+{
+    Console.Error.WriteLine("Falta PN_E2E_MQ_TRAMITES_CLAVE. Copia scripts/e2e-personanatural/.env.example a .env.local.");
+    return 1;
+}
+var fabrica = new ConnectionFactory { HostName = "127.0.0.1", Port = 5672, VirtualHost = "flit", UserName = "tramites", Password = clave };
 await using var con = await fabrica.CreateConnectionAsync();
 await using var canal = await con.CreateChannelAsync();
 var gate = new object();

@@ -1,10 +1,12 @@
 using Flit.PersonaNatural.Api.Cotizaciones;
 using Flit.PersonaNatural.Api.Definiciones;
+using Flit.PersonaNatural.Api.Identidad;
 using Flit.PersonaNatural.Api.Persistence;
 using Flit.PersonaNatural.Api.Solicitudes;
 using Flit.Platform.Sdk;
 using Flit.Platform.Sdk.Messaging;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Npgsql;
 
 namespace Flit.PersonaNatural.Api.Radicacion;
@@ -24,6 +26,7 @@ public sealed class RadicacionService(
     SolicitudesService solicitudes,
     DefinicionesService definiciones,
     ICompuertaDeRadicacion compuerta,
+    IOptions<IdentidadOptions> identidad,
     IPlatformOutbox outbox,
     TimeProvider reloj)
 {
@@ -66,6 +69,8 @@ public sealed class RadicacionService(
             return new RadicacionAceptada(s.Id, s.CodigoPublico, s.Estado);
         if (!SolicitudesService.EsEditable(s.Estado))
             throw SolicitudesService.NoPermiteCambio(s.Estado);
+        if (s.OrganismoId == Guid.Empty)
+            throw new ReglaDeNegocioException(StatusCodes.Status422UnprocessableEntity, SolicitudesService.CodigoOrganismoRequerido, "Falta el organismo", "Elige el organismo de tránsito antes de enviar el trámite.");
         if (await db.Set<SolicitudTramite>().AnyAsync(x => x.TenantId == s.TenantId && x.IdempotencyKey == llave && x.Id != s.Id, ct).ConfigureAwait(false))
             throw LlaveEnUso();
 
@@ -90,12 +95,15 @@ public sealed class RadicacionService(
                 new Dictionary<string, object?> { ["pendientes"] = borrador.Pendientes });
         }
 
-        var veredicto = await compuerta.EvaluarAsync(s.Id, ct).ConfigureAwait(false);
-        if (!veredicto.Permite)
+        if (identidad.Value.ExigirAlRadicar)
         {
-            throw new ReglaDeNegocioException(
-                StatusCodes.Status409Conflict, CodigoIdentidadPendiente, "Falta validar la identidad", "Todas las partes del trámite deben validar su identidad antes de enviarlo.",
-                new Dictionary<string, object?> { ["motivo"] = veredicto.Motivo, ["partes"] = veredicto.Partes });
+            var veredicto = await compuerta.EvaluarAsync(s.Id, ct).ConfigureAwait(false);
+            if (!veredicto.Permite)
+            {
+                throw new ReglaDeNegocioException(
+                    StatusCodes.Status409Conflict, CodigoIdentidadPendiente, "Falta validar la identidad", "Todas las partes del trámite deben validar su identidad antes de enviarlo.",
+                    new Dictionary<string, object?> { ["motivo"] = veredicto.Motivo, ["partes"] = veredicto.Partes });
+            }
         }
 
         var evento = await ArmarEventoAsync(s, borrador, llave, ct).ConfigureAwait(false);

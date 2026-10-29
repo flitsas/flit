@@ -5,8 +5,8 @@ core-notificaciones, core-personanatural, gateway YARP, front del portal, Postgr
 cotizar, abrir la solicitud, completar los pasos, radicar y ver el trámite BORRADOR nacer en FLIT 2.
 
 Todo externo va simulado. **Nada de esto toca servicios reales**: biometría `mock`, consultas RUNT/Verifik `mock`, SMTP a la
-consola, captcha deshabilitado y file-manager simulado. Todos los secretos de este documento y de los scripts son
-**FICTICIOS, solo para local**.
+consola, captcha deshabilitado y file-manager simulado. Las claves locales viven solo en
+`scripts/e2e-personanatural/.env.local` (no se versiona). Cópiala desde `.env.example` y complétala en tu máquina.
 
 ## Qué hace falta
 
@@ -19,12 +19,17 @@ consola, captcha deshabilitado y file-manager simulado. Todos los secretos de es
 ## Montaje, en orden
 
 ```powershell
-# 0. Broker: usuarios por servicio (una vez; idempotente). Claves FICTICIAS de prueba.
+# 0. Claves locales (una vez) y usuarios del broker. Las claves salen de .env.local, no de este documento.
+Copy-Item scripts/e2e-personanatural/.env.example scripts/e2e-personanatural/.env.local
+# Edita .env.local y luego cárgala en la sesión:
+Get-Content scripts/e2e-personanatural/.env.local | ForEach-Object {
+  if ($_ -match '^\s*([^#=]+)=(.*)$') { Set-Item -Path "Env:$($Matches[1].Trim())" -Value $Matches[2].Trim() }
+}
 $env:COMPOSE = "docker compose -f deploy/rabbitmq/docker-compose.local.yml"   # en Git Bash: export COMPOSE=...
-deploy/rabbitmq/usuario-de-servicio.sh tramites       "pn-e2e-tramites-clave-local-0001" notificaciones,personanatural,consultas,plataforma
-deploy/rabbitmq/usuario-de-servicio.sh personanatural "pn-e2e-pn-clave-local-0001" tramites
-deploy/rabbitmq/usuario-de-servicio.sh consultas      "pn-e2e-consultas-clave-local-0001"
-deploy/rabbitmq/usuario-de-servicio.sh notificaciones "pn-e2e-notif-clave-local-0001"
+deploy/rabbitmq/usuario-de-servicio.sh tramites       "$env:PN_E2E_MQ_TRAMITES_CLAVE" notificaciones,personanatural,consultas,plataforma
+deploy/rabbitmq/usuario-de-servicio.sh personanatural "$env:PN_E2E_MQ_PN_CLAVE" tramites
+deploy/rabbitmq/usuario-de-servicio.sh consultas      "$env:PN_E2E_MQ_CONSULTAS_CLAVE"
+deploy/rabbitmq/usuario-de-servicio.sh notificaciones "$env:PN_E2E_MQ_NOTIF_CLAVE"
 
 # 1. Compilar (la primera vez) y levantar todo en orden, con PID en scripts/e2e-personanatural/.pids.json
 pwsh -File scripts/e2e-personanatural/levantar.ps1 -Compilar -LogDir C:\temp\pn-logs

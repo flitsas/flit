@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Adjunto, CampoDefinicion, DocumentoRequerido } from "@/lib/api/cliente";
 import {
   adjuntoDe,
+  documentoVisible,
   erroresDeRequisitos,
   errorDeArchivo,
   errorDeCampo,
@@ -39,6 +40,26 @@ describe("archivos del cargador", () => {
     expect(esExigible(doc())).toBe(true);
     expect(esExigible(doc({ obligatorio: false }))).toBe(false);
     expect(esExigible(doc({ condicion: "si hay prenda" }))).toBe(false);
+    expect(esExigible(doc({ condicion: "Se pide si hay prenda." }), { tienePrenda: true, transformaciones: [], campos: {}, hayPersonaJuridica: false })).toBe(true);
+  });
+
+  it("un documento condicional se muestra solo cuando la condición se cumple y conserva su texto", () => {
+    const leasing = doc({ nombre: "Contrato de leasing", condicion: "Se pide si el vehículo está en leasing." });
+    const natural = doc({ nombre: "Cédula", condicion: "No se pide si la parte es persona natural: su identidad se valida de forma digital." });
+    const carroceria = doc({ nombre: "Factura de carrocería", condicion: "Se pide si el trámite cambia la carrocería." });
+    const libre = doc({ condicion: "el vehículo es de servicio público" });
+    const sinPrenda = { tienePrenda: false, transformaciones: [], campos: {}, hayPersonaJuridica: false };
+    const conCarroceria = { ...sinPrenda, transformaciones: ["CAMBIO_CARROCERIA"] };
+    const conLeasing = { ...sinPrenda, campos: { observacion: "el vehículo está en leasing" } };
+
+    expect(documentoVisible(leasing, sinPrenda)).toBe(false);
+    expect(documentoVisible(leasing, conLeasing)).toBe(true);
+    expect(documentoVisible(natural, sinPrenda)).toBe(false);
+    expect(documentoVisible(carroceria, sinPrenda)).toBe(false);
+    expect(documentoVisible(carroceria, conCarroceria)).toBe(true);
+    expect(esExigible(carroceria, conCarroceria)).toBe(true);
+    expect(documentoVisible(libre, sinPrenda)).toBe(true);
+    expect(esExigible(libre, sinPrenda)).toBe(false);
   });
 });
 

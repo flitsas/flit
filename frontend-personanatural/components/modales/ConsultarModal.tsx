@@ -21,22 +21,20 @@ interface Props {
   cliente?: ClientePortal;
   /** Catálogo de tipos, solo para mostrar el nombre del tipo en lugar de su código. */
   tipos?: readonly TipoTramite[];
-  /** El ciudadano pulsó la alerta de subsanación (la costura al wizard de la HU F7). */
-  onCorregir?: (radicado: EstadoRadicado, cedula: string) => void;
   /** Radicado con el que se abre el campo (p. ej. el que acaba de entregarse en el wizard). La cédula nunca se precarga. */
   radicadoInicial?: string;
 }
 
-/** Modal «Consultar mi trámite»: radicado + cédula (+ placa opcional), tracking de 5 pasos y alerta de subsanación. */
-export function ConsultarModal({ abierto, onCerrar, cliente = portal, tipos = [], onCorregir, radicadoInicial = "" }: Props) {
+/** Modal «Consultar mi trámite»: radicado + cédula (+ placa opcional) y tracking de 5 pasos. */
+export function ConsultarModal({ abierto, onCerrar, cliente = portal, tipos = [], radicadoInicial = "" }: Props) {
   return (
     <ModalFlit abierto={abierto} onCerrar={onCerrar} titulo="Consultar mi trámite" icono={Search} descripcion="Ingresa el número de radicado y la cédula del solicitante. La placa es opcional.">
-      <ContenidoConsulta cliente={cliente} tipos={tipos} onCerrar={onCerrar} onCorregir={onCorregir} radicadoInicial={radicadoInicial} />
+      <ContenidoConsulta cliente={cliente} tipos={tipos} onCerrar={onCerrar} radicadoInicial={radicadoInicial} />
     </ModalFlit>
   );
 }
 
-function ContenidoConsulta({ cliente, tipos, onCerrar, onCorregir, radicadoInicial }: { cliente: ClientePortal; tipos: readonly TipoTramite[]; onCerrar: () => void; onCorregir?: Props["onCorregir"]; radicadoInicial: string }) {
+function ContenidoConsulta({ cliente, tipos, onCerrar, radicadoInicial }: { cliente: ClientePortal; tipos: readonly TipoTramite[]; onCerrar: () => void; radicadoInicial: string }) {
   const idAyuda = useId();
   const [placa, setPlaca] = useState("");
   const [radicado, setRadicado] = useState(radicadoInicial);
@@ -103,18 +101,17 @@ function ContenidoConsulta({ cliente, tipos, onCerrar, onCorregir, radicadoInici
             {mensajeDe(consulta.error)}
           </p>
         )}
-        {consulta.isSuccess && <ResultadoConsulta resultado={consulta.data} tipos={tipos} onCerrar={onCerrar} onCorregir={() => onCorregir?.(consulta.data, cedula)} />}
+        {consulta.isSuccess && <ResultadoConsulta resultado={consulta.data} tipos={tipos} onCerrar={onCerrar} />}
       </div>
     </>
   );
 }
 
-function ResultadoConsulta({ resultado, tipos, onCerrar, onCorregir }: { resultado: EstadoRadicado; tipos: readonly TipoTramite[]; onCerrar: () => void; onCorregir: () => void }) {
+function ResultadoConsulta({ resultado, tipos, onCerrar }: { resultado: EstadoRadicado; tipos: readonly TipoTramite[]; onCerrar: () => void }) {
   const titular = titularDe(resultado);
   const nombreTipo = tipos.find((t) => t.code === resultado.tipoTramite)?.name ?? resultado.tipoTramite;
   const pasos = resultado.pasos.map((p) => ({ titulo: p.titulo, estado: p.estado, fecha: formatearFechaHora(p.fecha) }));
-  const subsanacion = resultado.subsanacion;
-  const puedeCorregir = Boolean(subsanacion?.accionCorregir) && !resultado.soloLectura;
+  const motivoRechazo = resultado.subsanacion?.motivo;
 
   return (
     <section aria-label="Resultado de la consulta">
@@ -135,16 +132,10 @@ function ResultadoConsulta({ resultado, tipos, onCerrar, onCorregir }: { resulta
       <p className={`mt-4 rounded-lg p-4 text-sm ${CLASE_MENSAJE[titular.tono]}`}>{resultado.mensaje}</p>
       {resultado.soloLectura && <p className="mt-2 text-xs text-foreground/70">Consultas este trámite como parte: solo puedes verlo, no modificarlo.</p>}
 
-      {subsanacion && (
-        puedeCorregir ? (
-          <button type="button" onClick={onCorregir} className="mt-4 w-full rounded-[9px] border border-alert bg-alert/10 p-4 text-left text-sm text-alert transition-transform hover:scale-[1.01]">
-            <b>Causal de rechazo:</b> {subsanacion.motivo ?? "El Organismo de Tránsito devolvió la solicitud."} <b>Da clic aquí para subsanar tu trámite.</b>
-          </button>
-        ) : (
-          <p role="note" className="mt-4 rounded-[9px] border border-alert bg-alert/10 p-4 text-sm text-alert">
-            <b>Causal de rechazo:</b> {subsanacion.motivo ?? "El Organismo de Tránsito devolvió la solicitud."}
-          </p>
-        )
+      {motivoRechazo && (
+        <p role="note" className="mt-4 rounded-[9px] border border-alert bg-alert/10 p-4 text-sm text-alert">
+          <b>Causal de rechazo:</b> {motivoRechazo}
+        </p>
       )}
 
       {esAprobado(resultado) && (
@@ -154,9 +145,7 @@ function ResultadoConsulta({ resultado, tipos, onCerrar, onCorregir }: { resulta
         </div>
       )}
 
-      {!puedeCorregir && (
-        <button type="button" onClick={onCerrar} className={boton("flit", "mx-auto mt-4 flex h-11 px-10", "none")}>Entendido</button>
-      )}
+      <button type="button" onClick={onCerrar} className={boton("flit", "mx-auto mt-4 flex h-11 px-10", "none")}>Entendido</button>
     </section>
   );
 }

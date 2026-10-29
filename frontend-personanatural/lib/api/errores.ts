@@ -34,6 +34,8 @@ export class ApiError extends Error {
     readonly estado?: string,
     /** Lo que informa el back al rechazar radicar: los pendientes (422 `requisitos_incompletos`) o las partes sin identidad (409 `identity_pending`). */
     readonly fallas?: FallasDeRadicacion,
+    /** Campo que señala un 422 (`field`), por ejemplo `celular` o `correo`. */
+    readonly campo?: string,
   ) {
     super(title);
     this.name = "ApiError";
@@ -57,13 +59,14 @@ const MENSAJES_POR_CODIGO: Record<string, string> = {
   tarifa_no_vigente: "Este trámite aún no tiene tarifa en el organismo elegido.",
   tipo_no_disponible: "Este tipo de trámite ya no está disponible en el portal.",
   organismo_no_habilitado: "El organismo de tránsito no está habilitado.",
+  organismo_requerido: "Elige el organismo de tránsito antes de continuar.",
   consentimiento_requerido: "Acepta el tratamiento de tus datos personales para continuar.",
   consentimiento_version_desconocida: "El texto de consentimiento cambió. Recarga la página y vuelve a aceptarlo.",
   correo_rate_limited: "Ese correo ya recibió varias cotizaciones. Intenta más tarde.",
   correo_invalido: "Escribe un correo válido.",
   envio_fallido: "No pudimos enviar el correo. Intenta de nuevo.",
   persona_juridica_no_soportada: "Este trámite en línea es solo para personas naturales: no admite NIT ni personas jurídicas.",
-  contacto_invalido: "Revisa el correo y el celular de esta persona.",
+  contacto_invalido: "Revisa el celular: debe tener 10 dígitos y empezar por 3. Si el correo tampoco es válido, corrígelo.",
   reenvio_muy_pronto: "Espera un momento antes de reenviar el enlace de nuevo.",
   reenvios_agotados: "Ya se reenvió el enlace el máximo de veces.",
   validacion_en_curso: "Ya hay una validación en curso para esta persona.",
@@ -117,18 +120,20 @@ export async function errorDeRespuesta(respuesta: Response): Promise<ApiError> {
   let errores: Record<string, string[]> | undefined;
   let estado: string | undefined;
   let fallas: FallasDeRadicacion | undefined;
+  let campo: string | undefined;
   try {
-    const datos = (await respuesta.json()) as { code?: unknown; title?: unknown; errors?: unknown; state?: unknown; pendientes?: unknown; motivo?: unknown; partes?: unknown };
+    const datos = (await respuesta.json()) as { code?: unknown; title?: unknown; errors?: unknown; state?: unknown; field?: unknown; pendientes?: unknown; motivo?: unknown; partes?: unknown };
     if (typeof datos.code === "string") code = datos.code;
     if (typeof datos.title === "string") title = datos.title;
     if (typeof datos.state === "string") estado = datos.state;
     errores = erroresPorCampo(datos.errors);
     fallas = fallasDe(datos);
+    campo = typeof datos.field === "string" ? datos.field : undefined;
   } catch {
     // Cuerpo vacío o que no es JSON: queda el código por estado.
   }
   const espera = Number(respuesta.headers.get("retry-after"));
-  return new ApiError(code, title, respuesta.status, Number.isFinite(espera) && espera > 0 ? espera : undefined, errores, estado, fallas);
+  return new ApiError(code, title, respuesta.status, Number.isFinite(espera) && espera > 0 ? espera : undefined, errores, estado, fallas, campo);
 }
 
 const esTexto = (v: unknown): v is string => typeof v === "string";

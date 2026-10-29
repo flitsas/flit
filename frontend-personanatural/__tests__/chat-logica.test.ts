@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AVISO_DEMOSTRACION, buscarTema, PREGUNTAS_SUGERIDAS, responder, SALUDO, SIN_INFORMACION, TEMAS } from "@/lib/chat/respuestas";
-import { DOCUMENTOS_LEGALES, TEXTO_DOCUMENTO_NO_DISPONIBLE, TEXTO_POLITICAS } from "@/lib/legal";
+import { DOCUMENTOS_LEGALES, TEXTO_DOCUMENTO_NO_DISPONIBLE, TEXTO_POLITICAS, URL_POLITICA_FLIT } from "@/lib/legal";
 
 const CONTEXTO = { tipos: ["Trámite A", "Trámite C"], organismos: ["Ciudad Uno", "Villa Dos"] };
 
@@ -72,8 +72,9 @@ describe("chat simulado: respuestas por tema", () => {
 });
 
 describe("documentos legales: un único módulo", () => {
-  it("las políticas figuran como no disponibles y sin URL, listas para recibir la oficial", () => {
-    expect(DOCUMENTOS_LEGALES.politicas).toEqual({ clave: "politicas", titulo: "Políticas de Privacidad y Términos de Uso", url: null, disponible: false });
+  it("las políticas apuntan al documento público de FLIT 2", () => {
+    expect(DOCUMENTOS_LEGALES.politicas).toEqual({ clave: "politicas", titulo: "Políticas de Privacidad y Términos de Uso", url: URL_POLITICA_FLIT, disponible: true });
+    expect(URL_POLITICA_FLIT).toBe("https://flitsas.com.co/privacy-policy/");
     expect(TEXTO_POLITICAS).toBe(DOCUMENTOS_LEGALES.politicas.titulo);
     expect(TEXTO_DOCUMENTO_NO_DISPONIBLE).toBe("El documento oficial aún no está disponible.");
   });

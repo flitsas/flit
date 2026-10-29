@@ -64,6 +64,11 @@ async function paso(nombre, fn) {
   const t0 = Date.now();
   try {
     const evidencia = await fn();
+    if (evidencia && typeof evidencia === "object" && evidencia.omitido) {
+      resultados.push({ nombre, ok: true, evidencia: evidencia.texto });
+      console.log(`OMIT  ${nombre}\n        ${evidencia.texto}   (${Date.now() - t0} ms)`);
+      return;
+    }
     resultados.push({ nombre, ok: true, evidencia });
     console.log(`PASS  ${nombre}\n        ${evidencia}   (${Date.now() - t0} ms)`);
   } catch (e) {
@@ -92,8 +97,29 @@ await paso("1b. GET /tipos-tramite ofrece el tipo habilitado con tarifa", async 
   verifica(r.status === 200, `HTTP ${r.status}`);
   const disp = r.json.filter((t) => t.disponible);
   verifica(disp.length > 0, `ningun tipo disponible: ${resumen(r.json)}`);
+  ctx.tipos = r.json;
   ctx.tipo = disp.find((t) => t.code === "TRASPASO_STANDARD") ?? disp[0];
   return `disponibles: ${disp.map((t) => t.code).join(", ")} (de ${r.json.length} tipos listados)`;
+});
+
+await paso("AC6. Matriz por familia: cada una usa un tipo elegible o queda omitida", async () => {
+  const familias = ["MATRICULAS", "TRASPASO", "OTROS"];
+  const lineas = familias.map((f) => {
+    const de = ctx.tipos.filter((t) => String(t.family ?? "").toUpperCase() === f && t.disponible);
+    return de.length ? `${f}: ${de.map((t) => t.code).join(", ")}` : `${f}: OMITIDA (ningún tipo elegible)`;
+  });
+  return lineas.join("; ");
+});
+
+await paso("AC7. Un tipo no elegible responde tipo_no_disponible y no crea solicitud", async () => {
+  const antes = sql("select count(*) from personanatural.procedure_request")[0][0];
+  const cookiePrev = cookie;
+  const r = await pn("POST", "/sesiones", { cuerpo: { tipoCodigo: "TIPO_NO_ELEGIBLE_E2E", organismoId: ctx.organismo.id, cedula: `8${azar(9)}`, placa: `${letras()}${String(Math.floor(Math.random() * 900) + 100)}`, consentimiento: true, consentimientoVersion: CONSENTIMIENTO } });
+  cookie = cookiePrev;
+  verifica(r.status === 404 && r.json?.code === "tipo_no_disponible", `HTTP ${r.status} ${resumen(r.json)}`);
+  const despues = sql("select count(*) from personanatural.procedure_request")[0][0];
+  verifica(antes === despues, `se creó una solicitud: ${antes} -> ${despues}`);
+  return `404 ${r.json.code}; solicitudes del portal ${antes} -> ${despues}`;
 });
 
 await paso("1c. GET /configuracion responde (version 0 = contenido fijo del portal; otra = publicado)", async () => {
@@ -176,25 +202,6 @@ await paso("5b. identidad: pide la validacion de cada parte (core-api real, prov
   return `2 validaciones mock en estado 'enviado' en tramites.procedure_instance_biometric_validations`;
 });
 
-await paso("5c. identidad: aprueba cada parte por el camino del mock (magic-link con token conocido, ver nota)", async () => {
-  // El proveedor mock guarda solo el HASH del token del enlace y nadie lo envia (en el portal no hay correo del mock):
-  // la prueba fija el hash de un token conocido en su base temporal y completa la captura por el endpoint publico real.
-  let i = 0;
-  for (const id of ctx.validaciones) {
-    const token = `e2e-token-${ctx.solicitudId.slice(-8)}-${++i}`;
-    sql(`update tramites.procedure_instance_biometric_validations set token_hash = encode(sha256(convert_to('${token}','UTF8')),'hex') where id = '${id}'`);
-    const form = new FormData();
-    for (const campo of ["rostro", "cedula_frontal", "cedula_reverso"]) form.append(campo, new Blob([PNG], { type: "image/png" }), `${campo}.png`);
-    const r = await http(GATEWAY, "POST", `/api/v1/public/biometric/${token}`, { form, conCookie: false, captcha: false });
-    verifica(r.status === 200 && r.json.estado === "aprobado", `captura ${i}: HTTP ${r.status} ${resumen(r.json)}`);
-  }
-  const e = await hasta("espejo aprobado en el BFF", async () => {
-    const r = await pn("GET", `/solicitudes/${ctx.solicitudId}/identidad`);
-    return r.status === 200 && r.json.completa ? r.json : null;
-  }, { intentos: 10, cada: 1000 });
-  return `ambas partes aprobada en el BFF (completa=${e.completa}). NOTA: el camino mock no publica tramites.identity_validation.completed; el espejo se actualiza por consulta (pull) a core-api`;
-});
-
 await paso("5d. campos, comercial, requisitos, adjunto (file-manager simulado) y diagnostico", async () => {
   let r = await pn("PUT", `/solicitudes/${ctx.solicitudId}/campos`, { cuerpo: { version: ctx.version, valores: { plate: PLACA, owner_document_type: VENDEDOR.tipoDocumento, owner_document_number: VENDEDOR.numeroDocumento } } });
   verifica(r.status === 200, `campos HTTP ${r.status} ${resumen(r.json)}`);
@@ -213,6 +220,38 @@ await paso("5d. campos, comercial, requisitos, adjunto (file-manager simulado) y
   verifica(s.json.completo === true, `la solicitud no queda completa: pendientes ${resumen(s.json.pendientes, 300)}`);
   ctx.version = s.json.version;
   return `adjunto ${a.json.nombreArchivo} (${a.json.tamanoBytes} B); diagnostico puedeContinuar=true; solicitud completa=true`;
+});
+
+await paso("AC2. Radicar con la identidad pendiente responde 409 y no crea el trámite", async () => {
+  const antes = sql(`select count(*) from tramites.procedure_instances where tenant_id = '${EMPRESA_PN}' and external_ref = '${ctx.solicitudId}'`)[0][0];
+  const r = await pn("POST", `/solicitudes/${ctx.solicitudId}/radicar`, { headers: { "idempotency-key": `e2e-sin-identidad-${Date.now()}` } });
+  verifica(r.status === 409 && r.json?.code === "identity_pending", `HTTP ${r.status} ${resumen(r.json, 300)}`);
+  const partes = (r.json.partes ?? []).map((p) => p.parte).sort();
+  verifica(partes.length > 0, "el 409 no dice qué parte falta");
+  const despues = sql(`select count(*) from tramites.procedure_instances where tenant_id = '${EMPRESA_PN}' and external_ref = '${ctx.solicitudId}'`)[0][0];
+  verifica(antes === despues && despues === "0", `se creó un trámite: ${antes} -> ${despues}`);
+  const s = await pn("GET", `/solicitudes/${ctx.solicitudId}`);
+  verifica(s.json.estado === "borrador", `la solicitud quedó en ${s.json.estado}`);
+  return `409 identity_pending motivo=${r.json.motivo} partes=${partes.join(", ")}; sigue en borrador y sin trámite en FLIT 2`;
+});
+
+await paso("5c. identidad: aprueba cada parte por el camino del mock (magic-link con token conocido, ver nota)", async () => {
+  // El proveedor mock guarda solo el HASH del token del enlace y nadie lo envia (en el portal no hay correo del mock):
+  // la prueba fija el hash de un token conocido en su base temporal y completa la captura por el endpoint publico real.
+  let i = 0;
+  for (const id of ctx.validaciones) {
+    const token = `e2e-token-${ctx.solicitudId.slice(-8)}-${++i}`;
+    sql(`update tramites.procedure_instance_biometric_validations set token_hash = encode(sha256(convert_to('${token}','UTF8')),'hex') where id = '${id}'`);
+    const form = new FormData();
+    for (const campo of ["rostro", "cedula_frontal", "cedula_reverso"]) form.append(campo, new Blob([PNG], { type: "image/png" }), `${campo}.png`);
+    const r = await http(GATEWAY, "POST", `/api/v1/public/biometric/${token}`, { form, conCookie: false, captcha: false });
+    verifica(r.status === 200 && r.json.estado === "aprobado", `captura ${i}: HTTP ${r.status} ${resumen(r.json)}`);
+  }
+  const e = await hasta("espejo aprobado en el BFF", async () => {
+    const r = await pn("GET", `/solicitudes/${ctx.solicitudId}/identidad`);
+    return r.status === 200 && r.json.completa ? r.json : null;
+  }, { intentos: 10, cada: 1000 });
+  return `ambas partes aprobada en el BFF (completa=${e.completa}). NOTA: el camino mock no publica tramites.identity_validation.completed; el espejo se actualiza por consulta (pull) a core-api`;
 });
 
 const llaveRadicar = `e2e-radicar-${Date.now()}`;
@@ -275,7 +314,7 @@ await paso("7. el tramite NO esta en el feed de Flito y no hay efectos en otras 
   return `sin historial a preasignacion/entregado (el feed solo trae radicados) y la consulta del feed excluye la empresa Persona Natural; tramites de otras empresas: ${otrasEmpresasAntes} -> ${otras}`;
 });
 
-await paso("8. re-radicar con la misma llave no duplica el tramite", async () => {
+await paso("AC3. Un segundo envío con la misma llave no duplica el trámite", async () => {
   const r = await pn("POST", `/solicitudes/${ctx.solicitudId}/radicar`, { headers: { "idempotency-key": llaveRadicar } });
   verifica(r.status === 202 || r.status === 200, `HTTP ${r.status} ${resumen(r.json, 300)}`);
   await dormir(4000);
@@ -292,6 +331,25 @@ await paso("9. POST /radicados/consulta con el radicado real (sin sesion)", asyn
   const mal = await pn("POST", "/radicados/consulta", { cuerpo: { placa: PLACA, radicado: ctx.tramite.referencia, cedula: `9${azar(9)}` } });
   verifica(mal.status === 404, `con otra cedula debia ser 404 y fue ${mal.status}`);
   return `200 macroEstado=${r.json.macroEstado?.codigo} «${r.json.macroEstado?.etiqueta}»; con otra cedula 404 generico`;
+});
+
+await paso("AC5. Más solicitudes que el límite por IP responden 429 con un mensaje claro", async () => {
+  let ultimo;
+  for (let i = 0; i < 40; i++) {
+    ultimo = await pn("POST", "/radicados/consulta", { cuerpo: { radicado: `PN-2026-${azar(6)}`, cedula: `7${azar(9)}` } });
+    if (ultimo.status === 429) break;
+  }
+  verifica(ultimo?.status === 429 && ultimo.json?.code === "rate_limited", `no llegó el 429: HTTP ${ultimo?.status} ${resumen(ultimo?.json)}`);
+  verifica(typeof ultimo.json.detail === "string" && ultimo.json.detail.length > 0, "el 429 no trae un mensaje");
+  verifica(ultimo.headers.get("retry-after"), "falta Retry-After");
+  return `429 ${ultimo.json.code}: «${ultimo.json.detail}»; Retry-After ${ultimo.headers.get("retry-after")}`;
+});
+
+await paso("AC8. El tipo piloto sigue habilitado en el wizard de FLIT 2 y en el portal", async () => {
+  const fila = sql("select code, wizard_enabled::text from tramites.procedure_types where code = 'TRASPASO_STANDARD'")[0];
+  verifica(fila && fila[1] === "true", `TRASPASO_STANDARD wizard_enabled=${fila?.[1] ?? "ausente"}`);
+  verifica(ctx.tipos.some((t) => t.code === "TRASPASO_STANDARD" && t.disponible), "el portal no ofrece TRASPASO_STANDARD");
+  return "TRASPASO_STANDARD wizard_enabled=true y disponible en GET /tipos-tramite. La regresión de UI del wizard de FLIT 2 no corre en este script.";
 });
 
 // ───────────────────────── informe ─────────────────────────

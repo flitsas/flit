@@ -36,6 +36,25 @@ public sealed class ConsultaVehiculoTests
     }
 
     [Fact]
+    public void LaConsultaDelTramite_TraeLosAtributosDeFlit2_YElPropietarioCompleto()
+    {
+        var vehiculo = ProyeccionMinima.DelTramite(ResultadosFalsos.VehiculoCompleto(prenda: true), "ABC123");
+
+        vehiculo.Existe.Should().BeTrue();
+        vehiculo.Vin.Should().Be("9BWZZZ377VT004251");
+        vehiculo.Color.Should().Be("ROJO");
+        vehiculo.Combustible.Should().Be("GASOLINA");
+        vehiculo.Cilindraje.Should().Be("1600");
+        vehiculo.NumeroMotor.Should().Be("MOTOR-FICTICIO-1");
+        vehiculo.NumeroSerie.Should().Be("SERIE-FICTICIA-1");
+        vehiculo.PropietarioNombre.Should().Be("PROPIETARIO FICTICIO PEREZ");
+        vehiculo.PropietarioDocumento.Should().Be("CC 1098765432");
+        var json = JsonSerializer.Serialize(vehiculo, JsonSerializerOptions.Web);
+        json.Should().Contain("ROJO").And.Contain("9BWZZZ377VT004251").And.Contain("PROPIETARIO FICTICIO PEREZ").And.Contain("1098765432");
+        json.Should().NotContainAny("CALLE FICTICIA", "3000000000", "BANCO FICTICIO", "soat");
+    }
+
+    [Fact]
     public void ElDto_NoTienePropiedadesDePropietarioNiDeDocumento()
     {
         var propiedades = typeof(VehiculoMinimo).GetProperties().Select(p => p.Name.ToLowerInvariant());

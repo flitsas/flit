@@ -1,17 +1,14 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useId, useRef, useState } from "react";
-import { Captcha } from "@/components/Captcha";
-import { boton } from "@/components/landing/estilos";
-import type { ClientePortal, Cotizacion } from "@/lib/api/cliente";
-import { ApiError, esperaDe, mensajeDe } from "@/lib/api/errores";
-import { useBloqueo } from "@/lib/api/useBloqueo";
+import { skipToken, useQuery } from "@tanstack/react-query";
+import { useEffect, useId } from "react";
+import { useCotizacionAutomatica } from "@/components/tramite/useCotizacionAutomatica";
+import type { ClientePortal } from "@/lib/api/cliente";
+import { esperaDe, mensajeDe } from "@/lib/api/errores";
 import { formatearPesos } from "@/lib/formato";
-import { claveCotizacion } from "@/lib/tramite/cotizacion";
+import { claveAdicionalesActivos } from "@/lib/tramite/cotizacion";
 
 export const MENSAJE_SIN_TARIFA = "Este organismo no tiene tarifa para este trámite";
-const CODIGOS_SIN_TARIFA = new Set(["tarifa_no_vigente", "tipo_no_habilitado"]);
 
 interface Props {
   cliente: ClientePortal;
@@ -22,46 +19,19 @@ interface Props {
 }
 
 /**
- * «Valor del trámite» de la barra lateral: la cotización vigente del organismo para el tipo (el front no tiene precios). El BFF
- * pide captcha para cotizar, así que el valor se calcula a pedido: «Calcular valor» muestra la verificación y, al resolverla,
- * consulta sola. Sin tarifa vigente avisa y bloquea el avance.
+ * «Valor del trámite» de la barra lateral. Se cotiza solo, con las transformaciones que el ciudadano active
+ * en Requisitos. Sin tarifa vigente avisa y bloquea el avance.
  */
 export function ValorTramite({ cliente, organismoId, tipoCodigo, onSinTarifa }: Props) {
   const idValor = useId();
-  const bloqueo = useBloqueo();
-  const queryClient = useQueryClient();
-  const [pidiendo, setPidiendo] = useState(false);
-  const [captcha, setCaptcha] = useState<string | null>(null);
-  const [reinicio, setReinicio] = useState(0);
-  const tokenUsado = useRef<string | null>(null);
+  const { data: adicionales } = useQuery<readonly string[]>({ queryKey: claveAdicionalesActivos, queryFn: skipToken, staleTime: Infinity });
+  const cotizacion = useCotizacionAutomatica({ cliente, organismoId, tipoCodigo, transformaciones: adicionales ?? [] });
 
-  const cotizacion = useMutation<Cotizacion, unknown, string>({
-    mutationFn: (token) => cliente.cotizaciones.cotizar({ organismoId, tipoCodigo }, { captcha: token }),
-    // El valor base queda en la caché para que el paso Requisitos lo muestre sin pedir otra verificación.
-    onSuccess: (c) => queryClient.setQueryData(claveCotizacion(organismoId, tipoCodigo, []), c),
-    onError: (error) => bloqueo.registrar(error),
-    onSettled: () => {
-      setCaptcha(null);
-      setReinicio((n) => n + 1);
-    },
-  });
-
-  const sinTarifa = cotizacion.error instanceof ApiError && CODIGOS_SIN_TARIFA.has(cotizacion.error.code);
-  useEffect(() => onSinTarifa(sinTarifa), [sinTarifa, onSinTarifa]);
-
-  const mutar = cotizacion.mutate;
-  useEffect(() => {
-    if (!captcha) {
-      tokenUsado.current = null;
-      return;
-    }
-    if (!pidiendo || cotizacion.isPending || cotizacion.isSuccess || bloqueo.bloqueado || tokenUsado.current === captcha) return;
-    tokenUsado.current = captcha;
-    mutar(captcha);
-  }, [captcha, pidiendo, cotizacion.isPending, cotizacion.isSuccess, bloqueo.bloqueado, mutar]);
+  useEffect(() => onSinTarifa(cotizacion.sinTarifa), [cotizacion.sinTarifa, onSinTarifa]);
 
   const total = cotizacion.data ? formatearPesos(cotizacion.data.totalCop) : "—";
   const error = cotizacion.isError ? cotizacion.error : null;
+  const calculando = cotizacion.isPending && !cotizacion.sinTarifa;
 
   return (
     <div>
@@ -70,21 +40,12 @@ export function ValorTramite({ cliente, organismoId, tipoCodigo, onSinTarifa }: 
       </label>
       <input id={idValor} className="field" readOnly value={total} aria-describedby={`${idValor}-estado`} />
       <div id={`${idValor}-estado`} aria-live="polite" className="mt-1 text-xs">
-        {cotizacion.isPending && <p role="status">Calculando...</p>}
-        {sinTarifa && <p role="alert" className="text-alert">{MENSAJE_SIN_TARIFA}</p>}
-        {error !== null && !sinTarifa && <p role="alert" className="text-alert">{esperaDe(error) ? mensajeDe(error) : "No pudimos calcular el valor. Intenta de nuevo."}</p>}
-        {bloqueo.bloqueado && <p role="status">Podrás intentarlo de nuevo en {bloqueo.segundosRestantes} s.</p>}
+        {calculando && <p role="status">Calculando...</p>}
+        {cotizacion.sinTarifa && <p role="alert" className="text-alert">{MENSAJE_SIN_TARIFA}</p>}
+        {error !== null && !cotizacion.sinTarifa && <p role="alert" className="text-alert">{esperaDe(error) ? mensajeDe(error) : "No pudimos calcular el valor. Intenta de nuevo."}</p>}
+        {cotizacion.bloqueo.bloqueado && <p role="status">Podrás intentarlo de nuevo en {cotizacion.bloqueo.segundosRestantes} s.</p>}
+        {cotizacion.captcha}
       </div>
-      {!cotizacion.isSuccess && !cotizacion.isPending && !sinTarifa && !pidiendo && (
-        <button type="button" className={boton("back", "mt-2 h-9 px-4", "none")} onClick={() => setPidiendo(true)}>
-          Calcular valor
-        </button>
-      )}
-      {pidiendo && !cotizacion.isSuccess && !cotizacion.isPending && !sinTarifa && (
-        <div className="mt-2">
-          <Captcha onToken={setCaptcha} reinicio={reinicio} />
-        </div>
-      )}
     </div>
   );
 }

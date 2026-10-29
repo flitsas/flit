@@ -4,9 +4,11 @@ import { describe, expect, it } from "vitest";
 import {
   VALOR_MAXIMO_COP,
   agruparTarifas,
+  caretTrasDigitos,
   formatPesos,
   hoyColombiaIso,
   parsePesos,
+  textoPesos,
   type TarifaPn,
 } from "../admin-pn-tarifas";
 
@@ -39,6 +41,23 @@ describe("formatPesos", () => {
   });
   it("sin valor muestra una raya", () => {
     expect(formatPesos(null)).toBe("—");
+  });
+});
+
+describe("textoPesos", () => {
+  it("rearma el punto de miles al escribir y al borrar un dígito", () => {
+    expect(textoPesos("1250")).toBe("1.250");
+    expect(textoPesos("1.250.000")).toBe("1.250.000");
+    expect(textoPesos("1.250.00")).toBe("125.000");
+    expect(textoPesos("1.25.000")).toBe("125.000");
+    expect(textoPesos("1,250,000")).toBe("1.250.000");
+    expect(textoPesos("-5")).toBe("-5");
+    expect(textoPesos("abc")).toBe("abc");
+    expect(textoPesos("12,5")).toBe("12,5");
+    expect(textoPesos("")).toBe("");
+    expect(textoPesos("0")).toBe("0");
+    expect(caretTrasDigitos("125.000", 6)).toBe(7);
+    expect(caretTrasDigitos("125.000", 3)).toBe(3);
   });
 });
 

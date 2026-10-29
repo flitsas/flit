@@ -8,13 +8,13 @@ namespace Flit.Api.PersonaNatural;
 /// <summary>Una parte del trámite tal como la entrega el portal (datos personales en claro: solo viajan por el RPC, nunca por logs ni por el bus).</summary>
 internal sealed record ParteSolicitudPortal(
     string Rol, int Ordinal, string TipoDocumento, string NumeroDocumento, string Nombre, string Correo, string Celular, string Direccion,
-    Guid? ValidacionId, string ValidacionEstado);
+    Guid? ValidacionId, string ValidacionEstado, string? Ciudad = null);
 
 /// <summary>Un archivo por referencia opaca al almacenamiento (los bytes no viajan).</summary>
 internal sealed record AdjuntoSolicitudPortal(Guid Id, string Tipo, string Referencia, string Sha256, long TamanoBytes, string MimeType, string NombreArchivo);
 
 /// <summary>Bloques del trámite que no son campos del tipo (<c>datos_json</c> del RPC). Sin datos personales de personas.</summary>
-internal sealed record DatosSolicitudPortal(decimal? ValorComercial, PrendaPortal? Prenda)
+internal sealed record DatosSolicitudPortal(decimal? ValorComercial, PrendaPortal? Prenda, string? Observaciones = null)
 {
     public static readonly DatosSolicitudPortal Vacios = new(null, null);
 
@@ -45,7 +45,11 @@ internal sealed record DatosSolicitudPortal(decimal? ValorComercial, PrendaPorta
                     Texto(p, "nitAcreedor"));
             }
 
-            return new DatosSolicitudPortal(valor, prenda);
+            string? observaciones = null;
+            if (raiz.TryGetProperty("requisitos", out var requisitos) && requisitos.ValueKind == JsonValueKind.Object)
+                observaciones = Texto(requisitos, "observaciones");
+
+            return new DatosSolicitudPortal(valor, prenda, observaciones);
         }
         catch (JsonException)
         {
@@ -138,7 +142,8 @@ internal sealed class GrpcPersonaNaturalPortalClient(RadicacionService.Radicacio
             DatosSolicitudPortal.Leer(r.DatosJson),
             [.. r.Partes.Select(p => new ParteSolicitudPortal(
                 p.Rol, p.Ordinal, p.TipoDocumento, p.NumeroDocumento, p.Nombre, p.Correo, p.Celular, p.Direccion,
-                Guid.TryParse(p.ValidacionId, out var v) ? v : null, p.ValidacionEstado))],
+                Guid.TryParse(p.ValidacionId, out var v) ? v : null, p.ValidacionEstado,
+                string.IsNullOrWhiteSpace(p.Ciudad) ? null : p.Ciudad))],
             [.. r.Adjuntos.Select(a => new AdjuntoSolicitudPortal(
                 Guid.TryParse(a.Id, out var id) ? id : Guid.Empty, a.Tipo, a.Referencia, a.Sha256, a.TamanoBytes, a.MimeType, a.NombreArchivo))],
             r.IdempotencyKey,

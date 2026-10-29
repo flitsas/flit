@@ -30,6 +30,21 @@ public static partial class EntradaConsulta
     }
 
     /// <summary>
+    /// Documento del propietario al consultar el vehículo. Acepta los tipos de la consulta de persona y, además, NIT,
+    /// que es uno de los tipos con los que FLIT 2 consulta el RUNT por placa. El NIT se valida como número de 5 a 12 dígitos.
+    /// </summary>
+    public static DocumentoConsulta? DocumentoPropietario(string? tipo, string? numero)
+    {
+        var codigo = (tipo ?? string.Empty).Trim().ToUpperInvariant();
+        if (codigo == "NIT")
+        {
+            var comoCedula = Documento("CC", numero);
+            return comoCedula is null ? null : comoCedula with { Tipo = "NIT" };
+        }
+        return Documento(tipo, numero);
+    }
+
+    /// <summary>
     /// Documento sin puntos, comas ni espacios. Cédulas y tarjetas: solo dígitos (5 a 12); pasaporte y PPT: letras y
     /// dígitos (4 a 16). El tipo se acepta en cualquier capitalización.
     /// </summary>

@@ -96,7 +96,33 @@ export function hoyColombiaIso(now: Date = new Date()): string {
 /** Pesos enteros con separador de miles colombiano escrito a mano: `1250000 → "$ 1.250.000"`. */
 export function formatPesos(valor: number | null | undefined): string {
   if (valor === null || valor === undefined || !Number.isFinite(valor)) return "—";
-  return `$ ${String(Math.trunc(valor)).replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
+  return `$ ${textoPesos(String(Math.trunc(valor)))}`;
+}
+
+/**
+ * Lo que va en el campo mientras se escribe. Solo quedan dígitos y el punto de miles se rearma
+ * en cada tecla, también al borrar: `1.250.00` vuelve a `125.000`.
+ */
+export function textoPesos(texto: string): string {
+  if (texto.trim() === "") return "";
+  // Un negativo, una letra o una coma decimal se dejan como están: el guardado los marca en el campo.
+  if (/[a-zA-Z-]/.test(texto) || /,\d{1,2}$/.test(texto.replace(/\s/g, ""))) return texto;
+  const digitos = texto.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+  if (digitos === "") return "";
+  return digitos.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+/** Posición del cursor justo después de `digitos` cifras, saltando los puntos de miles. */
+export function caretTrasDigitos(texto: string, digitos: number): number {
+  if (digitos <= 0) return 0;
+  let vistos = 0;
+  for (let i = 0; i < texto.length; i++) {
+    if (texto[i] >= "0" && texto[i] <= "9") {
+      vistos++;
+      if (vistos === digitos) return i + 1;
+    }
+  }
+  return texto.length;
 }
 
 export type ValorPesos = { ok: true; valor: number } | { ok: false; mensaje: string };

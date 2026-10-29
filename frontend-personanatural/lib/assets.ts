@@ -11,7 +11,7 @@ export const ASSETS = {
     diagnostico: "/assets/flit/paso-diagnostico.svg",
     validacionDeIdentidad: "/assets/flit/paso-validacion_de_identidad.svg",
     documentosDigitales: "/assets/flit/paso-documentos_digitales.svg",
-    pagoFacil: "/assets/flit/paso-pago_facil.svg",
+    radicacion: "/assets/flit/paso-pago_facil.svg",
   },
   // Banners del carrusel (3967×908 px, con el texto dentro de la imagen). Se sirven con next/image para no mandar ~1 MB al móvil.
   banners: [

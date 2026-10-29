@@ -23,19 +23,19 @@ export function conservaLlave(error: unknown): boolean {
 }
 
 /**
- * Seguimiento del envío para `RadicadoTracking`, a partir del estado de la solicitud. Los pasos son los del trámite entregado a
- * FLIT 2 como borrador: no hay revisión ni aprobación en esta entrega, así que no se muestran.
- * `actualizadoEn` es la fecha del último cambio de estado: es la del envío si sigue en cola y la de la creación si ya fue creada.
+ * Seguimiento del paso Envío, con los mismos cinco títulos del diseño (`trackingEnviado`): recién enviado, el paso en curso es
+ * «Enviado al OT». `actualizadoEn` es la fecha de ese último cambio.
  */
 export function pasosDeSeguimiento(estado: Pick<EstadoSolicitud, "estado" | "actualizadoEn">, definicion: DefinicionTipo): PasoVisible[] {
   const fecha = formatearFechaHora(estado.actualizadoEn);
   const validaIdentidad = definicion.flags.requiereBiometria || definicion.actores.some((a) => a.biometria);
   const creada = estado.estado === "creada";
-  const rechazada = estado.estado === "rechazada_creacion";
+  const enCola = estado.estado === "en_cola" || estado.estado === "rechazada_creacion";
   return [
     { titulo: "Borrador del trámite", estado: "done", fecha: null },
     { titulo: "Validación de identidad", estado: validaIdentidad ? "done" : "skipped", fecha: null },
-    { titulo: "Enviado a FLIT 2", estado: "done", fecha: estado.estado === "en_cola" ? fecha : null },
-    { titulo: "Creado en FLIT 2", estado: creada ? "done" : rechazada ? "rejected" : "current", fecha: creada || rechazada ? fecha : null },
+    { titulo: "Enviado al OT", estado: enCola ? "current" : "done", fecha: enCola ? fecha : null },
+    { titulo: "En revisión", estado: creada ? "current" : "pending", fecha: creada ? fecha : null },
+    { titulo: "Aprobado / Rechazado", estado: "pending", fecha: null },
   ];
 }

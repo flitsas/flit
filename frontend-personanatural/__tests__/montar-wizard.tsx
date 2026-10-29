@@ -31,6 +31,7 @@ export function montar(rutas: Record<string, Manejador> = {}, { registro = REGIS
     "GET /tipos-tramite": () => json(TIPOS),
     "GET /solicitudes/s-1": () => json(solicitudDe()),
     "GET /tipos-tramite/TIPO_A/definicion?organismoId=o-1": () => json(DEFINICION),
+    "POST /cotizaciones": () => json({ lineas: [], totalCop: 0, versionTarifa: "v1", adicionalesNoAplicados: [] }),
     ...rutas,
   };
   const llamadas: { clave: string; init: RequestInit }[] = [];

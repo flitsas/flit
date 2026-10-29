@@ -13,7 +13,8 @@ import { SeccionPendiente } from "./SeccionPendiente";
  *
  * Construido: `vehicle_query` (HU F2), `actor_form` y `biometric` (HU F3), `commercial`, `prenda_decision`, `document_checklist` y
  * `generic_form` (paso Requisitos, HU F4 y K6) y los pasos propios Resumen (HU F5, reducida) y Envío (HU F6). Solo `plate_request`
- * sigue en el marcador accesible. El cobro está fuera de esta entrega: no hay renderer de pago.
+ * sigue en el marcador accesible. `signature_fur` no se pinta: el trámite se radica como borrador.
+ * El paso propio `resumen` pinta el resumen del trámite y desde ahí se radica.
  */
 export const REGISTRO_RENDERERS: RegistroRenderers = {
   vehicle_query: ConsultaVehiculo,

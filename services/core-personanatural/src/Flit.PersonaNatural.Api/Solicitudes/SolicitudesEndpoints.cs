@@ -50,6 +50,8 @@ public static class SolicitudesEndpoints
             Atender(async () => Results.Ok(await s.GuardarComercialAsync(id, body, ct).ConfigureAwait(false))));
         conSesion.MapPut("/requisitos", (Guid id, RequisitosRequest body, SolicitudesService s, CancellationToken ct) =>
             Atender(async () => Results.Ok(await s.GuardarRequisitosAsync(id, body, ct).ConfigureAwait(false))));
+        conSesion.MapPut("/organismo", (Guid id, AsignarOrganismoRequest body, SolicitudesService s, CancellationToken ct) =>
+            Atender(async () => Results.Ok(await s.AsignarOrganismoAsync(id, body, ct).ConfigureAwait(false))));
         conSesion.MapPost("/diagnostico", (Guid id, DiagnosticoRequest? body, SolicitudesService s, CancellationToken ct) =>
             Atender(async () => Results.Ok(await s.DiagnosticarAsync(id, body, ct).ConfigureAwait(false))));
         conSesion.MapDelete(string.Empty, (Guid id, SolicitudesService s, CancellationToken ct) =>

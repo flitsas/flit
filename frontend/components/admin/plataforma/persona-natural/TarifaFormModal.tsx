@@ -14,9 +14,11 @@ import {
   CONCEPTOS_QUE_EXIGEN_TIPO,
   CONCEPTOS_TARIFA,
   CONCEPTO_LABEL,
+  caretTrasDigitos,
   formatPesos,
   hoyColombiaIso,
   parsePesos,
+  textoPesos,
   registrarTarifasPn,
   type ConceptoTarifa,
   type GrupoTarifa,
@@ -134,7 +136,9 @@ export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: T
           : "Elige el trámite, escribe los valores en pesos y la fecha desde la que rigen."
       }
       icon={ReceiptText}
-      size="lg"
+      size="xl"
+      panelClassName="h-[calc(100dvh-2rem)] min-h-0 overflow-hidden"
+      bodyClassName="[scrollbar-gutter:stable] px-1"
       footer={
         <div className="flex justify-end gap-2">
           <PnButton variant="secondary" onClick={onClose} disabled={busy}>
@@ -146,13 +150,13 @@ export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: T
         </div>
       }
     >
-      <form id="pn-tarifa-form" onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+      <form id="pn-tarifa-form" onSubmit={handleSubmit} className="flex flex-col gap-3 pb-1" noValidate>
         <InlineAlert tone="info">
           Las cotizaciones ya emitidas no cambian: la tarifa nueva solo aplica desde su fecha de inicio. La tarifa
           anterior deja de regir el día anterior.
         </InlineAlert>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid items-end gap-4 sm:grid-cols-2">
           <label className={PN_LABEL_CLS}>
             Trámite
             <select
@@ -176,15 +180,20 @@ export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: T
             )}
           </label>
 
-          <SearchableSelect
-            label="Organismo"
-            options={opcionesOrganismo}
-            value={organismoId}
-            onChange={setOrganismoId}
-            defaultLabel="Todos los organismos (valor general)"
-            disabled={versionando}
-            placeholder="Buscar organismo…"
-          />
+          <div className={PN_LABEL_CLS}>
+            <span id="pn-tarifa-organismo">Organismo</span>
+            <SearchableSelect
+              label="Organismo"
+              hideLabel
+              options={opcionesOrganismo}
+              value={organismoId}
+              onChange={setOrganismoId}
+              defaultLabel="Todos los organismos (valor general)"
+              disabled={versionando}
+              placeholder="Buscar organismo…"
+              className="[&_input]:h-11 [&_input]:rounded-[10px] [&_input]:border-[#DFE5ED] [&_input]:text-sm [&_input]:focus:border-flit-brand [&_input]:focus:ring-2 [&_input]:focus:ring-inset [&_input]:focus:ring-flit-brand"
+            />
+          </div>
         </div>
         {!versionando && (
           <p className={PN_HINT_CLS}>
@@ -192,6 +201,7 @@ export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: T
           </p>
         )}
 
+        <div className="grid items-end gap-4 sm:grid-cols-2">
         <label className={PN_LABEL_CLS}>
           Rige desde
           <input
@@ -200,7 +210,7 @@ export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: T
             min={hoy}
             onChange={(e) => setFecha(e.target.value)}
             aria-invalid={Boolean(errores.fecha)}
-            className={`${PN_INPUT_CLS} sm:max-w-[220px] ${errores.fecha ? PN_INPUT_ERROR_CLS : ""}`}
+            className={`${PN_INPUT_CLS} ${errores.fecha ? PN_INPUT_ERROR_CLS : ""}`}
           />
           {errores.fecha ? (
             <span role="alert" className={PN_FIELD_ERROR_CLS}>
@@ -214,10 +224,11 @@ export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: T
             )
           )}
         </label>
+        </div>
 
         <fieldset className="flex flex-col gap-3">
           <legend className="mb-1 text-sm font-semibold text-flit-primary dark:text-white">Valores en pesos colombianos</legend>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid items-end gap-x-4 gap-y-3 sm:grid-cols-2">
             {CONCEPTOS_TARIFA.map((concepto) => {
               const actual = grupo?.porConcepto[concepto];
               return (
@@ -227,10 +238,14 @@ export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: T
                     inputMode="numeric"
                     autoComplete="off"
                     value={valores[concepto]}
-                    onChange={(e) => actualizaValor(concepto, e.target.value)}
-                    onBlur={() => {
-                      const r = parsePesos(valores[concepto]);
-                      if (r.ok) actualizaValor(concepto, formatPesos(r.valor).slice(2));
+                    onChange={(e) => {
+                      const entrada = e.target.value;
+                      const cursor = e.target.selectionStart ?? entrada.length;
+                      const digitosAntes = entrada.slice(0, cursor).replace(/\D/g, "").length;
+                      const formateado = textoPesos(entrada);
+                      actualizaValor(concepto, formateado);
+                      const pos = caretTrasDigitos(formateado, digitosAntes);
+                      requestAnimationFrame(() => e.target.setSelectionRange(pos, pos));
                     }}
                     placeholder={versionando ? "Sin cambios" : "Ej.: 250.000"}
                     aria-invalid={Boolean(errores[concepto])}

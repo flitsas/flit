@@ -95,6 +95,7 @@ internal sealed class RadicacionGrpcService(PersonaNaturalDb db, PersonaService 
                 Correo = p.Correo ?? string.Empty,
                 Celular = p.Celular ?? string.Empty,
                 Direccion = p.Direccion ?? string.Empty,
+                Ciudad = p.Ciudad ?? string.Empty,
                 ValidacionId = v?.ValidacionId?.ToString() ?? string.Empty,
                 ValidacionEstado = v?.ValidacionEstado ?? string.Empty,
             });

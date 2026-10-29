@@ -6,7 +6,7 @@ import { ConsultarModal } from "@/components/modales/ConsultarModal";
 import { CotizarModal } from "@/components/modales/CotizarModal";
 import { IniciarModal, type DatosInicio } from "@/components/modales/IniciarModal";
 import { portal, type ClientePortal, type Organismo } from "@/lib/api/cliente";
-import { TEXTO_POLITICAS } from "@/lib/legal";
+import { URL_POLITICA_FLIT } from "@/lib/legal";
 import { fijarContexto } from "@/lib/tramite/contexto";
 import { rutaDelTramite } from "@/lib/tramite/ruta";
 import { AccionesPrincipales } from "./AccionesPrincipales";
@@ -39,12 +39,7 @@ export function Landing({ cliente = portal }: { cliente?: ClientePortal }) {
   // Datos de la tarjeta «Iniciar mi trámite» mientras el modal de requisitos está abierto. Solo en memoria.
   const [iniciando, setIniciando] = useState<DatosInicio | null>(null);
   const proximamente = (titulo: string) => setAviso({ titulo, tipo: "proximamente" });
-  // Políticas: con URL publicada abre el documento en una pestaña nueva; sin ella, el aviso «documento aún no disponible».
-  const abrirPoliticas = () => {
-    const url = contenido.enlaces.POLITICA_DATOS ?? contenido.enlaces.TERMINOS ?? null;
-    if (url) window.open(url, "_blank", "noopener,noreferrer");
-    else setAviso({ titulo: TEXTO_POLITICAS, tipo: "documento" });
-  };
+  const urlPolitica = contenido.enlaces.POLITICA_DATOS ?? URL_POLITICA_FLIT;
 
   return (
     <div className="dashboard-shell bg-background font-sans text-foreground">
@@ -76,18 +71,12 @@ export function Landing({ cliente = portal }: { cliente?: ClientePortal }) {
       </div>
       {/* Asistente simulado (S4): sin servicio externo; solo lee los nombres de los catálogos reales para sus respuestas. */}
       <DrFlit contexto={{ tipos: tipos.data?.map((t) => t.name), organismos: organismos.data?.map((o) => o.nombre), soporte: contenido.soporte }} />
-      <Pie onAbrirPoliticas={abrirPoliticas} enlaces={contenido.enlaces} soporte={contenido.soporte} />
+      <Pie enlaces={contenido.enlaces} soporte={contenido.soporte} />
       <ConsultarModal
         abierto={consultando}
         onCerrar={() => setConsultando(false)}
         cliente={cliente}
         tipos={tipos.data}
-        // Costura con el wizard de subsanación (HU F7): deja el contexto en memoria y entra a la ruta del tipo; el wizard
-        // reanuda la sesión con su propio captcha. La cédula y el radicado no van en la URL.
-        onCorregir={(radicado, cedula) => {
-          fijarContexto({ intencion: "subsanar", tipoCodigo: radicado.tipoTramite, radicado: radicado.radicado, cedula, placa: radicado.placa ?? undefined });
-          router.push(rutaDelTramite(radicado.tipoTramite));
-        }}
       />
       <CotizarModal abierto={cotizando !== null} onCerrar={() => setCotizando(null)} cliente={cliente} organismoInicial={cotizando?.organismo ?? null} />
       <IniciarModal
@@ -95,9 +84,9 @@ export function Landing({ cliente = portal }: { cliente?: ClientePortal }) {
         onCerrar={() => setIniciando(null)}
         cliente={cliente}
         datos={iniciando}
-        onAbrirPoliticas={abrirPoliticas}
-        onSesion={(sesion, datos, organismoId) => {
-          fijarContexto({ intencion: "iniciar", tipoCodigo: sesion.tipoTramiteCodigo, solicitudId: sesion.solicitudId, radicado: sesion.codigoPublico, organismoId, cedula: datos.cedula, placa: datos.placa, vin: datos.vin });
+        urlPolitica={urlPolitica}
+        onSesion={(sesion, datos) => {
+          fijarContexto({ intencion: "iniciar", tipoCodigo: sesion.tipoTramiteCodigo, solicitudId: sesion.solicitudId, radicado: sesion.codigoPublico, cedula: datos.cedula, placa: datos.placa, vin: datos.vin });
           router.push(rutaDelTramite(sesion.tipoTramiteCodigo));
         }}
       />

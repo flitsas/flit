@@ -7,6 +7,39 @@ namespace Flit.PersonaNatural.Api.Consultas;
 /// Vehículo para un ciudadano anónimo (política de dato mínimo N0, diseño §8): lo que dice si puede iniciar el trámite y
 /// nada de quién es el propietario. Un campo nuevo aquí exige revisión de seguridad (riesgo Habeas Data de la HU #14039).
 /// </summary>
+/// <summary>
+/// Atributos del vehículo que FLIT 2 muestra al consultar el RUNT (placa, clase, marca, VIN, chasis, color, motor, medidas)
+/// y el propietario completo (nombre y documento). Sigue sin dirección, teléfono, documentos del SOAT ni acreedor.
+/// </summary>
+public sealed record VehiculoDelTramite(
+    bool Existe,
+    string? Placa,
+    string? Vin,
+    string? Clase,
+    string? Marca,
+    string? Linea,
+    string? ModeloAno,
+    string? TipoServicio,
+    string? Estado,
+    string? NumeroChasis,
+    string? Color,
+    string? Combustible,
+    string? NumeroSerie,
+    string? Cilindraje,
+    string? Capacidad,
+    string? Ejes,
+    string? Carroceria,
+    string? NumeroMotor,
+    string? Alto,
+    string? Ancho,
+    string? Largo,
+    string? Llantas,
+    bool TienePrenda,
+    bool TieneLimitacion,
+    bool TieneRestricciones,
+    string? PropietarioNombre = null,
+    string? PropietarioDocumento = null);
+
 public sealed record VehiculoMinimo(
     bool Existe,
     string? Placa,
@@ -79,6 +112,47 @@ public static class ProyeccionMinima
     {
         ArgumentNullException.ThrowIfNull(resultado);
         return resultado.Chequeos.Any(c => c.Estado == EstadoChequeo.Error);
+    }
+
+    /// <summary>
+    /// Consulta dentro del trámite: los mismos atributos que FLIT 2 pinta en la ficha del vehículo,
+    /// con el nombre y el documento del propietario completos. La dirección, el teléfono, el SOAT y el acreedor se descartan.
+    /// Un nombre que ya llega con asteriscos no es un nombre y no se copia.
+    /// </summary>
+    public static VehiculoDelTramite DelTramite(ResultadoConsulta resultado, string? placaConsultada)
+    {
+        ArgumentNullException.ThrowIfNull(resultado);
+        var minimo = Vehiculo(resultado, placaConsultada);
+        string? Campo(string clave) => Texto(resultado, clave);
+        var propietarioNombre = Campo("person_full_name") is { } nombre && !nombre.Contains('*', StringComparison.Ordinal) ? nombre : null;
+        var tipoDocumento = Campo("owner_document_type");
+        var numeroDocumento = Campo("owner_document_number");
+        var propietarioDocumento = numeroDocumento is null
+            ? null
+            : string.IsNullOrWhiteSpace(tipoDocumento) ? numeroDocumento : $"{tipoDocumento} {numeroDocumento}";
+        var vin = Campo(CampoVin);
+        var chasis = Campo("vehicle_chassis");
+        var color = Campo(CampoColor);
+        var combustible = Campo(CampoCombustible);
+        var serie = Campo(CampoSerie);
+        var cilindraje = Campo(CampoCilindraje);
+        var capacidad = Campo("vehicle_passengers");
+        var ejes = Campo("vehicle_axles");
+        var carroceria = Campo("vehicle_body_type");
+        var motor = Campo(CampoMotor);
+        var alto = Campo("vehicle_height");
+        var ancho = Campo("vehicle_width");
+        var largo = Campo("vehicle_length");
+        var llantas = Campo("vehicle_tires");
+        var existe = minimo.Existe || vin is not null || chasis is not null || color is not null || combustible is not null
+            || serie is not null || cilindraje is not null || capacidad is not null || ejes is not null || carroceria is not null
+            || motor is not null || alto is not null || ancho is not null || largo is not null || llantas is not null;
+        if (!existe)
+            return new VehiculoDelTramite(false, placaConsultada, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, false, false, false);
+        return new VehiculoDelTramite(
+            true, minimo.Placa, vin, minimo.Clase, minimo.Marca, minimo.Linea, minimo.ModeloAno, minimo.TipoServicio, minimo.Estado,
+            chasis, color, combustible, serie, cilindraje, capacidad, ejes, carroceria, motor, alto, ancho, largo, llantas,
+            minimo.TienePrenda, minimo.TieneLimitacion, minimo.TieneRestricciones, propietarioNombre, propietarioDocumento);
     }
 
     /// <summary>

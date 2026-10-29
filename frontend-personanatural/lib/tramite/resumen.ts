@@ -1,9 +1,8 @@
 // Paso Resumen (HU F5, reducida). Módulo puro, sin React ni red: arma, a partir de la definición del tipo y del borrador, lo que el
 // ciudadano ve para revisar antes de enviar. Todo es solo lectura y sale de la definición: ningún tipo de trámite está nombrado aquí.
-// Habeas Data: el documento, el correo y el celular de cada persona se muestran enmascarados.
 import type { ActorEstado, DefinicionTipo, Pendiente, Solicitud } from "@/lib/api/cliente";
 import { formatearPesos } from "@/lib/formato";
-import { enmascararCorreo } from "@/lib/tramite/actores";
+import { documentoLegible } from "@/lib/tramite/actores";
 import { grupoDePendiente, GRUPO_POR_SECCION, type GrupoPaso } from "@/lib/tramite/pasos";
 import { DOC_COMPROBANTE_PAGO, tamanoLegible, TRANSFORMACIONES } from "@/lib/tramite/requisitos";
 
@@ -28,21 +27,15 @@ export interface SeccionResumen {
 
 export const SIN_DATO = "—";
 
-// ── Máscaras ────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-/** «CC ••••6789»: tipo de documento y los últimos cuatro dígitos. */
-export function enmascararDocumento(tipo: string | null, numero: string | null): string {
+function documentoCompleto(tipo: string | null, numero: string | null): string {
   const digitos = (numero ?? "").replace(/\s/g, "");
   if (digitos === "") return SIN_DATO;
-  const cola = digitos.length > 4 ? digitos.slice(-4) : "";
-  return `${tipo ? `${tipo} ` : ""}••••${cola}`;
+  return documentoLegible(tipo ?? "", digitos).trim() || SIN_DATO;
 }
 
-/** «••••••••12»: solo los dos últimos dígitos. */
-export function enmascararCelular(celular: string | null): string {
-  const digitos = (celular ?? "").replace(/\D/g, "");
-  if (digitos === "") return SIN_DATO;
-  return `${"•".repeat(Math.max(digitos.length - 2, 4))}${digitos.length > 2 ? digitos.slice(-2) : ""}`;
+function textoOVacio(valor: string | null | undefined, vacio: string): string {
+  const limpio = valor?.trim() ?? "";
+  return limpio === "" ? vacio : limpio;
 }
 
 // ── Qué paso edita cada sección ─────────────────────────────────────────────────────────────────────────────────────
@@ -63,11 +56,12 @@ function bloqueDeActor(definicion: DefinicionTipo, actor: ActorEstado): BloqueRe
   return {
     titulo: etiquetaDelRol(definicion, actor),
     filas: [
-      { etiqueta: "Documento", valor: enmascararDocumento(actor.tipoDocumento, actor.numeroDocumento) },
-      { etiqueta: "Nombre", valor: actor.nombre?.trim() || SIN_DATO },
-      { etiqueta: "Correo", valor: actor.correo ? enmascararCorreo(actor.correo) : SIN_DATO },
-      { etiqueta: "Celular", valor: enmascararCelular(actor.celular) },
-      { etiqueta: "Dirección", valor: actor.direccion?.trim() ? "Registrada" : "Sin registrar" },
+      { etiqueta: "Documento", valor: documentoCompleto(actor.tipoDocumento, actor.numeroDocumento) },
+      { etiqueta: "Nombre", valor: textoOVacio(actor.nombre, SIN_DATO) },
+      { etiqueta: "Correo", valor: textoOVacio(actor.correo, SIN_DATO) },
+      { etiqueta: "Celular", valor: textoOVacio(actor.celular, SIN_DATO) },
+      { etiqueta: "Dirección", valor: textoOVacio(actor.direccion, "Sin registrar") },
+      { etiqueta: "Ciudad", valor: textoOVacio(actor.ciudad, SIN_DATO) },
     ],
   };
 }

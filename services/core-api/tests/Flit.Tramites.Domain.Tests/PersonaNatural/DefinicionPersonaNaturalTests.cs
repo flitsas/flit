@@ -19,18 +19,18 @@ public sealed class DefinicionPersonaNaturalTests
     private static ProcedureTypeGateProfile Perfil(string json) => ProcedureTypeGateProfile.FromJson(json);
 
     [Fact]
-    public void Traspaso_PideVendedorYComprador_ConCopropietariosSoloDelLadoQueLoPermite_YBiometriaDeAmbos()
+    public void Traspaso_PideUnVendedorYUnComprador_AunqueElTipoAdmitaCopropietarios()
     {
         var actores = DefinicionPersonaNatural.Actores(Perfil(PerfilTraspaso), personaNaturalPermitida: true);
 
         actores.Select(a => a.Rol).Should().Equal("vendedor", "comprador");
         var vendedor = actores[0];
         vendedor.Min.Should().Be(1);
-        vendedor.Max.Should().Be(1, "allowsMultipleSeller no está declarado");
+        vendedor.Max.Should().Be(1);
         vendedor.Biometria.Should().BeTrue();
         vendedor.Firma.Should().BeTrue();
         var comprador = actores[1];
-        comprador.Max.Should().Be(DefinicionPersonaNatural.MaximoPorLado);
+        comprador.Max.Should().Be(1, "el portal no pide copropietarios");
         comprador.Biometria.Should().BeTrue();
         comprador.Etiqueta.Should().Be("Comprador");
         actores.Should().OnlyContain(a => a.PersonaNaturalPermitida);

@@ -4,7 +4,7 @@ import { TOKEN_MODO_DESARROLLO } from "@/components/Captcha";
 import { Landing } from "@/components/landing/Landing";
 import { CotizarModal, MENSAJE_COTIZACION_FALLIDA, MENSAJE_SIN_TARIFAS } from "@/components/modales/CotizarModal";
 import { crearCliente, type Cotizacion } from "@/lib/api/cliente";
-import { formatearPesos } from "@/lib/formato";
+import { alEscribirMoneda, formatearPesos, numeroMoneda, textoMoneda } from "@/lib/formato";
 import { json, ORGANISMOS, renderConQuery, TIPOS } from "./utilidades";
 
 const COTIZACION: Cotizacion = {
@@ -147,9 +147,9 @@ describe("modal Cotizar: cálculo", () => {
     expect(within(tabla).getByText("Valor del Servicio de tránsito")).toBeInTheDocument();
     expect(within(tabla).getByText("Valor de Servicio FLIT")).toBeInTheDocument();
     expect(within(tabla).getByText("Incluye validación de identidad y radicación digital")).toBeInTheDocument();
-    expect(within(tabla).getByText("$ 185.000 COP")).toBeInTheDocument();
-    expect(within(tabla).getByText("$ 181.000 COP")).toBeInTheDocument();
-    expect(within(tabla).getByRole("row", { name: /Total.*\$ 366\.000 COP/ })).toBeInTheDocument();
+    expect(within(tabla).getByText("$ 185.000,00 COP")).toBeInTheDocument();
+    expect(within(tabla).getByText("$ 181.000,00 COP")).toBeInTheDocument();
+    expect(within(tabla).getByRole("row", { name: /Total.*\$ 366\.000,00 COP/ })).toBeInTheDocument();
     expect(screen.getByText("Ciudad Uno · Trámite A")).toBeInTheDocument();
     expect(screen.queryByText(/simulados/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Calcular" })).not.toBeInTheDocument();
@@ -342,13 +342,23 @@ describe("landing: Cotizar y Ver tarifas", () => {
 });
 
 describe("formato de pesos", () => {
-  it("separa los miles con punto, sin Intl", () => {
-    expect(formatearPesos(0)).toBe("$ 0 COP");
-    expect(formatearPesos(999)).toBe("$ 999 COP");
-    expect(formatearPesos(185000)).toBe("$ 185.000 COP");
-    expect(formatearPesos(1234567)).toBe("$ 1.234.567 COP");
-    expect(formatearPesos(366000.4)).toBe("$ 366.000 COP");
-    expect(formatearPesos(-1500)).toBe("-$ 1.500 COP");
-    expect(formatearPesos(Number.NaN)).toBe("$ 0 COP");
+  it("separa miles con punto y decimales con coma, sin Intl", () => {
+    expect(formatearPesos(0)).toBe("$ 0,00 COP");
+    expect(formatearPesos(999)).toBe("$ 999,00 COP");
+    expect(formatearPesos(185000)).toBe("$ 185.000,00 COP");
+    expect(formatearPesos(1234567)).toBe("$ 1.234.567,00 COP");
+    expect(formatearPesos(366000.4)).toBe("$ 366.000,40 COP");
+    expect(formatearPesos(-1500)).toBe("-$ 1.500,00 COP");
+    expect(formatearPesos(Number.NaN)).toBe("$ 0,00 COP");
+  });
+
+  it("rearma los puntos al escribir y al borrar, y deja la coma para los decimales", () => {
+    expect(textoMoneda("45000000")).toBe("45.000.000");
+    expect(textoMoneda("1.250.00")).toBe("125.000");
+    expect(textoMoneda("12a.3")).toBe("123");
+    expect(textoMoneda("1250000,5")).toBe("1.250.000,5");
+    expect(textoMoneda("1250000,599")).toBe("1.250.000,59");
+    expect(numeroMoneda("45.000.000,50")).toBe(45000000.5);
+    expect(alEscribirMoneda("1.250.00", 8)).toEqual({ texto: "125.000", cursor: 7 });
   });
 });

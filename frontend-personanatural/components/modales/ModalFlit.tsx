@@ -3,6 +3,7 @@
 import { X, type LucideIcon } from "lucide-react";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { boton } from "@/components/landing/estilos";
+import { clicFueraDelDialogo } from "@/lib/ui/clic-dialogo";
 
 interface Props {
   abierto: boolean;
@@ -61,7 +62,7 @@ export function ModalFlit({ abierto, onCerrar, titulo, descripcion, icono: Icono
         if (abierto && !ocupado) onCerrar();
       }}
       onClick={(e) => {
-        if (e.target === ref.current) cerrar();
+        if (clicFueraDelDialogo(e)) cerrar();
       }}
       className={`m-auto max-h-[90dvh] w-[calc(100%-2rem)] ${ancho === "4xl" ? "max-w-4xl" : "max-w-2xl"} overflow-y-auto ${desborde ? "sm:overflow-visible" : ""} rounded-[9px] border border-border bg-card p-6 text-foreground backdrop:bg-primary/50 backdrop:backdrop-blur-sm`}
     >

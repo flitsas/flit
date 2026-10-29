@@ -20,6 +20,15 @@ public sealed class ConsultaVehiculoService(IConsultasRunt runt)
 
         return ProyeccionMinima.Vehiculo(resultado, placa);
     }
+
+    /// <summary>La misma consulta al RUNT, proyectada con los atributos que FLIT 2 muestra dentro del trámite. Sigue sin datos de terceros.</summary>
+    public async Task<VehiculoDelTramite> ConsultarDelTramiteAsync(string? placa, string? vin, DocumentoConsulta? propietario, string? referencia, CancellationToken ct)
+    {
+        var resultado = await runt.ConsultarVehiculoAsync(placa, vin, propietario, referencia, ct).ConfigureAwait(false);
+        if (ProyeccionMinima.ProveedorCaido(resultado))
+            throw new ProveedorNoDisponibleException("El proveedor del RUNT no respondió.");
+        return ProyeccionMinima.DelTramite(resultado, placa);
+    }
 }
 
 /// <summary>

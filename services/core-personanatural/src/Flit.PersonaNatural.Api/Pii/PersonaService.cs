@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Flit.PersonaNatural.Api.Pii;
 
 /// <summary>Datos de una persona de la solicitud, en claro. Solo existe en memoria: en la base queda cifrado.</summary>
-public sealed record DatosPersona(string Parte, short Ordinal, string TipoDocumento, string Documento, string? Nombre, string? Correo, string? Celular, string? Direccion);
+public sealed record DatosPersona(string Parte, short Ordinal, string TipoDocumento, string Documento, string? Nombre, string? Correo, string? Celular, string? Direccion, string? Ciudad = null);
 
 /// <summary>
 /// Única puerta de entrada y salida de los datos personales de la solicitud (HU #14037). Al guardar cifra cada campo y deja
@@ -24,6 +24,7 @@ public sealed class PersonaService(PersonaNaturalDb db, CifradoPii cifrado, PiiH
     private const string CtxCorreo = "persona.correo";
     private const string CtxCelular = "persona.celular";
     private const string CtxDireccion = "persona.direccion";
+    private const string CtxCiudad = "persona.ciudad";
 
     /// <summary>AAD de cada columna: ligado a la solicitud y a la parte (<c>parte:ordinal</c>) de ESA fila.</summary>
     private static ContextoCifrado Ctx(string columna, Guid solicitudId, string parte, short ordinal) => new(columna, solicitudId, parte, ordinal);
@@ -61,6 +62,7 @@ public sealed class PersonaService(PersonaNaturalDb db, CifradoPii cifrado, PiiH
         persona.CorreoCifrado = cifrado.Cifrar(datos.Correo, Ctx(CtxCorreo, solicitudId, datos.Parte, datos.Ordinal));
         persona.CelularCifrado = cifrado.Cifrar(datos.Celular, Ctx(CtxCelular, solicitudId, datos.Parte, datos.Ordinal));
         persona.DireccionCifrada = cifrado.Cifrar(datos.Direccion, Ctx(CtxDireccion, solicitudId, datos.Parte, datos.Ordinal));
+        persona.CiudadCifrada = cifrado.Cifrar(datos.Ciudad, Ctx(CtxCiudad, solicitudId, datos.Parte, datos.Ordinal));
         persona.UpdatedAt = ahora;
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         return persona.Id;
@@ -83,6 +85,7 @@ public sealed class PersonaService(PersonaNaturalDb db, CifradoPii cifrado, PiiH
             cifrado.Descifrar(p.NombreCifrado, Ctx(CtxNombre, solicitudId, p.Parte, p.Ordinal)),
             cifrado.Descifrar(p.CorreoCifrado, Ctx(CtxCorreo, solicitudId, p.Parte, p.Ordinal)),
             cifrado.Descifrar(p.CelularCifrado, Ctx(CtxCelular, solicitudId, p.Parte, p.Ordinal)),
-            cifrado.Descifrar(p.DireccionCifrada, Ctx(CtxDireccion, solicitudId, p.Parte, p.Ordinal)))).ToList();
+            cifrado.Descifrar(p.DireccionCifrada, Ctx(CtxDireccion, solicitudId, p.Parte, p.Ordinal)),
+            cifrado.Descifrar(p.CiudadCifrada, Ctx(CtxCiudad, solicitudId, p.Parte, p.Ordinal)))).ToList();
     }
 }

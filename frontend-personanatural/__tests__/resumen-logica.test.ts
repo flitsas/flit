@@ -1,21 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { destinoDePendiente, enmascararCelular, enmascararDocumento, pasoTieneSecciones, textoPendiente } from "@/lib/tramite/resumen";
-import { definicionCompleta } from "./fixtures-envio";
+import { armarResumen, destinoDePendiente, pasoTieneSecciones, textoPendiente } from "@/lib/tramite/resumen";
+import { definicionCompleta, solicitudCompleta } from "./fixtures-envio";
 import { definicionDe } from "./fixtures-wizard";
 
-describe("máscaras del resumen", () => {
-  it("el documento deja el tipo y los últimos cuatro dígitos", () => {
-    expect(enmascararDocumento("CC", "1020456789")).toBe("CC ••••6789");
-    expect(enmascararDocumento(null, "1234567")).toBe("••••4567");
-    expect(enmascararDocumento("CE", "123")).toBe("CE ••••");
-    expect(enmascararDocumento("CC", null)).toBe("—");
-  });
+describe("datos del actor en el resumen", () => {
+  it("documento, correo, celular, dirección y ciudad se ven completos", () => {
+    const actores = armarResumen(definicionCompleta(), solicitudCompleta()).find((s) => s.id === "actores");
+    const comprador = actores?.bloques.find((b) => b.titulo === "Comprador");
+    const valor = (etiqueta: string) => comprador?.filas.find((f) => f.etiqueta === etiqueta)?.valor;
 
-  it("el celular deja solo los dos últimos dígitos y nunca el número completo", () => {
-    expect(enmascararCelular("3001234567")).toBe("••••••••67");
-    expect(enmascararCelular("3001234567")).not.toContain("300");
-    expect(enmascararCelular("12")).toBe("••••");
-    expect(enmascararCelular("")).toBe("—");
+    expect(valor("Documento")).toBe("C.C. 52.987.654");
+    expect(valor("Nombre")).toBe("LUIS PEREZ");
+    expect(valor("Correo")).toBe("luis.perez@mail.co");
+    expect(valor("Celular")).toBe("3109876543");
+    expect(valor("Dirección")).toBe("Calle 1 # 2-3");
+    expect(valor("Ciudad")).toBe("—");
   });
 });
 

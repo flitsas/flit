@@ -11,7 +11,7 @@ describe("pasos del wizard desde la definición del tipo", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.pasos.map((p) => p.titulo)).toEqual(["Diagnóstico", "Actores", "Requisitos", "Resumen", "Envío"]);
-    expect(r.pasos.map((p) => p.miga).at(-1)).toBe("Envío");
+    expect(r.pasos.map((p) => p.miga).at(-1)).toBe("Confirmación");
     expect(PASOS_BASE).toHaveLength(5);
   });
 
@@ -34,9 +34,31 @@ describe("pasos del wizard desde la definición del tipo", () => {
     expect(r.ok && r.pasos[0].secciones).toEqual([]);
   });
 
+  it("la firma del FUR no oculta el trámite: la cubre el Resumen y se puede llegar a radicar", () => {
+    const r = armarPasos(definicionDe([["vehicle_query"], ["signature_fur"]]), SOPORTADOS);
+
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.pasos[0].secciones.map((s) => s.sectionType)).toEqual(["vehicle_query"]);
+    expect(r.pasos[3].secciones.map((s) => s.sectionType)).toEqual(["resumen"]);
+    expect(r.pasos[4].secciones.map((s) => s.sectionType)).toEqual(["envio"]);
+  });
+
   it("un section_type sin renderer vuelve el tipo no disponible entero, nunca a medias", () => {
-    expect(armarPasos(definicionDe([["vehicle_query"], ["signature_fur"]]), SOPORTADOS)).toEqual({ ok: false, motivo: "seccion_desconocida" });
     expect(armarPasos(definicionDe([["algo_nuevo"]]), SOPORTADOS)).toEqual({ ok: false, motivo: "seccion_desconocida" });
+  });
+
+  it("agrega un paso extra, antes de Resumen, solo si la definición trae una sección que el portal pinta y que no cabe en los cinco", () => {
+    const soportados = new Set([...SOPORTADOS, "visita"]);
+    const r = armarPasos(definicionDe([["vehicle_query"], ["visita"], ["actor_form"]]), soportados);
+
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.pasos.map((p) => p.titulo)).toEqual(["Diagnóstico", "Actores", "Requisitos", "Sección 2", "Resumen", "Envío"]);
+    expect(r.pasos[3].id).toBe("extra:p2");
+    expect(r.pasos[3].secciones.map((s) => s.sectionType)).toEqual(["visita"]);
+    const sinExtra = armarPasos(definicionDe([["vehicle_query"], ["actor_form"]]), SOPORTADOS);
+    expect(sinExtra.ok && sinExtra.pasos).toHaveLength(5);
   });
 
   it("una definición no disponible o sin pasos no arma nada", () => {

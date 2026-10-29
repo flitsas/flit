@@ -85,9 +85,9 @@ const identidadAprobada = (): EstadoIdentidad => ({
   partes: ["vendedor", "comprador"].map((parte) => ({ parte, ordinal: 1, estado: "aprobada", puedeReenviar: false, reenviosRestantes: 5, esperaSegundos: 0 })),
 });
 
-export const resumenVisible = () => screen.getByRole("region", { name: "Resumen de tu trámite" });
+export const resumenVisible = () => screen.getByRole("region", { name: "Resumen del trámite" });
 
-/** Abre el wizard en el paso Resumen. `estado.actual` es el borrador que devuelve GET: las pruebas lo cambian como lo haría el back. */
+/** Abre el wizard en el paso Pago. `estado.actual` es el borrador que devuelve GET: las pruebas lo cambian como lo haría el back. */
 export async function abrirResumen(rutas: Record<string, Manejador> = {}, inicial: Solicitud = solicitudCompleta()) {
   const estado = { actual: inicial };
   const m = await wizardAbierto({
@@ -96,16 +96,14 @@ export async function abrirResumen(rutas: Record<string, Manejador> = {}, inicia
     "GET /solicitudes/s-1/identidad": () => json(identidadAprobada()),
     ...rutas,
   });
-  await screen.findByRole("region", { name: "Resumen de tu trámite" });
+  await screen.findByRole("region", { name: "Resumen del trámite" });
   return { ...m, estado };
 }
 
-/** Confirma el resumen y pasa al paso Envío. */
+/** El botón de radicar está en Resumen; el paso Envío es solo la confirmación. */
 export async function irAlEnvio() {
-  fireEvent.click(screen.getByLabelText("Revisé la información y autorizo el envío"));
-  fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
-  await waitFor(() => expect(nodo(5)).toHaveAttribute("aria-current", "step"));
-  return nodo(5);
+  await screen.findByRole("button", { name: "Enviar trámite" });
+  return nodo(4);
 }
 
 export const ACEPTADA = { solicitudId: "s-1", codigoPublico: "PN-2026-0042", estado: "en_cola" };

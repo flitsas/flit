@@ -194,21 +194,20 @@ describe("landing: estructura, accesibilidad y contenido", () => {
     expect(screen.getByRole("img", { name: "Video explicativo disponible próximamente" })).toBeInTheDocument();
   });
 
-  it("FAQ: el pago ya no menciona PSE, explica la transferencia y el acordeón abre una a la vez", () => {
+  it("FAQ: el acordeón abre una pregunta a la vez y no explica un pago del trámite", () => {
     const { cliente } = fetchFalso(OK);
     renderConQuery(<Landing cliente={cliente} />);
 
-    expect(JSON.stringify(PREGUNTAS_FRECUENTES)).not.toMatch(/PSE/);
-    expect(PREGUNTAS_FRECUENTES).toHaveLength(5);
-    const pago = screen.getByRole("button", { name: "¿Cómo hago el pago de mi trámite?" });
+    expect(JSON.stringify(PREGUNTAS_FRECUENTES)).not.toMatch(/PSE|transferencia|Bancolombia|comprobante del pago/);
+    expect(PREGUNTAS_FRECUENTES).toHaveLength(4);
+    const identidad = screen.getByRole("button", { name: "¿Cómo se realiza la validación de identidad biométrica?" });
     const entrega = screen.getByRole("button", { name: "¿Cómo me entregan la tarjeta de propiedad?" });
-    expect(pago).toHaveAttribute("aria-expanded", "false");
+    expect(identidad).toHaveAttribute("aria-expanded", "false");
 
-    fireEvent.click(pago);
-    expect(pago).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("region", { name: "¿Cómo hago el pago de mi trámite?" })).toHaveTextContent(/transferencia.*Bancolombia.*Paso 4/);
+    fireEvent.click(identidad);
+    expect(identidad).toHaveAttribute("aria-expanded", "true");
     fireEvent.click(entrega);
-    expect(pago).toHaveAttribute("aria-expanded", "false");
+    expect(identidad).toHaveAttribute("aria-expanded", "false");
     expect(entrega).toHaveAttribute("aria-expanded", "true");
   });
 
@@ -222,13 +221,14 @@ describe("landing: estructura, accesibilidad y contenido", () => {
     expect(dialogo).toHaveTextContent("Próximamente");
   });
 
-  it("el pie abre «El documento oficial aún no está disponible.»", async () => {
+  it("el pie enlaza la política pública de FLIT 2", async () => {
     const { cliente } = fetchFalso(OK);
     renderConQuery(<Landing cliente={cliente} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Políticas de Privacidad y Términos de Uso" }));
-
-    expect(await screen.findByText("El documento oficial aún no está disponible.")).toBeInTheDocument();
+    const politica = screen.getByRole("link", { name: /Política de tratamiento de datos personales/ });
+    expect(politica).toHaveAttribute("href", "https://flitsas.com.co/privacy-policy/");
+    expect(politica).toHaveAttribute("target", "_blank");
+    expect(politica).toHaveAttribute("rel", "noopener noreferrer");
   });
 });
 

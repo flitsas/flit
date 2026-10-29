@@ -92,6 +92,8 @@ message ParteSolicitud {
   // Validación de identidad de ESTA solicitud (vacía si no hay) y su estado (aprobada, …).
   string validacion_id = 9;
   string validacion_estado = 10;
+  // Ciudad que eligió el ciudadano. Vacía si el borrador es anterior a este dato.
+  string ciudad = 11;
 }
 
 // Un archivo del trámite, por referencia opaca al almacenamiento: no son los bytes.

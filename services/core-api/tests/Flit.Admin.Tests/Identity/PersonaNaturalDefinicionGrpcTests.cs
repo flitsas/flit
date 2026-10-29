@@ -89,7 +89,7 @@ public sealed class PersonaNaturalDefinicionGrpcTests(WebApplicationFactory<Prog
 
         d.Actores.Select(a => a.Rol).Should().Equal("vendedor", "comprador");
         d.Actores.Should().OnlyContain(a => a.Biometria && a.Firma && a.Min == 1 && a.PersonaNaturalPermitida);
-        d.Actores.Single(a => a.Rol == "comprador").Max.Should().Be(4);
+        d.Actores.Single(a => a.Rol == "comprador").Max.Should().Be(1);
         d.Actores.Single(a => a.Rol == "vendedor").Max.Should().Be(1);
         d.Flags.EntryMode.Should().Be("PLATE");
         d.Flags.RequiereComercial.Should().BeTrue();

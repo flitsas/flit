@@ -14,6 +14,7 @@ import { useToast } from "@/components/admin/Toast";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { formatFechaHora } from "@/lib/format/date";
 import {
+  CAPTCHA_HABITUAL,
   RANGOS_PARAMETROS,
   SOPORTE_CORREO_MAX,
   SOPORTE_HORARIO_MAX,
@@ -275,7 +276,7 @@ export function ParametrosTab() {
         >
           <p className="text-sm text-[#59677D] dark:text-white/78">
             Estos ajustes definen cómo se comporta el portal para el ciudadano. Si dejas un campo vacío, el portal usa su
-            valor habitual.
+            valor habitual, que se indica en cada campo.
           </p>
 
           {conflicto && (
@@ -333,7 +334,7 @@ export function ParametrosTab() {
                       className={`mt-1 ${errores[campo] ? "text-xs font-semibold text-[#C2410C]" : HELP_TEXT}`}
                     >
                       {errores[campo] ??
-                        `${ayuda} Permitido: de ${r.min} a ${r.max} ${r.unidad}. Vacío: usa el valor habitual del portal.`}
+                        `${ayuda} Permitido: de ${r.min} a ${r.max} ${r.unidad}. Vacío: usa el valor habitual del portal (${r.habitual}).`}
                     </p>
                   </div>
                 );
@@ -357,11 +358,13 @@ export function ParametrosTab() {
                 className={FIELD_CLASS}
                 style={{ borderColor: "#DFE5ED" }}
               >
-                <option value="">Lo habitual del portal</option>
+                <option value="">Lo habitual del portal ({CAPTCHA_HABITUAL})</option>
                 <option value="si">Activada</option>
                 <option value="no">Desactivada</option>
               </select>
-              <p className={`mt-1 ${HELP_TEXT}`}>«Lo habitual del portal» deja que el portal decida.</p>
+              <p className={`mt-1 ${HELP_TEXT}`}>
+                «Lo habitual del portal» deja la verificación {CAPTCHA_HABITUAL}.
+              </p>
             </div>
           </ConfigCard>
 

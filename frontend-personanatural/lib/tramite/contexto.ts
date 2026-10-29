@@ -5,8 +5,8 @@ import { useSyncExternalStore } from "react";
 // «Consultar mi trámite» de nuevo. El token de la sesión no está aquí: va en una cookie HttpOnly que solo ve el servidor.
 
 export interface ContextoTramite {
-  /** «iniciar» = trámite recién abierto; «subsanar» = vuelve a corregir uno devuelto (flujo de la HU F7). */
-  intencion: "iniciar" | "subsanar";
+  /** «iniciar» abre un trámite nuevo. */
+  intencion: "iniciar";
   tipoCodigo: string;
   solicitudId?: string;
   /** Código público (radicado) del trámite. */
@@ -15,6 +15,8 @@ export interface ContextoTramite {
   cedula?: string;
   placa?: string;
   vin?: string;
+  /** Documento del propietario con el que se consultó el vehículo en el paso 1. Sirve para sembrar al vendedor. */
+  propietario?: { tipo: string; numero: string };
 }
 
 let actual: ContextoTramite | null = null;

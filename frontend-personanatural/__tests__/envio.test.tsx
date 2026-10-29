@@ -1,7 +1,6 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { EstadoSolicitud } from "@/lib/api/cliente";
-import { claveSolicitud } from "@/components/tramite/useSolicitud";
 import { obtenerContexto } from "@/lib/tramite/contexto";
 import { ACEPTADA, abrirResumen, definicionCompleta, irAlEnvio, problema, RUTA_DEFINICION, solicitudCompleta } from "./fixtures-envio";
 import { nodo, wizardAbierto, type Manejador } from "./montar-wizard";
@@ -28,7 +27,7 @@ const enCola = () => solicitudCompleta({ estado: "en_cola", version: 8, actores:
 
 const radicaciones = <T extends { clave: string }>(llamadas: T[]) => llamadas.filter((l) => l.clave === RADICAR);
 const llaveDe = (l: { init: RequestInit }) => (l.init.headers as Record<string, string>)["idempotency-key"];
-const enviar = () => screen.getByRole("button", { name: "Enviar mi trámite" });
+const enviar = () => screen.getByRole("button", { name: "Enviar trámite" });
 const esperar = (ms: number) => act(() => new Promise<void>((r) => setTimeout(r, ms)));
 
 /** Abre el wizard en el paso Envío; `radicar` responde la radicación y, si es 202, el back deja el borrador en cola. */
@@ -50,14 +49,17 @@ async function abrirEnvio({ radicar, estado, rutas = {} }: { radicar?: Manejador
 }
 
 describe("Paso 5 · Envío (F6)", () => {
-  it("antes de enviar explica que el trámite queda como borrador en FLIT 2, sin prometer pago ni aprobación", async () => {
+  it("antes de enviar muestra el resumen del trámite y el botón que radica", async () => {
     await abrirEnvio();
 
-    const tarjeta = screen.getByRole("region", { name: "Envío de tu trámite" });
-    expect(tarjeta).toHaveTextContent(/queda como borrador/);
-    expect(tarjeta).not.toHaveTextContent(/pago|aprob|factura/i);
-    expect(within(tarjeta).getByRole("button", { name: "Volver al resumen" })).toBeEnabled();
+    const resumen = screen.getByRole("region", { name: "Resumen del trámite" });
+    expect(within(resumen).getByText("Valor del trámite")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Elección de facturación" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Datos bancarios FLIT" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Comprobante de pago/)).not.toBeInTheDocument();
+    expect(within(resumen).getByRole("button", { name: "Atrás" })).toBeEnabled();
     expect(enviar()).toBeEnabled();
+    expect(nodo(4)).toHaveAttribute("aria-current", "step");
   });
 
   it("al recibir el 202 muestra la confirmación: radicado del portal, tipo, organismo, mensaje de borrador y el seguimiento", async () => {
@@ -65,32 +67,41 @@ describe("Paso 5 · Envío (F6)", () => {
 
     fireEvent.click(enviar());
 
-    expect(await screen.findByRole("heading", { level: 2, name: "Tu trámite fue entregado" })).toHaveFocus();
+    expect(await screen.findByRole("heading", { level: 2, name: "¡Muchas gracias, tu trámite se ha enviado con éxito!" })).toHaveFocus();
     expect(llamadas.filter((l) => l.clave === RADICAR)).toHaveLength(1);
     expect(llaveDe(radicaciones(llamadas)[0])).toBeTruthy();
     expect(radicaciones(llamadas)[0].init.body).toBeUndefined();
 
     const tabla = screen.getByRole("table");
-    expect(within(tabla).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Radicado del portal", "Tipo", "Organismo", "Referencia en FLIT 2"]);
-    expect(within(tabla).getAllByRole("cell").map((c) => c.textContent)).toEqual(["PN-2026-0042", "Trámite A", "Ciudad Uno", "Pendiente"]);
-    expect(screen.getByText(/está siendo creado\. Quedará como borrador, pendiente de continuar con el equipo/)).toBeInTheDocument();
-    expect(screen.getByText(/te sirve para consultar el estado más adelante/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Enviar mi trámite" })).toBeNull();
+    expect(within(tabla).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["ID del trámite", "Tipo", "Nº radicado", "Organismo"]);
+    expect(within(tabla).getAllByRole("cell").map((c) => c.textContent)).toEqual(["PN-2026-0042", "Trámite A", "Pendiente", "Ciudad Uno"]);
+    const confirmacion = screen.getByRole("region", { name: "Confirmación del trámite" });
+    expect(confirmacion).toHaveTextContent(/Para consultar el estado de tu trámite o la respuesta del Organismo de Tránsito/);
+    expect(within(confirmacion).getByRole("region", { name: "Vehículo" })).toHaveTextContent("ABC123");
+    expect(within(confirmacion).getByRole("region", { name: "Actores" })).toHaveTextContent("Propietario (vendedor): ANA RUIZ");
+    expect(within(confirmacion).getByRole("region", { name: "Actores" })).toHaveTextContent("Comprador: LUIS PEREZ");
+    const documentos = within(confirmacion).getByRole("region", { name: "Documentos cargados" });
+    expect(documentos).toHaveTextContent("Paz y salvo de impuestos");
+    expect(documentos).not.toHaveTextContent("Comprobante de pago");
+    expect(documentos).not.toHaveTextContent(".pdf");
+    expect(screen.queryByRole("button", { name: "Enviar trámite" })).toBeNull();
 
     const seguimiento = await screen.findByRole("list", { name: "Tracking del radicado" });
     const pasos = within(seguimiento).getAllByRole("listitem");
-    expect(pasos.map((p) => p.getAttribute("data-status"))).toEqual(["done", "done", "done", "current"]);
-    expect(pasos[2]).toHaveTextContent("Enviado a FLIT 2");
+    expect(pasos.map((p) => p.getAttribute("data-status"))).toEqual(["done", "done", "current", "pending", "pending"]);
+    expect(pasos[2]).toHaveTextContent("Enviado al OT");
     expect(pasos[2]).toHaveTextContent("28/10/2026 10:30");
-    expect(pasos[3]).toHaveTextContent("Creado en FLIT 2");
+    expect(pasos[3]).toHaveTextContent("En revisión");
   });
 
   it("no hay rastro de pago en la confirmación", async () => {
     await abrirEnvio();
     fireEvent.click(enviar());
-    await screen.findByRole("heading", { level: 2, name: "Tu trámite fue entregado" });
+    await screen.findByRole("heading", { level: 2, name: "¡Muchas gracias, tu trámite se ha enviado con éxito!" });
 
-    expect(document.body.textContent).not.toMatch(/pago|PSE\b|transferencia|bancari|bancolombia|factura|comprobante|convenio/i);
+    const confirmacion = screen.getByRole("region", { name: "Confirmación del trámite" });
+    expect(confirmacion.textContent).not.toMatch(/PSE\b|transferencia|bancari|bancolombia|factura|convenio|cuenta corriente/i);
+    expect(within(confirmacion).getByRole("region", { name: "Documentos cargados" })).not.toHaveTextContent("Comprobante de pago");
   });
 
   it("un doble clic radica una sola vez, con el cargador a pantalla completa y el botón deshabilitado", async () => {
@@ -111,7 +122,7 @@ describe("Paso 5 · Envío (F6)", () => {
     expect(document.body.querySelector("[aria-busy='true']")).toBeInTheDocument();
     fase.enviada = true;
     liberar();
-    await screen.findByRole("heading", { level: 2, name: "Tu trámite fue entregado" });
+    await screen.findByRole("heading", { level: 2, name: "¡Muchas gracias, tu trámite se ha enviado con éxito!" });
 
     expect(radicaciones(llamadas)).toHaveLength(1);
     expect(screen.queryByText("Enviando tu trámite")).toBeNull();
@@ -131,7 +142,7 @@ describe("Paso 5 · Envío (F6)", () => {
     expect(await screen.findByText("No pudimos completar la acción. Intenta de nuevo en unos minutos.")).toBeInTheDocument();
     expect(enviar()).toBeEnabled();
     fireEvent.click(enviar());
-    await screen.findByRole("heading", { level: 2, name: "Tu trámite fue entregado" });
+    await screen.findByRole("heading", { level: 2, name: "¡Muchas gracias, tu trámite se ha enviado con éxito!" });
 
     const [primera, segunda] = radicaciones(llamadas);
     expect(llaveDe(primera)).toBe(llaveDe(segunda));
@@ -150,7 +161,7 @@ describe("Paso 5 · Envío (F6)", () => {
     fireEvent.click(enviar());
     expect(await screen.findByText("No pudimos procesar el envío. Vuelve a intentarlo.")).toBeInTheDocument();
     fireEvent.click(enviar());
-    await screen.findByRole("heading", { level: 2, name: "Tu trámite fue entregado" });
+    await screen.findByRole("heading", { level: 2, name: "¡Muchas gracias, tu trámite se ha enviado con éxito!" });
 
     const [primera, segunda] = radicaciones(llamadas);
     expect(llaveDe(primera)).not.toBe(llaveDe(segunda));
@@ -183,7 +194,7 @@ describe("Paso 5 · Envío (F6)", () => {
     await waitFor(() => expect(llamadas.filter((l) => l.clave === "GET /solicitudes/s-1").length).toBeGreaterThan(1));
   });
 
-  it("409 identity_pending: dice qué persona falta validar y su estado, con enlace a Actores", async () => {
+  it("409 identity_pending: impide el envío y dice qué parte falta", async () => {
     await abrirEnvio({ radicar: () => problema(409, "identity_pending", { motivo: "identidad_pendiente", partes: [{ parte: "comprador", ordinal: 1, estado: "pendiente" }] }) });
 
     fireEvent.click(enviar());
@@ -191,18 +202,8 @@ describe("Paso 5 · Envío (F6)", () => {
     const alerta = await screen.findByRole("alert");
     expect(alerta).toHaveTextContent("Falta validar la identidad");
     expect(alerta).toHaveTextContent("Comprador: validación pendiente");
-    fireEvent.click(within(alerta).getByRole("button", { name: "Ir a Actores" }));
-    expect(nodo(2)).toHaveAttribute("aria-current", "step");
-  });
-
-  it("409 identity_pending por una validación rechazada pide reenviar el enlace", async () => {
-    await abrirEnvio({ radicar: () => problema(409, "identity_pending", { motivo: "identidad_rechazada", partes: [{ parte: "vendedor", ordinal: 1, estado: "rechazada" }] }) });
-
-    fireEvent.click(enviar());
-
-    const alerta = await screen.findByRole("alert");
-    expect(alerta).toHaveTextContent(/Alguna validación fue rechazada: reenvía el enlace desde Actores/);
-    expect(alerta).toHaveTextContent("Propietario (vendedor): validación rechazada");
+    expect(within(alerta).getByRole("button", { name: "Ir a Actores" })).toBeInTheDocument();
+    expect(enviar()).toBeEnabled();
   });
 
   it("409 estado_no_permite_cambio (ya había salido): vuelve a leer el borrador y muestra la confirmación", async () => {
@@ -215,7 +216,7 @@ describe("Paso 5 · Envío (F6)", () => {
 
     fireEvent.click(enviar());
 
-    expect(await screen.findByRole("heading", { level: 2, name: "Tu trámite fue entregado" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 2, name: "¡Muchas gracias, tu trámite se ha enviado con éxito!" })).toBeInTheDocument();
   });
 
   it.each([
@@ -251,31 +252,29 @@ describe("Paso 5 · Envío (F6)", () => {
     expect(await screen.findByRole("dialog", { name: "Tu sesión venció" })).toBeInTheDocument();
   });
 
-  it("«Volver al resumen» regresa al paso 4, y no se puede saltar el resumen si el borrador cambió", async () => {
-    const { client } = await abrirEnvio();
+  it("«Atrás» en el resumen regresa a Requisitos", async () => {
+    await abrirEnvio();
 
-    fireEvent.click(screen.getByRole("button", { name: "Volver al resumen" }));
-    expect(nodo(4)).toHaveAttribute("aria-current", "step");
-    act(() => client.setQueryData(claveSolicitud("s-1"), solicitudCompleta({ version: 9 })));
-    await waitFor(() => expect(screen.getByLabelText("Revisé la información y autorizo el envío")).not.toBeChecked());
-    fireEvent.click(nodo(1));
-    fireEvent.click(nodo(5));
+    fireEvent.click(screen.getByRole("button", { name: "Atrás" }));
 
-    expect(nodo(1)).toHaveAttribute("aria-current", "step");
+    expect(nodo(3)).toHaveAttribute("aria-current", "step");
   });
 });
 
 describe("Seguimiento tras enviar (sondeo de GET /estado)", () => {
-  it("sondea hasta que FLIT 2 crea el trámite, muestra «creado» con su referencia y deja de preguntar", async () => {
+  it("sondea hasta que el trámite queda creado, muestra la referencia en la tabla y deja de preguntar", async () => {
     let n = 0;
     const { llamadas } = await abrirEnvio({ estado: () => json(++n < 3 ? estadoDe("en_cola") : estadoDe("creada", { numeroReferencia: "TR-2026-9001", actualizadoEn: "2026-10-28T16:00:00Z" })) });
     fireEvent.click(enviar());
 
-    expect(await screen.findByText(/ya fue creado en FLIT 2 con el número de referencia/, undefined, { timeout: 3000 })).toHaveTextContent("TR-2026-9001");
+    expect(await screen.findByText("TR-2026-9001", undefined, { timeout: 3000 })).toBeInTheDocument();
+    expect(screen.queryByText(/ya fue creado en FLIT 2/)).toBeNull();
+    expect(screen.queryByText(/pendiente de continuar con el equipo/)).toBeNull();
     const tabla = screen.getByRole("table");
-    expect(within(tabla).getAllByRole("cell")[3]).toHaveTextContent("TR-2026-9001");
+    expect(within(tabla).getAllByRole("cell")[2]).toHaveTextContent("TR-2026-9001");
     const pasos = within(screen.getByRole("list", { name: "Tracking del radicado" })).getAllByRole("listitem");
-    expect(pasos.map((p) => p.getAttribute("data-status"))).toEqual(["done", "done", "done", "done"]);
+    expect(pasos.map((p) => p.getAttribute("data-status"))).toEqual(["done", "done", "done", "current", "pending"]);
+    expect(pasos[3]).toHaveTextContent("En revisión");
     expect(pasos[3]).toHaveTextContent("28/10/2026 11:00");
 
     const sondeos = llamadas.filter((l) => l.clave === ESTADO).length;
@@ -284,19 +283,19 @@ describe("Seguimiento tras enviar (sondeo de GET /estado)", () => {
     expect(llamadas.filter((l) => l.clave === ESTADO)).toHaveLength(sondeos);
   });
 
-  it("creado sin referencia en la respuesta: lo dice sin inventar un número", async () => {
+  it("creado sin referencia deja el radicado en pendiente y no anuncia la creación", async () => {
     await abrirEnvio({ estado: () => json(estadoDe("creada")) });
     fireEvent.click(enviar());
 
-    const mensaje = await screen.findByText(/Tu trámite ya fue creado en FLIT 2/, undefined, { timeout: 3000 });
-    expect(mensaje).not.toHaveTextContent(/número de referencia/);
-    expect(within(screen.getByRole("table")).getAllByRole("cell")[3]).toHaveTextContent("Creado");
+    expect(await screen.findByText("En revisión", undefined, { timeout: 3000 })).toBeInTheDocument();
+    expect(screen.queryByText(/Tu trámite ya fue creado en FLIT 2/)).toBeNull();
+    expect(within(screen.getByRole("table")).getAllByRole("cell")[2]).toHaveTextContent("Pendiente");
   });
 
   it("mientras siga en cola sigue sondeando de forma periódica", async () => {
     const { llamadas } = await abrirEnvio();
     fireEvent.click(enviar());
-    await screen.findByRole("heading", { level: 2, name: "Tu trámite fue entregado" });
+    await screen.findByRole("heading", { level: 2, name: "¡Muchas gracias, tu trámite se ha enviado con éxito!" });
 
     await waitFor(() => expect(llamadas.filter((l) => l.clave === ESTADO).length).toBeGreaterThanOrEqual(3), { timeout: 3000 });
   });
@@ -318,10 +317,11 @@ describe("Seguimiento tras enviar (sondeo de GET /estado)", () => {
     const { llamadas } = await abrirEnvio({ estado: () => json(estadoDe("rechazada_creacion")) });
     fireEvent.click(enviar());
 
-    expect(await screen.findByRole("heading", { level: 2, name: "No pudimos crear tu trámite en FLIT 2" }, { timeout: 3000 })).toBeInTheDocument();
-    expect(screen.getByText(/FLIT 2 no pudo crear tu trámite/)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 2, name: "¡Muchas gracias, tu trámite se ha enviado con éxito!" }, { timeout: 3000 })).toBeInTheDocument();
+    expect(screen.queryByText(/No pudimos crear tu trámite/)).toBeNull();
     const pasos = within(screen.getByRole("list", { name: "Tracking del radicado" })).getAllByRole("listitem");
-    expect(pasos[3]).toHaveAttribute("data-status", "rejected");
+    expect(pasos[2]).toHaveAttribute("data-status", "current");
+    expect(pasos[4]).toHaveAttribute("data-status", "pending");
     await esperar(150);
     expect(llamadas.filter((l) => l.clave === ESTADO)).toHaveLength(1);
   });
@@ -332,7 +332,8 @@ describe("Seguimiento tras enviar (sondeo de GET /estado)", () => {
     fireEvent.click(enviar());
 
     expect(await screen.findByText("No pudimos actualizar el estado ahora. Lo intentaremos de nuevo.")).toBeInTheDocument();
-    expect(await screen.findByText(/Tu trámite ya fue creado en FLIT 2/, undefined, { timeout: 3000 })).toBeInTheDocument();
+    expect(await screen.findByText("En revisión", undefined, { timeout: 3000 })).toBeInTheDocument();
+    expect(screen.queryByText(/Tu trámite ya fue creado en FLIT 2/)).toBeNull();
   });
 
   it("si la sesión de solo estado ya no sirve (401) deja de sondear", async () => {
@@ -358,9 +359,9 @@ describe("Reanudar un trámite que ya salió", () => {
   it("un trámite en cola reabre directamente en la confirmación, sin botón de enviar ni nueva radicación", async () => {
     const { llamadas } = await abrirEnviado("en_cola");
 
-    expect(await screen.findByRole("heading", { level: 2, name: "Tu trámite fue entregado" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 2, name: "¡Muchas gracias, tu trámite se ha enviado con éxito!" })).toBeInTheDocument();
     expect(nodo(5)).toHaveAttribute("aria-current", "step");
-    expect(screen.queryByRole("button", { name: "Enviar mi trámite" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Enviar trámite" })).toBeNull();
     expect(radicaciones(llamadas)).toHaveLength(0);
   });
 
@@ -376,7 +377,7 @@ describe("Salir o consultar más tarde", () => {
   it("«Consultar mi trámite» abre la consulta con el radicado escrito y la cédula vacía", async () => {
     await abrirEnvio();
     fireEvent.click(enviar());
-    await screen.findByRole("heading", { level: 2, name: "Tu trámite fue entregado" });
+    await screen.findByRole("heading", { level: 2, name: "¡Muchas gracias, tu trámite se ha enviado con éxito!" });
 
     fireEvent.click(screen.getByRole("button", { name: "Consultar mi trámite" }));
 
@@ -388,10 +389,10 @@ describe("Salir o consultar más tarde", () => {
   it("«Salir» vuelve al inicio y suelta el contexto en memoria (la cédula no se conserva)", async () => {
     await abrirEnvio();
     fireEvent.click(enviar());
-    await screen.findByRole("heading", { level: 2, name: "Tu trámite fue entregado" });
+    await screen.findByRole("heading", { level: 2, name: "¡Muchas gracias, tu trámite se ha enviado con éxito!" });
     expect(obtenerContexto()?.cedula).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Salir" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ir al Dashboard" }));
 
     expect(routerPush).toHaveBeenCalledWith("/");
     expect(obtenerContexto()).toBeNull();
@@ -403,7 +404,7 @@ describe("Habeas Data en el envío", () => {
     const espias = (["log", "info", "warn", "error", "debug"] as const).map((n) => vi.spyOn(console, n).mockImplementation(() => undefined));
     const { llamadas } = await abrirEnvio();
     fireEvent.click(enviar());
-    await screen.findByRole("heading", { level: 2, name: "Tu trámite fue entregado" });
+    await screen.findByRole("heading", { level: 2, name: "¡Muchas gracias, tu trámite se ha enviado con éxito!" });
     await waitFor(() => expect(llamadas.some((l) => l.clave === ESTADO)).toBe(true));
 
     expect(localStorage.length).toBe(0);

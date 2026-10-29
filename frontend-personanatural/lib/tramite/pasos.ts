@@ -1,15 +1,15 @@
 // Pasos del wizard a partir de la definición del tipo (GET /tipos-tramite/{code}/definicion). Módulo puro, sin React ni red.
 //
-// El portal muestra SIEMPRE los mismos cinco pasos (Diagnóstico, Actores, Requisitos, Resumen y Envío); lo que cambia por tipo
-// es lo que se pinta dentro de cada uno. Cada sección de la definición (`section_type` del catálogo cerrado de FLIT 2) cae en
-// uno de esos pasos y la dibuja su renderer del registro. Aquí no hay ningún tipo de trámite nombrado: todo sale de la
-// definición. Un `section_type` sin renderer vuelve al tipo «no disponible» entero; nunca se pinta una parte.
+// El portal muestra los cinco pasos base (Diagnóstico, Actores, Requisitos, Resumen y Envío). Cada sección conocida de la
+// definición cae en uno de ellos. Si la definición trae una sección que el portal sabe pintar y que no cabe en esos cinco,
+// se agrega un paso extra con el título de ese paso de la definición, antes de Resumen. Un `section_type` sin renderer vuelve
+// al tipo «no disponible» entero; nunca se pinta una parte. Aquí no hay ningún tipo de trámite nombrado.
 import type { DefinicionTipo, PasoDefinicion, Pendiente, Solicitud } from "@/lib/api/cliente";
 
 export type GrupoPaso = "diagnostico" | "actores" | "requisitos" | "resumen" | "envio";
 
 export interface PasoBase {
-  id: GrupoPaso;
+  id: string;
   /** Nombre en el navegador de pasos: «Paso n · {titulo}». */
   titulo: string;
   /** Nombre en las migas (el último paso se muestra como «Confirmación»). */
@@ -23,8 +23,15 @@ export const PASOS_BASE: readonly PasoBase[] = [
   { id: "actores", titulo: "Actores", miga: "Actores", propio: false },
   { id: "requisitos", titulo: "Requisitos", miga: "Requisitos", propio: false },
   { id: "resumen", titulo: "Resumen", miga: "Resumen", propio: true },
-  { id: "envio", titulo: "Envío", miga: "Envío", propio: true },
+  { id: "envio", titulo: "Envío", miga: "Confirmación", propio: true },
 ];
+
+/**
+ * Secciones de FLIT 2 que el portal no pinta como paso propio porque ya las cubre otro paso.
+ * `signature_fur` es la firma del FUR del operador: el ciudadano ve el Resumen y el trámite se entrega como borrador,
+ * así que esa sección no puede ocultar el tipo entero ni impedir la radicación.
+ */
+export const SECCIONES_CUBIERTAS: ReadonlySet<string> = new Set(["signature_fur"]);
 
 /** Paso del portal al que pertenece cada `section_type` de FLIT 2. La validación de identidad vive dentro de la tarjeta de actor. */
 export const GRUPO_POR_SECCION: Readonly<Record<string, GrupoPaso>> = {
@@ -61,20 +68,41 @@ export function armarPasos(definicion: DefinicionTipo, soportados: ReadonlySet<s
   if (definicion.pasos.length === 0) return { ok: false, motivo: "sin_pasos" };
 
   const porGrupo = new Map<GrupoPaso, SeccionWizard[]>();
+  const extras: PasoWizard[] = [];
   for (const paso of definicion.pasos) {
+    const sueltos: SeccionWizard[] = [];
     for (const sectionType of paso.sectionTypes) {
+      if (SECCIONES_CUBIERTAS.has(sectionType)) continue;
       const grupo = GRUPO_POR_SECCION[sectionType];
-      if (!grupo || !soportados.has(sectionType)) return { ok: false, motivo: "seccion_desconocida" };
-      const lista = porGrupo.get(grupo) ?? [];
-      lista.push({ clave: `${paso.clave}:${sectionType}`, sectionType, paso });
-      porGrupo.set(grupo, lista);
+      if (grupo && soportados.has(sectionType)) {
+        const lista = porGrupo.get(grupo) ?? [];
+        lista.push({ clave: `${paso.clave}:${sectionType}`, sectionType, paso });
+        porGrupo.set(grupo, lista);
+      } else if (soportados.has(sectionType)) {
+        sueltos.push({ clave: `${paso.clave}:${sectionType}`, sectionType, paso });
+      } else {
+        return { ok: false, motivo: "seccion_desconocida" };
+      }
+    }
+    if (sueltos.length > 0) {
+      extras.push({
+        id: `extra:${paso.clave}`,
+        titulo: paso.titulo || "Datos adicionales",
+        miga: paso.titulo || "Datos adicionales",
+        propio: false,
+        secciones: sueltos,
+      });
     }
   }
 
   const pasos = PASOS_BASE.map<PasoWizard>((base) => ({
     ...base,
-    secciones: base.propio ? [{ clave: `portal:${base.id}`, sectionType: base.id, paso: null }] : (porGrupo.get(base.id) ?? []),
+    secciones: base.propio
+      ? [{ clave: `portal:${base.id}`, sectionType: base.id, paso: null }]
+      : (porGrupo.get(base.id as GrupoPaso) ?? []),
   }));
+  const resumen = pasos.findIndex((p) => p.id === "resumen");
+  pasos.splice(resumen, 0, ...extras);
   return { ok: true, pasos };
 }
 
@@ -112,8 +140,14 @@ export function pendientesDelGrupo(grupo: GrupoPaso, definicion: DefinicionTipo,
  * pide y su último resultado no tiene bloqueos. Resumen y Envío no se dan por completos desde un borrador: el ciudadano debe
  * revisar y confirmar de nuevo.
  */
+const esPasoBase = (id: string): id is GrupoPaso => PASOS_BASE.some((p) => p.id === id);
+
 export function pasoCompletoGuardado(paso: PasoWizard, definicion: DefinicionTipo, solicitud: Solicitud): boolean {
   if (paso.id === "resumen" || paso.id === "envio") return false;
+  if (!esPasoBase(paso.id)) {
+    const claves = new Set(paso.secciones.map((s) => s.paso?.clave).filter((c): c is string => Boolean(c)));
+    return !solicitud.pendientes.some((p) => p.paso !== null && claves.has(p.paso));
+  }
   if (pendientesDelGrupo(paso.id, definicion, solicitud).length > 0) return false;
   if (paso.id === "diagnostico" && paso.secciones.some((s) => s.sectionType === "vehicle_query")) return solicitud.datos.diagnostico?.puedeContinuar === true;
   return true;

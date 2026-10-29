@@ -10,9 +10,9 @@ import { ApiError, esperaDe, mensajeDe } from "@/lib/api/errores";
 import { useBloqueo } from "@/lib/api/useBloqueo";
 import {
   enCurso,
-  enmascararCorreo,
-  enmascararNombre,
+  documentoLegible,
   ETIQUETA_VALIDACION,
+  MENSAJE_CELULAR,
   MENSAJE_CONSULTAR,
   soloDigitos,
   TIPOS_DOCUMENTO,
@@ -23,6 +23,7 @@ import {
   type FilaActor,
   type TipoDocumento,
 } from "@/lib/tramite/actores";
+import { ciudadCanonica, filtrarCiudades } from "@/lib/catalogos/ciudades";
 import { consentimientoDeConsulta } from "@/lib/tramite/diagnostico";
 import { formatearFecha } from "@/lib/formato";
 
@@ -31,10 +32,13 @@ interface Props {
   rol: ActorRol;
   /** Título de la persona dentro del rol cuando el rol admite varias («Copropietario 2»); `undefined` con una sola. */
   titulo?: string;
+  /**
+   * La primera persona del trámite (vendedor o titular): una vez consultada se pinta como la ficha del propietario
+   * del diseño (nombre, documento junto y teléfono en la misma fila).
+   */
+  esPropietario?: boolean;
   solicitudId: string;
   cliente: ClientePortal;
-  /** Cédula con la que se abrió el trámite: esa persona ya se identificó y no necesita consulta. */
-  cedulaSolicitante?: string;
   /** El ciudadano intentó avanzar con el paso incompleto: se muestran todos los errores. */
   mostrarErrores: boolean;
   erroresServidor?: ErroresActor | undefined;
@@ -61,9 +65,9 @@ export function PersonaActor({
   fila,
   rol,
   titulo,
+  esPropietario = false,
   solicitudId,
   cliente,
-  cedulaSolicitante,
   mostrarErrores,
   erroresServidor,
   estado,
@@ -81,6 +85,7 @@ export function PersonaActor({
   /** Aviso bajo los campos cuando el nombre se escribe a mano porque la consulta no lo trajo (no es un error). */
   const [avisoManual, setAvisoManual] = useState<string | null>(null);
   const [aviso, setAviso] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
+  const [errorContacto, setErrorContacto] = useState<Partial<Record<"correo" | "celular", string>>>({});
   const [ocupado, setOcupado] = useState(false);
   const bloqueoConsulta = useBloqueo();
   const esperaReenvio = useBloqueo();
@@ -89,7 +94,7 @@ export function PersonaActor({
   const errores = validarFila(fila, rol);
   const juridica = !rol.personaNaturalPermitida || fila.tipoDocumento === "NIT";
   const error = (campo: CampoActor): string | undefined => {
-    const delServidor = erroresServidor?.[campo];
+    const delServidor = erroresServidor?.[campo] ?? (campo === "correo" || campo === "celular" ? errorContacto[campo] : undefined);
     if (delServidor) return delServidor;
     const e = errores[campo];
     if (!e) return undefined;
@@ -110,12 +115,13 @@ export function PersonaActor({
     onSuccess: (r) => {
       setErrorConsulta(null);
       const nombre = (r.existe ? (r.nombreCompleto ?? [r.nombres, r.apellidos].filter(Boolean).join(" ")) : "").trim();
+      const ciudad = r.ciudad ? ciudadCanonica(r.ciudad) ?? "" : "";
       if (nombre) {
         setAvisoManual(null);
-        onCambio({ consultado: true, nombreConsultado: true, nombre, licencia: null });
+        onCambio({ consultado: true, nombreConsultado: true, nombre, licencia: null, ...(ciudad ? { ciudad } : {}) });
       } else {
         setAvisoManual("No encontramos los datos de esta persona; escribe su nombre manualmente.");
-        onCambio({ consultado: true, nombreConsultado: false, nombre: "", licencia: null });
+        onCambio({ consultado: true, nombreConsultado: false, nombre: "", licencia: null, ...(ciudad ? { ciudad } : {}) });
       }
     },
     onError: (e) => {
@@ -136,11 +142,6 @@ export function PersonaActor({
     setErrorConsulta(null);
     // Persona jurídica o un número mal formado: el error ya está a la vista y no hay nada que consultar.
     if (errores.numeroDocumento && errores.numeroDocumento !== MENSAJE_CONSULTAR) return;
-    // La persona que abrió el trámite ya se identificó (captcha y consentimiento al iniciar): no se vuelve a consultar.
-    if (cedulaSolicitante && fila.tipoDocumento === "CC" && fila.numeroDocumento === cedulaSolicitante) {
-      onCambio({ consultado: true });
-      return;
-    }
     consulta.mutate();
   };
 
@@ -186,12 +187,16 @@ export function PersonaActor({
       avisar(
         resultado.estado === "pendiente_envio"
           ? { tipo: "ok", texto: "Aún no pudimos enviar el enlace: lo intentaremos de nuevo automáticamente." }
-          : { tipo: "ok", texto: `Enlace enviado a ${enmascararCorreo(fila.correo)}` },
+          : { tipo: "ok", texto: `Enlace enviado a ${fila.correo}` },
       );
     } catch (err) {
       reportarError(err);
       refrescarIdentidad();
       if (esperaDe(err)) esperaReenvio.registrar(err);
+      if (err instanceof ApiError && err.code === "contacto_invalido" && (err.campo === "celular" || err.campo === "correo")) {
+        setTocados((t) => ({ ...t, [err.campo!]: true }));
+        setErrorContacto({ [err.campo]: err.campo === "celular" ? MENSAJE_CELULAR : "Ingresa un correo electrónico válido" });
+      }
       avisar({ tipo: "error", texto: textoDeError(err) });
     } finally {
       setOcupado(false);
@@ -202,12 +207,13 @@ export function PersonaActor({
 
   const identidadAbierta = estado === "aprobada" || enCurso(estado);
   const documentoBloqueado = fila.consultado && identidadAbierta;
-  const nombreMostrado = !fila.consultado ? "" : estado === "aprobada" || !documentoBloqueado ? fila.nombre : enmascararNombre(fila.nombre);
+  const nombreMostrado = fila.consultado ? fila.nombre : "";
   const pideIdentidad = rol.biometria;
   const vence = formatearFecha(fila.licencia?.vigencia);
   const etiquetaLicencia = fila.licencia?.estado ? `Licencia ${fila.licencia.estado.toLowerCase()}${fila.licencia.vigencia ? ` · ${vence ?? fila.licencia.vigencia}` : ""}` : null;
   const reenviosAgotados = parte !== undefined && enCurso(estado) && parte.reenviosRestantes === 0;
-  const puedeCambiarDocumento = fila.consultado && !identidadAbierta;
+  const puedeCambiarDocumento = fila.consultado && !identidadAbierta && !esPropietario;
+  const fichaPropietario = esPropietario && fila.consultado;
 
   return (
     <div role={titulo ? "group" : undefined} aria-label={titulo} className="space-y-4">
@@ -222,6 +228,27 @@ export function PersonaActor({
         </div>
       )}
       <div className="grid gap-4 md:grid-cols-3">
+        {fichaPropietario && (
+          <>
+            <Field label="Nombre completo" error={error("nombre")}>
+              <input
+                className="field"
+                autoComplete="off"
+                readOnly
+                aria-invalid={error("nombre") ? true : undefined}
+                value={nombreMostrado}
+                onChange={(e) => {
+                  if (!documentoBloqueado) onCambio({ nombre: e.target.value });
+                }}
+              />
+            </Field>
+            <Field label="Tipo y Número de Documento">
+              <input className="field" readOnly disabled value={documentoLegible(fila.tipoDocumento, fila.numeroDocumento)} />
+            </Field>
+          </>
+        )}
+        {!fichaPropietario && (
+          <>
         <Field label="Tipo de documento">
           <select
             className="field"
@@ -261,7 +288,7 @@ export function PersonaActor({
         <div className="flex flex-wrap items-end gap-2">
           {!fila.consultado && (
             <Btn onClick={alConsultar} disabled={consulta.isPending || bloqueoConsulta.bloqueado}>
-              {consulta.isPending ? "Consultando..." : "Consultar"}
+              {consulta.isPending ? "Consultando..." : esPropietario ? "Consultar" : `Consultar ${(titulo ?? rol.etiqueta).toLowerCase()}`}
             </Btn>
           )}
           {puedeCambiarDocumento && (
@@ -285,6 +312,8 @@ export function PersonaActor({
             onBlur={() => tocar("nombre")}
           />
         </Field>
+          </>
+        )}
         <Field label="Teléfono *" error={error("celular")}>
           <input
             className="field"
@@ -293,7 +322,10 @@ export function PersonaActor({
             disabled={!fila.consultado}
             aria-invalid={error("celular") ? true : undefined}
             value={fila.celular}
-            onChange={(e) => onCambio({ celular: soloDigitos(e.target.value) })}
+            onChange={(e) => {
+              setErrorContacto((actual) => (actual.celular ? { ...actual, celular: undefined } : actual));
+              onCambio({ celular: soloDigitos(e.target.value) });
+            }}
             onBlur={() => tocar("celular")}
           />
         </Field>
@@ -305,11 +337,22 @@ export function PersonaActor({
             disabled={!fila.consultado}
             aria-invalid={error("correo") ? true : undefined}
             value={fila.correo}
-            onChange={(e) => onCambio({ correo: e.target.value })}
+            onChange={(e) => {
+              setErrorContacto((actual) => (actual.correo ? { ...actual, correo: undefined } : actual));
+              onCambio({ correo: e.target.value });
+            }}
             onBlur={() => tocar("correo")}
           />
         </Field>
-        <div className="md:col-span-3">
+        <CampoCiudad
+          id={idCampo("ciudad")}
+          value={fila.ciudad}
+          disabled={!fila.consultado}
+          error={error("ciudad")}
+          onChange={(ciudad) => onCambio({ ciudad })}
+          onBlur={() => tocar("ciudad")}
+        />
+        <div className={fichaPropietario ? "md:col-span-2" : "md:col-span-2"}>
           <AddressField
             id={idCampo("direccion")}
             label="Dirección"
@@ -347,7 +390,7 @@ export function PersonaActor({
                 </Btn>
               ) : (
                 <Btn onClick={() => void pedirIdentidad("solicitar")} disabled={ocupado}>
-                  {ocupado ? "Enviando..." : "Validar identidad"}
+                  {ocupado ? "Enviando..." : "Reenviar Validación"}
                 </Btn>
               )}
             </span>
@@ -363,10 +406,62 @@ export function PersonaActor({
       </div>
       {estado === "rechazada" && pideIdentidad && fila.consultado && (
         <p role="alert" className="rounded-[9px] border border-alert bg-alert/10 p-3 text-sm text-alert">
-          La validación de identidad de esta persona fue rechazada. Puedes enviarle un enlace nuevo con «Validar identidad».
+          La validación de identidad de esta persona fue rechazada. Puedes enviarle un enlace nuevo con «Reenviar Validación».
         </p>
       )}
     </div>
+  );
+}
+
+/** Ciudad del actor. Se elige de la misma lista que FLIT 2. */
+function CampoCiudad({ id, value, disabled, error, onChange, onBlur }: { id: string; value: string; disabled: boolean; error?: string; onChange: (valor: string) => void; onBlur: () => void }) {
+  const [abierto, setAbierto] = useState(false);
+  const sugerencias = filtrarCiudades(value);
+  const mostrar = abierto && !disabled && sugerencias.length > 0;
+  return (
+    <Field label="Ciudad *" error={error}>
+      <div className="relative">
+        <input
+          id={id}
+          className="field"
+          autoComplete="off"
+          disabled={disabled}
+          aria-invalid={error ? true : undefined}
+          aria-autocomplete="list"
+          aria-expanded={mostrar}
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value);
+            setAbierto(true);
+          }}
+          onFocus={() => setAbierto(true)}
+          onBlur={() => {
+            window.setTimeout(() => setAbierto(false), 150);
+            onBlur();
+          }}
+        />
+        {mostrar && (
+          <ul role="listbox" aria-label="Sugerencias de ciudad" className="absolute z-40 mt-1 max-h-48 w-full overflow-auto rounded-[9px] border border-border bg-card shadow">
+            {sugerencias.map((ciudad) => (
+              <li key={ciudad}>
+                <button
+                  type="button"
+                  role="option"
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    onChange(ciudad);
+                    setAbierto(false);
+                  }}
+                >
+                  {ciudad}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Field>
   );
 }
 

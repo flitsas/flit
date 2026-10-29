@@ -8,6 +8,7 @@ using Flit.Platform.Sdk;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Tramites.Estados;
 using FluentAssertions;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -56,10 +57,10 @@ public sealed class PersonaNaturalRadicacionPostgresTests(WebApplicationFactory<
     }
 
     [Fact]
-    public async Task UnaParteSinIdentidadAprobada_SeRechazaAntesDeCrearNada()
+    public async Task UnaParteSinIdentidadAprobada_SeRechazaAntesDeCrearNada_CuandoSeExige()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        using var host = factory.WithWebHostBuilder(b => b.UseSetting("PersonaNatural:Radicacion:ExigirIdentidadAlCrear", "true")).ConEmpresaPersonaNatural();
         await using var e = await Escenario.CrearAsync(host, ct);
         var solicitud = e.Solicitud(partes: [e.Parte("comprador", "1000000001", estado: "pendiente")]);
 

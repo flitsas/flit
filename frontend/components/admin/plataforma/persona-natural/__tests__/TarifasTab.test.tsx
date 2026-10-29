@@ -308,8 +308,12 @@ describe("TarifasTab (#14074)", () => {
     await ue.selectOptions(within(dialog).getByLabelText("Trámite"), TIPO);
     const derechos = within(dialog).getByLabelText(/^Derechos de tránsito/);
     await ue.type(derechos, "1250000");
-    await ue.tab();
     expect(derechos).toHaveValue("1.250.000");
+    await ue.type(derechos, "{Backspace}");
+    expect(derechos).toHaveValue("125.000");
+    await ue.type(derechos, "0");
+    expect(derechos).toHaveValue("1.250.000");
+    await ue.tab();
     await ue.click(within(dialog).getByRole("button", { name: /guardar tarifa/i }));
     await waitFor(() => expect(registrarTarifasPn).toHaveBeenCalledTimes(1));
     expect(vi.mocked(registrarTarifasPn).mock.calls[0][0].valores).toEqual([{ concepto: "DERECHOS_TRANSITO", valorCop: 1250000 }]);

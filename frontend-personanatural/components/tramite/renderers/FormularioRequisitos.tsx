@@ -1,17 +1,21 @@
 "use client";
 
 import { AlertTriangle } from "lucide-react";
+import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Drop, type EstadoArchivo } from "@/components/tramite/Drop";
 import { useWizard, type PropsSeccion } from "@/components/tramite/ContextoWizard";
 import { Btn, Card, Field } from "@/components/tramite/piezas";
 import { TotalLiquidado } from "@/components/tramite/TotalLiquidado";
-import type { CampoDefinicion, DocumentoRequerido } from "@/lib/api/cliente";
+import type { CampoDefinicion, Cotizacion, DocumentoRequerido } from "@/lib/api/cliente";
+import { alEscribirMoneda, formatearPesos, numeroMoneda, textoMonedaCompleta } from "@/lib/formato";
+import { claveAdicionalesActivos, claveCotizacion } from "@/lib/tramite/cotizacion";
 import { ApiError, mensajeDe } from "@/lib/api/errores";
 import {
   adjuntoDe,
   AYUDA_ARCHIVOS,
   documentosOrdenados,
+  documentoVisible,
   erroresDeRequisitos,
   errorDeArchivo,
   esExigible,
@@ -59,11 +63,19 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
   const documentos = useMemo(() => (t.documentos ? documentosOrdenados(definicion) : []), [t.documentos, definicion]);
 
   const [campos, setCampos] = useState<Record<string, string>>(() => ({ ...solicitud.fieldValues }));
-  const [valorVenta, setValorVenta] = useState(() => (solicitud.datos.comercial?.valor ? String(solicitud.datos.comercial.valor) : ""));
+  const [valorVenta, setValorVenta] = useState(() => {
+    const valor = solicitud.datos.comercial?.valor;
+    return valor != null && valor > 0 ? textoMonedaCompleta(valor) : "";
+  });
   const [tienePrenda, setTienePrenda] = useState(() => solicitud.datos.prenda?.tiene ?? false);
   const [acreedor, setAcreedor] = useState(() => solicitud.datos.prenda?.acreedor ?? "");
   const [nitAcreedor, setNitAcreedor] = useState(() => solicitud.datos.prenda?.nitAcreedor ?? "");
   const [transformaciones, setTransformaciones] = useState<string[]>(() => solicitud.datos.requisitos?.transformaciones ?? []);
+  const cotizacion = useQuery<Cotizacion>({
+    queryKey: claveCotizacion(solicitud.organismoId, definicion.code, transformaciones),
+    queryFn: skipToken,
+    staleTime: Infinity,
+  });
   const [observaciones, setObservaciones] = useState(() => solicitud.datos.requisitos?.observaciones ?? "");
   const [subidas, setSubidas] = useState<Record<string, Subida>>({});
   const [tocados, setTocados] = useState<Record<string, boolean>>({});
@@ -71,7 +83,10 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
   const [borrador, setBorrador] = useState<EstadoBorrador>("inactivo");
   const [errorBorrador, setErrorBorrador] = useState<string | null>(null);
 
-  const entrada: EntradaRequisitos = { campos, valorVenta, tienePrenda: t.prendaObligatoria || tienePrenda, acreedor, nitAcreedor, observaciones };
+  const hayPersonaJuridica = solicitud.actores.some((a) => a.tipoDocumento === "NIT");
+  const condicion = { tienePrenda: t.prendaObligatoria || tienePrenda, transformaciones, campos, hayPersonaJuridica };
+  const documentosVisibles = documentos.filter((doc) => documentoVisible(doc, condicion));
+  const entrada: EntradaRequisitos = { campos, valorVenta, tienePrenda: condicion.tienePrenda, acreedor, nitAcreedor, observaciones, transformaciones, hayPersonaJuridica };
   const errores = erroresDeRequisitos(definicion, solicitud.adjuntos, entrada);
   const subiendo = Object.values(subidas).some((s) => s.estado === "cargando");
   const completo = Object.keys(errores).length === 0 && !subiendo;
@@ -101,7 +116,7 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
         await guardarConVersion((version) =>
           cliente.solicitudes.guardarComercial(idSolicitud, {
             version,
-            ...(t.comercial ? { valorComercial: Number(valorVenta) } : {}),
+            ...(t.comercial ? { valorComercial: numeroMoneda(valorVenta) } : {}),
             ...(t.prenda ? { prenda: { tienePrenda: tiene, ...(tiene ? { acreedor: acreedor.trim(), nitAcreedor } : {}) } } : {}),
           }),
         );
@@ -187,6 +202,11 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
 
   const cambiarTransformacion = (codigo: string) => setTransformaciones((actual) => (actual.includes(codigo) ? actual.filter((c) => c !== codigo) : [...actual, codigo]));
 
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    queryClient.setQueryData(claveAdicionalesActivos, transformaciones);
+  }, [queryClient, transformaciones]);
+
   // Las observaciones acompañan a cualquier paso de requisitos, así que siempre hay al menos una tarjeta que pintar.
   return (
     <>
@@ -209,10 +229,17 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
                 aria-invalid={mostrar("valorComercial") ? true : undefined}
                 value={valorVenta}
                 onChange={(e) => {
-                  setValorVenta(e.target.value.replace(/\D/g, ""));
+                  const el = e.target;
+                  const escrito = alEscribirMoneda(el.value, el.selectionStart ?? el.value.length);
+                  setValorVenta(escrito.texto);
                   editar("valorComercial");
+                  requestAnimationFrame(() => el.setSelectionRange(escrito.cursor, escrito.cursor));
                 }}
-                onBlur={() => tocar("valorComercial")}
+                onBlur={() => {
+                  tocar("valorComercial");
+                  const n = numeroMoneda(valorVenta);
+                  if (Number.isFinite(n) && n > 0) setValorVenta(textoMonedaCompleta(n));
+                }}
               />
             </Field>
           </div>
@@ -293,14 +320,14 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
         </Card>
       ))}
 
-      {t.documentos && (
+      {documentosVisibles.length > 0 && (
         <Card title="Documentos" id="requisitos-documentos">
           <div className="grid gap-4 md:grid-cols-3">
-            {documentos.map((doc) => {
+            {documentosVisibles.map((doc) => {
               const subida = subidas[doc.docCode];
               const cargado = adjuntoDe(solicitud.adjuntos, doc.docCode);
               const estado: EstadoArchivo = subida?.estado === "cargando" ? "cargando" : subida?.estado === "error" && !cargado ? "error" : cargado ? "ok" : "vacio";
-              const exigible = esExigible(doc);
+              const exigible = esExigible(doc, condicion);
               const faltante = intentoAvance > 0 ? errores[`documento.${doc.docCode}`] : undefined;
               const error = subida?.estado === "error" ? subida.error : faltante;
               const ayuda = [doc.instruccionCargue.trim().replace(/\.$/, ""), doc.condicion.trim() ? `Aplica si: ${doc.condicion.trim().replace(/\.$/, "")}` : "", AYUDA_ARCHIVOS].filter(Boolean).join(". ");
@@ -357,9 +384,18 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
           <div className="mt-3 space-y-3">
             {TRANSFORMACIONES.map(({ codigo, etiqueta }) => {
               const activa = transformaciones.includes(codigo);
+              const precio = cotizacion.data?.lineas.find((l) => l.codigo === codigo)?.valorCop;
               return (
                 <div key={codigo} className="flex items-center justify-between">
-                  <span id={`transf-${codigo}`}>{etiqueta}</span>
+                  <span id={`transf-${codigo}`}>
+                    {etiqueta}
+                    {precio != null && (
+                      <>
+                        {" "}
+                        <b className="text-primary">+{formatearPesos(precio)}</b>
+                      </>
+                    )}
+                  </span>
                   <button
                     type="button"
                     role="switch"

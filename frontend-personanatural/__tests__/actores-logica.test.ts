@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { ActorEstado, ActorRol, EstadoIdentidad } from "@/lib/api/cliente";
 import {
+  actoresDeLaSeccion,
   actoresParaGuardar,
+  actoresYaGuardados,
   correoInvalido,
-  enmascararCorreo,
-  enmascararNombre,
   erroresDeServidor,
   estadoDeFila,
   filasIniciales,
   filaVacia,
+  motivoIdentidadPendiente,
   motivoIncompleto,
   ordinalLibre,
   puedeAgregar,
@@ -21,11 +22,13 @@ import {
 import { definicionDe } from "./fixtures-wizard";
 
 const rol = (extra: Partial<ActorRol> = {}): ActorRol => ({ rol: "comprador", etiqueta: "Comprador", min: 1, max: 1, biometria: true, firma: false, personaNaturalPermitida: true, ...extra });
-const valida = (extra: Partial<FilaActor> = {}): FilaActor => ({ ...filaVacia("comprador", 1), numeroDocumento: "52123456", nombre: "ANA RUIZ", correo: "ana@correo.co", celular: "3001234567", consultado: true, ...extra });
+const valida = (extra: Partial<FilaActor> = {}): FilaActor => ({ ...filaVacia("comprador", 1), numeroDocumento: "52123456", nombre: "ANA RUIZ", correo: "ana@correo.co", celular: "3001234567", ciudad: "Medellin", consultado: true, ...extra });
 
 describe("formato de los datos de un actor", () => {
-  it("el teléfono acepta de 7 a 10 dígitos y el correo exige arroba y dominio", () => {
+  it("el celular es colombiano (10 dígitos que empiezan por 3) y el correo exige arroba y dominio", () => {
     expect(telefonoInvalido("3001234567")).toBe(false);
+    expect(telefonoInvalido("573001234567")).toBe(false);
+    expect(telefonoInvalido("1012457896")).toBe(true);
     expect(telefonoInvalido("123456")).toBe(true);
     expect(telefonoInvalido("30012345678")).toBe(true);
     expect(telefonoInvalido("300 123 4567")).toBe(true);
@@ -40,7 +43,7 @@ describe("formato de los datos de un actor", () => {
     expect(validarFila(valida({ numeroDocumento: "12" , consultado: false }), rol()).numeroDocumento).toContain("entre 4 y 15");
     expect(validarFila(valida({ consultado: false }), rol()).numeroDocumento).toBe("Consulta el documento de esta persona");
     const e = validarFila(valida({ nombre: " ", celular: "12", correo: "x" }), rol());
-    expect(e).toEqual({ nombre: "Escribe el nombre completo", celular: "Ingresa un teléfono válido", correo: "Ingresa un correo electrónico válido" });
+    expect(e).toEqual({ nombre: "Escribe el nombre completo", celular: "Ingresa un celular de 10 dígitos que empiece por 3", correo: "Ingresa un correo electrónico válido" });
   });
 
   it("un NIT o un rol que no admite persona natural es persona jurídica: mensaje fijo y no se puede continuar", () => {
@@ -48,10 +51,42 @@ describe("formato de los datos de un actor", () => {
     expect(validarFila(valida(), rol({ personaNaturalPermitida: false })).numeroDocumento).toBe(MENSAJE_PERSONA_JURIDICA);
   });
 
-  it("enmascara el correo y el nombre de un tercero", () => {
-    expect(enmascararCorreo("juan.perez@correo.com")).toBe("ju•••@correo.com");
-    expect(enmascararCorreo("sin-arroba")).toBe("••••");
-    expect(enmascararNombre("MARIA RODRIGUEZ LOPEZ")).toBe("MA••• RO••• LO•••");
+});
+
+describe("una sección de actor por rol", () => {
+  const definicion = definicionDe([["actor_form"], ["actor_form"]], {
+    actores: [rol({ rol: "vendedor", etiqueta: "Vendedor" }), rol({ rol: "comprador", etiqueta: "Comprador", max: 4 })],
+  });
+
+  it("la sección cuya clave es el rol pinta solo esa persona", () => {
+    expect(actoresDeLaSeccion(definicion, "vendedor").map((a) => a.rol)).toEqual(["vendedor"]);
+    expect(actoresDeLaSeccion(definicion, "comprador").map((a) => a.rol)).toEqual(["comprador"]);
+  });
+
+  it("una sección que no nombra un rol pinta a todas las personas", () => {
+    expect(actoresDeLaSeccion(definicion, "p1").map((a) => a.rol)).toEqual(["vendedor", "comprador"]);
+    expect(actoresDeLaSeccion(definicion, undefined).map((a) => a.rol)).toEqual(["vendedor", "comprador"]);
+  });
+});
+
+describe("guardado que ya está en el borrador", () => {
+  it("reconoce a la persona guardada y distingue un contacto distinto", () => {
+    const fila = { ...valida(), rol: "vendedor", direccion: "Calle 1" };
+    const guardado: ActorEstado = {
+      rol: "vendedor",
+      ordinal: 1,
+      validacionEstado: "pendiente",
+      tipoDocumento: "CC",
+      numeroDocumento: fila.numeroDocumento,
+      nombre: fila.nombre,
+      correo: fila.correo,
+      celular: fila.celular,
+      direccion: "Calle 1",
+      ciudad: "Medellin",
+    };
+
+    expect(actoresYaGuardados([fila], [guardado])).toBe(true);
+    expect(actoresYaGuardados([{ ...fila, correo: "otro@correo.co" }], [guardado])).toBe(false);
   });
 });
 
@@ -71,7 +106,7 @@ describe("filas por rol según la definición", () => {
   it("toma del borrador las personas por rol y posición (guardadas = consultadas) y recorta al máximo", () => {
     const filas = filasIniciales(definicion, [guardado("copropietario", 2), guardado("copropietario", 1), guardado("vendedor", 1), guardado("copropietario", 3), guardado("copropietario", 4)]);
 
-    expect(filas.map((f) => `${f.rol}:${f.ordinal}`)).toEqual(["vendedor:1", "copropietario:1", "copropietario:2", "copropietario:3"]);
+    expect(filas.map((f) => `${f.rol}:${f.ordinal}`)).toEqual(["vendedor:1", "copropietario:1"]);
     expect(filas.every((f) => f.consultado)).toBe(true);
   });
 
@@ -93,7 +128,7 @@ describe("filas por rol según la definición", () => {
   it("manda al back solo las filas consultadas, con el contacto normalizado y sin dirección vacía", () => {
     const filas = [valida({ rol: "vendedor", nombre: "  ANA RUIZ ", direccion: " " }), valida({ consultado: false })];
 
-    expect(actoresParaGuardar(filas)).toEqual([{ rol: "vendedor", ordinal: 1, tipoDocumento: "CC", numeroDocumento: "52123456", nombre: "ANA RUIZ", correo: "ana@correo.co", celular: "3001234567" }]);
+    expect(actoresParaGuardar(filas)).toEqual([{ rol: "vendedor", ordinal: 1, tipoDocumento: "CC", numeroDocumento: "52123456", nombre: "ANA RUIZ", correo: "ana@correo.co", celular: "3001234567", ciudad: "Medellin" }]);
   });
 });
 
@@ -114,7 +149,8 @@ describe("estado y compuerta de la identidad", () => {
 
     expect(motivoIncompleto(definicion, [valida({ rol: "vendedor" })], () => "aprobada")).toBe("Registra a Comprador.");
     expect(motivoIncompleto(definicion, [valida({ rol: "vendedor" }), valida({ celular: "" })], () => "aprobada")).toBe("Completa los datos de Comprador.");
-    expect(motivoIncompleto(definicion, filas, (f) => (f.rol === "vendedor" ? "aprobada" : "pendiente"))).toBe("Falta validar la identidad de: Comprador.");
+    expect(motivoIncompleto(definicion, filas, (f) => (f.rol === "vendedor" ? "aprobada" : "pendiente"))).toBeUndefined();
+    expect(motivoIdentidadPendiente(definicion, filas, (f) => (f.rol === "vendedor" ? "aprobada" : "pendiente"))).toBe("Falta validar la identidad de: Comprador.");
     expect(motivoIncompleto(definicion, filas, () => "aprobada")).toBeUndefined();
   });
 

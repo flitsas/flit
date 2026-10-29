@@ -43,11 +43,11 @@ const RECHAZADO = respuesta({
   subsanacion: { motivo: "Inconsistencia en el paz y salvo de impuestos.", accionCorregir: true },
 });
 
-function montar(manejador: (url: string, init: RequestInit) => Response | Promise<Response>, extra: { onCorregir?: () => void } = {}) {
+function montar(manejador: (url: string, init: RequestInit) => Response | Promise<Response>) {
   const fetchImpl = vi.fn(async (url: string, init: RequestInit) => manejador(String(url), init)) as unknown as typeof fetch;
   const onCerrar = vi.fn();
   const cliente = crearCliente({ fetchImpl });
-  renderConQuery(<ConsultarModal abierto onCerrar={onCerrar} cliente={cliente} tipos={TIPOS} {...extra} />);
+  renderConQuery(<ConsultarModal abierto onCerrar={onCerrar} cliente={cliente} tipos={TIPOS} />);
   return { fetchImpl: fetchImpl as unknown as ReturnType<typeof vi.fn>, onCerrar };
 }
 
@@ -185,9 +185,8 @@ describe("modal Consultar: envío y estados", () => {
     expect(descargar).toHaveAccessibleDescription("El comprobante estará disponible próximamente.");
   });
 
-  it("rechazo con subsanación: alerta clicable con la causal del back que entrega el trámite a la costura del wizard", async () => {
-    const onCorregir = vi.fn();
-    montar(() => json(RECHAZADO), { onCorregir });
+  it("rechazo: muestra la causal y cierra con Entendido, sin ofrecer corregir el trámite", async () => {
+    montar(() => json(RECHAZADO));
     llenar();
 
     consultar();
@@ -195,13 +194,9 @@ describe("modal Consultar: envío y estados", () => {
     const titular = await screen.findByRole("heading", { name: "Tu trámite ha sido rechazado" });
     expect(titular).toHaveClass("text-alert");
     expect(screen.getByText("Rechazado")).toBeInTheDocument();
-    const alerta = screen.getByRole("button", { name: /Causal de rechazo:.*Inconsistencia en el paz y salvo de impuestos\./ });
-    expect(screen.queryByRole("button", { name: "Entendido" })).not.toBeInTheDocument();
-
-    fireEvent.click(alerta);
-
-    expect(onCorregir).toHaveBeenCalledTimes(1);
-    expect(onCorregir.mock.calls[0]).toEqual([RECHAZADO, "1020456789"]);
+    expect(screen.getByRole("note")).toHaveTextContent("Inconsistencia en el paz y salvo de impuestos.");
+    expect(screen.queryByRole("button", { name: /subsanar/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Entendido" })).toBeInTheDocument();
   });
 
   it("rechazo visto por una parte que no es el solicitante: muestra la causal pero no ofrece corregir", async () => {

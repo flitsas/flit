@@ -65,8 +65,8 @@ export function Drop({ title, hint, optional, estado, nombre, error, onFile, onQ
         />
       </label>
       {conArchivo && onQuitar && !disabled && (
-        <button type="button" className={boton("back", "h-9 px-4", "none")} onClick={onQuitar} disabled={cargando}>
-          Quitar {title}
+        <button type="button" className={boton("back", "h-9 w-fit px-4", "none")} onClick={onQuitar} disabled={cargando}>
+          Quitar archivo
         </button>
       )}
     </div>

@@ -156,7 +156,8 @@ export interface EstadoRadicado {
 
 export interface IniciarSesionRequest {
   tipoCodigo: string;
-  organismoId: string;
+  /** Lo elige el ciudadano en el paso 1; al abrir la sesión todavía no existe. */
+  organismoId?: string;
   cedula: string;
   placa?: string;
   vin?: string;
@@ -225,6 +226,7 @@ export interface ActorEstado {
   correo: string | null;
   celular: string | null;
   direccion: string | null;
+  ciudad?: string | null;
 }
 
 /** Qué cambió en la definición del tipo mientras el borrador estaba guardado y qué se hizo con los datos. */
@@ -294,6 +296,7 @@ export interface ActorRequest {
   correo: string;
   celular?: string;
   direccion?: string;
+  ciudad?: string;
 }
 
 export interface DiagnosticoRequest {
@@ -402,6 +405,29 @@ export interface VehiculoMinimo {
   tienePrenda: boolean;
   tieneLimitacion: boolean;
   tieneRestricciones: boolean;
+}
+
+/**
+ * Consulta del vehículo dentro del trámite: los mismos atributos que muestra FLIT 2 al consultar el RUNT,
+ * más el nombre y el documento del propietario, completos.
+ */
+export interface VehiculoDelTramite extends VehiculoMinimo {
+  vin?: string | null;
+  numeroChasis?: string | null;
+  color?: string | null;
+  combustible?: string | null;
+  numeroSerie?: string | null;
+  cilindraje?: string | null;
+  capacidad?: string | null;
+  ejes?: string | null;
+  carroceria?: string | null;
+  numeroMotor?: string | null;
+  alto?: string | null;
+  ancho?: string | null;
+  largo?: string | null;
+  llantas?: string | null;
+  propietarioNombre?: string | null;
+  propietarioDocumento?: string | null;
 }
 
 /** POST /solicitudes/{id}/consultas/persona-detalle: consulta de una persona con nombres, con la sesión de la solicitud (sin captcha). */
@@ -518,6 +544,9 @@ export function crearCliente({ base = BASE_BFF, fetchImpl }: OpcionesCliente = {
     },
     consultas: {
       vehiculo: (datos: ConsultaVehiculoRequest, o?: OpcionesLlamada) => solicitar<VehiculoMinimo>("POST", "/consultas/vehiculo", datos, o),
+      /** Misma consulta, con la sesión del trámite: devuelve los atributos técnicos que FLIT 2 muestra al gestor. */
+      vehiculoDelTramite: (solicitudId: string, datos: ConsultaVehiculoRequest, o?: OpcionesLlamada) =>
+        solicitar<VehiculoDelTramite>("POST", `/solicitudes/${encodeURIComponent(solicitudId)}/consultas/vehiculo`, datos, o),
       persona: (datos: ConsultaPersonaRequest, o?: OpcionesLlamada) => solicitar<ConductorMinimo>("POST", "/consultas/persona", datos, o),
       /** Con la sesión de la solicitud y sin captcha: devuelve los nombres para rellenar al actor. */
       personaDetalle: (solicitudId: string, datos: ConsultaPersonaDetalleRequest, o?: OpcionesLlamada) =>
@@ -537,6 +566,8 @@ export function crearCliente({ base = BASE_BFF, fetchImpl }: OpcionesCliente = {
       /** Preflight de requisitos del tipo (POST /solicitudes/{id}/diagnostico): lo guarda en el borrador y devuelve los resultados. */
       diagnosticar: (id: string, datos?: DiagnosticoRequest, o?: OpcionesLlamada) =>
         solicitar<Diagnostico>("POST", `/solicitudes/${encodeURIComponent(id)}/diagnostico`, datos, o),
+      asignarOrganismo: (id: string, datos: { organismoId: string; version: number }, o?: OpcionesLlamada) =>
+        solicitar<Solicitud>("PUT", `/solicitudes/${encodeURIComponent(id)}/organismo`, datos, o),
       /** Escrituras por paso: cada una lleva la `version` leída y devuelve el borrador completo (409 `conflicto_version` si ya cambió). */
       guardarActores: (id: string, datos: { version: number; actores: ActorRequest[] }, o?: OpcionesLlamada) =>
         solicitar<Solicitud>("PATCH", `/solicitudes/${encodeURIComponent(id)}/actores`, datos, o),

@@ -33,10 +33,12 @@ describe("estructura del wizard (F1)", () => {
     for (const n of [2, 3, 4, 5]) expect(nodo(n)).toBeDisabled();
   });
 
-  it("lee el borrador, luego la definición con el organismo del borrador, y no pide nada más sin acción del ciudadano", async () => {
+  it("al abrir cotiza el valor solo y no pide otras consultas", async () => {
     const { llamadas } = await wizardAbierto();
 
-    expect(llamadas.map((l) => l.clave)).toEqual(["GET /tipos-tramite", "GET /solicitudes/s-1", "GET /tipos-tramite/TIPO_A/definicion?organismoId=o-1"]);
+    await waitFor(() => expect(llamadas.map((l) => l.clave)).toContain("POST /cotizaciones"));
+    expect(llamadas.map((l) => l.clave).filter((c) => c.startsWith("GET"))).toEqual(["GET /tipos-tramite", "GET /solicitudes/s-1", "GET /tipos-tramite/TIPO_A/definicion?organismoId=o-1"]);
+    expect(screen.queryByRole("button", { name: /Calcular valor/ })).not.toBeInTheDocument();
   });
 
   it("monta los cinco pasos como un carrusel: los ocultos no se alcanzan con Tab ni los lee el lector de pantalla", async () => {
@@ -62,12 +64,13 @@ describe("estructura del wizard (F1)", () => {
     expect(llamadas.map((l) => l.clave)).toEqual(["GET /tipos-tramite"]);
   });
 
-  it("un tipo del catálogo con un section_type que el portal no pinta se muestra como no disponible entero", async () => {
+  it("la firma del FUR no impide abrir el trámite: el ciudadano llega al cascarón y puede radicar", async () => {
     fijarContexto(CONTEXTO);
     montar({ "GET /tipos-tramite/TIPO_A/definicion?organismoId=o-1": () => json(definicionDe([["vehicle_query"], ["signature_fur"]])) });
 
-    expect(await screen.findByRole("heading", { level: 1, name: "Este trámite aún no está disponible en el portal" })).toBeInTheDocument();
-    expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Trámite de Trámite A" })).toBeInTheDocument();
+    expect(screen.getByRole("complementary")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Este trámite aún no está disponible en el portal" })).not.toBeInTheDocument();
   });
 
   it("mientras carga muestra el MobilityLoader y si falla ofrece reintentar", async () => {
@@ -98,14 +101,6 @@ describe("sin sesión: reanudar", () => {
     expect(cuerpo(llamadas, "POST /sesiones/reanudar")).toEqual({ radicado: "PN-2026-0042", cedula: "1020456789" });
     expect(llamadas.find((l) => l.clave === "POST /sesiones/reanudar")?.init.headers).toMatchObject({ "x-captcha-token": "dev-captcha-token" });
     expect(obtenerContexto()).toMatchObject({ solicitudId: "s-1", radicado: "PN-2026-0042", cedula: "1020456789" });
-  });
-
-  it("al venir de «Consultar mi trámite» (subsanar) entra con el radicado y la cédula ya escritos", async () => {
-    fijarContexto({ intencion: "subsanar", tipoCodigo: "TIPO_A", radicado: "PN-2026-0007", cedula: "1020456789" });
-    montar();
-
-    expect(await screen.findByLabelText("Número de radicado")).toHaveValue("PN-2026-0007");
-    expect(screen.getByLabelText("Cédula del solicitante")).toHaveValue("1020456789");
   });
 
   it("si la sesión venció al leer el borrador dice «Tu sesión venció» y deja reanudar", async () => {
@@ -259,15 +254,14 @@ describe("avance bloqueado, guardado y conflictos", () => {
 });
 
 describe("valor del trámite", () => {
-  it("se calcula a pedido con la cotización vigente del organismo para el tipo", async () => {
+  it("se calcula solo con la cotización vigente del organismo para el tipo", async () => {
     const { llamadas } = await wizardAbierto({
       "POST /cotizaciones": () => json({ lineas: [], totalCop: 285400, versionTarifa: "v1", adicionalesNoAplicados: [] }),
     });
     const lateral = screen.getByRole("complementary", { name: "Resumen y navegación del trámite" });
 
-    fireEvent.click(within(lateral).getByRole("button", { name: "Calcular valor" }));
-
-    await waitFor(() => expect(within(lateral).getByLabelText("Valor del trámite")).toHaveValue("$ 285.400 COP"));
+    await waitFor(() => expect(within(lateral).getByLabelText("Valor del trámite")).toHaveValue("$ 285.400,00 COP"));
+    expect(within(lateral).queryByRole("button", { name: "Calcular valor" })).not.toBeInTheDocument();
     expect(cuerpo(llamadas, "POST /cotizaciones")).toEqual({ organismoId: "o-1", tipoCodigo: "TIPO_A" });
   });
 
@@ -277,8 +271,6 @@ describe("valor del trámite", () => {
       "GET /solicitudes/s-1": () => json(guardado(DIAGNOSTICO_OK)),
     });
     const lateral = screen.getByRole("complementary", { name: "Resumen y navegación del trámite" });
-
-    fireEvent.click(within(lateral).getByRole("button", { name: "Calcular valor" }));
 
     expect(await within(lateral).findByText("Este organismo no tiene tarifa para este trámite")).toBeInTheDocument();
     fireEvent.click(nodo(1));

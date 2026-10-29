@@ -82,7 +82,8 @@ describe("Paso 3 · tarjetas que aplican al tipo, en el orden del repo (F4 AC1 y
       "Transformaciones del vehículo",
     ]);
     expect(titulos).toContain("Datos del vehículo");
-    expect(screen.getByText(/Valor total liquidado:/)).toHaveTextContent("Valor total liquidado: —");
+    expect(await screen.findByText("Valor total liquidado: $ 0,00 COP")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Calcular valor/ })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Atrás" })).toBeInTheDocument();
     expect(siguiente()).toBeInTheDocument();
   });
@@ -213,7 +214,7 @@ describe("documentos de la definición (F4 AC4, K6 AC2 y AC3)", () => {
     terminar(json(adjunto("a1", "paz_salvo", "paz.pdf"), 201));
 
     expect(await within(tarjeta("Documentos")).findByText(/paz\.pdf · Da clic para reemplazar el archivo/)).toBeInTheDocument();
-    expect(within(tarjeta("Documentos")).getByRole("button", { name: "Quitar Paz y salvo de impuestos *" })).toBeInTheDocument();
+    expect(within(tarjeta("Documentos")).getByRole("button", { name: "Quitar archivo" })).toBeInTheDocument();
   });
 
   it("un tipo de archivo no permitido muestra el error en el propio cargador y no sube nada", async () => {
@@ -275,7 +276,7 @@ describe("documentos de la definición (F4 AC4, K6 AC2 y AC3)", () => {
     const card = tarjeta("Documentos");
     expect(within(card).getByText(/paz\.pdf · Da clic para reemplazar/)).toBeInTheDocument();
 
-    fireEvent.click(within(card).getByRole("button", { name: "Quitar Paz y salvo de impuestos *" }));
+    fireEvent.click(within(card).getByRole("button", { name: "Quitar archivo" }));
 
     await waitFor(() => expect(within(card).queryByText(/paz\.pdf/)).toBeNull());
     expect(llamadas.some((l) => l.clave === "DELETE /solicitudes/s-1/adjuntos/a1")).toBe(true);
@@ -325,20 +326,19 @@ describe("transformaciones y total (F4 AC5)", () => {
     fireEvent.click(within(tarjeta("Transformaciones del vehículo")).getByRole("switch", { name: "Cambio de color" }));
     fireEvent.click(within(tarjeta("Transformaciones del vehículo")).getByRole("switch", { name: "Cambio de carrocería" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Calcular valor total" }));
-
-    expect(await screen.findByText("Valor total liquidado: $ 426.000 COP")).toBeInTheDocument();
-    const peticion = llamadas.find((l) => l.clave === "POST /cotizaciones");
-    expect(JSON.parse(String(peticion?.init.body))).toEqual({ organismoId: "o-1", tipoCodigo: "TIPO_A", adicionales: ["CAMBIO_COLOR", "CAMBIO_CARROCERIA"] });
+    expect(await screen.findByText("Valor total liquidado: $ 426.000,00 COP")).toBeInTheDocument();
+    await waitFor(() => {
+      const peticiones = llamadas.filter((l) => l.clave === "POST /cotizaciones");
+      expect(JSON.parse(String(peticiones.at(-1)?.init.body))).toEqual({ organismoId: "o-1", tipoCodigo: "TIPO_A", adicionales: ["CAMBIO_COLOR", "CAMBIO_CARROCERIA"] });
+    });
+    expect(screen.queryByRole("button", { name: "Calcular valor total" })).not.toBeInTheDocument();
     expect(screen.getByText("No aplican en este organismo: Cambio de carrocería.")).toBeInTheDocument();
   });
 
   it("sin transformaciones el total comparte la cotización del valor base y no vuelve a pedir la verificación", async () => {
     const { llamadas } = await abrir({ "POST /cotizaciones": () => json({ lineas: [], totalCop: 366000, versionTarifa: "v1", adicionalesNoAplicados: [] }) });
 
-    fireEvent.click(screen.getByRole("button", { name: "Calcular valor total" }));
-
-    expect(await screen.findByText("Valor total liquidado: $ 366.000 COP")).toBeInTheDocument();
+    expect(await screen.findByText("Valor total liquidado: $ 366.000,00 COP")).toBeInTheDocument();
     expect(JSON.parse(String(llamadas.find((l) => l.clave === "POST /cotizaciones")?.init.body))).toEqual({ organismoId: "o-1", tipoCodigo: "TIPO_A" });
   });
 });
@@ -421,7 +421,7 @@ describe("guardado del borrador con versión y avance (F4 AC6)", () => {
 
     expect(await within(tarjeta("Datos del vehículo")).findByText("Escriba un número.")).toBeInTheDocument();
     expect(entrada(/Cilindraje/)).toHaveAttribute("aria-invalid", "true");
-    expect(entrada(/Valor de venta/)).toHaveValue("45000000");
+    expect(entrada(/Valor de venta/)).toHaveValue("45.000.000");
   });
 
   it("tras un rato sin escribir guarda el borrador (si lo escrito es válido) y confirma «Borrador guardado»", async () => {
@@ -456,7 +456,7 @@ describe("guardado del borrador con versión y avance (F4 AC6)", () => {
     });
 
     expect(await screen.findByText(/No pudimos guardar el borrador/)).toBeInTheDocument();
-    expect(entrada(/Valor de venta/)).toHaveValue("45000000");
+    expect(entrada(/Valor de venta/)).toHaveValue("45.000.000");
     falla = false;
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
     expect(await screen.findByText("Borrador guardado")).toBeInTheDocument();

@@ -25,8 +25,8 @@ public sealed record CapacidadesPortal(
 /// </summary>
 public static class DefinicionPersonaNatural
 {
-    /// <summary>Tope de actores por lado (ADR-0053: ordinal 1..4) cuando el perfil admite varios.</summary>
-    public const int MaximoPorLado = 4;
+    /// <summary>El portal pide una persona por rol. Los copropietarios siguen en el asistente de FLIT 2.</summary>
+    public const int PersonasPorRol = 1;
 
     public const string RolVendedor = "vendedor";
     public const string RolComprador = "comprador";
@@ -38,8 +38,8 @@ public static class DefinicionPersonaNatural
     private const string ActorLocatario = "LESSEE";
 
     /// <summary>
-    /// Roles del tipo. <c>min</c>/<c>max</c> no existen en la configuración: se derivan de <c>requiresX</c> (1) o ausente (0)
-    /// y de <c>allowsMultipleX</c> (tope ADR-0053). Un tipo de un solo titular declara solo el comprador: se llama «titular».
+    /// Roles del tipo. <c>min</c> sale de <c>requiresX</c> (1) o ausente (0). <c>max</c> es siempre una persona:
+    /// el ciudadano no carga copropietarios. Un tipo de un solo titular declara solo el comprador: se llama «titular».
     /// </summary>
     public static IReadOnlyList<ActorPortal> Actores(ProcedureTypeGateProfile perfil, bool personaNaturalPermitida)
     {
@@ -50,14 +50,14 @@ public static class DefinicionPersonaNatural
 
         var actores = new List<ActorPortal>(3);
         if (perfil.RequiresSeller)
-            actores.Add(new(RolVendedor, "Vendedor", 1, perfil.AllowsMultipleSeller ? MaximoPorLado : 1, Biometria(ActorPropietario), Firma(ActorPropietario), personaNaturalPermitida));
+            actores.Add(new(RolVendedor, "Vendedor", 1, PersonasPorRol, Biometria(ActorPropietario), Firma(ActorPropietario), personaNaturalPermitida));
 
         if (perfil.RequiresBuyer)
-            actores.Add(new(RolComprador, perfil.RequiresSeller ? "Comprador" : "Titular", 1, perfil.AllowsMultipleBuyer ? MaximoPorLado : 1,
+            actores.Add(new(RolComprador, perfil.RequiresSeller ? "Comprador" : "Titular", 1, PersonasPorRol,
                 Biometria(ActorComprador), Firma(ActorComprador), personaNaturalPermitida));
 
         if (perfil.RequiresLessee)
-            actores.Add(new(RolLocatario, "Locatario", 1, 1, Biometria(ActorLocatario), Firma(ActorLocatario), personaNaturalPermitida));
+            actores.Add(new(RolLocatario, "Locatario", 1, PersonasPorRol, Biometria(ActorLocatario), Firma(ActorLocatario), personaNaturalPermitida));
 
         return actores;
     }

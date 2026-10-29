@@ -199,14 +199,14 @@ describe("landing: Dr. FLIT con los catálogos del BFF y enlaces legales", () =>
     expect(screen.getByRole("log")).toHaveTextContent("Ciudad Uno, Villa Dos, Ñandú del Sur.");
   });
 
-  it("el enlace legal del pie abre el aviso «documento no disponible» sin texto legal", async () => {
+  it("el enlace legal del pie abre la política pública de FLIT 2", async () => {
     vi.useRealTimers();
     const { cliente } = fetchFalso(OK);
     renderConQuery(<Landing cliente={cliente} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Políticas de Privacidad y Términos de Uso" }));
-
-    expect(await screen.findByText("El documento oficial aún no está disponible.")).toBeInTheDocument();
+    const politica = screen.getByRole("link", { name: /Política de tratamiento de datos personales/ });
+    expect(politica).toHaveAttribute("href", "https://flitsas.com.co/privacy-policy/");
+    expect(politica).toHaveAttribute("rel", "noopener noreferrer");
   });
 });
 

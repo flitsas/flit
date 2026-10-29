@@ -58,6 +58,9 @@ public sealed partial class SolicitudesService(
 
     private static readonly JsonSerializerOptions JsonOpciones = new(JsonSerializerDefaults.Web);
 
+    /// <summary>Quién es el titular del vehículo: en un traspaso el vendedor; si no hay, el comprador o el locatario.</summary>
+    private static readonly string[] RolesTitular = ["vendedor", "comprador", "locatario"];
+
     [GeneratedRegex(@"^\d{4,15}$")]
     private static partial Regex CedulaValida();
 
@@ -75,7 +78,9 @@ public sealed partial class SolicitudesService(
         var errores = new ErroresDeCampo();
         if (body is null || string.IsNullOrWhiteSpace(body.TipoCodigo) || body.TipoCodigo.Length > 80)
             errores.Agregar("tipoCodigo", "Elija un tipo de trámite.");
-        if (!Guid.TryParse(body?.OrganismoId, out var organismoId))
+        // El organismo se elige en el paso 1 del wizard (el modal de requisitos no lo pide). Si viene, se valida ya.
+        var pideOrganismo = Guid.TryParse(body?.OrganismoId, out var organismoId) && organismoId != Guid.Empty;
+        if (!string.IsNullOrWhiteSpace(body?.OrganismoId) && !pideOrganismo)
             errores.Agregar("organismoId", "Elija un organismo de tránsito.");
         var cedula = PiiHasher.NormalizarDocumento(body?.Cedula ?? string.Empty);
         if (!CedulaValida().IsMatch(cedula))
@@ -92,7 +97,7 @@ public sealed partial class SolicitudesService(
         DefinicionTipoDto def;
         try
         {
-            def = await definiciones.ObtenerAsync(body.TipoCodigo!.Trim(), organismoId.ToString(), ct).ConfigureAwait(false);
+            def = await definiciones.ObtenerAsync(body.TipoCodigo!.Trim(), pideOrganismo ? organismoId.ToString() : null, ct).ConfigureAwait(false);
         }
         catch (FachadaException ex) when (ex.Codigo == DefinicionesService.CodigoTipoNoDisponible)
         {
@@ -100,9 +105,14 @@ public sealed partial class SolicitudesService(
         }
 
         var (placa, vin) = ReglasBorrador.ValidarVehiculo(def, body.Placa, body.Vin, errores);
-        var organismo = (await catalogo.OrganismosAsync(ct).ConfigureAwait(false)).FirstOrDefault(o => string.Equals(o.Id, organismoId.ToString(), StringComparison.OrdinalIgnoreCase));
-        if (organismo is null)
-            throw new ReglaDeNegocioException(StatusCodes.Status422UnprocessableEntity, "organismo_no_habilitado", "Organismo no habilitado", "El organismo de tránsito no está habilitado.");
+        var nombreOrganismo = "";
+        if (pideOrganismo)
+        {
+            var organismo = (await catalogo.OrganismosAsync(ct).ConfigureAwait(false)).FirstOrDefault(o => string.Equals(o.Id, organismoId.ToString(), StringComparison.OrdinalIgnoreCase));
+            if (organismo is null)
+                throw new ReglaDeNegocioException(StatusCodes.Status422UnprocessableEntity, "organismo_no_habilitado", "Organismo no habilitado", "El organismo de tránsito no está habilitado.");
+            nombreOrganismo = organismo.Nombre.Length > 200 ? organismo.Nombre[..200] : organismo.Nombre;
+        }
         if (errores.Hay)
             throw ReglaDeNegocioException.Invalido(errores);
 
@@ -115,8 +125,8 @@ public sealed partial class SolicitudesService(
             TipoTramiteCodigo = def.Code,
             DefinicionVersion = def.Version,
             DefinicionSnapshot = DefinicionesService.Serializar(def),
-            OrganismoId = organismoId,
-            OrganismoNombre = organismo.Nombre.Length > 200 ? organismo.Nombre[..200] : organismo.Nombre,
+            OrganismoId = pideOrganismo ? organismoId : Guid.Empty,
+            OrganismoNombre = nombreOrganismo,
             Placa = placa,
             Vin = vin,
             Estado = EstadoSolicitud.Borrador,
@@ -140,6 +150,47 @@ public sealed partial class SolicitudesService(
 
         var sesion = await sesiones.IniciarAsync(solicitud.Id, ipHash, ct).ConfigureAwait(false);
         return new SesionCreadaDto(sesion.Token, sesion.ExpiraEn, solicitud.Id, solicitud.CodigoPublico, solicitud.Estado, solicitud.TipoTramiteCodigo, solicitud.DefinicionVersion);
+    }
+
+    public const string CodigoOrganismoRequerido = "organismo_requerido";
+
+    /// <summary>
+    /// Fija el organismo del paso 1 y congela la definición de ese organismo. Solo mientras el borrador no tenga diagnóstico:
+    /// después el organismo queda de solo lectura, como en el diseño.
+    /// </summary>
+    public async Task<SolicitudDto> AsignarOrganismoAsync(Guid id, AsignarOrganismoRequest? body, CancellationToken ct)
+    {
+        if (!Guid.TryParse(body?.OrganismoId, out var organismoId) || organismoId == Guid.Empty)
+        {
+            var errores = new ErroresDeCampo();
+            errores.Agregar("organismoId", "Elija un organismo de tránsito.");
+            throw ReglaDeNegocioException.Invalido(errores);
+        }
+
+        var (s, _) = await CargarParaEditarAsync(id, body?.Version, ct).ConfigureAwait(false);
+        if (DatosSolicitud.Leer(s.Datos).Diagnostico is not null)
+            throw new ReglaDeNegocioException(StatusCodes.Status409Conflict, CodigoNoPermiteCambio, "No se puede cambiar", "El organismo quedó fijo al consultar el vehículo.");
+
+        var organismo = (await catalogo.OrganismosAsync(ct).ConfigureAwait(false)).FirstOrDefault(o => string.Equals(o.Id, organismoId.ToString(), StringComparison.OrdinalIgnoreCase));
+        if (organismo is null)
+            throw new ReglaDeNegocioException(StatusCodes.Status422UnprocessableEntity, "organismo_no_habilitado", "Organismo no habilitado", "El organismo de tránsito no está habilitado.");
+
+        DefinicionTipoDto def;
+        try
+        {
+            def = await definiciones.ObtenerAsync(s.TipoTramiteCodigo, organismoId.ToString(), ct).ConfigureAwait(false);
+        }
+        catch (FachadaException ex) when (ex.Codigo == DefinicionesService.CodigoTipoNoDisponible)
+        {
+            throw TipoNoDisponible();
+        }
+
+        s.OrganismoId = organismoId;
+        s.OrganismoNombre = organismo.Nombre.Length > 200 ? organismo.Nombre[..200] : organismo.Nombre;
+        s.DefinicionSnapshot = DefinicionesService.Serializar(def);
+        s.DefinicionVersion = def.Version;
+        await GuardarAsync(s, ct).ConfigureAwait(false);
+        return await ConstruirAsync(s, conPersonas: true, null, ct).ConfigureAwait(false);
     }
 
     /// <summary>Radicado visible <c>PN-AAAA-NNNNNN</c>: el consecutivo sale de una secuencia, no se repite entre réplicas.</summary>
@@ -179,7 +230,7 @@ public sealed partial class SolicitudesService(
 
     private async Task<DefinicionCambioDto?> ReconciliarAsync(SolicitudTramite s, CancellationToken ct)
     {
-        if (!EsEditable(s.Estado) || DefinicionesService.Leer(s.DefinicionSnapshot) is not { } anterior)
+        if (!EsEditable(s.Estado) || s.OrganismoId == Guid.Empty || DefinicionesService.Leer(s.DefinicionSnapshot) is not { } anterior)
             return null;
 
         DefinicionTipoDto actual;
@@ -250,7 +301,7 @@ public sealed partial class SolicitudesService(
             }
 
             foreach (var a in validados)
-                await personas.GuardarAsync(id, new DatosPersona(a.Rol, a.Ordinal, a.TipoDocumento, a.Documento, a.Nombre, a.Correo, a.Celular, a.Direccion), ct2).ConfigureAwait(false);
+                await personas.GuardarAsync(id, new DatosPersona(a.Rol, a.Ordinal, a.TipoDocumento, a.Documento, a.Nombre, a.Correo, a.Celular, a.Direccion, a.Ciudad), ct2).ConfigureAwait(false);
 
             await GuardarAsync(s, ct2).ConfigureAwait(false);
             return await ConstruirAsync(s, conPersonas: true, null, ct2).ConfigureAwait(false);
@@ -307,19 +358,50 @@ public sealed partial class SolicitudesService(
     }
 
     /// <summary>
-    /// Diagnóstico: los requisitos previos del tipo, evaluados por FLIT 2 con la placa o VIN de la solicitud. Del propietario
-    /// solo se usa el documento que llega en la petición, y no se guarda: del resultado solo queda etiqueta y estado.
+    /// Diagnóstico: los requisitos previos del tipo, evaluados por FLIT 2 con la placa o VIN de la solicitud.
+    /// Del resultado no se guarda el propietario que devuelva el RUNT. Sí se guardan la placa y el documento que
+    /// el ciudadano escribió, porque el tipo los pide como campos y si no el envío los vuelve a reclamar.
     /// </summary>
     public async Task<DiagnosticoDto> DiagnosticarAsync(Guid id, DiagnosticoRequest? body, CancellationToken ct)
     {
-        var (s, _) = await CargarParaEditarAsync(id, null, ct).ConfigureAwait(false);
+        var (s, def) = await CargarParaEditarAsync(id, null, ct).ConfigureAwait(false);
+        if (s.OrganismoId == Guid.Empty)
+            throw new ReglaDeNegocioException(StatusCodes.Status422UnprocessableEntity, CodigoOrganismoRequerido, "Falta el organismo", "Elige el organismo de tránsito antes de consultar el vehículo.");
         var tipoDoc = body?.Propietario?.TipoDocumento?.Trim().ToUpperInvariant();
         var doc = body?.Propietario?.NumeroDocumento is { } n ? PiiHasher.NormalizarDocumento(n) : null;
         var resultado = await requisitos.EvaluarAsync(s.TipoTramiteCodigo, s.OrganismoId.ToString(), s.Placa, s.Vin, tipoDoc, doc, ct).ConfigureAwait(false);
 
+        SembrarConsulta(s, def, tipoDoc, doc);
         s.Datos = (DatosSolicitud.Leer(s.Datos) with { Diagnostico = new DiagnosticoDatos(reloj.GetUtcNow(), resultado.PuedeContinuar, resultado.Requisitos) }).Serializar();
         await GuardarAsync(s, ct).ConfigureAwait(false);
         return resultado;
+    }
+
+    /// <summary>Deja en los campos del tipo la placa, el VIN y el documento del titular que el ciudadano ya dio al consultar.</summary>
+    private static void SembrarConsulta(SolicitudTramite s, DefinicionTipoDto def, string? tipoDocumento, string? numeroDocumento)
+    {
+        var conocidos = def.Pasos.SelectMany(p => p.Campos).Select(c => c.FieldKey).ToHashSet(StringComparer.Ordinal);
+        if (conocidos.Count == 0)
+            return;
+
+        var campos = LeerCampos(s.FieldValues);
+        var cambio = false;
+        void Poner(string clave, string? valor)
+        {
+            if (string.IsNullOrWhiteSpace(valor) || !conocidos.Contains(clave))
+                return;
+            if (campos.TryGetValue(clave, out var ya) && !string.IsNullOrWhiteSpace(ya))
+                return;
+            campos[clave] = valor;
+            cambio = true;
+        }
+
+        Poner("plate", s.Placa);
+        Poner("vin", s.Vin);
+        Poner("owner_document_type", tipoDocumento);
+        Poner("owner_document_number", numeroDocumento);
+        if (cambio)
+            s.FieldValues = JsonSerializer.Serialize(campos, JsonOpciones);
     }
 
     // ── Cancelar ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -361,6 +443,13 @@ public sealed partial class SolicitudesService(
             throw NoPermiteCambio(s.Estado);
         if (version is { } v && v != s.RowVersion)
             throw ConflictoVersion(s.RowVersion);
+
+        if (s.OrganismoId == Guid.Empty)
+        {
+            var defVacio = DefinicionesService.Leer(s.DefinicionSnapshot)
+                ?? throw new ReglaDeNegocioException(StatusCodes.Status409Conflict, "definicion_obsoleta", "Definición no disponible", "La definición de este trámite ya no se puede leer.");
+            return (s, defVacio);
+        }
 
         try
         {
@@ -432,7 +521,13 @@ public sealed partial class SolicitudesService(
     {
         var def = DefinicionesService.Leer(s.DefinicionSnapshot) ?? DefinicionesService.Vacia(s.TipoTramiteCodigo, s.DefinicionVersion);
         var filas = await db.Set<PersonaSolicitante>().AsNoTracking().Where(p => p.SolicitudId == s.Id)
-            .OrderBy(p => p.Parte).ThenBy(p => p.Ordinal).Select(p => new { p.Parte, p.Ordinal, p.ValidacionEstado }).ToListAsync(ct).ConfigureAwait(false);
+            .OrderBy(p => p.Parte).ThenBy(p => p.Ordinal)
+            .Select(p => new { p.Parte, p.Ordinal, p.ValidacionEstado, p.TipoDocumento, TieneDocumento = p.DocumentoCifrado.Length > 0 })
+            .ToListAsync(ct).ConfigureAwait(false);
+        var titular = RolesTitular
+            .Select(rol => filas.FirstOrDefault(f => string.Equals(f.Parte, rol, StringComparison.OrdinalIgnoreCase)))
+            .FirstOrDefault(f => f is not null);
+        var captura = new ReglasBorrador.CapturaConsulta(s.Placa, s.Vin, titular?.TipoDocumento, titular?.TieneDocumento == true);
         var adjuntos = await db.Set<Adjunto>().AsNoTracking().Where(a => a.SolicitudId == s.Id).OrderBy(a => a.CreatedAt)
             .Select(a => new AdjuntoDto(a.Id, a.Tipo, a.NombreArchivo, a.MimeType, a.TamanoBytes, a.Sha256, a.CreatedAt)).ToListAsync(ct).ConfigureAwait(false);
         var tiposAdjuntos = adjuntos.Select(a => a.Tipo).ToList();
@@ -443,14 +538,14 @@ public sealed partial class SolicitudesService(
         var actores = filas.Select(f =>
         {
             detalle.TryGetValue((f.Parte, f.Ordinal), out var d);
-            return new ActorEstadoDto(f.Parte, f.Ordinal, f.ValidacionEstado, d?.TipoDocumento, d?.Documento, d?.Nombre, d?.Correo, d?.Celular, d?.Direccion);
+            return new ActorEstadoDto(f.Parte, f.Ordinal, f.ValidacionEstado, d?.TipoDocumento, d?.Documento, d?.Nombre, d?.Correo, d?.Celular, d?.Direccion, d?.Ciudad);
         }).ToList();
 
         var campos = LeerCampos(s.FieldValues);
         var datos = DatosSolicitud.Leer(s.Datos);
         var (pasos, pendientes) = ReglasBorrador.Completitud(
             def, campos, datos, [.. filas.Select(f => (f.Parte, f.Ordinal))],
-            tiposAdjuntos.ToHashSet(StringComparer.Ordinal));
+            tiposAdjuntos.ToHashSet(StringComparer.Ordinal), captura);
 
         return new SolicitudDto(
             s.Id, s.CodigoPublico, s.Estado, s.TipoTramiteCodigo, s.DefinicionVersion, def.Huella, s.RowVersion, s.OrganismoId, s.OrganismoNombre,

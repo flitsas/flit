@@ -1,6 +1,7 @@
 // Paso Requisitos (HU F4 y K6). Módulo puro, sin React ni red: qué tarjetas aplican al tipo, cómo se valida cada campo y cuándo está
 // completo el paso. Todo sale de la definición del tipo (flags, campos y documentos): ningún tipo de trámite está nombrado aquí.
 import type { Adjunto, CampoDefinicion, DefinicionTipo, DocumentoRequerido, PasoDefinicion } from "@/lib/api/cliente";
+import { numeroMoneda } from "@/lib/formato";
 import { GRUPO_POR_SECCION } from "@/lib/tramite/pasos";
 
 // ── Archivos ────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -28,8 +29,64 @@ export function adjuntoDe(adjuntos: readonly Adjunto[], docCode: string): Adjunt
   return adjuntos.filter((a) => a.tipo === docCode).sort((a, b) => b.creadoEn.localeCompare(a.creadoEn))[0];
 }
 
-/** Un documento con condición (texto que el back evalúa al crear el trámite) no se exige aquí: se ofrece como opcional. */
-export const esExigible = (d: DocumentoRequerido): boolean => d.obligatorio && d.condicion.trim() === "";
+/** Lo que el ciudadano ya eligió y con lo que se decide si un documento condicional se muestra. */
+export interface ContextoCondicion {
+  tienePrenda: boolean;
+  transformaciones: readonly string[];
+  campos: Readonly<Record<string, string>>;
+  hayPersonaJuridica: boolean;
+}
+
+export const contextoVacio: ContextoCondicion = { tienePrenda: false, transformaciones: [], campos: {}, hayPersonaJuridica: false };
+
+/**
+ * Un documento sin condición siempre se muestra. Los textos que publica FLIT 2 se resuelven con lo que el ciudadano
+ * ya llenó. Un texto que el portal no reconoce se sigue mostrando (el servidor decide al radicar) y no se exige aquí.
+ */
+export function documentoVisible(doc: DocumentoRequerido, ctx: ContextoCondicion = contextoVacio): boolean {
+  const c = doc.condicion.trim().toLowerCase();
+  if (c === "") return true;
+  if (c.includes("persona natural")) return false;
+  if (c.includes("persona jurídica") || c.includes("persona juridica") || c.includes("nit")) return !ctx.hayPersonaJuridica;
+  if (c.includes("tramitador") || c.includes("mandato")) return false;
+  if (c.includes("causal de cancelación") || c.includes("causal de cancelacion")) return false;
+  if (c.includes("leasing")) return menciona(ctx, "leasing");
+  if (c.includes("prenda")) return ctx.tienePrenda;
+  if (c.includes("servicio especial")) return menciona(ctx, "especial");
+  if (c.includes("carrocer")) return ctx.transformaciones.some((t) => t.toUpperCase() === "CAMBIO_CARROCERIA");
+  return true;
+}
+
+/** La condición es una de las que el portal sabe resolver (si no, no se exige en el navegador). */
+function condicionConocida(doc: DocumentoRequerido): boolean {
+  const c = doc.condicion.trim().toLowerCase();
+  if (c === "") return false;
+  return (
+    c.includes("persona natural") ||
+    c.includes("persona jurídica") ||
+    c.includes("persona juridica") ||
+    c.includes("nit") ||
+    c.includes("tramitador") ||
+    c.includes("mandato") ||
+    c.includes("causal de cancelación") ||
+    c.includes("causal de cancelacion") ||
+    c.includes("leasing") ||
+    c.includes("prenda") ||
+    c.includes("servicio especial") ||
+    c.includes("carrocer")
+  );
+}
+
+function menciona(ctx: ContextoCondicion, texto: string): boolean {
+  const needle = texto.toLowerCase();
+  return Object.entries(ctx.campos).some(([k, v]) => k.toLowerCase().includes(needle) || v.toLowerCase().includes(needle));
+}
+
+/** Obligatorio y, si tiene una condición que el portal entiende, solo cuando esa condición se cumple. */
+export function esExigible(doc: DocumentoRequerido, ctx: ContextoCondicion = contextoVacio): boolean {
+  if (!doc.obligatorio || !documentoVisible(doc, ctx)) return false;
+  return doc.condicion.trim() === "" || condicionConocida(doc);
+}
 
 /** El cobro está fuera de esta entrega del portal: el comprobante de pago no se ofrece en Requisitos aunque la definición lo liste. */
 export const DOC_COMPROBANTE_PAGO = "comprobante_pago";
@@ -109,7 +166,10 @@ export function errorDeCampo(campo: CampoDefinicion, valor: string): string | un
   }
 }
 
-export const valorComercialInvalido = (v: string): string | undefined => (Number(v) > 0 ? undefined : "Ingresa el valor de venta");
+export const valorComercialInvalido = (v: string): string | undefined => {
+  const n = numeroMoneda(v);
+  return Number.isFinite(n) && n > 0 ? undefined : "Ingresa el valor de venta";
+};
 
 export const nitAcreedorInvalido = (v: string): string | undefined => (/^\d{8,10}$/.test(v) ? undefined : "Ingresa el NIT del acreedor (8 a 10 dígitos)");
 
@@ -124,6 +184,8 @@ export interface EntradaRequisitos {
   acreedor: string;
   nitAcreedor: string;
   observaciones: string;
+  transformaciones?: readonly string[];
+  hayPersonaJuridica?: boolean;
 }
 
 /** Errores de lo escrito, por llave estable (la misma con la que el back nombra el campo): `campo.<key>`, `valorComercial`, `prenda.acreedor`… */
@@ -147,7 +209,13 @@ export function erroresDeRequisitos(d: DefinicionTipo, adjuntos: readonly Adjunt
     if (n) errores["prenda.nitAcreedor"] = n;
   }
   if (t.documentos) {
-    for (const doc of documentosOrdenados(d).filter(esExigible)) if (!adjuntoDe(adjuntos, doc.docCode)) errores[`documento.${doc.docCode}`] = MENSAJE_FALTA_ARCHIVO;
+    const ctx: ContextoCondicion = {
+      tienePrenda: e.tienePrenda,
+      transformaciones: e.transformaciones ?? [],
+      campos: e.campos,
+      hayPersonaJuridica: e.hayPersonaJuridica ?? false,
+    };
+    for (const doc of documentosOrdenados(d).filter((doc) => esExigible(doc, ctx))) if (!adjuntoDe(adjuntos, doc.docCode)) errores[`documento.${doc.docCode}`] = MENSAJE_FALTA_ARCHIVO;
   }
   if (t.observaciones && e.observaciones.trim().length > MAX_TEXTO_LARGO) errores["observaciones"] = `Usa hasta ${MAX_TEXTO_LARGO} caracteres`;
   return errores;

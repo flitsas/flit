@@ -413,6 +413,11 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .HasColumnName("phone_encrypted")
                         .HasComment("@pii:medium Celular cifrado (AES-GCM).");
 
+                    b.Property<byte[]>("CiudadCifrada")
+                        .HasColumnType("bytea")
+                        .HasColumnName("city_encrypted")
+                        .HasComment("@pii:medium Ciudad cifrada (AES-GCM).");
+
                     b.Property<byte[]>("CorreoCifrado")
                         .HasColumnType("bytea")
                         .HasColumnName("email_encrypted")

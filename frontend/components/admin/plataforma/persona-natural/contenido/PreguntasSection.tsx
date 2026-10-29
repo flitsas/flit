@@ -186,7 +186,7 @@ export function PreguntasSection({ onCambio }: { onCambio: () => void }) {
         id="pn-faqs-titulo"
         contador={status === "ready" || status === "empty" ? `${plural(faqs.length, "pregunta", "preguntas")} · ${plural(faqs.filter((f) => f.activa).length, "visible", "visibles")}` : undefined}
         titulo="Preguntas frecuentes"
-        descripcion="Las respuestas a las dudas más comunes. Se muestran en este orden (usa las flechas para subir o bajar); las ocultas no aparecen en el portal."
+        descripcion="Al empezar, aquí están las preguntas que el portal ya muestra al ciudadano. Se muestran en este orden (usa las flechas para subir o bajar); las ocultas no aparecen en el portal."
         accion={<CreateButton label="Nueva pregunta" icon={HelpCircle} onClick={nueva} />}
       />
       {status === "loading" ? (

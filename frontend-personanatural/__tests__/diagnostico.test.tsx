@@ -10,7 +10,7 @@ describe("paso 1: diagnóstico con consultas reales (F2)", () => {
   const rutasConsulta = (diagnostico: Diagnostico, vehiculo: VehiculoMinimo = VEHICULO): Record<string, Manejador> => {
     let consultado = false;
     return {
-      "POST /consultas/vehiculo": () => json(vehiculo),
+      "POST /solicitudes/s-1/consultas/vehiculo": () => json(vehiculo),
       "POST /solicitudes/s-1/diagnostico": () => {
         consultado = true;
         return json(diagnostico);
@@ -26,8 +26,8 @@ describe("paso 1: diagnóstico con consultas reales (F2)", () => {
     resolverCaptcha();
 
     expect(await screen.findByText("Consultado en RUNT el 28/10/2026 15:23")).toBeInTheDocument();
-    expect(cuerpo(llamadas, "POST /consultas/vehiculo")).toEqual({ placa: "ABC123", propietario: { tipo: "CC", numero: "1020456789" }, consentimiento: true, consentimientoVersion: "v1" });
-    expect(llamadas.find((l) => l.clave === "POST /consultas/vehiculo")?.init.headers).toMatchObject({ "x-captcha-token": "dev-captcha-token" });
+    expect(cuerpo(llamadas, "POST /solicitudes/s-1/consultas/vehiculo")).toEqual({ placa: "ABC123", propietario: { tipo: "CC", numero: "1020456789" }, consentimiento: true, consentimientoVersion: "v1" });
+    expect(llamadas.find((l) => l.clave === "POST /solicitudes/s-1/consultas/vehiculo")?.init.headers).toMatchObject({ "x-captcha-token": "dev-captcha-token" });
     expect(cuerpo(llamadas, "POST /solicitudes/s-1/diagnostico")).toEqual({ propietario: { tipoDocumento: "CC", numeroDocumento: "1020456789" } });
 
     const indicadores = within(screen.getByRole("list", { name: "Indicadores del vehículo" }));
@@ -38,7 +38,7 @@ describe("paso 1: diagnóstico con consultas reales (F2)", () => {
     const tecnicos = screen.getByRole("region", { name: "Datos técnicos del vehículo" });
     expect(within(tecnicos).getByText("CAMIONETA")).toBeInTheDocument();
     expect(within(tecnicos).getByText("Propietario Actual")).toBeInTheDocument();
-    expect(within(tecnicos).queryByText(/PÉREZ|1020456789/)).not.toBeInTheDocument();
+    expect(within(tecnicos).getByText("C.C. 1.020.456.789")).toBeInTheDocument();
   });
 
   it("sin bloqueos habilita «Continuar» y lleva al paso 2 con el foco en su título", async () => {
@@ -73,7 +73,7 @@ describe("paso 1: diagnóstico con consultas reales (F2)", () => {
   });
 
   it("si el vehículo no existe lo dice, no pide diagnóstico y no deja continuar", async () => {
-    const { llamadas } = await wizardAbierto({ "POST /consultas/vehiculo": () => json({ ...VEHICULO, existe: false }) });
+    const { llamadas } = await wizardAbierto({ "POST /solicitudes/s-1/consultas/vehiculo": () => json({ ...VEHICULO, existe: false }) });
     resolverCaptcha();
 
     expect(await screen.findByText(/No encontramos el vehículo/)).toBeInTheDocument();
@@ -84,7 +84,7 @@ describe("paso 1: diagnóstico con consultas reales (F2)", () => {
   it("si el RUNT no responde avisa y «Reintentar» pide de nuevo la verificación para volver a consultar", async () => {
     let intentos = 0;
     const { llamadas } = await wizardAbierto({
-      "POST /consultas/vehiculo": () => (++intentos === 1 ? json({ code: "proveedor_no_disponible", title: "Consulta no disponible" }, 503) : json(VEHICULO)),
+      "POST /solicitudes/s-1/consultas/vehiculo": () => (++intentos === 1 ? json({ code: "proveedor_no_disponible", title: "Consulta no disponible" }, 503) : json(VEHICULO)),
       "POST /solicitudes/s-1/diagnostico": () => json(DIAGNOSTICO_OK),
       "GET /solicitudes/s-1": () => json(intentos > 1 ? guardado(DIAGNOSTICO_OK) : solicitudDe()),
     });
@@ -95,14 +95,14 @@ describe("paso 1: diagnóstico con consultas reales (F2)", () => {
     resolverCaptcha();
 
     expect(await screen.findByText(/Consultado en RUNT/)).toBeInTheDocument();
-    expect(llamadas.filter((l) => l.clave === "POST /consultas/vehiculo")).toHaveLength(2);
+    expect(llamadas.filter((l) => l.clave === "POST /solicitudes/s-1/consultas/vehiculo")).toHaveLength(2);
   });
 
   it("ante un 429 muestra la espera, no reintenta solo y deja «Reintentar» deshabilitado", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       const { llamadas } = await wizardAbierto({
-        "POST /consultas/vehiculo": () => new Response(JSON.stringify({ code: "cedula_rate_limited", title: "Tope" }), { status: 429, headers: { "content-type": "application/json", "retry-after": "30" } }),
+        "POST /solicitudes/s-1/consultas/vehiculo": () => new Response(JSON.stringify({ code: "cedula_rate_limited", title: "Tope" }), { status: 429, headers: { "content-type": "application/json", "retry-after": "30" } }),
       });
       resolverCaptcha();
 
@@ -112,7 +112,7 @@ describe("paso 1: diagnóstico con consultas reales (F2)", () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(5000);
       });
-      expect(llamadas.filter((l) => l.clave === "POST /consultas/vehiculo")).toHaveLength(1);
+      expect(llamadas.filter((l) => l.clave === "POST /solicitudes/s-1/consultas/vehiculo")).toHaveLength(1);
     } finally {
       vi.useRealTimers();
     }
@@ -122,14 +122,14 @@ describe("paso 1: diagnóstico con consultas reales (F2)", () => {
     fijarContexto({ ...CONTEXTO, placa: undefined });
     const { llamadas } = montar({
       "GET /solicitudes/s-1": () => json(solicitudDe({ placa: null, vin: "9BWZZZ377VT004251" })),
-      "POST /consultas/vehiculo": () => json(VEHICULO),
+      "POST /solicitudes/s-1/consultas/vehiculo": () => json(VEHICULO),
       "POST /solicitudes/s-1/diagnostico": () => json(DIAGNOSTICO_OK),
     });
     await screen.findByRole("heading", { level: 1, name: "Trámite de Trámite A" });
     resolverCaptcha();
 
-    await screen.findByText(/Consultado en RUNT|SOAT/);
-    expect(cuerpo(llamadas, "POST /consultas/vehiculo")).toEqual({ vin: "9BWZZZ377VT004251", consentimiento: true, consentimientoVersion: "v1" });
+    await screen.findByRole("list", { name: "Indicadores del vehículo" });
+    expect(cuerpo(llamadas, "POST /solicitudes/s-1/consultas/vehiculo")).toEqual({ vin: "9BWZZZ377VT004251", consentimiento: true, consentimientoVersion: "v1" });
     const tecnicos = screen.getByRole("region", { name: "Datos técnicos del vehículo" });
     expect(within(tecnicos).getByText("VIN")).toBeInTheDocument();
     expect(within(tecnicos).getByText("9BWZZZ377VT004251")).toBeInTheDocument();

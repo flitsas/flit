@@ -13,6 +13,7 @@ import { useSolicitud } from "@/components/tramite/useSolicitud";
 import { portal, type ClientePortal } from "@/lib/api/cliente";
 import { ApiError } from "@/lib/api/errores";
 import { fijarContexto, useContextoTramite } from "@/lib/tramite/contexto";
+import { organismoElegido } from "@/lib/tramite/diagnostico";
 import { armarPasos, SECCIONES_PROPIAS } from "@/lib/tramite/pasos";
 
 interface Props {
@@ -72,8 +73,8 @@ export function PaginaTramite({ tipoCodigo, cliente = portal, registro = REGISTR
   const sesionDelTipo = contexto && contexto.tipoCodigo === tipoCodigo ? contexto : null;
   const enCatalogo = tipos.data?.some((t) => t.code === tipoCodigo) === true;
   const solicitud = useSolicitud(cliente, enCatalogo ? sesionDelTipo?.solicitudId : undefined);
-  const organismoId = solicitud.data?.organismoId;
-  const definicion = useDefinicion(cliente, tipoCodigo, organismoId, organismoId !== undefined);
+  const organismoId = organismoElegido(solicitud.data?.organismoId) ? solicitud.data?.organismoId : undefined;
+  const definicion = useDefinicion(cliente, tipoCodigo, organismoId, solicitud.data !== undefined);
 
   const soportados = useMemo(() => new Set([...Object.keys(registro)].filter((k) => !SECCIONES_PROPIAS.includes(k))), [registro]);
   const pasos = useMemo(() => (definicion.data ? armarPasos(definicion.data, soportados) : null), [definicion.data, soportados]);

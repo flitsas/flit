@@ -102,6 +102,8 @@ public sealed class PersonaNaturalDb(DbContextOptions<PersonaNaturalDb> options)
                 .HasComment("@pii:medium Celular cifrado (AES-GCM).");
             e.Property(p => p.DireccionCifrada).HasColumnName("address_encrypted")
                 .HasComment("@pii:high Dirección cifrada (AES-GCM).");
+            e.Property(p => p.CiudadCifrada).HasColumnName("city_encrypted")
+                .HasComment("@pii:medium Ciudad cifrada (AES-GCM).");
             e.Property(p => p.ValidacionId).HasColumnName("identity_validation_id");
             e.Property(p => p.ValidacionEstado).HasColumnName("identity_validation_status").HasMaxLength(20).HasDefaultValue("sin_solicitar").IsRequired();
             e.Property(p => p.ValidacionVigenteHasta).HasColumnName("identity_validation_valid_until");

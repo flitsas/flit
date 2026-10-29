@@ -2,10 +2,10 @@
 // Mismos tokens y estados de foco que los formularios de las demás consolas admin (línea base de globals.css).
 
 export const PN_INPUT_CLS =
-  "h-11 w-full rounded-[10px] border border-[#DFE5ED] bg-white px-3 text-sm text-flit-primary " +
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 " +
+  "h-11 w-full min-w-0 rounded-[10px] border border-[#DFE5ED] bg-white px-3 text-sm text-flit-primary " +
+  "focus:border-flit-brand focus:outline-none focus:ring-2 focus:ring-inset focus:ring-flit-brand " +
   "disabled:bg-[#EEF5FF] disabled:opacity-80 dark:border-white/15 dark:bg-[#162744] dark:text-white";
-export const PN_INPUT_ERROR_CLS = "border-[#FF4E00] ring-1 ring-[#FF4E00]";
+export const PN_INPUT_ERROR_CLS = "border-[#FF4E00] ring-1 ring-inset ring-[#FF4E00]";
 export const PN_LABEL_CLS = "flex flex-col gap-1.5 text-sm font-semibold text-flit-primary dark:text-white";
 export const PN_HINT_CLS = "text-xs font-normal text-[#59677D] dark:text-white/70";
 export const PN_FIELD_ERROR_CLS = "text-xs font-semibold text-[#C2410C]";

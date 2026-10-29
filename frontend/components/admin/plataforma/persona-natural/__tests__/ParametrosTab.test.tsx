@@ -44,8 +44,11 @@ describe("ParametrosTab (#14075)", () => {
   it("carga los valores, muestra el rango en cada campo y no deja guardar sin cambios", async () => {
     renderTab();
     expect(await screen.findByLabelText(/duración de la sesión/i)).toHaveValue("60");
-    expect(screen.getByText(/permitido: de 15 a 1440 minutos/i)).toBeInTheDocument();
-    expect(screen.getByText(/permitido: de 1 a 90 días/i)).toBeInTheDocument();
+    expect(screen.getByText(/permitido: de 15 a 1440 minutos\. vacío: usa el valor habitual del portal \(60 minutos\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/permitido: de 1 a 90 días\. vacío: usa el valor habitual del portal \(30 días\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/valor habitual del portal \(10 consultas por hora\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/valor habitual del portal \(2000 consultas\)/i)).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /lo habitual del portal \(activada\)/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/días que se guarda un trámite/i)).toHaveValue("");
     expect(screen.getByLabelText(/captcha/i)).toHaveValue("si");
     expect(screen.getByText(/última actualización: 20\/10\/2026/i)).toBeInTheDocument();

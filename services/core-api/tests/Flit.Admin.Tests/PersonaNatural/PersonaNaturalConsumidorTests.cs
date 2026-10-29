@@ -5,6 +5,7 @@ using Flit.Platform.Sdk;
 using Flit.Platform.Sdk.Grpc;
 using Flit.Platform.Sdk.Messaging;
 using Flit.PersonaNatural.Grpc.V1;
+using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using FluentAssertions;
 using Grpc.Core;
@@ -125,7 +126,7 @@ public sealed class PersonaNaturalConsumidorTests
     public void UnaParteDelPortal_SeMapeaALosActoresDeFlit2()
     {
         var actor = PersonaNaturalCreador.MapearParte(new ParteSolicitudPortal(
-            "Vendedor", 2, "cc", " 123456 ", " Ana Pérez ", "ana@correo.test", "3001112233", "Calle 1", Guid.NewGuid(), "aprobada"));
+            "Vendedor", 2, "cc", " 123456 ", " Ana Pérez ", "ana@correo.test", "3001112233", "Calle 1", Guid.NewGuid(), "aprobada", "Medellin"));
 
         actor.Rol.Should().Be("vendedor");
         actor.TipoDocumento.Should().Be("CC");
@@ -134,6 +135,7 @@ public sealed class PersonaNaturalConsumidorTests
         actor.Email.Should().Be("ana@correo.test");
         actor.Telefono.Should().Be("3001112233");
         actor.Direccion.Should().Be("Calle 1");
+        actor.Ciudad.Should().Be("Medellin");
         actor.Ordinal.Should().Be(2);
         actor.AutorizaReutilizacionDatos.Should().BeFalse("el ciudadano del portal no autoriza el reúso de sus datos entre trámites");
     }
@@ -145,10 +147,45 @@ public sealed class PersonaNaturalConsumidorTests
 
         datos.ValorComercial.Should().Be(45_000_000m);
         datos.Prenda.Should().Be(new PrendaPortal(true, "Banco X", "900123"));
+        datos.Observaciones.Should().BeNull();
+        DatosSolicitudPortal.Leer("""{"requisitos":{"observaciones":"  El color nuevo es rojo  "}}""").Observaciones.Should().Be("  El color nuevo es rojo  ");
         DatosSolicitudPortal.Leer("{no es json").Should().Be(DatosSolicitudPortal.Vacios);
         DatosSolicitudPortal.Leer(null).Should().Be(DatosSolicitudPortal.Vacios);
         DatosSolicitudPortal.Leer("{}").Prenda.Should().BeNull();
     }
+
+    [Fact]
+    public void ElTitularDeLaConsulta_EsElVendedorYSiNoHay_ElComprador()
+    {
+        var vendedor = Parte("vendedor");
+        var comprador = Parte("comprador");
+        PersonaNaturalCreador.TitularDeLaConsulta([comprador, vendedor]).Should().BeSameAs(vendedor);
+        PersonaNaturalCreador.TitularDeLaConsulta([comprador]).Should().BeSameAs(comprador);
+        PersonaNaturalCreador.TitularDeLaConsulta([]).Should().BeNull();
+    }
+
+    [Fact]
+    public void LaConsultaDelVehiculo_SiembraLaFicha_SinPisarLoEscritoNiElOrganismo()
+    {
+        var ya = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "plate", "vehicle_color" };
+        var campos = PersonaNaturalCreador.CamposDeLaConsulta(
+            [
+                new HydratedField("vehicle_brand", "TESLA", null),
+                new HydratedField("vehicle_color", "ROJO", null),
+                new HydratedField("vehicle_fuel", "ELECTRICO", null),
+                new HydratedField("transit_office_name", "OT RUNT", null),
+                new HydratedField("plate", "XXX123", null),
+                new HydratedField("vacio", "  ", null),
+            ],
+            ya);
+
+        campos.Select(c => c.FieldKey).Should().Equal("vehicle_brand", "vehicle_color_runt", "vehicle_fuel", "vehicle_fuel_runt");
+        campos.Should().NotContain(c => c.FieldKey == "vehicle_color");
+        campos.Should().NotContain(c => c.FieldKey.StartsWith("transit_office_", StringComparison.Ordinal));
+    }
+
+    private static ParteSolicitudPortal Parte(string rol) =>
+        new(rol, 1, "CC", "123", "Ana", "ana@correo.test", "3001112233", "Calle 1", null, "sin_solicitar");
 
     [Fact]
     public void LaRespuestaDelRpc_SeMapeaALaSolicitudDelPortal()
