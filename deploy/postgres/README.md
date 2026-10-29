@@ -64,3 +64,14 @@ psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -f deploy/postgres/migrar-valores-mock-aval
 
 Copia `tramites.avaluo_mock_values` a `consultas.valores_mock_avaluo` (los que se hayan agregado a mano en el ambiente);
 si alguno no queda igual, no confirma nada. Es idempotente. En producción no hace falta: la tabla de origen está vacía.
+
+## Empresa «Persona Natural» (Épica #14021)
+
+Antes de encender la fachada del portal de persona natural se crea la empresa a cuyo nombre nacen sus trámites (ya no la
+siembra una migración). Una vez por ambiente, idempotente:
+
+```bash
+psql "$CONNECTION_STRING_CORE_ADMIN" -v ON_ERROR_STOP=1 -f deploy/postgres/crear-empresa-persona-natural.sql
+```
+
+Detalle y verificación en `docs/suite/handoff-vps-personanatural.md`, §3.

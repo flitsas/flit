@@ -130,6 +130,12 @@ public static class DependencyInjection
         services.AddScoped<Integrations.Clients.RegenerateExternalClientSecretHandler>();
         services.AddScoped<Integrations.Clients.UnlockExternalClientHandler>();
 
+        // HU #14067 (Épica #14021) — integraciones externas ligadas a una compañía.
+        services.AddScoped<Integrations.Clients.ListExternalIntegrationsHandler>();
+        services.AddScoped<Integrations.Clients.CreateExternalIntegrationHandler>();
+        services.AddScoped<Integrations.Clients.RotateExternalIntegrationSecretHandler>();
+        services.AddScoped<Integrations.Clients.ChangeExternalIntegrationStateHandler>();
+
         // Alta de compañías (botón "Crear compañía" en la consola, #10118).
         services.AddScoped<CreateCompanyHandler>();
 
@@ -477,6 +483,18 @@ public static class DependencyInjection
         // HU #12513 — catálogo de jobs ICT + último run (sin PII).
         services.AddScoped<GetIctJobCatalogHandler>();
         services.AddScoped<GetIctJobRunsHandler>();
+
+        // HU #14071 (Feature J, Épica #14021) — tarifas del portal de Persona Natural (SuperAdmin Plataforma).
+        services.AddScoped<Plataforma.PersonaNatural.ListarTarifasPnHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.HistorialTarifaPnHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.TarifaVigentePnHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.VersionarTarifasPnHandler>();
+        // HU #14072 — configuración del portal: parámetros, organismos y lista blanca de tipos.
+        services.AddScoped<Plataforma.PersonaNatural.ParametrosPnHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.OrganismosPnHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.TiposPnHandler>();
+        // HU #14073 — contenido del portal: preguntas, banners, enlaces y publicación.
+        services.AddScoped<Plataforma.PersonaNatural.ContenidoPnHandler>();
 
         // Feature #13508 (HU #13509 / #13512) — configuración multi-proveedor IA (SuperAdmin Plataforma).
         services.AddScoped<Plataforma.Ai.ListAiToolsHandler>();

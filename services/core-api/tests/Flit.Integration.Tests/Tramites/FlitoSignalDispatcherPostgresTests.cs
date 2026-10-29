@@ -100,6 +100,50 @@ public sealed class FlitoSignalDispatcherPostgresTests(PostgresDatabaseFixture f
         (await EstadoAvisoAsync(Radicado)).Pendiente.Should().BeTrue();
     }
 
+    /// <summary>HU #14050 AC8 (Épica #14021): un trámite radicado de la empresa «Persona Natural» no sale hacia FLITO; el de otra empresa sí.</summary>
+    [PostgresFact]
+    public async Task AC8_UnTramiteDeLaEmpresaPersonaNatural_SeCierraSinDejarTrabajo_YElDeOtraEmpresaSale()
+    {
+        await SembrarAsync();
+        var portal = Guid.CreateVersion7();
+        await using (var ctx = NewContext())
+        {
+            ctx.Tenants.Add(TenantSeed.New(Flit.Platform.Sdk.PlatformTenants.PersonaNatural, "IT-14050-PN", isGroupParent: false, parentId: null));
+            await ctx.SaveChangesAsync();
+            var tipo = await ctx.ProcedureTypes.AsNoTracking().OrderBy(t => t.Code).Select(t => t.Id).FirstAsync();
+            ctx.ProcedureInstances.Add(new ProcedureInstance
+            {
+                Id = portal,
+                TenantId = Flit.Platform.Sdk.PlatformTenants.PersonaNatural,
+                ProcedureTypeId = tipo,
+                ReferenceNumber = "IT14050-PN",
+                Status = TramiteEstado.Borrador,
+                Vin = "VIN14050000000001",
+                CreatedByUserId = Gestor,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        await RadicarAsync(Radicado);
+        await EjecutarAsync(
+            $"INSERT INTO tramites.procedure_instance_status_history (tenant_id, procedure_instance_id, to_status) VALUES ('{Flit.Platform.Sdk.PlatformTenants.PersonaNatural}', '{portal}', 'entregado')");
+        await using var sp = Servicios();
+        // El trámite del portal se escribe después que el de la otra empresa: en CI una transacción ajena puede
+        // dejar su sync_xact por encima de pg_snapshot_xmin aunque el de la otra empresa ya esté estable.
+        await EsperarHorizonteDelFeedAsync(Flit.Platform.Sdk.PlatformTenants.PersonaNatural);
+
+        await Despachador(sp).ProcesarPendientesAsync(TestContext.Current.CancellationToken);
+
+        var trabajos = await TrabajosAsync();
+        trabajos.Should().ContainSingle("solo sale el de la otra empresa");
+        trabajos[0].Trabajo.Origen.Should().Be("flito");
+        trabajos[0].Sobre.TenantId.Should().Be(Cliente);
+        var avisoPortal = await EstadoAvisoAsync(portal);
+        avisoPortal.Pendiente.Should().BeFalse("el aviso se cierra");
+        avisoPortal.Encolado.Should().BeFalse();
+    }
+
     [PostgresFact]
     public async Task AC4_UnBorradorNuncaRadicadoSeCierraSinDejarTrabajo()
     {
@@ -349,11 +393,13 @@ public sealed class FlitoSignalDispatcherPostgresTests(PostgresDatabaseFixture f
     /// de despachar se espera a que el horizonte supere las versiones de los trámites de esta prueba, en vez de suponer
     /// que el primer ciclo ya los ve.
     /// </summary>
-    private async Task EsperarHorizonteDelFeedAsync()
+    private async Task EsperarHorizonteDelFeedAsync(params Guid[] tenantsAdicionales)
     {
+        var tenants = new[] { Cliente }.Concat(tenantsAdicionales).Distinct();
+        var lista = string.Join(", ", tenants.Select(id => $"'{id}'"));
         var limite = DateTime.UtcNow.AddSeconds(60);
         while (await EscalarAsync<bool>(
-                   $"SELECT EXISTS (SELECT 1 FROM tramites.procedure_instances WHERE tenant_id = '{Cliente}' " +
+                   "SELECT EXISTS (SELECT 1 FROM tramites.procedure_instances WHERE tenant_id IN (" + lista + ") " +
                    "AND COALESCE(sync_xact, '0'::xid8) >= pg_snapshot_xmin(pg_current_snapshot()))"))
         {
             if (DateTime.UtcNow > limite)

@@ -47,6 +47,24 @@ public interface IExternalClientRepository
         Guid id, string newSecretHash, bool revokePrevious, Guid? actor, DateTimeOffset now,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// HU #14067 — la compañía existe. <see cref="CreateAsync"/> lanza
+    /// <see cref="ExternalIntegrationAlreadyActiveException"/> si ya hay una integración activa de ese tipo en la compañía.
+    /// </summary>
+    Task<bool> CompanyExistsAsync(Guid companyId, CancellationToken cancellationToken = default);
+
+    /// <summary>HU #14067 — integraciones (no dadas de baja, activas o no) de una compañía, las más recientes primero.</summary>
+    Task<IReadOnlyList<ExternalClientView>> ListByCompanyAsync(Guid companyId, CancellationToken cancellationToken = default);
+
+    /// <summary>HU #14067 — una integración de la compañía; <c>null</c> si no existe o es de otra compañía.</summary>
+    Task<ExternalClientView?> GetByCompanyAsync(Guid companyId, Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// HU #14067 — bloqueo indefinido (<c>locked_until</c> en el año 9999) hasta que un superadministrador lo quite con
+    /// <see cref="UnlockAsync"/>. <c>null</c> si no existe.
+    /// </summary>
+    Task<ExternalClientView?> BlockAsync(Guid id, Guid? actor, DateTimeOffset now, CancellationToken cancellationToken = default);
+
     /// <summary>HU #13088 — pone a cero los intentos y quita el bloqueo. <c>null</c> si no existe.</summary>
     Task<ExternalClientView?> UnlockAsync(Guid id, Guid? actor, DateTimeOffset now, CancellationToken cancellationToken = default);
 }

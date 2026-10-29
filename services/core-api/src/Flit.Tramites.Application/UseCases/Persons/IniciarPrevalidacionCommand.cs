@@ -33,6 +33,24 @@ public sealed record IniciarPrevalidacionResult(
     string CaptureUrl,
     bool Queued = false);
 
+/// <summary>Ancla de una validación del portal de Persona Natural: la solicitud (<c>external_ref</c>) y el rol del actor (HU #14044).</summary>
+internal sealed record PortalAnchor(string SolicitudRef, string Parte);
+
+/// <summary>Qué hizo <see cref="IniciarPrevalidacionHandler.HandlePortalAsync"/> (HU #14044).</summary>
+public enum PortalValidationOutcome
+{
+    /// <summary>Validación nueva; el proveedor envió el enlace de captura al correo.</summary>
+    Created,
+
+    /// <summary>El proveedor falló de forma transitoria: la validación quedó encolada y se reintenta sola, sin duplicar el enlace.</summary>
+    Queued,
+
+    /// <summary>Ya había una en curso o aprobada de ESA solicitud y rol: se devuelve la misma, sin crear otra.</summary>
+    Existing,
+}
+
+public sealed record PortalValidationResult(BiometricValidationDto Validation, PortalValidationOutcome Outcome);
+
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 /// <summary>
@@ -212,11 +230,84 @@ public sealed class IniciarPrevalidacionHandler(
         return (result, error);
     }
 
+    /// <summary>
+    /// HU #14044 (Feature #14023, Épica #14021, ADR-0075) — lanza una validación de identidad NUEVA para una parte de una
+    /// solicitud del portal de Persona Natural, con el MISMO flujo de la prevalidación y del trámite (Kyverum: enlace al
+    /// correo, captura y webhook; mock en local). Diferencias deliberadas respecto de <see cref="HandleAsync"/>
+    /// (decisión del PO, 2026-10-27: en el portal nada se reutiliza entre trámites ni vence por días):
+    /// <list type="bullet">
+    ///   <item>NO evalúa la precedencia de envío por documento: una identidad vigente o una validación en vuelo de la misma
+    ///        cédula en otro trámite, otra solicitud o la prevalidación NO cuenta ni bloquea. Solo importa lo de ESTA
+    ///        solicitud y rol.</item>
+    ///   <item>Idempotente por (solicitud, rol, documento): con una validación en vuelo o ya aprobada de esa solicitud
+    ///        devuelve esa misma (<see cref="PortalValidationOutcome.Existing"/>), sin llamar al proveedor ni duplicar el
+    ///        enlace; con una rechazada o vencida crea otra.</item>
+    ///   <item>La fila queda anclada a la solicitud (<c>portal_solicitud_ref</c>) sin persona ni trámite, y no entra en la
+    ///        unicidad en vuelo por documento de FLIT 2.</item>
+    /// </list>
+    /// No cambia el contrato de <see cref="HandleAsync"/> ni de <see cref="HandleMandatarioAsync"/>.
+    /// </summary>
+    public async Task<(PortalValidationResult? Result, string? Error)> HandlePortalAsync(
+        Guid tenantId,
+        string solicitudRef,
+        string parte,
+        string documentType,
+        string documentNumber,
+        string name,
+        string email,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(solicitudRef)
+            || string.IsNullOrWhiteSpace(parte)
+            || string.IsNullOrWhiteSpace(documentType)
+            || string.IsNullOrWhiteSpace(documentNumber)
+            || string.IsNullOrWhiteSpace(name)
+            || string.IsNullOrWhiteSpace(email))
+            return (null, "datos_incompletos");
+
+        var anchor = new PortalAnchor(solicitudRef.Trim(), parte.Trim());
+        var subject = new IdentitySubjectStandalone(
+            name.Trim(), documentType.Trim(), documentNumber.Trim(), email.Trim());
+
+        var now = DateTimeOffset.UtcNow;
+        var previous = await procedureRepo.FindPortalValidationAsync(
+            tenantId, anchor.SolicitudRef, anchor.Parte, subject.NumeroDocumento, ct);
+        if (previous is not null
+            && (previous.Status is BiometricEstados.Aprobado or BiometricEstados.ManualActivo or BiometricEstados.PendienteRevisionManual
+                || BiometricRules.EstaEnVuelo(previous)))
+            return (new PortalValidationResult(IniciarBiometriaHandler.ToDto(previous, now), PortalValidationOutcome.Existing), null);
+
+        var validationId = Guid.NewGuid();
+        var (result, error, _) = providerOptions.IsKyverum
+            ? await IniciarConKyverumAsync(tenantId, null, null, subject, validationId, ct, anchor)
+            : await IniciarConMockAsync(tenantId, null, null, subject, validationId, ct, anchor);
+        if (error is not null || result is null)
+        {
+            // Carrera: otra llamada igual ganó el índice único por (solicitud, rol, documento) entre la lectura y el guardado.
+            if (error == "prevalidacion_activa")
+            {
+                procedureRepo.ResetTracking();
+                var winner = await procedureRepo.FindPortalValidationAsync(
+                    tenantId, anchor.SolicitudRef, anchor.Parte, subject.NumeroDocumento, ct);
+                if (winner is not null)
+                    return (new PortalValidationResult(IniciarBiometriaHandler.ToDto(winner, now), PortalValidationOutcome.Existing), null);
+            }
+
+            return (null, error ?? "proveedor_error");
+        }
+
+        return (new PortalValidationResult(
+            result.Validation, result.Queued ? PortalValidationOutcome.Queued : PortalValidationOutcome.Created), null);
+    }
+
+    private static string? ParteDe(Guid? mandateSignerId, PortalAnchor? portal) =>
+        mandateSignerId is not null ? BiometricRules.ParteMandatario : portal?.Parte;
+
     // ── Kyverum path ─────────────────────────────────────────────────────────────
 
     private async Task<(IniciarPrevalidacionResult? Result, string? Error, IdentitySendDecision? Conflict)> IniciarConKyverumAsync(
         Guid tenantId, Guid? personId, Guid? mandateSignerId, IdentitySubjectStandalone subject,
-        Guid validationId, CancellationToken ct)
+        Guid validationId, CancellationToken ct, PortalAnchor? portal = null)
     {
         KyverumVerifyStartResult provider;
         try
@@ -225,7 +316,7 @@ public sealed class IniciarPrevalidacionHandler(
                 new KyverumVerifyStartRequest(
                     ProcedureInstanceId: null,
                     CorrelationId: validationId,
-                    Parte: mandateSignerId is null ? null : BiometricRules.ParteMandatario,
+                    Parte: ParteDe(mandateSignerId, portal),
                     Nombre: subject.Nombre,
                     TipoDoc: subject.TipoDocumento,
                     Documento: subject.NumeroDocumento,
@@ -239,7 +330,7 @@ public sealed class IniciarPrevalidacionHandler(
                 return (null, "proveedor_error", null);
 
             var queuedAt = DateTimeOffset.UtcNow;
-            var queued = BuildValidation(tenantId, personId, mandateSignerId, validationId, subject,
+            var queued = BuildValidation(tenantId, personId, mandateSignerId, validationId, subject, portal,
                 status: BiometricEstados.PendienteEnvio,
                 provider: BiometricProviders.Kyverum,
                 now: queuedAt,
@@ -253,7 +344,7 @@ public sealed class IniciarPrevalidacionHandler(
                 ProcedureInstanceId = null,
                 ValidationId = queued.Id,
                 Provider = BiometricProviders.Kyverum,
-                Parte = mandateSignerId is null ? null : BiometricRules.ParteMandatario,
+                Parte = ParteDe(mandateSignerId, portal),
             }, ct);
 
             try
@@ -271,7 +362,7 @@ public sealed class IniciarPrevalidacionHandler(
         }
 
         var now = DateTimeOffset.UtcNow;
-        var validation = BuildValidation(tenantId, personId, mandateSignerId, validationId, subject,
+        var validation = BuildValidation(tenantId, personId, mandateSignerId, validationId, subject, portal,
             status: BiometricEstados.EnProceso,
             provider: BiometricProviders.Kyverum,
             now: now,
@@ -294,7 +385,7 @@ public sealed class IniciarPrevalidacionHandler(
             ProcedureInstanceId = null,
             ValidationId = validation.Id,
             Provider = BiometricProviders.Kyverum,
-            Parte = mandateSignerId is null ? null : BiometricRules.ParteMandatario,
+            Parte = ParteDe(mandateSignerId, portal),
             ProviderVerificationId = provider.VerificationId,
         }, ct);
 
@@ -316,12 +407,12 @@ public sealed class IniciarPrevalidacionHandler(
 
     private async Task<(IniciarPrevalidacionResult? Result, string? Error, IdentitySendDecision? Conflict)> IniciarConMockAsync(
         Guid tenantId, Guid? personId, Guid? mandateSignerId, IdentitySubjectStandalone subject,
-        Guid validationId, CancellationToken ct)
+        Guid validationId, CancellationToken ct, PortalAnchor? portal = null)
     {
         var token = BiometricToken.Generate();
         var now = DateTimeOffset.UtcNow;
 
-        var validation = BuildValidation(tenantId, personId, mandateSignerId, validationId, subject,
+        var validation = BuildValidation(tenantId, personId, mandateSignerId, validationId, subject, portal,
             status: BiometricEstados.Enviado,
             provider: BiometricProviders.Mock,
             now: now,
@@ -336,7 +427,7 @@ public sealed class IniciarPrevalidacionHandler(
             ProcedureInstanceId = null,
             ValidationId = validation.Id,
             Provider = BiometricProviders.Mock,
-            Parte = mandateSignerId is null ? null : BiometricRules.ParteMandatario,
+            Parte = ParteDe(mandateSignerId, portal),
         }, ct);
 
         try
@@ -366,6 +457,7 @@ public sealed class IniciarPrevalidacionHandler(
         Guid? mandateSignerId,
         Guid validationId,
         IdentitySubjectStandalone subject,
+        PortalAnchor? portal,
         string status,
         string provider,
         DateTimeOffset now,
@@ -382,6 +474,9 @@ public sealed class IniciarPrevalidacionHandler(
             // HU #13246 — con mandateSignerId la validación es del mandatario (exclusiva de su ficha).
             PartyRole = mandateSignerId is null ? null : BiometricRules.ParteMandatario,
             MandateSignerId = mandateSignerId,
+            // HU #14044 — validación del portal: ancla = solicitud + rol (sin trámite ni persona del módulo Identidad).
+            PortalSolicitudRef = portal?.SolicitudRef,
+            PortalParte = portal?.Parte,
             Name = subject.Nombre,
             DocumentType = subject.TipoDocumento,
             DocumentNumber = subject.NumeroDocumento,
