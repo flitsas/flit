@@ -43,8 +43,8 @@ public static class DetailedReportEndpoints
 
     private static async Task<IResult> GetProceduresAsync(
         HttpContext httpContext,
-        DateOnly from,
-        DateOnly to,
+        DateOnly? from,
+        DateOnly? to,
         GetDetailedProceduresHandler handler,
         IProcedureFamilyPermissionGate familyGate,
         CancellationToken ct,
@@ -61,12 +61,15 @@ public static class DetailedReportEndpoints
         [FromQuery] int? page = null,
         [FromQuery] int? pageSize = null)
     {
+        if (from is null || to is null)
+            return AnalyticsEndpointsHelpers.MissingDates();
+
         if (!AnalyticsEndpointsHelpers.TryResolveTenant(httpContext.User, tenantId, out var tenant, out var error))
             return error!;
 
         var (result, err) = await handler.HandleAsync(
             new GetDetailedProceduresQuery(
-                tenant, from, to, transitOfficeId, procedureTypeId, category, status,
+                tenant, from.Value, to.Value, transitOfficeId, procedureTypeId, category, status,
                 referenceNumber, personDocument, personName, hasTransformation, isLeasing,
                 page ?? 1, pageSize ?? GetDetailedProceduresHandler.DefaultPageSize)
             {
@@ -83,8 +86,8 @@ public static class DetailedReportEndpoints
 
     private static IResult ExportExcelAsync(
         HttpContext httpContext,
-        DateOnly from,
-        DateOnly to,
+        DateOnly? from,
+        DateOnly? to,
         IDetailedReportExcelExporter exporter,
         IProcedureFamilyPermissionGate familyGate,
         [FromQuery] Guid? tenantId = null,
@@ -98,12 +101,15 @@ public static class DetailedReportEndpoints
         [FromQuery] bool? hasTransformation = null,
         [FromQuery] bool? isLeasing = null)
     {
+        if (from is null || to is null)
+            return AnalyticsEndpointsHelpers.MissingDates();
+
         if (!AnalyticsEndpointsHelpers.TryResolveTenant(httpContext.User, tenantId, out var tenant, out var error))
             return error!;
 
         var (filter, err) = ExportDetailedProceduresHandler.Validate(
             new ExportDetailedProceduresQuery(
-                tenant, from, to, transitOfficeId, procedureTypeId, category, status,
+                tenant, from.Value, to.Value, transitOfficeId, procedureTypeId, category, status,
                 referenceNumber, personDocument, personName, hasTransformation, isLeasing)
             {
                 AllowedFamilies = familyGate.ReadableFamilyCodes(), // HU #13664 — Ver por familia
@@ -126,7 +132,7 @@ public static class DetailedReportEndpoints
                     }
                 },
                 contentType: ExcelContentType,
-                fileDownloadName: $"reporte_detallado_{from:yyyyMMdd}_{to:yyyyMMdd}.xlsx"),
+                fileDownloadName: $"reporte_detallado_{from.Value:yyyyMMdd}_{to.Value:yyyyMMdd}.xlsx"),
         };
     }
 }
@@ -177,4 +183,9 @@ internal static class AnalyticsEndpointsHelpers
     public static IResult InvalidRange() =>
         Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Bad Request",
             detail: "El rango de fechas es inválido: 'from' no puede ser posterior a 'to'.");
+
+    /// <summary>Bug #14010 H-02: fechas obligatorias ausentes, sin el texto interno del binder.</summary>
+    public static IResult MissingDates() =>
+        Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Bad Request",
+            detail: "Debes indicar la fecha inicial y la fecha final.");
 }

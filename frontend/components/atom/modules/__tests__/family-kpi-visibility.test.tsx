@@ -1,6 +1,6 @@
 // HU #13665 (Feature #13636 F-F, Épica #12753, criterio FF-4) — sin Ver de una familia, su tarjeta KPI no aparece en el
 // inicio (Dashboard) ni en Reportes › Resumen general, ni su serie en los gráficos por familia. La API (HU #13664) ya no
-// la cuenta; la UI no la pinta en cero. En modo compatibilidad (token sin permisos por familia) no se oculta nada.
+// la cuenta; la UI no la pinta en cero. Sin slugs de familia (Bug #14010 H-01) tampoco se pintan: no se heredan de tramites.read.
 //
 // Uso de ejemplo: token con `matriculas.read` y `otros-tramites.read` (sin `traspasos.read`) → sin tarjeta «Traspasos».
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -103,13 +103,14 @@ describe("Inicio (Dashboard) — tarjetas KPI por familia", () => {
     expect(screen.queryByText("Traspasos")).not.toBeInTheDocument();
   });
 
-  it("token sin permisos por familia (compatibilidad): no se oculta ninguna tarjeta", async () => {
+  it("Bug #14010 H-01: token sin permisos por familia no pinta las tarjetas de familia", async () => {
     sesion(COMPATIBILIDAD);
     render(<Dashboard onNewTramite={() => {}} />);
 
     const grid = await screen.findByTestId("dashboard-kpi-grid");
-    expect(within(grid).getByText("Traspasos")).toBeInTheDocument();
-    expect(within(grid).getByText("Matrículas")).toBeInTheDocument();
+    expect(within(grid).queryByText("Traspasos")).not.toBeInTheDocument();
+    expect(within(grid).queryByText("Matrículas")).not.toBeInTheDocument();
+    expect(within(grid).queryByText("Otros Trámites")).not.toBeInTheDocument();
   });
 });
 

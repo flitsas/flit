@@ -81,11 +81,13 @@ export interface ClientProceduresTableProps {
   /** Abre el panel de documentos del expediente para el trámite. */
   onVerDocumentos?: (row: OtClientProcedure) => void;
   /**
-   * Abre el detalle del trámite. Lo disparan DOS cosas: la acción del menú y la fila entera —el
-   * detalle es a lo que se entra el 90% de las veces, y obligar a pasar por un menú de ocho
-   * opciones para llegar a él era peaje puro (prototipo del Feature #12059).
+   * Abre el detalle del trámite. Lo disparan la acción del menú, la fila entera y (HU #14157) el
+   * chip de Estado —con `panel: 'timeline'` para abrir la línea de tiempo.
    */
-  onVerDetalle?: (row: OtClientProcedure) => void;
+  onVerDetalle?: (
+    row: OtClientProcedure,
+    options?: { panel?: "timeline" },
+  ) => void;
   /**
    * Columnas que el usuario tiene encendidas (HU #12218 AC7). Sin la prop se pintan todas: la
    * tabla nunca se queda sin columnas porque una preferencia no cargara.
@@ -313,7 +315,11 @@ const CELDA_CLS: Record<string, string> = {
 };
 
 /** Qué pinta cada columna. Un solo sitio donde mirar cuando una celda muestra lo que no debe. */
-function renderCelda(columnKey: string, row: OtClientProcedure) {
+function renderCelda(
+  columnKey: string,
+  row: OtClientProcedure,
+  onVerDetalle?: ClientProceduresTableProps["onVerDetalle"],
+) {
   switch (columnKey) {
     case "radicado":
       return (
@@ -351,13 +357,31 @@ function renderCelda(columnKey: string, row: OtClientProcedure) {
           </span>
         </span>
       );
-    case "estado":
+    case "estado": {
+      const estadoLabel = formatOtProcedureStatus(row.status);
+      const chip = (
+        <StatusBadge label={estadoLabel} {...procedureStatusChip(row.status)} />
+      );
       return (
         <div className="flex flex-wrap items-center gap-1.5">
-          <StatusBadge
-            label={formatOtProcedureStatus(row.status)}
-            {...procedureStatusChip(row.status)}
-          />
+          {/* HU #14157 — clic en Estado abre el detalle con la línea de tiempo (paridad Gestor).
+              stopPropagation: la fila ya abre el detalle genérico; aquí pedimos el panel timeline. */}
+          {onVerDetalle ? (
+            <button
+              type="button"
+              className="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-1"
+              aria-label={`Estado: ${estadoLabel}. Ver línea de tiempo del trámite ${row.referenceNumber}`}
+              title="Ver línea de tiempo del trámite"
+              onClick={(e) => {
+                e.stopPropagation();
+                onVerDetalle(row, { panel: "timeline" });
+              }}
+            >
+              {chip}
+            </button>
+          ) : (
+            chip
+          )}
           {/* Feature #12565 — indicativo de revocatoria: sin esto la fila se ve igual a cualquier
               "Aprobado" mientras el gestor espera la decisión, o incluso DESPUÉS de un rechazo (el
               trámite vuelve a Aprobado sin más rastro). Icono + texto en vez de un StatusBadge sólido:
@@ -376,6 +400,7 @@ function renderCelda(columnKey: string, row: OtClientProcedure) {
           ) : null}
         </div>
       );
+    }
     case "fechaRadicacion":
       return formatOtDate(row.createdAt);
     default:
@@ -611,7 +636,7 @@ export function ClientProceduresTable({
                   className={`${indice === 0 && !conCasillas ? "rounded-l-xl border-l " : ""}border-y px-4 py-3 ${CELDA_CLS[columna.key] ?? ""}`}
                   style={{ borderColor: "#DFE5ED" }}
                 >
-                  {renderCelda(columna.key, row)}
+                  {renderCelda(columna.key, row, onVerDetalle)}
                 </td>
               ))}
               {/*
