@@ -126,7 +126,7 @@ export function TramiteTrackingModal({
             quedaba flotando contra el borde izquierdo mientras la mitad derecha se veía vacía. */}
         <section className="rounded-xl border border-[#DFE5ED] bg-[#F8FAFC] p-3.5 dark:border-white/10 dark:bg-white/[0.03]">
           <h4 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-flit-brand">
-            Historial
+            Estado del trámite
           </h4>
 
           {loading ? <SeccionCargando etiqueta="Cargando historial" filas={3} /> : null}

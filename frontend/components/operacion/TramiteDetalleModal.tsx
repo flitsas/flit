@@ -19,6 +19,7 @@ import { SeccionCargando, SeccionError } from './detalle/primitivos';
 import { DetalleTramiteShell } from './detalle/DetalleTramiteShell';
 import { DetalleStepper } from './detalle/DetalleStepper';
 import { DetalleHistorialAuditoria } from './detalle/DetalleHistorialAuditoria';
+import { ModificacionesBitacora } from './ExpedienteTimeline';
 import { detalleEstadoHeader } from './detalle/detalle-estado-header';
 import {
   DETALLE_BLUE,
@@ -38,6 +39,7 @@ import { TimelineTrackPanel } from './detalle/TimelineTrackPanel';
 import {
   mapEventsToTimelineNodes,
   mapIdentidadToTimelineNodes,
+  mapModificacionesToTimelineNodes,
   mapStatusHistoryToTimelineNodes,
   mergeTimelineNodesByTimestamp,
 } from './detalle/timeline-mappers';
@@ -56,6 +58,7 @@ import type {
   InstanceSummary,
   ProcedureAttachment,
   ProcedureInstanceDetail,
+  StatusHistoryModification,
 } from '@/lib/api/types/procedure-runtime';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 
@@ -225,6 +228,10 @@ export function TramiteDetalleModal({
   const [identidadLoading, setIdentidadLoading] = useState(false);
   const [identidadError, setIdentidadError] = useState<string | null>(null);
   const [identidadReloadKey, setIdentidadReloadKey] = useState(0);
+  const [lineaRows, setLineaRows] = useState<StatusHistoryModification[]>([]);
+  const [lineaTotal, setLineaTotal] = useState(0);
+  const [lineaPage, setLineaPage] = useState(1);
+  const [lineaStatus, setLineaStatus] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle');
 
   const [seccion, setSeccion] = useState<SeccionId>('expediente');
   const [seccionDe, setSeccionDe] = useState<string | null>(instanceId);
@@ -236,6 +243,10 @@ export function TramiteDetalleModal({
     // que quedó al navegar) reaparecería sobre el siguiente trámite que se abra.
     setAbriendoSubsanacion(false);
     setSubsanarError(null);
+    setLineaRows([]);
+    setLineaTotal(0);
+    setLineaPage(1);
+    setLineaStatus('idle');
   }
 
   // HU #12411 — en consulta, «Archivos finales» ve/descarga por la ruta de red (nunca preview-url).
@@ -279,6 +290,52 @@ export function TramiteDetalleModal({
       cancelled = true;
     };
   }, [open, instanceId, tenantId, detailReloadKey, consultaMode]);
+
+  useEffect(() => {
+    if (!open || !instanceId || consultaMode || panelTracking !== 'timeline') return;
+    let cancelled = false;
+    const load = async () => {
+      setLineaStatus('loading');
+      try {
+        const res = tenantId
+          ? await tramitesClient.getStatusHistory(instanceId, 1, 20, tenantId)
+          : await tramitesClient.getStatusHistory(instanceId, 1, 20);
+        if (cancelled) return;
+        setLineaRows(res?.modificaciones ?? []);
+        setLineaTotal(res?.modificacionesTotal ?? res?.modificaciones?.length ?? 0);
+        setLineaPage(1);
+        setLineaStatus('ok');
+      } catch {
+        if (!cancelled) setLineaStatus('error');
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, instanceId, tenantId, consultaMode, panelTracking, detailReloadKey]);
+
+  const cargarMasLinea = useCallback(async () => {
+    if (!instanceId || lineaStatus === 'loading' || lineaRows.length >= lineaTotal) return;
+    const next = lineaPage + 1;
+    setLineaStatus('loading');
+    try {
+      const res = tenantId
+        ? await tramitesClient.getStatusHistory(instanceId, next, 20, tenantId)
+        : await tramitesClient.getStatusHistory(instanceId, next, 20);
+      const chunk = res?.modificaciones ?? [];
+      setLineaRows((prev) => {
+        const byId = new Map(prev.map((row) => [row.id, row]));
+        for (const row of chunk) byId.set(row.id, row);
+        return [...byId.values()];
+      });
+      setLineaTotal(res?.modificacionesTotal ?? lineaTotal);
+      setLineaPage(next);
+      setLineaStatus('ok');
+    } catch {
+      setLineaStatus('error');
+    }
+  }, [instanceId, lineaPage, lineaRows.length, lineaStatus, lineaTotal, tenantId]);
 
   useEffect(() => {
     if (!open || !instanceId) return;
@@ -714,7 +771,10 @@ export function TramiteDetalleModal({
                       contexto="la línea de tiempo"
                       onReintentar={() => setDetailReloadKey((k) => k + 1)}
                     />
+                  ) : !consultaMode && lineaStatus === 'loading' && lineaRows.length === 0 ? (
+                    <SeccionCargando etiqueta="Cargando línea de tiempo" filas={3} />
                   ) : (
+                    <div className="space-y-3">
                     <TimelineTrackPanel
                       title="Línea de tiempo del trámite"
                       // Bug #12376, defecto 4 — la reasignación de gestor no es un cambio de estado,
@@ -728,20 +788,36 @@ export function TramiteDetalleModal({
                       // solicitud de revocatoria ocurre siempre ANTES de que el status pase a
                       // 'revocado', pero como es un evento aparte vivía en la segunda lista y salía
                       // pintada DESPUÉS del hito 'Revocado' en pantalla.
-                      nodes={mergeTimelineNodesByTimestamp(
-                        mapStatusHistoryToTimelineNodes(detail?.statusHistory ?? []),
-                        mapEventsToTimelineNodes(
-                          (detail?.events ?? []).filter(
-                            (e) =>
-                              e.tipo === 'reasignar_gestor_admin' ||
-                              e.tipo === 'revocatoria_solicitada' ||
-                              e.tipo === 'revocatoria_aprobada' ||
-                              e.tipo === 'revocatoria_rechazada',
-                          ),
-                        ),
-                      )}
+                      nodes={
+                        !consultaMode && lineaRows.length > 0 && lineaStatus !== 'idle'
+                          ? mapModificacionesToTimelineNodes(lineaRows)
+                          : mergeTimelineNodesByTimestamp(
+                              mapStatusHistoryToTimelineNodes(detail?.statusHistory ?? []),
+                              mapEventsToTimelineNodes(
+                                (detail?.events ?? []).filter(
+                                  (e) =>
+                                    e.tipo === 'reasignar_gestor_admin' ||
+                                    e.tipo === 'revocatoria_solicitada' ||
+                                    e.tipo === 'revocatoria_aprobada' ||
+                                    e.tipo === 'revocatoria_rechazada',
+                                ),
+                              ),
+                            )
+                      }
                       emptyMessage="Sin eventos registrados todavía."
                     />
+                    {!consultaMode && lineaRows.length > 0 && lineaRows.length < lineaTotal ? (
+                      <button
+                        type="button"
+                        onClick={() => void cargarMasLinea()}
+                        disabled={lineaStatus === 'loading'}
+                        className="rounded-xl border px-3 py-1.5 text-xs font-semibold transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                        style={{ borderColor: '#DFE5ED', color: 'var(--color-flit-brand)' }}
+                      >
+                        {lineaStatus === 'loading' ? 'Cargando…' : 'Ver más'}
+                      </button>
+                    ) : null}
+                    </div>
                   )}
                 </div>
               ) : panelTracking === 'identidad' ? (
@@ -917,6 +993,14 @@ export function TramiteDetalleModal({
                                 contexto="el historial de auditoría"
                                 onReintentar={() => setDetailReloadKey((k) => k + 1)}
                               />
+                            ) : !consultaMode && instanceId ? (
+                              <section className={`${DETALLE_CARD} h-full`} aria-label="Trazabilidad cronológica del trámite">
+                                <ModificacionesBitacora
+                                  instanceId={instanceId}
+                                  tenantId={tenantId}
+                                  embebida
+                                />
+                              </section>
                             ) : (
                               <DetalleHistorialAuditoria
                                 statusHistory={detail?.statusHistory ?? []}

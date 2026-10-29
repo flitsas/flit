@@ -135,6 +135,9 @@ export const OT_ARTICLES: ManualArticle[] = [
       "por aprobar",
       "por preasignar",
       "transformaciones",
+      "linea de tiempo",
+      "modificaciones",
+      "borrador",
     ],
     summary: "Revisar, filtrar y decidir trámites radicados por compañías cliente; asignar, corregir y liberar placas.",
     blocks: [
@@ -169,6 +172,7 @@ export const OT_ARTICLES: ManualArticle[] = [
         title: "3. Revisión y decisión",
         paragraphs: [
           "Abre un trámite para ver el expediente, organizado en acordeones independientes que puedes tener abiertos a la vez: vehículo, propietario y actores; transformaciones declaradas (si el vehículo cambió color, combustible o carrocería frente a lo que dice RUNT, aquí ves el antes y el después); documentos del gestor («Ver documentos»), consolidado («Ver consolidado») y el historial. El panel «Pendientes antes de decidir» lista lo que falta (por ejemplo SOAT vigente cuando la regla aplica).",
+          "«Línea de Tiempo del Trámite», o el chip de estado, muestra cada cambio en tarjetas, también lo ocurrido cuando el trámite todavía estaba en borrador. El título de la tarjeta es el dato. Una bandera de transformación (color, carrocería, combustible o blindaje) se lee Sí o No. Dentro van gestor, correo, empresa, rol, fecha y hora de Colombia, y el detalle con el valor anterior y el nuevo. La de más abajo es la vigente. Si no hay cambios dice «Todavía no hay modificaciones»; si está cargando o falla, lo dice. Solo lo ves en un trámite que ya puedes abrir: un borrador que no te corresponde no llega a esta bandeja.",
           "El consolidado se mantiene al día solo: si el gestor o el organismo cambian un dato, un documento o la placa, el FUR y el consolidado se vuelven a generar en segundos. No hace falta pedir que lo limpien para ver el cambio.",
         ],
         bullets: [
