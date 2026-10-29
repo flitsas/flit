@@ -59,7 +59,10 @@ public sealed class IdentityValidationPolicyWarningTests
         await Applier().ApplyAsync(v, Aprobado(95), DateTimeOffset.UtcNow, TestContext.Current.CancellationToken);
 
         v.Status.Should().Be(BiometricEstados.Aprobado);
-        await _repo.DidNotReceive().AddEventAsync(Arg.Any<ProcedureInstanceEvent>(), Arg.Any<CancellationToken>());
+        // HU #14179 encola aparte la frase de identidad; aquí solo se exige que no haya advertencia.
+        await _repo.DidNotReceive().AddEventAsync(
+            Arg.Is<ProcedureInstanceEvent>(e => e.Tipo == "validacion_biometrica_advertencia"),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -68,7 +71,9 @@ public sealed class IdentityValidationPolicyWarningTests
         var v = EnProceso();
         await Applier().ApplyAsync(v, Aprobado(null), DateTimeOffset.UtcNow, TestContext.Current.CancellationToken);
 
-        await _repo.DidNotReceive().AddEventAsync(Arg.Any<ProcedureInstanceEvent>(), Arg.Any<CancellationToken>());
+        await _repo.DidNotReceive().AddEventAsync(
+            Arg.Is<ProcedureInstanceEvent>(e => e.Tipo == "validacion_biometrica_advertencia"),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

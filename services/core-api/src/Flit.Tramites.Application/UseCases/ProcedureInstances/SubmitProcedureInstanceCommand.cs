@@ -1,3 +1,4 @@
+using Flit.Tramites.Application.Tracking;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
@@ -151,6 +152,16 @@ public sealed class SubmitProcedureInstanceHandler(
             {
                 SubmitLog.FirmaImprontaOmitida(_logger, ex, id, tenantId);
             }
+        }
+
+        // La radicación que ve el gestor es este envío del borrador. Enviar al organismo
+        // no repite la fila si ya quedó escrita aquí.
+        if (!RadicacionBitacora.YaRegistrada(instance)
+            && (final.Instance is null || ReferenceEquals(final.Instance, instance) || !RadicacionBitacora.YaRegistrada(final.Instance)))
+        {
+            await repo.AddEventAsync(
+                RadicacionBitacora.Crear(tenantId, id, changedBy, DateTimeOffset.UtcNow), ct);
+            await repo.SaveChangesAsync(ct);
         }
 
         return (CreateProcedureInstanceHandler.ToSummary(final.Instance!), null);

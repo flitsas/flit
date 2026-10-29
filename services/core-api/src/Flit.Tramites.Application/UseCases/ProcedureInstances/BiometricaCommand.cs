@@ -871,7 +871,9 @@ public sealed class CompletarBiometriaHandler(
 /// crea/actualiza la validación con estado <c>aprobado</c>, score 95, proveedor/scorer "mock" y los
 /// datos del actor. Devuelve el mismo <see cref="BiometricValidationDto"/> que la lista.
 /// </summary>
-public sealed class SimularBiometriaHandler(IProcedureInstanceRepository repo)
+public sealed class SimularBiometriaHandler(
+    IProcedureInstanceRepository repo,
+    IdentityValidationResultApplier? bitacora = null)
 {
     private const int MockScore = 95;
 
@@ -976,6 +978,11 @@ public sealed class SimularBiometriaHandler(IProcedureInstanceRepository repo)
             // PK store-generated (uuidv7) con Id ya seteado: marcar Added explícito para forzar INSERT.
             repo.Add(validation);
         }
+
+        // La frase va en el mismo guardado. ApplyAsync no sirve aquí: la fila ya quedó Aprobado
+        // y esa ruta sale sin escribir. CreatedBy sigue null → «Sistema · Validación de identidad».
+        if (bitacora is not null)
+            await bitacora.EncolarFraseDeParteAsync(validation, approved: true, now, ct);
 
         await repo.SaveChangesAsync(ct);
         return (IniciarBiometriaHandler.ToDto(validation, now, actor.Ordinal), null);

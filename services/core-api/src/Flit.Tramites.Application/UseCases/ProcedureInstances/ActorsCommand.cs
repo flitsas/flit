@@ -3,10 +3,12 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Flit.Tramites.Application.Identity;
+using Flit.Tramites.Application.Tracking;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tracking;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Services;
@@ -157,10 +159,25 @@ public sealed class PutActorsHandler(
             [ParteRol.Locatario] = "LESSEE",
         };
 
+    // HU #14172 — opciones JSON (camelCase) para el payload de eventos de bitácora de actores.
+    private static readonly JsonSerializerOptions s_actorJsonOpts = new(JsonSerializerDefaults.Web);
+
+    /// <param name="actorUserId">
+    /// Usuario que realiza el cambio (claim <c>sub</c>). <c>null</c> cuando no hay sesión de usuario
+    /// (ICT, tests) — el evento queda sin <c>CreatedBy</c> y la consulta de historial lo mostrará como sistema.
+    /// </param>
+    public Task<(ActorsResponse? Result, string? Error)> HandleAsync(
+        Guid id,
+        Guid tenantId,
+        PutActorsRequest request,
+        CancellationToken ct = default) =>
+        HandleAsync(id, tenantId, request, actorUserId: null, ct);
+
     public async Task<(ActorsResponse? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
         PutActorsRequest request,
+        Guid? actorUserId,
         CancellationToken ct = default)
     {
         // HU #10880: se necesitan también las validaciones biométricas para poder invalidar/reenviar la
@@ -328,6 +345,14 @@ public sealed class PutActorsHandler(
             .Select(a => (Rol: ParseRol(a.ActorType)!.Value, a.Ordinal, Subject: IdentitySubjectResolver.For(a)))
             .ToDictionary(x => (x.Rol, x.Ordinal), x => x.Subject);
 
+        // HU #14172 — snapshot de atributos visibles de los actores ANTES de la eliminación,
+        // para poder calcular el diff contra los nuevos en la bitácora de cambios de datos.
+        var previousActorData = toRemove
+            .Where(a => ParseRol(a.ActorType) is not null)
+            .ToDictionary(
+                a => (ParseRol(a.ActorType)!.Value, a.Ordinal),
+                a => (a.FullName, a.DocumentType, a.DocumentNumber, a.Email, a.Phone));
+
         foreach (var actor in toRemove)
             instance.Actors.Remove(actor);
         await repo.SaveChangesAsync(ct);
@@ -379,6 +404,15 @@ public sealed class PutActorsHandler(
             }
             list.Add(actor);
         }
+
+        // HU #14172 — bitácora de cambios de actores: compara el snapshot previo contra los nuevos.
+        // Se llama primero a ProcedureFieldChangeRecorder.Record; como las claves actor_* no están
+        // en ProcedureFieldLabels todavía, el recorder devuelve vacío y se escriben los eventos
+        // directamente con el mismo shape de payload (etiqueta, campo, anterior, nuevo).
+        var actorChangeEvents = BuildActorChangeEvents(
+            tenantId, instance.Id, inputs, previousActorData, actorUserId, now);
+        foreach (var evt in actorChangeEvents)
+            await repo.AddEventAsync(evt, ct);
 
         await repo.SaveChangesAsync(ct);
 
@@ -930,6 +964,103 @@ public sealed class PutActorsHandler(
     /// </summary>
     internal static (string? Ciudad, string? Direccion, ActorRepresentanteLegal? RepresentanteLegal, ActorMandante? Mandante) ParseMetadata(string? metadata) =>
         ActorMetadataReader.Parse(metadata);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // HU #14172 — bitácora de cambios de actores
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Construye los eventos de bitácora (<c>dato_modificado</c>) para los atributos visibles
+    /// de los actores que cambiaron respecto al snapshot previo.
+    ///
+    /// <para>Intenta primero <see cref="ProcedureFieldChangeRecorder.Record"/>: si las claves
+    /// <c>actor_*</c> ya están en <see cref="ProcedureFieldLabels"/>, el recorder los genera.
+    /// Mientras no estén, el recorder devuelve vacío y este método los escribe directamente con
+    /// el mismo shape de payload que el recorder (<c>etiqueta</c>, <c>campo</c>,
+    /// <c>anterior</c>, <c>nuevo</c>).</para>
+    ///
+    /// <para>Solo se emite un evento cuando el valor normalizado (trim + minúsculas de null → "")
+    /// efectivamente cambió y el ordinal del actor ya existía (actor nuevo no tiene anterior).</para>
+    /// </summary>
+    private static IReadOnlyList<ProcedureInstanceEvent> BuildActorChangeEvents(
+        Guid tenantId,
+        Guid instanceId,
+        IReadOnlyList<ActorInput> inputs,
+        Dictionary<(ParteRol Rol, int Ordinal), (string FullName, string DocumentType, string DocumentNumber, string? Email, string? Phone)> previousActorData,
+        Guid? actorUserId,
+        DateTimeOffset atUtc)
+    {
+        // Normalización idéntica a la del recorder: null y blanco → cadena vacía; en otro caso, Trim().
+        static string N(string? v) => string.IsNullOrWhiteSpace(v) ? string.Empty : v.Trim();
+
+        // Lista de cambios detectados: (FieldKey, Etiqueta, Anterior normalizado, Nuevo normalizado)
+        var changes = new List<(string FieldKey, string Etiqueta, string Anterior, string Nuevo)>();
+
+        foreach (var a in inputs)
+        {
+            var rol = ParseRol(a.Rol)!.Value;
+            // Actor nuevo: el anterior queda vacío y el valor que se guarda es el nuevo.
+            if (!previousActorData.TryGetValue((rol, a.Ordinal), out var prev))
+                prev = default;
+
+            var rolCode  = RolToCode(rol);
+            var rolLabel = rol switch
+            {
+                ParteRol.Comprador => "Comprador",
+                ParteRol.Vendedor  => "Vendedor",
+                ParteRol.Locatario => "Locatario",
+                _                  => rolCode,
+            };
+            // ordinal=1: sin sufijo numérico para compatibilidad con las claves del ejemplo del ADR.
+            var ordSuffix  = a.Ordinal == 1 ? string.Empty : $"_{a.Ordinal}";
+            var keyPrefix  = $"actor_{rolCode}{ordSuffix}";
+            var labelBase  = a.Ordinal == 1 ? rolLabel : $"{rolLabel} {a.Ordinal}";
+
+            void TryAdd(string field, string label, string? anterior, string? nuevo)
+            {
+                var ant = N(anterior);
+                var nvo = N(nuevo);
+                if (!string.Equals(ant, nvo, StringComparison.Ordinal))
+                    changes.Add(($"{keyPrefix}_{field}", $"{labelBase} · {label}", ant, nvo));
+            }
+
+            TryAdd("nombre",          "Nombre",           prev.FullName,      a.NombreCompleto);
+            TryAdd("tipo_documento",  "Tipo de documento", prev.DocumentType,  a.TipoDocumento?.ToUpperInvariant());
+            TryAdd("documento",       "Documento",        prev.DocumentNumber, a.NumeroDocumento);
+            TryAdd("correo",          "Correo",           prev.Email,         a.Email);
+            TryAdd("telefono",        "Teléfono",         prev.Phone,         a.Telefono);
+        }
+
+        if (changes.Count == 0)
+            return [];
+
+        // Intento con el recorder: si las claves ya están en ProcedureFieldLabels, los produce él.
+        var pfcs = changes
+            .Select(c => new ProcedureFieldChange(c.FieldKey, c.Anterior, c.Nuevo))
+            .ToList();
+        var recorderResult = ProcedureFieldChangeRecorder.Record(tenantId, instanceId, pfcs, actorUserId, atUtc);
+        if (recorderResult.Count > 0)
+            return recorderResult;
+
+        // Fallback directo: claves actor_* no están en ProcedureFieldLabels aún.
+        var events = new List<ProcedureInstanceEvent>(changes.Count);
+        foreach (var (fieldKey, etiqueta, anterior, nuevo) in changes)
+        {
+            events.Add(new ProcedureInstanceEvent
+            {
+                Id                  = Guid.NewGuid(),
+                TenantId            = tenantId,
+                ProcedureInstanceId = instanceId,
+                Tipo                = ProcedureFieldChangeRecorder.EventType,
+                Payload             = JsonSerializer.Serialize(
+                    new { etiqueta, campo = fieldKey, anterior, nuevo },
+                    s_actorJsonOpts),
+                CreatedAt           = atUtc,
+                CreatedBy           = actorUserId,
+            });
+        }
+        return events;
+    }
 }
 
 /// <summary>GET de actores del set guardado.</summary>
