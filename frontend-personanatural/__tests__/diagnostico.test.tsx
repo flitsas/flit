@@ -72,6 +72,18 @@ describe("paso 1: diagnóstico con consultas reales (F2)", () => {
     expect(continuar).toHaveAccessibleDescription("Resuelve los pendientes del diagnóstico para continuar.");
   });
 
+  it("mientras consulta el vehículo conserva el loader y muestra la frase de espera", async () => {
+    await wizardAbierto({
+      "POST /solicitudes/s-1/consultas/vehiculo": () => new Promise(() => {}),
+    });
+    resolverCaptcha();
+
+    const frase = await screen.findByText("Consultando el vehículo…");
+    const espera = frase.closest('[role="status"]');
+    expect(espera).not.toBeNull();
+    expect(espera?.querySelector(".mobility-orbit")).not.toBeNull();
+  });
+
   it("si el vehículo no existe lo dice, no pide diagnóstico y no deja continuar", async () => {
     const { llamadas } = await wizardAbierto({ "POST /solicitudes/s-1/consultas/vehiculo": () => json({ ...VEHICULO, existe: false }) });
     resolverCaptcha();

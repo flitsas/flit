@@ -8,7 +8,12 @@ import { filtrarOrganismos, tiposDisponibles } from "@/lib/landing/catalogos";
 import { PASOS_TRAMITE, PREGUNTAS_FRECUENTES } from "@/lib/landing/contenido";
 import { fetchFalso, json, ORGANISMOS, renderConQuery, TIPOS } from "./utilidades";
 
-const OK = { "/organismos": () => json(ORGANISMOS), "/tipos-tramite": () => json(TIPOS) };
+const TIPOS_PUERTA = [
+  ...TIPOS,
+  { code: "CAMBIO_COLOR", name: "Cambio de color", family: "OTROS", version: 1, disponible: true },
+  { code: "TRASPASO_STANDARD", name: "Traspaso", family: "TRASPASO", version: 1, disponible: true },
+];
+const OK = { "/organismos": () => json(ORGANISMOS), "/tipos-tramite": () => json(TIPOS_PUERTA) };
 const pendiente = () => new Promise<Response>(() => {});
 
 describe("landing: organismos desde el BFF", () => {
@@ -77,10 +82,10 @@ describe("landing: tipos de trámite desde el BFF", () => {
 
     fireEvent.click(selector);
     const opciones = within(screen.getByRole("listbox", { name: "Tipo de Trámite" })).getAllByRole("option");
-    expect(opciones.map((o) => o.textContent)).toEqual(["Trámite A", "Trámite C"]);
+    expect(opciones.map((o) => o.textContent)).toEqual(["Cambio de color", "Traspaso"]);
 
     fireEvent.click(opciones[1]);
-    expect(screen.getByRole("button", { name: "Tipo de Trámite" })).toHaveTextContent("Trámite C");
+    expect(screen.getByRole("button", { name: "Tipo de Trámite" })).toHaveTextContent("Traspaso");
   });
 
   it("se opera con teclado: flechas, Enter y Escape", async () => {
@@ -93,7 +98,7 @@ describe("landing: tipos de trámite desde el BFF", () => {
     const lista = screen.getByRole("listbox", { name: "Tipo de Trámite" });
     fireEvent.keyDown(lista, { key: "ArrowDown" });
     fireEvent.keyDown(lista, { key: "Enter" });
-    expect(selector).toHaveTextContent("Trámite C");
+    expect(selector).toHaveTextContent("Traspaso");
 
     fireEvent.keyDown(selector, { key: "ArrowDown" });
     fireEvent.keyDown(screen.getByRole("listbox"), { key: "Escape" });
@@ -121,7 +126,7 @@ describe("landing: tipos de trámite desde el BFF", () => {
 
   it("error: muestra el mensaje y permite reintentar sin tocar los organismos", async () => {
     let falla = true;
-    const { cliente } = fetchFalso({ ...OK, "/tipos-tramite": () => (falla ? json({ code: "x" }, 503) : json(TIPOS)) });
+    const { cliente } = fetchFalso({ ...OK, "/tipos-tramite": () => (falla ? json({ code: "x" }, 503) : json(TIPOS_PUERTA)) });
     renderConQuery(<Landing cliente={cliente} />);
 
     const alerta = await screen.findByRole("alert");

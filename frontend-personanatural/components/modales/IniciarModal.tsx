@@ -7,17 +7,22 @@ import { boton } from "@/components/landing/estilos";
 import { useDefinicion } from "@/components/landing/useCatalogos";
 import { Captcha } from "@/components/Captcha";
 import { MobilityLoader } from "@/components/MobilityLoader";
-import { portal, type ClientePortal, type SesionTramite } from "@/lib/api/cliente";
-import { mensajeDe } from "@/lib/api/errores";
+import { portal, type ClientePortal, type Organismo, type SesionTramite } from "@/lib/api/cliente";
+import { ApiError, mensajeDe } from "@/lib/api/errores";
 import { useBloqueo } from "@/lib/api/useBloqueo";
 import { CONSENTIMIENTO_VERSION } from "@/lib/consentimiento";
+import { mensajeDeOrganismo, organismoHabilitadoDelRunt, MENSAJE_PLACA_NO_ENCONTRADA, MENSAJE_RUNT_PUERTA } from "@/lib/landing/puerta-iniciar";
+import { comoLista } from "@/lib/landing/catalogos";
 import { TEXTO_POLITICA_DATOS, URL_POLITICA_FLIT } from "@/lib/legal";
+import { MENSAJE_CONSULTANDO_VEHICULO } from "@/lib/tramite/diagnostico";
 import { ModalFlit } from "./ModalFlit";
 
 /** Lo que el ciudadano escribió en la tarjeta «Iniciar mi trámite». Solo vive en memoria. */
 export interface DatosInicio {
   tipoCodigo: string;
+  /** Número de documento del propietario. La consulta por placa lo exige; la sesión lo usa como identidad del borrador. */
   cedula: string;
+  tipoDocumento: string;
   placa?: string;
   vin?: string;
 }
@@ -29,16 +34,15 @@ interface Props {
   datos: DatosInicio | null;
   /** Política que el ciudadano puede leer antes de aceptar. Por defecto, la de FLIT 2. */
   urlPolitica?: string;
-  /** La sesión ya está abierta: quien llama guarda el contexto y entra al wizard. El organismo se elige en el paso 1. */
+  /** La sesión ya está abierta: quien llama guarda el contexto y entra al wizard. El organismo es el que trajo el RUNT. */
   onSesion: (sesion: SesionTramite, datos: DatosInicio) => void;
 }
 
 /**
- * Modal «Requisitos para tu trámite»: las tarjetas de los documentos que siempre pide el tipo (el organismo se elige después,
- * en el paso 1), consentimiento de datos, captcha y «Iniciar ahora» o «Iniciar más tarde» (cierra sin crear nada).
+ * Modal «Requisitos para tu trámite»: documentos que siempre pide el tipo, consentimiento, captcha e «Iniciar ahora».
+ * Al confirmar se consulta el RUNT (con el documento del propietario si es por placa) y solo entonces se abre el borrador.
  */
 export function IniciarModal({ abierto, onCerrar, cliente = portal, datos, urlPolitica = URL_POLITICA_FLIT, onSesion }: Props) {
-  // Mientras se abre la sesión no se puede cerrar: así no se crean borradores duplicados.
   const [ocupado, setOcupado] = useState(false);
   return (
     <ModalFlit
@@ -64,36 +68,72 @@ interface ContenidoProps {
   onOcupado: (ocupado: boolean) => void;
 }
 
+function mensajeDeArranque(error: unknown): string {
+  if (error instanceof ApiError && (error.code === "proveedor_no_disponible" || error.status === 503)) return MENSAJE_RUNT_PUERTA;
+  return mensajeDe(error);
+}
+
 function ContenidoIniciar({ cliente, datos, urlPolitica, onCerrar, onSesion, onOcupado }: ContenidoProps) {
   const idConsentimiento = useId();
   const [consentimiento, setConsentimiento] = useState(false);
   const [captcha, setCaptcha] = useState<string | null>(null);
   const [reinicio, setReinicio] = useState(0);
+  const [aviso, setAviso] = useState<string | null>(null);
   const bloqueo = useBloqueo();
   const definicion = useDefinicion(cliente, datos.tipoCodigo);
+  const porPlaca = Boolean(datos.placa);
 
-  const sesion = useMutation({
-    mutationFn: (token: string) =>
-      cliente.sesiones.iniciar(
-        { tipoCodigo: datos.tipoCodigo, cedula: datos.cedula, placa: datos.placa, vin: datos.vin, consentimiento: true, consentimientoVersion: CONSENTIMIENTO_VERSION },
+  const gastarCaptcha = () => {
+    setCaptcha(null);
+    setReinicio((n) => n + 1);
+  };
+
+  const arranque = useMutation({
+    mutationFn: async (token: string) => {
+      const vehiculo = await cliente.consultas.vehiculo(
+        {
+          placa: datos.placa,
+          vin: datos.vin,
+          propietario: porPlaca ? { tipo: datos.tipoDocumento, numero: datos.cedula } : undefined,
+          consentimiento: true,
+          consentimientoVersion: CONSENTIMIENTO_VERSION,
+        },
         { captcha: token },
-      ),
-    onMutate: () => onOcupado(true),
-    onSuccess: (abierta) => onSesion(abierta, datos),
+      );
+      if (!vehiculo.existe) return { ok: false as const, mensaje: porPlaca ? MENSAJE_PLACA_NO_ENCONTRADA : "No encontramos el vehículo." };
+      const organismos = comoLista<Organismo>(await cliente.catalogos.organismos());
+      const avisoOrganismo = mensajeDeOrganismo(vehiculo.organismo, organismos);
+      if (avisoOrganismo) return { ok: false as const, mensaje: avisoOrganismo };
+      const organismo = organismoHabilitadoDelRunt(vehiculo.organismo, organismos);
+      const sesion = await cliente.sesiones.iniciar(
+        { tipoCodigo: datos.tipoCodigo, organismoId: organismo?.id, cedula: datos.cedula, placa: datos.placa, vin: datos.vin, consentimiento: true, consentimientoVersion: CONSENTIMIENTO_VERSION },
+        { captcha: token },
+      );
+      return { ok: true as const, sesion };
+    },
+    onMutate: () => {
+      setAviso(null);
+      onOcupado(true);
+    },
+    onSuccess: (resultado) => {
+      if (!resultado.ok) {
+        onOcupado(false);
+        setAviso(resultado.mensaje);
+        gastarCaptcha();
+        return;
+      }
+      onSesion(resultado.sesion, datos);
+    },
     onError: (error) => {
       onOcupado(false);
       bloqueo.registrar(error);
-    },
-    onSettled: () => {
-      // El token de un captcha sirve una sola vez.
-      setCaptcha(null);
-      setReinicio((n) => n + 1);
+      setAviso(mensajeDeArranque(error));
+      gastarCaptcha();
     },
   });
 
-  // Un documento con condición (leasing, tramitador, carrocería) no se anuncia aquí: se pide en el paso de requisitos si aplica.
   const documentos = (definicion.data?.documentos ?? []).filter((d) => d.obligatorio && (d.condicion ?? "").trim() === "").sort((a, b) => a.orden - b.orden);
-  const enCurso = sesion.isPending || sesion.isSuccess;
+  const enCurso = arranque.isPending;
   const puedeIniciar = consentimiento && captcha !== null && !enCurso && !bloqueo.bloqueado;
 
   return (
@@ -123,7 +163,7 @@ function ContenidoIniciar({ cliente, datos, urlPolitica, onCerrar, onSesion, onO
         className="mt-5"
         onSubmit={(e) => {
           e.preventDefault();
-          if (puedeIniciar && captcha) sesion.mutate(captcha);
+          if (puedeIniciar && captcha) arranque.mutate(captcha);
         }}
       >
         <div className="mx-auto flex max-w-xl flex-col items-center gap-1 text-center">
@@ -139,7 +179,7 @@ function ContenidoIniciar({ cliente, datos, urlPolitica, onCerrar, onSesion, onO
         </div>
 
         <div aria-live="polite" className="mt-3 text-center text-sm">
-          {sesion.isError && <p role="alert" className="rounded-[9px] border border-alert bg-alert/10 p-3 text-alert">{mensajeDe(sesion.error)}</p>}
+          {aviso && <p role="alert" className="rounded-[9px] border border-alert bg-alert/10 p-3 text-alert">{aviso}</p>}
           {bloqueo.bloqueado && <p role="status" className="mt-2 text-xs text-foreground/70">Podrás intentarlo de nuevo en {bloqueo.segundosRestantes} s.</p>}
         </div>
 
@@ -151,7 +191,7 @@ function ContenidoIniciar({ cliente, datos, urlPolitica, onCerrar, onSesion, onO
 
       {enCurso && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-background/80 backdrop-blur-sm">
-          <MobilityLoader />
+          <MobilityLoader mensaje={MENSAJE_CONSULTANDO_VEHICULO} />
         </div>
       )}
     </>

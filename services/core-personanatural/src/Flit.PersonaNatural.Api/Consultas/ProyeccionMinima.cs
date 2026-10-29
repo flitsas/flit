@@ -51,7 +51,8 @@ public sealed record VehiculoMinimo(
     string? Estado,
     bool TienePrenda,
     bool TieneLimitacion,
-    bool TieneRestricciones);
+    bool TieneRestricciones,
+    string? Organismo = null);
 
 /// <summary>
 /// Vehículo para un actor con identidad validada dentro de SU trámite (nivel N2 del diseño §8): el dato mínimo más los
@@ -90,6 +91,7 @@ public static class ProyeccionMinima
 {
     // Claves de campo de la plataforma (las que escriben los mappers del RUNT en core-consultas).
     internal const string CampoPlaca = "plate";
+    internal const string CampoOrganismo = "transit_office_name";
     internal const string CampoClase = "vehicle_class";
     internal const string CampoMarca = "vehicle_brand";
     internal const string CampoLinea = "vehicle_line";
@@ -157,7 +159,8 @@ public static class ProyeccionMinima
 
     /// <summary>
     /// Dato mínimo del vehículo. <paramref name="placaConsultada"/> es la que el ciudadano escribió, ya normalizada: la
-    /// respuesta devuelve esa y no una que venga del proveedor. Sin ningún atributo del vehículo, <c>existe = false</c> y todo
+    /// respuesta devuelve esa y no una que venga del proveedor. <c>Organismo</c> es el organismo de tránsito del RUNT
+    /// (<c>transit_office_name</c>), no un dato de persona. Sin ningún atributo del vehículo, <c>existe = false</c> y todo
     /// lo demás vacío.
     /// </summary>
     public static VehiculoMinimo Vehiculo(ResultadoConsulta resultado, string? placaConsultada)
@@ -175,7 +178,7 @@ public static class ProyeccionMinima
         var limitacion = TieneLimitacion(resultado);
         return new VehiculoMinimo(
             true, placaConsultada ?? Texto(resultado, CampoPlaca), clase, marca, linea, Texto(resultado, CampoModelo), servicio,
-            estado?.ToUpperInvariant(), prenda, limitacion, prenda || limitacion);
+            estado?.ToUpperInvariant(), prenda, limitacion, prenda || limitacion, Texto(resultado, CampoOrganismo));
     }
 
     internal const string CampoVin = "vin";

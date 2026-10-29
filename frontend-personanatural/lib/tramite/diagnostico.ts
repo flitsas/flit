@@ -92,6 +92,7 @@ export function entradaConsulta(
 
 export const consentimientoDeConsulta = { consentimiento: true, consentimientoVersion: CONSENTIMIENTO_VERSION } as const;
 
+export const MENSAJE_CONSULTANDO_VEHICULO = "Consultando el vehículo…";
 export const MENSAJE_RUNT_NO_RESPONDE = "No pudimos consultar el RUNT. Intenta de nuevo.";
 export const MENSAJE_SIN_VEHICULO = "No encontramos el vehículo";
 export const MENSAJE_ATENCION = "Para continuar con la radicación debes estar al día en pagos de SOAT, multas e impuestos vehiculares.";

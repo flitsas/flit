@@ -29,7 +29,7 @@ public sealed class ConsultaVehiculoTests
 
         vehiculo.Should().BeEquivalentTo(new VehiculoMinimo(
             true, "ABC123", "AUTOMOVIL", "MARCA-FICTICIA", "LINEA-FICTICIA", "2018", "PARTICULAR", "ACTIVO",
-            TienePrenda: true, TieneLimitacion: false, TieneRestricciones: true));
+            TienePrenda: true, TieneLimitacion: false, TieneRestricciones: true, Organismo: "ORGANISMO FICTICIO"));
         var json = JsonSerializer.Serialize(vehiculo, JsonSerializerOptions.Web);
         json.Should().NotContainAny("1098765432", "PROPIETARIO", "FICTICIO PEREZ", "CALLE FICTICIA", "3000000000", "BANCO FICTICIO", "PERSONA FICTICIA",
             "9BWZZZ377VT004251", "MOTOR-FICTICIO", "SERIE-FICTICIA", "ROJO", "owner", "soat");

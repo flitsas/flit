@@ -86,7 +86,16 @@ export function Landing({ cliente = portal }: { cliente?: ClientePortal }) {
         datos={iniciando}
         urlPolitica={urlPolitica}
         onSesion={(sesion, datos) => {
-          fijarContexto({ intencion: "iniciar", tipoCodigo: sesion.tipoTramiteCodigo, solicitudId: sesion.solicitudId, radicado: sesion.codigoPublico, cedula: datos.cedula, placa: datos.placa, vin: datos.vin });
+          fijarContexto({
+            intencion: "iniciar",
+            tipoCodigo: sesion.tipoTramiteCodigo,
+            solicitudId: sesion.solicitudId,
+            radicado: sesion.codigoPublico,
+            cedula: datos.cedula,
+            placa: datos.placa,
+            vin: datos.vin,
+            propietario: datos.placa ? { tipo: datos.tipoDocumento, numero: datos.cedula } : undefined,
+          });
           router.push(rutaDelTramite(sesion.tipoTramiteCodigo));
         }}
       />
