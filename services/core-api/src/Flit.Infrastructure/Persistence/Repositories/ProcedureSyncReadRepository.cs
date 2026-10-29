@@ -19,6 +19,9 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 ///   <c>to_status IN ('preasignacion','entregado')</c>. Una vez dentro no salen aunque retrocedan
 ///   (nunca <c>draft_finalized_at</c>, que significa otra cosa);</item>
 ///   <item>nunca los migrados desde FLIT 1 (<c>is_migrated</c>), ni como cambio ni como borrado;</item>
+///   <item>nunca los de la empresa «Persona Natural» (<c>PlatformTenants.PersonaNatural</c>, Épica #14021 · HU #14050
+///   AC8), ni como cambio ni como borrado: llevan datos de ciudadanos que no son de Flito. El literal de la consulta es
+///   ese mismo id (lo verifica una prueba) y el resto de las empresas no cambia;</item>
 ///   <item>solo cambios estables: de transacciones anteriores a la más antigua en curso
 ///   (<c>pg_snapshot_xmin</c>: por debajo ya no puede aparecer nada nuevo) y con más de
 ///   <c>StabilityLag</c> de antigüedad (ventana de 5 s del contrato). La ventana CORTA la página en el
@@ -48,6 +51,7 @@ internal sealed class ProcedureSyncReadRepository(FlitDbContext context) : IProc
                pi.deleted_at IS NOT NULL AS is_deleted
           FROM tramites.procedure_instances pi
          WHERE pi.is_migrated = false
+           AND pi.tenant_id <> '00000000-0000-0000-0000-0000000f1171'
            AND COALESCE(pi.sync_xact, '0'::xid8) < pg_snapshot_xmin(pg_current_snapshot())
            AND NOT EXISTS (SELECT 1
                              FROM tramites.procedure_instances q
@@ -187,6 +191,7 @@ internal sealed class ProcedureSyncReadRepository(FlitDbContext context) : IProc
            AND x.procedure_instance_id = @procedure_id
            AND x.tipo = 'factura'
            AND pi.is_migrated = false
+           AND pi.tenant_id <> '00000000-0000-0000-0000-0000000f1171'
            AND pi.deleted_at IS NULL
            AND EXISTS (SELECT 1
                          FROM tramites.procedure_instance_status_history h

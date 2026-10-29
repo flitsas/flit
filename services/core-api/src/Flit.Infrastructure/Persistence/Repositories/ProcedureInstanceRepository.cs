@@ -623,12 +623,15 @@ internal sealed partial class ProcedureInstanceRepository(
         // upper(btrim(tipo)), upper(btrim(número)), en vuelo, sin mandatario): todas las filas que impedirían guardar una
         // validación nueva de este documento, sin filtrar por trámite ni quedarse con la más reciente. Rastreadas y con el
         // trámite cargado para que el caso de uso decida cuáles cerrar.
-        var tipo = (tipoDoc ?? string.Empty).Trim().ToUpperInvariant();
+        // HU #14044 — el índice excluye además las filas del portal (portal_solicitud_ref IS NOT NULL, que tienen su
+        // propio índice por solicitud/parte): este método también las ignora para no cerrar validaciones del portal.
+        var tipo =(tipoDoc ?? string.Empty).Trim().ToUpperInvariant();
         var numero = (documento ?? string.Empty).Trim().ToUpperInvariant();
         return await db.ProcedureInstanceBiometricValidations
             .Include(v => v.ProcedureInstance)
             .Where(v => v.TenantId == tenantId
                 && v.MandateSignerId == null
+                && v.PortalSolicitudRef == null
                 && (v.Status == BiometricEstados.PendienteEnvio
                     || v.Status == BiometricEstados.Enviado
                     || v.Status == BiometricEstados.EnProceso)
@@ -653,6 +656,7 @@ internal sealed partial class ProcedureInstanceRepository(
             .AsNoTracking()
             .Where(v => tenantIds.Contains(v.TenantId)
                 && v.MandateSignerId == null
+                && v.PortalSolicitudRef == null
                 && v.Status == BiometricEstados.Aprobado
                 && v.DocumentType != null
                 && v.DocumentNumber != null
@@ -705,6 +709,7 @@ internal sealed partial class ProcedureInstanceRepository(
             .AsNoTracking()
             .Where(v => tenantIds.Contains(v.TenantId)
                 && v.MandateSignerId == null
+                && v.PortalSolicitudRef == null
                 && v.Status == BiometricEstados.Aprobado
                 && v.ExpiredManuallyAt != null
                 && (v.ValidUntilPrevious == null || v.ValidUntilPrevious > now)
@@ -1813,6 +1818,26 @@ internal sealed partial class ProcedureInstanceRepository(
             .Include(x => x.Person)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
 
+    // HU #14044 — solo filas con ancla de portal: la búsqueda por (solicitud, rol, documento) nunca alcanza a una validación
+    // de otra solicitud ni a las de FLIT 2 (decisión del PO: no se reutilizan).
+    public Task<ProcedureInstanceBiometricValidation?> FindPortalValidationAsync(
+        Guid tenantId, string solicitudRef, string parte, string documentNumber, CancellationToken ct = default)
+    {
+        var documento = documentNumber.Trim().ToUpperInvariant();
+        return db.ProcedureInstanceBiometricValidations
+            .Where(v => v.TenantId == tenantId
+                && v.PortalSolicitudRef == solicitudRef
+                && v.PortalParte == parte
+                && v.DocumentNumber.Trim().ToUpper() == documento)
+            .OrderByDescending(v => v.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    public Task<ProcedureInstanceBiometricValidation?> GetPortalValidationByIdAsync(
+        Guid tenantId, Guid validationId, CancellationToken ct = default) =>
+        db.ProcedureInstanceBiometricValidations
+            .FirstOrDefaultAsync(v => v.Id == validationId && v.TenantId == tenantId && v.PortalSolicitudRef != null, ct);
+
     // UPDATE atómico e idempotente del conteo de intentos Kyverum. La guarda `last_attempt_at <> @key`
     // (más el row-lock del UPDATE) garantiza que dos entregas paralelas del MISMO intento cuenten una sola vez.
     public async Task<bool> TryCountKyverumAttemptAsync(
@@ -2055,11 +2080,15 @@ internal sealed partial class ProcedureInstanceRepository(
     /// <summary>HU #13246 — a lo sumo una validación en vuelo por mandatario (DDL 129).</summary>
     private const string BiometricInFlightMandatarioIndex = "uq_biometric_validations_inflight_mandate_signer";
 
+    /// <summary>HU #14044 — a lo sumo una validación en vuelo por (solicitud, rol, documento) del portal (DDL 160).</summary>
+    private const string BiometricInFlightPortalIndex = "uq_biometric_validations_inflight_portal";
+
     private static bool IsBiometricInFlightUniqueViolation(DbUpdateException ex) =>
         ex.InnerException is PostgresException pg
         && pg.SqlState == PostgresErrorCodes.UniqueViolation
         && (string.Equals(pg.ConstraintName, BiometricInFlightUniqueIndex, StringComparison.Ordinal)
-            || string.Equals(pg.ConstraintName, BiometricInFlightMandatarioIndex, StringComparison.Ordinal));
+            || string.Equals(pg.ConstraintName, BiometricInFlightMandatarioIndex, StringComparison.Ordinal)
+            || string.Equals(pg.ConstraintName, BiometricInFlightPortalIndex, StringComparison.Ordinal));
 
     /// <summary>HU #11029 — ver <see cref="IProcedureInstanceRepository.ResetTracking"/>.</summary>
     public void ResetTracking() => db.ChangeTracker.Clear();

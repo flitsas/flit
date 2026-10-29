@@ -62,8 +62,9 @@ public sealed class IssueExternalClientTokenHandler(
 
         await clients.RegisterTokenIssuedAsync(client.Id, now, cancellationToken).ConfigureAwait(false);
 
-        // Solo los permisos del contrato viajan en el pase, aunque la tabla tuviera otro valor.
-        var scopes = client.Scopes.Where(ExternalScopes.EsValido).Distinct(StringComparer.Ordinal).ToList();
+        // Solo los permisos del contrato viajan en el pase, aunque la tabla tuviera otro valor. HU #14067: según el tipo de
+        // la integración; la de persona_natural lleva únicamente el de la fachada del portal, nunca los de lectura externa.
+        var scopes = client.Scopes.Where(s => ExternalScopes.EsValidoPara(client.Tipo, s)).Distinct(StringComparer.Ordinal).ToList();
         var token = issuer.Issue(client.ClientId, scopes);
         return new IssueExternalClientTokenResult(
             ExternalTokenStatus.Issued, token.Token, token.ExpiresInSeconds, scopes);

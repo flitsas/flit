@@ -32,7 +32,10 @@ internal static class BiometricDocumentMatchQuery
         var (tipo, numero) = DocumentCanonicalNormalization.Normalize(documentType, documentNumber);
         // HU #13246 — la validación del mandatario es EXCLUSIVA de su ficha: nunca cuenta como identidad del
         // comprador, el vendedor, el representante legal ni la prevalidación con el mismo documento.
+        // HU #14044 — las validaciones del portal Persona Natural (ancla PortalSolicitudRef) NO se reutilizan entre
+        // trámites ni vigencian: nunca cuentan como identidad de ninguna consulta de FLIT 2 por documento.
         return query.Where(v => v.MandateSignerId == null
+            && v.PortalSolicitudRef == null
             && v.DocumentType.Trim().ToUpper() == tipo
             && v.DocumentNumber.Trim().ToUpper() == numero);
     }
@@ -61,6 +64,7 @@ internal static class BiometricDocumentMatchQuery
     /// </summary>
     public static IQueryable<ProcedureInstanceBiometricValidation> WhereInstanciaVigente(
         this IQueryable<ProcedureInstanceBiometricValidation> query) =>
-        query.Where(v => v.ProcedureInstanceId == null
-            || (v.ProcedureInstance != null && v.ProcedureInstance.DeletedAt == null));
+        query.Where(v => v.PortalSolicitudRef == null
+            && (v.ProcedureInstanceId == null
+                || (v.ProcedureInstance != null && v.ProcedureInstance.DeletedAt == null)));
 }

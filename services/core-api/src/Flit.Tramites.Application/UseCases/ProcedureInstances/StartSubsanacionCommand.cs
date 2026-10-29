@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Flit.Tramites.Application.Tracking;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
@@ -16,7 +17,11 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// HU #14177 — escribe un evento <c>dato_modificado</c> con etiqueta «Subsanación»,
 /// anterior «Desactivada», nuevo «Activada» (con motivo si se proporcionó).
 /// </summary>
-public sealed class StartSubsanacionHandler(IProcedureInstanceRepository repo)
+/// <remarks>
+/// HU #14051: <paramref name="publisher"/> es opcional (sin él, el comportamiento es el de siempre). Con él, justo antes de
+/// guardar se avisa que se abrió la subsanación, en la misma unidad de trabajo (outbox).
+/// </remarks>
+public sealed class StartSubsanacionHandler(IProcedureInstanceRepository repo, ITramiteSubsanacionPublisher? publisher = null)
 {
     // camelCase para el payload — mismo options que el fallback de actores (HU #14172).
     private static readonly JsonSerializerOptions s_json = new(JsonSerializerDefaults.Web);
@@ -76,6 +81,9 @@ public sealed class StartSubsanacionHandler(IProcedureInstanceRepository repo)
             CreatedBy           = changedBy,
         };
         await repo.AddEventAsync(evtSubsanacion, ct);
+
+        if (publisher is not null)
+            await publisher.EnqueueAsync(instance, ct).ConfigureAwait(false);
 
         var committed = await repo.SaveChangesWithConcurrencyGuardAsync(ct).ConfigureAwait(false);
         if (!committed)

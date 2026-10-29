@@ -21,6 +21,7 @@ import { CompanyDocumentParamsPanel } from "@/components/admin/documents/Company
 import { RepresentativesAndVaultTab } from "@/components/admin/companies/legal-representatives/RepresentativesAndVaultTab";
 import { CompanyMandatariosPanel } from "@/components/admin/companies/mandate-signers/CompanyMandatariosPanel";
 import { CompanyUsersPanel } from "@/components/admin/companies/panels/CompanyUsersPanel";
+import { ExternalIntegrationsPanel } from "@/components/admin/companies/external-integrations/ExternalIntegrationsPanel";
 import { fetchCompany, fetchCompanyChildren, fetchTenantSettings, updateTenantSettings } from "@/lib/api/admin-companies";
 import { isHeadTenantType } from "@/lib/api/types";
 import type { CompanyListItem, TenantDomainResponse, TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
@@ -305,6 +306,8 @@ function CompanyDetail() {
                     networkHeadId={managingChild ? networkHeadId : null}
                   />
                 }
+                // HU #14068 — integraciones externas de la compañía: solo SuperAdmin (la API también lo exige).
+                integracionesSlot={isSuperAdmin ? <ExternalIntegrationsPanel companyId={tenantId} /> : undefined}
                 childrenSlot={
                   marcaBlancaHeadTabs && company ? <CompanyChildrenSection company={company} /> : undefined
                 }

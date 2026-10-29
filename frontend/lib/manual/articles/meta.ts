@@ -14,7 +14,7 @@ export const MANUAL_NAV_SECTIONS: readonly ManualNavSection[] = [
 
 export const MANUAL_HOME_SLUG = "0-introduccion/1-bienvenida";
 
-/** Manual v2.1 (DR-FLIT v3): 4 perfiles + Normativa (fuente principal), 40 artículos, sugerencia contextual y filtro por rol. */
+/** Manual v2.1 (DR-FLIT v3): 4 perfiles + Normativa (fuente principal), 46 artículos, sugerencia contextual y filtro por rol. */
 export const MANUAL_VERSION = "2.1.0";
 export const MANUAL_VERSION_DATE = "Septiembre 2026";
 
@@ -69,6 +69,8 @@ export const MANUAL_PATH_ARTICLES: readonly { prefix: string; slug: string }[] =
   { prefix: "/admin/causales-rechazo", slug: "4-superadmin/1-companias-y-organismos" },
   { prefix: "/admin/documents", slug: "4-superadmin/2-documental-e-improntas" },
   { prefix: "/admin/improntas", slug: "4-superadmin/2-documental-e-improntas" },
+  // Persona Natural va antes: el prefijo `/admin/plataforma` también lo cubriría.
+  { prefix: "/admin/plataforma/persona-natural", slug: "4-superadmin/7-plataforma-persona-natural" },
   { prefix: "/admin/plataforma", slug: "4-superadmin/3-plataforma" },
   { prefix: "/admin/banners", slug: "4-superadmin/3-plataforma" },
   { prefix: "/admin/quipux", slug: "4-superadmin/4-integraciones-y-procesos" },

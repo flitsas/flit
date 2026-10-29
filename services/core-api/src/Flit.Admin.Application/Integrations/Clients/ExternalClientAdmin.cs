@@ -50,6 +50,13 @@ internal static partial class ExternalClientRules
         return scopes.Distinct(StringComparer.Ordinal).ToList();
     }
 
+    /// <summary>
+    /// HU #14067 — <c>true</c> si el cliente es una integración ligada a una compañía: esas solo se administran por
+    /// <c>/admin/companies/{id}/external-integrations</c> (sus alcances son fijos y no se editan por la ruta genérica).
+    /// </summary>
+    public static async Task<bool> EsDeCompaniaAsync(IExternalClientRepository clients, Guid id, CancellationToken cancellationToken) =>
+        await clients.GetByIdAsync(id, cancellationToken).ConfigureAwait(false) is { Tipo: not ExternalIntegrationTypes.Externa };
+
     /// <summary>Secreto de máquina: 32 bytes criptográficos en base64url (43 caracteres, sin símbolos problemáticos).</summary>
     public static string GenerateSecret() =>
         Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).Replace('+', '-').Replace('/', '_').TrimEnd('=');
@@ -63,8 +70,13 @@ public sealed class ListExternalClientsHandler(IExternalClientRepository clients
 
 public sealed class GetExternalClientHandler(IExternalClientRepository clients)
 {
-    public Task<ExternalClientView?> HandleAsync(Guid id, CancellationToken cancellationToken = default) =>
-        clients.GetByIdAsync(id, cancellationToken);
+    public async Task<ExternalClientView?> HandleAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var client = await clients.GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
+
+        // HU #14067: las integraciones ligadas a una compañía se administran solo por su ficha.
+        return client is { Tipo: not ExternalIntegrationTypes.Externa } ? null : client;
+    }
 }
 
 /// <summary>HU #13088 AC1 — alta con secreto de un solo uso.</summary>
@@ -140,6 +152,11 @@ public sealed class UpdateExternalClientHandler(IExternalClientRepository client
             }
         }
 
+        if (await ExternalClientRules.EsDeCompaniaAsync(clients, command.Id, cancellationToken).ConfigureAwait(false))
+        {
+            return (null, ExternalClientAdminErrors.NotFound);
+        }
+
         var updated = await clients.UpdateAsync(
             command.Id,
             new ExternalClientChanges(command.DisplayName?.Trim(), command.Purpose?.Trim(), scopes, command.IsActive, command.MustRotate),
@@ -161,6 +178,11 @@ public sealed class RegenerateExternalClientSecretHandler(
     public async Task<(ExternalClientSecretResult? Result, string? Error)> HandleAsync(
         Guid id, bool revokePrevious, Guid? actor, CancellationToken cancellationToken = default)
     {
+        if (await ExternalClientRules.EsDeCompaniaAsync(clients, id, cancellationToken).ConfigureAwait(false))
+        {
+            return (null, ExternalClientAdminErrors.NotFound);
+        }
+
         var secret = ExternalClientRules.GenerateSecret();
         var updated = await clients.ReplaceSecretAsync(
             id, hasher.Hash(secret), revokePrevious, actor, timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
@@ -177,6 +199,11 @@ public sealed class UnlockExternalClientHandler(IExternalClientRepository client
     public async Task<(ExternalClientView? Result, string? Error)> HandleAsync(
         Guid id, Guid? actor, CancellationToken cancellationToken = default)
     {
+        if (await ExternalClientRules.EsDeCompaniaAsync(clients, id, cancellationToken).ConfigureAwait(false))
+        {
+            return (null, ExternalClientAdminErrors.NotFound);
+        }
+
         var updated = await clients.UnlockAsync(id, actor, timeProvider.GetUtcNow(), cancellationToken).ConfigureAwait(false);
         return updated is null ? (null, ExternalClientAdminErrors.NotFound) : (updated, null);
     }

@@ -1,0 +1,286 @@
+syntax = "proto3";
+
+package flit.tramites.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "Flit.Tramites.Grpc.V1";
+
+// Fachada para el portal de persona natural (ADR-0075, Épica #14021). Adaptador delgado sobre los casos de uso de
+// Trámites: cubre solo lo que debe ser síncrono (identidad, tipos, requisitos, cotización y estado). NO tiene ningún
+// método que cree o modifique un trámite: las escrituras viajan por la cola y las atiende el consumidor de core-api.
+//
+// Autenticación: token de servicio del cliente `svc-personanatural` con `aud=tramites` y el scope
+// `platform.tramites.persona_natural` (contrato v1.3 §3). La empresa va en la metadata `x-flit-tenant-id` y core-api solo
+// acepta la de «Persona Natural»: con otra responde `invalid_tenant`. Los métodos que todavía no tienen implementación
+// responden UNIMPLEMENTED con `ErrorInfo.reason = NO_IMPLEMENTADO`.
+service PersonaNaturalService {
+  // Prevalidación de identidad anclada a la persona y a la solicitud; se usa al radicar. NUNCA reutiliza una validación
+  // de otro trámite ni tiene vigencia en días (decisión del PO, 2026-10-27): siempre crea una nueva. Idempotente por
+  // (solicitud_id, parte, documento). [HU C1]
+  rpc SolicitarValidacionIdentidad(SolicitarValidacionIdentidadRequest) returns (SolicitarValidacionIdentidadResponse);
+  // Reenvía el enlace de validación de una persona. [HU C2]
+  rpc ReenviarValidacionIdentidad(ReenviarValidacionIdentidadRequest) returns (ReenviarValidacionIdentidadResponse);
+  // Estado de una validación de identidad. [HU C2]
+  rpc ObtenerEstadoValidacionIdentidad(ObtenerEstadoValidacionIdentidadRequest) returns (ObtenerEstadoValidacionIdentidadResponse);
+
+  // Organismos de tránsito habilitados para la empresa «Persona Natural» (con grant vigente). Sin grants, lista vacía. [HU B5]
+  rpc ListarOrganismos(ListarOrganismosRequest) returns (ListarOrganismosResponse);
+
+  // Tipos de trámite del portal con su elegibilidad calculada desde el perfil del tipo; con organismo_id, solo los que el
+  // portal ofrece en ese organismo (elegibles y con tarifa vigente). [HU K2, B5]
+  rpc ListarTiposDisponibles(ListarTiposDisponiblesRequest) returns (ListarTiposDisponiblesResponse);
+
+  // Estructura del wizard de un tipo: pasos, campos, roles de actor, documentos y flags. Solo estructura, sin reglas
+  // ejecutables. [HU K1]
+  rpc ObtenerDefinicionTipoTramite(ObtenerDefinicionTipoTramiteRequest) returns (ObtenerDefinicionTipoTramiteResponse);
+
+  // Requisitos previos del tipo (preflight) sin crear el trámite: la misma consulta del paso 1 del wizard de FLIT 2. [HU A3]
+  rpc EvaluarRequisitos(EvaluarRequisitosRequest) returns (EvaluarRequisitosResponse);
+
+  // Tarifas del organismo y del servicio FLIT para el tipo de trámite (cotización y resumen de cobro). [HU B5]
+  rpc Cotizar(CotizarRequest) returns (CotizarResponse);
+
+  // Contenido publicado y parámetros públicos del portal (preguntas frecuentes, banners, enlaces). [HU J3]
+  rpc ObtenerConfiguracionPortal(ObtenerConfiguracionPortalRequest) returns (ObtenerConfiguracionPortalResponse);
+
+  // Imagen de un banner PUBLICADO y vigente (bytes y ETag = sha256) para que el BFF la sirva con caché corta. [HU J3]
+  rpc ObtenerImagenBannerPortal(ObtenerImagenBannerPortalRequest) returns (ObtenerImagenBannerPortalResponse);
+
+  // Estado actual del trámite creado a partir de la solicitud (conciliación y subsanación). [HU A3]
+  rpc ObtenerEstadoTramite(ObtenerEstadoTramiteRequest) returns (ObtenerEstadoTramiteResponse);
+}
+
+message PersonaIdentidad {
+  string tipo_documento = 1;     // CC, CE, PAS...
+  string numero_documento = 2;
+  string nombre = 3;
+  string correo = 4;
+  string celular = 5;
+}
+
+message SolicitarValidacionIdentidadRequest {
+  string solicitud_id = 1;       // external_ref; correlaciona el aviso del proveedor
+  string parte = 2;              // rol del actor según la definición del tipo
+  PersonaIdentidad persona = 3;
+}
+message SolicitarValidacionIdentidadResponse {
+  string validacion_id = 1;
+  string estado = 2;             // pendiente | aprobada | rechazada (siempre de esta solicitud: nunca una validación reutilizada)
+  google.protobuf.Timestamp vigente_hasta = 3;
+}
+
+message ReenviarValidacionIdentidadRequest {
+  string validacion_id = 1;
+  string correo = 2;             // correo nuevo, opcional
+}
+message ReenviarValidacionIdentidadResponse {
+  string estado = 1;
+  google.protobuf.Timestamp expira = 2;
+}
+
+message ObtenerEstadoValidacionIdentidadRequest { string validacion_id = 1; }
+message ObtenerEstadoValidacionIdentidadResponse {
+  string estado = 1;             // pendiente | aprobada | rechazada | vencida
+  google.protobuf.Timestamp vigente_hasta = 2;
+}
+
+message ListarOrganismosRequest {}
+message ListarOrganismosResponse { repeated OrganismoPortal organismos = 1; }
+message OrganismoPortal {
+  string id = 1;
+  string codigo = 2;
+  string nombre = 3;
+  string municipio = 4;
+  string departamento = 5;
+  string enlace_tarifas = 6;               // vacío mientras no exista el dato (HU J)
+}
+
+message ListarTiposDisponiblesRequest {
+  string organismo_id = 1;                 // opcional; con valor, solo los tipos ofrecidos en ese organismo
+}
+message ListarTiposDisponiblesResponse { repeated TipoTramiteResumen tipos = 1; }
+message TipoTramiteResumen {
+  string codigo = 1;                       // tramites.procedure_types.code
+  string nombre = 2;
+  string familia = 3;                      // MATRICULAS | TRASPASO | OTROS
+  int32 version = 4;                       // tramites.procedure_types.version
+  bool disponible_pn = 5;
+  string motivo_no_disponible = 6;         // vacío si disponible
+}
+
+message ObtenerDefinicionTipoTramiteRequest {
+  string codigo = 1;
+  string organismo_id = 2;                 // la matriz documental se resuelve con precedencia organismo sobre defecto
+}
+
+message ObtenerDefinicionTipoTramiteResponse { DefinicionTipoTramite definicion = 1; }
+
+// Solo estructura. El perfil de capacidades interno no sale entero: se proyectan los flags que el portal necesita.
+message DefinicionTipoTramite {
+  string codigo = 1;
+  string nombre = 2;
+  string familia = 3;
+  int32 version = 4;
+  bool disponible_pn = 5;
+  string motivo_no_disponible = 6;
+  repeated Paso pasos = 7;
+  repeated ActorRol actores = 8;
+  repeated DocumentoRequerido documentos = 9;
+  FlagsTipo flags = 10;
+  // Huella (SHA-256 hex) del contenido de la definición. `version` solo cambia al versionar el tipo; la matriz documental o
+  // la configuración pueden cambiar sin ella, así que el BFF usa (codigo, organismo, version, huella) como clave de caché y
+  // la solicitud congela ambas. [HU K1]
+  string huella = 11;
+}
+message Paso {
+  string clave = 1;
+  string titulo = 2;
+  repeated string section_types = 3;       // catálogo cerrado de FLIT 2 tal cual: vehicle_query | document_checklist | actor_form | commercial | biometric | signature_fur | plate_request | prenda_decision | generic_form
+  repeated Campo campos = 4;
+}
+message Campo {
+  string field_key = 1;
+  string etiqueta = 2;
+  string tipo = 3;                         // text | number | select | date | textarea | checkbox
+  bool obligatorio = 4;
+  repeated string opciones = 5;
+  string validation_schema = 6;
+}
+message ActorRol {
+  string rol = 1;
+  string etiqueta = 2;
+  int32 min = 3;
+  int32 max = 4;
+  bool biometria = 5;
+  bool firma = 6;
+  bool persona_natural_permitida = 7;
+}
+message DocumentoRequerido {
+  string doc_code = 1;
+  string nombre = 2;
+  bool obligatorio = 3;
+  int32 orden = 4;
+  string instruccion_cargue = 5;
+  string condicion = 6;                    // texto de la regla condicional ya resuelta en servidor; no ejecutable
+}
+message FlagsTipo {
+  string entry_mode = 1;                   // VIN | PLATE | BOTH
+  bool requiere_comercial = 2;
+  bool requiere_prenda = 3;
+  bool permite_transformaciones = 4;
+  bool permite_prenda_complementaria = 5;
+  bool requiere_biometria = 6;
+  bool requiere_solicitud_placa = 7;
+}
+
+// Entrada del paso 1: qué identificador pide depende del tipo (placa o VIN). El documento del propietario solo hace
+// falta en los tipos que consultan al propietario (p. ej. traspaso).
+message EvaluarRequisitosRequest {
+  string tipo_tramite_codigo = 1;
+  string placa = 2;
+  string organismo_id = 3;
+  string vin = 4;
+  string tipo_documento_propietario = 5;
+  string numero_documento_propietario = 6;
+}
+message EvaluarRequisitosResponse {
+  repeated Requisito requisitos = 1;
+  bool puede_continuar = 2;
+}
+// Solo etiqueta y estado: nunca datos del vehículo ni de personas (dato mínimo).
+message Requisito {
+  string codigo = 1;
+  string descripcion = 2;
+  string estado = 3;                       // cumple | falta | no_aplica
+}
+
+message CotizarRequest {
+  string tipo_tramite_codigo = 1;
+  string organismo_id = 2;
+  // Conceptos adicionales pedidos: CAMBIO_COLOR | CONVERSION_COMBUSTIBLE | CAMBIO_CARROCERIA | ENVIO_DOCUMENTO. Las
+  // transformaciones solo suman si la definición del tipo las permite.
+  repeated string adicionales = 3;
+}
+// Errores estables (ErrorInfo.reason): tipo_no_disponible, organismo_no_habilitado, tipo_no_habilitado, tarifa_no_vigente.
+message CotizarResponse {
+  repeated LineaCobro lineas = 1;        // Servicio de tránsito, Servicio FLIT y los adicionales que sumaron
+  int64 total_cop = 2;
+  string version_tarifa = 3;             // versiones de tarifa usadas; la solicitud las congela
+  repeated string adicionales_no_aplicados = 4;
+}
+message LineaCobro {
+  string codigo = 1;
+  string nombre = 2;
+  string subtitulo = 3;
+  int64 valor_cop = 4;
+}
+
+message ObtenerConfiguracionPortalRequest {}
+// Contenido PUBLICADO y vigente del portal más los parámetros públicos (HU J3). Solo texto plano. NO lleva datos bancarios ni
+// parámetros de protección (topes, captcha, sesión): esos no salen de core-api hacia el ciudadano. Sin contenido publicado
+// responde version = "0" y listas vacías (el portal conserva su contenido actual); los enlaces vienen siempre (url vacía =
+// sin documento oficial, y el portal conserva su aviso en lugar de inventar texto legal).
+message ObtenerConfiguracionPortalResponse {
+  string version = 1;                                  // versión publicada del contenido ("0" = nada publicado)
+  google.protobuf.Timestamp publicado_en = 2;          // ausente si nada publicado
+  repeated PreguntaFrecuentePortal preguntas = 3;      // activas y en el orden configurado
+  repeated BannerPortal banners = 4;                   // vigentes ahora y en el orden configurado
+  repeated EnlacePortal enlaces = 5;                   // POLITICA_DATOS, TERMINOS, CONTACTO_VENTAS, VIDEO
+  ContactoSoportePortal soporte = 6;
+  ParametrosPublicosPortal parametros = 7;
+}
+
+message PreguntaFrecuentePortal {
+  string id = 1;
+  string pregunta = 2;       // texto simple
+  string respuesta = 3;      // texto simple
+  int32 orden = 4;
+}
+
+message BannerPortal {
+  string id = 1;
+  string titulo = 2;
+  string texto_alternativo = 3;
+  string enlace_url = 4;     // vacío = el banner no enlaza
+  int32 orden = 5;
+  string imagen_sha256 = 6;  // versión de la imagen (ETag)
+  string imagen_content_type = 7;
+}
+
+message EnlacePortal {
+  string codigo = 1;         // POLITICA_DATOS | TERMINOS | CONTACTO_VENTAS | VIDEO
+  string url = 2;            // vacío = sin documento oficial / sin valor
+  bool con_documento = 3;
+}
+
+message ContactoSoportePortal {
+  string correo = 1;
+  string telefono = 2;
+  string horario = 3;
+}
+
+message ParametrosPublicosPortal {
+  int32 borrador_vigencia_dias = 1;   // 0 = predeterminado del BFF
+}
+
+message ObtenerImagenBannerPortalRequest {
+  string banner_id = 1;
+  string if_none_match = 2;  // sha256 que el cliente ya tiene
+}
+message ObtenerImagenBannerPortalResponse {
+  bool encontrado = 1;
+  bool no_modificado = 2;    // if_none_match coincide: sin bytes
+  string sha256 = 3;
+  string content_type = 4;
+  bytes contenido = 5;
+}
+
+message ObtenerEstadoTramiteRequest { string solicitud_id = 1; }   // external_ref del trámite
+message ObtenerEstadoTramiteResponse {
+  bool encontrado = 1;
+  string procedure_instance_id = 2;
+  string reference_number = 3;
+  string estado = 4;                 // vocabulario TramiteEstado
+  bool subsanacion_activa = 5;
+}

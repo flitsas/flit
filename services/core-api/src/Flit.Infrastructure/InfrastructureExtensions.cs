@@ -89,6 +89,13 @@ public static class InfrastructureExtensions
         services.AddScoped<IProcedureTypeSourceRepository, ProcedureTypeSourceRepository>();
         // FEATURE-08 / HU-BE-04 (CFD-06) — requisitos documentales por tipo (configurador dinámico).
         services.AddScoped<IProcedureTypeDocumentRepository, ProcedureTypeDocumentRepository>();
+        // HU #14043/#14079 (Épica #14021) — catálogo, elegibilidad y tarifas del portal de Persona Natural (solo lectura).
+        services.AddScoped<PersonaNatural.PersonaNaturalTiposReader>();
+        services.AddScoped(sp => new PersonaNatural.PersonaNaturalPortalReader(
+            sp.GetRequiredService<Persistence.FlitDbContext>(), sp.GetService<TimeProvider>()));
+        // HU #14073 — contenido publicado y parámetros públicos del portal (solo lectura).
+        services.AddScoped(sp => new PersonaNatural.PersonaNaturalConfiguracionPublicaReader(
+            sp.GetRequiredService<Persistence.FlitDbContext>(), sp.GetService<TimeProvider>()));
         // FEATURE-08 / HU-BE-06 (CFD-09) — feature flag F08_DynamicProcedures (por tenant, ot_feature_flags).
         services.AddScoped<Flit.Tramites.Application.UseCases.ProcedureInstances.IDynamicProceduresPolicy,
             OtRules.DynamicProceduresPolicy>();
