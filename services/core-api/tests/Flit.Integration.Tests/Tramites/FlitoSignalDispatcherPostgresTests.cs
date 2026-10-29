@@ -129,7 +129,9 @@ public sealed class FlitoSignalDispatcherPostgresTests(PostgresDatabaseFixture f
         await EjecutarAsync(
             $"INSERT INTO tramites.procedure_instance_status_history (tenant_id, procedure_instance_id, to_status) VALUES ('{Flit.Platform.Sdk.PlatformTenants.PersonaNatural}', '{portal}', 'entregado')");
         await using var sp = Servicios();
-        await EsperarHorizonteDelFeedAsync();
+        // El trámite del portal se escribe después que el de la otra empresa: en CI una transacción ajena puede
+        // dejar su sync_xact por encima de pg_snapshot_xmin aunque el de la otra empresa ya esté estable.
+        await EsperarHorizonteDelFeedAsync(Flit.Platform.Sdk.PlatformTenants.PersonaNatural);
 
         await Despachador(sp).ProcesarPendientesAsync(TestContext.Current.CancellationToken);
 
@@ -391,11 +393,13 @@ public sealed class FlitoSignalDispatcherPostgresTests(PostgresDatabaseFixture f
     /// de despachar se espera a que el horizonte supere las versiones de los trámites de esta prueba, en vez de suponer
     /// que el primer ciclo ya los ve.
     /// </summary>
-    private async Task EsperarHorizonteDelFeedAsync()
+    private async Task EsperarHorizonteDelFeedAsync(params Guid[] tenantsAdicionales)
     {
+        var tenants = new[] { Cliente }.Concat(tenantsAdicionales).Distinct();
+        var lista = string.Join(", ", tenants.Select(id => $"'{id}'"));
         var limite = DateTime.UtcNow.AddSeconds(60);
         while (await EscalarAsync<bool>(
-                   $"SELECT EXISTS (SELECT 1 FROM tramites.procedure_instances WHERE tenant_id = '{Cliente}' " +
+                   "SELECT EXISTS (SELECT 1 FROM tramites.procedure_instances WHERE tenant_id IN (" + lista + ") " +
                    "AND COALESCE(sync_xact, '0'::xid8) >= pg_snapshot_xmin(pg_current_snapshot()))"))
         {
             if (DateTime.UtcNow > limite)
