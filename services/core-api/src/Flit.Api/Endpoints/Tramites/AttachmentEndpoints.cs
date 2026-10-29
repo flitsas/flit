@@ -21,6 +21,7 @@ internal static class AttachmentEndpoints
             [FromForm] string? tipo,
             IFormFile? file,
             UploadAttachmentHandler handler,
+            HttpContext http,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
@@ -36,7 +37,8 @@ internal static class AttachmentEndpoints
                 file.Length,
                 stream);
 
-            var (result, error) = await handler.HandleAsync(id, tenantId.Value, input, null, ct);
+            var userId = ResolveUserId(http.User);
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, input, userId, ct);
             return error switch
             {
                 "missing_file" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta el archivo (file)."),
@@ -100,6 +102,7 @@ internal static class AttachmentEndpoints
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
             [FromBody] RegisterAttachmentRequest? body,
             RegisterAttachmentHandler handler,
+            HttpContext http,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
@@ -115,7 +118,8 @@ internal static class AttachmentEndpoints
                 body.Sha256 ?? string.Empty,
                 body.StoragePath ?? string.Empty);
 
-            var (result, error) = await handler.HandleAsync(id, tenantId.Value, input, null, ct);
+            var userId = ResolveUserId(http.User);
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, input, userId, ct);
             return error switch
             {
                 "missing_file" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "El tamaño del archivo debe ser mayor a 0."),
@@ -198,12 +202,14 @@ internal static class AttachmentEndpoints
             Guid attachmentId,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
             DeleteAttachmentHandler handler,
+            HttpContext http,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
-            var error = await handler.HandleAsync(id, tenantId.Value, attachmentId, ct);
+            var userId = ResolveUserId(http.User);
+            var error = await handler.HandleAsync(id, tenantId.Value, attachmentId, userId, ct);
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),

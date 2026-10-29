@@ -1,3 +1,5 @@
+using System.Text.Json;
+using Flit.Tramites.Application.Tracking;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
@@ -425,5 +427,154 @@ public sealed class PatchFieldValuesTests
         error.Should().BeNull();
         instance.FieldValues.Should().ContainSingle(f => f.FieldKey == "transit_office_id");
         await _repo.Received(1).SaveChangesAsync(ct);
+    }
+
+    // ── HU #14172 — bitácora de cambios de field_values ─────────────────────
+
+    /// <summary>
+    /// AC1: un campo visible cambia → se persiste un evento dato_modificado con el actor,
+    /// la etiqueta correcta y los valores anterior/nuevo. CreatedAt en UTC (offset 0).
+    /// </summary>
+    [Fact]
+    public async Task HU14172_AC1_CambioCampoVisible_EmiteEventoConActorYPayloadCorrectos()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var actorUserId = Guid.NewGuid();
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = Instance(id, tenantId, TramiteEstado.Borrador);
+        var existing = new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, ProcedureInstanceId = id,
+            FieldKey = "plate", ValueText = "ABC123", Source = "user",
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        instance.FieldValues.Add(existing);
+        _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(instance);
+
+        // Capturar el evento que se pasa a AddEventAsync.
+        var capturedEvents = new List<ProcedureInstanceEvent>();
+        _repo.When(r => r.AddEventAsync(Arg.Any<ProcedureInstanceEvent>(), Arg.Any<CancellationToken>()))
+             .Do(ci => capturedEvents.Add(ci.ArgAt<ProcedureInstanceEvent>(0)));
+
+        var request = new PatchFieldValuesRequest([new FieldValueInput(null, "plate", "XYZ987", null)]);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, request, actorUserId, ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+
+        // Exactamente un evento persistido.
+        capturedEvents.Should().HaveCount(1);
+        var evt = capturedEvents[0];
+
+        evt.Tipo.Should().Be(ProcedureFieldChangeRecorder.EventType);         // "dato_modificado"
+        evt.CreatedBy.Should().Be(actorUserId);
+        evt.TenantId.Should().Be(tenantId);
+        evt.ProcedureInstanceId.Should().Be(id);
+        evt.CreatedAt.Offset.Should().Be(TimeSpan.Zero);                      // UTC
+
+        // Payload: etiqueta, campo, anterior, nuevo
+        var payload = JsonDocument.Parse(evt.Payload).RootElement;
+        payload.GetProperty("etiqueta").GetString().Should().Be("Placa");
+        payload.GetProperty("campo").GetString().Should().Be("plate");
+        payload.GetProperty("anterior").GetString().Should().Be("ABC123");
+        payload.GetProperty("nuevo").GetString().Should().Be("XYZ987");
+    }
+
+    /// <summary>
+    /// AC2: guardar el mismo valor que ya está persistido → el recorder descarta el cambio
+    /// y AddEventAsync no se llama en absoluto.
+    /// </summary>
+    [Fact]
+    public async Task HU14172_AC2_MismoValor_NoEmiteEvento()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var actorUserId = Guid.NewGuid();
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = Instance(id, tenantId, TramiteEstado.Borrador);
+        var existing = new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, ProcedureInstanceId = id,
+            FieldKey = "plate", ValueText = "ABC123", Source = "user",
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        instance.FieldValues.Add(existing);
+        _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(instance);
+
+        // Mismo valor
+        var request = new PatchFieldValuesRequest([new FieldValueInput(null, "plate", "ABC123", null)]);
+        var (result, error) = await _sut.HandleAsync(id, tenantId, request, actorUserId, ct);
+
+        error.Should().BeNull();
+        await _repo.DidNotReceive().AddEventAsync(Arg.Any<ProcedureInstanceEvent>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Tres campos distintos en el mismo PATCH → 3 eventos, mismo CreatedAt y mismo CreatedBy.
+    /// </summary>
+    [Fact]
+    public async Task HU14172_TresCamposCambian_Genera3EventosConMismoCreatedAtYCreatedBy()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var actorUserId = Guid.NewGuid();
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = Instance(id, tenantId, TramiteEstado.Borrador);
+
+        foreach (var (key, old) in new[] { ("plate", "OLD-P"), ("vin", "OLD-V"), ("vehicle_brand", "OLD-B") })
+        {
+            instance.FieldValues.Add(new ProcedureInstanceFieldValue
+            {
+                Id = Guid.NewGuid(), TenantId = tenantId, ProcedureInstanceId = id,
+                FieldKey = key, ValueText = old, Source = "user", CreatedAt = DateTimeOffset.UtcNow,
+            });
+        }
+        _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(instance);
+
+        var capturedEvents = new List<ProcedureInstanceEvent>();
+        _repo.When(r => r.AddEventAsync(Arg.Any<ProcedureInstanceEvent>(), Arg.Any<CancellationToken>()))
+             .Do(ci => capturedEvents.Add(ci.ArgAt<ProcedureInstanceEvent>(0)));
+
+        var request = new PatchFieldValuesRequest(
+        [
+            new FieldValueInput(null, "plate",         "NEW-P", null),
+            new FieldValueInput(null, "vin",           "NEW-V", null),
+            new FieldValueInput(null, "vehicle_brand", "NEW-B", null),
+        ]);
+        var (_, error) = await _sut.HandleAsync(id, tenantId, request, actorUserId, ct);
+
+        error.Should().BeNull();
+        capturedEvents.Should().HaveCount(3);
+        capturedEvents.Should().OnlyContain(e => e.CreatedBy == actorUserId);
+        // Todos comparten el mismo CreatedAt (un único DateTimeOffset.UtcNow por lote).
+        capturedEvents.Select(e => e.CreatedAt).Distinct().Should().ContainSingle();
+    }
+
+    /// <summary>
+    /// HandleSystemSeedAsync (siembra de sistema) NO debe registrar eventos de historial,
+    /// aunque los valores cambien efectivamente.
+    /// </summary>
+    [Fact]
+    public async Task HU14172_HandleSystemSeedAsync_NoRegistraHistorial()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = Instance(id, tenantId, TramiteEstado.Borrador);
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(), TenantId = tenantId, ProcedureInstanceId = id,
+            FieldKey = "plate", ValueText = "ABC123", Source = "user", CreatedAt = DateTimeOffset.UtcNow,
+        });
+        _repo.GetByIdWithDetailsAsync(id, tenantId, ct).Returns(instance);
+
+        var request = new PatchFieldValuesRequest([new FieldValueInput(null, "plate", "XYZ999", null)]);
+        var (result, error) = await _sut.HandleSystemSeedAsync(id, tenantId, request, ct);
+
+        error.Should().BeNull();
+        result.Should().NotBeNull();
+        // La siembra de sistema no produce eventos de bitácora.
+        await _repo.DidNotReceive().AddEventAsync(Arg.Any<ProcedureInstanceEvent>(), Arg.Any<CancellationToken>());
     }
 }

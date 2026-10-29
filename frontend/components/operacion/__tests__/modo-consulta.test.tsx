@@ -46,6 +46,7 @@ const mocks = vi.hoisted(() => ({
   downloadAttachment: vi.fn(),
   downloadBiometricCertificado: vi.fn(),
   getInstance: vi.fn(),
+  getStatusHistory: vi.fn(),
   listBiometricExpediente: vi.fn(),
   startSubsanacion: vi.fn(),
   pauseInstance: vi.fn(),
@@ -281,6 +282,14 @@ beforeEach(() => {
   mocks.getInstance.mockResolvedValue({ ...detalle, id: 'inst-propio', tenantId: CABEZA });
   mocks.getNetworkInstance.mockResolvedValue({ ...detalle, fromNetwork: true });
   mocks.getAttachments.mockResolvedValue([]);
+  mocks.getStatusHistory.mockResolvedValue({
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize: 20,
+    modificaciones: [],
+    modificacionesTotal: 0,
+  });
   mocks.getNetworkAttachments.mockResolvedValue([]);
   mocks.getChecklist.mockResolvedValue({ items: [] });
   mocks.listBiometricExpediente.mockResolvedValue({

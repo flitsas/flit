@@ -19,6 +19,7 @@ using Flit.Queries.Domain;
 using Flit.Queries.Domain.Documentos;
 using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
@@ -2262,6 +2263,87 @@ internal sealed partial class ProcedureInstanceRepository(
         }
 
         return resultado;
+    }
+
+    /// <summary>
+    /// HU #14173 — eventos dato_modificado de la instancia, más reciente primero, con nombre y
+    /// compañía del actor resueltos igual que GetStatusHistoryPageAsync. Incluye filas de borrador.
+    /// HU #14180 — proyecta además, una sola vez, los actos ya guardados (reasignación, reenvío,
+    /// revocatoria). No escribe otro evento. Devuelve null si la instancia no existe en el tenant
+    /// (mismo criterio que GetStatusHistoryPageAsync). Si el payload de un dato_modificado está roto,
+    /// omite esa fila sin lanzar ni loguear el payload (puede traer nombre, documento, placa).
+    /// El tiempo se conserva en UTC; no se convierte a hora Colombia.
+    /// </summary>
+    public async Task<(IReadOnlyList<ProcedureInstanceModificacionEntry> Items, int Total)?> GetModificacionesPageAsync(
+        Guid id, Guid tenantId, int skip, int take, CancellationToken ct)
+    {
+        // Mismo predicado de existencia que GetStatusHistoryPageAsync.
+        var exists = await db.ProcedureInstances.AsNoTracking()
+            .AnyAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
+        if (!exists)
+            return null;
+
+        // Se leen todos los tipos de la línea y se deduplica antes de paginar: un acto y su
+        // dato_modificado espejo no pueden caer en páginas distintas y contarse dos veces.
+        var tipos = StatusHistoryModificacionLectura.Tipos();
+        var raw = await db.ProcedureInstanceEvents.AsNoTracking()
+            .Where(e => e.ProcedureInstanceId == id && e.TenantId == tenantId && tipos.Contains(e.Tipo))
+            .OrderByDescending(e => e.CreatedAt)
+            .ThenByDescending(e => e.Id)
+            .Select(e => new { e.Id, e.Tipo, e.CreatedAt, e.CreatedBy, e.Payload })
+            .ToListAsync(ct);
+
+        var projected = new List<StatusHistoryModificacionLectura.Fila>(raw.Count);
+        foreach (var row in raw)
+        {
+            if (StatusHistoryModificacionLectura.TryProject(
+                    row.Tipo, row.Id, row.CreatedAt, row.CreatedBy, row.Payload, out var fila))
+                projected.Add(fila);
+        }
+
+        var deduped = StatusHistoryModificacionLectura.Dedup(projected);
+        var total = deduped.Count;
+        var page = deduped.Skip(skip).Take(take).ToList();
+        if (page.Count == 0)
+            return ([], total);
+
+        // Resolver nombre y compañía en batch — mismo criterio que GetStatusHistoryPageAsync.
+        var userIds = page
+            .Where(p => p.CreatedBy is not null)
+            .Select(p => p.CreatedBy!.Value)
+            .Distinct()
+            .ToList();
+
+        var names = userIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : (await db.Users.AsNoTracking()
+                .Where(u => userIds.Contains(u.Id))
+                .Select(u => new { u.Id, u.DisplayName })
+                .ToListAsync(ct))
+                .Where(r => !string.IsNullOrWhiteSpace(r.DisplayName))
+                .ToDictionary(r => r.Id, r => r.DisplayName);
+
+        var companias = await ResolveCompaniasDeUsuariosAsync(userIds, ct);
+
+        var items = page
+            .Select(p =>
+            {
+                var nombre = p.CreatedBy is { } uid1 && names.TryGetValue(uid1, out var n) ? n : null;
+                var compania = p.CreatedBy is { } uid2 && companias.TryGetValue(uid2, out var co) ? co : null;
+                return new ProcedureInstanceModificacionEntry(
+                    p.Id,
+                    p.Etiqueta,
+                    p.Campo,
+                    p.Anterior,
+                    p.Nuevo,
+                    p.ChangedAt,
+                    p.CreatedBy,
+                    StatusHistoryModificacionLectura.NombreActor(p.Campo, p.CreatedBy, nombre),
+                    StatusHistoryModificacionLectura.CompaniaActor(p.Campo, p.CreatedBy, compania));
+            })
+            .ToList();
+
+        return (items, total);
     }
 
     public async Task<IReadOnlyList<ProcedureStateChangeEmailDispatch>?> ListEmailDispatchesAsync(

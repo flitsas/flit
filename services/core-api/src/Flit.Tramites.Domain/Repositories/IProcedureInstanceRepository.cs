@@ -657,6 +657,17 @@ public interface IProcedureInstanceRepository
         Guid id, Guid tenantId, int skip, int take, CancellationToken ct = default);
 
     /// <summary>
+    /// HU #14173 — eventos <c>dato_modificado</c> de la instancia (campo a campo), ordenados por
+    /// <c>created_at</c> DESC (más reciente primero), con nombre y compañía del actor resueltos igual
+    /// que <see cref="GetStatusHistoryPageAsync"/>. Incluye filas escritas en borrador: no filtra por
+    /// estado. Devuelve <c>null</c> si la instancia no existe o no pertenece al tenant (mismo criterio
+    /// que <see cref="GetStatusHistoryPageAsync"/>: TenantId + DeletedAt == null). Si existe pero no
+    /// hay eventos, devuelve página vacía con Total 0. El tiempo se conserva en UTC.
+    /// </summary>
+    Task<(IReadOnlyList<ProcedureInstanceModificacionEntry> Items, int Total)?> GetModificacionesPageAsync(
+        Guid id, Guid tenantId, int skip, int take, CancellationToken ct = default);
+
+    /// <summary>
     /// HU #11470 — despachos de correo de cambio de estado del trámite.
     /// <c>null</c> si la instancia no existe en el tenant; lista vacía si no hay avisos.
     /// </summary>
@@ -890,6 +901,22 @@ public sealed record TramitesFilterOptions(
 public sealed record TramitesFilterTipoOption(string Code, string Name, string Family);
 
 public sealed record TramitesFilterCompaniaOption(Guid Id, string Nombre);
+
+/// <summary>
+/// HU #14173 — proyección de un evento <c>dato_modificado</c> con nombre y compañía del actor
+/// resueltos en batch. El tiempo (<see cref="ChangedAt"/>) es el <c>created_at</c> UTC del evento;
+/// no se convierte a hora Colombia.
+/// </summary>
+public sealed record ProcedureInstanceModificacionEntry(
+    Guid Id,
+    string Etiqueta,
+    string Campo,
+    string Anterior,
+    string Nuevo,
+    DateTimeOffset ChangedAt,
+    Guid? ChangedByUserId,
+    string? ChangedByName,
+    string? ChangedByCompania);
 
 /// <summary>
 /// Proyección de lectura de una fila de <c>procedure_instance_status_history</c> con el nombre

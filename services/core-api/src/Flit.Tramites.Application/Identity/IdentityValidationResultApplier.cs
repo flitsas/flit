@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Flit.Tramites.Application.Identity.Events;
+using Flit.Tramites.Application.Tracking;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
@@ -28,12 +29,25 @@ public sealed record IdentityValidationTerminalResult(
 /// veredicto ni bloquear la radicación. Los parámetros <paramref name="repo"/>/<paramref name="policy"/> son
 /// opcionales: sin ellos (p. ej. en tests que no ejercitan la política) el applier mantiene su comportamiento
 /// previo intacto.
+///
+/// <para><b>HU #14179</b> — al aprobar o rechazar la identidad de una parte del trámite, encola UNA fila
+/// <c>dato_modificado</c> con la frase corta («Identidad del comprador: aprobada» / «rechazada»; la parte
+/// en minúscula). Anterior vacío. No guarda imagen, puntaje ni el cuerpo del proveedor. La misma frase
+/// (Ordinal tras trim) no genera otra fila. No escribe <see cref="IdentityValidationAuditEvent"/>.</para>
 /// </summary>
 public sealed class IdentityValidationResultApplier(
     IIdentityValidationEventPublisher events,
     IProcedureInstanceRepository? repo = null,
     ImprontaValidationPolicyOptions? policy = null)
 {
+    private const string EtiquetaIdentidad = "Validación de identidad";
+    private const string CampoIdentidad = "identidad";
+
+    private static readonly JsonSerializerOptions PayloadJson = new(JsonSerializerDefaults.Web);
+
+    /// <summary>Frases ya encoladas en este scope (aún no visibles en la consulta de bitácora).</summary>
+    private readonly HashSet<(Guid InstanceId, string Frase)> _frasesEmitidas = new();
+
     public async Task<bool> ApplyAsync(
         ProcedureInstanceBiometricValidation v,
         IdentityValidationTerminalResult result,
@@ -118,6 +132,8 @@ public sealed class IdentityValidationResultApplier(
             }
         }
 
+        await RegistrarFraseEnBitacoraAsync(v, result.Approved, now, ct);
+
         await events.PublishAsync(new IdentityValidationCompleted
         {
             TenantId = v.TenantId,
@@ -131,5 +147,105 @@ public sealed class IdentityValidationResultApplier(
         }, ct);
 
         return true;
+    }
+
+    /// <summary>
+    /// Encola la frase corta de la parte sin volver a decidir el resultado.
+    /// La simulación del gestor aprueba la fila y no pasa por <see cref="ApplyAsync"/>,
+    /// que sale sin escribir si el estado ya es terminal. No usa el catálogo de etiquetas.
+    /// Sin repositorio, sin trámite o sin parte, no hay fila. La misma frase no se encola otra vez.
+    /// </summary>
+    public Task EncolarFraseDeParteAsync(
+        ProcedureInstanceBiometricValidation v,
+        bool approved,
+        DateTimeOffset now,
+        CancellationToken ct = default)
+        => RegistrarFraseEnBitacoraAsync(v, approved, now, ct);
+
+    private async Task RegistrarFraseEnBitacoraAsync(
+        ProcedureInstanceBiometricValidation v,
+        bool approved,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        if (repo is null || v.ProcedureInstanceId is not Guid instanceId)
+            return;
+
+        var parte = ParteEnMinuscula(v.PartyRole);
+        if (parte is null)
+            return;
+
+        var frase = approved
+            ? $"Identidad del {parte}: aprobada"
+            : $"Identidad del {parte}: rechazada";
+
+        var clave = (instanceId, frase);
+        if (_frasesEmitidas.Contains(clave))
+            return;
+
+        if (await FraseYaRegistradaAsync(repo, instanceId, v.TenantId, frase, ct))
+        {
+            _frasesEmitidas.Add(clave);
+            return;
+        }
+
+        _frasesEmitidas.Add(clave);
+        await repo.AddEventAsync(new ProcedureInstanceEvent
+        {
+            Id = Guid.NewGuid(),
+            TenantId = v.TenantId,
+            ProcedureInstanceId = instanceId,
+            Tipo = ProcedureFieldChangeRecorder.EventType,
+            Payload = JsonSerializer.Serialize(new
+            {
+                etiqueta = EtiquetaIdentidad,
+                campo = CampoIdentidad,
+                anterior = "",
+                nuevo = frase,
+            }, PayloadJson),
+            CreatedAt = now.ToUniversalTime(),
+            CreatedBy = null,
+        }, ct);
+    }
+
+    private static async Task<bool> FraseYaRegistradaAsync(
+        IProcedureInstanceRepository repositorio,
+        Guid instanceId,
+        Guid tenantId,
+        string frase,
+        CancellationToken ct)
+    {
+        const int pageSize = 100;
+        var skip = 0;
+        for (var pageIndex = 0; pageIndex < 1000; pageIndex++)
+        {
+            var page = await repositorio.GetModificacionesPageAsync(instanceId, tenantId, skip, pageSize, ct);
+            if (page is not { } found)
+                return false;
+
+            foreach (var item in found.Items)
+            {
+                if (!string.Equals(item.Campo, CampoIdentidad, StringComparison.Ordinal))
+                    continue;
+
+                var existente = string.IsNullOrWhiteSpace(item.Nuevo) ? string.Empty : item.Nuevo.Trim();
+                if (string.Equals(existente, frase, StringComparison.Ordinal))
+                    return true;
+            }
+
+            skip += pageSize;
+            if (skip >= found.Total)
+                return false;
+        }
+
+        return false;
+    }
+
+    private static string? ParteEnMinuscula(string? partyRole)
+    {
+        if (string.IsNullOrWhiteSpace(partyRole))
+            return null;
+        var parte = partyRole.Trim().ToLowerInvariant();
+        return parte.Length == 0 ? null : parte;
     }
 }

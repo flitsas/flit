@@ -719,6 +719,7 @@ Flit.Tramites.Application.UseCases.ProcedureInstances.AdminReenviarValidacionesL
 Flit.Tramites.Application.UseCases.ProcedureInstances.AprobarValidacionManualHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.AprobarValidacionManualHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.AttachmentValidator => Flit.Tramites.Application.UseCases.ProcedureInstances.AttachmentValidator (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.BackfillFirmaImprontaManualHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.BackfillFirmaImprontaManualHandler (Scoped)
+Flit.Tramites.Application.UseCases.ProcedureInstances.BitacoraPlacaOtHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.BitacoraPlacaOtHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.BusquedaRapidaResolver => Flit.Tramites.Application.UseCases.ProcedureInstances.BusquedaRapidaResolver (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.CamaraComercioRequirementResolver => Flit.Tramites.Application.UseCases.ProcedureInstances.CamaraComercioRequirementResolver (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.CancelSubsanacionHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.CancelSubsanacionHandler (Scoped)

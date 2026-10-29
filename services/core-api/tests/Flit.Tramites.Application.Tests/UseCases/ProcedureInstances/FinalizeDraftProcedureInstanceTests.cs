@@ -18,8 +18,13 @@ public sealed class FinalizeDraftProcedureInstanceTests
     private readonly IProcedureInstanceRepository _repo = Substitute.For<IProcedureInstanceRepository>();
     private readonly FinalizeDraftProcedureInstanceHandler _sut;
 
-    public FinalizeDraftProcedureInstanceTests() =>
+    public FinalizeDraftProcedureInstanceTests()
+    {
+        _repo.AddEventAsync(Arg.Any<ProcedureInstanceEvent>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        _repo.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
         _sut = new FinalizeDraftProcedureInstanceHandler(_repo);
+    }
 
     /// <summary>Submit N 03: orquestador del lifecycle service (puertos no-op, sin gates OT).</summary>
     private SubmitProcedureInstanceHandler SubmitHandler(IProcedureTypeRepository typeRepo)
