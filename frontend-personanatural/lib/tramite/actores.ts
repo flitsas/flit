@@ -185,9 +185,9 @@ export function actoresYaGuardados(filas: readonly FilaActor[], guardados: reado
         (g.numeroDocumento ?? "") === a.numeroDocumento &&
         (g.nombre ?? "").trim() === a.nombre &&
         (g.correo ?? "").trim() === a.correo &&
-        (g.celular ?? "").replace(/\D/g, "") === a.celular.replace(/\D/g, "") &&
+        (g.celular ?? "").replace(/\D/g, "") === (a.celular ?? "").replace(/\D/g, "") &&
         (g.direccion ?? "").trim() === (a.direccion ?? "").trim() &&
-        (g.ciudad ?? "") === (ciudadCanonica(a.ciudad) ?? ""),
+        (g.ciudad ?? "") === (ciudadCanonica(a.ciudad ?? "") ?? ""),
     ),
   );
 }
