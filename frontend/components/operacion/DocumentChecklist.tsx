@@ -34,6 +34,17 @@ export type DocumentUploadMode = 'individual' | 'batch';
 /** Mensaje del POST generate-impronta del trámite (ProblemDetails.detail). */
 export const IMPRONTA_MANUAL_TEXTO = 'Cargue la impronta; no se genera automáticamente.';
 
+/**
+ * La generación por debajo (resumen, radicar, consolidado) solo corre si el checklist
+ * marca la impronta como obligatoria. Opcional, o ausente: solo el clic «Generar impronta».
+ */
+export function improntaObligatoriaEnChecklist(
+  items: ReadonlyArray<{ key: string; docTipo?: string | null; obligatorio: boolean }>,
+): boolean {
+  const item = items.find((i) => (i.docTipo ?? i.key).toLowerCase() === 'impronta');
+  return item?.obligatorio === true;
+}
+
 /** HU #13403 — 409 `generacion_improntas_deshabilitada` (extensions.error en el ProblemDetails). */
 export function esGeneracionImprontasDeshabilitada(error: unknown): boolean {
   const problem = (error as { problem?: Record<string, unknown> | null } | null)?.problem;
