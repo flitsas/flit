@@ -23,6 +23,12 @@ internal sealed class FasecoldaAvaluoProvider(
 {
     private const string SourceKey = "fasecolda";
     private const long ThousandsToPesos = 1000;
+
+    /// <summary>
+    /// fasecoldaback responde 429 «Cliente no permitido» si la búsqueda por VIN no lleva este User-Agent.
+    /// El valor que acepta es comilla, espacio y comilla (<c>' '</c>), no un espacio solo.
+    /// </summary>
+    private const string UserAgentBusquedaVin = "' '";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly FasecoldaOptions _options = options.Value;
@@ -63,7 +69,9 @@ internal sealed class FasecoldaAvaluoProvider(
         // 1) Búsqueda por VIN → códigos (sin auth). URL absoluta (ver FasecoldaUrl).
         var vinClient = httpFactory.CreateClient("fasecolda-vin");
         var vinUrl = FasecoldaUrl.Absolute(_options.ByVinBaseUrl, $"{_options.ByVinPath}/{Uri.EscapeDataString(vin)}");
-        using var vinResp = await vinClient.GetAsync(vinUrl, ct);
+        using var vinReq = new HttpRequestMessage(HttpMethod.Get, vinUrl);
+        vinReq.Headers.TryAddWithoutValidation("User-Agent", UserAgentBusquedaVin);
+        using var vinResp = await vinClient.SendAsync(vinReq, ct);
         if (vinResp.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.NotFound)
             return AvaluoResult.NoData(SourceKey, "VIN sin coincidencia en Fasecolda");
         if (!vinResp.IsSuccessStatusCode)
@@ -85,7 +93,9 @@ internal sealed class FasecoldaAvaluoProvider(
         using var req = new HttpRequestMessage(
             HttpMethod.Get,
             FasecoldaUrl.Absolute(_options.ApiBaseUrl, $"{_options.ListCodePath}/{string.Join(",", codigos)}"));
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        // El access_token de Fasecolda trae '/' y '='. AuthenticationHeaderValue los rechaza
+        // (FormatException) y la consulta no sale; Postman Auth escribe el header sin esa validación.
+        req.Headers.TryAddWithoutValidation("Authorization", "Bearer " + token);
         req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
         using var detResp = await apiClient.SendAsync(req, ct);
