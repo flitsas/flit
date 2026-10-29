@@ -51,20 +51,81 @@ beforeEach(() => {
   mocks.lookupLegalRepresentativeByNit.mockResolvedValue(null);
   mocks.actorContactLookup.mockResolvedValue({ found: false });
   mocks.getBiometricState.mockResolvedValue({ validations: [], provider: 'mock' });
-  mocks.runtPersonLookup.mockResolvedValue({
+  mocks.runtPersonLookup.mockImplementation(async (_instanceId: string, input: { documentNumber?: string }) => ({
     found: true,
     fullName: 'Persona Encontrada',
     firstName: 'Persona',
     lastName: 'Encontrada',
     documentType: 'CC',
-    documentNumber: '111',
+    documentNumber: input?.documentNumber ?? '111',
     source: 'RUNT',
     mode: 'mock',
-  });
+  }));
 });
 
 function addButton(sideLabel: string) {
   return screen.getByRole('button', { name: `Agregar propietario de ${sideLabel}` });
+}
+
+/** Actor completo ya persistido — habilita secuencia HU #14192 (campos + parteGuardadaSinCambios). */
+const COMPLETE_COMPRADOR = {
+  rol: 'comprador' as const,
+  tipoDocumento: 'CC' as const,
+  numeroDocumento: '11111111',
+  nombreCompleto: 'Persona Encontrada',
+  email: 'persona@example.com',
+  ciudad: 'Bogota',
+  direccion: 'Calle 1 # 2-3',
+  telefono: '3001234567',
+  personType: 'natural' as const,
+  ordinal: 1,
+};
+
+const COMPLETE_VENDEDOR = {
+  ...COMPLETE_COMPRADOR,
+  rol: 'vendedor' as const,
+  numeroDocumento: '22222222',
+  email: 'vendedor@example.com',
+};
+
+/** Espera a que Agregar esté habilitado (HU #14192: secuencia). */
+async function waitAddEnabled(sideLabel: string) {
+  await waitFor(() => expect(addButton(sideLabel)).toBeEnabled());
+}
+
+/** Completa campos de contacto en el scope (screen o within(card)). */
+async function fillContactFields(
+  user: ReturnType<typeof userEvent.setup>,
+  scope: Pick<typeof screen, 'getByLabelText'>,
+  opts?: { email?: string; ciudad?: string; direccion?: string; telefono?: string },
+) {
+  const email = opts?.email ?? 'persona@example.com';
+  const ciudad = opts?.ciudad ?? 'Bogota';
+  const direccion = opts?.direccion ?? 'Calle 1 # 2-3';
+  const telefono = opts?.telefono ?? '3001234567';
+  await user.clear(scope.getByLabelText(/Correo electr/i));
+  await user.type(scope.getByLabelText(/Correo electr/i), email);
+  await user.clear(scope.getByLabelText(/^Ciudad/i));
+  await user.type(scope.getByLabelText(/^Ciudad/i), ciudad);
+  await user.clear(scope.getByLabelText(/Direcci/i));
+  await user.type(scope.getByLabelText(/Direcci/i), direccion);
+  await user.clear(scope.getByLabelText(/Tel[eé]fono/i));
+  await user.type(scope.getByLabelText(/Tel[eé]fono/i), telefono);
+}
+
+/** Documento + consulta RUNT + contacto → habilita Agregar. */
+async function completeOwnerWithRunt(
+  user: ReturnType<typeof userEvent.setup>,
+  scope: typeof screen | ReturnType<typeof within>,
+  docNumber: string,
+  contact?: Parameters<typeof fillContactFields>[2],
+) {
+  const doc = scope.getByLabelText(/Número de documento/);
+  await user.clear(doc);
+  await user.type(doc, docNumber);
+  await user.click(scope.getByRole('button', { name: /Consultar RUNT/i }));
+  await scope.findByText(/Persona encontrada en RUNT/i);
+  await fillContactFields(user, scope, contact);
 }
 
 // CAMBIO DE COMPORTAMIENTO (decisión del usuario, imagen de referencia): con un solo actor la fila
@@ -102,11 +163,20 @@ describe('ActorsForm — Múltiple Propietario, un solo actor (regresión, caso 
 
 describe('ActorsForm — Múltiple Propietario, agregar/quitar copropietarios (matrícula inicial)', () => {
   async function addSecondComprador(user: ReturnType<typeof userEvent.setup>) {
+    mocks.getActors.mockResolvedValue([COMPLETE_COMPRADOR]);
+    render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
+    await waitFor(() => expect(screen.getByLabelText(/Número de documento/)).toHaveValue(COMPLETE_COMPRADOR.numeroDocumento));
+    await waitFor(() => expect(addButton('comprador')).toBeEnabled());
+    await user.click(addButton('comprador'));
+    await screen.findByRole('tab', { name: /Comprador 2/ });
+  }
+
+  it('HU #14192 — Agregar propietario deshabilitado si el actual no está completo', async () => {
+    mocks.getActors.mockResolvedValue([]);
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
     await screen.findByLabelText(/Número de documento/);
-    await user.click(addButton('comprador'));
-    await screen.findByRole('tablist');
-  }
+    expect(addButton('comprador')).toBeDisabled();
+  });
 
   it('al agregar el segundo aparecen las pestañas con el rótulo del rol + ordinal, y el bloque de %', async () => {
     const user = userEvent.setup();
@@ -204,12 +274,14 @@ describe('ActorsForm — Múltiple Propietario, agregar/quitar copropietarios (m
 
   it('máximo 4 propietarios por lado: el botón "+" se deshabilita al llegar al límite', async () => {
     const user = userEvent.setup();
+    mocks.getActors.mockResolvedValue([
+      { ...COMPLETE_COMPRADOR, ordinal: 1, numeroDocumento: '11111111', email: 'a@example.com', porcentaje: 34 },
+      { ...COMPLETE_COMPRADOR, ordinal: 2, numeroDocumento: '22222222', email: 'b@example.com', porcentaje: 33 },
+      { ...COMPLETE_COMPRADOR, ordinal: 3, numeroDocumento: '33333333', email: 'c@example.com', porcentaje: 33 },
+    ]);
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    await screen.findByLabelText(/Número de documento/);
-
-    await user.click(addButton('comprador'));
-    await screen.findByRole('tablist');
-    await user.click(addButton('comprador'));
+    await waitFor(() => expect(screen.getByLabelText(/Número de documento/)).toHaveValue('11111111'));
+    await waitAddEnabled('comprador');
     await user.click(addButton('comprador'));
 
     await waitFor(() => expect(screen.getByRole('tab', { name: /Comprador 4/ })).toBeInTheDocument());
@@ -258,10 +330,8 @@ describe('ActorsForm — Múltiple Propietario, sin estado fantasma al desplazar
     const vendedorCard = (await screen.findByRole('group', { name: 'Vendedor' })) as HTMLElement;
     const compradorCard = screen.getByRole('group', { name: 'Comprador' }) as HTMLElement;
 
-    // Consulta RUNT del vendedor único (ordinal=1, índice 0 en el array `actors`).
-    await user.type(within(vendedorCard).getByLabelText(/Número de documento/), '111');
-    await user.click(within(vendedorCard).getByRole('button', { name: /Consultar RUNT/ }));
-    await within(vendedorCard).findByText(/Persona encontrada en RUNT/i);
+    // Consulta RUNT + datos completos del vendedor único (HU #14192 exige secuencia antes de +).
+    await completeOwnerWithRunt(user, within(vendedorCard), '111');
 
     // El comprador (índice 1, ANTES de agregar) sigue vacío y sin consultar.
     expect((within(compradorCard).getByLabelText(/Número de documento/) as HTMLInputElement).value).toBe('');
@@ -269,8 +339,11 @@ describe('ActorsForm — Múltiple Propietario, sin estado fantasma al desplazar
     // Agrega un 2do vendedor: se inserta EN el índice 1 (justo tras el vendedor#1), desplazando al
     // comprador de índice 1 → 2. Sin reindexar los mapas posicionales, la consulta RUNT del
     // vendedor#1 podría "saltar" al actor equivocado tras este desplazamiento.
+    await waitFor(() =>
+      expect(within(vendedorCard).getByRole('button', { name: 'Agregar propietario de vendedor' })).toBeEnabled(),
+    );
     await user.click(within(vendedorCard).getByRole('button', { name: 'Agregar propietario de vendedor' }));
-    await within(vendedorCard).findByRole('tablist');
+    await within(vendedorCard).findByRole('tab', { name: /Vendedor 2/ });
 
     // Vuelve a la pestaña del vendedor#1: su consulta sigue siendo LA SUYA, no se perdió ni se
     // reasoció al vendedor#2 recién creado (que debe seguir sin consultar).
@@ -291,16 +364,14 @@ describe('ActorsForm — Múltiple Propietario, sin estado fantasma al desplazar
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
     await screen.findByLabelText(/Número de documento/);
 
-    // Consulta RUNT del único propietario (ordinal=1, índice 0), TODAVÍA en la presentación
-    // partida — sin pasar por la rejilla de traspaso.
-    await user.type(screen.getByLabelText(/Número de documento/), '111');
-    await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
-    await screen.findByText(/Persona encontrada en RUNT/i);
+    // Consulta RUNT + datos completos (HU #14192) del único propietario, presentación partida.
+    await completeOwnerWithRunt(user, screen, '111');
 
     // Agrega el segundo: se inserta EN el índice 1, justo después del primero. Sin reindexar los
     // mapas posicionales, la consulta del primero podría "saltar" al recién creado.
+    await waitAddEnabled('comprador');
     await user.click(addButton('comprador'));
-    await screen.findByRole('tablist');
+    await screen.findByRole('tab', { name: /Comprador 2/ });
 
     // El nuevo (activo tras agregar) NO heredó la consulta del primero.
     expect(screen.queryByText(/Persona encontrada en RUNT/i)).toBeNull();
@@ -324,10 +395,12 @@ describe('ActorsForm — Múltiple Propietario, toda la píldora es clicable (no
     // es quien carga las clases de caja completa (borde, alto, relleno): si alguien vuelve a
     // mover esas clases a un envolvente, esta aserción se rompe.
     const user = userEvent.setup();
+    mocks.getActors.mockResolvedValue([COMPLETE_COMPRADOR]);
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    await screen.findByLabelText(/Número de documento/);
+    await waitFor(() => expect(screen.getByLabelText(/Número de documento/)).toHaveValue(COMPLETE_COMPRADOR.numeroDocumento));
+    await waitAddEnabled('comprador');
     await user.click(addButton('comprador'));
-    await screen.findByRole('tablist');
+    await screen.findByRole('tab', { name: /Comprador 2/ });
 
     const tab1 = screen.getByRole('tab', { name: /Comprador 1/ });
     const tab2 = screen.getByRole('tab', { name: /Comprador 2/ });
@@ -346,11 +419,15 @@ describe('ActorsForm — Múltiple Propietario, toda la píldora es clicable (no
 
   it('un clic en el botón "×" NO cambia la pestaña activa (solo elimina)', async () => {
     const user = userEvent.setup();
+    mocks.getActors.mockResolvedValue([
+      { ...COMPLETE_COMPRADOR, ordinal: 1, numeroDocumento: '11111111', email: 'a@example.com', porcentaje: 50 },
+      { ...COMPLETE_COMPRADOR, ordinal: 2, numeroDocumento: '22222222', email: 'b@example.com', porcentaje: 50 },
+    ]);
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    await screen.findByLabelText(/Número de documento/);
-    await user.click(addButton('comprador'));
-    await screen.findByRole('tablist');
+    await waitFor(() => expect(screen.getByLabelText(/Número de documento/)).toHaveValue('11111111'));
+    await waitAddEnabled('comprador');
     await user.click(addButton('comprador')); // Comprador 3 queda activa
+    await screen.findByRole('tab', { name: /Comprador 3/ });
 
     const tab3 = screen.getByRole('tab', { name: /Comprador 3/ });
     expect(tab3).toHaveAttribute('aria-selected', 'true');
@@ -380,9 +457,9 @@ describe('ActorsForm — Múltiple Propietario, reemplazo de contenido (una tarj
     const user = userEvent.setup();
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
-    // Fase 1 (un solo propietario, el caso mayoritario): el gestor ya escribio su documento.
-    const doc = await screen.findByLabelText(/Número de documento/);
-    await user.type(doc, '111');
+    // Fase 1 (un solo propietario, el caso mayoritario): datos + RUNT (secuencia HU #14192).
+    await screen.findByLabelText(/Número de documento/);
+    await completeOwnerWithRunt(user, screen, '111');
     expect((screen.getByLabelText(/Número de documento/) as HTMLInputElement).value).toBe('111');
     // Presentacion "isSplit": titulo de seccion ancha, SIN el encabezado "Actores del tramite" ni
     // la tarjeta agrupada (`role="group"`) que solo existen en la rejilla de traspaso.
@@ -394,8 +471,9 @@ describe('ActorsForm — Múltiple Propietario, reemplazo de contenido (una tarj
     // accesible: si hubiera dos tarjetas apiladas (la vieja Y la nueva), esta misma linea ya
     // fallaria por ambiguedad - y la presentacion partida debe seguir intacta, NO caer a la
     // rejilla de tarjetas.
+    await waitAddEnabled('comprador');
     await user.click(addButton('comprador'));
-    await screen.findByRole('tablist');
+    await screen.findByRole('tab', { name: /Comprador 2/ });
     expect(screen.getByText(/Datos del comprador/)).toBeInTheDocument();
     expect(screen.queryByText('Actores del trámite')).toBeNull();
     expect(screen.queryByRole('group', { name: /Comprador/i })).toBeNull();
@@ -427,12 +505,14 @@ describe('ActorsForm — Múltiple Propietario, reemplazo de contenido (una tarj
 
   it('matricula inicial: el bloque "Porcentaje de propiedad" aparece al final desde el segundo propietario, y desaparece si vuelve a uno solo - en la presentacion partida', async () => {
     const user = userEvent.setup();
+    mocks.getActors.mockResolvedValue([COMPLETE_COMPRADOR]);
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    await screen.findByLabelText(/Número de documento/);
+    await waitFor(() => expect(screen.getByLabelText(/Número de documento/)).toHaveValue(COMPLETE_COMPRADOR.numeroDocumento));
     expect(screen.queryByText(/Porcentaje de propiedad/)).toBeNull();
 
+    await waitAddEnabled('comprador');
     await user.click(addButton('comprador'));
-    await screen.findByRole('tablist');
+    await screen.findByRole('tab', { name: /Comprador 2/ });
     const panel = screen.getByText(/Porcentaje de propiedad/);
     expect(panel).toBeInTheDocument();
 
@@ -446,10 +526,12 @@ describe('ActorsForm — Múltiple Propietario, reemplazo de contenido (una tarj
 
   it('matricula inicial: toda la pildora responde al clic (misma superficie completa que en traspaso)', async () => {
     const user = userEvent.setup();
+    mocks.getActors.mockResolvedValue([COMPLETE_COMPRADOR]);
     render(<ActorsForm instanceId={INSTANCE} modalidad="matricula_inicial" />);
-    await screen.findByLabelText(/Número de documento/);
+    await waitFor(() => expect(screen.getByLabelText(/Número de documento/)).toHaveValue(COMPLETE_COMPRADOR.numeroDocumento));
+    await waitAddEnabled('comprador');
     await user.click(addButton('comprador'));
-    await screen.findByRole('tablist');
+    await screen.findByRole('tab', { name: /Comprador 2/ });
 
     const tab1 = screen.getByRole('tab', { name: /Comprador 1/ });
     expect(tab1.className).toMatch(/\bborder\b/);
@@ -466,13 +548,18 @@ describe('ActorsForm — Múltiple Propietario, reemplazo de contenido (una tarj
     const vendedorCard = await screen.findByRole('group', { name: 'Vendedor' });
     const compradorCard = screen.getByRole('group', { name: 'Comprador' });
 
-    // CC solo admite dígitos (`sanitizeDocNumber`) — valores puramente numéricos y distintos
-    // entre sí, para no depender de letras que la sanitización descartaría igual en ambos lados.
-    await user.type(within(vendedorCard).getByLabelText(/Número de documento/), '9111');
-    await user.type(within(compradorCard).getByLabelText(/Número de documento/), '8222');
+    // CC solo admite dígitos — datos + RUNT en ambos lados (secuencia HU #14192) antes de Agregar.
+    await completeOwnerWithRunt(user, within(vendedorCard), '9111', { email: 'vend@example.com' });
+    await completeOwnerWithRunt(user, within(compradorCard), '8222', { email: 'comp@example.com' });
 
     // Agrega un segundo en AMBOS lados — traspaso siempre es layout MULTI (sin salto de layout),
     // pero el comportamiento de reemplazo debe ser idéntico al de matrícula.
+    await waitFor(() =>
+      expect(within(vendedorCard).getByRole('button', { name: 'Agregar propietario de vendedor' })).toBeEnabled(),
+    );
+    await waitFor(() =>
+      expect(within(compradorCard).getByRole('button', { name: 'Agregar propietario de comprador' })).toBeEnabled(),
+    );
     await user.click(within(vendedorCard).getByRole('button', { name: 'Agregar propietario de vendedor' }));
     await user.click(within(compradorCard).getByRole('button', { name: 'Agregar propietario de comprador' }));
 
