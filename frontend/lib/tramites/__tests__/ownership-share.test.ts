@@ -88,14 +88,21 @@ describe('applySolidarioAbsorption', () => {
     expect(next[0].porcentaje).toBe(40);
   });
 
-  it('el residuo puede quedar negativo si el gestor edita a los agregados antes que al principal', () => {
+  it('HU #14192 — si los agregados suman más de ~100, escala y deja al solidario > 0 (nunca negativo)', () => {
     const actors = [
       actor({ rol: 'vendedor', porcentaje: 999 }),
       actor({ rol: 'vendedor', porcentaje: 60 }),
       actor({ rol: 'vendedor', porcentaje: 60 }),
     ];
     const next = applySolidarioAbsorption(actors, new Set());
-    expect(next[0].porcentaje).toBe(-20);
+    expect(next[0].porcentaje).toBeGreaterThan(0);
+    expect(next[0].porcentaje).toBeLessThanOrEqual(100);
+    expect(next[1].porcentaje).toBeGreaterThan(0);
+    expect(next[1].porcentaje).toBeLessThanOrEqual(100);
+    expect(next[2].porcentaje).toBeGreaterThan(0);
+    expect(next[2].porcentaje).toBeLessThanOrEqual(100);
+    const sum = (next[0].porcentaje ?? 0) + (next[1].porcentaje ?? 0) + (next[2].porcentaje ?? 0);
+    expect(sum).toBeCloseTo(100, 1);
   });
 
   it('devuelve la MISMA referencia si el residuo ya coincide (no re-renderiza de más)', () => {
@@ -193,6 +200,32 @@ describe('validateOwnershipShares', () => {
     const result = validateOwnershipShares(actors);
     expect(result.valid).toBe(false);
     expect(result.zeroError).toBe(true);
+  });
+
+  it('HU #14192 — bloquea cuando algún actor supera 100% aunque la suma sea 100 con otro negativo', () => {
+    const actors = [
+      actor({ rol: 'comprador', porcentaje: -20 }),
+      actor({ rol: 'comprador', porcentaje: 120 }),
+    ];
+    const result = validateOwnershipShares(actors);
+    expect(result.valid).toBe(false);
+    expect(result.zeroError).toBe(true);
+    expect(result.rangeError).toBe(true);
+  });
+
+  it('HU #14192 — tras eliminar con descuadre, no quedan negativos ni >100', () => {
+    const actors = [
+      actor({ rol: 'comprador', numeroDocumento: '1', porcentaje: -20 }),
+      actor({ rol: 'comprador', numeroDocumento: '2', porcentaje: 120 }),
+      actor({ rol: 'comprador', numeroDocumento: '3', porcentaje: 0 }),
+    ];
+    const next = redistributeAfterRemoval(actors, 2);
+    expect(next).toHaveLength(2);
+    for (const a of next) {
+      expect(a.porcentaje).toBeGreaterThan(0);
+      expect(a.porcentaje).toBeLessThanOrEqual(100);
+    }
+    expect((next[0].porcentaje ?? 0) + (next[1].porcentaje ?? 0)).toBeCloseTo(100, 1);
   });
 
   it('los dos mensajes de bloqueo son textualmente los del encargo, no paráfrasis', () => {
