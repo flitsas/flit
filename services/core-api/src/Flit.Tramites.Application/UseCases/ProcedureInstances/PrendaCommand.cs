@@ -1,5 +1,7 @@
 using System.Text.Json;
 using Flit.Tramites.Application.Storage;
+using Flit.Tramites.Application.Tracking;
+using Flit.Tramites.Domain.Tracking;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
@@ -174,6 +176,22 @@ public sealed class RegistrarPrendaHandler(
         await prendas.AddAsync(nueva, ct);
         await prendas.SaveChangesAsync(ct);
 
+        var previa = aReemplazar.Count > 0 ? aReemplazar[0] : null;
+        var cambiosPrenda = new List<ProcedureFieldChange>
+        {
+            new("prenda_decision", DecisionVisible(previa?.Decision), DecisionVisible(nueva.Decision)),
+            new("prenda_acreedor", previa?.AcreedorNombre, nueva.AcreedorNombre),
+            new("prenda_documento_acreedor", previa?.AcreedorDocumento, nueva.AcreedorDocumento),
+            new("prenda_entidad_levantamiento", previa?.LevantamientoEntidad, nueva.LevantamientoEntidad),
+        };
+        var eventosPrenda = ProcedureFieldChangeRecorder.Record(tenantId, instanceId, cambiosPrenda, userId, now);
+        foreach (var evt in eventosPrenda)
+            await instances.AddEventAsync(evt, ct);
+        // AddEventAsync solo deja el evento en el contexto. Sin este guardado la decisión
+        // queda en la ficha y la fila de bitácora se pierde al cerrar la petición.
+        if (eventosPrenda.Count > 0)
+            await instances.SaveChangesAsync(ct);
+
         // Bug #13240 — el soporte de la decisión anterior no sobrevive al cambio de decisión.
         var vigentesResultantes = vigentes.Except(aReemplazar).Append(nueva).ToList();
         await RetirarSoportesHuerfanosAsync(
@@ -261,6 +279,17 @@ public sealed class RegistrarPrendaHandler(
 
     private static string? Trimmed(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string? DecisionVisible(string? decision) => decision?.Trim().ToLowerInvariant() switch
+    {
+        null or "" => null,
+        "solicitar" => "Solicitar",
+        "registrar" => "Registrar",
+        "levantar" => "Levantar",
+        "omitir" => "Omitir",
+        "sin_prenda" => "Sin prenda",
+        var otro => otro,
+    };
 }
 
 /// <summary>

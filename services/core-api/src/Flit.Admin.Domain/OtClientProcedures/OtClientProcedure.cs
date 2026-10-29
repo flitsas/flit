@@ -75,6 +75,14 @@ public sealed record OtClientProcedure
     /// </summary>
     public IReadOnlyList<OtClientProcedureStatusHistory> StatusHistory { get; init; } = [];
 
+    /// <summary>
+    /// HU #14173 — modificaciones de datos campo a campo (eventos <c>dato_modificado</c>), más
+    /// reciente primero. Solo en GET by id; vacío en listados. Colección ADITIVA: no se mezcla con
+    /// <see cref="StatusHistory"/> para no pintarlas como cambios de estado vacíos. Incluye filas
+    /// escritas en borrador. El tiempo es UTC; no se convierte a hora Colombia.
+    /// </summary>
+    public IReadOnlyList<OtClientProcedureModificacion> Modificaciones { get; init; } = [];
+
     /// <summary>Placa denormalizada (también en listado de bandeja).</summary>
     public string? Placa { get; init; }
 
@@ -237,6 +245,23 @@ public sealed class OtClientProcedurePrenda
     public string? AcreedorNombre { get; init; }
     public string? AcreedorDocumento { get; init; }
     public string? LevantamientoEntidad { get; init; }
+}
+
+/// <summary>
+/// HU #14173 — modificación de un campo del trámite visible para el OT, con el actor resuelto.
+/// El tiempo (<see cref="ChangedAt"/>) es UTC; no se convierte a hora Colombia.
+/// </summary>
+public sealed class OtClientProcedureModificacion
+{
+    public string Etiqueta { get; init; } = string.Empty;
+    public string Campo { get; init; } = string.Empty;
+    public string Anterior { get; init; } = string.Empty;
+    public string Nuevo { get; init; } = string.Empty;
+    public DateTimeOffset ChangedAt { get; init; }
+    /// <summary>Nombre del usuario que realizó el cambio; null si fue proceso automático o no existe.</summary>
+    public string? ActorNombre { get; init; }
+    /// <summary>Razón social de la compañía del actor; null si no resoluble.</summary>
+    public string? ActorCompania { get; init; }
 }
 
 /// <summary>Actor visible para el OT en el detalle del trámite de cliente.</summary>

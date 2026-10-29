@@ -1,8 +1,10 @@
+using Flit.Tramites.Application.Tracking;
 using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.ExternalSync;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tracking;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
@@ -19,12 +21,24 @@ public sealed record PatchFieldValuesRequest(IReadOnlyList<FieldValueInput> Item
 
 public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
 {
+    /// <param name="actorUserId">
+    /// Usuario que realiza el cambio (claim <c>sub</c>). <c>null</c> cuando no hay sesión de usuario
+    /// (ICT, tests) — el evento queda sin <c>CreatedBy</c> y la consulta de historial lo mostrará como sistema.
+    /// </param>
     public Task<(ProcedureInstanceDetailDto? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
         PatchFieldValuesRequest request,
         CancellationToken ct = default) =>
-        HandleCoreAsync(id, tenantId, request, semillaDeSistema: false, ct);
+        HandleCoreAsync(id, tenantId, request, semillaDeSistema: false, actorUserId: null, ct);
+
+    public Task<(ProcedureInstanceDetailDto? Result, string? Error)> HandleAsync(
+        Guid id,
+        Guid tenantId,
+        PatchFieldValuesRequest request,
+        Guid? actorUserId,
+        CancellationToken ct = default) =>
+        HandleCoreAsync(id, tenantId, request, semillaDeSistema: false, actorUserId, ct);
 
     /// <summary>
     /// Siembra de SISTEMA al materializar un borrador (Bug #13109): mismo escritor que el PATCH del
@@ -38,13 +52,15 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
         Guid tenantId,
         PatchFieldValuesRequest request,
         CancellationToken ct = default) =>
-        HandleCoreAsync(id, tenantId, request, semillaDeSistema: true, ct);
+        // semillaDeSistema=true → no se registra historial (materialización de sistema, no edición de usuario)
+        HandleCoreAsync(id, tenantId, request, semillaDeSistema: true, actorUserId: null, ct);
 
     private async Task<(ProcedureInstanceDetailDto? Result, string? Error)> HandleCoreAsync(
         Guid id,
         Guid tenantId,
         PatchFieldValuesRequest request,
         bool semillaDeSistema,
+        Guid? actorUserId,
         CancellationToken ct)
     {
         var instance = await repo.GetByIdWithDetailsAsync(id, tenantId, ct);
@@ -91,6 +107,11 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
 
         var now = DateTimeOffset.UtcNow;
 
+        // HU #14172 — lista de cambios para la bitácora (solo cuando no es siembra de sistema).
+        var fieldChanges = semillaDeSistema
+            ? null
+            : new List<ProcedureFieldChange>(request.Items.Count);
+
         foreach (var item in request.Items)
         {
             var existing = instance.FieldValues.FirstOrDefault(f => f.FieldKey == item.FieldKey);
@@ -100,6 +121,9 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
                 if (ExternalAttachmentRules.IsProtectedFlitoMark(existing.FieldKey, existing.Source))
                     continue;
 
+                // HU #14172 — captura anterior ANTES de sobrescribir (FLITO ya descartado arriba).
+                fieldChanges?.Add(new ProcedureFieldChange(item.FieldKey, existing.ValueText, item.ValueText));
+
                 existing.ValueText = item.ValueText;
                 existing.ValueJson = item.ValueJson;
                 existing.Source = "user";
@@ -107,6 +131,9 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
             }
             else
             {
+                // HU #14172 — campo nuevo: anterior es null.
+                fieldChanges?.Add(new ProcedureFieldChange(item.FieldKey, null, item.ValueText));
+
                 // El front no conoce el form_field.id, así que al crear un value nuevo lo
                 // resolvemos por field_key contra el grafo del procedure_type de la instancia.
                 // Si el front sí mandó un Guid válido, se respeta tal cual.
@@ -136,6 +163,15 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
                 // INSERT. Sin esto, EF infiere Modified por la PK no-default → UPDATE de 0 filas.
                 repo.Add(fieldValue);
             }
+        }
+
+        // HU #14172 — persiste bitácora de cambios de campo ANTES del SaveChanges principal.
+        // El recorder omite valores iguales, current_step y claves internas (EsVisible=false).
+        if (fieldChanges is { Count: > 0 })
+        {
+            var events = ProcedureFieldChangeRecorder.Record(tenantId, id, fieldChanges, actorUserId, now);
+            foreach (var evt in events)
+                await repo.AddEventAsync(evt, ct);
         }
 
         // La instancia se cargó trackeada (GetByIdWithDetailsAsync sin AsNoTracking), así que

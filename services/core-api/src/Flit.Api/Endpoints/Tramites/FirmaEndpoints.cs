@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -60,13 +61,15 @@ internal static class FirmaEndpoints
             Guid id,
             Guid sigId,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            HttpContext http,
             SimularFirmaHandler handler,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
-            var (result, error) = await handler.HandleAsync(id, tenantId.Value, sigId, ct);
+            var (result, error) = await handler.HandleAsync(
+                id, tenantId.Value, sigId, ResolveUserId(http.User), ct);
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
@@ -77,5 +80,11 @@ internal static class FirmaEndpoints
         }).WithName("SimularProcedureInstanceFirma");
 
         return app;
+    }
+
+    private static Guid? ResolveUserId(ClaimsPrincipal user)
+    {
+        var raw = user.FindFirstValue("sub") ?? user.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(raw, out var id) && id != Guid.Empty ? id : null;
     }
 }
