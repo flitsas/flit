@@ -932,15 +932,34 @@ describe('TramiteWizard — Finalizar y blockers', () => {
       expect(mocks.generarImpronta).not.toHaveBeenCalled();
     });
 
-    it('AC4 — con el flag en true conserva la generación al radicar', async () => {
+    const checklistImpronta = (obligatorio: boolean) => {
+      mocks.getChecklist.mockResolvedValue({
+        items: [{ key: 'impronta', label: 'Impronta', obligatorio, docTipo: 'impronta', satisfied: false }],
+        faltanObligatorios: obligatorio ? 1 : 0,
+        completo: !obligatorio,
+      });
+    };
+
+    it('AC4 — con el flag en true y la impronta obligatoria conserva la generación al radicar', async () => {
       preparado({ improntaGeneracionHabilitada: true });
+      checklistImpronta(true);
       await radicar();
       await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
       expect(mocks.generarImpronta).toHaveBeenCalledWith('inst-1');
     });
 
-    it('AC4 — sin el campo en el detalle (trámites previos) se trata como habilitada', async () => {
+    it('con el flag en true y la impronta opcional no la genera al radicar', async () => {
+      preparado({ improntaGeneracionHabilitada: true });
+      checklistImpronta(false);
+      await radicar();
+      await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
+      expect(mocks.generarFur).toHaveBeenCalled();
+      expect(mocks.generarImpronta).not.toHaveBeenCalled();
+    });
+
+    it('AC4 — sin el campo en el detalle y la impronta obligatoria se trata como habilitada', async () => {
       preparado({});
+      checklistImpronta(true);
       await radicar();
       await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
       expect(mocks.generarImpronta).toHaveBeenCalledWith('inst-1');

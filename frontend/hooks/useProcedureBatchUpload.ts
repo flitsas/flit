@@ -2,6 +2,11 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import {
+  MENSAJE_ARCHIVO_NO_LEGIBLE,
+  copiarArchivoEnMemoria,
+  esLecturaDeArchivoDenegada,
+} from '@/lib/tramites/archivo-en-memoria';
 import { mensajeErrorAdjunto } from '@/lib/tramites/flito';
 import {
   cargarTiposOcr,
@@ -247,7 +252,20 @@ export function useProcedureBatchUpload(
       let algunoRespondio = false;
       let hechos = 0;
 
-      for (const file of files) {
+      for (const original of files) {
+        let file: File;
+        try {
+          file = await copiarArchivoEnMemoria(original);
+        } catch (err) {
+          errores.push({
+            filename: original.name,
+            motivo: err instanceof Error && err.message.trim() ? err.message : MENSAJE_ARCHIVO_NO_LEGIBLE,
+          });
+          hechos++;
+          setState((s) => ({ ...s, progreso: { hechos, total: files.length } }));
+          continue;
+        }
+
         try {
           const result = await tramitesClient.analyzeBatch(tipos, [file], tenantId);
           piezas.push(...result.piezas);
@@ -259,7 +277,11 @@ export function useProcedureBatchUpload(
           // misma lista de errores por archivo que ya pinta la pantalla de revisión.
           errores.push({
             filename: file.name,
-            motivo: err instanceof Error ? err.message : 'No se pudo analizar el archivo.',
+            motivo: esLecturaDeArchivoDenegada(err)
+              ? MENSAJE_ARCHIVO_NO_LEGIBLE
+              : err instanceof Error
+                ? err.message
+                : 'No se pudo analizar el archivo.',
           });
         }
 
@@ -367,7 +389,9 @@ export function useProcedureBatchUpload(
         fallos.push({
           filename: piece.filename,
           // HU #13266 (AC3) — si el tipo ya lo cargó FLITO, copy de FLITO en vez del 409 crudo.
-          motivo: mensajeErrorAdjunto(err, 'No se pudo adjuntar.', item.conflicto),
+          motivo: esLecturaDeArchivoDenegada(err)
+            ? MENSAJE_ARCHIVO_NO_LEGIBLE
+            : mensajeErrorAdjunto(err, 'No se pudo adjuntar.', item.conflicto),
         });
       }
     }

@@ -111,7 +111,12 @@ describe('VehicleTransformationsCard — tarjeta "Trámites Simultáneos"', () =
     expect(screen.getByLabelText(/Nuevo color/)).toHaveTextContent('Selecciona…');
     expect(screen.getByText(/Escoge un valor distinto al del RUNT/)).toBeInTheDocument();
     expect(screen.queryByText(/Adjunta el soporte obligatorio/)).not.toBeInTheDocument();
-    expect(screen.getByText(/PDF, JPG hasta 5MB · Opcional/)).toBeInTheDocument();
+    const formatos = screen.getByText(/PDF, JPG hasta 5MB · Opcional/);
+    const nota = screen.getByText(/Debes adjuntar/);
+    const accion = screen.getByText(/Guarda el trámite para poder adjuntar/);
+    // La leyenda de formatos queda entre la nota y la acción de adjuntar, no bajo el título.
+    expect(nota.compareDocumentPosition(formatos) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(formatos.compareDocumentPosition(accion) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('con cambio_color activo y valor nuevo, aparece la card con el valor', () => {
