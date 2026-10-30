@@ -11,6 +11,7 @@ import {
   computeOrdinals,
   defaultPercentageForNewActor,
   duplicateDocumentIndicesWithinSide,
+  equalizeSharesForRol,
   identityStatusForActor,
   indicesForRol,
   isCoveredByVaultForActor,
@@ -316,6 +317,28 @@ describe('defaultPercentageForNewActor', () => {
   it('reparte equitativamente entre el total de actores tras agregar', () => {
     expect(defaultPercentageForNewActor(2)).toBe(50);
     expect(defaultPercentageForNewActor(4)).toBe(25);
+  });
+});
+
+describe('equalizeSharesForRol', () => {
+  // Uso de ejemplo: tras agregar un 3er comprador con solidario editado a mano (50+75),
+  // equalizeSharesForRol deja 33.33/33.33/33.34 y suma exactamente 100 (hallazgo QA).
+  it('reescribe todos los % del lado a partes iguales que suman 100', () => {
+    const actors = [
+      actor({ rol: 'comprador', porcentaje: 50 }),
+      actor({ rol: 'comprador', porcentaje: 75 }),
+      actor({ rol: 'comprador', porcentaje: 33.33 }),
+      actor({ rol: 'vendedor', porcentaje: 100 }),
+    ];
+    const next = equalizeSharesForRol(actors, 'comprador');
+    expect(next[0].porcentaje).toBe(33.33);
+    expect(next[1].porcentaje).toBe(33.33);
+    expect(next[2].porcentaje).toBe(33.34);
+    expect(round2((next[0].porcentaje ?? 0) + (next[1].porcentaje ?? 0) + (next[2].porcentaje ?? 0))).toBe(
+      100,
+    );
+    // No toca el otro lado.
+    expect(next[3].porcentaje).toBe(100);
   });
 });
 
