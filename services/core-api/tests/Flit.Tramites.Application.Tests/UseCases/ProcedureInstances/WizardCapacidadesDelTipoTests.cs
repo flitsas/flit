@@ -1,5 +1,6 @@
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 using FluentAssertions;
@@ -182,5 +183,55 @@ public sealed class WizardCapacidadesDelTipoTests
 
         error.Should().BeNull();
         result!.Capabilities!.ImprontaSource.Should().Be("MANUAL");
+    }
+
+    /// <summary>
+    /// HU #14224 — con RL ya en directorio, el unilateral igual debe revelar la tarjeta del vendedor.
+    /// </summary>
+    [Fact]
+    public async Task Unilateral_ConVendedorJuridicoYRlEnDirectorio_RevealSellerFormEsTrue()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tipo = ProcedureTypeFixture.TraspasoUnilateral;
+        var instance = Instancia(tipo);
+        instance.Actors.Add(new ProcedureInstanceActor
+        {
+            Id = Guid.NewGuid(),
+            ProcedureInstanceId = instance.Id,
+            TenantId = instance.TenantId,
+            ActorType = "vendedor",
+            PersonType = "juridical",
+            DocumentType = "NIT",
+            DocumentNumber = "900123456",
+            FullName = "LEASING DEMO SA",
+            Email = "contacto@leasing.demo",
+        });
+        _repo.GetByIdWithWizardGraphAsync(instance.Id, instance.TenantId, ct).Returns(instance);
+
+        var directory = Substitute.For<IRepresentanteLegalDirectory>();
+        directory.BuscarNombreRepresentanteAsync(
+                Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>(),
+                Arg.Any<CancellationToken>())
+            .Returns("REPRESENTANTE UNO");
+
+        var handler = new GetWizardStateHandler(
+            _repo, snapshotRepo: _snapshots, representanteDirectory: directory);
+        var (state, err) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
+
+        err.Should().BeNull();
+        var actores = state!.Steps.First(s =>
+            string.Equals(s.SectionType, "actor_form", StringComparison.OrdinalIgnoreCase)
+            || (s.SectionTypes?.Any(t => string.Equals(t, "actor_form", StringComparison.OrdinalIgnoreCase)) ?? false));
+        actores.SectionConfig!["revealSellerForm"]!.GetValue<bool>().Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task TraspasoEstandar_RevealSellerFormEsFalse()
+    {
+        var state = await EstadoDe(ProcedureTypeFixture.Traspaso);
+        var actores = state.Steps.First(s =>
+            string.Equals(s.SectionType, "actor_form", StringComparison.OrdinalIgnoreCase)
+            || (s.SectionTypes?.Any(t => string.Equals(t, "actor_form", StringComparison.OrdinalIgnoreCase)) ?? false));
+        actores.SectionConfig!["revealSellerForm"]!.GetValue<bool>().Should().BeFalse();
     }
 }
