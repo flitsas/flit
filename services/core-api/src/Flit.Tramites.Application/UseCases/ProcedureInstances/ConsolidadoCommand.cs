@@ -56,9 +56,9 @@ public interface IExpedienteHotDocumentsRegenerator
 }
 
 /// <summary>
-/// Genera la impronta del trámite cuando falta, para que el consolidado no obligue al gestor a
-/// producirla antes (HU #11017). Lo implementa <c>GenerarImprontaAttachmentHandler</c>; devuelve el
-/// código de error del proveedor o <c>null</c> si se generó. Best-effort: el consolidado sigue.
+/// Genera la impronta del trámite cuando falta y el checklist la marca obligatoria (HU #11017).
+/// Si es opcional no se llama: el gestor la pide con «Generar impronta». Devuelve el código de
+/// error del proveedor o <c>null</c> si se generó. Best-effort: el consolidado sigue.
 /// </summary>
 public interface IImprontaAutoGenerator
 {
@@ -305,24 +305,28 @@ public sealed class GenerarConsolidadoHandler(
                 avisosCascada.Add($"fur: {errorFur}");
         }
 
-        // HU #11017 — impronta en cascada. Best-effort y solo con usuario conocido: depende del RUNT
-        // (Kyverum) y de que el trámite esté en borrador, así que su fallo NO impide el consolidado.
-        // HU #13402 — con la generación deshabilitada al crear el trámite no hay nada que generar: ni
-        // se invoca el generador ni se recarga, y el consolidado sigue (la impronta, si la matriz la
-        // exige, llegará por carga manual y aparecerá como faltante como cualquier otro documento).
+        // HU #11017 — impronta en cascada, solo si el ítem es obligatorio. La opcional no se genera
+        // por debajo: el gestor la pide con «Generar impronta». Best-effort y solo con usuario
+        // conocido: depende del RUNT (Kyverum) y de que el trámite esté en borrador, así que su
+        // fallo NO impide el consolidado.
+        // HU #13402 — con la generación deshabilitada al crear el trámite no hay nada que generar.
+        var checklist = matrixCompleteness is null
+            ? null
+            : await matrixCompleteness.TryComputeAsync(instance, tenantId, ct).ConfigureAwait(false);
         if (improntaGenerator is not null && userId is { } operador
-            && instance.ImprontaGeneracionHabilitada && !TieneImpronta(instance))
+            && instance.ImprontaGeneracionHabilitada && !TieneImpronta(instance)
+            && SubmitGate.ExigeImpronta(instance, checklist))
         {
             await improntaGenerator.TryGenerateAsync(id, tenantId, operador, ct).ConfigureAwait(false);
             instance = await ReloadAsync(id, tenantId, instance, ct).ConfigureAwait(false);
+            checklist = matrixCompleteness is null
+                ? null
+                : await matrixCompleteness.TryComputeAsync(instance, tenantId, ct).ConfigureAwait(false);
         }
 
         // HU #11017 — los documentos obligatorios faltantes YA NO bloquean (antes: documentos_incompletos).
         // El consolidado se genera igual y se devuelve MARCADO, con la lista de lo que falta, para que el
         // gestor lo sepa antes de que el organismo se lo rechace.
-        var checklist = matrixCompleteness is null
-            ? null
-            : await matrixCompleteness.TryComputeAsync(instance, tenantId, ct);
         var faltantes = checklist?.FaltanObligatorios ?? FaltantesObligatorios(instance);
 
         // HU #11184 — el expediente se arma en el orden que el OT configuró para este tipo de
