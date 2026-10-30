@@ -61,6 +61,7 @@ internal sealed class PersonaNaturalConfigRepository(
     public async Task<IReadOnlyList<OrganismoPnView>> ListarOrganismosAsync(bool soloHabilitados, CancellationToken ct = default)
     {
         var habilitados = await GrantsHabilitadosAsync(ct).ConfigureAwait(false);
+        var canales = await CanalesPuntoEncendidosAsync(ct).ConfigureAwait(false);
         // Solo los «activos por FLIT» (operables); un habilitado que dejó de serlo sigue en la lista para poder apagarlo.
         var operables = await portal.OrganismosOperablesAsync(ct).ConfigureAwait(false);
         var visibles = operables.Concat(habilitados).ToList();
@@ -74,8 +75,54 @@ internal sealed class PersonaNaturalConfigRepository(
             .Where(o => !soloHabilitados || habilitados.Contains(o.Id))
             .Select(o => new OrganismoPnView(
                 o.Id, o.Code, o.Name, o.CityName ?? string.Empty, o.DepartmentName ?? string.Empty, habilitados.Contains(o.Id),
-                ofrecibles.Count(t => TieneTarifaBase(t, o.Id, tarifas)), operables.Contains(o.Id)))
+                ofrecibles.Count(t => TieneTarifaBase(t, o.Id, tarifas)), operables.Contains(o.Id), canales.Contains(o.Id)))
             .ToList();
+    }
+
+    public async Task<CambioHabilitacionPn> EstablecerCanalPuntoAsync(Guid organismoId, bool encendido, Guid actor, CancellationToken ct = default)
+    {
+        if (!await db.TransitOffices.AsNoTracking().AnyAsync(o => o.Id == organismoId && o.IsActive, ct).ConfigureAwait(false))
+            return new CambioHabilitacionPn(false, false);
+
+        var previo = (await db.Database.SqlQuery<bool>($"""
+            SELECT is_enabled AS "Value" FROM admin.persona_natural_point_channel WHERE transit_office_id = {organismoId}
+            """).ToListAsync(ct).ConfigureAwait(false)).Select(v => (bool?)v).FirstOrDefault();
+        var estadoPrevio = previo ?? false;
+        if (previo == encendido || (previo is null && !encendido))
+            return new CambioHabilitacionPn(true, estadoPrevio);
+
+        // Solo esta tabla. El grant del portal (tenant_transit_office_grants) no se lee ni se escribe aquí.
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO admin.persona_natural_point_channel (transit_office_id, is_enabled, updated_at, updated_by)
+            VALUES ({organismoId}, {encendido}, now(), {actor})
+            ON CONFLICT (transit_office_id) DO UPDATE
+                SET is_enabled = EXCLUDED.is_enabled, updated_at = now(), updated_by = EXCLUDED.updated_by
+            """, ct).ConfigureAwait(false);
+        return new CambioHabilitacionPn(true, estadoPrevio);
+    }
+
+    public async Task<CanalPuntoResolucion> ResolverCanalPuntoAsync(string codigo, CancellationToken ct = default)
+    {
+        var buscado = (codigo ?? string.Empty).Trim().ToUpperInvariant();
+        if (buscado.Length == 0)
+            return new CanalPuntoResolucion(CanalPuntoResolucion.CodigoDesconocido, Guid.Empty, string.Empty, string.Empty);
+
+        var oficina = await db.TransitOffices.AsNoTracking()
+            .Where(o => o.IsActive && o.Code.ToUpper() == buscado)
+            .Select(o => new { o.Id, o.Code, o.Name })
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        if (oficina is null)
+            return new CanalPuntoResolucion(CanalPuntoResolucion.CodigoDesconocido, Guid.Empty, string.Empty, string.Empty);
+        if (!await OrganismoEsOperableAsync(oficina.Id, ct).ConfigureAwait(false))
+            return new CanalPuntoResolucion(CanalPuntoResolucion.OrganismoNoOperable, oficina.Id, oficina.Code, oficina.Name);
+
+        var encendido = (await db.Database.SqlQuery<bool>($"""
+            SELECT is_enabled AS "Value" FROM admin.persona_natural_point_channel WHERE transit_office_id = {oficina.Id}
+            """).ToListAsync(ct).ConfigureAwait(false)).FirstOrDefault();
+        if (!encendido)
+            return new CanalPuntoResolucion(CanalPuntoResolucion.CanalApagado, oficina.Id, oficina.Code, oficina.Name);
+
+        return new CanalPuntoResolucion(CanalPuntoResolucion.Ok, oficina.Id, oficina.Code, oficina.Name);
     }
 
     public async Task<bool> OrganismoEsOperableAsync(Guid organismoId, CancellationToken ct = default) =>
@@ -165,6 +212,15 @@ internal sealed class PersonaNaturalConfigRepository(
                 habilitados.Contains(t.Id),
                 t.Elegibilidad.Elegible && habilitados.Contains(t.Id), 0, t.ActivoEnFlit))
             .ToList();
+    }
+
+    /// <summary>Organismos con el canal del punto encendido. Tabla global, sin RLS y sin el grant del portal.</summary>
+    private async Task<HashSet<Guid>> CanalesPuntoEncendidosAsync(CancellationToken ct)
+    {
+        var ids = await db.Database.SqlQuery<Guid>($"""
+            SELECT transit_office_id AS "Value" FROM admin.persona_natural_point_channel WHERE is_enabled
+            """).ToListAsync(ct).ConfigureAwait(false);
+        return [.. ids];
     }
 
     /// <summary>Organismos con grant habilitado de la empresa Persona Natural (activos o no: el filtro de activos lo hace quien lista).</summary>

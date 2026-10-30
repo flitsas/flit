@@ -23,16 +23,15 @@ public abstract record ResultadoConsultaRadicado
 {
     public sealed record Exito(RadicadoConsultaResponse Radicado) : ResultadoConsultaRadicado;
 
-    /// <summary>No existe el radicado, la cédula no coincide o la placa no es la del trámite: nunca se distingue cuál.</summary>
+    /// <summary>No existe el trámite o la combinación placa + radicado/cédula no coincide: nunca se distingue cuál.</summary>
     public sealed record NoEncontrado : ResultadoConsultaRadicado;
 
     public sealed record Bloqueado(TimeSpan EsperarHasta) : ResultadoConsultaRadicado;
 }
 
 /// <summary>
-/// Consulta pública del estado de un trámite con radicado y cédula, sin crear sesión (HU #14042, ADR-0075). El radicado es el
-/// código del portal o el número de FLIT 2. Ve el trámite el solicitante principal o cualquier parte, comparando huellas HMAC
-/// en tiempo constante; las demás partes solo lo ven, no lo editan.
+/// Consulta pública del estado de un trámite (HU #14042 / diseño UI): placa + radicado, o placa + cédula.
+/// El radicado es el código del portal o el número de FLIT 2. Sin crear sesión.
 /// </summary>
 public sealed class RadicadoConsultaService(
     PersonaNaturalDb db, PiiHasher hasher, BloqueoPorRadicado bloqueo, IEstadoTramiteFuente fuente)
@@ -42,44 +41,116 @@ public sealed class RadicadoConsultaService(
     private static readonly string[] EstadosEnRevision = ["preasignacion", "asignado", "entregado"];
     private static readonly string[] EstadosFinales = ["aprobado", "rechazado", "anulado", "revocado"];
 
-    public async Task<ResultadoConsultaRadicado> ConsultarAsync(string radicado, string cedula, string? placa, byte[]? ipHash, CancellationToken ct)
+    public Task<ResultadoConsultaRadicado> ConsultarAsync(string? radicado, string? cedula, string placa, byte[]? ipHash, CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(radicado))
+            return ConsultarPorRadicadoAsync(radicado, cedula, placa, ipHash, ct);
+        return ConsultarPorPlacaYCedulaAsync(cedula!, placa, ipHash, ct);
+    }
+
+    private async Task<ResultadoConsultaRadicado> ConsultarPorRadicadoAsync(string radicado, string? cedula, string placa, byte[]? ipHash, CancellationToken ct)
     {
         var clave = PiiHasher.ClaveRadicado(radicado);
         if (await bloqueo.ReservarIntentoAsync(clave, ipHash, ct).ConfigureAwait(false) is { } espera)
             return new ResultadoConsultaRadicado.Bloqueado(espera);
 
         var codigo = PiiHasher.NormalizarRadicado(radicado);
+        var placaNorm = PiiHasher.NormalizarDocumento(placa);
 #pragma warning disable CA1862 // EF no traduce string.Equals con StringComparison; ToUpper() sí (upper(columna) = parámetro).
         var solicitud = await db.Set<SolicitudTramite>().AsNoTracking()
             .Where(s => s.Estado != EstadoSolicitud.Cancelada && (s.CodigoPublico == codigo || (s.ReferenceNumber != null && s.ReferenceNumber.ToUpper() == codigo)))
             .OrderBy(s => s.CodigoPublico == codigo ? 0 : 1)
-            .Select(s => new
-            {
+            .Select(s => new SolicitudConsulta(
                 s.Id, s.CodigoPublico, s.ReferenceNumber, s.Placa, s.TipoTramiteCodigo, s.OrganismoNombre, s.Estado, s.CedulaSolicitanteHash,
-                s.ProcedureInstanceId, s.EstadoTramite, s.SubsanacionActiva, s.SubsanacionMotivo, s.CreatedAt,
-            })
+                s.ProcedureInstanceId, s.EstadoTramite, s.SubsanacionActiva, s.SubsanacionMotivo, s.CreatedAt))
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
 #pragma warning restore CA1862
 
-        // Siempre se calcula la huella y se compara con relleno si no hay solicitud: el tiempo no delata si el radicado existe.
-        var huella = hasher.HashCedula(cedula);
-        var principalEsperada = solicitud?.CedulaSolicitanteHash is { Length: 32 } h ? h : new byte[32];
-        var esPrincipal = PiiHasher.Iguales(huella, principalEsperada) & solicitud is not null;
-        var solicitudId = solicitud?.Id ?? Guid.Empty;
-        var huellasPartes = await db.Set<PersonaSolicitante>().AsNoTracking()
-            .Where(p => p.SolicitudId == solicitudId).Select(p => p.DocumentoHash).ToListAsync(ct).ConfigureAwait(false);
+        var placaCoincide = solicitud?.Placa is not null
+            && PiiHasher.NormalizarDocumento(solicitud.Placa) == placaNorm;
+
+        // Con cédula: misma verificación de identidad de siempre. Sin cédula (UI: placa + radicado): basta la placa.
+        var esPrincipal = false;
         var esParte = false;
-        foreach (var parte in huellasPartes)
-            esParte |= PiiHasher.Iguales(huella, parte is { Length: 32 } ? parte : new byte[32]);
-
-        var placaCoincide = string.IsNullOrWhiteSpace(placa)
-            || (solicitud?.Placa is not null && PiiHasher.NormalizarDocumento(placa) == PiiHasher.NormalizarDocumento(solicitud.Placa));
-
-        if (solicitud is null || !(esPrincipal | esParte) || !placaCoincide)
+        if (!string.IsNullOrWhiteSpace(cedula))
         {
+            var huella = hasher.HashCedula(cedula);
+            var principalEsperada = solicitud?.CedulaSolicitanteHash is { Length: 32 } h ? h : new byte[32];
+            esPrincipal = PiiHasher.Iguales(huella, principalEsperada) & solicitud is not null;
+            var solicitudId = solicitud?.Id ?? Guid.Empty;
+            var huellasPartes = await db.Set<PersonaSolicitante>().AsNoTracking()
+                .Where(p => p.SolicitudId == solicitudId).Select(p => p.DocumentoHash).ToListAsync(ct).ConfigureAwait(false);
+            foreach (var parte in huellasPartes)
+                esParte |= PiiHasher.Iguales(huella, parte is { Length: 32 } ? parte : new byte[32]);
+        }
+
+        var identidadOk = string.IsNullOrWhiteSpace(cedula) || (esPrincipal | esParte);
+        if (solicitud is null || !placaCoincide || !identidadOk)
+            return new ResultadoConsultaRadicado.NoEncontrado();
+
+        // Sin cédula no afirmamos que sea el solicitante: solo lectura.
+        var soloLectura = string.IsNullOrWhiteSpace(cedula) || !esPrincipal;
+        return await EmitirExitoAsync(solicitud, clave, ipHash, soloLectura, ct).ConfigureAwait(false);
+    }
+
+    private async Task<ResultadoConsultaRadicado> ConsultarPorPlacaYCedulaAsync(string cedula, string placa, byte[]? ipHash, CancellationToken ct)
+    {
+        var placaNorm = PiiHasher.NormalizarDocumento(placa);
+        var huella = hasher.HashCedula(cedula);
+        var clave = PiiHasher.ClaveConsultaPlacaCedula(placaNorm, huella);
+        if (await bloqueo.ReservarIntentoAsync(clave, ipHash, ct).ConfigureAwait(false) is { } espera)
+            return new ResultadoConsultaRadicado.Bloqueado(espera);
+
+#pragma warning disable CA1862
+        var candidatas = await db.Set<SolicitudTramite>().AsNoTracking()
+            .Where(s => s.Estado != EstadoSolicitud.Cancelada && s.Placa != null && s.Placa.ToUpper() == placaNorm)
+            .OrderByDescending(s => s.CreatedAt)
+            .Take(20)
+            .Select(s => new SolicitudConsulta(
+                s.Id, s.CodigoPublico, s.ReferenceNumber, s.Placa, s.TipoTramiteCodigo, s.OrganismoNombre, s.Estado, s.CedulaSolicitanteHash,
+                s.ProcedureInstanceId, s.EstadoTramite, s.SubsanacionActiva, s.SubsanacionMotivo, s.CreatedAt))
+            .ToListAsync(ct).ConfigureAwait(false);
+#pragma warning restore CA1862
+
+        SolicitudConsulta? elegida = null;
+        var esPrincipal = false;
+        foreach (var candidata in candidatas)
+        {
+            var principalOk = candidata.CedulaSolicitanteHash is { Length: 32 }
+                && PiiHasher.Iguales(huella, candidata.CedulaSolicitanteHash);
+            if (principalOk)
+            {
+                elegida = candidata;
+                esPrincipal = true;
+                break;
+            }
+
+            var huellasPartes = await db.Set<PersonaSolicitante>().AsNoTracking()
+                .Where(p => p.SolicitudId == candidata.Id).Select(p => p.DocumentoHash).ToListAsync(ct).ConfigureAwait(false);
+            var hayParte = false;
+            foreach (var parte in huellasPartes)
+                hayParte |= PiiHasher.Iguales(huella, parte is { Length: 32 } ? parte : new byte[32]);
+            if (hayParte)
+            {
+                elegida = candidata;
+                esPrincipal = false;
+                break;
+            }
+        }
+
+        // Comparación constante con relleno si no hubo match, para no filtrar por tiempo.
+        if (elegida is null)
+        {
+            _ = PiiHasher.Iguales(huella, new byte[32]);
             return new ResultadoConsultaRadicado.NoEncontrado();
         }
 
+        return await EmitirExitoAsync(elegida, clave, ipHash, soloLectura: !esPrincipal, ct).ConfigureAwait(false);
+    }
+
+    private async Task<ResultadoConsultaRadicado> EmitirExitoAsync(
+        SolicitudConsulta solicitud, byte[] clave, byte[]? ipHash, bool soloLectura, CancellationToken ct)
+    {
         await bloqueo.LiberarAsync(clave, ipHash, ct).ConfigureAwait(false);
         var externo = await fuente.ObtenerAsync(
             new SolicitudParaEstado(solicitud.Id, solicitud.ProcedureInstanceId, solicitud.ReferenceNumber, solicitud.EstadoTramite, solicitud.SubsanacionActiva, solicitud.SubsanacionMotivo), ct)
@@ -96,7 +167,7 @@ public sealed class RadicadoConsultaService(
 
         return new ResultadoConsultaRadicado.Exito(new RadicadoConsultaResponse(
             solicitud.CodigoPublico, solicitud.ReferenceNumber, solicitud.Placa, solicitud.TipoTramiteCodigo, solicitud.OrganismoNombre,
-            new MacroEstadoDto(macro.Codigo, macro.Etiqueta, (int)macro.Macro), macro.Mensaje, pasos, subsanacion, SoloLectura: !esPrincipal));
+            new MacroEstadoDto(macro.Codigo, macro.Etiqueta, (int)macro.Macro), macro.Mensaje, pasos, subsanacion, SoloLectura: soloLectura));
     }
 
     /// <summary>
@@ -161,4 +232,9 @@ public sealed class RadicadoConsultaService(
 
         return pasos;
     }
+
+    private sealed record SolicitudConsulta(
+        Guid Id, string CodigoPublico, string? ReferenceNumber, string? Placa, string TipoTramiteCodigo, string OrganismoNombre,
+        string Estado, byte[]? CedulaSolicitanteHash, Guid? ProcedureInstanceId, string? EstadoTramite, bool SubsanacionActiva,
+        string? SubsanacionMotivo, DateTimeOffset CreatedAt);
 }

@@ -109,8 +109,8 @@ export function AccionesPrincipales({ tipos, cliente, onIniciar, onConsultar, on
   );
 }
 
-/** Fila clicable del diseño. Sin acción conectada queda deshabilitada y lo dice. */
-function AccionFila({ etiqueta, src, onClick }: { etiqueta: string; src: string; onClick?: () => void }) {
+/** Fila clicable del diseño (portal y canal OT). Sin acción conectada queda deshabilitada y lo dice. */
+export function AccionFila({ etiqueta, src, onClick }: { etiqueta: string; src: string; onClick?: () => void }) {
   if (onClick) {
     return (
       <button type="button" aria-label={etiqueta} aria-haspopup="dialog" onClick={onClick} className="dashboard-institutional-card action-row action-clickable">

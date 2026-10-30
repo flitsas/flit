@@ -49,6 +49,11 @@ export interface OrganismoPn {
   municipio: string;
   departamento: string;
   habilitado: boolean;
+  /**
+   * Canal del punto de atención (HU #14217). Independiente de `habilitado` (ofrecer en el portal).
+   * Ausente = apagado (respuesta anterior al campo).
+   */
+  canalPuntoEncendido?: boolean;
   /** Tipos habilitados y elegibles con derechos de tránsito y servicio digital vigentes en el organismo. */
   tiposConTarifaVigente: number;
   /** `false` = el organismo ya no está activo en FLIT (sigue en la lista solo para poder apagarlo). Ausente = activo. */
@@ -84,6 +89,11 @@ export function fetchOrganismosPn(signal?: AbortSignal): Promise<OrganismoPn[]> 
 
 export function establecerOrganismoPn(id: string, habilitado: boolean): Promise<void> {
   return apiFetch<void>(`${PN_BASE}/organismos/${id}`, { method: "PUT", body: { habilitado } });
+}
+
+/** Enciende o apaga el canal del punto. 204 sin cuerpo. */
+export function establecerCanalPuntoPn(id: string, encendido: boolean): Promise<void> {
+  return apiFetch<void>(`${PN_BASE}/organismos/${id}/canal-punto`, { method: "PUT", body: { encendido } });
 }
 
 export function fetchTiposPn(signal?: AbortSignal): Promise<TipoPn[]> {

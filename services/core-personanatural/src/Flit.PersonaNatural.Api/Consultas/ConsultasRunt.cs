@@ -46,6 +46,15 @@ public interface IConsultasRunt
 
     /// <exception cref="ProveedorNoDisponibleException">core-consultas no respondió.</exception>
     Task<ResultadoConsulta> ConsultarConductorAsync(DocumentoConsulta documento, string? referencia, CancellationToken ct);
+
+    /// <summary>
+    /// Comparendos y acuerdos de pago. Fuente: <c>ConsultasService.ConsultarMultas</c>
+    /// (<c>contracts/proto/flit/consultas/v1/consultas.proto</c>), atendido por core-consultas
+    /// (<c>ConsultasGrpcService.ConsultarMultas</c>). Esa RPC es la consulta de multas que FLIT 2 ya usa
+    /// (SIMIT o la fuente interna de la empresa). El BFF no tiene otro camino.
+    /// </summary>
+    /// <exception cref="ProveedorNoDisponibleException">core-consultas no respondió.</exception>
+    Task<ResultadoConsulta> ConsultarMultasAsync(string? placa, DocumentoConsulta? documento, string? referencia, CancellationToken ct);
 }
 
 /// <summary>
@@ -76,6 +85,16 @@ internal sealed partial class ConsultasRuntGrpc(ConsultasService.ConsultasServic
             Documento = new DocumentoIdentidad { Tipo = documento.Tipo, Numero = documento.Numero },
         };
         return LlamarAsync(() => client.ConsultarConductorAsync(request, Cabeceras(), cancellationToken: ct).ResponseAsync, r => r.Resultado);
+    }
+
+    public Task<ResultadoConsulta> ConsultarMultasAsync(string? placa, DocumentoConsulta? documento, string? referencia, CancellationToken ct)
+    {
+        var request = new ConsultarMultasRequest { Opciones = Opciones(referencia), TipoPersona = TipoPersona.Natural };
+        if (!string.IsNullOrWhiteSpace(placa))
+            request.Placa = new Placa { Valor = placa };
+        if (documento is not null)
+            request.Documento = new DocumentoIdentidad { Tipo = documento.Tipo, Numero = documento.Numero };
+        return LlamarAsync(() => client.ConsultarMultasAsync(request, Cabeceras(), cancellationToken: ct).ResponseAsync, r => r.Resultado);
     }
 
     /// <summary>
@@ -127,6 +146,9 @@ internal sealed class ConsultasRuntNoConfigurado : IConsultasRunt
         throw new ProveedorNoDisponibleException(Mensaje);
 
     public Task<ResultadoConsulta> ConsultarConductorAsync(DocumentoConsulta documento, string? referencia, CancellationToken ct) =>
+        throw new ProveedorNoDisponibleException(Mensaje);
+
+    public Task<ResultadoConsulta> ConsultarMultasAsync(string? placa, DocumentoConsulta? documento, string? referencia, CancellationToken ct) =>
         throw new ProveedorNoDisponibleException(Mensaje);
 }
 

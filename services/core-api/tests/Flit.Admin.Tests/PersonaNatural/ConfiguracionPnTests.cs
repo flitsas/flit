@@ -159,6 +159,49 @@ public sealed class ConfiguracionPnTests(WebApplicationFactory<Program> factory)
     }
 
     [Fact]
+    public async Task HU14216_ElCanalDelPuntoNoTocaElGrant_YElCodigoResuelveSoloSiEstaEncendidoYOperable()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var e = await Escenario.CrearAsync(factory, ct);
+        if (!await e.ExisteTablaCanalAsync(ct))
+        {
+            await e.RetirarRestosDePruebaAsync(ct);
+            Assert.Skip("La base local aún no tiene admin.persona_natural_point_channel. Las pruebas dejan Database:AutoMigrate en false; aplica la migración 20261029120000_HU14216 con core-api detenido (pnpm migrate:core-api).");
+        }
+
+        (await e.Canal.EstablecerAsync(e.Organismo, false, e.Actor, ct)).Should().BeNull("apagar un canal apagado no falla");
+        (await e.Canal.EstablecerAsync(e.OtroOrganismo, true, e.Actor, ct)).Should().Be(ConfiguracionPnErrores.OrganismoNoOperable);
+        (await e.Canal.EstablecerAsync(Guid.NewGuid(), false, e.Actor, ct)).Should().Be(ConfiguracionPnErrores.OrganismoNoExiste);
+
+        (await e.Config.ResolverCanalPuntoAsync(e.CodigoOrganismo, ct)).Estado.Should().Be(CanalPuntoResolucion.CanalApagado);
+
+        (await e.Canal.EstablecerAsync(e.Organismo, true, e.Actor, ct)).Should().BeNull();
+        (await e.Organismos.ListarAsync(false, ct)).Single(o => o.Id == e.Organismo)
+            .Should().Match<OrganismoPnView>(o => o.CanalPuntoEncendido && !o.Habilitado);
+
+        var grants = await GrantsAsync(e, ct);
+        grants.Should().BeEmpty("encender el canal no crea el grant del portal");
+
+        var ok = await e.Config.ResolverCanalPuntoAsync(e.CodigoOrganismo.ToLowerInvariant(), ct);
+        ok.Estado.Should().Be(CanalPuntoResolucion.Ok);
+        ok.OrganismoId.Should().Be(e.Organismo);
+        ok.Codigo.Should().Be(e.CodigoOrganismo);
+
+        (await e.Config.ResolverCanalPuntoAsync("NO-EXISTE", ct)).Estado.Should().Be(CanalPuntoResolucion.CodigoDesconocido);
+        (await e.Config.ResolverCanalPuntoAsync(e.CodigoOtro, ct)).Estado.Should().Be(CanalPuntoResolucion.OrganismoNoOperable);
+
+        (await e.Canal.EstablecerAsync(e.Organismo, false, e.Actor, ct)).Should().BeNull();
+        (await e.Config.ResolverCanalPuntoAsync(e.CodigoOrganismo, ct)).Estado.Should().Be(CanalPuntoResolucion.CanalApagado);
+        (await GrantsAsync(e, ct)).Should().BeEmpty("apagar el canal tampoco toca el grant");
+    }
+
+    private static async Task<List<GrantFila>> GrantsAsync(Escenario e, CancellationToken ct) =>
+        await e.Db.Database.SqlQuery<GrantFila>($"""
+            SELECT is_enabled, source FROM admin.tenant_transit_office_grants
+             WHERE tenant_id = {PlatformTenants.PersonaNatural} AND transit_office_id = {e.Organismo}
+            """).ToListAsync(ct);
+
+    [Fact]
     public async Task HU14072_SoloSeListanLosOrganismosActivosPorFlit_NoSeHabilitanLosNoOperables_YElHabilitadoQueDejoDeSerloSigueParaApagarlo()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -266,7 +309,11 @@ public sealed class ConfiguracionPnTests(WebApplicationFactory<Program> factory)
         public FlitDbContext Db { get; }
         public ParametrosPnHandler Parametros { get; }
         public OrganismosPnHandler Organismos { get; }
+        public CanalPuntoPnHandler Canal { get; }
+        public IPersonaNaturalConfigRepository Config { get; }
         public TiposPnHandler Tipos { get; }
+        public string CodigoOrganismo { get; private set; } = string.Empty;
+        public string CodigoOtro { get; private set; } = string.Empty;
         public IPersonaNaturalTarifaRepository Tarifas { get; }
         public Guid Actor { get; } = Guid.NewGuid();
         public Guid Organismo { get; } = Guid.NewGuid();
@@ -286,6 +333,8 @@ public sealed class ConfiguracionPnTests(WebApplicationFactory<Program> factory)
             Db = sp.GetRequiredService<FlitDbContext>();
             Parametros = sp.GetRequiredService<ParametrosPnHandler>();
             Organismos = sp.GetRequiredService<OrganismosPnHandler>();
+            Canal = sp.GetRequiredService<CanalPuntoPnHandler>();
+            Config = sp.GetRequiredService<IPersonaNaturalConfigRepository>();
             Tipos = sp.GetRequiredService<TiposPnHandler>();
             Portal = sp.GetRequiredService<PersonaNaturalPortalReader>();
             Tarifas = sp.GetRequiredService<IPersonaNaturalTarifaRepository>();
@@ -300,6 +349,8 @@ public sealed class ConfiguracionPnTests(WebApplicationFactory<Program> factory)
             foreach (var (id, n) in new[] { (e.Organismo, "A"), (e.OtroOrganismo, "B") })
             {
                 var code = $"PNC{e._sufijo}{n}";
+                if (n == "A") e.CodigoOrganismo = code;
+                else e.CodigoOtro = code;
                 await e.Db.Database.ExecuteSqlInterpolatedAsync($"""
                     INSERT INTO catalogs.transit_offices (id, code, name, department_code, city_code, city_name, department_name)
                     VALUES ({id}, {code}, {"Organismo de prueba " + code}, '99', '999', 'Municipio de prueba', 'Departamento de prueba')
@@ -336,6 +387,46 @@ public sealed class ConfiguracionPnTests(WebApplicationFactory<Program> factory)
         }
 
         /// <summary>Derechos de tránsito y servicio FLIT del tipo, general, vigentes desde la fecha.</summary>
+        /// <summary>Quita organismos, tipos y usuarios que esta prueba siembra (también un intento anterior si la limpieza no llegó a confirmarse).</summary>
+        public async Task RetirarRestosDePruebaAsync(CancellationToken ct)
+        {
+            await using var tx = await Db.Database.BeginTransactionAsync(ct);
+            await Db.Database.ExecuteSqlRawAsync("SET LOCAL session_replication_role = replica", ct);
+            await Db.Database.ExecuteSqlInterpolatedAsync($"""
+                DELETE FROM admin.persona_natural_tariffs
+                 WHERE procedure_type_id IN (SELECT id FROM tramites.procedure_types WHERE name LIKE {"Tipo de prueba PN_C_%"})
+                """, ct);
+            await Db.Database.ExecuteSqlInterpolatedAsync($"""
+                DELETE FROM admin.persona_natural_enabled_types
+                 WHERE procedure_type_id IN (SELECT id FROM tramites.procedure_types WHERE name LIKE {"Tipo de prueba PN_C_%"})
+                """, ct);
+            await Db.Database.ExecuteSqlInterpolatedAsync($"""
+                DELETE FROM admin.tenant_transit_office_grants
+                 WHERE transit_office_id IN (SELECT id FROM catalogs.transit_offices WHERE name LIKE {"Organismo de prueba PNC%"})
+                """, ct);
+            await Db.Database.ExecuteSqlInterpolatedAsync($"""
+                DELETE FROM admin.tenant_config_audit_logs
+                 WHERE changed_by IN (SELECT id FROM identity.users WHERE email LIKE {"pn-cfg-%@example.test"})
+                """, ct);
+            await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM identity.users WHERE email LIKE {"pn-cfg-%@example.test"}", ct);
+            await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM tramites.procedure_types WHERE name LIKE {"Tipo de prueba PN_C_%"}", ct);
+            await Db.Database.ExecuteSqlInterpolatedAsync($"""
+                DELETE FROM admin.transit_office_profiles
+                 WHERE tenant_id IN (SELECT id FROM identity.tenants WHERE legal_name LIKE {"OT de prueba %"})
+                """, ct);
+            await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM identity.tenants WHERE legal_name LIKE {"OT de prueba %"}", ct);
+            await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM catalogs.transit_offices WHERE name LIKE {"Organismo de prueba PNC%"}", ct);
+            await tx.CommitAsync(ct);
+        }
+
+        public async Task<bool> ExisteTablaCanalAsync(CancellationToken ct)
+        {
+            var nombre = (await Db.Database.SqlQuery<string>($"""
+                SELECT COALESCE(to_regclass('admin.persona_natural_point_channel')::text, '') AS "Value"
+                """).ToListAsync(ct)).FirstOrDefault();
+            return !string.IsNullOrEmpty(nombre);
+        }
+
         public async Task TarifaAsync(Guid tipo, DateOnly desde, CancellationToken ct)
         {
             foreach (var concepto in new[] { "DERECHOS_TRANSITO", "SERVICIO_FLIT" })
@@ -350,6 +441,7 @@ public sealed class ConfiguracionPnTests(WebApplicationFactory<Program> factory)
             try
             {
                 // Las versiones de tarifa son historial inmutable por trigger: solo un superusuario (la base de pruebas) puede retirarlas.
+                var hayCanal = await ExisteTablaCanalAsync(CancellationToken.None);
                 await using var tx = await Db.Database.BeginTransactionAsync();
                 await Db.Database.ExecuteSqlRawAsync("SET LOCAL session_replication_role = replica");
                 var orgs = new[] { Organismo, OtroOrganismo };
@@ -357,6 +449,8 @@ public sealed class ConfiguracionPnTests(WebApplicationFactory<Program> factory)
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.persona_natural_tariffs WHERE procedure_type_id = ANY({tipos})");
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.persona_natural_enabled_types WHERE procedure_type_id = ANY({tipos})");
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.tenant_transit_office_grants WHERE transit_office_id = ANY({orgs})");
+                if (hayCanal)
+                    await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.persona_natural_point_channel WHERE transit_office_id = ANY({orgs})");
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.tenant_config_audit_logs WHERE changed_by = {Actor}");
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM identity.users WHERE id = {Actor}");
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM tramites.procedure_types WHERE id = ANY({tipos})");

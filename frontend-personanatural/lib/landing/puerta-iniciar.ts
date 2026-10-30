@@ -10,6 +10,25 @@ const CODIGOS = new Set([
   "LEVANTAMIENTO_PRENDA",
 ]);
 
+/**
+ * Catálogo fijo del canal del punto (HU #14220). «Duplicado de matrícula» es la tarjeta
+ * de propiedad (`DUPLICADO_TARJETA`). Distinto de {@link tiposDePuerta}, que filtra el catálogo del portal.
+ */
+export interface TipoDelPunto {
+  codigo: string;
+  nombre: string;
+}
+
+export const tiposDelPunto: readonly TipoDelPunto[] = [
+  { codigo: "TRASPASO_STANDARD", nombre: "Traspaso" },
+  { codigo: "CAMBIO_COLOR", nombre: "Cambio de color" },
+  { codigo: "CAMBIO_CARROCERIA", nombre: "Cambio de carrocería" },
+  { codigo: "CONVERSION_COMBUSTIBLE", nombre: "Conversión de combustible" },
+  { codigo: "DUPLICADO_PLACA", nombre: "Duplicado de placa" },
+  { codigo: "DUPLICADO_TARJETA", nombre: "Duplicado de matrícula" },
+  { codigo: "LEVANTAMIENTO_PRENDA", nombre: "Levantar prenda" },
+];
+
 export function esTipoDePuerta(tipo: Pick<TipoTramite, "code" | "family">): boolean {
   const code = tipo.code.toUpperCase();
   return tipo.family.toUpperCase() === "TRASPASO" || code.startsWith("TRASPASO") || CODIGOS.has(code);

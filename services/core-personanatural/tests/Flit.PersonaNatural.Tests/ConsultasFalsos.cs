@@ -138,7 +138,11 @@ internal sealed class ConsultasRuntFalso : IConsultasRunt
 
     public List<(string? Placa, string? Vin, DocumentoConsulta? Propietario, string? Referencia)> LlamadasVehiculo { get; } = [];
 
+    public Func<ResultadoConsulta> Multas { get; set; } = () => new ResultadoConsulta { Semaforo = Semaforo.Verde };
+
     public List<(DocumentoConsulta Documento, string? Referencia)> LlamadasConductor { get; } = [];
+
+    public List<(string? Placa, DocumentoConsulta? Documento, string? Referencia)> LlamadasMultas { get; } = [];
 
     public Task<ResultadoConsulta> ConsultarVehiculoAsync(string? placa, string? vin, DocumentoConsulta? propietario, string? referencia, CancellationToken ct)
     {
@@ -150,6 +154,12 @@ internal sealed class ConsultasRuntFalso : IConsultasRunt
     {
         LlamadasConductor.Add((documento, referencia));
         return Falla is null ? Task.FromResult(Conductor()) : Task.FromException<ResultadoConsulta>(Falla);
+    }
+
+    public Task<ResultadoConsulta> ConsultarMultasAsync(string? placa, DocumentoConsulta? documento, string? referencia, CancellationToken ct)
+    {
+        LlamadasMultas.Add((placa, documento, referencia));
+        return Falla is null ? Task.FromResult(Multas()) : Task.FromException<ResultadoConsulta>(Falla);
     }
 }
 

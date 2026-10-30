@@ -51,39 +51,36 @@ function montar(manejador: (url: string, init: RequestInit) => Response | Promis
   return { fetchImpl: fetchImpl as unknown as ReturnType<typeof vi.fn>, onCerrar };
 }
 
-function llenar({ radicado = "pn-2026-0001", cedula = "1020456789", placa = "" } = {}) {
-  if (placa) fireEvent.change(screen.getByLabelText("Placa (opcional)"), { target: { value: placa } });
-  fireEvent.change(screen.getByLabelText("Número de radicado"), { target: { value: radicado } });
-  fireEvent.change(screen.getByLabelText("Cédula del solicitante"), { target: { value: cedula } });
+/** Por defecto consulta con placa + radicado (diseño UI). Pasa `clave` numérica para cédula. */
+function llenar({ placa = "abc123", clave = "pn-2026-0001" } = {}) {
+  fireEvent.change(screen.getByLabelText("Placa"), { target: { value: placa } });
+  fireEvent.change(screen.getByLabelText("Número de Radicado o Cédula"), { target: { value: clave } });
 }
 
 const consultar = () => fireEvent.click(screen.getByRole("button", { name: "Consultar" }));
 
 describe("modal Consultar: formulario", () => {
-  it("abre como diálogo con título y descripción, y el botón solo se habilita con radicado y cédula", () => {
+  it("abre como diálogo con el diseño UI y el botón solo se habilita con placa y radicado o cédula", () => {
     montar(() => json(respuesta()));
 
     const dialogo = screen.getByRole("dialog", { name: "Consultar mi trámite" });
-    expect(dialogo).toHaveAccessibleDescription(/radicado y la cédula/);
+    expect(dialogo).toHaveAccessibleDescription(/placa y el número de radicado o cédula/i);
     const boton = screen.getByRole("button", { name: "Consultar" });
     expect(boton).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText("Número de radicado"), { target: { value: "pn-1" } });
-    expect(screen.getByLabelText("Número de radicado")).toHaveValue("PN-1");
-    fireEvent.change(screen.getByLabelText("Cédula del solicitante"), { target: { value: "10a2" } });
-    expect(screen.getByLabelText("Cédula del solicitante")).toHaveValue("102");
+    fireEvent.change(screen.getByLabelText("Placa"), { target: { value: "abc123" } });
     expect(boton).toBeDisabled();
-
-    fireEvent.change(screen.getByLabelText("Cédula del solicitante"), { target: { value: "1020456789" } });
+    fireEvent.change(screen.getByLabelText("Número de Radicado o Cédula"), { target: { value: "pn-1" } });
+    expect(screen.getByLabelText("Número de Radicado o Cédula")).toHaveValue("PN-1");
     expect(boton).toBeEnabled();
   });
 
-  it("la placa es opcional, va en mayúsculas y se limita a 6 caracteres", () => {
+  it("la placa va en mayúsculas y se limita a 6 caracteres", () => {
     montar(() => json(respuesta()));
 
-    fireEvent.change(screen.getByLabelText("Placa (opcional)"), { target: { value: "ab-c12345" } });
+    fireEvent.change(screen.getByLabelText("Placa"), { target: { value: "ab-c12345" } });
 
-    expect(screen.getByLabelText("Placa (opcional)")).toHaveValue("ABC123");
+    expect(screen.getByLabelText("Placa")).toHaveValue("ABC123");
   });
 
   it("tiene el botón Cerrar de 44 px y Escape (cancel) cierra el modal", () => {
@@ -98,9 +95,9 @@ describe("modal Consultar: formulario", () => {
 });
 
 describe("modal Consultar: envío y estados", () => {
-  it("manda radicado, cédula y placa al BFF con el captcha en su cabecera, sin guardar nada en el navegador ni en la URL", async () => {
+  it("con radicado manda placa + radicado al BFF (sin cédula) y el captcha en cabecera", async () => {
     const { fetchImpl } = montar(() => json(respuesta()));
-    llenar({ placa: "abc123" });
+    llenar({ placa: "abc123", clave: "pn-2026-0001" });
 
     consultar();
     await screen.findByRole("heading", { name: "Tu trámite está en proceso" });
@@ -108,21 +105,24 @@ describe("modal Consultar: envío y estados", () => {
     const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("/api/v1/persona-natural/radicados/consulta");
     expect(init.method).toBe("POST");
-    expect(JSON.parse(String(init.body))).toEqual({ placa: "ABC123", radicado: "PN-2026-0001", cedula: "1020456789" });
+    expect(JSON.parse(String(init.body))).toEqual({ placa: "ABC123", radicado: "PN-2026-0001" });
     expect((init.headers as Record<string, string>)["x-captcha-token"]).toBe(TOKEN_MODO_DESARROLLO);
     expect(localStorage.length).toBe(0);
     expect(sessionStorage.length).toBe(0);
     expect(window.location.href).not.toMatch(/1020456789|PN-2026/);
   });
 
-  it("sin placa no la envía", async () => {
+  it("con cédula (solo dígitos) manda placa + cédula al BFF (sin radicado)", async () => {
     const { fetchImpl } = montar(() => json(respuesta()));
-    llenar();
+    llenar({ placa: "abc123", clave: "1020456789" });
 
     consultar();
     await screen.findByRole("heading", { name: "Tu trámite está en proceso" });
 
-    expect(JSON.parse(String((fetchImpl.mock.calls[0] as [string, RequestInit])[1].body))).toEqual({ radicado: "PN-2026-0001", cedula: "1020456789" });
+    expect(JSON.parse(String((fetchImpl.mock.calls[0] as [string, RequestInit])[1].body))).toEqual({
+      placa: "ABC123",
+      cedula: "1020456789",
+    });
   });
 
   it("cargando: muestra el cargador con role=status y el botón no permite enviar dos veces", async () => {
@@ -224,15 +224,15 @@ describe("modal Consultar: envío y estados", () => {
     expect(omitido).toHaveTextContent("Omitido");
   });
 
-  it("radicado inexistente y cédula distinta dan el mismo mensaje genérico, con role=alert", async () => {
+  it("radicado inexistente y otra clave dan el mismo mensaje genérico, con role=alert", async () => {
     const problema = () => json({ type: "about:blank", title: "No encontrado", status: 404, code: "solicitud_no_encontrada" }, 404);
     montar(problema);
-    llenar({ radicado: "no-existe" });
+    llenar({ clave: "no-existe" });
     consultar();
     const primera = await screen.findByRole("alert");
     const texto = primera.textContent;
 
-    fireEvent.change(screen.getByLabelText("Cédula del solicitante"), { target: { value: "999999" } });
+    fireEvent.change(screen.getByLabelText("Número de Radicado o Cédula"), { target: { value: "999999" } });
     consultar();
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("No encontramos un trámite con esos datos."));
 
@@ -271,7 +271,7 @@ describe("modal Consultar: envío y estados", () => {
     consultar();
     await screen.findByRole("heading", { name: "Tu trámite está en proceso" });
 
-    fireEvent.change(screen.getByLabelText("Número de radicado"), { target: { value: "otro" } });
+    fireEvent.change(screen.getByLabelText("Número de Radicado o Cédula"), { target: { value: "otro" } });
 
     expect(screen.queryByRole("heading", { name: "Tu trámite está en proceso" })).not.toBeInTheDocument();
   });

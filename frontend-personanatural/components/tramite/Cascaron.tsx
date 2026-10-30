@@ -392,7 +392,7 @@ export function Cascaron({ cliente, definicion, solicitud, pasos, registro, cont
           </div>
         </main>
 
-        <ModalFlit abierto={saliendoDelTramite} onCerrar={() => setSaliendoDelTramite(false)} titulo="Salir del trámite" icono={LogOut} ancho="2xl" descripcion="Tu borrador se conserva: puedes reanudarlo desde «Consultar mi trámite» con tu radicado y tu cédula.">
+        <ModalFlit abierto={saliendoDelTramite} onCerrar={() => setSaliendoDelTramite(false)} titulo="Salir del trámite" icono={LogOut} ancho="2xl" descripcion="Tu borrador se conserva: puedes consultarlo desde «Consultar mi trámite» con la placa y el radicado o la cédula.">
           <div className="mt-5 flex flex-wrap justify-center gap-3">
             <button type="button" className={boton("back", "h-11 px-6", "none")} onClick={() => setSaliendoDelTramite(false)}>
               Seguir aquí

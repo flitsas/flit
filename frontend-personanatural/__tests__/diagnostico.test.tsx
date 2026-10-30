@@ -31,9 +31,9 @@ describe("paso 1: diagnóstico con consultas reales (F2)", () => {
     expect(cuerpo(llamadas, "POST /solicitudes/s-1/diagnostico")).toEqual({ propietario: { tipoDocumento: "CC", numeroDocumento: "1020456789" } });
 
     const indicadores = within(screen.getByRole("list", { name: "Indicadores del vehículo" }));
-    expect(indicadores.getAllByRole("listitem")).toHaveLength(2);
+    expect(indicadores.getAllByRole("listitem")).toHaveLength(3);
     expect(indicadores.getByText("SOAT").closest("li")).toHaveTextContent("SOAT: OK");
-    expect(indicadores.queryByText("Multas asociadas")).not.toBeInTheDocument();
+    expect(indicadores.getByText("Multas asociadas").closest("li")).toHaveTextContent("Multas asociadas: OK");
 
     const tecnicos = screen.getByRole("region", { name: "Datos técnicos del vehículo" });
     expect(within(tecnicos).getByText("CAMIONETA")).toBeInTheDocument();

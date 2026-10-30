@@ -6,9 +6,12 @@ import { TEXTO_DOCUMENTO_NO_DISPONIBLE } from "@/lib/legal";
 import { clicFueraDelDialogo } from "@/lib/ui/clic-dialogo";
 import { boton } from "./estilos";
 
-export type Aviso = { titulo: string; tipo: "proximamente" | "documento" };
+export type Aviso =
+  | { titulo: string; tipo: "proximamente" | "documento" }
+  /** Fallas y reglas de negocio (mismo diálogo del diseño; el texto va en el cuerpo, como en IniciarModal). */
+  | { titulo: string; tipo: "mensaje"; mensaje: string };
 
-/** Diálogo informativo del diseño («Próximamente» / documento no disponible). Usa <dialog> nativo: foco atrapado, Escape y retorno del foco. */
+/** Diálogo informativo del diseño («Próximamente» / documento / mensaje de negocio). Usa <dialog> nativo: foco atrapado, Escape y retorno del foco. */
 export function AvisoModal({ aviso, onCerrar }: { aviso: Aviso | null; onCerrar: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
 
@@ -47,14 +50,22 @@ export function AvisoModal({ aviso, onCerrar }: { aviso: Aviso | null; onCerrar:
             </span>
             <h2 id="aviso-titulo" className="dashboard-title">{aviso.titulo}</h2>
           </div>
-          <p id="aviso-descripcion" className="mt-4 text-center">
-            {aviso.tipo === "proximamente" ? (
-              <span className="inline-block rounded-full bg-primary/10 px-4 py-1 text-sm font-semibold text-primary">Próximamente</span>
-            ) : (
-              <span className="text-sm">{TEXTO_DOCUMENTO_NO_DISPONIBLE}</span>
+          <div id="aviso-descripcion" className="mt-4 text-center">
+            {aviso.tipo === "proximamente" && (
+              <p>
+                <span className="inline-block rounded-full bg-primary/10 px-4 py-1 text-sm font-semibold text-primary">Próximamente</span>
+              </p>
             )}
-          </p>
-          <button type="button" onClick={onCerrar} className={boton("flit", "mx-auto mt-5 flex h-11 px-10", "none")}>Cerrar</button>
+            {aviso.tipo === "documento" && <p className="text-sm">{TEXTO_DOCUMENTO_NO_DISPONIBLE}</p>}
+            {aviso.tipo === "mensaje" && (
+              <p role="alert" className="rounded-[9px] border border-alert bg-alert/10 p-3 text-sm text-alert">
+                {aviso.mensaje}
+              </p>
+            )}
+          </div>
+          <button type="button" onClick={onCerrar} className={boton("flit", "mx-auto mt-5 flex h-11 px-10", "none")}>
+            Cerrar
+          </button>
         </>
       )}
     </dialog>

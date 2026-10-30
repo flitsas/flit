@@ -788,6 +788,10 @@ jobs:
             # El dominio raíz (flitsas.online / flitsas.com) va explícito: en PDN el frontend se
             # sirve en la raíz y debe ser host FLIT (arreglo 5ae9578f, traído de release).
             NEXT_PUBLIC_FLIT_HOSTS=flitsas.online,*.flitsas.online,flitsas.com,*.flitsas.com,!marcablancadev.flitsas.online,!marcablancaqa.flitsas.online,!marcablancapdn.flitsas.online,!tramites.marcablancadev.flitsas.online,!tramites.marcablancaqa.flitsas.online,!tramites.marcablancapdn.flitsas.online,!marcablancadag1.flitsas.online,!tramites.marcablancadag1.flitsas.online
+            # HU #14217 — origen del portal Persona Natural para Enlace y QR. Vacío mientras el
+            # vhost del portal no esté definido (docs/suite/handoff-vps-personanatural.md §5).
+            # Cuando exista, añadir personanatural_domain en setup y hornearlo aquí.
+            NEXT_PUBLIC_CANAL_OT_ORIGEN=
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 

@@ -154,6 +154,32 @@ public sealed class OrganismosPnHandler(IPersonaNaturalConfigRepository config, 
 }
 
 /// <summary>
+/// HU #14216 — interruptor del canal del punto. Encender exige el mismo «operable en FLIT» que habilitar el organismo
+/// para el portal. Apagar siempre se puede. No modifica el grant <c>tenant_transit_office_grants</c>.
+/// </summary>
+public sealed class CanalPuntoPnHandler(IPersonaNaturalConfigRepository config, IAdminAuditWriter audit)
+{
+    /// <returns>Código de error (<see cref="ConfiguracionPnErrores"/>) o <c>null</c> si quedó aplicado.</returns>
+    public async Task<string?> EstablecerAsync(Guid organismoId, bool encendido, Guid actor, CancellationToken ct = default)
+    {
+        if (encendido && !await config.OrganismoEsOperableAsync(organismoId, ct).ConfigureAwait(false))
+            return await config.ExisteOrganismoAsync(organismoId, ct).ConfigureAwait(false)
+                ? ConfiguracionPnErrores.OrganismoNoOperable
+                : ConfiguracionPnErrores.OrganismoNoExiste;
+
+        var cambio = await config.EstablecerCanalPuntoAsync(organismoId, encendido, actor, ct).ConfigureAwait(false);
+        if (!cambio.Existe)
+            return ConfiguracionPnErrores.OrganismoNoExiste;
+        if (cambio.EstadoAnterior != encendido)
+            await PersonaNaturalAuditoria.EscribirAsync(
+                audit, "persona_natural_point_channel", encendido ? AuditVocabulary.Operations.Activate : AuditVocabulary.Operations.Deactivate,
+                actor, organismoId, PersonaNaturalAuditoria.Json(("encendido", cambio.EstadoAnterior)),
+                PersonaNaturalAuditoria.Json(("encendido", encendido)), ct).ConfigureAwait(false);
+        return null;
+    }
+}
+
+/// <summary>
 /// HU #14072 AC1 — lista blanca de tipos: «habilitado = elegible (K2) + habilitado aquí + tarifa vigente». Solo se pueden
 /// habilitar los candidatos (elegibles y con el wizard encendido); apagar un tipo siempre se puede.
 /// </summary>

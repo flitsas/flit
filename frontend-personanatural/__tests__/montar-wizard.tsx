@@ -18,7 +18,8 @@ export const DIAGNOSTICO_OK: Diagnostico = {
   requisitos: [
     { codigo: "soat", descripcion: "SOAT", estado: "cumple" },
     { codigo: "rtm", descripcion: "RTM", estado: "cumple" },
-    { codigo: "multas", descripcion: "Multas asociadas", estado: "no_aplica" },
+    // HU #14221 — multas conectadas al diagnóstico (SIMIT), no ocultas como no_aplica.
+    { codigo: "multas", descripcion: "Multas asociadas", estado: "cumple" },
   ],
 };
 export const DIAGNOSTICO_BLOQUEADO: Diagnostico = { puedeContinuar: false, requisitos: [{ codigo: "soat", descripcion: "SOAT", estado: "falta" }] };

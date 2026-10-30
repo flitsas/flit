@@ -1,4 +1,5 @@
 using Flit.Admin.Domain.DocumentOrderOverrides;
+using Flit.Admin.Domain.Plataforma.PersonaNatural;
 using Flit.Api.Authorization;
 using Flit.Infrastructure.PersonaNatural;
 using Flit.Infrastructure.Persistence;
@@ -30,7 +31,8 @@ namespace Flit.Api.Grpc;
 public sealed class PersonaNaturalGrpcService(
     FlitDbContext db, RunPreflightPreviewHandler preview, PersonaNaturalTiposReader tiposReader, PersonaNaturalPortalReader portal,
     GetProcedureStepsHandler pasosHandler, IResolvedDocumentMatrixResolver matriz,
-    PersonaNaturalConfiguracionPublicaReader configuracionPublica, Flit.Admin.Application.Banners.Ports.IBannerImageStorage imagenesBanner)
+    PersonaNaturalConfiguracionPublicaReader configuracionPublica, Flit.Admin.Application.Banners.Ports.IBannerImageStorage imagenesBanner,
+    IPersonaNaturalConfigRepository configuracionPn)
     : PersonaNaturalService.PersonaNaturalServiceBase
 {
     /// <summary>Razón estable de un método que todavía no tiene implementación.</summary>
@@ -132,6 +134,27 @@ public sealed class PersonaNaturalGrpcService(
             EnlaceTarifas = string.Empty,
         }));
         return respuesta;
+    }
+
+    /// <summary>
+    /// HU #14216 — código público del organismo para el canal del punto. No crea trámites ni toca el grant del portal.
+    /// </summary>
+    public override async Task<ResolverCanalPuntoResponse> ResolverCanalPunto(ResolverCanalPuntoRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Verificar(context);
+        var codigo = Texto(request.Codigo);
+        if (codigo is null)
+            throw Invalido("codigo es obligatorio.");
+
+        var r = await configuracionPn.ResolverCanalPuntoAsync(codigo, context.CancellationToken).ConfigureAwait(false);
+        return new ResolverCanalPuntoResponse
+        {
+            Estado = r.Estado,
+            OrganismoId = r.OrganismoId == Guid.Empty ? string.Empty : r.OrganismoId.ToString(),
+            Codigo = r.Codigo,
+            Nombre = r.Nombre,
+        };
     }
 
     /// <summary>
@@ -372,11 +395,15 @@ public sealed class PersonaNaturalGrpcService(
 
     private static RpcException Invalido(string detalle) => new(new Status(StatusCode.InvalidArgument, detalle));
 
-    /// <summary>Un chequeo en <c>ok</c>/<c>warn</c> se cumple (el aviso no bloquea); <c>fail</c>/<c>error</c> falta; el resto no aplica.</summary>
+    /// <summary>
+    /// <c>ok</c> se cumple; <c>warn</c>/<c>fail</c>/<c>error</c> se muestran como pendientes (POR REVISAR)
+    /// — p. ej. multas SIMIT en amarillo como en FLIT 2. El resto no aplica. El bloqueo de continuar
+    /// sigue el overall del preflight (<c>PuedeContinuar</c>), no este mapeo por sí solo.
+    /// </summary>
     internal static string EstadoRequisito(string status) => status switch
     {
-        "ok" or "warn" => "cumple",
-        "fail" or "error" => "falta",
+        "ok" => "cumple",
+        "warn" or "fail" or "error" => "falta",
         _ => "no_aplica",
     };
 

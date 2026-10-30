@@ -520,6 +520,9 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
       "cotizaciones",
       "organismos habilitados",
       "ofrecer en el portal",
+      "canal del punto",
+      "enlace y qr",
+      "codigo del organismo",
       "dejar de ofrecer",
       "tramites que ofrece el portal",
       "falta tarifa",
@@ -559,12 +562,16 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         paragraphs: [
           "Aquí decides qué se ofrece en el portal, en dos pestañas separadas. Una regla manda sobre todo lo demás, y la pestaña «Trámites» la recuerda arriba: un trámite aparece cuando está activado, el organismo está habilitado y existe una tarifa vigente para esa combinación. Si falta algo, el ciudadano no lo ve.",
           "«Trámites» (paso 1, «Trámites que ofrece el portal») lista los trámites activos y publicados en FLIT 2. Cada uno muestra su categoría, su disponibilidad («Listo para ofrecer», «Aún no disponible» o «Ya no está activo en FLIT»), el interruptor «Ofrecer en el portal», si «Lo ve el ciudadano» (Sí, No o «Falta tarifa») y en cuántos organismos tiene tarifa. Un trámite no disponible no se puede activar: su interruptor queda bloqueado y se lee el motivo. Uno que ya no está activo en FLIT sigue en la lista solo para que puedas dejar de ofrecerlo.",
-          "«Organismos» (paso 2, «Organismos de tránsito») lista solo los organismos de tránsito activos en FLIT. Cada uno muestra su municipio y departamento, el interruptor «Ofrecer en el portal» y cuántos trámites tiene con tarifa. Si un organismo habilitado deja de estar activo en FLIT, sigue en la lista marcado «Ya no está activo en FLIT» y solo puedes dejar de ofrecerlo. Tiene un buscador por nombre, municipio o departamento y filtros por Organismo, Departamento y «Ofrecer en el portal». Ambas tablas tienen paginación con «Filas por página».",
+          "«Organismos» (paso 2, «Organismos de tránsito») lista solo los organismos de tránsito activos en FLIT. Cada uno muestra su municipio y departamento, el interruptor «Ofrecer en el portal», el interruptor «Canal del punto» y cuántos trámites tiene con tarifa. Si un organismo habilitado deja de estar activo en FLIT, sigue en la lista marcado «Ya no está activo en FLIT» y solo puedes dejar de ofrecerlo. Tiene un buscador por nombre, municipio o departamento y filtros por Organismo, Departamento, «Ofrecer en el portal» y «Canal del punto». Ambas tablas tienen paginación con «Filas por página».",
+          "«Canal del punto» es independiente de «Ofrecer en el portal». Encenderlo no publica el organismo en el portal, y apagar el portal no apaga el punto. Con el canal apagado la fila no muestra «Enlace y QR». Con el canal encendido, «Enlace y QR» abre un cuadro con la dirección de ese organismo, el botón «Copiar enlace» y el código QR de esa misma dirección. «Descargar QR» guarda la imagen para imprimirla. La placa y el documento no van en la dirección: quien atiende en el organismo entrega el enlace o el QR, y la persona los abre en el punto. Ahí solo ve «Iniciar» y «Consultar». Si el canal está apagado, el código no existe o el organismo no está activo en FLIT, la página explica el motivo y no deja entrar. Si el organismo ya no está activo en FLIT, el interruptor del canal queda bloqueado mientras esté apagado.",
         ],
         bullets: [
           "Ofrecer un trámite u organismo: usa el interruptor de la fila. Verás un aviso como «… ahora se ofrece en el portal.».",
           "Dejar de ofrecerlo: apaga el interruptor. Antes se abre una confirmación que explica que el ciudadano dejará de verlo hasta que lo vuelvas a activar (las tarifas ya configuradas se conservan); confirma con «Dejar de ofrecer» o cancela y no cambia nada.",
+          "Encender el canal del punto: usa «Canal del punto» en la fila. El estado pasa a «Encendido» y aparece «Enlace y QR». Entrega esa dirección y el QR al organismo para que los publique en su sitio y en el punto.",
+          "Apagar el canal: el interruptor vuelve a «Apagado» y «Enlace y QR» desaparece. Quien abra la dirección ve el motivo y no entra al trámite.",
           "Aviso «Falta tarifa»: el trámite o el organismo está activado pero no tiene tarifa vigente, así que el ciudadano no puede cotizar. El botón «Crear tarifa» de ese aviso te lleva a la pestaña «Tarifas».",
+          "Si falta el sitio público del canal, el cuadro de «Enlace y QR» lo avisa y la dirección queda incompleta. Hay que configurarlo antes de entregar el enlace al organismo.",
         ],
         callouts: [
           {

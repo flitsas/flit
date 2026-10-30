@@ -21,6 +21,8 @@ public static partial class AdminPlataformaPersonaNaturalEndpoints
 
     public sealed record HabilitarRequest(bool? Habilitado);
 
+    public sealed record CanalPuntoRequest(bool? Encendido);
+
     private static void MapConfiguracion(RouteGroupBuilder group)
     {
         group.MapGet("/configuracion/parametros", ObtenerParametrosAsync)
@@ -46,6 +48,14 @@ public static partial class AdminPlataformaPersonaNaturalEndpoints
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status404NotFound);
+
+        group.MapPut("/organismos/{organismoId:guid}/canal-punto", EstablecerCanalPuntoAsync)
+            .WithName("AdminPnCanalPuntoSet")
+            .WithSummary("Enciende o apaga el canal del punto de atención sin cambiar el grant del portal")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
 
         group.MapGet("/tipos", ListarTiposAsync)
             .WithName("AdminPnTiposList")
@@ -100,6 +110,24 @@ public static partial class AdminPlataformaPersonaNaturalEndpoints
             return Error(StatusCodes.Status400BadRequest, "habilitado_obligatorio", "Indique si el organismo queda habilitado o no.");
 
         return await handler.EstablecerAsync(organismoId, habilitado, actor, ct).ConfigureAwait(false) switch
+        {
+            null => Results.NoContent(),
+            ConfiguracionPnErrores.OrganismoNoOperable => Error(
+                StatusCodes.Status422UnprocessableEntity, ConfiguracionPnErrores.OrganismoNoOperable,
+                "El organismo no está activo en FLIT: no tiene perfil de organismo con empresa activa. Actívelo en FLIT antes de habilitarlo."),
+            _ => Error(StatusCodes.Status404NotFound, ConfiguracionPnErrores.OrganismoNoExiste, "El organismo de tránsito no existe o está inactivo."),
+        };
+    }
+
+    private static async Task<IResult> EstablecerCanalPuntoAsync(
+        Guid organismoId, CanalPuntoRequest body, CanalPuntoPnHandler handler, HttpContext http, CancellationToken ct)
+    {
+        if (AdminCompaniesDomainEndpoints.ResolveUserId(http.User) is not { } actor)
+            return Error(StatusCodes.Status401Unauthorized, "usuario_no_identificado", "No se pudo identificar al usuario.");
+        if (body.Encendido is not { } encendido)
+            return Error(StatusCodes.Status400BadRequest, "encendido_obligatorio", "Indique si el canal del punto queda encendido o no.");
+
+        return await handler.EstablecerAsync(organismoId, encendido, actor, ct).ConfigureAwait(false) switch
         {
             null => Results.NoContent(),
             ConfiguracionPnErrores.OrganismoNoOperable => Error(

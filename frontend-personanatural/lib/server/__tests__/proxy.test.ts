@@ -162,3 +162,45 @@ describe("proxy: configuración pública del portal (HU #14073)", () => {
     expect(r.headers.get("cache-control")).toBeNull();
   });
 });
+
+describe("proxy del canal del punto", () => {
+  it("quita el token de la entrada y lo guarda como cookie del punto", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ token: "punto-secreto", organismoId: "o1", codigo: "BOG", nombre: "Bogotá" }), { status: 200, headers: { "content-type": "application/json" } }));
+
+    const resultado = await reenviarAlBff(post("https://portal/api/v1/persona-natural/punto/entrada", { codigo: "BOG" }), ["punto", "entrada"], { apiOrigin: ORIGEN, fetchImpl });
+
+    expect(resultado.cookiePunto).toMatchObject({ accion: "fijar", valor: "punto-secreto" });
+    expect(resultado.cookie).toBeUndefined();
+    const cuerpo = JSON.parse(String(resultado.cuerpo));
+    expect(cuerpo).toEqual({ organismoId: "o1", codigo: "BOG", nombre: "Bogotá" });
+    expect(JSON.stringify(cuerpo)).not.toContain("punto-secreto");
+  });
+
+  it("si el BFF pone la cookie pn_punto, la guarda y deja el cuerpo igual", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ organismoId: "o1", codigo: "BOG", nombre: "Bogotá" }), { status: 200, headers: { "content-type": "application/json", "set-cookie": "pn_punto=desde-cookie; HttpOnly" } }));
+
+    const resultado = await reenviarAlBff(post("https://portal/api/v1/persona-natural/punto/entrada", { codigo: "BOG" }), ["punto", "entrada"], { apiOrigin: ORIGEN, fetchImpl });
+
+    expect(resultado.cookiePunto).toMatchObject({ accion: "fijar", valor: "desde-cookie" });
+    expect(JSON.parse(String(resultado.cuerpo))).toEqual({ organismoId: "o1", codigo: "BOG", nombre: "Bogotá" });
+  });
+
+  it("en el canal manda la sesión del punto y no la del trámite", async () => {
+    const fetchImpl = vi.fn(async () => new Response("{}", { status: 200, headers: { "content-type": "application/json" } }));
+
+    await reenviarAlBff(post("https://portal/api/v1/persona-natural/punto/arranque", {}), ["punto", "arranque"], { apiOrigin: ORIGEN, tokenSesion: "tramite", tokenPunto: "punto-tok", fetchImpl });
+
+    const cabeceras = (fetchImpl.mock.calls[0] as unknown as [URL, RequestInit])[1].headers as Headers;
+    expect(cabeceras.get("cookie")).toBe("pn_punto=punto-tok");
+    expect(cabeceras.get("authorization")).toBeNull();
+  });
+
+  it("un 401 del canal borra solo la cookie del punto", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ code: "no_autorizado" }), { status: 401 }));
+
+    const resultado = await reenviarAlBff(new Request("https://portal/x"), ["punto", "sesion"], { apiOrigin: ORIGEN, fetchImpl });
+
+    expect(resultado.cookiePunto).toEqual({ accion: "borrar" });
+    expect(resultado.cookie).toBeUndefined();
+  });
+});

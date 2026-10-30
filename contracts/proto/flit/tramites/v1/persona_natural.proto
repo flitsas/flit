@@ -49,6 +49,10 @@ service PersonaNaturalService {
 
   // Estado actual del trámite creado a partir de la solicitud (conciliación y subsanación). [HU A3]
   rpc ObtenerEstadoTramite(ObtenerEstadoTramiteRequest) returns (ObtenerEstadoTramiteResponse);
+
+  // Canal del punto de atención (HU #14216): resuelve el código público del organismo. No crea trámites ni
+  // altera el grant del portal. estado = ok | codigo_desconocido | organismo_no_operable | canal_apagado.
+  rpc ResolverCanalPunto(ResolverCanalPuntoRequest) returns (ResolverCanalPuntoResponse);
 }
 
 message PersonaIdentidad {
@@ -283,4 +287,12 @@ message ObtenerEstadoTramiteResponse {
   string reference_number = 3;
   string estado = 4;                 // vocabulario TramiteEstado
   bool subsanacion_activa = 5;
+}
+
+message ResolverCanalPuntoRequest { string codigo = 1; }
+message ResolverCanalPuntoResponse {
+  string estado = 1;                 // ok | codigo_desconocido | organismo_no_operable | canal_apagado
+  string organismo_id = 2;
+  string codigo = 3;
+  string nombre = 4;
 }

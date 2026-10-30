@@ -107,10 +107,11 @@ export interface EnvioCotizacion {
 
 // ── Consulta de radicado (POST /radicados/consulta) ──────────────────────────────────────────────────────────────
 
+/** Consulta pública: placa + radicado, o placa + cédula (el UI envía solo uno de los dos segundos). */
 export interface ConsultaRadicadoRequest {
-  placa?: string;
-  radicado: string;
-  cedula: string;
+  placa: string;
+  radicado?: string;
+  cedula?: string;
 }
 
 export interface MacroEstado {
@@ -488,6 +489,69 @@ export interface ResultadoParte {
 
 // ── Cliente ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
+// ── Canal del punto (POST /punto/entrada, /punto/arranque y /punto/consultas/*) ──────────────────────────────────
+
+/** Organismo que abrió el canal. La cookie de la sesión la guarda el proxy; no viaja en este cuerpo. */
+export interface EntradaPunto {
+  organismoId: string;
+  codigo: string;
+  nombre: string;
+}
+
+export interface ArranquePuntoRequest {
+  placa: string;
+  documento: string;
+  tipoCodigo: string;
+}
+
+/** `puedeSeguir` abre el paso de diagnóstico. El texto va en `message` (BFF) o `mensaje`. */
+export interface ArranquePunto {
+  puedeSeguir: boolean;
+  mensaje?: string | null;
+  message?: string | null;
+}
+
+export function textoArranque(resultado: ArranquePunto): string {
+  return (resultado.mensaje ?? resultado.message ?? "").trim();
+}
+
+export interface ResultadoVehiculoPunto {
+  existe: boolean;
+  placa?: string | null;
+  clase?: string | null;
+  marca?: string | null;
+  linea?: string | null;
+  modeloAno?: string | null;
+  color?: string | null;
+  estado?: string | null;
+}
+
+export interface ResultadoPersonaPunto {
+  existe: boolean;
+  documento?: string | null;
+  nombreCompleto?: string | null;
+  nombres?: string | null;
+  apellidos?: string | null;
+  estadoLicencia?: string | null;
+  vigencia?: string | null;
+}
+
+export interface MultaPunto {
+  numero?: string | null;
+  comparendo?: string | null;
+  estado?: string | null;
+  valorCop?: number | null;
+  descripcion?: string | null;
+}
+
+/** El BFF del punto devuelve cuántos comparendos hay (`comparendos`), sin el detalle del infractor. */
+export interface ResultadoMultasPunto {
+  consultado?: boolean;
+  comparendos?: number;
+  existe?: boolean;
+  multas?: MultaPunto[] | null;
+}
+
 export interface OpcionesCliente {
   base?: string;
   fetchImpl?: typeof fetch;
@@ -596,6 +660,30 @@ export function crearCliente({ base = BASE_BFF, fetchImpl }: OpcionesCliente = {
       },
       eliminar: (id: string, adjuntoId: string, o?: OpcionesLlamada) =>
         solicitar<void>("DELETE", `/solicitudes/${encodeURIComponent(id)}/adjuntos/${encodeURIComponent(adjuntoId)}`, undefined, o),
+    },
+    punto: {
+      /** Abre el canal con el código de la dirección. 422: `codigo_desconocido`, `organismo_no_operable` o `canal_apagado`. */
+      entrada: (codigo: string, o?: OpcionesLlamada) => solicitar<EntradaPunto>("POST", "/punto/entrada", { codigo }, o),
+      sesion: (o?: OpcionesLlamada) => solicitar<EntradaPunto>("GET", "/punto/sesion", undefined, o),
+      arranque: (datos: ArranquePuntoRequest, o?: OpcionesLlamada) => solicitar<ArranquePunto>("POST", "/punto/arranque", datos, o),
+      consultas: {
+        vehiculo: (datos: { placa: string; documento: string; tipoDocumento?: string; consentimiento: boolean }, o?: OpcionesLlamada) =>
+          solicitar<ResultadoVehiculoPunto>(
+            "POST",
+            "/punto/consultas/vehiculo",
+            { placa: datos.placa, propietario: { tipo: datos.tipoDocumento ?? "CC", numero: datos.documento }, consentimiento: datos.consentimiento },
+            o,
+          ),
+        persona: (datos: { documento: string; tipoDocumento?: string; consentimiento: boolean }, o?: OpcionesLlamada) =>
+          solicitar<ResultadoPersonaPunto>(
+            "POST",
+            "/punto/consultas/persona",
+            { documento: { tipo: datos.tipoDocumento ?? "CC", numero: datos.documento }, consentimiento: datos.consentimiento },
+            o,
+          ),
+        multas: (datos: { placa: string; consentimiento: boolean }, o?: OpcionesLlamada) =>
+          solicitar<ResultadoMultasPunto>("POST", "/punto/consultas/multas", { placa: datos.placa, consentimiento: datos.consentimiento }, o),
+      },
     },
     identidad: {
       /** Estado de la validación de cada parte que el tipo obliga a validar (se sondea). */

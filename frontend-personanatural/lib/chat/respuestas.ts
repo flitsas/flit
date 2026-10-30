@@ -78,7 +78,7 @@ export const TEMAS: readonly Tema[] = [
     pregunta: "¿Cómo consulto mi trámite?",
     patron: /consult|estado|seguimiento|radicado|donde va|como va/,
     respuesta: () =>
-      "Usa «Consultar mi trámite» en la página principal. Necesitarás el número de radicado y el documento con el que lo iniciaste.",
+      "Usa «Consultar mi trámite» en la página principal. Necesitarás la placa y el número de radicado o la cédula con la que lo iniciaste.",
     relacionados: ["tiempo", "iniciar"],
   },
   {

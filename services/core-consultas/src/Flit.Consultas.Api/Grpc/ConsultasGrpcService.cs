@@ -81,7 +81,13 @@ internal sealed partial class ConsultasGrpcService(
     private async Task<ConsultarMultasResponse> ConsultarMultasCore(ConsultarMultasRequest request, ServerCallContext context)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var documento = Documento(request.Documento);
+        // Canal del punto (Épica #14186) consulta multas solo con placa; FLIT 2 suele mandar documento.
+        // Hace falta al menos uno: sin documento ni placa no hay qué buscar.
+        var tieneDocumento = request.Documento is { Numero.Length: > 0 };
+        var tienePlaca = !string.IsNullOrWhiteSpace(request.Placa?.Valor);
+        if (!tieneDocumento && !tienePlaca)
+            throw Invalido("Se necesita el documento (tipo y número) o la placa.");
+        var documento = tieneDocumento ? Documento(request.Documento) : null;
         var caller = PlatformServiceCaller.From(context);
         var tenantOverride = await overrides.GetAsync(caller.TenantId, context.CancellationToken).ConfigureAwait(false);
 
@@ -89,7 +95,10 @@ internal sealed partial class ConsultasGrpcService(
         var proveedor = string.IsNullOrWhiteSpace(request.Opciones?.Proveedor)
             ? FinesProviderResolver.Resolve(tenantOverride?.FinesQuerySource, request.TipoPersona != TipoPersona.Juridica)
             : request.Opciones.Proveedor;
-        var campos = Campos(("owner_document_type", documento.Tipo), ("owner_document_number", documento.Numero), ("plate", request.Placa?.Valor));
+        var campos = Campos(
+            ("owner_document_type", documento?.Tipo),
+            ("owner_document_number", documento?.Numero),
+            ("plate", request.Placa?.Valor));
         var resultado = await ConsultarProveedorAsync(proveedor, campos, request.Opciones, context).ConfigureAwait(false);
         return new ConsultarMultasResponse { Resultado = resultado };
     }

@@ -87,6 +87,7 @@ const MENSAJES_POR_CODIGO: Record<string, string> = {
   idempotency_conflicto: "No pudimos procesar el envío. Vuelve a intentarlo.",
   idempotency_key_requerida: "No pudimos procesar el envío. Vuelve a intentarlo.",
   estado_no_permite_cambio: "Este trámite ya fue enviado o cancelado y no admite cambios.",
+  proveedor_no_disponible: "No pudimos consultar el RUNT. Inténtalo de nuevo.",
 };
 
 const MENSAJES_POR_ESTADO: Record<number, string> = {
@@ -109,6 +110,18 @@ export function mensajeDe(error: unknown): string {
   return MENSAJES_POR_CODIGO[error.code] ?? MENSAJES_POR_ESTADO[error.status] ?? MENSAJE_GENERICO;
 }
 
+/**
+ * Mensaje del canal del punto: si el BFF mandó `message` (y no hay texto propio del código), se muestra tal cual.
+ * Los códigos conocidos siguen usando su frase fija.
+ */
+export function mensajeDeFallo(error: unknown): string {
+  if (!(error instanceof ApiError)) return MENSAJE_GENERICO;
+  if (MENSAJES_POR_CODIGO[error.code]) return MENSAJES_POR_CODIGO[error.code];
+  const titulo = error.title.trim();
+  if (titulo && titulo !== "Error") return titulo;
+  return MENSAJES_POR_ESTADO[error.status] ?? MENSAJE_GENERICO;
+}
+
 /** Texto de «vuelve a intentarlo» con el tiempo exacto cuando el back lo indicó. */
 export function esperaDe(error: unknown): number | undefined {
   return error instanceof ApiError && (error.status === 429 || error.status === 503) ? error.reintentarEnSegundos : undefined;
@@ -122,9 +135,10 @@ export async function errorDeRespuesta(respuesta: Response): Promise<ApiError> {
   let fallas: FallasDeRadicacion | undefined;
   let campo: string | undefined;
   try {
-    const datos = (await respuesta.json()) as { code?: unknown; title?: unknown; errors?: unknown; state?: unknown; field?: unknown; pendientes?: unknown; motivo?: unknown; partes?: unknown };
+    const datos = (await respuesta.json()) as { code?: unknown; title?: unknown; message?: unknown; errors?: unknown; state?: unknown; field?: unknown; pendientes?: unknown; motivo?: unknown; partes?: unknown };
     if (typeof datos.code === "string") code = datos.code;
     if (typeof datos.title === "string") title = datos.title;
+    else if (typeof datos.message === "string" && datos.message.trim()) title = datos.message.trim();
     if (typeof datos.state === "string") estado = datos.state;
     errores = erroresPorCampo(datos.errors);
     fallas = fallasDe(datos);

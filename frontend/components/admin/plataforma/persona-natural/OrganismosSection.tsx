@@ -6,7 +6,7 @@
 // confirmación. La lista trae solo los organismos activos en FLIT (y los ya habilitados que dejaron de serlo, marcados
 // «Ya no está activo en FLIT», que solo se pueden apagar).
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { EyeOff } from "lucide-react";
+import { EyeOff, Power } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { InlineAlert } from "@/components/atom/InlineAlert";
@@ -19,11 +19,19 @@ import { usePaginacion } from "@/components/atom/usePaginacion";
 import { SwitchToggle } from "@/components/ui/SwitchToggle";
 import { filtrarFilas, normalizarTexto, type ColumnaFiltro } from "@/lib/tablas/filtrar-filas";
 import { useTablaFiltros } from "@/lib/tablas/useTablaFiltros";
-import { establecerOrganismoPn, fetchOrganismosPn, type OrganismoPn } from "@/lib/api/admin-pn-config";
+import { establecerCanalPuntoPn, establecerOrganismoPn, fetchOrganismosPn, type OrganismoPn } from "@/lib/api/admin-pn-config";
 import { PN_FIELD_ERROR_CLS } from "./pn-ui";
 import { nombrePropio } from "./formato";
+import { EnlaceQrDialog } from "./EnlaceQrDialog";
 import { PnConfirmDialog, PnLinkButton, PnSeccionHeader } from "./pn-componentes";
 import { pnError } from "./pnErrors";
+
+function textoTarifa(o: OrganismoPn): string {
+  if (o.habilitado && o.tiposConTarifaVigente === 0) return "Falta tarifa";
+  if (o.tiposConTarifaVigente === 0) return "—";
+  const n = o.tiposConTarifaVigente;
+  return `${n} ${n === 1 ? "trámite" : "trámites"} con tarifa`;
+}
 
 export interface OrganismosSectionProps {
   /** Lleva a la pestaña Tarifas (botón «Crear tarifa» del aviso «Falta tarifa»). */
@@ -38,8 +46,10 @@ export function OrganismosSection({ onIrATarifas, onCambio }: OrganismosSectionP
   const [status, setStatus] = useState<UiStatus>("loading");
   const [busqueda, setBusqueda] = useState("");
   const [guardando, setGuardando] = useState<string | null>(null);
-  const [errorFila, setErrorFila] = useState<{ id: string; mensaje: string } | null>(null);
+  const [errorFila, setErrorFila] = useState<{ id: string; campo: "portal" | "canal"; mensaje: string } | null>(null);
   const [apagando, setApagando] = useState<OrganismoPn | null>(null);
+  const [apagandoCanal, setApagandoCanal] = useState<OrganismoPn | null>(null);
+  const [enlace, setEnlace] = useState<OrganismoPn | null>(null);
   const pg = usePaginacion("pn.organismos");
   const { setPage } = pg;
   const volverAPrimeraPagina = useCallback(() => setPage(1), [setPage]);
@@ -49,6 +59,7 @@ export function OrganismosSection({ onIrATarifas, onCambio }: OrganismosSectionP
     return [
       { id: "organismo", label: "Organismo", tipo: "texto" },
       { id: "departamento", label: "Departamento", tipo: "seleccion", opciones: departamentos.map((d) => ({ value: d, label: d })) },
+      { id: "municipio", label: "Municipio", tipo: "texto" },
       {
         id: "habilitado",
         label: "Ofrecer en el portal",
@@ -58,6 +69,16 @@ export function OrganismosSection({ onIrATarifas, onCambio }: OrganismosSectionP
           { value: "no", label: "No se ofrece" },
         ],
       },
+      {
+        id: "canal",
+        label: "Canal del punto",
+        tipo: "seleccion",
+        opciones: [
+          { value: "si", label: "Encendido" },
+          { value: "no", label: "Apagado" },
+        ],
+      },
+      { id: "tarifa", label: "Tarifa vigente", tipo: "texto" },
     ];
   }, [organismos]);
   const filtros = useTablaFiltros({ columnas: columnasFiltro, onCambio: volverAPrimeraPagina });
@@ -93,8 +114,11 @@ export function OrganismosSection({ onIrATarifas, onCambio }: OrganismosSectionP
     const porColumna = filtrarFilas(organismos, filtros.condicionesTotales, "", {
       columnas: {
         organismo: (o) => [o.nombre, o.codigo],
+        municipio: (o) => o.municipio,
         departamento: (o) => o.departamento,
         habilitado: (o) => (o.habilitado ? "si" : "no"),
+        canal: (o) => (o.canalPuntoEncendido ? "si" : "no"),
+        tarifa: (o) => textoTarifa(o),
       },
     });
     const q = normalizarTexto(busqueda);
@@ -118,7 +142,27 @@ export function OrganismosSection({ onIrATarifas, onCambio }: OrganismosSectionP
     try {
       await aplicar(o, true);
     } catch (err) {
-      setErrorFila({ id: o.id, mensaje: pnError(err).message });
+      setErrorFila({ id: o.id, campo: "portal", mensaje: pnError(err).message });
+    } finally {
+      setGuardando(null);
+    }
+  }
+
+  /** Lanza el cambio del canal; si falla, el diálogo de apagado o la fila muestran el motivo. */
+  async function aplicarCanal(o: OrganismoPn, encendido: boolean) {
+    await establecerCanalPuntoPn(o.id, encendido);
+    setOrganismos((prev) => prev.map((x) => (x.id === o.id ? { ...x, canalPuntoEncendido: encendido } : x)));
+    show(`El canal del punto de «${o.nombre}» quedó ${encendido ? "encendido" : "apagado"}.`, "success");
+    onCambio?.();
+  }
+
+  async function encenderCanal(o: OrganismoPn) {
+    setGuardando(o.id);
+    setErrorFila(null);
+    try {
+      await aplicarCanal(o, true);
+    } catch (err) {
+      setErrorFila({ id: o.id, campo: "canal", mensaje: pnError(err).message });
     } finally {
       setGuardando(null);
     }
@@ -139,7 +183,15 @@ export function OrganismosSection({ onIrATarifas, onCambio }: OrganismosSectionP
         </>
       ),
     },
-    { key: "municipio", header: "Municipio", render: (o) => o.municipio },
+    {
+      key: "municipio",
+      header: (
+        <EncabezadoFiltrable filtros={filtros} columnaId="municipio">
+          Municipio
+        </EncabezadoFiltrable>
+      ),
+      render: (o) => o.municipio,
+    },
     {
       key: "departamento",
       header: (
@@ -169,7 +221,36 @@ export function OrganismosSection({ onIrATarifas, onCambio }: OrganismosSectionP
               {o.habilitado ? "Solo puedes dejar de ofrecerlo." : "No se puede ofrecer."}
             </span>
           )}
-          {errorFila?.id === o.id && (
+          {errorFila?.id === o.id && errorFila.campo === "portal" && (
+            <span role="alert" className={PN_FIELD_ERROR_CLS}>
+              {errorFila.mensaje}
+            </span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "canal",
+      header: (
+        <EncabezadoFiltrable filtros={filtros} columnaId="canal">
+          Canal del punto
+        </EncabezadoFiltrable>
+      ),
+      render: (o) => (
+        <div className="flex flex-col items-start gap-1">
+          <SwitchToggle
+            checked={o.canalPuntoEncendido === true}
+            disabled={guardando === o.id || (o.activoEnFlit === false && o.canalPuntoEncendido !== true)}
+            label={`${o.canalPuntoEncendido ? "Apagar" : "Encender"} el canal del punto de ${o.nombre}`}
+            onChange={(next) => (next ? void encenderCanal(o) : setApagandoCanal(o))}
+          />
+          <span className="text-xs text-[#59677D] dark:text-white/70">{o.canalPuntoEncendido ? "Encendido" : "Apagado"}</span>
+          {o.canalPuntoEncendido === true && (
+            <PnLinkButton onClick={() => setEnlace(o)} ariaLabel={`Enlace y QR de ${o.nombre}`}>
+              Enlace y QR
+            </PnLinkButton>
+          )}
+          {errorFila?.id === o.id && errorFila.campo === "canal" && (
             <span role="alert" className={PN_FIELD_ERROR_CLS}>
               {errorFila.mensaje}
             </span>
@@ -179,7 +260,11 @@ export function OrganismosSection({ onIrATarifas, onCambio }: OrganismosSectionP
     },
     {
       key: "tarifa",
-      header: "Tarifa vigente",
+      header: (
+        <EncabezadoFiltrable filtros={filtros} columnaId="tarifa">
+          Tarifa vigente
+        </EncabezadoFiltrable>
+      ),
       render: (o) =>
         o.habilitado && o.tiposConTarifaVigente === 0 ? (
           <div className="flex flex-col items-start gap-1">
@@ -271,6 +356,27 @@ export function OrganismosSection({ onIrATarifas, onCambio }: OrganismosSectionP
           </p>
         </PnConfirmDialog>
       )}
+
+      {apagandoCanal && (
+        <PnConfirmDialog
+          title="Apagar el canal del punto"
+          icon={Power}
+          tone="danger"
+          confirmLabel="Apagar canal"
+          onClose={() => setApagandoCanal(null)}
+          onConfirm={async () => {
+            await aplicarCanal(apagandoCanal, false);
+            setApagandoCanal(null);
+          }}
+        >
+          <p>
+            «{apagandoCanal.nombre}» dejará de atender en el punto: el enlace y el QR dejan de servir hasta que vuelvas a
+            encender el canal.
+          </p>
+        </PnConfirmDialog>
+      )}
+
+      {enlace && <EnlaceQrDialog codigo={enlace.codigo} nombre={enlace.nombre} onClose={() => setEnlace(null)} />}
     </section>
   );
 }

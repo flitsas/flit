@@ -492,6 +492,7 @@ public static class DependencyInjection
         // HU #14072 — configuración del portal: parámetros, organismos y lista blanca de tipos.
         services.AddScoped<Plataforma.PersonaNatural.ParametrosPnHandler>();
         services.AddScoped<Plataforma.PersonaNatural.OrganismosPnHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.CanalPuntoPnHandler>();
         services.AddScoped<Plataforma.PersonaNatural.TiposPnHandler>();
         // HU #14073 — contenido del portal: preguntas, banners, enlaces y publicación.
         services.AddScoped<Plataforma.PersonaNatural.ContenidoPnHandler>();
