@@ -1,12 +1,5 @@
-// Feature #10701 / HU #10860 — la salida manual del organismo reconstruye el expediente
-// consolidado ignorando la marca de vigencia. Existe porque el consolidado se sirve cacheado, y
-// aunque cualquier cambio del expediente lo invalide, el operador que dude de lo que ve no puede
-// quedarse sin forma de comprobarlo.
-//
-// La cobertura vivía en ClientProcedureDetailPanel.regenerar.test.tsx; con la HU #11930 la acción
-// dejó de estar en el pie del detalle y quedó solo aquí, dentro de la sección Documentos. Con la
-// HU #12061 la sección adoptó la rejilla del prototipo y las dos acciones pasaron a ser botones de
-// icono sobre la tarjeta azul del consolidado: cambia la forma, no el contrato.
+// HU #14207 — CTA único «Ver consolidado»: regenera por vigencia (sin force) y previsualiza.
+// force=true solo desde «Reintentar» del aviso de fallo (cubierto en hu12799-ot-fallo-regeneracion).
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -43,31 +36,26 @@ function renderTab(readOnly = false) {
   );
 }
 
-describe("OtDetalleDocumentos — consolidado del expediente", () => {
+describe("OtDetalleDocumentos — consolidado del expediente (HU #14207)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fetchOtDocuments.mockResolvedValue({ data: [] });
     generarOtConsolidadoMaestro.mockResolvedValue(CONSOLIDADO);
-    // La previsualización descarga los bytes; sin URL el flujo termina en el aviso de error, que no
-    // es lo que mide este test.
     fetchOtAttachmentPreviewUrl.mockRejectedValue(new Error("sin preview en test"));
   });
 
-  it("«Ver consolidado» no fuerza y «Actualizar consolidado» sí (HU #11932)", async () => {
+  it("«Ver consolidado» es el único CTA y no fuerza (vigencia decide)", async () => {
     renderTab();
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("button", { name: /Ver consolidado/i }));
-    // Sin forzar: el backend decide por la marca de vigencia.
     await waitFor(() => expect(generarOtConsolidadoMaestro).toHaveBeenCalledWith("proc-1", undefined, false));
-
-    await user.click(screen.getByRole("button", { name: /Actualizar el consolidado del expediente/i }));
-    await waitFor(() =>
-      expect(generarOtConsolidadoMaestro).toHaveBeenLastCalledWith("proc-1", undefined, true),
-    );
+    expect(
+      screen.queryByRole("button", { name: /Actualizar el consolidado del expediente/i }),
+    ).not.toBeInTheDocument();
   });
 
-  it("en modo lectura no ofrece la salida manual", async () => {
+  it("en modo lectura tampoco ofrece Actualizar; solo Ver consolidado", async () => {
     renderTab(true);
 
     await waitFor(() => expect(fetchOtDocuments).toHaveBeenCalled());
@@ -77,17 +65,14 @@ describe("OtDetalleDocumentos — consolidado del expediente", () => {
     expect(screen.getByRole("button", { name: /Ver consolidado/i })).toBeInTheDocument();
   });
 
-  it("HU #11932 — la acción se llama «Actualizar consolidado», sin rastro de «Regenerar»", async () => {
+  it("no queda rastro de CTA «Actualizar» ni «Regenerar» permanente", async () => {
     renderTab();
 
     await waitFor(() => expect(fetchOtDocuments).toHaveBeenCalled());
-
-    const accion = screen.getByRole("button", { name: /Actualizar el consolidado del expediente/i });
-    // El nombre accesible y el rótulo emergente dicen lo mismo: el PDF ya existe y se reconstruye.
-    expect(accion).toHaveAttribute(
-      "title",
-      "Reconstruye el expediente consolidado con el contenido actual del trámite",
-    );
+    expect(screen.getByRole("button", { name: /Ver consolidado/i })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Actualizar el consolidado del expediente/i }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText(/regenerar/i)).not.toBeInTheDocument();
   });
 });
