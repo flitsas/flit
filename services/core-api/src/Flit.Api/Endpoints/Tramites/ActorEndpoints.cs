@@ -104,7 +104,7 @@ internal static class ActorEndpoints
                 // ADR-0053 (Múltiple Propietario, §4.4/§4.5/§7):
                 "actor_duplicado_mismo_lado" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Dos actores del mismo lado no pueden compartir documento."),
                 "porcentajes_no_suman_100" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La suma de los porcentajes del lado debe ser exactamente 100."),
-                "porcentaje_en_cero" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Todos los propietarios deben tener un porcentaje mayor a 0."),
+                "porcentaje_en_cero" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Cada propietario debe tener un porcentaje mayor a 0% y como máximo 100%."),
                 "ordinal_fuera_de_rango" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El ordinal debe estar entre 1 y 4 y ser único dentro del rol."),
                 "ordinal_principal_ausente" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El actor principal (ordinal=1) no se puede omitir ni eliminar."),
                 // Si el arrendatario fuera el propietario no habría leasing que registrar.
