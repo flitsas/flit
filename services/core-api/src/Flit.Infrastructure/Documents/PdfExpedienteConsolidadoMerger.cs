@@ -14,8 +14,9 @@ namespace Flit.Infrastructure.Documents;
 /// Fusiona adjuntos en un PDF único. PDFs se importan con PdfSharpCore; imágenes se
 /// renderizan a una página con QuestPDF (ya presente por HU #10256).
 /// </summary>
-public sealed class PdfExpedienteConsolidadoMerger : IExpedienteConsolidadoMerger
+public sealed partial class PdfExpedienteConsolidadoMerger : IExpedienteConsolidadoMerger
 {
+    private readonly ILogger<PdfExpedienteConsolidadoMerger> _logger;
     private readonly PdfDocumentNameStampPipeline _stampPipeline;
 
     static PdfExpedienteConsolidadoMerger()
@@ -31,13 +32,22 @@ public sealed class PdfExpedienteConsolidadoMerger : IExpedienteConsolidadoMerge
     public PdfExpedienteConsolidadoMerger(ILogger<PdfExpedienteConsolidadoMerger> logger)
     {
         ArgumentNullException.ThrowIfNull(logger);
+        _logger = logger;
         _stampPipeline = new PdfDocumentNameStampPipeline(logger);
     }
 
     /// <summary>Constructor de pruebas: permite inyectar el pipeline de estampado/normalización.</summary>
     internal PdfExpedienteConsolidadoMerger(PdfDocumentNameStampPipeline stampPipeline)
+        : this(stampPipeline, NullLogger<PdfExpedienteConsolidadoMerger>.Instance)
+    {
+    }
+
+    internal PdfExpedienteConsolidadoMerger(
+        PdfDocumentNameStampPipeline stampPipeline,
+        ILogger<PdfExpedienteConsolidadoMerger> logger)
     {
         _stampPipeline = stampPipeline ?? throw new ArgumentNullException(nameof(stampPipeline));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public byte[] NormalizeToPdf(byte[] content, string mimetype)
@@ -60,9 +70,14 @@ public sealed class PdfExpedienteConsolidadoMerger : IExpedienteConsolidadoMerge
             throw new ArgumentException("Se requiere al menos un PDF para fusionar.", nameof(pdfParts));
 
         using var output = new PdfDocument();
-        foreach (var pdfBytes in pdfParts)
+        for (var index = 0; index < pdfParts.Count; index++)
         {
-            using var inputStream = new MemoryStream(pdfBytes);
+            // HU #14240 — nunca pasar a Import un PDF que PdfSharp no puede leer (Token '18', etc.).
+            var safe = PdfModifyNormalizer.EnsureImportable(pdfParts[index], documentName: null, out var substituted);
+            if (substituted)
+                LogMergeSubstitutedUnimportablePart(_logger, index);
+
+            using var inputStream = new MemoryStream(safe);
             using var input = PdfReader.Open(inputStream, PdfDocumentOpenMode.Import);
             for (var i = 0; i < input.PageCount; i++)
                 output.AddPage(input.Pages[i]);
@@ -85,11 +100,22 @@ public sealed class PdfExpedienteConsolidadoMerger : IExpedienteConsolidadoMerge
             parts.Add(FlitCoverPageGenerator.Generate(ToCoverData(request.Cover)));
 
         // HU #10858 — pie con el nombre del documento en cada parte antes de fusionar.
-        // HU #14209 — si Modify falla: N1 Import-rewrite → N2 raster → incluir sin pie (no tumbar Compose).
+        // HU #14209 — si Modify falla: N1 Import-rewrite → N2 raster → fallback.
+        // HU #14240 — partes sin DocumentName también deben ser Import-ok antes del Merge.
         foreach (var part in request.Parts)
-            parts.Add(string.IsNullOrWhiteSpace(part.DocumentName)
-                ? part.Pdf
-                : _stampPipeline.Apply(part.Pdf, part.DocumentName!, BottomCmFor(part.Profile)));
+        {
+            if (string.IsNullOrWhiteSpace(part.DocumentName))
+            {
+                var safe = PdfModifyNormalizer.EnsureImportable(part.Pdf, documentName: null, out var substituted);
+                if (substituted)
+                    LogComposeSubstitutedUnnamedPart(_logger);
+                parts.Add(safe);
+            }
+            else
+            {
+                parts.Add(_stampPipeline.Apply(part.Pdf, part.DocumentName!, BottomCmFor(part.Profile)));
+            }
+        }
 
         var merged = Merge(parts);
 
@@ -146,4 +172,14 @@ public sealed class PdfExpedienteConsolidadoMerger : IExpedienteConsolidadoMerge
                 page.Content().Image(imageBytes).FitArea();
             });
         }).GeneratePdf();
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "HU14240: parte {PartIndex} del Merge no abre en Import; sustituida por página de aviso.")]
+    private static partial void LogMergeSubstitutedUnimportablePart(ILogger logger, int partIndex);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "HU14240: parte sin DocumentName no abre en Import; sustituida por página de aviso.")]
+    private static partial void LogComposeSubstitutedUnnamedPart(ILogger logger);
 }
