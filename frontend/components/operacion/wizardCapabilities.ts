@@ -375,6 +375,22 @@ export function rolesDeActores(caps: CapacidadesEfectivas): ActorRol[] {
 }
 
 /**
+ * Roles que de verdad se pintan en el paso de actores (HU #14225 / ADR-0051 Decisión 6).
+ * Parte de {@link rolesDeActores} y, si el backend envió `revealSellerForm`, añade `vendedor`
+ * aunque el tipo declare `vendedorCapturaPorFormulario:false` (p. ej. TRASPASO_UNILATERAL).
+ */
+export function rolesDeActoresEnPantalla(
+  caps: CapacidadesEfectivas,
+  revealSellerForm: boolean,
+): ActorRol[] {
+  const rolesBase = rolesDeActores(caps);
+  if (revealSellerForm && !rolesBase.includes('vendedor')) {
+    return ['vendedor', ...rolesBase];
+  }
+  return rolesBase;
+}
+
+/**
  * Adaptadores a la `modalidad` heredada, para los componentes de paso que todavía la reciben.
  *
  * No son un puente perezoso: cada uno traduce la pregunta REAL que ese componente le hace a la
