@@ -70,6 +70,7 @@ import {
   applySolidarioAbsorption,
   defaultPercentageForNewActor,
   duplicateDocumentIndicesWithinSide,
+  equalizeSharesForRol,
   indicesForRol,
   isFirstOfRol,
   redistributeAfterRemoval,
@@ -1773,6 +1774,16 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     setActors((prev) => {
       const next = prev.slice();
       next.splice(insertAt, 0, newActor);
+      // HU #14192 / QA: reescribe TODOS los % del lado a 100/n. Si solo se asignaba el del
+      // nuevo y el solidario estaba editado a mano (absorción off), la suma quedaba >100
+      // (p. ej. 50+75+33.33=158.33).
+      return equalizeSharesForRol(next, rol);
+    });
+    // Tras rebalancear, el solidario vuelve a absorber en ediciones siguientes.
+    setSolidarioManuallyEdited((prev) => {
+      if (!prev.has(rol)) return prev;
+      const next = new Set(prev);
+      next.delete(rol);
       return next;
     });
     shiftAllPositionalMaps((m) => shiftIndexMapOnInsert(m, insertAt));
