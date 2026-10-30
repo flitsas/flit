@@ -1,0 +1,34 @@
+// core-personanatural en tu máquina. Copia este archivo a appsettings.Development.json (ignorado por git) y reemplaza cada CAMBIAR.
+// La base es la misma de core-api; el servicio usa su esquema propio «personanatural».
+{
+  "Urls": "http://127.0.0.1:4029",
+  "Servicio": { "GrpcPort": 8087 },
+  "ConnectionStrings": {
+    "Servicio": "Host=127.0.0.1;Port=5432;Database=CAMBIAR;Username=CAMBIAR;Password=CAMBIAR"
+  },
+  "Platform": {
+    "Auth": {
+      "JwksUri": "http://127.0.0.1:4003/.well-known/jwks.json",
+      "Issuers": [ "http://127.0.0.1:4022/" ]
+    },
+    "ServiceClient": {
+      "ClientSecret": "CAMBIAR-igual-a-svc-personanatural-en-core-api",
+      "TokenEndpoint": "http://127.0.0.1:4003/connect/token"
+    },
+    "Messaging": {
+      "ConnectionString": "amqp://localhost:5672/flit"
+    }
+  },
+  "Pii": {
+    "ClaveHmac": "CAMBIAR-minimo-32-caracteres-solo-en-esta-maquina",
+    "Cifrado": {
+      "Llaves": {
+        "1": "CAMBIAR-base64-de-32-bytes"
+      }
+    }
+  },
+  "Captcha": {
+    "Proveedor": "deshabilitado",
+    "PermitirDeshabilitado": true
+  }
+}

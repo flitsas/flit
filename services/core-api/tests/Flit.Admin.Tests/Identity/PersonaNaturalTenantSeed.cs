@@ -7,8 +7,8 @@ using Npgsql;
 namespace Flit.Admin.Tests.Identity;
 
 /// <summary>
-/// HU #14033 — la empresa «Persona Natural» ya NO la siembra una migración (decisión del PO: se crea a mano por ambiente con
-/// <c>deploy/postgres/crear-empresa-persona-natural.sql</c>). Las pruebas de la fachada que la necesitan la siembran ellas
+/// HU #14033 — la migración <c>20261029180000_HU14033_EmpresaPersonaNatural</c> siembra la empresa «Persona Natural».
+/// Las pruebas de la fachada que la necesitan la aseguran ellas
 /// mismas, una sola vez por proceso de pruebas, y, si fueron ellas quienes la crearon, la retiran al terminar el proceso
 /// junto con lo que las pruebas dejaron colgado (best-effort: nunca falla la corrida). Si la fila ya existía (base de
 /// desarrollo con la empresa creada), ni se toca ni se borra.

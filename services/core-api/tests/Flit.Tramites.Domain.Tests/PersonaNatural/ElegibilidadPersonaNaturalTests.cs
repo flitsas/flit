@@ -38,7 +38,6 @@ public sealed class ElegibilidadPersonaNaturalTests
     [InlineData("camara_comercio", "persona jurídica o NIT")]
     [InlineData("camara_comercio_comprador", "persona jurídica o NIT")]
     [InlineData("mandato", "mandato o tramitador")]
-    [InlineData("impronta", "impronta con verificación física")]
     [InlineData("contrato_leasing", "leasing")]
     [InlineData("certificado_dijin", "causales de cancelación")]
     [InlineData("oficio_judicial", "causales de cancelación")]
@@ -68,6 +67,15 @@ public sealed class ElegibilidadPersonaNaturalTests
     public void UnTipoPrendarioPorSuCodigo_NoEsElegible_AunqueElPerfilNoDigaNada()
     {
         ElegibilidadPersonaNatural.Evaluar(Tipo("PRENDA_INSCRIPCION")).Elegible.Should().BeFalse();
+    }
+
+    [Fact]
+    public void DocumentoObligatorioImpronta_NoExcluyeAlTipo()
+    {
+        var r = ElegibilidadPersonaNatural.Evaluar(Tipo(documentos: ["impronta"]));
+
+        r.Elegible.Should().BeTrue();
+        r.Motivo.Should().BeEmpty();
     }
 
     [Fact]
