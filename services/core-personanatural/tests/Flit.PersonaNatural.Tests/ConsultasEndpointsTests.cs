@@ -103,19 +103,17 @@ public sealed class ConsultasEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SinCaptchaNoSeLlamaAFlit2_NiSeCuenta()
+    public async Task SinCaptcha_IgualConsulta_CaptchaDesactivado()
     {
         if (!await IniciarAsync()) return;
 
         var sin = await _http.PostAsJsonAsync(Vehiculo, VehiculoBody(), TestContext.Current.CancellationToken);
-        var malo = await PostAsync(Persona, new { documento = new { tipo = "CC", numero = DocumentoPropietario }, consentimiento = true }, "token-falso");
+        var persona = await PostAsync(Persona, new { documento = new { tipo = "CC", numero = DocumentoPropietario }, consentimiento = true }, "token-falso");
 
-        sin.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await CodigoAsync(sin)).Should().Be("captcha_required");
-        (await CodigoAsync(malo)).Should().Be("captcha_required");
-        _runt.LlamadasVehiculo.Should().BeEmpty();
-        _runt.LlamadasConductor.Should().BeEmpty();
-        (await ConsumoAsync()).Should().BeEmpty();
+        sin.StatusCode.Should().Be(HttpStatusCode.OK);
+        persona.StatusCode.Should().Be(HttpStatusCode.OK);
+        _runt.LlamadasVehiculo.Should().NotBeEmpty();
+        _runt.LlamadasConductor.Should().NotBeEmpty();
     }
 
     [Fact]

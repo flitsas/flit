@@ -4,7 +4,6 @@ import { useMutation } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { useId, useState } from "react";
 import { boton } from "@/components/landing/estilos";
-import { Captcha } from "@/components/Captcha";
 import { MobilityLoader } from "@/components/MobilityLoader";
 import { portal, type ClientePortal, type EstadoRadicado, type TipoTramite } from "@/lib/api/cliente";
 import { mensajeDe } from "@/lib/api/errores";
@@ -59,30 +58,21 @@ function ContenidoConsulta({
   const idAyuda = useId();
   const [placa, setPlaca] = useState("");
   const [clave, setClave] = useState(radicadoInicial);
-  const [captcha, setCaptcha] = useState<string | null>(null);
-  const [reinicio, setReinicio] = useState(0);
   const bloqueo = useBloqueo();
 
   const consulta = useMutation({
-    mutationFn: ({ token }: { token: string }) => {
+    mutationFn: () => {
       const clasificado = clasificarRadicadoOCedula(clave);
       if (!clasificado || !placaValida(placa)) throw new Error("Datos incompletos");
-      return cliente.radicados.consultar(
-        { placa, ...clasificado },
-        { captcha: token },
-      );
+      return cliente.radicados.consultar({ placa, ...clasificado });
     },
     onError: (error) => {
       bloqueo.registrar(error);
     },
-    onSettled: () => {
-      setCaptcha(null);
-      setReinicio((n) => n + 1);
-    },
   });
 
   const listo = placaValida(placa) && clasificarRadicadoOCedula(clave) !== null;
-  const puedeEnviar = listo && captcha !== null && !consulta.isPending && !bloqueo.bloqueado;
+  const puedeEnviar = listo && !consulta.isPending && !bloqueo.bloqueado;
   const cambio = (fijar: (v: string) => void) => (valor: string) => {
     fijar(valor);
     consulta.reset();
@@ -94,7 +84,7 @@ function ContenidoConsulta({
         className="mt-4 grid gap-3 sm:grid-cols-2"
         onSubmit={(e) => {
           e.preventDefault();
-          if (puedeEnviar && captcha) consulta.mutate({ token: captcha });
+          if (puedeEnviar) consulta.mutate();
         }}
       >
         <label className="dashboard-label">
@@ -120,9 +110,6 @@ function ContenidoConsulta({
             onChange={(e) => cambio(setClave)(normalizarRadicadoOCedula(e.target.value))}
           />
         </label>
-        <div className="sm:col-span-2">
-          <Captcha onToken={setCaptcha} reinicio={reinicio} />
-        </div>
         <div className="flex flex-col items-center gap-2 sm:col-span-2">
           <button type="submit" className={boton("flit", "h-11 px-10", "none")} disabled={!puedeEnviar} aria-describedby={idAyuda}>
             Consultar

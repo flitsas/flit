@@ -99,7 +99,7 @@ describe("sin sesión: reanudar", () => {
 
     expect(await screen.findByRole("heading", { level: 1, name: "Trámite de Trámite A" })).toBeInTheDocument();
     expect(cuerpo(llamadas, "POST /sesiones/reanudar")).toEqual({ radicado: "PN-2026-0042", cedula: "1020456789" });
-    expect(llamadas.find((l) => l.clave === "POST /sesiones/reanudar")?.init.headers).toMatchObject({ "x-captcha-token": "dev-captcha-token" });
+    expect((llamadas.find((l) => l.clave === "POST /sesiones/reanudar")?.init.headers as Record<string, string>)["x-captcha-token"]).toBeUndefined();
     expect(obtenerContexto()).toMatchObject({ solicitudId: "s-1", radicado: "PN-2026-0042", cedula: "1020456789" });
   });
 

@@ -94,23 +94,23 @@ public sealed class SolicitudesTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task AlAbrir_ExigeCaptcha_ConsentimientoYDatosValidos()
+    public async Task AlAbrir_ExigeConsentimientoYDatosValidos_CaptchaNoObligatorio()
     {
         await IniciarAsync();
 
         var sinCaptcha = await _host.EnviarAsync(HttpMethod.Post, $"{Base}/sesiones", Cuerpo(), captcha: false);
-        var sinConsentimiento = await _host.EnviarAsync(HttpMethod.Post, $"{Base}/sesiones", Cuerpo(consentimiento: false), captcha: true);
-        var sinPlaca = await _host.EnviarAsync(HttpMethod.Post, $"{Base}/sesiones", Cuerpo(placa: null), captcha: true);
-        var cedulaMala = await _host.EnviarAsync(HttpMethod.Post, $"{Base}/sesiones", Cuerpo(cedula: "x"), captcha: true);
+        var sinConsentimiento = await _host.EnviarAsync(HttpMethod.Post, $"{Base}/sesiones", Cuerpo(consentimiento: false), captcha: false);
+        var sinPlaca = await _host.EnviarAsync(HttpMethod.Post, $"{Base}/sesiones", Cuerpo(placa: null), captcha: false);
+        var cedulaMala = await _host.EnviarAsync(HttpMethod.Post, $"{Base}/sesiones", Cuerpo(cedula: "x"), captcha: false);
 
-        sinCaptcha.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await PortalHost.CodigoAsync(sinCaptcha)).Should().Be("captcha_required");
+        // Captcha desactivado: sin token la sesión igual se abre si el resto es válido.
+        sinCaptcha.StatusCode.Should().Be(HttpStatusCode.OK);
         (await PortalHost.CodigoAsync(sinConsentimiento)).Should().Be("consentimiento_requerido");
         sinPlaca.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
         (await Errores(sinPlaca)).Should().ContainKey("placa");
         (await Errores(cedulaMala)).Should().ContainKey("cedula");
         await using var db = _host.NuevaDb();
-        (await db.Set<SolicitudTramite>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(0);
+        (await db.Set<SolicitudTramite>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(1);
     }
 
     [Fact]

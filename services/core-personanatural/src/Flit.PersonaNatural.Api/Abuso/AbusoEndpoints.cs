@@ -56,16 +56,11 @@ public static class AbusoEndpoints
         return services;
     }
 
-    /// <summary>Exige un captcha resuelto (cabecera <c>X-Captcha-Token</c>) antes de ejecutar el endpoint.</summary>
-    public static RouteHandlerBuilder ConCaptcha(this RouteHandlerBuilder builder) => builder.AddEndpointFilter(async (contexto, siguiente) =>
-    {
-        var http = contexto.HttpContext;
-        var token = http.Request.Headers[CabeceraCaptcha].ToString();
-        var proveedor = http.RequestServices.GetRequiredService<IProveedorCaptcha>();
-        if (string.IsNullOrWhiteSpace(token) || !await proveedor.VerificarAsync(token, http.Connection.RemoteIpAddress?.ToString(), http.RequestAborted).ConfigureAwait(false))
-            return SesionEndpoints.Problema(StatusCodes.Status400BadRequest, "Captcha requerido", "Resuelva el captcha para continuar.", CodigoCaptcha);
-        return await siguiente(contexto).ConfigureAwait(false);
-    });
+    /// <summary>
+    /// Antes exigía captcha (<c>X-Captcha-Token</c>). Desactivado por completo: el filtro no valida nada
+    /// (el consentimiento de tratamiento de datos sigue en los cuerpos que lo piden).
+    /// </summary>
+    public static RouteHandlerBuilder ConCaptcha(this RouteHandlerBuilder builder) => builder;
 
     /// <summary>
     /// Cuenta la consulta contra los topes por cédula y global antes de ejecutarla. <paramref name="cedula"/> saca del request

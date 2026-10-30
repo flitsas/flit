@@ -295,17 +295,16 @@ public sealed class RadicadosTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SinCaptchaValido_Responde400_YNoCuentaComoIntento()
+    public async Task SinCaptcha_LaConsultaIgualProcede_CaptchaDesactivado()
     {
         if (!await IniciarAsync()) return;
         await SembrarAsync();
 
         var respuesta = await ConsultarAsync(Radicado, Cedula, captcha: "token-falso");
 
-        respuesta.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK);
         await using var db = NuevaDb();
-        (await db.Set<IntentoReanudar>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(0);
-        (await db.Set<AccesoPiiLog>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(0);
+        (await db.Set<AccesoPiiLog>().CountAsync(TestContext.Current.CancellationToken)).Should().BeGreaterThan(0);
     }
 
     // ── AC5: cédula de otra parte ────────────────────────────────────────────────────────────────────────────────────

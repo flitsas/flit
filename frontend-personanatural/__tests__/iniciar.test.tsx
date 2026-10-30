@@ -1,6 +1,5 @@
 ﻿import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { TOKEN_MODO_DESARROLLO } from "@/components/Captcha";
 import { Landing } from "@/components/landing/Landing";
 
 import { crearCliente, type DefinicionTipo } from "@/lib/api/cliente";
@@ -226,7 +225,7 @@ describe("consulta al pulsar Iniciar", () => {
       consentimiento: true,
       consentimientoVersion: CONSENTIMIENTO_VERSION,
     });
-    expect((post.init.headers as Record<string, string>)["x-captcha-token"]).toBe(TOKEN_MODO_DESARROLLO);
+    expect((post.init.headers as Record<string, string>)["x-captcha-token"]).toBeUndefined();
     expect(String(routerPush.mock.calls[0][0])).not.toMatch(/1020456789|ABC123/);
     expect(obtenerContexto()).toMatchObject({
       intencion: "iniciar",

@@ -5,7 +5,6 @@ import { ClipboardList, FileText } from "lucide-react";
 import { useId, useState } from "react";
 import { boton } from "@/components/landing/estilos";
 import { useDefinicion } from "@/components/landing/useCatalogos";
-import { Captcha } from "@/components/Captcha";
 import { MobilityLoader } from "@/components/MobilityLoader";
 import { portal, type ClientePortal, type Organismo, type SesionTramite } from "@/lib/api/cliente";
 import { ApiError, mensajeDe } from "@/lib/api/errores";
@@ -39,7 +38,7 @@ interface Props {
 }
 
 /**
- * Modal «Requisitos para tu trámite»: documentos que siempre pide el tipo, consentimiento, captcha e «Iniciar ahora».
+ * Modal «Requisitos para tu trámite»: documentos que siempre pide el tipo, consentimiento e «Iniciar ahora».
  * Al confirmar se consulta el RUNT (con el documento del propietario si es por placa) y solo entonces se abre el borrador.
  */
 export function IniciarModal({ abierto, onCerrar, cliente = portal, datos, urlPolitica = URL_POLITICA_FLIT, onSesion }: Props) {
@@ -76,39 +75,34 @@ function mensajeDeArranque(error: unknown): string {
 function ContenidoIniciar({ cliente, datos, urlPolitica, onCerrar, onSesion, onOcupado }: ContenidoProps) {
   const idConsentimiento = useId();
   const [consentimiento, setConsentimiento] = useState(false);
-  const [captcha, setCaptcha] = useState<string | null>(null);
-  const [reinicio, setReinicio] = useState(0);
   const [aviso, setAviso] = useState<string | null>(null);
   const bloqueo = useBloqueo();
   const definicion = useDefinicion(cliente, datos.tipoCodigo);
   const porPlaca = Boolean(datos.placa);
 
-  const gastarCaptcha = () => {
-    setCaptcha(null);
-    setReinicio((n) => n + 1);
-  };
-
   const arranque = useMutation({
-    mutationFn: async (token: string) => {
-      const vehiculo = await cliente.consultas.vehiculo(
-        {
-          placa: datos.placa,
-          vin: datos.vin,
-          propietario: porPlaca ? { tipo: datos.tipoDocumento, numero: datos.cedula } : undefined,
-          consentimiento: true,
-          consentimientoVersion: CONSENTIMIENTO_VERSION,
-        },
-        { captcha: token },
-      );
+    mutationFn: async () => {
+      const vehiculo = await cliente.consultas.vehiculo({
+        placa: datos.placa,
+        vin: datos.vin,
+        propietario: porPlaca ? { tipo: datos.tipoDocumento, numero: datos.cedula } : undefined,
+        consentimiento: true,
+        consentimientoVersion: CONSENTIMIENTO_VERSION,
+      });
       if (!vehiculo.existe) return { ok: false as const, mensaje: porPlaca ? MENSAJE_PLACA_NO_ENCONTRADA : "No encontramos el vehículo." };
       const organismos = comoLista<Organismo>(await cliente.catalogos.organismos());
       const avisoOrganismo = mensajeDeOrganismo(vehiculo.organismo, organismos);
       if (avisoOrganismo) return { ok: false as const, mensaje: avisoOrganismo };
       const organismo = organismoHabilitadoDelRunt(vehiculo.organismo, organismos);
-      const sesion = await cliente.sesiones.iniciar(
-        { tipoCodigo: datos.tipoCodigo, organismoId: organismo?.id, cedula: datos.cedula, placa: datos.placa, vin: datos.vin, consentimiento: true, consentimientoVersion: CONSENTIMIENTO_VERSION },
-        { captcha: token },
-      );
+      const sesion = await cliente.sesiones.iniciar({
+        tipoCodigo: datos.tipoCodigo,
+        organismoId: organismo?.id,
+        cedula: datos.cedula,
+        placa: datos.placa,
+        vin: datos.vin,
+        consentimiento: true,
+        consentimientoVersion: CONSENTIMIENTO_VERSION,
+      });
       return { ok: true as const, sesion };
     },
     onMutate: () => {
@@ -119,7 +113,6 @@ function ContenidoIniciar({ cliente, datos, urlPolitica, onCerrar, onSesion, onO
       if (!resultado.ok) {
         onOcupado(false);
         setAviso(resultado.mensaje);
-        gastarCaptcha();
         return;
       }
       onSesion(resultado.sesion, datos);
@@ -128,13 +121,12 @@ function ContenidoIniciar({ cliente, datos, urlPolitica, onCerrar, onSesion, onO
       onOcupado(false);
       bloqueo.registrar(error);
       setAviso(mensajeDeArranque(error));
-      gastarCaptcha();
     },
   });
 
   const documentos = (definicion.data?.documentos ?? []).filter((d) => d.obligatorio && (d.condicion ?? "").trim() === "").sort((a, b) => a.orden - b.orden);
   const enCurso = arranque.isPending;
-  const puedeIniciar = consentimiento && captcha !== null && !enCurso && !bloqueo.bloqueado;
+  const puedeIniciar = consentimiento && !enCurso && !bloqueo.bloqueado;
 
   return (
     <>
@@ -163,7 +155,7 @@ function ContenidoIniciar({ cliente, datos, urlPolitica, onCerrar, onSesion, onO
         className="mt-5"
         onSubmit={(e) => {
           e.preventDefault();
-          if (puedeIniciar && captcha) arranque.mutate(captcha);
+          if (puedeIniciar) arranque.mutate();
         }}
       >
         <div className="mx-auto flex max-w-xl flex-col items-center gap-1 text-center">
@@ -172,10 +164,6 @@ function ContenidoIniciar({ cliente, datos, urlPolitica, onCerrar, onSesion, onO
             Acepto el tratamiento de mis datos personales.
           </label>
           <a href={urlPolitica} target="_blank" rel="noopener noreferrer" className={boton("link", "h-auto p-0 text-xs font-light text-foreground/70", "none")}>{TEXTO_POLITICA_DATOS}<span className="sr-only"> (se abre en una pestaña nueva)</span></a>
-        </div>
-
-        <div className="mt-3">
-          <Captcha onToken={setCaptcha} reinicio={reinicio} />
         </div>
 
         <div aria-live="polite" className="mt-3 text-center text-sm">

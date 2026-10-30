@@ -1,6 +1,5 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { TOKEN_MODO_DESARROLLO } from "@/components/Captcha";
 import { Landing } from "@/components/landing/Landing";
 import { CotizarModal, MENSAJE_COTIZACION_FALLIDA, MENSAJE_SIN_TARIFAS } from "@/components/modales/CotizarModal";
 import { crearCliente, type Cotizacion } from "@/lib/api/cliente";
@@ -136,7 +135,7 @@ describe("modal Cotizar: selección", () => {
 });
 
 describe("modal Cotizar: cálculo", () => {
-  it("calcula con el captcha, muestra las dos líneas con su subtítulo, el total en pesos y el encabezado organismo · tipo", async () => {
+  it("calcula, muestra las dos líneas con su subtítulo, el total en pesos y el encabezado organismo · tipo", async () => {
     const { llamadas } = montar(BASE);
     await elegirOrganismoYTipo();
     marcarCaptcha();
@@ -156,7 +155,7 @@ describe("modal Cotizar: cálculo", () => {
 
     const post = llamadas.find((l) => l.clave === "POST /cotizaciones")!;
     expect(JSON.parse(String(post.init.body))).toEqual({ organismoId: "o-1", tipoCodigo: "TIPO_A" });
-    expect((post.init.headers as Record<string, string>)["x-captcha-token"]).toBe(TOKEN_MODO_DESARROLLO);
+    expect((post.init.headers as Record<string, string>)["x-captcha-token"]).toBeUndefined();
   });
 
   it("cambiar el tipo oculta la tabla y vuelve «Calcular»", async () => {
@@ -252,7 +251,7 @@ describe("modal Cotizar: envío por correo", () => {
   const correo = () => screen.getByLabelText("Correo electrónico");
   const enviar = () => fireEvent.click(screen.getByRole("button", { name: "Enviar al correo" }));
 
-  it("con un correo válido envía con Idempotency-Key y captcha, confirma con role=status y no conserva el correo", async () => {
+  it("con un correo válido envía con Idempotency-Key, confirma con role=status y no conserva el correo", async () => {
     const { llamadas } = await conCotizacion();
     fireEvent.change(correo(), { target: { value: "ciudadano@ejemplo.com" } });
     marcarCaptcha();
@@ -263,7 +262,7 @@ describe("modal Cotizar: envío por correo", () => {
     const envio = llamadas.find((l) => l.clave === "POST /cotizaciones/enviar-correo")!;
     const cabeceras = envio.init.headers as Record<string, string>;
     expect(cabeceras["idempotency-key"]).toMatch(/\S{8,}/);
-    expect(cabeceras["x-captcha-token"]).toBe(TOKEN_MODO_DESARROLLO);
+    expect(cabeceras["x-captcha-token"]).toBeUndefined();
     expect(JSON.parse(String(envio.init.body))).toEqual({ organismoId: "o-1", tipoCodigo: "TIPO_A", correo: "ciudadano@ejemplo.com" });
     expect(correo()).toHaveValue("");
     expect(localStorage.length).toBe(0);

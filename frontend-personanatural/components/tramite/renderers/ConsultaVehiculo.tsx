@@ -3,7 +3,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { AlertTriangle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Captcha } from "@/components/Captcha";
 import { MobilityLoader } from "@/components/MobilityLoader";
 import { Badge, Btn, Card, Field, Row } from "@/components/tramite/piezas";
 import { useWizard, type PropsSeccion } from "@/components/tramite/ContextoWizard";
@@ -31,15 +30,13 @@ function mensajeDeConsulta(error: unknown): string {
 }
 
 /**
- * Renderer de las secciones `vehicle_query`: la consulta REAL del vehículo (dato mínimo, con consentimiento y captcha) y el
- * preflight de requisitos del tipo, que el back guarda en el borrador. Cada fila del diagnóstico sale de lo que devuelve el
- * back; no hay indicadores escritos aquí. El propietario se muestra completo: nombre y documento.
+ * Renderer de las secciones `vehicle_query`: la consulta REAL del vehículo (dato mínimo, con consentimiento) y el
+ * preflight de requisitos del tipo, que el back guarda en el borrador. Cada fila del diagnóstico sale de lo que
+ * devuelve el back; no hay indicadores escritos aquí. El propietario se muestra completo: nombre y documento.
  */
 export function ConsultaVehiculo({ activa, intentoAvance, onEstado }: PropsSeccion) {
   const { cliente, solicitud, contexto, recargar, reportarError } = useWizard();
   const bloqueo = useBloqueo();
-  const [captcha, setCaptcha] = useState<string | null>(null);
-  const [reinicio, setReinicio] = useState(0);
   const [tipoPropietario, setTipoPropietario] = useState(contexto?.propietario?.tipo ?? "CC");
   const [numeroPropietario, setNumeroPropietario] = useState(contexto?.propietario?.numero ?? contexto?.cedula ?? "");
   const idAlerta = `diag-alerta-${solicitud.solicitudId}`;
@@ -47,17 +44,17 @@ export function ConsultaVehiculo({ activa, intentoAvance, onEstado }: PropsSecci
   const porVin = Boolean(solicitud.vin);
 
   const entrada = entradaConsulta(solicitud, porVin ? undefined : { tipo: tipoPropietario, numero: numeroPropietario });
+  const firmaEntrada = entrada ? JSON.stringify(entrada) : "";
 
-  const consulta = useMutation<Resultado, unknown, string>({
-    mutationFn: async (token) => {
+  const consulta = useMutation<Resultado>({
+    mutationFn: async () => {
       if (!entrada) throw new ApiError("sin_identificador", "Falta el identificador del vehículo", 400);
-      const vehiculo = await cliente.consultas.vehiculoDelTramite(solicitud.solicitudId, { ...entrada, ...consentimientoDeConsulta }, { captcha: token });
+      const vehiculo = await cliente.consultas.vehiculoDelTramite(solicitud.solicitudId, { ...entrada, ...consentimientoDeConsulta });
       if (!vehiculo.existe) return { vehiculo, diagnostico: null };
       const propietario = entrada.propietario ? { tipoDocumento: entrada.propietario.tipo, numeroDocumento: entrada.propietario.numero } : undefined;
       const diagnostico = await cliente.solicitudes.diagnosticar(solicitud.solicitudId, propietario ? { propietario } : undefined);
       return { vehiculo, diagnostico };
     },
-    // El preflight cambió la `version` del borrador: se vuelve a leer para que lo que se guarde después use la vigente.
     onSuccess: (r) => {
       if (entrada?.propietario && contexto) fijarContexto({ ...contexto, propietario: entrada.propietario });
       if (r.diagnostico) void recargar();
@@ -65,11 +62,6 @@ export function ConsultaVehiculo({ activa, intentoAvance, onEstado }: PropsSecci
     onError: (error) => {
       bloqueo.registrar(error);
       reportarError(error);
-    },
-    onSettled: () => {
-      // El token del captcha sirve una sola vez.
-      setCaptcha(null);
-      setReinicio((n) => n + 1);
     },
   });
 
@@ -80,19 +72,15 @@ export function ConsultaVehiculo({ activa, intentoAvance, onEstado }: PropsSecci
   const consultando = consulta.isPending;
   const enEspera = bloqueo.bloqueado;
 
-  // Sin resultado todavía: con el captcha resuelto se consulta sola, sin otro clic. Nunca mientras se espera un 429 o un 503.
+  // Sin resultado todavía: se consulta sola al estar lista la entrada. Nunca mientras se espera un 429 o un 503.
   const mutar = consulta.mutate;
-  const tokenUsado = useRef<string | null>(null);
+  const disparado = useRef<string | null>(null);
   useEffect(() => {
-    if (!captcha) {
-      tokenUsado.current = null;
-      return;
-    }
-    if (!activa || !hayOrganismo || diagnostico || noExiste || consultando || enEspera) return;
-    if (tokenUsado.current === captcha) return; // un token, una consulta (también bajo StrictMode)
-    tokenUsado.current = captcha;
-    mutar(captcha);
-  }, [activa, hayOrganismo, captcha, diagnostico, noExiste, consultando, enEspera, mutar]);
+    if (!activa || !hayOrganismo || !entrada || diagnostico || noExiste || consultando || enEspera) return;
+    if (disparado.current === firmaEntrada) return;
+    disparado.current = firmaEntrada;
+    mutar();
+  }, [activa, hayOrganismo, entrada, firmaEntrada, diagnostico, noExiste, consultando, enEspera, mutar]);
 
   const conBloqueos = diagnostico !== null && !diagnostico.puedeContinuar;
   const completo = diagnostico?.puedeContinuar === true;
@@ -103,12 +91,10 @@ export function ConsultaVehiculo({ activa, intentoAvance, onEstado }: PropsSecci
 
   const reintentar = () => {
     consulta.reset();
-    setCaptcha(null);
-    setReinicio((n) => n + 1);
+    disparado.current = null;
   };
 
   const filas = diagnostico ? filasDiagnostico(diagnostico.requisitos) : [];
-  // La fecha es la que el back guardó con el diagnóstico (llega al recargar el borrador, justo después de consultar).
   const fecha = formatearFechaHora(guardado?.fecha);
   const documentoEscrito = numeroPropietario.trim() ? documentoLegible(tipoPropietario, numeroPropietario) : "";
   const documentoPropietario = vehiculo?.propietarioDocumento?.trim() || documentoEscrito;
@@ -179,12 +165,6 @@ export function ConsultaVehiculo({ activa, intentoAvance, onEstado }: PropsSecci
               </p>
               {!sinIdentificador && <Btn tone="secondary" onClick={reintentar} disabled={enEspera || consultando}>Reintentar</Btn>}
               {enEspera && <p role="status" className="text-xs">Podrás intentarlo de nuevo en {bloqueo.segundosRestantes} s.</p>}
-            </div>
-          )}
-
-          {hayOrganismo && !diagnostico && !noExiste && error === null && activa && entrada && (
-            <div className="mt-2">
-              <Captcha onToken={setCaptcha} reinicio={reinicio} />
             </div>
           )}
 

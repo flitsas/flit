@@ -4,7 +4,6 @@ import { useMutation } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Captcha } from "@/components/Captcha";
 import { boton } from "@/components/landing/estilos";
 import { MobilityLoader } from "@/components/MobilityLoader";
 import type { ClientePortal } from "@/lib/api/cliente";
@@ -30,19 +29,17 @@ const TEXTO = {
 
 /**
  * Pantalla para volver a un trámite cuando no hay sesión (se recargó la página, venció o se llegó desde «Consultar mi
- * trámite»): radicado, cédula y verificación de seguridad abren una sesión nueva (POST /sesiones/reanudar). Radicado y
- * cédula viven solo en memoria; el token de la sesión lo guarda el proxy en una cookie HttpOnly.
+ * trámite»): radicado y cédula abren una sesión nueva (POST /sesiones/reanudar). Radicado y cédula viven solo en
+ * memoria; el token de la sesión lo guarda el proxy en una cookie HttpOnly.
  */
 export function ReanudarSesion({ cliente, tipoCodigo, contexto, motivo }: Props) {
   const router = useRouter();
   const [radicado, setRadicado] = useState(contexto?.radicado ?? "");
   const [cedula, setCedula] = useState(contexto?.cedula ?? "");
-  const [captcha, setCaptcha] = useState<string | null>(null);
-  const [reinicio, setReinicio] = useState(0);
   const bloqueo = useBloqueo();
 
   const reanudar = useMutation({
-    mutationFn: (token: string) => cliente.sesiones.reanudar({ radicado, cedula }, { captcha: token }),
+    mutationFn: () => cliente.sesiones.reanudar({ radicado, cedula }),
     onSuccess: (sesion) => {
       fijarContexto({
         intencion: contexto?.intencion ?? "iniciar",
@@ -57,14 +54,10 @@ export function ReanudarSesion({ cliente, tipoCodigo, contexto, motivo }: Props)
       if (sesion.tipoTramiteCodigo !== tipoCodigo) router.replace(rutaDelTramite(sesion.tipoTramiteCodigo));
     },
     onError: (error) => bloqueo.registrar(error),
-    onSettled: () => {
-      setCaptcha(null);
-      setReinicio((n) => n + 1);
-    },
   });
 
   const listo = radicado.trim().length > 0 && cedulaValida(cedula);
-  const puedeEnviar = listo && captcha !== null && !reanudar.isPending && !bloqueo.bloqueado;
+  const puedeEnviar = listo && !reanudar.isPending && !bloqueo.bloqueado;
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-4 p-6">
@@ -74,7 +67,7 @@ export function ReanudarSesion({ cliente, tipoCodigo, contexto, motivo }: Props)
         className="grid w-full gap-3 rounded-[9px] border border-border bg-card p-6"
         onSubmit={(e) => {
           e.preventDefault();
-          if (puedeEnviar && captcha) reanudar.mutate(captcha);
+          if (puedeEnviar) reanudar.mutate();
         }}
       >
         <label className="dashboard-label">
@@ -85,7 +78,6 @@ export function ReanudarSesion({ cliente, tipoCodigo, contexto, motivo }: Props)
           Cédula del solicitante
           <input required className="field" inputMode="numeric" autoComplete="off" placeholder="Ej. 1020456789" value={cedula} onChange={(e) => setCedula(soloDigitos(e.target.value))} />
         </label>
-        <Captcha onToken={setCaptcha} reinicio={reinicio} />
         <div aria-live="polite" className="text-center text-sm">
           {reanudar.isError && <p role="alert" className="rounded-[9px] border border-alert bg-alert/10 p-3 text-alert">{mensajeDe(reanudar.error)}</p>}
           {bloqueo.bloqueado && <p role="status" className="mt-2 text-xs text-foreground/70">Podrás intentarlo de nuevo en {bloqueo.segundosRestantes} s.</p>}

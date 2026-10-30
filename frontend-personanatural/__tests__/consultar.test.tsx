@@ -1,6 +1,5 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { TOKEN_MODO_DESARROLLO } from "@/components/Captcha";
 import { ConsultarModal } from "@/components/modales/ConsultarModal";
 import { crearCliente, type EstadoRadicado } from "@/lib/api/cliente";
 import { formatearFechaHora } from "@/lib/formato";
@@ -95,7 +94,7 @@ describe("modal Consultar: formulario", () => {
 });
 
 describe("modal Consultar: envío y estados", () => {
-  it("con radicado manda placa + radicado al BFF (sin cédula) y el captcha en cabecera", async () => {
+  it("con radicado manda placa + radicado al BFF (sin cédula)", async () => {
     const { fetchImpl } = montar(() => json(respuesta()));
     llenar({ placa: "abc123", clave: "pn-2026-0001" });
 
@@ -106,7 +105,7 @@ describe("modal Consultar: envío y estados", () => {
     expect(url).toBe("/api/v1/persona-natural/radicados/consulta");
     expect(init.method).toBe("POST");
     expect(JSON.parse(String(init.body))).toEqual({ placa: "ABC123", radicado: "PN-2026-0001" });
-    expect((init.headers as Record<string, string>)["x-captcha-token"]).toBe(TOKEN_MODO_DESARROLLO);
+    expect((init.headers as Record<string, string>)["x-captcha-token"]).toBeUndefined();
     expect(localStorage.length).toBe(0);
     expect(sessionStorage.length).toBe(0);
     expect(window.location.href).not.toMatch(/1020456789|PN-2026/);
