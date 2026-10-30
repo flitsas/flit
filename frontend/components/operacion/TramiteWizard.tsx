@@ -31,7 +31,7 @@ import {
   modalidadPorEntrada,
   modalidadPorPartes,
   permiteAccionComplementaria,
-  rolesDeActores,
+  rolesDeActoresEnPantalla,
   runtAvisoGravamenVariant,
   transformacionDelTipo,
   type CapacidadesEfectivas,
@@ -992,6 +992,10 @@ export function TramiteWizard(props: Props) {
   // con dos modalidades las dos ramas agotaban el catálogo, con veintiún tipos ya no. Un blindaje
   // entraba por la rama de matrícula y pedía un comprador que no existe, sin que nada fallara.
   const caps = capacidadesEfectivas(wizard?.capabilities, familia);
+  // HU #14225 / ADR-0051 — `revealSellerForm` es por instancia (p. ej. TRASPASO_UNILATERAL). Los
+  // roles en pantalla pueden incluir vendedor aunque `rolesDeActores(caps)` no lo traiga.
+  const revealSellerFormWizard = steps.some((s) => s.sectionConfig?.revealSellerForm === true);
+  const rolesActoresPantalla = rolesDeActoresEnPantalla(caps, revealSellerFormWizard);
   // `tipologiaCodigo` ES el `code` canónico del catálogo desde ADR-0050; mientras el trámite no
   // existe, el code lo trae la ruta.
   const tipoCodigo = wizard?.tipologiaCodigo?.trim() || entryProcedureTypeCode || '';
@@ -1646,7 +1650,7 @@ export function TramiteWizard(props: Props) {
       const rolesDelPasoActivo: ActorRol[] = !isActorStep || !activeStep
         ? []
         : esPasoDeActoresUnificado(steps, activeIndex)
-          ? rolesDeActores(caps)
+          ? rolesActoresPantalla
           : [resolveActorRole(activeStep)];
       // ADR-0051 — y de esas partes, solo las que el TIPO declara como firmantes (`biometricActors`).
       //
@@ -1792,7 +1796,7 @@ export function TramiteWizard(props: Props) {
                 activeIndex={activeIndex}
                 onGoToStep={goToStep}
                 viewOnly={navViewOnly}
-                coalesceActores={rolesDeActores(caps).length > 1}
+                coalesceActores={rolesActoresPantalla.length > 1}
                 compacto={cabeceraCompacta}
               />
             )}
@@ -5162,12 +5166,8 @@ function StepBody({
       // le falta un dato (representante legal o correo) para poder enviarle la validación de
       // identidad. El backend ya calculó la excepción en `sectionConfig.actor_form`; el frontend NO
       // la recalcula, solo la lee.
-      const rolesBase = rolesDeActores(caps);
       const revealSellerForm = step.sectionConfig?.revealSellerForm === true;
-      const roles: ActorRol[] =
-        revealSellerForm && !rolesBase.includes('vendedor')
-          ? ['vendedor', ...rolesBase]
-          : rolesBase;
+      const roles: ActorRol[] = rolesDeActoresEnPantalla(caps, revealSellerForm);
       const unificado = roles.length > 1;
       // El documento se siembra desde el propietario que devolvió el RUNT cuando el vehículo YA
       // tiene uno, que es justo lo que significa entrar por placa. En una matrícula inicial no hay
