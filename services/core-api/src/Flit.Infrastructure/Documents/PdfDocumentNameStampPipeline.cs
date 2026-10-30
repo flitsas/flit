@@ -60,8 +60,12 @@ internal sealed partial class PdfDocumentNameStampPipeline
         }
 
         LogStampFallbackWithoutFooter(_logger, documentName, firstError);
-        // Preferir bytes normalizados si existen (más seguros para Merge/Import) sobre el original hostil.
-        return n2 ?? n1 ?? pdf;
+        // HU #14240 — nunca devolver bytes que Merge no pueda Import (Token '18', etc.).
+        var candidate = n2 ?? n1 ?? pdf;
+        var safe = PdfModifyNormalizer.EnsureImportable(candidate, documentName, out var substituted);
+        if (substituted)
+            LogStampFallbackPlaceholder(_logger, documentName, firstError);
+        return safe;
     }
 
     private bool TryStamp(
@@ -107,4 +111,9 @@ internal sealed partial class PdfDocumentNameStampPipeline
         Level = LogLevel.Warning,
         Message = "HU14209: no se pudo estampar pie tras N1/N2; se incluye la parte sin pie. Documento={DocumentName}. Causa={Error}")]
     private static partial void LogStampFallbackWithoutFooter(ILogger logger, string documentName, string? error);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "HU14240: PDF ilegible para Import tras N1/N2; se sustituye por página de aviso. Documento={DocumentName}. Causa={Error}")]
+    private static partial void LogStampFallbackPlaceholder(ILogger logger, string documentName, string? error);
 }
