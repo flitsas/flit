@@ -24,15 +24,17 @@ namespace Flit.Modules.Security.Application.Tests.Auth;
 /// la mediana en milisegundos.
 /// <para>
 /// <see cref="TraitAttribute"/> "Timing": sensible al entorno de CI (carga de la máquina). Tolerancia
-/// amplia (ratio ≤ 2.0) a propósito: el objetivo es detectar una regresión estructural (un camino que
-/// se salta el hash), no medir microsegundos. 1.6 fallaba en runners cargados (~1.84 observado).
+/// amplia (ratio ≤ 4) a propósito: el objetivo es detectar una regresión estructural (un camino que
+/// se salta el hash), no medir microsegundos. 1.6 fallaba en runners cargados (~1.84). 2.5 falló en
+/// el PR #743 con ambos caminos hasheando (30 ms y 9 ms, ratio 3.48).
 /// </para>
 /// </summary>
 [Trait("Category", "Timing")]
 public sealed class LoginTimingTests
 {
     private const int Samples = 20;
-    private const double ToleranceRatio = 2.5;
+    private const int Warmup = 5;
+    private const double ToleranceRatio = 4.0;
 
     private static readonly Guid HeadA = Guid.NewGuid();
     private static readonly Guid OffNetworkTenant = Guid.NewGuid();
@@ -132,6 +134,17 @@ public sealed class LoginTimingTests
 
     private static async Task<double> MeasureMedianMsAsync(Func<Task> attempt)
     {
+        for (var i = 0; i < Warmup; i++)
+        {
+            try
+            {
+                await attempt();
+            }
+            catch (InvalidCredentialsException)
+            {
+            }
+        }
+
         var samples = new List<double>(Samples);
         for (var i = 0; i < Samples; i++)
         {
