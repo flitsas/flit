@@ -82,13 +82,28 @@ export function isFirstOfRol(actors: ProcedureActor[], index: number): boolean {
 
 /**
  * Porcentaje por defecto de un propietario recién agregado: reparto equitativo entre TODOS los
- * actores que quedarán en el lado (incluido el que se está agregando). El diseño no fija un valor
- * exacto para este caso (decisión de UI del frontend-agent) — un reparto equitativo es el punto de
- * partida más neutral, y el solidario lo corrige de inmediato vía `applySolidarioAbsorption`.
+ * actores que quedarán en el lado (incluido el que se está agregando). Tras el insert,
+ * `equalizeSharesForRol` reescribe TODOS los % del lado a 100/n (evita sumas >100 cuando el
+ * solidario ya estaba editado a mano y la absorción no corre — hallazgo QA HU #14192).
  */
 export function defaultPercentageForNewActor(countAfterAdd: number): number {
   if (countAfterAdd <= 0) return 100;
   return round2(100 / countAfterAdd);
+}
+
+/**
+ * Reparte 100% en partes iguales entre todos los actores del `rol` (último absorbe redondeo).
+ * Usado al agregar un copropietario para garantizar suma exacta 100 aunque el solidario estuviera
+ * marcado como editado a mano.
+ */
+export function equalizeSharesForRol(
+  actors: ProcedureActor[],
+  rol: ActorRol,
+): ProcedureActor[] {
+  const idxs = indicesForRol(actors, rol);
+  if (idxs.length === 0) return actors;
+  const next = actors.slice();
+  return assignEqualShares(next, idxs);
 }
 
 /**
@@ -202,7 +217,7 @@ export function redistributeAfterRemoval(
   return remaining;
 }
 
-/** Reparto equitativo 100/n entre índices del mismo lado (post-delete o descuadre). */
+/** Reparto equitativo 100/n entre índices del mismo lado (post-add, post-delete o descuadre). */
 function assignEqualShares(
   remaining: ProcedureActor[],
   idxs: number[],
