@@ -128,32 +128,34 @@ describe('hu12799 AC1 — aviso visible al abrir el expediente con fallo', () =>
     await waitFor(() => expect(mocks.openObjectUrlInWindow).toHaveBeenCalledTimes(1));
   });
 
-  it('un consolidado vigente que falla al regenerarse muestra el aviso con la fecha del PDF conservado', async () => {
-    mocks.generarConsolidado.mockResolvedValue(FALLO);
+  it('HU #14206 — fallo vía Ver (entrega) muestra aviso con la fecha del PDF conservado', async () => {
+    mocks.entregarConsolidado.mockResolvedValue(FALLO);
     const user = userEvent.setup();
-    renderVisor(vigencia({ estado: 'vigente' }));
+    renderVisor(vigencia({ estado: 'desactualizado' }));
 
-    await user.click(screen.getByRole('button', { name: 'Re-generar expediente consolidado' }));
+    await abrir(user);
 
     const aviso = await screen.findByTestId('aviso-fallo-regeneracion');
     expect(aviso).toHaveTextContent('20/09/2026 10:05 (hora Colombia)');
+    expect(
+      screen.queryByRole('button', { name: /Re-generar expediente consolidado/i }),
+    ).not.toBeInTheDocument();
   });
 
   it('no dice «Expediente consolidado generado» cuando regenerado === false (mensaje contradictorio)', async () => {
-    mocks.generarConsolidado.mockResolvedValue(
+    mocks.entregarConsolidado.mockResolvedValue(
       respuesta({
         regenerado: false,
         avisosCascada: ['consolidado: excepcion', 'impronta: provider_unavailable'],
       }),
     );
     const user = userEvent.setup();
-    renderVisor(vigencia({ estado: 'vigente' }));
+    renderVisor(vigencia({ estado: 'desactualizado' }));
 
-    await user.click(screen.getByRole('button', { name: 'Re-generar expediente consolidado' }));
+    await abrir(user);
 
     await screen.findByTestId('aviso-fallo-regeneracion');
     expect(document.body.textContent).not.toMatch(/Expediente consolidado generado/);
-    // El fallo del consolidado no se duplica en la caja de error; el de la impronta sí se conserva.
     expect(document.body.textContent).not.toMatch(/No se pudo generar Consolidado/i);
     const alertas = screen.getAllByRole('alert');
     expect(alertas).toHaveLength(2);
