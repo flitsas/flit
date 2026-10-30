@@ -150,7 +150,7 @@ describe('ExpedienteVisor — documentos (sin repetir vehículo/actores)', () =>
     ).not.toBeInTheDocument();
   });
 
-  it('con consolidado muestra Re-generar y el CTA Ver expediente consolidado', () => {
+  it('HU #14206 — con consolidado solo muestra el CTA Ver (sin Re-generar permanente)', () => {
     render(
       <ExpedienteVisor
         instanceId="inst-1"
@@ -169,10 +169,10 @@ describe('ExpedienteVisor — documentos (sin repetir vehículo/actores)', () =>
       />,
     );
     expect(
-      screen.getByRole('button', { name: 'Re-generar expediente consolidado' }),
-    ).toBeInTheDocument();
-    expect(
       screen.getByRole('button', { name: 'Ver expediente consolidado (PDF)' }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Re-generar expediente consolidado/i }),
+    ).not.toBeInTheDocument();
   });
 });
