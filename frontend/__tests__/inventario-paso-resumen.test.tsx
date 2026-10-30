@@ -510,9 +510,9 @@ describe('FirmaFurStep — inventario: expediente y documentos generados', () =>
     // La huella del documento es lo que permite demostrar que no se alteró.
     expect(within(documentos).getByText(/SHA-256 abc123/)).toBeInTheDocument();
     // Cada documento con adjunto emparejado se puede abrir.
-    expect(within(documentos).getByRole('button', { name: 'Ver PDF de FUR' })).toBeInTheDocument();
+    expect(within(documentos).getByRole('button', { name: /Ver PDF de FUR/ })).toBeInTheDocument();
     expect(
-      within(documentos).getByRole('button', { name: 'Ver PDF de Improntas de motor y chasis' }),
+      within(documentos).getByRole('button', { name: /Ver PDF de Improntas/ }),
     ).toBeInTheDocument();
     expect(within(documentos).getAllByText('Validado')).toHaveLength(2);
     // Un ítem del checklist sin adjunto sale Pendiente y sin botón (no hay nada que abrir).
@@ -534,15 +534,18 @@ describe('FirmaFurStep — inventario: expediente y documentos generados', () =>
     ).toBeInTheDocument();
   });
 
-  it('con consolidado ya generado ofrece además re-generarlo', async () => {
+  it('HU #14206 — con consolidado ya generado solo ofrece Ver (sin Re-generar permanente)', async () => {
     mocks.getAttachments.mockResolvedValue([
       { ...FUR_DOC, id: 'att-cons', tipo: 'consolidado', filename: 'consolidado.pdf' },
     ]);
     render(<FirmaFurStep instanceId={INSTANCE} modalidad="traspaso" />);
 
     expect(
-      await screen.findByRole('button', { name: 'Re-generar expediente consolidado' }),
+      await screen.findByRole('button', { name: 'Ver expediente consolidado (PDF)' }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Re-generar expediente consolidado' }),
+    ).toBeNull();
   });
 
   // El texto del consolidado enumera lo que lleva dentro, y en traspaso lleva un documento más.
@@ -717,7 +720,7 @@ describe('FirmaFurStep — inventario: acciones del cierre del trámite', () => 
     expect(screen.queryByRole('button', { name: 'Re-generar expediente consolidado' })).toBeNull();
     // Pero los documentos siguen listados y se pueden abrir.
     const documentos = await screen.findByRole('list', { name: 'Documentos del expediente (visor)' });
-    expect(within(documentos).getByRole('button', { name: 'Ver PDF de FUR' })).toBeInTheDocument();
+    expect(within(documentos).getByRole('button', { name: /Ver PDF de FUR/ })).toBeInTheDocument();
   });
 });
 

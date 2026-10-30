@@ -58,7 +58,6 @@ import {
 
 const INSTANCE = 'inst-12800';
 const VER = { name: 'Ver expediente consolidado (PDF)' };
-const REGENERAR = { name: 'Re-generar expediente consolidado' };
 /** Code-review M2 — la apertura va por la ruta de entrega, `tipo=consolidado`, sin force. */
 const ENTREGA = { tipo: 'consolidado' };
 
@@ -234,19 +233,19 @@ describe('HU #12800 AC2 — la interfaz sigue utilizable durante la reconstrucci
     expect(mocks.entregarConsolidado).toHaveBeenCalledTimes(1);
   });
 
-  it('las acciones del propio consolidado quedan protegidas: un clic en «Re-generar» no lanza otra reconstrucción', async () => {
+  it('HU #14206 — mientras Ver está en vuelo el CTA queda disabled y no hay Re-generar permanente', async () => {
     mocks.entregarConsolidado.mockReturnValue(diferida<GenerarConsolidadoResult>().promise);
     renderVisor();
 
     clicVer();
-    const regenerar = screen.getByRole('button', REGENERAR);
-    expect(regenerar).toBeDisabled();
-    act(() => regenerar.click());
+    const ver = screen.getByRole('button', VER);
+    expect(ver).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /Re-generar expediente consolidado/i })).toBeNull();
+    act(() => ver.click());
     await flush();
 
     expect(mocks.entregarConsolidado).toHaveBeenCalledTimes(1);
     expect(mocks.entregarConsolidado).toHaveBeenCalledWith(INSTANCE, ENTREGA);
-    // El POST con force (la acción «Re-generar») no salió: el candado lo cortó.
     expect(mocks.generarConsolidado).not.toHaveBeenCalled();
   });
 
@@ -542,21 +541,22 @@ describe('Code-review M2 — la apertura usa la ruta única de entrega (#12785)'
     );
     expect(mocks.openObjectUrlInWindow).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('alert')).toBeNull();
-    // Estado final: sin panel de reconstrucción y sin «Re-generar».
+    // Estado final: sin panel de reconstrucción y sin CTA Re-generar (HU #14206).
     expect(screen.queryByTestId('consolidado-reconstruccion')).toBeNull();
-    expect(screen.queryByRole('button', REGENERAR)).toBeNull();
+    expect(screen.queryByRole('button', { name: /Re-generar expediente consolidado/i })).toBeNull();
   });
 
-  it('edge: la entrega dice definitivo aunque el status del visor aún no sea final ⇒ aviso «Documento final» y sin «Re-generar»', async () => {
+  it('edge: la entrega dice definitivo aunque el status del visor aún no sea final ⇒ aviso «Documento final» y sin Re-generar', async () => {
     mocks.entregarConsolidado.mockResolvedValue(definitivo());
     renderVisor({ consolidadoWizard: vigencia('vigente') });
 
-    expect(screen.getByRole('button', REGENERAR)).toBeInTheDocument();
+    expect(screen.getByRole('button', VER)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Re-generar expediente consolidado/i })).toBeNull();
     clicVer();
     await flush();
 
     expect(screen.getByTestId('aviso-documento-final')).toBeInTheDocument();
-    expect(screen.queryByRole('button', REGENERAR)).toBeNull();
+    expect(screen.queryByRole('button', { name: /Re-generar expediente consolidado/i })).toBeNull();
   });
 
   it('contrato: el hook pide la entrega sin force y expone `definitivo` de la respuesta', async () => {
