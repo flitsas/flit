@@ -511,7 +511,6 @@ function SubtramiteDocCard({
           item.optionLabel
         )}
       </p>
-      <p className="mt-1 text-[11px] opacity-70">PDF, JPG hasta 5MB · Opcional</p>
 
       {attachment && (
         <p className="mt-1 truncate text-[11px] opacity-60">{attachment.filename}</p>
@@ -602,7 +601,10 @@ function SubtramiteDocCard({
         <p className="mt-0.5 opacity-70">{item.nota.descripcion}</p>
       </div>
 
-      <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
+      {/* Formatos y que el soporte es opcional: van con el botón, no bajo el título de la tarjeta. */}
+      <div className="mt-auto pt-3">
+        <p className="text-[11px] opacity-70">PDF, JPG hasta 5MB · Opcional</p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
         {canUpload ? (
           <>
             <input
@@ -653,6 +655,7 @@ function SubtramiteDocCard({
             {attachment ? 'Documento adjunto' : 'Guarda el trámite para poder adjuntar el soporte.'}
           </p>
         )}
+        </div>
       </div>
     </div>
   );

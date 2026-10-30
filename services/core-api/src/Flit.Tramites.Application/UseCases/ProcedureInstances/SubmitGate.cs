@@ -3,6 +3,7 @@ using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Flit.Tramites.Domain.Enums;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
@@ -43,10 +44,16 @@ public static class SubmitGate
     /// viene (no <c>null</c>) manda sobre el cómputo interno del catálogo; <c>null</c> ⇒ se usa el
     /// gate actual (flag OFF o sin matriz) sin regresión.
     /// </param>
+    /// <param name="improntaObligatoria">
+    /// Obligatoriedad ya resuelta por la matriz documental. <c>null</c> usa el catálogo en código.
+    /// La impronta opcional no bloquea la radicación aunque no haya adjunto: solo se genera si el
+    /// gestor pulsa «Generar impronta».
+    /// </param>
     public static IReadOnlyList<string> Evaluate(
         ProcedureInstance instance,
         IReadOnlySet<string> identidadAprobadaPartes,
-        bool? documentosCompletosOverride = null)
+        bool? documentosCompletosOverride = null,
+        bool? improntaObligatoria = null)
     {
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentNullException.ThrowIfNull(identidadAprobadaPartes);
@@ -54,14 +61,18 @@ public static class SubmitGate
         var modalidad = instance.Family;
 
         var docsCompletos = documentosCompletosOverride ?? DocumentosObligatoriosCompletos(instance);
+        var exigeImpronta = improntaObligatoria ?? ExigeImpronta(instance, checklist: null);
 
         return modalidad == ProcedureFamily.Traspaso
-            ? EvaluateTraspaso(instance, identidadAprobadaPartes, docsCompletos)
-            : EvaluateMatricula(instance, identidadAprobadaPartes, docsCompletos);
+            ? EvaluateTraspaso(instance, identidadAprobadaPartes, docsCompletos, exigeImpronta)
+            : EvaluateMatricula(instance, identidadAprobadaPartes, docsCompletos, exigeImpronta);
     }
 
     private static List<string> EvaluateMatricula(
-        ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes, bool docsCompletos)
+        ProcedureInstance instance,
+        IReadOnlySet<string> identidadAprobadaPartes,
+        bool docsCompletos,
+        bool exigeImpronta)
     {
         var errors = new List<string>(2);
 
@@ -70,7 +81,7 @@ public static class SubmitGate
         // Identidad PER-PERSONA (documento del comprador), referenciada de su validación vigente (HU #10350).
         if (!identidadAprobadaPartes.Contains(BiometricRules.ParteComprador))
             errors.Add(IdentidadNoAprobada);
-        if (!ImprontaGenerada(instance))
+        if (exigeImpronta && !TieneAdjuntoImpronta(instance))
             errors.Add(ImprontaRequerida);
 
         return errors;
@@ -82,7 +93,10 @@ public static class SubmitGate
     /// prepararse/radicar.
     /// </summary>
     private static List<string> EvaluateTraspaso(
-        ProcedureInstance instance, IReadOnlySet<string> identidadAprobadaPartes, bool docsCompletos)
+        ProcedureInstance instance,
+        IReadOnlySet<string> identidadAprobadaPartes,
+        bool docsCompletos,
+        bool exigeImpronta)
     {
         var errors = new List<string>(5);
 
@@ -99,7 +113,7 @@ public static class SubmitGate
             errors.Add(FurRequerido);
         if (!OrganismoSeleccionado(instance))
             errors.Add(OrganismoRequerido);
-        if (!ImprontaGenerada(instance))
+        if (exigeImpronta && !TieneAdjuntoImpronta(instance))
             errors.Add(ImprontaRequerida);
 
         return errors;
@@ -158,17 +172,25 @@ public static class SubmitGate
     }
 
     /// <summary>
-    /// ¿La tipología del trámite tiene un ítem de checklist con <c>DocTipo == "impronta"</c>? Así una
-    /// tipología futura sin impronta en su checklist no queda bloqueada por este gate.
+    /// La impronta se exige (y el consolidado puede generarla por debajo) solo cuando el ítem
+    /// resuelto es obligatorio. Con matriz, manda ese ítem: si no está, no se exige. Sin matriz,
+    /// manda el catálogo en código.
     /// </summary>
-    private static bool RequiereImpronta(ProcedureInstance instance)
+    internal static bool ExigeImpronta(ProcedureInstance instance, ChecklistResultado? checklist)
     {
-        var codigo = instance.TypeCode;
-        var tip = TramiteTipologiaCatalog.Get(codigo);
-        return tip is not null && tip.Checklist.Any(i => string.Equals(i.DocTipo, "impronta", StringComparison.OrdinalIgnoreCase));
+        if (checklist is not null)
+        {
+            var item = checklist.Items.FirstOrDefault(i =>
+                string.Equals(i.Item.DocTipo, "impronta", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(i.Item.Id, "impronta", StringComparison.OrdinalIgnoreCase));
+            return item?.Item.Obligatorio == true;
+        }
+
+        var tip = TramiteTipologiaCatalog.Get(instance.TypeCode);
+        return tip?.Checklist.Any(i =>
+            string.Equals(i.DocTipo, "impronta", StringComparison.OrdinalIgnoreCase) && i.Obligatorio) == true;
     }
 
-    private static bool ImprontaGenerada(ProcedureInstance instance) =>
-        !RequiereImpronta(instance)
-        || instance.Attachments.Any(a => string.Equals(a.Tipo, "impronta", StringComparison.OrdinalIgnoreCase));
+    private static bool TieneAdjuntoImpronta(ProcedureInstance instance) =>
+        instance.Attachments.Any(a => string.Equals(a.Tipo, "impronta", StringComparison.OrdinalIgnoreCase));
 }

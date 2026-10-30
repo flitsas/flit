@@ -13,9 +13,9 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// completitud del paso 2 / finalizar borrador deja continuar aunque la impronta esté marcada
 /// obligatoria por el gestor y aún no se haya cargado.
 ///
-/// La radicación NO se debilita: <see cref="SubmitGate"/> exige el attachment REAL de impronta con
-/// lógica independiente (<c>ImprontaGenerada</c>) que ignora este flag, así que diferir aquí nunca
-/// permite radicar sin la impronta generada en el FUR.
+/// La radicación NO se debilita cuando el ítem es obligatorio: <see cref="SubmitGate"/> exige el
+/// attachment REAL y el flag manual no cuenta. Si el checklist la deja opcional, no hay nada que
+/// exigir ni que generar por debajo.
 ///
 /// Acotado EXCLUSIVAMENTE al tipo <c>impronta</c> — único documento con un gate de radicación propio
 /// que exige el archivo real. NO se generaliza: un toggle manual sobre cualquier obligatorio dejaría

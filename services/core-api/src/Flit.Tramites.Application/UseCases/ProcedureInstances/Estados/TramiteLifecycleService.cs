@@ -557,9 +557,15 @@ public sealed class TramiteLifecycleService(
             repo, instance, DateTimeOffset.UtcNow, ct, _vaultPolicy).ConfigureAwait(false);
 
         // HU #10522 (RF17/RF22) — el gestor manda la completitud documental si tiene matriz.
-        var docsCompletos = matrixCompleteness is null
+        // La misma lectura dice si la impronta es obligatoria: el flag manual de «diferida» no
+        // sustituye al archivo cuando el ítem sí lo es.
+        var checklist = matrixCompleteness is null
             ? null
-            : await matrixCompleteness.TryComputeCompletoAsync(instance, command.TenantId, ct).ConfigureAwait(false);
+            : await matrixCompleteness.TryComputeAsync(instance, command.TenantId, ct).ConfigureAwait(false);
+        var docsCompletos = checklist?.Completo;
+        bool? improntaObligatoria = checklist is null
+            ? null
+            : SubmitGate.ExigeImpronta(instance, checklist);
 
         // FEATURE-08 / HU-BE-06 (AC-06): para tipos dinámicos (flag F08_DynamicProcedures + snapshot)
         // el gate de preparación se delega en DynamicGateEvaluator.CanSubmitBlockers; en cualquier
@@ -570,7 +576,7 @@ public sealed class TramiteLifecycleService(
 
         var gateErrors = snapshot is not null
             ? EvaluateDynamicSubmit(instance, snapshot, identidadAprobada, docsCompletos)
-            : SubmitGate.Evaluate(instance, identidadAprobada, docsCompletos);
+            : SubmitGate.Evaluate(instance, identidadAprobada, docsCompletos, improntaObligatoria);
         if (gateErrors.Count > 0)
             return (gateErrors[0], DetalleGatePreparacion(gateErrors));
 
