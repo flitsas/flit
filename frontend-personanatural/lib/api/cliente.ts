@@ -156,7 +156,7 @@ export interface EstadoRadicado {
 
 export interface IniciarSesionRequest {
   tipoCodigo: string;
-  /** Lo elige el ciudadano en el paso 1; al abrir la sesión todavía no existe. */
+  /** El que trajo el RUNT y está habilitado. Si no viene, el paso 1 todavía lo pide. */
   organismoId?: string;
   cedula: string;
   placa?: string;
@@ -405,6 +405,8 @@ export interface VehiculoMinimo {
   tienePrenda: boolean;
   tieneLimitacion: boolean;
   tieneRestricciones: boolean;
+  /** Organismo de tránsito que reporta el RUNT. No lo elige la persona. */
+  organismo?: string | null;
 }
 
 /**

@@ -13,7 +13,7 @@ import { useBloqueo } from "@/lib/api/useBloqueo";
 import { fijarContexto } from "@/lib/tramite/contexto";
 import { formatearFechaHora } from "@/lib/formato";
 import { documentoLegible } from "@/lib/tramite/actores";
-import { consentimientoDeConsulta, datosTecnicos, entradaConsulta, filasDiagnostico, organismoElegido, TIPOS_PROPIETARIO, MENSAJE_ATENCION, MENSAJE_RUNT_NO_RESPONDE, MENSAJE_SIN_VEHICULO } from "@/lib/tramite/diagnostico";
+import { consentimientoDeConsulta, datosTecnicos, entradaConsulta, filasDiagnostico, organismoElegido, TIPOS_PROPIETARIO, MENSAJE_ATENCION, MENSAJE_CONSULTANDO_VEHICULO, MENSAJE_RUNT_NO_RESPONDE, MENSAJE_SIN_VEHICULO } from "@/lib/tramite/diagnostico";
 
 interface Resultado {
   vehiculo: VehiculoDelTramite;
@@ -197,7 +197,7 @@ export function ConsultaVehiculo({ activa, intentoAvance, onEstado }: PropsSecci
 
           {consultando && (
             <div className="absolute inset-0 z-10 grid place-items-center rounded-[9px] bg-background/80 backdrop-blur-sm">
-              <MobilityLoader />
+              <MobilityLoader mensaje={MENSAJE_CONSULTANDO_VEHICULO} />
             </div>
           )}
         </div>

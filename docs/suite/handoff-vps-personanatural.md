@@ -60,8 +60,9 @@ En el `.env`: `RABBITMQ_URL_PERSONANATURAL=amqp://personanatural:<clave>@rabbitm
 ## 3. Empresa «Persona Natural», cliente de servicio `svc-personanatural` y fachada
 
 **Primero, la empresa.** Todo trámite del portal nace a nombre de la empresa «Persona Natural» (id fijo
-`00000000-0000-0000-0000-0000000f1171`). Por decisión del PO ya **no** la siembra una migración: se crea una vez por
-ambiente, **antes de encender la fachada**, con un usuario que escriba en `identity.tenants`:
+`00000000-0000-0000-0000-0000000f1171`). La migración `20261029180000_HU14033_EmpresaPersonaNatural` la inserta
+(idempotente: en DEV la fila ya existe y no se modifica). El script de abajo es el mismo INSERT, por si hay que repetirlo a mano
+**antes de encender la fachada**, con un usuario que escriba en `identity.tenants`:
 
 ```
 psql "$CONNECTION_STRING_CORE_ADMIN" -v ON_ERROR_STOP=1 -f deploy/postgres/crear-empresa-persona-natural.sql

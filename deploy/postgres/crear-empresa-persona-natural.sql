@@ -1,8 +1,8 @@
 -- HU #14033 (Feature #14022, Épica #14021 Portal Persona Natural): crea la empresa «Persona Natural».
 --
--- Decisión del PO: la empresa NO se siembra por migración en todos los ambientes. Se crea a mano, una sola vez por
--- ambiente, ANTES de encender la fachada del portal (PERSONA_NATURAL_FACHADA_HABILITADA=true). Ver
--- docs/suite/handoff-vps-personanatural.md, §3.
+-- La siembra vive en la migración 20261029180000_HU14033_EmpresaPersonaNatural (mismo INSERT, idempotente).
+-- Este script queda para repetirlo a mano si hace falta, ANTES de encender la fachada
+-- (PERSONA_NATURAL_FACHADA_HABILITADA=true). Ver docs/suite/handoff-vps-personanatural.md, §3.
 --
 -- Qué hace: inserta UNA fila en identity.tenants con el id fijo de Flit.Platform.Sdk.PlatformTenants.PersonaNatural.
 -- Todo trámite del portal nace a nombre de esta empresa; core-api solo acepta que el servicio del portal
@@ -19,8 +19,8 @@
 -- Qué NO hace: no toca ninguna compañía existente, no concede organismos de tránsito ni módulos a la empresa y no crea
 -- usuarios (los organismos habilitados para el portal se conceden aparte, como a cualquier compañía).
 --
--- Idempotente: si la fila ya existe (mismo id) no cambia nada; correrlo de nuevo es seguro. Los ambientes donde ya la
--- sembró la migración retirada (DDL 152) no necesitan correrlo.
+-- Idempotente: si la fila ya existe (mismo id) no cambia nada; correrlo de nuevo es seguro. La migración
+-- 20261029180000_HU14033_EmpresaPersonaNatural hace este mismo INSERT.
 --
 -- Datos de la fila:
 --   code         lo asigna la secuencia de la Épica #13517 (DEFAULT de identity.tenants.code, COMP-XXXX).

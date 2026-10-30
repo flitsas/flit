@@ -1,7 +1,7 @@
 import { Car } from "lucide-react";
 
 // Cargador del diseño de referencia (transfer-step-trail): el carro orbita; con «reducir movimiento» queda quieto.
-export function MobilityLoader() {
+export function MobilityLoader({ mensaje = "Cargando..." }: { mensaje?: string }) {
   return (
     <div role="status" aria-live="polite" className="flex flex-col items-center gap-5 py-8">
       <div className="mobility-track">
@@ -9,7 +9,7 @@ export function MobilityLoader() {
           <Car aria-hidden className="h-6 w-6 text-accent" />
         </div>
       </div>
-      <p className="text-sm">Cargando...</p>
+      <p className="text-sm">{mensaje}</p>
     </div>
   );
 }

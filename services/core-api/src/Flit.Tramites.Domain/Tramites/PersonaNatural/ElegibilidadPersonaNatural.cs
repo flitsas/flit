@@ -56,7 +56,6 @@ public static class ElegibilidadPersonaNatural
     [
         new("juridica", "exige persona jurídica o NIT", p => TieneAlguno(p, DocumentosJuridica)),
         new("mandato", "exige mandato o tramitador", p => TieneAlguno(p, ["mandato"])),
-        new("impronta", "exige impronta con verificación física", p => TieneAlguno(p, ["impronta"])),
         new("leasing", "exige leasing o locatario", p => p.Perfil.RequiresLessee || TieneAlguno(p, DocumentosLeasing)),
         new("causales", "exige causales de cancelación con documentos externos",
             p => p.DocumentosObligatorios.Any(d => CancelacionCausales.TodosLosDocumentos.Contains(d, StringComparer.OrdinalIgnoreCase))),

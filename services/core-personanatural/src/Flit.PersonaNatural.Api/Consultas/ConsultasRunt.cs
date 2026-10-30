@@ -118,7 +118,7 @@ internal sealed partial class ConsultasRuntGrpc(ConsultasService.ConsultasServic
     private static partial void SinToken(ILogger logger);
 }
 
-/// <summary>Reemplazo cuando no hay dirección de core-consultas: toda consulta es «proveedor no disponible», no un error 500.</summary>
+/// <summary>Reemplazo cuando no hay dirección de core-consultas (<c>Consultas:Remoto:Address</c>): toda consulta es «proveedor no disponible», no un error 500.</summary>
 internal sealed class ConsultasRuntNoConfigurado : IConsultasRunt
 {
     private const string Mensaje = $"No hay dirección de core-consultas ({ConsultasOptions.SectionName}:Address).";

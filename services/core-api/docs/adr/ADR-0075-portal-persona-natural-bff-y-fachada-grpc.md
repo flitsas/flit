@@ -343,9 +343,10 @@ Tras la revisión de código, seguridad y datos de las ramas del portal, el PO d
     (gRPC interno, cliente `svc-tramites`, audiencia `personanatural`, scope `platform.personanatural.leer`, solo solicitudes
     `en_cola`, cada lectura auditada en `pii_access_log`). Así no hay llave de cifrado compartida con core-api ni cifrado en la
     outbox o el broker, fuera de la retención.
-15. **La empresa «Persona Natural» no se siembra por migración.** Se crea al activar el portal con
-    `deploy/postgres/crear-empresa-persona-natural.sql` (paso del handoff), para no aparecer en listados de SuperAdmin de los
-    ambientes donde el portal no está encendido.
+15. **La empresa «Persona Natural» se siembra por migración.** El DDL 152 se retiró y pasó a un script manual
+    para no listarla en ambientes sin portal. En DEV la fila ya existe y el portal funciona con ella, así que vuelve a
+    la migración `20261029180000_HU14033_EmpresaPersonaNatural` (idempotente: si el id ya está, no cambia nada). El
+    script `deploy/postgres/crear-empresa-persona-natural.sql` queda como el mismo INSERT, por si hay que repetirlo a mano.
 16. **Validaciones de identidad sin reutilización ni vigencia** (solo portal): cada trámite pide una nueva a cada parte; las
     consultas de FLIT 2 por documento ignoran las validaciones ancladas al portal (`portal_solicitud_ref`).
 17. **Nombres del esquema `personanatural` en inglés, snake_case, singular** (migración única `ModeloDelPortal`); las

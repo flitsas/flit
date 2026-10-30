@@ -23,6 +23,7 @@ internal static class ResultadosFalsos
         Texto(r, "vehicle_year", "2018");
         Texto(r, "vehicle_service", "PARTICULAR");
         Texto(r, "vehicle_state", "activo");
+        Texto(r, "transit_office_name", "ORGANISMO FICTICIO");
         Texto(r, "vehicle_color", "ROJO");
         Texto(r, "vehicle_fuel", "GASOLINA");
         Texto(r, "vehicle_engine_displacement", "1600");
