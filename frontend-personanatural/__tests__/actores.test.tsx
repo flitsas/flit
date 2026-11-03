@@ -50,12 +50,10 @@ function llenarContacto(card: HTMLElement, correo = "ana@correo.co") {
 /** El vendedor usa la cédula con la que se abrió el trámite: se consulta igual que cualquier persona. */
 function consultarSolicitante(card: HTMLElement) {
   fireEvent.change(within(card).getByLabelText(/Número de documento/), { target: { value: CEDULA_SOLICITANTE } });
-  fireEvent.click(within(card).getByRole("button", { name: /^Consultar/ }));
 }
 
 async function consultarTercero(card: HTMLElement, documento: string) {
   fireEvent.change(within(card).getByLabelText(/Número de documento/), { target: { value: documento } });
-  fireEvent.click(within(card).getByRole("button", { name: /^Consultar/ }));
   await waitFor(() => expect(within(card).getByLabelText(/Teléfono/)).toBeEnabled());
 }
 
@@ -75,7 +73,6 @@ const detalle = (extra: Record<string, unknown> = {}) =>
   });
 const consultar = (card: HTMLElement, documento = "52123456") => {
   fireEvent.change(within(card).getByLabelText(/Número de documento/), { target: { value: documento } });
-  fireEvent.click(within(card).getByRole("button", { name: /^Consultar/ }));
 };
 
 afterEach(() => {
@@ -91,7 +88,7 @@ describe("Paso 2 · una tarjeta por rol de la definición (F3 AC1, K5 AC1 y AC2)
     expect(within(comprador).getByLabelText("Tipo de documento")).toHaveValue("CC");
     expect(within(comprador).getByLabelText(/Número de documento/)).toBeEnabled();
     for (const campo of [/Nombre completo/, /Teléfono/, /Correo electrónico/, /^Ciudad/, /Dirección/]) expect(within(comprador).getByLabelText(campo)).toBeDisabled();
-    expect(within(comprador).getByRole("button", { name: /^Consultar/ })).toBeInTheDocument();
+    expect(within(comprador).queryByRole("button", { name: /^Consultar/ })).toBeNull();
     expect(continuar()).toBeDisabled();
     expect(screen.getByText("Completa los datos de Propietario (vendedor).")).toBeInTheDocument();
   });
@@ -196,7 +193,7 @@ describe("validación de formato y consulta del documento (F3 AC1 y AC2, K5 AC5)
     expect(within(card).getByText(/Multas: pendientes \(2\)/i)).toBeInTheDocument();
   });
 
-  it("si el borrador ya trae comprador sin consulta RUNT, deja editar documento y muestra Consultar", async () => {
+  it("si el borrador ya trae comprador sin consulta RUNT, lo consulta solo, sin botón Consultar", async () => {
     const solicitud = solicitudDe({
       ...guardado(DIAGNOSTICO_OK),
       actores: [
@@ -204,7 +201,7 @@ describe("validación de formato y consulta del documento (F3 AC1 y AC2, K5 AC5)
         guardadoActor("comprador", "1098765432", "Parte invitada", "pendiente"),
       ],
     });
-    await abrir(
+    const { llamadas } = await abrir(
       {
         "GET /solicitudes/s-1": () => json(solicitud),
         "GET /solicitudes/s-1/identidad": () =>
@@ -213,10 +210,10 @@ describe("validación de formato y consulta del documento (F3 AC1 y AC2, K5 AC5)
       solicitud,
     );
     const card = tarjeta("Comprador");
-    expect(within(card).getByLabelText(/Número de documento/)).toBeEnabled();
-    expect(within(card).getByLabelText("Tipo de documento")).toBeEnabled();
-    expect(within(card).getByRole("button", { name: /Consultar comprador/i })).toBeInTheDocument();
-    expect(within(card).getByRole("button", { name: /Reenviar Validación/i })).toBeDisabled();
+    await waitFor(() => expect(within(card).getByText("Inscrito en RUNT")).toBeInTheDocument());
+    expect(within(card).getByLabelText(/Nombre completo/)).toHaveValue("Parte invitada");
+    expect(llamadas.filter((l) => l.clave === RUTA_DETALLE)).toHaveLength(1);
+    expect(within(card).queryByRole("button", { name: /Consultar/i })).toBeNull();
   });
 
   it("con la identidad pendiente el nombre consultado se muestra completo", async () => {
@@ -261,7 +258,7 @@ describe("validación de formato y consulta del documento (F3 AC1 y AC2, K5 AC5)
 
     expect(within(card).getByLabelText(/Número de documento/)).toBeEnabled();
     expect(within(card).getByLabelText(/Nombre completo/)).toHaveValue("");
-    expect(within(card).getByRole("button", { name: /^Consultar/ })).toBeInTheDocument();
+    expect(within(card).queryByRole("button", { name: /^Consultar/ })).toBeNull();
   });
 
   it("429 detalle_agotado degrada a captura manual con el aviso, sin bloquear la consulta", async () => {
@@ -281,7 +278,7 @@ describe("validación de formato y consulta del documento (F3 AC1 y AC2, K5 AC5)
 
     expect(await within(card).findByText(/máximo de consultas por hora para este documento/)).toBeInTheDocument();
     expect(within(card).getByText(/Podrás intentarlo de nuevo en/)).toBeInTheDocument();
-    expect(within(card).getByRole("button", { name: /^Consultar/ })).toBeDisabled();
+    expect(within(card).queryByRole("button", { name: /^Consultar/ })).toBeNull();
     expect(within(card).getByLabelText(/Teléfono/)).toBeDisabled();
   });
 
@@ -331,7 +328,7 @@ describe("validación de formato y consulta del documento (F3 AC1 y AC2, K5 AC5)
     const card = tarjeta("Comprador");
     fireEvent.change(within(card).getByLabelText("Tipo de documento"), { target: { value: "NIT" } });
     fireEvent.change(within(card).getByLabelText(/Número de documento/), { target: { value: "900123456" } });
-    fireEvent.click(within(card).getByRole("button", { name: /^Consultar/ }));
+    await new Promise((r) => setTimeout(r, 700));
 
     expect(within(card).getByText("Este trámite no admite personas jurídicas en este rol")).toBeInTheDocument();
     expect(within(card).getByLabelText(/Número de documento/)).toHaveAttribute("aria-invalid", "true");
@@ -350,6 +347,89 @@ describe("validación de formato y consulta del documento (F3 AC1 y AC2, K5 AC5)
     expect(within(card).getByText("Este trámite no admite personas jurídicas en este rol")).toBeInTheDocument();
     expect(screen.getByText(/no se puede continuar con este trámite en línea/)).toBeInTheDocument();
     expect(continuar()).toBeDisabled();
+  });
+});
+
+describe("consulta automática del documento (HU #14269)", () => {
+  const consultas = (llamadas: { clave: string }[]) => llamadas.filter((l) => l.clave === RUTA_DETALLE).length;
+  const esperar = (ms: number) =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, ms));
+    });
+  const documento = (card: HTMLElement) => within(card).getByLabelText(/Número de documento/);
+
+  it("no ofrece el botón Consultar y, mientras consulta, avisa con aria-busy y un estado para lectores de pantalla", async () => {
+    let resolver: (r: Response) => void = () => undefined;
+    const pendiente = new Promise<Response>((r) => (resolver = r));
+    await abrir({ [RUTA_DETALLE]: () => pendiente });
+    const card = tarjeta("Comprador");
+    fireEvent.change(documento(card), { target: { value: "52123456" } });
+
+    expect(await within(card).findByText("Consultando el documento...")).toHaveAttribute("role", "status");
+    expect(documento(card)).toHaveAttribute("aria-busy", "true");
+    expect(within(card).queryByRole("button", { name: /^Consultar/ })).toBeNull();
+    resolver(detalle());
+    await waitFor(() => expect(within(card).queryByText("Consultando el documento...")).toBeNull());
+  });
+
+  it("al terminar de escribir consulta una sola vez, con el último documento", async () => {
+    const { llamadas } = await abrir();
+    const card = tarjeta("Comprador");
+    for (const v of ["5212", "521234", "52123456"]) fireEvent.change(documento(card), { target: { value: v } });
+    await waitFor(() => expect(within(card).getByLabelText(/Teléfono/)).toBeEnabled());
+
+    expect(consultas(llamadas)).toBe(1);
+    const llamada = llamadas.find((l) => l.clave === RUTA_DETALLE);
+    expect(JSON.parse(String(llamada?.init.body))).toMatchObject({ tipoDocumento: "CC", documento: "52123456", rol: "comprador" });
+  });
+
+  it("un documento incompleto o vacío no consulta y muestra la validación del campo", async () => {
+    const { llamadas } = await abrir();
+    const card = tarjeta("Comprador");
+    fireEvent.change(documento(card), { target: { value: "12" } });
+    fireEvent.blur(documento(card));
+    await esperar(700);
+
+    expect(consultas(llamadas)).toBe(0);
+    expect(within(card).getByText("El número de documento debe tener entre 4 y 15 dígitos")).toBeInTheDocument();
+    fireEvent.change(documento(card), { target: { value: "" } });
+    await esperar(700);
+    expect(consultas(llamadas)).toBe(0);
+    expect(within(card).getByText("Escribe el número de documento")).toBeInTheDocument();
+  });
+
+  it("si la consulta falla muestra el motivo junto al campo, no repite sola y reintenta al cambiar el documento", async () => {
+    let falla = true;
+    const { llamadas } = await abrir({ [RUTA_DETALLE]: () => (falla ? problema(422, "rol_invalido") : detalle()) });
+    const card = tarjeta("Comprador");
+    fireEvent.change(documento(card), { target: { value: "52123456" } });
+
+    expect(await within(card).findByText("Este trámite no admite a esta persona en ese rol.")).toBeInTheDocument();
+    expect(documento(card)).toHaveAttribute("aria-invalid", "true");
+    await esperar(800);
+    expect(consultas(llamadas)).toBe(1);
+
+    falla = false;
+    fireEvent.change(documento(card), { target: { value: "52123457" } });
+    await waitFor(() => expect(within(card).getByLabelText(/Teléfono/)).toBeEnabled());
+    expect(consultas(llamadas)).toBe(2);
+    expect(within(card).queryByText("Este trámite no admite a esta persona en ese rol.")).toBeNull();
+  });
+
+  it("si el documento cambia mientras consulta, la respuesta anterior se descarta", async () => {
+    const resolvers: Array<(r: Response) => void> = [];
+    await abrir({ [RUTA_DETALLE]: () => new Promise<Response>((r) => resolvers.push(r)) });
+    const card = tarjeta("Comprador");
+    fireEvent.change(documento(card), { target: { value: "52123456" } });
+    await waitFor(() => expect(resolvers).toHaveLength(1));
+    fireEvent.change(documento(card), { target: { value: "52123457" } });
+    await waitFor(() => expect(resolvers).toHaveLength(2));
+
+    await act(async () => {
+      resolvers[0]!(detalle({ nombreCompleto: "PERSONA VIEJA" }));
+      resolvers[1]!(detalle({ nombreCompleto: "PERSONA NUEVA" }));
+    });
+    await waitFor(() => expect(within(card).getByLabelText(/Nombre completo/)).toHaveValue("PERSONA NUEVA"));
   });
 });
 
@@ -460,7 +540,6 @@ describe("validación de identidad por actor (F3 AC5 y AC6, K5 AC3)", () => {
     fireEvent.click(within(copro).getByRole("button", { name: "Agregar Copropietario" }));
     const grupo = within(copro).getByRole("group", { name: "Copropietario" });
     fireEvent.change(within(grupo).getByLabelText(/Número de documento/), { target: { value: CEDULA_SOLICITANTE } });
-    fireEvent.click(within(grupo).getByRole("button", { name: /^Consultar/ }));
     await waitFor(() => expect(within(grupo).getByLabelText(/Teléfono/)).toBeEnabled());
 
     expect(within(grupo).queryByText(/Validación:/)).toBeNull();

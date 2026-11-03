@@ -67,6 +67,14 @@ interface Props {
 }
 
 const SEGUNDOS_ENTRE_REENVIOS = 60;
+/** Espera tras la última tecla antes de consultar sola el documento que se está escribiendo. */
+export const ESPERA_CONSULTA_AUTOMATICA_MS = 500;
+
+interface PeticionConsulta {
+  tipoDocumento: TipoDocumento;
+  documento: string;
+  signal: AbortSignal;
+}
 const AVISO_ENLACE_MS = 8000;
 
 /** Una persona (actor) dentro de la tarjeta de su rol: documento y consulta, contacto, dirección y validación de identidad. */
@@ -121,13 +129,18 @@ export function PersonaActor({
   // ── Consulta del documento ──────────────────────────────────────────────────────────────────────────────────────────
 
   // La consulta lleva el rol de la tarjeta y la sesión de la solicitud (sin captcha); devuelve los nombres para rellenar al actor.
-  const consulta = useMutation<PersonaDetalle, unknown, void>({
-    mutationFn: () =>
-      cliente.consultas.personaDetalle(solicitudId, { tipoDocumento: fila.tipoDocumento, documento: fila.numeroDocumento, rol: fila.rol, ...consentimientoDeConsulta }),
-    onSuccess: (r) => {
+  // Se dispara sola (sin botón): al llegar con el documento diligenciado y al terminar de escribir uno válido.
+  const filaActual = useRef(fila);
+  filaActual.current = fila;
+  const consulta = useMutation<PersonaDetalle, unknown, PeticionConsulta>({
+    mutationFn: ({ tipoDocumento, documento, signal }) =>
+      cliente.consultas.personaDetalle(solicitudId, { tipoDocumento, documento, rol: fila.rol, ...consentimientoDeConsulta }, { signal }),
+    onSuccess: (r, { signal }) => {
+      if (signal.aborted) return; // el documento cambió mientras consultaba: esta respuesta ya no aplica
       setErrorConsulta(null);
       const nombre = (r.existe ? (r.nombreCompleto ?? [r.nombres, r.apellidos].filter(Boolean).join(" ")) : "").trim();
-      const ciudad = r.ciudad ? ciudadCanonica(r.ciudad) ?? "" : "";
+      // No se pisa una ciudad que la persona ya había escrito.
+      const ciudad = r.ciudad && !filaActual.current.ciudad ? ciudadCanonica(r.ciudad) ?? "" : "";
       const licencia =
         r.existe && (r.estadoLicencia || r.vigenciaLicencia)
           ? { estado: r.estadoLicencia ?? null, vigencia: r.vigenciaLicencia ?? null }
@@ -140,13 +153,16 @@ export function PersonaActor({
       };
       if (nombre) {
         setAvisoManual(null);
-        onCambio({ consultado: true, nombreConsultado: true, nombre, licencia, runt, ...(ciudad ? { ciudad } : {}) });
+        // Una persona ya guardada con su nombre (borrador reabierto) conserva lo que tenía: la consulta solo completa el RUNT.
+        const conservaNombre = filaActual.current.consultado && filaActual.current.nombre.trim() !== "";
+        onCambio({ consultado: true, ...(conservaNombre ? {} : { nombreConsultado: true, nombre }), licencia, runt, ...(ciudad ? { ciudad } : {}) });
       } else {
         setAvisoManual("No se encontró en RUNT. Corrige el documento e intenta de nuevo; sin inscripción RUNT no puedes continuar con esta persona.");
         onCambio({ consultado: true, nombreConsultado: false, nombre: "", licencia: null, runt, ...(ciudad ? { ciudad } : {}) });
       }
     },
-    onError: (e) => {
+    onError: (e, { signal }) => {
+      if (signal.aborted) return;
       reportarError(e);
       if (e instanceof ApiError && e.code === "detalle_agotado") {
         // Sin consultas disponibles: se sigue a mano, como cuando no hay coincidencia.
@@ -158,14 +174,6 @@ export function PersonaActor({
       setErrorConsulta(mensajeDe(e));
     },
   });
-
-  const alConsultar = () => {
-    tocar("numeroDocumento");
-    setErrorConsulta(null);
-    // Persona jurídica o un número mal formado: el error ya está a la vista y no hay nada que consultar.
-    if (errores.numeroDocumento && errores.numeroDocumento !== MENSAJE_CONSULTAR) return;
-    consulta.mutate();
-  };
 
   // ── Validación de identidad ─────────────────────────────────────────────────────────────────────────────────────────
 
@@ -267,7 +275,43 @@ export function PersonaActor({
   const puedeCambiarDocumento = fila.consultado && !identidadAprobada && !esPropietario;
   // Mostrar Consultar si no hay ficha o si el borrador trae datos guardados sin haber pasado por RUNT.
   const faltaConsultaRunt = fila.consultado && fila.runt === null && !identidadAprobada && !esPropietario;
-  const muestraConsultar = (!fila.consultado || faltaConsultaRunt) && !identidadAprobada;
+
+  // ── Consulta automática del documento ───────────────────────────────────────────────────────────────────────────────
+  const claveDoc = `${fila.tipoDocumento}|${fila.numeroDocumento}`;
+  const formatoValido = !errores.numeroDocumento || errores.numeroDocumento === MENSAJE_CONSULTAR;
+  const consultable = formatoValido && !identidadAprobada && !juridica && (!fila.consultado || faltaConsultaRunt) && !bloqueoConsulta.bloqueado;
+  const claveVista = useRef<string | null>(null);
+  const claveConsultada = useRef<string | null>(null);
+  const controlador = useRef<AbortController | null>(null);
+  const montado = useRef(false);
+  const consultar = consulta.mutate;
+  useEffect(() => {
+    montado.current = true;
+    return () => {
+      montado.current = false;
+      controlador.current?.abort();
+    };
+  }, []);
+  useEffect(() => {
+    if (claveVista.current !== claveDoc) {
+      // Documento distinto: lo que iba en vuelo ya no sirve y el nuevo vuelve a poder consultarse.
+      claveVista.current = claveDoc;
+      claveConsultada.current = null;
+      controlador.current?.abort();
+      controlador.current = null;
+    }
+    if (!consultable || claveConsultada.current === claveDoc) return;
+    const tipoDocumento = fila.tipoDocumento;
+    const documento = fila.numeroDocumento;
+    const temporizador = setTimeout(() => {
+      claveConsultada.current = claveDoc;
+      const c = new AbortController();
+      controlador.current = c;
+      setErrorConsulta(null);
+      consultar({ tipoDocumento, documento, signal: c.signal });
+    }, montado.current ? ESPERA_CONSULTA_AUTOMATICA_MS : 0);
+    return () => clearTimeout(temporizador);
+  }, [claveDoc, consultable, consultar, fila.tipoDocumento, fila.numeroDocumento]);
   const fichaPropietario = esPropietario && fila.consultado;
 
   return (
@@ -328,7 +372,8 @@ export function PersonaActor({
               className="field pl-10"
               inputMode="numeric"
               autoComplete="off"
-              placeholder="Consulta el documento"
+              placeholder="Escribe el documento"
+              aria-busy={consulta.isPending || undefined}
               disabled={fila.consultado && !faltaConsultaRunt}
               readOnly={fila.consultado && !faltaConsultaRunt ? true : undefined}
               aria-invalid={error("numeroDocumento") || errorConsulta ? true : undefined}
@@ -339,14 +384,17 @@ export function PersonaActor({
               }}
               onBlur={() => tocar("numeroDocumento")}
             />
+            {consulta.isPending && (
+              <>
+                <span aria-hidden className="mobility-mini absolute right-3 top-1/2 -translate-y-1/2" />
+                <span role="status" className="sr-only">
+                  Consultando el documento...
+                </span>
+              </>
+            )}
           </div>
         </Field>
         <div className="flex flex-wrap items-end gap-2">
-          {muestraConsultar && (
-            <Btn onClick={alConsultar} disabled={consulta.isPending || bloqueoConsulta.bloqueado}>
-              {consulta.isPending ? "Consultando..." : esPropietario ? "Consultar" : `Consultar ${(titulo ?? rol.etiqueta).toLowerCase()}`}
-            </Btn>
-          )}
           {puedeCambiarDocumento && !faltaConsultaRunt && (
             <Btn tone="secondary" onClick={() => {
                 setAvisoManual(null);
