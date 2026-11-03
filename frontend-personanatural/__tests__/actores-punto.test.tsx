@@ -1,7 +1,8 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ActoresPunto } from "@/components/punto/ActoresPunto";
 import type { ClientePortal, EstadoIdentidad, Solicitud } from "@/lib/api/cliente";
+import { ApiError } from "@/lib/api/errores";
 import { renderConQuery } from "./utilidades";
 
 const ESTADO_APROBADO: EstadoIdentidad = {
@@ -141,5 +142,86 @@ describe("ActoresPunto — fichas portal + reanudación", () => {
     expect(within(titular).getByLabelText(/Número de documento/i)).toHaveAttribute("readonly");
     const continuar = await screen.findByRole("button", { name: /Continuar/i });
     await waitFor(() => expect(continuar).toBeEnabled());
+  });
+});
+
+const SIN_SOLICITAR: EstadoIdentidad = {
+  solicitudId: "sol-1",
+  completa: false,
+  partes: [{ parte: "vendedor", ordinal: 1, estado: "sin_solicitar", puedeReenviar: false, reenviosRestantes: 5, esperaSegundos: 0 }],
+};
+
+/** Sin sesión previa al abrir; después, el estado de la identidad del radicante. */
+function estadoTrasAbrir(despues: EstadoIdentidad) {
+  let llamadas = 0;
+  return vi.fn(async () => {
+    llamadas += 1;
+    if (llamadas === 1) throw new Error("sin sesión");
+    return despues;
+  });
+}
+
+function montarPunto(cliente: ClientePortal, onAviso = vi.fn()) {
+  renderConQuery(
+    <ActoresPunto
+      cliente={cliente}
+      placa="XJI21G"
+      documento="1037669356"
+      tipoCodigo="TRASPASO"
+      onAtras={() => undefined}
+      onContinuarRequisitos={() => undefined}
+      onAviso={onAviso}
+    />,
+  );
+  return onAviso;
+}
+
+describe("ActoresPunto — épica #14185: identidad de quien radica", () => {
+  it("al entrar lanza sola la identidad in-situ, sin botón de validar ni invitaciones", async () => {
+    const radicante = vi.fn(async () => ({ parte: "vendedor", ordinal: 1, estado: "pendiente", capturaUrl: "https://verify.example/x" }));
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    montarPunto(clienteMock({ estado: estadoTrasAbrir(SIN_SOLICITAR), radicante }));
+    await waitFor(() => expect(radicante).toHaveBeenCalledTimes(1));
+    expect(openSpy).toHaveBeenCalledWith("https://verify.example/x", "_blank", "noopener,noreferrer");
+    expect(await screen.findByText(/Validando tu identidad/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Validar identidad en el punto|Enviar validación|Reenviar/i })).toBeNull();
+    expect(screen.queryByRole("region", { name: /^Comprador$/i })).toBeNull();
+    expect(screen.getByRole("button", { name: /Continuar/i })).toBeDisabled();
+    openSpy.mockRestore();
+  });
+
+  it("no dueño: informa, sin invitaciones, sin lanzar identidad ni Continuar", async () => {
+    const radicante = vi.fn();
+    const abrir = vi.fn(async () => ({ solicitudId: "x", puedeSerRadicante: false, message: "No puedes realizar este trámite porque no eres el propietario del vehículo." }));
+    montarPunto(clienteMock({ abrir, radicante }));
+    expect(await screen.findByText(/no eres el propietario del vehículo/i)).toBeInTheDocument();
+    expect(radicante).not.toHaveBeenCalled();
+    expect(screen.queryByRole("region", { name: /^Comprador$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Continuar$/i })).toBeNull();
+  });
+
+  it("si la identidad falla informa el motivo (aviso) y permite Reintentar, sin invitaciones", async () => {
+    const radicante = vi
+      .fn()
+      .mockRejectedValueOnce(new ApiError("proveedor_rechazo", "El proveedor rechazó la validación.", 422))
+      .mockResolvedValue({ parte: "vendedor", ordinal: 1, estado: "pendiente", capturaUrl: null });
+    const onAviso = montarPunto(clienteMock({ estado: estadoTrasAbrir(SIN_SOLICITAR), radicante }));
+    expect(await screen.findByText(/El proveedor rechazó la validación/i)).toBeInTheDocument();
+    expect(onAviso).toHaveBeenCalledWith("No pudimos validar tu identidad", expect.stringMatching(/rechaz/i), "alerta");
+    expect(screen.queryByRole("region", { name: /^Comprador$/i })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Reintentar/i }));
+    await waitFor(() => expect(radicante).toHaveBeenCalledTimes(2));
+  });
+
+  it("el radicante no necesita correo ni celular: un correo con ñ avisa pero no bloquea ni se envía", async () => {
+    const radicante = vi.fn(async () => ({ parte: "vendedor", ordinal: 1, estado: "pendiente", capturaUrl: null }));
+    const conCorreo = {
+      ...SOLICITUD,
+      actores: [{ ...SOLICITUD.actores[0], correo: "wiññyn@flitsas.com", celular: "" }],
+    } as unknown as Solicitud;
+    montarPunto(clienteMock({ estado: estadoTrasAbrir(SIN_SOLICITAR), radicante, obtener: async () => conCorreo }));
+    await waitFor(() => expect(radicante).toHaveBeenCalled());
+    const llamada = (radicante.mock.calls[0] as unknown[])[0] as { correo?: string };
+    expect(llamada.correo).toBeUndefined();
   });
 });

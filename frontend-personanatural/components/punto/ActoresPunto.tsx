@@ -20,6 +20,7 @@ import type {
   Solicitud,
 } from "@/lib/api/cliente";
 import { mensajeDeFallo } from "@/lib/api/errores";
+import { correoSeguro } from "@/lib/punto/contacto";
 import {
   actoresParaGuardar,
   estadoDeFila,
@@ -121,6 +122,10 @@ export function ActoresPunto({
   const [intentoAvance, setIntentoAvance] = useState(0);
   const [copiado, setCopiado] = useState<string | null>(null);
   const [versionEstado, setVersionEstado] = useState(0);
+  const [lanzando, setLanzando] = useState(false);
+  const [falloIdentidad, setFalloIdentidad] = useState<string | null>(null);
+  const [esperandoIdentidad, setEsperandoIdentidad] = useState(false);
+  const lanzado = useRef<string | null>(null);
   const vivo = useRef(true);
   const generacion = useRef(0);
   const sondeo = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -260,7 +265,8 @@ export function ActoresPunto({
     if (delRol.length === 0) return;
     const actualizada = await cliente.solicitudes.guardarActores(fase.solicitudId, {
       version: versionRef.current,
-      actores: actoresParaGuardar(delRol),
+      // Un correo con caracteres no permitidos (dato de origen dañado) no se guarda.
+      actores: actoresParaGuardar(delRol).map((a) => ({ ...a, correo: correoSeguro(a.correo) ?? "" })),
     });
     versionRef.current = actualizada.version;
     setFase((prev) => (prev.tipo === "listo" ? { ...prev, version: actualizada.version } : prev));
@@ -276,11 +282,11 @@ export function ActoresPunto({
       ordinal: 1,
       tipoDocumento: fila.tipoDocumento,
       documento: fila.numeroDocumento,
-      nombre: fila.nombre,
-      correo: fila.correo,
-      celular: fila.celular,
-      direccion: fila.direccion,
-      ciudad: fila.ciudad,
+      nombre: fila.nombre || undefined,
+      correo: correoSeguro(fila.correo),
+      celular: fila.celular || undefined,
+      direccion: fila.direccion || undefined,
+      ciudad: fila.ciudad || undefined,
     });
     setFase((prev) =>
       prev.tipo === "listo" ? { ...prev, capturaUrlVendedor: resultado.capturaUrl ?? prev.capturaUrlVendedor } : prev,
@@ -288,6 +294,46 @@ export function ActoresPunto({
     await refrescarEstado(fase.solicitudId);
     return resultado;
   };
+
+  // La identidad de quien radica se lanza sola al entrar (in-situ, sin enlace ni botón de envío).
+  const lanzarIdentidad = async () => {
+    setLanzando(true);
+    setFalloIdentidad(null);
+    setEsperandoIdentidad(false);
+    try {
+      const resultado = await validarRadicante();
+      setEsperandoIdentidad(true);
+      if (resultado.capturaUrl) window.open(resultado.capturaUrl, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      const mensaje = mensajeDeFallo(err);
+      setFalloIdentidad(mensaje);
+      onAviso("No pudimos validar tu identidad", mensaje, "alerta");
+    } finally {
+      setLanzando(false);
+    }
+  };
+
+  const parteRadicante = fase.tipo === "listo" && rolRadicante ? fase.estado.partes.find((p) => p.parte === rolRadicante.rol) : undefined;
+  const estadoRadicante = parteRadicante?.estado;
+  const hayFila = Boolean(rolRadicante && filas.some((f) => f.rol === rolRadicante.rol && f.ordinal === 1));
+  const solicitudListaId = fase.tipo === "listo" ? fase.solicitudId : null;
+  const lanzar = useRef(lanzarIdentidad);
+  useEffect(() => {
+    lanzar.current = lanzarIdentidad;
+  });
+  useEffect(() => {
+    if (!solicitudListaId || !hayFila || radicanteOk) return;
+    if (estadoRadicante && estadoRadicante !== "sin_solicitar") return;
+    if (lanzado.current === solicitudListaId) return;
+    lanzado.current = solicitudListaId;
+    void lanzar.current();
+  }, [solicitudListaId, hayFila, radicanteOk, estadoRadicante]);
+  const falloVisible =
+    falloIdentidad ??
+    (estadoRadicante === "rechazada" || estadoRadicante === "vencida"
+      ? `Tu identidad no quedó validada (${estadoRadicante === "vencida" ? "venció" : "fue rechazada"}). Vuelve a intentarlo.`
+      : null);
+  const identificando = !radicanteOk && !falloVisible && (lanzando || esperandoIdentidad || estadoRadicante === "pendiente" || estadoRadicante === "pendiente_envio");
 
   const validarInvitado = async (rol: ActorRol): Promise<{ estado: string; capturaUrl?: string | null }> => {
     if (fase.tipo !== "listo" || !rolRadicante) throw new Error("Sesión no lista");
@@ -391,6 +437,20 @@ export function ActoresPunto({
             </div>
           )}
 
+          {identificando && <MobilityLoader mensaje={MENSAJE_VALIDANDO} />}
+
+          {falloVisible && !radicanteOk && (
+            <div role="alert" className="flex flex-col gap-3 rounded-[9px] p-4" style={{ backgroundColor: `${COLOR_ERROR}18` }} id="punto-actores-identidad-fallo">
+              <p className="flex gap-2 font-medium" style={{ color: COLOR_ERROR }}>
+                <AlertTriangle aria-hidden className="h-5 w-5 shrink-0" />
+                <span>{falloVisible}</span>
+              </p>
+              <button type="button" className={boton("flit", "min-h-11 px-6", "none")} disabled={lanzando} onClick={() => void lanzarIdentidad()}>
+                Reintentar
+              </button>
+            </div>
+          )}
+
           {!radicanteOk && fase.capturaUrlVendedor && (
             <p className="text-sm text-muted-foreground">
               Completa la validación en la ventana abierta.{" "}
@@ -421,14 +481,14 @@ export function ActoresPunto({
                     guardarRol={() => guardarRol(rolRadicante.rol)}
                     refrescarIdentidad={() => void refrescarEstado(fase.solicitudId)}
                     reportarError={(err) => onAviso("No pudimos continuar", mensajeDeFallo(err), "alerta")}
+                    radicantePunto
                     onValidarIdentidad={validarRadicante}
-                    textoBotonValidar="Validar identidad en el punto"
                   />
                 ))}
             </Card>
           )}
 
-          {invitables.map((rolInv) => {
+          {radicanteOk && invitables.map((rolInv) => {
             const invitacion = fase.invitaciones[rolInv.rol];
             return (
               <Card key={rolInv.rol} title={rolInv.etiqueta} id={`punto-actores-${rolInv.rol}`}>

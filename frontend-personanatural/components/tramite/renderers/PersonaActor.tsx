@@ -26,6 +26,7 @@ import {
 import { ciudadCanonica, filtrarCiudades } from "@/lib/catalogos/ciudades";
 import { consentimientoDeConsulta } from "@/lib/tramite/diagnostico";
 import { formatearFecha } from "@/lib/formato";
+import { erroresRadicantePunto } from "@/lib/punto/contacto";
 
 interface Props {
   fila: FilaActor;
@@ -72,6 +73,8 @@ interface Props {
   textoBotonValidar?: string;
   /** Si false, el botón de validación queda deshabilitado (p. ej. invitaciones gated). */
   puedeValidarIdentidad?: boolean;
+  /** Canal del punto, quien radica: su identidad se lanza sola in-situ (sin botones ni reenvíos) y correo/celular son opcionales. */
+  radicantePunto?: boolean;
 }
 
 const SEGUNDOS_ENTRE_REENVIOS = 60;
@@ -113,6 +116,7 @@ export function PersonaActor({
   onValidarIdentidad,
   textoBotonValidar,
   puedeValidarIdentidad = true,
+  radicantePunto = false,
 }: Props) {
   const [tocados, setTocados] = useState<Partial<Record<CampoActor, boolean>>>({});
   const [errorConsulta, setErrorConsulta] = useState<string | null>(null);
@@ -125,13 +129,15 @@ export function PersonaActor({
   const esperaReenvio = useBloqueo();
   const idCampo = (n: string) => `${fila.clave}-${n}`;
 
-  const errores = validarFila(fila, rol);
+  const erroresBase = validarFila(fila, rol);
+  const errores = radicantePunto ? erroresRadicantePunto(erroresBase, fila.correo) : erroresBase;
   const juridica = !rol.personaNaturalPermitida || fila.tipoDocumento === "NIT";
   const error = (campo: CampoActor): string | undefined => {
     const delServidor = erroresServidor?.[campo] ?? (campo === "correo" || campo === "celular" ? errorContacto[campo] : undefined);
     if (delServidor) return delServidor;
     const e = errores[campo];
     if (!e) return undefined;
+    if (campo === "correo" && radicantePunto) return e; // el dato dañado se señala de inmediato
     if (campo === "numeroDocumento") {
       if (juridica) return e; // el aviso de persona jurídica sale de inmediato
       if (e === MENSAJE_CONSULTAR) return mostrarErrores ? e : undefined;
@@ -455,7 +461,7 @@ export function PersonaActor({
         </Field>
           </>
         )}
-        <Field label="Teléfono *" error={error("celular")}>
+        <Field label={radicantePunto ? "Teléfono" : "Teléfono *"} error={error("celular")}>
           <input
             className="field"
             inputMode="numeric"
@@ -470,7 +476,7 @@ export function PersonaActor({
             onBlur={() => tocar("celular")}
           />
         </Field>
-        <Field label="Correo electrónico *" error={error("correo")}>
+        <Field label={radicantePunto ? "Correo electrónico" : "Correo electrónico *"} error={error("correo")}>
           <input
             className="field"
             type="email"
@@ -528,8 +534,8 @@ export function PersonaActor({
           {etiquetaMultas && (
             <Badge tone={fila.runt?.multasPendientes ? "warning" : "success"}>{etiquetaMultas}</Badge>
           )}
-          {pideIdentidad && <Badge tone={TONO_VALIDACION(estado)}>Validación: {ETIQUETA_VALIDACION[estado] ?? estado}</Badge>}
-          {pideIdentidad && estado !== "aprobada" && (
+          {pideIdentidad && !radicantePunto && <Badge tone={TONO_VALIDACION(estado)}>Validación: {ETIQUETA_VALIDACION[estado] ?? estado}</Badge>}
+          {pideIdentidad && !radicantePunto && estado !== "aprobada" && (
             <span className="ml-auto flex flex-wrap items-center gap-3">
               {enCurso(estado) && parte && !reenviosAgotados && <span className="text-xs font-light text-muted-foreground">Te quedan {parte.reenviosRestantes} reenvíos</span>}
               {enCurso(estado) && esperaReenvio.bloqueado && <span className="text-xs font-light text-muted-foreground">Podrás reenviar en {esperaReenvio.segundosRestantes} s</span>}
