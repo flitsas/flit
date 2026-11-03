@@ -48,6 +48,8 @@ export interface ApiWizard {
   canal?: "punto";
   /** Avalúo sugerido (Fasecolda) que el canal del punto precarga en «Datos comerciales»; `null` si no hay. */
   avaluoSugerido?: number | null;
+  /** Al cerrar la confirmación («Ir al Dashboard»): el punto vuelve a su inicio en lugar de ir a la landing del portal. */
+  alTerminar?: () => void;
 }
 
 const Contexto = createContext<ApiWizard | null>(null);

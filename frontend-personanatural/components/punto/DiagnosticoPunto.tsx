@@ -6,6 +6,7 @@ import { AlertTriangle, Car, Check } from "lucide-react";
 import { MobilityLoader } from "@/components/MobilityLoader";
 import { boton } from "@/components/landing/estilos";
 import { ActoresPunto } from "@/components/punto/ActoresPunto";
+import { EnvioPunto } from "@/components/punto/EnvioPunto";
 import { RequisitosPunto } from "@/components/punto/RequisitosPunto";
 import { Badge, Card, Nav, Row } from "@/components/tramite/piezas";
 import type { ClientePortal, Diagnostico, ResultadoVehiculoPunto, VehiculoDelTramite } from "@/lib/api/cliente";
@@ -29,7 +30,7 @@ const PASOS = [
   { id: "envio", titulo: "Envío", miga: "Confirmación" },
 ] as const;
 
-type FasePaso = "diagnostico" | "actores" | "requisitos" | "pago";
+type FasePaso = "diagnostico" | "actores" | "requisitos" | "resumen" | "envio";
 
 type EstadoCarga =
   | { fase: "cargando" }
@@ -81,7 +82,7 @@ export function DiagnosticoPunto({
   const tituloRef = useRef<HTMLHeadingElement | null>(null);
   const tipoNombre = nombreDelTipo?.trim() || tipoCodigo;
   const indicePaso =
-    paso === "diagnostico" ? 0 : paso === "actores" ? 1 : paso === "requisitos" ? 2 : 3;
+    paso === "diagnostico" ? 0 : paso === "actores" ? 1 : paso === "requisitos" ? 2 : paso === "resumen" ? 3 : 4;
 
   async function cargar() {
     const id = ++intento.current;
@@ -222,8 +223,8 @@ export function DiagnosticoPunto({
               Paso {indicePaso + 1} · {PASOS[indicePaso].titulo}
             </h2>
 
-            {/* Actores permanece montado al ir a Requisitos/Pago para no reabrir identidad del vendedor ya validado. */}
-            {(paso === "actores" || paso === "requisitos" || paso === "pago") && (
+            {/* Actores permanece montado al ir a Requisitos/Resumen/Envío para no reabrir identidad del vendedor ya validado. */}
+            {(paso === "actores" || paso === "requisitos" || paso === "resumen" || paso === "envio") && (
               <div
                 className={paso === "actores" ? undefined : "hidden"}
                 aria-hidden={paso !== "actores"}
@@ -248,7 +249,7 @@ export function DiagnosticoPunto({
                 tipoCodigo={tipoCodigo}
                 placa={placa}
                 onAtras={() => setPaso("actores")}
-                onContinuarPago={() => setPaso("pago")}
+                onContinuarPago={() => setPaso("resumen")}
                 onAviso={onAviso}
               />
             ) : paso === "requisitos" ? (
@@ -258,11 +259,17 @@ export function DiagnosticoPunto({
                 </p>
                 <Nav onBack={() => setPaso("actores")} onNext={() => setPaso("actores")} nextLabel="Ir a Actores" />
               </Card>
-            ) : paso === "pago" ? (
-              <Card title="Pago" id="punto-pago-stub">
-                <p>El paso de Pago estará disponible en una próxima entrega. Los requisitos ya quedaron listos para continuar.</p>
-                <Nav onBack={() => setPaso("requisitos")} onNext={onVolver} nextLabel="Volver al inicio" />
-              </Card>
+            ) : (paso === "resumen" || paso === "envio") && solicitudIdPunto ? (
+              <EnvioPunto
+                cliente={cliente}
+                solicitudId={solicitudIdPunto}
+                tipoCodigo={tipoCodigo}
+                paso={paso}
+                onPaso={setPaso}
+                onAtras={() => setPaso("requisitos")}
+                onIrActores={() => setPaso("actores")}
+                onTerminar={onVolver}
+              />
             ) : paso === "diagnostico" ? (
               <>
                 <Card title="Diagnóstico de requisitos previos" id="punto-diagnostico-requisitos">

@@ -39,7 +39,7 @@ type Falla = { tipo: "mensaje"; texto: string } | { tipo: "pendientes"; fallas: 
  * Si el BFF responde identidad pendiente, se muestra qué parte falta.
  */
 export function ResumenTramite({ onEstado }: PropsSeccion) {
-  const { cliente, definicion, solicitud, recargar, reportarError, irAPaso } = useWizard();
+  const { cliente, definicion, solicitud, recargar, reportarError, irAPaso, canal } = useWizard();
   const queryClient = useQueryClient();
   const bloqueo = useBloqueo();
   const idBloqueo = useId();
@@ -133,10 +133,12 @@ export function ResumenTramite({ onEstado }: PropsSeccion) {
               <b>{formatearPesos(linea.valorCop)}</b>
             </li>
           ))}
-          <li className="flex justify-between gap-4 border-t border-border pt-3 text-lg">
-            <span className="font-bold">Valor del trámite</span>
-            <b className="text-primary">{cotizacion.data ? formatearPesos(cotizacion.data.totalCop) : "—"}</b>
-          </li>
+          {(canal !== "punto" || cotizacion.data) && (
+            <li className="flex justify-between gap-4 border-t border-border pt-3 text-lg">
+              <span className="font-bold">Valor del trámite</span>
+              <b className="text-primary">{cotizacion.data ? formatearPesos(cotizacion.data.totalCop) : "—"}</b>
+            </li>
+          )}
         </ul>
       </Card>
 

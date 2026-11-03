@@ -41,7 +41,7 @@ export function EnvioTramite({ onEstado, activa }: PropsSeccion) {
 
 function Confirmacion() {
   const router = useRouter();
-  const { cliente, definicion, solicitud, reportarError } = useWizard();
+  const { cliente, definicion, solicitud, reportarError, alTerminar } = useWizard();
   const [consultando, setConsultando] = useState(false);
   const titulo = useRef<HTMLHeadingElement>(null);
 
@@ -74,6 +74,10 @@ function Confirmacion() {
   }, []);
 
   const salir = () => {
+    if (alTerminar) {
+      alTerminar();
+      return;
+    }
     // La cédula del contexto en memoria no se conserva al salir.
     limpiarContexto();
     router.push("/");
