@@ -703,7 +703,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
     private const string Vin = "9BWZZZ377VT004251";
 
     [Fact]
-    public void Version_de_plantilla_es_3() => PdfVehiculo.VersionPlantilla.Should().Be(3);
+    public void Version_de_plantilla_es_4() => PdfVehiculo.VersionPlantilla.Should().Be(4);
 
     [Fact]
     public void Identificacion_datos_del_diagnostico_secciones_y_nota_en_orden()
@@ -712,8 +712,8 @@ public sealed partial class PdfVehiculoDisenoV2Tests
 
         var orden = new[]
         {
-            "Diagnóstico vehicular", "DATOS DEL DIAGNÓSTICO",
-            $"Diagnóstico ID Placa Fecha de generación {Id} ABC123 27/10/2026 10:04:05",
+            "Diagnóstico vehicular",
+            $"Diagnóstico ID {Id}", "Placa ABC123", "Fecha de generación 27/10/2026 10:04:05",
             "DATOS DEL VEHÍCULO", "INFORMACIÓN DEL VEHÍCULO", "Placa VIN Servicio", "PROPIETARIOS", "Propietario 1",
             "COMPARENDOS DEL VEHÍCULO", "Número Fecha Valor Estado Organismo", "COMPARENDOS DE LOS PROPIETARIOS", "No aplica.",
             "AVALÚO COMERCIAL", "$ 48.500.000", "IMPUESTO VEHICULAR DEPARTAMENTAL", "Vigencia Valor Estado 2025 $ 180.000 Pagada",
@@ -726,6 +726,8 @@ public sealed partial class PdfVehiculoDisenoV2Tests
             desde = i;
         }
 
+        PdfDePrueba.Tiene(texto, "DATOS DEL DIAGNÓSTICO").Should().BeFalse(texto);
+        PdfDePrueba.Tiene(texto, "Este documento reúne").Should().BeFalse(texto);
         PdfDePrueba.Tiene(texto, "Consultado el 22/10/2026 10:00 (hora Colombia)").Should().BeTrue(texto);
         PdfDePrueba.Tiene(texto, "Este informe se elaboró a solicitud de Ana Prueba, de Empresa de prueba, para la placa ABC123.").Should().BeTrue(texto);
         PdfDePrueba.Tiene(texto, "NOTA").Should().BeTrue(texto);

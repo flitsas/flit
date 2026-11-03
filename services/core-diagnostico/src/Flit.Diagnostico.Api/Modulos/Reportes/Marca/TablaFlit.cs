@@ -112,6 +112,31 @@ internal static class TablaFlit
         });
     }
 
+    /// <summary>
+    /// Tabla de dos columnas: la etiqueta a la izquierda (cabecera) y el valor a la derecha. Una fila por par, sin partirse.
+    /// </summary>
+    public static void Pares(IContainer contenedor, IReadOnlyList<(string Etiqueta, string Valor)> filas)
+    {
+        ArgumentNullException.ThrowIfNull(contenedor);
+        ArgumentNullException.ThrowIfNull(filas);
+        contenedor.Column(col =>
+        {
+            col.Spacing(Separador);
+            for (var i = 0; i < filas.Count; i++)
+            {
+                var arriba = i == 0;
+                var abajo = i == filas.Count - 1;
+                var (etiqueta, valor) = filas[i];
+                col.Item().ShowEntire().Row(fila =>
+                {
+                    fila.Spacing(Separador);
+                    fila.RelativeItem().Element(c => Pintar(c, etiqueta, encabezado: true, new Esquinas(arriba, false, false, abajo), 0, 1));
+                    fila.RelativeItem().Element(c => Pintar(c, valor, encabezado: false, new Esquinas(false, arriba, abajo, false), 0, 1));
+                });
+            }
+        });
+    }
+
     /// <summary>Una sola fila de dato a todo el ancho, con las cuatro esquinas redondeadas (p. ej. «No registra» de una tabla etiqueta-valor sin datos).</summary>
     public static void SinDatos(IContainer contenedor, string texto)
     {
@@ -184,20 +209,24 @@ internal static class TablaFlit
                 var desde = (float)inicio / totalColumnas;
                 var hasta = (float)(inicio + columnas) / totalColumnas;
                 inicio += columnas;
-                fila.RelativeItem(columnas).Layers(capas =>
-                {
-                    capas.Layer().Svg(tamano => CeldaSvg(tamano.Width, tamano.Height, esquinas, encabezado, desde, hasta));
-                    var celda = capas.PrimaryLayer().PaddingVertical(4).PaddingHorizontal(5).AlignCenter().AlignMiddle().Text(texto)
-                        .FontSize(TamanoTexto);
-                    if (encabezado)
-                        celda.FontFamily(FlitDocumentTheme.FontMedium).FontColor(FlitDocumentTheme.Blanco);
-                    else
-                        celda.FontColor(EstadosFavorables.Contains(texto.Trim()) ? FlitDocumentTheme.Verde : FlitDocumentTheme.TextoTabla);
-                });
+                fila.RelativeItem(columnas).Element(c => Pintar(c, texto, encabezado, esquinas, desde, hasta));
             }
 
             for (var i = inicio; i < totalColumnas; i++)
                 fila.RelativeItem();
+        });
+
+    /// <summary>Una celda: fondo SVG del tamaño real y el texto centrado encima.</summary>
+    private static void Pintar(IContainer contenedor, string texto, bool encabezado, Esquinas esquinas, float desde, float hasta) =>
+        contenedor.Layers(capas =>
+        {
+            capas.Layer().Svg(tamano => CeldaSvg(tamano.Width, tamano.Height, esquinas, encabezado, desde, hasta));
+            var celda = capas.PrimaryLayer().PaddingVertical(4).PaddingHorizontal(5).AlignCenter().AlignMiddle().Text(texto)
+                .FontSize(TamanoTexto);
+            if (encabezado)
+                celda.FontFamily(FlitDocumentTheme.FontMedium).FontColor(FlitDocumentTheme.Blanco);
+            else
+                celda.FontColor(EstadosFavorables.Contains(texto.Trim()) ? FlitDocumentTheme.Verde : FlitDocumentTheme.TextoTabla);
         });
 
     /// <summary>Esquinas redondeadas de una celda (superior izquierda, superior derecha, inferior derecha, inferior izquierda).</summary>

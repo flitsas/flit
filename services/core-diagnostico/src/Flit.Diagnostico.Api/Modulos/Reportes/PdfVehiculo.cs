@@ -34,8 +34,8 @@ namespace Flit.Diagnostico.Api.Modulos.Reportes;
 /// </example>
 internal static partial class PdfVehiculo
 {
-    /// <summary>Versión del diseño: entra en la huella (súbela al cambiar lo que se pinta o cómo). 3 = cabecera con logo, nota al pie y documentos completos.</summary>
-    public const int VersionPlantilla = 3;
+    /// <summary>Versión del diseño: entra en la huella (súbela al cambiar lo que se pinta o cómo). 4 = datos del diagnóstico en pares clave-valor, sin título ni introducción.</summary>
+    public const int VersionPlantilla = 4;
 
     public const string ContentType = "application/pdf";
 
@@ -52,12 +52,6 @@ internal static partial class PdfVehiculo
 
     /// <summary>Título de la primera página.</summary>
     public const string TituloDocumento = "Diagnóstico vehicular";
-
-    /// <summary>Párrafo que explica qué reúne el archivo.</summary>
-    public const string TextoIntroduccion =
-        "Este documento reúne la información del vehículo consultado: datos de matrícula, propietarios, locatarios, "
-        + "licencias de conducción, SOAT, revisión técnico-mecánica, comparendos, avalúo comercial e impuesto, "
-        + "según lo respondieron los organismos consultados en la fecha de generación.";
 
     /// <summary>
     /// Títulos de sección por código de fuente (los de la grilla), sin el prefijo de la fuente («RUNT —», «SIMIT —»): el diseño v2
@@ -78,7 +72,6 @@ internal static partial class PdfVehiculo
     /// <summary>Una línea, bajo el título, de qué contiene cada sección.</summary>
     private static readonly Dictionary<string, string> Descripciones = new(StringComparer.Ordinal)
     {
-        ["Datos del diagnóstico"] = "Identificación del lote y de quién lo solicitó.",
         ["Información del vehículo"] = "Placa, licencia de tránsito, clase, servicio y organismo de tránsito.",
         ["Información general"] = "Marca, línea, color, motor, chasis y estado del vehículo.",
         ["Datos técnicos"] = "Ejes, capacidad de carga, pasajeros y peso.",
@@ -141,7 +134,6 @@ internal static partial class PdfVehiculo
                 {
                     col.Spacing(14);
                     col.Item().AlignCenter().Text(TituloDocumento).Bold().FontSize(16).FontColor(FlitDocumentTheme.PrimaryBlue);
-                    col.Item().Text(TextoIntroduccion).FontSize(9).FontColor(FlitDocumentTheme.DarkNavy).Justify();
                     col.Item().Row(fila =>
                     {
                         fila.RelativeItem().AlignLeft().AlignMiddle().Element(e => e.Width(130).Height(48).Svg(BrandingAssets.LogoSvg));
@@ -295,9 +287,9 @@ internal static partial class PdfVehiculo
         });
     });
 
-    /// <summary>Tabla de la cabecera, al 50 % del ancho: identificación del diagnóstico y del lote.</summary>
-    private static void DatosDelDiagnostico(IContainer contenedor, EncabezadoReporte e, DateTimeOffset generado) => SeccionConTitulo(contenedor, "Datos del diagnóstico", null,
-        col => col.Item().Element(c => Tabla(c,
+    /// <summary>Tabla de la cabecera, al 50 % del ancho: cada dato en una fila, etiqueta a la izquierda y valor a la derecha.</summary>
+    private static void DatosDelDiagnostico(IContainer contenedor, EncabezadoReporte e, DateTimeOffset generado) =>
+        TablaFlit.Pares(contenedor,
         [
             ("Diagnóstico ID", e.DiagnosticoId.ToString()),
             ("Placa", e.Placa ?? NoRegistra),
@@ -308,7 +300,7 @@ internal static partial class PdfVehiculo
             ("Empresa", e.Empresa),
             ("Creado por", e.UsuarioCreador),
             ("VIN", e.Vin ?? NoRegistra),
-        ])));
+        ]);
 
     /// <summary>Texto del recuadro NOTA, repetido al pie de cada página.</summary>
     internal static string TextoNota(EncabezadoReporte e)
