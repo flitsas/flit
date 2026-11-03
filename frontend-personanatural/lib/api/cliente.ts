@@ -539,10 +539,16 @@ export interface MatrizRequisitosPunto {
 }
 
 /** HU #14243 — gate a Pago y sugerencia de valor. */
+export interface PendienteRequisitoPunto {
+  codigo: string;
+  /** Nombre legible (documento o dato): es lo único que se muestra al ciudadano. */
+  nombre: string;
+}
+
 export interface CompletitudRequisitosPunto {
   puedeContinuarPago: boolean;
-  pendientes: string[];
   requiereValorVenta: boolean;
+  pendientes: PendienteRequisitoPunto[];
 }
 
 export interface ValorVentaSugeridoPunto {
@@ -831,11 +837,9 @@ export function crearCliente({ base = BASE_BFF, fetchImpl }: OpcionesCliente = {
           { nombreArchivo, tamanoBytes },
           o,
         ),
-      requisitosCompletitud: (
-        datos: { tipoCodigo: string; docCodesCargados: string[]; valorVenta?: number | null },
-        o?: OpcionesLlamada,
-      ) =>
-        solicitar<CompletitudRequisitosPunto>("POST", "/punto/requisitos/completitud", datos, o),
+      /** Gate a Pago: el servidor calcula desde el borrador (sesión pn_sesion + cookie del punto); solo se manda el tipo. */
+      requisitosCompletitud: (datos: { tipoCodigo: string }, o?: OpcionesLlamada) =>
+        solicitar<CompletitudRequisitosPunto>("POST", "/punto/requisitos/completitud", { tipoCodigo: datos.tipoCodigo }, o),
       consultas: {
         vehiculo: (datos: { placa: string; documento: string; tipoDocumento?: string; consentimiento: boolean }, o?: OpcionesLlamada) =>
           solicitar<ResultadoVehiculoPunto>(

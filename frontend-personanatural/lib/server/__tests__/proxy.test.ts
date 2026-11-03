@@ -204,6 +204,25 @@ describe("proxy del canal del punto", () => {
     expect(resultado.cookie).toBeUndefined();
   });
 
+  it("el gate de requisitos manda la sesión del borrador además de la cookie del punto", async () => {
+    const fetchImpl = vi.fn(async () => new Response("{}", { status: 200, headers: { "content-type": "application/json" } }));
+
+    await reenviarAlBff(post("https://portal/api/v1/persona-natural/punto/requisitos/completitud", { tipoCodigo: "TRASPASO" }), ["punto", "requisitos", "completitud"], { apiOrigin: ORIGEN, tokenSesion: "borrador-tok", tokenPunto: "punto-tok", fetchImpl });
+
+    const cabeceras = (fetchImpl.mock.calls[0] as unknown as [URL, RequestInit])[1].headers as Headers;
+    expect(cabeceras.get("authorization")).toBe("Bearer borrador-tok");
+    expect(cabeceras.get("cookie")).toBe("pn_punto=punto-tok");
+  });
+
+  it("la matriz y la sugerencia de requisitos siguen sin Bearer (solo la cookie del punto)", async () => {
+    const fetchImpl = vi.fn(async () => new Response("{}", { status: 200, headers: { "content-type": "application/json" } }));
+
+    await reenviarAlBff(new Request("https://portal/x"), ["punto", "requisitos"], { apiOrigin: ORIGEN, tokenSesion: "borrador-tok", tokenPunto: "punto-tok", fetchImpl });
+
+    const cabeceras = (fetchImpl.mock.calls[0] as unknown as [URL, RequestInit])[1].headers as Headers;
+    expect(cabeceras.get("authorization")).toBeNull();
+  });
+
   it("un 401 session_invalid en actores no borra la cookie del punto", async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ code: "session_invalid" }), { status: 401 }));
 

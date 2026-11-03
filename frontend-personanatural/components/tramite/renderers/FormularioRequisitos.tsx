@@ -57,16 +57,20 @@ export function FormularioRequisitos(props: PropsSeccion) {
 const sinClave = <T,>(mapa: Record<string, T>, clave: string): Record<string, T> => Object.fromEntries(Object.entries(mapa).filter(([k]) => k !== clave));
 
 function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
-  const { cliente, definicion, solicitud, guardarConVersion, registrarGuardado, recargar, reportarError } = useWizard();
+  const { cliente, definicion, solicitud, guardarConVersion, registrarGuardado, recargar, reportarError, canal, avaluoSugerido } = useWizard();
   const idSolicitud = solicitud.solicitudId;
   const t = useMemo(() => tarjetasDeRequisitos(definicion), [definicion]);
   const documentos = useMemo(() => (t.documentos ? documentosOrdenados(definicion) : []), [t.documentos, definicion]);
+  const avaluo = avaluoSugerido != null && avaluoSugerido > 0 ? avaluoSugerido : null;
 
   const [campos, setCampos] = useState<Record<string, string>>(() => ({ ...solicitud.fieldValues }));
+  // Con avalúo sugerido (canal del punto) y sin valor guardado, el valor de venta arranca en el avalúo: sigue siendo editable.
   const [valorVenta, setValorVenta] = useState(() => {
     const valor = solicitud.datos.comercial?.valor;
-    return valor != null && valor > 0 ? textoMonedaCompleta(valor) : "";
+    if (valor != null && valor > 0) return textoMonedaCompleta(valor);
+    return avaluo != null ? textoMonedaCompleta(avaluo) : "";
   });
+  const valorPrecargado = !(solicitud.datos.comercial?.valor != null && solicitud.datos.comercial.valor > 0) && avaluo != null;
   const [tienePrenda, setTienePrenda] = useState(() => solicitud.datos.prenda?.tiene ?? false);
   const [acreedor, setAcreedor] = useState(() => solicitud.datos.prenda?.acreedor ?? "");
   const [nitAcreedor, setNitAcreedor] = useState(() => solicitud.datos.prenda?.nitAcreedor ?? "");
@@ -102,7 +106,8 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
   // ── Guardado del borrador ───────────────────────────────────────────────────────────────────────────────────────────
 
   const firma = JSON.stringify([campos, valorVenta, tienePrenda, acreedor, nitAcreedor, transformaciones, observaciones]);
-  const guardada = useRef(firma);
+  // Un valor precargado con el avalúo aún no está en el servidor: queda como cambio pendiente para que se guarde al avanzar.
+  const guardada = useRef(valorPrecargado ? "" : firma);
 
   const guardar = useCallback(async () => {
     try {
@@ -214,11 +219,11 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
         <Card title="Datos comerciales" id="requisitos-comercial">
           <div className="grid gap-4 md:grid-cols-3">
             <Field label="Avalúo sugerido (Fasecolda)">
-              <input className="field" disabled value="" placeholder="—" />
+              <input className="field" disabled value={avaluo != null ? textoMonedaCompleta(avaluo) : ""} placeholder="—" />
             </Field>
             <Field label="Fuentes consultadas">
               <select className="field" disabled>
-                <option>Fasecolda: No disponible</option>
+                <option>{avaluo != null ? "Fasecolda: Disponible" : "Fasecolda: No disponible"}</option>
               </select>
             </Field>
             <Field label="Valor de venta ($) *" error={mostrar("valorComercial")}>
@@ -414,7 +419,7 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
         </Card>
       )}
 
-      <TotalLiquidado cliente={cliente} organismoId={solicitud.organismoId} tipoCodigo={definicion.code} transformaciones={t.transformaciones ? transformaciones : []} />
+      {canal !== "punto" && <TotalLiquidado cliente={cliente} organismoId={solicitud.organismoId} tipoCodigo={definicion.code} transformaciones={t.transformaciones ? transformaciones : []} />}
 
       <div aria-live="polite" className="text-right text-xs">
         {borrador === "guardando" && <p role="status">Guardando borrador...</p>}

@@ -44,6 +44,10 @@ export interface ApiWizard {
   reportarError: (error: unknown) => void;
   /** Lleva al paso de ese grupo (solo hacia atrás, a uno ya alcanzado): «Editar» del resumen y los enlaces de lo que falta. */
   irAPaso: (grupo: GrupoPaso) => void;
+  /** Canal del punto de atención: monta el mismo paso Requisitos sin cotización y con el avalúo ya consultado. Ausente en el portal web. */
+  canal?: "punto";
+  /** Avalúo sugerido (Fasecolda) que el canal del punto precarga en «Datos comerciales»; `null` si no hay. */
+  avaluoSugerido?: number | null;
 }
 
 const Contexto = createContext<ApiWizard | null>(null);
