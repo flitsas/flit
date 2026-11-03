@@ -97,6 +97,9 @@ internal sealed class PersonaNaturalCreador(
 {
     private const string OrigenAdjuntos = "portal";
 
+    /// <summary>Marca visible en las observaciones del trámite radicado desde el punto de atención (canal <c>pn_punto</c>).</summary>
+    internal const string MarcaCanalPunto = "[Canal: punto de atención (OT)]";
+
     /// <summary>Prefijo del motivo con el que se anula un borrador de una solicitud rechazada; el código va entre corchetes.</summary>
     internal const string PrefijoAnulacion = "Persona Natural: solicitud rechazada en la creación";
 
@@ -216,8 +219,12 @@ internal sealed class PersonaNaturalCreador(
             items.Add(new FieldValueInput(null, "owner_document_number", p0.Numero, null));
         }
 
-        if (!string.IsNullOrWhiteSpace(s.Datos.Observaciones))
-            items.Add(new FieldValueInput(null, "observaciones", s.Datos.Observaciones.Trim(), null));
+        // Solo el canal del punto de atención (OT) deja marca; el portal web no cambia. Se anota en la observación existente.
+        var observaciones = s.Datos.Observaciones?.Trim();
+        if (string.Equals(s.Datos.Canal, "pn_punto", StringComparison.OrdinalIgnoreCase))
+            observaciones = string.IsNullOrEmpty(observaciones) ? MarcaCanalPunto : $"{MarcaCanalPunto} {observaciones}";
+        if (!string.IsNullOrWhiteSpace(observaciones))
+            items.Add(new FieldValueInput(null, "observaciones", observaciones, null));
 
         if (items.Count > 0 && await Fallo(campos.HandleAsync(id, empresa, new PatchFieldValuesRequest(items), ct)).ConfigureAwait(false) is { } e1)
             return Rechazo(e1);

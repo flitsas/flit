@@ -92,6 +92,20 @@ public sealed record DiagnosticoDatos(DateTimeOffset Fecha, bool PuedeContinuar,
 /// </summary>
 public sealed record DatosSolicitud(ComercialDatos? Comercial = null, PrendaDatos? Prenda = null, RequisitosDatos? Requisitos = null, DiagnosticoDatos? Diagnostico = null)
 {
+    /// <summary>
+    /// Marca del canal de origen: <c>pn_punto</c> si el borrador lo abrió el punto de atención (OT); ausente en el portal web.
+    /// Se conserva al reescribir <c>datos</c> (comercial, prenda, requisitos, diagnóstico): antes se perdía y el borrador dejaba
+    /// de ser del punto. Viaja a core-api en <c>datos_json</c>.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? Canal { get; init; }
+
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? CodigoOrganismo { get; init; }
+
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? OrganismoId { get; init; }
+
     private static readonly JsonSerializerOptions Opciones = new(JsonSerializerDefaults.Web);
 
     public static DatosSolicitud Leer(string? json)

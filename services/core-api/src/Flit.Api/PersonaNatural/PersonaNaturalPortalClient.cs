@@ -14,7 +14,7 @@ internal sealed record ParteSolicitudPortal(
 internal sealed record AdjuntoSolicitudPortal(Guid Id, string Tipo, string Referencia, string Sha256, long TamanoBytes, string MimeType, string NombreArchivo);
 
 /// <summary>Bloques del trámite que no son campos del tipo (<c>datos_json</c> del RPC). Sin datos personales de personas.</summary>
-internal sealed record DatosSolicitudPortal(decimal? ValorComercial, PrendaPortal? Prenda, string? Observaciones = null)
+internal sealed record DatosSolicitudPortal(decimal? ValorComercial, PrendaPortal? Prenda, string? Observaciones = null, string? Canal = null)
 {
     public static readonly DatosSolicitudPortal Vacios = new(null, null);
 
@@ -50,7 +50,8 @@ internal sealed record DatosSolicitudPortal(decimal? ValorComercial, PrendaPorta
             if (raiz.TryGetProperty("requisitos", out var requisitos) && requisitos.ValueKind == JsonValueKind.Object)
                 observaciones = Texto(requisitos, "observaciones");
 
-            return new DatosSolicitudPortal(valor, prenda, observaciones);
+            var canal = raiz.TryGetProperty("canal", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null;
+            return new DatosSolicitudPortal(valor, prenda, observaciones, canal);
         }
         catch (JsonException)
         {

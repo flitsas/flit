@@ -155,6 +155,8 @@ internal sealed class PortalHost : IAsyncDisposable
         {
             b.WebHost.UseTestServer();
             b.Configuration.AddInMemoryCollection(settings);
+            if (settings.TryGetValue("TestEnvironment", out var ambiente) && ambiente is not null)
+                b.Environment.EnvironmentName = ambiente;
             b.Services.AddSingleton<TimeProvider>(host.Reloj);
             b.Services.AddSingleton<IProveedorCaptcha, CaptchaFalso>();
             b.Services.AddSingleton<IFachadaTramites>(host.Catalogo);
