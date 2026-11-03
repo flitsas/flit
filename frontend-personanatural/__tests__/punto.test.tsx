@@ -12,6 +12,7 @@ const ENTRADA = { organismoId: "o-1", codigo: "BOG", nombre: "Movilidad de Bogot
 const MENSAJE_PLACA = "No encontramos un vehículo con esa placa.";
 const MENSAJE_ORGANISMO = "Este trámite se hace en el organismo que tiene el vehículo.";
 const MENSAJE_RUNT = "No pudimos consultar el RUNT. Inténtalo de nuevo.";
+const MENSAJE_REVISANDO = "Revisando el vehículo…";
 
 function montar(rutas: Record<string, Manejador> = {}) {
   const todas: Record<string, Manejador> = {
@@ -117,7 +118,7 @@ describe("canal del punto /o/codigo", () => {
 
     const dialogo = await screen.findByRole("dialog", { name: "No pudimos continuar" });
     expect(within(dialogo).getByRole("alert")).toHaveTextContent(mensaje);
-    expect(screen.queryByRole("heading", { name: "Puedes continuar al diagnóstico" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Puedes continuar." })).not.toBeInTheDocument();
     expect(cuerpo(llamadas, "POST /punto/arranque")).toEqual({
       placa: "ABC123",
       documento: "1020456789",
@@ -137,16 +138,33 @@ describe("canal del punto /o/codigo", () => {
     expect(espera?.querySelector(".mobility-orbit")).not.toBeNull();
   });
 
-  it("si puede seguir, deja el paso de diagnóstico y Volver permite consultar otra vez", async () => {
+  it("si puede seguir, abre el cascarón del wizard y Atrás permite consultar otra vez", async () => {
     const { llamadas } = montar({
       "POST /punto/arranque": () => json({ puedeSeguir: true }),
+      "POST /punto/diagnostico": () =>
+        json({ puedeContinuar: true, requisitos: [{ codigo: "soat", descripcion: "SOAT vigente", estado: "cumple" }] }),
+      "POST /punto/consultas/vehiculo": () =>
+        json({ existe: true, placa: "ABC123", marca: "MAZDA", linea: "3", modeloAno: "2020", estado: "ACTIVO" }),
     });
     await screen.findByRole("button", { name: "Iniciar trámite" });
     await llenar();
     fireEvent.click(screen.getByRole("button", { name: "Iniciar trámite" }));
 
-    expect(await screen.findByRole("heading", { name: "Puedes continuar al diagnóstico" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Volver" }));
+    expect(await screen.findByRole("heading", { name: "Puedes continuar." })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Ruta de navegación" })).toHaveTextContent("Diagnóstico");
+    expect(screen.getByRole("list", { name: "Pasos del trámite" })).toHaveTextContent("Paso 2 · Actores");
+    expect(screen.getByRole("heading", { name: "Diagnóstico de requisitos previos" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Datos técnicos del vehículo" })).toBeInTheDocument();
+    expect(screen.getByText("Atención:")).toBeInTheDocument();
+    expect(cuerpo(llamadas, "POST /punto/diagnostico")).toEqual({
+      placa: "ABC123",
+      documento: "1020456789",
+      tipoCodigo: "TRASPASO_STANDARD",
+      tipoDocumento: "CC",
+    });
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Atrás" }));
     expect(screen.getByLabelText("Placa")).toHaveValue("ABC123");
     expect(screen.getByLabelText("Número de documento")).toHaveValue("1020456789");
 
@@ -154,6 +172,59 @@ describe("canal del punto /o/codigo", () => {
     fireEvent.click(screen.getByRole("button", { name: "Iniciar trámite" }));
     await waitFor(() => expect(llamadas.filter((l) => l.clave === "POST /punto/arranque")).toHaveLength(2));
     expect(cuerpo(llamadas, "POST /punto/arranque")).toMatchObject({ placa: "XYZ987", documento: "1020456789" });
+  });
+
+  it("con bloqueo muestra No puedes continuar y deshabilita Continuar (como el portal)", async () => {
+    montar({
+      "POST /punto/arranque": () => json({ puedeSeguir: true }),
+      "POST /punto/diagnostico": () =>
+        json({ puedeContinuar: false, requisitos: [{ codigo: "soat", descripcion: "SOAT vencido", estado: "falta" }] }),
+      "POST /punto/consultas/vehiculo": () => json({ existe: true, placa: "ABC123" }),
+    });
+    await screen.findByRole("button", { name: "Iniciar trámite" });
+    await llenar();
+    fireEvent.click(screen.getByRole("button", { name: "Iniciar trámite" }));
+
+    expect(await screen.findByRole("heading", { name: "No puedes continuar" })).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Motivos del diagnóstico" })).toHaveTextContent("SOAT vencido");
+    expect(screen.getByRole("button", { name: "Continuar" })).toBeDisabled();
+  });
+
+  it("mientras diagnostica muestra Revisando el vehículo…", async () => {
+    const colgado = () => new Promise<Response>(() => {});
+    montar({
+      "POST /punto/arranque": () => json({ puedeSeguir: true }),
+      "POST /punto/diagnostico": colgado,
+      "POST /punto/consultas/vehiculo": colgado,
+    });
+    await screen.findByRole("button", { name: "Iniciar trámite" });
+    await llenar();
+    fireEvent.click(screen.getByRole("button", { name: "Iniciar trámite" }));
+    const frases = await screen.findAllByText(MENSAJE_REVISANDO);
+    expect(frases.some((n) => n.closest('[role="status"]')?.querySelector(".mobility-orbit"))).toBe(true);
+  });
+
+  it("si el diagnóstico falla, AvisoModal y Reintentar vuelve a consultar", async () => {
+    let intentos = 0;
+    const { llamadas } = montar({
+      "POST /punto/arranque": () => json({ puedeSeguir: true }),
+      "POST /punto/diagnostico": () => {
+        intentos += 1;
+        if (intentos === 1) return json({ code: "proveedor_no_disponible", message: "No pudimos armar el diagnóstico. Inténtalo de nuevo." }, 503);
+        return json({ puedeContinuar: true, requisitos: [] });
+      },
+    });
+    await screen.findByRole("button", { name: "Iniciar trámite" });
+    await llenar();
+    fireEvent.click(screen.getByRole("button", { name: "Iniciar trámite" }));
+
+    const dialogo = await screen.findByRole("dialog", { name: "No pudimos continuar" });
+    // mensajeDeFallo mapea proveedor_no_disponible al texto de RUNT del portal.
+    expect(within(dialogo).getByRole("alert")).toHaveTextContent("No pudimos consultar el RUNT");
+    fireEvent.click(within(dialogo).getAllByRole("button", { name: "Cerrar" }).at(-1)!);
+    fireEvent.click(await screen.findByRole("button", { name: "Reintentar" }));
+    expect(await screen.findByRole("heading", { name: "Puedes continuar." })).toBeInTheDocument();
+    expect(llamadas.filter((l) => l.clave === "POST /punto/diagnostico")).toHaveLength(2);
   });
 });
 

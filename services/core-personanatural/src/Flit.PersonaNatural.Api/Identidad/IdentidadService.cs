@@ -22,10 +22,11 @@ public sealed record ResultadoIdentidad(
     string? Estado = null,
     string? Campo = null,
     int? EsperaSegundos = null,
-    bool Aceptada = false)
+    bool Aceptada = false,
+    string? CapturaUrl = null)
 {
-    public static ResultadoIdentidad Ok(string parte, short ordinal, string estado, bool aceptada = false) =>
-        new(true, aceptada ? StatusCodes.Status202Accepted : StatusCodes.Status200OK, "ok", string.Empty, parte, ordinal, estado, Aceptada: aceptada);
+    public static ResultadoIdentidad Ok(string parte, short ordinal, string estado, bool aceptada = false, string? capturaUrl = null) =>
+        new(true, aceptada ? StatusCodes.Status202Accepted : StatusCodes.Status200OK, "ok", string.Empty, parte, ordinal, estado, Aceptada: aceptada, CapturaUrl: capturaUrl);
 
     public static ResultadoIdentidad Error(int http, string codigo, string mensaje, string? estado = null, string? campo = null, int? espera = null) =>
         new(false, http, codigo, mensaje, Estado: estado, Campo: campo, EsperaSegundos: espera);
@@ -105,6 +106,25 @@ public sealed partial class IdentidadService(
             return ResultadoIdentidad.Error(StatusCodes.Status409Conflict, "validacion_en_curso", "Ya hay una validación en curso para esta persona.", persona.ValidacionEstado);
 
         return await EnviarAsync(persona, rol, preparado.Datos!, nuevaValidacion: true, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// HU #14237 — identidad del radicante en el punto: no exige correo ni envía enlace; FLIT 2 abre la captura y
+    /// se devuelve <c>capturaUrl</c> para abrirla in-situ. El front sondea con <see cref="EstadoAsync"/>.
+    /// </summary>
+    public async Task<ResultadoIdentidad> SolicitarInSituAsync(Guid solicitudId, string parte, short ordinal, CancellationToken ct)
+    {
+        var preparado = await PrepararAsync(solicitudId, parte, ordinal, ct, exigirCorreo: false).ConfigureAwait(false);
+        if (preparado.Error is not null)
+            return preparado.Error;
+        var (persona, rol) = (preparado.Persona!, preparado.Rol!);
+
+        if (persona.ValidacionEstado == EstadosIdentidad.Aprobada)
+            return ResultadoIdentidad.Ok(rol, ordinal, EstadosIdentidad.Aprobada);
+        if (EstadosIdentidad.EnCurso(persona.ValidacionEstado))
+            return ResultadoIdentidad.Error(StatusCodes.Status409Conflict, "validacion_en_curso", "Ya hay una validación en curso para esta persona.", persona.ValidacionEstado);
+
+        return await EnviarAsync(persona, rol, preparado.Datos!, nuevaValidacion: true, ct, omitirEnvioCorreo: true).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -248,7 +268,7 @@ public sealed partial class IdentidadService(
     private sealed record Preparado(ResultadoIdentidad? Error, PersonaSolicitante? Persona, string? Rol, DatosPersona? Datos);
 
     /// <summary>Lo común de pedir y reenviar: la solicitud editable, el rol que exige identidad, la persona y su contacto válido.</summary>
-    private async Task<Preparado> PrepararAsync(Guid solicitudId, string parte, short ordinal, CancellationToken ct)
+    private async Task<Preparado> PrepararAsync(Guid solicitudId, string parte, short ordinal, CancellationToken ct, bool exigirCorreo = true)
     {
         var estadoSolicitud = await db.Set<SolicitudTramite>().AsNoTracking().Where(s => s.Id == solicitudId).Select(s => s.Estado).FirstOrDefaultAsync(ct).ConfigureAwait(false);
         if (estadoSolicitud is null)
@@ -278,8 +298,8 @@ public sealed partial class IdentidadService(
         if (datos is null)
             return Falla(StatusCodes.Status409Conflict, "actor_no_registrado", "Registre primero a esta persona en el trámite.");
 
-        // AC4: contacto inválido, con el campo que falla y sin llamar a FLIT 2.
-        if (!CorreoValido(datos.Correo))
+        // AC4: contacto inválido, con el campo que falla y sin llamar a FLIT 2. In-situ (punto) no exige correo.
+        if (exigirCorreo && !CorreoValido(datos.Correo))
             return Falla(StatusCodes.Status422UnprocessableEntity, "contacto_invalido", "Escriba un correo válido para esta persona.", campo: "correo");
         if (!string.IsNullOrWhiteSpace(datos.Celular) && !CelularValido(datos.Celular))
             return Falla(StatusCodes.Status422UnprocessableEntity, "contacto_invalido", "Escriba un celular válido para esta persona.", campo: "celular");
@@ -289,12 +309,25 @@ public sealed partial class IdentidadService(
 
     /// <summary>Pide el envío a FLIT 2 y refleja el resultado; sin respuesta de FLIT 2 deja <c>pendiente_envio</c> (202).</summary>
     private async Task<ResultadoIdentidad> EnviarAsync(
-        PersonaSolicitante persona, string rol, DatosPersona datos, bool nuevaValidacion, CancellationToken ct, string origen = "ciudadano")
+        PersonaSolicitante persona,
+        string rol,
+        DatosPersona datos,
+        bool nuevaValidacion,
+        CancellationToken ct,
+        string origen = "ciudadano",
+        bool omitirEnvioCorreo = false)
     {
         try
         {
+            var correo = omitirEnvioCorreo
+                ? (CorreoValido(datos.Correo) ? datos.Correo! : $"punto-{persona.SolicitudId:N}@noreply.flit.local")
+                : datos.Correo!;
             var respuesta = await fachada.SolicitarAsync(
-                persona.SolicitudId, rol, new PersonaParaValidar(datos.TipoDocumento, datos.Documento, datos.Nombre ?? string.Empty, datos.Correo!, datos.Celular), ct).ConfigureAwait(false);
+                persona.SolicitudId,
+                rol,
+                new PersonaParaValidar(datos.TipoDocumento, datos.Documento, datos.Nombre ?? string.Empty, correo, datos.Celular),
+                ct,
+                omitirEnvioCorreo).ConfigureAwait(false);
             if (nuevaValidacion)
             {
                 persona.Reenvios = 0;
@@ -303,7 +336,7 @@ public sealed partial class IdentidadService(
 
             persona.ValidacionId = respuesta.ValidacionId;
             await espejo.CambiarAsync(persona, respuesta.Estado, origen, null, ct).ConfigureAwait(false);
-            return ResultadoIdentidad.Ok(rol, persona.Ordinal, persona.ValidacionEstado);
+            return ResultadoIdentidad.Ok(rol, persona.Ordinal, persona.ValidacionEstado, capturaUrl: respuesta.CapturaUrl);
         }
         catch (FachadaException ex) when (ex.Codigo == ServicioNoDisponible)
         {

@@ -1,10 +1,11 @@
 "use client";
 
 // HU #14218 / #14222 — Al entrar a /o/{codigo} se abre el canal. Consultar = mismo modal/diseño del portal web.
+// Tras arranque OK el landing se oculta y el cascarón del wizard (DiagnosticoPunto) ocupa la página.
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { MobilityLoader } from "@/components/MobilityLoader";
-import { AvisoModal, type Aviso } from "@/components/landing/AvisoModal";
+import { AvisoModal, type Aviso, type TonoAviso } from "@/components/landing/AvisoModal";
 import { Pie } from "@/components/landing/Pie";
 import { boton } from "@/components/landing/estilos";
 import { useTiposTramite } from "@/components/landing/useCatalogos";
@@ -22,12 +23,18 @@ export function CanalPunto({ codigo, cliente = portal }: { codigo: string; clien
   const [punto, setPunto] = useState<EntradaPunto | null>(null);
   const [consultando, setConsultando] = useState(false);
   const [aviso, setAviso] = useState<Aviso | null>(null);
+  const [enWizard, setEnWizard] = useState(false);
   const tipos = useTiposTramite(cliente);
-  const avisar = useCallback((titulo: string, texto: string) => setAviso({ titulo, tipo: "mensaje", mensaje: texto }), []);
+  const avisar = useCallback(
+    (titulo: string, texto: string, tono: TonoAviso = "alerta") => setAviso({ titulo, tipo: "mensaje", mensaje: texto, tono }),
+    [],
+  );
+  const alWizard = useCallback((activo: boolean) => setEnWizard(activo), []);
 
   const entrar = useCallback(async () => {
     setFase("cargando");
     setPunto(null);
+    setEnWizard(false);
     try {
       const datos = await cliente.punto.entrada(codigo);
       setPunto(datos);
@@ -44,21 +51,23 @@ export function CanalPunto({ codigo, cliente = portal }: { codigo: string; clien
   }, [entrar]);
 
   return (
-    <div className="dashboard-shell bg-background font-sans text-foreground">
-      <header className="dashboard-header flex min-h-16 flex-wrap py-2 shrink-0 items-center justify-between gap-4 border-b border-border">
-        <Link href="/" aria-label="FLIT — Ir al inicio del portal">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={ASSETS.logo} alt="FLIT" className="h-9 w-auto" />
-        </Link>
-        {punto && (
-          <p className="max-w-md truncate text-sm font-medium text-foreground/80" title={punto.nombre}>
-            Punto de atención · {punto.nombre}
-          </p>
-        )}
-      </header>
+    <div className={enWizard ? "bg-background font-sans text-foreground" : "dashboard-shell bg-background font-sans text-foreground"}>
+      {!enWizard && (
+        <header className="dashboard-header flex min-h-16 flex-wrap py-2 shrink-0 items-center justify-between gap-4 border-b border-border">
+          <Link href="/" aria-label="FLIT — Ir al inicio del portal">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={ASSETS.logo} alt="FLIT" className="h-9 w-auto" />
+          </Link>
+          {punto && (
+            <p className="max-w-md truncate text-sm font-medium text-foreground/80" title={punto.nombre}>
+              Punto de atención · {punto.nombre}
+            </p>
+          )}
+        </header>
+      )}
 
-      <div className="dashboard-layout">
-        <main className="dashboard-main">
+      <div className={enWizard ? undefined : "dashboard-layout"}>
+        <main className={enWizard ? undefined : "dashboard-main"}>
           {fase === "cargando" && (
             <div className="fixed inset-0 z-50 grid place-items-center bg-background/80 backdrop-blur-sm">
               <MobilityLoader />
@@ -75,13 +84,19 @@ export function CanalPunto({ codigo, cliente = portal }: { codigo: string; clien
           {fase === "listo" && punto && (
             <>
               <h1 className="sr-only">{punto.nombre}</h1>
-              <AccionesPunto cliente={cliente} onConsultar={() => setConsultando(true)} onAviso={avisar} />
+              <AccionesPunto
+                cliente={cliente}
+                organismoNombre={punto.nombre}
+                onConsultar={() => setConsultando(true)}
+                onAviso={avisar}
+                onWizard={alWizard}
+              />
             </>
           )}
         </main>
       </div>
 
-      <Pie />
+      {!enWizard && <Pie />}
 
       {/* Mismo ConsultarModal del landing (título, campos, captcha, tracking). */}
       <ConsultarModal

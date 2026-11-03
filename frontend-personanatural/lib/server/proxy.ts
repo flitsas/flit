@@ -61,9 +61,10 @@ export async function reenviarAlBff(request: Request, path: string[], opciones: 
     if (condicional) cabeceras.set("if-none-match", condicional);
   }
   // La configuración pública es anónima: no lleva el token de la sesión del trámite.
-  // El canal no usa Bearer: el BFF lee la cookie pn_punto (valor protegido) y la sesión del trámite no se mezcla.
-  const token = publica || punto ? undefined : opciones.tokenSesion;
-  if (token) cabeceras.set("authorization", `Bearer ${token}`);
+  // El canal fija el organismo con cookie pn_punto. Tras abrir borrador (/punto/actores/*) también
+  // se reenvía Bearer pn_sesion para identidad e invitaciones.
+  const token = publica ? undefined : opciones.tokenSesion;
+  if (token && (!punto || esActoresPunto(path))) cabeceras.set("authorization", `Bearer ${token}`);
   if (punto && opciones.tokenPunto) cabeceras.set("cookie", `${COOKIE_PUNTO}=${opciones.tokenPunto}`);
   if (opciones.ipCliente) cabeceras.set("x-forwarded-for", opciones.ipCliente);
 
@@ -88,16 +89,21 @@ export async function reenviarAlBff(request: Request, path: string[], opciones: 
     if (valor) headers.set(nombre, valor);
   }
 
-  const esSesionNueva = respuesta.ok && /^sesiones(\/reanudar)?$/.test(path.join("/")) && request.method === "POST";
+  // /sesiones y /punto/actores/abrir emiten token de borrador PN → cookie HttpOnly pn_sesion.
+  const ruta = path.join("/");
+  const esSesionNueva = respuesta.ok && request.method === "POST"
+    && (/^sesiones(\/reanudar)?$/.test(ruta) || ruta === "punto/actores/abrir");
   if (esSesionNueva) return sesionNueva(respuesta, headers);
 
   if (respuesta.ok && request.method === "POST" && path.join("/") === "punto/entrada") {
     return sesionDePunto(respuesta, headers);
   }
 
-  const codigo = respuesta.status === 401 ? await codigoDe(respuesta) : null;
-  const sesionPerdida = !punto && codigo !== null;
-  const puntoPerdido = punto && respuesta.status === 401;
+  const codigo = respuesta.status === 401 ? await codigoDeRespuesta(respuesta) : null;
+  const sesionPerdida = !punto && codigo !== null && codigo.startsWith("session_");
+  // Solo borrar pn_punto si el BFF dice que faltó la sesión del canal. Un 401 de pn_sesion
+  // (p. ej. GET /punto/actores/identidad antes de abrir borrador) no debe tumbar el organismo.
+  const puntoPerdido = punto && codigo === "sesion_punto_ausente";
   return {
     status: respuesta.status,
     headers,
@@ -109,6 +115,11 @@ export async function reenviarAlBff(request: Request, path: string[], opciones: 
 
 function esCanalPunto(path: string[]): boolean {
   return path[0] === "punto";
+}
+
+/** Rutas del punto que ya materializaron borrador PN y usan la sesión del trámite. */
+function esActoresPunto(path: string[]): boolean {
+  return path[0] === "punto" && path[1] === "actores";
 }
 
 /** Cookie `pn_punto` del BFF, si vino en Set-Cookie. */
@@ -185,10 +196,10 @@ async function sesionNueva(respuesta: Response, headers: Headers): Promise<Resul
   };
 }
 
-/** Código estable de un problem+json de sesión (`session_expired`, `session_invalid`), o null. */
-async function codigoDe(respuesta: Response): Promise<string | null> {
+/** Código estable de un problem+json (`session_*`, `sesion_punto_ausente`), o null. */
+async function codigoDeRespuesta(respuesta: Response): Promise<string | null> {
   const datos = (await respuesta.clone().json().catch(() => null)) as { code?: unknown } | null;
-  return typeof datos?.code === "string" && datos.code.startsWith("session_") ? datos.code : null;
+  return typeof datos?.code === "string" ? datos.code : null;
 }
 
 function problema(status: number, code: string, title: string): ResultadoProxy {

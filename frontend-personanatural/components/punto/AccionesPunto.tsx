@@ -1,11 +1,13 @@
 "use client";
 
-// HU #14220 / #14222 — Acciones del punto con el mismo layout del portal (AccionesPrincipales), sin Cotizar.
-import { useState } from "react";
+// HU #14220 / #14222 / #14232 — Acciones del punto con el mismo layout del portal (AccionesPrincipales), sin Cotizar.
+// Tras arranque OK abre el cascarón del wizard (DiagnosticoPunto), igual que el portal web PN.
+import { useEffect, useState } from "react";
 import { AccionFila } from "@/components/landing/AccionesPrincipales";
 import { boton } from "@/components/landing/estilos";
 import { SelectorTipoTramite } from "@/components/landing/SelectorTipoTramite";
 import { MobilityLoader } from "@/components/MobilityLoader";
+import { DiagnosticoPunto } from "@/components/punto/DiagnosticoPunto";
 import { textoArranque, type ClientePortal, type TipoTramite } from "@/lib/api/cliente";
 import { mensajeDeFallo } from "@/lib/api/errores";
 import { ASSETS } from "@/lib/assets";
@@ -32,13 +34,18 @@ const OPCIONES: readonly TipoTramite[] = tiposDelPunto.map((t) => ({
 
 export function AccionesPunto({
   cliente,
+  organismoNombre,
   onConsultar,
   onAviso,
+  onWizard,
 }: {
   cliente: ClientePortal;
+  organismoNombre: string;
   onConsultar: () => void;
   /** Fallas y reglas de negocio: mismo AvisoModal del portal. */
-  onAviso: (titulo: string, mensaje: string) => void;
+  onAviso: (titulo: string, mensaje: string, tono?: "alerta" | "exito" | "info") => void;
+  /** El padre cambia el shell (dashboard → cascarón del wizard). */
+  onWizard?: (activo: boolean) => void;
 }) {
   const [placa, setPlaca] = useState("");
   const [documento, setDocumento] = useState("");
@@ -46,6 +53,10 @@ export function AccionesPunto({
   const [fase, setFase] = useState<"formulario" | "cargando" | "diagnostico">("formulario");
 
   const listo = placa !== "" && documento !== "" && tipo !== "";
+
+  useEffect(() => {
+    onWizard?.(fase === "diagnostico");
+  }, [fase, onWizard]);
 
   async function arrancar() {
     if (!listo) return;
@@ -66,19 +77,15 @@ export function AccionesPunto({
 
   if (fase === "diagnostico") {
     return (
-      <section className="dashboard-actions-stack" aria-label="Acciones del punto">
-        <div className="dashboard-institutional-card action-start" role="region" aria-labelledby="punto-diagnostico">
-          <IconoAccion src={ASSETS.acciones.iniciar} />
-          <h2 id="punto-diagnostico" className="dashboard-title">
-            Puedes continuar al diagnóstico
-          </h2>
-          <p>El vehículo quedó listo en este punto para seguir con el diagnóstico.</p>
-          <button type="button" className={boton("institutional", "dashboard-submit", "none")} onClick={() => setFase("formulario")}>
-            Volver
-          </button>
-        </div>
-        <FilaConsultar onConsultar={onConsultar} />
-      </section>
+      <DiagnosticoPunto
+        cliente={cliente}
+        placa={placa}
+        documento={documento}
+        tipoCodigo={tipo}
+        organismoNombre={organismoNombre}
+        onVolver={() => setFase("formulario")}
+        onAviso={onAviso}
+      />
     );
   }
 
@@ -130,7 +137,6 @@ export function AccionesPunto({
         </form>
       </div>
       <FilaConsultar onConsultar={onConsultar} />
-      {/* Mismo overlay de espera que IniciarModal / PaginaTramite del portal. */}
       {fase === "cargando" && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-background/80 backdrop-blur-sm">
           <MobilityLoader mensaje={MENSAJE_CONSULTANDO_VEHICULO} />

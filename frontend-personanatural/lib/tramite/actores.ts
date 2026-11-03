@@ -58,6 +58,16 @@ export interface FilaActor {
   nombreConsultado: boolean;
   /** Dato mínimo de la consulta de conductor (solo lo que el BFF devuelve). */
   licencia: { estado: string | null; vigencia: string | null } | null;
+  /**
+   * Resultado RUNT + multas de la última consulta (reglas FLIT 2).
+   * `null` = aún no se consultó; `inscrito=false` = documento no hallado en RUNT.
+   */
+  runt: {
+    inscrito: boolean;
+    multasPendientes: boolean | null;
+    nroPazYSalvo: string | null;
+    comparendos: number | null;
+  } | null;
 }
 
 export type CampoActor = "tipoDocumento" | "numeroDocumento" | "nombre" | "correo" | "celular" | "direccion" | "ciudad";
@@ -103,7 +113,7 @@ let consecutivo = 0;
 const claveNueva = (): string => `a-${++consecutivo}`;
 
 export function filaVacia(rol: string, ordinal: number): FilaActor {
-  return { clave: claveNueva(), rol, ordinal, tipoDocumento: "CC", numeroDocumento: "", nombre: "", correo: "", celular: "", direccion: "", ciudad: "", consultado: false, nombreConsultado: false, licencia: null };
+  return { clave: claveNueva(), rol, ordinal, tipoDocumento: "CC", numeroDocumento: "", nombre: "", correo: "", celular: "", direccion: "", ciudad: "", consultado: false, nombreConsultado: false, licencia: null, runt: null };
 }
 
 function filaDeActor(a: ActorEstado): FilaActor {
@@ -123,6 +133,7 @@ function filaDeActor(a: ActorEstado): FilaActor {
     consultado: Boolean(a.numeroDocumento),
     nombreConsultado: false,
     licencia: null,
+    runt: null,
   };
 }
 

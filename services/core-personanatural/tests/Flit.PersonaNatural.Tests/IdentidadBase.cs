@@ -36,7 +36,7 @@ internal sealed class FachadaIdentidadFalsa : IFachadaIdentidad
     public Dictionary<Guid, string> Estados { get; } = [];
     private readonly Dictionary<(Guid Solicitud, string Parte, string Documento), Guid> _creadas = [];
 
-    public Task<ValidacionDeFlit2> SolicitarAsync(Guid solicitudId, string parte, PersonaParaValidar persona, CancellationToken ct)
+    public Task<ValidacionDeFlit2> SolicitarAsync(Guid solicitudId, string parte, PersonaParaValidar persona, CancellationToken ct, bool omitirEnvioCorreo = false)
     {
         Llamadas++;
         if (Caida)
@@ -57,7 +57,8 @@ internal sealed class FachadaIdentidadFalsa : IFachadaIdentidad
             throw Caido();
         }
 
-        return Task.FromResult(new ValidacionDeFlit2(id, Estados[id]));
+        var url = omitirEnvioCorreo ? $"https://verify.test/captura/{id:N}" : null;
+        return Task.FromResult(new ValidacionDeFlit2(id, Estados[id], url));
     }
 
     public Task<string> ReenviarAsync(Guid validacionId, string? correoNuevo, CancellationToken ct)

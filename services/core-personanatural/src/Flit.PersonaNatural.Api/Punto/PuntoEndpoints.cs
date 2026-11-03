@@ -4,15 +4,20 @@ using System.Text.Json.Serialization;
 using Flit.PersonaNatural.Api.Abuso;
 using Flit.PersonaNatural.Api.Consultas;
 using Flit.PersonaNatural.Api.Cotizaciones;
+using Flit.PersonaNatural.Api.Definiciones;
+using Flit.PersonaNatural.Api.Identidad;
 using Flit.PersonaNatural.Api.Sesiones;
+using Flit.PersonaNatural.Api.Solicitudes;
 using Flit.Tramites.Grpc.V1;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Flit.PersonaNatural.Api.Punto;
 
 /// <summary>
-/// Canal del punto de atención (HU #14216, #14219 y #14221). La cookie fija el organismo: no hay forma de cambiarlo
-/// en la petición. Ninguna ruta crea un trámite en FLIT 2 ni una solicitud de radicación.
+/// Canal del punto de atención (HU #14216, #14219, #14221, #14231, #14236 y #14242). La cookie fija el organismo: no hay forma
+/// de cambiarlo en la petición. Las consultas previas a Actores no crean trámite en FLIT 2; <c>POST /actores/abrir</c>
+/// materializa un borrador PN (sin radicar ni procedure instance). <c>GET /requisitos</c> proyecta la matriz documental
+/// vigente de FLIT 2.0 sin crear procedure instance.
 /// </summary>
 public static class PuntoEndpoints
 {
@@ -36,6 +41,12 @@ public static class PuntoEndpoints
         services.TryAddSingleton<CookiePunto>();
         services.TryAddScoped<ArranquePuntoService>();
         services.TryAddScoped<ConsultasPuntoService>();
+        services.TryAddScoped<DiagnosticoPuntoService>();
+        services.TryAddScoped<IAbrirBorradorDesdePunto, AbrirBorradorDesdePunto>();
+        services.TryAddScoped<ActoresPuntoService>();
+        services.TryAddScoped<IdentidadPuntoService>();
+        services.TryAddScoped<RequisitosPuntoService>();
+        services.TryAddScoped<CompletitudRequisitosPuntoService>();
         services.TryAddScoped<ICanalPunto>(sp =>
         {
             var cliente = sp.GetService<PersonaNaturalService.PersonaNaturalServiceClient>();
@@ -98,6 +109,179 @@ public static class PuntoEndpoints
                     StatusCodes.Status400BadRequest, "Datos inválidos", datos.Mensaje, ConsultasEndpoints.CodigoDatosInvalidos),
                 _ => SesionEndpoints.Problema(StatusCodes.Status400BadRequest, "Datos inválidos", "Indique la placa, el documento y el tipo de trámite.", ConsultasEndpoints.CodigoDatosInvalidos),
             };
+        }).AddEndpointFilter(ConSesionDePunto);
+
+        grupo.MapPost("/diagnostico", async (DiagnosticoPuntoRequest? body, HttpContext http, DiagnosticoPuntoService diagnostico, CancellationToken ct) =>
+        {
+            var sesion = Sesion(http);
+            var resultado = await diagnostico.EvaluarAsync(
+                sesion, body?.Placa, body?.Documento, body?.TipoCodigo, body?.TipoDocumento, ct).ConfigureAwait(false);
+            return resultado switch
+            {
+                ResultadoDiagnosticoPunto.Ok ok => Results.Json(ok.Diagnostico, Json),
+                ResultadoDiagnosticoPunto.FachadaCaida caida => Results.Json(
+                    new { code = CodigoProveedor, message = caida.Mensaje }, Json, statusCode: StatusCodes.Status503ServiceUnavailable),
+                ResultadoDiagnosticoPunto.DatosInvalidos datos => SesionEndpoints.Problema(
+                    StatusCodes.Status400BadRequest, "Datos inválidos", datos.Mensaje, ConsultasEndpoints.CodigoDatosInvalidos),
+                _ => SesionEndpoints.Problema(
+                    StatusCodes.Status400BadRequest, "Datos inválidos", "Indique la placa, el documento y el tipo de trámite.", ConsultasEndpoints.CodigoDatosInvalidos),
+            };
+        }).AddEndpointFilter(ConSesionDePunto);
+
+        grupo.MapPost("/actores/abrir", async (AbrirActoresPuntoRequest? body, HttpContext http, ActoresPuntoService actores, PiiHasher hasher, CancellationToken ct) =>
+        {
+            var sesion = Sesion(http);
+            try
+            {
+                var resultado = await actores.AbrirAsync(
+                    sesion,
+                    body?.Placa,
+                    body?.Documento,
+                    body?.TipoCodigo,
+                    body?.TipoDocumento,
+                    hasher.HashIp(http.Connection.RemoteIpAddress?.ToString()),
+                    ct).ConfigureAwait(false);
+                return resultado switch
+                {
+                    ResultadoAbrirActores.Ok ok => Results.Json(new
+                    {
+                        solicitudId = ok.Sesion.SolicitudId,
+                        codigoPublico = ok.Sesion.CodigoPublico,
+                        token = ok.Sesion.Token,
+                        expiraEn = ok.Sesion.ExpiraEn,
+                        estado = ok.Sesion.Estado,
+                        tipoTramiteCodigo = ok.Sesion.TipoTramiteCodigo,
+                        definicionVersion = ok.Sesion.DefinicionVersion,
+                        organismoId = sesion.OrganismoId,
+                        puedeSerRadicante = ok.PuedeSerRadicante,
+                        message = ok.Message,
+                    }, Json),
+                    ResultadoAbrirActores.ProveedorCaido => Results.Json(
+                        new { code = CodigoProveedor, message = TiposDelPunto.RuntCaido }, Json, statusCode: StatusCodes.Status503ServiceUnavailable),
+                    ResultadoAbrirActores.DatosInvalidos datos => SesionEndpoints.Problema(
+                        StatusCodes.Status400BadRequest, "Datos inválidos", datos.Mensaje, ConsultasEndpoints.CodigoDatosInvalidos),
+                    _ => SesionEndpoints.Problema(
+                        StatusCodes.Status400BadRequest, "Datos inválidos", "Indique la placa, el documento y el tipo de trámite.", ConsultasEndpoints.CodigoDatosInvalidos),
+                };
+            }
+            catch (ReglaDeNegocioException ex)
+            {
+                var extensiones = new Dictionary<string, object?> { ["code"] = ex.Codigo };
+                if (ex.Extensiones is not null)
+                    foreach (var (k, v) in ex.Extensiones)
+                        extensiones[k] = v;
+                return Results.Problem(statusCode: ex.Estado, title: ex.Titulo, detail: ex.Message, extensions: extensiones);
+            }
+            catch (FachadaException ex)
+            {
+                return SesionEndpoints.Problema(ex.EstadoHttp, "No disponible", ex.Message, ex.Codigo);
+            }
+        }).AddEndpointFilter(ConSesionDePunto);
+
+        // Identidad se resuelve desde RequestServices para que el host de PuntoCanalTests (sin Db) pueda mapear el grupo.
+        grupo.MapPost("/actores/identidad/radicante", async (IdentidadRadicantePuntoRequest? body, HttpContext http, CancellationToken ct) =>
+        {
+            var identidadPunto = http.RequestServices.GetRequiredService<IdentidadPuntoService>();
+            var (solicitudId, errorSesion) = await identidadPunto.ResolverSolicitudAsync(TokenSolicitud(http), body?.SolicitudId, ct).ConfigureAwait(false);
+            if (errorSesion is not null)
+                return ResponderIdentidad(http, errorSesion);
+            return ResponderIdentidad(http, await identidadPunto.RadicanteInSituAsync(
+                solicitudId,
+                body?.Parte,
+                body?.Ordinal ?? 1,
+                body?.TipoDocumento,
+                body?.Documento,
+                body?.Nombre,
+                body?.Correo,
+                body?.Celular,
+                body?.Direccion,
+                body?.Ciudad,
+                ct).ConfigureAwait(false));
+        }).AddEndpointFilter(ConSesionDePunto);
+
+        grupo.MapGet("/actores/identidad", async (Guid? solicitudId, HttpContext http, CancellationToken ct) =>
+        {
+            var identidadPunto = http.RequestServices.GetRequiredService<IdentidadPuntoService>();
+            var (id, errorSesion) = await identidadPunto.ResolverSolicitudAsync(TokenSolicitud(http), solicitudId, ct).ConfigureAwait(false);
+            if (errorSesion is not null)
+                return ResponderIdentidad(http, errorSesion);
+            var estado = await identidadPunto.EstadoAsync(id, ct).ConfigureAwait(false);
+            return estado is null
+                ? SesionEndpoints.Problema(StatusCodes.Status404NotFound, "No encontrado", SesionEndpoints.MensajeNoEncontrada, SesionEndpoints.CodigoNoEncontrada)
+                : Results.Json(estado, Json);
+        }).AddEndpointFilter(ConSesionDePunto);
+
+        grupo.MapPost("/actores/invitar", async (InvitarPartePuntoRequest? body, HttpContext http, CancellationToken ct) =>
+        {
+            if (body is null)
+                return SesionEndpoints.Problema(StatusCodes.Status400BadRequest, "Datos inválidos", "Indique la parte a invitar.", ConsultasEndpoints.CodigoDatosInvalidos);
+            var identidadPunto = http.RequestServices.GetRequiredService<IdentidadPuntoService>();
+            var (solicitudId, errorSesion) = await identidadPunto.ResolverSolicitudAsync(TokenSolicitud(http), null, ct).ConfigureAwait(false);
+            if (errorSesion is not null)
+                return ResponderIdentidad(http, errorSesion);
+            return ResponderIdentidad(http, await identidadPunto.InvitarAsync(solicitudId, body, ct).ConfigureAwait(false));
+        }).AddEndpointFilter(ConSesionDePunto);
+
+        grupo.MapGet("/requisitos", async (string? tipoCodigo, HttpContext http, RequisitosPuntoService requisitos, CancellationToken ct) =>
+        {
+            var sesion = Sesion(http);
+            try
+            {
+                var resultado = await requisitos.ObtenerAsync(sesion, tipoCodigo, ct).ConfigureAwait(false);
+                return resultado switch
+                {
+                    ResultadoMatrizRequisitosPunto.Ok ok => Results.Json(ok.Matriz, Json),
+                    ResultadoMatrizRequisitosPunto.DatosInvalidos datos => SesionEndpoints.Problema(
+                        StatusCodes.Status400BadRequest, "Datos inválidos", datos.Mensaje, ConsultasEndpoints.CodigoDatosInvalidos),
+                    _ => SesionEndpoints.Problema(
+                        StatusCodes.Status400BadRequest, "Datos inválidos", "Indique el tipo de trámite.", ConsultasEndpoints.CodigoDatosInvalidos),
+                };
+            }
+            catch (FachadaException ex)
+            {
+                return SesionEndpoints.Problema(ex.EstadoHttp, "No disponible", ex.Message, ex.Codigo);
+            }
+        }).AddEndpointFilter(ConSesionDePunto);
+
+        grupo.MapGet("/requisitos/valor-sugerido", async (string? placa, HttpContext http, CompletitudRequisitosPuntoService completitud, CancellationToken ct) =>
+        {
+            _ = Sesion(http);
+            var sugerido = await completitud.SugerirValorVentaAsync(placa, ct).ConfigureAwait(false);
+            return Results.Json(sugerido, Json);
+        }).AddEndpointFilter(ConSesionDePunto);
+
+        grupo.MapPost("/requisitos/validar-archivo", (ValidarArchivoPuntoRequest? body, HttpContext http, CompletitudRequisitosPuntoService completitud) =>
+        {
+            _ = Sesion(http);
+            var r = completitud.ValidarArchivo(body?.NombreArchivo, body?.TamanoBytes ?? 0);
+            return r switch
+            {
+                ResultadoValidacionArchivoPunto.Ok => Results.Json(new { valido = true }, Json),
+                ResultadoValidacionArchivoPunto.Rechazo rechazo => Results.Json(
+                    new { valido = false, code = rechazo.Codigo, message = rechazo.Mensaje }, Json, statusCode: StatusCodes.Status400BadRequest),
+                _ => Results.Json(new { valido = false, code = "archivo_invalido", message = "Archivo no válido." }, Json, statusCode: StatusCodes.Status400BadRequest),
+            };
+        }).AddEndpointFilter(ConSesionDePunto);
+
+        grupo.MapPost("/requisitos/completitud", async (CompletitudRequisitosPuntoRequest? body, HttpContext http, CompletitudRequisitosPuntoService completitud, CancellationToken ct) =>
+        {
+            var sesion = Sesion(http);
+            try
+            {
+                var resultado = await completitud.EvaluarAsync(sesion, body?.TipoCodigo, body?.DocCodesCargados, body?.ValorVenta, ct).ConfigureAwait(false);
+                return resultado switch
+                {
+                    ResultadoCompletitudPunto.Ok ok => Results.Json(ok.Completitud, Json),
+                    ResultadoCompletitudPunto.DatosInvalidos datos => SesionEndpoints.Problema(
+                        StatusCodes.Status400BadRequest, "Datos inválidos", datos.Mensaje, ConsultasEndpoints.CodigoDatosInvalidos),
+                    _ => SesionEndpoints.Problema(
+                        StatusCodes.Status400BadRequest, "Datos inválidos", "Indique el tipo de trámite.", ConsultasEndpoints.CodigoDatosInvalidos),
+                };
+            }
+            catch (FachadaException ex)
+            {
+                return SesionEndpoints.Problema(ex.EstadoHttp, "No disponible", ex.Message, ex.Codigo);
+            }
         }).AddEndpointFilter(ConSesionDePunto);
 
         grupo.MapPost("/consultas/vehiculo", async (ConsultaVehiculoRequest? body, ConsultasPuntoService consultas, CancellationToken ct) =>
@@ -168,6 +352,28 @@ public static class PuntoEndpoints
     private static OrganismoPunto Sesion(HttpContext http) =>
         http.Items[ItemSesion] as OrganismoPunto ?? throw new InvalidOperationException("La sesión del punto no está en la petición.");
 
+    private static string? TokenSolicitud(HttpContext http)
+    {
+        var cabecera = http.Request.Headers.Authorization.ToString();
+        return cabecera.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) ? cabecera["Bearer ".Length..] : null;
+    }
+
+    private static IResult ResponderIdentidad(HttpContext http, ResultadoIdentidad r)
+    {
+        if (r.Exito)
+        {
+            var cuerpo = new { parte = r.Parte, ordinal = r.Ordinal, estado = r.Estado, capturaUrl = r.CapturaUrl };
+            return r.Aceptada ? Results.Accepted(value: cuerpo) : Results.Json(cuerpo, Json);
+        }
+
+        var extensiones = new Dictionary<string, object?> { ["code"] = r.Codigo };
+        if (r.Estado is not null)
+            extensiones["state"] = r.Estado;
+        if (r.Campo is not null)
+            extensiones["field"] = r.Campo;
+        return Results.Problem(statusCode: r.Http, title: r.Codigo, detail: r.Mensaje, extensions: extensiones);
+    }
+
     private static IResult SinSesion() => SesionEndpoints.Problema(
         StatusCodes.Status401Unauthorized, "Sesión del punto", "Entre con el código del organismo.", "sesion_punto_ausente");
 
@@ -221,5 +427,21 @@ internal static class ConsultasEndpointsPublico
 public sealed record EntradaPuntoRequest(string? Codigo);
 
 public sealed record ArranquePuntoRequest(string? Placa, string? Documento, string? TipoCodigo);
+
+public sealed record DiagnosticoPuntoRequest(string? Placa, string? Documento, string? TipoCodigo, string? TipoDocumento);
+
+public sealed record AbrirActoresPuntoRequest(string? Placa, string? Documento, string? TipoCodigo, string? TipoDocumento);
+
+public sealed record IdentidadRadicantePuntoRequest(
+    Guid? SolicitudId,
+    string? Parte,
+    short? Ordinal,
+    string? TipoDocumento,
+    string? Documento,
+    string? Nombre,
+    string? Correo = null,
+    string? Celular = null,
+    string? Direccion = null,
+    string? Ciudad = null);
 
 public sealed record ConsultaMultasPuntoRequest(string? Placa, DocumentoRequest? Documento, bool Consentimiento);

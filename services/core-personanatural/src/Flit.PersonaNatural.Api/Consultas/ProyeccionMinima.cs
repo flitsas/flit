@@ -76,11 +76,22 @@ public sealed record VehiculoDetalle(
 public sealed record ConductorMinimo(bool Existe, string? EstadoLicencia, string? Vigencia);
 
 /// <summary>
-/// Persona para el actor con sesión de la solicitud (consulta de detalle, el mismo prellenado de FLIT 2): SOLO lo que sirve para
-/// rellenar los campos del actor. Nada de licencias, sanciones, fechas de nacimiento ni otros datos del RUNT. <c>Ciudad</c> queda
-/// siempre vacía: en FLIT 2 sale del histórico de actores de la empresa, que el portal no conoce ni debe exponer.
+/// Persona para el actor con sesión (consulta de detalle, alineada a FLIT 2 / <c>RuntPersonLookup</c>): nombres para
+/// prellenar, inscripción RUNT (<c>Existe</c>), licencia y flag de multas. Sin fechas de nacimiento ni categorías.
+/// <c>Ciudad</c> queda vacía (en FLIT 2 sale del histórico de la empresa). <c>Comparendos</c> lo completa el servicio
+/// con una subconsulta SIMIT best-effort cuando hay multas pendientes.
 /// </summary>
-public sealed record PersonaDetalle(bool Existe, string? Nombres, string? Apellidos, string? NombreCompleto, string? Ciudad);
+public sealed record PersonaDetalle(
+    bool Existe,
+    string? Nombres,
+    string? Apellidos,
+    string? NombreCompleto,
+    string? Ciudad,
+    string? EstadoLicencia = null,
+    string? VigenciaLicencia = null,
+    bool? TieneMultasPendientes = null,
+    string? NroPazYSalvo = null,
+    int? Comparendos = null);
 
 /// <summary>
 /// Proyección del <see cref="ResultadoConsulta"/> de core-consultas a los DTO del portal. Es una LISTA BLANCA: solo se leen
@@ -231,10 +242,12 @@ public static class ProyeccionMinima
     internal const string CampoPrimerApellido = "person_first_last_name";
     internal const string CampoSegundoApellido = "person_second_last_name";
     internal const string CampoApellidos = "person_last_name";
+    internal const string CampoMultasPendientes = "person_has_pending_fines";
+    internal const string CampoPazYSalvo = "person_paz_y_salvo";
 
     /// <summary>
-    /// Nombres de la persona, como los usa FLIT 2 para rellenar el actor: nombres de pila juntos, apellidos juntos y nombre
-    /// completo. Como allí, «existe» es que haya nombre; un valor enmascarado (con <c>*</c>) no es un nombre y se descarta.
+    /// Prellenado FLIT 2: nombres + inscripción RUNT + licencia + flag de multas del mismo <c>ConsultarConductor</c>.
+    /// «Existe» = hay nombre (no enmascarado); sin nombre → no inscrito. El detalle de comparendos lo aporta el servicio.
     /// </summary>
     public static PersonaDetalle PersonaConNombres(ResultadoConsulta resultado)
     {
@@ -242,9 +255,31 @@ public static class ProyeccionMinima
         var nombres = Unir(Nombre(resultado, CampoPrimerNombre), Nombre(resultado, CampoSegundoNombre));
         var apellidos = Nombre(resultado, CampoApellidos) ?? Unir(Nombre(resultado, CampoPrimerApellido), Nombre(resultado, CampoSegundoApellido));
         var completo = Nombre(resultado, CampoNombreCompleto) ?? Unir(nombres, apellidos);
-        return completo is null
-            ? new PersonaDetalle(false, null, null, null, null)
-            : new PersonaDetalle(true, nombres, apellidos, completo, null);
+        if (completo is null)
+            return new PersonaDetalle(false, null, null, null, null);
+
+        var licencia = Conductor(resultado);
+        var flagMultas = Texto(resultado, CampoMultasPendientes);
+        bool? pendientes = flagMultas is null
+            ? null
+            : string.Equals(flagMultas, "true", StringComparison.OrdinalIgnoreCase);
+        return new PersonaDetalle(
+            true,
+            nombres,
+            apellidos,
+            completo,
+            null,
+            licencia.Existe ? licencia.EstadoLicencia : null,
+            licencia.Existe ? licencia.Vigencia : null,
+            pendientes,
+            pendientes == false ? Texto(resultado, CampoPazYSalvo) : null);
+    }
+
+    /// <summary>Cantidad de comparendos en los chequeos de una consulta de multas (SIMIT / flit_fines).</summary>
+    public static int ContarComparendos(ResultadoConsulta resultado)
+    {
+        ArgumentNullException.ThrowIfNull(resultado);
+        return resultado.Chequeos.Sum(c => c.Comparendos.Count);
     }
 
     private static string? Nombre(ResultadoConsulta resultado, string clave) => Texto(resultado, clave) is { } t && !t.Contains('*', StringComparison.Ordinal) ? t : null;

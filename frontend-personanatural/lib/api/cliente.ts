@@ -443,13 +443,26 @@ export interface ConsultaPersonaDetalleRequest {
   consentimientoVersion?: string;
 }
 
-/** Sin coincidencia: `existe = false` y el resto `null`. Son datos de un tercero: solo viven en memoria de la pantalla. */
+/**
+ * Prellenado del actor (RUNT conductor + multas, misma regla que FLIT 2).
+ * Sin coincidencia: `existe = false` y el resto `null`. Solo vive en memoria de la pantalla.
+ */
 export interface PersonaDetalle {
   existe: boolean;
   nombres: string | null;
   apellidos: string | null;
   nombreCompleto: string | null;
   ciudad: string | null;
+  /** Estado de licencia del RUNT (`ACTIVO`, …); null si no hay registro de licencia. */
+  estadoLicencia?: string | null;
+  /** `vigente` | `no_vigente` según licencia activa. */
+  vigenciaLicencia?: string | null;
+  /** Flag del RUNT; si es true el BFF intenta el detalle SIMIT (best-effort). */
+  tieneMultasPendientes?: boolean | null;
+  /** Número de paz y salvo cuando no hay multas pendientes. */
+  nroPazYSalvo?: string | null;
+  /** Cantidad de comparendos de la subconsulta SIMIT (puede faltar si el proveedor falló). */
+  comparendos?: number | null;
 }
 
 export interface ConductorMinimo {
@@ -485,11 +498,61 @@ export interface ResultadoParte {
   parte: string;
   ordinal: number;
   estado: EstadoValidacion;
+  /** HU #14237 — URL de captura (in-situ / copiar enlace). */
+  capturaUrl?: string | null;
+}
+
+/** HU #14236 — borrador PN abierto desde el punto + compuerta de dueño RUNT. */
+export interface AbrirActoresPunto {
+  solicitudId: string;
+  codigoPublico: string;
+  organismoId: string;
+  puedeSerRadicante: boolean;
+  message?: string | null;
+  estado?: string;
+  tipoTramiteCodigo?: string;
+}
+
+/** HU #14242 — matriz documental vigente del punto (FLIT 2.0). */
+export interface ItemRequisitoPunto {
+  docCode: string;
+  nombre: string;
+  clase: "obligatorio" | "opcional" | "informativo" | string;
+  orden: number;
+  instruccionCargue?: string;
+  condicion?: string;
+}
+
+export interface GrupoRequisitosPunto {
+  parte: string | null;
+  etiqueta: string;
+  ordinal: number;
+  items: ItemRequisitoPunto[];
+}
+
+export interface MatrizRequisitosPunto {
+  tipoCodigo: string;
+  organismoId: string;
+  huella: string;
+  version: number;
+  grupos: GrupoRequisitosPunto[];
+}
+
+/** HU #14243 — gate a Pago y sugerencia de valor. */
+export interface CompletitudRequisitosPunto {
+  puedeContinuarPago: boolean;
+  pendientes: string[];
+  requiereValorVenta: boolean;
+}
+
+export interface ValorVentaSugeridoPunto {
+  valorSugerido?: number | null;
+  fuente: string;
 }
 
 // ── Cliente ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
-// ── Canal del punto (POST /punto/entrada, /punto/arranque y /punto/consultas/*) ──────────────────────────────────
+// ── Canal del punto (POST /punto/entrada, /punto/arranque, /punto/diagnostico y /punto/consultas/*) ───────────────
 
 /** Organismo que abrió el canal. La cookie de la sesión la guarda el proxy; no viaja en este cuerpo. */
 export interface EntradaPunto {
@@ -513,6 +576,13 @@ export interface ArranquePunto {
 
 export function textoArranque(resultado: ArranquePunto): string {
   return (resultado.mensaje ?? resultado.message ?? "").trim();
+}
+
+export interface DiagnosticoPuntoRequest {
+  placa: string;
+  documento: string;
+  tipoCodigo: string;
+  tipoDocumento?: string;
 }
 
 export interface ResultadoVehiculoPunto {
@@ -666,6 +736,106 @@ export function crearCliente({ base = BASE_BFF, fetchImpl }: OpcionesCliente = {
       entrada: (codigo: string, o?: OpcionesLlamada) => solicitar<EntradaPunto>("POST", "/punto/entrada", { codigo }, o),
       sesion: (o?: OpcionesLlamada) => solicitar<EntradaPunto>("GET", "/punto/sesion", undefined, o),
       arranque: (datos: ArranquePuntoRequest, o?: OpcionesLlamada) => solicitar<ArranquePunto>("POST", "/punto/arranque", datos, o),
+      /** Preflight del tipo en el punto (HU #14231/#14232). No crea solicitud. */
+      diagnostico: (datos: DiagnosticoPuntoRequest, o?: OpcionesLlamada) =>
+        solicitar<Diagnostico>("POST", "/punto/diagnostico", {
+          placa: datos.placa,
+          documento: datos.documento,
+          tipoCodigo: datos.tipoCodigo,
+          tipoDocumento: datos.tipoDocumento ?? "CC",
+        }, o),
+      /** HU #14236 — materializa borrador PN y evalúa dueño RUNT. */
+      actoresAbrir: (datos: { placa: string; documento: string; tipoCodigo: string; tipoDocumento?: string }, o?: OpcionesLlamada) =>
+        solicitar<AbrirActoresPunto>("POST", "/punto/actores/abrir", {
+          placa: datos.placa,
+          documento: datos.documento,
+          tipoCodigo: datos.tipoCodigo,
+          tipoDocumento: datos.tipoDocumento ?? "CC",
+        }, o),
+      /** HU #14237 — identidad in-situ del radicante (ficha con mismos campos del portal). */
+      actoresIdentidadRadicante: (
+        datos: {
+          solicitudId?: string;
+          parte?: string;
+          ordinal?: number;
+          tipoDocumento?: string;
+          documento: string;
+          nombre?: string;
+          correo?: string;
+          celular?: string;
+          direccion?: string;
+          ciudad?: string;
+        },
+        o?: OpcionesLlamada,
+      ) =>
+        solicitar<ResultadoParte>("POST", "/punto/actores/identidad/radicante", {
+          solicitudId: datos.solicitudId,
+          parte: datos.parte,
+          ordinal: datos.ordinal ?? 1,
+          tipoDocumento: datos.tipoDocumento ?? "CC",
+          documento: datos.documento,
+          nombre: datos.nombre,
+          correo: datos.correo,
+          celular: datos.celular,
+          direccion: datos.direccion,
+          ciudad: datos.ciudad,
+        }, o),
+      actoresIdentidadEstado: (o?: OpcionesLlamada) =>
+        solicitar<EstadoIdentidad>("GET", "/punto/actores/identidad", undefined, o),
+      /** HU #14237 — invita otra parte (correo + URL copiable; mismos campos de ficha del portal). */
+      actoresInvitar: (
+        datos: {
+          parte: string;
+          ordinal?: number;
+          tipoDocumento?: string;
+          documento: string;
+          nombre?: string;
+          correo: string;
+          celular?: string;
+          direccion?: string;
+          ciudad?: string;
+        },
+        o?: OpcionesLlamada,
+      ) =>
+        solicitar<ResultadoParte>("POST", "/punto/actores/invitar", {
+          parte: datos.parte,
+          ordinal: datos.ordinal ?? 1,
+          tipoDocumento: datos.tipoDocumento ?? "CC",
+          documento: datos.documento,
+          nombre: datos.nombre,
+          correo: datos.correo,
+          celular: datos.celular,
+          direccion: datos.direccion,
+          ciudad: datos.ciudad,
+        }, o),
+      /** HU #14242 — matriz viva FLIT 2.0 por tipo + organismo de la cookie. */
+      requisitos: (tipoCodigo: string, o?: OpcionesLlamada) =>
+        solicitar<MatrizRequisitosPunto>(
+          "GET",
+          `/punto/requisitos?tipoCodigo=${encodeURIComponent(tipoCodigo)}`,
+          undefined,
+          o,
+        ),
+      /** HU #14243 — sugerencia Fasecolda (puede venir vacía). */
+      requisitosValorSugerido: (placa: string, o?: OpcionesLlamada) =>
+        solicitar<ValorVentaSugeridoPunto>(
+          "GET",
+          `/punto/requisitos/valor-sugerido?placa=${encodeURIComponent(placa)}`,
+          undefined,
+          o,
+        ),
+      requisitosValidarArchivo: (nombreArchivo: string, tamanoBytes: number, o?: OpcionesLlamada) =>
+        solicitar<{ valido: boolean; code?: string; message?: string }>(
+          "POST",
+          "/punto/requisitos/validar-archivo",
+          { nombreArchivo, tamanoBytes },
+          o,
+        ),
+      requisitosCompletitud: (
+        datos: { tipoCodigo: string; docCodesCargados: string[]; valorVenta?: number | null },
+        o?: OpcionesLlamada,
+      ) =>
+        solicitar<CompletitudRequisitosPunto>("POST", "/punto/requisitos/completitud", datos, o),
       consultas: {
         vehiculo: (datos: { placa: string; documento: string; tipoDocumento?: string; consentimiento: boolean }, o?: OpcionesLlamada) =>
           solicitar<ResultadoVehiculoPunto>(

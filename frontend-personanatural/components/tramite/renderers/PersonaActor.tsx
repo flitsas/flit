@@ -55,6 +55,15 @@ interface Props {
   /** Vuelve a leer el estado de la identidad. */
   refrescarIdentidad: () => void;
   reportarError: (error: unknown) => void;
+  /**
+   * Canal del punto u otros flujos: sustituye `cliente.identidad.solicitar/reenviar`.
+   * Si devuelve `capturaUrl`, se abre en una pestaña (validación in-situ).
+   */
+  onValidarIdentidad?: (accion: "solicitar" | "reenviar") => Promise<{ estado: string; capturaUrl?: string | null }>;
+  /** Etiqueta del botón primario de validación (default: «Reenviar Validación»). */
+  textoBotonValidar?: string;
+  /** Si false, el botón de validación queda deshabilitado (p. ej. invitaciones gated). */
+  puedeValidarIdentidad?: boolean;
 }
 
 const SEGUNDOS_ENTRE_REENVIOS = 60;
@@ -79,6 +88,9 @@ export function PersonaActor({
   guardarRol,
   refrescarIdentidad,
   reportarError,
+  onValidarIdentidad,
+  textoBotonValidar,
+  puedeValidarIdentidad = true,
 }: Props) {
   const [tocados, setTocados] = useState<Partial<Record<CampoActor, boolean>>>({});
   const [errorConsulta, setErrorConsulta] = useState<string | null>(null);
@@ -116,12 +128,22 @@ export function PersonaActor({
       setErrorConsulta(null);
       const nombre = (r.existe ? (r.nombreCompleto ?? [r.nombres, r.apellidos].filter(Boolean).join(" ")) : "").trim();
       const ciudad = r.ciudad ? ciudadCanonica(r.ciudad) ?? "" : "";
+      const licencia =
+        r.existe && (r.estadoLicencia || r.vigenciaLicencia)
+          ? { estado: r.estadoLicencia ?? null, vigencia: r.vigenciaLicencia ?? null }
+          : null;
+      const runt = {
+        inscrito: r.existe,
+        multasPendientes: r.existe ? (r.tieneMultasPendientes ?? null) : null,
+        nroPazYSalvo: r.nroPazYSalvo ?? null,
+        comparendos: r.comparendos ?? null,
+      };
       if (nombre) {
         setAvisoManual(null);
-        onCambio({ consultado: true, nombreConsultado: true, nombre, licencia: null, ...(ciudad ? { ciudad } : {}) });
+        onCambio({ consultado: true, nombreConsultado: true, nombre, licencia, runt, ...(ciudad ? { ciudad } : {}) });
       } else {
-        setAvisoManual("No encontramos los datos de esta persona; escribe su nombre manualmente.");
-        onCambio({ consultado: true, nombreConsultado: false, nombre: "", licencia: null, ...(ciudad ? { ciudad } : {}) });
+        setAvisoManual("No se encontró en RUNT. Corrige el documento e intenta de nuevo; sin inscripción RUNT no puedes continuar con esta persona.");
+        onCambio({ consultado: true, nombreConsultado: false, nombre: "", licencia: null, runt, ...(ciudad ? { ciudad } : {}) });
       }
     },
     onError: (e) => {
@@ -129,7 +151,7 @@ export function PersonaActor({
       if (e instanceof ApiError && e.code === "detalle_agotado") {
         // Sin consultas disponibles: se sigue a mano, como cuando no hay coincidencia.
         setAvisoManual(mensajeDe(e));
-        onCambio({ consultado: true, nombreConsultado: false, nombre: "", licencia: null });
+        onCambio({ consultado: true, nombreConsultado: false, nombre: "", licencia: null, runt: null });
         return;
       }
       bloqueoConsulta.registrar(e);
@@ -177,17 +199,34 @@ export function PersonaActor({
       avisar({ tipo: "error", texto: "Completa y corrige los datos de esta persona antes de validar su identidad." });
       return;
     }
+    // Regla FLIT 2: hay que consultar RUNT (inscrito) antes de validar identidad.
+    if (!fila.runt?.inscrito) {
+      avisar({
+        tipo: "error",
+        texto: fila.runt
+          ? "Sin inscripción en RUNT no puedes validar la identidad de esta persona. Corrige el documento y vuelve a consultar."
+          : "Consulta primero esta persona en el RUNT antes de enviar la validación.",
+      });
+      return;
+    }
     setOcupado(true);
     setAviso(null);
     try {
       await guardarRol();
-      const resultado = await cliente.identidad[accion](solicitudId, fila.rol, fila.ordinal);
+      const resultado = onValidarIdentidad
+        ? await onValidarIdentidad(accion)
+        : await cliente.identidad[accion](solicitudId, fila.rol, fila.ordinal);
       refrescarIdentidad();
       if (accion === "reenviar") esperaReenvio.iniciar(SEGUNDOS_ENTRE_REENVIOS);
+      if (resultado.capturaUrl) {
+        window.open(resultado.capturaUrl, "_blank", "noopener,noreferrer");
+      }
       avisar(
         resultado.estado === "pendiente_envio"
           ? { tipo: "ok", texto: "Aún no pudimos enviar el enlace: lo intentaremos de nuevo automáticamente." }
-          : { tipo: "ok", texto: `Enlace enviado a ${fila.correo}` },
+          : resultado.capturaUrl
+            ? { tipo: "ok", texto: "Abre la ventana de validación y completa tu identidad en el punto." }
+            : { tipo: "ok", texto: `Enlace enviado a ${fila.correo}` },
       );
     } catch (err) {
       reportarError(err);
@@ -205,14 +244,30 @@ export function PersonaActor({
 
   // ── Presentación ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-  const identidadAbierta = estado === "aprobada" || enCurso(estado);
-  const documentoBloqueado = fila.consultado && identidadAbierta;
+  const identidadAprobada = estado === "aprobada";
+  const identidadAbierta = identidadAprobada || enCurso(estado);
+  // Solo la identidad ya aprobada sella el documento; con pendiente/sin consultar RUNT se puede corregir.
+  const documentoBloqueado = fila.consultado && identidadAprobada;
   const nombreMostrado = fila.consultado ? fila.nombre : "";
   const pideIdentidad = rol.biometria;
   const vence = formatearFecha(fila.licencia?.vigencia);
-  const etiquetaLicencia = fila.licencia?.estado ? `Licencia ${fila.licencia.estado.toLowerCase()}${fila.licencia.vigencia ? ` · ${vence ?? fila.licencia.vigencia}` : ""}` : null;
+  const etiquetaLicencia = fila.licencia?.estado
+    ? `Licencia ${fila.licencia.estado.toLowerCase()}${fila.licencia.vigencia ? ` · ${fila.licencia.vigencia === "vigente" ? "vigente" : "no vigente"}${vence ? ` · vence ${vence}` : ""}` : ""}`
+    : fila.licencia?.vigencia
+      ? `Licencia ${fila.licencia.vigencia === "vigente" ? "vigente" : "no vigente"}`
+      : null;
+  const etiquetaMultas =
+    fila.runt?.inscrito && fila.runt.multasPendientes != null
+      ? fila.runt.multasPendientes
+        ? `Multas: pendientes${fila.runt.comparendos != null ? ` (${fila.runt.comparendos})` : ""}`
+        : `Multas: paz y salvo${fila.runt.nroPazYSalvo ? ` · ${fila.runt.nroPazYSalvo}` : ""}`
+      : null;
   const reenviosAgotados = parte !== undefined && enCurso(estado) && parte.reenviosRestantes === 0;
-  const puedeCambiarDocumento = fila.consultado && !identidadAbierta && !esPropietario;
+  // «Cambiar documento» si aún no está aprobada (incluye pendiente de invitación sin RUNT).
+  const puedeCambiarDocumento = fila.consultado && !identidadAprobada && !esPropietario;
+  // Mostrar Consultar si no hay ficha o si el borrador trae datos guardados sin haber pasado por RUNT.
+  const faltaConsultaRunt = fila.consultado && fila.runt === null && !identidadAprobada && !esPropietario;
+  const muestraConsultar = (!fila.consultado || faltaConsultaRunt) && !identidadAprobada;
   const fichaPropietario = esPropietario && fila.consultado;
 
   return (
@@ -252,10 +307,10 @@ export function PersonaActor({
         <Field label="Tipo de documento">
           <select
             className="field"
-            disabled={fila.consultado}
+            disabled={fila.consultado && !faltaConsultaRunt}
             value={fila.tipoDocumento}
             onChange={(e) => {
-              onCambio({ tipoDocumento: e.target.value as TipoDocumento });
+              onCambio({ tipoDocumento: e.target.value as TipoDocumento, runt: null });
               setErrorConsulta(null);
             }}
           >
@@ -274,11 +329,12 @@ export function PersonaActor({
               inputMode="numeric"
               autoComplete="off"
               placeholder="Consulta el documento"
-              disabled={fila.consultado}
+              disabled={fila.consultado && !faltaConsultaRunt}
+              readOnly={fila.consultado && !faltaConsultaRunt ? true : undefined}
               aria-invalid={error("numeroDocumento") || errorConsulta ? true : undefined}
               value={fila.numeroDocumento}
               onChange={(e) => {
-                onCambio({ numeroDocumento: soloDigitos(e.target.value) });
+                onCambio({ numeroDocumento: soloDigitos(e.target.value), runt: null });
                 setErrorConsulta(null);
               }}
               onBlur={() => tocar("numeroDocumento")}
@@ -286,15 +342,15 @@ export function PersonaActor({
           </div>
         </Field>
         <div className="flex flex-wrap items-end gap-2">
-          {!fila.consultado && (
+          {muestraConsultar && (
             <Btn onClick={alConsultar} disabled={consulta.isPending || bloqueoConsulta.bloqueado}>
               {consulta.isPending ? "Consultando..." : esPropietario ? "Consultar" : `Consultar ${(titulo ?? rol.etiqueta).toLowerCase()}`}
             </Btn>
           )}
-          {puedeCambiarDocumento && (
+          {puedeCambiarDocumento && !faltaConsultaRunt && (
             <Btn tone="secondary" onClick={() => {
                 setAvisoManual(null);
-                onCambio({ consultado: false, licencia: null, nombreConsultado: false, ...(fila.nombreConsultado ? { nombre: "" } : {}) });
+                onCambio({ consultado: false, licencia: null, runt: null, nombreConsultado: false, ...(fila.nombreConsultado ? { nombre: "" } : {}) });
               }}>
               Cambiar documento
             </Btn>
@@ -366,7 +422,7 @@ export function PersonaActor({
       </div>
 
       {fila.consultado && avisoManual && (
-        <p role="status" className="text-xs">
+        <p role={fila.runt && !fila.runt.inscrito ? "alert" : "status"} className={`text-xs ${fila.runt && !fila.runt.inscrito ? "text-alert" : ""}`}>
           {avisoManual}
         </p>
       )}
@@ -376,21 +432,32 @@ export function PersonaActor({
         </p>
       )}
 
-      {fila.consultado && (etiquetaLicencia || pideIdentidad) && (
-        <div className="flex flex-wrap items-center gap-3">
+      {fila.consultado && (fila.runt || etiquetaLicencia || etiquetaMultas || pideIdentidad) && (
+        <div className="flex flex-wrap items-center gap-3" role="status" aria-live="polite">
+          {fila.runt && (
+            <Badge tone={fila.runt.inscrito ? "success" : "warning"}>
+              {fila.runt.inscrito ? "Inscrito en RUNT" : "No inscrito en RUNT"}
+            </Badge>
+          )}
           {etiquetaLicencia && <Badge tone="info">{etiquetaLicencia}</Badge>}
+          {etiquetaMultas && (
+            <Badge tone={fila.runt?.multasPendientes ? "warning" : "success"}>{etiquetaMultas}</Badge>
+          )}
           {pideIdentidad && <Badge tone={TONO_VALIDACION(estado)}>Validación: {ETIQUETA_VALIDACION[estado] ?? estado}</Badge>}
           {pideIdentidad && estado !== "aprobada" && (
             <span className="ml-auto flex flex-wrap items-center gap-3">
               {enCurso(estado) && parte && !reenviosAgotados && <span className="text-xs font-light text-muted-foreground">Te quedan {parte.reenviosRestantes} reenvíos</span>}
               {enCurso(estado) && esperaReenvio.bloqueado && <span className="text-xs font-light text-muted-foreground">Podrás reenviar en {esperaReenvio.segundosRestantes} s</span>}
               {enCurso(estado) ? (
-                <Btn onClick={() => void pedirIdentidad("reenviar")} disabled={ocupado || esperaReenvio.bloqueado || reenviosAgotados}>
-                  {ocupado ? "Enviando..." : "Reenviar Validación"}
+                <Btn
+                  onClick={() => void pedirIdentidad("reenviar")}
+                  disabled={ocupado || esperaReenvio.bloqueado || reenviosAgotados || !puedeValidarIdentidad || !fila.runt?.inscrito}
+                >
+                  {ocupado ? "Enviando..." : (textoBotonValidar ?? "Reenviar Validación")}
                 </Btn>
               ) : (
-                <Btn onClick={() => void pedirIdentidad("solicitar")} disabled={ocupado}>
-                  {ocupado ? "Enviando..." : "Reenviar Validación"}
+                <Btn onClick={() => void pedirIdentidad("solicitar")} disabled={ocupado || !puedeValidarIdentidad || !fila.runt?.inscrito}>
+                  {ocupado ? "Enviando..." : (textoBotonValidar ?? "Reenviar Validación")}
                 </Btn>
               )}
             </span>

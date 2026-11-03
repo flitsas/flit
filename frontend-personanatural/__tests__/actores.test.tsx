@@ -59,7 +59,20 @@ async function consultarTercero(card: HTMLElement, documento: string) {
   await waitFor(() => expect(within(card).getByLabelText(/Teléfono/)).toBeEnabled());
 }
 
-const detalle = (extra: Record<string, unknown> = {}) => json({ existe: true, nombres: "ANA MARIA", apellidos: "RUIZ PEREZ", nombreCompleto: "ANA MARIA RUIZ PEREZ", ciudad: null, ...extra });
+const detalle = (extra: Record<string, unknown> = {}) =>
+  json({
+    existe: true,
+    nombres: "ANA MARIA",
+    apellidos: "RUIZ PEREZ",
+    nombreCompleto: "ANA MARIA RUIZ PEREZ",
+    ciudad: null,
+    estadoLicencia: "ACTIVO",
+    vigenciaLicencia: "vigente",
+    tieneMultasPendientes: false,
+    nroPazYSalvo: "PYS-1",
+    comparendos: null,
+    ...extra,
+  });
 const consultar = (card: HTMLElement, documento = "52123456") => {
   fireEvent.change(within(card).getByLabelText(/Número de documento/), { target: { value: documento } });
   fireEvent.click(within(card).getByRole("button", { name: /^Consultar/ }));
@@ -167,6 +180,43 @@ describe("validación de formato y consulta del documento (F3 AC1 y AC2, K5 AC5)
     expect(nombre).toHaveValue("ANA MARIA RUIZ PEREZ");
     expect(nombre).toHaveAttribute("readonly");
     expect(within(card).getByLabelText(/Teléfono/)).toBeEnabled();
+    expect(within(card).getByText("Inscrito en RUNT")).toBeInTheDocument();
+    expect(within(card).getByText(/Licencia activo/i)).toBeInTheDocument();
+    expect(within(card).getByText(/Multas: paz y salvo/i)).toBeInTheDocument();
+  });
+
+  it("con multas pendientes del RUNT muestra la alerta y la cantidad de comparendos", async () => {
+    await abrir({
+      [RUTA_DETALLE]: () =>
+        detalle({ tieneMultasPendientes: true, nroPazYSalvo: null, comparendos: 2, estadoLicencia: "ACTIVO", vigenciaLicencia: "vigente" }),
+    });
+    const card = tarjeta("Comprador");
+    await consultarTercero(card, "52123456");
+    expect(within(card).getByText("Inscrito en RUNT")).toBeInTheDocument();
+    expect(within(card).getByText(/Multas: pendientes \(2\)/i)).toBeInTheDocument();
+  });
+
+  it("si el borrador ya trae comprador sin consulta RUNT, deja editar documento y muestra Consultar", async () => {
+    const solicitud = solicitudDe({
+      ...guardado(DIAGNOSTICO_OK),
+      actores: [
+        guardadoActor("vendedor", CEDULA_SOLICITANTE, "DUEÑO", "aprobada"),
+        guardadoActor("comprador", "1098765432", "Parte invitada", "pendiente"),
+      ],
+    });
+    await abrir(
+      {
+        "GET /solicitudes/s-1": () => json(solicitud),
+        "GET /solicitudes/s-1/identidad": () =>
+          json(identidad([parte("vendedor", "aprobada"), parte("comprador", "pendiente")])),
+      },
+      solicitud,
+    );
+    const card = tarjeta("Comprador");
+    expect(within(card).getByLabelText(/Número de documento/)).toBeEnabled();
+    expect(within(card).getByLabelText("Tipo de documento")).toBeEnabled();
+    expect(within(card).getByRole("button", { name: /Consultar comprador/i })).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: /Reenviar Validación/i })).toBeDisabled();
   });
 
   it("con la identidad pendiente el nombre consultado se muestra completo", async () => {
@@ -179,18 +229,21 @@ describe("validación de formato y consulta del documento (F3 AC1 y AC2, K5 AC5)
     await waitFor(() => expect(within(card).getByLabelText(/Nombre completo/)).toHaveValue("ANA MARIA RUIZ PEREZ"));
   });
 
-  it("un documento sin coincidencia avisa bajo los campos y deja escribir el nombre a mano", async () => {
+  it("un documento sin coincidencia avisa no inscrito en RUNT y bloquea la validación de identidad", async () => {
     await abrir({ [RUTA_DETALLE]: () => json({ existe: false, nombres: null, apellidos: null, nombreCompleto: null, ciudad: null }) });
     const card = tarjeta("Comprador");
     await consultarTercero(card, "52123456");
 
-    expect(within(card).getByText(/No encontramos los datos de esta persona; escribe su nombre manualmente/)).toBeInTheDocument();
+    expect(within(card).getByText(/No se encontró en RUNT/i)).toBeInTheDocument();
+    expect(within(card).getByText("No inscrito en RUNT")).toBeInTheDocument();
     const nombre = within(card).getByLabelText(/Nombre completo/);
     expect(nombre).toBeEnabled();
     expect(nombre).not.toHaveAttribute("readonly");
     fireEvent.change(nombre, { target: { value: "ANA RUIZ" } });
     expect(nombre).toHaveValue("ANA RUIZ");
     expect(within(card).getByLabelText(/Número de documento/)).toBeDisabled();
+    llenarContacto(card);
+    expect(within(card).getByRole("button", { name: /Reenviar Validación|Enviar validación|Validar/i })).toBeDisabled();
   });
 
   it("si solo vienen nombres y apellidos arma el nombre completo", async () => {
@@ -237,7 +290,7 @@ describe("validación de formato y consulta del documento (F3 AC1 y AC2, K5 AC5)
     const card = tarjeta("Comprador");
     consultar(card);
 
-    expect(await within(card).findByText(/El servicio no está disponible en este momento/)).toBeInTheDocument();
+    expect(await within(card).findByText(/No pudimos consultar el RUNT/i)).toBeInTheDocument();
     expect(within(card).getByLabelText(/Teléfono/)).toBeDisabled();
     expect(within(card).getByText(/Podrás intentarlo de nuevo en/)).toBeInTheDocument();
   });

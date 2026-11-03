@@ -195,12 +195,21 @@ describe("proxy del canal del punto", () => {
     expect(cabeceras.get("authorization")).toBeNull();
   });
 
-  it("un 401 del canal borra solo la cookie del punto", async () => {
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ code: "no_autorizado" }), { status: 401 }));
+  it("un 401 sesion_punto_ausente borra solo la cookie del punto", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ code: "sesion_punto_ausente" }), { status: 401 }));
 
     const resultado = await reenviarAlBff(new Request("https://portal/x"), ["punto", "sesion"], { apiOrigin: ORIGEN, fetchImpl });
 
     expect(resultado.cookiePunto).toEqual({ accion: "borrar" });
+    expect(resultado.cookie).toBeUndefined();
+  });
+
+  it("un 401 session_invalid en actores no borra la cookie del punto", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ code: "session_invalid" }), { status: 401 }));
+
+    const resultado = await reenviarAlBff(new Request("https://portal/x"), ["punto", "actores", "identidad"], { apiOrigin: ORIGEN, fetchImpl });
+
+    expect(resultado.cookiePunto).toBeUndefined();
     expect(resultado.cookie).toBeUndefined();
   });
 });

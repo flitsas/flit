@@ -161,6 +161,16 @@ internal sealed class ConsultasRuntFalso : IConsultasRunt
         LlamadasMultas.Add((placa, documento, referencia));
         return Falla is null ? Task.FromResult(Multas()) : Task.FromException<ResultadoConsulta>(Falla);
     }
+
+    public Func<AvaluoSugeridoConsulta> Avaluos { get; set; } = () => new AvaluoSugeridoConsulta(null, "sin_datos");
+
+    public List<(string? Placa, string? Vin)> LlamadasAvaluos { get; } = [];
+
+    public Task<AvaluoSugeridoConsulta> ConsultarAvaluosAsync(string? placa, string? vin, CancellationToken ct)
+    {
+        LlamadasAvaluos.Add((placa, vin));
+        return Falla is null ? Task.FromResult(Avaluos()) : Task.FromException<AvaluoSugeridoConsulta>(Falla);
+    }
 }
 
 /// <summary>

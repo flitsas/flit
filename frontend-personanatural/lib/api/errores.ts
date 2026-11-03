@@ -48,8 +48,11 @@ const MENSAJES_POR_CODIGO: Record<string, string> = {
   session_expired: "Tu sesión venció. Puedes reanudar el trámite con tu radicado y tu cédula.",
   session_invalid: "Necesitamos que inicies o reanudes tu trámite para continuar.",
   session_scope_mismatch: "Esta sesión no corresponde a ese trámite.",
+  solicitud_ajena: "Esta sesión no corresponde a ese trámite. Recarga e inténtalo de nuevo.",
   reanudar_bloqueado: "Demasiados intentos. Vuelve a intentarlo en unos minutos.",
   solicitud_no_encontrada: "No encontramos un trámite con esos datos.",
+  no_es_canal_punto: "Esta solicitud no se abrió en el punto de atención.",
+  invitaciones_bloqueadas: "Primero debe quedar identificada la persona que radica.",
   rate_limited: "Demasiados intentos. Vuelve a intentarlo en unos minutos.",
   cedula_rate_limited: "Alcanzaste el máximo de consultas por hora para este documento. Intenta más tarde.",
   consultas_no_disponibles: "Las consultas están pausadas por hoy. Intenta de nuevo mañana.",
@@ -70,6 +73,7 @@ const MENSAJES_POR_CODIGO: Record<string, string> = {
   reenvio_muy_pronto: "Espera un momento antes de reenviar el enlace de nuevo.",
   reenvios_agotados: "Ya se reenvió el enlace el máximo de veces.",
   validacion_en_curso: "Ya hay una validación en curso para esta persona.",
+  servicio_no_disponible: "El servicio no está disponible por ahora. Intenta de nuevo en unos minutos.",
   identidad_aprobada: "La identidad de esta persona ya fue validada.",
   validacion_no_solicitada: "Primero solicita la validación de esta persona.",
   actor_no_registrado: "Guarda primero a esta persona en el trámite.",
@@ -117,6 +121,10 @@ export function mensajeDe(error: unknown): string {
 export function mensajeDeFallo(error: unknown): string {
   if (!(error instanceof ApiError)) return MENSAJE_GENERICO;
   if (MENSAJES_POR_CODIGO[error.code]) return MENSAJES_POR_CODIGO[error.code];
+  // Next/gateway a veces reenvían 502 con title "Bad Gateway" sin problem+json.
+  if (error.status === 502 || /^bad gateway$/i.test(error.title.trim())) {
+    return "No pudimos contactar el servicio de identidad. Reintenta en unos segundos; si sigue fallando, revisa que el BFF y core-api estén en marcha.";
+  }
   const titulo = error.title.trim();
   if (titulo && titulo !== "Error") return titulo;
   return MENSAJES_POR_ESTADO[error.status] ?? MENSAJE_GENERICO;
@@ -135,10 +143,23 @@ export async function errorDeRespuesta(respuesta: Response): Promise<ApiError> {
   let fallas: FallasDeRadicacion | undefined;
   let campo: string | undefined;
   try {
-    const datos = (await respuesta.json()) as { code?: unknown; title?: unknown; message?: unknown; errors?: unknown; state?: unknown; field?: unknown; pendientes?: unknown; motivo?: unknown; partes?: unknown };
+    const datos = (await respuesta.json()) as {
+      code?: unknown;
+      title?: unknown;
+      detail?: unknown;
+      message?: unknown;
+      errors?: unknown;
+      state?: unknown;
+      field?: unknown;
+      pendientes?: unknown;
+      motivo?: unknown;
+      partes?: unknown;
+    };
     if (typeof datos.code === "string") code = datos.code;
-    if (typeof datos.title === "string") title = datos.title;
+    // RFC 7807: preferir detail/message sobre title (el back a veces pone el code en title).
+    if (typeof datos.detail === "string" && datos.detail.trim()) title = datos.detail.trim();
     else if (typeof datos.message === "string" && datos.message.trim()) title = datos.message.trim();
+    else if (typeof datos.title === "string") title = datos.title;
     if (typeof datos.state === "string") estado = datos.state;
     errores = erroresPorCampo(datos.errors);
     fallas = fallasDe(datos);

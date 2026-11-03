@@ -7,11 +7,15 @@ using Flit.Consultas.Grpc.V1;
 using Flit.PersonaNatural.Api.Abuso;
 using Flit.PersonaNatural.Api.Consultas;
 using Flit.PersonaNatural.Api.Cotizaciones;
+using Flit.PersonaNatural.Api.Definiciones;
+using Flit.PersonaNatural.Api.Persistence;
 using Flit.PersonaNatural.Api.Punto;
 using Flit.PersonaNatural.Api.Sesiones;
+using Flit.PersonaNatural.Api.Solicitudes;
 using FluentAssertions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -19,8 +23,9 @@ using Xunit;
 namespace Flit.PersonaNatural.Tests;
 
 /// <summary>
-/// HU #14216, #14219 y #14221 — canal del punto. El host solo mapea esas rutas (sin Postgres): la cookie, el arranque y
-/// las consultas se prueban con fachadas falsas. Ningún servicio de estas rutas recibe el contexto de solicitudes.
+/// HU #14216, #14219, #14221, #14231, #14236 y #14242 — canal del punto. El host mapea esas rutas (sin Postgres): la cookie, el
+/// arranque, el diagnóstico, las consultas, abrir actores y la matriz de requisitos usan fachadas falsas. Abrir actores
+/// materializa borrador vía <see cref="IAbrirBorradorDesdePunto"/> falso (sin DbContext).
 /// </summary>
 public sealed class PuntoCanalTests
 {
@@ -155,12 +160,244 @@ public sealed class PuntoCanalTests
     }
 
     [Fact]
+    public async Task ActoresAbrir_SinSesion_Responde401()
+    {
+        await using var host = Host(Ok(), RuntCon(Nombre));
+
+        var r = await host.PostAsync("/actores/abrir", new { placa = "ABC123", documento = "1098765432", tipoCodigo = "CAMBIO_COLOR" });
+
+        r.Status.Should().Be(HttpStatusCode.Unauthorized);
+        r.Json.GetProperty("code").GetString().Should().Be("sesion_punto_ausente");
+    }
+
+    [Fact]
+    public async Task Requisitos_SinSesion_Responde401()
+    {
+        await using var host = Host(Ok());
+
+        var r = await host.GetAsync("/requisitos?tipoCodigo=TRASPASO_STANDARD", null);
+
+        r.Status.Should().Be(HttpStatusCode.Unauthorized);
+        r.Json.GetProperty("code").GetString().Should().Be("sesion_punto_ausente");
+    }
+
+    [Fact]
+    public async Task Requisitos_MatrizOk_AgrupaPorParteYUsaOrganismoDeLaCookie()
+    {
+        var defs = new FachadaDefinicionesFalsa();
+        defs.PorCodigo["TRASPASO_STANDARD"] = DefinicionesDePrueba.Traspaso(huella: "matriz-viva-1");
+        await using var host = Host(Ok(), definiciones: defs);
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+
+        var r = await host.GetAsync("/requisitos?tipoCodigo=TRASPASO_STANDARD", entrada.Cookie);
+
+        r.Status.Should().Be(HttpStatusCode.OK);
+        r.Json.GetProperty("tipoCodigo").GetString().Should().Be("TRASPASO_STANDARD");
+        r.Json.GetProperty("organismoId").GetGuid().Should().Be(OrganismoId);
+        r.Json.GetProperty("huella").GetString().Should().Be("matriz-viva-1");
+        var grupos = r.Json.GetProperty("grupos");
+        grupos.GetArrayLength().Should().Be(2);
+        grupos[0].GetProperty("parte").GetString().Should().Be("vendedor");
+        grupos[1].GetProperty("parte").GetString().Should().Be("comprador");
+        var clases = grupos[0].GetProperty("items").EnumerateArray()
+            .Select(i => i.GetProperty("clase").GetString())
+            .ToArray();
+        clases.Should().Contain("obligatorio");
+        clases.Should().Contain("opcional");
+        defs.UltimoOrganismo.Should().Be(OrganismoId.ToString());
+        defs.Llamadas.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Requisitos_MatrizViva_ReflejaCambioSinConfigLocal()
+    {
+        var defs = new FachadaDefinicionesFalsa();
+        defs.PorCodigo["CAMBIO_COLOR"] = DefinicionesDePrueba.UnTitular(huella: "antes");
+        await using var host = Host(Ok(), definiciones: defs);
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+
+        var primero = await host.GetAsync("/requisitos?tipoCodigo=CAMBIO_COLOR", entrada.Cookie);
+        primero.Json.GetProperty("huella").GetString().Should().Be("antes");
+
+        defs.PorCodigo["CAMBIO_COLOR"] = DefinicionesDePrueba.UnTitular(huella: "despues");
+        var segundo = await host.GetAsync("/requisitos?tipoCodigo=CAMBIO_COLOR", entrada.Cookie);
+
+        segundo.Status.Should().Be(HttpStatusCode.OK);
+        segundo.Json.GetProperty("huella").GetString().Should().Be("despues");
+        segundo.Json.GetProperty("grupos").GetArrayLength().Should().Be(1);
+        defs.Llamadas.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Requisitos_SinTipo_Responde400()
+    {
+        await using var host = Host(Ok());
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+
+        var r = await host.GetAsync("/requisitos", entrada.Cookie);
+
+        r.Status.Should().Be(HttpStatusCode.BadRequest);
+        r.Json.GetProperty("code").GetString().Should().Be("datos_invalidos");
+    }
+
+    [Fact]
+    public async Task Requisitos_ValidarArchivo_FormatoInvalido_400()
+    {
+        await using var host = Host(Ok());
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+
+        var r = await host.PostAsync("/requisitos/validar-archivo", new { nombreArchivo = "x.exe", tamanoBytes = 100 }, entrada.Cookie);
+
+        r.Status.Should().Be(HttpStatusCode.BadRequest);
+        r.Json.GetProperty("valido").GetBoolean().Should().BeFalse();
+        r.Json.GetProperty("code").GetString().Should().Be("formato_no_permitido");
+    }
+
+    [Fact]
+    public async Task Requisitos_ValidarArchivo_Ok()
+    {
+        await using var host = Host(Ok());
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+
+        var r = await host.PostAsync("/requisitos/validar-archivo", new { nombreArchivo = "contrato.pdf", tamanoBytes = 1024 }, entrada.Cookie);
+
+        r.Status.Should().Be(HttpStatusCode.OK);
+        r.Json.GetProperty("valido").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Requisitos_ValorSugerido_SinFasecolda_QuedaVacio()
+    {
+        await using var host = Host(Ok());
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+
+        var r = await host.GetAsync("/requisitos/valor-sugerido?placa=ABC123", entrada.Cookie);
+
+        r.Status.Should().Be(HttpStatusCode.OK);
+        r.Json.GetProperty("fuente").GetString().Should().Be("sin_datos");
+        // Json del punto omite nulls (WhenWritingNull): sin avalúo no viene valorSugerido.
+        r.Json.TryGetProperty("valorSugerido", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Requisitos_ValorSugerido_ConAvaluo_PrecargaValor()
+    {
+        var runt = new ConsultasRuntFalso
+        {
+            Avaluos = () => new AvaluoSugeridoConsulta(18_500_000m, "fasecolda"),
+        };
+        await using var host = Host(Ok(), runt);
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+
+        var r = await host.GetAsync("/requisitos/valor-sugerido?placa=ABC123", entrada.Cookie);
+
+        r.Status.Should().Be(HttpStatusCode.OK);
+        r.Json.GetProperty("fuente").GetString().Should().Be("fasecolda");
+        r.Json.GetProperty("valorSugerido").GetDecimal().Should().Be(18_500_000m);
+        runt.LlamadasAvaluos.Should().ContainSingle(x => x.Placa == "ABC123");
+    }
+
+    [Fact]
+    public async Task Requisitos_Completitud_GateObligatoriosYValor()
+    {
+        var defs = new FachadaDefinicionesFalsa();
+        defs.PorCodigo["TRASPASO_STANDARD"] = DefinicionesDePrueba.Traspaso();
+        await using var host = Host(Ok(), definiciones: defs);
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+
+        var soloSoat = new List<string> { "soat" };
+        var incompleto = await host.PostAsync("/requisitos/completitud", new
+        {
+            tipoCodigo = "TRASPASO_STANDARD",
+            docCodesCargados = soloSoat,
+            valorVenta = 0,
+        }, entrada.Cookie);
+
+        incompleto.Status.Should().Be(HttpStatusCode.OK);
+        incompleto.Json.GetProperty("puedeContinuarPago").GetBoolean().Should().BeFalse();
+        var pendientes = incompleto.Json.GetProperty("pendientes").EnumerateArray().Select(p => p.GetString()).ToArray();
+        pendientes.Should().Contain("compraventa");
+        pendientes.Should().Contain("valor_venta");
+
+        var docsCompletos = new List<string> { "compraventa", "soat", "poder_tramitador" };
+        var completo = await host.PostAsync("/requisitos/completitud", new
+        {
+            tipoCodigo = "TRASPASO_STANDARD",
+            docCodesCargados = docsCompletos,
+            valorVenta = 15_000_000,
+        }, entrada.Cookie);
+
+        completo.Json.GetProperty("puedeContinuarPago").GetBoolean().Should().BeTrue();
+        completo.Json.GetProperty("pendientes").GetArrayLength().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ActoresAbrir_DueñoOk_DevuelveBorradorYPuedeSerRadicante()
+    {
+        var borrador = new BorradorPuntoFalso();
+        await using var host = Host(Ok(), RuntCon(Nombre), borrador: borrador);
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+
+        var r = await host.PostAsync("/actores/abrir", new { placa = "ABC123", documento = "1098765432", tipoCodigo = "CAMBIO_COLOR" }, entrada.Cookie);
+
+        r.Status.Should().Be(HttpStatusCode.OK);
+        r.Json.GetProperty("solicitudId").GetGuid().Should().Be(borrador.UltimaSolicitudId);
+        r.Json.GetProperty("organismoId").GetGuid().Should().Be(OrganismoId);
+        r.Json.GetProperty("puedeSerRadicante").GetBoolean().Should().BeTrue();
+        r.Json.TryGetProperty("message", out _).Should().BeFalse();
+        borrador.UltimoOrganismoId.Should().Be(OrganismoId);
+        borrador.UltimaPlaca.Should().Be("ABC123");
+    }
+
+    [Fact]
+    public async Task ActoresAbrir_NoDueño_PuedeSerRadicanteFalse_ConMensaje()
+    {
+        var runt = new ConsultasRuntFalso
+        {
+            Vehiculo = () =>
+            {
+                var r = ResultadosFalsos.VehiculoCompleto();
+                var campo = r.Campos.FirstOrDefault(c => c.Clave == "owner_document_number");
+                if (campo is null)
+                    r.Campos.Add(new Campo { Clave = "owner_document_number", ValorTexto = "9999999999" });
+                else
+                    campo.ValorTexto = "9999999999";
+                return r;
+            },
+        };
+        await using var host = Host(Ok(), runt);
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+
+        var r = await host.PostAsync("/actores/abrir", new { placa = "ABC123", documento = "1098765432", tipoCodigo = "CAMBIO_COLOR" }, entrada.Cookie);
+
+        r.Status.Should().Be(HttpStatusCode.OK);
+        r.Json.GetProperty("puedeSerRadicante").GetBoolean().Should().BeFalse();
+        r.Json.GetProperty("message").GetString().Should().Be(ActoresPuntoService.MensajeNoDueño);
+        r.Json.GetProperty("solicitudId").GetGuid().Should().NotBe(Guid.Empty);
+    }
+
+    [Fact]
+    public void Actores_EsPropietarioRunt_ComparaDocumentoDelPropietario()
+    {
+        var dueño = ResultadosFalsos.VehiculoCompleto();
+        var propietario = new DocumentoConsulta("CC", "1098765432");
+        ActoresPuntoService.EsPropietarioRunt(dueño, propietario).Should().BeTrue();
+
+        var campo = dueño.Campos.First(c => c.Clave == "owner_document_number");
+        campo.ValorTexto = "111";
+        ActoresPuntoService.EsPropietarioRunt(dueño, propietario).Should().BeFalse();
+        ActoresPuntoService.EsPropietarioRunt(ResultadosFalsos.VehiculoInexistente(), propietario).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Consultas_NoCreanTramite_YSinSesionResponden401()
     {
         typeof(ArranquePuntoService).GetConstructors().Single().GetParameters()
             .Should().NotContain(p => p.ParameterType.Name.Contains("Db") || p.ParameterType.Name.Contains("Procedure"));
         typeof(ConsultasPuntoService).GetConstructors().Single().GetParameters()
             .Should().NotContain(p => p.ParameterType.Name.Contains("Db") || p.ParameterType.Name.Contains("Procedure"));
+        typeof(DiagnosticoPuntoService).GetConstructors().Single().GetParameters()
+            .Should().NotContain(p => p.ParameterType.Name.Contains("Db") || p.ParameterType.Name.Contains("Procedure") || p.ParameterType.Name.Contains("Solicitud"));
 
         var runt = new ConsultasRuntFalso
         {
@@ -184,6 +421,64 @@ public sealed class PuntoCanalTests
         runt.LlamadasVehiculo.Should().ContainSingle();
         runt.LlamadasConductor.Should().ContainSingle();
         runt.LlamadasMultas.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Diagnostico_ConSesion_DevuelvePuedeContinuarYRequisitos()
+    {
+        var requisitos = new FachadaRequisitosPuntoFalsa
+        {
+            Respuesta = new DiagnosticoDto(true, [new RequisitoDto("soat", "SOAT vigente", "cumple")]),
+        };
+        await using var host = Host(Ok(), requisitos: requisitos);
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+
+        var r = await host.PostAsync("/diagnostico", CuerpoDiagnostico(), entrada.Cookie);
+
+        r.Status.Should().Be(HttpStatusCode.OK);
+        r.Json.GetProperty("puedeContinuar").GetBoolean().Should().BeTrue();
+        r.Json.GetProperty("requisitos")[0].GetProperty("codigo").GetString().Should().Be("soat");
+        requisitos.UltimaOrganismoId.Should().Be(OrganismoId.ToString());
+        requisitos.UltimaPlaca.Should().Be("ABC123");
+        requisitos.UltimoTipoDocumento.Should().Be("CC");
+        requisitos.UltimoDocumento.Should().Be("1098765432");
+        requisitos.UltimoTipoCodigo.Should().Be("CAMBIO_COLOR");
+    }
+
+    [Fact]
+    public async Task Diagnostico_Bloqueo_DevuelvePuedeContinuarFalse()
+    {
+        var requisitos = new FachadaRequisitosPuntoFalsa
+        {
+            Respuesta = new DiagnosticoDto(false, [new RequisitoDto("soat", "SOAT", "falta")]),
+        };
+        await using var host = Host(Ok(), requisitos: requisitos);
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+
+        var r = await host.PostAsync("/diagnostico", CuerpoDiagnostico(), entrada.Cookie);
+
+        r.Status.Should().Be(HttpStatusCode.OK);
+        r.Json.GetProperty("puedeContinuar").GetBoolean().Should().BeFalse();
+        r.Json.GetProperty("requisitos").GetArrayLength().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Diagnostico_SinSesion_Responde401_DatosInvalidos400_YFachadaCaida503()
+    {
+        await using var hostOk = Host(Ok(), requisitos: new FachadaRequisitosPuntoFalsa());
+        (await hostOk.PostAsync("/diagnostico", CuerpoDiagnostico())).Status.Should().Be(HttpStatusCode.Unauthorized);
+
+        var entrada = await hostOk.PostAsync("/entrada", new { codigo = Codigo });
+        var invalido = await hostOk.PostAsync("/diagnostico", new { placa = "ABC123" }, entrada.Cookie);
+        invalido.Status.Should().Be(HttpStatusCode.BadRequest);
+
+        var caida = new FachadaRequisitosPuntoFalsa { Lanzar = true };
+        await using var hostCaida = Host(Ok(), requisitos: caida);
+        var cookie = (await hostCaida.PostAsync("/entrada", new { codigo = Codigo })).Cookie;
+        var r = await hostCaida.PostAsync("/diagnostico", CuerpoDiagnostico(), cookie);
+        r.Status.Should().Be(HttpStatusCode.ServiceUnavailable);
+        r.Json.GetProperty("code").GetString().Should().Be("proveedor_no_disponible");
+        r.Json.GetProperty("message").GetString().Should().Be(DiagnosticoPuntoService.MensajeFachadaCaida);
     }
 
     private static OrganismoPunto Sesion() => new(OrganismoId, Codigo, Nombre);
@@ -227,6 +522,8 @@ public sealed class PuntoCanalTests
 
     private static object CuerpoMultas() => new { documento = new { tipo = "CC", numero = "1098765432" }, consentimiento = true };
 
+    private static object CuerpoDiagnostico() => new { placa = "ABC123", documento = "1098765432", tipoCodigo = "CAMBIO_COLOR" };
+
     private static ResultadoConsulta MultasConUnComparendo()
     {
         var r = new ResultadoConsulta { Semaforo = Semaforo.Verde };
@@ -246,27 +543,48 @@ public sealed class PuntoCanalTests
         return par.StartsWith(prefijo, StringComparison.OrdinalIgnoreCase) ? par[prefijo.Length..] : null;
     }
 
-    private static HostPunto Host(ResolucionCanalPunto resolucion, ConsultasRuntFalso? runt = null, FachadaTipos? fachada = null) =>
-        new(resolucion, runt ?? new ConsultasRuntFalso(), fachada ?? FachadaCon());
+    private static HostPunto Host(
+        ResolucionCanalPunto resolucion,
+        ConsultasRuntFalso? runt = null,
+        FachadaTipos? fachada = null,
+        FachadaRequisitosPuntoFalsa? requisitos = null,
+        BorradorPuntoFalso? borrador = null,
+        FachadaDefinicionesFalsa? definiciones = null) =>
+        new(resolucion, runt ?? new ConsultasRuntFalso(), fachada ?? FachadaCon(), requisitos ?? new FachadaRequisitosPuntoFalsa(), borrador ?? new BorradorPuntoFalso(), definiciones ?? new FachadaDefinicionesFalsa());
 
     private sealed class HostPunto : IAsyncDisposable
     {
         private readonly WebApplication _app;
         private readonly HttpClient _http;
 
-        public HostPunto(ResolucionCanalPunto resolucion, ConsultasRuntFalso runt, FachadaTipos fachada)
+        public HostPunto(
+            ResolucionCanalPunto resolucion,
+            ConsultasRuntFalso runt,
+            FachadaTipos fachada,
+            FachadaRequisitosPuntoFalsa requisitos,
+            BorradorPuntoFalso borrador,
+            FachadaDefinicionesFalsa definiciones)
         {
             var builder = WebApplication.CreateBuilder();
+            builder.Configuration["Pii:ClaveHmac"] = "0123456789abcdef0123456789abcdef";
             builder.WebHost.UseTestServer();
             builder.Services.AddSingleton<ICanalPunto>(new CanalFijo(resolucion));
             builder.Services.AddSingleton<IConsultasRunt>(runt);
             builder.Services.AddSingleton<IFachadaTramites>(fachada);
+            builder.Services.AddSingleton<IFachadaRequisitos>(requisitos);
+            builder.Services.AddSingleton<IFachadaDefiniciones>(definiciones);
             builder.Services.AddSingleton(new ConsultaVehiculoService(runt));
             builder.Services.AddSingleton(new ConsultaConductorService(runt));
             builder.Services.AddDataProtection();
             builder.Services.AddSingleton<CookiePunto>();
+            builder.Services.AddSingleton<PiiHasher>();
             builder.Services.AddSingleton<ArranquePuntoService>();
             builder.Services.AddSingleton<ConsultasPuntoService>();
+            builder.Services.AddSingleton<DiagnosticoPuntoService>();
+            builder.Services.AddSingleton<IAbrirBorradorDesdePunto>(borrador);
+            builder.Services.AddSingleton<ActoresPuntoService>();
+            builder.Services.AddSingleton<RequisitosPuntoService>();
+            builder.Services.AddSingleton<CompletitudRequisitosPuntoService>();
             builder.Services.AddRateLimiter(o => o.AddPolicy(AbusoEndpoints.PoliticaPorIp, _ => RateLimitPartition.GetNoLimiter("punto-test")));
             _app = builder.Build();
             _app.UseRateLimiter();
@@ -303,7 +621,20 @@ public sealed class PuntoCanalTests
             var setCookie = respuesta.Headers.TryGetValues("Set-Cookie", out var valores)
                 ? valores.FirstOrDefault(v => v.StartsWith("pn_punto=", StringComparison.OrdinalIgnoreCase))
                 : null;
-            var json = texto.Length == 0 ? default : JsonDocument.Parse(texto).RootElement.Clone();
+            JsonElement json = default;
+            if (texto.Length > 0)
+            {
+                try
+                {
+                    json = JsonDocument.Parse(texto).RootElement.Clone();
+                }
+                catch (JsonException ex)
+                {
+                    throw new InvalidOperationException(
+                        $"Respuesta no JSON ({(int)respuesta.StatusCode}): {texto[..Math.Min(texto.Length, 500)]}", ex);
+                }
+            }
+
             return new RespuestaPunto(respuesta.StatusCode, json, setCookie, CookieUtil(setCookie));
         }
     }
@@ -327,5 +658,63 @@ public sealed class PuntoCanalTests
 
         public Task<CotizacionDto> CotizarAsync(string tipoCodigo, string organismoId, IReadOnlyCollection<string> adicionales, CancellationToken ct) =>
             throw new NotSupportedException();
+    }
+
+    private sealed class FachadaRequisitosPuntoFalsa : IFachadaRequisitos
+    {
+        public DiagnosticoDto Respuesta { get; set; } = new(true, []);
+        public bool Lanzar { get; set; }
+        public string? UltimaOrganismoId { get; private set; }
+        public string? UltimaPlaca { get; private set; }
+        public string? UltimoTipoDocumento { get; private set; }
+        public string? UltimoDocumento { get; private set; }
+        public string? UltimoTipoCodigo { get; private set; }
+
+        public Task<DiagnosticoDto> EvaluarAsync(
+            string tipoCodigo,
+            string organismoId,
+            string? placa,
+            string? vin,
+            string? tipoDocumentoPropietario,
+            string? documentoPropietario,
+            CancellationToken ct)
+        {
+            UltimoTipoCodigo = tipoCodigo;
+            UltimaOrganismoId = organismoId;
+            UltimaPlaca = placa;
+            UltimoTipoDocumento = tipoDocumentoPropietario;
+            UltimoDocumento = documentoPropietario;
+            if (Lanzar)
+                throw new FachadaException("servicio_no_disponible", "El diagnóstico no está disponible por ahora.", StatusCodes.Status503ServiceUnavailable);
+            return Task.FromResult(Respuesta);
+        }
+    }
+
+    private sealed class BorradorPuntoFalso : IAbrirBorradorDesdePunto
+    {
+        public Guid UltimaSolicitudId { get; private set; } = Guid.CreateVersion7();
+        public Guid? UltimoOrganismoId { get; private set; }
+        public string? UltimaPlaca { get; private set; }
+
+        public Task<SesionCreadaDto> AbrirAsync(
+            OrganismoPunto organismo,
+            string tipoCodigo,
+            string placa,
+            string documento,
+            byte[]? ipHash,
+            CancellationToken ct)
+        {
+            UltimoOrganismoId = organismo.OrganismoId;
+            UltimaPlaca = placa;
+            UltimaSolicitudId = Guid.CreateVersion7();
+            return Task.FromResult(new SesionCreadaDto(
+                "token-falso",
+                DateTimeOffset.UtcNow.AddHours(1),
+                UltimaSolicitudId,
+                "PN-2026-000001",
+                EstadoSolicitud.Borrador,
+                tipoCodigo,
+                1));
+        }
     }
 }
