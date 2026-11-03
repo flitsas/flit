@@ -243,7 +243,8 @@ describe("validación de formato y consulta del documento (F3 AC1 y AC2, K5 AC5)
     expect(nombre).toHaveValue("ANA RUIZ");
     expect(within(card).getByLabelText(/Número de documento/)).toBeDisabled();
     llenarContacto(card);
-    expect(within(card).getByRole("button", { name: /Reenviar Validación|Enviar validación|Validar/i })).toBeDisabled();
+    // La validación ya no se pide con un botón: se envía sola al continuar (y sin RUNT no hay nada que enviar).
+    expect(within(card).queryByRole("button", { name: /Reenviar Validación|Enviar validación|Validar/i })).toBeNull();
   });
 
   it("si solo vienen nombres y apellidos arma el nombre completo", async () => {
@@ -505,35 +506,64 @@ describe("validación de identidad por actor (F3 AC5 y AC6, K5 AC3)", () => {
     return { ...m, card, ident };
   }
 
-  it("guarda a la persona con la versión y solicita su validación: queda pendiente y avisa el correo completo", async () => {
+  /** Deja completo al comprador (el paso exige a todas las personas) para poder pulsar Continuar. */
+  async function completarComprador() {
+    const comprador = tarjeta("Comprador");
+    await consultarTercero(comprador, "52123456");
+    llenarContacto(comprador);
+  }
+
+  it("al continuar guarda a las personas y envía sola la validación de cada una, sin botón de primer envío", async () => {
     const ident = conIdentidad([parte("vendedor", "sin_solicitar"), parte("comprador", "sin_solicitar")]);
     const { llamadas, card } = await vendedorListo(
       {
         "PATCH /solicitudes/s-1/actores": () => json(solicitudDe({ version: 5 })),
         "POST /solicitudes/s-1/identidad/vendedor": () => {
-          ident.estado.partes = [parte("vendedor", "pendiente", { esperaSegundos: 60 }), parte("comprador", "sin_solicitar")];
+          ident.estado.partes = [parte("vendedor", "pendiente", { esperaSegundos: 60 }), ident.estado.partes[1]!];
           return json({ parte: "vendedor", ordinal: 1, estado: "pendiente" }, 202);
+        },
+        "POST /solicitudes/s-1/identidad/comprador": () => {
+          ident.estado.partes = [ident.estado.partes[0]!, parte("comprador", "pendiente")];
+          return json({ parte: "comprador", ordinal: 1, estado: "pendiente" }, 202);
         },
       },
       ident,
     );
-    expect(within(card).getByText("Validación: pendiente")).toBeInTheDocument();
+    await completarComprador();
+    expect(within(card).queryByRole("button", { name: /Validación|validación/ })).toBeNull();
+    expect(within(tarjeta("Comprador")).queryByRole("button", { name: /Validación|validación/ })).toBeNull();
 
-    fireEvent.click(within(card).getByRole("button", { name: "Reenviar Validación" }));
+    fireEvent.click(continuar());
+    await waitFor(() => expect(nodo(3)).toHaveAttribute("aria-current", "step"));
 
-    expect(await within(card).findByText("Enlace enviado a ana@correo.co")).toBeInTheDocument();
-    expect(within(card).getByText("Validación: pendiente")).toBeInTheDocument();
     const claves = llamadas.map((l) => l.clave);
+    expect(claves.filter((c) => c === "POST /solicitudes/s-1/identidad/vendedor")).toHaveLength(1);
+    expect(claves.filter((c) => c === "POST /solicitudes/s-1/identidad/comprador")).toHaveLength(1);
     expect(claves.indexOf("PATCH /solicitudes/s-1/actores")).toBeLessThan(claves.indexOf("POST /solicitudes/s-1/identidad/vendedor"));
-    expect(cuerpo(llamadas, "PATCH /solicitudes/s-1/actores")).toEqual({
+    expect(cuerpo(llamadas, "PATCH /solicitudes/s-1/actores")).toMatchObject({
       version: 4,
-      actores: [{ rol: "vendedor", ordinal: 1, tipoDocumento: "CC", numeroDocumento: CEDULA_SOLICITANTE, nombre: "ANA RUIZ", correo: "ana@correo.co", celular: "3001234567", ciudad: "Medellin" }],
+      actores: [{ rol: "vendedor", ordinal: 1, tipoDocumento: "CC", numeroDocumento: CEDULA_SOLICITANTE, nombre: "ANA RUIZ", correo: "ana@correo.co", celular: "3001234567", ciudad: "Medellin" }, { rol: "comprador" }],
     });
     expect(cuerpo(llamadas, "POST /solicitudes/s-1/identidad/vendedor")).toEqual({ ordinal: 1 });
-    expect(within(card).getByLabelText("Tipo y Número de Documento")).toBeDisabled();
-    expect(within(card).getByLabelText(/Nombre completo/)).toHaveValue("ANA RUIZ");
-    expect(within(card).getByRole("button", { name: "Reenviar Validación" })).toBeDisabled();
-    expect(within(card).getByText(/Podrás reenviar en \d+ s/)).toBeInTheDocument();
+    expect(screen.queryByText(/pendientes de envío/)).toBeNull();
+  });
+
+  it("no duplica el envío: quien ya tiene la validación enviada no se solicita de nuevo al continuar", async () => {
+    const ident = conIdentidad([parte("vendedor", "pendiente"), parte("comprador", "sin_solicitar")]);
+    const { llamadas } = await vendedorListo(
+      {
+        "PATCH /solicitudes/s-1/actores": () => json(solicitudDe({ version: 5 })),
+        "POST /solicitudes/s-1/identidad/comprador": () => json({ parte: "comprador", ordinal: 1, estado: "pendiente" }, 202),
+      },
+      ident,
+    );
+    await completarComprador();
+    fireEvent.click(continuar());
+    await waitFor(() => expect(nodo(3)).toHaveAttribute("aria-current", "step"));
+
+    const claves = llamadas.map((l) => l.clave);
+    expect(claves.some((c) => c === "POST /solicitudes/s-1/identidad/vendedor")).toBe(false);
+    expect(claves.filter((c) => c === "POST /solicitudes/s-1/identidad/comprador")).toHaveLength(1);
   });
 
   it("un reenvío a un actor no afecta a otro: el comprador sigue sin enviar", async () => {
@@ -591,32 +621,62 @@ describe("validación de identidad por actor (F3 AC5 y AC6, K5 AC3)", () => {
     expect(within(grupo).queryByRole("button", { name: /Reenviar Validación|Reenviar/ })).toBeNull();
   });
 
-  it("un NIT que el back rechaza (persona jurídica no soportada) se explica en la tarjeta", async () => {
-    const { card } = await vendedorListo({
-      "PATCH /solicitudes/s-1/actores": () => json(solicitudDe({ version: 5 })),
-      "POST /solicitudes/s-1/identidad/vendedor": () => problema(422, "persona_juridica_no_soportada"),
-    });
-    fireEvent.click(within(card).getByRole("button", { name: "Reenviar Validación" }));
+  it("si el envío automático falla no bloquea: avanza, avisa en el Resumen y deja el botón de alerta para reintentar", async () => {
+    const ident = conIdentidad([parte("vendedor", "sin_solicitar"), parte("comprador", "sin_solicitar")]);
+    let falla = true;
+    const { llamadas } = await vendedorListo(
+      {
+        "PATCH /solicitudes/s-1/actores": () => json(solicitudDe({ version: 5 })),
+        "POST /solicitudes/s-1/identidad/vendedor": () => {
+          if (falla) return problema(422, "persona_juridica_no_soportada");
+          ident.estado.partes = [parte("vendedor", "pendiente"), parte("comprador", "pendiente")];
+          return json({ parte: "vendedor", ordinal: 1, estado: "pendiente" }, 202);
+        },
+        "POST /solicitudes/s-1/identidad/comprador": () => json({ parte: "comprador", ordinal: 1, estado: "pendiente" }, 202),
+      },
+      ident,
+    );
+    await completarComprador();
+    fireEvent.click(continuar());
+    await waitFor(() => expect(nodo(3)).toHaveAttribute("aria-current", "step"));
+    expect(llamadas.some((l) => l.clave === "POST /solicitudes/s-1/identidad/comprador")).toBe(true);
 
+    // Al volver a Actores, la tarjeta de esa persona tiene el motivo y el botón de alerta.
+    fireEvent.click(nodo(2));
+    const card = await screen.findByRole("region", { name: "Propietario (vendedor)" });
     expect(await within(card).findByText(/solo para personas naturales/)).toBeInTheDocument();
+    expect(within(card).getAllByRole("alert").length).toBeGreaterThan(0);
+    const boton = within(card).getByRole("button", { name: "Reenviar validación" });
+    expect(boton).toBeEnabled();
+
+    falla = false;
+    fireEvent.click(boton);
+    await waitFor(() => expect(within(card).queryByRole("button", { name: "Reenviar validación" })).toBeNull());
+    expect(llamadas.filter((l) => l.clave === "POST /solicitudes/s-1/identidad/vendedor")).toHaveLength(2);
   });
 
-  it("si FLIT 2 no responde (202 pendiente_envio) lo dice y deja reintentar", async () => {
+  it("si FLIT 2 no responde (202 pendiente_envio) lo dice y deja reintentar con el botón de alerta", async () => {
     const ident = conIdentidad([parte("vendedor", "sin_solicitar"), parte("comprador", "sin_solicitar")]);
-    const { card } = await vendedorListo(
+    await vendedorListo(
       {
         "PATCH /solicitudes/s-1/actores": () => json(solicitudDe({ version: 5 })),
         "POST /solicitudes/s-1/identidad/vendedor": () => {
           ident.estado.partes = [parte("vendedor", "pendiente_envio"), parte("comprador", "sin_solicitar")];
           return json({ parte: "vendedor", ordinal: 1, estado: "pendiente_envio" }, 202);
         },
+        "POST /solicitudes/s-1/identidad/comprador": () => json({ parte: "comprador", ordinal: 1, estado: "pendiente" }, 202),
       },
       ident,
     );
-    fireEvent.click(within(card).getByRole("button", { name: "Reenviar Validación" }));
+    await completarComprador();
+    fireEvent.click(continuar());
+    await waitFor(() => expect(nodo(3)).toHaveAttribute("aria-current", "step"));
+    fireEvent.click(nodo(2));
 
-    expect(await within(card).findByText(/Aún no pudimos enviar el enlace/)).toBeInTheDocument();
-    expect(await within(card).findByText("Validación: enviando enlace")).toBeInTheDocument();
+    const tarj = await screen.findByRole("region", { name: "Propietario (vendedor)" });
+    expect(await within(tarj).findByText(/el enlace no salió todavía/)).toBeInTheDocument();
+    expect(await within(tarj).findByText("Validación: enviando enlace")).toBeInTheDocument();
+    expect(within(tarj).getByRole("button", { name: "Reenviar validación" })).toBeInTheDocument();
   });
 
   it("un rechazo muestra el estado y permite pedir un enlace nuevo", async () => {
@@ -829,13 +889,17 @@ describe("Habeas Data en el paso Actores", () => {
     const { llamadas } = await abrir({
       "PATCH /solicitudes/s-1/actores": () => json(solicitudDe({ version: 5 })),
       "POST /solicitudes/s-1/identidad/vendedor": () => json({ parte: "vendedor", ordinal: 1, estado: "pendiente" }, 202),
+      "POST /solicitudes/s-1/identidad/comprador": () => json({ parte: "comprador", ordinal: 1, estado: "pendiente" }, 202),
     });
     const card = tarjeta("Propietario (vendedor)");
     consultarSolicitante(card);
     await waitFor(() => expect(within(card).getByLabelText(/Teléfono/)).toBeEnabled());
     llenarContacto(card);
-    fireEvent.click(within(card).getByRole("button", { name: "Reenviar Validación" }));
-    await within(card).findByText(/Enlace enviado/);
+    const comprador = tarjeta("Comprador");
+    await consultarTercero(comprador, "52123456");
+    llenarContacto(comprador);
+    fireEvent.click(continuar());
+    await waitFor(() => expect(llamadas.some((l) => l.clave === "POST /solicitudes/s-1/identidad/vendedor")).toBe(true));
 
     const sensibles = [CEDULA_SOLICITANTE, "3001234567", "ana@correo.co", "ANA", "ana%40correo"];
     for (const { clave } of llamadas) for (const s of sensibles) expect(clave).not.toContain(s);

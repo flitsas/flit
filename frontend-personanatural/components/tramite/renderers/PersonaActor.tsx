@@ -39,6 +39,12 @@ interface Props {
   esPropietario?: boolean;
   /** El documento vino del primer paso (cédula del inicio): se muestra precargado y no se puede editar. */
   documentoFijo?: boolean;
+  /**
+   * Portal web: la validación se envía sola al pasar de Actores, así que no hay botón para el primer envío. Si ese envío
+   * falló (`fallaEnvio`) se muestra el motivo y un botón de alerta para reintentarlo.
+   */
+  envioAutomatico?: boolean;
+  fallaEnvio?: string | undefined;
   solicitudId: string;
   cliente: ClientePortal;
   /** El ciudadano intentó avanzar con el paso incompleto: se muestran todos los errores. */
@@ -89,6 +95,8 @@ export function PersonaActor({
   titulo,
   esPropietario = false,
   documentoFijo = false,
+  envioAutomatico = false,
+  fallaEnvio,
   solicitudId,
   cliente,
   mostrarErrores,
@@ -340,6 +348,8 @@ export function PersonaActor({
     return () => clearTimeout(temporizador);
   }, [claveDoc, consultable, consultar, fila.tipoDocumento, fila.numeroDocumento]);
   const fichaPropietario = esPropietario && fila.consultado;
+  // Envío automático fallido (o enlace que no salió): botón de alerta para reintentarlo.
+  const mostrarFalla = envioAutomatico && Boolean(fallaEnvio) && (estado === "sin_solicitar" || estado === "pendiente_envio");
 
   return (
     <div role={titulo ? "group" : undefined} aria-label={titulo} className="space-y-4">
@@ -523,14 +533,22 @@ export function PersonaActor({
             <span className="ml-auto flex flex-wrap items-center gap-3">
               {enCurso(estado) && parte && !reenviosAgotados && <span className="text-xs font-light text-muted-foreground">Te quedan {parte.reenviosRestantes} reenvíos</span>}
               {enCurso(estado) && esperaReenvio.bloqueado && <span className="text-xs font-light text-muted-foreground">Podrás reenviar en {esperaReenvio.segundosRestantes} s</span>}
-              {enCurso(estado) ? (
+              {mostrarFalla ? (
+                <Btn
+                  tone="alert"
+                  onClick={() => void pedirIdentidad(enCurso(estado) ? "reenviar" : "solicitar")}
+                  disabled={ocupado || esperaReenvio.bloqueado || !puedeValidarIdentidad}
+                >
+                  {ocupado ? "Enviando..." : "Reenviar validación"}
+                </Btn>
+              ) : enCurso(estado) ? (
                 <Btn
                   onClick={() => void pedirIdentidad("reenviar")}
                   disabled={ocupado || esperaReenvio.bloqueado || reenviosAgotados || !puedeValidarIdentidad || !fila.runt?.inscrito}
                 >
                   {ocupado ? "Enviando..." : (textoBotonValidar ?? "Reenviar Validación")}
                 </Btn>
-              ) : (
+              ) : envioAutomatico && estado === "sin_solicitar" ? null : (
                 <Btn onClick={() => void pedirIdentidad("solicitar")} disabled={ocupado || !puedeValidarIdentidad || !fila.runt?.inscrito}>
                   {ocupado ? "Enviando..." : (textoBotonValidar ?? "Reenviar Validación")}
                 </Btn>
@@ -538,6 +556,11 @@ export function PersonaActor({
             </span>
           )}
         </div>
+      )}
+      {mostrarFalla && (
+        <p role="alert" className="text-sm text-alert">
+          No pudimos enviar la validación de identidad: {fallaEnvio}
+        </p>
       )}
       <div aria-live="polite">
         {aviso && (
