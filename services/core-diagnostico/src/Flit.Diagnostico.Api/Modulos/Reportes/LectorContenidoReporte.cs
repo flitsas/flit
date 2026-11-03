@@ -151,7 +151,7 @@ internal sealed class LectorContenidoReporte(
         var tenant = cabecera.TenantId;
         return db.Set<CeldaConsulta>().AsNoTracking()
             .Where(c => c.DiagnosticoId == id && c.TenantId == tenant && (vehiculoId == null || c.VehiculoId == vehiculoId))
-            .Select(c => new CeldaLeidaReporte(c.VehiculoId, c.Fuente, c.Estado, c.MotivoNa, c.DatoObtenidoEn, c.Payload));
+            .Select(c => new CeldaLeidaReporte(c.VehiculoId, c.Fuente, c.Estado, c.MotivoNa, c.DatoObtenidoEn, c.Payload, c.RespuestaFuenteCifrada));
     }
 
     private async Task<EncabezadoLoteReporte> EncabezadoAsync(CabeceraDiagnostico cabecera, string? empresa, CancellationToken ct)
@@ -171,7 +171,7 @@ internal sealed class LectorContenidoReporte(
     private async Task<IReadOnlyDictionary<Fuente, IReadOnlyDictionary<int, JsonElement>>> RespuestasPersonaAsync(
         CabeceraDiagnostico cabecera, Guid vehiculoId, CancellationToken ct)
     {
-        Fuente[] fuentes = [Fuente.RuntPropietario, Fuente.RuntLocatario];
+        Fuente[] fuentes = [Fuente.RuntPropietario, Fuente.RuntLocatario, Fuente.SimitPropietario, Fuente.SimitLocatario];
         var filas = await db.Set<CeldaConsulta>().AsNoTracking()
             .Where(c => c.DiagnosticoId == cabecera.Id && c.TenantId == cabecera.TenantId && c.VehiculoId == vehiculoId && fuentes.Contains(c.Fuente))
             .Select(c => new { c.Fuente, c.RespuestaFuenteCifrada })
@@ -224,7 +224,7 @@ internal sealed class LectorContenidoReporte(
         {
             EstadoSeccion.Completado => new SeccionReporte(
                 codigo, grupo, estado, null, null, celda!.DatoObtenidoEn,
-                porPersona ? null : ProyectorDetalleCelda.ResultadoVehiculo(fuente, celda.Payload), deLaFuente),
+                porPersona ? null : ResultadoVehiculo(fuente, celda), deLaFuente),
             EstadoSeccion.NoAplica => new SeccionReporte(
                 codigo, grupo, estado, celda!.MotivoNa is { } m ? CodigosDeEnum.Codigo(m) : null,
                 celda.MotivoNa is { } motivo ? TextoMotivoNa.GetValueOrDefault(motivo) : null, null, null, deLaFuente),
@@ -247,5 +247,14 @@ internal sealed class LectorContenidoReporte(
 
     private sealed record IdentificacionLeida(Guid Id, int Orden, string Identificador, Domain.Vehiculos.TipoIdentificador Tipo, string? Placa, string? Vin);
 
-    private sealed record CeldaLeidaReporte(Guid VehiculoId, Fuente Fuente, EstadoCelda Estado, MotivoNa? MotivoNa, DateTimeOffset? DatoObtenidoEn, string? Payload);
+    private ResultadoDetalleDto? ResultadoVehiculo(Fuente fuente, CeldaLeidaReporte celda)
+    {
+        var resultado = ProyectorDetalleCelda.ResultadoVehiculo(fuente, celda.Payload);
+        if (resultado is not ResultadoSimitDetalle simit || !RespuestaFuenteCelda.TryLeerVehiculo(protectorRespuesta, celda.Cifrada, out var respuesta) || respuesta is not { } cruda)
+            return resultado;
+        var proveedor = ProyectorDetalleCelda.RespuestaProveedor(cruda, out _);
+        return proveedor is { } cuerpo ? SimitVisible.Completar(simit, cuerpo) : resultado;
+    }
+
+    private sealed record CeldaLeidaReporte(Guid VehiculoId, Fuente Fuente, EstadoCelda Estado, MotivoNa? MotivoNa, DateTimeOffset? DatoObtenidoEn, string? Payload, byte[]? Cifrada);
 }

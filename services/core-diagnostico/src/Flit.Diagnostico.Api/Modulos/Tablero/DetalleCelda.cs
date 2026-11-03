@@ -91,6 +91,8 @@ internal sealed partial class DetalleCelda(
                 respuestaProveedor = ProyectorDetalleCelda.RespuestaProveedor(crudaDeLaCelda, out var ilegible);
                 if (ilegible)
                     CrudoCeldaIlegible(log, celda.Id, codigo);
+                if (resultado is ResultadoSimitDetalle simit && respuestaProveedor is { } cuerpo)
+                    resultado = SimitVisible.Completar(simit, cuerpo);
             }
         }
 
@@ -153,12 +155,10 @@ internal static class ProyectorDetalleCelda
             JsonElement? respuestaFuente = respuestas is not null && respuestas.TryGetValue(p.Orden, out var respuesta) ? respuesta : null;
             var proveedor = respuestaFuente is { } deLaFuente ? RespuestaProveedor(deLaFuente, out _) : null;
             var resultado = leido is { Estado: EjecutorPorPersonas.EstadoOk, Resultado: { } r } ? ResultadoPersona(leido.Consulta, r) : null;
-            if (resultado is ResultadoRuntPersonaDetalle runt && proveedor is { } crudo)
-            {
-                var licencias = LicenciasConductor.Leer(crudo);
-                if (licencias.Count > 0)
-                    resultado = runt with { Licencias = licencias };
-            }
+            if (resultado is ResultadoRuntPersonaDetalle runt && proveedor is { } crudoConductor)
+                resultado = LicenciasConductor.Completar(runt, crudoConductor);
+            else if (resultado is ResultadoSimitDetalle simit && proveedor is { } crudoSimit)
+                resultado = SimitVisible.Completar(simit, crudoSimit);
 
             return new PersonaDetalleDto(
                 p.Orden, CodigosDeEnum.Codigo(p.Rol), p.DocTipo, Enmascarado(protector, p.DocCifrado), p.Origen == OrigenDocumento.DeclaradoCliente,

@@ -73,14 +73,19 @@ internal static partial class PdfVehiculo
     private static readonly Dictionary<string, string> Descripciones = new(StringComparer.Ordinal)
     {
         ["Información del vehículo"] = "Placa, licencia de tránsito, clase, servicio y organismo de tránsito.",
-        ["Información general"] = "Marca, línea, color, motor, chasis y estado del vehículo.",
-        ["Datos técnicos"] = "Ejes, capacidad de carga, pasajeros y peso.",
+        ["Información general"] = "Marca, línea, color, motor, chasis, estado, prenda y gravamen.",
+        ["Datos técnicos"] = "Ejes, capacidad de carga, pasajeros, peso y dimensiones.",
         ["Datos SOAT"] = "Póliza, vigencia y aseguradora.",
         ["Datos revisión tecno-mecánica"] = "Certificado, vigencia y centro de diagnóstico.",
         ["Solicitudes"] = "Trámites registrados ante el organismo de tránsito.",
         ["Garantías a favor"] = "Prendas o gravámenes inscritos sobre el vehículo.",
         ["Accidentalidad"] = "Siniestros informados para el vehículo.",
         ["Póliza de responsabilidad civil"] = "Póliza de responsabilidad civil y su vigencia.",
+        ["Limitaciones a la propiedad"] = "Embargos y otras limitaciones inscritas sobre el vehículo.",
+        ["Garantías mobiliarias"] = "Garantías mobiliarias inscritas y su estado.",
+        ["Infracciones del RUNT"] = "Comparendos que el RUNT entrega junto con el vehículo.",
+        ["Blindaje"] = "Si el vehículo está blindado y el certificado, cuando la fuente lo informa.",
+        ["Tarjeta de operación"] = "Modalidad de la tarjeta de operación, cuando aplica.",
         ["Propietarios"] = "Documento, inscripción como conductor y licencias de cada propietario.",
         ["Locatarios"] = "Documento, inscripción como conductor y licencias de cada locatario.",
         ["Comparendos del vehículo"] = "Multas y comparendos asociados a la placa.",
@@ -190,12 +195,13 @@ internal static partial class PdfVehiculo
                 ("VIN", R(g.Vin)), ("N.º motor", R(g.NumeroMotor)), ("N.º chasis", R(g.NumeroChasis)),
                 ("Regrabado VIN", R(g.RegrabadoVin)), ("Regrabado motor", R(g.RegrabadoMotor)), ("Regrabado chasis", R(g.RegrabadoChasis)),
                 ("Regrabado serie", R(g.RegrabadoSerie)), ("Estado del vehículo", R(g.EstadoVehiculo)),
+                ("Prendas", R(g.Prendas)), ("Tiene gravámenes", R(g.TieneGravamenes)),
             ]));
         }));
 
         var t = d?.DatosTecnicos;
-        GrillaRunt(col, "Datos técnicos", ["N.º ejes", "Capacidad de carga", "Pasajeros sentados", "Peso bruto vehicular"],
-            t is null ? [] : [[R(t.NumeroEjes), R(t.CapacidadCarga), R(t.PasajerosSentados), R(t.PesoBrutoVehicular)]]);
+        GrillaRunt(col, "Datos técnicos", ["N.º ejes", "Capacidad de carga", "Pasajeros sentados", "Peso bruto vehicular", "Alto", "Ancho", "Largo", "Rodaje"],
+            t is null ? [] : [[R(t.NumeroEjes), R(t.CapacidadCarga), R(t.PasajerosSentados), R(t.PesoBrutoVehicular), R(t.Alto), R(t.Ancho), R(t.Largo), R(t.Rodaje)]]);
         GrillaRunt(col, "Datos SOAT", ["Estado", "N.º póliza", "Vigencia", "Expedición", "Vencimiento", "Entidad"],
             [.. (d?.Soat ?? []).Select(s => new[] { Estado(s.Estado), R(s.NumeroPoliza), R(s.FechaVigencia), R(s.FechaExpedicion), R(s.FechaVencimiento), R(s.Entidad) })], [4, 4, 4, 4, 5, 6]);
         GrillaRunt(col, "Datos revisión tecno-mecánica", ["Estado", "N.º certificado", "Vigencia", "Expedición", "CDA"],
@@ -216,6 +222,36 @@ internal static partial class PdfVehiculo
 
         GrillaRunt(col, "Póliza de responsabilidad civil", ["Estado", "N.º póliza", "Tipo póliza", "Expedición", "Vencimiento", "Entidad"],
             [.. (d?.PolizasResponsabilidadCivil ?? []).Select(p => new[] { Estado(p.Estado), R(p.NumeroPoliza), R(p.Tipo), R(p.FechaExpedicion), R(p.FechaVencimiento), R(p.Entidad) })], [4, 4, 4, 4, 5, 6]);
+        GrillaRunt(col, "Limitaciones a la propiedad", ["Tipo", "N.º documento", "Entidad", "Demandante", "Expedición", "Radicación", "Departamento", "Municipio"],
+            [.. (d?.Limitaciones ?? []).Select(l => new[] { R(l.Tipo), R(l.NumeroDocumento), R(l.Entidad), Demandante(l), R(l.FechaExpedicion), R(l.FechaRadicacion), R(l.Departamento), R(l.Municipio) })]);
+        GrillaRunt(col, "Garantías mobiliarias", ["Entidad", "Estado", "Fecha de registro", "Tipo y N.º de documento"],
+            [.. (d?.GarantiasMobiliarias ?? []).Select(g => new[] { R(g.Entidad), R(g.Estado), R(g.FechaRegistro), Documento(g.TipoDocumento, g.NumeroDocumento) })], [3, 2, 2, 3]);
+        GrillaRunt(col, "Infracciones del RUNT", ["Número", "Fecha", "Código", "Estado", "Valor", "Secretaría"],
+            [.. (d?.Infracciones ?? []).Select(i => new[] { R(i.Numero), R(i.Fecha), R(i.Codigo), R(i.Estado), R(i.Valor), R(i.Secretaria) })]);
+        col.Item().Element(c => SeccionConTitulo(c, "Blindaje", null, cuerpo =>
+        {
+            if (d?.Blindaje is not { } b)
+            {
+                cuerpo.Item().Element(x => TablaFlit.SinDatos(x, NoRegistra));
+                return;
+            }
+
+            cuerpo.Item().Element(x => Tabla(x,
+            [
+                ("Blindado", R(b.Blindado)), ("Nivel", R(b.Nivel)), ("Fecha", R(b.Fecha)),
+                ("Resolución", R(b.Resolucion)), ("Tipo", R(b.Tipo)), ("Autorización", R(b.Autorizacion)),
+            ]));
+        }));
+        GrillaRunt(col, "Tarjeta de operación", ["Modalidad"],
+            [.. (d?.TarjetasOperacion ?? []).Select(t => new[] { R(t.Modalidad) })]);
+    }
+
+    private static string Demandante(DetalleRuntLimitacion limitacion) => Documento(limitacion.TipoDocumentoDemandante, limitacion.NumeroDocumentoDemandante);
+
+    private static string Documento(string? tipo, string? numero)
+    {
+        var texto = string.Join(' ', new[] { tipo, numero }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        return texto.Length == 0 ? NoRegistra : texto;
     }
 
     /// <summary>
@@ -438,8 +474,26 @@ internal static partial class PdfVehiculo
                     ]));
                     if (persona.Licencias is { Count: > 0 } licencias)
                     {
-                        col.Item().Element(c => Grilla(c, ["Número", "Categoría", "Estado", "Vencimiento"],
-                            [.. licencias.Select(l => new[] { l.Numero ?? NoRegistra, l.Categoria ?? NoRegistra, l.Estado ?? NoRegistra, l.VigenteHasta ?? NoRegistra })]));
+                        col.Item().Element(c => Grilla(c, ["Número", "Categoría", "Estado", "Vencimiento", "Expedición", "Organismo", "Restricciones", "Suspensión"],
+                            [.. licencias.Select(l => new[]
+                            {
+                                l.Numero ?? NoRegistra, l.Categoria ?? NoRegistra, l.Estado ?? NoRegistra, l.VigenteHasta ?? NoRegistra,
+                                l.Expedida ?? NoRegistra, l.Organismo ?? NoRegistra, l.Restricciones ?? NoRegistra,
+                                Suspension(l),
+                            })]));
+                        if (persona.FechaInscripcion is not null || persona.TieneMultas is not null || persona.PazYSalvo is not null)
+                            col.Item().Element(c => Tabla(c,
+                            [
+                                ("Fecha de inscripción", persona.FechaInscripcion ?? NoRegistra),
+                                ("Tiene multas", persona.TieneMultas ?? NoRegistra),
+                                ("Paz y salvo", persona.PazYSalvo ?? NoRegistra),
+                            ]));
+                        if (persona.Certificados is { Count: > 0 } certificados)
+                            col.Item().Element(c => Grilla(c, ["Categoría", "Estado", "Expedición", "Vencimiento", "Tipo", "Número", "Entidad"],
+                                [.. certificados.Select(x => new[] { x.Categoria ?? NoRegistra, x.Estado ?? NoRegistra, x.Expedida ?? NoRegistra, x.Vence ?? NoRegistra, x.Tipo ?? NoRegistra, x.Numero ?? NoRegistra, x.Entidad ?? NoRegistra })]));
+                        if (persona.Solicitudes is { Count: > 0 } solicitudes)
+                            col.Item().Element(c => Grilla(c, ["Trámite", "Estado solicitud", "Estado trámite", "Fecha", "Entidad", "Registro"],
+                                [.. solicitudes.Select(s => new[] { s.Tramite ?? NoRegistra, s.EstadoSolicitud ?? NoRegistra, s.EstadoTramite ?? NoRegistra, s.Fecha ?? NoRegistra, s.Entidad ?? NoRegistra, s.Registro ?? NoRegistra })]));
                     }
                     else
                     {
@@ -465,23 +519,41 @@ internal static partial class PdfVehiculo
         [
             ("Semáforo", simit.Semaforo ?? NoRegistra),
             ("Comparendos", simit.CantidadComparendos.ToString(CultureInfo.InvariantCulture)),
+            ("Total general", simit.TotalGeneral ?? NoRegistra),
+            ("Total por pagar", simit.TotalPorPagar ?? NoRegistra),
+            ("Paz y salvo", simit.PazYSalvo is null ? NoRegistra : simit.PazYSalvo.Value ? "Sí" : "No"),
+            ("Suspendida", simit.Suspendida is null ? NoRegistra : simit.Suspendida.Value ? "Sí" : "No"),
+            ("Cancelada", simit.Cancelada is null ? NoRegistra : simit.Cancelada.Value ? "Sí" : "No"),
         ]));
         var comparendos = simit.Comparendos ?? [];
         if (comparendos.Count == 0)
-        {
             col.Item().Element(c => Aviso(c, "No hay comparendos registrados."));
-            return;
+        else
+        {
+            col.Item().Element(c => Grilla(c, ["Número", "Fecha", "Valor", "Estado", "Organismo"],
+                [.. comparendos.Select(k => new[]
+                {
+                    k.Numero ?? NoRegistra, k.Fecha ?? NoRegistra, ValorTexto(k.Valor), k.Estado ?? NoRegistra, k.Organismo ?? NoRegistra,
+                })]));
+            var restantes = simit.CantidadComparendos - comparendos.Count;
+            if (simit.ComparendosTruncados || restantes > 0)
+                col.Item().Element(c => Aviso(c, $"y {Math.Max(restantes, 0).ToString(CultureInfo.InvariantCulture)} más"));
         }
 
-        col.Item().Element(c => Grilla(c, ["Número", "Fecha", "Valor", "Estado", "Organismo"],
-            [.. comparendos.Select(k => new[]
-            {
-                k.Numero ?? NoRegistra, k.Fecha ?? NoRegistra, ValorTexto(k.Valor), k.Estado ?? NoRegistra, k.Organismo ?? NoRegistra,
-            })]));
-        var restantes = simit.CantidadComparendos - comparendos.Count;
-        if (simit.ComparendosTruncados || restantes > 0)
-            col.Item().Element(c => Aviso(c, $"y {Math.Max(restantes, 0).ToString(CultureInfo.InvariantCulture)} más"));
+        if (simit.Multas is { Count: > 0 } multas)
+            col.Item().Element(c => Grilla(c, ["Número", "Fecha", "Valor", "Valor a pagar", "Estado de cartera", "Organismo", "Códigos"],
+                [.. multas.Select(m => new[] { m.Numero ?? NoRegistra, m.Fecha ?? NoRegistra, m.Valor ?? NoRegistra, m.ValorPagar ?? NoRegistra, m.EstadoCartera ?? NoRegistra, m.Organismo ?? NoRegistra, m.Codigos ?? NoRegistra })]));
+        if (simit.Acuerdos is { Count: > 0 } acuerdos)
+            col.Item().Element(c => Grilla(c, ["Estado", "Cuotas abonadas", "Cuotas pendientes", "Pendiente", "Fecha", "Organismo"],
+                [.. acuerdos.Select(a => new[] { a.Estado ?? NoRegistra, a.CuotasAbonadas ?? NoRegistra, a.CuotasPendientes ?? NoRegistra, a.Pendiente ?? NoRegistra, a.Fecha ?? NoRegistra, a.Organismo ?? NoRegistra })]));
     });
+
+    private static string Suspension(LicenciaDetalle licencia)
+    {
+        if (licencia.SuspensionDesde is null && licencia.SuspensionHasta is null)
+            return NoRegistra;
+        return $"{licencia.SuspensionDesde ?? "—"} – {licencia.SuspensionHasta ?? "—"}";
+    }
 
     private static void Avaluo(IContainer contenedor, ResultadoAvaluoDetalle avaluo) => contenedor.Column(col =>
     {

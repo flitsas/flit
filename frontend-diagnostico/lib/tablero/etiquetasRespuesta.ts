@@ -79,6 +79,25 @@ export const ETIQUETAS_RESPUESTA: Readonly<Record<string, string>> = {
   inscrito: "Inscrito",
   estado_conductor: "Estado del conductor",
   licencias: "Licencias",
+  organismo_expide: "Organismo que expide",
+  suspension_desde: "Suspensión desde",
+  suspension_hasta: "Suspensión hasta",
+  tiene_multas: "Tiene multas",
+  paz_y_salvo: "Paz y salvo",
+  certificados_aptitud: "Certificados de aptitud",
+  solicitudes_conductor: "Trámites del conductor",
+  tramite: "Trámite",
+  estado_solicitud: "Estado de la solicitud",
+  estado_tramite: "Estado del trámite",
+  registro: "Registro",
+  total_general: "Total general",
+  total_por_pagar: "Total por pagar",
+  valor_pagar: "Valor a pagar",
+  acuerdos_pago: "Acuerdos de pago",
+  cuotas_abonadas: "Cuotas abonadas",
+  cuotas_pendientes: "Cuotas pendientes",
+  pendiente: "Pendiente",
+  codigos: "Códigos",
   categoria: "Categoría",
   vigente_hasta: "Vigente hasta",
   encontrada: "Encontrada",
@@ -326,7 +345,35 @@ function sinMarcaComercial(texto: string): string {
   return limpio || "—";
 }
 
-type LicenciaVisible = { numero: string | null; categoria: string | null; estado: string | null; vigente_hasta: string | null };
+type LicenciaVisible = {
+  numero: string | null;
+  categoria: string | null;
+  estado: string | null;
+  vigente_hasta: string | null;
+  fecha_expedicion?: string | null;
+  organismo_expide?: string | null;
+  restricciones?: string | null;
+  suspension_desde?: string | null;
+  suspension_hasta?: string | null;
+};
+
+const textoLibre = (valor: unknown): string | null => {
+  if (typeof valor === "string" && valor.trim()) return valor.trim();
+  if (typeof valor === "number") return String(valor);
+  if (Array.isArray(valor)) {
+    const partes = valor.map(textoLibre).filter((v): v is string => Boolean(v));
+    return partes.length > 0 ? partes.join(", ") : null;
+  }
+  return null;
+};
+
+const complementoLicencia = (licencia: Record<string, unknown>) => ({
+  fecha_expedicion: textoDe(licencia, ["fechaExpedicion", "expeditionDate", "fecha_expedicion"]),
+  organismo_expide: textoDe(licencia, ["otExpide", "organismo", "authorityTransit", "organismo_expide"]),
+  restricciones: textoLibre(licencia.restricciones ?? licencia.restrictions),
+  suspension_desde: textoDe(licencia, ["startDateSuspension", "suspension_desde"]),
+  suspension_hasta: textoDe(licencia, ["endDateSuspension", "suspension_hasta"]),
+});
 
 const textoDe = (objeto: Record<string, unknown>, claves: string[]): string | null => {
   for (const clave of claves) {
@@ -357,15 +404,90 @@ export function licenciasDesdeProveedor(proveedor: unknown): LicenciaVisible[] {
         const cat = categoria as Record<string, unknown>;
         const nombre = textoDe(cat, ["categoria", "category"]);
         const hasta = textoDe(cat, ["fechaVencimiento", "dueDate", "vigente_hasta", "vigenteHasta"]);
-        if (nombre || numero) filas.push({ numero, categoria: nombre, estado, vigente_hasta: hasta });
+        if (nombre || numero) filas.push({ ...complementoLicencia(licencia), numero, categoria: nombre, estado, vigente_hasta: hasta });
       }
     } else {
       const nombre = textoDe(licencia, ["categoria", "category"]);
       const hasta = textoDe(licencia, ["fechaVencimiento", "dueDate", "vigente_hasta", "vigenteHasta"]);
-      if (nombre || numero || estado) filas.push({ numero, categoria: nombre, estado, vigente_hasta: hasta });
+      if (nombre || numero || estado) filas.push({ ...complementoLicencia(licencia), numero, categoria: nombre, estado, vigente_hasta: hasta });
     }
   }
   return filas;
+}
+
+const dataDe = (proveedor: unknown): Record<string, unknown> | null => {
+  if (proveedor === null || typeof proveedor !== "object" || Array.isArray(proveedor)) return null;
+  const raiz = proveedor as Record<string, unknown>;
+  const data = raiz.data;
+  return data !== null && typeof data === "object" && !Array.isArray(data) ? (data as Record<string, unknown>) : raiz;
+};
+
+const filasDe = (valor: unknown): Record<string, unknown>[] =>
+  Array.isArray(valor) ? valor.filter((v): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v)) : [];
+
+/**
+ * Campos útiles del cuerpo del proveedor que el resumen no trae. Sin nombres, sin documento y sin la firma del integrador.
+ */
+export function complementoProveedor(proveedor: unknown): Record<string, unknown> {
+  const data = dataDe(proveedor);
+  if (!data) return {};
+  const salida: Record<string, unknown> = {};
+  const inscripcion = textoDe(data, ["inscriptionDate", "fechaInscripcion", "fecha_inscripcion"]);
+  if (inscripcion) salida.fecha_inscripcion = inscripcion;
+  const infracciones = data.infractions ?? data.infracciones;
+  if (infracciones !== null && typeof infracciones === "object" && !Array.isArray(infracciones)) {
+    const inf = infracciones as Record<string, unknown>;
+    const tiene = textoDe(inf, ["tieneMultas", "tiene_multas"]);
+    const paz = textoDe(inf, ["nroPazYSalvo", "nro_paz_y_salvo"]);
+    if (tiene) salida.tiene_multas = tiene;
+    if (paz) salida.paz_y_salvo = paz;
+  }
+  const certificados = filasDe(data.aptitudeCertificates ?? data.certificadosAptitud).map((c) => ({
+    categoria: textoDe(c, ["categoria", "category"]),
+    estado: textoDe(c, ["estadoDocumento", "estado"]),
+    fecha_expedicion: textoDe(c, ["fechaExpedicion"]),
+    vigente_hasta: textoDe(c, ["fechaVencimiento"]),
+    tipo: textoDe(c, ["tipoCertificado", "tipo"]),
+    numero: textoLibre(c.numeroCertificadoAptitud ?? c.numero),
+    entidad: textoDe(c, ["nombreCea", "entidad"]),
+  })).filter((c) => c.categoria || c.numero || c.tipo);
+  if (certificados.length > 0) salida.certificados_aptitud = certificados;
+  const solicitudes = filasDe(data.requests ?? data.solicitudes).map((s) => ({
+    tramite: textoDe(s, ["nombreTramite", "tramite"]),
+    estado_solicitud: textoDe(s, ["estadoSolicitud"]),
+    estado_tramite: textoDe(s, ["estadoTramite"]),
+    fecha: textoDe(s, ["fechaSolicitud", "fecha"]),
+    entidad: textoDe(s, ["entidad"]),
+    registro: textoDe(s, ["registro"]),
+  })).filter((s) => s.tramite || s.entidad);
+  if (solicitudes.length > 0) salida.solicitudes_conductor = solicitudes;
+  const total = textoDe(data, ["totalGeneral", "total_general"]);
+  const porPagar = textoDe(data, ["totalMultasPagar", "total_por_pagar"]);
+  if (total) salida.total_general = total;
+  if (porPagar) salida.total_por_pagar = porPagar;
+  if (typeof data.pazSalvo === "boolean") salida.paz_y_salvo = data.pazSalvo ? "Sí" : "No";
+  if (typeof data.suspendida === "boolean") salida.suspendida = data.suspendida ? "Sí" : "No";
+  if (typeof data.cancelada === "boolean") salida.cancelada = data.cancelada ? "Sí" : "No";
+  const multas = filasDe(data.multas).map((m) => ({
+    numero: textoDe(m, ["numeroComparendo", "numero"]),
+    fecha: textoDe(m, ["fechaComparendo", "fecha"]),
+    valor: textoDe(m, ["valor"]),
+    valor_pagar: textoDe(m, ["valorPagar"]),
+    estado_cartera: textoDe(m, ["estadoCartera", "estado"]),
+    organismo: textoDe(m, ["organismoTransito", "organismo"]),
+    codigos: filasDe(m.infracciones).map((i) => textoDe(i, ["codigoInfraccion"])).filter(Boolean).join(", ") || null,
+  })).filter((m) => m.numero || m.valor || m.estado_cartera);
+  if (multas.length > 0) salida.multas = multas;
+  const acuerdos = filasDe(data.acuerdosPago).map((a) => ({
+    estado: textoDe(a, ["estado"]),
+    cuotas_abonadas: textoDe(a, ["cantCuotasAbonadas"]),
+    cuotas_pendientes: textoDe(a, ["cantCuotasPendientes"]),
+    pendiente: textoDe(a, ["pendiente"]),
+    fecha: textoDe(a, ["fechaResolucion", "fecha"]),
+    organismo: textoDe(a, ["organismoTransito", "organismo"]),
+  })).filter((a) => a.estado || a.pendiente);
+  if (acuerdos.length > 0) salida.acuerdos_pago = acuerdos;
+  return salida;
 }
 
 /** «numero_de_siniestros» / «fechaUltimoReporte» → «Numero de siniestros» / «Fecha ultimo reporte». */

@@ -108,7 +108,47 @@ public sealed record ResultadoSimitDetalle(
     [property: JsonPropertyName("semaforo")] string? Semaforo,
     [property: JsonPropertyName("cantidad_comparendos")] int CantidadComparendos,
     [property: JsonPropertyName("comparendos")] IReadOnlyList<ComparendoDetalle>? Comparendos,
-    [property: JsonPropertyName("comparendos_truncados")] bool ComparendosTruncados) : ResultadoDetalleDto;
+    [property: JsonPropertyName("comparendos_truncados")] bool ComparendosTruncados,
+    [property: JsonPropertyName("total_general")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? TotalGeneral = null,
+    [property: JsonPropertyName("total_por_pagar")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? TotalPorPagar = null,
+    [property: JsonPropertyName("paz_y_salvo")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    bool? PazYSalvo = null,
+    [property: JsonPropertyName("suspendida")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    bool? Suspendida = null,
+    [property: JsonPropertyName("cancelada")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    bool? Cancelada = null,
+    [property: JsonPropertyName("multas")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<MultaSimitDetalle>? Multas = null,
+    [property: JsonPropertyName("acuerdos_pago")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<AcuerdoSimitDetalle>? Acuerdos = null) : ResultadoDetalleDto;
+
+/// <summary>Una multa del SIMIT. Sin el infractor: el nombre y el documento no salen.</summary>
+public sealed record MultaSimitDetalle(
+    [property: JsonPropertyName("numero")] string? Numero,
+    [property: JsonPropertyName("fecha")] string? Fecha,
+    [property: JsonPropertyName("valor")] string? Valor,
+    [property: JsonPropertyName("valor_pagar")] string? ValorPagar,
+    [property: JsonPropertyName("estado_cartera")] string? EstadoCartera,
+    [property: JsonPropertyName("organismo")] string? Organismo,
+    [property: JsonPropertyName("codigos")] string? Codigos);
+
+/// <summary>Un acuerdo de pago del SIMIT, sin el infractor.</summary>
+public sealed record AcuerdoSimitDetalle(
+    [property: JsonPropertyName("estado")] string? Estado,
+    [property: JsonPropertyName("cuotas_abonadas")] string? CuotasAbonadas,
+    [property: JsonPropertyName("cuotas_pendientes")] string? CuotasPendientes,
+    [property: JsonPropertyName("pendiente")] string? Pendiente,
+    [property: JsonPropertyName("fecha")] string? Fecha,
+    [property: JsonPropertyName("organismo")] string? Organismo);
 
 /// <summary>Un comparendo: número, fecha (AAAA-MM-DD), valor (texto decimal en pesos), estado y organismo.</summary>
 public sealed record ComparendoDetalle(
@@ -137,7 +177,41 @@ public sealed record FuenteAvaluoDetalle(
 public sealed record ResultadoRuntPersonaDetalle(
     [property: JsonPropertyName("inscrito")] bool Inscrito,
     [property: JsonPropertyName("estado_conductor")] string? EstadoConductor,
-    [property: JsonPropertyName("licencias")] IReadOnlyList<LicenciaDetalle>? Licencias) : ResultadoDetalleDto;
+    [property: JsonPropertyName("licencias")] IReadOnlyList<LicenciaDetalle>? Licencias,
+    [property: JsonPropertyName("fecha_inscripcion")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? FechaInscripcion = null,
+    [property: JsonPropertyName("tiene_multas")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? TieneMultas = null,
+    [property: JsonPropertyName("paz_y_salvo")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? PazYSalvo = null,
+    [property: JsonPropertyName("certificados_aptitud")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<CertificadoAptitudDetalle>? Certificados = null,
+    [property: JsonPropertyName("solicitudes_conductor")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<SolicitudConductorDetalle>? Solicitudes = null) : ResultadoDetalleDto;
+
+/// <summary>Certificado de aptitud del conductor. Sin el documento ni el nombre de la persona.</summary>
+public sealed record CertificadoAptitudDetalle(
+    [property: JsonPropertyName("categoria")] string? Categoria,
+    [property: JsonPropertyName("estado")] string? Estado,
+    [property: JsonPropertyName("fecha_expedicion")] string? Expedida,
+    [property: JsonPropertyName("vigente_hasta")] string? Vence,
+    [property: JsonPropertyName("tipo")] string? Tipo,
+    [property: JsonPropertyName("numero")] string? Numero,
+    [property: JsonPropertyName("entidad")] string? Entidad);
+
+/// <summary>Trámite del conductor ante un organismo. Sin el identificador, que puede ser el documento.</summary>
+public sealed record SolicitudConductorDetalle(
+    [property: JsonPropertyName("tramite")] string? Tramite,
+    [property: JsonPropertyName("estado_solicitud")] string? EstadoSolicitud,
+    [property: JsonPropertyName("estado_tramite")] string? EstadoTramite,
+    [property: JsonPropertyName("fecha")] string? Fecha,
+    [property: JsonPropertyName("entidad")] string? Entidad,
+    [property: JsonPropertyName("registro")] string? Registro);
 
 /// <summary>Una licencia de conducción: categoría, estado, vigencia y número cuando la fuente lo informa.</summary>
 public sealed record LicenciaDetalle(
@@ -146,7 +220,22 @@ public sealed record LicenciaDetalle(
     [property: JsonPropertyName("vigente_hasta")] string? VigenteHasta,
     [property: JsonPropertyName("numero")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    string? Numero = null);
+    string? Numero = null,
+    [property: JsonPropertyName("fecha_expedicion")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Expedida = null,
+    [property: JsonPropertyName("organismo_expide")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Organismo = null,
+    [property: JsonPropertyName("restricciones")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Restricciones = null,
+    [property: JsonPropertyName("suspension_desde")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? SuspensionDesde = null,
+    [property: JsonPropertyName("suspension_hasta")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? SuspensionHasta = null);
 
 /// <summary>RUES de una persona jurídica (NIT, decisión Q2): si se encontró, el estado de la matrícula y la última renovación.</summary>
 public sealed record ResultadoRuesDetalle(

@@ -14,7 +14,7 @@ import {
   type PersonaDetalle,
 } from "@/lib/tablero/detalle";
 import { ChipEstadoCelda, fechaDelDato } from "./CeldaSemaforo";
-import { licenciasDesdeProveedor } from "@/lib/tablero/etiquetasRespuesta";
+import { complementoProveedor, licenciasDesdeProveedor } from "@/lib/tablero/etiquetasRespuesta";
 import { RespuestaFuente } from "./RespuestaFuente";
 import {
   CABECERA_TABLA_CLS,
@@ -202,12 +202,15 @@ const sinLicenciasAnidadas = (valor: unknown): unknown => {
 const datosDePersona = (p: PersonaDetalle): object | null => {
   const base = p.respuesta_fuente ?? p.resultado;
   const licencias = licenciasDesdeProveedor(p.respuesta_proveedor);
-  if (!base && licencias.length === 0) return null;
-  if (base === null || typeof base !== "object" || Array.isArray(base)) return licencias.length > 0 ? { licencias } : null;
-  if (licencias.length === 0) return base;
-  const objeto = sinLicenciasAnidadas(base) as Record<string, unknown>;
-  objeto.licencias = licencias;
-  return objeto;
+  const extra = complementoProveedor(p.respuesta_proveedor);
+  const hayExtra = Object.keys(extra).length > 0;
+  if (!base && licencias.length === 0 && !hayExtra) return null;
+  if (base === null || typeof base !== "object" || Array.isArray(base)) {
+    return licencias.length > 0 || hayExtra ? { ...extra, ...(licencias.length > 0 ? { licencias } : {}) } : null;
+  }
+  const objeto = (licencias.length > 0 ? sinLicenciasAnidadas(base) : { ...(base as Record<string, unknown>) }) as Record<string, unknown>;
+  if (licencias.length > 0) objeto.licencias = licencias;
+  return { ...objeto, ...extra };
 };
 const personaResumida = (p: PersonaDetalle) => !p.respuesta_fuente && p.resultado !== null;
 
@@ -270,13 +273,17 @@ function Respuesta({ detalle }: { detalle: Detalle }) {
     cuerpo = <Vacio>{`El vehículo no tiene ${detalle.fuente.endsWith("LOCATARIO") ? "locatarios" : "propietarios"} para esta consulta.`}</Vacio>;
   } else if (porPersona) {
     cuerpo = <RespuestasPersonas personas={personas} />;
-  } else if (detalle.respuesta_fuente) {
-    cuerpo = <RespuestaFuente datos={detalle.respuesta_fuente} etiqueta="Respuesta de la fuente" />;
-  } else if (detalle.resultado) {
-    cuerpo = (
+  } else if (detalle.respuesta_fuente || detalle.resultado) {
+    const datos = {
+      ...(detalle.respuesta_fuente ?? detalle.resultado),
+      ...complementoProveedor(detalle.respuesta_proveedor),
+    };
+    cuerpo = detalle.respuesta_fuente ? (
+      <RespuestaFuente datos={datos} etiqueta="Respuesta de la fuente" />
+    ) : (
       <>
         <AvisoResumido />
-        <RespuestaFuente datos={detalle.resultado} etiqueta="Respuesta de la fuente" />
+        <RespuestaFuente datos={datos} etiqueta="Respuesta de la fuente" />
       </>
     );
   } else {

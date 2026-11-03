@@ -97,7 +97,8 @@ public sealed class ArquitecturaReportesTests
 
         detalle.Select(t => t.Name).Should().Contain(
             ["DetalleRuntReporte", "DetalleRuntVehiculo", "DetalleRuntGeneral", "DetalleRuntTecnico", "DetalleRuntSoat", "DetalleRuntRtm",
-                "DetalleRuntSolicitud", "DetalleRuntGarantia", "DetalleRuntDato", "DetalleRuntPoliza"]);
+                "DetalleRuntSolicitud", "DetalleRuntGarantia", "DetalleRuntDato", "DetalleRuntPoliza", "DetalleRuntLimitacion",
+                "DetalleRuntGarantiaMobiliaria", "DetalleRuntInfraccion", "DetalleRuntBlindaje", "DetalleRuntTarjeta"]);
         detalle.Where(t => !alcanzables.Contains(t)).Select(t => t.Name).Should().BeEmpty("todo DetalleRunt* llega al renderizador y se revisa");
         ViolacionesDetalle(detalle).Should().BeEmpty();
         Propiedades([typeof(DetalleRuntGarantia)]).Select(p => p.Name).Should().Contain(nameof(DetalleRuntGarantia.Acreedor), "permitido: pasa por la regla del NIT");
