@@ -171,7 +171,7 @@ public static partial class ReglasBorrador
     /// <c>null</c> para borrar un campo opcional. El <c>validation_schema</c> viaja al front tal cual; aquí se valida tipo,
     /// opciones y obligatoriedad.
     /// </summary>
-    public static IReadOnlyDictionary<string, string?> ValidarCampos(DefinicionTipoDto def, IReadOnlyDictionary<string, JsonElement>? valores, ErroresDeCampo errores)
+    public static IReadOnlyDictionary<string, string?> ValidarCampos(DefinicionTipoDto def, IReadOnlyDictionary<string, JsonElement>? valores, ErroresDeCampo errores, ValoresActualesVehiculo? runt = null)
     {
         var salida = new Dictionary<string, string?>(StringComparer.Ordinal);
         if (valores is null || valores.Count == 0)
@@ -189,7 +189,7 @@ public static partial class ReglasBorrador
             {
                 if (declaradas.TryGetValue(clave, out var declaracion))
                 {
-                    ValidarDeclaracion(declaracion.Declaracion, declaracion.EsExtra, clave, valor, pre, salida, errores);
+                    ValidarDeclaracion(declaracion.Declaracion, declaracion.EsExtra, clave, valor, pre, salida, errores, runt);
                     continue;
                 }
 
@@ -275,7 +275,7 @@ public static partial class ReglasBorrador
     /// prende su bandera <c>cambio_*</c>; al vaciar el valor opcional se apaga.
     /// </summary>
     private static void ValidarDeclaracion(
-        DeclaracionTipoDto d, bool esExtra, string clave, JsonElement valor, string pre, Dictionary<string, string?> salida, ErroresDeCampo errores)
+        DeclaracionTipoDto d, bool esExtra, string clave, JsonElement valor, string pre, Dictionary<string, string?> salida, ErroresDeCampo errores, ValoresActualesVehiculo? runt)
     {
         if (esExtra)
             return;
@@ -303,6 +303,8 @@ public static partial class ReglasBorrador
             _ when d.Opciones.Count > 0 => d.Opciones.Any(o => string.Equals(o.Codigo, texto, StringComparison.Ordinal)) ? null : "Elija una de las opciones.",
             _ => texto.Length <= MaxValorDeclaracion ? null : $"Use hasta {MaxValorDeclaracion} caracteres.",
         };
+        // Paridad con FLIT 2: el valor nuevo de una transformación es obligatorio y distinto del que el RUNT tiene hoy.
+        error ??= ErrorIgualAlRunt(d, texto, runt);
         if (error is not null)
         {
             errores.Agregar(pre, error);
@@ -334,7 +336,7 @@ public static partial class ReglasBorrador
     }
 
     /// <summary>Un pendiente de declaración con el nombre legible que muestra el gate del punto.</summary>
-    public readonly record struct PendienteDeDeclaracion(string Codigo, string Referencia, string Nombre, string? Paso);
+    public readonly record struct PendienteDeDeclaracion(string Codigo, string Referencia, string Nombre, string? Paso, string? Motivo = null);
 
     /// <summary>
     /// Lo que falta de las declaraciones del borrador: el valor de cada declaración activa y obligatoria (<c>declaracion_requerida</c>)
@@ -342,7 +344,7 @@ public static partial class ReglasBorrador
     /// ciudadano marcó su transformación.
     /// </summary>
     public static IReadOnlyList<PendienteDeDeclaracion> PendientesDeDeclaraciones(
-        DefinicionTipoDto def, IReadOnlyDictionary<string, string> campos, IReadOnlyList<string> transformaciones, IReadOnlySet<string> documentosCargados)
+        DefinicionTipoDto def, IReadOnlyDictionary<string, string> campos, IReadOnlyList<string> transformaciones, IReadOnlySet<string> documentosCargados, ValoresActualesVehiculo? runt = null)
     {
         var salida = new List<PendienteDeDeclaracion>();
         string? PasoDe(string sectionType) => def.Pasos.FirstOrDefault(p => p.SectionTypes.Contains(sectionType, StringComparer.Ordinal))?.Clave;
@@ -362,6 +364,12 @@ public static partial class ReglasBorrador
             {
                 if (d.Obligatoria || simultanea)
                     salida.Add(new PendienteDeDeclaracion(PendienteDeclaracionRequerida, d.Clave, d.Etiqueta, paso));
+                continue;
+            }
+
+            if (ErrorIgualAlRunt(d, valor, runt) is { } igual)
+            {
+                salida.Add(new PendienteDeDeclaracion(PendienteDeclaracionRequerida, d.Clave, d.Etiqueta, paso, igual));
                 continue;
             }
 
@@ -511,7 +519,8 @@ public static partial class ReglasBorrador
         DatosSolicitud datos,
         IReadOnlyList<(string Rol, short Ordinal)> personas,
         IReadOnlySet<string> documentosCargados,
-        CapturaConsulta captura = default)
+        CapturaConsulta captura = default,
+        ValoresActualesVehiculo? runt = null)
     {
         string? PasoDe(string sectionType) => def.Pasos.FirstOrDefault(p => p.SectionTypes.Contains(sectionType, StringComparer.Ordinal))?.Clave;
 
@@ -539,8 +548,8 @@ public static partial class ReglasBorrador
         foreach (var doc in def.Documentos.Where(d => d.Obligatorio && string.IsNullOrWhiteSpace(d.Condicion) && !deLasDeclaraciones.Contains(d.DocCode) && !documentosCargados.Contains(d.DocCode)))
             pendientes.Add(new PendienteDto(PendienteDocumentoRequerido, doc.DocCode, PasoDe("document_checklist")));
 
-        foreach (var x in PendientesDeDeclaraciones(def, campos, datos.Requisitos?.Transformaciones ?? [], documentosCargados))
-            pendientes.Add(new PendienteDto(x.Codigo, x.Referencia, x.Paso));
+        foreach (var x in PendientesDeDeclaraciones(def, campos, datos.Requisitos?.Transformaciones ?? [], documentosCargados, runt))
+            pendientes.Add(new PendienteDto(x.Codigo, x.Referencia, x.Paso, x.Motivo));
 
         if (DocumentoDePrenda(datos.Prenda?.Decision) is { } docPrenda && !documentosCargados.Contains(docPrenda))
             pendientes.Add(new PendienteDto(PendienteDocumentoRequerido, docPrenda, PasoDe("prenda_decision") ?? PasoDe("document_checklist")));

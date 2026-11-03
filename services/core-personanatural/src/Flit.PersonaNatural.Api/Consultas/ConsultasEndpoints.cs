@@ -2,6 +2,7 @@ using System.Globalization;
 using Flit.PersonaNatural.Api.Abuso;
 using Flit.PersonaNatural.Api.Consentimientos;
 using Flit.PersonaNatural.Api.Sesiones;
+using Flit.PersonaNatural.Api.Solicitudes;
 
 namespace Flit.PersonaNatural.Api.Consultas;
 
@@ -57,6 +58,7 @@ public static class ConsultasEndpoints
         services.AddScoped<MedicionConsultasService>();
         services.AddScoped<ConsultaDetalleService>();
         services.AddScoped<VehiculoDelBorradorService>();
+        services.AddScoped<IValoresRuntBorrador>(sp => sp.GetRequiredService<VehiculoDelBorradorService>());
         services.AddScoped<ConsultaPersonaDetalleService>();
         return services;
     }
@@ -172,6 +174,28 @@ public static class ConsultasEndpoints
                 EstadoVehiculoBorrador.Ok => Results.Ok(r.Gravamen),
                 EstadoVehiculoBorrador.SinVehiculo => SesionEndpoints.Problema(
                     StatusCodes.Status409Conflict, "Sin vehículo", "Falta el vehículo o el documento del propietario para consultar el gravamen.", CodigoSinVehiculo),
+                _ => SesionEndpoints.Problema(StatusCodes.Status404NotFound, "No encontrado", SesionEndpoints.MensajeNoEncontrada, SesionEndpoints.CodigoNoEncontrada),
+            };
+        }).AddEndpointFilter(Radicacion.SesionTrasRadicar.Filtro);
+
+        // Valores RUNT actuales (color, combustible, carrocería) del vehículo del borrador: el front los muestra y valida «distinto del RUNT».
+        grupo.MapGet("/solicitudes/{id:guid}/vehiculo/valores-actuales", async (Guid id, HttpContext http, VehiculoDelBorradorService vehiculo, CancellationToken ct) =>
+        {
+            ResultadoVehiculoBorrador r;
+            try
+            {
+                r = await vehiculo.ValoresActualesAsync(id, ct).ConfigureAwait(false);
+            }
+            catch (ProveedorNoDisponibleException)
+            {
+                return ProveedorNoDisponible(http);
+            }
+
+            return r.Estado switch
+            {
+                EstadoVehiculoBorrador.Ok => Results.Ok(r.Valores),
+                EstadoVehiculoBorrador.SinVehiculo => SesionEndpoints.Problema(
+                    StatusCodes.Status409Conflict, "Sin vehículo", "Falta el vehículo o el documento del propietario para consultar el RUNT.", CodigoSinVehiculo),
                 _ => SesionEndpoints.Problema(StatusCodes.Status404NotFound, "No encontrado", SesionEndpoints.MensajeNoEncontrada, SesionEndpoints.CodigoNoEncontrada),
             };
         }).AddEndpointFilter(Radicacion.SesionTrasRadicar.Filtro);

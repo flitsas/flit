@@ -2,6 +2,7 @@ using System.Text.Json;
 using Flit.Consultas.Grpc.V1;
 using Flit.PersonaNatural.Api.Persistence;
 using Flit.PersonaNatural.Api.Pii;
+using Flit.PersonaNatural.Api.Solicitudes;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.PersonaNatural.Api.Consultas;
@@ -18,7 +19,7 @@ public enum EstadoVehiculoBorrador
 /// <summary>Gravamen del vehículo del borrador (HU #14257). <c>Aviso</c> = <c>sin_gravamen</c> cuando el RUNT respondió sin prenda.</summary>
 public sealed record GravamenBorradorDto(bool TienePrenda, string? Acreedor, string? NitAcreedor, string? Aviso);
 
-public sealed record ResultadoVehiculoBorrador(EstadoVehiculoBorrador Estado, string? Clase = null, GravamenBorradorDto? Gravamen = null);
+public sealed record ResultadoVehiculoBorrador(EstadoVehiculoBorrador Estado, string? Clase = null, GravamenBorradorDto? Gravamen = null, ValoresActualesVehiculo? Valores = null);
 
 /// <summary>
 /// Consultas del RUNT sobre el vehículo del BORRADOR (HU #14255 y #14257): la clase para filtrar las carrocerías y el gravamen para
@@ -27,7 +28,7 @@ public sealed record ResultadoVehiculoBorrador(EstadoVehiculoBorrador Estado, st
 /// Habeas Data (HU #14041): la clase y la bandera de prenda son dato mínimo; el acreedor (dato de un tercero) solo sale si algún actor
 /// de ESTA solicitud tiene la identidad validada, con el mismo criterio de <see cref="ConsultaDetalleService"/>.
 /// </summary>
-public sealed class VehiculoDelBorradorService(PersonaNaturalDb db, PersonaService personas, IConsultasRunt runt, ConsultaDetalleService detalle, MedicionConsultasService medicion)
+public sealed class VehiculoDelBorradorService(PersonaNaturalDb db, PersonaService personas, IConsultasRunt runt, ConsultaDetalleService detalle, MedicionConsultasService medicion) : IValoresRuntBorrador
 {
     public const string ActorAuditoria = "consulta_borrador";
 
@@ -41,6 +42,29 @@ public sealed class VehiculoDelBorradorService(PersonaNaturalDb db, PersonaServi
         return estado != EstadoVehiculoBorrador.Ok
             ? new ResultadoVehiculoBorrador(estado)
             : new ResultadoVehiculoBorrador(estado, ProyeccionMinima.Vehiculo(resultado!, placa).Clase);
+    }
+
+    /// <summary>Color, combustible y carrocería actuales del vehículo en el RUNT, para validar que la transformación sea distinta.</summary>
+    public async Task<ResultadoVehiculoBorrador> ValoresActualesAsync(Guid solicitudId, CancellationToken ct)
+    {
+        var (estado, resultado, placa) = await ConsultarAsync(solicitudId, ct).ConfigureAwait(false);
+        if (estado != EstadoVehiculoBorrador.Ok)
+            return new ResultadoVehiculoBorrador(estado);
+        var v = ProyeccionMinima.DelTramite(resultado!, placa);
+        return new ResultadoVehiculoBorrador(estado, Valores: new ValoresActualesVehiculo(v.Color, v.Combustible, v.Carroceria));
+    }
+
+    /// <summary>Sin RUNT o sin vehículo devuelve <c>null</c>: no se puede comparar y la regla no bloquea.</summary>
+    public async Task<ValoresActualesVehiculo?> ObtenerAsync(Guid solicitudId, CancellationToken ct)
+    {
+        try
+        {
+            return (await ValoresActualesAsync(solicitudId, ct).ConfigureAwait(false)).Valores;
+        }
+        catch (ProveedorNoDisponibleException)
+        {
+            return null;
+        }
     }
 
     public async Task<ResultadoVehiculoBorrador> GravamenAsync(Guid solicitudId, CancellationToken ct)

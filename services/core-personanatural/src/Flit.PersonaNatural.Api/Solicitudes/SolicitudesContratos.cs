@@ -31,7 +31,7 @@ public sealed record DiagnosticoRequest(PropietarioRequest? Propietario);
 // ── Salidas ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /// <summary>Algo que falta: un código estable, a qué se refiere (clave del campo, rol o documento) y en qué paso se corrige.</summary>
-public sealed record PendienteDto(string Codigo, string? Referencia, string? Paso);
+public sealed record PendienteDto(string Codigo, string? Referencia, string? Paso, string? Motivo = null);
 
 public sealed record PasoEstadoDto(string Clave, string Titulo, bool Completo, IReadOnlyList<PendienteDto> Pendientes);
 

@@ -12,7 +12,7 @@ namespace Flit.PersonaNatural.Api.Punto;
 /// El gate lee el borrador por <see cref="IBorradorPunto"/>. La persistencia de archivos y valor comercial reutiliza
 /// <c>/solicitudes/{id}/adjuntos</c> y <c>PUT …/comercial</c> del borrador abierto en Actores.
 /// </summary>
-public sealed class CompletitudRequisitosPuntoService(IFachadaDefiniciones definiciones, IConsultasRunt consultas, IBorradorPunto borradores)
+public sealed class CompletitudRequisitosPuntoService(IFachadaDefiniciones definiciones, IConsultasRunt consultas, IBorradorPunto borradores, IValoresRuntBorrador? valoresRunt = null)
 {
     /// <summary>Misma lista que <c>FirmaDeArchivo</c> / portal <c>EXTENSIONES_PERMITIDAS</c>.</summary>
     public static readonly HashSet<string> ExtensionesPermitidas = new(StringComparer.OrdinalIgnoreCase)
@@ -118,8 +118,13 @@ public sealed class CompletitudRequisitosPuntoService(IFachadaDefiniciones defin
         }
 
         // HU 13 — el gate también exige las declaraciones del tipo (valor nuevo, blindaje, causal, destino) y los documentos de lo elegido.
-        foreach (var x in ReglasBorrador.PendientesDeDeclaraciones(def, borrador.Campos, borrador.Datos.Requisitos?.Transformaciones ?? [], borrador.DocCodesCargados))
-            pendientes.Add(new PendienteCompletitudPuntoDto(x.Referencia, x.Nombre));
+        var runt = valoresRunt is not null && ReglasBorrador.HayTransformaciones(def, borrador.Campos.Keys)
+            ? await valoresRunt.ObtenerAsync(solicitudId.Value, ct).ConfigureAwait(false)
+            : null;
+        foreach (var x in ReglasBorrador.PendientesDeDeclaraciones(def, borrador.Campos, borrador.Datos.Requisitos?.Transformaciones ?? [], borrador.DocCodesCargados, runt))
+            pendientes.Add(x.Motivo is null
+                ? new PendienteCompletitudPuntoDto(x.Referencia, x.Nombre)
+                : new PendienteCompletitudPuntoDto(x.Codigo, x.Motivo));
 
         if (ReglasBorrador.DocumentoDePrenda(borrador.Datos.Prenda?.Decision) is { } docPrenda && !borrador.DocCodesCargados.Contains(docPrenda))
             pendientes.Add(new PendienteCompletitudPuntoDto(docPrenda, def.Documentos.FirstOrDefault(d => d.DocCode == docPrenda)?.Nombre ?? "Documento de la prenda"));

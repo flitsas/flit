@@ -50,7 +50,8 @@ public sealed partial class SolicitudesService(
     IEnumerable<ILimpiadorDeSolicitud> limpiadores,
     TimeProvider reloj,
     ConsentimientoVersiones versionesConsentimiento,
-    Catalogos.CatalogosVehiculoService catalogosVehiculo)
+    Catalogos.CatalogosVehiculoService catalogosVehiculo,
+    IValoresRuntBorrador? valoresRunt = null)
 {
     public const string CodigoTipoNoDisponible = "tipo_no_disponible";
     public const string CodigoNoPermiteCambio = "estado_no_permite_cambio";
@@ -313,7 +314,10 @@ public sealed partial class SolicitudesService(
     {
         var (s, def) = await CargarParaEditarAsync(id, body?.Version, ct).ConfigureAwait(false);
         var errores = new ErroresDeCampo();
-        var nuevos = ReglasBorrador.ValidarCampos(def, body?.Valores, errores);
+        var runt = valoresRunt is not null && body?.Valores is { Count: > 0 } && ReglasBorrador.HayTransformaciones(def, body.Valores.Keys)
+            ? await valoresRunt.ObtenerAsync(id, ct).ConfigureAwait(false)
+            : null;
+        var nuevos = ReglasBorrador.ValidarCampos(def, body?.Valores, errores, runt);
         if (errores.Hay)
             throw ReglaDeNegocioException.Invalido(errores);
 
@@ -560,9 +564,12 @@ public sealed partial class SolicitudesService(
 
         var campos = LeerCampos(s.FieldValues);
         var datos = DatosSolicitud.Leer(s.Datos);
+        var runt = valoresRunt is not null && ReglasBorrador.HayTransformaciones(def, campos.Keys)
+            ? await valoresRunt.ObtenerAsync(s.Id, ct).ConfigureAwait(false)
+            : null;
         var (pasos, pendientes) = ReglasBorrador.Completitud(
             def, campos, datos, [.. filas.Select(f => (f.Parte, f.Ordinal))],
-            tiposAdjuntos.ToHashSet(StringComparer.Ordinal), captura);
+            tiposAdjuntos.ToHashSet(StringComparer.Ordinal), captura, runt);
 
         return new SolicitudDto(
             s.Id, s.CodigoPublico, s.Estado, s.TipoTramiteCodigo, s.DefinicionVersion, def.Huella, s.RowVersion, s.OrganismoId, s.OrganismoNombre,
