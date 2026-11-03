@@ -180,8 +180,9 @@ public sealed class ContenidoReporteTests
         enError.RotuloDeclarado.Should().BeNull();
         enError.Resultado.Should().BeNull();
 
+        Texto(contenido).Should().Contain("1012345678").And.Contain("79111222");
         Texto(contenido).Should().NotContainAny(
-            ["1012345678", "012345678", "79111222", "NOMBRE FICTICIO", "TIMEOUT", "PERSONAS_CON_ERROR", locatario.Id.ToString(), propietario.Id.ToString()]);
+            ["NOMBRE FICTICIO", "TIMEOUT", "PERSONAS_CON_ERROR", locatario.Id.ToString(), propietario.Id.ToString()]);
         var huella = contenido.ParaHuella();
         huella.Values.Should().Contain(v => v != null && v.Contains("****5678", StringComparison.Ordinal), "la persona enmascarada entra en la huella");
         huella.Values.Should().NotContain(v => v != null && v.Contains("12345678", StringComparison.Ordinal));
@@ -382,13 +383,13 @@ public sealed class ContenidoReporteTests
         detalle.Solicitudes.Should().BeEmpty("Intempo manda siempre [] (§5.4)");
         detalle.GarantiasAFavor.Should().Equal(
             new DetalleRuntGarantia("BANCO PRUEBA SA", "NIT", "900123456", "SI", "10/05/2021"),
-            new DetalleRuntGarantia(DetalleRuntGarantia.PersonaNatural, "CC", "****5678", "NO", "11/06/2022"));
+            new DetalleRuntGarantia(DetalleRuntGarantia.PersonaNatural, "CC", "1012345678", "NO", "11/06/2022"));
         detalle.Accidentalidad.Should().BeEmpty("cantidadAccidentes y nombreConductor no están en el catálogo de permitidos");
         detalle.PolizasResponsabilidadCivil.Should().BeEmpty("el contrato solo trae serialVersionUID");
         Texto(contenido).Should().NotContainAny(
-            ["PERSONA NATURAL FICTICIA", "1012345678", "PROPIETARIO FICTICIO", "79111222", "CONDUCTOR FICTICIO", "SERIAL-SECRETO", "RTM-SERIAL",
+            ["PERSONA NATURAL FICTICIA", "PROPIETARIO FICTICIO", "79111222", "CONDUCTOR FICTICIO", "SERIAL-SECRETO", "RTM-SERIAL",
                 "RC-SERIAL", "proveedor.invalid", "intempo", "INTEMPO"]);
-        contenido.ParaHuella().Should().ContainKey("runt/garantia/2").WhoseValue.Should().Contain("****5678").And.NotContain("1012345678");
+        contenido.ParaHuella().Should().ContainKey("runt/garantia/2").WhoseValue.Should().Contain("1012345678");
 
         var scope = api.App.Services.CreateScope();
         var delZip = await ActivatorUtilities.CreateInstance<LectorContenidoReporte>(scope.ServiceProvider, db)

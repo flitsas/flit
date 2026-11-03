@@ -153,7 +153,9 @@ public sealed record PersonaReporte(
     string? Consulta,
     EstadoPersonaReporte Estado,
     DateTimeOffset? ConsultadoEn,
-    ResultadoDetalleDto? Resultado)
+    ResultadoDetalleDto? Resultado,
+    /// <summary>Número completo para el PDF. La huella y el Excel siguen usando <see cref="DocumentoEnmascarado"/>.</summary>
+    string? Documento = null)
 {
     /// <summary>Rótulo del documento declarado por el cliente (el mismo de la interfaz, HU #13754).</summary>
     public const string Declarado = "Declarado por el cliente";

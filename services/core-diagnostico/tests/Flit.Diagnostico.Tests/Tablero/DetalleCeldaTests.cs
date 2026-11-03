@@ -161,9 +161,9 @@ public sealed class DetalleCeldaTests
         var respuesta = await cliente.GetAsync(Tablero.RutaDetalle(lote.Id, vehiculo, "RUNT_LOCATARIO"), ct);
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
-        cuerpo.Should().NotContainAny(["1012345678", "012345678", "12345678"], "el documento nunca va completo");
         var persona = JsonDocument.Parse(cuerpo).RootElement.GetProperty("personas").EnumerateArray().Single();
         persona.GetProperty("documento_enmascarado").GetString().Should().Be("****5678");
+        persona.GetProperty("documento").GetString().Should().Be("1012345678");
         persona.GetProperty("declarado_por_cliente").GetBoolean().Should().BeTrue();
         persona.GetProperty("rol").GetString().Should().Be("LOCATARIO");
         persona.GetProperty("tipo_documento").GetString().Should().Be("C");
@@ -173,7 +173,8 @@ public sealed class DetalleCeldaTests
         var propietarios = await cliente.GetAsync(Tablero.RutaDetalle(lote.Id, vehiculo, "RUNT_PROPIETARIO"), ct);
         var cuerpoPropietarios = await propietarios.Content.ReadAsStringAsync(ct);
         propietarios.StatusCode.Should().Be(HttpStatusCode.OK, cuerpoPropietarios);
-        cuerpoPropietarios.Should().NotContainAny(["79111222", "900123456", natural.Id.ToString(), juridica.Id.ToString()]);
+        cuerpoPropietarios.Should().Contain("79111222").And.Contain("900123456");
+        cuerpoPropietarios.Should().NotContainAny([natural.Id.ToString(), juridica.Id.ToString()]);
         var detalle = JsonDocument.Parse(cuerpoPropietarios).RootElement;
         detalle.GetProperty("estado").GetString().Should().Be("ERROR");
         detalle.GetProperty("tipo_error").GetString().Should().Be("PERSONAS_CON_ERROR");

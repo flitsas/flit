@@ -29,7 +29,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
     /// <summary>Títulos de las secciones 2–9, en el orden del diseño.</summary>
     private static readonly string[] TitulosAmpliados =
     [
-        "INFORMACIÓN GENERAL", "DATOS TEÓRICOS", "DATOS SOAT", "DATOS REVISIÓN TECNO-MECÁNICA", "SOLICITUDES", "GARANTÍAS A FAVOR",
+        "INFORMACIÓN GENERAL", "DATOS TÉCNICOS", "DATOS SOAT", "DATOS REVISIÓN TECNO-MECÁNICA", "SOLICITUDES", "GARANTÍAS A FAVOR",
         "ACCIDENTALIDAD", "PÓLIZA DE RESPONSABILIDAD CIVIL",
     ];
 
@@ -59,7 +59,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
                  })
             PdfDePrueba.Tiene(vehiculo, esperado).Should().BeTrue($"«{esperado}» en Información del vehículo: {vehiculo}");
 
-        var general = Tramo(texto, "INFORMACIÓN GENERAL", "DATOS TEÓRICOS");
+        var general = Tramo(texto, "INFORMACIÓN GENERAL", "DATOS TÉCNICOS");
         foreach (var esperado in new[]
                  {
                      "Marca Línea Cilindraje CHEVROLET SPARK 1200", "VIN N.º motor N.º chasis", "MOT-0001", "CHS-0001",
@@ -68,7 +68,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
             PdfDePrueba.Tiene(general, esperado).Should().BeTrue($"«{esperado}» en Información general: {general}");
         PdfDePrueba.Tiene(texto, "N.º serie").Should().BeFalse("el RUNT no trae n.º de serie: va n.º chasis en su lugar");
 
-        PdfDePrueba.Tiene(Tramo(texto, "DATOS TEÓRICOS", "DATOS SOAT"),
+        PdfDePrueba.Tiene(Tramo(texto, "DATOS TÉCNICOS", "DATOS SOAT"),
             "N.º ejes Capacidad de carga Pasajeros sentados Peso bruto vehicular 2 500 4 1450").Should().BeTrue(texto);
 
         var soat = Tramo(texto, "DATOS SOAT", "DATOS REVISIÓN TECNO-MECÁNICA");
@@ -86,8 +86,8 @@ public sealed partial class PdfVehiculoDisenoV2Tests
         PdfDePrueba.Tiene(garantias, "BANCO FICTICIO S.A.").Should().BeTrue(garantias);
         PdfDePrueba.Tiene(garantias, "NIT 900123456").Should().BeTrue(garantias);
         PdfDePrueba.Tiene(garantias, "Persona natural").Should().BeTrue(garantias);
-        PdfDePrueba.Tiene(garantias, "CC ****5678").Should().BeTrue(garantias);
-        texto.Should().NotContainAny([PdfDePrueba.Plano(NombreAcreedorNatural), DocumentoAcreedorNatural, "FICTICIOACREEDOR"]);
+        PdfDePrueba.Tiene(garantias, "CC " + DocumentoAcreedorNatural).Should().BeTrue(garantias);
+        texto.Should().NotContainAny([PdfDePrueba.Plano(NombreAcreedorNatural), "FICTICIOACREEDOR"]);
 
         PdfDePrueba.Tiene(Tramo(texto, "ACCIDENTALIDAD", "PÓLIZA DE RESPONSABILIDAD CIVIL"), "Fecha Gravedad 02/02/2025 SOLO DAÑOS").Should().BeTrue(texto);
     }
@@ -98,9 +98,9 @@ public sealed partial class PdfVehiculoDisenoV2Tests
         var texto = PdfDePrueba.SinPies(PdfDePrueba.Texto(PdfVehiculo.Generar(ContenidoConDetalle("ABC123"), GeneradoEn)));
 
         PdfDePrueba.Tiene(Tramo(texto, "SOLICITUDES", "GARANTÍAS A FAVOR"),
-            "Estado Entidad N.º solicitud Fecha solicitud Trámites realizados No registra").Should().BeTrue(texto);
+            "Estado Entidad N.º solicitud Fecha solicitud Trámites realizados No hay información").Should().BeTrue(texto);
         PdfDePrueba.Tiene(Tramo(texto, "PÓLIZA DE RESPONSABILIDAD CIVIL", "PROPIETARIOS"),
-            "Estado N.º póliza Tipo póliza Expedición Vencimiento Entidad No registra").Should().BeTrue(texto);
+            "Estado N.º póliza Tipo póliza Expedición Vencimiento Entidad No hay información").Should().BeTrue(texto);
     }
 
     [Fact]
@@ -115,7 +115,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
         for (var i = 0; i < TitulosAmpliados.Length; i++)
         {
             var tramo = Tramo(texto, TitulosAmpliados[i], siguientes[i]);
-            PdfDePrueba.Tiene(tramo, "No registra").Should().BeTrue($"«{TitulosAmpliados[i]}» sin detalle dice «No registra»: {tramo}");
+            PdfDePrueba.Tiene(tramo, "No hay información").Should().BeTrue($"«{TitulosAmpliados[i]}» sin detalle dice «No hay información»: {tramo}");
         }
     }
 

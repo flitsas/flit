@@ -91,8 +91,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
         var garantia = Garantia(tipo, numero);
 
         garantia.Acreedor.Should().Be(DetalleRuntGarantia.PersonaNatural);
-        garantia.NumeroDocumento.Should().Be(EnmascaradorDocumento.Enmascarar(numero));
-        garantia.NumeroDocumento.Should().NotContain(numero);
+        garantia.NumeroDocumento.Should().Be(numero);
     }
 
     // Descifrado — una excepción no prevista del protector ⇒ null (sin propagar ni citar su texto) y el PDF se genera sin él.

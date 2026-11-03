@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Flit.Diagnostico.Api.Modulos.Consultas;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
 using Flit.Diagnostico.Api.Modulos.Tablero;
@@ -81,7 +82,7 @@ internal sealed class LectorContenidoReporte(
             new EncabezadoReporte(
                 lote.DiagnosticoId, lote.NombreLote, lote.Empresa, lote.UsuarioCreador, lote.CreadoEn, lote.TipoAnalisis,
                 vehiculo.Identificador, CodigosDeEnum.Codigo(vehiculo.Tipo), vehiculo.Placa, vehiculo.Vin),
-            Secciones(cabecera, celdas, personas),
+            Secciones(cabecera, celdas, personas, await RespuestasPersonaAsync(cabecera, vehiculoId, ct).ConfigureAwait(false)),
             detalle);
     }
 
@@ -163,14 +164,40 @@ internal sealed class LectorContenidoReporte(
             cabecera.CreadoEn.ToOffset(VigenciaDelDia.OffsetColombia), tipo);
     }
 
-    /// <summary>Una sección por fuente del alcance, en el orden de las columnas de la grilla; las celdas de otras fuentes no salen.</summary>
-    private List<SeccionReporte> Secciones(CabeceraDiagnostico cabecera, IReadOnlyList<CeldaLeidaReporte> celdas, IReadOnlyList<PersonaVehiculo> personas)
+    /// <summary>
+    /// Respuestas cifradas de RUNT propietario y locatario, para completar las licencias de conducción en el PDF.
+    /// El Excel del lote no las lee.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<Fuente, IReadOnlyDictionary<int, JsonElement>>> RespuestasPersonaAsync(
+        CabeceraDiagnostico cabecera, Guid vehiculoId, CancellationToken ct)
     {
-        var porFuente = celdas.GroupBy(c => c.Fuente).ToDictionary(g => g.Key, g => g.First());
-        return [.. Alcance.Agrupar(cabecera.Alcance).Fuentes.Select(f => Seccion(f, porFuente.GetValueOrDefault(f), personas))];
+        Fuente[] fuentes = [Fuente.RuntPropietario, Fuente.RuntLocatario];
+        var filas = await db.Set<CeldaConsulta>().AsNoTracking()
+            .Where(c => c.DiagnosticoId == cabecera.Id && c.TenantId == cabecera.TenantId && c.VehiculoId == vehiculoId && fuentes.Contains(c.Fuente))
+            .Select(c => new { c.Fuente, c.RespuestaFuenteCifrada })
+            .ToListAsync(ct).ConfigureAwait(false);
+        var mapa = new Dictionary<Fuente, IReadOnlyDictionary<int, JsonElement>>();
+        foreach (var fila in filas)
+        {
+            if (RespuestaFuenteCelda.TryLeerPersonas(protectorRespuesta, fila.RespuestaFuenteCifrada, out var respuestas))
+                mapa[fila.Fuente] = respuestas;
+        }
+
+        return mapa;
     }
 
-    private SeccionReporte Seccion(Fuente fuente, CeldaLeidaReporte? celda, IReadOnlyList<PersonaVehiculo> personas)
+    /// <summary>Una sección por fuente del alcance, en el orden de las columnas de la grilla; las celdas de otras fuentes no salen.</summary>
+    private List<SeccionReporte> Secciones(
+        CabeceraDiagnostico cabecera, IReadOnlyList<CeldaLeidaReporte> celdas, IReadOnlyList<PersonaVehiculo> personas,
+        IReadOnlyDictionary<Fuente, IReadOnlyDictionary<int, JsonElement>>? respuestasPersona = null)
+    {
+        var porFuente = celdas.GroupBy(c => c.Fuente).ToDictionary(g => g.Key, g => g.First());
+        return [.. Alcance.Agrupar(cabecera.Alcance).Fuentes.Select(f => Seccion(f, porFuente.GetValueOrDefault(f), personas, respuestasPersona))];
+    }
+
+    private SeccionReporte Seccion(
+        Fuente fuente, CeldaLeidaReporte? celda, IReadOnlyList<PersonaVehiculo> personas,
+        IReadOnlyDictionary<Fuente, IReadOnlyDictionary<int, JsonElement>>? respuestasPersona)
     {
         var codigo = CodigosDeEnum.Codigo(fuente);
         var grupo = CodigosDeEnum.Codigo(GruposFuente.De(fuente));
@@ -187,7 +214,9 @@ internal sealed class LectorContenidoReporte(
         {
             var rol = EjecutorPorPersonas.RolDe(fuente);
             deLaFuente = estado is EstadoSeccion.Completado or EstadoSeccion.NoDisponible
-                ? [.. ProyectorDetalleCelda.Personas(personas.Where(p => p.Rol == rol), celda!.Payload, protector).Select(Persona)]
+                ? [.. ProyectorDetalleCelda.Personas(
+                    personas.Where(p => p.Rol == rol), celda!.Payload, protector,
+                    respuestasPersona is not null && respuestasPersona.TryGetValue(fuente, out var deLaFuenteRespuestas) ? deLaFuenteRespuestas : null).Select(Persona)]
                 : [];
         }
 
@@ -214,7 +243,7 @@ internal sealed class LectorContenidoReporte(
             DetalleCelda.SinResultado => EstadoPersonaReporte.SinResultado,
             _ => EstadoPersonaReporte.NoDisponible,
         },
-        p.ConsultadoEn, p.Resultado);
+        p.ConsultadoEn, p.Resultado, p.Documento);
 
     private sealed record IdentificacionLeida(Guid Id, int Orden, string Identificador, Domain.Vehiculos.TipoIdentificador Tipo, string? Placa, string? Vin);
 

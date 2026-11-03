@@ -67,7 +67,9 @@ public sealed record PersonaDetalleDto(
     [property: JsonPropertyName("consultado_en")] DateTimeOffset? ConsultadoEn,
     [property: JsonPropertyName("resultado")] ResultadoDetalleDto? Resultado,
     [property: JsonPropertyName("respuesta_fuente")] JsonElement? RespuestaFuente = null,
-    [property: JsonPropertyName("respuesta_proveedor")] JsonElement? RespuestaProveedor = null);
+    [property: JsonPropertyName("respuesta_proveedor")] JsonElement? RespuestaProveedor = null,
+    /// <summary>Número de documento completo para el detalle de la consulta. La grilla sigue con el enmascarado.</summary>
+    [property: JsonPropertyName("documento")] string? Documento = null);
 
 /// <summary>
 /// Resultado normalizado de una fuente en el detalle. Conjunto cerrado de tipos (polimorfismo de solo escritura, sin
@@ -137,11 +139,14 @@ public sealed record ResultadoRuntPersonaDetalle(
     [property: JsonPropertyName("estado_conductor")] string? EstadoConductor,
     [property: JsonPropertyName("licencias")] IReadOnlyList<LicenciaDetalle>? Licencias) : ResultadoDetalleDto;
 
-/// <summary>Una licencia de conducción: categoría, estado y vigencia.</summary>
+/// <summary>Una licencia de conducción: categoría, estado, vigencia y número cuando la fuente lo informa.</summary>
 public sealed record LicenciaDetalle(
     [property: JsonPropertyName("categoria")] string? Categoria,
     [property: JsonPropertyName("estado")] string? Estado,
-    [property: JsonPropertyName("vigente_hasta")] string? VigenteHasta);
+    [property: JsonPropertyName("vigente_hasta")] string? VigenteHasta,
+    [property: JsonPropertyName("numero")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Numero = null);
 
 /// <summary>RUES de una persona jurídica (NIT, decisión Q2): si se encontró, el estado de la matrícula y la última renovación.</summary>
 public sealed record ResultadoRuesDetalle(

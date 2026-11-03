@@ -32,6 +32,9 @@ export const CLAVES_OCULTAS: ReadonlySet<string> = new Set([
   "id_ciudad",
   "id_prenda",
   "id_vehiculo_prenda",
+  "signature",
+  "firma",
+  "hash",
 ]);
 
 /** Ocultas solo dentro de un chequeo de ResultadoConsulta. */
@@ -306,9 +309,63 @@ export function textoValor(v: unknown): string {
   if (v === true) return "Sí";
   if (v === false) return "No";
   if (Array.isArray(v)) return v.length === 0 ? "Sin registros" : v.map(textoValor).join(", ");
-  if (typeof v === "string") return propio(VALORES, v) ?? v;
+  if (typeof v === "string") return sinMarcaComercial(propio(VALORES, v) ?? v);
   if (typeof v === "object") return Object.keys(v).length === 0 ? "Sin registros" : JSON.stringify(v);
   return String(v);
+}
+
+/** Quita el nombre del integrador. Si no queda texto útil, «—». */
+function sinMarcaComercial(texto: string): string {
+  if (!/verifik|intempo|kyverum/i.test(texto)) return texto;
+  const limpio = texto
+    .replace(/certified by\s*/gi, "")
+    .replace(/verifik(?:\.co)?|intempo|kyverum/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[\s.,;:-]+|[\s.,;:-]+$/g, "")
+    .trim();
+  return limpio || "—";
+}
+
+type LicenciaVisible = { numero: string | null; categoria: string | null; estado: string | null; vigente_hasta: string | null };
+
+const textoDe = (objeto: Record<string, unknown>, claves: string[]): string | null => {
+  for (const clave of claves) {
+    const valor = objeto[clave];
+    if (typeof valor === "string" && valor.trim()) return valor.trim();
+  }
+  return null;
+};
+
+/** Licencias del JSON del conductor, sin el resto del cuerpo del integrador. */
+export function licenciasDesdeProveedor(proveedor: unknown): LicenciaVisible[] {
+  if (proveedor === null || typeof proveedor !== "object") return [];
+  const raiz = proveedor as Record<string, unknown>;
+  const data = raiz.data;
+  const anidado = data !== null && typeof data === "object" ? (data as Record<string, unknown>) : undefined;
+  const lista = [raiz.licencias, raiz.licenses, anidado?.licencias, anidado?.licenses].find(Array.isArray);
+  if (!lista) return [];
+  const filas: LicenciaVisible[] = [];
+  for (const item of lista) {
+    if (item === null || typeof item !== "object") continue;
+    const licencia = item as Record<string, unknown>;
+    const numero = textoDe(licencia, ["numeroLicencia", "licenceNumber", "numero", "numero_licencia"]);
+    const estado = textoDe(licencia, ["estadoLicencia", "status", "estado"]);
+    const detalle = licencia.detalleLicencia ?? licencia.detalle_licencia;
+    if (Array.isArray(detalle) && detalle.length > 0) {
+      for (const categoria of detalle) {
+        if (categoria === null || typeof categoria !== "object") continue;
+        const cat = categoria as Record<string, unknown>;
+        const nombre = textoDe(cat, ["categoria", "category"]);
+        const hasta = textoDe(cat, ["fechaVencimiento", "dueDate", "vigente_hasta", "vigenteHasta"]);
+        if (nombre || numero) filas.push({ numero, categoria: nombre, estado, vigente_hasta: hasta });
+      }
+    } else {
+      const nombre = textoDe(licencia, ["categoria", "category"]);
+      const hasta = textoDe(licencia, ["fechaVencimiento", "dueDate", "vigente_hasta", "vigenteHasta"]);
+      if (nombre || numero || estado) filas.push({ numero, categoria: nombre, estado, vigente_hasta: hasta });
+    }
+  }
+  return filas;
 }
 
 /** «numero_de_siniestros» / «fechaUltimoReporte» → «Numero de siniestros» / «Fecha ultimo reporte». */

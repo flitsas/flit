@@ -150,12 +150,20 @@ internal static class ProyectorDetalleCelda
         return [.. filas.Select(p =>
         {
             var leido = resultados.GetValueOrDefault(p.Id);
+            JsonElement? respuestaFuente = respuestas is not null && respuestas.TryGetValue(p.Orden, out var respuesta) ? respuesta : null;
+            var proveedor = respuestaFuente is { } deLaFuente ? RespuestaProveedor(deLaFuente, out _) : null;
+            var resultado = leido is { Estado: EjecutorPorPersonas.EstadoOk, Resultado: { } r } ? ResultadoPersona(leido.Consulta, r) : null;
+            if (resultado is ResultadoRuntPersonaDetalle runt && proveedor is { } crudo)
+            {
+                var licencias = LicenciasConductor.Leer(crudo);
+                if (licencias.Count > 0)
+                    resultado = runt with { Licencias = licencias };
+            }
+
             return new PersonaDetalleDto(
                 p.Orden, CodigosDeEnum.Codigo(p.Rol), p.DocTipo, Enmascarado(protector, p.DocCifrado), p.Origen == OrigenDocumento.DeclaradoCliente,
                 leido?.Consulta, leido?.Estado ?? DetalleCelda.SinResultado, leido?.TipoError, leido?.ConsultadoEn,
-                leido is { Estado: EjecutorPorPersonas.EstadoOk, Resultado: { } r } ? ResultadoPersona(leido.Consulta, r) : null,
-                respuestas is not null && respuestas.TryGetValue(p.Orden, out var respuesta) ? respuesta : null,
-                respuestas is not null && respuestas.TryGetValue(p.Orden, out var deLaFuente) ? RespuestaProveedor(deLaFuente, out _) : null);
+                resultado, respuestaFuente, proveedor, DocumentoClaro(protector, p.DocCifrado));
         })];
     }
 
@@ -201,11 +209,16 @@ internal static class ProyectorDetalleCelda
     }
 
     /// <summary>El documento descifrado solo para enmascararlo; si no se puede descifrar, solo la máscara.</summary>
-    private static string Enmascarado(IProtectorDocumentoPersona protector, byte[] cifrado)
+    private static string Enmascarado(IProtectorDocumentoPersona protector, byte[] cifrado) =>
+        EnmascaradorDocumento.Enmascarar(DocumentoClaro(protector, cifrado));
+
+    /// <summary>El número completo. Si no se puede descifrar, la máscara, para no dejar el campo vacío.</summary>
+    private static string DocumentoClaro(IProtectorDocumentoPersona protector, byte[] cifrado)
     {
         try
         {
-            return EnmascaradorDocumento.Enmascarar(protector.Desproteger(cifrado));
+            var claro = protector.Desproteger(cifrado);
+            return string.IsNullOrWhiteSpace(claro) ? EnmascaradorDocumento.Mascara : claro.Trim();
         }
         catch (CryptographicException)
         {

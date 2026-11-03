@@ -242,7 +242,7 @@ internal static class LectorDetalleRunt
         return new DetalleRuntGarantia(
             juridica ? acreedor : DetalleRuntGarantia.PersonaNatural,
             tipo,
-            juridica ? numero : numero is null ? null : EnmascaradorDocumento.Enmascarar(numero),
+            numero,
             T(g.Confecamaras),
             T(g.FechaInscripcion));
     }

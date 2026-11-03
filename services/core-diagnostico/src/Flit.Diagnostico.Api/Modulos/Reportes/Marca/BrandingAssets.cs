@@ -18,6 +18,9 @@ internal static class BrandingAssets
 
     public static string MembreteFooterSvg => Svg("membrete-hoja-footer.svg");
 
+    /// <summary>Logotipo FLIT (wordmark oscuro) para la cabecera del PDF del vehículo.</summary>
+    public static string LogoSvg => Svg("logo-flit.svg");
+
     private static string Svg(string archivo) => Cache.GetOrAdd(archivo, Leer);
 
     private static string Leer(string archivo)

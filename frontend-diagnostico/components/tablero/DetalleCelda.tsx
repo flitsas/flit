@@ -3,12 +3,10 @@
 import { useEffect, useId, type ReactNode } from "react";
 import { Info } from "lucide-react";
 import { InlineAlert } from "@flit/ui/InlineAlert";
-import { DocumentoDeclarado, enmascararDocumento } from "@/components/comun/DocumentoDeclarado";
+import { DocumentoDeclarado } from "@/components/comun/DocumentoDeclarado";
 import type { EstadoCelda } from "@/lib/tablero/api";
-import type { Fuente } from "@/lib/configuracion";
 import {
   FUENTES_PERSONA,
-  FUENTES_RESPUESTA_PROVEEDOR,
   textoMotivoNa,
   textoTipoError,
   type DetalleCelda as Detalle,
@@ -16,7 +14,8 @@ import {
   type PersonaDetalle,
 } from "@/lib/tablero/detalle";
 import { ChipEstadoCelda, fechaDelDato } from "./CeldaSemaforo";
-import { RespuestaFuente, RespuestaProveedor } from "./RespuestaFuente";
+import { licenciasDesdeProveedor } from "@/lib/tablero/etiquetasRespuesta";
+import { RespuestaFuente } from "./RespuestaFuente";
 import {
   CABECERA_TABLA_CLS,
   CABECERA_TABLA_ESTILO,
@@ -93,9 +92,11 @@ function Seccion({ titulo, children }: { titulo: string; children: ReactNode }) 
 }
 
 function DocumentoPersona({ persona }: { persona: PersonaDetalle }) {
-  if (persona.declarado_por_cliente) return <DocumentoDeclarado tipo={persona.tipo_documento} documento={persona.documento_enmascarado} />;
+  const completo = Boolean(persona.documento?.trim());
+  const numero = completo ? persona.documento!.trim() : persona.documento_enmascarado;
+  if (persona.declarado_por_cliente) return <DocumentoDeclarado tipo={persona.tipo_documento} documento={numero} completo={completo} />;
   return (
-    <span className="font-mono text-xs font-medium text-flit-primary dark:text-white">{`${persona.tipo_documento} ${enmascararDocumento(persona.documento_enmascarado)}`}</span>
+    <span className="font-mono text-xs font-medium text-flit-primary dark:text-white">{`${persona.tipo_documento} ${numero}`}</span>
   );
 }
 
@@ -184,121 +185,69 @@ function AvisoResumido() {
   return <InlineAlert tone="info">{AVISO_RESULTADO_RESUMIDO}</InlineAlert>;
 }
 
-/**
- * Aviso cuando falta la respuesta íntegra del proveedor (HU #14154 en RUNT persona y RUES; HU #14184 en SIMIT): consulta
- * anterior al cambio, servida desde caché o llenada a mano. Texto literal de la decisión del usuario.
- */
-export const AVISO_SIN_RESPUESTA_PROVEEDOR = "Esta consulta no tiene la respuesta completa del proveedor. Para verla, vuelve a consultar.";
+/** Lo que se pinta de una persona: su respuesta completa o, si falta, su resultado resumido, más las licencias del conductor. */
+const sinLicenciasAnidadas = (valor: unknown): unknown => {
+  if (Array.isArray(valor)) return valor.map(sinLicenciasAnidadas);
+  if (valor !== null && typeof valor === "object") {
+    const copia: Record<string, unknown> = {};
+    for (const [clave, hijo] of Object.entries(valor as Record<string, unknown>)) {
+      if (clave === "licencias" || clave === "licenses") continue;
+      copia[clave] = sinLicenciasAnidadas(hijo);
+    }
+    return copia;
+  }
+  return valor;
+};
 
-/** Respuesta íntegra del proveedor de la persona (HU #14154), solo en las fuentes que la pintan; si no, undefined. */
-const proveedorDePersona = (p: PersonaDetalle, fuente: Fuente): unknown =>
-  FUENTES_RESPUESTA_PROVEEDOR.has(fuente) && p.respuesta_proveedor !== null && p.respuesta_proveedor !== undefined ? p.respuesta_proveedor : undefined;
-
-/** Lo que se pinta de una persona: su respuesta completa o, si falta, su resultado resumido. */
-const datosDePersona = (p: PersonaDetalle): object | null => p.respuesta_fuente ?? p.resultado;
-const personaResumida = (p: PersonaDetalle, fuente: Fuente) =>
-  proveedorDePersona(p, fuente) === undefined && !p.respuesta_fuente && p.resultado !== null;
-
-/** JSON del proveedor sin datos: objeto o lista vacíos, o texto vacío. */
-const sinDatos = (v: unknown) =>
-  v === "" || (Array.isArray(v) && v.length === 0) || (typeof v === "object" && v !== null && !Array.isArray(v) && Object.keys(v).length === 0);
-
-/**
- * «Respuesta del proveedor» de una persona (HU #14154): rol y documento enmascarado en el título (h4, bajo el h3 de la
- * persona) y el JSON íntegro del proveedor, o que el proveedor no devolvió datos.
- */
-function RespuestaProveedorPersona({ persona, datos, titulo }: { persona: PersonaDetalle; datos: unknown; titulo: string }) {
-  const id = useId();
-  const documento = [persona.tipo_documento, enmascararDocumento(persona.documento_enmascarado)].filter(Boolean).join(" ");
-  return (
-    <section aria-labelledby={id} className="flex flex-col gap-2">
-      <h4 id={id} className={TITULO_SECCION_CLS}>
-        {`Respuesta del proveedor · ${ROLES[persona.rol] ?? persona.rol} · ${documento}`}
-      </h4>
-      {sinDatos(datos) ? (
-        <Vacio>El proveedor no devolvió datos para esta persona.</Vacio>
-      ) : (
-        <RespuestaProveedor datos={datos} etiqueta={`Respuesta del proveedor · ${titulo}`} nivel={5} />
-      )}
-    </section>
-  );
-}
+const datosDePersona = (p: PersonaDetalle): object | null => {
+  const base = p.respuesta_fuente ?? p.resultado;
+  const licencias = licenciasDesdeProveedor(p.respuesta_proveedor);
+  if (!base && licencias.length === 0) return null;
+  if (base === null || typeof base !== "object" || Array.isArray(base)) return licencias.length > 0 ? { licencias } : null;
+  if (licencias.length === 0) return base;
+  const objeto = sinLicenciasAnidadas(base) as Record<string, unknown>;
+  objeto.licencias = licencias;
+  return objeto;
+};
+const personaResumida = (p: PersonaDetalle) => !p.respuesta_fuente && p.resultado !== null;
 
 /**
- * Respuesta de una persona: en RUNT persona, RUES y SIMIT por persona, la respuesta íntegra del proveedor si la trae
- * (HU #14154 y HU #14184); si no, todos los campos de su respuesta completa (o de su resultado) y, en esas fuentes, el
- * aviso de que falta la del proveedor.
+ * Respuesta de una persona: datos de la consulta, en español, sin el cuerpo ni el nombre del integrador.
+ * Las licencias de conducción se toman del detalle guardado del conductor.
  */
-function RespuestaPersona({ persona, fuente }: { persona: PersonaDetalle; fuente: Fuente }) {
+function RespuestaPersona({ persona }: { persona: PersonaDetalle }) {
   const id = useId();
   const titulo = `${ROLES[persona.rol] ?? persona.rol} ${persona.orden}`;
-  const proveedor = proveedorDePersona(persona, fuente);
   const datos = datosDePersona(persona);
-  let cuerpo: ReactNode;
-  if (proveedor !== undefined) {
-    cuerpo = <RespuestaProveedorPersona persona={persona} datos={proveedor} titulo={titulo} />;
-  } else {
-    cuerpo = (
-      <>
-        {FUENTES_RESPUESTA_PROVEEDOR.has(fuente) && <InlineAlert tone="info">{AVISO_SIN_RESPUESTA_PROVEEDOR}</InlineAlert>}
-        {datos ? (
-          <RespuestaFuente datos={datos} etiqueta={`Respuesta de la fuente · ${titulo}`} nivel={4} />
-        ) : (
-          <Vacio>Sin respuesta de la fuente para esta persona.</Vacio>
-        )}
-      </>
-    );
-  }
   return (
     <section aria-labelledby={id} className="flex flex-col gap-2">
       <h3 id={id} className={TITULO_SECCION_CLS}>
         {titulo}
       </h3>
-      {cuerpo}
+      {datos ? (
+        <RespuestaFuente datos={datos} etiqueta={`Respuesta de la fuente · ${titulo}`} nivel={4} />
+      ) : (
+        <Vacio>Sin respuesta de la fuente para esta persona.</Vacio>
+      )}
     </section>
   );
 }
 
 /** Personas con su respuesta y, una sola vez arriba, el aviso si alguna se muestra con el resultado resumido. */
-function RespuestasPersonas({ personas, fuente }: { personas: PersonaDetalle[]; fuente: Fuente }) {
+function RespuestasPersonas({ personas }: { personas: PersonaDetalle[] }) {
   return (
     <>
-      {personas.some((p) => personaResumida(p, fuente)) && <AvisoResumido />}
+      {personas.some((p) => personaResumida(p)) && <AvisoResumido />}
       {personas.map((p) => (
-        <RespuestaPersona key={p.orden} persona={p} fuente={fuente} />
+        <RespuestaPersona key={p.orden} persona={p} />
       ))}
     </>
   );
 }
 
-/** Objeto JSON del proveedor en la celda del vehículo. Solo SIMIT_VEHICULO; ausente o null no cuenta. */
-const proveedorDeCelda = (detalle: Detalle): unknown => {
-  if (detalle.fuente !== "SIMIT_VEHICULO") return undefined;
-  const valor = detalle.respuesta_proveedor;
-  if (valor === null || valor === undefined || typeof valor !== "object" || Array.isArray(valor)) return undefined;
-  return valor;
-};
-
 /**
- * «Respuesta del proveedor» de SIMIT vehículo (HU #14184): un bloque de celda con el mismo renderizador que el conductor.
- */
-function RespuestaProveedorCelda({ datos }: { datos: unknown }) {
-  const id = useId();
-  return (
-    <section aria-labelledby={id} className="flex flex-col gap-2">
-      <h3 id={id} className={TITULO_SECCION_CLS}>
-        Respuesta del proveedor
-      </h3>
-      <RespuestaProveedor datos={datos} etiqueta="Respuesta del proveedor" nivel={4} />
-    </section>
-  );
-}
-
-/**
- * «Respuesta de la fuente» (HU #14087): los datos de la consulta de la respuesta completa (`respuesta_fuente`), en español y
- * sin la auditoría del proveedor (RespuestaFuente); si no está guardada, el `resultado` resumido con un aviso; sin resultado
- * (Sin ejecutar, Novedad, Error), solo el mensaje. SIMIT vehículo (HU #14184) pinta `respuesta_proveedor` y, si falta, el
- * aviso del proveedor más el resultado resumido.
+ * «Respuesta de la fuente»: los datos de la consulta, en español y sin el nombre del integrador.
+ * Si no está guardada la respuesta completa, el resultado resumido con un aviso.
  */
 function Respuesta({ detalle }: { detalle: Detalle }) {
   const porPersona = FUENTES_PERSONA.has(detalle.fuente) || detalle.personas !== null;
@@ -314,22 +263,13 @@ function Respuesta({ detalle }: { detalle: Detalle }) {
         <InlineAlert tone="error" title="La consulta terminó en error">
           {textoTipoError(detalle.tipo_error)}
         </InlineAlert>
-        {personas.length > 0 && <RespuestasPersonas personas={personas} fuente={detalle.fuente} />}
+        {personas.length > 0 && <RespuestasPersonas personas={personas} />}
       </>
     );
   } else if (porPersona && personas.length === 0) {
     cuerpo = <Vacio>{`El vehículo no tiene ${detalle.fuente.endsWith("LOCATARIO") ? "locatarios" : "propietarios"} para esta consulta.`}</Vacio>;
   } else if (porPersona) {
-    cuerpo = <RespuestasPersonas personas={personas} fuente={detalle.fuente} />;
-  } else if (detalle.fuente === "SIMIT_VEHICULO" && proveedorDeCelda(detalle) !== undefined) {
-    cuerpo = <RespuestaProveedorCelda datos={proveedorDeCelda(detalle)} />;
-  } else if (detalle.fuente === "SIMIT_VEHICULO" && detalle.resultado) {
-    cuerpo = (
-      <>
-        <InlineAlert tone="info">{AVISO_SIN_RESPUESTA_PROVEEDOR}</InlineAlert>
-        <RespuestaFuente datos={detalle.resultado} etiqueta="Respuesta de la fuente" />
-      </>
-    );
+    cuerpo = <RespuestasPersonas personas={personas} />;
   } else if (detalle.respuesta_fuente) {
     cuerpo = <RespuestaFuente datos={detalle.respuesta_fuente} etiqueta="Respuesta de la fuente" />;
   } else if (detalle.resultado) {

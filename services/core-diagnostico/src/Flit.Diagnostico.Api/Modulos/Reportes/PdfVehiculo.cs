@@ -34,8 +34,8 @@ namespace Flit.Diagnostico.Api.Modulos.Reportes;
 /// </example>
 internal static partial class PdfVehiculo
 {
-    /// <summary>Versión del diseño: entra en la huella (súbela al cambiar lo que se pinta o cómo). 2 = diseño v2 (2026-10-27).</summary>
-    public const int VersionPlantilla = 2;
+    /// <summary>Versión del diseño: entra en la huella (súbela al cambiar lo que se pinta o cómo). 3 = cabecera con logo, nota al pie y documentos completos.</summary>
+    public const int VersionPlantilla = 3;
 
     public const string ContentType = "application/pdf";
 
@@ -45,10 +45,19 @@ internal static partial class PdfVehiculo
     /// <summary>Texto del pie de todas las páginas, junto a «Página X de Y».</summary>
     public const string Certificado = "Certificado de Diagnóstico";
 
-    private const string NoRegistra = "No registra";
+    private const string NoRegistra = "No hay información";
 
     /// <summary>Impuesto sin vigencias registradas (HU #13864).</summary>
-    public const string SinVigencias = "No registra vigencias";
+    public const string SinVigencias = "No hay vigencias registradas";
+
+    /// <summary>Título de la primera página.</summary>
+    public const string TituloDocumento = "Diagnóstico vehicular";
+
+    /// <summary>Párrafo que explica qué reúne el archivo.</summary>
+    public const string TextoIntroduccion =
+        "Este documento reúne la información del vehículo consultado: datos de matrícula, propietarios, locatarios, "
+        + "licencias de conducción, SOAT, revisión técnico-mecánica, comparendos, avalúo comercial e impuesto, "
+        + "según lo respondieron los organismos consultados en la fecha de generación.";
 
     /// <summary>
     /// Títulos de sección por código de fuente (los de la grilla), sin el prefijo de la fuente («RUNT —», «SIMIT —»): el diseño v2
@@ -64,6 +73,28 @@ internal static partial class PdfVehiculo
         ["SIMIT_LOCATARIO"] = "Comparendos de los locatarios",
         ["AVALUO"] = "Avalúo comercial",
         ["IMPUESTO_DEPARTAMENTAL"] = "Impuesto vehicular departamental",
+    };
+
+    /// <summary>Una línea, bajo el título, de qué contiene cada sección.</summary>
+    private static readonly Dictionary<string, string> Descripciones = new(StringComparer.Ordinal)
+    {
+        ["Datos del diagnóstico"] = "Identificación del lote y de quién lo solicitó.",
+        ["Información del vehículo"] = "Placa, licencia de tránsito, clase, servicio y organismo de tránsito.",
+        ["Información general"] = "Marca, línea, color, motor, chasis y estado del vehículo.",
+        ["Datos técnicos"] = "Ejes, capacidad de carga, pasajeros y peso.",
+        ["Datos SOAT"] = "Póliza, vigencia y aseguradora.",
+        ["Datos revisión tecno-mecánica"] = "Certificado, vigencia y centro de diagnóstico.",
+        ["Solicitudes"] = "Trámites registrados ante el organismo de tránsito.",
+        ["Garantías a favor"] = "Prendas o gravámenes inscritos sobre el vehículo.",
+        ["Accidentalidad"] = "Siniestros informados para el vehículo.",
+        ["Póliza de responsabilidad civil"] = "Póliza de responsabilidad civil y su vigencia.",
+        ["Propietarios"] = "Documento, inscripción como conductor y licencias de cada propietario.",
+        ["Locatarios"] = "Documento, inscripción como conductor y licencias de cada locatario.",
+        ["Comparendos del vehículo"] = "Multas y comparendos asociados a la placa.",
+        ["Comparendos de los propietarios"] = "Multas y comparendos de cada propietario.",
+        ["Comparendos de los locatarios"] = "Multas y comparendos de cada locatario.",
+        ["Avalúo comercial"] = "Valor comercial de referencia del vehículo.",
+        ["Impuesto vehicular departamental"] = "Vigencias del impuesto y si figuran pagadas.",
     };
 
     /// <summary>Nombre de cada fuente del avalúo (también para el Excel del lote, HU #13849).</summary>
@@ -105,12 +136,17 @@ internal static partial class PdfVehiculo
             {
                 FlitLetterhead.ApplyTo(page);
                 page.Header().Element(FlitLetterhead.Header);
-                page.Footer().Element(Pie);
+                page.Footer().Element(c => PieConNota(c, contenido.Encabezado));
                 page.Content().PaddingHorizontal(FlitDocumentTheme.MarginCm, Unit.Centimetre).PaddingVertical(0.4f, Unit.Centimetre).Column(col =>
                 {
                     col.Spacing(14);
-                    col.Item().Element(c => Identificacion(c, contenido.Encabezado, generado));
-                    col.Item().Element(c => DatosDelDiagnostico(c, contenido.Encabezado));
+                    col.Item().AlignCenter().Text(TituloDocumento).Bold().FontSize(16).FontColor(FlitDocumentTheme.PrimaryBlue);
+                    col.Item().Text(TextoIntroduccion).FontSize(9).FontColor(FlitDocumentTheme.DarkNavy).Justify();
+                    col.Item().Row(fila =>
+                    {
+                        fila.RelativeItem().AlignLeft().AlignMiddle().Element(e => e.Width(130).Height(48).Svg(BrandingAssets.LogoSvg));
+                        fila.RelativeItem().AlignRight().Element(c => DatosDelDiagnostico(c, contenido.Encabezado, generado));
+                    });
                     for (var i = 0; i < contenido.Secciones.Count; i++)
                     {
                         var seccion = contenido.Secciones[i];
@@ -120,8 +156,6 @@ internal static partial class PdfVehiculo
                         if (seccion.Fuente == "RUNT")
                             SeccionesRuntAmpliadas(col, contenido, seccion);
                     }
-
-                    col.Item().PaddingTop(4).Element(c => TablaFlit.Nota(c, TextoNota(contenido.Encabezado)));
                 });
             }))
             .WithMetadata(new DocumentMetadata
@@ -168,7 +202,7 @@ internal static partial class PdfVehiculo
         }));
 
         var t = d?.DatosTecnicos;
-        GrillaRunt(col, "Datos teóricos", ["N.º ejes", "Capacidad de carga", "Pasajeros sentados", "Peso bruto vehicular"],
+        GrillaRunt(col, "Datos técnicos", ["N.º ejes", "Capacidad de carga", "Pasajeros sentados", "Peso bruto vehicular"],
             t is null ? [] : [[R(t.NumeroEjes), R(t.CapacidadCarga), R(t.PasajerosSentados), R(t.PesoBrutoVehicular)]]);
         GrillaRunt(col, "Datos SOAT", ["Estado", "N.º póliza", "Vigencia", "Expedición", "Vencimiento", "Entidad"],
             [.. (d?.Soat ?? []).Select(s => new[] { Estado(s.Estado), R(s.NumeroPoliza), R(s.FechaVigencia), R(s.FechaExpedicion), R(s.FechaVencimiento), R(s.Entidad) })], [4, 4, 4, 4, 5, 6]);
@@ -241,6 +275,13 @@ internal static partial class PdfVehiculo
     /// Pie: la banda del membrete y, encima a la derecha, una sola línea con «Certificado de Diagnóstico» en azul y «Página X de Y» en
     /// gris. Va por encima de la banda degradada del arte (en dos líneas la segunda caía sobre la banda y el gris no se leía).
     /// </summary>
+    /// <summary>Nota en todas las páginas y, debajo, la banda del membrete con el certificado y el número de página.</summary>
+    private static void PieConNota(IContainer contenedor, EncabezadoReporte encabezado) => contenedor.Column(col =>
+    {
+        col.Item().PaddingHorizontal(FlitDocumentTheme.MarginCm, Unit.Centimetre).PaddingTop(4).Element(c => TablaFlit.Nota(c, TextoNota(encabezado)));
+        col.Item().Element(Pie);
+    });
+
     private static void Pie(IContainer contenedor) => contenedor.Layers(capas =>
     {
         capas.PrimaryLayer().Element(FlitLetterhead.Footer);
@@ -254,27 +295,13 @@ internal static partial class PdfVehiculo
         });
     });
 
-    /// <summary>Identificación (solo página 1): Diagnóstico ID, Placa (o VIN si no hay placa) y fecha de generación con segundos.</summary>
-    private static void Identificacion(IContainer contenedor, EncabezadoReporte e, DateTimeOffset generado) => contenedor.Column(col =>
-    {
-        col.Spacing(1);
-        col.Item().Element(c => Linea(c, "Diagnóstico ID", e.DiagnosticoId.ToString()));
-        col.Item().Element(c => Linea(c, e.Placa is null ? "VIN" : "Placa", e.Placa ?? e.Vin ?? e.Identificador));
-        col.Item().Element(c => Linea(c, "Fecha de generación", generado.ToString("dd/MM/yyyy HH:mm:ss", CultureInfo.InvariantCulture)));
-    });
-
-    /// <summary>Una línea «Etiqueta: valor» de la identificación: etiqueta azul oscuro regular, valor azul Poppins Bold, 11 pt.</summary>
-    private static void Linea(IContainer contenedor, string etiqueta, string valor) => contenedor.Text(t =>
-    {
-        t.DefaultTextStyle(s => s.FontSize(11));
-        t.Span(etiqueta + ": ").FontColor(FlitDocumentTheme.DarkNavy);
-        t.Span(valor).Bold().FontColor(FlitDocumentTheme.PrimaryBlue);
-    });
-
-    /// <summary>Lo del encabezado que no está en la identificación (AC de la HU #13848): lote, tipo, creación, empresa, creador y VIN.</summary>
-    private static void DatosDelDiagnostico(IContainer contenedor, EncabezadoReporte e) => SeccionConTitulo(contenedor, "Datos del diagnóstico", null,
+    /// <summary>Tabla de la cabecera, al 50 % del ancho: identificación del diagnóstico y del lote.</summary>
+    private static void DatosDelDiagnostico(IContainer contenedor, EncabezadoReporte e, DateTimeOffset generado) => SeccionConTitulo(contenedor, "Datos del diagnóstico", null,
         col => col.Item().Element(c => Tabla(c,
         [
+            ("Diagnóstico ID", e.DiagnosticoId.ToString()),
+            ("Placa", e.Placa ?? NoRegistra),
+            ("Fecha de generación", generado.ToString("dd/MM/yyyy HH:mm:ss", CultureInfo.InvariantCulture)),
             ("Nombre del lote", e.NombreLote),
             ("Tipo de análisis", e.TipoAnalisis),
             ("Fecha y hora de creación", Fecha(e.CreadoEn)),
@@ -283,15 +310,14 @@ internal static partial class PdfVehiculo
             ("VIN", e.Vin ?? NoRegistra),
         ])));
 
-    /// <summary>Texto del recuadro NOTA con la placa (o el VIN), el creador y la empresa del encabezado.</summary>
+    /// <summary>Texto del recuadro NOTA, repetido al pie de cada página.</summary>
     internal static string TextoNota(EncabezadoReporte e)
     {
         ArgumentNullException.ThrowIfNull(e);
-        var vehiculo = e.Placa is { } placa ? $"a la placa {placa}" : $"al VIN {e.Vin ?? e.Identificador}";
-        return $"La información que se encuentra en este documento asociada {vehiculo} se genera por solicitud de {e.UsuarioCreador} en "
-            + $"nombre de la compañía {e.Empresa}. Toda la información suministrada y relacionada en el presente documento se realiza sobre "
-            + "fuentes públicas y estatales; el resultado de estas consultas depende netamente de la respuesta otorgada por los organismos "
-            + "consultados en la fecha de generación.";
+        var vehiculo = e.Placa is { } placa ? $"la placa {placa}" : $"el VIN {e.Vin ?? e.Identificador}";
+        return $"Este informe se elaboró a solicitud de {e.UsuarioCreador}, de {e.Empresa}, para {vehiculo}. "
+            + "Los datos provienen de organismos públicos y corresponden a lo que respondieron en la fecha de generación. "
+            + "Una consulta sin resultado no significa que el dato no exista: significa que en esa fecha el organismo no lo entregó.";
     }
 
     /// <summary>
@@ -309,8 +335,11 @@ internal static partial class PdfVehiculo
         {
             col.Spacing(5);
             if (sobretitulo is not null)
-                col.Item().AlignCenter().Text(TituloVisible(sobretitulo)).Bold().FontSize(11).FontColor(FlitDocumentTheme.PrimaryBlue);
+                col.Item().AlignCenter().Text(TituloVisible(sobretitulo)).Bold().FontSize(sobretitulo == "Datos del vehículo" ? 15 : 11)
+                    .FontColor(FlitDocumentTheme.PrimaryBlue);
             col.Item().AlignCenter().Text(TituloVisible(titulo)).Bold().FontSize(11).FontColor(FlitDocumentTheme.DarkNavy);
+            if (Descripciones.TryGetValue(titulo, out var descripcion))
+                col.Item().AlignCenter().Text(descripcion).FontSize(8).FontColor(FlitDocumentTheme.Gris).Italic();
             if (dato is { } d)
                 col.Item().AlignCenter().Text($"Consultado el {Fecha(d)} (hora Colombia)").FontSize(7.5f).FontColor(FlitDocumentTheme.Gris);
             cuerpo(col);
@@ -335,10 +364,10 @@ internal static partial class PdfVehiculo
                     col.Item().Element(c => Aviso(c, "No aplica. " + (seccion.Leyenda ?? string.Empty)));
                     break;
                 case EstadoSeccion.NoDisponible:
-                    col.Item().Element(c => Aviso(c, SeccionReporte.ConsultaNoDisponible));
+                    col.Item().Element(c => Aviso(c, "No pudimos obtener esta información."));
                     break;
                 case EstadoSeccion.Pendiente:
-                    col.Item().Element(c => Aviso(c, "Pendiente: la consulta aún no termina."));
+                    col.Item().Element(c => Aviso(c, "Esta consulta todavía está en curso."));
                     break;
             }
 
@@ -349,7 +378,7 @@ internal static partial class PdfVehiculo
             }
             else if (seccion.Personas is not null && seccion.Estado == EstadoSeccion.Completado)
             {
-                col.Item().Element(c => Aviso(c, "Sin personas para consultar."));
+                col.Item().Element(c => Aviso(c, "No hay personas registradas para esta consulta."));
             }
         }, sobretitulo);
 
@@ -360,7 +389,8 @@ internal static partial class PdfVehiculo
         var rol = persona.Rol switch { "PROPIETARIO" => "Propietario", "LOCATARIO" => "Locatario", _ => persona.Rol };
         col.Item().AlignCenter().Text($"{rol} {persona.Orden.ToString(CultureInfo.InvariantCulture)}").FontFamily(FlitDocumentTheme.FontMedium)
             .FontSize(10).FontColor(FlitDocumentTheme.PrimaryBlue);
-        var filas = new List<(string, string)> { ("Documento", $"{persona.TipoDocumento} {persona.DocumentoEnmascarado}") };
+        var numero = string.IsNullOrWhiteSpace(persona.Documento) ? persona.DocumentoEnmascarado : persona.Documento;
+        var filas = new List<(string, string)> { ("Documento", $"{persona.TipoDocumento} {numero}") };
         if (persona.RotuloDeclarado is { } rotulo)
             filas.Add(("Declaración", rotulo));
         if (persona.ConsultadoEn is { } consultado)
@@ -372,10 +402,10 @@ internal static partial class PdfVehiculo
                 col.Item().Element(c => Resultado(c, resultado));
                 break;
             case EstadoPersonaReporte.NoDisponible:
-                col.Item().Element(c => Aviso(c, SeccionReporte.ConsultaNoDisponible));
+                col.Item().Element(c => Aviso(c, "No pudimos obtener esta información."));
                 break;
             default:
-                col.Item().Element(c => Aviso(c, "Sin resultado."));
+                col.Item().Element(c => Aviso(c, "No hay un resultado para esta persona."));
                 break;
         }
     });
@@ -416,12 +446,12 @@ internal static partial class PdfVehiculo
                     ]));
                     if (persona.Licencias is { Count: > 0 } licencias)
                     {
-                        col.Item().Element(c => Grilla(c, ["Categoría", "Estado", "Vigente hasta"],
-                            [.. licencias.Select(l => new[] { l.Categoria ?? NoRegistra, l.Estado ?? NoRegistra, l.VigenteHasta ?? NoRegistra })]));
+                        col.Item().Element(c => Grilla(c, ["Número", "Categoría", "Estado", "Vencimiento"],
+                            [.. licencias.Select(l => new[] { l.Numero ?? NoRegistra, l.Categoria ?? NoRegistra, l.Estado ?? NoRegistra, l.VigenteHasta ?? NoRegistra })]));
                     }
                     else
                     {
-                        col.Item().Element(c => Aviso(c, "Sin licencias de conducción."));
+                        col.Item().Element(c => Aviso(c, "No hay licencias de conducción registradas."));
                     }
                 });
                 break;
@@ -447,7 +477,7 @@ internal static partial class PdfVehiculo
         var comparendos = simit.Comparendos ?? [];
         if (comparendos.Count == 0)
         {
-            col.Item().Element(c => Aviso(c, "Sin comparendos."));
+            col.Item().Element(c => Aviso(c, "No hay comparendos registrados."));
             return;
         }
 
@@ -466,7 +496,7 @@ internal static partial class PdfVehiculo
         col.Spacing(5);
         if (avaluo.SinValorComercial)
         {
-            col.Item().Element(c => Aviso(c, "Sin valor comercial"));
+            col.Item().Element(c => Aviso(c, "No hay un valor comercial de referencia."));
         }
         else
         {

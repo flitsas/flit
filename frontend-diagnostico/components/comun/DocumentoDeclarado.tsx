@@ -11,9 +11,18 @@ export function enmascararDocumento(documento: string): string {
  * «Declarado por el cliente». La API ya lo entrega enmascarado; si llegara completo, aquí se vuelve a enmascarar para que
  * la pantalla nunca lo muestre entero.
  */
-export function DocumentoDeclarado({ tipo, documento }: { tipo: string | null; documento: string | null }) {
+export function DocumentoDeclarado({
+  tipo,
+  documento,
+  completo = false,
+}: {
+  tipo: string | null;
+  documento: string | null;
+  /** En el detalle de la consulta el número se muestra entero. */
+  completo?: boolean;
+}) {
   if (!documento) return null;
-  const visible = enmascararDocumento(documento);
+  const visible = completo ? documento : enmascararDocumento(documento);
   return (
     <span className="inline-flex flex-wrap items-center gap-1.5">
       <span className="font-mono text-xs font-medium text-flit-primary dark:text-white">{tipo ? `${tipo} ${visible}` : visible}</span>

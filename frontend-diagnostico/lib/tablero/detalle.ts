@@ -92,8 +92,10 @@ export interface PersonaDetalle {
   orden: number;
   rol: "PROPIETARIO" | "LOCATARIO";
   tipo_documento: string;
-  /** «****» más los cuatro últimos caracteres; se muestra tal cual llega, nunca se reconstruye. */
+  /** «****» más los cuatro últimos caracteres. La grilla usa este valor. */
   documento_enmascarado: string;
+  /** Número completo en el detalle de la consulta. Si falta, se muestra el enmascarado. */
+  documento?: string | null;
   declarado_por_cliente: boolean;
   consulta: ConsultaPersona | null;
   estado: EstadoPersona;
