@@ -67,11 +67,15 @@ message SolicitarValidacionIdentidadRequest {
   string solicitud_id = 1;       // external_ref; correlaciona el aviso del proveedor
   string parte = 2;              // rol del actor según la definición del tipo
   PersonaIdentidad persona = 3;
+  // HU #14237 — canal del punto: captura in-situ (sin correo al radicante). La URL va en captura_url.
+  bool omitir_envio_correo = 4;
 }
 message SolicitarValidacionIdentidadResponse {
   string validacion_id = 1;
   string estado = 2;             // pendiente | aprobada | rechazada (siempre de esta solicitud: nunca una validación reutilizada)
   google.protobuf.Timestamp vigente_hasta = 3;
+  // Enlace de captura (mock o Kyverum) para abrir en el punto o copiar al invitar otra parte.
+  string captura_url = 4;
 }
 
 message ReenviarValidacionIdentidadRequest {

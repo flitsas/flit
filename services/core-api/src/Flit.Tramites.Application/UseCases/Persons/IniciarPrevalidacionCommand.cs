@@ -49,7 +49,7 @@ public enum PortalValidationOutcome
     Existing,
 }
 
-public sealed record PortalValidationResult(BiometricValidationDto Validation, PortalValidationOutcome Outcome);
+public sealed record PortalValidationResult(BiometricValidationDto Validation, PortalValidationOutcome Outcome, string? CapturaUrl = null);
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 
@@ -275,7 +275,7 @@ public sealed class IniciarPrevalidacionHandler(
         if (previous is not null
             && (previous.Status is BiometricEstados.Aprobado or BiometricEstados.ManualActivo or BiometricEstados.PendienteRevisionManual
                 || BiometricRules.EstaEnVuelo(previous)))
-            return (new PortalValidationResult(IniciarBiometriaHandler.ToDto(previous, now), PortalValidationOutcome.Existing), null);
+            return (new PortalValidationResult(IniciarBiometriaHandler.ToDto(previous, now), PortalValidationOutcome.Existing, previous.CaptureUrl), null);
 
         var validationId = Guid.NewGuid();
         var (result, error, _) = providerOptions.IsKyverum
@@ -290,14 +290,16 @@ public sealed class IniciarPrevalidacionHandler(
                 var winner = await procedureRepo.FindPortalValidationAsync(
                     tenantId, anchor.SolicitudRef, anchor.Parte, subject.NumeroDocumento, ct);
                 if (winner is not null)
-                    return (new PortalValidationResult(IniciarBiometriaHandler.ToDto(winner, now), PortalValidationOutcome.Existing), null);
+                    return (new PortalValidationResult(IniciarBiometriaHandler.ToDto(winner, now), PortalValidationOutcome.Existing, winner.CaptureUrl), null);
             }
 
             return (null, error ?? "proveedor_error");
         }
 
         return (new PortalValidationResult(
-            result.Validation, result.Queued ? PortalValidationOutcome.Queued : PortalValidationOutcome.Created), null);
+            result.Validation,
+            result.Queued ? PortalValidationOutcome.Queued : PortalValidationOutcome.Created,
+            string.IsNullOrWhiteSpace(result.CaptureUrl) ? result.Validation.CaptureUrl : result.CaptureUrl), null);
     }
 
     private static string? ParteDe(Guid? mandateSignerId, PortalAnchor? portal) =>
@@ -440,8 +442,9 @@ public sealed class IniciarPrevalidacionHandler(
                 IdentitySendDecisionForTramite.InFlightRaceConflict(IdentitySendOrigen.Standalone));
         }
 
-        var dto = IniciarBiometriaHandler.ToDto(validation, now);
         var captureUrl = $"/api/v1/public/biometric/{token}";
+        validation.CaptureUrl = captureUrl;
+        var dto = IniciarBiometriaHandler.ToDto(validation, now);
         return (new IniciarPrevalidacionResult(dto, captureUrl), null, null);
     }
 

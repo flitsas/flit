@@ -51,12 +51,17 @@ internal sealed class PersonaNaturalIdentidadService(
             throw PlatformRpcErrors.ToRpcException("persona_juridica_no_soportada", "El portal solo atiende personas naturales.", StatusCode.FailedPrecondition);
 
         // AC4: contacto inválido, sin llamar al proveedor. El campo que falla va en la razón, nunca su valor.
+        // HU #14237: en el punto (omitir_envio_correo) el radicante no recibe correo; se usa un correo técnico
+        // solo para abrir la validación y se devuelve captura_url para abrirla in-situ.
+        var omitirCorreo = request.OmitirEnvioCorreo;
         var correo = Texto(persona.Correo);
-        if (correo is null || !EsCorreoValido(correo))
+        if (!omitirCorreo && (correo is null || !EsCorreoValido(correo)))
             throw PlatformRpcErrors.ToRpcException("contacto_invalido_correo", "El correo no tiene un formato válido.", StatusCode.InvalidArgument);
+        if (omitirCorreo)
+            correo = correo is not null && EsCorreoValido(correo) ? correo : $"punto-{solicitud}@noreply.flit.local";
 
         var (resultado, error) = await EnEmpresaAsync(
-            () => iniciar.HandlePortalAsync(PlatformTenants.PersonaNatural, solicitud, parte, tipoDocumento, numeroDocumento, nombre, correo, ct), ct)
+            () => iniciar.HandlePortalAsync(PlatformTenants.PersonaNatural, solicitud, parte, tipoDocumento, numeroDocumento, nombre, correo!, ct), ct)
             .ConfigureAwait(false);
         if (error is not null || resultado is null)
             throw error switch
@@ -69,6 +74,7 @@ internal sealed class PersonaNaturalIdentidadService(
         {
             ValidacionId = resultado.Validation.Id.ToString(),
             Estado = EstadoDelPortal(resultado.Validation.Status, resultado.Validation.ExpiresAt, DateTimeOffset.UtcNow),
+            CapturaUrl = resultado.CapturaUrl ?? resultado.Validation.CaptureUrl ?? string.Empty,
         };
     }
 
