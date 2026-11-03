@@ -39,12 +39,9 @@ public sealed class RequisitosPuntoService(IFachadaDefiniciones definiciones)
                 d.Condicion))
             .ToArray();
 
-        // Sin campo "parte" en DocumentoRequeridoDto: se agrupa por roles de la definición (quien radica carga por todas).
-        var grupos = def.Actores.Count == 0
-            ? [new GrupoRequisitosPuntoDto(null, "Documentos", 1, items)]
-            : def.Actores
-                .Select((a, i) => new GrupoRequisitosPuntoDto(a.Rol, a.Etiqueta, (short)(i + 1), items))
-                .ToArray();
+        // La matriz de FLIT 2.0 no asigna documentos a partes (DocumentoRequeridoDto no tiene "parte"): un único grupo
+        // «Documentos», sin repetir la lista por actor. El front decide la visibilidad con `condicion`; quien radica carga todo.
+        var grupos = new[] { new GrupoRequisitosPuntoDto(null, "Documentos", 1, items) };
 
         return new ResultadoMatrizRequisitosPunto.Ok(new MatrizRequisitosPuntoDto(
             def.Code,

@@ -8,10 +8,10 @@ namespace Flit.PersonaNatural.Api.Punto;
 /// Gate a Pago, validación de archivo y avalúo (HU #14243). Alineado a portal PN / FLIT 2:
 /// mismos límites que <c>AdjuntosService</c> (20 MB, PDF/JPG/PNG/WEBP) y avalúo vía
 /// <see cref="IConsultasRunt.ConsultarAvaluosAsync"/> (RPC <c>ConsultarAvaluos</c> de core-consultas).
-/// La persistencia de archivos y valor comercial reutiliza <c>/solicitudes/{id}/adjuntos</c> y
-/// <c>PUT …/comercial</c> del borrador abierto en Actores.
+/// El gate lee el borrador por <see cref="IBorradorPunto"/>. La persistencia de archivos y valor comercial reutiliza
+/// <c>/solicitudes/{id}/adjuntos</c> y <c>PUT …/comercial</c> del borrador abierto en Actores.
 /// </summary>
-public sealed class CompletitudRequisitosPuntoService(IFachadaDefiniciones definiciones, IConsultasRunt consultas)
+public sealed class CompletitudRequisitosPuntoService(IFachadaDefiniciones definiciones, IConsultasRunt consultas, IBorradorPunto borradores)
 {
     /// <summary>Misma lista que <c>FirmaDeArchivo</c> / portal <c>EXTENSIONES_PERMITIDAS</c>.</summary>
     public static readonly HashSet<string> ExtensionesPermitidas = new(StringComparer.OrdinalIgnoreCase)
@@ -20,6 +20,8 @@ public sealed class CompletitudRequisitosPuntoService(IFachadaDefiniciones defin
     };
 
     public const long TamanoMaximoBytes = 20 * 1024 * 1024;
+    public const string CodigoValorVenta = "valor_venta";
+    public const string CodigoOrganismoAjeno = "borrador_otro_organismo";
 
     public ResultadoValidacionArchivoPunto ValidarArchivo(string? nombreArchivo, long tamanoBytes)
     {
@@ -61,57 +63,75 @@ public sealed class CompletitudRequisitosPuntoService(IFachadaDefiniciones defin
         }
     }
 
+    /// <summary>
+    /// Gate a Pago (HU #14243 AC4). Todo sale del borrador guardado en servidor (adjuntos reales, valor comercial, prenda,
+    /// transformaciones y campos); nada de lo que el navegador diga sobre documentos o valor cuenta.
+    /// </summary>
     public async Task<ResultadoCompletitudPunto> EvaluarAsync(
         OrganismoPunto sesion,
+        string? tokenBorrador,
         string? tipoCodigo,
-        IReadOnlyList<string>? docCodesCargados,
-        decimal? valorVenta,
         CancellationToken ct)
     {
-        var codigo = (tipoCodigo ?? string.Empty).Trim();
-        if (codigo.Length == 0)
-            return new ResultadoCompletitudPunto.DatosInvalidos("Indique el tipo de trámite.");
+        ArgumentNullException.ThrowIfNull(sesion);
+        var solicitudId = await borradores.ResolverSesionAsync(tokenBorrador, ct).ConfigureAwait(false);
+        if (solicitudId is null)
+            return new ResultadoCompletitudPunto.Rechazo(StatusCodes.Status401Unauthorized, "session_invalid", "La sesión del trámite no es válida.");
+
+        var borrador = await borradores.LeerAsync(solicitudId.Value, ct).ConfigureAwait(false);
+        if (borrador is null)
+            return new ResultadoCompletitudPunto.Rechazo(StatusCodes.Status404NotFound, "solicitud_no_encontrada", "No encontramos ese trámite.");
+        if (!borrador.EsCanalPunto)
+            return new ResultadoCompletitudPunto.Rechazo(StatusCodes.Status409Conflict, "no_es_canal_punto", "Esta solicitud no se abrió en el punto de atención.");
+        if (borrador.OrganismoId != sesion.OrganismoId)
+            return new ResultadoCompletitudPunto.Rechazo(StatusCodes.Status403Forbidden, CodigoOrganismoAjeno, "Este trámite pertenece a otro organismo.");
+
+        // El tipo es el del borrador; si el cuerpo trae otro, no se evalúa contra uno distinto.
+        var pedido = (tipoCodigo ?? string.Empty).Trim();
+        if (pedido.Length > 0 && !string.Equals(pedido, borrador.TipoCodigo, StringComparison.OrdinalIgnoreCase))
+            return new ResultadoCompletitudPunto.DatosInvalidos("El tipo de trámite no corresponde al borrador.");
 
         DefinicionTipoDto def;
         try
         {
-            def = await definiciones.ObtenerDefinicionAsync(codigo, sesion.OrganismoId.ToString(), ct).ConfigureAwait(false);
+            def = await definiciones.ObtenerDefinicionAsync(borrador.TipoCodigo, sesion.OrganismoId.ToString(), ct).ConfigureAwait(false);
         }
         catch (FachadaException ex) when (ex.EstadoHttp is StatusCodes.Status404NotFound or StatusCodes.Status422UnprocessableEntity)
         {
             return new ResultadoCompletitudPunto.DatosInvalidos(ex.Message);
         }
 
-        var cargados = new HashSet<string>(
-            (docCodesCargados ?? []).Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()),
-            StringComparer.OrdinalIgnoreCase);
+        var ctx = new ContextoCondicionPunto(
+            borrador.Datos.Prenda?.Tiene == true,
+            borrador.Datos.Requisitos?.Transformaciones ?? [],
+            borrador.Campos,
+            borrador.HayPersonaJuridica);
 
-        var pendientes = new List<string>();
-        foreach (var doc in def.Documentos.Where(d => d.Obligatorio && string.IsNullOrWhiteSpace(d.Condicion)))
+        var pendientes = new List<PendienteCompletitudPuntoDto>();
+        foreach (var doc in def.Documentos.OrderBy(d => d.Orden).Where(d => CondicionesDocumentoPunto.Exigible(d, ctx)))
         {
-            if (!cargados.Contains(doc.DocCode))
-                pendientes.Add(doc.DocCode);
+            if (!borrador.DocCodesCargados.Contains(doc.DocCode))
+                pendientes.Add(new PendienteCompletitudPuntoDto(doc.DocCode, doc.Nombre));
         }
 
-        if (def.Flags.RequiereComercial)
-        {
-            if (valorVenta is null || valorVenta <= 0)
-                pendientes.Add("valor_venta");
-        }
+        if (def.Flags.RequiereComercial && borrador.Datos.Comercial?.Valor is not > 0)
+            pendientes.Add(new PendienteCompletitudPuntoDto(CodigoValorVenta, "Valor de venta"));
 
         return new ResultadoCompletitudPunto.Ok(new CompletitudRequisitosPuntoDto(
             pendientes.Count == 0,
-            pendientes,
-            def.Flags.RequiereComercial));
+            def.Flags.RequiereComercial,
+            pendientes));
     }
 }
 
 public sealed record ValorVentaSugeridoPuntoDto(decimal? ValorSugerido, string Fuente);
 
+public sealed record PendienteCompletitudPuntoDto(string Codigo, string Nombre);
+
 public sealed record CompletitudRequisitosPuntoDto(
     bool PuedeContinuarPago,
-    IReadOnlyList<string> Pendientes,
-    bool RequiereValorVenta);
+    bool RequiereValorVenta,
+    IReadOnlyList<PendienteCompletitudPuntoDto> Pendientes);
 
 public abstract record ResultadoValidacionArchivoPunto
 {
@@ -123,11 +143,10 @@ public abstract record ResultadoCompletitudPunto
 {
     public sealed record Ok(CompletitudRequisitosPuntoDto Completitud) : ResultadoCompletitudPunto;
     public sealed record DatosInvalidos(string Mensaje) : ResultadoCompletitudPunto;
+    public sealed record Rechazo(int Http, string Codigo, string Mensaje) : ResultadoCompletitudPunto;
 }
 
-public sealed record CompletitudRequisitosPuntoRequest(
-    string? TipoCodigo,
-    IReadOnlyList<string>? DocCodesCargados,
-    decimal? ValorVenta);
+/// <summary>Solo el tipo: documentos, valor, prenda y demás se leen del borrador guardado (el navegador no los afirma).</summary>
+public sealed record CompletitudRequisitosPuntoRequest(string? TipoCodigo);
 
 public sealed record ValidarArchivoPuntoRequest(string? NombreArchivo, long TamanoBytes);

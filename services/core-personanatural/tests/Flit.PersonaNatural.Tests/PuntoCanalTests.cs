@@ -182,7 +182,7 @@ public sealed class PuntoCanalTests
     }
 
     [Fact]
-    public async Task Requisitos_MatrizOk_AgrupaPorParteYUsaOrganismoDeLaCookie()
+    public async Task Requisitos_MatrizOk_UnSoloGrupoSinDuplicarPorActor_YUsaOrganismoDeLaCookie()
     {
         var defs = new FachadaDefinicionesFalsa();
         defs.PorCodigo["TRASPASO_STANDARD"] = DefinicionesDePrueba.Traspaso(huella: "matriz-viva-1");
@@ -196,14 +196,16 @@ public sealed class PuntoCanalTests
         r.Json.GetProperty("organismoId").GetGuid().Should().Be(OrganismoId);
         r.Json.GetProperty("huella").GetString().Should().Be("matriz-viva-1");
         var grupos = r.Json.GetProperty("grupos");
-        grupos.GetArrayLength().Should().Be(2);
-        grupos[0].GetProperty("parte").GetString().Should().Be("vendedor");
-        grupos[1].GetProperty("parte").GetString().Should().Be("comprador");
-        var clases = grupos[0].GetProperty("items").EnumerateArray()
-            .Select(i => i.GetProperty("clase").GetString())
-            .ToArray();
+        // Traspaso tiene dos actores (vendedor, comprador): aun así, un único grupo con cada documento una sola vez.
+        grupos.GetArrayLength().Should().Be(1);
+        grupos[0].TryGetProperty("parte", out _).Should().BeFalse();
+        grupos[0].GetProperty("etiqueta").GetString().Should().Be("Documentos");
+        var items = grupos[0].GetProperty("items").EnumerateArray().ToArray();
+        items.Select(i => i.GetProperty("docCode").GetString()).Should().Equal("compraventa", "soat", "rtm", "poder_tramitador");
+        var clases = items.Select(i => i.GetProperty("clase").GetString()).ToArray();
         clases.Should().Contain("obligatorio");
         clases.Should().Contain("opcional");
+        items[3].GetProperty("condicion").GetString().Should().NotBeNullOrWhiteSpace();
         defs.UltimoOrganismo.Should().Be(OrganismoId.ToString());
         defs.Llamadas.Should().Be(1);
     }
@@ -298,37 +300,188 @@ public sealed class PuntoCanalTests
     }
 
     [Fact]
-    public async Task Requisitos_Completitud_GateObligatoriosYValor()
+    public async Task Requisitos_Completitud_SinBearerDeBorrador_Responde401()
     {
-        var defs = new FachadaDefinicionesFalsa();
-        defs.PorCodigo["TRASPASO_STANDARD"] = DefinicionesDePrueba.Traspaso();
-        await using var host = Host(Ok(), definiciones: defs);
+        var guardado = BorradorGuardado();
+        await using var host = Host(Ok(), definiciones: DefsTraspaso(), guardado: guardado);
         var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
 
-        var soloSoat = new List<string> { "soat" };
-        var incompleto = await host.PostAsync("/requisitos/completitud", new
+        var sin = await host.PostAsync("/requisitos/completitud", new { tipoCodigo = "TRASPASO_STANDARD" }, entrada.Cookie);
+        sin.Status.Should().Be(HttpStatusCode.Unauthorized);
+        sin.Json.GetProperty("code").GetString().Should().Be("session_invalid");
+
+        var falso = await host.PostAsync("/requisitos/completitud", new { tipoCodigo = "TRASPASO_STANDARD" }, entrada.Cookie, "token-que-no-existe");
+        falso.Status.Should().Be(HttpStatusCode.Unauthorized);
+
+        var sinCookie = await host.PostAsync("/requisitos/completitud", new { tipoCodigo = "TRASPASO_STANDARD" }, null, guardado.Token);
+        sinCookie.Status.Should().Be(HttpStatusCode.Unauthorized);
+        sinCookie.Json.GetProperty("code").GetString().Should().Be("sesion_punto_ausente");
+    }
+
+    [Fact]
+    public async Task Requisitos_Completitud_IgnoraLoQueDiceElNavegador_YNombraLosPendientes()
+    {
+        var guardado = BorradorGuardado(); // sin adjuntos y sin valor guardado
+        var mentira = new List<string> { "compraventa", "soat" };
+        await using var host = Host(Ok(), definiciones: DefsTraspaso(), guardado: guardado);
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+
+        var r = await host.PostAsync("/requisitos/completitud", new
         {
             tipoCodigo = "TRASPASO_STANDARD",
-            docCodesCargados = soloSoat,
-            valorVenta = 0,
-        }, entrada.Cookie);
+            docCodesCargados = mentira,
+            valorVenta = 99_000_000,
+        }, entrada.Cookie, guardado.Token);
 
-        incompleto.Status.Should().Be(HttpStatusCode.OK);
-        incompleto.Json.GetProperty("puedeContinuarPago").GetBoolean().Should().BeFalse();
-        var pendientes = incompleto.Json.GetProperty("pendientes").EnumerateArray().Select(p => p.GetString()).ToArray();
-        pendientes.Should().Contain("compraventa");
-        pendientes.Should().Contain("valor_venta");
+        r.Status.Should().Be(HttpStatusCode.OK);
+        r.Json.GetProperty("puedeContinuarPago").GetBoolean().Should().BeFalse();
+        r.Json.GetProperty("requiereValorVenta").GetBoolean().Should().BeTrue();
+        var pendientes = r.Json.GetProperty("pendientes").EnumerateArray()
+            .Select(p => (p.GetProperty("codigo").GetString(), p.GetProperty("nombre").GetString())).ToArray();
+        pendientes.Should().Equal(
+            ("compraventa", "Contrato de compraventa"),
+            ("soat", "SOAT"),
+            ("valor_venta", "Valor de venta"));
+    }
 
-        var docsCompletos = new List<string> { "compraventa", "soat", "poder_tramitador" };
-        var completo = await host.PostAsync("/requisitos/completitud", new
+    [Fact]
+    public async Task Requisitos_Completitud_ValorMenorOIgualACero_PendienteValorVenta()
+    {
+        var guardado = BorradorGuardado(docs: ["compraventa", "soat"], valor: 0m);
+        await using var host = Host(Ok(), definiciones: DefsTraspaso(), guardado: guardado);
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+
+        var r = await host.PostAsync("/requisitos/completitud", new { tipoCodigo = "TRASPASO_STANDARD" }, entrada.Cookie, guardado.Token);
+
+        r.Json.GetProperty("puedeContinuarPago").GetBoolean().Should().BeFalse();
+        var codigos = r.Json.GetProperty("pendientes").EnumerateArray().Select(p => p.GetProperty("codigo").GetString()).ToArray();
+        codigos.Should().Equal("valor_venta");
+    }
+
+    [Fact]
+    public async Task Requisitos_Completitud_ExigeElCondicionalCuandoLaCondicionSeCumple()
+    {
+        var defs = DefsTraspaso();
+        defs.PorCodigo["TRASPASO_STANDARD"] = DefinicionesDePrueba.Traspaso() with
         {
-            tipoCodigo = "TRASPASO_STANDARD",
-            docCodesCargados = docsCompletos,
-            valorVenta = 15_000_000,
-        }, entrada.Cookie);
+            Documentos =
+            [
+                new DocumentoRequeridoDto("compraventa", "Contrato de compraventa", true, 1, string.Empty, string.Empty),
+                new DocumentoRequeridoDto("levantar_prenda", "Levantamiento de prenda", true, 2, string.Empty, "Se pide si el vehículo tiene prenda."),
+                new DocumentoRequeridoDto("rara", "Rara", true, 3, string.Empty, "Condición que el portal no conoce."),
+                new DocumentoRequeridoDto("comprobante_pago", "Comprobante", true, 4, string.Empty, string.Empty),
+            ],
+        };
 
-        completo.Json.GetProperty("puedeContinuarPago").GetBoolean().Should().BeTrue();
-        completo.Json.GetProperty("pendientes").GetArrayLength().Should().Be(0);
+        // Sin prenda declarada: el condicional no se exige; la condición desconocida y el comprobante tampoco.
+        var sinPrenda = BorradorGuardado(docs: ["compraventa"], valor: 1_000m);
+        await using (var host = Host(Ok(), definiciones: defs, guardado: sinPrenda))
+        {
+            var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+            var r = await host.PostAsync("/requisitos/completitud", new { tipoCodigo = "TRASPASO_STANDARD" }, entrada.Cookie, sinPrenda.Token);
+            r.Json.GetProperty("puedeContinuarPago").GetBoolean().Should().BeTrue();
+        }
+
+        // Con prenda guardada: el condicional pasa a ser obligatorio y se nombra.
+        var conPrenda = BorradorGuardado(docs: ["compraventa"], valor: 1_000m, prenda: true);
+        await using (var host = Host(Ok(), definiciones: defs, guardado: conPrenda))
+        {
+            var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+            var r = await host.PostAsync("/requisitos/completitud", new { tipoCodigo = "TRASPASO_STANDARD" }, entrada.Cookie, conPrenda.Token);
+            r.Json.GetProperty("puedeContinuarPago").GetBoolean().Should().BeFalse();
+            var p = r.Json.GetProperty("pendientes").EnumerateArray().Single();
+            p.GetProperty("codigo").GetString().Should().Be("levantar_prenda");
+            p.GetProperty("nombre").GetString().Should().Be("Levantamiento de prenda");
+        }
+
+        // Con el documento cargado en el borrador, el gate abre.
+        var completo = BorradorGuardado(docs: ["compraventa", "levantar_prenda"], valor: 1_000m, prenda: true);
+        await using (var host = Host(Ok(), definiciones: defs, guardado: completo))
+        {
+            var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+            var r = await host.PostAsync("/requisitos/completitud", new { tipoCodigo = "TRASPASO_STANDARD" }, entrada.Cookie, completo.Token);
+            r.Json.GetProperty("puedeContinuarPago").GetBoolean().Should().BeTrue();
+        }
+    }
+
+    [Fact]
+    public async Task Requisitos_Completitud_TransformacionDeCarroceriaExigeSuDocumento()
+    {
+        var defs = DefsTraspaso();
+        defs.PorCodigo["TRASPASO_STANDARD"] = DefinicionesDePrueba.Traspaso() with
+        {
+            Documentos = [new DocumentoRequeridoDto("cert_carroceria", "Certificado de carrocería", true, 1, string.Empty, "Se pide si hay cambio de carrocería.")],
+        };
+        var guardado = BorradorGuardado(valor: 1_000m, transformaciones: ["CAMBIO_CARROCERIA"]);
+        await using var host = Host(Ok(), definiciones: defs, guardado: guardado);
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+
+        var r = await host.PostAsync("/requisitos/completitud", new { tipoCodigo = "TRASPASO_STANDARD" }, entrada.Cookie, guardado.Token);
+
+        r.Json.GetProperty("pendientes").EnumerateArray().Single().GetProperty("codigo").GetString().Should().Be("cert_carroceria");
+    }
+
+    [Fact]
+    public async Task Requisitos_Completitud_TodoCompleto_PuedeContinuarPago()
+    {
+        var guardado = BorradorGuardado(docs: ["compraventa", "soat"], valor: 15_000_000m);
+        await using var host = Host(Ok(), definiciones: DefsTraspaso(), guardado: guardado);
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+
+        // El tipo puede omitirse: sale del borrador.
+        var r = await host.PostAsync("/requisitos/completitud", new { }, entrada.Cookie, guardado.Token);
+
+        r.Status.Should().Be(HttpStatusCode.OK);
+        r.Json.GetProperty("puedeContinuarPago").GetBoolean().Should().BeTrue();
+        r.Json.GetProperty("requiereValorVenta").GetBoolean().Should().BeTrue();
+        r.Json.GetProperty("pendientes").GetArrayLength().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Requisitos_Completitud_BorradorDeOtroOrganismo_Responde403()
+    {
+        var guardado = BorradorGuardado(docs: ["compraventa", "soat"], valor: 1m, organismo: Guid.CreateVersion7());
+        await using var host = Host(Ok(), definiciones: DefsTraspaso(), guardado: guardado);
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+
+        var r = await host.PostAsync("/requisitos/completitud", new { tipoCodigo = "TRASPASO_STANDARD" }, entrada.Cookie, guardado.Token);
+
+        r.Status.Should().Be(HttpStatusCode.Forbidden);
+        r.Json.GetProperty("code").GetString().Should().Be("borrador_otro_organismo");
+    }
+
+    [Fact]
+    public async Task Requisitos_Completitud_BorradorQueNoEsDelPunto_Responde409()
+    {
+        var guardado = BorradorGuardado(esPunto: false);
+        await using var host = Host(Ok(), definiciones: DefsTraspaso(), guardado: guardado);
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+
+        var r = await host.PostAsync("/requisitos/completitud", new { tipoCodigo = "TRASPASO_STANDARD" }, entrada.Cookie, guardado.Token);
+
+        r.Status.Should().Be(HttpStatusCode.Conflict);
+        r.Json.GetProperty("code").GetString().Should().Be("no_es_canal_punto");
+    }
+
+    /// <summary>
+    /// AC5 (#14243, solo radicante): una parte invitada no puede cargar archivos porque estructuralmente no obtiene sesión de
+    /// borrador. Las únicas fuentes de token son crear la solicitud y reanudar con radicado + cédula del solicitante
+    /// (la huella de la cédula del radicante); invitar solo devuelve <c>capturaUrl</c> de identidad, nunca un token.
+    /// </summary>
+    [Fact]
+    public void Invitado_NoPuedeObtenerSesionDeBorrador_SoloCapturaDeIdentidad()
+    {
+        var emisores = typeof(Flit.PersonaNatural.Api.Sesiones.SesionService).GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.DeclaredOnly)
+            .Where(m => m.ReturnType.IsGenericType && m.ReturnType.GetGenericArguments()[0] == typeof(Flit.PersonaNatural.Api.Sesiones.SesionEmitida))
+            .Select(m => m.Name)
+            .ToArray();
+        emisores.Should().BeEquivalentTo(["IniciarAsync"]);
+        typeof(Flit.PersonaNatural.Api.Sesiones.SesionService).GetMethod("ReanudarAsync")!.GetParameters().Select(p => p.Name)
+            .Should().Equal("radicado", "cedula", "ipHash", "ct");
+
+        var resultadoInvitar = typeof(Flit.PersonaNatural.Api.Identidad.ResultadoIdentidad).GetProperties().Select(p => p.Name);
+        resultadoInvitar.Should().Contain("CapturaUrl").And.NotContain(n => n.Contains("Token", StringComparison.OrdinalIgnoreCase));
+        typeof(InvitarPartePuntoRequest).GetProperties().Select(p => p.Name).Should().NotContain("Cedula");
     }
 
     [Fact]
@@ -481,6 +634,45 @@ public sealed class PuntoCanalTests
         r.Json.GetProperty("message").GetString().Should().Be(DiagnosticoPuntoService.MensajeFachadaCaida);
     }
 
+    private static FachadaDefinicionesFalsa DefsTraspaso()
+    {
+        var defs = new FachadaDefinicionesFalsa();
+        defs.PorCodigo["TRASPASO_STANDARD"] = DefinicionesDePrueba.Traspaso();
+        return defs;
+    }
+
+    private static BorradorGuardadoFalso BorradorGuardado(
+        string[]? docs = null,
+        decimal? valor = null,
+        bool prenda = false,
+        string[]? transformaciones = null,
+        Guid? organismo = null,
+        bool esPunto = true) =>
+        new(new DatosBorradorPunto(
+            Guid.CreateVersion7(),
+            organismo ?? OrganismoId,
+            "TRASPASO_STANDARD",
+            esPunto,
+            new DatosSolicitud(
+                valor is null ? null : new ComercialDatos(valor),
+                prenda ? new PrendaDatos(true, "Banco", "900123456") : null,
+                transformaciones is null ? null : new RequisitosDatos(transformaciones, null)),
+            new Dictionary<string, string>(),
+            new HashSet<string>(docs ?? [], StringComparer.Ordinal),
+            false));
+
+    /// <summary>Borrador "guardado" en servidor: el token solo abre ese borrador (la sesión real viene de <c>SesionService</c>).</summary>
+    private sealed class BorradorGuardadoFalso(DatosBorradorPunto? datos = null) : IBorradorPunto
+    {
+        public string Token { get; } = "token-borrador-" + Guid.NewGuid().ToString("N");
+
+        public Task<Guid?> ResolverSesionAsync(string? token, CancellationToken ct) =>
+            Task.FromResult(datos is not null && token == Token ? datos.SolicitudId : (Guid?)null);
+
+        public Task<DatosBorradorPunto?> LeerAsync(Guid solicitudId, CancellationToken ct) =>
+            Task.FromResult(datos is not null && datos.SolicitudId == solicitudId ? datos : null);
+    }
+
     private static OrganismoPunto Sesion() => new(OrganismoId, Codigo, Nombre);
 
     private static ResolucionCanalPunto Ok() => new("ok", OrganismoId, Codigo, Nombre);
@@ -549,8 +741,9 @@ public sealed class PuntoCanalTests
         FachadaTipos? fachada = null,
         FachadaRequisitosPuntoFalsa? requisitos = null,
         BorradorPuntoFalso? borrador = null,
-        FachadaDefinicionesFalsa? definiciones = null) =>
-        new(resolucion, runt ?? new ConsultasRuntFalso(), fachada ?? FachadaCon(), requisitos ?? new FachadaRequisitosPuntoFalsa(), borrador ?? new BorradorPuntoFalso(), definiciones ?? new FachadaDefinicionesFalsa());
+        FachadaDefinicionesFalsa? definiciones = null,
+        BorradorGuardadoFalso? guardado = null) =>
+        new(resolucion, runt ?? new ConsultasRuntFalso(), fachada ?? FachadaCon(), requisitos ?? new FachadaRequisitosPuntoFalsa(), borrador ?? new BorradorPuntoFalso(), definiciones ?? new FachadaDefinicionesFalsa(), guardado ?? new BorradorGuardadoFalso());
 
     private sealed class HostPunto : IAsyncDisposable
     {
@@ -563,7 +756,8 @@ public sealed class PuntoCanalTests
             FachadaTipos fachada,
             FachadaRequisitosPuntoFalsa requisitos,
             BorradorPuntoFalso borrador,
-            FachadaDefinicionesFalsa definiciones)
+            FachadaDefinicionesFalsa definiciones,
+            BorradorGuardadoFalso guardado)
         {
             var builder = WebApplication.CreateBuilder();
             builder.Configuration["Pii:ClaveHmac"] = "0123456789abcdef0123456789abcdef";
@@ -583,6 +777,7 @@ public sealed class PuntoCanalTests
             builder.Services.AddSingleton<DiagnosticoPuntoService>();
             builder.Services.AddSingleton<IAbrirBorradorDesdePunto>(borrador);
             builder.Services.AddSingleton<ActoresPuntoService>();
+            builder.Services.AddSingleton<IBorradorPunto>(guardado);
             builder.Services.AddSingleton<RequisitosPuntoService>();
             builder.Services.AddSingleton<CompletitudRequisitosPuntoService>();
             builder.Services.AddRateLimiter(o => o.AddPolicy(AbusoEndpoints.PoliticaPorIp, _ => RateLimitPartition.GetNoLimiter("punto-test")));
@@ -593,9 +788,11 @@ public sealed class PuntoCanalTests
             _http = _app.GetTestClient();
         }
 
-        public async Task<RespuestaPunto> PostAsync(string ruta, object cuerpo, string? cookie = null)
+        public async Task<RespuestaPunto> PostAsync(string ruta, object cuerpo, string? cookie = null, string? bearer = null)
         {
             using var peticion = new HttpRequestMessage(HttpMethod.Post, Base + ruta) { Content = JsonContent.Create(cuerpo) };
+            if (bearer is not null)
+                peticion.Headers.TryAddWithoutValidation("Authorization", "Bearer " + bearer);
             if (cookie is not null)
                 peticion.Headers.TryAddWithoutValidation("Cookie", "pn_punto=" + cookie);
             return await LeerAsync(await _http.SendAsync(peticion, TestContext.Current.CancellationToken)).ConfigureAwait(false);

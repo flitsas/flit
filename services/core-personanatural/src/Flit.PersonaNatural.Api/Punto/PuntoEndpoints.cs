@@ -46,6 +46,7 @@ public static class PuntoEndpoints
         services.TryAddScoped<ActoresPuntoService>();
         services.TryAddScoped<IdentidadPuntoService>();
         services.TryAddScoped<RequisitosPuntoService>();
+        services.TryAddScoped<IBorradorPunto, BorradorPuntoDb>();
         services.TryAddScoped<CompletitudRequisitosPuntoService>();
         services.TryAddScoped<ICanalPunto>(sp =>
         {
@@ -268,10 +269,11 @@ public static class PuntoEndpoints
             var sesion = Sesion(http);
             try
             {
-                var resultado = await completitud.EvaluarAsync(sesion, body?.TipoCodigo, body?.DocCodesCargados, body?.ValorVenta, ct).ConfigureAwait(false);
+                var resultado = await completitud.EvaluarAsync(sesion, TokenSolicitud(http), body?.TipoCodigo, ct).ConfigureAwait(false);
                 return resultado switch
                 {
                     ResultadoCompletitudPunto.Ok ok => Results.Json(ok.Completitud, Json),
+                    ResultadoCompletitudPunto.Rechazo r => SesionEndpoints.Problema(r.Http, "No se puede evaluar", r.Mensaje, r.Codigo),
                     ResultadoCompletitudPunto.DatosInvalidos datos => SesionEndpoints.Problema(
                         StatusCodes.Status400BadRequest, "Datos inválidos", datos.Mensaje, ConsultasEndpoints.CodigoDatosInvalidos),
                     _ => SesionEndpoints.Problema(
