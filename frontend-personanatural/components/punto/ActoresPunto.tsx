@@ -8,7 +8,7 @@ import { MobilityLoader } from "@/components/MobilityLoader";
 import type { TonoAviso } from "@/components/landing/AvisoModal";
 import { boton } from "@/components/landing/estilos";
 import { PersonaActor } from "@/components/tramite/renderers/PersonaActor";
-import { Card, Nav } from "@/components/tramite/piezas";
+import { Badge, Card, Nav } from "@/components/tramite/piezas";
 import type {
   ActorRol,
   ClientePortal,
@@ -19,7 +19,7 @@ import type {
   ResultadoParte,
   Solicitud,
 } from "@/lib/api/cliente";
-import { mensajeDeFallo } from "@/lib/api/errores";
+import { ApiError, mensajeDeFallo } from "@/lib/api/errores";
 import { correoSeguro } from "@/lib/punto/contacto";
 import {
   actoresParaGuardar,
@@ -125,7 +125,13 @@ export function ActoresPunto({
   const [lanzando, setLanzando] = useState(false);
   const [falloIdentidad, setFalloIdentidad] = useState<string | null>(null);
   const [esperandoIdentidad, setEsperandoIdentidad] = useState(false);
-  const lanzado = useRef<string | null>(null);
+  const lanzado = useRef(false);
+  const onAvisoRef = useRef(onAviso);
+  const onSolicitudListaRef = useRef(onSolicitudLista);
+  useEffect(() => {
+    onAvisoRef.current = onAviso;
+    onSolicitudListaRef.current = onSolicitudLista;
+  });
   const vivo = useRef(true);
   const generacion = useRef(0);
   const sondeo = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -160,7 +166,7 @@ export function ActoresPunto({
 
   const aplicarSolicitud = useCallback(
     (solicitud: Solicitud, estado: EstadoIdentidad, capturaUrlVendedor?: string | null) => {
-      onSolicitudLista?.(solicitud.solicitudId);
+      onSolicitudListaRef.current?.(solicitud.solicitudId);
       versionRef.current = solicitud.version;
       setFilas(filasDesdeSolicitud(solicitud, documento, rolesRef.current));
       setFase({
@@ -172,7 +178,7 @@ export function ActoresPunto({
         invitaciones: {},
       });
     },
-    [documento, onSolicitudLista],
+    [documento],
   );
 
   useEffect(() => {
@@ -239,7 +245,7 @@ export function ActoresPunto({
           if (!vivo.current || gen !== generacion.current) return;
           const mensaje = mensajeDeFallo(err);
           setFase({ tipo: "error", mensaje });
-          onAviso("No pudimos continuar", mensaje, "alerta");
+          onAvisoRef.current("No pudimos continuar", mensaje, "alerta");
         }
       })();
     }, 0);
@@ -248,7 +254,7 @@ export function ActoresPunto({
       vivo.current = false;
       detenerSondeo();
     };
-  }, [cliente, placa, documento, tipoCodigo, onAviso, detenerSondeo, refrescarEstado, aplicarSolicitud]);
+  }, [cliente, placa, documento, tipoCodigo, detenerSondeo, refrescarEstado, aplicarSolicitud]);
 
   const rolRadicante: ActorRol | undefined = roles[0];
   const invitables = roles.slice(1);
@@ -303,11 +309,16 @@ export function ActoresPunto({
     try {
       const resultado = await validarRadicante();
       setEsperandoIdentidad(true);
+      // Sin gesto del usuario el navegador puede bloquear la ventana: queda el botón «Abrir validación».
       if (resultado.capturaUrl) window.open(resultado.capturaUrl, "_blank", "noopener,noreferrer");
     } catch (err) {
-      const mensaje = mensajeDeFallo(err);
-      setFalloIdentidad(mensaje);
-      onAviso("No pudimos validar tu identidad", mensaje, "alerta");
+      if (err instanceof ApiError && err.code === "no_es_propietario") {
+        setFase({ tipo: "no_dueno", mensaje: mensajeDeFallo(err) });
+      } else {
+        const mensaje = mensajeDeFallo(err);
+        setFalloIdentidad(mensaje);
+        onAviso("No pudimos validar tu identidad", mensaje, "alerta");
+      }
     } finally {
       setLanzando(false);
     }
@@ -324,8 +335,8 @@ export function ActoresPunto({
   useEffect(() => {
     if (!solicitudListaId || !hayFila || radicanteOk) return;
     if (estadoRadicante && estadoRadicante !== "sin_solicitar") return;
-    if (lanzado.current === solicitudListaId) return;
-    lanzado.current = solicitudListaId;
+    if (lanzado.current) return;
+    lanzado.current = true;
     void lanzar.current();
   }, [solicitudListaId, hayFila, radicanteOk, estadoRadicante]);
   const falloVisible =
@@ -333,7 +344,7 @@ export function ActoresPunto({
     (estadoRadicante === "rechazada" || estadoRadicante === "vencida"
       ? `Tu identidad no quedó validada (${estadoRadicante === "vencida" ? "venció" : "fue rechazada"}). Vuelve a intentarlo.`
       : null);
-  const identificando = !radicanteOk && !falloVisible && (lanzando || esperandoIdentidad || estadoRadicante === "pendiente" || estadoRadicante === "pendiente_envio");
+  const enCursoIdentidad = !radicanteOk && !falloVisible && !lanzando && (esperandoIdentidad || estadoRadicante === "pendiente" || estadoRadicante === "pendiente_envio");
 
   const validarInvitado = async (rol: ActorRol): Promise<{ estado: string; capturaUrl?: string | null }> => {
     if (fase.tipo !== "listo" || !rolRadicante) throw new Error("Sesión no lista");
@@ -380,10 +391,10 @@ export function ActoresPunto({
 
   return (
     <div className="space-y-6" id="punto-actores">
-      {fase.tipo === "cargando" && (
-        <Card title="Actores" id="punto-actores-carga">
-          <MobilityLoader mensaje={fase.mensaje} />
-        </Card>
+      {(fase.tipo === "cargando" || lanzando) && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-background/80 backdrop-blur-sm" id="punto-actores-carga">
+          <MobilityLoader mensaje={MENSAJE_VALIDANDO} />
+        </div>
       )}
 
       {fase.tipo === "no_dueno" && (
@@ -437,29 +448,6 @@ export function ActoresPunto({
             </div>
           )}
 
-          {identificando && <MobilityLoader mensaje={MENSAJE_VALIDANDO} />}
-
-          {falloVisible && !radicanteOk && (
-            <div role="alert" className="flex flex-col gap-3 rounded-[9px] p-4" style={{ backgroundColor: `${COLOR_ERROR}18` }} id="punto-actores-identidad-fallo">
-              <p className="flex gap-2 font-medium" style={{ color: COLOR_ERROR }}>
-                <AlertTriangle aria-hidden className="h-5 w-5 shrink-0" />
-                <span>{falloVisible}</span>
-              </p>
-              <button type="button" className={boton("flit", "min-h-11 px-6", "none")} disabled={lanzando} onClick={() => void lanzarIdentidad()}>
-                Reintentar
-              </button>
-            </div>
-          )}
-
-          {!radicanteOk && fase.capturaUrlVendedor && (
-            <p className="text-sm text-muted-foreground">
-              Completa la validación en la ventana abierta.{" "}
-              <a className="text-primary underline" href={fase.capturaUrlVendedor} target="_blank" rel="noreferrer">
-                Abrir de nuevo
-              </a>
-            </p>
-          )}
-
           {rolRadicante && (
             <Card title={rolRadicante.etiqueta} id={`punto-actores-${rolRadicante.rol}`}>
               {filas
@@ -485,6 +473,37 @@ export function ActoresPunto({
                     onValidarIdentidad={validarRadicante}
                   />
                 ))}
+              {radicanteOk && (
+                <div className="mt-4">
+                  <Badge tone="success">Identificado</Badge>
+                </div>
+              )}
+              {!radicanteOk && (
+                <div className="mt-4 space-y-3" id="punto-actores-estado-identidad">
+                  {enCursoIdentidad && (
+                    <div className="flex flex-wrap items-center gap-3" role="status">
+                      <Badge tone="warning">Validación: en curso</Badge>
+                      <span className="text-sm text-muted-foreground">Completa la validación en la ventana que se abrió.</span>
+                      {fase.capturaUrlVendedor && (
+                        <a className={boton("flit", "min-h-11 px-6", "none")} href={fase.capturaUrlVendedor} target="_blank" rel="noreferrer">
+                          Abrir validación
+                        </a>
+                      )}
+                    </div>
+                  )}
+                  {falloVisible && (
+                    <div role="alert" className="flex flex-col gap-3 rounded-[9px] p-4" style={{ backgroundColor: `${COLOR_ERROR}18` }} id="punto-actores-identidad-fallo">
+                      <p className="flex gap-2 font-medium" style={{ color: COLOR_ERROR }}>
+                        <AlertTriangle aria-hidden className="h-5 w-5 shrink-0" />
+                        <span>{falloVisible}</span>
+                      </p>
+                      <button type="button" className={boton("flit", "min-h-11 px-6", "none")} disabled={lanzando} onClick={() => void lanzarIdentidad()}>
+                        Reintentar
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </Card>
           )}
 

@@ -1,4 +1,6 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactElement } from "react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ActoresPunto } from "@/components/punto/ActoresPunto";
 import type { ClientePortal, EstadoIdentidad, Solicitud } from "@/lib/api/cliente";
@@ -183,7 +185,10 @@ describe("ActoresPunto — épica #14185: identidad de quien radica", () => {
     montarPunto(clienteMock({ estado: estadoTrasAbrir(SIN_SOLICITAR), radicante }));
     await waitFor(() => expect(radicante).toHaveBeenCalledTimes(1));
     expect(openSpy).toHaveBeenCalledWith("https://verify.example/x", "_blank", "noopener,noreferrer");
-    expect(await screen.findByText(/Validando tu identidad/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Validación: en curso/i)).toBeInTheDocument();
+    expect(screen.getByText(/Completa la validación en la ventana que se abrió/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Abrir validación/i })).toHaveAttribute("href", "https://verify.example/x");
+    expect(screen.queryByText(/Validando tu identidad/i)).toBeNull(); // sin cargador colgado
     expect(screen.queryByRole("button", { name: /Validar identidad en el punto|Enviar validación|Reenviar/i })).toBeNull();
     expect(screen.queryByRole("region", { name: /^Comprador$/i })).toBeNull();
     expect(screen.getByRole("button", { name: /Continuar/i })).toBeDisabled();
@@ -209,6 +214,7 @@ describe("ActoresPunto — épica #14185: identidad de quien radica", () => {
     expect(await screen.findByText(/El proveedor rechazó la validación/i)).toBeInTheDocument();
     expect(onAviso).toHaveBeenCalledWith("No pudimos validar tu identidad", expect.stringMatching(/rechaz/i), "alerta");
     expect(screen.queryByRole("region", { name: /^Comprador$/i })).toBeNull();
+    expect(screen.queryByText(/Validando tu identidad/i)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Reintentar/i }));
     await waitFor(() => expect(radicante).toHaveBeenCalledTimes(2));
   });
@@ -223,5 +229,30 @@ describe("ActoresPunto — épica #14185: identidad de quien radica", () => {
     await waitFor(() => expect(radicante).toHaveBeenCalled());
     const llamada = (radicante.mock.calls[0] as unknown[])[0] as { correo?: string };
     expect(llamada.correo).toBeUndefined();
+  });
+
+  it("el lanzamiento es una sola solicitud por entrada, aunque el padre re-renderice con otro onAviso", async () => {
+    const radicante = vi.fn(async () => ({ parte: "vendedor", ordinal: 1, estado: "pendiente", capturaUrl: null }));
+    const cliente = clienteMock({ estado: estadoTrasAbrir(SIN_SOLICITAR), radicante });
+    const props = { cliente, placa: "XJI21G", documento: "1037669356", tipoCodigo: "TRASPASO", onAtras: () => undefined, onContinuarRequisitos: () => undefined };
+    const qc = new QueryClient();
+    const envolver = (ui: ReactElement) => <QueryClientProvider client={qc}>{ui}</QueryClientProvider>;
+    const { rerender } = render(envolver(<ActoresPunto {...props} onAviso={() => undefined} />));
+    await waitFor(() => expect(radicante).toHaveBeenCalledTimes(1));
+    rerender(envolver(<ActoresPunto {...props} onAviso={() => undefined} />));
+    rerender(envolver(<ActoresPunto {...props} onAviso={() => undefined} />));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(radicante).toHaveBeenCalledTimes(1);
+  });
+
+  it("no_es_propietario muestra el mensaje de no propietario sin Reintentar ni invitaciones", async () => {
+    const radicante = vi.fn(async () => {
+      throw new ApiError("no_es_propietario", "No puedes realizar este trámite porque no eres el propietario del vehículo.", 422);
+    });
+    montarPunto(clienteMock({ estado: estadoTrasAbrir(SIN_SOLICITAR), radicante }));
+    expect(await screen.findByText(/no eres el propietario del vehículo/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Reintentar/i })).toBeNull();
+    expect(screen.queryByRole("region", { name: /^Comprador$/i })).toBeNull();
+    expect(radicante).toHaveBeenCalledTimes(1);
   });
 });
