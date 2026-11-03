@@ -92,7 +92,7 @@ public static partial class ReglasBorrador
     /// Valida los actores contra los roles de la definición: rol conocido, posición dentro de <c>max</c>, documento y contacto
     /// bien formados, sin repetir persona. Con roles que el tipo no admite para persona natural, rechaza el rol.
     /// </summary>
-    public static IReadOnlyList<ActorValidado> ValidarActores(DefinicionTipoDto def, IReadOnlyList<ActorRequest>? actores, ErroresDeCampo errores)
+    public static IReadOnlyList<ActorValidado> ValidarActores(DefinicionTipoDto def, IReadOnlyList<ActorRequest>? actores, ErroresDeCampo errores, bool correoOpcionalDelRadicante = false)
     {
         var salida = new List<ActorValidado>();
         if (actores is null || actores.Count == 0)
@@ -142,7 +142,12 @@ public static partial class ReglasBorrador
                 errores.Agregar($"{pre}.nombre", "Escriba el nombre completo.");
 
             var correo = a.Correo?.Trim();
-            if (!CotizacionesService.CorreoValido(correo))
+            // Canal del punto: quien radica (primer rol, ordinal 1) valida in-situ y no necesita correo; vacío se acepta.
+            var sinCorreoPermitido = correoOpcionalDelRadicante && string.IsNullOrWhiteSpace(correo) && ordinal == 1
+                && def.Actores.Count > 0 && string.Equals(def.Actores[0].Rol, rol, StringComparison.Ordinal);
+            if (sinCorreoPermitido)
+                correo = null;
+            else if (!CotizacionesService.CorreoValido(correo))
                 errores.Agregar($"{pre}.correo", "El correo no es válido.");
 
             var celular = a.Celular is null ? null : new string(a.Celular.Where(c => char.IsDigit(c) || c == '+').ToArray());

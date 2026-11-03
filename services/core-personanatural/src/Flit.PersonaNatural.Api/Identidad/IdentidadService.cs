@@ -321,7 +321,7 @@ public sealed partial class IdentidadService(
         try
         {
             var correo = omitirEnvioCorreo
-                ? (CorreoValido(datos.Correo) ? datos.Correo! : $"punto-{persona.SolicitudId:N}@noreply.flit.local")
+                ? (CorreoUtilizableInSitu(datos.Correo) ? datos.Correo!.Trim() : $"punto-{persona.SolicitudId:N}@noreply.flit.local")
                 : datos.Correo!;
             var respuesta = await fachada.SolicitarAsync(
                 persona.SolicitudId,
@@ -339,7 +339,7 @@ public sealed partial class IdentidadService(
             await espejo.CambiarAsync(persona, respuesta.Estado, origen, null, ct).ConfigureAwait(false);
             return ResultadoIdentidad.Ok(rol, persona.Ordinal, persona.ValidacionEstado, capturaUrl: exponerCaptura || omitirEnvioCorreo ? respuesta.CapturaUrl : null);
         }
-        catch (FachadaException ex) when (ex.Codigo == ServicioNoDisponible)
+        catch (FachadaException ex) when (ex.Codigo == ServicioNoDisponible && !omitirEnvioCorreo)
         {
             // AC7: FLIT 2 sin respuesta. El actor queda pendiente_envio y el job reintenta; sin duplicar el enlace.
             await espejo.CambiarAsync(persona, EstadosIdentidad.PendienteEnvio, origen, null, ct).ConfigureAwait(false);
@@ -359,6 +359,7 @@ public sealed partial class IdentidadService(
     {
         "persona_juridica_no_soportada" => ResultadoIdentidad.Error(ex.EstadoHttp, ex.Codigo, ex.Message),
         "contacto_invalido_correo" => ResultadoIdentidad.Error(ex.EstadoHttp, "contacto_invalido", ex.Message, campo: "correo"),
+        "proveedor_rechazo" => ResultadoIdentidad.Error(StatusCodes.Status422UnprocessableEntity, "proveedor_rechazo", MensajeProveedorRechazo),
         "validacion_en_curso" or "identidad_aprobada" => ResultadoIdentidad.Error(ex.EstadoHttp, ex.Codigo, ex.Message, estadoActual),
         ServicioNoDisponible => ResultadoIdentidad.Error(StatusCodes.Status503ServiceUnavailable, ServicioNoDisponible, ex.Message),
         _ => ResultadoIdentidad.Error(ex.EstadoHttp, ex.Codigo, ex.Message),
@@ -375,6 +376,12 @@ public sealed partial class IdentidadService(
         p.UltimoReenvioEn is { } ultimo && ahora - ultimo < TimeSpan.FromSeconds(_opciones.EsperaReenvioSegundos)
             ? (int)Math.Ceiling((TimeSpan.FromSeconds(_opciones.EsperaReenvioSegundos) - (ahora - ultimo)).TotalSeconds)
             : 0;
+
+    internal const string MensajeProveedorRechazo = "No pudimos iniciar la validación con estos datos. Revisa el correo y el celular e inténtalo de nuevo.";
+
+    /// <summary>Solo en el punto (in-situ): ASCII imprimible sin espacios; el RUNT a veces trae una «ñ» dañada que el proveedor rechaza.</summary>
+    internal static bool CorreoUtilizableInSitu(string? correo) =>
+        CorreoValido(correo) && correo!.Trim().All(c => c is > (char)0x20 and < (char)0x7F);
 
     internal static bool CorreoValido(string? correo) =>
         !string.IsNullOrWhiteSpace(correo) && correo.Length <= 320

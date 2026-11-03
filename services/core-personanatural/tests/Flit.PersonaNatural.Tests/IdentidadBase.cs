@@ -29,6 +29,9 @@ internal sealed class FachadaIdentidadFalsa : IFachadaIdentidad
     public bool Caida;
     public bool PerderLaProximaRespuesta;
 
+    /// <summary>core-api responde FailedPrecondition por rechazo del proveedor (Kyverum 400).</summary>
+    public bool Rechazo;
+
     /// <summary>Como core-api desde la HU #14237: devuelve <c>captura_url</c> aunque el enlace salga por correo.</summary>
     public bool CapturaSiempre;
     public int Llamadas;
@@ -44,6 +47,8 @@ internal sealed class FachadaIdentidadFalsa : IFachadaIdentidad
         Llamadas++;
         if (Caida)
             throw Caido();
+        if (Rechazo)
+            throw new FachadaException("proveedor_rechazo", "No pudimos iniciar la validación con estos datos.", 422);
         Pedidos.Add((solicitudId, parte, persona.Documento, persona.Correo));
         var clave = (solicitudId, parte, persona.Documento);
         if (!_creadas.TryGetValue(clave, out var id) || Estados[id] is EstadosIdentidad.Rechazada or EstadosIdentidad.Vencida)
@@ -122,6 +127,7 @@ public abstract class IdentidadBase : IAsyncLifetime
     protected const string Celular = "3001234567";
 
     internal readonly FachadaIdentidadFalsa Fachada = new();
+    internal Action<IServiceCollection>? Servicios;
     internal readonly RelojDeIdentidad Reloj = new(new DateTimeOffset(2026, 10, 27, 15, 0, 0, TimeSpan.Zero));
     internal readonly RegistroDeLogs Logs = new();
     private string _database = string.Empty;
@@ -189,6 +195,7 @@ public abstract class IdentidadBase : IAsyncLifetime
             b.Services.AddSingleton<TimeProvider>(Reloj);
             b.Services.AddSingleton<IProveedorCaptcha, CaptchaFalso>();
             b.Services.AddSingleton<IFachadaIdentidad>(Fachada);
+            Servicios?.Invoke(b.Services);
             if (reglasFalsas)
                 b.Services.AddScoped<IReglasDeIdentidad, ReglasFalsas>();
             b.Logging.AddProvider(Logs);

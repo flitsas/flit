@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Flit.PersonaNatural.Api.Consultas;
 using Flit.PersonaNatural.Api.Identidad;
 using Flit.PersonaNatural.Api.Persistence;
 using Flit.PersonaNatural.Api.Sesiones;
@@ -17,11 +18,10 @@ public sealed class IdentidadPuntoService(
     IdentidadService identidad,
     SolicitudesService solicitudes,
     SesionService sesiones,
-    PiiHasher hasher)
+    IConsultasRunt runt)
 {
     public const string CodigoRolDesconocido = "rol_desconocido";
     public const string CodigoRolRadicante = "rol_radicante";
-    public const string CodigoDocumentoDistinto = "documento_distinto_del_primer_paso";
     public const string CodigoNoDueño = "no_es_propietario";
     public const string CodigoInvitacionesBloqueadas = "invitaciones_bloqueadas";
     public const string MensajeNoDueño = ActoresPuntoService.MensajeNoDueño;
@@ -57,16 +57,29 @@ public sealed class IdentidadPuntoService(
         if (string.IsNullOrWhiteSpace(documento))
             return ResultadoIdentidad.Error(StatusCodes.Status400BadRequest, "datos_invalidos", "Indique el documento de quien radica.");
 
-        // El radicante es quien abrió el trámite en el primer paso (el propietario según RUNT): su documento no cambia aquí.
-        var huellaPrimerPaso = await db.Set<SolicitudTramite>().AsNoTracking()
-            .Where(s => s.Id == solicitudId).Select(s => s.CedulaSolicitanteHash).FirstOrDefaultAsync(ct).ConfigureAwait(false);
-        if (huellaPrimerPaso is { Length: > 0 } && !huellaPrimerPaso.AsSpan().SequenceEqual(hasher.HashCedula(documento)))
-            return ResultadoIdentidad.Error(StatusCodes.Status422UnprocessableEntity, CodigoDocumentoDistinto, "El documento de quien radica debe ser el del primer paso.", campo: "documento");
+        // Compuerta de dueño (#14236): el documento de quien se identifica debe ser UN propietario del RUNT (copropiedad: cualquiera).
+        var placa = await db.Set<SolicitudTramite>().AsNoTracking()
+            .Where(s => s.Id == solicitudId).Select(s => s.Placa).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        var propietario = EntradaConsulta.DocumentoPropietario(string.IsNullOrWhiteSpace(tipoDocumento) ? "CC" : tipoDocumento, documento);
+        if (propietario is null || string.IsNullOrWhiteSpace(placa))
+            return ResultadoIdentidad.Error(StatusCodes.Status400BadRequest, "datos_invalidos", "Revisa el documento de quien radica.", campo: "documento");
+        try
+        {
+            var consulta = await runt.ConsultarVehiculoAsync(placa, null, propietario, ActoresPuntoService.CanalOrigen, ct).ConfigureAwait(false);
+            if (ProyeccionMinima.ProveedorCaido(consulta))
+                throw new ProveedorNoDisponibleException(TiposDelPunto.RuntCaido);
+            if (!ActoresPuntoService.EsPropietarioRunt(consulta, propietario))
+                return ResultadoIdentidad.Error(StatusCodes.Status422UnprocessableEntity, CodigoNoDueño, MensajeNoDueño, campo: "documento");
+        }
+        catch (ProveedorNoDisponibleException)
+        {
+            return ResultadoIdentidad.Error(StatusCodes.Status503ServiceUnavailable, "proveedor_no_disponible", TiposDelPunto.RuntCaido);
+        }
 
         // Correo: si el ciudadano ya lo digitó en la ficha se guarda; si no, técnico (in-situ no notifica).
-        var correo = string.IsNullOrWhiteSpace(correoCiudadano)
+        var correo = !IdentidadService.CorreoUtilizableInSitu(correoCiudadano)
             ? $"punto-{solicitudId:N}@noreply.flit.local"
-            : correoCiudadano.Trim();
+            : correoCiudadano!.Trim();
         try
         {
             await solicitudes.GuardarActoresAsync(solicitudId, new ActoresRequest(null, [

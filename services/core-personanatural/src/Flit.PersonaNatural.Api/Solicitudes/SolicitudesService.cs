@@ -284,7 +284,8 @@ public sealed partial class SolicitudesService(
         {
             var (s, def) = await CargarParaEditarAsync(id, body?.Version, ct2).ConfigureAwait(false);
             var errores = new ErroresDeCampo();
-            var validados = ReglasBorrador.ValidarActores(def, body?.Actores, errores);
+            var delPunto = EsCanalPunto(s.Datos);
+            var validados = ReglasBorrador.ValidarActores(def, body?.Actores, errores, correoOpcionalDelRadicante: delPunto);
             if (errores.Hay)
                 throw ReglaDeNegocioException.Invalido(errores);
 
@@ -589,4 +590,18 @@ public sealed partial class SolicitudesService(
 
     internal static ReglaDeNegocioException TipoNoDisponible() =>
         new(StatusCodes.Status409Conflict, CodigoTipoNoDisponible, "Trámite no disponible", "Este tipo de trámite ya no está disponible en el portal.");
+
+    private static bool EsCanalPunto(string? datosJson)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(string.IsNullOrWhiteSpace(datosJson) ? "{}" : datosJson);
+            return doc.RootElement.TryGetProperty("canal", out var canal)
+                && string.Equals(canal.GetString(), "pn_punto", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return false;
+        }
+    }
 }
