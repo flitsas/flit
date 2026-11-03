@@ -1,6 +1,7 @@
 using Flit.Api.Telemetry;
 using Flit.Diagnostico.Api;
 using Flit.Diagnostico.Api.Modulos;
+using Flit.Diagnostico.Api.Modulos.Dictamen;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Api.Plataforma;
 using Flit.Platform.Sdk.Authentication;
@@ -79,6 +80,8 @@ public static class Program
         builder.Services.AddFuentesConsultas(builder.Configuration);
         // HU #13846: almacén de archivos (file-manager; sin él ni la bandera de pruebas, no arranca) y registro de evidencias con huella.
         builder.Services.AddEvidencias(builder.Configuration);
+        // Épica #12678 (sin HU nueva): redactor con llave propia. El interruptor de emergencia es el de la HU #13741.
+        builder.Services.AddRedactorDictamen(builder.Configuration);
         builder.Services.AddFlitGrpcServer();
         builder.Services.AddFlitOutbox<DiagnosticoDb>(builder.Configuration);
         builder.Services.AddExceptionHandler<ManejadorReglas>();
