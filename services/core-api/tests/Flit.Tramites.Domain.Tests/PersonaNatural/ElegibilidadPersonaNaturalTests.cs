@@ -35,40 +35,45 @@ public sealed class ElegibilidadPersonaNaturalTests
     }
 
     [Theory]
-    [InlineData("camara_comercio", "persona jurídica o NIT")]
-    [InlineData("camara_comercio_comprador", "persona jurídica o NIT")]
-    [InlineData("mandato", "mandato o tramitador")]
-    [InlineData("contrato_leasing", "leasing")]
-    [InlineData("certificado_dijin", "causales de cancelación")]
-    [InlineData("oficio_judicial", "causales de cancelación")]
-    public void UnDocumentoObligatorioDeUnaCapacidadNoSoportada_ExcluyeAlTipo_NombrandoLaCapacidad(string documento, string capacidad)
+    [InlineData("camara_comercio")]
+    [InlineData("camara_comercio_comprador")]
+    [InlineData("mandato")]
+    [InlineData("contrato_leasing")]
+    [InlineData("certificado_dijin")]
+    [InlineData("oficio_judicial")]
+    public void UnDocumentoObligatorioDeJuridicaMandatoLeasingOCausal_YaNoExcluyeAlTipo(string documento)
     {
         var r = ElegibilidadPersonaNatural.Evaluar(Tipo(documentos: [documento]));
 
-        r.Elegible.Should().BeFalse();
-        r.Motivo.Should().Contain(capacidad);
+        r.Elegible.Should().BeTrue();
+        r.Motivo.Should().BeEmpty();
     }
 
     [Theory]
-    [InlineData("""{"requiresLessee":true}""", "leasing")]
-    [InlineData("""{"hasPrendaGate":true}""", "acreedor prendario")]
-    [InlineData("""{"transitOfficeSource":"OPERATOR"}""", "operador")]
-    [InlineData("""{"requiresDestinationTransitOffice":true}""", "organismo de destino")]
-    [InlineData("""{"requiresPlateRequest":true}""", "placa")]
-    public void UnFlagDelPerfilDeUnaCapacidadNoSoportada_ExcluyeAlTipo(string json, string capacidad)
+    [InlineData("""{"requiresLessee":true}""")]
+    [InlineData("""{"hasPrendaGate":true}""")]
+    [InlineData("""{"transitOfficeSource":"OPERATOR"}""")]
+    [InlineData("""{"requiresDestinationTransitOffice":true}""")]
+    [InlineData("""{"requiresPlateRequest":true}""")]
+    public void UnFlagDelPerfilQueAntesExcluia_YaNoExcluyeAlTipo(string json)
     {
         var r = ElegibilidadPersonaNatural.Evaluar(Tipo(perfil: Perfil(json)));
 
-        r.Elegible.Should().BeFalse();
-        r.Motivo.Should().Contain(capacidad);
+        r.Elegible.Should().BeTrue();
+        r.Motivo.Should().BeEmpty();
     }
 
     [Fact]
-    public void UnTipoPrendarioPorSuCodigo_NoEsElegible_AunqueElPerfilNoDigaNada()
+    public void UnTipoPrendarioPorSuCodigo_EsElegible()
     {
-        ElegibilidadPersonaNatural.Evaluar(Tipo("PRENDA_INSCRIPCION")).Elegible.Should().BeFalse();
+        ElegibilidadPersonaNatural.Evaluar(Tipo("PRENDA_INSCRIPCION")).Elegible.Should().BeTrue();
     }
 
+    [Fact]
+    public void LaListaDeCapacidadesNoSoportadasEstaVacia()
+    {
+        ElegibilidadPersonaNatural.Capacidades.Should().BeEmpty();
+    }
     [Fact]
     public void DocumentoObligatorioImpronta_NoExcluyeAlTipo()
     {
@@ -86,13 +91,6 @@ public sealed class ElegibilidadPersonaNaturalTests
         r.Elegible.Should().BeTrue();
     }
 
-    [Fact]
-    public void VariasCapacidades_SeReportanTodas()
-    {
-        var r = ElegibilidadPersonaNatural.Evaluar(Tipo(perfil: Perfil("""{"requiresLessee":true}"""), documentos: ["mandato"]));
-
-        r.Motivos.Should().HaveCount(2);
-    }
 
     [Fact]
     public void TipoNoPublicadoOInactivo_NoEsElegible()

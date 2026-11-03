@@ -75,7 +75,7 @@ internal static class PersonaNaturalDefinicionMapper
 
         // El portal solo pide lo que el ciudadano carga: ni los buzones informativos ni lo que el sistema genera.
         var (porDocumento, adicionales) = DefinicionPersonaNatural.CondicionesDocumentales(tipo.Codigo);
-        foreach (var doc in matriz.Where(m => !m.EsDummy && !m.EsGeneradoSistema).OrderBy(m => m.OrdenResuelto))
+        foreach (var doc in matriz.Where(m => !m.EsDummy && !m.EsGeneradoSistema && !DefinicionPersonaNatural.DocumentoNoAplicaAPersonaNatural(m.Codigo)).OrderBy(m => m.OrdenResuelto))
         {
             definicion.Documentos.Add(new DocumentoRequerido
             {
@@ -89,7 +89,7 @@ internal static class PersonaNaturalDefinicionMapper
         }
 
         var siguiente = definicion.Documentos.Count == 0 ? 1 : definicion.Documentos.Max(d => d.Orden) + 1;
-        foreach (var extra in adicionales.Where(a => !definicion.Documentos.Any(d => string.Equals(d.DocCode, a.DocCode, StringComparison.OrdinalIgnoreCase))))
+        foreach (var extra in adicionales.Where(a => !DefinicionPersonaNatural.DocumentoNoAplicaAPersonaNatural(a.DocCode) && !definicion.Documentos.Any(d => string.Equals(d.DocCode, a.DocCode, StringComparison.OrdinalIgnoreCase))))
         {
             definicion.Documentos.Add(new DocumentoRequerido
             {
@@ -102,7 +102,7 @@ internal static class PersonaNaturalDefinicionMapper
             });
         }
 
-        var cap = DefinicionPersonaNatural.Capacidades(tipo.Perfil, tipo.Familia);
+        var cap = DefinicionPersonaNatural.Capacidades(tipo.Perfil, tipo.Familia, tipo.Codigo);
         definicion.Flags = new FlagsTipo
         {
             EntryMode = cap.EntryMode,
@@ -112,10 +112,42 @@ internal static class PersonaNaturalDefinicionMapper
             PermitePrendaComplementaria = cap.PermitePrendaComplementaria,
             RequiereBiometria = cap.RequiereBiometria,
             RequiereSolicitudPlaca = cap.RequiereSolicitudPlaca,
+            RequiereDestino = cap.RequiereDestino,
+            OrganismoLoEligeOperador = cap.OrganismoLoEligeOperador,
+            AccionPrenda = cap.AccionPrenda ?? string.Empty,
         };
+
+        // HU 4 — declaraciones del tipo (valor nuevo, blindaje, causal, destino, simultáneos) con las constantes de FLIT 2.
+        foreach (var d in DeclaracionesPersonaNatural.Para(tipo.Perfil, tipo.Familia, tipo.Codigo))
+            definicion.Declaraciones.Add(Declaracion(d));
 
         definicion.Huella = Huella(definicion);
         return definicion;
+    }
+
+    internal static DeclaracionTipo Declaracion(DeclaracionPortal d)
+    {
+        var salida = new DeclaracionTipo
+        {
+            Clave = d.Clave,
+            Control = d.Control,
+            Etiqueta = d.Etiqueta,
+            Obligatoria = d.Obligatoria,
+            FieldKey = d.FieldKey,
+            DocCodeSoporte = d.DocCodeSoporte,
+            SoporteObligatorio = d.SoporteObligatorio,
+            Catalogo = d.Catalogo,
+            ActivadaPor = d.ActivadaPor,
+        };
+        salida.FieldKeysExtra.AddRange(d.FieldKeysExtra);
+        foreach (var o in d.Opciones)
+        {
+            var opcion = new OpcionDeclaracion { Codigo = o.Codigo, Etiqueta = o.Etiqueta, ExigeSoporte = o.ExigeSoporte };
+            opcion.DocCodes.AddRange(o.DocCodes);
+            salida.Opciones.Add(opcion);
+        }
+
+        return salida;
     }
 
     /// <summary>SHA-256 del mensaje sin la huella: cambia si cambia cualquier paso, campo, actor, documento o flag.</summary>
