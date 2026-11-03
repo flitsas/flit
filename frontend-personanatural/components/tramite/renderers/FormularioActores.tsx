@@ -50,16 +50,20 @@ export function FormularioActores({ seccion, activa, intentoAvance, onEstado }: 
     [definicion, seccion.paso?.clave],
   );
   const incluyeAlTitular = definicionSeccion.actores.some((r) => r.rol === definicion.actores[0]?.rol);
+  // Documento del primer paso: el del propietario consultado o, al reanudar, la cédula con la que se abrió/reanudó el trámite.
+  const propietarioDeContexto = contexto?.propietario;
+  const cedulaDeContexto = contexto?.cedula;
+  const documentoInicial = propietarioDeContexto ?? (cedulaDeContexto ? { tipo: "CC", numero: cedulaDeContexto } : undefined);
   const [filas, setFilas] = useState<FilaActor[]>(() => {
     const iniciales = filasIniciales(definicionSeccion, solicitud.actores);
-    return incluyeAlTitular ? sembrarDocumentoInicial(iniciales, contexto?.propietario) : iniciales;
+    return incluyeAlTitular ? sembrarDocumentoInicial(iniciales, documentoInicial) : iniciales;
   });
-  const documentoSembrado = useRef(Boolean(contexto?.propietario));
+  const documentoSembrado = useRef(Boolean(documentoInicial));
   useEffect(() => {
-    if (documentoSembrado.current || !contexto?.propietario) return;
+    if (documentoSembrado.current || !documentoInicial) return;
     documentoSembrado.current = true;
-    setFilas((actuales) => sembrarDocumentoInicial(actuales, contexto.propietario));
-  }, [contexto?.propietario]);
+    setFilas((actuales) => sembrarDocumentoInicial(actuales, documentoInicial));
+  }, [documentoInicial?.tipo, documentoInicial?.numero]); // eslint-disable-line react-hooks/exhaustive-deps
   const [erroresServidor, setErroresServidor] = useState<Record<string, ErroresActor>>({});
   const idSolicitud = solicitud.solicitudId;
   useEffect(() => {
@@ -203,6 +207,7 @@ export function FormularioActores({ seccion, activa, intentoAvance, onEstado }: 
                   rol={rol}
                   titulo={conTitulo ? (varias ? `${rol.etiqueta} ${i + 1}` : rol.etiqueta) : undefined}
                   esPropietario={definicion.actores[0]?.rol === rol.rol && fila.ordinal === 1}
+                  documentoFijo={definicion.actores[0]?.rol === rol.rol && fila.ordinal === 1 && Boolean(documentoInicial) && fila.numeroDocumento === documentoInicial?.numero.trim()}
                   solicitudId={idSolicitud}
                   cliente={cliente}
                   mostrarErrores={intentoAvance > 0}

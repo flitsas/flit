@@ -37,6 +37,9 @@ async function abrir(rutas: Record<string, Manejador> = {}, solicitud = guardado
   return m;
 }
 
+/** Consultas de persona hechas para un rol (el titular se consulta solo al entrar con la cédula del inicio). */
+const consultasDe = (llamadas: { clave: string; init: RequestInit }[], rol = "comprador") =>
+  llamadas.filter((l) => l.clave === RUTA_DETALLE && JSON.parse(String(l.init.body)).rol === rol);
 const tarjeta = (nombre: string) => screen.getByRole("region", { name: nombre });
 const continuar = () => screen.getByRole("button", { name: "Continuar" });
 
@@ -167,7 +170,7 @@ describe("validación de formato y consulta del documento (F3 AC1 y AC2, K5 AC5)
     const card = tarjeta("Comprador");
     await consultarTercero(card, "52123456");
 
-    const llamada = llamadas.find((l) => l.clave === RUTA_DETALLE);
+    const llamada = consultasDe(llamadas)[0];
     expect(JSON.parse(String(llamada?.init.body))).toEqual({ tipoDocumento: "CC", documento: "52123456", rol: "comprador", consentimiento: true, consentimientoVersion: "v1" });
     expect((llamada?.init.headers as Record<string, string>)["x-captcha-token"]).toBeUndefined();
     expect(within(card).queryByLabelText("Verificación de seguridad")).toBeNull();
@@ -289,7 +292,7 @@ describe("validación de formato y consulta del documento (F3 AC1 y AC2, K5 AC5)
 
     expect(await within(card).findByText(/No pudimos consultar el RUNT/i)).toBeInTheDocument();
     expect(within(card).getByLabelText(/Teléfono/)).toBeDisabled();
-    expect(within(card).getByText(/Podrás intentarlo de nuevo en/)).toBeInTheDocument();
+    expect(within(card).getByText(/Volveremos a consultar en/)).toBeInTheDocument();
   });
 
   it("un 503 consultas_no_disponibles se explica sin habilitar los campos", async () => {
@@ -333,7 +336,7 @@ describe("validación de formato y consulta del documento (F3 AC1 y AC2, K5 AC5)
     expect(within(card).getByText("Este trámite no admite personas jurídicas en este rol")).toBeInTheDocument();
     expect(within(card).getByLabelText(/Número de documento/)).toHaveAttribute("aria-invalid", "true");
     expect(within(card).queryByLabelText("Verificación de seguridad")).toBeNull();
-    expect(llamadas.some((l) => l.clave === RUTA_DETALLE)).toBe(false);
+    expect(consultasDe(llamadas)).toHaveLength(0);
     expect(continuar()).toBeDisabled();
   });
 
@@ -351,7 +354,7 @@ describe("validación de formato y consulta del documento (F3 AC1 y AC2, K5 AC5)
 });
 
 describe("consulta automática del documento (HU #14269)", () => {
-  const consultas = (llamadas: { clave: string }[]) => llamadas.filter((l) => l.clave === RUTA_DETALLE).length;
+  const consultas = (llamadas: { clave: string; init: RequestInit }[]) => consultasDe(llamadas).length;
   const esperar = (ms: number) =>
     act(async () => {
       await new Promise((r) => setTimeout(r, ms));
@@ -379,7 +382,7 @@ describe("consulta automática del documento (HU #14269)", () => {
     await waitFor(() => expect(within(card).getByLabelText(/Teléfono/)).toBeEnabled());
 
     expect(consultas(llamadas)).toBe(1);
-    const llamada = llamadas.find((l) => l.clave === RUTA_DETALLE);
+    const llamada = consultasDe(llamadas)[0];
     expect(JSON.parse(String(llamada?.init.body))).toMatchObject({ tipoDocumento: "CC", documento: "52123456", rol: "comprador" });
   });
 
@@ -415,6 +418,48 @@ describe("consulta automática del documento (HU #14269)", () => {
     expect(consultas(llamadas)).toBe(2);
     expect(within(card).queryByText("Este trámite no admite a esta persona en ese rol.")).toBeNull();
   });
+
+  it("el documento del titular viene del primer paso: precargado, de solo lectura y consultado solo al entrar", async () => {
+    const { llamadas } = await abrir();
+    const vendedor = tarjeta("Propietario (vendedor)");
+
+    expect(documento(vendedor)).toHaveValue(CEDULA_SOLICITANTE);
+    expect(documento(vendedor)).toBeDisabled();
+    expect(within(vendedor).getByLabelText("Tipo de documento")).toBeDisabled();
+    expect(within(vendedor).queryByRole("button", { name: /Cambiar documento|Consultar/ })).toBeNull();
+    await waitFor(() => expect(within(vendedor).getByLabelText(/Nombre completo/)).toHaveValue("ANA MARIA RUIZ PEREZ"));
+    expect(consultasDe(llamadas, "vendedor")).toHaveLength(1);
+    expect(JSON.parse(String(consultasDe(llamadas, "vendedor")[0]?.init.body))).toMatchObject({ documento: CEDULA_SOLICITANTE });
+    // Las demás personas siguen editables.
+    expect(documento(tarjeta("Comprador"))).toBeEnabled();
+  });
+
+  it("si el proveedor pide esperar, avisa que volverá a consultar y reintenta solo con el mismo documento", async () => {
+    let intentos = 0;
+    const { llamadas } = await abrir({
+      [RUTA_DETALLE]: (init) => (JSON.parse(String(init.body)).rol === "comprador" && intentos++ === 0 ? problema(503, "proveedor_no_disponible", { "retry-after": "1" }) : detalle()),
+    });
+    const card = tarjeta("Comprador");
+    fireEvent.change(documento(card), { target: { value: "52123456" } });
+
+    expect(await within(card).findByText(/Volveremos a consultar en \d+ s/)).toBeInTheDocument();
+    expect(within(card).getByText("No pudimos consultar el RUNT.")).toBeInTheDocument();
+    expect(within(card).queryByText(/Inténtalo de nuevo/)).toBeNull();
+    await waitFor(() => expect(within(card).getByLabelText(/Teléfono/)).toBeEnabled(), { timeout: 8000 });
+    expect(consultas(llamadas)).toBe(2);
+  }, 15000);
+
+  it("el reintento automático tiene tope: tras 3 reintentos deja el mensaje y no sigue consultando", async () => {
+    const { llamadas } = await abrir({ [RUTA_DETALLE]: () => problema(503, "proveedor_no_disponible", { "retry-after": "1" }) });
+    const card = tarjeta("Comprador");
+    fireEvent.change(documento(card), { target: { value: "52123456" } });
+
+    await waitFor(() => expect(consultas(llamadas)).toBe(4), { timeout: 20000 });
+    await waitFor(() => expect(within(card).getByText(/Podrás intentarlo de nuevo en/)).toBeInTheDocument());
+    await esperar(2500);
+    expect(consultas(llamadas)).toBe(4);
+    expect(within(card).getByLabelText(/Teléfono/)).toBeDisabled();
+  }, 30000);
 
   it("si el documento cambia mientras consulta, la respuesta anterior se descarta", async () => {
     const resolvers: Array<(r: Response) => void> = [];

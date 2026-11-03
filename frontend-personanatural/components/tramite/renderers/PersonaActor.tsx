@@ -37,6 +37,8 @@ interface Props {
    * del diseño (nombre, documento junto y teléfono en la misma fila).
    */
   esPropietario?: boolean;
+  /** El documento vino del primer paso (cédula del inicio): se muestra precargado y no se puede editar. */
+  documentoFijo?: boolean;
   solicitudId: string;
   cliente: ClientePortal;
   /** El ciudadano intentó avanzar con el paso incompleto: se muestran todos los errores. */
@@ -69,6 +71,9 @@ interface Props {
 const SEGUNDOS_ENTRE_REENVIOS = 60;
 /** Espera tras la última tecla antes de consultar sola el documento que se está escribiendo. */
 export const ESPERA_CONSULTA_AUTOMATICA_MS = 500;
+/** Cuántas veces se reintenta sola la consulta cuando el proveedor pide esperar, y la espera más larga que se acepta para hacerlo. */
+export const MAX_REINTENTOS_AUTOMATICOS = 3;
+const ESPERA_MAX_REINTENTO_S = 120;
 
 interface PeticionConsulta {
   tipoDocumento: TipoDocumento;
@@ -83,6 +88,7 @@ export function PersonaActor({
   rol,
   titulo,
   esPropietario = false,
+  documentoFijo = false,
   solicitudId,
   cliente,
   mostrarErrores,
@@ -132,12 +138,18 @@ export function PersonaActor({
   // Se dispara sola (sin botón): al llegar con el documento diligenciado y al terminar de escribir uno válido.
   const filaActual = useRef(fila);
   filaActual.current = fila;
+  const reintentos = useRef(0);
+  const reintentoPendiente = useRef(false);
+  /** La espera que se muestra es la de un reintento automático (cambia el texto: ya no hay nada que pulsar). */
+  const [reintentoAuto, setReintentoAuto] = useState(false);
   const consulta = useMutation<PersonaDetalle, unknown, PeticionConsulta>({
     mutationFn: ({ tipoDocumento, documento, signal }) =>
       cliente.consultas.personaDetalle(solicitudId, { tipoDocumento, documento, rol: fila.rol, ...consentimientoDeConsulta }, { signal }),
     onSuccess: (r, { signal }) => {
       if (signal.aborted) return; // el documento cambió mientras consultaba: esta respuesta ya no aplica
       setErrorConsulta(null);
+      setReintentoAuto(false);
+      reintentos.current = 0;
       const nombre = (r.existe ? (r.nombreCompleto ?? [r.nombres, r.apellidos].filter(Boolean).join(" ")) : "").trim();
       // No se pisa una ciudad que la persona ya había escrito.
       const ciudad = r.ciudad && !filaActual.current.ciudad ? ciudadCanonica(r.ciudad) ?? "" : "";
@@ -170,8 +182,16 @@ export function PersonaActor({
         onCambio({ consultado: true, nombreConsultado: false, nombre: "", licencia: null, runt: null });
         return;
       }
-      bloqueoConsulta.registrar(e);
-      setErrorConsulta(mensajeDe(e));
+      const espera = esperaDe(e);
+      const bloqueo = bloqueoConsulta.registrar(e);
+      // El proveedor pide esperar: al terminar la cuenta se vuelve a consultar sola (con tope); después, a mano.
+      const auto = bloqueo && espera !== undefined && espera <= ESPERA_MAX_REINTENTO_S && reintentos.current < MAX_REINTENTOS_AUTOMATICOS;
+      if (auto) {
+        reintentos.current += 1;
+        reintentoPendiente.current = true;
+      }
+      setReintentoAuto(auto);
+      setErrorConsulta(auto ? mensajeDe(e).replace(/\s*Inténtalo de nuevo\.?/i, "").trim() : mensajeDe(e));
     },
   });
 
@@ -297,8 +317,15 @@ export function PersonaActor({
       // Documento distinto: lo que iba en vuelo ya no sirve y el nuevo vuelve a poder consultarse.
       claveVista.current = claveDoc;
       claveConsultada.current = null;
+      reintentos.current = 0;
+      reintentoPendiente.current = false;
       controlador.current?.abort();
       controlador.current = null;
+    }
+    if (consultable && reintentoPendiente.current) {
+      // Terminó la espera que pidió el proveedor: se permite consultar de nuevo el mismo documento.
+      reintentoPendiente.current = false;
+      claveConsultada.current = null;
     }
     if (!consultable || claveConsultada.current === claveDoc) return;
     const tipoDocumento = fila.tipoDocumento;
@@ -351,7 +378,7 @@ export function PersonaActor({
         <Field label="Tipo de documento">
           <select
             className="field"
-            disabled={fila.consultado && !faltaConsultaRunt}
+            disabled={documentoFijo || (fila.consultado && !faltaConsultaRunt)}
             value={fila.tipoDocumento}
             onChange={(e) => {
               onCambio({ tipoDocumento: e.target.value as TipoDocumento, runt: null });
@@ -367,15 +394,15 @@ export function PersonaActor({
         </Field>
         <Field label="Número de documento *" error={error("numeroDocumento") ?? errorConsulta ?? undefined}>
           <div className="relative">
-            <Search aria-hidden className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-primary" />
+            {!documentoFijo && <Search aria-hidden className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-primary" />}
             <input
-              className="field pl-10"
+              className={documentoFijo ? "field" : "field pl-10"}
               inputMode="numeric"
               autoComplete="off"
               placeholder="Escribe el documento"
               aria-busy={consulta.isPending || undefined}
-              disabled={fila.consultado && !faltaConsultaRunt}
-              readOnly={fila.consultado && !faltaConsultaRunt ? true : undefined}
+              disabled={documentoFijo || (fila.consultado && !faltaConsultaRunt)}
+              readOnly={documentoFijo || (fila.consultado && !faltaConsultaRunt) ? true : undefined}
               aria-invalid={error("numeroDocumento") || errorConsulta ? true : undefined}
               value={fila.numeroDocumento}
               onChange={(e) => {
@@ -476,7 +503,7 @@ export function PersonaActor({
       )}
       {bloqueoConsulta.bloqueado && (
         <p role="status" className="text-xs">
-          Podrás intentarlo de nuevo en {bloqueoConsulta.segundosRestantes} s.
+          {reintentoAuto ? "Volveremos a consultar" : "Podrás intentarlo de nuevo"} en {bloqueoConsulta.segundosRestantes} s.
         </p>
       )}
 

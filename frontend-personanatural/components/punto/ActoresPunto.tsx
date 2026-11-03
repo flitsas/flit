@@ -379,6 +379,7 @@ export function ActoresPunto({
                   fila={fila}
                   rol={ROL_VENDEDOR}
                   esPropietario
+                  documentoFijo={Boolean(documento)}
                   solicitudId={fase.solicitudId}
                   cliente={cliente}
                   mostrarErrores={intentoAvance > 0}
