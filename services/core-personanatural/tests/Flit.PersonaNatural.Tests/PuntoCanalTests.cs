@@ -603,7 +603,7 @@ public sealed class PuntoCanalTests
     public async Task ActoresAbrir_DueñoOk_DevuelveBorradorYPuedeSerRadicante()
     {
         var borrador = new BorradorPuntoFalso();
-        await using var host = Host(Ok(), RuntCon(Nombre), borrador: borrador);
+        await using var host = Host(Ok(), RuntCon(Nombre), borrador: borrador, definiciones: DefsUnTitular());
         var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
 
         var r = await host.PostAsync("/actores/abrir", new { placa = "ABC123", documento = "1098765432", tipoCodigo = "CAMBIO_COLOR" }, entrada.Cookie);
@@ -633,7 +633,7 @@ public sealed class PuntoCanalTests
                 return r;
             },
         };
-        await using var host = Host(Ok(), runt);
+        await using var host = Host(Ok(), runt, definiciones: DefsUnTitular());
         var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
 
         var r = await host.PostAsync("/actores/abrir", new { placa = "ABC123", documento = "1098765432", tipoCodigo = "CAMBIO_COLOR" }, entrada.Cookie);
@@ -642,6 +642,72 @@ public sealed class PuntoCanalTests
         r.Json.GetProperty("puedeSerRadicante").GetBoolean().Should().BeFalse();
         r.Json.GetProperty("message").GetString().Should().Be(ActoresPuntoService.MensajeNoDueño);
         r.Json.GetProperty("solicitudId").GetGuid().Should().NotBe(Guid.Empty);
+    }
+
+    private static FachadaDefinicionesFalsa DefsUnTitular()
+    {
+        var defs = new FachadaDefinicionesFalsa();
+        defs.PorCodigo["CAMBIO_COLOR"] = DefinicionesDePrueba.UnTitular() with { Actores = [new ActorRolDto("titular", "Titular", 1, 1, true, true, true)] };
+        return defs;
+    }
+
+    [Fact]
+    public async Task ActoresAbrir_TipoDeUnSoloRol_ExponeSoloElTitularComoRadicante_SinComprador()
+    {
+        await using var host = Host(Ok(), RuntCon(Nombre), definiciones: DefsUnTitular());
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+
+        var r = await host.PostAsync("/actores/abrir", new { placa = "ABC123", documento = "1098765432", tipoCodigo = "CAMBIO_COLOR" }, entrada.Cookie);
+
+        r.Status.Should().Be(HttpStatusCode.OK);
+        var roles = r.Json.GetProperty("roles").EnumerateArray().ToArray();
+        roles.Should().ContainSingle();
+        roles[0].GetProperty("rol").GetString().Should().Be("titular");
+        roles[0].GetProperty("etiqueta").GetString().Should().Be("Titular");
+        roles[0].GetProperty("esRadicante").GetBoolean().Should().BeTrue();
+        roles[0].GetProperty("minimo").GetInt32().Should().Be(1);
+        roles[0].GetProperty("maximo").GetInt32().Should().Be(1);
+        r.Json.GetProperty("puedeSerRadicante").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ActoresAbrir_Traspaso_VendedorRadicanteYCompradorInvitable()
+    {
+        var defs = DefsTraspaso();
+        await using var host = Host(Ok(), RuntCon(Nombre), definiciones: defs);
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+
+        var r = await host.PostAsync("/actores/abrir", new { placa = "ABC123", documento = "1098765432", tipoCodigo = "TRASPASO_STANDARD" }, entrada.Cookie);
+
+        r.Status.Should().Be(HttpStatusCode.OK);
+        var roles = r.Json.GetProperty("roles").EnumerateArray().ToArray();
+        roles.Select(x => x.GetProperty("rol").GetString()).Should().Equal("vendedor", "comprador");
+        roles.Select(x => x.GetProperty("esRadicante").GetBoolean()).Should().Equal(true, false);
+        roles[1].GetProperty("maximo").GetInt32().Should().Be(4);
+    }
+
+    [Fact]
+    public async Task ActoresAbrir_TipoSinDefinicion_Responde404()
+    {
+        await using var host = Host(Ok(), RuntCon(Nombre), definiciones: new FachadaDefinicionesFalsa());
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+
+        var r = await host.PostAsync("/actores/abrir", new { placa = "ABC123", documento = "1098765432", tipoCodigo = "NO_EXISTE" }, entrada.Cookie);
+
+        r.Status.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public void RolesPunto_DesdeSnapshot_ConservaElOrden_YElPrimeroEsRadicante()
+    {
+        var snapshot = DefinicionesService.Serializar(DefinicionesDePrueba.Traspaso());
+
+        var roles = RolesPunto.Desde(snapshot);
+
+        roles.Select(r => r.Rol).Should().Equal("vendedor", "comprador");
+        roles.Select(r => r.EsRadicante).Should().Equal(true, false);
+        RolesPunto.Desde("{}").Should().BeEmpty();
+        RolesPunto.Desde("no json").Should().BeEmpty();
     }
 
     [Fact]

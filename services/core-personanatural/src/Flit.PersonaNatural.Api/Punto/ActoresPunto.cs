@@ -11,7 +11,7 @@ namespace Flit.PersonaNatural.Api.Punto;
 
 public abstract record ResultadoAbrirActores
 {
-    public sealed record Ok(SesionCreadaDto Sesion, bool PuedeSerRadicante, string? Message) : ResultadoAbrirActores;
+    public sealed record Ok(SesionCreadaDto Sesion, bool PuedeSerRadicante, string? Message, IReadOnlyList<RolPuntoDto> Roles) : ResultadoAbrirActores;
 
     public sealed record ProveedorCaido : ResultadoAbrirActores;
 
@@ -22,7 +22,7 @@ public abstract record ResultadoAbrirActores
 /// Abre el borrador PN desde el canal del punto y evalúa si el documento puede ser radicante (dueño RUNT).
 /// HU #14236. No radica ni crea procedure instance en FLIT 2.0.
 /// </summary>
-public sealed class ActoresPuntoService(IConsultasRunt runt, IAbrirBorradorDesdePunto borrador)
+public sealed class ActoresPuntoService(IConsultasRunt runt, IAbrirBorradorDesdePunto borrador, Definiciones.IFachadaDefiniciones definiciones)
 {
     public const string MensajeNoDueño = "No puedes realizar este trámite porque no eres el propietario del vehículo.";
     public const string CanalOrigen = "pn_punto";
@@ -47,6 +47,12 @@ public sealed class ActoresPuntoService(IConsultasRunt runt, IAbrirBorradorDesde
         if (placaNorm is null || propietario is null)
             return new ResultadoAbrirActores.DatosInvalidos("Indique la placa y el documento del propietario.");
 
+        // Los roles salen de la definición del tipo (en su orden): el primero radica en el punto, los demás se invitan.
+        var def = await definiciones.ObtenerDefinicionAsync(codigo, sesion.OrganismoId.ToString(), ct).ConfigureAwait(false);
+        var roles = RolesPunto.Desde(def);
+        if (roles.Count == 0)
+            return new ResultadoAbrirActores.DatosInvalidos("Este tipo de trámite no tiene partes definidas.");
+
         ResultadoConsulta resultado;
         try
         {
@@ -65,7 +71,8 @@ public sealed class ActoresPuntoService(IConsultasRunt runt, IAbrirBorradorDesde
         return new ResultadoAbrirActores.Ok(
             creada,
             puedeSerRadicante,
-            puedeSerRadicante ? null : MensajeNoDueño);
+            puedeSerRadicante ? null : MensajeNoDueño,
+            roles);
     }
 
     /// <summary>

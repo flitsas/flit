@@ -16,8 +16,12 @@ public sealed class IdentidadPuntoService(
     PersonaNaturalDb db,
     IdentidadService identidad,
     SolicitudesService solicitudes,
-    SesionService sesiones)
+    SesionService sesiones,
+    PiiHasher hasher)
 {
+    public const string CodigoRolDesconocido = "rol_desconocido";
+    public const string CodigoRolRadicante = "rol_radicante";
+    public const string CodigoDocumentoDistinto = "documento_distinto_del_primer_paso";
     public const string CodigoNoDueño = "no_es_propietario";
     public const string CodigoInvitacionesBloqueadas = "invitaciones_bloqueadas";
     public const string MensajeNoDueño = ActoresPuntoService.MensajeNoDueño;
@@ -39,12 +43,25 @@ public sealed class IdentidadPuntoService(
         if (gate is not null)
             return gate;
 
-        var rol = string.IsNullOrWhiteSpace(parte) ? await RolRadicanteAsync(solicitudId, ct).ConfigureAwait(false) : parte.Trim();
+        var rol = await RolRadicanteAsync(solicitudId, ct).ConfigureAwait(false);
         if (rol is null)
-            return ResultadoIdentidad.Error(StatusCodes.Status422UnprocessableEntity, "rol_desconocido", "No hay un rol de radicante en este trámite.");
+            return ResultadoIdentidad.Error(StatusCodes.Status422UnprocessableEntity, CodigoRolDesconocido, "No hay un rol de radicante en este trámite.");
+        if (!string.IsNullOrWhiteSpace(parte) && !string.Equals(parte.Trim(), rol, StringComparison.OrdinalIgnoreCase))
+        {
+            var existe = (await RolesAsync(solicitudId, ct).ConfigureAwait(false)).Any(r => string.Equals(r.Rol, parte.Trim(), StringComparison.OrdinalIgnoreCase));
+            return existe
+                ? ResultadoIdentidad.Error(StatusCodes.Status422UnprocessableEntity, CodigoRolRadicante, "Ese rol no es el de quien radica en el punto.")
+                : ResultadoIdentidad.Error(StatusCodes.Status422UnprocessableEntity, CodigoRolDesconocido, "Este tipo de trámite no tiene ese rol.");
+        }
 
         if (string.IsNullOrWhiteSpace(documento))
             return ResultadoIdentidad.Error(StatusCodes.Status400BadRequest, "datos_invalidos", "Indique el documento de quien radica.");
+
+        // El radicante es quien abrió el trámite en el primer paso (el propietario según RUNT): su documento no cambia aquí.
+        var huellaPrimerPaso = await db.Set<SolicitudTramite>().AsNoTracking()
+            .Where(s => s.Id == solicitudId).Select(s => s.CedulaSolicitanteHash).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        if (huellaPrimerPaso is { Length: > 0 } && !huellaPrimerPaso.AsSpan().SequenceEqual(hasher.HashCedula(documento)))
+            return ResultadoIdentidad.Error(StatusCodes.Status422UnprocessableEntity, CodigoDocumentoDistinto, "El documento de quien radica debe ser el del primer paso.", campo: "documento");
 
         // Correo: si el ciudadano ya lo digitó en la ficha se guarda; si no, técnico (in-situ no notifica).
         var correo = string.IsNullOrWhiteSpace(correoCiudadano)
@@ -103,6 +120,13 @@ public sealed class IdentidadPuntoService(
         var parte = (body.Parte ?? string.Empty).Trim();
         if (parte.Length == 0)
             return ResultadoIdentidad.Error(StatusCodes.Status400BadRequest, "datos_invalidos", "Indique el rol de la parte a invitar.");
+        var definido = (await RolesAsync(solicitudId, ct).ConfigureAwait(false))
+            .FirstOrDefault(r => string.Equals(r.Rol, parte, StringComparison.OrdinalIgnoreCase));
+        if (definido is null)
+            return ResultadoIdentidad.Error(StatusCodes.Status422UnprocessableEntity, CodigoRolDesconocido, "Este tipo de trámite no tiene ese rol.");
+        parte = definido.Rol;
+        if (definido.EsRadicante && (body.Ordinal ?? 1) == 1)
+            return ResultadoIdentidad.Error(StatusCodes.Status422UnprocessableEntity, CodigoRolRadicante, "Esa posición es la de quien radica; solo se pueden invitar las demás partes.");
 
         var actores = new ActoresRequest(null, [
             new ActorRequest(
@@ -165,29 +189,17 @@ public sealed class IdentidadPuntoService(
         return null;
     }
 
-    private async Task<string?> RolRadicanteAsync(Guid solicitudId, CancellationToken ct)
+    /// <summary>El radicante es el primer rol de la definición del tipo (ordinal 1); ningún rol se nombra en el BFF.</summary>
+    private async Task<string?> RolRadicanteAsync(Guid solicitudId, CancellationToken ct) =>
+        (await RolesAsync(solicitudId, ct).ConfigureAwait(false)).FirstOrDefault(r => r.EsRadicante)?.Rol;
+
+    private async Task<IReadOnlyList<RolPuntoDto>> RolesAsync(Guid solicitudId, CancellationToken ct)
     {
-        var definidas = await db.Set<SolicitudTramite>().AsNoTracking()
+        var snapshot = await db.Set<SolicitudTramite>().AsNoTracking()
             .Where(s => s.Id == solicitudId)
             .Select(s => s.DefinicionSnapshot)
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(definidas))
-            return null;
-        // Preferencia alineada al portal: vendedor → comprador → locatario → primer rol con identidad.
-        foreach (var candidato in new[] { "vendedor", "comprador", "locatario" })
-        {
-            if (definidas.Contains($"\"{candidato}\"", StringComparison.OrdinalIgnoreCase)
-                || definidas.Contains($"\"role\":\"{candidato}\"", StringComparison.OrdinalIgnoreCase)
-                || definidas.Contains($"\"rol\":\"{candidato}\"", StringComparison.OrdinalIgnoreCase))
-                return candidato;
-        }
-
-        var persona = await db.Set<PersonaSolicitante>().AsNoTracking()
-            .Where(p => p.SolicitudId == solicitudId)
-            .OrderBy(p => p.Ordinal)
-            .Select(p => p.Parte)
-            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
-        return string.IsNullOrWhiteSpace(persona) ? null : persona;
+        return RolesPunto.Desde(snapshot);
     }
 
     private static bool EsCanalPunto(string datosJson)

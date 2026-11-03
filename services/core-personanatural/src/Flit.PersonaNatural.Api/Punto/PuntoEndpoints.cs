@@ -171,6 +171,15 @@ public static class PuntoEndpoints
                         organismoId = sesion.OrganismoId,
                         puedeSerRadicante = ok.PuedeSerRadicante,
                         message = ok.Message,
+                        roles = ok.Roles.Select(r => new
+                        {
+                            rol = r.Rol,
+                            etiqueta = r.Etiqueta,
+                            esRadicante = r.EsRadicante,
+                            minimo = r.Minimo,
+                            maximo = r.Maximo,
+                            personaNaturalPermitida = r.PersonaNaturalPermitida,
+                        }),
                     }, Json),
                     ResultadoAbrirActores.ProveedorCaido => Results.Json(
                         new { code = CodigoProveedor, message = TiposDelPunto.RuntCaido }, Json, statusCode: StatusCodes.Status503ServiceUnavailable),
