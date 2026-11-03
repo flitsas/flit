@@ -107,6 +107,8 @@ export interface TarjetasRequisitos {
   campos: PasoDefinicion[];
   observaciones: boolean;
   transformaciones: boolean;
+  /** El tipo trae declaraciones propias (valor nuevo, causal, nivel…) que pinta el renderer `DeclaracionesTipo` dentro de este paso. */
+  declaraciones: boolean;
 }
 
 const tieneSeccion = (d: DefinicionTipo, tipo: string): boolean => d.pasos.some((p) => p.sectionTypes.includes(tipo));
@@ -128,6 +130,8 @@ export function tarjetasDeRequisitos(d: DefinicionTipo): TarjetasRequisitos {
     campos: d.pasos.filter((p) => p.campos.length > 0 && GRUPO_POR_SECCION[p.sectionTypes[0] ?? ""] === "requisitos"),
     observaciones: seccionesDeRequisitos(d).length > 0,
     transformaciones: seccionesDeRequisitos(d).length > 0 && d.flags.permiteTransformaciones,
+    // La secretaría de destino no es una tarjeta de este paso: va en el diagnóstico.
+    declaraciones: seccionesDeRequisitos(d).length > 0 && (d.declaraciones ?? []).some((x) => x.control !== "organismo_destino"),
   };
 }
 

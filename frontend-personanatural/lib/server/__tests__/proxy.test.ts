@@ -47,6 +47,19 @@ describe("proxy hacia el BFF", () => {
     expect(cabeceras.get("x-otra")).toBeNull();
   });
 
+  it("carrocerías y gravamen llevan el Bearer del borrador y conservan la consulta (web y punto usan el mismo token pn_sesion)", async () => {
+    const fetchImpl = vi.fn(async () => new Response("[]", { status: 200, headers: { "content-type": "application/json" } }));
+    await reenviarAlBff(new Request("https://portal/api/v1/persona-natural/catalogos/carrocerias?solicitudId=s1&texto=fur"), ["catalogos", "carrocerias"], { apiOrigin: ORIGEN, tokenSesion: "tok-borrador", tokenPunto: "tok-punto", fetchImpl });
+    await reenviarAlBff(new Request("https://portal/api/v1/persona-natural/solicitudes/s1/vehiculo/gravamen"), ["solicitudes", "s1", "vehiculo", "gravamen"], { apiOrigin: ORIGEN, tokenSesion: "tok-borrador", fetchImpl });
+
+    const [[url1, init1], [url2, init2]] = fetchImpl.mock.calls as unknown as [URL, RequestInit][];
+    expect(String(url1)).toBe(`${ORIGEN}/api/v1/persona-natural/catalogos/carrocerias?solicitudId=s1&texto=fur`);
+    expect((init1.headers as Headers).get("authorization")).toBe("Bearer tok-borrador");
+    expect((init1.headers as Headers).get("cookie")).toBeNull();
+    expect(String(url2)).toBe(`${ORIGEN}/api/v1/persona-natural/solicitudes/s1/vehiculo/gravamen`);
+    expect((init2.headers as Headers).get("authorization")).toBe("Bearer tok-borrador");
+  });
+
   it("no manda Authorization si no hay sesión, aunque el navegador lo intente", async () => {
     const fetchImpl = vi.fn(async () => new Response("{}", { status: 200 }));
 

@@ -6,8 +6,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Drop, type EstadoArchivo } from "@/components/tramite/Drop";
 import { useWizard, type PropsSeccion } from "@/components/tramite/ContextoWizard";
 import { Btn, Card, Field } from "@/components/tramite/piezas";
+import { DeclaracionesTipo, type SubidaSoporte } from "@/components/tramite/renderers/DeclaracionesTipo";
+import { TarjetaDestino } from "@/components/tramite/TarjetaDestino";
 import { TotalLiquidado } from "@/components/tramite/TotalLiquidado";
-import type { CampoDefinicion, Cotizacion, DocumentoRequerido } from "@/lib/api/cliente";
+import type { CampoDefinicion, Cotizacion, DeclaracionTipo, DefinicionTipo, DocumentoRequerido, GravamenRunt } from "@/lib/api/cliente";
+import { claveDeCampoDeclaracion, declaracionesActivas, declaracionesDe, destinoDelTipo, erroresDeDeclaraciones, faltaDestino, valoresDeDeclaraciones } from "@/lib/tramite/declaraciones";
 import { alEscribirMoneda, formatearPesos, numeroMoneda, textoMonedaCompleta } from "@/lib/formato";
 import { claveAdicionalesActivos, claveCotizacion } from "@/lib/tramite/cotizacion";
 import { ApiError, mensajeDe } from "@/lib/api/errores";
@@ -19,21 +22,28 @@ import {
   erroresDeRequisitos,
   errorDeArchivo,
   esExigible,
+  MENSAJE_OBLIGATORIO,
   MOTIVO_REQUISITOS,
   tarjetasDeRequisitos,
   TRANSFORMACIONES,
   type EntradaRequisitos,
 } from "@/lib/tramite/requisitos";
 import { GRUPO_POR_SECCION } from "@/lib/tramite/pasos";
+import { accionGuardada, decisionDe, documentoDeDecision, DOCS_DE_PRENDA, errorDeDocumentoDePrenda, ETIQUETA_ACCION_PRENDA, type AccionPrenda } from "@/lib/tramite/prenda";
 
 const AUTOGUARDADO_MS = 3000;
 
-interface Subida {
-  estado: "cargando" | "error";
-  nombre: string;
-  error?: string;
-  /** Solo en memoria, para «Reintentar» tras un fallo del servidor. */
-  archivo?: File;
+/** Solo en memoria, para «Reintentar» tras un fallo del servidor (`archivo`). */
+type Subida = SubidaSoporte;
+
+/** Códigos de los soportes que cubren las declaraciones: esos documentos se piden en su tarjeta y no se repiten en «Documentos». */
+function soportesDeDeclaraciones(d: DefinicionTipo): Set<string> {
+  const codigos = new Set<string>();
+  for (const decl of declaracionesDe(d)) {
+    if (decl.docCodeSoporte) codigos.add(decl.docCodeSoporte);
+    for (const o of decl.opciones) for (const c of o.docCodes) codigos.add(c);
+  }
+  return codigos;
 }
 
 type EstadoBorrador = "inactivo" | "guardando" | "guardado" | "error";
@@ -57,8 +67,15 @@ export function FormularioRequisitos(props: PropsSeccion) {
 const sinClave = <T,>(mapa: Record<string, T>, clave: string): Record<string, T> => Object.fromEntries(Object.entries(mapa).filter(([k]) => k !== clave));
 
 function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
-  const { cliente, definicion, solicitud, guardarConVersion, registrarGuardado, recargar, reportarError, canal, avaluoSugerido } = useWizard();
+  const { cliente, definicion: definicionBase, solicitud, guardarConVersion, registrarGuardado, recargar, reportarError, canal, avaluoSugerido } = useWizard();
   const idSolicitud = solicitud.solicitudId;
+  // Los documentos que ya cubre una declaración (su soporte) salen de la matriz de «Documentos» para no pedirse dos veces.
+  const definicion = useMemo<DefinicionTipo>(() => {
+    const cubiertos = soportesDeDeclaraciones(definicionBase);
+    // Los documentos propios de la prenda (registro y levantamiento) se piden en la tarjeta de prenda, según la decisión.
+    if (tarjetasDeRequisitos(definicionBase).prenda) for (const c of DOCS_DE_PRENDA) cubiertos.add(c);
+    return cubiertos.size === 0 ? definicionBase : { ...definicionBase, documentos: definicionBase.documentos.filter((d) => !cubiertos.has(d.docCode)) };
+  }, [definicionBase]);
   const t = useMemo(() => tarjetasDeRequisitos(definicion), [definicion]);
   const documentos = useMemo(() => (t.documentos ? documentosOrdenados(definicion) : []), [t.documentos, definicion]);
   const avaluo = avaluoSugerido != null && avaluoSugerido > 0 ? avaluoSugerido : null;
@@ -72,8 +89,21 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
   });
   const valorPrecargado = !(solicitud.datos.comercial?.valor != null && solicitud.datos.comercial.valor > 0) && avaluo != null;
   const [tienePrenda, setTienePrenda] = useState(() => solicitud.datos.prenda?.tiene ?? false);
-  const [acreedor, setAcreedor] = useState(() => solicitud.datos.prenda?.acreedor ?? "");
-  const [nitAcreedor, setNitAcreedor] = useState(() => solicitud.datos.prenda?.nitAcreedor ?? "");
+  const accionFija = (definicionBase.flags.accionPrenda === "levantar" ? "levantar" : definicionBase.flags.accionPrenda === "registrar" ? "registrar" : null) as AccionPrenda | null;
+  const [accionPrenda, setAccionPrenda] = useState<AccionPrenda>(() => accionFija ?? accionGuardada(solicitud.datos.prenda?.decision));
+  // `null` = la persona aún no escribió: se muestra el acreedor del RUNT si llegó (editable). Al escribir, manda lo escrito.
+  const [acreedorEscrito, setAcreedorEscrito] = useState<string | null>(() => solicitud.datos.prenda?.acreedor ?? null);
+  const [nitEscrito, setNitEscrito] = useState<string | null>(() => solicitud.datos.prenda?.nitAcreedor ?? null);
+  const verPrenda = t.prenda && (t.prendaObligatoria || tienePrenda);
+  const gravamen = useQuery<GravamenRunt>({
+    queryKey: ["pn", "gravamen", idSolicitud],
+    queryFn: ({ signal }) => cliente.solicitudes.gravamen(idSolicitud, { signal }),
+    enabled: verPrenda,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+  const acreedor = acreedorEscrito ?? gravamen.data?.acreedor ?? "";
+  const nitAcreedor = nitEscrito ?? (gravamen.data?.nitAcreedor ?? "").replace(/\D/g, "");
   const [transformaciones, setTransformaciones] = useState<string[]>(() => solicitud.datos.requisitos?.transformaciones ?? []);
   const cotizacion = useQuery<Cotizacion>({
     queryKey: claveCotizacion(solicitud.organismoId, definicion.code, transformaciones),
@@ -87,11 +117,21 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
   const [borrador, setBorrador] = useState<EstadoBorrador>("inactivo");
   const [errorBorrador, setErrorBorrador] = useState<string | null>(null);
 
-  const hayPersonaJuridica = solicitud.actores.some((a) => a.tipoDocumento === "NIT");
+  // Apagado: el portal es solo para personas naturales (no hay partes con NIT) y el servidor ya filtra los documentos de persona jurídica.
+  const hayPersonaJuridica = false;
   const condicion = { tienePrenda: t.prendaObligatoria || tienePrenda, transformaciones, campos, hayPersonaJuridica };
   const documentosVisibles = documentos.filter((doc) => documentoVisible(doc, condicion));
+  const decisionPrenda = decisionDe(condicion.tienePrenda, accionPrenda);
   const entrada: EntradaRequisitos = { campos, valorVenta, tienePrenda: condicion.tienePrenda, acreedor, nitAcreedor, observaciones, transformaciones, hayPersonaJuridica };
-  const errores = erroresDeRequisitos(definicion, solicitud.adjuntos, entrada);
+  const declaraciones = useMemo(() => (t.declaraciones ? declaracionesActivas(definicion, transformaciones) : []), [t.declaraciones, definicion, transformaciones]);
+  // El punto no tiene paso de diagnóstico: la secretaría de destino (traslado de cuenta) se elige aquí. En el portal web va en el diagnóstico.
+  const destinoDelPunto = canal === "punto" ? destinoDelTipo(definicionBase) : null;
+  const errores = {
+    ...erroresDeRequisitos(definicion, solicitud.adjuntos, entrada),
+    ...(destinoDelPunto && faltaDestino(definicionBase, solicitud.fieldValues) ? { [`declaracion.${destinoDelPunto.clave}`]: MENSAJE_OBLIGATORIO } : {}),
+    ...(t.prenda ? errorDeDocumentoDePrenda(definicionBase, solicitud.adjuntos, decisionPrenda) : {}),
+    ...(t.declaraciones ? erroresDeDeclaraciones(definicion, solicitud.adjuntos, campos, transformaciones) : {}),
+  };
   const subiendo = Object.values(subidas).some((s) => s.estado === "cargando");
   const completo = Object.keys(errores).length === 0 && !subiendo;
   const motivo = completo ? undefined : subiendo ? "Espera a que termine la carga del archivo." : MOTIVO_REQUISITOS;
@@ -105,16 +145,17 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
 
   // ── Guardado del borrador ───────────────────────────────────────────────────────────────────────────────────────────
 
-  const firma = JSON.stringify([campos, valorVenta, tienePrenda, acreedor, nitAcreedor, transformaciones, observaciones]);
+  const firma = JSON.stringify([campos, valorVenta, tienePrenda, accionPrenda, acreedor, nitAcreedor, transformaciones, observaciones]);
   // Un valor precargado con el avalúo aún no está en el servidor: queda como cambio pendiente para que se guarde al avanzar.
   const guardada = useRef(valorPrecargado ? "" : firma);
 
   const guardar = useCallback(async () => {
     try {
-      if (t.campos.length > 0) {
+      if (t.campos.length > 0 || t.declaraciones) {
         const valores: Record<string, string | null> = {};
         for (const paso of t.campos) for (const c of paso.campos) valores[c.fieldKey] = (campos[c.fieldKey] ?? "").trim() || null;
-        await guardarConVersion((version) => cliente.solicitudes.guardarCampos(idSolicitud, { version, valores }));
+        if (t.declaraciones) Object.assign(valores, valoresDeDeclaraciones(definicion, campos, transformaciones, solicitud.fieldValues));
+        if (Object.keys(valores).length > 0) await guardarConVersion((version) => cliente.solicitudes.guardarCampos(idSolicitud, { version, valores }));
       }
       if (t.comercial || t.prenda) {
         const tiene = t.prendaObligatoria || tienePrenda;
@@ -122,7 +163,9 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
           cliente.solicitudes.guardarComercial(idSolicitud, {
             version,
             ...(t.comercial ? { valorComercial: numeroMoneda(valorVenta) } : {}),
-            ...(t.prenda ? { prenda: { tienePrenda: tiene, ...(tiene ? { acreedor: acreedor.trim(), nitAcreedor } : {}) } } : {}),
+            ...(t.prenda
+              ? { prenda: { tienePrenda: tiene, decision: decisionDe(tiene, accionPrenda), ...(tiene ? { acreedor: acreedor.trim(), nitAcreedor } : {}) } }
+              : {}),
           }),
         );
       }
@@ -134,10 +177,10 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
       guardada.current = firma;
       setErroresServidor({});
     } catch (error) {
-      if (error instanceof ApiError && error.errores) setErroresServidor(erroresDeServidor(error.errores));
+      if (error instanceof ApiError && error.errores) setErroresServidor(erroresDeServidor(error.errores, definicion));
       throw error;
     }
-  }, [t, campos, valorVenta, tienePrenda, acreedor, nitAcreedor, transformaciones, observaciones, guardarConVersion, cliente, idSolicitud, firma]);
+  }, [t, definicion, solicitud.fieldValues, campos, valorVenta, tienePrenda, accionPrenda, acreedor, nitAcreedor, transformaciones, observaciones, guardarConVersion, cliente, idSolicitud, firma]);
 
   // Al pasar al siguiente paso: guarda solo si algo cambió desde el último guardado.
   useEffect(() => {
@@ -171,7 +214,7 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
 
   // ── Documentos ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
-  const subir = async (doc: DocumentoRequerido, archivo: File) => {
+  const subir = async (doc: Pick<DocumentoRequerido, "docCode">, archivo: File) => {
     const invalido = errorDeArchivo(archivo);
     if (invalido) {
       setSubidas((s) => ({ ...s, [doc.docCode]: { estado: "error", nombre: archivo.name, error: invalido } }));
@@ -191,7 +234,7 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
     }
   };
 
-  const quitar = async (doc: DocumentoRequerido) => {
+  const quitar = async (doc: Pick<DocumentoRequerido, "docCode">) => {
     const actual = adjuntoDe(solicitud.adjuntos, doc.docCode);
     if (!actual) return;
     setSubidas((s) => ({ ...s, [doc.docCode]: { estado: "cargando", nombre: actual.nombreArchivo } }));
@@ -212,9 +255,41 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
     queryClient.setQueryData(claveAdicionalesActivos, transformaciones);
   }, [queryClient, transformaciones]);
 
+  /** Cargador de un documento de la matriz del tipo (Documentos y documento de la prenda): mismos estados, reintento y quitar. */
+  const dropDe = (doc: DocumentoRequerido, exigible: boolean, faltante: string | undefined, ayudaExtra = "") => {
+    const subida = subidas[doc.docCode];
+    const cargado = adjuntoDe(solicitud.adjuntos, doc.docCode);
+    const estado: EstadoArchivo = subida?.estado === "cargando" ? "cargando" : subida?.estado === "error" && !cargado ? "error" : cargado ? "ok" : "vacio";
+    const error = subida?.estado === "error" ? subida.error : faltante;
+    const ayuda = [doc.instruccionCargue.trim().replace(/[.]$/, ""), ayudaExtra, AYUDA_ARCHIVOS].filter(Boolean).join(". ");
+    return (
+      <div key={doc.docCode} className="space-y-2">
+        <Drop
+          title={`${doc.nombre}${exigible ? " *" : ""}`}
+          hint={ayuda}
+          optional={!exigible}
+          estado={estado}
+          nombre={subida?.nombre ?? cargado?.nombreArchivo}
+          error={error}
+          onFile={(archivo) => void subir(doc, archivo)}
+          onQuitar={cargado ? () => void quitar(doc) : undefined}
+        />
+        {subida?.estado === "error" && subida.archivo && (
+          <Btn tone="secondary" onClick={() => void subir(doc, subida.archivo as File)}>
+            Reintentar subida
+          </Btn>
+        )}
+      </div>
+    );
+  };
+  // El documento de la decisión de prenda (registro o levantamiento), si la matriz del tipo lo trae.
+  const documentoPrenda = t.prenda ? documentoDeDecision(definicionBase, decisionPrenda) : undefined;
+
   // Las observaciones acompañan a cualquier paso de requisitos, así que siempre hay al menos una tarjeta que pintar.
   return (
     <>
+      {destinoDelPunto && <TarjetaDestino intentoAvance={intentoAvance} />}
+
       {t.comercial && (
         <Card title="Datos comerciales" id="requisitos-comercial">
           <div className="grid gap-4 md:grid-cols-3">
@@ -271,6 +346,33 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
               </div>
             </fieldset>
           )}
+          {(t.prendaObligatoria || tienePrenda) && accionFija === null && (
+            <fieldset className={t.prendaObligatoria ? undefined : "mt-4"}>
+              <legend>¿Qué se hará con la prenda?</legend>
+              <div className="mt-2 flex flex-wrap gap-6">
+                {(Object.keys(ETIQUETA_ACCION_PRENDA) as AccionPrenda[]).map((accion) => (
+                  <label key={accion} className="flex min-h-11 cursor-pointer items-center gap-2">
+                    <input type="radio" name="prenda-accion" className="h-5 w-5 accent-primary" checked={accionPrenda === accion} onChange={() => setAccionPrenda(accion)} />
+                    {ETIQUETA_ACCION_PRENDA[accion]}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
+          {verPrenda && (
+            <div aria-live="polite" className="mt-3 space-y-1 text-sm font-light text-muted-foreground">
+              {gravamen.isFetching && <p role="status">Consultando el gravamen en el RUNT...</p>}
+              {gravamen.data?.aviso === "sin_gravamen" && <p role="status">RUNT sin gravamen registrado para este vehículo.</p>}
+              {gravamen.data?.tienePrenda && gravamen.data.acreedor === null && (
+                <p role="status">El RUNT reporta una prenda. El acreedor se muestra cuando se valida la identidad; mientras tanto puedes escribirlo.</p>
+              )}
+            </div>
+          )}
+          {(t.prendaObligatoria || tienePrenda) && accionPrenda === "levantar" && (
+            <p role="note" className="mt-3 text-sm font-light text-muted-foreground">
+              Indica el acreedor de la prenda que se levantará y adjunta el documento del levantamiento.
+            </p>
+          )}
           {(t.prendaObligatoria || tienePrenda) && (
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <Field label="Acreedor (beneficiario) *" error={mostrar("prenda.acreedor")}>
@@ -280,7 +382,7 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
                   aria-invalid={mostrar("prenda.acreedor") ? true : undefined}
                   value={acreedor}
                   onChange={(e) => {
-                    setAcreedor(e.target.value);
+                    setAcreedorEscrito(e.target.value);
                     editar("prenda.acreedor");
                   }}
                   onBlur={() => tocar("prenda.acreedor")}
@@ -294,12 +396,17 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
                   aria-invalid={mostrar("prenda.nitAcreedor") ? true : undefined}
                   value={nitAcreedor}
                   onChange={(e) => {
-                    setNitAcreedor(e.target.value.replace(/\D/g, ""));
+                    setNitEscrito(e.target.value.replace(/\D/g, ""));
                     editar("prenda.nitAcreedor");
                   }}
                   onBlur={() => tocar("prenda.nitAcreedor")}
                 />
               </Field>
+            </div>
+          )}
+          {documentoPrenda && (
+            <div className="mt-4 max-w-sm">
+              {dropDe(documentoPrenda, documentoPrenda.obligatorio, intentoAvance > 0 ? errores[`documento.${documentoPrenda.docCode}`] : undefined)}
             </div>
           )}
         </Card>
@@ -325,37 +432,34 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
         </Card>
       ))}
 
+      {declaraciones.length > 0 && (
+        <DeclaracionesTipo
+          cliente={cliente}
+          definicion={definicionBase}
+          declaraciones={declaraciones}
+          campos={campos}
+          solicitudId={idSolicitud}
+          adjuntos={solicitud.adjuntos}
+          subidas={subidas}
+          intentoAvance={intentoAvance}
+          error={mostrar}
+          errorSoporte={(docCode) => (intentoAvance > 0 ? errores[`documento.${docCode}`] : undefined)}
+          onCambiar={(decl: DeclaracionTipo, valor) => {
+            setCampos((c) => ({ ...c, [decl.fieldKey]: valor }));
+            editar(`declaracion.${decl.clave}`);
+          }}
+          onTocar={tocar}
+          onSubir={(soporte, archivo) => void subir(soporte, archivo)}
+          onQuitar={(soporte) => void quitar(soporte)}
+        />
+      )}
+
       {documentosVisibles.length > 0 && (
         <Card title="Documentos" id="requisitos-documentos">
           <div className="grid gap-4 md:grid-cols-3">
-            {documentosVisibles.map((doc) => {
-              const subida = subidas[doc.docCode];
-              const cargado = adjuntoDe(solicitud.adjuntos, doc.docCode);
-              const estado: EstadoArchivo = subida?.estado === "cargando" ? "cargando" : subida?.estado === "error" && !cargado ? "error" : cargado ? "ok" : "vacio";
-              const exigible = esExigible(doc, condicion);
-              const faltante = intentoAvance > 0 ? errores[`documento.${doc.docCode}`] : undefined;
-              const error = subida?.estado === "error" ? subida.error : faltante;
-              const ayuda = [doc.instruccionCargue.trim().replace(/\.$/, ""), doc.condicion.trim() ? `Aplica si: ${doc.condicion.trim().replace(/\.$/, "")}` : "", AYUDA_ARCHIVOS].filter(Boolean).join(". ");
-              return (
-                <div key={doc.docCode} className="space-y-2">
-                  <Drop
-                    title={`${doc.nombre}${exigible ? " *" : ""}`}
-                    hint={ayuda}
-                    optional={!exigible}
-                    estado={estado}
-                    nombre={subida?.nombre ?? cargado?.nombreArchivo}
-                    error={error}
-                    onFile={(archivo) => void subir(doc, archivo)}
-                    onQuitar={cargado ? () => void quitar(doc) : undefined}
-                  />
-                  {subida?.estado === "error" && subida.archivo && (
-                    <Btn tone="secondary" onClick={() => void subir(doc, subida.archivo as File)}>
-                      Reintentar subida
-                    </Btn>
-                  )}
-                </div>
-              );
-            })}
+            {documentosVisibles.map((doc) =>
+              dropDe(doc, esExigible(doc, condicion), intentoAvance > 0 ? errores[`documento.${doc.docCode}`] : undefined, doc.condicion.trim() ? `Aplica si: ${doc.condicion.trim().replace(/[.]$/, "")}` : ""),
+            )}
           </div>
         </Card>
       )}
@@ -438,12 +542,18 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
 }
 
 /** Errores por campo de un 422 del back (`valores.<key>`, `valorComercial`, `prenda.acreedor`…) a las llaves de esta pantalla. */
-function erroresDeServidor(errores: Readonly<Record<string, readonly string[]>>): Record<string, string> {
+function erroresDeServidor(errores: Readonly<Record<string, readonly string[]>>, definicion: DefinicionTipo): Record<string, string> {
   const salida: Record<string, string> = {};
   for (const [llave, mensajes] of Object.entries(errores)) {
     const mensaje = mensajes[0];
     if (!mensaje) continue;
-    salida[llave.startsWith("valores.") ? `campo.${llave.slice("valores.".length)}` : llave] = mensaje;
+    if (!llave.startsWith("valores.")) {
+      salida[llave] = mensaje;
+      continue;
+    }
+    // Un campo que pertenece a una declaración se marca en la declaración; los demás, en su campo.
+    const campo = llave.slice("valores.".length);
+    salida[claveDeCampoDeclaracion(definicion, campo) ?? `campo.${campo}`] = mensaje;
   }
   return salida;
 }

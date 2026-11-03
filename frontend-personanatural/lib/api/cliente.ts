@@ -255,9 +255,21 @@ export interface DiagnosticoGuardado extends Diagnostico {
   fecha: string;
 }
 
+/** Gravamen que consta en el RUNT para el vehículo del borrador (GET /solicitudes/{id}/vehiculo/gravamen). */
+export interface GravamenRunt {
+  tienePrenda: boolean;
+  /** Solo llega si alguna parte de la solicitud ya validó su identidad. */
+  acreedor: string | null;
+  nitAcreedor: string | null;
+  aviso: "sin_gravamen" | null;
+}
+
+/** Qué se hace con la prenda: registrar una nueva, levantar la que tiene el vehículo o confirmar que no hay. */
+export type DecisionPrenda = "registrar" | "levantar" | "sin_prenda";
+
 export interface DatosSolicitud {
   comercial?: { valor: number | null } | null;
-  prenda?: { tiene: boolean; acreedor: string | null; nitAcreedor: string | null } | null;
+  prenda?: { tiene: boolean; acreedor: string | null; nitAcreedor: string | null; decision?: DecisionPrenda | null } | null;
   requisitos?: { transformaciones: string[]; observaciones: string | null } | null;
   diagnostico?: DiagnosticoGuardado | null;
 }
@@ -357,6 +369,56 @@ export interface FlagsTipo {
   permitePrendaComplementaria: boolean;
   requiereBiometria: boolean;
   requiereSolicitudPlaca: boolean;
+  /** El trámite lleva una secretaría de destino (traslado de cuenta). Ausente en definiciones anteriores. */
+  requiereDestino?: boolean;
+  /** El organismo lo elige el operador, no el RUNT: no se compara el organismo del RUNT con los habilitados. Ausente = false. */
+  organismoLoEligeOperador?: boolean;
+  /** Tipos de acción única sobre la prenda (inscribir o levantar): el servidor fija la decisión y el portal no la ofrece. Ausente = se elige. */
+  accionPrenda?: "registrar" | "levantar" | "" | (string & {});
+}
+
+/** Una opción de una declaración. `docCodes` son los soportes que esa opción pide (p. ej. los certificados de una causal). */
+export interface OpcionDeclaracion {
+  codigo: string;
+  etiqueta: string;
+  docCodes: string[];
+  exigeSoporte: boolean;
+}
+
+/**
+ * Dato propio del tipo (valor nuevo de color, nivel de blindaje, causal…) que el back describe en la definición. El portal
+ * tiene un solo renderer: pinta según `control`. El valor se guarda en `fieldValues[fieldKey]`; `fieldKeysExtra` son banderas que
+ * acompañan ("true" con valor, vacías sin él) y los soportes son adjuntos cuyo `tipo` es un `docCode`.
+ */
+export interface DeclaracionTipo {
+  clave: string;
+  /** `seleccion` (opciones en línea), `seleccion_catalogo` (opciones del catálogo `catalogo`) u `organismo_destino`. */
+  control: "seleccion" | "seleccion_catalogo" | "organismo_destino" | (string & {});
+  etiqueta: string;
+  obligatoria: boolean;
+  opciones: OpcionDeclaracion[];
+  fieldKey: string;
+  fieldKeysExtra: string[];
+  docCodeSoporte: string;
+  soporteObligatorio: boolean;
+  /** `colores`, `combustibles`, `carrocerias` o vacío. */
+  catalogo: "colores" | "combustibles" | "carrocerias" | "" | (string & {});
+  /** Trámite simultáneo (código de transformación) que activa la declaración; vacío o ausente = siempre aplica. */
+  activadaPor?: string;
+}
+
+/** Fila de un catálogo del vehículo (GET /catalogos/{colores|combustibles|carrocerias}). */
+export interface OpcionCatalogo {
+  codigo: string;
+  etiqueta: string;
+}
+
+/** Organismo elegible como destino (GET /organismos-destino). */
+export interface OrganismoDestino {
+  id: string;
+  nombre: string;
+  municipio?: string;
+  departamento?: string;
 }
 
 export interface DefinicionTipo {
@@ -371,6 +433,8 @@ export interface DefinicionTipo {
   actores: ActorRol[];
   documentos: DocumentoRequerido[];
   flags: FlagsTipo;
+  /** Datos propios del tipo. Ausente en definiciones o borradores anteriores a esta versión: se toma como vacío. */
+  declaraciones?: DeclaracionTipo[];
 }
 
 // ── Consultas públicas (POST /consultas/vehiculo y /consultas/persona) ───────────────────────────────────────────
@@ -675,6 +739,21 @@ export function crearCliente({ base = BASE_BFF, fetchImpl }: OpcionesCliente = {
       tiposTramite: (o?: OpcionesLlamada) => solicitar<TipoTramite[]>("GET", `/tipos-tramite${consultaOrganismo(o)}`, undefined, o),
       definicion: (code: string, o?: OpcionesLlamada) =>
         solicitar<DefinicionTipo>("GET", `/tipos-tramite/${encodeURIComponent(code)}/definicion${consultaOrganismo(o)}`, undefined, o),
+      /**
+       * Catálogo del vehículo para las declaraciones del tipo: `colores`, `combustibles` o `carrocerias`. `texto` filtra en el servidor
+       * (hasta 50 resultados); `solicitudId` es obligatorio en las carrocerías.
+       */
+      catalogoVehiculo: (nombre: string, filtro: { texto?: string; solicitudId?: string } = {}, o?: OpcionesLlamada) => {
+        const consulta = new URLSearchParams();
+        // Las carrocerías exigen la sesión del borrador: el servidor filtra por la clase RUNT de su vehículo.
+        if (filtro.solicitudId) consulta.set("solicitudId", filtro.solicitudId);
+        if (filtro.texto?.trim()) consulta.set("texto", filtro.texto.trim());
+        const sufijo = consulta.size > 0 ? `?${consulta.toString()}` : "";
+        return solicitar<OpcionCatalogo[]>("GET", `/catalogos/${encodeURIComponent(nombre)}${sufijo}`, undefined, o);
+      },
+      /** Búsqueda de la secretaría de destino por texto (traslado de cuenta): cualquier organismo operable. */
+      organismosDestino: (texto: string, limite = 20, o?: OpcionesLlamada) =>
+        solicitar<OrganismoDestino[]>("GET", `/organismos-destino?texto=${encodeURIComponent(texto)}&limite=${limite}`, undefined, o),
     },
     configuracion: {
       obtener: (o?: OpcionesLlamada) => solicitar<ConfiguracionPortal>("GET", "/configuracion", undefined, o),
@@ -708,6 +787,8 @@ export function crearCliente({ base = BASE_BFF, fetchImpl }: OpcionesCliente = {
       /** Preflight de requisitos del tipo (POST /solicitudes/{id}/diagnostico): lo guarda en el borrador y devuelve los resultados. */
       diagnosticar: (id: string, datos?: DiagnosticoRequest, o?: OpcionesLlamada) =>
         solicitar<Diagnostico>("POST", `/solicitudes/${encodeURIComponent(id)}/diagnostico`, datos, o),
+      /** Gravamen RUNT del vehículo del borrador, para precargar el acreedor de la prenda. 409 `vehiculo_no_definido`, 503 `proveedor_no_disponible`. */
+      gravamen: (id: string, o?: OpcionesLlamada) => solicitar<GravamenRunt>("GET", `/solicitudes/${encodeURIComponent(id)}/vehiculo/gravamen`, undefined, o),
       asignarOrganismo: (id: string, datos: { organismoId: string; version: number }, o?: OpcionesLlamada) =>
         solicitar<Solicitud>("PUT", `/solicitudes/${encodeURIComponent(id)}/organismo`, datos, o),
       /** Escrituras por paso: cada una lleva la `version` leída y devuelve el borrador completo (409 `conflicto_version` si ya cambió). */
@@ -717,7 +798,7 @@ export function crearCliente({ base = BASE_BFF, fetchImpl }: OpcionesCliente = {
         solicitar<Solicitud>("PUT", `/solicitudes/${encodeURIComponent(id)}/campos`, datos, o),
       guardarComercial: (
         id: string,
-        datos: { version: number; valorComercial?: number; prenda?: { tienePrenda: boolean; acreedor?: string; nitAcreedor?: string } },
+        datos: { version: number; valorComercial?: number; prenda?: { tienePrenda: boolean; decision?: DecisionPrenda; acreedor?: string; nitAcreedor?: string } },
         o?: OpcionesLlamada,
       ) => solicitar<Solicitud>("PUT", `/solicitudes/${encodeURIComponent(id)}/comercial`, datos, o),
       guardarRequisitos: (id: string, datos: { version: number; transformaciones?: string[]; observaciones?: string }, o?: OpcionesLlamada) =>
@@ -741,6 +822,8 @@ export function crearCliente({ base = BASE_BFF, fetchImpl }: OpcionesCliente = {
       /** Abre el canal con el código de la dirección. 422: `codigo_desconocido`, `organismo_no_operable` o `canal_apagado`. */
       entrada: (codigo: string, o?: OpcionesLlamada) => solicitar<EntradaPunto>("POST", "/punto/entrada", { codigo }, o),
       sesion: (o?: OpcionesLlamada) => solicitar<EntradaPunto>("GET", "/punto/sesion", undefined, o),
+      /** Tipos que el organismo de la sesión del punto ofrece (con tarifa vigente): misma forma que GET /tipos-tramite?organismoId=. */
+      tiposTramite: (o?: OpcionesLlamada) => solicitar<TipoTramite[]>("GET", "/punto/tipos-tramite", undefined, o),
       arranque: (datos: ArranquePuntoRequest, o?: OpcionesLlamada) => solicitar<ArranquePunto>("POST", "/punto/arranque", datos, o),
       /** Preflight del tipo en el punto (HU #14231/#14232). No crea solicitud. */
       diagnostico: (datos: DiagnosticoPuntoRequest, o?: OpcionesLlamada) =>

@@ -117,6 +117,8 @@ const GRUPO_DE_PENDIENTE: Readonly<Record<string, GrupoPaso>> = {
   prenda_acreedor_requerido: "requisitos",
   prenda_nit_requerido: "requisitos",
   documento_requerido: "requisitos",
+  // Una declaración del tipo sin responder (`referencia` = su clave): se atiende en la tarjeta de declaraciones del paso Requisitos.
+  declaracion_requerida: "requisitos",
   // El back de hoy aún lo pide al radicar (el cobro está fuera de esta entrega): no hay dónde corregirlo en el portal, así que
   // se atiende en el paso Envío, que lo muestra como un requisito que el portal no gestiona.
   comprobante_pago_requerido: "envio",

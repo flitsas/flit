@@ -3,6 +3,7 @@
 import type { ActorEstado, DefinicionTipo, Pendiente, Solicitud } from "@/lib/api/cliente";
 import { formatearPesos } from "@/lib/formato";
 import { documentoLegible } from "@/lib/tramite/actores";
+import { declaracionesDe } from "@/lib/tramite/declaraciones";
 import { grupoDePendiente, GRUPO_POR_SECCION, type GrupoPaso } from "@/lib/tramite/pasos";
 import { DOC_COMPROBANTE_PAGO, tamanoLegible, TRANSFORMACIONES } from "@/lib/tramite/requisitos";
 
@@ -114,13 +115,31 @@ export function armarResumen(definicion: DefinicionTipo, solicitud: Solicitud, v
     });
   }
 
+  const declaradas = declaracionesDe(definicion).filter((x) => (solicitud.fieldValues[x.fieldKey] ?? "").trim() !== "");
+  if (declaradas.length > 0) {
+    secciones.push({
+      id: "declaraciones",
+      titulo: "Declaraciones del trámite",
+      editar: "requisitos",
+      bloques: [
+        {
+          filas: declaradas.map((x) => {
+            const valorDeclarado = solicitud.fieldValues[x.fieldKey] ?? "";
+            return { etiqueta: x.etiqueta, valor: x.opciones.find((o) => o.codigo === valorDeclarado)?.etiqueta ?? valorDeclarado };
+          }),
+        },
+      ],
+    });
+  }
+
   const comercial: FilaResumen[] = [];
   const valor = solicitud.datos.comercial?.valor;
   if (valor !== undefined && valor !== null && valor > 0) comercial.push({ etiqueta: "Valor comercial", valor: formatearPesos(valor) });
   const prenda = solicitud.datos.prenda;
   if (prenda) {
-    comercial.push({ etiqueta: "Prenda", valor: prenda.tiene ? "Sí" : "No" });
-    if (prenda.tiene) {
+    const levanta = prenda.tiene && prenda.decision === "levantar";
+    comercial.push({ etiqueta: "Prenda", valor: levanta ? "Sí, se levantará" : prenda.tiene ? "Sí" : "No" });
+    if (prenda.tiene && !levanta) {
       comercial.push({ etiqueta: "Acreedor", valor: prenda.acreedor?.trim() || SIN_DATO });
       comercial.push({ etiqueta: "NIT del acreedor", valor: prenda.nitAcreedor?.trim() || SIN_DATO });
     }
@@ -179,6 +198,10 @@ export function textoPendiente(pendiente: Pendiente, definicion: DefinicionTipo)
     case "campo_requerido": {
       const campo = definicion.pasos.flatMap((p) => p.campos).find((c) => c.fieldKey === pendiente.referencia);
       return `Falta completar el campo: ${campo?.etiqueta || pendiente.referencia || "un dato del trámite"}.`;
+    }
+    case "declaracion_requerida": {
+      const declaracion = (definicion.declaraciones ?? []).find((x) => x.clave === pendiente.referencia);
+      return `Falta completar: ${declaracion?.etiqueta || pendiente.referencia || "un dato del trámite"}.`;
     }
     case "comprobante_pago_requerido":
       return "El servicio pide un requisito que este portal todavía no puede completar.";
