@@ -182,6 +182,27 @@ describe("consulta al pulsar Iniciar", () => {
     expect(screen.queryByRole("heading", { name: "Diagnóstico de requisitos previos" })).not.toBeInTheDocument();
   });
 
+  it("si el organismo lo elige el operador, el del RUNT no se valida: abre el borrador sin organismo para elegirlo en el trámite", async () => {
+    const eligeOperador = { ...definicion(), flags: { ...definicion().flags, organismoLoEligeOperador: true } };
+    const { llamadas } = await prepararInicio({
+      "GET /tipos-tramite/CAMBIO_COLOR/definicion": () => json(eligeOperador),
+      "POST /consultas/vehiculo": () => json({ ...VEHICULO, organismo: "Tránsito de Envigado" }),
+    });
+
+    await waitFor(() => expect(routerPush).toHaveBeenCalledWith("/tramite/CAMBIO_COLOR"));
+    const [post] = posts(llamadas);
+    expect(JSON.parse(String(post.init.body))).not.toHaveProperty("organismoId");
+  });
+
+  it("el organismo del RUNT solo se valida cuando no lo elige el operador (lógica)", () => {
+    const habilitados = [{ nombre: "Ciudad Uno" }];
+    expect(mensajeDeOrganismo("Tránsito de Envigado", habilitados)).toBe(mensajeOrganismoNoDisponible("Tránsito de Envigado"));
+    expect(mensajeDeOrganismo("Tránsito de Envigado", habilitados, false)).toBe(mensajeOrganismoNoDisponible("Tránsito de Envigado"));
+    expect(mensajeDeOrganismo("Tránsito de Envigado", habilitados, true)).toBeNull();
+    expect(mensajeDeOrganismo(null, habilitados, true)).toBeNull();
+    expect(mensajeDeOrganismo(null, habilitados)).not.toBeNull();
+  });
+
   it("si la placa no existe, avisa y no abre el borrador", async () => {
     const { llamadas, dialogo } = await prepararInicio({ "POST /consultas/vehiculo": () => json({ ...VEHICULO, existe: false }) });
 

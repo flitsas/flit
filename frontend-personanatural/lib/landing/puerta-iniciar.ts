@@ -1,42 +1,5 @@
-import type { TipoTramite } from "@/lib/api/cliente";
-
-/** Los siete tipos de la puerta Iniciar. El traspaso entra por familia o por código. */
-const CODIGOS = new Set([
-  "CAMBIO_COLOR",
-  "CAMBIO_CARROCERIA",
-  "CONVERSION_COMBUSTIBLE",
-  "DUPLICADO_PLACA",
-  "DUPLICADO_TARJETA",
-  "LEVANTAMIENTO_PRENDA",
-]);
-
-/**
- * Catálogo fijo del canal del punto (HU #14220). «Duplicado de matrícula» es la tarjeta
- * de propiedad (`DUPLICADO_TARJETA`). Distinto de {@link tiposDePuerta}, que filtra el catálogo del portal.
- */
-export interface TipoDelPunto {
-  codigo: string;
-  nombre: string;
-}
-
-export const tiposDelPunto: readonly TipoDelPunto[] = [
-  { codigo: "TRASPASO_STANDARD", nombre: "Traspaso" },
-  { codigo: "CAMBIO_COLOR", nombre: "Cambio de color" },
-  { codigo: "CAMBIO_CARROCERIA", nombre: "Cambio de carrocería" },
-  { codigo: "CONVERSION_COMBUSTIBLE", nombre: "Conversión de combustible" },
-  { codigo: "DUPLICADO_PLACA", nombre: "Duplicado de placa" },
-  { codigo: "DUPLICADO_TARJETA", nombre: "Duplicado de matrícula" },
-  { codigo: "LEVANTAMIENTO_PRENDA", nombre: "Levantar prenda" },
-];
-
-export function esTipoDePuerta(tipo: Pick<TipoTramite, "code" | "family">): boolean {
-  const code = tipo.code.toUpperCase();
-  return tipo.family.toUpperCase() === "TRASPASO" || code.startsWith("TRASPASO") || CODIGOS.has(code);
-}
-
-export function tiposDePuerta(tipos: readonly TipoTramite[]): TipoTramite[] {
-  return tipos.filter(esTipoDePuerta);
-}
+// Mensajes y reglas de organismo de la puerta «Iniciar». El catálogo de tipos de trámite ya no se fija aquí: lo configura la plataforma
+// por organismo y llega de GET /tipos-tramite (portal web y punto por igual).
 
 export const MENSAJE_PLACA_NO_ENCONTRADA = "No encontramos un vehículo con esa placa.";
 export const MENSAJE_RUNT_PUERTA = "No pudimos consultar el RUNT. Inténtalo de nuevo.";
@@ -84,9 +47,15 @@ export function organismoHabilitadoDelRunt<T extends { nombre: string; municipio
 
 /**
  * Mensaje para quedarse en el modal, o null si se puede abrir el trámite.
- * Sin organismo en la consulta tampoco se sigue: la persona no elige otro.
+ * Sin organismo en la consulta tampoco se sigue: la persona no elige otro. Si el tipo deja el organismo en manos del operador
+ * (`loEligeOperador`), el del RUNT no decide nada: nunca se rechaza y el organismo se elige en el trámite.
  */
-export function mensajeDeOrganismo(nombreRunt: string | null | undefined, organismos: readonly { nombre: string; municipio?: string }[]): string | null {
+export function mensajeDeOrganismo(
+  nombreRunt: string | null | undefined,
+  organismos: readonly { nombre: string; municipio?: string }[],
+  loEligeOperador = false,
+): string | null {
+  if (loEligeOperador) return null;
   const nombre = nombreRunt?.trim();
   if (!nombre) return MENSAJE_ORGANISMO_DESCONOCIDO;
   return organismoDelRuntHabilitado(nombre, organismos) ? null : mensajeOrganismoNoDisponible(nombre);

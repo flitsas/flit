@@ -5,6 +5,7 @@ import { AlertTriangle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { MobilityLoader } from "@/components/MobilityLoader";
 import { Badge, Btn, Card, Field, Row } from "@/components/tramite/piezas";
+import { TarjetaDestino } from "@/components/tramite/TarjetaDestino";
 import { useWizard, type PropsSeccion } from "@/components/tramite/ContextoWizard";
 import { ApiError, mensajeDe } from "@/lib/api/errores";
 import type { Diagnostico, VehiculoDelTramite } from "@/lib/api/cliente";
@@ -12,6 +13,7 @@ import { useBloqueo } from "@/lib/api/useBloqueo";
 import { fijarContexto } from "@/lib/tramite/contexto";
 import { formatearFechaHora } from "@/lib/formato";
 import { documentoLegible } from "@/lib/tramite/actores";
+import { faltaDestino } from "@/lib/tramite/declaraciones";
 import { consentimientoDeConsulta, datosTecnicos, entradaConsulta, filasDiagnostico, organismoElegido, TIPOS_PROPIETARIO, MENSAJE_ATENCION, MENSAJE_CONSULTANDO_VEHICULO, MENSAJE_RUNT_NO_RESPONDE, MENSAJE_SIN_VEHICULO } from "@/lib/tramite/diagnostico";
 
 interface Resultado {
@@ -22,6 +24,7 @@ interface Resultado {
 
 const MOTIVO_SIN_CONSULTA = "Verifica tu identidad y consulta el vehículo para continuar.";
 const MOTIVO_CON_PENDIENTES = "Resuelve los pendientes del diagnóstico para continuar.";
+const MOTIVO_SIN_DESTINO = "Elige la secretaría de destino para consultar el vehículo.";
 
 /** Mensaje de un error de la consulta: el RUNT caído tiene su texto propio; el resto, el del catálogo de errores. */
 function mensajeDeConsulta(error: unknown): string {
@@ -35,12 +38,14 @@ function mensajeDeConsulta(error: unknown): string {
  * devuelve el back; no hay indicadores escritos aquí. El propietario se muestra completo: nombre y documento.
  */
 export function ConsultaVehiculo({ activa, intentoAvance, onEstado }: PropsSeccion) {
-  const { cliente, solicitud, contexto, recargar, reportarError } = useWizard();
+  const { cliente, definicion, solicitud, contexto, recargar, reportarError } = useWizard();
   const bloqueo = useBloqueo();
   const [tipoPropietario, setTipoPropietario] = useState(contexto?.propietario?.tipo ?? "CC");
   const [numeroPropietario, setNumeroPropietario] = useState(contexto?.propietario?.numero ?? contexto?.cedula ?? "");
   const idAlerta = `diag-alerta-${solicitud.solicitudId}`;
   const hayOrganismo = organismoElegido(solicitud.organismoId);
+  // Traslado de cuenta: sin secretaría de destino no se consulta (se elige antes, como en FLIT 2).
+  const sinDestino = faltaDestino(definicion, solicitud.fieldValues);
   const porVin = Boolean(solicitud.vin);
 
   const entrada = entradaConsulta(solicitud, porVin ? undefined : { tipo: tipoPropietario, numero: numeroPropietario });
@@ -76,15 +81,15 @@ export function ConsultaVehiculo({ activa, intentoAvance, onEstado }: PropsSecci
   const mutar = consulta.mutate;
   const disparado = useRef<string | null>(null);
   useEffect(() => {
-    if (!activa || !hayOrganismo || !entrada || diagnostico || noExiste || consultando || enEspera) return;
+    if (!activa || !hayOrganismo || sinDestino || !entrada || diagnostico || noExiste || consultando || enEspera) return;
     if (disparado.current === firmaEntrada) return;
     disparado.current = firmaEntrada;
     mutar();
-  }, [activa, hayOrganismo, entrada, firmaEntrada, diagnostico, noExiste, consultando, enEspera, mutar]);
+  }, [activa, hayOrganismo, sinDestino, entrada, firmaEntrada, diagnostico, noExiste, consultando, enEspera, mutar]);
 
   const conBloqueos = diagnostico !== null && !diagnostico.puedeContinuar;
-  const completo = diagnostico?.puedeContinuar === true;
-  const motivo = completo ? undefined : conBloqueos ? MOTIVO_CON_PENDIENTES : MOTIVO_SIN_CONSULTA;
+  const completo = diagnostico?.puedeContinuar === true && !sinDestino;
+  const motivo = completo ? undefined : conBloqueos ? MOTIVO_CON_PENDIENTES : sinDestino ? MOTIVO_SIN_DESTINO : MOTIVO_SIN_CONSULTA;
   useEffect(() => {
     onEstado({ completo, bloqueo: motivo });
   }, [completo, motivo, onEstado]);
@@ -106,6 +111,7 @@ export function ConsultaVehiculo({ activa, intentoAvance, onEstado }: PropsSecci
 
   return (
     <>
+      <TarjetaDestino intentoAvance={intentoAvance} />
       <Card title="Diagnóstico de requisitos previos" id="diagnostico-requisitos">
         <div className="relative" aria-busy={consultando}>
           {!hayOrganismo && (
@@ -171,7 +177,7 @@ export function ConsultaVehiculo({ activa, intentoAvance, onEstado }: PropsSecci
           {intentoAvance > 0 && !completo && !conBloqueos && !consultando && (
             <p role="alert" className="mt-3 flex items-center gap-1 text-xs text-alert">
               <AlertTriangle aria-hidden className="h-3.5 w-3.5" />
-              {MOTIVO_SIN_CONSULTA}
+              {sinDestino ? MOTIVO_SIN_DESTINO : MOTIVO_SIN_CONSULTA}
             </p>
           )}
 

@@ -91,7 +91,9 @@ function ContenidoIniciar({ cliente, datos, urlPolitica, onCerrar, onSesion, onO
       });
       if (!vehiculo.existe) return { ok: false as const, mensaje: porPlaca ? MENSAJE_PLACA_NO_ENCONTRADA : "No encontramos el vehículo." };
       const organismos = comoLista<Organismo>(await cliente.catalogos.organismos());
-      const avisoOrganismo = mensajeDeOrganismo(vehiculo.organismo, organismos);
+      // Tipos cuyo organismo lo elige el operador: el del RUNT no se valida (se elige en el trámite). Si la definición no cargó, se pide aquí.
+      const flags = (definicion.data ?? (await cliente.catalogos.definicion(datos.tipoCodigo).catch(() => null)))?.flags;
+      const avisoOrganismo = mensajeDeOrganismo(vehiculo.organismo, organismos, flags?.organismoLoEligeOperador === true);
       if (avisoOrganismo) return { ok: false as const, mensaje: avisoOrganismo };
       const organismo = organismoHabilitadoDelRunt(vehiculo.organismo, organismos);
       const sesion = await cliente.sesiones.iniciar({
