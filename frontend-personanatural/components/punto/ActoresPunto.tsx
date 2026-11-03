@@ -1,6 +1,7 @@
 "use client";
 
-// HU #14238 — Paso Actores del canal OT: mismas fichas de vendedor/comprador que el portal PN + identidad in-situ e invitaciones.
+// HU #14238 — Paso Actores del canal OT: mismas fichas por rol que el portal PN (roles de la definición del tipo) + identidad in-situ e invitaciones.
+// El primer rol es quien radica en el punto (documento fijo, identidad in-situ); los demás roles son partes invitables.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Check, Copy } from "lucide-react";
 import { MobilityLoader } from "@/components/MobilityLoader";
@@ -34,27 +35,33 @@ const MENSAJE_NO_DUENO = "No puedes realizar este trámite porque no eres el pro
 const COLOR_OK = "#8CC63F";
 const COLOR_ERROR = "#C10000";
 
-const ROL_VENDEDOR: ActorRol = {
-  rol: "vendedor",
-  etiqueta: "Propietario (vendedor)",
-  min: 1,
-  max: 1,
-  biometria: true,
-  firma: false,
-  personaNaturalPermitida: true,
-};
+/** Roles de la lista que devuelve /punto/actores/abrir: { rol, etiqueta, esRadicante, minimo, maximo }. */
+interface RolAbrirPunto {
+  rol: string;
+  etiqueta: string;
+  esRadicante?: boolean;
+  minimo?: number;
+  maximo?: number;
+}
 
-const ROL_COMPRADOR: ActorRol = {
-  rol: "comprador",
-  etiqueta: "Comprador",
-  min: 1,
-  max: 1,
-  biometria: true,
-  firma: false,
-  personaNaturalPermitida: true,
-};
-
-const ROLES_PUNTO = [ROL_VENDEDOR, ROL_COMPRADOR];
+/** El primer rol (o el marcado esRadicante) es quien radica en el punto; los demás se invitan. */
+function rolesDeAbrir(roles: readonly RolAbrirPunto[], definicion: readonly ActorRol[]): ActorRol[] {
+  const base = roles.map((r): ActorRol => {
+    const def = definicion.find((d) => d.rol === r.rol);
+    return {
+      rol: r.rol,
+      etiqueta: r.etiqueta || def?.etiqueta || r.rol,
+      min: r.minimo ?? def?.min ?? 1,
+      max: r.maximo ?? def?.max ?? 1,
+      biometria: def?.biometria ?? true,
+      firma: def?.firma ?? false,
+      personaNaturalPermitida: def?.personaNaturalPermitida ?? true,
+    };
+  });
+  const iRad = roles.findIndex((r) => r.esRadicante);
+  if (iRad > 0) base.unshift(base.splice(iRad, 1)[0]);
+  return base;
+}
 
 type Fase =
   | { tipo: "cargando"; mensaje: string }
@@ -66,21 +73,21 @@ type Fase =
       version: number;
       estado: EstadoIdentidad;
       capturaUrlVendedor?: string | null;
-      invitacion?: ResultadoParte | null;
+      invitaciones: Record<string, ResultadoParte>;
     };
 
 function sesionActoresReutilizable(estado: EstadoIdentidad | null | undefined): boolean {
   return Boolean(estado?.solicitudId && estado.partes.length > 0);
 }
 
-function radicanteYaAprobado(estado: EstadoIdentidad): boolean {
-  return estado.partes.some((p) => p.parte === "vendedor" && p.estado === "aprobada");
+function radicanteYaAprobado(estado: EstadoIdentidad, rolRadicante: string): boolean {
+  return estado.partes.some((p) => p.parte === rolRadicante && p.estado === "aprobada");
 }
 
-function filasDesdeSolicitud(solicitud: Solicitud, documentoInicial: string): FilaActor[] {
-  const definicion = { actores: ROLES_PUNTO } as DefinicionTipo;
+function filasDesdeSolicitud(solicitud: Solicitud, documentoInicial: string, roles: readonly ActorRol[]): FilaActor[] {
+  const definicion = { actores: roles } as DefinicionTipo;
   const base = filasIniciales(definicion, solicitud.actores);
-  const conMinimos = ROLES_PUNTO.flatMap((rol) => {
+  const conMinimos = roles.flatMap((rol) => {
     const delRol = base.filter((f) => f.rol === rol.rol);
     if (delRol.length > 0) return delRol;
     return [filaVacia(rol.rol, 1)];
@@ -110,13 +117,16 @@ export function ActoresPunto({
 }) {
   const [fase, setFase] = useState<Fase>({ tipo: "cargando", mensaje: MENSAJE_VALIDANDO });
   const [filas, setFilas] = useState<FilaActor[]>([]);
+  const [roles, setRoles] = useState<ActorRol[]>([]);
   const [intentoAvance, setIntentoAvance] = useState(0);
-  const [copiado, setCopiado] = useState(false);
+  const [copiado, setCopiado] = useState<string | null>(null);
   const [versionEstado, setVersionEstado] = useState(0);
   const vivo = useRef(true);
   const generacion = useRef(0);
   const sondeo = useRef<ReturnType<typeof setInterval> | null>(null);
   const versionRef = useRef(0);
+  const rolesRef = useRef<ActorRol[]>([]);
+  const rolRadicanteRef = useRef("");
 
   const detenerSondeo = useCallback(() => {
     if (sondeo.current) {
@@ -135,7 +145,7 @@ export function ActoresPunto({
           return { ...prev, estado };
         });
         setVersionEstado((n) => n + 1);
-        if (radicanteYaAprobado(estado)) detenerSondeo();
+        if (radicanteYaAprobado(estado, rolRadicanteRef.current)) detenerSondeo();
       } catch {
         /* el sondeo reintenta */
       }
@@ -144,17 +154,17 @@ export function ActoresPunto({
   );
 
   const aplicarSolicitud = useCallback(
-    (solicitud: Solicitud, estado: EstadoIdentidad, capturaUrlVendedor?: string | null, invitacion?: ResultadoParte | null) => {
+    (solicitud: Solicitud, estado: EstadoIdentidad, capturaUrlVendedor?: string | null) => {
       onSolicitudLista?.(solicitud.solicitudId);
       versionRef.current = solicitud.version;
-      setFilas(filasDesdeSolicitud(solicitud, documento));
+      setFilas(filasDesdeSolicitud(solicitud, documento, rolesRef.current));
       setFase({
         tipo: "listo",
         solicitudId: solicitud.solicitudId,
         version: solicitud.version,
         estado,
         capturaUrlVendedor: capturaUrlVendedor ?? null,
-        invitacion: invitacion ?? null,
+        invitaciones: {},
       });
     },
     [documento, onSolicitudLista],
@@ -167,6 +177,16 @@ export function ActoresPunto({
       void (async () => {
         setFase({ tipo: "cargando", mensaje: MENSAJE_VALIDANDO });
         try {
+          // Los roles salen de la definición del tipo (misma fuente que el portal web).
+          const def = await cliente.catalogos.definicion(tipoCodigo);
+          if (!vivo.current || gen !== generacion.current) return;
+          const delTipo = def.actores.map((a) => ({ rol: a.rol, etiqueta: a.etiqueta, minimo: a.min, maximo: a.max }));
+          const lista = rolesDeAbrir(delTipo, def.actores);
+          if (lista.length === 0) throw new Error("El tipo de trámite no define actores.");
+          rolesRef.current = lista;
+          rolRadicanteRef.current = lista[0].rol;
+          setRoles(lista);
+
           try {
             const existente = await cliente.punto.actoresIdentidadEstado();
             if (!vivo.current || gen !== generacion.current) return;
@@ -175,7 +195,7 @@ export function ActoresPunto({
               if (!vivo.current || gen !== generacion.current) return;
               aplicarSolicitud(solicitud, existente);
               detenerSondeo();
-              if (!radicanteYaAprobado(existente)) {
+              if (!radicanteYaAprobado(existente, rolRadicanteRef.current)) {
                 sondeo.current = setInterval(() => {
                   void refrescarEstado(existente.solicitudId, gen);
                 }, 3000);
@@ -192,6 +212,12 @@ export function ActoresPunto({
             setFase({ tipo: "no_dueno", mensaje: abierto.message?.trim() || MENSAJE_NO_DUENO });
             return;
           }
+          if (abierto.roles && abierto.roles.length > 0) {
+            const delBack = rolesDeAbrir(abierto.roles, rolesRef.current);
+            rolesRef.current = delBack;
+            rolRadicanteRef.current = delBack[0].rol;
+            setRoles(delBack);
+          }
 
           const solicitud = await cliente.solicitudes.obtener(abierto.solicitudId);
           if (!vivo.current || gen !== generacion.current) return;
@@ -199,7 +225,7 @@ export function ActoresPunto({
           if (!vivo.current || gen !== generacion.current) return;
           aplicarSolicitud(solicitud, estado);
           detenerSondeo();
-          if (!radicanteYaAprobado(estado)) {
+          if (!radicanteYaAprobado(estado, rolRadicanteRef.current)) {
             sondeo.current = setInterval(() => {
               void refrescarEstado(abierto.solicitudId, gen);
             }, 3000);
@@ -219,7 +245,9 @@ export function ActoresPunto({
     };
   }, [cliente, placa, documento, tipoCodigo, onAviso, detenerSondeo, refrescarEstado, aplicarSolicitud]);
 
-  const radicanteOk = fase.tipo === "listo" && radicanteYaAprobado(fase.estado);
+  const rolRadicante: ActorRol | undefined = roles[0];
+  const invitables = roles.slice(1);
+  const radicanteOk = fase.tipo === "listo" && Boolean(rolRadicante) && radicanteYaAprobado(fase.estado, rolRadicante!.rol);
   const puedeContinuar = radicanteOk;
 
   const cambiarFila = (clave: string, patch: Partial<FilaActor>) => {
@@ -238,13 +266,13 @@ export function ActoresPunto({
     setFase((prev) => (prev.tipo === "listo" ? { ...prev, version: actualizada.version } : prev));
   };
 
-  const validarVendedor = async (): Promise<{ estado: string; capturaUrl?: string | null }> => {
-    if (fase.tipo !== "listo") throw new Error("Sesión no lista");
-    const fila = filas.find((f) => f.rol === "vendedor" && f.ordinal === 1);
-    if (!fila) throw new Error("Falta el vendedor");
+  const validarRadicante = async (): Promise<{ estado: string; capturaUrl?: string | null }> => {
+    if (fase.tipo !== "listo" || !rolRadicante) throw new Error("Sesión no lista");
+    const fila = filas.find((f) => f.rol === rolRadicante.rol && f.ordinal === 1);
+    if (!fila) throw new Error("Falta quien radica");
     const resultado = await cliente.punto.actoresIdentidadRadicante({
       solicitudId: fase.solicitudId,
-      parte: "vendedor",
+      parte: rolRadicante.rol,
       ordinal: 1,
       tipoDocumento: fila.tipoDocumento,
       documento: fila.numeroDocumento,
@@ -261,16 +289,16 @@ export function ActoresPunto({
     return resultado;
   };
 
-  const validarComprador = async (): Promise<{ estado: string; capturaUrl?: string | null }> => {
-    if (fase.tipo !== "listo") throw new Error("Sesión no lista");
-    if (!radicanteYaAprobado(fase.estado)) {
-      onAviso("Identifica al vendedor primero", "Primero debe quedar identificado quien radica en el punto.", "alerta");
+  const validarInvitado = async (rol: ActorRol): Promise<{ estado: string; capturaUrl?: string | null }> => {
+    if (fase.tipo !== "listo" || !rolRadicante) throw new Error("Sesión no lista");
+    if (!radicanteOk) {
+      onAviso(`Identifica a ${rolRadicante.etiqueta} primero`, "Primero debe quedar identificado quien radica en el punto.", "alerta");
       throw new Error("invitaciones_bloqueadas");
     }
-    const fila = filas.find((f) => f.rol === "comprador" && f.ordinal === 1);
-    if (!fila) throw new Error("Falta el comprador");
+    const fila = filas.find((f) => f.rol === rol.rol && f.ordinal === 1);
+    if (!fila) throw new Error(`Falta ${rol.etiqueta}`);
     const resultado = await cliente.punto.actoresInvitar({
-      parte: "comprador",
+      parte: rol.rol,
       ordinal: 1,
       tipoDocumento: fila.tipoDocumento,
       documento: fila.numeroDocumento,
@@ -280,17 +308,19 @@ export function ActoresPunto({
       direccion: fila.direccion,
       ciudad: fila.ciudad,
     });
-    setCopiado(false);
-    setFase((prev) => (prev.tipo === "listo" ? { ...prev, invitacion: resultado } : prev));
+    setCopiado(null);
+    setFase((prev) =>
+      prev.tipo === "listo" ? { ...prev, invitaciones: { ...prev.invitaciones, [rol.rol]: resultado } } : prev,
+    );
     await refrescarEstado(fase.solicitudId);
     onAviso("Correo enviado", "Se envió el enlace de validación al correo indicado. También puedes copiarlo.", "exito");
     return resultado;
   };
 
-  async function copiarEnlace(url: string) {
+  async function copiarEnlace(rol: string, url: string) {
     try {
       await navigator.clipboard.writeText(url);
-      setCopiado(true);
+      setCopiado(rol);
     } catch {
       onAviso("No se pudo copiar", "Copia el enlace manualmente desde la barra de direcciones del validador.", "alerta");
     }
@@ -354,8 +384,8 @@ export function ActoresPunto({
                 <p className="text-muted-foreground">
                   Quien radica en el punto quedó identificado y coincide con el propietario RUNT de la placa{" "}
                   <span className="font-medium text-foreground">{placa}</span> (documento{" "}
-                  <span className="font-medium text-foreground">{documento}</span>). Completa o invita al comprador, o
-                  continúa.
+                  <span className="font-medium text-foreground">{documento}</span>).{" "}
+                  {invitables.length > 0 ? "Completa o invita a las demás partes, o continúa." : "Continúa al siguiente paso."}
                 </p>
               </div>
             </div>
@@ -370,64 +400,75 @@ export function ActoresPunto({
             </p>
           )}
 
-          <Card title={ROL_VENDEDOR.etiqueta} id="punto-actores-vendedor">
-            {filas
-              .filter((f) => f.rol === "vendedor")
-              .map((fila) => (
-                <PersonaActor
-                  key={fila.clave}
-                  fila={fila}
-                  rol={ROL_VENDEDOR}
-                  esPropietario
-                  documentoFijo={Boolean(documento)}
-                  solicitudId={fase.solicitudId}
-                  cliente={cliente}
-                  mostrarErrores={intentoAvance > 0}
-                  estado={estadoDe(fila)}
-                  parte={parteDeFila(fila)}
-                  versionEstado={versionEstado}
-                  onCambio={(patch) => cambiarFila(fila.clave, patch)}
-                  guardarRol={() => guardarRol("vendedor")}
-                  refrescarIdentidad={() => void refrescarEstado(fase.solicitudId)}
-                  reportarError={(err) => onAviso("No pudimos continuar", mensajeDeFallo(err), "alerta")}
-                  onValidarIdentidad={validarVendedor}
-                  textoBotonValidar="Validar identidad en el punto"
-                />
-              ))}
-          </Card>
+          {rolRadicante && (
+            <Card title={rolRadicante.etiqueta} id={`punto-actores-${rolRadicante.rol}`}>
+              {filas
+                .filter((f) => f.rol === rolRadicante.rol)
+                .map((fila) => (
+                  <PersonaActor
+                    key={fila.clave}
+                    fila={fila}
+                    rol={rolRadicante}
+                    esPropietario
+                    documentoFijo={Boolean(documento)}
+                    solicitudId={fase.solicitudId}
+                    cliente={cliente}
+                    mostrarErrores={intentoAvance > 0}
+                    estado={estadoDe(fila)}
+                    parte={parteDeFila(fila)}
+                    versionEstado={versionEstado}
+                    onCambio={(patch) => cambiarFila(fila.clave, patch)}
+                    guardarRol={() => guardarRol(rolRadicante.rol)}
+                    refrescarIdentidad={() => void refrescarEstado(fase.solicitudId)}
+                    reportarError={(err) => onAviso("No pudimos continuar", mensajeDeFallo(err), "alerta")}
+                    onValidarIdentidad={validarRadicante}
+                    textoBotonValidar="Validar identidad en el punto"
+                  />
+                ))}
+            </Card>
+          )}
 
-          <Card title={ROL_COMPRADOR.etiqueta} id="punto-actores-comprador">
-            {filas
-              .filter((f) => f.rol === "comprador")
-              .map((fila) => (
-                <PersonaActor
-                  key={fila.clave}
-                  fila={fila}
-                  rol={ROL_COMPRADOR}
-                  solicitudId={fase.solicitudId}
-                  cliente={cliente}
-                  mostrarErrores={intentoAvance > 0}
-                  estado={estadoDe(fila)}
-                  parte={parteDeFila(fila)}
-                  versionEstado={versionEstado}
-                  onCambio={(patch) => cambiarFila(fila.clave, patch)}
-                  guardarRol={() => guardarRol("comprador")}
-                  refrescarIdentidad={() => void refrescarEstado(fase.solicitudId)}
-                  reportarError={(err) => onAviso("No pudimos invitar", mensajeDeFallo(err), "alerta")}
-                  onValidarIdentidad={validarComprador}
-                  textoBotonValidar="Enviar validación"
-                  puedeValidarIdentidad={radicanteOk}
-                />
-              ))}
-            {fase.invitacion?.capturaUrl && (
-              <div className="mt-4">
-                <button type="button" className={boton("flit", "min-h-11 px-6", "none")} onClick={() => void copiarEnlace(fase.invitacion!.capturaUrl!)}>
-                  <Copy aria-hidden className="mr-2 inline h-4 w-4" />
-                  {copiado ? "Copiado" : "Copiar enlace"}
-                </button>
-              </div>
-            )}
-          </Card>
+          {invitables.map((rolInv) => {
+            const invitacion = fase.invitaciones[rolInv.rol];
+            return (
+              <Card key={rolInv.rol} title={rolInv.etiqueta} id={`punto-actores-${rolInv.rol}`}>
+                {filas
+                  .filter((f) => f.rol === rolInv.rol)
+                  .map((fila) => (
+                    <PersonaActor
+                      key={fila.clave}
+                      fila={fila}
+                      rol={rolInv}
+                      solicitudId={fase.solicitudId}
+                      cliente={cliente}
+                      mostrarErrores={intentoAvance > 0}
+                      estado={estadoDe(fila)}
+                      parte={parteDeFila(fila)}
+                      versionEstado={versionEstado}
+                      onCambio={(patch) => cambiarFila(fila.clave, patch)}
+                      guardarRol={() => guardarRol(rolInv.rol)}
+                      refrescarIdentidad={() => void refrescarEstado(fase.solicitudId)}
+                      reportarError={(err) => onAviso("No pudimos invitar", mensajeDeFallo(err), "alerta")}
+                      onValidarIdentidad={() => validarInvitado(rolInv)}
+                      textoBotonValidar="Enviar validación"
+                      puedeValidarIdentidad={radicanteOk}
+                    />
+                  ))}
+                {invitacion?.capturaUrl && (
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      className={boton("flit", "min-h-11 px-6", "none")}
+                      onClick={() => void copiarEnlace(rolInv.rol, invitacion.capturaUrl!)}
+                    >
+                      <Copy aria-hidden className="mr-2 inline h-4 w-4" />
+                      {copiado === rolInv.rol ? "Copiado" : "Copiar enlace"}
+                    </button>
+                  </div>
+                )}
+              </Card>
+            );
+          })}
 
           <Nav
             onBack={onAtras}

@@ -582,6 +582,8 @@ export interface AbrirActoresPunto {
   message?: string | null;
   estado?: string;
   tipoTramiteCodigo?: string;
+  /** Roles del tipo para el punto (el radicante primero). Ausente en backends anteriores: se usa la definición del tipo. */
+  roles?: { rol: string; etiqueta: string; esRadicante?: boolean; minimo?: number; maximo?: number }[];
 }
 
 /** HU #14242 — matriz documental vigente del punto (FLIT 2.0). */
