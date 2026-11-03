@@ -6,7 +6,7 @@
 # Exporta ConnectionStrings__Core y FLIT_TEST_RABBITMQ a $GITHUB_ENV.
 # Los contenedores llevan etiquetas con el prefijo y el runner: --apagar borra todo lo del prefijo (también lo que
 # quedó a medias) y ci-limpiar-runner.sh, lo que un job cancelado dejó en el runner.
-# Uso: ci-servicios.sh <prefijo>      |  ci-servicios.sh --apagar <prefijo>
+# Uso: ci-servicios.sh <prefijo>  |  ci-servicios.sh --apagar <prefijo>  |  ci-servicios.sh <prefijo> --pg <carril>
 set -euo pipefail
 if [ "${1:-}" = --apagar ]; then
   ids=$(docker ps -aq --filter "label=flit-ci.prefijo=$2" 2>/dev/null || true)
@@ -31,8 +31,23 @@ puerto() { docker port "$1" "$2/tcp" | head -1 | sed 's/.*://'; }
 # Postgres sin durabilidad (fsync off): el reset de Integration reescribe ~150 tablas por prueba.
 # CI_PG_TMPFS=<tamaño> (pool de la 177): los datos en RAM, sin tocar el disco que comparten DEV y QA.
 pg_ram=(); [ -n "${CI_PG_TMPFS:-}" ] && pg_ram=(--tmpfs "/var/lib/postgresql/data:rw,size=$CI_PG_TMPFS")
-levantar "$p-pg" 5432 "${pg_ram[@]}" -e POSTGRES_DB=flit_dev -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
-  postgres:16-alpine -c fsync=off -c synchronous_commit=off -c full_page_writes=off -c max_connections=300
+levantar_pg() { # $1 nombre del contenedor
+  levantar "$1" 5432 "${pg_ram[@]}" -e POSTGRES_DB=flit_dev -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
+    postgres:16-alpine -c fsync=off -c synchronous_commit=off -c full_page_writes=off -c max_connections=300
+}
+
+# Un Postgres más para un carril del pool propio (ci-core-api-vps.sh). Un servidor por carril y no una base por
+# carril en el mismo servidor: el feed de sincronización usa pg_snapshot_xmin, que es de TODO el servidor, y las
+# transacciones abiertas de otro carril lo frenaban (ExternalSyncEndToEndTests, 2026-11-03). Imprime el puerto.
+if [ "${2:-}" = --pg ]; then
+  n="$p-pg-${3:?nombre del carril}"
+  levantar_pg "$n" >&2
+  for i in $(seq 1 60); do docker exec "$n" pg_isready -U postgres -d flit_dev >/dev/null 2>&1 && break; sleep 1; done
+  docker exec "$n" pg_isready -U postgres -d flit_dev >/dev/null || { echo "::error::Postgres $n no quedó listo" >&2; exit 1; }
+  puerto "$n" 5432; exit 0
+fi
+
+levantar_pg "$p-pg"
 # Usuario propio: guest solo entra desde loopback dentro del contenedor.
 levantar "$p-mq" 5672 -e RABBITMQ_DEFAULT_USER=flit -e RABBITMQ_DEFAULT_PASS=flit-prueba rabbitmq:4.1-alpine
 

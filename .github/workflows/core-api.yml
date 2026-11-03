@@ -204,7 +204,8 @@ jobs:
 
   # Pool propio de la 177 (input `runner` o variable RUNNER_CORE_API, p. ej. «flit-ci»): toda la suite en UN job.
   # La matriz de 6 jobs tumbó la 177 (2026-10-24: 7 compilaciones, 6 Postgres y 6 RabbitMQ a la vez, carga 336).
-  # Aquí se compila una vez, un solo Postgres en RAM y un RabbitMQ, y los carriles corren como procesos con tope
+  # Aquí se compila una vez, un Postgres en RAM por carril y un RabbitMQ (un vhost por carril), y los carriles
+  # corren como procesos con tope
   # (.github/scripts/ci-core-api-vps.sh). Un job a la vez por runner: cuántas suites corren juntas lo decide cuántos
   # runners tiene el grupo. Detalle y mediciones en docs/ci/estado-plan-ci-runners.md.
   pruebas-vps:
@@ -234,6 +235,7 @@ jobs:
         run: |
           echo "DOTNET_INSTALL_DIR=$RUNNER_TOOL_CACHE/dotnet" >> "$GITHUB_ENV"
           echo "CI_PG_CONTENEDOR=$CI_PREFIJO-pg" >> "$GITHUB_ENV"
+          echo "CI_MQ_CONTENEDOR=$CI_PREFIJO-mq" >> "$GITHUB_ENV"
           .github/scripts/ci-limpiar-runner.sh
 
       - name: Postgres (en RAM) y RabbitMQ de CI
@@ -273,6 +275,7 @@ jobs:
         env:
           PARALELO: ${{ vars.CI_VPS_PARALELO || '3' }}
           XUNIT_HILOS: ${{ vars.CI_VPS_XUNIT_HILOS || '2' }}
+          XUNIT_HILOS_ADMIN: ${{ vars.CI_VPS_XUNIT_HILOS_ADMIN || '4' }}
           COBERTURA: ${{ github.event_name == 'push' && '1' || '' }}
 
       # Lo mismo que «aot-publish» en GitHub, después de las pruebas para no competir con ellas por CPU.

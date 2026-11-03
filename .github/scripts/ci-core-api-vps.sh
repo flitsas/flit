@@ -8,11 +8,13 @@
 #   - como mucho $PARALELO a la vez (por defecto 3), del más largo al más corto;
 #   - cada proceso de pruebas con a lo sumo $XUNIT_HILOS hilos de xUnit;
 #   - con `nice`, para que el propio runner (Runner.Worker) no se quede sin CPU («lost communication»);
-#   - cada carril con SU copia de flit_dev (CREATE DATABASE … TEMPLATE), en el mismo Postgres: en GitHub cada carril
-#     tenía su máquina y su base, y aquí no deben pisarse. Las bases efímeras flit_it_* de Integration ya son por proceso.
+#   - cada carril con SU servidor Postgres (en RAM, con flit_dev ya migrada copiada) y SU vhost de RabbitMQ: en GitHub
+#     cada carril tiene su máquina, y aquí no deben pisarse (pg_snapshot_xmin es de todo el servidor).
 set -uo pipefail
 PARALELO=${PARALELO:-3}
 export XUNIT_HILOS=${XUNIT_HILOS:-2}
+# Admin es el camino crítico (2026-11-03: 26,6 min con 2 hilos, corriendo solo con la CPU ociosa desde el minuto 18).
+XUNIT_HILOS_ADMIN=${XUNIT_HILOS_ADMIN:-4}
 export MAX_PARALELO=${MAX_PARALELO:-2}   # proyectos simultáneos dentro del carril «resto»
 SHARDS=4
 base=${ConnectionStrings__Core:?falta ConnectionStrings__Core (ci-servicios.sh)}
@@ -21,22 +23,43 @@ pg_cont=${CI_PG_CONTENEDOR:?falta CI_PG_CONTENEDOR}
 # Orden: del carril más largo al más corto, para que el último en arrancar no alargue la corrida.
 carriles=(admin integration:0 integration:1 integration:2 integration:3 resto)
 
-psql_pg() { docker exec "$pg_cont" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -qAt -c "$1"; }
+mq=${FLIT_TEST_RABBITMQ:?falta FLIT_TEST_RABBITMQ (ci-servicios.sh)}
+mq_cont=${CI_MQ_CONTENEDOR:?falta CI_MQ_CONTENEDOR}
+prefijo=${CI_PREFIJO:?falta CI_PREFIJO}
+servicios=../../.github/scripts/ci-servicios.sh
+contar_tablas() { docker exec "$1" psql -U postgres -d flit_dev -qAt -c \
+  "SELECT count(*) FROM pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema')"; }
 
+# Cada carril con SU servidor Postgres (ver ci-servicios.sh --pg) y su vhost de RabbitMQ: en GitHub cada carril tiene
+# su máquina. flit_dev ya migrada se copia con sus roles (pg_dumpall --roles-only + pg_dump), sin volver a migrar.
+roles=$(docker exec "$pg_cont" pg_dumpall -U postgres --roles-only)
+dump="${RUNNER_TEMP:-/tmp}/flit_dev-$prefijo.dump"
+docker exec "$pg_cont" pg_dump -U postgres -Fc flit_dev > "$dump" || { echo "::error::pg_dump de flit_dev falló"; exit 1; }
+tablas=$(contar_tablas "$pg_cont")
+declare -A cadena_pg=() url_mq=()
 for c in "${carriles[@]}"; do
-  db="flit_ci_${c/:/_}"
-  psql_pg "DROP DATABASE IF EXISTS \"$db\" WITH (FORCE)" >/dev/null
-  psql_pg "CREATE DATABASE \"$db\" TEMPLATE flit_dev" >/dev/null || { echo "::error::No se pudo clonar flit_dev en $db"; exit 1; }
+  id=${c/:/-}; cont="$prefijo-pg-$id"
+  puerto=$("$servicios" "$prefijo" --pg "$id") || exit 1
+  echo "$roles" | docker exec -i "$cont" psql -U postgres -q >/dev/null 2>&1   # «postgres ya existe»: se ignora
+  docker exec -i "$cont" pg_restore -U postgres -d flit_dev < "$dump" 2> "TestResults-restore-$id.log" || true
+  t=$(contar_tablas "$cont")
+  [ "$t" = "$tablas" ] || { echo "::error::$cont quedó con $t tablas y flit_dev tiene $tablas"; cat "TestResults-restore-$id.log"; exit 1; }
+  cadena_pg[$c]=$(echo "$base" | sed -E "s/Port=[0-9]+/Port=$puerto/")
+  docker exec -u rabbitmq "$mq_cont" rabbitmqctl -q add_vhost "$id" >/dev/null
+  docker exec -u rabbitmq "$mq_cont" rabbitmqctl -q set_permissions -p "$id" flit '.*' '.*' '.*' >/dev/null
+  url_mq[$c]="${mq%/}/$id"
 done
-echo "Bases por carril creadas desde flit_dev. Paralelo=$PARALELO, hilos xUnit=$XUNIT_HILOS, resto=$MAX_PARALELO."
+rm -f "$dump"
+echo "Postgres y vhost por carril listos ($tablas tablas). Paralelo=$PARALELO, hilos xUnit=$XUNIT_HILOS (admin $XUNIT_HILOS_ADMIN), resto=$MAX_PARALELO."
 
 declare -A pid_de=() inicio=()
 rc=0; hechos=0
 correr() { # $1 = carril[:shard]
-  local c=$1 carril=${1%%:*} shard=0 db="flit_ci_${1/:/_}" log="TestResults-carril-${1/:/-}.log"
+  local c=$1 carril=${1%%:*} shard=0 log="TestResults-carril-${1/:/-}.log" hilos=$XUNIT_HILOS
   [ "$carril" != "$c" ] && shard=${c#*:}
+  [ "$carril" = admin ] && hilos=$XUNIT_HILOS_ADMIN
   (
-    export ConnectionStrings__Core="${base/Database=flit_dev/Database=$db}" SHARD=$shard SHARDS=$SHARDS
+    export ConnectionStrings__Core="${cadena_pg[$c]}" FLIT_TEST_RABBITMQ="${url_mq[$c]}" SHARD=$shard SHARDS=$SHARDS XUNIT_HILOS=$hilos
     exec nice -n 10 ../../.github/scripts/ci-core-api-pruebas.sh "$carril"
   ) > "$log" 2>&1 &
   pid_de[$c]=$!; inicio[$c]=$SECONDS
@@ -62,5 +85,4 @@ done
 # Defensa: si el bucle terminara antes de tiempo (un error de expansión lo corta sin abortar), no dar verde.
 if [ "$hechos" -ne ${#carriles[@]} ]; then echo "::error::Solo terminaron $hechos de ${#carriles[@]} carriles"; rc=1; fi
 
-for c in "${carriles[@]}"; do psql_pg "DROP DATABASE IF EXISTS \"flit_ci_${c/:/_}\" WITH (FORCE)" >/dev/null 2>&1 || true; done
-exit $rc
+exit $rc   # los contenedores por carril los borra «ci-servicios.sh --apagar» (etiqueta del prefijo)
