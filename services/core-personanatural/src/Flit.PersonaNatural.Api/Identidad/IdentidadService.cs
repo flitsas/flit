@@ -93,7 +93,7 @@ public sealed partial class IdentidadService(
     /// <c>validacion_en_curso</c> con el estado y no pide otra; con la aprobada de ESTA solicitud responde su estado; con una
     /// rechazada o vencida pide una nueva. Nunca mira lo que esa cédula validó en otro trámite.
     /// </summary>
-    public async Task<ResultadoIdentidad> SolicitarAsync(Guid solicitudId, string parte, short ordinal, CancellationToken ct)
+    public async Task<ResultadoIdentidad> SolicitarAsync(Guid solicitudId, string parte, short ordinal, CancellationToken ct, bool exponerCaptura = false)
     {
         var preparado = await PrepararAsync(solicitudId, parte, ordinal, ct).ConfigureAwait(false);
         if (preparado.Error is not null)
@@ -105,7 +105,7 @@ public sealed partial class IdentidadService(
         if (EstadosIdentidad.EnCurso(persona.ValidacionEstado))
             return ResultadoIdentidad.Error(StatusCodes.Status409Conflict, "validacion_en_curso", "Ya hay una validación en curso para esta persona.", persona.ValidacionEstado);
 
-        return await EnviarAsync(persona, rol, preparado.Datos!, nuevaValidacion: true, ct).ConfigureAwait(false);
+        return await EnviarAsync(persona, rol, preparado.Datos!, nuevaValidacion: true, ct, exponerCaptura: exponerCaptura).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -131,7 +131,7 @@ public sealed partial class IdentidadService(
     /// <c>POST /solicitudes/{id}/identidad/{parte}/reenviar</c>: reenvía el enlace de la misma validación (a un correo corregido
     /// si se indica). Tope: 5 reenvíos por parte y 60 s entre uno y otro (429). Una aprobada no se reenvía (409).
     /// </summary>
-    public async Task<ResultadoIdentidad> ReenviarAsync(Guid solicitudId, string parte, short ordinal, string? correoNuevo, CancellationToken ct)
+    public async Task<ResultadoIdentidad> ReenviarAsync(Guid solicitudId, string parte, short ordinal, string? correoNuevo, CancellationToken ct, bool exponerCaptura = false)
     {
         var preparado = await PrepararAsync(solicitudId, parte, ordinal, ct).ConfigureAwait(false);
         if (preparado.Error is not null)
@@ -161,7 +161,7 @@ public sealed partial class IdentidadService(
         {
             if (correoCorregido is not null)
                 await GuardarCorreoAsync(persona.SolicitudId, preparado.Datos!, correoCorregido, ct).ConfigureAwait(false);
-            return await EnviarAsync(persona, rol, preparado.Datos!, nuevaValidacion: false, ct).ConfigureAwait(false);
+            return await EnviarAsync(persona, rol, preparado.Datos!, nuevaValidacion: false, ct, exponerCaptura: exponerCaptura).ConfigureAwait(false);
         }
 
         string estado;
@@ -315,7 +315,8 @@ public sealed partial class IdentidadService(
         bool nuevaValidacion,
         CancellationToken ct,
         string origen = "ciudadano",
-        bool omitirEnvioCorreo = false)
+        bool omitirEnvioCorreo = false,
+        bool exponerCaptura = false)
     {
         try
         {
@@ -336,7 +337,7 @@ public sealed partial class IdentidadService(
 
             persona.ValidacionId = respuesta.ValidacionId;
             await espejo.CambiarAsync(persona, respuesta.Estado, origen, null, ct).ConfigureAwait(false);
-            return ResultadoIdentidad.Ok(rol, persona.Ordinal, persona.ValidacionEstado, capturaUrl: respuesta.CapturaUrl);
+            return ResultadoIdentidad.Ok(rol, persona.Ordinal, persona.ValidacionEstado, capturaUrl: exponerCaptura || omitirEnvioCorreo ? respuesta.CapturaUrl : null);
         }
         catch (FachadaException ex) when (ex.Codigo == ServicioNoDisponible)
         {

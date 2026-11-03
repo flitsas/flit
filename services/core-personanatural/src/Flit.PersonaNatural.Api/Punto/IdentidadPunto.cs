@@ -126,7 +126,7 @@ public sealed class IdentidadPuntoService(
             return ResultadoIdentidad.Error(ex.Estado, ex.Codigo, ex.Message);
         }
 
-        return await identidad.SolicitarAsync(solicitudId, parte, body.Ordinal ?? 1, ct).ConfigureAwait(false);
+        return await identidad.SolicitarAsync(solicitudId, parte, body.Ordinal ?? 1, ct, exponerCaptura: true).ConfigureAwait(false);
     }
 
     /// <summary>Valida token de sesión de solicitud y que el borrador sea del canal punto.</summary>

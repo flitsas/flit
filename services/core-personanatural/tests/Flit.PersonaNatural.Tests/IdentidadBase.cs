@@ -28,6 +28,9 @@ internal sealed class FachadaIdentidadFalsa : IFachadaIdentidad
 {
     public bool Caida;
     public bool PerderLaProximaRespuesta;
+
+    /// <summary>Como core-api desde la HU #14237: devuelve <c>captura_url</c> aunque el enlace salga por correo.</summary>
+    public bool CapturaSiempre;
     public int Llamadas;
     public int ValidacionesCreadas;
     public int Reenvios;
@@ -57,7 +60,7 @@ internal sealed class FachadaIdentidadFalsa : IFachadaIdentidad
             throw Caido();
         }
 
-        var url = omitirEnvioCorreo ? $"https://verify.test/captura/{id:N}" : null;
+        var url = omitirEnvioCorreo || CapturaSiempre ?$"https://verify.test/captura/{id:N}" : null;
         return Task.FromResult(new ValidacionDeFlit2(id, Estados[id], url));
     }
 
