@@ -42,7 +42,8 @@ internal sealed record DatosSolicitudPortal(decimal? ValorComercial, PrendaPorta
                 prenda = new PrendaPortal(
                     p.TryGetProperty("tiene", out var tiene) && tiene.ValueKind == JsonValueKind.True,
                     Texto(p, "acreedor"),
-                    Texto(p, "nitAcreedor"));
+                    Texto(p, "nitAcreedor"),
+                    Texto(p, "decision"));
             }
 
             string? observaciones = null;
@@ -61,7 +62,8 @@ internal sealed record DatosSolicitudPortal(decimal? ValorComercial, PrendaPorta
         e.TryGetProperty(nombre, out var v) && v.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(v.GetString()) ? v.GetString() : null;
 }
 
-internal sealed record PrendaPortal(bool Tiene, string? Acreedor, string? NitAcreedor);
+/// <summary><c>Decision</c> (HU 8): registrar | levantar | sin_prenda; null en un borrador anterior (se deduce de <c>Tiene</c>).</summary>
+internal sealed record PrendaPortal(bool Tiene, string? Acreedor, string? NitAcreedor, string? Decision = null);
 
 /// <summary>Lo que core-api necesita de una solicitud radicada para crear el trámite (HU #14050).</summary>
 internal sealed record SolicitudPortal(

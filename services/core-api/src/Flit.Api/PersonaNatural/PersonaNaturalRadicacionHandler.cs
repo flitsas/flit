@@ -9,6 +9,7 @@ using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.PersonaNatural;
 using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Microsoft.EntityFrameworkCore;
@@ -165,29 +166,54 @@ internal sealed class PersonaNaturalCreador(
             id = resumen.Id;
         }
 
-        var resultado = await CompletarAsync(id.Value, solicitud, oficina, creador, tipo.Familia, ct).ConfigureAwait(false);
+        var resultado = await CompletarAsync(id.Value, solicitud, oficina, creador, tipo, ct).ConfigureAwait(false);
         if (!resultado.Creada)
             await AnularAsync(id.Value, creador, resultado.Codigo ?? MotivosDeRechazo.Generico, ct).ConfigureAwait(false);
         return resultado;
     }
 
     /// <summary>Pasos posteriores a crear el borrador, hasta dejarlo completo. Todos idempotentes (upsert, dedup por sha256, reglas de FLIT 2).</summary>
-    private async Task<ResultadoRadicacionPortal> CompletarAsync(Guid id, SolicitudPortal s, ResolvedTransitOffice oficina, Guid creador, string familia, CancellationToken ct)
+    private async Task<ResultadoRadicacionPortal> CompletarAsync(Guid id, SolicitudPortal s, ResolvedTransitOffice oficina, Guid creador, TipoPersonaNatural tipo, CancellationToken ct)
     {
         var empresa = PlatformTenants.PersonaNatural;
 
         // 1. Campos del tipo, vehículo y documento del titular. En traspaso el titular es el vendedor;
         // en la familia OTROS (cambio de color, duplicado…) el titular se guarda como comprador.
-        var items = s.Campos.Select(c => new FieldValueInput(null, c.Key, c.Value, null)).ToList();
+        // Las declaraciones (valor nuevo, blindaje, causal, destino) viajan en los campos; las claves que FLIT 2 deriva de ellas
+        // (cambio_*, blindaje, transit_office_destino_*) las completa el servidor con las constantes del dominio (HU 4/10).
+        var valores = new Dictionary<string, string>(s.Campos, StringComparer.Ordinal);
+        foreach (var derivado in DeclaracionesPersonaNatural.Derivados(tipo.Perfil, tipo.Familia, tipo.Codigo, s.Campos))
+            valores[derivado.Key] = derivado.Value;
+        if (valores.TryGetValue(TransitOfficeFieldKeys.DestinoId, out var destinoTexto))
+        {
+            var destino = Guid.TryParse(destinoTexto, out var destinoId)
+                ? await db.TransitOffices.AsNoTracking().Where(o => o.Id == destinoId && o.IsActive).Select(o => new { o.Code, o.Name, o.CityName }).FirstOrDefaultAsync(ct).ConfigureAwait(false) // el grant de la empresa ya lo validó el BFF al guardar (RPC ListarOrganismosDestino, D3)
+                : null;
+            if (destino is null)
+                return Rechazo(MotivosDeRechazo.OrganismoDestinoInvalido);
+            valores[TransitOfficeFieldKeys.DestinoId] = destinoId.ToString();
+            valores[TransitOfficeFieldKeys.DestinoCode] = destino.Code;
+            valores[TransitOfficeFieldKeys.DestinoName] = destino.Name;
+            if (!string.IsNullOrWhiteSpace(destino.CityName))
+                valores[TransitOfficeFieldKeys.DestinoCity] = destino.CityName;
+        }
+
+        var items = valores.Select(c => new FieldValueInput(null, c.Key, c.Value, null)).ToList();
         if (s.Vin is not null)
             items.Add(new FieldValueInput(null, VehicleFieldKeys.Vin, s.Vin, null));
         if (s.Placa is not null)
             items.Add(new FieldValueInput(null, VehicleFieldKeys.Plate, s.Placa, null));
         var titular = TitularDeLaConsulta(s.Partes);
-        if (titular is not null && !string.IsNullOrWhiteSpace(titular.NumeroDocumento))
+        // En un leasing el titular que se captura es el locatario, no el propietario inscrito: si el diagnóstico ya dejó el
+        // documento del propietario, ese manda (HU 12).
+        var propietarioYaDado = tipo.Perfil.RequiresLessee && valores.TryGetValue("owner_document_number", out var docDado) && !string.IsNullOrWhiteSpace(docDado);
+        (string Tipo, string Numero)? propietario = propietarioYaDado
+            ? (valores.GetValueOrDefault("owner_document_type")?.Trim().ToUpperInvariant() ?? "CC", valores["owner_document_number"].Trim())
+            : titular is not null && !string.IsNullOrWhiteSpace(titular.NumeroDocumento) ? (titular.TipoDocumento.Trim().ToUpperInvariant(), titular.NumeroDocumento.Trim()) : null;
+        if (propietario is { } p0 && !propietarioYaDado)
         {
-            items.Add(new FieldValueInput(null, "owner_document_type", titular.TipoDocumento.Trim().ToUpperInvariant(), null));
-            items.Add(new FieldValueInput(null, "owner_document_number", titular.NumeroDocumento.Trim(), null));
+            items.Add(new FieldValueInput(null, "owner_document_type", p0.Tipo, null));
+            items.Add(new FieldValueInput(null, "owner_document_number", p0.Numero, null));
         }
 
         if (!string.IsNullOrWhiteSpace(s.Datos.Observaciones))
@@ -216,7 +242,7 @@ internal sealed class PersonaNaturalCreador(
         // La ficha del vehículo (marca, línea, color, carrocería…) la consulta el portal y el asistente de FLIT 2
         // la espera en los campos del trámite. No se corre el preflight: no cambia el estado ni mueve el organismo
         // que eligió el ciudadano. Si la consulta no responde, el borrador queda con lo que sí se guardó.
-        await SembrarVehiculoConsultadoAsync(id, empresa, familia, s, titular, items, ct).ConfigureAwait(false);
+        await SembrarVehiculoConsultadoAsync(id, empresa, tipo.Familia, s, propietario, items, ct).ConfigureAwait(false);
 
         // 2. Partes.
         db.ChangeTracker.Clear();
@@ -241,7 +267,7 @@ internal sealed class PersonaNaturalCreador(
         if (s.Datos.Prenda is { } p)
         {
             db.ChangeTracker.Clear();
-            var decision = p.Tiene ? PrendaDecision.Registrar : PrendaDecision.SinPrenda;
+            var decision = DecisionDePrenda(p, tipo.Codigo);
             var (_, errorPrenda) = await prenda.HandleAsync(id, empresa, new RegistrarPrendaInput(decision, p.Acreedor, p.NitAcreedor), creador, ct).ConfigureAwait(false);
             if (errorPrenda is not null)
                 return Rechazo(errorPrenda);
@@ -263,6 +289,25 @@ internal sealed class PersonaNaturalCreador(
         var fila = await db.Set<ProcedureInstance>().AsNoTracking().Where(x => x.Id == id)
             .Select(x => new { x.ReferenceNumber, x.Status }).FirstAsync(ct).ConfigureAwait(false);
         return ResultadoRadicacionPortal.Nueva(id, fila.ReferenceNumber, fila.Status);
+    }
+
+    /// <summary>
+    /// Decisión de prenda que se registra en FLIT 2 (HU 8). Un tipo de acción única la fija por sí mismo (levantar o inscribir);
+    /// en los demás manda la que declaró el ciudadano; un borrador anterior, sin decisión, se deduce de «tiene prenda».
+    /// </summary>
+    internal static string DecisionDePrenda(PrendaPortal p, string? codigoTipo)
+    {
+        ArgumentNullException.ThrowIfNull(p);
+        if (DefinicionPersonaNatural.AccionPrenda(codigoTipo) is { } fija)
+            return fija;
+
+        return p.Decision?.Trim().ToLowerInvariant() switch
+        {
+            PrendaDecision.Registrar => PrendaDecision.Registrar,
+            PrendaDecision.Levantar => PrendaDecision.Levantar,
+            PrendaDecision.SinPrenda => PrendaDecision.SinPrenda,
+            _ => p.Tiene ? PrendaDecision.Registrar : PrendaDecision.SinPrenda,
+        };
     }
 
     /// <summary>
@@ -352,7 +397,7 @@ internal sealed class PersonaNaturalCreador(
     }
 
     private async Task SembrarVehiculoConsultadoAsync(
-        Guid id, Guid empresa, string familia, SolicitudPortal s, ParteSolicitudPortal? titular, List<FieldValueInput> yaGuardados, CancellationToken ct)
+        Guid id, Guid empresa, string familia, SolicitudPortal s, (string Tipo, string Numero)? propietario, List<FieldValueInput> yaGuardados, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(s.Placa) && string.IsNullOrWhiteSpace(s.Vin))
             return;
@@ -365,10 +410,10 @@ internal sealed class PersonaNaturalCreador(
             valores[VehicleFieldKeys.Vin] = s.Vin;
         if (!string.IsNullOrWhiteSpace(s.Placa))
             valores[VehicleFieldKeys.Plate] = s.Placa;
-        if (titular is not null && !string.IsNullOrWhiteSpace(titular.NumeroDocumento))
+        if (propietario is { } dueno)
         {
-            valores["owner_document_type"] = titular.TipoDocumento.Trim().ToUpperInvariant();
-            valores["owner_document_number"] = titular.NumeroDocumento.Trim();
+            valores["owner_document_type"] = dueno.Tipo;
+            valores["owner_document_number"] = dueno.Numero;
         }
 
         ConsultationResult resultado;
@@ -469,6 +514,7 @@ internal static class MotivosDeRechazo
     public const string OrganismoNoHabilitado = "organismo_no_habilitado";
     public const string ParteNoSoportada = "parte_no_soportada";
     public const string IdentidadNoValidada = "identidad_no_validada";
+    public const string OrganismoDestinoInvalido = "organismo_destino_invalido";
     public const string Generico = "no_fue_posible_crear";
 
     private static readonly Dictionary<string, string> Motivos = new(StringComparer.Ordinal)
@@ -481,6 +527,7 @@ internal static class MotivosDeRechazo
         [SubmitGate.OrganismoRequerido] = "El organismo de tránsito elegido ya no recibe trámites del portal. Elija otro organismo.",
         [ParteNoSoportada] = "El trámite incluye una parte que el portal todavía no puede radicar.",
         [IdentidadNoValidada] = "Falta validar la identidad de alguna de las partes del trámite.",
+        [OrganismoDestinoInvalido] = "El organismo de destino elegido ya no está disponible. Elija otro organismo.",
         [SubmitGate.IdentidadNoAprobada] = "Falta validar la identidad de alguna de las partes del trámite.",
         [SubmitGate.DocumentosIncompletos] = "Faltan documentos obligatorios del trámite.",
         ["adjunto_invalido"] = "Alguno de los documentos adjuntos no se pudo registrar. Cárguelo de nuevo.",
