@@ -198,13 +198,13 @@ internal sealed class PersonaNaturalConfigRepository(
     // ── Soporte ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Candidatos (elegibles) y los habilitados que dejaron de serlo. El conteo de organismos con tarifa lo llena quien llama
+    /// Tipos habilitados en FLIT 2 (activos, publicados y con el wizard encendido); los que dejan de serlo desaparecen. El conteo de organismos con tarifa lo llena quien llama
     /// (<c>0</c> aquí).
     /// </summary>
     private async Task<List<TipoPnView>> TiposAsync(CancellationToken ct)
     {
         var habilitados = await portal.TiposHabilitadosAsync(ct).ConfigureAwait(false);
-        var tipos = await tiposReader.ListarParaAdministracionAsync(habilitados, ct).ConfigureAwait(false);
+        var tipos = await tiposReader.ListarParaAdministracionAsync(ct).ConfigureAwait(false);
         // Un no elegible solo sale Habilitado si conserva una fila vieja en la lista blanca (para poder apagarlo); nunca es ofrecible.
         return tipos
             .Select(t => new TipoPnView(

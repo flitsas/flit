@@ -234,14 +234,13 @@ public sealed class ConfiguracionPnTests(WebApplicationFactory<Program> factory)
 
         var antes = await e.Tipos.ListarAsync(ct);
         antes.Single(t => t.Id == e.TipoElegible).Should().Match<TipoPnView>(t => t.Elegible && !t.Habilitado && !t.Ofrecible);
-        // HU #14072: la lista trae TODOS los publicados; los no elegibles salen con su motivo y no se pueden habilitar.
-        antes.Single(t => t.Id == e.TipoApagado).Should().Match<TipoPnView>(
-            t => !t.Elegible && !t.Habilitado && !t.Ofrecible && t.Motivo.Contains("no está habilitado en FLIT 2"));
-        antes.Single(t => t.Id == e.TipoNoElegiblePerfil).Should().Match<TipoPnView>(
-            t => !t.Elegible && !t.Habilitado && !t.Ofrecible && t.Motivo == "El tipo exige leasing o locatario.");
+        // HU 2: la tabla trae SOLO los tipos habilitados en FLIT 2 (activos, publicados y con el wizard encendido).
+        antes.Should().NotContain(t => t.Id == e.TipoApagado, "un tipo sin wizard encendido en FLIT 2 no aparece");
+        // HU 1: ya no hay reglas de exclusión: un tipo con leasing en el perfil es elegible.
+        antes.Single(t => t.Id == e.TipoNoElegiblePerfil).Should().Match<TipoPnView>(t => t.Elegible && !t.Habilitado && !t.Ofrecible && t.Motivo == "");
         antes.Should().NotContain(t => t.Id == e.TipoArchivado || t.Id == e.TipoBorrador, "archivados y borradores no se listan");
 
-        (await e.Tipos.EstablecerAsync(e.TipoNoElegiblePerfil, true, e.Actor, ct)).Should().Be(ConfiguracionPnErrores.TipoNoElegible);
+        (await e.Tipos.EstablecerAsync(e.TipoNoElegiblePerfil, true, e.Actor, ct)).Should().BeNull("ya no hay reglas de exclusión");
         (await e.Tipos.EstablecerAsync(e.TipoNoElegiblePerfil, false, e.Actor, ct)).Should().BeNull("apagar siempre se puede");
         (await e.Tipos.EstablecerAsync(e.TipoApagado, true, e.Actor, ct)).Should().Be(ConfiguracionPnErrores.TipoNoElegible);
         (await e.Tipos.EstablecerAsync(Guid.NewGuid(), true, e.Actor, ct)).Should().Be(ConfiguracionPnErrores.TipoNoElegible, "no es candidato");
@@ -259,12 +258,11 @@ public sealed class ConfiguracionPnTests(WebApplicationFactory<Program> factory)
         despues.Ofrecible.Should().BeTrue();
         despues.OrganismosConTarifaVigente.Should().BeGreaterThanOrEqualTo(1);
 
-        // Un tipo habilitado que deja de ser elegible sigue en la lista (para apagarlo) pero ya no es ofrecible.
+        // HU 2: un tipo habilitado que pierde el wizard en FLIT 2 desaparece de la tabla (y el portal deja de ofrecerlo).
         await e.Db.Database.ExecuteSqlInterpolatedAsync($"UPDATE tramites.procedure_types SET wizard_enabled = false WHERE id = {e.TipoElegible}", ct);
-        var sinWizard = (await e.Tipos.ListarAsync(ct)).Single(t => t.Id == e.TipoElegible);
-        sinWizard.Should().Match<TipoPnView>(t => t.Habilitado && !t.Elegible && !t.Ofrecible);
+        (await e.Tipos.ListarAsync(ct)).Should().NotContain(t => t.Id == e.TipoElegible);
         (await e.Tipos.EstablecerAsync(e.TipoElegible, false, e.Actor, ct)).Should().BeNull("apagar siempre se puede");
-        (await e.Tipos.ListarAsync(ct)).Single(t => t.Id == e.TipoElegible).Should().Match<TipoPnView>(t => !t.Habilitado && !t.Elegible && !t.Ofrecible);
+        (await e.Portal.TiposHabilitadosAsync(ct)).Should().NotContain(e.TipoElegible, "apagarlo lo saca de la lista blanca aunque ya no se vea");
     }
 
     // ── Soporte ───────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -279,8 +277,7 @@ public sealed class ConfiguracionPnTests(WebApplicationFactory<Program> factory)
         (await e.Tipos.ListarAsync(ct)).Single(t => t.Id == e.TipoElegible).ActivoEnFlit.Should().BeTrue();
         await e.Db.Database.ExecuteSqlInterpolatedAsync($"UPDATE tramites.procedure_types SET is_active = false WHERE id = {e.TipoElegible}", ct);
 
-        (await e.Tipos.ListarAsync(ct)).Single(t => t.Id == e.TipoElegible)
-            .Should().Match<TipoPnView>(t => t.Habilitado && !t.ActivoEnFlit && !t.Elegible && !t.Ofrecible);
+        (await e.Tipos.ListarAsync(ct)).Should().NotContain(t => t.Id == e.TipoElegible, "HU 2: un tipo inactivo en FLIT 2 ya no se lista");
         (await e.Tipos.EstablecerAsync(e.TipoElegible, false, e.Actor, ct)).Should().BeNull("apagar siempre se puede");
         (await e.Tipos.ListarAsync(ct)).Should().NotContain(t => t.Id == e.TipoElegible, "ya no estÃ¡ habilitado ni activo");
     }
