@@ -88,6 +88,21 @@ public static class PuntoEndpoints
             return Results.Json(new { organismoId = organismo.OrganismoId, codigo = organismo.Codigo, nombre = organismo.Nombre }, Json);
         });
 
+        // HU 13 — tipos que el selector del punto ofrece: la MISMA lista del portal web (GET /tipos-tramite?organismoId=), calculada con
+        // el organismo de la cookie: tipo elegible, habilitado por el superadministrador y con tarifa vigente en ese organismo.
+        grupo.MapGet("/tipos-tramite", async (HttpContext http, IFachadaTramites catalogo, CancellationToken ct) =>
+        {
+            var sesion = Sesion(http);
+            try
+            {
+                return Results.Json(await catalogo.ListarTiposAsync(sesion.OrganismoId.ToString(), ct).ConfigureAwait(false), Json);
+            }
+            catch (FachadaException ex)
+            {
+                return SesionEndpoints.Problema(ex.EstadoHttp, "No disponible", ex.Message, ex.Codigo);
+            }
+        }).AddEndpointFilter(ConSesionDePunto);
+
         grupo.MapGet("/sesion", (HttpContext http, CookiePunto cookie) =>
         {
             var organismo = cookie.Leer(http);

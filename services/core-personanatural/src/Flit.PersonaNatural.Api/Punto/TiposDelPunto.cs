@@ -1,23 +1,11 @@
 namespace Flit.PersonaNatural.Api.Punto;
 
 /// <summary>
-/// Tipos que el canal del punto admite (HU #14219). La misma regla que iba a vivir en
-/// <c>frontend-personanatural/lib/landing/puerta-iniciar.ts</c>: traspaso (familia o código <c>TRASPASO</c>) y los códigos
-/// de transformación, duplicado y levantamiento. Un código de la familia TRASPASO (p. ej. <c>TRASPASO_STANDARD</c>) entra
-/// por la familia, no por estar escrito aquí.
+/// Mensajes y utilidades del canal del punto. HU 13: ya no hay lista fija de tipos; el arranque y el selector usan el catálogo
+/// del organismo de la sesión (tipo elegible, habilitado y con tarifa vigente ahí), igual que el portal web.
 /// </summary>
 public static class TiposDelPunto
 {
-    public static readonly string[] CodigosExactos =
-    [
-        "CAMBIO_COLOR",
-        "CAMBIO_CARROCERIA",
-        "CONVERSION_COMBUSTIBLE",
-        "DUPLICADO_PLACA",
-        "DUPLICADO_TARJETA",
-        "LEVANTAMIENTO_PRENDA",
-    ];
-
     public const string PlacaInexistente = "No encontramos un vehículo con esa placa.";
     public const string OtroOrganismo = "Este trámite se hace en el organismo que tiene el vehículo.";
     public const string RuntCaido = "No pudimos consultar el RUNT. Inténtalo de nuevo.";
@@ -27,17 +15,6 @@ public static class TiposDelPunto
     /// <summary>Campo que el mapper del RUNT de FLIT 2 escribe (<c>KyverumRuntVehicleResultMapper</c>). El portal lo compara contra el catálogo de grants; el punto lo compara con la sesión.</summary>
     public const string CampoOrganismoRunt = "transit_office_name";
 
-    public static bool Admite(string? codigo, string? familia)
-    {
-        var c = (codigo ?? string.Empty).Trim();
-        if (c.Length == 0)
-            return false;
-        if (c.Equals("TRASPASO", StringComparison.OrdinalIgnoreCase))
-            return true;
-        if (CodigosExactos.Contains(c, StringComparer.OrdinalIgnoreCase))
-            return true;
-        return string.Equals((familia ?? string.Empty).Trim(), "TRASPASO", StringComparison.OrdinalIgnoreCase);
-    }
 
     /// <summary>
     /// El nombre que devolvió el RUNT es el de la sesión (o su código público). Sin nombre no hay contra qué comparar:

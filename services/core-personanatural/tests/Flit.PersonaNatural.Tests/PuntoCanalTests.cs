@@ -97,7 +97,7 @@ public sealed class PuntoCanalTests
     public async Task Arranque_PlacaConEspacios_SeNormalizaYSigue()
     {
         var runt = RuntCon("tránsito de prueba");
-        var resultado = await Arranque(runt, new OrganismoPunto(OrganismoId, Codigo, Nombre), " abc 123 ", "1098765432", "traspaso");
+        var resultado = await Arranque(runt, new OrganismoPunto(OrganismoId, Codigo, Nombre), " abc 123 ", "1098765432", "TRASPASO_STANDARD");
 
         resultado.Should().BeOfType<ResultadoArranque.Seguir>();
         runt.LlamadasVehiculo.Single().Placa.Should().Be("ABC123");
@@ -140,6 +140,121 @@ public sealed class PuntoCanalTests
 
         resultado.Should().BeOfType<ResultadoArranque.Detener>().Which.Mensaje.Should().Be("El tipo de trámite no está habilitado en FLIT 2.");
         runt.LlamadasVehiculo.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task HU13_Arranque_UsaElCatalogoDelOrganismoDeLaSesion_YUnTipoFueraDelCatalogoNoSigue()
+    {
+        var runt = RuntCon(Nombre);
+        var fachada = FachadaCon(new TipoTramiteDto("BLINDAJE", "Blindaje", "OTROS", 1, true, string.Empty));
+
+        // Un tipo que antes no estaba en la lista fija ahora entra por el catálogo (y se pide con el organismo de la sesión).
+        var seguir = await new ArranquePuntoService(runt, fachada).EvaluarAsync(Sesion(), "ABC123", "1098765432", "BLINDAJE", TestContext.Current.CancellationToken);
+        seguir.Should().BeOfType<ResultadoArranque.Seguir>();
+        fachada.UltimoOrganismo.Should().Be(OrganismoId.ToString());
+
+        // Uno que el catálogo no ofrece en ese organismo (sin tarifa, no elegible…) se detiene sin consultar el RUNT.
+        var otroRunt = RuntCon(Nombre);
+        var fuera = await new ArranquePuntoService(otroRunt, fachada).EvaluarAsync(Sesion(), "ABC123", "1098765432", "CAMBIO_COLOR", TestContext.Current.CancellationToken);
+        fuera.Should().BeOfType<ResultadoArranque.Detener>().Which.Mensaje.Should().Be(TiposDelPunto.TipoNoDisponible);
+        otroRunt.LlamadasVehiculo.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task HU13_Arranque_ElOrganismoDelRuntNoSeCompara_CuandoLoEligeElOperador()
+    {
+        var runt = RuntCon("OT DE OTRO MUNICIPIO");
+        var fachada = FachadaCon(new TipoTramiteDto("MATRICULA_NUEVA", "Matrícula", "MATRICULAS", 1, true, string.Empty), new TipoTramiteDto("CAMBIO_COLOR", "Color", "OTROS", 1, true, string.Empty));
+        var definiciones = new FachadaDefinicionesFalsa();
+        definiciones.PorCodigo["MATRICULA_NUEVA"] = DefinicionesDePrueba.UnTitular("MATRICULA_NUEVA") with
+        {
+            Flags = new FlagsTipoDto("VIN", false, false, false, false, true, true, false, OrganismoLoEligeOperador: true),
+        };
+        definiciones.PorCodigo["CAMBIO_COLOR"] = DefinicionesDePrueba.UnTitular();
+        var servicio = new ArranquePuntoService(
+            runt, fachada, new DefinicionesService(definiciones, new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
+                Microsoft.Extensions.Options.Options.Create(new CotizacionesOptions())));
+
+        var elige = await servicio.EvaluarAsync(Sesion(), "ABC123", "1098765432", "MATRICULA_NUEVA", TestContext.Current.CancellationToken);
+        var impone = await servicio.EvaluarAsync(Sesion(), "ABC123", "1098765432", "CAMBIO_COLOR", TestContext.Current.CancellationToken);
+
+        elige.Should().BeOfType<ResultadoArranque.Seguir>("el organismo de la sesión ES el elegido");
+        impone.Should().BeOfType<ResultadoArranque.Detener>().Which.Mensaje.Should().Be(TiposDelPunto.OtroOrganismo);
+    }
+
+    [Fact]
+    public async Task HU13_TiposDelPunto_ResponderLaMismaFormaDelPortalWeb_ConElOrganismoDeLaCookie_YSinSesionSon401()
+    {
+        var fachada = FachadaCon(new TipoTramiteDto("CAMBIO_COLOR", "Color", "OTROS", 1, true, string.Empty), new TipoTramiteDto("BLINDAJE", "Blindaje", "OTROS", 1, true, string.Empty));
+        await using var host = Host(Ok(), fachada: fachada);
+
+        (await host.GetAsync("/tipos-tramite", null)).Status.Should().Be(HttpStatusCode.Unauthorized);
+
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+        var r = await host.GetAsync("/tipos-tramite", entrada.Cookie);
+
+        r.Status.Should().Be(HttpStatusCode.OK);
+        r.Json.EnumerateArray().Select(t => t.GetProperty("code").GetString()).Should().Equal("CAMBIO_COLOR", "BLINDAJE");
+        r.Json[0].EnumerateObject().Select(p => p.Name).Should().Equal("code", "name", "family", "version", "disponible", "motivoNoDisponible");
+        fachada.UltimoOrganismo.Should().Be(OrganismoId.ToString());
+    }
+
+    [Fact]
+    public async Task HU13_Completitud_ExigeLasDeclaracionesYLosDocumentosDeLoElegido()
+    {
+        var defs = DefsTraspaso();
+        defs.PorCodigo["TRASPASO_STANDARD"] = DefinicionesDePrueba.Traspaso() with
+        {
+            Documentos = [new DocumentoRequeridoDto("certificado_blindaje", "Certificado de blindaje", true, 1, string.Empty, string.Empty)],
+            Flags = new FlagsTipoDto("PLATE", false, false, false, false, true, false),
+            Declaraciones =
+            [
+                new DeclaracionTipoDto(
+                    "blindaje", "seleccion", "Blindaje", true,
+                    [new OpcionDeclaracionDto("NIVEL_1", "Blindaje nivel 1", ["certificado_blindaje"], true)],
+                    "blindaje_nivel", ["blindaje"], "certificado_blindaje", true, string.Empty, string.Empty),
+            ],
+        };
+
+        async Task<JsonElement> Evaluar(BorradorGuardadoFalso guardado)
+        {
+            await using var host = Host(Ok(), definiciones: defs, guardado: guardado);
+            var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+            return (await host.PostAsync("/requisitos/completitud", new { tipoCodigo = "TRASPASO_STANDARD" }, entrada.Cookie, guardado.Token)).Json;
+        }
+
+        // Sin declarar nada: falta la declaración (con el nombre legible) y el certificado NO se repite desde la matriz.
+        var sin = await Evaluar(BorradorGuardado());
+        sin.GetProperty("puedeContinuarPago").GetBoolean().Should().BeFalse();
+        sin.GetProperty("pendientes").EnumerateArray().Select(p => (p.GetProperty("codigo").GetString(), p.GetProperty("nombre").GetString()))
+            .Should().Equal(("blindaje", "Blindaje"));
+
+        // Declarada, sin certificado: pide el documento por nombre.
+        var sinCert = await Evaluar(BorradorGuardado(campos: new() { ["blindaje_nivel"] = "NIVEL_1" }));
+        sinCert.GetProperty("pendientes").EnumerateArray().Select(p => (p.GetProperty("codigo").GetString(), p.GetProperty("nombre").GetString()))
+            .Should().Equal(("certificado_blindaje", "Certificado de blindaje"));
+
+        // Declarada y con certificado: el gate abre.
+        var completo = await Evaluar(BorradorGuardado(docs: ["certificado_blindaje"], campos: new() { ["blindaje_nivel"] = "NIVEL_1" }));
+        completo.GetProperty("puedeContinuarPago").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task HU13_Completitud_ConDecisionDePrenda_PideElDocumentoDeLaDecision()
+    {
+        var defs = DefsTraspaso();
+        defs.PorCodigo["TRASPASO_STANDARD"] = DefinicionesDePrueba.Traspaso() with
+        {
+            Documentos = [],
+            Flags = new FlagsTipoDto("PLATE", false, true, false, false, true, false),
+        };
+        var sinDoc = BorradorGuardado(prendaDatos: new PrendaDatos(true, "Banco", "900123456", "levantar"));
+        await using var host = Host(Ok(), definiciones: defs, guardado: sinDoc);
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+
+        var r = await host.PostAsync("/requisitos/completitud", new { tipoCodigo = "TRASPASO_STANDARD" }, entrada.Cookie, sinDoc.Token);
+
+        r.Json.GetProperty("pendientes").EnumerateArray().Select(p => p.GetProperty("codigo").GetString()).Should().Equal("prenda_levantamiento");
     }
 
     [Fact]
@@ -647,7 +762,9 @@ public sealed class PuntoCanalTests
         bool prenda = false,
         string[]? transformaciones = null,
         Guid? organismo = null,
-        bool esPunto = true) =>
+        bool esPunto = true,
+        Dictionary<string, string>? campos = null,
+        PrendaDatos? prendaDatos = null) =>
         new(new DatosBorradorPunto(
             Guid.CreateVersion7(),
             organismo ?? OrganismoId,
@@ -655,9 +772,9 @@ public sealed class PuntoCanalTests
             esPunto,
             new DatosSolicitud(
                 valor is null ? null : new ComercialDatos(valor),
-                prenda ? new PrendaDatos(true, "Banco", "900123456") : null,
+                prendaDatos ?? (prenda ? new PrendaDatos(true, "Banco", "900123456") : null),
                 transformaciones is null ? null : new RequisitosDatos(transformaciones, null)),
-            new Dictionary<string, string>(),
+            campos ?? new Dictionary<string, string>(),
             new HashSet<string>(docs ?? [], StringComparer.Ordinal),
             false));
 
@@ -846,12 +963,16 @@ public sealed class PuntoCanalTests
     private sealed class FachadaTipos : IFachadaTramites
     {
         public List<TipoTramiteDto> Tipos { get; } = [];
+        public string? UltimoOrganismo { get; private set; }
 
         public Task<IReadOnlyList<OrganismoDto>> ListarOrganismosAsync(CancellationToken ct) =>
             Task.FromResult<IReadOnlyList<OrganismoDto>>([]);
 
-        public Task<IReadOnlyList<TipoTramiteDto>> ListarTiposAsync(string? organismoId, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyList<TipoTramiteDto>>(Tipos);
+        public Task<IReadOnlyList<TipoTramiteDto>> ListarTiposAsync(string? organismoId, CancellationToken ct)
+        {
+            UltimoOrganismo = organismoId;
+            return Task.FromResult<IReadOnlyList<TipoTramiteDto>>(Tipos);
+        }
 
         public Task<CotizacionDto> CotizarAsync(string tipoCodigo, string organismoId, IReadOnlyCollection<string> adicionales, CancellationToken ct) =>
             throw new NotSupportedException();

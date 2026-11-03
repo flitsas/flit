@@ -1,6 +1,7 @@
 using Flit.PersonaNatural.Api.Consultas;
 using Flit.PersonaNatural.Api.Cotizaciones;
 using Flit.PersonaNatural.Api.Definiciones;
+using Flit.PersonaNatural.Api.Solicitudes;
 
 namespace Flit.PersonaNatural.Api.Punto;
 
@@ -108,11 +109,20 @@ public sealed class CompletitudRequisitosPuntoService(IFachadaDefiniciones defin
             borrador.HayPersonaJuridica);
 
         var pendientes = new List<PendienteCompletitudPuntoDto>();
-        foreach (var doc in def.Documentos.OrderBy(d => d.Orden).Where(d => CondicionesDocumentoPunto.Exigible(d, ctx)))
+        // Lo que reclama una declaración (certificado de blindaje, documentos de la causal elegida) lo decide ella, no la matriz.
+        var deLasDeclaraciones = ReglasBorrador.DocumentosDeDeclaraciones(def);
+        foreach (var doc in def.Documentos.OrderBy(d => d.Orden).Where(d => CondicionesDocumentoPunto.Exigible(d, ctx) && !deLasDeclaraciones.Contains(d.DocCode)))
         {
             if (!borrador.DocCodesCargados.Contains(doc.DocCode))
                 pendientes.Add(new PendienteCompletitudPuntoDto(doc.DocCode, doc.Nombre));
         }
+
+        // HU 13 — el gate también exige las declaraciones del tipo (valor nuevo, blindaje, causal, destino) y los documentos de lo elegido.
+        foreach (var x in ReglasBorrador.PendientesDeDeclaraciones(def, borrador.Campos, borrador.Datos.Requisitos?.Transformaciones ?? [], borrador.DocCodesCargados))
+            pendientes.Add(new PendienteCompletitudPuntoDto(x.Referencia, x.Nombre));
+
+        if (ReglasBorrador.DocumentoDePrenda(borrador.Datos.Prenda?.Decision) is { } docPrenda && !borrador.DocCodesCargados.Contains(docPrenda))
+            pendientes.Add(new PendienteCompletitudPuntoDto(docPrenda, def.Documentos.FirstOrDefault(d => d.DocCode == docPrenda)?.Nombre ?? "Documento de la prenda"));
 
         if (def.Flags.RequiereComercial && borrador.Datos.Comercial?.Valor is not > 0)
             pendientes.Add(new PendienteCompletitudPuntoDto(CodigoValorVenta, "Valor de venta"));
