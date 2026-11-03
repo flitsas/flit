@@ -104,7 +104,7 @@ public sealed class SolicitudesTests : IAsyncLifetime
         var cedulaMala = await _host.EnviarAsync(HttpMethod.Post, $"{Base}/sesiones", Cuerpo(cedula: "x"), captcha: false);
 
         // Captcha desactivado: sin token la sesión igual se abre si el resto es válido.
-        sinCaptcha.StatusCode.Should().Be(HttpStatusCode.OK);
+        sinCaptcha.StatusCode.Should().Be(HttpStatusCode.Created);
         (await PortalHost.CodigoAsync(sinConsentimiento)).Should().Be("consentimiento_requerido");
         sinPlaca.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
         (await Errores(sinPlaca)).Should().ContainKey("placa");
