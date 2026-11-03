@@ -128,6 +128,7 @@ public abstract class IdentidadBase : IAsyncLifetime
 
     internal readonly FachadaIdentidadFalsa Fachada = new();
     internal Action<IServiceCollection>? Servicios;
+    internal Action<WebApplicationBuilder>? Ajustes;
     internal readonly RelojDeIdentidad Reloj = new(new DateTimeOffset(2026, 10, 27, 15, 0, 0, TimeSpan.Zero));
     internal readonly RegistroDeLogs Logs = new();
     private string _database = string.Empty;
@@ -196,6 +197,7 @@ public abstract class IdentidadBase : IAsyncLifetime
             b.Services.AddSingleton<IProveedorCaptcha, CaptchaFalso>();
             b.Services.AddSingleton<IFachadaIdentidad>(Fachada);
             Servicios?.Invoke(b.Services);
+            Ajustes?.Invoke(b);
             if (reglasFalsas)
                 b.Services.AddScoped<IReglasDeIdentidad, ReglasFalsas>();
             b.Logging.AddProvider(Logs);

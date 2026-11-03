@@ -23,7 +23,14 @@ public sealed record ConfiguracionPortalDto(
     IReadOnlyList<BannerDto> Banners,
     IReadOnlyList<EnlaceDto> Enlaces,
     SoporteDto Soporte,
-    int? BorradorVigenciaDias);
+    int? BorradorVigenciaDias)
+{
+    /// <summary>Solo existe con el interruptor de pruebas activo (Development); apagado se omite del JSON.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public PruebasDto? Pruebas { get; init; }
+}
+
+public sealed record PruebasDto(bool OmitirIdentidad);
 
 // ── Lo que entrega la fachada de core-api al BFF. ────────────────────────────────────────────────────────────────────────
 

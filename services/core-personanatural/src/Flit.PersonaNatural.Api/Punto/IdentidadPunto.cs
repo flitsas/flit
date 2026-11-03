@@ -19,7 +19,8 @@ public sealed class IdentidadPuntoService(
     SolicitudesService solicitudes,
     SesionService sesiones,
     IConsultasRunt runt,
-    Microsoft.Extensions.Configuration.IConfiguration? configuracion = null)
+    Microsoft.Extensions.Configuration.IConfiguration? configuracion = null,
+    Flit.PersonaNatural.Api.Pruebas.IPruebasPortal? pruebas = null)
 {
     public const string CodigoRolDesconocido = "rol_desconocido";
     public const string CodigoRolRadicante = "rol_radicante";
@@ -124,7 +125,7 @@ public sealed class IdentidadPuntoService(
             rolRadicante is not null
             && string.Equals(p.Parte, rolRadicante, StringComparison.OrdinalIgnoreCase)
             && p.Estado == EstadosIdentidad.Aprobada) == true;
-        if (!radicanteOk)
+        if (!radicanteOk && pruebas?.OmitirIdentidad != true)
             return ResultadoIdentidad.Error(
                 StatusCodes.Status409Conflict,
                 CodigoInvitacionesBloqueadas,

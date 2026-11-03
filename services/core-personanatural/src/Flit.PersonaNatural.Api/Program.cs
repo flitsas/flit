@@ -94,6 +94,9 @@ public static class Program
         // HU #14216: canal del punto (cookie del organismo). La fachada gRPC la registra AddCotizacionesPortal.
         builder.Services.AddPuntoPortal();
 
+        // Interruptor de pruebas locales (apagado por defecto; solo Development).
+        Flit.PersonaNatural.Api.Pruebas.PruebasPortal.AddPruebasPortal(builder.Services, builder.Configuration, builder.Environment);
+
         // HU #14044 y #14045: validación de identidad de las partes por enlace (fachada gRPC de core-api, espejo por evento).
         builder.Services.AddIdentidadPortal(builder.Configuration);
 

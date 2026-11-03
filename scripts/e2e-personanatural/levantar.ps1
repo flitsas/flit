@@ -10,7 +10,10 @@
   no van en este archivo. Guarda los PID exactos en .pids.json para que apagar.ps1 los cierre POR PID.
 
   Uso (desde la raíz del repo):
-    powershell -ExecutionPolicy Bypass -File scripts/e2e-personanatural/levantar.ps1 [-Base flit_pn_e2e] [-LogDir <ruta>] [-Compilar]
+    powershell -ExecutionPolicy Bypass -File scripts/e2e-personanatural/levantar.ps1 [-Base flit_pn_e2e] [-LogDir <ruta>] [-Compilar] [-SinFront] [-FuentesReales] [-SinIdentidad]
+    -SinIdentidad : SOLO PRUEBAS LOCALES. Pone PersonaNatural__Pruebas__OmitirIdentidad=true en el BFF (y nada más): la compuerta
+                    de radicación deja pasar sin identidad aprobada y el punto no exige radicante aprobado para invitar. El BFF
+                    lo ignora si ASPNETCORE_ENVIRONMENT no es Development (aquí siempre lo es). Sin el switch, comportamiento normal.
   Ver docs/suite/local-personanatural.md.
 #>
 #Requires -Version 7
@@ -22,7 +25,9 @@ param(
   [switch]$SinFront,
   # Consultas contra las fuentes REALES (Kyverum RUNT primero, Verifik de respaldo) con las llaves de
   # services/core-consultas/.../appsettings.Development.json. Sin este switch todo va en mock.
-  [switch]$FuentesReales
+  [switch]$FuentesReales,
+  # SOLO PRUEBAS LOCALES: omite la validación de identidad en el BFF (PersonaNatural__Pruebas__OmitirIdentidad=true).
+  [switch]$SinIdentidad
 )
 
 $ErrorActionPreference = 'Stop'
@@ -212,7 +217,7 @@ Iniciar 'core-notificaciones' "$Raiz\services\core-notificaciones\src\Flit.Notif
 } 'http://127.0.0.1:4027/health/ready' 180
 
 # ---------- 4. core-personanatural (BFF) ----------
-Iniciar 'core-personanatural' "$Raiz\services\core-personanatural\src\Flit.PersonaNatural.Api\bin\Debug\net10.0" 'dotnet' @('Flit.PersonaNatural.Api.dll') @{
+$bff = @{
   ASPNETCORE_ENVIRONMENT = 'Development'; ASPNETCORE_URLS = 'http://127.0.0.1:4029'
   Servicio__GrpcPort = '8087'
   ConnectionStrings__Servicio = $Cadena
@@ -232,7 +237,9 @@ Iniciar 'core-personanatural' "$Raiz\services\core-personanatural\src\Flit.Perso
   # Topes holgados SOLO para repetir el recorrido muchas veces desde una misma IP local (en el servidor mandan los de appsettings).
   Abuso__LimiteIpPorMinuto = '600'; Abuso__LimiteCedulaPorHora = '500'; Abuso__TopeGlobalDiario = '100000'
   Sesion__MaxIntentosFallidos = '1000'
-} 'http://127.0.0.1:4029/health/ready' 180
+}
+if ($SinIdentidad) { $bff['PersonaNatural__Pruebas__OmitirIdentidad'] = 'true' }
+Iniciar 'core-personanatural' "$Raiz\services\core-personanatural\src\Flit.PersonaNatural.Api\bin\Debug\net10.0" 'dotnet' @('Flit.PersonaNatural.Api.dll') $bff 'http://127.0.0.1:4029/health/ready' 180
 
 # ---------- 5. gateway YARP ----------
 Iniciar 'gateway' "$Raiz\services\core-api\src\Flit.Gateway\bin\Debug\net10.0" 'dotnet' @('Flit.Gateway.dll') @{
