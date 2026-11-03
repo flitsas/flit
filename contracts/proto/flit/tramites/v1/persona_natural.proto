@@ -53,6 +53,13 @@ service PersonaNaturalService {
   // Canal del punto de atención (HU #14216): resuelve el código público del organismo. No crea trámites ni
   // altera el grant del portal. estado = ok | codigo_desconocido | organismo_no_operable | canal_apagado.
   rpc ResolverCanalPunto(ResolverCanalPuntoRequest) returns (ResolverCanalPuntoResponse);
+
+  // HU 10 — organismos operables en FLIT 2 donde se puede trasladar una cuenta (cualquier organismo operable, no solo los
+  // del grant del portal). Sin datos sensibles; con `id` valida un destino concreto.
+  rpc ListarOrganismosDestino(ListarOrganismosDestinoRequest) returns (ListarOrganismosDestinoResponse);
+
+  // HU 6 — catálogos de color, combustible y carrocería de FLIT 2 (misma fuente que el asistente del gestor).
+  rpc ListarCatalogoVehiculo(ListarCatalogoVehiculoRequest) returns (ListarCatalogoVehiculoResponse);
 }
 
 message PersonaIdentidad {
@@ -140,7 +147,53 @@ message DefinicionTipoTramite {
   // la configuración pueden cambiar sin ella, así que el BFF usa (codigo, organismo, version, huella) como clave de caché y
   // la solicitud congela ambas. [HU K1]
   string huella = 11;
+  // HU 4 — declaraciones del tipo (color, combustible, carrocería, blindaje, causal, organismo de destino y trámites
+  // simultáneos), construidas en el dominio con las mismas constantes y reglas de FLIT 2. Vacía si el tipo no declara nada.
+  repeated DeclaracionTipo declaraciones = 12;
 }
+
+// Una declaración que el ciudadano hace además de los campos: valor nuevo del vehículo, opción (nivel de blindaje, causal),
+// organismo de destino. El portal la pinta según `control` sin nombrar ningún tipo.
+message DeclaracionTipo {
+  string clave = 1;                        // estable: transformacion_color | transformacion_combustible | transformacion_carroceria | blindaje | cancelacion_causal | organismo_destino | simultaneo_*
+  string control = 2;                      // seleccion | seleccion_catalogo | organismo_destino
+  string etiqueta = 3;
+  bool obligatoria = 4;
+  repeated OpcionDeclaracion opciones = 5; // seleccion: las opciones; seleccion_catalogo: puede venir llena (combustibles) o vacía (se pide al catálogo)
+  string field_key = 6;                    // clave principal en field_values
+  repeated string field_keys_extra = 7;    // claves derivadas que el servidor completa al crear el trámite (cambio_*, blindaje, transit_office_destino_*)
+  string doc_code_soporte = 8;             // docTipo del soporte (vacío si no hay)
+  bool soporte_obligatorio = 9;
+  string catalogo = 10;                    // colores | combustibles | carrocerias | "" (sin catálogo)
+  // Código de transformación (CAMBIO_COLOR…) que activa esta declaración cuando es un trámite simultáneo; vacío = siempre aplica.
+  string activada_por = 11;
+}
+message OpcionDeclaracion {
+  string codigo = 1;
+  string etiqueta = 2;
+  repeated string doc_codes = 3;           // documentos que la opción exige
+  bool exige_soporte = 4;
+}
+
+message ListarOrganismosDestinoRequest {
+  string texto = 1;                        // filtra por nombre, municipio o código; vacío = los primeros
+  int32 limite = 2;                        // 0 = predeterminado (20); máximo 50
+  string id = 3;                           // opcional: resuelve un organismo concreto (validación del destino)
+}
+message ListarOrganismosDestinoResponse { repeated OrganismoPortal organismos = 1; }
+
+message ListarCatalogoVehiculoRequest {
+  string catalogo = 1;                     // colores | combustibles | carrocerias
+  string texto = 2;
+  string clase = 3;                        // clase del vehículo (solo carrocerías)
+  int32 limite = 4;                        // 0 = predeterminado (50); máximo 300
+}
+message ListarCatalogoVehiculoResponse { repeated ItemCatalogoVehiculo items = 1; }
+message ItemCatalogoVehiculo {
+  string codigo = 1;                       // valor que se guarda en field_values (el mismo texto que guarda FLIT 2)
+  string etiqueta = 2;
+}
+
 message Paso {
   string clave = 1;
   string titulo = 2;
@@ -180,6 +233,12 @@ message FlagsTipo {
   bool permite_prenda_complementaria = 5;
   bool requiere_biometria = 6;
   bool requiere_solicitud_placa = 7;
+  // HU 4/10 — el tipo traslada la cuenta: hay que declarar el organismo de destino.
+  bool requiere_destino = 8;
+  // HU 4/10 — el organismo lo elige el operador (VIN o transitOfficeSource = OPERATOR), no lo impone el RUNT.
+  bool organismo_lo_elige_operador = 9;
+  // HU #14257 - prenda de acción única: "registrar" (inscripción) | "levantar" (levantamiento); vacío en los demás tipos.
+  string accion_prenda = 10;
 }
 
 // Entrada del paso 1: qué identificador pide depende del tipo (placa o VIN). El documento del propietario solo hace
