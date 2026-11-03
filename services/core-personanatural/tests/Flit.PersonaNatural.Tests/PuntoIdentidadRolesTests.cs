@@ -1,3 +1,5 @@
+using Flit.PersonaNatural.Api.Cotizaciones;
+using Microsoft.Extensions.Configuration;
 using Flit.PersonaNatural.Api.Solicitudes;
 using FluentAssertions;
 using Flit.PersonaNatural.Api.Definiciones;
@@ -143,7 +145,7 @@ public sealed class PuntoIdentidadRolesTests : IdentidadBase
             .RadicanteInSituAsync(solicitud, null, 1, "CC", Cedula, "Titular", correo, null, null, null, ct));
 
         r.Exito.Should().BeTrue(r.Mensaje);
-        Fachada.Pedidos.Should().ContainSingle().Which.Correo.Should().EndWith("@noreply.flit.local");
+        Fachada.Pedidos.Should().ContainSingle().Which.Correo.Should().Be($"validaciones+punto-{solicitud:N}@flitsas.com");
     }
 
     [Fact]
@@ -233,5 +235,45 @@ public sealed class PuntoIdentidadRolesTests : IdentidadBase
         r.Exito.Should().BeFalse();
         r.Http.Should().Be(503);
         (await PersonaAsync(solicitud, "titular")).ValidacionEstado.Should().NotBe("pendiente_envio");
+    }
+
+    [Fact]
+    public void CorreoTecnico_EsConfigurable_ConPlantillaId_YPorDefectoUsaDominioPublicoDeFlit()
+    {
+        var id = Guid.CreateVersion7();
+        var vacia = new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build();
+        var propia = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { [CorreoTecnicoPunto.Clave] = "nadie+{id}@ejemplo.com" }).Build();
+
+        CorreoTecnicoPunto.Para(vacia, id).Should().Be($"validaciones+punto-{id:N}@flitsas.com");
+        CorreoTecnicoPunto.Para(propia, id).Should().Be($"nadie+{id:N}@ejemplo.com");
+        CorreoTecnicoPunto.Para(null, id).Should().EndWith("@flitsas.com");
+    }
+
+    private sealed class InvocadorQueFalla(global::Grpc.Core.RpcException ex) : global::Grpc.Core.CallInvoker
+    {
+        public override global::Grpc.Core.AsyncUnaryCall<TResponse> AsyncUnaryCall<TRequest, TResponse>(global::Grpc.Core.Method<TRequest, TResponse> method, string? host, global::Grpc.Core.CallOptions options, TRequest request) =>
+            new(Task.FromException<TResponse>(ex), Task.FromResult(new global::Grpc.Core.Metadata()), () => ex.Status, () => ex.Trailers, () => { });
+
+        public override TResponse BlockingUnaryCall<TRequest, TResponse>(global::Grpc.Core.Method<TRequest, TResponse> method, string? host, global::Grpc.Core.CallOptions options, TRequest request) => throw ex;
+
+        public override global::Grpc.Core.AsyncServerStreamingCall<TResponse> AsyncServerStreamingCall<TRequest, TResponse>(global::Grpc.Core.Method<TRequest, TResponse> method, string? host, global::Grpc.Core.CallOptions options, TRequest request) => throw new NotSupportedException();
+
+        public override global::Grpc.Core.AsyncClientStreamingCall<TRequest, TResponse> AsyncClientStreamingCall<TRequest, TResponse>(global::Grpc.Core.Method<TRequest, TResponse> method, string? host, global::Grpc.Core.CallOptions options) => throw new NotSupportedException();
+
+        public override global::Grpc.Core.AsyncDuplexStreamingCall<TRequest, TResponse> AsyncDuplexStreamingCall<TRequest, TResponse>(global::Grpc.Core.Method<TRequest, TResponse> method, string? host, global::Grpc.Core.CallOptions options) => throw new NotSupportedException();
+    }
+
+    [Theory]
+    [InlineData(true, "proveedor_rechazo")]
+    [InlineData(false, "servicio_no_disponible")]
+    public async Task Fachada_FailedPreconditionDelProveedor_SoloEsRechazoEnElPunto(bool inSitu, string esperado)
+    {
+        var rpc = Flit.Platform.Sdk.Grpc.PlatformRpcErrors.ToRpcException("proveedor_rechazo", "rechazo", global::Grpc.Core.StatusCode.FailedPrecondition);
+        var fachada = new FachadaIdentidadGrpc(new Flit.Tramites.Grpc.V1.PersonaNaturalService.PersonaNaturalServiceClient(new InvocadorQueFalla(rpc)));
+
+        var accion = () => fachada.SolicitarAsync(Guid.NewGuid(), "titular", new PersonaParaValidar("CC", Cedula, "X", "a@flitsas.com", null), TestContext.Current.CancellationToken, inSitu);
+
+        (await accion.Should().ThrowAsync<FachadaException>()).Which.Codigo.Should().Be(esperado);
     }
 }

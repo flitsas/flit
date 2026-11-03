@@ -255,6 +255,7 @@ public sealed class IniciarPrevalidacionHandler(
         string documentNumber,
         string name,
         string email,
+        bool sinCorreoAlProveedor = false,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(solicitudRef)
@@ -279,7 +280,7 @@ public sealed class IniciarPrevalidacionHandler(
 
         var validationId = Guid.NewGuid();
         var (result, error, _) = providerOptions.IsKyverum
-            ? await IniciarConKyverumAsync(tenantId, null, null, subject, validationId, ct, anchor)
+            ? await IniciarConKyverumAsync(tenantId, null, null, subject, validationId, ct, anchor, sinCorreoAlProveedor)
             : await IniciarConMockAsync(tenantId, null, null, subject, validationId, ct, anchor);
         if (error is not null || result is null)
         {
@@ -309,7 +310,7 @@ public sealed class IniciarPrevalidacionHandler(
 
     private async Task<(IniciarPrevalidacionResult? Result, string? Error, IdentitySendDecision? Conflict)> IniciarConKyverumAsync(
         Guid tenantId, Guid? personId, Guid? mandateSignerId, IdentitySubjectStandalone subject,
-        Guid validationId, CancellationToken ct, PortalAnchor? portal = null)
+        Guid validationId, CancellationToken ct, PortalAnchor? portal = null, bool sinCorreoAlProveedor = false)
     {
         KyverumVerifyStartResult provider;
         try
@@ -322,7 +323,8 @@ public sealed class IniciarPrevalidacionHandler(
                     Nombre: subject.Nombre,
                     TipoDoc: subject.TipoDocumento,
                     Documento: subject.NumeroDocumento,
-                    Email: subject.Email,
+                    // In-situ (punto): sin correo al proveedor (Kyverum notifica al subjects[].email si viene); el correo técnico solo queda registrado.
+                    Email: sinCorreoAlProveedor ? string.Empty : subject.Email,
                     TenantId: tenantId),
                 ct);
         }

@@ -110,7 +110,7 @@ internal sealed class FachadaIdentidadGrpc(PersonaNaturalService.PersonaNaturalS
                 "validacion_no_encontrada" => new FachadaException(razon, "No encontramos esa validación.", StatusCodes.Status404NotFound),
                 "identidad_aprobada" => new FachadaException(razon, "La identidad ya fue validada.", StatusCodes.Status409Conflict),
                 "validacion_en_curso" => new FachadaException(razon, "Ya hay una validación en curso.", StatusCodes.Status409Conflict),
-                _ when rechazoDelProveedor && ex.StatusCode == StatusCode.FailedPrecondition => new FachadaException("proveedor_rechazo", "No pudimos iniciar la validación con estos datos.", StatusCodes.Status422UnprocessableEntity),
+                _ when rechazoDelProveedor && (razon == "proveedor_rechazo" || ex.StatusCode == StatusCode.FailedPrecondition) => new FachadaException("proveedor_rechazo", "No pudimos iniciar la validación con estos datos.", StatusCodes.Status422UnprocessableEntity),
                 _ when ex.StatusCode == StatusCode.InvalidArgument => new FachadaException("datos_invalidos", "Revise los datos de la persona.", StatusCodes.Status400BadRequest),
                 _ => new FachadaException(ServicioNoDisponible, "La validación de identidad no está disponible por ahora.", StatusCodes.Status503ServiceUnavailable),
             };

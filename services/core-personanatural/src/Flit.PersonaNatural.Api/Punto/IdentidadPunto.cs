@@ -18,7 +18,8 @@ public sealed class IdentidadPuntoService(
     IdentidadService identidad,
     SolicitudesService solicitudes,
     SesionService sesiones,
-    IConsultasRunt runt)
+    IConsultasRunt runt,
+    Microsoft.Extensions.Configuration.IConfiguration? configuracion = null)
 {
     public const string CodigoRolDesconocido = "rol_desconocido";
     public const string CodigoRolRadicante = "rol_radicante";
@@ -78,7 +79,7 @@ public sealed class IdentidadPuntoService(
 
         // Correo: si el ciudadano ya lo digitó en la ficha se guarda; si no, técnico (in-situ no notifica).
         var correo = !IdentidadService.CorreoUtilizableInSitu(correoCiudadano)
-            ? $"punto-{solicitudId:N}@noreply.flit.local"
+            ? CorreoTecnicoPunto.Para(configuracion, solicitudId)
             : correoCiudadano!.Trim();
         try
         {

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using System.Net.Mail;
 using Flit.Infrastructure.Persistence;
 using Flit.Platform.Sdk;
@@ -29,7 +30,8 @@ namespace Flit.Api.Grpc;
 internal sealed class PersonaNaturalIdentidadService(
     FlitDbContext db,
     IniciarPrevalidacionHandler iniciar,
-    ReenviarValidacionPortalHandler reenviar)
+    ReenviarValidacionPortalHandler reenviar,
+    Microsoft.Extensions.Configuration.IConfiguration? configuracion = null)
 {
     /// <summary>Estados de la validación que ve el portal (el proto: pendiente | aprobada | rechazada | vencida).</summary>
     public const string Pendiente = "pendiente";
@@ -58,15 +60,17 @@ internal sealed class PersonaNaturalIdentidadService(
         if (!omitirCorreo && (correo is null || !EsCorreoValido(correo)))
             throw PlatformRpcErrors.ToRpcException("contacto_invalido_correo", "El correo no tiene un formato válido.", StatusCode.InvalidArgument);
         if (omitirCorreo)
-            correo = correo is not null && EsCorreoValido(correo) ? correo : $"punto-{solicitud}@noreply.flit.local";
+            correo = correo is not null && EsCorreoUsableInSitu(correo) ? correo : CorreoTecnico(solicitud);
 
         var (resultado, error) = await EnEmpresaAsync(
-            () => iniciar.HandlePortalAsync(PlatformTenants.PersonaNatural, solicitud, parte, tipoDocumento, numeroDocumento, nombre, correo!, ct), ct)
+            () => iniciar.HandlePortalAsync(PlatformTenants.PersonaNatural, solicitud, parte, tipoDocumento, numeroDocumento, nombre, correo!, sinCorreoAlProveedor: omitirCorreo && !EnviarCorreoTecnicoAlProveedor, ct: ct), ct)
             .ConfigureAwait(false);
         if (error is not null || resultado is null)
             throw error switch
             {
                 "datos_incompletos" => Invalido("Faltan datos de la persona."),
+                // In-situ (punto): el proveedor rechazó los datos (4xx, no transitorio): FailedPrecondition, no «no disponible».
+                "proveedor_error" when omitirCorreo => PlatformRpcErrors.ToRpcException("proveedor_rechazo", "El proveedor rechazó la solicitud de validación.", StatusCode.FailedPrecondition),
                 _ => PlatformRpcErrors.ToRpcException("proveedor_no_disponible", "No fue posible enviar el enlace de validación por ahora.", StatusCode.Unavailable),
             };
 
@@ -156,6 +160,22 @@ internal sealed class PersonaNaturalIdentidadService(
             }
         }).ConfigureAwait(false);
     }
+
+    /// <summary>In-situ: solo ASCII imprimible y válido (el RUNT trae a veces una «ñ» dañada que el proveedor rechaza).</summary>
+    private static bool EsCorreoUsableInSitu(string correo) =>
+        EsCorreoValido(correo) && correo.All(c => c is > (char)0x20 and < (char)0x7F);
+
+    /// <summary>Correo técnico del radicante in-situ (<c>PersonaNatural:Punto:CorreoTecnico</c>, <c>{id}</c> = solicitud sin guiones).</summary>
+    private string CorreoTecnico(string solicitud)
+    {
+        var plantilla = configuracion?["PersonaNatural:Punto:CorreoTecnico"];
+        if (string.IsNullOrWhiteSpace(plantilla))
+            plantilla = "validaciones+punto-{id}@flitsas.com";
+        return plantilla.Replace("{id}", solicitud.Replace("-", string.Empty, StringComparison.Ordinal), StringComparison.Ordinal);
+    }
+
+    /// <summary>Por defecto NO se manda correo al proveedor en el punto (Kyverum notifica a todo <c>subjects[].email</c>). Solo con <c>PersonaNatural:Punto:EnviarCorreoTecnicoAlProveedor=true</c>.</summary>
+    private bool EnviarCorreoTecnicoAlProveedor => configuracion?.GetValue<bool>("PersonaNatural:Punto:EnviarCorreoTecnicoAlProveedor") == true;
 
     private static bool EsCorreoValido(string correo) =>
         correo.Length <= 320 && MailAddress.TryCreate(correo, out var mail) && string.Equals(mail.Address, correo, StringComparison.Ordinal);

@@ -80,7 +80,8 @@ public sealed partial class IdentidadService(
     EspejoDeIdentidad espejo,
     Microsoft.Extensions.Options.IOptions<IdentidadOptions> opciones,
     TimeProvider reloj,
-    ILogger<IdentidadService> logger)
+    ILogger<IdentidadService> logger,
+    Microsoft.Extensions.Configuration.IConfiguration? configuracion = null)
 {
     private const string ActorLectura = "identidad";
     private const string ServicioNoDisponible = FachadaIdentidadGrpc.ServicioNoDisponible;
@@ -321,7 +322,7 @@ public sealed partial class IdentidadService(
         try
         {
             var correo = omitirEnvioCorreo
-                ? (CorreoUtilizableInSitu(datos.Correo) ? datos.Correo!.Trim() : $"punto-{persona.SolicitudId:N}@noreply.flit.local")
+                ? (CorreoUtilizableInSitu(datos.Correo) ? datos.Correo!.Trim() : CorreoTecnicoPunto.Para(configuracion, persona.SolicitudId))
                 : datos.Correo!;
             var respuesta = await fachada.SolicitarAsync(
                 persona.SolicitudId,
