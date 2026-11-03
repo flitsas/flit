@@ -22,6 +22,8 @@ import { categoriaRuntDe, declaracionesActivas, errorIgualAlRunt } from "@/lib/t
 import { destinoDePendiente, filasDeDeclaraciones, pasoTieneSecciones, textoPendiente } from "@/lib/tramite/resumen";
 import { recordarPresentacion } from "@/lib/tramite/presentacion";
 import { useEnviosFallidos } from "@/lib/tramite/envioIdentidad";
+import { AvisoModoPruebas } from "@/components/tramite/AvisoModoPruebas";
+import { useOmitirIdentidad } from "@/components/landing/useConfiguracion";
 
 const NOMBRE_PASO: Readonly<Record<string, string>> = {
   actores: "Actores",
@@ -46,6 +48,7 @@ export function ResumenTramite({ onEstado }: PropsSeccion) {
   const llave = useRef<string | null>(null);
   const enCurso = useRef(false);
   const enviosFallidos = useEnviosFallidos(solicitud.solicitudId);
+  const omitirIdentidad = useOmitirIdentidad(cliente);
 
   const transformaciones = solicitud.datos.requisitos?.transformaciones ?? [];
   const cotizacion = useQuery<Cotizacion>({
@@ -137,7 +140,8 @@ export function ResumenTramite({ onEstado }: PropsSeccion) {
         </ul>
       </Card>
 
-      {enviosFallidos > 0 && (
+      {omitirIdentidad && <AvisoModoPruebas id="resumen-modo-pruebas" />}
+      {!omitirIdentidad && enviosFallidos > 0 && (
         <p role="alert" className="flex items-center gap-2 text-sm text-alert">
           <TriangleAlert aria-hidden className="h-4 w-4 shrink-0" />
           Hay validaciones de identidad pendientes de envío. Vuelve a Actores y usa «Reenviar validación».

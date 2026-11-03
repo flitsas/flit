@@ -6,6 +6,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MobilityLoader } from "@/components/MobilityLoader";
 import { useWizard, type PropsSeccion } from "@/components/tramite/ContextoWizard";
 import { Btn, Card } from "@/components/tramite/piezas";
+import { AvisoModoPruebas } from "@/components/tramite/AvisoModoPruebas";
+import { useOmitirIdentidad } from "@/components/landing/useConfiguracion";
 import { PersonaActor } from "@/components/tramite/renderers/PersonaActor";
 import type { EstadoIdentidad } from "@/lib/api/cliente";
 import { ApiError, mensajeDe } from "@/lib/api/errores";
@@ -47,6 +49,7 @@ const SONDEOS_RAPIDOS = 6;
  */
 export function FormularioActores({ seccion, activa, intentoAvance, onEstado }: PropsSeccion) {
   const { cliente, definicion, solicitud, contexto, guardarConVersion, registrarGuardado, reportarError } = useWizard();
+  const omitirIdentidad = useOmitirIdentidad(cliente);
   const definicionSeccion = useMemo(
     () => ({ ...definicion, actores: actoresDeLaSeccion(definicion, seccion.paso?.clave) }),
     [definicion, seccion.paso?.clave],
@@ -221,6 +224,7 @@ export function FormularioActores({ seccion, activa, intentoAvance, onEstado }: 
 
   return (
     <>
+      {omitirIdentidad && hayIdentidad && <AvisoModoPruebas id={`actores-modo-pruebas-${seccion.clave}`} />}
       {cargando && (
         <div role="status" className="flex items-center gap-3 text-sm text-muted-foreground">
           <MobilityLoader />

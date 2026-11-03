@@ -68,6 +68,8 @@ export interface ConfiguracionPortal {
   enlaces: EnlacePublicado[];
   soporte: SoportePublicado;
   borradorVigenciaDias?: number | null;
+  /** Solo en pruebas locales (interruptor del BFF apagado por defecto). */
+  pruebas?: { omitirIdentidad?: boolean } | null;
 }
 
 // ── Cotización (POST /cotizaciones y /cotizaciones/enviar-correo) ────────────────────────────────────────────────

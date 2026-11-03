@@ -9,6 +9,8 @@ import type { TonoAviso } from "@/components/landing/AvisoModal";
 import { boton } from "@/components/landing/estilos";
 import { PersonaActor } from "@/components/tramite/renderers/PersonaActor";
 import { Badge, Card, Nav } from "@/components/tramite/piezas";
+import { AvisoModoPruebas } from "@/components/tramite/AvisoModoPruebas";
+import { useOmitirIdentidad } from "@/components/landing/useConfiguracion";
 import type {
   ActorRol,
   ClientePortal,
@@ -116,6 +118,7 @@ export function ActoresPunto({
   onSolicitudLista?: (solicitudId: string) => void;
   onAviso: (titulo: string, mensaje: string, tono?: TonoAviso) => void;
 }) {
+  const omitirIdentidad = useOmitirIdentidad(cliente);
   const [fase, setFase] = useState<Fase>({ tipo: "cargando", mensaje: MENSAJE_VALIDANDO });
   const [filas, setFilas] = useState<FilaActor[]>([]);
   const [roles, setRoles] = useState<ActorRol[]>([]);
@@ -259,7 +262,9 @@ export function ActoresPunto({
   const rolRadicante: ActorRol | undefined = roles[0];
   const invitables = roles.slice(1);
   const radicanteOk = fase.tipo === "listo" && Boolean(rolRadicante) && radicanteYaAprobado(fase.estado, rolRadicante!.rol);
-  const puedeContinuar = radicanteOk;
+  // Modo de pruebas: la identidad no bloquea el avance ni a las demás partes (la identidad se sigue lanzando sola).
+  const identidadCumplida = radicanteOk || omitirIdentidad;
+  const puedeContinuar = identidadCumplida;
 
   const cambiarFila = (clave: string, patch: Partial<FilaActor>) => {
     setFilas((actuales) => actuales.map((f) => (f.clave === clave ? { ...f, ...patch } : f)));
@@ -348,7 +353,7 @@ export function ActoresPunto({
 
   const validarInvitado = async (rol: ActorRol): Promise<{ estado: string; capturaUrl?: string | null }> => {
     if (fase.tipo !== "listo" || !rolRadicante) throw new Error("Sesión no lista");
-    if (!radicanteOk) {
+    if (!identidadCumplida) {
       onAviso(`Identifica a ${rolRadicante.etiqueta} primero`, "Primero debe quedar identificado quien radica en el punto.", "alerta");
       throw new Error("invitaciones_bloqueadas");
     }
@@ -426,6 +431,7 @@ export function ActoresPunto({
 
       {fase.tipo === "listo" && (
         <>
+          {omitirIdentidad && <AvisoModoPruebas id="punto-actores-modo-pruebas" />}
           {radicanteOk && (
             <div
               className="flex gap-3 rounded-[9px] p-4"
@@ -507,7 +513,7 @@ export function ActoresPunto({
             </Card>
           )}
 
-          {radicanteOk && invitables.map((rolInv) => {
+          {identidadCumplida && invitables.map((rolInv) => {
             const invitacion = fase.invitaciones[rolInv.rol];
             return (
               <Card key={rolInv.rol} title={rolInv.etiqueta} id={`punto-actores-${rolInv.rol}`}>
@@ -530,7 +536,7 @@ export function ActoresPunto({
                       reportarError={(err) => onAviso("No pudimos invitar", mensajeDeFallo(err), "alerta")}
                       onValidarIdentidad={() => validarInvitado(rolInv)}
                       textoBotonValidar="Enviar validación"
-                      puedeValidarIdentidad={radicanteOk}
+                      puedeValidarIdentidad={identidadCumplida}
                     />
                   ))}
                 {invitacion?.capturaUrl && (

@@ -37,7 +37,7 @@ describe("estructura del wizard (F1)", () => {
     const { llamadas } = await wizardAbierto();
 
     await waitFor(() => expect(llamadas.map((l) => l.clave)).toContain("POST /cotizaciones"));
-    expect(llamadas.map((l) => l.clave).filter((c) => c.startsWith("GET"))).toEqual(["GET /tipos-tramite", "GET /solicitudes/s-1", "GET /tipos-tramite/TIPO_A/definicion?organismoId=o-1"]);
+    expect(llamadas.map((l) => l.clave).filter((c) => c.startsWith("GET") && c !== "GET /configuracion")).toEqual(["GET /tipos-tramite", "GET /solicitudes/s-1", "GET /tipos-tramite/TIPO_A/definicion?organismoId=o-1"]);
     expect(screen.queryByRole("button", { name: /Calcular valor/ })).not.toBeInTheDocument();
   });
 
