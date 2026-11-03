@@ -9,8 +9,8 @@ import { Btn, Card, Field } from "@/components/tramite/piezas";
 import { DeclaracionesTipo, type SubidaSoporte } from "@/components/tramite/renderers/DeclaracionesTipo";
 import { TarjetaDestino } from "@/components/tramite/TarjetaDestino";
 import { TotalLiquidado } from "@/components/tramite/TotalLiquidado";
-import type { CampoDefinicion, Cotizacion, DeclaracionTipo, DefinicionTipo, DocumentoRequerido, GravamenRunt } from "@/lib/api/cliente";
-import { claveDeCampoDeclaracion, declaracionesActivas, declaracionesDe, destinoDelTipo, erroresDeDeclaraciones, faltaDestino, valoresDeDeclaraciones } from "@/lib/tramite/declaraciones";
+import type { CampoDefinicion, Cotizacion, DeclaracionTipo, DefinicionTipo, DocumentoRequerido, GravamenRunt, ValoresActualesRunt } from "@/lib/api/cliente";
+import { categoriaRuntDe, claveDeCampoDeclaracion, declaracionesActivas, declaracionesDe, destinoDelTipo, erroresDeDeclaraciones, faltaDestino, valoresDeDeclaraciones } from "@/lib/tramite/declaraciones";
 import { alEscribirMoneda, formatearPesos, numeroMoneda, textoMonedaCompleta } from "@/lib/formato";
 import { claveAdicionalesActivos, claveCotizacion } from "@/lib/tramite/cotizacion";
 import { ApiError, mensajeDe } from "@/lib/api/errores";
@@ -124,13 +124,22 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
   const decisionPrenda = decisionDe(condicion.tienePrenda, accionPrenda);
   const entrada: EntradaRequisitos = { campos, valorVenta, tienePrenda: condicion.tienePrenda, acreedor, nitAcreedor, observaciones, transformaciones, hayPersonaJuridica };
   const declaraciones = useMemo(() => (t.declaraciones ? declaracionesActivas(definicion, transformaciones) : []), [t.declaraciones, definicion, transformaciones]);
+  // Lo que el RUNT tiene hoy (color, combustible, carrocería): el valor nuevo de una transformación debe ser distinto. Si no llega, no se bloquea.
+  const pideValoresRunt = declaraciones.some((d) => categoriaRuntDe(d) !== null);
+  const valoresRunt = useQuery<ValoresActualesRunt>({
+    queryKey: ["pn", "valores-actuales", idSolicitud],
+    queryFn: ({ signal }) => cliente.solicitudes.valoresActuales(idSolicitud, { signal }),
+    enabled: pideValoresRunt,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
   // El punto no tiene paso de diagnóstico: la secretaría de destino (traslado de cuenta) se elige aquí. En el portal web va en el diagnóstico.
   const destinoDelPunto = canal === "punto" ? destinoDelTipo(definicionBase) : null;
   const errores = {
     ...erroresDeRequisitos(definicion, solicitud.adjuntos, entrada),
     ...(destinoDelPunto && faltaDestino(definicionBase, solicitud.fieldValues) ? { [`declaracion.${destinoDelPunto.clave}`]: MENSAJE_OBLIGATORIO } : {}),
     ...(t.prenda ? errorDeDocumentoDePrenda(definicionBase, solicitud.adjuntos, decisionPrenda) : {}),
-    ...(t.declaraciones ? erroresDeDeclaraciones(definicion, solicitud.adjuntos, campos, transformaciones) : {}),
+    ...(t.declaraciones ? erroresDeDeclaraciones(definicion, solicitud.adjuntos, campos, transformaciones, valoresRunt.data) : {}),
   };
   const subiendo = Object.values(subidas).some((s) => s.estado === "cargando");
   const completo = Object.keys(errores).length === 0 && !subiendo;
@@ -438,6 +447,7 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
           definicion={definicionBase}
           declaraciones={declaraciones}
           campos={campos}
+          valoresRunt={valoresRunt.data}
           solicitudId={idSolicitud}
           adjuntos={solicitud.adjuntos}
           subidas={subidas}

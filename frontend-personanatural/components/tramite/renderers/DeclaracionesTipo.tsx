@@ -12,7 +12,7 @@ import { Btn, Card, Field } from "@/components/tramite/piezas";
 import { SelectorBusqueda } from "@/components/tramite/SelectorBusqueda";
 import type { Adjunto, ClientePortal, DeclaracionTipo, DefinicionTipo } from "@/lib/api/cliente";
 import { mensajeDe } from "@/lib/api/errores";
-import { soportesDe, type SoporteDeclaracion } from "@/lib/tramite/declaraciones";
+import { soportesDe, valorActualEnRunt, type SoporteDeclaracion, type ValoresRunt } from "@/lib/tramite/declaraciones";
 import { adjuntoDe, AYUDA_ARCHIVOS } from "@/lib/tramite/requisitos";
 
 const CINCO_MINUTOS = 5 * 60 * 1000;
@@ -31,6 +31,8 @@ interface Props {
   /** Las declaraciones que se piden ahora (ya filtradas). */
   declaraciones: readonly DeclaracionTipo[];
   campos: Readonly<Record<string, string>>;
+  /** Lo que consta hoy en el RUNT; se informa bajo el selector y el valor nuevo no puede ser el mismo. */
+  valoresRunt?: ValoresRunt | null | undefined;
   /** Borrador: las carrocerías las filtra el servidor por la clase RUNT de su vehículo. */
   solicitudId: string;
   adjuntos: readonly Adjunto[];
@@ -46,7 +48,7 @@ interface Props {
   onQuitar: (soporte: { docCode: string }) => void;
 }
 
-export function DeclaracionesTipo({ cliente, definicion, declaraciones, campos, solicitudId, adjuntos, subidas, error, errorSoporte, onCambiar, onTocar, onSubir, onQuitar }: Props) {
+export function DeclaracionesTipo({ cliente, definicion, declaraciones, campos, valoresRunt, solicitudId, adjuntos, subidas, error, errorSoporte, onCambiar, onTocar, onSubir, onQuitar }: Props) {
   if (declaraciones.length === 0) return null;
   const soportes = declaraciones.flatMap((decl) => soportesDe(decl, (campos[decl.fieldKey] ?? "").trim(), definicion).map((s) => ({ decl, s })));
   return (
@@ -59,6 +61,7 @@ export function DeclaracionesTipo({ cliente, definicion, declaraciones, campos, 
             decl={decl}
             solicitudId={solicitudId}
             valor={campos[decl.fieldKey] ?? ""}
+            ayuda={valorActualEnRunt(decl, valoresRunt)?.texto}
             error={error(`declaracion.${decl.clave}`)}
             onCambiar={(v) => onCambiar(decl, v)}
             onTocar={() => onTocar(`declaracion.${decl.clave}`)}
@@ -120,28 +123,35 @@ function Soporte({
   );
 }
 
-function ControlDeclaracion({ cliente, decl, solicitudId, valor, error, onCambiar, onTocar }: { cliente: ClientePortal; decl: DeclaracionTipo; solicitudId: string; valor: string; error: string | undefined; onCambiar: (v: string) => void; onTocar: () => void }) {
+function AyudaRunt({ texto }: { texto: string | undefined }) {
+  return texto ? <p className="mt-1 text-xs font-light text-muted-foreground">{texto}</p> : null;
+}
+
+function ControlDeclaracion({ cliente, decl, solicitudId, valor, ayuda, error, onCambiar, onTocar }: { cliente: ClientePortal; decl: DeclaracionTipo; solicitudId: string; valor: string; ayuda: string | undefined; error: string | undefined; onCambiar: (v: string) => void; onTocar: () => void }) {
   const etiqueta = `${decl.etiqueta}${decl.obligatoria ? " *" : ""}`;
   // Con opciones en línea (blindaje, causal, combustibles) no hace falta el catálogo; sin ellas, las opciones vienen del servidor.
   if (decl.control === "seleccion_catalogo" && decl.catalogo !== "" && decl.opciones.length === 0) {
-    return <ControlCatalogo cliente={cliente} decl={decl} solicitudId={solicitudId} etiqueta={etiqueta} valor={valor} error={error} onCambiar={onCambiar} onTocar={onTocar} />;
+    return <ControlCatalogo cliente={cliente} decl={decl} solicitudId={solicitudId} etiqueta={etiqueta} valor={valor} ayuda={ayuda} error={error} onCambiar={onCambiar} onTocar={onTocar} />;
   }
   return (
-    <Field label={etiqueta} error={error}>
-      <select className="field" aria-invalid={error ? true : undefined} value={valor} onChange={(e) => onCambiar(e.target.value)} onBlur={onTocar}>
-        <option value="">Selecciona</option>
-        {decl.opciones.map((o) => (
-          <option key={o.codigo} value={o.codigo}>
-            {o.etiqueta}
-          </option>
-        ))}
-      </select>
-    </Field>
+    <div>
+      <Field label={etiqueta} error={error}>
+        <select className="field" aria-invalid={error ? true : undefined} value={valor} onChange={(e) => onCambiar(e.target.value)} onBlur={onTocar}>
+          <option value="">Selecciona</option>
+          {decl.opciones.map((o) => (
+            <option key={o.codigo} value={o.codigo}>
+              {o.etiqueta}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <AyudaRunt texto={ayuda} />
+    </div>
   );
 }
 
 /** Opciones de un catálogo del vehículo (colores, combustibles, carrocerías) con búsqueda y los cuatro estados. */
-function ControlCatalogo({ cliente, decl, solicitudId, etiqueta, valor, error, onCambiar, onTocar }: { cliente: ClientePortal; decl: DeclaracionTipo; solicitudId: string; etiqueta: string; valor: string; error: string | undefined; onCambiar: (v: string) => void; onTocar: () => void }) {
+function ControlCatalogo({ cliente, decl, solicitudId, etiqueta, valor, ayuda, error, onCambiar, onTocar }: { cliente: ClientePortal; decl: DeclaracionTipo; solicitudId: string; etiqueta: string; valor: string; ayuda: string | undefined; error: string | undefined; onCambiar: (v: string) => void; onTocar: () => void }) {
   // El catálogo llega por pedazos (hasta 50): la búsqueda por texto la hace el servidor, sin una petición por tecla.
   const [texto, setTexto] = useState("");
   const [busqueda, setBusqueda] = useState("");
@@ -175,6 +185,7 @@ function ControlCatalogo({ cliente, decl, solicitudId, etiqueta, valor, error, o
           onBlur={onTocar}
         />
       </Field>
+      <AyudaRunt texto={ayuda} />
       <div aria-live="polite" className="mt-1 text-xs">
         {catalogo.isError && (
           <p role="alert" className="flex flex-wrap items-center gap-2 text-alert">

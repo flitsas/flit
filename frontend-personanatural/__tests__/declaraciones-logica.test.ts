@@ -6,7 +6,9 @@ import {
   declaracionesActivas,
   declaracionesDe,
   erroresDeDeclaraciones,
+  errorIgualAlRunt,
   nombreLegibleDeDocumento,
+  valorActualEnRunt,
   soportesDe,
   valoresDeDeclaraciones,
 } from "@/lib/tramite/declaraciones";
@@ -160,5 +162,46 @@ describe("declaraciones del tipo (lógica pura)", () => {
     expect(claveDeCampoDeclaracion(d, "vehicle_color")).toBe("declaracion.color");
     expect(claveDeCampoDeclaracion(d, "cambio_color")).toBe("declaracion.color");
     expect(claveDeCampoDeclaracion(d, "cilindraje")).toBeUndefined();
+  });
+});
+
+describe("el valor nuevo debe ser distinto al del RUNT", () => {
+  const d = def([decl()]);
+  const runt = { color: "AZUL MATE" };
+
+  it("igual (normalizado) al del RUNT es error y no se guarda; distinto pasa; sin valor RUNT no bloquea", () => {
+    expect(erroresDeDeclaraciones(d, [], { vehicle_color: "azul  máte" }, [], runt)["declaracion.color"]).toBe("El nuevo color debe ser distinto al registrado en el RUNT.");
+    expect(valoresDeDeclaraciones(d, { vehicle_color: "AZUL MATE" }, [], {}, runt)).toEqual({});
+    expect(erroresDeDeclaraciones(d, [adjunto("soporte_cambio_color")], { vehicle_color: "ROJO" }, [], runt)).toEqual({});
+    expect(valoresDeDeclaraciones(d, { vehicle_color: "ROJO" }, [], {}, runt)).toEqual({ vehicle_color: "ROJO" });
+    expect(erroresDeDeclaraciones(d, [adjunto("soporte_cambio_color")], { vehicle_color: "AZUL MATE" }, [], {})).toEqual({});
+    expect(erroresDeDeclaraciones(d, [adjunto("soporte_cambio_color")], { vehicle_color: "AZUL MATE" }, [], undefined)).toEqual({});
+  });
+
+  it("muestra el valor actual y aplica a combustible y carrocería; el blindaje no se compara", () => {
+    expect(valorActualEnRunt(decl(), runt)?.texto).toBe("Color actual en el RUNT: AZUL MATE");
+    const comb = decl({ clave: "comb", fieldKey: "vehicle_fuel", catalogo: "combustibles", opciones: [{ codigo: "GAS", etiqueta: "Gas", docCodes: [], exigeSoporte: false }], soporteObligatorio: false });
+    expect(errorIgualAlRunt(comb, "GAS", { combustible: "GAS" })).toBe("El nuevo combustible debe ser distinto al registrado en el RUNT.");
+    expect(errorIgualAlRunt(decl({ fieldKey: "vehicle_body_type", catalogo: "carrocerias" }), "Furgón", { carroceria: "FURGON" })).toMatch(/carrocería/);
+    expect(errorIgualAlRunt(CAUSAL, "VOLUNTARIA", { color: "VOLUNTARIA" })).toBeUndefined();
+  });
+
+  it("el 422 del servidor sobre valores.<fieldKey> cae en la declaración", () => {
+    expect(claveDeCampoDeclaracion(d, "vehicle_color")).toBe("declaracion.color");
+  });
+});
+
+describe("filas de declaraciones en el resumen", () => {
+  it("etiqueta y valor legible, más el soporte cargado", async () => {
+    const { filasDeDeclaraciones } = await import("@/lib/tramite/resumen");
+    const { solicitudCompleta } = await import("./fixtures-envio");
+    const base = solicitudCompleta();
+    const sol = { ...base, fieldValues: { ...base.fieldValues, vehicle_color: "ALUMINIO ROJO", cancelacion_causal: "VOLUNTARIA" }, adjuntos: [adjunto("soporte_cambio_color")] };
+    const filas = filasDeDeclaraciones(def([decl({ soporteObligatorio: false }), CAUSAL]), sol);
+    expect(filas).toEqual([
+      { etiqueta: "Nuevo color", valor: "ALUMINIO ROJO" },
+      { etiqueta: "Soporte cambio color", valor: "Cargado" },
+      { etiqueta: "Causal de cancelación", valor: "Decisión voluntaria" },
+    ]);
   });
 });

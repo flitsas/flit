@@ -9,7 +9,7 @@ import { useWizard, type PropsSeccion } from "@/components/tramite/ContextoWizar
 import { MobilityLoader } from "@/components/MobilityLoader";
 import { Btn, Card } from "@/components/tramite/piezas";
 import { claveSolicitud } from "@/components/tramite/useSolicitud";
-import type { Cotizacion, DefinicionTipo, Solicitud } from "@/lib/api/cliente";
+import type { Cotizacion, DefinicionTipo, Solicitud, ValoresActualesRunt } from "@/lib/api/cliente";
 import { ApiError, mensajeDe, type FallasDeRadicacion } from "@/lib/api/errores";
 import { useBloqueo } from "@/lib/api/useBloqueo";
 import { EXIGIR_IDENTIDAD_AL_ENVIAR, ETIQUETA_VALIDACION } from "@/lib/tramite/actores";
@@ -18,8 +18,10 @@ import { conservaLlave } from "@/lib/tramite/envio";
 import { formatearPesos } from "@/lib/formato";
 import { nuevaLlave } from "@/lib/idempotencia";
 import type { GrupoPaso } from "@/lib/tramite/pasos";
-import { destinoDePendiente, pasoTieneSecciones, textoPendiente } from "@/lib/tramite/resumen";
+import { categoriaRuntDe, declaracionesActivas, errorIgualAlRunt } from "@/lib/tramite/declaraciones";
+import { destinoDePendiente, filasDeDeclaraciones, pasoTieneSecciones, textoPendiente } from "@/lib/tramite/resumen";
 import { recordarPresentacion } from "@/lib/tramite/presentacion";
+import { useEnviosFallidos } from "@/lib/tramite/envioIdentidad";
 
 const NOMBRE_PASO: Readonly<Record<string, string>> = {
   actores: "Actores",
@@ -43,6 +45,7 @@ export function ResumenTramite({ onEstado }: PropsSeccion) {
   const [falla, setFalla] = useState<Falla | null>(null);
   const llave = useRef<string | null>(null);
   const enCurso = useRef(false);
+  const enviosFallidos = useEnviosFallidos(solicitud.solicitudId);
 
   const transformaciones = solicitud.datos.requisitos?.transformaciones ?? [];
   const cotizacion = useQuery<Cotizacion>({
@@ -50,6 +53,18 @@ export function ResumenTramite({ onEstado }: PropsSeccion) {
     queryFn: skipToken,
     staleTime: Infinity,
   });
+
+  // Lo declarado en Requisitos: una fila por declaración y por soporte cargado. Un valor igual al del RUNT no deja enviar.
+  const declaradas = filasDeDeclaraciones(definicion, solicitud);
+  const decls = declaracionesActivas(definicion, transformaciones);
+  const valoresRunt = useQuery<ValoresActualesRunt>({
+    queryKey: ["pn", "valores-actuales", solicitud.solicitudId],
+    queryFn: ({ signal }) => cliente.solicitudes.valoresActuales(solicitud.solicitudId, { signal }),
+    enabled: decls.some((d) => categoriaRuntDe(d) !== null),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+  const igualAlRunt = decls.map((d) => errorIgualAlRunt(d, (solicitud.fieldValues[d.fieldKey] ?? "").trim(), valoresRunt.data)).find((e) => e !== undefined);
 
   const placa = solicitud.placa ?? solicitud.vin ?? "—";
 
@@ -62,7 +77,7 @@ export function ResumenTramite({ onEstado }: PropsSeccion) {
   };
 
   const enviar = async () => {
-    if (enCurso.current || bloqueo.bloqueado) return;
+    if (enCurso.current || bloqueo.bloqueado || igualAlRunt) return;
     enCurso.current = true;
     setEnviando(true);
     setFalla(null);
@@ -103,6 +118,12 @@ export function ResumenTramite({ onEstado }: PropsSeccion) {
             <span>Tipo de Trámite</span>
             <b>{definicion.name}</b>
           </li>
+          {declaradas.map((fila) => (
+            <li key={fila.etiqueta} className="flex justify-between gap-4">
+              <span>{fila.etiqueta}</span>
+              <b>{fila.valor}</b>
+            </li>
+          ))}
           {(cotizacion.data?.lineas ?? []).map((linea) => (
             <li key={linea.codigo} className="flex justify-between gap-4">
               <span>{linea.nombre}</span>
@@ -116,7 +137,18 @@ export function ResumenTramite({ onEstado }: PropsSeccion) {
         </ul>
       </Card>
 
+      {enviosFallidos > 0 && (
+        <p role="alert" className="flex items-center gap-2 text-sm text-alert">
+          <TriangleAlert aria-hidden className="h-4 w-4 shrink-0" />
+          Hay validaciones de identidad pendientes de envío. Vuelve a Actores y usa «Reenviar validación».
+        </p>
+      )}
       <div aria-live="assertive">{falla && <FallaEnvio falla={falla} onIr={irAPaso} definicion={definicion} />}</div>
+      {igualAlRunt && (
+        <p role="alert" className="text-sm text-alert">
+          {igualAlRunt} Vuelve a Requisitos para corregirlo.
+        </p>
+      )}
       {bloqueo.bloqueado && (
         <p id={idBloqueo} role="status" className="text-sm text-muted-foreground">
           Podrás intentarlo de nuevo en {bloqueo.segundosRestantes} s.
@@ -127,7 +159,7 @@ export function ResumenTramite({ onEstado }: PropsSeccion) {
         <Btn tone="secondary" onClick={() => irAPaso("requisitos")} disabled={enviando}>
           Atrás
         </Btn>
-        <Btn tone="positive" onClick={() => void enviar()} disabled={enviando || bloqueo.bloqueado} describedBy={bloqueo.bloqueado ? idBloqueo : undefined}>
+        <Btn tone="positive" onClick={() => void enviar()} disabled={enviando || bloqueo.bloqueado || Boolean(igualAlRunt)} describedBy={bloqueo.bloqueado ? idBloqueo : undefined}>
           Enviar trámite
         </Btn>
       </div>

@@ -54,6 +54,54 @@ export const declaracionesActivas = (d: DefinicionTipo, transformaciones: readon
 /** Las opciones en línea de una declaración con la elegida (vacío si el valor viene de un catálogo). */
 export const opcionElegida = (decl: DeclaracionTipo, valor: string): OpcionDeclaracion | undefined => decl.opciones.find((o) => o.codigo === valor);
 
+/** Valores actuales del vehículo en el RUNT (GET /solicitudes/{id}/vehiculo/valores-actuales). Cualquiera puede faltar. */
+export interface ValoresRunt {
+  color?: string | null;
+  combustible?: string | null;
+  carroceria?: string | null;
+}
+
+type CategoriaRunt = keyof ValoresRunt;
+
+const CATEGORIA_POR_CATALOGO: Readonly<Record<string, CategoriaRunt>> = { colores: "color", combustibles: "combustible", carrocerias: "carroceria" };
+const CATEGORIA_POR_CLAVE: Readonly<Record<string, CategoriaRunt>> = { vehicle_color: "color", vehicle_fuel: "combustible", vehicle_body_type: "carroceria" };
+
+const TEXTOS_RUNT: Readonly<Record<CategoriaRunt, { actual: string; error: string }>> = {
+  color: { actual: "Color actual en el RUNT", error: "El nuevo color debe ser distinto al registrado en el RUNT." },
+  combustible: { actual: "Combustible actual en el RUNT", error: "El nuevo combustible debe ser distinto al registrado en el RUNT." },
+  carroceria: { actual: "Carrocería actual en el RUNT", error: "La nueva carrocería debe ser distinta a la registrada en el RUNT." },
+};
+
+/** Mayúsculas, sin tildes y con los espacios colapsados: así «Azul  mate» y «AZUL MATE» son el mismo valor. */
+export const normalizarTexto = (t: string): string =>
+  t
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+
+/** Categoría RUNT que una declaración de transformación (color, combustible, carrocería) debe cambiar; `null` si no es de esas. */
+export function categoriaRuntDe(decl: DeclaracionTipo): CategoriaRunt | null {
+  return CATEGORIA_POR_CLAVE[decl.fieldKey] ?? CATEGORIA_POR_CATALOGO[decl.catalogo] ?? null;
+}
+
+/** Lo que consta hoy en el RUNT para esa declaración, con el texto de ayuda (`null` si no aplica o el RUNT no lo trae). */
+export function valorActualEnRunt(decl: DeclaracionTipo, runt: ValoresRunt | null | undefined): { valor: string; texto: string } | null {
+  const cat = categoriaRuntDe(decl);
+  const valor = cat ? (runt?.[cat] ?? "").trim() : "";
+  return cat && valor ? { valor, texto: `${TEXTOS_RUNT[cat].actual}: ${valor}` } : null;
+}
+
+/** Mensaje de error si el valor elegido es el mismo que ya tiene el vehículo en el RUNT (comparación normalizada); sin valor RUNT no bloquea. */
+export function errorIgualAlRunt(decl: DeclaracionTipo, valor: string, runt: ValoresRunt | null | undefined): string | undefined {
+  const actual = valorActualEnRunt(decl, runt);
+  const cat = categoriaRuntDe(decl);
+  if (!actual || !cat || valor.trim() === "") return undefined;
+  const candidatos = [valor, opcionElegida(decl, valor)?.etiqueta ?? ""].filter((x) => x.trim() !== "").map(normalizarTexto);
+  return candidatos.includes(normalizarTexto(actual.valor)) ? TEXTOS_RUNT[cat].error : undefined;
+}
+
 export interface SoporteDeclaracion {
   docCode: string;
   nombre: string;
@@ -99,6 +147,7 @@ export function erroresDeDeclaraciones(
   adjuntos: readonly Adjunto[],
   campos: Readonly<Record<string, string>>,
   transformaciones: readonly string[] = [],
+  runt?: ValoresRunt | null,
 ): Record<string, string> {
   const errores: Record<string, string> = {};
   for (const decl of declaracionesActivas(d, transformaciones)) {
@@ -109,6 +158,11 @@ export function erroresDeDeclaraciones(
     }
     if (decl.opciones.length > 0 && !opcionElegida(decl, valor)) {
       errores[`declaracion.${decl.clave}`] = "Elige una de las opciones";
+      continue;
+    }
+    const igual = errorIgualAlRunt(decl, valor, runt);
+    if (igual) {
+      errores[`declaracion.${decl.clave}`] = igual;
       continue;
     }
     for (const soporte of soportesDe(decl, valor, d)) {
@@ -129,11 +183,14 @@ export function valoresDeDeclaraciones(
   campos: Readonly<Record<string, string>>,
   transformaciones: readonly string[] = [],
   guardados: Readonly<Record<string, string>> = {},
+  runt?: ValoresRunt | null,
 ): Record<string, string | null> {
   const valores: Record<string, string | null> = {};
   for (const decl of declaracionesDe(d)) {
     if (declaracionActiva(decl, transformaciones)) {
-      const valor = (campos[decl.fieldKey] ?? "").trim();
+      let valor = (campos[decl.fieldKey] ?? "").trim();
+      // Un valor igual al del RUNT no es válido: no se guarda como elegido (el servidor también lo rechazaría).
+      if (valor && errorIgualAlRunt(decl, valor, runt)) valor = "";
       if (valor) valores[decl.fieldKey] = valor;
       else if (!decl.obligatoria) valores[decl.fieldKey] = null;
     } else if (!decl.obligatoria && (guardados[decl.fieldKey] ?? "").trim() !== "") {

@@ -264,6 +264,13 @@ export interface GravamenRunt {
   aviso: "sin_gravamen" | null;
 }
 
+/** Valores actuales del vehículo en el RUNT (GET /solicitudes/{id}/vehiculo/valores-actuales); cualquiera puede venir vacío. */
+export interface ValoresActualesRunt {
+  color?: string | null;
+  combustible?: string | null;
+  carroceria?: string | null;
+}
+
 /** Qué se hace con la prenda: registrar una nueva, levantar la que tiene el vehículo o confirmar que no hay. */
 export type DecisionPrenda = "registrar" | "levantar" | "sin_prenda";
 
@@ -788,6 +795,8 @@ export function crearCliente({ base = BASE_BFF, fetchImpl }: OpcionesCliente = {
       diagnosticar: (id: string, datos?: DiagnosticoRequest, o?: OpcionesLlamada) =>
         solicitar<Diagnostico>("POST", `/solicitudes/${encodeURIComponent(id)}/diagnostico`, datos, o),
       /** Gravamen RUNT del vehículo del borrador, para precargar el acreedor de la prenda. 409 `vehiculo_no_definido`, 503 `proveedor_no_disponible`. */
+      /** Color, combustible y carrocería que el RUNT tiene hoy para el vehículo del borrador: el nuevo valor debe ser distinto. */
+      valoresActuales: (id: string, o?: OpcionesLlamada) => solicitar<ValoresActualesRunt>("GET", `/solicitudes/${encodeURIComponent(id)}/vehiculo/valores-actuales`, undefined, o),
       gravamen: (id: string, o?: OpcionesLlamada) => solicitar<GravamenRunt>("GET", `/solicitudes/${encodeURIComponent(id)}/vehiculo/gravamen`, undefined, o),
       asignarOrganismo: (id: string, datos: { organismoId: string; version: number }, o?: OpcionesLlamada) =>
         solicitar<Solicitud>("PUT", `/solicitudes/${encodeURIComponent(id)}/organismo`, datos, o),

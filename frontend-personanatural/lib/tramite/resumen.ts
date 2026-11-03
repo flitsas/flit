@@ -3,7 +3,7 @@
 import type { ActorEstado, DefinicionTipo, Pendiente, Solicitud } from "@/lib/api/cliente";
 import { formatearPesos } from "@/lib/formato";
 import { documentoLegible } from "@/lib/tramite/actores";
-import { declaracionesDe } from "@/lib/tramite/declaraciones";
+import { CLAVE_DESTINO_POR_DEFECTO, CLAVE_NOMBRE_DESTINO, declaracionDestino, declaracionesActivas, declaracionesDe, opcionElegida, soportesDe } from "@/lib/tramite/declaraciones";
 import { grupoDePendiente, GRUPO_POR_SECCION, type GrupoPaso } from "@/lib/tramite/pasos";
 import { DOC_COMPROBANTE_PAGO, tamanoLegible, TRANSFORMACIONES } from "@/lib/tramite/requisitos";
 
@@ -215,4 +215,31 @@ export function destinoDePendiente(pendiente: Pendiente, definicion: DefinicionT
   const grupo = grupoDePendiente(pendiente, definicion);
   if (grupo === "envio" || grupo === "resumen") return null;
   return pasoTieneSecciones(grupo, definicion) ? grupo : null;
+}
+
+// ── Lo declarado en Requisitos, para la tarjeta «Datos del trámite» del paso Resumen ─────────────────────────────────
+
+/**
+ * Una fila por cada declaración activa con valor (etiqueta de la declaración y valor legible: la etiqueta de la opción elegida o el
+ * valor del catálogo) y, bajo ella, una fila por cada soporte que pide ese valor y ya está cargado («Soporte cambio color» → «Cargado»).
+ * La secretaría de destino sale con el nombre que el servidor guardó, si lo hay.
+ */
+export function filasDeDeclaraciones(definicion: DefinicionTipo, solicitud: Solicitud): FilaResumen[] {
+  const transformaciones = solicitud.datos.requisitos?.transformaciones ?? [];
+  const filas: FilaResumen[] = [];
+  for (const decl of declaracionesActivas(definicion, transformaciones)) {
+    const valor = (solicitud.fieldValues[decl.fieldKey] ?? "").trim();
+    if (valor === "") continue;
+    filas.push({ etiqueta: decl.etiqueta, valor: opcionElegida(decl, valor)?.etiqueta ?? valor });
+    for (const soporte of soportesDe(decl, valor, definicion)) {
+      if (solicitud.adjuntos.some((a) => a.tipo === soporte.docCode)) filas.push({ etiqueta: soporte.nombre, valor: "Cargado" });
+    }
+  }
+  const destino = declaracionDestino(definicion);
+  const destinoClave = destino?.fieldKey || CLAVE_DESTINO_POR_DEFECTO;
+  if (destino && (solicitud.fieldValues[destinoClave] ?? "").trim() !== "") {
+    const nombre = (solicitud.fieldValues[CLAVE_NOMBRE_DESTINO] ?? "").trim();
+    filas.push({ etiqueta: destino.etiqueta || "Organismo de destino", valor: nombre || SIN_DATO });
+  }
+  return filas;
 }
