@@ -27,6 +27,15 @@ public sealed class AdjuntosService(
     private readonly AdjuntosOptions _o = options.Value;
 
     /// <summary>
+    /// El documento hace parte del tipo si está en su matriz, si lo reclama una de sus declaraciones (soporte de un cambio de color,
+    /// certificado de blindaje, documentos de una causal: HU 5) o si es el soporte de una decisión de prenda (HU 8) en un tipo con prenda.
+    /// </summary>
+    internal static bool DocumentoAdmitido(Definiciones.DefinicionTipoDto def, string tipo) =>
+        def.Documentos.Any(d => string.Equals(d.DocCode, tipo, StringComparison.Ordinal))
+        || (def.Declaraciones ?? []).Any(d => string.Equals(d.DocCodeSoporte, tipo, StringComparison.Ordinal) || d.Opciones.Any(o => o.DocCodes.Contains(tipo, StringComparer.Ordinal)))
+        || ((def.Flags.RequierePrenda || def.Flags.PermitePrendaComplementaria) && ReglasBorrador.DocumentosDePrenda.Contains(tipo));
+
+    /// <summary>
     /// Guarda un archivo ligado a un documento del tipo (<paramref name="tipo"/> es su <c>doc_code</c>) o, con
     /// <see cref="SolicitudesService.TipoComprobantePago"/>, como soporte del pago: el nuevo comprobante reemplaza al anterior
     /// para efectos del requisito, y el anterior queda en el historial de la solicitud (supuesto S1: lo valida un operador FLIT).
@@ -39,7 +48,7 @@ public sealed class AdjuntosService(
         tipo = tipo?.Trim();
         if (string.IsNullOrEmpty(tipo))
             throw Invalido("tipo", "Indique a qué documento corresponde el archivo.");
-        if (tipo != SolicitudesService.TipoComprobantePago && !def.Documentos.Any(d => string.Equals(d.DocCode, tipo, StringComparison.Ordinal)))
+        if (tipo != SolicitudesService.TipoComprobantePago && !DocumentoAdmitido(def, tipo))
             throw new ReglaDeNegocioException(StatusCodes.Status422UnprocessableEntity, CodigoDocumentoAjeno, "Documento no válido", "Ese documento no hace parte de este tipo de trámite.");
 
         if (contenido.Length == 0)

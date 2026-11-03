@@ -49,7 +49,8 @@ public sealed partial class SolicitudesService(
     IFachadaRequisitos requisitos,
     IEnumerable<ILimpiadorDeSolicitud> limpiadores,
     TimeProvider reloj,
-    ConsentimientoVersiones versionesConsentimiento)
+    ConsentimientoVersiones versionesConsentimiento,
+    Catalogos.CatalogosVehiculoService catalogosVehiculo)
 {
     public const string CodigoTipoNoDisponible = "tipo_no_disponible";
     public const string CodigoNoPermiteCambio = "estado_no_permite_cambio";
@@ -246,8 +247,8 @@ public sealed partial class SolicitudesService(
         if (actual.Huella == anterior.Huella && actual.Version == s.DefinicionVersion)
             return null;
 
-        var clavesActuales = actual.Pasos.SelectMany(p => p.Campos).Select(c => c.FieldKey).ToHashSet(StringComparer.Ordinal);
-        var clavesAnteriores = anterior.Pasos.SelectMany(p => p.Campos).Select(c => c.FieldKey).ToHashSet(StringComparer.Ordinal);
+        var clavesActuales = actual.Pasos.SelectMany(p => p.Campos).Select(c => c.FieldKey).Concat(ReglasBorrador.ClavesDeDeclaraciones(actual).Keys).ToHashSet(StringComparer.Ordinal);
+        var clavesAnteriores = anterior.Pasos.SelectMany(p => p.Campos).Select(c => c.FieldKey).Concat(ReglasBorrador.ClavesDeDeclaraciones(anterior).Keys).ToHashSet(StringComparer.Ordinal);
         var campos = LeerCampos(s.FieldValues);
         var descartados = campos.Keys.Where(k => !clavesActuales.Contains(k)).Order(StringComparer.Ordinal).ToList();
         foreach (var k in descartados)
@@ -316,6 +317,10 @@ public sealed partial class SolicitudesService(
         if (errores.Hay)
             throw ReglaDeNegocioException.Invalido(errores);
 
+        await ValidarDestinoAsync(def, nuevos, errores, ct).ConfigureAwait(false);
+        if (errores.Hay)
+            throw ReglaDeNegocioException.Invalido(errores);
+
         var campos = LeerCampos(s.FieldValues);
         foreach (var (clave, valor) in nuevos)
         {
@@ -328,6 +333,18 @@ public sealed partial class SolicitudesService(
         s.FieldValues = JsonSerializer.Serialize(campos, JsonOpciones);
         await GuardarAsync(s, ct).ConfigureAwait(false);
         return await ConstruirAsync(s, conPersonas: false, null, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>HU 10 — el organismo de destino tiene que existir y ser operable en FLIT 2 (D3 del PO: cualquier organismo operable).</summary>
+    private async Task ValidarDestinoAsync(DefinicionTipoDto def, IReadOnlyDictionary<string, string?> nuevos, ErroresDeCampo errores, CancellationToken ct)
+    {
+        foreach (var d in def.Declaraciones.Where(d => d.Control == ReglasBorrador.ControlDestino))
+        {
+            if (!nuevos.TryGetValue(d.FieldKey, out var valor) || !Guid.TryParse(valor, out var id))
+                continue;
+            if (!await catalogosVehiculo.DestinoValidoAsync(id, ct).ConfigureAwait(false))
+                errores.Agregar($"valores.{d.FieldKey}", "El organismo de destino no es válido.");
+        }
     }
 
     public async Task<SolicitudDto> GuardarComercialAsync(Guid id, ComercialRequest? body, CancellationToken ct)
