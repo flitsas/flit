@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Flit.Consultas.Grpc.V1;
 using Flit.PersonaNatural.Api;
 using Flit.PersonaNatural.Api.Abuso;
 using Flit.PersonaNatural.Api.Consultas;
@@ -354,6 +355,164 @@ public sealed class ConsultasEndpointsTests : IAsyncLifetime
 
         respuesta.StatusCode.Should().Be(HttpStatusCode.Conflict);
         (await CodigoAsync(respuesta)).Should().Be("vehiculo_no_definido");
+    }
+
+    // ── HU #14255 y #14257: clase para las carrocerías y gravamen para la prenda ─────────────────────────────────────
+
+    private static ResultadoConsulta ConClase(string? clase)
+    {
+        var r = ResultadosFalsos.VehiculoCompleto();
+        r.Campos.First(c => c.Clave == "vehicle_class").ValorTexto = clase ?? string.Empty;
+        return r;
+    }
+
+    private static ResultadoConsulta ConGravamen(string json)
+    {
+        var r = ResultadosFalsos.VehiculoCompleto(prenda: true);
+        r.Campos.First(c => c.Clave == "runt_gravamenes").ValorJson = json;
+        return r;
+    }
+
+    private async Task<HttpResponseMessage> GetAsync(string ruta, string? token)
+    {
+        using var peticion = new HttpRequestMessage(HttpMethod.Get, ruta);
+        if (token is not null)
+            peticion.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await _http.SendAsync(peticion, TestContext.Current.CancellationToken);
+    }
+
+    private static string Carrocerias(Guid solicitud, string? texto = null) =>
+        $"{SesionEndpoints.Base}/catalogos/carrocerias?solicitudId={solicitud}" + (texto is null ? string.Empty : $"&texto={Uri.EscapeDataString(texto)}");
+
+    private static string Gravamen(Guid solicitud) => $"{SesionEndpoints.Base}/solicitudes/{solicitud}/vehiculo/gravamen";
+
+    [Fact]
+    public async Task Carrocerias_SeFiltranPorLaClaseQueElServidorLeeDelRunt_NoLaDelNavegador()
+    {
+        if (!await IniciarAsync()) return;
+        var (solicitud, token) = await SembrarAsync(("vendedor", "pendiente", null));
+        _runt.Vehiculo = () => ConClase("CAMIÓN");
+
+        var respuesta = await GetAsync(Carrocerias(solicitud), token);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK);
+        var items = (await Json(respuesta)).EnumerateArray().Select(i => (i.GetProperty("codigo").GetString(), i.GetProperty("etiqueta").GetString())).ToList();
+        items.Should().NotBeEmpty().And.Contain(("AMBULANCIA", "AMBULANCIA"), "la clase acentuada del RUNT se normaliza como en FLIT 2");
+        items.Should().NotContain(i => i.Item1 == "SIN CARROCERIA", "esa es de la moto, no del camión");
+        _runt.LlamadasVehiculo.Single().Should().Be(("ABC123", null, new DocumentoConsulta("CC", DocumentoPropietario), solicitud.ToString()));
+    }
+
+    [Fact]
+    public async Task Carrocerias_SinClaseOClaseSinMatch_DevuelveListaVacia_NoElCatalogoCompleto()
+    {
+        if (!await IniciarAsync()) return;
+        var (solicitud, token) = await SembrarAsync(("vendedor", "pendiente", null));
+
+        _runt.Vehiculo = () => ConClase(null);
+        var sinClase = await GetAsync(Carrocerias(solicitud), token);
+        _runt.Vehiculo = () => ConClase("NAVE ESPACIAL");
+        var sinMatch = await GetAsync(Carrocerias(solicitud), token);
+        _runt.Vehiculo = ResultadosFalsos.VehiculoInexistente;
+        var noExiste = await GetAsync(Carrocerias(solicitud), token);
+
+        foreach (var r in new[] { sinClase, sinMatch, noExiste })
+        {
+            r.StatusCode.Should().Be(HttpStatusCode.OK);
+            (await Json(r)).GetArrayLength().Should().Be(0);
+        }
+    }
+
+    [Fact]
+    public async Task Carrocerias_FiltranPorTexto_ExigenLaSesionDeEsaSolicitud_Y503ConElProveedorCaido()
+    {
+        if (!await IniciarAsync()) return;
+        var (solicitud, token) = await SembrarAsync(("vendedor", "pendiente", null));
+        var (otra, _) = await SembrarAsync(("vendedor", "pendiente", null));
+        _runt.Vehiculo = () => ConClase("CAMION");
+
+        var filtrado = await GetAsync(Carrocerias(solicitud, "ambul"), token);
+        var sinSesion = await GetAsync(Carrocerias(solicitud), null);
+        var ajena = await GetAsync(Carrocerias(otra), token);
+        _runt.Vehiculo = ResultadosFalsos.ProveedorCaido;
+        var caido = await GetAsync(Carrocerias(solicitud), token);
+
+        (await Json(filtrado)).EnumerateArray().Select(i => i.GetProperty("codigo").GetString()).Should().Equal("AMBULANCIA");
+        sinSesion.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        ajena.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        caido.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+    }
+
+    [Fact]
+    public async Task Gravamen_SinPrendaEnElRunt_AvisaSinGravamen()
+    {
+        if (!await IniciarAsync()) return;
+        var (solicitud, token) = await SembrarAsync(("vendedor", "aprobada", null));
+        _runt.Vehiculo = () => ResultadosFalsos.VehiculoCompleto();
+
+        var respuesta = await GetAsync(Gravamen(solicitud), token);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK);
+        var cuerpo = await Json(respuesta);
+        cuerpo.GetProperty("tienePrenda").GetBoolean().Should().BeFalse();
+        cuerpo.GetProperty("aviso").GetString().Should().Be("sin_gravamen");
+        cuerpo.GetProperty("acreedor").ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task Gravamen_ConPrendaPeroSinIdentidadValidada_NoEntregaElAcreedorDelTercero()
+    {
+        if (!await IniciarAsync()) return;
+        var (solicitud, token) = await SembrarAsync(("vendedor", "pendiente", null));
+        _runt.Vehiculo = () => ConGravamen("[{\"nombreAcreedor\":\"BANCO FICTICIO S.A.\",\"numeroDocumentoAcreedor\":\"900123456\"}]");
+
+        var respuesta = await GetAsync(Gravamen(solicitud), token);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK);
+        var cuerpo = await Json(respuesta);
+        cuerpo.GetProperty("tienePrenda").GetBoolean().Should().BeTrue();
+        cuerpo.GetProperty("acreedor").ValueKind.Should().Be(JsonValueKind.Null);
+        cuerpo.GetProperty("nitAcreedor").ValueKind.Should().Be(JsonValueKind.Null);
+        cuerpo.GetProperty("aviso").ValueKind.Should().Be(JsonValueKind.Null);
+        (await respuesta.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().NotContain("BANCO FICTICIO").And.NotContain("900123456");
+    }
+
+    [Fact]
+    public async Task Gravamen_ConIdentidadValidadaEnEsaSolicitud_PrecargaElAcreedorYElNit()
+    {
+        if (!await IniciarAsync()) return;
+        var (solicitud, token) = await SembrarAsync(("vendedor", "aprobada", null));
+        _runt.Vehiculo = () => ConGravamen("[{\"nombreAcreedor\":\"BANCO FICTICIO S.A.\",\"numeroDocumentoAcreedor\":\"900.123.456-1\"}]");
+
+        var cuerpo = await Json(await GetAsync(Gravamen(solicitud), token));
+
+        cuerpo.GetProperty("tienePrenda").GetBoolean().Should().BeTrue();
+        cuerpo.GetProperty("acreedor").GetString().Should().Be("BANCO FICTICIO S.A.");
+        cuerpo.GetProperty("nitAcreedor").GetString().Should().Be("9001234561");
+        cuerpo.GetProperty("aviso").ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task Gravamen_LaIdentidadDeOtraSolicitudNoCuenta_YSinSesionOSinVehiculoHayError()
+    {
+        if (!await IniciarAsync()) return;
+        var (solicitud, token) = await SembrarAsync(("vendedor", "pendiente", null));
+        await SembrarAsync(("vendedor", "aprobada", null)); // otra solicitud con identidad validada: no es ESTA
+        _runt.Vehiculo = () => ConGravamen("[{\"nombreAcreedor\":\"BANCO FICTICIO S.A.\"}]");
+
+        var cuerpo = await Json(await GetAsync(Gravamen(solicitud), token));
+        var sinSesion = await GetAsync(Gravamen(solicitud), null);
+        await using (var db = NuevaDb())
+        {
+            (await db.Set<SolicitudTramite>().SingleAsync(s => s.Id == solicitud, TestContext.Current.CancellationToken)).Placa = "???";
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        var sinVehiculo = await GetAsync(Gravamen(solicitud), token);
+
+        cuerpo.GetProperty("acreedor").ValueKind.Should().Be(JsonValueKind.Null);
+        sinSesion.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        sinVehiculo.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await CodigoAsync(sinVehiculo)).Should().Be("vehiculo_no_definido");
     }
 
     // ── Infraestructura de la prueba ─────────────────────────────────────────────────────────────────────────────────

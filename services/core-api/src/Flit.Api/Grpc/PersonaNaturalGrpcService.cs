@@ -32,7 +32,9 @@ public sealed class PersonaNaturalGrpcService(
     FlitDbContext db, RunPreflightPreviewHandler preview, PersonaNaturalTiposReader tiposReader, PersonaNaturalPortalReader portal,
     GetProcedureStepsHandler pasosHandler, IResolvedDocumentMatrixResolver matriz,
     PersonaNaturalConfiguracionPublicaReader configuracionPublica, Flit.Admin.Application.Banners.Ports.IBannerImageStorage imagenesBanner,
-    IPersonaNaturalConfigRepository configuracionPn)
+    IPersonaNaturalConfigRepository configuracionPn,
+    Flit.Tramites.Domain.Tramites.Catalog.IVehicleColorCatalog catalogoColores,
+    Flit.Tramites.Domain.Tramites.Catalog.IVehicleBodyworkCatalog catalogoCarrocerias)
     : PersonaNaturalService.PersonaNaturalServiceBase
 {
     /// <summary>Razón estable de un método que todavía no tiene implementación.</summary>
@@ -155,6 +157,78 @@ public sealed class PersonaNaturalGrpcService(
             Codigo = r.Codigo,
             Nombre = r.Nombre,
         };
+    }
+
+    /// <summary>
+    /// HU 10 — organismos operables en FLIT 2 (oficina activa con perfil OT activo) donde se puede trasladar una cuenta. D3 del PO:
+    /// cualquier organismo operable, no solo los del grant del portal. Solo id, código, nombre y ubicación: sin enlaces ni tarifas.
+    /// Con `id` resuelve un destino concreto (validación del borrador); sin él filtra por texto y acota la lista.
+    /// </summary>
+    public override async Task<ListarOrganismosDestinoResponse> ListarOrganismosDestino(ListarOrganismosDestinoRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Verificar(context);
+        Guid? id = null;
+        if (Texto(request.Id) is { } idTexto)
+        {
+            if (!Guid.TryParse(idTexto, out var parsed))
+                throw Invalido("id no es un identificador válido.");
+            id = parsed;
+        }
+
+        var texto = Texto(request.Texto);
+        if (texto is { Length: > 80 })
+            throw Invalido("texto es demasiado largo.");
+        var limite = request.Limite <= 0 ? PersonaNaturalPortalReader.LimiteDestinoPorDefecto : Math.Min(request.Limite, PersonaNaturalPortalReader.LimiteDestinoMaximo);
+        var organismos = await portal.ListarOrganismosDestinoAsync(texto, id, limite, context.CancellationToken).ConfigureAwait(false);
+        var respuesta = new ListarOrganismosDestinoResponse();
+        respuesta.Organismos.AddRange(organismos.Select(o => new OrganismoPortal
+        {
+            Id = o.Id.ToString(),
+            Codigo = o.Codigo,
+            Nombre = o.Nombre,
+            Municipio = o.Municipio,
+            Departamento = o.Departamento,
+            EnlaceTarifas = string.Empty,
+        }));
+        return respuesta;
+    }
+
+    /// <summary>
+    /// HU 6 — catálogos de vehículo del asistente de FLIT 2: colores y carrocerías (por clase) de <c>catalogs.*</c> y la lista
+    /// cerrada de combustibles del dominio. `codigo` es el valor que FLIT 2 guarda en `field_values` (el nombre).
+    /// </summary>
+    public override async Task<ListarCatalogoVehiculoResponse> ListarCatalogoVehiculo(ListarCatalogoVehiculoRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Verificar(context);
+        var ct = context.CancellationToken;
+        var texto = Texto(request.Texto);
+        if (texto is { Length: > 80 })
+            throw Invalido("texto es demasiado largo.");
+        var limite = request.Limite <= 0 ? 50 : Math.Min(request.Limite, 300);
+        var respuesta = new ListarCatalogoVehiculoResponse();
+        switch ((Texto(request.Catalogo) ?? string.Empty).ToLowerInvariant())
+        {
+            case DeclaracionesPersonaNatural.CatalogoColores:
+                var colores = await catalogoColores.SearchAsync(texto, limite, ct).ConfigureAwait(false);
+                respuesta.Items.AddRange(colores.Select(c => new ItemCatalogoVehiculo { Codigo = c.Name, Etiqueta = c.Name }));
+                break;
+            case DeclaracionesPersonaNatural.CatalogoCarrocerias:
+                var carrocerias = await catalogoCarrocerias.SearchAsync(Texto(request.Clase), texto, limite, ct).ConfigureAwait(false);
+                respuesta.Items.AddRange(carrocerias.Select(c => new ItemCatalogoVehiculo { Codigo = c.Name, Etiqueta = c.Name }));
+                break;
+            case DeclaracionesPersonaNatural.CatalogoCombustibles:
+                respuesta.Items.AddRange(DeclaracionesPersonaNatural.Combustibles
+                    .Where(c => texto is null || c.Contains(texto, StringComparison.OrdinalIgnoreCase))
+                    .Take(limite)
+                    .Select(c => new ItemCatalogoVehiculo { Codigo = c, Etiqueta = c }));
+                break;
+            default:
+                throw Invalido("catalogo debe ser colores, combustibles o carrocerias.");
+        }
+
+        return respuesta;
     }
 
     /// <summary>

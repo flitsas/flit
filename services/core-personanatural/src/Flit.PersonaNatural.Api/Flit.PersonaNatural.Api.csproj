@@ -31,6 +31,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- HU #14255: copia del catálogo de carrocerías por clase de FLIT 2 (una prueba la compara contra frontend/lib/catalogs). -->
+    <EmbeddedResource Include="Catalogos/bodywork-by-class.json" LogicalName="bodywork-by-class.json" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Flit.PersonaNatural.Tests" />
   </ItemGroup>
 

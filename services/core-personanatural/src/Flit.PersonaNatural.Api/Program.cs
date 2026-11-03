@@ -2,6 +2,7 @@ using Flit.Api.Telemetry;
 using Flit.PersonaNatural.Api.Configuracion;
 using Flit.PersonaNatural.Api.Cotizaciones;
 using Flit.PersonaNatural.Api.Abuso;
+using Flit.PersonaNatural.Api.Catalogos;
 using Flit.PersonaNatural.Api.Adjuntos;
 using Flit.PersonaNatural.Api.Consentimientos;
 using Flit.PersonaNatural.Api.Consultas;
@@ -146,6 +147,7 @@ public static class Program
         app.MapDefinicionesEndpoints();
         app.MapConfiguracionEndpoints();
         app.MapSolicitudesEndpoints();
+        app.MapCatalogosVehiculoEndpoints();
         app.MapAdjuntosEndpoints();
         app.MapRadicacionEndpoints();
         app.MapGet("/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();
