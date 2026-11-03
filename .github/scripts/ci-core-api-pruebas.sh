@@ -12,11 +12,14 @@ set -uo pipefail
 carril=${1:?carril: admin | integration | resto}
 SHARD=${SHARD:-0}; SHARDS=${SHARDS:-1}
 cob=(); [ -n "${COBERTURA:-}" ] && cob=(--collect "XPlat Code Coverage")
+# Pool propio (ci-core-api-vps.sh): XUNIT_HILOS limita los hilos de xUnit de cada proceso y MAX_PARALELO, cuántos
+# proyectos de «resto» corren a la vez. Sin ellas (GitHub), xUnit usa todos los núcleos y «resto» lanza todo junto.
+hilos=(); [ -n "${XUNIT_HILOS:-}" ] && hilos=(-- "xUnit.MaxParallelThreads=$XUNIT_HILOS")
 contar() { sed -n 's/^    //p' | grep -c . ; }
 
 case "$carril" in
   admin)
-    exec dotnet test tests/Flit.Admin.Tests --no-build -c Release --logger "trx;LogFileName=admin.trx" "${cob[@]}" ;;
+    exec dotnet test tests/Flit.Admin.Tests --no-build -c Release --logger "trx;LogFileName=admin.trx" "${cob[@]}" "${hilos[@]}" ;;
 
   integration)
     p=tests/Flit.Integration.Tests
@@ -39,7 +42,7 @@ case "$carril" in
       exit 0
     fi
     args=(); [ -n "$f" ] && args=(--filter "$f")
-    exec dotnet test $p --no-build -c Release "${args[@]}" --logger "trx;LogFileName=integration-$SHARD.trx" "${cob[@]}" ;;
+    exec dotnet test $p --no-build -c Release "${args[@]}" --logger "trx;LogFileName=integration-$SHARD.trx" "${cob[@]}" "${hilos[@]}" ;;
 
   resto)
     # Proyectos con pruebas de TIEMPO (LoginTimingTests compara la latencia de dos caminos del login con una
@@ -50,7 +53,7 @@ case "$carril" in
     for csproj in $proyectos; do
       n=$(basename "$csproj" .csproj)
       case " $solos " in *" $n "*)
-        if dotnet test "$csproj" --no-build -c Release --logger "trx;LogFileName=$n.trx" "${cob[@]}" > "TestResults-$n.log" 2>&1
+        if dotnet test "$csproj" --no-build -c Release --logger "trx;LogFileName=$n.trx" "${cob[@]}" "${hilos[@]}" > "TestResults-$n.log" 2>&1
         then echo "OK    $n (solo)"; else echo "FALLA $n (solo)"; tail -80 "TestResults-$n.log"; rc=1; fi ;;
       esac
     done
@@ -58,7 +61,8 @@ case "$carril" in
       n=$(basename "$csproj" .csproj)
       case $csproj in *Admin.Tests*|*Integration.Tests*) continue ;; esac
       case " $solos " in *" $n "*) continue ;; esac
-      dotnet test "$csproj" --no-build -c Release --logger "trx;LogFileName=$n.trx" "${cob[@]}" > "TestResults-$n.log" 2>&1 &
+      while [ -n "${MAX_PARALELO:-}" ] && [ "$(jobs -rp | wc -l)" -ge "$MAX_PARALELO" ]; do sleep 2; done   # sin `wait -n`: reaparía un pid que se espera abajo
+      dotnet test "$csproj" --no-build -c Release --logger "trx;LogFileName=$n.trx" "${cob[@]}" "${hilos[@]}" > "TestResults-$n.log" 2>&1 &
       pids+=($!); nombres+=("$n")
     done
     for i in "${!pids[@]}"; do
