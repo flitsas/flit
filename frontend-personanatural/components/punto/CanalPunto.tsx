@@ -86,6 +86,7 @@ export function CanalPunto({ codigo, cliente = portal }: { codigo: string; clien
               <h1 className="sr-only">{punto.nombre}</h1>
               <AccionesPunto
                 cliente={cliente}
+                organismoId={punto.organismoId}
                 organismoNombre={punto.nombre}
                 onConsultar={() => setConsultando(true)}
                 onAviso={avisar}

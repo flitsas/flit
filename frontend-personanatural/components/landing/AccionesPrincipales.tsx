@@ -6,7 +6,6 @@ import type { ClientePortal } from "@/lib/api/cliente";
 import { mensajeDe } from "@/lib/api/errores";
 import { ASSETS } from "@/lib/assets";
 import { cedulaValida, normalizarVin, soloDigitos } from "@/lib/entradas";
-import { tiposDePuerta } from "@/lib/landing/puerta-iniciar";
 import { datosVehiculo, ETIQUETA_VEHICULO, MARCADOR_VEHICULO, modoVehiculo, normalizarVehiculo, vehiculoValido } from "@/lib/landing/vehiculo";
 import { boton } from "./estilos";
 import { SelectorTipoTramite } from "./SelectorTipoTramite";
@@ -40,7 +39,8 @@ export function AccionesPrincipales({ tipos, cliente, onIniciar, onConsultar, on
   const [cedula, setCedula] = useState("");
   const [vehiculo, setVehiculo] = useState("");
   const [tipo, setTipo] = useState("");
-  const opciones = tiposDePuerta(tipos.data ?? []);
+  // Los tipos son los que la plataforma tiene configurados y disponibles: sin lista fija en el portal.
+  const opciones = tipos.data ?? [];
   const sinTipos = tipos.isSuccess && opciones.length === 0;
   // La definición del tipo dice si el vehículo se identifica por placa, VIN o ambos; mientras no responda, es la placa.
   const definicion = useDefinicion(cliente, tipo);

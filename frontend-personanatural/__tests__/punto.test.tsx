@@ -2,12 +2,20 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { CanalPunto } from "@/components/punto/CanalPunto";
 import { crearCliente } from "@/lib/api/cliente";
-import { tiposDelPunto } from "@/lib/landing/puerta-iniciar";
 import { json, renderConQuery } from "./utilidades";
 
 type Manejador = (init: RequestInit) => Response | Promise<Response>;
 
 const ENTRADA = { organismoId: "o-1", codigo: "BOG", nombre: "Movilidad de Bogotá" };
+
+// Tipos con tarifa vigente en el organismo de la sesión del punto (GET /punto/tipos-tramite): la lista la define la plataforma, no el portal.
+const TIPOS_PUNTO = [
+  { code: "TRASPASO_STANDARD", name: "Traspaso", family: "TRASPASO", version: 1, disponible: true },
+  { code: "CAMBIO_COLOR", name: "Cambio de color", family: "OTROS", version: 1, disponible: true },
+  { code: "TRASLADO_CUENTA", name: "Traslado de cuenta", family: "OTROS", version: 1, disponible: true },
+  { code: "CANCELACION_MATRICULA", name: "Cancelación de matrícula", family: "OTROS", version: 2, disponible: true },
+  { code: "SIN_TARIFA", name: "Trámite sin tarifa", family: "OTROS", version: 1, disponible: false, motivoNoDisponible: "sin tarifa vigente" },
+];
 
 const MENSAJE_PLACA = "No encontramos un vehículo con esa placa.";
 const MENSAJE_ORGANISMO = "Este trámite se hace en el organismo que tiene el vehículo.";
@@ -17,6 +25,8 @@ const MENSAJE_REVISANDO = "Revisando el vehículo…";
 function montar(rutas: Record<string, Manejador> = {}) {
   const todas: Record<string, Manejador> = {
     "POST /punto/entrada": () => json(ENTRADA),
+    "GET /punto/tipos-tramite": () => json(TIPOS_PUNTO),
+    "GET /tipos-tramite": () => json(TIPOS_PUNTO),
     ...rutas,
   };
   const llamadas: { clave: string; init: RequestInit }[] = [];
@@ -91,17 +101,53 @@ describe("canal del punto /o/codigo", () => {
     fireEvent.change(screen.getByLabelText("Número de documento"), { target: { value: "1020456789" } });
     expect(boton).toBeDisabled();
 
-    expect(tiposDelPunto.map((t) => t.nombre)).toEqual([
-      "Traspaso",
-      "Cambio de color",
-      "Cambio de carrocería",
-      "Conversión de combustible",
-      "Duplicado de placa",
-      "Duplicado de matrícula",
-      "Levantar prenda",
-    ]);
     await elegirTipo("Traspaso");
     expect(boton).toBeEnabled();
+  });
+
+  it("el selector lista los tipos configurados para el organismo del punto, sin lista fija", async () => {
+    const { llamadas } = montar();
+    await screen.findByRole("button", { name: "Iniciar trámite" });
+    const selector = screen.getByRole("button", { name: "Tipo de Trámite" });
+    await waitFor(() => expect(selector).toBeEnabled());
+    fireEvent.click(selector);
+
+    const lista = await screen.findByRole("listbox", { name: "Tipo de Trámite" });
+    // Solo los disponibles (con tarifa vigente); incluye tipos que antes no estaban en la lista fija.
+    expect(within(lista).getAllByRole("option").map((o) => o.textContent)).toEqual(["Traspaso", "Cambio de color", "Traslado de cuenta", "Cancelación de matrícula"]);
+    expect(llamadas.map((l) => l.clave)).toContain("GET /punto/tipos-tramite");
+  });
+
+  it("un tipo del catálogo que no estaba en la lista fija se puede iniciar y llega al arranque con su código", async () => {
+    const { llamadas } = montar({ "POST /punto/arranque": () => json({ puedeSeguir: false, mensaje: "x" }) });
+    await screen.findByRole("button", { name: "Iniciar trámite" });
+    await llenar({ tipoNombre: "Traslado de cuenta" });
+    fireEvent.click(screen.getByRole("button", { name: "Iniciar trámite" }));
+    await waitFor(() => expect(llamadas.some((l) => l.clave === "POST /punto/arranque")).toBe(true));
+    expect(cuerpo(llamadas, "POST /punto/arranque").tipoCodigo).toBe("TRASLADO_CUENTA");
+  });
+
+  it("mientras carga los tipos lo dice; si fallan avisa con role=alert y reintenta; sin tipos lo explica", async () => {
+    let estado: "carga" | "falla" | "vacio" | "ok" = "carga";
+    let liberar: (r: Response) => void = () => undefined;
+    montar({
+      "GET /punto/tipos-tramite": () => {
+        if (estado === "carga") return new Promise<Response>((r) => (liberar = r));
+        if (estado === "falla") return json({ code: "x" }, 503);
+        return json(estado === "vacio" ? [] : TIPOS_PUNTO);
+      },
+    });
+    await screen.findByRole("button", { name: "Iniciar trámite" });
+    expect(screen.getByRole("button", { name: "Tipo de Trámite" })).toHaveTextContent("Cargando...");
+    expect(screen.getByRole("button", { name: "Tipo de Trámite" })).toBeDisabled();
+    estado = "falla";
+    liberar(json({ code: "x" }, 503));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+
+    estado = "vacio";
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+    expect(await screen.findByText("Por ahora no hay trámites disponibles en este punto.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tipo de Trámite" })).toBeDisabled();
   });
 
   it.each([

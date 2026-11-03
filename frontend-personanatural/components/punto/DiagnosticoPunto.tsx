@@ -11,7 +11,6 @@ import { Badge, Card, Nav, Row } from "@/components/tramite/piezas";
 import type { ClientePortal, Diagnostico, ResultadoVehiculoPunto, VehiculoDelTramite } from "@/lib/api/cliente";
 import { mensajeDeFallo } from "@/lib/api/errores";
 import { ASSETS } from "@/lib/assets";
-import { tiposDelPunto } from "@/lib/landing/puerta-iniciar";
 import {
   datosTecnicos,
   filasDiagnostico,
@@ -37,10 +36,6 @@ type EstadoCarga =
   | { fase: "listo"; diagnostico: Diagnostico; vehiculo: ResultadoVehiculoPunto | null }
   | { fase: "error"; mensaje: string };
 
-function nombreTipo(codigo: string): string {
-  return tiposDelPunto.find((t) => t.codigo === codigo)?.nombre ?? codigo;
-}
-
 function aVehiculoDelTramite(v: ResultadoVehiculoPunto | null): VehiculoDelTramite | null {
   if (!v) return null;
   return {
@@ -64,6 +59,7 @@ export function DiagnosticoPunto({
   placa,
   documento,
   tipoCodigo,
+  tipoNombre: nombreDelTipo,
   organismoNombre,
   onVolver,
   onAviso,
@@ -72,6 +68,8 @@ export function DiagnosticoPunto({
   placa: string;
   documento: string;
   tipoCodigo: string;
+  /** Nombre del tipo tal como lo ofrece el catálogo del punto; sin él se muestra el código. */
+  tipoNombre?: string | undefined;
   organismoNombre: string;
   onVolver: () => void;
   onAviso: (titulo: string, mensaje: string, tono?: "alerta" | "exito" | "info") => void;
@@ -81,7 +79,7 @@ export function DiagnosticoPunto({
   const [estado, setEstado] = useState<EstadoCarga>({ fase: "cargando" });
   const intento = useRef(0);
   const tituloRef = useRef<HTMLHeadingElement | null>(null);
-  const tipoNombre = nombreTipo(tipoCodigo);
+  const tipoNombre = nombreDelTipo?.trim() || tipoCodigo;
   const indicePaso =
     paso === "diagnostico" ? 0 : paso === "actores" ? 1 : paso === "requisitos" ? 2 : 3;
 
@@ -106,7 +104,9 @@ export function DiagnosticoPunto({
   }
 
   useEffect(() => {
-    void cargar();
+    // Diferido un turno (como RequisitosPunto): el estado ya arranca en «cargando» y así el efecto no escribe estado en su cuerpo.
+    const id = window.setTimeout(() => void cargar(), 0);
+    return () => window.clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- recarga explícita con Reintentar
   }, [placa, documento, tipoCodigo]);
 

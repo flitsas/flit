@@ -74,7 +74,7 @@ describe("landing: organismos desde el BFF", () => {
 });
 
 describe("landing: tipos de trámite desde el BFF", () => {
-  it("el selector ofrece solo los tipos disponibles y permite elegir uno", async () => {
+  it("el selector ofrece los tipos disponibles del catálogo (sin lista fija en el portal) y permite elegir uno", async () => {
     const { cliente } = fetchFalso(OK);
     renderConQuery(<Landing cliente={cliente} />);
     const selector = screen.getByRole("button", { name: "Tipo de Trámite" });
@@ -82,9 +82,10 @@ describe("landing: tipos de trámite desde el BFF", () => {
 
     fireEvent.click(selector);
     const opciones = within(screen.getByRole("listbox", { name: "Tipo de Trámite" })).getAllByRole("option");
-    expect(opciones.map((o) => o.textContent)).toEqual(["Cambio de color", "Traspaso"]);
+    // Todos los disponibles que informa el catálogo, también los que antes no estaban en la lista fija; el no disponible no sale.
+    expect(opciones.map((o) => o.textContent)).toEqual(["Trámite A", "Trámite C", "Cambio de color", "Traspaso"]);
 
-    fireEvent.click(opciones[1]);
+    fireEvent.click(opciones[3]);
     expect(screen.getByRole("button", { name: "Tipo de Trámite" })).toHaveTextContent("Traspaso");
   });
 
@@ -98,7 +99,7 @@ describe("landing: tipos de trámite desde el BFF", () => {
     const lista = screen.getByRole("listbox", { name: "Tipo de Trámite" });
     fireEvent.keyDown(lista, { key: "ArrowDown" });
     fireEvent.keyDown(lista, { key: "Enter" });
-    expect(selector).toHaveTextContent("Traspaso");
+    expect(selector).toHaveTextContent("Trámite C");
 
     fireEvent.keyDown(selector, { key: "ArrowDown" });
     fireEvent.keyDown(screen.getByRole("listbox"), { key: "Escape" });
