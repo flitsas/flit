@@ -87,6 +87,7 @@ public static class Modulos
             services.AddScoped<Consultas.Bus.IConstructorSolicitud>(sp => ActivatorUtilities.CreateInstance<Consultas.Bus.ConstructorSolicitudSimitPersona>(sp, fuente));
         services.AddScoped<Consultas.Bus.IConstructorSolicitud, Consultas.Bus.ConstructorSolicitudAvaluo>();
         services.AddScoped<Consultas.Bus.IConstructorSolicitud, Consultas.Bus.ConstructorSolicitudImpuesto>();
+        services.AddScoped<Dictamen.EmisorDictamen>();
         services.AddScoped<Consultas.Bus.PublicadorCeldas>();
         // HU #13737 (ADR-0075, Q4): los reintentos los decide Diagnóstico; core-consultas consulta una sola vez.
         services.AddSingleton<Consultas.Bus.ProgramadorReintentos>();

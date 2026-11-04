@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Flit.Diagnostico.Api.Modulos.Backoffice;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
+using Flit.Diagnostico.Api.Modulos.Dictamen;
 using Flit.Diagnostico.Api.Modulos.Tablero;
 using Flit.Diagnostico.Api.Modulos.Vehiculos;
 using Flit.Diagnostico.Api.Persistence;
@@ -88,7 +89,7 @@ internal sealed record PersonaEnErrorDto(
 /// </example>
 internal sealed partial class LlenadoManual(
     DiagnosticoDb db, UsuarioActual usuario, IProtectorDocumentoPersona protector, IProtectorRespuestaFuente protectorRespuesta, TimeProvider reloj,
-    IPlatformOutbox outbox, ILogger<LlenadoManual> logger)
+    IPlatformOutbox outbox, EmisorDictamen emisor, ILogger<LlenadoManual> logger)
 {
     public const string CodigoFuenteNoAdmite = "FUENTE_NO_ADMITE_MANUAL";
     public const string CodigoPersonaNoEnError = "PERSONA_NO_EN_ERROR";
@@ -96,7 +97,7 @@ internal sealed partial class LlenadoManual(
 
     /// <summary>Lo único que el llenado puede escribir en la compañía de la celda.</summary>
     private static readonly Type[] TiposDelLlenado =
-        [typeof(CeldaConsulta), typeof(IntentoConsulta), typeof(CabeceraDiagnostico), typeof(HistorialEstadoDiagnostico)];
+        [typeof(CeldaConsulta), typeof(IntentoConsulta), typeof(CabeceraDiagnostico), typeof(HistorialEstadoDiagnostico), typeof(DictamenVehiculo)];
 
     public async Task<LlenadoManualDto> LlenarAsync(Guid empresa, Guid consultaId, JsonElement json, CancellationToken ct)
     {
@@ -132,6 +133,7 @@ internal sealed partial class LlenadoManual(
             celda.RespuestaFuenteCifrada = EjecutorPorPersonas.EsPorPersona(celda.Fuente)
                 ? RespuestaFuenteCelda.SoloRespondidas(protectorRespuesta, celda.RespuestaFuenteCifrada, celda.Payload)
                 : null;
+            var foto = await emisor.PrepararAsync(celda, ct).ConfigureAwait(false);
             celda.Estado = EstadoCelda.Completado;
             celda.Payload = payload;
             celda.TipoError = null;
@@ -145,6 +147,8 @@ internal sealed partial class LlenadoManual(
             celda.ActualizadoEn = ahora;
             celda.VersionTablero = version;
             db.AddRange(intentos);
+            if (foto is { } tomada)
+                await emisor.EmitirAsync(celda, EstadoCelda.Completado, tomada, ahora, ct).ConfigureAwait(false);
             try
             {
                 await db.GuardarDeLaEmpresaAsync(empresa, TiposDelLlenado, ct).ConfigureAwait(false);

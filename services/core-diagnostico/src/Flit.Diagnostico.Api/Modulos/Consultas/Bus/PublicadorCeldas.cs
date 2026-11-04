@@ -1,4 +1,5 @@
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
+using Flit.Diagnostico.Api.Modulos.Dictamen;
 using Flit.Diagnostico.Api.Modulos.Tablero;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Domain.Consultas;
@@ -39,7 +40,7 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 /// </example>
 internal sealed partial class PublicadorCeldas(
     DiagnosticoDb db, IPlatformOutbox outbox, IEnumerable<IConstructorSolicitud> constructores, IEnumerable<IEjecutorCelda> ejecutores,
-    IProtectorRespuestaFuente protector, TimeProvider reloj, ILogger<PublicadorCeldas> log)
+    IProtectorRespuestaFuente protector, TimeProvider reloj, EmisorDictamen emisor, ILogger<PublicadorCeldas> log)
 {
     private readonly Dictionary<Guid, bool> _express = [];
 
@@ -144,6 +145,8 @@ internal sealed partial class PublicadorCeldas(
             throw new InvalidOperationException("El cierre de una celda exige la transacción de quien la cierra.");
 
         var ahora = reloj.GetUtcNow();
+        // La foto va antes de aplicar y de las celdas que este cierre publique: el «después» solo cambia esta celda.
+        var foto = await emisor.PrepararAsync(celda, ct).ConfigureAwait(false);
         var version = versionTablero ?? await EscritorCeldas.SubirVersionTableroAsync(db, celda.DiagnosticoId, ct).ConfigureAwait(false);
         var reprocesoDeLaRunt = celda.ReprocesoUsuarioId;
         EscritorCeldas.Aplicar(celda, resultado, version, ahora);
@@ -172,6 +175,9 @@ internal sealed partial class PublicadorCeldas(
         // HU #13743: tras cada celda terminal, el estado global del lote se recalcula en la misma transacción de cierre.
         if (recalcular)
             await RecalculadorEstado.RecalcularAsync(db, outbox, celda.DiagnosticoId, version, ahora, ct).ConfigureAwait(false);
+
+        if (foto is { } tomada)
+            await emisor.EmitirAsync(celda, resultado.Estado, tomada, ahora, ct).ConfigureAwait(false);
     }
 
     private IEjecutorCelda Ejecutor(Fuente fuente) =>
