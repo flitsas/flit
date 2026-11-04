@@ -3,6 +3,7 @@ using Flit.Diagnostico.Api.Modulos.Comun;
 using Flit.Diagnostico.Api.Modulos.Consultas;
 using Flit.Diagnostico.Api.Modulos.Configuracion;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
+using Flit.Diagnostico.Api.Modulos.Dictamen;
 using Flit.Diagnostico.Api.Modulos.Vehiculos;
 using Flit.Diagnostico.Api.Persistence;
 using FluentAssertions;
@@ -69,10 +70,14 @@ public sealed class EntidadesConTenantTests
     }
 
     /// <summary>
-    /// Catálogos globales de FLIT sin <c>tenant_id</c> (plan §5, HU #13723, excepción por tabla de ADR-0072): la réplica de
-    /// organismos y la caché de departamentos con impuesto. Lista cerrada: sumar uno exige su excepción en el ADR.
+    /// Catálogos globales de FLIT sin <c>tenant_id</c> (plan §5, excepción por tabla de ADR-0072): la réplica de
+    /// organismos, la caché de departamentos con impuesto (HU #13723) y las reglas de dictamen (corte 4, ADR-0077).
+    /// Lista cerrada: sumar uno exige su excepción en el ADR.
     /// </summary>
-    internal static readonly IReadOnlySet<Type> CatalogosGlobales = new HashSet<Type> { typeof(Organismo), typeof(DepartamentoImpuesto) };
+    internal static readonly IReadOnlySet<Type> CatalogosGlobales = new HashSet<Type>
+    {
+        typeof(Organismo), typeof(DepartamentoImpuesto), typeof(ReglaDictamen),
+    };
 
     private sealed class Huerfana
     {

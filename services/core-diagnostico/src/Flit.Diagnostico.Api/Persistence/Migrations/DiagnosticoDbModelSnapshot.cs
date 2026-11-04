@@ -942,6 +942,676 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Dictamen.DictamenVehiculo", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasComment("uuid v7 generado por la aplicación.");
+
+                    b.Property<string>("Alertamientos")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("alertamientos")
+                        .HasComment("Arreglo JSON: codigo, texto, efecto y fuente. Sin documentos ni nombres.");
+
+                    b.Property<bool>("AnalisisOverride")
+                        .HasColumnType("boolean")
+                        .HasColumnName("analisis_override")
+                        .HasDefaultValueSql("false")
+                        .HasComment("True si un analista reemplazó el veredicto. Ningún endpoint lo usa en este corte.");
+
+                    b.Property<int>("CatalogoVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("catalogo_version")
+                        .HasComment("Versión del catálogo con la que se dictaminó. Entero de recuerdo, no FK.");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en")
+                        .HasComment("Instante en que se guardó el dictamen (timestamptz).");
+
+                    b.Property<string>("EstadoRedaccion")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("estado_redaccion")
+                        .HasComment("PENDIENTE o COMPLETADA.");
+
+                    b.Property<DateTimeOffset?>("OverrideEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("override_en")
+                        .HasComment("Instante del override (timestamptz); null si no hubo.");
+
+                    b.Property<DateTimeOffset?>("RedaccionDisponibleDesde")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("redaccion_disponible_desde")
+                        .HasComment("Desde cuándo la cola puede tomar la redacción; null si no espera.");
+
+                    b.Property<int>("RedaccionIntentos")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("redaccion_intentos")
+                        .HasComment("Intentos de la cola de redacción. El índice entre empresas no se crea en este corte.");
+
+                    b.Property<DateTimeOffset?>("RedaccionLeaseHasta")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("redaccion_lease_hasta")
+                        .HasComment("Vencimiento del lease de redacción; null si nadie la tiene.");
+
+                    b.Property<string>("RedactadoPor")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("redactado_por")
+                        .HasComment("PLANTILLA o LLM.");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id")
+                        .HasComment("Empresa dueña del dictamen (la misma del vehículo).");
+
+                    b.Property<Guid?>("UsuarioOverrideId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("usuario_override_id")
+                        .HasComment("@pii:low Seudónimo uuid de quien hizo el override; sin documento ni nombre.");
+
+                    b.Property<Guid>("VehiculoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("vehiculo_id")
+                        .HasComment("Vehículo dictaminado.");
+
+                    b.Property<string>("Veredicto")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("veredicto")
+                        .HasComment("VIABLE o BLOQUEADO. Lo calcula el evaluador.");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version")
+                        .HasComment("Versión de negocio del dictamen de ese vehículo. No es el token xmin.");
+
+                    b.Property<bool>("Vigente")
+                        .HasColumnType("boolean")
+                        .HasColumnName("vigente")
+                        .HasComment("El que se entrega hoy; false conserva el anterior (no se borra).");
+
+                    b.Property<uint>("Xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_dictamenes");
+
+                    b.HasAlternateKey("TenantId", "Id")
+                        .HasName("uq_dictamenes_tenant_id");
+
+                    b.HasIndex("TenantId", "VehiculoId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_dictamen_vigente")
+                        .HasFilter("vigente");
+
+                    b.HasIndex("TenantId", "VehiculoId", "Version")
+                        .IsUnique()
+                        .HasDatabaseName("ux_dictamen_version");
+
+                    b.ToTable("dictamenes", "diagnostico", t =>
+                        {
+                            t.HasComment("Dictamen de un vehículo (clase (a) de ADR-0072, ADR-0077): tenant_id, xmin y FK compuesta al vehículo. Nace vacía, sin borrado lógico.");
+
+                            t.HasCheckConstraint("ck_dictamenes_alertamientos", "jsonb_typeof(alertamientos) = 'array'");
+
+                            t.HasCheckConstraint("ck_dictamenes_estado_redaccion", "estado_redaccion IN ('PENDIENTE', 'COMPLETADA')");
+
+                            t.HasCheckConstraint("ck_dictamenes_redactado_por", "redactado_por IN ('PLANTILLA', 'LLM')");
+
+                            t.HasCheckConstraint("ck_dictamenes_veredicto", "veredicto IN ('VIABLE', 'BLOQUEADO')");
+
+                            t.HasCheckConstraint("ck_redaccion", "(estado_redaccion = 'COMPLETADA') = (redactado_por = 'LLM')");
+                        });
+                });
+
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Dictamen.ReglaDictamen", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasComment("UUID v5 del proyector (catalogo_version, tipo_tramite_codigo, codigo). Sin DEFAULT uuidv7().");
+
+                    b.Property<int>("CatalogoVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("catalogo_version")
+                        .HasComment("Versión del catálogo. La v1 es 1.");
+
+                    b.Property<string>("Codigo")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("codigo")
+                        .HasComment("Código de la regla. La condición guarda el mismo valor.");
+
+                    b.Property<string>("Condicion")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("condicion")
+                        .HasComment("Objeto {\"codigo\":\"<codigo>\"}. No es un motor de reglas.");
+
+                    b.Property<string>("Efecto")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("efecto")
+                        .HasComment("BLOQUEA o ADVIERTE, el de CatalogoReglasDictamen.Filas.");
+
+                    b.Property<string>("PlantillaTexto")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("plantilla_texto")
+                        .HasComment("Texto de la plantilla, el de CatalogoReglasDictamen.Filas.");
+
+                    b.Property<string>("TipoTramiteCodigo")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("tipo_tramite_codigo")
+                        .HasComment("Código de trámite de la familia (varchar 64).");
+
+                    b.Property<bool>("Vigente")
+                        .HasColumnType("boolean")
+                        .HasColumnName("vigente")
+                        .HasComment("La v1 nace en true. El único update previsto es false al publicar otra versión.");
+
+                    b.Property<uint>("Xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_reglas_dictamen");
+
+                    b.HasIndex("CatalogoVersion", "TipoTramiteCodigo", "Codigo")
+                        .IsUnique()
+                        .HasDatabaseName("ux_regla");
+
+                    b.ToTable("reglas_dictamen", "diagnostico", t =>
+                        {
+                            t.HasComment("Catálogo global de reglas de dictamen de FLIT (ADR-0077). Sin tenant_id: excepción de catálogo de ADR-0072. No se edita a mano; condicion repite el código de la fila y no es un motor.");
+
+                            t.HasCheckConstraint("ck_reglas_dictamen_condicion", "jsonb_typeof(condicion) = 'object' AND condicion->>'codigo' = codigo");
+
+                            t.HasCheckConstraint("ck_reglas_dictamen_efecto", "efecto IN ('BLOQUEA', 'ADVIERTE')");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("d981f4f1-ad6f-590f-9fe7-5578c1db7471"),
+                            CatalogoVersion = 1,
+                            Codigo = "SOAT_NO_VIGENTE",
+                            Condicion = "{\"codigo\":\"SOAT_NO_VIGENTE\"}",
+                            Efecto = "BLOQUEA",
+                            PlantillaTexto = "El SOAT no está vigente, así que el traspaso queda bloqueado.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("ca245f58-0893-5eb6-8136-000f38582755"),
+                            CatalogoVersion = 1,
+                            Codigo = "RTM_NO_VIGENTE",
+                            Condicion = "{\"codigo\":\"RTM_NO_VIGENTE\"}",
+                            Efecto = "BLOQUEA",
+                            PlantillaTexto = "La revisión técnico-mecánica no está vigente y el vehículo tiene 5 años o más de matrícula, así que el traspaso queda bloqueado.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("1d3a5f04-f7e8-5752-814c-f495d0659a90"),
+                            CatalogoVersion = 1,
+                            Codigo = "ESTADO_VEHICULO",
+                            Condicion = "{\"codigo\":\"ESTADO_VEHICULO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo no figura activo en el RUNT. Es una advertencia y el traspaso sigue viable.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("2c83a005-cc4a-57c7-939e-92a5032ca0b8"),
+                            CatalogoVersion = 1,
+                            Codigo = "SIMIT_VEHICULO",
+                            Condicion = "{\"codigo\":\"SIMIT_VEHICULO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene comparendos, no está en paz y salvo, figura suspendido o cancelado, o tiene un acuerdo de pago que no está al día. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("65440b8b-713d-5321-9010-fc024db11d6b"),
+                            CatalogoVersion = 1,
+                            Codigo = "SIMIT_PROPIETARIO",
+                            Condicion = "{\"codigo\":\"SIMIT_PROPIETARIO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El propietario tiene comparendos, no está en paz y salvo, tiene la licencia suspendida o cancelada, o un acuerdo de pago que no está al día. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("e2e7279d-4047-59b6-9ba8-5c81ee97858e"),
+                            CatalogoVersion = 1,
+                            Codigo = "SIMIT_LOCATARIO",
+                            Condicion = "{\"codigo\":\"SIMIT_LOCATARIO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El locatario tiene comparendos, no está en paz y salvo, tiene la licencia suspendida o cancelada, o un acuerdo de pago que no está al día. Es una advertencia. En leasing, si no hay documento, no se pudo consultar su deuda.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("f798bb57-9009-5ff0-8e98-3a0fdce72409"),
+                            CatalogoVersion = 1,
+                            Codigo = "LIMITACION",
+                            Condicion = "{\"codigo\":\"LIMITACION\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene una limitación a la propiedad. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("e170b56e-fd41-596f-95b1-3c2133f37a7c"),
+                            CatalogoVersion = 1,
+                            Codigo = "GRAVAMEN",
+                            Condicion = "{\"codigo\":\"GRAVAMEN\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene un gravamen registrado. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("a367e833-8821-5e4f-992e-be727e0aed40"),
+                            CatalogoVersion = 1,
+                            Codigo = "GARANTIA_MOBILIARIA",
+                            Condicion = "{\"codigo\":\"GARANTIA_MOBILIARIA\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene una garantía mobiliaria registrada. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("b0d0d2af-8a64-5198-8208-afe102514fc7"),
+                            CatalogoVersion = 1,
+                            Codigo = "PRENDA",
+                            Condicion = "{\"codigo\":\"PRENDA\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene una prenda registrada. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("ee0a5b6e-5f95-50b7-8e4e-0a4a6bd2f6f7"),
+                            CatalogoVersion = 1,
+                            Codigo = "INFRACCION_RUNT",
+                            Condicion = "{\"codigo\":\"INFRACCION_RUNT\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El RUNT del vehículo registra infracciones. Es una advertencia, además de lo que informe el SIMIT.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("0fe37cbf-801e-5c34-973e-7c15c8805217"),
+                            CatalogoVersion = 1,
+                            Codigo = "LICENCIA_CONDUCTOR",
+                            Condicion = "{\"codigo\":\"LICENCIA_CONDUCTOR\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "La licencia de conducción está suspendida, vencida o cancelada, o no hay certificado de aptitud vigente. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("f389e9dd-fe63-5836-bc76-b98095a3a72f"),
+                            CatalogoVersion = 1,
+                            Codigo = "IMPUESTO",
+                            Condicion = "{\"codigo\":\"IMPUESTO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene impuesto departamental pendiente. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("22229c2f-7a50-51a1-b193-c90dd2e9a406"),
+                            CatalogoVersion = 1,
+                            Codigo = "FUENTE_PENDIENTE",
+                            Condicion = "{\"codigo\":\"FUENTE_PENDIENTE\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "Falta el resultado de una consulta obligatoria. El dictamen se emite con la información disponible y esta novedad queda advertida.",
+                            TipoTramiteCodigo = "TRASPASO_STANDARD",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("cda18963-5b11-5ca1-84ee-f5145784f84c"),
+                            CatalogoVersion = 1,
+                            Codigo = "SOAT_NO_VIGENTE",
+                            Condicion = "{\"codigo\":\"SOAT_NO_VIGENTE\"}",
+                            Efecto = "BLOQUEA",
+                            PlantillaTexto = "El SOAT no está vigente, así que el traspaso queda bloqueado.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("40072083-940e-5447-b638-cf6160369e4c"),
+                            CatalogoVersion = 1,
+                            Codigo = "RTM_NO_VIGENTE",
+                            Condicion = "{\"codigo\":\"RTM_NO_VIGENTE\"}",
+                            Efecto = "BLOQUEA",
+                            PlantillaTexto = "La revisión técnico-mecánica no está vigente y el vehículo tiene 5 años o más de matrícula, así que el traspaso queda bloqueado.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("3e2166b5-40b5-5923-bc5b-9cc38a61946f"),
+                            CatalogoVersion = 1,
+                            Codigo = "ESTADO_VEHICULO",
+                            Condicion = "{\"codigo\":\"ESTADO_VEHICULO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo no figura activo en el RUNT. Es una advertencia y el traspaso sigue viable.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("d8b7a707-305c-5d3a-adce-87e764e8961d"),
+                            CatalogoVersion = 1,
+                            Codigo = "SIMIT_VEHICULO",
+                            Condicion = "{\"codigo\":\"SIMIT_VEHICULO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene comparendos, no está en paz y salvo, figura suspendido o cancelado, o tiene un acuerdo de pago que no está al día. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("299b149a-eaad-5276-a6d5-8431a71715f3"),
+                            CatalogoVersion = 1,
+                            Codigo = "SIMIT_PROPIETARIO",
+                            Condicion = "{\"codigo\":\"SIMIT_PROPIETARIO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El propietario tiene comparendos, no está en paz y salvo, tiene la licencia suspendida o cancelada, o un acuerdo de pago que no está al día. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("43e0ed4a-d031-5dfa-b5a6-bcc0ea10052f"),
+                            CatalogoVersion = 1,
+                            Codigo = "SIMIT_LOCATARIO",
+                            Condicion = "{\"codigo\":\"SIMIT_LOCATARIO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El locatario tiene comparendos, no está en paz y salvo, tiene la licencia suspendida o cancelada, o un acuerdo de pago que no está al día. Es una advertencia. En leasing, si no hay documento, no se pudo consultar su deuda.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("85e6b488-7bf4-5d0d-b843-e92067b79c92"),
+                            CatalogoVersion = 1,
+                            Codigo = "LIMITACION",
+                            Condicion = "{\"codigo\":\"LIMITACION\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene una limitación a la propiedad. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("1f8e7def-9d1c-50c3-9462-9cdf3fb0999b"),
+                            CatalogoVersion = 1,
+                            Codigo = "GRAVAMEN",
+                            Condicion = "{\"codigo\":\"GRAVAMEN\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene un gravamen registrado. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("17a1a24a-1ce3-5db5-b50e-88b5ec3b698b"),
+                            CatalogoVersion = 1,
+                            Codigo = "GARANTIA_MOBILIARIA",
+                            Condicion = "{\"codigo\":\"GARANTIA_MOBILIARIA\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene una garantía mobiliaria registrada. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("6414a735-dd51-5199-92fe-b20187a7b526"),
+                            CatalogoVersion = 1,
+                            Codigo = "PRENDA",
+                            Condicion = "{\"codigo\":\"PRENDA\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene una prenda registrada. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("9eadea8c-cf53-58f9-8e75-2da10372924f"),
+                            CatalogoVersion = 1,
+                            Codigo = "INFRACCION_RUNT",
+                            Condicion = "{\"codigo\":\"INFRACCION_RUNT\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El RUNT del vehículo registra infracciones. Es una advertencia, además de lo que informe el SIMIT.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("55df451f-b41d-5ff2-bb55-2c494518bb7a"),
+                            CatalogoVersion = 1,
+                            Codigo = "LICENCIA_CONDUCTOR",
+                            Condicion = "{\"codigo\":\"LICENCIA_CONDUCTOR\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "La licencia de conducción está suspendida, vencida o cancelada, o no hay certificado de aptitud vigente. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("f8fe7a99-11bd-5aaa-a2da-a5d7a18ba175"),
+                            CatalogoVersion = 1,
+                            Codigo = "IMPUESTO",
+                            Condicion = "{\"codigo\":\"IMPUESTO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene impuesto departamental pendiente. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("81143b0e-770d-5a75-8b98-947d2091fd94"),
+                            CatalogoVersion = 1,
+                            Codigo = "FUENTE_PENDIENTE",
+                            Condicion = "{\"codigo\":\"FUENTE_PENDIENTE\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "Falta el resultado de una consulta obligatoria. El dictamen se emite con la información disponible y esta novedad queda advertida.",
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("cbe2d044-ee98-5917-b9f4-63aea051786d"),
+                            CatalogoVersion = 1,
+                            Codigo = "SOAT_NO_VIGENTE",
+                            Condicion = "{\"codigo\":\"SOAT_NO_VIGENTE\"}",
+                            Efecto = "BLOQUEA",
+                            PlantillaTexto = "El SOAT no está vigente, así que el traspaso queda bloqueado.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("24ad7c86-d40d-5162-8732-c3c3f7930051"),
+                            CatalogoVersion = 1,
+                            Codigo = "RTM_NO_VIGENTE",
+                            Condicion = "{\"codigo\":\"RTM_NO_VIGENTE\"}",
+                            Efecto = "BLOQUEA",
+                            PlantillaTexto = "La revisión técnico-mecánica no está vigente y el vehículo tiene 5 años o más de matrícula, así que el traspaso queda bloqueado.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("15604da8-20f4-54ea-9335-824c22ae8d0f"),
+                            CatalogoVersion = 1,
+                            Codigo = "ESTADO_VEHICULO",
+                            Condicion = "{\"codigo\":\"ESTADO_VEHICULO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo no figura activo en el RUNT. Es una advertencia y el traspaso sigue viable.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("4eb0f804-22e1-5cf3-8ab2-6fc09314aabd"),
+                            CatalogoVersion = 1,
+                            Codigo = "SIMIT_VEHICULO",
+                            Condicion = "{\"codigo\":\"SIMIT_VEHICULO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene comparendos, no está en paz y salvo, figura suspendido o cancelado, o tiene un acuerdo de pago que no está al día. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("fe3ead9a-c293-5b5f-8b21-18e0020a7632"),
+                            CatalogoVersion = 1,
+                            Codigo = "SIMIT_PROPIETARIO",
+                            Condicion = "{\"codigo\":\"SIMIT_PROPIETARIO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El propietario tiene comparendos, no está en paz y salvo, tiene la licencia suspendida o cancelada, o un acuerdo de pago que no está al día. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("a978390a-3e7b-5187-b4cd-2705cebb103b"),
+                            CatalogoVersion = 1,
+                            Codigo = "SIMIT_LOCATARIO",
+                            Condicion = "{\"codigo\":\"SIMIT_LOCATARIO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El locatario tiene comparendos, no está en paz y salvo, tiene la licencia suspendida o cancelada, o un acuerdo de pago que no está al día. Es una advertencia. En leasing, si no hay documento, no se pudo consultar su deuda.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("342a46bc-0d50-5fb7-b5fd-be5d6f209347"),
+                            CatalogoVersion = 1,
+                            Codigo = "LIMITACION",
+                            Condicion = "{\"codigo\":\"LIMITACION\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene una limitación a la propiedad. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("81d7fa62-673b-5b25-b480-1a0e76aa9d76"),
+                            CatalogoVersion = 1,
+                            Codigo = "GRAVAMEN",
+                            Condicion = "{\"codigo\":\"GRAVAMEN\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene un gravamen registrado. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("a613c1e1-30f0-5f8c-8b91-b859ec9c91f3"),
+                            CatalogoVersion = 1,
+                            Codigo = "GARANTIA_MOBILIARIA",
+                            Condicion = "{\"codigo\":\"GARANTIA_MOBILIARIA\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene una garantía mobiliaria registrada. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("5dfcbb96-f6ba-526a-b387-e9d2f76015b8"),
+                            CatalogoVersion = 1,
+                            Codigo = "PRENDA",
+                            Condicion = "{\"codigo\":\"PRENDA\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene una prenda registrada. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("7f10f78f-f6e8-57e2-9d15-f6f6c2d159df"),
+                            CatalogoVersion = 1,
+                            Codigo = "INFRACCION_RUNT",
+                            Condicion = "{\"codigo\":\"INFRACCION_RUNT\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El RUNT del vehículo registra infracciones. Es una advertencia, además de lo que informe el SIMIT.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("521e5df7-c5c7-53dc-a306-85ada06f0c34"),
+                            CatalogoVersion = 1,
+                            Codigo = "LICENCIA_CONDUCTOR",
+                            Condicion = "{\"codigo\":\"LICENCIA_CONDUCTOR\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "La licencia de conducción está suspendida, vencida o cancelada, o no hay certificado de aptitud vigente. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("c1b6d234-94d7-5460-9932-1928ddfcccdc"),
+                            CatalogoVersion = 1,
+                            Codigo = "IMPUESTO",
+                            Condicion = "{\"codigo\":\"IMPUESTO\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "El vehículo tiene impuesto departamental pendiente. Es una advertencia.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        },
+                        new
+                        {
+                            Id = new Guid("edc5c707-7b7d-5886-b4bb-acd479df9a9e"),
+                            CatalogoVersion = 1,
+                            Codigo = "FUENTE_PENDIENTE",
+                            Condicion = "{\"codigo\":\"FUENTE_PENDIENTE\"}",
+                            Efecto = "ADVIERTE",
+                            PlantillaTexto = "Falta el resultado de una consulta obligatoria. El dictamen se emite con la información disponible y esta novedad queda advertida.",
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO",
+                            Vigente = true
+                        });
+                });
+
             modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Reportes.Evidencia", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1472,6 +2142,17 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_historial_estado_diagnostico_diagnosticos");
+                });
+
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Dictamen.DictamenVehiculo", b =>
+                {
+                    b.HasOne("Flit.Diagnostico.Api.Modulos.Vehiculos.VehiculoDiagnostico", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "VehiculoId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_dictamenes_vehiculos");
                 });
 
             modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Reportes.Evidencia", b =>

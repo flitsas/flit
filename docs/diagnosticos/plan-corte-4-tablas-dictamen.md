@@ -126,3 +126,11 @@ El formato, con severidad error, solo sobre los `.cs` del diff.
 - La siembra coincide con el catálogo en memoria y `dictamenes` no tiene filas de semilla.
 - No hay endpoint nuevo ni llamada desde `AvanceVehiculo`.
 - El registro de la corrida queda en este documento, en local, sin Azure DevOps.
+
+## Registro de la corrida (local, 2026-11-03)
+
+Sin Azure DevOps. ADR-0077 y ADR-0072 siguen en Propuesto. Migración `20261104030902_D6_TablasDictamen`: 42 `InsertData` en `reglas_dictamen`, cero en `dictamenes`. `db-schema-validator`: `OK_TO_MERGE_DB` (excepciones de catálogo cubiertas por ADR-0072).
+
+Rojo, antes del proyector: `dotnet test services/core-diagnostico/tests/Flit.Diagnostico.Tests/Flit.Diagnostico.Tests.csproj --filter "FullyQualifiedName~SiembraReglasDictamenTests"`. Exit code 1. `CS0103`: `ProyectorReglasDictamen` no existe.
+
+Verde, después del build del proyecto de tests y `dotnet test --no-build` con filtro `SiembraReglasDictamenTests|EntidadesConTenantTests`: 8 correctas, 0 con error (6 de siembra, 2 de aislamiento). El restore literal de ese proyecto se detiene por NU1903 en `Microsoft.DotNet.ILCompiler` 10.0.8, ajeno a este corte; la corrida usó `-p:NuGetAudit=false` solo en el comando, sin cambiar el csproj.

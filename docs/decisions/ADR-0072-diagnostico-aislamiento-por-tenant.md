@@ -103,9 +103,9 @@ si cumple todos; si falla uno, la migración no se mergea sin una excepción esc
 8. Si un GET la expone, su escenario está en `EscenariosDeFuga.Todos`.
 
 **Fuera de la regla:** las tablas sin `tenant_id` (catálogos globales del plan §5: `reglas_dictamen`, `organismos`,
-`departamentos_impuesto`) y las del SDK (outbox, inbox, historial de migraciones). Las primeras necesitan su propia
-justificación al materializarse, porque `EntidadesConTenantTests` las rechazaría: `organismos` y `departamentos_impuesto`
-ya la tienen (HU #13723, ver excepciones por tabla).
+`departamentos_impuesto`) y las del SDK (outbox, inbox, historial de migraciones). `EntidadesConTenantTests` las
+rechazaría si no están en la lista cerrada `CatalogosGlobales`. `organismos` y `departamentos_impuesto` conservan la
+excepción de la HU #13723. `reglas_dictamen` ya tiene la suya en esta sección (corte 4, ADR-0077).
 
 ### Aplicabilidad a las tablas existentes
 
@@ -124,6 +124,8 @@ ya la tienen (HU #13723, ver excepciones por tabla).
 | `archivo_local` | #13846 · `D4_Evidencias`; `D4_ArchivoLocalSoloInsercion` | (b) | — | `creado_en`; solo inserción | Ninguna | Solo pruebas automáticas (`Diagnostico:Archivos:GuardarEnBase`). PII `@pii:medium`: `contenido`; `ck_archivo_local_tipo` |
 | `organismos` | #13723 · `D2_MotorConsultas` | Catálogo global (sin `tenant_id`) | — | — | Ninguna | A3, A4, A5, A20 (ver excepciones) |
 | `departamentos_impuesto` | #13723 · `D2_MotorConsultas` | Catálogo global (sin `tenant_id`) | — | `actualizado_en` | Ninguna | A3, A4, A5, A20 (ver excepciones) |
+| `reglas_dictamen` | corte 4 · ADR-0077 | Catálogo global (sin `tenant_id`) | `xmin` | — | Ninguna | A3, A4, A5, A16, A20 (ver excepciones). A3: la PK es uuid v5 estable, no el código natural; la unicidad de negocio es `(catalogo_version, tipo_tramite_codigo, codigo)` |
+| `dictamenes` | corte 4 · ADR-0077 | (a) | `xmin` | `creado_en`; override en `usuario_override_id` / `override_en` (nulos) | `(tenant_id, vehiculo_id)` → `vehiculos(tenant_id, id)`, `RESTRICT`, sin `ON UPDATE` emitido; expone `uq_dictamenes_tenant_id`; `ux_dictamen_version (tenant_id, vehiculo_id, version)`; índice único parcial `(tenant_id, vehiculo_id) WHERE vigente` (`ux_dictamen_vigente`) | Ninguna. Clase (a), no es excepción de catálogo. Tabla vacía, sin `HasData`. Sin PII en claro (`usuario_override_id` es uuid). `ix_redaccion_pendiente` (lectura entre empresas) no se crea en este corte |
 
 ### Excepciones por tabla
 
@@ -146,6 +148,7 @@ ya la tienen (HU #13723, ver excepciones por tabla).
   clave es la natural del catálogo (código del organismo, código DIVIPOLA del departamento), que es la que usa quien busca.
   A5/A20: no tienen `created_*`, `is_active` ni `external_refs`; la réplica se reemplaza desde su origen y
   `departamentos_impuesto.actualizado_en` marca el último refresco. No se editan a mano.
+- **`reglas_dictamen`, catálogo global (corte 4, [ADR-0077](ADR-0077-diagnostico-dictamen-por-reglas.md)).** `reglas_dictamen` es el catálogo global de reglas de dictamen de FLIT, igual para todas las empresas. No lleva `tenant_id` ni filtro de empresa. `EntidadesConTenantTests` la excluye ampliando la lista cerrada `CatalogosGlobales`. No se edita a mano, no lleva `deleted_*` ni actor, y la justificación de materializarla está en ADR-0077. El único update previsto es `vigente = false` al publicar otra versión del catálogo. A4, A5 y A20 siguen el patrón de `organismos` y `departamentos_impuesto`: sin FK a `identity.tenants`, sin `created_*`, `updated_*`, `deleted_*` ni `row_version`, y sin `is_active` ni `external_refs` (el estado es `vigente`). La concurrencia es `xmin` con `IsRowVersion()`. A3 de esta tabla: la PK es un uuid v5 estable de `catalogo_version`, `tipo_tramite_codigo` y `codigo` (`ValueGeneratedNever`, sin `DEFAULT uuidv7()`), y la unicidad de negocio es `(catalogo_version, tipo_tramite_codigo, codigo)`. En `organismos` y `departamentos_impuesto` la PK sí es el código natural; esa justificación no se aplica aquí.
 - **`consultas`, A11 en `ix_cola` (HU #13723; enmendada por ADR-0075, HU #13727).** El índice parcial de la cola
   `(disponible_desde) WHERE estado IN ('PENDIENTE','EN_CURSO')` no empieza por `tenant_id`, y los demás índices de la
   tabla sí. Su dueño cambió con [ADR-0075](ADR-0075-diagnostico-consultas-por-rabbitmq.md):
@@ -303,3 +306,5 @@ aquí; hasta entonces, ningún endpoint de backoffice escribe entre empresas.
 - ADR-0075: consultas del diagnóstico por RabbitMQ. Enmienda la excepción A11 de `consultas` (el dueño de `ix_cola` pasa
   a ser el reconciliador) y el control R-2 de la retención (documento en claro en la outbox de diagnóstico y de
   consultas hasta 24 h tras publicarse; ver «Retención de datos personales»).
+- ADR-0077: catálogo global `diagnostico.reglas_dictamen` (excepción de esta sección) y `diagnostico.dictamenes` como
+  clase (a). El veredicto lo calcula el evaluador; el corte 4 solo materializa las tablas.
