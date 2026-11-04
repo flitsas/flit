@@ -29,7 +29,7 @@ const SOLICITUD = {
   solicitudId: "sol-1",
   version: 1,
   estado: "borrador",
-  actores: [{ rol: "vendedor", ordinal: 1, validacionEstado: "sin_solicitar", tipoDocumento: "CC", numeroDocumento: "1037669356", nombre: "DUEÑO", correo: "a@b.co", celular: "3001234567", direccion: "Calle 1", ciudad: "Medellin" }],
+  actores: [{ rol: "vendedor", ordinal: 1, validacionEstado: "sin_solicitar", tipoDocumento: "CC", numeroDocumento: "1020456789", nombre: "DUEÑO", correo: "a@b.co", celular: "3001234567", direccion: "Calle 1", ciudad: "Medellin" }],
   campos: {},
   adjuntos: [],
   pendientes: [],
@@ -58,7 +58,7 @@ function cliente(pruebas: unknown): ClientePortal {
 
 function montar(c: ClientePortal) {
   renderConQuery(
-    <ActoresPunto cliente={c} placa="XJI21G" documento="1037669356" tipoCodigo="TRASPASO" onAtras={() => undefined} onContinuarRequisitos={() => undefined} onAviso={() => undefined} />,
+    <ActoresPunto cliente={c} placa="ABC123" documento="1020456789" tipoCodigo="TRASPASO" onAtras={() => undefined} onContinuarRequisitos={() => undefined} onAviso={() => undefined} />,
   );
 }
 

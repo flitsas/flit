@@ -21,7 +21,7 @@ const SOLICITUD: Solicitud = {
   codigoPublico: "P-1",
   version: 1,
   estado: "borrador",
-  placa: "XJI21G",
+  placa: "ABC123",
   tipoTramiteCodigo: "TRASPASO",
   organismoId: "o-1",
   actores: [
@@ -30,7 +30,7 @@ const SOLICITUD: Solicitud = {
       ordinal: 1,
       validacionEstado: "aprobada",
       tipoDocumento: "CC",
-      numeroDocumento: "1037669356",
+      numeroDocumento: "1020456789",
       nombre: "DUEÑO PRUEBA",
       correo: "dueno@correo.co",
       celular: "3001234567",
@@ -93,8 +93,8 @@ describe("ActoresPunto — fichas portal + reanudación", () => {
     renderConQuery(
       <ActoresPunto
         cliente={clienteMock({ estado, abrir, radicante })}
-        placa="XJI21G"
-        documento="1037669356"
+        placa="ABC123"
+        documento="1020456789"
         tipoCodigo="TRASPASO"
         onAtras={() => undefined}
         onContinuarRequisitos={() => undefined}
@@ -132,8 +132,8 @@ describe("ActoresPunto — fichas portal + reanudación", () => {
     renderConQuery(
       <ActoresPunto
         cliente={clienteMock({ estado, actores: [rol("titular", "Titular")], obtener: async () => solicitud })}
-        placa="XJI21G"
-        documento="1037669356"
+        placa="ABC123"
+        documento="1020456789"
         tipoCodigo="CAMBIO_COLOR"
         onAtras={() => undefined}
         onContinuarRequisitos={onContinuar}
@@ -143,7 +143,7 @@ describe("ActoresPunto — fichas portal + reanudación", () => {
     const titular = await screen.findByRole("region", { name: /^Titular$/i });
     expect(screen.queryByRole("region", { name: /Comprador/i })).toBeNull();
     expect(screen.queryByRole("region", { name: /vendedor/i })).toBeNull();
-    expect(within(titular).getByLabelText(/Número de documento/i)).toHaveValue("C.C. 1.037.669.356");
+    expect(within(titular).getByLabelText(/Número de documento/i)).toHaveValue("C.C. 1.020.456.789");
     expect(within(titular).getByLabelText(/Número de documento/i)).toHaveAttribute("readonly");
     const continuar = await screen.findByRole("button", { name: /Continuar/i });
     await waitFor(() => expect(continuar).toBeEnabled());
@@ -170,8 +170,8 @@ function montarPunto(cliente: ClientePortal, onAviso = vi.fn(), onContinuar: () 
   renderConQuery(
     <ActoresPunto
       cliente={cliente}
-      placa="XJI21G"
-      documento="1037669356"
+      placa="ABC123"
+      documento="1020456789"
       tipoCodigo="TRASPASO"
       onAtras={() => undefined}
       onContinuarRequisitos={onContinuar}
@@ -270,8 +270,8 @@ describe("ActoresPunto — épica #14185: identidad de quien radica", () => {
     const titulo = await screen.findByText("¡Identidad validada!");
     expect(titulo).toHaveAttribute("role", "status");
     const alerta = document.getElementById("punto-actores-dueno-ok")!;
-    expect(alerta.textContent).toContain("Dueño Prueba, confirmamos que eres el propietario de la placa XJI21G. Ya puedes continuar con tu trámite.");
-    expect(alerta.textContent).not.toContain("1037669356");
+    expect(alerta.textContent).toContain("Dueño Prueba, confirmamos que eres el propietario de la placa ABC123. Ya puedes continuar con tu trámite.");
+    expect(alerta.textContent).not.toContain("1020456789");
     expect(screen.queryByText(/RUNT|radica en el punto/i)).toBeNull();
     expect(screen.queryByText("Identificado")).toBeNull();
   });
@@ -315,7 +315,7 @@ describe("ActoresPunto — épica #14185: identidad de quien radica", () => {
   it("el lanzamiento es una sola solicitud por entrada, aunque el padre re-renderice con otro onAviso", async () => {
     const radicante = vi.fn(async () => ({ parte: "vendedor", ordinal: 1, estado: "pendiente", capturaUrl: null }));
     const cliente = clienteMock({ estado: estadoTrasAbrir(SIN_SOLICITAR), radicante });
-    const props = { cliente, placa: "XJI21G", documento: "1037669356", tipoCodigo: "TRASPASO", onAtras: () => undefined, onContinuarRequisitos: () => undefined };
+    const props = { cliente, placa: "ABC123", documento: "1020456789", tipoCodigo: "TRASPASO", onAtras: () => undefined, onContinuarRequisitos: () => undefined };
     const qc = new QueryClient();
     const envolver = (ui: ReactElement) => <QueryClientProvider client={qc}>{ui}</QueryClientProvider>;
     const { rerender } = render(envolver(<ActoresPunto {...props} onAviso={() => undefined} />));
@@ -348,7 +348,7 @@ describe("ActoresPunto — épica #14185: identidad de quien radica", () => {
     expect(radicante).not.toHaveBeenCalled();
     resolver({ existe: true, nombres: "ANA", apellidos: "RUNT", nombreCompleto: "ANA RUNT", ciudad: null });
     await waitFor(() => expect(radicante).toHaveBeenCalledTimes(1));
-    expect((radicante.mock.calls[0] as unknown[])[0]).toMatchObject({ nombre: "ANA RUNT", documento: "1037669356" });
+    expect((radicante.mock.calls[0] as unknown[])[0]).toMatchObject({ nombre: "ANA RUNT", documento: "1020456789" });
   });
 
   it("Continuar guarda las fichas editadas antes de avanzar", async () => {
@@ -394,13 +394,13 @@ describe("ActoresPunto — épica #14185: identidad de quien radica", () => {
     it("un borrador de otra placa o de otro documento no se reutiliza", async () => {
       const abrirPlaca = abrirNuevo();
       const { unmount } = renderConQuery(
-        <ActoresPunto cliente={clienteMock({ estado: estadoConSesion(), abrir: abrirPlaca })} placa="AAA111" documento="1037669356" tipoCodigo="TRASPASO" onAtras={() => undefined} onContinuarRequisitos={() => undefined} onAviso={() => undefined} />,
+        <ActoresPunto cliente={clienteMock({ estado: estadoConSesion(), abrir: abrirPlaca })} placa="AAA111" documento="1020456789" tipoCodigo="TRASPASO" onAtras={() => undefined} onContinuarRequisitos={() => undefined} onAviso={() => undefined} />,
       );
       await waitFor(() => expect(abrirPlaca).toHaveBeenCalledTimes(1));
       unmount();
       const abrirDoc = abrirNuevo();
       renderConQuery(
-        <ActoresPunto cliente={clienteMock({ estado: estadoConSesion(), abrir: abrirDoc })} placa="XJI21G" documento="79555444" tipoCodigo="TRASPASO" onAtras={() => undefined} onContinuarRequisitos={() => undefined} onAviso={() => undefined} />,
+        <ActoresPunto cliente={clienteMock({ estado: estadoConSesion(), abrir: abrirDoc })} placa="ABC123" documento="79555444" tipoCodigo="TRASPASO" onAtras={() => undefined} onContinuarRequisitos={() => undefined} onAviso={() => undefined} />,
       );
       await waitFor(() => expect(abrirDoc).toHaveBeenCalledTimes(1));
     });
@@ -500,7 +500,7 @@ describe('filasDesdeSolicitud · documento del radicante', () => {
     const filas = filasDesdeSolicitud(SOLICITUD, '555000111', roles);
     const comprador = filas.find((f) => f.rol === 'comprador');
     expect(comprador?.numeroDocumento).toBe('');
-    expect(filas.find((f) => f.rol === 'vendedor')?.numeroDocumento).toBe('1037669356');
+    expect(filas.find((f) => f.rol === 'vendedor')?.numeroDocumento).toBe('1020456789');
   });
 
   it('si la fila del radicante está vacía, se siembra solo ahí', () => {
