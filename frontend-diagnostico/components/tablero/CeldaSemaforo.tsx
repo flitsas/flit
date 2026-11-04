@@ -84,12 +84,19 @@ export const textoEstadoCelda = (estado: EstadoVisible) => ESTADOS[estado].texto
 /** Motivo corto de una N/A («Servicio público»…), el que va bajo el chip «Novedad». */
 export const motivoNaCorto = (motivo: MotivoNa | null) => (motivo ? MOTIVOS_NA[motivo] : null);
 
+/** Impuesto completado con deuda: ámbar «Con deuda», no verde. El resto de estados no cambia. */
+function vistaDe(estado: EstadoVisible, conDeuda: boolean) {
+  if (conDeuda && estado === "COMPLETADO")
+    return { tono: "warning" as const, texto: "Con deuda", Icono: AlertCircle, animado: false };
+  return ESTADOS[estado];
+}
+
 /**
  * Chip del semáforo (icono + texto + tono por token). Lo reutilizan la grilla, el detalle de la celda (HU #13801, su
  * auditoría desde HU #14087) y la grilla de backoffice (F06-H5); nunca depende solo del color.
  */
-export function ChipEstadoCelda({ estado }: { estado: EstadoVisible }) {
-  const { tono, texto, Icono, animado } = ESTADOS[estado];
+export function ChipEstadoCelda({ estado, conDeuda = false }: { estado: EstadoVisible; conDeuda?: boolean }) {
+  const { tono, texto, Icono, animado } = vistaDe(estado, conDeuda);
   return (
     <span
       data-tono={tono}
@@ -154,6 +161,8 @@ export function CeldaSemaforo({
     );
 
   const nota = detalle(celda);
+  const conDeuda = fuente === "IMPUESTO_DEPARTAMENTAL" && celda.estado === "COMPLETADO" && celda.tiene_deuda === true;
+  const texto = vistaDe(celda.estado, conDeuda).texto;
   return (
     <td data-fuente={fuente} data-celda={celda.id} data-estado={celda.estado} className={TD_CLS}>
       <div className="flex flex-col items-start gap-1">
@@ -162,14 +171,14 @@ export function CeldaSemaforo({
             href={hrefDetalle}
             target="_blank"
             rel="noopener noreferrer"
-            aria-label={`Ver detalle de ${nombreFuente} de ${identificador}: ${ESTADOS[celda.estado].texto} ${NUEVA_PESTANA}`}
+            aria-label={`Ver detalle de ${nombreFuente} de ${identificador}: ${texto} ${NUEVA_PESTANA}`}
             className={`inline-flex cursor-pointer items-center gap-1 rounded-full transition hover:opacity-90 ${FOCO_CLS}`}
           >
-            <ChipEstadoCelda estado={celda.estado} />
+            <ChipEstadoCelda estado={celda.estado} conDeuda={conDeuda} />
             <span className="sr-only">{NUEVA_PESTANA}</span>
           </a>
         ) : (
-          <ChipEstadoCelda estado={celda.estado} />
+          <ChipEstadoCelda estado={celda.estado} conDeuda={conDeuda} />
         )}
         {marca}
         {nota && <span className="text-xs text-[var(--nav-texto)] dark:text-slate-300">{nota}</span>}

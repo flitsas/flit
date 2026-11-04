@@ -56,8 +56,10 @@ public sealed record HechosRuntVehiculo(
     int Infracciones);
 
 /// <summary>
-/// Entrada del evaluador. <see cref="Hoy"/> fija el corte de los 5 años de matrícula. El impuesto en null o en cero
-/// no dispara. Las cuatro fuentes obligatorias son el RUNT y el SIMIT del vehículo y del propietario.
+/// Entrada del evaluador. <see cref="Hoy"/> fija el corte de los 5 años de matrícula.
+/// <see cref="ImpuestoTieneDeuda"/> dispara IMPUESTO aunque el monto sea null. <see cref="EstadoImpuesto"/> en error
+/// y dentro del alcance dispara FUENTE_PENDIENTE; null es fuera del alcance y N/A no dispara.
+/// Las cuatro fuentes obligatorias son el RUNT y el SIMIT del vehículo y del propietario.
 /// </summary>
 public sealed record HechosDictamen(
     string TipoTramiteCodigo,
@@ -72,4 +74,6 @@ public sealed record HechosDictamen(
     HechosSimit? SimitLocatario,
     LicenciaConductor? LicenciaPropietario,
     LicenciaConductor? LicenciaLocatario,
-    long? ImpuestoMontoPesos);
+    long? ImpuestoMontoPesos,
+    bool ImpuestoTieneDeuda = false,
+    EstadoFuenteDictamen? EstadoImpuesto = null);

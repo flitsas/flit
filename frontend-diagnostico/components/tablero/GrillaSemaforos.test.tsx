@@ -375,4 +375,21 @@ describe("GrillaSemaforos — HU #13866: columna del impuesto departamental", ()
     expect(chipDe(td)).toHaveAttribute("data-tono", "success");
     expect(within(td).getByRole("link", { name: `Ver detalle de Impuesto departamental de TST007: Ejecutado (OK)${NUEVA}` })).toHaveAttribute("target", "_blank");
   });
+
+  it("el impuesto completado con deuda no es verde, con o sin monto", () => {
+    const { container } = pintar(conImpuesto("COMPLETADO", { tiene_deuda: true }));
+    const td = celdaDe(container, "celda-7-impuesto_departamental");
+    expect(td).toHaveAttribute("data-estado", "COMPLETADO");
+    expect(chipDe(td)).toHaveAttribute("data-tono", "warning");
+    expect(chipDe(td)).toHaveTextContent("Con deuda");
+    expect(within(td).getByRole("link", { name: `Ver detalle de Impuesto departamental de TST007: Con deuda${NUEVA}` })).toBeInTheDocument();
+  });
+
+  it("otra fuente completada sigue en verde aunque llegue tiene_deuda", () => {
+    const { container } = pintar(grilla({
+      columnas: { por_vehiculo: ["RUNT"], por_propietario: [], por_locatario: [] },
+      vehiculos: [vehiculo(7, [celda(7, "RUNT", "COMPLETADO", { tiene_deuda: true })])],
+    }));
+    expect(chipDe(celdaDe(container, "celda-7-runt"))).toHaveAttribute("data-tono", "success");
+  });
 });

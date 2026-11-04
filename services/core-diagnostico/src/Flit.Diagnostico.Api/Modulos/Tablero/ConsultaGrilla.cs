@@ -92,7 +92,7 @@ internal sealed class ConsultaGrilla(DiagnosticoDb db, UsuarioActual usuario, IP
             .Where(c => c.DiagnosticoId == id)
             .Select(c => new CeldaLeida(
                 c.Id, c.VehiculoId, c.Fuente, c.Estado, c.MotivoNa, c.TipoError, c.DatoObtenidoEn, c.ReutilizadaDeId != null, c.VersionTablero,
-                c.Origen, c.UsuarioManualId))
+                c.Origen, c.UsuarioManualId, c.Payload))
             .ToListAsync(ct).ConfigureAwait(false);
         var porVehiculo = celdas.GroupBy(c => c.VehiculoId).ToDictionary(g => g.Key, g => g.ToList());
         var cambiadas = celdas.Where(c => c.Version > desde).ToList();
@@ -167,7 +167,7 @@ internal sealed class ConsultaGrilla(DiagnosticoDb db, UsuarioActual usuario, IP
 
     private static CeldaGrillaDto Dto(CeldaLeida c) => new(
         c.Id, CodigosDeEnum.Codigo(c.Fuente), CodigosDeEnum.Codigo(c.Estado), c.MotivoNa is { } m ? CodigosDeEnum.Codigo(m) : null,
-        c.TipoError, c.DatoObtenidoEn, c.Reutilizada, c.Version);
+        c.TipoError, c.DatoObtenidoEn, c.Reutilizada, c.Version, TieneDeuda(c));
 
     /// <summary>
     /// Estimado frente a consumido solo con AL_FINALIZAR (copia de la cabecera) y el lote cerrado; null en todo otro caso. También lo
@@ -216,6 +216,22 @@ internal sealed class ConsultaGrilla(DiagnosticoDb db, UsuarioActual usuario, IP
                 ? estimado
                 : EstimadoConsultas.NoMostrar;
     }
+
+    /// <summary>El semáforo del impuesto deja de ser verde cuando la celda confirma deuda, con o sin monto.</summary>
+    private static bool TieneDeuda(CeldaLeida celda)
+    {
+        if (celda.Fuente != Fuente.ImpuestoDepartamental || celda.Estado != EstadoCelda.Completado || string.IsNullOrWhiteSpace(celda.Payload))
+            return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(celda.Payload);
+            return ResultadoImpuestoDetalle.Desde(doc.RootElement)?.TieneDeuda == true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
 }
 
 /// <summary>La grilla leída (HU #13799): común a la compañía y al backoffice; cada uno la proyecta a su DTO.</summary>
@@ -254,4 +270,4 @@ internal sealed record DocumentoCapturado(
 /// </summary>
 internal sealed record CeldaLeida(
     Guid Id, Guid VehiculoId, Fuente Fuente, EstadoCelda Estado, MotivoNa? MotivoNa, string? TipoError, DateTimeOffset? DatoObtenidoEn,
-    bool Reutilizada, long Version, OrigenCelda? Origen, Guid? UsuarioManualId);
+    bool Reutilizada, long Version, OrigenCelda? Origen, Guid? UsuarioManualId, string? Payload = null);

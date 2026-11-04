@@ -73,7 +73,11 @@ public sealed record CeldaGrillaDto(
     [property: JsonPropertyName("tipo_error")] string? TipoError,
     [property: JsonPropertyName("dato_obtenido_en")] DateTimeOffset? DatoObtenidoEn,
     [property: JsonPropertyName("reutilizada")] bool Reutilizada,
-    [property: JsonPropertyName("version")] long Version);
+    [property: JsonPropertyName("version")] long Version,
+    /// <summary>Solo impuesto COMPLETADO con deuda confirmada. Ausente si es false. El semáforo no se pinta en verde.</summary>
+    [property: JsonPropertyName("tiene_deuda")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    bool TieneDeuda = false);
 
 /// <summary>
 /// Estimado por fuente (calculador de HU #13747) frente a las consultas consumidas: intentos con <c>desde_cache=false</c>

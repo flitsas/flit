@@ -46,6 +46,7 @@ public static class LectorHechosDictamen
         var (estadoSimitPropietario, simitPropietario) = Lista(pedido.SimitPropietario, true);
         var (_, simitLocatario) = Lista(pedido.SimitLocatario, true);
         var (estadoLocatario, personasLocatario) = Lista(pedido.RuntLocatario, false);
+        var impuesto = Impuesto(pedido.Impuesto);
 
         return new HechosDictamen(
             pedido.TipoTramiteCodigo,
@@ -62,7 +63,9 @@ public static class LectorHechosDictamen
             estadoLocatario == EstadoFuenteDictamen.Disponible && personasLocatario is not null
                 ? ResumirLicencia(personasLocatario, pedido.Hoy)
                 : null,
-            Impuesto(pedido.Impuesto));
+            impuesto.Monto,
+            impuesto.TieneDeuda,
+            impuesto.Estado);
     }
 
     private static HechosRuntVehiculo Runt(DetalleRuntReporte detalle, PedidoLectura pedido)
@@ -149,8 +152,23 @@ public static class LectorHechosDictamen
         return Fecha(certificado.Vence) is { } vence && vence >= hoy;
     }
 
-    private static long? Impuesto(LecturaCelda<ResultadoImpuestoDetalle>? celda) =>
-        celda is { Estado: EstadoCelda.Completado, Lectura: { } lectura } ? lectura.MontoTotal : null;
+    /// <summary>
+    /// Fuera del alcance (sin celda) no tiene estado. N/A no es pendiente. ERROR sí. Un monto positivo sin bandera
+    /// sigue siendo deuda, para las celdas anteriores a <c>tiene_deuda</c>.
+    /// </summary>
+    private static (bool TieneDeuda, long? Monto, EstadoFuenteDictamen? Estado) Impuesto(LecturaCelda<ResultadoImpuestoDetalle>? celda)
+    {
+        if (celda is null)
+            return (false, null, null);
+        if (celda.Estado == EstadoCelda.Error)
+            return (false, null, EstadoFuenteDictamen.Error);
+        if (celda.Estado == EstadoCelda.Na)
+            return (false, null, EstadoFuenteDictamen.NoAplica);
+        if (celda.Estado != EstadoCelda.Completado || celda.Lectura is not { } lectura)
+            return (false, null, EstadoFuenteDictamen.SinResultado);
+        var monto = lectura.MontoTotal is > 0 ? lectura.MontoTotal : null;
+        return (lectura.TieneDeuda || monto is not null, monto, EstadoFuenteDictamen.Disponible);
+    }
 
     private static (EstadoFuenteDictamen Estado, T? Valor) Simple<T>(LecturaCelda<T>? celda)
         where T : class

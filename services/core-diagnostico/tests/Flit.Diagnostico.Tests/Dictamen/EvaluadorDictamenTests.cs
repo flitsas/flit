@@ -290,6 +290,28 @@ public sealed class EvaluadorDictamenTests
     }
 
     [Fact]
+    public void Deuda_sin_monto_dispara_impuesto_y_sin_deuda_no()
+    {
+        var conDeuda = EvaluadorDictamen.Evaluar(Base() with { ImpuestoTieneDeuda = true, ImpuestoMontoPesos = null });
+        var sinDeuda = EvaluadorDictamen.Evaluar(Base() with { ImpuestoTieneDeuda = false, ImpuestoMontoPesos = 0 });
+
+        conDeuda.Reglas.Should().ContainSingle(x => x.Codigo == "IMPUESTO" && x.Fuente == "IMPUESTO_DEPARTAMENTAL" && x.MontoPesos == null);
+        sinDeuda.Reglas.Should().NotContain(x => x.Codigo == "IMPUESTO");
+    }
+
+    [Fact]
+    public void Impuesto_en_error_dentro_del_alcance_deja_fuente_pendiente_y_na_o_fuera_no()
+    {
+        var error = EvaluadorDictamen.Evaluar(Base() with { EstadoImpuesto = EstadoFuenteDictamen.Error });
+        var na = EvaluadorDictamen.Evaluar(Base() with { EstadoImpuesto = EstadoFuenteDictamen.NoAplica });
+        var fuera = EvaluadorDictamen.Evaluar(Base());
+
+        error.Reglas.Should().Contain(x => x.Codigo == "FUENTE_PENDIENTE" && x.Fuente == "IMPUESTO_DEPARTAMENTAL");
+        na.Reglas.Should().NotContain(x => x.Fuente == "IMPUESTO_DEPARTAMENTAL");
+        fuera.Reglas.Should().NotContain(x => x.Fuente == "IMPUESTO_DEPARTAMENTAL");
+    }
+
+    [Fact]
     public void Impuesto_mayor_que_cero_advierte_con_el_monto()
     {
         var resultado = EvaluadorDictamen.Evaluar(Base() with { ImpuestoMontoPesos = 1500 });

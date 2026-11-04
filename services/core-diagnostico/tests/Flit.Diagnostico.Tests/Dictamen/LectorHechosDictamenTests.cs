@@ -260,6 +260,32 @@ public sealed class LectorHechosDictamenTests
     }
 
     [Fact]
+    public void Deuda_sin_monto_dispara_el_error_queda_pendiente_y_la_na_no()
+    {
+        var deuda = EvaluadorDictamen.Evaluar(LectorHechosDictamen.Leer(Base() with
+        {
+            Impuesto = Celda(EstadoCelda.Completado, new ResultadoImpuestoDetalle(null, [], true)),
+        }));
+        var sinDeuda = EvaluadorDictamen.Evaluar(LectorHechosDictamen.Leer(Base() with
+        {
+            Impuesto = Celda(EstadoCelda.Completado, new ResultadoImpuestoDetalle(null, [], false)),
+        }));
+        var error = EvaluadorDictamen.Evaluar(LectorHechosDictamen.Leer(Base() with
+        {
+            Impuesto = Celda<ResultadoImpuestoDetalle>(EstadoCelda.Error, null),
+        }));
+        var na = EvaluadorDictamen.Evaluar(LectorHechosDictamen.Leer(Base() with
+        {
+            Impuesto = Celda<ResultadoImpuestoDetalle>(EstadoCelda.Na, null),
+        }));
+
+        deuda.Reglas.Should().Contain(r => r.Codigo == "IMPUESTO" && r.MontoPesos == null);
+        sinDeuda.Reglas.Should().NotContain(r => r.Codigo == "IMPUESTO");
+        error.Reglas.Should().Contain(r => r.Codigo == "FUENTE_PENDIENTE" && r.Fuente == "IMPUESTO_DEPARTAMENTAL");
+        na.Reglas.Should().NotContain(r => r.Fuente == "IMPUESTO_DEPARTAMENTAL");
+    }
+
+    [Fact]
     public void Las_cuatro_fuentes_en_error_avisan_y_siguen_viables()
     {
         var resultado = EvaluadorDictamen.Evaluar(LectorHechosDictamen.Leer(Base() with

@@ -22,6 +22,8 @@ export interface CeldaGrilla {
   dato_obtenido_en: string | null;
   reutilizada: boolean;
   version: number;
+  /** Impuesto COMPLETADO con deuda confirmada. El semáforo no se pinta en verde. */
+  tiene_deuda?: boolean;
 }
 
 /** Documento de persona que declaró el cliente en el lote (HU #14087); llega enmascarado («****» y los 4 últimos). */

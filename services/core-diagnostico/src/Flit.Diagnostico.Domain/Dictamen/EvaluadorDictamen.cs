@@ -52,8 +52,8 @@ public static class EvaluadorDictamen
         if (runt is not null)
             AgregarPropiedad(hechos, runt, reglas);
         AgregarLicencia(hechos, leasing, reglas);
-        if (hechos.ImpuestoMontoPesos is > 0)
-            reglas.Add(Emitir(hechos, "IMPUESTO", "IMPUESTO_DEPARTAMENTAL", hechos.ImpuestoMontoPesos));
+        if (hechos.ImpuestoTieneDeuda || hechos.ImpuestoMontoPesos is > 0)
+            reglas.Add(Emitir(hechos, "IMPUESTO", "IMPUESTO_DEPARTAMENTAL", hechos.ImpuestoMontoPesos is > 0 ? hechos.ImpuestoMontoPesos : null));
         AgregarFuentes(hechos, reglas);
 
         var veredicto = reglas.Exists(r => r.Efecto == "BLOQUEA") ? "BLOQUEADO" : "VIABLE";
@@ -126,6 +126,8 @@ public static class EvaluadorDictamen
         Agregar(hechos.EstadoSimitVehiculo, "SIMIT_VEHICULO");
         Agregar(hechos.EstadoRuntPropietario, "RUNT_PROPIETARIO");
         Agregar(hechos.EstadoSimitPropietario, "SIMIT_PROPIETARIO");
+        if (hechos.EstadoImpuesto == EstadoFuenteDictamen.Error)
+            reglas.Add(Emitir(hechos, "FUENTE_PENDIENTE", "IMPUESTO_DEPARTAMENTAL"));
 
         void Agregar(EstadoFuenteDictamen estado, string fuente)
         {

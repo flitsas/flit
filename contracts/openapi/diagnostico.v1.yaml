@@ -3565,6 +3565,11 @@ components:
         reutilizada:
           type: boolean
           description: El dato se reutilizó de una consulta del mismo día de la compañía, sin consumo (D-10).
+        tiene_deuda:
+          type: boolean
+          description: >
+            Solo IMPUESTO_DEPARTAMENTAL en COMPLETADO cuando la fuente confirmó deuda, con o sin monto.
+            Ausente si es false. El semáforo no se pinta en verde.
         version:
           type: integer
           format: int64
