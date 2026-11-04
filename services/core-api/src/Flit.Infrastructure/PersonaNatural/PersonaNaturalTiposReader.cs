@@ -19,52 +19,38 @@ public sealed record TipoPersonaNatural(
     bool ActivoEnFlit = true);
 
 /// <summary>
-/// HU #14079 (Épica #14021) — lee los tipos publicados y su matriz documental y le aplica
-/// <see cref="ElegibilidadPersonaNatural"/>. Solo lectura sobre tablas existentes; ningún tipo se nombra aquí.
+/// HU #14079 (Épica #14021) — lee los tipos publicados y le aplica <see cref="ElegibilidadPersonaNatural"/>. Solo lectura
+/// sobre tablas existentes; ningún tipo se nombra aquí.
 /// </summary>
 public sealed class PersonaNaturalTiposReader(FlitDbContext db)
 {
     /// <summary>Todos los tipos activos y publicados, elegibles o no (los no elegibles llevan su motivo).</summary>
     public Task<IReadOnlyList<TipoPersonaNatural>> ListarAsync(CancellationToken ct, string? codigo = null) =>
-        LeerAsync(soloActivos: true, codigo, ct);
+        LeerAsync(soloHabilitadosEnFlit2: false, codigo, ct);
 
     /// <summary>
-    /// Solo para la pantalla de administración: los tipos ACTIVOS en FLIT 2 (publicados y activos), elegibles o no, con su
-    /// motivo; más los ya habilitados en la lista blanca que dejaron de estar activos (para poder apagarlos). Borradores y
-    /// archivados no se listan. El portal NO usa este método.
+    /// Solo para la pantalla de administración: los tipos HABILITADOS en FLIT 2 (activos, publicados y con el wizard
+    /// encendido). Un tipo que deja de cumplirlo desaparece de la tabla (HU 2, decisión D4 del PO); su fila en la lista blanca
+    /// no estorba porque el portal ya no lo ofrece sin el wizard. El portal NO usa este método.
     /// </summary>
-    public Task<IReadOnlyList<TipoPersonaNatural>> ListarParaAdministracionAsync(IReadOnlyCollection<Guid> habilitados, CancellationToken ct) =>
-        LeerAsync(soloActivos: false, null, ct, habilitados);
+    public Task<IReadOnlyList<TipoPersonaNatural>> ListarParaAdministracionAsync(CancellationToken ct) =>
+        LeerAsync(soloHabilitadosEnFlit2: true, null, ct);
 
-    private async Task<IReadOnlyList<TipoPersonaNatural>> LeerAsync(
-        bool soloActivos, string? codigo, CancellationToken ct, IReadOnlyCollection<Guid>? habilitados = null)
+    private async Task<IReadOnlyList<TipoPersonaNatural>> LeerAsync(bool soloHabilitadosEnFlit2, string? codigo, CancellationToken ct)
     {
-        var extra = habilitados?.ToList() ?? [];
         var tipos = await db.ProcedureTypes.AsNoTracking()
-            .Where(t => soloActivos
-                ? t.IsActive && t.PublicationStatus == PublicationStatus.Published && (codigo == null || t.Code == codigo)
-                : (t.IsActive && t.PublicationStatus == PublicationStatus.Published) || extra.Contains(t.Id))
+            .Where(t => t.IsActive && t.PublicationStatus == PublicationStatus.Published
+                && (!soloHabilitadosEnFlit2 || t.WizardEnabled)
+                && (codigo == null || t.Code == codigo))
             .OrderBy(t => t.Name)
             .Select(t => new { t.Id, t.Code, t.Name, t.Family, t.Version, t.GateProfile, t.WizardEnabled, t.IsActive, t.PublicationStatus })
             .ToListAsync(ct).ConfigureAwait(false);
-        if (tipos.Count == 0)
-            return [];
-
-        var ids = tipos.Select(t => t.Id).ToList();
-        var documentos = await (
-                from r in db.ProcedureDocumentRequirements.AsNoTracking()
-                join d in db.DocumentTypes.AsNoTracking() on r.DocumentTypeId equals d.Id
-                where ids.Contains(r.ProcedureTypeId) && r.IsMandatory && !r.IsDummy && r.ConditionGroup == null
-                select new { r.ProcedureTypeId, d.Code })
-            .ToListAsync(ct).ConfigureAwait(false);
-        var porTipo = documentos.GroupBy(d => d.ProcedureTypeId).ToDictionary(g => g.Key, g => (IReadOnlyCollection<string>)g.Select(x => x.Code).ToList());
 
         return tipos.Select(t =>
         {
             var perfil = ProcedureTypeGateProfile.FromJson(t.GateProfile);
-            var obligatorios = porTipo.GetValueOrDefault(t.Id) ?? [];
             var eleg = ElegibilidadPersonaNatural.Evaluar(new PerfilTipoParaElegibilidad(
-                t.Code, t.Family, Publicado: t.PublicationStatus == PublicationStatus.Published, t.IsActive, t.WizardEnabled, perfil, obligatorios));
+                t.Code, t.Family, Publicado: t.PublicationStatus == PublicationStatus.Published, t.IsActive, t.WizardEnabled, perfil, []));
             return new TipoPersonaNatural(
                 t.Id, t.Code, t.Name, t.Family, t.Version, perfil, eleg, t.WizardEnabled,
                 ActivoEnFlit: t.IsActive && t.PublicationStatus == PublicationStatus.Published);

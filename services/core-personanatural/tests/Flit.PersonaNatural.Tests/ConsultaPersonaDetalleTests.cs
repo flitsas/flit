@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using Flit.Consultas.Grpc.V1;
 using Flit.PersonaNatural.Api.Consultas;
 using Flit.PersonaNatural.Api.Persistence;
 using FluentAssertions;
@@ -39,6 +40,17 @@ public sealed class ConsultaPersonaDetalleTests : IAsyncLifetime
         _iniciado = true;
         _host.Definiciones.PorCodigo["TRASPASO_STANDARD"] = DefinicionesDePrueba.Traspaso();
         _runt.Conductor = ResultadosFalsos.ConductorConNombres;
+        _runt.Multas = MultasConDosComparendos;
+    }
+
+    private static ResultadoConsulta MultasConDosComparendos()
+    {
+        var r = new ResultadoConsulta { Semaforo = Semaforo.Rojo };
+        var chequeo = new Chequeo { Clave = "simit", Estado = EstadoChequeo.Fail };
+        chequeo.Comparendos.Add(new Comparendo { Numero = "M1" });
+        chequeo.Comparendos.Add(new Comparendo { Numero = "M2" });
+        r.Chequeos.Add(chequeo);
+        return r;
     }
 
     [Fact]
@@ -58,11 +70,17 @@ public sealed class ConsultaPersonaDetalleTests : IAsyncLifetime
         json.GetProperty("apellidos").GetString().Should().Be("GOMEZ RUIZ");
         json.GetProperty("nombreCompleto").GetString().Should().Be("ANA MARIA GOMEZ RUIZ");
         json.GetProperty("ciudad").ValueKind.Should().Be(JsonValueKind.Null, "la ciudad de FLIT 2 sale del histórico de la empresa, que el portal no expone");
-        json.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("existe", "nombres", "apellidos", "nombreCompleto", "ciudad");
-        texto.Should().NotContainAny("1990", "PYS-FICTICIO", "ACTIVO", DocumentoTercero);
+        json.GetProperty("estadoLicencia").GetString().Should().Be("ACTIVO");
+        json.GetProperty("tieneMultasPendientes").GetBoolean().Should().BeTrue();
+        json.GetProperty("comparendos").GetInt32().Should().Be(2, "SIMIT best-effort tras el flag del RUNT");
+        json.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(
+            "existe", "nombres", "apellidos", "nombreCompleto", "ciudad",
+            "estadoLicencia", "vigenciaLicencia", "tieneMultasPendientes", "nroPazYSalvo", "comparendos");
+        texto.Should().NotContainAny("1990", DocumentoTercero);
         var llamada = _runt.LlamadasConductor.Should().ContainSingle().Subject;
         llamada.Documento.Should().Be(new DocumentoConsulta("CC", DocumentoTercero));
         llamada.Referencia.Should().Be(id.ToString(), "la consulta queda trazada a la solicitud");
+        _runt.LlamadasMultas.Should().ContainSingle().Which.Documento.Should().Be(new DocumentoConsulta("CC", DocumentoTercero));
     }
 
     [Theory]

@@ -6,6 +6,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MobilityLoader } from "@/components/MobilityLoader";
 import { useWizard, type PropsSeccion } from "@/components/tramite/ContextoWizard";
 import { Btn, Card } from "@/components/tramite/piezas";
+import { AvisoModoPruebas } from "@/components/tramite/AvisoModoPruebas";
+import { useOmitirIdentidad } from "@/components/landing/useConfiguracion";
+import { AlertaIdentidadValidada, nombrePropio } from "@/components/tramite/AlertaIdentidadValidada";
 import { PersonaActor } from "@/components/tramite/renderers/PersonaActor";
 import type { EstadoIdentidad } from "@/lib/api/cliente";
 import { ApiError, mensajeDe } from "@/lib/api/errores";
@@ -18,6 +21,7 @@ import {
   estadoDeFila,
   filasIniciales,
   rolDeUnaPersona,
+  validarFila,
   sembrarDocumentoInicial,
   filaVacia,
   motivoIncompleto,
@@ -29,6 +33,7 @@ import {
   type FilaActor,
 } from "@/lib/tramite/actores";
 import { recordarActor } from "@/lib/tramite/presentacion";
+import { marcarEnvioFallido } from "@/lib/tramite/envioIdentidad";
 
 export const claveIdentidad = (solicitudId: string) => ["pn", "identidad", solicitudId] as const;
 
@@ -45,21 +50,26 @@ const SONDEOS_RAPIDOS = 6;
  */
 export function FormularioActores({ seccion, activa, intentoAvance, onEstado }: PropsSeccion) {
   const { cliente, definicion, solicitud, contexto, guardarConVersion, registrarGuardado, reportarError } = useWizard();
+  const omitirIdentidad = useOmitirIdentidad(cliente);
   const definicionSeccion = useMemo(
     () => ({ ...definicion, actores: actoresDeLaSeccion(definicion, seccion.paso?.clave) }),
     [definicion, seccion.paso?.clave],
   );
   const incluyeAlTitular = definicionSeccion.actores.some((r) => r.rol === definicion.actores[0]?.rol);
+  // Documento del primer paso: el del propietario consultado o, al reanudar, la cédula con la que se abrió/reanudó el trámite.
+  const propietarioDeContexto = contexto?.propietario;
+  const cedulaDeContexto = contexto?.cedula;
+  const documentoInicial = propietarioDeContexto ?? (cedulaDeContexto ? { tipo: "CC", numero: cedulaDeContexto } : undefined);
   const [filas, setFilas] = useState<FilaActor[]>(() => {
     const iniciales = filasIniciales(definicionSeccion, solicitud.actores);
-    return incluyeAlTitular ? sembrarDocumentoInicial(iniciales, contexto?.propietario) : iniciales;
+    return incluyeAlTitular ? sembrarDocumentoInicial(iniciales, documentoInicial) : iniciales;
   });
-  const documentoSembrado = useRef(Boolean(contexto?.propietario));
+  const documentoSembrado = useRef(Boolean(documentoInicial));
   useEffect(() => {
-    if (documentoSembrado.current || !contexto?.propietario) return;
+    if (documentoSembrado.current || !documentoInicial) return;
     documentoSembrado.current = true;
-    setFilas((actuales) => sembrarDocumentoInicial(actuales, contexto.propietario));
-  }, [contexto?.propietario]);
+    setFilas((actuales) => sembrarDocumentoInicial(actuales, documentoInicial));
+  }, [documentoInicial?.tipo, documentoInicial?.numero]); // eslint-disable-line react-hooks/exhaustive-deps
   const [erroresServidor, setErroresServidor] = useState<Record<string, ErroresActor>>({});
   const idSolicitud = solicitud.solicitudId;
   useEffect(() => {
@@ -114,10 +124,70 @@ export function FormularioActores({ seccion, activa, intentoAvance, onEstado }: 
     [filas, cliente, idSolicitud, guardarConVersion, solicitud.actores],
   );
 
+  // ── Envío automático de la validación de identidad (al pasar al siguiente paso) ─────────────────────────────────────
+
+  /** Motivo corto por persona cuando su validación no se pudo enviar sola. */
+  const [fallosEnvio, setFallosEnvio] = useState<Record<string, string>>({});
+  const yaEnviadas = useRef(new Set<string>());
+  const marcarFallo = useCallback(
+    (clave: string, motivoCorto: string | null) => {
+      setFallosEnvio((actual) => {
+        if (motivoCorto === null) return clave in actual ? Object.fromEntries(Object.entries(actual).filter(([k]) => k !== clave)) : actual;
+        return actual[clave] === motivoCorto ? actual : { ...actual, [clave]: motivoCorto };
+      });
+      marcarEnvioFallido(idSolicitud, clave, motivoCorto !== null);
+    },
+    [idSolicitud],
+  );
+
+  /**
+   * Solicita la validación de cada persona que la exige y aún no la tiene enviada, en paralelo. Nunca lanza: lo que falle queda
+   * como botón de alerta en su tarjeta y no impide avanzar.
+   */
+  const enviarPendientes = useCallback(async () => {
+    // Sin el estado real de las validaciones no se sabe a quién ya se le envió: no se arriesga un envío doble.
+    if (hayIdentidad && !identidad.data) return;
+    const candidatas = filas.filter((f) => {
+      const rol = definicionSeccion.actores.find((r) => r.rol === f.rol);
+      return rol?.biometria && f.consultado && estadoDe(f) === "sin_solicitar" && !yaEnviadas.current.has(f.clave);
+    });
+    if (candidatas.length === 0) return;
+    await Promise.all(
+      candidatas.map(async (f) => {
+        const rol = definicionSeccion.actores.find((r) => r.rol === f.rol);
+        if (!rol) return;
+        if (Object.keys(validarFila(f, rolDeUnaPersona(rol))).length > 0) return marcarFallo(f.clave, "revisa los datos de esta persona.");
+        if (!f.runt?.inscrito) return marcarFallo(f.clave, f.runt ? "no está inscrita en el RUNT." : "consulta primero el documento en el RUNT.");
+        try {
+          const resultado = await cliente.identidad.solicitar(idSolicitud, f.rol, f.ordinal);
+          if (resultado.estado === "pendiente_envio") return marcarFallo(f.clave, "el enlace no salió todavía; reintenta el envío.");
+          yaEnviadas.current.add(f.clave);
+          marcarFallo(f.clave, null);
+        } catch (error) {
+          reportarError(error);
+          const contacto = error instanceof ApiError && error.code === "contacto_invalido";
+          marcarFallo(f.clave, contacto ? "revisa el correo y el celular." : mensajeDe(error));
+        }
+      }),
+    );
+    refrescarIdentidad();
+  }, [filas, hayIdentidad, identidad.data, definicionSeccion.actores, estadoDe, cliente, idSolicitud, reportarError, marcarFallo, refrescarIdentidad]);
+
   useEffect(() => {
-    registrarGuardado(seccion.clave, () => guardar());
+    registrarGuardado(seccion.clave, async () => {
+      await guardar();
+      await enviarPendientes();
+    });
     return () => registrarGuardado(seccion.clave, null);
-  }, [registrarGuardado, seccion.clave, guardar]);
+  }, [registrarGuardado, seccion.clave, guardar, enviarPendientes]);
+
+  // Cuando la validación ya salió (por el envío automático o el reenvío manual) deja de estar pendiente de envío.
+  useEffect(() => {
+    for (const f of filas) {
+      const e = estadoDe(f);
+      if (e !== "sin_solicitar" && e !== "pendiente_envio") marcarEnvioFallido(idSolicitud, f.clave, false);
+    }
+  }, [filas, estadoDe, idSolicitud]);
 
   // ── Edición ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -152,9 +222,20 @@ export function FormularioActores({ seccion, activa, intentoAvance, onEstado }: 
 
   const cargando = hayIdentidad && activa && identidad.isPending;
   const errorEstado = identidad.isError ? identidad.error : null;
+  // Alerta de «identidad validada»: solo con aprobación real de TODAS las personas que validan identidad en la solicitud.
+  const filasConIdentidad = filas.filter((f) => definicionSeccion.actores.find((r) => r.rol === f.rol)?.biometria);
+  const totalPersonas = Math.max(identidad.data?.partes.length ?? 0, filasConIdentidad.length);
+  const todasValidaron =
+    hayIdentidad &&
+    Boolean(identidad.data?.completa) &&
+    filasConIdentidad.length > 0 &&
+    filasConIdentidad.every((f) => f.consultado && estadoDe(f) === "aprobada");
+  const unaSolaPersona = totalPersonas === 1;
+  const nombreUnica = unaSolaPersona ? nombrePropio(filasConIdentidad[0]?.nombre) : "";
 
   return (
     <>
+      {omitirIdentidad && hayIdentidad && <AvisoModoPruebas id={`actores-modo-pruebas-${seccion.clave}`} />}
       {cargando && (
         <div role="status" className="flex items-center gap-3 text-sm text-muted-foreground">
           <MobilityLoader />
@@ -173,8 +254,15 @@ export function FormularioActores({ seccion, activa, intentoAvance, onEstado }: 
         </div>
       )}
       <p role="status" aria-live="polite" className="sr-only">
-        {hayIdentidad && identidad.data ? (identidad.data.completa ? "Todas las identidades están aprobadas." : "Hay validaciones de identidad pendientes.") : ""}
+        {hayIdentidad && identidad.data && !identidad.data.completa ? "Hay validaciones de identidad pendientes." : ""}
       </p>
+      {todasValidaron && (
+        <AlertaIdentidadValidada id={`actores-identidad-validada-${seccion.clave}`}>
+          {unaSolaPersona
+            ? `${nombreUnica ? `${nombreUnica}, tu` : "Tu"} identidad quedó validada. Ya puedes continuar con tu trámite.`
+            : "Todas las personas del trámite validaron su identidad. Ya puedes continuar con tu trámite."}
+        </AlertaIdentidadValidada>
+      )}
 
       {definicionSeccion.actores.map((definido, indiceRol) => {
         const rol = rolDeUnaPersona(definido);
@@ -203,6 +291,7 @@ export function FormularioActores({ seccion, activa, intentoAvance, onEstado }: 
                   rol={rol}
                   titulo={conTitulo ? (varias ? `${rol.etiqueta} ${i + 1}` : rol.etiqueta) : undefined}
                   esPropietario={definicion.actores[0]?.rol === rol.rol && fila.ordinal === 1}
+                  documentoFijo={definicion.actores[0]?.rol === rol.rol && fila.ordinal === 1 && Boolean(documentoInicial) && fila.numeroDocumento === documentoInicial?.numero.trim()}
                   solicitudId={idSolicitud}
                   cliente={cliente}
                   mostrarErrores={intentoAvance > 0}
@@ -210,6 +299,10 @@ export function FormularioActores({ seccion, activa, intentoAvance, onEstado }: 
                   estado={estadoDe(fila)}
                   parte={parteDe(fila, identidad.data)}
                   versionEstado={identidad.dataUpdatedAt}
+                  envioAutomatico
+                  confirmarIdentidad={totalPersonas > 1}
+                  consultaActiva={activa}
+                  fallaEnvio={fallosEnvio[fila.clave]}
                   onCambio={(patch) => cambiar(fila.clave, patch)}
                   onQuitar={conTitulo && puedeQuitar(filas, rol) ? () => quitar(fila.clave) : undefined}
                   guardarRol={() => guardar([rol.rol])}

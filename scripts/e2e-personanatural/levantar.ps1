@@ -10,7 +10,10 @@
   no van en este archivo. Guarda los PID exactos en .pids.json para que apagar.ps1 los cierre POR PID.
 
   Uso (desde la raíz del repo):
-    powershell -ExecutionPolicy Bypass -File scripts/e2e-personanatural/levantar.ps1 [-Base flit_pn_e2e] [-LogDir <ruta>] [-Compilar]
+    powershell -ExecutionPolicy Bypass -File scripts/e2e-personanatural/levantar.ps1 [-Base flit_pn_e2e] [-LogDir <ruta>] [-Compilar] [-SinFront] [-FuentesReales] [-SinIdentidad]
+    -SinIdentidad : SOLO PRUEBAS LOCALES. Pone PersonaNatural__Pruebas__OmitirIdentidad=true en el BFF (y nada más): la compuerta
+                    de radicación deja pasar sin identidad aprobada y el punto no exige radicante aprobado para invitar. El BFF
+                    lo ignora si ASPNETCORE_ENVIRONMENT no es Development (aquí siempre lo es). Sin el switch, comportamiento normal.
   Ver docs/suite/local-personanatural.md.
 #>
 #Requires -Version 7
@@ -19,7 +22,12 @@ param(
   [string]$LogDir = (Join-Path $env:TEMP 'flit-pn-e2e-logs'),
   [string]$PgClave = 'flitdb',
   [switch]$Compilar,
-  [switch]$SinFront
+  [switch]$SinFront,
+  # Consultas contra las fuentes REALES (Kyverum RUNT primero, Verifik de respaldo) con las llaves de
+  # services/core-consultas/.../appsettings.Development.json. Sin este switch todo va en mock.
+  [switch]$FuentesReales,
+  # SOLO PRUEBAS LOCALES: omite la validación de identidad en el BFF (PersonaNatural__Pruebas__OmitirIdentidad=true).
+  [switch]$SinIdentidad
 )
 
 $ErrorActionPreference = 'Stop'
@@ -147,7 +155,9 @@ Iniciar 'core-api' $api 'dotnet' @('Flit.Api.dll') @{
   Platform__ServiceClient__ClientId = 'svc-tramites'
   Platform__ServiceClient__ClientSecret = $Sec.tramites
   Platform__ServiceClient__TokenEndpoint = 'http://127.0.0.1:4003/connect/token'
-  Biometrics__Provider = 'mock'
+  # -FuentesReales: Kyverum real con la llave de appsettings.Development.json. Sin el túnel del webhook, el resultado
+  # llega por la reconciliación periódica (IdentityValidationReconcileProcessor), con unos minutos de retraso.
+  Biometrics__Provider = $(if ($FuentesReales) { 'kyverum' } else { 'mock' })
   FileManager__BaseUrl = 'http://127.0.0.1:4999/'
   PersonaNatural__Fachada__Habilitada = 'true'
   PersonaNatural__Consumidor__Habilitado = 'true'
@@ -157,8 +167,8 @@ Iniciar 'core-api' $api 'dotnet' @('Flit.Api.dll') @{
 # Empresa «Persona Natural» (idempotente) con la base ya migrada. SIEMPRE antes de encender el recorrido.
 & $Psql -h 127.0.0.1 -U postgres -d $Base -v ON_ERROR_STOP=1 -q -f (Join-Path $Raiz 'deploy\postgres\crear-empresa-persona-natural.sql')
 
-# ---------- 2. core-consultas (todo en mock) ----------
-Iniciar 'core-consultas' "$Raiz\services\core-consultas\src\Flit.Consultas.Api\bin\Debug\net10.0" 'dotnet' @('Flit.Consultas.Api.dll') @{
+# ---------- 2. core-consultas (mock por defecto; -FuentesReales consulta RUNT/SIMIT reales) ----------
+$consultas = @{
   ASPNETCORE_ENVIRONMENT = 'Development'; ASPNETCORE_URLS = 'http://127.0.0.1:4026'
   Servicio__GrpcPort = '8084'
   ConnectionStrings__Servicio = $Cadena
@@ -167,15 +177,31 @@ Iniciar 'core-consultas' "$Raiz\services\core-consultas\src\Flit.Consultas.Api\b
   Platform__ServiceClient__ClientSecret = $Sec.consultas
   Platform__ServiceClient__TokenEndpoint = 'http://127.0.0.1:4003/connect/token'
   Platform__Messaging__ConnectionString = $Mq.consultas
-  VERIFIK_VEHICLE_MODE = 'mock'; VERIFIK_CONDUCTOR_MODE = 'mock'; VERIFIK_SIMIT_MODE = 'mock'; VERIFIK_RNMC_MODE = 'mock'
-  VERIFIK_RUES_MODE = 'mock'; FASECOLDA_MODE = 'mock'; INTEMPO_MODE = 'mock'; KYVERUM_FINES_MODE = 'mock'
-  # Kyverum RUNT no tiene modo mock y encabeza la cadena por defecto: llave FICTICIA, direccion muerta (nada sale a
-  # internet) y cadena que empieza por los proveedores con mock (verifik).
-  KYVERUM_RUNT_API_KEY = $KyverumRunt; KYVERUM_RUNT_BASE_URL = 'http://127.0.0.1:4998/'
-  Consultations__DefaultChains__vehicle_vin__0 = 'verifik'
-  Consultations__DefaultChains__vehicle_plate__0 = 'verifik'
-  Consultations__DefaultChains__conductor__0 = 'verifik_conductor'
-} 'http://127.0.0.1:4026/health/ready' 180
+}
+if ($FuentesReales) {
+  # Las llaves NO van aquí: salen de appsettings.Development.json de core-consultas. Kyverum RUNT lee la variable de
+  # entorno antes que el appsettings, así que no se define KYVERUM_RUNT_* (la llave ficticia del modo mock la taparía).
+  # Se fija por CLAVE DE CONFIG (doble guion bajo), que gana sobre el appsettings y sobre VERIFIK_*_MODE.
+  $consultas += @{
+    Consultations__VerifikVehicleMode = 'real'; Consultations__VerifikConductorMode = 'real'; Consultations__VerifikSimitMode = 'real'
+    Consultations__DefaultChains__vehicle_vin__0 = 'kyverum_runt'; Consultations__DefaultChains__vehicle_vin__1 = 'verifik'
+    Consultations__DefaultChains__vehicle_plate__0 = 'kyverum_runt'; Consultations__DefaultChains__vehicle_plate__1 = 'verifik'
+    Consultations__DefaultChains__conductor__0 = 'kyverum_runt_conductor'; Consultations__DefaultChains__conductor__1 = 'verifik_conductor'
+    'Logging__LogLevel__System.Net.Http.HttpClient' = 'Information'
+  }
+} else {
+  $consultas += @{
+    VERIFIK_VEHICLE_MODE = 'mock'; VERIFIK_CONDUCTOR_MODE = 'mock'; VERIFIK_SIMIT_MODE = 'mock'; VERIFIK_RNMC_MODE = 'mock'
+    VERIFIK_RUES_MODE = 'mock'; FASECOLDA_MODE = 'mock'; INTEMPO_MODE = 'mock'; KYVERUM_FINES_MODE = 'mock'
+    # Kyverum RUNT no tiene modo mock y encabeza la cadena por defecto: llave FICTICIA, direccion muerta (nada sale a
+    # internet) y cadena que empieza por los proveedores con mock (verifik).
+    KYVERUM_RUNT_API_KEY = $KyverumRunt; KYVERUM_RUNT_BASE_URL = 'http://127.0.0.1:4998/'
+    Consultations__DefaultChains__vehicle_vin__0 = 'verifik'
+    Consultations__DefaultChains__vehicle_plate__0 = 'verifik'
+    Consultations__DefaultChains__conductor__0 = 'verifik_conductor'
+  }
+}
+Iniciar 'core-consultas' "$Raiz\services\core-consultas\src\Flit.Consultas.Api\bin\Debug\net10.0" 'dotnet' @('Flit.Consultas.Api.dll') $consultas 'http://127.0.0.1:4026/health/ready' 180
 
 # ---------- 3. core-notificaciones (SMTP a consola) ----------
 Iniciar 'core-notificaciones' "$Raiz\services\core-notificaciones\src\Flit.Notificaciones.Api\bin\Debug\net10.0" 'dotnet' @('Flit.Notificaciones.Api.dll') @{
@@ -191,7 +217,7 @@ Iniciar 'core-notificaciones' "$Raiz\services\core-notificaciones\src\Flit.Notif
 } 'http://127.0.0.1:4027/health/ready' 180
 
 # ---------- 4. core-personanatural (BFF) ----------
-Iniciar 'core-personanatural' "$Raiz\services\core-personanatural\src\Flit.PersonaNatural.Api\bin\Debug\net10.0" 'dotnet' @('Flit.PersonaNatural.Api.dll') @{
+$bff = @{
   ASPNETCORE_ENVIRONMENT = 'Development'; ASPNETCORE_URLS = 'http://127.0.0.1:4029'
   Servicio__GrpcPort = '8087'
   ConnectionStrings__Servicio = $Cadena
@@ -211,7 +237,9 @@ Iniciar 'core-personanatural' "$Raiz\services\core-personanatural\src\Flit.Perso
   # Topes holgados SOLO para repetir el recorrido muchas veces desde una misma IP local (en el servidor mandan los de appsettings).
   Abuso__LimiteIpPorMinuto = '600'; Abuso__LimiteCedulaPorHora = '500'; Abuso__TopeGlobalDiario = '100000'
   Sesion__MaxIntentosFallidos = '1000'
-} 'http://127.0.0.1:4029/health/ready' 180
+}
+if ($SinIdentidad) { $bff['PersonaNatural__Pruebas__OmitirIdentidad'] = 'true' }
+Iniciar 'core-personanatural' "$Raiz\services\core-personanatural\src\Flit.PersonaNatural.Api\bin\Debug\net10.0" 'dotnet' @('Flit.PersonaNatural.Api.dll') $bff 'http://127.0.0.1:4029/health/ready' 180
 
 # ---------- 5. gateway YARP ----------
 Iniciar 'gateway' "$Raiz\services\core-api\src\Flit.Gateway\bin\Debug\net10.0" 'dotnet' @('Flit.Gateway.dll') @{

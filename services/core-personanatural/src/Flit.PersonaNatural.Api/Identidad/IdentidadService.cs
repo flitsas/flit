@@ -22,10 +22,11 @@ public sealed record ResultadoIdentidad(
     string? Estado = null,
     string? Campo = null,
     int? EsperaSegundos = null,
-    bool Aceptada = false)
+    bool Aceptada = false,
+    string? CapturaUrl = null)
 {
-    public static ResultadoIdentidad Ok(string parte, short ordinal, string estado, bool aceptada = false) =>
-        new(true, aceptada ? StatusCodes.Status202Accepted : StatusCodes.Status200OK, "ok", string.Empty, parte, ordinal, estado, Aceptada: aceptada);
+    public static ResultadoIdentidad Ok(string parte, short ordinal, string estado, bool aceptada = false, string? capturaUrl = null) =>
+        new(true, aceptada ? StatusCodes.Status202Accepted : StatusCodes.Status200OK, "ok", string.Empty, parte, ordinal, estado, Aceptada: aceptada, CapturaUrl: capturaUrl);
 
     public static ResultadoIdentidad Error(int http, string codigo, string mensaje, string? estado = null, string? campo = null, int? espera = null) =>
         new(false, http, codigo, mensaje, Estado: estado, Campo: campo, EsperaSegundos: espera);
@@ -79,7 +80,8 @@ public sealed partial class IdentidadService(
     EspejoDeIdentidad espejo,
     Microsoft.Extensions.Options.IOptions<IdentidadOptions> opciones,
     TimeProvider reloj,
-    ILogger<IdentidadService> logger)
+    ILogger<IdentidadService> logger,
+    Microsoft.Extensions.Configuration.IConfiguration? configuracion = null)
 {
     private const string ActorLectura = "identidad";
     private const string ServicioNoDisponible = FachadaIdentidadGrpc.ServicioNoDisponible;
@@ -92,7 +94,7 @@ public sealed partial class IdentidadService(
     /// <c>validacion_en_curso</c> con el estado y no pide otra; con la aprobada de ESTA solicitud responde su estado; con una
     /// rechazada o vencida pide una nueva. Nunca mira lo que esa cédula validó en otro trámite.
     /// </summary>
-    public async Task<ResultadoIdentidad> SolicitarAsync(Guid solicitudId, string parte, short ordinal, CancellationToken ct)
+    public async Task<ResultadoIdentidad> SolicitarAsync(Guid solicitudId, string parte, short ordinal, CancellationToken ct, bool exponerCaptura = false)
     {
         var preparado = await PrepararAsync(solicitudId, parte, ordinal, ct).ConfigureAwait(false);
         if (preparado.Error is not null)
@@ -104,14 +106,33 @@ public sealed partial class IdentidadService(
         if (EstadosIdentidad.EnCurso(persona.ValidacionEstado))
             return ResultadoIdentidad.Error(StatusCodes.Status409Conflict, "validacion_en_curso", "Ya hay una validación en curso para esta persona.", persona.ValidacionEstado);
 
-        return await EnviarAsync(persona, rol, preparado.Datos!, nuevaValidacion: true, ct).ConfigureAwait(false);
+        return await EnviarAsync(persona, rol, preparado.Datos!, nuevaValidacion: true, ct, exponerCaptura: exponerCaptura).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// HU #14237 — identidad del radicante en el punto: no exige correo ni envía enlace; FLIT 2 abre la captura y
+    /// se devuelve <c>capturaUrl</c> para abrirla in-situ. El front sondea con <see cref="EstadoAsync"/>.
+    /// </summary>
+    public async Task<ResultadoIdentidad> SolicitarInSituAsync(Guid solicitudId, string parte, short ordinal, CancellationToken ct)
+    {
+        var preparado = await PrepararAsync(solicitudId, parte, ordinal, ct, exigirCorreo: false).ConfigureAwait(false);
+        if (preparado.Error is not null)
+            return preparado.Error;
+        var (persona, rol) = (preparado.Persona!, preparado.Rol!);
+
+        if (persona.ValidacionEstado == EstadosIdentidad.Aprobada)
+            return ResultadoIdentidad.Ok(rol, ordinal, EstadosIdentidad.Aprobada);
+        if (EstadosIdentidad.EnCurso(persona.ValidacionEstado))
+            return ResultadoIdentidad.Error(StatusCodes.Status409Conflict, "validacion_en_curso", "Ya hay una validación en curso para esta persona.", persona.ValidacionEstado);
+
+        return await EnviarAsync(persona, rol, preparado.Datos!, nuevaValidacion: true, ct, omitirEnvioCorreo: true).ConfigureAwait(false);
     }
 
     /// <summary>
     /// <c>POST /solicitudes/{id}/identidad/{parte}/reenviar</c>: reenvía el enlace de la misma validación (a un correo corregido
     /// si se indica). Tope: 5 reenvíos por parte y 60 s entre uno y otro (429). Una aprobada no se reenvía (409).
     /// </summary>
-    public async Task<ResultadoIdentidad> ReenviarAsync(Guid solicitudId, string parte, short ordinal, string? correoNuevo, CancellationToken ct)
+    public async Task<ResultadoIdentidad> ReenviarAsync(Guid solicitudId, string parte, short ordinal, string? correoNuevo, CancellationToken ct, bool exponerCaptura = false)
     {
         var preparado = await PrepararAsync(solicitudId, parte, ordinal, ct).ConfigureAwait(false);
         if (preparado.Error is not null)
@@ -141,7 +162,7 @@ public sealed partial class IdentidadService(
         {
             if (correoCorregido is not null)
                 await GuardarCorreoAsync(persona.SolicitudId, preparado.Datos!, correoCorregido, ct).ConfigureAwait(false);
-            return await EnviarAsync(persona, rol, preparado.Datos!, nuevaValidacion: false, ct).ConfigureAwait(false);
+            return await EnviarAsync(persona, rol, preparado.Datos!, nuevaValidacion: false, ct, exponerCaptura: exponerCaptura).ConfigureAwait(false);
         }
 
         string estado;
@@ -248,7 +269,7 @@ public sealed partial class IdentidadService(
     private sealed record Preparado(ResultadoIdentidad? Error, PersonaSolicitante? Persona, string? Rol, DatosPersona? Datos);
 
     /// <summary>Lo común de pedir y reenviar: la solicitud editable, el rol que exige identidad, la persona y su contacto válido.</summary>
-    private async Task<Preparado> PrepararAsync(Guid solicitudId, string parte, short ordinal, CancellationToken ct)
+    private async Task<Preparado> PrepararAsync(Guid solicitudId, string parte, short ordinal, CancellationToken ct, bool exigirCorreo = true)
     {
         var estadoSolicitud = await db.Set<SolicitudTramite>().AsNoTracking().Where(s => s.Id == solicitudId).Select(s => s.Estado).FirstOrDefaultAsync(ct).ConfigureAwait(false);
         if (estadoSolicitud is null)
@@ -278,8 +299,10 @@ public sealed partial class IdentidadService(
         if (datos is null)
             return Falla(StatusCodes.Status409Conflict, "actor_no_registrado", "Registre primero a esta persona en el trámite.");
 
-        // AC4: contacto inválido, con el campo que falla y sin llamar a FLIT 2.
-        if (!CorreoValido(datos.Correo))
+        // AC4: contacto inválido, con el campo que falla y sin llamar a FLIT 2. In-situ (punto) no exige correo.
+        // El proveedor rechaza (400 Invalid email) los correos con caracteres fuera de ASCII (p. ej. una «ñ» dañada que
+        // vino del RUNT): se corta aquí con el campo, en vez de reintentar como «FLIT 2 no respondió».
+        if (exigirCorreo && !CorreoUtilizableInSitu(datos.Correo))
             return Falla(StatusCodes.Status422UnprocessableEntity, "contacto_invalido", "Escriba un correo válido para esta persona.", campo: "correo");
         if (!string.IsNullOrWhiteSpace(datos.Celular) && !CelularValido(datos.Celular))
             return Falla(StatusCodes.Status422UnprocessableEntity, "contacto_invalido", "Escriba un celular válido para esta persona.", campo: "celular");
@@ -289,12 +312,26 @@ public sealed partial class IdentidadService(
 
     /// <summary>Pide el envío a FLIT 2 y refleja el resultado; sin respuesta de FLIT 2 deja <c>pendiente_envio</c> (202).</summary>
     private async Task<ResultadoIdentidad> EnviarAsync(
-        PersonaSolicitante persona, string rol, DatosPersona datos, bool nuevaValidacion, CancellationToken ct, string origen = "ciudadano")
+        PersonaSolicitante persona,
+        string rol,
+        DatosPersona datos,
+        bool nuevaValidacion,
+        CancellationToken ct,
+        string origen = "ciudadano",
+        bool omitirEnvioCorreo = false,
+        bool exponerCaptura = false)
     {
         try
         {
+            var correo = omitirEnvioCorreo
+                ? (CorreoUtilizableInSitu(datos.Correo) ? datos.Correo!.Trim() : CorreoTecnicoPunto.Para(configuracion, persona.SolicitudId))
+                : datos.Correo!;
             var respuesta = await fachada.SolicitarAsync(
-                persona.SolicitudId, rol, new PersonaParaValidar(datos.TipoDocumento, datos.Documento, datos.Nombre ?? string.Empty, datos.Correo!, datos.Celular), ct).ConfigureAwait(false);
+                persona.SolicitudId,
+                rol,
+                new PersonaParaValidar(datos.TipoDocumento, datos.Documento, datos.Nombre ?? string.Empty, correo, datos.Celular),
+                ct,
+                omitirEnvioCorreo).ConfigureAwait(false);
             if (nuevaValidacion)
             {
                 persona.Reenvios = 0;
@@ -303,9 +340,9 @@ public sealed partial class IdentidadService(
 
             persona.ValidacionId = respuesta.ValidacionId;
             await espejo.CambiarAsync(persona, respuesta.Estado, origen, null, ct).ConfigureAwait(false);
-            return ResultadoIdentidad.Ok(rol, persona.Ordinal, persona.ValidacionEstado);
+            return ResultadoIdentidad.Ok(rol, persona.Ordinal, persona.ValidacionEstado, capturaUrl: exponerCaptura || omitirEnvioCorreo ? respuesta.CapturaUrl : null);
         }
-        catch (FachadaException ex) when (ex.Codigo == ServicioNoDisponible)
+        catch (FachadaException ex) when (ex.Codigo == ServicioNoDisponible && !omitirEnvioCorreo)
         {
             // AC7: FLIT 2 sin respuesta. El actor queda pendiente_envio y el job reintenta; sin duplicar el enlace.
             await espejo.CambiarAsync(persona, EstadosIdentidad.PendienteEnvio, origen, null, ct).ConfigureAwait(false);
@@ -325,6 +362,7 @@ public sealed partial class IdentidadService(
     {
         "persona_juridica_no_soportada" => ResultadoIdentidad.Error(ex.EstadoHttp, ex.Codigo, ex.Message),
         "contacto_invalido_correo" => ResultadoIdentidad.Error(ex.EstadoHttp, "contacto_invalido", ex.Message, campo: "correo"),
+        "proveedor_rechazo" => ResultadoIdentidad.Error(StatusCodes.Status422UnprocessableEntity, "proveedor_rechazo", MensajeProveedorRechazo),
         "validacion_en_curso" or "identidad_aprobada" => ResultadoIdentidad.Error(ex.EstadoHttp, ex.Codigo, ex.Message, estadoActual),
         ServicioNoDisponible => ResultadoIdentidad.Error(StatusCodes.Status503ServiceUnavailable, ServicioNoDisponible, ex.Message),
         _ => ResultadoIdentidad.Error(ex.EstadoHttp, ex.Codigo, ex.Message),
@@ -341,6 +379,12 @@ public sealed partial class IdentidadService(
         p.UltimoReenvioEn is { } ultimo && ahora - ultimo < TimeSpan.FromSeconds(_opciones.EsperaReenvioSegundos)
             ? (int)Math.Ceiling((TimeSpan.FromSeconds(_opciones.EsperaReenvioSegundos) - (ahora - ultimo)).TotalSeconds)
             : 0;
+
+    internal const string MensajeProveedorRechazo = "No pudimos iniciar la validación con estos datos. Revisa el correo y el celular e inténtalo de nuevo.";
+
+    /// <summary>Solo en el punto (in-situ): ASCII imprimible sin espacios; el RUNT a veces trae una «ñ» dañada que el proveedor rechaza.</summary>
+    internal static bool CorreoUtilizableInSitu(string? correo) =>
+        CorreoValido(correo) && correo!.Trim().All(c => c is > (char)0x20 and < (char)0x7F);
 
     internal static bool CorreoValido(string? correo) =>
         !string.IsNullOrWhiteSpace(correo) && correo.Length <= 320

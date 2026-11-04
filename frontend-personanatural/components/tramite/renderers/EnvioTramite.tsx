@@ -41,7 +41,7 @@ export function EnvioTramite({ onEstado, activa }: PropsSeccion) {
 
 function Confirmacion() {
   const router = useRouter();
-  const { cliente, definicion, solicitud, reportarError } = useWizard();
+  const { cliente, definicion, solicitud, reportarError, alTerminar } = useWizard();
   const [consultando, setConsultando] = useState(false);
   const titulo = useRef<HTMLHeadingElement>(null);
 
@@ -66,7 +66,7 @@ function Confirmacion() {
   const codigo = estado.data?.estado ?? solicitud.estado;
   const cancelada = codigo === "cancelada";
   const referencia = estado.data?.numeroReferencia?.trim() || null;
-  const seguimiento = pasosDeSeguimiento({ estado: codigo, actualizadoEn: estado.data?.actualizadoEn ?? "" }, definicion);
+  const seguimiento = pasosDeSeguimiento({ estado: codigo, actualizadoEn: estado.data?.actualizadoEn ?? "" }, definicion, solicitud.actores);
 
   // El foco pasa al título cuando aparece la confirmación (lectores de pantalla y teclado).
   useEffect(() => {
@@ -74,6 +74,10 @@ function Confirmacion() {
   }, []);
 
   const salir = () => {
+    if (alTerminar) {
+      alTerminar();
+      return;
+    }
     // La cédula del contexto en memoria no se conserva al salir.
     limpiarContexto();
     router.push("/");

@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { portal, type ClientePortal } from "@/lib/api/cliente";
-import { resolverContenido, SIN_PUBLICAR } from "@/lib/configuracion";
+import { omitirIdentidadActiva, resolverContenido, SIN_PUBLICAR } from "@/lib/configuracion";
 
 const UN_MINUTO = 60 * 1000;
 
@@ -21,4 +21,10 @@ export function useConfiguracion(cliente: ClientePortal = portal) {
   });
   const contenido = useMemo(() => (consulta.isSuccess ? resolverContenido(consulta.data) : SIN_PUBLICAR), [consulta.isSuccess, consulta.data]);
   return { ...consulta, contenido };
+}
+
+/** `true` solo si el BFF publicó `pruebas.omitirIdentidad` (entorno local de pruebas). Mientras carga o si falla: `false`. */
+export function useOmitirIdentidad(cliente: ClientePortal = portal): boolean {
+  const { data, isSuccess } = useConfiguracion(cliente);
+  return isSuccess && omitirIdentidadActiva(data);
 }

@@ -19,21 +19,18 @@ describe("paso 1: diagnóstico con consultas reales (F2)", () => {
     };
   };
 
-  it("consulta el vehículo con placa y cédula del propietario, con consentimiento y captcha, y pinta lo que devuelve el back", async () => {
+  it("consulta el vehículo con placa y cédula del propietario, con consentimiento, y pinta lo que devuelve el back", async () => {
     const { llamadas } = await wizardAbierto(rutasConsulta(DIAGNOSTICO_OK));
-    expect(screen.queryByText(/Consultado en RUNT/)).not.toBeInTheDocument();
-
-    resolverCaptcha();
 
     expect(await screen.findByText("Consultado en RUNT el 28/10/2026 15:23")).toBeInTheDocument();
     expect(cuerpo(llamadas, "POST /solicitudes/s-1/consultas/vehiculo")).toEqual({ placa: "ABC123", propietario: { tipo: "CC", numero: "1020456789" }, consentimiento: true, consentimientoVersion: "v1" });
-    expect(llamadas.find((l) => l.clave === "POST /solicitudes/s-1/consultas/vehiculo")?.init.headers).toMatchObject({ "x-captcha-token": "dev-captcha-token" });
+    expect((llamadas.find((l) => l.clave === "POST /solicitudes/s-1/consultas/vehiculo")?.init.headers as Record<string, string>)["x-captcha-token"]).toBeUndefined();
     expect(cuerpo(llamadas, "POST /solicitudes/s-1/diagnostico")).toEqual({ propietario: { tipoDocumento: "CC", numeroDocumento: "1020456789" } });
 
     const indicadores = within(screen.getByRole("list", { name: "Indicadores del vehículo" }));
-    expect(indicadores.getAllByRole("listitem")).toHaveLength(2);
+    expect(indicadores.getAllByRole("listitem")).toHaveLength(3);
     expect(indicadores.getByText("SOAT").closest("li")).toHaveTextContent("SOAT: OK");
-    expect(indicadores.queryByText("Multas asociadas")).not.toBeInTheDocument();
+    expect(indicadores.getByText("Multas asociadas").closest("li")).toHaveTextContent("Multas asociadas: OK");
 
     const tecnicos = screen.getByRole("region", { name: "Datos técnicos del vehículo" });
     expect(within(tecnicos).getByText("CAMIONETA")).toBeInTheDocument();
@@ -66,7 +63,8 @@ describe("paso 1: diagnóstico con consultas reales (F2)", () => {
 
     const aviso = await screen.findByText(/Para continuar con la radicación debes estar al día en pagos de SOAT, multas e impuestos vehiculares\./);
     expect(aviso.closest('[role="alert"]')).not.toBeNull();
-    expect(screen.getByText("SOAT").closest("li")).toHaveTextContent("SOAT: POR REVISAR");
+    expect(within(screen.getByRole("list", { name: "Indicadores del vehículo" })).getByText("SOAT").closest("li")).toHaveTextContent("SOAT: POR REVISAR");
+    expect(screen.getByLabelText("Motivos del diagnóstico")).toHaveTextContent("SOAT");
     const continuar = screen.getByRole("button", { name: "Continuar" });
     expect(continuar).toBeDisabled();
     expect(continuar).toHaveAccessibleDescription("Resuelve los pendientes del diagnóstico para continuar.");

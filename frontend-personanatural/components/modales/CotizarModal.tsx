@@ -7,7 +7,6 @@ import { boton } from "@/components/landing/estilos";
 import { SelectorOrganismo } from "@/components/landing/SelectorOrganismo";
 import { SelectorTipoTramite } from "@/components/landing/SelectorTipoTramite";
 import { useOrganismos } from "@/components/landing/useCatalogos";
-import { Captcha } from "@/components/Captcha";
 import { MobilityLoader } from "@/components/MobilityLoader";
 import { ApiError, mensajeDe } from "@/lib/api/errores";
 import { portal, type ClientePortal, type Cotizacion, type Organismo, type TipoTramite } from "@/lib/api/cliente";
@@ -49,8 +48,6 @@ function ContenidoCotizar({ cliente, organismoInicial }: { cliente: ClientePorta
   const organismos = useOrganismos(cliente);
   const [organismo, setOrganismo] = useState<Organismo | null>(organismoInicial);
   const [tipo, setTipo] = useState("");
-  const [captcha, setCaptcha] = useState<string | null>(null);
-  const [reinicio, setReinicio] = useState(0);
   const bloqueo = useBloqueo();
 
   const tipos = useQuery({
@@ -62,25 +59,15 @@ function ContenidoCotizar({ cliente, organismoInicial }: { cliente: ClientePorta
   const sinTarifas = organismo !== null && tipos.isSuccess && opciones.length === 0;
 
   const calculo = useMutation({
-    mutationFn: ({ token }: { token: string }) => cliente.cotizaciones.cotizar({ organismoId: organismo?.id ?? "", tipoCodigo: tipo }, { captcha: token }),
+    mutationFn: () => cliente.cotizaciones.cotizar({ organismoId: organismo?.id ?? "", tipoCodigo: tipo }),
     onError: (error) => {
       bloqueo.registrar(error);
-    },
-    onSettled: () => {
-      // El token de un captcha sirve una sola vez.
-      setCaptcha(null);
-      setReinicio((n) => n + 1);
     },
   });
 
   const lista = organismo !== null && tipo !== "";
   const nombreTipo = opciones.find((t) => t.code === tipo)?.name ?? tipo;
-  // Cambiar la selección oculta la tabla y vuelve «Calcular»; el captcha del envío por correo no se arrastra al nuevo cálculo.
   const alCambiarSeleccion = () => {
-    if (calculo.isSuccess) {
-      setCaptcha(null);
-      setReinicio((n) => n + 1);
-    }
     calculo.reset();
   };
 
@@ -91,7 +78,7 @@ function ContenidoCotizar({ cliente, organismoInicial }: { cliente: ClientePorta
         className="mt-4"
         onSubmit={(e) => {
           e.preventDefault();
-          if (lista && captcha && !calculo.isPending && !bloqueo.bloqueado && !calculo.isSuccess) calculo.mutate({ token: captcha });
+          if (lista && !calculo.isPending && !bloqueo.bloqueado && !calculo.isSuccess) calculo.mutate();
         }}
       >
         <div className="dashboard-registration-fields !grid-cols-1 sm:!grid-cols-2">
@@ -142,24 +129,17 @@ function ContenidoCotizar({ cliente, organismoInicial }: { cliente: ClientePorta
         </div>
 
         {!calculo.isSuccess && (
-          <>
-            {lista && (
-              <div className="mt-4">
-                <Captcha onToken={setCaptcha} reinicio={reinicio} />
-              </div>
-            )}
-            <div className="mt-4 flex flex-col items-center gap-2">
-              <button type="submit" className={boton("flit", "h-11 px-10", "none")} disabled={!lista || !captcha || calculo.isPending || bloqueo.bloqueado}>
-                {calculo.isPending && <span aria-hidden className="mobility-mini" />}
-                Calcular
-              </button>
-              <div aria-live="polite" aria-busy={calculo.isPending}>
-                {calculo.isPending && <p role="status" className="text-xs text-foreground/70">Calculando...</p>}
-                {calculo.isError && <p role="alert" className="text-center text-sm text-alert">{mensajeDeCotizacion(calculo.error)}</p>}
-                {bloqueo.bloqueado && <p role="status" className="text-center text-xs text-foreground/70">Podrás intentarlo de nuevo en {bloqueo.segundosRestantes} s.</p>}
-              </div>
+          <div className="mt-4 flex flex-col items-center gap-2">
+            <button type="submit" className={boton("flit", "h-11 px-10", "none")} disabled={!lista || calculo.isPending || bloqueo.bloqueado}>
+              {calculo.isPending && <span aria-hidden className="mobility-mini" />}
+              Calcular
+            </button>
+            <div aria-live="polite" aria-busy={calculo.isPending}>
+              {calculo.isPending && <p role="status" className="text-xs text-foreground/70">Calculando...</p>}
+              {calculo.isError && <p role="alert" className="text-center text-sm text-alert">{mensajeDeCotizacion(calculo.error)}</p>}
+              {bloqueo.bloqueado && <p role="status" className="text-center text-xs text-foreground/70">Podrás intentarlo de nuevo en {bloqueo.segundosRestantes} s.</p>}
             </div>
-          </>
+          </div>
         )}
       </form>
 
@@ -169,13 +149,6 @@ function ContenidoCotizar({ cliente, organismoInicial }: { cliente: ClientePorta
           cliente={cliente}
           organismoId={organismo.id}
           tipoCodigo={tipo}
-          captcha={captcha}
-          onToken={setCaptcha}
-          reinicio={reinicio}
-          alUsarToken={() => {
-            setCaptcha(null);
-            setReinicio((n) => n + 1);
-          }}
         />
       )}
     </>
@@ -187,32 +160,26 @@ interface ResultadoProps {
   cliente: ClientePortal;
   organismoId: string;
   tipoCodigo: string;
-  captcha: string | null;
-  onToken: (token: string | null) => void;
-  reinicio: number;
-  alUsarToken: () => void;
 }
 
-function ResultadoCotizacion({ cotizacion, cliente, organismoId, tipoCodigo, captcha, onToken, reinicio, alUsarToken }: ResultadoProps) {
+function ResultadoCotizacion({ cotizacion, cliente, organismoId, tipoCodigo }: ResultadoProps) {
   const [correo, setCorreo] = useState("");
   const llave = useRef<string | null>(null);
   const bloqueo = useBloqueo();
 
   const envio = useMutation({
-    mutationFn: ({ token, llaveEnvio }: { token: string; llaveEnvio: string }) =>
-      cliente.cotizaciones.enviarCorreo({ organismoId, tipoCodigo, correo: correo.trim() }, { captcha: token, idempotencyKey: llaveEnvio }),
+    mutationFn: ({ llaveEnvio }: { llaveEnvio: string }) =>
+      cliente.cotizaciones.enviarCorreo({ organismoId, tipoCodigo, correo: correo.trim() }, { idempotencyKey: llaveEnvio }),
     onSuccess: () => {
-      // El correo no se guarda en ninguna parte: se descarta apenas se envía.
       setCorreo("");
       llave.current = null;
     },
     onError: (error) => {
       bloqueo.registrar(error);
     },
-    onSettled: alUsarToken,
   });
 
-  const puedeEnviar = correoValido(correo) && captcha !== null && !envio.isPending && !bloqueo.bloqueado;
+  const puedeEnviar = correoValido(correo) && !envio.isPending && !bloqueo.bloqueado;
 
   return (
     <>
@@ -245,9 +212,9 @@ function ResultadoCotizacion({ cotizacion, cliente, organismoId, tipoCodigo, cap
         className="mx-auto mt-4 grid max-w-lg gap-2 sm:grid-cols-[minmax(0,1fr)_auto]"
         onSubmit={(e) => {
           e.preventDefault();
-          if (!puedeEnviar || !captcha) return;
+          if (!puedeEnviar) return;
           llave.current ??= nuevaLlave();
-          envio.mutate({ token: captcha, llaveEnvio: llave.current });
+          envio.mutate({ llaveEnvio: llave.current });
         }}
       >
         <input
@@ -260,7 +227,7 @@ function ResultadoCotizacion({ cotizacion, cliente, organismoId, tipoCodigo, cap
           value={correo}
           onChange={(e) => {
             setCorreo(e.target.value);
-            llave.current = null; // otro correo, otra operación
+            llave.current = null;
             envio.reset();
           }}
         />
@@ -268,9 +235,6 @@ function ResultadoCotizacion({ cotizacion, cliente, organismoId, tipoCodigo, cap
           {envio.isPending && <span aria-hidden className="mobility-mini" />}
           Enviar al correo
         </button>
-        <div className="sm:col-span-2">
-          <Captcha onToken={onToken} reinicio={reinicio} />
-        </div>
       </form>
       <div aria-live="polite" className="mt-2 text-center text-xs">
         {envio.isPending && <p role="status" className="text-foreground/70">Enviando...</p>}

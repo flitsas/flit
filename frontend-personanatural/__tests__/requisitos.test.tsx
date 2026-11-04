@@ -371,7 +371,7 @@ describe("guardado del borrador con versión y avance (F4 AC6)", () => {
     await waitFor(() => expect(nodo(4)).toHaveAttribute("aria-current", "step"));
     const cuerpo = (clave: string) => JSON.parse(String(llamadas.find((l) => l.clave === clave)?.init.body));
     expect(cuerpo("PUT /solicitudes/s-1/campos")).toEqual({ version: 4, valores: { cilindraje: "1600", color: "AZUL", entrega: null, nota: null } });
-    expect(cuerpo("PUT /solicitudes/s-1/comercial")).toEqual({ version: 5, valorComercial: 45000000, prenda: { tienePrenda: true, acreedor: "Banco Uno", nitAcreedor: "860002964" } });
+    expect(cuerpo("PUT /solicitudes/s-1/comercial")).toEqual({ version: 5, valorComercial: 45000000, prenda: { tienePrenda: true, decision: "registrar", acreedor: "Banco Uno", nitAcreedor: "860002964" } });
     expect(cuerpo("PUT /solicitudes/s-1/requisitos")).toEqual({ version: 6, transformaciones: ["CAMBIO_COLOR"], observaciones: "Entregar el lunes" });
   });
 
@@ -386,7 +386,7 @@ describe("guardado del borrador con versión y avance (F4 AC6)", () => {
     fireEvent.click(siguiente());
 
     await waitFor(() => expect(llamadas.some((l) => l.clave === "PUT /solicitudes/s-1/comercial")).toBe(true));
-    expect(JSON.parse(String(llamadas.find((l) => l.clave === "PUT /solicitudes/s-1/comercial")?.init.body)).prenda).toEqual({ tienePrenda: false });
+    expect(JSON.parse(String(llamadas.find((l) => l.clave === "PUT /solicitudes/s-1/comercial")?.init.body)).prenda).toEqual({ tienePrenda: false, decision: "sin_prenda" });
   });
 
   it("«Siguiente» sigue bloqueado con un documento obligatorio sin cargar y avisa por qué", async () => {

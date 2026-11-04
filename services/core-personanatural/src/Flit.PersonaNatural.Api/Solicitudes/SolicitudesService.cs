@@ -49,7 +49,11 @@ public sealed partial class SolicitudesService(
     IFachadaRequisitos requisitos,
     IEnumerable<ILimpiadorDeSolicitud> limpiadores,
     TimeProvider reloj,
-    ConsentimientoVersiones versionesConsentimiento)
+    ConsentimientoVersiones versionesConsentimiento,
+    Catalogos.CatalogosVehiculoService catalogosVehiculo,
+    CifradoPii cifrado,
+    IValoresRuntBorrador? valoresRunt = null,
+    VerificadorDeOrganismo? organismoDelVehiculo = null)
 {
     public const string CodigoTipoNoDisponible = "tipo_no_disponible";
     public const string CodigoNoPermiteCambio = "estado_no_permite_cambio";
@@ -187,6 +191,10 @@ public sealed partial class SolicitudesService(
 
         s.OrganismoId = organismoId;
         s.OrganismoNombre = organismo.Nombre.Length > 200 ? organismo.Nombre[..200] : organismo.Nombre;
+        // Cambiar de organismo invalida la verificación contra el RUNT: se vuelve a hacer al diagnosticar o al radicar.
+        var datosOrganismo = DatosSolicitud.Leer(s.Datos);
+        if (datosOrganismo.OrganismoVerificadoId is not null)
+            s.Datos = (datosOrganismo with { OrganismoVerificadoId = null }).Serializar();
         s.DefinicionSnapshot = DefinicionesService.Serializar(def);
         s.DefinicionVersion = def.Version;
         await GuardarAsync(s, ct).ConfigureAwait(false);
@@ -246,8 +254,8 @@ public sealed partial class SolicitudesService(
         if (actual.Huella == anterior.Huella && actual.Version == s.DefinicionVersion)
             return null;
 
-        var clavesActuales = actual.Pasos.SelectMany(p => p.Campos).Select(c => c.FieldKey).ToHashSet(StringComparer.Ordinal);
-        var clavesAnteriores = anterior.Pasos.SelectMany(p => p.Campos).Select(c => c.FieldKey).ToHashSet(StringComparer.Ordinal);
+        var clavesActuales = actual.Pasos.SelectMany(p => p.Campos).Select(c => c.FieldKey).Concat(ReglasBorrador.ClavesDeDeclaraciones(actual).Keys).ToHashSet(StringComparer.Ordinal);
+        var clavesAnteriores = anterior.Pasos.SelectMany(p => p.Campos).Select(c => c.FieldKey).Concat(ReglasBorrador.ClavesDeDeclaraciones(anterior).Keys).ToHashSet(StringComparer.Ordinal);
         var campos = LeerCampos(s.FieldValues);
         var descartados = campos.Keys.Where(k => !clavesActuales.Contains(k)).Order(StringComparer.Ordinal).ToList();
         foreach (var k in descartados)
@@ -282,7 +290,8 @@ public sealed partial class SolicitudesService(
         {
             var (s, def) = await CargarParaEditarAsync(id, body?.Version, ct2).ConfigureAwait(false);
             var errores = new ErroresDeCampo();
-            var validados = ReglasBorrador.ValidarActores(def, body?.Actores, errores);
+            var delPunto = EsCanalPunto(s.Datos);
+            var validados = ReglasBorrador.ValidarActores(def, body?.Actores, errores, correoOpcionalDelRadicante: delPunto);
             if (errores.Hay)
                 throw ReglaDeNegocioException.Invalido(errores);
 
@@ -312,7 +321,14 @@ public sealed partial class SolicitudesService(
     {
         var (s, def) = await CargarParaEditarAsync(id, body?.Version, ct).ConfigureAwait(false);
         var errores = new ErroresDeCampo();
-        var nuevos = ReglasBorrador.ValidarCampos(def, body?.Valores, errores);
+        var runt = valoresRunt is not null && body?.Valores is { Count: > 0 } && ReglasBorrador.HayTransformaciones(def, body.Valores.Keys)
+            ? await valoresRunt.ObtenerAsync(id, ct).ConfigureAwait(false)
+            : null;
+        var nuevos = ReglasBorrador.ValidarCampos(def, body?.Valores, errores, runt);
+        if (errores.Hay)
+            throw ReglaDeNegocioException.Invalido(errores);
+
+        await ValidarDestinoAsync(def, nuevos, errores, ct).ConfigureAwait(false);
         if (errores.Hay)
             throw ReglaDeNegocioException.Invalido(errores);
 
@@ -328,6 +344,18 @@ public sealed partial class SolicitudesService(
         s.FieldValues = JsonSerializer.Serialize(campos, JsonOpciones);
         await GuardarAsync(s, ct).ConfigureAwait(false);
         return await ConstruirAsync(s, conPersonas: false, null, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>HU 10 — el organismo de destino tiene que existir y ser operable en FLIT 2 (D3 del PO: cualquier organismo operable).</summary>
+    private async Task ValidarDestinoAsync(DefinicionTipoDto def, IReadOnlyDictionary<string, string?> nuevos, ErroresDeCampo errores, CancellationToken ct)
+    {
+        foreach (var d in def.Declaraciones.Where(d => d.Control == ReglasBorrador.ControlDestino))
+        {
+            if (!nuevos.TryGetValue(d.FieldKey, out var valor) || !Guid.TryParse(valor, out var id))
+                continue;
+            if (!await catalogosVehiculo.DestinoValidoAsync(id, ct).ConfigureAwait(false))
+                errores.Agregar($"valores.{d.FieldKey}", "El organismo de destino no es válido.");
+        }
     }
 
     public async Task<SolicitudDto> GuardarComercialAsync(Guid id, ComercialRequest? body, CancellationToken ct)
@@ -369,10 +397,25 @@ public sealed partial class SolicitudesService(
             throw new ReglaDeNegocioException(StatusCodes.Status422UnprocessableEntity, CodigoOrganismoRequerido, "Falta el organismo", "Elige el organismo de tránsito antes de consultar el vehículo.");
         var tipoDoc = body?.Propietario?.TipoDocumento?.Trim().ToUpperInvariant();
         var doc = body?.Propietario?.NumeroDocumento is { } n ? PiiHasher.NormalizarDocumento(n) : null;
+
+        // El vehículo tiene que estar matriculado en el organismo del borrador (según el RUNT) antes de diagnosticar. Un proveedor caído
+        // sale 503 y no se decide en falso. Sale antes de guardar nada: un rechazo no deja el diagnóstico a medias.
+        var verificados = organismoDelVehiculo is null
+            ? null
+            : await organismoDelVehiculo.VerificarAsync(
+                s, def, string.IsNullOrWhiteSpace(tipoDoc) || string.IsNullOrWhiteSpace(doc) ? null : EntradaConsulta.DocumentoPropietario(tipoDoc, doc), exigir: false, ct).ConfigureAwait(false);
+
         var resultado = await requisitos.EvaluarAsync(s.TipoTramiteCodigo, s.OrganismoId.ToString(), s.Placa, s.Vin, tipoDoc, doc, ct).ConfigureAwait(false);
 
         SembrarConsulta(s, def, tipoDoc, doc);
-        s.Datos = (DatosSolicitud.Leer(s.Datos) with { Diagnostico = new DiagnosticoDatos(reloj.GetUtcNow(), resultado.PuedeContinuar, resultado.Requisitos) }).Serializar();
+        var propietario = string.IsNullOrWhiteSpace(tipoDoc) || string.IsNullOrWhiteSpace(doc)
+            ? DatosSolicitud.Leer(s.Datos).PropietarioConsulta
+            : new PropietarioConsultaDatos(tipoDoc, Convert.ToBase64String(cifrado.Cifrar(doc, new ContextoCifrado(VehiculoDelBorradorService.ContextoPropietario, s.Id))!));
+        s.Datos = ((verificados ?? DatosSolicitud.Leer(s.Datos)) with
+        {
+            Diagnostico = new DiagnosticoDatos(reloj.GetUtcNow(), resultado.PuedeContinuar, resultado.Requisitos),
+            PropietarioConsulta = propietario,
+        }).Serializar();
         await GuardarAsync(s, ct).ConfigureAwait(false);
         return resultado;
     }
@@ -543,9 +586,12 @@ public sealed partial class SolicitudesService(
 
         var campos = LeerCampos(s.FieldValues);
         var datos = DatosSolicitud.Leer(s.Datos);
+        var runt = valoresRunt is not null && ReglasBorrador.HayTransformaciones(def, campos.Keys)
+            ? await valoresRunt.ObtenerAsync(s.Id, ct).ConfigureAwait(false)
+            : null;
         var (pasos, pendientes) = ReglasBorrador.Completitud(
             def, campos, datos, [.. filas.Select(f => (f.Parte, f.Ordinal))],
-            tiposAdjuntos.ToHashSet(StringComparer.Ordinal), captura);
+            tiposAdjuntos.ToHashSet(StringComparer.Ordinal), captura, runt);
 
         return new SolicitudDto(
             s.Id, s.CodigoPublico, s.Estado, s.TipoTramiteCodigo, s.DefinicionVersion, def.Huella, s.RowVersion, s.OrganismoId, s.OrganismoNombre,
@@ -565,4 +611,18 @@ public sealed partial class SolicitudesService(
 
     internal static ReglaDeNegocioException TipoNoDisponible() =>
         new(StatusCodes.Status409Conflict, CodigoTipoNoDisponible, "Trámite no disponible", "Este tipo de trámite ya no está disponible en el portal.");
+
+    private static bool EsCanalPunto(string? datosJson)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(string.IsNullOrWhiteSpace(datosJson) ? "{}" : datosJson);
+            return doc.RootElement.TryGetProperty("canal", out var canal)
+                && string.Equals(canal.GetString(), "pn_punto", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return false;
+        }
+    }
 }

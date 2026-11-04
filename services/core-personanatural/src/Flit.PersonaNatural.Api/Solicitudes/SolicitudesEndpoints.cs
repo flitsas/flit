@@ -1,4 +1,5 @@
 using Flit.PersonaNatural.Api.Abuso;
+using Flit.PersonaNatural.Api.Catalogos;
 using Flit.PersonaNatural.Api.Cotizaciones;
 using Flit.PersonaNatural.Api.Radicacion;
 using Flit.PersonaNatural.Api.Sesiones;
@@ -20,6 +21,8 @@ public static class SolicitudesEndpoints
             sp.GetService<Flit.Tramites.Grpc.V1.PersonaNaturalService.PersonaNaturalServiceClient>() is { } cliente
                 ? new FachadaRequisitosGrpc(cliente)
                 : new FachadaRequisitosNoConfigurada());
+        services.AddCatalogosVehiculoPortal(); // HU 6 y 10: catálogos de vehículo y organismos de destino (misma fachada gRPC)
+        services.AddScoped<VerificadorDeOrganismo>();
         services.AddScoped<SolicitudesService>();
         return services;
     }

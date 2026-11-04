@@ -11,6 +11,8 @@ export interface EstadoSeccion {
   completo: boolean;
   /** Motivo por el que «Continuar» queda deshabilitado (un bloqueo duro, p. ej. el diagnóstico con pendientes). */
   bloqueo?: string;
+  /** Requisitos: el RUNT reporta prenda o gravamen y la persona aún no decidió qué hacer (bloquea el avance también en el punto). */
+  prendaSinDecidir?: boolean;
 }
 
 export interface PropsSeccion {
@@ -44,6 +46,12 @@ export interface ApiWizard {
   reportarError: (error: unknown) => void;
   /** Lleva al paso de ese grupo (solo hacia atrás, a uno ya alcanzado): «Editar» del resumen y los enlaces de lo que falta. */
   irAPaso: (grupo: GrupoPaso) => void;
+  /** Canal del punto de atención: monta el mismo paso Requisitos sin cotización y con el avalúo ya consultado. Ausente en el portal web. */
+  canal?: "punto";
+  /** Avalúo sugerido (Fasecolda) que el canal del punto precarga en «Datos comerciales»; `null` si no hay. */
+  avaluoSugerido?: number | null;
+  /** Al cerrar la confirmación («Ir al Dashboard»): el punto vuelve a su inicio en lugar de ir a la landing del portal. */
+  alTerminar?: () => void;
 }
 
 const Contexto = createContext<ApiWizard | null>(null);

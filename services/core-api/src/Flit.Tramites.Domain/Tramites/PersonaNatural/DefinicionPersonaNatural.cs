@@ -15,7 +15,10 @@ public sealed record CapacidadesPortal(
     bool PermiteTransformaciones,
     bool PermitePrendaComplementaria,
     bool RequiereBiometria,
-    bool RequiereSolicitudPlaca);
+    bool RequiereSolicitudPlaca,
+    bool RequiereDestino = false,
+    bool OrganismoLoEligeOperador = false,
+    string? AccionPrenda = null);
 
 /// <summary>
 /// HU #14078 (Feature K, Épica #14021) — proyecta lo que FLIT 2 ya sabe de un tipo (su <c>gate_profile</c> y sus reglas
@@ -49,11 +52,16 @@ public static class DefinicionPersonaNatural
         bool Firma(string actor) => perfil.RequiresSignature && firman.Contains(actor, StringComparer.OrdinalIgnoreCase);
 
         var actores = new List<ActorPortal>(3);
-        if (perfil.RequiresSeller)
+        // El portal es solo de personas naturales. El propietario que figura en el RUNT y no se digita (vendedor de un traspaso
+        // unilateral, propietario/arrendador de un leasing) no se captura: lo toma FLIT 2 del RUNT y lo gestiona el OT.
+        if (perfil.RequiresSeller && perfil.SellerCapturedViaForm)
             actores.Add(new(RolVendedor, "Vendedor", 1, PersonasPorRol, Biometria(ActorPropietario), Firma(ActorPropietario), personaNaturalPermitida));
 
-        if (perfil.RequiresBuyer)
-            actores.Add(new(RolComprador, perfil.RequiresSeller ? "Comprador" : "Titular", 1, PersonasPorRol,
+        // Con locatario y sin parte vendedora, el «comprador» del perfil es el arrendador/propietario (normalmente una entidad
+        // financiera): no se captura. Quien se captura es el locatario (decisión D1 del PO).
+        var comprador = perfil.RequiresBuyer && !(perfil.RequiresLessee && !perfil.RequiresSeller);
+        if (comprador)
+            actores.Add(new(RolComprador, perfil.RequiresSeller ? (perfil.SellerCapturedViaForm ? "Comprador" : "Locatario") : "Titular", 1, PersonasPorRol,
                 Biometria(ActorComprador), Firma(ActorComprador), personaNaturalPermitida));
 
         if (perfil.RequiresLessee)
@@ -62,8 +70,12 @@ public static class DefinicionPersonaNatural
         return actores;
     }
 
+    /// <summary>Decisión fija de un tipo prendario de acción única (misma fuente que el creador): levantar, registrar o null.</summary>
+    public static string? AccionPrenda(string? codigo) =>
+        !ProcedureTypeLayers.EsPrendaDeAccionUnica(codigo) ? null : ProcedureTypeLayers.ExigePrendaPreviaEnRunt(codigo) ? "levantar" : "registrar";
+
     /// <summary>Capacidades del tipo con nombres del contrato; cada una con el mismo resolvedor que usa FLIT 2.</summary>
-    public static CapacidadesPortal Capacidades(ProcedureTypeGateProfile perfil, string? familia)
+    public static CapacidadesPortal Capacidades(ProcedureTypeGateProfile perfil, string? familia, string? codigo = null)
     {
         ArgumentNullException.ThrowIfNull(perfil);
         return new CapacidadesPortal(
@@ -74,7 +86,26 @@ public static class DefinicionPersonaNatural
             perfil.ComplementaryTransformationsAllowed(familia),
             perfil.ComplementaryPrendaAllowed(familia),
             perfil.RequiresBiometrics,
-            perfil.RequiresPlateRequest);
+            perfil.RequiresPlateRequest,
+            perfil.RequiresDestinationTransitOffice,
+            perfil.OperatorChoosesTransitOffice(),
+            AccionPrenda(codigo));
+    }
+
+    /// <summary>
+    /// Documentos que solo existen para una persona jurídica o un mandato. El portal es SOLO para personas naturales (decisión
+    /// del PO): no se piden, así que se filtran en el servidor al armar la definición. Lista cerrada, en un solo lugar.
+    /// </summary>
+    public static bool DocumentoNoAplicaAPersonaNatural(string? docCode)
+    {
+        if (string.IsNullOrWhiteSpace(docCode))
+            return false;
+        var c = docCode.Trim();
+        return c.StartsWith("camara_comercio", StringComparison.OrdinalIgnoreCase)
+            || c.StartsWith("escritura_representante", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(c, "mandato", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(c, "poder_tramitador", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(c, "autorizacion_apoderado", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Un documento adicional que una regla condicional agrega o exige y que no está en la matriz base del tipo.</summary>

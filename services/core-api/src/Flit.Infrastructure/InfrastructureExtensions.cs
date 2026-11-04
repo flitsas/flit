@@ -93,7 +93,8 @@ public static class InfrastructureExtensions
         // HU #14043/#14079 (Épica #14021) — catálogo, elegibilidad y tarifas del portal de Persona Natural (solo lectura).
         services.AddScoped<PersonaNatural.PersonaNaturalTiposReader>();
         services.AddScoped(sp => new PersonaNatural.PersonaNaturalPortalReader(
-            sp.GetRequiredService<Persistence.FlitDbContext>(), sp.GetService<TimeProvider>()));
+            sp.GetRequiredService<Persistence.FlitDbContext>(), sp.GetService<TimeProvider>(),
+            sp.GetService<Flit.Admin.Domain.Companies.TransitOffices.IEffectiveTransitOfficeListResolver>()));
         // HU #14073 — contenido publicado y parámetros públicos del portal (solo lectura).
         services.AddScoped(sp => new PersonaNatural.PersonaNaturalConfiguracionPublicaReader(
             sp.GetRequiredService<Persistence.FlitDbContext>(), sp.GetService<TimeProvider>()));

@@ -119,10 +119,11 @@ internal sealed class KyverumFinesConsultationProvider(
                 "Sin registros SIMIT")],
             []);
 
+    // Aviso (warn), no bloqueo: sin respuesta del proveedor de comparendos el trámite puede seguir.
     private static ConsultationResult ProviderUnavailable() =>
-        new(Key_, "red",
-            [new ConsultationCheck("provider", "Consulta de comparendos", "error", Key_,
-                "No fue posible verificar la información de comparendos en este momento. Vuelve a intentarlo en unos minutos.")],
+        new(Key_, "yellow",
+            [new ConsultationCheck("provider", "Consulta de comparendos", "warn", Key_,
+                "No fue posible verificar la información de comparendos en este momento. Puedes continuar y reintentar más tarde.")],
             []);
 
     private static ConsultationResult InputError(string message) =>

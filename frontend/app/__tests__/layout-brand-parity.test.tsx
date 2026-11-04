@@ -12,12 +12,11 @@ vi.mock("server-only", () => ({}));
 vi.mock("next/headers", () => ({
   headers: () => Promise.resolve({ get: (name: string) => (name === "host" ? state.host : null) }),
 }));
-// next/font/google exige el compilador SWC de Next (webpack/turbopack) para resolver la
+// next/font/local exige el compilador SWC de Next (webpack/turbopack) para resolver la
 // tipografía; fuera de ese runtime (vitest) no es invocable. Se sustituye por un stub — el
 // objetivo de este test es `generateMetadata()`, no la carga de fuentes.
-vi.mock("next/font/google", () => ({
-  Poppins: () => ({ variable: "--font-poppins" }),
-  JetBrains_Mono: () => ({ variable: "--font-jetbrains-mono" }),
+vi.mock("next/font/local", () => ({
+  default: ({ variable }: { variable: string }) => ({ variable }),
 }));
 
 describe("app/layout · generateMetadata — paridad AC7", () => {

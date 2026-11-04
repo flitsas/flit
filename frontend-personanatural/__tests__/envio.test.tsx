@@ -374,7 +374,7 @@ describe("Reanudar un trámite que ya salió", () => {
 });
 
 describe("Salir o consultar más tarde", () => {
-  it("«Consultar mi trámite» abre la consulta con el radicado escrito y la cédula vacía", async () => {
+  it("«Consultar mi trámite» abre la consulta con el radicado precargado en el segundo campo", async () => {
     await abrirEnvio();
     fireEvent.click(enviar());
     await screen.findByRole("heading", { level: 2, name: "¡Muchas gracias, tu trámite se ha enviado con éxito!" });
@@ -382,8 +382,8 @@ describe("Salir o consultar más tarde", () => {
     fireEvent.click(screen.getByRole("button", { name: "Consultar mi trámite" }));
 
     const dialogo = await screen.findByRole("dialog", { name: "Consultar mi trámite" });
-    expect(within(dialogo).getByLabelText("Número de radicado")).toHaveValue("PN-2026-0042");
-    expect(within(dialogo).getByLabelText("Cédula del solicitante")).toHaveValue("");
+    expect(within(dialogo).getByLabelText("Número de Radicado o Cédula")).toHaveValue("PN-2026-0042");
+    expect(within(dialogo).getByLabelText("Placa")).toHaveValue("");
   });
 
   it("«Salir» vuelve al inicio y suelta el contexto en memoria (la cédula no se conserva)", async () => {

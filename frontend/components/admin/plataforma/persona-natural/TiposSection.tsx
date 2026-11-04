@@ -1,9 +1,9 @@
 "use client";
 
-// HU #14075 AC1 — Tipos de trámite que el portal de Persona Natural puede ofrecer. Cada tipo trae si está listo en
-// FLIT 2 (regla K2: perfil del tipo, asistente encendido y publicado) y el interruptor «Ofrecer en el portal». Solo se
-// puede activar un tipo que esté listo (la API responde 422 `tipo_no_elegible`); dejar de ofrecerlo siempre se puede,
-// pero pide confirmación porque el ciudadano deja de verlo.
+// HU #14075 AC1 (ajustada, Feature #14248) —Tipos de trámite que el portal de Persona Natural puede ofrecer. La API solo lista los
+// trámites con asistente habilitado en FLIT 2, así que todos se pueden encender con el interruptor «Ofrecer en el
+// portal» (si aun así la API responde 422 `tipo_no_elegible`, se muestra el motivo en la fila y se recarga). Dejar de
+// ofrecerlo pide confirmación porque el ciudadano deja de verlo.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EyeOff } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
@@ -90,7 +90,7 @@ export function TiposSection({ onIrATarifas, onCambio }: TiposSectionProps) {
   async function aplicar(tipo: TipoPn, habilitado: boolean) {
     await establecerTipoPn(tipo.id, habilitado);
     setTipos((prev) =>
-      prev.map((t) => (t.id === tipo.id ? { ...t, habilitado, ofrecible: habilitado && t.elegible } : t)),
+      prev.map((t) => (t.id === tipo.id ? { ...t, habilitado, ofrecible: habilitado } : t)),
     );
     show(`«${tipo.nombre}» ${habilitado ? "ahora se ofrece" : "ya no se ofrece"} en el portal.`, "success");
     onCambio?.();
@@ -127,58 +127,27 @@ export function TiposSection({ onIrATarifas, onCambio }: TiposSectionProps) {
       ),
     },
     {
-      key: "elegible",
-      header: "Disponibilidad",
-      render: (t) => (
-        <div className="flex flex-col gap-1">
-          {t.activoEnFlit === false ? (
-            <StatusBadge label="Ya no está activo en FLIT" tone="warning" />
-          ) : (
-            <StatusBadge label={t.elegible ? "Listo para ofrecer" : "Aún no disponible"} tone={t.elegible ? "success" : "neutral"} />
-          )}
-        </div>
-      ),
-    },
-    {
       key: "habilitado",
       header: (
         <EncabezadoFiltrable filtros={filtros} columnaId="habilitado">
           Ofrecer en el portal
         </EncabezadoFiltrable>
       ),
-      render: (t) => {
-        const inactivo = t.activoEnFlit === false;
-        const bloqueado = (!t.elegible || inactivo) && !t.habilitado;
-        const motivoId = `pn-tipo-motivo-${t.id}`;
-        return (
-          <div className="flex flex-col items-start gap-1">
-            <SwitchToggle
-              checked={t.habilitado}
-              disabled={guardando === t.id || bloqueado}
-              label={`${t.habilitado ? "Dejar de ofrecer" : "Ofrecer"} ${t.nombre} en el portal`}
-              describedById={bloqueado ? motivoId : undefined}
-              onChange={(next) => (next ? void encender(t) : setApagando(t))}
-            />
-            {bloqueado && (
-              <span id={motivoId} className="max-w-[260px] text-xs text-[#59677D] dark:text-white/70">
-                {inactivo
-                  ? "Ya no está activo en FLIT: no se puede ofrecer."
-                  : `No se puede ofrecer todavía: ${t.motivo.trim() || "no está terminado en FLIT 2"}`}
-              </span>
-            )}
-            {t.habilitado && inactivo && (
-              <span className="max-w-[260px] text-xs text-[#59677D] dark:text-white/70">
-                Ya no está activo en FLIT: solo puedes dejar de ofrecerlo.
-              </span>
-            )}
-            {errorFila?.id === t.id && (
-              <span role="alert" className={PN_FIELD_ERROR_CLS}>
-                {errorFila.mensaje}
-              </span>
-            )}
-          </div>
-        );
-      },
+      render: (t) => (
+        <div className="flex flex-col items-start gap-1">
+          <SwitchToggle
+            checked={t.habilitado}
+            disabled={guardando === t.id}
+            label={`${t.habilitado ? "Dejar de ofrecer" : "Ofrecer"} ${t.nombre} en el portal`}
+            onChange={(next) => (next ? void encender(t) : setApagando(t))}
+          />
+          {errorFila?.id === t.id && (
+            <span role="alert" className={PN_FIELD_ERROR_CLS}>
+              {errorFila.mensaje}
+            </span>
+          )}
+        </div>
+      ),
     },
     {
       key: "ofrecible",
@@ -196,7 +165,7 @@ export function TiposSection({ onIrATarifas, onCambio }: TiposSectionProps) {
       key: "tarifa",
       header: "Tarifa vigente",
       render: (t) =>
-        t.habilitado && t.elegible && t.organismosConTarifaVigente === 0 ? (
+        t.habilitado && t.organismosConTarifaVigente === 0 ? (
           <div className="flex flex-col items-start gap-1">
             <span className="text-xs">Ningún organismo tiene tarifa.</span>
             <PnLinkButton onClick={onIrATarifas} ariaLabel={`Crear tarifa para ${t.nombre}`}>
@@ -219,14 +188,14 @@ export function TiposSection({ onIrATarifas, onCambio }: TiposSectionProps) {
         id="pn-tipos-titulo"
         paso={1}
         titulo="Trámites que ofrece el portal"
-        descripcion="Activa los trámites que una persona natural puede iniciar. Aquí aparecen los trámites activos y publicados en FLIT 2; solo se pueden activar los que ya están listos."
+        descripcion="Activa los trámites que una persona natural puede iniciar. Aquí aparecen los trámites que ya tienen su asistente habilitado en FLIT 2; actívalos para que se ofrezcan."
       />
       {status === "loading" ? (
         <CarLoaderModal label="Cargando trámites…" />
       ) : (
         <UiStateBoundary
           status={status}
-          emptyMessage="Todavía no hay trámites listos para Persona Natural. Cuando el equipo de FLIT termine uno, aparecerá aquí."
+          emptyMessage="Todavía no hay trámites habilitados en FLIT 2 para Persona Natural. Cuando se habilite uno, aparecerá aquí."
           errorMessage="No se pudieron cargar los trámites."
           onRetry={() => void load()}
         >

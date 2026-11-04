@@ -33,6 +33,10 @@ public sealed class ConsultaDetalleService(PersonaNaturalDb db, PersonaService p
 
     public const string ActorAuditoria = "consulta_detalle";
 
+    /// <summary>¿Algún actor de ESTA solicitud tiene la identidad validada? Criterio único para dar el acreedor prendario (HU #14041, #14257).</summary>
+    public Task<bool> TieneIdentidadValidadaAsync(Guid solicitudId, CancellationToken ct) =>
+        db.Set<PersonaSolicitante>().AsNoTracking().AnyAsync(p => p.SolicitudId == solicitudId && EstadosValidados.Contains(p.ValidacionEstado), ct);
+
     /// <summary>
     /// <paramref name="parte"/> es el rol del actor que respalda la consulta; sin él vale cualquiera con identidad validada,
     /// con preferencia por quien es dueño del vehículo (vendedor, propietario o titular).

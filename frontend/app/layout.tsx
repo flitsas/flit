@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { JetBrains_Mono, Poppins } from "next/font/google";
+import localFont from "next/font/local";
 import { isOidcSessionMode } from "@flit/auth/request";
 import { SessionExpiredListener } from "@/components/auth/SessionExpiredListener";
 import { BrandProvider } from "@/components/brand/BrandProvider";
@@ -7,16 +7,22 @@ import { BrandStyle } from "@/components/brand/BrandStyle";
 import { resolveBrand } from "@/lib/brand/resolve-brand.server";
 import "./globals.css";
 
-const poppins = Poppins({
+// Las fuentes viven en el repo: el build no depende de lo que responda Google Fonts.
+const poppins = localFont({
   variable: "--font-poppins",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  src: [
+    { path: "./fonts/Poppins-400-latin.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/Poppins-500-latin.woff2", weight: "500", style: "normal" },
+    { path: "./fonts/Poppins-600-latin.woff2", weight: "600", style: "normal" },
+    { path: "./fonts/Poppins-700-latin.woff2", weight: "700", style: "normal" },
+  ],
 });
 
-const jetbrainsMono = JetBrains_Mono({
+const jetbrainsMono = localFont({
   variable: "--font-jetbrains-mono",
-  subsets: ["latin"],
-  weight: ["400", "500", "700"],
+  src: "./fonts/JetBrainsMono-variable-latin.woff2",
+  weight: "100 800",
+  style: "normal",
 });
 
 // HU #12419 (AC2/AC7) — en host FLIT `resolveBrand()` devuelve `FLIT_BRAND` SIN fetch, así que

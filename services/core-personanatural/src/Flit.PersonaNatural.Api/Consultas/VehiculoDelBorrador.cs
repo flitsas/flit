@@ -1,0 +1,239 @@
+using System.Text.Json;
+using Flit.Consultas.Grpc.V1;
+using Flit.PersonaNatural.Api.Persistence;
+using Flit.PersonaNatural.Api.Pii;
+using Flit.PersonaNatural.Api.Solicitudes;
+using Microsoft.EntityFrameworkCore;
+
+namespace Flit.PersonaNatural.Api.Consultas;
+
+public enum EstadoVehiculoBorrador
+{
+    Ok,
+    SolicitudNoEncontrada,
+
+    /// <summary>Sin placa/VIN o, por placa, sin documento del propietario con el cual consultar el RUNT.</summary>
+    SinVehiculo,
+}
+
+/// <summary>Gravamen del vehículo del borrador (HU #14257). <c>Aviso</c> = <c>sin_gravamen</c> cuando el RUNT respondió sin prenda.</summary>
+public sealed record GravamenBorradorDto(bool TienePrenda, string? Acreedor, string? NitAcreedor, string? Aviso, string? FechaInscripcion = null, bool TieneGravamenes = false);
+
+public sealed record ResultadoVehiculoBorrador(EstadoVehiculoBorrador Estado, string? Clase = null, GravamenBorradorDto? Gravamen = null, ValoresActualesVehiculo? Valores = null);
+
+/// <summary>Organismo que reporta el RUNT para el vehículo del borrador. <c>Existe</c> es false si el RUNT no halló el vehículo.</summary>
+public sealed record OrganismoDelVehiculo(EstadoVehiculoBorrador Estado, bool Existe, string? OrganismoRunt);
+
+/// <summary>
+/// Consultas del RUNT sobre el vehículo del BORRADOR (HU #14255 y #14257): la clase para filtrar las carrocerías y el gravamen para
+/// la prenda. El servidor resuelve el vehículo y el propietario desde el borrador: el navegador no manda ni placa ni documento.
+/// Por placa se consulta con el documento que el diagnóstico dejó en los campos, o con el del titular de la solicitud.
+/// El acreedor, su NIT y la fecha de inscripción salen siempre que el RUNT los traiga (decisión del producto: el portal muestra la
+/// prenda como FLIT 2); nunca datos del propietario, y solo para la solicitud de la sesión.
+/// </summary>
+public sealed class VehiculoDelBorradorService(PersonaNaturalDb db, PersonaService personas, IConsultasRunt runt, MedicionConsultasService medicion, CifradoPii cifrado) : IValoresRuntBorrador, IGravamenDelBorrador
+{
+    public const string ActorAuditoria = "consulta_borrador";
+
+    private static readonly string[] RolesTitular = ["vendedor", "comprador", "locatario"];
+
+    private static readonly JsonSerializerOptions OpcionesJson = new(JsonSerializerDefaults.Web);
+
+    public async Task<ResultadoVehiculoBorrador> ClaseAsync(Guid solicitudId, CancellationToken ct)
+    {
+        var (estado, resultado, placa) = await ConsultarAsync(solicitudId, ct).ConfigureAwait(false);
+        return estado != EstadoVehiculoBorrador.Ok
+            ? new ResultadoVehiculoBorrador(estado)
+            : new ResultadoVehiculoBorrador(estado, ProyeccionMinima.Vehiculo(resultado!, placa).Clase);
+    }
+
+    /// <summary>Color, combustible y carrocería actuales del vehículo en el RUNT, para validar que la transformación sea distinta.</summary>
+    public async Task<ResultadoVehiculoBorrador> ValoresActualesAsync(Guid solicitudId, CancellationToken ct)
+    {
+        var (estado, resultado, placa) = await ConsultarAsync(solicitudId, ct).ConfigureAwait(false);
+        if (estado != EstadoVehiculoBorrador.Ok)
+            return new ResultadoVehiculoBorrador(estado);
+        var v = ProyeccionMinima.DelTramite(resultado!, placa);
+        return new ResultadoVehiculoBorrador(estado, Valores: new ValoresActualesVehiculo(v.Color, v.Combustible, v.Carroceria));
+    }
+
+    /// <summary>Sin RUNT o sin vehículo devuelve <c>null</c>: no se puede comparar y la regla no bloquea.</summary>
+    public async Task<ValoresActualesVehiculo?> ObtenerAsync(Guid solicitudId, CancellationToken ct)
+    {
+        try
+        {
+            return (await ValoresActualesAsync(solicitudId, ct).ConfigureAwait(false)).Valores;
+        }
+        catch (ProveedorNoDisponibleException)
+        {
+            return null;
+        }
+    }
+
+    public async Task<ResultadoVehiculoBorrador> GravamenAsync(Guid solicitudId, CancellationToken ct)
+    {
+        var (estado, resultado, _) = await ConsultarAsync(solicitudId, ct).ConfigureAwait(false);
+        if (estado != EstadoVehiculoBorrador.Ok)
+            return new ResultadoVehiculoBorrador(estado);
+
+        if (!ProyeccionMinima.TienePrenda(resultado!))
+            return new ResultadoVehiculoBorrador(estado, null, new GravamenBorradorDto(false, null, null, "sin_gravamen"));
+
+        var (acreedor, nit) = Acreedor(resultado!);
+        return new ResultadoVehiculoBorrador(estado, null, new GravamenBorradorDto(true, acreedor, nit, null, FechaInscripcion(resultado!), true));
+    }
+
+    /// <summary>Fecha de inscripción del primer gravamen de <c>runt_gravamenes</c> (<c>fechaInscripcion</c> o <c>fechaRegistro</c>), tal como la trae el RUNT.</summary>
+    internal static string? FechaInscripcion(ResultadoConsulta resultado)
+    {
+        var json = resultado.Campos.FirstOrDefault(c => string.Equals(c.Clave, ProyeccionMinima.CampoGarantias, StringComparison.OrdinalIgnoreCase))?.ValorJson;
+        if (string.IsNullOrWhiteSpace(json))
+            return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                return null;
+            return doc.RootElement.EnumerateArray().Where(f => f.ValueKind == JsonValueKind.Object)
+                .Select(f => Primero(f, "fechaInscripcion", "FechaInscripcion", "fechaRegistro", "FechaRegistro")).FirstOrDefault(f => f is not null);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Primer gravamen con datos de <c>runt_gravamenes</c> (mismas llaves que <c>parseRuntGravamenesJson</c> de FLIT 2) o, en su defecto, el acreedor plano.</summary>
+    internal static (string? Acreedor, string? Nit) Acreedor(ResultadoConsulta resultado)
+    {
+        string? nombre = null, documento = null;
+        var json = resultado.Campos.FirstOrDefault(c => string.Equals(c.Clave, ProyeccionMinima.CampoGarantias, StringComparison.OrdinalIgnoreCase))?.ValorJson;
+        if (!string.IsNullOrWhiteSpace(json))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var fila in doc.RootElement.EnumerateArray().Where(f => f.ValueKind == JsonValueKind.Object))
+                    {
+                        nombre = Primero(fila, "nombreAcreedor", "NombreAcreedor", "acreedor", "Acreedor", "entidad", "Entidad");
+                        documento = Primero(fila, "numeroDocumentoAcreedor", "NumeroDocumentoAcreedor", "documentoAcreedor", "numeroDocumentoEntidad", "NumeroDocumentoEntidad");
+                        if (nombre is not null || documento is not null)
+                            break;
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+                // JSON ilegible: se cae al acreedor plano.
+            }
+        }
+
+        nombre ??= ProyeccionMinima.Texto(resultado, ProyeccionMinima.CampoAcreedor);
+        var nit = documento is null ? null : new string(documento.Where(char.IsDigit).ToArray());
+        return (nombre, string.IsNullOrEmpty(nit) ? null : nit);
+    }
+
+    private static string? Primero(JsonElement fila, params string[] claves)
+    {
+        foreach (var clave in claves)
+        {
+            if (fila.TryGetProperty(clave, out var v) && v.ValueKind != JsonValueKind.Null)
+            {
+                var texto = v.ValueKind == JsonValueKind.String ? v.GetString() : v.ToString();
+                if (!string.IsNullOrWhiteSpace(texto))
+                    return texto.Trim();
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Organismo de tránsito donde el RUNT dice que está matriculado el vehículo del borrador. Con <paramref name="propietario"/>
+    /// consulta con ese documento (el diagnóstico aún no lo ha guardado); sin él, con el que el borrador ya tiene. Core-consultas
+    /// reutiliza su caché, así que repetir la consulta no vuelve a pagarle al proveedor.
+    /// </summary>
+    /// <exception cref="ProveedorNoDisponibleException">core-consultas no respondió o el proveedor del RUNT estaba caído.</exception>
+    public async Task<OrganismoDelVehiculo> OrganismoDelVehiculoAsync(Guid solicitudId, DocumentoConsulta? propietario, CancellationToken ct)
+    {
+        var (estado, resultado, placa) = await ConsultarAsync(solicitudId, ct, propietario).ConfigureAwait(false);
+        if (estado != EstadoVehiculoBorrador.Ok)
+            return new OrganismoDelVehiculo(estado, false, null);
+        var existe = ProyeccionMinima.Vehiculo(resultado!, placa).Existe;
+        return new OrganismoDelVehiculo(estado, existe, existe ? ProyeccionMinima.Texto(resultado!, "transit_office_name") : null);
+    }
+
+    private async Task<(EstadoVehiculoBorrador Estado, ResultadoConsulta? Resultado, string? Placa)> ConsultarAsync(Guid solicitudId, CancellationToken ct, DocumentoConsulta? propietarioExplicito = null)
+    {
+        var s = await db.Set<SolicitudTramite>().AsNoTracking().Where(x => x.Id == solicitudId)
+            .Select(x => new { x.Placa, x.Vin, x.FieldValues, x.Datos }).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        if (s is null)
+            return (EstadoVehiculoBorrador.SolicitudNoEncontrada, null, null);
+
+        var vin = EntradaConsulta.Vin(s.Vin);
+        var placa = EntradaConsulta.Placa(s.Placa);
+        if (vin is null && placa is null)
+            return (EstadoVehiculoBorrador.SinVehiculo, null, null);
+
+        DocumentoConsulta? propietario = null;
+        if (vin is null)
+        {
+            propietario = propietarioExplicito ?? await PropietarioAsync(solicitudId, s.FieldValues, s.Datos, ct).ConfigureAwait(false);
+            if (propietario is null)
+                return (EstadoVehiculoBorrador.SinVehiculo, null, null);
+        }
+
+        try
+        {
+            var resultado = await runt.ConsultarVehiculoAsync(vin is null ? placa : null, vin, propietario, solicitudId.ToString(), ct).ConfigureAwait(false);
+            if (ProyeccionMinima.ProveedorCaido(resultado))
+                throw new ProveedorNoDisponibleException("El proveedor del RUNT no respondió.");
+            return (EstadoVehiculoBorrador.Ok, resultado, placa);
+        }
+        finally
+        {
+            await medicion.RegistrarAsync(MedicionConsultasService.TipoVehiculo, CancellationToken.None).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<DocumentoConsulta?> PropietarioAsync(Guid solicitudId, string camposJson, string? datosJson, CancellationToken ct)
+    {
+        try
+        {
+            var campos = JsonSerializer.Deserialize<Dictionary<string, string>>(camposJson, OpcionesJson) ?? [];
+            if (campos.TryGetValue("owner_document_type", out var tipo) && campos.TryGetValue("owner_document_number", out var numero)
+                && EntradaConsulta.DocumentoPropietario(tipo, numero) is { } deCampos)
+                return deCampos;
+        }
+        catch (JsonException)
+        {
+            // Sin campos legibles: se intenta con el titular.
+        }
+
+        // El documento que el ciudadano escribió al consultar el vehículo (portal web): los tipos sin esos campos no lo dejan en
+        // los campos y las partes aún no existen; sin esto no habría con qué consultar el RUNT (409 sin_vehiculo).
+        if (DatosSolicitud.Leer(datosJson).PropietarioConsulta is { } guardado && Descifrar(guardado, solicitudId) is { } deDiagnostico)
+            return deDiagnostico;
+
+        var partes = await personas.LeerAsync(solicitudId, ActorAuditoria, ct).ConfigureAwait(false);
+        var titular = RolesTitular.Select(rol => partes.FirstOrDefault(p => string.Equals(p.Parte, rol, StringComparison.OrdinalIgnoreCase))).FirstOrDefault(p => p is not null);
+        return titular is null ? null : EntradaConsulta.DocumentoPropietario(titular.TipoDocumento, titular.Documento);
+    }
+
+    internal const string ContextoPropietario = "solicitud.propietario_consulta";
+
+    private DocumentoConsulta? Descifrar(PropietarioConsultaDatos guardado, Guid solicitudId)
+    {
+        try
+        {
+            var numero = cifrado.Descifrar(Convert.FromBase64String(guardado.DocumentoCifrado), new ContextoCifrado(ContextoPropietario, solicitudId));
+            return EntradaConsulta.DocumentoPropietario(guardado.TipoDocumento, numero);
+        }
+        catch (Exception e) when (e is FormatException or System.Security.Cryptography.CryptographicException)
+        {
+            return null;
+        }
+    }
+}

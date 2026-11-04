@@ -108,13 +108,15 @@ public sealed class PersonaNaturalDefinicionGrpcTests(WebApplicationFactory<Prog
         var conOrganismo = (await cliente.ObtenerDefinicionTipoTramiteAsync(Pedir(e.CodigoTraspaso, e.Organismo), cancellationToken: ct)).Definicion;
         var porDefecto = (await cliente.ObtenerDefinicionTipoTramiteAsync(Pedir(e.CodigoTraspaso, null), cancellationToken: ct)).Definicion;
 
-        porDefecto.Documentos.Select(x => x.DocCode).Should().Equal(e.DocA, e.DocB);
-        conOrganismo.Documentos.Select(x => x.DocCode).Should().Equal(e.DocB, e.DocA);
+        // El portal agrega al traspaso los documentos de la decisión de prenda que FLIT 2 exige; no son de la matriz.
+        porDefecto.Documentos.Select(x => x.DocCode).Where(c => c is not ("prenda_registro" or "prenda_levantamiento")).Should().Equal(e.DocA, e.DocB);
+        conOrganismo.Documentos.Select(x => x.DocCode).Where(c => c is not ("prenda_registro" or "prenda_levantamiento")).Should().Equal(e.DocB, e.DocA);
         var a = conOrganismo.Documentos.Single(x => x.DocCode == e.DocA);
         a.Obligatorio.Should().BeTrue();
         a.Nombre.Should().Be("Documento A de prueba");
         a.InstruccionCargue.Should().Be("Suba el documento A legible.");
         conOrganismo.Documentos.Should().NotContain(x => x.DocCode == e.DocBuzon, "un buzón informativo no lo carga el ciudadano");
+        conOrganismo.Documentos.Should().NotContain(x => x.DocCode == e.DocJuridica, "HU 1: los documentos de persona jurídica no aplican al portal");
         conOrganismo.Documentos.Select(x => x.Orden).Should().BeInAscendingOrder();
     }
 
@@ -133,8 +135,8 @@ public sealed class PersonaNaturalDefinicionGrpcTests(WebApplicationFactory<Prog
         titular.Flags.PermiteTransformaciones.Should().BeFalse("la familia OTROS no acumula transformaciones");
         titular.DisponiblePn.Should().BeTrue();
         prenda.Flags.RequierePrenda.Should().BeTrue();
-        prenda.DisponiblePn.Should().BeFalse("exige gravamen o acreedor prendario");
-        prenda.MotivoNoDisponible.Should().Contain("prendario");
+        prenda.DisponiblePn.Should().BeTrue("HU 1: ya no hay reglas de exclusión; el portal cubre la prenda");
+        prenda.MotivoNoDisponible.Should().BeEmpty();
     }
 
     [Fact]
@@ -257,6 +259,7 @@ public sealed class PersonaNaturalDefinicionGrpcTests(WebApplicationFactory<Prog
         public string DocA => "pn_doc_a_" + _sufijo.ToLowerInvariant();
         public string DocB => "pn_doc_b_" + _sufijo.ToLowerInvariant();
         public string DocBuzon => "pn_doc_buzon_" + _sufijo.ToLowerInvariant();
+        public string DocJuridica => "camara_comercio_pn_" + _sufijo.ToLowerInvariant();
         private Guid _docAId;
 
         private Escenario(IServiceScope scope)
@@ -310,6 +313,7 @@ public sealed class PersonaNaturalDefinicionGrpcTests(WebApplicationFactory<Prog
             e._docAId = await e.DocumentoAsync(e.DocA, "Documento A de prueba", "Suba el documento A legible.", mandatory: true, orden: 1, dummy: false, ct);
             await e.DocumentoAsync(e.DocB, "Documento B de prueba", null, mandatory: false, orden: 2, dummy: false, ct);
             await e.DocumentoAsync(e.DocBuzon, "Buzón informativo", null, mandatory: false, orden: 3, dummy: true, ct);
+            await e.DocumentoAsync(e.DocJuridica, "Cámara de comercio de prueba", null, mandatory: true, orden: 4, dummy: false, ct);
             // El organismo pone el B antes que el A.
             var docB = await db.DocumentTypes.Where(d => d.Code == e.DocB).Select(d => d.Id).SingleAsync(ct);
             db.DocumentOrderOverrides.Add(new DocumentOrderOverride

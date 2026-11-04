@@ -36,6 +36,7 @@ public sealed class SolicitudesTests : IAsyncLifetime
     private const string CorreoVendedor = "vendedor.secreto@example.org";
 
     private readonly FachadaRequisitosFalsa _requisitos = new();
+    private readonly ConsultasRuntFalso _runt = new();
     private PortalHost _host = null!;
     private bool _iniciado;
 
@@ -49,7 +50,7 @@ public sealed class SolicitudesTests : IAsyncLifetime
 
     private async Task IniciarAsync(params (string Clave, string Valor)[] ajustes)
     {
-        _host = await PortalHost.IniciarAsync("pnsol", (servicios, _) => servicios.AddSingleton<IFachadaRequisitos>(_requisitos), ajustes);
+        _host = await PortalHost.IniciarAsync("pnsol", (servicios, _) => { servicios.AddSingleton<IFachadaRequisitos>(_requisitos); servicios.AddSingleton<Flit.PersonaNatural.Api.Consultas.IConsultasRunt>(_runt); }, ajustes);
         _iniciado = true;
         _host.Definiciones.PorCodigo["TRASPASO_STANDARD"] = DefinicionesDePrueba.Traspaso();
         _host.Definiciones.PorCodigo["CAMBIO_COLOR"] = DefinicionesDePrueba.UnTitular();
@@ -94,23 +95,23 @@ public sealed class SolicitudesTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task AlAbrir_ExigeCaptcha_ConsentimientoYDatosValidos()
+    public async Task AlAbrir_ExigeConsentimientoYDatosValidos_CaptchaNoObligatorio()
     {
         await IniciarAsync();
 
         var sinCaptcha = await _host.EnviarAsync(HttpMethod.Post, $"{Base}/sesiones", Cuerpo(), captcha: false);
-        var sinConsentimiento = await _host.EnviarAsync(HttpMethod.Post, $"{Base}/sesiones", Cuerpo(consentimiento: false), captcha: true);
-        var sinPlaca = await _host.EnviarAsync(HttpMethod.Post, $"{Base}/sesiones", Cuerpo(placa: null), captcha: true);
-        var cedulaMala = await _host.EnviarAsync(HttpMethod.Post, $"{Base}/sesiones", Cuerpo(cedula: "x"), captcha: true);
+        var sinConsentimiento = await _host.EnviarAsync(HttpMethod.Post, $"{Base}/sesiones", Cuerpo(consentimiento: false), captcha: false);
+        var sinPlaca = await _host.EnviarAsync(HttpMethod.Post, $"{Base}/sesiones", Cuerpo(placa: null), captcha: false);
+        var cedulaMala = await _host.EnviarAsync(HttpMethod.Post, $"{Base}/sesiones", Cuerpo(cedula: "x"), captcha: false);
 
-        sinCaptcha.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await PortalHost.CodigoAsync(sinCaptcha)).Should().Be("captcha_required");
+        // Captcha desactivado: sin token la sesión igual se abre si el resto es válido.
+        sinCaptcha.StatusCode.Should().Be(HttpStatusCode.Created);
         (await PortalHost.CodigoAsync(sinConsentimiento)).Should().Be("consentimiento_requerido");
         sinPlaca.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
         (await Errores(sinPlaca)).Should().ContainKey("placa");
         (await Errores(cedulaMala)).Should().ContainKey("cedula");
         await using var db = _host.NuevaDb();
-        (await db.Set<SolicitudTramite>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(0);
+        (await db.Set<SolicitudTramite>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(1);
     }
 
     [Fact]
@@ -450,6 +451,28 @@ public sealed class SolicitudesTests : IAsyncLifetime
         await using var db = _host.NuevaDb();
         var datos = (await db.Set<SolicitudTramite>().SingleAsync(TestContext.Current.CancellationToken)).Datos;
         datos.Should().Contain("diagnostico").And.Contain("SOAT vigente").And.NotContain("1234567");
+    }
+
+    [Fact]
+    public async Task ElGravamen_EnElWeb_UsaElDocumentoDelDiagnostico_AunqueElTipoNoTengaCamposDelPropietario_YNoLoDejaEnClaro()
+    {
+        await IniciarAsync();
+        var (id, token) = await AbrirSesion("TIPO_PRENDA");
+        var r = ResultadosFalsos.VehiculoCompleto(prenda: true);
+        r.Campos.First(c => c.Clave == "runt_gravamenes").ValorJson = "[{\"nombreAcreedor\":\"BANCO FICTICIO S.A.\",\"numeroDocumentoAcreedor\":\"900123456\"}]";
+        r.Campos.First(c => c.Clave == "transit_office_name").ValorTexto = "Tránsito de Prueba"; // el diagnóstico verifica el organismo contra el RUNT
+        _runt.Vehiculo = () => r;
+        (await _host.EnviarAsync(HttpMethod.Post, $"{Base}/solicitudes/{id}/diagnostico", new { propietario = new { tipoDocumento = "cc", numeroDocumento = "7005551234" } }, token)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var respuesta = await _host.EnviarAsync(HttpMethod.Get, $"{Base}/solicitudes/{id}/vehiculo/gravamen", token: token);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK, "antes el web daba 409 sin_vehiculo: no había documento del propietario");
+        var json = (await PortalHost.JsonAsync(respuesta)).RootElement;
+        json.GetProperty("acreedor").GetString().Should().Be("BANCO FICTICIO S.A.");
+        _runt.LlamadasVehiculo.Should().HaveCount(2, "el diagnóstico verifica el organismo y el gravamen consulta de nuevo (core-consultas usa su caché)");
+        _runt.LlamadasVehiculo.Last().Propietario.Should().Be(new Flit.PersonaNatural.Api.Consultas.DocumentoConsulta("CC", "7005551234"));
+        await using var db = _host.NuevaDb();
+        (await db.Set<SolicitudTramite>().SingleAsync(TestContext.Current.CancellationToken)).Datos.Should().NotContain("7005551234", "el documento se guarda cifrado");
     }
 
     [Fact]

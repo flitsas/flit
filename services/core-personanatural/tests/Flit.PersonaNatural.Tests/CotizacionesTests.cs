@@ -162,19 +162,16 @@ public sealed class CotizacionesTests : IAsyncLifetime
     // ── AC2 y AC4: cotización ────────────────────────────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task LaCotizacion_ExigeCaptcha_YDevuelveLasDosLineasYElTotalDeLaFachada()
+    public async Task LaCotizacion_SinCaptchaDevuelveLasDosLineasYElTotalDeLaFachada()
     {
         if (!await IniciarAsync()) return;
         var ct = TestContext.Current.CancellationToken;
         var cuerpo = new { organismoId = Organismo, tipoCodigo = "TRASPASO_STANDARD", adicionales = new[] { "ENVIO_DOCUMENTO" } };
 
         var sinCaptcha = await _http.PostAsJsonAsync(Cotizar, cuerpo, ct);
-        var ok = await PostAsync(Cotizar, cuerpo, captcha: true);
 
-        sinCaptcha.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await Codigo(sinCaptcha)).Should().Be("captcha_required");
-        ok.StatusCode.Should().Be(HttpStatusCode.OK);
-        var json = (await Json(ok)).RootElement;
+        sinCaptcha.StatusCode.Should().Be(HttpStatusCode.OK);
+        var json = (await Json(sinCaptcha)).RootElement;
         json.GetProperty("lineas").GetArrayLength().Should().Be(2);
         json.GetProperty("lineas")[1].GetProperty("subtitulo").GetString().Should().NotBeNullOrEmpty();
         json.GetProperty("totalCop").GetInt64().Should().Be(366_000);
@@ -244,18 +241,18 @@ public sealed class CotizacionesTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task EnviarPorCorreo_ExigeCaptchaIdempotencyKeyYCorreoValido()
+    public async Task EnviarPorCorreo_ExigeIdempotencyKeyYCorreoValido_CaptchaNoObligatorio()
     {
         if (!await IniciarAsync()) return;
 
         var sinCaptcha = await PostAsync(EnviarCorreo, Cuerpo(Correo), captcha: false, idempotencia: "k");
-        var sinClave = await PostAsync(EnviarCorreo, Cuerpo(Correo), captcha: true, idempotencia: null);
-        var correoMalo = await PostAsync(EnviarCorreo, Cuerpo("no-es-correo"), captcha: true, idempotencia: "k");
+        var sinClave = await PostAsync(EnviarCorreo, Cuerpo(Correo), captcha: false, idempotencia: null);
+        var correoMalo = await PostAsync(EnviarCorreo, Cuerpo("no-es-correo"), captcha: false, idempotencia: "k");
 
-        sinCaptcha.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        sinCaptcha.StatusCode.Should().Be(HttpStatusCode.OK);
         (await Codigo(sinClave)).Should().Be(CotizacionesEndpoints.CodigoIdempotenciaRequerida);
         (await Codigo(correoMalo)).Should().Be("correo_invalido");
-        _enviador.Enviados.Should().BeEmpty();
+        _enviador.Enviados.Should().ContainSingle();
     }
 
     [Fact]

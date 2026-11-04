@@ -4,6 +4,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach, beforeEach, vi } from "vitest";
 import { limpiarContexto } from "./lib/tramite/contexto";
+import { olvidarPresentacion } from "./lib/tramite/presentacion";
 import { routerPush } from "./__tests__/router";
 
 // La landing navega con el router de Next, que no existe fuera de la app: se simula y las pruebas miran `routerPush`.
@@ -57,5 +58,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   limpiarContexto();
+  olvidarPresentacion();
   routerPush.mockClear();
 });
