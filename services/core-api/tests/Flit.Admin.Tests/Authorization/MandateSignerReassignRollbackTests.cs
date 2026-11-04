@@ -89,7 +89,9 @@ public sealed class MandateSignerReassignRollbackTests(WebApplicationFactory<Pro
     private async Task<Guid> SeedProcedureAsync(Guid signerId, string status)
     {
         await using var db = NewDb();
-        var typeId = await db.ProcedureTypes.AsNoTracking().Select(t => t.Id).FirstAsync(Ct);
+        // El tipo MÁS ANTIGUO (sembrado por las migraciones): un tipo cualquiera podía ser uno que otra clase (Persona Natural)
+        // crea y borra en paralelo, y la inserción fallaba por la FK procedure_instances_procedure_type_id_fkey.
+        var typeId = await db.ProcedureTypes.AsNoTracking().OrderBy(t => t.CreatedAt).ThenBy(t => t.Id).Select(t => t.Id).FirstAsync(Ct);
         var id = Guid.NewGuid();
         db.ProcedureInstances.Add(new ProcedureInstance
         {
