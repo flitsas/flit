@@ -178,11 +178,8 @@ public sealed class SimulacionTests
     [Fact]
     public async Task Impuesto_simulado_pasa_por_el_interprete_segun_el_penultimo_caracter()
     {
-        var opciones = OpcionesImpuesto.Desde(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
-        {
-            ["IMPUESTO_DEPARTAMENTOS"] = "05",
-        }).Build());
-        var proveedor = new ProveedorImpuesto(new TransporteImpuestoSimulado(), opciones);
+        var opciones = OpcionesImpuesto.Desde(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build());
+        var proveedor = new ProveedorImpuesto(new TransporteImpuestoSimulado(), opciones, new Flit.Consultas.Tests.Impuesto.CatalogoImpuestoFijo("05"));
         var deuda = await proveedor.ConsultarAsync(PedidoSimulado("TST20Z"), CancellationToken.None);
         var sinMonto = await proveedor.ConsultarAsync(PedidoSimulado("TST21Z"), CancellationToken.None);
         var corta = await proveedor.ConsultarAsync(PedidoSimulado("TST29Z"), CancellationToken.None);

@@ -16,10 +16,10 @@ public sealed class OpcionesImpuestoTests
         OpcionesImpuesto.Unir(baseUrl, ruta).Should().Be("http://host/api/v1/tax/detail");
 
     [Fact]
-    public void Un_codigo_fuera_de_los_16_impide_armar_las_opciones()
+    public void La_variable_vieja_de_departamentos_no_impide_arrancar()
     {
-        var accion = () => OpcionesImpuesto.Desde(Config(("IMPUESTO_DEPARTAMENTOS", "99")));
-        accion.Should().Throw<InvalidOperationException>().WithMessage("*IMPUESTO_DEPARTAMENTOS*");
+        var opciones = OpcionesImpuesto.Desde(Config(("IMPUESTO_DEPARTAMENTOS", "99")));
+        opciones.TieneRuta.Should().BeFalse();
     }
 
     [Fact]
@@ -27,7 +27,6 @@ public sealed class OpcionesImpuestoTests
     {
         var opciones = OpcionesImpuesto.Desde(Config());
         opciones.TieneRuta.Should().BeFalse();
-        opciones.Departamentos.Should().BeEmpty();
     }
 
     private static IConfiguration Config(params (string Clave, string Valor)[] pares)

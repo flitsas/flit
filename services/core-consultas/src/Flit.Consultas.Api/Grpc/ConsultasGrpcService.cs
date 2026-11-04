@@ -64,11 +64,11 @@ internal sealed partial class ConsultasGrpcService(
     public override Task<ConsultarImpuestoVehicularResponse> ConsultarImpuestoVehicular(ConsultarImpuestoVehicularRequest request, ServerCallContext context) =>
         ConsultarImpuestoVehicular(request, Llamador(context), context.CancellationToken);
 
-    public override Task<ListarDepartamentosImpuestoResponse> ListarDepartamentosImpuesto(ListarDepartamentosImpuestoRequest request, ServerCallContext context)
+    public override async Task<ListarDepartamentosImpuestoResponse> ListarDepartamentosImpuesto(ListarDepartamentosImpuestoRequest request, ServerCallContext context)
     {
         var respuesta = new ListarDepartamentosImpuestoResponse();
-        respuesta.DepartamentoCodigos.AddRange(impuesto.Departamentos());
-        return Task.FromResult(respuesta);
+        respuesta.DepartamentoCodigos.AddRange(await impuesto.DepartamentosAsync(context.CancellationToken).ConfigureAwait(false));
+        return respuesta;
     }
 
     /// <summary>Vehículo, medido, con el llamador y el <paramref name="deadline"/> dados (<see cref="DateTime.MaxValue"/> = sin deadline).</summary>

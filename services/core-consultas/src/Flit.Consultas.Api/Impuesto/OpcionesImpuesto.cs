@@ -28,20 +28,16 @@ internal sealed record ContactoImpuesto(
 }
 
 /// <summary>
-/// Variables <c>IMPUESTO_API_*</c>. Sin URL en código. Un código de departamento fuera de los 16 impide arrancar.
+/// Variables <c>IMPUESTO_API_*</c>. Sin URL en código. Los departamentos encendidos viven en la tabla, no aquí (ADR-0080).
 /// </summary>
-internal sealed record OpcionesImpuesto(Uri? BaseUrl, string Ruta, int TimeoutSegundos, IReadOnlyList<string> Departamentos, ContactoImpuesto Contacto)
+internal sealed record OpcionesImpuesto(Uri? BaseUrl, string Ruta, int TimeoutSegundos, ContactoImpuesto Contacto)
 {
     public const string VariableBaseUrl = "IMPUESTO_API_BASE_URL";
     public const string VariableRuta = "IMPUESTO_API_PATH";
     public const string VariableTimeout = "IMPUESTO_API_TIMEOUT_SECONDS";
-    public const string VariableDepartamentos = "IMPUESTO_DEPARTAMENTOS";
     public const int TimeoutPorDefecto = 280;
 
     public bool TieneRuta => BaseUrl is not null && Ruta.Length > 0;
-
-    public bool Soporta(string? departamento) =>
-        departamento is { Length: > 0 } && Departamentos.Contains(departamento, StringComparer.Ordinal);
 
     public static string Unir(string baseUrl, string ruta)
     {
@@ -63,15 +59,7 @@ internal sealed record OpcionesImpuesto(Uri? BaseUrl, string Ruta, int TimeoutSe
             && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
             ? uri
             : null;
-        var departamentos = Valor(VariableDepartamentos)
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        foreach (var codigo in departamentos)
-        {
-            if (!HomologacionDocumentoImpuesto.Conocido(codigo))
-                throw new InvalidOperationException($"{VariableDepartamentos} tiene un código fuera de la homologación.");
-        }
-
-        return new(baseUrl, Valor(VariableRuta).Trim('/'), timeout, departamentos, LeerContacto(configuracion));
+        return new(baseUrl, Valor(VariableRuta).Trim('/'), timeout, LeerContacto(configuracion));
     }
 
     private static ContactoImpuesto LeerContacto(IConfiguration configuracion)

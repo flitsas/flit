@@ -21,7 +21,7 @@ Restricciones:
 
 ## Decisión
 
-**Fachada.** core-consultas arma el cuerpo, llama por HTTP al servicio actual y traduce la respuesta. Diagnóstico no habla con el portal. El modo simulado es otro transporte (`ITransporteImpuesto`) que devuelve JSON crudo sintético al mismo intérprete. Pasar a real es quitar `impuesto` de la simulación en LOCAL y DEV, o llenar `IMPUESTO_DEPARTAMENTOS` en QA y PDN.
+**Fachada.** core-consultas arma el cuerpo, llama por HTTP al servicio actual y traduce la respuesta. Diagnóstico no habla con el portal. El modo simulado es otro transporte (`ITransporteImpuesto`) que devuelve JSON crudo sintético al mismo intérprete. Pasar a real es quitar `impuesto` de la simulación en LOCAL y DEV. Los departamentos encendidos salen de `consultas.vehicle_tax_departments` (ADR-0080), no de una variable de entorno.
 
 ## Alternativas consideradas
 

@@ -59,9 +59,9 @@ service ConsultasService {
   // = FAILED_PRECONDITION.
   rpc ConsultarImpuestoVehicular(ConsultarImpuestoVehicularRequest) returns (ConsultarImpuestoVehicularResponse);
 
-  // Departamentos en los que el servicio sabe consultar el impuesto (HU #13860). Es capacidad global, igual para todas
+  // Departamentos activos en consultas.vehicle_tax_departments (ADR-0080). Capacidad global, igual para todas
   // las empresas: EXCEPCIÓN a la cabecera del servicio, no exige `x-flit-tenant-id` (sí el token de servicio).
-  // Hasta C3 responde UNIMPLEMENTED.
+  // Lista vacía si el transporte del impuesto no está listo.
   rpc ListarDepartamentosImpuesto(ListarDepartamentosImpuestoRequest) returns (ListarDepartamentosImpuestoResponse);
 }
 

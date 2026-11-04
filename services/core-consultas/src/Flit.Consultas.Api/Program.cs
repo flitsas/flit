@@ -135,7 +135,12 @@ public static class Program
             return new Impuesto.TransporteImpuestoHttp(
                 sp.GetRequiredService<IHttpClientFactory>(), impuesto, sp.GetRequiredService<ILogger<Impuesto.TransporteImpuestoHttp>>());
         });
-        builder.Services.AddSingleton(sp => new Impuesto.ProveedorImpuesto(sp.GetRequiredService<Impuesto.ITransporteImpuesto>(), impuesto));
+        builder.Services.AddScoped<Impuesto.CatalogoDepartamentosImpuesto>();
+        builder.Services.AddScoped<Impuesto.ICatalogoDepartamentosImpuesto>(sp => sp.GetRequiredService<Impuesto.CatalogoDepartamentosImpuesto>());
+        builder.Services.AddScoped(sp => new Impuesto.ProveedorImpuesto(
+            sp.GetRequiredService<Impuesto.ITransporteImpuesto>(),
+            sp.GetRequiredService<Impuesto.OpcionesImpuesto>(),
+            sp.GetRequiredService<Impuesto.ICatalogoDepartamentosImpuesto>()));
         var simulados = bool.TryParse(builder.Configuration["Consultations:ComparendosSimulados"], out var sim) ? sim : builder.Environment.IsDevelopment();
         builder.Services.AddSingleton<Comparendos.IProveedorComparendos>(sp => new Comparendos.ProveedorSimulado(sp.GetRequiredService<TimeProvider>(), simulados));
 

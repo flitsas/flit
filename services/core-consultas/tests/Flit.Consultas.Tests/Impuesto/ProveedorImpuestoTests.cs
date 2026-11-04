@@ -53,10 +53,23 @@ public sealed class ProveedorImpuestoTests
     [Fact]
     public async Task Sin_ruta_la_lista_de_departamentos_queda_vacia()
     {
+        var opciones = OpcionesImpuesto.Desde(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build());
+        var proveedor = new ProveedorImpuesto(new TransporteFalso { Listo = false }, opciones, new CatalogoImpuestoFijo("13", "41"));
+        (await proveedor.DepartamentosAsync(CancellationToken.None)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task La_lista_efectiva_sale_del_catalogo_y_no_de_una_variable()
+    {
         var opciones = OpcionesImpuesto.Desde(new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["IMPUESTO_DEPARTAMENTOS"] = "13,41" }).Build());
-        var proveedor = new ProveedorImpuesto(new TransporteFalso { Listo = false }, opciones);
-        proveedor.Departamentos().Should().BeEmpty();
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["IMPUESTO_DEPARTAMENTOS"] = "13,41",
+                ["IMPUESTO_API_BASE_URL"] = "http://host",
+                ["IMPUESTO_API_PATH"] = "api/v1/tax/detail",
+            }).Build());
+        var proveedor = new ProveedorImpuesto(new TransporteFalso { Listo = true }, opciones, new CatalogoImpuestoFijo("50", "52"));
+        (await proveedor.DepartamentosAsync(CancellationToken.None)).Should().Equal("50", "52");
     }
 
     [Fact]
@@ -97,12 +110,11 @@ public sealed class ProveedorImpuestoTests
         var opciones = OpcionesImpuesto.Desde(new ConfigurationBuilder().AddInMemoryCollection(
             new Dictionary<string, string?>
             {
-                ["IMPUESTO_DEPARTAMENTOS"] = departamentos,
                 ["IMPUESTO_API_BASE_URL"] = "http://host",
                 ["IMPUESTO_API_PATH"] = "api/v1/tax/detail",
                 ["IMPUESTO_CONTACTO_CORREO"] = "prueba@example.com",
             }).Build());
-        return new ProveedorImpuesto(transporte, opciones);
+        return new ProveedorImpuesto(transporte, opciones, new CatalogoImpuestoFijo(departamentos));
     }
 
     private static ConsultarImpuestoVehicularRequest Pedido(string departamento, string tipo, string numero, string? nombre = null)

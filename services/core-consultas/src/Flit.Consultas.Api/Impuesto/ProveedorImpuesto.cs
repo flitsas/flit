@@ -9,16 +9,23 @@ namespace Flit.Consultas.Api.Impuesto;
 /// Fachada del impuesto. Departamento fuera de la lista: <c>FAILED_PRECONDITION</c>, sin llamada.
 /// Par sin homologar: chequeo en ERROR, sin llamada. El mensaje del chequeo es fijo.
 /// </summary>
-internal sealed class ProveedorImpuesto(ITransporteImpuesto transporte, OpcionesImpuesto opciones)
+internal sealed class ProveedorImpuesto(ITransporteImpuesto transporte, OpcionesImpuesto opciones, ICatalogoDepartamentosImpuesto catalogo)
 {
     public const string ClaveProveedor = "impuesto";
 
-    public IReadOnlyList<string> Departamentos() => transporte.Listo ? opciones.Departamentos : [];
+    /// <summary>Códigos activos. Vacía si el transporte no está listo, aunque la tabla tenga filas.</summary>
+    public async Task<IReadOnlyList<string>> DepartamentosAsync(CancellationToken ct)
+    {
+        if (!transporte.Listo)
+            return [];
+        var filas = await catalogo.ActivosAsync(ct).ConfigureAwait(false);
+        return filas.Select(f => f.Codigo).ToArray();
+    }
 
     public async Task<ConsultarImpuestoVehicularResponse> ConsultarAsync(ConsultarImpuestoVehicularRequest request, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (!opciones.Soporta(request.DepartamentoCodigo))
+        if (!transporte.Listo || !await catalogo.ActivoAsync(request.DepartamentoCodigo, ct).ConfigureAwait(false))
             throw new RpcException(new Status(StatusCode.FailedPrecondition, "Departamento sin consulta de impuesto."));
 
         var homologado = HomologacionDocumentoImpuesto.Homologar(request.DepartamentoCodigo, request.Documento?.Tipo);
