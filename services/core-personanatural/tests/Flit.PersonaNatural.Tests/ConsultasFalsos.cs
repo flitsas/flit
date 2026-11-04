@@ -134,6 +134,21 @@ internal sealed class ConsultasRuntFalso : IConsultasRunt
 
     public Func<ResultadoConsulta> Conductor { get; set; } = ResultadosFalsos.ConductorInexistente;
 
+    /// <summary>Proveedor cuyo vehículo existe y el RUNT dice que está matriculado en <paramref name="organismoRunt"/> (vacío = el RUNT no lo trae).</summary>
+    public static ConsultasRuntFalso DeOrganismo(string organismoRunt) => new()
+    {
+        Vehiculo = () =>
+        {
+            var r = ResultadosFalsos.VehiculoCompleto();
+            var campo = r.Campos.First(c => c.Clave == "transit_office_name");
+            if (string.IsNullOrEmpty(organismoRunt))
+                r.Campos.Remove(campo);
+            else
+                campo.ValorTexto = organismoRunt;
+            return r;
+        },
+    };
+
     public Exception? Falla { get; set; }
 
     public List<(string? Placa, string? Vin, DocumentoConsulta? Propietario, string? Referencia)> LlamadasVehiculo { get; } = [];

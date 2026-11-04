@@ -460,6 +460,7 @@ public sealed class SolicitudesTests : IAsyncLifetime
         var (id, token) = await AbrirSesion("TIPO_PRENDA");
         var r = ResultadosFalsos.VehiculoCompleto(prenda: true);
         r.Campos.First(c => c.Clave == "runt_gravamenes").ValorJson = "[{\"nombreAcreedor\":\"BANCO FICTICIO S.A.\",\"numeroDocumentoAcreedor\":\"900123456\"}]";
+        r.Campos.First(c => c.Clave == "transit_office_name").ValorTexto = "Tránsito de Prueba"; // el diagnóstico verifica el organismo contra el RUNT
         _runt.Vehiculo = () => r;
         (await _host.EnviarAsync(HttpMethod.Post, $"{Base}/solicitudes/{id}/diagnostico", new { propietario = new { tipoDocumento = "cc", numeroDocumento = "7005551234" } }, token)).StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -468,7 +469,8 @@ public sealed class SolicitudesTests : IAsyncLifetime
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, "antes el web daba 409 sin_vehiculo: no había documento del propietario");
         var json = (await PortalHost.JsonAsync(respuesta)).RootElement;
         json.GetProperty("acreedor").GetString().Should().Be("BANCO FICTICIO S.A.");
-        _runt.LlamadasVehiculo.Single().Propietario.Should().Be(new Flit.PersonaNatural.Api.Consultas.DocumentoConsulta("CC", "7005551234"));
+        _runt.LlamadasVehiculo.Should().HaveCount(2, "el diagnóstico verifica el organismo y el gravamen consulta de nuevo (core-consultas usa su caché)");
+        _runt.LlamadasVehiculo.Last().Propietario.Should().Be(new Flit.PersonaNatural.Api.Consultas.DocumentoConsulta("CC", "7005551234"));
         await using var db = _host.NuevaDb();
         (await db.Set<SolicitudTramite>().SingleAsync(TestContext.Current.CancellationToken)).Datos.Should().NotContain("7005551234", "el documento se guarda cifrado");
     }

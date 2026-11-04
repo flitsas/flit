@@ -1,3 +1,5 @@
+using Flit.PersonaNatural.Api.Consultas;
+
 namespace Flit.PersonaNatural.Api.Punto;
 
 /// <summary>
@@ -20,32 +22,48 @@ public static class TiposDelPunto
     public static string MensajeOtroOrganismo(string? organismoRunt, OrganismoPunto sesion)
     {
         ArgumentNullException.ThrowIfNull(sesion);
-        var runt = string.Join(' ', (organismoRunt ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
-        if (runt.Length == 0)
-            return OtroOrganismo;
-
-        var punto = sesion.Nombre.Trim();
-        return $"Esta placa está registrada en {runt}, no en {punto}. Este trámite debe hacerse en {runt}.";
+        return CoincidenciaOrganismo.MensajeOtroOrganismo(organismoRunt, sesion.Nombre);
     }
+
+    /// <summary>El RUNT no trajo el organismo del vehículo: no se sigue (igual que el portal web).</summary>
+    public const string OrganismoDesconocido = CoincidenciaOrganismo.MensajeOrganismoDesconocido;
 
     /// <summary>Campo que el mapper del RUNT de FLIT 2 escribe (<c>KyverumRuntVehicleResultMapper</c>). El portal lo compara contra el catálogo de grants; el punto lo compara con la sesión.</summary>
     public const string CampoOrganismoRunt = "transit_office_name";
 
 
     /// <summary>
-    /// El nombre que devolvió el RUNT es el de la sesión (o su código público). Sin nombre no hay contra qué comparar:
-    /// igual que el preflight de FLIT 2, no se niega el trámite por un dato que no vino. No se consulta el catálogo de
-    /// organismos elegibles del portal.
+    /// El nombre que devolvió el RUNT es el de la sesión (nombre, código o, si se conoce, municipio) según la regla única
+    /// <see cref="CoincidenciaOrganismo"/>, la misma del portal web. Sin nombre del RUNT NO coincide: quien llama decide
+    /// (el portal tampoco deja seguir sin organismo, salvo los tipos que elige el operador).
     /// </summary>
-    public static bool OrganismoDeLaSesion(string? nombreRunt, OrganismoPunto sesion)
+    public static bool OrganismoDeLaSesion(string? nombreRunt, OrganismoPunto sesion, string? municipio = null)
     {
         ArgumentNullException.ThrowIfNull(sesion);
-        if (string.IsNullOrWhiteSpace(nombreRunt))
-            return true;
+        return CoincidenciaOrganismo.Coincide(nombreRunt, sesion.Nombre, sesion.Codigo, municipio);
+    }
 
-        var nombre = nombreRunt.Trim();
-        return string.Equals(nombre, sesion.Nombre.Trim(), StringComparison.OrdinalIgnoreCase)
-            || string.Equals(nombre, sesion.Codigo.Trim(), StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// Igual, pero si por nombre o código no coincide busca el municipio del organismo de la sesión en el catálogo (la cookie del punto
+    /// no lo trae). El catálogo solo se pide cuando hace falta; si no responde se queda con el resultado por nombre.
+    /// </summary>
+    public static async Task<bool> OrganismoDeLaSesionAsync(string? nombreRunt, OrganismoPunto sesion, Cotizaciones.IFachadaTramites? catalogo, CancellationToken ct)
+    {
+        if (OrganismoDeLaSesion(nombreRunt, sesion))
+            return true;
+        if (catalogo is null || string.IsNullOrWhiteSpace(nombreRunt))
+            return false;
+
+        try
+        {
+            var organismos = await catalogo.ListarOrganismosAsync(ct).ConfigureAwait(false);
+            var propio = organismos.FirstOrDefault(o => string.Equals(o.Id, sesion.OrganismoId.ToString(), StringComparison.OrdinalIgnoreCase));
+            return propio is not null && CoincidenciaOrganismo.Coincide(nombreRunt, propio.Nombre, propio.Municipio);
+        }
+        catch (Cotizaciones.FachadaException)
+        {
+            return false;
+        }
     }
 }
 

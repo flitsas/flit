@@ -28,7 +28,8 @@ public sealed class RadicacionService(
     ICompuertaDeRadicacion compuerta,
     IOptions<IdentidadOptions> identidad,
     IPlatformOutbox outbox,
-    TimeProvider reloj)
+    TimeProvider reloj,
+    VerificadorDeOrganismo verificadorDeOrganismo)
 {
     public const string TipoEvento = "tramites.persona_natural.radicacion_solicitada";
     public const int VersionEvento = 1;
@@ -75,9 +76,10 @@ public sealed class RadicacionService(
             throw LlaveEnUso();
 
         // El tipo tiene que seguir siendo elegible. Si FLIT 2 no responde no se bloquea: la cola existe para eso.
+        DefinicionTipoDto? vigente = null;
         try
         {
-            await definiciones.ObtenerAsync(s.TipoTramiteCodigo, s.OrganismoId.ToString(), ct).ConfigureAwait(false);
+            vigente = await definiciones.ObtenerAsync(s.TipoTramiteCodigo, s.OrganismoId.ToString(), ct).ConfigureAwait(false);
         }
         catch (FachadaException ex) when (ex.Codigo == DefinicionesService.CodigoTipoNoDisponible)
         {
@@ -85,6 +87,16 @@ public sealed class RadicacionService(
         }
         catch (FachadaException)
         {
+        }
+
+        // Una placa de un organismo no se radica en otro: el borrador debe tener el organismo verificado contra el RUNT. Si no lo está
+        // (borradores anteriores, o se saltó el diagnóstico) se verifica ahora, con la caché de core-consultas; no se radica sin verificar.
+        var def = DefinicionesService.Leer(s.DefinicionSnapshot) ?? vigente;
+        if (def is not null)
+        {
+            var verificados = await verificadorDeOrganismo.VerificarAsync(s, def, null, exigir: true, ct).ConfigureAwait(false);
+            if (verificados is not null)
+                s.Datos = verificados.Serializar();
         }
 
         var borrador = await solicitudes.ConstruirAsync(s, conPersonas: false, null, ct).ConfigureAwait(false);

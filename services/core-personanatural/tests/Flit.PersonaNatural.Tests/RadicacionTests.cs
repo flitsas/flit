@@ -80,6 +80,7 @@ public sealed class RadicacionTests : IAsyncLifetime
         var s = await db.Set<SolicitudTramite>().SingleAsync(TestContext.Current.CancellationToken);
         s.Estado.Should().Be("en_cola");
         s.IdempotencyKey.Should().Be("k-1");
+        Flit.PersonaNatural.Api.Solicitudes.DatosSolicitud.Leer(s.Datos).OrganismoVerificadoId.Should().BeEquivalentTo(PortalHost.Organismo, "se radicó con el organismo verificado contra el RUNT");
         (await db.Set<HistorialEstado>().Where(h => h.Hasta == "en_cola").CountAsync(TestContext.Current.CancellationToken)).Should().Be(1);
         var evento = await db.Set<OutboxMessage>().SingleAsync(TestContext.Current.CancellationToken);
         evento.RoutingKey.Should().Be("tramites.persona_natural.radicacion_solicitada");

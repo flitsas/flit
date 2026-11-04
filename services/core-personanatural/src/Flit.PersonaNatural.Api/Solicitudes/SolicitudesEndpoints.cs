@@ -22,6 +22,7 @@ public static class SolicitudesEndpoints
                 ? new FachadaRequisitosGrpc(cliente)
                 : new FachadaRequisitosNoConfigurada());
         services.AddCatalogosVehiculoPortal(); // HU 6 y 10: catálogos de vehículo y organismos de destino (misma fachada gRPC)
+        services.AddScoped<VerificadorDeOrganismo>();
         services.AddScoped<SolicitudesService>();
         return services;
     }

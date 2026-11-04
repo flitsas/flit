@@ -52,7 +52,8 @@ public sealed partial class SolicitudesService(
     ConsentimientoVersiones versionesConsentimiento,
     Catalogos.CatalogosVehiculoService catalogosVehiculo,
     CifradoPii cifrado,
-    IValoresRuntBorrador? valoresRunt = null)
+    IValoresRuntBorrador? valoresRunt = null,
+    VerificadorDeOrganismo? organismoDelVehiculo = null)
 {
     public const string CodigoTipoNoDisponible = "tipo_no_disponible";
     public const string CodigoNoPermiteCambio = "estado_no_permite_cambio";
@@ -190,6 +191,10 @@ public sealed partial class SolicitudesService(
 
         s.OrganismoId = organismoId;
         s.OrganismoNombre = organismo.Nombre.Length > 200 ? organismo.Nombre[..200] : organismo.Nombre;
+        // Cambiar de organismo invalida la verificación contra el RUNT: se vuelve a hacer al diagnosticar o al radicar.
+        var datosOrganismo = DatosSolicitud.Leer(s.Datos);
+        if (datosOrganismo.OrganismoVerificadoId is not null)
+            s.Datos = (datosOrganismo with { OrganismoVerificadoId = null }).Serializar();
         s.DefinicionSnapshot = DefinicionesService.Serializar(def);
         s.DefinicionVersion = def.Version;
         await GuardarAsync(s, ct).ConfigureAwait(false);
@@ -392,13 +397,21 @@ public sealed partial class SolicitudesService(
             throw new ReglaDeNegocioException(StatusCodes.Status422UnprocessableEntity, CodigoOrganismoRequerido, "Falta el organismo", "Elige el organismo de tránsito antes de consultar el vehículo.");
         var tipoDoc = body?.Propietario?.TipoDocumento?.Trim().ToUpperInvariant();
         var doc = body?.Propietario?.NumeroDocumento is { } n ? PiiHasher.NormalizarDocumento(n) : null;
+
+        // El vehículo tiene que estar matriculado en el organismo del borrador (según el RUNT) antes de diagnosticar. Un proveedor caído
+        // sale 503 y no se decide en falso. Sale antes de guardar nada: un rechazo no deja el diagnóstico a medias.
+        var verificados = organismoDelVehiculo is null
+            ? null
+            : await organismoDelVehiculo.VerificarAsync(
+                s, def, string.IsNullOrWhiteSpace(tipoDoc) || string.IsNullOrWhiteSpace(doc) ? null : EntradaConsulta.DocumentoPropietario(tipoDoc, doc), exigir: false, ct).ConfigureAwait(false);
+
         var resultado = await requisitos.EvaluarAsync(s.TipoTramiteCodigo, s.OrganismoId.ToString(), s.Placa, s.Vin, tipoDoc, doc, ct).ConfigureAwait(false);
 
         SembrarConsulta(s, def, tipoDoc, doc);
         var propietario = string.IsNullOrWhiteSpace(tipoDoc) || string.IsNullOrWhiteSpace(doc)
             ? DatosSolicitud.Leer(s.Datos).PropietarioConsulta
             : new PropietarioConsultaDatos(tipoDoc, Convert.ToBase64String(cifrado.Cifrar(doc, new ContextoCifrado(VehiculoDelBorradorService.ContextoPropietario, s.Id))!));
-        s.Datos = (DatosSolicitud.Leer(s.Datos) with
+        s.Datos = ((verificados ?? DatosSolicitud.Leer(s.Datos)) with
         {
             Diagnostico = new DiagnosticoDatos(reloj.GetUtcNow(), resultado.PuedeContinuar, resultado.Requisitos),
             PropietarioConsulta = propietario,

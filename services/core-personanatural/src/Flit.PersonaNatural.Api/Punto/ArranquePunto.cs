@@ -70,10 +70,13 @@ public sealed class ArranquePuntoService(IConsultasRunt runt, IFachadaTramites c
             return new ResultadoArranque.Detener(TiposDelPunto.PlacaInexistente);
 
         var organismoRunt = ProyeccionMinima.Texto(resultado, TiposDelPunto.CampoOrganismoRunt);
-        if (!await OrganismoLoEligeElOperadorAsync(codigo, sesion, ct).ConfigureAwait(false)
-            && !TiposDelPunto.OrganismoDeLaSesion(organismoRunt, sesion))
+        if (!await OrganismoLoEligeElOperadorAsync(codigo, sesion, ct).ConfigureAwait(false))
         {
-            return new ResultadoArranque.Detener(TiposDelPunto.MensajeOtroOrganismo(organismoRunt, sesion));
+            // Sin organismo en el RUNT tampoco se sigue (como el portal web): la persona no elige otro.
+            if (string.IsNullOrWhiteSpace(organismoRunt))
+                return new ResultadoArranque.Detener(TiposDelPunto.OrganismoDesconocido);
+            if (!await TiposDelPunto.OrganismoDeLaSesionAsync(organismoRunt, sesion, catalogo, ct).ConfigureAwait(false))
+                return new ResultadoArranque.Detener(TiposDelPunto.MensajeOtroOrganismo(organismoRunt, sesion));
         }
 
         return new ResultadoArranque.Seguir();

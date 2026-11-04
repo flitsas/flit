@@ -133,12 +133,29 @@ public sealed class PuntoCanalTests
     }
 
     [Fact]
-    public async Task Arranque_PlacaSinOrganismoEnElRunt_Sigue_HoyNoBloquea()
+    public async Task Arranque_PlacaSinOrganismoEnElRunt_NoSigue_ConMensajeClaro()
     {
         var runt = RuntCon("");
         var resultado = await Arranque(runt, Sesion(), "ABC123", "1098765432", "TRASPASO_STANDARD");
 
-        resultado.Should().BeOfType<ResultadoArranque.Seguir>();
+        resultado.Should().BeOfType<ResultadoArranque.Detener>().Which.Mensaje.Should().Be(TiposDelPunto.OrganismoDesconocido);
+    }
+
+    [Fact]
+    public async Task Arranque_ComparaConLaReglaUnica_NombreSinTildesYMunicipioDelCatalogo_SinAceptarDeMas()
+    {
+        var sesion = new OrganismoPunto(OrganismoId, "SAB", "Secretaría de Tránsito de Sabaneta");
+        var fachada = FachadaCon(new TipoTramiteDto("CAMBIO_COLOR", "Color", "OTROS", 1, true, string.Empty));
+        fachada.Organismos.Add(new OrganismoDto(OrganismoId.ToString(), "SAB", "Secretaría de Tránsito de Sabaneta", "Sabaneta", "Antioquia", string.Empty));
+
+        async Task<ResultadoArranque> Evaluar(string organismoRunt) =>
+            await new ArranquePuntoService(RuntCon(organismoRunt), fachada).EvaluarAsync(sesion, "ABC123", "1098765432", "CAMBIO_COLOR", TestContext.Current.CancellationToken);
+
+        (await Evaluar("SECRETARIA DE TRANSITO DE SABANETA")).Should().BeOfType<ResultadoArranque.Seguir>("el nombre coincide sin tildes ni mayúsculas");
+        fachada.LlamadasOrganismos.Should().Be(0, "por nombre no hace falta pedir el catálogo");
+        (await Evaluar("STRIA TTOyTTE MCPAL SABANETA")).Should().BeOfType<ResultadoArranque.Seguir>("coincide por el municipio del catálogo");
+        (await Evaluar("STRIA TTOyTTE MCPAL ENVIGADO")).Should().BeOfType<ResultadoArranque.Detener>().Which.Mensaje.Should().Contain("ENVIGADO");
+        (await Evaluar("SECRETARIA DE TRANSITO DE SABANETAS")).Should().BeOfType<ResultadoArranque.Detener>("no acepta una palabra que solo contiene al municipio");
     }
 
     [Fact]
@@ -645,6 +662,7 @@ public sealed class PuntoCanalTests
             Vehiculo = () =>
             {
                 var r = ResultadosFalsos.VehiculoCompleto();
+                r.Campos.First(c => c.Clave == TiposDelPunto.CampoOrganismoRunt).ValorTexto = Nombre;
                 var campo = r.Campos.FirstOrDefault(c => c.Clave == "owner_document_number");
                 if (campo is null)
                     r.Campos.Add(new Campo { Clave = "owner_document_number", ValorTexto = "9999999999" });
@@ -662,6 +680,78 @@ public sealed class PuntoCanalTests
         r.Json.GetProperty("puedeSerRadicante").GetBoolean().Should().BeFalse();
         r.Json.GetProperty("message").GetString().Should().Be(ActoresPuntoService.MensajeNoDueño);
         r.Json.GetProperty("solicitudId").GetGuid().Should().NotBe(Guid.Empty);
+    }
+
+    [Fact]
+    public async Task ActoresAbrir_SaltandoElArranque_PlacaDeOtroOrganismo_Responde422_SinCrearBorrador()
+    {
+        var borrador = new BorradorPuntoFalso();
+        await using var host = Host(Ok(), RuntCon("STRIA TTOyTTE MCPAL SABANETA"), borrador: borrador, definiciones: DefsUnTitular());
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+
+        var r = await host.PostAsync("/actores/abrir", new { placa = "ABC123", documento = "1098765432", tipoCodigo = "CAMBIO_COLOR" }, entrada.Cookie);
+
+        r.Status.Should().Be(HttpStatusCode.UnprocessableEntity);
+        r.Json.GetProperty("code").GetString().Should().Be("organismo_no_corresponde");
+        r.Json.GetProperty("detail").GetString().Should().Be(
+            "Esta placa está registrada en STRIA TTOyTTE MCPAL SABANETA, no en Tránsito de Prueba. Este trámite debe hacerse en STRIA TTOyTTE MCPAL SABANETA.");
+        r.Json.GetRawText().Should().NotContain("1098765432").And.NotContain("PROPIETARIO");
+        borrador.UltimoOrganismoId.Should().BeNull("no se creó el borrador");
+    }
+
+    [Fact]
+    public async Task ActoresAbrir_RuntSinOrganismo_Responde422_ConElMensajeClaro()
+    {
+        var borrador = new BorradorPuntoFalso();
+        await using var host = Host(Ok(), RuntCon(""), borrador: borrador, definiciones: DefsUnTitular());
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+
+        var r = await host.PostAsync("/actores/abrir", new { placa = "ABC123", documento = "1098765432", tipoCodigo = "CAMBIO_COLOR" }, entrada.Cookie);
+
+        r.Status.Should().Be(HttpStatusCode.UnprocessableEntity);
+        r.Json.GetProperty("code").GetString().Should().Be("organismo_no_corresponde");
+        r.Json.GetProperty("detail").GetString().Should().Be(TiposDelPunto.OrganismoDesconocido);
+        borrador.UltimoOrganismoId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ActoresAbrir_CoincideYMarcaElOrganismoVerificado_YElOperadorQueEligeNoCompara()
+    {
+        var ok = new BorradorPuntoFalso();
+        await using (var host = Host(Ok(), RuntCon(Nombre), borrador: ok, definiciones: DefsUnTitular()))
+        {
+            var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+            (await host.PostAsync("/actores/abrir", new { placa = "ABC123", documento = "1098765432", tipoCodigo = "CAMBIO_COLOR" }, entrada.Cookie)).Status.Should().Be(HttpStatusCode.OK);
+        }
+
+        ok.UltimoVerificado.Should().BeTrue();
+
+        var elige = new BorradorPuntoFalso();
+        var defs = DefsUnTitular();
+        defs.PorCodigo["CAMBIO_COLOR"] = defs.PorCodigo["CAMBIO_COLOR"] with { Flags = defs.PorCodigo["CAMBIO_COLOR"].Flags with { OrganismoLoEligeOperador = true } };
+        await using (var host = Host(Ok(), RuntCon("OT DE OTRO MUNICIPIO"), borrador: elige, definiciones: defs))
+        {
+            var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+            (await host.PostAsync("/actores/abrir", new { placa = "ABC123", documento = "1098765432", tipoCodigo = "CAMBIO_COLOR" }, entrada.Cookie)).Status.Should().Be(HttpStatusCode.OK);
+        }
+
+        elige.UltimoOrganismoId.Should().Be(OrganismoId);
+        elige.UltimoVerificado.Should().BeFalse("no se comparó con el RUNT");
+    }
+
+    [Fact]
+    public async Task ActoresAbrir_RuntCaido_Responde503_SinCrearBorrador()
+    {
+        var borrador = new BorradorPuntoFalso();
+        var runt = new ConsultasRuntFalso { Vehiculo = ResultadosFalsos.ProveedorCaido };
+        await using var host = Host(Ok(), runt, borrador: borrador, definiciones: DefsUnTitular());
+        var entrada = await host.PostAsync("/entrada", new { codigo = Codigo });
+
+        var r = await host.PostAsync("/actores/abrir", new { placa = "ABC123", documento = "1098765432", tipoCodigo = "CAMBIO_COLOR" }, entrada.Cookie);
+
+        r.Status.Should().Be(HttpStatusCode.ServiceUnavailable);
+        r.Json.GetProperty("code").GetString().Should().Be("proveedor_no_disponible");
+        borrador.UltimoOrganismoId.Should().BeNull();
     }
 
     private static FachadaDefinicionesFalsa DefsUnTitular()
@@ -1051,8 +1141,14 @@ public sealed class PuntoCanalTests
         public List<TipoTramiteDto> Tipos { get; } = [];
         public string? UltimoOrganismo { get; private set; }
 
-        public Task<IReadOnlyList<OrganismoDto>> ListarOrganismosAsync(CancellationToken ct) =>
-            Task.FromResult<IReadOnlyList<OrganismoDto>>([]);
+        public List<OrganismoDto> Organismos { get; } = [];
+        public int LlamadasOrganismos { get; private set; }
+
+        public Task<IReadOnlyList<OrganismoDto>> ListarOrganismosAsync(CancellationToken ct)
+        {
+            LlamadasOrganismos++;
+            return Task.FromResult<IReadOnlyList<OrganismoDto>>(Organismos);
+        }
 
         public Task<IReadOnlyList<TipoTramiteDto>> ListarTiposAsync(string? organismoId, CancellationToken ct)
         {
@@ -1098,6 +1194,7 @@ public sealed class PuntoCanalTests
     {
         public Guid UltimaSolicitudId { get; private set; } = Guid.CreateVersion7();
         public Guid? UltimoOrganismoId { get; private set; }
+        public bool UltimoVerificado { get; private set; }
         public string? UltimaPlaca { get; private set; }
 
         public Task<SesionCreadaDto> AbrirAsync(
@@ -1106,9 +1203,11 @@ public sealed class PuntoCanalTests
             string placa,
             string documento,
             byte[]? ipHash,
-            CancellationToken ct)
+            CancellationToken ct,
+            bool organismoVerificado = false)
         {
             UltimoOrganismoId = organismo.OrganismoId;
+            UltimoVerificado = organismoVerificado;
             UltimaPlaca = placa;
             UltimaSolicitudId = Guid.CreateVersion7();
             return Task.FromResult(new SesionCreadaDto(

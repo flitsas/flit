@@ -112,6 +112,13 @@ public sealed record DatosSolicitud(ComercialDatos? Comercial = null, PrendaDato
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public PropietarioConsultaDatos? PropietarioConsulta { get; init; }
 
+    /// <summary>
+    /// Id del organismo contra el que se comprobó, con el RUNT, que el vehículo está matriculado ahí. La radicación solo deja pasar
+    /// si es el mismo del borrador (salvo los tipos cuyo organismo elige el operador). Lo fija el servidor; el cliente no lo escribe.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? OrganismoVerificadoId { get; init; }
+
     private static readonly JsonSerializerOptions Opciones = new(JsonSerializerDefaults.Web);
 
     public static DatosSolicitud Leer(string? json)

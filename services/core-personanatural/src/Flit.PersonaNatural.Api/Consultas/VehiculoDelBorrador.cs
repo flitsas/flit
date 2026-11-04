@@ -21,6 +21,9 @@ public sealed record GravamenBorradorDto(bool TienePrenda, string? Acreedor, str
 
 public sealed record ResultadoVehiculoBorrador(EstadoVehiculoBorrador Estado, string? Clase = null, GravamenBorradorDto? Gravamen = null, ValoresActualesVehiculo? Valores = null);
 
+/// <summary>Organismo que reporta el RUNT para el vehículo del borrador. <c>Existe</c> es false si el RUNT no halló el vehículo.</summary>
+public sealed record OrganismoDelVehiculo(EstadoVehiculoBorrador Estado, bool Existe, string? OrganismoRunt);
+
 /// <summary>
 /// Consultas del RUNT sobre el vehículo del BORRADOR (HU #14255 y #14257): la clase para filtrar las carrocerías y el gravamen para
 /// la prenda. El servidor resuelve el vehículo y el propietario desde el borrador: el navegador no manda ni placa ni documento.
@@ -147,7 +150,22 @@ public sealed class VehiculoDelBorradorService(PersonaNaturalDb db, PersonaServi
         return null;
     }
 
-    private async Task<(EstadoVehiculoBorrador Estado, ResultadoConsulta? Resultado, string? Placa)> ConsultarAsync(Guid solicitudId, CancellationToken ct)
+    /// <summary>
+    /// Organismo de tránsito donde el RUNT dice que está matriculado el vehículo del borrador. Con <paramref name="propietario"/>
+    /// consulta con ese documento (el diagnóstico aún no lo ha guardado); sin él, con el que el borrador ya tiene. Core-consultas
+    /// reutiliza su caché, así que repetir la consulta no vuelve a pagarle al proveedor.
+    /// </summary>
+    /// <exception cref="ProveedorNoDisponibleException">core-consultas no respondió o el proveedor del RUNT estaba caído.</exception>
+    public async Task<OrganismoDelVehiculo> OrganismoDelVehiculoAsync(Guid solicitudId, DocumentoConsulta? propietario, CancellationToken ct)
+    {
+        var (estado, resultado, placa) = await ConsultarAsync(solicitudId, ct, propietario).ConfigureAwait(false);
+        if (estado != EstadoVehiculoBorrador.Ok)
+            return new OrganismoDelVehiculo(estado, false, null);
+        var existe = ProyeccionMinima.Vehiculo(resultado!, placa).Existe;
+        return new OrganismoDelVehiculo(estado, existe, existe ? ProyeccionMinima.Texto(resultado!, "transit_office_name") : null);
+    }
+
+    private async Task<(EstadoVehiculoBorrador Estado, ResultadoConsulta? Resultado, string? Placa)> ConsultarAsync(Guid solicitudId, CancellationToken ct, DocumentoConsulta? propietarioExplicito = null)
     {
         var s = await db.Set<SolicitudTramite>().AsNoTracking().Where(x => x.Id == solicitudId)
             .Select(x => new { x.Placa, x.Vin, x.FieldValues, x.Datos }).FirstOrDefaultAsync(ct).ConfigureAwait(false);
@@ -162,7 +180,7 @@ public sealed class VehiculoDelBorradorService(PersonaNaturalDb db, PersonaServi
         DocumentoConsulta? propietario = null;
         if (vin is null)
         {
-            propietario = await PropietarioAsync(solicitudId, s.FieldValues, s.Datos, ct).ConfigureAwait(false);
+            propietario = propietarioExplicito ?? await PropietarioAsync(solicitudId, s.FieldValues, s.Datos, ct).ConfigureAwait(false);
             if (propietario is null)
                 return (EstadoVehiculoBorrador.SinVehiculo, null, null);
         }

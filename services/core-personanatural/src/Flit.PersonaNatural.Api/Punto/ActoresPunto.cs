@@ -22,7 +22,7 @@ public abstract record ResultadoAbrirActores
 /// Abre el borrador PN desde el canal del punto y evalúa si el documento puede ser radicante (dueño RUNT).
 /// HU #14236. No radica ni crea procedure instance en FLIT 2.0.
 /// </summary>
-public sealed class ActoresPuntoService(IConsultasRunt runt, IAbrirBorradorDesdePunto borrador, Definiciones.IFachadaDefiniciones definiciones)
+public sealed class ActoresPuntoService(IConsultasRunt runt, IAbrirBorradorDesdePunto borrador, Definiciones.IFachadaDefiniciones definiciones, Cotizaciones.IFachadaTramites? catalogo = null)
 {
     public const string MensajeNoDueño = "No puedes realizar este trámite porque no eres el propietario del vehículo.";
     public const string CanalOrigen = "pn_punto";
@@ -66,8 +66,21 @@ public sealed class ActoresPuntoService(IConsultasRunt runt, IAbrirBorradorDesde
         if (ProyeccionMinima.ProveedorCaido(resultado))
             return new ResultadoAbrirActores.ProveedorCaido();
 
+        // /arranque se puede saltar: el organismo del vehículo se vuelve a comprobar aquí, con la misma consulta, antes de crear el
+        // borrador. Si el tipo deja el organismo al operador no se compara. Un vehículo que el RUNT no halla no decide nada.
+        var verificado = false;
+        if (!def.Flags.OrganismoLoEligeOperador && ProyeccionMinima.Vehiculo(resultado, placaNorm).Existe)
+        {
+            var organismoRunt = ProyeccionMinima.Texto(resultado, TiposDelPunto.CampoOrganismoRunt);
+            if (string.IsNullOrWhiteSpace(organismoRunt))
+                throw new ReglaDeNegocioException(StatusCodes.Status422UnprocessableEntity, CoincidenciaOrganismo.CodigoNoCorresponde, "Organismo no corresponde", TiposDelPunto.OrganismoDesconocido);
+            if (!await TiposDelPunto.OrganismoDeLaSesionAsync(organismoRunt, sesion, catalogo, ct).ConfigureAwait(false))
+                throw new ReglaDeNegocioException(StatusCodes.Status422UnprocessableEntity, CoincidenciaOrganismo.CodigoNoCorresponde, "Organismo no corresponde", TiposDelPunto.MensajeOtroOrganismo(organismoRunt, sesion));
+            verificado = true;
+        }
+
         var puedeSerRadicante = EsPropietarioRunt(resultado, propietario);
-        var creada = await borrador.AbrirAsync(sesion, codigo, placaNorm, propietario.Numero, ipHash, ct).ConfigureAwait(false);
+        var creada = await borrador.AbrirAsync(sesion, codigo, placaNorm, propietario.Numero, ipHash, ct, verificado).ConfigureAwait(false);
         return new ResultadoAbrirActores.Ok(
             creada,
             puedeSerRadicante,
@@ -111,7 +124,8 @@ public interface IAbrirBorradorDesdePunto
         string placa,
         string documento,
         byte[]? ipHash,
-        CancellationToken ct);
+        CancellationToken ct,
+        bool organismoVerificado = false);
 }
 
 public sealed class AbrirBorradorDesdePunto(
@@ -126,7 +140,8 @@ public sealed class AbrirBorradorDesdePunto(
         string placa,
         string documento,
         byte[]? ipHash,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool organismoVerificado = false)
     {
         ArgumentNullException.ThrowIfNull(organismo);
         var creada = await solicitudes.CrearAsync(
@@ -151,6 +166,8 @@ public sealed class AbrirBorradorDesdePunto(
         nodo["canal"] = ActoresPuntoService.CanalOrigen;
         nodo["codigoOrganismo"] = organismo.Codigo;
         nodo["organismoId"] = organismo.OrganismoId.ToString();
+        if (organismoVerificado)
+            nodo["organismoVerificadoId"] = organismo.OrganismoId.ToString();
         solicitud.Datos = nodo.ToJsonString(Json);
         solicitud.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
