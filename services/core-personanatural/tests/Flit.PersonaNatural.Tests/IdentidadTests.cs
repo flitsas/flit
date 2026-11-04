@@ -211,6 +211,8 @@ public sealed class IdentidadTests : IdentidadBase
 
     [Theory]
     [InlineData("no-es-un-correo", Celular, "correo")]
+    [InlineData("willyn.londoño@flitsas.com", Celular, "correo")]
+    [InlineData("willyn.londo�o@flitsas.com", Celular, "correo")]
     [InlineData(Correo, "123", "celular")]
     public async Task Solicitar_ConContactoInvalido_Responde422ConElCampo_SinLlamarAFlit2(string correo, string celular, string campo)
     {

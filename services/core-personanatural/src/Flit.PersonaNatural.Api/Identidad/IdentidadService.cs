@@ -300,7 +300,9 @@ public sealed partial class IdentidadService(
             return Falla(StatusCodes.Status409Conflict, "actor_no_registrado", "Registre primero a esta persona en el trámite.");
 
         // AC4: contacto inválido, con el campo que falla y sin llamar a FLIT 2. In-situ (punto) no exige correo.
-        if (exigirCorreo && !CorreoValido(datos.Correo))
+        // El proveedor rechaza (400 Invalid email) los correos con caracteres fuera de ASCII (p. ej. una «ñ» dañada que
+        // vino del RUNT): se corta aquí con el campo, en vez de reintentar como «FLIT 2 no respondió».
+        if (exigirCorreo && !CorreoUtilizableInSitu(datos.Correo))
             return Falla(StatusCodes.Status422UnprocessableEntity, "contacto_invalido", "Escriba un correo válido para esta persona.", campo: "correo");
         if (!string.IsNullOrWhiteSpace(datos.Celular) && !CelularValido(datos.Celular))
             return Falla(StatusCodes.Status422UnprocessableEntity, "contacto_invalido", "Escriba un celular válido para esta persona.", campo: "celular");
