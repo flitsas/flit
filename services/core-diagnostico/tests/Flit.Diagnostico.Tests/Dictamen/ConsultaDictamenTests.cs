@@ -332,11 +332,8 @@ public sealed class ConsultaDictamenTests
         [
             new("TST901", [new(Fuente.Runt, EstadoCelda.Completado, 1)]),
             new("TST902", [new(Fuente.Runt, EstadoCelda.Completado, 1)]),
-        ]);
+        ], modo: ModoDiagnostico.ConAnalisis, tipoTramiteCodigo: "TRASPASO_STANDARD");
         await using var db = empresa.Db();
-        var cabecera = await db.Set<CabeceraDiagnostico>().SingleAsync(c => c.Id == lote.Id, ct);
-        cabecera.Modo = ModoDiagnostico.ConAnalisis;
-        cabecera.TipoTramiteCodigo = "TRASPASO_STANDARD";
         db.Add(new DictamenVehiculo
         {
             VehiculoId = lote.Vehiculos[0].Id,

@@ -89,7 +89,8 @@ internal static class Tablero
     public static async Task<LoteSembrado> SembrarAsync(
         EmpresaDePrueba empresa, CancellationToken ct, long version = 1,
         EstadoDiagnostico estado = EstadoDiagnostico.EnProceso, Guid? creador = null, string estimado = "NO_MOSTRAR",
-        Fuente[]? alcance = null, bool manual = false, string nombre = "Lote del tablero", VehiculoSembrado[]? vehiculos = null)
+        Fuente[]? alcance = null, bool manual = false, string nombre = "Lote del tablero", VehiculoSembrado[]? vehiculos = null,
+        ModoDiagnostico? modo = null, string? tipoTramiteCodigo = null)
     {
         ArgumentNullException.ThrowIfNull(vehiculos);
         var ahora = DateTimeOffset.UtcNow;
@@ -104,6 +105,11 @@ internal static class Tablero
             CreadoEn = ahora,
             CerradoEn = estado is EstadoDiagnostico.Completado or EstadoDiagnostico.Incompleto ? ahora : null,
         };
+        // Modo y trámite son inmutables después de guardar la cabecera: solo se fijan aquí, antes del primer guardado.
+        if (modo is { } elegido)
+            cabecera.Modo = elegido;
+        if (tipoTramiteCodigo is not null)
+            cabecera.TipoTramiteCodigo = tipoTramiteCodigo;
         var filas = vehiculos.Select((v, i) => new VehiculoDiagnostico
         {
             DiagnosticoId = cabecera.Id,
