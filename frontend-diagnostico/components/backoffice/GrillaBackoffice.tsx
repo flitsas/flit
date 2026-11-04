@@ -10,6 +10,7 @@ import { useSesion } from "@/components/DiagnosticoShell";
 import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { EstadoGlobal, EstimadoVsConsumido } from "@/components/tablero/EstadoGlobal";
 import { GrillaSemaforos } from "@/components/tablero/GrillaSemaforos";
+import { BotonAbrirDictamen, PanelDictamen } from "@/components/tablero/PanelDictamen";
 import { Etiqueta, TEXTO_SECUNDARIO_CLS } from "@/components/tablero/vistasDetalle/comun";
 import { ApiError } from "@/lib/api";
 import {
@@ -82,9 +83,11 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
   const router = useRouter();
   const { sesion } = useSesion();
   const puedeLlenar = sesion?.capacidades.llenarConsultas ?? false;
+  const puedeCorregir = sesion?.capacidades.corregirDictamen ?? false;
   const [carga, setCarga] = useState<Carga>({ tipo: "cargando" });
   const [intento, setIntento] = useState(0);
   const [llenado, setLlenado] = useState<Llenado | null>(null);
+  const [dictamen, setDictamen] = useState<{ vehiculo: FilaVehiculo; disparador: HTMLElement | null } | null>(null);
   const [exito, setExito] = useState<string | null>(null);
   const [avisoLectura, setAvisoLectura] = useState<string | null>(null);
   const [leyendo, setLeyendo] = useState(false);
@@ -231,6 +234,12 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
                 hrefDetalle={(celda, v) => rutaDetalleBackoffice(grilla.id, v.id, celda.fuente, empresa)}
                 accionCelda={accionCelda}
                 marcaCelda={(celda) => (origenDe(celda) === "MANUAL" ? <MarcaManual /> : null)}
+                accionEncabezado={(v) => (
+                  <BotonAbrirDictamen
+                    identificador={v.placa || v.vin || v.identificador}
+                    onAbrir={(disparador) => setDictamen({ vehiculo: v, disparador })}
+                  />
+                )}
               />
             </div>
             <EstimadoVsConsumido estimado={grilla.estimado_consultas} />
@@ -272,6 +281,18 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
           onLlenada={alLlenar}
           onCeldaCambiada={() => void releer()}
           devolverFocoA={llenado.disparador}
+        />
+      )}
+      {dictamen && (
+        <PanelDictamen
+          diagnosticoId={diagnosticoId}
+          vehiculoId={dictamen.vehiculo.id}
+          identificador={dictamen.vehiculo.placa || dictamen.vehiculo.vin || dictamen.vehiculo.identificador}
+          modo="backoffice"
+          empresa={empresa}
+          puedeCorregir={puedeCorregir}
+          onClose={() => setDictamen(null)}
+          devolverFocoA={dictamen.disparador}
         />
       )}
     </>

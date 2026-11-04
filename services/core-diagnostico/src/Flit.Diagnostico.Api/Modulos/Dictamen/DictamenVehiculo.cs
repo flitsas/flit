@@ -48,7 +48,7 @@ public sealed class DictamenVehiculo : IEntidadDeEmpresa
     /// <summary>Hasta cuándo un trabajador tiene tomada la redacción; null si nadie la tiene.</summary>
     public DateTimeOffset? RedaccionLeaseHasta { get; set; }
 
-    /// <summary>True si un analista reemplazó el veredicto automático. Ningún endpoint lo usa en este corte.</summary>
+    /// <summary>True si un analista reemplazó el veredicto automático.</summary>
     public bool AnalisisOverride { get; set; }
 
     /// <summary>Seudónimo (uuid) de quien hizo el override. Sin documento ni nombre.</summary>

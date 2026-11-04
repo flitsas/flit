@@ -12,9 +12,10 @@ import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, TARJETA
 import { ApiError } from "@/lib/api";
 import { accesoNegado } from "@/lib/carga/api";
 import { urlVolverAlListado } from "@/lib/diagnosticos/listado";
-import { cerrarPanel, mensajeCierre, type CeldaGrilla, type Grilla } from "@/lib/tablero/api";
+import { cerrarPanel, mensajeCierre, type CeldaGrilla, type FilaVehiculo, type Grilla } from "@/lib/tablero/api";
 import { hayPendientes, marcarReprocesada } from "@/lib/tablero/fusionarCeldas";
 import { useGrillaIncremental } from "@/lib/tablero/useGrillaIncremental";
+import { BotonAbrirDictamen, PanelDictamen } from "./PanelDictamen";
 import { BotonPdfVehiculo } from "./BotonPdfVehiculo";
 import { DescargasLote } from "./DescargasLote";
 import { EstadoGlobal, EstimadoVsConsumido } from "./EstadoGlobal";
@@ -57,6 +58,7 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
   });
   const [aviso, setAviso] = useState<string | null>(null);
   const [cerrando, setCerrando] = useState(false);
+  const [dictamen, setDictamen] = useState<{ vehiculo: FilaVehiculo; disparador: HTMLElement | null } | null>(null);
   const volver = urlVolverAlListado(desde);
 
   const codigo403 = accesoNegado(error);
@@ -168,6 +170,12 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
             onReprocesada={alReprocesar}
             onErrorReproceso={alFallarReproceso}
             accionVehiculo={puedeDescargar ? (v) => <BotonPdfVehiculo diagnosticoId={grilla.id} estadoLote={grilla.estado} vehiculo={v} /> : undefined}
+            accionEncabezado={(v) => (
+              <BotonAbrirDictamen
+                identificador={v.placa || v.vin || v.identificador}
+                onAbrir={(disparador) => setDictamen({ vehiculo: v, disparador })}
+              />
+            )}
           />
           <EstimadoVsConsumido estimado={grilla.estimado_consultas} />
         </section>
@@ -199,6 +207,17 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
         </div>
       </section>
       {contenido}
+      {dictamen && (
+        <PanelDictamen
+          diagnosticoId={diagnosticoId}
+          vehiculoId={dictamen.vehiculo.id}
+          identificador={dictamen.vehiculo.placa || dictamen.vehiculo.vin || dictamen.vehiculo.identificador}
+          modo="compania"
+          puedeCorregir={false}
+          onClose={() => setDictamen(null)}
+          devolverFocoA={dictamen.disparador}
+        />
+      )}
     </>
   );
 }

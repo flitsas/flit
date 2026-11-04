@@ -310,6 +310,7 @@ public sealed class ColaRedaccionTests
         evidencias.Single(e => e.Tipo == TipoEvidencia.Pdf).Vigente.Should().BeFalse();
         evidencias.Single(e => e.Tipo == TipoEvidencia.Xlsx).Vigente.Should().BeTrue();
         evidencias.Single(e => e.Tipo == TipoEvidencia.Zip).Vigente.Should().BeTrue();
+        (await OutboxDePrueba.EventosAsync(api, DictamenEmitido.Tipo, ct)).Should().BeEmpty("completar el texto no publica otro evento");
     }
 
     [Fact]

@@ -17,7 +17,8 @@ namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 /// (<see cref="ContratoBackofficeEndpoints"/>, HU #13741) y <c>GET /backoffice/consultas/{consulta}/intentos</c>
 /// (<see cref="IntentosBackofficeEndpoints"/>, HU #13737) y los lotes, la grilla y el historial de una compañía
 /// (<see cref="DiagnosticosBackofficeEndpoints"/>, HU #13799) y el llenado manual de una celda en ERROR
-/// (<see cref="LlenadoManualEndpoints"/>, HU #13800) y la lista de empresas con Diagnóstico para el editor de contrato
+/// (<see cref="LlenadoManualEndpoints"/>, HU #13800), el dictamen vigente y su reemplazo
+/// (<see cref="OverrideDictamenEndpoints"/>, corte 7) y la lista de empresas con Diagnóstico para el editor de contrato
 /// (<c>GET /backoffice/empresas</c>, <see cref="EmpresasBackofficeEndpoints"/>, HU #13741), la única sin empresa explícita.
 /// </summary>
 public static class BackofficeEndpoints
@@ -33,6 +34,7 @@ public static class BackofficeEndpoints
         IntentosBackofficeEndpoints.Map(backoffice);
         DiagnosticosBackofficeEndpoints.Map(backoffice);
         LlenadoManualEndpoints.Map(backoffice);
+        OverrideDictamenEndpoints.Map(backoffice);
 
         // HU #13741 (escenario 15): la lista de empresas de la plataforma no lee datos de ninguna compañía, así que no pide
         // empresa explícita ni se audita como lectura entre compañías; la política del backoffice sí aplica.

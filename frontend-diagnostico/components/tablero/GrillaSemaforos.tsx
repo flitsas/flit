@@ -43,6 +43,8 @@ export interface GrillaSemaforosProps extends Pick<CeldaSemaforoProps, "onReproc
    * `descargarReportes`). Sin ella la columna no existe (backoffice y compañía sin la capacidad).
    */
   accionVehiculo?: (vehiculo: FilaVehiculo) => ReactNode;
+  /** Acción bajo la placa (corte 7: «Dictamen»). No entra en el sondeo de la grilla: quien la pinta pide el dictamen al abrirla. */
+  accionEncabezado?: (vehiculo: FilaVehiculo) => ReactNode;
 }
 
 /** «—» con nombre accesible cuando el dato no existe. */
@@ -54,7 +56,7 @@ function SinDato({ etiqueta }: { etiqueta: string }) {
   );
 }
 
-function EncabezadoVehiculo({ vehiculo, pedidas }: { vehiculo: FilaVehiculo; pedidas: ReadonlySet<Fuente> }) {
+function EncabezadoVehiculo({ vehiculo, pedidas, accion }: { vehiculo: FilaVehiculo; pedidas: ReadonlySet<Fuente>; accion?: ReactNode }) {
   const resueltas = vehiculo.celdas.filter((c) => pedidas.has(c.fuente) && RESUELTAS.has(c.estado)).length;
   return (
     <th scope="row" className="px-3 py-2.5 text-left align-top font-normal">
@@ -71,6 +73,7 @@ function EncabezadoVehiculo({ vehiculo, pedidas }: { vehiculo: FilaVehiculo; ped
           Terminado
         </span>
       )}
+      {accion ? <div className="mt-2">{accion}</div> : null}
     </th>
   );
 }
@@ -130,6 +133,7 @@ export function GrillaSemaforos({
   accionCelda,
   marcaCelda,
   accionVehiculo,
+  accionEncabezado,
 }: GrillaSemaforosProps) {
   const pedidas = fuentesPedidas(grilla.columnas);
 
@@ -178,7 +182,7 @@ export function GrillaSemaforos({
             const porFuente = new Map(v.celdas.map((c) => [c.fuente, c]));
             return (
               <tr key={v.id} data-vehiculo={v.id} className="border-t border-[var(--table-row-border)] bg-white dark:bg-transparent">
-                <EncabezadoVehiculo vehiculo={v} pedidas={pedidas} />
+                <EncabezadoVehiculo vehiculo={v} pedidas={pedidas} accion={accionEncabezado?.(v)} />
                 <CeldaDocumentoDeclarado vehiculo={v} />
                 <CeldaDocumentosPropietario vehiculo={v} />
                 {FUENTES_TABLA.map((f) => {

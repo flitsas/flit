@@ -184,6 +184,7 @@ public static class Modulos
         Vehiculos.VehiculosEndpoints.Map(api);
         Express.ExpressEndpoints.Map(api);
         Tablero.EndpointsTablero.Map(api);
+        Dictamen.DictamenEndpoints.Map(api);
         Consultas.EndpointsReproceso.Map(api);
         Reportes.ReportesEndpoints.Map(api);
         Reportes.EvidenciasEndpoints.Map(api);

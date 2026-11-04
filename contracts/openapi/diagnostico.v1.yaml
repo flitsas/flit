@@ -1134,6 +1134,59 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorRegla"
 
+  /api/v1/diagnostico/diagnosticos/{id}/vehiculos/{vid}/dictamen:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote (cabecera).
+        schema: { type: string, format: uuid }
+      - name: vid
+        in: path
+        required: true
+        description: Id del vehículo del lote.
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Tablero]
+      operationId: obtenerDictamenVehiculo
+      summary: Dictamen vigente de un vehículo
+      description: >
+        Corte 7. Permiso diagnostico.diagnosticos.ver y la misma visibilidad que la grilla (AccesoLote). Devuelve la fila
+        vigente: versión, veredicto, estado de redacción, alertamientos en el orden guardado, versión del catálogo y fecha.
+        No trae override, lease, intentos ni empresa. Sin fila vigente, 404 SIN_DICTAMEN (el panel lo trata como vacío).
+        No hay PUT en esta ruta: el reemplazo es del backoffice y un PUT aquí responde 404.
+      responses:
+        "200":
+          description: Dictamen vigente.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DictamenVehiculo"
+              example:
+                version: 1
+                veredicto: BLOQUEADO
+                estado_redaccion: PENDIENTE
+                alertamientos:
+                  - { codigo: SOAT_NO_VIGENTE, texto: "El SOAT no está vigente, así que el traspaso queda bloqueado.", efecto: BLOQUEA, fuente: RUNT }
+                catalogo_version: 1
+                creado_en: "2026-11-03T15:00:00+00:00"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.diagnosticos.ver; sin compañía (`code` = SIN_EMPRESA); compañía sin Diagnóstico activo (`code` = PRODUCTO_NO_HABILITADO).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: >
+            `code` = NO_ENCONTRADO si el lote no se ve o el vehículo no es de ese lote. `code` = SIN_DICTAMEN si el
+            vehículo se ve y no tiene fila vigente.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
   /api/v1/diagnostico/diagnosticos/{id}/vehiculos/{vid}/pdf:
     parameters:
       - name: id
@@ -2040,6 +2093,119 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorRegla"
               example: { code: RESULTADO_INVALIDO, error: "El campo «proveedor» no existe en el esquema de esta fuente.", campo: resultado.proveedor }
+
+  /api/v1/diagnostico/backoffice/diagnosticos/{id}/vehiculos/{vid}/dictamen:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id del lote de la compañía indicada.
+        schema: { type: string, format: uuid }
+      - name: vid
+        in: path
+        required: true
+        description: Id del vehículo de ese lote.
+        schema: { type: string, format: uuid }
+      - name: empresa
+        in: query
+        required: true
+        description: Id de la compañía dueña del lote (uuid distinto de cero, un solo valor).
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Backoffice]
+      operationId: obtenerDictamenVehiculoBackoffice
+      summary: Dictamen vigente de un vehículo (backoffice FLIT)
+      description: >
+        Corte 7. Política diagnostico.backoffice (diagnostico.backoffice.ver + tenant_type=FLIT) y empresa explícita en
+        ?empresa= (la lectura queda en diagnostico.lecturas_backoffice antes de tocar la fila). El mismo cuerpo que la
+        compañía más analisis_override, usuario_override_id (uuid, sin nombre) y override_en. Sin lease, intentos ni texto
+        de cola. Un usuario de la compañía recibe 403.
+      responses:
+        "200":
+          description: Dictamen vigente, con los tres campos de override.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DictamenVehiculoBackoffice"
+        "400":
+          description: Falta ?empresa= o no es válido (`code` = EMPRESA_REQUERIDA). No se audita.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: No es backoffice FLIT (sin cuerpo); SIN_EMPRESA, SIN_USUARIO o PRODUCTO_NO_HABILITADO.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "404":
+          description: >
+            `code` = NO_ENCONTRADO si el lote o el vehículo no son de la compañía indicada. `code` = SIN_DICTAMEN si no
+            hay fila vigente.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+    put:
+      tags: [Backoffice]
+      operationId: corregirDictamenVehiculoBackoffice
+      summary: Reemplazar el veredicto del dictamen vigente (backoffice FLIT)
+      description: >
+        Corte 7. La misma política del GET y además diagnostico.dictamen.override. El admin de la compañía recibe 403.
+        No vuelve a evaluar ni redacta. El veredicto nuevo es el del cuerpo. Los alertamientos conservan codigo, efecto
+        y fuente, en el mismo orden; el texto vuelve a la plantilla del catálogo del tipo de trámite (si esa fila no está,
+        se conserva el texto guardado). Nace otra versión (la anterior queda vigente=false), con analisis_override, el sub
+        y la fecha del reloj. La redacción queda PENDIENTE para que la cola explique el veredicto nuevo. No genera PDF ni
+        toca el Excel o el ZIP. Publica diagnostico.dictamen.emitido con override=true en la misma transacción.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CuerpoOverrideDictamen"
+            example: { veredicto: BLOQUEADO, confirmado: true }
+      responses:
+        "200":
+          description: Dictamen nuevo, con los tres campos de override.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DictamenVehiculoBackoffice"
+        "400":
+          description: Falta ?empresa= o no es válido (`code` = EMPRESA_REQUERIDA). No se escribe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: No es backoffice FLIT o le falta diagnostico.dictamen.override. No se escribe.
+        "404":
+          description: "`code` = NO_ENCONTRADO o SIN_DICTAMEN. No se escribe."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "409":
+          description: >
+            Nada cambia. `code` = VEREDICTO_SIN_CAMBIO si el veredicto pedido es el de la vigente.
+            `code` = DICTAMEN_EN_CONFLICTO si dos overrides chocan en ux_dictamen_version o ux_dictamen_vigente.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "422":
+          description: >
+            Nada cambia. `code` = CONFIRMADO_REQUERIDO si confirmado no es true. `code` = VEREDICTO_INVALIDO si el
+            veredicto no es VIABLE ni BLOQUEADO.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
 
   /api/v1/diagnostico/backoffice/diagnosticos:
     get:
@@ -3578,6 +3744,59 @@ components:
         en:
           type: string
           format: date-time
+
+    AlertaDictamen:
+      type: object
+      additionalProperties: false
+      required: [codigo, texto, efecto, fuente]
+      properties:
+        codigo: { type: string }
+        texto: { type: string }
+        efecto: { type: string }
+        fuente: { type: string }
+
+    DictamenVehiculo:
+      type: object
+      additionalProperties: false
+      description: Dictamen vigente que ve la compañía. Sin override, lease, intentos ni empresa.
+      required: [version, veredicto, estado_redaccion, alertamientos, catalogo_version, creado_en]
+      properties:
+        version: { type: integer, minimum: 1 }
+        veredicto: { type: string, enum: [VIABLE, BLOQUEADO] }
+        estado_redaccion: { type: string, enum: [PENDIENTE, COMPLETADA] }
+        alertamientos:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlertaDictamen"
+        catalogo_version: { type: integer }
+        creado_en: { type: string, format: date-time }
+
+    DictamenVehiculoBackoffice:
+      type: object
+      additionalProperties: false
+      description: El de la compañía más los tres campos de override. Sin lease, intentos ni texto de cola.
+      required: [version, veredicto, estado_redaccion, alertamientos, catalogo_version, creado_en, analisis_override, usuario_override_id, override_en]
+      properties:
+        version: { type: integer, minimum: 1 }
+        veredicto: { type: string, enum: [VIABLE, BLOQUEADO] }
+        estado_redaccion: { type: string, enum: [PENDIENTE, COMPLETADA] }
+        alertamientos:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlertaDictamen"
+        catalogo_version: { type: integer }
+        creado_en: { type: string, format: date-time }
+        analisis_override: { type: boolean }
+        usuario_override_id: { type: string, format: uuid, nullable: true }
+        override_en: { type: string, format: date-time, nullable: true }
+
+    CuerpoOverrideDictamen:
+      type: object
+      additionalProperties: false
+      required: [veredicto, confirmado]
+      properties:
+        veredicto: { type: string, enum: [VIABLE, BLOQUEADO] }
+        confirmado: { type: boolean, description: Solo true escribe. Cualquier otro valor es 422 CONFIRMADO_REQUERIDO. }
 
     DetalleCelda:
       type: object

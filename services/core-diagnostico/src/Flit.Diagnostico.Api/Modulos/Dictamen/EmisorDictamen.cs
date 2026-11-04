@@ -10,9 +10,11 @@ using Flit.Diagnostico.Api.Modulos.Tablero;
 using Flit.Diagnostico.Api.Modulos.Vehiculos;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Api.Persistence.Configuraciones;
+using Flit.Diagnostico.Api.Plataforma;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Diagnosticos;
 using Flit.Diagnostico.Domain.Dictamen;
+using Flit.Platform.Sdk.Messaging;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Diagnostico.Api.Modulos.Dictamen;
@@ -40,10 +42,11 @@ internal readonly record struct TransicionVersion(VersionEmitida? Anterior, Vers
 /// <summary>
 /// Escribe <c>diagnostico.dictamenes</c> cuando un vehículo Con Análisis IA de la familia TRASPASO pasa a terminado
 /// (corte 5). El cierre deja la plantilla y la fecha de toma (corte 6): no llama al modelo. El flanco, el pedido, los
-/// alertamientos y la versión son funciones. La fila va en la transacción de quien cierra. No publica endpoint ni evento.
+/// alertamientos y la versión son funciones. La fila va en la transacción de quien cierra, y con ella el evento
+/// <c>diagnostico.dictamen.emitido</c> (corte 7).
 /// </summary>
 internal sealed partial class EmisorDictamen(
-    DiagnosticoDb db, IProtectorRespuestaFuente protector, IProveedorRedactor proveedor, ILogger<EmisorDictamen> log)
+    DiagnosticoDb db, IProtectorRespuestaFuente protector, IProveedorRedactor proveedor, IPlatformOutbox outbox, ILogger<EmisorDictamen> log)
 {
     /// <summary>El payload solo guarda cuántos locatarios había. El lector pregunta si el número viene con texto.</summary>
     private const string DocumentoSoloParaElLector = "1";
@@ -115,6 +118,33 @@ internal sealed partial class EmisorDictamen(
         }
 
         return JsonSerializer.Serialize(alertas, Json);
+    }
+
+    /// <summary>
+    /// El mismo arreglo, en el mismo orden. <c>codigo</c>, <c>efecto</c> y <c>fuente</c> se conservan. El texto vuelve a la
+    /// plantilla del catálogo para <paramref name="tipoTramiteCodigo"/>; si esa fila no está, se conserva el texto guardado.
+    /// </summary>
+    internal static string TextosDePlantilla(string? tipoTramiteCodigo, string alertamientos)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(alertamientos);
+        using var documento = JsonDocument.Parse(alertamientos);
+        if (documento.RootElement.ValueKind != JsonValueKind.Array)
+            throw new InvalidOperationException("Los alertamientos del dictamen no son un arreglo.");
+
+        var lista = new List<AlertaJson>();
+        foreach (var item in documento.RootElement.EnumerateArray())
+        {
+            var codigo = item.GetProperty("codigo").GetString() ?? string.Empty;
+            var texto = item.GetProperty("texto").GetString() ?? string.Empty;
+            var efecto = item.GetProperty("efecto").GetString() ?? string.Empty;
+            var fuente = item.GetProperty("fuente").GetString() ?? string.Empty;
+            var plantilla = CatalogoReglasDictamen.Filas.FirstOrDefault(f => f.TipoTramiteCodigo == tipoTramiteCodigo && f.Codigo == codigo);
+            if (plantilla is not null)
+                texto = plantilla.PlantillaTexto;
+            lista.Add(new AlertaJson(codigo, texto, efecto, fuente));
+        }
+
+        return JsonSerializer.Serialize(lista, Json);
     }
 
     /// <summary>La fila que se agrega. <paramref name="version"/> ya salió de <see cref="SiguienteVersion"/>.</summary>
@@ -213,6 +243,46 @@ internal sealed partial class EmisorDictamen(
     }
 
     /// <summary>
+    /// La fila del override. No vuelve a evaluar y no redacta: el veredicto es el pedido y los textos vuelven a la plantilla.
+    /// Sin confirmación, o si el veredicto es el de la vigente, no arma fila y no apaga la anterior.
+    /// </summary>
+    internal static DictamenVehiculo FilaDeOverride(
+        DictamenVehiculo vigente, string veredicto, bool confirmado, Guid usuarioId, string? tipoTramiteCodigo,
+        bool redaccionSuspendida, bool proveedorConfigurado, DateTimeOffset ahora)
+    {
+        ArgumentNullException.ThrowIfNull(vigente);
+        if (!confirmado)
+            throw new ReglaException(CodigosDictamen.ConfirmadoRequerido, "Confirma el cambio de veredicto para reemplazarlo.");
+        if (veredicto is not ("VIABLE" or "BLOQUEADO"))
+            throw new ReglaException(CodigosDictamen.VeredictoInvalido, "El veredicto debe ser VIABLE o BLOQUEADO.");
+        if (veredicto == vigente.Veredicto)
+            throw ReglaException.Conflicto(CodigosDictamen.VeredictoSinCambio, "El veredicto pedido es el del dictamen vigente.");
+
+        var transicion = SiguienteVersion(vigente.Version);
+        vigente.Vigente = false;
+        return new DictamenVehiculo
+        {
+            Id = Guid.CreateVersion7(ahora),
+            TenantId = vigente.TenantId,
+            VehiculoId = vigente.VehiculoId,
+            Version = transicion.Nueva.Version,
+            Vigente = true,
+            Veredicto = veredicto,
+            Alertamientos = TextosDePlantilla(tipoTramiteCodigo, vigente.Alertamientos),
+            CatalogoVersion = vigente.CatalogoVersion,
+            RedactadoPor = "PLANTILLA",
+            EstadoRedaccion = "PENDIENTE",
+            RedaccionIntentos = 0,
+            RedaccionDisponibleDesde = DisponibleAlCerrar(redaccionSuspendida, proveedorConfigurado, ahora),
+            RedaccionLeaseHasta = null,
+            AnalisisOverride = true,
+            UsuarioOverrideId = usuarioId,
+            OverrideEn = ahora,
+            CreadoEn = ahora,
+        };
+    }
+
+    /// <summary>
     /// Null salvo un fallo técnico (<see cref="TipoFalloRedactor.Timeout"/>, <see cref="TipoFalloRedactor.Http5xx"/>,
     /// <see cref="TipoFalloRedactor.RateLimit"/> o <see cref="TipoFalloRedactor.Red"/>). Con espera, el reloj más esa espera;
     /// sin ella, el reloj. Suspensión, proveedor apagado y contradicción quedan null. La usa la cola después de un fallo, no el cierre.
@@ -246,7 +316,8 @@ internal sealed partial class EmisorDictamen(
 
     /// <summary>
     /// Si el flanco sube, evalúa y deja la plantilla en el contexto. No llama al modelo y no confirma: la transacción es de
-    /// quien cierra. Un fallo al armar o al evaluar se propaga y el cierre no queda a medias.
+    /// quien cierra. Encola <c>diagnostico.dictamen.emitido</c> con la fila nueva. Un fallo al armar o al evaluar se propaga
+    /// y el cierre no queda a medias.
     /// </summary>
     public async Task EmitirAsync(CeldaConsulta celda, EstadoCelda estadoNuevo, FotoFlanco foto, DateTimeOffset ahora, CancellationToken ct)
     {
@@ -275,6 +346,7 @@ internal sealed partial class EmisorDictamen(
         var fila = FilaAlCerrar(
             celda.TenantId, celda.VehiculoId, transicion.Nueva.Version, pedido.TipoTramiteCodigo, evaluado, suspendida, proveedor.Configurado, ahora);
         db.Add(fila);
+        DictamenEmitido.Encolar(outbox, cabecera, fila, esOverride: false);
         Escrito(log, celda.VehiculoId, fila.Version, fila.Veredicto, fila.EstadoRedaccion);
     }
 

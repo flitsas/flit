@@ -23,6 +23,21 @@ channels:
       message:
         $ref: '#/components/messages/LoteTerminado'
 
+  diagnostico.dictamen.emitido:
+    description: |
+      Nació una versión del dictamen de un vehículo (cierre del lote o override del backoffice). Se publica por la
+      outbox en la misma transacción de quien escribe la fila. Completar el texto de una versión que ya existía no
+      publica otro. Los consumidores deduplican por `(vehiculoId, version)`. Sin placa, VIN, documentos ni el texto
+      de los alertamientos. La empresa va en el sobre.
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.diagnostico, type: topic, durable: true, autoDelete: false, vhost: flit }
+    subscribe:
+      operationId: dictamenEmitido
+      message:
+        $ref: '#/components/messages/DictamenEmitido'
+
 components:
   messages:
     LoteTerminado:
@@ -51,3 +66,25 @@ components:
                     type: object
                     description: Celdas en ERROR por tipo_error (TIMEOUT, RED, BLOQUEADA_POR_RUNT…); vacío si no hay.
                     additionalProperties: { type: integer, minimum: 1 }
+    DictamenEmitido:
+      name: diagnostico.dictamen.emitido
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              data:
+                type: object
+                additionalProperties: false
+                required: [diagnosticoId, vehiculoId, dictamenId, version, veredicto, catalogoVersion, modo, tipoTramiteCodigo, estadoRedaccion, override]
+                properties:
+                  diagnosticoId: { type: string, format: uuid, description: Lote. }
+                  vehiculoId: { type: string, format: uuid, description: Vehículo. }
+                  dictamenId: { type: string, format: uuid, description: Id de la versión que nace. }
+                  version: { type: integer, minimum: 1, description: Versión de negocio del dictamen. }
+                  veredicto: { type: string, enum: [VIABLE, BLOQUEADO] }
+                  catalogoVersion: { type: integer, description: Versión del catálogo guardada en la fila. }
+                  modo: { type: string, description: Código del modo de la cabecera. }
+                  tipoTramiteCodigo: { type: string, description: Código de trámite de la cabecera. }
+                  estadoRedaccion: { type: string, enum: [PENDIENTE, COMPLETADA] }
+                  override: { type: boolean, description: true solo en el reemplazo del backoffice. }
