@@ -253,6 +253,11 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasColumnName("departamento_nombre")
                         .HasComment("Nombre del departamento.");
 
+                    b.Property<string>("Municipio")
+                        .HasColumnType("text")
+                        .HasColumnName("municipio")
+                        .HasComment("Municipio del organismo, de catalogos.proto. Lo exige la consulta de impuesto.");
+
                     b.Property<string>("Nombre")
                         .IsRequired()
                         .HasMaxLength(200)

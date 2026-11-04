@@ -20,6 +20,7 @@ internal sealed class OrganismoConfig : IEntityTypeConfiguration<Organismo>
         builder.Property(x => x.NombreNorm).HasMaxLength(200).HasComment("Nombre normalizado para buscar por el transit_office_name del RUNT.");
         builder.Property(x => x.DepartamentoCodigo).HasMaxLength(8).HasComment("Código del departamento (DIVIPOLA).");
         builder.Property(x => x.DepartamentoNombre).HasMaxLength(100).HasComment("Nombre del departamento.");
+        builder.Property(x => x.Municipio).HasColumnType("text").HasComment("Municipio del organismo, de catalogos.proto. Lo exige la consulta de impuesto.");
         builder.HasIndex(x => x.NombreNorm).HasDatabaseName("ix_organismos_nombre_norm");
     }
 }

@@ -18,4 +18,7 @@ public sealed class Organismo
     public required string DepartamentoCodigo { get; set; }
 
     public required string DepartamentoNombre { get; set; }
+
+    /// <summary>Municipio del organismo. Null hasta la sincronización que lo traiga; la consulta de impuesto lo exige.</summary>
+    public string? Municipio { get; set; }
 }

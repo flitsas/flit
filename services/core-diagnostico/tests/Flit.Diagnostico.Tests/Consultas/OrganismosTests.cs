@@ -109,6 +109,7 @@ public sealed class OrganismosTests
         var replicado = await OrganismoAsync(api, "98001000", ct);
         replicado.NombreNorm.Should().Be("SECRETARIA DE TRANSITO DE PRUEBA");
         replicado.DepartamentoNombre.Should().Be("DEPARTAMENTO FICTICIO");
+        replicado.Municipio.Should().Be("MUNICIPIO FICTICIO");
 
         api.Catalogos.Organismos.Clear();
         (await SincronizarAsync(api, ct)).Should().BeNull("una lista vacía no se aplica: sería borrar el catálogo");
@@ -118,6 +119,7 @@ public sealed class OrganismosTests
         (await SincronizarAsync(api, ct)).Should().Be(new ResultadoSincronizacion(1, 1, 0, 1, 0));
         await using var db = DosEmpresas.Contexto(api.BaseDeDatos, null);
         (await db.Set<Organismo>().AsNoTracking().Select(o => o.Codigo).ToListAsync(ct)).Should().Equal("98003000");
+        (await OrganismoAsync(api, "98003000", ct)).Municipio.Should().BeNull("un municipio vacío no se guarda como texto en blanco");
     }
 
     // Sin dirección del gRPC de catálogos el adaptador queda no conectado: la sincronización no toca la réplica.

@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Flit.Diagnostico.Api.Modulos.Catalogos;
 
 /// <summary>Un organismo de tránsito tal como lo tiene la plataforma (<c>catalogs.transit_offices</c> de core-api).</summary>
-public sealed record OrganismoPlataforma(string Codigo, string Nombre, string? DepartamentoCodigo, string? Departamento);
+public sealed record OrganismoPlataforma(string Codigo, string Nombre, string? DepartamentoCodigo, string? Departamento, string? Municipio);
 
 /// <summary>El catálogo de organismos de la plataforma, o null si no hay con quién hablar.</summary>
 public interface ICatalogoOrganismosPlataforma
@@ -70,18 +70,20 @@ public sealed partial class SincronizacionOrganismos(DiagnosticoDb db, ICatalogo
             var nombre = Recortar(r.Nombre, 200);
             var nombreNorm = Recortar(NombreNormalizado.Normalizar(r.Nombre), 200);
             var departamentoNombre = Recortar(r.Departamento ?? string.Empty, 100);
+            var municipio = TextoONull(r.Municipio);
             if (locales.TryGetValue(r.Codigo, out var o))
             {
-                if (o.Nombre != nombre || o.NombreNorm != nombreNorm || o.DepartamentoCodigo != departamento || o.DepartamentoNombre != departamentoNombre)
+                if (o.Nombre != nombre || o.NombreNorm != nombreNorm || o.DepartamentoCodigo != departamento || o.DepartamentoNombre != departamentoNombre || o.Municipio != municipio)
                     actualizados++;
                 o.Nombre = nombre;
                 o.NombreNorm = nombreNorm;
                 o.DepartamentoCodigo = departamento;
                 o.DepartamentoNombre = departamentoNombre;
+                o.Municipio = municipio;
                 continue;
             }
 
-            db.Add(new Organismo { Codigo = r.Codigo, Nombre = nombre, NombreNorm = nombreNorm, DepartamentoCodigo = departamento, DepartamentoNombre = departamentoNombre });
+            db.Add(new Organismo { Codigo = r.Codigo, Nombre = nombre, NombreNorm = nombreNorm, DepartamentoCodigo = departamento, DepartamentoNombre = departamentoNombre, Municipio = municipio });
             nuevos++;
         }
 
@@ -102,6 +104,13 @@ public sealed partial class SincronizacionOrganismos(DiagnosticoDb db, ICatalogo
     }
 
     private static string Recortar(string texto, int largo) => texto.Length <= largo ? texto : texto[..largo];
+
+    /// <summary>Vacío o solo espacios queda null: no se guarda un municipio en blanco.</summary>
+    private static string? TextoONull(string? texto)
+    {
+        var limpio = texto?.Trim();
+        return string.IsNullOrEmpty(limpio) ? null : limpio;
+    }
 
     [LoggerMessage(EventId = 137330, Level = LogLevel.Information, Message = "Sincronización de organismos omitida: no hay dirección del gRPC de catálogos (Diagnostico:Tramites:Address).")]
     private static partial void LogNoConectado(ILogger logger);

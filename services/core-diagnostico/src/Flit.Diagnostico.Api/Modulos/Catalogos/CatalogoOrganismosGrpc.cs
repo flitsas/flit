@@ -17,6 +17,6 @@ public sealed class CatalogoOrganismosGrpc(Flit.Tramites.Grpc.V1.CatalogosServic
         var r = await cliente.ListarOrganismosTransitoAsync(new Flit.Tramites.Grpc.V1.ListarOrganismosTransitoRequest(), cancellationToken: ct).ConfigureAwait(false);
         static string? Texto(string s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
         return [.. r.Organismos.Where(o => !string.IsNullOrWhiteSpace(o.Codigo))
-            .Select(o => new OrganismoPlataforma(o.Codigo.Trim(), o.Nombre.Trim(), Texto(o.DepartamentoCodigo), Texto(o.Departamento)))];
+            .Select(o => new OrganismoPlataforma(o.Codigo.Trim(), o.Nombre.Trim(), Texto(o.DepartamentoCodigo), Texto(o.Departamento), Texto(o.Municipio)))];
     }
 }
