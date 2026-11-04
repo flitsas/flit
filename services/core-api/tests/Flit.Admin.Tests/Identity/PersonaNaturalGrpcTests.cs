@@ -26,7 +26,7 @@ namespace Flit.Admin.Tests.Identity;
 /// Natural, viene apagada por defecto y no tiene ningún método que cree trámites. Requiere la base con las migraciones
 /// aplicadas (la empresa «Persona Natural» la siembra el DDL 152).
 /// </summary>
-public sealed class PersonaNaturalGrpcTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
+public sealed class PersonaNaturalGrpcTests(PersonaNaturalGrpcTests.Anfitrion anfitrion) : IClassFixture<PersonaNaturalGrpcTests.Anfitrion>
 {
     private const string Scope = "platform.tramites.persona_natural";
     private const string Portal = "svc-personanatural";
@@ -35,7 +35,7 @@ public sealed class PersonaNaturalGrpcTests(WebApplicationFactory<Program> facto
     public async Task ElPortalConSuEmpresa_EntraYSinTramiteResponde_EncontradoFalso()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host(habilitada: true);
+        var host = anfitrion.Factory;
         var cliente = await ClienteAsync(host, Portal, PlatformTenants.PersonaNatural, ct);
 
         var respuesta = await cliente.ObtenerEstadoTramiteAsync(new ObtenerEstadoTramiteRequest { SolicitudId = $"sin-tramite-{Guid.NewGuid():N}" }, cancellationToken: ct);
@@ -47,7 +47,7 @@ public sealed class PersonaNaturalGrpcTests(WebApplicationFactory<Program> facto
     public async Task ConUnTramiteDelPortal_ObtenerEstadoLoEncuentraPorSuReferenciaExterna()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host(habilitada: true);
+        var host = anfitrion.Factory;
         var solicitud = $"pn-{Guid.NewGuid():N}";
         var id = await SembrarTramiteAsync(host, PlatformTenants.PersonaNatural, solicitud, ct);
         var cliente = await ClienteAsync(host, Portal, PlatformTenants.PersonaNatural, ct);
@@ -64,7 +64,7 @@ public sealed class PersonaNaturalGrpcTests(WebApplicationFactory<Program> facto
     public async Task UnTramiteDeOtraEmpresaConLaMismaReferencia_NoSeVe()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host(habilitada: true);
+        var host = anfitrion.Factory;
         var solicitud = $"pn-ajeno-{Guid.NewGuid():N}";
         await SembrarTramiteAsync(host, empresa: null, solicitud, ct);
         var cliente = await ClienteAsync(host, Portal, PlatformTenants.PersonaNatural, ct);
@@ -78,7 +78,7 @@ public sealed class PersonaNaturalGrpcTests(WebApplicationFactory<Program> facto
     public async Task ConOtraEmpresa_RespondeInvalidTenant_YNoEjecutaNada()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host(habilitada: true);
+        var host = anfitrion.Factory;
         foreach (var empresa in new[] { Guid.NewGuid(), PlatformTenants.Plataforma })
         {
             var cliente = await ClienteAsync(host, Portal, empresa, ct);
@@ -95,7 +95,7 @@ public sealed class PersonaNaturalGrpcTests(WebApplicationFactory<Program> facto
     public async Task SinLaEmpresaEnLaMetadata_SeRechaza()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host(habilitada: true);
+        var host = anfitrion.Factory;
         var cliente = await ClienteAsync(host, Portal, empresa: null, ct);
 
         var llamada = () => cliente.ObtenerEstadoTramiteAsync(new ObtenerEstadoTramiteRequest { SolicitudId = "x" }, cancellationToken: ct).ResponseAsync;
@@ -107,7 +107,7 @@ public sealed class PersonaNaturalGrpcTests(WebApplicationFactory<Program> facto
     public async Task OtroClienteDeServicio_AunqueTengaElScope_NoEntra()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host(habilitada: true);
+        var host = anfitrion.Factory;
         foreach (var otro in new[] { "svc-otro-prueba", "svc-ict-prueba" })
         {
             var cliente = await ClienteAsync(host, otro, PlatformTenants.PersonaNatural, ct);
@@ -122,7 +122,7 @@ public sealed class PersonaNaturalGrpcTests(WebApplicationFactory<Program> facto
     public async Task SinToken_SeRechaza()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host(habilitada: true);
+        var host = anfitrion.Factory;
         var cliente = new Cliente(Canal(host, token: null, PlatformTenants.PersonaNatural));
 
         var llamada = () => cliente.ObtenerEstadoTramiteAsync(new ObtenerEstadoTramiteRequest { SolicitudId = "x" }, cancellationToken: ct).ResponseAsync;
@@ -134,7 +134,7 @@ public sealed class PersonaNaturalGrpcTests(WebApplicationFactory<Program> facto
     public async Task ApagadaPorDefecto_NoSeAtiende_NiConElTokenCorrecto()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host(habilitada: false);
+        using var host = Construir(anfitrion.Base, habilitada: false);
         var cliente = await ClienteAsync(host, Portal, PlatformTenants.PersonaNatural, ct);
 
         var llamada = () => cliente.ObtenerEstadoTramiteAsync(new ObtenerEstadoTramiteRequest { SolicitudId = "x" }, cancellationToken: ct).ResponseAsync;
@@ -146,7 +146,7 @@ public sealed class PersonaNaturalGrpcTests(WebApplicationFactory<Program> facto
     public async Task ObtenerConfiguracionPortal_YaNoEstaPendiente_PeroElCandadoVaPrimero()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host(habilitada: true);
+        var host = anfitrion.Factory;
         var bueno = await ClienteAsync(host, Portal, PlatformTenants.PersonaNatural, ct);
         var ajeno = await ClienteAsync(host, Portal, Guid.NewGuid(), ct);
 
@@ -163,7 +163,7 @@ public sealed class PersonaNaturalGrpcTests(WebApplicationFactory<Program> facto
     public async Task EvaluarRequisitos_ValidaLaEntrada_YUnTipoDesconocidoNoEstaDisponible()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host(habilitada: true);
+        var host = anfitrion.Factory;
         var cliente = await ClienteAsync(host, Portal, PlatformTenants.PersonaNatural, ct);
 
         var sinTipo = (await ((Func<Task>)(() => cliente.EvaluarRequisitosAsync(new EvaluarRequisitosRequest { Placa = "ABC123" }, cancellationToken: ct).ResponseAsync)).Should().ThrowAsync<RpcException>()).Which;
@@ -222,7 +222,16 @@ public sealed class PersonaNaturalGrpcTests(WebApplicationFactory<Program> facto
 
     // ── Soporte ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
-    private WebApplicationFactory<Program> Host(bool habilitada) =>
+    /// <summary>Un host para toda la clase (<see cref="HostPorClase"/>): antes cada prueba arrancaba y destruía el suyo
+    /// (~30 s por prueba en CI). Las pruebas siembran datos con identificadores propios, así que comparten host sin cruzarse. La prueba de la fachada apagada
+    /// arranca la suya con <see cref="Construir"/>.</summary>
+    public sealed class Anfitrion : HostPorClase
+    {
+        protected override WebApplicationFactory<Program> Configurar(WebApplicationFactory<Program> factory) =>
+            Construir(factory, habilitada: true);
+    }
+
+    private static WebApplicationFactory<Program> Construir(WebApplicationFactory<Program> factory, bool habilitada) =>
         OidcServerTests.WithOidc(factory).WithWebHostBuilder(b =>
         {
             b.UseSetting("PersonaNatural:Fachada:Habilitada", habilitada ? "true" : "false");

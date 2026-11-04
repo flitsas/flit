@@ -24,7 +24,7 @@ namespace Flit.Admin.Tests.Identity;
 /// solicitud pide una validación NUEVA; nada se reutiliza entre trámites ni vence por días. Requiere la base con las
 /// migraciones aplicadas (DDL 152 y 160); el proveedor es el mock del ambiente de pruebas.
 /// </summary>
-public sealed class PersonaNaturalIdentidadGrpcTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
+public sealed class PersonaNaturalIdentidadGrpcTests(PersonaNaturalIdentidadGrpcTests.Anfitrion anfitrion) : IClassFixture<PersonaNaturalIdentidadGrpcTests.Anfitrion>
 {
     private const string Scope = "platform.tramites.persona_natural";
     private const string Portal = "svc-personanatural";
@@ -33,7 +33,7 @@ public sealed class PersonaNaturalIdentidadGrpcTests(WebApplicationFactory<Progr
     public async Task Solicitar_CreaUnaValidacionNuevaDeEsaSolicitudYParte_EnPendiente_SinVigencia()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         var cliente = await ClienteAsync(host, ct);
         var (solicitud, cedula) = Nueva();
 
@@ -53,7 +53,7 @@ public sealed class PersonaNaturalIdentidadGrpcTests(WebApplicationFactory<Progr
     public async Task Solicitar_DosVecesLoMismo_DevuelveLaMismaValidacion_SinDuplicarElEnlace()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         var cliente = await ClienteAsync(host, ct);
         var (solicitud, cedula) = Nueva();
 
@@ -68,7 +68,7 @@ public sealed class PersonaNaturalIdentidadGrpcTests(WebApplicationFactory<Progr
     public async Task Solicitar_AunqueLaMismaCedulaYaEstaAprobadaEnOtraSolicitud_PideUnaNuevaYNoLaReutiliza()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         var cliente = await ClienteAsync(host, ct);
         var cedula = $"9{Random.Shared.NextInt64(10_000_000, 99_999_999)}";
         var ayer = await cliente.SolicitarValidacionIdentidadAsync(Pedido(NuevaSolicitud(), "vendedor", cedula), cancellationToken: ct);
@@ -84,7 +84,7 @@ public sealed class PersonaNaturalIdentidadGrpcTests(WebApplicationFactory<Progr
     public async Task Solicitar_DosSolicitudesAbiertasALaVezConLaMismaCedula_NoSeBloquean()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         var cliente = await ClienteAsync(host, ct);
         var cedula = $"9{Random.Shared.NextInt64(10_000_000, 99_999_999)}";
 
@@ -98,7 +98,7 @@ public sealed class PersonaNaturalIdentidadGrpcTests(WebApplicationFactory<Progr
     public async Task Solicitar_ConLaAnteriorRechazada_CreaOtraEnLaMismaSolicitud()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         var cliente = await ClienteAsync(host, ct);
         var (solicitud, cedula) = Nueva();
         var primera = await cliente.SolicitarValidacionIdentidadAsync(Pedido(solicitud, "vendedor", cedula), cancellationToken: ct);
@@ -114,7 +114,7 @@ public sealed class PersonaNaturalIdentidadGrpcTests(WebApplicationFactory<Progr
     public async Task Solicitar_ConLaAnteriorAprobadaEnLaMismaSolicitud_DevuelveEsaMisma()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         var cliente = await ClienteAsync(host, ct);
         var (solicitud, cedula) = Nueva();
         var primera = await cliente.SolicitarValidacionIdentidadAsync(Pedido(solicitud, "vendedor", cedula), cancellationToken: ct);
@@ -130,7 +130,7 @@ public sealed class PersonaNaturalIdentidadGrpcTests(WebApplicationFactory<Progr
     public async Task Solicitar_ConUnNit_RespondePersonaJuridicaNoSoportada_YNoCreaNada()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         var cliente = await ClienteAsync(host, ct);
         var solicitud = NuevaSolicitud();
         var pedido = Pedido(solicitud, "comprador", "900123456");
@@ -149,7 +149,7 @@ public sealed class PersonaNaturalIdentidadGrpcTests(WebApplicationFactory<Progr
     public async Task Solicitar_ConCorreoInvalido_RespondeContactoInvalido_YNoCreaNada(string correo)
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         var cliente = await ClienteAsync(host, ct);
         var solicitud = NuevaSolicitud();
         var pedido = Pedido(solicitud, "vendedor", "1012345678");
@@ -165,7 +165,7 @@ public sealed class PersonaNaturalIdentidadGrpcTests(WebApplicationFactory<Progr
     public async Task Solicitar_SinSolicitudONiParte_EsUnaEntradaInvalida()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         var cliente = await ClienteAsync(host, ct);
 
         var sinSolicitud = (await ((Func<Task>)(() => cliente.SolicitarValidacionIdentidadAsync(Pedido("", "vendedor", "1"), cancellationToken: ct).ResponseAsync)).Should().ThrowAsync<RpcException>()).Which;
@@ -179,7 +179,7 @@ public sealed class PersonaNaturalIdentidadGrpcTests(WebApplicationFactory<Progr
     public async Task ConOtraEmpresa_LosTresMetodosDeIdentidadRespondenInvalidTenant()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         var ajeno = await ClienteAsync(host, ct, Guid.NewGuid());
         var (solicitud, cedula) = Nueva();
 
@@ -200,7 +200,7 @@ public sealed class PersonaNaturalIdentidadGrpcTests(WebApplicationFactory<Progr
     public async Task Reenviar_SaleElEnlaceNuevoEnLaMismaFila_YSincronizaElCorreoNuevo()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         var cliente = await ClienteAsync(host, ct);
         var (solicitud, cedula) = Nueva();
         var creada = await cliente.SolicitarValidacionIdentidadAsync(Pedido(solicitud, "comprador", cedula), cancellationToken: ct);
@@ -223,7 +223,7 @@ public sealed class PersonaNaturalIdentidadGrpcTests(WebApplicationFactory<Progr
     public async Task Reenviar_UnaYaAprobada_NoSeReenvia()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         var cliente = await ClienteAsync(host, ct);
         var (solicitud, cedula) = Nueva();
         var creada = await cliente.SolicitarValidacionIdentidadAsync(Pedido(solicitud, "vendedor", cedula), cancellationToken: ct);
@@ -238,7 +238,7 @@ public sealed class PersonaNaturalIdentidadGrpcTests(WebApplicationFactory<Progr
     public async Task Reenviar_UnaVencida_LaReabreConEnlaceNuevo()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         var cliente = await ClienteAsync(host, ct);
         var (solicitud, cedula) = Nueva();
         var creada = await cliente.SolicitarValidacionIdentidadAsync(Pedido(solicitud, "vendedor", cedula), cancellationToken: ct);
@@ -253,7 +253,7 @@ public sealed class PersonaNaturalIdentidadGrpcTests(WebApplicationFactory<Progr
     public async Task ReenviarYEstado_ConUnIdInexistenteODeFlit2_RespondenNoEncontrada()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         var cliente = await ClienteAsync(host, ct);
         var deFlit2 = await SembrarValidacionDeFlit2Async(host, ct);
 
@@ -270,7 +270,7 @@ public sealed class PersonaNaturalIdentidadGrpcTests(WebApplicationFactory<Progr
     public async Task ObtenerEstado_TraduceLosEstadosDeFlit2_AlVocabularioDelPortal()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         var cliente = await ClienteAsync(host, ct);
         var casos = new (string Estado, string Esperado)[]
         {
@@ -303,7 +303,7 @@ public sealed class PersonaNaturalIdentidadGrpcTests(WebApplicationFactory<Progr
         PersonaNaturalIdentidadService.EstadoDelPortal(BiometricEstados.PendienteEnvio, ahora.AddHours(-1), ahora).Should().Be("pendiente");
         PersonaNaturalIdentidadService.EstadoDelPortal(BiometricEstados.Aprobado, ahora.AddHours(-1), ahora).Should().Be("aprobada", "una aprobada no vence por plazo");
     }
-[Theory]    [InlineData("wiññyn.londono@flitsas.com")]    [InlineData("")]    public async Task Solicitar_InSitu_ConCorreoInvalidoOVacio_UsaElCorreoTecnicoConDominioPublicoDeFlit(string correo)    {        var ct = TestContext.Current.CancellationToken;        using var host = Host();        var cliente = await ClienteAsync(host, ct);        var (solicitud, cedula) = Nueva();        var pedido = Pedido(solicitud, "titular", cedula);        pedido.OmitirEnvioCorreo = true;        pedido.Persona.Correo = correo;        var respuesta = await cliente.SolicitarValidacionIdentidadAsync(pedido, cancellationToken: ct);        var fila = await FilaAsync(host, respuesta.ValidacionId, ct);        fila.Email.Should().Be($"validaciones+punto-{solicitud.Replace("-", string.Empty)}@flitsas.com");        fila.Email.Should().NotContain(".local");    }
+[Theory]    [InlineData("wiññyn.londono@flitsas.com")]    [InlineData("")]    public async Task Solicitar_InSitu_ConCorreoInvalidoOVacio_UsaElCorreoTecnicoConDominioPublicoDeFlit(string correo)    {        var ct = TestContext.Current.CancellationToken;        var host = anfitrion.Factory;        var cliente = await ClienteAsync(host, ct);        var (solicitud, cedula) = Nueva();        var pedido = Pedido(solicitud, "titular", cedula);        pedido.OmitirEnvioCorreo = true;        pedido.Persona.Correo = correo;        var respuesta = await cliente.SolicitarValidacionIdentidadAsync(pedido, cancellationToken: ct);        var fila = await FilaAsync(host, respuesta.ValidacionId, ct);        fila.Email.Should().Be($"validaciones+punto-{solicitud.Replace("-", string.Empty)}@flitsas.com");        fila.Email.Should().NotContain(".local");    }
 
     // ── Soporte ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -318,13 +318,18 @@ public sealed class PersonaNaturalIdentidadGrpcTests(WebApplicationFactory<Progr
         Persona = new PersonaIdentidad { TipoDocumento = "CC", NumeroDocumento = cedula, Nombre = "Persona de Prueba", Correo = "prueba@ejemplo.test", Celular = "3000000000" },
     };
 
-    private WebApplicationFactory<Program> Host() =>
-        OidcServerTests.WithOidc(factory).WithWebHostBuilder(b =>
-        {
-            b.UseSetting("PersonaNatural:Fachada:Habilitada", "true");
-            b.UseSetting($"Suite:Oidc:ServiceClients:{Portal}:Secret", OidcServerTests.ServiceSecret);
-            b.UseSetting($"Suite:Oidc:ServiceClients:{Portal}:Scopes:0", Scope);
-        }).ConEmpresaPersonaNatural();
+    /// <summary>Un host para toda la clase (<see cref="HostPorClase"/>): antes cada prueba arrancaba y destruía el suyo
+    /// (~30 s por prueba en CI). Las pruebas siembran datos con identificadores propios, así que comparten host sin cruzarse.</summary>
+    public sealed class Anfitrion : HostPorClase
+    {
+        protected override WebApplicationFactory<Program> Configurar(WebApplicationFactory<Program> factory) =>
+            OidcServerTests.WithOidc(factory).WithWebHostBuilder(b =>
+            {
+                b.UseSetting("PersonaNatural:Fachada:Habilitada", "true");
+                b.UseSetting($"Suite:Oidc:ServiceClients:{Portal}:Secret", OidcServerTests.ServiceSecret);
+                b.UseSetting($"Suite:Oidc:ServiceClients:{Portal}:Scopes:0", Scope);
+            }).ConEmpresaPersonaNatural();
+    }
 
     private static async Task<Cliente> ClienteAsync(WebApplicationFactory<Program> host, CancellationToken ct, Guid? empresa = null)
     {

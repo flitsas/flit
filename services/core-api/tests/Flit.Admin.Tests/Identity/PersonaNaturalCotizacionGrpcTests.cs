@@ -21,7 +21,7 @@ namespace Flit.Admin.Tests.Identity;
 /// gRPC, de punta a punta con el servidor OIDC real de los tests. Cada prueba arma sus propios organismos, tipos y tarifas
 /// (con códigos únicos) y los retira al terminar; requiere la base con las migraciones aplicadas (DDL 153).
 /// </summary>
-public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
+public sealed class PersonaNaturalCotizacionGrpcTests(PersonaNaturalCotizacionGrpcTests.Anfitrion anfitrion) : IClassFixture<PersonaNaturalCotizacionGrpcTests.Anfitrion>
 {
     private const string Scope = "platform.tramites.persona_natural";
     private const string Portal = "svc-personanatural";
@@ -31,7 +31,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task ListarOrganismos_DevuelveSoloLosHabilitadosParaPersonaNatural()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
 
@@ -45,7 +45,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task ListarOrganismos_NoOfreceUnOrganismoHabilitadoQueDejoDeEstarActivoPorFlit()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
         (await cliente.ListarOrganismosAsync(new ListarOrganismosRequest(), cancellationToken: ct)).Organismos
@@ -61,7 +61,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task ListarTipos_ConOrganismo_SoloOfreceLosElegiblesConTarifaVigente_YSinOrganismoTodosConMotivo()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.TarifaAsync("DERECHOS_TRANSITO", e.TipoElegible, null, 100_000, ct);
         await e.TarifaAsync("SERVICIO_FLIT", e.TipoElegible, null, 50_000, ct);
@@ -84,7 +84,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task Cotizar_DevuelveLasDosLineasYElTotal_ConElSubtituloDelServicioFlit()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.TarifaAsync("DERECHOS_TRANSITO", e.TipoElegible, null, 185_000, ct);
         await e.TarifaAsync("SERVICIO_FLIT", e.TipoElegible, null, 181_000, ct);
@@ -103,7 +103,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task Cotizar_LaExcepcionDelOrganismoMandaSobreElValorGeneral()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.TarifaAsync("DERECHOS_TRANSITO", e.TipoElegible, null, 100_000, ct);
         await e.TarifaAsync("DERECHOS_TRANSITO", e.TipoElegible, e.Organismo, 120_000, ct);
@@ -120,7 +120,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task Cotizar_LasTransformacionesSoloSumanSiElTipoLasPermite_YElEnvioSuma()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         foreach (var tipo in new[] { e.TipoElegible, e.TipoSinTransformaciones })
         {
@@ -145,7 +145,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task Cotizar_DesdeLaLandingYDesdeElPago_DaElMismoTotal()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.TarifaAsync("DERECHOS_TRANSITO", e.TipoElegible, null, 77_000, ct);
         await e.TarifaAsync("SERVICIO_FLIT", e.TipoElegible, null, 33_000, ct);
@@ -162,7 +162,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task Cotizar_SinTarifaVigente_RespondeTarifaNoVigente()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
 
@@ -175,7 +175,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task Cotizar_TipoNoHabilitado_TipoDesconocidoYOrganismoSinGrant_TienenSuPropioError()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.TarifaAsync("DERECHOS_TRANSITO", e.TipoApagado, null, 1, ct);
         await e.TarifaAsync("SERVICIO_FLIT", e.TipoApagado, null, 1, ct);
@@ -193,7 +193,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task Cotizar_ValidaLaEntrada_YElCandadoVaPrimero()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         var bueno = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
         var ajeno = await ClienteAsync(host, Guid.NewGuid(), ct);
 
@@ -207,7 +207,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task ListaBlanca_UnTipoElegibleSinHabilitarNoSeOfreceNiSeCotiza_AunConTarifa_YAlHabilitarloSi()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.TarifaAsync("DERECHOS_TRANSITO", e.TipoSinListaBlanca, null, 10_000, ct);
         await e.TarifaAsync("SERVICIO_FLIT", e.TipoSinListaBlanca, null, 5_000, ct);
@@ -240,13 +240,18 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
 
     private static async Task<RpcException> Error(Func<Task> llamada) => (await llamada.Should().ThrowAsync<RpcException>()).Which;
 
-    private WebApplicationFactory<Program> Host() =>
-        OidcServerTests.WithOidc(factory).WithWebHostBuilder(b =>
-        {
-            b.UseSetting("PersonaNatural:Fachada:Habilitada", "true");
-            b.UseSetting($"Suite:Oidc:ServiceClients:{Portal}:Secret", OidcServerTests.ServiceSecret);
-            b.UseSetting($"Suite:Oidc:ServiceClients:{Portal}:Scopes:0", Scope);
-        }).ConEmpresaPersonaNatural();
+    /// <summary>Un host para toda la clase (<see cref="HostPorClase"/>): antes cada prueba arrancaba y destruía el suyo
+    /// (~30 s por prueba en CI). Las pruebas siembran datos con identificadores propios, así que comparten host sin cruzarse.</summary>
+    public sealed class Anfitrion : HostPorClase
+    {
+        protected override WebApplicationFactory<Program> Configurar(WebApplicationFactory<Program> factory) =>
+            OidcServerTests.WithOidc(factory).WithWebHostBuilder(b =>
+            {
+                b.UseSetting("PersonaNatural:Fachada:Habilitada", "true");
+                b.UseSetting($"Suite:Oidc:ServiceClients:{Portal}:Secret", OidcServerTests.ServiceSecret);
+                b.UseSetting($"Suite:Oidc:ServiceClients:{Portal}:Scopes:0", Scope);
+            }).ConEmpresaPersonaNatural();
+    }
 
     private static async Task<Cliente> ClienteAsync(WebApplicationFactory<Program> host, Guid empresa, CancellationToken ct)
     {
