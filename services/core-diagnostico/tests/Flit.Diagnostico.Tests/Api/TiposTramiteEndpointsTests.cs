@@ -11,9 +11,9 @@ namespace Flit.Diagnostico.Tests.Api;
 /// <summary>
 /// HU #13742 (F01-H2), escenarios 1 a 4 — <c>GET /tipos-tramite</c>: proxy del rpc <c>ListarTiposTramite</c> de Trámites
 /// (cliente gRPC con el token de svc-diagnostico) con el permiso <c>diagnostico.diagnosticos.crear</c>. Filtra por código,
-/// <c>fuentesObligatorias</c> vacía en D1, reintenta 2 veces ante Unavailable/DeadlineExceeded, guarda 5 minutos la última
-/// respuesta correcta y, sin caché vigente, responde 503 con <c>Retry-After: 30</c>. El rpc es el doble
-/// <see cref="Catalogos.CatalogosFalso"/> del arnés: no depende de core-api ni de la base.
+/// reintenta 2 veces ante Unavailable/DeadlineExceeded, guarda 5 minutos código, nombre y familia, y arma
+/// <c>fuentesObligatorias</c> desde Postgres (ADR-0078). Sin copia vigente responde 503 con <c>Retry-After: 30</c>. El rpc
+/// es el doble <see cref="Catalogos.CatalogosFalso"/> del arnés: no depende de core-api. La semilla sí depende de la base.
 /// </summary>
 /// <example>
 /// <code>
@@ -29,7 +29,8 @@ public sealed class TiposTramiteEndpointsTests
     public async Task Devuelve_solo_los_tipos_de_la_etapa_filtrados_por_codigo()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var api = await ApiDePrueba.SinBaseAsync();
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
 
         var respuesta = await api.Cliente(TokenCrear(api)).GetAsync(Ruta, ct);
 
@@ -57,9 +58,28 @@ public sealed class TiposTramiteEndpointsTests
         api.Catalogos.Llamadas.Should().Be(0, "sin permiso no se consulta a Trámites");
     }
 
-    // Escenario 2 — fuentesObligatorias llega vacía hasta D6.
+    // ADR-0078 — con la semilla, el ordinario y la transferencia publican el piso; el unilateral y otra familia, [].
     [Fact]
-    public async Task Cada_tipo_trae_fuentes_obligatorias_vacia()
+    public async Task La_semilla_publica_el_piso_el_vacio_del_unilateral_y_el_vacio_de_otra_familia()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync(configurar: b => b.Configuration["Diagnostico:TiposTramite:Habilitados:3"] = "MATRICULA_INICIAL");
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+
+        var respuesta = await api.Cliente(TokenCrear(api)).GetAsync(Ruta, ct);
+
+        var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
+        var tipos = JsonDocument.Parse(cuerpo).RootElement.GetProperty("tipos").EnumerateArray().ToDictionary(t => t.GetProperty("codigo").GetString()!);
+        Codigos(tipos["TRASPASO_STANDARD"]).Should().Equal("SIMIT_PROPIETARIO");
+        Codigos(tipos["TRASPASO_TRANSFERENCIA_DE_DOMINIO"]).Should().Equal("SIMIT_PROPIETARIO");
+        Codigos(tipos["TRASPASO_UNILATERAL"]).Should().BeEmpty();
+        Codigos(tipos["MATRICULA_INICIAL"]).Should().BeEmpty();
+    }
+
+    // Si Postgres no responde las definiciones, el listado no se disfraza de «sin fila».
+    [Fact]
+    public async Task Base_de_definiciones_caida_no_publica_arreglo_vacio()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var api = await ApiDePrueba.SinBaseAsync();
@@ -67,11 +87,8 @@ public sealed class TiposTramiteEndpointsTests
         var respuesta = await api.Cliente(TokenCrear(api)).GetAsync(Ruta, ct);
 
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
-        respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
-        var tipos = JsonDocument.Parse(cuerpo).RootElement.GetProperty("tipos").EnumerateArray().ToList();
-        tipos.Should().NotBeEmpty();
-        tipos.Should().OnlyContain(t => t.GetProperty("fuentesObligatorias").ValueKind == JsonValueKind.Array
-                                        && t.GetProperty("fuentesObligatorias").GetArrayLength() == 0);
+        respuesta.StatusCode.Should().NotBe(HttpStatusCode.OK, cuerpo);
+        cuerpo.Should().NotContain("fuentesObligatorias");
     }
 
     // Escenario 3 — falla dos veces con Unavailable y responde a la tercera: 200.
@@ -79,7 +96,8 @@ public sealed class TiposTramiteEndpointsTests
     public async Task Dos_fallas_transitorias_y_responde_a_la_tercera_devuelve_200()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var api = await ApiDePrueba.SinBaseAsync();
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         api.Catalogos.FallarLasPrimeras(2, StatusCode.Unavailable);
 
         var respuesta = await api.Cliente(TokenCrear(api)).GetAsync(Ruta, ct);
@@ -95,7 +113,8 @@ public sealed class TiposTramiteEndpointsTests
     public async Task DeadlineExceeded_se_reintenta()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var api = await ApiDePrueba.SinBaseAsync();
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         api.Catalogos.FallarLasPrimeras(1, StatusCode.DeadlineExceeded);
 
         var respuesta = await api.Cliente(TokenCrear(api)).GetAsync(Ruta, ct);
@@ -146,7 +165,8 @@ public sealed class TiposTramiteEndpointsTests
     public async Task Con_cache_vigente_no_llama_al_rpc()
     {
         var ct = TestContext.Current.CancellationToken;
-        await using var api = await ApiDePrueba.SinBaseAsync();
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         using var cliente = api.Cliente(TokenCrear(api));
 
         var primera = await cliente.GetAsync(Ruta, ct);
@@ -160,4 +180,7 @@ public sealed class TiposTramiteEndpointsTests
     }
 
     private static string TokenCrear(ApiDePrueba api) => api.Token(permisos: [Permisos.DiagnosticosCrear]);
+
+    private static IEnumerable<string?> Codigos(JsonElement tipo) =>
+        tipo.GetProperty("fuentesObligatorias").EnumerateArray().Select(e => e.GetString());
 }

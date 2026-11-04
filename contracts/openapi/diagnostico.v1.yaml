@@ -188,7 +188,10 @@ paths:
         publicación. Catálogo global, igual para toda compañía. La última respuesta correcta se guarda 5
         minutos; con esa copia vigente no se llama al rpc. Si el rpc falla con Unavailable o DeadlineExceeded
         se reintenta 2 veces (200 ms y 600 ms, 3 s por llamada); PermissionDenied y Unauthenticated no se
-        reintentan. fuentesObligatorias llega vacía en D1 (R-17, hasta el catálogo de reglas de D6).
+        reintentan. La copia de 5 minutos guarda código, nombre y familia de Trámites, no las fuentes.
+        fuentesObligatorias sale del catálogo global de FLIT (ADR-0078): cabecera del tipo, si no la de su
+        familia, si no []. Cada listado las lee en Postgres, así que un guardado del backoffice se ve en el
+        GET siguiente sin esperar la vigencia. Si esa lectura falla, la respuesta no es un arreglo vacío.
       responses:
         "200":
           description: Tipos de trámite de la etapa.
@@ -1701,6 +1704,90 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorRegla"
 
+  /api/v1/diagnostico/backoffice/fuentes-obligatorias:
+    get:
+      tags: [Backoffice, Catalogos]
+      operationId: listarFuentesObligatoriasBackoffice
+      summary: Catálogo global de fuentes obligatorias por trámite (backoffice FLIT)
+      description: >
+        ADR-0078. Política diagnostico.backoffice (diagnostico.backoffice.ver + tenant_type=FLIT). No pide
+        ?empresa=: el dato es de FLIT, no de una compañía. Mandar ?empresa= no cambia la respuesta y no responde
+        EMPRESA_REQUERIDA. No se registra en lecturas_backoffice. Lista las cabeceras guardadas con sus líneas;
+        una cabecera con fuentes vacías va en el arreglo y una definición que no existe no va (en el alta, eso es
+        heredar). Orden: familias por código, después tipos por código. Dentro de fuentes, el orden del enum
+        Fuente sin RUNT.
+      responses:
+        "200":
+          description: Definiciones guardadas.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListaDefinicionesFuentesObligatorias"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >
+            La política no pasa (sin cuerpo). También SIN_EMPRESA, SIN_USUARIO si el token no trae compañía o
+            usuario, y PRODUCTO_NO_HABILITADO.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+    put:
+      tags: [Backoffice, Catalogos]
+      operationId: guardarFuentesObligatoriasBackoffice
+      summary: Reemplaza las fuentes de una definición (backoffice FLIT)
+      description: >
+        Misma política que el GET, sin permiso distinto y sin ?empresa=. El cuerpo es la lista completa. Si la
+        cabecera no existe, la crea con uuid v7. Si existe, la conserva y reemplaza las líneas. fuentes vacío
+        deja la cabecera (vacío explícito) y no la borra. Una fuente repetida cuenta una vez. La respuesta trae
+        fuentes en el orden del enum Fuente sin RUNT. actualizado_por toma el sub del token. Con un error no se
+        escribe ninguna línea. Orden de validación: forma (CUERPO_INVALIDO, DEFINICION_AMBIGUA) y después
+        negocio (FUENTE_DESCONOCIDA, FUENTE_RUNT_NO_CONFIGURABLE, SIMIT_PROHIBIDO_EN_UNILATERAL,
+        PISO_NO_DISPENSABLE). No hay DELETE.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DefinicionFuentesObligatorias"
+      responses:
+        "200":
+          description: Definición guardada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DefinicionFuentesObligatorias"
+        "400":
+          description: >
+            `code` = CUERPO_INVALIDO si el cuerpo no es un objeto JSON o no trae el arreglo fuentes.
+            `code` = DEFINICION_AMBIGUA (`campo` = familia) si vienen familia y tipo, no viene ninguno, o el
+            texto no cumple ^[A-Z][A-Z0-9_]{0,63}$.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >
+            La política no pasa (sin cuerpo). SIN_USUARIO si el sub no es un uuid, ya con el cuerpo aceptado y
+            antes de escribir. También SIN_EMPRESA y PRODUCTO_NO_HABILITADO.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "422":
+          description: >
+            `campo` = fuentes. `code` = FUENTE_DESCONOCIDA (no está en el enum), FUENTE_RUNT_NO_CONFIGURABLE
+            (el arreglo incluye RUNT), SIMIT_PROHIBIDO_EN_UNILATERAL (TRASPASO_UNILATERAL incluye un SIMIT_*)
+            o PISO_NO_DISPENSABLE (falta SIMIT_PROPIETARIO en la familia TRASPASO, en TRASPASO_STANDARD o en
+            TRASPASO_TRANSFERENCIA_DE_DOMINIO). VALOR_INVALIDO si un CHECK de la base se escapa (SQLSTATE 23514).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
   /api/v1/diagnostico/backoffice/empresas:
     get:
       tags: [Backoffice, Configuracion]
@@ -2652,6 +2739,44 @@ components:
       type: string
       enum: [RUNT, RUNT_PROPIETARIO, RUNT_LOCATARIO, SIMIT_VEHICULO, SIMIT_PROPIETARIO, SIMIT_LOCATARIO, AVALUO, IMPUESTO_DEPARTAMENTAL]
 
+    FuenteConfigurable:
+      type: string
+      description: Valor del enum Fuente salvo RUNT, que no se configura en el catálogo de fuentes obligatorias.
+      enum: [RUNT_PROPIETARIO, RUNT_LOCATARIO, SIMIT_VEHICULO, SIMIT_PROPIETARIO, SIMIT_LOCATARIO, AVALUO, IMPUESTO_DEPARTAMENTAL]
+
+    DefinicionFuentesObligatorias:
+      type: object
+      required: [familia, tipo_tramite_codigo, fuentes]
+      description: >
+        Una definición del catálogo global. familia y tipo_tramite_codigo son excluyentes; la que no aplica es null.
+        fuentes vacío con la definición presente es la lista vacía explícita.
+      properties:
+        familia:
+          type: string
+          nullable: true
+          example: TRASPASO
+        tipo_tramite_codigo:
+          type: string
+          nullable: true
+          example: TRASPASO_STANDARD
+        fuentes:
+          type: array
+          items:
+            $ref: "#/components/schemas/FuenteConfigurable"
+      example:
+        familia: null
+        tipo_tramite_codigo: TRASPASO_STANDARD
+        fuentes: [SIMIT_PROPIETARIO]
+
+    ListaDefinicionesFuentesObligatorias:
+      type: object
+      required: [definiciones]
+      properties:
+        definiciones:
+          type: array
+          items:
+            $ref: "#/components/schemas/DefinicionFuentesObligatorias"
+
     VisibilidadUsuario:
       type: string
       enum: [PROPIOS, EMPRESA]
@@ -2863,9 +2988,13 @@ components:
           example: TRASPASO
         fuentesObligatorias:
           type: array
-          description: Fuentes que el tipo exige en el alcance (códigos RUNT, SIMIT_VEHICULO...). Vacía en D1.
+          description: >
+            Fuentes que el tipo exige en el alcance. Sale del catálogo global de FLIT (ADR-0078): la cabecera del
+            tipo, aunque no tenga líneas; si no hay cabecera de tipo, la de su familia; si tampoco, vacío. No llega
+            vacío por defecto. Con la semilla, TRASPASO_STANDARD y TRASPASO_TRANSFERENCIA_DE_DOMINIO incluyen
+            SIMIT_PROPIETARIO, y TRASPASO_UNILATERAL queda vacío. RUNT no forma parte de esta lista.
           items:
-            type: string
+            $ref: "#/components/schemas/FuenteConfigurable"
 
     ModoDiagnostico:
       type: string

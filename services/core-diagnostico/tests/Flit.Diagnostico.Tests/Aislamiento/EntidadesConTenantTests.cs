@@ -71,12 +71,13 @@ public sealed class EntidadesConTenantTests
 
     /// <summary>
     /// Catálogos globales de FLIT sin <c>tenant_id</c> (plan §5, excepción por tabla de ADR-0072): la réplica de
-    /// organismos, la caché de departamentos con impuesto (HU #13723) y las reglas de dictamen (corte 4, ADR-0077).
-    /// Lista cerrada: sumar uno exige su excepción en el ADR.
+    /// organismos, la caché de departamentos con impuesto (HU #13723), las reglas de dictamen (corte 4, ADR-0077) y
+    /// las definiciones de fuentes obligatorias (corte 8, ADR-0078). Lista cerrada: sumar uno exige su excepción en el ADR.
     /// </summary>
     internal static readonly IReadOnlySet<Type> CatalogosGlobales = new HashSet<Type>
     {
         typeof(Organismo), typeof(DepartamentoImpuesto), typeof(ReglaDictamen),
+        typeof(DefinicionFuentesObligatorias), typeof(FuenteDefinicionObligatoria),
     };
 
     private sealed class Huerfana

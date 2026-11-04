@@ -44,13 +44,13 @@ public sealed class CrearDiagnosticoTests
         var empresas = DosEmpresas.En(api);
         await SembrarAsync(empresas.A, new ConfiguracionEmpresa
         {
-            FuentesHabilitadas = [Fuente.Runt, Fuente.SimitVehiculo, Fuente.RuntPropietario],
+            FuentesHabilitadas = [Fuente.Runt, Fuente.SimitVehiculo, Fuente.RuntPropietario, Fuente.SimitPropietario],
             FuentesPorDefecto = [Fuente.Runt],
             LimiteVehiculosLote = 300,
         }, ct);
 
         var respuesta = await api.Cliente(Cabeceras.TokenUsuario(api, empresas.A.Id)).PostAsync(Cabeceras.Ruta,
-            Cuerpo(Cabeceras.Json("  Flota norte  ", "CON_ANALISIS", "TRASPASO_STANDARD", ["RUNT", "SIMIT_VEHICULO"], ["RUNT_PROPIETARIO"])), ct);
+            Cuerpo(Cabeceras.Json("  Flota norte  ", "CON_ANALISIS", "TRASPASO_STANDARD", ["RUNT", "SIMIT_VEHICULO"], ["RUNT_PROPIETARIO", "SIMIT_PROPIETARIO"])), ct);
 
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.Created, cuerpo);
@@ -61,7 +61,7 @@ public sealed class CrearDiagnosticoTests
         json.GetProperty("modo").GetString().Should().Be("CON_ANALISIS");
         json.GetProperty("tipo_tramite_codigo").GetString().Should().Be("TRASPASO_STANDARD");
         Codigos(json.GetProperty("alcance").GetProperty("por_vehiculo")).Should().Equal("RUNT", "SIMIT_VEHICULO");
-        Codigos(json.GetProperty("alcance").GetProperty("por_propietario")).Should().Equal("RUNT_PROPIETARIO");
+        Codigos(json.GetProperty("alcance").GetProperty("por_propietario")).Should().Equal("RUNT_PROPIETARIO", "SIMIT_PROPIETARIO");
         Codigos(json.GetProperty("alcance").GetProperty("por_locatario")).Should().BeEmpty();
         json.GetProperty("configuracion").GetProperty("limite_vehiculos_lote").GetInt32().Should().Be(300);
         cuerpo.Should().NotContainEquivalentOf("redaccion");
@@ -69,11 +69,11 @@ public sealed class CrearDiagnosticoTests
         var cabecera = await Cabeceras.LeerAsync(api, empresas.A.Id, id, ct);
         cabecera.Estado.Should().Be(EstadoDiagnostico.Creado);
         cabecera.TenantId.Should().Be(empresas.A.Id);
-        cabecera.Alcance.Should().Equal(Fuente.Runt, Fuente.SimitVehiculo, Fuente.RuntPropietario);
+        cabecera.Alcance.Should().Equal(Fuente.Runt, Fuente.SimitVehiculo, Fuente.RuntPropietario, Fuente.SimitPropietario);
         cabecera.EstimadoConsultas.Should().BeNull("el estimado se guarda al confirmar los vehículos (F02-H5)");
         cabecera.UsuarioCreadorId.Should().NotBeEmpty();
         JsonDocument.Parse(cabecera.Configuracion).RootElement.GetProperty("fuentes_habilitadas").EnumerateArray()
-            .Select(e => e.GetString()).Should().Equal("RUNT", "SIMIT_VEHICULO", "RUNT_PROPIETARIO");
+            .Select(e => e.GetString()).Should().Equal("RUNT", "SIMIT_VEHICULO", "RUNT_PROPIETARIO", "SIMIT_PROPIETARIO");
 
         await using var db = DosEmpresas.Contexto(api.BaseDeDatos, empresas.A.Id);
         var historial = await db.Set<HistorialEstadoDiagnostico>().AsNoTracking().Where(h => h.DiagnosticoId == id).ToListAsync(ct);
@@ -204,6 +204,30 @@ public sealed class CrearDiagnosticoTests
         (await Codigo(sin, ct)).Should().Be(ValidadorCabecera.CodigoFuentesObligatoriasFaltantes);
         con.StatusCode.Should().Be(HttpStatusCode.Created, await con.Content.ReadAsStringAsync(ct));
         (await Cabeceras.ContarAsync(api, empresas.A.Id, ct)).Should().Be(1);
+    }
+
+    // ADR-0078 — el catálogo real (semilla) exige SIMIT_PROPIETARIO en el Con Análisis IA ordinario. Simple no mira esa lista.
+    // El doble inyectado de arriba no se reescribe: este caso pasa por ICatalogoTiposTramite del arnés.
+    [Fact]
+    public async Task Con_analisis_ordinario_sin_el_piso_responde_422_y_simple_no_mira_la_lista()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresas = DosEmpresas.En(api);
+        await SembrarAsync(empresas.A, new ConfiguracionEmpresa { FuentesHabilitadas = [Fuente.Runt] }, ct);
+        using var cliente = api.Cliente(Cabeceras.TokenUsuario(api, empresas.A.Id));
+
+        var sin = await cliente.PostAsync(Cabeceras.Ruta, Cuerpo(Cabeceras.Json("Lote", "CON_ANALISIS", "TRASPASO_STANDARD", ["RUNT"])), ct);
+        var simple = await cliente.PostAsync(Cabeceras.Ruta, Cuerpo(Cabeceras.Json("Lote simple", "SIMPLE", null, ["RUNT"])), ct);
+
+        var texto = await sin.Content.ReadAsStringAsync(ct);
+        sin.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, texto);
+        var json = JsonDocument.Parse(texto).RootElement;
+        json.GetProperty("code").GetString().Should().Be(ValidadorCabecera.CodigoFuentesObligatoriasFaltantes);
+        json.GetProperty("campo").GetString().Should().Be(ValidadorCabecera.CampoAlcance);
+        simple.StatusCode.Should().Be(HttpStatusCode.Created, await simple.Content.ReadAsStringAsync(ct));
+        (await Cabeceras.ContarAsync(api, empresas.A.Id, ct)).Should().Be(1, "solo se guardó la Simple");
     }
 
     // Escenario 9 (F01-C12, R-6) — el backoffice FLIT no tiene diagnostico.diagnosticos.crear: 403.

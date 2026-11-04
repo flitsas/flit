@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useEffectEvent, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Settings, ShieldCheck } from "lucide-react";
+import { ListChecks, Settings, ShieldCheck } from "lucide-react";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { SuiteShell, type NavCatalog, type ShellUser } from "@flit/shell/SuiteShell";
@@ -46,14 +46,16 @@ const NAV: NavCatalog = {
 };
 
 /**
- * Dock con la entrada «Backoffice» (HU #13802, F06-C7): solo con la capacidad `backoffice` de GET /sesion, que además del
+ * Dock del backoffice FLIT (HU #13802, F06-C7 y ADR-0078): solo con la capacidad `backoffice` de GET /sesion, que además del
  * permiso diagnostico.backoffice.ver exige ser de la compañía FLIT (el permiso del token solo no basta). El admin de una
- * compañía nunca la ve; la ruta, además, lo lleva a la 403 (AccesoBackoffice).
+ * compañía nunca la ve; la ruta, además, lo lleva a la 403 (AccesoBackoffice). «Fuentes obligatorias» vive solo aquí: `NAV`
+ * de la compañía no la lleva.
  */
 const NAV_BACKOFFICE: NavCatalog = {
   sections: [{ id: "backoffice", label: "Backoffice", icon: ShieldCheck, side: "left" }, ...NAV.sections],
   items: [
     { key: "backoffice-diagnosticos", label: "Backoffice", href: "/backoffice/diagnosticos", section: "backoffice", icon: ShieldCheck },
+    { key: "backoffice-fuentes-obligatorias", label: "Fuentes obligatorias", href: "/backoffice/fuentes-obligatorias", section: "backoffice", icon: ListChecks },
     ...NAV.items,
   ],
 };

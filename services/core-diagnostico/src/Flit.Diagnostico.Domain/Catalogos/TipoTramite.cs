@@ -5,7 +5,8 @@ namespace Flit.Diagnostico.Domain.Catalogos;
 /// <summary>
 /// Tipo de trámite publicado en Trámites que Diagnóstico ofrece en el modo Con Análisis IA (HU #13742). El
 /// <see cref="Codigo"/> es la llave estable (por ejemplo <c>TRASPASO_STANDARD</c>); el nombre solo se muestra.
-/// <see cref="FuentesObligatorias"/> llega vacía en D1 (R-17: el catálogo de reglas es de D6).
+/// <see cref="FuentesObligatorias"/> sale del catálogo global de FLIT (ADR-0078): la cabecera del tipo, si no la de su
+/// familia, si no un arreglo vacío. Vacío es una cabecera sin líneas, no la ausencia de catálogo.
 /// </summary>
 public sealed record TipoTramite(string Codigo, string Nombre, string Familia, IReadOnlyList<Fuente> FuentesObligatorias);
 

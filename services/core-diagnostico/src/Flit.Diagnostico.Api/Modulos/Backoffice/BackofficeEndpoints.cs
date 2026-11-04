@@ -19,7 +19,9 @@ namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 /// (<see cref="DiagnosticosBackofficeEndpoints"/>, HU #13799) y el llenado manual de una celda en ERROR
 /// (<see cref="LlenadoManualEndpoints"/>, HU #13800), el dictamen vigente y su reemplazo
 /// (<see cref="OverrideDictamenEndpoints"/>, corte 7) y la lista de empresas con Diagnóstico para el editor de contrato
-/// (<c>GET /backoffice/empresas</c>, <see cref="EmpresasBackofficeEndpoints"/>, HU #13741), la única sin empresa explícita.
+/// (<c>GET /backoffice/empresas</c>, <see cref="EmpresasBackofficeEndpoints"/>, HU #13741) y el catálogo global de
+/// fuentes obligatorias (<c>GET/PUT /backoffice/fuentes-obligatorias</c>, <see cref="FuentesObligatoriasBackofficeEndpoints"/>,
+/// ADR-0078). Esas dos no piden empresa explícita.
 /// </summary>
 public static class BackofficeEndpoints
 {
@@ -39,6 +41,10 @@ public static class BackofficeEndpoints
         // HU #13741 (escenario 15): la lista de empresas de la plataforma no lee datos de ninguna compañía, así que no pide
         // empresa explícita ni se audita como lectura entre compañías; la política del backoffice sí aplica.
         EmpresasBackofficeEndpoints.Map(api.MapGroup(Grupo).RequireAuthorization(PoliticaBackoffice.Nombre));
+
+        // ADR-0078: el catálogo de fuentes obligatorias es de FLIT, igual que la lista de empresas. La política aplica;
+        // no pide ?empresa=, no audita lecturas_backoffice y no abre AutorizarEscrituraDe.
+        FuentesObligatoriasBackofficeEndpoints.Map(api.MapGroup(Grupo).RequireAuthorization(PoliticaBackoffice.Nombre));
 
         api.MapGroup(Grupo).RequireAuthorization(PoliticaBackoffice.Nombre).MapFallback(() => Results.NotFound());
     }

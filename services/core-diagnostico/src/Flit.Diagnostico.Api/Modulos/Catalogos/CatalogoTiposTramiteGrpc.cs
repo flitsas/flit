@@ -1,5 +1,8 @@
+using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Domain.Catalogos;
+using Flit.Diagnostico.Domain.Consultas;
 using Grpc.Core;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using CatalogosService = Flit.Tramites.Grpc.V1.CatalogosService;
 using ListarTiposTramiteRequest = Flit.Tramites.Grpc.V1.ListarTiposTramiteRequest;
@@ -10,8 +13,10 @@ namespace Flit.Diagnostico.Api.Modulos.Catalogos;
 /// Catálogo de tipos de trámite por el gRPC de catálogos de core-api (<c>flit.tramites.v1.CatalogosService</c>, rpc
 /// <c>ListarTiposTramite</c>, HU #13731), con el token de servicio de svc-diagnostico (<c>aud=tramites</c>, scope
 /// <c>platform.tramites.catalogos</c>), como Comparendos con los organismos (HU #13742). Filtra por código con la lista
-/// blanca <see cref="ClaveHabilitados"/> y guarda <see cref="Vigencia"/> la última respuesta correcta: con copia vigente
-/// no llama al rpc. Unavailable o DeadlineExceeded se reintentan 2 veces (200 ms y 600 ms, 3 s por llamada); si sigue
+/// blanca <see cref="ClaveHabilitados"/> y guarda durante <see cref="Vigencia"/> el código, el nombre y la familia: con copia vigente no
+/// llama al rpc. <see cref="TipoTramite.FuentesObligatorias"/> no entra en esa copia; cada listado la arma leyendo
+/// Postgres (<see cref="ResolucionFuentesObligatorias"/>). Si esa lectura falla, la excepción sube: no se publica
+/// <c>[]</c> en su lugar. Unavailable o DeadlineExceeded se reintentan 2 veces (200 ms y 600 ms, 3 s por llamada); si sigue
 /// fallando, o ante cualquier otro error, lanza <see cref="CatalogoTiposTramiteNoDisponibleException"/> (sin lista fija ni
 /// copia vencida). PermissionDenied y Unauthenticated no se reintentan y se registran como error de configuración.
 /// </summary>
@@ -20,6 +25,7 @@ public sealed partial class CatalogoTiposTramiteGrpc(
     IMemoryCache cache,
     IConfiguration configuration,
     TimeProvider reloj,
+    DiagnosticoDb db,
     ILogger<CatalogoTiposTramiteGrpc> logger) : ICatalogoTiposTramite
 {
     public const string ClaveHabilitados = "Diagnostico:TiposTramite:Habilitados";
@@ -34,14 +40,39 @@ public sealed partial class CatalogoTiposTramiteGrpc(
 
     public async Task<IReadOnlyList<TipoTramite>> ListarAsync(CancellationToken ct)
     {
-        if (cache.TryGetValue(ClaveCache, out IReadOnlyList<TipoTramite>? vigentes) && vigentes is not null)
-            return vigentes;
+        if (!cache.TryGetValue(ClaveCache, out IReadOnlyList<TipoPublicado>? vigentes) || vigentes is null)
+        {
+            var publicados = await ListarPublicadosAsync(ct).ConfigureAwait(false);
+            var habilitados = FiltroTiposTramite.Habilitados(publicados, configuration.GetSection(ClaveHabilitados).Get<string[]>() ?? []);
+            vigentes = [.. habilitados.Select(t => new TipoPublicado(t.Codigo, t.Nombre, t.Familia))];
+            cache.Set(ClaveCache, vigentes, Vigencia);
+        }
 
-        var publicados = await ListarPublicadosAsync(ct).ConfigureAwait(false);
-        var habilitados = FiltroTiposTramite.Habilitados(publicados, configuration.GetSection(ClaveHabilitados).Get<string[]>() ?? []);
-        cache.Set(ClaveCache, habilitados, Vigencia);
-        return habilitados;
+        var definiciones = await LeerDefinicionesAsync(ct).ConfigureAwait(false);
+        return [.. vigentes.Select(t => new TipoTramite(
+            t.Codigo,
+            t.Nombre,
+            t.Familia,
+            ResolucionFuentesObligatorias.Resolver(t.Codigo, t.Familia.Length == 0 ? null : t.Familia, definiciones)))];
     }
+
+    /// <summary>
+    /// Cabeceras y líneas del catálogo global. No usa <c>IgnoreQueryFilters</c>: estas entidades no tienen filtro de
+    /// empresa. Un error de Postgres se propaga; no es lo mismo que no haber cabecera.
+    /// </summary>
+    private async Task<IReadOnlyList<DefinicionDeFuentes>> LeerDefinicionesAsync(CancellationToken ct)
+    {
+        var cabeceras = await db.Set<DefinicionFuentesObligatorias>().AsNoTracking().ToListAsync(ct).ConfigureAwait(false);
+        var lineas = await db.Set<FuenteDefinicionObligatoria>().AsNoTracking().ToListAsync(ct).ConfigureAwait(false);
+        var porId = lineas.GroupBy(l => l.DefinicionId).ToDictionary(
+            g => g.Key,
+            g => (IReadOnlyList<Fuente>)[.. g.Select(l => l.Fuente).OrderBy(f => f)]);
+        return [.. cabeceras.Select(c => new DefinicionDeFuentes(
+            c.Familia, c.TipoTramiteCodigo, porId.GetValueOrDefault(c.Id) ?? []))];
+    }
+
+    /// <summary>Copia de Trámites en <see cref="ClaveCache"/>. Sin fuentes: esas se leen en cada listado.</summary>
+    private sealed record TipoPublicado(string Codigo, string Nombre, string Familia);
 
     private async Task<IReadOnlyList<TipoTramite>> ListarPublicadosAsync(CancellationToken ct)
     {

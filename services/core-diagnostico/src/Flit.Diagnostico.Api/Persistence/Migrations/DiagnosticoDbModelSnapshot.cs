@@ -81,6 +81,88 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Catalogos.DefinicionFuentesObligatorias", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasComment("UUID v5 en la semilla y UUID v7 si el PUT crea la cabecera. Sin DEFAULT uuidv7().");
+
+                    b.Property<DateTimeOffset>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en")
+                        .HasComment("Instante del último guardado (timestamptz). En la semilla, 2026-11-04T00:00:00Z.");
+
+                    b.Property<Guid?>("ActualizadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actualizado_por")
+                        .HasComment("@pii:low Seudónimo uuid del claim sub de quien guardó la definición; sin nombre, correo ni documento. NULL en la semilla.");
+
+                    b.Property<string>("Familia")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("familia")
+                        .HasComment("Familia del trámite. Nula si la definición es de un tipo.");
+
+                    b.Property<string>("TipoTramiteCodigo")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("tipo_tramite_codigo")
+                        .HasComment("Código del tipo de trámite. Nulo si la definición es de una familia.");
+
+                    b.Property<uint>("Xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_definiciones_fuentes_obligatorias");
+
+                    b.HasIndex("Familia")
+                        .IsUnique()
+                        .HasDatabaseName("ux_definicion_familia")
+                        .HasFilter("familia IS NOT NULL");
+
+                    b.HasIndex("TipoTramiteCodigo")
+                        .IsUnique()
+                        .HasDatabaseName("ux_definicion_tipo")
+                        .HasFilter("tipo_tramite_codigo IS NOT NULL");
+
+                    b.ToTable("definiciones_fuentes_obligatorias", "diagnostico", t =>
+                        {
+                            t.HasComment("Catálogo global de definiciones de fuentes obligatorias de FLIT (ADR-0078). Sin tenant_id: excepción de catálogo de ADR-0072. La cabecera existe o no existe; cero líneas es la lista vacía explícita.");
+
+                            t.HasCheckConstraint("ck_definicion_un_alcance", "(familia IS NOT NULL AND tipo_tramite_codigo IS NULL AND familia ~ '^[A-Z][A-Z0-9_]{0,63}$') OR (familia IS NULL AND tipo_tramite_codigo IS NOT NULL AND tipo_tramite_codigo ~ '^[A-Z][A-Z0-9_]{0,63}$')");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("adb98fbb-4f43-5e77-8735-135635b678ca"),
+                            ActualizadoEn = new DateTimeOffset(new DateTime(2026, 11, 4, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            Familia = "TRASPASO"
+                        },
+                        new
+                        {
+                            Id = new Guid("1e9d3f5a-5fcb-57f8-8c24-302e5d8c5de7"),
+                            ActualizadoEn = new DateTimeOffset(new DateTime(2026, 11, 4, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            TipoTramiteCodigo = "TRASPASO_STANDARD"
+                        },
+                        new
+                        {
+                            Id = new Guid("5ecf004e-e332-5ba7-9523-51014ec4cf3c"),
+                            ActualizadoEn = new DateTimeOffset(new DateTime(2026, 11, 4, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            TipoTramiteCodigo = "TRASPASO_TRANSFERENCIA_DE_DOMINIO"
+                        },
+                        new
+                        {
+                            Id = new Guid("caaaba1c-e41d-5981-b2b5-b140b0983789"),
+                            ActualizadoEn = new DateTimeOffset(new DateTime(2026, 11, 4, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            TipoTramiteCodigo = "TRASPASO_UNILATERAL"
+                        });
+                });
+
             modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Catalogos.DepartamentoImpuesto", b =>
                 {
                     b.Property<string>("DepartamentoCodigo")
@@ -105,6 +187,47 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                     b.ToTable("departamentos_impuesto", "diagnostico", t =>
                         {
                             t.HasComment("Departamentos con impuesto vehicular soportado por core-consultas (R-9, HU #13723). Sin tenant.");
+                        });
+                });
+
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Catalogos.FuenteDefinicionObligatoria", b =>
+                {
+                    b.Property<Guid>("DefinicionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("definicion_id")
+                        .HasComment("Cabecera dueña de la línea.");
+
+                    b.Property<string>("Fuente")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("fuente")
+                        .HasComment("Fuente configurable (enum Fuente menos RUNT).");
+
+                    b.HasKey("DefinicionId", "Fuente")
+                        .HasName("pk_fuentes_definicion_obligatoria");
+
+                    b.ToTable("fuentes_definicion_obligatoria", "diagnostico", t =>
+                        {
+                            t.HasComment("Fuentes de una definición obligatoria (ADR-0078). Sin tenant_id: excepción de catálogo de ADR-0072. Cero filas de una cabecera es la lista vacía explícita. RUNT no se guarda.");
+
+                            t.HasCheckConstraint("ck_fuentes_definicion_obligatoria_fuente", "fuente IN ('RUNT_PROPIETARIO', 'RUNT_LOCATARIO', 'SIMIT_VEHICULO', 'SIMIT_PROPIETARIO', 'SIMIT_LOCATARIO', 'AVALUO', 'IMPUESTO_DEPARTAMENTAL')");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            DefinicionId = new Guid("adb98fbb-4f43-5e77-8735-135635b678ca"),
+                            Fuente = "SIMIT_PROPIETARIO"
+                        },
+                        new
+                        {
+                            DefinicionId = new Guid("1e9d3f5a-5fcb-57f8-8c24-302e5d8c5de7"),
+                            Fuente = "SIMIT_PROPIETARIO"
+                        },
+                        new
+                        {
+                            DefinicionId = new Guid("5ecf004e-e332-5ba7-9523-51014ec4cf3c"),
+                            Fuente = "SIMIT_PROPIETARIO"
                         });
                 });
 
@@ -2054,6 +2177,16 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         {
                             t.HasComment("Llaves de ASP.NET Data Protection del servicio (HU #13735). Sin tenant.");
                         });
+                });
+
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Catalogos.FuenteDefinicionObligatoria", b =>
+                {
+                    b.HasOne("Flit.Diagnostico.Api.Modulos.Catalogos.DefinicionFuentesObligatorias", null)
+                        .WithMany()
+                        .HasForeignKey("DefinicionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_fuentes_definicion_obligatoria_definicion");
                 });
 
             modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Configuracion.CambioContrato", b =>
