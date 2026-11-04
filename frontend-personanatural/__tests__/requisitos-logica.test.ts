@@ -74,9 +74,10 @@ describe("tarjetas que aplican al tipo", () => {
     expect(ninguna).toMatchObject({ comercial: false, prenda: false, documentos: false, transformaciones: false, observaciones: true });
   });
 
-  it("la prenda complementaria se pregunta; sin la sección no hay tarjeta aunque el flag esté activo", () => {
+  it("la prenda complementaria se pregunta, con o sin la sección prenda_decision (como en FLIT 2, traspaso)", () => {
     expect(tarjetasDeRequisitos(definicionDe(SECCIONES, { flags: flags({ permitePrendaComplementaria: true }) }))).toMatchObject({ prenda: true, prendaObligatoria: false });
-    expect(tarjetasDeRequisitos(definicionDe([["document_checklist"]], { flags: flags({ permitePrendaComplementaria: true }) })).prenda).toBe(false);
+    expect(tarjetasDeRequisitos(definicionDe([["document_checklist"]], { flags: flags({ permitePrendaComplementaria: true }) }))).toMatchObject({ prenda: true, prendaObligatoria: false });
+    expect(tarjetasDeRequisitos(definicionDe([["document_checklist"]], { flags: flags() })).prenda).toBe(false);
   });
 
   it("un tipo que exige prenda (levantar/registrar) muestra la tarjeta aunque falte la sección prenda_decision", () => {

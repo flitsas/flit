@@ -60,12 +60,11 @@ export function documentosDeLaMatriz(matriz: MatrizRequisitosPunto): DocumentoRe
   return documentos;
 }
 
-/** La definición real del tipo (flags, campos, secciones) con los documentos de la matriz del punto y sin transformaciones (no hay cotización). */
+/** La definición real del tipo (flags, campos, secciones) con los documentos de la matriz del punto (las transformaciones se cotizan en el envío). */
 function definicionDelPunto(definicion: DefinicionTipo, matriz: MatrizRequisitosPunto): DefinicionTipo {
   return {
     ...definicion,
     documentos: documentosDeLaMatriz(matriz),
-    flags: { ...definicion.flags, permiteTransformaciones: false },
   };
 }
 
@@ -168,7 +167,11 @@ export function RequisitosPunto({ cliente, solicitudId, tipoCodigo, placa, onAtr
     if (gate && !gate.puedeContinuarPago) pendientesRef.current?.focus({ preventScroll: false });
   }, [gate]);
 
-  const onEstado = useCallback((e: EstadoSeccion) => setEstado(e), []);
+  const estadoRef = useRef<EstadoSeccion>({ completo: false });
+  const onEstado = useCallback((e: EstadoSeccion) => {
+    estadoRef.current = e;
+    setEstado(e);
+  }, []);
 
   const api = useMemo<ApiWizard | null>(() => {
     if (!cargado || !solicitud) return null;
@@ -193,6 +196,11 @@ export function RequisitosPunto({ cliente, solicitudId, tipoCodigo, placa, onAtr
     try {
       // Guarda lo pendiente (valor de venta, prenda…). Un 422 ya queda marcado bajo su campo: el gate de abajo dice qué falta.
       await guardarPendientes();
+      // El RUNT reporta prenda y falta decidir: no se pasa a Pago (FLIT 2 exige la decisión).
+      if (estadoRef.current.prendaSinDecidir) {
+        onAviso("Falta la decisión de prenda", "El RUNT reporta prenda o gravamen: elige qué se hará con ella para continuar.", "alerta");
+        return;
+      }
       const resultado = await cliente.punto.requisitosCompletitud({ tipoCodigo });
       setGateGuardado({ resultado, base: vigente() });
       if (resultado.puedeContinuarPago) onContinuarPago();

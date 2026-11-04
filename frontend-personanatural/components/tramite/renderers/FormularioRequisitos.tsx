@@ -98,11 +98,14 @@ function PasoRequisitos({ seccion, activa, intentoAvance, onEstado }: PropsSecci
   const [nitEscrito, setNitEscrito] = useState<string | null>(() => solicitud.datos.prenda?.nitAcreedor?.trim() || null);
   const [entidadLevantamiento, setEntidadLevantamiento] = useState(() => solicitud.datos.prenda?.entidadLevantamiento ?? "");
   const verPrenda = t.prenda && (t.prendaObligatoria || tienePrenda);
+  // Con gravamen en el RUNT la decisión de prenda es obligatoria y no se preselecciona (FLIT 2: ExigeDecisionDePrenda). `null` = aún no eligió.
+  const [elegida, setElegida] = useState(() => solicitud.datos.prenda?.decision != null);
+  const [accionElegida, setAccionElegida] = useState(() => solicitud.datos.prenda?.decision === "registrar" || solicitud.datos.prenda?.decision === "levantar");
   const gravamen = useQuery<GravamenRunt>({
     queryKey: ["pn", "gravamen", idSolicitud],
     queryFn: ({ signal }) => cliente.solicitudes.gravamen(idSolicitud, { signal }),
     // El Cascarón monta todos los pasos: solo se consulta con el paso activo (antes el BFF aún no tiene el documento del propietario y respondería 409).
-    enabled: verPrenda && activa,
+    enabled: t.prenda && activa,
     staleTime: 5 * 60 * 1000,
     retry: false,
   });
@@ -110,19 +113,23 @@ function PasoRequisitos({ seccion, activa, intentoAvance, onEstado }: PropsSecci
   const refetchGravamen = gravamen.refetch;
   const gravamenConError = gravamen.isError;
   useEffect(() => {
-    if (activa && verPrenda && gravamenConError) void refetchGravamen();
+    if (activa && t.prenda && gravamenConError) void refetchGravamen();
     // Solo al pasar a activo: un error que ocurre con el paso ya activo no debe entrar en bucle.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activa]);
   const acreedorRunt = gravamen.data?.acreedor?.trim() ?? "";
   const nitRunt = (gravamen.data?.nitAcreedor ?? "").replace(/\D/g, "");
-  // Como en FLIT 2: al levantar una prenda que el RUNT confirmó con sus datos, el acreedor y el NIT son de solo lectura.
-  const levantando = (accionFija ?? accionPrenda) === "levantar";
+  // Como en FLIT 2: solo con acción fija de levantar el acreedor y el NIT del RUNT son de solo lectura; si la persona elige la decisión, puede corregirlos.
+  const levantando = accionFija === "levantar";
   const acreedorBloqueado = levantando && acreedorRunt !== "";
   const nitBloqueado = levantando && nitRunt !== "";
   const acreedor = acreedorBloqueado ? acreedorRunt : (acreedorEscrito ?? acreedorRunt);
   const nitAcreedor = nitBloqueado ? nitRunt : (nitEscrito ?? nitRunt);
   const runtReportaPrenda = Boolean(gravamen.data?.tienePrenda || gravamen.data?.tieneGravamenes);
+  // Si la consulta falla no se inventa el gravamen: sin dato del RUNT no se exige la decisión.
+  const gravamenExige = t.prenda && !t.prendaObligatoria && runtReportaPrenda;
+  const sinAccion = gravamenExige && tienePrenda && accionFija === null && !accionElegida;
+  const sinDecidir = gravamenExige && (!elegida || sinAccion);
   const fechaInscripcion = formatearFecha(gravamen.data?.fechaInscripcion);
   const [transformaciones, setTransformaciones] = useState<string[]>(() => solicitud.datos.requisitos?.transformaciones ?? []);
   const cotizacion = useQuery<Cotizacion>({
@@ -160,15 +167,16 @@ function PasoRequisitos({ seccion, activa, intentoAvance, onEstado }: PropsSecci
   const errores = {
     ...erroresDeRequisitos(definicion, solicitud.adjuntos, entrada),
     ...(destinoDelPunto && faltaDestino(definicionBase, solicitud.fieldValues) ? { [`declaracion.${destinoDelPunto.clave}`]: MENSAJE_OBLIGATORIO } : {}),
+    ...(sinDecidir ? ({ "prenda.decision": "Elige qué se hará con la prenda que reporta el RUNT" } as Record<string, string>) : {}),
     ...(t.prenda ? errorDeDocumentoDePrenda(definicionBase, solicitud.adjuntos, decisionPrenda) : {}),
     ...(t.declaraciones ? erroresDeDeclaraciones(definicionBase, solicitud.adjuntos, campos, transformaciones, valoresRunt.data) : {}),
   };
   const subiendo = Object.values(subidas).some((s) => s.estado === "cargando");
   const completo = Object.keys(errores).length === 0 && !subiendo;
-  const motivo = completo ? undefined : subiendo ? "Espera a que termine la carga del archivo." : MOTIVO_REQUISITOS;
+  const motivo = completo ? undefined : subiendo ? "Espera a que termine la carga del archivo." : sinDecidir ? "Elige qué se hará con la prenda que reporta el RUNT." : MOTIVO_REQUISITOS;
   useEffect(() => {
-    onEstado({ completo, bloqueo: motivo });
-  }, [completo, motivo, onEstado]);
+    onEstado({ completo, bloqueo: motivo, prendaSinDecidir: sinDecidir });
+  }, [completo, motivo, sinDecidir, onEstado]);
 
   const mostrar = (llave: string): string | undefined => erroresServidor[llave] ?? (intentoAvance > 0 || tocados[llave] ? errores[llave] : undefined);
   const tocar = (llave: string) => setTocados((x) => (x[llave] ? x : { ...x, [llave]: true }));
@@ -194,7 +202,7 @@ function PasoRequisitos({ seccion, activa, intentoAvance, onEstado }: PropsSecci
           cliente.solicitudes.guardarComercial(idSolicitud, {
             version,
             ...(t.comercial ? { valorComercial: numeroMoneda(valorVenta) } : {}),
-            ...(t.prenda
+            ...(t.prenda && !sinDecidir
               ? { prenda: { tienePrenda: tiene, decision: decisionDe(tiene, accionPrenda), ...(tiene ? { acreedor: acreedor.trim(), nitAcreedor } : {}), ...(tiene && accionFija === "levantar" ? { entidadLevantamiento: entidadLevantamiento.trim() } : {}) } }
               : {}),
           }),
@@ -211,7 +219,7 @@ function PasoRequisitos({ seccion, activa, intentoAvance, onEstado }: PropsSecci
       if (error instanceof ApiError && error.errores) setErroresServidor(erroresDeServidor(error.errores, definicion));
       throw error;
     }
-  }, [t, definicion, solicitud.fieldValues, campos, valorVenta, tienePrenda, accionPrenda, acreedor, nitAcreedor, entidadLevantamiento, accionFija, transformaciones, observaciones, guardarConVersion, cliente, idSolicitud, firma]);
+  }, [t, sinDecidir, definicion, solicitud.fieldValues, campos, valorVenta, tienePrenda, accionPrenda, acreedor, nitAcreedor, entidadLevantamiento, accionFija, transformaciones, observaciones, guardarConVersion, cliente, idSolicitud, firma]);
 
   // Al pasar al siguiente paso: guarda solo si algo cambió desde el último guardado.
   useEffect(() => {
@@ -376,7 +384,7 @@ function PasoRequisitos({ seccion, activa, intentoAvance, onEstado }: PropsSecci
                   ] as const
                 ).map(([etiqueta, valor]) => (
                   <label key={etiqueta} className="flex min-h-11 cursor-pointer items-center gap-2">
-                    <input type="radio" name="prenda" className="h-5 w-5 accent-primary" checked={tienePrenda === valor} onChange={() => setTienePrenda(valor)} />
+                    <input type="radio" name="prenda" className="h-5 w-5 accent-primary" checked={(!gravamenExige || elegida) && tienePrenda === valor} onChange={() => { setTienePrenda(valor); setElegida(true); }} />
                     {etiqueta}
                   </label>
                 ))}
@@ -389,14 +397,19 @@ function PasoRequisitos({ seccion, activa, intentoAvance, onEstado }: PropsSecci
               <div className="mt-2 flex flex-wrap gap-6">
                 {(Object.keys(ETIQUETA_ACCION_PRENDA) as AccionPrenda[]).map((accion) => (
                   <label key={accion} className="flex min-h-11 cursor-pointer items-center gap-2">
-                    <input type="radio" name="prenda-accion" className="h-5 w-5 accent-primary" checked={accionPrenda === accion} onChange={() => setAccionPrenda(accion)} />
+                    <input type="radio" name="prenda-accion" className="h-5 w-5 accent-primary" checked={!sinAccion && accionPrenda === accion} onChange={() => { setAccionPrenda(accion); setAccionElegida(true); }} />
                     {ETIQUETA_ACCION_PRENDA[accion]}
                   </label>
                 ))}
               </div>
             </fieldset>
           )}
-          {verPrenda && (
+          {gravamenExige && mostrar("prenda.decision") && (
+            <p role="alert" className="mt-2 text-sm text-alert">
+              {mostrar("prenda.decision")}
+            </p>
+          )}
+          {(verPrenda || gravamenExige) && (
             <div aria-live="polite" className="mt-3 space-y-1 text-sm font-light text-muted-foreground">
               {gravamen.isFetching && <p role="status">Consultando el gravamen en el RUNT...</p>}
               {gravamen.data?.aviso === "sin_gravamen" && <p role="status">RUNT sin gravamen registrado para este vehículo.</p>}
@@ -411,7 +424,7 @@ function PasoRequisitos({ seccion, activa, intentoAvance, onEstado }: PropsSecci
               )}
             </div>
           )}
-          {verPrenda && runtReportaPrenda && (
+          {(verPrenda || gravamenExige) && runtReportaPrenda && (
             <details open className="mt-3 rounded-[9px] border border-border p-3 text-sm">
               <summary className="cursor-pointer font-normal">Ver información de prenda / gravamen del RUNT</summary>
               <dl className="mt-2 grid gap-x-6 gap-y-1 sm:grid-cols-2">

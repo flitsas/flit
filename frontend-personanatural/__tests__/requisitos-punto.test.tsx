@@ -99,6 +99,16 @@ describe("Requisitos del punto · mismas tarjetas del portal", () => {
     expect(screen.getByRole("button", { name: "Continuar" })).toBeInTheDocument();
   }, 20000);
 
+  it("muestra las tarjetas de transformaciones con su opción y la de prenda pregunta si hay prenda (traspaso)", async () => {
+    montar();
+    await esperar();
+
+    expect(screen.getByText("Cambio de color")).toBeInTheDocument();
+    expect(screen.getByText("Conversión de combustible")).toBeInTheDocument();
+    expect(screen.getByText("Cambio de carrocería")).toBeInTheDocument();
+    expect(screen.getByText("¿Al vehículo se le asociará una prenda?")).toBeInTheDocument();
+  });
+
   it("mientras carga muestra el estado de carga y si falla ofrece reintentar", async () => {
     let falla = true;
     montar({ [RUTA_MATRIZ]: () => (falla ? json({ code: "servicio_no_disponible" }, 503) : json(MATRIZ)) });
@@ -318,6 +328,27 @@ describe("Requisitos del punto · Continuar a Pago", () => {
 
     await waitFor(() => expect(onContinuarPago).toHaveBeenCalled());
     expect(cuerpo(llamadas, "PUT /solicitudes/s-1/comercial").valorComercial).toBe(38500000);
+  });
+
+  it("con prenda en el RUNT no avanza a Pago sin decidir, y con la decisión sí avanza", async () => {
+    const { onContinuarPago, onAviso, llamadas, estado } = montar({
+      "GET /solicitudes/s-1/vehiculo/gravamen": () => json({ tienePrenda: true, acreedor: "Banco Uno", nitAcreedor: "860002964", aviso: null }),
+      "PUT /solicitudes/s-1/comercial": () => escritura(estado)({}),
+      "PUT /solicitudes/s-1/requisitos": () => escritura(estado)({}),
+      "POST /punto/requisitos/completitud": () => json({ puedeContinuarPago: true, requiereValorVenta: true, pendientes: [] }),
+    });
+    await esperar();
+    await screen.findByText(/El RUNT reporta gravamen o prenda/);
+
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    await waitFor(() => expect(onAviso).toHaveBeenCalledWith("Falta la decisión de prenda", expect.any(String), "alerta"));
+    expect(onContinuarPago).not.toHaveBeenCalled();
+    expect(llamadas.some((l) => l.clave === "POST /punto/requisitos/completitud")).toBe(false);
+    expect(cuerpo(llamadas, "PUT /solicitudes/s-1/comercial").prenda).toBeUndefined();
+
+    fireEvent.click(within(tarjeta("Prenda / limitación a la propiedad")).getByLabelText("No"));
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    await waitFor(() => expect(onContinuarPago).toHaveBeenCalled());
   });
 
   it("si el gate falla por red avisa y no avanza", async () => {

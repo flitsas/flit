@@ -90,12 +90,21 @@ describe("gravamen RUNT en la prenda", () => {
     expect(screen.queryByText(/se muestra cuando se valida la identidad/)).toBeNull();
   });
 
-  it("al levantar una prenda con datos del RUNT, acreedor y NIT quedan de solo lectura; al registrar se pueden corregir", async () => {
+  it("si la persona elige levantar (traspaso), acreedor y NIT del RUNT se pueden corregir", async () => {
     await abrir(definicion(), { [GRAVAMEN]: () => json({ tienePrenda: true, acreedor: "Banco Uno", nitAcreedor: "860002964", aviso: null }) });
     fireEvent.click(within(tarjeta()).getByLabelText("Sí"));
     await waitFor(() => expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).toHaveValue("Banco Uno"));
     expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).not.toHaveAttribute("readonly");
     fireEvent.click(within(tarjeta()).getByLabelText("Levantar la prenda inscrita"));
+    expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).not.toHaveAttribute("readonly");
+    expect(within(tarjeta()).getByLabelText("NIT / Documento del acreedor *")).not.toHaveAttribute("readonly");
+  });
+
+  it("con acción fija de levantar, acreedor y NIT del RUNT son de solo lectura", async () => {
+    await abrir(definicion({ flags: flags({ requierePrenda: true, permitePrendaComplementaria: false, accionPrenda: "levantar" }) }), {
+      [GRAVAMEN]: () => json({ tienePrenda: true, acreedor: "Banco Uno", nitAcreedor: "860002964", aviso: null }),
+    });
+    await waitFor(() => expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).toHaveValue("Banco Uno"));
     expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).toHaveAttribute("readonly");
     expect(within(tarjeta()).getByLabelText("NIT / Documento del acreedor *")).toHaveAttribute("readonly");
   });
@@ -116,13 +125,50 @@ describe("gravamen RUNT en la prenda", () => {
     expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).not.toHaveAttribute("readonly");
   });
 
-  it("no consulta el gravamen si no hay prenda, y si falla no estorba", async () => {
+  it("consulta el gravamen con el paso activo para saber si exige decidir; si falla no inventa gravamen ni estorba", async () => {
     const { llamadas } = await abrir(definicion(), { [GRAVAMEN]: () => json({ code: "vehiculo_no_definido" }, 409) });
-    expect(llamadas.some((l) => l.clave === GRAVAMEN)).toBe(false);
-    fireEvent.click(within(tarjeta()).getByLabelText("Sí"));
     await waitFor(() => expect(llamadas.some((l) => l.clave === GRAVAMEN)).toBe(true));
+    expect(within(tarjeta()).getByLabelText("No")).toBeChecked();
+    expect(within(tarjeta()).queryByText(/Elige qué se hará con la prenda/)).toBeNull();
+    fireEvent.click(within(tarjeta()).getByLabelText("Sí"));
     expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).toHaveValue("");
     expect(await within(tarjeta()).findByText(/No pudimos consultar el gravamen en el RUNT/)).toBeInTheDocument();
+  });
+
+  describe("el RUNT reporta prenda: la decisión es obligatoria y no se preselecciona (como FLIT 2)", () => {
+    const CON_PRENDA = { [GRAVAMEN]: () => json({ tienePrenda: true, acreedor: "Banco Uno", nitAcreedor: "860002964", aviso: null }) };
+
+    it("sin decidir no avanza, no marca ninguna opción y no guarda una decisión por su cuenta", async () => {
+      const { llamadas } = await abrir(definicion(), CON_PRENDA);
+      await within(tarjeta()).findByText(/El RUNT reporta gravamen o prenda/);
+      expect(within(tarjeta()).getByLabelText("No")).not.toBeChecked();
+      expect(within(tarjeta()).getByLabelText("Sí")).not.toBeChecked();
+      expect(siguiente()).toBeDisabled();
+      expect(llamadas.some((l) => l.clave === "PUT /solicitudes/s-1/comercial")).toBe(false);
+    });
+
+    it("con «Sí» pide elegir registrar o levantar sin preseleccionar, y no exige la entidad del levantamiento", async () => {
+      await abrir(definicion(), CON_PRENDA);
+      await within(tarjeta()).findByText(/El RUNT reporta gravamen o prenda/);
+      fireEvent.click(within(tarjeta()).getByLabelText("Sí"));
+      expect(within(tarjeta()).getByLabelText("Registrar una prenda nueva")).not.toBeChecked();
+      expect(within(tarjeta()).getByLabelText("Levantar la prenda inscrita")).not.toBeChecked();
+      expect(siguiente()).toBeDisabled();
+      fireEvent.click(within(tarjeta()).getByLabelText("Levantar la prenda inscrita"));
+      expect(within(tarjeta()).queryByLabelText(/Entidad ante la que se levantó/)).toBeNull();
+      expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).toHaveValue("Banco Uno");
+    });
+
+    it("«No» (omitir la prenda) es una decisión explícita y habilita el avance una vez cargados los documentos", async () => {
+      const { llamadas } = await abrir(definicion(), CON_PRENDA);
+      await within(tarjeta()).findByText(/El RUNT reporta gravamen o prenda/);
+      fireEvent.click(within(tarjeta()).getByLabelText("No"));
+      expect(within(tarjeta()).queryByText(/Elige qué se hará con la prenda/)).toBeNull();
+      await waitFor(() => expect(siguiente()).toBeEnabled());
+      fireEvent.click(siguiente());
+      await waitFor(() => expect(llamadas.some((l) => l.clave === "PUT /solicitudes/s-1/comercial")).toBe(true));
+      expect(cuerpo(llamadas, "PUT /solicitudes/s-1/comercial").prenda).toMatchObject({ tienePrenda: false, decision: "sin_prenda" });
+    });
   });
 
   describe("solo se consulta con el paso de Requisitos activo", () => {
@@ -297,10 +343,11 @@ describe("tipo que exige prenda sin la sección prenda_decision", () => {
     expect(within(tarjeta()).queryByLabelText(/Entidad ante la que se levantó/)).toBeNull();
   });
 
-  it("con solo prenda complementaria y sin la sección no hay tarjeta", async () => {
+  it("con solo prenda complementaria y sin la sección la tarjeta sale y pregunta si hay prenda (traspaso)", async () => {
     const def = definicionDe([["vehicle_query"], ["actor_form"], ["document_checklist"]], { flags: flags({ permitePrendaComplementaria: true }), documentos: DOCS });
     await wizardAbierto({ [RUTA_DEFINICION]: () => json(def), "GET /solicitudes/s-1": () => json(borrador()) });
     await screen.findByRole("button", { name: "Siguiente" });
-    expect(screen.queryByRole("region", { name: "Prenda / limitación a la propiedad" })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Prenda / limitación a la propiedad" })).toBeInTheDocument();
+    expect(screen.getByText("¿Al vehículo se le asociará una prenda?")).toBeInTheDocument();
   });
 });

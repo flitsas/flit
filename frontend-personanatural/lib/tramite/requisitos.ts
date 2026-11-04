@@ -122,9 +122,9 @@ export const seccionesDeRequisitos = (d: DefinicionTipo): string[] => d.pasos.fl
  */
 export function tarjetasDeRequisitos(d: DefinicionTipo): TarjetasRequisitos {
   const admitePrenda = d.flags.requierePrenda || d.flags.permitePrendaComplementaria;
-  // Un tipo que exige prenda por definición (levantar/registrar) la pide aunque su matriz no traiga la sección `prenda_decision`:
-  // el servidor exige acreedor y NIT. La prenda complementaria sí depende de la sección.
-  const pidePrenda = d.flags.requierePrenda || (tieneSeccion(d, "prenda_decision") && admitePrenda);
+  // Como en FLIT 2, la decisión de prenda vive dentro de Requisitos: la tarjeta sale si el tipo la exige o la admite como complementaria,
+  // aunque su definición no traiga la sección `prenda_decision`.
+  const pidePrenda = admitePrenda;
   return {
     comercial: tieneSeccion(d, "commercial") && d.flags.requiereComercial,
     prenda: pidePrenda,

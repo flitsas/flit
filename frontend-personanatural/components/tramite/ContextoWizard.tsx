@@ -11,6 +11,8 @@ export interface EstadoSeccion {
   completo: boolean;
   /** Motivo por el que «Continuar» queda deshabilitado (un bloqueo duro, p. ej. el diagnóstico con pendientes). */
   bloqueo?: string;
+  /** Requisitos: el RUNT reporta prenda o gravamen y la persona aún no decidió qué hacer (bloquea el avance también en el punto). */
+  prendaSinDecidir?: boolean;
 }
 
 export interface PropsSeccion {
