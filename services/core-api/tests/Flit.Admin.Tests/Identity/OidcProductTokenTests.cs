@@ -128,14 +128,32 @@ public sealed class OidcProductTokenTests : IClassFixture<OidcProductTokenTests.
     }
 
     [Fact]
-    public async Task ProductoApagado_NoHayCodigo_PRODUCT_NOT_ENABLED()
+    public async Task ProductoApagado_SinRolDePlataforma_NoHayCodigo_PRODUCT_NOT_ENABLED()
     {
         var ct = TestContext.Current.CancellationToken;
         await SetTramitesEnabledAsync(false);
+        await RemoveAssignmentAsync(_platformRoleId);
 
         var error = await AuthorizeErrorAsync(await LoggedInAsync(ct), "tramites", ct);
 
         error.Should().Be(("access_denied", "PRODUCT_NOT_ENABLED"));
+    }
+
+    [Fact]
+    public async Task TramitesApagado_ConRolDePlataforma_EntraAUsuariosSinPermisosDeTramites()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await SetTramitesEnabledAsync(false);
+
+        var tokens = await CodeFlowAsync(await LoggedInAsync(ct), "tramites", ct);
+        var payload = JsonDocument.Parse(Base64UrlDecode(new JsonWebToken(tokens.GetProperty("access_token").GetString()).EncodedPayload)).RootElement;
+
+        payload.GetProperty("roles").EnumerateArray().Select(r => r.GetProperty("code").GetString())
+            .Should().Equal($"OidcPlat-{_suffix}");
+        payload.GetProperty("permissions").EnumerateArray().Select(p => p.GetString())
+            .Should().Equal(PlatformSlug);
+        payload.GetProperty("permissions").EnumerateArray().Select(p => p.GetString())
+            .Should().NotContain(TramitesSlug);
     }
 
     [Fact]

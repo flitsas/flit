@@ -152,14 +152,16 @@ public sealed class SubmitGateTraspasoTests
     }
 
     [Fact]
-    public void Gate_TodoSatisfechoSalvoImpronta_Bloquea()
+    public void Gate_ImprontaOpcionalSinAdjunto_NoBloquea()
     {
-        // Integración impronta↔trámites: aunque el checklist ya no la exige (Obligatorio: false),
-        // el gate de radicación SIGUE exigiendo el adjunto tipo "impronta" (cargado o generado).
+        // El catálogo marca la impronta como opcional: sin adjunto no hay impronta_requerida.
+        // Solo se exige cuando la matriz (o el catálogo) la deja obligatoria.
         var instance = CompleteTraspaso();
         instance.Attachments.Remove(instance.Attachments.First(a => a.Tipo == "impronta"));
 
-        SubmitGate.Evaluate(instance, Aprobadas(instance)).Should().Contain(SubmitGate.ImprontaRequerida);
+        SubmitGate.Evaluate(instance, Aprobadas(instance)).Should().NotContain(SubmitGate.ImprontaRequerida);
+        SubmitGate.Evaluate(instance, Aprobadas(instance), improntaObligatoria: true)
+            .Should().Contain(SubmitGate.ImprontaRequerida);
     }
 
     [Fact]

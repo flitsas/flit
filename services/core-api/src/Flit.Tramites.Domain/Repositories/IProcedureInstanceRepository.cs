@@ -479,6 +479,21 @@ public interface IProcedureInstanceRepository
         Guid id, Guid tenantId, CancellationToken ct = default);
 
     /// <summary>
+    /// HU #14044 (Épica #14021) — la validación MÁS RECIENTE del portal de Persona Natural para (solicitud, rol, documento),
+    /// en cualquier estado, aislada por tenant y TRACKEADA. Solo mira lo de ESA solicitud: una validación de otra solicitud
+    /// de la misma cédula nunca se devuelve (decisión del PO: no se reutiliza entre trámites).
+    /// </summary>
+    Task<ProcedureInstanceBiometricValidation?> FindPortalValidationAsync(
+        Guid tenantId, string solicitudRef, string parte, string documentNumber, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #14044 — una validación del portal por id (solo las que tienen <c>portal_solicitud_ref</c>), aislada por tenant y
+    /// TRACKEADA (para reenviar). Null si no existe, es de otro tenant o no es del portal.
+    /// </summary>
+    Task<ProcedureInstanceBiometricValidation?> GetPortalValidationByIdAsync(
+        Guid tenantId, Guid validationId, CancellationToken ct = default);
+
+    /// <summary>
     /// Cuenta un intento rechazado de Kyverum de forma ATÓMICA e idempotente: en un ÚNICO <c>UPDATE</c>
     /// incrementa <c>attempts</c>, sella <c>last_attempt_at</c> con la clave del intento y REINICIA
     /// <c>reconcile_poll_count</c>, con la guarda <c>status = en_proceso AND last_attempt_at &lt;&gt; @key</c>.
@@ -639,6 +654,17 @@ public interface IProcedureInstanceRepository
     /// pertenece al tenant (→ 404); si existe pero no tiene historial, página vacía con Total 0.
     /// </summary>
     Task<(IReadOnlyList<ProcedureInstanceStatusHistoryEntry> Items, int Total)?> GetStatusHistoryPageAsync(
+        Guid id, Guid tenantId, int skip, int take, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #14173 — eventos <c>dato_modificado</c> de la instancia (campo a campo), ordenados por
+    /// <c>created_at</c> DESC (más reciente primero), con nombre y compañía del actor resueltos igual
+    /// que <see cref="GetStatusHistoryPageAsync"/>. Incluye filas escritas en borrador: no filtra por
+    /// estado. Devuelve <c>null</c> si la instancia no existe o no pertenece al tenant (mismo criterio
+    /// que <see cref="GetStatusHistoryPageAsync"/>: TenantId + DeletedAt == null). Si existe pero no
+    /// hay eventos, devuelve página vacía con Total 0. El tiempo se conserva en UTC.
+    /// </summary>
+    Task<(IReadOnlyList<ProcedureInstanceModificacionEntry> Items, int Total)?> GetModificacionesPageAsync(
         Guid id, Guid tenantId, int skip, int take, CancellationToken ct = default);
 
     /// <summary>
@@ -875,6 +901,22 @@ public sealed record TramitesFilterOptions(
 public sealed record TramitesFilterTipoOption(string Code, string Name, string Family);
 
 public sealed record TramitesFilterCompaniaOption(Guid Id, string Nombre);
+
+/// <summary>
+/// HU #14173 — proyección de un evento <c>dato_modificado</c> con nombre y compañía del actor
+/// resueltos en batch. El tiempo (<see cref="ChangedAt"/>) es el <c>created_at</c> UTC del evento;
+/// no se convierte a hora Colombia.
+/// </summary>
+public sealed record ProcedureInstanceModificacionEntry(
+    Guid Id,
+    string Etiqueta,
+    string Campo,
+    string Anterior,
+    string Nuevo,
+    DateTimeOffset ChangedAt,
+    Guid? ChangedByUserId,
+    string? ChangedByName,
+    string? ChangedByCompania);
 
 /// <summary>
 /// Proyección de lectura de una fila de <c>procedure_instance_status_history</c> con el nombre

@@ -54,6 +54,7 @@ npx -y @bufbuild/buf@1.73.0 breaking . --against "../../.git#ref=origin/develop,
 | `Flit.Notificaciones.Grpc.Contracts` | `flit.notificaciones.v1` | `services/core-notificaciones/src/` |
 | `Flit.Comparendos.Grpc.Contracts` | `flit.comparendos.v1` | `services/core-comparendos/src/` |
 | `Flit.Diagnostico.Grpc.Contracts` | `flit.diagnostico.v1` | `services/core-diagnostico/src/` |
+| `Flit.PersonaNatural.Grpc.Contracts` | `flit.personanatural.v1` | `services/core-personanatural/src/` |
 
 Los proyectos de un servicio que importan `flit.platform.v1` referencian `Flit.Platform.Grpc.Contracts` y no
 vuelven a generar esos tipos.

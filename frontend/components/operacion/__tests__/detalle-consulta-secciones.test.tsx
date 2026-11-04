@@ -21,6 +21,7 @@ import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
 
 const mocks = vi.hoisted(() => ({
   getInstance: vi.fn(),
+  getStatusHistory: vi.fn(),
   getNetworkInstance: vi.fn(),
   getAttachments: vi.fn(),
   getNetworkAttachments: vi.fn(),
@@ -169,6 +170,14 @@ beforeEach(() => {
   mocks.getInstance.mockResolvedValue({ ...detalleRed(), id: 'inst-propio', tenantId: CABEZA, fromNetwork: undefined });
   mocks.getNetworkInstance.mockResolvedValue(detalleRed());
   mocks.getAttachments.mockResolvedValue([]);
+  mocks.getStatusHistory.mockResolvedValue({
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize: 20,
+    modificaciones: [],
+    modificacionesTotal: 0,
+  });
   mocks.getNetworkAttachments.mockResolvedValue([]);
   mocks.getChecklist.mockResolvedValue({ items: [] });
   mocks.getActors.mockResolvedValue([

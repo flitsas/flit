@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { AlertCircle, Blocks, Building2, FileClock, FileText, Network, Palette, Save, Stamp, UserCheck, UserCog, Users } from "lucide-react";
+import { AlertCircle, Blocks, Building2, FileClock, FileText, Network, Palette, PlugZap, Save, Stamp, UserCheck, UserCog, Users } from "lucide-react";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 import { diffSettings, formFromSettings, formToUpdate, type SettingsForm } from "./settingsForm";
@@ -26,6 +26,7 @@ type TabId =
   | "representantes"
   | "mandatarios"
   | "usuarios"
+  | "integraciones"
   | "hijos"
   | "marca"
   | "historial";
@@ -71,6 +72,9 @@ const TABS: TabDef[] = [
   { id: "mandatarios", label: "Mandatarios", icon: UserCheck, isConfig: false },
   // Gestión de usuarios del tenant compañía (SuperAdmin); invite force AdminCompany.
   { id: "usuarios", label: "Usuarios", icon: UserCog, isConfig: false },
+  // HU #14068 (Épica #14021) — integraciones externas de la compañía (Persona Natural); solo SuperAdmin: la ficha
+  // inyecta el slot solo para él, y sin slot la pestaña no aparece.
+  { id: "integraciones", label: "Integraciones externas", icon: PlugZap, isConfig: false },
   // Cabeza Marca Blanca: la tabla de clientes y la identidad de marca (con su dominio) eran cajas
   // apiladas bajo las pestañas, visibles en cualquiera; ahora son pestañas propias (solo con slot).
   { id: "hijos", label: "Clientes hijos", icon: Network, isConfig: false },
@@ -98,6 +102,8 @@ export interface CompanyConfigTabsProps {
   mandatariosSlot?: ReactNode;
   /** Tab Usuarios scoped al tenant de la ficha (SuperAdmin). */
   usuariosSlot?: ReactNode;
+  /** HU #14068 — integraciones externas de la compañía (solo SuperAdmin). Sin slot, la pestaña no aparece. */
+  integracionesSlot?: ReactNode;
   /** Cabeza Marca Blanca: tabla de clientes hijos. Sin slot, la pestaña no aparece. */
   childrenSlot?: ReactNode;
   /** Cabeza Marca Blanca: identidad de marca y dominio de la red, en una misma vista. Sin slot, no aparece. */
@@ -135,6 +141,7 @@ export function CompanyConfigTabs({
   legalRepresentativesSlot,
   mandatariosSlot,
   usuariosSlot,
+  integracionesSlot,
   childrenSlot,
   brandingSlot,
   company,
@@ -151,10 +158,11 @@ export function CompanyConfigTabs({
         restrictedToRepresentatives
           ? REPRESENTATIVE_TABS.includes(t.id) || (t.id === "usuarios" && Boolean(usuariosSlot))
           : (t.id !== "usuarios" || Boolean(usuariosSlot)) &&
+            (t.id !== "integraciones" || Boolean(integracionesSlot)) &&
             (t.id !== "hijos" || Boolean(childrenSlot)) &&
             (t.id !== "marca" || Boolean(brandingSlot)),
       ),
-    [restrictedToRepresentatives, usuariosSlot, childrenSlot, brandingSlot],
+    [restrictedToRepresentatives, usuariosSlot, integracionesSlot, childrenSlot, brandingSlot],
   );
   const [form, setForm] = useState<SettingsForm>(() => formFromSettings(settings));
   // Línea base (última configuración guardada) para detectar cambios; se actualiza al guardar.
@@ -380,6 +388,7 @@ export function CompanyConfigTabs({
         {activeTabId === "representantes" && legalRepresentativesSlot}
         {activeTabId === "mandatarios" && mandatariosSlot}
         {activeTabId === "usuarios" && usuariosSlot}
+        {activeTabId === "integraciones" && integracionesSlot}
         {activeTabId === "hijos" && childrenSlot}
         {activeTabId === "marca" && brandingSlot}
         {activeTabId === "historial" && auditSlot}

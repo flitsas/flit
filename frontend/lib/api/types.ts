@@ -54,6 +54,10 @@ export interface CompanyPagedResult {
 }
 
 export interface CompaniesIndexParams {
+  /** HU #13998 — código contiene (COMP-XXXX). */
+  codigo?: string;
+  /** HU #13998 — uno o varios tipos separados por coma (OR entre ellos). */
+  tenantType?: string;
   nit?: string;
   razonSocial?: string;
   estadoActivo?: boolean;

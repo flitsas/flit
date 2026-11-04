@@ -584,6 +584,8 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   // Sección con la que abre el modal de detalle: la bandeja tiene dos entradas al mismo trámite
   // («ver detalle» y «ver documentos») y las dos llevan al mismo modal.
   const [detailSection, setDetailSection] = useState<OtDetalleSeccionId>("vehiculo");
+  /** HU #14157 — panel de tracking al abrir el detalle (p. ej. clic en Estado → timeline). */
+  const [detailInitialPanel, setDetailInitialPanel] = useState<"timeline" | null>(null);
   // Panel lateral derecho — detalle del trámite
   const [detailProcedure, setDetailProcedure] = useState<OtClientProcedure | null>(null);
   // Previsualización inline del consolidado (sin forzar descarga).
@@ -1417,12 +1419,9 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
   };
 
   const handleConsolidado = async (row: OtClientProcedure, force = false) => {
-    // Botón único (Feature #10701): abre el consolidado del expediente INLINE. Si el OT puede
-    // generar, "asegura" el vigente — el backend regenera solo si la marca lo pide (nunca generado
-    // o invalidado por CUALQUIER cambio del expediente: adjuntar o borrar un documento, editar
-    // datos, la decisión del OT, una transición de estado…) y reutiliza si ya está vigente.
-    // `force` se salta ese atajo y reconstruye: la salida manual del operador. En modo QX read-only
-    // no se puede generar: solo se muestra el consolidado existente.
+    // HU #14207 / Feature #10701 — CTA único «Ver consolidado» en bandeja. Sin force el backend
+    // regenera solo si la marca lo pide (cambios de docs/datos invalidan vía tracker). force=true
+    // queda para recuperación (Reintentar). En QX read-only: solo entrega/ver.
     setConsolidadoActingId(row.id);
     setPreview((p) => {
       if (p.url) URL.revokeObjectURL(p.url);
@@ -1838,10 +1837,12 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           consolidadoActingId={consolidadoActingId}
           onVerDocumentos={(row) => {
             setDetailSection("documentos");
+            setDetailInitialPanel(null);
             setDetailProcedure(row);
           }}
-          onVerDetalle={(row) => {
+          onVerDetalle={(row, options) => {
             setDetailSection("vehiculo");
+            setDetailInitialPanel(options?.panel === "timeline" ? "timeline" : null);
             setDetailProcedure(row);
           }}
           seleccionable={puedeLote}
@@ -2400,10 +2401,14 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
       <ClientProcedureDetailModal
         open={!!detailProcedure}
         procedure={detailProcedure}
-        onClose={() => setDetailProcedure(null)}
+        onClose={() => {
+          setDetailProcedure(null);
+          setDetailInitialPanel(null);
+        }}
         scope={scope}
         readOnly={isReadOnly}
         initialSection={detailSection}
+        initialPanel={detailInitialPanel}
         // HU #12062 — LOS MISMOS manejadores que recibe la tabla: decidir desde el detalle abre el
         // mismo diálogo que decidir desde la fila, sin una segunda vía de aprobación.
         onApprove={(row) => {

@@ -9,6 +9,7 @@ import userEvent from "@testing-library/user-event";
 import { ToastProvider } from "@/components/admin/Toast";
 import { ClientProcedureDetailModal } from "../ClientProcedureDetailModal";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
+import { formatFechaHora } from "@/lib/format/date";
 
 const fetchOtClientProcedure = vi.fn();
 const fetchOtDocuments = vi.fn();
@@ -72,10 +73,13 @@ describe("ClientProcedureDetailModal (HU #11930 · rediseño HU #12060)", () => 
     fetchOtDocuments.mockResolvedValue({ data: [{ id: "d1", tipo: "fur", filename: "fur.pdf" }] });
   });
 
-  it("AC1 — ninguna pieza del detalle del OT importa del detalle del gestor", () => {
+  it("AC1 — ninguna pieza del detalle del OT importa del detalle del gestor (salvo timeline HU #14157)", () => {
     // Guarda de aislamiento: el valor de este rediseño es que el gestor NO se mueva cuando se mueva
     // el OT, y eso solo se sostiene si no queda ni un import cruzado. Se comprueba sobre el código
     // fuente porque es una propiedad del módulo, no algo observable en el DOM.
+    // HU #14157 — excepción explícita: TimelineTrackPanel + timeline-mappers (paridad de línea de tiempo).
+    const permitidos =
+      /operacion\/detalle\/(TimelineTrackPanel|timeline-mappers)["']/;
     const raiz = join(__dirname, "..");
     const ficheros = [
       join(raiz, "ClientProcedureDetailModal.tsx"),
@@ -84,9 +88,11 @@ describe("ClientProcedureDetailModal (HU #11930 · rediseño HU #12060)", () => 
         .map((f) => join(raiz, "detalle", f)),
     ];
 
-    const culpables = ficheros.filter((f) =>
-      /from\s+["']@?[./\w-]*operacion\/detalle/.test(readFileSync(f, "utf8")),
-    );
+    const culpables = ficheros.filter((f) => {
+      const src = readFileSync(f, "utf8");
+      const matches = src.match(/from\s+["'][^"']*operacion\/detalle[^"']*["']/g) ?? [];
+      return matches.some((m) => !permitidos.test(m));
+    });
     expect(culpables).toEqual([]);
   });
 
@@ -221,5 +227,202 @@ describe("ClientProcedureDetailModal (HU #11930 · rediseño HU #12060)", () => 
       expect(screen.getByText(/se muestran los datos de la bandeja/i)).toBeInTheDocument(),
     );
     expect(screen.getAllByText("RAD-0001").length).toBeGreaterThan(0);
+  });
+
+  it("HU #14157 AC2 — botón Línea de Tiempo muestra el panel y al desactivar lo oculta", async () => {
+    const conHistorial: OtClientProcedure = {
+      ...PROCEDURE,
+      statusHistory: [
+        {
+          fromStatus: "entregado",
+          toStatus: "aprobado",
+          changedAt: "2026-10-28T15:21:00Z",
+          reason: "Aprobado por OT",
+          changedByName: "Jose Manuel Pimienta",
+          changedByEmail: "jose.pimienta@flitsas.com",
+          changedByCompania: "Empresa Demo FLIT",
+        },
+      ],
+    };
+    fetchOtClientProcedure.mockResolvedValue(conHistorial);
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <ClientProcedureDetailModal open procedure={conHistorial} onClose={vi.fn()} />
+      </ToastProvider>,
+    );
+
+    await screen.findByRole("dialog");
+    expect(screen.queryByText("Línea de tiempo del trámite")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Línea de Tiempo del Trámite" }));
+    expect(await screen.findByText("Línea de tiempo del trámite")).toBeInTheDocument();
+    expect(screen.getByText("Jose Manuel Pimienta")).toBeInTheDocument();
+    expect(screen.getByText("jose.pimienta@flitsas.com")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Línea de Tiempo del Trámite" }));
+    expect(screen.queryByText("Línea de tiempo del trámite")).not.toBeInTheDocument();
+    expect(acordeon(ACORDEONES[0]!)).toBeInTheDocument();
+  });
+
+  it("HU #14157 AC1 — initialPanel timeline abre con el historial visible", async () => {
+    const conHistorial: OtClientProcedure = {
+      ...PROCEDURE,
+      statusHistory: [
+        {
+          fromStatus: null,
+          toStatus: "borrador",
+          changedAt: "2026-10-28T15:21:00Z",
+          reason: "Borrador",
+          changedByName: "Jose Manuel Pimienta",
+          changedByEmail: "jose.pimienta@flitsas.com",
+          changedByCompania: "Empresa Demo FLIT",
+        },
+      ],
+    };
+    fetchOtClientProcedure.mockResolvedValue(conHistorial);
+    render(
+      <ToastProvider>
+        <ClientProcedureDetailModal
+          open
+          procedure={conHistorial}
+          onClose={vi.fn()}
+          initialPanel="timeline"
+        />
+      </ToastProvider>,
+    );
+
+    expect(await screen.findByText("Línea de tiempo del trámite")).toBeInTheDocument();
+    expect(screen.getByText("Jose Manuel Pimienta")).toBeInTheDocument();
+  });
+
+  it("HU #14157 AC4 — historial vacío muestra estado vacío claro", async () => {
+    const sinHistorial = { ...PROCEDURE, statusHistory: [] };
+    fetchOtClientProcedure.mockResolvedValue(sinHistorial);
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <ClientProcedureDetailModal open procedure={sinHistorial} onClose={vi.fn()} />
+      </ToastProvider>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Línea de Tiempo del Trámite" }));
+    expect(
+      await screen.findByText(/aún no tiene cambios de estado registrados/i),
+    ).toBeInTheDocument();
+  });
+
+  it("HU #14157 AC3 — fallo al cargar detalle con timeline muestra error recuperable", async () => {
+    fetchOtClientProcedure.mockRejectedValue(new Error("boom"));
+    render(
+      <ToastProvider>
+        <ClientProcedureDetailModal
+          open
+          procedure={PROCEDURE}
+          onClose={vi.fn()}
+          initialPanel="timeline"
+        />
+      </ToastProvider>,
+    );
+
+    expect(await screen.findByText(/No se pudo cargar el historial de estados/i)).toBeInTheDocument();
+    expect(acordeon(ACORDEONES[0]!)).toBeInTheDocument();
+  });
+
+  it("HU #14182 AC1 — un trámite visible muestra sus modificaciones, la más reciente primero", async () => {
+    const reciente = "2026-10-28T20:21:00.000Z";
+    const enBorrador = "2026-10-02T13:00:00.000Z";
+    const conMods: OtClientProcedure = {
+      ...PROCEDURE,
+      statusHistory: [
+        {
+          fromStatus: "borrador",
+          toStatus: "entregado",
+          changedAt: reciente,
+          reason: "Enviado",
+          changedByName: "Solo En Timeline",
+          changedByEmail: "solo-timeline@flit.test",
+          changedByCompania: "OT Demo",
+        },
+      ],
+      modificaciones: [
+        {
+          etiqueta: "Estado",
+          campo: "estado",
+          anterior: "borrador",
+          nuevo: "entregado",
+          changedAt: reciente,
+          actorNombre: "Ana Gómez",
+          actorCompania: "Empresa Demo",
+        },
+        {
+          etiqueta: "Color",
+          campo: "color",
+          anterior: "",
+          nuevo: "Rojo",
+          changedAt: enBorrador,
+          actorNombre: null,
+          actorCompania: null,
+        },
+      ],
+    };
+    fetchOtClientProcedure.mockResolvedValue(conMods);
+    render(
+      <ToastProvider>
+        <ClientProcedureDetailModal
+          open
+          procedure={conMods}
+          onClose={vi.fn()}
+          initialPanel="timeline"
+        />
+      </ToastProvider>,
+    );
+
+    const lista = await screen.findByRole("list", { name: "Línea de tiempo del trámite" });
+    const items = within(lista).getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+
+    // El carril va del más antiguo al vigente, con las mismas tarjetas del gestor.
+    expect(items[0]).toHaveTextContent("Color");
+    expect(items[0]).toHaveTextContent("Gestor");
+    expect(items[0]).toHaveTextContent("Fecha y hora");
+    expect(items[0]).toHaveTextContent(formatFechaHora(enBorrador));
+    expect(items[0]).toHaveTextContent("Sistema");
+    expect(items[0]).toHaveTextContent("Rojo");
+
+    expect(items[1]).toHaveTextContent("Entregado");
+    expect(items[1]).toHaveTextContent("Ana Gómez");
+    expect(items[1]).toHaveTextContent("Empresa Demo");
+    expect(items[1]).toHaveTextContent("Entregado desde Borrador");
+    expect(items[1]).toHaveTextContent("Vigente");
+
+    // La misma transición ya está en modificaciones: el carril de estados no la repite.
+    expect(screen.queryByText("solo-timeline@flit.test")).not.toBeInTheDocument();
+    expect(screen.queryByText("Solo En Timeline")).not.toBeInTheDocument();
+  });
+
+  it("HU #14182 AC2 — sin modificaciones no hay entradas ni una consulta de historial aparte", async () => {
+    const sinMods: OtClientProcedure = { ...PROCEDURE, statusHistory: [], modificaciones: [] };
+    fetchOtClientProcedure.mockResolvedValue(sinMods);
+    render(
+      <ToastProvider>
+        <ClientProcedureDetailModal
+          open
+          procedure={sinMods}
+          onClose={vi.fn()}
+          initialPanel="timeline"
+        />
+      </ToastProvider>,
+    );
+
+    expect(await screen.findByText("Todavía no hay modificaciones")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("list", { name: "Modificaciones del trámite" }),
+    ).not.toBeInTheDocument();
+
+    const src = readFileSync(join(__dirname, "../ClientProcedureDetailModal.tsx"), "utf8");
+    expect(src).not.toMatch(/status-history/);
+    expect(JSON.stringify(fetchOtClientProcedure.mock.calls)).not.toMatch(/status-history/i);
+    expect(JSON.stringify(fetchOtDocuments.mock.calls)).not.toMatch(/status-history/i);
   });
 });

@@ -95,6 +95,17 @@ export interface OtClientProcedure {
   gestorNombre?: string | null;
   /** Detalle (GET by id): actores del trámite. */
   actors?: OtClientProcedureActor[];
+  /**
+   * HU #14156/#14157 — historial de estados del detalle OT (línea de tiempo). Ausente o `[]` en
+   * filas de listado; el GET by id siempre lo envía (arreglo vacío si no hay transiciones).
+   */
+  statusHistory?: OtClientProcedureStatusHistory[];
+  /**
+   * HU #14182 — modificaciones de datos del detalle (incluye el periodo de borrador y las
+   * transiciones de estado). Ausente en filas de listado; el GET by id lo envía ya ordenado
+   * de la más reciente a la más antigua. El modal no vuelve a pedirlo.
+   */
+  modificaciones?: OtClientProcedureModificacion[];
   placa?: string | null;
   vin?: string | null;
   marca?: string | null;
@@ -191,6 +202,29 @@ export interface OtClientProcedureActor {
   email?: string | null;
   phone?: string | null;
   personType?: string | null;
+}
+
+/** HU #14156 — entrada de línea de tiempo (paridad con StatusHistory del Gestor). */
+export interface OtClientProcedureStatusHistory {
+  fromStatus: string | null;
+  toStatus: string;
+  changedAt: string;
+  reason: string | null;
+  metadata?: string | null;
+  changedByName?: string | null;
+  changedByEmail?: string | null;
+  changedByCompania?: string | null;
+}
+
+/** HU #14182 — una modificación ya incluida en el detalle del trámite. */
+export interface OtClientProcedureModificacion {
+  etiqueta: string;
+  campo: string;
+  anterior: string;
+  nuevo: string;
+  changedAt: string;
+  actorNombre?: string | null;
+  actorCompania?: string | null;
 }
 
 export interface OtClientProcedurePagedResult {

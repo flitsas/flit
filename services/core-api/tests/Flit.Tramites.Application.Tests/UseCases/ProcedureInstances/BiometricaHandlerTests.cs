@@ -1,6 +1,8 @@
 using System.Text;
+using System.Text.Json;
 using Flit.Tramites.Application.Biometrics;
 using Flit.Tramites.Application.Identity;
+using Flit.Tramites.Application.Identity.Events;
 using Flit.Tramites.Application.Storage;
 using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
@@ -578,6 +580,37 @@ public sealed class BiometricaHandlerTests
             .Which.Detail.Should().Contain("mock");
         _repo.Received(1).Add(Arg.Any<ProcedureInstanceBiometricValidation>());
         await _repo.Received(1).SaveChangesAsync(ct);
+    }
+
+    [Fact]
+    public async Task Simular_PrimeraAprobacion_EncolaFraseDeIdentidad()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant);
+        instance.Actors.Add(Actor(tenant, "comprador"));
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
+
+        ProcedureInstanceEvent? captured = null;
+        _repo.AddEventAsync(Arg.Do<ProcedureInstanceEvent>(e => captured = e), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var applier = new IdentityValidationResultApplier(
+            Substitute.For<IIdentityValidationEventPublisher>(), _repo);
+        var sut = new SimularBiometriaHandler(_repo, applier);
+
+        var (result, error) = await sut.HandleAsync(id, tenant, parte: "comprador", ct: ct);
+
+        error.Should().BeNull();
+        result!.Status.Should().Be(BiometricEstados.Aprobado);
+        captured.Should().NotBeNull();
+        captured!.CreatedBy.Should().BeNull();
+        captured.Tipo.Should().Be("dato_modificado");
+        using var doc = JsonDocument.Parse(captured.Payload);
+        doc.RootElement.GetProperty("campo").GetString().Should().Be("identidad");
+        doc.RootElement.GetProperty("anterior").GetString().Should().Be("");
+        doc.RootElement.GetProperty("nuevo").GetString().Should().Be("Identidad del comprador: aprobada");
     }
 
     [Fact]

@@ -11,6 +11,7 @@ import {
   computeOrdinals,
   defaultPercentageForNewActor,
   duplicateDocumentIndicesWithinSide,
+  equalizeSharesForRol,
   identityStatusForActor,
   indicesForRol,
   isCoveredByVaultForActor,
@@ -88,14 +89,21 @@ describe('applySolidarioAbsorption', () => {
     expect(next[0].porcentaje).toBe(40);
   });
 
-  it('el residuo puede quedar negativo si el gestor edita a los agregados antes que al principal', () => {
+  it('HU #14192 — si los agregados suman más de ~100, escala y deja al solidario > 0 (nunca negativo)', () => {
     const actors = [
       actor({ rol: 'vendedor', porcentaje: 999 }),
       actor({ rol: 'vendedor', porcentaje: 60 }),
       actor({ rol: 'vendedor', porcentaje: 60 }),
     ];
     const next = applySolidarioAbsorption(actors, new Set());
-    expect(next[0].porcentaje).toBe(-20);
+    expect(next[0].porcentaje).toBeGreaterThan(0);
+    expect(next[0].porcentaje).toBeLessThanOrEqual(100);
+    expect(next[1].porcentaje).toBeGreaterThan(0);
+    expect(next[1].porcentaje).toBeLessThanOrEqual(100);
+    expect(next[2].porcentaje).toBeGreaterThan(0);
+    expect(next[2].porcentaje).toBeLessThanOrEqual(100);
+    const sum = (next[0].porcentaje ?? 0) + (next[1].porcentaje ?? 0) + (next[2].porcentaje ?? 0);
+    expect(sum).toBeCloseTo(100, 1);
   });
 
   it('devuelve la MISMA referencia si el residuo ya coincide (no re-renderiza de más)', () => {
@@ -195,6 +203,32 @@ describe('validateOwnershipShares', () => {
     expect(result.zeroError).toBe(true);
   });
 
+  it('HU #14192 — bloquea cuando algún actor supera 100% aunque la suma sea 100 con otro negativo', () => {
+    const actors = [
+      actor({ rol: 'comprador', porcentaje: -20 }),
+      actor({ rol: 'comprador', porcentaje: 120 }),
+    ];
+    const result = validateOwnershipShares(actors);
+    expect(result.valid).toBe(false);
+    expect(result.zeroError).toBe(true);
+    expect(result.rangeError).toBe(true);
+  });
+
+  it('HU #14192 — tras eliminar con descuadre, no quedan negativos ni >100', () => {
+    const actors = [
+      actor({ rol: 'comprador', numeroDocumento: '1', porcentaje: -20 }),
+      actor({ rol: 'comprador', numeroDocumento: '2', porcentaje: 120 }),
+      actor({ rol: 'comprador', numeroDocumento: '3', porcentaje: 0 }),
+    ];
+    const next = redistributeAfterRemoval(actors, 2);
+    expect(next).toHaveLength(2);
+    for (const a of next) {
+      expect(a.porcentaje).toBeGreaterThan(0);
+      expect(a.porcentaje).toBeLessThanOrEqual(100);
+    }
+    expect((next[0].porcentaje ?? 0) + (next[1].porcentaje ?? 0)).toBeCloseTo(100, 1);
+  });
+
   it('los dos mensajes de bloqueo son textualmente los del encargo, no paráfrasis', () => {
     expect(OWNERSHIP_SUM_MESSAGE).toBe('La suma de los porcentajes debe ser exactamente 100%.');
     expect(OWNERSHIP_ZERO_MESSAGE).toBe(
@@ -283,6 +317,28 @@ describe('defaultPercentageForNewActor', () => {
   it('reparte equitativamente entre el total de actores tras agregar', () => {
     expect(defaultPercentageForNewActor(2)).toBe(50);
     expect(defaultPercentageForNewActor(4)).toBe(25);
+  });
+});
+
+describe('equalizeSharesForRol', () => {
+  // Uso de ejemplo: tras agregar un 3er comprador con solidario editado a mano (50+75),
+  // equalizeSharesForRol deja 33.33/33.33/33.34 y suma exactamente 100 (hallazgo QA).
+  it('reescribe todos los % del lado a partes iguales que suman 100', () => {
+    const actors = [
+      actor({ rol: 'comprador', porcentaje: 50 }),
+      actor({ rol: 'comprador', porcentaje: 75 }),
+      actor({ rol: 'comprador', porcentaje: 33.33 }),
+      actor({ rol: 'vendedor', porcentaje: 100 }),
+    ];
+    const next = equalizeSharesForRol(actors, 'comprador');
+    expect(next[0].porcentaje).toBe(33.33);
+    expect(next[1].porcentaje).toBe(33.33);
+    expect(next[2].porcentaje).toBe(33.34);
+    expect(round2((next[0].porcentaje ?? 0) + (next[1].porcentaje ?? 0) + (next[2].porcentaje ?? 0))).toBe(
+      100,
+    );
+    // No toca el otro lado.
+    expect(next[3].porcentaje).toBe(100);
   });
 });
 

@@ -2579,6 +2579,26 @@ export interface StatusHistoryPage {
   total: number;
   page: number;
   pageSize: number;
+  /**
+   * HU #14181 — modificaciones de datos del expediente, en el orden del API
+   * (más reciente primero). `null` cuando esta página no trae ninguna.
+   */
+  modificaciones?: StatusHistoryModification[] | null;
+  /** Total de modificaciones del trámite, no solo las de esta página. */
+  modificacionesTotal?: number;
+}
+
+/** HU #14181 — un cambio de dato dentro del expediente abierto. */
+export interface StatusHistoryModification {
+  id: string;
+  etiqueta: string;
+  campo: string;
+  anterior: string;
+  nuevo: string;
+  changedAt: string;
+  changedByUserId: string | null;
+  changedByName: string | null;
+  changedByCompania: string | null;
 }
 
 /** HU #11470 — fila de despacho de correo (dirección enmascarada). */

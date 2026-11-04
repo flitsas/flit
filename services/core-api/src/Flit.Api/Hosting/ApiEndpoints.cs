@@ -23,6 +23,13 @@ internal static class ApiEndpoints
         // HU #13459: catálogo de organismos de tránsito para la réplica de Comparendos (token de servicio, aud=tramites).
         app.MapGrpcService<Flit.Api.Grpc.CatalogosGrpcService>()
             .RequireAuthorization(Flit.Api.Authorization.ApiSecurityExtensions.CatalogosServicioPolicy);
+        // HU #14034 (Épica #14021): fachada del portal de persona natural. APAGADA por defecto: solo se mapea con
+        // PersonaNatural:Fachada:Habilitada=true, y aun así solo la atiende el cliente svc-personanatural para su empresa.
+        if (app.ServiceProvider.GetRequiredService<IConfiguration>().GetValue("PersonaNatural:Fachada:Habilitada", false))
+        {
+            app.MapGrpcService<Flit.Api.Grpc.PersonaNaturalGrpcService>()
+                .RequireAuthorization(Flit.Api.Authorization.ApiSecurityExtensions.PersonaNaturalServicioPolicy);
+        }
 
         // ── Endpoints de seguridad + Admin/parametrización (develop) ──────────────────
         app.MapInternalJwksEndpoints(); // JWKS público del token de usuario (core-ict valida con él)
@@ -75,6 +82,8 @@ internal static class ApiEndpoints
         app.MapAdminDocumentTypesEndpoints();
         app.MapAdminBannersEndpoints();
         app.MapAdminExternalClientsEndpoints(); // HU #13088 (Épica #12737) — clientes de integración externos (SuperAdmin)
+        app.MapAdminExternalIntegrationsEndpoints(); // HU #14067 (Épica #14021) — integraciones externas por compañía (SuperAdmin)
+        app.MapAdminPlataformaPersonaNaturalEndpoints(); // Feature J (Épica #14021) — tarifas, configuración y contenido del portal (SuperAdmin)
         app.MapAdminRejectionReasonsEndpoints();
         app.MapAdminProcedureDocumentRequirementsEndpoints();
         app.MapAdminDocumentOrderOverridesEndpoints();

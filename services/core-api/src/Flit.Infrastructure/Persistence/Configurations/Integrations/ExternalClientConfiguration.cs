@@ -32,6 +32,8 @@ internal sealed class ExternalClientConfiguration : IEntityTypeConfiguration<Ext
         builder.Property(x => x.FailedAttempts).HasColumnName("failed_attempts").HasDefaultValue(0).IsRequired();
         builder.Property(x => x.LockedUntil).HasColumnName("locked_until");
         builder.Property(x => x.LastTokenAt).HasColumnName("last_token_at");
+        builder.Property(x => x.Tipo).HasColumnName("tipo").HasMaxLength(32).HasDefaultValue("externa").IsRequired();
+        builder.Property(x => x.CompanyId).HasColumnName("company_id");
 
         builder.Property(x => x.RowVersion).HasColumnName("row_version").IsConcurrencyToken();
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
@@ -43,5 +45,10 @@ internal sealed class ExternalClientConfiguration : IEntityTypeConfiguration<Ext
 
         // Refleja la restricción única del DDL; no la crea (la entidad está ExcludeFromMigrations).
         builder.HasIndex(x => x.ClientId).IsUnique().HasDatabaseName("uq_external_clients_client_id");
+
+        // HU #14067 — una sola integración ACTIVA por (compañía, tipo); la crea el DDL 162.
+        builder.HasIndex(x => new { x.CompanyId, x.Tipo }).IsUnique()
+            .HasDatabaseName("uq_external_clients_company_tipo_activo")
+            .HasFilter("is_active AND deleted_at IS NULL AND company_id IS NOT NULL");
     }
 }

@@ -78,6 +78,8 @@ public static class DependencyInjection
         // ICT (paridad v1) — pausar/reanudar trámites ICT desde la UI de FLIT (individual + masivo).
         services.AddScoped<PauseProcedureInstanceHandler>();
         services.AddScoped<EnviarAlOtHandler>();
+        // HU #14177 — registra evento dato_modificado cuando el OT asigna o corrige la placa.
+        services.AddScoped<BitacoraPlacaOtHandler>();
         // HU #10349 — finalizar borrador (fase 2): datos completos sin exigir identidad/FUR.
         services.AddScoped<FinalizeDraftProcedureInstanceHandler>();
         // HU #10536 — marcar trámite como prioritario (ordenamiento con primacía en los listados).
@@ -203,6 +205,8 @@ public static class DependencyInjection
         // el correo) y reenviar manualmente una prevalidación standalone.
         services.AddScoped<UseCases.Persons.EditarPrevalidacionHandler>();
         services.AddScoped<UseCases.Persons.ReenviarPrevalidacionHandler>();
+        // HU #14045 (Feature #14023, Épica #14021) — reenvío de la validación de una parte del portal de Persona Natural.
+        services.AddScoped<UseCases.Persons.ReenviarValidacionPortalHandler>();
         // CF-06 (Feature #11004, ADR-0036) — detalle de UNA validación por id (poll), tenant-scoped,
         // sirve tanto a standalone como a trámite.
         services.AddScoped<UseCases.Persons.GetPrevalidacionDetailHandler>();

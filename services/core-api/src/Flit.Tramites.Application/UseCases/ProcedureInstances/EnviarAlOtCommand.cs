@@ -1,7 +1,9 @@
-using Flit.Tramites.Domain.Entities;
-using Flit.Tramites.Domain.ExternalSync;
+using System.Text.Json;
+using Flit.Tramites.Application.Tracking;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
+using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Domain.ExternalSync;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Microsoft.Extensions.Logging;
@@ -34,6 +36,9 @@ public sealed class EnviarAlOtHandler(
     IFirmaPendienteNotifier? firmaNotifier = null,
     UltimoBloqueoFirma? ultimoBloqueo = null)
 {
+    // HU #14177 — camelCase para el payload de bitácora (mismo options que el fallback de actores).
+    private static readonly JsonSerializerOptions s_json = new(JsonSerializerDefaults.Web);
+
     /// <summary>
     /// El RUNT no reporta un SOAT vigente y la compañía tiene apagada la opción de continuar sin él.
     /// </summary>
@@ -135,6 +140,15 @@ public sealed class EnviarAlOtHandler(
             ct).ConfigureAwait(false);
         if (!outcome.Success)
             return (null, outcome.ErrorCode, null);
+
+        // HU #14177 — bitácora de radicación: anterior vacío, nuevo "Radicado".
+        // Si el envío del borrador ya dejó esa fila, no se repite.
+        if (!RadicacionBitacora.YaRegistrada(instance))
+        {
+            await repo.AddEventAsync(
+                RadicacionBitacora.Crear(tenantId, id, changedBy, DateTimeOffset.UtcNow), ct);
+            await repo.SaveChangesAsync(ct);
+        }
 
         // HU #12116 — mismo disparador best-effort que Submit/AssignPlate: idempotente si ya se firmó
         // al asignar la placa (AlreadyStamped) y «no lista» si aún falta identidad. Nunca cambia la

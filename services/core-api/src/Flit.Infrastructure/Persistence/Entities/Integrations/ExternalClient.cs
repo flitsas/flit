@@ -36,6 +36,12 @@ public sealed class ExternalClient
 
     public DateTimeOffset? LastTokenAt { get; set; }
 
+    /// <summary>HU #14067 — <c>externa</c> (feed de trámites, sin compañía) o <c>persona_natural</c> (ligada a una compañía).</summary>
+    public string Tipo { get; set; } = "externa";
+
+    /// <summary>HU #14067 — compañía a la que se liga la integración; <c>null</c> en las de tipo <c>externa</c>.</summary>
+    public Guid? CompanyId { get; set; }
+
     public long RowVersion { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }

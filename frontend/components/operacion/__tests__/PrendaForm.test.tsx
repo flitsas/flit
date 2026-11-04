@@ -7,7 +7,9 @@ import {
   type PrendaFormHandle,
   parseRuntGravamenesJson,
   buildRuntPrendaSummary,
+  hasRuntAcreedorPii,
   pickRuntAcreedor,
+  RUNT_SIN_DETALLE_ACREEDOR_AVISO,
   runtGarantiaTieneDatos,
   traspasoDecisions,
 } from '../PrendaForm';
@@ -923,6 +925,83 @@ describe('PrendaForm — aviso RUNT sin gravamen (HU #12131)', () => {
     expect(screen.getByLabelText('NIT / documento del acreedor', { exact: false })).toBeDisabled();
     // Con gravamen confirmado, la modal informativa no aplica (mismo criterio que AC4).
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByText(RUNT_SIN_DETALLE_ACREEDOR_AVISO)).not.toBeInTheDocument();
+  });
+
+  /**
+   * HU #14152 — RUNT marca gravamen (bandera SI) pero no trae nombre/documento/ítems con acreedor:
+   * los campos deben quedar editables (antes quedaban bloqueados y vacíos → PrendaAcreedorRequerido).
+   */
+  it('AC1d — Levantar CON gravamen RUNT sin detalle de acreedor: campos editables + aviso info', async () => {
+    client.getInstance.mockResolvedValue({
+      fieldValues: [
+        {
+          formFieldId: '',
+          fieldKey: 'runt_tiene_prendas',
+          valueText: 'SI',
+          valueJson: null,
+          source: 'consultation',
+        },
+        {
+          formFieldId: '',
+          fieldKey: 'runt_nombre_acreedor',
+          valueText: '',
+          valueJson: null,
+          source: 'consultation',
+        },
+        {
+          formFieldId: '',
+          fieldKey: 'runt_gravamenes',
+          valueText: null,
+          valueJson: '[]',
+          source: 'consultation',
+        },
+      ],
+    } as never);
+
+    render(
+      <PrendaForm
+        instanceId="abc"
+        embeddedInWizard
+        decisions={['levantar']}
+        exigeEntidadLevantamiento
+        runtAvisoVariant="levantamiento"
+        runtGravamenChecked
+        runtHasGravamen
+      />,
+    );
+    await waitFor(() => expect(client.getPrenda).toHaveBeenCalled());
+
+    const nombreInput = await screen.findByLabelText('Acreedor (beneficiario)', { exact: false });
+    const docInput = screen.getByLabelText('NIT / documento del acreedor', { exact: false });
+    expect(nombreInput).toBeEnabled();
+    expect(docInput).toBeEnabled();
+    expect(screen.getAllByText(RUNT_SIN_DETALLE_ACREEDOR_AVISO).length).toBeGreaterThanOrEqual(1);
+
+    fireEvent.change(nombreInput, { target: { value: 'JESUS ALONSO ALZATE' } });
+    fireEvent.change(docInput, { target: { value: '71623158' } });
+    expect(nombreInput).toHaveValue('JESUS ALONSO ALZATE');
+    expect(docInput).toHaveValue('71623158');
+  });
+
+  it('hasRuntAcreedorPii — bandera SI sin nombre/documento no cuenta como PII', () => {
+    const summary = buildRuntPrendaSummary([
+      {
+        formFieldId: '',
+        fieldKey: 'runt_tiene_prendas',
+        valueText: 'SI',
+        valueJson: null,
+        source: 'consultation',
+      } as FieldValue,
+      {
+        formFieldId: '',
+        fieldKey: 'runt_gravamenes',
+        valueText: null,
+        valueJson: '[]',
+        source: 'consultation',
+      } as FieldValue,
+    ]);
+    expect(hasRuntAcreedorPii(summary)).toBe(false);
   });
 
   it('AC2 — Inscribir Prenda sin gravamen en RUNT: aparece la modal con el texto de Inscripción', async () => {

@@ -5024,6 +5024,10 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("client_id");
 
+                    b.Property<Guid?>("CompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -5103,6 +5107,14 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("secret_rotated_at");
 
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("externa")
+                        .HasColumnName("tipo");
+
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -5117,6 +5129,11 @@ namespace Flit.Infrastructure.Migrations
                     b.HasIndex("ClientId")
                         .IsUnique()
                         .HasDatabaseName("uq_external_clients_client_id");
+
+                    b.HasIndex("CompanyId", "Tipo")
+                        .IsUnique()
+                        .HasDatabaseName("uq_external_clients_company_tipo_activo")
+                        .HasFilter("is_active AND deleted_at IS NULL AND company_id IS NOT NULL");
 
                     b.ToTable("external_clients", "integrations", t =>
                         {

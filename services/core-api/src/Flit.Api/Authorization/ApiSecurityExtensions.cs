@@ -26,6 +26,7 @@ public static class ApiSecurityExtensions
 
     /// <summary>Policy del gRPC de catálogos (HU #13459): token de servicio de Identidad con el scope de catálogos.</summary>
     public const string CatalogosServicioPolicy = "CatalogosServicio";
+    public const string PersonaNaturalServicioPolicy = "PersonaNaturalServicio";
 
     public static IServiceCollection AddApiSecurity(
         this IServiceCollection services,
@@ -146,6 +147,7 @@ public static class ApiSecurityExtensions
             .AddPolicy(CatalogosServicioPolicy, CatalogosServicioAuthorization.Configure)
             // HU #13731 — ListarTiposTramite: además del scope, solo los clientes de la lista (svc-diagnostico).
             .AddPolicy(CatalogoTiposTramiteAuthorization.Policy, policy => CatalogoTiposTramiteAuthorization.Configure(policy, configuration))
+            .AddPolicy(PersonaNaturalServicioPolicy, PersonaNaturalServicioAuthorization.Configure)
             // HU #13087 — endpoints externos: solo el esquema ExternalClient y el permiso del pase.
             .AddPolicy(ExternalClientAuthorization.TramitesReadPolicy, policy => policy
                 .AddAuthenticationSchemes(ExternalClientAuthorization.Scheme)

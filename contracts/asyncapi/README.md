@@ -7,7 +7,7 @@ sale de FLIT por REST (`contracts/openapi`).
 | Archivo | Exchange | Qué contiene |
 |---|---|---|
 | [`plataforma-events.v1.yaml`](plataforma-events.v1.yaml) | `flit.plataforma` | Productos encendidos, suspensiones y cambios de roles |
-| [`tramites-events.v1.yaml`](tramites-events.v1.yaml) | `flit.tramites` | Cambio de estado del trámite y validaciones de identidad |
+| [`tramites-events.v1.yaml`](tramites-events.v1.yaml) | `flit.tramites` | Cambio de estado del trámite y validaciones de identidad; además el aviso de radicación (solo ids; los datos van por pull gRPC) que le deja el portal de persona natural |
 | [`consultas-events.v1.yaml`](consultas-events.v1.yaml) | `flit.consultas` | Medición de cada consulta a proveedores; trabajos de consulta del Diagnóstico y su resultado (ADR-0075) |
 | [`diagnostico-events.v1.yaml`](diagnostico-events.v1.yaml) | `flit.diagnostico` | Cierre de un diagnóstico (`diagnostico.lote.terminado`, totales sin datos personales) |
 | [`notificaciones-events.v1.yaml`](notificaciones-events.v1.yaml) | `flit.notificaciones` | Trabajos en cola que recibe Notificaciones (correo y webhooks salientes) |

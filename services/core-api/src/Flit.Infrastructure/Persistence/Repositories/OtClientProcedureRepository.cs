@@ -8,6 +8,7 @@ using Flit.Modules.Quipux.Domain.Envios;
 using Flit.Queries.Domain;
 using Flit.Queries.Domain.Documentos;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -1398,6 +1399,18 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     .ToListAsync(cancellationToken)
                     .ConfigureAwait(false);
 
+                // HU #14156 — línea de tiempo: mismas filas que escribe Approve/Reject/Observe; actores
+                // resueltos en batch (bug #12526) sin inventar nombre/correo/compañía si faltan.
+                var statusHistory = await LoadStatusHistoryForDetailAsync(mapped.Id, cancellationToken)
+                    .ConfigureAwait(false);
+
+                // HU #14173/#14176/#14180 — modificaciones de datos, estados y actos ya guardados
+                // (reasignación, reenvío, revocatoria). El acceso ya está garantizado porque el
+                // trámite es visible para el OT (grant vigente). No abre otro permiso. Se pasa
+                // statusHistory para no abrir una segunda consulta sobre la misma tabla.
+                var modificaciones = await LoadModificacionesForDetailAsync(mapped.Id, statusHistory, cancellationToken)
+                    .ConfigureAwait(false);
+
                 var comercial = await _context.ProcedureInstanceCommercials
                     .AsNoTracking()
                     .Where(c => c.ProcedureInstanceId == mapped.Id)
@@ -1464,6 +1477,8 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     SubmittedAt = mapped.SubmittedAt,
                     Prioritario = mapped.Prioritario,
                     Actors = actors,
+                    StatusHistory = statusHistory,
+                    Modificaciones = modificaciones,
                     Placa = mapped.Placa,
                     Vin = mapped.Vin,
                     VendedorNombre = mapped.VendedorNombre,
@@ -1511,6 +1526,280 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 return enriched[0];
             },
             cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// HU #14156 — lee <c>procedure_instance_status_history</c> del detalle OT y resuelve
+    /// nombre/correo/compañía del ejecutor en tres consultas batch (mismo criterio que bug #12526 /
+    /// GetProcedureInstance). Metadata recortada: solo motivo+items de subsanación (sin fieldSnapshot
+    /// ni tenant ids internos).
+    /// </summary>
+    private async Task<IReadOnlyList<OtClientProcedureStatusHistory>> LoadStatusHistoryForDetailAsync(
+        Guid procedureInstanceId,
+        CancellationToken cancellationToken)
+    {
+        var rows = await _context.ProcedureInstanceStatusHistories
+            .AsNoTracking()
+            .Where(h => h.ProcedureInstanceId == procedureInstanceId)
+            .OrderBy(h => h.ChangedAt)
+            .ThenBy(h => h.Id)
+            .Select(h => new
+            {
+                h.FromStatus,
+                h.ToStatus,
+                h.ChangedAt,
+                h.Reason,
+                h.Metadata,
+                h.ChangedBy,
+            })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (rows.Count == 0)
+            return [];
+
+        var userIds = rows
+            .Where(r => r.ChangedBy is not null)
+            .Select(r => r.ChangedBy!.Value)
+            .Distinct()
+            .ToList();
+
+        var names = await LoadUserDisplayNamesAsync(userIds, cancellationToken).ConfigureAwait(false);
+        var emails = await LoadUserEmailsAsync(userIds, cancellationToken).ConfigureAwait(false);
+        var companias = await LoadUserCompaniasAsync(userIds, cancellationToken).ConfigureAwait(false);
+
+        return rows.Select(h => new OtClientProcedureStatusHistory
+        {
+            FromStatus = h.FromStatus,
+            ToStatus = h.ToStatus,
+            ChangedAt = h.ChangedAt,
+            Reason = h.Reason,
+            Metadata = BuildOtObservationMetadata(h.Metadata),
+            ChangedByName = h.ChangedBy is { } cb1 && names.TryGetValue(cb1, out var n) ? n : null,
+            ChangedByEmail = h.ChangedBy is { } cb2 && emails.TryGetValue(cb2, out var em) ? em : null,
+            ChangedByCompania = h.ChangedBy is { } cb3 && companias.TryGetValue(cb3, out var co) ? co : null,
+        }).ToList();
+    }
+
+    /// <summary>
+    /// HU #14173 — lee los eventos <c>dato_modificado</c> del trámite y resuelve nombre y
+    /// compañía del actor en batch. No filtra por estado: incluye filas escritas en borrador.
+    /// Llama a <see cref="LoadUserDisplayNamesAsync"/> y <see cref="LoadUserCompaniasAsync"/>
+    /// (ya definidos en esta clase). No loguea el payload (puede traer PII).
+    /// El trámite ya fue validado como visible para el OT antes de llegar aquí: no abre otro permiso.
+    /// <para>
+    /// HU #14176 — recibe el <paramref name="statusHistory"/> ya cargado por
+    /// <see cref="LoadStatusHistoryForDetailAsync"/> para proyectar cada transición como una
+    /// modificación con <c>Etiqueta="Estado"</c> / <c>Campo="estado"</c> sin abrir una segunda
+    /// consulta. Los <c>dato_modificado</c> con <c>campo="estado"</c> y mismo anterior/nuevo que
+    /// una fila del historial se descartan para no duplicar la entrada.
+    /// </para>
+    /// <para>
+    /// HU #14180 — proyecta en la misma lista los actos ya guardados (reasignación, reenvío,
+    /// revocatoria), una sola vez. El tiempo se conserva en UTC.
+    /// </para>
+    /// </summary>
+    private async Task<IReadOnlyList<OtClientProcedureModificacion>> LoadModificacionesForDetailAsync(
+        Guid procedureInstanceId,
+        IReadOnlyList<OtClientProcedureStatusHistory> statusHistory,
+        CancellationToken ct)
+    {
+        var tipos = StatusHistoryModificacionLectura.Tipos();
+        var raw = await _context.ProcedureInstanceEvents
+            .AsNoTracking()
+            .Where(e => e.ProcedureInstanceId == procedureInstanceId && tipos.Contains(e.Tipo))
+            .OrderByDescending(e => e.CreatedAt)
+            .ThenByDescending(e => e.Id)
+            .Select(e => new { e.Id, e.Tipo, e.CreatedAt, e.CreatedBy, e.Payload })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        // Payload roto de dato_modificado se omite. Un acto conocido se proyecta con su etiqueta.
+        // No se loguea el payload (puede traer PII).
+        var projected = new List<StatusHistoryModificacionLectura.Fila>(raw.Count);
+        foreach (var row in raw)
+        {
+            if (StatusHistoryModificacionLectura.TryProject(
+                    row.Tipo, row.Id, row.CreatedAt, row.CreatedBy, row.Payload, out var fila))
+                projected.Add(fila);
+        }
+
+        var deduped = StatusHistoryModificacionLectura.Dedup(projected);
+
+        // HU #14176 — proyección de cada transición de estado como modificación "Estado".
+        // Los actores ya están resueltos en statusHistory (no se hace una segunda consulta).
+        var statusMods = statusHistory
+            .Select(h => new OtClientProcedureModificacion
+            {
+                Etiqueta = "Estado",
+                Campo = "estado",
+                Anterior = h.FromStatus ?? "",
+                Nuevo = h.ToStatus,
+                ChangedAt = h.ChangedAt,
+                ActorNombre = h.ChangedByName,
+                ActorCompania = h.ChangedByCompania,
+            })
+            .ToList();
+
+        // Descartar dato_modificado con campo "estado" duplicado respecto a una fila de status history.
+        var sinEstadoDuplicado = deduped
+            .Where(p => !(p.Campo == "estado" &&
+                statusMods.Any(s => s.Anterior == p.Anterior && s.Nuevo == p.Nuevo)))
+            .ToList();
+
+        if (sinEstadoDuplicado.Count == 0 && statusMods.Count == 0)
+            return [];
+
+        var userIds = sinEstadoDuplicado
+            .Where(p => p.CreatedBy is not null)
+            .Select(p => p.CreatedBy!.Value)
+            .Distinct()
+            .ToList();
+
+        var names = userIds.Count > 0
+            ? await LoadUserDisplayNamesAsync(userIds, ct).ConfigureAwait(false)
+            : new Dictionary<Guid, string>();
+        var companias = userIds.Count > 0
+            ? await LoadUserCompaniasAsync(userIds, ct).ConfigureAwait(false)
+            : new Dictionary<Guid, string>();
+
+        var dataMods = sinEstadoDuplicado.Select(p =>
+        {
+            var nombre = p.CreatedBy is { } uid && names.TryGetValue(uid, out var n) ? n : null;
+            var compania = p.CreatedBy is { } uid2 && companias.TryGetValue(uid2, out var co) ? co : null;
+            return new OtClientProcedureModificacion
+            {
+                Etiqueta = p.Etiqueta,
+                Campo = p.Campo,
+                Anterior = p.Anterior,
+                Nuevo = p.Nuevo,
+                ChangedAt = p.ChangedAt,
+                ActorNombre = StatusHistoryModificacionLectura.NombreActor(p.Campo, p.CreatedBy, nombre),
+                ActorCompania = StatusHistoryModificacionLectura.CompaniaActor(p.Campo, p.CreatedBy, compania),
+            };
+        }).ToList();
+
+        // Mezclar y ordenar por ChangedAt DESC (más reciente primero). UTC, sin conversión a Colombia.
+        return statusMods
+            .Concat(dataMods)
+            .OrderByDescending(m => m.ChangedAt)
+            .ThenByDescending(m => m.Campo)
+            .ToList();
+    }
+
+    private async Task<IReadOnlyDictionary<Guid, string>> LoadUserDisplayNamesAsync(
+        List<Guid> userIds,
+        CancellationToken ct)
+    {
+        if (userIds.Count == 0)
+            return new Dictionary<Guid, string>();
+
+        var rows = await _context.Users.AsNoTracking()
+            .Where(u => userIds.Contains(u.Id))
+            .Select(u => new { u.Id, u.DisplayName })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return rows
+            .Where(r => !string.IsNullOrWhiteSpace(r.DisplayName))
+            .ToDictionary(r => r.Id, r => r.DisplayName);
+    }
+
+    private async Task<IReadOnlyDictionary<Guid, string>> LoadUserEmailsAsync(
+        List<Guid> userIds,
+        CancellationToken ct)
+    {
+        if (userIds.Count == 0)
+            return new Dictionary<Guid, string>();
+
+        var rows = await _context.Users.AsNoTracking()
+            .Where(u => userIds.Contains(u.Id))
+            .Select(u => new { u.Id, u.Email })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return rows
+            .Where(r => !string.IsNullOrWhiteSpace(r.Email))
+            .ToDictionary(r => r.Id, r => r.Email);
+    }
+
+    /// <summary>
+    /// Misma resolución de compañía que ProcedureInstanceRepository (HomeTenantId, si no la
+    /// asignación de rol activa más antigua). Usuarios sin compañía resoluble se omiten.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<Guid, string>> LoadUserCompaniasAsync(
+        List<Guid> userIds,
+        CancellationToken ct)
+    {
+        if (userIds.Count == 0)
+            return new Dictionary<Guid, string>();
+
+        var distinct = userIds.Distinct().ToList();
+        var homes = await _context.Users.AsNoTracking()
+            .Where(u => distinct.Contains(u.Id))
+            .Select(u => new { u.Id, u.HomeTenantId })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var sinHome = homes.Where(h => h.HomeTenantId is null).Select(h => h.Id).ToList();
+        var asignaciones = sinHome.Count == 0
+            ? []
+            : await _context.UserRoleAssignments.AsNoTracking()
+                .Where(a => sinHome.Contains(a.UserId) && a.DeletedAt == null)
+                .OrderBy(a => a.AssignedAt)
+                .Select(a => new { a.UserId, a.TenantId })
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+
+        var tenantPorUsuario = new Dictionary<Guid, Guid>();
+        foreach (var home in homes)
+        {
+            if (home.HomeTenantId is { } tid)
+                tenantPorUsuario[home.Id] = tid;
+        }
+
+        foreach (var asignacion in asignaciones)
+            tenantPorUsuario.TryAdd(asignacion.UserId, asignacion.TenantId);
+
+        if (tenantPorUsuario.Count == 0)
+            return new Dictionary<Guid, string>();
+
+        var tenantIds = tenantPorUsuario.Values.Distinct().ToList();
+        var razones = await _context.Tenants.AsNoTracking()
+            .Where(t => tenantIds.Contains(t.Id))
+            .Select(t => new { t.Id, t.LegalName })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var legalByTenant = razones
+            .Where(t => !string.IsNullOrWhiteSpace(t.LegalName))
+            .ToDictionary(t => t.Id, t => t.LegalName);
+
+        var result = new Dictionary<Guid, string>();
+        foreach (var (userId, tenantId) in tenantPorUsuario)
+        {
+            if (legalByTenant.TryGetValue(tenantId, out var name))
+                result[userId] = name;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Recorta metadata de historial al checklist de subsanación (motivo + items). No reexpone
+    /// fieldSnapshot ni ot_tenant_id/approver_tenant_id (Habeas Data / plomería interna).
+    /// </summary>
+    private static string? BuildOtObservationMetadata(string? metadataJson)
+    {
+        var observation = SubsanacionObservation.FromJson(metadataJson);
+        if (observation is null || (observation.Motivo is null && observation.Items.Count == 0))
+            return null;
+
+        return JsonSerializer.Serialize(new
+        {
+            motivo = observation.Motivo,
+            items = observation.Items.Select(i => new { campo = i.Campo, detalle = i.Detalle }),
+        });
     }
 
     /// <summary>Columnas del detalle que viven en <c>procedure_instances</c> (o en un join directo).</summary>

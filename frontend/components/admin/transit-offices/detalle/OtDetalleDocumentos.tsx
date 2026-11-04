@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, Download, Eye, RefreshCw } from "lucide-react";
+import { Check, Download, Eye } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { DocumentPreviewModal } from "@/components/shared/DocumentPreviewModal";
@@ -253,12 +253,9 @@ export function OtDetalleDocumentos({
   };
 
   const handleConsolidado = async (force = false) => {
-    // Botón único (Feature #10701): muestra el consolidado del expediente INLINE. Si el OT puede
-    // generar, "asegura" el vigente — el backend regenera solo si la marca lo pide (nunca generado
-    // o invalidado por CUALQUIER cambio del expediente: adjuntar o borrar un documento, editar
-    // datos, la decisión del OT, una transición de estado…) y reutiliza si ya está vigente.
-    // `force` se salta ese atajo y reconstruye. En modo QX read-only no se puede generar: solo se
-    // muestra el consolidado existente.
+    // HU #14207 / Feature #10701 — CTA único «Ver consolidado». Sin force el backend regenera solo
+    // si la marca de vigencia lo pide (cambio de docs/datos invalida vía ConsolidadoVigenciaTracker).
+    // `force=true` solo desde «Reintentar» del aviso de fallo. En QX read-only: solo entrega/ver.
     setConsolidadoActing(true);
     try {
       if (!readOnly) {
@@ -498,6 +495,7 @@ export function OtDetalleDocumentos({
                 {consolidadoActing ? "Abriendo el consolidado…" : "Consolidado de documentos"}
               </span>
               <span className="flex shrink-0 items-center gap-1.5">
+                {/* HU #14207 — un solo CTA; force solo vía Reintentar del aviso de fallo. */}
                 <AccionDoc
                   blanco
                   icon={Eye}
@@ -506,19 +504,6 @@ export function OtDetalleDocumentos({
                   disabled={consolidadoActing}
                   onClick={() => void handleConsolidado()}
                 />
-                {/* Salida manual: reconstruye el PDF ignorando la marca de vigencia. El expediente se
-                    invalida solo cuando cambia, pero si el operador duda de lo que ve —o una vía de
-                    invalidación falla— no debe quedarse sin forma de comprobarlo. */}
-                {!readOnly ? (
-                  <AccionDoc
-                    blanco
-                    icon={RefreshCw}
-                    label="Actualizar el consolidado del expediente"
-                    title="Reconstruye el expediente consolidado con el contenido actual del trámite"
-                    disabled={consolidadoActing}
-                    onClick={() => void handleConsolidado(true)}
-                  />
-                ) : null}
               </span>
             </li>
             </ul>

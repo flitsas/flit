@@ -109,6 +109,17 @@ describe("LegalRepresentativesTab — diseño", () => {
     expect(screen.getByText(/ningún representante coincide/i)).toBeInTheDocument();
   });
 
+  it("el embudo de Representante cubre todo el directorio, no solo la página visible", async () => {
+    const user = userEvent.setup();
+    renderTab();
+    await screen.findByText("Nombre1 Apellido1");
+    await user.click(screen.getByRole("button", { name: "Filtrar por Representante" }));
+    await user.type(screen.getByLabelText(/representante contiene/i), "nombre12");
+    await user.click(screen.getByRole("button", { name: "Aplicar" }));
+    expect(screen.getByText("Nombre12 Apellido12")).toBeInTheDocument();
+    expect(screen.queryByText("Nombre1 Apellido1")).not.toBeInTheDocument();
+  });
+
   it("cada fila ofrece acciones con nombre accesible y tooltip", async () => {
     renderTab();
     await screen.findByText("Nombre1 Apellido1");

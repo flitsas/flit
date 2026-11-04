@@ -54,6 +54,15 @@ public sealed class OtClientProcedureResponse
     /// <summary>Detalle: actores (GET by id). Vacío en listados.</summary>
     public IReadOnlyList<OtClientProcedureActorResponse> Actors { get; init; } = [];
 
+    /// <summary>HU #14156 — historial de estados (GET by id). Arreglo vacío si no hay filas; vacío en listados.</summary>
+    public IReadOnlyList<OtClientProcedureStatusHistoryResponse> StatusHistory { get; init; } = [];
+
+    /// <summary>
+    /// HU #14173 — modificaciones de datos campo a campo (dato_modificado), más reciente primero.
+    /// GET by id únicamente; arreglo vacío en listados. Colección ADITIVA: no se mezcla con StatusHistory.
+    /// </summary>
+    public IReadOnlyList<OtClientProcedureModificacionResponse> Modificaciones { get; init; } = [];
+
     public string? Placa { get; init; }
     public string? Vin { get; init; }
     /// <summary>Propietario/vendedor (null en matrícula inicial).</summary>
@@ -159,6 +168,34 @@ public sealed class OtClientProcedureActorResponse
     public string? PersonType { get; init; }
 }
 
+/// <summary>HU #14156 — entrada de línea de tiempo en el detalle OT (paridad con StatusHistory del Gestor).</summary>
+public sealed class OtClientProcedureStatusHistoryResponse
+{
+    public string? FromStatus { get; init; }
+    public string ToStatus { get; init; } = string.Empty;
+    public DateTimeOffset ChangedAt { get; init; }
+    public string? Reason { get; init; }
+    public string? Metadata { get; init; }
+    public string? ChangedByName { get; init; }
+    public string? ChangedByEmail { get; init; }
+    public string? ChangedByCompania { get; init; }
+}
+
+/// <summary>
+/// HU #14173 — modificación de un campo del trámite en el detalle OT. <see cref="ChangedAt"/>
+/// es UTC; el frontend lo formatea en la zona horaria del usuario.
+/// </summary>
+public sealed class OtClientProcedureModificacionResponse
+{
+    public string Etiqueta { get; init; } = string.Empty;
+    public string Campo { get; init; } = string.Empty;
+    public string Anterior { get; init; } = string.Empty;
+    public string Nuevo { get; init; } = string.Empty;
+    public DateTimeOffset ChangedAt { get; init; }
+    public string? ActorNombre { get; init; }
+    public string? ActorCompania { get; init; }
+}
+
 public sealed class RejectOtClientProcedureRequest
 {
     /// <summary>
@@ -229,6 +266,27 @@ internal static class OtClientProcedureMapper
                 Email = a.Email,
                 Phone = a.Phone,
                 PersonType = a.PersonType,
+            }).ToList(),
+            StatusHistory = procedure.StatusHistory.Select(h => new OtClientProcedureStatusHistoryResponse
+            {
+                FromStatus = h.FromStatus,
+                ToStatus = h.ToStatus,
+                ChangedAt = h.ChangedAt,
+                Reason = h.Reason,
+                Metadata = h.Metadata,
+                ChangedByName = h.ChangedByName,
+                ChangedByEmail = h.ChangedByEmail,
+                ChangedByCompania = h.ChangedByCompania,
+            }).ToList(),
+            Modificaciones = procedure.Modificaciones.Select(m => new OtClientProcedureModificacionResponse
+            {
+                Etiqueta = m.Etiqueta,
+                Campo = m.Campo,
+                Anterior = m.Anterior,
+                Nuevo = m.Nuevo,
+                ChangedAt = m.ChangedAt,
+                ActorNombre = m.ActorNombre,
+                ActorCompania = m.ActorCompania,
             }).ToList(),
             Placa = procedure.Placa,
             Vin = procedure.Vin,

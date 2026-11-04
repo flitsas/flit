@@ -28,7 +28,7 @@ export const OT_ARTICLES: ManualArticle[] = [
         id: "que-ves",
         title: "1. Qué ves al entrar",
         paragraphs: [
-          "Con rol de organismo de tránsito, al iniciar sesión entras directo a «Tu cola de trabajo»: no es el panel del gestor, porque aquí no se mide producción de una empresa sino el trabajo pendiente del organismo.",
+          "Con rol de organismo de tránsito, al iniciar sesión entras directo a «Tu cola de trabajo»: no es el panel del gestor, porque aquí no se mide producción de una empresa sino el trabajo pendiente del organismo. Si no tienes el permiso de reportes del organismo, en lugar de la cola ves «No tienes permiso para ver esta información.»: no es una falla del sistema y reintentar no la va a cargar.",
           "Arriba rota un carrusel de mensajes: el primero siempre es fijo y resume tu cola en palabras («Tienes N trámites esperando tu decisión, M llevan más de 7 días esperando» y tu mediana de decisión de hoy); detrás pueden aparecer los banners activos que publique el equipo FLIT. Los datos son del día calendario de Bogotá.",
         ],
         media: [
@@ -135,6 +135,9 @@ export const OT_ARTICLES: ManualArticle[] = [
       "por aprobar",
       "por preasignar",
       "transformaciones",
+      "linea de tiempo",
+      "modificaciones",
+      "borrador",
     ],
     summary: "Revisar, filtrar y decidir trámites radicados por compañías cliente; asignar, corregir y liberar placas.",
     blocks: [
@@ -169,6 +172,7 @@ export const OT_ARTICLES: ManualArticle[] = [
         title: "3. Revisión y decisión",
         paragraphs: [
           "Abre un trámite para ver el expediente, organizado en acordeones independientes que puedes tener abiertos a la vez: vehículo, propietario y actores; transformaciones declaradas (si el vehículo cambió color, combustible o carrocería frente a lo que dice RUNT, aquí ves el antes y el después); documentos del gestor («Ver documentos»), consolidado («Ver consolidado») y el historial. El panel «Pendientes antes de decidir» lista lo que falta (por ejemplo SOAT vigente cuando la regla aplica).",
+          "«Línea de Tiempo del Trámite», o el chip de estado, muestra cada cambio en tarjetas, también lo ocurrido cuando el trámite todavía estaba en borrador. El título de la tarjeta es el dato. Una bandera de transformación (color, carrocería, combustible o blindaje) se lee Sí o No. Dentro van gestor, correo, empresa, rol, fecha y hora de Colombia, y el detalle con el valor anterior y el nuevo. La de más abajo es la vigente. Si no hay cambios dice «Todavía no hay modificaciones»; si está cargando o falla, lo dice. Solo lo ves en un trámite que ya puedes abrir: un borrador que no te corresponde no llega a esta bandeja.",
           "El consolidado se mantiene al día solo: si el gestor o el organismo cambian un dato, un documento o la placa, el FUR y el consolidado se vuelven a generar en segundos. No hace falta pedir que lo limpien para ver el cambio.",
         ],
         bullets: [
@@ -271,6 +275,8 @@ export const OT_ARTICLES: ManualArticle[] = [
       "permisos individuales",
       "fuera de tu tope",
       "auditoria de permisos",
+      "filtrar usuarios",
+      "buscar usuario",
     ],
     summary: "Invitar y administrar cuentas del perfil OT (Administrador OT y Gestor OT) y ajustar sus permisos.",
     blocks: [
@@ -293,7 +299,7 @@ export const OT_ARTICLES: ManualArticle[] = [
           "Verifica que el correo sea institucional del OT cuando la política lo exija.",
           "Cada correo corresponde a un solo usuario en toda la plataforma, sin importar la compañía ni las mayúsculas (Juan@empresa.com y juan@empresa.com son el mismo). El correo se guarda siempre en minúsculas. Si ya existe un usuario con ese correo, o ya hay una invitación pendiente para él en cualquier compañía, la invitación no se crea, ves «El usuario ya se encuentra previamente creado» y el campo de correo queda marcado en rojo; corrige el correo para continuar.",
           "Una invitación pendiente se reenvía con el ícono «Reenviar invitación» de su fila y se cancela desde «Acciones» → «Cancelar invitación».",
-          "Al cambiar el rol de una persona desde «Editar usuario», si tiene permisos individuales el sistema te avisa cuántos se eliminarán («Este usuario tiene 3 permisos individuales que se eliminarán al cambiar su rol.»). El rol solo cambia si confirmas con «Cambiar rol»; «Mantener rol actual» no cambia nada.",
+          "Al cambiar el rol de una persona desde «Editar usuario», si tiene permisos individuales de ese producto el sistema te avisa cuántos se eliminarán («Este usuario tiene 3 permisos individuales de este producto que se eliminarán al cambiar su rol. Los de otros productos se conservan.»). El rol solo cambia si confirmas con «Cambiar rol»; «Mantener rol actual» no cambia nada. El aviso de un permiso individual dice que entra en vigor en el siguiente refresco de la sesión, como máximo 15 minutos.",
         ],
       },
       {
@@ -306,8 +312,8 @@ export const OT_ARTICLES: ManualArticle[] = [
           "1. Dock → Usuarios; en la fila de la persona abre «Acciones» y elige «Permisos por módulo».",
           "2. Activa o desactiva una acción con su interruptor, o usa «Habilitar módulo» y «Denegar módulo» para todo el módulo.",
           "3. «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo.",
-          "Un Gestor OT entra con la bandeja de trámites y el Inicio. Para que use otro módulo (por ejemplo Documentos o Mandatos), habilítaselo aquí; aparece en su dock al volver a ingresar.",
-          "Aquí solo ves los módulos del organismo.",
+          "Un Gestor OT entra con la bandeja de trámites y el Inicio. Para que use otro módulo (por ejemplo Documentos, Mandatos o Webhooks), habilítaselo aquí; aparece en su dock al volver a ingresar. Webhooks está en Administración cuando la persona tiene ese permiso.",
+          "Aquí ves los módulos del organismo y, si puedes otorgarlo, «Reenviar validación de identidad».",
         ],
         callouts: [
           {
@@ -324,7 +330,7 @@ export const OT_ARTICLES: ManualArticle[] = [
         id: "auditoria-permisos",
         title: "4. Auditoría de permisos",
         paragraphs: [
-          "Usuarios tiene dos pestañas: «Usuarios» (la tabla de personas y el botón «Invitar usuario») y «Auditoría de permisos», con el registro de cada cambio de permisos individuales hecho en tu organismo: fecha y hora (DD/MM/AAAA HH:mm), el administrador que lo hizo, la persona afectada, el permiso, la acción (otorgó, denegó, volvió al rol) y el valor antes y después. La pestaña «Usuarios» te devuelve a la tabla.",
+          "Usuarios tiene dos pestañas: «Usuarios» (la tabla de personas, con buscador, selectores de perfil, rol y estado, un embudo en cada columna para filtrarla, y el botón «Invitar usuario»; ver «Tablas: cómo leerlas y moverte entre páginas») y «Auditoría de permisos», con el registro de cada cambio de permisos individuales hecho en tu organismo: fecha y hora (DD/MM/AAAA HH:mm), el administrador que lo hizo, la persona afectada, el permiso, la acción (otorgó, denegó, volvió al rol) y el valor antes y después. La pestaña «Usuarios» te devuelve a la tabla.",
           "Solo ves los registros de las personas de tu organismo. Puedes filtrar por usuario y por administrador; no hay filtro de compañía porque siempre es el tuyo. Si el servicio no responde, verás un aviso de error con el botón «Reintentar».",
         ],
       },

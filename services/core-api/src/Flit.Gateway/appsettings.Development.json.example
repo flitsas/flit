@@ -43,6 +43,11 @@
         "Destinations": {
           "core-diagnostico-1": { "Address": "http://127.0.0.1:4029/" }
         }
+      },
+      "core-personanatural-cluster": {
+        "Destinations": {
+          "core-personanatural-1": { "Address": "http://127.0.0.1:4029/" }
+        }
       }
     }
   }

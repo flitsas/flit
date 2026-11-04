@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -71,12 +72,18 @@ internal static class ActorEndpoints
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
             PutActorsRequest request,
             PutActorsHandler handler,
+            HttpContext http,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
-            var (result, error) = await handler.HandleAsync(id, tenantId.Value, request, ct);
+            // HU #14172 — el usuario autenticado queda como CreatedBy del evento de bitácora.
+            var rawUserId = http.User.FindFirst("sub")?.Value
+                ?? http.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var actorUserId = Guid.TryParse(rawUserId, out var uid) ? uid : (Guid?)null;
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, request, actorUserId, ct);
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
@@ -97,7 +104,7 @@ internal static class ActorEndpoints
                 // ADR-0053 (Múltiple Propietario, §4.4/§4.5/§7):
                 "actor_duplicado_mismo_lado" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Dos actores del mismo lado no pueden compartir documento."),
                 "porcentajes_no_suman_100" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La suma de los porcentajes del lado debe ser exactamente 100."),
-                "porcentaje_en_cero" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Todos los propietarios deben tener un porcentaje mayor a 0."),
+                "porcentaje_en_cero" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Cada propietario debe tener un porcentaje mayor a 0% y como máximo 100%."),
                 "ordinal_fuera_de_rango" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El ordinal debe estar entre 1 y 4 y ser único dentro del rol."),
                 "ordinal_principal_ausente" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El actor principal (ordinal=1) no se puede omitir ni eliminar."),
                 // Si el arrendatario fuera el propietario no habría leasing que registrar.

@@ -61,6 +61,7 @@ export const OT_ADM_DOCK = {
   reportes: "ot-adm-reportes",
   mandatos: "ot-adm-mandatos",
   imprintValidation: "ot-adm-imprint-validation",
+  webhooks: "ot-adm-webhooks",
   configuracion: "ot-adm-configuracion",
 } as const;
 

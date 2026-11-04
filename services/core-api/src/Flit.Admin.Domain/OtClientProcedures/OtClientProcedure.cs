@@ -69,6 +69,20 @@ public sealed record OtClientProcedure
     /// <summary>Detalle (GET by id): actores del trámite. Vacío en listados.</summary>
     public IReadOnlyList<OtClientProcedureActor> Actors { get; init; } = [];
 
+    /// <summary>
+    /// HU #14156 — historial de transiciones de estado (línea de tiempo OT). Solo en GET by id;
+    /// vacío en listados y en respuestas de acciones que no recargan el detalle completo.
+    /// </summary>
+    public IReadOnlyList<OtClientProcedureStatusHistory> StatusHistory { get; init; } = [];
+
+    /// <summary>
+    /// HU #14173 — modificaciones de datos campo a campo (eventos <c>dato_modificado</c>), más
+    /// reciente primero. Solo en GET by id; vacío en listados. Colección ADITIVA: no se mezcla con
+    /// <see cref="StatusHistory"/> para no pintarlas como cambios de estado vacíos. Incluye filas
+    /// escritas en borrador. El tiempo es UTC; no se convierte a hora Colombia.
+    /// </summary>
+    public IReadOnlyList<OtClientProcedureModificacion> Modificaciones { get; init; } = [];
+
     /// <summary>Placa denormalizada (también en listado de bandeja).</summary>
     public string? Placa { get; init; }
 
@@ -233,6 +247,23 @@ public sealed class OtClientProcedurePrenda
     public string? LevantamientoEntidad { get; init; }
 }
 
+/// <summary>
+/// HU #14173 — modificación de un campo del trámite visible para el OT, con el actor resuelto.
+/// El tiempo (<see cref="ChangedAt"/>) es UTC; no se convierte a hora Colombia.
+/// </summary>
+public sealed class OtClientProcedureModificacion
+{
+    public string Etiqueta { get; init; } = string.Empty;
+    public string Campo { get; init; } = string.Empty;
+    public string Anterior { get; init; } = string.Empty;
+    public string Nuevo { get; init; } = string.Empty;
+    public DateTimeOffset ChangedAt { get; init; }
+    /// <summary>Nombre del usuario que realizó el cambio; null si fue proceso automático o no existe.</summary>
+    public string? ActorNombre { get; init; }
+    /// <summary>Razón social de la compañía del actor; null si no resoluble.</summary>
+    public string? ActorCompania { get; init; }
+}
+
 /// <summary>Actor visible para el OT en el detalle del trámite de cliente.</summary>
 public sealed class OtClientProcedureActor
 {
@@ -243,4 +274,22 @@ public sealed class OtClientProcedureActor
     public string? Email { get; init; }
     public string? Phone { get; init; }
     public string? PersonType { get; init; }
+}
+
+/// <summary>
+/// HU #14156 — una transición de <c>procedure_instance_status_history</c> proyectada al detalle OT,
+/// alineada al contrato del Gestor (<c>ProcedureInstanceStatusHistoryDto</c> / bug #12526): sin inventar
+/// actor cuando la transición fue automática o el usuario ya no existe.
+/// </summary>
+public sealed class OtClientProcedureStatusHistory
+{
+    public string? FromStatus { get; init; }
+    public string ToStatus { get; init; } = string.Empty;
+    public DateTimeOffset ChangedAt { get; init; }
+    public string? Reason { get; init; }
+    /// <summary>Observación de subsanación recortada (motivo + items); null si no aplica.</summary>
+    public string? Metadata { get; init; }
+    public string? ChangedByName { get; init; }
+    public string? ChangedByEmail { get; init; }
+    public string? ChangedByCompania { get; init; }
 }

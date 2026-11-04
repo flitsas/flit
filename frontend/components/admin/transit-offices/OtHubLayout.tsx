@@ -107,6 +107,8 @@ export function OtHubLayout({
   }, [transitOfficeId]);
 
   useEffect(() => {
+    // Bug #14010 H-05: el estado operativo es del Super Admin. El Admin OT recibía 403 en cada pantalla.
+    if (!isSuperAdmin(decodeJwtPayload(getToken()))) return;
     const controller = new AbortController();
     void fetchTransitOfficesOperationalStatus(controller.signal)
       .then((rows) => {

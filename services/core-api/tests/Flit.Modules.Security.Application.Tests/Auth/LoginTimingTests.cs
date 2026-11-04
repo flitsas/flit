@@ -24,17 +24,17 @@ namespace Flit.Modules.Security.Application.Tests.Auth;
 /// la mediana en milisegundos.
 /// <para>
 /// <see cref="TraitAttribute"/> "Timing": sensible al entorno de CI (carga de la máquina). Tolerancia
-/// amplia (ratio ≤ 2.5) a propósito: el objetivo es detectar una regresión estructural (un camino que
+/// amplia (ratio ≤ 3.0) a propósito: el objetivo es detectar una regresión estructural (un camino que
 /// se salta el hash), no medir microsegundos. 1.6 fallaba en runners cargados (~1.84 observado);
-/// 2.5 también, cuando el primer camino pagaba el JIT de Argon2id (mediana ~86 ms) y el segundo ya
-/// iba caliente (~25 ms, ratio ~3.5). Por eso cada camino se calienta y las muestras se intercalan.
+/// 2.5 también (JIT Argon2id ~86 vs ~25 ms, ratio ~3.5; y en CI 2.517 vs 2.5 por jitter).
+/// Por eso cada camino se calienta, las muestras se intercalan y el umbral queda en 3.0.
 /// </para>
 /// </summary>
 [Trait("Category", "Timing")]
 public sealed class LoginTimingTests
 {
     private const int Samples = 20;
-    private const double ToleranceRatio = 2.5;
+    private const double ToleranceRatio = 3.0;
 
     private static readonly Guid HeadA = Guid.NewGuid();
     private static readonly Guid OffNetworkTenant = Guid.NewGuid();

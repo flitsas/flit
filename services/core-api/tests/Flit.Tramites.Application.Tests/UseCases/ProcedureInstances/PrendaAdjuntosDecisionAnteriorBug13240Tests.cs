@@ -34,6 +34,9 @@ public sealed class PrendaAdjuntosDecisionAnteriorBug13240Tests
     {
         _maestro.AttachmentsProtegidosAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlySet<Guid>>(new HashSet<Guid>()));
+        _instances.AddEventAsync(Arg.Any<ProcedureInstanceEvent>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        _instances.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
     }
 
     private sealed class FakePrendaRepo : IProcedureInstancePrendaRepository

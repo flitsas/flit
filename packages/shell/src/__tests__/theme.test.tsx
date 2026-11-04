@@ -1,9 +1,14 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ThemeToggle } from "../theme";
-import { THEME_INIT_SCRIPT } from "../theme-script";
+import {
+  DARK_MODE_ENABLED,
+  THEME_COMING_SOON_MESSAGE,
+  THEME_INIT_SCRIPT,
+} from "../theme-script";
 
 // El tema claro/oscuro es el mismo en todos los productos: clase `dark` en <html> y preferencia en `flit-theme`.
+// HU #14159: Dark Mode inhabilitado — forzar claro + aviso "próximamente".
 
 afterEach(() => {
   cleanup();
@@ -11,33 +16,40 @@ afterEach(() => {
   localStorage.clear();
 });
 
-describe("tema de la suite", () => {
-  it("el interruptor cambia la clase de <html> y recuerda la preferencia", async () => {
+describe("tema de la suite (HU #14159 — Dark Mode deshabilitado)", () => {
+  it("el interruptor está visible pero deshabilitado con aviso de próximamente", () => {
+    expect(DARK_MODE_ENABLED).toBe(false);
     render(<ThemeToggle />);
-    const toggle = screen.getByRole("button", { name: "Cambiar tema" });
+    const toggle = screen.getByRole("button", { name: THEME_COMING_SOON_MESSAGE });
+    expect(toggle).toBeDisabled();
     expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(toggle.closest("span")).toHaveAttribute("title", THEME_COMING_SOON_MESSAGE);
+  });
+
+  it("el clic no activa dark mode ni escribe dark en localStorage", async () => {
+    render(<ThemeToggle />);
+    const toggle = screen.getByRole("button", { name: THEME_COMING_SOON_MESSAGE });
 
     await act(async () => fireEvent.click(toggle));
-    expect(document.documentElement.classList.contains("dark")).toBe(true);
-    expect(localStorage.getItem("flit-theme")).toBe("dark");
-    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
+    expect(localStorage.getItem("flit-theme")).not.toBe("dark");
+  });
 
-    await act(async () => fireEvent.click(toggle));
+  it("al montarse fuerza claro aunque hubiera preferencia dark guardada", async () => {
+    localStorage.setItem("flit-theme", "dark");
+    document.documentElement.classList.add("dark");
+    await act(async () => {
+      render(<ThemeToggle />);
+    });
     expect(document.documentElement.classList.contains("dark")).toBe(false);
     expect(localStorage.getItem("flit-theme")).toBe("light");
   });
 
-  it("al montarse aplica la preferencia guardada (Trámites no pone el script de arranque)", async () => {
+  it("el script de arranque fuerza claro y limpia preferencia dark", () => {
     localStorage.setItem("flit-theme", "dark");
-    await act(async () => {
-      render(<ThemeToggle />);
-    });
-    expect(document.documentElement.classList.contains("dark")).toBe(true);
-  });
-
-  it("el script de arranque aplica el oscuro antes de pintar", () => {
-    localStorage.setItem("flit-theme", "dark");
+    document.documentElement.classList.add("dark");
     new Function(THEME_INIT_SCRIPT)();
-    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
+    expect(localStorage.getItem("flit-theme")).toBe("light");
   });
 });

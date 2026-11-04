@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
@@ -21,6 +22,9 @@ public sealed class PrendaHandlerTests
 
     public PrendaHandlerTests()
     {
+        _instances.AddEventAsync(Arg.Any<ProcedureInstanceEvent>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        _instances.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
         _registrar = new RegistrarPrendaHandler(_instances, _prendas);
         _get = new GetPrendaVigenteHandler(_prendas);
     }
@@ -403,6 +407,33 @@ public sealed class PrendaHandlerTests
         _prendas.Rows.Count(r => r.Estado == PrendaEstado.Vigente).Should().Be(1);
         _prendas.Rows.Single(r => r.Estado == PrendaEstado.Vigente).Decision.Should().Be("registrar");
         _prendas.Rows.Single(r => r.Estado == PrendaEstado.Reemplazada).Decision.Should().Be("sin_prenda");
+    }
+
+    [Fact]
+    public async Task Registrar_PersisteLaBitacoraDeLaDecision()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        InstanceExists(id, tenant);
+
+        ProcedureInstanceEvent? captured = null;
+        _instances.AddEventAsync(Arg.Do<ProcedureInstanceEvent>(e => captured = e), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var (result, error) = await _registrar.HandleAsync(
+            id, tenant, new RegistrarPrendaInput("solicitar"), null, ct);
+
+        error.Should().BeNull();
+        result!.Decision.Should().Be("solicitar");
+        captured.Should().NotBeNull();
+        captured!.Tipo.Should().Be("dato_modificado");
+        using var doc = JsonDocument.Parse(captured.Payload);
+        doc.RootElement.GetProperty("etiqueta").GetString().Should().Be("Decisión de prenda");
+        doc.RootElement.GetProperty("campo").GetString().Should().Be("prenda_decision");
+        doc.RootElement.GetProperty("anterior").GetString().Should().Be("");
+        doc.RootElement.GetProperty("nuevo").GetString().Should().Be("Solicitar");
+        await _instances.Received().SaveChangesAsync(ct);
     }
 
     // ── AC4 (ADR-0055, HU #12129) — GetPrendaVigenteHandler devuelve 0-2 PrendaDto, no PrendaDto? ──

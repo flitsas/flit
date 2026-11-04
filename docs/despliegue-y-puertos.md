@@ -151,6 +151,8 @@ no se reutilizan.
 | `frontend-hub` | `4022` | `5022` | `6022` |
 | Comparendos (`frontend-comparendos`) | `4023` | `5023` | `6023` |
 | API de Comparendos (`core-comparendos`, sin publicar) | `4028` | `5028` | `6028` |
+| BFF del portal Persona Natural (`core-personanatural`, sin publicar; propuesto) | `4029` | `5029` | `6029` |
+| Portal Persona Natural (`frontend-personanatural`, la app web; propuesto) | `4031` | `5031` | `6031` |
 | Diagnóstico (`frontend-diagnostico`) | `4024` | `5024` | `6024` |
 | API de Diagnóstico (`core-diagnostico`, sin publicar) | `4029` | `5029` | `6029` |
 | `core-identity` | `4025` | `5025` | `6025` |
@@ -176,6 +178,7 @@ su propia red). Un servicio gRPC escucha HTTP/2 sin TLS (h2c) en un puerto apart
 | `core-consultas` (`flit.consultas.v1`) | `8084` (propuesto) | `CORE_CONSULTAS_GRPC_PORT` | Por confirmar con el líder; REST interno `CORE_CONSULTAS_PORT` 4026 |
 | `core-comparendos` (`flit.comparendos.v1`) | `8086` (propuesto) | `CORE_COMPARENDOS_GRPC_PORT` | Perfil `comparendos`; encendido en [handoff-vps-comparendos.md](suite/handoff-vps-comparendos.md) |
 | `core-diagnostico` (`flit.diagnostico.v1`) | `8087` | `CORE_DIAGNOSTICO_GRPC_PORT` | Decidido (RD-4, 2026-10-21). Perfil `diagnostico`; REST interno `CORE_DIAGNOSTICO_PORT` 4029; encendido en [handoff-vps-diagnostico.md](suite/handoff-vps-diagnostico.md) |
+| `core-personanatural` (`flit.personanatural.v1`) | `8087` (propuesto) | `CORE_PERSONANATURAL_GRPC_PORT` | Perfil `personanatural`; por confirmar con el líder; REST interno `CORE_PERSONANATURAL_PORT` 4029 ([handoff-vps-personanatural.md](suite/handoff-vps-personanatural.md)) |
 
 ---
 

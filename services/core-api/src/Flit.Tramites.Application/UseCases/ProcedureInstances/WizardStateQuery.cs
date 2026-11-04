@@ -629,49 +629,29 @@ public sealed class GetWizardStateHandler(
     }
 
     /// <summary>
-    /// ADR-0051 Decisión 6 — ¿hay que revelar el formulario oculto del propietario porque falta el
-    /// dato con el que enviarle la validación de identidad? El disparador es el mismo hueco de dato que
-    /// gobierna <c>IdentitySendDecisionForTramite</c> (ADR-0039): esta señal NO decide si se envía
-    /// correo (esa decisión sigue siendo exclusiva de ADR-0039), solo expone al frontend que hace falta
-    /// un dato para poder ejecutarla. Tres casos, cualquiera revela:
-    /// <list type="number">
-    /// <item><description>Aún no hay actor "vendedor" sincronizado (la sincronización best-effort de
-    /// <see cref="SyncSellerActorFromConsultationsHandler"/> no corrió o no encontró nada que
-    /// persistir).</description></item>
-    /// <item><description>El actor existe pero sin <c>FullName</c> (el lookup RUNT/RUES no resolvió
-    /// nombre — riesgo documentado en ADR-0051 Decisión 5).</description></item>
-    /// <item><description>Persona jurídica sin representante legal utilizable en
-    /// <see cref="IRepresentanteLegalDirectory"/>, o persona natural sin correo conocido (la consulta
-    /// RUNT nunca lo trae; <c>IniciarBiometriaHandler</c> exige <c>Email</c> no vacío para poder
-    /// crear la validación).</description></item>
-    /// </list>
-    /// No aplica si el tipo captura al vendedor por formulario (ahí el gestor ya lo teclea) o si el
-    /// tipo no le exige validar identidad al propietario (<c>biometricActors</c> sin <c>OWNER</c>).
+    /// ADR-0051 Decisión 6 + HU #14224 — ¿revelar el formulario oculto del propietario (vendedor
+    /// sincronizado) en el paso de actores?
+    /// <para>Para tipos con <c>requiresSeller &amp;&amp; !sellerCapturedViaForm</c> y biometría
+    /// <c>OWNER</c> (p. ej. <c>TRASPASO_UNILATERAL</c>) se revela <b>siempre</b>: el gestor debe ver
+    /// la tarjeta y poder elegir Representante Legal aunque el directorio ya tenga RL(s). Antes solo
+    /// se revelaba si faltaba RL/correo.</para>
+    /// No aplica si el tipo captura al vendedor por formulario o si <c>biometricActors</c> no incluye
+    /// <c>OWNER</c>. Esta señal no decide el envío de validación (ADR-0039).
     /// </summary>
-    private async Task<bool> ResolveRevealSellerFormAsync(
+    private Task<bool> ResolveRevealSellerFormAsync(
         ProcedureInstance instance, ProcedureTypeGateProfile profile, CancellationToken ct)
     {
+        _ = instance;
+        _ = ct;
+        _ = _representanteDirectory;
+
         if (!profile.RequiresSeller || profile.SellerCapturedViaForm)
-            return false;
+            return Task.FromResult(false);
         if (!profile.RequiresBiometrics
             || !profile.BiometricActors.Any(a => string.Equals(a, "OWNER", StringComparison.OrdinalIgnoreCase)))
-            return false;
+            return Task.FromResult(false);
 
-        var vendedor = instance.Actors.FirstOrDefault(a =>
-            string.Equals(a.ActorType, "vendedor", StringComparison.OrdinalIgnoreCase));
-        if (vendedor is null || string.IsNullOrWhiteSpace(vendedor.FullName))
-            return true;
-
-        var esJuridica = ActorPersonTypes.IsJuridical(vendedor.PersonType)
-            || string.Equals(vendedor.DocumentType, "NIT", StringComparison.OrdinalIgnoreCase);
-        if (esJuridica)
-        {
-            var nombreRl = await _representanteDirectory.BuscarNombreRepresentanteAsync(
-                instance.TenantId, vendedor.DocumentNumber, null, null, ct).ConfigureAwait(false);
-            return string.IsNullOrWhiteSpace(nombreRl);
-        }
-
-        return string.IsNullOrWhiteSpace(vendedor.Email);
+        return Task.FromResult(true);
     }
 
     /// <summary>
@@ -681,11 +661,10 @@ public sealed class GetWizardStateHandler(
     /// pagar una consulta por fila.</para>
     /// </summary>
     /// <param name="revealSellerForm">
-    /// ADR-0051 Decisión 6: <c>true</c> si al paso <c>actor_form</c> hay que revelar el formulario
-    /// oculto del propietario (falta un dato para poder enviarle validación de identidad). Resuelto por
-    /// IO en <see cref="ResolveRevealSellerFormAsync"/>; default <c>false</c> para el listado de
-    /// trámites (<see cref="ComputeState"/>), que no paga una consulta al directorio de RL por fila —
-    /// mismo criterio que <paramref name="documentRequirements"/>/<paramref name="prendaVigente"/>.
+    /// ADR-0051 Decisión 6 / HU #14224: <c>true</c> si al paso <c>actor_form</c> hay que revelar el
+    /// formulario del propietario (tipos sin captura por formulario + biometría OWNER). Resuelto en
+    /// <see cref="ResolveRevealSellerFormAsync"/>; default <c>false</c> en el listado
+    /// (<see cref="ComputeState"/>).
     /// </param>
     private static WizardStateDto BuildDynamicStateCore(
         ProcedureInstance instance,

@@ -1,3 +1,6 @@
+using System.Text.Json;
+using Flit.Tramites.Application.Tracking;
+using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 
@@ -7,9 +10,15 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// Cancela la subsanación sobre un trámite en <c>rechazado</c> con flag activo:
 /// apaga <c>subsanacion_activa</c> sin cambiar el status de negocio (sigue rechazado).
 /// Usado cuando el operador decide que no hace falta corregir/re-radicar.
+///
+/// HU #14177 — escribe un evento <c>dato_modificado</c> con etiqueta «Subsanación»,
+/// anterior «Activada», nuevo «Desactivada».
 /// </summary>
 public sealed class CancelSubsanacionHandler(IProcedureInstanceRepository repo)
 {
+    // camelCase para el payload — mismo options que el fallback de actores (HU #14172).
+    private static readonly JsonSerializerOptions s_json = new(JsonSerializerDefaults.Web);
+
     public async Task<(ProcedureInstanceSummary? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
@@ -37,6 +46,21 @@ public sealed class CancelSubsanacionHandler(IProcedureInstanceRepository repo)
         // Cerrar la ventana tampoco es una transición: no se escribe historial. Antes se insertaba
         // una fila rechazado → rechazado que el timeline mostraba como un rechazo repetido. El quién
         // y el cuándo quedan en updated_by / updated_at y en el log de auditoría de la tabla.
+
+        // HU #14177 — bitácora de cambio de dato campo a campo.
+        var evtSubsanacion = new ProcedureInstanceEvent
+        {
+            Id                  = Guid.NewGuid(),
+            TenantId            = tenantId,
+            ProcedureInstanceId = instance.Id,
+            Tipo                = ProcedureFieldChangeRecorder.EventType,
+            Payload             = JsonSerializer.Serialize(
+                new { etiqueta = "Subsanación", campo = "subsanacion", anterior = "Activada", nuevo = "Desactivada" },
+                s_json),
+            CreatedAt           = now,
+            CreatedBy           = changedBy,
+        };
+        await repo.AddEventAsync(evtSubsanacion, ct);
 
         var committed = await repo.SaveChangesWithConcurrencyGuardAsync(ct).ConfigureAwait(false);
         if (!committed)

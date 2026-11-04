@@ -19,6 +19,7 @@ using Flit.Queries.Domain;
 using Flit.Queries.Domain.Documentos;
 using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
@@ -622,12 +623,15 @@ internal sealed partial class ProcedureInstanceRepository(
         // upper(btrim(tipo)), upper(btrim(número)), en vuelo, sin mandatario): todas las filas que impedirían guardar una
         // validación nueva de este documento, sin filtrar por trámite ni quedarse con la más reciente. Rastreadas y con el
         // trámite cargado para que el caso de uso decida cuáles cerrar.
-        var tipo = (tipoDoc ?? string.Empty).Trim().ToUpperInvariant();
+        // HU #14044 — el índice excluye además las filas del portal (portal_solicitud_ref IS NOT NULL, que tienen su
+        // propio índice por solicitud/parte): este método también las ignora para no cerrar validaciones del portal.
+        var tipo =(tipoDoc ?? string.Empty).Trim().ToUpperInvariant();
         var numero = (documento ?? string.Empty).Trim().ToUpperInvariant();
         return await db.ProcedureInstanceBiometricValidations
             .Include(v => v.ProcedureInstance)
             .Where(v => v.TenantId == tenantId
                 && v.MandateSignerId == null
+                && v.PortalSolicitudRef == null
                 && (v.Status == BiometricEstados.PendienteEnvio
                     || v.Status == BiometricEstados.Enviado
                     || v.Status == BiometricEstados.EnProceso)
@@ -652,6 +656,7 @@ internal sealed partial class ProcedureInstanceRepository(
             .AsNoTracking()
             .Where(v => tenantIds.Contains(v.TenantId)
                 && v.MandateSignerId == null
+                && v.PortalSolicitudRef == null
                 && v.Status == BiometricEstados.Aprobado
                 && v.DocumentType != null
                 && v.DocumentNumber != null
@@ -704,6 +709,7 @@ internal sealed partial class ProcedureInstanceRepository(
             .AsNoTracking()
             .Where(v => tenantIds.Contains(v.TenantId)
                 && v.MandateSignerId == null
+                && v.PortalSolicitudRef == null
                 && v.Status == BiometricEstados.Aprobado
                 && v.ExpiredManuallyAt != null
                 && (v.ValidUntilPrevious == null || v.ValidUntilPrevious > now)
@@ -1812,6 +1818,26 @@ internal sealed partial class ProcedureInstanceRepository(
             .Include(x => x.Person)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
 
+    // HU #14044 — solo filas con ancla de portal: la búsqueda por (solicitud, rol, documento) nunca alcanza a una validación
+    // de otra solicitud ni a las de FLIT 2 (decisión del PO: no se reutilizan).
+    public Task<ProcedureInstanceBiometricValidation?> FindPortalValidationAsync(
+        Guid tenantId, string solicitudRef, string parte, string documentNumber, CancellationToken ct = default)
+    {
+        var documento = documentNumber.Trim().ToUpperInvariant();
+        return db.ProcedureInstanceBiometricValidations
+            .Where(v => v.TenantId == tenantId
+                && v.PortalSolicitudRef == solicitudRef
+                && v.PortalParte == parte
+                && v.DocumentNumber.Trim().ToUpper() == documento)
+            .OrderByDescending(v => v.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    public Task<ProcedureInstanceBiometricValidation?> GetPortalValidationByIdAsync(
+        Guid tenantId, Guid validationId, CancellationToken ct = default) =>
+        db.ProcedureInstanceBiometricValidations
+            .FirstOrDefaultAsync(v => v.Id == validationId && v.TenantId == tenantId && v.PortalSolicitudRef != null, ct);
+
     // UPDATE atómico e idempotente del conteo de intentos Kyverum. La guarda `last_attempt_at <> @key`
     // (más el row-lock del UPDATE) garantiza que dos entregas paralelas del MISMO intento cuenten una sola vez.
     public async Task<bool> TryCountKyverumAttemptAsync(
@@ -2054,11 +2080,15 @@ internal sealed partial class ProcedureInstanceRepository(
     /// <summary>HU #13246 — a lo sumo una validación en vuelo por mandatario (DDL 129).</summary>
     private const string BiometricInFlightMandatarioIndex = "uq_biometric_validations_inflight_mandate_signer";
 
+    /// <summary>HU #14044 — a lo sumo una validación en vuelo por (solicitud, rol, documento) del portal (DDL 160).</summary>
+    private const string BiometricInFlightPortalIndex = "uq_biometric_validations_inflight_portal";
+
     private static bool IsBiometricInFlightUniqueViolation(DbUpdateException ex) =>
         ex.InnerException is PostgresException pg
         && pg.SqlState == PostgresErrorCodes.UniqueViolation
         && (string.Equals(pg.ConstraintName, BiometricInFlightUniqueIndex, StringComparison.Ordinal)
-            || string.Equals(pg.ConstraintName, BiometricInFlightMandatarioIndex, StringComparison.Ordinal));
+            || string.Equals(pg.ConstraintName, BiometricInFlightMandatarioIndex, StringComparison.Ordinal)
+            || string.Equals(pg.ConstraintName, BiometricInFlightPortalIndex, StringComparison.Ordinal));
 
     /// <summary>HU #11029 — ver <see cref="IProcedureInstanceRepository.ResetTracking"/>.</summary>
     public void ResetTracking() => db.ChangeTracker.Clear();
@@ -2233,6 +2263,87 @@ internal sealed partial class ProcedureInstanceRepository(
         }
 
         return resultado;
+    }
+
+    /// <summary>
+    /// HU #14173 — eventos dato_modificado de la instancia, más reciente primero, con nombre y
+    /// compañía del actor resueltos igual que GetStatusHistoryPageAsync. Incluye filas de borrador.
+    /// HU #14180 — proyecta además, una sola vez, los actos ya guardados (reasignación, reenvío,
+    /// revocatoria). No escribe otro evento. Devuelve null si la instancia no existe en el tenant
+    /// (mismo criterio que GetStatusHistoryPageAsync). Si el payload de un dato_modificado está roto,
+    /// omite esa fila sin lanzar ni loguear el payload (puede traer nombre, documento, placa).
+    /// El tiempo se conserva en UTC; no se convierte a hora Colombia.
+    /// </summary>
+    public async Task<(IReadOnlyList<ProcedureInstanceModificacionEntry> Items, int Total)?> GetModificacionesPageAsync(
+        Guid id, Guid tenantId, int skip, int take, CancellationToken ct)
+    {
+        // Mismo predicado de existencia que GetStatusHistoryPageAsync.
+        var exists = await db.ProcedureInstances.AsNoTracking()
+            .AnyAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
+        if (!exists)
+            return null;
+
+        // Se leen todos los tipos de la línea y se deduplica antes de paginar: un acto y su
+        // dato_modificado espejo no pueden caer en páginas distintas y contarse dos veces.
+        var tipos = StatusHistoryModificacionLectura.Tipos();
+        var raw = await db.ProcedureInstanceEvents.AsNoTracking()
+            .Where(e => e.ProcedureInstanceId == id && e.TenantId == tenantId && tipos.Contains(e.Tipo))
+            .OrderByDescending(e => e.CreatedAt)
+            .ThenByDescending(e => e.Id)
+            .Select(e => new { e.Id, e.Tipo, e.CreatedAt, e.CreatedBy, e.Payload })
+            .ToListAsync(ct);
+
+        var projected = new List<StatusHistoryModificacionLectura.Fila>(raw.Count);
+        foreach (var row in raw)
+        {
+            if (StatusHistoryModificacionLectura.TryProject(
+                    row.Tipo, row.Id, row.CreatedAt, row.CreatedBy, row.Payload, out var fila))
+                projected.Add(fila);
+        }
+
+        var deduped = StatusHistoryModificacionLectura.Dedup(projected);
+        var total = deduped.Count;
+        var page = deduped.Skip(skip).Take(take).ToList();
+        if (page.Count == 0)
+            return ([], total);
+
+        // Resolver nombre y compañía en batch — mismo criterio que GetStatusHistoryPageAsync.
+        var userIds = page
+            .Where(p => p.CreatedBy is not null)
+            .Select(p => p.CreatedBy!.Value)
+            .Distinct()
+            .ToList();
+
+        var names = userIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : (await db.Users.AsNoTracking()
+                .Where(u => userIds.Contains(u.Id))
+                .Select(u => new { u.Id, u.DisplayName })
+                .ToListAsync(ct))
+                .Where(r => !string.IsNullOrWhiteSpace(r.DisplayName))
+                .ToDictionary(r => r.Id, r => r.DisplayName);
+
+        var companias = await ResolveCompaniasDeUsuariosAsync(userIds, ct);
+
+        var items = page
+            .Select(p =>
+            {
+                var nombre = p.CreatedBy is { } uid1 && names.TryGetValue(uid1, out var n) ? n : null;
+                var compania = p.CreatedBy is { } uid2 && companias.TryGetValue(uid2, out var co) ? co : null;
+                return new ProcedureInstanceModificacionEntry(
+                    p.Id,
+                    p.Etiqueta,
+                    p.Campo,
+                    p.Anterior,
+                    p.Nuevo,
+                    p.ChangedAt,
+                    p.CreatedBy,
+                    StatusHistoryModificacionLectura.NombreActor(p.Campo, p.CreatedBy, nombre),
+                    StatusHistoryModificacionLectura.CompaniaActor(p.Campo, p.CreatedBy, compania));
+            })
+            .ToList();
+
+        return (items, total);
     }
 
     public async Task<IReadOnlyList<ProcedureStateChangeEmailDispatch>?> ListEmailDispatchesAsync(

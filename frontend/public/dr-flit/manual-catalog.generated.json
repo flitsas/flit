@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "generatedFrom": "frontend/lib/manual (pnpm manual:export)",
-  "articleCount": 45,
+  "articleCount": 46,
   "articles": [
     {
       "slug": "0-introduccion/1-bienvenida",
@@ -353,7 +353,7 @@
       "href": "/manual/0-introduccion/7-tablas-y-paginacion",
       "audience": "Todos",
       "sectionId": "introduccion",
-      "summary": "Todas las tablas de FLIT se ven y se usan igual: cómo cambiar de página, ir al principio o al final y elegir cuántas filas ver.",
+      "summary": "Todas las tablas de FLIT se ven y se usan igual: cómo filtrar por columna, cambiar de página, ir al principio o al final y elegir cuántas filas ver.",
       "primarySource": false,
       "blocks": [
         {
@@ -397,8 +397,31 @@
           "callouts": []
         },
         {
+          "id": "filtrar-tabla",
+          "title": "4. Cómo filtrar una tabla",
+          "paragraphs": [
+            "Hay dos lugares para filtrar, y se usan igual en Compañías, Usuarios, Auditoría y las demás listas: aprendes una vez y la usas en todas."
+          ],
+          "bullets": [
+            "En cada columna: todas las columnas con datos tienen un pequeño embudo en su encabezado (la columna Acciones no lo tiene). Al pulsarlo se despliega el filtro de esa columna.",
+            "Si la columna es de texto (nombre, documento, código…), escribe lo que buscas en la caja «X contiene»: el cursor ya queda ahí. Pulsa Enter o «Aplicar».",
+            "Si la columna tiene opciones (estado, tipo, catálogos), marca una o varias casillas y pulsa «Aplicar».",
+            "Si la columna es una fecha, elige un periodo: Sin periodo, Hoy, Últimos 7 días, Últimos 30 días, Últimos 90 días, Mes actual, Mes anterior o Rango propio con fecha inicial y final. Si la fecha inicial es posterior a la final, te avisa y no aplica el filtro.",
+            "Para quitar un filtro, abre el embudo de esa columna y pulsa «Quitar filtro». Cuando una columna tiene filtro, su embudo se pinta en azul para que lo reconozcas de un vistazo.",
+            "Arriba de la tabla: cada pantalla conserva los filtros que ya tenía (por ejemplo, el panel de NIT, Razón social, Estado y fechas con «Buscar» y «Limpiar» en el listado de Compañías, o un buscador por nombre, documento o código en otras listas). No hay un botón «+ Filtro» ni un «Periodo» arriba: lo de las columnas se hace desde el embudo.",
+            "Los filtros de arriba y los de las columnas se combinan: la tabla muestra solo lo que cumple todos a la vez."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Si ningún registro cumple los filtros, la tabla sigue mostrando sus encabezados y filtros, y avisa «Ningún registro coincide con los filtros» con el botón «Limpiar filtros» para volver a ver todo. También puedes quitar un solo filtro desde su embudo."
+            }
+          ]
+        },
+        {
           "id": "filtros",
-          "title": "4. Filtros y exportaciones",
+          "title": "5. Filtros y exportaciones",
           "paragraphs": [
             "Las páginas se calculan sobre el resultado filtrado: si aplicas un filtro que deja pocos registros, la tabla te lleva a la página que existe en vez de mostrarte una vacía. Exportar a Excel o CSV siempre incluye todo el resultado del filtro, no solo la página que estás viendo."
           ],
@@ -852,6 +875,7 @@
           "title": "3. El detalle del trámite",
           "paragraphs": [
             "Al abrir una fila entras al detalle: el asistente (si sigue en borrador), la línea de tiempo de estados con fecha y hora, los documentos del expediente (también desde «Ver documentos» en la fila, sin entrar al asistente) y las observaciones del organismo cuando las hay.",
+            "Dentro del trámite abierto, en cualquier estado, cada cambio queda registrado: fecha y hora de Colombia, quién lo hizo (su nombre y su compañía, o Sistema), el dato, el valor anterior y el nuevo. Una bandera de transformación (color, carrocería, combustible o blindaje) se lee Sí o No. En borrador o en subsanación está en el acordeón «Expediente — Trazabilidad cronológica» del resumen, del más reciente al más antiguo. En los demás estados, la sección Expediente usa esa misma lista. «Línea de Tiempo del Trámite» conserva sus tarjetas: el título es el dato, y dentro van gestor, correo, empresa, rol, fecha y hora, y el detalle con el valor anterior y el nuevo. La tarjeta de más abajo es la vigente. Si no hay cambios dice «Todavía no hay modificaciones»; si está cargando o falla, lo dice y puedes pulsar «Reintentar». «Ver más» trae el resto. El recuadro «Estado del trámite», si lo abres sin entrar al detalle, solo muestra el estado y los actos administrativos.",
             "Todas las fechas de la plataforma se muestran en hora de Colombia con el formato DD/MM/YYYY HH:mm; las vigencias (SOAT, RTM, identidad) van sin hora."
           ],
           "bullets": [],
@@ -1296,7 +1320,7 @@
             "Píldora «Usuarios» del dock (visible para el Administrador de la compañía). Según tu perfil y permisos verás hasta tres pestañas:"
           ],
           "bullets": [
-            "Usuarios: invitar, editar y gestionar el acceso de las personas de tu compañía.",
+            "Usuarios: invitar, editar y gestionar el acceso de las personas de tu compañía. Para encontrar a alguien usa el buscador, los selectores de perfil, rol y estado, o el embudo del encabezado de cada columna (Nombre, Correo, Perfil, Rol, Estado, Fecha); ver «Tablas: cómo leerlas y moverte entre páginas».",
             "Roles y permisos: crea y edita los roles de tu compañía y consulta los roles de FLIT. Solo la ve el Administrador de la compañía.",
             "Clientes ICT: solo si tu compañía integra con terceros y tienes el permiso correspondiente (ver bloque 7)."
           ],
@@ -1318,7 +1342,7 @@
             "Como Administrador de la compañía puedes editar, restablecer contraseña, y suspender o desactivar un usuario. Eliminar un usuario de forma definitiva (y restaurarlo desde Eliminados) es exclusivo del equipo FLIT. Todas estas acciones están en el botón «Acciones» de la fila del usuario: ábrelo y elige la que necesitas."
           ],
           "bullets": [
-            "Editar: cambia nombre, perfil o roles. Al cambiar el rol de una persona que tiene permisos individuales, el sistema te avisa antes, por ejemplo «Este usuario tiene 3 permisos individuales que se eliminarán al cambiar su rol.»: el rol solo cambia si confirmas con «Cambiar rol»; con «Mantener rol actual» no cambia nada. Si no tiene permisos individuales, el cambio es directo y no aparece aviso.",
+            "Editar: cambia nombre, perfil o roles. Al cambiar el rol de una persona que tiene permisos individuales de ese producto, el sistema te avisa antes, por ejemplo «Este usuario tiene 3 permisos individuales de este producto que se eliminarán al cambiar su rol. Los de otros productos se conservan.»: el rol solo cambia si confirmas con «Cambiar rol»; con «Mantener rol actual» no cambia nada. Si no tiene permisos individuales de ese producto, el cambio es directo y no aparece aviso. Quien es Administrador de Compañía también administra Trámites: el rol de administrador de trámites va con el de la compañía mientras los roles no se asignen por producto.",
             "Restablecer contraseña: envía instrucciones de cambio al correo del usuario.",
             "Suspender: bloquea el acceso temporalmente; puedes reactivarlo cuando corresponda.",
             "Desactivar: bloquea el acceso de forma indefinida.",
@@ -1543,7 +1567,7 @@
           "id": "que-ves",
           "title": "1. Qué ves al entrar",
           "paragraphs": [
-            "Con rol de organismo de tránsito, al iniciar sesión entras directo a «Tu cola de trabajo»: no es el panel del gestor, porque aquí no se mide producción de una empresa sino el trabajo pendiente del organismo.",
+            "Con rol de organismo de tránsito, al iniciar sesión entras directo a «Tu cola de trabajo»: no es el panel del gestor, porque aquí no se mide producción de una empresa sino el trabajo pendiente del organismo. Si no tienes el permiso de reportes del organismo, en lugar de la cola ves «No tienes permiso para ver esta información.»: no es una falla del sistema y reintentar no la va a cargar.",
             "Arriba rota un carrusel de mensajes: el primero siempre es fijo y resume tu cola en palabras («Tienes N trámites esperando tu decisión, M llevan más de 7 días esperando» y tu mediana de decisión de hoy); detrás pueden aparecer los banners activos que publique el equipo FLIT. Los datos son del día calendario de Bogotá."
           ],
           "bullets": [],
@@ -1667,6 +1691,7 @@
           "title": "3. Revisión y decisión",
           "paragraphs": [
             "Abre un trámite para ver el expediente, organizado en acordeones independientes que puedes tener abiertos a la vez: vehículo, propietario y actores; transformaciones declaradas (si el vehículo cambió color, combustible o carrocería frente a lo que dice RUNT, aquí ves el antes y el después); documentos del gestor («Ver documentos»), consolidado («Ver consolidado») y el historial. El panel «Pendientes antes de decidir» lista lo que falta (por ejemplo SOAT vigente cuando la regla aplica).",
+            "«Línea de Tiempo del Trámite», o el chip de estado, muestra cada cambio en tarjetas, también lo ocurrido cuando el trámite todavía estaba en borrador. El título de la tarjeta es el dato. Una bandera de transformación (color, carrocería, combustible o blindaje) se lee Sí o No. Dentro van gestor, correo, empresa, rol, fecha y hora de Colombia, y el detalle con el valor anterior y el nuevo. La de más abajo es la vigente. Si no hay cambios dice «Todavía no hay modificaciones»; si está cargando o falla, lo dice. Solo lo ves en un trámite que ya puedes abrir: un borrador que no te corresponde no llega a esta bandeja.",
             "El consolidado se mantiene al día solo: si el gestor o el organismo cambian un dato, un documento o la placa, el FUR y el consolidado se vuelven a generar en segundos. No hace falta pedir que lo limpien para ver el cambio."
           ],
           "bullets": [
@@ -1769,7 +1794,7 @@
             "Verifica que el correo sea institucional del OT cuando la política lo exija.",
             "Cada correo corresponde a un solo usuario en toda la plataforma, sin importar la compañía ni las mayúsculas (Juan@empresa.com y juan@empresa.com son el mismo). El correo se guarda siempre en minúsculas. Si ya existe un usuario con ese correo, o ya hay una invitación pendiente para él en cualquier compañía, la invitación no se crea, ves «El usuario ya se encuentra previamente creado» y el campo de correo queda marcado en rojo; corrige el correo para continuar.",
             "Una invitación pendiente se reenvía con el ícono «Reenviar invitación» de su fila y se cancela desde «Acciones» → «Cancelar invitación».",
-            "Al cambiar el rol de una persona desde «Editar usuario», si tiene permisos individuales el sistema te avisa cuántos se eliminarán («Este usuario tiene 3 permisos individuales que se eliminarán al cambiar su rol.»). El rol solo cambia si confirmas con «Cambiar rol»; «Mantener rol actual» no cambia nada."
+            "Al cambiar el rol de una persona desde «Editar usuario», si tiene permisos individuales de ese producto el sistema te avisa cuántos se eliminarán («Este usuario tiene 3 permisos individuales de este producto que se eliminarán al cambiar su rol. Los de otros productos se conservan.»). El rol solo cambia si confirmas con «Cambiar rol»; «Mantener rol actual» no cambia nada. El aviso de un permiso individual dice que entra en vigor en el siguiente refresco de la sesión, como máximo 15 minutos."
           ],
           "callouts": []
         },
@@ -1783,8 +1808,8 @@
             "1. Dock → Usuarios; en la fila de la persona abre «Acciones» y elige «Permisos por módulo».",
             "2. Activa o desactiva una acción con su interruptor, o usa «Habilitar módulo» y «Denegar módulo» para todo el módulo.",
             "3. «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo.",
-            "Un Gestor OT entra con la bandeja de trámites y el Inicio. Para que use otro módulo (por ejemplo Documentos o Mandatos), habilítaselo aquí; aparece en su dock al volver a ingresar.",
-            "Aquí solo ves los módulos del organismo."
+            "Un Gestor OT entra con la bandeja de trámites y el Inicio. Para que use otro módulo (por ejemplo Documentos, Mandatos o Webhooks), habilítaselo aquí; aparece en su dock al volver a ingresar. Webhooks está en Administración cuando la persona tiene ese permiso.",
+            "Aquí ves los módulos del organismo y, si puedes otorgarlo, «Reenviar validación de identidad»."
           ],
           "callouts": [
             {
@@ -1803,7 +1828,7 @@
           "id": "auditoria-permisos",
           "title": "4. Auditoría de permisos",
           "paragraphs": [
-            "Usuarios tiene dos pestañas: «Usuarios» (la tabla de personas y el botón «Invitar usuario») y «Auditoría de permisos», con el registro de cada cambio de permisos individuales hecho en tu organismo: fecha y hora (DD/MM/AAAA HH:mm), el administrador que lo hizo, la persona afectada, el permiso, la acción (otorgó, denegó, volvió al rol) y el valor antes y después. La pestaña «Usuarios» te devuelve a la tabla.",
+            "Usuarios tiene dos pestañas: «Usuarios» (la tabla de personas, con buscador, selectores de perfil, rol y estado, un embudo en cada columna para filtrarla, y el botón «Invitar usuario»; ver «Tablas: cómo leerlas y moverte entre páginas») y «Auditoría de permisos», con el registro de cada cambio de permisos individuales hecho en tu organismo: fecha y hora (DD/MM/AAAA HH:mm), el administrador que lo hizo, la persona afectada, el permiso, la acción (otorgó, denegó, volvió al rol) y el valor antes y después. La pestaña «Usuarios» te devuelve a la tabla.",
             "Solo ves los registros de las personas de tu organismo. Puedes filtrar por usuario y por administrador; no hay filtro de compañía porque siempre es el tuyo. Si el servicio no responde, verás un aviso de error con el botón «Reintentar»."
           ],
           "bullets": [],
@@ -2205,7 +2230,7 @@
           "title": "1. Qué ves al entrar",
           "paragraphs": [
             "Píldora «Administración» del dock (solo Administrador de compañía). Hoy se abre directo en dos pestañas: Representantes legales y Mandatarios. Es un cambio a propósito: antes veías la ficha completa de tu compañía (Trámites, Configuración Empresa, Documentos, Usuarios, Historial de Cambios); esas secciones ahora las gestiona el equipo FLIT para proteger cambios sensibles.",
-            "Si administras una compañía hija desde el panel «Red de clientes» (solo cabezas de Concesión o Marca Blanca) y abres su ficha, ves una tercera pestaña, Usuarios, propia de esa hija: ahí resetas contraseñas y suspendes o desactivas sus usuarios."
+            "Si administras una compañía hija desde el panel «Red de clientes» (solo cabezas de Concesión o Marca Blanca) y abres su ficha, ves una tercera pestaña, Usuarios, propia de esa hija: ahí resetas contraseñas y suspendes o desactivas sus usuarios. La tabla tiene buscador, selectores de perfil, rol y estado, y un embudo en cada columna (Nombre, Correo, Perfil, Rol, Estado, Fecha)."
           ],
           "bullets": [],
           "callouts": [
@@ -2278,7 +2303,8 @@
           "bullets": [
             "Registra la persona (tipo y número de documento, nombre; correo, dirección y ciudad opcionales).",
             "Dentro de su ficha, asocia las empresas que representa: por cada NIT, adjunta la escritura de constitución o poder (PDF) que respalda esa representación en los documentos del trámite.",
-            "Asocia la firma del baúl para que los documentos la estampen automáticamente."
+            "Asocia la firma del baúl para que los documentos la estampen automáticamente.",
+            "Encontrar a alguien: encima del directorio hay un buscador por nombre o documento y, en el encabezado de cada columna (Representante, Documento, Trámites, Firma / Identidad), un embudo para filtrarla; los dos se combinan. La firma de cada representante se gestiona en su ficha. Cómo funcionan los embudos: ver «Tablas: cómo leerlas y moverte entre páginas»."
           ],
           "callouts": []
         },
@@ -2293,6 +2319,7 @@
             "Validación de identidad del mandatario: al guardar un mandatario nuevo con Validación de identidad, le enviamos un enlace al correo para que valide su identidad; antes de guardar el formulario te lo avisa. Solo cuenta la validación hecha para ese mandatario (no la que la misma persona haya hecho como comprador o vendedor). Al editar, la ficha muestra el estado: «Pendiente de validación» (aún sin firma válida), «En curso», «Aprobada» o «Enlace vencido», y el botón «Reenviar validación» para volver a enviar el enlace (te confirma el correo de destino y se deshabilita mientras envía). Si cambias el tipo o el número de documento, o pasas de Baúl de firmas a Validación de identidad, el formulario te avisa antes de guardar que se enviará una nueva validación y que la anterior deja de contar. Con Baúl de firmas, Persona jurídica o Formato en blanco no aparece este bloque. Reactivar un mandatario no envía ninguna validación. Los mandatarios anteriores con Validación de identidad aparecen como «Pendiente de validación» hasta que completen el nuevo flujo; los de Baúl de firmas siguen igual.",
             "Organismos donde aplica: solo se ofrecen los habilitados para tu compañía. La firma de forma física ya no se ofrece.",
             "Sobre la lista se indica el formato de contrato de cada organismo habilitado, con el nombre vigente del catálogo. Lista de mandatarios: cada fila muestra el modelo, una columna «Validación» (solo con Validación de identidad) y una etiqueta de vigencia con texto e ícono: verde «Vigente», naranja «Por vencer» (faltan 7 días o menos para el fin), rojo «Vencido», rojo «Inactivo» y azul «Aún no vigente» si el rango todavía no empieza. En rango de fechas se indica hasta cuándo. Si el organismo de tránsito configuró un mandatario para tu compañía, su fila se ve en gris con un candado y la leyenda «Configurado por el organismo de tránsito»: puedes consultarlo, pero no editarlo ni eliminarlo (solo el organismo). Los mandatarios que registraste tú conservan sus acciones.",
+            "Encontrar un mandatario: encima de la lista hay un buscador por nombre o documento y un embudo en el encabezado de columnas como Mandatario, Documento, Modelo, Vigencia, Validación y Organismos. Si ningún mandatario cumple, verás «Ningún registro coincide con los filtros» y «Limpiar filtros».",
             "Desactivar, reactivar y eliminar: en cada fila tienes los iconos de editar, desactivar (o reactivar si está inactivo) y eliminar. Antes de desactivar o eliminar, el sistema revisa qué afecta. Si es el único mandatario activo de una compañía en un organismo, o es un default, el diálogo lista las compañías y organismos que quedarían sin mandatario y pide que confirmes; los trámites radicados sin aprobar se reasignan con la prelación (mandatario propio, asociado de otra compañía o default del organismo) y, si no queda nadie, el organismo decide al aprobar. Sin impacto basta una confirmación corta. Eliminar conserva el historial. Al terminar te dice cuántos trámites se reasignaron y cuántos quedan para el organismo. Reactivar no desplaza al mandatario que ya esté vigente: si hubo otro activo, el vínculo queda inactivo y se te avisa. Si el servidor responde «No tienes permiso», la fila no cambia. Persona jurídica y Formato en blanco no tienen vigencia y muestran un guion. Un mandatario eliminado no aparece.",
             "Compañías asociadas: el formulario se abre como una ventana (modal) por pasos (¿Quién firma?, Datos, ¿Cómo firma?, Vigencia y Dónde aplica) con un resumen que se actualiza mientras lo llenas. En «Dónde aplica», si tu compañía tiene compañías hijas, las ves completas, sin páginas: escribe en el buscador parte del nombre o del NIT para filtrar, marca las que quieras (quedan como chips con una «x» para quitarlas y un contador), y usa «Seleccionar las filtradas» o «Limpiar» para marcar o quitar varias de una vez. Es opcional: sin marcar ninguna, el mandatario aplica solo a tu compañía. Los organismos funcionan igual: con ocho o menos se muestran como chips que activas con un clic, y con más aparece el buscador. Si no tienes compañías hijas no hay lista y el formulario dice «Este mandatario aplica solo a su compañía». Ya no aparecen las empresas de los Representantes Legales."
           ],
@@ -2345,6 +2372,7 @@
           "bullets": [
             "Agregar cliente a la red: razón social, NIT y tipo de compañía. El código lo asigna el sistema (COMP-XXXX). Nace vinculado a tu red.",
             "Activar / Desactivar cliente, con confirmación.",
+            "Encontrar un cliente: la tabla del Panel de red no tiene filtros arriba: usa el embudo del encabezado de cada columna (Cliente, NIT, Tipo, Estado y la fecha de vinculación).",
             "Invitar usuario a un cliente: eliges el cliente como destino y el rol (Administrador de compañía, Radicador, Gestor, Documentador, Validador u Operario full).",
             "Cada correo corresponde a un solo usuario en toda la plataforma, sin importar la compañía ni las mayúsculas (Juan@empresa.com y juan@empresa.com son el mismo). El correo se guarda siempre en minúsculas. Si ya existe un usuario con ese correo, o ya hay una invitación pendiente para él en cualquier compañía, la invitación no se crea, ves «El usuario ya se encuentra previamente creado» y el campo de correo queda marcado en rojo; corrige el correo para continuar.",
             "Administrar un cliente: abre su ficha para gestionar sus Representantes legales y Mandatarios (y sus Usuarios), con un aviso de que estás en un cliente de tu red."
@@ -2465,18 +2493,19 @@
           "id": "companias",
           "title": "1. Compañías",
           "paragraphs": [
-            "Administradores → Compañías. Catálogo de compañías B2B con filtros, estado y el toggle «incluir OT» para ver también los organismos de tránsito en el mismo listado. La primera columna, «Código», muestra el consecutivo de cada compañía (COMP-0001, COMP-0002…); las compañías que ya existían recibieron el suyo según su antigüedad. «Crear compañía»: razón social, NIT, tipo de compañía (normal, Concesión o Marca Blanca) y, para Marca Blanca, dominio propio. El código no se escribe: el sistema asigna el siguiente consecutivo (COMP-0001, COMP-0002…) al guardar. «Activar / Desactivar» cambia el estado con confirmación; una compañía de tipo de sistema no se edita desde aquí.",
-            "Abrir una fila lleva a la ficha completa de la compañía, con 8 pestañas:"
+            "Administradores → Compañías. Catálogo de compañías B2B con el toggle «incluir OT» para ver también los organismos de tránsito en el mismo listado. Arriba de la tabla está el panel con NIT, Razón social, Estado y Fecha desde/hasta, con «Buscar» y «Limpiar». Además, cada columna con datos tiene un embudo en su encabezado para filtrarla (ver «Tablas: cómo leerlas y moverte entre páginas»); los filtros del panel y los de las columnas se combinan. La primera columna, «Código», muestra el consecutivo de cada compañía (COMP-0001, COMP-0002…); las compañías que ya existían recibieron el suyo según su antigüedad. «Crear compañía»: razón social, NIT, tipo de compañía (normal, Concesión o Marca Blanca) y, para Marca Blanca, dominio propio. El código no se escribe: el sistema asigna el siguiente consecutivo (COMP-0001, COMP-0002…) al guardar. «Activar / Desactivar» cambia el estado con confirmación; una compañía de tipo de sistema no se edita desde aquí.",
+            "Abrir una fila lleva a la ficha completa de la compañía, con 9 pestañas (más «Clientes hijos» y «Marca» si es cabeza de red):"
           ],
           "bullets": [
             "Productos: enciende o apaga los productos de la suite para la compañía (Trámites, Comparendos, Diagnóstico). El cambio se aplica al instante, sin «Guardar todo», y queda en el historial. Cada producto muestra su estado escrito: Encendido, Apagado o Próximamente.",
             "Trámites: familias habilitadas (Matrículas, Traspaso, Otros), cada una en un acordeón con un resumen («Sin restricciones» o «N restricciones activas») y con el estado de cada opción escrito junto a su switch (por ejemplo Permitido o Bloqueado), más la lista blanca de trámites permitidos. Debajo, la sección «Improntas» tiene el interruptor «Generación de improntas» (visible solo para el Super Admin), con el estado escrito junto a él: Habilitada o Deshabilitada. Si lo desactivas, el asistente no genera la impronta automáticamente y el radicador la carga a mano; solo aplica a trámites nuevos. Se guarda con «Guardar todo».",
-            "Configuración Empresa: cinco bloques con un índice de acceso rápido arriba. «Firma y documentos» (firma precargada desde el baúl y módulo de Resoluciones), «Notificaciones» (enrutamiento, avisos al aprobar o rechazar y sus destinatarios), «Cobro y recaudo» (métodos de recaudo), «Consultas y fuentes» (validar SOAT ante RUNT, fuente de comparendos, proveedores de consulta y de avalúo; el tiempo de espera de contingencia está en «Opciones avanzadas») y «Organismos de tránsito», con los bloqueos y restricciones que aplica cada uno. Las opciones elegidas se marcan en verde y la de Fasecolda aparece como obligatoria. El buscador de esa tabla (por nombre o código, con o sin tildes) recorre todos los organismos, no solo la página que estás viendo.",
-            "Documentos: parámetros documentales de la gestora, en una tabla con cada tipo de documento y su estado (Obligatorio, Opcional u Oculto). «Agregar parámetro» o el ícono de editar abren la ventana para elegir el documento y su estado.",
-            "Representantes legales: buscador por nombre o documento, un resumen de cuántos representantes no tienen firma ni identidad y paginación con «Filas por página».",
-            "Mandatarios: el mismo formulario que ve el Administrador de la compañía, con modelo (Persona natural, Persona jurídica o Formato en blanco), forma de firma y vigencia. La lista muestra el modelo y la etiqueta de vigencia (Vigente, Por vencer, Vencido, Inactivo, Aún no vigente; guion en Persona jurídica y Formato en blanco). Tiene buscador por nombre o documento y las acciones de cada fila son íconos (editar, dar de baja o reactivar, eliminar) con su nombre al pasar el mouse. Ver el artículo «Representantes legales y mandatarios» de Administrador de compañía.",
-            "Usuarios: usuarios de la compañía con buscador y filtros por perfil, rol y estado, e «Invitar usuario».",
-            "Historial de Cambios: quién cambió qué y cuándo, con el campo en lenguaje claro y el valor anterior y el nuevo como etiquetas. «Ver detalle» abre los valores extensos. Los filtros (fechas, tipo de cambio y texto) se aplican a la página cargada."
+            "Configuración Empresa: cinco bloques con un índice de acceso rápido arriba. «Firma y documentos» (firma precargada desde el baúl y módulo de Resoluciones), «Notificaciones» (enrutamiento, avisos al aprobar o rechazar y sus destinatarios), «Cobro y recaudo» (métodos de recaudo), «Consultas y fuentes» (validar SOAT ante RUNT, fuente de comparendos, proveedores de consulta y de avalúo; el tiempo de espera de contingencia está en «Opciones avanzadas») y «Organismos de tránsito», con los bloqueos y restricciones que aplica cada uno. Las opciones elegidas se marcan en verde y la de Fasecolda aparece como obligatoria. Esa tabla y la de Bloqueos tienen un buscador arriba por nombre o código y, además, un embudo en el encabezado de cada columna (Organismo, Código, Estado, Convenio; en Bloqueos, Estado en red); recorren todos los organismos, no solo la página que estás viendo.",
+            "Documentos: la tabla lista todos los documentos del catálogo con su estado: Obligatorio, Opcional, Oculto o Base (el documento que aún no tiene parámetro para esa compañía). Ya no hay botón «Agregar parámetro»: se edita desde la fila, con el ícono de editar, para elegir el estado. Filtra con el embudo de las columnas Documento (nombre o código) y Estado.",
+            "Representantes legales: un resumen de cuántos representantes no tienen firma ni identidad y paginación con «Filas por página». Encima hay un buscador por nombre o documento y, en el encabezado de cada columna (Representante, Documento, Trámites, Firma / Identidad), un embudo para filtrarla. La firma de cada representante se gestiona en su ficha.",
+            "Mandatarios: el mismo formulario que ve el Administrador de la compañía, con modelo (Persona natural, Persona jurídica o Formato en blanco), forma de firma y vigencia. La lista muestra el modelo y la etiqueta de vigencia (Vigente, Por vencer, Vencido, Inactivo, Aún no vigente; guion en Persona jurídica y Formato en blanco). Tiene buscador por nombre o documento y un embudo en el encabezado de columnas como Mandatario, Documento, Modelo, Vigencia, Validación y Organismos; las acciones de cada fila son íconos (editar, dar de baja o reactivar, eliminar) con su nombre al pasar el mouse. Ver el artículo «Representantes legales y mandatarios» de Administrador de compañía.",
+            "Usuarios: usuarios de la compañía con buscador y selectores de perfil, rol y estado arriba, un embudo en cada columna (Nombre, Correo, Perfil, Rol, Estado, Fecha) e «Invitar usuario».",
+            "Integraciones externas: la conexión del portal de Persona Natural con la compañía (solo la ve el Super Admin). Se explica en el apartado «5. Integraciones externas de la compañía».",
+            "Historial de Cambios: quién cambió qué y cuándo, con el campo en lenguaje claro y el valor anterior y el nuevo como etiquetas. «Ver detalle» abre los valores extensos. Arriba hay fechas, tipo de cambio y buscador, que actúan sobre la página cargada. Los embudos de las columnas (Fecha, Campo modificado, Valor anterior, Operador) filtran todo el historial de la compañía, no solo la página que ves; puedes buscar por lo que se ve, por ejemplo «Inicio de sesión» en Campo modificado o «Deshabilitada» en Valor anterior. Si en el rango propio la fecha inicial es posterior a la final, te avisa y no aplica."
           ],
           "callouts": [
             {
@@ -2490,7 +2519,7 @@
           "id": "companias-red",
           "title": "2. Cabezas de red",
           "paragraphs": [
-            "Si la compañía es cabeza de red (Concesión o Marca Blanca), su ficha suma el panel de hijas: agregar un cliente a la red, activar o inactivar una hija e invitar usuarios para que la administren.",
+            "Si la compañía es cabeza de red (Concesión o Marca Blanca), su ficha suma el panel de hijas: agregar un cliente a la red, activar o inactivar una hija e invitar usuarios para que la administren. La tabla de hijas y el Panel de red no tienen filtros arriba: se filtran con el embudo de cada columna (Razón social, NIT, Tipo, Estado y la fecha de vinculación).",
             "Si además es Marca Blanca, configura la marca y el dominio propio de la red: registrar el dominio, cambiarlo, retirarlo y comprobarlo (validación de propiedad). Estas cuatro acciones son exclusivas del Super Admin; el Administrador de la cabeza de red solo las ve en modo lectura."
           ],
           "bullets": [],
@@ -2524,6 +2553,33 @@
           ],
           "bullets": [],
           "callouts": []
+        },
+        {
+          "id": "integraciones-externas",
+          "title": "5. Integraciones externas de la compañía",
+          "paragraphs": [
+            "En la ficha de la compañía, la pestaña «Integraciones externas» (solo Super Admin; los demás perfiles no la ven) administra la conexión que permite al portal público de Persona Natural hablar con FLIT 2 en nombre de esa compañía. La conexión solo puede consultar información, no modificarla. Cada compañía puede tener una sola conexión de Persona Natural activa a la vez.",
+            "La tabla muestra, por cada conexión: el nombre y su identificador, el tipo (Persona Natural), la finalidad, el alcance (Solo lectura), el estado, el último acceso y la fecha en que se creó. Tiene filtros por Conexión y Estado, y paginación con «Filas por página». Los estados son: Activa; Bloqueada (indica hasta cuándo, o «Bloqueada hasta que se desbloquee» cuando la bloqueó una persona del equipo FLIT; también puede bloquearse sola por intentos fallidos) y Desactivada. Si una conexión activa aparece con la marca «Debe cambiar la clave», hay que generarle una clave nueva."
+          ],
+          "bullets": [
+            "Crear: botón «Crear conexión». Escribe el nombre y, si quieres, la finalidad (los dos son opcionales: sin nombre se usa uno por defecto) y confirma con «Crear conexión». El botón aparece desactivado, con su explicación al lado, si la compañía ya tiene una conexión activa: primero hay que desactivarla.",
+            "Ver la clave: al crear (y al generar una clave nueva) se abre una ventana con el identificador de la conexión y la clave secreta, y el botón «Copiar clave». La clave se muestra una sola vez: no se puede volver a ver ni recuperar. Cópiala, entrégala al servicio del portal por un canal seguro y cierra con «Ya la copié, cerrar». Si la pierdes, tendrás que generar una nueva.",
+            "Generar una clave nueva: ícono de la llave en la fila → «Generar clave nueva». Se crea una clave nueva y se muestra una sola vez. Por defecto la clave anterior sigue sirviendo 24 horas para que el portal alcance a cambiarla; si sospechas que se filtró, marca «Dejar sin efecto la clave anterior ahora mismo». No se puede generar una clave nueva en una conexión bloqueada: primero desbloquéala.",
+            "Bloquear y desbloquear: el candado de la fila. Bloquear impide que la conexión obtenga accesos nuevos hasta que alguien la desbloquee; los accesos que ya tenía siguen valiendo hasta que vencen (máximo 30 minutos). Desbloquear le permite volver a pedir accesos de inmediato con su clave vigente.",
+            "Desactivar: ícono de apagar → «Desactivar». Es definitivo: la conexión no podrá obtener accesos ni volver a activarse; para reconectar el portal hay que crear una nueva. Una conexión desactivada ya no ofrece acciones."
+          ],
+          "callouts": [
+            {
+              "variant": "warning",
+              "title": null,
+              "text": "Cada acción pide confirmación. Si el sistema no la puede aplicar (por ejemplo, otra persona ya la desactivó), el motivo se muestra en la misma ventana y no se cierra; recarga el listado para ver el estado actual."
+            },
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Si el listado no carga verás «No se pudieron cargar las conexiones» con la opción de reintentar; si la compañía aún no tiene conexiones, la pestaña te invita a crear la de Persona Natural con «Crear conexión»."
+            }
+          ]
         }
       ],
       "sources": []
@@ -2720,8 +2776,8 @@
             "Cada correo corresponde a un solo usuario en toda la plataforma, sin importar la compañía ni las mayúsculas (Juan@empresa.com y juan@empresa.com son el mismo). El correo se guarda siempre en minúsculas. Si ya existe un usuario con ese correo, o ya hay una invitación pendiente para él en cualquier compañía, la invitación no se crea, ves «El usuario ya se encuentra previamente creado» y el campo de correo queda marcado en rojo; corrige el correo para continuar.",
             "«Eliminar usuario» es un borrado lógico: el usuario sale del listado activo y pierde el acceso, pero queda visible en la pestaña Eliminados, donde «Restaurar» lo devuelve a activo con sus roles previos. Cada usuario tiene además su propio historial de auditoría: quién lo invitó, qué roles cambiaron y cuándo.",
             "Las acciones de cada usuario (historial, permisos por módulo, editar, restablecer contraseña, suspender, desactivar y eliminar) están en el botón «Acciones» de su fila; las que quitan acceso van al final. Reenviar o reactivar una invitación sigue siendo el ícono de la fila.",
-            "Permisos por módulo: en la fila del usuario abre «Acciones» y elige «Permisos por módulo»; ves cada módulo y cada acción con su origen: «Heredado del rol» (lo que dicta su rol), «Individual» (un permiso que se le dio o quitó solo a él) o «Parcial» (módulo con acciones de ambos orígenes). Puedes habilitar o denegar un módulo completo o una acción, y «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo. Solo aparecen los permisos que la plataforma ya exige. La ficha es una sola lista: primero «Módulos» y después «Tipos de servicio» (si la persona no tiene tipos de servicio, solo ves la lista). Ver y Crear por tipo de servicio: en «Tipos de servicio», «Trámites: Matrículas», «Trámites: Traspasos» y «Trámites: Otros trámites» tienen cada uno un par «Ver» / «Crear». «Crear» solo se puede habilitar si «Ver» está habilitado, y al apagar «Ver» también se apaga «Crear». Cada interruptor muestra si viene «Heredado del rol» o es «Individual»; «Crear» queda deshabilitado mientras el «Ver» de la persona (heredado o individual) esté inactivo, y si «Volver al rol» deja a la persona sin «Ver», su «Crear» individual también se retira. Los permisos que un administrador de la compañía o del organismo no podría otorgar llevan la etiqueta «Solo SA» con un candado: son exclusivos del Super Admin. Al habilitar el permiso de revelar datos personales aparece un aviso de la Ley 1581 de 2012: solo se guarda si marcas «Confirmo» y pulsas «Otorgar»; si cancelas, no cambia nada, y la confirmación queda en la auditoría. Ese permiso no se otorga con «Habilitar módulo»; se hace uno a uno. Tras cada cambio guardado ves un aviso verde que te dice cuándo entra en vigor (la próxima vez que la persona inicie sesión, con el máximo de espera); si algo falla, ves un aviso de error. Si el usuario es Super Admin, o su invitación sigue pendiente, la sección no permite cambios y te explica por qué.",
-            "Cambio de rol con permisos individuales: al cambiar el rol de un usuario desde «Editar» (en Usuarios, en la ficha de la compañía o en el hub del organismo), si tiene permisos individuales el sistema te avisa cuántos se eliminarán al cambiar su rol y el rol solo cambia si confirmas con «Cambiar rol». «Mantener rol actual» cancela el cambio sin tocar nada."
+            "Permisos por módulo: en la fila del usuario abre «Acciones» y elige «Permisos por módulo»; ves cada módulo y cada acción con su origen: «Heredado del rol» (lo que dicta su rol), «Individual» (un permiso que se le dio o quitó solo a él) o «Parcial» (módulo con acciones de ambos orígenes). Puedes habilitar o denegar un módulo completo o una acción, y «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo. Solo aparecen los permisos que la plataforma ya exige. La ficha es una sola lista: primero «Módulos» y después «Tipos de servicio» (si la persona no tiene tipos de servicio, solo ves la lista). Ver y Crear por tipo de servicio: en «Tipos de servicio», «Trámites: Matrículas», «Trámites: Traspasos» y «Trámites: Otros trámites» tienen cada uno un par «Ver» / «Crear». «Crear» solo se puede habilitar si «Ver» está habilitado, y al apagar «Ver» también se apaga «Crear». Cada interruptor muestra si viene «Heredado del rol» o es «Individual»; «Crear» queda deshabilitado mientras el «Ver» de la persona (heredado o individual) esté inactivo, y si «Volver al rol» deja a la persona sin «Ver», su «Crear» individual también se retira. Los permisos que un administrador de la compañía o del organismo no podría otorgar llevan la etiqueta «Solo SA» con un candado: son exclusivos del Super Admin. Al habilitar el permiso de revelar datos personales aparece un aviso de la Ley 1581 de 2012: solo se guarda si marcas «Confirmo» y pulsas «Otorgar»; si cancelas, no cambia nada, y la confirmación queda en la auditoría. Ese permiso no se otorga con «Habilitar módulo»; se hace uno a uno. Tras cada cambio guardado ves un aviso verde que te dice cuándo entra en vigor (la próxima vez que la persona inicie sesión, como máximo 15 minutos); si algo falla, ves un aviso de error. Si el usuario es Super Admin, o su invitación sigue pendiente, la sección no permite cambios y te explica por qué.",
+            "Cambio de rol con permisos individuales: al cambiar el rol de un usuario desde «Editar» (en Usuarios, en la ficha de la compañía o en el hub del organismo), si tiene permisos individuales de ese producto el sistema te avisa cuántos se eliminarán y el rol solo cambia si confirmas con «Cambiar rol». Los permisos individuales de otros productos se conservan. «Mantener rol actual» cancela el cambio sin tocar nada. Un cambio de permiso individual entra en vigor en el siguiente refresco de la sesión, como máximo 15 minutos. «Restablecer contraseña» y «Validaciones de identidad (administración)» se configuran en el rol Administrador de Compañía (producto plataforma), no en un rol de Trámites. El Administrador de Compañía siempre puede administrar Trámites."
           ],
           "bullets": [],
           "callouts": []
@@ -2779,6 +2835,115 @@
               "variant": "info",
               "title": null,
               "text": "El tope diario de mensajes del chat y el modelo de inteligencia artificial se configuran por ambiente desde la operación de la plataforma; si el equipo necesita ajustarlos, es un cambio de configuración, no de código."
+            }
+          ]
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "4-superadmin/7-plataforma-persona-natural",
+      "title": "Plataforma: Persona Natural (trámites, organismos, tarifas, ajustes y contenido del portal)",
+      "href": "/manual/4-superadmin/7-plataforma-persona-natural",
+      "audience": "Super Admin",
+      "sectionId": "superadmin",
+      "summary": "Cómo el Super Admin deja listo el portal de Persona Natural: qué trámites se ofrecen y en qué organismos, cuánto cuestan, los ajustes del portal y los textos que ve el ciudadano.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "entrada",
+          "title": "1. Dónde está y qué falta configurar",
+          "paragraphs": [
+            "Plataforma → «Persona Natural». Es la pantalla desde la que el equipo FLIT decide qué trámites puede hacer una persona natural desde el portal público, en qué organismos de tránsito y cuánto cuestan. Solo la ve el Super Admin con el permiso de administrar Persona Natural: los demás perfiles no tienen la entrada en el menú y, si abren la dirección directa, ven el mensaje «No tienes permiso para administrar el portal de Persona Natural.».",
+            "Arriba está el «Estado de la configuración». Dice que para ofrecer un trámite al ciudadano necesitas tres cosas, y muestra cada una como «Hecho» o «Pendiente» con un botón que te lleva directo a donde se resuelve: 1. «Un tipo de trámite» (botón «Elegir trámites»), 2. «Un organismo de tránsito» (botón «Elegir organismos») y 3. «Una tarifa vigente» (botón «Configurar tarifas»). Debajo, una frase resume lo que el ciudadano ve hoy, por ejemplo «Hoy el ciudadano puede iniciar 2 tipos de trámite en 5 organismos de tránsito», o qué falta si todavía no puede iniciar ninguno. Si hay organismos habilitados sin tarifa, un aviso lo dice. Cuando los tres pasos están hechos, el panel se reduce a una sola línea («Configuración completa. Hoy el ciudadano puede iniciar…») con el botón «Ver pasos» para expandirlo; si falta algo, se muestra completo. El estado se actualiza solo cuando cambias algo.",
+            "Debajo hay cinco pestañas, en el orden de los pasos: «Trámites» (paso 1), «Organismos» (paso 2), «Tarifas» (paso 3), «Ajustes del portal» y «Contenido». Un trámite que no está listo o un organismo que ya no está activo en FLIT no cuentan como «Hecho». Cada una carga cuando entras en ella y muestra los cuatro estados de siempre: cargando, vacío, error con «Reintentar» y con datos. Para conectar el portal con una compañía se usa, además, la pestaña «Integraciones externas» de la ficha de la compañía (ver «Compañías, organismos de tránsito y causales»)."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "organismos-tramites",
+          "title": "2. Trámites y organismos",
+          "paragraphs": [
+            "Aquí decides qué se ofrece en el portal, en dos pestañas separadas. Una regla manda sobre todo lo demás, y la pestaña «Trámites» la recuerda arriba: un trámite aparece cuando está activado, el organismo está habilitado y existe una tarifa vigente para esa combinación. Si falta algo, el ciudadano no lo ve.",
+            "«Trámites» (paso 1, «Trámites que ofrece el portal») lista los trámites activos y publicados en FLIT 2. Cada uno muestra su categoría, su disponibilidad («Listo para ofrecer», «Aún no disponible» o «Ya no está activo en FLIT»), el interruptor «Ofrecer en el portal», si «Lo ve el ciudadano» (Sí, No o «Falta tarifa») y en cuántos organismos tiene tarifa. Un trámite no disponible no se puede activar: su interruptor queda bloqueado y se lee el motivo. Uno que ya no está activo en FLIT sigue en la lista solo para que puedas dejar de ofrecerlo.",
+            "«Organismos» (paso 2, «Organismos de tránsito») lista solo los organismos de tránsito activos en FLIT. Cada uno muestra su municipio y departamento, el interruptor «Ofrecer en el portal» y cuántos trámites tiene con tarifa. Si un organismo habilitado deja de estar activo en FLIT, sigue en la lista marcado «Ya no está activo en FLIT» y solo puedes dejar de ofrecerlo. Tiene un buscador por nombre, municipio o departamento y filtros por Organismo, Departamento y «Ofrecer en el portal». Ambas tablas tienen paginación con «Filas por página»."
+          ],
+          "bullets": [
+            "Ofrecer un trámite u organismo: usa el interruptor de la fila. Verás un aviso como «… ahora se ofrece en el portal.».",
+            "Dejar de ofrecerlo: apaga el interruptor. Antes se abre una confirmación que explica que el ciudadano dejará de verlo hasta que lo vuelvas a activar (las tarifas ya configuradas se conservan); confirma con «Dejar de ofrecer» o cancela y no cambia nada.",
+            "Aviso «Falta tarifa»: el trámite o el organismo está activado pero no tiene tarifa vigente, así que el ciudadano no puede cotizar. El botón «Crear tarifa» de ese aviso te lleva a la pestaña «Tarifas»."
+          ],
+          "callouts": [
+            {
+              "variant": "tip",
+              "title": null,
+              "text": "Habilitar un organismo no basta: también necesita una tarifa vigente. Si no ves un trámite en el portal, revisa primero las tres condiciones de la regla o mira el «Estado de la configuración»."
+            }
+          ]
+        },
+        {
+          "id": "tarifas",
+          "title": "3. Tarifas",
+          "paragraphs": [
+            "Lista cuánto paga el ciudadano por cada trámite en el portal, agrupado por organismo y trámite. Cada fila muestra el organismo (o «Todos los organismos» si el valor aplica a todos), el trámite, los Derechos de tránsito, el Servicio digital FLIT, el Envío, otros cargos, desde cuándo rige y su estado: Vigente, Próxima (aún no rige) o Anterior (ya no rige). Los valores se ven en pesos, con puntos de miles. Tiene filtros por Organismo, Trámite, «Vigente desde» y Estado, y por defecto no muestra las anteriores: para verlas, filtra por Estado en el encabezado de esa columna.",
+            "Una tarifa de un organismo tiene prioridad sobre el valor general del trámite. Los cargos que se pueden registrar son Derechos de tránsito, Servicio digital, Cambio de color, Conversión de combustible, Cambio de carrocería y Envío del documento."
+          ],
+          "bullets": [
+            "Crear una tarifa nueva: botón «Nueva tarifa». Elige el trámite y el organismo (o «Todos los organismos (valor general)»), indica desde qué fecha rige («Rige desde»; debajo ves «Desde el … el portal cotiza con estos valores») y escribe el valor en pesos de al menos un cargo; los puntos de miles se acomodan al escribir y también al borrar un dígito. Los Derechos de tránsito y el Servicio digital siempre se registran para un trámite concreto; «Todos los trámites (solo cargos adicionales)» sirve solo para los demás cargos.",
+            "Cambiar los valores de una tarifa: en la fila, el lápiz «Cambiar valores de…». No se edita la tarifa anterior: se registra una nueva con otra fecha. Cada campo muestra el valor de hoy y solo viajan los que cambies. La tarifa anterior deja de regir el día antes del inicio de la nueva. Las tarifas anteriores ya no ofrecen cambiar valores.",
+            "Fecha de inicio: puede ser hoy o una fecha futura; no se admite una fecha pasada.",
+            "Ver el historial: ícono de historial en la fila («Ver historial de…»). Muestra, por cargo, los valores anteriores con su vigencia, estado y la fecha en que se registraron."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Las cotizaciones que ya se emitieron no cambian: una tarifa nueva solo aplica desde su fecha de inicio."
+            },
+            {
+              "variant": "warning",
+              "title": "Mensajes frecuentes",
+              "text": "«La fecha de inicio no puede ser anterior a hoy.» Elige hoy o una fecha futura. «Ya hay una tarifa para este trámite y organismo que empieza ese mismo día o después. Elige una fecha de inicio posterior.» Cambia la fecha de inicio. «Cambia al menos un valor para registrar el cambio.» No modificaste ningún valor. «Los derechos de tránsito y el servicio digital se registran siempre para un trámite concreto: elige el trámite.»"
+            }
+          ]
+        },
+        {
+          "id": "ajustes",
+          "title": "4. Ajustes del portal",
+          "paragraphs": [
+            "Ajustes generales de cómo se comporta el portal para el ciudadano, ordenados en tarjetas. Si dejas un campo vacío, el portal usa su valor habitual, y ese valor se lee debajo del campo junto con el rango permitido. La unidad (minutos, días, consultas) se ve dentro del campo.",
+            "Tres tarjetas: «Tiempos y límites» (Duración de la sesión, habitual 60 minutos; Días que se guarda un trámite sin enviar, habitual 30 días; Consultas por persona al día, habitual 10 consultas por hora; Consultas de todo el portal al día, habitual 2000 consultas), «Verificación anti-robots» (el captcha puede quedar en «Lo habitual del portal (activada)», «Activada» o «Desactivada») y «Contacto de soporte»: correo, teléfono y horario de atención (opcionales), pensados para que el ciudadano pida ayuda.",
+            "Abajo hay una barra con el estado («Hay cambios sin guardar» o «No hay cambios por guardar») y la fecha de la última actualización. Para guardar usa «Guardar ajustes»; el botón queda inactivo mientras no haya cambios. Si hay cambios, «Descartar cambios» devuelve el formulario a lo guardado. Si un valor está fuera de rango o el correo no es válido, el mensaje aparece bajo el campo y no se guarda nada."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "warning",
+              "title": "Si otra persona editó al mismo tiempo",
+              "text": "Verás el aviso «Alguien más cambió estos ajustes». Lo que escribiste se conserva en pantalla, pero para guardarlo debes pulsar «Cargar valores actuales» y volver a aplicar tus cambios."
+            }
+          ]
+        },
+        {
+          "id": "contenido",
+          "title": "5. Contenido del portal",
+          "paragraphs": [
+            "Administra lo que el ciudadano lee en el portal sin intervención técnica, en tres secciones: «Preguntas frecuentes», «Banners» y «Enlaces legales y de contacto». Lo que cambias aquí no lo ve el ciudadano hasta que lo publiques. El panel «Publicación del contenido» muestra «Lo que ve hoy el ciudadano» (el contenido por defecto del portal, o el que publicaste con su fecha y hora), dice «Hay cambios sin publicar» o «Todo está publicado» y trae «Ver cómo quedaría», «Publicaciones anteriores» y «Publicar cambios». Cada sección tiene su encabezado con un contador (por ejemplo «3 preguntas · 2 visibles») y su botón de agregar, y la tabla debajo."
+          ],
+          "bullets": [
+            "Preguntas frecuentes: la lista abre con las preguntas que el portal ya muestra al ciudadano, para que puedas editarlas. «Nueva pregunta» pide la pregunta y la respuesta (texto simple, sin formato ni código) y si se muestra en el portal. En cada fila puedes editar, subir o bajar para cambiar el orden y usar el interruptor para mostrar u ocultar (ocultar pide confirmación). El formulario cuenta los caracteres (300 la pregunta, 2000 la respuesta) y muestra cómo se verá en el portal. Estado: Visible u Oculta. Filtra por Pregunta y Estado. El ciudadano sigue viendo el texto de siempre hasta que publiques.",
+            "Banners: «Nuevo banner» pide el título, la imagen (JPG, PNG o WEBP de hasta 2 MB), una descripción de la imagen para quienes no pueden verla, un enlace opcional y, si quieres, «Mostrar desde» y «Mostrar hasta». Cada banner se puede editar, mover de orden y mostrar u ocultar con su interruptor (ocultar pide confirmación). Su estado es Vigente, Programado (aún no empieza), Vencido (ya terminó) u Oculto. La descripción de la imagen es para personas con discapacidad visual que usan lector de pantalla.",
+            "Enlaces del portal: la Política de tratamiento de datos, los Términos y condiciones, el Contacto de ventas y el Video explicativo. Cada enlace dice «Configurado» o «Falta configurar»; son cuatro filas fijas, sin paginación. Edita cada uno con el lápiz (la dirección debe empezar por http:// o https://); en los dos enlaces legales, si no hay documento oficial déjalo vacío y el portal conserva su aviso actual. Los demás aceptan una página web, un correo o un teléfono según el caso.",
+            "Ver cómo quedaría: muestra cómo lo vería el ciudadano con tus cambios, sin publicarlos todavía.",
+            "Publicar cambios: pide confirmación y dice cuántas preguntas y banners visibles verá el ciudadano desde ahora. Avisa que lo que publicas reemplaza las preguntas y los banners que el portal muestra por defecto y que una publicación no se puede editar: para cambiar algo, haces el cambio y publicas otra vez. Confirma con «Sí, publicar». El botón está inactivo si no hay cambios por publicar.",
+            "Publicaciones anteriores: lista cada publicación con su fecha y cuántas preguntas y banners tenía, de la más reciente a la más antigua."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Cada cambio de una pregunta, banner o enlace dice «… guardado. El ciudadano lo verá cuando publiques». Nada llega al ciudadano hasta que pulses «Publicar cambios»."
             }
           ]
         }

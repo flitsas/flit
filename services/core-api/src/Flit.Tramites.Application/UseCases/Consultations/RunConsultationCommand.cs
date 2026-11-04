@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Flit.Queries.Domain.Time;
+using Flit.Tramites.Application.Tracking;
 using Flit.Tramites.Application.UseCases.Certifications;
 using Flit.Tramites.Domain.Certifications;
 using Flit.Tramites.Domain.Entities;
@@ -58,6 +59,18 @@ public sealed class RunConsultationHandler(
     /// </summary>
     private const string FieldKeyRuntConsultaFecha = "runt_consulta_fecha";
 
+    // HU #14178 — bitácora de la consulta de vehículo en RUNT. ProcedureFieldLabels no conoce
+    // consulta_runt (termina en _runt y no está en el catálogo): el evento se arma aquí, igual
+    // que el fallback de actores, y el responsable lo resuelve la lectura a partir del campo.
+    private const string TemplateCodigoVehiculoRunt = "RUNT_VEHICLE";
+    private const string CampoConsultaRunt = "consulta_runt";
+    private const string EtiquetaConsultaRunt = "Consulta RUNT";
+    private const string FraseVehiculoEncontrado = "RUNT: vehículo encontrado";
+    private const string FraseConDiscrepancia = "RUNT: con discrepancia";
+    private const string FraseConsultaFallida = "RUNT: consulta fallida";
+
+    private static readonly JsonSerializerOptions s_bitacoraJson = new(JsonSerializerDefaults.Web);
+
     public async Task<(ConsultationResult? Result, string? Error)> HandleAsync(
         Guid instanceId,
         Guid tenantId,
@@ -90,6 +103,10 @@ public sealed class RunConsultationHandler(
             {
                 UpsertHydratedFields(instance, tenantId, instanceRepo, WithConsultaFecha(template, cached, now));
 
+                if (EsConsultaVehiculoRunt(template))
+                    await RegistrarBitacoraConsultaVehiculoRuntAsync(
+                        instance, tenantId, FraseConsultaVehiculoRunt(cached, fieldValues), now, ct);
+
                 try
                 {
                     await instanceRepo.SaveChangesAsync(ct);
@@ -117,9 +134,34 @@ public sealed class RunConsultationHandler(
             templateCode,
             fieldValues);
 
-        var result = await provider.ConsultAsync(ctx, ct);
+        ConsultationResult result;
+        try
+        {
+            result = await provider.ConsultAsync(ctx, ct);
+        }
+        catch (Exception ex) when (DebeRegistrarFalloConsultaVehiculo(template, ex, ct))
+        {
+            // El proveedor no devolvió un resultado: misma bitácora que el fallo que sí viene
+            // en el ConsultationResult (check error / vehículo no encontrado).
+            await RegistrarBitacoraConsultaVehiculoRuntAsync(
+                instance, tenantId, FraseConsultaFallida, now, ct);
+            try
+            {
+                await instanceRepo.SaveChangesAsync(ct);
+            }
+            catch (Exception saveEx) when (IsNotDraftViolation(saveEx))
+            {
+                return (null, "not_draft");
+            }
+
+            throw;
+        }
 
         UpsertHydratedFields(instance, tenantId, instanceRepo, WithConsultaFecha(template, result, now));
+
+        if (EsConsultaVehiculoRunt(template))
+            await RegistrarBitacoraConsultaVehiculoRuntAsync(
+                instance, tenantId, FraseConsultaVehiculoRunt(result, fieldValues), now, ct);
 
         try
         {
@@ -430,4 +472,191 @@ public sealed class RunConsultationHandler(
 
         return false;
     }
+
+    /// <summary>
+    /// HU #14178 — solo la plantilla de vehículo en RUNT. El SOAT y las consultas de actor
+    /// salen por otros handlers o por otro <c>code</c> y no dejan esta fila.
+    /// </summary>
+    private static bool EsConsultaVehiculoRunt(ConsultationTemplate template) =>
+        string.Equals(template.Code, TemplateCodigoVehiculoRunt, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(template.EntityScope, EntityScopeVehicle, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// La cancelación del llamador no es un fallo de RUNT. Un timeout interno
+    /// (<see cref="OperationCanceledException"/> con el token del request aún activo) sí lo es.
+    /// </summary>
+    private static bool DebeRegistrarFalloConsultaVehiculo(
+        ConsultationTemplate template, Exception ex, CancellationToken ct) =>
+        EsConsultaVehiculoRunt(template)
+        && (ex is not OperationCanceledException || !ct.IsCancellationRequested);
+
+    /// <summary>
+    /// Frase corta del resultado. No incluye placas, documentos ni el cuerpo del proveedor:
+    /// el llamador solo persiste este texto.
+    /// </summary>
+    /// <remarks>
+    /// Fallo: el proveedor no respondió (<c>status=error</c>), el RUNT dijo que el vehículo no
+    /// existe, o faltaban datos para consultarlo. Un SOAT o una RTM en rojo no es un fallo de
+    /// esta consulta: el vehículo sí vino.
+    /// Discrepancia: el identificador que ya tenía el trámite no es el que devolvió el RUNT,
+    /// o el resultado quedó en amarillo. Encontrado: el resto.
+    /// </remarks>
+    private static string FraseConsultaVehiculoRunt(
+        ConsultationResult result,
+        IReadOnlyDictionary<string, string?> fieldValues)
+    {
+        if (ConsultaVehiculoFallida(result))
+            return FraseConsultaFallida;
+        if (HayDiscrepanciaDeIdentificador(result, fieldValues)
+            || string.Equals(result.Overall, "yellow", StringComparison.OrdinalIgnoreCase))
+            return FraseConDiscrepancia;
+        return FraseVehiculoEncontrado;
+    }
+
+    private static bool ConsultaVehiculoFallida(ConsultationResult result)
+    {
+        if (result.Checks.Any(c => string.Equals(c.Status, "error", StringComparison.OrdinalIgnoreCase)))
+            return true;
+        if (result.Checks.Any(c =>
+                string.Equals(c.Key, "vehiculo", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(c.Status, "fail", StringComparison.OrdinalIgnoreCase)))
+            return true;
+        if (result.Checks.Any(c => string.Equals(c.Key, "input", StringComparison.OrdinalIgnoreCase)))
+            return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Placa o VIN ya guardados que no coinciden con lo que trajo el RUNT. Si el trámite aún
+    /// no tenía ese identificador, no hay discrepancia: la consulta lo está hidratando.
+    /// <c>plate_or_vin</c> vale como placa o como VIN.
+    /// </summary>
+    private static bool HayDiscrepanciaDeIdentificador(
+        ConsultationResult result,
+        IReadOnlyDictionary<string, string?> fieldValues)
+    {
+        var placaRunt = ValorHidratado(result, "plate");
+        var vinRunt = ValorHidratado(result, "vin");
+        if (Difiere(LeerCampo(fieldValues, "plate"), placaRunt))
+            return true;
+        if (Difiere(LeerCampo(fieldValues, "vin"), vinRunt))
+            return true;
+
+        var declarado = LeerCampo(fieldValues, "plate_or_vin");
+        if (string.IsNullOrWhiteSpace(declarado))
+            return false;
+        if (string.IsNullOrWhiteSpace(placaRunt) && string.IsNullOrWhiteSpace(vinRunt))
+            return false;
+
+        var d = declarado.Trim();
+        var coincidePlaca = !string.IsNullOrWhiteSpace(placaRunt)
+            && string.Equals(d, placaRunt.Trim(), StringComparison.OrdinalIgnoreCase);
+        var coincideVin = !string.IsNullOrWhiteSpace(vinRunt)
+            && string.Equals(d, vinRunt.Trim(), StringComparison.OrdinalIgnoreCase);
+        return !coincidePlaca && !coincideVin;
+    }
+
+    private static string? ValorHidratado(ConsultationResult result, string fieldKey)
+    {
+        foreach (var field in result.HydratedFields)
+        {
+            if (string.Equals(field.FieldKey, fieldKey, StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(field.ValueText))
+                return field.ValueText;
+        }
+
+        return null;
+    }
+
+    private static string? LeerCampo(IReadOnlyDictionary<string, string?> fieldValues, string fieldKey) =>
+        fieldValues.TryGetValue(fieldKey, out var value) ? value : null;
+
+    /// <summary>Los dos lados con valor y distintos (sin distinguir mayúsculas). Un lado vacío no es discrepancia.</summary>
+    private static bool Difiere(string? actual, string? runt)
+    {
+        if (string.IsNullOrWhiteSpace(actual) || string.IsNullOrWhiteSpace(runt))
+            return false;
+        return !string.Equals(actual.Trim(), runt.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Escribe una fila <c>dato_modificado</c> de la consulta de vehículo. El anterior va siempre
+    /// vacío. Si el último <c>nuevo</c> de <c>consulta_runt</c>, ya normalizado, es el mismo
+    /// (Ordinal), no deja otra fila. No guarda el JSON del proveedor.
+    /// </summary>
+    private async Task RegistrarBitacoraConsultaVehiculoRuntAsync(
+        ProcedureInstance instance,
+        Guid tenantId,
+        string frase,
+        DateTimeOffset atUtc,
+        CancellationToken ct)
+    {
+        var nuevo = NormalizarBitacora(frase);
+        var ultimo = UltimoNuevoConsultaRunt(instance);
+        if (string.Equals(ultimo, nuevo, StringComparison.Ordinal))
+            return;
+
+        var evt = new ProcedureInstanceEvent
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureInstanceId = instance.Id,
+            Tipo = ProcedureFieldChangeRecorder.EventType,
+            Payload = JsonSerializer.Serialize(
+                new { etiqueta = EtiquetaConsultaRunt, campo = CampoConsultaRunt, anterior = "", nuevo },
+                s_bitacoraJson),
+            CreatedAt = atUtc,
+            CreatedBy = null,
+        };
+
+        await instanceRepo.AddEventAsync(evt, ct);
+    }
+
+    private static string? UltimoNuevoConsultaRunt(ProcedureInstance instance)
+    {
+        ProcedureInstanceEvent? ultimo = null;
+        foreach (var evt in instance.Events)
+        {
+            if (!string.Equals(evt.Tipo, ProcedureFieldChangeRecorder.EventType, StringComparison.Ordinal))
+                continue;
+            if (!TryLeerNuevoConsultaRunt(evt.Payload, out _))
+                continue;
+            if (ultimo is null || evt.CreatedAt >= ultimo.CreatedAt)
+                ultimo = evt;
+        }
+
+        return ultimo is null || !TryLeerNuevoConsultaRunt(ultimo.Payload, out var frase)
+            ? null
+            : NormalizarBitacora(frase);
+    }
+
+    private static bool TryLeerNuevoConsultaRunt(string? payload, out string nuevo)
+    {
+        nuevo = string.Empty;
+        if (string.IsNullOrWhiteSpace(payload))
+            return false;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(payload);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+                return false;
+            if (!root.TryGetProperty("campo", out var campo)
+                || campo.ValueKind != JsonValueKind.String
+                || !string.Equals(campo.GetString(), CampoConsultaRunt, StringComparison.Ordinal))
+                return false;
+            if (!root.TryGetProperty("nuevo", out var nuevoEl) || nuevoEl.ValueKind != JsonValueKind.String)
+                return false;
+            nuevo = nuevoEl.GetString() ?? string.Empty;
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static string NormalizarBitacora(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
 }

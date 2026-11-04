@@ -341,6 +341,9 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       "subsanacion",
       "entregado",
       "anulado",
+      "modificaciones del tramite",
+      "expediente",
+      "trazabilidad",
       "reenviar validacion",
       "reenviar validacion de identidad",
       "copiar enlace",
@@ -397,6 +400,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         title: "3. El detalle del trámite",
         paragraphs: [
           "Al abrir una fila entras al detalle: el asistente (si sigue en borrador), la línea de tiempo de estados con fecha y hora, los documentos del expediente (también desde «Ver documentos» en la fila, sin entrar al asistente) y las observaciones del organismo cuando las hay.",
+          "Dentro del trámite abierto, en cualquier estado, cada cambio queda registrado: fecha y hora de Colombia, quién lo hizo (su nombre y su compañía, o Sistema), el dato, el valor anterior y el nuevo. Una bandera de transformación (color, carrocería, combustible o blindaje) se lee Sí o No. En borrador o en subsanación está en el acordeón «Expediente — Trazabilidad cronológica» del resumen, del más reciente al más antiguo. En los demás estados, la sección Expediente usa esa misma lista. «Línea de Tiempo del Trámite» conserva sus tarjetas: el título es el dato, y dentro van gestor, correo, empresa, rol, fecha y hora, y el detalle con el valor anterior y el nuevo. La tarjeta de más abajo es la vigente. Si no hay cambios dice «Todavía no hay modificaciones»; si está cargando o falla, lo dice y puedes pulsar «Reintentar». «Ver más» trae el resto. El recuadro «Estado del trámite», si lo abres sin entrar al detalle, solo muestra el estado y los actos administrativos.",
           "Todas las fechas de la plataforma se muestran en hora de Colombia con el formato DD/MM/YYYY HH:mm; las vigencias (SOAT, RTM, identidad) van sin hora.",
         ],
       },
@@ -899,6 +903,8 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       "permisos individuales",
       "fuera de tu tope",
       "auditoria de permisos",
+      "filtrar usuarios",
+      "buscar usuario",
     ],
     summary: "Las pestañas del módulo Usuarios, cómo invitar y gestionar personas, y qué es Clientes ICT.",
     blocks: [
@@ -909,7 +915,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "Píldora «Usuarios» del dock (visible para el Administrador de la compañía). Según tu perfil y permisos verás hasta tres pestañas:",
         ],
         bullets: [
-          "Usuarios: invitar, editar y gestionar el acceso de las personas de tu compañía.",
+          "Usuarios: invitar, editar y gestionar el acceso de las personas de tu compañía. Para encontrar a alguien usa el buscador, los selectores de perfil, rol y estado, o el embudo del encabezado de cada columna (Nombre, Correo, Perfil, Rol, Estado, Fecha); ver «Tablas: cómo leerlas y moverte entre páginas».",
           "Roles y permisos: crea y edita los roles de tu compañía y consulta los roles de FLIT. Solo la ve el Administrador de la compañía.",
           "Clientes ICT: solo si tu compañía integra con terceros y tienes el permiso correspondiente (ver bloque 7).",
         ],
@@ -936,7 +942,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "Como Administrador de la compañía puedes editar, restablecer contraseña, y suspender o desactivar un usuario. Eliminar un usuario de forma definitiva (y restaurarlo desde Eliminados) es exclusivo del equipo FLIT. Todas estas acciones están en el botón «Acciones» de la fila del usuario: ábrelo y elige la que necesitas.",
         ],
         bullets: [
-          "Editar: cambia nombre, perfil o roles. Al cambiar el rol de una persona que tiene permisos individuales, el sistema te avisa antes, por ejemplo «Este usuario tiene 3 permisos individuales que se eliminarán al cambiar su rol.»: el rol solo cambia si confirmas con «Cambiar rol»; con «Mantener rol actual» no cambia nada. Si no tiene permisos individuales, el cambio es directo y no aparece aviso.",
+          "Editar: cambia nombre, perfil o roles. Al cambiar el rol de una persona que tiene permisos individuales de ese producto, el sistema te avisa antes, por ejemplo «Este usuario tiene 3 permisos individuales de este producto que se eliminarán al cambiar su rol. Los de otros productos se conservan.»: el rol solo cambia si confirmas con «Cambiar rol»; con «Mantener rol actual» no cambia nada. Si no tiene permisos individuales de ese producto, el cambio es directo y no aparece aviso. Quien es Administrador de Compañía también administra Trámites: el rol de administrador de trámites va con el de la compañía mientras los roles no se asignen por producto.",
           "Restablecer contraseña: envía instrucciones de cambio al correo del usuario.",
           "Suspender: bloquea el acceso temporalmente; puedes reactivarlo cuando corresponda.",
           "Desactivar: bloquea el acceso de forma indefinida.",

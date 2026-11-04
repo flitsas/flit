@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Flit.Tramites.Application.Signatures;
+using Flit.Tramites.Application.Tracking;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
@@ -156,16 +157,39 @@ public sealed class ListFirmasHandler(IProcedureInstanceRepository repo)
 /// <c>enviada</c>; idempotente si ya está <c>firmada</c> (devuelve el estado actual). Marca
 /// <c>firmada</c>, <c>firmado_at</c>, y registra un pdfPath + sha256 sintéticos. La lógica vive en
 /// el handler para reusarse desde admin (Part A) y desde el portal público (Part B).
+///
+/// <para>HU #14175 — al transicionar a <c>firmada</c> registra UNA entrada en la bitácora de
+/// cambios (<c>dato_modificado</c>) con documento, estado y firmante. La misma (documento, estado,
+/// firmante) no genera una segunda fila (comparación Ordinal tras Trim).</para>
 /// </summary>
 public sealed class SimularFirmaHandler(IProcedureInstanceRepository repo)
 {
-    public async Task<(SimularFirmaResult? Result, string? Error)> HandleAsync(
+    private static readonly JsonSerializerOptions s_jsonOpts = new(JsonSerializerDefaults.Web);
+
+    /// <summary>
+    /// Overload de compatibilidad: no pasa actor (proveedor automático / webhook sin persona).
+    /// <c>CreatedBy</c> queda en <c>null</c>.
+    /// </summary>
+    public Task<(SimularFirmaResult? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
         Guid signatureId,
         CancellationToken ct = default)
+        => HandleAsync(id, tenantId, signatureId, null, ct);
+
+    /// <summary>
+    /// Overload principal. <paramref name="actorUserId"/> puede ser <c>null</c> cuando la firma la
+    /// aplica el proveedor sin persona identificada (webhook, proceso batch).
+    /// </summary>
+    public async Task<(SimularFirmaResult? Result, string? Error)> HandleAsync(
+        Guid id,
+        Guid tenantId,
+        Guid signatureId,
+        Guid? actorUserId,
+        CancellationToken ct = default)
     {
-        var instance = await repo.GetByIdWithSignaturesAsync(id, tenantId, ct);
+        // HU #14175: cargamos el grafo con actores para obtener el firmante en la bitácora.
+        var instance = await repo.GetByIdWithFurGraphAsync(id, tenantId, ct);
         if (instance is null)
             return (null, "not_found");
 
@@ -180,20 +204,82 @@ public sealed class SimularFirmaHandler(IProcedureInstanceRepository repo)
             return (null, "estado_invalido");
 
         var now = DateTimeOffset.UtcNow;
+
+        // ── HU #14175 — bitácora ─────────────────────────────────────────────────────────────────
+        // Se captura el anterior ANTES de mutar la firma para reflejar el estado que tenía.
+        var anteriorLabel = BuildFirmaLabel(signature.Estado, signature.DocTipo, instance, signature.Parte);
+        var nuevoLabel    = BuildFirmaLabel(SignatureEstados.Firmada, signature.DocTipo, instance, signature.Parte);
+
         // MOCK: el proveedor real devolvería el PDF firmado + su hash en el callback.
         var pdfPath = $"signatures/{id:N}/{signature.Parte}_{signature.DocTipo}_signed.pdf";
         var sha256 = Convert.ToHexStringLower(
             System.Security.Cryptography.SHA256.HashData(
                 System.Text.Encoding.UTF8.GetBytes($"{signature.Id:N}:{now:O}")));
 
-        signature.Estado = SignatureEstados.Firmada;
-        signature.PdfPath = pdfPath;
-        signature.Sha256 = sha256;
+        signature.Estado    = SignatureEstados.Firmada;
+        signature.PdfPath   = pdfPath;
+        signature.Sha256    = sha256;
         signature.FirmadoAt = now;
         signature.UpdatedAt = now;
+
+        // Comparación Ordinal tras Trim; iguales → no fila (AC2 — idempotencia de la bitácora).
+        var ant = NormFirma(anteriorLabel);
+        var nvo = NormFirma(nuevoLabel);
+        if (!string.Equals(ant, nvo, StringComparison.Ordinal))
+        {
+            var payload = JsonSerializer.Serialize(
+                new { etiqueta = "Firma", campo = "firma", anterior = ant, nuevo = nvo },
+                s_jsonOpts);
+            await repo.AddEventAsync(new ProcedureInstanceEvent
+            {
+                Id                  = Guid.NewGuid(),
+                TenantId            = tenantId,
+                ProcedureInstanceId = id,
+                Tipo                = ProcedureFieldChangeRecorder.EventType,
+                Payload             = payload,
+                CreatedAt           = now,
+                CreatedBy           = actorUserId,
+            }, ct);
+        }
 
         await repo.SaveChangesAsync(ct);
 
         return (new SimularFirmaResult(signature.Id, signature.Estado, pdfPath, sha256), null);
     }
+
+    /// <summary>
+    /// Construye la etiqueta del campo "firma" para la bitácora:
+    /// <c>"{EstadoLabel} · {DocTipoLabel} · {Firmante}"</c> (sin firmante si el actor no está en el
+    /// grafo cargado).
+    /// </summary>
+    /// <remarks>
+    /// <c>internal</c> para que los tests de la HU #14175 puedan verificar el valor exacto de la
+    /// etiqueta sin necesidad de deserializar el payload.
+    /// </remarks>
+    internal static string BuildFirmaLabel(
+        string estado, string docTipo, ProcedureInstance instance, string parte)
+    {
+        var estadoLabel = string.Equals(estado, SignatureEstados.Firmada, StringComparison.OrdinalIgnoreCase)
+            ? "Firmada"
+            : "Pendiente";
+        var docLabel = DocTipoLabel(docTipo);
+        var firmante = instance.Actors
+            .FirstOrDefault(a => string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase))
+            ?.FullName ?? string.Empty;
+        return string.IsNullOrWhiteSpace(firmante)
+            ? $"{estadoLabel} · {docLabel}"
+            : $"{estadoLabel} · {docLabel} · {firmante}";
+    }
+
+    // "compraventa" → "Compraventa"; "mandato" → "Mandato"; vacío → vacío.
+    private static string DocTipoLabel(string? docTipo)
+    {
+        if (string.IsNullOrWhiteSpace(docTipo)) return string.Empty;
+        var s = docTipo.Trim();
+        return s.Length == 0 ? s : char.ToUpperInvariant(s[0]) + s[1..];
+    }
+
+    // null y blanco → cadena vacía; en otro caso, Trim().
+    private static string NormFirma(string? value)
+        => string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
 }

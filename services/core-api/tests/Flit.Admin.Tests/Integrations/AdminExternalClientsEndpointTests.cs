@@ -253,6 +253,19 @@ public sealed class AdminExternalClientsEndpointTests : IClassFixture<AdminExter
             return Task.FromResult<ExternalClientView?>(updated);
         }
 
+        // HU #14067 — integraciones por compañía: este doble solo cubre la ruta que prueba su clase.
+        public Task<bool> CompanyExistsAsync(Guid companyId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<ExternalClientView>> ListByCompanyAsync(Guid companyId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<ExternalClientView?> GetByCompanyAsync(Guid companyId, Guid id, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<ExternalClientView?> BlockAsync(Guid id, Guid? actor, DateTimeOffset now, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<ExternalClientCredentials?> GetCredentialsByClientIdAsync(string clientId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
