@@ -280,12 +280,12 @@ internal sealed class PersonaNaturalCreador(
                 return Rechazo(errorPrenda);
         }
 
-        // 5. Adjuntos por referencia (no se re-suben bytes): origen «portal», idempotentes por sha256.
+        // 5. Adjuntos por referencia (no se re-suben bytes): origen «portal», idempotentes por (tipo + sha256): el mismo archivo puede servir a dos tipos.
         if (s.Adjuntos.Count > 0)
         {
             db.ChangeTracker.Clear();
             var entradas = s.Adjuntos.Select(a => new RegisterAttachmentInput(a.Tipo, a.NombreArchivo, a.MimeType, a.TamanoBytes, a.Sha256, a.Referencia)).ToList();
-            var (_, avisos) = await adjuntos.HandleBatchAsync(id, empresa, entradas, OrigenAdjuntos, creador, ct).ConfigureAwait(false);
+            var (_, avisos) = await adjuntos.HandleBatchAsync(id, empresa, entradas, OrigenAdjuntos, creador, dedupPorTipo: true, ct: ct).ConfigureAwait(false);
             if (avisos.Count > 0)
                 return Rechazo("adjunto_invalido");
         }

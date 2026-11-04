@@ -47,6 +47,27 @@ public sealed class PersonaNaturalTiposPostgresTests(WebApplicationFactory<Progr
     }
 
     [Fact]
+    public async Task CambioDeColor_ElMismoArchivoParaDosDocumentos_SeRegistraUnaVezPorTipo()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        await using var e = await Escenario.CrearAsync(host, ct);
+        await e.UsarTipoSembradoAsync("CAMBIO_COLOR", ct);
+        var solicitud = e.Solicitud(
+            partes: [e.Parte("comprador", "2000000001")],
+            campos: new() { ["vehicle_color"] = "ROJO CEREZA" },
+            adjuntos: [e.Adjunto("tarjeta_propiedad", "same"), e.Adjunto("soporte_cambio_color", "same")]);
+        await e.SembrarValidacionesAsync(solicitud, ct);
+
+        var r = await e.ProcesarAsync(new PortalFalso(solicitud), e.Evento(), ct);
+
+        r.Creada.Should().BeTrue(r.Codigo);
+        var adjuntos = await e.AdjuntosAsync(ct);
+        adjuntos.Select(a => a.Tipo).Should().BeEquivalentTo("tarjeta_propiedad", "soporte_cambio_color");
+        adjuntos.Select(a => a.Sha256).Distinct().Should().ContainSingle("es el mismo archivo registrado para dos tipos");
+    }
+
+    [Fact]
     public async Task Blindaje_ElDesmonteDejaLaBanderaDerivadaEnFalso_YLosNivelesEnVerdadero()
     {
         var ct = TestContext.Current.CancellationToken;
