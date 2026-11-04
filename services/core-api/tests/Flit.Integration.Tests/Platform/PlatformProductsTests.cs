@@ -18,6 +18,7 @@ namespace Flit.Integration.Tests.Platform;
 public sealed class PlatformProductsTests(PostgresDatabaseFixture fixture) : PostgresTestBase(fixture)
 {
     private const string DdlResource = "Flit.Infrastructure.Persistence.Sql.Ddl.119-HU12958-platform-products.sql";
+    private const string RetirarDemoResource = "Flit.Infrastructure.Persistence.Sql.Ddl.125-suite-retirar-producto-demo.sql";
 
     private async Task SeedTenantAsync(Guid? id = null, string code = "IT-LONE")
     {
@@ -26,9 +27,9 @@ public sealed class PlatformProductsTests(PostgresDatabaseFixture fixture) : Pos
         await ctx.SaveChangesAsync();
     }
 
-    private static string LoadDdl()
+    private static string LoadDdl(string resource = DdlResource)
     {
-        using var stream = typeof(FlitDbContext).Assembly.GetManifestResourceStream(DdlResource)!;
+        using var stream = typeof(FlitDbContext).Assembly.GetManifestResourceStream(resource)!;
         using var reader = new StreamReader(stream, Encoding.UTF8);
         return reader.ReadToEnd();
     }
@@ -89,10 +90,24 @@ public sealed class PlatformProductsTests(PostgresDatabaseFixture fixture) : Pos
             // Correr el DDL dos veces: la segunda no duplica ni falla. Comando Npgsql directo porque
             // ExecuteSqlRaw lee las llaves del regex ({1,39}) como parámetros de formato.
             await ctx.Database.OpenConnectionAsync();
-            for (var i = 0; i < 2; i++)
+            try
             {
+                for (var i = 0; i < 2; i++)
+                {
+                    await using var cmd = ctx.Database.GetDbConnection().CreateCommand();
+                    cmd.CommandText = LoadDdl();
+                    await cmd.ExecuteNonQueryAsync();
+                }
+
+                // Cuatro del catálogo + `demo`, que el DDL 119 vuelve a sembrar: sin duplicados.
+                (await ctx.Set<ProductEntity>().CountAsync()).Should().Be(5);
+            }
+            finally
+            {
+                // platform.products se preserva entre pruebas (PreservedSeededTables): el DDL 125 vuelve a retirar
+                // `demo`, como en la cadena real de migraciones. Sin esto, AC1 ve `demo` si corre después.
                 await using var cmd = ctx.Database.GetDbConnection().CreateCommand();
-                cmd.CommandText = LoadDdl();
+                cmd.CommandText = LoadDdl(RetirarDemoResource);
                 await cmd.ExecuteNonQueryAsync();
             }
         }
@@ -101,7 +116,7 @@ public sealed class PlatformProductsTests(PostgresDatabaseFixture fixture) : Pos
         var rows = await check.Set<TenantProductEntity>().AsNoTracking()
             .Where(r => r.TenantId == TenantSeed.LoneId).ToListAsync();
         rows.Should().ContainSingle(r => r.ProductCode == "tramites" && r.Enabled);
-        (await check.Set<ProductEntity>().CountAsync()).Should().Be(5);
+        (await check.Set<ProductEntity>().AnyAsync(p => p.Code == "demo")).Should().BeFalse();
     }
 
     // ── AC3 — encender o apagar con auditoría ─────────────────────────────────────
