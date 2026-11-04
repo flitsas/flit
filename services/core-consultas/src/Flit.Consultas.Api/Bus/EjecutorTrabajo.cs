@@ -94,7 +94,7 @@ internal sealed class EjecutorTrabajo(
 
         // HU #13727 (U3 = a): en LOCAL y DEV responde el proveedor simulado, por el mismo camino (medición, minimización y
         // resultado), sin salir a ningún proveedor.
-        if (simulacion.Simula(trabajo.Fuente))
+        if (simulacion.Simula(trabajo.Fuente) && trabajo.Fuente != FuentesBus.Impuesto)
         {
             return await consumo.MedirAsync(caller, trabajo.Fuente, () => Task.FromResult(simulador.Responder(trabajo.Rpc, solicitud)),
                 _ => (SimuladorConsultas.Proveedor, SimuladorConsultas.Proveedor, false), ct).ConfigureAwait(false);

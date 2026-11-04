@@ -11,6 +11,8 @@ internal interface ITransporteImpuesto
 {
     bool Listo { get; }
 
+    string NombreProveedor { get; }
+
     Task<ResultadoTransporteImpuesto> EnviarAsync(string cuerpo, CancellationToken ct);
 }
 
@@ -22,6 +24,8 @@ internal sealed class TransporteImpuestoHttp(IHttpClientFactory http, OpcionesIm
     public const string HttpClientName = "impuesto";
 
     public bool Listo => opciones.TieneRuta;
+
+    public string NombreProveedor => ProveedorImpuesto.ClaveProveedor;
 
     public async Task<ResultadoTransporteImpuesto> EnviarAsync(string cuerpo, CancellationToken ct)
     {

@@ -26,7 +26,6 @@ namespace Flit.Consultas.Api.Simulacion;
 /// <item><term>RUES</term><description>6 cancelada, 7 tiempo agotado, 8 respuesta inválida, otro activa. Con
 /// <c>incluir_respuesta_cruda</c> (HU #14153) trae la respuesta cruda de Verifik con representantes legales y actividades CIIU.</description></item>
 /// <item><term>Avalúo</term><description>2 solo Fasecolda (48 M), 4 sin datos, 7 tiempo agotado, otro tres fuentes (52 M).</description></item>
-/// <item><term>Impuesto</term><description>0 pagado, 7 tiempo agotado, otro con deuda (400 000).</description></item>
 /// </list>
 /// </summary>
 /// <example>
@@ -54,6 +53,7 @@ internal sealed class SimuladorConsultas(TimeProvider time)
         ['6'] = "intempo-departamento-no-soportado.json",
         ['7'] = "intempo-error-timeout.json",
         ['8'] = "intempo-error-respuesta-invalida.json",
+        ['Z'] = "intempo-impuesto.json",
     };
 
     private static readonly JsonParser Lector = new(JsonParser.Settings.Default.WithIgnoreUnknownFields(false));
@@ -69,7 +69,6 @@ internal sealed class SimuladorConsultas(TimeProvider time)
             (RpcConsultas.Multas, ConsultarMultasRequest r) => Multas(r.Placa?.Valor ?? r.Documento?.Numero, r.Opciones?.IncluirRespuestaCruda == true),
             (RpcConsultas.Rues, ConsultarRuesRequest r) => Rues(r.Nit, r.Opciones?.IncluirRespuestaCruda == true),
             (RpcConsultas.Avaluos, ConsultarAvaluosRequest r) => Avaluos(r.Placa?.Valor ?? r.Vin?.Valor),
-            (RpcConsultas.Impuesto, ConsultarImpuestoVehicularRequest r) => Impuesto(r.Placa?.Valor),
             _ => throw new RpcException(new Status(StatusCode.Unimplemented, "Rpc sin simulación.")),
         };
     }
@@ -203,24 +202,6 @@ internal sealed class SimuladorConsultas(TimeProvider time)
             '4' => Con(0, string.Empty, SinDatos(Fasecolda), SinDatos(MercadoLibre), SinDatos(BaseGravable)),
             '7' => throw TiempoAgotado(),
             _ => Con(52_000_000, Fasecolda, Ok(Fasecolda, 52_000_000), Ok(MercadoLibre, 50_500_000, 9), Ok(BaseGravable, 45_000_000)),
-        };
-    }
-
-    private ConsultarImpuestoVehicularResponse Impuesto(string? placa)
-    {
-        ConsultarImpuestoVehicularResponse Con(params VigenciaImpuesto[] vigencias)
-        {
-            var monto = vigencias.Where(v => !v.Pagada).Sum(v => v.Valor);
-            var r = new ConsultarImpuestoVehicularResponse { Resultado = Resultado("impuesto_simulado", monto > 0 ? Semaforo.Rojo : Semaforo.Verde), MontoTotal = monto };
-            r.Vigencias.AddRange(vigencias);
-            return r;
-        }
-
-        return UltimoCaracter(placa) switch
-        {
-            '0' => Con(new() { Anio = 2025, Valor = 180_000, Pagada = true }, new() { Anio = 2026, Valor = 175_000, Pagada = true }),
-            '7' => throw TiempoAgotado(),
-            _ => Con(new() { Anio = 2025, Valor = 210_000, Pagada = false }, new() { Anio = 2026, Valor = 190_000, Pagada = false }),
         };
     }
 

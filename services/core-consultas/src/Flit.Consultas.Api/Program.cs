@@ -127,8 +127,14 @@ public static class Program
         var impuesto = Impuesto.OpcionesImpuesto.Desde(builder.Configuration);
         builder.Services.AddSingleton(impuesto);
         builder.Services.AddHttpClient(Impuesto.TransporteImpuestoHttp.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(impuesto.TimeoutSegundos));
-        builder.Services.AddSingleton<Impuesto.ITransporteImpuesto>(sp => new Impuesto.TransporteImpuestoHttp(
-            sp.GetRequiredService<IHttpClientFactory>(), impuesto, sp.GetRequiredService<ILogger<Impuesto.TransporteImpuestoHttp>>()));
+        builder.Services.AddSingleton<Impuesto.ITransporteImpuesto>(sp =>
+        {
+            var simulacion = sp.GetRequiredService<Simulacion.OpcionesSimulacion>();
+            if (simulacion.Simula(Bus.FuentesBus.Impuesto))
+                return new Impuesto.TransporteImpuestoSimulado();
+            return new Impuesto.TransporteImpuestoHttp(
+                sp.GetRequiredService<IHttpClientFactory>(), impuesto, sp.GetRequiredService<ILogger<Impuesto.TransporteImpuestoHttp>>());
+        });
         builder.Services.AddSingleton(sp => new Impuesto.ProveedorImpuesto(sp.GetRequiredService<Impuesto.ITransporteImpuesto>(), impuesto));
         var simulados = bool.TryParse(builder.Configuration["Consultations:ComparendosSimulados"], out var sim) ? sim : builder.Environment.IsDevelopment();
         builder.Services.AddSingleton<Comparendos.IProveedorComparendos>(sp => new Comparendos.ProveedorSimulado(sp.GetRequiredService<TimeProvider>(), simulados));

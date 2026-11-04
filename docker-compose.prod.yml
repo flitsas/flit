@@ -490,8 +490,8 @@ services:
       Diagnostico__Identidad__Address: ${DIAGNOSTICO_IDENTIDAD_ADDRESS:-}
       # Tipos de trámite publicados (GET /tipos-tramite) por el gRPC ListarTiposTramite de core-api. Sin ella: 503.
       Diagnostico__Tramites__Address: http://core-api:${CORE_API_GRPC_PORT:-8082}
-      # Fuente de impuestos aún sin proveedor: apagada en los tres ambientes (se revisa al cerrar #13716).
-      Diagnostico__Fuentes__ImpuestoDisponible: "false"
+      # Fuente de impuesto. Vacía la lista en core-consultas y sigue apagada. El encendido real no va en este compose.
+      Diagnostico__Fuentes__ImpuestoDisponible: ${DIAGNOSTICO_IMPUESTO_DISPONIBLE:-false}
       # HU #13878: fuentes reales por el gRPC de core-consultas (p. ej. http://core-consultas:8084), sin valor por defecto: cada
       # ambiente la define en su .env. OJO: al definirla se encienden JUNTAS todas las fuentes de core-consultas del
       # diagnóstico (RUNT por Intempo, RUNT persona, RUES, SIMIT, avalúo e impuesto), no solo el RUNT. Sin ella, todas quedan
@@ -621,6 +621,11 @@ services:
       INTEMPO_API_VEHICLE_PLATE_PATH: ${INTEMPO_API_VEHICLE_PLATE_PATH:-/api/RuntConsulta/consultar-vehiculo}
       INTEMPO_API_VEHICLE_VIN_PATH: ${INTEMPO_API_VEHICLE_VIN_PATH:-/api/RuntConsulta/consultar-vin}
       INTEMPO_API_SECONDS_TIMEOUT: ${INTEMPO_API_SECONDS_TIMEOUT:-20}
+      # Impuesto vehicular. Sin base y sin ruta el transporte real no está listo. La lista vacía no ofrece la fuente.
+      IMPUESTO_API_BASE_URL: ${IMPUESTO_API_BASE_URL:-}
+      IMPUESTO_API_PATH: ${IMPUESTO_API_PATH:-}
+      IMPUESTO_API_TIMEOUT_SECONDS: ${IMPUESTO_API_TIMEOUT_SECONDS:-280}
+      IMPUESTO_DEPARTAMENTOS: ${IMPUESTO_DEPARTAMENTOS:-}
     volumes:
       # El mismo .pfx que core-notificaciones, solo lectura y en la misma ruta a ambos lados. Si no existe, la API de
       # contratos queda «no conectada» con la ruta en el motivo (no impide arrancar).

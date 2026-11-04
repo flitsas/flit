@@ -121,6 +121,7 @@ public sealed class ProveedorImpuestoTests
     private sealed class TransporteFalso : ITransporteImpuesto
     {
         public bool Listo { get; init; } = true;
+        public string NombreProveedor => "impuesto";
         public string Cuerpo { get; init; } = "{}";
         public Flit.Tramites.Application.UseCases.Consultations.FalloProveedor? Fallo { get; init; }
         public int Llamadas { get; private set; }

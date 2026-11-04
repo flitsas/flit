@@ -15,6 +15,7 @@ public sealed class AnfitrionBusSimulado : AnfitrionBus
     {
         Extra[OpcionesSimulacion.ClaveHabilitada] = "true";
         Extra[OpcionesSimulacion.ClaveAmbiente] = "DEV";
+        Extra["IMPUESTO_DEPARTAMENTOS"] = "05,13,41";
     }
 }
 
@@ -51,13 +52,19 @@ public sealed class SimulacionBusTests(AnfitrionBusSimulado bus) : IClassFixture
     public async Task El_impuesto_simulado_responde_aunque_la_consulta_real_no_exista()
     {
         var sobre = AnfitrionBus.Trabajo(Guid.NewGuid(), FuentesBus.Impuesto, RpcConsultas.Impuesto,
-            new ConsultarImpuestoVehicularRequest { Opciones = new OpcionesConsulta(), Placa = new Placa { Valor = "TST001" }, DepartamentoCodigo = "05" }, esExpress: true);
+            new ConsultarImpuestoVehicularRequest
+            {
+                Opciones = new OpcionesConsulta(),
+                Placa = new Placa { Valor = "TST20Z" },
+                DepartamentoCodigo = "05",
+                Documento = new DocumentoIdentidad { Tipo = "CC", Numero = "999999" },
+            }, esExpress: true);
 
         await bus.EjecutarAsync<ConsumidorTrabajosExpress>(sobre);
 
         var datos = (await bus.ResultadosAsync(sobre)).Single().DataAs<ResultadoConsultaDiagnostico>();
         datos.Estado.Should().Be("OK");
-        JsonParser.Default.Parse<ConsultarImpuestoVehicularResponse>(datos.Respuesta!.Value.GetRawText()).MontoTotal.Should().Be(400_000);
+        JsonParser.Default.Parse<ConsultarImpuestoVehicularResponse>(datos.Respuesta!.Value.GetRawText()).MontoTotal.Should().Be(615_000);
     }
 
     [Theory]

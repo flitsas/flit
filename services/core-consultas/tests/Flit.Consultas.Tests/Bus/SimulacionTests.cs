@@ -1,4 +1,5 @@
 using Flit.Consultas.Api.Bus;
+using Flit.Consultas.Api.Impuesto;
 using Flit.Consultas.Api.Simulacion;
 using Flit.Consultas.Grpc.V1;
 using Flit.Platform.Grpc.V1;
@@ -82,7 +83,8 @@ public sealed class SimulacionTests
 
         fixtures.Keys.Should().BeEquivalentTo(
             "intempo-persona-natural.json", "intempo-nit.json", "intempo-leasing-locatario-c.json", "intempo-leasing-locatario-n.json",
-            "intempo-servicio-publico.json", "intempo-departamento-no-soportado.json", "intempo-error-timeout.json", "intempo-error-respuesta-invalida.json");
+            "intempo-servicio-publico.json", "intempo-departamento-no-soportado.json", "intempo-error-timeout.json", "intempo-error-respuesta-invalida.json",
+            "intempo-impuesto.json");
         var lector = new JsonParser(JsonParser.Settings.Default.WithIgnoreUnknownFields(false));
         foreach (var json in fixtures.Values)
             FluentActions.Invoking(() => lector.Parse<ConsultarVehiculoIntempoResponse>(json)).Should().NotThrow();
@@ -174,18 +176,31 @@ public sealed class SimulacionTests
     }
 
     [Fact]
-    public void Impuesto_con_deuda_o_pagado()
+    public async Task Impuesto_simulado_pasa_por_el_interprete_segun_el_penultimo_caracter()
     {
-        var conDeuda = (ConsultarImpuestoVehicularResponse)_simulador.Responder(RpcConsultas.Impuesto, Impuesto("TST001"));
-        var pagado = (ConsultarImpuestoVehicularResponse)_simulador.Responder(RpcConsultas.Impuesto, Impuesto("TST010"));
-
-        (conDeuda.MontoTotal, conDeuda.Vigencias.Count(v => !v.Pagada)).Should().Be((400_000, 2));
-        (pagado.MontoTotal, pagado.Vigencias.All(v => v.Pagada)).Should().Be((0, true));
-        Codigo(() => _simulador.Responder(RpcConsultas.Impuesto, Impuesto("TST007"))).Should().Be(StatusCode.DeadlineExceeded);
+        var opciones = OpcionesImpuesto.Desde(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["IMPUESTO_DEPARTAMENTOS"] = "05",
+        }).Build());
+        var proveedor = new ProveedorImpuesto(new TransporteImpuestoSimulado(), opciones);
+        var deuda = await proveedor.ConsultarAsync(PedidoSimulado("TST20Z"), CancellationToken.None);
+        var sinMonto = await proveedor.ConsultarAsync(PedidoSimulado("TST21Z"), CancellationToken.None);
+        var corta = await proveedor.ConsultarAsync(PedidoSimulado("TST29Z"), CancellationToken.None);
+        deuda.TieneDeuda.Should().BeTrue();
+        deuda.MontoTotal.Should().Be(615_000);
+        deuda.Resultado.Proveedor.Should().Be("impuesto_simulado");
+        sinMonto.TieneDeuda.Should().BeTrue();
+        sinMonto.MontoInformado.Should().BeFalse();
+        corta.Resultado.Chequeos[0].Clave.Should().Be("impuesto_no_confirmado");
     }
 
-    // HU #14087 AC8: sin minimización, cada respuesta simulada se publica entera (con los nombres ficticios de los fixtures) y
-    // core-diagnostico la lee de vuelta igual.
+    private static ConsultarImpuestoVehicularRequest PedidoSimulado(string placa) => new()
+    {
+        Placa = new Placa { Valor = placa },
+        DepartamentoCodigo = "05",
+        Documento = new DocumentoIdentidad { Tipo = "CC", Numero = "999999" },
+    };
+
     [Fact]
     public void Cada_respuesta_simulada_se_publica_completa_y_se_lee_de_vuelta_igual()
     {
@@ -197,7 +212,6 @@ public sealed class SimulacionTests
             (RpcConsultas.Multas, Multas(placa: "TST002")),
             (RpcConsultas.Rues, new ConsultarRuesRequest { Nit = "999990002" }),
             (RpcConsultas.Avaluos, Avaluo("TST001")),
-            (RpcConsultas.Impuesto, Impuesto("TST001")),
         };
         var publicador = new PublicadorResultado(new OutboxCapturada());
         var trabajo = new TrabajoConsultaDiagnostico(Guid.CreateVersion7(), Guid.CreateVersion7(), null, FuentesBus.Runt, RpcConsultas.PorPlaca,
@@ -258,6 +272,4 @@ public sealed class SimulacionTests
     }
 
     private static ConsultarAvaluosRequest Avaluo(string placa) => new() { Placa = new Placa { Valor = placa }, Modelo = 2020, Cilindraje = 1600 };
-
-    private static ConsultarImpuestoVehicularRequest Impuesto(string placa) => new() { Placa = new Placa { Valor = placa }, DepartamentoCodigo = "05" };
 }

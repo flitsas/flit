@@ -57,12 +57,12 @@ internal sealed class ProveedorImpuesto(ITransporteImpuesto transporte, Opciones
         _ => "impuesto_caida",
     };
 
-    private static ConsultarImpuestoVehicularResponse Error(string clave) => new()
+    private ConsultarImpuestoVehicularResponse Error(string clave) => new()
     {
         Resultado = Resultado(clave, EstadoChequeo.Error, Semaforo.Amarillo, "El impuesto no quedó confirmado."),
     };
 
-    private static ConsultarImpuestoVehicularResponse AProto(VeredictoImpuesto veredicto)
+    private ConsultarImpuestoVehicularResponse AProto(VeredictoImpuesto veredicto)
     {
         if (!veredicto.Confirmado)
         {
@@ -125,9 +125,9 @@ internal sealed class ProveedorImpuesto(ITransporteImpuesto transporte, Opciones
         return confirmada;
     }
 
-    private static ResultadoConsulta Resultado(string clave, EstadoChequeo estado, Semaforo semaforo, string mensaje) => new()
+    private ResultadoConsulta Resultado(string clave, EstadoChequeo estado, Semaforo semaforo, string mensaje) => new()
     {
-        Proveedor = ClaveProveedor,
+        Proveedor = transporte.NombreProveedor,
         Semaforo = semaforo,
         Chequeos =
         {
