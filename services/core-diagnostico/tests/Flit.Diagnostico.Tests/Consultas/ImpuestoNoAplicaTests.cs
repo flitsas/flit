@@ -130,6 +130,7 @@ public sealed class ImpuestoNoAplicaTests
             Nombre = "Secretaría de Tránsito de Prueba",
             DepartamentoCodigo = departamentoOrganismo,
             Departamento = "DEPARTAMENTO DE PRUEBA",
+            Municipio = "MUNICIPIO DE PRUEBA",
             Activo = true,
         });
         await using (var scope = api.App.Services.CreateAsyncScope())

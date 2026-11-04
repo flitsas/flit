@@ -48,7 +48,7 @@ public sealed class ConstructoresSolicitudTests
         // HU #14183 T3: SIMIT también lleva opciones.incluirRespuestaCruda=true.
         [RpcConsultas.Multas] = ["opciones", "opciones.incluirRespuestaCruda", "documento", "documento.tipo", "documento.numero", "tipoPersona", "placa", "placa.valor"],
         [RpcConsultas.Avaluos] = ["opciones", "placa", "placa.valor", "vin", "vin.valor", "modelo", "cilindraje", "combustible", "pasajeros"],
-        [RpcConsultas.Impuesto] = ["opciones", "placa", "placa.valor", "departamentoCodigo"],
+        [RpcConsultas.Impuesto] = ["opciones", "placa", "placa.valor", "departamentoCodigo", "documento", "documento.tipo", "documento.numero", "organismoNombre", "municipio", "departamentoNombre", "modelo", "propietarioNombre"],
     };
 
     [Fact]
@@ -198,6 +198,11 @@ public sealed class ConstructoresSolicitudTests
         var lote = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST001"), Lotes.Fila("TST003"), Lotes.Fila(Vin)],
             [Fuente.Runt, Fuente.SimitVehiculo, Fuente.Avaluo, Fuente.ImpuestoDepartamental],
             [Fuente.RuntPropietario, Fuente.SimitPropietario], [Fuente.RuntLocatario, Fuente.SimitLocatario], ct);
+        await Motor.EjecutarAsync(api, """
+            INSERT INTO diagnostico.organismos (codigo, nombre, nombre_norm, departamento_codigo, departamento_nombre, municipio)
+            VALUES ('98096000', 'SECRETARIA DE TRANSITO DE PRUEBA', 'SECRETARIA DE TRANSITO DE PRUEBA', '96', 'DEPARTAMENTO DE PRUEBA', 'MUNICIPIO DE PRUEBA')
+            ON CONFLICT (codigo) DO NOTHING
+            """, ct);
         (await Motor.Bus(api).ProcesarLoteAsync(ct)).Should().Be(3, "la primera vuelta solo atiende las RUNT");
         // Ningún organismo de prueba deriva un departamento: se fija el soportado de la réplica (MotorNa).
         await Motor.EjecutarAsync(api,
@@ -245,6 +250,14 @@ public sealed class ConstructoresSolicitudTests
                 Opciones = opciones,
                 Placa = new Placa { Valor = v.Placa },
                 DepartamentoCodigo = MotorNa.DepartamentoSoportadoFicticio,
+                Documento = tst003
+                    ? new DocumentoIdentidad { Tipo = "NIT", Numero = Nit }
+                    : new DocumentoIdentidad { Tipo = "CC", Numero = Natural },
+                OrganismoNombre = "SECRETARIA DE TRANSITO DE PRUEBA",
+                Municipio = "MUNICIPIO DE PRUEBA",
+                DepartamentoNombre = "DEPARTAMENTO DE PRUEBA",
+                Modelo = 2020,
+                PropietarioNombre = tst003 ? "LEASING FICTICIO SA" : "PERSONA PRUEBA UNO",
             })],
             _ => throw new ArgumentOutOfRangeException(nameof(fuente)),
         };

@@ -358,6 +358,7 @@ public sealed class EjecutorCeldaImpuestoTests
             Nombre = "Secretaría de Tránsito de Prueba",
             DepartamentoCodigo = Departamento,
             Departamento = "DEPARTAMENTO DE PRUEBA",
+            Municipio = "MUNICIPIO DE PRUEBA",
             Activo = true,
         });
         await using (var scope = api.App.Services.CreateAsyncScope())

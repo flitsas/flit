@@ -4,6 +4,7 @@ using Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 using Flit.Diagnostico.Api.Modulos.Consultas.Mapeos;
 using Flit.Diagnostico.Api.Modulos.Vehiculos;
 using Flit.Diagnostico.Domain.Consultas;
+using Flit.Diagnostico.Domain.Personas;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Diagnostico.Api.Modulos.Consultas;
@@ -16,6 +17,8 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// PENDIENTE (<see cref="OrquestadorVehiculo"/>: servicio público o departamento no soportado ya quedan N/A ahí). Reglas:
 /// <list type="bullet">
 /// <item>Sin placa: ERROR <see cref="SinPlaca"/>, definitivo, sin consultar.</item>
+/// <item>Sin propietario con documento, sin modelo, organismo sin municipio o sin nombre de departamento, o RUNT sin el
+/// nombre del propietario: ERROR con ese código. Definitivo y reprocesable desde el tablero.</item>
 /// <item>Departamento nulo o que dejó de estar soportado en la réplica (<c>departamentos_impuesto</c>) desde que se liberó:
 /// N/A <c>DEPARTAMENTO_NO_SOPORTADO</c>, sin consultar ni dejar intento (el constructor no arma la consulta).</item>
 /// <item>Con respuesta: COMPLETADO con <see cref="ResultadoImpuesto"/> en snake_case, sin proveedor ni transacción (R-20); el
@@ -32,30 +35,37 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// services.AddScoped&lt;IEjecutorCelda, EjecutorCeldaImpuesto&gt;();
 /// </code>
 /// </example>
-internal sealed partial class EjecutorCeldaImpuesto(ILogger<EjecutorCeldaImpuesto> log) : IEjecutorCelda
+internal sealed partial class EjecutorCeldaImpuesto(
+    IProtectorDocumentoPersona documentos, IProtectorRespuestaFuente respuestas, ILogger<EjecutorCeldaImpuesto> log) : IEjecutorCelda
 {
     /// <summary><c>tipo_error</c> si el vehículo no tiene placa definitiva tras el RUNT (definitivo).</summary>
     public const string SinPlaca = "SIN_PLACA";
 
+    public const string SinDocumento = "SIN_DOCUMENTO";
+
+    public const string SinModelo = "SIN_MODELO";
+
+    public const string OrganismoIncompleto = "ORGANISMO_INCOMPLETO";
+
+    public const string SinNombrePropietario = "SIN_NOMBRE_PROPIETARIO";
+
     public Fuente Fuente => Fuente.ImpuestoDepartamental;
 
     /// <summary>
-    /// El constructor no arma la consulta: sin placa, ERROR <see cref="SinPlaca"/> (definitivo); con el departamento nulo o que ya no
-    /// está soportado en la réplica, N/A <c>DEPARTAMENTO_NO_SOPORTADO</c> sin intento.
+    /// El constructor no armó la consulta. Repite la misma preparación y cierra con el código de la falta: una lista vacía
+    /// con placa ya no queda siempre en N/A.
     /// </summary>
     public async Task<ResultadoCelda> SinConsultaAsync(ContextoCelda contexto, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(contexto);
-        var celda = contexto.Celda;
-        var vehiculo = await LeerAsync(contexto, ct).ConfigureAwait(false);
-        if (Limpio(vehiculo?.Placa) is null)
-        {
-            ImpuestoEnError(log, celda.Id, SinPlaca);
-            return ResultadoCelda.Error(SinPlaca) with { Intento = new DatosIntento(null, null, null, "El vehículo no tiene placa definitiva tras el RUNT.") };
-        }
-
-        ImpuestoNoSoportado(log, celda.Id);
-        return ResultadoCelda.Na(MotivoNa.DepartamentoNoSoportado);
+        var preparada = await PreparacionSolicitudImpuesto.PrepararAsync(
+            contexto.Db, contexto.Celda.TenantId, contexto.Celda.VehiculoId, documentos, respuestas, ct).ConfigureAwait(false);
+        var cierre = preparada.Cierre ?? ResultadoCelda.Na(MotivoNa.DepartamentoNoSoportado);
+        if (cierre.Estado == EstadoCelda.Na)
+            ImpuestoNoSoportado(log, contexto.Celda.Id);
+        else
+            ImpuestoEnError(log, contexto.Celda.Id, cierre.TipoError ?? SinPlaca);
+        return cierre;
     }
 
     public async Task<ResultadoCelda> AplicarAsync(ContextoCelda contexto, RespuestaConsulta respuesta, CancellationToken ct)

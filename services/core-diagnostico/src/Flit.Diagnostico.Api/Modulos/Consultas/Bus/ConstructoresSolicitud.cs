@@ -13,8 +13,9 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 /// <summary>
 /// Arma las consultas de una celda para el bus (ADR-0075, T6): el MISMO <c>*Request</c> proto que antes enviaba por gRPC la
 /// <c>Fuente*Real</c> de la celda (<c>ConstructoresSolicitudTests</c> lo fija campo por campo). Es la mitad «construir solicitud» de
-/// cada <see cref="IEjecutorCelda"/>. Solo lleva identificación: placa o VIN, tipo y número de documento o NIT, los datos técnicos
-/// del avalúo o el departamento del impuesto; nunca nombres ni direcciones (U1 = b). Lee con el contexto de la empresa de la celda
+/// cada <see cref="IEjecutorCelda"/>. Lleva identificación: placa o VIN, tipo y número de documento o NIT y los datos técnicos
+/// del avalúo. El impuesto, además, lleva el nombre del primer propietario leído en memoria de la respuesta del RUNT: no se
+/// persiste (P9). Lee con el contexto de la empresa de la celda
 /// y CON seguimiento (lo que el contexto tenga sin guardar cuenta). Lista vacía si la celda no tiene qué consultar (sin placa, sin
 /// personas, departamento no soportado): entonces no se publica nada y el ejecutor decide el cierre
 /// (<see cref="IEjecutorCelda.SinConsultaAsync"/>).
@@ -153,25 +154,20 @@ internal sealed class ConstructorSolicitudAvaluo : IConstructorSolicitud
     }
 }
 
-/// <summary>Impuesto departamental por la placa y el departamento, si sigue soportado en la réplica (<see cref="EjecutorCeldaImpuesto"/>).</summary>
-internal sealed class ConstructorSolicitudImpuesto : IConstructorSolicitud
+/// <summary>
+/// Impuesto departamental. Publica solo si la preparación tiene solicitud; si falta un dato, la lista queda vacía y
+/// <see cref="EjecutorCeldaImpuesto.SinConsultaAsync"/> cierra con el código de esa falta.
+/// </summary>
+internal sealed class ConstructorSolicitudImpuesto(IProtectorDocumentoPersona documentos, IProtectorRespuestaFuente respuestas) : IConstructorSolicitud
 {
     public Fuente Fuente => Fuente.ImpuestoDepartamental;
 
     public async Task<IReadOnlyList<SolicitudConsulta>> ConstruirAsync(DiagnosticoDb db, CeldaConsulta celda, CancellationToken ct)
     {
-        var vehiculo = await DatosDeLaCelda.VehiculoAsync(db, celda, ct).ConfigureAwait(false);
-        var placa = DatosDeLaCelda.Limpio(vehiculo?.Placa);
-        var departamento = DatosDeLaCelda.Limpio(vehiculo?.DepartamentoCodigo);
-        if (placa is null || departamento is null || !await DerivacionDepartamento.SoportadoAsync(db, departamento, ct).ConfigureAwait(false))
-            return [];
-        var request = new ConsultarImpuestoVehicularRequest
-        {
-            Opciones = new OpcionesConsulta(),
-            Placa = new Placa { Valor = placa },
-            DepartamentoCodigo = departamento,
-        };
-        return [new SolicitudConsulta(FuentesBus.Impuesto, RpcConsultas.Impuesto, request)];
+        var preparada = await PreparacionSolicitudImpuesto.PrepararAsync(db, celda, documentos, respuestas, ct).ConfigureAwait(false);
+        return preparada.Solicitud is { } solicitud
+            ? [new SolicitudConsulta(FuentesBus.Impuesto, RpcConsultas.Impuesto, solicitud)]
+            : [];
     }
 }
 
