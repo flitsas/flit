@@ -63,6 +63,7 @@ export function DiagnosticoPunto({
   tipoNombre: nombreDelTipo,
   organismoNombre,
   onVolver,
+  onTerminar,
   onAviso,
 }: {
   cliente: ClientePortal;
@@ -73,6 +74,8 @@ export function DiagnosticoPunto({
   tipoNombre?: string | undefined;
   organismoNombre: string;
   onVolver: () => void;
+  /** Al cerrar la confirmación: el punto queda listo para la siguiente persona (sin datos del trámite anterior). */
+  onTerminar?: () => void;
   onAviso: (titulo: string, mensaje: string, tono?: "alerta" | "exito" | "info") => void;
 }) {
   const [paso, setPaso] = useState<FasePaso>("diagnostico");
@@ -268,7 +271,11 @@ export function DiagnosticoPunto({
                 onPaso={setPaso}
                 onAtras={() => setPaso("requisitos")}
                 onIrActores={() => setPaso("actores")}
-                onTerminar={onVolver}
+                onTerminar={() => {
+                  setSolicitudIdPunto(null);
+                  setPaso("diagnostico");
+                  (onTerminar ?? onVolver)();
+                }}
               />
             ) : paso === "diagnostico" ? (
               <>

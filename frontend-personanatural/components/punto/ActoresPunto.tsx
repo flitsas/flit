@@ -21,6 +21,7 @@ import type {
   ResultadoParte,
   Solicitud,
 } from "@/lib/api/cliente";
+import { esEditable } from "@/lib/tramite/pasos";
 import { ApiError, mensajeDeFallo } from "@/lib/api/errores";
 import { correoSeguro } from "@/lib/punto/contacto";
 import {
@@ -87,6 +88,21 @@ function sesionActoresReutilizable(estado: EstadoIdentidad | null | undefined): 
 
 function radicanteYaAprobado(estado: EstadoIdentidad, rolRadicante: string): boolean {
   return estado.partes.some((p) => p.parte === rolRadicante && p.estado === "aprobada");
+}
+
+const normalizar = (v: string | null | undefined): string => (v ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+/**
+ * Un borrador previo de la sesión solo se reanuda si sigue editable y es de esta misma entrada
+ * (placa, tipo de trámite y documento de quien radica). Si no, se abre uno nuevo.
+ */
+function borradorDeEstaEntrada(solicitud: Solicitud, entrada: { placa: string; tipoCodigo: string; documento: string; rolRadicante: string }): boolean {
+  if (!esEditable(solicitud.estado)) return false;
+  if (normalizar(solicitud.placa) !== normalizar(entrada.placa)) return false;
+  if (normalizar(solicitud.tipoTramiteCodigo) !== normalizar(entrada.tipoCodigo)) return false;
+  const radicante = solicitud.actores.find((a) => a.rol === entrada.rolRadicante && a.ordinal === 1);
+  if (radicante?.numeroDocumento && normalizar(radicante.numeroDocumento) !== normalizar(entrada.documento)) return false;
+  return true;
 }
 
 function filasDesdeSolicitud(solicitud: Solicitud, documentoInicial: string, roles: readonly ActorRol[]): FilaActor[] {
@@ -211,14 +227,17 @@ export function ActoresPunto({
             if (sesionActoresReutilizable(existente)) {
               const solicitud = await cliente.solicitudes.obtener(existente.solicitudId);
               if (!vivo.current || gen !== generacion.current) return;
-              aplicarSolicitud(solicitud, existente);
-              detenerSondeo();
-              if (!radicanteYaAprobado(existente, rolRadicanteRef.current)) {
-                sondeo.current = setInterval(() => {
-                  void refrescarEstado(existente.solicitudId, gen);
-                }, 3000);
+              if (borradorDeEstaEntrada(solicitud, { placa, tipoCodigo, documento, rolRadicante: rolRadicanteRef.current })) {
+                aplicarSolicitud(solicitud, existente);
+                detenerSondeo();
+                if (!radicanteYaAprobado(existente, rolRadicanteRef.current)) {
+                  sondeo.current = setInterval(() => {
+                    void refrescarEstado(existente.solicitudId, gen);
+                  }, 3000);
+                }
+                return;
               }
-              return;
+              // Radicado, cancelado o de otra placa/tipo/persona: no se reutiliza ni se muestran sus datos.
             }
           } catch {
             /* sin sesión → apertura normal */

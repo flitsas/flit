@@ -84,6 +84,12 @@ export function AccionesPunto({
         tipoNombre={opciones.find((o) => o.code === tipo)?.name}
         organismoNombre={organismoNombre}
         onVolver={() => setFase("formulario")}
+        onTerminar={() => {
+          setPlaca("");
+          setDocumento("");
+          setTipo("");
+          setFase("formulario");
+        }}
         onAviso={onAviso}
       />
     );

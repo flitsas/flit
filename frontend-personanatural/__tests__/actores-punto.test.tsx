@@ -21,6 +21,7 @@ const SOLICITUD: Solicitud = {
   codigoPublico: "P-1",
   version: 1,
   estado: "borrador",
+  placa: "XJI21G",
   tipoTramiteCodigo: "TRASPASO",
   organismoId: "o-1",
   actores: [
@@ -296,5 +297,41 @@ describe("ActoresPunto — épica #14185: identidad de quien radica", () => {
     expect(await screen.findByText(/Falta el celular del titular/i)).toBeInTheDocument();
     expect(onContinuar).not.toHaveBeenCalled();
     expect(onAviso).toHaveBeenCalledWith("No pudimos guardar los datos", expect.any(String), "alerta");
+  });
+
+  describe("reanudación de la sesión del punto", () => {
+    function estadoConSesion() {
+      let n = 0;
+      return vi.fn(async () => (++n === 1 ? ESTADO_APROBADO : SIN_SOLICITAR));
+    }
+    const abrirNuevo = () => vi.fn(async () => ({ solicitudId: "nueva", puedeSerRadicante: true }));
+
+    it("un borrador ya radicado no se reutiliza: abre uno nuevo", async () => {
+      const abrir = abrirNuevo();
+      const obtener = vi.fn().mockResolvedValueOnce({ ...SOLICITUD, estado: "radicada" }).mockResolvedValue(SOLICITUD);
+      montarPunto(clienteMock({ estado: estadoConSesion(), abrir, obtener }));
+      await waitFor(() => expect(abrir).toHaveBeenCalledTimes(1));
+    });
+
+    it("un borrador de otra placa o de otro documento no se reutiliza", async () => {
+      const abrirPlaca = abrirNuevo();
+      const { unmount } = renderConQuery(
+        <ActoresPunto cliente={clienteMock({ estado: estadoConSesion(), abrir: abrirPlaca })} placa="AAA111" documento="1037669356" tipoCodigo="TRASPASO" onAtras={() => undefined} onContinuarRequisitos={() => undefined} onAviso={() => undefined} />,
+      );
+      await waitFor(() => expect(abrirPlaca).toHaveBeenCalledTimes(1));
+      unmount();
+      const abrirDoc = abrirNuevo();
+      renderConQuery(
+        <ActoresPunto cliente={clienteMock({ estado: estadoConSesion(), abrir: abrirDoc })} placa="XJI21G" documento="79555444" tipoCodigo="TRASPASO" onAtras={() => undefined} onContinuarRequisitos={() => undefined} onAviso={() => undefined} />,
+      );
+      await waitFor(() => expect(abrirDoc).toHaveBeenCalledTimes(1));
+    });
+
+    it("el mismo borrador editable (misma placa, tipo y documento) se reanuda sin abrir otro", async () => {
+      const abrir = abrirNuevo();
+      montarPunto(clienteMock({ estado: estadoConSesion(), abrir }));
+      expect(await screen.findByText(/Identidad validada/i)).toBeInTheDocument();
+      expect(abrir).not.toHaveBeenCalled();
+    });
   });
 });
