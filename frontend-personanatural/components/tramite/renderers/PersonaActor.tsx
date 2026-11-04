@@ -4,6 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { AddressField } from "@/components/tramite/AddressField";
+import { AlertaIdentidadValidada, nombrePropio } from "@/components/tramite/AlertaIdentidadValidada";
 import { Badge, Btn, Field } from "@/components/tramite/piezas";
 import type { ActorRol, ClientePortal, EstadoValidacion, ParteIdentidad, PersonaDetalle } from "@/lib/api/cliente";
 import { ApiError, esperaDe, mensajeDe } from "@/lib/api/errores";
@@ -75,6 +76,8 @@ interface Props {
   puedeValidarIdentidad?: boolean;
   /** Canal del punto, quien radica: su identidad se lanza sola in-situ (sin botones ni reenvíos) y correo/celular son opcionales. */
   radicantePunto?: boolean;
+  /** Portal web con varias personas: al aprobarse su identidad, la tarjeta muestra la alerta «validó su identidad». */
+  confirmarIdentidad?: boolean;
 }
 
 const SEGUNDOS_ENTRE_REENVIOS = 60;
@@ -117,6 +120,7 @@ export function PersonaActor({
   textoBotonValidar,
   puedeValidarIdentidad = true,
   radicantePunto = false,
+  confirmarIdentidad = false,
 }: Props) {
   const [tocados, setTocados] = useState<Partial<Record<CampoActor, boolean>>>({});
   const [errorConsulta, setErrorConsulta] = useState<string | null>(null);
@@ -562,6 +566,11 @@ export function PersonaActor({
             </span>
           )}
         </div>
+      )}
+      {confirmarIdentidad && pideIdentidad && !radicantePunto && fila.consultado && identidadAprobada && (
+        <AlertaIdentidadValidada>
+          {nombrePropio(fila.nombre) || "Esta persona"} validó su identidad correctamente.
+        </AlertaIdentidadValidada>
       )}
       {mostrarFalla && (
         <p role="alert" className="text-sm text-alert">

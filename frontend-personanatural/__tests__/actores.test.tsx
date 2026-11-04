@@ -724,6 +724,54 @@ describe("estado en vivo y compuerta de «Continuar» (F3 AC6)", () => {
     expect(lecturas).toBe(antes);
   });
 
+  it("al cambiar a aprobada la alerta general y la de cada persona aparecen con texto simple; con una pendiente no dicen que todas validaron", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let partes = [parte("vendedor", "aprobada"), parte("comprador", "pendiente")];
+    await abrir({ "GET /solicitudes/s-1/identidad": () => json(identidad(partes)) }, rehidratado("aprobada", "pendiente"));
+    const comprador = tarjeta("Comprador");
+    await within(comprador).findByText("Validación: pendiente");
+    // Con una pendiente: la ya aprobada se confirma en su tarjeta, pero no hay mensaje general ni se dice que ya puede continuar por identidad.
+    expect(within(tarjeta("Propietario (vendedor)")).getByText("Juan Perez validó su identidad correctamente.")).toBeInTheDocument();
+    expect(within(comprador).queryByText(/validó su identidad/)).toBeNull();
+    expect(screen.queryByText(/Todas las personas del trámite validaron/)).toBeNull();
+    expect(screen.queryByText(/Ya puedes continuar con tu trámite/)).toBeNull();
+    expect(screen.getAllByText("¡Identidad validada!")).toHaveLength(1);
+
+    partes = [parte("vendedor", "aprobada"), parte("comprador", "aprobada")];
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(8500);
+    });
+
+    expect(await screen.findByText("Todas las personas del trámite validaron su identidad. Ya puedes continuar con tu trámite.")).toBeInTheDocument();
+    expect(within(comprador).getByText("Maria Rodriguez validó su identidad correctamente.")).toBeInTheDocument();
+    expect(screen.getAllByText("¡Identidad validada!")).toHaveLength(3);
+    expect(screen.getAllByText("¡Identidad validada!").every((t) => t.getAttribute("role") === "status")).toBe(true);
+    expect(screen.queryByText("Todas las identidades están aprobadas.")).toBeNull();
+  });
+
+  it("con una sola persona muestra solo la alerta general con su nombre, sin repetirla en la tarjeta", async () => {
+    const solo = definicionDe([["vehicle_query"], ["actor_form"], ["document_checklist"]], {
+      actores: [{ rol: "vendedor", etiqueta: "Propietario (vendedor)", min: 1, max: 1, biometria: true, ...comun }],
+    });
+    await wizardAbierto({
+      [RUTA_DEFINICION]: () => json(solo),
+      "GET /solicitudes/s-1": () => json(solicitudDe({ ...guardado(DIAGNOSTICO_OK), actores: [guardadoActor("vendedor", CEDULA_SOLICITANTE, "JUAN PEREZ", "aprobada")] })),
+      "GET /solicitudes/s-1/identidad": () => json(identidad([parte("vendedor", "aprobada")])),
+    });
+    await screen.findByRole("region", { name: "Propietario (vendedor)" });
+
+    expect(await screen.findByText("Juan Perez, tu identidad quedó validada. Ya puedes continuar con tu trámite.")).toBeInTheDocument();
+    expect(screen.getAllByText("¡Identidad validada!")).toHaveLength(1);
+    expect(screen.queryByText(/validó su identidad correctamente/)).toBeNull();
+    expect(screen.queryByText(/Todas las personas/)).toBeNull();
+  });
+
+  it("sin aprobación real no hay alerta de identidad validada", async () => {
+    await abrir({ "GET /solicitudes/s-1/identidad": () => json(identidad([parte("vendedor", "pendiente"), parte("comprador", "sin_solicitar")])) }, rehidratado("pendiente", "sin_solicitar"));
+    await within(tarjeta("Comprador")).findByText("Validación: pendiente");
+    expect(screen.queryByText("¡Identidad validada!")).toBeNull();
+  });
+
   it("el sondeo es prudente: una lectura cada 8 s mientras algo esté pendiente, sin ráfagas", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     let lecturas = 0;

@@ -8,6 +8,7 @@ import { useWizard, type PropsSeccion } from "@/components/tramite/ContextoWizar
 import { Btn, Card } from "@/components/tramite/piezas";
 import { AvisoModoPruebas } from "@/components/tramite/AvisoModoPruebas";
 import { useOmitirIdentidad } from "@/components/landing/useConfiguracion";
+import { AlertaIdentidadValidada, nombrePropio } from "@/components/tramite/AlertaIdentidadValidada";
 import { PersonaActor } from "@/components/tramite/renderers/PersonaActor";
 import type { EstadoIdentidad } from "@/lib/api/cliente";
 import { ApiError, mensajeDe } from "@/lib/api/errores";
@@ -221,6 +222,16 @@ export function FormularioActores({ seccion, activa, intentoAvance, onEstado }: 
 
   const cargando = hayIdentidad && activa && identidad.isPending;
   const errorEstado = identidad.isError ? identidad.error : null;
+  // Alerta de «identidad validada»: solo con aprobación real de TODAS las personas que validan identidad en la solicitud.
+  const filasConIdentidad = filas.filter((f) => definicionSeccion.actores.find((r) => r.rol === f.rol)?.biometria);
+  const totalPersonas = Math.max(identidad.data?.partes.length ?? 0, filasConIdentidad.length);
+  const todasValidaron =
+    hayIdentidad &&
+    Boolean(identidad.data?.completa) &&
+    filasConIdentidad.length > 0 &&
+    filasConIdentidad.every((f) => f.consultado && estadoDe(f) === "aprobada");
+  const unaSolaPersona = totalPersonas === 1;
+  const nombreUnica = unaSolaPersona ? nombrePropio(filasConIdentidad[0]?.nombre) : "";
 
   return (
     <>
@@ -243,8 +254,15 @@ export function FormularioActores({ seccion, activa, intentoAvance, onEstado }: 
         </div>
       )}
       <p role="status" aria-live="polite" className="sr-only">
-        {hayIdentidad && identidad.data ? (identidad.data.completa ? "Todas las identidades están aprobadas." : "Hay validaciones de identidad pendientes.") : ""}
+        {hayIdentidad && identidad.data && !identidad.data.completa ? "Hay validaciones de identidad pendientes." : ""}
       </p>
+      {todasValidaron && (
+        <AlertaIdentidadValidada id={`actores-identidad-validada-${seccion.clave}`}>
+          {unaSolaPersona
+            ? `${nombreUnica ? `${nombreUnica}, tu` : "Tu"} identidad quedó validada. Ya puedes continuar con tu trámite.`
+            : "Todas las personas del trámite validaron su identidad. Ya puedes continuar con tu trámite."}
+        </AlertaIdentidadValidada>
+      )}
 
       {definicionSeccion.actores.map((definido, indiceRol) => {
         const rol = rolDeUnaPersona(definido);
@@ -282,6 +300,7 @@ export function FormularioActores({ seccion, activa, intentoAvance, onEstado }: 
                   parte={parteDe(fila, identidad.data)}
                   versionEstado={identidad.dataUpdatedAt}
                   envioAutomatico
+                  confirmarIdentidad={totalPersonas > 1}
                   fallaEnvio={fallosEnvio[fila.clave]}
                   onCambio={(patch) => cambiar(fila.clave, patch)}
                   onQuitar={conTitulo && puedeQuitar(filas, rol) ? () => quitar(fila.clave) : undefined}

@@ -192,10 +192,29 @@ describe("ActoresPunto — épica #14185: identidad de quien radica", () => {
     expect(screen.getByText(/Completa la validación en la ventana que se abrió/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Abrir validación/i })).toHaveAttribute("href", "https://verify.example/x");
     expect(screen.queryByText(/Validando tu identidad/i)).toBeNull(); // sin cargador colgado
+    expect(screen.queryByText(/Identidad validada/i)).toBeNull(); // sin aprobación real no hay alerta de validada
     expect(screen.queryByRole("button", { name: /Validar identidad en el punto|Enviar validación|Reenviar/i })).toBeNull();
     expect(screen.queryByRole("region", { name: /^Comprador$/i })).toBeNull();
     expect(screen.getByRole("button", { name: /Continuar/i })).toBeDisabled();
     openSpy.mockRestore();
+  });
+
+  it("al pasar a aprobada muestra «¡Identidad validada!» con el nombre y la placa, sin el documento ni jerga", async () => {
+    const radicante = vi.fn(async () => ({ parte: "vendedor", ordinal: 1, estado: "pendiente", capturaUrl: null }));
+    let n = 0;
+    const estado = vi.fn(async () => {
+      n += 1;
+      if (n === 1) throw new Error("sin sesión");
+      return n < 3 ? SIN_SOLICITAR : ESTADO_APROBADO;
+    });
+    montarPunto(clienteMock({ estado, radicante }));
+    const titulo = await screen.findByText("¡Identidad validada!");
+    expect(titulo).toHaveAttribute("role", "status");
+    const alerta = document.getElementById("punto-actores-dueno-ok")!;
+    expect(alerta.textContent).toContain("Dueño Prueba, confirmamos que eres el propietario de la placa XJI21G. Ya puedes continuar con tu trámite.");
+    expect(alerta.textContent).not.toContain("1037669356");
+    expect(screen.queryByText(/RUNT|radica en el punto/i)).toBeNull();
+    expect(screen.queryByText("Identificado")).toBeNull();
   });
 
   it("no dueño: informa, sin invitaciones, sin lanzar identidad ni Continuar", async () => {

@@ -3,7 +3,8 @@
 // HU #14238 — Paso Actores del canal OT: mismas fichas por rol que el portal PN (roles de la definición del tipo) + identidad in-situ e invitaciones.
 // El primer rol es quien radica en el punto (documento fijo, identidad in-situ); los demás roles son partes invitables.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Check, Copy } from "lucide-react";
+import { AlertTriangle, Copy } from "lucide-react";
+import { AlertaIdentidadValidada, nombrePropio } from "@/components/tramite/AlertaIdentidadValidada";
 import { MobilityLoader } from "@/components/MobilityLoader";
 import type { TonoAviso } from "@/components/landing/AvisoModal";
 import { boton } from "@/components/landing/estilos";
@@ -38,7 +39,6 @@ const MENSAJE_VALIDANDO = "Validando tu identidad…";
 const MENSAJE_NO_DUENO = "No puedes realizar este trámite porque no eres el propietario del vehículo.";
 /** Cuánto se espera la consulta automática de la persona antes de lanzar igual la identidad. */
 const ESPERA_CONSULTA_RADICANTE_MS = 8000;
-const COLOR_OK = "#8CC63F";
 const COLOR_ERROR = "#C10000";
 
 /** Roles de la lista que devuelve /punto/actores/abrir: { rol, etiqueta, esRadicante, minimo, maximo }. */
@@ -389,6 +389,8 @@ export function ActoresPunto({
     }
   };
 
+  const filaRadicante = rolRadicante ? filas.find((f) => f.rol === rolRadicante.rol && f.ordinal === 1) : undefined;
+  const nombreRadicante = filaRadicante?.consultado ? nombrePropio(filaRadicante.nombre) : "";
   const parteRadicante = fase.tipo === "listo" && rolRadicante ? fase.estado.partes.find((p) => p.parte === rolRadicante.rol) : undefined;
   const estadoRadicante = parteRadicante?.estado;
   const hayFila = Boolean(rolRadicante && filas.some((f) => f.rol === rolRadicante.rol && f.ordinal === 1));
@@ -503,25 +505,10 @@ export function ActoresPunto({
         <>
           {omitirIdentidad && <AvisoModoPruebas id="punto-actores-modo-pruebas" />}
           {radicanteOk && (
-            <div
-              className="flex gap-3 rounded-[9px] p-4"
-              style={{ backgroundColor: `${COLOR_OK}18` }}
-              role="status"
-              id="punto-actores-dueno-ok"
-            >
-              <Check aria-hidden className="mt-0.5 h-5 w-5 shrink-0" style={{ color: COLOR_OK }} />
-              <div className="space-y-1 text-sm">
-                <p className="font-semibold" style={{ color: COLOR_OK }}>
-                  Identidad validada · propietario del vehículo
-                </p>
-                <p className="text-muted-foreground">
-                  Quien radica en el punto quedó identificado y coincide con el propietario RUNT de la placa{" "}
-                  <span className="font-medium text-foreground">{placa}</span> (documento{" "}
-                  <span className="font-medium text-foreground">{documento}</span>).{" "}
-                  {invitables.length > 0 ? "Completa o invita a las demás partes, o continúa." : "Continúa al siguiente paso."}
-                </p>
-              </div>
-            </div>
+            <AlertaIdentidadValidada id="punto-actores-dueno-ok">
+              {nombreRadicante ? `${nombreRadicante}, confirmamos` : "Confirmamos"} que eres el propietario de la placa{" "}
+              <span className="font-medium text-foreground">{placa}</span>. Ya puedes continuar con tu trámite.
+            </AlertaIdentidadValidada>
           )}
 
           {rolRadicante && (
@@ -553,11 +540,6 @@ export function ActoresPunto({
                 <p role="alert" className="mt-4 text-sm font-medium" style={{ color: COLOR_ERROR }} id="punto-actores-error-guardado">
                   {errorGuardado}
                 </p>
-              )}
-              {radicanteOk && (
-                <div className="mt-4">
-                  <Badge tone="success">Identificado</Badge>
-                </div>
               )}
               {!radicanteOk && (
                 <div className="mt-4 space-y-3" id="punto-actores-estado-identidad">
