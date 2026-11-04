@@ -90,7 +90,7 @@ public sealed class TrabajosDiagnosticoTests(AnfitrionBus bus) : IClassFixture<A
         { "proveedor desconocido", RpcConsultas.Multas, JsonFormatter.Default.Format(Multas("no_existe")), "InvalidArgument" },
         { "solicitud con un campo que no es del contrato", RpcConsultas.PorPlaca, """{"placa":"TST401","nombre":"X"}""", "InvalidArgument" },
         { "solicitud que no es del rpc", RpcConsultas.Rues, """{"placa":"TST401"}""", "InvalidArgument" },
-        { "impuesto aún sin consulta real (C3)", RpcConsultas.Impuesto, JsonFormatter.Default.Format(new ConsultarImpuestoVehicularRequest { Placa = new Placa { Valor = "TST401" }, DepartamentoCodigo = "05" }), "Unimplemented" },
+        { "impuesto de un departamento que no está en la lista", RpcConsultas.Impuesto, JsonFormatter.Default.Format(new ConsultarImpuestoVehicularRequest { Placa = new Placa { Valor = "TST401" }, DepartamentoCodigo = "05" }), "FailedPrecondition" },
         { "rpc desconocido", "ConsultasService/ConsultarVehiculo", "{}", "Unimplemented" },
         { "falla inesperada del proveedor", RpcConsultas.Multas, JsonFormatter.Default.Format(Multas("falso_explota")), "Internal" },
         { "el proveedor no responde dentro del tiempo máximo", RpcConsultas.Multas, JsonFormatter.Default.Format(Multas("falso_lento")), "DeadlineExceeded" },

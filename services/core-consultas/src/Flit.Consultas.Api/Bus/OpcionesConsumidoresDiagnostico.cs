@@ -46,6 +46,13 @@ internal sealed class OpcionesConsumidoresDiagnostico
 
     public TimeSpan TiempoMaximo { get; init; } = TimeSpan.FromSeconds(TiempoMaximoPorDefectoSegundos);
 
+    /// <summary>Tope por fuente. El impuesto espera al portal; el resto sigue en <see cref="TiempoMaximo"/>.</summary>
+    public IReadOnlyDictionary<string, TimeSpan> TiempoMaximoPorFuente { get; init; } =
+        new Dictionary<string, TimeSpan>(StringComparer.Ordinal) { [FuentesBus.Impuesto] = TimeSpan.FromSeconds(300) };
+
+    public TimeSpan TiempoDe(string fuente) =>
+        TiempoMaximoPorFuente.TryGetValue(fuente, out var propio) ? propio : TiempoMaximo;
+
     public ColaConsumidor Lote { get; init; } = new(8, 16);
 
     public ColaConsumidor Express { get; init; } = new(4, 8);
@@ -69,10 +76,27 @@ internal sealed class OpcionesConsumidoresDiagnostico
         return new OpcionesConsumidoresDiagnostico
         {
             TiempoMaximo = TimeSpan.FromSeconds(segundos),
+            TiempoMaximoPorFuente = TiemposPorFuente(configuration),
             Lote = Cola(configuration, "Lote", new ColaConsumidor(8, 16)),
             Express = Cola(configuration, "Express", new ColaConsumidor(4, 8)),
             ProductoresPermitidos = productores.Count > 0 ? productores : [ProductorDiagnostico],
         };
+    }
+
+    private static Dictionary<string, TimeSpan> TiemposPorFuente(IConfiguration configuration)
+    {
+        var tiempos = new Dictionary<string, TimeSpan>(StringComparer.Ordinal)
+        {
+            [FuentesBus.Impuesto] = TimeSpan.FromSeconds(300),
+        };
+        foreach (var hijo in configuration.GetSection($"{Seccion}:TiempoMaximoPorFuente").GetChildren())
+        {
+            if (!int.TryParse(hijo.Value, out var n) || n <= 0)
+                throw Invalida($"TiempoMaximoPorFuente:{hijo.Key}", "debe ser mayor que 0", n);
+            tiempos[hijo.Key] = TimeSpan.FromSeconds(n);
+        }
+
+        return tiempos;
     }
 
     private static ColaConsumidor Cola(IConfiguration configuration, string cola, ColaConsumidor porDefecto)

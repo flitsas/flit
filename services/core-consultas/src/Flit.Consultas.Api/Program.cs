@@ -124,6 +124,12 @@ public static class Program
         var intempo = RuntIntempo.IntempoOpciones.Desde(builder.Configuration);
         builder.Services.AddHttpClient(RuntIntempo.ProveedorRuntIntempo.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(intempo.TimeoutSegundos));
         builder.Services.AddSingleton(sp => new RuntIntempo.ProveedorRuntIntempo(sp.GetRequiredService<IHttpClientFactory>(), intempo));
+        var impuesto = Impuesto.OpcionesImpuesto.Desde(builder.Configuration);
+        builder.Services.AddSingleton(impuesto);
+        builder.Services.AddHttpClient(Impuesto.TransporteImpuestoHttp.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(impuesto.TimeoutSegundos));
+        builder.Services.AddSingleton<Impuesto.ITransporteImpuesto>(sp => new Impuesto.TransporteImpuestoHttp(
+            sp.GetRequiredService<IHttpClientFactory>(), impuesto, sp.GetRequiredService<ILogger<Impuesto.TransporteImpuestoHttp>>()));
+        builder.Services.AddSingleton(sp => new Impuesto.ProveedorImpuesto(sp.GetRequiredService<Impuesto.ITransporteImpuesto>(), impuesto));
         var simulados = bool.TryParse(builder.Configuration["Consultations:ComparendosSimulados"], out var sim) ? sim : builder.Environment.IsDevelopment();
         builder.Services.AddSingleton<Comparendos.IProveedorComparendos>(sp => new Comparendos.ProveedorSimulado(sp.GetRequiredService<TimeProvider>(), simulados));
 

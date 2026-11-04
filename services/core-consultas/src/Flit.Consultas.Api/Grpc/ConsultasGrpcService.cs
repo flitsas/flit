@@ -29,7 +29,8 @@ internal sealed partial class ConsultasGrpcService(
     TimeProvider time,
     IRuntVehicleRawClient runtCrudo,
     IImprontaExternalClient improntas,
-    IEnumerable<IRuesExternalClient> rues) : ConsultasService.ConsultasServiceBase
+    IEnumerable<IRuesExternalClient> rues,
+    Impuesto.ProveedorImpuesto impuesto) : ConsultasService.ConsultasServiceBase
 {
     public const string Scope = "platform.consultas";
 
@@ -60,6 +61,16 @@ internal sealed partial class ConsultasGrpcService(
     public override Task<ConsultarAvaluosResponse> ConsultarAvaluos(ConsultarAvaluosRequest request, ServerCallContext context) =>
         ConsultarAvaluos(request, Llamador(context), context.CancellationToken);
 
+    public override Task<ConsultarImpuestoVehicularResponse> ConsultarImpuestoVehicular(ConsultarImpuestoVehicularRequest request, ServerCallContext context) =>
+        ConsultarImpuestoVehicular(request, Llamador(context), context.CancellationToken);
+
+    public override Task<ListarDepartamentosImpuestoResponse> ListarDepartamentosImpuesto(ListarDepartamentosImpuestoRequest request, ServerCallContext context)
+    {
+        var respuesta = new ListarDepartamentosImpuestoResponse();
+        respuesta.DepartamentoCodigos.AddRange(impuesto.Departamentos());
+        return Task.FromResult(respuesta);
+    }
+
     /// <summary>Vehículo, medido, con el llamador y el <paramref name="deadline"/> dados (<see cref="DateTime.MaxValue"/> = sin deadline).</summary>
     internal Task<ConsultarVehiculoResponse> ConsultarVehiculo(ConsultarVehiculoRequest request, PlatformServiceCaller caller, DateTime deadline, CancellationToken ct) =>
         consumo.MedirAsync(caller, "vehiculo", () => ConsultarVehiculoCore(request, caller, deadline, ct), r => Resumen(r.Resultado), ct);
@@ -80,6 +91,9 @@ internal sealed partial class ConsultasGrpcService(
     internal Task<ConsultarAvaluosResponse> ConsultarAvaluos(ConsultarAvaluosRequest request, PlatformServiceCaller caller, CancellationToken ct) =>
         consumo.MedirAsync(caller, "avaluos", () => ConsultarAvaluosCore(request, caller, ct),
             r => (r.FuentePrincipal, r.ValorSugerido > 0 ? "verde" : "sin_datos", false), ct);
+
+    internal Task<ConsultarImpuestoVehicularResponse> ConsultarImpuestoVehicular(ConsultarImpuestoVehicularRequest request, PlatformServiceCaller caller, CancellationToken ct) =>
+        consumo.MedirAsync(caller, "impuesto", () => impuesto.ConsultarAsync(request, ct), r => Resumen(r.Resultado), ct);
 
     private async Task<ConsultarVehiculoResponse> ConsultarVehiculoCore(ConsultarVehiculoRequest request, PlatformServiceCaller caller, DateTime deadline, CancellationToken ct)
     {

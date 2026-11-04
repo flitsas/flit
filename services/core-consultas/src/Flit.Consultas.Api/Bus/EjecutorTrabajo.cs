@@ -59,8 +59,9 @@ internal sealed class EjecutorTrabajo(
         ArgumentNullException.ThrowIfNull(caller);
         var reloj = Stopwatch.StartNew();
         using var limite = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        limite.CancelAfter(opciones.TiempoMaximo);
-        var deadline = time.GetUtcNow().UtcDateTime + opciones.TiempoMaximo;
+        var tope = opciones.TiempoDe(trabajo.Fuente);
+        limite.CancelAfter(tope);
+        var deadline = time.GetUtcNow().UtcDateTime + tope;
         using var fallos = RegistroFallosProveedor.Abrir();
         try
         {
@@ -107,8 +108,7 @@ internal sealed class EjecutorTrabajo(
             ConsultarMultasRequest r => await consultas.ConsultarMultas(r, caller, ct).ConfigureAwait(false),
             ConsultarRuesRequest r => await consultas.ConsultarRues(r, caller, ct).ConfigureAwait(false),
             ConsultarAvaluosRequest r => await consultas.ConsultarAvaluos(r, caller, ct).ConfigureAwait(false),
-            // HU #13860: contrato primero; el servicio no lo implementa hasta C3 y por gRPC responde UNIMPLEMENTED. La solicitud
-            // se validó igual, para que un trabajo mal formado sea INVALID_ARGUMENT y no se confunda con la falta de la consulta.
+            ConsultarImpuestoVehicularRequest r => await consultas.ConsultarImpuestoVehicular(r, caller, ct).ConfigureAwait(false),
             _ => throw new RpcException(new Status(StatusCode.Unimplemented, "Rpc sin implementación en core-consultas.")),
         };
     }

@@ -35,8 +35,14 @@ internal static class RegistroFallosProveedor
     public static void Anotar(ConsultationResult resultado)
     {
         ArgumentNullException.ThrowIfNull(resultado);
+        Anotar(resultado.Fallo);
+    }
+
+    /// <summary>Anota un fallo de transporte del impuesto. Sin trabajo del bus, no hace nada.</summary>
+    public static void Anotar(FalloProveedor? fallo)
+    {
         if (Actual.Value is { } caja)
-            caja.Fallo = resultado.Fallo;
+            caja.Fallo = fallo;
     }
 
     /// <summary>El código del último fallo anotado en el trabajo en curso (<see cref="FalloProveedor.Codigo"/>), o null.</summary>

@@ -27,6 +27,8 @@ public sealed class ConfiguracionConsumidoresTests
         var o = OpcionesConsumidoresDiagnostico.Desde(Config([]));
 
         (o.Lote, o.Express, o.TiempoMaximo).Should().Be((new ColaConsumidor(8, 16), new ColaConsumidor(4, 8), TimeSpan.FromSeconds(90)));
+        o.TiempoDe(FuentesBus.Impuesto).Should().Be(TimeSpan.FromSeconds(300));
+        o.TiempoDe(FuentesBus.Runt).Should().Be(TimeSpan.FromSeconds(90));
         o.ProductoresPermitidos.Should().Equal("diagnostico");
     }
 
