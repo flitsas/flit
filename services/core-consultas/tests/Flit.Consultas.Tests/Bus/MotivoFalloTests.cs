@@ -6,6 +6,7 @@ using Flit.Platform.Grpc.V1;
 using Flit.Platform.Sdk.Grpc;
 using Flit.Tramites.Application.UseCases.Consultations;
 using FluentAssertions;
+using Google.Protobuf;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -40,6 +41,30 @@ public sealed class MotivoFalloTests(AnfitrionBus bus) : IClassFixture<Anfitrion
         var datos = publicado.DataAs<ResultadoConsultaDiagnostico>();
         (datos.Estado, datos.GrpcStatus, datos.MotivoFallo).Should().Be(("OK", (string?)null, "CREDENCIALES"));
         publicado.Data.GetProperty("motivoFallo").GetString().Should().Be("CREDENCIALES", "camelCase, como el resto del sobre");
+    }
+
+    // HU14231: la caída de multas viaja como aviso; este es el mensaje del que Diagnóstico deduce el ERROR (TraductorErroresConsultas).
+    [Fact]
+    public async Task El_trabajo_SIMIT_caido_en_aviso_publica_el_motivo_y_el_chequeo_provider_en_warn()
+    {
+        var empresa = Guid.NewGuid();
+        await bus.SembrarEmpresaAsync(empresa, "external");
+        var solicitud = new ConsultarMultasRequest
+        {
+            Opciones = new OpcionesConsulta { Proveedor = AnfitrionBus.SinCredencialesEnAviso.Clave },
+            Placa = new Placa { Valor = "TST804" },
+            Documento = new DocumentoIdentidad { Tipo = "CC", Numero = "9999900081" },
+        };
+        var sobre = AnfitrionBus.Trabajo(empresa, FuentesBus.SimitVehiculo, RpcConsultas.Multas, solicitud);
+
+        await bus.EjecutarAsync<ConsumidorTrabajosLote>(sobre);
+
+        var publicado = (await bus.ResultadosAsync(sobre)).Should().ContainSingle().Subject;
+        var datos = publicado.DataAs<ResultadoConsultaDiagnostico>();
+        (datos.Estado, datos.MotivoFallo).Should().Be(("OK", "CREDENCIALES"));
+        var respuesta = JsonParser.Default.Parse<ConsultarMultasResponse>(publicado.Data.GetProperty("respuesta").GetRawText());
+        var chequeo = respuesta.Resultado.Chequeos.Should().ContainSingle().Subject;
+        (chequeo.Clave, chequeo.Estado).Should().Be(("provider", EstadoChequeo.Warn));
     }
 
     [Fact]

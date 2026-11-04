@@ -98,6 +98,7 @@ public class AnfitrionBus : IAsyncLifetime
         s.AddTransient<IConsultationProvider>(_ => new CrudoGrande(Llamadas));
         s.AddTransient<IConsultationProvider>(_ => new Lento(Llamadas));
         s.AddTransient<IConsultationProvider>(_ => new SinCredenciales());
+        s.AddTransient<IConsultationProvider>(_ => new SinCredencialesEnAviso());
     });
 
     /// <summary>El efecto de <typeparamref name="TConsumidor"/> en un scope con su transacción, como el consumidor del SDK.</summary>
@@ -266,6 +267,24 @@ public class AnfitrionBus : IAsyncLifetime
         public static ConsultationResult Resultado { get; } = new(Clave, "red",
             [new ConsultationCheck("provider", "Consulta SIMIT", "error", Clave,
                 "No fue posible verificar la información en SIMIT en este momento. Vuelve a intentarlo en unos minutos.")],
+            [], Fallo: new FalloProveedor(ClaseFalloProveedor.Credenciales, 403));
+
+        public string Key => Clave;
+
+        public Task<ConsultationResult> ConsultAsync(ConsultationContext ctx, CancellationToken ct) => Task.FromResult(Resultado);
+    }
+
+    /// <summary>
+    /// El mismo proveedor de multas caído como responde desde HU14231: chequeo <c>provider</c> en <c>warn</c> y semáforo amarillo
+    /// (aviso, no bloqueo de Trámites), con el <see cref="ConsultationResult.Fallo"/> que anota el proveedor real.
+    /// </summary>
+    public sealed class SinCredencialesEnAviso : IConsultationProvider
+    {
+        public const string Clave = "falso_sin_credenciales_aviso";
+
+        public static ConsultationResult Resultado { get; } = new(Clave, "yellow",
+            [new ConsultationCheck("provider", "Consulta SIMIT", "warn", Clave,
+                "No fue posible verificar la información en SIMIT en este momento. Puedes continuar y reintentar más tarde.")],
             [], Fallo: new FalloProveedor(ClaseFalloProveedor.Credenciales, 403));
 
         public string Key => Clave;

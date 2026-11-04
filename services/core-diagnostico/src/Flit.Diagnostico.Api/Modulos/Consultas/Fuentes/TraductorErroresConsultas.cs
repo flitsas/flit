@@ -25,8 +25,9 @@ public sealed record ErrorConsulta(string TipoError, string Mensaje)
 /// <c>Unauthenticated</c> y <c>PermissionDenied</c> → <c>AUTENTICACION</c>; <c>InvalidArgument</c> y el resto →
 /// <c>ESTADO_NO_OK</c> (definitivos).</item>
 /// <item><see cref="ErrorProveedor"/> (documentos generados): <c>transitorio</c> → <c>HTTP_5XX</c>; si no, <c>ESTADO_NO_OK</c>.</item>
-/// <item><see cref="ResultadoConsulta"/>: un proveedor caído no es error gRPC sino un chequeo en <c>ESTADO_CHEQUEO_ERROR</c>
-/// (el proveedor no respondió) → <c>HTTP_5XX</c> transitorio, salvo que el bus traiga <c>motivoFallo</c> (<see cref="ConMotivo"/>);
+/// <item><see cref="ResultadoConsulta"/>: un proveedor caído no es error gRPC sino un chequeo en <c>ESTADO_CHEQUEO_ERROR</c>, o el
+/// chequeo <c>provider</c> en <c>ESTADO_CHEQUEO_WARN</c> de las multas (el proveedor no respondió) → <c>HTTP_5XX</c> transitorio,
+/// salvo que el bus traiga <c>motivoFallo</c> (<see cref="ConMotivo"/>);
 /// sin resultado → <c>RESPUESTA_INVALIDA</c>.</item>
 /// </list>
 /// <see cref="Servicio"/> lleva la clave del proveedor (<c>ResultadoConsulta.proveedor</c>) a <see cref="ServicioConsulta"/> del
@@ -47,6 +48,9 @@ public static class TraductorErroresConsultas
     private const string EstadoNoOk = "ESTADO_NO_OK";
     private const string RespuestaInvalida = "RESPUESTA_INVALIDA";
     private const string LimiteProveedor = "LIMITE_PROVEEDOR";
+
+    /// <summary>Clave del chequeo con que un proveedor informa que no respondió (<c>ProviderUnavailable</c>).</summary>
+    private const string ChequeoProveedor = "provider";
 
     /// <summary>Motivo de <c>motivoFallo</c> que es una credencial del proveedor vencida o sin permiso (error de configuración).</summary>
     public const string MotivoCredenciales = "CREDENCIALES";
@@ -86,13 +90,18 @@ public static class TraductorErroresConsultas
             : new ErrorConsulta(EstadoNoOk, "El proveedor rechazó la solicitud.");
     }
 
-    /// <summary>Null si el resultado tiene veredicto (ningún chequeo en ERROR).</summary>
+    /// <summary>
+    /// Null si el resultado tiene veredicto: ningún chequeo en ERROR ni el chequeo <see cref="ChequeoProveedor"/> en WARN. Los
+    /// proveedores de multas informan su caída con ese aviso (HU14231, para no bloquear Trámites); para Diagnóstico sigue siendo un
+    /// proveedor que no respondió. Cualquier otro aviso (datos de entrada, multas) es un veredicto.
+    /// </summary>
     public static ErrorConsulta? Traducir(ResultadoConsulta? resultado)
     {
         if (resultado is null)
             return new ErrorConsulta(RespuestaInvalida, "core-consultas respondió sin resultado.");
 
-        var caido = resultado.Chequeos.FirstOrDefault(c => c.Estado == EstadoChequeo.Error);
+        var caido = resultado.Chequeos.FirstOrDefault(c =>
+            c.Estado == EstadoChequeo.Error || (c.Estado == EstadoChequeo.Warn && c.Clave == ChequeoProveedor));
         return caido is null ? null : new ErrorConsulta(Http5xx, $"El proveedor no respondió (chequeo {caido.Clave}).");
     }
 

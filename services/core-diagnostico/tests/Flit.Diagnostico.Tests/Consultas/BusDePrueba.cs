@@ -161,7 +161,7 @@ public sealed record TrabajoAtendido(Guid OutboxId, string RoutingKey, EventEnve
 /// Lo que core-consultas responde a un trabajo en las pruebas: el <c>*Response</c> (estado OK; null = respuesta ilegible) o el
 /// código gRPC (estado ERROR).
 /// </summary>
-public sealed record RespuestaSimulada(IMessage? Respuesta, StatusCode? Error = null, bool DesdeCache = false, long DuracionMs = 0)
+public sealed record RespuestaSimulada(IMessage? Respuesta, StatusCode? Error = null, bool DesdeCache = false, long DuracionMs = 0, string? MotivoFallo = null)
 {
     public static RespuestaSimulada Ok(IMessage respuesta) => new(respuesta);
 
@@ -294,7 +294,7 @@ public sealed class BusDePrueba
         var data = new ResultadoConsultaDiagnostico(
             trabajo.TrabajoId, trabajo.ConsultaId, trabajo.PersonaId, trabajo.Fuente,
             respuesta.Error is null ? ResultadoConsultaDiagnostico.EstadoOk : ResultadoConsultaDiagnostico.EstadoError,
-            respuesta.Error?.ToString(), json, respuesta.DuracionMs, respuesta.DesdeCache);
+            respuesta.Error?.ToString(), json, respuesta.DuracionMs, respuesta.DesdeCache, respuesta.MotivoFallo);
         return new EventEnvelope(
             Guid.CreateVersion7(), ResultadoConsultaDiagnostico.Tipo, ResultadoConsultaDiagnostico.VersionContrato, Reloj.GetUtcNow(),
             trabajo.Sobre.TenantId, OpcionesBus.Productor, trabajo.Sobre.CorrelationId, JsonSerializer.SerializeToElement(data, EventEnvelope.JsonOptions));
