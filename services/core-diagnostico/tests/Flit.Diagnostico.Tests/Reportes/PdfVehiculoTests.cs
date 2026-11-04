@@ -178,8 +178,8 @@ public sealed class PdfVehiculoTests
         (await db.Set<Evidencia>().CountAsync(e => e.VehiculoId == sinTerminar, ct)).Should().Be(0, "no se genera nada");
     }
 
-    // AC8 (F07-C4, F07-C9, Q7) — lote INCOMPLETO con SIMIT_VEHICULO en ERROR TIMEOUT: 200 y la sección SIMIT dice «consulta no
-    // disponible», sin TIMEOUT, causa técnica ni origen.
+    // AC8 (F07-C4, F07-C9, Q7) — lote INCOMPLETO con SIMIT_VEHICULO en ERROR TIMEOUT: 200 y la sección SIMIT dice «No pudimos
+    // obtener esta información.», sin TIMEOUT, causa técnica ni origen.
     [Fact]
     public async Task Lote_incompleto_emite_el_pdf_con_consulta_no_disponible()
     {
@@ -195,7 +195,7 @@ public sealed class PdfVehiculoTests
         var texto = await PdfDePrueba.TextoOkAsync(api, PdfDePrueba.Token(api, empresa.Id), lote.Id, lote.Vehiculos.Single().Id, ct);
 
         var simit = PdfDePrueba.Seccion(texto, TituloSimit);
-        PdfDePrueba.Tiene(simit, SeccionReporte.ConsultaNoDisponible).Should().BeTrue(simit);
+        PdfDePrueba.Tiene(simit, "No pudimos obtener esta información.").Should().BeTrue(simit);
         texto.Should().NotContainAny(["TIMEOUT", "Timeout", "timeout", "30 s", "30s", "proveedor"], "sin código de error ni causa técnica");
         texto.Should().NotContain("rigen", "sin origen");
     }

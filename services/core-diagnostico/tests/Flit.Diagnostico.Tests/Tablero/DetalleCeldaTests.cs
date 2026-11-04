@@ -323,7 +323,23 @@ public sealed class DetalleCeldaTests
         var personas = deLasPersonas.GetProperty("personas").EnumerateArray().ToList();
         JsonElement.DeepEquals(personas[0].GetProperty("respuesta_fuente"), JsonDocument.Parse(CrudaPersona).RootElement).Should().BeTrue();
         personas[1].GetProperty("respuesta_fuente").ValueKind.Should().Be(JsonValueKind.Null, "la persona 2 no tiene respuesta guardada");
-        deLasPersonas.GetRawText().Should().NotContainAny([primero.Id.ToString(), segundo.Id.ToString(), "9999900461"]);
+        deLasPersonas.GetRawText().Should().NotContainAny([primero.Id.ToString(), segundo.Id.ToString()]);
+
+        // El número en claro va solo en `documento` de su persona; la máscara no se relaja.
+        personas[0].GetProperty("documento_enmascarado").GetString().Should().Be("****0461");
+        personas[1].GetProperty("documento_enmascarado").GetString().Should().Be("****0462");
+        RutasConValor(deLasPersonas, "9999900461", "$").Should().Equal("$.personas[0].documento");
+        RutasConValor(deLasPersonas, "9999900462", "$").Should().Equal("$.personas[1].documento");
+    }
+
+    /// <summary>Rutas de las hojas del JSON cuyo valor contiene <paramref name="valor"/>.</summary>
+    private static IEnumerable<string> RutasConValor(JsonElement nodo, string valor, string ruta)
+    {
+        if (nodo.ValueKind == JsonValueKind.Object)
+            return nodo.EnumerateObject().SelectMany(p => RutasConValor(p.Value, valor, ruta + "." + p.Name));
+        if (nodo.ValueKind == JsonValueKind.Array)
+            return nodo.EnumerateArray().SelectMany((e, i) => RutasConValor(e, valor, ruta + "[" + i.ToString(System.Globalization.CultureInfo.InvariantCulture) + "]"));
+        return nodo.GetRawText().Contains(valor, StringComparison.Ordinal) ? [ruta] : [];
     }
 
     // HU #14087 AC8 — sin respuesta guardada (celda manual o de antes del AC8) respuesta_fuente es null; si no se puede descifrar,

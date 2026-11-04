@@ -186,9 +186,12 @@ public sealed class ZipLoteTests
 
         zip.Pdfs.Should().HaveCount(3);
         var conError = zip.TextoPdf("TST523");
-        PdfDePrueba.Tiene(PdfDePrueba.Seccion(conError, TituloSimit), SeccionReporte.ConsultaNoDisponible).Should().BeTrue(conError);
+        PdfDePrueba.Tiene(PdfDePrueba.Seccion(conError, TituloSimit), "No pudimos obtener esta información.").Should().BeTrue(conError);
         conError.Should().NotContainAny(["TIMEOUT", "Timeout", "timeout", "30s", "proveedor"], "sin código de error ni causa técnica");
-        PdfDePrueba.Tiene(PdfDePrueba.Seccion(zip.TextoPdf("TST521"), TituloSimit), "TST-C-0501").Should().BeTrue();
+        // La tabla de comparendos puede caer en la página siguiente al título, y Seccion corta en el pie: se afirma el orden en el texto completo.
+        var completo = zip.TextoPdf("TST521");
+        PdfDePrueba.Tiene(completo, TituloSimit).Should().BeTrue(completo);
+        completo.IndexOf(PdfDePrueba.Plano("TST-C-0501"), StringComparison.Ordinal).Should().BeGreaterThan(completo.IndexOf(PdfDePrueba.Plano(TituloSimit), StringComparison.Ordinal), completo);
         zip.Indice.Should().NotContain("No incluido", "con el lote INCOMPLETO ninguno queda fuera");
         zip.Indice.Split('\n').Should().Contain(l => l.Contains("TST523", StringComparison.Ordinal) && l.Contains("Con error", StringComparison.Ordinal), zip.Indice);
         zip.Indice.Should().NotContainAny(["TIMEOUT", "Timeout"]);
