@@ -192,6 +192,9 @@ public static class ProyeccionMinima
             estado?.ToUpperInvariant(), prenda, limitacion, prenda || limitacion, Texto(resultado, CampoOrganismo));
     }
 
+    /// <summary>Color del vehículo en el RUNT (dato del vehículo).</summary>
+    public static string? ColorDe(ResultadoConsulta resultado) => Texto(resultado, CampoColor);
+
     internal const string CampoVin = "vin";
     internal const string CampoMotor = "vehicle_engine_number";
     internal const string CampoSerie = "vehicle_series";
