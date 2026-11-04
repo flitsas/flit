@@ -121,6 +121,25 @@ internal static class PersonaNaturalDefinicionMapper
         }
 
         var cap = DefinicionPersonaNatural.Capacidades(tipo.Perfil, tipo.Familia, tipo.Codigo);
+
+        // Un tipo con prenda complementaria (p. ej. traspaso) deja decidir registrar o levantar; PrendaGate exige el documento exacto de la
+        // decisión. Se ofrecen los dos, condicionados: el BFF solo reclama el de la decisión guardada.
+        if (cap.PermitePrendaComplementaria && DefinicionPersonaNatural.AccionPrenda(tipo.Codigo) is null)
+        {
+            foreach (var (codigo, nombre, condicion) in new[]
+            {
+                ("prenda_registro", "Documento de registro de la prenda", "Se pide si se registra una prenda."),
+                ("prenda_levantamiento", "Documento del levantamiento de la prenda", "Se pide si se levanta la prenda."),
+            })
+            {
+                if (definicion.Documentos.Any(d => string.Equals(d.DocCode, codigo, StringComparison.OrdinalIgnoreCase))) continue;
+                definicion.Documentos.Add(new DocumentoRequerido
+                {
+                    DocCode = codigo, Nombre = nombre, Obligatorio = true, Orden = siguiente++, InstruccionCargue = string.Empty, Condicion = condicion,
+                });
+            }
+        }
+
         definicion.Flags = new FlagsTipo
         {
             EntryMode = cap.EntryMode,

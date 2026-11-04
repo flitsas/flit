@@ -108,8 +108,48 @@ public sealed class PersonaNaturalDefinicionMapperTests
         d.Documentos.Should().ContainSingle(x => x.DocCode == "prenda_levantamiento");
     }
 
+    private const string PerfilPrendaComplementaria = """{"entryMode":"PLATE","requiresBuyer":true,"allowsComplementaryPrenda":true}""";
+
+    [Fact]
+    public void UnTraspaso_ConPrendaComplementaria_TraeLosDosDocumentosDeLaDecision_ConCondicion()
+    {
+        var d = PersonaNaturalDefinicionMapper.Armar(Tipo("TRASPASO_STANDARD", "TRASPASO", PerfilPrendaComplementaria), Pasos(), [Doc("compraventa")]);
+
+        var reg = d.Documentos.Single(x => x.DocCode == "prenda_registro");
+        var lev = d.Documentos.Single(x => x.DocCode == "prenda_levantamiento");
+        reg.Obligatorio.Should().BeTrue();
+        lev.Obligatorio.Should().BeTrue();
+        reg.Condicion.Should().Be("Se pide si se registra una prenda.");
+        lev.Condicion.Should().Be("Se pide si se levanta la prenda.");
+    }
+
+    [Fact]
+    public void LosDocumentosDeLaDecision_NoSeDuplican_EnTipoConPrendaComplementaria()
+    {
+        var d = PersonaNaturalDefinicionMapper.Armar(Tipo("TRASPASO_STANDARD", "TRASPASO", PerfilPrendaComplementaria), Pasos(), [Doc("prenda_registro")]);
+
+        d.Documentos.Count(x => x.DocCode == "prenda_registro").Should().Be(1);
+        d.Documentos.Count(x => x.DocCode == "prenda_levantamiento").Should().Be(1);
+    }
+
+    [Fact]
+    public void UnTipoSinPrendaComplementaria_NoRecibeLosDocumentosDeLaDecision()
+    {
+        var d = PersonaNaturalDefinicionMapper.Armar(Tipo("CAMBIO_COLOR", "OTROS", PerfilOtros), Pasos(), [Doc("tarjeta_propiedad")]);
+
+        d.Documentos.Select(x => x.DocCode).Should().NotContain(["prenda_levantamiento", "prenda_registro"]);
+    }
+
+    [Fact]
+    public void LaAccionUnica_SigueConSuUnicoDocumentoDeLaDecision_SinCondicion()
+    {
+        var d = PersonaNaturalDefinicionMapper.Armar(Tipo("LEVANTAMIENTO_PRENDA", "OTROS", PerfilPrendaComplementaria), Pasos(), []);
+
+        d.Documentos.Select(x => x.DocCode).Should().Equal("prenda_levantamiento");
+        d.Documentos.Single().Condicion.Should().BeEmpty();
+    }
+
     [Theory]
-    [InlineData("TRASPASO_STANDARD")]
     [InlineData("CAMBIO_COLOR")]
     public void UnTipoQueNoEsDeAccionUnica_NoRecibeElDocumentoDeLaDecision(string codigo)
     {

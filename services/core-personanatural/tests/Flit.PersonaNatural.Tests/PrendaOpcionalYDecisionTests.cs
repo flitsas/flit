@@ -161,6 +161,46 @@ public sealed class PrendaOpcionalYDecisionTests
         r.Should().BeOfType<ResultadoCompletitudPunto.Ok>().Subject.Completitud.PuedeContinuarPago.Should().BeTrue();
     }
 
+    // ── Documentos condicionados de la decisión (los trae el mapper en tipos con prenda complementaria) ─────────────────
+
+    private static DefinicionTipoDto ConDocsDeDecision() => Complementaria() with
+    {
+        Documentos =
+        [
+            new DocumentoRequeridoDto("prenda_registro", "Documento de registro de la prenda", true, 1, "", "Se pide si se registra una prenda."),
+            new DocumentoRequeridoDto("prenda_levantamiento", "Documento del levantamiento de la prenda", true, 2, "", "Se pide si se levanta la prenda."),
+        ],
+    };
+
+    [Fact]
+    public void Completitud_LevantarSinElDocumento_DejaPendiente_ConElDocumentoNo_YSinPrendaNoLoPide()
+    {
+        var def = ConDocsDeDecision();
+        var datos = new DatosSolicitud(null, new PrendaDatos(true, null, null, "levantar"), null);
+        var sin = ReglasBorrador.Completitud(def, new Dictionary<string, string>(), datos, [], new HashSet<string>()).Pendientes;
+        sin.Should().Contain(p => p.Referencia == "prenda_levantamiento");
+        sin.Should().NotContain(p => p.Referencia == "prenda_registro");
+
+        ReglasBorrador.Completitud(def, new Dictionary<string, string>(), datos, [], new HashSet<string> { "prenda_levantamiento" }).Pendientes
+            .Should().NotContain(p => p.Referencia == "prenda_levantamiento" || p.Referencia == "prenda_registro");
+
+        ReglasBorrador.Completitud(def, new Dictionary<string, string>(), new DatosSolicitud(null, new PrendaDatos(false, null, null, "sin_prenda"), null), [], new HashSet<string>()).Pendientes
+            .Should().NotContain(p => p.Referencia == "prenda_levantamiento" || p.Referencia == "prenda_registro");
+    }
+
+    [Fact]
+    public async Task Punto_LevantarSinElDocumento_NoPasa_ConElDocumentoSi_YSinPrendaNoLoPide()
+    {
+        var levantar = new PrendaDatos(true, null, null, "levantar");
+        var r = await Punto(ConDocsDeDecision(), levantar, new GravamenFalso(true));
+        var c = r.Should().BeOfType<ResultadoCompletitudPunto.Ok>().Subject.Completitud;
+        c.PuedeContinuarPago.Should().BeFalse();
+        c.Pendientes.Should().ContainSingle().Which.Codigo.Should().Be("prenda_levantamiento");
+
+        var sinPrenda = await Punto(ConDocsDeDecision(), new PrendaDatos(false, null, null, "sin_prenda"), new GravamenFalso(true));
+        sinPrenda.Should().BeOfType<ResultadoCompletitudPunto.Ok>().Subject.Completitud.PuedeContinuarPago.Should().BeTrue();
+    }
+
     [Fact]
     public async Task Punto_SinGravamen_NoExigeDecision()
     {

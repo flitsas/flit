@@ -1,3 +1,4 @@
+using Flit.PersonaNatural.Api.Solicitudes;
 using Flit.PersonaNatural.Api.Definiciones;
 
 namespace Flit.PersonaNatural.Api.Punto;
@@ -47,6 +48,8 @@ public static class CondicionesDocumentoPunto
     public static bool Exigible(DocumentoRequeridoDto doc, ContextoCondicionPunto ctx)
     {
         if (doc.DocCode == DocComprobantePago || !doc.Obligatorio || !Visible(doc, ctx)) return false;
+        // Documento condicionado de la decisión de prenda: lo reclama solo la decisión guardada (ReglasBorrador.DocumentoDePrendaDelTipo).
+        if (!string.IsNullOrWhiteSpace(doc.Condicion) && ReglasBorrador.DocumentosDePrenda.Contains(doc.DocCode)) return false;
         return string.IsNullOrWhiteSpace(doc.Condicion) || CondicionConocida(doc);
     }
 
