@@ -12,7 +12,8 @@ namespace Flit.Infrastructure.Tests.Consultations;
 /// <summary>
 /// Resolvedor de errores del Diagnóstico — cada proveedor HTTP dice POR QUÉ no respondió (<see cref="ConsultationResult.Fallo"/>)
 /// sin cambiar lo que ve Trámites: <c>Overall</c>, los checks y su mensaje son los de siempre para 401, 403, 429, 500, timeout y
-/// red, y <c>Fallo</c> no se serializa. Datos ficticios (TST###, 99999…).
+/// red, y <c>Fallo</c> no se serializa. Los proveedores de multas caídos responden aviso (<c>yellow</c>/<c>warn</c>, HU14231); el
+/// chequeo <c>provider</c> es lo que Diagnóstico lee como caída. Datos ficticios (TST###, 99999…).
 /// <para>Uso de ejemplo: <c>(await Simit(Http(HttpStatusCode.Forbidden)).ConsultAsync(CtxPlaca(), ct)).Fallo!.Clase</c> →
 /// <see cref="ClaseFalloProveedor.Credenciales"/>.</para>
 /// </summary>
@@ -21,7 +22,7 @@ public sealed class FalloProveedorHttpTests
     private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
 
     private const string MensajeSimit =
-        "No fue posible verificar la información en SIMIT en este momento. Vuelve a intentarlo en unos minutos.";
+        "No fue posible verificar la información en SIMIT en este momento. Puedes continuar y reintentar más tarde.";
 
     public static TheoryData<string, ClaseFalloProveedor, int?> Casos => new()
     {
@@ -67,10 +68,10 @@ public sealed class FalloProveedorHttpTests
 
         var result = await Simit(Handler(caso)).ConsultAsync(CtxPlaca(), ct);
 
-        result.Overall.Should().Be("red", caso);
+        result.Overall.Should().Be("yellow", caso);
         var check = result.Checks.Should().ContainSingle(caso).Subject;
         (check.Key, check.Label, check.Status, check.Source, check.Message)
-            .Should().Be(("provider", "Consulta SIMIT", "error", "verifik_simit", MensajeSimit), caso);
+            .Should().Be(("provider", "Consulta SIMIT", "warn", "verifik_simit", MensajeSimit), caso);
         result.HydratedFields.Should().BeEmpty(caso);
         result.Fallo.Should().Be(new FalloProveedor(clase, status), caso);
     }
@@ -90,7 +91,9 @@ public sealed class FalloProveedorHttpTests
         // Hoy todo no-2xx (salvo 404), timeout y red responde lo mismo: el 503 es la referencia de «lo de siempre».
         result.Overall.Should().Be(hoy.Overall, $"{proveedor} {caso}");
         result.Checks.Should().BeEquivalentTo(hoy.Checks, o => o.WithStrictOrdering(), $"{proveedor} {caso}");
-        result.Checks.Should().Contain(c => c.Status == "error", $"{proveedor} {caso}");
+        // HU14231: multas avisa (no bloquea Trámites); el resto sigue en error.
+        var estadoCaida = proveedor is "verifik_simit" or "flit_fines" or "kyverum_fines" ? "warn" : "error";
+        result.Checks.Should().Contain(c => c.Key == "provider" && c.Status == estadoCaida, $"{proveedor} {caso}");
         result.Fallo.Should().Be(new FalloProveedor(clase, status), $"{proveedor} {caso}");
     }
 
