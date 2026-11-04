@@ -55,17 +55,17 @@ Diagnostico__Anthropic__Simulado=false
 
 ## Qué queda fuera de esta entrega
 
-El resto del punto 1 del plan de pendientes sigue sin código. Lo bloquean decisiones que este documento no toma:
+El catálogo v1 y el evaluador ya están en el dominio. El resto del punto 1 sigue sin código:
 
 | Pieza | Por qué espera |
 |---|---|
-| Tablas `reglas_dictamen` y `dictamenes` | El catálogo de reglas lo fija el PO. Sin reglas no hay migración útil |
-| Evaluador TRASPASO y siembra de fuentes obligatorias | Dictamen de `expert-doc-engine` (R-17) y catálogo del PO. C1 (monto SIMIT tipado) bloquea las reglas por monto |
+| Tablas `reglas_dictamen` y `dictamenes` | El catálogo v1 ya está en memoria. La migración sigue fuera de este corte |
+| Siembra de fuentes obligatorias en el alta | Sigue esperando el dictamen de `expert-doc-engine` (R-17). El evaluador no marca esas fuentes |
 | Cola durable, invalidación del PDF y `GET`/`PUT` de dictamen | Dependen de la fila de dictamen y del enganche al vehículo terminado |
 | ADR (g) y OpenAPI | El ADR queda en Propuesto hasta que el Líder Técnico lo acepte. El OpenAPI se publica con el endpoint |
 | Activar #12678 | Sigue en New. Pasarla de estado pide confirmación humana |
 
-No hay migración EF en esta entrega. Cuando el catálogo exista, la migración sale solo de `dotnet ef migrations add`, seguida de `migrations list` y de `db-schema-validator`, antes del primer test de integración.
+No hay migración EF en esta entrega. El catálogo v1 y el evaluador ya están en el dominio, sin tabla: `docs/diagnosticos/evaluador-reglas-dictamen-v1.md`. Cuando se persistan, la migración sale solo de `dotnet ef migrations add`, seguida de `migrations list` y de `db-schema-validator`, antes del primer test de integración.
 
 ## Dónde enganchar el siguiente corte
 
