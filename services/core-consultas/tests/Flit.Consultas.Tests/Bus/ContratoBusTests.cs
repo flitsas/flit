@@ -94,5 +94,14 @@ public sealed class ContratoBusTests
     public void La_cola_de_lotes_y_la_del_Express_se_atan_con_su_propio_comodin(bool esExpress, string patron) =>
         TrabajoConsultaDiagnostico.Patron(esExpress).Should().Be(patron);
 
+    [Theory]
+    [InlineData(false, "consultas.diagnostico-impuesto.*")]
+    [InlineData(true, "consultas.diagnostico-impuesto-express.*")]
+    public void La_cola_del_impuesto_tiene_su_comodin_y_no_el_del_lote(bool esExpress, string patron)
+    {
+        TrabajoConsultaDiagnostico.PatronImpuesto(esExpress).Should().Be(patron);
+        patron.Should().NotBe(TrabajoConsultaDiagnostico.Patron(esExpress));
+    }
+
     private static List<string> Claves(JsonElement objeto) => [.. objeto.EnumerateObject().Select(p => p.Name)];
 }

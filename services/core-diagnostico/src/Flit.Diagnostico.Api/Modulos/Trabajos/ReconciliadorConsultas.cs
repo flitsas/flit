@@ -72,7 +72,8 @@ internal sealed partial class ReconciliadorConsultas(
         var ahora = reloj.GetUtcNow();
         var umbrales = new UmbralesHuerfanas(
             ahora - o.Margen, ahora - o.TtlTrabajo - o.Margen,
-            pulso.UltimoAtendido(esExpress: false) - o.ToleranciaOrden, pulso.UltimoAtendido(esExpress: true) - o.ToleranciaOrden);
+            pulso.UltimoAtendido(ColaPulso.Lote) - o.ToleranciaOrden, pulso.UltimoAtendido(ColaPulso.Express) - o.ToleranciaOrden,
+            pulso.UltimoAtendido(ColaPulso.Impuesto) - o.ToleranciaOrden, pulso.UltimoAtendido(ColaPulso.ImpuestoExpress) - o.ToleranciaOrden);
         IReadOnlyList<CeldaHuerfana> huerfanas;
         await using (var scope = scopes.CreateAsyncScope())
             huerfanas = await scope.ServiceProvider.GetRequiredService<ColaConsultas>().BuscarHuerfanasAsync(umbrales, ahora, o.Maximo, ct).ConfigureAwait(false);

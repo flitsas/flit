@@ -57,6 +57,12 @@ internal sealed class OpcionesConsumidoresDiagnostico
 
     public ColaConsumidor Express { get; init; } = new(4, 8);
 
+    /// <summary>Impuesto en lote: 4 a la vez. Con el Express del impuesto suman 5.</summary>
+    public ColaConsumidor Impuesto { get; init; } = new(4, 8);
+
+    /// <summary>Impuesto en Express: uno a la vez, sin esperar detrás de los lotes.</summary>
+    public ColaConsumidor ImpuestoExpress { get; init; } = new(1, 2);
+
     public IReadOnlyList<string> ProductoresPermitidos { get; init; } = [ProductorDiagnostico];
 
     /// <summary>Lee y valida la sección; lanza <see cref="InvalidOperationException"/> si el servicio no debe arrancar.</summary>
@@ -79,6 +85,8 @@ internal sealed class OpcionesConsumidoresDiagnostico
             TiempoMaximoPorFuente = TiemposPorFuente(configuration),
             Lote = Cola(configuration, "Lote", new ColaConsumidor(8, 16)),
             Express = Cola(configuration, "Express", new ColaConsumidor(4, 8)),
+            Impuesto = Cola(configuration, "Impuesto", new ColaConsumidor(4, 8)),
+            ImpuestoExpress = Cola(configuration, "ImpuestoExpress", new ColaConsumidor(1, 2)),
             ProductoresPermitidos = productores.Count > 0 ? productores : [ProductorDiagnostico],
         };
     }

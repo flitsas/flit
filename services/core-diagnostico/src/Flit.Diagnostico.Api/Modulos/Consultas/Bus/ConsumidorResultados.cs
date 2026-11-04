@@ -70,7 +70,14 @@ internal sealed partial class ConsumidorResultados(
         // Dec. 6: marca de agua FIFO de la cola del trabajo (la del lote o la del Express), también si el resultado se descarta.
         var esExpress = await db.Set<CabeceraDiagnostico>().AsNoTracking()
             .Where(c => c.Id == celda.DiagnosticoId).Select(c => c.EsExpress).FirstOrDefaultAsync(ct).ConfigureAwait(false);
-        pulso.RegistrarAtendido(esExpress, data.TrabajoId);
+        var cola = (esExpress, celda.Fuente == Fuente.ImpuestoDepartamental) switch
+        {
+            (true, true) => ColaPulso.ImpuestoExpress,
+            (false, true) => ColaPulso.Impuesto,
+            (true, false) => ColaPulso.Express,
+            _ => ColaPulso.Lote,
+        };
+        pulso.RegistrarAtendido(cola, data.TrabajoId);
 
         if (celda.TrabajoId is null || celda.TrabajoId != data.TrabajoId)
         {

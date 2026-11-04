@@ -45,3 +45,11 @@ internal sealed class ConsumidorTrabajosLote(EjecutorTrabajo ejecutor, Publicado
 /// <summary>Cola <see cref="TrabajoConsultaDiagnostico.ColaExpress"/>: el Express, que no espera detrás de los lotes.</summary>
 internal sealed class ConsumidorTrabajosExpress(EjecutorTrabajo ejecutor, PublicadorResultado publicador, ILogger<ConsumidorTrabajosExpress> logger)
     : ConsumidorTrabajosDiagnostico(ejecutor, publicador, logger);
+
+/// <summary>Cola <see cref="TrabajoConsultaDiagnostico.ColaImpuesto"/>: el impuesto de los lotes, con concurrencia 4.</summary>
+internal sealed class ConsumidorTrabajosImpuesto(EjecutorTrabajo ejecutor, PublicadorResultado publicador, ILogger<ConsumidorTrabajosImpuesto> logger)
+    : ConsumidorTrabajosDiagnostico(ejecutor, publicador, logger);
+
+/// <summary>Cola <see cref="TrabajoConsultaDiagnostico.ColaImpuestoExpress"/>: el impuesto del Express, con concurrencia 1.</summary>
+internal sealed class ConsumidorTrabajosImpuestoExpress(EjecutorTrabajo ejecutor, PublicadorResultado publicador, ILogger<ConsumidorTrabajosImpuestoExpress> logger)
+    : ConsumidorTrabajosDiagnostico(ejecutor, publicador, logger);

@@ -58,6 +58,18 @@ public sealed record TrabajoConsultaDiagnostico(Guid TrabajoId, Guid ConsultaId,
     /// <summary>Cola aparte del Express (brecha 3), con su propio consumidor.</summary>
     public const string ColaExpress = "consultas.diagnostico-express";
 
+    /// <summary>Cola propia del impuesto en lote. No la ata <c>consultas.diagnostico.*</c>.</summary>
+    public const string ColaImpuesto = "consultas.diagnostico-impuesto";
+
+    /// <summary>Cola propia del impuesto en Express.</summary>
+    public const string ColaImpuestoExpress = "consultas.diagnostico-impuesto-express";
+
+    /// <summary>Prefijo de <see cref="ColaImpuesto"/>.</summary>
+    public const string PrefijoImpuesto = "consultas.diagnostico-impuesto";
+
+    /// <summary>Prefijo de <see cref="ColaImpuestoExpress"/>.</summary>
+    public const string PrefijoImpuestoExpress = "consultas.diagnostico-impuesto-express";
+
     /// <summary>Versión del sobre de este trabajo.</summary>
     public const int VersionContrato = 1;
 
@@ -66,4 +78,7 @@ public sealed record TrabajoConsultaDiagnostico(Guid TrabajoId, Guid ConsultaId,
     /// esa cola. En un exchange topic <c>diagnostico-express</c> es otra palabra, así que los lotes no reciben los del Express.
     /// </summary>
     public static string Patron(bool esExpress) => $"{(esExpress ? PrefijoExpress : Prefijo)}.*";
+
+    /// <summary>Comodín de la cola propia del impuesto, en lote o en Express.</summary>
+    public static string PatronImpuesto(bool esExpress) => $"{(esExpress ? PrefijoImpuestoExpress : PrefijoImpuesto)}.*";
 }

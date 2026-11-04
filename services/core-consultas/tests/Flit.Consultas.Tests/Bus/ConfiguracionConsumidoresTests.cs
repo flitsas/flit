@@ -67,6 +67,9 @@ public sealed class ConfiguracionConsumidoresTests
 
         (Numero(diagnostico, "Lote", "Concurrencia"), Numero(diagnostico, "Lote", "Prefetch")).Should().Be((8, 16));
         (Numero(diagnostico, "Express", "Concurrencia"), Numero(diagnostico, "Express", "Prefetch")).Should().Be((4, 8));
+        (Numero(diagnostico, "Impuesto", "Concurrencia"), Numero(diagnostico, "Impuesto", "Prefetch")).Should().Be((4, 8));
+        (Numero(diagnostico, "ImpuestoExpress", "Concurrencia"), Numero(diagnostico, "ImpuestoExpress", "Prefetch")).Should().Be((1, 2));
+        (Numero(diagnostico, "Impuesto", "Concurrencia") + Numero(diagnostico, "ImpuestoExpress", "Concurrencia")).Should().Be(5);
         diagnostico.GetProperty("ProductoresPermitidos").EnumerateArray().Select(p => p.GetString()).Should().Equal("diagnostico");
         consultas.GetProperty("Simulacion").GetProperty("Habilitada").GetBoolean().Should().BeFalse();
     }
@@ -79,7 +82,8 @@ public sealed class ConfiguracionConsumidoresTests
         var consumidores = app.Services.GetServices<IHostedService>().Select(s => s.GetType())
             .Where(t => t.IsGenericType && t.Name.StartsWith("PlatformConsumer", StringComparison.Ordinal)).ToList();
 
-        consumidores.Select(t => t.GetGenericArguments()[1]).Should().BeEquivalentTo([typeof(ConsumidorTrabajosLote), typeof(ConsumidorTrabajosExpress)]);
+        consumidores.Select(t => t.GetGenericArguments()[1]).Should().BeEquivalentTo(
+            [typeof(ConsumidorTrabajosLote), typeof(ConsumidorTrabajosExpress), typeof(ConsumidorTrabajosImpuesto), typeof(ConsumidorTrabajosImpuestoExpress)]);
         consumidores.Should().OnlyContain(t => t.GetGenericArguments()[2] == typeof(TrabajoConsultaDiagnostico));
     }
 

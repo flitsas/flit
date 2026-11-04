@@ -59,6 +59,8 @@ van en `definitions.json` con los **mismos argumentos** que declara el SDK: ning
 |---|---|---|
 | `consultas.diagnostico` | core-consultas | `consultas.diagnostico.*` |
 | `consultas.diagnostico-express` | core-consultas | `consultas.diagnostico-express.*` |
+| `consultas.diagnostico-impuesto` | core-consultas | `consultas.diagnostico-impuesto.*` |
+| `consultas.diagnostico-impuesto-express` | core-consultas | `consultas.diagnostico-impuesto-express.*` |
 | `diagnostico.consultas-resultados` | core-diagnostico | `consultas.resultado.diagnostico` |
 
 **Retención (U1 de ADR-0075, Ley 1581).** La política `dlq-7d` (prioridad 10) pone `message-ttl` de 7 días

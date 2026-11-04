@@ -21,7 +21,25 @@ public sealed record CeldaHuerfana(Guid Id, Guid TenantId, bool EsExpress);
 /// <param name="Vencido">Publicada antes de esto (ahora − TTL − margen): su mensaje ya venció en el broker.</param>
 /// <param name="PerdidasLote">Publicada antes de esto en la cola del lote (marca de agua − tolerancia): ya debió salir; null sin marca.</param>
 /// <param name="PerdidasExpress">Lo mismo en la cola del Express.</param>
-public sealed record UmbralesHuerfanas(DateTimeOffset Limite, DateTimeOffset Vencido, DateTimeOffset? PerdidasLote, DateTimeOffset? PerdidasExpress);
+public sealed record UmbralesHuerfanas(
+    DateTimeOffset Limite,
+    DateTimeOffset Vencido,
+    DateTimeOffset? PerdidasLote,
+    DateTimeOffset? PerdidasExpress,
+    DateTimeOffset? PerdidasImpuesto = null,
+    DateTimeOffset? PerdidasImpuestoExpress = null)
+{
+    /// <summary>
+    /// Marca de la cola de la celda. El avance del lote general no declara perdido un impuesto, ni al revés.
+    /// </summary>
+    public DateTimeOffset? De(bool esExpress, bool esImpuesto) => (esImpuesto, esExpress) switch
+    {
+        (true, true) => PerdidasImpuestoExpress,
+        (true, false) => PerdidasImpuesto,
+        (false, true) => PerdidasExpress,
+        _ => PerdidasLote,
+    };
+}
 
 /// <summary>
 /// Búsqueda de las celdas huérfanas de TODAS las empresas para el reconciliador (ADR-0075, D3, 6r-i; enmienda la excepción A11
@@ -48,6 +66,7 @@ internal sealed class ColaConsultas(DiagnosticoDb db)
 {
     private static readonly string Pendiente = CodigosDeEnum.Codigo(EstadoCelda.Pendiente);
     private static readonly string EnCurso = CodigosDeEnum.Codigo(EstadoCelda.EnCurso);
+    private static readonly string Impuesto = CodigosDeEnum.Codigo(Fuente.ImpuestoDepartamental);
 
     // Los códigos de estado van como literales (constantes del enum, no entrada de usuario) para que el planificador pueda
     // usar el índice parcial ix_cola, cuyo predicado es estado IN ('PENDIENTE', 'EN_CURSO').
@@ -60,7 +79,12 @@ internal sealed class ColaConsultas(DiagnosticoDb db)
           AND (c.trabajo_id IS NULL
                OR (c.disponible_desde < @limite
                    AND (c.disponible_desde < @vencido
-                        OR c.disponible_desde < (CASE WHEN d.es_express THEN @perdidas_express ELSE @perdidas_lote END))))
+                        OR c.disponible_desde < (CASE
+                             WHEN c.fuente = '{Impuesto}' AND d.es_express THEN @perdidas_impuesto_express
+                             WHEN c.fuente = '{Impuesto}' THEN @perdidas_impuesto
+                             WHEN d.es_express THEN @perdidas_express
+                             ELSE @perdidas_lote
+                           END))))
         ORDER BY c.disponible_desde, c.id
         LIMIT @maximo
         """;
@@ -86,6 +110,8 @@ internal sealed class ColaConsultas(DiagnosticoDb db)
             // Sin marca de agua (null) la comparación da NULL: ninguna celda de esa cola cuenta como perdida.
             consulta.Parameters.Add(new NpgsqlParameter("perdidas_lote", NpgsqlDbType.TimestampTz) { Value = (object?)umbrales.PerdidasLote?.ToUniversalTime() ?? DBNull.Value });
             consulta.Parameters.Add(new NpgsqlParameter("perdidas_express", NpgsqlDbType.TimestampTz) { Value = (object?)umbrales.PerdidasExpress?.ToUniversalTime() ?? DBNull.Value });
+            consulta.Parameters.Add(new NpgsqlParameter("perdidas_impuesto", NpgsqlDbType.TimestampTz) { Value = (object?)umbrales.PerdidasImpuesto?.ToUniversalTime() ?? DBNull.Value });
+            consulta.Parameters.Add(new NpgsqlParameter("perdidas_impuesto_express", NpgsqlDbType.TimestampTz) { Value = (object?)umbrales.PerdidasImpuestoExpress?.ToUniversalTime() ?? DBNull.Value });
             consulta.Parameters.AddWithValue("ahora", ahora.ToUniversalTime());
             consulta.Parameters.AddWithValue("maximo", maximo);
             var huerfanas = new List<CeldaHuerfana>();

@@ -69,6 +69,12 @@ public sealed record TrabajoConsultaDiagnostico(Guid TrabajoId, Guid ConsultaId,
     /// <summary>Prefijo de la llave de los trabajos del Express (cola aparte <c>consultas.diagnostico-express</c>).</summary>
     public const string PrefijoExpress = "consultas.diagnostico-express";
 
+    /// <summary>Prefijo de la cola propia del impuesto en lote (concurrencia 4).</summary>
+    public const string PrefijoImpuesto = "consultas.diagnostico-impuesto";
+
+    /// <summary>Prefijo de la cola propia del impuesto en Express (concurrencia 1).</summary>
+    public const string PrefijoImpuestoExpress = "consultas.diagnostico-impuesto-express";
+
     /// <summary>Versión del sobre de este trabajo.</summary>
     public const int VersionContrato = 1;
 
@@ -76,7 +82,15 @@ public sealed record TrabajoConsultaDiagnostico(Guid TrabajoId, Guid ConsultaId,
     public static string Clave(string fuente, bool esExpress)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(fuente);
-        return $"{(esExpress ? PrefijoExpress : Prefijo)}.{fuente}";
+        var impuesto = string.Equals(fuente, FuentesBus.Impuesto, StringComparison.Ordinal);
+        var prefijo = (esExpress, impuesto) switch
+        {
+            (true, true) => PrefijoImpuestoExpress,
+            (false, true) => PrefijoImpuesto,
+            (true, false) => PrefijoExpress,
+            _ => Prefijo,
+        };
+        return $"{prefijo}.{fuente}";
     }
 
     /// <summary>El trabajo de la celda <paramref name="consultaId"/> con la solicitud en proto-JSON (<see cref="JsonFormatter"/>).</summary>

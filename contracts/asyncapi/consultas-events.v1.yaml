@@ -61,10 +61,36 @@ channels:
       message:
         $ref: '#/components/messages/TrabajoConsultaDiagnostico'
 
+  consultas.diagnostico-impuesto.impuesto:
+    description: |
+      Trabajo de impuesto de un lote. Va a la cola `consultas.diagnostico-impuesto` (concurrencia 4), no a
+      `consultas.diagnostico.*`. El mismo sobre que el resto de las fuentes.
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.consultas, type: topic, durable: true, autoDelete: false, vhost: flit }
+    publish:
+      operationId: trabajoConsultaImpuesto
+      message:
+        $ref: '#/components/messages/TrabajoConsultaDiagnostico'
+
+  consultas.diagnostico-impuesto-express.impuesto:
+    description: |
+      Trabajo de impuesto de un Express. Va a `consultas.diagnostico-impuesto-express` (concurrencia 1).
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.consultas, type: topic, durable: true, autoDelete: false, vhost: flit }
+    publish:
+      operationId: trabajoConsultaImpuestoExpress
+      message:
+        $ref: '#/components/messages/TrabajoConsultaDiagnostico'
+
   consultas.diagnostico-express.{fuente}:
     description: |
       El mismo trabajo para un Diagnóstico Express (la cabecera tiene `es_express`). Va a la cola aparte
       `consultas.diagnostico-express`, con su propio consumidor, para no esperar detrás de los lotes.
+      El impuesto no usa este canal: va a `consultas.diagnostico-impuesto-express.impuesto`.
     parameters:
       fuente:
         $ref: '#/components/parameters/FuenteDiagnostico'

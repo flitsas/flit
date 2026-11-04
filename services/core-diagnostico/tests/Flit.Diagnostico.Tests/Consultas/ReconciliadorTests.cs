@@ -35,7 +35,11 @@ namespace Flit.Diagnostico.Tests.Consultas;
 /// </example>
 public sealed class ReconciliadorTests
 {
-    private static readonly string[] ColasPrincipales = [BrokerDePrueba.ColaLote, BrokerDePrueba.ColaExpress, BrokerDePrueba.ColaResultados];
+    private static readonly string[] ColasPrincipales =
+    [
+        BrokerDePrueba.ColaLote, BrokerDePrueba.ColaExpress, BrokerDePrueba.ColaResultados,
+        "consultas.diagnostico-impuesto", "consultas.diagnostico-impuesto-express",
+    ];
 
     [Fact]
     public void Las_opciones_por_defecto_son_las_del_diseno_y_se_validan()
@@ -70,6 +74,16 @@ public sealed class ReconciliadorTests
     }
 
     [Fact]
+    public void La_marca_del_lote_general_no_declara_perdido_al_impuesto()
+    {
+        var ahora = DateTimeOffset.Parse("2026-11-04T15:00:00Z");
+        var umbrales = new UmbralesHuerfanas(ahora, ahora, ahora.AddMinutes(20), null, null, ahora.AddMinutes(20));
+        umbrales.De(esExpress: false, esImpuesto: true).Should().BeNull("sin marca propia el impuesto espera");
+        umbrales.De(esExpress: false, esImpuesto: false).Should().Be(ahora.AddMinutes(20));
+        umbrales.De(esExpress: true, esImpuesto: true).Should().Be(ahora.AddMinutes(20));
+    }
+
+    [Fact]
     public void El_pulso_dice_si_llego_algun_resultado_en_la_ventana()
     {
         var pulso = new PulsoConsultas();
@@ -100,6 +114,9 @@ public sealed class ReconciliadorTests
 
         pulso.UltimoAtendido(esExpress: false).Should().Be(t0.AddMinutes(5));
         pulso.UltimoAtendido(esExpress: true).Should().BeNull("la del Express es aparte");
+        pulso.RegistrarAtendido(ColaPulso.Impuesto, Guid.CreateVersion7(t0.AddMinutes(40)));
+        pulso.UltimoAtendido(ColaPulso.Impuesto).Should().Be(t0.AddMinutes(40));
+        pulso.UltimoAtendido(ColaPulso.Lote).Should().Be(t0.AddMinutes(5), "el avance del impuesto no mueve la cola general");
         PulsoConsultas.PublicadoEn(Guid.CreateVersion7(t0)).Should().Be(t0);
         PulsoConsultas.PublicadoEn(Guid.NewGuid()).Should().BeNull();
     }

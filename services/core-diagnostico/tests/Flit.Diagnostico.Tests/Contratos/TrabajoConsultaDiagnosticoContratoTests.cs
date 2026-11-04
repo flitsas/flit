@@ -18,9 +18,8 @@ namespace Flit.Diagnostico.Tests.Contratos;
 /// HU #13727 (ADR-0075, U1 = b) — contrato del trabajo <c>consultas.diagnostico[-express].{fuente}</c>
 /// (<c>contracts/asyncapi/consultas-events.v1.yaml</c>): el <c>data</c> que publica <see cref="PublicadorCeldas"/> coincide en
 /// claves y formato con el fixture compartido <c>contracts/fixtures/bus/trabajo-consulta-diagnostico.v1.json</c>, y viaja en
-/// claro pero sin nombres ni direcciones: con el RUNT simulado (propietario «LEASING FICTICIO SA», locatario «LOCATARIO PRUEBA
-/// DOS», propietario natural «PERSONA PRUEBA UNO»; las respuestas de prueba no traen direcciones) ninguno de esos valores, ni
-/// una clave de nombre, razón social, dirección o contacto, aparece en ningún trabajo de ninguna fuente. PostgreSQL real.
+/// claro pero sin nombres ni direcciones de persona, salvo el nombre del propietario que el impuesto envía a propósito
+/// (P9) junto con el nombre del organismo y del departamento. El resto de las fuentes no los lleva. PostgreSQL real.
 /// </summary>
 /// <example>
 /// <code>
@@ -49,6 +48,10 @@ public sealed class TrabajoConsultaDiagnosticoContratoTests
         JsonNode.DeepEquals(data, esperado).Should().BeTrue($"el data {data.ToJsonString()} es el del fixture {esperado.ToJsonString()}");
         fixture["type"]!.GetValue<string>().Should().Be(TrabajoConsultaDiagnostico.Clave(FuentesBus.Runt, esExpress: false));
         TrabajoConsultaDiagnostico.Clave(FuentesBus.Runt, esExpress: true).Should().Be("consultas.diagnostico-express.runt");
+        TrabajoConsultaDiagnostico.Clave(FuentesBus.Impuesto, esExpress: false).Should().Be("consultas.diagnostico-impuesto.impuesto");
+        TrabajoConsultaDiagnostico.Clave(FuentesBus.Impuesto, esExpress: true).Should().Be("consultas.diagnostico-impuesto-express.impuesto");
+        TrabajoConsultaDiagnostico.Clave(FuentesBus.Impuesto, esExpress: false)
+            .StartsWith(TrabajoConsultaDiagnostico.Prefijo + ".", StringComparison.Ordinal).Should().BeFalse("la cola general no recibe el impuesto");
         fixture["producer"]!.GetValue<string>().Should().Be("diagnostico");
     }
 
@@ -86,9 +89,18 @@ public sealed class TrabajoConsultaDiagnosticoContratoTests
                 FuentesBus.SimitPropietario, FuentesBus.SimitLocatario, FuentesBus.Avaluo, FuentesBus.Impuesto], "hay trabajos de todas las fuentes");
         foreach (var trabajo in trabajos)
         {
+            var impuesto = trabajo.Data.GetProperty("fuente").GetString() == FuentesBus.Impuesto;
             foreach (var nombre in Nombres)
+            {
+                if (impuesto && nombre == "PERSONA PRUEBA UNO")
+                    continue;
                 trabajo.Payload.Should().NotContainEquivalentOf(nombre);
-            Claves(JsonNode.Parse(trabajo.Payload)!).Should().NotContain(c => ClavesProhibidas.Any(p => c.Contains(p, StringComparison.OrdinalIgnoreCase)));
+            }
+
+            var claves = Claves(JsonNode.Parse(trabajo.Payload)!);
+            if (impuesto)
+                claves = claves.Where(c => c is not ("propietarioNombre" or "organismoNombre" or "departamentoNombre"));
+            claves.Should().NotContain(c => ClavesProhibidas.Any(p => c.Contains(p, StringComparison.OrdinalIgnoreCase)));
         }
     }
 

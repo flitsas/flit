@@ -24,6 +24,15 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 /// if (pulso.UltimoAtendido(esExpress: false) is { } marca &amp;&amp; marca &gt; celda.DisponibleDesde + tolerancia) { /* perdida */ }
 /// </code>
 /// </example>
+/// <summary>Cola cuya marca de agua usa el reconciliador. El impuesto no comparte la del lote general.</summary>
+public enum ColaPulso
+{
+    Lote,
+    Express,
+    Impuesto,
+    ImpuestoExpress,
+}
+
 public sealed class PulsoConsultas
 {
     /// <summary>Ticks UTC del último resultado; 0 si no llegó ninguno.</summary>
@@ -34,6 +43,12 @@ public sealed class PulsoConsultas
 
     /// <summary>Lo mismo para la cola del Express.</summary>
     private long _atendidoExpress;
+
+    /// <summary>Lo mismo para la cola propia del impuesto en lote.</summary>
+    private long _atendidoImpuesto;
+
+    /// <summary>Lo mismo para la cola propia del impuesto en Express.</summary>
+    private long _atendidoImpuestoExpress;
 
     /// <summary>Cuándo llegó el último resultado; null si no llegó ninguno desde que arrancó el proceso.</summary>
     public DateTimeOffset? UltimoResultado => Leer(ref _ultimo);
@@ -48,14 +63,21 @@ public sealed class PulsoConsultas
     /// Marca que core-consultas devolvió el resultado del trabajo <paramref name="trabajoId"/> de la cola del lote o del Express (se
     /// queda con la publicación más reciente). Un id que no es UUIDv7 no la mueve.
     /// </summary>
-    public void RegistrarAtendido(bool esExpress, Guid trabajoId)
+    public void RegistrarAtendido(bool esExpress, Guid trabajoId) =>
+        RegistrarAtendido(esExpress ? ColaPulso.Express : ColaPulso.Lote, trabajoId);
+
+    /// <summary>Marca el trabajo atendido en su cola. La del impuesto no mueve la del lote general.</summary>
+    public void RegistrarAtendido(ColaPulso cola, Guid trabajoId)
     {
         if (PublicadoEn(trabajoId) is { } publicado)
-            Subir(ref Marca(esExpress), publicado.UtcTicks);
+            Subir(ref Marca(cola), publicado.UtcTicks);
     }
 
     /// <summary>Publicación del trabajo atendido más reciente de esa cola; null si esta réplica no vio ninguno.</summary>
-    public DateTimeOffset? UltimoAtendido(bool esExpress) => Leer(ref Marca(esExpress));
+    public DateTimeOffset? UltimoAtendido(bool esExpress) => UltimoAtendido(esExpress ? ColaPulso.Express : ColaPulso.Lote);
+
+    /// <summary>Publicación del trabajo atendido más reciente de <paramref name="cola"/>.</summary>
+    public DateTimeOffset? UltimoAtendido(ColaPulso cola) => Leer(ref Marca(cola));
 
     /// <summary>
     /// El instante de publicación que lleva un <c>trabajo_id</c> UUIDv7 (los 48 bits altos: milisegundos Unix, RFC 9562); null si no
@@ -71,7 +93,20 @@ public sealed class PulsoConsultas
         return DateTimeOffset.FromUnixTimeMilliseconds(ms);
     }
 
-    private ref long Marca(bool esExpress) => ref esExpress ? ref _atendidoExpress : ref _atendidoLote;
+    private ref long Marca(ColaPulso cola)
+    {
+        switch (cola)
+        {
+            case ColaPulso.Express:
+                return ref _atendidoExpress;
+            case ColaPulso.Impuesto:
+                return ref _atendidoImpuesto;
+            case ColaPulso.ImpuestoExpress:
+                return ref _atendidoImpuestoExpress;
+            default:
+                return ref _atendidoLote;
+        }
+    }
 
     private static DateTimeOffset? Leer(ref long campo) =>
         Interlocked.Read(ref campo) is var ticks and > 0 ? new DateTimeOffset(ticks, TimeSpan.Zero) : null;

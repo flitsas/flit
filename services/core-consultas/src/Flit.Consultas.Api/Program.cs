@@ -90,6 +90,12 @@ public static class Program
         builder.Services.AddFlitConsumer<ConsultasDb, Bus.ConsumidorTrabajosExpress, Bus.TrabajoConsultaDiagnostico>(
             builder.Configuration, Bus.TrabajoConsultaDiagnostico.ColaExpress, ServicioSettings.Codigo, [Bus.TrabajoConsultaDiagnostico.Patron(esExpress: true)],
             o => consumidores.Express.Aplicar(o, consumidores.ProductoresPermitidos));
+        builder.Services.AddFlitConsumer<ConsultasDb, Bus.ConsumidorTrabajosImpuesto, Bus.TrabajoConsultaDiagnostico>(
+            builder.Configuration, Bus.TrabajoConsultaDiagnostico.ColaImpuesto, ServicioSettings.Codigo, [Bus.TrabajoConsultaDiagnostico.PatronImpuesto(esExpress: false)],
+            o => consumidores.Impuesto.Aplicar(o, consumidores.ProductoresPermitidos));
+        builder.Services.AddFlitConsumer<ConsultasDb, Bus.ConsumidorTrabajosImpuestoExpress, Bus.TrabajoConsultaDiagnostico>(
+            builder.Configuration, Bus.TrabajoConsultaDiagnostico.ColaImpuestoExpress, ServicioSettings.Codigo, [Bus.TrabajoConsultaDiagnostico.PatronImpuesto(esExpress: true)],
+            o => consumidores.ImpuestoExpress.Aplicar(o, consumidores.ProductoresPermitidos));
 
         // HU #13520: fuentes de Gestión de Comparendos (separadas de ConsultarMultas). Verifik SIMIT con las mismas
         // credenciales de Trámites; el simulado solo en DEV (Development o Consultations:ComparendosSimulados=true).
