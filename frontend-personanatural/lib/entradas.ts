@@ -11,8 +11,26 @@ export const normalizarVin = (valor: string): string => valor.toUpperCase().repl
 /** Radicado: letras, números y guion en mayúsculas (los códigos del portal y los números de FLIT 2). */
 export const normalizarRadicado = (valor: string): string => valor.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 40);
 
+/** Segundo campo de «Consultar mi trámite»: admite radicado o cédula mientras se escribe. */
+export const normalizarRadicadoOCedula = (valor: string): string => valor.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 40);
+
 export const CEDULA_MINIMA = 6;
 export const cedulaValida = (cedula: string): boolean => cedula.length >= CEDULA_MINIMA;
 export const placaValida = (placa: string): boolean => /^[A-Z0-9]{5,6}$/.test(placa);
+
+/**
+ * Clasifica el segundo campo del diseño UI: con letra o guion → radicado; solo dígitos → cédula.
+ * Devuelve null si aún no es usable.
+ */
+export function clasificarRadicadoOCedula(valor: string): { radicado: string } | { cedula: string } | null {
+  const limpio = valor.trim();
+  if (!limpio) return null;
+  if (/[A-Za-z-]/.test(limpio)) {
+    const radicado = normalizarRadicado(limpio);
+    return radicado.length > 0 ? { radicado } : null;
+  }
+  const cedula = soloDigitos(limpio);
+  return cedulaValida(cedula) ? { cedula } : null;
+}
 export const vinValido = (vin: string): boolean => /^[A-Z0-9]{11,30}$/.test(vin);
 export const correoValido = (correo: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo.trim());

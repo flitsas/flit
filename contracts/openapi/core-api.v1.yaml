@@ -13610,6 +13610,31 @@ paths:
         "401": { description: Sin sesión. }
         "403": { description: No es Super Admin. }
         "404": { description: organismo_no_existe (inexistente o inactivo). }
+  /api/v1/admin/plataforma/persona-natural/organismos/{organismoId}/canal-punto:
+    put:
+      operationId: adminPnCanalPuntoSet
+      tags: [Admin · Plataforma · Persona Natural]
+      summary: Encender o apagar el canal del punto de atención — HU #14216, Épica #14186
+      description: >
+        Escribe admin.persona_natural_point_channel. No modifica is_enabled del grant del portal
+        (admin.tenant_transit_office_grants). Encender exige que el organismo sea operable en FLIT (la misma regla que
+        habilitarlo para el portal). Apagar un canal ya apagado responde 204. 404 si el organismo no existe o está inactivo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: organismoId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PersonaNaturalCanalPuntoRequest" }
+      responses:
+        "204": { description: Aplicado. }
+        "400": { description: encendido_obligatorio. }
+        "401": { description: Sin sesión. }
+        "403": { description: No es Super Admin. }
+        "404": { description: organismo_no_existe (inexistente o inactivo). }
+        "422": { description: organismo_no_operable — no está activo en FLIT. }
   /api/v1/admin/plataforma/persona-natural/tipos:
     get:
       operationId: adminPnTiposList
@@ -20785,7 +20810,13 @@ components:
         departamento: { type: string }
         habilitado: { type: boolean }
         tiposConTarifaVigente: { type: integer, description: Tipos ofrecibles con derechos de tránsito y servicio FLIT vigentes en este organismo hoy. }
-      required: [id, codigo, nombre, habilitado, tiposConTarifaVigente]
+        canalPuntoEncendido: { type: boolean, description: "Canal del punto de atención (HU #14216). Independiente de habilitado." }
+      required: [id, codigo, nombre, habilitado, tiposConTarifaVigente, canalPuntoEncendido]
+    PersonaNaturalCanalPuntoRequest:
+      type: object
+      properties:
+        encendido: { type: boolean }
+      required: [encendido]
     PersonaNaturalTipo:
       type: object
       properties:

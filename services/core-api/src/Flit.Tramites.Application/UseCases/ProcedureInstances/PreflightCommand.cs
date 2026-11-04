@@ -842,8 +842,9 @@ public sealed class RunPreflightHandler(
         var provider = registry.Resolve(providerKey);
         if (provider is null)
         {
-            checks.Add(new PreflightCheckDto(fallbackKey, fallbackLabel, "error", providerKey,
-                "No fue posible verificar la información de comparendos en este momento. Vuelve a intentarlo en unos minutos."));
+            // warn (no error): SIMIT/comparendos caído o no cableado no bloquea el trámite.
+            checks.Add(new PreflightCheckDto(fallbackKey, fallbackLabel, "warn", providerKey,
+                "No fue posible verificar la información de comparendos en este momento. Puedes continuar y reintentar más tarde."));
             return;
         }
 
@@ -902,8 +903,17 @@ public sealed class RunPreflightHandler(
         catch (Exception)
         {
             var key = keyPrefix ?? "provider";
-            checks.Add(new PreflightCheckDto(key, "Consulta no disponible", "error", provider.Key,
-                "No fue posible verificar la información en este momento. Vuelve a intentarlo en unos minutos."));
+            // Comparendos/SIMIT caídos: warn (no bloquea). RUNT/vehículo u otros: error (bloqueo duro).
+            var esComparendos = keyPrefix is not null
+                && keyPrefix.StartsWith("simit_", StringComparison.OrdinalIgnoreCase);
+            checks.Add(new PreflightCheckDto(
+                key,
+                "Consulta no disponible",
+                esComparendos ? "warn" : "error",
+                provider.Key,
+                esComparendos
+                    ? "No fue posible verificar la información de comparendos en este momento. Puedes continuar y reintentar más tarde."
+                    : "No fue posible verificar la información en este momento. Vuelve a intentarlo en unos minutos."));
             return [];
         }
     }

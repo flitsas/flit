@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using Flit.PersonaNatural.Api.Adjuntos;
+using Flit.PersonaNatural.Api.Consultas;
 using Flit.PersonaNatural.Api.Persistence;
 using Flit.PersonaNatural.Api.Pii;
 using Flit.PersonaNatural.Api.Radicacion;
@@ -80,6 +81,7 @@ public sealed class RadicacionTests : IAsyncLifetime
         var s = await db.Set<SolicitudTramite>().SingleAsync(TestContext.Current.CancellationToken);
         s.Estado.Should().Be("en_cola");
         s.IdempotencyKey.Should().Be("k-1");
+        Flit.PersonaNatural.Api.Solicitudes.DatosSolicitud.Leer(s.Datos).OrganismoVerificadoId.Should().BeEquivalentTo(PortalHost.Organismo, "se radicó con el organismo verificado contra el RUNT");
         (await db.Set<HistorialEstado>().Where(h => h.Hasta == "en_cola").CountAsync(TestContext.Current.CancellationToken)).Should().Be(1);
         var evento = await db.Set<OutboxMessage>().SingleAsync(TestContext.Current.CancellationToken);
         evento.RoutingKey.Should().Be("tramites.persona_natural.radicacion_solicitada");
@@ -435,13 +437,133 @@ public sealed class RadicacionTests : IAsyncLifetime
             _host.Logs.Mensajes.Should().NotContain(m => m.Contains(Vendedor) || m.Contains("secreto") || m.Contains("Persona de Prueba"));
     }
 
+
+    // ── Canal del punto (OT): misma radicación que el portal web ─────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task UnBorradorDelPunto_SeRadicaConLaMismaRadicacion_Encola_YConservaLaMarcaDeCanalAunqueSeGuardeComercial()
+    {
+        await IniciarAsync();
+        var (id, token) = await Completa(conComprobante: false, canalPunto: true);
+
+        var r = await Radicar(id, token, "k-punto");
+
+        r.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        await using var db = _host.NuevaDb();
+        var s = await db.Set<SolicitudTramite>().SingleAsync(TestContext.Current.CancellationToken);
+        s.Estado.Should().Be("en_cola");
+        (await db.Set<OutboxMessage>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(1);
+        using var datos = JsonDocument.Parse(s.Datos);
+        datos.RootElement.GetProperty("canal").GetString().Should().Be("pn_punto", "guardar comercial no puede borrar el canal del punto");
+        datos.RootElement.GetProperty("comercial").ValueKind.Should().Be(JsonValueKind.Object);
+    }
+
+    [Fact]
+    public async Task UnBorradorWeb_NoLlevaMarcaDeCanal_YSigueRadicandoIgual()
+    {
+        await IniciarAsync();
+        var (id, token) = await Completa();
+
+        (await Radicar(id, token, "k-web")).StatusCode.Should().Be(HttpStatusCode.Accepted);
+        await using var db = _host.NuevaDb();
+        var s = await db.Set<SolicitudTramite>().SingleAsync(TestContext.Current.CancellationToken);
+        s.Datos.Should().NotContain("canal").And.NotContain("organismoId");
+    }
+
+    [Fact]
+    public async Task UnBorradorDelPunto_ConModoDePruebasSinIdentidad_RadicaAunqueLasPartesNoValidaron()
+    {
+        _host = await PortalHost.IniciarAsync("pnradp", (servicios, _) =>
+        {
+            servicios.AddSingleton<IAlmacenAdjuntos>(_almacen);
+        }, ("Identidad:ExigirAlRadicar", "true"), ("TestEnvironment", "Development"), ("PersonaNatural:Pruebas:OmitirIdentidad", "true"));
+        _iniciado = true;
+        _host.Definiciones.PorCodigo["TRASPASO_STANDARD"] = DefinicionesDePrueba.Traspaso();
+        var (id, token) = await Completa(validar: false, canalPunto: true);
+
+        (await Radicar(id, token, "k-punto-pruebas")).StatusCode.Should().Be(HttpStatusCode.Accepted);
+    }
+
+    [Fact]
+    public async Task UnBorradorDelPunto_SinOmitirIdentidad_SigueBloqueadoPorLaCompuerta()
+    {
+        await IniciarAsync(null, ("Identidad:ExigirAlRadicar", "true"));
+        var (id, token) = await Completa(validar: false, canalPunto: true);
+
+        (await Radicar(id, token, "k-punto-409")).StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    // ── Decisión de prenda obligatoria con gravamen en el RUNT ───────────────────────────────────────────────────────
+
+    private async Task<(Guid Id, string Token)> ConGravamenEnElRunt(bool gravamen, object? prenda)
+    {
+        await IniciarAsync();
+        _host.Definiciones.PorCodigo["TRASPASO_STANDARD"] = DefinicionesDePrueba.Traspaso() with
+        {
+            Flags = DefinicionesDePrueba.Traspaso().Flags with { PermitePrendaComplementaria = true },
+        };
+        _host.Runt.Vehiculo = () =>
+        {
+            var r = ResultadosFalsos.VehiculoCompleto(prenda: gravamen);
+            r.Campos.First(c => c.Clave == "transit_office_name").ValorTexto = "Tránsito de Prueba";
+            return r;
+        };
+        var (id, token) = await Completa();
+        if (prenda is not null)
+            (await _host.EnviarAsync(HttpMethod.Put, $"{Base}/solicitudes/{id}/comercial", new { valorComercial = 45_000_000, prenda }, token)).StatusCode.Should().Be(HttpStatusCode.OK);
+        return (id, token);
+    }
+
+    [Fact]
+    public async Task ConGravamenEnElRunt_SinDecision_NoRadica_422PrendaDecisionRequerida()
+    {
+        var (id, token) = await ConGravamenEnElRunt(gravamen: true, prenda: null);
+
+        var r = await Radicar(id, token, "k-prenda");
+
+        r.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        var json = (await PortalHost.JsonAsync(r)).RootElement;
+        json.GetProperty("code").GetString().Should().Be("prenda_decision_requerida");
+        json.GetProperty("referencia").GetString().Should().Be("prenda.decision");
+        json.GetProperty("detail").GetString().Should().Be("El RUNT reporta prenda o gravamen: elige qué se hará con ella para continuar.");
+    }
+
+    [Theory]
+    [InlineData("sin_prenda", false)]
+    [InlineData("levantar", true)]
+    public async Task ConGravamenEnElRunt_ConDecision_Radica(string decision, bool tienePrenda)
+    {
+        var (id, token) = await ConGravamenEnElRunt(gravamen: true, prenda: new { tienePrenda, decision });
+
+        (await Radicar(id, token, "k-prenda-ok")).StatusCode.Should().Be(HttpStatusCode.Accepted);
+    }
+
+    [Fact]
+    public async Task SinGravamenEnElRunt_NoExigeDecision_Radica()
+    {
+        var (id, token) = await ConGravamenEnElRunt(gravamen: false, prenda: null);
+
+        (await Radicar(id, token, "k-sin-gravamen")).StatusCode.Should().Be(HttpStatusCode.Accepted);
+    }
+
+    [Fact]
+    public async Task ConRuntCaido_AlRadicar_ConservaElErrorDeProveedor_NoDecideEnFalso()
+    {
+        var (id, token) = await ConGravamenEnElRunt(gravamen: true, prenda: null);
+        _host.Runt.Falla = new ProveedorNoDisponibleException("caído");
+
+        var r = await Radicar(id, token, "k-caido");
+
+        r.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+    }
+
     // ── Soporte ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
     private Task<HttpResponseMessage> Radicar(Guid id, string? token, string? llave) =>
         _host.EnviarAsync(HttpMethod.Post, $"{Base}/solicitudes/{id}/radicar", null, token, false, llave is null ? Array.Empty<(string, string)>() : [("Idempotency-Key", llave)]);
 
     /// <summary>Un borrador de traspaso listo para radicar: partes, campos, valor comercial, documentos y comprobante.</summary>
-    private async Task<(Guid Id, string Token)> Completa(bool conComprobante = true, bool conKm = true, bool validar = true)
+    private async Task<(Guid Id, string Token)> Completa(bool conComprobante = true, bool conKm = true, bool validar = true, bool canalPunto = false)
     {
         var r = await _host.EnviarAsync(HttpMethod.Post, $"{Base}/sesiones",
             new { tipoCodigo = "TRASPASO_STANDARD", organismoId = PortalHost.Organismo, cedula = PortalHost.Cedula, placa = "ABC123", consentimiento = true }, captcha: true);
@@ -449,6 +571,15 @@ public sealed class RadicacionTests : IAsyncLifetime
         var json = (await PortalHost.JsonAsync(r)).RootElement;
         var id = json.GetProperty("solicitudId").GetGuid();
         var token = json.GetProperty("token").GetString()!;
+
+        if (canalPunto)
+        {
+            // Igual que AbrirBorradorDesdePunto: marca el canal en datos antes de que el punto siga completando el borrador.
+            await using var dbPunto = _host.NuevaDb();
+            var sol = await dbPunto.Set<SolicitudTramite>().SingleAsync(x => x.Id == id, TestContext.Current.CancellationToken);
+            sol.Datos = "{\"canal\":\"pn_punto\",\"codigoOrganismo\":\"OT-1\",\"organismoId\":\"" + sol.OrganismoId + "\"}";
+            await dbPunto.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
 
         (await _host.EnviarAsync(HttpMethod.Patch, $"{Base}/solicitudes/{id}/actores", new
         {

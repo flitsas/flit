@@ -240,6 +240,7 @@ Flit.Admin.Application.Plataforma.Mandatos.IMandateTemplateStorage => Flit.Infra
 Flit.Admin.Application.Plataforma.Notificaciones.INotificationChannelsAdminService => Flit.Infrastructure.Notifications.Admin.NotificationChannelsAdminService (Scoped)
 Flit.Admin.Application.Plataforma.Notificaciones.INotificationTestMailboxAdminService => Flit.Infrastructure.Notifications.Admin.NotificationTestMailboxAdminService (Scoped)
 Flit.Admin.Application.Plataforma.Notificaciones.INotificationTestSendAdminService => Flit.Infrastructure.Notifications.Admin.NotificationTestSendAdminService (Scoped)
+Flit.Admin.Application.Plataforma.PersonaNatural.CanalPuntoPnHandler => Flit.Admin.Application.Plataforma.PersonaNatural.CanalPuntoPnHandler (Scoped)
 Flit.Admin.Application.Plataforma.PersonaNatural.ContenidoPnHandler => Flit.Admin.Application.Plataforma.PersonaNatural.ContenidoPnHandler (Scoped)
 Flit.Admin.Application.Plataforma.PersonaNatural.HistorialTarifaPnHandler => Flit.Admin.Application.Plataforma.PersonaNatural.HistorialTarifaPnHandler (Scoped)
 Flit.Admin.Application.Plataforma.PersonaNatural.ListarTarifasPnHandler => Flit.Admin.Application.Plataforma.PersonaNatural.ListarTarifasPnHandler (Scoped)

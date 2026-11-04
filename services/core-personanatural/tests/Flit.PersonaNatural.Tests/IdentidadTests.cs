@@ -39,6 +39,66 @@ public sealed class IdentidadTests : IdentidadBase
     }
 
     [Fact]
+    public async Task Web_Solicitar_NoExponeCapturaUrl_AunqueLaFachadaLaDevuelva()
+    {
+        if (!await IniciarAsync()) return;
+        Fachada.CapturaSiempre = true;
+        var (solicitud, token) = await SembrarAsync();
+
+        var r = await SolicitarAsync(solicitud, token, "vendedor");
+
+        r.StatusCode.Should().Be(HttpStatusCode.OK);
+        var cuerpo = await Json(r);
+        (cuerpo.TryGetProperty("capturaUrl", out var url) ? url.ValueKind : System.Text.Json.JsonValueKind.Null)
+            .Should().Be(System.Text.Json.JsonValueKind.Null, "el portal web recibe el enlace solo por correo");
+    }
+
+    [Fact]
+    public async Task Web_Reenviar_SinEnlaceTodavia_NoExponeCapturaUrl()
+    {
+        if (!await IniciarAsync()) return;
+        Fachada.CapturaSiempre = true;
+        var (solicitud, token) = await SembrarAsync();
+        Fachada.Caida = true;
+        (await SolicitarAsync(solicitud, token, "vendedor")).StatusCode.Should().Be(HttpStatusCode.Accepted);
+        Fachada.Caida = false;
+
+        var r = await ReenviarAsync(solicitud, token, "vendedor");
+
+        r.StatusCode.Should().Be(HttpStatusCode.OK);
+        var cuerpo = await Json(r);
+        (cuerpo.TryGetProperty("capturaUrl", out var url) ? url.ValueKind : System.Text.Json.JsonValueKind.Null)
+            .Should().Be(System.Text.Json.JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task Punto_RadicanteInSitu_DevuelveCapturaUrl()
+    {
+        if (!await IniciarAsync()) return;
+        var (solicitud, _) = await SembrarAsync();
+
+        var r = await EnScopeAsync(sp => sp.GetRequiredService<IdentidadService>().SolicitarInSituAsync(solicitud, "vendedor", 1, TestContext.Current.CancellationToken));
+
+        r.Exito.Should().BeTrue();
+        r.CapturaUrl.Should().StartWith("https://verify.test/captura/");
+    }
+
+    [Fact]
+    public async Task Punto_Invitacion_DevuelveCapturaUrl_PeroSinElFlagNo()
+    {
+        if (!await IniciarAsync()) return;
+        Fachada.CapturaSiempre = true;
+        var (solicitud, _) = await SembrarAsync();
+        var ct = TestContext.Current.CancellationToken;
+
+        var conFlag = await EnScopeAsync(sp => sp.GetRequiredService<IdentidadService>().SolicitarAsync(solicitud, "vendedor", 1, ct, exponerCaptura: true));
+        var sinFlag = await EnScopeAsync(sp => sp.GetRequiredService<IdentidadService>().SolicitarAsync(solicitud, "comprador", 1, ct));
+
+        conFlag.CapturaUrl.Should().StartWith("https://verify.test/captura/");
+        sinFlag.CapturaUrl.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Solicitar_ConUnaEnCurso_Responde409ConElEstado_YNoPideOtra()
     {
         if (!await IniciarAsync()) return;
@@ -151,6 +211,8 @@ public sealed class IdentidadTests : IdentidadBase
 
     [Theory]
     [InlineData("no-es-un-correo", Celular, "correo")]
+    [InlineData("willyn.londoño@flitsas.com", Celular, "correo")]
+    [InlineData("willyn.londo�o@flitsas.com", Celular, "correo")]
     [InlineData(Correo, "123", "celular")]
     public async Task Solicitar_ConContactoInvalido_Responde422ConElCampo_SinLlamarAFlit2(string correo, string celular, string campo)
     {

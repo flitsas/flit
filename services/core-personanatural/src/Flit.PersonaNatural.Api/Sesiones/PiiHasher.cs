@@ -42,6 +42,10 @@ public sealed class PiiHasher
     public static byte[] ClaveRadicadoIp(byte[] claveRadicado, byte[]? ipHash) =>
         SHA256.HashData([.. Encoding.UTF8.GetBytes("radicado-ip:"), .. claveRadicado, .. (ipHash ?? [])]);
 
+    /// <summary>Clave de bloqueo cuando se consulta por placa + cédula (sin radicado), diseño UI de «Consultar mi trámite».</summary>
+    public static byte[] ClaveConsultaPlacaCedula(string placaNormalizada, byte[] cedulaHash) =>
+        SHA256.HashData([.. Encoding.UTF8.GetBytes("consulta-placa-cedula:" + placaNormalizada + ":"), .. cedulaHash]);
+
     public static string NormalizarRadicado(string radicado) => (radicado ?? string.Empty).Trim().ToUpperInvariant();
 
     public static string NormalizarDocumento(string documento) =>

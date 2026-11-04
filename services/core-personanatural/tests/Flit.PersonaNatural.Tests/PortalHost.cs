@@ -112,6 +112,8 @@ internal sealed class PortalHost : IAsyncDisposable
 
     public FachadaFalsa Catalogo { get; } = new();
 
+    public ConsultasRuntFalso Runt { get; } = ConsultasRuntFalso.DeOrganismo("Tránsito de Prueba");
+
     public RegistroDeLogs Logs { get; } = new();
 
     /// <summary>Arma el host. <paramref name="servicios"/> reemplaza o suma servicios de prueba antes de construirlo.</summary>
@@ -155,10 +157,14 @@ internal sealed class PortalHost : IAsyncDisposable
         {
             b.WebHost.UseTestServer();
             b.Configuration.AddInMemoryCollection(settings);
+            if (settings.TryGetValue("TestEnvironment", out var ambiente) && ambiente is not null)
+                b.Environment.EnvironmentName = ambiente;
             b.Services.AddSingleton<TimeProvider>(host.Reloj);
             b.Services.AddSingleton<IProveedorCaptcha, CaptchaFalso>();
             b.Services.AddSingleton<IFachadaTramites>(host.Catalogo);
             b.Services.AddSingleton<IFachadaDefiniciones>(host.Definiciones);
+            // Por omisión el RUNT dice que el vehículo está en el organismo de prueba: la radicación verifica el organismo.
+            b.Services.AddSingleton<Flit.PersonaNatural.Api.Consultas.IConsultasRunt>(host.Runt);
             b.Logging.AddProvider(host.Logs);
             servicios?.Invoke(b.Services, host);
         });

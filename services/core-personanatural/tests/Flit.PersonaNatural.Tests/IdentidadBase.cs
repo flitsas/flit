@@ -28,6 +28,12 @@ internal sealed class FachadaIdentidadFalsa : IFachadaIdentidad
 {
     public bool Caida;
     public bool PerderLaProximaRespuesta;
+
+    /// <summary>core-api responde FailedPrecondition por rechazo del proveedor (Kyverum 400).</summary>
+    public bool Rechazo;
+
+    /// <summary>Como core-api desde la HU #14237: devuelve <c>captura_url</c> aunque el enlace salga por correo.</summary>
+    public bool CapturaSiempre;
     public int Llamadas;
     public int ValidacionesCreadas;
     public int Reenvios;
@@ -36,11 +42,13 @@ internal sealed class FachadaIdentidadFalsa : IFachadaIdentidad
     public Dictionary<Guid, string> Estados { get; } = [];
     private readonly Dictionary<(Guid Solicitud, string Parte, string Documento), Guid> _creadas = [];
 
-    public Task<ValidacionDeFlit2> SolicitarAsync(Guid solicitudId, string parte, PersonaParaValidar persona, CancellationToken ct)
+    public Task<ValidacionDeFlit2> SolicitarAsync(Guid solicitudId, string parte, PersonaParaValidar persona, CancellationToken ct, bool omitirEnvioCorreo = false)
     {
         Llamadas++;
         if (Caida)
             throw Caido();
+        if (Rechazo)
+            throw new FachadaException("proveedor_rechazo", "No pudimos iniciar la validación con estos datos.", 422);
         Pedidos.Add((solicitudId, parte, persona.Documento, persona.Correo));
         var clave = (solicitudId, parte, persona.Documento);
         if (!_creadas.TryGetValue(clave, out var id) || Estados[id] is EstadosIdentidad.Rechazada or EstadosIdentidad.Vencida)
@@ -57,7 +65,8 @@ internal sealed class FachadaIdentidadFalsa : IFachadaIdentidad
             throw Caido();
         }
 
-        return Task.FromResult(new ValidacionDeFlit2(id, Estados[id]));
+        var url = omitirEnvioCorreo || CapturaSiempre ?$"https://verify.test/captura/{id:N}" : null;
+        return Task.FromResult(new ValidacionDeFlit2(id, Estados[id], url));
     }
 
     public Task<string> ReenviarAsync(Guid validacionId, string? correoNuevo, CancellationToken ct)
@@ -118,6 +127,8 @@ public abstract class IdentidadBase : IAsyncLifetime
     protected const string Celular = "3001234567";
 
     internal readonly FachadaIdentidadFalsa Fachada = new();
+    internal Action<IServiceCollection>? Servicios;
+    internal Action<WebApplicationBuilder>? Ajustes;
     internal readonly RelojDeIdentidad Reloj = new(new DateTimeOffset(2026, 10, 27, 15, 0, 0, TimeSpan.Zero));
     internal readonly RegistroDeLogs Logs = new();
     private string _database = string.Empty;
@@ -185,6 +196,8 @@ public abstract class IdentidadBase : IAsyncLifetime
             b.Services.AddSingleton<TimeProvider>(Reloj);
             b.Services.AddSingleton<IProveedorCaptcha, CaptchaFalso>();
             b.Services.AddSingleton<IFachadaIdentidad>(Fachada);
+            Servicios?.Invoke(b.Services);
+            Ajustes?.Invoke(b);
             if (reglasFalsas)
                 b.Services.AddScoped<IReglasDeIdentidad, ReglasFalsas>();
             b.Logging.AddProvider(Logs);

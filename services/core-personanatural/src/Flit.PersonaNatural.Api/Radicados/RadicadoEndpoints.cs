@@ -4,7 +4,7 @@ using Flit.PersonaNatural.Api.Sesiones;
 
 namespace Flit.PersonaNatural.Api.Radicados;
 
-/// <summary>Consulta pública de radicado (HU #14042): captcha y límite por IP del grupo, más el bloqueo por radicado.</summary>
+/// <summary>Consulta pública de radicado (HU #14042): captcha y límite por IP del grupo, más el bloqueo por radicado/placa+cédula.</summary>
 public static class RadicadoEndpoints
 {
     private const int MaxRadicado = 40;
@@ -27,11 +27,23 @@ public static class RadicadoEndpoints
 
         grupo.MapPost("/radicados/consulta", async (ConsultaRadicadoRequest body, HttpContext http, RadicadoConsultaService consultas, PiiHasher hasher, CancellationToken ct) =>
         {
-            if (string.IsNullOrWhiteSpace(body?.Radicado) || string.IsNullOrWhiteSpace(body.Cedula)
-                || body.Radicado.Length > MaxRadicado || body.Cedula.Length > MaxCedula || body.Placa?.Length > MaxPlaca)
-                return SesionEndpoints.Problema(StatusCodes.Status400BadRequest, "Datos inválidos", "Indique el radicado y la cédula.", "datos_invalidos");
+            var placa = body?.Placa?.Trim();
+            var radicado = string.IsNullOrWhiteSpace(body?.Radicado) ? null : body!.Radicado.Trim();
+            var cedula = string.IsNullOrWhiteSpace(body?.Cedula) ? null : body!.Cedula.Trim();
 
-            var resultado = await consultas.ConsultarAsync(body.Radicado, body.Cedula, body.Placa, hasher.HashIp(http.Connection.RemoteIpAddress?.ToString()), ct).ConfigureAwait(false);
+            // Diseño UI: placa obligatoria + radicado y/o cédula (al menos uno).
+            if (string.IsNullOrWhiteSpace(placa) || placa.Length > MaxPlaca
+                || (radicado is null && cedula is null)
+                || radicado?.Length > MaxRadicado || cedula?.Length > MaxCedula)
+            {
+                return SesionEndpoints.Problema(
+                    StatusCodes.Status400BadRequest,
+                    "Datos inválidos",
+                    "Indique la placa y el número de radicado o la cédula.",
+                    "datos_invalidos");
+            }
+
+            var resultado = await consultas.ConsultarAsync(radicado, cedula, placa, hasher.HashIp(http.Connection.RemoteIpAddress?.ToString()), ct).ConfigureAwait(false);
             switch (resultado)
             {
                 case ResultadoConsultaRadicado.Exito exito:

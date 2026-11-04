@@ -68,6 +68,8 @@ export interface ConfiguracionPortal {
   enlaces: EnlacePublicado[];
   soporte: SoportePublicado;
   borradorVigenciaDias?: number | null;
+  /** Solo en pruebas locales (interruptor del BFF apagado por defecto). */
+  pruebas?: { omitirIdentidad?: boolean } | null;
 }
 
 // ── Cotización (POST /cotizaciones y /cotizaciones/enviar-correo) ────────────────────────────────────────────────
@@ -107,10 +109,11 @@ export interface EnvioCotizacion {
 
 // ── Consulta de radicado (POST /radicados/consulta) ──────────────────────────────────────────────────────────────
 
+/** Consulta pública: placa + radicado, o placa + cédula (el UI envía solo uno de los dos segundos). */
 export interface ConsultaRadicadoRequest {
-  placa?: string;
-  radicado: string;
-  cedula: string;
+  placa: string;
+  radicado?: string;
+  cedula?: string;
 }
 
 export interface MacroEstado {
@@ -254,9 +257,32 @@ export interface DiagnosticoGuardado extends Diagnostico {
   fecha: string;
 }
 
+/** Gravamen que consta en el RUNT para el vehículo del borrador (GET /solicitudes/{id}/vehiculo/gravamen). */
+export interface GravamenRunt {
+  tienePrenda: boolean;
+  /** El RUNT reporta gravámenes (distinto de prenda). */
+  tieneGravamenes?: boolean;
+  /** Acreedor y NIT que consultó el RUNT; ya no dependen de validar la identidad. Vacíos si el RUNT no los entrega. */
+  acreedor: string | null;
+  nitAcreedor: string | null;
+  /** Fecha de inscripción de la prenda (ISO, con o sin hora). */
+  fechaInscripcion?: string | null;
+  aviso: "sin_gravamen" | null;
+}
+
+/** Valores actuales del vehículo en el RUNT (GET /solicitudes/{id}/vehiculo/valores-actuales); cualquiera puede venir vacío. */
+export interface ValoresActualesRunt {
+  color?: string | null;
+  combustible?: string | null;
+  carroceria?: string | null;
+}
+
+/** Qué se hace con la prenda: registrar una nueva, levantar la que tiene el vehículo o confirmar que no hay. */
+export type DecisionPrenda = "registrar" | "levantar" | "sin_prenda";
+
 export interface DatosSolicitud {
   comercial?: { valor: number | null } | null;
-  prenda?: { tiene: boolean; acreedor: string | null; nitAcreedor: string | null } | null;
+  prenda?: { tiene: boolean; acreedor: string | null; nitAcreedor: string | null; entidadLevantamiento?: string | null; decision?: DecisionPrenda | null } | null;
   requisitos?: { transformaciones: string[]; observaciones: string | null } | null;
   diagnostico?: DiagnosticoGuardado | null;
 }
@@ -356,6 +382,56 @@ export interface FlagsTipo {
   permitePrendaComplementaria: boolean;
   requiereBiometria: boolean;
   requiereSolicitudPlaca: boolean;
+  /** El trámite lleva una secretaría de destino (traslado de cuenta). Ausente en definiciones anteriores. */
+  requiereDestino?: boolean;
+  /** El organismo lo elige el operador, no el RUNT: no se compara el organismo del RUNT con los habilitados. Ausente = false. */
+  organismoLoEligeOperador?: boolean;
+  /** Tipos de acción única sobre la prenda (inscribir o levantar): el servidor fija la decisión y el portal no la ofrece. Ausente = se elige. */
+  accionPrenda?: "registrar" | "levantar" | "" | (string & {});
+}
+
+/** Una opción de una declaración. `docCodes` son los soportes que esa opción pide (p. ej. los certificados de una causal). */
+export interface OpcionDeclaracion {
+  codigo: string;
+  etiqueta: string;
+  docCodes: string[];
+  exigeSoporte: boolean;
+}
+
+/**
+ * Dato propio del tipo (valor nuevo de color, nivel de blindaje, causal…) que el back describe en la definición. El portal
+ * tiene un solo renderer: pinta según `control`. El valor se guarda en `fieldValues[fieldKey]`; `fieldKeysExtra` son banderas que
+ * acompañan ("true" con valor, vacías sin él) y los soportes son adjuntos cuyo `tipo` es un `docCode`.
+ */
+export interface DeclaracionTipo {
+  clave: string;
+  /** `seleccion` (opciones en línea), `seleccion_catalogo` (opciones del catálogo `catalogo`) u `organismo_destino`. */
+  control: "seleccion" | "seleccion_catalogo" | "organismo_destino" | (string & {});
+  etiqueta: string;
+  obligatoria: boolean;
+  opciones: OpcionDeclaracion[];
+  fieldKey: string;
+  fieldKeysExtra: string[];
+  docCodeSoporte: string;
+  soporteObligatorio: boolean;
+  /** `colores`, `combustibles`, `carrocerias` o vacío. */
+  catalogo: "colores" | "combustibles" | "carrocerias" | "" | (string & {});
+  /** Trámite simultáneo (código de transformación) que activa la declaración; vacío o ausente = siempre aplica. */
+  activadaPor?: string;
+}
+
+/** Fila de un catálogo del vehículo (GET /catalogos/{colores|combustibles|carrocerias}). */
+export interface OpcionCatalogo {
+  codigo: string;
+  etiqueta: string;
+}
+
+/** Organismo elegible como destino (GET /organismos-destino). */
+export interface OrganismoDestino {
+  id: string;
+  nombre: string;
+  municipio?: string;
+  departamento?: string;
 }
 
 export interface DefinicionTipo {
@@ -370,6 +446,8 @@ export interface DefinicionTipo {
   actores: ActorRol[];
   documentos: DocumentoRequerido[];
   flags: FlagsTipo;
+  /** Datos propios del tipo. Ausente en definiciones o borradores anteriores a esta versión: se toma como vacío. */
+  declaraciones?: DeclaracionTipo[];
 }
 
 // ── Consultas públicas (POST /consultas/vehiculo y /consultas/persona) ───────────────────────────────────────────
@@ -442,13 +520,26 @@ export interface ConsultaPersonaDetalleRequest {
   consentimientoVersion?: string;
 }
 
-/** Sin coincidencia: `existe = false` y el resto `null`. Son datos de un tercero: solo viven en memoria de la pantalla. */
+/**
+ * Prellenado del actor (RUNT conductor + multas, misma regla que FLIT 2).
+ * Sin coincidencia: `existe = false` y el resto `null`. Solo vive en memoria de la pantalla.
+ */
 export interface PersonaDetalle {
   existe: boolean;
   nombres: string | null;
   apellidos: string | null;
   nombreCompleto: string | null;
   ciudad: string | null;
+  /** Estado de licencia del RUNT (`ACTIVO`, …); null si no hay registro de licencia. */
+  estadoLicencia?: string | null;
+  /** `vigente` | `no_vigente` según licencia activa. */
+  vigenciaLicencia?: string | null;
+  /** Flag del RUNT; si es true el BFF intenta el detalle SIMIT (best-effort). */
+  tieneMultasPendientes?: boolean | null;
+  /** Número de paz y salvo cuando no hay multas pendientes. */
+  nroPazYSalvo?: string | null;
+  /** Cantidad de comparendos de la subconsulta SIMIT (puede faltar si el proveedor falló). */
+  comparendos?: number | null;
 }
 
 export interface ConductorMinimo {
@@ -484,9 +575,137 @@ export interface ResultadoParte {
   parte: string;
   ordinal: number;
   estado: EstadoValidacion;
+  /** HU #14237 — URL de captura (in-situ / copiar enlace). */
+  capturaUrl?: string | null;
+}
+
+/** HU #14236 — borrador PN abierto desde el punto + compuerta de dueño RUNT. */
+export interface AbrirActoresPunto {
+  solicitudId: string;
+  codigoPublico: string;
+  organismoId: string;
+  puedeSerRadicante: boolean;
+  message?: string | null;
+  estado?: string;
+  tipoTramiteCodigo?: string;
+  /** Roles del tipo para el punto (el radicante primero). Ausente en backends anteriores: se usa la definición del tipo. */
+  roles?: { rol: string; etiqueta: string; esRadicante?: boolean; minimo?: number; maximo?: number }[];
+}
+
+/** HU #14242 — matriz documental vigente del punto (FLIT 2.0). */
+export interface ItemRequisitoPunto {
+  docCode: string;
+  nombre: string;
+  clase: "obligatorio" | "opcional" | "informativo" | string;
+  orden: number;
+  instruccionCargue?: string;
+  condicion?: string;
+}
+
+export interface GrupoRequisitosPunto {
+  parte: string | null;
+  etiqueta: string;
+  ordinal: number;
+  items: ItemRequisitoPunto[];
+}
+
+export interface MatrizRequisitosPunto {
+  tipoCodigo: string;
+  organismoId: string;
+  huella: string;
+  version: number;
+  grupos: GrupoRequisitosPunto[];
+}
+
+/** HU #14243 — gate a Pago y sugerencia de valor. */
+export interface PendienteRequisitoPunto {
+  codigo: string;
+  /** Nombre legible (documento o dato): es lo único que se muestra al ciudadano. */
+  nombre: string;
+}
+
+export interface CompletitudRequisitosPunto {
+  puedeContinuarPago: boolean;
+  requiereValorVenta: boolean;
+  pendientes: PendienteRequisitoPunto[];
+}
+
+export interface ValorVentaSugeridoPunto {
+  valorSugerido?: number | null;
+  fuente: string;
 }
 
 // ── Cliente ──────────────────────────────────────────────────────────────────────────────────────────────────────
+
+// ── Canal del punto (POST /punto/entrada, /punto/arranque, /punto/diagnostico y /punto/consultas/*) ───────────────
+
+/** Organismo que abrió el canal. La cookie de la sesión la guarda el proxy; no viaja en este cuerpo. */
+export interface EntradaPunto {
+  organismoId: string;
+  codigo: string;
+  nombre: string;
+}
+
+export interface ArranquePuntoRequest {
+  placa: string;
+  documento: string;
+  tipoCodigo: string;
+}
+
+/** `puedeSeguir` abre el paso de diagnóstico. El texto va en `message` (BFF) o `mensaje`. */
+export interface ArranquePunto {
+  puedeSeguir: boolean;
+  mensaje?: string | null;
+  message?: string | null;
+}
+
+export function textoArranque(resultado: ArranquePunto): string {
+  return (resultado.mensaje ?? resultado.message ?? "").trim();
+}
+
+export interface DiagnosticoPuntoRequest {
+  placa: string;
+  documento: string;
+  tipoCodigo: string;
+  tipoDocumento?: string;
+}
+
+export interface ResultadoVehiculoPunto {
+  existe: boolean;
+  placa?: string | null;
+  clase?: string | null;
+  marca?: string | null;
+  linea?: string | null;
+  modeloAno?: string | null;
+  color?: string | null;
+  estado?: string | null;
+}
+
+export interface ResultadoPersonaPunto {
+  existe: boolean;
+  documento?: string | null;
+  nombreCompleto?: string | null;
+  nombres?: string | null;
+  apellidos?: string | null;
+  estadoLicencia?: string | null;
+  vigencia?: string | null;
+}
+
+export interface MultaPunto {
+  numero?: string | null;
+  comparendo?: string | null;
+  estado?: string | null;
+  valorCop?: number | null;
+  descripcion?: string | null;
+}
+
+/** El BFF del punto devuelve cuántos comparendos hay (`comparendos`), sin el detalle del infractor. */
+export interface ResultadoMultasPunto {
+  consultado?: boolean;
+  comparendos?: number;
+  existe?: boolean;
+  multas?: MultaPunto[] | null;
+}
 
 export interface OpcionesCliente {
   base?: string;
@@ -535,6 +754,21 @@ export function crearCliente({ base = BASE_BFF, fetchImpl }: OpcionesCliente = {
       tiposTramite: (o?: OpcionesLlamada) => solicitar<TipoTramite[]>("GET", `/tipos-tramite${consultaOrganismo(o)}`, undefined, o),
       definicion: (code: string, o?: OpcionesLlamada) =>
         solicitar<DefinicionTipo>("GET", `/tipos-tramite/${encodeURIComponent(code)}/definicion${consultaOrganismo(o)}`, undefined, o),
+      /**
+       * Catálogo del vehículo para las declaraciones del tipo: `colores`, `combustibles` o `carrocerias`. `texto` filtra en el servidor
+       * (hasta 50 resultados); `solicitudId` es obligatorio en las carrocerías.
+       */
+      catalogoVehiculo: (nombre: string, filtro: { texto?: string; solicitudId?: string } = {}, o?: OpcionesLlamada) => {
+        const consulta = new URLSearchParams();
+        // Las carrocerías exigen la sesión del borrador: el servidor filtra por la clase RUNT de su vehículo.
+        if (filtro.solicitudId) consulta.set("solicitudId", filtro.solicitudId);
+        if (filtro.texto?.trim()) consulta.set("texto", filtro.texto.trim());
+        const sufijo = consulta.size > 0 ? `?${consulta.toString()}` : "";
+        return solicitar<OpcionCatalogo[]>("GET", `/catalogos/${encodeURIComponent(nombre)}${sufijo}`, undefined, o);
+      },
+      /** Búsqueda de la secretaría de destino por texto (traslado de cuenta): cualquier organismo operable. */
+      organismosDestino: (texto: string, limite = 20, o?: OpcionesLlamada) =>
+        solicitar<OrganismoDestino[]>("GET", `/organismos-destino?texto=${encodeURIComponent(texto)}&limite=${limite}`, undefined, o),
     },
     configuracion: {
       obtener: (o?: OpcionesLlamada) => solicitar<ConfiguracionPortal>("GET", "/configuracion", undefined, o),
@@ -568,6 +802,10 @@ export function crearCliente({ base = BASE_BFF, fetchImpl }: OpcionesCliente = {
       /** Preflight de requisitos del tipo (POST /solicitudes/{id}/diagnostico): lo guarda en el borrador y devuelve los resultados. */
       diagnosticar: (id: string, datos?: DiagnosticoRequest, o?: OpcionesLlamada) =>
         solicitar<Diagnostico>("POST", `/solicitudes/${encodeURIComponent(id)}/diagnostico`, datos, o),
+      /** Gravamen RUNT del vehículo del borrador, para precargar el acreedor de la prenda. 409 `vehiculo_no_definido`, 503 `proveedor_no_disponible`. */
+      /** Color, combustible y carrocería que el RUNT tiene hoy para el vehículo del borrador: el nuevo valor debe ser distinto. */
+      valoresActuales: (id: string, o?: OpcionesLlamada) => solicitar<ValoresActualesRunt>("GET", `/solicitudes/${encodeURIComponent(id)}/vehiculo/valores-actuales`, undefined, o),
+      gravamen: (id: string, o?: OpcionesLlamada) => solicitar<GravamenRunt>("GET", `/solicitudes/${encodeURIComponent(id)}/vehiculo/gravamen`, undefined, o),
       asignarOrganismo: (id: string, datos: { organismoId: string; version: number }, o?: OpcionesLlamada) =>
         solicitar<Solicitud>("PUT", `/solicitudes/${encodeURIComponent(id)}/organismo`, datos, o),
       /** Escrituras por paso: cada una lleva la `version` leída y devuelve el borrador completo (409 `conflicto_version` si ya cambió). */
@@ -577,7 +815,7 @@ export function crearCliente({ base = BASE_BFF, fetchImpl }: OpcionesCliente = {
         solicitar<Solicitud>("PUT", `/solicitudes/${encodeURIComponent(id)}/campos`, datos, o),
       guardarComercial: (
         id: string,
-        datos: { version: number; valorComercial?: number; prenda?: { tienePrenda: boolean; acreedor?: string; nitAcreedor?: string } },
+        datos: { version: number; valorComercial?: number; prenda?: { tienePrenda: boolean; decision?: DecisionPrenda; acreedor?: string; nitAcreedor?: string; entidadLevantamiento?: string } },
         o?: OpcionesLlamada,
       ) => solicitar<Solicitud>("PUT", `/solicitudes/${encodeURIComponent(id)}/comercial`, datos, o),
       guardarRequisitos: (id: string, datos: { version: number; transformaciones?: string[]; observaciones?: string }, o?: OpcionesLlamada) =>
@@ -596,6 +834,130 @@ export function crearCliente({ base = BASE_BFF, fetchImpl }: OpcionesCliente = {
       },
       eliminar: (id: string, adjuntoId: string, o?: OpcionesLlamada) =>
         solicitar<void>("DELETE", `/solicitudes/${encodeURIComponent(id)}/adjuntos/${encodeURIComponent(adjuntoId)}`, undefined, o),
+    },
+    punto: {
+      /** Abre el canal con el código de la dirección. 422: `codigo_desconocido`, `organismo_no_operable` o `canal_apagado`. */
+      entrada: (codigo: string, o?: OpcionesLlamada) => solicitar<EntradaPunto>("POST", "/punto/entrada", { codigo }, o),
+      sesion: (o?: OpcionesLlamada) => solicitar<EntradaPunto>("GET", "/punto/sesion", undefined, o),
+      /** Tipos que el organismo de la sesión del punto ofrece (con tarifa vigente): misma forma que GET /tipos-tramite?organismoId=. */
+      tiposTramite: (o?: OpcionesLlamada) => solicitar<TipoTramite[]>("GET", "/punto/tipos-tramite", undefined, o),
+      arranque: (datos: ArranquePuntoRequest, o?: OpcionesLlamada) => solicitar<ArranquePunto>("POST", "/punto/arranque", datos, o),
+      /** Preflight del tipo en el punto (HU #14231/#14232). No crea solicitud. */
+      diagnostico: (datos: DiagnosticoPuntoRequest, o?: OpcionesLlamada) =>
+        solicitar<Diagnostico>("POST", "/punto/diagnostico", {
+          placa: datos.placa,
+          documento: datos.documento,
+          tipoCodigo: datos.tipoCodigo,
+          tipoDocumento: datos.tipoDocumento ?? "CC",
+        }, o),
+      /** HU #14236 — materializa borrador PN y evalúa dueño RUNT. */
+      actoresAbrir: (datos: { placa: string; documento: string; tipoCodigo: string; tipoDocumento?: string }, o?: OpcionesLlamada) =>
+        solicitar<AbrirActoresPunto>("POST", "/punto/actores/abrir", {
+          placa: datos.placa,
+          documento: datos.documento,
+          tipoCodigo: datos.tipoCodigo,
+          tipoDocumento: datos.tipoDocumento ?? "CC",
+        }, o),
+      /** HU #14237 — identidad in-situ del radicante (ficha con mismos campos del portal). */
+      actoresIdentidadRadicante: (
+        datos: {
+          solicitudId?: string;
+          parte?: string;
+          ordinal?: number;
+          tipoDocumento?: string;
+          documento: string;
+          nombre?: string;
+          correo?: string;
+          celular?: string;
+          direccion?: string;
+          ciudad?: string;
+        },
+        o?: OpcionesLlamada,
+      ) =>
+        solicitar<ResultadoParte>("POST", "/punto/actores/identidad/radicante", {
+          solicitudId: datos.solicitudId,
+          parte: datos.parte,
+          ordinal: datos.ordinal ?? 1,
+          tipoDocumento: datos.tipoDocumento ?? "CC",
+          documento: datos.documento,
+          nombre: datos.nombre,
+          correo: datos.correo,
+          celular: datos.celular,
+          direccion: datos.direccion,
+          ciudad: datos.ciudad,
+        }, o),
+      actoresIdentidadEstado: (o?: OpcionesLlamada) =>
+        solicitar<EstadoIdentidad>("GET", "/punto/actores/identidad", undefined, o),
+      /** HU #14237 — invita otra parte (correo + URL copiable; mismos campos de ficha del portal). */
+      actoresInvitar: (
+        datos: {
+          parte: string;
+          ordinal?: number;
+          tipoDocumento?: string;
+          documento: string;
+          nombre?: string;
+          correo: string;
+          celular?: string;
+          direccion?: string;
+          ciudad?: string;
+        },
+        o?: OpcionesLlamada,
+      ) =>
+        solicitar<ResultadoParte>("POST", "/punto/actores/invitar", {
+          parte: datos.parte,
+          ordinal: datos.ordinal ?? 1,
+          tipoDocumento: datos.tipoDocumento ?? "CC",
+          documento: datos.documento,
+          nombre: datos.nombre,
+          correo: datos.correo,
+          celular: datos.celular,
+          direccion: datos.direccion,
+          ciudad: datos.ciudad,
+        }, o),
+      /** HU #14242 — matriz viva FLIT 2.0 por tipo + organismo de la cookie. */
+      requisitos: (tipoCodigo: string, o?: OpcionesLlamada) =>
+        solicitar<MatrizRequisitosPunto>(
+          "GET",
+          `/punto/requisitos?tipoCodigo=${encodeURIComponent(tipoCodigo)}`,
+          undefined,
+          o,
+        ),
+      /** HU #14243 — sugerencia Fasecolda (puede venir vacía). */
+      requisitosValorSugerido: (placa: string, o?: OpcionesLlamada) =>
+        solicitar<ValorVentaSugeridoPunto>(
+          "GET",
+          `/punto/requisitos/valor-sugerido?placa=${encodeURIComponent(placa)}`,
+          undefined,
+          o,
+        ),
+      requisitosValidarArchivo: (nombreArchivo: string, tamanoBytes: number, o?: OpcionesLlamada) =>
+        solicitar<{ valido: boolean; code?: string; message?: string }>(
+          "POST",
+          "/punto/requisitos/validar-archivo",
+          { nombreArchivo, tamanoBytes },
+          o,
+        ),
+      /** Gate a Pago: el servidor calcula desde el borrador (sesión pn_sesion + cookie del punto); solo se manda el tipo. */
+      requisitosCompletitud: (datos: { tipoCodigo: string }, o?: OpcionesLlamada) =>
+        solicitar<CompletitudRequisitosPunto>("POST", "/punto/requisitos/completitud", { tipoCodigo: datos.tipoCodigo }, o),
+      consultas: {
+        vehiculo: (datos: { placa: string; documento: string; tipoDocumento?: string; consentimiento: boolean }, o?: OpcionesLlamada) =>
+          solicitar<ResultadoVehiculoPunto>(
+            "POST",
+            "/punto/consultas/vehiculo",
+            { placa: datos.placa, propietario: { tipo: datos.tipoDocumento ?? "CC", numero: datos.documento }, consentimiento: datos.consentimiento },
+            o,
+          ),
+        persona: (datos: { documento: string; tipoDocumento?: string; consentimiento: boolean }, o?: OpcionesLlamada) =>
+          solicitar<ResultadoPersonaPunto>(
+            "POST",
+            "/punto/consultas/persona",
+            { documento: { tipo: datos.tipoDocumento ?? "CC", numero: datos.documento }, consentimiento: datos.consentimiento },
+            o,
+          ),
+        multas: (datos: { placa: string; consentimiento: boolean }, o?: OpcionesLlamada) =>
+          solicitar<ResultadoMultasPunto>("POST", "/punto/consultas/multas", { placa: datos.placa, consentimiento: datos.consentimiento }, o),
+      },
     },
     identidad: {
       /** Estado de la validación de cada parte que el tipo obliga a validar (se sondea). */

@@ -303,6 +303,7 @@ public sealed class PersonaNaturalIdentidadGrpcTests(PersonaNaturalIdentidadGrpc
         PersonaNaturalIdentidadService.EstadoDelPortal(BiometricEstados.PendienteEnvio, ahora.AddHours(-1), ahora).Should().Be("pendiente");
         PersonaNaturalIdentidadService.EstadoDelPortal(BiometricEstados.Aprobado, ahora.AddHours(-1), ahora).Should().Be("aprobada", "una aprobada no vence por plazo");
     }
+[Theory]    [InlineData("wiññyn.londono@flitsas.com")]    [InlineData("")]    public async Task Solicitar_InSitu_ConCorreoInvalidoOVacio_UsaElCorreoTecnicoConDominioPublicoDeFlit(string correo)    {        var ct = TestContext.Current.CancellationToken;        using var host = Host();        var cliente = await ClienteAsync(host, ct);        var (solicitud, cedula) = Nueva();        var pedido = Pedido(solicitud, "titular", cedula);        pedido.OmitirEnvioCorreo = true;        pedido.Persona.Correo = correo;        var respuesta = await cliente.SolicitarValidacionIdentidadAsync(pedido, cancellationToken: ct);        var fila = await FilaAsync(host, respuesta.ValidacionId, ct);        fila.Email.Should().Be($"validaciones+punto-{solicitud.Replace("-", string.Empty)}@flitsas.com");        fila.Email.Should().NotContain(".local");    }
 
     // ── Soporte ──────────────────────────────────────────────────────────────────────────────────────────────────────
 

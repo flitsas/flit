@@ -181,7 +181,7 @@ public sealed class PersonaNaturalGrpcTests(PersonaNaturalGrpcTests.Anfitrion an
 
     [Theory]
     [InlineData("ok", "cumple")]
-    [InlineData("warn", "cumple")]
+    [InlineData("warn", "falta")]
     [InlineData("fail", "falta")]
     [InlineData("error", "falta")]
     [InlineData("skip", "no_aplica")]

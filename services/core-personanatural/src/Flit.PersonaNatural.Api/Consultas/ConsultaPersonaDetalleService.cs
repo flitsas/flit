@@ -92,15 +92,40 @@ public sealed class ConsultaPersonaDetalleService(
         // La medición se cuenta en cuanto se llama a core-consultas, salga bien o mal.
         try
         {
-            var resultado = await runt.ConsultarConductorAsync(Proveedor(documento), solicitudId.ToString(), ct).ConfigureAwait(false);
+            var documentoProveedor = Proveedor(documento);
+            var resultado = await runt.ConsultarConductorAsync(documentoProveedor, solicitudId.ToString(), ct).ConfigureAwait(false);
             if (ProyeccionMinima.ProveedorCaido(resultado))
                 throw new ProveedorNoDisponibleException("El proveedor del RUNT no respondió.");
 
-            return new ResultadoPersonaDetalle(EstadoPersonaDetalle.Ok, ProyeccionMinima.PersonaConNombres(resultado));
+            // Misma regla que FLIT 2 (RuntPersonLookup): RUNT +, si marca multas, detalle SIMIT best-effort.
+            var persona = ProyeccionMinima.PersonaConNombres(resultado);
+            if (persona.Existe && persona.TieneMultasPendientes == true)
+                persona = await EnriquecerMultasAsync(persona, documentoProveedor, solicitudId, ct).ConfigureAwait(false);
+
+            return new ResultadoPersonaDetalle(EstadoPersonaDetalle.Ok, persona);
         }
         finally
         {
             await medicion.RegistrarAsync(MedicionConsultasService.TipoPersonaDetalle, CancellationToken.None).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Subconsulta de comparendos (FLIT 2): informativa; si el proveedor falla se conserva el flag del RUNT sin cantidad.
+    /// </summary>
+    private async Task<PersonaDetalle> EnriquecerMultasAsync(
+        PersonaDetalle persona, DocumentoConsulta documento, Guid solicitudId, CancellationToken ct)
+    {
+        try
+        {
+            var multas = await runt.ConsultarMultasAsync(null, documento, solicitudId.ToString(), ct).ConfigureAwait(false);
+            if (ProyeccionMinima.ProveedorCaido(multas))
+                return persona;
+            return persona with { Comparendos = ProyeccionMinima.ContarComparendos(multas) };
+        }
+        catch (ProveedorNoDisponibleException)
+        {
+            return persona;
         }
     }
 

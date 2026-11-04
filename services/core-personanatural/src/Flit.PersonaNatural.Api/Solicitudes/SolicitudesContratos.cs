@@ -17,7 +17,8 @@ public sealed record ActoresRequest(long? Version, IReadOnlyList<ActorRequest>? 
 
 public sealed record CamposRequest(long? Version, Dictionary<string, JsonElement>? Valores);
 
-public sealed record PrendaRequest(bool TienePrenda, string? Acreedor, string? NitAcreedor);
+/// <summary><c>Decision</c> (HU 8): registrar | levantar | sin_prenda. Opcional: sin ella se conserva <c>TienePrenda</c>.</summary>
+public sealed record PrendaRequest(bool TienePrenda, string? Acreedor, string? NitAcreedor, string? Decision = null, string? EntidadLevantamiento = null);
 
 public sealed record ComercialRequest(long? Version, decimal? ValorComercial, PrendaRequest? Prenda);
 
@@ -30,7 +31,7 @@ public sealed record DiagnosticoRequest(PropietarioRequest? Propietario);
 // ── Salidas ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /// <summary>Algo que falta: un código estable, a qué se refiere (clave del campo, rol o documento) y en qué paso se corrige.</summary>
-public sealed record PendienteDto(string Codigo, string? Referencia, string? Paso);
+public sealed record PendienteDto(string Codigo, string? Referencia, string? Paso, string? Motivo = null);
 
 public sealed record PasoEstadoDto(string Clave, string Titulo, bool Completo, IReadOnlyList<PendienteDto> Pendientes);
 
@@ -79,9 +80,12 @@ public sealed record CancelacionDto(Guid SolicitudId, string Estado);
 
 public sealed record ComercialDatos(decimal? Valor);
 
-public sealed record PrendaDatos(bool Tiene, string? Acreedor, string? NitAcreedor);
+public sealed record PrendaDatos(bool Tiene, string? Acreedor, string? NitAcreedor, string? Decision = null, string? EntidadLevantamiento = null);
 
 public sealed record RequisitosDatos(IReadOnlyList<string> Transformaciones, string? Observaciones);
+
+/// <summary>Documento del propietario que el ciudadano escribió al consultar el vehículo, CIFRADO (base64). Solo para volver a consultar el RUNT en la sesión; nunca viaja a core-api.</summary>
+public sealed record PropietarioConsultaDatos(string TipoDocumento, string DocumentoCifrado);
 
 public sealed record DiagnosticoDatos(DateTimeOffset Fecha, bool PuedeContinuar, IReadOnlyList<RequisitoDto> Requisitos);
 
@@ -91,6 +95,30 @@ public sealed record DiagnosticoDatos(DateTimeOffset Fecha, bool PuedeContinuar,
 /// </summary>
 public sealed record DatosSolicitud(ComercialDatos? Comercial = null, PrendaDatos? Prenda = null, RequisitosDatos? Requisitos = null, DiagnosticoDatos? Diagnostico = null)
 {
+    /// <summary>
+    /// Marca del canal de origen: <c>pn_punto</c> si el borrador lo abrió el punto de atención (OT); ausente en el portal web.
+    /// Se conserva al reescribir <c>datos</c> (comercial, prenda, requisitos, diagnóstico): antes se perdía y el borrador dejaba
+    /// de ser del punto. Viaja a core-api en <c>datos_json</c>.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? Canal { get; init; }
+
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? CodigoOrganismo { get; init; }
+
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? OrganismoId { get; init; }
+
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public PropietarioConsultaDatos? PropietarioConsulta { get; init; }
+
+    /// <summary>
+    /// Id del organismo contra el que se comprobó, con el RUNT, que el vehículo está matriculado ahí. La radicación solo deja pasar
+    /// si es el mismo del borrador (salvo los tipos cuyo organismo elige el operador). Lo fija el servidor; el cliente no lo escribe.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? OrganismoVerificadoId { get; init; }
+
     private static readonly JsonSerializerOptions Opciones = new(JsonSerializerDefaults.Web);
 
     public static DatosSolicitud Leer(string? json)

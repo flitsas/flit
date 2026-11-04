@@ -2,9 +2,11 @@ using Flit.Api.Telemetry;
 using Flit.PersonaNatural.Api.Configuracion;
 using Flit.PersonaNatural.Api.Cotizaciones;
 using Flit.PersonaNatural.Api.Abuso;
+using Flit.PersonaNatural.Api.Catalogos;
 using Flit.PersonaNatural.Api.Adjuntos;
 using Flit.PersonaNatural.Api.Consentimientos;
 using Flit.PersonaNatural.Api.Consultas;
+using Flit.PersonaNatural.Api.Punto;
 using Flit.PersonaNatural.Api.Identidad;
 using Flit.PersonaNatural.Api.Definiciones;
 using Flit.PersonaNatural.Api;
@@ -89,6 +91,12 @@ public static class Program
         // HU #14043: catálogo de organismos y tipos, cotización de 2 líneas y envío por correo (fachada gRPC de core-api).
         builder.Services.AddCotizacionesPortal(builder.Configuration);
 
+        // HU #14216: canal del punto (cookie del organismo). La fachada gRPC la registra AddCotizacionesPortal.
+        builder.Services.AddPuntoPortal();
+
+        // Interruptor de pruebas locales (apagado por defecto; solo Development).
+        Flit.PersonaNatural.Api.Pruebas.PruebasPortal.AddPruebasPortal(builder.Services, builder.Configuration, builder.Environment);
+
         // HU #14044 y #14045: validación de identidad de las partes por enlace (fachada gRPC de core-api, espejo por evento).
         builder.Services.AddIdentidadPortal(builder.Configuration);
 
@@ -135,12 +143,14 @@ public static class Program
         app.MapSesionEndpoints();
         app.MapRadicadoEndpoints();
         app.MapConsultasEndpoints();
+        app.MapPuntoEndpoints();
 
         app.MapCotizacionesEndpoints();
         app.MapIdentidadEndpoints();
         app.MapDefinicionesEndpoints();
         app.MapConfiguracionEndpoints();
         app.MapSolicitudesEndpoints();
+        app.MapCatalogosVehiculoEndpoints();
         app.MapAdjuntosEndpoints();
         app.MapRadicacionEndpoints();
         app.MapGet("/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();
