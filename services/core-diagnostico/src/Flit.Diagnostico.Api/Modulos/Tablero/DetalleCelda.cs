@@ -96,10 +96,11 @@ internal sealed partial class DetalleCelda(
             }
         }
 
+        var datoParcial = codigo == Fuente.ImpuestoDepartamental && ResultadoImpuestoDetalle.EsDatoParcial(respuestaFuente);
         return new DetalleCeldaDto(
             celda.Id, vehiculoId, CodigosDeEnum.Codigo(codigo), CodigosDeEnum.Codigo(celda.Estado),
             celda.MotivoNa is { } motivo ? CodigosDeEnum.Codigo(motivo) : null, celda.TipoError, celda.DatoObtenidoEn, celda.Reutilizada,
-            resultado, personas, respuestaFuente, identificador, cabecera.Nombre, respuestaProveedor);
+            resultado, personas, respuestaFuente, identificador, cabecera.Nombre, respuestaProveedor, datoParcial);
     }
 
     /// <summary>
@@ -276,13 +277,10 @@ internal static class ProyectorDetalleCelda
         e.ValueKind == JsonValueKind.Object && e.Deserialize<ResultadoAvaluoDetalle>(Json) is { } r ? r with { Fuentes = r.Fuentes ?? [] } : null;
 
     /// <summary>
-    /// Impuesto departamental (HU #13864): total adeudado y vigencias por año ascendente. El payload de <c>EjecutorCeldaImpuesto</c>
-    /// trae además <c>departamento_codigo</c>, que no se proyecta (R-20: solo lo que el tipo tiene).
+    /// Impuesto departamental: <c>tiene_deuda</c>, monto anulable y vigencias por año. El payload trae además
+    /// <c>departamento_codigo</c>, que no se proyecta (R-20).
     /// </summary>
-    private static ResultadoImpuestoDetalle? Impuesto(JsonElement e) =>
-        e.ValueKind == JsonValueKind.Object && e.Deserialize<ResultadoImpuestoDetalle>(Json) is { } r
-            ? r with { Vigencias = [.. (r.Vigencias ?? []).OrderBy(v => v.Anio)] }
-            : null;
+    private static ResultadoImpuestoDetalle? Impuesto(JsonElement e) => ResultadoImpuestoDetalle.Desde(e);
 
     /// <summary>SIMIT con como mucho <see cref="DetalleCelda.TopeComparendos"/> comparendos; el corte lo calcula el detalle, no el payload.</summary>
     private static ResultadoSimitDetalle? Simit(JsonElement e)

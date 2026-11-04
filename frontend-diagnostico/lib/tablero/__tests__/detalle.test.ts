@@ -64,6 +64,17 @@ describe("detalle — textos de error, N/A y pesos", () => {
     ["SIN_PLACA", /no tiene placa/i],
     ["SIN_IDENTIFICADOR", /ni placa ni VIN/i],
     ["NO_CONECTADO", /no está conectada/i],
+    ["NO_CONFIRMADO", /no quedó confirmado/i],
+    ["MODELO_NO_ACEPTADO", /modelo/i],
+    ["DOCUMENTO_NO_COINCIDE", /no coincide/i],
+    ["DOCUMENTO_NO_HOMOLOGADO", /no está homologado/i],
+    ["VEHICULO_NO_ENCONTRADO", /no aparece/i],
+    ["VEHICULO_NO_CONSULTABLE", /no se puede consultar/i],
+    ["REQUIERE_ACTUALIZACION", /actualizar/i],
+    ["SIN_DOCUMENTO", /documento del propietario/i],
+    ["SIN_MODELO", /modelo del vehículo/i],
+    ["ORGANISMO_INCOMPLETO", /municipio/i],
+    ["SIN_NOMBRE_PROPIETARIO", /nombre del propietario/i],
   ])("%s se traduce", (codigo, texto) => {
     expect(textoTipoError(codigo)).toMatch(texto);
   });

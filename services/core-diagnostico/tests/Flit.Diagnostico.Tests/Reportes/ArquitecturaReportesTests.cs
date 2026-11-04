@@ -57,9 +57,8 @@ public sealed class ArquitecturaReportesTests
         prueba.Should().Throw<Exception>().WithMessage("*ReporteConOrigen.Origen*");
     }
 
-    // HU #13864 (F09-C9, R-20) — el resultado del impuesto llega al renderizador (está registrado entre los derivados de
-    // ResultadoDetalleDto) y ni él ni sus vigencias tienen proveedor, transacción, origen ni departamento: sus claves JSON son
-    // exactamente monto_total/vigencias y anio/valor/pagada.
+    // HU #13864 (F09-C9, R-20) — el resultado del impuesto llega al renderizador y ni él ni sus vigencias tienen proveedor,
+    // transacción, origen ni departamento. C3-8 suma tiene_deuda y los opcionales; las vigencias siguen en anio/valor/pagada.
     [Fact]
     public void ResultadoImpuestoDetalle_no_tiene_proveedor_transaccion_ni_origen()
     {
@@ -69,7 +68,8 @@ public sealed class ArquitecturaReportesTests
             ["ResultadoImpuestoDetalle.MontoTotal", "ResultadoImpuestoDetalle.Vigencias", "VigenciaImpuestoDetalle.Pagada"],
             "el resultado del impuesto es un derivado registrado de ResultadoDetalleDto (JsonDerivedType)");
         Violaciones([typeof(ResultadoImpuestoDetalle)]).Should().BeEmpty();
-        Json(typeof(ResultadoImpuestoDetalle)).Should().BeEquivalentTo(["monto_total", "vigencias"]);
+        Json(typeof(ResultadoImpuestoDetalle)).Should().BeEquivalentTo(
+            ["monto_total", "vigencias", "tiene_deuda", "intereses_mora", "sanciones", "avaluo_comercial", "ultimo_pago", "liquidacion_consolidada_id", "periodo_certificacion", "fecha_consulta"]);
         Json(typeof(VigenciaImpuestoDetalle)).Should().BeEquivalentTo(["anio", "valor", "pagada"]);
         Propiedades([typeof(ResultadoImpuestoDetalle)]).Select(p => p.Name)
             .Should().NotContain(n => n.Contains("Proveedor", StringComparison.OrdinalIgnoreCase) || n.Contains("Departamento", StringComparison.OrdinalIgnoreCase));

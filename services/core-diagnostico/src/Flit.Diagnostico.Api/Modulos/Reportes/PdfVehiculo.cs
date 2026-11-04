@@ -34,8 +34,8 @@ namespace Flit.Diagnostico.Api.Modulos.Reportes;
 /// </example>
 internal static partial class PdfVehiculo
 {
-    /// <summary>Versión del diseño: entra en la huella (súbela al cambiar lo que se pinta o cómo). 5 = sección Dictamen (veredicto en palabra y párrafo) después de los pares del diagnóstico.</summary>
-    public const int VersionPlantilla = 5;
+    /// <summary>Versión del diseño: entra en la huella (súbela al cambiar lo que se pinta o cómo). 6 = impuesto con deuda sin valor, sin deuda y «No confirmado».</summary>
+    public const int VersionPlantilla = 6;
 
     public const string ContentType = "application/pdf";
 
@@ -49,6 +49,15 @@ internal static partial class PdfVehiculo
 
     /// <summary>Impuesto sin vigencias registradas (HU #13864).</summary>
     public const string SinVigencias = "No hay vigencias registradas";
+
+    /// <summary>Deuda confirmada sin monto informado. Nunca «$ 0».</summary>
+    public const string DeudaSinValor = "Deuda sin valor informado";
+
+    /// <summary>Consulta completada sin deuda.</summary>
+    public const string SinDeuda = "Sin deuda";
+
+    /// <summary>Impuesto en ERROR: no confirma deuda ni imprime un monto.</summary>
+    public const string NoConfirmado = "No confirmado.";
 
     /// <summary>Título de la primera página.</summary>
     public const string TituloDocumento = "Diagnóstico vehicular";
@@ -423,7 +432,7 @@ internal static partial class PdfVehiculo
                     col.Item().Element(c => Aviso(c, "No aplica. " + (seccion.Leyenda ?? string.Empty)));
                     break;
                 case EstadoSeccion.NoDisponible:
-                    col.Item().Element(c => Aviso(c, "No pudimos obtener esta información."));
+                    col.Item().Element(c => Aviso(c, seccion.Fuente == "IMPUESTO_DEPARTAMENTAL" ? NoConfirmado : "No pudimos obtener esta información."));
                     break;
                 case EstadoSeccion.Pendiente:
                     col.Item().Element(c => Aviso(c, "Esta consulta todavía está en curso."));
@@ -614,13 +623,13 @@ internal static partial class PdfVehiculo
     });
 
     /// <summary>
-    /// Impuesto departamental (HU #13864): «Total adeudado» con el formato de moneda del avalúo y la grilla Vigencia / Valor / Estado
-    /// («Pagada» o «Pendiente») por año; sin vigencias, «No registra vigencias».
+    /// Impuesto departamental: total adeudado, o «Deuda sin valor informado» / «Sin deuda» cuando no hay un monto que afirmar.
+    /// Fechas y valores opcionales solo si vinieron. Sin vigencias, «No hay vigencias registradas».
     /// </summary>
     private static void Impuesto(IContainer contenedor, ResultadoImpuestoDetalle impuesto) => contenedor.Column(col =>
     {
         col.Spacing(5);
-        col.Item().Element(c => Tabla(c, [("Total adeudado", Moneda(impuesto.MontoTotal))]));
+        col.Item().Element(c => Tabla(c, FilasImpuesto(impuesto)));
         if (impuesto.Vigencias is { Count: > 0 } vigencias)
         {
             col.Item().Element(c => Grilla(c, ["Vigencia", "Valor", "Estado"],
@@ -631,6 +640,37 @@ internal static partial class PdfVehiculo
             col.Item().Element(c => Aviso(c, SinVigencias));
         }
     });
+
+    private static string TextoTotal(ResultadoImpuestoDetalle impuesto) =>
+        impuesto.TieneDeuda && impuesto.MontoTotal is null or 0 ? DeudaSinValor
+        : impuesto.MontoTotal is > 0 ? Moneda(impuesto.MontoTotal.Value)
+        : SinDeuda;
+
+    private static List<(string Etiqueta, string Valor)> FilasImpuesto(ResultadoImpuestoDetalle impuesto)
+    {
+        var filas = new List<(string Etiqueta, string Valor)> { ("Total adeudado", TextoTotal(impuesto)) };
+        if (impuesto.InteresesMora is > 0)
+            filas.Add(("Intereses de mora", Moneda(impuesto.InteresesMora.Value)));
+        if (impuesto.Sanciones is > 0)
+            filas.Add(("Sanciones", Moneda(impuesto.Sanciones.Value)));
+        if (impuesto.AvaluoComercial is > 0)
+            filas.Add(("Avalúo comercial", Moneda(impuesto.AvaluoComercial.Value)));
+        if (impuesto.UltimoPago is { } pago)
+        {
+            if (pago.Valor is > 0)
+                filas.Add(("Último pago", Moneda(pago.Valor.Value)));
+            if (!string.IsNullOrWhiteSpace(pago.Fecha))
+                filas.Add(("Fecha del último pago", pago.Fecha));
+            if (pago.Anio is > 0)
+                filas.Add(("Año del último pago", pago.Anio.Value.ToString(CultureInfo.InvariantCulture)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(impuesto.PeriodoCertificacion))
+            filas.Add(("Periodo de certificación", impuesto.PeriodoCertificacion));
+        if (!string.IsNullOrWhiteSpace(impuesto.FechaConsulta))
+            filas.Add(("Fecha de consulta", impuesto.FechaConsulta));
+        return filas;
+    }
 
     /// <summary>Tabla etiqueta-valor: bloques de 3 columnas, fila de etiquetas y debajo la de valores (<see cref="TablaFlit.Campos"/>).</summary>
     private static void Tabla(IContainer contenedor, IReadOnlyList<(string Etiqueta, string Valor)> filas) => TablaFlit.Campos(contenedor, filas);

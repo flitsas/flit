@@ -64,13 +64,40 @@ export interface VigenciaImpuestoDetalle {
   pagada: boolean;
 }
 
+/** Último pago informado. Un campo que no vino no se pinta. */
+export interface UltimoPagoImpuesto {
+  anio?: number | null;
+  valor?: number | null;
+  fecha?: string | null;
+}
+
 /**
- * Impuesto vehicular departamental (HU #13864): total adeudado (suma de lo no pagado) y vigencias por año ascendente, en
- * pesos enteros. Sin proveedor, transacción, origen ni departamento consultado (R-20).
+ * Impuesto vehicular. `tiene_deuda` confirma la deuda. `monto_total` falta cuando no se informó valor (tampoco es 0).
+ * Los opcionales solo vienen si la fuente los trajo.
  */
 export interface ResultadoImpuestoDetalle {
-  monto_total: number;
+  tiene_deuda?: boolean;
+  monto_total?: number | null;
   vigencias: VigenciaImpuestoDetalle[];
+  intereses_mora?: number | null;
+  sanciones?: number | null;
+  avaluo_comercial?: number | null;
+  ultimo_pago?: UltimoPagoImpuesto | null;
+  liquidacion_consolidada_id?: string | null;
+  periodo_certificacion?: string | null;
+  fecha_consulta?: string | null;
+}
+
+export const FRASE_DEUDA_SIN_VALOR = "Deuda sin valor informado";
+export const FRASE_SIN_DEUDA = "Sin deuda";
+export const FRASE_DATO_PARCIAL = "Dato parcial. El monto que trajo la fuente no se confirma y no se muestra.";
+
+/** Frase del impuesto cuando no hay un monto que afirmar. Null si el total informado se muestra tal cual. */
+export function fraseImpuesto(resultado: ResultadoImpuestoDetalle): string | null {
+  const sinMonto = resultado.monto_total === null || resultado.monto_total === undefined || resultado.monto_total === 0;
+  if (resultado.tiene_deuda && sinMonto) return FRASE_DEUDA_SIN_VALOR;
+  if (resultado.tiene_deuda === false && sinMonto) return FRASE_SIN_DEUDA;
+  return null;
 }
 
 export interface ResultadoRuntPersona {
@@ -148,6 +175,8 @@ export interface DetalleCelda {
    * `personas[].respuesta_proveedor`. Null si no hay crudo, no es JSON o no es un objeto.
    */
   respuesta_proveedor?: RespuestaProveedor | null;
+  /** Impuesto en ERROR con dato parcial: se rotula y no se muestra el monto. Ausente si es false. */
+  dato_parcial?: boolean;
 }
 
 /** Carga el detalle de una celda; la pantalla de backoffice (F06-H5) pasa la suya con `?empresa=`. */
@@ -199,6 +228,17 @@ const TIPOS_ERROR: Record<string, string> = {
   BLOQUEADA_POR_RUNT: "Depende del RUNT del vehículo, que también falló. Se resuelve al reprocesar el RUNT.",
   SIN_PLACA: "El vehículo no tiene placa según el RUNT: no se puede consultar.",
   SIN_IDENTIFICADOR: "El vehículo no tiene ni placa ni VIN según el RUNT: no se puede consultar.",
+  NO_CONFIRMADO: "El impuesto no quedó confirmado.",
+  MODELO_NO_ACEPTADO: "El modelo del vehículo no es aceptado para consultar el impuesto.",
+  DOCUMENTO_NO_COINCIDE: "El documento del propietario no coincide con el del impuesto.",
+  DOCUMENTO_NO_HOMOLOGADO: "El tipo de documento del propietario no está homologado para el impuesto.",
+  VEHICULO_NO_ENCONTRADO: "El vehículo no aparece en el impuesto.",
+  VEHICULO_NO_CONSULTABLE: "El vehículo no se puede consultar en el impuesto.",
+  REQUIERE_ACTUALIZACION: "El impuesto pide actualizar los datos del vehículo antes de consultar.",
+  SIN_DOCUMENTO: "Falta el documento del propietario para consultar el impuesto.",
+  SIN_MODELO: "Falta el modelo del vehículo para consultar el impuesto.",
+  ORGANISMO_INCOMPLETO: "El organismo de tránsito no tiene municipio para consultar el impuesto.",
+  SIN_NOMBRE_PROPIETARIO: "Falta el nombre del propietario para consultar el impuesto.",
 };
 
 /** Texto claro del tipo_error de la celda o de una persona; un código desconocido no se muestra crudo. */

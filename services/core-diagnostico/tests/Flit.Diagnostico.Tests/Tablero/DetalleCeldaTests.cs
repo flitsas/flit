@@ -583,7 +583,8 @@ public sealed class DetalleCeldaTests
         detalle.GetProperty("personas").ValueKind.Should().Be(JsonValueKind.Null, "es una fuente del vehículo");
         var resultado = detalle.GetProperty("resultado");
         resultado.ValueKind.Should().Be(JsonValueKind.Object, cuerpo);
-        resultado.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["monto_total", "vigencias"]);
+        resultado.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["monto_total", "vigencias", "tiene_deuda"]);
+        resultado.GetProperty("tiene_deuda").GetBoolean().Should().BeTrue("un monto positivo sin bandera sigue siendo deuda");
         resultado.GetProperty("monto_total").GetInt64().Should().Be(350000, "pesos enteros");
         var vigencias = resultado.GetProperty("vigencias").EnumerateArray().ToList();
         vigencias.Select(v => v.GetProperty("anio").GetInt32()).Should().Equal([2025, 2026], "por año ascendente");

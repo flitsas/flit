@@ -470,7 +470,8 @@ public sealed class PdfVehiculoTests
         var sinVigencias = await PdfDePrueba.TextoOkAsync(api, token, lote.Id, lote.Vehiculos.Single(v => v.Placa == "TST372").Id, ct);
         var otra = PdfDePrueba.Seccion(sinVigencias, TituloImpuesto);
         PdfDePrueba.Tiene(otra, "No hay vigencias registradas").Should().BeTrue(otra);
-        PdfDePrueba.Tiene(otra, "$ 0").Should().BeTrue($"total adeudado 0: {otra}");
+        PdfDePrueba.Tiene(otra, PdfVehiculo.SinDeuda).Should().BeTrue($"sin deuda no es un monto: {otra}");
+        PdfDePrueba.Tiene(otra, "$ 0").Should().BeFalse($"el cero no se imprime: {otra}");
     }
 
     // HU #13864 AC3 (F09-C9) — vehículo con el impuesto en N/A DEPARTAMENTO_NO_SOPORTADO: la sección «Impuesto vehicular
@@ -703,7 +704,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
     private const string Vin = "9BWZZZ377VT004251";
 
     [Fact]
-    public void Version_de_plantilla_es_5() => PdfVehiculo.VersionPlantilla.Should().Be(5);
+    public void Version_de_plantilla_es_6() => PdfVehiculo.VersionPlantilla.Should().Be(6);
 
     /// <summary>Sin fila de dictamen el PDF sigue igual: no hay sección ni aviso de redacción.</summary>
     [Fact]

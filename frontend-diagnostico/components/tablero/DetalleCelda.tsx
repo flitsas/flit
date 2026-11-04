@@ -7,9 +7,12 @@ import { DocumentoDeclarado } from "@/components/comun/DocumentoDeclarado";
 import type { EstadoCelda } from "@/lib/tablero/api";
 import {
   FUENTES_PERSONA,
+  FRASE_DATO_PARCIAL,
+  fraseImpuesto,
   textoMotivoNa,
   textoTipoError,
   type DetalleCelda as Detalle,
+  type ResultadoImpuestoDetalle,
   type EstadoPersona,
   type PersonaDetalle,
 } from "@/lib/tablero/detalle";
@@ -248,6 +251,23 @@ function RespuestasPersonas({ personas }: { personas: PersonaDetalle[] }) {
   );
 }
 
+function esImpuesto(resultado: Detalle["resultado"]): resultado is ResultadoImpuestoDetalle {
+  return resultado !== null && "vigencias" in resultado;
+}
+
+/** Deuda sin monto, o sin deuda: la frase sustituye al cero y no pinta fechas que no vinieron. */
+function Impuesto({ resultado }: { resultado: ResultadoImpuestoDetalle }) {
+  const frase = fraseImpuesto(resultado);
+  const { monto_total: _monto, tiene_deuda: _deuda, ...resto } = resultado;
+  return (
+    <>
+      {frase && <p>{frase}</p>}
+      <AvisoResumido />
+      <RespuestaFuente datos={resto} etiqueta="Respuesta de la fuente" />
+    </>
+  );
+}
+
 /**
  * «Respuesta de la fuente»: los datos de la consulta, en español y sin el nombre del integrador.
  * Si no está guardada la respuesta completa, el resultado resumido con un aviso.
@@ -266,9 +286,12 @@ function Respuesta({ detalle }: { detalle: Detalle }) {
         <InlineAlert tone="error" title="La consulta terminó en error">
           {textoTipoError(detalle.tipo_error)}
         </InlineAlert>
+        {detalle.dato_parcial && <p>{FRASE_DATO_PARCIAL}</p>}
         {personas.length > 0 && <RespuestasPersonas personas={personas} />}
       </>
     );
+  } else if (detalle.fuente === "IMPUESTO_DEPARTAMENTAL" && esImpuesto(detalle.resultado) && fraseImpuesto(detalle.resultado)) {
+    cuerpo = <Impuesto resultado={detalle.resultado} />;
   } else if (porPersona && personas.length === 0) {
     cuerpo = <Vacio>{`El vehículo no tiene ${detalle.fuente.endsWith("LOCATARIO") ? "locatarios" : "propietarios"} para esta consulta.`}</Vacio>;
   } else if (porPersona) {

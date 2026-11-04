@@ -328,8 +328,8 @@ paths:
         (FUENTE_EN_GRUPO_AJENO); alcance sin RUNT (ALCANCE_SIN_RUNT); fuente fuera de fuentes_habilitadas
         (FUENTE_NO_HABILITADA); fuente habilitada sin adaptador registrado (en D2 solo RUNT lo tiene, HU #13733) o
         IMPUESTO_DEPARTAMENTAL mientras no esté disponible (HU #13863, Q5: bandera Diagnostico:Fuentes:ImpuestoDisponible
-        en true, adaptador de core-consultas conectado y al menos un departamento soportado en la réplica
-        departamentos_impuesto; sin C3 nunca lo está) (FUENTE_NO_DISPONIBLE);
+        en true, adaptador conectado y al menos un departamento soportado en la réplica departamentos_impuesto;
+        en simulación LOCAL/DEV se ofrece con la bandera encendida y la réplica con departamentos) (FUENTE_NO_DISPONIBLE);
         CON_ANALISIS sin tipo
         (TIPO_TRAMITE_REQUERIDO). Solo si todo eso se cumple y el modo es CON_ANALISIS se consulta el catálogo de
         GET /tipos-tramite: tipo fuera del catálogo de la etapa (TIPO_TRAMITE_NO_DISPONIBLE) o faltan las fuentes
@@ -3962,7 +3962,16 @@ components:
         tipo_error:
           type: string
           nullable: true
-          description: Solo con estado ERROR; mismos códigos que CeldaGrilla.tipo_error.
+          description: >
+            Solo con estado ERROR; mismos códigos que CeldaGrilla.tipo_error. El impuesto añade NO_CONFIRMADO,
+            MODELO_NO_ACEPTADO, DOCUMENTO_NO_COINCIDE, DOCUMENTO_NO_HOMOLOGADO, VEHICULO_NO_ENCONTRADO,
+            VEHICULO_NO_CONSULTABLE, REQUIERE_ACTUALIZACION, SIN_DOCUMENTO, SIN_MODELO, ORGANISMO_INCOMPLETO
+            y SIN_NOMBRE_PROPIETARIO.
+        dato_parcial:
+          type: boolean
+          description: >
+            Solo impuesto en ERROR cuando la fuente marcó dato parcial. El detalle lo rotula y no muestra el monto.
+            Ausente cuando es false. No sale en PDF, Excel ni dictamen.
         dato_obtenido_en:
           type: string
           format: date-time
@@ -4135,21 +4144,43 @@ components:
     ResultadoImpuestoDetalle:
       type: object
       description: >
-        Impuesto vehicular departamental (HU #13864, Q1 = a). Sin proveedor, transacción, origen ni departamento consultado
-        (R-20). Pesos colombianos enteros.
-      required: [monto_total, vigencias]
+        Impuesto vehicular departamental. `tiene_deuda` confirma la deuda. `monto_total` es null y se omite cuando el
+        servicio no informó valor: la pantalla, el PDF y el Excel dicen «Deuda sin valor informado», nunca `$ 0`.
+        Sin deuda no trae fechas ni valores que no vinieron. Sin proveedor, transacción, origen ni departamento (R-20).
+      required: [tiene_deuda, vigencias]
       properties:
-        monto_total: { type: integer, format: int64, description: "Total adeudado: suma de las vigencias no pagadas.", example: 350000 }
+        tiene_deuda: { type: boolean, description: "true si la fuente confirmó deuda, también sin monto." }
+        monto_total:
+          type: integer
+          format: int64
+          nullable: true
+          description: "Total adeudado en pesos. Ausente o null si no se informó (no es 0)."
+          example: 350000
+        intereses_mora: { type: integer, format: int64, nullable: true }
+        sanciones: { type: integer, format: int64, nullable: true }
+        avaluo_comercial: { type: integer, format: int64, nullable: true }
+        ultimo_pago: { $ref: "#/components/schemas/UltimoPagoImpuestoDetalle" }
+        liquidacion_consolidada_id: { type: string, nullable: true }
+        periodo_certificacion: { type: string, nullable: true }
+        fecha_consulta: { type: string, nullable: true }
         vigencias:
           type: array
-          description: Por año ascendente; vacía si no registra vigencias («No registra vigencias»).
+          description: Por año ascendente; vacía si no registra vigencias.
           items:
             $ref: "#/components/schemas/VigenciaImpuestoDetalle"
       example:
+        tiene_deuda: true
         monto_total: 350000
         vigencias:
           - { anio: 2025, valor: 180000, pagada: true }
           - { anio: 2026, valor: 350000, pagada: false }
+
+    UltimoPagoImpuestoDetalle:
+      type: object
+      properties:
+        anio: { type: integer, nullable: true }
+        valor: { type: integer, format: int64, nullable: true }
+        fecha: { type: string, nullable: true }
 
     VigenciaImpuestoDetalle:
       type: object

@@ -297,6 +297,26 @@ describe("PaginaDetalleConsulta — respuesta de la fuente: solo la consulta y e
     ]);
   });
 
+  it("deuda sin monto: «Deuda sin valor informado» y sin cero", async () => {
+    const { pagina } = await pintarDetalle(detalle("IMPUESTO_DEPARTAMENTAL", { resultado: { tiene_deuda: true, vigencias: [] } }));
+    expect(within(pagina).getByText("Deuda sin valor informado")).toBeInTheDocument();
+    expect(pagina.textContent).not.toMatch(/\$\s*0|Monto total/);
+  });
+
+  it("dato parcial en error: rótulo y sin monto", async () => {
+    const { pagina } = await pintarDetalle(detalle("IMPUESTO_DEPARTAMENTAL", {
+      estado: "ERROR",
+      tipo_error: "NO_CONFIRMADO",
+      dato_parcial: true,
+      dato_obtenido_en: null,
+      resultado: null,
+      respuesta_fuente: { dato_parcial: true, monto_total: 120000 },
+    }));
+    expect(within(pagina).getByText(/no quedó confirmado/i)).toBeInTheDocument();
+    expect(within(pagina).getByText(/Dato parcial/)).toBeInTheDocument();
+    expect(pagina.textContent).not.toMatch(/120000/);
+  });
+
   it("impuesto sin vigencias: «Sin registros»", async () => {
     const { pagina } = await pintarDetalle(impuestoSinVigencias());
     expect(valorDe(within(pagina).getByRole("table", { name: "Respuesta de la fuente" }), "Vigencias")).toBe("Sin registros");

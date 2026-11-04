@@ -43,8 +43,8 @@ internal sealed record DatosTecnicosVehiculo(string? Marca, string? Linea, int? 
 /// </example>
 internal static class ExcelLote
 {
-    /// <summary>Versión del diseño: entra en la huella (súbela al cambiar hojas, columnas o cómo se pinta una celda).</summary>
-    public const int VersionPlantilla = 1;
+    /// <summary>Versión del diseño: entra en la huella (súbela al cambiar hojas, columnas o cómo se pinta una celda). 2 = monto de impuesto null no es cero.</summary>
+    public const int VersionPlantilla = 2;
 
     public const string ContentType = TabularWorkbookWriter.ContentType;
 
@@ -160,7 +160,7 @@ internal static class ExcelLote
     {
         EstadoSeccion.Completado => "Completado",
         EstadoSeccion.NoAplica => string.IsNullOrWhiteSpace(seccion.Leyenda) ? "No aplica" : "No aplica: " + seccion.Leyenda,
-        EstadoSeccion.NoDisponible => "Consulta no disponible",
+        EstadoSeccion.NoDisponible => seccion.Fuente == "IMPUESTO_DEPARTAMENTAL" ? "No confirmado" : "Consulta no disponible",
         _ => "Pendiente",
     };
 
@@ -188,11 +188,21 @@ internal static class ExcelLote
                 Celda.Of(a.SinValorComercial ? "Sí" : "No"),
             ],
             { Resultado: ResultadoImpuestoDetalle i } =>
-                [Celda.Of((double)i.MontoTotal), Celda.Of((i.Vigencias ?? []).Count(v => !v.Pagada))],
+                [MontoImpuesto(i), Celda.Of((i.Vigencias ?? []).Count(v => !v.Pagada))],
             { Personas: { } personas } => DePersonas(seccion.Fuente, personas, cantidad),
             _ => [],
         };
         return datos.Count == cantidad ? datos : [.. datos, .. Enumerable.Repeat(Celda.Empty, Math.Max(0, cantidad - datos.Count))];
+    }
+
+    /// <summary>El monto null o la deuda sin valor no se escriben como 0. Sin deuda tampoco.</summary>
+    private static Celda MontoImpuesto(ResultadoImpuestoDetalle impuesto)
+    {
+        if (impuesto.TieneDeuda && impuesto.MontoTotal is null or 0)
+            return Celda.Of(PdfVehiculo.DeudaSinValor);
+        if (impuesto.MontoTotal is > 0)
+            return Celda.Of((double)impuesto.MontoTotal.Value);
+        return Celda.Of(PdfVehiculo.SinDeuda);
     }
 
     private static List<Celda> DePersonas(string fuente, IReadOnlyList<PersonaReporte> personas, int cantidad)

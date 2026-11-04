@@ -2,14 +2,12 @@ import { expect, test, type Page } from "@playwright/test";
 import { lanzarExpress } from "./express";
 
 /**
- * HU #13866 (F09-H7) — celda y detalle del impuesto departamental en el tablero.
+ * HU #13866 (F09-H7) y C3-8 — celda y detalle del impuesto departamental en el tablero.
  *
  * Artefacto E2E para QA, SOLO en LOCAL: necesita la suite levantada (hub en 4022, gateway en 4002, core-diagnostico en 4029
- * con `Diagnostico__Ambiente=LOCAL`, `Diagnostico__Simulacion__Habilitada=true` y `Diagnostico__Fuentes__ImpuestoDisponible=true`
- * solo en el entorno de este test, y esta app en 4024). La capacidad simulada declara los departamentos 05 y 25 (HU #13861),
- * así que el impuesto queda disponible sin C3 y sin tocar ningún ambiente desplegado. La consulta simulada (HU #13862) con
- * placa terminada en 1 devuelve 2025 y 2026 sin pagar: total adeudado $ 400.000. El contrato de la compañía debe habilitar
- * IMPUESTO_DEPARTAMENTAL y el Express debe incluirlo en el alcance; si no, el test se omite con el motivo.
+ * con `Diagnostico__Ambiente=LOCAL`, `Diagnostico__Simulacion__Habilitada=true` y `Diagnostico__Fuentes__ImpuestoDisponible=true`,
+ * y esta app en 4024). En simulación el alta ofrece la fuente cuando la bandera está encendida y la réplica tiene
+ * departamentos. El contrato de la compañía debe habilitar IMPUESTO_DEPARTAMENTAL; si no, el test se omite.
  * Excluido de `tsc` y de Vitest; se corre con Playwright desde la raíz del repo, por ejemplo:
  *
  *   DIAGNOSTICO_URL=http://127.0.0.1:4024 E2E_USUARIO=... E2E_CLAVE=... \
@@ -36,7 +34,14 @@ test.describe("impuesto departamental en el tablero", () => {
     test.skip(!process.env.E2E_USUARIO || !process.env.E2E_CLAVE, "Faltan E2E_USUARIO / E2E_CLAVE");
     await entrar(page, process.env.E2E_USUARIO!, process.env.E2E_CLAVE!);
 
-    // HU #14085: el inicio abre la pantalla única en Express con la placa precargada.
+    // El alta (pantalla única) ofrece el impuesto cuando la simulación lo declara disponible.
+    await page.getByRole("textbox", { name: "Placa o VIN" }).fill(PLACA);
+    await page.getByRole("button", { name: "Diagnosticar" }).click();
+    await page.waitForURL((url) => url.pathname === "/diagnosticos/nuevo" && url.searchParams.get("modo") === "express");
+    const casilla = page.getByRole("checkbox", { name: "Impuesto departamental" });
+    test.skip((await casilla.count()) === 0, "La simulación no ofrece el impuesto: revisar la bandera y la réplica de departamentos");
+    await expect(casilla).toBeVisible();
+    await page.goto(`${APP}/`);
     await lanzarExpress(page, PLACA);
 
     const grilla = page.getByRole("table", { name: /semáforo de consultas/i });
