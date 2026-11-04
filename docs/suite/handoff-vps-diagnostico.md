@@ -272,6 +272,51 @@ La suscripción simulada es solo para pruebas en local y no se pone en ningún a
 El compose ya fija, sin variable del `.env`: `Diagnostico__Tramites__Address=http://core-api:${CORE_API_GRPC_PORT}`
 (sin ella `GET /tipos-tramite` responde 503) y `Diagnostico__Fuentes__ImpuestoDisponible=false`.
 
+### 4.0 Impuesto (C3, sin encender)
+
+No se ponen en ningún ambiente hasta el checklist de abajo. Sin valor en el repo:
+
+```
+IMPUESTO_API_BASE_URL=
+IMPUESTO_API_PATH=
+IMPUESTO_API_TIMEOUT_SECONDS=300
+IMPUESTO_CONTACTO_CELULAR=
+IMPUESTO_CONTACTO_TELEFONO=
+IMPUESTO_CONTACTO_CORREO=
+IMPUESTO_CONTACTO_DEPARTAMENTO=
+IMPUESTO_CONTACTO_CIUDAD=
+IMPUESTO_CONTACTO_DIRECCION=
+DIAGNOSTICO_IMPUESTO_DISPONIBLE=false
+```
+
+`DIAGNOSTICO_IMPUESTO_DISPONIBLE` es `Diagnostico__Fuentes__ImpuestoDisponible`. Con la lista de departamentos vacía
+la fuente no se ofrece aunque la bandera esté en true.
+
+Colas nuevas, con TTL 24 h y DLQ 7 días: `consultas.diagnostico-impuesto` (concurrencia 4) y
+`consultas.diagnostico-impuesto-express` (concurrencia 1).
+
+Reiniciar core-diagnostico adelanta las dos réplicas: el trabajador de organismos y el de departamentos de impuesto
+sincronizan antes de su primera espera.
+
+Checklist, por ambiente. No se ejecuta en este corte:
+
+1. Enmienda C3 de ADR-0075 aprobada por el Líder Técnico, y revisión de Seguridad y Habeas Data (nombre y documento
+   en claro en outbox, colas y DLQ).
+2. Constancia de Legal para el scraping.
+3. Seguridad valida que el servicio no autentica y decide si eso se acepta en esa red.
+4. El Líder Técnico ratifica la fachada. El ADR sigue en Propuesto hasta esa aceptación.
+5. Host de DEV/QA y dueño del servicio cerrados.
+6. Variables de arriba puestas. Con la lista vacía, comprobar que la fuente no se ofrece.
+7. Migración aplicada. Los organismos candidatos tienen municipio.
+8. Orden de despliegue: broker (colas y permisos), core-consultas, core-diagnostico.
+9. `scripts/smoke/humo-impuesto.py` contra un vehículo de prueba autorizado, por departamento. Espera una clase, no
+   un valor. Si incluye Valle y devuelve sin deuda en blanco, Valle no se enciende.
+10. Un solo cambio de la tabla de departamentos.
+11. Un diagnóstico real por departamento. Revisar celda, detalle, PDF y Excel. Los logs no llevan URL, placa,
+    documento ni nombre.
+12. Para apagar: vaciar la lista. La réplica conserva las filas y deja de ofrecer la fuente.
+13. Tras el primer lote, medir respuestas vacías, `NO_CONFIRMADO`, sin deuda en blanco y duración por departamento.
+
 Archivos (evidencias y PDF del informe, HU #13846): el compose pasa las mismas `FILE_MANAGER_*` de core-api, con el mismo
 defecto (`https://ny46zhyeti.execute-api.us-east-1.amazonaws.com/pdn/`, `api/v1/files`, timeout 30 s) y la categoría
 `diagnostico` (`DIAGNOSTICO_FILE_MANAGER_CATEGORY`). Si el ambiente ya define `FILE_MANAGER_BASE_URL` o

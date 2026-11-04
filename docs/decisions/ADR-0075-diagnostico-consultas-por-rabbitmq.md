@@ -9,7 +9,8 @@
 **Enmienda** ADR-0072 (Propuesto) en dos puntos: la excepción A11 de `ix_cola` (el dueño pasa a ser el reconciliador) y el control **R-2** de la retención de datos personales (el documento puede estar en claro en la outbox hasta 24 h después de publicarse; ver «Enmienda del control R-2 de ADR-0072»).
 **Enmendado por** [ADR-0076](ADR-0076-diagnostico-respuesta-completa-de-la-fuente-con-pii-cifrada.md) (Propuesto,
 HU #14087 AC8): la vuelta deja de ir minimizada (U1 = b en la vuelta y C3) y lleva el `*Response` completo, con datos
-personales; core-diagnostico lo guarda cifrado aparte de `payload`. La ida no cambia.
+personales; core-diagnostico lo guarda cifrado aparte de `payload`. La ida no cambia, salvo la enmienda C3 de abajo
+(el impuesto envía el nombre del propietario).
 **Diseño**: `docs/diagnosticos/diseno-consultas-por-rabbitmq.md` (revisión 5)
 **Estado de la implementación**: implementado en `feature/AB-12881-diagnostico-d0-d2` (`3dbb299e7..63e0fe89c`, 37 commits, sin push), pendiente de PR, de la re-revisión del security-agent y de la revisión del LT.
 
@@ -75,8 +76,9 @@ Restricciones verificadas:
      misma transacción, desde el punto común de la transición: cierre automático, cierre del panel y llenado manual
      (Dec. 5).
 5. **Red de seguridad.** Un reconciliador de 60 s revisa las celdas con trabajo y sin resultado tras 30 min.
-   - Solo están **perdidas** si su cola (lote o Express) ya devolvió un trabajo publicado más de 15 min después que el
-     suyo. La marca de agua FIFO sale del UUIDv7 del `trabajo_id` (Dec. 6).
+   - Solo están **perdidas** si su propia cola ya devolvió un trabajo publicado más de 15 min después que el suyo.
+     **Enmienda C3 (Propuesto):** el impuesto tiene cola propia, en lote y en Express; el avance del lote general no lo
+     declara perdido. La marca de agua FIFO sale del UUIDv7 del `trabajo_id` (Dec. 6).
    - Una perdida se republica una vez y, a la siguiente, se cierra en ERROR reprocesable.
    - Se **pausa** cuando no llegó ningún resultado en los últimos 10 min, porque eso indica que consultas está caído y
      los trabajos están esperando: no duplica ni pasa celdas a ERROR (U4 = a).
@@ -87,7 +89,8 @@ Restricciones verificadas:
    24 h (Dec. 7).
 7. **SDK.** Gana tres opciones retrocompatibles: `Concurrencia` (por defecto 1), `ProductoresPermitidos` con `user_id`
    validado (en los reenvíos a reintento o DLQ, el consumidor pone su propio `user_id` y lleva el verificado en
-   `x-flit-user-id`) y `RetencionPublicados` (apagada por defecto). Sin cifrado de campo (U1 = b).
+   `x-flit-user-id`) y `RetencionPublicados` (apagada por defecto). Sin cifrado de campo (U1 = b). **Enmienda C3
+   (Propuesto):** la ida del impuesto lleva el nombre del propietario. Este ADR no pasa a Aceptado.
 8. **Simulación.** La de LOCAL y DEV vive en core-consultas (U3 = a). Diagnóstico queda sin adaptadores de proveedor y
    ya no llama por gRPC a ninguna fuente; solo conserva `ListarDepartamentosImpuesto`, el catálogo diario.
 
@@ -103,12 +106,12 @@ Restricciones verificadas:
 | D2 | Sin cupo por empresa. Se acepta perder la equidad entre empresas en los lotes |
 | D3 | Reconciliador cada 60 s: re-publica una vez y luego ERROR (reprocesable) |
 | D4 | Dos tandas de commits con corte directo en `feature/AB-12881-diagnostico-d0-d2`. A: SDK, contratos, migración, publicación y evento de lote, sin consumidores. B: consumidores, reconciliador, simulación en consultas, infraestructura y borrado del trabajador de Postgres. **Las dos están cerradas** |
-| U1 = b | Datos personales **en claro, solo lo mínimo**. Ni a la ida ni a la vuelta viajan nombres o direcciones. **Sin cifrado AES-GCM.** Riesgo aceptado: quien tenga usuario en RabbitMQ lee placa, VIN, documentos y el resultado minimizado. Retención: DLQ 7 días, colas 24 h (Dec. 6) y outbox 24 h (Dec. 7). La revisión de Habeas Data del security-agent se hizo (BLOQUEADO, condiciones resueltas). Registro formal en «Registro del riesgo aceptado U1» |
+| U1 = b | Datos personales **en claro, solo lo mínimo**. Ni a la ida ni a la vuelta viajan nombres o direcciones, salvo la enmienda C3. **Sin cifrado AES-GCM.** Riesgo aceptado: quien tenga usuario en RabbitMQ lee placa, VIN, documentos y el resultado minimizado. Retención: DLQ 7 días, colas 24 h (Dec. 6) y outbox 24 h (Dec. 7). La revisión de Habeas Data del security-agent se hizo (BLOQUEADO, condiciones resueltas). Registro formal en «Registro del riesgo aceptado U1». **Enmienda C3 (Propuesto, 2026-11-04):** la ida del impuesto lleva el nombre del propietario, el del organismo y el del departamento, en claro, en outbox, cola y DLQ. No marca este ADR como Aceptado |
 | U2 = a | Reintentos en diagnóstico (`PoliticaReintentos` 5, 10 y 20 s; efectivo 5, 15 y 35 s; con `MaxReintentos` = 1, solo 5 s). Re-publica una vez y luego ERROR, según D3. core-consultas consulta una vez y devuelve OK o ERROR con el código gRPC |
 | U3 = a | La simulación de LOCAL y DEV vive en core-consultas (tanda B) |
 | U4 = a | Reconciliador con margen de 30 min y pausa si consultas no devuelve resultados en 10 min. Completada por Dec. 6 |
 | Dec. 5 = a | `diagnostico.lote.terminado` en los tres caminos de cierre (automático, `CierrePanel` → INCOMPLETO, `LlenadoManual`), desde el punto común de la transición |
-| Dec. 6 = a | Marca de agua FIFO por cola (lote y Express) a partir del UUIDv7 del `trabajo_id`, `ToleranciaOrden` = 15 min. TTL de 24 h en las 3 colas principales por política, con DLX a la `.dlq`, y `Reconciliador:TtlTrabajo` = 24 h configurable. Pasados TTL + margen, ERROR reprocesable aunque consultas esté caído |
+| Dec. 6 = a | Marca de agua FIFO por cola (lote, Express y, con la enmienda C3, las dos colas de impuesto) a partir del UUIDv7 del `trabajo_id`, `ToleranciaOrden` = 15 min. TTL de 24 h en las colas principales por política, con DLX a la `.dlq`, y `Reconciliador:TtlTrabajo` = 24 h configurable. Pasados TTL + margen, ERROR reprocesable aunque consultas esté caído |
 | Dec. 7 = a | Purga opt-in de la outbox en el SDK (`Platform:Messaging:RetencionPublicados`), apagada por defecto. 24 h en diagnóstico y consultas. Enmienda R-2 de ADR-0072 |
 | Dec. 8 = a | `json-intempo.txt` movido sin leer a `context/muestras/` (gitignored) |
 
@@ -223,7 +226,9 @@ Aceptado.
 
 - **Ida** (`*Request`): placa o VIN; tipo y número de documento de propietarios y locatarios (NIT para RUES); datos
   técnicos del avalúo (modelo, cilindraje, combustible, pasajeros); departamento del impuesto; ids internos (`trabajoId`,
-  `consultaId`, `personaId`, empresa en el sobre).
+  `consultaId`, `personaId`, empresa en el sobre). **Enmienda C3 (Propuesto):** la ida del impuesto añade el nombre del
+  propietario, el del organismo y el del departamento. Sigue en claro, en outbox, cola y DLQ. No marca este ADR como
+  Aceptado.
 - **Vuelta** (`*Response` proyectado a la lista permitida, `services/core-consultas/src/Flit.Consultas.Api/Bus/MinimizadorRespuesta.cs`):
 
   | rpc | Lo único que viaja |
@@ -232,7 +237,7 @@ Aceptado.
   | `ConsultasService/ConsultarConductor` (RUNT persona) | Proveedor, chequeos (clave y estado) y solo los campos `person_license_status` y `person_license_categories` (clave y `valor_texto`) |
   | `ConsultasService/ConsultarMultas` (SIMIT) | Proveedor, semáforo, chequeos (clave y estado) y comparendos (número, fecha, valor, estado y organismo) |
   | `ConsultasService/ConsultarRues` | Proveedor, chequeos, los campos `rues_estado`, `rues_fecha_renovacion` y `rues_ultimo_ano_renovado`, y de cada matrícula mercantil el estado (`valor`, `crudo`) y la fecha de renovación. Sin NIT, razón social ni representantes |
-  | `ConsultasService/ConsultarImpuestoVehicular` | Proveedor, chequeos, monto total y vigencias (año, valor, pagada) |
+  | `ConsultasService/ConsultarImpuestoVehicular` | Proveedor, chequeos, monto total y vigencias (año, valor, pagada). **Enmienda C3 (Propuesto):** el nombre va en la ida, no en esta vuelta. La fachada HTTP está en ADR-0079, también en Propuesto |
   | `ConsultasService/ConsultarAvaluos` | Valor sugerido, fuente principal y de cada fuente su clave, estado, valor y muestras (sin el mensaje del proveedor) |
 
   Nunca viajan `valor_json`, mapas clave-valor, texto libre del proveedor ni ningún campo que el proto agregue sin
@@ -244,7 +249,7 @@ Aceptado.
 
 | Lugar | Retención | Control |
 |---|---|---|
-| Colas principales (`consultas.diagnostico`, `consultas.diagnostico-express`, `diagnostico.consultas-resultados`) | Hasta consumirse; máximo 24 h | Políticas `ttl-*` (86400000 ms, DLX a la `.dlq`), prioridad 10 |
+| Colas principales (`consultas.diagnostico`, `consultas.diagnostico-express`, `consultas.diagnostico-impuesto`, `consultas.diagnostico-impuesto-express`, `diagnostico.consultas-resultados`) | Hasta consumirse; máximo 24 h | Políticas `ttl-*` (86400000 ms, DLX a la `.dlq`), prioridad 10. Las dos de impuesto son la enmienda C3 (Propuesto) |
 | Colas `.retry.<n>` | Segundos o minutos | TTL del SDK |
 | Colas `.dlq` | 7 días | Política `dlq-7d` (604800000 ms), prioridad 10, sin vuelta atrás por `clear_policy` |
 | Volumen del broker | Lo mismo que las colas | Mismos TTL |
@@ -298,9 +303,11 @@ cada alta de usuario del broker y al menos cada 6 meses.
 ### Cambios operacionales
 - **Broker.**
   - Usuario `diagnostico` con destino `consultas`.
-  - `definitions.json` declara `consultas.diagnostico`, `consultas.diagnostico-express` y
+  - `definitions.json` declara `consultas.diagnostico`, `consultas.diagnostico-express`,
+    `consultas.diagnostico-impuesto`, `consultas.diagnostico-impuesto-express` y
     `diagnostico.consultas-resultados` con sus bindings, la política `dlq-7d` en sus `.dlq` y las `ttl-*` en las
-    principales, todas en prioridad 10. Una política manual con más prioridad que alcance estas colas las anula.
+    principales, todas en prioridad 10. Las dos de impuesto son la enmienda C3 (Propuesto): no se usa
+    `consultas.diagnostico.impuesto`. Una política manual con más prioridad que alcance estas colas las anula.
   - El TTL de las `ttl-*` y `Diagnostico:Consultas:Reconciliador:TtlTrabajo` deben coincidir.
 - **Acceso al broker.** Inventario de usuarios y consola solo en `127.0.0.1`, porque cualquier usuario puede leer los
   mensajes (riesgo aceptado de U1).
@@ -322,8 +329,11 @@ cada alta de usuario del broker y al menos cada 6 meses.
 
 ## Pendientes fuera de este ADR
 
-- **Impuestos (acta §3.6).** El servicio actual no está en el repo. Falta su URL, su contrato, su autenticación y si es
-  scraping. Encaje propuesto: core-consultas como fachada, con diagnóstico publicando `consultas.diagnostico.impuesto`.
+- **Impuestos (acta §3.6). Enmienda C3 (Propuesto, 2026-11-04).** El servicio sigue fuera del repo. core-consultas es la
+  fachada HTTP (ADR-0079, Propuesto; la ratifica el Líder Técnico y este ADR no pasa a Aceptado). El plan v2 escribía el
+  scraper dentro de core-consultas; esa opción queda marcada para ratificación, no adoptada aquí. Las colas son
+  `consultas.diagnostico-impuesto` y `consultas.diagnostico-impuesto-express`, no `consultas.diagnostico.impuesto`.
+  Faltan el host de DEV/QA, el dueño y el encendido: nada real se enciende en este corte.
 - **SIMIT.** El acta dice Verifik y el código elige el proveedor por empresa (`FinesProviderResolver`). A ratificar con el
   LT.
 - **Intempo.** Ya implementado en core-consultas (HU #13876). Falta confirmar el nombre y el alcance (acta §6.1).
