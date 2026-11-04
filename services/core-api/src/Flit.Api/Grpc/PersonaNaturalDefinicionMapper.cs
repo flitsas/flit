@@ -4,6 +4,7 @@ using Flit.Admin.Domain.DocumentOrderOverrides;
 using Flit.Infrastructure.PersonaNatural;
 using Flit.Tramites.Application.UseCases.ProcedureTypes;
 using Flit.Tramites.Domain.Tramites.PersonaNatural;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using Flit.Tramites.Grpc.V1;
 using Google.Protobuf;
 
@@ -99,6 +100,23 @@ internal static class PersonaNaturalDefinicionMapper
                 Orden = siguiente++,
                 InstruccionCargue = string.Empty,
                 Condicion = extra.Condicion,
+            });
+        }
+
+        // Un tipo prendario de acción única exige el documento de la decisión (PrendaGate): el portal debe pedirlo aunque la matriz
+        // del tipo solo traiga otro código (paz_salvo_prenda / inscripcion_prenda). Los de la matriz no se quitan.
+        if (DefinicionPersonaNatural.AccionPrenda(tipo.Codigo) is { } accionPrenda
+            && PrendaDecision.DocTipoFor(accionPrenda) is { } docDecision
+            && !definicion.Documentos.Any(d => string.Equals(d.DocCode, docDecision, StringComparison.OrdinalIgnoreCase)))
+        {
+            definicion.Documentos.Add(new DocumentoRequerido
+            {
+                DocCode = docDecision,
+                Nombre = accionPrenda == PrendaDecision.Levantar ? "Documento del levantamiento de la prenda" : "Documento de registro de la prenda",
+                Obligatorio = true,
+                Orden = siguiente++,
+                InstruccionCargue = string.Empty,
+                Condicion = string.Empty,
             });
         }
 

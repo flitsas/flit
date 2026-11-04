@@ -36,6 +36,9 @@ public static partial class ReglasBorrador
     public const int MaxTexto = 500;
     public const int MaxTextoLargo = 2000;
 
+    /// <summary>Tope de «Entidad ante la que se levantó»: el mismo de la columna de FLIT 2 (<c>levantamiento_entidad</c>).</summary>
+    public const int MaxEntidadLevantamiento = 200;
+
     /// <summary>Documentos de una persona natural: la cédula de ciudadanía, la de extranjería, el pasaporte y la tarjeta de identidad.</summary>
     public static readonly IReadOnlySet<string> TiposDocumento = new HashSet<string>(StringComparer.Ordinal) { "CC", "CE", "PAS", "TI" };
 
@@ -445,7 +448,7 @@ public static partial class ReglasBorrador
             errores.Agregar("valorComercial", "Indique el valor comercial.");
         }
 
-        var admitePrenda = def.Flags.RequierePrenda || def.Flags.PermitePrendaComplementaria;
+        var admitePrenda = def.Flags.RequierePrenda || def.Flags.PermitePrendaComplementaria || !string.IsNullOrEmpty(def.Flags.AccionPrenda);
         if (body.Prenda is { } p)
         {
             if (!admitePrenda)
@@ -475,8 +478,14 @@ public static partial class ReglasBorrador
                     errores.Agregar("prenda.acreedor", "El nombre del acreedor es demasiado largo.");
                 if (tiene && !Nit().IsMatch(nit))
                     errores.Agregar("prenda.nitAcreedor", "Indique el NIT del acreedor.");
+                // Solo el levantamiento de acción única la exige (PrendaGate); en los demás tipos no se guarda.
+                var entidad = def.Flags.AccionPrenda == PrendaLevantar && tiene ? p.EntidadLevantamiento?.Trim() : null;
+                if (entidad is { Length: > MaxEntidadLevantamiento })
+                    errores.Agregar("prenda.entidadLevantamiento", $"Use hasta {MaxEntidadLevantamiento} caracteres.");
+                if (string.IsNullOrEmpty(entidad))
+                    entidad = null;
                 if (!errores.Hay)
-                    prenda = tiene ? new PrendaDatos(true, acreedor, nit, decision) : new PrendaDatos(false, null, null, decision);
+                    prenda = tiene ? new PrendaDatos(true, acreedor, nit, decision, entidad) : new PrendaDatos(false, null, null, decision);
             }
         }
         else if (def.Flags.RequierePrenda)
@@ -549,11 +558,13 @@ public static partial class ReglasBorrador
         if (def.Flags.RequiereComercial && datos.Comercial?.Valor is not > 0)
             pendientes.Add(new PendienteDto("comercial_requerido", "valorComercial", PasoDe("commercial")));
 
-        var prendaExigida = def.Flags.RequierePrenda || datos.Prenda?.Tiene == true;
+        var prendaExigida = def.Flags.RequierePrenda || datos.Prenda?.Tiene == true || !string.IsNullOrEmpty(def.Flags.AccionPrenda);
         if (prendaExigida && string.IsNullOrWhiteSpace(datos.Prenda?.Acreedor))
             pendientes.Add(new PendienteDto("prenda_acreedor_requerido", "prenda.acreedor", PasoDe("prenda_decision")));
         if (prendaExigida && string.IsNullOrWhiteSpace(datos.Prenda?.NitAcreedor))
             pendientes.Add(new PendienteDto("prenda_nit_requerido", "prenda.nitAcreedor", PasoDe("prenda_decision")));
+        if (def.Flags.AccionPrenda == PrendaLevantar && string.IsNullOrWhiteSpace(datos.Prenda?.EntidadLevantamiento))
+            pendientes.Add(new PendienteDto("prenda_entidad_requerida", "prenda.entidadLevantamiento", PasoDe("prenda_decision")));
 
         // Lo que reclama una declaración (certificado de blindaje, documentos de la causal) lo decide ella, no la matriz.
         var deLasDeclaraciones = DocumentosDeDeclaraciones(def);

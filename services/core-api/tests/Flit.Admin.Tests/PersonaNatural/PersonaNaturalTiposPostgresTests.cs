@@ -129,6 +129,53 @@ public sealed class PersonaNaturalTiposPostgresTests(WebApplicationFactory<Progr
             p => p.Decision == esperada && p.AcreedorNombre == "Banco Uno" && p.AcreedorDocumento == "900123456");
     }
 
+    [Theory]
+    [InlineData("LEVANTAMIENTO_PRENDA", "paz_salvo_prenda", "prenda_levantamiento")]
+    [InlineData("PRENDA_INSCRIPCION", "inscripcion_prenda", "prenda_registro")]
+    public async Task UnTipoPrendarioDeAccionUnica_RadicadoDesdeElPortal_PasaElGateDePrendaDeFlit2(string tipo, string deLaMatriz, string deLaDecision)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        await using var e = await Escenario.CrearAsync(host, ct);
+        await e.UsarTipoSembradoAsync(tipo, ct);
+        var levanta = tipo == "LEVANTAMIENTO_PRENDA";
+        var solicitud = e.Solicitud(
+            partes: [e.Parte("comprador", "2000000014")],
+            adjuntos: [e.Adjunto(deLaMatriz, "pr01"), e.Adjunto(deLaDecision, "pr02")],
+            prenda: new PrendaPortal(true, "Banco Uno", "900123456", null, levanta ? "Secretaría de Tránsito de Cali" : "ignorada"));
+        await e.SembrarValidacionesAsync(solicitud, ct);
+
+        var r = await e.ProcesarAsync(new PortalFalso(solicitud), e.Evento(), ct);
+
+        r.Creada.Should().BeTrue(r.Codigo);
+        var prendas = await e.PrendasAsync(ct);
+        prendas.Should().ContainSingle().Which.LevantamientoEntidad.Should().Be(levanta ? "Secretaría de Tránsito de Cali" : null);
+        var docTipos = (await e.AdjuntosAsync(ct)).Select(a => a.Tipo).ToList();
+        docTipos.Should().Contain([deLaMatriz, deLaDecision]);
+        Flit.Tramites.Domain.Tramites.Services.PrendaGate.EvaluateAccionUnica(prendas.ToList(), docTipos).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task LevantamientoRadicadoSinEntidad_NoPasaElGateDePrenda_ComoEnFlit2()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        await using var e = await Escenario.CrearAsync(host, ct);
+        await e.UsarTipoSembradoAsync("LEVANTAMIENTO_PRENDA", ct);
+        var solicitud = e.Solicitud(
+            partes: [e.Parte("comprador", "2000000015")],
+            adjuntos: [e.Adjunto("paz_salvo_prenda", "pr03"), e.Adjunto("prenda_levantamiento", "pr04")],
+            prenda: new PrendaPortal(true, "Banco Uno", "900123456"));
+        await e.SembrarValidacionesAsync(solicitud, ct);
+
+        var r = await e.ProcesarAsync(new PortalFalso(solicitud), e.Evento(), ct);
+
+        r.Creada.Should().BeTrue(r.Codigo);
+        var prendas = await e.PrendasAsync(ct);
+        Flit.Tramites.Domain.Tramites.Services.PrendaGate.EvaluateAccionUnica(prendas.ToList(), (await e.AdjuntosAsync(ct)).Select(a => a.Tipo).ToList())
+            .Should().Be(Flit.Tramites.Domain.Tramites.TramiteEstadoErrores.PrendaEntidadLevantamientoRequerida);
+    }
+
     // ── Destino, prenda, leasing y simultáneos con tipos propios ─────────────────────────────────────────────────────
 
     [Fact]

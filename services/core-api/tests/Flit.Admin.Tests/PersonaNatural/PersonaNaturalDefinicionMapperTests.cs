@@ -86,6 +86,38 @@ public sealed class PersonaNaturalDefinicionMapperTests
         PersonaNaturalDefinicionMapper.Armar(Tipo("DUPLICADO_TARJETA", "OTROS", PerfilOtros), Pasos(), []).Flags.OrganismoLoEligeOperador.Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData("LEVANTAMIENTO_PRENDA", "paz_salvo_prenda", "prenda_levantamiento", "Documento del levantamiento de la prenda")]
+    [InlineData("PRENDA_INSCRIPCION", "inscripcion_prenda", "prenda_registro", "Documento de registro de la prenda")]
+    public void UnTipoPrendarioDeAccionUnica_AgregaElDocumentoDeLaDecision_ObligatorioYSinQuitarLosDeLaMatriz(string codigo, string deLaMatriz, string deLaDecision, string nombre)
+    {
+        var d = PersonaNaturalDefinicionMapper.Armar(Tipo(codigo, "OTROS", PerfilOtros), Pasos(), [Doc(deLaMatriz)]);
+
+        d.Documentos.Select(x => x.DocCode).Should().Equal(deLaMatriz, deLaDecision);
+        var doc = d.Documentos.Single(x => x.DocCode == deLaDecision);
+        doc.Obligatorio.Should().BeTrue();
+        doc.Nombre.Should().Be(nombre);
+        doc.Orden.Should().BeGreaterThan(d.Documentos.Single(x => x.DocCode == deLaMatriz).Orden);
+    }
+
+    [Fact]
+    public void ElDocumentoDeLaDecision_NoSeDuplica_SiLaMatrizYaLoTrae()
+    {
+        var d = PersonaNaturalDefinicionMapper.Armar(Tipo("LEVANTAMIENTO_PRENDA", "OTROS", PerfilOtros), Pasos(), [Doc("prenda_levantamiento")]);
+
+        d.Documentos.Should().ContainSingle(x => x.DocCode == "prenda_levantamiento");
+    }
+
+    [Theory]
+    [InlineData("TRASPASO_STANDARD")]
+    [InlineData("CAMBIO_COLOR")]
+    public void UnTipoQueNoEsDeAccionUnica_NoRecibeElDocumentoDeLaDecision(string codigo)
+    {
+        var d = PersonaNaturalDefinicionMapper.Armar(Tipo(codigo, "OTROS", PerfilOtros), Pasos(), [Doc("tarjeta_propiedad")]);
+
+        d.Documentos.Select(x => x.DocCode).Should().NotContain(["prenda_levantamiento", "prenda_registro"]);
+    }
+
     [Fact]
     public void LosDocumentosDeJuridicaYMandato_NoSalen_NiDeLaMatrizNiDeLasReglasCondicionales()
     {

@@ -130,6 +130,9 @@ public sealed class CompletitudRequisitosPuntoService(IFachadaDefiniciones defin
             && !pendientes.Any(x => string.Equals(x.Codigo, docPrenda, StringComparison.OrdinalIgnoreCase)))
             pendientes.Add(new PendienteCompletitudPuntoDto(docPrenda, def.Documentos.FirstOrDefault(d => d.DocCode == docPrenda)?.Nombre ?? "Documento de la prenda"));
 
+        if (def.Flags.AccionPrenda == ReglasBorrador.PrendaLevantar && string.IsNullOrWhiteSpace(borrador.Datos.Prenda?.EntidadLevantamiento))
+            pendientes.Add(new PendienteCompletitudPuntoDto("prenda_entidad_requerida", "Entidad ante la que se levantó la prenda"));
+
         if (def.Flags.RequiereComercial && borrador.Datos.Comercial?.Valor is not > 0)
             pendientes.Add(new PendienteCompletitudPuntoDto(CodigoValorVenta, "Valor de venta"));
 

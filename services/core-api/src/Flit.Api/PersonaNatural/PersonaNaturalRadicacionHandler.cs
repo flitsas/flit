@@ -275,7 +275,8 @@ internal sealed class PersonaNaturalCreador(
         {
             db.ChangeTracker.Clear();
             var decision = DecisionDePrenda(p, tipo.Codigo);
-            var (_, errorPrenda) = await prenda.HandleAsync(id, empresa, new RegistrarPrendaInput(decision, p.Acreedor, p.NitAcreedor), creador, ct).ConfigureAwait(false);
+            var (_, errorPrenda) = await prenda.HandleAsync(id, empresa, new RegistrarPrendaInput(decision, p.Acreedor, p.NitAcreedor,
+                string.Equals(decision, PrendaDecision.Levantar, StringComparison.OrdinalIgnoreCase) ? p.EntidadLevantamiento : null), creador, ct).ConfigureAwait(false);
             if (errorPrenda is not null)
                 return Rechazo(errorPrenda);
         }

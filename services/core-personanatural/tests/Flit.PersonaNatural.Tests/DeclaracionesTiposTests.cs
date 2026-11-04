@@ -379,6 +379,82 @@ public sealed class DeclaracionesTiposTests
         DefinicionesService.Leer(json.Replace(",\"accionPrenda\":\"levantar\"", string.Empty, StringComparison.Ordinal))!.Flags.AccionPrenda.Should().BeNull();
     }
 
+    // ── Prenda de acción única: entidad del levantamiento ───────────────────────────────────────────────────────────
+
+    private static DefinicionTipoDto AccionUnica(string accion) => DefinicionesDePrueba.UnTitular(accion == "levantar" ? "LEVANTAMIENTO_PRENDA" : "PRENDA_INSCRIPCION", "au") with
+    {
+        Pasos = [new PasoDto("prenda", "Prenda", ["prenda_decision"], []), new PasoDto("documentos", "Documentos", ["document_checklist"], [])],
+        Documentos = [new DocumentoRequeridoDto(accion == "levantar" ? "prenda_levantamiento" : "prenda_registro", "Documento de la decisión", true, 1, string.Empty, string.Empty)],
+        Flags = new FlagsTipoDto("PLATE", false, true, false, false, true, false, AccionPrenda: accion),
+    };
+
+    [Fact]
+    public void Levantar_deAccionUnica_SinEntidad_PidePendiente_YConEntidadCompleta()
+    {
+        var def = AccionUnica("levantar");
+        var sin = new PrendaDatos(true, "Banco Uno", "900123456", "levantar");
+        var con = sin with { EntidadLevantamiento = "Secretaría de Tránsito" };
+
+        Pendientes(def, docs: ["prenda_levantamiento"], prenda: sin).Should().ContainSingle().Which
+            .Should().Be(new PendienteDto("prenda_entidad_requerida", "prenda.entidadLevantamiento", "prenda"));
+        Pendientes(def, docs: ["prenda_levantamiento"], prenda: con).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Levantar_deAccionUnica_ElDocumentoDeLaDecision_NoSeDuplicaComoPendiente()
+    {
+        var def = AccionUnica("levantar");
+        var prenda = new PrendaDatos(true, "Banco Uno", "900123456", "levantar", "Tránsito");
+
+        var pendientes = Pendientes(def, prenda: prenda);
+
+        pendientes.Should().ContainSingle().Which.Referencia.Should().Be("prenda_levantamiento");
+    }
+
+    [Fact]
+    public void Registrar_deAccionUnica_NoPideEntidad()
+    {
+        var def = AccionUnica("registrar");
+
+        Pendientes(def, docs: ["prenda_registro"], prenda: new PrendaDatos(true, "Banco Uno", "900123456", "registrar")).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ConPrendaNormal_LaEntidadNoSePide_NiSeGuarda()
+    {
+        var def = ConPrenda(exige: true);
+        Pendientes(def, docs: ["tarjeta_propiedad"], prenda: new PrendaDatos(true, "Banco Uno", "900123456", "levantar")).Should().BeEmpty();
+
+        var (prenda, errores) = ValidarPrenda(def, new PrendaRequest(true, "Banco Uno", "900123456", "levantar", "Tránsito"));
+        errores.Hay.Should().BeFalse();
+        prenda!.EntidadLevantamiento.Should().BeNull("solo el levantamiento de acción única la usa");
+    }
+
+    [Fact]
+    public void ValidarEntidad_SeGuardaRecortada_SoloParaLevantarDeAccionUnica_YTopeDe200()
+    {
+        var (prenda, errores) = ValidarPrenda(AccionUnica("levantar"), new PrendaRequest(true, "Banco Uno", "900123456", null, "  Tránsito de Cali  "));
+        errores.Hay.Should().BeFalse();
+        prenda!.EntidadLevantamiento.Should().Be("Tránsito de Cali");
+
+        var (ins, e2) = ValidarPrenda(AccionUnica("registrar"), new PrendaRequest(true, "Banco Uno", "900123456", null, "Tránsito"));
+        e2.Hay.Should().BeFalse();
+        ins!.EntidadLevantamiento.Should().BeNull();
+
+        var (_, e3) = ValidarPrenda(AccionUnica("levantar"), new PrendaRequest(true, "Banco Uno", "900123456", null, new string('x', 201)));
+        e3.Hay.Should().BeTrue();
+        var (ok, e4) = ValidarPrenda(AccionUnica("levantar"), new PrendaRequest(true, "Banco Uno", "900123456", null, new string('x', 200)));
+        e4.Hay.Should().BeFalse();
+        ok!.EntidadLevantamiento.Should().HaveLength(200);
+    }
+
+    [Fact]
+    public void ElBorradorAnteriorSinEntidad_SeLeeCompatible()
+    {
+        DatosSolicitud.Leer("{\"prenda\":{\"tiene\":true,\"acreedor\":\"B\",\"nitAcreedor\":\"1\",\"decision\":\"levantar\"}}").Prenda!.EntidadLevantamiento.Should().BeNull();
+        DatosSolicitud.Leer(new DatosSolicitud(null, new PrendaDatos(true, "B", "1", "levantar", "Tránsito")).Serializar()).Prenda!.EntidadLevantamiento.Should().Be("Tránsito");
+    }
+
     // ── HU 6 y 10: catálogos y destinos ──────────────────────────────────────────────────────────────────────────────
 
     private sealed class CatalogosFalsos : IFachadaCatalogosVehiculo

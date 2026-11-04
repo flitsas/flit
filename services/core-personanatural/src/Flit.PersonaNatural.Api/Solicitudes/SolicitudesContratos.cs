@@ -18,7 +18,7 @@ public sealed record ActoresRequest(long? Version, IReadOnlyList<ActorRequest>? 
 public sealed record CamposRequest(long? Version, Dictionary<string, JsonElement>? Valores);
 
 /// <summary><c>Decision</c> (HU 8): registrar | levantar | sin_prenda. Opcional: sin ella se conserva <c>TienePrenda</c>.</summary>
-public sealed record PrendaRequest(bool TienePrenda, string? Acreedor, string? NitAcreedor, string? Decision = null);
+public sealed record PrendaRequest(bool TienePrenda, string? Acreedor, string? NitAcreedor, string? Decision = null, string? EntidadLevantamiento = null);
 
 public sealed record ComercialRequest(long? Version, decimal? ValorComercial, PrendaRequest? Prenda);
 
@@ -80,7 +80,7 @@ public sealed record CancelacionDto(Guid SolicitudId, string Estado);
 
 public sealed record ComercialDatos(decimal? Valor);
 
-public sealed record PrendaDatos(bool Tiene, string? Acreedor, string? NitAcreedor, string? Decision = null);
+public sealed record PrendaDatos(bool Tiene, string? Acreedor, string? NitAcreedor, string? Decision = null, string? EntidadLevantamiento = null);
 
 public sealed record RequisitosDatos(IReadOnlyList<string> Transformaciones, string? Observaciones);
 
