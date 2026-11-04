@@ -116,6 +116,7 @@ const GRUPO_DE_PENDIENTE: Readonly<Record<string, GrupoPaso>> = {
   comercial_requerido: "requisitos",
   prenda_acreedor_requerido: "requisitos",
   prenda_nit_requerido: "requisitos",
+  prenda_entidad_requerida: "requisitos",
   documento_requerido: "requisitos",
   // Una declaración del tipo sin responder (`referencia` = su clave): se atiende en la tarjeta de declaraciones del paso Requisitos.
   declaracion_requerida: "requisitos",

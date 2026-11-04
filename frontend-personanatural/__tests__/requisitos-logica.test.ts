@@ -85,6 +85,14 @@ describe("tarjetas que aplican al tipo", () => {
     expect(erroresDeRequisitos(d, [], entrada())).toMatchObject({ "prenda.acreedor": expect.any(String), "prenda.nitAcreedor": expect.any(String) });
   });
 
+  it("la entidad del levantamiento solo se exige cuando la entrada la trae (acción fija levantar)", () => {
+    const d = definicionDe([["vehicle_query"], ["document_checklist"]], { flags: flags({ requierePrenda: true }) });
+    expect(erroresDeRequisitos(d, [], entrada())).not.toHaveProperty("prenda.entidadLevantamiento");
+    expect(erroresDeRequisitos(d, [], entrada({ entidadLevantamiento: "  " }))).toHaveProperty("prenda.entidadLevantamiento");
+    expect(erroresDeRequisitos(d, [], entrada({ entidadLevantamiento: "x".repeat(201) }))).toHaveProperty("prenda.entidadLevantamiento");
+    expect(erroresDeRequisitos(d, [], entrada({ entidadLevantamiento: "Notaría 15" }))).not.toHaveProperty("prenda.entidadLevantamiento");
+  });
+
   it("los campos del tipo salen de los pasos de requisitos que los traen", () => {
     const d = definicionDe([["actor_form"], ["generic_form"]], {});
     d.pasos[0]!.campos = [campo({ fieldKey: "de-actores" })];

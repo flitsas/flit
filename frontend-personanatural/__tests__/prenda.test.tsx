@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Adjunto, DefinicionTipo, Solicitud } from "@/lib/api/cliente";
 import { definicionDe, solicitudDe } from "./fixtures-wizard";
@@ -181,6 +181,43 @@ describe("tipo que exige prenda sin la sección prenda_decision", () => {
     expect(within(tarjeta()).getByLabelText("NIT / Documento del acreedor *")).toHaveValue("860002964");
     expect(within(tarjeta()).queryByText("¿Qué se hará con la prenda?")).not.toBeInTheDocument();
     expect(screen.getAllByText(/Paz y Salvo de Prenda/)).toHaveLength(1);
+  });
+
+  it("con acción fija levantar pide la entidad ante la que se levantó, la guarda y la precarga", async () => {
+    const ENTIDAD = "Entidad ante la que se levantó *";
+    const { llamadas, estado } = await abrir(definicion({ flags: flags({ requierePrenda: true, permitePrendaComplementaria: false, accionPrenda: "levantar" }) }), {
+      "POST /solicitudes/s-1/adjuntos": () => json(adjunto("a1", "prenda_levantamiento"), 201),
+    });
+    const campo = within(tarjeta()).getByLabelText(ENTIDAD);
+    expect(campo).toHaveAttribute("maxlength", "200");
+    expect(campo).toHaveAttribute("placeholder", "Ej. Notaría 15 de Medellín");
+    expect(siguiente()).toBeDisabled();
+    fireEvent.change(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *"), { target: { value: "Banco Uno" } });
+    fireEvent.change(within(tarjeta()).getByLabelText("NIT / Documento del acreedor *"), { target: { value: "860002964" } });
+    fireEvent.blur(campo);
+    expect(await within(tarjeta()).findByText("Campo obligatorio")).toBeInTheDocument();
+    fireEvent.change(campo, { target: { value: "Notaría 15 de Medellín" } });
+    estado.actual = { ...estado.actual, adjuntos: [adjunto("a1", "prenda_levantamiento")] };
+    fireEvent.change(within(tarjeta()).getByLabelText(/Paz y salvo del acreedor/), { target: { files: [pdf] } });
+    await waitFor(() => expect(siguiente()).toBeEnabled());
+    fireEvent.click(siguiente());
+    await waitFor(() => expect(llamadas.some((l) => l.clave === "PUT /solicitudes/s-1/comercial")).toBe(true));
+    expect(cuerpo(llamadas, "PUT /solicitudes/s-1/comercial").prenda).toMatchObject({ entidadLevantamiento: "Notaría 15 de Medellín" });
+  });
+
+  it("precarga la entidad guardada al reanudar", async () => {
+    await abrir(sinSeccion(), {}, borrador({ datos: { diagnostico: { ...DIAGNOSTICO_OK, fecha: "2026-10-28T20:23:00Z" }, prenda: { tiene: true, acreedor: "B", nitAcreedor: "860002964", entidadLevantamiento: "Notaría 3", decision: "levantar" } } }));
+    expect(within(tarjeta()).getByLabelText("Entidad ante la que se levantó *")).toHaveValue("Notaría 3");
+  });
+
+  it("registrar y el selector de acción (aunque se elija levantar) no muestran la entidad", async () => {
+    await abrir(definicion({ flags: flags({ requierePrenda: true, permitePrendaComplementaria: false, accionPrenda: "registrar" }) }));
+    expect(within(tarjeta()).queryByLabelText(/Entidad ante la que se levantó/)).toBeNull();
+    cleanup();
+    await abrir();
+    fireEvent.click(within(tarjeta()).getByLabelText("Sí"));
+    fireEvent.click(within(tarjeta()).getByLabelText("Levantar la prenda inscrita"));
+    expect(within(tarjeta()).queryByLabelText(/Entidad ante la que se levantó/)).toBeNull();
   });
 
   it("con solo prenda complementaria y sin la sección no hay tarjeta", async () => {

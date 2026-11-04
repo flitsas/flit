@@ -182,6 +182,9 @@ export const nitAcreedorInvalido = (v: string): string | undefined => (/^\d{8,10
 
 export const acreedorInvalido = (v: string): string | undefined => (v.trim() === "" ? "Campo obligatorio" : v.trim().length > 150 ? "El nombre del acreedor es demasiado largo" : undefined);
 
+export const entidadLevantamientoInvalida = (v: string): string | undefined =>
+  v.trim() === "" ? "Campo obligatorio" : v.trim().length > 200 ? "El nombre de la entidad es demasiado largo" : undefined;
+
 // ── Qué falta ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
 export interface EntradaRequisitos {
@@ -190,6 +193,8 @@ export interface EntradaRequisitos {
   tienePrenda: boolean;
   acreedor: string;
   nitAcreedor: string;
+  /** Solo con acción fija levantar; si es `undefined` no se exige. */
+  entidadLevantamiento?: string;
   observaciones: string;
   transformaciones?: readonly string[];
   hayPersonaJuridica?: boolean;
@@ -214,6 +219,10 @@ export function erroresDeRequisitos(d: DefinicionTipo, adjuntos: readonly Adjunt
     const n = nitAcreedorInvalido(e.nitAcreedor);
     if (a) errores["prenda.acreedor"] = a;
     if (n) errores["prenda.nitAcreedor"] = n;
+    if (e.entidadLevantamiento !== undefined) {
+      const l = entidadLevantamientoInvalida(e.entidadLevantamiento);
+      if (l) errores["prenda.entidadLevantamiento"] = l;
+    }
   }
   if (t.documentos) {
     const ctx: ContextoCondicion = {

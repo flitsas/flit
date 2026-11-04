@@ -278,7 +278,7 @@ export type DecisionPrenda = "registrar" | "levantar" | "sin_prenda";
 
 export interface DatosSolicitud {
   comercial?: { valor: number | null } | null;
-  prenda?: { tiene: boolean; acreedor: string | null; nitAcreedor: string | null; decision?: DecisionPrenda | null } | null;
+  prenda?: { tiene: boolean; acreedor: string | null; nitAcreedor: string | null; entidadLevantamiento?: string | null; decision?: DecisionPrenda | null } | null;
   requisitos?: { transformaciones: string[]; observaciones: string | null } | null;
   diagnostico?: DiagnosticoGuardado | null;
 }
@@ -811,7 +811,7 @@ export function crearCliente({ base = BASE_BFF, fetchImpl }: OpcionesCliente = {
         solicitar<Solicitud>("PUT", `/solicitudes/${encodeURIComponent(id)}/campos`, datos, o),
       guardarComercial: (
         id: string,
-        datos: { version: number; valorComercial?: number; prenda?: { tienePrenda: boolean; decision?: DecisionPrenda; acreedor?: string; nitAcreedor?: string } },
+        datos: { version: number; valorComercial?: number; prenda?: { tienePrenda: boolean; decision?: DecisionPrenda; acreedor?: string; nitAcreedor?: string; entidadLevantamiento?: string } },
         o?: OpcionesLlamada,
       ) => solicitar<Solicitud>("PUT", `/solicitudes/${encodeURIComponent(id)}/comercial`, datos, o),
       guardarRequisitos: (id: string, datos: { version: number; transformaciones?: string[]; observaciones?: string }, o?: OpcionesLlamada) =>

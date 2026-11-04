@@ -94,6 +94,7 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
   // `null` = la persona aún no escribió: se muestra el acreedor del RUNT si llegó (editable). Al escribir, manda lo escrito.
   const [acreedorEscrito, setAcreedorEscrito] = useState<string | null>(() => solicitud.datos.prenda?.acreedor ?? null);
   const [nitEscrito, setNitEscrito] = useState<string | null>(() => solicitud.datos.prenda?.nitAcreedor ?? null);
+  const [entidadLevantamiento, setEntidadLevantamiento] = useState(() => solicitud.datos.prenda?.entidadLevantamiento ?? "");
   const verPrenda = t.prenda && (t.prendaObligatoria || tienePrenda);
   const gravamen = useQuery<GravamenRunt>({
     queryKey: ["pn", "gravamen", idSolicitud],
@@ -122,7 +123,7 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
   const condicion = { tienePrenda: t.prendaObligatoria || tienePrenda, transformaciones, campos, hayPersonaJuridica };
   const documentosVisibles = documentos.filter((doc) => documentoVisible(doc, condicion));
   const decisionPrenda = decisionDe(condicion.tienePrenda, accionPrenda);
-  const entrada: EntradaRequisitos = { campos, valorVenta, tienePrenda: condicion.tienePrenda, acreedor, nitAcreedor, observaciones, transformaciones, hayPersonaJuridica };
+  const entrada: EntradaRequisitos = { campos, valorVenta, tienePrenda: condicion.tienePrenda, acreedor, nitAcreedor, ...(accionFija === "levantar" ? { entidadLevantamiento } : {}), observaciones, transformaciones, hayPersonaJuridica };
   const declaraciones = useMemo(() => (t.declaraciones ? declaracionesActivas(definicion, transformaciones) : []), [t.declaraciones, definicion, transformaciones]);
   // Lo que el RUNT tiene hoy (color, combustible, carrocería): el valor nuevo de una transformación debe ser distinto. Si no llega, no se bloquea.
   const pideValoresRunt = declaraciones.some((d) => categoriaRuntDe(d) !== null);
@@ -154,7 +155,7 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
 
   // ── Guardado del borrador ───────────────────────────────────────────────────────────────────────────────────────────
 
-  const firma = JSON.stringify([campos, valorVenta, tienePrenda, accionPrenda, acreedor, nitAcreedor, transformaciones, observaciones]);
+  const firma = JSON.stringify([campos, valorVenta, tienePrenda, accionPrenda, acreedor, nitAcreedor, entidadLevantamiento, transformaciones, observaciones]);
   // Un valor precargado con el avalúo aún no está en el servidor: queda como cambio pendiente para que se guarde al avanzar.
   const guardada = useRef(valorPrecargado ? "" : firma);
 
@@ -173,7 +174,7 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
             version,
             ...(t.comercial ? { valorComercial: numeroMoneda(valorVenta) } : {}),
             ...(t.prenda
-              ? { prenda: { tienePrenda: tiene, decision: decisionDe(tiene, accionPrenda), ...(tiene ? { acreedor: acreedor.trim(), nitAcreedor } : {}) } }
+              ? { prenda: { tienePrenda: tiene, decision: decisionDe(tiene, accionPrenda), ...(tiene ? { acreedor: acreedor.trim(), nitAcreedor } : {}), ...(tiene && accionFija === "levantar" ? { entidadLevantamiento: entidadLevantamiento.trim() } : {}) } }
               : {}),
           }),
         );
@@ -189,7 +190,7 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
       if (error instanceof ApiError && error.errores) setErroresServidor(erroresDeServidor(error.errores, definicion));
       throw error;
     }
-  }, [t, definicion, solicitud.fieldValues, campos, valorVenta, tienePrenda, accionPrenda, acreedor, nitAcreedor, transformaciones, observaciones, guardarConVersion, cliente, idSolicitud, firma]);
+  }, [t, definicion, solicitud.fieldValues, campos, valorVenta, tienePrenda, accionPrenda, acreedor, nitAcreedor, entidadLevantamiento, accionFija, transformaciones, observaciones, guardarConVersion, cliente, idSolicitud, firma]);
 
   // Al pasar al siguiente paso: guarda solo si algo cambió desde el último guardado.
   useEffect(() => {
@@ -411,6 +412,23 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
                   onBlur={() => tocar("prenda.nitAcreedor")}
                 />
               </Field>
+              {accionFija === "levantar" && (
+                <Field label="Entidad ante la que se levantó *" error={mostrar("prenda.entidadLevantamiento")}>
+                  <input
+                    className="field"
+                    autoComplete="off"
+                    maxLength={200}
+                    placeholder="Ej. Notaría 15 de Medellín"
+                    aria-invalid={mostrar("prenda.entidadLevantamiento") ? true : undefined}
+                    value={entidadLevantamiento}
+                    onChange={(e) => {
+                      setEntidadLevantamiento(e.target.value);
+                      editar("prenda.entidadLevantamiento");
+                    }}
+                    onBlur={() => tocar("prenda.entidadLevantamiento")}
+                  />
+                </Field>
+              )}
             </div>
           )}
           {documentoPrenda && (

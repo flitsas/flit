@@ -139,6 +139,7 @@ export function armarResumen(definicion: DefinicionTipo, solicitud: Solicitud, v
   if (prenda) {
     const levanta = prenda.tiene && prenda.decision === "levantar";
     comercial.push({ etiqueta: "Prenda", valor: levanta ? "Sí, se levantará" : prenda.tiene ? "Sí" : "No" });
+    if (levanta) comercial.push({ etiqueta: "Entidad ante la que se levantó", valor: prenda.entidadLevantamiento?.trim() || SIN_DATO });
     if (prenda.tiene && !levanta) {
       comercial.push({ etiqueta: "Acreedor", valor: prenda.acreedor?.trim() || SIN_DATO });
       comercial.push({ etiqueta: "NIT del acreedor", valor: prenda.nitAcreedor?.trim() || SIN_DATO });
@@ -189,6 +190,8 @@ export function textoPendiente(pendiente: Pendiente, definicion: DefinicionTipo)
       return "Falta el valor comercial.";
     case "prenda_acreedor_requerido":
       return "Falta el acreedor de la prenda.";
+    case "prenda_entidad_requerida":
+      return "Falta la entidad ante la que se levantó la prenda.";
     case "prenda_nit_requerido":
       return "Falta el NIT del acreedor de la prenda.";
     case "documento_requerido": {
