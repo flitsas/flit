@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using Flit.PersonaNatural.Api.Adjuntos;
+using Flit.PersonaNatural.Api.Consultas;
 using Flit.PersonaNatural.Api.Persistence;
 using Flit.PersonaNatural.Api.Pii;
 using Flit.PersonaNatural.Api.Radicacion;
@@ -490,6 +491,70 @@ public sealed class RadicacionTests : IAsyncLifetime
         var (id, token) = await Completa(validar: false, canalPunto: true);
 
         (await Radicar(id, token, "k-punto-409")).StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    // ── Decisión de prenda obligatoria con gravamen en el RUNT ───────────────────────────────────────────────────────
+
+    private async Task<(Guid Id, string Token)> ConGravamenEnElRunt(bool gravamen, object? prenda)
+    {
+        await IniciarAsync();
+        _host.Definiciones.PorCodigo["TRASPASO_STANDARD"] = DefinicionesDePrueba.Traspaso() with
+        {
+            Flags = DefinicionesDePrueba.Traspaso().Flags with { PermitePrendaComplementaria = true },
+        };
+        _host.Runt.Vehiculo = () =>
+        {
+            var r = ResultadosFalsos.VehiculoCompleto(prenda: gravamen);
+            r.Campos.First(c => c.Clave == "transit_office_name").ValorTexto = "Tránsito de Prueba";
+            return r;
+        };
+        var (id, token) = await Completa();
+        if (prenda is not null)
+            (await _host.EnviarAsync(HttpMethod.Put, $"{Base}/solicitudes/{id}/comercial", new { valorComercial = 45_000_000, prenda }, token)).StatusCode.Should().Be(HttpStatusCode.OK);
+        return (id, token);
+    }
+
+    [Fact]
+    public async Task ConGravamenEnElRunt_SinDecision_NoRadica_422PrendaDecisionRequerida()
+    {
+        var (id, token) = await ConGravamenEnElRunt(gravamen: true, prenda: null);
+
+        var r = await Radicar(id, token, "k-prenda");
+
+        r.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        var json = (await PortalHost.JsonAsync(r)).RootElement;
+        json.GetProperty("code").GetString().Should().Be("prenda_decision_requerida");
+        json.GetProperty("referencia").GetString().Should().Be("prenda.decision");
+        json.GetProperty("detail").GetString().Should().Be("El RUNT reporta prenda o gravamen: elige qué se hará con ella para continuar.");
+    }
+
+    [Theory]
+    [InlineData("sin_prenda", false)]
+    [InlineData("levantar", true)]
+    public async Task ConGravamenEnElRunt_ConDecision_Radica(string decision, bool tienePrenda)
+    {
+        var (id, token) = await ConGravamenEnElRunt(gravamen: true, prenda: new { tienePrenda, decision });
+
+        (await Radicar(id, token, "k-prenda-ok")).StatusCode.Should().Be(HttpStatusCode.Accepted);
+    }
+
+    [Fact]
+    public async Task SinGravamenEnElRunt_NoExigeDecision_Radica()
+    {
+        var (id, token) = await ConGravamenEnElRunt(gravamen: false, prenda: null);
+
+        (await Radicar(id, token, "k-sin-gravamen")).StatusCode.Should().Be(HttpStatusCode.Accepted);
+    }
+
+    [Fact]
+    public async Task ConRuntCaido_AlRadicar_ConservaElErrorDeProveedor_NoDecideEnFalso()
+    {
+        var (id, token) = await ConGravamenEnElRunt(gravamen: true, prenda: null);
+        _host.Runt.Falla = new ProveedorNoDisponibleException("caído");
+
+        var r = await Radicar(id, token, "k-caido");
+
+        r.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
     }
 
     // ── Soporte ──────────────────────────────────────────────────────────────────────────────────────────────────────

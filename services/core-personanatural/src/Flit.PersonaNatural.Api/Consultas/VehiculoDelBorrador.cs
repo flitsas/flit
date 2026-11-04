@@ -31,7 +31,7 @@ public sealed record OrganismoDelVehiculo(EstadoVehiculoBorrador Estado, bool Ex
 /// El acreedor, su NIT y la fecha de inscripción salen siempre que el RUNT los traiga (decisión del producto: el portal muestra la
 /// prenda como FLIT 2); nunca datos del propietario, y solo para la solicitud de la sesión.
 /// </summary>
-public sealed class VehiculoDelBorradorService(PersonaNaturalDb db, PersonaService personas, IConsultasRunt runt, MedicionConsultasService medicion, CifradoPii cifrado) : IValoresRuntBorrador
+public sealed class VehiculoDelBorradorService(PersonaNaturalDb db, PersonaService personas, IConsultasRunt runt, MedicionConsultasService medicion, CifradoPii cifrado) : IValoresRuntBorrador, IGravamenDelBorrador
 {
     public const string ActorAuditoria = "consulta_borrador";
 

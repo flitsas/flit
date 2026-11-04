@@ -1,3 +1,4 @@
+using Flit.PersonaNatural.Api.Consultas;
 using Flit.PersonaNatural.Api.Cotizaciones;
 using Flit.PersonaNatural.Api.Definiciones;
 using Flit.PersonaNatural.Api.Identidad;
@@ -29,7 +30,8 @@ public sealed class RadicacionService(
     IOptions<IdentidadOptions> identidad,
     IPlatformOutbox outbox,
     TimeProvider reloj,
-    VerificadorDeOrganismo verificadorDeOrganismo)
+    VerificadorDeOrganismo verificadorDeOrganismo,
+    IGravamenDelBorrador? gravamen = null)
 {
     public const string TipoEvento = "tramites.persona_natural.radicacion_solicitada";
     public const int VersionEvento = 1;
@@ -97,6 +99,26 @@ public sealed class RadicacionService(
             var verificados = await verificadorDeOrganismo.VerificarAsync(s, def, null, exigir: true, ct).ConfigureAwait(false);
             if (verificados is not null)
                 s.Datos = verificados.Serializar();
+        }
+
+        // Con prenda o gravamen en el RUNT, el traspaso no se radica sin decisión explícita. Con el RUNT caído no se decide en falso.
+        if (def is not null)
+        {
+            try
+            {
+                if (await DecisionDePrendaObligatoria.FaltaAsync(def, DatosSolicitud.Leer(s.Datos), s.Id, gravamen, ct).ConfigureAwait(false))
+                {
+                    throw new ReglaDeNegocioException(
+                        StatusCodes.Status422UnprocessableEntity, DecisionDePrendaObligatoria.Codigo, "Falta la decisión de la prenda", DecisionDePrendaObligatoria.Mensaje,
+                        new Dictionary<string, object?> { ["referencia"] = DecisionDePrendaObligatoria.Referencia });
+                }
+            }
+            catch (ProveedorNoDisponibleException)
+            {
+                throw new ReglaDeNegocioException(
+                    StatusCodes.Status503ServiceUnavailable, ConsultasEndpoints.CodigoProveedor, "Consulta no disponible",
+                    "No pudimos consultar el RUNT en este momento. Intente de nuevo en unos minutos.");
+            }
         }
 
         var borrador = await solicitudes.ConstruirAsync(s, conPersonas: false, null, ct).ConfigureAwait(false);

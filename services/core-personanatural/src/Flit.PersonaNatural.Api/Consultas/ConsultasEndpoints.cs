@@ -59,6 +59,7 @@ public static class ConsultasEndpoints
         services.AddScoped<ConsultaDetalleService>();
         services.AddScoped<VehiculoDelBorradorService>();
         services.AddScoped<IValoresRuntBorrador>(sp => sp.GetRequiredService<VehiculoDelBorradorService>());
+        services.AddScoped<IGravamenDelBorrador>(sp => sp.GetRequiredService<VehiculoDelBorradorService>());
         services.AddScoped<ConsultaPersonaDetalleService>();
         return services;
     }

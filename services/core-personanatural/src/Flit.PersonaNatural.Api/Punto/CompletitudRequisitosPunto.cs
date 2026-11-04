@@ -12,7 +12,7 @@ namespace Flit.PersonaNatural.Api.Punto;
 /// El gate lee el borrador por <see cref="IBorradorPunto"/>. La persistencia de archivos y valor comercial reutiliza
 /// <c>/solicitudes/{id}/adjuntos</c> y <c>PUT …/comercial</c> del borrador abierto en Actores.
 /// </summary>
-public sealed class CompletitudRequisitosPuntoService(IFachadaDefiniciones definiciones, IConsultasRunt consultas, IBorradorPunto borradores, IValoresRuntBorrador? valoresRunt = null)
+public sealed class CompletitudRequisitosPuntoService(IFachadaDefiniciones definiciones, IConsultasRunt consultas, IBorradorPunto borradores, IValoresRuntBorrador? valoresRunt = null, IGravamenDelBorrador? gravamen = null)
 {
     /// <summary>Misma lista que <c>FirmaDeArchivo</c> / portal <c>EXTENSIONES_PERMITIDAS</c>.</summary>
     public static readonly HashSet<string> ExtensionesPermitidas = new(StringComparer.OrdinalIgnoreCase)
@@ -109,6 +109,17 @@ public sealed class CompletitudRequisitosPuntoService(IFachadaDefiniciones defin
             borrador.HayPersonaJuridica);
 
         var pendientes = new List<PendienteCompletitudPuntoDto>();
+        try
+        {
+            if (await DecisionDePrendaObligatoria.FaltaAsync(def, borrador.Datos, solicitudId.Value, gravamen, ct).ConfigureAwait(false))
+                pendientes.Add(new PendienteCompletitudPuntoDto(DecisionDePrendaObligatoria.Codigo, DecisionDePrendaObligatoria.Mensaje, DecisionDePrendaObligatoria.Referencia));
+        }
+        catch (ProveedorNoDisponibleException)
+        {
+            return new ResultadoCompletitudPunto.Rechazo(
+                StatusCodes.Status503ServiceUnavailable, ConsultasEndpoints.CodigoProveedor, "No pudimos consultar el RUNT en este momento. Intente de nuevo en unos minutos.");
+        }
+
         // Lo que reclama una declaración (certificado de blindaje, documentos de la causal elegida) lo decide ella, no la matriz.
         var deLasDeclaraciones = ReglasBorrador.DocumentosDeDeclaraciones(def);
         foreach (var doc in def.Documentos.OrderBy(d => d.Orden).Where(d => CondicionesDocumentoPunto.Exigible(d, ctx) && !deLasDeclaraciones.Contains(d.DocCode)))
@@ -145,7 +156,7 @@ public sealed class CompletitudRequisitosPuntoService(IFachadaDefiniciones defin
 
 public sealed record ValorVentaSugeridoPuntoDto(decimal? ValorSugerido, string Fuente);
 
-public sealed record PendienteCompletitudPuntoDto(string Codigo, string Nombre);
+public sealed record PendienteCompletitudPuntoDto(string Codigo, string Nombre, string? Referencia = null);
 
 public sealed record CompletitudRequisitosPuntoDto(
     bool PuedeContinuarPago,

@@ -292,9 +292,9 @@ public sealed class DeclaracionesTiposTests
     }
 
     [Fact]
-    public void LaDecisionLevantar_SinAcreedor_Falla()
+    public void LaDecisionLevantar_SinAcreedor_FallaSiElTipoExigeLaPrenda()
     {
-        var (_, errores) = ValidarPrenda(ConPrenda(), new PrendaRequest(false, null, null, "levantar"));
+        var (_, errores) = ValidarPrenda(ConPrenda(exige: true), new PrendaRequest(false, null, null, "levantar"));
 
         errores.Todos().Keys.Should().Contain(["prenda.acreedor", "prenda.nitAcreedor"]);
     }

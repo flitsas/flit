@@ -420,6 +420,11 @@ public static partial class ReglasBorrador
     /// <summary>Todos los DocTipo de prenda que un borrador con prenda puede recibir como adjunto.</summary>
     public static readonly IReadOnlySet<string> DocumentosDePrenda = new HashSet<string>(StringComparer.Ordinal) { "prenda_solicitud", "prenda_registro", "prenda_levantamiento" };
 
+    /// <summary>Levantar en un tipo con prenda complementaria (sin acción única ni prenda obligatoria): el acreedor y el NIT son opcionales.</summary>
+    public static bool LevantarSinAcreedor(DefinicionTipoDto def, string? decision) =>
+        string.Equals(decision, PrendaLevantar, StringComparison.Ordinal)
+        && def.Flags.PermitePrendaComplementaria && !def.Flags.RequierePrenda && string.IsNullOrEmpty(def.Flags.AccionPrenda);
+
     /// <summary>
     /// Valor comercial solo si el tipo lo pide; prenda con acreedor y NIT cuando el tipo la exige o la admite y el ciudadano
     /// declara que hay. Un bloque que el tipo no pide se rechaza: no se guarda nada «por si acaso».
@@ -472,11 +477,13 @@ public static partial class ReglasBorrador
                 };
                 var acreedor = p.Acreedor?.Trim();
                 var nit = new string((p.NitAcreedor ?? string.Empty).Where(char.IsDigit).ToArray());
-                if (tiene && string.IsNullOrEmpty(acreedor))
+                // Regla de FLIT 2 (PrendaGate): levantar en un tipo de prenda complementaria no exige acreedor ni NIT; si vienen se validan.
+                var exigeAcreedor = tiene && !LevantarSinAcreedor(def, decision);
+                if (exigeAcreedor && string.IsNullOrEmpty(acreedor))
                     errores.Agregar("prenda.acreedor", "Indique el acreedor de la prenda.");
                 else if (acreedor is { Length: > 150 })
                     errores.Agregar("prenda.acreedor", "El nombre del acreedor es demasiado largo.");
-                if (tiene && !Nit().IsMatch(nit))
+                if (tiene && (exigeAcreedor || nit.Length > 0) && !Nit().IsMatch(nit))
                     errores.Agregar("prenda.nitAcreedor", "Indique el NIT del acreedor.");
                 // Solo el levantamiento de acción única la exige (PrendaGate); en los demás tipos no se guarda.
                 var entidad = def.Flags.AccionPrenda == PrendaLevantar && tiene ? p.EntidadLevantamiento?.Trim() : null;
@@ -558,7 +565,8 @@ public static partial class ReglasBorrador
         if (def.Flags.RequiereComercial && datos.Comercial?.Valor is not > 0)
             pendientes.Add(new PendienteDto("comercial_requerido", "valorComercial", PasoDe("commercial")));
 
-        var prendaExigida = def.Flags.RequierePrenda || datos.Prenda?.Tiene == true || !string.IsNullOrEmpty(def.Flags.AccionPrenda);
+        var prendaExigida = (def.Flags.RequierePrenda || datos.Prenda?.Tiene == true || !string.IsNullOrEmpty(def.Flags.AccionPrenda))
+            && !LevantarSinAcreedor(def, datos.Prenda?.Decision?.Trim().ToLowerInvariant());
         if (prendaExigida && string.IsNullOrWhiteSpace(datos.Prenda?.Acreedor))
             pendientes.Add(new PendienteDto("prenda_acreedor_requerido", "prenda.acreedor", PasoDe("prenda_decision")));
         if (prendaExigida && string.IsNullOrWhiteSpace(datos.Prenda?.NitAcreedor))
