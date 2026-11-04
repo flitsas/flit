@@ -122,9 +122,12 @@ export const seccionesDeRequisitos = (d: DefinicionTipo): string[] => d.pasos.fl
  */
 export function tarjetasDeRequisitos(d: DefinicionTipo): TarjetasRequisitos {
   const admitePrenda = d.flags.requierePrenda || d.flags.permitePrendaComplementaria;
+  // Un tipo que exige prenda por definición (levantar/registrar) la pide aunque su matriz no traiga la sección `prenda_decision`:
+  // el servidor exige acreedor y NIT. La prenda complementaria sí depende de la sección.
+  const pidePrenda = d.flags.requierePrenda || (tieneSeccion(d, "prenda_decision") && admitePrenda);
   return {
     comercial: tieneSeccion(d, "commercial") && d.flags.requiereComercial,
-    prenda: tieneSeccion(d, "prenda_decision") && admitePrenda,
+    prenda: pidePrenda,
     prendaObligatoria: d.flags.requierePrenda,
     documentos: tieneSeccion(d, "document_checklist") && documentosOrdenados(d).length > 0,
     campos: d.pasos.filter((p) => p.campos.length > 0 && GRUPO_POR_SECCION[p.sectionTypes[0] ?? ""] === "requisitos"),

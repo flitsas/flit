@@ -76,7 +76,13 @@ describe("tarjetas que aplican al tipo", () => {
 
   it("la prenda complementaria se pregunta; sin la sección no hay tarjeta aunque el flag esté activo", () => {
     expect(tarjetasDeRequisitos(definicionDe(SECCIONES, { flags: flags({ permitePrendaComplementaria: true }) }))).toMatchObject({ prenda: true, prendaObligatoria: false });
-    expect(tarjetasDeRequisitos(definicionDe([["document_checklist"]], { flags: flags({ requierePrenda: true }) })).prenda).toBe(false);
+    expect(tarjetasDeRequisitos(definicionDe([["document_checklist"]], { flags: flags({ permitePrendaComplementaria: true }) })).prenda).toBe(false);
+  });
+
+  it("un tipo que exige prenda (levantar/registrar) muestra la tarjeta aunque falte la sección prenda_decision", () => {
+    const d = definicionDe([["vehicle_query"], ["document_checklist"]], { flags: flags({ requierePrenda: true }) });
+    expect(tarjetasDeRequisitos(d)).toMatchObject({ prenda: true, prendaObligatoria: true });
+    expect(erroresDeRequisitos(d, [], entrada())).toMatchObject({ "prenda.acreedor": expect.any(String), "prenda.nitAcreedor": expect.any(String) });
   });
 
   it("los campos del tipo salen de los pasos de requisitos que los traen", () => {

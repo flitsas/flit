@@ -167,3 +167,26 @@ describe("tarjeta de prenda (HU9)", () => {
     expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).toBeInTheDocument();
   });
 });
+
+describe("tipo que exige prenda sin la sección prenda_decision", () => {
+  const sinSeccion = () =>
+    definicionDe([["vehicle_query"], ["actor_form"], ["document_checklist"]], {
+      flags: flags({ requierePrenda: true, permitePrendaComplementaria: false, accionPrenda: "levantar" }),
+      documentos: [{ docCode: "paz_salvo_prenda", nombre: "Paz y Salvo de Prenda", obligatorio: true, orden: 1, instruccionCargue: "", condicion: "" }],
+    });
+
+  it("muestra la tarjeta con el gravamen precargado, sin selector de acción, y el paz y salvo una sola vez en Documentos", async () => {
+    await abrir(sinSeccion(), { [GRAVAMEN]: () => json({ tienePrenda: true, acreedor: "Banco Uno", nitAcreedor: "860.002.964", aviso: null }) });
+    await waitFor(() => expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).toHaveValue("Banco Uno"));
+    expect(within(tarjeta()).getByLabelText("NIT / Documento del acreedor *")).toHaveValue("860002964");
+    expect(within(tarjeta()).queryByText("¿Qué se hará con la prenda?")).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Paz y Salvo de Prenda/)).toHaveLength(1);
+  });
+
+  it("con solo prenda complementaria y sin la sección no hay tarjeta", async () => {
+    const def = definicionDe([["vehicle_query"], ["actor_form"], ["document_checklist"]], { flags: flags({ permitePrendaComplementaria: true }), documentos: DOCS });
+    await wizardAbierto({ [RUTA_DEFINICION]: () => json(def), "GET /solicitudes/s-1": () => json(borrador()) });
+    await screen.findByRole("button", { name: "Siguiente" });
+    expect(screen.queryByRole("region", { name: "Prenda / limitación a la propiedad" })).not.toBeInTheDocument();
+  });
+});
