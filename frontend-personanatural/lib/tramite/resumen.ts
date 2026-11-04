@@ -204,6 +204,8 @@ export function textoPendiente(pendiente: Pendiente, definicion: DefinicionTipo)
     }
     case "comercial_requerido":
       return "Falta el valor comercial.";
+    case "prenda_decision_requerida":
+      return "Falta decidir qué se hará con la prenda.";
     case "prenda_acreedor_requerido":
       return "Falta el acreedor de la prenda.";
     case "prenda_entidad_requerida":

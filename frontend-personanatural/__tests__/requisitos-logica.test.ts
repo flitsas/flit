@@ -86,6 +86,15 @@ describe("tarjetas que aplican al tipo", () => {
     expect(erroresDeRequisitos(d, [], entrada())).toMatchObject({ "prenda.acreedor": expect.any(String), "prenda.nitAcreedor": expect.any(String) });
   });
 
+  it("acreedor y NIT opcionales (levantar en traspaso): vacíos no fallan, con valor se validan; sin la bandera siguen obligatorios", () => {
+    const d = definicionDe([["vehicle_query"], ["document_checklist"]], { flags: flags({ requierePrenda: true }) });
+    expect(erroresDeRequisitos(d, [], entrada({ acreedorOpcional: true }))).not.toHaveProperty("prenda.acreedor");
+    expect(erroresDeRequisitos(d, [], entrada({ acreedorOpcional: true }))).not.toHaveProperty("prenda.nitAcreedor");
+    expect(erroresDeRequisitos(d, [], entrada({ acreedorOpcional: true, nitAcreedor: "123" }))).toHaveProperty("prenda.nitAcreedor");
+    expect(erroresDeRequisitos(d, [], entrada({ acreedorOpcional: true, acreedor: "x".repeat(151) }))).toHaveProperty("prenda.acreedor");
+    expect(erroresDeRequisitos(d, [], entrada({ acreedorOpcional: false }))).toHaveProperty("prenda.acreedor");
+  });
+
   it("la entidad del levantamiento solo se exige cuando la entrada la trae (acción fija levantar)", () => {
     const d = definicionDe([["vehicle_query"], ["document_checklist"]], { flags: flags({ requierePrenda: true }) });
     expect(erroresDeRequisitos(d, [], entrada())).not.toHaveProperty("prenda.entidadLevantamiento");

@@ -195,6 +195,8 @@ export interface EntradaRequisitos {
   nitAcreedor: string;
   /** Solo con acción fija levantar; si es `undefined` no se exige. */
   entidadLevantamiento?: string;
+  /** Levantar en un tipo sin acción fija (traspaso): acreedor y NIT no son obligatorios, pero si se escriben se validan. */
+  acreedorOpcional?: boolean;
   observaciones: string;
   transformaciones?: readonly string[];
   hayPersonaJuridica?: boolean;
@@ -215,8 +217,9 @@ export function erroresDeRequisitos(d: DefinicionTipo, adjuntos: readonly Adjunt
     if (msg) errores["valorComercial"] = msg;
   }
   if (t.prenda && (t.prendaObligatoria || e.tienePrenda)) {
-    const a = acreedorInvalido(e.acreedor);
-    const n = nitAcreedorInvalido(e.nitAcreedor);
+    const opcional = e.acreedorOpcional === true;
+    const a = opcional && e.acreedor.trim() === "" ? undefined : acreedorInvalido(e.acreedor);
+    const n = opcional && e.nitAcreedor.trim() === "" ? undefined : nitAcreedorInvalido(e.nitAcreedor);
     if (a) errores["prenda.acreedor"] = a;
     if (n) errores["prenda.nitAcreedor"] = n;
     if (e.entidadLevantamiento !== undefined) {

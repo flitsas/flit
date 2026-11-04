@@ -346,7 +346,7 @@ describe("Requisitos del punto · Continuar a Pago", () => {
     expect(llamadas.some((l) => l.clave === "POST /punto/requisitos/completitud")).toBe(false);
     expect(cuerpo(llamadas, "PUT /solicitudes/s-1/comercial").prenda).toBeUndefined();
 
-    fireEvent.click(within(tarjeta("Prenda / limitación a la propiedad")).getByLabelText("No"));
+    fireEvent.click(within(tarjeta("Prenda / limitación a la propiedad")).getByLabelText("No hacer nada con la prenda"));
     fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
     await waitFor(() => expect(onContinuarPago).toHaveBeenCalled());
   });

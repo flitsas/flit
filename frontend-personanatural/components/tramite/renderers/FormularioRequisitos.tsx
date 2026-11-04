@@ -10,7 +10,7 @@ import { DeclaracionesTipo, type SubidaSoporte } from "@/components/tramite/rend
 import { TarjetasTransformaciones } from "@/components/tramite/renderers/TarjetasTransformaciones";
 import { TarjetaDestino } from "@/components/tramite/TarjetaDestino";
 import { TotalLiquidado } from "@/components/tramite/TotalLiquidado";
-import type { CampoDefinicion, Cotizacion, DeclaracionTipo, DefinicionTipo, DocumentoRequerido, GravamenRunt, ValoresActualesRunt } from "@/lib/api/cliente";
+import type { CampoDefinicion, Cotizacion, DecisionPrenda, DeclaracionTipo, DefinicionTipo, DocumentoRequerido, GravamenRunt, ValoresActualesRunt } from "@/lib/api/cliente";
 import { categoriaRuntDe, claveDeCampoDeclaracion, declaracionDeTransformacion, declaracionesActivas, declaracionesDe, declaracionesPropias, destinoDelTipo, erroresDeDeclaraciones, faltaDestino, valoresDeDeclaraciones } from "@/lib/tramite/declaraciones";
 import { alEscribirMoneda, formatearFecha, numeroMoneda, textoMonedaCompleta } from "@/lib/formato";
 import { claveAdicionalesActivos, claveCotizacion } from "@/lib/tramite/cotizacion";
@@ -130,6 +130,21 @@ function PasoRequisitos({ seccion, activa, intentoAvance, onEstado }: PropsSecci
   const gravamenExige = t.prenda && !t.prendaObligatoria && runtReportaPrenda;
   const sinAccion = gravamenExige && tienePrenda && accionFija === null && !accionElegida;
   const sinDecidir = gravamenExige && (!elegida || sinAccion);
+  // Con gravamen en el RUNT (y sin acción fija) la pregunta cambia: un solo grupo con las tres decisiones, sin preselección.
+  const decisionUnica = gravamenExige && accionFija === null;
+  const decisionActual: DecisionPrenda | null = !elegida ? null : tienePrenda ? accionPrenda : "sin_prenda";
+  const elegirDecision = (d: DecisionPrenda) => {
+    setElegida(true);
+    if (d === "sin_prenda") {
+      setTienePrenda(false);
+      return;
+    }
+    setTienePrenda(true);
+    setAccionPrenda(d);
+    setAccionElegida(true);
+  };
+  // Como en FLIT 2: levantar en un tipo sin acción fija (traspaso) no obliga a escribir acreedor ni NIT; si hay valor, se valida y se envía.
+  const acreedorOpcional = accionFija === null && (t.prendaObligatoria || tienePrenda) && accionPrenda === "levantar";
   const fechaInscripcion = formatearFecha(gravamen.data?.fechaInscripcion);
   const [transformaciones, setTransformaciones] = useState<string[]>(() => solicitud.datos.requisitos?.transformaciones ?? []);
   const cotizacion = useQuery<Cotizacion>({
@@ -149,7 +164,7 @@ function PasoRequisitos({ seccion, activa, intentoAvance, onEstado }: PropsSecci
   const condicion = { tienePrenda: t.prendaObligatoria || tienePrenda, transformaciones, campos, hayPersonaJuridica };
   const documentosVisibles = documentos.filter((doc) => documentoVisible(doc, condicion));
   const decisionPrenda = decisionDe(condicion.tienePrenda, accionPrenda);
-  const entrada: EntradaRequisitos = { campos, valorVenta, tienePrenda: condicion.tienePrenda, acreedor, nitAcreedor, ...(accionFija === "levantar" ? { entidadLevantamiento } : {}), observaciones, transformaciones, hayPersonaJuridica };
+  const entrada: EntradaRequisitos = { campos, valorVenta, tienePrenda: condicion.tienePrenda, acreedor, nitAcreedor, acreedorOpcional, ...(accionFija === "levantar" ? { entidadLevantamiento } : {}), observaciones, transformaciones, hayPersonaJuridica };
   const declaraciones = useMemo(() => (t.declaraciones ? declaracionesActivas(definicion, transformaciones) : []), [t.declaraciones, definicion, transformaciones]);
   // Lo que el RUNT tiene hoy (color, combustible, carrocería): el valor nuevo de una transformación debe ser distinto. Si no llega, no se bloquea.
   // Las atadas a una transformación se pintan en la tarjeta de su transformación; esta tarjeta conserva solo las propias del tipo.
@@ -203,7 +218,7 @@ function PasoRequisitos({ seccion, activa, intentoAvance, onEstado }: PropsSecci
             version,
             ...(t.comercial ? { valorComercial: numeroMoneda(valorVenta) } : {}),
             ...(t.prenda && !sinDecidir
-              ? { prenda: { tienePrenda: tiene, decision: decisionDe(tiene, accionPrenda), ...(tiene ? { acreedor: acreedor.trim(), nitAcreedor } : {}), ...(tiene && accionFija === "levantar" ? { entidadLevantamiento: entidadLevantamiento.trim() } : {}) } }
+              ? { prenda: { tienePrenda: tiene, decision: decisionDe(tiene, accionPrenda), ...(tiene ? { ...(!acreedorOpcional || acreedor.trim() ? { acreedor: acreedor.trim() } : {}), ...(!acreedorOpcional || nitAcreedor ? { nitAcreedor } : {}) } : {}), ...(tiene && accionFija === "levantar" ? { entidadLevantamiento: entidadLevantamiento.trim() } : {}) } }
               : {}),
           }),
         );
@@ -219,7 +234,7 @@ function PasoRequisitos({ seccion, activa, intentoAvance, onEstado }: PropsSecci
       if (error instanceof ApiError && error.errores) setErroresServidor(erroresDeServidor(error.errores, definicion));
       throw error;
     }
-  }, [t, sinDecidir, definicion, solicitud.fieldValues, campos, valorVenta, tienePrenda, accionPrenda, acreedor, nitAcreedor, entidadLevantamiento, accionFija, transformaciones, observaciones, guardarConVersion, cliente, idSolicitud, firma]);
+  }, [t, sinDecidir, acreedorOpcional, definicion, solicitud.fieldValues, campos, valorVenta, tienePrenda, accionPrenda, acreedor, nitAcreedor, entidadLevantamiento, accionFija, transformaciones, observaciones, guardarConVersion, cliente, idSolicitud, firma]);
 
   // Al pasar al siguiente paso: guarda solo si algo cambió desde el último guardado.
   useEffect(() => {
@@ -373,7 +388,26 @@ function PasoRequisitos({ seccion, activa, intentoAvance, onEstado }: PropsSecci
 
       {t.prenda && (
         <Card title="Prenda / limitación a la propiedad" id="requisitos-prenda">
-          {!t.prendaObligatoria && (
+          {decisionUnica && (
+            <fieldset>
+              <legend>Este vehículo tiene una prenda. ¿Qué se hará con ella?</legend>
+              <div className="mt-2 flex flex-wrap gap-6">
+                {(
+                  [
+                    ["No hacer nada con la prenda", "sin_prenda"],
+                    [ETIQUETA_ACCION_PRENDA.registrar, "registrar"],
+                    [ETIQUETA_ACCION_PRENDA.levantar, "levantar"],
+                  ] as const
+                ).map(([etiqueta, valor]) => (
+                  <label key={valor} className="flex min-h-11 cursor-pointer items-center gap-2">
+                    <input type="radio" name="prenda-decision" className="h-5 w-5 accent-primary" checked={decisionActual === valor} onChange={() => elegirDecision(valor)} />
+                    {etiqueta}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
+          {!t.prendaObligatoria && !decisionUnica && (
             <fieldset>
               <legend>¿Al vehículo se le asociará una prenda?</legend>
               <div className="mt-2 flex gap-6">
@@ -391,7 +425,7 @@ function PasoRequisitos({ seccion, activa, intentoAvance, onEstado }: PropsSecci
               </div>
             </fieldset>
           )}
-          {(t.prendaObligatoria || tienePrenda) && accionFija === null && (
+          {(t.prendaObligatoria || tienePrenda) && accionFija === null && !decisionUnica && (
             <fieldset className={t.prendaObligatoria ? undefined : "mt-4"}>
               <legend>¿Qué se hará con la prenda?</legend>
               <div className="mt-2 flex flex-wrap gap-6">
@@ -459,12 +493,14 @@ function PasoRequisitos({ seccion, activa, intentoAvance, onEstado }: PropsSecci
           )}
           {(t.prendaObligatoria || tienePrenda) && accionPrenda === "levantar" && (
             <p role="note" className="mt-3 text-sm font-light text-muted-foreground">
-              Indica el acreedor de la prenda que se levantará y adjunta el documento del levantamiento.
+              {acreedorOpcional
+                ? "Si lo conoces, confirma el acreedor de la prenda que se levantará (es opcional) y adjunta el documento del levantamiento."
+                : "Indica el acreedor de la prenda que se levantará y adjunta el documento del levantamiento."}
             </p>
           )}
           {(t.prendaObligatoria || tienePrenda) && (
             <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <Field label="Acreedor (beneficiario) *" error={mostrar("prenda.acreedor")}>
+              <Field label={`Acreedor (beneficiario)${acreedorOpcional ? "" : " *"}`} error={mostrar("prenda.acreedor")}>
                 <input
                   className={`field${acreedorBloqueado ? " opacity-70" : ""}`}
                   autoComplete="off"
@@ -478,7 +514,7 @@ function PasoRequisitos({ seccion, activa, intentoAvance, onEstado }: PropsSecci
                   onBlur={() => tocar("prenda.acreedor")}
                 />
               </Field>
-              <Field label="NIT / Documento del acreedor *" error={mostrar("prenda.nitAcreedor")}>
+              <Field label={`NIT / Documento del acreedor${acreedorOpcional ? "" : " *"}`} error={mostrar("prenda.nitAcreedor")}>
                 <input
                   className={`field${nitBloqueado ? " opacity-70" : ""}`}
                   inputMode="numeric"

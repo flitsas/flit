@@ -241,6 +241,12 @@ function SeccionDatos({ seccion, onEditar }: { seccion: SeccionResumen; onEditar
 function fallaDe(error: unknown): Falla {
   if (error instanceof ApiError) {
     if (error.code === "requisitos_incompletos" && error.fallas?.pendientes?.length) return { tipo: "pendientes", fallas: error.fallas };
+    if (error.code === "prenda_decision_requerida") {
+      const pendientes = error.fallas?.pendientes?.length ? error.fallas.pendientes : [{ codigo: "prenda_decision_requerida", referencia: "prenda.decision", paso: null }];
+      return { tipo: "pendientes", fallas: { ...error.fallas, pendientes } };
+    }
+    // El servidor explica en `detail` por qué el organismo no es el de la placa: se muestra tal cual.
+    if (error.code === "organismo_no_corresponde" && error.title.trim() && error.title.trim() !== error.code) return { tipo: "mensaje", texto: error.title.trim() };
     if (error.code === "identity_pending") {
       if (!EXIGIR_IDENTIDAD_AL_ENVIAR) return { tipo: "mensaje", texto: "No pudimos enviar el trámite. Intenta de nuevo." };
       return { tipo: "identidad", fallas: error.fallas ?? {} };

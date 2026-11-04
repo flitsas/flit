@@ -54,7 +54,7 @@ const GRAVAMEN = "GET /solicitudes/s-1/vehiculo/gravamen";
 describe("gravamen RUNT en la prenda", () => {
   it("precarga acreedor y NIT del RUNT, editables, y los guarda", async () => {
     const { llamadas } = await abrir(definicion(), { [GRAVAMEN]: () => json({ tienePrenda: true, acreedor: "Banco Uno", nitAcreedor: "860.002.964", aviso: null }) });
-    fireEvent.click(within(tarjeta()).getByLabelText("Sí"));
+    fireEvent.click(within(tarjeta()).getByLabelText("Registrar una prenda nueva"));
     await waitFor(() => expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).toHaveValue("Banco Uno"));
     expect(within(tarjeta()).getByLabelText("NIT / Documento del acreedor *")).toHaveValue("860002964");
     expect(llamadas.filter((l) => l.clave === GRAVAMEN)).toHaveLength(1);
@@ -70,14 +70,14 @@ describe("gravamen RUNT en la prenda", () => {
     fireEvent.click(within(tarjeta()).getByLabelText("Sí"));
     fireEvent.click(within(tarjeta()).getByLabelText("Levantar la prenda inscrita"));
     expect(await within(tarjeta()).findByText(/RUNT sin gravamen registrado/)).toBeInTheDocument();
-    expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).toHaveValue("");
+    expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario)")).toHaveValue("");
   });
 
   it("con prenda del RUNT muestra el aviso y el resumen (fecha DD/MM/YYYY) y precarga acreedor y NIT", async () => {
     await abrir(definicion(), {
       [GRAVAMEN]: () => json({ tienePrenda: true, tieneGravamenes: true, acreedor: "Banco Uno", nitAcreedor: "860002964", fechaInscripcion: "2024-03-07T00:00:00Z", aviso: null }),
     });
-    fireEvent.click(within(tarjeta()).getByLabelText("Sí"));
+    fireEvent.click(within(tarjeta()).getByLabelText("Registrar una prenda nueva"));
     expect(await within(tarjeta()).findByText(/El RUNT reporta gravamen o prenda para este vehículo/)).toBeInTheDocument();
     expect(within(tarjeta()).getByText("Ver información de prenda / gravamen del RUNT")).toBeInTheDocument();
     expect(within(tarjeta()).getByText("TIENE GRAVÁMENES").nextElementSibling).toHaveTextContent("SI");
@@ -92,12 +92,12 @@ describe("gravamen RUNT en la prenda", () => {
 
   it("si la persona elige levantar (traspaso), acreedor y NIT del RUNT se pueden corregir", async () => {
     await abrir(definicion(), { [GRAVAMEN]: () => json({ tienePrenda: true, acreedor: "Banco Uno", nitAcreedor: "860002964", aviso: null }) });
-    fireEvent.click(within(tarjeta()).getByLabelText("Sí"));
+    fireEvent.click(within(tarjeta()).getByLabelText("Registrar una prenda nueva"));
     await waitFor(() => expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).toHaveValue("Banco Uno"));
     expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).not.toHaveAttribute("readonly");
     fireEvent.click(within(tarjeta()).getByLabelText("Levantar la prenda inscrita"));
-    expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).not.toHaveAttribute("readonly");
-    expect(within(tarjeta()).getByLabelText("NIT / Documento del acreedor *")).not.toHaveAttribute("readonly");
+    expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario)")).not.toHaveAttribute("readonly");
+    expect(within(tarjeta()).getByLabelText("NIT / Documento del acreedor")).not.toHaveAttribute("readonly");
   });
 
   it("con acción fija de levantar, acreedor y NIT del RUNT son de solo lectura", async () => {
@@ -117,7 +117,7 @@ describe("gravamen RUNT en la prenda", () => {
 
   it("con prenda pero sin acreedor no inventa nada: avisa y deja escribirlo a mano", async () => {
     await abrir(definicion(), { [GRAVAMEN]: () => json({ tienePrenda: true, acreedor: null, nitAcreedor: null, aviso: null }) });
-    fireEvent.click(within(tarjeta()).getByLabelText("Sí"));
+    fireEvent.click(within(tarjeta()).getByLabelText("Registrar una prenda nueva"));
     expect(await within(tarjeta()).findByText(/No entregó el detalle del acreedor: escríbelo a mano/)).toBeInTheDocument();
     expect(within(tarjeta()).queryByText("ACREEDOR")).toBeNull();
     expect(within(tarjeta()).queryByText("FECHA DE INSCRIPCIÓN")).toBeNull();
@@ -138,31 +138,55 @@ describe("gravamen RUNT en la prenda", () => {
   describe("el RUNT reporta prenda: la decisión es obligatoria y no se preselecciona (como FLIT 2)", () => {
     const CON_PRENDA = { [GRAVAMEN]: () => json({ tienePrenda: true, acreedor: "Banco Uno", nitAcreedor: "860002964", aviso: null }) };
 
-    it("sin decidir no avanza, no marca ninguna opción y no guarda una decisión por su cuenta", async () => {
+    it("sin decidir muestra la pregunta nueva con tres opciones sin preseleccionar, no avanza y no guarda una decisión por su cuenta", async () => {
       const { llamadas } = await abrir(definicion(), CON_PRENDA);
       await within(tarjeta()).findByText(/El RUNT reporta gravamen o prenda/);
-      expect(within(tarjeta()).getByLabelText("No")).not.toBeChecked();
-      expect(within(tarjeta()).getByLabelText("Sí")).not.toBeChecked();
+      expect(within(tarjeta()).getByText("Este vehículo tiene una prenda. ¿Qué se hará con ella?")).toBeInTheDocument();
+      expect(within(tarjeta()).queryByText("¿Al vehículo se le asociará una prenda?")).toBeNull();
+      expect(within(tarjeta()).getAllByRole("radio")).toHaveLength(3);
+      for (const e of ["No hacer nada con la prenda", "Registrar una prenda nueva", "Levantar la prenda inscrita"]) expect(within(tarjeta()).getByLabelText(e)).not.toBeChecked();
       expect(siguiente()).toBeDisabled();
       expect(llamadas.some((l) => l.clave === "PUT /solicitudes/s-1/comercial")).toBe(false);
     });
 
-    it("con «Sí» pide elegir registrar o levantar sin preseleccionar, y no exige la entidad del levantamiento", async () => {
+    it("levantar en traspaso: acreedor y NIT quedan precargados, editables y sin asterisco, y no pide la entidad", async () => {
       await abrir(definicion(), CON_PRENDA);
       await within(tarjeta()).findByText(/El RUNT reporta gravamen o prenda/);
-      fireEvent.click(within(tarjeta()).getByLabelText("Sí"));
-      expect(within(tarjeta()).getByLabelText("Registrar una prenda nueva")).not.toBeChecked();
-      expect(within(tarjeta()).getByLabelText("Levantar la prenda inscrita")).not.toBeChecked();
-      expect(siguiente()).toBeDisabled();
       fireEvent.click(within(tarjeta()).getByLabelText("Levantar la prenda inscrita"));
       expect(within(tarjeta()).queryByLabelText(/Entidad ante la que se levantó/)).toBeNull();
-      expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).toHaveValue("Banco Uno");
+      expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario)")).toHaveValue("Banco Uno");
+      expect(within(tarjeta()).getByLabelText("NIT / Documento del acreedor")).toHaveValue("860002964");
+      expect(within(tarjeta()).getByRole("note")).toHaveTextContent(/opcional/);
     });
 
-    it("«No» (omitir la prenda) es una decisión explícita y habilita el avance una vez cargados los documentos", async () => {
+    it("levantar sin acreedor ni NIT avanza (con el documento) y envía solo lo que tenga valor", async () => {
+      const { llamadas, estado } = await abrir(definicion(), {
+        [GRAVAMEN]: () => json({ tienePrenda: true, acreedor: null, nitAcreedor: null, aviso: null }),
+        "POST /solicitudes/s-1/adjuntos": () => json(adjunto("a1", "prenda_levantamiento"), 201),
+      });
+      await within(tarjeta()).findByText(/El RUNT reporta gravamen o prenda/);
+      fireEvent.click(within(tarjeta()).getByLabelText("Levantar la prenda inscrita"));
+      estado.actual = { ...estado.actual, adjuntos: [adjunto("a1", "prenda_levantamiento")] };
+      fireEvent.change(within(tarjeta()).getByLabelText(/Paz y salvo del acreedor/), { target: { files: [pdf] } });
+      await waitFor(() => expect(siguiente()).toBeEnabled());
+      fireEvent.click(siguiente());
+      await waitFor(() => expect(llamadas.some((l) => l.clave === "PUT /solicitudes/s-1/comercial")).toBe(true));
+      expect(cuerpo(llamadas, "PUT /solicitudes/s-1/comercial").prenda).toEqual({ tienePrenda: true, decision: "levantar" });
+    });
+
+    it("registrar sin acreedor ni NIT no avanza (siguen obligatorios, con asterisco)", async () => {
+      await abrir(definicion(), { [GRAVAMEN]: () => json({ tienePrenda: true, acreedor: null, nitAcreedor: null, aviso: null }) });
+      await within(tarjeta()).findByText(/El RUNT reporta gravamen o prenda/);
+      fireEvent.click(within(tarjeta()).getByLabelText("Registrar una prenda nueva"));
+      expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).toHaveValue("");
+      expect(within(tarjeta()).getByLabelText("NIT / Documento del acreedor *")).toHaveValue("");
+      expect(siguiente()).toBeDisabled();
+    });
+
+    it("«No hacer nada con la prenda» es una decisión explícita y habilita el avance una vez cargados los documentos", async () => {
       const { llamadas } = await abrir(definicion(), CON_PRENDA);
       await within(tarjeta()).findByText(/El RUNT reporta gravamen o prenda/);
-      fireEvent.click(within(tarjeta()).getByLabelText("No"));
+      fireEvent.click(within(tarjeta()).getByLabelText("No hacer nada con la prenda"));
       expect(within(tarjeta()).queryByText(/Elige qué se hará con la prenda/)).toBeNull();
       await waitFor(() => expect(siguiente()).toBeEnabled());
       fireEvent.click(siguiente());
@@ -206,8 +230,16 @@ describe("gravamen RUNT en la prenda", () => {
 
   it("si el RUNT reporta prenda y el acreedor llega vacío u omitido, lo avisa igual", async () => {
     await abrir(definicion(), { [GRAVAMEN]: () => json({ tienePrenda: true, acreedor: "", aviso: null }) });
-    fireEvent.click(within(tarjeta()).getByLabelText("Sí"));
+    fireEvent.click(within(tarjeta()).getByLabelText("Registrar una prenda nueva"));
     expect(await within(tarjeta()).findByText(/No entregó el detalle del acreedor/)).toBeInTheDocument();
+  });
+
+  it("acción fija de levantar sin acreedor sigue sin avanzar (obligatorio, con asterisco)", async () => {
+    await abrir(definicion({ flags: flags({ requierePrenda: true, permitePrendaComplementaria: false, accionPrenda: "levantar" }) }), {
+      [GRAVAMEN]: () => json({ tienePrenda: true, acreedor: null, nitAcreedor: null, aviso: null }),
+    });
+    expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).toHaveValue("");
+    expect(siguiente()).toBeDisabled();
   });
 
   it("en un tipo de acción única el portal no ofrece elegir (la fija el servidor)", async () => {
@@ -236,8 +268,8 @@ describe("tarjeta de prenda (HU9)", () => {
     fireEvent.click(within(tarjeta()).getByLabelText("Sí"));
     fireEvent.click(within(tarjeta()).getByLabelText("Levantar la prenda inscrita"));
 
-    expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).toBeInTheDocument();
-    expect(within(tarjeta()).getByLabelText("NIT / Documento del acreedor *")).toBeInTheDocument();
+    expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario)")).toBeInTheDocument();
+    expect(within(tarjeta()).getByLabelText("NIT / Documento del acreedor")).toBeInTheDocument();
     expect(within(tarjeta()).getByRole("note")).toHaveTextContent(/acreedor de la prenda que se levantará/i);
     expect(within(tarjeta()).getByText("Paz y salvo del acreedor *")).toBeInTheDocument();
     expect(within(tarjeta()).queryByText(/Contrato de prenda/)).toBeNull();
@@ -251,13 +283,13 @@ describe("tarjeta de prenda (HU9)", () => {
     expect(within(docs).getByText("Paz y salvo de impuestos")).toBeInTheDocument();
   });
 
-  it("levantar exige acreedor, NIT y el documento; con todo guarda la decisión", async () => {
+  it("levantar exige el documento (acreedor y NIT son opcionales); con todo guarda la decisión", async () => {
     const { llamadas, estado } = await abrir(definicion(), { "POST /solicitudes/s-1/adjuntos": () => json(adjunto("a1", "prenda_levantamiento"), 201) });
     fireEvent.click(within(tarjeta()).getByLabelText("Sí"));
     fireEvent.click(within(tarjeta()).getByLabelText("Levantar la prenda inscrita"));
     expect(siguiente()).toBeDisabled();
-    fireEvent.change(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *"), { target: { value: "Banco Uno" } });
-    fireEvent.change(within(tarjeta()).getByLabelText("NIT / Documento del acreedor *"), { target: { value: "860002964" } });
+    fireEvent.change(within(tarjeta()).getByLabelText("Acreedor (beneficiario)"), { target: { value: "Banco Uno" } });
+    fireEvent.change(within(tarjeta()).getByLabelText("NIT / Documento del acreedor"), { target: { value: "860002964" } });
     expect(siguiente()).toBeDisabled();
 
     estado.actual = { ...estado.actual, adjuntos: [adjunto("a1", "prenda_levantamiento")] };
@@ -287,7 +319,7 @@ describe("tarjeta de prenda (HU9)", () => {
     expect(within(tarjeta()).getByText("¿Qué se hará con la prenda?")).toBeInTheDocument();
     expect(within(tarjeta()).getByLabelText("Registrar una prenda nueva")).toBeChecked();
     fireEvent.click(within(tarjeta()).getByLabelText("Levantar la prenda inscrita"));
-    expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).toBeInTheDocument();
+    expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario)")).toBeInTheDocument();
   });
 });
 

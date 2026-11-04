@@ -86,6 +86,7 @@ const MENSAJES_POR_CODIGO: Record<string, string> = {
   limite_de_adjuntos: "Alcanzaste el máximo de archivos del trámite.",
   almacenamiento_no_disponible: "No pudimos guardar el archivo. Intenta de nuevo.",
   adjunto_no_encontrado: "No encontramos ese archivo.",
+  prenda_decision_requerida: "Falta decidir qué se hará con la prenda.",
   requisitos_incompletos: "Falta información para enviar el trámite.",
   identity_pending: "Todas las personas del trámite deben validar su identidad antes de enviarlo.",
   idempotency_conflicto: "No pudimos procesar el envío. Vuelve a intentarlo.",

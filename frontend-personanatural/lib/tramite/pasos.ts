@@ -114,6 +114,7 @@ export const SECCIONES_PROPIAS: readonly string[] = PASOS_BASE.filter((p) => p.p
 const GRUPO_DE_PENDIENTE: Readonly<Record<string, GrupoPaso>> = {
   actor_requerido: "actores",
   comercial_requerido: "requisitos",
+  prenda_decision_requerida: "requisitos",
   prenda_acreedor_requerido: "requisitos",
   prenda_nit_requerido: "requisitos",
   prenda_entidad_requerida: "requisitos",
