@@ -308,8 +308,8 @@ function filasPropias(definicion: DefinicionTipo, solicitud: Solicitud, ctx: Con
   if (prenda) {
     const levanta = prenda.tiene && prenda.decision === "levantar";
     filas.push({ etiqueta: "Prenda", valor: levanta ? "Sí, se levantará" : prenda.tiene ? "Sí" : "No" });
+    if (prenda.tiene) filas.push(...conValor([["Acreedor", prenda.acreedor], ["NIT del acreedor", prenda.nitAcreedor]]));
     if (levanta) filas.push(...conValor([["Entidad ante la que se levantó", prenda.entidadLevantamiento]]));
-    else if (prenda.tiene) filas.push(...conValor([["Acreedor", prenda.acreedor], ["NIT del acreedor", prenda.nitAcreedor]]));
   }
 
   // Declaraciones del tipo (color, combustible, carrocería, blindaje, causal…): lo actual en el RUNT y lo declarado, con etiquetas legibles.
