@@ -58,6 +58,12 @@ internal static class EscritorCeldas
             .ExecuteUpdateAsync(s => s.SetProperty(c => c.VersionTablero, c => c.VersionTablero + 1), ct).ConfigureAwait(false);
         if (filas != 1)
             throw new InvalidOperationException("La celda no tiene su cabecera en la empresa del contexto.");
-        return await contexto.Set<CabeceraDiagnostico>().Where(c => c.Id == diagnosticoId).Select(c => c.VersionTablero).SingleAsync(ct).ConfigureAwait(false);
+        // ExecuteUpdate no refresca el xmin de la cabecera ya seguida. Si el cierre después le cambia el estado, el
+        // SaveChanges chocaría con el token viejo.
+        var seguida = contexto.ChangeTracker.Entries<CabeceraDiagnostico>().FirstOrDefault(e => e.Entity.Id == diagnosticoId);
+        if (seguida is not null)
+            await seguida.ReloadAsync(ct).ConfigureAwait(false);
+        return seguida?.Entity.VersionTablero
+            ?? await contexto.Set<CabeceraDiagnostico>().Where(c => c.Id == diagnosticoId).Select(c => c.VersionTablero).SingleAsync(ct).ConfigureAwait(false);
     }
 }

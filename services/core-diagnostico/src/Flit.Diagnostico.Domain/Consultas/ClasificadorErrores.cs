@@ -30,6 +30,9 @@ public static class ClasificadorErrores
     private static readonly HashSet<string> Definitivos = new(StringComparer.Ordinal)
     {
         "RESPUESTA_INVALIDA", "AUTENTICACION", "ESTADO_NO_OK", "NO_CONECTADO",
+        "NO_CONFIRMADO", "MODELO_NO_ACEPTADO", "DOCUMENTO_NO_COINCIDE", "DOCUMENTO_NO_HOMOLOGADO",
+        "VEHICULO_NO_ENCONTRADO", "VEHICULO_NO_CONSULTABLE", "REQUIERE_ACTUALIZACION",
+        "SIN_PLACA", "SIN_DOCUMENTO", "SIN_MODELO", "ORGANISMO_INCOMPLETO", "SIN_NOMBRE_PROPIETARIO",
     };
 
     /// <summary>Clase del error con el código dado; sin código o con uno desconocido, <see cref="ClaseError.Definitivo"/>.</summary>

@@ -162,7 +162,7 @@ public sealed partial class FixturesSinPiiTests
     {
         var ct = TestContext.Current.CancellationToken;
         var simulada = new FuenteImpuestoSimulada();
-        var permitidas = new HashSet<string>(StringComparer.Ordinal) { "monto_total", "vigencias", "departamento_codigo", "anio", "valor", "pagada" };
+        var permitidas = new HashSet<string>(StringComparer.Ordinal) { "monto_total", "vigencias", "departamento_codigo", "tiene_deuda", "anio", "valor", "pagada" };
         var conDato = 0;
         for (var digito = 0; digito <= 9; digito++)
         {

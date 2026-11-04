@@ -142,7 +142,13 @@ public sealed class MapeosTests
     [Fact]
     public void Impuesto_normaliza_vigencias_y_UNIMPLEMENTED_es_no_conectado()
     {
-        var respuesta = new ConsultarImpuestoVehicularResponse { Resultado = new ResultadoConsulta { Proveedor = "impuestos_prueba" }, MontoTotal = 400_000 };
+        var respuesta = new ConsultarImpuestoVehicularResponse
+        {
+            Resultado = new ResultadoConsulta { Proveedor = "impuestos_prueba" },
+            MontoTotal = 400_000,
+            MontoInformado = true,
+            TieneDeuda = true,
+        };
         respuesta.Vigencias.Add(new VigenciaImpuesto { Anio = 2026, Valor = 190_000 });
         respuesta.Vigencias.Add(new VigenciaImpuesto { Anio = 2025, Valor = 210_000 });
 

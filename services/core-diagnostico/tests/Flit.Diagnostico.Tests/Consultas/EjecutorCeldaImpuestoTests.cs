@@ -92,7 +92,7 @@ public sealed class EjecutorCeldaImpuestoTests
         var celda = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST001", Fuente.ImpuestoDepartamental, ct);
         celda.Estado.Should().Be(EstadoCelda.Completado);
         using (var payload = JsonDocument.Parse(celda.Payload!))
-            payload.RootElement.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["monto_total", "vigencias", "departamento_codigo"]);
+            payload.RootElement.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["monto_total", "vigencias", "departamento_codigo", "tiene_deuda"]);
         celda.Payload.Should().NotContainAny(["proveedor", "transaccion", "origen", FuenteImpuestoSimulada.Transaccion, "servicio"]);
         var intento = (await MotorPersonas.IntentosAsync(empresa, celda.Id, ct)).Should().ContainSingle().Subject;
         // ADR-0075: el *Response del impuesto no trae transacción; el servicio sale del proveedor de la respuesta.
@@ -310,6 +310,50 @@ public sealed class EjecutorCeldaImpuestoTests
         (await MotorPersonas.IntentosAsync(empresa, copia.Id, ct)).Should().ContainSingle().Which.DesdeCache.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task El_mismo_dia_no_copia_un_ERROR_de_impuesto()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var reloj = new RelojManual();
+        var grpc = new ImpuestoGrpcFalso { ClaveError = "impuesto_no_confirmado" };
+        await using var api = await ArrancarAsync(b =>
+        {
+            b.Services.AddSingleton<TimeProvider>(reloj);
+            grpc.RegistrarAdaptadorReal(b);
+        }, ct);
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        IrA(reloj, 8, 0);
+        var primero = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST001")], Alcance, null, null, ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api, maxReintentos: 1), ct);
+        var original = await MotorPersonas.CeldaAsync(api, empresa, primero, "TST001", Fuente.ImpuestoDepartamental, ct);
+        (original.Estado, original.TipoError, original.Payload).Should().Be((EstadoCelda.Error, "NO_CONFIRMADO", (string?)null));
+
+        IrA(reloj, 15, 0);
+        var segundo = await SegundoLoteAsync(api, empresa, "TST001", ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api, maxReintentos: 1), ct);
+
+        grpc.Llamadas.Should().HaveCount(2, "un ERROR de impuesto no se reutiliza");
+        var copia = await MotorPersonas.CeldaAsync(api, empresa, segundo, "TST001", Fuente.ImpuestoDepartamental, ct);
+        (copia.Estado, copia.ReutilizadaDeId, copia.TipoError).Should().Be((EstadoCelda.Error, (Guid?)null, "NO_CONFIRMADO"));
+    }
+
+    [Fact]
+    public async Task Dato_parcial_deja_la_celda_en_ERROR_sin_monto_y_conserva_la_respuesta_cifrada()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var grpc = new ImpuestoGrpcFalso { ClaveError = "impuesto_no_confirmado", DatoParcial = true };
+        await using var api = await ArrancarAsync(grpc.RegistrarAdaptadorReal, ct);
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST001")], Alcance, null, null, ct);
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api, maxReintentos: 0), ct);
+
+        var celda = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST001", Fuente.ImpuestoDepartamental, ct);
+        (celda.Estado, celda.TipoError, celda.Payload).Should().Be((EstadoCelda.Error, "NO_CONFIRMADO", (string?)null));
+        celda.RespuestaFuenteCifrada.Should().NotBeNull();
+    }
+
     // Contexto técnico (FuenteImpuestoSimulada, solo LOCAL o DEV) — determinista por el último dígito: 0 sin deuda (vigencias
     // pagadas, monto 0), 7 TIMEOUT transitorio y el resto dos vigencias con deuda; siempre el mismo resultado.
     [Fact]
@@ -423,6 +467,11 @@ public sealed class ImpuestoGrpcFalso : ConsultasService.ConsultasServiceClient
 
     public bool ChequeoEnError { get; init; }
 
+    /// <summary>Clave del chequeo en ERROR. Si es null y <see cref="ChequeoEnError"/>, queda <c>provider</c>.</summary>
+    public string? ClaveError { get; set; }
+
+    public bool DatoParcial { get; set; }
+
     public IReadOnlyCollection<(string? Tenant, ConsultarImpuestoVehicularRequest Request)> Llamadas => _llamadas;
 
     /// <summary>Registra el adaptador real del impuesto sobre este cliente (antes que Program: gana al TryAdd).</summary>
@@ -440,11 +489,19 @@ public sealed class ImpuestoGrpcFalso : ConsultasService.ConsultasServiceClient
             throw new RpcException(new Status(codigo, "detalle del proveedor que no debe guardarse"));
 
         var resultado = new ResultadoConsulta { Proveedor = "verifik" };
-        if (ChequeoEnError)
-            resultado.Chequeos.Add(new Chequeo { Clave = "provider", Estado = EstadoChequeo.Error });
-        var respuesta = new ConsultarImpuestoVehicularResponse { Resultado = resultado };
-        if (!ChequeoEnError)
+        if (ChequeoEnError || ClaveError is not null)
+            resultado.Chequeos.Add(new Chequeo { Clave = ClaveError ?? "provider", Estado = EstadoChequeo.Error });
+        var respuesta = new ConsultarImpuestoVehicularResponse { Resultado = resultado, DatoParcial = DatoParcial };
+        if (DatoParcial)
         {
+            respuesta.TieneDeuda = true;
+            respuesta.MontoInformado = true;
+            respuesta.MontoTotal = 350_000;
+        }
+        else if (!ChequeoEnError && ClaveError is null)
+        {
+            respuesta.TieneDeuda = true;
+            respuesta.MontoInformado = true;
             respuesta.MontoTotal = 350_000;
             respuesta.Vigencias.Add(new VigenciaImpuesto { Anio = 2026, Valor = 150_000, Pagada = false });
             respuesta.Vigencias.Add(new VigenciaImpuesto { Anio = 2025, Valor = 200_000, Pagada = false });

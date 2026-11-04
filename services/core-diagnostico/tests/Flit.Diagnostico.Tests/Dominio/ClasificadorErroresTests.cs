@@ -49,4 +49,32 @@ public sealed class ClasificadorErroresTests
 
         ClasificadorErrores.EsConocido("CODIGO_QUE_NO_EXISTE").Should().BeFalse();
     }
+
+    [Theory]
+    [InlineData("NO_CONFIRMADO")]
+    [InlineData("MODELO_NO_ACEPTADO")]
+    [InlineData("DOCUMENTO_NO_COINCIDE")]
+    [InlineData("DOCUMENTO_NO_HOMOLOGADO")]
+    [InlineData("VEHICULO_NO_ENCONTRADO")]
+    [InlineData("VEHICULO_NO_CONSULTABLE")]
+    [InlineData("REQUIERE_ACTUALIZACION")]
+    [InlineData("SIN_PLACA")]
+    [InlineData("SIN_DOCUMENTO")]
+    [InlineData("SIN_MODELO")]
+    [InlineData("ORGANISMO_INCOMPLETO")]
+    [InlineData("SIN_NOMBRE_PROPIETARIO")]
+    public void Codigos_del_impuesto_son_definitivos_y_conocidos(string codigo)
+    {
+        ClasificadorErrores.EsConocido(codigo).Should().BeTrue();
+        ClasificadorErrores.Clasificar(codigo).Should().Be(ClaseError.Definitivo);
+        new PoliticaReintentos(1).Decidir(codigo, 0, DateTimeOffset.UnixEpoch).Reintentar.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Timeout_de_impuesto_si_se_reintenta_y_no_confirmado_no()
+    {
+        var politica = new PoliticaReintentos(1);
+        politica.Decidir("TIMEOUT", 0, DateTimeOffset.UnixEpoch).Reintentar.Should().BeTrue();
+        politica.Decidir("NO_CONFIRMADO", 0, DateTimeOffset.UnixEpoch).Reintentar.Should().BeFalse();
+    }
 }

@@ -166,7 +166,10 @@ internal static class ConsultasSimuladas
         return RespuestaSimulada.Ok(respuesta);
     }
 
-    /// <summary>El vehículo normalizado como lo devolvería Intempo (claves de §5), sin nombres.</summary>
+    /// <summary>
+    /// El vehículo normalizado como lo devolvería Intempo (claves de §5). El nombre es sintético y solo viaja en la respuesta
+    /// cifrada: el impuesto lo lee en memoria y el payload normalizado no lo guarda.
+    /// </summary>
     public static VehiculoIntempo VehiculoIntempo(VehiculoRunt v)
     {
         ArgumentNullException.ThrowIfNull(v);
@@ -193,6 +196,7 @@ internal static class ConsultasSimuladas
             {
                 IdTipoDocumento = p.TipoDocumento,
                 NoDocumento = p.NumeroDocumento,
+                NombreCompleto = "PERSONA PRUEBA UNO",
                 DetallePropiedad = p.TipoPropiedad switch
                 {
                     TipoPropiedad.Propio => "PROPIO",
@@ -319,7 +323,14 @@ internal static class ConsultasSimuladas
 
     public static IMessage Impuesto(ResultadoImpuesto r, string? proveedor)
     {
-        var respuesta = new ConsultarImpuestoVehicularResponse { Resultado = new ResultadoConsulta { Proveedor = proveedor ?? string.Empty }, MontoTotal = r.MontoTotal };
+        var respuesta = new ConsultarImpuestoVehicularResponse
+        {
+            Resultado = new ResultadoConsulta { Proveedor = proveedor ?? string.Empty },
+            TieneDeuda = r.TieneDeuda,
+            MontoInformado = r.MontoTotal is not null,
+        };
+        if (r.MontoTotal is { } monto)
+            respuesta.MontoTotal = monto;
         respuesta.Vigencias.AddRange(r.Vigencias.Select(v => new VigenciaImpuesto { Anio = v.Anio, Valor = v.Valor, Pagada = v.Pagada }));
         return respuesta;
     }

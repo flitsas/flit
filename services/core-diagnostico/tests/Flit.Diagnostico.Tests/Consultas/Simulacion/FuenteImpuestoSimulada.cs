@@ -42,5 +42,9 @@ public sealed class FuenteImpuestoSimulada : IFuenteImpuesto
 
     private static RespuestaFuente<ResultadoImpuesto> Exito(string departamento, params VigenciaResultadoImpuesto[] vigencias) =>
         RespuestaFuente<ResultadoImpuesto>.Exito(
-            new ResultadoImpuesto(vigencias.Where(v => !v.Pagada).Sum(v => v.Valor), vigencias, departamento), ServicioConsulta.Otro, Transaccion);
+            new ResultadoImpuesto(
+                vigencias.Where(v => !v.Pagada).Sum(v => v.Valor),
+                vigencias,
+                departamento,
+                vigencias.Any(v => !v.Pagada)), ServicioConsulta.Otro, Transaccion);
 }
