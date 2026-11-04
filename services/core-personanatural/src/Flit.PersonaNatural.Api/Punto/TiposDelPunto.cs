@@ -12,6 +12,22 @@ public static class TiposDelPunto
     public const string TipoNoDisponible = "El tipo de trámite no está disponible.";
     public const string MultasCaidas = "No pudimos consultar las multas. Inténtalo de nuevo.";
 
+    /// <summary>
+    /// Mensaje cuando la placa es de otro organismo: dice dónde está registrada y dónde se hace. Usa el nombre del RUNT tal cual
+    /// (solo recorta y colapsa espacios) y el nombre del catálogo de la sesión. No lleva datos del propietario. Sin nombre del RUNT
+    /// (no ocurre al rechazar) cae al texto genérico.
+    /// </summary>
+    public static string MensajeOtroOrganismo(string? organismoRunt, OrganismoPunto sesion)
+    {
+        ArgumentNullException.ThrowIfNull(sesion);
+        var runt = string.Join(' ', (organismoRunt ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        if (runt.Length == 0)
+            return OtroOrganismo;
+
+        var punto = sesion.Nombre.Trim();
+        return $"Esta placa está registrada en {runt}, no en {punto}. Este trámite debe hacerse en {runt}.";
+    }
+
     /// <summary>Campo que el mapper del RUNT de FLIT 2 escribe (<c>KyverumRuntVehicleResultMapper</c>). El portal lo compara contra el catálogo de grants; el punto lo compara con la sesión.</summary>
     public const string CampoOrganismoRunt = "transit_office_name";
 

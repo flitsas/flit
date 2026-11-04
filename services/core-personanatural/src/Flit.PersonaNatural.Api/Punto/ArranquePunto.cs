@@ -73,7 +73,7 @@ public sealed class ArranquePuntoService(IConsultasRunt runt, IFachadaTramites c
         if (!await OrganismoLoEligeElOperadorAsync(codigo, sesion, ct).ConfigureAwait(false)
             && !TiposDelPunto.OrganismoDeLaSesion(organismoRunt, sesion))
         {
-            return new ResultadoArranque.Detener(TiposDelPunto.OtroOrganismo);
+            return new ResultadoArranque.Detener(TiposDelPunto.MensajeOtroOrganismo(organismoRunt, sesion));
         }
 
         return new ResultadoArranque.Seguir();

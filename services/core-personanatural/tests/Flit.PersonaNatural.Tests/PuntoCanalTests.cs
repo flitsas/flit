@@ -118,7 +118,27 @@ public sealed class PuntoCanalTests
         var runt = RuntCon("OT DE OTRO MUNICIPIO");
         var resultado = await Arranque(runt, Sesion(), "ABC123", "1098765432", "TRASPASO_STANDARD");
 
-        resultado.Should().BeOfType<ResultadoArranque.Detener>().Which.Mensaje.Should().Be(TiposDelPunto.OtroOrganismo);
+        resultado.Should().BeOfType<ResultadoArranque.Detener>().Which.Mensaje.Should().Be(
+            "Esta placa está registrada en OT DE OTRO MUNICIPIO, no en Tránsito de Prueba. Este trámite debe hacerse en OT DE OTRO MUNICIPIO.");
+    }
+
+    [Fact]
+    public void MensajeOtroOrganismo_ConservaElNombreDelRunt_RecortaEspacios_YCaeAlGenericoSinNombre()
+    {
+        var sesion = Sesion();
+        TiposDelPunto.MensajeOtroOrganismo("  STRIA TTOyTTE   MCPAL SABANETA ", sesion).Should().Be(
+            "Esta placa está registrada en STRIA TTOyTTE MCPAL SABANETA, no en Tránsito de Prueba. Este trámite debe hacerse en STRIA TTOyTTE MCPAL SABANETA.");
+        TiposDelPunto.MensajeOtroOrganismo(null, sesion).Should().Be(TiposDelPunto.OtroOrganismo);
+        TiposDelPunto.MensajeOtroOrganismo("   ", sesion).Should().Be(TiposDelPunto.OtroOrganismo);
+    }
+
+    [Fact]
+    public async Task Arranque_PlacaSinOrganismoEnElRunt_Sigue_HoyNoBloquea()
+    {
+        var runt = RuntCon("");
+        var resultado = await Arranque(runt, Sesion(), "ABC123", "1098765432", "TRASPASO_STANDARD");
+
+        resultado.Should().BeOfType<ResultadoArranque.Seguir>();
     }
 
     [Fact]
@@ -179,7 +199,7 @@ public sealed class PuntoCanalTests
         var impone = await servicio.EvaluarAsync(Sesion(), "ABC123", "1098765432", "CAMBIO_COLOR", TestContext.Current.CancellationToken);
 
         elige.Should().BeOfType<ResultadoArranque.Seguir>("el organismo de la sesión ES el elegido");
-        impone.Should().BeOfType<ResultadoArranque.Detener>().Which.Mensaje.Should().Be(TiposDelPunto.OtroOrganismo);
+        impone.Should().BeOfType<ResultadoArranque.Detener>().Which.Mensaje.Should().Contain("OT DE OTRO MUNICIPIO").And.Contain(Nombre);
     }
 
     [Fact]
