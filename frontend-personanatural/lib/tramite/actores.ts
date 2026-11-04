@@ -1,6 +1,6 @@
 // Paso Actores (HU F3 y K5). Módulo puro, sin React ni red: arma las filas de actores por rol a partir de la definición del tipo y
 // del borrador, valida su formato y decide qué falta. Ningún rol ni tipo de trámite está nombrado aquí: todo sale de la definición.
-import type { ActorEstado, ActorRequest, ActorRol, DefinicionTipo, EstadoIdentidad, EstadoValidacion, ParteIdentidad } from "@/lib/api/cliente";
+import type { ActorEstado, ActorRequest, ActorRol, DefinicionTipo, EstadoIdentidad, EstadoValidacion, ParteIdentidad, Solicitud } from "@/lib/api/cliente";
 import { ciudadCanonica } from "@/lib/catalogos/ciudades";
 
 export type TipoDocumento = "CC" | "CE" | "NIT";
@@ -314,4 +314,21 @@ export function motivoIncompleto(
   }
   if (!EXIGIR_IDENTIDAD_PARA_CONTINUAR) return undefined;
   return motivoIdentidadPendiente(definicion, filas, estadoDe);
+}
+
+const sinPersona = (a: ActorEstado): boolean => a.numeroDocumento == null && a.nombre == null;
+
+/**
+ * Los guardados de campos, comercial, requisitos y organismo responden sin datos personales (solo GET y PATCH /actores los traen).
+ * Al aplicar esa respuesta al caché, las personas ya conocidas conservan sus datos: si no, el Resumen las pintaría vacías.
+ */
+export function conservarPersonas(previa: Solicitud | undefined, nueva: Solicitud): Solicitud {
+  if (!previa || !nueva.actores.some(sinPersona)) return nueva;
+  const actores = nueva.actores.map((a) => {
+    const antes = sinPersona(a) ? previa.actores.find((p) => p.rol === a.rol && p.ordinal === a.ordinal && !sinPersona(p)) : undefined;
+    if (!antes) return a;
+    const { tipoDocumento, numeroDocumento, nombre, correo, celular, direccion, ciudad } = antes;
+    return { ...a, tipoDocumento, numeroDocumento, nombre, correo, celular, direccion, ciudad };
+  });
+  return { ...nueva, actores };
 }

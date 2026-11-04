@@ -299,15 +299,8 @@ function valorDeCampoLegible(tipo: string, valor: string): string {
   return /fecha|date/i.test(tipo) ? (formatearFecha(valor) ?? valor) : valor;
 }
 
-/** «Placa» o «Documento» que solo repite la placa del trámite o el documento de un actor: ya salen en «Trámite» y «Titular y actores». */
-function repiteIdentificador(etiqueta: string, valor: string, solicitud: Solicitud): boolean {
-  const norm = (t: string) => t.replace(/[\s.\-]/g, "").toUpperCase();
-  const v = norm(valor);
-  if (v === "") return false;
-  if (/placa/i.test(etiqueta)) return v === norm(solicitud.placa ?? "");
-  if (/documento|c[eé]dula|identificaci[oó]n/i.test(etiqueta)) return solicitud.actores.some((a) => norm(a.numeroDocumento ?? "") === v);
-  return false;
-}
+/** Campos del tipo que solo repiten la placa del trámite o el documento del titular: ya salen en «Trámite» y «Titular y actores». */
+const CLAVES_REPETIDAS: ReadonlySet<string> = new Set(["plate", "owner_document_type", "owner_document_number"]);
 
 function filasPropias(definicion: DefinicionTipo, solicitud: Solicitud, ctx: ContextoResumen): FilaResumen[] {
   const filas: FilaResumen[] = [];
@@ -343,8 +336,8 @@ function filasPropias(definicion: DefinicionTipo, solicitud: Solicitud, ctx: Con
   for (const campo of definicion.pasos.flatMap((p) => p.campos)) {
     if (yaDeclarados.has(campo.fieldKey) || vistos.has(campo.fieldKey)) continue;
     vistos.add(campo.fieldKey);
+    if (CLAVES_REPETIDAS.has(campo.fieldKey)) continue;
     const valor = limpio(solicitud.fieldValues[campo.fieldKey]);
-    if (repiteIdentificador(campo.etiqueta, valor, solicitud)) continue;
     if (valor !== "") filas.push({ etiqueta: campo.etiqueta, valor: valorDeCampoLegible(campo.tipo, valor) });
   }
 

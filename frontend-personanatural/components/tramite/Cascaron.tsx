@@ -17,6 +17,7 @@ import type { ClientePortal, DefinicionTipo, Organismo, Solicitud } from "@/lib/
 import { ApiError, mensajeDe } from "@/lib/api/errores";
 import { organismoElegido } from "@/lib/tramite/diagnostico";
 import { ASSETS } from "@/lib/assets";
+import { conservarPersonas } from "@/lib/tramite/actores";
 import { crearGuardadorSerial } from "@/lib/tramite/guardadoSerial";
 import type { ContextoTramite } from "@/lib/tramite/contexto";
 import { esEditable, pasoInicial, type GrupoPaso, type PasoWizard, type SeccionWizard } from "@/lib/tramite/pasos";
@@ -100,7 +101,7 @@ export function Cascaron({ cliente, definicion, solicitud, pasos, registro, cont
     () => (queryClient.getQueryData<Solicitud>(claveSolicitud(idSolicitud)) ?? solicitudRef.current).version,
     [queryClient, idSolicitud],
   );
-  const aplicarSolicitud = useCallback((s: Solicitud) => void queryClient.setQueryData(claveSolicitud(idSolicitud), s), [queryClient, idSolicitud]);
+  const aplicarSolicitud = useCallback((s: Solicitud) => void queryClient.setQueryData<Solicitud>(claveSolicitud(idSolicitud), (previa) => conservarPersonas(previa, s)), [queryClient, idSolicitud]);
   const releer = useCallback(() => cliente.solicitudes.obtener(idSolicitud), [cliente, idSolicitud]);
   const guardarConVersion = useMemo(() => crearGuardadorSerial(leerVersion, aplicarSolicitud, releer), [leerVersion, aplicarSolicitud, releer]);
 
@@ -457,7 +458,7 @@ function ElegirOrganismo({ cliente, solicitud }: { cliente: ClientePortal; solic
   const asignar = useMutation({
     mutationFn: (organismo: Organismo) => cliente.solicitudes.asignarOrganismo(solicitud.solicitudId, { organismoId: organismo.id, version: solicitud.version }),
     onSuccess: (actualizada) => {
-      queryClient.setQueryData(claveSolicitud(solicitud.solicitudId), actualizada);
+      queryClient.setQueryData<Solicitud>(claveSolicitud(solicitud.solicitudId), (previa) => conservarPersonas(previa, actualizada));
     },
   });
 

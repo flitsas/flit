@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ActorEstado, DeclaracionTipo, DefinicionTipo, EstadoIdentidad, Solicitud } from "@/lib/api/cliente";
 import { armarDatosResumen, armarResumen, destinoDePendiente, pasoTieneSecciones, textoPendiente, type SeccionResumen } from "@/lib/tramite/resumen";
+import { conservarPersonas } from "@/lib/tramite/actores";
 import { adjunto, definicionCompleta, solicitudCompleta } from "./fixtures-envio";
 import { definicionDe } from "./fixtures-wizard";
 
@@ -218,16 +219,32 @@ describe("pendientes en lenguaje claro", () => {
 });
 
 describe("«Información del trámite» no repite placa ni documento del titular", () => {
-  it("quita los campos que solo repiten placa o documento de un actor y conserva el resto", () => {
+  it("quita por fieldKey placa y documento del titular (aunque no coincidan con los actores) y conserva el resto", () => {
     const base = definicionCompleta();
     const sol = solicitudCompleta();
     const doc = sol.actores[0]?.numeroDocumento ?? "";
     const campo = (fieldKey: string, etiqueta: string) => ({ fieldKey, etiqueta, tipo: "text", obligatorio: false, opciones: [], validationSchema: "" });
-    const definicion = { ...base, pasos: base.pasos.map((p) => (p.clave === "p3" ? { ...p, campos: [...p.campos, campo("placa_x", "Placa"), campo("doc_x", "Documento del titular"), campo("nota", "Nota")] } : p)) };
-    const conRepetidos = { ...sol, fieldValues: { ...sol.fieldValues, placa_x: sol.placa ?? "", doc_x: doc, nota: "hola" } };
+    const definicion = { ...base, pasos: base.pasos.map((p) => (p.clave === "p3" ? { ...p, campos: [...p.campos, campo("plate", "Placa"), campo("owner_document_type", "Tipo de documento del titular"), campo("owner_document_number", "Documento del titular"), campo("nota", "Nota")] } : p)) };
+    const conRepetidos = { ...sol, fieldValues: { ...sol.fieldValues, plate: "XYZ999", owner_document_type: "CC", owner_document_number: `${doc}0`, nota: "hola" } };
     const etiquetas = filasDe(armarDatosResumen(definicion, conRepetidos), "propios").map((f) => f.etiqueta);
     expect(etiquetas).not.toContain("Placa");
     expect(etiquetas).not.toContain("Documento del titular");
+    expect(etiquetas).not.toContain("Tipo de documento del titular");
     expect(etiquetas).toContain("Nota");
+  });
+});
+
+describe("conservarPersonas: respuestas sin datos personales no vacían a los actores", () => {
+  it("el Resumen sigue mostrando a las personas tras un guardado que responde sin PII, y la no editable no las muestra", () => {
+    const previa = solicitudCompleta();
+    const sinPii = { ...previa, version: previa.version + 1, actores: previa.actores.map((a) => ({ ...a, tipoDocumento: null, numeroDocumento: null, nombre: null, correo: null, celular: null, direccion: null, ciudad: null })) };
+    expect(armarDatosResumen(definicionCompleta(), sinPii).some((x) => x.id === "actores")).toBe(false);
+    const fusionada = conservarPersonas(previa, sinPii);
+    expect(fusionada.version).toBe(sinPii.version);
+    const actores = armarDatosResumen(definicionCompleta(), fusionada).find((x) => x.id === "actores");
+    expect(actores?.bloques.map((b) => b.titulo)).toHaveLength(previa.actores.length);
+    expect(conservarPersonas(undefined, sinPii)).toBe(sinPii);
+    const enCola = armarDatosResumen(definicionCompleta(), { ...fusionada, estado: "en_cola" });
+    expect(enCola.some((x) => x.id === "actores")).toBe(false);
   });
 });
