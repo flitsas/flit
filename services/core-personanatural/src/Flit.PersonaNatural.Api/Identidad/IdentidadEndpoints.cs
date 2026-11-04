@@ -80,7 +80,7 @@ public static class IdentidadEndpoints
     {
         if (r.Exito)
         {
-            var cuerpo = new ParteResponse(r.Parte!, r.Ordinal, r.Estado!);
+            var cuerpo = new ParteResponse(r.Parte!, r.Ordinal, r.Estado!, r.CapturaUrl);
             return r.Aceptada ? Results.Accepted(value: cuerpo) : Results.Ok(cuerpo);
         }
 
@@ -103,7 +103,7 @@ public sealed record ParteRequest(short? Ordinal);
 
 public sealed record ReenviarRequest(short? Ordinal, string? Correo);
 
-public sealed record ParteResponse(string Parte, short Ordinal, string Estado);
+public sealed record ParteResponse(string Parte, short Ordinal, string Estado, string? CapturaUrl = null);
 
 /// <summary>Datos del evento <c>tramites.identity_validation.completed</c> (sanitizados: solo ids y estado, sin datos personales).</summary>
 public sealed record ValidacionCompletada(Guid ValidationId, string? Estado, string? Parte, Guid? ProcedureInstanceId, string? Provider, string? ProviderStatus, int? Score);

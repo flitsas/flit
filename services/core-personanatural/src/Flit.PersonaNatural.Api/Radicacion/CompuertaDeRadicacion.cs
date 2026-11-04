@@ -16,10 +16,14 @@ namespace Flit.PersonaNatural.Api.Radicacion;
 /// un falso 409. Si FLIT 2 no responde, queda lo que el espejo sabe, que es lo seguro: pendiente.
 /// </para>
 /// </summary>
-public sealed class CompuertaDeRadicacion(PersonaNaturalDb db, IReglasDeIdentidad reglas, IdentidadService identidad, IOptions<IdentidadOptions> opciones) : ICompuertaDeRadicacion
+public sealed class CompuertaDeRadicacion(PersonaNaturalDb db, IReglasDeIdentidad reglas, IdentidadService identidad, IOptions<IdentidadOptions> opciones, Flit.PersonaNatural.Api.Pruebas.IPruebasPortal? pruebas = null) : ICompuertaDeRadicacion
 {
     public async Task<ResultadoCompuerta> EvaluarAsync(Guid solicitudId, CancellationToken ct)
     {
+        // Solo pruebas locales (Development + flag): las identidades no frenan; las demás reglas de la radicación siguen.
+        if (pruebas?.OmitirIdentidad == true)
+            return ResultadoCompuerta.Aprobada;
+
         var definidas = await reglas.LeerAsync(solicitudId, ct).ConfigureAwait(false);
         // Una solicitud inexistente no tiene nada verificado: no se puede radicar.
         if (definidas is null)

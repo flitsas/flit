@@ -181,7 +181,7 @@ public sealed class PersonaNaturalGrpcTests(WebApplicationFactory<Program> facto
 
     [Theory]
     [InlineData("ok", "cumple")]
-    [InlineData("warn", "cumple")]
+    [InlineData("warn", "falta")]
     [InlineData("fail", "falta")]
     [InlineData("error", "falta")]
     [InlineData("skip", "no_aplica")]

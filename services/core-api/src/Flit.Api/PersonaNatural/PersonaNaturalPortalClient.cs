@@ -14,7 +14,7 @@ internal sealed record ParteSolicitudPortal(
 internal sealed record AdjuntoSolicitudPortal(Guid Id, string Tipo, string Referencia, string Sha256, long TamanoBytes, string MimeType, string NombreArchivo);
 
 /// <summary>Bloques del trámite que no son campos del tipo (<c>datos_json</c> del RPC). Sin datos personales de personas.</summary>
-internal sealed record DatosSolicitudPortal(decimal? ValorComercial, PrendaPortal? Prenda, string? Observaciones = null)
+internal sealed record DatosSolicitudPortal(decimal? ValorComercial, PrendaPortal? Prenda, string? Observaciones = null, string? Canal = null)
 {
     public static readonly DatosSolicitudPortal Vacios = new(null, null);
 
@@ -42,14 +42,17 @@ internal sealed record DatosSolicitudPortal(decimal? ValorComercial, PrendaPorta
                 prenda = new PrendaPortal(
                     p.TryGetProperty("tiene", out var tiene) && tiene.ValueKind == JsonValueKind.True,
                     Texto(p, "acreedor"),
-                    Texto(p, "nitAcreedor"));
+                    Texto(p, "nitAcreedor"),
+                    Texto(p, "decision"),
+                    Texto(p, "entidadLevantamiento"));
             }
 
             string? observaciones = null;
             if (raiz.TryGetProperty("requisitos", out var requisitos) && requisitos.ValueKind == JsonValueKind.Object)
                 observaciones = Texto(requisitos, "observaciones");
 
-            return new DatosSolicitudPortal(valor, prenda, observaciones);
+            var canal = raiz.TryGetProperty("canal", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null;
+            return new DatosSolicitudPortal(valor, prenda, observaciones, canal);
         }
         catch (JsonException)
         {
@@ -61,7 +64,8 @@ internal sealed record DatosSolicitudPortal(decimal? ValorComercial, PrendaPorta
         e.TryGetProperty(nombre, out var v) && v.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(v.GetString()) ? v.GetString() : null;
 }
 
-internal sealed record PrendaPortal(bool Tiene, string? Acreedor, string? NitAcreedor);
+/// <summary><c>Decision</c> (HU 8): registrar | levantar | sin_prenda; null en un borrador anterior (se deduce de <c>Tiene</c>).</summary>
+internal sealed record PrendaPortal(bool Tiene, string? Acreedor, string? NitAcreedor, string? Decision = null, string? EntidadLevantamiento = null);
 
 /// <summary>Lo que core-api necesita de una solicitud radicada para crear el trámite (HU #14050).</summary>
 internal sealed record SolicitudPortal(

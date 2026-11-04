@@ -1,3 +1,4 @@
+using Flit.PersonaNatural.Api.Consultas;
 using Flit.PersonaNatural.Api.Cotizaciones;
 using Flit.PersonaNatural.Api.Definiciones;
 using Flit.PersonaNatural.Api.Identidad;
@@ -28,7 +29,9 @@ public sealed class RadicacionService(
     ICompuertaDeRadicacion compuerta,
     IOptions<IdentidadOptions> identidad,
     IPlatformOutbox outbox,
-    TimeProvider reloj)
+    TimeProvider reloj,
+    VerificadorDeOrganismo verificadorDeOrganismo,
+    IGravamenDelBorrador? gravamen = null)
 {
     public const string TipoEvento = "tramites.persona_natural.radicacion_solicitada";
     public const int VersionEvento = 1;
@@ -75,9 +78,10 @@ public sealed class RadicacionService(
             throw LlaveEnUso();
 
         // El tipo tiene que seguir siendo elegible. Si FLIT 2 no responde no se bloquea: la cola existe para eso.
+        DefinicionTipoDto? vigente = null;
         try
         {
-            await definiciones.ObtenerAsync(s.TipoTramiteCodigo, s.OrganismoId.ToString(), ct).ConfigureAwait(false);
+            vigente = await definiciones.ObtenerAsync(s.TipoTramiteCodigo, s.OrganismoId.ToString(), ct).ConfigureAwait(false);
         }
         catch (FachadaException ex) when (ex.Codigo == DefinicionesService.CodigoTipoNoDisponible)
         {
@@ -85,6 +89,36 @@ public sealed class RadicacionService(
         }
         catch (FachadaException)
         {
+        }
+
+        // Una placa de un organismo no se radica en otro: el borrador debe tener el organismo verificado contra el RUNT. Si no lo está
+        // (borradores anteriores, o se saltó el diagnóstico) se verifica ahora, con la caché de core-consultas; no se radica sin verificar.
+        var def = DefinicionesService.Leer(s.DefinicionSnapshot) ?? vigente;
+        if (def is not null)
+        {
+            var verificados = await verificadorDeOrganismo.VerificarAsync(s, def, null, exigir: true, ct).ConfigureAwait(false);
+            if (verificados is not null)
+                s.Datos = verificados.Serializar();
+        }
+
+        // Con prenda o gravamen en el RUNT, el traspaso no se radica sin decisión explícita. Con el RUNT caído no se decide en falso.
+        if (def is not null)
+        {
+            try
+            {
+                if (await DecisionDePrendaObligatoria.FaltaAsync(def, DatosSolicitud.Leer(s.Datos), s.Id, gravamen, ct).ConfigureAwait(false))
+                {
+                    throw new ReglaDeNegocioException(
+                        StatusCodes.Status422UnprocessableEntity, DecisionDePrendaObligatoria.Codigo, "Falta la decisión de la prenda", DecisionDePrendaObligatoria.Mensaje,
+                        new Dictionary<string, object?> { ["referencia"] = DecisionDePrendaObligatoria.Referencia });
+                }
+            }
+            catch (ProveedorNoDisponibleException)
+            {
+                throw new ReglaDeNegocioException(
+                    StatusCodes.Status503ServiceUnavailable, ConsultasEndpoints.CodigoProveedor, "Consulta no disponible",
+                    "No pudimos consultar el RUNT en este momento. Intente de nuevo en unos minutos.");
+            }
         }
 
         var borrador = await solicitudes.ConstruirAsync(s, conPersonas: false, null, ct).ConfigureAwait(false);

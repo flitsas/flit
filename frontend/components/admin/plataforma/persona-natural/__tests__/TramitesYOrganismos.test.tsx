@@ -122,24 +122,15 @@ describe("OrganismosYTiposTab (#14075)", () => {
     expect(within(cerrado).getByText(/no se puede ofrecer/i)).toBeInTheDocument();
   });
 
-  it("un trámite no elegible muestra su motivo y no se puede encender; uno inactivo en FLIT solo se puede apagar", async () => {
-    vi.mocked(fetchTiposPn).mockResolvedValue([
-      ...TIPOS,
-      tipo({ id: "t5", nombre: "Trámite Retirado", elegible: false, motivo: "", habilitado: true, ofrecible: false, activoEnFlit: false }),
-      tipo({ id: "t6", nombre: "Trámite Cerrado", elegible: false, habilitado: false, ofrecible: false, activoEnFlit: false }),
-    ]);
+  it("la tabla de trámites no muestra mensajes de bloqueo ni la columna de disponibilidad: todos los tipos listados se pueden encender", async () => {
     renderTab();
     await screen.findByRole("table", { name: /trámites del portal de persona natural/i });
+    const tabla = screen.getByRole("table", { name: /trámites del portal de persona natural/i });
+    expect(within(tabla).queryByRole("columnheader", { name: /disponibilidad/i })).not.toBeInTheDocument();
+    expect(within(tabla).queryByText(/aún no disponible|listo para ofrecer|no se puede ofrecer|ya no está activo/i)).not.toBeInTheDocument();
     const prenda = fila(/inscripción de prenda/i);
-    expect(within(prenda).getByText(/no se puede ofrecer todavía: el asistente no está publicado/i)).toBeInTheDocument();
-    expect(within(prenda).getByRole("switch", { name: /^ofrecer inscripción de prenda/i })).toBeDisabled();
-    const retirado = fila(/trámite retirado/i);
-    expect(within(retirado).getByText("Ya no está activo en FLIT")).toBeInTheDocument();
-    expect(within(retirado).getByText(/solo puedes dejar de ofrecerlo/i)).toBeInTheDocument();
-    expect(within(retirado).getByRole("switch", { name: /dejar de ofrecer trámite retirado/i })).toBeEnabled();
-    const cerrado = fila(/trámite cerrado/i);
-    expect(within(cerrado).getByText(/ya no está activo en flit: no se puede ofrecer/i)).toBeInTheDocument();
-    expect(within(cerrado).getByRole("switch", { name: /^ofrecer trámite cerrado/i })).toBeDisabled();
+    expect(within(prenda).getByRole("switch", { name: /^ofrecer inscripción de prenda/i })).toBeEnabled();
+    expect(screen.getByRole("switch", { name: /dejar de ofrecer traspaso en el portal/i })).toBeEnabled();
   });
 
   it("AC1: un organismo habilitado sin tarifa vigente avisa «Falta tarifa» con botón a Tarifas", async () => {
@@ -196,16 +187,13 @@ describe("OrganismosYTiposTab (#14075)", () => {
     expect(await screen.findByText(/ningún registro coincide/i)).toBeInTheDocument();
   });
 
-  it("AC1: un trámite activado sin tarifa avisa «Falta tarifa»; uno aún no disponible no se puede activar y lo explica", async () => {
+  it("AC1: un trámite activado sin tarifa avisa «Falta tarifa» con botón a Tarifas; uno apagado no avisa", async () => {
     renderTab();
     await screen.findByRole("table", { name: /trámites del portal de persona natural/i });
     const matricula = fila(/matrícula inicial/i);
     expect(within(matricula).getByText("Falta tarifa")).toBeInTheDocument();
     expect(within(matricula).getByRole("button", { name: /crear tarifa para matrícula inicial/i })).toBeInTheDocument();
-    const prenda = fila(/inscripción de prenda/i);
-    expect(within(prenda).getByText("Aún no disponible")).toBeInTheDocument();
-    expect(within(prenda).getByText(/no se puede ofrecer todavía/i)).toBeInTheDocument();
-    expect(within(prenda).getByRole("switch", { name: /^ofrecer inscripción de prenda/i })).toBeDisabled();
+    expect(within(fila(/inscripción de prenda/i)).queryByText("Falta tarifa")).not.toBeInTheDocument();
   });
 
   it("AC1: un 422 tipo_no_elegible muestra el motivo en lenguaje claro y recarga; luego ofrecer un trámite listo actualiza la fila", async () => {
@@ -258,7 +246,7 @@ describe("OrganismosYTiposTab (#14075)", () => {
         <Ambas onIrATarifas={vi.fn()} onCambio={vi.fn()} />
       </ToastProvider>,
     );
-    expect(await screen.findByText(/todavía no hay trámites listos para persona natural/i)).toBeInTheDocument();
+    expect(await screen.findByText(/todavía no hay trámites habilitados en flit 2 para persona natural/i)).toBeInTheDocument();
     expect(await screen.findByText(/no se pudieron cargar los organismos/i)).toBeInTheDocument();
     await ue.click(screen.getByRole("button", { name: /reintentar/i }));
     expect(await screen.findByRole("table", { name: /organismos del portal/i })).toBeInTheDocument();

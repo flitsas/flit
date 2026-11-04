@@ -74,9 +74,33 @@ describe("tarjetas que aplican al tipo", () => {
     expect(ninguna).toMatchObject({ comercial: false, prenda: false, documentos: false, transformaciones: false, observaciones: true });
   });
 
-  it("la prenda complementaria se pregunta; sin la sección no hay tarjeta aunque el flag esté activo", () => {
+  it("la prenda complementaria se pregunta, con o sin la sección prenda_decision (como en FLIT 2, traspaso)", () => {
     expect(tarjetasDeRequisitos(definicionDe(SECCIONES, { flags: flags({ permitePrendaComplementaria: true }) }))).toMatchObject({ prenda: true, prendaObligatoria: false });
-    expect(tarjetasDeRequisitos(definicionDe([["document_checklist"]], { flags: flags({ requierePrenda: true }) })).prenda).toBe(false);
+    expect(tarjetasDeRequisitos(definicionDe([["document_checklist"]], { flags: flags({ permitePrendaComplementaria: true }) }))).toMatchObject({ prenda: true, prendaObligatoria: false });
+    expect(tarjetasDeRequisitos(definicionDe([["document_checklist"]], { flags: flags() })).prenda).toBe(false);
+  });
+
+  it("un tipo que exige prenda (levantar/registrar) muestra la tarjeta aunque falte la sección prenda_decision", () => {
+    const d = definicionDe([["vehicle_query"], ["document_checklist"]], { flags: flags({ requierePrenda: true }) });
+    expect(tarjetasDeRequisitos(d)).toMatchObject({ prenda: true, prendaObligatoria: true });
+    expect(erroresDeRequisitos(d, [], entrada())).toMatchObject({ "prenda.acreedor": expect.any(String), "prenda.nitAcreedor": expect.any(String) });
+  });
+
+  it("acreedor y NIT opcionales (levantar en traspaso): vacíos no fallan, con valor se validan; sin la bandera siguen obligatorios", () => {
+    const d = definicionDe([["vehicle_query"], ["document_checklist"]], { flags: flags({ requierePrenda: true }) });
+    expect(erroresDeRequisitos(d, [], entrada({ acreedorOpcional: true }))).not.toHaveProperty("prenda.acreedor");
+    expect(erroresDeRequisitos(d, [], entrada({ acreedorOpcional: true }))).not.toHaveProperty("prenda.nitAcreedor");
+    expect(erroresDeRequisitos(d, [], entrada({ acreedorOpcional: true, nitAcreedor: "123" }))).toHaveProperty("prenda.nitAcreedor");
+    expect(erroresDeRequisitos(d, [], entrada({ acreedorOpcional: true, acreedor: "x".repeat(151) }))).toHaveProperty("prenda.acreedor");
+    expect(erroresDeRequisitos(d, [], entrada({ acreedorOpcional: false }))).toHaveProperty("prenda.acreedor");
+  });
+
+  it("la entidad del levantamiento solo se exige cuando la entrada la trae (acción fija levantar)", () => {
+    const d = definicionDe([["vehicle_query"], ["document_checklist"]], { flags: flags({ requierePrenda: true }) });
+    expect(erroresDeRequisitos(d, [], entrada())).not.toHaveProperty("prenda.entidadLevantamiento");
+    expect(erroresDeRequisitos(d, [], entrada({ entidadLevantamiento: "  " }))).toHaveProperty("prenda.entidadLevantamiento");
+    expect(erroresDeRequisitos(d, [], entrada({ entidadLevantamiento: "x".repeat(201) }))).toHaveProperty("prenda.entidadLevantamiento");
+    expect(erroresDeRequisitos(d, [], entrada({ entidadLevantamiento: "Notaría 15" }))).not.toHaveProperty("prenda.entidadLevantamiento");
   });
 
   it("los campos del tipo salen de los pasos de requisitos que los traen", () => {

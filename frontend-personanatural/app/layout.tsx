@@ -1,16 +1,22 @@
 import type { Metadata } from "next";
-import { Poppins } from "next/font/google";
+import localFont from "next/font/local";
 import { connection } from "next/server";
 import { ConfigPublica } from "@/components/ConfigPublica";
 import { portalConfig } from "@/lib/config.server";
 import { Providers } from "./providers";
 import "./globals.css";
 
-// Tipografía del diseño de referencia (Poppins 300–700).
-const poppins = Poppins({
+// Tipografía del diseño de referencia (Poppins 300–700). Las fuentes viven en el repo: el build no depende de lo que
+// responda Google Fonts.
+const poppins = localFont({
   variable: "--font-poppins",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
+  src: [
+    { path: "./fonts/Poppins-300-latin.woff2", weight: "300", style: "normal" },
+    { path: "./fonts/Poppins-400-latin.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/Poppins-500-latin.woff2", weight: "500", style: "normal" },
+    { path: "./fonts/Poppins-600-latin.woff2", weight: "600", style: "normal" },
+    { path: "./fonts/Poppins-700-latin.woff2", weight: "700", style: "normal" },
+  ],
 });
 
 export const metadata: Metadata = {

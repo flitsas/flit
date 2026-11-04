@@ -137,12 +137,12 @@ internal sealed class VerifikSimitConsultationProvider(
     /// <summary>El <c>ProviderUnavailable</c> de siempre, con la clase del fallo (resolvedor del Diagnóstico).</summary>
     private static ConsultationResult ProviderUnavailable(FalloProveedor fallo) => ProviderUnavailable() with { Fallo = fallo };
 
-    // No se pudo verificar SIMIT (no-200/timeout/red/respuesta ilegible). Dato crítico:
-    // check "error" (bloqueo DURO, no subsanable) con mensaje amigable sin exponer el proveedor.
+    // No se pudo verificar SIMIT (no-200/timeout/red/respuesta ilegible). Aviso (warn), no bloqueo:
+    // el trámite puede seguir; el gestor ve «POR REVISAR» y puede reintentar la consulta después.
     private static ConsultationResult ProviderUnavailable() =>
-        new(Key_, "red",
-            [new ConsultationCheck("provider", "Consulta SIMIT", "error", Key_,
-                "No fue posible verificar la información en SIMIT en este momento. Vuelve a intentarlo en unos minutos.")],
+        new(Key_, "yellow",
+            [new ConsultationCheck("provider", "Consulta SIMIT", "warn", Key_,
+                "No fue posible verificar la información en SIMIT en este momento. Puedes continuar y reintentar más tarde.")],
             []);
 
     private static ConsultationResult InputError(string message) =>

@@ -19,7 +19,24 @@ export interface FilaDiagnostico {
 export function filasDiagnostico(requisitos: readonly Requisito[]): FilaDiagnostico[] {
   return requisitos
     .filter((r) => r.estado !== "no_aplica")
-    .map((r) => (r.estado === "cumple" ? { clave: r.codigo, nombre: r.descripcion, tono: "success", estado: "OK" } : { clave: r.codigo, nombre: r.descripcion, tono: "warning", estado: "POR REVISAR" }));
+    .map((r) => (r.estado === "cumple" ? { clave: r.codigo, nombre: r.descripcion, tono: "success", estado: "OK" } : { clave: r.codigo, nombre: etiquetaCorta(r.descripcion), tono: "warning", estado: "POR REVISAR" }));
+}
+
+/** Un motivo largo ya sale completo en la alerta de ancho completo: la cinta angosta solo lleva una etiqueta corta. */
+const LARGO_MAXIMO_CINTA = 40;
+function etiquetaCorta(descripcion: string): string {
+  const texto = descripcion.trim();
+  if (texto.length <= LARGO_MAXIMO_CINTA) return texto;
+  return /tr[aá]mite en proceso/i.test(texto) ? "Trámite en proceso" : "Requisito pendiente";
+}
+
+/**
+ * Motivos (texto del servidor, sin tocar) de los requisitos no cumplidos cuando el diagnóstico está bloqueado. Se pintan en una
+ * alerta de ancho completo: la cinta de indicadores es angosta y un mensaje largo se ve apretado.
+ */
+export function motivosDiagnostico(diagnostico: { puedeContinuar: boolean; requisitos: readonly Requisito[] } | null): string[] {
+  if (!diagnostico || diagnostico.puedeContinuar) return [];
+  return diagnostico.requisitos.filter((r) => r.estado !== "cumple" && r.estado !== "no_aplica" && r.descripcion.trim()).map((r) => r.descripcion.trim());
 }
 
 /** Organismo aún no elegido en el paso 1 (el BFF guarda el guid vacío). */
@@ -93,6 +110,10 @@ export function entradaConsulta(
 export const consentimientoDeConsulta = { consentimiento: true, consentimientoVersion: CONSENTIMIENTO_VERSION } as const;
 
 export const MENSAJE_CONSULTANDO_VEHICULO = "Consultando el vehículo…";
+/** Carga del paso Diagnóstico en el canal del punto (épica #14187). */
+export const MENSAJE_REVISANDO_VEHICULO = "Revisando el vehículo…";
 export const MENSAJE_RUNT_NO_RESPONDE = "No pudimos consultar el RUNT. Intenta de nuevo.";
 export const MENSAJE_SIN_VEHICULO = "No encontramos el vehículo";
 export const MENSAJE_ATENCION = "Para continuar con la radicación debes estar al día en pagos de SOAT, multas e impuestos vehiculares.";
+export const MENSAJE_PUEDE_CONTINUAR = "Puedes continuar.";
+export const MENSAJE_NO_PUEDE_CONTINUAR = "No puedes continuar";

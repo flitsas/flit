@@ -114,12 +114,12 @@ internal sealed class FlitFinesConsultationProvider(
     /// <summary>El <c>ProviderUnavailable</c> de siempre, con la clase del fallo (resolvedor del Diagnóstico).</summary>
     private static ConsultationResult ProviderUnavailable(FalloProveedor fallo) => ProviderUnavailable() with { Fallo = fallo };
 
-    // No se pudo verificar (no-200/timeout/red/respuesta ilegible). Dato crítico: check "error"
-    // (bloqueo DURO, no subsanable) con mensaje amigable que no expone el proveedor.
+    // No se pudo verificar (no-200/timeout/red/respuesta ilegible). Aviso (warn), no bloqueo:
+    // el trámite puede seguir sin SIMIT/comparendos disponible; se reintenta más adelante.
     private static ConsultationResult ProviderUnavailable() =>
-        new(Key_, "red",
-            [new ConsultationCheck("provider", "Consulta de comparendos", "error", Key_,
-                "No fue posible verificar la información de comparendos en este momento. Vuelve a intentarlo en unos minutos.")],
+        new(Key_, "yellow",
+            [new ConsultationCheck("provider", "Consulta de comparendos", "warn", Key_,
+                "No fue posible verificar la información de comparendos en este momento. Puedes continuar y reintentar más tarde.")],
             []);
 
     private static ConsultationResult InputError(string message) =>

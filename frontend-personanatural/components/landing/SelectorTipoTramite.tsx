@@ -1,7 +1,8 @@
 "use client";
 
 import { Check, ChevronDown } from "lucide-react";
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import type { TipoTramite } from "@/lib/api/cliente";
 
 interface Props {
@@ -23,16 +24,38 @@ export function SelectorTipoTramite({ etiqueta = "Tipo de Trámite", opciones, v
   const disparador = useRef<HTMLButtonElement>(null);
   const lista = useRef<HTMLUListElement>(null);
   const elegido = opciones.find((o) => o.code === valor);
+  // La lista va en un portal (como el Select de radix del diseño): dentro de la tarjeta de acción quedaba atrapada en su
+  // contexto de apilamiento y las tarjetas siguientes la tapaban. En un <dialog> se monta dentro de él (capa superior).
+  const [posicion, setPosicion] = useState<CSSProperties | null>(null);
+  const [destino, setDestino] = useState<HTMLElement | null>(null);
+
+  useLayoutEffect(() => {
+    if (!abierto || !disparador.current) return;
+    const boton = disparador.current;
+    setDestino(boton.closest("dialog") ?? document.body);
+    const ubicar = () => {
+      const r = boton.getBoundingClientRect();
+      setPosicion({ position: "fixed", top: r.bottom + 4, left: r.left, width: r.width });
+    };
+    ubicar();
+    window.addEventListener("resize", ubicar);
+    window.addEventListener("scroll", ubicar, true);
+    return () => {
+      window.removeEventListener("resize", ubicar);
+      window.removeEventListener("scroll", ubicar, true);
+    };
+  }, [abierto]);
 
   useEffect(() => {
     if (!abierto) return;
     lista.current?.focus();
     const fuera = (e: MouseEvent) => {
-      if (raiz.current && !raiz.current.contains(e.target as Node)) setAbierto(false);
+      const nodo = e.target as Node;
+      if (!raiz.current?.contains(nodo) && !lista.current?.contains(nodo)) setAbierto(false);
     };
     document.addEventListener("mousedown", fuera);
     return () => document.removeEventListener("mousedown", fuera);
-  }, [abierto]);
+  }, [abierto, destino]);
 
   const abrir = () => {
     setIndice(Math.max(0, opciones.findIndex((o) => o.code === valor)));
@@ -83,7 +106,7 @@ export function SelectorTipoTramite({ etiqueta = "Tipo de Trámite", opciones, v
         <span className="truncate">{elegido?.name ?? marcador}</span>
         <ChevronDown aria-hidden className="h-4 w-4 shrink-0 text-primary" />
       </button>
-      {abierto && (
+      {abierto && destino && posicion && createPortal(
         <ul
           ref={lista}
           id={idLista}
@@ -92,7 +115,8 @@ export function SelectorTipoTramite({ etiqueta = "Tipo de Trámite", opciones, v
           aria-label={etiqueta}
           aria-activedescendant={`${idLista}-${indice}`}
           onKeyDown={alTeclear}
-          className="transaction-options absolute left-0 right-0 top-full z-50 mt-1 max-h-72 overflow-y-auto rounded-[9px] border border-border bg-popover p-1 text-popover-foreground outline-none"
+          style={posicion}
+          className="transaction-options z-50 max-h-72 overflow-y-auto rounded-[9px] border border-border bg-popover p-1 text-popover-foreground outline-none"
         >
           {opciones.map((o, i) => (
             <li
@@ -108,7 +132,8 @@ export function SelectorTipoTramite({ etiqueta = "Tipo de Trámite", opciones, v
               {o.name}
             </li>
           ))}
-        </ul>
+        </ul>,
+        destino,
       )}
     </div>
   );

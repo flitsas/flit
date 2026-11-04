@@ -47,6 +47,19 @@ describe("proxy hacia el BFF", () => {
     expect(cabeceras.get("x-otra")).toBeNull();
   });
 
+  it("carrocerías y gravamen llevan el Bearer del borrador y conservan la consulta (web y punto usan el mismo token pn_sesion)", async () => {
+    const fetchImpl = vi.fn(async () => new Response("[]", { status: 200, headers: { "content-type": "application/json" } }));
+    await reenviarAlBff(new Request("https://portal/api/v1/persona-natural/catalogos/carrocerias?solicitudId=s1&texto=fur"), ["catalogos", "carrocerias"], { apiOrigin: ORIGEN, tokenSesion: "tok-borrador", tokenPunto: "tok-punto", fetchImpl });
+    await reenviarAlBff(new Request("https://portal/api/v1/persona-natural/solicitudes/s1/vehiculo/gravamen"), ["solicitudes", "s1", "vehiculo", "gravamen"], { apiOrigin: ORIGEN, tokenSesion: "tok-borrador", fetchImpl });
+
+    const [[url1, init1], [url2, init2]] = fetchImpl.mock.calls as unknown as [URL, RequestInit][];
+    expect(String(url1)).toBe(`${ORIGEN}/api/v1/persona-natural/catalogos/carrocerias?solicitudId=s1&texto=fur`);
+    expect((init1.headers as Headers).get("authorization")).toBe("Bearer tok-borrador");
+    expect((init1.headers as Headers).get("cookie")).toBeNull();
+    expect(String(url2)).toBe(`${ORIGEN}/api/v1/persona-natural/solicitudes/s1/vehiculo/gravamen`);
+    expect((init2.headers as Headers).get("authorization")).toBe("Bearer tok-borrador");
+  });
+
   it("no manda Authorization si no hay sesión, aunque el navegador lo intente", async () => {
     const fetchImpl = vi.fn(async () => new Response("{}", { status: 200 }));
 
@@ -160,5 +173,75 @@ describe("proxy: configuración pública del portal (HU #14073)", () => {
     const [, init] = fetchImpl.mock.calls[0] as unknown as [URL, RequestInit];
     expect((init.headers as Headers).get("if-none-match")).toBeNull();
     expect(r.headers.get("cache-control")).toBeNull();
+  });
+});
+
+describe("proxy del canal del punto", () => {
+  it("quita el token de la entrada y lo guarda como cookie del punto", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ token: "punto-secreto", organismoId: "o1", codigo: "BOG", nombre: "Bogotá" }), { status: 200, headers: { "content-type": "application/json" } }));
+
+    const resultado = await reenviarAlBff(post("https://portal/api/v1/persona-natural/punto/entrada", { codigo: "BOG" }), ["punto", "entrada"], { apiOrigin: ORIGEN, fetchImpl });
+
+    expect(resultado.cookiePunto).toMatchObject({ accion: "fijar", valor: "punto-secreto" });
+    expect(resultado.cookie).toBeUndefined();
+    const cuerpo = JSON.parse(String(resultado.cuerpo));
+    expect(cuerpo).toEqual({ organismoId: "o1", codigo: "BOG", nombre: "Bogotá" });
+    expect(JSON.stringify(cuerpo)).not.toContain("punto-secreto");
+  });
+
+  it("si el BFF pone la cookie pn_punto, la guarda y deja el cuerpo igual", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ organismoId: "o1", codigo: "BOG", nombre: "Bogotá" }), { status: 200, headers: { "content-type": "application/json", "set-cookie": "pn_punto=desde-cookie; HttpOnly" } }));
+
+    const resultado = await reenviarAlBff(post("https://portal/api/v1/persona-natural/punto/entrada", { codigo: "BOG" }), ["punto", "entrada"], { apiOrigin: ORIGEN, fetchImpl });
+
+    expect(resultado.cookiePunto).toMatchObject({ accion: "fijar", valor: "desde-cookie" });
+    expect(JSON.parse(String(resultado.cuerpo))).toEqual({ organismoId: "o1", codigo: "BOG", nombre: "Bogotá" });
+  });
+
+  it("en el canal manda la sesión del punto y no la del trámite", async () => {
+    const fetchImpl = vi.fn(async () => new Response("{}", { status: 200, headers: { "content-type": "application/json" } }));
+
+    await reenviarAlBff(post("https://portal/api/v1/persona-natural/punto/arranque", {}), ["punto", "arranque"], { apiOrigin: ORIGEN, tokenSesion: "tramite", tokenPunto: "punto-tok", fetchImpl });
+
+    const cabeceras = (fetchImpl.mock.calls[0] as unknown as [URL, RequestInit])[1].headers as Headers;
+    expect(cabeceras.get("cookie")).toBe("pn_punto=punto-tok");
+    expect(cabeceras.get("authorization")).toBeNull();
+  });
+
+  it("un 401 sesion_punto_ausente borra solo la cookie del punto", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ code: "sesion_punto_ausente" }), { status: 401 }));
+
+    const resultado = await reenviarAlBff(new Request("https://portal/x"), ["punto", "sesion"], { apiOrigin: ORIGEN, fetchImpl });
+
+    expect(resultado.cookiePunto).toEqual({ accion: "borrar" });
+    expect(resultado.cookie).toBeUndefined();
+  });
+
+  it("el gate de requisitos manda la sesión del borrador además de la cookie del punto", async () => {
+    const fetchImpl = vi.fn(async () => new Response("{}", { status: 200, headers: { "content-type": "application/json" } }));
+
+    await reenviarAlBff(post("https://portal/api/v1/persona-natural/punto/requisitos/completitud", { tipoCodigo: "TRASPASO" }), ["punto", "requisitos", "completitud"], { apiOrigin: ORIGEN, tokenSesion: "borrador-tok", tokenPunto: "punto-tok", fetchImpl });
+
+    const cabeceras = (fetchImpl.mock.calls[0] as unknown as [URL, RequestInit])[1].headers as Headers;
+    expect(cabeceras.get("authorization")).toBe("Bearer borrador-tok");
+    expect(cabeceras.get("cookie")).toBe("pn_punto=punto-tok");
+  });
+
+  it("la matriz y la sugerencia de requisitos siguen sin Bearer (solo la cookie del punto)", async () => {
+    const fetchImpl = vi.fn(async () => new Response("{}", { status: 200, headers: { "content-type": "application/json" } }));
+
+    await reenviarAlBff(new Request("https://portal/x"), ["punto", "requisitos"], { apiOrigin: ORIGEN, tokenSesion: "borrador-tok", tokenPunto: "punto-tok", fetchImpl });
+
+    const cabeceras = (fetchImpl.mock.calls[0] as unknown as [URL, RequestInit])[1].headers as Headers;
+    expect(cabeceras.get("authorization")).toBeNull();
+  });
+
+  it("un 401 session_invalid en actores no borra la cookie del punto", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ code: "session_invalid" }), { status: 401 }));
+
+    const resultado = await reenviarAlBff(new Request("https://portal/x"), ["punto", "actores", "identidad"], { apiOrigin: ORIGEN, fetchImpl });
+
+    expect(resultado.cookiePunto).toBeUndefined();
+    expect(resultado.cookie).toBeUndefined();
   });
 });

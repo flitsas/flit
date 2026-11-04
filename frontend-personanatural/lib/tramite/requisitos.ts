@@ -107,6 +107,8 @@ export interface TarjetasRequisitos {
   campos: PasoDefinicion[];
   observaciones: boolean;
   transformaciones: boolean;
+  /** El tipo trae declaraciones propias (valor nuevo, causal, nivel…) que pinta el renderer `DeclaracionesTipo` dentro de este paso. */
+  declaraciones: boolean;
 }
 
 const tieneSeccion = (d: DefinicionTipo, tipo: string): boolean => d.pasos.some((p) => p.sectionTypes.includes(tipo));
@@ -120,14 +122,19 @@ export const seccionesDeRequisitos = (d: DefinicionTipo): string[] => d.pasos.fl
  */
 export function tarjetasDeRequisitos(d: DefinicionTipo): TarjetasRequisitos {
   const admitePrenda = d.flags.requierePrenda || d.flags.permitePrendaComplementaria;
+  // Como en FLIT 2, la decisión de prenda vive dentro de Requisitos: la tarjeta sale si el tipo la exige o la admite como complementaria,
+  // aunque su definición no traiga la sección `prenda_decision`.
+  const pidePrenda = admitePrenda;
   return {
     comercial: tieneSeccion(d, "commercial") && d.flags.requiereComercial,
-    prenda: tieneSeccion(d, "prenda_decision") && admitePrenda,
+    prenda: pidePrenda,
     prendaObligatoria: d.flags.requierePrenda,
     documentos: tieneSeccion(d, "document_checklist") && documentosOrdenados(d).length > 0,
     campos: d.pasos.filter((p) => p.campos.length > 0 && GRUPO_POR_SECCION[p.sectionTypes[0] ?? ""] === "requisitos"),
     observaciones: seccionesDeRequisitos(d).length > 0,
     transformaciones: seccionesDeRequisitos(d).length > 0 && d.flags.permiteTransformaciones,
+    // La secretaría de destino no es una tarjeta de este paso: va en el diagnóstico.
+    declaraciones: seccionesDeRequisitos(d).length > 0 && (d.declaraciones ?? []).some((x) => x.control !== "organismo_destino"),
   };
 }
 
@@ -175,6 +182,9 @@ export const nitAcreedorInvalido = (v: string): string | undefined => (/^\d{8,10
 
 export const acreedorInvalido = (v: string): string | undefined => (v.trim() === "" ? "Campo obligatorio" : v.trim().length > 150 ? "El nombre del acreedor es demasiado largo" : undefined);
 
+export const entidadLevantamientoInvalida = (v: string): string | undefined =>
+  v.trim() === "" ? "Campo obligatorio" : v.trim().length > 200 ? "El nombre de la entidad es demasiado largo" : undefined;
+
 // ── Qué falta ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
 export interface EntradaRequisitos {
@@ -183,6 +193,10 @@ export interface EntradaRequisitos {
   tienePrenda: boolean;
   acreedor: string;
   nitAcreedor: string;
+  /** Solo con acción fija levantar; si es `undefined` no se exige. */
+  entidadLevantamiento?: string;
+  /** Levantar en un tipo sin acción fija (traspaso): acreedor y NIT no son obligatorios, pero si se escriben se validan. */
+  acreedorOpcional?: boolean;
   observaciones: string;
   transformaciones?: readonly string[];
   hayPersonaJuridica?: boolean;
@@ -203,10 +217,15 @@ export function erroresDeRequisitos(d: DefinicionTipo, adjuntos: readonly Adjunt
     if (msg) errores["valorComercial"] = msg;
   }
   if (t.prenda && (t.prendaObligatoria || e.tienePrenda)) {
-    const a = acreedorInvalido(e.acreedor);
-    const n = nitAcreedorInvalido(e.nitAcreedor);
+    const opcional = e.acreedorOpcional === true;
+    const a = opcional && e.acreedor.trim() === "" ? undefined : acreedorInvalido(e.acreedor);
+    const n = opcional && e.nitAcreedor.trim() === "" ? undefined : nitAcreedorInvalido(e.nitAcreedor);
     if (a) errores["prenda.acreedor"] = a;
     if (n) errores["prenda.nitAcreedor"] = n;
+    if (e.entidadLevantamiento !== undefined) {
+      const l = entidadLevantamientoInvalida(e.entidadLevantamiento);
+      if (l) errores["prenda.entidadLevantamiento"] = l;
+    }
   }
   if (t.documentos) {
     const ctx: ContextoCondicion = {

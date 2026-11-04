@@ -36,3 +36,15 @@ export function useTiposTramite(cliente: ClientePortal = portal) {
     staleTime: CINCO_MINUTOS,
   });
 }
+
+/**
+ * Tipos que ofrece el punto de atención: los del organismo de la sesión del punto con tarifa vigente (GET /punto/tipos-tramite, misma
+ * forma que GET /tipos-tramite?organismoId=). `organismoId` solo separa la caché entre puntos.
+ */
+export function useTiposTramitePunto(cliente: ClientePortal = portal, organismoId = "") {
+  return useQuery({
+    queryKey: ["pn", "punto", "tipos-tramite", organismoId],
+    queryFn: async ({ signal }) => tiposDisponibles(comoLista<TipoTramite>(await cliente.punto.tiposTramite({ signal }))),
+    staleTime: CINCO_MINUTOS,
+  });
+}

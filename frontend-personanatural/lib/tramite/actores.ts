@@ -1,6 +1,6 @@
 // Paso Actores (HU F3 y K5). Módulo puro, sin React ni red: arma las filas de actores por rol a partir de la definición del tipo y
 // del borrador, valida su formato y decide qué falta. Ningún rol ni tipo de trámite está nombrado aquí: todo sale de la definición.
-import type { ActorEstado, ActorRequest, ActorRol, DefinicionTipo, EstadoIdentidad, EstadoValidacion, ParteIdentidad } from "@/lib/api/cliente";
+import type { ActorEstado, ActorRequest, ActorRol, DefinicionTipo, EstadoIdentidad, EstadoValidacion, ParteIdentidad, Solicitud } from "@/lib/api/cliente";
 import { ciudadCanonica } from "@/lib/catalogos/ciudades";
 
 export type TipoDocumento = "CC" | "CE" | "NIT";
@@ -25,11 +25,16 @@ export function documentoLegible(tipo: string, numero: string): string {
  * Si el paso 1 consultó el vehículo con un documento de persona natural, lo deja en la primera fila vacía
  * (el vendedor o titular). No marca la fila como consultada: el ciudadano sigue pulsando consultar para traer el nombre.
  */
-export function sembrarDocumentoInicial(filas: readonly FilaActor[], documento: { tipo: string; numero: string } | undefined): FilaActor[] {
+export function sembrarDocumentoInicial(
+  filas: readonly FilaActor[],
+  documento: { tipo: string; numero: string } | undefined,
+  /** Si se indica, solo se siembra en la fila 1 de ese rol (quien radica), y solo si está vacía. */
+  rol?: string,
+): FilaActor[] {
   const numero = documento?.numero.trim() ?? "";
   const tipo = TIPOS_DOCUMENTO.find((t) => t.valor === documento?.tipo)?.valor;
   if (!tipo || tipo === "NIT" || numero === "") return filas as FilaActor[];
-  const destino = filas.find((f) => f.ordinal === 1 && f.numeroDocumento === "");
+  const destino = filas.find((f) => f.ordinal === 1 && f.numeroDocumento === "" && (rol === undefined || f.rol === rol));
   if (!destino) return filas as FilaActor[];
   return filas.map((f) => (f.clave === destino.clave ? { ...f, tipoDocumento: tipo, numeroDocumento: numero } : f));
 }
@@ -58,6 +63,16 @@ export interface FilaActor {
   nombreConsultado: boolean;
   /** Dato mínimo de la consulta de conductor (solo lo que el BFF devuelve). */
   licencia: { estado: string | null; vigencia: string | null } | null;
+  /**
+   * Resultado RUNT + multas de la última consulta (reglas FLIT 2).
+   * `null` = aún no se consultó; `inscrito=false` = documento no hallado en RUNT.
+   */
+  runt: {
+    inscrito: boolean;
+    multasPendientes: boolean | null;
+    nroPazYSalvo: string | null;
+    comparendos: number | null;
+  } | null;
 }
 
 export type CampoActor = "tipoDocumento" | "numeroDocumento" | "nombre" | "correo" | "celular" | "direccion" | "ciudad";
@@ -103,7 +118,7 @@ let consecutivo = 0;
 const claveNueva = (): string => `a-${++consecutivo}`;
 
 export function filaVacia(rol: string, ordinal: number): FilaActor {
-  return { clave: claveNueva(), rol, ordinal, tipoDocumento: "CC", numeroDocumento: "", nombre: "", correo: "", celular: "", direccion: "", ciudad: "", consultado: false, nombreConsultado: false, licencia: null };
+  return { clave: claveNueva(), rol, ordinal, tipoDocumento: "CC", numeroDocumento: "", nombre: "", correo: "", celular: "", direccion: "", ciudad: "", consultado: false, nombreConsultado: false, licencia: null, runt: null };
 }
 
 function filaDeActor(a: ActorEstado): FilaActor {
@@ -123,6 +138,7 @@ function filaDeActor(a: ActorEstado): FilaActor {
     consultado: Boolean(a.numeroDocumento),
     nombreConsultado: false,
     licencia: null,
+    runt: null,
   };
 }
 
@@ -298,4 +314,21 @@ export function motivoIncompleto(
   }
   if (!EXIGIR_IDENTIDAD_PARA_CONTINUAR) return undefined;
   return motivoIdentidadPendiente(definicion, filas, estadoDe);
+}
+
+const sinPersona = (a: ActorEstado): boolean => a.numeroDocumento == null && a.nombre == null;
+
+/**
+ * Los guardados de campos, comercial, requisitos y organismo responden sin datos personales (solo GET y PATCH /actores los traen).
+ * Al aplicar esa respuesta al caché, las personas ya conocidas conservan sus datos: si no, el Resumen las pintaría vacías.
+ */
+export function conservarPersonas(previa: Solicitud | undefined, nueva: Solicitud): Solicitud {
+  if (!previa || !nueva.actores.some(sinPersona)) return nueva;
+  const actores = nueva.actores.map((a) => {
+    const antes = sinPersona(a) ? previa.actores.find((p) => p.rol === a.rol && p.ordinal === a.ordinal && !sinPersona(p)) : undefined;
+    if (!antes) return a;
+    const { tipoDocumento, numeroDocumento, nombre, correo, celular, direccion, ciudad } = antes;
+    return { ...a, tipoDocumento, numeroDocumento, nombre, correo, celular, direccion, ciudad };
+  });
+  return { ...nueva, actores };
 }

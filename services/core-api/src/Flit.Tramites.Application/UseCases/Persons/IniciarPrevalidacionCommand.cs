@@ -49,7 +49,7 @@ public enum PortalValidationOutcome
     Existing,
 }
 
-public sealed record PortalValidationResult(BiometricValidationDto Validation, PortalValidationOutcome Outcome);
+public sealed record PortalValidationResult(BiometricValidationDto Validation, PortalValidationOutcome Outcome, string? CapturaUrl = null);
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 
@@ -255,6 +255,7 @@ public sealed class IniciarPrevalidacionHandler(
         string documentNumber,
         string name,
         string email,
+        bool sinCorreoAlProveedor = false,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(solicitudRef)
@@ -275,11 +276,11 @@ public sealed class IniciarPrevalidacionHandler(
         if (previous is not null
             && (previous.Status is BiometricEstados.Aprobado or BiometricEstados.ManualActivo or BiometricEstados.PendienteRevisionManual
                 || BiometricRules.EstaEnVuelo(previous)))
-            return (new PortalValidationResult(IniciarBiometriaHandler.ToDto(previous, now), PortalValidationOutcome.Existing), null);
+            return (new PortalValidationResult(IniciarBiometriaHandler.ToDto(previous, now), PortalValidationOutcome.Existing, previous.CaptureUrl), null);
 
         var validationId = Guid.NewGuid();
         var (result, error, _) = providerOptions.IsKyverum
-            ? await IniciarConKyverumAsync(tenantId, null, null, subject, validationId, ct, anchor)
+            ? await IniciarConKyverumAsync(tenantId, null, null, subject, validationId, ct, anchor, sinCorreoAlProveedor)
             : await IniciarConMockAsync(tenantId, null, null, subject, validationId, ct, anchor);
         if (error is not null || result is null)
         {
@@ -290,14 +291,16 @@ public sealed class IniciarPrevalidacionHandler(
                 var winner = await procedureRepo.FindPortalValidationAsync(
                     tenantId, anchor.SolicitudRef, anchor.Parte, subject.NumeroDocumento, ct);
                 if (winner is not null)
-                    return (new PortalValidationResult(IniciarBiometriaHandler.ToDto(winner, now), PortalValidationOutcome.Existing), null);
+                    return (new PortalValidationResult(IniciarBiometriaHandler.ToDto(winner, now), PortalValidationOutcome.Existing, winner.CaptureUrl), null);
             }
 
             return (null, error ?? "proveedor_error");
         }
 
         return (new PortalValidationResult(
-            result.Validation, result.Queued ? PortalValidationOutcome.Queued : PortalValidationOutcome.Created), null);
+            result.Validation,
+            result.Queued ? PortalValidationOutcome.Queued : PortalValidationOutcome.Created,
+            string.IsNullOrWhiteSpace(result.CaptureUrl) ? result.Validation.CaptureUrl : result.CaptureUrl), null);
     }
 
     private static string? ParteDe(Guid? mandateSignerId, PortalAnchor? portal) =>
@@ -307,7 +310,7 @@ public sealed class IniciarPrevalidacionHandler(
 
     private async Task<(IniciarPrevalidacionResult? Result, string? Error, IdentitySendDecision? Conflict)> IniciarConKyverumAsync(
         Guid tenantId, Guid? personId, Guid? mandateSignerId, IdentitySubjectStandalone subject,
-        Guid validationId, CancellationToken ct, PortalAnchor? portal = null)
+        Guid validationId, CancellationToken ct, PortalAnchor? portal = null, bool sinCorreoAlProveedor = false)
     {
         KyverumVerifyStartResult provider;
         try
@@ -320,7 +323,8 @@ public sealed class IniciarPrevalidacionHandler(
                     Nombre: subject.Nombre,
                     TipoDoc: subject.TipoDocumento,
                     Documento: subject.NumeroDocumento,
-                    Email: subject.Email,
+                    // In-situ (punto): sin correo al proveedor (Kyverum notifica al subjects[].email si viene); el correo técnico solo queda registrado.
+                    Email: sinCorreoAlProveedor ? string.Empty : subject.Email,
                     TenantId: tenantId),
                 ct);
         }
@@ -440,8 +444,9 @@ public sealed class IniciarPrevalidacionHandler(
                 IdentitySendDecisionForTramite.InFlightRaceConflict(IdentitySendOrigen.Standalone));
         }
 
-        var dto = IniciarBiometriaHandler.ToDto(validation, now);
         var captureUrl = $"/api/v1/public/biometric/{token}";
+        validation.CaptureUrl = captureUrl;
+        var dto = IniciarBiometriaHandler.ToDto(validation, now);
         return (new IniciarPrevalidacionResult(dto, captureUrl), null, null);
     }
 

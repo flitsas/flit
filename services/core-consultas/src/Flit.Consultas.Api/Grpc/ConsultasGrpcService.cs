@@ -121,6 +121,8 @@ internal sealed partial class ConsultasGrpcService(
     private async Task<ConsultarMultasResponse> ConsultarMultasCore(ConsultarMultasRequest request, PlatformServiceCaller caller, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
+        // Canal del punto (Épica #14186) consulta multas solo con placa; FLIT 2 suele mandar documento.
+        // Hace falta al menos uno: sin documento ni placa no hay qué buscar.
         var placa = request.Placa?.Valor;
         var documento = request.Documento is { Numero.Length: > 0 } d ? d : null;
         if (documento is null && string.IsNullOrWhiteSpace(placa))

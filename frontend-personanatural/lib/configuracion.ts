@@ -58,6 +58,11 @@ export function estaPublicada(configuracion: ConfiguracionPortal | undefined): c
   return typeof configuracion?.version === "string" && configuracion.version !== "" && configuracion.version !== "0";
 }
 
+/** Modo de pruebas: el BFF solo lo publica con el interruptor local encendido. Ausente o distinto de `true` es apagado. */
+export function omitirIdentidadActiva(configuracion: ConfiguracionPortal | undefined | null): boolean {
+  return objeto(configuracion?.pruebas)?.omitirIdentidad === true;
+}
+
 export function resolverContenido(configuracion: ConfiguracionPortal | undefined): ContenidoPublicado {
   if (!estaPublicada(configuracion)) return SIN_PUBLICAR;
 
