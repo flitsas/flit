@@ -7,10 +7,18 @@ on:
   pull_request:
     branches: [develop]
     paths: ['services/python-ml/**', 'contracts/openapi/python-ml.v1.yaml']
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: 'Etiqueta de runner para validar (p. ej. flit-ci); vacío = vars.RUNNER o ubuntu-latest'
+        required: false
+        default: ''
 
+# runs-on: la variable de repo RUNNER (p. ej. flit-ci = runners propios de la 177) mueve estos jobs fuera de GitHub;
+# sin ella siguen en ubuntu-latest. El input `runner` del workflow_dispatch sirve para validar sin tocar la variable.
 jobs:
   lint-test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner || vars.RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
