@@ -75,7 +75,7 @@ public sealed class BloqueoYDepuracionTests
 
         // Dos fallos por «consultar radicado» completan los cinco de la misma IP sobre el mismo radicado.
         for (var i = 0; i < 2; i++)
-            (await host.EnScopeAsync(sp => sp.GetRequiredService<RadicadoConsultaService>().ConsultarAsync(Radicado, $"x{i}", null, ip, TestContext.Current.CancellationToken)))
+            (await host.EnScopeAsync(sp => sp.GetRequiredService<RadicadoConsultaService>().ConsultarAsync(Radicado, $"x{i}", "ABC123", ip, TestContext.Current.CancellationToken)))
                 .Should().BeOfType<ResultadoConsultaRadicado.NoEncontrado>();
 
         (await Reanudar(host, "mal5", ip)).Should().BeOfType<ResultadoReanudar.Bloqueado>();

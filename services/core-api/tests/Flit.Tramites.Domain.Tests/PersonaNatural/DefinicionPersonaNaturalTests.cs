@@ -62,10 +62,34 @@ public sealed class DefinicionPersonaNaturalTests
     }
 
     [Fact]
+    public void Leasing_HU12_SoloSeCapturaAlLocatario_ElPropietarioArrendadorSaleDelRunt()
+    {
+        // MATRICULA_LEASING / CAMBIO_LOCATARIO: el «comprador» del perfil es el arrendador (entidad financiera).
+        var actores = DefinicionPersonaNatural.Actores(
+            Perfil("""{"requiresBuyer":true,"requiresLessee":true,"biometricActors":["BUYER"],"requiresBiometrics":true,"requiresSignature":true}"""), true);
+
+        var locatario = actores.Should().ContainSingle().Which;
+        locatario.Rol.Should().Be("locatario");
+        locatario.PersonaNaturalPermitida.Should().BeTrue();
+        locatario.Biometria.Should().BeFalse("la valida el propietario, no el locatario");
+    }
+
+    [Fact]
+    public void TraspasoUnilateral_NoCapturaAlVendedor_ElCompradorEsElLocatario()
+    {
+        var actores = DefinicionPersonaNatural.Actores(
+            Perfil("""{"requiresSeller":true,"requiresBuyer":true,"sellerCapturedViaForm":false,"biometricActors":["OWNER"],"requiresBiometrics":true}"""), true);
+
+        var unico = actores.Should().ContainSingle().Which;
+        unico.Rol.Should().Be("comprador", "el rol persistido sigue siendo comprador, como en FLIT 2");
+        unico.Etiqueta.Should().Be("Locatario");
+    }
+
+    [Fact]
     public void ElLocatario_SoloApareceSiElPerfilLoPide_YUnPerfilVacioNoPideActores()
     {
         DefinicionPersonaNatural.Actores(Perfil("""{"requiresBuyer":true,"requiresLessee":true}"""), true).Select(a => a.Rol)
-            .Should().Equal("comprador", "locatario");
+            .Should().Equal("locatario");
         DefinicionPersonaNatural.Actores(Perfil("{}"), true).Should().BeEmpty();
     }
 

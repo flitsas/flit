@@ -71,6 +71,17 @@ describe("cliente del BFF", () => {
     await expect(cliente.catalogos.organismos()).rejects.toMatchObject({ code: "http_502", status: 502 });
   });
 
+  it("un 422 del canal con message y sin title conserva ese texto", async () => {
+    const cliente = crearCliente({
+      fetchImpl: async () => json({ code: "canal_apagado", message: "Este canal está apagado." }, { status: 422 }),
+    });
+
+    const error = await cliente.punto.entrada("BOG").catch((e: unknown) => e);
+
+    expect(error).toMatchObject({ code: "canal_apagado", title: "Este canal está apagado.", status: 422 });
+    expect((error as { title: string }).title).not.toMatch(/placa|documento/i);
+  });
+
   it("un 204 no intenta leer cuerpo", async () => {
     const cliente = crearCliente({ fetchImpl: async () => new Response(null, { status: 204 }) });
 
@@ -100,7 +111,7 @@ describe("mensajes para el ciudadano", () => {
   it("el error tipado solo guarda código, título y estado: ni cuerpo ni datos personales", () => {
     const error = new ApiError("x", "t", 400);
 
-    // `errores`, `estado` y `fallas` son textos fijos del back (códigos, claves de campo y roles; nunca el valor escrito por el ciudadano).
-    expect(Object.keys(error).sort()).toEqual(["code", "errores", "estado", "fallas", "name", "reintentarEnSegundos", "status", "title"]);
+    // `campo`, `errores`, `estado` y `fallas` son textos fijos del back (códigos, claves de campo y roles; nunca el valor escrito por el ciudadano).
+    expect(Object.keys(error).sort()).toEqual(["campo", "code", "errores", "estado", "fallas", "name", "reintentarEnSegundos", "status", "title"]);
   });
 });

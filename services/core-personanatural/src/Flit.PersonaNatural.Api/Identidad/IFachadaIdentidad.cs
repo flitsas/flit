@@ -9,8 +9,8 @@ namespace Flit.PersonaNatural.Api.Identidad;
 /// <summary>Datos de contacto que viajan a FLIT 2 para enviar el enlace. Solo en memoria: nunca se loguean.</summary>
 public sealed record PersonaParaValidar(string TipoDocumento, string Documento, string Nombre, string Correo, string? Celular);
 
-/// <summary>Respuesta de FLIT 2: id de la validación y su estado ya traducido (<see cref="EstadosIdentidad"/>).</summary>
-public sealed record ValidacionDeFlit2(Guid ValidacionId, string Estado);
+/// <summary>Respuesta de FLIT 2: id de la validación, estado traducido y URL de captura (punto / copiar enlace).</summary>
+public sealed record ValidacionDeFlit2(Guid ValidacionId, string Estado, string? CapturaUrl = null);
 
 /// <summary>
 /// Lo que el BFF le pide a la fachada gRPC de core-api para la identidad de las partes (HU #14044 y #14045). Separada de
@@ -20,7 +20,8 @@ public sealed record ValidacionDeFlit2(Guid ValidacionId, string Estado);
 public interface IFachadaIdentidad
 {
     /// <summary>Pide una validación NUEVA para esa parte de esa solicitud; idempotente por (solicitud, parte, documento).</summary>
-    Task<ValidacionDeFlit2> SolicitarAsync(Guid solicitudId, string parte, PersonaParaValidar persona, CancellationToken ct);
+    /// <param name="omitirEnvioCorreo">HU #14237 — in-situ en el punto: no notificar por correo; devolver <c>captura_url</c>.</param>
+    Task<ValidacionDeFlit2> SolicitarAsync(Guid solicitudId, string parte, PersonaParaValidar persona, CancellationToken ct, bool omitirEnvioCorreo = false);
 
     /// <summary>Reenvía el enlace de la misma validación, a un correo corregido si se indica. Devuelve el estado resultante.</summary>
     Task<string> ReenviarAsync(Guid validacionId, string? correoNuevo, CancellationToken ct);
@@ -34,7 +35,7 @@ internal sealed class FachadaIdentidadNoConfigurada : IFachadaIdentidad
     private static FachadaException NoDisponible() =>
         new(FachadaIdentidadGrpc.ServicioNoDisponible, "La validación de identidad no está disponible por ahora.", StatusCodes.Status503ServiceUnavailable);
 
-    public Task<ValidacionDeFlit2> SolicitarAsync(Guid solicitudId, string parte, PersonaParaValidar persona, CancellationToken ct) => throw NoDisponible();
+    public Task<ValidacionDeFlit2> SolicitarAsync(Guid solicitudId, string parte, PersonaParaValidar persona, CancellationToken ct, bool omitirEnvioCorreo = false) => throw NoDisponible();
 
     public Task<string> ReenviarAsync(Guid validacionId, string? correoNuevo, CancellationToken ct) => throw NoDisponible();
 
@@ -56,13 +57,14 @@ internal sealed class FachadaIdentidadGrpc(PersonaNaturalService.PersonaNaturalS
     private static Metadata Empresa() =>
         new() { { PlatformServiceCallInterceptor.TenantMetadata, PlatformTenants.PersonaNatural.ToString() } };
 
-    public async Task<ValidacionDeFlit2> SolicitarAsync(Guid solicitudId, string parte, PersonaParaValidar persona, CancellationToken ct)
+    public async Task<ValidacionDeFlit2> SolicitarAsync(Guid solicitudId, string parte, PersonaParaValidar persona, CancellationToken ct, bool omitirEnvioCorreo = false)
     {
         ArgumentNullException.ThrowIfNull(persona);
         var peticion = new SolicitarValidacionIdentidadRequest
         {
             SolicitudId = solicitudId.ToString(),
             Parte = parte,
+            OmitirEnvioCorreo = omitirEnvioCorreo,
             Persona = new PersonaIdentidad
             {
                 TipoDocumento = persona.TipoDocumento,
@@ -72,8 +74,9 @@ internal sealed class FachadaIdentidadGrpc(PersonaNaturalService.PersonaNaturalS
                 Celular = persona.Celular ?? string.Empty,
             },
         };
-        var r = await Llamar(() => cliente.SolicitarValidacionIdentidadAsync(peticion, Empresa(), DateTime.UtcNow.Add(Plazo), ct).ResponseAsync).ConfigureAwait(false);
-        return new ValidacionDeFlit2(Guid.Parse(r.ValidacionId), r.Estado);
+        var r = await Llamar(() => cliente.SolicitarValidacionIdentidadAsync(peticion, Empresa(), DateTime.UtcNow.Add(Plazo), ct).ResponseAsync, rechazoDelProveedor: omitirEnvioCorreo).ConfigureAwait(false);
+        var url = string.IsNullOrWhiteSpace(r.CapturaUrl) ? null : r.CapturaUrl;
+        return new ValidacionDeFlit2(Guid.Parse(r.ValidacionId), r.Estado, url);
     }
 
     public async Task<string> ReenviarAsync(Guid validacionId, string? correoNuevo, CancellationToken ct)
@@ -90,7 +93,8 @@ internal sealed class FachadaIdentidadGrpc(PersonaNaturalService.PersonaNaturalS
         return r.Estado;
     }
 
-    private static async Task<T> Llamar<T>(Func<Task<T>> llamada)
+    /// <param name="rechazoDelProveedor">Solo el punto (in-situ): FailedPrecondition de core-api (Kyverum rechazó) es <c>proveedor_rechazo</c>, no «FLIT 2 no respondió».</param>
+    private static async Task<T> Llamar<T>(Func<Task<T>> llamada, bool rechazoDelProveedor = false)
     {
         try
         {
@@ -106,9 +110,15 @@ internal sealed class FachadaIdentidadGrpc(PersonaNaturalService.PersonaNaturalS
                 "validacion_no_encontrada" => new FachadaException(razon, "No encontramos esa validación.", StatusCodes.Status404NotFound),
                 "identidad_aprobada" => new FachadaException(razon, "La identidad ya fue validada.", StatusCodes.Status409Conflict),
                 "validacion_en_curso" => new FachadaException(razon, "Ya hay una validación en curso.", StatusCodes.Status409Conflict),
+                _ when rechazoDelProveedor && (razon == "proveedor_rechazo" || ex.StatusCode == StatusCode.FailedPrecondition) => new FachadaException("proveedor_rechazo", "No pudimos iniciar la validación con estos datos.", StatusCodes.Status422UnprocessableEntity),
                 _ when ex.StatusCode == StatusCode.InvalidArgument => new FachadaException("datos_invalidos", "Revise los datos de la persona.", StatusCodes.Status400BadRequest),
                 _ => new FachadaException(ServicioNoDisponible, "La validación de identidad no está disponible por ahora.", StatusCodes.Status503ServiceUnavailable),
             };
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or UriFormatException or HttpRequestException)
+        {
+            // TokenEndpoint vacío / Identidad caída: no dejar que el proxy muestre «Bad Gateway».
+            throw new FachadaException(ServicioNoDisponible, "La validación de identidad no está disponible por ahora.", StatusCodes.Status503ServiceUnavailable);
         }
     }
 }

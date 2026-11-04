@@ -60,7 +60,9 @@ public sealed class DefinicionesService(IFachadaDefiniciones fachada, IMemoryCac
         try
         {
             var d = JsonSerializer.Deserialize<DefinicionTipoDto>(snapshot, Json);
-            return d is { Pasos: not null, Actores: not null, Documentos: not null, Flags: not null } ? d : null;
+            if (d is not { Pasos: not null, Actores: not null, Documentos: not null, Flags: not null })
+                return null;
+            return d.Declaraciones is null ? d with { Declaraciones = [] } : d; // snapshot anterior a las declaraciones (HU 4)
         }
         catch (JsonException)
         {

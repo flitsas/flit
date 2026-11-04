@@ -37,7 +37,7 @@ describe("estructura del wizard (F1)", () => {
     const { llamadas } = await wizardAbierto();
 
     await waitFor(() => expect(llamadas.map((l) => l.clave)).toContain("POST /cotizaciones"));
-    expect(llamadas.map((l) => l.clave).filter((c) => c.startsWith("GET"))).toEqual(["GET /tipos-tramite", "GET /solicitudes/s-1", "GET /tipos-tramite/TIPO_A/definicion?organismoId=o-1"]);
+    expect(llamadas.map((l) => l.clave).filter((c) => c.startsWith("GET") && c !== "GET /configuracion")).toEqual(["GET /tipos-tramite", "GET /solicitudes/s-1", "GET /tipos-tramite/TIPO_A/definicion?organismoId=o-1"]);
     expect(screen.queryByRole("button", { name: /Calcular valor/ })).not.toBeInTheDocument();
   });
 
@@ -99,7 +99,7 @@ describe("sin sesión: reanudar", () => {
 
     expect(await screen.findByRole("heading", { level: 1, name: "Trámite de Trámite A" })).toBeInTheDocument();
     expect(cuerpo(llamadas, "POST /sesiones/reanudar")).toEqual({ radicado: "PN-2026-0042", cedula: "1020456789" });
-    expect(llamadas.find((l) => l.clave === "POST /sesiones/reanudar")?.init.headers).toMatchObject({ "x-captcha-token": "dev-captcha-token" });
+    expect((llamadas.find((l) => l.clave === "POST /sesiones/reanudar")?.init.headers as Record<string, string>)["x-captcha-token"]).toBeUndefined();
     expect(obtenerContexto()).toMatchObject({ solicitudId: "s-1", radicado: "PN-2026-0042", cedula: "1020456789" });
   });
 
@@ -209,7 +209,8 @@ describe("avance bloqueado, guardado y conflictos", () => {
     expect(nodo(1)).toHaveAttribute("aria-current", "step");
     fireEvent.click(screen.getByRole("button", { name: "Recargar" }));
     await waitFor(() => expect(screen.queryByText(/Este trámite cambió mientras lo editabas/)).not.toBeInTheDocument());
-    expect(lecturas).toBe(2);
+    // El 409 persistente se reintenta una vez releyendo la versión (lectura 2); «Recargar» lee otra vez (3).
+    expect(lecturas).toBe(3);
   });
 
   it("si la sesión vence al guardar, avisa «Tu sesión venció» y deja reanudar", async () => {

@@ -494,15 +494,34 @@ public sealed class RunPreflightPreviewHandler(
         }
         else
         {
-            // Todavía no hay actores capturados (llegan en pasos posteriores): los checks quedan en
-            // `unknown`, exactamente como hoy en la primera corrida del preflight del paso 1.
-            // Preview sin instancia aún: InstanceId vacío; TenantId sí (core-consultas exige empresa).
-            await RunPreflightHandler.RunSimitAsync(
-                registry, checks, providersUsed, "simit_comprador", "SIMIT comprador", null,
-                Guid.Empty, request.TenantId, tenantOverride, ct);
-            await RunPreflightHandler.RunSimitAsync(
-                registry, checks, providersUsed, "simit_vendedor", "SIMIT vendedor", null,
-                Guid.Empty, request.TenantId, tenantOverride, ct);
+            // HU #14221 — con el documento del propietario (PN/OT lo envían en el diagnóstico) se
+            // consulta SIMIT por las mismas fuentes que FLIT 2 (FinesProviderResolver → core-consultas).
+            // Sin documento el check queda en `unknown`, como cuando aún no hay actor.
+            // Preview sin instancia: InstanceId vacío; TenantId sí (core-consultas exige empresa).
+            RunPreflightHandler.ActorRef? propietario = null;
+            if (Trim(request.OwnerDocumentType) is { } tipoDoc
+                && Trim(request.OwnerDocumentNumber) is { } numeroDoc)
+            {
+                propietario = new RunPreflightHandler.ActorRef(tipoDoc, numeroDoc, null);
+            }
+
+            if (modalidad == ProcedureFamily.Traspaso)
+            {
+                // Propietario actual del vehículo = vendedor. El comprador se consulta en Actores.
+                await RunPreflightHandler.RunSimitAsync(
+                    registry, checks, providersUsed, "simit_vendedor", "SIMIT vendedor", propietario,
+                    Guid.Empty, request.TenantId, tenantOverride, ct);
+                await RunPreflightHandler.RunSimitAsync(
+                    registry, checks, providersUsed, "simit_comprador", "SIMIT comprador", null,
+                    Guid.Empty, request.TenantId, tenantOverride, ct);
+            }
+            else
+            {
+                // OTROS: un solo actor (propietario inscrito), igual que el preflight con instancia.
+                await RunPreflightHandler.RunSimitAsync(
+                    registry, checks, providersUsed, "simit_comprador", "SIMIT propietario", propietario,
+                    Guid.Empty, request.TenantId, tenantOverride, ct);
+            }
         }
 
         RunPreflightHandler.AplicarPoliticaDeBloqueo(checks, blockingRules);

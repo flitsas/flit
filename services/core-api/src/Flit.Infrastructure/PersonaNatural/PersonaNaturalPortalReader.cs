@@ -12,7 +12,7 @@ public sealed record OrganismoHabilitadoPn(Guid Id, string Codigo, string Nombre
 /// HU #14043 (Épica #14021) — lecturas del catálogo del portal: organismos habilitados para la empresa «Persona Natural» y
 /// tarifas vigentes. Solo lectura: las tarifas se administran desde Plataforma (Feature J).
 /// </summary>
-public sealed class PersonaNaturalPortalReader(FlitDbContext db, TimeProvider? reloj = null)
+public sealed class PersonaNaturalPortalReader(FlitDbContext db, TimeProvider? reloj = null, Flit.Admin.Domain.Companies.TransitOffices.IEffectiveTransitOfficeListResolver? efectivos = null)
 {
     private readonly TimeProvider _reloj = reloj ?? TimeProvider.System;
 
@@ -36,6 +36,41 @@ public sealed class PersonaNaturalPortalReader(FlitDbContext db, TimeProvider? r
         var operables = await OrganismosOperablesAsync(ct).ConfigureAwait(false);
         return filas.Where(o => operables.Contains(o.Id))
             .Select(o => new OrganismoHabilitadoPn(o.Id, o.Code, o.Name, o.CityName ?? string.Empty, o.DepartmentName ?? string.Empty)).ToList();
+    }
+
+    public const int LimiteDestinoPorDefecto = 20;
+    public const int LimiteDestinoMaximo = 50;
+
+    /// <summary>
+    /// HU 10 (D3 del PO) — organismos donde se puede trasladar una cuenta: los habilitados para la empresa Persona Natural
+    /// (misma lista efectiva que valida FLIT 2 al radicar) y operables. Con <paramref name="id"/> devuelve solo ese si es
+    /// operable; con <paramref name="texto"/> filtra por nombre, código, municipio o departamento. Ordenado por nombre y acotado.
+    /// </summary>
+    public async Task<IReadOnlyList<OrganismoHabilitadoPn>> ListarOrganismosDestinoAsync(string? texto, Guid? id, int limite, CancellationToken ct)
+    {
+        // D3 (PO, HU #14259): solo los organismos habilitados para la empresa Persona Natural, con el criterio de FLIT 2 al radicar
+        // (ValidarOrganismoDestinoAsync -> ITransitOfficeGrantGate -> lista efectiva de la empresa) y además operables.
+        var operables = await OrganismosOperablesAsync(ct).ConfigureAwait(false);
+        var habilitados = efectivos is null
+            ? [.. await db.TenantTransitOfficeGrants.AsNoTracking().Where(g => g.TenantId == PlatformTenants.PersonaNatural && g.IsEnabled).Select(g => g.TransitOfficeId).ToListAsync(ct).ConfigureAwait(false)]
+            : (await efectivos.ListEffectiveOfficeIdsAsync(PlatformTenants.PersonaNatural, ct).ConfigureAwait(false)).ToHashSet();
+        operables = operables.Where(habilitados.Contains).ToHashSet();
+        if (operables.Count == 0 || (id is { } unico && !operables.Contains(unico)))
+            return [];
+
+        var consulta = db.TransitOffices.AsNoTracking().Where(o => o.IsActive && operables.Contains(o.Id));
+        if (id is { } solo)
+            consulta = consulta.Where(o => o.Id == solo);
+        if (!string.IsNullOrWhiteSpace(texto))
+        {
+            var patron = "%" + texto.Replace(@"\", @"\\").Replace("%", @"\%").Replace("_", @"\_") + "%";
+            consulta = consulta.Where(o => EF.Functions.ILike(o.Name, patron) || EF.Functions.ILike(o.Code, patron)
+                || (o.CityName != null && EF.Functions.ILike(o.CityName, patron)) || (o.DepartmentName != null && EF.Functions.ILike(o.DepartmentName, patron)));
+        }
+
+        var filas = await consulta.OrderBy(o => o.Name).Take(Math.Clamp(limite, 1, LimiteDestinoMaximo))
+            .Select(o => new { o.Id, o.Code, o.Name, o.CityName, o.DepartmentName }).ToListAsync(ct).ConfigureAwait(false);
+        return filas.Select(o => new OrganismoHabilitadoPn(o.Id, o.Code, o.Name, o.CityName ?? string.Empty, o.DepartmentName ?? string.Empty)).ToList();
     }
 
     public async Task<bool> OrganismoHabilitadoAsync(Guid organismoId, CancellationToken ct) =>

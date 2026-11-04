@@ -58,22 +58,19 @@ public sealed class AbusoTests : IAsyncLifetime
     // ── AC1: captcha obligatorio ─────────────────────────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task SinCaptcha_ElEndpointPublicoResponde400_YNoEjecutaLaAccion()
+    public async Task SinCaptcha_ElEndpointPublicoEjecutaIgual_CaptchaDesactivado()
     {
         if (!await IniciarAsync()) return;
 
         var sin = await _http.PostAsJsonAsync(Reanudar, new ReanudarRequest("PN-1", Cedula), TestContext.Current.CancellationToken);
-        var malo = await PostConCaptchaAsync("token-falso");
-        var bueno = await PostConCaptchaAsync(CaptchaFalso.TokenValido);
+        var conToken = await PostConCaptchaAsync(CaptchaFalso.TokenValido);
 
-        sin.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await CodigoAsync(sin)).Should().Be("captcha_required");
-        malo.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await CodigoAsync(malo)).Should().Be("captcha_required");
-        bueno.StatusCode.Should().Be(HttpStatusCode.NotFound, "con captcha válido la acción corre y responde lo suyo");
+        // Captcha desactivado: ambas peticiones llegan a la acción (radicado inexistente → 404).
+        sin.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        conToken.StatusCode.Should().Be(HttpStatusCode.NotFound);
 
         await using var db = NuevaDb();
-        (await db.Set<IntentoReanudar>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(2, "solo la petición con captcha válido llegó a reanudar (un intento = dos contadores: por IP y por radicado)");
+        (await db.Set<IntentoReanudar>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(4, "cada intento cuenta por IP y por radicado");
     }
 
     // ── AC2: límite por IP ───────────────────────────────────────────────────────────────────────────────────────────

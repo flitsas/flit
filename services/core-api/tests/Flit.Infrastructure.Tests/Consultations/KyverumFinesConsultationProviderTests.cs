@@ -134,7 +134,7 @@ public sealed class KyverumFinesConsultationProviderTests
     }
 
     [Fact]
-    public async Task ConsultAsync_ModoReal_401_DevuelveErrorSinLanzarYSinFiltrarElProveedor()
+    public async Task ConsultAsync_ModoReal_401_DevuelveAvisoSinLanzarYSinFiltrarElProveedor()
     {
         // Riesgo documentado: en real sin credencial válida esto es un bloqueo duro. Debe al menos
         // degradar con un mensaje de usuario que no exponga el proveedor ni el detalle técnico.
@@ -143,8 +143,8 @@ public sealed class KyverumFinesConsultationProviderTests
 
         var result = await BuildProvider("real", handler, apiKey: "invalida").ConsultAsync(Ctx(), ct);
 
-        result.Overall.Should().Be("red");
-        result.Checks.Should().ContainSingle(c => c.Status == "error");
+        result.Overall.Should().Be("yellow");
+        result.Checks.Should().ContainSingle(c => c.Status == "warn");
         result.Checks.Single().Message.Should().NotContainAny("Kyverum", "KYVERUM", "401");
     }
 

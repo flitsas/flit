@@ -46,7 +46,26 @@ public interface IConsultasRunt
 
     /// <exception cref="ProveedorNoDisponibleException">core-consultas no respondió.</exception>
     Task<ResultadoConsulta> ConsultarConductorAsync(DocumentoConsulta documento, string? referencia, CancellationToken ct);
+
+    /// <summary>
+    /// Comparendos y acuerdos de pago. Fuente: <c>ConsultasService.ConsultarMultas</c>
+    /// (<c>contracts/proto/flit/consultas/v1/consultas.proto</c>), atendido por core-consultas
+    /// (<c>ConsultasGrpcService.ConsultarMultas</c>). Esa RPC es la consulta de multas que FLIT 2 ya usa
+    /// (SIMIT o la fuente interna de la empresa). El BFF no tiene otro camino.
+    /// </summary>
+    /// <exception cref="ProveedorNoDisponibleException">core-consultas no respondió.</exception>
+    Task<ResultadoConsulta> ConsultarMultasAsync(string? placa, DocumentoConsulta? documento, string? referencia, CancellationToken ct);
+
+    /// <summary>
+    /// Avalúo sugerido (Fasecolda / fuentes de la empresa) vía <c>ConsultarAvaluos</c>, la misma RPC que usa FLIT 2
+    /// en el bloque comercial. <c>Valor</c> es null si no hay sugerencia.
+    /// </summary>
+    /// <exception cref="ProveedorNoDisponibleException">core-consultas no respondió.</exception>
+    Task<AvaluoSugeridoConsulta> ConsultarAvaluosAsync(string? placa, string? vin, CancellationToken ct);
 }
+
+/// <summary>Proyección mínima del avalúo para el canal PN / punto (sin crudo de proveedor).</summary>
+public sealed record AvaluoSugeridoConsulta(decimal? Valor, string Fuente);
 
 /// <summary>
 /// Cliente gRPC hacia <c>ConsultasService</c> con el token de servicio del SDK (<c>svc-personanatural</c>, scope
@@ -78,6 +97,34 @@ internal sealed partial class ConsultasRuntGrpc(ConsultasService.ConsultasServic
         return LlamarAsync(() => client.ConsultarConductorAsync(request, Cabeceras(), cancellationToken: ct).ResponseAsync, r => r.Resultado);
     }
 
+    public Task<ResultadoConsulta> ConsultarMultasAsync(string? placa, DocumentoConsulta? documento, string? referencia, CancellationToken ct)
+    {
+        var request = new ConsultarMultasRequest { Opciones = Opciones(referencia), TipoPersona = TipoPersona.Natural };
+        if (!string.IsNullOrWhiteSpace(placa))
+            request.Placa = new Placa { Valor = placa };
+        if (documento is not null)
+            request.Documento = new DocumentoIdentidad { Tipo = documento.Tipo, Numero = documento.Numero };
+        return LlamarAsync(() => client.ConsultarMultasAsync(request, Cabeceras(), cancellationToken: ct).ResponseAsync, r => r.Resultado);
+    }
+
+    public Task<AvaluoSugeridoConsulta> ConsultarAvaluosAsync(string? placa, string? vin, CancellationToken ct)
+    {
+        var request = new ConsultarAvaluosRequest { Opciones = Opciones(null) };
+        if (!string.IsNullOrWhiteSpace(vin))
+            request.Vin = new Vin { Valor = vin };
+        if (!string.IsNullOrWhiteSpace(placa))
+            request.Placa = new Placa { Valor = placa };
+
+        return LlamarProyectadoAsync(
+            () => client.ConsultarAvaluosAsync(request, Cabeceras(), cancellationToken: ct).ResponseAsync,
+            r =>
+            {
+                if (r.ValorSugerido <= 0)
+                    return new AvaluoSugeridoConsulta(null, string.IsNullOrWhiteSpace(r.FuentePrincipal) ? "sin_datos" : r.FuentePrincipal);
+                return new AvaluoSugeridoConsulta(r.ValorSugerido, string.IsNullOrWhiteSpace(r.FuentePrincipal) ? "fasecolda" : r.FuentePrincipal);
+            });
+    }
+
     /// <summary>
     /// Sin reintentos propios (el cliente del SDK se registra con <c>MaxRetries = 0</c>): un RUNT caído no se martilla desde
     /// aquí. Del <see cref="RpcException"/> solo se registra el estado, nunca su detalle.
@@ -96,6 +143,24 @@ internal sealed partial class ConsultasRuntGrpc(ConsultasService.ConsultasServic
         catch (InvalidOperationException)
         {
             // El token de servicio no se pudo obtener (Identidad caída o cliente de servicio mal configurado).
+            SinToken(logger);
+            throw new ProveedorNoDisponibleException("No se obtuvo el token de servicio para core-consultas.");
+        }
+    }
+
+    private async Task<T> LlamarProyectadoAsync<TResponse, T>(Func<Task<TResponse>> llamada, Func<TResponse, T> proyectar)
+    {
+        try
+        {
+            return proyectar(await llamada().ConfigureAwait(false));
+        }
+        catch (RpcException ex)
+        {
+            EstadoRecibido(logger, ex.StatusCode);
+            throw new ProveedorNoDisponibleException($"core-consultas respondió {ex.StatusCode}.");
+        }
+        catch (InvalidOperationException)
+        {
             SinToken(logger);
             throw new ProveedorNoDisponibleException("No se obtuvo el token de servicio para core-consultas.");
         }
@@ -127,6 +192,12 @@ internal sealed class ConsultasRuntNoConfigurado : IConsultasRunt
         throw new ProveedorNoDisponibleException(Mensaje);
 
     public Task<ResultadoConsulta> ConsultarConductorAsync(DocumentoConsulta documento, string? referencia, CancellationToken ct) =>
+        throw new ProveedorNoDisponibleException(Mensaje);
+
+    public Task<ResultadoConsulta> ConsultarMultasAsync(string? placa, DocumentoConsulta? documento, string? referencia, CancellationToken ct) =>
+        throw new ProveedorNoDisponibleException(Mensaje);
+
+    public Task<AvaluoSugeridoConsulta> ConsultarAvaluosAsync(string? placa, string? vin, CancellationToken ct) =>
         throw new ProveedorNoDisponibleException(Mensaje);
 }
 

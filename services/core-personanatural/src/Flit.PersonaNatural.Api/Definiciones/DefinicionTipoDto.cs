@@ -19,7 +19,31 @@ public sealed record FlagsTipoDto(
     bool PermiteTransformaciones,
     bool PermitePrendaComplementaria,
     bool RequiereBiometria,
-    bool RequiereSolicitudPlaca);
+    bool RequiereSolicitudPlaca,
+    bool RequiereDestino = false,
+    bool OrganismoLoEligeOperador = false,
+    string? AccionPrenda = null);
+
+public sealed record OpcionDeclaracionDto(string Codigo, string Etiqueta, IReadOnlyList<string> DocCodes, bool ExigeSoporte);
+
+/// <summary>
+/// Una declaración del tipo (valor nuevo del vehículo, blindaje, causal, organismo de destino…) tal como la arma core-api con las
+/// reglas de FLIT 2 (HU 4). El BFF valida las claves, los valores y los soportes contra esta lista: ningún tipo se nombra aquí.
+/// <c>Control</c>: seleccion | seleccion_catalogo | organismo_destino. <c>FieldKeysExtra</c> las deriva el servidor.
+/// <c>ActivadaPor</c>: transformación que activa un trámite simultáneo (vacío = siempre aplica).
+/// </summary>
+public sealed record DeclaracionTipoDto(
+    string Clave,
+    string Control,
+    string Etiqueta,
+    bool Obligatoria,
+    IReadOnlyList<OpcionDeclaracionDto> Opciones,
+    string FieldKey,
+    IReadOnlyList<string> FieldKeysExtra,
+    string DocCodeSoporte,
+    bool SoporteObligatorio,
+    string Catalogo,
+    string ActivadaPor);
 
 /// <summary>
 /// Estructura del wizard de un tipo de trámite tal como la entrega FLIT 2 (HU #14078): solo estructura, sin reglas
@@ -37,7 +61,11 @@ public sealed record DefinicionTipoDto(
     IReadOnlyList<PasoDto> Pasos,
     IReadOnlyList<ActorRolDto> Actores,
     IReadOnlyList<DocumentoRequeridoDto> Documentos,
-    FlagsTipoDto Flags);
+    FlagsTipoDto Flags)
+{
+    /// <summary>Declaraciones del tipo (HU 4). Un snapshot anterior a ellas no las trae: queda vacío y el borrador sigue válido.</summary>
+    public IReadOnlyList<DeclaracionTipoDto> Declaraciones { get; init; } = [];
+}
 
 /// <summary>
 /// Lo que el BFF le pide a la fachada de core-api para armar un trámite (HU #14078). Interfaz hermana de
@@ -71,6 +99,16 @@ internal sealed class FachadaDefinicionesGrpc(PersonaNaturalService.PersonaNatur
             [.. d.Documentos.Select(x => new DocumentoRequeridoDto(x.DocCode, x.Nombre, x.Obligatorio, x.Orden, x.InstruccionCargue, x.Condicion))],
             new FlagsTipoDto(
                 d.Flags.EntryMode, d.Flags.RequiereComercial, d.Flags.RequierePrenda, d.Flags.PermiteTransformaciones,
-                d.Flags.PermitePrendaComplementaria, d.Flags.RequiereBiometria, d.Flags.RequiereSolicitudPlaca));
+                d.Flags.PermitePrendaComplementaria, d.Flags.RequiereBiometria, d.Flags.RequiereSolicitudPlaca,
+                d.Flags.RequiereDestino, d.Flags.OrganismoLoEligeOperador, string.IsNullOrEmpty(d.Flags.AccionPrenda) ? null : d.Flags.AccionPrenda))
+        {
+            Declaraciones =
+            [
+                .. d.Declaraciones.Select(x => new DeclaracionTipoDto(
+                    x.Clave, x.Control, x.Etiqueta, x.Obligatoria,
+                    [.. x.Opciones.Select(o => new OpcionDeclaracionDto(o.Codigo, o.Etiqueta, [.. o.DocCodes], o.ExigeSoporte))],
+                    x.FieldKey, [.. x.FieldKeysExtra], x.DocCodeSoporte, x.SoporteObligatorio, x.Catalogo, x.ActivadaPor)),
+            ],
+        };
     }
 }

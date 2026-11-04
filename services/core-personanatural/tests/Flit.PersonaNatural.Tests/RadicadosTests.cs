@@ -256,28 +256,55 @@ public sealed class RadicadosTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData("", "123")]
-    [InlineData("PN-1", "")]
-    [InlineData("PN-1234567890123456789012345678901234567890123", "123")]
-    public async Task SinRadicadoOCedulaValidos_Responde400(string radicado, string cedula)
+    [InlineData(null, null, "ABC123")]
+    [InlineData("PN-1", "123", "")]
+    [InlineData("PN-1234567890123456789012345678901234567890123", "123", "ABC123")]
+    public async Task SinPlacaOSinRadicadoNiCedula_Responde400(string? radicado, string? cedula, string? placa)
     {
         if (!await IniciarAsync()) return;
 
-        (await ConsultarAsync(radicado, cedula)).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ConsultarAsync(radicado, cedula, placa)).StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     [Fact]
-    public async Task SinCaptchaValido_Responde400_YNoCuentaComoIntento()
+    public async Task ConPlacaYRadicado_SinCedula_ConsultaElTramite()
+    {
+        if (!await IniciarAsync()) return;
+        await SembrarAsync(estado: EstadoSolicitud.Creada, estadoTramite: "asignado");
+
+        var respuesta = await ConsultarAsync(Radicado, cedula: null, placa: "ABC123");
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK);
+        var cuerpo = await LeerAsync(respuesta);
+        cuerpo.GetProperty("radicado").GetString().Should().Be(Radicado);
+        cuerpo.GetProperty("soloLectura").GetBoolean().Should().BeTrue("sin cédula no se afirma el solicitante");
+    }
+
+    [Fact]
+    public async Task ConPlacaYCedula_SinRadicado_ConsultaElTramite()
+    {
+        if (!await IniciarAsync()) return;
+        await SembrarAsync(estado: EstadoSolicitud.Creada, estadoTramite: "asignado");
+
+        var respuesta = await ConsultarAsync(radicado: null, Cedula, placa: "ABC123");
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK);
+        var cuerpo = await LeerAsync(respuesta);
+        cuerpo.GetProperty("radicado").GetString().Should().Be(Radicado);
+        cuerpo.GetProperty("soloLectura").GetBoolean().Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SinCaptcha_LaConsultaIgualProcede_CaptchaDesactivado()
     {
         if (!await IniciarAsync()) return;
         await SembrarAsync();
 
         var respuesta = await ConsultarAsync(Radicado, Cedula, captcha: "token-falso");
 
-        respuesta.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK);
         await using var db = NuevaDb();
-        (await db.Set<IntentoReanudar>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(0);
-        (await db.Set<AccesoPiiLog>().CountAsync(TestContext.Current.CancellationToken)).Should().Be(0);
+        (await db.Set<AccesoPiiLog>().CountAsync(TestContext.Current.CancellationToken)).Should().BeGreaterThan(0);
     }
 
     // ── AC5: cédula de otra parte ────────────────────────────────────────────────────────────────────────────────────
@@ -482,7 +509,7 @@ public sealed class RadicadosTests : IAsyncLifetime
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
-    private async Task<HttpResponseMessage> ConsultarAsync(string radicado, string cedula, string? placa = null, string captcha = CaptchaFalso.TokenValido)
+    private async Task<HttpResponseMessage> ConsultarAsync(string? radicado, string? cedula, string? placa = "ABC123", string captcha = CaptchaFalso.TokenValido)
     {
         using var peticion = new HttpRequestMessage(HttpMethod.Post, $"{SesionEndpoints.Base}/radicados/consulta")
         {

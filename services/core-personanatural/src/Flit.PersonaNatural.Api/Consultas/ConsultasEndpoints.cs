@@ -2,6 +2,7 @@ using System.Globalization;
 using Flit.PersonaNatural.Api.Abuso;
 using Flit.PersonaNatural.Api.Consentimientos;
 using Flit.PersonaNatural.Api.Sesiones;
+using Flit.PersonaNatural.Api.Solicitudes;
 
 namespace Flit.PersonaNatural.Api.Consultas;
 
@@ -56,6 +57,9 @@ public static class ConsultasEndpoints
         ArgumentNullException.ThrowIfNull(services);
         services.AddScoped<MedicionConsultasService>();
         services.AddScoped<ConsultaDetalleService>();
+        services.AddScoped<VehiculoDelBorradorService>();
+        services.AddScoped<IValoresRuntBorrador>(sp => sp.GetRequiredService<VehiculoDelBorradorService>());
+        services.AddScoped<IGravamenDelBorrador>(sp => sp.GetRequiredService<VehiculoDelBorradorService>());
         services.AddScoped<ConsultaPersonaDetalleService>();
         return services;
     }
@@ -133,6 +137,69 @@ public static class ConsultasEndpoints
             var body = c.Arguments.OfType<ConsultaPersonaRequest>().FirstOrDefault();
             return body is { Consentimiento: true } ? EntradaConsulta.Documento(body.Documento?.Tipo, body.Documento?.Numero)?.Numero : null;
         });
+
+        // HU #14255 — carrocerías de la clase del vehículo del borrador (la clase la resuelve el servidor desde el RUNT, no el navegador).
+        // Sin clase o sin coincidencia, lista vacía: igual que getBodyworksForVehicleClass de FLIT 2. Ruta literal: gana a /catalogos/{catalogo}.
+        grupo.MapGet("/catalogos/carrocerias", async (Guid solicitudId, string? texto, HttpContext http, VehiculoDelBorradorService vehiculo, CancellationToken ct) =>
+        {
+            ResultadoVehiculoBorrador r;
+            try
+            {
+                r = await vehiculo.ClaseAsync(solicitudId, ct).ConfigureAwait(false);
+            }
+            catch (ProveedorNoDisponibleException)
+            {
+                return ProveedorNoDisponible(http);
+            }
+
+            return r.Estado == EstadoVehiculoBorrador.SolicitudNoEncontrada
+                ? SesionEndpoints.Problema(StatusCodes.Status404NotFound, "No encontrado", SesionEndpoints.MensajeNoEncontrada, SesionEndpoints.CodigoNoEncontrada)
+                : Results.Ok(Catalogos.CarroceriasPorClase.Para(r.Clase, texto));
+        }).AddEndpointFilter(Radicacion.SesionTrasRadicar.Filtro);
+
+        // HU #14257 — gravamen del vehículo del borrador para la prenda. El acreedor (tercero) solo con identidad validada en ESTA solicitud.
+        grupo.MapGet("/solicitudes/{id:guid}/vehiculo/gravamen", async (Guid id, HttpContext http, VehiculoDelBorradorService vehiculo, CancellationToken ct) =>
+        {
+            ResultadoVehiculoBorrador r;
+            try
+            {
+                r = await vehiculo.GravamenAsync(id, ct).ConfigureAwait(false);
+            }
+            catch (ProveedorNoDisponibleException)
+            {
+                return ProveedorNoDisponible(http);
+            }
+
+            return r.Estado switch
+            {
+                EstadoVehiculoBorrador.Ok => Results.Ok(r.Gravamen),
+                EstadoVehiculoBorrador.SinVehiculo => SesionEndpoints.Problema(
+                    StatusCodes.Status409Conflict, "Sin vehículo", "Falta el vehículo o el documento del propietario para consultar el gravamen.", CodigoSinVehiculo),
+                _ => SesionEndpoints.Problema(StatusCodes.Status404NotFound, "No encontrado", SesionEndpoints.MensajeNoEncontrada, SesionEndpoints.CodigoNoEncontrada),
+            };
+        }).AddEndpointFilter(Radicacion.SesionTrasRadicar.Filtro);
+
+        // Valores RUNT actuales (color, combustible, carrocería) del vehículo del borrador: el front los muestra y valida «distinto del RUNT».
+        grupo.MapGet("/solicitudes/{id:guid}/vehiculo/valores-actuales", async (Guid id, HttpContext http, VehiculoDelBorradorService vehiculo, CancellationToken ct) =>
+        {
+            ResultadoVehiculoBorrador r;
+            try
+            {
+                r = await vehiculo.ValoresActualesAsync(id, ct).ConfigureAwait(false);
+            }
+            catch (ProveedorNoDisponibleException)
+            {
+                return ProveedorNoDisponible(http);
+            }
+
+            return r.Estado switch
+            {
+                EstadoVehiculoBorrador.Ok => Results.Ok(r.Valores),
+                EstadoVehiculoBorrador.SinVehiculo => SesionEndpoints.Problema(
+                    StatusCodes.Status409Conflict, "Sin vehículo", "Falta el vehículo o el documento del propietario para consultar el RUNT.", CodigoSinVehiculo),
+                _ => SesionEndpoints.Problema(StatusCodes.Status404NotFound, "No encontrado", SesionEndpoints.MensajeNoEncontrada, SesionEndpoints.CodigoNoEncontrada),
+            };
+        }).AddEndpointFilter(Radicacion.SesionTrasRadicar.Filtro);
 
         // Con sesión de la solicitud: el filtro responde 401 o 403 antes que el handler. La id de la ruta es el primer Guid
         // de los argumentos, que es lo que ConSesionDeLaSolicitud compara con la sesión.

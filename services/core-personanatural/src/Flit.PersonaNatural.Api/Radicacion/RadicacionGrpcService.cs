@@ -75,7 +75,7 @@ internal sealed class RadicacionGrpcService(PersonaNaturalDb db, PersonaService 
             OrganismoNombre = s.OrganismoNombre,
             Placa = s.Placa ?? string.Empty,
             Vin = s.Vin ?? string.Empty,
-            DatosJson = DatosSolicitud.Leer(s.Datos).Serializar(),
+            DatosJson = (DatosSolicitud.Leer(s.Datos) with { PropietarioConsulta = null }).Serializar(),
             ComprobantePagoId = adjuntos.LastOrDefault(a => a.Tipo == SolicitudesService.TipoComprobantePago)?.Id.ToString() ?? string.Empty,
             IdempotencyKey = s.IdempotencyKey ?? string.Empty,
             CorrelationId = s.CorrelationId.ToString(),

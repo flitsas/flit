@@ -23,10 +23,23 @@ public sealed record GuardarParametrosPnResultado(ParametrosPn? Parametros, bool
 /// <summary>
 /// Un organismo con su estado para el portal. <c>TiposConTarifaVigente</c> cuenta los tipos habilitados y elegibles que ya
 /// tienen derechos de tránsito y servicio FLIT vigentes ahí: un organismo habilitado con cero se avisa «Sin tarifa vigente».
+/// <c>CanalPuntoEncendido</c> es el interruptor del punto de atención (HU #14216), independiente de <c>Habilitado</c>.
 /// </summary>
 public sealed record OrganismoPnView(
     Guid Id, string Codigo, string Nombre, string Municipio, string Departamento, bool Habilitado, int TiposConTarifaVigente,
-    bool ActivoEnFlit = true);
+    bool ActivoEnFlit = true, bool CanalPuntoEncendido = false);
+
+/// <summary>
+/// Resolución del código público del organismo para el canal del punto (HU #14216).
+/// <see cref="Estado"/> es <c>ok</c>, <c>codigo_desconocido</c>, <c>organismo_no_operable</c> o <c>canal_apagado</c>.
+/// </summary>
+public sealed record CanalPuntoResolucion(string Estado, Guid OrganismoId, string Codigo, string Nombre)
+{
+    public const string Ok = "ok";
+    public const string CodigoDesconocido = "codigo_desconocido";
+    public const string OrganismoNoOperable = "organismo_no_operable";
+    public const string CanalApagado = "canal_apagado";
+}
 
 /// <summary>
 /// Un tipo candidato para el portal. <c>Elegible</c> sale de la regla K2 (perfil del tipo, wizard encendido y publicado);
@@ -71,4 +84,14 @@ public interface IPersonaNaturalConfigRepository
 
     /// <summary>Un tipo es candidato si está publicado, activo y es elegible para persona natural (K2).</summary>
     Task<bool> TipoEsCandidatoAsync(Guid tipoId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Enciende o apaga el canal del punto (HU #14216) en <c>admin.persona_natural_point_channel</c>.
+    /// No escribe <c>admin.tenant_transit_office_grants</c>. <c>Existe = false</c> si el organismo no existe o está inactivo.
+    /// Apagar cuando ya está apagado (o no hay fila) no inserta nada.
+    /// </summary>
+    Task<CambioHabilitacionPn> EstablecerCanalPuntoAsync(Guid organismoId, bool encendido, Guid actor, CancellationToken ct = default);
+
+    /// <summary>Código público del catálogo: operable en FLIT y con el canal encendido, o el motivo estable.</summary>
+    Task<CanalPuntoResolucion> ResolverCanalPuntoAsync(string codigo, CancellationToken ct = default);
 }

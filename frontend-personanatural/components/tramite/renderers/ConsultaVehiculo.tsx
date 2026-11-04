@@ -3,17 +3,19 @@
 import { useMutation } from "@tanstack/react-query";
 import { AlertTriangle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Captcha } from "@/components/Captcha";
 import { MobilityLoader } from "@/components/MobilityLoader";
 import { Badge, Btn, Card, Field, Row } from "@/components/tramite/piezas";
+import { TarjetaDestino } from "@/components/tramite/TarjetaDestino";
 import { useWizard, type PropsSeccion } from "@/components/tramite/ContextoWizard";
 import { ApiError, mensajeDe } from "@/lib/api/errores";
 import type { Diagnostico, VehiculoDelTramite } from "@/lib/api/cliente";
 import { useBloqueo } from "@/lib/api/useBloqueo";
 import { fijarContexto } from "@/lib/tramite/contexto";
+import { recordarVehiculo } from "@/lib/tramite/presentacion";
 import { formatearFechaHora } from "@/lib/formato";
 import { documentoLegible } from "@/lib/tramite/actores";
-import { consentimientoDeConsulta, datosTecnicos, entradaConsulta, filasDiagnostico, organismoElegido, TIPOS_PROPIETARIO, MENSAJE_ATENCION, MENSAJE_CONSULTANDO_VEHICULO, MENSAJE_RUNT_NO_RESPONDE, MENSAJE_SIN_VEHICULO } from "@/lib/tramite/diagnostico";
+import { faltaDestino } from "@/lib/tramite/declaraciones";
+import { consentimientoDeConsulta, datosTecnicos, entradaConsulta, filasDiagnostico, motivosDiagnostico, organismoElegido, TIPOS_PROPIETARIO, MENSAJE_ATENCION, MENSAJE_CONSULTANDO_VEHICULO, MENSAJE_RUNT_NO_RESPONDE, MENSAJE_SIN_VEHICULO } from "@/lib/tramite/diagnostico";
 
 interface Resultado {
   vehiculo: VehiculoDelTramite;
@@ -23,6 +25,7 @@ interface Resultado {
 
 const MOTIVO_SIN_CONSULTA = "Verifica tu identidad y consulta el vehículo para continuar.";
 const MOTIVO_CON_PENDIENTES = "Resuelve los pendientes del diagnóstico para continuar.";
+const MOTIVO_SIN_DESTINO = "Elige la secretaría de destino para consultar el vehículo.";
 
 /** Mensaje de un error de la consulta: el RUNT caído tiene su texto propio; el resto, el del catálogo de errores. */
 function mensajeDeConsulta(error: unknown): string {
@@ -31,45 +34,41 @@ function mensajeDeConsulta(error: unknown): string {
 }
 
 /**
- * Renderer de las secciones `vehicle_query`: la consulta REAL del vehículo (dato mínimo, con consentimiento y captcha) y el
- * preflight de requisitos del tipo, que el back guarda en el borrador. Cada fila del diagnóstico sale de lo que devuelve el
- * back; no hay indicadores escritos aquí. El propietario se muestra completo: nombre y documento.
+ * Renderer de las secciones `vehicle_query`: la consulta REAL del vehículo (dato mínimo, con consentimiento) y el
+ * preflight de requisitos del tipo, que el back guarda en el borrador. Cada fila del diagnóstico sale de lo que
+ * devuelve el back; no hay indicadores escritos aquí. El propietario se muestra completo: nombre y documento.
  */
 export function ConsultaVehiculo({ activa, intentoAvance, onEstado }: PropsSeccion) {
-  const { cliente, solicitud, contexto, recargar, reportarError } = useWizard();
+  const { cliente, definicion, solicitud, contexto, recargar, reportarError } = useWizard();
   const bloqueo = useBloqueo();
-  const [captcha, setCaptcha] = useState<string | null>(null);
-  const [reinicio, setReinicio] = useState(0);
   const [tipoPropietario, setTipoPropietario] = useState(contexto?.propietario?.tipo ?? "CC");
   const [numeroPropietario, setNumeroPropietario] = useState(contexto?.propietario?.numero ?? contexto?.cedula ?? "");
   const idAlerta = `diag-alerta-${solicitud.solicitudId}`;
   const hayOrganismo = organismoElegido(solicitud.organismoId);
+  // Traslado de cuenta: sin secretaría de destino no se consulta (se elige antes, como en FLIT 2).
+  const sinDestino = faltaDestino(definicion, solicitud.fieldValues);
   const porVin = Boolean(solicitud.vin);
 
   const entrada = entradaConsulta(solicitud, porVin ? undefined : { tipo: tipoPropietario, numero: numeroPropietario });
+  const firmaEntrada = entrada ? JSON.stringify(entrada) : "";
 
-  const consulta = useMutation<Resultado, unknown, string>({
-    mutationFn: async (token) => {
+  const consulta = useMutation<Resultado>({
+    mutationFn: async () => {
       if (!entrada) throw new ApiError("sin_identificador", "Falta el identificador del vehículo", 400);
-      const vehiculo = await cliente.consultas.vehiculoDelTramite(solicitud.solicitudId, { ...entrada, ...consentimientoDeConsulta }, { captcha: token });
+      const vehiculo = await cliente.consultas.vehiculoDelTramite(solicitud.solicitudId, { ...entrada, ...consentimientoDeConsulta });
       if (!vehiculo.existe) return { vehiculo, diagnostico: null };
       const propietario = entrada.propietario ? { tipoDocumento: entrada.propietario.tipo, numeroDocumento: entrada.propietario.numero } : undefined;
       const diagnostico = await cliente.solicitudes.diagnosticar(solicitud.solicitudId, propietario ? { propietario } : undefined);
       return { vehiculo, diagnostico };
     },
-    // El preflight cambió la `version` del borrador: se vuelve a leer para que lo que se guarde después use la vigente.
     onSuccess: (r) => {
+      recordarVehiculo(solicitud.solicitudId, r.vehiculo);
       if (entrada?.propietario && contexto) fijarContexto({ ...contexto, propietario: entrada.propietario });
       if (r.diagnostico) void recargar();
     },
     onError: (error) => {
       bloqueo.registrar(error);
       reportarError(error);
-    },
-    onSettled: () => {
-      // El token del captcha sirve una sola vez.
-      setCaptcha(null);
-      setReinicio((n) => n + 1);
     },
   });
 
@@ -80,35 +79,30 @@ export function ConsultaVehiculo({ activa, intentoAvance, onEstado }: PropsSecci
   const consultando = consulta.isPending;
   const enEspera = bloqueo.bloqueado;
 
-  // Sin resultado todavía: con el captcha resuelto se consulta sola, sin otro clic. Nunca mientras se espera un 429 o un 503.
+  // Sin resultado todavía: se consulta sola al estar lista la entrada. Nunca mientras se espera un 429 o un 503.
   const mutar = consulta.mutate;
-  const tokenUsado = useRef<string | null>(null);
+  const disparado = useRef<string | null>(null);
   useEffect(() => {
-    if (!captcha) {
-      tokenUsado.current = null;
-      return;
-    }
-    if (!activa || !hayOrganismo || diagnostico || noExiste || consultando || enEspera) return;
-    if (tokenUsado.current === captcha) return; // un token, una consulta (también bajo StrictMode)
-    tokenUsado.current = captcha;
-    mutar(captcha);
-  }, [activa, hayOrganismo, captcha, diagnostico, noExiste, consultando, enEspera, mutar]);
+    if (!activa || !hayOrganismo || sinDestino || !entrada || diagnostico || noExiste || consultando || enEspera) return;
+    if (disparado.current === firmaEntrada) return;
+    disparado.current = firmaEntrada;
+    mutar();
+  }, [activa, hayOrganismo, sinDestino, entrada, firmaEntrada, diagnostico, noExiste, consultando, enEspera, mutar]);
 
   const conBloqueos = diagnostico !== null && !diagnostico.puedeContinuar;
-  const completo = diagnostico?.puedeContinuar === true;
-  const motivo = completo ? undefined : conBloqueos ? MOTIVO_CON_PENDIENTES : MOTIVO_SIN_CONSULTA;
+  const completo = diagnostico?.puedeContinuar === true && !sinDestino;
+  const motivo = completo ? undefined : conBloqueos ? MOTIVO_CON_PENDIENTES : sinDestino ? MOTIVO_SIN_DESTINO : MOTIVO_SIN_CONSULTA;
   useEffect(() => {
     onEstado({ completo, bloqueo: motivo });
   }, [completo, motivo, onEstado]);
 
   const reintentar = () => {
     consulta.reset();
-    setCaptcha(null);
-    setReinicio((n) => n + 1);
+    disparado.current = null;
   };
 
   const filas = diagnostico ? filasDiagnostico(diagnostico.requisitos) : [];
-  // La fecha es la que el back guardó con el diagnóstico (llega al recargar el borrador, justo después de consultar).
+  const motivos = motivosDiagnostico(diagnostico);
   const fecha = formatearFechaHora(guardado?.fecha);
   const documentoEscrito = numeroPropietario.trim() ? documentoLegible(tipoPropietario, numeroPropietario) : "";
   const documentoPropietario = vehiculo?.propietarioDocumento?.trim() || documentoEscrito;
@@ -120,6 +114,7 @@ export function ConsultaVehiculo({ activa, intentoAvance, onEstado }: PropsSecci
 
   return (
     <>
+      <TarjetaDestino intentoAvance={intentoAvance} />
       <Card title="Diagnóstico de requisitos previos" id="diagnostico-requisitos">
         <div className="relative" aria-busy={consultando}>
           {!hayOrganismo && (
@@ -144,6 +139,17 @@ export function ConsultaVehiculo({ activa, intentoAvance, onEstado }: PropsSecci
           )}
 
           {fecha && <p className="text-xs font-light text-muted-foreground">Consultado en RUNT el {fecha}</p>}
+
+          {motivos.length > 0 && (
+            <div aria-label="Motivos del diagnóstico" className="mt-3 w-full space-y-2 rounded-[9px] border border-alert bg-alert/10 p-4 text-sm leading-relaxed text-foreground">
+              {motivos.map((m) => (
+                <p key={m} className="flex gap-2">
+                  <AlertTriangle aria-hidden className="mt-0.5 h-5 w-5 shrink-0 text-alert" />
+                  <span>{m}</span>
+                </p>
+              ))}
+            </div>
+          )}
 
           {diagnostico && filas.length > 0 && (
             <ul className="wizard-diagnosis mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6" aria-label="Indicadores del vehículo">
@@ -182,16 +188,10 @@ export function ConsultaVehiculo({ activa, intentoAvance, onEstado }: PropsSecci
             </div>
           )}
 
-          {hayOrganismo && !diagnostico && !noExiste && error === null && activa && entrada && (
-            <div className="mt-2">
-              <Captcha onToken={setCaptcha} reinicio={reinicio} />
-            </div>
-          )}
-
           {intentoAvance > 0 && !completo && !conBloqueos && !consultando && (
             <p role="alert" className="mt-3 flex items-center gap-1 text-xs text-alert">
               <AlertTriangle aria-hidden className="h-3.5 w-3.5" />
-              {MOTIVO_SIN_CONSULTA}
+              {sinDestino ? MOTIVO_SIN_DESTINO : MOTIVO_SIN_CONSULTA}
             </p>
           )}
 

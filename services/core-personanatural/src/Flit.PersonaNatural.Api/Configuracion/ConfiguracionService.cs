@@ -11,7 +11,7 @@ namespace Flit.PersonaNatural.Api.Configuracion;
 /// <see cref="CotizacionesOptions.CacheCatalogoSegundos"/> del catálogo: 60 s) y arma la ruta de la imagen. No lleva datos
 /// bancarios ni parámetros de protección: core-api ni siquiera los entrega por este RPC.
 /// </summary>
-public sealed class ConfiguracionService(IFachadaConfiguracion fachada, IMemoryCache cache, IOptions<CotizacionesOptions> options)
+public sealed class ConfiguracionService(IFachadaConfiguracion fachada, IMemoryCache cache, IOptions<CotizacionesOptions> options, Flit.PersonaNatural.Api.Pruebas.IPruebasPortal? pruebas = null)
 {
     public const string RutaImagenes = SesionEndpoints.Base + "/configuracion/banners";
 
@@ -32,7 +32,10 @@ public sealed class ConfiguracionService(IFachadaConfiguracion fachada, IMemoryC
             [.. c.Banners.Select(b => new BannerDto(b.Id, b.Titulo, b.TextoAlternativo, b.EnlaceUrl, b.Orden, $"{RutaImagenes}/{b.Id}/imagen?v={Uri.EscapeDataString(b.ImagenSha256)}"))],
             c.Enlaces,
             c.Soporte,
-            c.BorradorVigenciaDias);
+            c.BorradorVigenciaDias)
+        {
+            Pruebas = pruebas?.OmitirIdentidad == true ? new PruebasDto(true) : null,
+        };
         if (_o.CacheCatalogoSegundos > 0)
             cache.Set(clave, dto, TimeSpan.FromSeconds(_o.CacheCatalogoSegundos));
         return dto;

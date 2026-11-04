@@ -17,6 +17,8 @@ import type { ClientePortal, DefinicionTipo, Organismo, Solicitud } from "@/lib/
 import { ApiError, mensajeDe } from "@/lib/api/errores";
 import { organismoElegido } from "@/lib/tramite/diagnostico";
 import { ASSETS } from "@/lib/assets";
+import { conservarPersonas } from "@/lib/tramite/actores";
+import { crearGuardadorSerial } from "@/lib/tramite/guardadoSerial";
 import type { ContextoTramite } from "@/lib/tramite/contexto";
 import { esEditable, pasoInicial, type GrupoPaso, type PasoWizard, type SeccionWizard } from "@/lib/tramite/pasos";
 
@@ -90,6 +92,19 @@ export function Cascaron({ cliente, definicion, solicitud, pasos, registro, cont
     [pasos],
   );
 
+  // Un solo serializador por solicitud (la cola sobrevive a los renders): autoguardado y Continuar no se pisan la versión.
+  const solicitudRef = useRef(solicitud);
+  useEffect(() => {
+    solicitudRef.current = solicitud;
+  });
+  const leerVersion = useCallback(
+    () => (queryClient.getQueryData<Solicitud>(claveSolicitud(idSolicitud)) ?? solicitudRef.current).version,
+    [queryClient, idSolicitud],
+  );
+  const aplicarSolicitud = useCallback((s: Solicitud) => void queryClient.setQueryData<Solicitud>(claveSolicitud(idSolicitud), (previa) => conservarPersonas(previa, s)), [queryClient, idSolicitud]);
+  const releer = useCallback(() => cliente.solicitudes.obtener(idSolicitud), [cliente, idSolicitud]);
+  const guardarConVersion = useMemo(() => crearGuardadorSerial(leerVersion, aplicarSolicitud, releer), [leerVersion, aplicarSolicitud, releer]);
+
   const api = useMemo<ApiWizard>(
     () => ({
       cliente,
@@ -97,10 +112,7 @@ export function Cascaron({ cliente, definicion, solicitud, pasos, registro, cont
       solicitud,
       contexto,
       recargar: () => queryClient.invalidateQueries({ queryKey: claveSolicitud(idSolicitud) }),
-      guardarConVersion: async (escribir) => {
-        const vigente = queryClient.getQueryData<Solicitud>(claveSolicitud(idSolicitud)) ?? solicitud;
-        queryClient.setQueryData(claveSolicitud(idSolicitud), await escribir(vigente.version));
-      },
+      guardarConVersion,
       registrarGuardado: (clave, guardar) => {
         if (guardar) guardadores.current.set(clave, guardar);
         else guardadores.current.delete(clave);
@@ -108,7 +120,7 @@ export function Cascaron({ cliente, definicion, solicitud, pasos, registro, cont
       reportarError,
       irAPaso,
     }),
-    [cliente, definicion, solicitud, contexto, queryClient, idSolicitud, reportarError, irAPaso],
+    [cliente, definicion, solicitud, contexto, queryClient, idSolicitud, reportarError, irAPaso, guardarConVersion],
   );
 
   // ── Validez y navegación ──────────────────────────────────────────────────────────────────────────────────────────
@@ -392,7 +404,7 @@ export function Cascaron({ cliente, definicion, solicitud, pasos, registro, cont
           </div>
         </main>
 
-        <ModalFlit abierto={saliendoDelTramite} onCerrar={() => setSaliendoDelTramite(false)} titulo="Salir del trámite" icono={LogOut} ancho="2xl" descripcion="Tu borrador se conserva: puedes reanudarlo desde «Consultar mi trámite» con tu radicado y tu cédula.">
+        <ModalFlit abierto={saliendoDelTramite} onCerrar={() => setSaliendoDelTramite(false)} titulo="Salir del trámite" icono={LogOut} ancho="2xl" descripcion="Tu borrador se conserva: puedes consultarlo desde «Consultar mi trámite» con la placa y el radicado o la cédula.">
           <div className="mt-5 flex flex-wrap justify-center gap-3">
             <button type="button" className={boton("back", "h-11 px-6", "none")} onClick={() => setSaliendoDelTramite(false)}>
               Seguir aquí
@@ -446,7 +458,7 @@ function ElegirOrganismo({ cliente, solicitud }: { cliente: ClientePortal; solic
   const asignar = useMutation({
     mutationFn: (organismo: Organismo) => cliente.solicitudes.asignarOrganismo(solicitud.solicitudId, { organismoId: organismo.id, version: solicitud.version }),
     onSuccess: (actualizada) => {
-      queryClient.setQueryData(claveSolicitud(solicitud.solicitudId), actualizada);
+      queryClient.setQueryData<Solicitud>(claveSolicitud(solicitud.solicitudId), (previa) => conservarPersonas(previa, actualizada));
     },
   });
 

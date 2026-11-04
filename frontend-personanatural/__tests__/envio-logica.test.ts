@@ -58,6 +58,18 @@ describe("pasos del seguimiento", () => {
     expect(p[4]).toEqual({ titulo: "Aprobado / Rechazado", estado: "pending", fecha: null });
   });
 
+  it("la validación de identidad solo es «Completado» si las partes que se validan están aprobadas", () => {
+    const aprobada = { rol: "vendedor", ordinal: 1, validacionEstado: "aprobada", tipoDocumento: "CC", numeroDocumento: "1", nombre: "A", correo: null, celular: null, direccion: null };
+    const comprador = { ...aprobada, rol: "comprador" };
+    const paso = (actores: (typeof aprobada)[]) => pasosDeSeguimiento({ estado: "en_cola", actualizadoEn: MARCA }, d, actores)[1].estado;
+
+    expect(paso([aprobada, comprador])).toBe("done");
+    expect(paso([aprobada, { ...comprador, validacionEstado: "pendiente" }])).toBe("current");
+    expect(paso([{ ...aprobada, validacionEstado: "sin_solicitar" }, comprador])).toBe("pending");
+    expect(paso([{ ...aprobada, validacionEstado: "rechazada" }, comprador])).toBe("pending");
+    expect(paso([])).toBe("pending");
+  });
+
   it("si el tipo no exige validar la identidad, ese paso se muestra omitido", () => {
     const sinIdentidad = definicionDe([["vehicle_query"], ["actor_form"]]);
 

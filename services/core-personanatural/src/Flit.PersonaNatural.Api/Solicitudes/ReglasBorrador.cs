@@ -36,6 +36,9 @@ public static partial class ReglasBorrador
     public const int MaxTexto = 500;
     public const int MaxTextoLargo = 2000;
 
+    /// <summary>Tope de «Entidad ante la que se levantó»: el mismo de la columna de FLIT 2 (<c>levantamiento_entidad</c>).</summary>
+    public const int MaxEntidadLevantamiento = 200;
+
     /// <summary>Documentos de una persona natural: la cédula de ciudadanía, la de extranjería, el pasaporte y la tarjeta de identidad.</summary>
     public static readonly IReadOnlySet<string> TiposDocumento = new HashSet<string>(StringComparer.Ordinal) { "CC", "CE", "PAS", "TI" };
 
@@ -92,7 +95,7 @@ public static partial class ReglasBorrador
     /// Valida los actores contra los roles de la definición: rol conocido, posición dentro de <c>max</c>, documento y contacto
     /// bien formados, sin repetir persona. Con roles que el tipo no admite para persona natural, rechaza el rol.
     /// </summary>
-    public static IReadOnlyList<ActorValidado> ValidarActores(DefinicionTipoDto def, IReadOnlyList<ActorRequest>? actores, ErroresDeCampo errores)
+    public static IReadOnlyList<ActorValidado> ValidarActores(DefinicionTipoDto def, IReadOnlyList<ActorRequest>? actores, ErroresDeCampo errores, bool correoOpcionalDelRadicante = false)
     {
         var salida = new List<ActorValidado>();
         if (actores is null || actores.Count == 0)
@@ -142,7 +145,12 @@ public static partial class ReglasBorrador
                 errores.Agregar($"{pre}.nombre", "Escriba el nombre completo.");
 
             var correo = a.Correo?.Trim();
-            if (!CotizacionesService.CorreoValido(correo))
+            // Canal del punto: quien radica (primer rol, ordinal 1) valida in-situ y no necesita correo; vacío se acepta.
+            var sinCorreoPermitido = correoOpcionalDelRadicante && string.IsNullOrWhiteSpace(correo) && ordinal == 1
+                && def.Actores.Count > 0 && string.Equals(def.Actores[0].Rol, rol, StringComparison.Ordinal);
+            if (sinCorreoPermitido)
+                correo = null;
+            else if (!CotizacionesService.CorreoValido(correo))
                 errores.Agregar($"{pre}.correo", "El correo no es válido.");
 
             var celular = a.Celular is null ? null : new string(a.Celular.Where(c => char.IsDigit(c) || c == '+').ToArray());
@@ -171,7 +179,7 @@ public static partial class ReglasBorrador
     /// <c>null</c> para borrar un campo opcional. El <c>validation_schema</c> viaja al front tal cual; aquí se valida tipo,
     /// opciones y obligatoriedad.
     /// </summary>
-    public static IReadOnlyDictionary<string, string?> ValidarCampos(DefinicionTipoDto def, IReadOnlyDictionary<string, JsonElement>? valores, ErroresDeCampo errores)
+    public static IReadOnlyDictionary<string, string?> ValidarCampos(DefinicionTipoDto def, IReadOnlyDictionary<string, JsonElement>? valores, ErroresDeCampo errores, ValoresActualesVehiculo? runt = null)
     {
         var salida = new Dictionary<string, string?>(StringComparer.Ordinal);
         if (valores is null || valores.Count == 0)
@@ -181,11 +189,18 @@ public static partial class ReglasBorrador
         }
 
         var campos = def.Pasos.SelectMany(p => p.Campos).GroupBy(c => c.FieldKey, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        var declaradas = ClavesDeDeclaraciones(def);
         foreach (var (clave, valor) in valores)
         {
             var pre = $"valores.{clave}";
             if (!campos.TryGetValue(clave, out var campo))
             {
+                if (declaradas.TryGetValue(clave, out var declaracion))
+                {
+                    ValidarDeclaracion(declaracion.Declaracion, declaracion.EsExtra, clave, valor, pre, salida, errores, runt);
+                    continue;
+                }
+
                 errores.Agregar(pre, "Este tipo de trámite no tiene ese campo.");
                 continue;
             }
@@ -238,7 +253,177 @@ public static partial class ReglasBorrador
         }
     }
 
+    // ── Declaraciones del tipo (HU 5) ────────────────────────────────────────────────────────────────────────────────
+
+    public const string ControlSeleccion = "seleccion";
+    public const string ControlCatalogo = "seleccion_catalogo";
+    public const string ControlDestino = "organismo_destino";
+    public const string PendienteDeclaracionRequerida = "declaracion_requerida";
+    public const string PendienteDocumentoRequerido = "documento_requerido";
+    private const int MaxValorDeclaracion = 100;
+
+    /// <summary>Claves de <c>field_values</c> que las declaraciones del tipo admiten: la principal y las derivadas por el servidor.</summary>
+    public static IReadOnlyDictionary<string, (DeclaracionTipoDto Declaracion, bool EsExtra)> ClavesDeDeclaraciones(DefinicionTipoDto def)
+    {
+        var claves = new Dictionary<string, (DeclaracionTipoDto, bool)>(StringComparer.Ordinal);
+        foreach (var d in def.Declaraciones ?? [])
+        {
+            claves.TryAdd(d.FieldKey, (d, false));
+            foreach (var extra in d.FieldKeysExtra)
+                claves.TryAdd(extra, (d, true));
+        }
+
+        return claves;
+    }
+
+    /// <summary>
+    /// Valida un valor declarado. La clave principal se valida contra el control (opciones, catálogo o identificador del
+    /// organismo); las claves derivadas (<c>cambio_*</c>, <c>blindaje</c>, <c>transit_office_destino_*</c>) las completa el
+    /// servidor al crear el trámite, así que lo que el cliente mande en ellas se ignora. Al declarar una transformación se
+    /// prende su bandera <c>cambio_*</c>; al vaciar el valor opcional se apaga.
+    /// </summary>
+    private static void ValidarDeclaracion(
+        DeclaracionTipoDto d, bool esExtra, string clave, JsonElement valor, string pre, Dictionary<string, string?> salida, ErroresDeCampo errores, ValoresActualesVehiculo? runt)
+    {
+        if (esExtra)
+            return;
+
+        var texto = Canonico(valor);
+        var banderas = d.FieldKeysExtra.Where(k => k.StartsWith("cambio_", StringComparison.Ordinal)).ToList();
+        if (string.IsNullOrEmpty(texto))
+        {
+            if (d.Obligatoria)
+            {
+                errores.Agregar(pre, "Este campo es obligatorio.");
+                return;
+            }
+
+            salida[clave] = null;
+            foreach (var b in banderas)
+                salida[b] = null;
+            return;
+        }
+
+        var error = d.Control switch
+        {
+            ControlSeleccion => d.Opciones.Any(o => string.Equals(o.Codigo, texto, StringComparison.Ordinal)) ? null : "Elija una de las opciones.",
+            ControlDestino => Guid.TryParse(texto, out var id) && id != Guid.Empty ? null : "Elija un organismo de destino.",
+            _ when d.Opciones.Count > 0 => d.Opciones.Any(o => string.Equals(o.Codigo, texto, StringComparison.Ordinal)) ? null : "Elija una de las opciones.",
+            _ => texto.Length <= MaxValorDeclaracion ? null : $"Use hasta {MaxValorDeclaracion} caracteres.",
+        };
+        // Paridad con FLIT 2: el valor nuevo de una transformación es obligatorio y distinto del que el RUNT tiene hoy.
+        error ??= ErrorIgualAlRunt(d, texto, runt);
+        if (error is not null)
+        {
+            errores.Agregar(pre, error);
+            return;
+        }
+
+        salida[clave] = d.Control == ControlDestino ? Guid.Parse(texto).ToString() : texto;
+        foreach (var b in banderas)
+            salida[b] = "true";
+    }
+
+    /// <summary>
+    /// Documentos que una declaración reclama por sí misma (certificado de blindaje, los de cada causal): la matriz del tipo no
+    /// los repite como pendientes. Los soportes opcionales (cambio de color…) no entran: si la matriz los pide, la matriz manda.
+    /// </summary>
+    public static IReadOnlySet<string> DocumentosDeDeclaraciones(DefinicionTipoDto def)
+    {
+        var docs = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var d in def.Declaraciones ?? [])
+        {
+            if (d.SoporteObligatorio && !string.IsNullOrWhiteSpace(d.DocCodeSoporte))
+                docs.Add(d.DocCodeSoporte);
+            foreach (var o in d.Opciones.Where(o => o.ExigeSoporte))
+                foreach (var doc in o.DocCodes)
+                    docs.Add(doc);
+        }
+
+        return docs;
+    }
+
+    /// <summary>Un pendiente de declaración con el nombre legible que muestra el gate del punto.</summary>
+    public readonly record struct PendienteDeDeclaracion(string Codigo, string Referencia, string Nombre, string? Paso, string? Motivo = null);
+
+    /// <summary>
+    /// Lo que falta de las declaraciones del borrador: el valor de cada declaración activa y obligatoria (<c>declaracion_requerida</c>)
+    /// y los documentos que exige lo elegido (<c>documento_requerido</c>). Una declaración de trámite simultáneo solo cuenta si el
+    /// ciudadano marcó su transformación.
+    /// </summary>
+    public static IReadOnlyList<PendienteDeDeclaracion> PendientesDeDeclaraciones(
+        DefinicionTipoDto def, IReadOnlyDictionary<string, string> campos, IReadOnlyList<string> transformaciones, IReadOnlySet<string> documentosCargados, ValoresActualesVehiculo? runt = null)
+    {
+        var salida = new List<PendienteDeDeclaracion>();
+        string? PasoDe(string sectionType) => def.Pasos.FirstOrDefault(p => p.SectionTypes.Contains(sectionType, StringComparer.Ordinal))?.Clave;
+        string NombreDoc(string doc) => def.Documentos.FirstOrDefault(x => string.Equals(x.DocCode, doc, StringComparison.Ordinal))?.Nombre ?? doc;
+
+        foreach (var d in def.Declaraciones ?? [])
+        {
+            var simultanea = !string.IsNullOrEmpty(d.ActivadaPor);
+            if (simultanea && !transformaciones.Contains(d.ActivadaPor, StringComparer.OrdinalIgnoreCase))
+                continue;
+
+            var paso = d.Control == ControlDestino ? PasoDe("vehicle_query") ?? PasoDe("document_checklist") : PasoDe("document_checklist") ?? PasoDe("generic_form");
+            campos.TryGetValue(d.FieldKey, out var valor);
+            var opcion = string.IsNullOrWhiteSpace(valor) ? null : d.Opciones.FirstOrDefault(o => string.Equals(o.Codigo, valor, StringComparison.Ordinal));
+            var tieneValor = !string.IsNullOrWhiteSpace(valor) && (d.Control != ControlSeleccion || opcion is not null);
+            if (!tieneValor)
+            {
+                if (d.Obligatoria || simultanea)
+                    salida.Add(new PendienteDeDeclaracion(PendienteDeclaracionRequerida, d.Clave, d.Etiqueta, paso));
+                continue;
+            }
+
+            if (ErrorIgualAlRunt(d, valor, runt) is { } igual)
+            {
+                salida.Add(new PendienteDeDeclaracion(PendienteDeclaracionRequerida, d.Clave, d.Etiqueta, paso, igual));
+                continue;
+            }
+
+            var docs = new List<string>();
+            if (opcion is { ExigeSoporte: true })
+                docs.AddRange(opcion.DocCodes);
+            if (d.SoporteObligatorio && !string.IsNullOrWhiteSpace(d.DocCodeSoporte))
+                docs.Add(d.DocCodeSoporte);
+            foreach (var doc in docs.Distinct(StringComparer.Ordinal).Where(doc => !documentosCargados.Contains(doc)))
+                salida.Add(new PendienteDeDeclaracion(PendienteDocumentoRequerido, doc, NombreDoc(doc), paso));
+        }
+
+        return salida;
+    }
+
     // ── Comercial y prenda ───────────────────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>Decisiones de prenda que el portal acepta (HU 8): constituir una que ya existe, levantarla o declarar que no hay.</summary>
+    public const string PrendaRegistrar = "registrar";
+    public const string PrendaLevantar = "levantar";
+    public const string PrendaSinPrenda = "sin_prenda";
+
+    public static readonly IReadOnlySet<string> DecisionesPrenda = new HashSet<string>(StringComparer.Ordinal) { PrendaRegistrar, PrendaLevantar, PrendaSinPrenda };
+
+    /// <summary>Documento de soporte de la decisión (mismos DocTipo de FLIT 2: <c>PrendaDocTipos</c>); <c>sin_prenda</c> no pide documento.</summary>
+    public static string? DocumentoDePrenda(string? decision) => decision?.Trim().ToLowerInvariant() switch
+    {
+        PrendaRegistrar => "prenda_registro",
+        PrendaLevantar => "prenda_levantamiento",
+        _ => null,
+    };
+
+    /// <summary>
+    /// El documento de la decisión de prenda solo se reclama si la matriz del tipo lo trae; los tipos de acción única
+    /// (levantamiento, inscripción) ya traen el suyo con otro código y ese es el que se exige.
+    /// </summary>
+    public static string? DocumentoDePrendaDelTipo(DefinicionTipoDto def, string? decision) =>
+        DocumentoDePrenda(decision) is { } doc && def.Documentos.Any(d => string.Equals(d.DocCode, doc, StringComparison.OrdinalIgnoreCase)) ? doc : null;
+
+    /// <summary>Todos los DocTipo de prenda que un borrador con prenda puede recibir como adjunto.</summary>
+    public static readonly IReadOnlySet<string> DocumentosDePrenda = new HashSet<string>(StringComparer.Ordinal) { "prenda_solicitud", "prenda_registro", "prenda_levantamiento" };
+
+    /// <summary>Levantar en un tipo con prenda complementaria (sin acción única ni prenda obligatoria): el acreedor y el NIT son opcionales.</summary>
+    public static bool LevantarSinAcreedor(DefinicionTipoDto def, string? decision) =>
+        string.Equals(decision, PrendaLevantar, StringComparison.Ordinal)
+        && def.Flags.PermitePrendaComplementaria && !def.Flags.RequierePrenda && string.IsNullOrEmpty(def.Flags.AccionPrenda);
 
     /// <summary>
     /// Valor comercial solo si el tipo lo pide; prenda con acreedor y NIT cuando el tipo la exige o la admite y el ciudadano
@@ -268,24 +453,46 @@ public static partial class ReglasBorrador
             errores.Agregar("valorComercial", "Indique el valor comercial.");
         }
 
-        var admitePrenda = def.Flags.RequierePrenda || def.Flags.PermitePrendaComplementaria;
+        var admitePrenda = def.Flags.RequierePrenda || def.Flags.PermitePrendaComplementaria || !string.IsNullOrEmpty(def.Flags.AccionPrenda);
         if (body.Prenda is { } p)
         {
             if (!admitePrenda)
                 errores.Agregar("prenda", "Este tipo de trámite no admite prenda.");
             else
             {
-                var tiene = def.Flags.RequierePrenda || p.TienePrenda;
+                var decision = p.Decision?.Trim().ToLowerInvariant();
+                if (!string.IsNullOrEmpty(decision) && !DecisionesPrenda.Contains(decision))
+                    errores.Agregar("prenda.decision", "Elija registrar, levantar o sin prenda.");
+                else if (decision == PrendaSinPrenda && def.Flags.RequierePrenda)
+                    errores.Agregar("prenda.decision", "Este tipo de trámite exige indicar la prenda.");
+                if (string.IsNullOrEmpty(decision))
+                    decision = null;
+
+                // Con decisión explícita manda ella; sin decisión se conserva el comportamiento anterior (TienePrenda).
+                var tiene = decision switch
+                {
+                    PrendaRegistrar or PrendaLevantar => true,
+                    PrendaSinPrenda => false,
+                    _ => def.Flags.RequierePrenda || p.TienePrenda,
+                };
                 var acreedor = p.Acreedor?.Trim();
                 var nit = new string((p.NitAcreedor ?? string.Empty).Where(char.IsDigit).ToArray());
-                if (tiene && string.IsNullOrEmpty(acreedor))
+                // Regla de FLIT 2 (PrendaGate): levantar en un tipo de prenda complementaria no exige acreedor ni NIT; si vienen se validan.
+                var exigeAcreedor = tiene && !LevantarSinAcreedor(def, decision);
+                if (exigeAcreedor && string.IsNullOrEmpty(acreedor))
                     errores.Agregar("prenda.acreedor", "Indique el acreedor de la prenda.");
                 else if (acreedor is { Length: > 150 })
                     errores.Agregar("prenda.acreedor", "El nombre del acreedor es demasiado largo.");
-                if (tiene && !Nit().IsMatch(nit))
+                if (tiene && (exigeAcreedor || nit.Length > 0) && !Nit().IsMatch(nit))
                     errores.Agregar("prenda.nitAcreedor", "Indique el NIT del acreedor.");
+                // Solo el levantamiento de acción única la exige (PrendaGate); en los demás tipos no se guarda.
+                var entidad = def.Flags.AccionPrenda == PrendaLevantar && tiene ? p.EntidadLevantamiento?.Trim() : null;
+                if (entidad is { Length: > MaxEntidadLevantamiento })
+                    errores.Agregar("prenda.entidadLevantamiento", $"Use hasta {MaxEntidadLevantamiento} caracteres.");
+                if (string.IsNullOrEmpty(entidad))
+                    entidad = null;
                 if (!errores.Hay)
-                    prenda = tiene ? new PrendaDatos(true, acreedor, nit) : new PrendaDatos(false, null, null);
+                    prenda = tiene ? new PrendaDatos(true, acreedor, nit, decision, entidad) : new PrendaDatos(false, null, null, decision);
             }
         }
         else if (def.Flags.RequierePrenda)
@@ -340,7 +547,8 @@ public static partial class ReglasBorrador
         DatosSolicitud datos,
         IReadOnlyList<(string Rol, short Ordinal)> personas,
         IReadOnlySet<string> documentosCargados,
-        CapturaConsulta captura = default)
+        CapturaConsulta captura = default,
+        ValoresActualesVehiculo? runt = null)
     {
         string? PasoDe(string sectionType) => def.Pasos.FirstOrDefault(p => p.SectionTypes.Contains(sectionType, StringComparer.Ordinal))?.Clave;
 
@@ -357,14 +565,26 @@ public static partial class ReglasBorrador
         if (def.Flags.RequiereComercial && datos.Comercial?.Valor is not > 0)
             pendientes.Add(new PendienteDto("comercial_requerido", "valorComercial", PasoDe("commercial")));
 
-        var prendaExigida = def.Flags.RequierePrenda || datos.Prenda?.Tiene == true;
+        var prendaExigida = (def.Flags.RequierePrenda || datos.Prenda?.Tiene == true || !string.IsNullOrEmpty(def.Flags.AccionPrenda))
+            && !LevantarSinAcreedor(def, datos.Prenda?.Decision?.Trim().ToLowerInvariant());
         if (prendaExigida && string.IsNullOrWhiteSpace(datos.Prenda?.Acreedor))
             pendientes.Add(new PendienteDto("prenda_acreedor_requerido", "prenda.acreedor", PasoDe("prenda_decision")));
         if (prendaExigida && string.IsNullOrWhiteSpace(datos.Prenda?.NitAcreedor))
             pendientes.Add(new PendienteDto("prenda_nit_requerido", "prenda.nitAcreedor", PasoDe("prenda_decision")));
+        if (def.Flags.AccionPrenda == PrendaLevantar && string.IsNullOrWhiteSpace(datos.Prenda?.EntidadLevantamiento))
+            pendientes.Add(new PendienteDto("prenda_entidad_requerida", "prenda.entidadLevantamiento", PasoDe("prenda_decision")));
 
-        foreach (var doc in def.Documentos.Where(d => d.Obligatorio && string.IsNullOrWhiteSpace(d.Condicion) && !documentosCargados.Contains(d.DocCode)))
-            pendientes.Add(new PendienteDto("documento_requerido", doc.DocCode, PasoDe("document_checklist")));
+        // Lo que reclama una declaración (certificado de blindaje, documentos de la causal) lo decide ella, no la matriz.
+        var deLasDeclaraciones = DocumentosDeDeclaraciones(def);
+        foreach (var doc in def.Documentos.Where(d => d.Obligatorio && string.IsNullOrWhiteSpace(d.Condicion) && !deLasDeclaraciones.Contains(d.DocCode) && !documentosCargados.Contains(d.DocCode)))
+            pendientes.Add(new PendienteDto(PendienteDocumentoRequerido, doc.DocCode, PasoDe("document_checklist")));
+
+        foreach (var x in PendientesDeDeclaraciones(def, campos, datos.Requisitos?.Transformaciones ?? [], documentosCargados, runt))
+            pendientes.Add(new PendienteDto(x.Codigo, x.Referencia, x.Paso, x.Motivo));
+
+        if (DocumentoDePrendaDelTipo(def, datos.Prenda?.Decision) is { } docPrenda && !documentosCargados.Contains(docPrenda)
+            && !pendientes.Any(x => x.Codigo == PendienteDocumentoRequerido && string.Equals(x.Referencia, docPrenda, StringComparison.OrdinalIgnoreCase)))
+            pendientes.Add(new PendienteDto(PendienteDocumentoRequerido, docPrenda, PasoDe("prenda_decision") ?? PasoDe("document_checklist")));
 
         var pasos = def.Pasos.Select(p =>
         {
