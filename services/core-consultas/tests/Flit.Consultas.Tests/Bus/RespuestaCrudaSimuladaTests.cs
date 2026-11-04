@@ -95,7 +95,14 @@ public sealed class RespuestaCrudaSimuladaTests
 
         fixtures.Keys.Should().BeEquivalentTo(
         "proveedor-kyverum-conductor.json", "proveedor-kyverum-conductor-sin-licencias.json", "proveedor-verifik-rues.json",
-        "proveedor-verifik-simit-persona.json", "proveedor-verifik-simit-vehiculo.json", "proveedor-verifik-simit-sin-registros.json");
+        "proveedor-verifik-simit-persona.json", "proveedor-verifik-simit-vehiculo.json", "proveedor-verifik-simit-sin-registros.json",
+        "proveedor-impuesto-bandera-falsa-con-timeout.json", "proveedor-impuesto-corta-con-error.json", "proveedor-impuesto-corta-sin-typeerror.json",
+        "proveedor-impuesto-credenciales-faltantes.json", "proveedor-impuesto-cuerpo-ilegible.json", "proveedor-impuesto-deuda-completa.json",
+        "proveedor-impuesto-deuda-sin-monto.json", "proveedor-impuesto-deuda-solo-total.json", "proveedor-impuesto-documento-no-coincide-en-validity.json",
+        "proveedor-impuesto-documento-no-coincide.json", "proveedor-impuesto-error-con-monto.json", "proveedor-impuesto-error-seleccionando-modelo.json",
+        "proveedor-impuesto-extendida-19-llaves.json", "proveedor-impuesto-requiere-actualizacion.json", "proveedor-impuesto-sin-detalle-15-llaves.json",
+        "proveedor-impuesto-sin-deuda-con-datos.json", "proveedor-impuesto-sin-deuda-en-blanco.json", "proveedor-impuesto-vacia.json",
+        "proveedor-impuesto-vehiculo-cancelado.json", "proveedor-impuesto-vehiculo-no-encontrado.json");
         foreach (var (archivo, json) in fixtures)
         {
             var esSimit = archivo.Contains("simit", StringComparison.Ordinal);
