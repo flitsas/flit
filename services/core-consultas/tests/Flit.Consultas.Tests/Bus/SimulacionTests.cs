@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Flit.Consultas.Api.Bus;
 using Flit.Consultas.Api.Impuesto;
 using Flit.Consultas.Api.Simulacion;
@@ -88,6 +89,42 @@ public sealed class SimulacionTests
         var lector = new JsonParser(JsonParser.Settings.Default.WithIgnoreUnknownFields(false));
         foreach (var json in fixtures.Values)
             FluentActions.Invoking(() => lector.Parse<ConsultarVehiculoIntempoResponse>(json)).Should().NotThrow();
+    }
+
+    // Plan C3 (:467): con un organismo fuera del catálogo el departamento queda nulo y la celda N/A sin consultar. Sin red ni base:
+    // el organismo del fixture se contrasta con las semillas del catálogo (core-api) y de los departamentos activos (ADR-0080).
+    [Fact]
+    public void El_organismo_del_fixture_de_impuesto_existe_en_el_catalogo_con_municipio_y_departamento_activo()
+    {
+        var raiz = RaizDelRepo();
+        var ddl = Path.Combine(raiz, "services", "core-api", "src", "Flit.Infrastructure", "Persistence", "Sql", "Ddl");
+        var catalogo = File.ReadAllText(Path.Combine(ddl, "27-HU10659-transit-offices-runt-catalog-seed.sql"));
+        var municipios = File.ReadAllText(Path.Combine(ddl, "34-transit-offices-city-department-names.sql"));
+        var semilla = File.ReadAllText(Path.Combine(raiz, "services", "core-consultas", "src", "Flit.Consultas.Api", "Persistence", "Migrations", "20261104150611_ImpuestoDepartamentosHabilitados.cs"));
+        var activos = Regex.Matches(semilla, @"'(?<codigo>\d{2})',\s*'[^']+',\s*true,").Select(m => m.Groups["codigo"].Value).ToList();
+        activos.Should().BeEquivalentTo("50", "52", "94");
+        var fixture = new JsonParser(JsonParser.Settings.Default.WithIgnoreUnknownFields(false)).Parse<ConsultarVehiculoIntempoResponse>(FixturesIntempo.Todos()["intempo-impuesto.json"]);
+        var organismo = fixture.Vehiculo.InformacionGeneral.OrganismoTransito;
+
+        var filas = Regex.Matches(catalogo, @"VALUES \(\s*'[^']+'::uuid,\s*'(?<codigo>[^']+)',\s*'(?<nombre>[^']+)',\s*'(?<departamento>[^']+)',\s*'(?<ciudad>[^']*)',\s*true\s*\)")
+            .Where(m => m.Groups["nombre"].Value == organismo).ToList();
+
+        filas.Should().ContainSingle($"«{organismo}» debe estar una vez en el catálogo sembrado y activo");
+        activos.Should().Contain(filas[0].Groups["departamento"].Value);
+        filas[0].Groups["ciudad"].Value.Should().NotBeEmpty();
+        Regex.IsMatch(municipios, $@"\('{filas[0].Groups["codigo"].Value}', '[^']+', '[^']+'").Should().BeTrue("la consulta de impuesto exige el nombre del municipio y del departamento");
+    }
+
+    /// <summary>Sube desde la salida de las pruebas hasta la carpeta con <c>contracts</c> y <c>services</c>.</summary>
+    private static string RaizDelRepo()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            if (Directory.Exists(Path.Combine(dir.FullName, "contracts")) && Directory.Exists(Path.Combine(dir.FullName, "services")))
+                return dir.FullName;
+        }
+
+        throw new InvalidOperationException("No se encontró la raíz del repositorio desde la salida de las pruebas.");
     }
 
     [Theory]
