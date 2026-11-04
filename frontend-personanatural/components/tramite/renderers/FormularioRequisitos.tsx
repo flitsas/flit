@@ -11,7 +11,7 @@ import { TarjetaDestino } from "@/components/tramite/TarjetaDestino";
 import { TotalLiquidado } from "@/components/tramite/TotalLiquidado";
 import type { CampoDefinicion, Cotizacion, DeclaracionTipo, DefinicionTipo, DocumentoRequerido, GravamenRunt, ValoresActualesRunt } from "@/lib/api/cliente";
 import { categoriaRuntDe, claveDeCampoDeclaracion, declaracionesActivas, declaracionesDe, destinoDelTipo, erroresDeDeclaraciones, faltaDestino, valoresDeDeclaraciones } from "@/lib/tramite/declaraciones";
-import { alEscribirMoneda, formatearPesos, numeroMoneda, textoMonedaCompleta } from "@/lib/formato";
+import { alEscribirMoneda, formatearFecha, formatearPesos, numeroMoneda, textoMonedaCompleta } from "@/lib/formato";
 import { claveAdicionalesActivos, claveCotizacion } from "@/lib/tramite/cotizacion";
 import { ApiError, mensajeDe } from "@/lib/api/errores";
 import {
@@ -93,8 +93,9 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
   const accionFija = (definicionBase.flags.accionPrenda === "levantar" ? "levantar" : definicionBase.flags.accionPrenda === "registrar" ? "registrar" : null) as AccionPrenda | null;
   const [accionPrenda, setAccionPrenda] = useState<AccionPrenda>(() => accionFija ?? accionGuardada(solicitud.datos.prenda?.decision));
   // `null` = la persona aún no escribió: se muestra el acreedor del RUNT si llegó (editable). Al escribir, manda lo escrito.
-  const [acreedorEscrito, setAcreedorEscrito] = useState<string | null>(() => solicitud.datos.prenda?.acreedor ?? null);
-  const [nitEscrito, setNitEscrito] = useState<string | null>(() => solicitud.datos.prenda?.nitAcreedor ?? null);
+  // Un borrador guardado sin acreedor/NIT (vacío) cuenta como «no escrito»: así la precarga del RUNT también aplica al reabrirlo.
+  const [acreedorEscrito, setAcreedorEscrito] = useState<string | null>(() => solicitud.datos.prenda?.acreedor?.trim() || null);
+  const [nitEscrito, setNitEscrito] = useState<string | null>(() => solicitud.datos.prenda?.nitAcreedor?.trim() || null);
   const [entidadLevantamiento, setEntidadLevantamiento] = useState(() => solicitud.datos.prenda?.entidadLevantamiento ?? "");
   const verPrenda = t.prenda && (t.prendaObligatoria || tienePrenda);
   const gravamen = useQuery<GravamenRunt>({
@@ -104,8 +105,16 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
     staleTime: 5 * 60 * 1000,
     retry: false,
   });
-  const acreedor = acreedorEscrito ?? gravamen.data?.acreedor ?? "";
-  const nitAcreedor = nitEscrito ?? (gravamen.data?.nitAcreedor ?? "").replace(/\D/g, "");
+  const acreedorRunt = gravamen.data?.acreedor?.trim() ?? "";
+  const nitRunt = (gravamen.data?.nitAcreedor ?? "").replace(/\D/g, "");
+  // Como en FLIT 2: al levantar una prenda que el RUNT confirmó con sus datos, el acreedor y el NIT son de solo lectura.
+  const levantando = (accionFija ?? accionPrenda) === "levantar";
+  const acreedorBloqueado = levantando && acreedorRunt !== "";
+  const nitBloqueado = levantando && nitRunt !== "";
+  const acreedor = acreedorBloqueado ? acreedorRunt : (acreedorEscrito ?? acreedorRunt);
+  const nitAcreedor = nitBloqueado ? nitRunt : (nitEscrito ?? nitRunt);
+  const runtReportaPrenda = Boolean(gravamen.data?.tienePrenda || gravamen.data?.tieneGravamenes);
+  const fechaInscripcion = formatearFecha(gravamen.data?.fechaInscripcion);
   const [transformaciones, setTransformaciones] = useState<string[]>(() => solicitud.datos.requisitos?.transformaciones ?? []);
   const cotizacion = useQuery<Cotizacion>({
     queryKey: claveCotizacion(solicitud.organismoId, definicion.code, transformaciones),
@@ -377,10 +386,46 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
               {gravamen.isError && !gravamen.isFetching && (
                 <p role="status">No pudimos consultar el gravamen en el RUNT. Escribe el acreedor y su NIT a mano.</p>
               )}
-              {gravamen.data?.tienePrenda && !gravamen.data.acreedor && (
-                <p role="status">El RUNT reporta una prenda. El acreedor se muestra cuando se valida la identidad; mientras tanto puedes escribirlo.</p>
+              {runtReportaPrenda && (
+                <p role="status" className="font-normal text-foreground">
+                  El RUNT reporta gravamen o prenda para este vehículo.
+                  {!acreedorRunt && " No entregó el detalle del acreedor: escríbelo a mano."}
+                </p>
               )}
             </div>
+          )}
+          {verPrenda && runtReportaPrenda && (
+            <details open className="mt-3 rounded-[9px] border border-border p-3 text-sm">
+              <summary className="cursor-pointer font-normal">Ver información de prenda / gravamen del RUNT</summary>
+              <dl className="mt-2 grid gap-x-6 gap-y-1 sm:grid-cols-2">
+                <div>
+                  <dt className="text-xs font-light text-muted-foreground">TIENE GRAVÁMENES</dt>
+                  <dd>{gravamen.data?.tieneGravamenes ? "SI" : "NO"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-light text-muted-foreground">TIENE PRENDAS</dt>
+                  <dd>{gravamen.data?.tienePrenda ? "SI" : "NO"}</dd>
+                </div>
+                {acreedorRunt && (
+                  <div>
+                    <dt className="text-xs font-light text-muted-foreground">ACREEDOR</dt>
+                    <dd>{acreedorRunt}</dd>
+                  </div>
+                )}
+                {nitRunt && (
+                  <div>
+                    <dt className="text-xs font-light text-muted-foreground">DOCUMENTO ACREEDOR</dt>
+                    <dd>{nitRunt}</dd>
+                  </div>
+                )}
+                {fechaInscripcion && (
+                  <div>
+                    <dt className="text-xs font-light text-muted-foreground">FECHA DE INSCRIPCIÓN</dt>
+                    <dd>{fechaInscripcion}</dd>
+                  </div>
+                )}
+              </dl>
+            </details>
           )}
           {(t.prendaObligatoria || tienePrenda) && accionPrenda === "levantar" && (
             <p role="note" className="mt-3 text-sm font-light text-muted-foreground">
@@ -391,8 +436,9 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <Field label="Acreedor (beneficiario) *" error={mostrar("prenda.acreedor")}>
                 <input
-                  className="field"
+                  className={`field${acreedorBloqueado ? " opacity-70" : ""}`}
                   autoComplete="off"
+                  readOnly={acreedorBloqueado}
                   aria-invalid={mostrar("prenda.acreedor") ? true : undefined}
                   value={acreedor}
                   onChange={(e) => {
@@ -404,9 +450,10 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
               </Field>
               <Field label="NIT / Documento del acreedor *" error={mostrar("prenda.nitAcreedor")}>
                 <input
-                  className="field"
+                  className={`field${nitBloqueado ? " opacity-70" : ""}`}
                   inputMode="numeric"
                   autoComplete="off"
+                  readOnly={nitBloqueado}
                   aria-invalid={mostrar("prenda.nitAcreedor") ? true : undefined}
                   value={nitAcreedor}
                   onChange={(e) => {

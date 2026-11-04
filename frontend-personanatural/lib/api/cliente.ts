@@ -260,9 +260,13 @@ export interface DiagnosticoGuardado extends Diagnostico {
 /** Gravamen que consta en el RUNT para el vehículo del borrador (GET /solicitudes/{id}/vehiculo/gravamen). */
 export interface GravamenRunt {
   tienePrenda: boolean;
-  /** Solo llega si alguna parte de la solicitud ya validó su identidad. */
+  /** El RUNT reporta gravámenes (distinto de prenda). */
+  tieneGravamenes?: boolean;
+  /** Acreedor y NIT que consultó el RUNT; ya no dependen de validar la identidad. Vacíos si el RUNT no los entrega. */
   acreedor: string | null;
   nitAcreedor: string | null;
+  /** Fecha de inscripción de la prenda (ISO, con o sin hora). */
+  fechaInscripcion?: string | null;
   aviso: "sin_gravamen" | null;
 }
 

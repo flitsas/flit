@@ -73,10 +73,47 @@ describe("gravamen RUNT en la prenda", () => {
     expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).toHaveValue("");
   });
 
-  it("con prenda pero acreedor aún no visible (identidad sin validar) lo indica", async () => {
+  it("con prenda del RUNT muestra el aviso y el resumen (fecha DD/MM/YYYY) y precarga acreedor y NIT", async () => {
+    await abrir(definicion(), {
+      [GRAVAMEN]: () => json({ tienePrenda: true, tieneGravamenes: true, acreedor: "Banco Uno", nitAcreedor: "860002964", fechaInscripcion: "2024-03-07T00:00:00Z", aviso: null }),
+    });
+    fireEvent.click(within(tarjeta()).getByLabelText("Sí"));
+    expect(await within(tarjeta()).findByText(/El RUNT reporta gravamen o prenda para este vehículo/)).toBeInTheDocument();
+    expect(within(tarjeta()).getByText("Ver información de prenda / gravamen del RUNT")).toBeInTheDocument();
+    expect(within(tarjeta()).getByText("TIENE GRAVÁMENES").nextElementSibling).toHaveTextContent("SI");
+    expect(within(tarjeta()).getByText("TIENE PRENDAS").nextElementSibling).toHaveTextContent("SI");
+    expect(within(tarjeta()).getByText("ACREEDOR").nextElementSibling).toHaveTextContent("Banco Uno");
+    expect(within(tarjeta()).getByText("DOCUMENTO ACREEDOR").nextElementSibling).toHaveTextContent("860002964");
+    expect(within(tarjeta()).getByText("FECHA DE INSCRIPCIÓN").nextElementSibling).toHaveTextContent("07/03/2024");
+    expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).toHaveValue("Banco Uno");
+    expect(within(tarjeta()).getByLabelText("NIT / Documento del acreedor *")).toHaveValue("860002964");
+    expect(screen.queryByText(/se muestra cuando se valida la identidad/)).toBeNull();
+  });
+
+  it("al levantar una prenda con datos del RUNT, acreedor y NIT quedan de solo lectura; al registrar se pueden corregir", async () => {
+    await abrir(definicion(), { [GRAVAMEN]: () => json({ tienePrenda: true, acreedor: "Banco Uno", nitAcreedor: "860002964", aviso: null }) });
+    fireEvent.click(within(tarjeta()).getByLabelText("Sí"));
+    await waitFor(() => expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).toHaveValue("Banco Uno"));
+    expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).not.toHaveAttribute("readonly");
+    fireEvent.click(within(tarjeta()).getByLabelText("Levantar la prenda inscrita"));
+    expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).toHaveAttribute("readonly");
+    expect(within(tarjeta()).getByLabelText("NIT / Documento del acreedor *")).toHaveAttribute("readonly");
+  });
+
+  it("reabrir un borrador guardado sin acreedor ni NIT precarga los del RUNT", async () => {
+    await abrir(definicion(), { [GRAVAMEN]: () => json({ tienePrenda: true, acreedor: "Banco Uno", nitAcreedor: "860.002.964", aviso: null }) }, borrador({ datos: { diagnostico: { ...DIAGNOSTICO_OK, fecha: "2026-10-28T20:23:00Z" }, prenda: { tiene: true, acreedor: "", nitAcreedor: "", decision: "registrar" } } }));
+    await waitFor(() => expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).toHaveValue("Banco Uno"));
+    expect(within(tarjeta()).getByLabelText("NIT / Documento del acreedor *")).toHaveValue("860002964");
+  });
+
+  it("con prenda pero sin acreedor no inventa nada: avisa y deja escribirlo a mano", async () => {
     await abrir(definicion(), { [GRAVAMEN]: () => json({ tienePrenda: true, acreedor: null, nitAcreedor: null, aviso: null }) });
     fireEvent.click(within(tarjeta()).getByLabelText("Sí"));
-    expect(await within(tarjeta()).findByText(/se muestra cuando se valida la identidad/)).toBeInTheDocument();
+    expect(await within(tarjeta()).findByText(/No entregó el detalle del acreedor: escríbelo a mano/)).toBeInTheDocument();
+    expect(within(tarjeta()).queryByText("ACREEDOR")).toBeNull();
+    expect(within(tarjeta()).queryByText("FECHA DE INSCRIPCIÓN")).toBeNull();
+    expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).toHaveValue("");
+    expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).not.toHaveAttribute("readonly");
   });
 
   it("no consulta el gravamen si no hay prenda, y si falla no estorba", async () => {
@@ -91,7 +128,7 @@ describe("gravamen RUNT en la prenda", () => {
   it("si el RUNT reporta prenda y el acreedor llega vacío u omitido, lo avisa igual", async () => {
     await abrir(definicion(), { [GRAVAMEN]: () => json({ tienePrenda: true, acreedor: "", aviso: null }) });
     fireEvent.click(within(tarjeta()).getByLabelText("Sí"));
-    expect(await within(tarjeta()).findByText(/se muestra cuando se valida la identidad/)).toBeInTheDocument();
+    expect(await within(tarjeta()).findByText(/No entregó el detalle del acreedor/)).toBeInTheDocument();
   });
 
   it("en un tipo de acción única el portal no ofrece elegir (la fija el servidor)", async () => {
