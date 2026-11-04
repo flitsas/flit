@@ -21,8 +21,10 @@ base=${ConnectionStrings__Core:?falta ConnectionStrings__Core (ci-servicios.sh)}
 pg_cont=${CI_PG_CONTENEDOR:?falta CI_PG_CONTENEDOR}
 
 # Orden: del carril más largo al más corto, para que el último en arrancar no alargue la corrida.
-# Admin va en 2 shards (ADMIN_SHARDS): es el camino crítico y, corriendo solo, dejaba la CPU ociosa (2026-11-03).
-export ADMIN_SHARDS=${ADMIN_SHARDS:-2}
+# ADMIN_SHARDS (var CI_VPS_ADMIN_SHARDS) parte admin por clase. Por defecto 1: con 2 (2026-11-04, run 41838341625) cada
+# proceso de admin ocupó ~3,5 GB, el slice de runners (MemoryHigh 12G) se quedó sin memoria y la 177 entró en thrashing
+# (carga 220, 79 % de CPU en el kernel). Subirlo solo con más memoria para el slice.
+export ADMIN_SHARDS=${ADMIN_SHARDS:-1}
 carriles=()
 for ((i = 0; i < ADMIN_SHARDS; i++)); do carriles+=("admin:$i"); done
 carriles+=(integration:0 integration:1 integration:2 integration:3 resto)

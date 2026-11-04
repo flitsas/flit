@@ -276,6 +276,7 @@ jobs:
           PARALELO: ${{ vars.CI_VPS_PARALELO || '3' }}
           XUNIT_HILOS: ${{ vars.CI_VPS_XUNIT_HILOS || '2' }}
           XUNIT_HILOS_ADMIN: ${{ vars.CI_VPS_XUNIT_HILOS_ADMIN || '4' }}
+          ADMIN_SHARDS: ${{ vars.CI_VPS_ADMIN_SHARDS || '1' }}
           COBERTURA: ${{ github.event_name == 'push' && '1' || '' }}
 
       # Lo mismo que «aot-publish» en GitHub, después de las pruebas para no competir con ellas por CPU.
