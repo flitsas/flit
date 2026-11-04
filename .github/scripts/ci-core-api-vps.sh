@@ -8,7 +8,7 @@
 #   - como mucho $PARALELO a la vez (por defecto 3), del más largo al más corto;
 #   - cada proceso de pruebas con a lo sumo $XUNIT_HILOS hilos de xUnit;
 #   - con `nice`, para que el propio runner (Runner.Worker) no se quede sin CPU («lost communication»);
-#   - cada carril con SU servidor Postgres (en RAM, con flit_dev ya migrada copiada) y SU vhost de RabbitMQ: en GitHub
+#   - cada carril con SU servidor Postgres (en disco con fsync off, con flit_dev ya migrada copiada) y SU vhost de RabbitMQ: en GitHub
 #     cada carril tiene su máquina, y aquí no deben pisarse (pg_snapshot_xmin es de todo el servidor).
 set -uo pipefail
 PARALELO=${PARALELO:-3}
