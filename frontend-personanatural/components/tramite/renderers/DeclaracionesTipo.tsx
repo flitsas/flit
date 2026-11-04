@@ -79,7 +79,7 @@ export function DeclaracionesTipo({ cliente, definicion, declaraciones, campos, 
   );
 }
 
-function Soporte({
+export function Soporte({
   decl,
   soporte,
   valor,
@@ -127,8 +127,8 @@ function AyudaRunt({ texto }: { texto: string | undefined }) {
   return texto ? <p className="mt-1 text-xs font-light text-muted-foreground">{texto}</p> : null;
 }
 
-function ControlDeclaracion({ cliente, decl, solicitudId, valor, ayuda, error, onCambiar, onTocar }: { cliente: ClientePortal; decl: DeclaracionTipo; solicitudId: string; valor: string; ayuda: string | undefined; error: string | undefined; onCambiar: (v: string) => void; onTocar: () => void }) {
-  const etiqueta = `${decl.etiqueta}${decl.obligatoria ? " *" : ""}`;
+export function ControlDeclaracion({ cliente, decl, solicitudId, valor, ayuda, error, requerida, onCambiar, onTocar }: { requerida?: boolean; cliente: ClientePortal; decl: DeclaracionTipo; solicitudId: string; valor: string; ayuda: string | undefined; error: string | undefined; onCambiar: (v: string) => void; onTocar: () => void }) {
+  const etiqueta = `${decl.etiqueta}${decl.obligatoria || requerida ? " *" : ""}`;
   // Con opciones en línea (blindaje, causal, combustibles) no hace falta el catálogo; sin ellas, las opciones vienen del servidor.
   if (decl.control === "seleccion_catalogo" && decl.catalogo !== "" && decl.opciones.length === 0) {
     return <ControlCatalogo cliente={cliente} decl={decl} solicitudId={solicitudId} etiqueta={etiqueta} valor={valor} ayuda={ayuda} error={error} onCambiar={onCambiar} onTocar={onTocar} />;

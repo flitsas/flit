@@ -2,7 +2,7 @@
 // El back las describe en la definición (`declaraciones`) y aquí solo se decide qué se muestra, qué soportes pide cada opción, qué
 // falta y qué valores se guardan. Ningún tipo de trámite está nombrado: todo sale de los metadatos de la declaración.
 import type { Adjunto, DeclaracionTipo, DefinicionTipo, OpcionDeclaracion } from "@/lib/api/cliente";
-import { adjuntoDe, MENSAJE_FALTA_ARCHIVO, MENSAJE_OBLIGATORIO } from "@/lib/tramite/requisitos";
+import { adjuntoDe, contextoVacio, esExigible, MENSAJE_FALTA_ARCHIVO, MENSAJE_OBLIGATORIO } from "@/lib/tramite/requisitos";
 
 /** Control que el renderer de declaraciones NO pinta: la secretaría de destino va en el diagnóstico (web) o en Requisitos (punto) con `OrganismoDestinoField`. */
 export const CONTROL_DESTINO = "organismo_destino";
@@ -47,6 +47,13 @@ export function declaracionActiva(decl: DeclaracionTipo, transformaciones: reado
   const atada = transformacionDe(decl);
   return atada === null || transformaciones.some((t) => t.toUpperCase() === atada);
 }
+
+/** La declaración de trámite simultáneo que activa esa transformación (`CAMBIO_COLOR`…), si la definición la trae. */
+export const declaracionDeTransformacion = (d: DefinicionTipo, codigo: string): DeclaracionTipo | undefined =>
+  declaracionesDe(d).find((x) => transformacionDe(x) === codigo.toUpperCase());
+
+/** Las declaraciones propias del tipo (no atadas a una transformación): van en la tarjeta «Declaraciones del trámite». */
+export const declaracionesPropias = (decls: readonly DeclaracionTipo[]): DeclaracionTipo[] => decls.filter((x) => transformacionDe(x) === null);
 
 export const declaracionesActivas = (d: DefinicionTipo, transformaciones: readonly string[]): DeclaracionTipo[] =>
   declaracionesDe(d).filter((x) => declaracionActiva(x, transformaciones));
@@ -122,6 +129,24 @@ export const nombreDelDocumento = (d: DefinicionTipo, docCode: string): string =
  * si la declaración lo marca así (`soporteObligatorio`), y opcional en otro caso (p. ej. el soporte de un cambio de combustible).
  * Con un valor de catálogo (sin opción en línea) manda el soporte general y su `soporteObligatorio`. Sin valor no se pide ninguno.
  */
+/**
+ * Una transformación cuyo soporte la matriz del tipo marca como obligatorio mientras la transformación esté activa (p. ej. la
+ * factura de carrocería, «Se pide si el trámite cambia la carrocería») lo exige también aquí: es lo que revisa el gate del punto.
+ * El de color y combustible no está en la matriz y sigue opcional, como en FLIT 2.
+ */
+function obligadoPorMatriz(decl: DeclaracionTipo, docCode: string, d: DefinicionTipo): boolean {
+  const atada = transformacionDe(decl);
+  if (atada === null) return false;
+  const doc = d.documentos.find((x) => x.docCode === docCode);
+  return doc !== undefined && esExigible(doc, { ...contextoVacio, transformaciones: [atada] });
+}
+
+/** El soporte de una transformación activa, aunque aún no haya valor elegido (FLIT 2 muestra la carga al activarla). */
+export function soporteDeTransformacion(decl: DeclaracionTipo, d: DefinicionTipo): SoporteDeclaracion | null {
+  if (!decl.docCodeSoporte) return null;
+  return { docCode: decl.docCodeSoporte, nombre: nombreDelDocumento(d, decl.docCodeSoporte), obligatorio: decl.soporteObligatorio || obligadoPorMatriz(decl, decl.docCodeSoporte, d) };
+}
+
 export function soportesDe(decl: DeclaracionTipo, valor: string, d: DefinicionTipo): SoporteDeclaracion[] {
   if (valor.trim() === "") return [];
   const opcion = opcionElegida(decl, valor);
@@ -131,9 +156,10 @@ export function soportesDe(decl: DeclaracionTipo, valor: string, d: DefinicionTi
     const propios = opcion.docCodes.length > 0;
     codigos = propios ? opcion.docCodes : decl.docCodeSoporte ? [decl.docCodeSoporte] : [];
     obligatorio = opcion.exigeSoporte || (!propios && decl.soporteObligatorio);
+    if (!propios && !obligatorio && decl.docCodeSoporte) obligatorio = obligadoPorMatriz(decl, decl.docCodeSoporte, d);
   } else {
     codigos = decl.docCodeSoporte ? [decl.docCodeSoporte] : [];
-    obligatorio = decl.soporteObligatorio;
+    obligatorio = decl.soporteObligatorio || (decl.docCodeSoporte !== "" && obligadoPorMatriz(decl, decl.docCodeSoporte, d));
   }
   return [...new Set(codigos)].map((docCode) => ({ docCode, nombre: nombreDelDocumento(d, docCode), obligatorio }));
 }

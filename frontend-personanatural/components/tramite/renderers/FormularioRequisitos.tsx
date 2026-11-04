@@ -7,11 +7,12 @@ import { Drop, type EstadoArchivo } from "@/components/tramite/Drop";
 import { useWizard, type PropsSeccion } from "@/components/tramite/ContextoWizard";
 import { Btn, Card, Field } from "@/components/tramite/piezas";
 import { DeclaracionesTipo, type SubidaSoporte } from "@/components/tramite/renderers/DeclaracionesTipo";
+import { TarjetasTransformaciones } from "@/components/tramite/renderers/TarjetasTransformaciones";
 import { TarjetaDestino } from "@/components/tramite/TarjetaDestino";
 import { TotalLiquidado } from "@/components/tramite/TotalLiquidado";
 import type { CampoDefinicion, Cotizacion, DeclaracionTipo, DefinicionTipo, DocumentoRequerido, GravamenRunt, ValoresActualesRunt } from "@/lib/api/cliente";
-import { categoriaRuntDe, claveDeCampoDeclaracion, declaracionesActivas, declaracionesDe, destinoDelTipo, erroresDeDeclaraciones, faltaDestino, valoresDeDeclaraciones } from "@/lib/tramite/declaraciones";
-import { alEscribirMoneda, formatearFecha, formatearPesos, numeroMoneda, textoMonedaCompleta } from "@/lib/formato";
+import { categoriaRuntDe, claveDeCampoDeclaracion, declaracionDeTransformacion, declaracionesActivas, declaracionesDe, declaracionesPropias, destinoDelTipo, erroresDeDeclaraciones, faltaDestino, valoresDeDeclaraciones } from "@/lib/tramite/declaraciones";
+import { alEscribirMoneda, formatearFecha, numeroMoneda, textoMonedaCompleta } from "@/lib/formato";
 import { claveAdicionalesActivos, claveCotizacion } from "@/lib/tramite/cotizacion";
 import { ApiError, mensajeDe } from "@/lib/api/errores";
 import {
@@ -25,7 +26,6 @@ import {
   MENSAJE_OBLIGATORIO,
   MOTIVO_REQUISITOS,
   tarjetasDeRequisitos,
-  TRANSFORMACIONES,
   type EntradaRequisitos,
 } from "@/lib/tramite/requisitos";
 import { GRUPO_POR_SECCION } from "@/lib/tramite/pasos";
@@ -145,6 +145,8 @@ function PasoRequisitos({ seccion, activa, intentoAvance, onEstado }: PropsSecci
   const entrada: EntradaRequisitos = { campos, valorVenta, tienePrenda: condicion.tienePrenda, acreedor, nitAcreedor, ...(accionFija === "levantar" ? { entidadLevantamiento } : {}), observaciones, transformaciones, hayPersonaJuridica };
   const declaraciones = useMemo(() => (t.declaraciones ? declaracionesActivas(definicion, transformaciones) : []), [t.declaraciones, definicion, transformaciones]);
   // Lo que el RUNT tiene hoy (color, combustible, carrocería): el valor nuevo de una transformación debe ser distinto. Si no llega, no se bloquea.
+  // Las atadas a una transformación se pintan en la tarjeta de su transformación; esta tarjeta conserva solo las propias del tipo.
+  const declaracionesDelTipo = useMemo(() => declaracionesPropias(declaraciones), [declaraciones]);
   const pideValoresRunt = declaraciones.some((d) => categoriaRuntDe(d) !== null);
   const valoresRunt = useQuery<ValoresActualesRunt>({
     queryKey: ["pn", "valores-actuales", idSolicitud],
@@ -159,7 +161,7 @@ function PasoRequisitos({ seccion, activa, intentoAvance, onEstado }: PropsSecci
     ...erroresDeRequisitos(definicion, solicitud.adjuntos, entrada),
     ...(destinoDelPunto && faltaDestino(definicionBase, solicitud.fieldValues) ? { [`declaracion.${destinoDelPunto.clave}`]: MENSAJE_OBLIGATORIO } : {}),
     ...(t.prenda ? errorDeDocumentoDePrenda(definicionBase, solicitud.adjuntos, decisionPrenda) : {}),
-    ...(t.declaraciones ? erroresDeDeclaraciones(definicion, solicitud.adjuntos, campos, transformaciones, valoresRunt.data) : {}),
+    ...(t.declaraciones ? erroresDeDeclaraciones(definicionBase, solicitud.adjuntos, campos, transformaciones, valoresRunt.data) : {}),
   };
   const subiendo = Object.values(subidas).some((s) => s.estado === "cargando");
   const completo = Object.keys(errores).length === 0 && !subiendo;
@@ -277,7 +279,13 @@ function PasoRequisitos({ seccion, activa, intentoAvance, onEstado }: PropsSecci
     }
   };
 
-  const cambiarTransformacion = (codigo: string) => setTransformaciones((actual) => (actual.includes(codigo) ? actual.filter((c) => c !== codigo) : [...actual, codigo]));
+  // Como en FLIT 2: al activar o apagar, el valor elegido se descarta (al activar hay que escoger uno nuevo, distinto al del RUNT; al apagar
+  // se deja de enviar). El archivo ya cargado no se borra: FLIT 2 tampoco lo borra, solo deja de pedirlo y de mostrarlo.
+  const cambiarTransformacion = (codigo: string) => {
+    const decl = declaracionDeTransformacion(definicion, codigo);
+    if (decl) setCampos((c) => ({ ...c, [decl.fieldKey]: "" }));
+    setTransformaciones((actual) => (actual.includes(codigo) ? actual.filter((c) => c !== codigo) : [...actual, codigo]));
+  };
 
   const queryClient = useQueryClient();
   useEffect(() => {
@@ -519,11 +527,11 @@ function PasoRequisitos({ seccion, activa, intentoAvance, onEstado }: PropsSecci
         </Card>
       ))}
 
-      {declaraciones.length > 0 && (
+      {declaracionesDelTipo.length > 0 && (
         <DeclaracionesTipo
           cliente={cliente}
           definicion={definicionBase}
-          declaraciones={declaraciones}
+          declaraciones={declaracionesDelTipo}
           campos={campos}
           valoresRunt={valoresRunt.data}
           solicitudId={idSolicitud}
@@ -576,39 +584,27 @@ function PasoRequisitos({ seccion, activa, intentoAvance, onEstado }: PropsSecci
       )}
 
       {t.transformaciones && (
-        <Card title="Transformaciones del vehículo" id="requisitos-transformaciones">
-          <p>Al activar un switch, el valor de la transformación se sumará automáticamente al valor total liquidado del trámite.</p>
-          <div className="mt-3 space-y-3">
-            {TRANSFORMACIONES.map(({ codigo, etiqueta }) => {
-              const activa = transformaciones.includes(codigo);
-              const precio = cotizacion.data?.lineas.find((l) => l.codigo === codigo)?.valorCop;
-              return (
-                <div key={codigo} className="flex items-center justify-between">
-                  <span id={`transf-${codigo}`}>
-                    {etiqueta}
-                    {precio != null && (
-                      <>
-                        {" "}
-                        <b className="text-primary">+{formatearPesos(precio)}</b>
-                      </>
-                    )}
-                  </span>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={activa}
-                    aria-labelledby={`transf-${codigo}`}
-                    onClick={() => cambiarTransformacion(codigo)}
-                    className={`relative h-11 w-16 rounded-full p-0 transition-colors focus-visible:ring-2 focus-visible:ring-primary/40 ${activa ? "bg-success" : "bg-disabled"}`}
-                  >
-                    <span className={`absolute top-2.5 h-6 w-6 rounded-full bg-card transition-all ${activa ? "left-9" : "left-1"}`} />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-          {transformaciones.length === 0 && <p className="mt-3 text-xs font-light text-muted-foreground">Sin transformaciones declaradas: se registrará el dato del RUNT.</p>}
-        </Card>
+        <TarjetasTransformaciones
+          cliente={cliente}
+          definicion={definicionBase}
+          transformaciones={transformaciones}
+          precioDe={(codigo) => cotizacion.data?.lineas.find((l) => l.codigo === codigo)?.valorCop}
+          campos={campos}
+          valoresRunt={valoresRunt.data}
+          solicitudId={idSolicitud}
+          adjuntos={solicitud.adjuntos}
+          subidas={subidas}
+          error={mostrar}
+          errorSoporte={(docCode) => (intentoAvance > 0 ? errores[`documento.${docCode}`] : undefined)}
+          onAlternar={cambiarTransformacion}
+          onCambiarValor={(decl: DeclaracionTipo, valor) => {
+            setCampos((c) => ({ ...c, [decl.fieldKey]: valor }));
+            editar(`declaracion.${decl.clave}`);
+          }}
+          onTocar={tocar}
+          onSubir={(soporte, archivo) => void subir(soporte, archivo)}
+          onQuitar={(soporte) => void quitar(soporte)}
+        />
       )}
 
       {canal !== "punto" && <TotalLiquidado cliente={cliente} organismoId={solicitud.organismoId} tipoCodigo={definicion.code} transformaciones={t.transformaciones ? transformaciones : []} />}

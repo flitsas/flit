@@ -209,11 +209,16 @@ describe("declaraciones del tipo en el paso Requisitos", () => {
 
     const interruptor = await screen.findByRole("switch", { name: /Cambio de color/ });
     fireEvent.click(interruptor);
-    expect(await screen.findByRole("region", { name: "Declaraciones del trámite" })).toBeInTheDocument();
-    await elegirColor(/Verde/);
+    // La declaración atada sale en la tarjeta de su transformación, no en «Declaraciones del trámite».
+    const suTarjeta = screen.getByRole("region", { name: /Cambio de color/ });
+    expect(screen.queryByRole("region", { name: "Declaraciones del trámite" })).toBeNull();
+    const combo = await within(suTarjeta).findByRole("combobox", { name: "Nuevo color" });
+    await waitFor(() => expect(combo).toBeEnabled());
+    fireEvent.focus(combo);
+    fireEvent.click(await screen.findByRole("option", { name: /Verde/ }));
     expect(siguiente()).toBeEnabled();
     fireEvent.click(interruptor);
-    await waitFor(() => expect(screen.queryByRole("region", { name: "Declaraciones del trámite" })).toBeNull());
+    await waitFor(() => expect(within(suTarjeta).queryByRole("combobox", { name: "Nuevo color" })).toBeNull());
 
     fireEvent.click(siguiente());
     await waitFor(() => expect(llamadas.some((l) => l.clave === "PUT /solicitudes/s-1/campos")).toBe(true));
