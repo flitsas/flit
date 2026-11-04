@@ -7,9 +7,9 @@ import { createPortal } from "react-dom";
 import { boton } from "@/components/landing/estilos";
 import { useWizard, type PropsSeccion } from "@/components/tramite/ContextoWizard";
 import { MobilityLoader } from "@/components/MobilityLoader";
-import { Btn, Card } from "@/components/tramite/piezas";
+import { Badge, Btn, Card } from "@/components/tramite/piezas";
 import { claveSolicitud } from "@/components/tramite/useSolicitud";
-import type { Cotizacion, DefinicionTipo, Solicitud, ValoresActualesRunt } from "@/lib/api/cliente";
+import type { Cotizacion, DefinicionTipo, EstadoIdentidad, Solicitud, ValoresActualesRunt } from "@/lib/api/cliente";
 import { ApiError, mensajeDe, type FallasDeRadicacion } from "@/lib/api/errores";
 import { useBloqueo } from "@/lib/api/useBloqueo";
 import { EXIGIR_IDENTIDAD_AL_ENVIAR, ETIQUETA_VALIDACION } from "@/lib/tramite/actores";
@@ -17,10 +17,10 @@ import { claveCotizacion } from "@/lib/tramite/cotizacion";
 import { conservaLlave } from "@/lib/tramite/envio";
 import { formatearPesos } from "@/lib/formato";
 import { nuevaLlave } from "@/lib/idempotencia";
-import type { GrupoPaso } from "@/lib/tramite/pasos";
+import { esEditable, type GrupoPaso } from "@/lib/tramite/pasos";
 import { categoriaRuntDe, declaracionesActivas, errorIgualAlRunt } from "@/lib/tramite/declaraciones";
-import { destinoDePendiente, filasDeDeclaraciones, pasoTieneSecciones, textoPendiente } from "@/lib/tramite/resumen";
-import { recordarPresentacion } from "@/lib/tramite/presentacion";
+import { armarDatosResumen, destinoDePendiente, pasoTieneSecciones, textoPendiente, type BloqueResumen, type FilaResumen, type SeccionResumen } from "@/lib/tramite/resumen";
+import { recordarPresentacion, vehiculoRecordado } from "@/lib/tramite/presentacion";
 import { useEnviosFallidos } from "@/lib/tramite/envioIdentidad";
 import { AvisoModoPruebas } from "@/components/tramite/AvisoModoPruebas";
 import { useOmitirIdentidad } from "@/components/landing/useConfiguracion";
@@ -57,8 +57,7 @@ export function ResumenTramite({ onEstado }: PropsSeccion) {
     staleTime: Infinity,
   });
 
-  // Lo declarado en Requisitos: una fila por declaración y por soporte cargado. Un valor igual al del RUNT no deja enviar.
-  const declaradas = filasDeDeclaraciones(definicion, solicitud);
+  // Un valor declarado igual al del RUNT no deja enviar.
   const decls = declaracionesActivas(definicion, transformaciones);
   const valoresRunt = useQuery<ValoresActualesRunt>({
     queryKey: ["pn", "valores-actuales", solicitud.solicitudId],
@@ -69,7 +68,25 @@ export function ResumenTramite({ onEstado }: PropsSeccion) {
   });
   const igualAlRunt = decls.map((d) => errorIgualAlRunt(d, (solicitud.fieldValues[d.fieldKey] ?? "").trim(), valoresRunt.data)).find((e) => e !== undefined);
 
-  const placa = solicitud.placa ?? solicitud.vin ?? "—";
+  // Identidad real (no la copia del borrador): en el punto se lee de la sesión del punto. Solo mientras la solicitud es editable.
+  const editable = esEditable(solicitud.estado);
+  const pideIdentidad = definicion.actores.some((r) => r.biometria) || definicion.flags.requiereBiometria;
+  const identidad = useQuery<EstadoIdentidad>({
+    queryKey: ["pn", "resumen-identidad", canal, solicitud.solicitudId],
+    queryFn: ({ signal }) => (canal === "punto" ? cliente.punto.actoresIdentidadEstado({ signal }) : cliente.identidad.estado(solicitud.solicitudId, { signal })),
+    enabled: editable && pideIdentidad,
+    staleTime: 0,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+  const secciones = armarDatosResumen(definicion, solicitud, {
+    canal: canal === "punto" ? "punto" : "web",
+    vehiculo: vehiculoRecordado(solicitud.solicitudId) ?? null,
+    valoresRunt: valoresRunt.data ?? null,
+    identidad: identidad.data ?? null,
+  });
+  const lineas = cotizacion.data?.lineas ?? [];
+  const mostrarTotal = canal !== "punto" || Boolean(cotizacion.data);
 
   useEffect(() => {
     onEstado({ completo: true });
@@ -112,34 +129,32 @@ export function ResumenTramite({ onEstado }: PropsSeccion) {
   return (
     <div className="space-y-6" role="region" aria-label="Resumen del trámite">
       <Card title="Datos del trámite" id="resumen-tramite">
-        <ul className="space-y-3">
-          <li className="flex justify-between gap-4">
-            <span>Placa</span>
-            <b>{placa}</b>
-          </li>
-          <li className="flex justify-between gap-4">
-            <span>Tipo de Trámite</span>
-            <b>{definicion.name}</b>
-          </li>
-          {declaradas.map((fila) => (
-            <li key={fila.etiqueta} className="flex justify-between gap-4">
-              <span>{fila.etiqueta}</span>
-              <b>{fila.valor}</b>
-            </li>
+        <div className="space-y-4">
+          {secciones.map((s) => (
+            <SeccionDatos key={s.id} seccion={s} onEditar={irAPaso} />
           ))}
-          {(cotizacion.data?.lineas ?? []).map((linea) => (
-            <li key={linea.codigo} className="flex justify-between gap-4">
-              <span>{linea.nombre}</span>
-              <b>{formatearPesos(linea.valorCop)}</b>
-            </li>
-          ))}
-          {(canal !== "punto" || cotizacion.data) && (
-            <li className="flex justify-between gap-4 border-t border-border pt-3 text-lg">
-              <span className="font-bold">Valor del trámite</span>
-              <b className="text-primary">{cotizacion.data ? formatearPesos(cotizacion.data.totalCop) : "—"}</b>
-            </li>
+          {(lineas.length > 0 || mostrarTotal) && (
+            <section aria-labelledby="resumen-valores-titulo" className="rounded-[9px] border border-border p-4">
+              <h4 id="resumen-valores-titulo" className="mb-3 text-lg font-bold text-primary">
+                Valores
+              </h4>
+              <ul className="space-y-3">
+                {lineas.map((linea) => (
+                  <li key={linea.codigo} className="flex justify-between gap-4">
+                    <span>{linea.nombre}</span>
+                    <b>{formatearPesos(linea.valorCop)}</b>
+                  </li>
+                ))}
+                {mostrarTotal && (
+                  <li className="flex justify-between gap-4 border-t border-border pt-3 text-lg">
+                    <span className="font-bold">Valor del trámite</span>
+                    <b className="text-primary">{cotizacion.data ? formatearPesos(cotizacion.data.totalCop) : "—"}</b>
+                  </li>
+                )}
+              </ul>
+            </section>
           )}
-        </ul>
+        </div>
       </Card>
 
       {omitirIdentidad && <AvisoModoPruebas id="resumen-modo-pruebas" />}
@@ -171,6 +186,54 @@ export function ResumenTramite({ onEstado }: PropsSeccion) {
       </div>
       {enviando && <CargadorDeEnvio />}
     </div>
+  );
+}
+
+function Filas({ filas }: { filas: FilaResumen[] }) {
+  return (
+    <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+      {filas.map((f, i) => (
+        <div key={`${f.etiqueta}-${i}`} className="min-w-0">
+          <dt className="text-xs font-light text-muted-foreground">{f.etiqueta}</dt>
+          <dd className="break-words font-semibold">{f.tono ? <Badge tone={f.tono}>{f.valor}</Badge> : f.valor}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function Bloque({ bloque }: { bloque: BloqueResumen }) {
+  if (!bloque.titulo) return <Filas filas={bloque.filas} />;
+  return (
+    <div className="rounded-[9px] bg-muted/40 p-3">
+      <h5 className="mb-2 text-sm font-bold">{bloque.titulo}</h5>
+      <Filas filas={bloque.filas} />
+    </div>
+  );
+}
+
+/** Una tarjeta del resumen con su enlace «Editar» (si el paso existe en este flujo). */
+function SeccionDatos({ seccion, onEditar }: { seccion: SeccionResumen; onEditar: (grupo: GrupoPaso) => void }) {
+  const idTitulo = `resumen-seccion-${seccion.id}-titulo`;
+  const editar = seccion.editar;
+  return (
+    <section aria-labelledby={idTitulo} className="rounded-[9px] border border-border p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h4 id={idTitulo} className="text-lg font-bold text-primary">
+          {seccion.titulo}
+        </h4>
+        {editar && (
+          <button type="button" className={boton("link", "h-auto min-h-11 p-0", "none")} aria-label={`Editar ${seccion.titulo}`} onClick={() => onEditar(editar)}>
+            Editar
+          </button>
+        )}
+      </div>
+      <div className="space-y-3">
+        {seccion.bloques.map((b, i) => (
+          <Bloque key={`${b.titulo ?? "filas"}-${i}`} bloque={b} />
+        ))}
+      </div>
+    </section>
   );
 }
 

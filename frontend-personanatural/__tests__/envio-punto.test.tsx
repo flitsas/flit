@@ -47,7 +47,7 @@ describe("Envío del punto · Resumen y confirmación", () => {
 
     const resumen = await screen.findByRole("region", { name: "Resumen del trámite" });
     expect(resumen).toHaveTextContent("PlacaABC123");
-    expect(resumen).toHaveTextContent("Tipo de TrámiteTrámite A");
+    expect(resumen).toHaveTextContent("Tipo de trámiteTrámite A");
     expect(screen.queryByText("Valor del trámite")).toBeNull();
     expect(screen.queryByText(/Comprobante de pago/)).toBeNull();
 

@@ -19,13 +19,29 @@ describe("Paso 4 · Resumen", () => {
 
     const datos = seccion("Datos del trámite");
     expect(datos).toHaveTextContent("PlacaABC123");
-    expect(datos).toHaveTextContent("Tipo de TrámiteTrámite A");
+    expect(datos).toHaveTextContent("Tipo de trámiteTrámite A");
     expect(datos).toHaveTextContent("Valor del trámite");
     expect(screen.queryByRole("region", { name: "Elección de facturación" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Datos bancarios FLIT" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Comprobante de pago" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Enviar trámite" })).toBeEnabled();
     expect(screen.queryByRole("button", { name: "Continuar" })).toBeNull();
+  });
+
+  it("muestra las secciones con los datos del borrador, la identidad real y los documentos, con enlace «Editar»", async () => {
+    await abrirResumen();
+
+    const actores = seccion("Titular y actores");
+    expect(actores).toHaveTextContent("LUIS PEREZ");
+    expect(actores).toHaveTextContent("luis.perez@mail.co");
+    expect(seccion("Validación de identidad")).toHaveTextContent("Validada");
+    expect(seccion("Documentos cargados")).toHaveTextContent("Paz y salvo de impuestospaz-y-salvo.pdf");
+    expect(seccion("Documentos cargados")).not.toHaveTextContent("soporte.pdf");
+    expect(screen.queryByRole("region", { name: "Vehículo" })).toBeNull();
+
+    fireEvent.click(within(seccion("Titular y actores")).getByRole("button", { name: "Editar Titular y actores" }));
+
+    expect(nodo(2)).toHaveAttribute("aria-current", "step");
   });
 
   it("«Atrás» vuelve a Requisitos", async () => {

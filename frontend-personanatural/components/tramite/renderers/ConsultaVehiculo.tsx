@@ -11,6 +11,7 @@ import { ApiError, mensajeDe } from "@/lib/api/errores";
 import type { Diagnostico, VehiculoDelTramite } from "@/lib/api/cliente";
 import { useBloqueo } from "@/lib/api/useBloqueo";
 import { fijarContexto } from "@/lib/tramite/contexto";
+import { recordarVehiculo } from "@/lib/tramite/presentacion";
 import { formatearFechaHora } from "@/lib/formato";
 import { documentoLegible } from "@/lib/tramite/actores";
 import { faltaDestino } from "@/lib/tramite/declaraciones";
@@ -61,6 +62,7 @@ export function ConsultaVehiculo({ activa, intentoAvance, onEstado }: PropsSecci
       return { vehiculo, diagnostico };
     },
     onSuccess: (r) => {
+      recordarVehiculo(solicitud.solicitudId, r.vehiculo);
       if (entrada?.propietario && contexto) fijarContexto({ ...contexto, propietario: entrada.propietario });
       if (r.diagnostico) void recargar();
     },

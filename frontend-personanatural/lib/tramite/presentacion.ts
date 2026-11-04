@@ -44,6 +44,28 @@ export function archivoRecordado(solicitudId: string, id: string): string | unde
   return porSolicitud.get(solicitudId)?.archivos.get(id);
 }
 
+/** Datos del vehículo que la consulta del diagnóstico ya trajo (sin propietario): el Resumen los reutiliza en vez de consultar de nuevo. */
+export interface VehiculoRecordado {
+  marca?: string | null;
+  linea?: string | null;
+  modeloAno?: string | null;
+  clase?: string | null;
+  color?: string | null;
+  tipoServicio?: string | null;
+}
+
+const vehiculos = new Map<string, VehiculoRecordado>();
+
+/** Guarda solo los seis datos del vehículo que muestra el Resumen; nada del propietario. Solo en memoria. */
+export function recordarVehiculo(solicitudId: string, v: (VehiculoRecordado & { existe?: boolean }) | null | undefined): void {
+  if (!v || v.existe === false) return;
+  vehiculos.set(solicitudId, { marca: v.marca, linea: v.linea, modeloAno: v.modeloAno, clase: v.clase, color: v.color, tipoServicio: v.tipoServicio });
+}
+
+export function vehiculoRecordado(solicitudId: string): VehiculoRecordado | undefined {
+  return vehiculos.get(solicitudId);
+}
+
 /** Texto cuando el servicio solo conoce el código del documento y no el nombre del archivo que subió la persona. */
 export const ARCHIVO_CARGADO = "Archivo cargado";
 

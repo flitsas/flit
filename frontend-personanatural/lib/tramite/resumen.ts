@@ -1,15 +1,31 @@
 // Paso Resumen (HU F5, reducida). Módulo puro, sin React ni red: arma, a partir de la definición del tipo y del borrador, lo que el
 // ciudadano ve para revisar antes de enviar. Todo es solo lectura y sale de la definición: ningún tipo de trámite está nombrado aquí.
-import type { ActorEstado, DefinicionTipo, Pendiente, Solicitud } from "@/lib/api/cliente";
-import { formatearPesos } from "@/lib/formato";
-import { documentoLegible } from "@/lib/tramite/actores";
-import { CLAVE_DESTINO_POR_DEFECTO, CLAVE_NOMBRE_DESTINO, declaracionDestino, declaracionesActivas, declaracionesDe, opcionElegida, soportesDe } from "@/lib/tramite/declaraciones";
-import { grupoDePendiente, GRUPO_POR_SECCION, type GrupoPaso } from "@/lib/tramite/pasos";
+import type { ActorEstado, DefinicionTipo, EstadoIdentidad, Pendiente, Solicitud } from "@/lib/api/cliente";
+import { formatearFecha, formatearPesos } from "@/lib/formato";
+import { esCorreoTecnico } from "@/lib/punto/contacto";
+import { documentoLegible, estadoDeFila } from "@/lib/tramite/actores";
+import {
+  CLAVE_DESTINO_POR_DEFECTO,
+  CLAVE_NOMBRE_DESTINO,
+  declaracionDestino,
+  declaracionesActivas,
+  declaracionesDe,
+  nombreDelDocumento,
+  opcionElegida,
+  soportesDe,
+  valorActualEnRunt,
+  type ValoresRunt,
+} from "@/lib/tramite/declaraciones";
+import { esEditable, grupoDePendiente, GRUPO_POR_SECCION, type GrupoPaso } from "@/lib/tramite/pasos";
+import { nombreVisibleDeAdjunto, type VehiculoRecordado } from "@/lib/tramite/presentacion";
 import { DOC_COMPROBANTE_PAGO, tamanoLegible, TRANSFORMACIONES } from "@/lib/tramite/requisitos";
+import type { TonoBadge } from "@/lib/tramite/tonos";
 
 export interface FilaResumen {
   etiqueta: string;
   valor: string;
+  /** Si viene, el valor se pinta como insignia con ese tono (estado de la identidad). */
+  tono?: TonoBadge;
 }
 
 /** Un grupo de filas bajo un subtítulo opcional (por ejemplo, una persona dentro de «Actores»). */
@@ -245,4 +261,162 @@ export function filasDeDeclaraciones(definicion: DefinicionTipo, solicitud: Soli
     filas.push({ etiqueta: destino.etiqueta || "Organismo de destino", valor: nombre || SIN_DATO });
   }
   return filas;
+}
+
+// ── Resumen previo al envío: «Datos del trámite» por secciones ───────────────────────────────────────────────────────
+
+export interface ContextoResumen {
+  canal?: "web" | "punto";
+  /** Lo que el diagnóstico ya consultó del vehículo; sin esto no se pinta la sección (no se consulta de nuevo). */
+  vehiculo?: VehiculoRecordado | null;
+  valoresRunt?: ValoresRunt | null;
+  /** Estado real de la identidad (GET identidad): manda sobre el que trae el borrador. */
+  identidad?: EstadoIdentidad | null;
+}
+
+const limpio = (v: string | null | undefined): string => (v ?? "").trim();
+
+/** Solo las filas con valor: lo que no llega no se pinta ni deja huecos. */
+const conValor = (pares: ReadonlyArray<readonly [string, string | null | undefined]>): FilaResumen[] =>
+  pares.flatMap(([etiqueta, valor]) => (limpio(valor) === "" ? [] : [{ etiqueta, valor: limpio(valor) }]));
+
+const TEXTO_IDENTIDAD: Readonly<Record<string, { texto: string; tono: TonoBadge }>> = {
+  aprobada: { texto: "Validada", tono: "success" },
+  rechazada: { texto: "Rechazada", tono: "warning" },
+  vencida: { texto: "Vencida", tono: "warning" },
+};
+
+/** «Validada» solo si el estado real es aprobada; cualquier otro (sin solicitar, en curso) es «Pendiente». */
+export function textoIdentidad(estado: string): { texto: string; tono: TonoBadge } {
+  return TEXTO_IDENTIDAD[estado] ?? { texto: "Pendiente", tono: "warning" };
+}
+
+function valorDeCampoLegible(tipo: string, valor: string): string {
+  if (valor === "true") return "Sí";
+  if (valor === "false") return "No";
+  return /fecha|date/i.test(tipo) ? (formatearFecha(valor) ?? valor) : valor;
+}
+
+function filasPropias(definicion: DefinicionTipo, solicitud: Solicitud, ctx: ContextoResumen): FilaResumen[] {
+  const filas: FilaResumen[] = [];
+  const transformaciones = solicitud.datos.requisitos?.transformaciones ?? [];
+
+  const valorComercial = solicitud.datos.comercial?.valor;
+  if (valorComercial !== undefined && valorComercial !== null && valorComercial > 0) filas.push({ etiqueta: "Valor comercial", valor: formatearPesos(valorComercial) });
+
+  const prenda = solicitud.datos.prenda;
+  if (prenda) {
+    const levanta = prenda.tiene && prenda.decision === "levantar";
+    filas.push({ etiqueta: "Prenda", valor: levanta ? "Sí, se levantará" : prenda.tiene ? "Sí" : "No" });
+    if (levanta) filas.push(...conValor([["Entidad ante la que se levantó", prenda.entidadLevantamiento]]));
+    else if (prenda.tiene) filas.push(...conValor([["Acreedor", prenda.acreedor], ["NIT del acreedor", prenda.nitAcreedor]]));
+  }
+
+  // Declaraciones del tipo (color, combustible, carrocería, blindaje, causal…): lo actual en el RUNT y lo declarado, con etiquetas legibles.
+  for (const decl of declaracionesActivas(definicion, transformaciones)) {
+    const valor = limpio(solicitud.fieldValues[decl.fieldKey]);
+    if (valor === "") continue;
+    const actual = valorActualEnRunt(decl, ctx.valoresRunt);
+    if (actual) filas.push({ etiqueta: actual.etiqueta, valor: actual.valor });
+    filas.push({ etiqueta: decl.etiqueta, valor: opcionElegida(decl, valor)?.etiqueta ?? valor });
+  }
+  const destino = declaracionDestino(definicion);
+  if (destino && limpio(solicitud.fieldValues[destino.fieldKey || CLAVE_DESTINO_POR_DEFECTO]) !== "") {
+    filas.push(...conValor([[destino.etiqueta || "Organismo de destino", solicitud.fieldValues[CLAVE_NOMBRE_DESTINO]]]));
+  }
+
+  // Campos del tipo (excepto los que ya salieron como declaración).
+  const yaDeclarados = new Set(declaracionesDe(definicion).flatMap((d) => [d.fieldKey, ...d.fieldKeysExtra]));
+  const vistos = new Set<string>();
+  for (const campo of definicion.pasos.flatMap((p) => p.campos)) {
+    if (yaDeclarados.has(campo.fieldKey) || vistos.has(campo.fieldKey)) continue;
+    vistos.add(campo.fieldKey);
+    const valor = limpio(solicitud.fieldValues[campo.fieldKey]);
+    if (valor !== "") filas.push({ etiqueta: campo.etiqueta, valor: valorDeCampoLegible(campo.tipo, valor) });
+  }
+
+  if (transformaciones.length > 0) {
+    filas.push({ etiqueta: "Trámites complementarios", valor: transformaciones.map((c) => TRANSFORMACIONES.find((t) => t.codigo === c)?.etiqueta ?? c).join(", ") });
+  }
+  filas.push(...conValor([["Observaciones", solicitud.datos.requisitos?.observaciones]]));
+  return filas;
+}
+
+/**
+ * Secciones de «Datos del trámite» del Resumen (antes de enviar), todas a partir de la definición y del borrador. Una fila o sección
+ * sin datos no se incluye. Si la solicitud ya no es editable (ya se envió) solo queda la sección «Trámite»: ni personas, ni
+ * documentos, ni nombres de archivo (HU #14049). El correo técnico del punto nunca se muestra.
+ */
+export function armarDatosResumen(definicion: DefinicionTipo, solicitud: Solicitud, ctx: ContextoResumen = {}): SeccionResumen[] {
+  const punto = ctx.canal === "punto";
+  const editable = esEditable(solicitud.estado);
+  const destinoEditar = (grupo: GrupoPaso): GrupoPaso | null => (editable && pasoTieneSecciones(grupo, definicion) ? grupo : null);
+  const secciones: SeccionResumen[] = [];
+  const agregar = (id: string, titulo: string, editar: GrupoPaso | null, bloques: BloqueResumen[]) => {
+    const con = bloques.filter((b) => b.filas.length > 0);
+    if (con.length > 0) secciones.push({ id, titulo, editar, bloques: con });
+  };
+
+  agregar("tramite", "Trámite", null, [
+    {
+      filas: conValor([
+        ["Tipo de trámite", definicion.name],
+        ["Organismo de tránsito", solicitud.organismoNombre],
+        ["Placa", solicitud.placa],
+        ["VIN", solicitud.vin],
+      ]),
+    },
+  ]);
+  if (!editable) return secciones;
+
+  const v = ctx.vehiculo;
+  if (v) {
+    agregar("vehiculo", "Vehículo", punto ? null : destinoEditar("diagnostico"), [
+      { filas: conValor([["Marca", v.marca], ["Línea", v.linea], ["Modelo", v.modeloAno], ["Clase", v.clase], ["Color", v.color], ["Servicio", v.tipoServicio]]) },
+    ]);
+  }
+
+  const actores = [...solicitud.actores].sort((a, b) => a.rol.localeCompare(b.rol) || a.ordinal - b.ordinal);
+  agregar(
+    "actores",
+    "Titular y actores",
+    destinoEditar("actores"),
+    actores.map((a) => ({
+      titulo: etiquetaDelRol(definicion, a),
+      filas: conValor([
+        ["Nombre", a.nombre],
+        ["Documento", limpio(a.numeroDocumento) === "" ? "" : documentoCompleto(a.tipoDocumento, a.numeroDocumento)],
+        ["Teléfono", a.celular],
+        ["Correo", punto && esCorreoTecnico(a.correo) ? "" : a.correo],
+        ["Ciudad", a.ciudad],
+        ["Dirección", a.direccion],
+      ]),
+    })),
+  );
+
+  const rolesConIdentidad = new Set(definicion.actores.filter((r) => r.biometria).map((r) => r.rol));
+  if (rolesConIdentidad.size > 0 || definicion.flags.requiereBiometria) {
+    const partes = rolesConIdentidad.size > 0 ? actores.filter((a) => rolesConIdentidad.has(a.rol)) : actores;
+    agregar("identidad", "Validación de identidad", destinoEditar("actores"), [
+      {
+        filas: partes.map((a) => {
+          const estado = textoIdentidad(estadoDeFila(a, ctx.identidad ?? undefined, solicitud.actores));
+          return { etiqueta: etiquetaDelRol(definicion, a), valor: estado.texto, tono: estado.tono };
+        }),
+      },
+    ]);
+  }
+
+  agregar("propios", "Información del trámite", destinoEditar("requisitos"), [{ filas: filasPropias(definicion, solicitud, ctx) }]);
+
+  // Solo el nombre del documento y del archivo (nunca su contenido). El comprobante de pago no hace parte de esta entrega.
+  agregar("documentos", "Documentos cargados", destinoEditar("requisitos"), [
+    {
+      filas: solicitud.adjuntos
+        .filter((a) => a.tipo !== DOC_COMPROBANTE_PAGO)
+        .map((a) => ({ etiqueta: nombreDelDocumento(definicion, a.tipo), valor: nombreVisibleDeAdjunto(a, solicitud.solicitudId) })),
+    },
+  ]);
+
+  return secciones;
 }

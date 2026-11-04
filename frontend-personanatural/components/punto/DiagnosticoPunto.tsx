@@ -12,6 +12,7 @@ import { Badge, Card, Nav, Row } from "@/components/tramite/piezas";
 import type { ClientePortal, Diagnostico, ResultadoVehiculoPunto, VehiculoDelTramite } from "@/lib/api/cliente";
 import { mensajeDeFallo } from "@/lib/api/errores";
 import { ASSETS } from "@/lib/assets";
+import { recordarVehiculo } from "@/lib/tramite/presentacion";
 import {
   datosTecnicos,
   filasDiagnostico,
@@ -117,6 +118,12 @@ export function DiagnosticoPunto({
   useEffect(() => {
     tituloRef.current?.focus({ preventScroll: true });
   }, [paso]);
+
+  // El Resumen reutiliza lo que esta consulta ya trajo del vehículo (no vuelve a consultar).
+  const vehiculoConsultado = estado.fase === "listo" ? estado.vehiculo : null;
+  useEffect(() => {
+    if (solicitudIdPunto) recordarVehiculo(solicitudIdPunto, vehiculoConsultado);
+  }, [solicitudIdPunto, vehiculoConsultado]);
 
   const diagnostico = estado.fase === "listo" ? estado.diagnostico : null;
   const vehiculo = estado.fase === "listo" ? estado.vehiculo : null;

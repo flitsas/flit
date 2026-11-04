@@ -87,10 +87,10 @@ export function categoriaRuntDe(decl: DeclaracionTipo): CategoriaRunt | null {
 }
 
 /** Lo que consta hoy en el RUNT para esa declaración, con el texto de ayuda (`null` si no aplica o el RUNT no lo trae). */
-export function valorActualEnRunt(decl: DeclaracionTipo, runt: ValoresRunt | null | undefined): { valor: string; texto: string } | null {
+export function valorActualEnRunt(decl: DeclaracionTipo, runt: ValoresRunt | null | undefined): { valor: string; texto: string; etiqueta: string } | null {
   const cat = categoriaRuntDe(decl);
   const valor = cat ? (runt?.[cat] ?? "").trim() : "";
-  return cat && valor ? { valor, texto: `${TEXTOS_RUNT[cat].actual}: ${valor}` } : null;
+  return cat && valor ? { valor, texto: `${TEXTOS_RUNT[cat].actual}: ${valor}`, etiqueta: TEXTOS_RUNT[cat].actual } : null;
 }
 
 /** Mensaje de error si el valor elegido es el mismo que ya tiene el vehículo en el RUNT (comparación normalizada); sin valor RUNT no bloquea. */
@@ -114,7 +114,7 @@ export function nombreLegibleDeDocumento(docCode: string): string {
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
-const nombreDelDocumento = (d: DefinicionTipo, docCode: string): string => d.documentos.find((x) => x.docCode === docCode)?.nombre || nombreLegibleDeDocumento(docCode);
+export const nombreDelDocumento = (d: DefinicionTipo, docCode: string): string => d.documentos.find((x) => x.docCode === docCode)?.nombre || nombreLegibleDeDocumento(docCode);
 
 /**
  * Soportes que pide el valor elegido. Si la opción trae `docCodes` (los de una causal), esos son los soportes y obligan según su
