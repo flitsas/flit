@@ -34,8 +34,8 @@ namespace Flit.Diagnostico.Api.Modulos.Reportes;
 /// </example>
 internal static partial class PdfVehiculo
 {
-    /// <summary>Versión del diseño: entra en la huella (súbela al cambiar lo que se pinta o cómo). 4 = datos del diagnóstico en pares clave-valor, sin título ni introducción.</summary>
-    public const int VersionPlantilla = 4;
+    /// <summary>Versión del diseño: entra en la huella (súbela al cambiar lo que se pinta o cómo). 5 = sección Dictamen (veredicto en palabra y párrafo) después de los pares del diagnóstico.</summary>
+    public const int VersionPlantilla = 5;
 
     public const string ContentType = "application/pdf";
 
@@ -144,6 +144,8 @@ internal static partial class PdfVehiculo
                         fila.RelativeItem().AlignLeft().AlignMiddle().Element(e => e.Width(130).Height(48).Svg(BrandingAssets.LogoSvg));
                         fila.RelativeItem().AlignRight().Element(c => DatosDelDiagnostico(c, contenido.Encabezado, generado));
                     });
+                    if (contenido.Dictamen is { } dictamen)
+                        col.Item().Element(c => SeccionConTitulo(c, "Dictamen", null, cuerpo => CuerpoDictamen(cuerpo, dictamen)));
                     for (var i = 0; i < contenido.Secciones.Count; i++)
                     {
                         var seccion = contenido.Secciones[i];
@@ -322,6 +324,35 @@ internal static partial class PdfVehiculo
             t.TotalPages().FontSize(7).FontColor(FlitDocumentTheme.Gris);
         });
     });
+
+    /// <summary>
+    /// Cuerpo de la sección Dictamen, después de los pares del diagnóstico: la palabra del veredicto, el aviso si el estado es
+    /// exactamente <c>PENDIENTE</c>, y los párrafos de <see cref="DictamenEnHuella.Texto"/> en orden. Si un párrafo es igual al
+    /// anterior, no se repite. No pinta código, efecto, fuente ni placa.
+    /// </summary>
+    private static void CuerpoDictamen(ColumnDescriptor cuerpo, DictamenEnHuella dictamen)
+    {
+        cuerpo.Item().Text(VeredictoEnPalabra(dictamen.Veredicto));
+        if (dictamen.Estado == "PENDIENTE")
+            cuerpo.Item().Text("redacción IA pendiente");
+
+        string? anterior = null;
+        foreach (var parrafo in dictamen.Texto.Split('\n'))
+        {
+            if (parrafo == anterior)
+                continue;
+            anterior = parrafo;
+            cuerpo.Item().Text(parrafo);
+        }
+    }
+
+    /// <summary>El veredicto se lee en palabra. El color no lo sustituye.</summary>
+    private static string VeredictoEnPalabra(string veredicto) => veredicto switch
+    {
+        "VIABLE" => "Viable",
+        "BLOQUEADO" => "Bloqueado",
+        _ => veredicto,
+    };
 
     /// <summary>Tabla de la cabecera, al 50 % del ancho: cada dato en una fila, etiqueta a la izquierda y valor a la derecha.</summary>
     private static void DatosDelDiagnostico(IContainer contenedor, EncabezadoReporte e, DateTimeOffset generado) =>

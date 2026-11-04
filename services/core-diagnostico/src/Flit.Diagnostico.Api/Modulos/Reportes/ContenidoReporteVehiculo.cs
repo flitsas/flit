@@ -26,7 +26,8 @@ namespace Flit.Diagnostico.Api.Modulos.Reportes;
 /// </param>
 /// <param name="Dictamen">
 /// Dictamen vigente del vehículo, si lo hay (corte 6). Sin él no se agregan claves <c>dictamen/</c>: la huella de los reportes que
-/// ya existen no cambia. El PDF no dibuja el párrafo; la huella sí cambia cuando el texto pasa a completada.
+/// ya existen no cambia. El PDF dibuja ese texto (veredicto en palabra, aviso si está pendiente, párrafos sin repetir el
+/// consecutivo). La huella no gana claves.
 /// </param>
 public sealed record ContenidoReporteVehiculo(
     EncabezadoReporte Encabezado,

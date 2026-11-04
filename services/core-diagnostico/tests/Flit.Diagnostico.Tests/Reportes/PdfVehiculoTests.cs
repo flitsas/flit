@@ -703,7 +703,83 @@ public sealed partial class PdfVehiculoDisenoV2Tests
     private const string Vin = "9BWZZZ377VT004251";
 
     [Fact]
-    public void Version_de_plantilla_es_4() => PdfVehiculo.VersionPlantilla.Should().Be(4);
+    public void Version_de_plantilla_es_5() => PdfVehiculo.VersionPlantilla.Should().Be(5);
+
+    /// <summary>Sin fila de dictamen el PDF sigue igual: no hay sección ni aviso de redacción.</summary>
+    [Fact]
+    public void Sin_dictamen_el_pdf_no_trae_el_titulo_ni_la_redaccion_pendiente()
+    {
+        var contenido = Contenido("ABC123");
+        contenido.Dictamen.Should().BeNull();
+        var texto = PdfDePrueba.Texto(PdfVehiculo.Generar(contenido, GeneradoEn));
+
+        PdfDePrueba.Tiene(texto, "DICTAMEN").Should().BeFalse(texto);
+        PdfDePrueba.Tiene(texto, "redacción IA pendiente").Should().BeFalse(texto);
+    }
+
+    /// <summary>
+    /// Pendiente y bloqueado: la palabra, el aviso y los dos párrafos distintos, en ese orden, antes de «DATOS DEL VEHÍCULO».
+    /// </summary>
+    [Fact]
+    public void Dictamen_pendiente_bloqueado_pinta_veredicto_aviso_y_los_dos_parrafos_antes_de_datos_del_vehiculo()
+    {
+        const string primero = "qx17 alfa dictamen bloqueo unico";
+        const string segundo = "qy28 beta dictamen multa unica";
+        var contenido = Contenido("ABC123") with
+        {
+            Dictamen = new DictamenEnHuella("BLOQUEADO", "PENDIENTE", primero + "\n" + segundo),
+        };
+        var texto = PdfDePrueba.SinPies(PdfDePrueba.Texto(PdfVehiculo.Generar(contenido, GeneradoEn)));
+
+        var orden = new[] { "Bloqueado", "redacción IA pendiente", primero, segundo, "DATOS DEL VEHÍCULO" };
+        var desde = 0;
+        foreach (var literal in orden)
+        {
+            var i = texto.IndexOf(PdfDePrueba.Plano(literal), desde, StringComparison.Ordinal);
+            i.Should().BeGreaterThanOrEqualTo(0, $"«{literal}» aparece después del anterior: {texto}");
+            desde = i;
+        }
+    }
+
+    /// <summary>Completada: el mismo párrafo en cada alertamiento sale una vez, sin aviso, y el veredicto se lee «Viable».</summary>
+    [Fact]
+    public void Dictamen_completada_no_repite_el_parrafo_ni_el_aviso_y_lee_viable()
+    {
+        const string mismo = "qz39 gamma dictamen modelo unico";
+        var contenido = Contenido("ABC123") with { Dictamen = new DictamenEnHuella("VIABLE", "COMPLETADA", mismo + "\n" + mismo) };
+        var texto = PdfDePrueba.Texto(PdfVehiculo.Generar(contenido, GeneradoEn));
+        var plano = PdfDePrueba.Plano(mismo);
+        var cuenta = 0;
+        var desde = 0;
+        while (true)
+        {
+            var i = texto.IndexOf(plano, desde, StringComparison.Ordinal);
+            if (i < 0)
+                break;
+            cuenta++;
+            desde = i + plano.Length;
+        }
+
+        cuenta.Should().Be(1, texto);
+        PdfDePrueba.Tiene(texto, "redacción IA pendiente").Should().BeFalse(texto);
+        PdfDePrueba.Tiene(texto, "Viable").Should().BeTrue(texto);
+    }
+
+    /// <summary>La huella no gana claves: sin dictamen ninguna <c>dictamen/</c>; con dictamen solo veredicto, estado y texto.</summary>
+    [Fact]
+    public void Para_huella_sin_dictamen_no_suma_claves_y_con_dictamen_solo_las_tres()
+    {
+        const string textoDictamen = "qw41 delta dictamen huella unica";
+        var sin = Contenido("ABC123");
+        sin.ParaHuella().Keys.Should().NotContain(k => k.StartsWith("dictamen/", StringComparison.Ordinal));
+
+        var con = sin with { Dictamen = new DictamenEnHuella("BLOQUEADO", "PENDIENTE", textoDictamen) };
+        con.ParaHuella().Keys.Where(k => k.StartsWith("dictamen/", StringComparison.Ordinal))
+            .Should().BeEquivalentTo(["dictamen/veredicto", "dictamen/estado", "dictamen/texto"]);
+        con.ParaHuella()["dictamen/veredicto"].Should().Be("BLOQUEADO");
+        con.ParaHuella()["dictamen/estado"].Should().Be("PENDIENTE");
+        con.ParaHuella()["dictamen/texto"].Should().Be(textoDictamen);
+    }
 
     [Fact]
     public void Identificacion_datos_del_diagnostico_secciones_y_nota_en_orden()
