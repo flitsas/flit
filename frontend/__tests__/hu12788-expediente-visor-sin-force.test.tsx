@@ -1,15 +1,8 @@
 /**
- * HU #12788 — el ExpedienteVisor deja de forzar la regeneración del consolidado al abrirlo.
+ * HU #12788 / #14206 — Ver abre sin force; force=true solo desde «Reintentar» (sin CTA Re-generar).
  *
- * Uso de ejemplo:
- *   <ExpedienteVisor instanceId="inst-1" attachments={[consolidado]} />
- *   · «Ver expediente consolidado (PDF)»   → GET  /instances/inst-1/consolidado/entrega?tipo=consolidado (sin force)
- *   · «Re-generar expediente consolidado»  → POST /instances/inst-1/consolidado?force=true
- *
- * Code-review M2 (Épica #12760): la apertura usa la ruta ÚNICA de entrega (#12785), no el POST.
- *
- * El backend decide con `consolidado_wizard_vigente`: vigente → PDF en caché; no vigente →
- * reconstruye una vez. El cliente no cachea el PDF entre aperturas.
+ *   · «Ver expediente consolidado (PDF)» → GET …/consolidado/entrega?tipo=consolidado (sin force)
+ *   · «Reintentar» (aviso fallo)         → POST …/consolidado?force=true
  */
 import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -46,7 +39,7 @@ import ExpedienteVisor from '@/components/operacion/ExpedienteVisor';
 
 const INSTANCE = 'inst-12788';
 const VER = { name: 'Ver expediente consolidado (PDF)' };
-const REGENERAR = { name: 'Re-generar expediente consolidado' };
+const REINTENTAR = { name: 'Reintentar la regeneración del consolidado' };
 /** Parámetros de la apertura: el consolidado del wizard, sin force. */
 const ENTREGA = { tipo: 'consolidado' };
 
@@ -127,7 +120,7 @@ describe('HU #12788 AC1 — bandera vigente: abrir el visor va sin force y muest
     const user = userEvent.setup();
     render(<ExpedienteVisor instanceId={INSTANCE} attachments={[]} />);
 
-    expect(screen.queryByRole('button', REGENERAR)).toBeNull();
+    expect(screen.queryByRole('button', { name: /Re-generar expediente consolidado/i })).toBeNull();
     await user.click(screen.getByRole('button', VER));
 
     await waitFor(() => expect(mocks.entregarConsolidado).toHaveBeenCalledWith(INSTANCE, ENTREGA));
@@ -196,8 +189,15 @@ describe('HU #12788 AC2 — bandera en false: se reconstruye una sola vez (una �
   });
 });
 
-describe('HU #12788 AC3 — la acción explícita de regenerar sigue enviando force=true', () => {
-  it('«Re-generar expediente consolidado» llama generarConsolidado(instanceId, undefined, true)', async () => {
+describe('HU #12788 AC3 / #14206 — force=true solo desde Reintentar (sin CTA Re-generar)', () => {
+  const falloEntrega = (): GenerarConsolidadoResult => ({
+    ...resultado('att-cons-v1'),
+    regenerado: false,
+    avisosCascada: ['consolidado: adjunto_no_disponible'],
+  });
+
+  it('«Reintentar» llama generarConsolidado(instanceId, undefined, true)', async () => {
+    mocks.entregarConsolidado.mockResolvedValue(falloEntrega());
     mocks.generarConsolidado.mockResolvedValue(resultado('att-cons-v3'));
     const onAttachmentsChange = vi.fn();
     const user = userEvent.setup();
@@ -205,38 +205,61 @@ describe('HU #12788 AC3 — la acción explícita de regenerar sigue enviando fo
       <ExpedienteVisor
         instanceId={INSTANCE}
         attachments={[CONSOLIDADO_PREVIO]}
+        consolidadoWizard={{
+          estado: 'desactualizado',
+          generadoEn: '2026-09-20T15:05:00Z',
+          origen: 'system',
+          definitivo: false,
+          modo: null,
+        }}
         onAttachmentsChange={onAttachmentsChange}
       />,
     );
 
-    await user.click(screen.getByRole('button', REGENERAR));
+    await user.click(screen.getByRole('button', VER));
+    await screen.findByTestId('aviso-fallo-regeneracion');
+    const entregarAntes = mocks.entregarConsolidado.mock.calls.length;
+    await user.click(screen.getByRole('button', REINTENTAR));
 
-    await waitFor(() => expect(onAttachmentsChange).toHaveBeenCalledTimes(1));
-    expect(mocks.generarConsolidado).toHaveBeenCalledTimes(1);
-    expect(mocks.generarConsolidado).toHaveBeenCalledWith(INSTANCE, undefined, true);
-    // «Re-generar» es la única vía con force y va por el POST: nunca por la entrega (GET).
-    expect(mocks.entregarConsolidado).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.generarConsolidado).toHaveBeenCalledWith(INSTANCE, undefined, true));
+    expect(mocks.entregarConsolidado).toHaveBeenCalledTimes(entregarAntes);
+    expect(screen.queryByRole('button', { name: /Re-generar expediente consolidado/i })).toBeNull();
   });
 
-  it('mantiene el aviso de FUR no regenerado de la HU #11642 tras forzar', async () => {
+  it('mantiene el aviso de FUR no regenerado de la HU #11642 tras Reintentar con force', async () => {
+    mocks.entregarConsolidado.mockResolvedValue(falloEntrega());
     mocks.generarConsolidado.mockResolvedValue({
       ...resultado('att-cons-v3'),
       avisosCascada: ['fur: provider_unavailable'],
     });
     const user = userEvent.setup();
-    render(<ExpedienteVisor instanceId={INSTANCE} attachments={[CONSOLIDADO_PREVIO]} />);
+    render(
+      <ExpedienteVisor
+        instanceId={INSTANCE}
+        attachments={[CONSOLIDADO_PREVIO]}
+        consolidadoWizard={{
+          estado: 'desactualizado',
+          generadoEn: '2026-09-20T15:05:00Z',
+          origen: 'system',
+          definitivo: false,
+          modo: null,
+        }}
+      />,
+    );
 
-    await user.click(screen.getByRole('button', REGENERAR));
+    await user.click(screen.getByRole('button', VER));
+    await screen.findByTestId('aviso-fallo-regeneracion');
+    await user.click(screen.getByRole('button', REINTENTAR));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/No se pudo regenerar el FUR/);
     expect(mocks.generarConsolidado).toHaveBeenCalledWith(INSTANCE, undefined, true);
   });
 
-  it('en estado final no se ofrece regenerar (sin botón force)', () => {
+  it('en estado final no hay CTA Re-generar; solo Ver', () => {
     render(
       <ExpedienteVisor instanceId={INSTANCE} attachments={[CONSOLIDADO_PREVIO]} status="aprobado" />,
     );
-    expect(screen.queryByRole('button', REGENERAR)).toBeNull();
+    expect(screen.queryByRole('button', { name: /Re-generar expediente consolidado/i })).toBeNull();
     expect(screen.getByRole('button', VER)).toBeEnabled();
   });
 });

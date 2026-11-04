@@ -418,20 +418,17 @@ function ExpedienteConsolidadoBody({
   };
 
   /**
-   * Acción EXPLÍCITA «Re-generar expediente consolidado»: única que envía force=true (HU #12788 AC3).
-   * Invalida la vigencia y reconstruye consolidado y FUR (HU #11642) sin anidar un consolidado previo.
+   * HU #14206 — force=true solo desde «Reintentar» del aviso de fallo (HU #12799), no hay CTA
+   * permanente «Re-generar». Invalida vigencia y reconstruye consolidado y FUR (HU #11642).
    */
   const handleGenerate = async () => {
-    // HU #12788 — candado síncrono: `disabled={busy}` solo llega tras el re-render, así que un doble
-    // clic rápido lanzaría dos POST /consolidado (y, con force, dos reconstrucciones). El candado (del
-    // hook, compartido con la apertura) corta el segundo antes de que salga la petición.
+    // Candado síncrono compartido con «Ver» (HU #12788): un doble clic no lanza dos POST force.
     if (!instanceId || !apertura.tomarCandado()) return;
     setGenerating(true);
     setError(null);
     apertura.limpiarError();
     try {
       await onBeforeGenerateConsolidado?.();
-      // force=true: invalida caché y reconstruye sin anidar un consolidado previo (evita docs duplicados).
       const generado = await tramitesClient.generarConsolidado(instanceId, undefined, true);
       registrarResultado(generado);
       applyAvisos(generado);
@@ -472,16 +469,15 @@ function ExpedienteConsolidadoBody({
   const errorVisible = error ?? apertura.error;
   /**
    * AC3 #12785 — la entrega avisa que sirvió el DEFINITIVO aunque el `status` que recibe el visor
-   * aún no sea final (detalle sin recargar): se trata igual que el estado final (sin «Re-generar»,
-   * que respondería 409, y sin aviso de fallo).
+   * aún no sea final (detalle sin recargar): se trata igual que el estado final (sin Reintentar
+   * force, que respondería 409, y sin aviso de fallo).
    */
   const definitivoPorEntrega = !estadoFinal && apertura.definitivo;
   const sinRegeneracion = estadoFinal || definitivoPorEntrega;
 
   return (
     <>
-      {/* HU #12799 — aviso de fallo con la fecha del PDF conservado y «Reintentar» = «Re-generar».
-          El rótulo de vigencia (HU #12792) se retiró por decisión de producto. */}
+      {/* HU #12799 — aviso de fallo; «Reintentar» es la única vía force (HU #14206, sin CTA Re-generar). */}
       {fallo && !sinRegeneracion ? (
         <div className="mb-3">
           <AvisoFalloRegeneracion
@@ -514,23 +510,9 @@ function ExpedienteConsolidadoBody({
       ) : null}
       {definitivoPorEntrega ? <AvisoDocumentoFinal className="mb-3" /> : null}
 
+      {/* HU #14206 — CTA único: Ver regenera vía entrega si la vigencia lo pide y abre el PDF. */}
       <div className="flex flex-wrap items-center gap-2">
-        {!sinRegeneracion && consolidado ? (
-          <button
-            type="button"
-            onClick={() => void handleGenerate()}
-            disabled={busy || !instanceId}
-            className="rounded-full px-5 py-2.5 text-xs font-semibold text-white disabled:opacity-50"
-            style={{ background: '#162744' }}
-          >
-            {generating ? 'Generando expediente…' : 'Re-generar expediente consolidado'}
-          </button>
-        ) : null}
-
         {instanceId && (!estadoFinal || consolidado) ? (
-          // CTA primario en el degradado de marca (`gradient.primary`), igual que el resto de
-          // acciones principales del módulo. Antes iba en azul plano copiando la captura del Step5;
-          // el guardián de diseño rechaza el CTA primario plano, así que se unifica con el degradado.
           <button
             type="button"
             className="inline-flex items-center justify-center rounded-full px-6 py-2.5 text-xs font-semibold text-white transition hover:opacity-95 disabled:opacity-50"
@@ -542,7 +524,7 @@ function ExpedienteConsolidadoBody({
             }}
             aria-label="Ver expediente consolidado (PDF)"
           >
-            {opening ? 'Generando expediente…' : 'Ver expediente consolidado (PDF)'}
+            {opening || generating ? 'Generando expediente…' : 'Ver expediente consolidado (PDF)'}
           </button>
         ) : null}
       </div>

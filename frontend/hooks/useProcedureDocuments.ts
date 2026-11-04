@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { useRevalidateOnFocus } from './useRevalidateOnFocus';
+import {
+  MENSAJE_ARCHIVO_NO_LEGIBLE,
+  copiarArchivoEnMemoria,
+  esLecturaDeArchivoDenegada,
+} from '@/lib/tramites/archivo-en-memoria';
 import { CODIGO_ADJUNTO_BLOQUEADO_FLITO, mensajeErrorAdjunto } from '@/lib/tramites/flito';
 import type {
   ChecklistView,
@@ -359,8 +364,21 @@ export function useProcedureDocuments(
   }, [instanceId, tenantId]);
 
   const upload = useCallback(
-    async (tipo: string, file: File) => {
+    async (tipo: string, original: File) => {
       if (!instanceId) return false;
+
+      // Una sola lectura del disco, antes de OCR y de la subida. El resto trabaja con la copia.
+      let file: File;
+      try {
+        file = await copiarArchivoEnMemoria(original);
+      } catch (err) {
+        setState((s) => ({
+          ...s,
+          analyzingTipos: withoutTipoInSet(s.analyzingTipos, tipo),
+          error: err instanceof Error && err.message.trim() ? err.message : MENSAJE_ARCHIVO_NO_LEGIBLE,
+        }));
+        return false;
+      }
 
       let fileToUpload = file;
       // HU #12776 — ¿este cargue ya le dijo al backend qué fecha tiene el certificado?
@@ -481,7 +499,9 @@ export function useProcedureDocuments(
           ...s,
           uploadingTipos: withoutTipoInSet(s.uploadingTipos, tipo),
           // HU #13266 (AC3) — 409 `adjunto_bloqueado_flito`: copy de FLITO, sin código técnico.
-          error: mensajeErrorAdjunto(err, 'Error al subir el documento'),
+          error: esLecturaDeArchivoDenegada(err)
+            ? MENSAJE_ARCHIVO_NO_LEGIBLE
+            : mensajeErrorAdjunto(err, 'Error al subir el documento'),
         }));
         // FLITO cargó ese tipo mientras la pantalla estaba abierta: se relee para que la casilla
         // muestre su adjunto (etiqueta y sin acciones) en vez de seguir ofreciendo «Adjuntar».

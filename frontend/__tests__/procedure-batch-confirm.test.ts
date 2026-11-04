@@ -141,7 +141,16 @@ describe('useProcedureBatchUpload — análisis', () => {
 
     expect(client.analyzeBatch).toHaveBeenCalledTimes(3);
     for (const file of files) {
-      expect(client.analyzeBatch).toHaveBeenCalledWith(['soat', 'impronta'], [file], undefined);
+      const enviados = client.analyzeBatch.mock.calls.map((call) => (call[1] as File[])[0]);
+      const enviado = enviados.find((candidato) => candidato.name === file.name);
+      expect(enviado).toBeInstanceOf(File);
+      expect(enviado).not.toBe(file);
+      expect(await enviado!.text()).toBe(await file.text());
+      expect(client.analyzeBatch).toHaveBeenCalledWith(
+        ['soat', 'impronta'],
+        [enviado],
+        undefined,
+      );
     }
   });
 

@@ -5,7 +5,7 @@
   "description": "Portal Persona Natural: el ciudadano consulta, cotiza y radica trámites en FLIT 2 sin cuenta. Habla solo con su BFF core-personanatural por el gateway.",
   "scripts": {
     "dev": "next dev --port 4031 -H 127.0.0.1",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",

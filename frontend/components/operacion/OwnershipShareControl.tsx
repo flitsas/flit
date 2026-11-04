@@ -103,6 +103,13 @@ export interface OwnershipTabsBarProps {
   onRemove: (index: number) => void;
   /** Ya se alcanzó el máximo de 4 — el botón "+" se deshabilita. */
   maxReached: boolean;
+  /**
+   * HU #14192 — deshabilita "+" aunque no se haya llegado al máximo (p. ej. el propietario actual
+   * aún no tiene documento consultado y datos completos).
+   */
+  addBlocked?: boolean;
+  /** Motivo accesible / tooltip cuando `addBlocked` es true. */
+  addBlockedReason?: string;
   readOnly?: boolean;
   /** Prefijo único para ids de accesibilidad — DEBE coincidir con el de `OwnershipPercentagePanel`. */
   idPrefix: string;
@@ -124,6 +131,8 @@ export function OwnershipTabsBar({
   onAdd,
   onRemove,
   maxReached,
+  addBlocked = false,
+  addBlockedReason,
   readOnly = false,
   idPrefix,
   sideLabel,
@@ -131,6 +140,13 @@ export function OwnershipTabsBar({
 }: OwnershipTabsBarProps) {
   const panelId = ownershipPanelId(idPrefix);
   const allPct = items.map((i) => i.percentage);
+  const addDisabled = readOnly || maxReached || addBlocked;
+  const addTitle = maxReached
+    ? 'Máximo 4 propietarios permitidos por trámite.'
+    : addBlocked
+      ? (addBlockedReason ??
+        'Completa los datos y la consulta del propietario actual antes de agregar otro.')
+      : undefined;
 
   return (
     // Un solo renglón (corrección del usuario: la separación en dos renglones dejaba un hueco
@@ -196,8 +212,8 @@ export function OwnershipTabsBar({
         <button
           type="button"
           onClick={onAdd}
-          disabled={readOnly || maxReached}
-          title={maxReached ? 'Máximo 4 propietarios permitidos por trámite.' : undefined}
+          disabled={addDisabled}
+          title={addTitle}
           // El nombre accesible EMPIEZA por el texto visible ("Agregar propietario") y solo le
           // añade de qué lado es: quien dicta por voz lo que ve en pantalla acierta igual.
           aria-label={`Agregar propietario de ${sideLabel.toLowerCase()}`}
@@ -256,6 +272,7 @@ export function OwnershipPercentagePanel({
   const total = allPct.reduce((s, p) => s + p, 0);
   const sumError = Math.abs(total - 100) > 0.005;
   const zeroError = items.some((i) => i.percentage <= 0);
+  const rangeError = items.some((i) => i.percentage > 100);
   const panelId = ownershipPanelId(idPrefix);
   const activeColor = colorDeParticipacion(active.percentage, allPct);
   const activeSliderValue = clampDisplay(active.percentage);
@@ -283,7 +300,7 @@ export function OwnershipPercentagePanel({
           <input
             id={`${idPrefix}-input-${active.index}`}
             type="number"
-            min={0}
+            min={0.01}
             max={100}
             step={0.01}
             inputMode="decimal"
@@ -338,10 +355,13 @@ export function OwnershipPercentagePanel({
         </span>
       </div>
 
-      {showErrors && (sumError || zeroError) && (
+      {showErrors && (sumError || zeroError || rangeError) && (
         <div role="alert" className="mt-2 space-y-1 text-xs" style={{ color: '#FF4E00' }}>
           {sumError && <p>La suma de los porcentajes debe ser exactamente 100%.</p>}
           {zeroError && <p>Todos los propietarios deben tener un porcentaje mayor a 0%.</p>}
+          {rangeError && (
+            <p>Cada propietario debe tener un porcentaje mayor a 0% y como máximo 100%.</p>
+          )}
         </div>
       )}
     </div>
