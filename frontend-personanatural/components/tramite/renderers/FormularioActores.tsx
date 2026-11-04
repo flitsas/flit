@@ -301,6 +301,7 @@ export function FormularioActores({ seccion, activa, intentoAvance, onEstado }: 
                   versionEstado={identidad.dataUpdatedAt}
                   envioAutomatico
                   confirmarIdentidad={totalPersonas > 1}
+                  consultaActiva={activa}
                   fallaEnvio={fallosEnvio[fila.clave]}
                   onCambio={(patch) => cambiar(fila.clave, patch)}
                   onQuitar={conTitulo && puedeQuitar(filas, rol) ? () => quitar(fila.clave) : undefined}

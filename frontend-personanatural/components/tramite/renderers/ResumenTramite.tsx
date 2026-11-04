@@ -38,7 +38,7 @@ type Falla = { tipo: "mensaje"; texto: string } | { tipo: "pendientes"; fallas: 
  * Paso anterior al envío: resume el trámite y radica con «Enviar trámite».
  * Si el BFF responde identidad pendiente, se muestra qué parte falta.
  */
-export function ResumenTramite({ onEstado }: PropsSeccion) {
+export function ResumenTramite({ activa, onEstado }: PropsSeccion) {
   const { cliente, definicion, solicitud, recargar, reportarError, irAPaso, canal } = useWizard();
   const queryClient = useQueryClient();
   const bloqueo = useBloqueo();
@@ -62,7 +62,7 @@ export function ResumenTramite({ onEstado }: PropsSeccion) {
   const valoresRunt = useQuery<ValoresActualesRunt>({
     queryKey: ["pn", "valores-actuales", solicitud.solicitudId],
     queryFn: ({ signal }) => cliente.solicitudes.valoresActuales(solicitud.solicitudId, { signal }),
-    enabled: decls.some((d) => categoriaRuntDe(d) !== null),
+    enabled: activa && decls.some((d) => categoriaRuntDe(d) !== null),
     staleTime: 5 * 60 * 1000,
     retry: false,
   });
@@ -74,7 +74,8 @@ export function ResumenTramite({ onEstado }: PropsSeccion) {
   const identidad = useQuery<EstadoIdentidad>({
     queryKey: ["pn", "resumen-identidad", canal, solicitud.solicitudId],
     queryFn: ({ signal }) => (canal === "punto" ? cliente.punto.actoresIdentidadEstado({ signal }) : cliente.identidad.estado(solicitud.solicitudId, { signal })),
-    enabled: editable && pideIdentidad,
+    // Solo con el Resumen a la vista (el Cascarón monta todos los pasos); staleTime 0 trae el estado actual al entrar.
+    enabled: activa && editable && pideIdentidad,
     staleTime: 0,
     retry: false,
     refetchOnWindowFocus: false,

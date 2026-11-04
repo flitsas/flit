@@ -105,7 +105,7 @@ function borradorDeEstaEntrada(solicitud: Solicitud, entrada: { placa: string; t
   return true;
 }
 
-function filasDesdeSolicitud(solicitud: Solicitud, documentoInicial: string, roles: readonly ActorRol[]): FilaActor[] {
+export function filasDesdeSolicitud(solicitud: Solicitud, documentoInicial: string, roles: readonly ActorRol[]): FilaActor[] {
   const definicion = { actores: roles } as DefinicionTipo;
   // El correo técnico interno del radicante no se muestra: el campo queda vacío.
   const base = filasIniciales(definicion, solicitud.actores).map((f) => (esCorreoTecnico(f.correo) ? { ...f, correo: "" } : f));
@@ -114,7 +114,7 @@ function filasDesdeSolicitud(solicitud: Solicitud, documentoInicial: string, rol
     if (delRol.length > 0) return delRol;
     return [filaVacia(rol.rol, 1)];
   });
-  return sembrarDocumentoInicial(conMinimos, { tipo: "CC", numero: documentoInicial });
+  return sembrarDocumentoInicial(conMinimos, { tipo: "CC", numero: documentoInicial }, roles[0]?.rol ?? "");
 }
 
 export function ActoresPunto({

@@ -78,6 +78,8 @@ interface Props {
   radicantePunto?: boolean;
   /** Portal web con varias personas: al aprobarse su identidad, la tarjeta muestra la alerta «validó su identidad». */
   confirmarIdentidad?: boolean;
+  /** El paso está a la vista: un paso oculto no consulta el documento por su cuenta (cada consulta cuesta una llamada al proveedor). */
+  consultaActiva?: boolean;
 }
 
 const SEGUNDOS_ENTRE_REENVIOS = 60;
@@ -121,6 +123,7 @@ export function PersonaActor({
   puedeValidarIdentidad = true,
   radicantePunto = false,
   confirmarIdentidad = false,
+  consultaActiva = true,
 }: Props) {
   const [tocados, setTocados] = useState<Partial<Record<CampoActor, boolean>>>({});
   const [errorConsulta, setErrorConsulta] = useState<string | null>(null);
@@ -330,6 +333,7 @@ export function PersonaActor({
   const faltaCompletarRunt =
     fila.consultado && fila.runt === null && fila.nombre.trim() !== "" && (identidadAprobada || esPropietario) && fila.numeroDocumento.trim() !== "";
   const consultable =
+    consultaActiva &&
     formatoValido &&
     !juridica &&
     ((!identidadAprobada && (!fila.consultado || faltaConsultaRunt)) || faltaCompletarRunt) &&

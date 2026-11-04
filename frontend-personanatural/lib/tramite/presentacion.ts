@@ -78,3 +78,9 @@ export function nombreVisibleDeAdjunto(adjunto: { id: string; tipo: string; nomb
   if (real && real !== adjunto.tipo) return real;
   return (solicitudId ? archivoRecordado(solicitudId, adjunto.id) : undefined) ?? ARCHIVO_CARGADO;
 }
+
+/** Vacía la memoria de la sesión (nombres, archivos y vehículo). Lo usan las pruebas para no arrastrar estado entre casos. */
+export function olvidarPresentacion(): void {
+  porSolicitud.clear();
+  vehiculos.clear();
+}

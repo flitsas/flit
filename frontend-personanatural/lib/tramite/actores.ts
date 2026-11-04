@@ -25,11 +25,16 @@ export function documentoLegible(tipo: string, numero: string): string {
  * Si el paso 1 consultó el vehículo con un documento de persona natural, lo deja en la primera fila vacía
  * (el vendedor o titular). No marca la fila como consultada: el ciudadano sigue pulsando consultar para traer el nombre.
  */
-export function sembrarDocumentoInicial(filas: readonly FilaActor[], documento: { tipo: string; numero: string } | undefined): FilaActor[] {
+export function sembrarDocumentoInicial(
+  filas: readonly FilaActor[],
+  documento: { tipo: string; numero: string } | undefined,
+  /** Si se indica, solo se siembra en la fila 1 de ese rol (quien radica), y solo si está vacía. */
+  rol?: string,
+): FilaActor[] {
   const numero = documento?.numero.trim() ?? "";
   const tipo = TIPOS_DOCUMENTO.find((t) => t.valor === documento?.tipo)?.valor;
   if (!tipo || tipo === "NIT" || numero === "") return filas as FilaActor[];
-  const destino = filas.find((f) => f.ordinal === 1 && f.numeroDocumento === "");
+  const destino = filas.find((f) => f.ordinal === 1 && f.numeroDocumento === "" && (rol === undefined || f.rol === rol));
   if (!destino) return filas as FilaActor[];
   return filas.map((f) => (f.clave === destino.clave ? { ...f, tipoDocumento: tipo, numeroDocumento: numero } : f));
 }

@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { ActoresPunto } from "@/components/punto/ActoresPunto";
+import { ActoresPunto, filasDesdeSolicitud } from "@/components/punto/ActoresPunto";
 import type { ClientePortal, EstadoIdentidad, Solicitud } from "@/lib/api/cliente";
 import { ApiError } from "@/lib/api/errores";
 import { renderConQuery } from "./utilidades";
@@ -490,5 +490,22 @@ describe("ActoresPunto — épica #14185: identidad de quien radica", () => {
       expect(guardar).toHaveBeenCalledTimes(2);
       expect(onContinuar).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('filasDesdeSolicitud · documento del radicante', () => {
+  const roles = ACTORES_TRASPASO;
+
+  it('si el vendedor ya trae documento guardado, el del radicante no se siembra en la fila del comprador', () => {
+    const filas = filasDesdeSolicitud(SOLICITUD, '555000111', roles);
+    const comprador = filas.find((f) => f.rol === 'comprador');
+    expect(comprador?.numeroDocumento).toBe('');
+    expect(filas.find((f) => f.rol === 'vendedor')?.numeroDocumento).toBe('1037669356');
+  });
+
+  it('si la fila del radicante está vacía, se siembra solo ahí', () => {
+    const filas = filasDesdeSolicitud({ ...SOLICITUD, actores: [] }, '555000111', roles);
+    expect(filas.find((f) => f.rol === 'vendedor')?.numeroDocumento).toBe('555000111');
+    expect(filas.find((f) => f.rol === 'comprador')?.numeroDocumento).toBe('');
   });
 });

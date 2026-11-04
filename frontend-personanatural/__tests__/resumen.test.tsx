@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { abrirResumen, DOC_COMPRADOR, DOC_VENDEDOR, resumenVisible } from "./fixtures-envio";
 import { nodo } from "./montar-wizard";
@@ -50,6 +50,28 @@ describe("Paso 4 · Resumen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Atrás" }));
 
     expect(nodo(3)).toHaveAttribute("aria-current", "step");
+  });
+
+  it("la identidad se lee solo con el Resumen a la vista y de nuevo al volver a él", async () => {
+    const { llamadas } = await abrirResumen();
+    const lecturas = () => llamadas.filter((l) => l.clave === "GET /solicitudes/s-1/identidad").length;
+    await waitFor(() => expect(lecturas()).toBe(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "Atrás" }));
+    expect(nodo(3)).toHaveAttribute("aria-current", "step");
+    await new Promise((r) => setTimeout(r, 50));
+    expect(lecturas()).toBe(1);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Siguiente" }));
+    await waitFor(() => expect(nodo(4)).toHaveAttribute("aria-current", "step"));
+    await waitFor(() => expect(lecturas()).toBe(2));
+  });
+
+  it("los pasos ocultos no consultan personas al abrir el borrador en Resumen", async () => {
+    const { llamadas } = await abrirResumen();
+    await new Promise((r) => setTimeout(r, 700));
+
+    expect(llamadas.filter((l) => l.clave.includes("persona-detalle"))).toHaveLength(0);
   });
 
   it("Habeas Data: nada del ciudadano en el almacenamiento, en la URL ni en la consola", async () => {
