@@ -232,7 +232,7 @@ describe("canal del punto /o/codigo", () => {
     fireEvent.click(screen.getByRole("button", { name: "Iniciar trámite" }));
 
     expect(await screen.findByRole("heading", { name: "No puedes continuar" })).toBeInTheDocument();
-    expect(screen.getByRole("list", { name: "Motivos del diagnóstico" })).toHaveTextContent("SOAT vencido");
+    expect(screen.getByLabelText("Motivos del diagnóstico")).toHaveTextContent("SOAT vencido");
     expect(screen.getByRole("button", { name: "Continuar" })).toBeDisabled();
   });
 

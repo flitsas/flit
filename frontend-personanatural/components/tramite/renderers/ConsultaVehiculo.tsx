@@ -15,7 +15,7 @@ import { recordarVehiculo } from "@/lib/tramite/presentacion";
 import { formatearFechaHora } from "@/lib/formato";
 import { documentoLegible } from "@/lib/tramite/actores";
 import { faltaDestino } from "@/lib/tramite/declaraciones";
-import { consentimientoDeConsulta, datosTecnicos, entradaConsulta, filasDiagnostico, organismoElegido, TIPOS_PROPIETARIO, MENSAJE_ATENCION, MENSAJE_CONSULTANDO_VEHICULO, MENSAJE_RUNT_NO_RESPONDE, MENSAJE_SIN_VEHICULO } from "@/lib/tramite/diagnostico";
+import { consentimientoDeConsulta, datosTecnicos, entradaConsulta, filasDiagnostico, motivosDiagnostico, organismoElegido, TIPOS_PROPIETARIO, MENSAJE_ATENCION, MENSAJE_CONSULTANDO_VEHICULO, MENSAJE_RUNT_NO_RESPONDE, MENSAJE_SIN_VEHICULO } from "@/lib/tramite/diagnostico";
 
 interface Resultado {
   vehiculo: VehiculoDelTramite;
@@ -102,6 +102,7 @@ export function ConsultaVehiculo({ activa, intentoAvance, onEstado }: PropsSecci
   };
 
   const filas = diagnostico ? filasDiagnostico(diagnostico.requisitos) : [];
+  const motivos = motivosDiagnostico(diagnostico);
   const fecha = formatearFechaHora(guardado?.fecha);
   const documentoEscrito = numeroPropietario.trim() ? documentoLegible(tipoPropietario, numeroPropietario) : "";
   const documentoPropietario = vehiculo?.propietarioDocumento?.trim() || documentoEscrito;
@@ -138,6 +139,17 @@ export function ConsultaVehiculo({ activa, intentoAvance, onEstado }: PropsSecci
           )}
 
           {fecha && <p className="text-xs font-light text-muted-foreground">Consultado en RUNT el {fecha}</p>}
+
+          {motivos.length > 0 && (
+            <div aria-label="Motivos del diagnóstico" className="mt-3 w-full space-y-2 rounded-[9px] border border-alert bg-alert/10 p-4 text-sm leading-relaxed text-foreground">
+              {motivos.map((m) => (
+                <p key={m} className="flex gap-2">
+                  <AlertTriangle aria-hidden className="mt-0.5 h-5 w-5 shrink-0 text-alert" />
+                  <span>{m}</span>
+                </p>
+              ))}
+            </div>
+          )}
 
           {diagnostico && filas.length > 0 && (
             <ul className="wizard-diagnosis mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6" aria-label="Indicadores del vehículo">

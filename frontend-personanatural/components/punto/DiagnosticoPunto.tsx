@@ -16,6 +16,7 @@ import { recordarVehiculo } from "@/lib/tramite/presentacion";
 import {
   datosTecnicos,
   filasDiagnostico,
+  motivosDiagnostico,
   MENSAJE_ATENCION,
   MENSAJE_NO_PUEDE_CONTINUAR,
   MENSAJE_PUEDE_CONTINUAR,
@@ -128,9 +129,7 @@ export function DiagnosticoPunto({
   const diagnostico = estado.fase === "listo" ? estado.diagnostico : null;
   const vehiculo = estado.fase === "listo" ? estado.vehiculo : null;
   const filas = diagnostico ? filasDiagnostico(diagnostico.requisitos) : [];
-  const avisos = diagnostico
-    ? diagnostico.requisitos.filter((r) => r.estado !== "cumple" && r.estado !== "no_aplica")
-    : [];
+  const motivos = motivosDiagnostico(diagnostico);
   const puede = diagnostico?.puedeContinuar === true;
   const conBloqueos = diagnostico !== null && !diagnostico.puedeContinuar;
   const tecnicos = datosTecnicos(aVehiculoDelTramite(vehiculo), { placa, vin: null }, documento);
@@ -297,6 +296,17 @@ export function DiagnosticoPunto({
                           {puede ? MENSAJE_PUEDE_CONTINUAR : MENSAJE_NO_PUEDE_CONTINUAR}
                         </h2>
 
+                        {motivos.length > 0 && (
+                          <div aria-label="Motivos del diagnóstico" className="mt-3 w-full space-y-2 rounded-[9px] border border-alert bg-alert/10 p-4 text-sm leading-relaxed text-foreground">
+                            {motivos.map((m) => (
+                              <p key={m} className="flex gap-2">
+                                <AlertTriangle aria-hidden className="mt-0.5 h-5 w-5 shrink-0 text-alert" />
+                                <span>{m}</span>
+                              </p>
+                            ))}
+                          </div>
+                        )}
+
                         {filas.length > 0 && (
                           <ul
                             className="wizard-diagnosis mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6"
@@ -304,14 +314,6 @@ export function DiagnosticoPunto({
                           >
                             {filas.map((f) => (
                               <Row key={f.clave} k={f.nombre} v={<Badge tone={f.tono}>{f.estado}</Badge>} />
-                            ))}
-                          </ul>
-                        )}
-
-                        {avisos.length > 0 && (
-                          <ul className="mt-3 list-disc space-y-1 pl-5 text-sm" aria-label="Motivos del diagnóstico">
-                            {avisos.map((a) => (
-                              <li key={a.codigo}>{a.descripcion}</li>
                             ))}
                           </ul>
                         )}

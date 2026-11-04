@@ -196,6 +196,18 @@ describe("validación de formato y consulta del documento (F3 AC1 y AC2, K5 AC5)
     expect(within(card).getByText(/Multas: pendientes \(2\)/i)).toBeInTheDocument();
   });
 
+  it("con 0 comparendos no dice «pendientes» aunque el indicador lo diga: «Multas: sin pendientes», sin inventar paz y salvo", async () => {
+    await abrir({
+      [RUTA_DETALLE]: () =>
+        detalle({ tieneMultasPendientes: true, nroPazYSalvo: null, comparendos: 0, estadoLicencia: "ACTIVO", vigenciaLicencia: "vigente" }),
+    });
+    const card = tarjeta("Comprador");
+    await consultarTercero(card, "52123456");
+    expect(within(card).getByText("Multas: sin pendientes")).toBeInTheDocument();
+    expect(within(card).queryByText(/pendientes \(/i)).toBeNull();
+    expect(within(card).queryByText(/paz y salvo/i)).toBeNull();
+  });
+
   it("si el borrador ya trae comprador sin consulta RUNT, lo consulta solo, sin botón Consultar", async () => {
     const solicitud = solicitudDe({
       ...guardado(DIAGNOSTICO_OK),

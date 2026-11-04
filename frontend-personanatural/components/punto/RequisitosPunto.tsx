@@ -19,6 +19,7 @@ import type {
 } from "@/lib/api/cliente";
 import { ApiError, mensajeDeFallo } from "@/lib/api/errores";
 import { GRUPO_POR_SECCION, type SeccionWizard } from "@/lib/tramite/pasos";
+import { crearGuardadorSerial } from "@/lib/tramite/guardadoSerial";
 import { MOTIVO_REQUISITOS } from "@/lib/tramite/requisitos";
 
 type Props = {
@@ -93,12 +94,10 @@ function useBorradorPunto(cliente: ClientePortal, solicitudId: string) {
   const recargar = useCallback(async () => {
     aplicar(await cliente.solicitudes.obtener(solicitudId));
   }, [cliente, solicitudId, aplicar]);
-  const guardarConVersion = useCallback(
-    async (escribir: (version: number) => Promise<Solicitud>) => {
-      aplicar(await escribir(version.current));
-    },
-    [aplicar],
-  );
+  const leerVersion = useCallback(() => version.current, []);
+  const releer = useCallback(() => cliente.solicitudes.obtener(solicitudId), [cliente, solicitudId]);
+  // eslint-disable-next-line react-hooks/refs -- leerVersion solo se invoca al guardar (en un evento), nunca durante el render
+  const guardarConVersion = useMemo(() => crearGuardadorSerial(leerVersion, aplicar, releer), [leerVersion, aplicar, releer]);
   const registrarGuardado = useCallback((clave: string, guardar: (() => Promise<void>) | null) => {
     if (guardar) guardadores.current.set(clave, guardar);
     else guardadores.current.delete(clave);

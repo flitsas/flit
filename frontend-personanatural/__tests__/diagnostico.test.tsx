@@ -63,7 +63,8 @@ describe("paso 1: diagnóstico con consultas reales (F2)", () => {
 
     const aviso = await screen.findByText(/Para continuar con la radicación debes estar al día en pagos de SOAT, multas e impuestos vehiculares\./);
     expect(aviso.closest('[role="alert"]')).not.toBeNull();
-    expect(screen.getByText("SOAT").closest("li")).toHaveTextContent("SOAT: POR REVISAR");
+    expect(within(screen.getByRole("list", { name: "Indicadores del vehículo" })).getByText("SOAT").closest("li")).toHaveTextContent("SOAT: POR REVISAR");
+    expect(screen.getByLabelText("Motivos del diagnóstico")).toHaveTextContent("SOAT");
     const continuar = screen.getByRole("button", { name: "Continuar" });
     expect(continuar).toBeDisabled();
     expect(continuar).toHaveAccessibleDescription("Resuelve los pendientes del diagnóstico para continuar.");

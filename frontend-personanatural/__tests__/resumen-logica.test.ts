@@ -216,3 +216,18 @@ describe("pendientes en lenguaje claro", () => {
     expect(destinoDePendiente({ codigo: "actor_requerido", referencia: "x", paso: null }, sinActores)).toBeNull();
   });
 });
+
+describe("«Información del trámite» no repite placa ni documento del titular", () => {
+  it("quita los campos que solo repiten placa o documento de un actor y conserva el resto", () => {
+    const base = definicionCompleta();
+    const sol = solicitudCompleta();
+    const doc = sol.actores[0]?.numeroDocumento ?? "";
+    const campo = (fieldKey: string, etiqueta: string) => ({ fieldKey, etiqueta, tipo: "text", obligatorio: false, opciones: [], validationSchema: "" });
+    const definicion = { ...base, pasos: base.pasos.map((p) => (p.clave === "p3" ? { ...p, campos: [...p.campos, campo("placa_x", "Placa"), campo("doc_x", "Documento del titular"), campo("nota", "Nota")] } : p)) };
+    const conRepetidos = { ...sol, fieldValues: { ...sol.fieldValues, placa_x: sol.placa ?? "", doc_x: doc, nota: "hola" } };
+    const etiquetas = filasDe(armarDatosResumen(definicion, conRepetidos), "propios").map((f) => f.etiqueta);
+    expect(etiquetas).not.toContain("Placa");
+    expect(etiquetas).not.toContain("Documento del titular");
+    expect(etiquetas).toContain("Nota");
+  });
+});

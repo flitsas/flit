@@ -17,6 +17,7 @@ import type { ClientePortal, DefinicionTipo, Organismo, Solicitud } from "@/lib/
 import { ApiError, mensajeDe } from "@/lib/api/errores";
 import { organismoElegido } from "@/lib/tramite/diagnostico";
 import { ASSETS } from "@/lib/assets";
+import { crearGuardadorSerial } from "@/lib/tramite/guardadoSerial";
 import type { ContextoTramite } from "@/lib/tramite/contexto";
 import { esEditable, pasoInicial, type GrupoPaso, type PasoWizard, type SeccionWizard } from "@/lib/tramite/pasos";
 
@@ -90,6 +91,19 @@ export function Cascaron({ cliente, definicion, solicitud, pasos, registro, cont
     [pasos],
   );
 
+  // Un solo serializador por solicitud (la cola sobrevive a los renders): autoguardado y Continuar no se pisan la versión.
+  const solicitudRef = useRef(solicitud);
+  useEffect(() => {
+    solicitudRef.current = solicitud;
+  });
+  const leerVersion = useCallback(
+    () => (queryClient.getQueryData<Solicitud>(claveSolicitud(idSolicitud)) ?? solicitudRef.current).version,
+    [queryClient, idSolicitud],
+  );
+  const aplicarSolicitud = useCallback((s: Solicitud) => void queryClient.setQueryData(claveSolicitud(idSolicitud), s), [queryClient, idSolicitud]);
+  const releer = useCallback(() => cliente.solicitudes.obtener(idSolicitud), [cliente, idSolicitud]);
+  const guardarConVersion = useMemo(() => crearGuardadorSerial(leerVersion, aplicarSolicitud, releer), [leerVersion, aplicarSolicitud, releer]);
+
   const api = useMemo<ApiWizard>(
     () => ({
       cliente,
@@ -97,10 +111,7 @@ export function Cascaron({ cliente, definicion, solicitud, pasos, registro, cont
       solicitud,
       contexto,
       recargar: () => queryClient.invalidateQueries({ queryKey: claveSolicitud(idSolicitud) }),
-      guardarConVersion: async (escribir) => {
-        const vigente = queryClient.getQueryData<Solicitud>(claveSolicitud(idSolicitud)) ?? solicitud;
-        queryClient.setQueryData(claveSolicitud(idSolicitud), await escribir(vigente.version));
-      },
+      guardarConVersion,
       registrarGuardado: (clave, guardar) => {
         if (guardar) guardadores.current.set(clave, guardar);
         else guardadores.current.delete(clave);
@@ -108,7 +119,7 @@ export function Cascaron({ cliente, definicion, solicitud, pasos, registro, cont
       reportarError,
       irAPaso,
     }),
-    [cliente, definicion, solicitud, contexto, queryClient, idSolicitud, reportarError, irAPaso],
+    [cliente, definicion, solicitud, contexto, queryClient, idSolicitud, reportarError, irAPaso, guardarConVersion],
   );
 
   // ── Validez y navegación ──────────────────────────────────────────────────────────────────────────────────────────

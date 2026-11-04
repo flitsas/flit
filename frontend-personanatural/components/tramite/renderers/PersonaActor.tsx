@@ -314,11 +314,15 @@ export function PersonaActor({
     : fila.licencia?.vigencia
       ? `Licencia ${fila.licencia.vigencia === "vigente" ? "vigente" : "no vigente"}`
       : null;
+  // Con 0 comparendos no hay pendientes aunque el indicador diga lo contrario; sin número de paz y salvo no se inventa uno.
+  const multasPendientes = fila.runt?.multasPendientes === true && fila.runt.comparendos !== 0;
   const etiquetaMultas =
     fila.runt?.inscrito && fila.runt.multasPendientes != null
-      ? fila.runt.multasPendientes
+      ? multasPendientes
         ? `Multas: pendientes${fila.runt.comparendos != null ? ` (${fila.runt.comparendos})` : ""}`
-        : `Multas: paz y salvo${fila.runt.nroPazYSalvo ? ` · ${fila.runt.nroPazYSalvo}` : ""}`
+        : fila.runt.nroPazYSalvo
+          ? `Multas: paz y salvo · ${fila.runt.nroPazYSalvo}`
+          : "Multas: sin pendientes"
       : null;
   const reenviosAgotados = parte !== undefined && enCurso(estado) && parte.reenviosRestantes === 0;
   // «Cambiar documento» si aún no está aprobada (incluye pendiente de invitación sin RUNT).
@@ -558,7 +562,7 @@ export function PersonaActor({
           )}
           {etiquetaLicencia && <Badge tone="info">{etiquetaLicencia}</Badge>}
           {etiquetaMultas && (
-            <Badge tone={fila.runt?.multasPendientes ? "warning" : "success"}>{etiquetaMultas}</Badge>
+            <Badge tone={multasPendientes ? "warning" : "success"}>{etiquetaMultas}</Badge>
           )}
           {pideIdentidad && !radicantePunto && <Badge tone={TONO_VALIDACION(estado)}>Validación: {ETIQUETA_VALIDACION[estado] ?? estado}</Badge>}
           {pideIdentidad && !radicantePunto && estado !== "aprobada" && (

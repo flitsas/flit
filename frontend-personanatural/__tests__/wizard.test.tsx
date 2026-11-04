@@ -209,7 +209,8 @@ describe("avance bloqueado, guardado y conflictos", () => {
     expect(nodo(1)).toHaveAttribute("aria-current", "step");
     fireEvent.click(screen.getByRole("button", { name: "Recargar" }));
     await waitFor(() => expect(screen.queryByText(/Este trámite cambió mientras lo editabas/)).not.toBeInTheDocument());
-    expect(lecturas).toBe(2);
+    // El 409 persistente se reintenta una vez releyendo la versión (lectura 2); «Recargar» lee otra vez (3).
+    expect(lecturas).toBe(3);
   });
 
   it("si la sesión vence al guardar, avisa «Tu sesión venció» y deja reanudar", async () => {
