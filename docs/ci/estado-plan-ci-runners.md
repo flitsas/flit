@@ -91,22 +91,33 @@ El usuario no puede ampliar la 177 y quiere todo el CI en ella con los repos pri
 **Diseño** (rama `ci/core-api-vps`, sale de develop; reemplaza a `ci/core-api-pool`):
 - Job `pruebas (pool propio)` en `core-api.yml`, solo con el input `runner` o la variable de repo `RUNNER_CORE_API`. Sin ella, los PR siguen con la matriz en GitHub (verificado: run 41665901596).
 - Compila **una vez**; `.github/scripts/ci-core-api-vps.sh` corre los carriles como procesos: `PARALELO=3`, xUnit con 2 hilos (admin con 4), `nice`, admin primero.
-- **Un Postgres en RAM por carril** (`ci-servicios.sh <prefijo> --pg <carril>`, flit_dev copiada con `pg_dumpall --roles-only` + `pg_dump`, sin volver a migrar) y **un vhost de RabbitMQ por carril**. No sirve una base por carril en un mismo servidor: el feed de sincronización usa `pg_snapshot_xmin`, que es de todo el servidor (falló `ExternalSyncEndToEndTests` en la primera corrida).
+- **Un Postgres por carril, en disco con `fsync=off`** (`ci-servicios.sh <prefijo> --pg <carril>`, flit_dev copiada con `pg_dumpall --roles-only` + `pg_dump`, sin volver a migrar) y **un vhost de RabbitMQ por carril**. No sirve una base por carril en un mismo servidor: el feed de sincronización usa `pg_snapshot_xmin`, que es de todo el servidor (falló `ExternalSyncEndToEndTests` en la primera corrida).
 - El publish linux-musl va al final del mismo job. Una suite a la vez por runner: cuántas corren juntas = cuántos runners tiene el grupo `flit-ci`.
-- Ajustes sin código: variables `CI_VPS_PARALELO`, `CI_VPS_XUNIT_HILOS`, `CI_VPS_XUNIT_HILOS_ADMIN`.
+- Ajustes sin código: variables `CI_VPS_PARALELO`, `CI_VPS_XUNIT_HILOS`, `CI_VPS_XUNIT_HILOS_ADMIN`, `CI_VPS_ADMIN_SHARDS` (por defecto 1) y `CI_VPS_PG_TMPFS` (vacío = disco).
+- **No usar tmpfs para los Postgres** (2026-11-04): sin swap, el tmpfs (~5 GB) cuenta contra el slice de runners (MemoryHigh 12G) y no se puede liberar; al crecer admin el kernel desalojaba el código de los propios procesos → thrashing (carga 115–220, 79 % de CPU de sistema). En disco, esos datos son caché que el kernel sí suelta.
 
 | Fecha | Corrida | Configuración | Resultado |
 |---|---|---|---|
 | 2026-11-03 17:54 UTC | 41688727580 | v1: solo r3, 1 Postgres con una base por carril | 33 min; 1 fallo (`ExternalSyncEndToEndTests`, xmin compartido); carga máx. 13,6; RAM máx. 20,6 GB; **0 reinicios** |
 | 2026-11-03 20:32 UTC | 41713546796 | v2: 1 Postgres + vhost por carril, admin 4 hilos | ✅ **verde, 34 min** (build 4,7 · pruebas 25,7 · publish 2,3); admin 24,8 min (5.064), integration 4–7 min, resto 1 min; carga máx. 17; RAM máx. 22 GB; **0 reinicios**; sin huérfanos |
+| 2026-11-04 | 41838341625 | v3: admin en 2 shards, Postgres en tmpfs | ❌ abortada: thrashing (cada admin ~3,5 GB + tmpfs) |
+| 2026-11-04 | 41850465386 | v4: admin entero + HostPorClase, Postgres en tmpfs | ❌ abortada: thrashing (admin 5,7 GB + tmpfs 5,1 GB, slice 12,3 GB) |
+| 2026-11-04 16:18 UTC | 41865830378 | v5: Postgres en disco | abortada por el monitor (falsa alarma: medía MemoryCurrent, que incluye caché liberable; carga ~10, sistema 22 %) |
+| 2026-11-04 17:10 UTC | 41874934119 | v5: Postgres en disco, admin entero + HostPorClase | ✅ **verde, 28 min**; admin 19,4 min (5.064), integration 4–8 min, resto 1 min; carga máx. 26; memoria no liberable del slice máx. 10,5 GB; PSI de memoria 0; CPU de sistema máx. 27 %; **0 reinicios** |
 
 **Camino crítico = admin**, también en GitHub: en la corrida de control 41665901596 (mismo código) admin tardó ~27 min. La Fase 1b se fue perdiendo con clases nuevas: `PersonaNatural{Cotizacion,,Definicion,Identidad}GrpcTests` y `ContenidoPnTests` tardan ~15–35 s por prueba en los dos entornos. En la 177, prueba a prueba, admin es más rápido que en GitHub (mediana 0,54×).
 
+**HostPorClase en PersonaNatural** (`PersonaNatural{,Cotizacion,Definicion,Identidad}GrpcTests`, `ContenidoPnTests`): admin bajó de ~27 a **13,1 min en GitHub** (run 41841359966) y de 24,8 a 19,4 min en la 177.
+
+**Operación de la 177 durante las mediciones**
+- Unidad `actions-runner@.service` con `KillMode=mixed` (antes `process`: al parar un runner su `Runner.Listener` seguía vivo; r3 llegó a tener 3 y los jobs fallaban a los 3 s con «_diag/pages … already exists»).
+- `/root/monitor-pool.sh` aborta solo (`apagar-pool.sh`) si anon+shmem del slice pasa de 11,5 GB, si el PSI `full avg10` llega a 20 o si el CPU de sistema pasa del 40 % dos muestras seguidas. **No** mirar `MemoryCurrent`: incluye la caché de disco.
+- Margen: la memoria no liberable llegó a 10,5 GB de 12 GB → **un solo runner del grupo `flit-ci` a la vez** para core-api y `ADMIN_SHARDS=1`.
+
 **Siguientes pasos**
-1. Partir admin en 2 shards por clase en el job del pool (la CPU queda ociosa cuando admin corre solo) → estimado ~22 min de job.
-2. Llevar `HostPorClase` a las clases PersonaNatural*Grpc (beneficia también a GitHub).
-3. PR de `ci/core-api-vps` a develop → staging → release.
-4. Mover a la 177 el CI liviano (CI, CD, contratos, security scan) y flito; luego `RUNNER_CORE_API=flit-ci` con 1–2 runners, repos privados (rotar SMTP antes) y grupo `flit-ci` sin `allows_public_repositories`.
+1. ~~Partir admin en shards~~ (descartado por memoria) · ~~HostPorClase en PersonaNatural~~ (hecho).
+2. PR de `ci/core-api-vps` a develop → staging → release.
+3. Mover a la 177 el CI liviano (CI, CD, contratos, security scan) y flito; luego `RUNNER_CORE_API=flit-ci` con 1 runner para core-api, repos privados (rotar SMTP antes) y grupo `flit-ci` sin `allows_public_repositories`.
 
 ## 4. Pendientes fuera de las fases
 - Rotar la clave SMTP expuesta (el usuario dijo «más adelante»; hacerlo antes de pasar a privado).
