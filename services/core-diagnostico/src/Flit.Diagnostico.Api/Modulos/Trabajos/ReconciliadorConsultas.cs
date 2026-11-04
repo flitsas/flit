@@ -175,7 +175,8 @@ internal sealed partial class ReconciliadorConsultas(
         }
 
         // Dec. 6: perdida solo si su cola ya devolvió trabajos publicados después del suyo (más allá de la tolerancia).
-        if ((esExpress ? umbrales.PerdidasExpress : umbrales.PerdidasLote) is not { } perdidas || celda.DisponibleDesde >= perdidas)
+        // La misma marca con que BuscarHuerfanasAsync la seleccionó: el impuesto tiene su propia cola.
+        if (umbrales.De(esExpress, celda.Fuente == Fuente.ImpuestoDepartamental) is not { } perdidas || celda.DisponibleDesde >= perdidas)
             return Accion.Ninguna;
         if (!vivo)
         {

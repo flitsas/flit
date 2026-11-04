@@ -11,6 +11,7 @@ using Flit.Diagnostico.Tests.Api;
 using Flit.Diagnostico.Tests.Bus;
 using Flit.Diagnostico.Tests.Configuracion;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -357,6 +358,115 @@ public sealed class ReconciliadorTests
 
         await bus.ProcesarTodoAsync(ct);
         (await Motor.CeldasAsync(api, empresa.Id, lote, ct)).Single().Estado.Should().Be(EstadoCelda.Completado);
+    }
+
+    // Plan C3 (:550): el avance del lote general no prueba nada del impuesto. Sin marca propia, su celda espera su turno.
+    [Fact]
+    public async Task Impuesto_en_espera_no_se_republica_aunque_avance_el_lote_general()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var reloj = new RelojManual();
+        await using var api = await MotorNa.ArrancarAsync(b => b.Services.AddSingleton<TimeProvider>(reloj));
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var publicado = reloj.GetUtcNow();
+        var (sembrado, trabajo) = await ImpuestoEnCursoAsync(api, publicado, esExpress: false, ct);
+        var pulso = api.App.Services.GetRequiredService<PulsoConsultas>();
+
+        reloj.Avanzar(TimeSpan.FromMinutes(31));
+        pulso.Registrar(reloj.GetUtcNow());
+        pulso.RegistrarAtendido(ColaPulso.Lote, Guid.CreateVersion7(publicado.AddMinutes(20)));
+        pulso.RegistrarAtendido(ColaPulso.Express, Guid.CreateVersion7(publicado.AddMinutes(20)));
+
+        (await api.App.Services.GetRequiredService<ReconciliadorConsultas>().ReconciliarAsync(ct)).Should().Be(new VueltaReconciliador(0, 0, 0, 0, 0, 0));
+        var celda = await ImpuestoAsync(sembrado, ct);
+        (celda.Estado, celda.TrabajoId, celda.Republicaciones).Should().Be((EstadoCelda.EnCurso, (Guid?)trabajo, (short)0));
+        (await Motor.Bus(api).DescartarTrabajosAsync(ct)).Should().BeEmpty("no duplica la consulta de impuesto");
+    }
+
+    // Plan C3 (:550): perdida según SU cola, aunque la marca general no exista: se republica por la cola del impuesto y, a la segunda, cierra.
+    [Theory]
+    [InlineData(false, "consultas.diagnostico-impuesto.")]
+    [InlineData(true, "consultas.diagnostico-impuesto-express.")]
+    public async Task Impuesto_perdido_segun_su_cola_se_republica_y_a_la_segunda_cierra(bool esExpress, string prefijoCola)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var reloj = new RelojManual();
+        await using var api = await MotorNa.ArrancarAsync(b => b.Services.AddSingleton<TimeProvider>(reloj));
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var publicado = reloj.GetUtcNow();
+        var (sembrado, trabajo) = await ImpuestoEnCursoAsync(api, publicado, esExpress, ct);
+        var cola = esExpress ? ColaPulso.ImpuestoExpress : ColaPulso.Impuesto;
+        var pulso = api.App.Services.GetRequiredService<PulsoConsultas>();
+        var reconciliador = api.App.Services.GetRequiredService<ReconciliadorConsultas>();
+
+        reloj.Avanzar(TimeSpan.FromMinutes(31));
+        pulso.Registrar(reloj.GetUtcNow());
+        pulso.RegistrarAtendido(cola, Guid.CreateVersion7(publicado.AddMinutes(20)));
+
+        (await reconciliador.ReconciliarAsync(ct)).Should().Be(new VueltaReconciliador(1, 0, 1, 0, 0, 0), "su cola devolvió un trabajo publicado 20 min después");
+        var republicada = await ImpuestoAsync(sembrado, ct);
+        (republicada.Estado, republicada.Republicaciones).Should().Be((EstadoCelda.EnCurso, (short)1));
+        republicada.TrabajoId.Should().NotBe(trabajo);
+        var nuevo = (await Motor.Bus(api).DescartarTrabajosAsync(ct)).Should().ContainSingle().Subject;
+        nuevo.RoutingKey.Should().StartWith(prefijoCola);
+        nuevo.TrabajoId.Should().Be(republicada.TrabajoId!.Value);
+
+        var republicadoEn = reloj.GetUtcNow();
+        reloj.Avanzar(TimeSpan.FromMinutes(31));
+        pulso.Registrar(reloj.GetUtcNow());
+        pulso.RegistrarAtendido(cola, Guid.CreateVersion7(republicadoEn.AddMinutes(20)));
+
+        (await reconciliador.ReconciliarAsync(ct)).Should().Be(new VueltaReconciliador(1, 0, 0, 1, 0, 0));
+        (await ImpuestoAsync(sembrado, ct)).Estado.Should().Be(EstadoCelda.Error);
+        (await Motor.Bus(api).DescartarTrabajosAsync(ct)).Should().BeEmpty("cerrar no publica nada");
+    }
+
+    // La marca del impuesto no mueve a las demás fuentes: la RUNT sigue midiéndose con la cola general.
+    [Fact]
+    public async Task Las_otras_fuentes_siguen_con_la_marca_general_y_no_con_la_del_impuesto()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var reloj = new RelojManual();
+        await using var api = await MotorRunt.ArrancarAsync(b => b.Services.AddSingleton<TimeProvider>(reloj));
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var publicado = reloj.GetUtcNow();
+        var lote = await MotorRunt.LoteAsync(api, empresa, [Lotes.Fila("TST001")], ct);
+        var bus = Motor.Bus(api);
+        (await bus.DescartarTrabajosAsync(ct)).Should().ContainSingle();
+        var reconciliador = api.App.Services.GetRequiredService<ReconciliadorConsultas>();
+        var pulso = api.App.Services.GetRequiredService<PulsoConsultas>();
+
+        reloj.Avanzar(TimeSpan.FromMinutes(31));
+        pulso.Registrar(reloj.GetUtcNow());
+        pulso.RegistrarAtendido(ColaPulso.Impuesto, Guid.CreateVersion7(publicado.AddMinutes(20)));
+        pulso.RegistrarAtendido(ColaPulso.ImpuestoExpress, Guid.CreateVersion7(publicado.AddMinutes(20)));
+        (await reconciliador.ReconciliarAsync(ct)).Should().Be(new VueltaReconciliador(0, 0, 0, 0, 0, 0), "la marca del impuesto no declara perdida a la RUNT");
+
+        pulso.RegistrarAtendido(ColaPulso.Lote, Guid.CreateVersion7(publicado.AddMinutes(20)));
+        (await reconciliador.ReconciliarAsync(ct)).Should().Be(new VueltaReconciliador(1, 0, 1, 0, 0, 0));
+        (await Motor.CeldasAsync(api, empresa.Id, lote, ct)).Single().Republicaciones.Should().Be(1);
+        (await bus.DescartarTrabajosAsync(ct)).Should().ContainSingle().Which.RoutingKey.Should().StartWith("consultas.diagnostico.");
+    }
+
+    /// <summary>La celda de impuesto con solicitud posible y un trabajo publicado en <paramref name="publicado"/> que nadie atendió.</summary>
+    private static async Task<(SolicitudImpuestoTests.Sembrado Sembrado, Guid Trabajo)> ImpuestoEnCursoAsync(
+        ApiDePrueba api, DateTimeOffset publicado, bool esExpress, CancellationToken ct)
+    {
+        var sembrado = await SolicitudImpuestoTests.SembrarAsync(api, ct);
+        var trabajo = Guid.CreateVersion7(publicado);
+        await Motor.EjecutarAsync(api,
+            $"UPDATE diagnostico.consultas SET estado = 'EN_CURSO', trabajo_id = '{trabajo}', disponible_desde = '{publicado.UtcDateTime:O}'::timestamptz WHERE id = '{sembrado.ImpuestoId}'", ct);
+        if (esExpress)
+            await Motor.EjecutarAsync(api, $"UPDATE diagnostico.diagnosticos SET es_express = true WHERE id = '{sembrado.LoteId}'", ct);
+        await Motor.Bus(api).DescartarTrabajosAsync(ct);
+        return (sembrado, trabajo);
+    }
+
+    private static async Task<CeldaConsulta> ImpuestoAsync(SolicitudImpuestoTests.Sembrado sembrado, CancellationToken ct)
+    {
+        await using var db = sembrado.Empresa.Db();
+        return await db.Set<CeldaConsulta>().AsNoTracking().SingleAsync(c => c.Id == sembrado.ImpuestoId, ct);
     }
 
     /// <summary>
