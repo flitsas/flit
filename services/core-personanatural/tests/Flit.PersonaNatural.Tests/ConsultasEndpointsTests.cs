@@ -459,21 +459,23 @@ public sealed class ConsultasEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Gravamen_ConPrendaPeroSinIdentidadValidada_NoEntregaElAcreedorDelTercero()
+    public async Task Gravamen_ConPrendaSinIdentidadValidada_EntregaAcreedorNitYFecha_ComoEnFlit2()
     {
         if (!await IniciarAsync()) return;
         var (solicitud, token) = await SembrarAsync(("vendedor", "pendiente", null));
-        _runt.Vehiculo = () => ConGravamen("[{\"nombreAcreedor\":\"BANCO FICTICIO S.A.\",\"numeroDocumentoAcreedor\":\"900123456\"}]");
+        _runt.Vehiculo = () => ConGravamen("[{\"nombreAcreedor\":\"BANCO FICTICIO S.A.\",\"numeroDocumentoAcreedor\":\"900123456\",\"fechaInscripcion\":\"2024-03-15\"}]");
 
         var respuesta = await GetAsync(Gravamen(solicitud), token);
 
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK);
         var cuerpo = await Json(respuesta);
         cuerpo.GetProperty("tienePrenda").GetBoolean().Should().BeTrue();
-        cuerpo.GetProperty("acreedor").ValueKind.Should().Be(JsonValueKind.Null);
-        cuerpo.GetProperty("nitAcreedor").ValueKind.Should().Be(JsonValueKind.Null);
+        cuerpo.GetProperty("acreedor").GetString().Should().Be("BANCO FICTICIO S.A.");
+        cuerpo.GetProperty("nitAcreedor").GetString().Should().Be("900123456");
+        cuerpo.GetProperty("fechaInscripcion").GetString().Should().Be("2024-03-15");
+        cuerpo.GetProperty("tieneGravamenes").GetBoolean().Should().BeTrue();
         cuerpo.GetProperty("aviso").ValueKind.Should().Be(JsonValueKind.Null);
-        (await respuesta.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().NotContain("BANCO FICTICIO").And.NotContain("900123456");
+        (await respuesta.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().NotContain(DocumentoPropietario, "nada del propietario");
     }
 
     [Fact]
@@ -492,7 +494,7 @@ public sealed class ConsultasEndpointsTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Gravamen_LaIdentidadDeOtraSolicitudNoCuenta_YSinSesionOSinVehiculoHayError()
+    public async Task Gravamen_SinSesionOSinVehiculoHayError()
     {
         if (!await IniciarAsync()) return;
         var (solicitud, token) = await SembrarAsync(("vendedor", "pendiente", null));
@@ -509,7 +511,7 @@ public sealed class ConsultasEndpointsTests : IAsyncLifetime
 
         var sinVehiculo = await GetAsync(Gravamen(solicitud), token);
 
-        cuerpo.GetProperty("acreedor").ValueKind.Should().Be(JsonValueKind.Null);
+        cuerpo.GetProperty("acreedor").GetString().Should().Be("BANCO FICTICIO S.A.");
         sinSesion.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         sinVehiculo.StatusCode.Should().Be(HttpStatusCode.Conflict);
         (await CodigoAsync(sinVehiculo)).Should().Be("vehiculo_no_definido");

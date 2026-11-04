@@ -84,6 +84,9 @@ public sealed record PrendaDatos(bool Tiene, string? Acreedor, string? NitAcreed
 
 public sealed record RequisitosDatos(IReadOnlyList<string> Transformaciones, string? Observaciones);
 
+/// <summary>Documento del propietario que el ciudadano escribió al consultar el vehículo, CIFRADO (base64). Solo para volver a consultar el RUNT en la sesión; nunca viaja a core-api.</summary>
+public sealed record PropietarioConsultaDatos(string TipoDocumento, string DocumentoCifrado);
+
 public sealed record DiagnosticoDatos(DateTimeOffset Fecha, bool PuedeContinuar, IReadOnlyList<RequisitoDto> Requisitos);
 
 /// <summary>
@@ -105,6 +108,9 @@ public sealed record DatosSolicitud(ComercialDatos? Comercial = null, PrendaDato
 
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public string? OrganismoId { get; init; }
+
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public PropietarioConsultaDatos? PropietarioConsulta { get; init; }
 
     private static readonly JsonSerializerOptions Opciones = new(JsonSerializerDefaults.Web);
 

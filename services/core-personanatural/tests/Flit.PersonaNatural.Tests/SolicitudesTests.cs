@@ -36,6 +36,7 @@ public sealed class SolicitudesTests : IAsyncLifetime
     private const string CorreoVendedor = "vendedor.secreto@example.org";
 
     private readonly FachadaRequisitosFalsa _requisitos = new();
+    private readonly ConsultasRuntFalso _runt = new();
     private PortalHost _host = null!;
     private bool _iniciado;
 
@@ -49,7 +50,7 @@ public sealed class SolicitudesTests : IAsyncLifetime
 
     private async Task IniciarAsync(params (string Clave, string Valor)[] ajustes)
     {
-        _host = await PortalHost.IniciarAsync("pnsol", (servicios, _) => servicios.AddSingleton<IFachadaRequisitos>(_requisitos), ajustes);
+        _host = await PortalHost.IniciarAsync("pnsol", (servicios, _) => { servicios.AddSingleton<IFachadaRequisitos>(_requisitos); servicios.AddSingleton<Flit.PersonaNatural.Api.Consultas.IConsultasRunt>(_runt); }, ajustes);
         _iniciado = true;
         _host.Definiciones.PorCodigo["TRASPASO_STANDARD"] = DefinicionesDePrueba.Traspaso();
         _host.Definiciones.PorCodigo["CAMBIO_COLOR"] = DefinicionesDePrueba.UnTitular();
@@ -450,6 +451,26 @@ public sealed class SolicitudesTests : IAsyncLifetime
         await using var db = _host.NuevaDb();
         var datos = (await db.Set<SolicitudTramite>().SingleAsync(TestContext.Current.CancellationToken)).Datos;
         datos.Should().Contain("diagnostico").And.Contain("SOAT vigente").And.NotContain("1234567");
+    }
+
+    [Fact]
+    public async Task ElGravamen_EnElWeb_UsaElDocumentoDelDiagnostico_AunqueElTipoNoTengaCamposDelPropietario_YNoLoDejaEnClaro()
+    {
+        await IniciarAsync();
+        var (id, token) = await AbrirSesion("TIPO_PRENDA");
+        var r = ResultadosFalsos.VehiculoCompleto(prenda: true);
+        r.Campos.First(c => c.Clave == "runt_gravamenes").ValorJson = "[{\"nombreAcreedor\":\"BANCO FICTICIO S.A.\",\"numeroDocumentoAcreedor\":\"900123456\"}]";
+        _runt.Vehiculo = () => r;
+        (await _host.EnviarAsync(HttpMethod.Post, $"{Base}/solicitudes/{id}/diagnostico", new { propietario = new { tipoDocumento = "cc", numeroDocumento = "7005551234" } }, token)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var respuesta = await _host.EnviarAsync(HttpMethod.Get, $"{Base}/solicitudes/{id}/vehiculo/gravamen", token: token);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK, "antes el web daba 409 sin_vehiculo: no había documento del propietario");
+        var json = (await PortalHost.JsonAsync(respuesta)).RootElement;
+        json.GetProperty("acreedor").GetString().Should().Be("BANCO FICTICIO S.A.");
+        _runt.LlamadasVehiculo.Single().Propietario.Should().Be(new Flit.PersonaNatural.Api.Consultas.DocumentoConsulta("CC", "7005551234"));
+        await using var db = _host.NuevaDb();
+        (await db.Set<SolicitudTramite>().SingleAsync(TestContext.Current.CancellationToken)).Datos.Should().NotContain("7005551234", "el documento se guarda cifrado");
     }
 
     [Fact]

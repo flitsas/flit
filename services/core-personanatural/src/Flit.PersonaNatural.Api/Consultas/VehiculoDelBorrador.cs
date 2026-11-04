@@ -17,7 +17,7 @@ public enum EstadoVehiculoBorrador
 }
 
 /// <summary>Gravamen del vehículo del borrador (HU #14257). <c>Aviso</c> = <c>sin_gravamen</c> cuando el RUNT respondió sin prenda.</summary>
-public sealed record GravamenBorradorDto(bool TienePrenda, string? Acreedor, string? NitAcreedor, string? Aviso);
+public sealed record GravamenBorradorDto(bool TienePrenda, string? Acreedor, string? NitAcreedor, string? Aviso, string? FechaInscripcion = null, bool TieneGravamenes = false);
 
 public sealed record ResultadoVehiculoBorrador(EstadoVehiculoBorrador Estado, string? Clase = null, GravamenBorradorDto? Gravamen = null, ValoresActualesVehiculo? Valores = null);
 
@@ -25,10 +25,10 @@ public sealed record ResultadoVehiculoBorrador(EstadoVehiculoBorrador Estado, st
 /// Consultas del RUNT sobre el vehículo del BORRADOR (HU #14255 y #14257): la clase para filtrar las carrocerías y el gravamen para
 /// la prenda. El servidor resuelve el vehículo y el propietario desde el borrador: el navegador no manda ni placa ni documento.
 /// Por placa se consulta con el documento que el diagnóstico dejó en los campos, o con el del titular de la solicitud.
-/// Habeas Data (HU #14041): la clase y la bandera de prenda son dato mínimo; el acreedor (dato de un tercero) solo sale si algún actor
-/// de ESTA solicitud tiene la identidad validada, con el mismo criterio de <see cref="ConsultaDetalleService"/>.
+/// El acreedor, su NIT y la fecha de inscripción salen siempre que el RUNT los traiga (decisión del producto: el portal muestra la
+/// prenda como FLIT 2); nunca datos del propietario, y solo para la solicitud de la sesión.
 /// </summary>
-public sealed class VehiculoDelBorradorService(PersonaNaturalDb db, PersonaService personas, IConsultasRunt runt, ConsultaDetalleService detalle, MedicionConsultasService medicion) : IValoresRuntBorrador
+public sealed class VehiculoDelBorradorService(PersonaNaturalDb db, PersonaService personas, IConsultasRunt runt, MedicionConsultasService medicion, CifradoPii cifrado) : IValoresRuntBorrador
 {
     public const string ActorAuditoria = "consulta_borrador";
 
@@ -76,11 +76,28 @@ public sealed class VehiculoDelBorradorService(PersonaNaturalDb db, PersonaServi
         if (!ProyeccionMinima.TienePrenda(resultado!))
             return new ResultadoVehiculoBorrador(estado, null, new GravamenBorradorDto(false, null, null, "sin_gravamen"));
 
-        if (!await detalle.TieneIdentidadValidadaAsync(solicitudId, ct).ConfigureAwait(false))
-            return new ResultadoVehiculoBorrador(estado, null, new GravamenBorradorDto(true, null, null, null));
-
         var (acreedor, nit) = Acreedor(resultado!);
-        return new ResultadoVehiculoBorrador(estado, null, new GravamenBorradorDto(true, acreedor, nit, null));
+        return new ResultadoVehiculoBorrador(estado, null, new GravamenBorradorDto(true, acreedor, nit, null, FechaInscripcion(resultado!), true));
+    }
+
+    /// <summary>Fecha de inscripción del primer gravamen de <c>runt_gravamenes</c> (<c>fechaInscripcion</c> o <c>fechaRegistro</c>), tal como la trae el RUNT.</summary>
+    internal static string? FechaInscripcion(ResultadoConsulta resultado)
+    {
+        var json = resultado.Campos.FirstOrDefault(c => string.Equals(c.Clave, ProyeccionMinima.CampoGarantias, StringComparison.OrdinalIgnoreCase))?.ValorJson;
+        if (string.IsNullOrWhiteSpace(json))
+            return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                return null;
+            return doc.RootElement.EnumerateArray().Where(f => f.ValueKind == JsonValueKind.Object)
+                .Select(f => Primero(f, "fechaInscripcion", "FechaInscripcion", "fechaRegistro", "FechaRegistro")).FirstOrDefault(f => f is not null);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     /// <summary>Primer gravamen con datos de <c>runt_gravamenes</c> (mismas llaves que <c>parseRuntGravamenesJson</c> de FLIT 2) o, en su defecto, el acreedor plano.</summary>
@@ -133,7 +150,7 @@ public sealed class VehiculoDelBorradorService(PersonaNaturalDb db, PersonaServi
     private async Task<(EstadoVehiculoBorrador Estado, ResultadoConsulta? Resultado, string? Placa)> ConsultarAsync(Guid solicitudId, CancellationToken ct)
     {
         var s = await db.Set<SolicitudTramite>().AsNoTracking().Where(x => x.Id == solicitudId)
-            .Select(x => new { x.Placa, x.Vin, x.FieldValues }).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+            .Select(x => new { x.Placa, x.Vin, x.FieldValues, x.Datos }).FirstOrDefaultAsync(ct).ConfigureAwait(false);
         if (s is null)
             return (EstadoVehiculoBorrador.SolicitudNoEncontrada, null, null);
 
@@ -145,7 +162,7 @@ public sealed class VehiculoDelBorradorService(PersonaNaturalDb db, PersonaServi
         DocumentoConsulta? propietario = null;
         if (vin is null)
         {
-            propietario = await PropietarioAsync(solicitudId, s.FieldValues, ct).ConfigureAwait(false);
+            propietario = await PropietarioAsync(solicitudId, s.FieldValues, s.Datos, ct).ConfigureAwait(false);
             if (propietario is null)
                 return (EstadoVehiculoBorrador.SinVehiculo, null, null);
         }
@@ -163,7 +180,7 @@ public sealed class VehiculoDelBorradorService(PersonaNaturalDb db, PersonaServi
         }
     }
 
-    private async Task<DocumentoConsulta?> PropietarioAsync(Guid solicitudId, string camposJson, CancellationToken ct)
+    private async Task<DocumentoConsulta?> PropietarioAsync(Guid solicitudId, string camposJson, string? datosJson, CancellationToken ct)
     {
         try
         {
@@ -177,8 +194,28 @@ public sealed class VehiculoDelBorradorService(PersonaNaturalDb db, PersonaServi
             // Sin campos legibles: se intenta con el titular.
         }
 
+        // El documento que el ciudadano escribió al consultar el vehículo (portal web): los tipos sin esos campos no lo dejan en
+        // los campos y las partes aún no existen; sin esto no habría con qué consultar el RUNT (409 sin_vehiculo).
+        if (DatosSolicitud.Leer(datosJson).PropietarioConsulta is { } guardado && Descifrar(guardado, solicitudId) is { } deDiagnostico)
+            return deDiagnostico;
+
         var partes = await personas.LeerAsync(solicitudId, ActorAuditoria, ct).ConfigureAwait(false);
         var titular = RolesTitular.Select(rol => partes.FirstOrDefault(p => string.Equals(p.Parte, rol, StringComparison.OrdinalIgnoreCase))).FirstOrDefault(p => p is not null);
         return titular is null ? null : EntradaConsulta.DocumentoPropietario(titular.TipoDocumento, titular.Documento);
+    }
+
+    internal const string ContextoPropietario = "solicitud.propietario_consulta";
+
+    private DocumentoConsulta? Descifrar(PropietarioConsultaDatos guardado, Guid solicitudId)
+    {
+        try
+        {
+            var numero = cifrado.Descifrar(Convert.FromBase64String(guardado.DocumentoCifrado), new ContextoCifrado(ContextoPropietario, solicitudId));
+            return EntradaConsulta.DocumentoPropietario(guardado.TipoDocumento, numero);
+        }
+        catch (Exception e) when (e is FormatException or System.Security.Cryptography.CryptographicException)
+        {
+            return null;
+        }
     }
 }

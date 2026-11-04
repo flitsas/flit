@@ -51,6 +51,7 @@ public sealed partial class SolicitudesService(
     TimeProvider reloj,
     ConsentimientoVersiones versionesConsentimiento,
     Catalogos.CatalogosVehiculoService catalogosVehiculo,
+    CifradoPii cifrado,
     IValoresRuntBorrador? valoresRunt = null)
 {
     public const string CodigoTipoNoDisponible = "tipo_no_disponible";
@@ -394,7 +395,14 @@ public sealed partial class SolicitudesService(
         var resultado = await requisitos.EvaluarAsync(s.TipoTramiteCodigo, s.OrganismoId.ToString(), s.Placa, s.Vin, tipoDoc, doc, ct).ConfigureAwait(false);
 
         SembrarConsulta(s, def, tipoDoc, doc);
-        s.Datos = (DatosSolicitud.Leer(s.Datos) with { Diagnostico = new DiagnosticoDatos(reloj.GetUtcNow(), resultado.PuedeContinuar, resultado.Requisitos) }).Serializar();
+        var propietario = string.IsNullOrWhiteSpace(tipoDoc) || string.IsNullOrWhiteSpace(doc)
+            ? DatosSolicitud.Leer(s.Datos).PropietarioConsulta
+            : new PropietarioConsultaDatos(tipoDoc, Convert.ToBase64String(cifrado.Cifrar(doc, new ContextoCifrado(VehiculoDelBorradorService.ContextoPropietario, s.Id))!));
+        s.Datos = (DatosSolicitud.Leer(s.Datos) with
+        {
+            Diagnostico = new DiagnosticoDatos(reloj.GetUtcNow(), resultado.PuedeContinuar, resultado.Requisitos),
+            PropietarioConsulta = propietario,
+        }).Serializar();
         await GuardarAsync(s, ct).ConfigureAwait(false);
         return resultado;
     }
