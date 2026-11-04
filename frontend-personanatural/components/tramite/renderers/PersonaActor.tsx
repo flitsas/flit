@@ -165,12 +165,17 @@ export function PersonaActor({
   const soloCompletarRunt = useRef(false);
   /** La espera que se muestra es la de un reintento automático (cambia el texto: ya no hay nada que pulsar). */
   const [reintentoAuto, setReintentoAuto] = useState(false);
+  /** El último error se puede resolver volviendo a consultar a mano (no es una espera automática ni un tope de consultas). */
+  const [errorReintentable, setErrorReintentable] = useState(false);
+  /** La consulta en curso la pidió el botón «Volver a consultar»: si falla no programa reintento automático. */
+  const consultaManual = useRef(false);
   const consulta = useMutation<PersonaDetalle, unknown, PeticionConsulta>({
     mutationFn: ({ tipoDocumento, documento, signal }) =>
       cliente.consultas.personaDetalle(solicitudId, { tipoDocumento, documento, rol: fila.rol, ...consentimientoDeConsulta }, { signal }),
     onSuccess: (r, { signal }) => {
       if (signal.aborted) return; // el documento cambió mientras consultaba: esta respuesta ya no aplica
       setErrorConsulta(null);
+      setErrorReintentable(false);
       setReintentoAuto(false);
       reintentos.current = 0;
       const nombre = (r.existe ? (r.nombreCompleto ?? [r.nombres, r.apellidos].filter(Boolean).join(" ")) : "").trim();
@@ -189,13 +194,18 @@ export function PersonaActor({
       if (nombre) {
         setAvisoManual(null);
         // Una persona ya guardada con su nombre (borrador reabierto) conserva lo que tenía: la consulta solo completa el RUNT.
-        const conservaNombre = filaActual.current.consultado && filaActual.current.nombre.trim() !== "";
+        const conservaNombre = filaActual.current.consultado && filaActual.current.nombre.trim() !== "" && filaActual.current.runt?.inscrito !== false;
         onCambio({ consultado: true, ...(conservaNombre ? {} : { nombreConsultado: true, nombre }), licencia, runt, ...(ciudad ? { ciudad } : {}) });
       } else if (soloCompletarRunt.current) {
         // Borrador reabierto: lo guardado no se toca; la etiqueta de RUNT refleja lo que dijo la consulta.
         onCambio({ licencia, runt });
       } else {
-        setAvisoManual("No se encontró en RUNT. Corrige el documento e intenta de nuevo; sin inscripción RUNT no puedes continuar con esta persona.");
+        // Sin poder corregir el documento (titular o precargado) lo único posible es volver a consultar.
+        setAvisoManual(
+          esPropietario || documentoFijo
+            ? "No se encontró en RUNT. Vuelve a consultar; sin inscripción RUNT no puedes continuar con esta persona."
+            : "No se encontró en RUNT. Corrige el documento e intenta de nuevo; sin inscripción RUNT no puedes continuar con esta persona.",
+        );
         onCambio({ consultado: true, nombreConsultado: false, nombre: "", licencia: null, runt, ...(ciudad ? { ciudad } : {}) });
       }
     },
@@ -209,18 +219,21 @@ export function PersonaActor({
       if (e instanceof ApiError && e.code === "detalle_agotado") {
         // Sin consultas disponibles: se sigue a mano, como cuando no hay coincidencia.
         setAvisoManual(mensajeDe(e));
+        setErrorReintentable(false);
         onCambio({ consultado: true, nombreConsultado: false, nombre: "", licencia: null, runt: null });
         return;
       }
       const espera = esperaDe(e);
       const bloqueo = bloqueoConsulta.registrar(e);
       // El proveedor pide esperar: al terminar la cuenta se vuelve a consultar sola (con tope); después, a mano.
-      const auto = bloqueo && espera !== undefined && espera <= ESPERA_MAX_REINTENTO_S && reintentos.current < MAX_REINTENTOS_AUTOMATICOS;
+      const auto = !consultaManual.current && bloqueo && espera !== undefined && espera <= ESPERA_MAX_REINTENTO_S && reintentos.current < MAX_REINTENTOS_AUTOMATICOS;
       if (auto) {
         reintentos.current += 1;
         reintentoPendiente.current = true;
       }
       setReintentoAuto(auto);
+      // Con las consultas pausadas, volver a consultar no serviría (el cupo agotado ya salió arriba).
+      setErrorReintentable(!auto && !(e instanceof ApiError && e.code === "consultas_no_disponibles"));
       setErrorConsulta(auto ? mensajeDe(e).replace(/\s*Inténtalo de nuevo\.?/i, "").trim() : mensajeDe(e));
     },
   });
@@ -378,12 +391,30 @@ export function PersonaActor({
       const c = new AbortController();
       controlador.current = c;
       soloCompletarRunt.current = completar;
+      consultaManual.current = false;
       setErrorConsulta(null);
       consultar({ tipoDocumento, documento, signal: c.signal });
     }, montado.current ? ESPERA_CONSULTA_AUTOMATICA_MS : 0);
     return () => clearTimeout(temporizador);
   }, [claveDoc, consultable, faltaCompletarRunt, consultar, fila.tipoDocumento, fila.numeroDocumento]);
   const fichaPropietario = esPropietario && fila.consultado;
+  // «Volver a consultar»: el mismo documento, cuando no se halló en RUNT o la consulta falló y repetirla puede servir.
+  const puedeReconsultar =
+    consultaActiva &&
+    !juridica &&
+    formatoValido &&
+    !identidadAprobada &&
+    !faltaCompletarRunt &&
+    ((fila.consultado && fila.runt?.inscrito === false) || (errorConsulta !== null && errorReintentable));
+  const reconsultar = () => {
+    controlador.current?.abort();
+    const c = new AbortController();
+    controlador.current = c;
+    soloCompletarRunt.current = false;
+    consultaManual.current = true;
+    claveConsultada.current = claveDoc;
+    consultar({ tipoDocumento: fila.tipoDocumento, documento: fila.numeroDocumento, signal: c.signal });
+  };
   // Envío automático fallido (o enlace que no salió): botón de alerta para reintentarlo.
   const mostrarFalla = envioAutomatico && Boolean(fallaEnvio) && (estado === "sin_solicitar" || estado === "pendiente_envio");
 
@@ -551,6 +582,18 @@ export function PersonaActor({
         <p role="status" className="text-xs">
           {reintentoAuto ? "Volveremos a consultar" : "Podrás intentarlo de nuevo"} en {bloqueoConsulta.segundosRestantes} s.
         </p>
+      )}
+      {fichaPropietario && errorConsulta && (
+        <p role="alert" className="text-xs text-alert">
+          {errorConsulta}
+        </p>
+      )}
+      {puedeReconsultar && (
+        <div>
+          <Btn tone="secondary" onClick={reconsultar} disabled={bloqueoConsulta.bloqueado || consulta.isPending}>
+            {consulta.isPending ? "Consultando..." : "Volver a consultar"}
+          </Btn>
+        </div>
       )}
 
       {fila.consultado && (fila.runt || etiquetaLicencia || etiquetaMultas || pideIdentidad) && (

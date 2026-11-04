@@ -1391,7 +1391,7 @@ jobs:
   # Una variable nueva en el compose NO llega sola: hay que agregarla alla, en cada ambiente.
   deploy-gitops:
     name: Deploy ${{ needs.setup.outputs.env_name }} (GitOps → Argo CD)
-    needs: [setup, build-core-api, build-core-identity, build-core-consultas, build-core-notificaciones, build-core-comparendos, build-core-ict, build-frontend, build-frontend-hub, build-frontend-comparendos, build-frontend-personanatural, build-core-personanatural, build-python-ml]
+    needs: [setup, build-core-api, build-core-identity, build-core-consultas, build-core-notificaciones, build-core-comparendos, build-core-ict, build-frontend, build-frontend-hub, build-frontend-comparendos, build-frontend-personanatural, build-core-personanatural, build-core-diagnostico, build-frontend-diagnostico, build-python-ml]
     if: ${{ !cancelled() && needs.setup.result == 'success' && (github.ref_name == 'develop' || github.ref_name == 'staging' || github.ref_name == 'release') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -1425,6 +1425,10 @@ jobs:
       D_CORE_PERSONANATURAL: ${{ needs.build-core-personanatural.outputs.digest }}
       R_FRONTEND_PERSONANATURAL: ${{ needs.build-frontend-personanatural.result }}
       D_FRONTEND_PERSONANATURAL: ${{ needs.build-frontend-personanatural.outputs.digest }}
+      R_CORE_DIAGNOSTICO: ${{ needs.build-core-diagnostico.result }}
+      D_CORE_DIAGNOSTICO: ${{ needs.build-core-diagnostico.outputs.digest }}
+      R_FRONTEND_DIAGNOSTICO: ${{ needs.build-frontend-diagnostico.result }}
+      D_FRONTEND_DIAGNOSTICO: ${{ needs.build-frontend-diagnostico.outputs.digest }}
       R_PYTHON_ML: ${{ needs.build-python-ml.result }}
       D_PYTHON_ML: ${{ needs.build-python-ml.outputs.digest }}
     steps:
@@ -1460,8 +1464,8 @@ jobs:
           FAILED=""
           MSG=""
           # servicio:imagen:variable (R_<variable> = resultado del build, D_<variable> = digest)
-          # Persona Natural: si la imagen aún no está en la kustomization del ambiente (QA/PDN), se omite
-          # sin fallar — el portal se enciende por ambiente (DEV primero).
+          # Persona Natural y Diagnóstico: si la imagen aún no está en la kustomization del ambiente (QA/PDN), se omite
+          # sin fallar — el producto se enciende por ambiente (DEV primero).
           for entry in \
               "core-api:${{ env.CORE_API_IMAGE }}:CORE_API" \
               "core-identity:${{ env.CORE_IDENTITY_IMAGE }}:CORE_IDENTITY" \
@@ -1474,6 +1478,8 @@ jobs:
               "frontend-comparendos:${{ env.FRONTEND_COMPARENDOS_IMAGE }}:FRONTEND_COMPARENDOS" \
               "core-personanatural:${{ env.CORE_PERSONANATURAL_IMAGE }}:CORE_PERSONANATURAL" \
               "frontend-personanatural:${{ env.FRONTEND_PERSONANATURAL_IMAGE }}:FRONTEND_PERSONANATURAL" \
+              "core-diagnostico:${{ env.CORE_DIAGNOSTICO_IMAGE }}:CORE_DIAGNOSTICO" \
+              "frontend-diagnostico:${{ env.FRONTEND_DIAGNOSTICO_IMAGE }}:FRONTEND_DIAGNOSTICO" \
               "python-ml:${{ env.PYTHON_ML_IMAGE }}:PYTHON_ML"; do
             svc=${entry%%:*}; rest=${entry#*:}; img=${rest%:*}; var=${rest##*:}
             r="R_$var"; d="D_$var"
@@ -1484,8 +1490,8 @@ jobs:
             fi
             if ! yq -e "(.images[] | select(.name == \"$img\"))" "$K" > /dev/null 2>&1; then
               case "$svc" in
-                core-personanatural|frontend-personanatural)
-                  echo "::notice::$svc: no listado en $K; omitido (portal no encendido en ${AMBIENTE})"
+                core-personanatural|frontend-personanatural|core-diagnostico|frontend-diagnostico)
+                  echo "::notice::$svc: no listado en $K; omitido (producto no encendido en ${AMBIENTE})"
                   continue
                   ;;
                 *)
