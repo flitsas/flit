@@ -1,0 +1,12 @@
+{
+  "currentCertificationPeriod": "2026",
+  "currentConsultationDate": "Febrero 9 de 2025",
+  "lastPaymentMadeYear": "2024",
+  "lastPaymentMadeDate": "09-02-2025",
+  "lastPaymentMadeAmountPaid": "$ 1.234",
+  "pendingDebtTaxes": false,
+  "pendingTotalToPay": "",
+  "pendingValidity": "",
+  "pendingDetailTax": [],
+  "observationError": { "descriptionError": "", "descriptionErrorDevelopment": "TRAZA-INTERNA-NO-COPIAR", "typeError": 0 }
+}

@@ -1,0 +1,6 @@
+{
+  "pendingDebtTaxes": false,
+  "pendingDetailTax": [],
+  "pendingTotalToPay": "0",
+  "observationError": { "descriptionError": "Error procesando la solicitud", "descriptionErrorDevelopment": "TRAZA-INTERNA-NO-COPIAR", "typeError": 1 }
+}

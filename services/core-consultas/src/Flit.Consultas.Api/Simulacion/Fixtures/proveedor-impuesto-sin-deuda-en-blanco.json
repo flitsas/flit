@@ -1,0 +1,18 @@
+{
+  "currentCertificationPeriod": "",
+  "currentConsultationDate": "",
+  "currentVehicleCommercialAppraisal": "",
+  "lastPaymentMadeYear": "",
+  "lastPaymentMadeDate": "",
+  "lastPaymentMadeAmountPaid": "",
+  "pendingValidity": "",
+  "pendingDebtTaxes": false,
+  "pendingVehicleTaxValue": "",
+  "pendingPenalties": "",
+  "pendingInterestLate": "",
+  "pendingSystematization": "",
+  "pendingTotalToPay": "",
+  "idAttachedTaxSettlementConsolidated": "",
+  "pendingDetailTax": [],
+  "observationError": { "descriptionError": "", "descriptionErrorDevelopment": "TRAZA-INTERNA-NO-COPIAR", "typeError": 0 }
+}

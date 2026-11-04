@@ -1,0 +1,6 @@
+{
+  "pendingDebtTaxes": false,
+  "pendingTotalToPay": "0",
+  "pendingDetailTax": [],
+  "observationError": { "descriptionError": "Timeout de page.goto", "descriptionErrorDevelopment": "TRAZA-INTERNA-NO-COPIAR", "typeError": 1 }
+}
