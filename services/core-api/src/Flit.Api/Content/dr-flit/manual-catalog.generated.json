@@ -2979,6 +2979,7 @@
           "title": "2. Actores en el portal web",
           "paragraphs": [
             "Al llegar a «Actores», FLIT consulta automáticamente al RUNT los datos del titular, de la licencia de conducción y de las multas, y los muestra con sus etiquetas. El documento del titular se ve pero no se puede editar.",
+            "Si la consulta falla o la persona no aparece en el RUNT, se muestra el botón «Volver a consultar», que repite la consulta con el mismo documento. Si el sistema pide esperar, el botón se habilita cuando termina la cuenta regresiva. No aparece cuando ya se agotaron las consultas de la solicitud ni cuando las consultas están pausadas por el día.",
             "Al pulsar «Continuar», la validación de identidad se envía al correo de la persona. Si no llega, el botón de reenvío la manda otra vez. El estado se actualiza solo, en vivo, mientras la persona valida; cuando termina se ve «¡Identidad validada!».",
             "«Continuar» no espera a que la identidad esté aprobada, así la persona puede avanzar con los requisitos. El envío final del trámite sí la exige: sin identidad aprobada no se puede enviar."
           ],
@@ -2990,7 +2991,8 @@
           "title": "3. Actores en el punto del organismo",
           "paragraphs": [
             "En el punto la identidad se hace de forma automática en la misma estación: el botón «Abrir validación» lleva a la persona a validar ahí mismo.",
-            "Aquí «Continuar» sí espera: solo avanza cuando el radicante aprobó la identidad."
+            "Aquí «Continuar» sí espera: solo avanza cuando el radicante aprobó la identidad.",
+            "Si la consulta al RUNT falla o la persona no aparece, también está disponible el botón «Volver a consultar»."
           ],
           "bullets": [],
           "callouts": []
