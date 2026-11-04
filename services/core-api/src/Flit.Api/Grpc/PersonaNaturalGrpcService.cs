@@ -497,7 +497,7 @@ public sealed class PersonaNaturalGrpcService(
 
         var descripcion = error switch
         {
-            _ when error == InitialProcedureValidationGate.DuplicateActiveProcedure => "Ya existe un trámite en proceso para este vehículo.",
+            _ when error == InitialProcedureValidationGate.DuplicateActiveProcedure => "Esta placa ya tiene un trámite en proceso. No puedes iniciar otro hasta que ese trámite termine o se anule. Puedes ver su estado en «Consultar mi trámite».",
             _ when error == VehicleStatePolicy.ErrorCode => "El vehículo ya se encuentra matriculado: no es válido para este tipo de trámite.",
             _ when error == VehicleStatePolicy.OrganismoRuntNoHabilitadoErrorCode => "El organismo ante el que está el vehículo no está habilitado para el portal.",
             _ when error == VehicleBodyTypePolicy.ErrorCode => "El vehículo no tiene carrocería registrada: no es posible radicar este trámite.",

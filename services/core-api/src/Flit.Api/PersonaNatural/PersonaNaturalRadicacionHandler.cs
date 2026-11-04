@@ -539,7 +539,7 @@ internal static class MotivosDeRechazo
         [SubmitGate.IdentidadNoAprobada] = "Falta validar la identidad de alguna de las partes del trámite.",
         [SubmitGate.DocumentosIncompletos] = "Faltan documentos obligatorios del trámite.",
         ["adjunto_invalido"] = "Alguno de los documentos adjuntos no se pudo registrar. Cárguelo de nuevo.",
-        [InitialProcedureValidationGate.DuplicateActiveProcedure] = "Ya existe un trámite en proceso para este vehículo.",
+        [InitialProcedureValidationGate.DuplicateActiveProcedure] = "Esta placa ya tiene un trámite en proceso. No puedes iniciar otro hasta que ese trámite termine o se anule. Puedes ver su estado en «Consultar mi trámite».",
         [VehicleStatePolicy.ErrorCode] = "El vehículo ya se encuentra matriculado: no es válido para este tipo de trámite.",
         [VehicleBodyTypePolicy.ErrorCode] = "El vehículo no tiene carrocería registrada: no es posible radicar este trámite.",
         ["procedure_family_blocked"] = "Este tipo de trámite no está disponible por ahora para el organismo elegido.",
