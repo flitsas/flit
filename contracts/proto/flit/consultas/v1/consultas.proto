@@ -250,14 +250,35 @@ message ConsultarImpuestoVehicularRequest {
   flit.platform.v1.Placa placa = 2;
   // Departamento en código DIVIPOLA de dos dígitos (por ejemplo "05"), el mismo de vehiculos.departamento_codigo.
   string departamento_codigo = 3;
+  // Número y tipo, con el mismo mensaje de ConsultarMultasRequest. El tipo va sin homologar.
+  flit.platform.v1.DocumentoIdentidad documento = 4;
+  optional string organismo_nombre = 5;
+  optional string municipio = 6;
+  optional string departamento_nombre = 7;
+  optional int32 modelo = 8;
+  // Descifrado en memoria de la respuesta RUNT. Solo en este mensaje; Diagnóstico no lo persiste.
+  optional string propietario_nombre = 9;
 }
 
 message ConsultarImpuestoVehicularResponse {
   // El proveedor viaja en resultado.proveedor; quien consulta solo lo guarda en su registro auditable.
   ResultadoConsulta resultado = 1;
-  // Suma de las vigencias no pagadas; 0 si no hay deuda.
+  // Suma de lo no pagado o total informado. Significativo solo con monto_informado.
   int64 monto_total = 2;
   repeated VigenciaImpuesto vigencias = 3;
+  // El servicio confirma deuda con typeError=0, tenga o no valor.
+  bool tiene_deuda = 4;
+  bool monto_informado = 5;
+  optional int64 intereses_mora = 6;
+  optional int64 sanciones = 7;
+  optional int64 avaluo_comercial = 8;
+  optional UltimoPagoImpuesto ultimo_pago = 9;
+  optional string liquidacion_consolidada_id = 10;
+  optional string periodo_certificacion = 11;
+  // AAAA-MM-DD.
+  optional string fecha_consulta_proveedor = 12;
+  // Con chequeo en ERROR: lo informado es parcial y no confirma.
+  bool dato_parcial = 13;
 }
 
 // Una vigencia (año gravable) del impuesto.
@@ -266,6 +287,15 @@ message VigenciaImpuesto {
   // Valor de la vigencia.
   int64 valor = 2;
   bool pagada = 3;
+  optional string liquidacion_id = 4;
+  optional int64 avaluo = 5;
+}
+
+// Último pago informado por el servicio. Las fechas son AAAA-MM-DD y no cambian la clasificación.
+message UltimoPagoImpuesto {
+  optional int32 anio = 1;
+  optional int64 valor = 2;
+  optional string fecha = 3;
 }
 
 message ListarDepartamentosImpuestoRequest {}
