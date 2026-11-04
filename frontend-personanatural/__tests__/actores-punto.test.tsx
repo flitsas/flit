@@ -181,6 +181,65 @@ function montarPunto(cliente: ClientePortal, onAviso = vi.fn(), onContinuar: () 
   return onAviso;
 }
 
+const RESPUESTA_RUNT = {
+  existe: true,
+  nombreCompleto: "OTRO NOMBRE RUNT",
+  estadoLicencia: "Activo",
+  vigenciaLicencia: "vigente",
+  tieneMultasPendientes: false,
+  nroPazYSalvo: "PZS-123",
+};
+
+const consultasDelVendedor = (persona: { mock: { calls: unknown[][] } }) =>
+  persona.mock.calls.filter((c) => (c[1] as { rol: string }).rol === "vendedor");
+
+describe("ActoresPunto — etiquetas RUNT al reanudar con identidad aprobada", () => {
+  it("reanudar con identidad aprobada muestra las tres etiquetas, conserva lo guardado y consulta una sola vez", async () => {
+    const persona = vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => RESPUESTA_RUNT);
+    montarPunto(clienteMock({ estado: vi.fn(async () => ESTADO_APROBADO), persona: persona as never }));
+    const vendedor = await screen.findByRole("region", { name: /Propietario \(vendedor\)/i });
+    expect(await within(vendedor).findByText("Inscrito en RUNT")).toBeInTheDocument();
+    expect(within(vendedor).getByText(/Licencia activo · vigente/i)).toBeInTheDocument();
+    expect(within(vendedor).getByText("Multas: paz y salvo · PZS-123")).toBeInTheDocument();
+    expect(within(vendedor).getByLabelText(/Nombre completo/i)).toHaveValue("DUEÑO PRUEBA");
+    expect(within(vendedor).getByLabelText(/Teléfono/i)).toHaveValue("3001234567");
+    expect(within(vendedor).getByLabelText(/Correo electrónico/i)).toHaveValue("dueno@correo.co");
+    expect(within(vendedor).getByLabelText(/Dirección/i)).toHaveValue("Calle 1");
+    expect(consultasDelVendedor(persona)).toHaveLength(1);
+  });
+
+  it("si la consulta falla conserva los datos guardados y no bloquea Continuar", async () => {
+    const persona = vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => {
+      throw new Error("proveedor caído");
+    });
+    montarPunto(clienteMock({ estado: vi.fn(async () => ESTADO_APROBADO), persona: persona as never }));
+    const vendedor = await screen.findByRole("region", { name: /Propietario \(vendedor\)/i });
+    await waitFor(() => expect(consultasDelVendedor(persona)).toHaveLength(1));
+    expect(within(vendedor).getByLabelText(/Nombre completo/i)).toHaveValue("DUEÑO PRUEBA");
+    expect(within(vendedor).getByLabelText(/Teléfono/i)).toHaveValue("3001234567");
+    expect(within(vendedor).queryByText("Inscrito en RUNT")).toBeNull();
+    expect(screen.getByRole("button", { name: /Continuar/i })).toBeEnabled();
+  });
+
+  it("al pasar a aprobada las etiquetas se conservan", async () => {
+    const persona = vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => RESPUESTA_RUNT);
+    const radicante = vi.fn(async () => ({ parte: "vendedor", ordinal: 1, estado: "pendiente", capturaUrl: null }));
+    let n = 0;
+    const estado = vi.fn(async () => {
+      n += 1;
+      if (n === 1) throw new Error("sin sesión");
+      return n < 3 ? SIN_SOLICITAR : ESTADO_APROBADO;
+    });
+    montarPunto(clienteMock({ estado, radicante, persona: persona as never }));
+    await screen.findByText("¡Identidad validada!");
+    const vendedor = screen.getByRole("region", { name: /Propietario \(vendedor\)/i });
+    expect(await within(vendedor).findByText("Inscrito en RUNT")).toBeInTheDocument();
+    expect(within(vendedor).getByText(/Licencia activo · vigente/i)).toBeInTheDocument();
+    expect(within(vendedor).getByText("Multas: paz y salvo · PZS-123")).toBeInTheDocument();
+    expect(within(vendedor).getByLabelText(/Nombre completo/i)).toHaveValue("DUEÑO PRUEBA");
+  });
+});
+
 describe("ActoresPunto — épica #14185: identidad de quien radica", () => {
   it("al entrar lanza sola la identidad in-situ, sin botón de validar ni invitaciones", async () => {
     const radicante = vi.fn(async () => ({ parte: "vendedor", ordinal: 1, estado: "pendiente", capturaUrl: "https://verify.example/x" }));

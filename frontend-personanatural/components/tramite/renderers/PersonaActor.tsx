@@ -158,6 +158,8 @@ export function PersonaActor({
   filaActual.current = fila;
   const reintentos = useRef(0);
   const reintentoPendiente = useRef(false);
+  /** La consulta en curso solo completa las etiquetas RUNT/licencia/multas de una persona ya guardada (no toca sus datos). */
+  const soloCompletarRunt = useRef(false);
   /** La espera que se muestra es la de un reintento automático (cambia el texto: ya no hay nada que pulsar). */
   const [reintentoAuto, setReintentoAuto] = useState(false);
   const consulta = useMutation<PersonaDetalle, unknown, PeticionConsulta>({
@@ -186,6 +188,9 @@ export function PersonaActor({
         // Una persona ya guardada con su nombre (borrador reabierto) conserva lo que tenía: la consulta solo completa el RUNT.
         const conservaNombre = filaActual.current.consultado && filaActual.current.nombre.trim() !== "";
         onCambio({ consultado: true, ...(conservaNombre ? {} : { nombreConsultado: true, nombre }), licencia, runt, ...(ciudad ? { ciudad } : {}) });
+      } else if (soloCompletarRunt.current) {
+        // Borrador reabierto: lo guardado no se toca; la etiqueta de RUNT refleja lo que dijo la consulta.
+        onCambio({ licencia, runt });
       } else {
         setAvisoManual("No se encontró en RUNT. Corrige el documento e intenta de nuevo; sin inscripción RUNT no puedes continuar con esta persona.");
         onCambio({ consultado: true, nombreConsultado: false, nombre: "", licencia: null, runt, ...(ciudad ? { ciudad } : {}) });
@@ -194,6 +199,10 @@ export function PersonaActor({
     onError: (e, { signal }) => {
       if (signal.aborted) return;
       reportarError(e);
+      if (soloCompletarRunt.current) {
+        // Completar las etiquetas es opcional: si falla, se conservan los datos y no se bloquea nada.
+        return;
+      }
       if (e instanceof ApiError && e.code === "detalle_agotado") {
         // Sin consultas disponibles: se sigue a mano, como cuando no hay coincidencia.
         setAvisoManual(mensajeDe(e));
@@ -317,7 +326,14 @@ export function PersonaActor({
   // ── Consulta automática del documento ───────────────────────────────────────────────────────────────────────────────
   const claveDoc = `${fila.tipoDocumento}|${fila.numeroDocumento}`;
   const formatoValido = !errores.numeroDocumento || errores.numeroDocumento === MENSAJE_CONSULTAR;
-  const consultable = formatoValido && !identidadAprobada && !juridica && (!fila.consultado || faltaConsultaRunt) && !bloqueoConsulta.bloqueado;
+  // Persona ya guardada con su nombre (identidad aprobada o titular) a la que le faltan las etiquetas RUNT: se completan sin tocar lo guardado.
+  const faltaCompletarRunt =
+    fila.consultado && fila.runt === null && fila.nombre.trim() !== "" && (identidadAprobada || esPropietario) && fila.numeroDocumento.trim() !== "";
+  const consultable =
+    formatoValido &&
+    !juridica &&
+    ((!identidadAprobada && (!fila.consultado || faltaConsultaRunt)) || faltaCompletarRunt) &&
+    !bloqueoConsulta.bloqueado;
   const claveVista = useRef<string | null>(null);
   const claveConsultada = useRef<string | null>(null);
   const controlador = useRef<AbortController | null>(null);
@@ -348,15 +364,17 @@ export function PersonaActor({
     if (!consultable || claveConsultada.current === claveDoc) return;
     const tipoDocumento = fila.tipoDocumento;
     const documento = fila.numeroDocumento;
+    const completar = faltaCompletarRunt;
     const temporizador = setTimeout(() => {
       claveConsultada.current = claveDoc;
       const c = new AbortController();
       controlador.current = c;
+      soloCompletarRunt.current = completar;
       setErrorConsulta(null);
       consultar({ tipoDocumento, documento, signal: c.signal });
     }, montado.current ? ESPERA_CONSULTA_AUTOMATICA_MS : 0);
     return () => clearTimeout(temporizador);
-  }, [claveDoc, consultable, consultar, fila.tipoDocumento, fila.numeroDocumento]);
+  }, [claveDoc, consultable, faltaCompletarRunt, consultar, fila.tipoDocumento, fila.numeroDocumento]);
   const fichaPropietario = esPropietario && fila.consultado;
   // Envío automático fallido (o enlace que no salió): botón de alerta para reintentarlo.
   const mostrarFalla = envioAutomatico && Boolean(fallaEnvio) && (estado === "sin_solicitar" || estado === "pendiente_envio");

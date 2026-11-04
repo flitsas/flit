@@ -215,7 +215,7 @@ describe("validación de formato y consulta del documento (F3 AC1 y AC2, K5 AC5)
     const card = tarjeta("Comprador");
     await waitFor(() => expect(within(card).getByText("Inscrito en RUNT")).toBeInTheDocument());
     expect(within(card).getByLabelText(/Nombre completo/)).toHaveValue("Parte invitada");
-    expect(llamadas.filter((l) => l.clave === RUTA_DETALLE)).toHaveLength(1);
+    expect(consultasDe(llamadas, "comprador")).toHaveLength(1);
     expect(within(card).queryByRole("button", { name: /Consultar/i })).toBeNull();
   });
 
@@ -722,6 +722,44 @@ describe("estado en vivo y compuerta de «Continuar» (F3 AC6)", () => {
       await vi.advanceTimersByTimeAsync(40000);
     });
     expect(lecturas).toBe(antes);
+  });
+
+  it("al reanudar con la identidad aprobada muestra las tres etiquetas RUNT, conserva lo guardado y consulta una sola vez", async () => {
+    const { llamadas } = await abrir(
+      { "GET /solicitudes/s-1/identidad": () => json(identidad([parte("vendedor", "aprobada"), parte("comprador", "aprobada")])) },
+      rehidratado("aprobada", "aprobada"),
+    );
+    const vendedor = tarjeta("Propietario (vendedor)");
+    const comprador = tarjeta("Comprador");
+    for (const card of [vendedor, comprador]) {
+      expect(await within(card).findByText("Inscrito en RUNT")).toBeInTheDocument();
+      expect(within(card).getByText(/Licencia activo · vigente/i)).toBeInTheDocument();
+      expect(within(card).getByText("Multas: paz y salvo · PYS-1")).toBeInTheDocument();
+      expect(within(card).getByLabelText(/Teléfono/)).toHaveValue("3001234567");
+      expect(within(card).getByLabelText(/Correo electrónico/)).toHaveValue("ana@correo.co");
+    }
+    expect(within(vendedor).getByLabelText(/Nombre completo/)).toHaveValue("JUAN PEREZ");
+    expect(within(comprador).getByLabelText(/Nombre completo/)).toHaveValue("MARIA RODRIGUEZ");
+    expect(consultasDe(llamadas, "comprador")).toHaveLength(1);
+    expect(consultasDe(llamadas, "vendedor")).toHaveLength(1);
+  });
+
+  it("al pasar el comprador de pendiente a aprobada conserva sus etiquetas RUNT", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let partes = [parte("vendedor", "aprobada"), parte("comprador", "pendiente")];
+    const { llamadas } = await abrir({ "GET /solicitudes/s-1/identidad": () => json(identidad(partes)) }, rehidratado("aprobada", "pendiente"));
+    const comprador = tarjeta("Comprador");
+    expect(await within(comprador).findByText("Inscrito en RUNT")).toBeInTheDocument();
+    partes = [parte("vendedor", "aprobada"), parte("comprador", "aprobada")];
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(8500);
+    });
+    expect(await within(comprador).findByText("Validación: aprobada")).toBeInTheDocument();
+    expect(within(comprador).getByText("Inscrito en RUNT")).toBeInTheDocument();
+    expect(within(comprador).getByText(/Licencia activo · vigente/i)).toBeInTheDocument();
+    expect(within(comprador).getByText("Multas: paz y salvo · PYS-1")).toBeInTheDocument();
+    expect(within(comprador).getByLabelText(/Nombre completo/)).toHaveValue("MARIA RODRIGUEZ");
+    expect(consultasDe(llamadas, "comprador")).toHaveLength(1);
   });
 
   it("al cambiar a aprobada la alerta general y la de cada persona aparecen con texto simple; con una pendiente no dicen que todas validaron", async () => {
