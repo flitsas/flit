@@ -8,7 +8,8 @@ namespace Flit.Diagnostico.Api.Persistence.Configuraciones;
 /// <summary>
 /// <c>diagnostico.dictamenes</c> (corte 4, ADR-0077). Clase (a) de ADR-0072: <c>tenant_id</c>, filtro global, <c>xmin</c>
 /// y sin <c>deleted_*</c>. La FK es compuesta <c>(tenant_id, vehiculo_id)</c> contra el alterno del vehículo, con
-/// <c>ON DELETE RESTRICT</c> y sin <c>ON UPDATE</c>. Nace vacía: no hay <c>HasData</c> ni <c>ix_redaccion_pendiente</c>.
+/// <c>ON DELETE RESTRICT</c> y sin <c>ON UPDATE</c>. Nace vacía: no hay <c>HasData</c>. <c>ix_redaccion_pendiente</c>
+/// (corte 6, ADR-0072) no empieza por <c>tenant_id</c>: el trabajador reclama filas de todas las empresas.
 /// <see cref="DictamenVehiculo.Version"/> es la versión de negocio; el token es <see cref="DictamenVehiculo.Xmin"/>.
 /// </summary>
 internal sealed class DictamenVehiculoConfig : IEntityTypeConfiguration<DictamenVehiculo>
@@ -42,7 +43,7 @@ internal sealed class DictamenVehiculoConfig : IEntityTypeConfiguration<Dictamen
         builder.Property(x => x.RedaccionIntentos)
             .HasDefaultValue(0)
             .ValueGeneratedNever()
-            .HasComment("Intentos de la cola de redacción. El índice entre empresas no se crea en este corte.");
+            .HasComment("Intentos de la cola de redacción. La toma entre empresas los suma.");
         builder.Property(x => x.RedaccionDisponibleDesde).HasComment("Desde cuándo la cola puede tomar la redacción; null si no espera.");
         builder.Property(x => x.RedaccionLeaseHasta).HasComment("Vencimiento del lease de redacción; null si nadie la tiene.");
         builder.Property(x => x.AnalisisOverride)
@@ -68,6 +69,10 @@ internal sealed class DictamenVehiculoConfig : IEntityTypeConfiguration<Dictamen
             .IsUnique()
             .HasFilter("vigente")
             .HasDatabaseName("ux_dictamen_vigente");
+        // Cola de redacción de todas las empresas (corte 6, ADR-0072). No empieza por tenant_id: el trabajador reclama y después fija la empresa.
+        builder.HasIndex(x => x.RedaccionDisponibleDesde)
+            .HasFilter("estado_redaccion = 'PENDIENTE' AND vigente")
+            .HasDatabaseName("ix_redaccion_pendiente");
 
         // xmin sobre Xmin. Version (int) es la columna de negocio version, no el token.
         builder.Property(x => x.Xmin).IsRowVersion();

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Flit.Diagnostico.Api.Modulos.Consultas;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
+using Flit.Diagnostico.Api.Modulos.Dictamen;
 using Flit.Diagnostico.Api.Modulos.Tablero;
 using Flit.Diagnostico.Api.Modulos.Vehiculos;
 using Flit.Diagnostico.Api.Persistence;
@@ -77,13 +78,15 @@ internal sealed class LectorContenidoReporte(
             .ToListAsync(ct).ConfigureAwait(false);
         var lote = await EncabezadoAsync(cabecera, empresa, ct).ConfigureAwait(false);
         var detalle = await DetalleRuntAsync(cabecera, vehiculoId, celdas, ct).ConfigureAwait(false);
+        var dictamen = await DictamenVigenteAsync(cabecera, vehiculoId, ct).ConfigureAwait(false);
 
         return new ContenidoReporteVehiculo(
             new EncabezadoReporte(
                 lote.DiagnosticoId, lote.NombreLote, lote.Empresa, lote.UsuarioCreador, lote.CreadoEn, lote.TipoAnalisis,
                 vehiculo.Identificador, CodigosDeEnum.Codigo(vehiculo.Tipo), vehiculo.Placa, vehiculo.Vin),
             Secciones(cabecera, celdas, personas, await RespuestasPersonaAsync(cabecera, vehiculoId, ct).ConfigureAwait(false)),
-            detalle);
+            detalle,
+            dictamen);
     }
 
     /// <summary>
@@ -102,6 +105,20 @@ internal sealed class LectorContenidoReporte(
             .Select(c => c.RespuestaFuenteCifrada)
             .FirstOrDefaultAsync(ct).ConfigureAwait(false);
         return LectorDetalleRunt.Leer(protectorRespuesta, cifrada);
+    }
+
+    /// <summary>
+    /// El dictamen vigente del vehículo, si existe. Sin fila no hay claves de dictamen. Solo veredicto, estado y los textos de
+    /// los alertamientos: ni documentos ni nombres.
+    /// </summary>
+    private async Task<DictamenEnHuella?> DictamenVigenteAsync(CabeceraDiagnostico cabecera, Guid vehiculoId, CancellationToken ct)
+    {
+        var fila = await db.Set<DictamenVehiculo>().AsNoTracking()
+            .Where(d => d.VehiculoId == vehiculoId && d.TenantId == cabecera.TenantId && d.Vigente)
+            .Select(d => new { d.Veredicto, d.EstadoRedaccion, d.Alertamientos })
+            .SingleOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+        return fila is null ? null : new DictamenEnHuella(fila.Veredicto, fila.EstadoRedaccion, ContenidoReporteVehiculo.TextoDeAlertamientos(fila.Alertamientos));
     }
 
     /// <summary>El contenido del lote para la compañía del token, con su visibilidad y la empresa del claim.</summary>

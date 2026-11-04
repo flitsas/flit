@@ -992,7 +992,7 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(0)
                         .HasColumnName("redaccion_intentos")
-                        .HasComment("Intentos de la cola de redacción. El índice entre empresas no se crea en este corte.");
+                        .HasComment("Intentos de la cola de redacción. La toma entre empresas los suma.");
 
                     b.Property<DateTimeOffset?>("RedaccionLeaseHasta")
                         .HasColumnType("timestamp with time zone")
@@ -1049,6 +1049,10 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
 
                     b.HasAlternateKey("TenantId", "Id")
                         .HasName("uq_dictamenes_tenant_id");
+
+                    b.HasIndex("RedaccionDisponibleDesde")
+                        .HasDatabaseName("ix_redaccion_pendiente")
+                        .HasFilter("estado_redaccion = 'PENDIENTE' AND vigente");
 
                     b.HasIndex("TenantId", "VehiculoId")
                         .IsUnique()

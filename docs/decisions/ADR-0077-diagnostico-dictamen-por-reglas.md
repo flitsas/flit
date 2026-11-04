@@ -9,6 +9,7 @@
 **Plan**: `docs/diagnosticos/plan-corte-4-tablas-dictamen.md`
 **Registro de cambios**:
 - 2026-11-03 — versión inicial. Propuesto.
+- 2026-11-03 — corte 6. `ix_redaccion_pendiente` ya existe (migración `D6_ColaRedaccion`). La excepción A11 está en ADR-0072. Este ADR sigue en Propuesto.
 
 ## Contexto
 
@@ -62,7 +63,7 @@ FLIT (`diagnostico.reglas_dictamen`, sin `tenant_id`). El dictamen de un vehícu
    `catalogo_version` int. `redactado_por` CHECK `PLANTILLA` o `LLM`. `estado_redaccion` CHECK `PENDIENTE` o
    `COMPLETADA`. CHECK `ck_redaccion`: `(estado_redaccion = 'COMPLETADA') = (redactado_por = 'LLM')`. Cola:
    `redaccion_intentos` default 0, `redaccion_disponible_desde` y `redaccion_lease_hasta` nulos. El índice
-   `ix_redaccion_pendiente` no se crea en este corte. Override: `analisis_override` default false,
+   `ix_redaccion_pendiente` no se crea en el corte 4; el corte 6 lo crea (ver registro de cambios y ADR-0072). Override: `analisis_override` default false,
    `usuario_override_id` y `override_en` nulos; `usuario_override_id` es uuid. Sin PII en claro.
 8. **Concurrencia de `dictamenes`.** La columna de negocio `version` (int) y el token `xmin` no comparten la propiedad
    `Version` que el resto del servicio usa para `xmin`. La de negocio se llama `Version` y mapea la columna
@@ -133,9 +134,10 @@ efecto y la plantilla de cada versión. `condicion` repite el código de la fila
 ni pueda apuntar a otra regla. La opción B abre un segundo lenguaje de reglas. La opción C obliga a desplegar código
 para saber qué versión dictaminó un vehículo ya guardado.
 
-Se acepta que cambiar una condición es un despliegue, que el JSON de `condicion` no describe la lógica, y que
-`ix_redaccion_pendiente` espera al corte 6: crearlo ahora sería una lectura entre empresas sin el trabajador que la
-justifica (el mismo criterio que la cola del ZIP en ADR-0072).
+Se acepta que cambiar una condición es un despliegue y que el JSON de `condicion` no describe la lógica. En el corte 4,
+`ix_redaccion_pendiente` se aplazó: crearlo entonces habría sido una lectura entre empresas sin el trabajador que la
+justifica (el mismo criterio que la cola del ZIP en ADR-0072). El corte 6 ya creó el índice; la excepción A11 queda
+nombrada en ADR-0072.
 
 ## Diagrama de secuencia
 
@@ -228,7 +230,7 @@ documentos ni nombres) la cumple quien inserte en el corte 5. Este corte solo de
 ### Lo que se pierde
 - No se puede cambiar una condición con un UPDATE.
 - `condicion` no documenta la lógica, solo el código.
-- La cola de redacción no tiene todavía su índice: las columnas existen y nadie las reclama en este corte.
+- En el corte 4 la cola de redacción no tenía índice. El corte 6 lo agregó: `ix_redaccion_pendiente` ya existe.
 
 ### Cambios operacionales
 - Una migración nueva, generada por EF, con 42 filas de siembra y `dictamenes` en cero filas.
@@ -239,7 +241,7 @@ documentos ni nombres) la cumple quien inserte en el corte 5. Este corte solo de
 ## Fuera de alcance
 
 - Enganchar `AvanceVehiculo.Terminado`, el lector, el redactor y la primera fila de `dictamenes`. Corte 5.
-- La cola durable y la invalidación del PDF, incluido `ix_redaccion_pendiente`. Corte 6.
+- La cola durable y la invalidación del PDF, incluido `ix_redaccion_pendiente`. Hecho en el corte 6: el índice ya existe.
 - `GET`, `PUT`, el evento y la pantalla. Corte 7.
 - Marcar las fuentes obligatorias en el alta. Corte 8, después de R-17.
 - Un intérprete de `condicion`.

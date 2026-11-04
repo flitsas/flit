@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Flit.Diagnostico.Api.Modulos.Tablero;
 
 namespace Flit.Diagnostico.Api.Modulos.Reportes;
@@ -23,13 +24,21 @@ namespace Flit.Diagnostico.Api.Modulos.Reportes;
 /// celda no está COMPLETADO, no guardó respuesta (celdas anteriores al 2026-10-27), el cifrado no se puede leer o el RUNT no
 /// encontró el vehículo. El PDF dice «No registra». El Excel del lote no lo usa.
 /// </param>
-public sealed record ContenidoReporteVehiculo(EncabezadoReporte Encabezado, IReadOnlyList<SeccionReporte> Secciones, DetalleRuntReporte? DetalleRunt = null)
+/// <param name="Dictamen">
+/// Dictamen vigente del vehículo, si lo hay (corte 6). Sin él no se agregan claves <c>dictamen/</c>: la huella de los reportes que
+/// ya existen no cambia. El PDF no dibuja el párrafo; la huella sí cambia cuando el texto pasa a completada.
+/// </param>
+public sealed record ContenidoReporteVehiculo(
+    EncabezadoReporte Encabezado,
+    IReadOnlyList<SeccionReporte> Secciones,
+    DetalleRuntReporte? DetalleRunt = null,
+    DictamenEnHuella? Dictamen = null)
 {
     /// <summary>
     /// Lo que sale en el archivo y no viene de las celdas ni de la cabecera, para el <c>Encabezado</c> de
     /// <see cref="EntradaHuella"/> (HU #13846): empresa, creador, tipo de análisis, fecha de creación, identificación del vehículo,
-    /// cada persona enmascarada y, si hay, el detalle del RUNT (claves <c>runt/…</c>; sin detalle no se agrega ninguna). Cambiar
-    /// cualquiera de estos textos cambia la huella e invalida el archivo guardado.
+    /// cada persona enmascarada, si hay el detalle del RUNT (claves <c>runt/…</c>) y, si hay dictamen vigente,
+    /// <c>dictamen/veredicto</c>, <c>dictamen/estado</c> y <c>dictamen/texto</c>. Cambiar cualquiera de estos textos cambia la huella.
     /// </summary>
     public IReadOnlyDictionary<string, string?> ParaHuella()
     {
@@ -37,9 +46,28 @@ public sealed record ContenidoReporteVehiculo(EncabezadoReporte Encabezado, IRea
         Encabezado.Agregar(claves);
         SeccionReporte.AgregarPersonas(claves, "persona", Secciones);
         DetalleRunt?.Agregar(claves);
+        if (Dictamen is { } dictamen)
+        {
+            claves["dictamen/veredicto"] = dictamen.Veredicto;
+            claves["dictamen/estado"] = dictamen.Estado;
+            claves["dictamen/texto"] = dictamen.Texto;
+        }
+
         return claves;
     }
+
+    /// <summary>Los textos de <paramref name="alertamientos"/>, en orden, unidos por un salto de línea. Sin documentos ni nombres.</summary>
+    public static string TextoDeAlertamientos(string alertamientos)
+    {
+        ArgumentNullException.ThrowIfNull(alertamientos);
+        using var documento = JsonDocument.Parse(alertamientos);
+        return string.Join('\n', documento.RootElement.EnumerateArray().Select(e =>
+            e.TryGetProperty("texto", out var texto) ? texto.GetString() : null));
+    }
 }
+
+/// <summary>Lo que la huella toma del dictamen vigente. Solo veredicto, estado y los textos, en ese orden.</summary>
+public sealed record DictamenEnHuella(string Veredicto, string Estado, string Texto);
 
 /// <summary>
 /// Encabezado del reporte de un vehículo (F07-C1/C2): ID del diagnóstico, nombre del lote, empresa (claim <c>company_name</c>

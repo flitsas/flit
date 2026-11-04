@@ -125,7 +125,7 @@ excepción de la HU #13723. `reglas_dictamen` ya tiene la suya en esta sección 
 | `organismos` | #13723 · `D2_MotorConsultas` | Catálogo global (sin `tenant_id`) | — | — | Ninguna | A3, A4, A5, A20 (ver excepciones) |
 | `departamentos_impuesto` | #13723 · `D2_MotorConsultas` | Catálogo global (sin `tenant_id`) | — | `actualizado_en` | Ninguna | A3, A4, A5, A20 (ver excepciones) |
 | `reglas_dictamen` | corte 4 · ADR-0077 | Catálogo global (sin `tenant_id`) | `xmin` | — | Ninguna | A3, A4, A5, A16, A20 (ver excepciones). A3: la PK es uuid v5 estable, no el código natural; la unicidad de negocio es `(catalogo_version, tipo_tramite_codigo, codigo)` |
-| `dictamenes` | corte 4 · ADR-0077 | (a) | `xmin` | `creado_en`; override en `usuario_override_id` / `override_en` (nulos) | `(tenant_id, vehiculo_id)` → `vehiculos(tenant_id, id)`, `RESTRICT`, sin `ON UPDATE` emitido; expone `uq_dictamenes_tenant_id`; `ux_dictamen_version (tenant_id, vehiculo_id, version)`; índice único parcial `(tenant_id, vehiculo_id) WHERE vigente` (`ux_dictamen_vigente`) | Ninguna. Clase (a), no es excepción de catálogo. Tabla vacía, sin `HasData`. Sin PII en claro (`usuario_override_id` es uuid). `ix_redaccion_pendiente` (lectura entre empresas) no se crea en este corte |
+| `dictamenes` | corte 4 · ADR-0077; índice de cola en el corte 6 | (a) | `xmin` | `creado_en`; override en `usuario_override_id` / `override_en` (nulos) | `(tenant_id, vehiculo_id)` → `vehiculos(tenant_id, id)`, `RESTRICT`, sin `ON UPDATE` emitido; expone `uq_dictamenes_tenant_id`; `ux_dictamen_version (tenant_id, vehiculo_id, version)`; índice único parcial `(tenant_id, vehiculo_id) WHERE vigente` (`ux_dictamen_vigente`) | A11 en `ix_redaccion_pendiente (redaccion_disponible_desde) WHERE estado_redaccion = 'PENDIENTE' AND vigente` (corte 6, ver excepciones). Sin PII en claro (`usuario_override_id` es uuid). Sin `HasData` |
 
 ### Excepciones por tabla
 
@@ -168,9 +168,14 @@ excepción de la HU #13723. `reglas_dictamen` ya tiene la suya en esta sección 
 - **`evidencias`, A11 en `ix_evidencias_cola (estado, lease_hasta)` (HU #13850).** El índice parcial de la cola del ZIP
   `WHERE tipo = 'ZIP' AND estado IN ('PENDIENTE','GENERANDO')` no empieza por `tenant_id`: el trabajador del ZIP reclama
   filas de todas las empresas con `FOR UPDATE SKIP LOCKED`, y luego fija la empresa de la fila en su propio contexto
-  (Tradeoff aceptado, «jobs sin usuario»). Es la segunda y última lectura entre empresas, junto con la del
-  reconciliador de consultas (antes `ColaConsultas`, ver A11 de `consultas`); `TomaEntreEmpresasSoloEnColaTests` vigila
-  que no haya otra. Los demás índices de la tabla empiezan por `tenant_id`.
+  (Tradeoff aceptado, «jobs sin usuario»). Es la segunda lectura entre empresas, junto con la del
+  reconciliador de consultas (antes `ColaConsultas`, ver A11 de `consultas`). Los demás índices de la tabla empiezan por `tenant_id`.
+- **`dictamenes`, A11 en `ix_redaccion_pendiente (redaccion_disponible_desde)` (corte 6, [ADR-0077](ADR-0077-diagnostico-dictamen-por-reglas.md)).**
+  El índice parcial `WHERE estado_redaccion = 'PENDIENTE' AND vigente` no empieza por `tenant_id`: el trabajador de
+  redacción reclama filas de todas las empresas con `FOR UPDATE SKIP LOCKED` y después fija la empresa de la fila en su
+  contexto (Tradeoff aceptado, «jobs sin usuario»). Es la tercera lectura entre empresas, junto con el reconciliador de
+  consultas y `ix_evidencias_cola`. `TomaEntreEmpresasSoloEnColaTests` permite el SQL crudo solo en `ColaConsultas.cs`,
+  `ColaEvidencias.cs` y `ColaRedaccion.cs`. Los demás índices de `dictamenes` empiezan por `tenant_id`.
 
 ## Retención de datos personales
 

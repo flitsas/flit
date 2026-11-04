@@ -88,6 +88,17 @@ public static class Modulos
         services.AddScoped<Consultas.Bus.IConstructorSolicitud, Consultas.Bus.ConstructorSolicitudAvaluo>();
         services.AddScoped<Consultas.Bus.IConstructorSolicitud, Consultas.Bus.ConstructorSolicitudImpuesto>();
         services.AddScoped<Dictamen.EmisorDictamen>();
+        // Corte 6: la cola de redacción vive en diagnostico.dictamenes. El trabajador solo se registra con
+        // Diagnostico:Redaccion:Habilitado=true; no mira el entorno del host. La toma es SQL crudo; el cierre de la fila fija la empresa.
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddScoped<Trabajos.ColaRedaccion>();
+        services.AddSingleton<Trabajos.RedactorEnCola>();
+        services.AddOptions<Trabajos.OpcionesRedaccion>()
+            .Bind(configuration.GetSection(Trabajos.OpcionesRedaccion.Seccion))
+            .Validate(o => o.Errores().Count == 0, $"{Trabajos.OpcionesRedaccion.Seccion} tiene valores fuera de rango (Intervalo > 0, DuracionLease >= 30 s, MaxReintentos 0-5).")
+            .ValidateOnStart();
+        if (configuration.GetValue($"{Trabajos.OpcionesRedaccion.Seccion}:{nameof(Trabajos.OpcionesRedaccion.Habilitado)}", false))
+            services.AddHostedService<Trabajos.TrabajadorRedaccion>();
         services.AddScoped<Consultas.Bus.PublicadorCeldas>();
         // HU #13737 (ADR-0075, Q4): los reintentos los decide Diagnóstico; core-consultas consulta una sola vez.
         services.AddSingleton<Consultas.Bus.ProgramadorReintentos>();

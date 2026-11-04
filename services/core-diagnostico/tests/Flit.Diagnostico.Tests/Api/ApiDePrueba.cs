@@ -136,6 +136,8 @@ public sealed class ApiDePrueba : IAsyncDisposable
         ["Diagnostico:Consultas:Bus:ConsumidorHabilitado"] = "false",
         // HU #13850: tampoco el trabajador del ZIP; cada prueba llama al empaquetador directo.
         ["Diagnostico:Evidencias:Habilitado"] = "false",
+        // Corte 6: el trabajador de redacción no corre en las pruebas; cada prueba llama a la cola directo.
+        ["Diagnostico:Redaccion:Habilitado"] = "false",
         // HU #13846: sin file-manager en las pruebas, los archivos generados van a diagnostico.archivo_local.
         [Flit.Diagnostico.Api.Infraestructura.Archivos.OpcionesAlmacen.GuardarEnBase] = "true",
     };
