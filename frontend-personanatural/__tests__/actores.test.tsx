@@ -491,6 +491,104 @@ describe("consulta automática del documento (HU #14269)", () => {
   });
 });
 
+describe("«Volver a consultar» cuando el RUNT no halla a la persona o la consulta falla", () => {
+  const consultas = (llamadas: { clave: string; init: RequestInit }[], rol = "comprador") => consultasDe(llamadas, rol).length;
+  const esperar = (ms: number) =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, ms));
+    });
+  const noExiste = () => json({ existe: false, nombres: null, apellidos: null, nombreCompleto: null, ciudad: null });
+  const boton = (card: HTMLElement) => within(card).queryByRole("button", { name: /Volver a consultar|Consultando/ });
+
+  it("el titular no hallado en RUNT puede volver a consultar: se rellena, sale inscrito y el botón desaparece", async () => {
+    let n = 0;
+    const { llamadas } = await abrir({ [RUTA_DETALLE]: (init) => (JSON.parse(String(init.body)).rol === "vendedor" && n++ === 0 ? noExiste() : detalle()) });
+    const vendedor = tarjeta("Propietario (vendedor)");
+
+    const volver = await within(vendedor).findByRole("button", { name: "Volver a consultar" });
+    expect(volver).toBeEnabled();
+    expect(within(vendedor).getByText(/No se encontró en RUNT\. Vuelve a consultar/)).toBeInTheDocument();
+    expect(within(vendedor).queryByText(/Corrige el documento/)).toBeNull();
+    expect(within(vendedor).getByText("No inscrito en RUNT")).toBeInTheDocument();
+
+    fireEvent.click(volver);
+    await waitFor(() => expect(within(vendedor).getByLabelText(/Nombre completo/)).toHaveValue("ANA MARIA RUIZ PEREZ"));
+    expect(within(vendedor).getByText("Inscrito en RUNT")).toBeInTheDocument();
+    expect(boton(vendedor)).toBeNull();
+    expect(consultas(llamadas, "vendedor")).toBe(2);
+  });
+
+  it("un tercero no inscrito con el nombre escrito a mano: al hallarlo gana el nombre del RUNT", async () => {
+    let n = 0;
+    await abrir({ [RUTA_DETALLE]: (init) => (JSON.parse(String(init.body)).rol === "comprador" && n++ === 0 ? noExiste() : detalle()) });
+    const card = tarjeta("Comprador");
+    await consultarTercero(card, "52123456");
+    fireEvent.change(within(card).getByLabelText(/Nombre completo/), { target: { value: "ANA RUIZ" } });
+    expect(within(card).getByLabelText(/Nombre completo/)).toHaveValue("ANA RUIZ");
+
+    fireEvent.click(within(card).getByRole("button", { name: "Volver a consultar" }));
+    await waitFor(() => expect(within(card).getByLabelText(/Nombre completo/)).toHaveValue("ANA MARIA RUIZ PEREZ"));
+    expect(within(card).getByText("Inscrito en RUNT")).toBeInTheDocument();
+    expect(boton(card)).toBeNull();
+  });
+
+  it("tras agotar los reintentos automáticos el botón espera deshabilitado y luego consulta y recupera", async () => {
+    let n = 0;
+    const { llamadas } = await abrir({
+      [RUTA_DETALLE]: (init) => (JSON.parse(String(init.body)).rol === "comprador" && n++ < 4 ? problema(503, "proveedor_no_disponible", { "retry-after": "1" }) : detalle()),
+    });
+    const card = tarjeta("Comprador");
+    fireEvent.change(within(card).getByLabelText(/Número de documento/), { target: { value: "52123456" } });
+
+    await waitFor(() => expect(consultas(llamadas)).toBe(4), { timeout: 20000 });
+    await waitFor(() => expect(within(card).getByText(/Podrás intentarlo de nuevo en/)).toBeInTheDocument());
+    expect(within(card).getByRole("button", { name: "Volver a consultar" })).toBeDisabled();
+    await waitFor(() => expect(within(card).getByRole("button", { name: "Volver a consultar" })).toBeEnabled(), { timeout: 5000 });
+
+    fireEvent.click(within(card).getByRole("button", { name: "Volver a consultar" }));
+    await waitFor(() => expect(within(card).getByLabelText(/Teléfono/)).toBeEnabled());
+    expect(within(card).getByLabelText(/Nombre completo/)).toHaveValue("ANA MARIA RUIZ PEREZ");
+    expect(consultas(llamadas)).toBe(5);
+    expect(boton(card)).toBeNull();
+  }, 40000);
+
+  it("si la consulta manual falla no programa reintento automático y el error sale en la ficha del titular", async () => {
+    let n = 0;
+    const { llamadas } = await abrir({
+      [RUTA_DETALLE]: (init) => {
+        if (JSON.parse(String(init.body)).rol !== "vendedor") return detalle();
+        return n++ === 0 ? noExiste() : problema(503, "proveedor_no_disponible", { "retry-after": "1" });
+      },
+    });
+    const vendedor = tarjeta("Propietario (vendedor)");
+    fireEvent.click(await within(vendedor).findByRole("button", { name: "Volver a consultar" }));
+
+    expect(await within(vendedor).findByText(/No pudimos consultar el RUNT/)).toBeInTheDocument();
+    expect(within(vendedor).getByText(/Podrás intentarlo de nuevo en/)).toBeInTheDocument();
+    expect(within(vendedor).queryByText(/Volveremos a consultar/)).toBeNull();
+    expect(within(vendedor).getByRole("button", { name: "Volver a consultar" })).toBeDisabled();
+    await esperar(2500);
+    expect(consultas(llamadas, "vendedor")).toBe(2);
+    expect(within(vendedor).getByRole("button", { name: "Volver a consultar" })).toBeEnabled();
+  });
+
+  it("con las consultas pausadas o el cupo agotado no ofrece el botón", async () => {
+    await abrir({ [RUTA_DETALLE]: () => problema(503, "consultas_no_disponibles") });
+    const pausadas = tarjeta("Comprador");
+    fireEvent.change(within(pausadas).getByLabelText(/Número de documento/), { target: { value: "52123456" } });
+    expect(await within(pausadas).findByText("Las consultas están pausadas por hoy. Intenta de nuevo mañana.")).toBeInTheDocument();
+    expect(boton(pausadas)).toBeNull();
+  });
+
+  it("con el cupo de consultas agotado no ofrece el botón", async () => {
+    await abrir({ [RUTA_DETALLE]: () => problema(429, "detalle_agotado") });
+    const card = tarjeta("Comprador");
+    await consultarTercero(card, "52123456");
+    expect(within(card).getByText(/máximo de consultas para este trámite/)).toBeInTheDocument();
+    expect(boton(card)).toBeNull();
+  });
+});
+
 describe("dirección con ayuda de entrega (F3 AC4)", () => {
   it("el campo de dirección es editable tras consultar y, sin marca de entrega en la definición, no muestra el ícono de ayuda", async () => {
     await abrir();
