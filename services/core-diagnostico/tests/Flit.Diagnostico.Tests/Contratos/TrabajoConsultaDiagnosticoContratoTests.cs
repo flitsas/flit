@@ -92,7 +92,7 @@ public sealed class TrabajoConsultaDiagnosticoContratoTests
             var impuesto = trabajo.Data.GetProperty("fuente").GetString() == FuentesBus.Impuesto;
             foreach (var nombre in Nombres)
             {
-                if (impuesto && nombre == "PERSONA PRUEBA UNO")
+                if (impuesto && nombre is "PERSONA PRUEBA UNO" or "LEASING FICTICIO SA")
                     continue;
                 trabajo.Payload.Should().NotContainEquivalentOf(nombre);
             }

@@ -156,16 +156,25 @@ public static class MapperIntempo
 
     private static PropietarioRunt? Propietario(PropietarioActualIntempo p)
     {
-        var numero = Numero(p.NoDocumento);
-        var tipo = Texto(p.IdTipoDocumento) is { } id ? TipoDocumento(id) : Texto(p.TipoDocumento) is { } texto ? TipoDocumentoDeTexto(texto) : null;
-        if (tipo is null || numero is null)
+        if (DocumentoPropietario(p.IdTipoDocumento, p.TipoDocumento, p.NoDocumento) is not { } documento)
             return null;
         var locatarios = p.Locatarios
             .Select(l => Locatario(l.Tdoc, l.Ndoc))
             .OfType<LocatarioRunt>()
             .Distinct()
             .ToList();
-        return new PropietarioRunt(tipo, numero, Propiedad(p), locatarios);
+        return new PropietarioRunt(documento.Tipo, documento.Numero, Propiedad(p), locatarios);
+    }
+
+    /// <summary>
+    /// Tipo y número del propietario como quedan en <c>personas_vehiculo</c>: el tipo de <paramref name="idTipo"/> o, si falta, de
+    /// <paramref name="tipoTexto"/>; null si falta alguno (ese propietario no entra a la lista del vehículo).
+    /// </summary>
+    internal static (string Tipo, string Numero)? DocumentoPropietario(string? idTipo, string? tipoTexto, string? numero)
+    {
+        var limpio = Numero(numero);
+        var tipo = Texto(idTipo) is { } id ? TipoDocumento(id) : Texto(tipoTexto) is { } texto ? TipoDocumentoDeTexto(texto) : null;
+        return tipo is null || limpio is null ? null : (tipo, limpio);
     }
 
     private static LocatarioRunt? Locatario(string tipo, string numero)

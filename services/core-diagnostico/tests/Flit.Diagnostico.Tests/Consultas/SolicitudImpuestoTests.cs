@@ -1,3 +1,5 @@
+using System.Net.Http.Json;
+using System.Text.Json;
 using Flit.Consultas.Grpc.V1;
 using Flit.Diagnostico.Api.Modulos.Catalogos;
 using Flit.Diagnostico.Api.Modulos.Consultas;
@@ -9,6 +11,7 @@ using Flit.Diagnostico.Domain.Personas;
 using Flit.Diagnostico.Domain.Vehiculos;
 using Flit.Diagnostico.Tests.Aislamiento;
 using Flit.Diagnostico.Tests.Api;
+using Flit.Diagnostico.Tests.Configuracion;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,7 +21,8 @@ using Xunit;
 namespace Flit.Diagnostico.Tests.Consultas;
 
 /// <summary>
-/// C3-6: la solicitud de impuesto lleva el primer propietario y cierra con un código visible si falta un dato.
+/// C3-6: la solicitud de impuesto lleva el primer propietario, con nombre y documento de la misma persona, y cierra con un
+/// código visible si falta un dato.
 /// No pasa por el bus del RUNT: siembra el vehículo, la réplica y la respuesta cifrada.
 /// </summary>
 public sealed class SolicitudImpuestoTests
@@ -28,7 +32,9 @@ public sealed class SolicitudImpuestoTests
     private const string Nombre = "PRIMERO DE PRUEBA";
 
     private const string JsonConDosNombres = """
-        {"vehiculo":{"propietarios_actuales":[{"nombre_completo":"PRIMERO DE PRUEBA"},{"nombre_completo":"OTRO"}]}}
+        {"vehiculo":{"propietarios_actuales":[
+          {"id_tipo_documento":"C","no_documento":"9999900001","nombre_completo":"PRIMERO DE PRUEBA"},
+          {"id_tipo_documento":"C","no_documento":"9999900002","nombre_completo":"OTRO"}]}}
         """;
 
     [Fact]
@@ -42,7 +48,7 @@ public sealed class SolicitudImpuestoTests
         var ct = TestContext.Current.CancellationToken;
         await using var api = await MotorNa.ArrancarAsync();
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
-        var sembrado = await SembrarAsync(api, ct, tipo: "pas", numero: "AB-100", json: Json("TITULAR PAS"));
+        var sembrado = await SembrarAsync(api, ct, tipo: "pas", numero: "AB-100", json: Json("TITULAR PAS", "PAS", "AB-100"));
 
         var solicitud = await UnaAsync(api, sembrado, ct);
 
@@ -60,7 +66,7 @@ public sealed class SolicitudImpuestoTests
         var ct = TestContext.Current.CancellationToken;
         await using var api = await MotorNa.ArrancarAsync();
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
-        var sembrado = await SembrarAsync(api, ct, tipo: "nit", numero: "999990003-1");
+        var sembrado = await SembrarAsync(api, ct, tipo: "nit", numero: "999990003-1", json: Json(Nombre, "N", "999990003-1"));
 
         var solicitud = await UnaAsync(api, sembrado, ct);
 
@@ -130,6 +136,116 @@ public sealed class SolicitudImpuestoTests
         (cierre.Estado, cierre.MotivoNa).Should().Be((EstadoCelda.Na, MotivoNa.DepartamentoNoSoportado));
     }
 
+    // Plan C3 (:688-692): el primero crudo sin documento no entra a personas_vehiculo, así que el de orden 1 es el segundo crudo.
+    [Fact]
+    public async Task El_nombre_y_el_documento_son_de_la_misma_persona_si_el_primero_crudo_no_trae_documento()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await MotorNa.ArrancarAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var sembrado = await SembrarAsync(api, ct, json: """
+            {"vehiculo":{"propietarios_actuales":[
+              {"nombre_completo":"SIN DOCUMENTO DE PRUEBA"},
+              {"id_tipo_documento":"C","no_documento":"9999900001","nombre_completo":"PRIMERO DE PRUEBA"}]}}
+            """);
+
+        var solicitud = await UnaAsync(api, sembrado, ct);
+
+        solicitud.Documento.Numero.Should().Be(Documento);
+        solicitud.PropietarioNombre.Should().Be(Nombre);
+    }
+
+    [Fact]
+    public async Task El_propietario_que_corresponde_sin_nombre_cierra_sin_solicitud_y_no_usa_el_de_otra_persona()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await MotorNa.ArrancarAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var sembrado = await SembrarAsync(api, ct, json: """
+            {"vehiculo":{"propietarios_actuales":[
+              {"nombre_completo":"SIN DOCUMENTO DE PRUEBA"},
+              {"id_tipo_documento":"C","no_documento":"9999900001"}]}}
+            """);
+
+        await SinSolicitudPorNombreAsync(api, sembrado, ct);
+    }
+
+    // Dos filas del mismo documento (personas_vehiculo las une) con nombres distintos no identifican a nadie de forma segura.
+    [Fact]
+    public async Task Dos_nombres_distintos_para_el_documento_cierran_sin_solicitud()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await MotorNa.ArrancarAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var sembrado = await SembrarAsync(api, ct, json: """
+            {"vehiculo":{"propietarios_actuales":[
+              {"id_tipo_documento":"C","no_documento":"9999900001","nombre_completo":"UNA PERSONA DE PRUEBA"},
+              {"tipo_documento":"Cédula Ciudadanía","no_documento":"9999900001","nombre_completo":"OTRA PERSONA DE PRUEBA"}]}}
+            """);
+
+        await SinSolicitudPorNombreAsync(api, sembrado, ct);
+    }
+
+    [Fact]
+    public async Task El_RUNT_sin_respuesta_cifrada_cierra_sin_solicitud()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await MotorNa.ArrancarAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var sembrado = await SembrarAsync(api, ct, sinRespuesta: true);
+
+        await SinSolicitudPorNombreAsync(api, sembrado, ct);
+    }
+
+    // Plan C3 (:692): la reutilización del mismo día copia la respuesta cifrada; el impuesto del lote nuevo arma su solicitud con ella.
+    [Fact]
+    public async Task El_RUNT_reutilizado_el_mismo_dia_copia_la_cifrada_y_el_impuesto_arma_su_solicitud()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var reloj = new RelojManual();
+        await using var api = await MotorNa.ArrancarAsync(b => b.Services.AddSingleton<TimeProvider>(reloj));
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var primero = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST001")], [Fuente.Runt, Fuente.ImpuestoDepartamental], null, null, ct);
+        await Motor.Bus(api).ProcesarLoteAsync(ct);
+        var cliente = api.Cliente(Cabeceras.TokenUsuario(api, empresa.Id));
+        var creada = await cliente.PostAsync(Cabeceras.Ruta, ConfiguracionOperativaTests.Cuerpo(Cabeceras.Json("Lote reutilizado", "SIMPLE", null, ["RUNT", "IMPUESTO_DEPARTAMENTAL"])), ct);
+        creada.IsSuccessStatusCode.Should().BeTrue(await creada.Content.ReadAsStringAsync(ct));
+        var segundo = (await creada.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("id").GetGuid();
+        (await Lotes.ConfirmarAsync(cliente, segundo, [Lotes.Fila("TST001")], ct)).IsSuccessStatusCode.Should().BeTrue();
+        await Motor.Bus(api).ProcesarLoteAsync(ct);
+        await Motor.EjecutarAsync(api, """
+            INSERT INTO diagnostico.organismos (codigo, nombre, nombre_norm, departamento_codigo, departamento_nombre, municipio)
+            VALUES ('98096000', 'SECRETARIA DE TRANSITO DE PRUEBA', 'SECRETARIA DE TRANSITO DE PRUEBA', '96', 'DEPARTAMENTO DE PRUEBA', 'MUNICIPIO DE PRUEBA')
+            ON CONFLICT (codigo) DO NOTHING
+            """, ct);
+        await Motor.EjecutarAsync(api, $"UPDATE diagnostico.vehiculos SET departamento_codigo = '{MotorNa.DepartamentoSoportadoFicticio}' WHERE diagnostico_id = '{segundo}'", ct);
+
+        var celdas = await Motor.CeldasAsync(api, empresa.Id, segundo, ct);
+        var runtCopia = celdas.Single(c => c.Fuente == Fuente.Runt);
+        var runtOrigen = (await Motor.CeldasAsync(api, empresa.Id, primero, ct)).Single(c => c.Fuente == Fuente.Runt);
+        runtCopia.ReutilizadaDeId.Should().Be(runtOrigen.Id);
+        runtCopia.RespuestaFuenteCifrada.Should().NotBeNullOrEmpty();
+        var impuestoId = celdas.Single(x => x.Fuente == Fuente.ImpuestoDepartamental).Id;
+        await using var db = empresa.Db();
+        var impuesto = await db.Set<CeldaConsulta>().SingleAsync(c => c.Id == impuestoId, ct);
+
+        var solicitud = (ConsultarImpuestoVehicularRequest)(await ConstruirAsync(api, db, impuesto, ct)).Should().ContainSingle().Subject.Solicitud;
+
+        solicitud.Documento.Numero.Should().Be(Documento);
+        solicitud.PropietarioNombre.Should().Be("PERSONA PRUEBA UNO");
+    }
+
+    private static async Task SinSolicitudPorNombreAsync(ApiDePrueba api, Sembrado sembrado, CancellationToken ct)
+    {
+        await using var db = sembrado.Empresa.Db();
+        var celda = await db.Set<CeldaConsulta>().SingleAsync(c => c.Id == sembrado.ImpuestoId, ct);
+
+        (await ConstruirAsync(api, db, celda, ct)).Should().BeEmpty("sin nombre seguro no se llama al proveedor ni se publica el trabajo");
+        var cierre = await new EjecutorCeldaImpuesto(Docs(api), Respuestas(api), new ListaLog()).SinConsultaAsync(new ContextoCelda(CeldaEnCurso.De(celda), db), ct);
+        (cierre.Estado, cierre.TipoError).Should().Be((EstadoCelda.Error, EjecutorCeldaImpuesto.SinNombrePropietario));
+    }
+
     private static async Task<ConsultarImpuestoVehicularRequest> UnaAsync(ApiDePrueba api, Sembrado sembrado, CancellationToken ct)
     {
         await using var db = sembrado.Empresa.Db();
@@ -137,9 +253,9 @@ public sealed class SolicitudImpuestoTests
         return (ConsultarImpuestoVehicularRequest)(await ConstruirAsync(api, db, celda, ct)).Should().ContainSingle().Subject.Solicitud;
     }
 
-    private static async Task<Sembrado> SembrarAsync(
+    internal static async Task<Sembrado> SembrarAsync(
         ApiDePrueba api, CancellationToken ct, string tipo = "CC", string numero = Documento, string? json = null,
-        bool placa = true, bool persona = true, bool modelo = true, bool municipio = true, string departamento = Departamento, bool soportar = true)
+        bool placa = true, bool persona = true, bool modelo = true, bool municipio = true, string departamento = Departamento, bool soportar = true, bool sinRespuesta = false)
     {
         var empresa = DosEmpresas.En(api).A;
         var lote = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST901")], [Fuente.Runt, Fuente.ImpuestoDepartamental], null, null, ct);
@@ -162,12 +278,12 @@ public sealed class SolicitudImpuestoTests
         vehiculo.DatosConsolidados = modelo ? """{"vehiculo":{"modelo":2020}}""" : "{}";
         var runt = await db.Set<CeldaConsulta>().SingleAsync(c => c.VehiculoId == vehiculo.Id && c.Fuente == Fuente.Runt, ct);
         runt.Estado = EstadoCelda.Completado;
-        runt.RespuestaFuenteCifrada = Respuestas(api).Proteger(json ?? JsonConDosNombres);
+        runt.RespuestaFuenteCifrada = sinRespuesta ? null : Respuestas(api).Proteger(json ?? JsonConDosNombres);
         if (persona)
             db.Add(Persona(api, empresa.Id, vehiculo.Id, tipo, numero));
         await db.SaveChangesAsync(ct);
         var impuesto = await db.Set<CeldaConsulta>().AsNoTracking().SingleAsync(c => c.VehiculoId == vehiculo.Id && c.Fuente == Fuente.ImpuestoDepartamental, ct);
-        return new Sembrado(empresa, vehiculo.Id, impuesto.Id);
+        return new Sembrado(empresa, lote, vehiculo.Id, impuesto.Id);
     }
 
     private static PersonaVehiculo Persona(ApiDePrueba api, Guid empresa, Guid vehiculo, string tipo, string numero) => new()
@@ -182,8 +298,8 @@ public sealed class SolicitudImpuestoTests
         CreadoEn = DateTimeOffset.UtcNow,
     };
 
-    private static string Json(string nombre) =>
-        "{\"vehiculo\":{\"propietarios_actuales\":[{\"nombre_completo\":\"" + nombre + "\"}]}}";
+    private static string Json(string nombre, string tipo, string numero) =>
+        "{\"vehiculo\":{\"propietarios_actuales\":[{\"id_tipo_documento\":\"" + tipo + "\",\"no_documento\":\"" + numero + "\",\"nombre_completo\":\"" + nombre + "\"}]}}";
 
     private static async Task<IReadOnlyList<SolicitudConsulta>> ConstruirAsync(ApiDePrueba api, DiagnosticoDb db, CeldaConsulta celda, CancellationToken ct)
     {
@@ -196,7 +312,7 @@ public sealed class SolicitudImpuestoTests
 
     private static IProtectorRespuestaFuente Respuestas(ApiDePrueba api) => api.App.Services.GetRequiredService<IProtectorRespuestaFuente>();
 
-    private sealed record Sembrado(EmpresaDePrueba Empresa, Guid VehiculoId, Guid ImpuestoId);
+    internal sealed record Sembrado(EmpresaDePrueba Empresa, Guid LoteId, Guid VehiculoId, Guid ImpuestoId);
 
     private sealed class ListaLog : ILogger<EjecutorCeldaImpuesto>
     {

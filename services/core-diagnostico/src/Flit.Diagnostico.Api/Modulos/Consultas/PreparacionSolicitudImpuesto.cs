@@ -53,7 +53,7 @@ internal sealed record PreparacionSolicitudImpuesto(ConsultarImpuestoVehicularRe
         if (organismo is null || Limpio(organismo.Municipio) is not { } municipio || Limpio(organismo.DepartamentoNombre) is not { } departamentoNombre)
             return Cerrar(EjecutorCeldaImpuesto.OrganismoIncompleto, "El organismo no tiene municipio o nombre de departamento.");
 
-        if (LectorNombrePropietario.Leer(await JsonRuntAsync(db, celda, respuestas, ct).ConfigureAwait(false)) is not { } nombre)
+        if (LectorNombrePropietario.Leer(await JsonRuntAsync(db, celda, respuestas, ct).ConfigureAwait(false), documento) is not { } nombre)
             return Cerrar(EjecutorCeldaImpuesto.SinNombrePropietario, "La respuesta del RUNT no trae el nombre del propietario.");
 
         return new(new ConsultarImpuestoVehicularRequest

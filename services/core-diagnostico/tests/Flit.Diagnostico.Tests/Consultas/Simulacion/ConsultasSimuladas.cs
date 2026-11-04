@@ -37,6 +37,25 @@ namespace Flit.Diagnostico.Tests.Consultas;
 /// </example>
 internal static class ConsultasSimuladas
 {
+    /// <summary>
+    /// Documento → nombre de cada propietario de los fixtures. <see cref="VehiculoRunt"/> ya no trae nombres: sin esto, el doble le
+    /// pondría el mismo nombre a todos y la respuesta cifrada no sería la del fixture.
+    /// </summary>
+    private static readonly Lazy<Dictionary<string, string>> NombresDeFixtures = new(() =>
+    {
+        var nombres = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var fixture in FixturesIntempo.Todos().Values)
+        {
+            using var json = JsonDocument.Parse(fixture);
+            if (!json.RootElement.TryGetProperty("vehiculo", out var vehiculo) || !vehiculo.TryGetProperty("propietariosActuales", out var propietarios))
+                continue;
+            foreach (var p in propietarios.EnumerateArray())
+                nombres.TryAdd(p.GetProperty("noDocumento").GetString()!, p.GetProperty("nombreCompleto").GetString()!);
+        }
+
+        return nombres;
+    });
+
     public static async Task<RespuestaSimulada> ResponderAsync(ApiDePrueba api, TrabajoAtendido trabajo, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(api);
@@ -196,7 +215,7 @@ internal static class ConsultasSimuladas
             {
                 IdTipoDocumento = p.TipoDocumento,
                 NoDocumento = p.NumeroDocumento,
-                NombreCompleto = "PERSONA PRUEBA UNO",
+                NombreCompleto = NombresDeFixtures.Value.GetValueOrDefault(p.NumeroDocumento, "PERSONA PRUEBA UNO"),
                 DetallePropiedad = p.TipoPropiedad switch
                 {
                     TipoPropiedad.Propio => "PROPIO",
