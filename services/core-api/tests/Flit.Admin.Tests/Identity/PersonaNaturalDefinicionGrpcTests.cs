@@ -108,8 +108,9 @@ public sealed class PersonaNaturalDefinicionGrpcTests(WebApplicationFactory<Prog
         var conOrganismo = (await cliente.ObtenerDefinicionTipoTramiteAsync(Pedir(e.CodigoTraspaso, e.Organismo), cancellationToken: ct)).Definicion;
         var porDefecto = (await cliente.ObtenerDefinicionTipoTramiteAsync(Pedir(e.CodigoTraspaso, null), cancellationToken: ct)).Definicion;
 
-        porDefecto.Documentos.Select(x => x.DocCode).Should().Equal(e.DocA, e.DocB);
-        conOrganismo.Documentos.Select(x => x.DocCode).Should().Equal(e.DocB, e.DocA);
+        // El portal agrega al traspaso los documentos de la decisión de prenda que FLIT 2 exige; no son de la matriz.
+        porDefecto.Documentos.Select(x => x.DocCode).Where(c => c is not ("prenda_registro" or "prenda_levantamiento")).Should().Equal(e.DocA, e.DocB);
+        conOrganismo.Documentos.Select(x => x.DocCode).Where(c => c is not ("prenda_registro" or "prenda_levantamiento")).Should().Equal(e.DocB, e.DocA);
         var a = conOrganismo.Documentos.Single(x => x.DocCode == e.DocA);
         a.Obligatorio.Should().BeTrue();
         a.Nombre.Should().Be("Documento A de prueba");
