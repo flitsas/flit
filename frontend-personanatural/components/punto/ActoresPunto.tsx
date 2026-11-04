@@ -35,6 +35,8 @@ import {
 
 const MENSAJE_VALIDANDO = "Validando tu identidad…";
 const MENSAJE_NO_DUENO = "No puedes realizar este trámite porque no eres el propietario del vehículo.";
+/** Cuánto se espera la consulta automática de la persona antes de lanzar igual la identidad. */
+const ESPERA_CONSULTA_RADICANTE_MS = 8000;
 const COLOR_OK = "#8CC63F";
 const COLOR_ERROR = "#C10000";
 
@@ -127,6 +129,8 @@ export function ActoresPunto({
   const [versionEstado, setVersionEstado] = useState(0);
   const [lanzando, setLanzando] = useState(false);
   const [falloIdentidad, setFalloIdentidad] = useState<string | null>(null);
+  const [guardando, setGuardando] = useState(false);
+  const [errorGuardado, setErrorGuardado] = useState<string | null>(null);
   const [esperandoIdentidad, setEsperandoIdentidad] = useState(false);
   const lanzado = useRef(false);
   const onAvisoRef = useRef(onAviso);
@@ -329,21 +333,46 @@ export function ActoresPunto({
     }
   };
 
+  // Antes de avanzar se guardan las fichas consultadas (lo editado tras lanzar la identidad debe llegar al borrador).
+  const guardarYContinuar = async () => {
+    setGuardando(true);
+    setErrorGuardado(null);
+    try {
+      for (const rol of roles) await guardarRol(rol.rol);
+      onContinuarRequisitos();
+    } catch (err) {
+      const mensaje = mensajeDeFallo(err);
+      setErrorGuardado(mensaje);
+      onAviso("No pudimos guardar los datos", mensaje, "alerta");
+    } finally {
+      setGuardando(false);
+    }
+  };
+
   const parteRadicante = fase.tipo === "listo" && rolRadicante ? fase.estado.partes.find((p) => p.parte === rolRadicante.rol) : undefined;
   const estadoRadicante = parteRadicante?.estado;
   const hayFila = Boolean(rolRadicante && filas.some((f) => f.rol === rolRadicante.rol && f.ordinal === 1));
   const solicitudListaId = fase.tipo === "listo" ? fase.solicitudId : null;
+  // La identidad espera a la consulta automática de la persona (para llevar el nombre del RUNT); si no llega, se lanza igual.
+  const radicanteConsultado = Boolean(rolRadicante && filas.some((f) => f.rol === rolRadicante.rol && f.ordinal === 1 && f.consultado));
+  const [esperaConsultaVencida, setEsperaConsultaVencida] = useState(false);
+  useEffect(() => {
+    if (!solicitudListaId || radicanteConsultado) return;
+    const t = window.setTimeout(() => setEsperaConsultaVencida(true), ESPERA_CONSULTA_RADICANTE_MS);
+    return () => window.clearTimeout(t);
+  }, [solicitudListaId, radicanteConsultado]);
   const lanzar = useRef(lanzarIdentidad);
   useEffect(() => {
     lanzar.current = lanzarIdentidad;
   });
   useEffect(() => {
     if (!solicitudListaId || !hayFila || radicanteOk) return;
+    if (!radicanteConsultado && !esperaConsultaVencida) return;
     if (estadoRadicante && estadoRadicante !== "sin_solicitar") return;
     if (lanzado.current) return;
     lanzado.current = true;
     void lanzar.current();
-  }, [solicitudListaId, hayFila, radicanteOk, estadoRadicante]);
+  }, [solicitudListaId, hayFila, radicanteOk, estadoRadicante, radicanteConsultado, esperaConsultaVencida]);
   const falloVisible =
     falloIdentidad ??
     (estadoRadicante === "rechazada" || estadoRadicante === "vencida"
@@ -479,6 +508,11 @@ export function ActoresPunto({
                     onValidarIdentidad={validarRadicante}
                   />
                 ))}
+              {errorGuardado && (
+                <p role="alert" className="mt-4 text-sm font-medium" style={{ color: COLOR_ERROR }} id="punto-actores-error-guardado">
+                  {errorGuardado}
+                </p>
+              )}
               {radicanteOk && (
                 <div className="mt-4">
                   <Badge tone="success">Identificado</Badge>
@@ -562,10 +596,10 @@ export function ActoresPunto({
                 setIntentoAvance((n) => n + 1);
                 return;
               }
-              onContinuarRequisitos();
+              void guardarYContinuar();
             }}
             nextLabel="Continuar"
-            nextDisabled={!puedeContinuar}
+            nextDisabled={!puedeContinuar || guardando}
             motivo={!puedeContinuar ? "Debes quedar identificado como propietario para continuar." : undefined}
           />
         </>

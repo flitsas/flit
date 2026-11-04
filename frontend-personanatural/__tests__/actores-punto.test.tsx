@@ -53,6 +53,8 @@ const ACTORES_TRASPASO = [rol("vendedor", "Propietario (vendedor)"), rol("compra
 
 function clienteMock(overrides: {
   actores?: ReturnType<typeof rol>[];
+  persona?: () => Promise<unknown>;
+  guardar?: (...args: unknown[]) => Promise<unknown>;
   estado?: () => Promise<EstadoIdentidad>;
   abrir?: () => Promise<unknown>;
   radicante?: () => Promise<unknown>;
@@ -74,8 +76,8 @@ function clienteMock(overrides: {
       actoresIdentidadEstado: estado,
       actoresInvitar: vi.fn(),
     },
-    solicitudes: { obtener, guardarActores: vi.fn() },
-    consultas: { personaDetalle: vi.fn() },
+    solicitudes: { obtener, guardarActores: overrides.guardar ?? vi.fn(async () => ({ ...SOLICITUD, version: 2 })) },
+    consultas: { personaDetalle: overrides.persona ?? vi.fn() },
     identidad: { solicitar: vi.fn(), reenviar: vi.fn(), estado: vi.fn() },
   } as unknown as ClientePortal;
 }
@@ -163,7 +165,7 @@ function estadoTrasAbrir(despues: EstadoIdentidad) {
   });
 }
 
-function montarPunto(cliente: ClientePortal, onAviso = vi.fn()) {
+function montarPunto(cliente: ClientePortal, onAviso = vi.fn(), onContinuar: () => void = () => undefined) {
   renderConQuery(
     <ActoresPunto
       cliente={cliente}
@@ -171,7 +173,7 @@ function montarPunto(cliente: ClientePortal, onAviso = vi.fn()) {
       documento="1037669356"
       tipoCodigo="TRASPASO"
       onAtras={() => undefined}
-      onContinuarRequisitos={() => undefined}
+      onContinuarRequisitos={onContinuar}
       onAviso={onAviso}
     />,
   );
@@ -254,5 +256,45 @@ describe("ActoresPunto — épica #14185: identidad de quien radica", () => {
     expect(screen.queryByRole("button", { name: /Reintentar/i })).toBeNull();
     expect(screen.queryByRole("region", { name: /^Comprador$/i })).toBeNull();
     expect(radicante).toHaveBeenCalledTimes(1);
+  });
+
+  it("el lanzamiento espera a la consulta automática y manda el nombre del RUNT", async () => {
+    const radicante = vi.fn(async () => ({ parte: "vendedor", ordinal: 1, estado: "pendiente", capturaUrl: null }));
+    let resolver: (v: unknown) => void = () => undefined;
+    const persona = vi.fn(() => new Promise((res) => { resolver = res; }));
+    const vacia = { ...SOLICITUD, actores: [] } as unknown as Solicitud;
+    montarPunto(clienteMock({ estado: estadoTrasAbrir(SIN_SOLICITAR), radicante, persona, obtener: async () => vacia }));
+    await waitFor(() => expect(persona).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 100));
+    expect(radicante).not.toHaveBeenCalled();
+    resolver({ existe: true, nombres: "ANA", apellidos: "RUNT", nombreCompleto: "ANA RUNT", ciudad: null });
+    await waitFor(() => expect(radicante).toHaveBeenCalledTimes(1));
+    expect((radicante.mock.calls[0] as unknown[])[0]).toMatchObject({ nombre: "ANA RUNT", documento: "1037669356" });
+  });
+
+  it("Continuar guarda las fichas editadas antes de avanzar", async () => {
+    const guardar = vi.fn(async () => ({ ...SOLICITUD, version: 2 }));
+    const onContinuar = vi.fn();
+    montarPunto(clienteMock({ estado: async () => ESTADO_APROBADO, guardar }), vi.fn(), onContinuar);
+    const vendedor = await screen.findByRole("region", { name: /Propietario \(vendedor\)/i });
+    fireEvent.change(within(vendedor).getByLabelText(/Teléfono/i), { target: { value: "3109998877" } });
+    fireEvent.change(within(vendedor).getByLabelText(/Correo electrónico/i), { target: { value: "nuevo@correo.co" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Continuar$/i }));
+    await waitFor(() => expect(onContinuar).toHaveBeenCalledTimes(1));
+    const llamada = (guardar.mock.calls[0] as unknown[])[1] as { actores: { rol: string; celular: string; correo: string }[] };
+    expect(llamada.actores[0]).toMatchObject({ rol: "vendedor", celular: "3109998877", correo: "nuevo@correo.co" });
+  });
+
+  it("si el guardado falla no avanza y muestra el motivo junto a la tarjeta", async () => {
+    const guardar = vi.fn(async () => {
+      throw new ApiError("actor_incompleto", "Falta el celular del titular.", 422);
+    });
+    const onContinuar = vi.fn();
+    const onAviso = montarPunto(clienteMock({ estado: async () => ESTADO_APROBADO, guardar }), vi.fn(), onContinuar);
+    await screen.findByRole("region", { name: /Propietario \(vendedor\)/i });
+    fireEvent.click(screen.getByRole("button", { name: /^Continuar$/i }));
+    expect(await screen.findByText(/Falta el celular del titular/i)).toBeInTheDocument();
+    expect(onContinuar).not.toHaveBeenCalled();
+    expect(onAviso).toHaveBeenCalledWith("No pudimos guardar los datos", expect.any(String), "alerta");
   });
 });
