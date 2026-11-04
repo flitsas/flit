@@ -4,7 +4,7 @@ import { lanzarExpress } from "./express";
 /**
  * HU #13866 (F09-H7) y C3-8 — celda y detalle del impuesto departamental en el tablero.
  *
- * Artefacto E2E para QA, SOLO en LOCAL: necesita la suite levantada (hub en 4022, gateway en 4002, core-diagnostico en 4029
+ * Artefacto E2E para QA, SOLO en LOCAL: necesita la suite levantada (hub en 4022, gateway en 4002, core-diagnostico en 4032
  * con `Diagnostico__Ambiente=LOCAL`, `Diagnostico__Simulacion__Habilitada=true` y `Diagnostico__Fuentes__ImpuestoDisponible=true`,
  * y esta app en 4024). En simulación el alta ofrece la fuente cuando la bandera está encendida y la réplica tiene
  * departamentos. El contrato de la compañía debe habilitar IMPUESTO_DEPARTAMENTAL; si no, el test se omite.

@@ -15,9 +15,9 @@ modelo que [handoff-vps-comparendos.md](handoff-vps-comparendos.md).
 
 | Ambiente | Web (`DIAGNOSTICO_PORT`) | API interna (`CORE_DIAGNOSTICO_PORT`) | gRPC | Host |
 |---|---|---|---|---|
-| DEV | 4024 | 4029 | 8087 | `dev.diagnostico.flitsas.online` |
-| QA | 5024 | 5029 | 8087 | `qa.diagnostico.flitsas.online` |
-| PDN | 6024 | 6029 | 8087 | `diagnostico.flitsas.online` |
+| DEV | 4024 | 4032 | 8088 | `dev.diagnostico.flitsas.online` |
+| QA | 5024 | 5032 | 8088 | `qa.diagnostico.flitsas.online` |
+| PDN | 6024 | 6032 | 8088 | `diagnostico.flitsas.online` |
 
 La API y el gRPC no se publican: viven en la red de Docker. Los puertos los exporta el CD por ambiente
 ([despliegue-y-puertos.md](../despliegue-y-puertos.md) §2.d).
@@ -373,7 +373,7 @@ Si falta una variable, el servicio no arranca y el log dice cuál y de qué vari
 **Comprobar:**
 
 ```bash
-docker compose exec core-diagnostico wget -qO- http://localhost:${CORE_DIAGNOSTICO_PORT:-4029}/health/ready
+docker compose exec core-diagnostico wget -qO- http://localhost:${CORE_DIAGNOSTICO_PORT:-4032}/health/ready
 curl -s http://127.0.0.1:${GATEWAY_PORT:-4002}/api/v1/diagnostico/ -o /dev/null -w '%{http_code}\n'   # distinto de 502/503 = el gateway llega al servicio
 curl -s http://127.0.0.1:${DIAGNOSTICO_PORT:-4024}/healthz
 ```

@@ -21,7 +21,7 @@ info:
 servers:
   - url: https://api.flit.co
     description: Producción (vía Gateway YARP)
-  - url: http://localhost:4029
+  - url: http://localhost:4032
     description: Local (core-diagnostico)
 
 security:

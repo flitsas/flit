@@ -4,7 +4,7 @@ import { lanzarExpress } from "./express";
 /**
  * HU #13851 (F07-H6) — descargas del tablero: PDF del vehículo y Excel del lote.
  *
- * Artefacto E2E para QA: necesita la suite levantada (hub en 4022, gateway en 4002, core-diagnostico en 4029 con
+ * Artefacto E2E para QA: necesita la suite levantada (hub en 4022, gateway en 4002, core-diagnostico en 4032 con
  * `Diagnostico__Ambiente=LOCAL|DEV` y `Diagnostico__Simulacion__Habilitada=true`, y esta app en 4024). Con la simulación de
  * RUNT (HU #13725) una placa terminada en 1 responde con éxito. Excluido de `tsc` y de Vitest; se corre con Playwright
  * desde la raíz del repo, por ejemplo:

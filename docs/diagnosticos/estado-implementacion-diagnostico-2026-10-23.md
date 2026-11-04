@@ -157,7 +157,7 @@ flowchart LR
   end
   subgraph Producto Diagnóstico
     FE[frontend-diagnostico<br/>Next 16 · React 19 · Tailwind 4]
-    API[core-diagnostico API<br/>.NET 10 · puertos 4029/5029/6029]
+    API[core-diagnostico API<br/>.NET 10 · puertos 4032/5032/6032]
     WK[Trabajadores en segundo plano<br/>cola durable · réplicas · ZIP]
     DB[(PostgreSQL<br/>schema diagnostico<br/>filtro por tenant)]
   end

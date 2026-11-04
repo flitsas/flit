@@ -90,7 +90,7 @@ jobs:
               image_tag=pdn
               front_port=6001; gateway_port=6002; core_port=6003; python_port=6012; migracion_port=6030; hub_port=6022; identity_port=6025
               comparendos_port=6023; core_comparendos_port=6028
-              diagnostico_port=6024; core_diagnostico_port=6029
+              diagnostico_port=6024; core_diagnostico_port=6032
               # FLIT Suite (contrato §1): prefijo de ambiente de los hosts; vacío en PDN.
               suite_env=
               tramites_domain=tramites.flitsas.com
@@ -104,7 +104,7 @@ jobs:
               image_tag=qa
               front_port=5001; gateway_port=5002; core_port=5003; python_port=5012; migracion_port=5030; hub_port=5022; identity_port=5025
               comparendos_port=5023; core_comparendos_port=5028
-              diagnostico_port=5024; core_diagnostico_port=5029
+              diagnostico_port=5024; core_diagnostico_port=5032
               suite_env=qa
               tramites_domain=qa.tramites.flitsas.online
               internal_subnet=10.114.50.0/24
@@ -117,7 +117,7 @@ jobs:
               image_tag=dev
               front_port=4001; gateway_port=4002; core_port=4003; python_port=4012; migracion_port=4030; hub_port=4022; identity_port=4025
               comparendos_port=4023; core_comparendos_port=4028
-              diagnostico_port=4024; core_diagnostico_port=4029
+              diagnostico_port=4024; core_diagnostico_port=4032
               suite_env=dev
               tramites_domain=dev.tramites.flitsas.online
               # 172.28.40.0/24 (doc) ya estaba ocupado en el VPS compartido → Pool overlaps.

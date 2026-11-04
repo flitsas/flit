@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 /**
  * HU #13744 (F00.2-H3) — pantalla 10: configuración con pestañas Contrato y Operación.
  *
- * Artefacto E2E para QA: necesita la suite levantada (hub en 4022, gateway en 4002, core-diagnostico en 4029 y esta
+ * Artefacto E2E para QA: necesita la suite levantada (hub en 4022, gateway en 4002, core-diagnostico en 4032 y esta
  * app en 4024). Excluido de `tsc` y de Vitest; se corre con Playwright desde la raíz del repo, por ejemplo:
  *
  *   DIAGNOSTICO_URL=http://127.0.0.1:4024 E2E_ADMIN=... E2E_CLAVE_ADMIN=... \

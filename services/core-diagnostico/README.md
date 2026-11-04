@@ -23,8 +23,8 @@ negocio pasa por el guard de suscripción (fail-closed) y exige un permiso del m
 
 | | Local | DEV / QA / PDN |
 |---|---|---|
-| API REST | 4029 | interna, detrás del gateway |
-| gRPC (solo HTTP/2) | 8087 | interno, sin publicar |
+| API REST | 4032 | interna, detrás del gateway |
+| gRPC (solo HTTP/2) | 8088 | interno, sin publicar |
 | App web `frontend-diagnostico` | 4024 | 4024 / 5024 / 6024 |
 
 Configuración local: copiar `src/Flit.Diagnostico.Api/appsettings.Development.json.example` a `appsettings.Development.json`.

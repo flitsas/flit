@@ -1,8 +1,8 @@
 {
   // core-diagnostico en tu máquina (docs/suite/local.md). Copia este archivo a appsettings.Development.json (ignorado
-  // por git) y reemplaza cada CAMBIAR. Puertos de la ronda D0 (plan v2, RD-4): API 4029, gRPC interno 8087.
-  "Urls": "http://127.0.0.1:4029",
-  "Servicio": { "GrpcPort": 8087, "MigrateOnStartup": true },
+  // por git) y reemplaza cada CAMBIAR. Puertos de la ronda D0 (plan v2, RD-4, modificado el 2026-11-04): API 4032, gRPC interno 8088.
+  "Urls": "http://127.0.0.1:4032",
+  "Servicio": { "GrpcPort": 8088, "MigrateOnStartup": true },
   "ConnectionStrings": {
     // La misma base de core-api; el servicio usa su esquema propio «diagnostico» y lo migra al arrancar.
     "Servicio": "Host=127.0.0.1;Port=5432;Database=CAMBIAR;Username=CAMBIAR;Password=CAMBIAR"

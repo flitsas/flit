@@ -68,7 +68,7 @@ Orden de arranque del script (cada paso depende del anterior):
 | 1b | core-identity (productos habilitados, empresas) | 4025 | 8083 | `/health/ready` | `core-identity.log` |
 | 2 | core-consultas (proveedores y **simulación**) | 4026 | 8084 | `/health` | `core-consultas.log` |
 | 2 | core-notificaciones (correo solo al log) | 4027 | 8085 | `/health` | `core-notificaciones.log` |
-| 3 | core-diagnostico | 4029 | 8087 | `/health` | `core-diagnostico.log` |
+| 3 | core-diagnostico | 4032 | 8088 | `/health` | `core-diagnostico.log` |
 | 4 | gateway (YARP) | 4002 | — | `/health` | `gateway.log` |
 | 5 | frontend-hub (login de la suite) | **4022** | — | `/` | `hub.log` |
 | 5 | frontend-diagnostico | 4024 | — | `/` | `frontend-diagnostico.log` |
@@ -109,7 +109,7 @@ Qué hace cada bloque:
 | 2. core-consultas | Modo de proveedores y simulación según `simulado`/`real` (§4). |
 | 2. core-notificaciones | `Smtp__Host` vacío (correo solo al log), Renting apagado. |
 | 3. core-diagnostico | `Diagnostico__Ambiente=LOCAL`, migra su esquema, archivos en la base (`Diagnostico__Archivos__GuardarEnBase=true`), Trámites 8082, Identidad 8083, gateway 4002 (manifiesto), certificado de Data Protection. |
-| 4. gateway | Clusters de diagnostico (4029), comparendos (4028) y consultas (4026). |
+| 4. gateway | Clusters de diagnostico (4032), comparendos (4028) y consultas (4026). |
 | 5–7. Front | `pnpm exec next dev -H 127.0.0.1 -p <puerto>`. Copia `.env.example` → `.env.local` en frontend-diagnostico y frontend-comparendos si no existe. Trámites con `FLIT_SESSION_MODE=oidc`. |
 
 Reglas del script:
@@ -182,7 +182,7 @@ AUTH=(Platform__Auth__JwksUri=http://127.0.0.1:4003/.well-known/jwks.json Platfo
 6. **core-diagnostico** (`services/core-diagnostico/src/Flit.Diagnostico.Api`):
 
    ```bash
-   env "ConnectionStrings__Servicio=$CS" Urls=http://127.0.0.1:4029 Servicio__GrpcPort=8087 Servicio__MigrateOnStartup=true \
+   env "ConnectionStrings__Servicio=$CS" Urls=http://127.0.0.1:4032 Servicio__GrpcPort=8088 Servicio__MigrateOnStartup=true \
      "${AUTH[@]}" "Platform__ServiceClient__ClientSecret=$SVC_DIAGNOSTICO" \
      "Platform__Messaging__ConnectionString=amqp://diagnostico:$MQ_DIAGNOSTICO@127.0.0.1:5672/flit" \
      "Diagnostico__DataProtection__CertificadoRuta=<ruta Windows de infra/secrets/diagnostico-dp.pfx>" \
@@ -198,7 +198,7 @@ AUTH=(Platform__Auth__JwksUri=http://127.0.0.1:4003/.well-known/jwks.json Platfo
    de departamentos, que se sincroniza por `Diagnostico__Consultas__Address`) y `Diagnostico__Identidad__SimularSuscripcionActiva=true`
    (solo local). `Diagnostico__Consultas__Bus__ConsumidorHabilitado` ya es `true` en `appsettings.json`.
 7. **gateway** (`services/core-api/src/Flit.Gateway`): `ASPNETCORE_URLS=http://127.0.0.1:4002` y
-   `ReverseProxy__Clusters__core-diagnostico-cluster__Destinations__core-diagnostico-1__Address=http://127.0.0.1:4029/` (ídem
+   `ReverseProxy__Clusters__core-diagnostico-cluster__Destinations__core-diagnostico-1__Address=http://127.0.0.1:4032/` (ídem
    `core-consultas-cluster` → 4026 y `core-comparendos-cluster` → 4028).
 8. **Front:**
 
@@ -310,7 +310,7 @@ Fixtures (recursos del ensamblado, `services/core-consultas/src/Flit.Consultas.A
 ## 6. Verificación de punta a punta
 
 ```bash
-for u in 4003/health 4025/health/ready 4026/health 4027/health 4029/health 4002/health; do
+for u in 4003/health 4025/health/ready 4026/health 4027/health 4032/health 4002/health; do
   printf '%-22s %s\n' "$u" "$(curl -s -o /dev/null -w '%{http_code}' -m 3 http://127.0.0.1:$u)"; done
 ```
 
@@ -419,7 +419,7 @@ Otras variables según el spec: `E2E_ADMIN`/`E2E_CLAVE_ADMIN`, `E2E_BACKOFFICE`/
 bash scripts/dev/levantar-diagnostico-local.sh parar
 ```
 
-Mata por puerto (3000, 4023, 4028, 4024, 4022, 4029, 4002, 4027, 4026, 4025, 4003) con `taskkill //T //F`, detiene RabbitMQ con
+Mata por puerto (3000, 4023, 4028, 4024, 4022, 4032, 4029, 4002, 4027, 4026, 4025, 4003) con `taskkill //T //F`, detiene RabbitMQ con
 `rabbitmqctl stop` (con el mismo `ERLANG_HOME`/`RABBITMQ_BASE`/`RABBITMQ_CONFIG_FILE` del arranque) y mata `epmd` (:4369). No
 borra datos de la base ni del broker.
 

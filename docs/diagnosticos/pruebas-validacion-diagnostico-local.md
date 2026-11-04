@@ -41,7 +41,7 @@ Fuentes usadas:
 | core-api | 4003 (gRPC 8082) | Login OIDC, catálogos y tipos de trámite. |
 | core-consultas | 4026 (gRPC 8084) | Todo en `mock`. `INTEMPO_API_BASE_URL` vacía. |
 | core-notificaciones | 4027 | Los correos solo van al log. |
-| core-diagnostico | 4029 (gRPC 8087) | `Diagnostico__Ambiente=LOCAL` y `Diagnostico__Identidad__SimularSuscripcionActiva=true`. |
+| core-diagnostico | 4032 (gRPC 8088) | `Diagnostico__Ambiente=LOCAL` y `Diagnostico__Identidad__SimularSuscripcionActiva=true`. |
 | RabbitMQ | 5672 (consola http://127.0.0.1:15672) | vhost `flit` |
 | PostgreSQL | 127.0.0.1:5432, base `flit_local` | Schemas `diagnostico`, `consultas`, `identity` y `platform`. |
 | Trámites (frontend) | http://127.0.0.1:3000 | **El script no lo levanta.** Solo hace falta en TC00, para encender el producto. |
@@ -192,7 +192,7 @@ select t.id, t.tax_id, p.enabled from identity.tenants t
 - **Precondición:** la pila está arriba en modo `simulado`. La compañía de ADMIN **no** tiene Diagnóstico encendido.
 - **Datos:** SUPER; EMPRESA_A (NIT 9000000002); EMPRESA_FLIT (NIT 9000000001).
 - **Pasos:**
-  1. **A. Pila.** Ejecuta `curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:4029/health`. Repite con 4026, 4003 y 4002. Cada uno debe dar `200`. Si alguno falla, arranca con `bash scripts/dev/levantar-diagnostico-local.sh simulado --sin-build`.
+  1. **A. Pila.** Ejecuta `curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:4032/health`. Repite con 4026, 4003 y 4002. Cada uno debe dar `200`. Si alguno falla, arranca con `bash scripts/dev/levantar-diagnostico-local.sh simulado --sin-build`.
   2. **B. Trámites.** En otra terminal, ejecuta `pnpm --dir frontend exec next dev --webpack -H 127.0.0.1 -p 3000`. Abre http://127.0.0.1:3000 e inicia sesión como SUPER.
   3. **C. Encender.** Ve a «Administración de compañías» (`/admin/companies`), elige la compañía de NIT 9000000002 y abre la pestaña **«Productos»**. En «Productos de la FLIT Suite», activa el interruptor **«Diagnóstico»**.
   4. Repite el paso 3 con la compañía FLIT (NIT 9000000001), para las pruebas entre compañías.
@@ -334,8 +334,8 @@ select t.id, t.tax_id, p.enabled from identity.tenants t
 - **Precondición:** la pila está arriba.
 - **Datos:** —
 - **Pasos:**
-  1. Ejecuta `curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:4029/health`.
-  2. Ejecuta lo mismo con `http://127.0.0.1:4029/health/ready`.
+  1. Ejecuta `curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:4032/health`.
+  2. Ejecuta lo mismo con `http://127.0.0.1:4032/health/ready`.
 - **Resultado esperado:** los dos responden `200`.
 - **Resultado:** ☐ Pasa / ☐ Falla — Observaciones: ____________________
 
@@ -345,7 +345,7 @@ select t.id, t.tax_id, p.enabled from identity.tenants t
 - **Precondición:** la pila está arriba.
 - **Datos:** —
 - **Pasos:**
-  1. Ejecuta `curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:4029/api/v1/diagnostico/sesion`, sin cabecera Authorization.
+  1. Ejecuta `curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:4032/api/v1/diagnostico/sesion`, sin cabecera Authorization.
 - **Resultado esperado:** `401`. No se devuelve ningún dato de sesión.
 - **Resultado:** ☐ Pasa / ☐ Falla — Observaciones: ____________________
 

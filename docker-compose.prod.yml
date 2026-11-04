@@ -527,8 +527,8 @@ services:
     image: ghcr.io/flitsas/flitdev/core-diagnostico:${CORE_DIAGNOSTICO_TAG:-latest}
     environment:
       ASPNETCORE_ENVIRONMENT: ${FLIT_DOTNET_ENVIRONMENT:-Development}
-      ASPNETCORE_URLS: http://+:${CORE_DIAGNOSTICO_PORT:-4029}
-      Servicio__GrpcPort: ${CORE_DIAGNOSTICO_GRPC_PORT:-8087}
+      ASPNETCORE_URLS: http://+:${CORE_DIAGNOSTICO_PORT:-4032}
+      Servicio__GrpcPort: ${CORE_DIAGNOSTICO_GRPC_PORT:-8088}
       # Usuario de base dueño del esquema diagnostico (deploy/postgres/servicio-con-esquema-propio.sql).
       ConnectionStrings__Servicio: ${CONNECTION_STRING_DIAGNOSTICO:-}
       Platform__ServiceClient__ClientSecret: ${SVC_DIAGNOSTICO_CLIENT_SECRET:-}
@@ -570,7 +570,7 @@ services:
     secrets:
       - diagnostico_dp_pfx
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_DIAGNOSTICO_PORT:-4029}/health/ready"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_DIAGNOSTICO_PORT:-4032}/health/ready"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -1005,7 +1005,7 @@ services:
       # Epic #12878: API de Comparendos (/api/v1/comparendos/*).
       ReverseProxy__Clusters__core-comparendos-cluster__Destinations__core-comparendos-1__Address: http://core-comparendos:${CORE_COMPARENDOS_PORT:-4028}/
       # HU #13734: API de Diagnóstico (/api/v1/diagnostico/*).
-      ReverseProxy__Clusters__core-diagnostico-cluster__Destinations__core-diagnostico-1__Address: http://core-diagnostico:${CORE_DIAGNOSTICO_PORT:-4029}/
+      ReverseProxy__Clusters__core-diagnostico-cluster__Destinations__core-diagnostico-1__Address: http://core-diagnostico:${CORE_DIAGNOSTICO_PORT:-4032}/
       # HU #13225/#13226 — rutas del login hacia core-identity. Apagada (por defecto) todo va a core-api como siempre;
       # encenderla exige core-identity arriba (perfil "identity"). Volver atrás = false + recrear el gateway.
       Gateway__IdentityCluster__Enabled: ${FLIT_IDENTITY_CLUSTER_ENABLED:-false}

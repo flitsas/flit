@@ -176,7 +176,7 @@ Para cambiar de modo hay que `parar` primero: los servicios que ya corren no se 
 | core-api | 4003, gRPC 8082 |
 | core-consultas | 4026, gRPC 8084 |
 | core-notificaciones | 4027, gRPC 8085 (correo solo al log) |
-| core-diagnostico | 4029, gRPC 8087 |
+| core-diagnostico | 4032, gRPC 8088 |
 | RabbitMQ | 5672, consola http://127.0.0.1:15672 (usuario `flit-admin`) |
 
 Base de datos: `flit_local` en el PostgreSQL nativo (`127.0.0.1:5432`).

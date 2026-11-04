@@ -4,7 +4,7 @@ import { lanzarExpress } from "./express";
 /**
  * HU #13852 (F08-H2) — listado de diagnósticos con filtros en el inicio.
  *
- * Artefacto E2E para QA: necesita la suite levantada (hub en 4022, gateway en 4002, core-diagnostico en 4029 con
+ * Artefacto E2E para QA: necesita la suite levantada (hub en 4022, gateway en 4002, core-diagnostico en 4032 con
  * `Diagnostico__Ambiente=LOCAL|DEV` y `Diagnostico__Simulacion__Habilitada=true`, y esta app en 4024). Excluido de `tsc` y
  * de Vitest; se corre con Playwright desde la raíz del repo, por ejemplo:
  *

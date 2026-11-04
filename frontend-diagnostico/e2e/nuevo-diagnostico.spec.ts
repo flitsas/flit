@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 /**
  * HU #14085 — pantalla única de creación (Express | Masivo).
  *
- * Artefacto E2E para QA: necesita la suite levantada (hub en 4022, gateway en 4002, core-diagnostico en 4029 con
+ * Artefacto E2E para QA: necesita la suite levantada (hub en 4022, gateway en 4002, core-diagnostico en 4032 con
  * `Diagnostico__Simulacion__Habilitada=true`, y esta app en 4024). Excluido de `tsc` y de Vitest; se corre con Playwright
  * desde la raíz del repo, por ejemplo:
  *

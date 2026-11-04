@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 /**
  * HU #13732 (F00.1-H7) — entrada a Diagnóstico desde el hub.
  *
- * Artefacto E2E para QA: necesita la suite levantada (hub en 4022, gateway en 4002, core-diagnostico en 4029 y esta
+ * Artefacto E2E para QA: necesita la suite levantada (hub en 4022, gateway en 4002, core-diagnostico en 4032 y esta
  * app en 4024) y el cliente OIDC `diagnostico` registrado en el hub (P4 + HU #13734). Excluido de `tsc` y de Vitest;
  * se corre con Playwright desde la raíz del repo, por ejemplo:
  *

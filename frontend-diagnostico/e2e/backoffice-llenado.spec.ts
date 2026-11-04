@@ -4,7 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
  * HU #13802 (F06-H5) — backoffice FLIT: elegir compañía, abrir un lote con error, llenar SIMIT vehículo a mano y verlo en
  * verde con la marca «Manual»; un admin de compañía no ve la entrada y la ruta le muestra la 403.
  *
- * Artefacto E2E para QA: necesita la suite levantada (hub en 4022, gateway en 4002, core-diagnostico en 4029 con
+ * Artefacto E2E para QA: necesita la suite levantada (hub en 4022, gateway en 4002, core-diagnostico en 4032 con
  * `Diagnostico__Ambiente=LOCAL|DEV` y `Diagnostico__Simulacion__Habilitada=true`, y esta app en 4024) y un lote de la
  * compañía de prueba con SIMIT vehículo en ERROR (la simulación lo da con el escenario de falla de SIMIT). Excluido de `tsc`
  * y de Vitest; se corre con Playwright desde la raíz del repo, por ejemplo:

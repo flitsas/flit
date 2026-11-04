@@ -29,9 +29,9 @@ SETTINGS_SERVICIO = RAIZ / "services" / "core-diagnostico" / "src" / "Flit.Diagn
 DOCKERFILE_API = RAIZ / "services" / "core-diagnostico" / "Dockerfile"
 DOCKERFILE_WEB = RAIZ / "frontend-diagnostico" / "Dockerfile"
 
-API_DEV, API_QA, API_PDN = "4029", "5029", "6029"
+API_DEV, API_QA, API_PDN = "4032", "5032", "6032"
 WEB_DEV, WEB_QA, WEB_PDN = "4024", "5024", "6024"
-GRPC = "8087"
+GRPC = "8088"
 # Sin valor por defecto: vacía (${VAR:-}) u obligatoria (${VAR:?mensaje}, p. ej. RABBITMQ_URL_DIAGNOSTICO, ADR-0075).
 INTERPOLACION_VACIA = re.compile(r"^\$\{[A-Z0-9_]+(:-|:\?[^}]*)\}$")
 
@@ -82,11 +82,11 @@ class PerfilDeCompose(unittest.TestCase):
         self.assertEqual(api.get("profiles"), ["diagnostico"])
         self.assertEqual(api["image"], "ghcr.io/flitsas/flitdev/core-diagnostico:${CORE_DIAGNOSTICO_TAG:-latest}")
         env = api["environment"]
-        self.assertEqual(env["ASPNETCORE_URLS"], "http://+:${CORE_DIAGNOSTICO_PORT:-4029}")
-        self.assertEqual(env["Servicio__GrpcPort"], "${CORE_DIAGNOSTICO_GRPC_PORT:-8087}")
+        self.assertEqual(env["ASPNETCORE_URLS"], "http://+:${CORE_DIAGNOSTICO_PORT:-4032}")
+        self.assertEqual(env["Servicio__GrpcPort"], "${CORE_DIAGNOSTICO_GRPC_PORT:-8088}")
         self.assertNotIn("ports", api, "la API no se publica: vive detrás del gateway")
         self.assertIn("/health/ready", " ".join(api["healthcheck"]["test"]))
-        self.assertIn("${CORE_DIAGNOSTICO_PORT:-4029}", " ".join(api["healthcheck"]["test"]))
+        self.assertIn("${CORE_DIAGNOSTICO_PORT:-4032}", " ".join(api["healthcheck"]["test"]))
 
     def test_api_trae_toda_la_configuracion_que_exige_al_arrancar(self):
         env = _servicio("core-diagnostico")["environment"]
@@ -121,7 +121,7 @@ class PerfilDeCompose(unittest.TestCase):
         gateway = _servicio("gateway")["environment"]
         self.assertEqual(
             gateway.get("ReverseProxy__Clusters__core-diagnostico-cluster__Destinations__core-diagnostico-1__Address"),
-            "http://core-diagnostico:${CORE_DIAGNOSTICO_PORT:-4029}/",
+            "http://core-diagnostico:${CORE_DIAGNOSTICO_PORT:-4032}/",
         )
         for nombre in ("core-api", "core-identity"):
             env = _servicio(nombre)["environment"]
@@ -219,7 +219,7 @@ class CiDePlataforma(unittest.TestCase):
 
 
 class PuertosRegistrados(unittest.TestCase):
-    """Escenario 4: §2.d registra API 4029/5029/6029 y gRPC 8087 sin choques."""
+    """Escenario 4: §2.d registra API 4032/5032/6032 y gRPC 8088 sin choques."""
 
     def test_diagnostico_registrado(self):
         filas = dict(_filas(_seccion_2d()))
