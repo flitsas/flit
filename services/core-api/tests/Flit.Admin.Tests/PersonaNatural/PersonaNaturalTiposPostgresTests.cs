@@ -173,7 +173,7 @@ public sealed class PersonaNaturalTiposPostgresTests(WebApplicationFactory<Progr
         r.Creada.Should().BeTrue(r.Codigo);
         var prendas = await e.PrendasAsync(ct);
         Flit.Tramites.Domain.Tramites.Services.PrendaGate.EvaluateAccionUnica(prendas.ToList(), (await e.AdjuntosAsync(ct)).Select(a => a.Tipo).ToList())
-            .Should().Be(Flit.Tramites.Domain.Tramites.TramiteEstadoErrores.PrendaEntidadLevantamientoRequerida);
+            .Should().Be(Flit.Tramites.Domain.Tramites.Estados.TramiteEstadoErrores.PrendaEntidadLevantamientoRequerida);
     }
 
     // ── Destino, prenda, leasing y simultáneos con tipos propios ─────────────────────────────────────────────────────
