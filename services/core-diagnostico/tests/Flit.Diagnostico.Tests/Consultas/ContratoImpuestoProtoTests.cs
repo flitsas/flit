@@ -76,19 +76,43 @@ public sealed class ContratoImpuestoProtoTests
         Campo(req, "opciones", 1, FieldType.Message, tipoMensaje: "flit.consultas.v1.OpcionesConsulta");
         Campo(req, "placa", 2, FieldType.Message, tipoMensaje: "flit.platform.v1.Placa");
         Campo(req, "departamento_codigo", 3, FieldType.String);
-        req.Fields.InFieldNumberOrder().Should().HaveCount(3);
+        Campo(req, "documento", 4, FieldType.Message, tipoMensaje: "flit.platform.v1.DocumentoIdentidad");
+        Campo(req, "organismo_nombre", 5, FieldType.String);
+        Campo(req, "municipio", 6, FieldType.String);
+        Campo(req, "departamento_nombre", 7, FieldType.String);
+        Campo(req, "modelo", 8, FieldType.Int32);
+        Campo(req, "propietario_nombre", 9, FieldType.String);
+        req.Fields.InFieldNumberOrder().Should().HaveCount(9);
 
         var resp = MensajeObligatorio("ConsultarImpuestoVehicularResponse");
         Campo(resp, "resultado", 1, FieldType.Message, tipoMensaje: "flit.consultas.v1.ResultadoConsulta");
         Campo(resp, "monto_total", 2, FieldType.Int64);
         Campo(resp, "vigencias", 3, FieldType.Message, repetido: true, tipoMensaje: "flit.consultas.v1.VigenciaImpuesto");
-        resp.Fields.InFieldNumberOrder().Should().HaveCount(3);
+        Campo(resp, "tiene_deuda", 4, FieldType.Bool);
+        Campo(resp, "monto_informado", 5, FieldType.Bool);
+        Campo(resp, "intereses_mora", 6, FieldType.Int64);
+        Campo(resp, "sanciones", 7, FieldType.Int64);
+        Campo(resp, "avaluo_comercial", 8, FieldType.Int64);
+        Campo(resp, "ultimo_pago", 9, FieldType.Message, tipoMensaje: "flit.consultas.v1.UltimoPagoImpuesto");
+        Campo(resp, "liquidacion_consolidada_id", 10, FieldType.String);
+        Campo(resp, "periodo_certificacion", 11, FieldType.String);
+        Campo(resp, "fecha_consulta_proveedor", 12, FieldType.String);
+        Campo(resp, "dato_parcial", 13, FieldType.Bool);
+        resp.Fields.InFieldNumberOrder().Should().HaveCount(13);
 
         var vigencia = MensajeObligatorio("VigenciaImpuesto");
         Campo(vigencia, "anio", 1, FieldType.Int32);
         Campo(vigencia, "valor", 2, FieldType.Int64);
         Campo(vigencia, "pagada", 3, FieldType.Bool);
-        vigencia.Fields.InFieldNumberOrder().Should().HaveCount(3);
+        Campo(vigencia, "liquidacion_id", 4, FieldType.String);
+        Campo(vigencia, "avaluo", 5, FieldType.Int64);
+        vigencia.Fields.InFieldNumberOrder().Should().HaveCount(5);
+
+        var ultimoPago = MensajeObligatorio("UltimoPagoImpuesto");
+        Campo(ultimoPago, "anio", 1, FieldType.Int32);
+        Campo(ultimoPago, "valor", 2, FieldType.Int64);
+        Campo(ultimoPago, "fecha", 3, FieldType.String);
+        ultimoPago.Fields.InFieldNumberOrder().Should().HaveCount(3);
 
         MensajeObligatorio("ListarDepartamentosImpuestoRequest").Fields.InFieldNumberOrder().Should().BeEmpty();
         var deptos = MensajeObligatorio("ListarDepartamentosImpuestoResponse");
