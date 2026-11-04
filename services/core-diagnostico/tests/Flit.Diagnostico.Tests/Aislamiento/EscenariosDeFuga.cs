@@ -3,9 +3,12 @@ using Flit.Diagnostico.Api.Modulos.Carga;
 using Flit.Diagnostico.Api.Modulos.Catalogos;
 using Flit.Diagnostico.Api.Modulos.Comun;
 using Flit.Diagnostico.Api.Modulos.Configuracion;
+using Flit.Diagnostico.Api.Modulos.Diagnosticos;
+using Flit.Diagnostico.Api.Modulos.Dictamen;
 using Flit.Diagnostico.Api.Modulos.Tablero;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Domain.Consultas;
+using Flit.Diagnostico.Domain.Dictamen;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Metadata;
@@ -148,6 +151,13 @@ public static class EscenariosDeFuga
     /// </summary>
     public const string RutaArchivoEvidencia = Program.Prefijo + global::Flit.Diagnostico.Api.Modulos.Reportes.EvidenciasEndpoints.RutaArchivoEvidencia;
 
+    /// <summary>
+    /// Dictamen vigente de un vehículo (corte 7): cada empresa siembra un dictamen real cuyo alertamiento lleva un texto exclusivo
+    /// de esa empresa. El DTO no trae ids, así que lo que A debe leer y lo que no debe cruzar es ese texto; con el token de A la URL
+    /// de B no devuelve el dictamen de B.
+    /// </summary>
+    public const string RutaDictamen = Program.Prefijo + DictamenEndpoints.Ruta;
+
     public static IReadOnlyList<EscenarioDeFuga> Todos { get; } =
     [
         EscenarioDeFuga.Con(RutaSonda, _ => new LecturaBackoffice { EmpresaConsultada = Guid.NewGuid(), UsuarioId = Guid.NewGuid(), Ruta = "/sonda" }, l => l.Id),
@@ -206,6 +216,27 @@ public static class EscenariosDeFuga
             // compañías siembran la misma placa ficticia, así que lo que no debe cruzar es el id del lote.
             return new Sembrado(Reportes.ZipDePrueba.RutaArchivo(lote, evidencia), [lote.ToString(), "TST908", "AUTOMOVIL"], Exclusivos: [lote.ToString()]);
         }, Reportes.ZipDePrueba.TextoAsync),
+        new EscenarioDeFuga(RutaDictamen, async (empresa, ct) =>
+        {
+            var lote = await Tablero.Tablero.SembrarAsync(empresa, ct, vehiculos: [new("TST909", [new(Fuente.Runt, EstadoCelda.Completado, 1)])]);
+            var vehiculo = lote.Vehiculos.Single().Id;
+            var exclusivo = $"ALERTA-DE-{empresa.Id}";
+            await using var db = empresa.Db();
+            db.Add(new DictamenVehiculo
+            {
+                VehiculoId = vehiculo,
+                Version = 1,
+                Vigente = true,
+                Veredicto = "VIABLE",
+                Alertamientos = $$"""[{"codigo":"SOAT_NO_VIGENTE","texto":"{{exclusivo}}","efecto":"BLOQUEA","fuente":"RUNT"}]""",
+                CatalogoVersion = CatalogoReglasDictamen.Version,
+                RedactadoPor = "PLANTILLA",
+                EstadoRedaccion = "PENDIENTE",
+                CreadoEn = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(ct);
+            return new Sembrado($"{Program.Prefijo}{DiagnosticosEndpoints.Ruta}/{lote.Id}/vehiculos/{vehiculo}/dictamen", [exclusivo]);
+        }),
     ];
 
     /// <summary>Lote con un vehículo terminado y su ZIP pedido (y generado por la cola si <paramref name="procesar"/>).</summary>
