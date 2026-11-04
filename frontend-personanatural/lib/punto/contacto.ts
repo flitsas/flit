@@ -19,3 +19,6 @@ export function erroresRadicantePunto(errores: ErroresActor, correo: string): Er
   void _t;
   return correo.trim() !== "" && correoConCaracteresNoPermitidos(correo) ? { ...resto, correo: MENSAJE_CORREO_CARACTERES } : resto;
 }
+
+/** Correo técnico interno que el backend pone al radicante del punto: la persona nunca debe verlo. */
+export const esCorreoTecnico = (v: string | null | undefined): boolean => (v ?? "").trim().toLowerCase().startsWith("validaciones+punto-");

@@ -335,6 +335,17 @@ describe("ActoresPunto — épica #14185: identidad de quien radica", () => {
     });
   });
 
+  it("el correo técnico interno del radicante no se muestra al reanudar", async () => {
+    const tecnico = {
+      ...SOLICITUD,
+      actores: [{ ...SOLICITUD.actores[0], correo: "validaciones+punto-abc123@flitsas.com" }],
+    } as unknown as Solicitud;
+    montarPunto(clienteMock({ estado: async () => ESTADO_APROBADO, obtener: async () => tecnico }));
+    const vendedor = await screen.findByRole("region", { name: /Propietario \(vendedor\)/i });
+    expect(within(vendedor).getByLabelText(/Correo electrónico/i)).toHaveValue("");
+    expect(screen.queryByDisplayValue(/validaciones\+punto-/)).toBeNull();
+  });
+
   describe("versión del borrador", () => {
     it("lanzar la identidad sube la versión y Continuar guarda con la versión nueva", async () => {
       const guardar = vi.fn(async () => ({ ...SOLICITUD, version: 6 }));

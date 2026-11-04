@@ -23,7 +23,7 @@ import type {
 } from "@/lib/api/cliente";
 import { esEditable } from "@/lib/tramite/pasos";
 import { ApiError, mensajeDeFallo } from "@/lib/api/errores";
-import { correoSeguro } from "@/lib/punto/contacto";
+import { correoSeguro, esCorreoTecnico } from "@/lib/punto/contacto";
 import {
   actoresParaGuardar,
   estadoDeFila,
@@ -107,7 +107,8 @@ function borradorDeEstaEntrada(solicitud: Solicitud, entrada: { placa: string; t
 
 function filasDesdeSolicitud(solicitud: Solicitud, documentoInicial: string, roles: readonly ActorRol[]): FilaActor[] {
   const definicion = { actores: roles } as DefinicionTipo;
-  const base = filasIniciales(definicion, solicitud.actores);
+  // El correo técnico interno del radicante no se muestra: el campo queda vacío.
+  const base = filasIniciales(definicion, solicitud.actores).map((f) => (esCorreoTecnico(f.correo) ? { ...f, correo: "" } : f));
   const conMinimos = roles.flatMap((rol) => {
     const delRol = base.filter((f) => f.rol === rol.rol);
     if (delRol.length > 0) return delRol;
