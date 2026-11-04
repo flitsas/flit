@@ -63,6 +63,16 @@ describe("Envío del punto · Resumen y confirmación", () => {
     expect(routerPush).not.toHaveBeenCalled();
   }, 20000);
 
+  it("cotiza con el organismo del borrador y muestra el valor en el Resumen y en la confirmación", async () => {
+    const cotizar = vi.fn(() => json({ lineas: [{ codigo: "TARIFA", nombre: "Tarifa", subtitulo: "", valorCop: 2000 }], totalCop: 2000, versionTarifa: "v1", adicionalesNoAplicados: [] }));
+    const { llamadas } = montar({ "POST /cotizaciones": cotizar });
+
+    const resumen = await screen.findByRole("region", { name: "Resumen del trámite" });
+    await waitFor(() => expect(resumen).toHaveTextContent(/2.000/));
+    expect(llamadas.filter((l) => l === "POST /cotizaciones").length).toBeGreaterThan(0);
+    expect(JSON.parse(String((cotizar.mock.calls[0] as unknown as [RequestInit])[0].body))).toMatchObject({ organismoId: "o-1", tipoCodigo: "TIPO_A" });
+  });
+
   it("si la radicación falla muestra el motivo, no confirma y permite reintentar", async () => {
     const { fase } = montar({
       [RADICAR]: () => problema(409, "identity_pending", { motivo: "identidad_pendiente", partes: [] }),

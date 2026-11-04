@@ -327,6 +327,23 @@ describe("ActoresPunto — épica #14185: identidad de quien radica", () => {
       await waitFor(() => expect(abrirDoc).toHaveBeenCalledTimes(1));
     });
 
+    it("al reanudar con la validación en curso ofrece «Abrir validación» y la vuelve a pedir al pulsarlo", async () => {
+      const pendiente: EstadoIdentidad = { solicitudId: "sol-1", completa: false, partes: [{ parte: "vendedor", ordinal: 1, estado: "pendiente", puedeReenviar: false, reenviosRestantes: 5, esperaSegundos: 0 }] };
+      const radicante = vi.fn(async () => ({ parte: "vendedor", ordinal: 1, estado: "pendiente", capturaUrl: "https://verify.example/de-nuevo" }));
+      const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+      const abrir = abrirNuevo();
+      montarPunto(clienteMock({ estado: vi.fn(async () => pendiente), abrir, radicante }));
+
+      expect(await screen.findByText(/Validación: en curso/i)).toBeInTheDocument();
+      expect(radicante).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name: /Abrir validación/i }));
+
+      await waitFor(() => expect(openSpy).toHaveBeenCalledWith("https://verify.example/de-nuevo", "_blank", "noopener,noreferrer"));
+      expect(radicante).toHaveBeenCalledTimes(1);
+      expect(abrir).not.toHaveBeenCalled();
+      openSpy.mockRestore();
+    });
+
     it("el mismo borrador editable (misma placa, tipo y documento) se reanuda sin abrir otro", async () => {
       const abrir = abrirNuevo();
       montarPunto(clienteMock({ estado: estadoConSesion(), abrir }));

@@ -66,7 +66,7 @@ function Confirmacion() {
   const codigo = estado.data?.estado ?? solicitud.estado;
   const cancelada = codigo === "cancelada";
   const referencia = estado.data?.numeroReferencia?.trim() || null;
-  const seguimiento = pasosDeSeguimiento({ estado: codigo, actualizadoEn: estado.data?.actualizadoEn ?? "" }, definicion);
+  const seguimiento = pasosDeSeguimiento({ estado: codigo, actualizadoEn: estado.data?.actualizadoEn ?? "" }, definicion, solicitud.actores);
 
   // El foco pasa al título cuando aparece la confirmación (lectores de pantalla y teclado).
   useEffect(() => {

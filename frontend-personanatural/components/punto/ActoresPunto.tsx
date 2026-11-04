@@ -565,10 +565,15 @@ export function ActoresPunto({
                     <div className="flex flex-wrap items-center gap-3" role="status">
                       <Badge tone="warning">Validación: en curso</Badge>
                       <span className="text-sm text-muted-foreground">Completa la validación en la ventana que se abrió.</span>
-                      {fase.capturaUrlVendedor && (
+                      {fase.capturaUrlVendedor ? (
                         <a className={boton("flit", "min-h-11 px-6", "none")} href={fase.capturaUrlVendedor} target="_blank" rel="noreferrer">
                           Abrir validación
                         </a>
+                      ) : (
+                        // Al reanudar un borrador el enlace no se conoce: se vuelve a pedir con el mismo flujo del lanzamiento inicial.
+                        <button type="button" className={boton("flit", "min-h-11 px-6", "none")} disabled={lanzando} onClick={() => void lanzarIdentidad()}>
+                          Abrir validación
+                        </button>
                       )}
                     </div>
                   )}

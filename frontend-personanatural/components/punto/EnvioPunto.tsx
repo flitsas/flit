@@ -11,6 +11,7 @@ import { ProveedorWizard, type ApiWizard } from "@/components/tramite/ContextoWi
 import { Btn, Card, Nav } from "@/components/tramite/piezas";
 import { EnvioTramite } from "@/components/tramite/renderers/EnvioTramite";
 import { ResumenTramite } from "@/components/tramite/renderers/ResumenTramite";
+import { useCotizacionAutomatica } from "@/components/tramite/useCotizacionAutomatica";
 import { claveSolicitud, useSolicitud } from "@/components/tramite/useSolicitud";
 import type { ClientePortal, DefinicionTipo } from "@/lib/api/cliente";
 import { mensajeDeFallo } from "@/lib/api/errores";
@@ -43,6 +44,15 @@ export function EnvioPunto({ cliente, solicitudId, tipoCodigo, paso, onPaso, onA
     enabled: Boolean(solicitud),
     staleTime: Infinity,
     retry: false,
+  });
+
+  // El punto no monta la barra lateral del portal que cotiza: se cotiza aquí (mismo POST /cotizaciones, mismo organismo del borrador)
+  // y queda en la misma caché que leen el Resumen, la tarjeta lateral y la confirmación. Con organismo vacío no consulta.
+  useCotizacionAutomatica({
+    cliente,
+    organismoId: solicitud?.organismoId ?? "",
+    tipoCodigo,
+    transformaciones: solicitud?.datos.requisitos?.transformaciones ?? [],
   });
 
   const recargar = useCallback(() => queryClient.invalidateQueries({ queryKey: claveSolicitud(solicitudId) }), [queryClient, solicitudId]);

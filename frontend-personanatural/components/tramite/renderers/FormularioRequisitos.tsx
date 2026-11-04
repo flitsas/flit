@@ -29,6 +29,7 @@ import {
   type EntradaRequisitos,
 } from "@/lib/tramite/requisitos";
 import { GRUPO_POR_SECCION } from "@/lib/tramite/pasos";
+import { nombreVisibleDeAdjunto } from "@/lib/tramite/presentacion";
 import { accionGuardada, decisionDe, documentoDeDecision, DOCS_DE_PRENDA, errorDeDocumentoDePrenda, ETIQUETA_ACCION_PRENDA, type AccionPrenda } from "@/lib/tramite/prenda";
 
 const AUTOGUARDADO_MS = 3000;
@@ -279,7 +280,7 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
           hint={ayuda}
           optional={!exigible}
           estado={estado}
-          nombre={subida?.nombre ?? cargado?.nombreArchivo}
+          nombre={subida?.nombre ?? (cargado ? nombreVisibleDeAdjunto(cargado, idSolicitud) : undefined)}
           error={error}
           onFile={(archivo) => void subir(doc, archivo)}
           onQuitar={cargado ? () => void quitar(doc) : undefined}
@@ -373,7 +374,10 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
             <div aria-live="polite" className="mt-3 space-y-1 text-sm font-light text-muted-foreground">
               {gravamen.isFetching && <p role="status">Consultando el gravamen en el RUNT...</p>}
               {gravamen.data?.aviso === "sin_gravamen" && <p role="status">RUNT sin gravamen registrado para este vehículo.</p>}
-              {gravamen.data?.tienePrenda && gravamen.data.acreedor === null && (
+              {gravamen.isError && !gravamen.isFetching && (
+                <p role="status">No pudimos consultar el gravamen en el RUNT. Escribe el acreedor y su NIT a mano.</p>
+              )}
+              {gravamen.data?.tienePrenda && !gravamen.data.acreedor && (
                 <p role="status">El RUNT reporta una prenda. El acreedor se muestra cuando se valida la identidad; mientras tanto puedes escribirlo.</p>
               )}
             </div>

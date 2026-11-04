@@ -85,6 +85,13 @@ describe("gravamen RUNT en la prenda", () => {
     fireEvent.click(within(tarjeta()).getByLabelText("Sí"));
     await waitFor(() => expect(llamadas.some((l) => l.clave === GRAVAMEN)).toBe(true));
     expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).toHaveValue("");
+    expect(await within(tarjeta()).findByText(/No pudimos consultar el gravamen en el RUNT/)).toBeInTheDocument();
+  });
+
+  it("si el RUNT reporta prenda y el acreedor llega vacío u omitido, lo avisa igual", async () => {
+    await abrir(definicion(), { [GRAVAMEN]: () => json({ tienePrenda: true, acreedor: "", aviso: null }) });
+    fireEvent.click(within(tarjeta()).getByLabelText("Sí"));
+    expect(await within(tarjeta()).findByText(/se muestra cuando se valida la identidad/)).toBeInTheDocument();
   });
 
   it("en un tipo de acción única el portal no ofrece elegir (la fija el servidor)", async () => {
