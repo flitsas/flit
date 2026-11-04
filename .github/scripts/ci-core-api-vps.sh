@@ -21,7 +21,11 @@ base=${ConnectionStrings__Core:?falta ConnectionStrings__Core (ci-servicios.sh)}
 pg_cont=${CI_PG_CONTENEDOR:?falta CI_PG_CONTENEDOR}
 
 # Orden: del carril más largo al más corto, para que el último en arrancar no alargue la corrida.
-carriles=(admin integration:0 integration:1 integration:2 integration:3 resto)
+# Admin va en 2 shards (ADMIN_SHARDS): es el camino crítico y, corriendo solo, dejaba la CPU ociosa (2026-11-03).
+export ADMIN_SHARDS=${ADMIN_SHARDS:-2}
+carriles=()
+for ((i = 0; i < ADMIN_SHARDS; i++)); do carriles+=("admin:$i"); done
+carriles+=(integration:0 integration:1 integration:2 integration:3 resto)
 
 mq=${FLIT_TEST_RABBITMQ:?falta FLIT_TEST_RABBITMQ (ci-servicios.sh)}
 mq_cont=${CI_MQ_CONTENEDOR:?falta CI_MQ_CONTENEDOR}
