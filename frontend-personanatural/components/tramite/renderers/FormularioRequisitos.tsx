@@ -67,7 +67,7 @@ export function FormularioRequisitos(props: PropsSeccion) {
 
 const sinClave = <T,>(mapa: Record<string, T>, clave: string): Record<string, T> => Object.fromEntries(Object.entries(mapa).filter(([k]) => k !== clave));
 
-function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
+function PasoRequisitos({ seccion, activa, intentoAvance, onEstado }: PropsSeccion) {
   const { cliente, definicion: definicionBase, solicitud, guardarConVersion, registrarGuardado, recargar, reportarError, canal, avaluoSugerido } = useWizard();
   const idSolicitud = solicitud.solicitudId;
   // Los documentos que ya cubre una declaración (su soporte) salen de la matriz de «Documentos» para no pedirse dos veces.
@@ -101,10 +101,19 @@ function PasoRequisitos({ seccion, intentoAvance, onEstado }: PropsSeccion) {
   const gravamen = useQuery<GravamenRunt>({
     queryKey: ["pn", "gravamen", idSolicitud],
     queryFn: ({ signal }) => cliente.solicitudes.gravamen(idSolicitud, { signal }),
-    enabled: verPrenda,
+    // El Cascarón monta todos los pasos: solo se consulta con el paso activo (antes el BFF aún no tiene el documento del propietario y respondería 409).
+    enabled: verPrenda && activa,
     staleTime: 5 * 60 * 1000,
     retry: false,
   });
+  // Un fallo previo (p. ej. 409 por consultar antes de tiempo) no queda como aviso definitivo: al volver a activarse el paso se reintenta.
+  const refetchGravamen = gravamen.refetch;
+  const gravamenConError = gravamen.isError;
+  useEffect(() => {
+    if (activa && verPrenda && gravamenConError) void refetchGravamen();
+    // Solo al pasar a activo: un error que ocurre con el paso ya activo no debe entrar en bucle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activa]);
   const acreedorRunt = gravamen.data?.acreedor?.trim() ?? "";
   const nitRunt = (gravamen.data?.nitAcreedor ?? "").replace(/\D/g, "");
   // Como en FLIT 2: al levantar una prenda que el RUNT confirmó con sus datos, el acreedor y el NIT son de solo lectura.

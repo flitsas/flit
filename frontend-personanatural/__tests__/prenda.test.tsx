@@ -2,7 +2,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/re
 import { describe, expect, it } from "vitest";
 import type { Adjunto, DefinicionTipo, Solicitud } from "@/lib/api/cliente";
 import { definicionDe, solicitudDe } from "./fixtures-wizard";
-import { cuerpo, DIAGNOSTICO_OK, wizardAbierto, type Manejador } from "./montar-wizard";
+import { cuerpo, DIAGNOSTICO_OK, nodo, wizardAbierto, type Manejador } from "./montar-wizard";
 import { json } from "./utilidades";
 
 // Tarjeta de prenda (HU9): decisión registrar / levantar / sin prenda y el documento que pide cada una.
@@ -123,6 +123,39 @@ describe("gravamen RUNT en la prenda", () => {
     await waitFor(() => expect(llamadas.some((l) => l.clave === GRAVAMEN)).toBe(true));
     expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).toHaveValue("");
     expect(await within(tarjeta()).findByText(/No pudimos consultar el gravamen en el RUNT/)).toBeInTheDocument();
+  });
+
+  describe("solo se consulta con el paso de Requisitos activo", () => {
+    // Abre en el paso 2 (Actores) con prenda ya declarada: Requisitos está montado pero inactivo.
+    const enActores = () =>
+      borrador({ pendientes: [{ codigo: "actor_requerido", referencia: "vendedor", paso: "p2" }], datos: { diagnostico: { ...DIAGNOSTICO_OK, fecha: "2026-10-28T20:23:00Z" }, prenda: { tiene: true, acreedor: "", nitAcreedor: "", decision: "registrar" } } });
+    it("con otro paso activo no llama al gravamen aunque ya haya prenda declarada", async () => {
+      const { llamadas } = await wizardAbierto({
+        [RUTA_DEFINICION]: () => json(definicion()),
+        "GET /solicitudes/s-1": () => json(enActores()),
+        [GRAVAMEN]: () => json({ tienePrenda: true, acreedor: "Banco Uno", nitAcreedor: "860002964", aviso: null }),
+      });
+      await screen.findByRole("button", { name: /Paso 2 ·/ });
+      await new Promise((r) => setTimeout(r, 100));
+      expect(llamadas.some((l) => l.clave === GRAVAMEN)).toBe(false);
+    });
+
+    it("activo consulta y precarga; tras un error, al reactivar el paso vuelve a consultar y el aviso desaparece", async () => {
+      let intentos = 0;
+      const conPrenda = borrador({ datos: { diagnostico: { ...DIAGNOSTICO_OK, fecha: "2026-10-28T20:23:00Z" }, prenda: { tiene: true, acreedor: "", nitAcreedor: "", decision: "registrar" } } });
+      const { llamadas } = await abrir(
+        definicion(),
+        { [GRAVAMEN]: () => (++intentos === 1 ? json({ code: "vehiculo_no_definido" }, 409) : json({ tienePrenda: true, acreedor: "Banco Uno", nitAcreedor: "860002964", aviso: null })) },
+        conPrenda,
+      );
+      expect(await within(tarjeta()).findByText(/No pudimos consultar el gravamen en el RUNT/)).toBeInTheDocument();
+      expect(llamadas.filter((l) => l.clave === GRAVAMEN)).toHaveLength(1);
+      fireEvent.click(nodo(2));
+      fireEvent.click(await screen.findByRole("button", { name: /Paso 3 ·/ }));
+      await waitFor(() => expect(within(tarjeta()).getByLabelText("Acreedor (beneficiario) *")).toHaveValue("Banco Uno"));
+      expect(llamadas.filter((l) => l.clave === GRAVAMEN)).toHaveLength(2);
+      expect(within(tarjeta()).queryByText(/No pudimos consultar el gravamen en el RUNT/)).toBeNull();
+    });
   });
 
   it("si el RUNT reporta prenda y el acreedor llega vacío u omitido, lo avisa igual", async () => {
