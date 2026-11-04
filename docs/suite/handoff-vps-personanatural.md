@@ -132,6 +132,28 @@ PersonaNatural__Portal__DeadlineSegundos=15                       # opcional
   solicitud editable. Tope por solicitud `Consultas__MaxDetallePorSolicitud` (6 por defecto); comparte los topes por documento
   y globales (`Abuso__*`) con las consultas públicas. Sin configuración nueva obligatoria.
 
+## 3d. Archivos del trámite: file-manager (HU #14048)
+
+**Obligatorio en cada ambiente.** Sin `FILE_MANAGER_BASE_URL` el contenedor arranca y queda `healthy`, pero toda carga de
+documentos responde `almacenamiento_no_disponible` y el portal muestra «No pudimos guardar el archivo». Así ocurrió en DEV.
+
+```
+FILE_MANAGER_BASE_URL=<URL del file-manager del ambiente, la misma de core-api>
+FILE_MANAGER_FILES_PATH=api/v1/files                      # opcional
+FILE_MANAGER_CATEGORY_PN=persona-natural                  # opcional; en compose: PERSONANATURAL_FILE_MANAGER_CATEGORY
+FILE_MANAGER_TIMEOUT_SECONDS=60                           # opcional
+FILE_MANAGER_AUTH_TOKEN=<el mismo valor de core-api>      # donde el file-manager lo exija
+```
+
+- **DEV:** `https://devfilemanager.flitsas.online`, sin token.
+- **PDN:** `filemanager.flitsas.com` responde 401 sin token. Con GitOps va como secreto sellado en `core-personanatural-secrets`;
+  el script `gen-secretos-dev.sh` no lo incluye.
+- Con GitOps, estas variables van en `core-personanatural-config` de cada ambiente. `envFrom` no reinicia el pod al cambiar el
+  ConfigMap: hay que forzar el rollout.
+
+**Comprobar:** subir un documento en el paso de requisitos de un trámite: debe responder 201 y mostrar el archivo cargado.
+**Volver atrás:** quitar las variables y reiniciar; las cargas vuelven a responder `almacenamiento_no_disponible`.
+
 ## 4. Secretos de datos personales y captcha
 
 ```

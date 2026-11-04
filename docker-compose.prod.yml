@@ -442,6 +442,13 @@ services:
       Cotizaciones__NotificacionesAddress: ${NOTIFICACIONES_REMOTO_ADDRESS:-http://core-notificaciones:8085}
       # Detrás del gateway: la IP real del ciudadano llega en X-Forwarded-For (límite por IP).
       Abuso__ConfiarEnXForwardedFor: "true"
+      # Archivos del trámite por el file-manager corporativo (HU #14048), las mismas variables que core-api, en su propia
+      # categoría. Sin URL el servicio arranca, pero toda carga responde almacenamiento_no_disponible. PDN exige el token.
+      FILE_MANAGER_BASE_URL: ${FILE_MANAGER_BASE_URL:-}
+      FILE_MANAGER_FILES_PATH: ${FILE_MANAGER_FILES_PATH:-api/v1/files}
+      FILE_MANAGER_CATEGORY_PN: ${PERSONANATURAL_FILE_MANAGER_CATEGORY:-persona-natural}
+      FILE_MANAGER_TIMEOUT_SECONDS: ${FILE_MANAGER_TIMEOUT_SECONDS:-60}
+      FILE_MANAGER_AUTH_TOKEN: ${FILE_MANAGER_AUTH_TOKEN:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     healthcheck:
       # Listo = base alcanzable y sin migraciones pendientes (aplica las suyas al arrancar, solo su esquema).
