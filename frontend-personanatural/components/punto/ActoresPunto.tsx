@@ -293,15 +293,34 @@ export function ActoresPunto({
     setFilas((actuales) => actuales.map((f) => (f.clave === clave ? { ...f, ...patch } : f)));
   };
 
+  // Identidad e invitaciones guardan al actor en el servidor y suben la versión: se relee sin tocar lo que la persona escribió en las filas.
+  const recargarVersion = async (solicitudId: string) => {
+    try {
+      const vigente = await cliente.solicitudes.obtener(solicitudId);
+      versionRef.current = vigente.version;
+      setFase((prev) => (prev.tipo === "listo" ? { ...prev, version: vigente.version } : prev));
+    } catch {
+      /* si no se pudo releer, el guardado reintenta al detectar el conflicto */
+    }
+  };
+
   const guardarRol = async (rol: string) => {
     if (fase.tipo !== "listo") return;
     const delRol = filas.filter((f) => f.rol === rol && f.consultado);
     if (delRol.length === 0) return;
-    const actualizada = await cliente.solicitudes.guardarActores(fase.solicitudId, {
-      version: versionRef.current,
-      // Un correo con caracteres no permitidos (dato de origen dañado) no se guarda.
-      actores: actoresParaGuardar(delRol).map((a) => ({ ...a, correo: correoSeguro(a.correo) ?? "" })),
-    });
+    // Un correo con caracteres no permitidos (dato de origen dañado) no se guarda.
+    const actores = actoresParaGuardar(delRol).map((a) => ({ ...a, correo: correoSeguro(a.correo) ?? "" }));
+    const guardar = () => cliente.solicitudes.guardarActores(fase.solicitudId, { version: versionRef.current, actores });
+    let actualizada;
+    try {
+      actualizada = await guardar();
+    } catch (err) {
+      if (!(err instanceof ApiError && err.status === 409 && err.code === "conflicto_version")) throw err;
+      // Conflicto de versión: se relee la versión y se reintenta UNA vez con los datos actuales de la ficha.
+      const vigente = await cliente.solicitudes.obtener(fase.solicitudId);
+      versionRef.current = vigente.version;
+      actualizada = await guardar();
+    }
     versionRef.current = actualizada.version;
     setFase((prev) => (prev.tipo === "listo" ? { ...prev, version: actualizada.version } : prev));
   };
@@ -325,6 +344,7 @@ export function ActoresPunto({
     setFase((prev) =>
       prev.tipo === "listo" ? { ...prev, capturaUrlVendedor: resultado.capturaUrl ?? prev.capturaUrlVendedor } : prev,
     );
+    await recargarVersion(fase.solicitudId);
     await refrescarEstado(fase.solicitudId);
     return resultado;
   };
@@ -422,6 +442,7 @@ export function ActoresPunto({
     setFase((prev) =>
       prev.tipo === "listo" ? { ...prev, invitaciones: { ...prev.invitaciones, [rol.rol]: resultado } } : prev,
     );
+    await recargarVersion(fase.solicitudId);
     await refrescarEstado(fase.solicitudId);
     onAviso("Correo enviado", "Se envió el enlace de validación al correo indicado. También puedes copiarlo.", "exito");
     return resultado;

@@ -334,4 +334,55 @@ describe("ActoresPunto — épica #14185: identidad de quien radica", () => {
       expect(abrir).not.toHaveBeenCalled();
     });
   });
+
+  describe("versión del borrador", () => {
+    it("lanzar la identidad sube la versión y Continuar guarda con la versión nueva", async () => {
+      const guardar = vi.fn(async () => ({ ...SOLICITUD, version: 6 }));
+      const radicante = vi.fn(async () => ({ parte: "vendedor", ordinal: 1, estado: "pendiente", capturaUrl: null }));
+      const obtener = vi.fn().mockResolvedValueOnce(SOLICITUD).mockResolvedValue({ ...SOLICITUD, version: 5 });
+      const onContinuar = vi.fn();
+      let n = 0;
+      const estado = vi.fn(async () => {
+        n += 1;
+        if (n === 1) throw new Error("sin sesión");
+        return n < 4 ? SIN_SOLICITAR : ESTADO_APROBADO;
+      });
+      montarPunto(clienteMock({ estado, radicante, obtener, guardar }), vi.fn(), onContinuar);
+      await waitFor(() => expect(radicante).toHaveBeenCalled());
+      await waitFor(() => expect(obtener.mock.calls.length).toBeGreaterThanOrEqual(2));
+      const continuar = await screen.findByRole("button", { name: /^Continuar$/i }, { timeout: 4000 });
+      await waitFor(() => expect(continuar).toBeEnabled(), { timeout: 4000 });
+      fireEvent.click(continuar);
+      await waitFor(() => expect(onContinuar).toHaveBeenCalled());
+      expect((guardar.mock.calls[0] as unknown[])[1]).toMatchObject({ version: 5 });
+    });
+
+    it("un 409 de versión se reintenta una sola vez y avanza", async () => {
+      const guardar = vi
+        .fn()
+        .mockRejectedValueOnce(new ApiError("conflicto_version", "Cambió", 409))
+        .mockResolvedValue({ ...SOLICITUD, version: 9 });
+      const obtener = vi.fn().mockResolvedValueOnce(SOLICITUD).mockResolvedValue({ ...SOLICITUD, version: 8 });
+      const onContinuar = vi.fn();
+      montarPunto(clienteMock({ estado: async () => ESTADO_APROBADO, guardar, obtener }), vi.fn(), onContinuar);
+      await screen.findByRole("region", { name: /Propietario \(vendedor\)/i });
+      fireEvent.click(screen.getByRole("button", { name: /^Continuar$/i }));
+      await waitFor(() => expect(onContinuar).toHaveBeenCalledTimes(1));
+      expect(guardar).toHaveBeenCalledTimes(2);
+      expect((guardar.mock.calls[1] as unknown[])[1]).toMatchObject({ version: 8 });
+    });
+
+    it("un segundo 409 no avanza y muestra el motivo", async () => {
+      const guardar = vi.fn(async () => {
+        throw new ApiError("conflicto_version", "Cambió", 409);
+      });
+      const onContinuar = vi.fn();
+      const onAviso = montarPunto(clienteMock({ estado: async () => ESTADO_APROBADO, guardar }), vi.fn(), onContinuar);
+      await screen.findByRole("region", { name: /Propietario \(vendedor\)/i });
+      fireEvent.click(screen.getByRole("button", { name: /^Continuar$/i }));
+      await waitFor(() => expect(onAviso).toHaveBeenCalledWith("No pudimos guardar los datos", expect.any(String), "alerta"));
+      expect(guardar).toHaveBeenCalledTimes(2);
+      expect(onContinuar).not.toHaveBeenCalled();
+    });
+  });
 });
