@@ -196,6 +196,20 @@ class JobsDeCd(unittest.TestCase):
         self.assertIn("diagnostico_port", outputs)
         self.assertIn("core_diagnostico_port", outputs)
 
+    def test_deploy_gitops_escribe_los_digests_sin_exigirlos_en_qa_ni_pdn(self):
+        job = self._job("deploy-gitops")
+        script = next(p["run"] for p in job["steps"] if p.get("name") == "Actualizar digests en flit-gitops")
+        for servicio, variable, imagen in (
+            ("core-diagnostico", "CORE_DIAGNOSTICO", "CORE_DIAGNOSTICO_IMAGE"),
+            ("frontend-diagnostico", "FRONTEND_DIAGNOSTICO", "FRONTEND_DIAGNOSTICO_IMAGE"),
+        ):
+            self.assertIn(f"build-{servicio}", job["needs"])
+            self.assertEqual(job["env"][f"R_{variable}"], f"${{{{ needs.build-{servicio}.result }}}}")
+            self.assertEqual(job["env"][f"D_{variable}"], f"${{{{ needs.build-{servicio}.outputs.digest }}}}")
+            self.assertIn(f'"{servicio}:${{{{ env.{imagen} }}}}:{variable}"', script)
+        # Sin esta excepción, el CD de QA y PDN falla mientras sus kustomization no listen estas imágenes.
+        self.assertRegex(script, r"(?m)^\s*[\w|-]*\bcore-diagnostico\|frontend-diagnostico\b[\w|-]*\)$")
+
 
 class CiDePlataforma(unittest.TestCase):
     """Escenario 3: servicios-plataforma.yml descubre core-diagnostico y prueba con Postgres."""

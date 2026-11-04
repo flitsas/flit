@@ -18,8 +18,21 @@ FLIT Suite. Recibe placas o VIN, consulta fuentes (RUNT, SIMIT, avalúo, impuest
 3. **Hoy nada de Diagnóstico está en `develop`.** Ver §1.
 4. **Este despliegue no enciende el impuesto real.** Ver §9, punto 5.
 
-Este documento no se pudo contrastar con `flit-gitops`: no está en este repositorio. Lo que depende de él va marcado
-**Por confirmar** y está reunido en §10.
+**Contrastado con `flit-gitops` y la 177 el 2026-11-04.** Donde el resto del documento difiera, manda esta tabla. Los
+valores son de ese día: vuelva a medirlos antes de ejecutar.
+
+| Tema | En DEV | Consecuencia |
+|---|---|---|
+| Espacio de nombres | `flit2-dev`; broker en `deploy/rabbitmq` | Sustituye `<ns>` y `<pod-rabbitmq>` |
+| Rol de Diagnóstico | Por ambiente: `flit_diagnostico_dev`, en la base `flitdev` | `servicio-con-esquema-propio.sql` no admite ese nombre: se crea a mano, como `flit_comparendos_dev`. Agregarlo a la línea de `10.42.0.0/16` de `pg_hba.conf` |
+| Conexiones de core-consultas | `flit_consultas_dev`: tope 10, `Maximum Pool Size=8`. PostgreSQL: `max_connections` 100, 54 en uso | Ver §5.1. Subir tope y pool **antes** del merge |
+| `definitions.json` | En el ConfigMap `rabbitmq-config` de `services/flit2-dev/rabbitmq.yaml`, montado con `subPath` | No se actualiza en caliente. Cambiar el ConfigMap y reiniciar el pod. `import_definitions` con la ruta del pod leería el archivo viejo |
+| Proxy | Sin ingress: nginx del host hacia una ClusterIP fija. `10.43.40.25` está libre | El vhost `dev.diagnostico` ya existe, con DNS y certificado, pero hace 302 a «próximamente». Cambiarlo por `proxy_pass` en el paso 7. Las configs de nginx no están en git |
+| File-manager | `https://devfilemanager.flitsas.online`, sin token | Mismo valor de Comparendos y Persona Natural |
+| `ASPNETCORE_ENVIRONMENT` | `Development` | Cierra PC-3 para DEV |
+| gRPC de core-identity | 8083 en la config y en el Service | Cierra PC-12 |
+| Cambios de ConfigMap o Secret | Los pods usan `envFrom` | No reinician solos: `rollout restart` o cambiar la anotación `flit/config-rev` |
+| Sellado | `kubeseal` corre en la 177, con su llave propia | Modelo: `docs/host-177/personanatural/gen-secretos-dev.sh` de `flit-gitops` |
 
 ---
 
@@ -311,9 +324,15 @@ servicio no tocan al otro.
 **Qué agrega la de consultas.** Crea `consultas.vehicle_tax_departments` y siembra 5 filas: activas 50, 52 y 94; apagadas 17 y 63.
 No tiene datos personales. Con la lista vacía o sin URL, no se consulta nada.
 
-**Conexiones.** Diagnóstico cabe en 20 (handoff §2.4). **core-consultas está por confirmar:** el rol se creó con 20
-(`handoff-vps-consultas-notificaciones.md:150`) y los nuevos consumidores suman 17 mensajes a la vez (8 + 4 + 4 + 1), además
-del gRPC de Trámites e ICT (PC-4). Vigile `too many connections for role "flit_consultas"`.
+**Conexiones.** Diagnóstico cabe en 20 (handoff §2.4). **core-consultas no cabe con lo que tiene DEV:** tope 10 y pool 8, y los
+nuevos consumidores suman 17 mensajes a la vez (8 + 4 + 4 + 1). Cada consumidor abre la transacción antes del efecto
+(`services/core-api/src/Flit.Platform.Sdk/Messaging/PlatformConsumer.cs`, `ProcessAsync`), así que retiene una conexión durante toda
+la llamada al proveedor, hasta 90 s, y comparte el pool con el gRPC de Trámites e ICT. Un lote con fuentes reales puede dejar a
+Trámites sin conexiones. ADR-0075 pide 30.
+
+Para DEV, antes del merge: tope 25 y pool 20, y bajar la concurrencia a 8 en total (`Consultas__Diagnostico__Lote__*` 4/8, `Express`
+2/4, `Impuesto` 1/2, `ImpuestoExpress` 1/2; concurrencia/prefetch). El PostgreSQL de la 177 es compartido: revise `max_connections`
+antes de subir topes. Vigile `too many connections for role "flit_consultas_dev"`.
 
 ### 5.2 RabbitMQ
 
@@ -649,11 +668,10 @@ Nada de esto se corrigió en este documento. Las rutas se verificaron en el comm
 1. **Sin work item registrado no hay merge a `develop`.** La rama arrancó sin él (`docs/decisions/ADR-0080-departamentos-impuesto-por-tabla.md:7`).
    Además, las reglas piden PR de hasta 800 líneas, build verde, Code Review y Security, y un reviewer humano real
    (`CLAUDE.md`, §1 y §2). El diff actual son 900 archivos: **hay que resolver cómo se parte o se exceptúa**. Lo cierra el Líder Técnico.
-2. **El CD no despliega Diagnóstico.** `deploy-gitops` no incluye `build-core-diagnostico` ni `build-frontend-diagnostico`
-   (`cd.yml:1390`, lista en `:1461-1473`). Los builds existen (`cd.yml:618`, `:1058`), pero sus digests no se escriben. Falta sumarlos
-   a `needs`, a `env` (`R_*`, `D_*`) y a la lista. Va por PR, después del paso 1. `origin/develop` ya agregó `personanatural` a esa
-   misma línea: **espere conflicto** al fusionar.
-3. **Manifiestos en `flit-gitops` sin hacer**, hasta donde se sabe. `handoff-vps-diagnostico.md:27-30` lo da por pendiente (PC-1).
+2. **Resuelto: el CD ya escribe los digests de Diagnóstico.** `deploy-gitops` incluye sus dos builds. Si una kustomization no lista
+   las imágenes, se omiten sin fallar, igual que Persona Natural: QA y PDN siguen desplegando. En DEV, la imagen debe estar listada
+   antes del merge para recibir su digest (§6, paso 1).
+3. **Manifiestos en `flit-gitops` sin hacer.** Comprobado el 2026-11-04: no hay nada de Diagnóstico en `services/flit2-dev/`.
 4. **`svc-diagnostico` no tiene `platform.consultas`.** El cliente pide ese scope (`ClienteConsultas.cs:36`, `:126-127`) y
    core-consultas lo exige (`C/Grpc/ConsultasGrpcService.cs:35`). `appsettings.json:232` no lo incluye y
    `.github/scripts/test_despliegue_diagnostico.py:254-259` **exige que no esté**. En local funciona porque se inyecta a mano
@@ -714,18 +732,18 @@ Quedaron abiertos porque dependen de `flit-gitops` o de decisiones que no están
 
 | Id | Qué falta | Lo cierra |
 |---|---|---|
-| PC-1 | Contenido real de `flit-gitops/services/flit2-dev/`: espacio de nombres, si ya hay algo de Diagnóstico | Líder Técnico |
-| PC-2 | RabbitMQ en k3s: nombre del pod, ruta de `definitions.json` y cómo se montó. Toda la documentación supone compose | Líder Técnico |
-| PC-3 | Valor real de `ASPNETCORE_ENVIRONMENT` en DEV, QA y PDN | Líder Técnico |
-| PC-4 | Si 20 conexiones alcanzan a core-consultas con 17 mensajes a la vez. Cuántas retiene cada uno mientras espera al proveedor | Líder Técnico con backend-agent |
-| PC-5 | URL del file-manager en DEV. `despliegue-dev-k3s-comparendos.md:65` dice que es la misma de core-api, sobre MinIO | Líder Técnico |
-| PC-6 | Ingress de `dev.diagnostico`: si existe, si aún redirige a «Próximamente», y qué tiempo de lectura necesita la descarga de PDF y ZIP | Líder Técnico |
-| PC-7 | Cómo sacar a Diagnóstico de «Próximamente» solo en DEV. Opción verificada en código: `Suite__Hosts__Overrides__diagnostico` (`ConfiguredProductHosts.cs:31`). `despliegue-dev-k3s-comparendos.md:113` fija `Suite__Hosts__ComingSoon__0=diagnostico`, y `appsettings.json:209` deja a `diagnostico` también en el índice 1. Quitar uno solo no basta. No se probó en un ambiente | Líder Técnico |
+| PC-1 | **Cerrado para DEV:** ver la tabla inicial | |
+| PC-2 | **Cerrado para DEV:** ver la tabla inicial | |
+| PC-3 | Valor real de `ASPNETCORE_ENVIRONMENT` en QA y PDN. DEV: `Development` | Líder Técnico |
+| PC-4 | **Respondido para DEV:** cada mensaje retiene una conexión mientras espera al proveedor, y 8 no alcanzan (§5.1). Falta decidir los valores de QA y PDN | Líder Técnico con backend-agent |
+| PC-5 | **Cerrado para DEV:** ver la tabla inicial | |
+| PC-6 | Tiempo de lectura que necesita la descarga de PDF y ZIP. El clúster del gateway corta a 30 s y nginx de Comparendos a 120 s: medir en el humo. No hay ingress: ver la tabla inicial | Líder Técnico |
+| PC-7 | Sacar a Diagnóstico de «Próximamente» solo en DEV: `Suite__Hosts__Overrides__diagnostico` en core-api y core-identity (`ConfiguredProductHosts.cs:31`). **No quite** `Suite__Hosts__ComingSoon__0=diagnostico`: Comparendos volvería a «Próximamente», porque ese índice lo reemplaza en `appsettings.json`. No se probó en un ambiente | Líder Técnico |
 | PC-8 | Si el scope `platform.consultas` queda como variable por ambiente o entra a `appsettings.json` (con su prueba) | Líder Técnico con backend-agent |
 | PC-9 | Redactor en DEV: llave real de Anthropic, simulado o sin configurar | Líder Técnico con PO |
 | PC-10 | Alerta de DLQ en k3s | Líder Técnico |
 | PC-11 | Cómo se monta el `.pfx` en k3s y con qué ruta | Líder Técnico |
-| PC-12 | Si `core-identity` en DEV ya expone 8083. Lo propuso `despliegue-dev-k3s-comparendos.md:115`; no se pudo verificar | Líder Técnico |
+| PC-12 | **Cerrado:** `core-identity` expone 8083 en DEV | |
 | PC-13 | Cuándo y con qué credenciales pasa DEV de simulación a fuentes reales (`INTEMPO_API_BASE_URL`, saldo) | Líder Técnico con PO |
 
 ---
