@@ -407,6 +407,13 @@ public static partial class ReglasBorrador
         _ => null,
     };
 
+    /// <summary>
+    /// El documento de la decisión de prenda solo se reclama si la matriz del tipo lo trae; los tipos de acción única
+    /// (levantamiento, inscripción) ya traen el suyo con otro código y ese es el que se exige.
+    /// </summary>
+    public static string? DocumentoDePrendaDelTipo(DefinicionTipoDto def, string? decision) =>
+        DocumentoDePrenda(decision) is { } doc && def.Documentos.Any(d => string.Equals(d.DocCode, doc, StringComparison.OrdinalIgnoreCase)) ? doc : null;
+
     /// <summary>Todos los DocTipo de prenda que un borrador con prenda puede recibir como adjunto.</summary>
     public static readonly IReadOnlySet<string> DocumentosDePrenda = new HashSet<string>(StringComparer.Ordinal) { "prenda_solicitud", "prenda_registro", "prenda_levantamiento" };
 
@@ -556,7 +563,8 @@ public static partial class ReglasBorrador
         foreach (var x in PendientesDeDeclaraciones(def, campos, datos.Requisitos?.Transformaciones ?? [], documentosCargados, runt))
             pendientes.Add(new PendienteDto(x.Codigo, x.Referencia, x.Paso, x.Motivo));
 
-        if (DocumentoDePrenda(datos.Prenda?.Decision) is { } docPrenda && !documentosCargados.Contains(docPrenda))
+        if (DocumentoDePrendaDelTipo(def, datos.Prenda?.Decision) is { } docPrenda && !documentosCargados.Contains(docPrenda)
+            && !pendientes.Any(x => x.Codigo == PendienteDocumentoRequerido && string.Equals(x.Referencia, docPrenda, StringComparison.OrdinalIgnoreCase)))
             pendientes.Add(new PendienteDto(PendienteDocumentoRequerido, docPrenda, PasoDe("prenda_decision") ?? PasoDe("document_checklist")));
 
         var pasos = def.Pasos.Select(p =>

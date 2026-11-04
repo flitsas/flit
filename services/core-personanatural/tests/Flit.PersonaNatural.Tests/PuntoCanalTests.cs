@@ -245,7 +245,7 @@ public sealed class PuntoCanalTests
         var defs = DefsTraspaso();
         defs.PorCodigo["TRASPASO_STANDARD"] = DefinicionesDePrueba.Traspaso() with
         {
-            Documentos = [],
+            Documentos = [new DocumentoRequeridoDto("prenda_levantamiento", "Levantamiento de prenda", false, 1, string.Empty, string.Empty)],
             Flags = new FlagsTipoDto("PLATE", false, true, false, false, true, false),
         };
         var sinDoc = BorradorGuardado(prendaDatos: new PrendaDatos(true, "Banco", "900123456", "levantar"));

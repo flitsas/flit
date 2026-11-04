@@ -331,11 +331,30 @@ public sealed class DeclaracionesTiposTests
     [Fact]
     public void ConDecision_ElBorradorPideElDocumentoDeLaDecision()
     {
-        var def = ConPrenda();
+        var def = ConPrenda() with { Documentos = [Doc("prenda_levantamiento", false)] };
 
         Pendientes(def, prenda: new PrendaDatos(true, "Banco", "900123456", "levantar")).Should().Equal(new PendienteDto("documento_requerido", "prenda_levantamiento", "documentos"));
         Pendientes(def, docs: ["prenda_levantamiento"], prenda: new PrendaDatos(true, "Banco", "900123456", "levantar")).Should().BeEmpty();
         Pendientes(def, prenda: new PrendaDatos(true, "Banco", "900123456")).Should().BeEmpty("sin decisión no hay documento: comportamiento anterior");
+    }
+
+    private static DocumentoRequeridoDto Doc(string code, bool obligatorio) => new(code, code, obligatorio, 1, string.Empty, string.Empty);
+
+    [Fact]
+    public void ElDocumentoDeLaDecision_SoloSePideSiLaMatrizDelTipoLoTrae()
+    {
+        var prenda = new PrendaDatos(true, "Banco", "900123456", "levantar");
+
+        // Tipo de acción única: su matriz trae paz_salvo_prenda, no prenda_levantamiento.
+        var levantamiento = ConPrenda(exige: true) with { Documentos = [Doc("paz_salvo_prenda", true)] };
+        Pendientes(levantamiento, prenda: prenda).Should().Equal(new PendienteDto("documento_requerido", "paz_salvo_prenda", "documentos"));
+        Pendientes(levantamiento, docs: ["paz_salvo_prenda"], prenda: prenda).Should().BeEmpty();
+
+        // Matriz con el documento de la decisión (cualquier mayúscula): sigue el pendiente, sin duplicarse.
+        var conDoc = ConPrenda() with { Documentos = [Doc("PRENDA_LEVANTAMIENTO", false)] };
+        Pendientes(conDoc, prenda: prenda).Should().Equal(new PendienteDto("documento_requerido", "prenda_levantamiento", "documentos"));
+        var obligatorio = ConPrenda() with { Documentos = [Doc("prenda_levantamiento", true)] };
+        Pendientes(obligatorio, prenda: prenda).Should().ContainSingle();
     }
 
     [Fact]
