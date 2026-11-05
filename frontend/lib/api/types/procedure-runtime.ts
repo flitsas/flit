@@ -1713,6 +1713,12 @@ export interface RegenerarEnlaceManualResult {
   emailEnviado: boolean;
 }
 
+/** Respuesta de POST .../biometric-validations/{id}/manual-link/copy (HU #14306). El `url` NO se guarda en ningún estado persistente. */
+export interface CopiarEnlaceManualResult {
+  url: string;
+  expiresAt: string;
+}
+
 /**
  * Un evento de la bitácora (solo lectura) del ciclo de una validación de identidad: envío, llegada del
  * webhook, si descifró el secreto, firma, resultado y reconciliaciones. Sin PII ni secretos. Espejo de

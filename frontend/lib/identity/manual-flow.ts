@@ -110,6 +110,35 @@ export function mensajeErrorFlujoManual(err: unknown, accion: AccionManual): str
     : 'No se pudo regenerar el enlace. Inténtalo de nuevo.';
 }
 
+/** ¿La fila del listado de manuales espera captura del cliente (y por tanto tiene un enlace que copiar)? */
+export function puedeCopiarEnlaceManual(estado: string): boolean {
+  return estado === 'manual_activo' || estado === 'rechazado';
+}
+
+export type MotivoCopiaEnlace = 'vencido' | 'no_disponible' | 'inactivo' | 'otro';
+
+/** Clasifica el fallo de «Copiar enlace» por `problem.code` (o `title`) del 409; el resto, por status HTTP. */
+export function motivoFalloCopiaEnlace(err: unknown): { motivo: MotivoCopiaEnlace; mensaje: string } {
+  const { status, problem } = (err ?? {}) as { status?: unknown; problem?: unknown };
+  const p = problem && typeof problem === 'object' ? (problem as { code?: unknown; title?: unknown }) : {};
+  const code = typeof p.code === 'string' ? p.code : typeof p.title === 'string' ? p.title : '';
+  if (status === 409) {
+    if (code === 'enlace_vencido') return { motivo: 'vencido', mensaje: 'El enlace venció.' };
+    if (code === 'enlace_no_disponible') {
+      return { motivo: 'no_disponible', mensaje: 'No se puede recuperar este enlace.' };
+    }
+    if (code === 'flujo_manual_no_activo') {
+      return { motivo: 'inactivo', mensaje: 'El flujo manual ya no está activo. Actualiza la lista.' };
+    }
+    return { motivo: 'otro', mensaje: 'La validación cambió de estado. Actualiza la lista.' };
+  }
+  if (status === 403) {
+    return { motivo: 'otro', mensaje: 'No tienes permiso para esta acción. Solo el Super Admin puede hacerla.' };
+  }
+  if (status === 404) return { motivo: 'otro', mensaje: 'No se encontró la validación. Actualiza la lista.' };
+  return { motivo: 'otro', mensaje: 'No se pudo obtener el enlace. Inténtalo de nuevo.' };
+}
+
 /**
  * ¿La validación tiene un detalle en «Validaciones manuales»? Cualquier estado manual: esperando captura,
  * pendiente de revisión, rechazada o aprobada. Kyverum y simulada nunca pasan por esa pestaña.

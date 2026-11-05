@@ -762,4 +762,94 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
       },
     ],
   },
+  {
+    slug: "4-superadmin/9-validaciones-manuales",
+    title: "Validación de identidad manual",
+    audience: "Super Admin",
+    sectionId: "superadmin",
+    keywords: [
+      "validaciones manuales",
+      "validacion manual",
+      "identidad manual",
+      "flujo manual",
+      "activar flujo manual",
+      "regenerar enlace",
+      "copiar enlace",
+      "enlace de captura",
+      "enlace vencido",
+      "correo no salio",
+      "aprobar identidad",
+      "rechazar identidad",
+      "esperando captura",
+      "pendiente de revision",
+    ],
+    summary:
+      "Cuándo usar la validación manual, cómo activarla, cómo copiar o regenerar el enlace para el cliente y cómo aprobar o rechazar cada caso.",
+    blocks: [
+      {
+        id: "que-es",
+        title: "1. Qué es y cuándo usarla",
+        paragraphs: [
+          "La validación manual es la alternativa cuando la persona no logra validar su identidad por el camino normal. La persona toma sus fotos y su firma desde un enlace, y tú decides si aprueba o no. Solo el Super Admin puede activarla y resolverla.",
+          "Se activa sobre cualquier validación que no esté aprobada y vigente. Al activarla, la validación en curso deja de contar para FLIT y la persona recibe un enlace nuevo por correo, vigente 24 horas.",
+        ],
+      },
+      {
+        id: "activar",
+        title: "2. Activar el flujo manual",
+        paragraphs: [],
+        bullets: [
+          "Paso 1: entra a Validaciones y abre el detalle de la validación.",
+          "Paso 2: en Acciones, elige «Activar flujo manual» y confirma.",
+          "Paso 3: el caso aparece en la pestaña «Validaciones manuales» con el estado «Esperando captura».",
+        ],
+      },
+      {
+        id: "enlace",
+        title: "3. Copiar o regenerar el enlace",
+        paragraphs: [
+          "Usa «Copiar enlace» cuando el correo no llegó o el cliente prefiere recibirlo por otro canal.",
+        ],
+        bullets: [
+          "Paso 1: en la pestaña «Validaciones manuales», busca la fila de la persona.",
+          "Paso 2: en la columna Acciones, pulsa el ícono de copiar enlace. Verás el mensaje «Enlace copiado».",
+          "Paso 3: pégalo en el canal que uses con el cliente.",
+          "Copiar no cambia el enlace ni envía otro correo: el enlace que ya salió sigue funcionando.",
+          "La acción aparece mientras el caso espera una captura, también si fue rechazado y la persona debe repetirla.",
+          "Si el enlace venció o no se puede recuperar, verás el motivo y la opción «Regenerar enlace». Regenerar crea un enlace nuevo, envía el correo y deja sin servicio el anterior.",
+          "Los enlaces emitidos antes de que existiera esta opción no se pueden copiar: toca regenerarlos una vez.",
+          "Cada copia queda registrada con quién la hizo y cuándo.",
+        ],
+        callouts: [
+          {
+            variant: "warning",
+            text: "El enlace le da acceso a la captura de esa persona. Compártelo solo con ella.",
+          },
+        ],
+      },
+      {
+        id: "revisar",
+        title: "4. Revisar y decidir",
+        paragraphs: [
+          "Cuando la persona envía sus fotos y su firma, el caso pasa a «Pendiente de revisión». Abre el detalle desde la fila para ver las imágenes y decidir.",
+        ],
+        bullets: [
+          "Aprobar: la identidad queda aprobada por 30 días y el estado cambia a «Aprobada manual».",
+          "Rechazar: eliges uno de los motivos de la lista. La persona recibe el motivo por correo junto con un enlace nuevo para repetir la captura.",
+        ],
+      },
+      {
+        id: "estados",
+        title: "5. Estados",
+        paragraphs: [],
+        bullets: [
+          "Esperando captura: la persona aún no envía sus fotos.",
+          "Pendiente de revisión: ya envió la captura y falta tu decisión.",
+          "Aprobada manual: la aprobaste y la identidad está vigente.",
+          "Rechazada: la rechazaste y la persona puede repetir la captura.",
+          "Vencida: el plazo terminó sin completarse.",
+        ],
+      },
+    ],
+  },
 ];
