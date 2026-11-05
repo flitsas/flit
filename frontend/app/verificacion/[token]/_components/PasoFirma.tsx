@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { SignaturePad, type SignaturePadHandle } from "./SignaturePad";
 import { AUTORIZACION_FIRMA_INSTRUCTION, AUTORIZACION_FIRMA_TEXT, AUTORIZACION_FIRMA_TITLE } from "@/lib/captura-manual/consent";
 import { isComplete, offendingCapture, type CaptureKey, type Captures } from "@/lib/captura-manual/captures";
+import type { ValidacionFotos } from "@/lib/captura-manual/validacionFotos";
 import {
   ManualCaptureError,
   terminalKindOf,
@@ -23,6 +24,7 @@ export function PasoFirma({
   token,
   client,
   captures,
+  validacion,
   onSignature,
   onOutcome,
   onSendingChange,
@@ -30,6 +32,8 @@ export function PasoFirma({
   token: string;
   client: ManualCaptureClient;
   captures: Captures;
+  /** Resultado de validar cada foto en el dispositivo (informativo): viaja como texto, nunca como imagen. */
+  validacion?: ValidacionFotos;
   onSignature: (png: Blob | null) => void;
   onOutcome: (o: SubmitOutcome) => void;
   /** El Flow oculta este paso y muestra la pantalla «Enviando…» mientras dura el POST final. */
@@ -47,7 +51,7 @@ export function PasoFirma({
     onSendingChange?.(true);
     setError(null);
     try {
-      await client.submit(token, captures);
+      await client.submit(token, captures, validacion);
       onOutcome({ kind: "success" });
       return;
     } catch (e) {

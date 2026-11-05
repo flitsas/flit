@@ -55,6 +55,31 @@ public sealed class ManualReviewDetailHandlerTests
     }
 
     [Fact]
+    public async Task HU14310_AC2_Detalle_indica_que_foto_no_esta_verificada_y_su_motivo()
+    {
+        var checks = new ManualPhotoChecks(
+            ManualPhotoCheck.Verified, ManualPhotoCheck.NotVerified("lado_incorrecto"), ManualPhotoCheck.NotVerified("sin_soporte"));
+        _repo.GetDetailAsync(Id, Arg.Any<CancellationToken>()).Returns(Fila() with { PhotoChecks = checks });
+
+        var (result, _) = await new GetManualDetailHandler(_repo, _audit, new FixedTime(Now)).HandleAsync(new GetManualDetailQuery(Id, User), Ct);
+
+        result!.ValidacionFotos.Should().Be(new ManualPhotoChecksDto(
+            new ManualPhotoCheckDto("verificada", null),
+            new ManualPhotoCheckDto("no_verificada", "lado_incorrecto"),
+            new ManualPhotoCheckDto("no_verificada", "sin_soporte")));
+    }
+
+    [Fact]
+    public async Task HU14310_AC4_Captura_anterior_devuelve_validacionFotos_null()
+    {
+        _repo.GetDetailAsync(Id, Arg.Any<CancellationToken>()).Returns(Fila());
+
+        var (result, _) = await new GetManualDetailHandler(_repo, _audit, new FixedTime(Now)).HandleAsync(new GetManualDetailQuery(Id, User), Ct);
+
+        result!.ValidacionFotos.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Detalle_inexistente_responde_not_found_y_no_audita()
     {
         _repo.GetDetailAsync(Id, Arg.Any<CancellationToken>()).Returns((ManualIdentityReviewDetailRow?)null);
