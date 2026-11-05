@@ -53,6 +53,30 @@ public sealed class TramiteCanalTests
             TramiteCanal.Integracion, TramiteCanal.Aplicacion,
         }.Should().BeEquivalentTo(TramiteCanal.Todos);
 
+    // ── HU #14318 ─────────────────────────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null, "tramites")]
+    [InlineData("", "tramites")]
+    [InlineData("  ", "tramites")]
+    [InlineData("tramites", "tramites")]
+    [InlineData("pn_web", "pn_web")]
+    [InlineData("pn_punto", "pn_punto")]
+    [InlineData("integracion", "integracion")]
+    public void AC10_Efectivo_UnTramiteSinDatoSeLeeComoTramites(string? guardado, string esperado) =>
+        TramiteCanal.Efectivo(guardado).Should().Be(esperado);
+
+    [Theory]
+    [InlineData("pn_punto", "pn_punto")]
+    [InlineData("PN_PUNTO", "pn_punto")]
+    [InlineData("Pn_Punto", "pn_punto")]
+    [InlineData("pn_web", "pn_web")]
+    [InlineData("web", "pn_web")]
+    [InlineData("", "pn_web")]
+    [InlineData(null, "pn_web")]
+    public void AC2_AC3_DesdeSolicitudPortal_SoloPnPuntoEsElPunto_ElRestoEsWeb(string? canalSolicitud, string esperado) =>
+        TramiteCanal.DesdeSolicitudPortal(canalSolicitud).Should().Be(esperado);
+
     [Fact]
     public void AC5_ElEnumDelContratoOpenApiCoincideConLaClaseDeDominio()
     {

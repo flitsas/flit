@@ -7,7 +7,7 @@ namespace Flit.Tramites.Domain.Tramites.Enums;
 /// <c>contracts/openapi/core-api.v1.yaml</c> (una prueba los compara).
 /// <para>
 /// <b>Aplicación</b> está en el catálogo pero hoy ningún flujo la asigna. Una fila sin canal (<c>null</c>)
-/// es un trámite histórico y se lee como Trámites en los reportes (decisión de las HUs siguientes).
+/// es un trámite histórico y se lee como Trámites (<see cref="Efectivo"/>).
 /// </para>
 /// </summary>
 public static class TramiteCanal
@@ -41,8 +41,24 @@ public static class TramiteCanal
     public static bool EsValido(string? codigo) =>
         codigo is not null && Todos.Contains(codigo, StringComparer.Ordinal);
 
-    /// <summary>Canal efectivo: un trámite sin canal (<c>null</c>, histórico) se lee como Trámites.</summary>
-    public static string Efectivo(string? codigo) => codigo ?? Tramites;
+    /// <summary>Valor del campo <c>datos.canal</c> de la solicitud del portal que marca el punto de atención de un OT.</summary>
+    public const string CanalSolicitudPunto = "pn_punto";
+
+    /// <summary>
+    /// Canal con el que se lee un trámite: el persistido, o Trámites cuando no hay dato (histórico o
+    /// migrado de V1). Única regla de «sin dato»; el detalle (HU #14318) y los reportes (HU #14319) la comparten.
+    /// </summary>
+    public static string Efectivo(string? codigo) => string.IsNullOrWhiteSpace(codigo) ? Tramites : codigo;
+
+    /// <summary>
+    /// Canal de un trámite que llega del portal Persona Natural (HU #14318): <c>pn_punto</c> cuando la
+    /// solicitud trae ese canal (sin distinguir mayúsculas), <c>pn_web</c> en cualquier otro caso, incluido
+    /// el campo ausente.
+    /// </summary>
+    public static string DesdeSolicitudPortal(string? canalSolicitud) =>
+        string.Equals(canalSolicitud, CanalSolicitudPunto, StringComparison.OrdinalIgnoreCase)
+            ? PersonaNaturalOt
+            : PersonaNaturalWeb;
 
     /// <summary>Nombre visible del canal, o <c>null</c> si el código no pertenece al catálogo.</summary>
     public static string? NombreVisible(string? codigo) => codigo switch
