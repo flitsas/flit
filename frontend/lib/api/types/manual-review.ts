@@ -57,6 +57,8 @@ export interface ManualDetail extends ManualListItem {
    * (enlace NUEVO para repetir la captura, HU #13299); `null` en los demás. Espejo de `ManualDetail.linkExpiresAt`.
    */
   linkExpiresAt?: string | null;
+  /** HU #14303 — true si la validación está aprobada y su carta ya se generó. */
+  cartaDisponible?: boolean;
 }
 
 /** Respuesta de `POST .../manual-approve` (espejo de `AprobarValidacionManualResult`). */

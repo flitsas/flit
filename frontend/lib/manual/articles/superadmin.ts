@@ -762,4 +762,59 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
       },
     ],
   },
+  {
+    slug: "4-superadmin/11-carta-identidad-manual",
+    title: "Carta de identidad de una validación manual",
+    audience: "Todos",
+    sectionId: "superadmin",
+    keywords: [
+      "carta de identidad",
+      "carta selfie",
+      "certificado de identidad",
+      "certificado de validacion de identidad",
+      "descargar certificado",
+      "certificado en preparacion",
+      "validacion manual aprobada",
+      "codigo de integridad",
+      "serie de la carta",
+      "sello del fur",
+      "consolidado",
+      "expediente",
+    ],
+    summary:
+      "Qué es la carta que FLIT emite al aprobar una identidad manual, dónde queda en el trámite y cómo descargarla.",
+    blocks: [
+      {
+        id: "que-es",
+        title: "Qué es",
+        paragraphs: [
+          "Cuando el Super Admin aprueba una validación de identidad manual, FLIT emite una carta con el resultado, los datos de la persona, sus fotos y su firma. Cumple el mismo papel que el certificado de una validación automática.",
+          "La carta se genera una sola vez. Si esa identidad aprobada se reutiliza en otro trámite de la misma persona, ese trámite recibe la misma carta.",
+        ],
+      },
+      {
+        id: "tramite",
+        title: "Dónde queda en el trámite",
+        paragraphs: [
+          "La carta entra al expediente y al consolidado, asociada a su actor. Si el trámite tiene varias personas en un mismo rol, cada una tiene su propia carta. En una persona jurídica, la carta es la de su representante legal.",
+          "Un trámite puede combinar actores validados de forma automática y manual: cada uno conserva su propio documento.",
+          "En el FUR, el sello de una identidad manual muestra la serie de la carta. El código de integridad completo se consulta en la carta.",
+        ],
+      },
+      {
+        id: "descargar",
+        title: "Cómo descargarla",
+        paragraphs: [
+          "Paso 1. Abre el detalle de la validación aprobada, desde el trámite, la prevalidación o las validaciones manuales.",
+          "Paso 2. Pulsa «Descargar certificado». El PDF se guarda en tu equipo.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Si ves «Certificado en preparación», la carta aún no está lista. La aprobación sigue vigente: vuelve a intentarlo en unos minutos. Si al descargar aparece un mensaje de que aún no está disponible, también se resuelve intentando de nuevo.",
+          },
+        ],
+      },
+    ],
+  },
 ];

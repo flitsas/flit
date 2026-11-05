@@ -1672,6 +1672,11 @@ export interface BiometricValidation {
    * Nunca trae el nombre del revisor.
    */
   approvalOrigin?: 'automatica' | 'manual' | null;
+  /**
+   * HU #14303 — true solo si la validación es manual, está aprobada y su carta ya se generó. Ausente/false en
+   * manual aprobada = «certificado en preparación». No aplica a Kyverum (su certificado no cambia).
+   */
+  cartaDisponible?: boolean;
 }
 
 /**
