@@ -8672,6 +8672,10 @@ paths:
         Kyverum (`GET /v1/validations/{kyverumVerificationId}/certificado`), con el mismo Bearer API key del
         create. Solo aplica a validaciones del proveedor `kyverum` con id de verificación. Keyed por
         `validationId`, sirve para cualquier parte (comprador/vendedor).
+
+        HU #14302 — para una validación **manual** aprobada (`provider=manual`) devuelve la carta de identidad en PDF que
+        emite FLIT, con las mismas reglas de pertenencia y tenant. Si la carta falta se genera en ese momento; si no se
+        puede obtener responde `503` (reintentable), nunca `502` ni `500`.
       security:
         - bearerAuth: []
       parameters:
@@ -8714,7 +8718,55 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "503":
-          description: El proveedor de identidad no está disponible (transitorio).
+          description: >
+            El proveedor de identidad no está disponible (transitorio), o la carta de una validación manual aún no se
+            pudo generar/leer (HU #14302; reintentar).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/biometric-validations/{id}/certificado:
+    get:
+      operationId: descargarCartaIdentidadPorValidacion
+      tags: [Tramites, Identidad]
+      summary: Descargar la carta de identidad (PDF) de una validación manual aprobada, sin trámite
+      description: >
+        HU #14302 (Épica #14271). Sirve la carta de FLIT de una validación MANUAL aprobada por id, p. ej. una prevalidación
+        sin trámite. Si la carta falta se genera en ese momento. Super Admin: cualquier compañía (el tenant sale de la fila).
+        Demás usuarios: permiso del módulo de identidad (`validaciones.read`/`validaciones.manage` o `tramites.read`, mismo de la
+        bitácora) y solo validaciones de su propio tenant; otro tenant responde 404 para no revelar que existe.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: PDF de la carta.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: Sin sesión.
+        "403":
+          description: Sin permiso del módulo de identidad, o usuario de un organismo de tránsito.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La validación no existe, es de otro tenant, no es manual o no está aprobada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: La carta aún no se pudo generar o leer; reintentar.
           content:
             application/json:
               schema:
@@ -19202,6 +19254,13 @@ components:
             Épica #13202 — código homologado del motivo que eligió el Super Admin al rechazar una validación MANUAL. Solo con
             status=rechazado y provider=manual; `null` en cualquier otro caso (las rechazadas de Kyverum/mock siguen con
             `rejectionReason`). Sin texto libre ni PII.
+        cartaDisponible:
+          type: boolean
+          default: false
+          description: >
+            HU #14302 (Épica #14271) — `true` solo si la validación es MANUAL, está aprobada y su carta de identidad ya fue
+            generada. Cuando es `true`, la carta se descarga por `GET /api/v1/tramites/instances/{id}/biometric/{validationId}/certificado`.
+            No expone la ruta, la serie ni el hash.
     BiometricValidationsResponse:
       type: object
       required: [validations, provider]
@@ -19796,6 +19855,12 @@ components:
             Código del último rechazo. Tras rechazar (HU #13299) el estado es `rechazado` con este campo no nulo hasta que el
             cliente envíe la captura nueva (que lo limpia).
         linkExpiresAt: { type: string, format: date-time, nullable: true, description: Vencimiento del enlace de captura; solo cuando se espera captura (manual_activo o rechazado con motivo). }
+        cartaDisponible:
+          type: boolean
+          default: false
+          description: >
+            HU #14302 — `true` solo si la validación es manual, está aprobada y su carta de identidad ya fue generada (misma regla
+            que `BiometricValidationDto.cartaDisponible`). Se descarga por `GET /api/v1/tramites/biometric-validations/{id}/certificado`.
     ManualCaptureView:
       type: object
       required: [fullName, documentType, documentNumber, expiresAt, consentTextVersion]

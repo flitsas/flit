@@ -155,7 +155,8 @@ internal sealed class ManualIdentityReviewReadRepository(FlitDbContext db) : IMa
                 v.ReviewedAt, reviewer, v.RejectionReasonCode,
                 (v.Status == BiometricEstados.ManualActivo
                     || (v.Status == BiometricEstados.Rechazado && v.RejectionReasonCode != null)) ? v.ExpiresAt : null,
-                waitingSince);
+                waitingSince,
+                v.CorrespondeCartaIdentidad && v.TieneCartaIdentidad);
         }, ct);
 
     /// <summary>

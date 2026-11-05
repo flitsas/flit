@@ -35,7 +35,9 @@ public sealed record ManualDetail(
     DateTimeOffset? ReviewedAt,
     string? ReviewedBy,
     string? RejectionReasonCode,
-    DateTimeOffset? LinkExpiresAt);
+    DateTimeOffset? LinkExpiresAt,
+    // HU #14302 — misma regla que BiometricValidationDto.cartaDisponible: manual, aprobada y con carta generada.
+    bool CartaDisponible = false);
 
 /// <summary>Consulta del detalle: <paramref name="ConsultedByUserId"/> es quien lo pidió (queda en la auditoría).</summary>
 public sealed record GetManualDetailQuery(Guid ValidationId, Guid ConsultedByUserId);
@@ -78,7 +80,8 @@ public sealed class GetManualDetailHandler(
         return (new ManualDetail(
             r.Id, r.FullName, r.DocumentNumber, r.TenantName, r.Origin, r.Status, r.ActivatedAt,
             ListManualIdentityValidationsHandler.WaitingMinutes(r.Status, r.WaitingSince, now),
-            r.ConsentAt, r.ConsentTextVersion, images, r.ReviewedAt, r.ReviewedBy, r.RejectionReasonCode, r.LinkExpiresAt), null);
+            r.ConsentAt, r.ConsentTextVersion, images, r.ReviewedAt, r.ReviewedBy, r.RejectionReasonCode, r.LinkExpiresAt,
+            r.CartaDisponible), null);
     }
 }
 

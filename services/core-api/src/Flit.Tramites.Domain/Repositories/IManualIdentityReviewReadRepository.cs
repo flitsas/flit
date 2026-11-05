@@ -72,7 +72,8 @@ public sealed record ManualIdentityReviewDetailRow(
     string? ReviewedBy,
     string? RejectionReasonCode,
     DateTimeOffset? LinkExpiresAt,
-    DateTimeOffset? WaitingSince = null);
+    DateTimeOffset? WaitingSince = null,
+    bool CartaDisponible = false);
 
 /// <summary>Referencia (interna, nunca sale por HTTP) a la imagen de una validación manual en el storage.</summary>
 public sealed record ManualIdentityImageRef(
