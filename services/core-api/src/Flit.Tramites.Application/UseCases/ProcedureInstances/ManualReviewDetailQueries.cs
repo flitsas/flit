@@ -36,7 +36,9 @@ public sealed record ManualDetail(
     string? ReviewedBy,
     string? RejectionReasonCode,
     DateTimeOffset? LinkExpiresAt,
-    ManualPhotoChecksDto? ValidacionFotos = null);
+    ManualPhotoChecksDto? ValidacionFotos = null,
+    // HU #14302 — misma regla que BiometricValidationDto.cartaDisponible: manual, aprobada y con carta generada.
+    bool CartaDisponible = false);
 
 /// <summary>
 /// HU #14310 — resultado de la validación en el dispositivo de UNA foto: <c>estado</c> ∈ {verificada, no_verificada};
@@ -96,7 +98,8 @@ public sealed class GetManualDetailHandler(
             r.Id, r.FullName, r.DocumentNumber, r.TenantName, r.Origin, r.Status, r.ActivatedAt,
             ListManualIdentityValidationsHandler.WaitingMinutes(r.Status, r.WaitingSince, now),
             r.ConsentAt, r.ConsentTextVersion, images, r.ReviewedAt, r.ReviewedBy, r.RejectionReasonCode, r.LinkExpiresAt,
-            ManualPhotoChecksDto.From(r.PhotoChecks)), null);
+            ManualPhotoChecksDto.From(r.PhotoChecks),
+            r.CartaDisponible), null);
     }
 }
 

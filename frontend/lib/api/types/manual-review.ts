@@ -74,6 +74,8 @@ export interface ManualDetail extends ManualListItem {
    * cambio: no se muestra ningún aviso.
    */
   validacionFotos?: ManualPhotoChecks | null;
+  /** HU #14303 — true si la validación está aprobada y su carta ya se generó. */
+  cartaDisponible?: boolean;
 }
 
 /** Respuesta de `POST .../manual-approve` (espejo de `AprobarValidacionManualResult`). */

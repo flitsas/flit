@@ -63,7 +63,8 @@ public sealed class GenerarFurHandler(
     ITransitOfficeResolver? transitOfficeResolver = null,
     IIdentitySignatureCapture? identitySignatureCapture = null,
     IIdentitySignatureExtractor? identitySignatureExtractor = null,
-    IMandateFormatTemplateProvider? mandateFormatTemplates = null)
+    IMandateFormatTemplateProvider? mandateFormatTemplates = null,
+    IIdentityLetterService? identityLetterService = null)
     : IExpedienteHotDocumentsRegenerator
 {
     // Bug #11613 — respaldo del gate de organismo: resuelve el OT habilitado por id para rellenar los
@@ -248,7 +249,12 @@ public sealed class GenerarFurHandler(
             {
                 var val = await ResolveApprovedValidationAsync(instance, slot.Actor, slot.Role, DateTimeOffset.UtcNow, ct);
                 if (val is not null)
+                {
+                    // HU #14302 (AC3) — una identidad MANUAL sella con la serie y el hash de su carta; si la outbox aún no la
+                    // generó (o se rindió) se genera aquí, ANTES de armar el sello y de tocar el expediente.
+                    val = await EnsureCartaDeValidacionManualAsync(val, ct) ?? val;
                     sellosIdentidad[slot.Key] = BuildIdentidadSello(val);
+                }
             }
         }
 
@@ -1875,7 +1881,11 @@ public sealed class GenerarFurHandler(
     {
         var bio = await ResolveKyverumBioForActorAsync(instance, role, actor, ct);
         if (bio is null)
-            return null; // provider mock o sin id de Kyverum: no hay certificado externo que descargar.
+        {
+            // Sin certificado de Kyverum para este actor: si su identidad es MANUAL, su documento es la carta de FLIT
+            // (HU #14302). Provider mock / sin identidad: no hay documento que adjuntar.
+            return await TryLetterDocumentAsync(instance, role, ordinal, actor, ct);
+        }
 
         try
         {
@@ -1897,6 +1907,87 @@ public sealed class GenerarFurHandler(
         catch (KyverumCertificateException ex)
         {
             GenerarFurLog.CertificadoDescargaFallo(logger, ex, instance.Id);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// HU #14302 — validación MANUAL aprobada del actor concreto (documento del sujeto), con el mismo fail-closed que
+    /// <see cref="ResolveKyverumBioForActorAsync"/> (Bug #13194): sin actor se usa el PRIMER actor del rol, y sin documento usable
+    /// no hay carta que adjuntar; jamás «la primera manual aprobada del rol». La identidad vigente de otro trámite o de una
+    /// prevalidación (HU #10350) se referencia por documento y da la MISMA carta.
+    /// </summary>
+    private async Task<ProcedureInstanceBiometricValidation?> ResolveManualBioForActorAsync(
+        ProcedureInstance instance,
+        string role,
+        ProcedureInstanceActor? actor,
+        CancellationToken ct)
+    {
+        var sujetoActor = actor ?? instance.Actors
+            .Where(a => string.Equals(a.ActorType, role, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(a => a.Ordinal)
+            .FirstOrDefault();
+        var subject = sujetoActor is null ? null : IdentitySubjectResolver.For(sujetoActor);
+        if (subject is null
+            || string.IsNullOrWhiteSpace(subject.TipoDocumento)
+            || string.IsNullOrWhiteSpace(subject.NumeroDocumento))
+            return null;
+
+        var doc = subject.NumeroDocumento.Trim();
+        var bio = instance.BiometricValidations.FirstOrDefault(v =>
+            string.Equals(v.PartyRole, role, StringComparison.OrdinalIgnoreCase)
+            && v.CorrespondeCartaIdentidad
+            && BiometricRules.DocumentoCoincide(v, subject.TipoDocumento, doc));
+        if (bio is not null)
+            return bio;
+
+        var source = await repo.FindVigenteApprovedByDocumentAsync(
+            instance.TenantId, subject.TipoDocumento.Trim(), doc, DateTimeOffset.UtcNow, ct);
+        return source is { CorrespondeCartaIdentidad: true } ? source : null;
+    }
+
+    /// <summary>
+    /// HU #14302 — garantiza (genera si falta) la carta de una validación manual aprobada. <c>null</c> si no le corresponde o no se
+    /// pudo generar: el llamador conserva la validación original y aplica su criterio de fallo.
+    /// </summary>
+    private Task<ProcedureInstanceBiometricValidation?> EnsureCartaDeValidacionManualAsync(
+        ProcedureInstanceBiometricValidation validation, CancellationToken ct) =>
+        IdentityLetterAccess.EnsureAsync(identityLetterService, repo, validation, ct);
+
+    /// <summary>
+    /// Documento de identidad de un actor con identidad MANUAL: la carta PDF de FLIT, con el MISMO tipo de adjunto que el certificado
+    /// de Kyverum (<see cref="IdentityCertificateAttachmentTipo"/>), de modo que el consolidado la ordena en la misma posición
+    /// (<see cref="ConsolidadoAttachmentRank"/>) y la rotula igual (<see cref="DocumentLabels"/>). Mismo criterio de fallo que el
+    /// certificado de Kyverum: si no se puede obtener, warning y se omite ese actor sin bloquear el FUR.
+    /// </summary>
+    private async Task<GeneratedDocument?> TryLetterDocumentAsync(
+        ProcedureInstance instance,
+        string role,
+        int ordinal,
+        ProcedureInstanceActor? actor,
+        CancellationToken ct)
+    {
+        var manual = await ResolveManualBioForActorAsync(instance, role, actor, ct);
+        if (manual is null)
+            return null;
+
+        try
+        {
+            var conCarta = await EnsureCartaDeValidacionManualAsync(manual, ct);
+            var pdf = conCarta is null ? null : await IdentityLetterAccess.ReadPdfAsync(storage, conCarta, ct);
+            if (pdf is null)
+            {
+                GenerarFurLog.CartaNoDisponible(logger, manual.Id, instance.Id);
+                return null;
+            }
+
+            var tipo = IdentityCertificateAttachmentTipo.For(role, ordinal);
+            var safeRef = instance.ReferenceNumber.Replace('/', '-');
+            return new GeneratedDocument(tipo, $"{tipo}_{safeRef}.pdf", "application/pdf", pdf);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            GenerarFurLog.CartaDescargaFallo(logger, ex, instance.Id);
             return null;
         }
     }
@@ -2139,6 +2230,14 @@ internal static partial class GenerarFurLog
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "No se pudo descargar el certificado de identidad de Kyverum (instancia {InstanceId}); se omite del expediente sin bloquear el FUR.")]
     public static partial void CertificadoDescargaFallo(ILogger logger, Exception ex, Guid instanceId);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "La carta de identidad de la validación manual {ValidationId} (instancia {InstanceId}) no está disponible; se omite del expediente sin bloquear el FUR.")]
+    public static partial void CartaNoDisponible(ILogger logger, Guid validationId, Guid instanceId);
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "No se pudo adjuntar la carta de identidad de una validación manual (instancia {InstanceId}); se omite del expediente sin bloquear el FUR.")]
+    public static partial void CartaDescargaFallo(ILogger logger, Exception ex, Guid instanceId);
 
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "No se pudo leer el artefacto de la firma del baúl (instancia {InstanceId}); la parte cae al sello de texto sin bloquear el FUR.")]

@@ -17,6 +17,7 @@ import { COPY } from '@/lib/copy/copy-catalog';
 import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
 import { formatDateOnly } from '@/lib/format/date-only';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { estadoCertificado, TEXTO_CERTIFICADO_EN_PREPARACION } from '@/lib/identity/certificado-validacion';
 import { WizardAccordion } from './WizardAccordion';
 import { WizardCardHeader, WizardPair } from './wizard-atoms';
 import { WIZARD_CARD, WIZARD_INPUT, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
@@ -389,7 +390,9 @@ function CertificadoIdButton({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const aprobado = !firmaBaul && bio?.status === 'aprobado';
+  const estadoCert = estadoCertificado(bio);
+  const aprobado = !firmaBaul && estadoCert === 'descargable';
+  const enPreparacion = !firmaBaul && estadoCert === 'en_preparacion';
   const validationId = bio?.id ?? null;
 
   const handleOpen = async () => {
@@ -415,6 +418,14 @@ function CertificadoIdButton({
   };
 
   if (firmaBaul) return null;
+
+  if (enPreparacion) {
+    return (
+      <span className="w-fit text-xs opacity-70" role="status" aria-live="polite">
+        {TEXTO_CERTIFICADO_EN_PREPARACION}
+      </span>
+    );
+  }
 
   return (
     <div className="flex w-fit max-w-full flex-col gap-1">
