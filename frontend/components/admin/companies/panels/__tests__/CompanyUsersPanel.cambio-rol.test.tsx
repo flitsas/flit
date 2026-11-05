@@ -50,7 +50,7 @@ describe("CompanyUsersPanel — cambio de rol (#13657)", () => {
     vi.mocked(assignRole).mockResolvedValue(undefined);
     await pickRole();
     expect(
-      await screen.findByText("Este usuario tiene 1 permiso individual que se eliminará al cambiar su rol."),
+      await screen.findByText("Este usuario tiene 1 permiso individual de este producto que se eliminará al cambiar su rol. Los de otros productos se conservan."),
     ).toBeInTheDocument();
     expect(countUserOverrides).toHaveBeenCalledWith("u-1", "tramites", "tenant-1", "r-ges");
     expect(assignRole).not.toHaveBeenCalled();

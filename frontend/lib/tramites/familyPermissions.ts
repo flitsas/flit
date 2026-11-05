@@ -4,12 +4,10 @@
 // familias con `.read` y crear exige `.create` de la familia del tipo. La autorización real es del backend; esto
 // decide qué se muestra.
 //
-// COMPATIBILIDAD (tokens emitidos antes de la migración #13663, hasta 12 h de vida): si el claim `permissions` NO
-// trae ninguno de los 6 slugs por familia pero sí `tramites.read` / `tramites.create`, se trata como «las tres
-// familias» para ese permiso — igual que la API con `ModulePermissionEnforcement` apagado. En cuanto el token trae
-// aunque sea UNO de los 6 slugs, manda el modo estricto: solo cuentan los slugs de cada familia. Se evalúa sobre el
-// conjunto de los 6 (no por Ver/Crear por separado): quien tiene `traspasos.read` y `tramites.create` no hereda
-// Crear en las tres familias.
+// Bug #14010 H-01: no se hereda `tramites.read` / `tramites.create` cuando el token no trae slugs de familia.
+// Esa compatibilidad (tokens anteriores a la migración #13663) hacía indistinguible «todavía no migrado» de
+// «las seis familias fueron denegadas», y `/tramites` se abría igual. La API, con la exigencia encendida, ya
+// niega en ese caso. Aquí solo cuenta el slug de cada familia (o SuperAdmin).
 import { type JwtPayload, hasPermission, isSuperAdmin } from "@/lib/auth/jwt";
 import type { ProcedureFamily } from "@/lib/api/types/procedure-parametrization";
 
@@ -22,12 +20,9 @@ export const FAMILY_PERMISSION_SLUGS: Record<ProcedureFamily, { read: string; cr
   OTROS: { read: "otros-tramites.read", create: "otros-tramites.create" },
 };
 
-const BASE_READ = "tramites.read";
-const BASE_CREATE = "tramites.create";
-
 const ALL_FAMILY_SLUGS = PROCEDURE_FAMILIES.flatMap((f) => [FAMILY_PERMISSION_SLUGS[f].read, FAMILY_PERMISSION_SLUGS[f].create]);
 
-/** ¿El token ya trae permisos por familia? Si no, es un token «anterior a la migración» (modo compatibilidad). */
+/** ¿El token trae al menos un slug Ver/Crear de familia? */
 export function hasFamilyPermissions(claims: JwtPayload | null): boolean {
   return ALL_FAMILY_SLUGS.some((slug) => hasPermission(claims, slug));
 }
@@ -36,7 +31,6 @@ export function hasFamilyPermissions(claims: JwtPayload | null): boolean {
 export function canReadFamily(claims: JwtPayload | null, family: ProcedureFamily): boolean {
   if (!claims) return false;
   if (isSuperAdmin(claims)) return true;
-  if (!hasFamilyPermissions(claims)) return hasPermission(claims, BASE_READ);
   return hasPermission(claims, FAMILY_PERMISSION_SLUGS[family].read);
 }
 
@@ -44,7 +38,6 @@ export function canReadFamily(claims: JwtPayload | null, family: ProcedureFamily
 export function canCreateFamily(claims: JwtPayload | null, family: ProcedureFamily): boolean {
   if (!claims) return false;
   if (isSuperAdmin(claims)) return true;
-  if (!hasFamilyPermissions(claims)) return hasPermission(claims, BASE_CREATE);
   return hasPermission(claims, FAMILY_PERMISSION_SLUGS[family].create);
 }
 
@@ -57,11 +50,11 @@ export function creatableFamilies(claims: JwtPayload | null): ProcedureFamily[] 
 }
 
 /**
- * Familias que se pintan en los agregados por familia (tarjetas KPI y series del inicio y de Reportes, criterio FF-4).
- * Solo se ocultan cuando el token trae permisos por familia (modo estricto): en modo compatibilidad decide la API según
- * su flag, y ocultar las tres dejaría sin tarjetas a un rol que entra al inicio o a Reportes sin `tramites.read`.
+ * Familias que se pintan en los agregados por familia (tarjetas KPI y series del inicio y de Reportes).
+ * Sin claims legibles no se ocultan (aún no hay sesión que evaluar). Con claims, solo las que puede ver.
  */
 export function aggregateFamilies(claims: JwtPayload | null): ProcedureFamily[] {
-  if (!claims || !hasFamilyPermissions(claims)) return [...PROCEDURE_FAMILIES];
+  if (!claims) return [...PROCEDURE_FAMILIES];
+  if (isSuperAdmin(claims)) return [...PROCEDURE_FAMILIES];
   return readableFamilies(claims);
 }
