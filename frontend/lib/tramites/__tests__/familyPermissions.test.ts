@@ -1,5 +1,5 @@
-// HU #13665 (Feature #13636 F-F): Ver / Crear por familia desde el claim `permissions`, con la regla de
-// compatibilidad para tokens anteriores a la migración #13663.
+// HU #13665 (Feature #13636 F-F): Ver / Crear por familia desde el claim `permissions`.
+// Bug #14010 H-01: sin slugs de familia no se hereda tramites.read / tramites.create.
 import { describe, expect, it } from "vitest";
 import {
   canCreateFamily,
@@ -36,17 +36,17 @@ describe("familyPermissions", () => {
     expect(creatableFamilies(c)).toEqual(["MATRICULAS", "TRASPASO", "OTROS"]);
   });
 
-  describe("compatibilidad: token anterior a la migración (ninguno de los 6 slugs)", () => {
-    it("tramites.read / tramites.create equivalen a las tres familias", () => {
+  describe("Bug #14010 H-01: sin slugs de familia no se hereda tramites.read / tramites.create", () => {
+    it("las seis familias denegadas dejan el módulo cerrado aunque quede el permiso base", () => {
       const c = claims(["tramites.read", "tramites.create"]);
       expect(hasFamilyPermissions(c)).toBe(false);
-      expect(readableFamilies(c)).toEqual(["MATRICULAS", "TRASPASO", "OTROS"]);
-      expect(creatableFamilies(c)).toEqual(["MATRICULAS", "TRASPASO", "OTROS"]);
+      expect(readableFamilies(c)).toEqual([]);
+      expect(creatableFamilies(c)).toEqual([]);
     });
 
-    it("solo tramites.read: ve todo pero no crea nada", () => {
+    it("solo tramites.read no abre ninguna familia", () => {
       const c = claims(["tramites.read"]);
-      expect(readableFamilies(c)).toHaveLength(3);
+      expect(readableFamilies(c)).toEqual([]);
       expect(creatableFamilies(c)).toEqual([]);
     });
 

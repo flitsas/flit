@@ -9,6 +9,7 @@ import {
   X,
 } from 'lucide-react';
 import { tramitesClient } from '@/lib/api/tramites-client';
+import { improntaObligatoriaEnChecklist } from './DocumentChecklist';
 import MatriculaResumen, { ResumenCard } from './MatriculaResumen';
 import { ExpedienteCronologicoAccordion } from './ExpedienteTimeline';
 import ExpedienteVisor from './ExpedienteVisor';
@@ -650,8 +651,17 @@ export function FirmaFurStep({
         // si aún no (matrícula), las casillas quedan vacías. Un FUR previo sin placa no se conserva.
         await tramitesClient.generarFur(instanceId);
 
-        // HU #13403 — con la generación deshabilitada la impronta se carga a mano en el checklist.
-        if (!hasImpronta && improntaAutomatica) {
+        // La impronta opcional no se genera al entrar al resumen: solo el clic «Generar impronta»
+        // del checklist. Obligatoria + generación habilitada conserva la pre-generación.
+        let improntaObligatoria = false;
+        try {
+          const chk = await tramitesClient.getChecklist(instanceId);
+          improntaObligatoria = improntaObligatoriaEnChecklist(chk.items);
+          if (montadoRef.current) setChecklist(chk.items);
+        } catch {
+          // Sin checklist no se asume obligatoriedad: no se llama a Kyverum por debajo.
+        }
+        if (!hasImpronta && improntaAutomatica && improntaObligatoria) {
           try {
             await tramitesClient.generarImpronta(instanceId);
           } catch {

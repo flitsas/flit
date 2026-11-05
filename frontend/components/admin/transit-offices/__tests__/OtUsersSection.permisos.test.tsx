@@ -159,7 +159,7 @@ describe("OtUsersSection — aviso al cambiar el rol (#13657)", () => {
     vi.mocked(assignRole).mockResolvedValue(undefined);
     await openEditAndPickRole();
     expect(
-      await screen.findByText("Este usuario tiene 3 permisos individuales que se eliminarán al cambiar su rol."),
+      await screen.findByText("Este usuario tiene 3 permisos individuales de este producto que se eliminarán al cambiar su rol. Los de otros productos se conservan."),
     ).toBeInTheDocument();
     // Cuenta los permisos del producto del rol nuevo; el Admin OT no manda tenantId.
     expect(countUserOverrides).toHaveBeenCalledWith("u-1", "tramites", undefined, "r-ot2");

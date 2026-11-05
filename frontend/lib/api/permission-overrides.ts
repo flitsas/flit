@@ -146,7 +146,7 @@ export function setModuleOverrides(
 
 /**
  * Permisos individuales activos del usuario. Con `roleId`, los que se purgarían al asignarle ese rol: el producto del rol
- * nuevo y los de los roles que el reemplazo cierra (`productCode` se ignora).
+ * solo los del producto de ese rol (`productCode` se ignora). Los de otros productos no se cuentan.
  */
 export function countUserOverrides(
   userId: string,

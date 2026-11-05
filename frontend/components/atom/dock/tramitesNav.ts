@@ -20,6 +20,7 @@ import {
   FileText,
   FolderCog,
   Fingerprint,
+  Webhook,
   History,
   Image as ImageIcon,
   Landmark,
@@ -180,6 +181,7 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
       ot(OT_ADM_DOCK.reportes, COPY.B21Reportes, "reportes", BarChart3),
       ot(OT_ADM_DOCK.mandatos, "Mandatos", "mandatos", FileSignature),
       ot(OT_ADM_DOCK.imprintValidation, "Validar impronta", "imprint-validation", Fingerprint),
+      ot(OT_ADM_DOCK.webhooks, "Webhooks", "webhooks", Webhook),
     );
   }
 
