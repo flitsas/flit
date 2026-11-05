@@ -154,11 +154,12 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
         ],
       },
       {
-        id: "convenio",
-        title: "3. Convenio con el organismo",
+        id: "firma-mandatario",
+        title: "3. Cómo firma el mandatario el contrato de mandato",
         paragraphs: [
-          "Cuando existe un convenio comercial registrado entre tu compañía y el organismo, el contrato de mandato no lleva recuadro de firma del mandatario: firma solo el mandante. Los datos del mandatario siguen en el cuerpo del contrato.",
-          "Sin convenio, el recuadro del mandatario lleva su firma así: con Baúl de firmas, la imagen de la firma del baúl con su vigencia y código hash; con Validación de identidad, el trazo de la firma que hizo al validar su identidad con el mismo sello que el mandante: documento, UUID, firma y fecha de aprobación (y, si su vigencia es por rango, la fecha en que vence). Si su validación no está aprobada o está fuera de vigencia, el recuadro queda «Sin firmar».",
+          "Persona natural: los datos del mandatario van en el cuerpo del contrato de mandato, y su recuadro lleva la firma así: con Baúl de firmas, la imagen de la firma del baúl con su vigencia y código hash; con Validación de identidad, el trazo de la firma que hizo al validar su identidad con el mismo sello que el mandante: documento, UUID, firma y fecha de aprobación (y, si su vigencia es por rango, la fecha en que vence). Si su validación no está aprobada o está fuera de vigencia, el recuadro queda «Sin firmar».",
+          "Persona jurídica: el contrato no lleva recuadro del mandatario y firma solo el mandante; los datos del mandatario siguen en el cuerpo del contrato.",
+          "Formato en blanco: el recuadro queda con líneas para firmar a mano.",
         ],
       },
     ],
