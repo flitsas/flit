@@ -55,7 +55,7 @@ public sealed class ManualCaptureTokenCifradoPostgresTests(PostgresDatabaseFixtu
         {
             var guardado = await read.ProcedureInstanceBiometricValidations.IgnoreQueryFilters().AsNoTracking()
                 .Where(v => v.Id == validationId).Select(v => v.ManualCaptureTokenEncrypted).SingleAsync(Ct);
-            guardado.Should().Be("CfDJ8-cifrado-de-prueba");
+            guardado.Should().Be(new string('c', 23));
         }
 
         await using (var ctx = NewContext())
