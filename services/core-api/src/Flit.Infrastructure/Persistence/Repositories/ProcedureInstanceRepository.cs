@@ -1858,6 +1858,8 @@ internal sealed partial class ProcedureInstanceRepository(
                 .SetProperty(x => x.SignatureImagePath, signature)
                 .SetProperty(x => x.SignatureImageSha256, signatureSha)
                 .SetProperty(x => x.Status, status)
+                // HU #14305 — el enlace se consumió: se borra el token cifrado (RegistrarCapturaManual lo dejó en null).
+                .SetProperty(x => x.ManualCaptureTokenEncrypted, validation.ManualCaptureTokenEncrypted)
                 // HU #13299 — la captura nueva limpia el motivo y la revisión del rechazo previo (RegistrarCapturaManual).
                 .SetProperty(x => x.RejectionReasonCode, validation.RejectionReasonCode)
                 .SetProperty(x => x.ReviewedBy, validation.ReviewedBy)
