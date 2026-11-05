@@ -20,6 +20,7 @@ vi.mock('@/lib/api/tramites-client', () => ({
 }));
 
 import { ValidacionesManuales } from '@/components/atom/modules/ValidacionesManuales';
+import { ToastProvider } from '@/components/admin/Toast';
 import { createMockManualReviewClient } from '@/lib/api/manual-review-mock';
 import { puedeCopiarEnlaceManual, motivoFalloCopiaEnlace } from '@/lib/identity/manual-flow';
 
@@ -54,26 +55,28 @@ async function abrirAcciones(user: ReturnType<typeof userEvent.setup>, fila: HTM
 }
 
 describe('HU #14306 — Copiar enlace', () => {
-  it('AC1: copia el enlace y avisa «Enlace copiado» en una región aria-live', async () => {
+  it('AC1: copia el enlace y avisa «Enlace copiado» en una notificación flotante', async () => {
     const user = userEvent.setup();
     instalarPortapapeles();
     mocks.copyManualLink.mockResolvedValue({ url: URL_SECRETA, expiresAt: '2026-10-06T15:00:00Z' });
-    render(<ValidacionesManuales client={cliente()} />);
+    render(<ToastProvider><ValidacionesManuales client={cliente()} /></ToastProvider>);
     const fila = await filaDe('Persona de prueba 02'); // manual_activo
     await abrirAcciones(user, fila);
     await user.click(await screen.findByRole('menuitem', { name: /Copiar enlace de Persona de prueba 02/ }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(URL_SECRETA));
     expect(mocks.copyManualLink).toHaveBeenCalledWith(expect.any(String));
+    // Notificación flotante en su región aria-live: no se pinta entre los filtros y la tabla.
     const aviso = await screen.findByText('Enlace copiado');
-    expect(aviso).toHaveAttribute('aria-live', 'polite');
-    expect(aviso).toHaveAttribute('role', 'status');
+    const region = aviso.closest('[role="status"]');
+    expect(region).toHaveAttribute('aria-live', 'polite');
+    expect(screen.getByRole('table').parentElement?.contains(aviso)).toBe(false);
     // El enlace nunca se pinta en pantalla.
     expect(document.body.textContent).not.toContain('token-secreto-123');
   });
 
   it('también se ofrece en una fila rechazada (enlace nuevo para repetir la captura)', async () => {
     const user = userEvent.setup();
-    render(<ValidacionesManuales client={cliente()} />);
+    render(<ToastProvider><ValidacionesManuales client={cliente()} /></ToastProvider>);
     const fila = await filaDe('Persona de prueba 05');
     await abrirAcciones(user, fila);
     expect(await screen.findByRole('menuitem', { name: /Copiar enlace de/ })).toBeInTheDocument();
@@ -84,7 +87,7 @@ describe('HU #14306 — Copiar enlace', () => {
     instalarPortapapeles();
     mocks.copyManualLink.mockRejectedValue(problem(409, 'enlace_vencido'));
     mocks.regenerateManualLink.mockResolvedValue({ emailEnviado: true });
-    render(<ValidacionesManuales client={cliente()} />);
+    render(<ToastProvider><ValidacionesManuales client={cliente()} /></ToastProvider>);
     const fila = await filaDe('Persona de prueba 02');
     await abrirAcciones(user, fila);
     await user.click(await screen.findByRole('menuitem', { name: /Copiar enlace de/ }));
@@ -100,7 +103,7 @@ describe('HU #14306 — Copiar enlace', () => {
     const user = userEvent.setup();
     instalarPortapapeles();
     mocks.copyManualLink.mockRejectedValue(problem(409, 'enlace_no_disponible'));
-    render(<ValidacionesManuales client={cliente()} />);
+    render(<ToastProvider><ValidacionesManuales client={cliente()} /></ToastProvider>);
     const fila = await filaDe('Persona de prueba 02');
     await abrirAcciones(user, fila);
     await user.click(await screen.findByRole('menuitem', { name: /Copiar enlace de/ }));
@@ -115,7 +118,7 @@ describe('HU #14306 — Copiar enlace', () => {
     const user = userEvent.setup();
     instalarPortapapeles();
     mocks.copyManualLink.mockRejectedValue(problem(409, 'flujo_manual_no_activo'));
-    render(<ValidacionesManuales client={cliente()} />);
+    render(<ToastProvider><ValidacionesManuales client={cliente()} /></ToastProvider>);
     const fila = await filaDe('Persona de prueba 02');
     await abrirAcciones(user, fila);
     await user.click(await screen.findByRole('menuitem', { name: /Copiar enlace de/ }));
@@ -128,7 +131,7 @@ describe('HU #14306 — Copiar enlace', () => {
     instalarPortapapeles();
     writeText.mockRejectedValue(new Error('NotAllowedError: secreto'));
     mocks.copyManualLink.mockResolvedValue({ url: URL_SECRETA, expiresAt: '2026-10-06T15:00:00Z' });
-    render(<ValidacionesManuales client={cliente()} />);
+    render(<ToastProvider><ValidacionesManuales client={cliente()} /></ToastProvider>);
     const fila = await filaDe('Persona de prueba 02');
     await abrirAcciones(user, fila);
     await user.click(await screen.findByRole('menuitem', { name: /Copiar enlace de/ }));
@@ -139,7 +142,7 @@ describe('HU #14306 — Copiar enlace', () => {
 
   it('AC3: no aparece en filas aprobada, pendiente de revisión ni expirada', async () => {
     const user = userEvent.setup();
-    render(<ValidacionesManuales client={cliente()} />);
+    render(<ToastProvider><ValidacionesManuales client={cliente()} /></ToastProvider>);
     for (const n of ['01', '03', '04', '06']) {
       const fila = await filaDe(`Persona de prueba ${n}`);
       await abrirAcciones(user, fila);
