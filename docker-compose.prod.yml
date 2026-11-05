@@ -163,6 +163,8 @@ services:
       PasswordRecovery__ResetUrlBase: ${CORS_ORIGIN:?CORS_ORIGIN es obligatoria (URL publica del front de este ambiente, p. ej. https://qa.flitsas.online); definela en el .env del VPS}/auth/reset-password
       Notifications__EmailAssets__BaseUrl: ${CORS_ORIGIN:?CORS_ORIGIN es obligatoria (URL publica del front de este ambiente, p. ej. https://qa.flitsas.online); definela en el .env del VPS}/email-assets
       PublicBranding__PublicBaseUrl: ${CORS_ORIGIN:?CORS_ORIGIN es obligatoria (URL publica del front de este ambiente, p. ej. https://qa.flitsas.online); definela en el .env del VPS}
+      # IP pública del borde: el valor del registro A que se le pide crear a cada cliente de Marca Blanca.
+      Domains__EdgeIp: ${FLIT_EDGE_IP:-}
       # Marca Blanca (#12417/#12421): MISMA clave que Internal__ApiKey del servicio gateway
       # de abajo. Si difieren, el Gateway no puede autenticar GET /internal/domains/active
       # (responde 401 SIEMPRE) y su CORS dinamico cae a la lista fija de Cors__AllowedOrigins__0

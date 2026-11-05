@@ -28,7 +28,7 @@ public sealed class RemoveDomainHandlerTests
             RowVersion = 3,
             CheckAttempts = 0,
         };
-        repo.RetireAsync(TenantId, Arg.Any<Guid?>(), Arg.Any<CancellationToken>()).Returns(retired);
+        repo.RetireAsync(TenantId, Arg.Any<Guid?>(), TenantDomainPurposes.Hub, Arg.Any<CancellationToken>()).Returns(retired);
 
         var result = await new RemoveDomainHandler(repo).HandleAsync(
             new RemoveDomainCommand { TenantId = TenantId }, TestContext.Current.CancellationToken);
@@ -41,7 +41,7 @@ public sealed class RemoveDomainHandlerTests
     public async Task SinDominioVigente_DevuelveNotFound()
     {
         var repo = Substitute.For<ITenantDomainRepository>();
-        repo.RetireAsync(TenantId, Arg.Any<Guid?>(), Arg.Any<CancellationToken>()).Returns((TenantDomain?)null);
+        repo.RetireAsync(TenantId, Arg.Any<Guid?>(), TenantDomainPurposes.Hub, Arg.Any<CancellationToken>()).Returns((TenantDomain?)null);
 
         var result = await new RemoveDomainHandler(repo).HandleAsync(
             new RemoveDomainCommand { TenantId = TenantId }, TestContext.Current.CancellationToken);

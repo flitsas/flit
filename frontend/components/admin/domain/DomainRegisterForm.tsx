@@ -13,6 +13,10 @@ import type { TenantDomainResponse } from "@/lib/api/types";
 
 export interface DomainRegisterFormProps {
   tenantId: string;
+  /** Producto del dominio. Sin él, el dominio principal de la red. */
+  purpose?: string;
+  /** Texto de la etiqueta del campo. */
+  label?: string;
   /** Dominio vigente, o `null` si la red aún no tiene uno registrado. */
   domain: TenantDomainResponse | null;
   onRegistered: (domain: TenantDomainResponse) => void;
@@ -24,8 +28,9 @@ export interface DomainRegisterFormProps {
  * (HU #12427 AC3; registrar/cambiar/retirar es siempre `/admin/companies/{tenantId}/domain`,
  * nunca `/company/domain`, que es de solo lectura para la propia cabeza).
  */
-export function DomainRegisterForm({ tenantId, domain, onRegistered, onRemoved }: DomainRegisterFormProps) {
+export function DomainRegisterForm({ tenantId, purpose, label = "Dominio de la red", domain, onRegistered, onRemoved }: DomainRegisterFormProps) {
   const [host, setHost] = useState(domain?.host ?? "");
+  const inputId = `domain-host${purpose ? `-${purpose}` : ""}`;
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
@@ -51,10 +56,11 @@ export function DomainRegisterForm({ tenantId, domain, onRegistered, onRemoved }
 
     setSaving(true);
     try {
-      const updated = await registerAdminDomain(tenantId, {
-        host: trimmed,
-        rowVersion: domain?.rowVersion ?? null,
-      });
+      const updated = await registerAdminDomain(
+        tenantId,
+        { host: trimmed, rowVersion: domain?.rowVersion ?? null },
+        purpose,
+      );
       setHost(updated.host);
       onRegistered(updated);
     } catch (err) {
@@ -68,7 +74,7 @@ export function DomainRegisterForm({ tenantId, domain, onRegistered, onRemoved }
     setRemoving(true);
     setFormError(null);
     try {
-      await removeAdminDomain(tenantId);
+      await removeAdminDomain(tenantId, purpose);
       setHost("");
       setConfirmingRemove(false);
       onRemoved();
@@ -82,11 +88,11 @@ export function DomainRegisterForm({ tenantId, domain, onRegistered, onRemoved }
   return (
     <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-3">
       <div>
-        <label htmlFor="domain-host" className="mb-1 block text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }}>
-          Dominio de la red
+        <label htmlFor={inputId} className="mb-1 block text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }}>
+          {label}
         </label>
         <input
-          id="domain-host"
+          id={inputId}
           type="text"
           value={host}
           onChange={(e) => setHost(e.target.value)}
@@ -94,11 +100,11 @@ export function DomainRegisterForm({ tenantId, domain, onRegistered, onRemoved }
           maxLength={253}
           className="w-full max-w-md rounded-lg border px-3 py-2 font-mono text-sm"
           style={{ borderColor: fieldError ? "#FF4E00" : "#DFE5ED" }}
-          aria-describedby={isChange ? "domain-host-hint" : undefined}
+          aria-describedby={isChange ? `${inputId}-hint` : undefined}
           aria-invalid={Boolean(fieldError)}
         />
         {isChange && (
-          <p id="domain-host-hint" className="mt-1 text-[10px] opacity-60">
+          <p id={`${inputId}-hint`} className="mt-1 text-[10px] opacity-60">
             Cambiar el dominio reinicia el ciclo de comprobación desde cero.
           </p>
         )}
