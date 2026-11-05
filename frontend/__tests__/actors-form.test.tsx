@@ -780,6 +780,44 @@ describe('ActorsForm — prefill documento del propietario (paso vendedor)', () 
     expect(screen.queryByRole('button', { name: 'Consultar RUNT' })).not.toBeInTheDocument();
   });
 
+  // Protege la precarga desde Representantes Legales de la compañía: un propietario NIT debe seguir
+  // resolviendo por RUES + directorio y llenar el formulario con el representante registrado.
+  it('con NIT sembrado consulta RUES y precarga el representante legal del directorio', async () => {
+    mocks.getInstance.mockResolvedValue({
+      fieldValues: [
+        { fieldKey: 'owner_document_type', valueText: 'NIT' },
+        { fieldKey: 'owner_document_number', valueText: '900123' },
+      ],
+    });
+    const representante = {
+      tipoDoc: 'CC',
+      documento: '79000111',
+      nombres: 'LAURA',
+      primerApellido: 'GOMEZ',
+      email: 'laura@empresa.test',
+      telefono: '3001234567',
+      firmaVigente: true,
+      identidadVigente: true,
+    };
+    mocks.lookupLegalRepresentativeByNit.mockResolvedValue({
+      company: { nit: '900123', razonSocial: 'Empresa SAS' },
+      representante,
+      firmaVigente: true,
+      identidadVigente: true,
+      representantes: [representante],
+    });
+
+    renderVendedor();
+
+    await waitFor(() =>
+      expect(mocks.ruesPersonLookup).toHaveBeenCalledWith(INSTANCE, { documentNumber: '900123' }),
+    );
+    expect(mocks.lookupLegalRepresentativeByNit).toHaveBeenCalledWith('900123');
+    expect(mocks.runtPersonLookup).not.toHaveBeenCalled();
+    expect(await screen.findByDisplayValue('79000111')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('LAURA GOMEZ')).toBeInTheDocument();
+  });
+
   it('no pisa el documento del vendedor ya persistido y no lo vuelve a consultar', async () => {
     mocks.getActors.mockResolvedValue([
       {
