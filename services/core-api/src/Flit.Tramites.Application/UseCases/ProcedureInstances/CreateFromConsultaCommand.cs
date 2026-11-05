@@ -1,3 +1,4 @@
+using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
@@ -312,7 +313,11 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
         if (perfilTipo.RequiresSeller && !perfilTipo.SellerCapturedViaForm && sellerSyncHandler is not null)
         {
             await sellerSyncHandler.SyncAsync(
-                summary.Id, request.TenantId, request.OwnerDocumentType, request.OwnerDocumentNumber, ct);
+                summary.Id,
+                request.TenantId,
+                ResolverTipoDocumentoVendedor(request.OwnerDocumentType, precomputed?.HydratedFields),
+                request.OwnerDocumentNumber,
+                ct);
         }
 
         // Preflight autoritativo sobre la instancia real, reusando la consulta del paso 1: hidrata los
@@ -372,6 +377,25 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Tipo de documento con el que se sincroniza el vendedor: el que reportó el RUNT en la consulta del
+    /// paso 1 manda sobre el capturado. Sin tipo capturado devuelve <c>null</c>, para que la sincronización
+    /// siga omitiéndose como hasta ahora; sin dato del RUNT (consulta vencida o proveedor que no lo informa)
+    /// se usa el capturado.
+    /// </summary>
+    public static string? ResolverTipoDocumentoVendedor(
+        string? tipoCapturado, IReadOnlyList<HydratedField>? camposConsulta)
+    {
+        var capturado = Trim(tipoCapturado);
+        if (capturado is null)
+            return null;
+
+        var delRunt = camposConsulta?
+            .FirstOrDefault(f => string.Equals(f.FieldKey, "owner_document_type", StringComparison.OrdinalIgnoreCase))
+            ?.ValueText;
+        return Trim(delRunt) ?? capturado;
     }
 
     private static string? Trim(string? value) =>

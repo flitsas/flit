@@ -3213,7 +3213,8 @@ function ConsultaStep({
   // diferida ya no hay instancia donde persistirlo: simplemente prellena el input del paso 1.
   const [vin, setVin] = useState(seedVin ?? '');
   const [plate, setPlate] = useState(seedPlaca ?? '');
-  const [ownerDocType, setOwnerDocType] = useState<ActorDocumentType>('CC');
+  // Sin valor inicial: el tipo lo elige el gestor. Asumir 'CC' mandaba un NIT como cédula a las consultas.
+  const [ownerDocType, setOwnerDocType] = useState<ActorDocumentType | ''>('');
   const [ownerDocNumber, setOwnerDocNumber] = useState('');
   const [persisting, setPersisting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -3234,17 +3235,10 @@ function ConsultaStep({
   const [fieldValues, setFieldValues] = useState<FieldValue[]>([]);
   // CF-02 — snapshot de la consulta desacoplada (sin instancia que lo persista todavía).
   const [previewSnapshot, setPreviewSnapshot] = useState<PreflightSnapshot | null>(null);
-  // HU #10478 — proveedor de consulta por placa resuelto para el tenant. Con Kyverum RUNT NO se pide
-  // el tipo de documento del propietario (lo resuelve el RUNT y lo devuelve); con Verifik sí se necesita.
-  // null = aún sin resolver ⇒ se muestra el campo (default seguro para no ocultarlo con Verifik).
-  const [platePrimaryProvider, setPlatePrimaryProvider] = useState<string | null>(null);
-  // HU #10478 (novedad maquinaria/remolques) — con Kyverum como primario el tipo de documento del
-  // propietario se oculta (Kyverum lo resuelve por placa). Pero maquinaria y remolques NO están en el RUNT
-  // de Kyverum: el backend cae a Verifik, que SÍ exige el tipo real del dueño para hallar el vehículo. Si la
-  // consulta devuelve "vehículo no encontrado", este flag revela el selector para corregir el tipo (p. ej. NIT).
+  // El tipo de documento del propietario se pide siempre, sea cual sea el proveedor: otras consultas del
+  // aplicativo lo necesitan aunque Kyverum no lo exija. Este flag solo muestra el aviso de verificarlo
+  // cuando la consulta devuelve "vehículo no encontrado".
   const [ownerDocTypeSuggested, setOwnerDocTypeSuggested] = useState(false);
-  const hideOwnerDocType =
-    !isVin && platePrimaryProvider === 'kyverum_runt' && !ownerDocTypeSuggested;
 
   // HU #11199 — la secretaría se elige aquí SOLO en los trámites que matriculan el vehículo y SOLO
   // mientras el trámite no existe (AC5 + convivencia D8): los borradores abiertos antes del cambio
@@ -3505,7 +3499,6 @@ function ConsultaStep({
       .getConsultationConfig()
       .then((cfg) => {
         if (!active) return;
-        setPlatePrimaryProvider(cfg.vehiclePlate);
         const byFamily = cfg.onlyOwnVehiclesByFamily;
         const block = cfg.blockProcedureFamily;
         if (isVin) {
@@ -3535,12 +3528,11 @@ function ConsultaStep({
     setOwnerDocNumber(tenantNitDigits);
   }, [isVin, onlyOwnVehicles, tenantNitDigits, ownerDocNumber]);
 
-  // HU #10478 (novedad maquinaria/remolques) — revela el selector de tipo de documento del propietario
-  // cuando una consulta por placa (Kyverum primario) devuelve "vehículo no encontrado" (check 'vehiculo' en
-  // fail). Probablemente es maquinaria/remolque, fuera del RUNT de Kyverum; el fallback a Verifik solo lo
-  // halla con el tipo correcto del dueño (p. ej. NIT). Sticky: una vez revelado, permanece visible.
+  // HU #10478 (novedad maquinaria/remolques) — avisa que se verifique el tipo de documento del propietario
+  // cuando una consulta por placa devuelve "vehículo no encontrado" (check 'vehiculo' en fail).
+  // Sticky: una vez mostrado, permanece visible.
   useEffect(() => {
-    if (isVin || platePrimaryProvider !== 'kyverum_runt' || ownerDocTypeSuggested) return;
+    if (isVin || ownerDocTypeSuggested) return;
     const pf = deferred ? previewSnapshot : preflight;
     const noEncontrado = (pf?.checks ?? []).some(
       (c) => c.key === 'vehiculo' && c.status === 'fail',
@@ -3549,7 +3541,7 @@ function ConsultaStep({
     // async — checks del preflight/preview —, no del render). Sticky por el guard de arriba.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (noEncontrado) setOwnerDocTypeSuggested(true);
-  }, [isVin, platePrimaryProvider, ownerDocTypeSuggested, deferred, previewSnapshot, preflight]);
+  }, [isVin, ownerDocTypeSuggested, deferred, previewSnapshot, preflight]);
 
   const buildItems = (): FieldValueInput[] | null => {
     if (isVin) {
@@ -3559,13 +3551,9 @@ function ConsultaStep({
     }
     const plateValue = plate.trim();
     const docNumber = ownerDocNumber.trim();
-    if (!plateValue || !docNumber) return null;
-    // owner_document_type SIEMPRE viaja en el payload aunque el campo esté oculto (Kyverum): Kyverum
-    // lo ignora (resuelve el tipo por la placa), pero el FALLBACK a Verifik SÍ lo exige para consultar
-    // por placa (HU #10478). Por defecto 'CC'; tras un primer éxito de Kyverum, el preflight lo hidrata
-    // al tipo real (tipoDocPropietario), así el fallback posterior queda correcto. Ocultarlo de la UI
-    // no debe vaciar el dato o el fallback devolvería "requiere documento" (unknown) y enmascararía el
-    // fallo como pre-vuelo verde.
+    if (!plateValue || !docNumber || !ownerDocType) return null;
+    // owner_document_type SIEMPRE viaja en el payload: el proveedor, sus respaldos y las demás consultas
+    // del trámite lo usan. Tras una consulta exitosa, el preflight lo hidrata al tipo que reporta el RUNT.
     return [
       { formFieldId: null, fieldKey: 'plate', valueText: plateValue, valueJson: null },
       {
@@ -3591,7 +3579,7 @@ function ConsultaStep({
       setError(
         isVin
           ? 'Ingresa el VIN antes de consultar.'
-          : 'Ingresa la placa y el documento del propietario antes de consultar.',
+          : 'Ingresa la placa, el tipo y el número de documento del propietario antes de consultar.',
       );
       return;
     }
@@ -3972,10 +3960,10 @@ function ConsultaStep({
   const [pendingTipo, setPendingTipo] = useState<string | null>(null);
 
   // El identificador del vehículo está completo: el VIN en matrícula; la placa Y el documento del
-  // propietario en traspaso, porque el RUNT los cruza y con uno solo la consulta no resuelve.
+  // propietario (tipo y número) en traspaso, porque el RUNT los cruza y con uno solo la consulta no resuelve.
   const identificadorCompleto = isVin
     ? vin.trim().length > 0
-    : plate.trim().length > 0 && ownerDocNumber.trim().length > 0;
+    : plate.trim().length > 0 && ownerDocType !== '' && ownerDocNumber.trim().length > 0;
 
   // Botón "Consultar RUNT" — azul pleno de marca SIN degradado (PDF anotaciones / Lovable).
   const consultButton = (
@@ -4375,19 +4363,10 @@ function ConsultaStep({
           {!readOnly && consultButton}
         </div>
         ) : (
-          /* Traspaso — prototipo Lovable: Placa | Nº documento | Consultar RUNT. El tipo de documento
-             del propietario se oculta con Kyverum (`hideOwnerDocType`) y solo aparece cuando hace
-             falta corregirlo (maquinaria/remolque, HU #10478).
-
-             La rejilla es de DOCE columnas, no de tres, porque el número de campos cambia. Con tres,
-             el selector tenía que declararse `col-span-3` para no descuadrar la fila —es decir, se
-             llevaba una fila entera para él solo, encogido a `max-w-xs`— y empujaba el número y el
-             botón a una tercera. El resultado eran tres filas desparejas con un control huérfano en
-             medio. Con doce, cada campo declara su porción y los dos escenarios caben en UNA fila:
-                sin selector →      4 + 5 + 3 = 12
-                con selector →  3 + 2 + 4 + 3 = 12 */
+          /* Entrada por placa: Placa | Tipo de documento | Nº documento | Consultar RUNT.
+             Rejilla de doce columnas para que todo quepa en UNA fila: 3 + 2 + 4 + 3 = 12. */
           <div className="mt-4 grid grid-cols-1 items-end gap-4 lg:grid-cols-12">
-            <div className={`min-w-0 ${hideOwnerDocType ? 'lg:col-span-4' : 'lg:col-span-3'}`}>
+            <div className="min-w-0 lg:col-span-3">
               <label htmlFor="consulta-plate" className={WIZARD_LABEL}>
                 Placa del vehículo
               </label>
@@ -4404,35 +4383,34 @@ function ConsultaStep({
                 placeholder="Ej. XYR010"
               />
             </div>
-            {!hideOwnerDocType && (
-              // Dos de doce: lo justo para «CC»/«NIT» y su flecha. Antes se declaraba a fila
-              // completa y luego se recortaba con `max-w-xs`, que es lo que dejaba el hueco a su
-              // derecha y lo hacía leer como un campo suelto.
-              <div className="min-w-0 lg:col-span-2">
-                <label htmlFor="consulta-owner-doc-type" className={WIZARD_LABEL}>
-                  Tipo documento propietario
-                </label>
-                <select
-                  id="consulta-owner-doc-type"
-                  value={ownerDocType}
-                  onChange={(e) => {
-                    const next = e.target.value as ActorDocumentType;
-                    setOwnerDocType(next);
-                    setOwnerDocNumber((n) => sanitizeDocNumber(n, next));
-                    invalidatePreview();
-                  }}
-                  disabled={readOnly || ownerDocLocked}
-                  className={`mt-1 ${WIZARD_SELECT} disabled:opacity-60`}
-                >
-                  {DOC_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            <div className={`min-w-0 ${hideOwnerDocType ? 'lg:col-span-5' : 'lg:col-span-4'}`}>
+            {/* Dos de doce: lo justo para «CC»/«NIT» y su flecha. */}
+            <div className="min-w-0 lg:col-span-2">
+              <label htmlFor="consulta-owner-doc-type" className={WIZARD_LABEL}>
+                Tipo documento propietario
+              </label>
+              <select
+                id="consulta-owner-doc-type"
+                value={ownerDocType}
+                onChange={(e) => {
+                  const next = e.target.value as ActorDocumentType;
+                  setOwnerDocType(next);
+                  setOwnerDocNumber((n) => sanitizeDocNumber(n, next));
+                  invalidatePreview();
+                }}
+                disabled={readOnly || ownerDocLocked}
+                className={`mt-1 ${WIZARD_SELECT} disabled:opacity-60`}
+              >
+                <option value="" disabled>
+                  Selecciona
+                </option>
+                {DOC_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="min-w-0 lg:col-span-4">
               <label htmlFor="consulta-owner-doc-number" className={WIZARD_LABEL}>
                 Número documento del propietario
               </label>
@@ -4464,7 +4442,7 @@ function ConsultaStep({
         {/* La tercera condición era `deferred && modalidad === 'traspaso'`, que no habilitaba
             ninguna nota: dentro solo hay dos y ambas tienen su propia condición. Abría un contenedor
             vacío con margen. */}
-        {(ownerDocLocked || (!hideOwnerDocType && ownerDocTypeSuggested)) && (
+        {(ownerDocLocked || ownerDocTypeSuggested) && (
           <div className="mt-3 space-y-1.5">
             {ownerDocLocked && (
               <p id="consulta-owner-doc-locked" className="text-xs leading-tight opacity-70">
@@ -4472,7 +4450,7 @@ function ConsultaStep({
                 NIT y no se puede editar durante el trámite.
               </p>
             )}
-            {!hideOwnerDocType && ownerDocTypeSuggested && (
+            {ownerDocTypeSuggested && (
               <p className="text-xs leading-tight opacity-70">
                 No se encontró el vehículo en RUNT. Si es maquinaria o remolque, verifica el tipo de
                 documento del propietario (p. ej. NIT) y vuelve a consultar.
