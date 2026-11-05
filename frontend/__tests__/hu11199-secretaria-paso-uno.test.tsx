@@ -260,7 +260,6 @@ describe('HU #11199 — la secretaría se elige en el primer paso', () => {
     expect(mocks.listTransitOffices).not.toHaveBeenCalled();
 
     await user.type(screen.getByLabelText('Placa del vehículo'), PLACA_VALIDA);
-    await user.selectOptions(screen.getByLabelText('Tipo documento propietario'), 'CC');
     await user.type(screen.getByLabelText('Número documento del propietario'), '1020304050');
     const boton = screen.getByRole('button', { name: 'Consultar RUNT' });
     expect(boton).toBeEnabled();
