@@ -54,6 +54,19 @@ public sealed class ManualReviewDetailHandlerTests
         result.Images.Should().OnlyContain(i => i.Available);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Detalle_expone_cartaDisponible_tal_como_la_resuelve_el_repositorio(bool disponible)
+    {
+        _repo.GetDetailAsync(Id, Arg.Any<CancellationToken>()).Returns(Fila() with { CartaDisponible = disponible });
+
+        var (result, _) = await new GetManualDetailHandler(_repo, _audit, new FixedTime(Now))
+            .HandleAsync(new GetManualDetailQuery(Id, User), Ct);
+
+        result!.CartaDisponible.Should().Be(disponible);
+    }
+
     [Fact]
     public async Task HU14310_AC2_Detalle_indica_que_foto_no_esta_verificada_y_su_motivo()
     {

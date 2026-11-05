@@ -262,6 +262,8 @@ public static class InfrastructureExtensions
         // HU #10458 — certificado de identidad en PDF real (QuestPDF). Reemplaza el mock text/plain
         // para que pase IsMergeableMime y se fusione en el Expediente Consolidado.
         services.AddSingleton<IIdentityCertificateGenerator, Documents.IdentityCertificatePdfGenerator>();
+        // HU #14301 — carta de identidad de FLIT (validación manual aprobada) en PDF con la marca FLIT.
+        services.AddSingleton<Flit.Tramites.Application.Identity.IIdentityLetterPdfGenerator, Documents.IdentityLetterPdfGenerator>();
         services.AddSingleton<IRuesCertificateGenerator, Documents.RuesCertificatePdfGenerator>();
         // HU #10926 (ADR-0033) — resolutor de escrituras vigentes por actor NIT para adjuntarlas al
         // consolidado. Scoped: depende de los readers de escrituras/directorio (DbContext) + storage.

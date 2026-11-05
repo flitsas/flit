@@ -157,7 +157,8 @@ internal sealed class ManualIdentityReviewReadRepository(FlitDbContext db) : IMa
                     || (v.Status == BiometricEstados.Rechazado && v.RejectionReasonCode != null)) ? v.ExpiresAt : null,
                 waitingSince,
                 // HU #14310 — null en capturas anteriores (y sin captura vigente): el detalle no muestra aviso.
-                current ? v.PhotoChecks : null);
+                current ? v.PhotoChecks : null,
+                v.CorrespondeCartaIdentidad && v.TieneCartaIdentidad);
         }, ct);
 
     /// <summary>

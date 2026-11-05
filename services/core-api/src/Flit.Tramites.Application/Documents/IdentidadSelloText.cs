@@ -33,11 +33,27 @@ public static class IdentidadSelloText
             : Encabezado(v);
     }
 
+    /// <summary>
+    /// Firma del sello. Kyverum: la serie <c>firmaSerie</c> del certificado (<c>CertificateHash</c>), sin cambios. HU #14302 —
+    /// validación MANUAL aprobada: solo la serie de la carta de identidad que FLIT emitió (<c>CertificateHash</c> es de Kyverum y
+    /// no se toca). Sin ninguno de los dos, «no disponible».
+    /// </summary>
+    private static string Firma(ProcedureInstanceBiometricValidation v)
+    {
+        if (!string.IsNullOrWhiteSpace(v.CertificateHash))
+            return v.CertificateHash!;
+
+        // Solo la serie: el hash completo vive en la carta y en CartaSha256 (el renderer trunca las líneas largas).
+        return v.TieneCartaIdentidad && !string.IsNullOrWhiteSpace(v.CartaSerie)
+            ? v.CartaSerie!
+            : "no disponible";
+    }
+
     private static string Encabezado(ProcedureInstanceBiometricValidation v)
     {
         var doc = $"{v.DocumentType} {v.DocumentNumber}".Trim();
         var uuid = string.IsNullOrWhiteSpace(v.KyverumVerificationId) ? v.Id.ToString("D") : v.KyverumVerificationId!;
-        var firma = string.IsNullOrWhiteSpace(v.CertificateHash) ? "no disponible" : v.CertificateHash!;
+        var firma = Firma(v);
         var aprob = v.ValidatedAt is { } va
             ? va.ToOffset(ColombiaTime.Offset).ToString(FechaDocumento.Formato, CultureInfo.InvariantCulture) : "-";
         return $"Validación biométrica {doc}\nUUID {uuid}\nFirma {firma}\nAprob {aprob}";

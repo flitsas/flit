@@ -12,6 +12,7 @@ import { formatEspera, manualOriginLabel } from '@/lib/identidad/manual-review-m
 import { etiquetaMotivoRechazoManual } from '@/lib/identidad/motivos-rechazo-manual';
 import { formatFechaHora } from '@/lib/format/date';
 import { MANUAL_AVISO, MANUAL_AVISO_BASE, MANUAL_BTN_SECUNDARIO } from './manual-field-styles';
+import { CertificadoIdentidadAccion } from './CertificadoIdentidadAccion';
 import { ManualImageGallery } from './ManualImageGallery';
 import { ManualReviewActions } from './ManualReviewActions';
 import { ManualStatusBadge } from './ManualStatusBadge';
@@ -190,6 +191,12 @@ function DetalleCuerpo({
                 <Clock className="h-4 w-4 shrink-0" aria-hidden />
                 <span>Se envió un enlace nuevo al cliente. Vence el {formatFechaHora(detail.linkExpiresAt)}</span>
               </p>
+            )}
+
+            {detail.status === 'aprobado' && (
+              <CertificadoIdentidadAccion
+                validation={{ id: detail.id, status: 'aprobado', provider: 'manual', cartaDisponible: detail.cartaDisponible }}
+              />
             )}
 
             <section aria-labelledby={`${id}-consent`} className="rounded-2xl border border-[#DFE5ED] p-4 dark:border-white/10">

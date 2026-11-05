@@ -70,7 +70,13 @@ public sealed record BiometricValidationDto(
     /// una validación MANUAL. Solo con status=rechazado y provider=manual; <c>null</c> en cualquier otro caso (Kyverum/mock
     /// rechazados siguen con <see cref="RejectionReason"/>).
     /// </summary>
-    string? RejectionReasonCode = null);
+    string? RejectionReasonCode = null,
+    /// <summary>
+    /// HU #14302 (Épica #14271) — <c>true</c> solo si la validación es MANUAL, está aprobada y su carta de identidad ya existe
+    /// (<c>CartaPath</c> presente). El detalle ofrece entonces descargarla por la misma ruta del certificado. Nunca expone la ruta,
+    /// la serie ni el hash.
+    /// </summary>
+    bool CartaDisponible = false);
 
 /// <summary>Resultado de iniciar: incluye el token CRUDO (solo aquí) para construir el magic-link.</summary>
 public sealed record IniciarBiometriaResult(
@@ -317,7 +323,8 @@ public sealed class IniciarBiometriaHandler(
             RejectionReasonCode: v.Status == BiometricEstados.Rechazado
                 && string.Equals(v.Provider, BiometricProviders.Manual, StringComparison.Ordinal)
                     ? v.RejectionReasonCode
-                    : null);
+                    : null,
+            CartaDisponible: v.CorrespondeCartaIdentidad && v.TieneCartaIdentidad);
 
     /// <summary>
     /// Motivo de rechazo SANITIZADO para mostrar al gestor (HU #10234 AC4). Solo se expone en estado
