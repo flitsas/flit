@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertCircle } from 'lucide-react';
+import { useToast } from '@/components/admin/Toast';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { WIZARD_CTA_GRADIENT } from '@/components/operacion/wizard-field-styles';
 import { mensajeErrorFlujoManual, motivoFalloCopiaEnlace } from '@/lib/identity/manual-flow';
@@ -29,13 +30,12 @@ interface Pendiente {
 }
 
 export function useCopiarEnlaceManual(onRegenerado?: () => void) {
-  const [aviso, setAviso] = useState('');
+  const { show } = useToast();
   const [pendiente, setPendiente] = useState<Pendiente | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const copiar = useCallback(async (id: string) => {
-    setAviso('');
     let url: string;
     try {
       ({ url } = await tramitesClient.copyManualLink(id));
@@ -45,17 +45,17 @@ export function useCopiarEnlaceManual(onRegenerado?: () => void) {
         setError(null);
         setPendiente({ id, mensaje });
       } else {
-        setAviso(mensaje);
+        show(mensaje, 'error');
       }
       return;
     }
     try {
       await navigator.clipboard.writeText(url);
-      setAviso(MSG_COPIADO);
+      show(MSG_COPIADO);
     } catch {
-      setAviso(MSG_PORTAPAPELES);
+      show(MSG_PORTAPAPELES, 'error');
     }
-  }, []);
+  }, [show]);
 
   const cerrar = useCallback(() => {
     setPendiente(null);
@@ -69,25 +69,18 @@ export function useCopiarEnlaceManual(onRegenerado?: () => void) {
     try {
       await tramitesClient.regenerateManualLink(pendiente.id);
       setPendiente(null);
-      setAviso('Enlace regenerado y enviado por correo.');
+      show('Enlace regenerado y enviado por correo.');
       onRegenerado?.();
     } catch (err) {
       setError(mensajeErrorFlujoManual(err, 'regenerar'));
     } finally {
       setBusy(false);
     }
-  }, [pendiente, busy, onRegenerado]);
+  }, [pendiente, busy, onRegenerado, show]);
 
-  const region = (
-    <>
-      <p role="status" aria-live="polite" className="min-h-4 text-xs font-semibold text-flit-primary dark:text-white/80">
-        {aviso}
-      </p>
-      {pendiente && (
-        <RegenerarDialog mensaje={pendiente.mensaje} busy={busy} error={error} onConfirm={() => void regenerar()} onClose={cerrar} />
-      )}
-    </>
-  );
+  const region = pendiente ? (
+    <RegenerarDialog mensaje={pendiente.mensaje} busy={busy} error={error} onConfirm={() => void regenerar()} onClose={cerrar} />
+  ) : null;
 
   return { copiar, region };
 }
