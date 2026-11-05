@@ -14193,6 +14193,15 @@ components:
       description: Identificador del tenant (compañía) dueño del trámite.
 
   schemas:
+    # ── Trámites · Canal del trámite (HU #14317, Feature #14315, Épica #14296) ────
+    TramiteCanal:
+      type: string
+      description: >-
+        Canal por el que entró el trámite. Nombres visibles: tramites = Trámites, pn_web = Persona Natural Web,
+        pn_punto = Persona Natural OT, integracion = Integración, aplicacion = Aplicación (reservado, hoy no se
+        asigna). Ningún endpoint lo usa todavía.
+      enum: [tramites, pn_web, pn_punto, integracion, aplicacion]
+
     # ── Admin · Integraciones externas por compañía (HU #14067, Épica #14021, ADR-0075) ────
     ExternalIntegration:
       type: object
