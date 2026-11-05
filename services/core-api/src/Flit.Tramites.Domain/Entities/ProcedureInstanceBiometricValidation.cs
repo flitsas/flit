@@ -227,6 +227,63 @@ public sealed class ProcedureInstanceBiometricValidation
     /// <summary>Código (lista cerrada, constante en código) del motivo de rechazo de la revisión manual.</summary>
     public string? RejectionReasonCode { get; set; }
 
+    /// <summary>
+    /// HU #14301 (Feature #14300, Épica #14271) — serie del código de integridad de la carta de identidad que FLIT emite al
+    /// aprobar una validación MANUAL (derivada de forma estable de la evidencia). NULL en toda validación de Kyverum: no se
+    /// confunde con <see cref="CertificateHash"/> (la serie <c>firmaSerie</c> de Kyverum que lee el sello del FUR).
+    /// </summary>
+    public string? CartaSerie { get; set; }
+
+    /// <summary>Hash (SHA-256 hex) de la evidencia sellada en la carta: el mismo que se imprime en «Código de integridad».</summary>
+    public string? CartaSha256 { get; set; }
+
+    /// <summary>SHA-256 hex de los bytes del PDF guardado (verifica que el archivo en custodia no cambió).</summary>
+    public string? CartaPdfSha256 { get; set; }
+
+    /// <summary>Ruta opaca del PDF en el storage (jamás una URL ni dato personal).</summary>
+    public string? CartaPath { get; set; }
+
+    /// <summary>Instante en que se generó la carta (el «Sellado» del PDF).</summary>
+    public DateTimeOffset? CartaGeneratedAt { get; set; }
+
+    /// <summary>¿Ya tiene carta? Una validación se genera UNA sola vez (idempotente).</summary>
+    public bool TieneCartaIdentidad => !string.IsNullOrWhiteSpace(CartaPath);
+
+    /// <summary>
+    /// HU #14301 — ¿le corresponde la carta de FLIT? Solo la validación MANUAL ya aprobada por una persona de FLIT
+    /// (<see cref="BiometricApprovalOrigins.Manual"/>); la aprobada por Kyverum trae su propio certificado.
+    /// </summary>
+    public bool CorrespondeCartaIdentidad =>
+        string.Equals(Provider, BiometricProviders.Manual, StringComparison.Ordinal)
+        && string.Equals(Status, BiometricEstados.Aprobado, StringComparison.Ordinal)
+        && string.Equals(ApprovalOrigin, BiometricApprovalOrigins.Manual, StringComparison.Ordinal);
+
+    /// <summary>
+    /// HU #14301 — registra la carta generada. Idempotente: si ya existe NO la pisa y devuelve <c>false</c> (la serie, el hash y la
+    /// ruta de la primera generación no cambian). Solo aplica a <see cref="CorrespondeCartaIdentidad"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">La validación no es una aprobación manual.</exception>
+    /// <exception cref="ArgumentException">Serie/ruta vacías o hashes que no son SHA-256 (64 hex).</exception>
+    public bool RegistrarCartaIdentidad(string serie, string evidenceSha256, string pdfSha256, string path, DateTimeOffset now)
+    {
+        if (!CorrespondeCartaIdentidad)
+            throw new InvalidOperationException("Solo una validación manual aprobada por FLIT tiene carta de identidad.");
+        if (TieneCartaIdentidad)
+            return false;
+        if (string.IsNullOrWhiteSpace(serie) || string.IsNullOrWhiteSpace(path))
+            throw new ArgumentException("La carta exige serie y ruta.");
+        if (evidenceSha256?.Length != 64 || pdfSha256?.Length != 64)
+            throw new ArgumentException("Los hashes de la carta deben ser SHA-256 (64 hex).");
+
+        CartaSerie = serie;
+        CartaSha256 = evidenceSha256;
+        CartaPdfSha256 = pdfSha256;
+        CartaPath = path;
+        CartaGeneratedAt = now;
+        UpdatedAt = now;
+        return true;
+    }
+
     public ProcedureInstance? ProcedureInstance { get; set; }
 
     /// <summary>

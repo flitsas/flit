@@ -73,6 +73,14 @@ internal sealed class ProcedureInstanceBiometricValidationConfiguration
         builder.Property(x => x.ReviewedBy).HasColumnName("reviewed_by");
         builder.Property(x => x.ReviewedAt).HasColumnName("reviewed_at");
         builder.Property(x => x.RejectionReasonCode).HasColumnName("rejection_reason_code");
+
+        // HU #14301 — carta de identidad que FLIT emite al aprobar una validación manual (DDL 169). Propias de FLIT: no usan
+        // certificate_hash (la serie de Kyverum que lee el sello del FUR).
+        builder.Property(x => x.CartaSerie).HasColumnName("letter_series").HasMaxLength(60);
+        builder.Property(x => x.CartaSha256).HasColumnName("letter_sha256").HasMaxLength(64);
+        builder.Property(x => x.CartaPdfSha256).HasColumnName("letter_pdf_sha256").HasMaxLength(64);
+        builder.Property(x => x.CartaPath).HasColumnName("letter_path");
+        builder.Property(x => x.CartaGeneratedAt).HasColumnName("letter_generated_at");
         builder.HasIndex(x => new { x.TenantId, x.Status, x.ManualActivatedAt })
             .HasDatabaseName("ix_biometric_validations_manual_tab")
             .HasFilter("provider = 'manual'");
