@@ -61,6 +61,7 @@ public sealed class DetailedReportCanalEndpointsTests : IClassFixture<DetailedRe
         _factory.Repo.ClearReceivedCalls();
         _factory.StdRepo.ClearReceivedCalls();
         _factory.Writer.ClearReceivedCalls();
+        _factory.Writer.WriteAsync(default!, default).ReturnsForAnyArgs(true);
     }
 
     public static TheoryData<string, string> RutasConCanal => new()
@@ -272,6 +273,25 @@ public sealed class DetailedReportCanalEndpointsTests : IClassFixture<DetailedRe
                 && e.Result == NetworkAccessVocabulary.Results.Ok && e.ReachedTenantIds.Count == 3
                 && e.FiltersJson != null && e.FiltersJson.Contains("\"allCompanies\":true")),
             Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("/export")]
+    public async Task H14320_AC5_sin_auditoria_no_salen_datos_de_todas_las_companias(string ruta)
+    {
+        _factory.Writer.WriteAsync(default!, default).ReturnsForAnyArgs(false);
+        try
+        {
+            var response = await ClientFor(Admin, "SuperAdmin").GetAsync($"{Procedures}{ruta}?{Range}&allCompanies=true", TestContext.Current.CancellationToken);
+
+            response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+            (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().NotContain("legalName").And.NotContain("personDocument");
+        }
+        finally
+        {
+            _factory.Writer.WriteAsync(default!, default).ReturnsForAnyArgs(true);
+        }
     }
 
     [Fact]
