@@ -7839,6 +7839,15 @@ paths:
                 anverso: { type: string, format: binary, description: "Anverso del documento (JPEG, PNG o WebP; máx. 5 MiB)." }
                 reverso: { type: string, format: binary, description: "Reverso del documento (JPEG, PNG o WebP; máx. 5 MiB)." }
                 firma: { type: string, format: binary, description: "Firma trazada (PNG; máx. 2 MiB)." }
+                validacionFotos:
+                  type: string
+                  maxLength: 2048
+                  description: >
+                    HU #14310. Opcional. JSON con el resultado de la validación en el dispositivo de cada foto:
+                    `{"rostro":{"estado":"verificada","motivo":null},"anverso":{"estado":"no_verificada","motivo":"lado_incorrecto"},"reverso":{...}}`.
+                    `estado` ∈ verificada | no_verificada; `motivo` (solo no verificada) ∈ sin_rostro, varios_rostros, sin_documento,
+                    lado_incorrecto, sin_soporte, sin_resultado. Es INFORMATIVO (no es un control de seguridad) y nunca rechaza el envío:
+                    campo ausente, demasiado largo, JSON inválido o valor desconocido dejan esa foto «no_verificada / sin_resultado».
       responses:
         "200":
           description: Captura recibida; la validación queda pendiente de revisión.
@@ -19017,6 +19026,27 @@ components:
             Código del último rechazo. Tras rechazar (HU #13299) el estado es `rechazado` con este campo no nulo hasta que el
             cliente envíe la captura nueva (que lo limpia).
         linkExpiresAt: { type: string, format: date-time, nullable: true, description: Vencimiento del enlace de captura; solo cuando se espera captura (manual_activo o rechazado con motivo). }
+        validacionFotos:
+          type: object
+          nullable: true
+          description: >
+            HU #14310. Resultado informativo de la validación de cada foto en el dispositivo de la persona (no es un control de
+            seguridad; no bloquea aprobar ni rechazar). `null` en capturas anteriores a este cambio: no se muestra aviso.
+          required: [rostro, anverso, reverso]
+          properties:
+            rostro: { $ref: "#/components/schemas/ManualPhotoCheck" }
+            anverso: { $ref: "#/components/schemas/ManualPhotoCheck" }
+            reverso: { $ref: "#/components/schemas/ManualPhotoCheck" }
+    ManualPhotoCheck:
+      type: object
+      required: [estado]
+      properties:
+        estado: { type: string, enum: [verificada, no_verificada] }
+        motivo:
+          type: string
+          nullable: true
+          enum: [sin_rostro, varios_rostros, sin_documento, lado_incorrecto, sin_soporte, sin_resultado]
+          description: Solo cuando `estado` es no_verificada.
     ManualCaptureView:
       type: object
       required: [fullName, documentType, documentNumber, expiresAt, consentTextVersion]

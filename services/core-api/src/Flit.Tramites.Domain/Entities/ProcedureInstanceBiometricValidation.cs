@@ -225,6 +225,29 @@ public sealed class ProcedureInstanceBiometricValidation
     /// <summary>Código (lista cerrada, constante en código) del motivo de rechazo de la revisión manual.</summary>
     public string? RejectionReasonCode { get; set; }
 
+    // HU #14310 — resultado informativo (no es un control de seguridad) de la validación de cada foto en el dispositivo.
+    // Todas NULL en capturas anteriores. Los valores salen de ManualPhotoCheckStates / ManualPhotoCheckReasons.
+    public string? FaceCheckStatus { get; set; }
+
+    public string? FaceCheckReason { get; set; }
+
+    public string? IdFrontCheckStatus { get; set; }
+
+    public string? IdFrontCheckReason { get; set; }
+
+    public string? IdBackCheckStatus { get; set; }
+
+    public string? IdBackCheckReason { get; set; }
+
+    /// <summary>HU #14310 — resultado de las tres fotos, o <c>null</c> si la captura es anterior a este cambio.</summary>
+    public ManualPhotoChecks? PhotoChecks =>
+        FaceCheckStatus is null && IdFrontCheckStatus is null && IdBackCheckStatus is null
+            ? null
+            : new ManualPhotoChecks(
+                ManualPhotoCheck.FromColumns(FaceCheckStatus, FaceCheckReason) ?? ManualPhotoCheck.Unknown,
+                ManualPhotoCheck.FromColumns(IdFrontCheckStatus, IdFrontCheckReason) ?? ManualPhotoCheck.Unknown,
+                ManualPhotoCheck.FromColumns(IdBackCheckStatus, IdBackCheckReason) ?? ManualPhotoCheck.Unknown);
+
     public ProcedureInstance? ProcedureInstance { get; set; }
 
     /// <summary>
@@ -385,7 +408,8 @@ public sealed class ProcedureInstanceBiometricValidation
     /// <exception cref="ManualCaptureStateException">Sesión no vigente o sin consentimiento del ciclo actual.</exception>
     /// <exception cref="ArgumentException">Falta alguna ruta o el hash de la firma no es SHA-256.</exception>
     public void RegistrarCapturaManual(
-        string facePath, string idFrontPath, string idBackPath, string signaturePath, string signatureSha256, DateTimeOffset now)
+        string facePath, string idFrontPath, string idBackPath, string signaturePath, string signatureSha256, DateTimeOffset now,
+        ManualPhotoChecks? photoChecks = null)
     {
         AsegurarSesionManualVigente(now);
         if (!TieneConsentimientoManualVigente)
@@ -401,6 +425,14 @@ public sealed class ProcedureInstanceBiometricValidation
         IdBackPhotoPath = idBackPath;
         SignatureImagePath = signaturePath;
         SignatureImageSha256 = signatureSha256;
+        // HU #14310 — la captura nueva SOBRESCRIBE el resultado anterior; sin dato, las tres quedan «sin resultado».
+        var checks = photoChecks ?? ManualPhotoChecks.AllUnknown;
+        FaceCheckStatus = checks.Face.State;
+        FaceCheckReason = checks.Face.Reason;
+        IdFrontCheckStatus = checks.IdFront.State;
+        IdFrontCheckReason = checks.IdFront.Reason;
+        IdBackCheckStatus = checks.IdBack.State;
+        IdBackCheckReason = checks.IdBack.Reason;
         Status = BiometricEstados.PendienteRevisionManual;
         // HU #14305 — el enlace se consumió: el token cifrado se borra (el hash queda para que el público lo reconozca).
         ManualCaptureTokenEncrypted = null;
