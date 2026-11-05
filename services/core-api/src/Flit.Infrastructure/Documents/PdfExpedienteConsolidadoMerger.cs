@@ -72,9 +72,11 @@ public sealed partial class PdfExpedienteConsolidadoMerger : IExpedienteConsolid
         using var output = new PdfDocument();
         for (var index = 0; index < pdfParts.Count; index++)
         {
-            // HU #14240 — nunca pasar a Import un PDF que PdfSharp no puede leer (Token '18', etc.).
-            var safe = PdfModifyNormalizer.EnsureImportable(pdfParts[index], documentName: null, out var substituted);
-            if (substituted)
+            // HU #14240 / #14312 — nunca pasar a Import un PDF que PdfSharp no puede leer (Token '18', etc.).
+            var safe = PdfModifyNormalizer.EnsureImportable(pdfParts[index], documentName: null, out var recovery);
+            if (recovery == PdfImportRecovery.Converted)
+                LogMergeConvertedUnimportablePart(_logger, index);
+            else if (recovery == PdfImportRecovery.Placeholder)
                 LogMergeSubstitutedUnimportablePart(_logger, index);
 
             using var inputStream = new MemoryStream(safe);
@@ -106,8 +108,10 @@ public sealed partial class PdfExpedienteConsolidadoMerger : IExpedienteConsolid
         {
             if (string.IsNullOrWhiteSpace(part.DocumentName))
             {
-                var safe = PdfModifyNormalizer.EnsureImportable(part.Pdf, documentName: null, out var substituted);
-                if (substituted)
+                var safe = PdfModifyNormalizer.EnsureImportable(part.Pdf, documentName: null, out var recovery);
+                if (recovery == PdfImportRecovery.Converted)
+                    LogComposeConvertedUnnamedPart(_logger);
+                else if (recovery == PdfImportRecovery.Placeholder)
                     LogComposeSubstitutedUnnamedPart(_logger);
                 parts.Add(safe);
             }
@@ -175,8 +179,18 @@ public sealed partial class PdfExpedienteConsolidadoMerger : IExpedienteConsolid
 
     [LoggerMessage(
         Level = LogLevel.Warning,
+        Message = "HU14312: parte {PartIndex} del Merge no abre en Import; convertida vía PDFium→QuestPDF.")]
+    private static partial void LogMergeConvertedUnimportablePart(ILogger logger, int partIndex);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
         Message = "HU14240: parte {PartIndex} del Merge no abre en Import; sustituida por página de aviso.")]
     private static partial void LogMergeSubstitutedUnimportablePart(ILogger logger, int partIndex);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "HU14312: parte sin DocumentName no abre en Import; convertida vía PDFium→QuestPDF.")]
+    private static partial void LogComposeConvertedUnnamedPart(ILogger logger);
 
     [LoggerMessage(
         Level = LogLevel.Warning,

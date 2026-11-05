@@ -68,6 +68,8 @@ COPY --from=build /app/api ./api
 COPY --from=build /app/gateway ./gateway
 COPY --from=build /app/migrador ./migrador
 COPY --from=build /app/migracion-api ./migracion-api
+# HU #14312 / ADR-0076 — PDFtoImage trae libpdfium + Skia nativos; en Alpine/musl si no cargan,
+# EnsureImportable degrada al placeholder (#14240). Validar en smoke de consolidado hostil.
 # Puerto interno por defecto (Flit.Api). El gateway lo sobreescribe via ASPNETCORE_URLS.
 EXPOSE 8081
 ENV ASPNETCORE_URLS=http://+:8081
