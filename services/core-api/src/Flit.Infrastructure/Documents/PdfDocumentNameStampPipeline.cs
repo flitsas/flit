@@ -60,10 +60,12 @@ internal sealed partial class PdfDocumentNameStampPipeline
         }
 
         LogStampFallbackWithoutFooter(_logger, documentName, firstError);
-        // HU #14240 — nunca devolver bytes que Merge no pueda Import (Token '18', etc.).
+        // HU #14240 / #14312 — nunca devolver bytes que Merge no pueda Import (Token '18', etc.).
         var candidate = n2 ?? n1 ?? pdf;
-        var safe = PdfModifyNormalizer.EnsureImportable(candidate, documentName, out var substituted);
-        if (substituted)
+        var safe = PdfModifyNormalizer.EnsureImportable(candidate, documentName, out var recovery);
+        if (recovery == PdfImportRecovery.Converted)
+            LogStampFallbackConverted(_logger, documentName, firstError);
+        else if (recovery == PdfImportRecovery.Placeholder)
             LogStampFallbackPlaceholder(_logger, documentName, firstError);
         return safe;
     }
@@ -114,6 +116,11 @@ internal sealed partial class PdfDocumentNameStampPipeline
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "HU14240: PDF ilegible para Import tras N1/N2; se sustituye por página de aviso. Documento={DocumentName}. Causa={Error}")]
+        Message = "HU14312: PDF ilegible para Import tras N1/N2; convertido vía PDFium→QuestPDF. Documento={DocumentName}. Causa={Error}")]
+    private static partial void LogStampFallbackConverted(ILogger logger, string documentName, string? error);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "HU14240: PDF ilegible para Import tras N1/N2/PDFium; se sustituye por página de aviso. Documento={DocumentName}. Causa={Error}")]
     private static partial void LogStampFallbackPlaceholder(ILogger logger, string documentName, string? error);
 }
