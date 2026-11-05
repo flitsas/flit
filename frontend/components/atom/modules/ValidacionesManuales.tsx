@@ -166,7 +166,6 @@ export function ValidacionesManuales({
       render: (r) => (
         <ActionsMenu
           ariaLabel={`Acciones de ${r.fullName}`}
-          className="bg-white dark:bg-[#0B0F14]"
           items={[
             {
               key: 'ver-detalle',
