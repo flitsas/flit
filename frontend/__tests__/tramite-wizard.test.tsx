@@ -1156,17 +1156,12 @@ describe('TramiteWizard — consulta persiste antes de preflight', () => {
 
   it('traspaso persiste placa + documento del propietario antes de preflight', async () => {
     mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD);
-    // Proveedor de placa = Verifik: SÍ pide y envía el tipo de documento del propietario (HU #10478).
-    mocks.getConsultationConfig.mockResolvedValue({
-      vehicleVin: 'kyverum_runt',
-      vehiclePlate: 'verifik',
-      conductor: 'kyverum_runt_conductor',
-    });
     const user = userEvent.setup();
     renderWizard();
     await screen.findByRole('button', { name: /^Paso 1: Consulta Vehículo/ });
 
     await user.type(screen.getByLabelText(/Placa del vehículo/), 'ABC123');
+    await user.selectOptions(screen.getByLabelText('Tipo documento propietario'), 'CC');
     await user.type(
       screen.getByLabelText(/Número documento del propietario/),
       '1020304050',
@@ -1766,9 +1761,9 @@ describe('TramiteWizard — datos comerciales dentro de Requisitos', () => {
   });
 });
 
-// HU #10478 — el paso de consulta de traspaso adapta el formulario al proveedor del tenant: con
-// Kyverum RUNT no pide el tipo de documento del propietario (el RUNT lo resuelve); con Verifik sí.
-describe('TramiteWizard — tipo de documento del propietario según proveedor (HU #10478)', () => {
+// El tipo de documento del propietario se pide siempre, sea cual sea el proveedor del tenant: otras
+// consultas del aplicativo lo necesitan aunque Kyverum no lo exija (reemplaza el ocultamiento de la HU #10478).
+describe('TramiteWizard — tipo de documento del propietario obligatorio', () => {
   beforeEach(() => {
     mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD);
     mocks.getInstance.mockResolvedValue({ id: 'inst-tr', status: 'borrador', fieldValues: [] });
@@ -1783,34 +1778,62 @@ describe('TramiteWizard — tipo de documento del propietario según proveedor (
     await screen.findByLabelText('Placa del vehículo');
   }
 
-  it('con Kyverum RUNT (default) NO pide el tipo, pero sí placa y número', async () => {
-    await abrirPasoConsulta();
-
-    expect(screen.getByLabelText('Placa del vehículo')).toBeInTheDocument();
-    expect(screen.getByLabelText('Número documento del propietario')).toBeInTheDocument();
-    await waitFor(() =>
-      expect(screen.queryByLabelText('Tipo documento propietario')).not.toBeInTheDocument(),
-    );
-  });
-
-  it('con Verifik SÍ pide el tipo de documento del propietario', async () => {
+  it.each([
+    ['Kyverum', 'kyverum_runt'],
+    ['Verifik', 'verifik'],
+  ])('con %s pide placa, tipo y número, y el tipo arranca sin valor', async (_nombre, vehiclePlate) => {
     mocks.getConsultationConfig.mockResolvedValue({
       vehicleVin: 'kyverum_runt',
-      vehiclePlate: 'verifik',
+      vehiclePlate,
       conductor: 'kyverum_runt_conductor',
     });
 
     await abrirPasoConsulta();
 
-    expect(
-      await screen.findByLabelText('Tipo documento propietario'),
-    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Placa del vehículo')).toBeInTheDocument();
+    expect(screen.getByLabelText('Número documento del propietario')).toBeInTheDocument();
+    expect(screen.getByLabelText('Tipo documento propietario')).toHaveValue('');
   });
 
-  // Regresión: aunque el tipo esté OCULTO (Kyverum), el payload SIGUE enviando owner_document_type
-  // (default 'CC') — el fallback a Verifik lo exige; omitirlo devolvía "requiere documento" (unknown)
-  // y enmascaraba el fallo como pre-vuelo verde.
-  it('con Kyverum el payload igual incluye owner_document_type (para el fallback a Verifik)', async () => {
+  it('si no se pudo leer la configuración de la compañía, igual lo pide', async () => {
+    mocks.getConsultationConfig.mockRejectedValue(new Error('500'));
+
+    await abrirPasoConsulta();
+
+    expect(screen.getByLabelText('Tipo documento propietario')).toHaveValue('');
+  });
+
+  it('sin tipo no se puede consultar, aunque estén la placa y el número', async () => {
+    const user = userEvent.setup();
+    await abrirPasoConsulta();
+
+    await user.type(screen.getByLabelText(/Placa del vehículo/), 'PWL160');
+    await user.type(screen.getByLabelText(/Número documento del propietario/), '890903938');
+
+    expect(screen.getByRole('button', { name: /Consultar RUNT/ })).toBeDisabled();
+
+    await user.selectOptions(screen.getByLabelText('Tipo documento propietario'), 'NIT');
+
+    expect(screen.getByRole('button', { name: /Consultar RUNT/ })).toBeEnabled();
+  });
+
+  it('un borrador carga el tipo guardado, sin pedirlo de nuevo', async () => {
+    mocks.getInstance.mockResolvedValue({
+      id: 'inst-tr',
+      status: 'borrador',
+      fieldValues: [
+        { fieldKey: 'owner_document_type', valueText: 'NIT', valueJson: null },
+        { fieldKey: 'owner_document_number', valueText: '890903938', valueJson: null },
+      ],
+    });
+
+    await abrirPasoConsulta();
+
+    await waitFor(() => expect(screen.getByLabelText('Tipo documento propietario')).toHaveValue('NIT'));
+  });
+
+  // Regresión del hallazgo de QA: un NIT no puede viajar como cédula a las consultas.
+  it('el tipo elegido es el que viaja en la consulta (NIT no se envía como CC)', async () => {
     const user = userEvent.setup();
     render(<TramiteWizard existingInstanceId="inst-tr" onExit={() => {}} />);
     // Instancia existente: reanuda en la frontera, así que hay que abrir el paso de consulta.
@@ -1818,13 +1841,14 @@ describe('TramiteWizard — tipo de documento del propietario según proveedor (
     await screen.findByLabelText('Placa del vehículo');
 
     await user.type(screen.getByLabelText(/Placa del vehículo/), 'PWL160');
+    await user.selectOptions(screen.getByLabelText('Tipo documento propietario'), 'NIT');
     await user.type(screen.getByLabelText(/Número documento del propietario/), '890903938');
     await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
 
     await waitFor(() =>
       expect(mocks.patchFieldValues).toHaveBeenCalledWith('inst-tr', [
         { formFieldId: null, fieldKey: 'plate', valueText: 'PWL160', valueJson: null },
-        { formFieldId: null, fieldKey: 'owner_document_type', valueText: 'CC', valueJson: null },
+        { formFieldId: null, fieldKey: 'owner_document_type', valueText: 'NIT', valueJson: null },
         {
           formFieldId: null,
           fieldKey: 'owner_document_number',
