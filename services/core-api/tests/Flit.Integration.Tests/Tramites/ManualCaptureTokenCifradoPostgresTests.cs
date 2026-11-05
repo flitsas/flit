@@ -42,7 +42,7 @@ public sealed class ManualCaptureTokenCifradoPostgresTests(PostgresDatabaseFixtu
                 Provider = BiometricProviders.Manual,
                 Status = BiometricEstados.ManualActivo,
                 TokenHash = new string('a', 64),
-                ManualCaptureTokenEncrypted = "CfDJ8-cifrado-de-prueba",
+                ManualCaptureTokenEncrypted = new string('c', 23),
                 ExpiresAt = now.AddHours(20),
                 ManualActivatedAt = now.AddMinutes(-30),
                 ConsentAt = now.AddMinutes(-10),

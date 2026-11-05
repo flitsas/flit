@@ -17,7 +17,7 @@ namespace Flit.Infrastructure.Tests.Notifications.Identity;
 /// </summary>
 public sealed class ManualCaptureTokenProtectionTests
 {
-    private const string Token = "token-de-captura-manual-abc123";
+    private static readonly string Token = new('t', 30);
 
     private static DataProtectionManualCaptureTokenProtector Protector(IDataProtectionProvider? provider = null) =>
         new(provider ?? new EphemeralDataProtectionProvider());
