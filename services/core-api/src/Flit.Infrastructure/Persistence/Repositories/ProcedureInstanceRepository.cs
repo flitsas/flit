@@ -1887,6 +1887,13 @@ internal sealed partial class ProcedureInstanceRepository(
                 .SetProperty(x => x.ManualCaptureTokenEncrypted, validation.ManualCaptureTokenEncrypted)
                 // HU #13299 — la captura nueva limpia el motivo y la revisión del rechazo previo (RegistrarCapturaManual).
                 .SetProperty(x => x.RejectionReasonCode, validation.RejectionReasonCode)
+                // HU #14310 — resultado de la validación de fotos; sobrescribe el de la captura anterior.
+                .SetProperty(x => x.FaceCheckStatus, validation.FaceCheckStatus)
+                .SetProperty(x => x.FaceCheckReason, validation.FaceCheckReason)
+                .SetProperty(x => x.IdFrontCheckStatus, validation.IdFrontCheckStatus)
+                .SetProperty(x => x.IdFrontCheckReason, validation.IdFrontCheckReason)
+                .SetProperty(x => x.IdBackCheckStatus, validation.IdBackCheckStatus)
+                .SetProperty(x => x.IdBackCheckReason, validation.IdBackCheckReason)
                 .SetProperty(x => x.ReviewedBy, validation.ReviewedBy)
                 .SetProperty(x => x.ReviewedAt, validation.ReviewedAt)
                 .SetProperty(x => x.UpdatedAt, updatedAt), ct);

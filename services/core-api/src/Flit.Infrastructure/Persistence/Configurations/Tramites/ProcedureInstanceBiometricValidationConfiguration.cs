@@ -75,6 +75,14 @@ internal sealed class ProcedureInstanceBiometricValidationConfiguration
         builder.Property(x => x.ReviewedBy).HasColumnName("reviewed_by");
         builder.Property(x => x.ReviewedAt).HasColumnName("reviewed_at");
         builder.Property(x => x.RejectionReasonCode).HasColumnName("rejection_reason_code");
+        // HU #14310 (DDL 171) — resultado de la validación de cada foto en el dispositivo; NULL en capturas anteriores.
+        builder.Property(x => x.FaceCheckStatus).HasColumnName("face_check_status").HasMaxLength(20);
+        builder.Property(x => x.FaceCheckReason).HasColumnName("face_check_reason").HasMaxLength(30);
+        builder.Property(x => x.IdFrontCheckStatus).HasColumnName("id_front_check_status").HasMaxLength(20);
+        builder.Property(x => x.IdFrontCheckReason).HasColumnName("id_front_check_reason").HasMaxLength(30);
+        builder.Property(x => x.IdBackCheckStatus).HasColumnName("id_back_check_status").HasMaxLength(20);
+        builder.Property(x => x.IdBackCheckReason).HasColumnName("id_back_check_reason").HasMaxLength(30);
+        builder.Ignore(x => x.PhotoChecks);
         builder.HasIndex(x => new { x.TenantId, x.Status, x.ManualActivatedAt })
             .HasDatabaseName("ix_biometric_validations_manual_tab")
             .HasFilter("provider = 'manual'");
