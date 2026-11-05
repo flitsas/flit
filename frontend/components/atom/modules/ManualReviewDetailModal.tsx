@@ -220,7 +220,7 @@ function DetalleCuerpo({
                   </div>
                 </div>
               ) : (
-                <ManualImageGallery client={client} id={detail.id} images={detail.images} onViewerChange={onViewerChange} />
+                <ManualImageGallery client={client} id={detail.id} images={detail.images} onViewerChange={onViewerChange} validacionFotos={detail.validacionFotos} />
               )}
             </section>
           </>

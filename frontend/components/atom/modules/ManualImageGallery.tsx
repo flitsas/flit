@@ -6,7 +6,9 @@ import { Modal } from '@flit/ui/Modal';
 import { useWizardFocusTrap } from '@/components/operacion/use-wizard-focus-trap';
 import type { ManualReviewClient } from '@/lib/api/manual-review-client';
 import { MANUAL_BTN_SECUNDARIO, MANUAL_FOCO } from './manual-field-styles';
-import { MANUAL_IMAGE_KINDS, type ManualImageKind } from '@/lib/api/types/manual-review';
+import { MANUAL_IMAGE_KINDS, type ManualImageKind, type ManualPhotoChecks } from '@/lib/api/types/manual-review';
+import { etiquetaMotivoFoto } from '@/lib/identidad/manual-review-meta';
+import { MANUAL_AVISO } from './manual-field-styles';
 
 /**
  * Las 4 capturas de una validación manual (HU-C6): rostro, anverso, reverso y firma, con visor
@@ -99,10 +101,13 @@ export function ManualImageGallery({
   id,
   images,
   onViewerChange,
+  validacionFotos,
 }: {
   client: ManualReviewClient;
   id: string;
   images: { kind: ManualImageKind; available: boolean }[];
+  /** Resultado de la validación en el dispositivo (HU #14311). `null` o ausente: captura anterior, sin aviso. */
+  validacionFotos?: ManualPhotoChecks | null;
   /** Avisa si el visor está abierto, para que el modal padre no se cierre con el mismo Escape. */
   onViewerChange?: (open: boolean) => void;
 }) {
@@ -157,6 +162,14 @@ export function ManualImageGallery({
                   </div>
                 )}
               </div>
+              {kind !== 'firma' && validacionFotos?.[kind]?.estado === 'no_verificada' && (
+                <p className={`flex items-start gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs ${MANUAL_AVISO.warning}`}>
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <span>
+                    <strong className="font-semibold">No verificada.</strong> {etiquetaMotivoFoto(validacionFotos[kind].motivo)}
+                  </span>
+                </p>
+              )}
             </li>
           );
         })}
