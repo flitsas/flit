@@ -858,7 +858,7 @@ export function TramiteDetalleModal({
               ) : (
                 <>
                   <div className="lg:col-span-4">
-                    <DetalleVehiculoSidebar item={item} />
+                    <DetalleVehiculoSidebar item={item} canal={detail} />
                   </div>
 
                   <div className="flex min-w-0 flex-col gap-4 lg:col-span-8">
