@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Eye, Info, Link2, Search } from 'lucide-react';
 import { DataTable, type DataTableColumn } from '@flit/ui/DataTable';
-import { RowActions } from '@/components/atom/RowActions';
+import { ActionsMenu } from '@/components/atom/ActionsMenu';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
 import { usePaginacion } from '@/components/atom/usePaginacion';
 import { WIZARD_INPUT, WIZARD_LABEL, WIZARD_SELECT } from '@/components/operacion/wizard-field-styles';
@@ -29,7 +29,7 @@ import { puedeCopiarEnlaceManual } from '@/lib/identity/manual-flow';
 /**
  * Pestaña «Validaciones manuales» de Validaciones (Épica #13202, HU-C5). Solo Super Admin: quien la monta
  * (`Validaciones`) ya comprobó el rol. Tabla del modelo único de trámites: `DataTable` (cabecera
- * `table-styles`, filas-tarjeta, sin tarjeta envolvente), `RowActions`, paginación numerada con
+ * `table-styles`, filas-tarjeta, sin tarjeta envolvente), `ActionsMenu`, paginación numerada con
  * «Filas por página» y `CarLoaderModal` mientras carga.
  */
 
@@ -164,21 +164,26 @@ export function ValidacionesManuales({
       header: 'Acciones',
       align: 'right',
       render: (r) => (
-        <RowActions
-          actions={[
+        <ActionsMenu
+          ariaLabel={`Acciones de ${r.fullName}`}
+          className="bg-white dark:bg-[#0B0F14]"
+          items={[
             {
+              key: 'ver-detalle',
+              label: 'Ver detalle',
+              ariaLabel: `Ver detalle de ${r.fullName}`,
               icon: Eye,
-              label: `Ver detalle de ${r.fullName}`,
-              tone: 'primary',
-              onClick: () => setDetalleId(r.id),
+              onSelect: () => setDetalleId(r.id),
             },
             // HU #14306: solo si espera captura del cliente (no aprobada ni con captura enviada).
             ...(puedeCopiarEnlaceManual(r.status)
               ? [
                   {
+                    key: 'copiar-enlace',
+                    label: 'Copiar enlace',
+                    ariaLabel: `Copiar enlace de ${r.fullName}`,
                     icon: Link2,
-                    label: `Copiar enlace de ${r.fullName}`,
-                    onClick: () => void copiar(r.id),
+                    onSelect: () => void copiar(r.id),
                   },
                 ]
               : []),

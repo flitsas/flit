@@ -100,7 +100,9 @@ describe('Pestaña Validaciones manuales — tabla', () => {
 
   it('cada fila tiene la acción «Ver detalle» con nombre accesible', async () => {
     render(<ValidacionesManuales client={nuevoCliente()} />);
-    expect(await screen.findByRole('button', { name: 'Ver detalle de Persona de prueba 01' })).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Acciones de Persona de prueba 01' }));
+    expect(await screen.findByRole('menuitem', { name: 'Ver detalle de Persona de prueba 01' })).toBeInTheDocument();
   });
 });
 
