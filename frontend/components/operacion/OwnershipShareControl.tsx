@@ -2,6 +2,14 @@
 
 import { X } from 'lucide-react';
 import { WIZARD_LABEL } from './wizard-field-styles';
+import {
+  OWNERSHIP_CAP_MESSAGE,
+  OWNERSHIP_RANGE_MESSAGE,
+  OWNERSHIP_SUM_MESSAGE,
+  OWNERSHIP_ZERO_MESSAGE,
+  ownershipShareGuidance,
+  round2,
+} from '@/lib/tramites/ownership-share';
 
 /**
  * Múltiple Propietario (ADR-0053, docs/design/MULTIPLE-PROPIETARIO-diseno-tecnico.md §8 "PR 2 —
@@ -35,7 +43,7 @@ import { WIZARD_LABEL } from './wizard-field-styles';
  * identidad de cada actor — solo reciben la lista de pestañas de ESTE lado (`items`, ya resuelta
  * por índice real en el array `actors`) y notifican intención
  * (`onSelectTab`/`onAdd`/`onRemove`/`onPercentageChange`). Toda la lógica de reparto
- * (auto-absorción del solidario, redistribución al eliminar, validación de suma=100) vive en
+ * (tope ≤100 al editar, residuo al agregar/quitar, validación de suma=100) vive en
  * `frontend/lib/tramites/ownership-share.ts`, testeada aparte sin RTL.
  */
 
@@ -269,13 +277,26 @@ export function OwnershipPercentagePanel({
   if (!active) return null;
 
   const allPct = items.map((i) => i.percentage);
-  const total = allPct.reduce((s, p) => s + p, 0);
+  const total = round2(allPct.reduce((s, p) => s + p, 0));
+  const sumOthers = round2(total - active.percentage);
+  const maxAllowed = round2(Math.max(0, Math.min(100, 100 - sumOthers)));
   const sumError = Math.abs(total - 100) > 0.005;
   const zeroError = items.some((i) => i.percentage <= 0);
   const rangeError = items.some((i) => i.percentage > 100);
+  const guidance = ownershipShareGuidance(total, {
+    hasZero: zeroError,
+    activeMaxIsZero: !readOnly && maxAllowed <= 0 && active.percentage <= 0,
+  });
   const panelId = ownershipPanelId(idPrefix);
   const activeColor = colorDeParticipacion(active.percentage, allPct);
-  const activeSliderValue = clampDisplay(active.percentage);
+  const sliderMax = Math.max(0, Math.round(maxAllowed));
+  const activeSliderValue = Math.min(sliderMax, clampDisplay(active.percentage));
+  const guidanceColor =
+    guidance.kind === 'exacto'
+      ? 'var(--badge-success-fg)'
+      : guidance.kind === 'superan'
+        ? 'var(--badge-danger-fg)'
+        : 'var(--badge-warning-fg)';
 
   return (
     // Mismo tratamiento que la caja anidada "Datos de contacto" de ActorsForm.tsx (borde sólido
@@ -295,13 +316,13 @@ export function OwnershipPercentagePanel({
         </p>
         <div className="flex items-center gap-2">
           <label htmlFor={`${idPrefix}-input-${active.index}`} className="sr-only">
-            Porcentaje exacto de {active.label}, hasta dos decimales
+            Porcentaje exacto de {active.label}, hasta dos decimales. Máximo disponible {formatPercent(maxAllowed)}%
           </label>
           <input
             id={`${idPrefix}-input-${active.index}`}
             type="number"
-            min={0.01}
-            max={100}
+            min={0}
+            max={maxAllowed}
             step={0.01}
             inputMode="decimal"
             disabled={readOnly}
@@ -316,6 +337,10 @@ export function OwnershipPercentagePanel({
         </div>
       </div>
 
+      <p className="mt-1 text-[11px]" style={{ color: '#59677D' }}>
+        Máximo para {active.label}: {formatPercent(maxAllowed)}% (no se puede superar el 100% total).
+      </p>
+
       <div className="mt-3">
         <label htmlFor={`${idPrefix}-slider-${active.index}`} className="sr-only">
           Porcentaje de {active.label} (aproximado, en enteros)
@@ -324,15 +349,15 @@ export function OwnershipPercentagePanel({
           id={`${idPrefix}-slider-${active.index}`}
           type="range"
           min={0}
-          max={100}
+          max={sliderMax}
           step={1}
           value={activeSliderValue}
-          disabled={readOnly}
+          disabled={readOnly || sliderMax <= 0}
           aria-valuetext={`${formatPercent(active.percentage)}%`}
           onChange={(e) => onPercentageChange(active.index, Number(e.target.value))}
           className="h-1.5 w-full appearance-none rounded-full outline-none transition disabled:opacity-70 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-[#59677D] [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-[#59677D] [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:shadow-md"
           style={{
-            background: `linear-gradient(to right, ${activeColor} ${activeSliderValue}%, rgba(223,229,237,0.6) ${activeSliderValue}%)`,
+            background: `linear-gradient(to right, ${activeColor} ${sliderMax > 0 ? (activeSliderValue / sliderMax) * 100 : 0}%, rgba(223,229,237,0.6) ${sliderMax > 0 ? (activeSliderValue / sliderMax) * 100 : 0}%)`,
             accentColor: activeColor,
           }}
         />
@@ -355,13 +380,21 @@ export function OwnershipPercentagePanel({
         </span>
       </div>
 
+      <p
+        className="mt-2 text-xs font-medium"
+        style={{ color: guidanceColor }}
+        aria-live="polite"
+        data-testid={`${idPrefix}-ownership-guidance`}
+      >
+        {guidance.text}
+      </p>
+
       {showErrors && (sumError || zeroError || rangeError) && (
         <div role="alert" className="mt-2 space-y-1 text-xs" style={{ color: '#FF4E00' }}>
-          {sumError && <p>La suma de los porcentajes debe ser exactamente 100%.</p>}
-          {zeroError && <p>Todos los propietarios deben tener un porcentaje mayor a 0%.</p>}
-          {rangeError && (
-            <p>Cada propietario debe tener un porcentaje mayor a 0% y como máximo 100%.</p>
-          )}
+          {sumError && <p>{OWNERSHIP_SUM_MESSAGE}</p>}
+          {zeroError && <p>{OWNERSHIP_ZERO_MESSAGE}</p>}
+          {rangeError && <p>{OWNERSHIP_RANGE_MESSAGE}</p>}
+          {guidance.kind === 'superan' && <p>{OWNERSHIP_CAP_MESSAGE}</p>}
         </div>
       )}
     </div>
