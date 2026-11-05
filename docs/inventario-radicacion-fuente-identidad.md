@@ -21,7 +21,7 @@ el PO o el Líder Técnico lo lea.
 | 2 | Directorio de mandatarios y certificado del sello | `MandateSignerDirectory.cs` | Leía `admin.admin_identity_validations` con `SET LOCAL row_security = off` | **Migrado** (HU #11752) a `tramites.procedure_instance_biometric_validations` |
 | 3 | Rótulo de identidad de la ficha del representante legal | `DbLegalRepresentativeReader.LoadIdentityVigenciaAsync` | Leía la tabla admin. **Era el defecto original de las novedades 8 y 9** | **Migrado** (HU #11765) |
 | 4 | Rótulo de identidad de la ficha del mandatario | `DbMandateSignerReader.LoadIdentityVigenciaAsync` | Ídem | **Migrado** (HU #11765) |
-| 5 | Política de firma del mandato | `MandatoFirmaPolicy.cs:38-59` | **No lee identidad en absoluto** | Sin cambios |
+| 5 | Modo de firma del mandato | `MandatoFirmaModoResolver.cs` (tipo de mandato + estampa) | **No lee identidad en absoluto** | Sin cambios |
 
 **Estado verificado el 2026-08-21:** `grep -rn "\.AdminIdentityValidations\b" services/core-api/src`
 fuera de las migraciones devuelve **cero resultados**. La tabla sigue existiendo, sin ningún lector de

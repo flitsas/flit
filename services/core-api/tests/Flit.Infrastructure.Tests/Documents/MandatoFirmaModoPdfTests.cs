@@ -10,11 +10,11 @@ namespace Flit.Infrastructure.Tests.Documents;
 /// <summary>
 /// Cómo aparece el MANDATARIO en el recuadro de firmas del contrato de mandato.
 ///
-/// <para>Precedencia: el modo que trae el caller gana (<c>SinBloque</c> institucional/convenio,
+/// <para>Precedencia: el modo que trae el caller gana (<c>SinBloque</c> Persona jurídica,
 /// <c>Manual</c> abierto o firma física). Plantilla Sabaneta sin modo Manual/Estampada explícito →
 /// sin bloque. Familia organismo (Bello) → línea manual. El resto estampa.</para>
 /// </summary>
-public sealed class MandatoFirmaPorConvenioTests
+public sealed class MandatoFirmaModoPdfTests
 {
     private static readonly MethodInfo Modo = typeof(MandatoPdfGenerator)
         .GetMethod("ModoFirmaMandatario", BindingFlags.NonPublic | BindingFlags.Static)!;
@@ -23,15 +23,15 @@ public sealed class MandatoFirmaPorConvenioTests
         (MandatarioFirmaModo)Modo.Invoke(null, [data])!;
 
     [Fact]
-    public void A_SinConvenio_ElMandatarioFirma()
+    public void A_ModoEstampada_ElMandatarioFirma()
     {
-        // El mandatario es un actor obligatorio del trámite: sin convenio que lo releve, su firma va.
+        // El mandatario es un actor obligatorio del trámite: si el tipo pide su firma, su firma va.
         Resolver(Mandato(MandatarioFirmaModo.Estampada))
             .Should().Be(MandatarioFirmaModo.Estampada);
     }
 
     [Fact]
-    public void B_ConConvenio_NoHayBloqueDeMandatario()
+    public void B_ModoSinBloque_NoHayBloqueDeMandatario()
     {
         Resolver(Mandato(MandatarioFirmaModo.SinBloque))
             .Should().Be(MandatarioFirmaModo.SinBloque);
@@ -67,19 +67,19 @@ public sealed class MandatoFirmaPorConvenioTests
     }
 
     [Fact]
-    public void UnOtInstitucionalSinPlantillaPropia_FirmaAMano_AunqueNoHayaConvenio()
+    public void UnOtInstitucionalSinPlantillaPropia_FirmaAMano()
     {
         // Familia organismo_transito con plantilla genérica: firma la empresa, y lo hace a mano sobre la
-        // línea. No depende del convenio: es la naturaleza del mandatario.
+        // línea. Es la naturaleza del mandatario.
         Resolver(Mandato(MandatarioFirmaModo.Estampada, MandatoFamilia.OrganismoTransito))
             .Should().Be(MandatarioFirmaModo.Manual);
     }
 
     [Fact]
-    public void ElConvenioGanaSobreLaFamilia_UnOtInstitucionalConConvenioTampocoLlevaBloque()
+    public void ElModoSinBloqueGanaSobreLaFamilia_UnOtInstitucionalTampocoLlevaBloque()
     {
-        // Con convenio no hay a quién dejarle espacio de firma, sea quien sea el mandatario. Si la
-        // familia ganara, un OT institucional con convenio seguiría pintando su recuadro vacío.
+        // Sin bloque no hay a quién dejarle espacio de firma, sea quien sea el mandatario. Si la
+        // familia ganara, un OT institucional seguiría pintando su recuadro vacío.
         Resolver(Mandato(MandatarioFirmaModo.SinBloque, MandatoFamilia.OrganismoTransito))
             .Should().Be(MandatarioFirmaModo.SinBloque);
     }
@@ -106,7 +106,7 @@ public sealed class MandatoFirmaPorConvenioTests
     [Fact]
     public void ElCuerpoDelContratoSigueNombrandoAlMandatario_AunSinBloqueDeFirma()
     {
-        // Lo que quita el convenio es el ESPACIO DE FIRMA, no al actor: el contrato tiene que seguir
+        // Lo que quita Persona jurídica es el ESPACIO DE FIRMA, no al actor: el contrato tiene que seguir
         // diciendo a nombre de quién se otorga el mandato.
         var data = Mandato(MandatarioFirmaModo.SinBloque) with
         {
@@ -116,6 +116,19 @@ public sealed class MandatoFirmaPorConvenioTests
         var pdf = new MandatoPdfGenerator().GenerateMandato(data);
 
         pdf.Content.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public void AC4_SinBloque_LosDatosDelMandatarioSiguenEnElCuerpo()
+    {
+        // HU #14358 — firma solo el mandante, pero el contrato sigue nombrando a la persona y a la entidad.
+        var persona = Parrafos(Mandato(MandatarioFirmaModo.SinBloque), MandatoVariante.Generico);
+        persona.Should().Contain("Carlos Ruiz").And.Contain("70111222");
+
+        var entidad = Parrafos(
+            Mandato(MandatarioFirmaModo.SinBloque, MandatoFamilia.OrganismoTransito, MandatoTemplateResolver.Bello),
+            MandatoVariante.Bello);
+        entidad.Should().Contain("UNION TEMPORAL SETSA").And.Contain("900273813-7");
     }
 
     [Fact]
@@ -158,6 +171,19 @@ public sealed class MandatoFirmaPorConvenioTests
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private static string Parrafos(MandatoData data, MandatoVariante variante)
+    {
+        var build = typeof(MandatoPdfGenerator)
+            .GetMethod("BuildParrafos", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var parrafos = (List<IReadOnlyList<MandatoPdfGenerator.ParrafoSegmento>>)build.Invoke(
+            null,
+            [
+                data, data.Tramite.Partes[0], false, variante,
+                "TRASPASO", "PJS615", "ENVIGADO", "ENVIGADO", "5 de agosto de 2026",
+            ])!;
+        return string.Join("\n", parrafos.Select(p => string.Concat(p.Select(s => s.Texto))));
+    }
 
     private static MandatoData Mandato(
         MandatarioFirmaModo modo,

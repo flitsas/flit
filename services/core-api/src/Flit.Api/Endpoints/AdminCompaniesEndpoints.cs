@@ -243,31 +243,6 @@ public static class AdminCompaniesEndpoints
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status404NotFound);
 
-        // PUT /api/v1/admin/companies/{tenantId}/transit-agreements/{transitOfficeId} — convenio comercial.
-        group.MapPut("/{tenantId:guid}/transit-agreements/{transitOfficeId:guid}", SetTransitAgreementAsync)
-            .AddEndpointFilter<CompanyOwnTenantFilter>()
-            // HU #12710 — sección reservada al SuperAdmin (también frente a una cabeza de red).
-            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
-            .WithName("AdminCompanySetTransitAgreement")
-            .WithSummary("Marca o desmarca el convenio de la compañía con un Organismo de Tránsito")
-            .WithDescription("El convenio NO es el permiso para radicar (eso son los transit-grants): es un "
-                + "acuerdo comercial cuyo efecto es documental — con convenio, el contrato de mandato no "
-                + "lleva bloque de firma del mandatario. Idempotente. Requiere SuperAdmin.")
-            .Produces(StatusCodes.Status204NoContent)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .Produces(StatusCodes.Status403Forbidden);
-
-        // GET /api/v1/admin/companies/{tenantId}/transit-agreements — OT con convenio activo.
-        group.MapGet("/{tenantId:guid}/transit-agreements", GetTransitAgreementsAsync)
-            .AddEndpointFilter<CompanyOwnTenantFilter>()
-            // HU #12710 — sección reservada al SuperAdmin (también frente a una cabeza de red).
-            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
-            .WithName("AdminCompanyGetTransitAgreements")
-            .WithSummary("Lista los OT con los que la compañía tiene convenio")
-            .Produces(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .Produces(StatusCodes.Status403Forbidden);
-
         // GET /api/v1/admin/companies/{tenantId}/audit-log — historial de gobernanza paginado (#10192 AC4).
         group.MapGet("/{tenantId:guid}/audit-log", GetAuditLogAsync)
             .AddEndpointFilter<CompanyOwnTenantFilter>()
@@ -632,41 +607,6 @@ public static class AdminCompaniesEndpoints
 
         return Results.Ok(result);
     }
-
-    /// <summary>
-    /// Marca o desmarca el convenio comercial de la compañía con un organismo. Distinto del grant: aquel
-    /// habilita la radicación, este solo decide si el mandato lleva bloque de firma del mandatario.
-    /// </summary>
-    private static async Task<IResult> SetTransitAgreementAsync(
-        Guid tenantId,
-        Guid transitOfficeId,
-        SetTransitAgreementRequest request,
-        HttpContext httpContext,
-        [FromServices] ICompanyAgreementRepository repository,
-        CancellationToken cancellationToken)
-    {
-        await repository
-            .SetAsync(
-                tenantId, transitOfficeId, request?.Active ?? false,
-                ResolveUserId(httpContext.User), cancellationToken)
-            .ConfigureAwait(false);
-
-        return Results.NoContent();
-    }
-
-    private static async Task<IResult> GetTransitAgreementsAsync(
-        Guid tenantId,
-        [FromServices] ICompanyAgreementRepository repository,
-        CancellationToken cancellationToken)
-    {
-        var ids = await repository
-            .ListActiveOfficeIdsAsync(tenantId, cancellationToken).ConfigureAwait(false);
-
-        return Results.Ok(new { transitOfficeIds = ids });
-    }
-
-    /// <summary>Cuerpo del convenio: si queda activo o no.</summary>
-    public sealed record SetTransitAgreementRequest(bool Active);
 
     private static async Task<IResult> AddTransitGrantAsync(
         Guid tenantId,

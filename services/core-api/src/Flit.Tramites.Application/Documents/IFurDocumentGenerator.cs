@@ -298,8 +298,7 @@ public sealed record MandatoData(
     IReadOnlyList<string>? Transformaciones = null,
     /// <summary>
     /// Qué hacer con el bloque de firma del MANDATARIO. Se resuelve fuera del generador porque depende
-    /// del convenio comercial compañía↔organismo y de la marca de firma física del mandatario, datos que
-    /// viven en Admin.
+    /// del tipo de mandato y de si el mandatario tiene estampa (ver <c>MandatoFirmaModoResolver</c>).
     /// </summary>
     MandatarioFirmaModo ModoFirmaMandatario = MandatarioFirmaModo.Estampada,
     /// <summary>none | pdf | editor — plantilla propia del OT.</summary>
@@ -337,8 +336,8 @@ public enum MandatarioFirmaModo
     Manual,
 
     /// <summary>
-    /// Sin bloque de mandatario: el recuadro de firmas solo lleva al MANDANTE. Lo activa el convenio
-    /// comercial entre la compañía y el organismo.
+    /// Sin bloque de mandatario: el recuadro de firmas solo lleva al MANDANTE. Lo activa el tipo de
+    /// mandato Persona jurídica.
     /// </summary>
     SinBloque,
 }
