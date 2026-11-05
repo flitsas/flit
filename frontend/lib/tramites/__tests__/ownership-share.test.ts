@@ -3,19 +3,26 @@ import { describe, expect, it } from 'vitest';
 import type { ProcedureActor } from '@/lib/api/types/procedure-runtime';
 import {
   MAX_OWNERS_PER_SIDE,
-  actorsOrderedByOrdinal,
+  OWNERSHIP_CAP_MESSAGE,
+  OWNERSHIP_EXACT_MESSAGE,
   OWNERSHIP_SUM_MESSAGE,
   OWNERSHIP_ZERO_MESSAGE,
+  actorsOrderedByOrdinal,
   applySolidarioAbsorption,
   biometricValidationMatchesActor,
+  clampEditableShare,
   computeOrdinals,
-  defaultPercentageForNewActor,
   duplicateDocumentIndicesWithinSide,
+  equalizeSharesForRol,
   identityStatusForActor,
   indicesForRol,
   isCoveredByVaultForActor,
   isFirstOfRol,
+  maxEditableShare,
+  ownershipShareGuidance,
+  percentageForNewOwner,
   redistributeAfterRemoval,
+  remainingShareForRol,
   round2,
   shiftIndexMapOnInsert,
   shiftIndexMapOnRemove,
@@ -88,14 +95,21 @@ describe('applySolidarioAbsorption', () => {
     expect(next[0].porcentaje).toBe(40);
   });
 
-  it('el residuo puede quedar negativo si el gestor edita a los agregados antes que al principal', () => {
+  it('HU #14192 — si los agregados suman más de ~100, escala y deja al solidario > 0 (nunca negativo)', () => {
     const actors = [
       actor({ rol: 'vendedor', porcentaje: 999 }),
       actor({ rol: 'vendedor', porcentaje: 60 }),
       actor({ rol: 'vendedor', porcentaje: 60 }),
     ];
     const next = applySolidarioAbsorption(actors, new Set());
-    expect(next[0].porcentaje).toBe(-20);
+    expect(next[0].porcentaje).toBeGreaterThan(0);
+    expect(next[0].porcentaje).toBeLessThanOrEqual(100);
+    expect(next[1].porcentaje).toBeGreaterThan(0);
+    expect(next[1].porcentaje).toBeLessThanOrEqual(100);
+    expect(next[2].porcentaje).toBeGreaterThan(0);
+    expect(next[2].porcentaje).toBeLessThanOrEqual(100);
+    const sum = (next[0].porcentaje ?? 0) + (next[1].porcentaje ?? 0) + (next[2].porcentaje ?? 0);
+    expect(sum).toBeCloseTo(100, 1);
   });
 
   it('devuelve la MISMA referencia si el residuo ya coincide (no re-renderiza de más)', () => {
@@ -130,28 +144,28 @@ describe('redistributeAfterRemoval', () => {
     expect(next[0].porcentaje).toBe(100);
   });
 
-  it('redistribuye proporcionalmente entre los que quedan del mismo lado', () => {
+  it('HU #14192 — con 2+ remanentes deja residuo libre (no redistribuye)', () => {
     const actors = [
       actor({ rol: 'comprador', numeroDocumento: '1', porcentaje: 50 }),
       actor({ rol: 'comprador', numeroDocumento: '2', porcentaje: 30 }),
       actor({ rol: 'comprador', numeroDocumento: '3', porcentaje: 20 }),
     ];
-    // Elimina al tercero (20%): se reparte entre 1 y 2 proporcional a su participación (50/80, 30/80).
     const next = redistributeAfterRemoval(actors, 2);
     expect(next).toHaveLength(2);
-    expect(next[0].porcentaje).toBeCloseTo(62.5, 5);
-    expect(next[1].porcentaje).toBeCloseTo(37.5, 5);
+    expect(next[0].porcentaje).toBe(50);
+    expect(next[1].porcentaje).toBe(30);
+    expect(validateOwnershipShares(next).sumError).toBe(true);
   });
 
-  it('reparto equitativo si los remanentes estaban todos en 0 (residuo negativo agotado)', () => {
+  it('HU #14192 — al quitar el que tenía 100%, los demás quedan en 0 (residuo 100 libre)', () => {
     const actors = [
       actor({ rol: 'comprador', numeroDocumento: '1', porcentaje: 0 }),
       actor({ rol: 'comprador', numeroDocumento: '2', porcentaje: 0 }),
       actor({ rol: 'comprador', numeroDocumento: '3', porcentaje: 100 }),
     ];
     const next = redistributeAfterRemoval(actors, 2);
-    expect(next[0].porcentaje).toBe(50);
-    expect(next[1].porcentaje).toBe(50);
+    expect(next[0].porcentaje).toBe(0);
+    expect(next[1].porcentaje).toBe(0);
   });
 
   it('no toca actores de otro lado', () => {
@@ -193,6 +207,30 @@ describe('validateOwnershipShares', () => {
     const result = validateOwnershipShares(actors);
     expect(result.valid).toBe(false);
     expect(result.zeroError).toBe(true);
+  });
+
+  it('HU #14192 — bloquea cuando algún actor supera 100% aunque la suma sea 100 con otro negativo', () => {
+    const actors = [
+      actor({ rol: 'comprador', porcentaje: -20 }),
+      actor({ rol: 'comprador', porcentaje: 120 }),
+    ];
+    const result = validateOwnershipShares(actors);
+    expect(result.valid).toBe(false);
+    expect(result.zeroError).toBe(true);
+    expect(result.rangeError).toBe(true);
+  });
+
+  it('HU #14192 — tras eliminar deja los % remanentes intactos (el tope vive al editar)', () => {
+    const actors = [
+      actor({ rol: 'comprador', numeroDocumento: '1', porcentaje: 40 }),
+      actor({ rol: 'comprador', numeroDocumento: '2', porcentaje: 40 }),
+      actor({ rol: 'comprador', numeroDocumento: '3', porcentaje: 20 }),
+    ];
+    const next = redistributeAfterRemoval(actors, 2);
+    expect(next).toHaveLength(2);
+    expect(next[0].porcentaje).toBe(40);
+    expect(next[1].porcentaje).toBe(40);
+    expect(validateOwnershipShares(next).sumError).toBe(true);
   });
 
   it('los dos mensajes de bloqueo son textualmente los del encargo, no paráfrasis', () => {
@@ -279,10 +317,69 @@ describe('computeOrdinals / withOwnershipFields', () => {
   });
 });
 
-describe('defaultPercentageForNewActor', () => {
-  it('reparte equitativamente entre el total de actores tras agregar', () => {
-    expect(defaultPercentageForNewActor(2)).toBe(50);
-    expect(defaultPercentageForNewActor(4)).toBe(25);
+describe('percentageForNewOwner / remainingShareForRol / maxEditableShare', () => {
+  it('nuevo propietario toma el residuo libre; si ya suman 100 entra en 0', () => {
+    expect(percentageForNewOwner(40)).toBe(40);
+    expect(percentageForNewOwner(0)).toBe(0);
+    expect(percentageForNewOwner(-5)).toBe(0);
+    const full = [
+      actor({ rol: 'comprador', porcentaje: 60 }),
+      actor({ rol: 'comprador', porcentaje: 40 }),
+    ];
+    expect(remainingShareForRol(full, 'comprador')).toBe(0);
+    expect(percentageForNewOwner(remainingShareForRol(full, 'comprador'))).toBe(0);
+    const under = [actor({ rol: 'comprador', porcentaje: 70 })];
+    expect(remainingShareForRol(under, 'comprador')).toBe(30);
+  });
+
+  it('tope editable = 100 − suma de los demás; clamp no deja superar', () => {
+    const actors = [
+      actor({ rol: 'comprador', porcentaje: 40 }),
+      actor({ rol: 'comprador', porcentaje: 30 }),
+      actor({ rol: 'comprador', porcentaje: 20 }),
+    ];
+    expect(maxEditableShare(actors, 0)).toBe(50); // 100 − (30+20)
+    expect(maxEditableShare(actors, 2)).toBe(30); // 100 − (40+30)
+    expect(clampEditableShare(80, 50)).toBe(50);
+    expect(clampEditableShare(-1, 50)).toBe(0);
+  });
+
+  it('guía en vivo: faltan / exacto / superan / cero', () => {
+    expect(ownershipShareGuidance(80)).toEqual({
+      kind: 'faltan',
+      text: 'Faltan 20% para completar el 100%.',
+      delta: 20,
+    });
+    expect(ownershipShareGuidance(100)).toEqual({
+      kind: 'exacto',
+      text: OWNERSHIP_EXACT_MESSAGE,
+      delta: 0,
+    });
+    expect(ownershipShareGuidance(100, { hasZero: true }).kind).toBe('faltan');
+    expect(ownershipShareGuidance(100, { activeMaxIsZero: true }).text).toMatch(/liberar espacio/);
+    expect(ownershipShareGuidance(110).kind).toBe('superan');
+    expect(ownershipShareGuidance(110).text).toContain(OWNERSHIP_CAP_MESSAGE);
+  });
+});
+
+describe('equalizeSharesForRol', () => {
+  // Utilidad legacy (ya no la usa ActorsForm); se conserva por si hay callers de migración.
+  it('reescribe todos los % del lado a partes iguales que suman 100', () => {
+    const actors = [
+      actor({ rol: 'comprador', porcentaje: 50 }),
+      actor({ rol: 'comprador', porcentaje: 75 }),
+      actor({ rol: 'comprador', porcentaje: 33.33 }),
+      actor({ rol: 'vendedor', porcentaje: 100 }),
+    ];
+    const next = equalizeSharesForRol(actors, 'comprador');
+    expect(next[0].porcentaje).toBe(33.33);
+    expect(next[1].porcentaje).toBe(33.33);
+    expect(next[2].porcentaje).toBe(33.34);
+    expect(round2((next[0].porcentaje ?? 0) + (next[1].porcentaje ?? 0) + (next[2].porcentaje ?? 0))).toBe(
+      100,
+    );
+    // No toca el otro lado.
+    expect(next[3].porcentaje).toBe(100);
   });
 });
 
