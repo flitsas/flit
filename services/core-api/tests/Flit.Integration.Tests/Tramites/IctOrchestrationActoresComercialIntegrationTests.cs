@@ -54,6 +54,30 @@ public sealed class IctOrchestrationActoresComercialIntegrationTests(PostgresDat
         commercial.MetodoPago.Should().Be("TRANSFERENCIA");
     }
 
+    /// <summary>
+    /// HU #14318 AC4 — el borrador materializado por ICT nace con canal Integración y sin OT del canal, sea cual sea el
+    /// <c>origin</c> que mande el RPC (el canal lo decide el servidor, no el cliente).
+    /// </summary>
+    [PostgresTheory]
+    [InlineData("ict")]
+    [InlineData("")]
+    [InlineData("persona_natural")]
+    public async Task AC4_CreateDraftFromIct_QuedaConCanalIntegracionYSinOtDelCanal(string origin)
+    {
+        await SeedTenantAsync();
+        var request = Request("ict-14318-canal-" + origin);
+        request.Origin = origin;
+
+        var reply = await InvokeCreateAsync(request);
+
+        reply.ProcedureInstanceId.Should().NotBeNullOrEmpty();
+        await using var ctx = NewContext();
+        var fila = await ctx.ProcedureInstances.AsNoTracking()
+            .SingleAsync(p => p.Id == Guid.Parse(reply.ProcedureInstanceId), TestContext.Current.CancellationToken);
+        fila.Channel.Should().Be("integracion");
+        fila.ChannelTransitOfficeId.Should().BeNull();
+    }
+
     [PostgresFact]
     public async Task CreateDraftFromIct_ActorQueRevientaLaColumna_DevuelveWarningSinPiiYGuardaComercialYAdjuntos()
     {

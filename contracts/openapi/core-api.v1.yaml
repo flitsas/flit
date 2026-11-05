@@ -14199,7 +14199,8 @@ components:
       description: >-
         Canal por el que entró el trámite. Nombres visibles: tramites = Trámites, pn_web = Persona Natural Web,
         pn_punto = Persona Natural OT, integracion = Integración, aplicacion = Aplicación (reservado, hoy no se
-        asigna). Ningún endpoint lo usa todavía.
+        asigna). Lo devuelve el detalle del trámite (`ProcedureInstanceDetail.channel`, HU #14318); un trámite sin dato
+        se lee como `tramites`. El cliente nunca lo envía: lo fija el servidor al crear.
       enum: [tramites, pn_web, pn_punto, integracion, aplicacion]
 
     # ── Admin · Integraciones externas por compañía (HU #14067, Épica #14021, ADR-0075) ────
@@ -18776,9 +18777,26 @@ components:
       description: >
         Detalle de `GET /api/v1/tramites/instances/{id}` (gestor y SuperAdmin) y objeto `instance` de
         `GET /api/v1/tramites/network/instances/{id}`. Aquí se documentan solo los campos de vigencia de
-        la HU #12791; el resto del objeto (fieldValues, statusHistory, actors, …) no cambia.
+        la HU #12791 y el canal (HU #14318); el resto del objeto (fieldValues, statusHistory, actors, …) no cambia.
       additionalProperties: true
       properties:
+        channel:
+          allOf:
+            - $ref: "#/components/schemas/TramiteCanal"
+          description: >
+            HU #14318 (Feature #14315, Épica #14296) — canal por el que entró el trámite. Solo lectura: se
+            fija al crear. Un trámite sin dato (histórico o migrado de V1) devuelve `tramites`. Aditivo.
+        channelTransitOfficeId:
+          type: string
+          format: uuid
+          nullable: true
+          description: >
+            HU #14318 — organismo de tránsito del punto de atención; solo con `channel = pn_punto`, `null` en
+            los demás. Distinto del organismo del trámite, que puede cambiar al enviarlo al OT. Aditivo.
+        channelTransitOfficeName:
+          type: string
+          nullable: true
+          description: HU #14318 — nombre del organismo de `channelTransitOfficeId`; `null` si no aplica. Aditivo.
         improntaGeneracionHabilitada:
           type: boolean
           description: >
