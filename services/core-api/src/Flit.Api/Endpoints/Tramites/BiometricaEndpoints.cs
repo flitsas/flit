@@ -380,11 +380,47 @@ internal static class BiometricaEndpoints
                 "sin_certificado" => Results.Problem(statusCode: 404, title: "Not Found", detail: "No hay certificado disponible para esta validación."),
                 "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway", detail: "El proveedor rechazó la descarga del certificado."),
                 "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "El proveedor de validación de identidad no está disponible. Reintenta más tarde."),
+                // HU #14302 — carta de una validación manual que aún no se pudo generar/leer: reintentable.
+                "carta_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "La carta de identidad aún no está disponible. Intenta descargarla de nuevo en unos minutos."),
                 _ => Results.File(result!.Content, result.ContentType, result.FileName),
             };
         })
         .WithName("DescargarCertificadoIdentidad")
         .Produces(StatusCodes.Status200OK, contentType: "application/pdf");
+
+        // GET carta de identidad de una validación MANUAL aprobada, SIN trámite (HU #14302, Épica #14271): sirve la prevalidación
+        // standalone. Super Admin: cualquier compañía (el tenant sale de la fila, no del header). Resto: mismo permiso del módulo
+        // que la bitácora y el detalle del trámite (validaciones.read/manage o tramites.read) y solo su propio tenant; otro tenant
+        // responde 404 (no revela que existe). Genera la carta si falta; si no puede, 503 reintentable.
+        group.MapGet("/biometric-validations/{id:guid}/certificado", async (
+            Guid id,
+            HttpContext http,
+            DescargarCertificadoIdentidadHandler handler,
+            CancellationToken ct) =>
+        {
+            Guid? scope = null;
+            if (!RequestTenantResolver.IsSuperAdmin(http.User))
+            {
+                if (!RequestTenantResolver.TryResolveNonEmptyTenantId(http.User, out var tenantId))
+                    return Results.Problem(statusCode: 403, title: "Forbidden", detail: "El usuario autenticado no tiene una compañía asignada.");
+                scope = tenantId;
+            }
+
+            var (result, error) = await handler.HandleCartaPorValidacionAsync(id, scope, ct);
+            return error switch
+            {
+                null => Results.File(result!.Content, result.ContentType, result.FileName),
+                "carta_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "La carta de identidad aún no está disponible. Intenta descargarla de nuevo en unos minutos."),
+                _ => Results.Problem(statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada."),
+            };
+        })
+        .RequireIdentityModuleOrTramites()
+        .WithName("DescargarCartaIdentidadPorValidacion")
+        .Produces(StatusCodes.Status200OK, contentType: "application/pdf")
+        .Produces(StatusCodes.Status401Unauthorized)
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound)
+        .Produces(StatusCodes.Status503ServiceUnavailable);
 
         // GET bitácora (solo lectura) del ciclo de una validación: envío, llegada del webhook, si descifró el
         // secreto o no, firma, resultado y reconciliaciones. Diagnóstico desde la API sin entrar a la BD/pod.

@@ -658,6 +658,33 @@ function biometricPersonParams(filters: TenantBiometricPersonFilters): URLSearch
   return params;
 }
 
+async function leerCertificadoPdf(
+  res: Response,
+  validationId: string,
+): Promise<{ blob: Blob; filename: string; mimetype: string }> {
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(problemMessage(res, body));
+  }
+  const blob = await res.blob();
+  const mimetype = res.headers.get('content-type') ?? 'application/pdf';
+  const cd = res.headers.get('content-disposition') ?? '';
+  const star = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(cd);
+  const plain = /filename="?([^";]+)"?/i.exec(cd);
+  const raw = star?.[1] ?? plain?.[1] ?? '';
+  let filename = raw.trim();
+  try {
+    filename = raw ? decodeURIComponent(raw.trim()) : '';
+  } catch {
+    // raw no era URI-encoded; se usa tal cual.
+  }
+  return {
+    blob,
+    filename: filename || `certificado_identidad_${validationId}.pdf`,
+    mimetype,
+  };
+}
+
 export function tenantHeader(tenantId?: string): HeadersInit {
   const headers: Record<string, string> = {};
   const token = getToken();
@@ -2314,27 +2341,20 @@ export const tramitesClient = {
       ),
       { headers: tenantHeader(tenantId) },
     );
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(problemMessage(res, body));
-    }
-    const blob = await res.blob();
-    const mimetype = res.headers.get('content-type') ?? 'application/pdf';
-    const cd = res.headers.get('content-disposition') ?? '';
-    const star = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(cd);
-    const plain = /filename="?([^";]+)"?/i.exec(cd);
-    const raw = star?.[1] ?? plain?.[1] ?? '';
-    let filename = raw.trim();
-    try {
-      filename = raw ? decodeURIComponent(raw.trim()) : '';
-    } catch {
-      // raw no era URI-encoded; se usa tal cual.
-    }
-    return {
-      blob,
-      filename: filename || `certificado_identidad_${validationId}.pdf`,
-      mimetype,
-    };
+    return leerCertificadoPdf(res, validationId);
+  },
+
+  // HU #14303 — GET del certificado/carta por validación, SIN trámite (prevalidación, detalle manual).
+  // 503 = carta aún no disponible; 404/403 como el resto. El mensaje es el del ProblemDetails.
+  downloadValidationCertificado: async (
+    validationId: string,
+    tenantId?: string,
+  ): Promise<{ blob: Blob; filename: string; mimetype: string }> => {
+    const res = await fetch(
+      apiUrl(`/api/v1/tramites/biometric-validations/${validationId}/certificado`),
+      { headers: tenantHeader(tenantId) },
+    );
+    return leerCertificadoPdf(res, validationId);
   },
 
   // POST reconciliar una validación con el proveedor (fallback si el webhook no llegó): consulta el
