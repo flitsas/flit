@@ -165,11 +165,12 @@ internal sealed partial class NetworkAccessAuditFilter : IEndpointFilter
     }
 
     /// <summary>
-    /// Recursos cuya auditoría es condición para responder: hoy solo la descarga de un documento de un
-    /// hijo (el listado de metadatos y las lecturas siguen best-effort).
+    /// Recursos cuya auditoría es condición para responder: la descarga de un documento de un hijo y, por
+    /// su alcance, toda consulta o exportación de todas las compañías (HU #14320). El listado de metadatos y
+    /// las demás lecturas de red siguen best-effort.
     /// </summary>
     private static bool IsFailClosed(HttpContext http) =>
-        NetworkAccessAuditContext.Get(http) is { Resource: NetworkAccessVocabulary.Resources.AttachmentsDownload };
+        NetworkAccessAuditContext.Get(http) is { Resource: NetworkAccessVocabulary.Resources.AttachmentsDownload } or { PlatformWide: true };
 
     private static async ValueTask DisposeFileAsync(object? result)
     {
