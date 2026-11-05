@@ -713,7 +713,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     /// Cómo aparece el MANDATARIO en el recuadro de firmas. Orden deliberado:
     /// <list type="number">
     ///   <item><b>Modo resuelto por el caller</b> (<see cref="MandatoData.ModoFirmaMandatario"/>):
-    ///   institucional/convenio → <c>SinBloque</c>; abierto / firma física → <c>Manual</c> (líneas);
+    ///   Persona jurídica → <c>SinBloque</c>; abierto o sin estampa → <c>Manual</c> (líneas);
     ///   persona/RL → <c>Estampada</c>. El caller gana para no pisar el tipo Abierto.
     ///   Si hay estampa (baúl o sello), el caller pide <c>Estampada</c> aunque el modelo sea a mano.</item>
     ///   <item><b>Sabaneta sin modo explícito Manual/Estampada:</b> sin bloque — su mandatario es la UT,
@@ -724,7 +724,7 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     /// </summary>
     private static MandatarioFirmaModo ModoFirmaMandatario(MandatoData data)
     {
-        // Caller explícito (Abierto=Manual, Institucional/convenio=SinBloque, Persona=Estampada/Manual).
+        // Caller explícito (Abierto=Manual, Persona jurídica=SinBloque, Persona natural=Estampada/Manual).
         if (data.ModoFirmaMandatario == MandatarioFirmaModo.SinBloque)
             return MandatarioFirmaModo.SinBloque;
         if (data.ModoFirmaMandatario == MandatarioFirmaModo.Manual)

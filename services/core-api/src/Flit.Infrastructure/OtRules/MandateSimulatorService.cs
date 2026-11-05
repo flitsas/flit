@@ -310,7 +310,6 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
             Mandatario = MandatoAssignmentModeCodes.IsOpen(assignmentMode) ? null : mandatario,
             ModoFirmaMandatario = MandatoFirmaModoResolver.Resolve(
                 assignmentMode,
-                tieneConvenio: false,
                 MandatoFirmaModoResolver.TieneEstampa(
                     MandatoAssignmentModeCodes.IsOpen(assignmentMode) ? null : mandatario)),
             CustomTemplateKind = MandatoCustomTemplateKindCodes.Resolve(config?.CustomTemplateKind),

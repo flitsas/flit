@@ -897,7 +897,6 @@ Flit.Tramites.Domain.Integration.IMandateCustomTemplateBlobReader => Flit.Infras
 Flit.Tramites.Domain.Integration.IMandateFormatTemplateProvider => Flit.Infrastructure.OtRules.MandateFormatTemplateProvider (Scoped)
 Flit.Tramites.Domain.Integration.IMandateRequirementPolicy => Flit.Infrastructure.OtRules.MandateRequirementPolicy (Scoped)
 Flit.Tramites.Domain.Integration.IMandateSignerDirectory => Flit.Infrastructure.OtRules.MandateSignerDirectory (Scoped)
-Flit.Tramites.Domain.Integration.IMandatoFirmaPolicy => Flit.Infrastructure.OtRules.MandatoFirmaPolicy (Scoped)
 Flit.Tramites.Domain.Integration.IOtOperabilityGate => Flit.Infrastructure.OtRules.OtOperabilityGate (Scoped)
 Flit.Tramites.Domain.Integration.IOtRuleGate => Flit.Infrastructure.OtRules.OtRuleGateService (Scoped)
 Flit.Tramites.Domain.Integration.IProcedureFamilyCreationGate => Flit.Infrastructure.Tramites.ProcedureFamilyCreationGate (Scoped)
