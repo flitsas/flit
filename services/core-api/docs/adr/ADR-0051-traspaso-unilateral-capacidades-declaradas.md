@@ -60,6 +60,12 @@ hoy en ningún `HydratedField` de la cadena de consulta**. Lo que sí existe:
 
 - `owner_document_type` / `owner_document_number` — los teclea el gestor en el paso 1 y se persisten
   tal cual (`CreateFromConsultaCommand.cs:261-263`), no vienen del RUNT.
+
+  > **Actualización 2026-11-05 (ajuste de QA, sin HU; Daniel Amado García, GitHub `dag-flit`):** el
+  > selector de tipo de documento del paso 1 ya no se oculta con Kyverum (HU #10478): es obligatorio y
+  > arranca sin valor, sea cual sea el proveedor. Al sincronizar al vendedor, el tipo que reporta el
+  > RUNT en la consulta del paso 1 (`tipoDocPropietario`) manda sobre el tecleado.
+
 - El resto de datos del vendedor (nombre, dirección, ciudad, teléfono, correo) hoy los captura el
   gestor a mano en `ActorsForm`, con el documento pre-sembrado desde esos dos campos
   (`TramiteWizard.tsx`, comentario "El documento se siembra desde el propietario que devolvió el
