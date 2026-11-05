@@ -1,5 +1,7 @@
 using Flit.Infrastructure.Documents.Branding;
 using Flit.Tramites.Application.Documents;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using PdfSharpCore.Pdf;
 using PdfSharpCore.Pdf.IO;
 using QuestPDF.Fluent;
@@ -14,9 +16,28 @@ namespace Flit.Infrastructure.Documents;
 /// </summary>
 public sealed class PdfExpedienteConsolidadoMerger : IExpedienteConsolidadoMerger
 {
+    private readonly PdfDocumentNameStampPipeline _stampPipeline;
+
     static PdfExpedienteConsolidadoMerger()
     {
         QuestPDF.Settings.License = LicenseType.Community;
+    }
+
+    public PdfExpedienteConsolidadoMerger()
+        : this(NullLogger<PdfExpedienteConsolidadoMerger>.Instance)
+    {
+    }
+
+    public PdfExpedienteConsolidadoMerger(ILogger<PdfExpedienteConsolidadoMerger> logger)
+    {
+        ArgumentNullException.ThrowIfNull(logger);
+        _stampPipeline = new PdfDocumentNameStampPipeline(logger);
+    }
+
+    /// <summary>Constructor de pruebas: permite inyectar el pipeline de estampado/normalización.</summary>
+    internal PdfExpedienteConsolidadoMerger(PdfDocumentNameStampPipeline stampPipeline)
+    {
+        _stampPipeline = stampPipeline ?? throw new ArgumentNullException(nameof(stampPipeline));
     }
 
     public byte[] NormalizeToPdf(byte[] content, string mimetype)
@@ -63,14 +84,12 @@ public sealed class PdfExpedienteConsolidadoMerger : IExpedienteConsolidadoMerge
         if (request.Cover is not null)
             parts.Add(FlitCoverPageGenerator.Generate(ToCoverData(request.Cover)));
 
-        // HU #10858 — pie con el nombre del documento en cada parte antes de fusionar (se estampa
-        // por parte para que cada página lleve la descripción de SU documento). El margen inferior
-        // depende del perfil de estampado de la parte (ADR-0049): el FUR usa un margen reducido
-        // porque su contenido oficial llega más cerca del borde inferior que el resto de documentos.
+        // HU #10858 — pie con el nombre del documento en cada parte antes de fusionar.
+        // HU #14209 — si Modify falla: N1 Import-rewrite → N2 raster → incluir sin pie (no tumbar Compose).
         foreach (var part in request.Parts)
             parts.Add(string.IsNullOrWhiteSpace(part.DocumentName)
                 ? part.Pdf
-                : FlitPdfStamper.ApplyDocumentName(part.Pdf, part.DocumentName!, BottomCmFor(part.Profile)));
+                : _stampPipeline.Apply(part.Pdf, part.DocumentName!, BottomCmFor(part.Profile)));
 
         var merged = Merge(parts);
 
