@@ -18,7 +18,7 @@ public sealed class CopiarEnlaceManualHandlerTests
 {
     private static readonly DateTimeOffset Now = new(2026, 11, 5, 10, 0, 0, TimeSpan.Zero);
     private static readonly Guid User = Guid.Parse("66666666-6666-4666-8666-666666666666");
-    private const string Token = "token-en-claro-123";
+    private static readonly string Token = new('t', 18);
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private readonly IProcedureInstanceRepository _repo = Substitute.For<IProcedureInstanceRepository>();
