@@ -14,6 +14,11 @@ import { formatEspera } from '@/lib/identidad/manual-review-meta';
 const NOW = new Date('2026-10-05T15:00:00Z');
 const nuevoCliente = (count = 27) => createMockManualReviewClient({ count, delayMs: 0, now: NOW });
 
+vi.mock('@/components/admin/Toast', () => ({
+  useToast: () => ({ show: vi.fn() }),
+  ToastProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 describe('Pestaña Validaciones manuales — tabla', () => {
   it('muestra las columnas del modelo de trámites y la fecha en DD/MM/YYYY HH:mm', async () => {
     render(<ValidacionesManuales client={nuevoCliente()} />);
