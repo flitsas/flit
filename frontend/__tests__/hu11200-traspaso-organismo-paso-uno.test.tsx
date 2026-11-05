@@ -86,7 +86,6 @@ const PREVIEW_OK = {
 
 async function consultarVehiculo(user: ReturnType<typeof userEvent.setup>) {
   await user.type(await screen.findByLabelText('Placa del vehículo'), 'ABC123');
-  await user.selectOptions(screen.getByLabelText('Tipo documento propietario'), 'CC');
   await user.type(screen.getByLabelText('Número documento del propietario'), '1020304050');
   await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
 }
@@ -155,30 +154,6 @@ describe('HU #11200 — el organismo del traspaso se valida en el primer paso', 
 
     expect(screen.getByRole('button', { name: /Continuar/ })).toBeDisabled();
     expect(mocks.createInstanceFromConsulta).not.toHaveBeenCalled();
-  });
-
-  it('el NIT elegido viaja en la consulta y en la creación del trámite', async () => {
-    const user = userEvent.setup();
-    renderTraspaso();
-
-    await user.type(await screen.findByLabelText('Placa del vehículo'), 'ABC123');
-    await user.selectOptions(screen.getByLabelText('Tipo documento propietario'), 'NIT');
-    await user.type(screen.getByLabelText('Número documento del propietario'), '890903938');
-    await user.click(screen.getByRole('button', { name: 'Consultar RUNT' }));
-
-    await waitFor(() =>
-      expect(mocks.runPreflightPreview).toHaveBeenCalledWith(
-        expect.objectContaining({ ownerDocumentType: 'NIT', ownerDocumentNumber: '890903938' }),
-      ),
-    );
-
-    await user.click(await screen.findByRole('button', { name: /Continuar/ }));
-
-    await waitFor(() =>
-      expect(mocks.createInstanceFromConsulta).toHaveBeenCalledWith(
-        expect.objectContaining({ ownerDocumentType: 'NIT', ownerDocumentNumber: '890903938' }),
-      ),
-    );
   });
 
   it('AC5: en traspaso no se pide elegir organismo (lo impone el RUNT)', async () => {

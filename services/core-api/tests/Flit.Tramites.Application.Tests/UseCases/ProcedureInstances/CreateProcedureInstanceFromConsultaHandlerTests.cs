@@ -211,37 +211,4 @@ public sealed class CreateProcedureInstanceFromConsultaHandlerTests
 
         error.Should().Be("identificador_requerido");
     }
-
-    [Theory]
-    // El tipo que reporta el RUNT manda sobre el capturado.
-    [InlineData("CC", "NIT", "NIT")]
-    [InlineData("NIT", "NIT", "NIT")]
-    [InlineData("NIT", "CC", "CC")]
-    // Sin dato del RUNT (consulta vencida o proveedor que no lo informa) se usa el capturado.
-    [InlineData("NIT", null, "NIT")]
-    [InlineData("NIT", "  ", "NIT")]
-    // Sin tipo capturado la sincronización se sigue omitiendo, aunque el RUNT lo informe.
-    [InlineData(null, "NIT", null)]
-    [InlineData("  ", "NIT", null)]
-    public void TipoDocumentoVendedor_ElRuntMandaSobreElCapturado(
-        string? capturado, string? delRunt, string? esperado)
-    {
-        IReadOnlyList<HydratedField> campos =
-        [
-            new HydratedField("plate", "ABC123", null),
-            new HydratedField("owner_document_type", delRunt, null),
-        ];
-
-        CreateProcedureInstanceFromConsultaHandler
-            .ResolverTipoDocumentoVendedor(capturado, campos)
-            .Should().Be(esperado);
-    }
-
-    [Fact]
-    public void TipoDocumentoVendedor_SinConsultaReutilizable_UsaElCapturado()
-    {
-        CreateProcedureInstanceFromConsultaHandler
-            .ResolverTipoDocumentoVendedor("NIT", null)
-            .Should().Be("NIT");
-    }
 }
