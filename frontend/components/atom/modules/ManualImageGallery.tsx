@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ChevronLeft, ChevronRight, ImageOff, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight, ImageOff, RefreshCw, ZoomIn } from 'lucide-react';
 import { Modal } from '@flit/ui/Modal';
 import { useWizardFocusTrap } from '@/components/operacion/use-wizard-focus-trap';
 import type { ManualReviewClient } from '@/lib/api/manual-review-client';
@@ -124,19 +124,26 @@ export function ManualImageGallery({
         {MANUAL_IMAGE_KINDS.map((kind) => {
           const estado = estados[kind];
           const { title, alt } = MANUAL_IMAGE_TEXT[kind];
+          const noVerificada = kind !== 'firma' && validacionFotos?.[kind]?.estado === 'no_verificada';
           return (
-            <li key={kind} className="flex flex-col gap-1.5">
-              <p className="text-xs font-semibold text-flit-primary dark:text-white">{title}</p>
-              <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-xl border border-[#DFE5ED] bg-[#EEF5FF] dark:border-white/10 dark:bg-[#162744]">
+            <li
+              key={kind}
+              className={`flex flex-col overflow-hidden rounded-2xl border ${noVerificada ? 'border-[#F9AC00]/40' : 'border-[#DFE5ED] dark:border-white/10'}`}
+            >
+              <p className="px-3 py-2 text-xs font-semibold text-flit-primary dark:text-white">{title}</p>
+              <div className="flex aspect-[4/3] flex-1 items-center justify-center overflow-hidden bg-[#EEF5FF] dark:bg-[#162744]">
                 {estado.status === 'ready' ? (
                   <button
                     type="button"
                     onClick={() => setAmpliada(kind)}
                     aria-label={`Ampliar ${title.toLowerCase()}`}
-                    className="h-full w-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-flit-brand dark:focus-visible:outline-[#7C9BFF]"
+                    className="group relative h-full w-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-flit-brand dark:focus-visible:outline-[#7C9BFF]"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element -- URL de blob de una imagen protegida */}
                     <img src={estado.url} alt={alt} className="h-full w-full object-contain" />
+                    <span className="absolute bottom-2 right-2 inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#DFE5ED] bg-white text-flit-primary transition group-hover:text-flit-brand dark:border-white/15 dark:bg-[#162744] dark:text-white">
+                      <ZoomIn className="h-3.5 w-3.5" aria-hidden />
+                    </span>
                   </button>
                 ) : estado.status === 'loading' ? (
                   <p role="status" className="text-xs text-[#59677D] dark:text-white/70">
@@ -162,11 +169,11 @@ export function ManualImageGallery({
                   </div>
                 )}
               </div>
-              {kind !== 'firma' && validacionFotos?.[kind]?.estado === 'no_verificada' && (
-                <p className={`flex items-start gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs ${MANUAL_AVISO.warning}`}>
+              {noVerificada && (
+                <p className={`flex items-start gap-1.5 border-t px-3 py-2 text-xs ${MANUAL_AVISO.warning}`}>
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
                   <span>
-                    <strong className="font-semibold">No verificada.</strong> {etiquetaMotivoFoto(validacionFotos[kind].motivo)}
+                    <strong className="font-semibold">No verificada.</strong> {etiquetaMotivoFoto(validacionFotos?.[kind]?.motivo)}
                   </span>
                 </p>
               )}
