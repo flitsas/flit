@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Flit.Tramites.Application.UseCases.Consultations;
@@ -49,17 +50,19 @@ internal sealed class IntempoConsultationProvider(
 
     private async Task<ConsultationResult> SendAsync(object body, CancellationToken ct)
     {
+        HttpStatusCode? estado = null;
         try
         {
             const string path = "/consultaAseguradora/consulta/vehiculos";
             using var response = await http.PostAsJsonAsync(path, body, JsonOptions, ct);
+            estado = response.StatusCode;
 
             if (!response.IsSuccessStatusCode)
-                return ProviderUnavailable();
+                return ProviderUnavailable(ClasificadorFalloHttp.PorEstado(response.StatusCode));
 
             var payload = await response.Content.ReadFromJsonAsync<IntempoVehicleResponse>(JsonOptions, ct);
             if (payload is null)
-                return ProviderUnavailable();
+                return ProviderUnavailable(ClasificadorFalloHttp.CuerpoIlegible(response.StatusCode));
 
             return IntempoVehicleResultMapper.Map(payload);
         }
@@ -69,15 +72,15 @@ internal sealed class IntempoConsultationProvider(
         }
         catch (TaskCanceledException)
         {
-            return ProviderUnavailable();
+            return ProviderUnavailable(ClasificadorFalloHttp.Timeout());
         }
         catch (HttpRequestException)
         {
-            return ProviderUnavailable();
+            return ProviderUnavailable(ClasificadorFalloHttp.Red());
         }
         catch (JsonException)
         {
-            return ProviderUnavailable();
+            return ProviderUnavailable(ClasificadorFalloHttp.CuerpoIlegible(estado));
         }
     }
 
@@ -129,6 +132,9 @@ internal sealed class IntempoConsultationProvider(
         };
         return IntempoVehicleResultMapper.Map(mock);
     }
+
+    /// <summary>El <c>ProviderUnavailable</c> de siempre, con la clase del fallo (resolvedor del Diagnóstico).</summary>
+    private static ConsultationResult ProviderUnavailable(FalloProveedor fallo) => ProviderUnavailable() with { Fallo = fallo };
 
     // No se pudo verificar el vehículo (no-200/timeout/red/respuesta ilegible). Dato crítico:
     // check "error" (bloqueo DURO, no subsanable) con mensaje amigable sin exponer el proveedor.

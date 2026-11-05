@@ -41,6 +41,8 @@
 #                           (en PDN, https://app.flitsas.com). Vacío en DEV/QA
 #   VERIFIK_API_TOKEN       token Verifik (RUNT); lo lee core-consultas (HU #13348)
 #   RABBITMQ_URL_TRAMITES   usuario tramites del broker; OBLIGATORIA desde el corte (HU #13348)
+#   RABBITMQ_URL_DIAGNOSTICO  usuario diagnostico del broker (con destino consultas); OBLIGATORIA aunque el
+#                           perfil diagnostico esté apagado: compose valida todo el archivo (ADR-0075)
 #   ICT_SERVICE_TOKEN_SECRET  secreto HMAC del canal gRPC este-oeste ICT (core-api <-> core-ict).
 #                             Sin el, la orquestacion y el callback quedan fail-closed.
 #   FLIT_INTERNAL_API_KEY   clave compartida Gateway <-> core-api para GET /internal/domains/active
@@ -210,6 +212,9 @@ services:
       Suite__Oidc__ServiceClients__svc-notificaciones__Secret: ${SVC_NOTIFICACIONES_CLIENT_SECRET:-}
       # Epic #12878 (GDC): core-comparendos registra su manifiesto y llama a Consultas y Notificaciones.
       Suite__Oidc__ServiceClients__svc-comparendos__Secret: ${SVC_COMPARENDOS_CLIENT_SECRET:-}
+      # HU #13734 (F00.1-H8): core-diagnostico registra su manifiesto, consulta la suscripción de la empresa y lee los
+      # tipos de trámite publicados (scopes en appsettings.json).
+      Suite__Oidc__ServiceClients__svc-diagnostico__Secret: ${SVC_DIAGNOSTICO_CLIENT_SECRET:-}
       Suite__Oidc__ServiceClients__svc-identidad__Secret: ${SVC_IDENTIDAD_CLIENT_SECRET:-}
       # Epic #14021 (HU #14033/#14038): cliente del portal Persona Natural. Vacío = no se registra (como hasta ahora).
       Suite__Oidc__ServiceClients__svc-personanatural__Secret: ${SVC_PERSONANATURAL_CLIENT_SECRET:-}
@@ -513,6 +518,68 @@ services:
     cpus: ${CORE_COMPARENDOS_CPUS:-0}
     logging: *default-logging
 
+  # ── core-diagnostico (HU #13734, F00.1-H8) — CORE_DIAGNOSTICO_PORT / CORE_DIAGNOSTICO_GRPC_PORT, sin publicar ──
+  # Diagnóstico Vehicular: su app web (frontend-diagnostico) le habla por el gateway (/api/v1/diagnostico/*). Perfil
+  # propio: no arranca hasta que el ambiente lo pida (COMPOSE_PROFILES=…,diagnostico). Si falta configuración no
+  # arranca y el log dice qué variable falta. Pasos en docs/suite/handoff-vps-diagnostico.md.
+  core-diagnostico:
+    profiles: ["diagnostico"]
+    image: ghcr.io/flitsas/flitdev/core-diagnostico:${CORE_DIAGNOSTICO_TAG:-latest}
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${FLIT_DOTNET_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:${CORE_DIAGNOSTICO_PORT:-4032}
+      Servicio__GrpcPort: ${CORE_DIAGNOSTICO_GRPC_PORT:-8088}
+      # Usuario de base dueño del esquema diagnostico (deploy/postgres/servicio-con-esquema-propio.sql).
+      ConnectionStrings__Servicio: ${CONNECTION_STRING_DIAGNOSTICO:-}
+      Platform__ServiceClient__ClientSecret: ${SVC_DIAGNOSTICO_CLIENT_SECRET:-}
+      Platform__ServiceClient__TokenEndpoint: http://gateway:${GATEWAY_PORT:-4002}/connect/token
+      Platform__Auth__JwksUri: http://gateway:${GATEWAY_PORT:-4002}/.well-known/jwks.json
+      Platform__Auth__Issuers__0: ${FLIT_HUB_URL:-https://dev.flitsas.online}/
+      # Su usuario del broker (deploy/rabbitmq/usuario-de-servicio.sh diagnostico <clave> consultas): publica en
+      # flit.diagnostico y deja los trabajos de consulta en flit.consultas (ADR-0075). Sin bus no hay consultas.
+      Platform__Messaging__ConnectionString: ${RABBITMQ_URL_DIAGNOSTICO:?RABBITMQ_URL_DIAGNOSTICO es obligatoria (amqp://diagnostico:<clave>@rabbitmq:5672/flit; las consultas del diagnóstico van por el bus, ADR-0075)}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      # Manifiesto de permisos (contrato v1 §6) por la plataforma.
+      Diagnostico__Plataforma__GatewayUrl: http://gateway:${GATEWAY_PORT:-4002}
+      # Suscripción por petición (HU #13726, fail-closed): el gRPC de Identidad. Vacío = ninguna empresa habilitada.
+      # La suscripción simulada es solo para pruebas en local: no va en ningún ambiente.
+      Diagnostico__Identidad__Address: ${DIAGNOSTICO_IDENTIDAD_ADDRESS:-}
+      # Tipos de trámite publicados (GET /tipos-tramite) por el gRPC ListarTiposTramite de core-api. Sin ella: 503.
+      Diagnostico__Tramites__Address: http://core-api:${CORE_API_GRPC_PORT:-8082}
+      # Fuente de impuesto. Vacía la lista en core-consultas y sigue apagada. El encendido real no va en este compose.
+      Diagnostico__Fuentes__ImpuestoDisponible: ${DIAGNOSTICO_IMPUESTO_DISPONIBLE:-false}
+      # HU #13878: fuentes reales por el gRPC de core-consultas (p. ej. http://core-consultas:8084), sin valor por defecto: cada
+      # ambiente la define en su .env. OJO: al definirla se encienden JUNTAS todas las fuentes de core-consultas del
+      # diagnóstico (RUNT por Intempo, RUNT persona, RUES, SIMIT, avalúo e impuesto), no solo el RUNT. Sin ella, todas quedan
+      # no conectadas. Diagnostico__Ambiente (LOCAL, DEV, QA o PDN) solo se valida si la simulación está habilitada, y la
+      # simulación no se declara aquí: QA y PDN nunca la encienden.
+      Diagnostico__Consultas__Address: ${DIAGNOSTICO_CONSULTAS_ADDRESS:-}
+      Diagnostico__Ambiente: ${DIAGNOSTICO_AMBIENTE:-}
+      # Evidencias y PDF del informe (HU #13846) por el file-manager corporativo, las mismas variables que core-api y con el
+      # mismo defecto (AWS pdn) para que ambos apunten siempre al mismo sitio, en su propia categoría. Sin URL no arranca.
+      FILE_MANAGER_BASE_URL: ${FILE_MANAGER_BASE_URL:-https://ny46zhyeti.execute-api.us-east-1.amazonaws.com/pdn/}
+      FILE_MANAGER_FILES_PATH: ${FILE_MANAGER_FILES_PATH:-api/v1/files}
+      FILE_MANAGER_CATEGORY: ${DIAGNOSTICO_FILE_MANAGER_CATEGORY:-diagnostico}
+      FILE_MANAGER_TIMEOUT_SECONDS: ${FILE_MANAGER_TIMEOUT_SECONDS:-30}
+      FILE_MANAGER_AUTH_TOKEN: ${FILE_MANAGER_AUTH_TOKEN:-}
+      # Data Protection (HU #13751, fail-closed): el anillo de llaves en la base va cifrado con este certificado RSA.
+      # El .pfx vive FUERA del repo (DIAGNOSTICO_DP_CERT_FILE, ver secrets: al final) y entra como secreto; la clave
+      # sale del .env del ambiente. Perder el certificado deja ilegibles los documentos cifrados: respaldo obligatorio.
+      Diagnostico__DataProtection__CertificadoRuta: /run/secrets/diagnostico_dp_pfx
+      Diagnostico__DataProtection__CertificadoClave: ${DIAGNOSTICO_DP_CERT_PASSWORD:-}
+    secrets:
+      - diagnostico_dp_pfx
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:${CORE_DIAGNOSTICO_PORT:-4032}/health/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    restart: *restart
+    mem_limit: ${CORE_DIAGNOSTICO_MEM_LIMIT:-0}
+    cpus: ${CORE_DIAGNOSTICO_CPUS:-0}
+    logging: *default-logging
+
   # ── core-consultas (Epic #13316, HU #13347) — CORE_CONSULTAS_PORT / CORE_CONSULTAS_GRPC_PORT, sin publicar ──
   # Consultas a proveedores como servicio (ADR-0065): Trámites e ICT lo llaman por gRPC en la red interna. Obligatorio
   # desde el corte (HU #13348): core-api e ICT ya no tienen proveedores. Sin `ports`: ni REST ni gRPC se publican.
@@ -604,6 +671,17 @@ services:
       RENTING_API_CONTRATOS_PATH: ${RENTING_API_CONTRATOS_PATH:-}
       RENTING_API_CONTRATOS_REAL_CONTACT_ENABLED: ${RENTING_API_CONTRATOS_REAL_CONTACT_ENABLED:-false}
       RENTING_API_CONTRATOS_DEVELOPMENT_EMAIL: ${RENTING_API_CONTRATOS_DEVELOPMENT_EMAIL:-}
+      # HU #13876: RUNT por Intempo (API nativa; sin la URL queda no conectado). Misma URL en DEV, QA y PDN, definida en el
+      # .env del ambiente (ver .env.intempo.example). INTEMPO_MODE de arriba es el proveedor heredado de core-api: no cambia.
+      INTEMPO_API_BASE_URL: ${INTEMPO_API_BASE_URL:-}
+      INTEMPO_API_VEHICLE_PLATE_PATH: ${INTEMPO_API_VEHICLE_PLATE_PATH:-/api/RuntConsulta/consultar-vehiculo}
+      INTEMPO_API_VEHICLE_VIN_PATH: ${INTEMPO_API_VEHICLE_VIN_PATH:-/api/RuntConsulta/consultar-vin}
+      INTEMPO_API_SECONDS_TIMEOUT: ${INTEMPO_API_SECONDS_TIMEOUT:-20}
+      # Impuesto vehicular. Sin base y sin ruta el transporte real no está listo. La lista vacía no ofrece la fuente.
+      IMPUESTO_API_BASE_URL: ${IMPUESTO_API_BASE_URL:-}
+      IMPUESTO_API_PATH: ${IMPUESTO_API_PATH:-}
+      IMPUESTO_API_TIMEOUT_SECONDS: ${IMPUESTO_API_TIMEOUT_SECONDS:-280}
+      IMPUESTO_DEPARTAMENTOS: ${IMPUESTO_DEPARTAMENTOS:-}
     volumes:
       # El mismo .pfx que core-notificaciones, solo lectura y en la misma ruta a ambos lados. Si no existe, la API de
       # contratos queda «no conectada» con la ruta en el motivo (no impide arrancar).
@@ -926,6 +1004,8 @@ services:
       ReverseProxy__Clusters__core-personanatural-cluster__Destinations__core-personanatural-1__Address: http://core-personanatural:${CORE_PERSONANATURAL_PORT:-4029}/
       # Epic #12878: API de Comparendos (/api/v1/comparendos/*).
       ReverseProxy__Clusters__core-comparendos-cluster__Destinations__core-comparendos-1__Address: http://core-comparendos:${CORE_COMPARENDOS_PORT:-4028}/
+      # HU #13734: API de Diagnóstico (/api/v1/diagnostico/*).
+      ReverseProxy__Clusters__core-diagnostico-cluster__Destinations__core-diagnostico-1__Address: http://core-diagnostico:${CORE_DIAGNOSTICO_PORT:-4032}/
       # HU #13225/#13226 — rutas del login hacia core-identity. Apagada (por defecto) todo va a core-api como siempre;
       # encenderla exige core-identity arriba (perfil "identity"). Volver atrás = false + recrear el gateway.
       Gateway__IdentityCluster__Enabled: ${FLIT_IDENTITY_CLUSTER_ENABLED:-false}
@@ -1151,6 +1231,39 @@ services:
     cpus: ${FRONTEND_COMPARENDOS_CPUS:-0}
     logging: *default-logging
 
+  # ── frontend-diagnostico (HU #13734, F00.1-H8) — DIAGNOSTICO_PORT (4024 DEV / 5024 QA / 6024 PDN) ──
+  # App web de Diagnóstico en <amb>.diagnostico.flitsas.online. Cliente OIDC público `diagnostico` del hub (PKCE, se
+  # registra solo con el host del ambiente); habla con core-diagnostico por el gateway. Mismo perfil que su API.
+  frontend-diagnostico:
+    profiles: ["diagnostico"]
+    image: ghcr.io/flitsas/flitdev/frontend-diagnostico:${FRONTEND_DIAGNOSTICO_TAG:-latest}
+    environment:
+      PORT: "${DIAGNOSTICO_PORT:-4024}"
+      HOSTNAME: "0.0.0.0"
+      CORE_API_ORIGIN: http://gateway:${GATEWAY_PORT:-4002}
+      BRANDING_INTERNAL_API_URL: http://gateway:${GATEWAY_PORT:-4002}
+      FLIT_INTERNAL_API_KEY: ${FLIT_INTERNAL_API_KEY:-}
+      FLIT_HUB_URL: ${FLIT_HUB_URL:-https://dev.flitsas.online}
+      FLIT_OIDC_INTERNAL_URL: http://gateway:${GATEWAY_PORT:-4002}
+      # Cifra la cookie de sesión de Diagnóstico: al menos 32 caracteres, distinta por ambiente y de la del hub.
+      FLIT_SESSION_SECRET: ${DIAGNOSTICO_SESSION_SECRET:-}
+      TRAMITES_URL: ${FLIT_TRAMITES_URL:-https://dev.tramites.flitsas.online}
+      FLIT_HOSTS: ${FLIT_HOSTS:-flitsas.online,*.flitsas.online,flitsas.com,*.flitsas.com,!marcablancadev.flitsas.online,!marcablancaqa.flitsas.online,!marcablancapdn.flitsas.online,!marcablancadag1.flitsas.online}
+    ports:
+      - "127.0.0.1:${DIAGNOSTICO_PORT:-4024}:${DIAGNOSTICO_PORT:-4024}"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:${DIAGNOSTICO_PORT:-4024}/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    depends_on:
+      - gateway
+    restart: *restart
+    mem_limit: ${FRONTEND_DIAGNOSTICO_MEM_LIMIT:-0}
+    cpus: ${FRONTEND_DIAGNOSTICO_CPUS:-0}
+    logging: *default-logging
+
   # ── frontend-personanatural (Epic #14021, HU #14052) — PERSONANATURAL_PORT, solo en 127.0.0.1 (nginx publica el dominio) ──
   # App web del portal Persona Natural (Next.js, una imagen para todos los ambientes). No usa el login del hub: habla con
   # el gateway (/api/v1/persona-natural/*) por su propio proxy, que guarda la sesión del trámite en cookie HttpOnly.
@@ -1204,6 +1317,13 @@ volumes:
   observabilidad-datos:
   # HU #13349: datos del broker (vhost, colas y mensajes durables).
   rabbitmq-datos:
+
+# Secretos de archivo (montados en /run/secrets/<nombre>, nunca dentro del repo ni de la imagen).
+secrets:
+  # HU #13751: certificado .pfx (RSA con llave privada) que protege las llaves de Data Protection de core-diagnostico.
+  # Uno por ambiente, con respaldo fuera del VPS. Ruta en DIAGNOSTICO_DP_CERT_FILE del .env del ambiente.
+  diagnostico_dp_pfx:
+    file: ${DIAGNOSTICO_DP_CERT_FILE:-/etc/flit/secrets/diagnostico-dp.pfx}
 
 # ── Red interna (Marca Blanca, #12421) ──────────────────────────────────────
 # Subred EXPLICITA de la red "default" (la que TODO servicio de arriba usa ya

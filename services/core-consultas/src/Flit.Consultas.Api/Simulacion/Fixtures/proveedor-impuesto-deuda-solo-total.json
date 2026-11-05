@@ -1,0 +1,6 @@
+{
+  "pendingDebtTaxes": true,
+  "pendingTotalToPay": "$ 1.234.567 COP",
+  "pendingValidity": "",
+  "observationError": { "descriptionError": "", "descriptionErrorDevelopment": "TRAZA-INTERNA-NO-COPIAR", "typeError": 0 }
+}

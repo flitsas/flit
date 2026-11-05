@@ -255,7 +255,196 @@ public sealed class ConsumerTests(MessagingFixture fixture) : IClassFixture<Mess
         new PlatformConsumerOptions().RetryDelays.Should().Equal(TimeSpan.FromSeconds(10), TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(10));
     }
 
+    // ── HU #13727 (ADR-0075, D1): mensajes que el consumidor atiende a la vez ─────────────────────────────────────
+
+    [Fact]
+    public async Task HU13727_ConConcurrencia2_DosEfectosEntranALaVez()
+    {
+        fixture.SkipIfUnavailable();
+        var barrera = new Barrera(esperados: 2, tope: TimeSpan.FromSeconds(10));
+        await using var consumidor = await ConsumidorExtra.ArrancarAsync<EfectoConBarrera>(
+            fixture, Config(), TipoConcurrente, s => s.AddSingleton(barrera), o =>
+            {
+                o.Concurrencia = 2;
+                o.Prefetch = 2;
+            });
+
+        await PublicarAsync(Sobre(TipoConcurrente));
+        await PublicarAsync(Sobre(TipoConcurrente));
+        await Eventually(() => Task.FromResult(barrera.Salidas == 2), TimeSpan.FromSeconds(15));
+
+        barrera.Maximo.Should().Be(2, "con Concurrencia=2 los dos efectos están dentro a la vez");
+    }
+
+    [Fact]
+    public async Task HU13727_PorDefecto_UnSoloEfectoALaVez()
+    {
+        fixture.SkipIfUnavailable();
+        var barrera = new Barrera(esperados: 2, tope: TimeSpan.FromSeconds(1));
+        await using var consumidor = await ConsumidorExtra.ArrancarAsync<EfectoConBarrera>(
+            fixture, Config(), TipoConcurrente, s => s.AddSingleton(barrera), o => o.Prefetch = 10);
+
+        await PublicarAsync(Sobre(TipoConcurrente));
+        await PublicarAsync(Sobre(TipoConcurrente));
+        await Eventually(() => Task.FromResult(barrera.Salidas == 2), TimeSpan.FromSeconds(15));
+
+        barrera.Maximo.Should().Be(1, "sin Concurrencia el consumidor atiende un mensaje a la vez aunque tenga prefetch");
+    }
+
+    [Fact]
+    public void HU13727_LaConcurrenciaPorDefecto_EsUno_YLlegaALaConexion()
+    {
+        new PlatformConsumerOptions().Concurrencia.Should().Be(1);
+
+        var opciones = new PlatformConsumerOptions { Queue = "prueba.fabrica", Producer = Productor, Concurrencia = 4, Prefetch = 8 };
+        Consumidor(opciones).Fabrica().ConsumerDispatchConcurrency.Should().Be(4);
+        Consumidor(new PlatformConsumerOptions { Queue = "prueba.fabrica", Producer = Productor }).Fabrica().ConsumerDispatchConcurrency.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(0, 10)]
+    [InlineData(4, 2)]
+    public void HU13727_ConcurrenciaCero_OPrefetchMenorQueLaConcurrencia_NoRegistra(int concurrencia, int prefetch)
+    {
+        var registrar = () => new ServiceCollection().AddFlitConsumer<PruebaDb, EfectoDePrueba, PedidoCreado>(
+            Config(), "prueba.invalida", Productor, [Tipo], o =>
+            {
+                o.Concurrencia = (ushort)concurrencia;
+                o.Prefetch = (ushort)prefetch;
+            });
+
+        registrar.Should().Throw<InvalidOperationException>().WithMessage("*Concurrencia*");
+    }
+
+    // ── HU #13727 (ADR-0075, Q3=3a): productores permitidos con el user_id que valida RabbitMQ ──────────────────────
+
+    [Fact]
+    public async Task HU13727_ProductorPermitido_SeProcesa()
+    {
+        fixture.SkipIfUnavailable();
+        var comportamiento = new Comportamiento();
+        await using var consumidor = await ConsumidorExtra.ArrancarAsync<EfectoDePrueba>(
+            fixture, Config(), TipoProductor, s => s.AddSingleton(comportamiento), o => o.ProductoresPermitidos.Add(UsuarioDelBroker));
+        var evento = Sobre(TipoProductor, UsuarioDelBroker);
+
+        await PublicarAsync(evento);
+
+        await Eventually(async () => await EfectosAsync(evento.EventId) == 1);
+        (await consumidor.MuertosAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task HU13727_ProductorFueraDeLaLista_VaALaDlq_SinLlamarAlEfecto()
+    {
+        fixture.SkipIfUnavailable();
+        var comportamiento = new Comportamiento();
+        await using var consumidor = await ConsumidorExtra.ArrancarAsync<EfectoDePrueba>(
+            fixture, Config(), TipoProductor, s => s.AddSingleton(comportamiento), o => o.ProductoresPermitidos.Add("diagnostico"));
+        var evento = Sobre(TipoProductor, UsuarioDelBroker);
+
+        await PublicarAsync(evento);
+
+        await Eventually(async () => await consumidor.MuertosAsync() == 1);
+        comportamiento.Intentos(evento.EventId).Should().Be(0, "el efecto no se llama");
+        (await consumidor.MotivoDelMuertoAsync()).Should().Be(VerificacionProductor.MotivoNoAutorizado);
+    }
+
+    [Fact]
+    public async Task HU13727_UserIdDistintoDelProductorDelSobre_VaALaDlq()
+    {
+        fixture.SkipIfUnavailable();
+        var comportamiento = new Comportamiento();
+        await using var consumidor = await ConsumidorExtra.ArrancarAsync<EfectoDePrueba>(
+            fixture, Config(), TipoProductor, s => s.AddSingleton(comportamiento), o => o.ProductoresPermitidos.Add("otro-servicio"));
+        // El sobre dice «otro-servicio», pero RabbitMQ autenticó y validó el user_id del usuario de la conexión.
+        var evento = Sobre(TipoProductor, "otro-servicio");
+
+        await PublicarAsync(evento);
+
+        await Eventually(async () => await consumidor.MuertosAsync() == 1);
+        comportamiento.Intentos(evento.EventId).Should().Be(0);
+        (await consumidor.MotivoDelMuertoAsync()).Should().Be(VerificacionProductor.MotivoNoAutorizado);
+    }
+
+    [Fact]
+    public async Task HU13727_SinProductoresPermitidos_ElComportamientoEsElDeHoy()
+    {
+        fixture.SkipIfUnavailable();
+        var comportamiento = new Comportamiento();
+        await using var consumidor = await ConsumidorExtra.ArrancarAsync<EfectoDePrueba>(
+            fixture, Config(), TipoProductor, s => s.AddSingleton(comportamiento), _ => { });
+        var evento = Sobre(TipoProductor, "cualquiera");
+
+        await PublicarAsync(evento);
+
+        await Eventually(async () => await EfectosAsync(evento.EventId) == 1);
+        (await consumidor.MuertosAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public void HU13727_ProductoresPermitidos_VaciaPorDefecto()
+    {
+        new PlatformConsumerOptions().ProductoresPermitidos.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("", "diagnostico", "diagnostico", true)]
+    [InlineData("", null, "diagnostico", true)]
+    [InlineData("diagnostico", "diagnostico", "diagnostico", true)]
+    [InlineData("diagnostico", "tramites", "tramites", false)]
+    [InlineData("diagnostico", "tramites", "diagnostico", false)]
+    [InlineData("diagnostico", null, "diagnostico", false)]
+    [InlineData("diagnostico,tramites", "tramites", "tramites", true)]
+    public void HU13727_Autorizado_SoloSiElUserIdEsElProductorYEstaEnLaLista(string permitidos, string? userId, string productor, bool esperado)
+    {
+        var lista = permitidos.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
+
+        VerificacionProductor.Autorizado(userId, productor, lista).Should().Be(esperado);
+    }
+
+    [Fact]
+    public void HU13727_AlReenviarAReintentoODlq_ElUserIdEsElDelConsumidor_YElProductorVerificadoSeConserva()
+    {
+        var original = new BasicProperties { UserId = "diagnostico", MessageId = "m-1" };
+
+        var primera = VerificacionProductor.Reenvio(original, "consultas");
+        var segunda = VerificacionProductor.Reenvio(primera, "consultas");
+
+        primera.UserId.Should().Be("consultas", "RabbitMQ rechaza un user_id distinto del usuario que republica");
+        primera.MessageId.Should().Be("m-1");
+        VerificacionProductor.Verificado(primera, "consultas").Should().Be("diagnostico");
+        VerificacionProductor.Verificado(segunda, "consultas").Should().Be("diagnostico", "el segundo reenvío no lo pierde");
+        VerificacionProductor.Verificado(original, "consultas").Should().Be("diagnostico");
+    }
+
+    [Fact]
+    public void HU13727_LaCabeceraDelProductorVerificado_SoloValeEnUnReenvioDelPropioConsumidor()
+    {
+        // Otro servicio publica con su user_id (validado) y una cabecera que dice «diagnostico»: manda el user_id.
+        var falsa = new BasicProperties
+        {
+            UserId = "tramites",
+            Headers = new Dictionary<string, object?> { [VerificacionProductor.UserIdHeader] = Encoding.UTF8.GetBytes("diagnostico") },
+        };
+
+        VerificacionProductor.Verificado(falsa, "consultas").Should().Be("tramites");
+        VerificacionProductor.Verificado(new BasicProperties(), "consultas").Should().BeNull();
+    }
+
     // ── Apoyo ────────────────────────────────────────────────────────────────────────────────────────────────────
+
+    private const string TipoConcurrente = "prueba-consumo.pedido.concurrente";
+    private const string TipoProductor = "prueba-consumo.pedido.verificado";
+
+    /// <summary>Usuario de la conexión de las pruebas: el user_id que pone el publicador y que valida RabbitMQ.</summary>
+    private string UsuarioDelBroker => Uri.UnescapeDataString(new Uri(fixture.RabbitMq).UserInfo.Split(':')[0]);
+
+    private PlatformConsumer<PruebaDb, EfectoDePrueba, PedidoCreado> Consumidor(PlatformConsumerOptions opciones) => new(
+        new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
+        opciones,
+        new PlatformMessagingOptions { Producer = "consumidor-prueba", ConnectionString = fixture.RabbitMq },
+        TimeProvider.System,
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<PlatformConsumer<PruebaDb, EfectoDePrueba, PedidoCreado>>.Instance);
 
     private IConfiguration Config() => new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
     {
@@ -263,8 +452,8 @@ public sealed class ConsumerTests(MessagingFixture fixture) : IClassFixture<Mess
         ["Platform:Messaging:ConnectionString"] = fixture.RabbitMq,
     }).Build();
 
-    private static EventEnvelope Sobre() => new(
-        Guid.CreateVersion7(), Tipo, 1, DateTimeOffset.UtcNow, Guid.NewGuid(), Productor, "corr-consumo",
+    private static EventEnvelope Sobre(string tipo = Tipo, string productor = Productor) => new(
+        Guid.CreateVersion7(), tipo, 1, DateTimeOffset.UtcNow, Guid.NewGuid(), productor, "corr-consumo",
         System.Text.Json.JsonSerializer.SerializeToElement(new PedidoCreado("uno"), EventEnvelope.JsonOptions));
 
     private async Task PublicarAsync(EventEnvelope evento)
@@ -348,5 +537,131 @@ public sealed class EfectoDePrueba(PruebaDb db, Comportamiento comportamiento) :
 
         db.Set<Efecto>().Add(new Efecto { Id = Guid.NewGuid(), EventId = envelope.EventId, Cola = envelope.Type });
         return Task.CompletedTask;
+    }
+}
+
+/// <summary>
+/// Un consumidor más, con su cola, su efecto y sus opciones (HU #13727, ADR-0075): para probar la concurrencia y los productores
+/// permitidos sin tocar el de la clase. Al cerrarse detiene el consumidor y borra su topología.
+/// </summary>
+internal sealed class ConsumidorExtra : IAsyncDisposable
+{
+    private readonly MessagingFixture _fixture;
+    private readonly ServiceProvider _services;
+
+    private ConsumidorExtra(MessagingFixture fixture, ServiceProvider services, string cola)
+    {
+        _fixture = fixture;
+        _services = services;
+        Cola = cola;
+    }
+
+    public string Cola { get; }
+
+    public static async Task<ConsumidorExtra> ArrancarAsync<THandler>(
+        MessagingFixture fixture, IConfiguration config, string tipo, Action<IServiceCollection> registrar, Action<PlatformConsumerOptions> opciones)
+        where THandler : class, IEventConsumer<PedidoCreado>
+    {
+        var cola = $"prueba.extra{Guid.NewGuid():N}"[..30];
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddDbContext<PruebaDb>(o => o.UseNpgsql(fixture.Postgres));
+        registrar(services);
+        services.AddFlitConsumer<PruebaDb, THandler, PedidoCreado>(config, cola, "prueba-consumo", [tipo], o =>
+        {
+            o.RetryDelays.Clear();
+            o.RetryDelays.Add(TimeSpan.FromMilliseconds(200));
+            opciones(o);
+        });
+        var provider = services.BuildServiceProvider();
+        foreach (var hosted in provider.GetServices<IHostedService>())
+            await hosted.StartAsync(TestContext.Current.CancellationToken);
+
+        var extra = new ConsumidorExtra(fixture, provider, cola);
+        await using var admin = await new ConnectionFactory { Uri = new Uri(fixture.RabbitMq) }.CreateConnectionAsync();
+        var limite = Stopwatch.StartNew();
+        while (true)
+        {
+            await using var probe = await admin.CreateChannelAsync();
+            try
+            {
+                if (await probe.ConsumerCountAsync(cola) == 1)
+                    return extra;
+            }
+            catch (RabbitMQ.Client.Exceptions.OperationInterruptedException)
+            {
+                // La cola todavía no existe.
+            }
+
+            if (limite.Elapsed > TimeSpan.FromSeconds(10))
+                throw new TimeoutException("El consumidor extra no quedó escuchando.");
+            await Task.Delay(50);
+        }
+    }
+
+    /// <summary>Mensajes en la DLQ de este consumidor.</summary>
+    public async Task<uint> MuertosAsync()
+    {
+        await using var conexion = await new ConnectionFactory { Uri = new Uri(_fixture.RabbitMq) }.CreateConnectionAsync();
+        await using var canal = await conexion.CreateChannelAsync();
+        return await canal.MessageCountAsync($"{Cola}.dlq");
+    }
+
+    /// <summary>Motivo del primer mensaje de la DLQ (lo saca).</summary>
+    public async Task<string?> MotivoDelMuertoAsync()
+    {
+        await using var conexion = await new ConnectionFactory { Uri = new Uri(_fixture.RabbitMq) }.CreateConnectionAsync();
+        await using var canal = await conexion.CreateChannelAsync();
+        var muerto = await canal.BasicGetAsync($"{Cola}.dlq", autoAck: true);
+        return muerto?.BasicProperties.Headers?[PlatformDeadLetters.ReasonHeader] is byte[] motivo ? Encoding.UTF8.GetString(motivo) : null;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        foreach (var hosted in _services.GetServices<IHostedService>())
+            await hosted.StopAsync(CancellationToken.None);
+        await _services.DisposeAsync();
+        await using var conexion = await new ConnectionFactory { Uri = new Uri(_fixture.RabbitMq) }.CreateConnectionAsync();
+        await using var canal = await conexion.CreateChannelAsync();
+        foreach (var cola in new[] { Cola, $"{Cola}.retry.1", $"{Cola}.dlq" })
+            await canal.QueueDeleteAsync(cola);
+        await canal.ExchangeDeleteAsync($"{Cola}.reintentos");
+    }
+}
+
+/// <summary>Cuántos efectos hay dentro a la vez: cada uno espera a que entren <c>esperados</c> o a que venza el tope.</summary>
+public sealed class Barrera(int esperados, TimeSpan tope)
+{
+    private int _dentro;
+    private int _maximo;
+    private int _salidas;
+
+    public int Maximo => Volatile.Read(ref _maximo);
+
+    public int Salidas => Volatile.Read(ref _salidas);
+
+    public async Task EntrarAsync(CancellationToken ct)
+    {
+        var dentro = Interlocked.Increment(ref _dentro);
+        int previo;
+        while ((previo = Volatile.Read(ref _maximo)) < dentro && Interlocked.CompareExchange(ref _maximo, dentro, previo) != previo)
+        {
+        }
+
+        var limite = Stopwatch.StartNew();
+        while (Volatile.Read(ref _dentro) < esperados && limite.Elapsed < tope)
+            await Task.Delay(10, ct);
+        Interlocked.Decrement(ref _dentro);
+        Interlocked.Increment(ref _salidas);
+    }
+}
+
+/// <summary>Efecto de prueba que pasa por la <see cref="Barrera"/> antes de dejar su fila.</summary>
+public sealed class EfectoConBarrera(PruebaDb db, Barrera barrera) : IEventConsumer<PedidoCreado>
+{
+    public async Task HandleAsync(EventEnvelope envelope, PedidoCreado data, CancellationToken ct)
+    {
+        await barrera.EntrarAsync(ct);
+        db.Set<Efecto>().Add(new Efecto { Id = Guid.NewGuid(), EventId = envelope.EventId, Cola = envelope.Type });
     }
 }

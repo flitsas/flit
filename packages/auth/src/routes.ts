@@ -6,7 +6,10 @@ import { parseCookies, serializeCookie, txCookie } from "./cookies";
 import { pkceChallenge, randomToken, seal, unseal } from "./crypto";
 import { withNetworkHub } from "./network";
 import { clearSessionCookies, freshSession, isSecure, sessionCookies } from "./store";
+import { safeReturnTo } from "./return-to";
 import { exchangeCode, TokenError } from "./tokens";
+
+export { safeReturnTo };
 
 export type RouteHandler = (request: Request) => Promise<Response>;
 
@@ -162,11 +165,6 @@ function withParam(path: string, key: string, value: string): string {
   const url = new URL(path, "http://app.local");
   url.searchParams.set(key, value);
   return `${url.pathname}${url.search}`;
-}
-
-/** Solo rutas relativas de esta misma app (evita un redireccionamiento abierto). */
-export function safeReturnTo(value: string | null): string {
-  return value && value.startsWith("/") && !value.startsWith("//") && !value.startsWith("/\\") ? value : "/";
 }
 
 function redirect(location: string, cookies: string[]): Response {

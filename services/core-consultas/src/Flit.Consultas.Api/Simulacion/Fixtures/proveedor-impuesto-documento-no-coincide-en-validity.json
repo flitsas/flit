@@ -1,0 +1,7 @@
+{
+  "pendingDebtTaxes": false,
+  "pendingValidity": "El documento no corresponde al propietario",
+  "pendingTotalToPay": "",
+  "pendingDetailTax": [],
+  "observationError": { "descriptionError": "", "descriptionErrorDevelopment": "TRAZA-INTERNA-NO-COPIAR", "typeError": 0 }
+}

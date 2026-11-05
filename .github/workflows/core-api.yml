@@ -54,8 +54,10 @@ jobs:
             *) archivos=TODO ;;
           esac
           # El catálogo del manual (dr-flit) es texto generado: no dispara la suite.
-          if [ "$archivos" = TODO ] || echo "$archivos" | grep -v '^services/core-api/src/Flit.Api/Content/dr-flit/' | grep -qE \
-               '^(services/core-(api|identity|consultas|personanatural)/|contracts/proto/|contracts/openapi/(core-api\.v1\.yaml|external-api\.v1\.json)$|\.github/workflows/core-api\.yml$|\.github/scripts/ci-core-api-pruebas\.sh$)'; then
+          # Sin grep -q: con pipefail, -q cierra el pipe en la primera coincidencia, el grep -v muere con SIGPIPE y una lista
+          # grande de archivos se leía como «No toca core-api» (las pruebas se saltaban y el check salía verde).
+          if [ "$archivos" = TODO ] || echo "$archivos" | grep -v '^services/core-api/src/Flit.Api/Content/dr-flit/' | grep -E \
+               '^(services/core-(api|identity|consultas|personanatural)/|contracts/proto/|contracts/openapi/(core-api\.v1\.yaml|external-api\.v1\.json)$|\.github/workflows/core-api\.yml$|\.github/scripts/ci-core-api-pruebas\.sh$)' > /dev/null; then
             echo "core=true" >> "$GITHUB_OUTPUT"; echo "Toca core-api: corren las pruebas."
           else
             echo "core=false" >> "$GITHUB_OUTPUT"; echo "No toca core-api: se saltan las pruebas."

@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Flit.Tramites.Domain.Certifications;
 
 namespace Flit.Tramites.Application.UseCases.Consultations;
@@ -19,6 +20,10 @@ namespace Flit.Tramites.Application.UseCases.Consultations;
 /// lo que certificó en <b>vocabulario canónico</b>, sin que ningún consumidor tenga que volver a
 /// interpretar el texto libre de <see cref="HydratedFields"/>.</para>
 ///
+/// <para>HU #14153 (hallazgo H1 de seguridad): <see cref="RawPayload"/> no se serializa (<see cref="JsonIgnore"/>, igual que
+/// <see cref="Fallo"/>). Es el crudo sin sanear del proveedor —con el conductor incluye licencias y el documento— y la API de
+/// Trámites devuelve este objeto tal cual; solo viaja en memoria y por el mapper proto de core-consultas.</para>
+///
 /// <para>La costura es esta y no otra por dos razones. Un normalizador central sobre
 /// <see cref="HydratedFields"/> sería un segundo mapeo sobre el primero y perdería lo que el mapper ya
 /// sabe. Y fusionar entre proveedores en el resolutor de cadena exigiría llamar a más de uno, y
@@ -34,7 +39,52 @@ public sealed record ConsultationResult(
     bool FromCache = false,
     DateTimeOffset? QueriedAt = null,
     CertificationBundle? Certifications = null,
-    RawProviderPayload? RawPayload = null);
+    [property: JsonIgnore] RawProviderPayload? RawPayload = null,
+    [property: JsonIgnore] FalloProveedor? Fallo = null);
+
+/// <summary>
+/// Por qué no respondió el proveedor (resolvedor de errores del Diagnóstico). Lo llenan los proveedores HTTP en cada
+/// <c>ProviderUnavailable</c>; no cambia <see cref="ConsultationResult.Overall"/>, los checks ni el mensaje, y no se serializa
+/// (<see cref="JsonIgnore"/>): Trámites y Comparendos reciben exactamente lo mismo. Solo core-consultas lo lee, dentro de un
+/// trabajo del bus del Diagnóstico, para publicar <c>motivoFallo</c>.
+/// </summary>
+/// <param name="Clase">Clase del fallo.</param>
+/// <param name="HttpStatus">Código HTTP del proveedor, si hubo respuesta.</param>
+public sealed record FalloProveedor(ClaseFalloProveedor Clase, int? HttpStatus = null)
+{
+    /// <summary>Código estable del fallo: <c>CREDENCIALES|LIMITE|RECHAZO|CAIDA|RED|TIMEOUT</c>.</summary>
+    public string Codigo => Clase switch
+    {
+        ClaseFalloProveedor.Credenciales => "CREDENCIALES",
+        ClaseFalloProveedor.Limite => "LIMITE",
+        ClaseFalloProveedor.Rechazo => "RECHAZO",
+        ClaseFalloProveedor.Caida => "CAIDA",
+        ClaseFalloProveedor.Red => "RED",
+        _ => "TIMEOUT",
+    };
+}
+
+/// <summary>Clase del fallo de un proveedor externo.</summary>
+public enum ClaseFalloProveedor
+{
+    /// <summary>401/403: credencial vencida o sin permiso (error de configuración).</summary>
+    Credenciales,
+
+    /// <summary>429: límite de peticiones del proveedor.</summary>
+    Limite,
+
+    /// <summary>400/422: el proveedor rechazó la solicitud.</summary>
+    Rechazo,
+
+    /// <summary>5xx, cualquier otro no-2xx, o 2xx con cuerpo ilegible.</summary>
+    Caida,
+
+    /// <summary>Error de red (DNS, conexión, reset).</summary>
+    Red,
+
+    /// <summary>Timeout del cliente HTTP.</summary>
+    Timeout,
+}
 
 /// <summary>
 /// Un check individual de la consulta. Status ∈ {"ok","warn","fail","unknown","error"}.

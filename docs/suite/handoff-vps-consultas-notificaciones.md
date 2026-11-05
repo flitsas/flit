@@ -246,6 +246,92 @@ operaciones que ya usa la alerta de certificados (`deploy/edge/acme`). Revisa ca
 
 **Comprobar:** `systemctl list-timers | grep flit-rabbitmq-dlq`.
 
+## Paso 9 — Trabajos de consulta del diagnóstico (ADR-0075)
+
+Desde [ADR-0075](../decisions/ADR-0075-diagnostico-consultas-por-rabbitmq.md), core-consultas atiende también por cola
+las consultas del Diagnóstico Vehicular. Diagnóstico deja un trabajo en `flit.consultas`, core-consultas consulta al
+proveedor **una sola vez** y publica `consultas.resultado.diagnostico` en su propio exchange. Los reintentos los decide
+diagnóstico. Las colas, la política de 7 días y el usuario `diagnostico` con destino `consultas` están en
+[handoff-vps-diagnostico.md](handoff-vps-diagnostico.md) §2, que va **antes** de este paso.
+
+**El usuario `consultas` no cambia.** Ya escribe en `flit.consultas` y lee sus colas `consultas.*`. No hay que volver a
+correr el script.
+
+### 9.1 Colas que consume
+
+| Cola | Consumidor | `Concurrencia` / `Prefetch` |
+|---|---|---|
+| `consultas.diagnostico` | lotes, en orden de llegada | 8 / 16 |
+| `consultas.diagnostico-express` | Express, aparte para no esperar detrás de los lotes | 4 / 8 |
+
+Los dos consumidores solo aceptan trabajos cuyo productor validado por el broker (`user_id`) sea `diagnostico`. Un
+mensaje de otro productor va directo a la `.dlq` con el motivo `productor_no_autorizado`. Los valores por defecto viven
+en el `appsettings.json` de core-consultas: no van en el compose.
+
+**Comprobar**, con core-consultas arriba:
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T rabbitmq rabbitmqctl list_queues -p flit name messages consumers | grep -e '^consultas.diagnostico' | grep -v -e retry -e dlq
+```
+
+`consultas.diagnostico` y `consultas.diagnostico-express` tienen un consumidor cada una, y `messages` baja mientras
+corre un lote.
+
+**Volver atrás:** volver a la imagen anterior de core-consultas. Los trabajos se quedan esperando en las colas (no se
+pierden) y el reconciliador de diagnóstico se pausa mientras no lleguen resultados.
+
+### 9.2 Pool de Postgres de core-consultas
+
+Cada trabajo en curso mantiene **una** conexión de Postgres abierta mientras dura la llamada al proveedor (la
+transacción de la bandeja del SDK). Con los valores por defecto son hasta **12** conexiones (8 + 4), y pueden durar lo
+que tarde el proveedor (hasta `VERIFIK_TIMEOUT_SECONDS`, 120 s). Además están las del gRPC en línea de Trámites, ICT y
+Comparendos, los avisos de Kyverum y el publicador de la outbox.
+
+Con el tope del paso 3 (`conexiones=20`), un lote grande deja solo 8 conexiones para las consultas en línea del
+asistente. **Recomendado:** subir el tope a 30, tanto en el usuario como en la cadena:
+
+```bash
+psql "$ADMIN_URL" -Atc "show max_connections; select count(*) from pg_stat_activity;"   # margen para 10 más
+psql "$ADMIN_URL" -v servicio=consultas -v conexiones=30 -v clave="$CLAVE_PG_CONSULTAS" -f deploy/postgres/servicio-con-esquema-propio.sql
+```
+
+En el `.env`, `CONNECTION_STRING_CONSULTAS` con `Maximum Pool Size=30`. Recrear el servicio:
+`docker compose -f docker-compose.prod.yml up -d core-consultas`. Se usa **la misma clave** de hoy: el script la
+vuelve a fijar. Si no hay margen en `max_connections`, la alternativa es bajar la `Concurrencia` de los consumidores
+de core-consultas: el Express nunca por debajo de 1, y los lotes tardan más.
+
+**Comprobar** con un lote en curso:
+
+```bash
+psql "$ADMIN_URL" -Atc "select count(*) from pg_stat_activity where usename = 'flit_consultas';"
+```
+
+Debe quedar por debajo del tope. Si llega, el log de core-consultas dice `too many connections for role
+"flit_consultas"` o `The connection pool has been exhausted`, y el asistente de Trámites dice «Consulta no disponible».
+
+**Volver atrás:** volver a correr el script con `conexiones=20` y dejar `Maximum Pool Size=20` en la cadena.
+
+### 9.3 Datos personales en el broker (Ley 1581)
+
+Los trabajos llevan placa, VIN y tipo y número de documento **en claro**, y los resultados llevan el RUNT ya minimizado
+(sin nombres, direcciones ni contacto). Es el riesgo aceptado U1 de ADR-0075. Cualquier usuario del broker puede atar
+una cola a `flit.consultas` y leerlos. Los controles son estos:
+
+- La consola sigue publicada solo en `127.0.0.1` (túnel SSH).
+- Las `.dlq` del flujo se borran a los 7 días (política `dlq-7d`).
+- Hay un usuario por servicio y ninguno de más.
+
+Inventario para la revisión de Habeas Data, una vez por ambiente:
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T rabbitmq rabbitmqctl list_users
+docker compose -f docker-compose.prod.yml exec -T rabbitmq rabbitmqctl list_permissions -p flit
+```
+
+Solo deben aparecer los usuarios de servicio (`tramites`, `consultas`, `notificaciones`, `plataforma`, `diagnostico` y
+los de los productos encendidos) y el administrador. Un usuario que nadie reconoce se borra con `delete_user`, después
+de confirmarlo con el líder técnico.
+
 ## Después, con el despliegue estable
 
 1. **Cortar el token viejo de ICT:** `ICT_SERVICE_TOKEN_ACCEPT_LEGACY=false` y recrear core-api. Desde ahí se rechaza

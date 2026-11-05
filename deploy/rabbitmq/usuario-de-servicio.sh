@@ -11,6 +11,7 @@
 #   CLAVE="$(openssl rand -base64 32)"   # va al .env del ambiente (RABBITMQ_URL_<SERVICIO>), nunca al repo
 #   deploy/rabbitmq/usuario-de-servicio.sh consultas "$CLAVE"
 #   deploy/rabbitmq/usuario-de-servicio.sh tramites "$CLAVE" notificaciones   # deja trabajos de correo
+#   deploy/rabbitmq/usuario-de-servicio.sh diagnostico "$CLAVE" consultas    # deja trabajos de consulta (ADR-0075)
 #
 # Variables opcionales: COMPOSE (por defecto "docker compose -f docker-compose.prod.yml"), VHOST (por defecto flit).
 set -euo pipefail
@@ -25,6 +26,27 @@ if ! [[ "$servicio" =~ ^[a-z][a-z0-9-]{1,40}$ ]]; then
   echo "Nombre de servicio inválido: $servicio (minúsculas, p. ej. consultas)" >&2
   exit 2
 fi
+# Nombres reservados: «flit» tendría por patrón propio ^(flit\.flit|flit\..*)$, que abarca los exchanges de TODOS los
+# productores (configurar, escribir y leer sobre cualquier flit.*); «guest» es el usuario por defecto del broker.
+reservado() { [[ "$1" == "flit" || "$1" == "guest" ]]; }
+if reservado "$servicio"; then
+  echo "Nombre de servicio reservado: $servicio (flit abarcaría todos los flit.*; guest es el usuario por defecto del broker)" >&2
+  exit 2
+fi
+
+# Los destinos se validan antes de tocar el broker: un argumento inválido no deja el usuario creado a medias.
+propio="^(flit\\.${servicio}|${servicio}\\..*)$"
+escritura="$propio"
+if [[ -n "$trabajos" ]]; then
+  destinos=""
+  for destino in ${trabajos//,/ }; do
+    [[ "$destino" =~ ^[a-z][a-z0-9-]{1,40}$ ]] || { echo "Servicio destino inválido: $destino" >&2; exit 2; }
+    if reservado "$destino"; then echo "Servicio destino reservado: $destino" >&2; exit 2; fi
+    destinos="${destinos}|flit\\.${destino}"
+  done
+  escritura="^(flit\\.${servicio}${destinos}|${servicio}\\..*)$"
+fi
+lectura="^(flit\\..*|${servicio}\\..*)$"
 
 ctl() { $compose exec -T rabbitmq rabbitmqctl "$@"; }
 
@@ -34,17 +56,6 @@ else
   ctl add_user "$servicio" "$clave" >/dev/null
 fi
 
-propio="^(flit\\.${servicio}|${servicio}\\..*)$"
-escritura="$propio"
-if [[ -n "$trabajos" ]]; then
-  destinos=""
-  for destino in ${trabajos//,/ }; do
-    [[ "$destino" =~ ^[a-z][a-z0-9-]{1,40}$ ]] || { echo "Servicio destino inválido: $destino" >&2; exit 2; }
-    destinos="${destinos}|flit\\.${destino}"
-  done
-  escritura="^(flit\\.${servicio}${destinos}|${servicio}\\..*)$"
-fi
-lectura="^(flit\\..*|${servicio}\\..*)$"
 ctl set_permissions -p "$vhost" "$servicio" "$propio" "$escritura" "$lectura" >/dev/null
 
 echo "Listo: usuario '$servicio' en el vhost '$vhost' (escribe en flit.$servicio${trabajos:+, trabajos a $trabajos} y $servicio.*; lee flit.* y sus colas)."

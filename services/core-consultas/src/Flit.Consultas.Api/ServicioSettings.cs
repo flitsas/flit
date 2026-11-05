@@ -34,5 +34,10 @@ internal static class ServicioSettings
             throw new InvalidOperationException(
                 $"core-{Codigo} no puede arrancar; falta configuración: {string.Join("; ", missing)}. Ver docs/suite/servicio-nuevo.md.");
         }
+
+        // HU #13727 (ADR-0075): los consumidores de trabajos del diagnóstico (Consultas:Diagnostico) y la simulación
+        // (Consultas:Simulacion, solo LOCAL y DEV) también se validan al arrancar; cada uno dice qué variable corregir.
+        Bus.OpcionesConsumidoresDiagnostico.Desde(configuration);
+        Simulacion.OpcionesSimulacion.Desde(configuration);
     }
 }

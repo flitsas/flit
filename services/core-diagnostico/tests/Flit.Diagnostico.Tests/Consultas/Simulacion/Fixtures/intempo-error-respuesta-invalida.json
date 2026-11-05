@@ -1,0 +1,14 @@
+{
+  "proveedor": "intempo",
+  "resultado": "RESULTADO_RUNT_INTEMPO_ERROR",
+  "tipoError": "TIPO_ERROR_FUENTE_RESPUESTA_INVALIDA",
+  "mensajeError": "Intempo respondió sin la forma esperada (simulado).",
+  "httpStatus": 200,
+  "duracionMs": 150,
+  "errores": [
+    {
+      "code": 200,
+      "description": "Intempo respondió sin la forma esperada (simulado)."
+    }
+  ]
+}

@@ -1,0 +1,241 @@
+using Flit.Consultas.Api.Bus;
+using Flit.Consultas.Grpc.V1;
+using Google.Protobuf;
+using Google.Protobuf.WellKnownTypes;
+using Grpc.Core;
+
+namespace Flit.Consultas.Api.Simulacion;
+
+/// <summary>
+/// Proveedor simulado por fuente para LOCAL y DEV (ADR-0075, U3 = a; T10): responde el <c>*Response</c> proto de cada rpc del
+/// diagnóstico, determinista por el ÚLTIMO carácter del identificador, con los mismos escenarios que tenían las fuentes simuladas de
+/// core-diagnostico. Solo lo usa <see cref="EjecutorTrabajo"/> con <see cref="OpcionesSimulacion.Habilitada"/> o las fuentes de <see cref="OpcionesSimulacion.Fuentes"/>; no llama a ningún
+/// proveedor ni registra nada. Los errores van como los daría el servicio real: un tiempo agotado es <see cref="RpcException"/>
+/// <see cref="StatusCode.DeadlineExceeded"/> (Diagnóstico lo traduce como <c>TIMEOUT</c>) y una «respuesta sin la forma esperada»
+/// es un <c>*Response</c> sin resultado (<c>RESPUESTA_INVALIDA</c>).
+/// <list type="table">
+/// <item><term>RUNT</term><description>fixtures de <see cref="FixturesIntempo"/>: 1 persona natural, 2 NIT, 3 leasing con locatario C,
+/// 4 leasing con locatario N, 5 servicio público, 6 departamento no soportado, 7 error <c>TIMEOUT</c>, 8 respuesta inválida, otro
+/// persona natural; el vehículo lleva la placa o el VIN consultado.</description></item>
+/// <item><term>RUNT persona</term><description>2 inscrita sin licencias, 3 licencia suspendida, 7 tiempo agotado, 8 respuesta
+/// inválida, otro inscrita con licencia B1. Con <c>incluir_respuesta_cruda</c> (HU #14153) trae la respuesta cruda de Kyverum de
+/// <see cref="FixturesProveedor"/>: licencia activa, vencida y suspendida (sin licencias en el escenario 2).</description></item>
+/// <item><term>SIMIT</term><description>2 rojo con 2 comparendos, 3 amarillo con acuerdo de pago, 6 rojo con 60, 7 tiempo agotado, 8
+/// respuesta inválida, otro verde. Con <c>incluir_respuesta_cruda</c> (HU #14183) adjunta el cuerpo de Verifik: persona con multa
+/// en cobro coactivo, vehículo sin multas, y el 4 el 404 «sin registros». El semáforo no cambia y <c>desde_cache</c> queda en false.</description></item>
+/// <item><term>RUES</term><description>6 cancelada, 7 tiempo agotado, 8 respuesta inválida, otro activa. Con
+/// <c>incluir_respuesta_cruda</c> (HU #14153) trae la respuesta cruda de Verifik con representantes legales y actividades CIIU.</description></item>
+/// <item><term>Avalúo</term><description>2 solo Fasecolda (48 M), 4 sin datos, 7 tiempo agotado, otro tres fuentes (52 M).</description></item>
+/// </list>
+/// </summary>
+/// <example>
+/// <code>
+/// var r = (ConsultarVehiculoIntempoResponse)simulador.Responder(RpcConsultas.PorPlaca, new ConsultarPorPlacaRequest { Placa = "ABC123" });
+/// // "ABC123" termina en 3 → leasing con locatario C
+/// </code>
+/// </example>
+internal sealed class SimuladorConsultas(TimeProvider time)
+{
+    /// <summary>Proveedor con que se mide el consumo simulado.</summary>
+    public const string Proveedor = "simulado";
+
+    private const string Organismo = "SECRETARIA DE TRANSITO DE PRUEBA";
+
+    private const string RuntIntempoPorDefecto = "intempo-persona-natural.json";
+
+    private static readonly Dictionary<char, string> EscenariosRunt = new()
+    {
+        ['1'] = RuntIntempoPorDefecto,
+        ['2'] = "intempo-nit.json",
+        ['3'] = "intempo-leasing-locatario-c.json",
+        ['4'] = "intempo-leasing-locatario-n.json",
+        ['5'] = "intempo-servicio-publico.json",
+        ['6'] = "intempo-departamento-no-soportado.json",
+        ['7'] = "intempo-error-timeout.json",
+        ['8'] = "intempo-error-respuesta-invalida.json",
+        ['Z'] = "intempo-impuesto.json",
+    };
+
+    private static readonly JsonParser Lector = new(JsonParser.Settings.Default.WithIgnoreUnknownFields(false));
+
+    public IMessage Responder(string rpc, IMessage solicitud)
+    {
+        ArgumentNullException.ThrowIfNull(solicitud);
+        return (rpc, solicitud) switch
+        {
+            (RpcConsultas.PorPlaca, ConsultarPorPlacaRequest r) => Runt(r.Placa, esVin: false),
+            (RpcConsultas.PorVin, ConsultarPorVinRequest r) => Runt(r.Vin, esVin: true),
+            (RpcConsultas.Conductor, ConsultarConductorRequest r) => Conductor(r.Documento?.Numero, r.Opciones?.IncluirRespuestaCruda == true),
+            (RpcConsultas.Multas, ConsultarMultasRequest r) => Multas(r.Placa?.Valor ?? r.Documento?.Numero, r.Opciones?.IncluirRespuestaCruda == true),
+            (RpcConsultas.Rues, ConsultarRuesRequest r) => Rues(r.Nit, r.Opciones?.IncluirRespuestaCruda == true),
+            (RpcConsultas.Avaluos, ConsultarAvaluosRequest r) => Avaluos(r.Placa?.Valor ?? r.Vin?.Valor),
+            _ => throw new RpcException(new Status(StatusCode.Unimplemented, "Rpc sin simulación.")),
+        };
+    }
+
+    private static ConsultarVehiculoIntempoResponse Runt(string identificador, bool esVin)
+    {
+        var valor = identificador?.Trim() ?? string.Empty;
+        var archivo = valor.Length > 0 && EscenariosRunt.TryGetValue(valor[^1], out var a) ? a : RuntIntempoPorDefecto;
+        var respuesta = Lector.Parse<ConsultarVehiculoIntempoResponse>(FixturesIntempo.Todos()[archivo]);
+        if (respuesta.Vehiculo is { } vehiculo && valor.Length > 0)
+        {
+            vehiculo.InformacionGeneral ??= new InformacionGeneralIntempo();
+            if (esVin)
+            {
+                vehiculo.Vin = valor;
+                vehiculo.InformacionGeneral.NoVin = valor;
+            }
+            else
+            {
+                vehiculo.Plate = valor;
+                vehiculo.InformacionGeneral.NoPlaca = valor;
+            }
+        }
+
+        return respuesta;
+    }
+
+    private ConsultarConductorResponse Conductor(string? documento, bool incluirCruda)
+    {
+        ResultadoConsulta Inscrita(string estado, string? categorias)
+        {
+            var r = Resultado("kyverum_runt", Semaforo.Verde);
+            r.Chequeos.Add(new Chequeo { Clave = "conductor_identidad", Etiqueta = "Persona en RUNT", Estado = EstadoChequeo.Ok, Fuente = "RUNT" });
+            r.Campos.Add(new Campo { Clave = "person_license_status", ValorTexto = estado });
+            if (categorias is not null)
+                r.Campos.Add(new Campo { Clave = "person_license_categories", ValorTexto = categorias });
+
+            // HU #14153 AC3: como el servicio real, el crudo solo viaja si se pide (Diagnóstico lo pide en runt_propietario y runt_locatario).
+            if (incluirCruda)
+            {
+                var fixture = categorias is null ? FixturesProveedor.ConductorSinLicencias : FixturesProveedor.Conductor;
+                r.RespuestaCruda = Cruda("kyverum_runt_conductor", "person", documento, FixturesProveedor.Con(fixture, ("documento", documento)));
+            }
+
+            return r;
+        }
+
+        return UltimoDigito(documento) switch
+        {
+            '2' => new ConsultarConductorResponse { Resultado = Inscrita("ACTIVO", null) },
+            '3' => new ConsultarConductorResponse { Resultado = Inscrita("SUSPENDIDO", "B1") },
+            '7' => throw TiempoAgotado(),
+            '8' => new ConsultarConductorResponse(),
+            _ => new ConsultarConductorResponse { Resultado = Inscrita("ACTIVO", "B1") },
+        };
+    }
+
+    private ConsultarMultasResponse Multas(string? clave, bool incluirCruda)
+    {
+        ConsultarMultasResponse Con(Semaforo semaforo, params Comparendo[] comparendos)
+        {
+            var r = Resultado("smartcloud", semaforo);
+            var chequeo = new Chequeo { Clave = "multas", Etiqueta = "Multas", Estado = comparendos.Length == 0 ? EstadoChequeo.Ok : EstadoChequeo.Fail, Fuente = "SIMIT" };
+            chequeo.Comparendos.AddRange(comparendos);
+            r.Chequeos.Add(chequeo);
+            if (incluirCruda)
+                r.RespuestaCruda = CrudoSimit(clave);
+            return new ConsultarMultasResponse { Resultado = r };
+        }
+
+        static Comparendo C(string numero, string fecha, string valor, string estado) =>
+            new() { Numero = numero, Fecha = fecha, Valor = valor, Estado = estado, Organismo = Organismo };
+
+        return UltimoCaracter(clave) switch
+        {
+            '2' => Con(Semaforo.Rojo, C("SIM-0001", "2026-01-10", "604100.00", "PENDIENTE"), C("SIM-0002", "2026-02-11", "302050.00", "PENDIENTE")),
+            '3' => Con(Semaforo.Amarillo, C("SIM-0003", "2025-11-03", "604100.00", "ACUERDO DE PAGO")),
+            '6' => Con(Semaforo.Rojo, [.. Enumerable.Range(1, 60).Select(i =>
+                C($"SIM-6{i:D3}", $"2026-{(i % 12) + 1:D2}-{(i % 28) + 1:D2}", "302050.00", "PENDIENTE"))]),
+            '7' => throw TiempoAgotado(),
+            '8' => new ConsultarMultasResponse(),
+            _ => Con(Semaforo.Verde),
+        };
+    }
+
+    private ConsultarRuesResponse Rues(string? nit, bool incluirCruda)
+    {
+        ConsultarRuesResponse Con(string estado, string renovacion)
+        {
+            var r = Resultado("verifik_rues", Semaforo.Verde);
+
+            // HU #14153 AC3: crudo de Verifik RUES (representantes legales y CIIU) solo si se pide, con el estado y la renovación del escenario.
+            if (incluirCruda)
+                r.RespuestaCruda = Cruda("verifik_rues", "company", nit, FixturesProveedor.Con(FixturesProveedor.Rues, ("nit", nit), ("estado", estado), ("renovacion", renovacion)));
+            r.Certificaciones = new Certificaciones();
+            r.Certificaciones.MatriculasMercantiles.Add(new MatriculaMercantil
+            {
+                Nit = new ValorCertificado { Valor = nit },
+                Estado = new EstadoVigencia { Valor = estado == "ACTIVA" ? Vigencia.Vigente : Vigencia.Vencido, Crudo = estado },
+                RenovadaEn = new FechaCertificada { Valor = renovacion },
+            });
+            return new ConsultarRuesResponse { Resultado = r };
+        }
+
+        return UltimoDigito(nit) switch
+        {
+            '6' => Con("CANCELADA", "2024-03-31"),
+            '7' => throw TiempoAgotado(),
+            '8' => new ConsultarRuesResponse(),
+            _ => Con("ACTIVA", "2026-03-31"),
+        };
+    }
+
+    private static ConsultarAvaluosResponse Avaluos(string? clave)
+    {
+        const string Fasecolda = "fasecolda";
+        const string MercadoLibre = "mercado_libre";
+        const string BaseGravable = "base_gravable";
+        static Avaluo Ok(string fuente, long valor, int muestras = 0) => new() { Fuente = fuente, Estado = EstadoAvaluo.Ok, Valor = valor, Muestras = muestras };
+        static Avaluo SinDatos(string fuente) => new() { Fuente = fuente, Estado = EstadoAvaluo.SinDatos };
+        static ConsultarAvaluosResponse Con(long sugerido, string principal, params Avaluo[] avaluos)
+        {
+            var r = new ConsultarAvaluosResponse { ValorSugerido = sugerido, FuentePrincipal = principal };
+            r.Avaluos.AddRange(avaluos);
+            return r;
+        }
+
+        return UltimoCaracter(clave) switch
+        {
+            '2' => Con(48_000_000, Fasecolda, Ok(Fasecolda, 48_000_000), SinDatos(MercadoLibre), SinDatos(BaseGravable)),
+            '4' => Con(0, string.Empty, SinDatos(Fasecolda), SinDatos(MercadoLibre), SinDatos(BaseGravable)),
+            '7' => throw TiempoAgotado(),
+            _ => Con(52_000_000, Fasecolda, Ok(Fasecolda, 52_000_000), Ok(MercadoLibre, 50_500_000, 9), Ok(BaseGravable, 45_000_000)),
+        };
+    }
+
+    private ResultadoConsulta Resultado(string proveedor, Semaforo semaforo) =>
+        new() { Proveedor = proveedor, Semaforo = semaforo, ConsultadoEn = Timestamp.FromDateTimeOffset(time.GetUtcNow()) };
+
+    /// <summary>
+    /// Cuerpo de Verifik SIMIT (§ 3.1): el 4 es el 404 sin registros; una placa usa el vehículo sin multas; un documento, la persona
+    /// con cobro coactivo. No sale de caché: <c>desde_cache</c> del resultado sigue en false.
+    /// </summary>
+    private static RespuestaCruda CrudoSimit(string? clave)
+    {
+        var esPlaca = clave is { Length: 6 }
+            && clave[..3].All(char.IsAsciiLetter)
+            && clave[3..].All(char.IsAsciiDigit);
+        var sinRegistros = UltimoCaracter(clave) == '4';
+        var archivo = sinRegistros
+            ? FixturesProveedor.SimitSinRegistros
+            : esPlaca ? FixturesProveedor.SimitVehiculo : FixturesProveedor.SimitPersona;
+        var tipo = esPlaca ? "vehicle" : "person";
+        return Cruda("verifik_simit", tipo, clave, FixturesProveedor.Todos()[archivo]);
+    }
+
+    private static RespuestaCruda Cruda(string proveedor, string tipoSujeto, string? claveSujeto, string json)
+    {
+        var cruda = new RespuestaCruda { Proveedor = proveedor, TipoSujeto = tipoSujeto, Json = json };
+        if (claveSujeto is not null)
+            cruda.ClaveSujeto = claveSujeto;
+        return cruda;
+    }
+
+    private static RpcException TiempoAgotado() => new(new Status(StatusCode.DeadlineExceeded, "Proveedor simulado: tiempo de espera agotado."));
+
+    private static char UltimoDigito(string? numero) => numero?.LastOrDefault(char.IsAsciiDigit) ?? '0';
+
+    private static char UltimoCaracter(string? valor) => valor?.Trim() is { Length: > 0 } t ? t[^1] : '1';
+}

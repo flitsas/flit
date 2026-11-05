@@ -1,0 +1,40 @@
+{
+  "proveedor": "intempo",
+  "resultado": "RESULTADO_RUNT_INTEMPO_ENCONTRADO",
+  "httpStatus": 200,
+  "duracionMs": 120,
+  "vehiculo": {
+    "plate": "TST20Z",
+    "informacionGeneral": {
+      "noPlaca": "TST20Z",
+      "noVin": "9ZZPRUEBA0000000Z",
+      "estadoDelVehiculo": "ACTIVO",
+      "tipoServicio": "PARTICULAR",
+      "claseVehiculo": "MOTOCICLETA",
+      "marca": "MARCA PRUEBA",
+      "linea": "LINEA PRUEBA",
+      "modelo": "2020",
+      "organismoTransito": "STRIA TTOyTTE MCPAL VILLAVICENCIO"
+    },
+    "propietariosActuales": [
+      {
+        "id": "1",
+        "idTipoDocumento": "C",
+        "tipoDocumento": "Cédula Ciudadanía",
+        "noDocumento": "999999",
+        "nombreCompleto": "PROPIETARIO DE PRUEBA",
+        "tipoPropiedad": 1,
+        "detallePropiedad": "PROPIO",
+        "locatarios": []
+      }
+    ],
+    "owner": [
+      {
+        "documentType": "Cédula de ciudadanía",
+        "documentNumber": "999999",
+        "name": "PROPIETARIO DE PRUEBA"
+      }
+    ],
+    "lessee": []
+  }
+}

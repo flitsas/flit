@@ -41,11 +41,13 @@ public sealed class PlatformServiceCallInterceptor(string requiredScope, string 
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(continuation);
-        Validate(context.GetHttpContext().User, context.RequestHeaders.GetValue(TenantMetadata)).Store(context);
+        var exigeEmpresa = requireTenant
+            && !context.Method.EndsWith("/ListarDepartamentosImpuesto", StringComparison.Ordinal);
+        Validate(context.GetHttpContext().User, context.RequestHeaders.GetValue(TenantMetadata), exigeEmpresa).Store(context);
         return await continuation(request, context).ConfigureAwait(false);
     }
 
-    public PlatformServiceCaller Validate(System.Security.Claims.ClaimsPrincipal user, string? tenantHeader)
+    public PlatformServiceCaller Validate(System.Security.Claims.ClaimsPrincipal user, string? tenantHeader, bool? exigeEmpresa = null)
     {
         ArgumentNullException.ThrowIfNull(user);
         var subject = user.FindFirst("sub")?.Value;
@@ -57,7 +59,7 @@ public sealed class PlatformServiceCallInterceptor(string requiredScope, string 
             throw PlatformRpcErrors.ToRpcException(PlatformErrorCodes.TokenAudienceMismatch, $"El token no es para el servicio «{requiredAudience}».", StatusCode.PermissionDenied);
         if (!PlatformPrincipal.HasScope(user, requiredScope))
             throw Fail(StatusCode.PermissionDenied, $"El token no tiene el scope {requiredScope}.");
-        if (!requireTenant)
+        if (!(exigeEmpresa ?? requireTenant))
             return new PlatformServiceCaller(subject, Guid.Empty);
         if (!Guid.TryParse(tenantHeader, out var tenantId) || tenantId == Guid.Empty)
             throw Fail(StatusCode.InvalidArgument, $"Falta la metadata {TenantMetadata} con el id de la empresa.");

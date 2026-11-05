@@ -37,6 +37,8 @@ export interface SearchableSelectProps {
   placeholder?: string;
   /** Oculta la etiqueta visualmente; sigue accesible para lectores de pantalla. */
   hideLabel?: boolean;
+  /** Texto de la lista cuando la búsqueda no encuentra nada (p. ej. "Ninguna empresa coincide"). */
+  noResultsLabel?: string;
   className?: string;
   id?: string;
 }
@@ -58,6 +60,7 @@ export function SearchableSelect({
   disabled = false,
   placeholder = "Buscar…",
   hideLabel = false,
+  noResultsLabel = "Sin coincidencias",
   className = "",
   id,
 }: SearchableSelectProps) {
@@ -265,7 +268,7 @@ export function SearchableSelect({
             className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border bg-white py-1 shadow-lg dark:bg-[#0B0F14]"
           >
             {filtradas.length === 0 && (
-              <li className="px-3 py-2 text-xs opacity-60">Sin coincidencias</li>
+              <li className="px-3 py-2 text-xs opacity-60">{noResultsLabel}</li>
             )}
             {filtradas.map((o, i) => {
               const activa = i === indiceActivo;

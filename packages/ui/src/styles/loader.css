@@ -1,0 +1,74 @@
+/* @flit/ui — loader de marca de la FLIT Suite: el aro que orbita con el vehículo (`VehicleLoader`, `.flit-loader`)
+   y la escena de tres capas del CarLoader de Trámites (`.flit-escena-*`). Antes vivía solo en el CSS global de
+   Trámites; aquí cualquier frontend de la suite lo importa con `@import "@flit/ui/loader.css";` (HU #13729, RD-6).
+   Los valores se movieron sin cambios. */
+@layer base {
+  @keyframes flit-orbit {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes flit-counter {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(-360deg);
+    }
+  }
+
+  .flit-loader {
+    position: relative;
+    width: 96px;
+    height: 96px;
+  }
+
+  .flit-loader::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    border: 2px solid var(--color-flit-brand);
+    box-shadow:
+      0 0 12px 2px color-mix(in srgb, var(--color-flit-brand) 55%, transparent),
+      inset 0 0 6px color-mix(in srgb, var(--color-flit-brand) 40%, transparent);
+    border-top-color: transparent;
+    animation: flit-orbit 1.2s linear infinite;
+  }
+
+  .flit-loader > .flit-vehicle {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    animation: flit-counter 1.2s linear infinite;
+    color: var(--color-flit-tech);
+  }
+
+  /* Escena del CarLoader, calcada del loader de pestaña nueva (`open-document-tab.ts`): la pista
+     queda fija, la línea orbita en contra y el vehículo gira a favor, LA MISMA cadencia de 2s para
+     los dos. Antes iban a 2.5s/3.5s a propósito para no leerse como una sola pieza rígida, pero esa
+     diferencia de velocidad es precisamente lo que hacía que esta escena se viera distinta de la
+     de la pestaña —el mismo dibujo, con otro ritmo—; sincronizada a 2s/2s, gira igual en los dos
+     sitios y se sigue leyendo como movimiento porque las dos capas giran en sentido contrario. */
+  .flit-escena-orbita {
+    animation: flit-counter 2s linear infinite;
+  }
+
+  .flit-escena-vehiculo {
+    animation: flit-orbit 2s linear infinite;
+  }
+
+  /* Respeta a quien pidió menos movimiento: la escena se queda quieta y el mensaje sigue
+     anunciando el progreso, que es lo que de verdad informa. */
+  @media (prefers-reduced-motion: reduce) {
+    .flit-escena-orbita,
+    .flit-escena-vehiculo {
+      animation: none;
+    }
+  }
+}

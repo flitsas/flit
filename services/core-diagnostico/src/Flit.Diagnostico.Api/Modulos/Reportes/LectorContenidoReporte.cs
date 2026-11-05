@@ -1,0 +1,277 @@
+using System.Text.Json;
+using Flit.Diagnostico.Api.Modulos.Consultas;
+using Flit.Diagnostico.Api.Modulos.Diagnosticos;
+using Flit.Diagnostico.Api.Modulos.Dictamen;
+using Flit.Diagnostico.Api.Modulos.Tablero;
+using Flit.Diagnostico.Api.Modulos.Vehiculos;
+using Flit.Diagnostico.Api.Persistence;
+using Flit.Diagnostico.Api.Persistence.Configuraciones;
+using Flit.Diagnostico.Api.Plataforma;
+using Flit.Diagnostico.Domain.Catalogos;
+using Flit.Diagnostico.Domain.Consultas;
+using Flit.Diagnostico.Domain.Diagnosticos;
+using Flit.Diagnostico.Domain.Personas;
+using Microsoft.EntityFrameworkCore;
+
+namespace Flit.Diagnostico.Api.Modulos.Reportes;
+
+/// <summary>
+/// Arma el contenido de los reportes (HU #13847, F07-H2): <see cref="ContenidoReporteVehiculo"/> para el PDF de un vehículo y
+/// <see cref="ContenidoReporteLote"/> para el Excel del lote. Lee con el contexto de la empresa (filtro global) y, para la
+/// compañía, con la visibilidad de <see cref="AccesoLote"/>: otra compañía, PROPIOS de otro usuario o un vehículo de otro lote →
+/// 404 <c>NO_ENCONTRADO</c>. Las celdas del vehículo (o del lote) salen en UNA consulta y las personas en otra; de la celda solo se
+/// leen fuente, estado, motivo de N/A, fecha del dato y payload (nunca origen, usuario manual ni tipo de error), y el resultado
+/// pasa por la proyección cerrada del detalle de celda (<see cref="ProyectorDetalleCelda"/>). Los documentos de persona se
+/// descifran solo dentro de esa proyección para enmascararlos («****» + 4); el documento en claro no llega al contenido.
+/// Nombres: creador por <see cref="IResolutorNombresUsuario"/> («No disponible» si Identidad no responde), empresa del claim
+/// <c>company_name</c> de quien pide (o la que pase el ZIP, <c>evidencias.empresa_nombre</c>).
+/// </summary>
+/// <example>
+/// <code>
+/// var contenido = await lector.VehiculoAsync(usuario, diagnosticoId, vehiculoId, ct);       // PDF (F07-H3)
+/// var lote = await lector.LoteAsync(usuario, diagnosticoId, ct);                           // Excel (F07-H4)
+/// var delZip = await lector.VehiculoAsync(cabecera, vehiculoId, evidencia.EmpresaNombre, ct); // ZIP (F07-H5)
+/// </code>
+/// </example>
+/// <remarks>
+/// Detalle del RUNT (PDF v2, ajuste 2026-10-27): solo en el contenido del vehículo (PDF y ZIP), con la respuesta completa de la
+/// fuente de la celda RUNT COMPLETADO, descifrada en memoria con <see cref="IProtectorRespuestaFuente"/> y proyectada por
+/// <see cref="LectorDetalleRunt"/> (acreedores persona natural sin nombre y enmascarados). El contenido del lote (Excel) no la lee.
+/// </remarks>
+internal sealed class LectorContenidoReporte(
+    DiagnosticoDb db, IProtectorDocumentoPersona protector, IProtectorRespuestaFuente protectorRespuesta, IResolutorNombresUsuario nombres,
+    ICatalogoTiposTramite catalogo)
+{
+    /// <summary>Texto de cada motivo de N/A (los mismos del detalle de celda de la interfaz).</summary>
+    public static readonly IReadOnlyDictionary<MotivoNa, string> TextoMotivoNa = new Dictionary<MotivoNa, string>
+    {
+        [MotivoNa.ServicioPublico] = "El vehículo es de servicio público: esta consulta no aplica.",
+        [MotivoNa.DepartamentoNoSoportado] = "El departamento del vehículo todavía no está soportado.",
+        [MotivoNa.SinDocumentoLocatario] = "El vehículo está sin el documento del locatario: no hay a quién consultar.",
+    };
+
+    /// <summary>El contenido del vehículo para la compañía del token, con su visibilidad y la empresa del claim.</summary>
+    public async Task<ContenidoReporteVehiculo> VehiculoAsync(UsuarioActual usuario, Guid diagnosticoId, Guid vehiculoId, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(usuario);
+        var cabecera = await AccesoLote.LeerVisibleAsync(db, usuario, diagnosticoId, seguir: false, ct).ConfigureAwait(false);
+        return await VehiculoAsync(cabecera, vehiculoId, usuario.EmpresaNombre, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// El contenido del vehículo de una cabecera que ya pasó el control de acceso de quien llama (el ZIP con su contexto de empresa);
+    /// 404 si la cabecera o el vehículo (dentro de ese lote) no es de la empresa del contexto.
+    /// </summary>
+    public async Task<ContenidoReporteVehiculo> VehiculoAsync(CabeceraDiagnostico cabecera, Guid vehiculoId, string? empresa, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(cabecera);
+        await ExigirCabeceraAsync(cabecera, ct).ConfigureAwait(false);
+        var vehiculo = await db.Set<VehiculoDiagnostico>().AsNoTracking()
+            .Where(v => v.Id == vehiculoId && v.DiagnosticoId == cabecera.Id && v.TenantId == cabecera.TenantId)
+            .Select(v => new IdentificacionLeida(v.Id, v.Orden, v.IdentificadorNorm, v.TipoIdentificador, v.Placa, v.Vin))
+            .SingleOrDefaultAsync(ct).ConfigureAwait(false)
+            ?? throw ReglaException.NoEncontrado("El vehículo");
+        var celdas = await Celdas(cabecera, vehiculoId).ToListAsync(ct).ConfigureAwait(false);
+        var personas = await db.Set<PersonaVehiculo>().AsNoTracking()
+            .Where(p => p.TenantId == cabecera.TenantId && p.VehiculoId == vehiculoId)
+            .OrderBy(p => p.Rol).ThenBy(p => p.Orden)
+            .ToListAsync(ct).ConfigureAwait(false);
+        var lote = await EncabezadoAsync(cabecera, empresa, ct).ConfigureAwait(false);
+        var detalle = await DetalleRuntAsync(cabecera, vehiculoId, celdas, ct).ConfigureAwait(false);
+        var dictamen = await DictamenVigenteAsync(cabecera, vehiculoId, ct).ConfigureAwait(false);
+
+        return new ContenidoReporteVehiculo(
+            new EncabezadoReporte(
+                lote.DiagnosticoId, lote.NombreLote, lote.Empresa, lote.UsuarioCreador, lote.CreadoEn, lote.TipoAnalisis,
+                vehiculo.Identificador, CodigosDeEnum.Codigo(vehiculo.Tipo), vehiculo.Placa, vehiculo.Vin),
+            Secciones(cabecera, celdas, personas, await RespuestasPersonaAsync(cabecera, vehiculoId, ct).ConfigureAwait(false)),
+            detalle,
+            dictamen);
+    }
+
+    /// <summary>
+    /// El detalle del RUNT del vehículo: solo si el RUNT está en el alcance y su celda está COMPLETADO; la respuesta cifrada se lee
+    /// aparte (una fila, una columna) para no traerla en el resto de las lecturas. Null si no hay o no se puede leer.
+    /// </summary>
+    private async Task<DetalleRuntReporte?> DetalleRuntAsync(CabeceraDiagnostico cabecera, Guid vehiculoId, IReadOnlyList<CeldaLeidaReporte> celdas, CancellationToken ct)
+    {
+        if (!Alcance.Agrupar(cabecera.Alcance).Fuentes.Contains(Fuente.Runt)
+            || !celdas.Any(c => c.Fuente == Fuente.Runt && c.Estado == EstadoCelda.Completado))
+            return null;
+        var id = cabecera.Id;
+        var tenant = cabecera.TenantId;
+        var cifrada = await db.Set<CeldaConsulta>().AsNoTracking()
+            .Where(c => c.DiagnosticoId == id && c.TenantId == tenant && c.VehiculoId == vehiculoId && c.Fuente == Fuente.Runt && c.Estado == EstadoCelda.Completado)
+            .Select(c => c.RespuestaFuenteCifrada)
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        return LectorDetalleRunt.Leer(protectorRespuesta, cifrada);
+    }
+
+    /// <summary>
+    /// El dictamen vigente del vehículo, si existe. Sin fila no hay claves de dictamen. Solo veredicto, estado y los textos de
+    /// los alertamientos: ni documentos ni nombres.
+    /// </summary>
+    private async Task<DictamenEnHuella?> DictamenVigenteAsync(CabeceraDiagnostico cabecera, Guid vehiculoId, CancellationToken ct)
+    {
+        var fila = await db.Set<DictamenVehiculo>().AsNoTracking()
+            .Where(d => d.VehiculoId == vehiculoId && d.TenantId == cabecera.TenantId && d.Vigente)
+            .Select(d => new { d.Veredicto, d.EstadoRedaccion, d.Alertamientos })
+            .SingleOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+        return fila is null ? null : new DictamenEnHuella(fila.Veredicto, fila.EstadoRedaccion, ContenidoReporteVehiculo.TextoDeAlertamientos(fila.Alertamientos));
+    }
+
+    /// <summary>El contenido del lote para la compañía del token, con su visibilidad y la empresa del claim.</summary>
+    public async Task<ContenidoReporteLote> LoteAsync(UsuarioActual usuario, Guid diagnosticoId, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(usuario);
+        var cabecera = await AccesoLote.LeerVisibleAsync(db, usuario, diagnosticoId, seguir: false, ct).ConfigureAwait(false);
+        return await LoteAsync(cabecera, usuario.EmpresaNombre, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>El contenido del lote de una cabecera que ya pasó el control de acceso; 404 si no es de la empresa del contexto.</summary>
+    public async Task<ContenidoReporteLote> LoteAsync(CabeceraDiagnostico cabecera, string? empresa, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(cabecera);
+        await ExigirCabeceraAsync(cabecera, ct).ConfigureAwait(false);
+        var vehiculosDelLote = db.Set<VehiculoDiagnostico>().AsNoTracking().Where(v => v.DiagnosticoId == cabecera.Id && v.TenantId == cabecera.TenantId);
+        var vehiculos = await vehiculosDelLote
+            .OrderBy(v => v.Orden)
+            .Select(v => new IdentificacionLeida(v.Id, v.Orden, v.IdentificadorNorm, v.TipoIdentificador, v.Placa, v.Vin))
+            .ToListAsync(ct).ConfigureAwait(false);
+        var celdas = (await Celdas(cabecera, null).ToListAsync(ct).ConfigureAwait(false)).ToLookup(c => c.VehiculoId);
+        var personas = (await db.Set<PersonaVehiculo>().AsNoTracking()
+                .Where(p => p.TenantId == cabecera.TenantId && vehiculosDelLote.Any(v => v.Id == p.VehiculoId))
+                .OrderBy(p => p.Rol).ThenBy(p => p.Orden)
+                .ToListAsync(ct).ConfigureAwait(false))
+            .ToLookup(p => p.VehiculoId);
+        var encabezado = await EncabezadoAsync(cabecera, empresa, ct).ConfigureAwait(false);
+
+        return new ContenidoReporteLote(encabezado, [.. vehiculos.Select(v => new VehiculoReporte(
+            v.Id, v.Orden, v.Identificador, CodigosDeEnum.Codigo(v.Tipo), v.Placa, v.Vin,
+            Secciones(cabecera, [.. celdas[v.Id]], [.. personas[v.Id]])))]);
+    }
+
+    /// <summary>La cabecera debe existir en la empresa del contexto: una de otra compañía pasada a mano no se lee (404).</summary>
+    private async Task ExigirCabeceraAsync(CabeceraDiagnostico cabecera, CancellationToken ct)
+    {
+        if (!await db.Set<CabeceraDiagnostico>().AsNoTracking().AnyAsync(c => c.Id == cabecera.Id && c.TenantId == cabecera.TenantId, ct).ConfigureAwait(false))
+            throw ReglaException.NoEncontrado("El diagnóstico");
+    }
+
+    /// <summary>
+    /// Solo lo que el reporte puede mostrar de cada celda del lote (o de un vehículo): ni origen, ni usuario manual, ni tipo de error.
+    /// </summary>
+    private IQueryable<CeldaLeidaReporte> Celdas(CabeceraDiagnostico cabecera, Guid? vehiculoId)
+    {
+        var id = cabecera.Id;
+        var tenant = cabecera.TenantId;
+        return db.Set<CeldaConsulta>().AsNoTracking()
+            .Where(c => c.DiagnosticoId == id && c.TenantId == tenant && (vehiculoId == null || c.VehiculoId == vehiculoId))
+            .Select(c => new CeldaLeidaReporte(c.VehiculoId, c.Fuente, c.Estado, c.MotivoNa, c.DatoObtenidoEn, c.Payload, c.RespuestaFuenteCifrada));
+    }
+
+    private async Task<EncabezadoLoteReporte> EncabezadoAsync(CabeceraDiagnostico cabecera, string? empresa, CancellationToken ct)
+    {
+        var creador = (await nombres.ResolverAsync(cabecera.TenantId, [cabecera.UsuarioCreadorId], ct).ConfigureAwait(false))
+            .GetValueOrDefault(cabecera.UsuarioCreadorId, ResolutorNombresUsuario.NoDisponible);
+        var tipo = await EtiquetaTipoAnalisis.ResolverAsync(cabecera, catalogo, ct).ConfigureAwait(false);
+        return new EncabezadoLoteReporte(
+            cabecera.Id, cabecera.Nombre, string.IsNullOrWhiteSpace(empresa) ? ResolutorNombresUsuario.NoDisponible : empresa.Trim(), creador,
+            cabecera.CreadoEn.ToOffset(VigenciaDelDia.OffsetColombia), tipo);
+    }
+
+    /// <summary>
+    /// Respuestas cifradas de RUNT propietario y locatario, para completar las licencias de conducción en el PDF.
+    /// El Excel del lote no las lee.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<Fuente, IReadOnlyDictionary<int, JsonElement>>> RespuestasPersonaAsync(
+        CabeceraDiagnostico cabecera, Guid vehiculoId, CancellationToken ct)
+    {
+        Fuente[] fuentes = [Fuente.RuntPropietario, Fuente.RuntLocatario, Fuente.SimitPropietario, Fuente.SimitLocatario];
+        var filas = await db.Set<CeldaConsulta>().AsNoTracking()
+            .Where(c => c.DiagnosticoId == cabecera.Id && c.TenantId == cabecera.TenantId && c.VehiculoId == vehiculoId && fuentes.Contains(c.Fuente))
+            .Select(c => new { c.Fuente, c.RespuestaFuenteCifrada })
+            .ToListAsync(ct).ConfigureAwait(false);
+        var mapa = new Dictionary<Fuente, IReadOnlyDictionary<int, JsonElement>>();
+        foreach (var fila in filas)
+        {
+            if (RespuestaFuenteCelda.TryLeerPersonas(protectorRespuesta, fila.RespuestaFuenteCifrada, out var respuestas))
+                mapa[fila.Fuente] = respuestas;
+        }
+
+        return mapa;
+    }
+
+    /// <summary>Una sección por fuente del alcance, en el orden de las columnas de la grilla; las celdas de otras fuentes no salen.</summary>
+    private List<SeccionReporte> Secciones(
+        CabeceraDiagnostico cabecera, IReadOnlyList<CeldaLeidaReporte> celdas, IReadOnlyList<PersonaVehiculo> personas,
+        IReadOnlyDictionary<Fuente, IReadOnlyDictionary<int, JsonElement>>? respuestasPersona = null)
+    {
+        var porFuente = celdas.GroupBy(c => c.Fuente).ToDictionary(g => g.Key, g => g.First());
+        return [.. Alcance.Agrupar(cabecera.Alcance).Fuentes.Select(f => Seccion(f, porFuente.GetValueOrDefault(f), personas, respuestasPersona))];
+    }
+
+    private SeccionReporte Seccion(
+        Fuente fuente, CeldaLeidaReporte? celda, IReadOnlyList<PersonaVehiculo> personas,
+        IReadOnlyDictionary<Fuente, IReadOnlyDictionary<int, JsonElement>>? respuestasPersona)
+    {
+        var codigo = CodigosDeEnum.Codigo(fuente);
+        var grupo = CodigosDeEnum.Codigo(GruposFuente.De(fuente));
+        var estado = celda?.Estado switch
+        {
+            EstadoCelda.Completado => EstadoSeccion.Completado,
+            EstadoCelda.Na => EstadoSeccion.NoAplica,
+            EstadoCelda.Error => EstadoSeccion.NoDisponible,
+            _ => EstadoSeccion.Pendiente,
+        };
+        var porPersona = EjecutorPorPersonas.EsPorPersona(fuente);
+        IReadOnlyList<PersonaReporte>? deLaFuente = null;
+        if (porPersona)
+        {
+            var rol = EjecutorPorPersonas.RolDe(fuente);
+            deLaFuente = estado is EstadoSeccion.Completado or EstadoSeccion.NoDisponible
+                ? [.. ProyectorDetalleCelda.Personas(
+                    personas.Where(p => p.Rol == rol), celda!.Payload, protector,
+                    respuestasPersona is not null && respuestasPersona.TryGetValue(fuente, out var deLaFuenteRespuestas) ? deLaFuenteRespuestas : null).Select(Persona)]
+                : [];
+        }
+
+        return estado switch
+        {
+            EstadoSeccion.Completado => new SeccionReporte(
+                codigo, grupo, estado, null, null, celda!.DatoObtenidoEn,
+                porPersona ? null : ResultadoVehiculo(fuente, celda), deLaFuente),
+            EstadoSeccion.NoAplica => new SeccionReporte(
+                codigo, grupo, estado, celda!.MotivoNa is { } m ? CodigosDeEnum.Codigo(m) : null,
+                celda.MotivoNa is { } motivo ? TextoMotivoNa.GetValueOrDefault(motivo) : null, null, null, deLaFuente),
+            EstadoSeccion.NoDisponible => new SeccionReporte(codigo, grupo, estado, null, SeccionReporte.ConsultaNoDisponible, null, null, deLaFuente),
+            _ => new SeccionReporte(codigo, grupo, estado, null, null, null, null, deLaFuente),
+        };
+    }
+
+    /// <summary>La persona del detalle para el reporte: sin tipo de error; su error es «consulta no disponible».</summary>
+    private static PersonaReporte Persona(PersonaDetalleDto p) => new(
+        p.Orden, p.Rol, p.TipoDocumento, p.DocumentoEnmascarado, p.DeclaradoPorCliente,
+        p.DeclaradoPorCliente ? PersonaReporte.Declarado : null, p.Consulta,
+        p.Estado switch
+        {
+            EjecutorPorPersonas.EstadoOk => EstadoPersonaReporte.Ok,
+            DetalleCelda.SinResultado => EstadoPersonaReporte.SinResultado,
+            _ => EstadoPersonaReporte.NoDisponible,
+        },
+        p.ConsultadoEn, p.Resultado, p.Documento);
+
+    private sealed record IdentificacionLeida(Guid Id, int Orden, string Identificador, Domain.Vehiculos.TipoIdentificador Tipo, string? Placa, string? Vin);
+
+    private ResultadoDetalleDto? ResultadoVehiculo(Fuente fuente, CeldaLeidaReporte celda)
+    {
+        var resultado = ProyectorDetalleCelda.ResultadoVehiculo(fuente, celda.Payload);
+        if (resultado is not ResultadoSimitDetalle simit || !RespuestaFuenteCelda.TryLeerVehiculo(protectorRespuesta, celda.Cifrada, out var respuesta) || respuesta is not { } cruda)
+            return resultado;
+        var proveedor = ProyectorDetalleCelda.RespuestaProveedor(cruda, out _);
+        return proveedor is { } cuerpo ? SimitVisible.Completar(simit, cuerpo) : resultado;
+    }
+
+    private sealed record CeldaLeidaReporte(Guid VehiculoId, Fuente Fuente, EstadoCelda Estado, MotivoNa? MotivoNa, DateTimeOffset? DatoObtenidoEn, string? Payload, byte[]? Cifrada);
+}

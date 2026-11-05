@@ -158,6 +158,32 @@ public sealed class OutboxTests(MessagingFixture fixture) : IClassFixture<Messag
         recibidos.Should().Equal(ids);
     }
 
+    // HU #13727 (ADR-0075, Q3=3a): el publicador pone user_id = usuario de la conexión, que RabbitMQ valida.
+    [Fact]
+    public async Task HU13727_ElMensajePublicado_LlevaUserIdIgualAlUsuarioDeLaConexion()
+    {
+        fixture.SkipIfUnavailable();
+        var ct = TestContext.Current.CancellationToken;
+        await using (var scope = _services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PruebaDb>();
+            scope.ServiceProvider.GetRequiredService<IPlatformOutbox>().Enqueue("prueba.pedido.creado", 1, _tenant, new { nombre = "uid" });
+            await db.SaveChangesAsync(ct);
+        }
+
+        (await Publisher().PublishPendingAsync(ct)).Should().Be(1);
+
+        var recibido = await _channel!.BasicGetAsync(_queue, autoAck: true, ct);
+        recibido!.BasicProperties.UserId.Should().Be(Uri.UnescapeDataString(new Uri(fixture.RabbitMq).UserInfo.Split(':')[0]));
+    }
+
+    [Theory]
+    [InlineData("amqp://diagnostico:clave@rabbitmq:5672/flit", "diagnostico")]
+    [InlineData("amqps://consultas:c%40ve@broker/flit", "consultas")]
+    [InlineData("amqp://rabbitmq:5672/", "guest")]
+    public void HU13727_ElUserIdEsElUsuarioDeLaUri(string uri, string usuario) =>
+        RabbitMqEventPublisher.UsuarioDe(uri).Should().Be(usuario);
+
     // ── Broker caído: la espera entre ciclos crece (1 s, 2 s, 4 s…) hasta el tope y vuelve al poll al recuperarse ──
 
     [Theory]
