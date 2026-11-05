@@ -23,6 +23,10 @@ namespace Flit.Api.Endpoints.Auditing;
 /// <param name="ProcedureId">Trámite consultado (detalle) o <c>null</c>.</param>
 /// <param name="ProcedureTenantId">Dueño del trámite consultado (detalle) o <c>null</c>.</param>
 /// <param name="AttachmentId">Documento descargado (HU #12410) o <c>null</c>.</param>
+/// <param name="PlatformWide">
+/// HU #14320 — acceso del SuperAdmin en modo «todas las compañías» (no hay cabeza de grupo). El filtro solo lo
+/// audita si el JWT es realmente de SuperAdmin; el actor se toma del JWT, nunca de la petición.
+/// </param>
 internal sealed record NetworkAccessOutcome(
     string Resource,
     string Result,
@@ -30,7 +34,8 @@ internal sealed record NetworkAccessOutcome(
     string? FiltersJson = null,
     Guid? ProcedureId = null,
     Guid? ProcedureTenantId = null,
-    Guid? AttachmentId = null);
+    Guid? AttachmentId = null,
+    bool PlatformWide = false);
 
 /// <summary>
 /// Puente entre los endpoints de red y <see cref="NetworkAccessAuditFilter"/> (HU #12361): publica el
@@ -194,6 +199,10 @@ internal sealed partial class NetworkAccessAuditFilter : IEndpointFilter
     /// </returns>
     private static async Task<bool> AuditAsync(HttpContext http)
     {
+        // HU #14320 — modo «todas las compañías» del SuperAdmin: misma tabla y mismo writer, sin cabeza de grupo.
+        if (NetworkAccessAuditContext.Get(http) is { PlatformWide: true } platform)
+            return await AuditPlatformWideAsync(http, platform).ConfigureAwait(false);
+
         var scope = RequestTenantResolver.ScopeFromItems(http);
         if (scope is null || !scope.IsGroup || scope.WriteTenantId is not { } head)
             return true; // no es una cabeza de grupo: nada que auditar (AC6)
@@ -220,6 +229,39 @@ internal sealed partial class NetworkAccessAuditFilter : IEndpointFilter
                 ProcedureId: outcome.ProcedureId,
                 ProcedureTenantId: outcome.ProcedureTenantId,
                 AttachmentId: outcome.AttachmentId,
+                Result: outcome.Result),
+            http.RequestAborted).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// HU #14320 — una fila por petición con las compañías DISTINTAS que aparecieron en el resultado. Solo si el
+    /// JWT es de SuperAdmin (defensa en profundidad: la ruta ya respondió 403 a otro rol y no publica desenlace).
+    /// El «cliente actor» es el tenant del JWT del SuperAdmin (o <see cref="Guid.Empty"/> si no trae); la tabla
+    /// no tiene FK a propósito. Sin compañías en el resultado no hay acceso a datos que registrar.
+    /// </summary>
+    private static async Task<bool> AuditPlatformWideAsync(HttpContext http, NetworkAccessOutcome outcome)
+    {
+        if (!RequestTenantResolver.IsSuperAdmin(http.User))
+            return true;
+
+        var reached = outcome.ReachedTenantIds.Where(t => t != Guid.Empty).Distinct().ToList();
+        if (reached.Count == 0)
+            return true;
+
+        var writer = http.RequestServices.GetService<INetworkAccessAuditWriter>();
+        if (writer is null)
+            return false;
+
+        return await writer.WriteAsync(
+            new NetworkAccessAuditEntry(
+                ActorUserId: ResolveUserId(http.User),
+                ActorTenantId: RequestTenantResolver.ResolveTenantIdOrNull(http.User) ?? Guid.Empty,
+                ReachedTenantIds: reached,
+                Resource: outcome.Resource,
+                FiltersJson: outcome.FiltersJson,
+                ProcedureId: null,
+                ProcedureTenantId: null,
+                AttachmentId: null,
                 Result: outcome.Result),
             http.RequestAborted).ConfigureAwait(false);
     }

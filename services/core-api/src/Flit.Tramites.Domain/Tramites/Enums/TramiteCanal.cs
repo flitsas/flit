@@ -41,6 +41,9 @@ public static class TramiteCanal
     public static bool EsValido(string? codigo) =>
         codigo is not null && Todos.Contains(codigo, StringComparer.Ordinal);
 
+    /// <summary>Canal efectivo: un trámite sin canal (<c>null</c>, histórico) se lee como Trámites.</summary>
+    public static string Efectivo(string? codigo) => codigo ?? Tramites;
+
     /// <summary>Nombre visible del canal, o <c>null</c> si el código no pertenece al catálogo.</summary>
     public static string? NombreVisible(string? codigo) => codigo switch
     {
