@@ -7476,7 +7476,7 @@ paths:
       tags: [Tramites, Identidad]
       summary: Regenerar el enlace de captura manual (solo Super Admin) — HU #13287, Épica #13202
       description: >
-        Emite un enlace de captura NUEVO de 24 h (token guardado solo como hash SHA-256) para una validación que espera
+        Emite un enlace de captura NUEVO de 24 h (token guardado como hash SHA-256 y, cifrado, para poder copiarlo — HU #14305) para una validación que espera
         captura: `manual_activo`, o `rechazado` tras una revisión manual (HU #13299; sigue `rechazado`); el enlace anterior deja de funcionar (la búsqueda por hash ya no lo encuentra, así que el
         público recibe 404; no se distingue «reemplazado» de «inválido» y el front lo cubre con «enlace inválido o
         reemplazado»). Envía el correo al titular y audita `manual_enlace_regenerado`. Si el correo no sale la
@@ -7504,6 +7504,57 @@ paths:
           description: Validación de identidad no encontrada.
         "409":
           description: "flujo_manual_no_activo (la validación no espera captura: ni manual_activo ni rechazado con motivo)."
+  /api/v1/tramites/biometric-validations/{id}/manual-link/copy:
+    post:
+      operationId: copiarEnlaceManual
+      tags: [Tramites, Identidad]
+      summary: Copiar el enlace de captura manual vigente (solo Super Admin) — HU #14305, Épica #14271
+      description: >
+        Devuelve el enlace de captura completo de una validación que espera captura (`manual_activo`, o `rechazado` tras
+        una revisión manual) y cuyo enlace sigue vigente, SIN regenerarlo: el token y el hash no cambian y no se envía
+        correo. El token se guarda cifrado (Data Protection) además del hash desde la activación, la regeneración o el
+        rechazo, y se borra al enviar la captura. La auditoría registra `manual_enlace_copiado` (quién y cuándo; sin token
+        ni URL). Solo Super Admin; el tenant sale de la fila (NO se usa X-Tenant-Id). La respuesta lleva
+        `Cache-Control: no-store`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Enlace vigente.
+          headers:
+            Cache-Control:
+              schema: { type: string, example: no-store }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url, expiresAt]
+                properties:
+                  url: { type: string, description: Enlace completo de captura (contiene el token). }
+                  expiresAt: { type: string, format: date-time }
+        "401":
+          description: Sin sesión.
+        "403":
+          description: El usuario no es Super Admin.
+        "404":
+          description: Validación de identidad no encontrada (`code` = not_found).
+        "409":
+          description: >
+            `code`: `enlace_vencido` (pasó la vigencia de 24 h), `enlace_no_disponible` (captura ya enviada, enlace emitido
+            antes del cifrado, o token que no se puede descifrar; se regenera) o `flujo_manual_no_activo` (la validación no
+            espera captura).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: string, enum: [enlace_vencido, enlace_no_disponible, flujo_manual_no_activo] }
+                  message: { type: string }
   /api/v1/tramites/biometric-validations/{id}/manual-detail:
     get:
       operationId: getManualIdentityValidationDetail

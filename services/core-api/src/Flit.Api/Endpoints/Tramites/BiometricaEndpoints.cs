@@ -728,6 +728,50 @@ internal static class BiometricaEndpoints
         .Produces(StatusCodes.Status404NotFound)
         .Produces(StatusCodes.Status409Conflict);
 
+        // POST copiar el enlace de captura manual vigente (HU #14305, Feature #14304, Épica #14271). SOLO Super Admin (misma
+        // policy que regenerate-manual-link). Devuelve el enlace completo SIN regenerarlo: token y hash no cambian y no hay correo.
+        // Cross-tenant: el tenant sale de la fila. La respuesta lleva el token en la URL, así que va con Cache-Control: no-store.
+        // 409 con `code`: enlace_vencido | enlace_no_disponible | flujo_manual_no_activo (en los dos primeros se regenera).
+        group.MapPost("/biometric-validations/{id:guid}/manual-link/copy", async (
+            Guid id,
+            HttpContext http,
+            CopiarEnlaceManualHandler handler,
+            CancellationToken ct) =>
+        {
+            var raw = http.User.FindFirst("sub")?.Value
+                ?? http.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(raw, out var userId) || userId == Guid.Empty)
+                return Results.Problem(statusCode: 401, title: "Unauthorized",
+                    detail: "No se pudo identificar al usuario que copia el enlace.");
+
+            http.Response.Headers.CacheControl = "no-store";
+            var (result, error) = await handler.HandleAsync(new CopiarEnlaceManualCommand(id, userId), ct);
+            return error switch
+            {
+                null => Results.Ok(new { url = result!.Url, expiresAt = result.ExpiresAt }),
+                CopiarEnlaceManualHandler.NoEncontrada => Results.Json(
+                    new { code = error, message = "Validación de identidad no encontrada." },
+                    statusCode: StatusCodes.Status404NotFound),
+                CopiarEnlaceManualHandler.EnlaceVencido => Results.Json(
+                    new { code = error, message = "El enlace de captura venció: regenera uno nuevo." },
+                    statusCode: StatusCodes.Status409Conflict),
+                CopiarEnlaceManualHandler.EnlaceNoDisponible => Results.Json(
+                    new { code = error, message = "El enlace ya no está disponible para copiar: regenera uno nuevo si hace falta." },
+                    statusCode: StatusCodes.Status409Conflict),
+                _ => Results.Json(
+                    new { code = CopiarEnlaceManualHandler.FlujoManualNoActivo, message = "La validación no está esperando una captura manual." },
+                    statusCode: StatusCodes.Status409Conflict),
+            };
+        })
+        .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+        .WithName("CopiarEnlaceManual")
+        .WithSummary("Devuelve el enlace de captura manual vigente (solo Super Admin) sin regenerarlo ni enviar correo")
+        .Produces(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status401Unauthorized)
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound)
+        .Produces(StatusCodes.Status409Conflict);
+
         return app;
     }
 

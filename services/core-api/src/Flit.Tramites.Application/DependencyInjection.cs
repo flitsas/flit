@@ -279,6 +279,7 @@ public static class DependencyInjection
         // notificador del enlace (IManualCaptureLinkNotifier, correo al titular) se registra en Infraestructura.
         services.AddScoped<ActivarIdentidadManualHandler>();
         services.AddScoped<RegenerarEnlaceManualHandler>();
+        services.AddScoped<CopiarEnlaceManualHandler>();
         // HU #13298/#13299 (Feature #13282 C) — aprobar y rechazar la revisión manual (Super Admin).
         services.AddScoped<AprobarValidacionManualHandler>();
         services.AddScoped<RechazarValidacionManualHandler>();

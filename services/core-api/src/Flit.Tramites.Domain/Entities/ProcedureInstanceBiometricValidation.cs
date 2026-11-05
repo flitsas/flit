@@ -58,6 +58,16 @@ public sealed class ProcedureInstanceBiometricValidation
 
     /// <summary>SHA-256 (hex) del token enviado por magic-link. El token crudo nunca se persiste.</summary>
     public string TokenHash { get; set; } = string.Empty;
+
+    /// <summary>
+    /// HU #14305 (Feature #14304, Épica #14271) — token de la captura manual CIFRADO (Data Protection), solo mientras la validación
+    /// espera la captura del cliente; permite al Super Admin copiar el enlace sin regenerarlo. Cambia a propósito la regla de la
+    /// #13202 («solo el hash»): el token en claro sigue sin persistirse. Se llena al activar, regenerar o rechazar; se BORRA al
+    /// enviar la captura (<see cref="RegistrarCapturaManual"/>) y al aprobar. Nulo en enlaces emitidos antes de este cambio. Nunca
+    /// sale en un DTO, un log ni la auditoría.
+    /// </summary>
+    public string? ManualCaptureTokenEncrypted { get; set; }
+
     public DateTimeOffset ExpiresAt { get; set; }
 
     // ── Proveedor de validación de identidad (HU #10233 — Kyverum Verify) ────────
@@ -224,7 +234,7 @@ public sealed class ProcedureInstanceBiometricValidation
     /// </para>
     /// </summary>
     /// <exception cref="IdentidadManualNoActivableException">Aprobada y vigente.</exception>
-    public void ActivarFlujoManual(Guid userId, DateTimeOffset now, string tokenHash)
+    public void ActivarFlujoManual(Guid userId, DateTimeOffset now, string tokenHash, string? tokenEncrypted = null)
     {
         if (userId == Guid.Empty)
             throw new ArgumentException("El usuario que activa el flujo manual es obligatorio.", nameof(userId));
@@ -236,6 +246,7 @@ public sealed class ProcedureInstanceBiometricValidation
         Provider = BiometricProviders.Manual;
         Status = BiometricEstados.ManualActivo;
         TokenHash = tokenHash;
+        ManualCaptureTokenEncrypted = tokenEncrypted;
         ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras);
         ManualActivatedBy = userId;
         ManualActivatedAt = now;
@@ -278,7 +289,7 @@ public sealed class ProcedureInstanceBiometricValidation
     /// quién ni cuándo se activó, ni las fotos o el consentimiento (en <c>rechazado</c> sigue <c>rechazado</c>).
     /// </summary>
     /// <exception cref="FlujoManualNoActivoException">No espera captura (<see cref="EsperaCapturaManual"/>).</exception>
-    public void RegenerarEnlaceManual(DateTimeOffset now, string tokenHash)
+    public void RegenerarEnlaceManual(DateTimeOffset now, string tokenHash, string? tokenEncrypted = null)
     {
         if (string.IsNullOrWhiteSpace(tokenHash) || tokenHash.Length != 64)
             throw new ArgumentException("El token debe guardarse como hash SHA-256 (64 hex).", nameof(tokenHash));
@@ -288,6 +299,7 @@ public sealed class ProcedureInstanceBiometricValidation
             throw new ArgumentException("El enlace regenerado debe ser distinto del anterior.", nameof(tokenHash));
 
         TokenHash = tokenHash;
+        ManualCaptureTokenEncrypted = tokenEncrypted; // sustituye al cifrado anterior (HU #14305)
         ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras);
         ResendCount++;
         LastResentAt = now;
@@ -363,6 +375,8 @@ public sealed class ProcedureInstanceBiometricValidation
         SignatureImagePath = signaturePath;
         SignatureImageSha256 = signatureSha256;
         Status = BiometricEstados.PendienteRevisionManual;
+        // HU #14305 — el enlace se consumió: el token cifrado se borra (el hash queda para que el público lo reconozca).
+        ManualCaptureTokenEncrypted = null;
         // HU #13299 — la captura nueva abre una revisión nueva: el motivo y la revisión (quién y cuándo) del rechazo previo, que se
         // conservan mientras el cliente repite la captura, se LIMPIAN aquí; la historia queda en la auditoría (manual_rechazado).
         RejectionReasonCode = null;
@@ -395,6 +409,7 @@ public sealed class ProcedureInstanceBiometricValidation
             throw new InvalidOperationException("Solo una validación manual ya aprobada se sella como aprobada manualmente.");
 
         ApprovalOrigin = BiometricApprovalOrigins.Manual;
+        ManualCaptureTokenEncrypted = null; // HU #14305: aprobar nunca deja un token vivo
         ReviewedBy = reviewerId;
         ReviewedAt = now;
         RejectionReasonCode = null;
@@ -417,7 +432,8 @@ public sealed class ProcedureInstanceBiometricValidation
     /// </summary>
     /// <exception cref="RevisionManualNoPendienteException">No está en <c>pendiente_revision_manual</c>.</exception>
     /// <exception cref="ArgumentException">Revisor vacío, motivo fuera de la lista o token mal formado/repetido.</exception>
-    public void RechazarRevisionManual(Guid reviewerId, string reasonCode, DateTimeOffset now, string tokenHash)
+    public void RechazarRevisionManual(
+        Guid reviewerId, string reasonCode, DateTimeOffset now, string tokenHash, string? tokenEncrypted = null)
     {
         if (reviewerId == Guid.Empty)
             throw new ArgumentException("El usuario que revisa es obligatorio.", nameof(reviewerId));
@@ -436,6 +452,7 @@ public sealed class ProcedureInstanceBiometricValidation
         ReviewedAt = now;
 
         TokenHash = tokenHash;
+        ManualCaptureTokenEncrypted = tokenEncrypted;
         ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras);
         ManualActivatedAt = now;
         UpdatedAt = now;
@@ -464,6 +481,7 @@ public sealed class ProcedureInstanceBiometricValidation
     public void Approve(DateTimeOffset now)
     {
         Status = BiometricEstados.Aprobado;
+        ManualCaptureTokenEncrypted = null; // HU #14305: aprobar nunca deja un token de captura vivo
         ValidatedAt = now;
         ValidUntil = BiometricRules.FechaFinVigencia(now);
         // HU #13303: toda aprobación que pasa por aquí (Kyverum, mock, reconciliación) es AUTOMÁTICA. La del flujo manual también

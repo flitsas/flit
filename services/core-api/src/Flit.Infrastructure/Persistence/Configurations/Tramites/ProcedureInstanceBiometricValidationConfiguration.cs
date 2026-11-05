@@ -33,6 +33,8 @@ internal sealed class ProcedureInstanceBiometricValidationConfiguration
             .IsRequired().HasDefaultValue("");
         builder.Property(x => x.Status).HasColumnName("status").HasMaxLength(40).IsRequired().HasDefaultValue("enviado");
         builder.Property(x => x.TokenHash).HasColumnName("token_hash").HasMaxLength(64).IsRequired();
+        // HU #14305 — token de la captura manual cifrado (Data Protection); nulo salvo mientras espera la captura (DDL 170).
+        builder.Property(x => x.ManualCaptureTokenEncrypted).HasColumnName("manual_capture_token_encrypted").HasMaxLength(2000);
         builder.Property(x => x.ExpiresAt).HasColumnName("expires_at").IsRequired();
         builder.Property(x => x.Attempts).HasColumnName("attempts").IsRequired().HasDefaultValue(0);
         builder.Property(x => x.MaxAttempts).HasColumnName("max_attempts").IsRequired().HasDefaultValue(5);

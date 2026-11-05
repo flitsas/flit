@@ -77,6 +77,7 @@ import type {
   ReconcileIdentityResult,
   ActivarIdentidadManualResult,
   RegenerarEnlaceManualResult,
+  CopiarEnlaceManualResult,
   ProcedureInstanceSummary,
   EnviarAlOtResult,
   RuntPersonLookupInput,
@@ -2361,6 +2362,14 @@ export const tramitesClient = {
   regenerateManualLink: (validationId: string): Promise<RegenerarEnlaceManualResult> =>
     request<RegenerarEnlaceManualResult>(
       `/api/v1/tramites/biometric-validations/${validationId}/regenerate-manual-link`,
+      { method: 'POST' },
+    ),
+
+  // HU #14306 (Épica #14271) — SOLO Super Admin. Devuelve el enlace de captura vigente para copiarlo al portapapeles
+  // (no se persiste ni se registra). 409 `code`: enlace_vencido | enlace_no_disponible | flujo_manual_no_activo.
+  copyManualLink: (validationId: string): Promise<CopiarEnlaceManualResult> =>
+    request<CopiarEnlaceManualResult>(
+      `/api/v1/tramites/biometric-validations/${validationId}/manual-link/copy`,
       { method: 'POST' },
     ),
 

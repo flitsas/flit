@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { Eye, Info, Search } from 'lucide-react';
+import { Eye, Info, Link2, Search } from 'lucide-react';
 import { DataTable, type DataTableColumn } from '@flit/ui/DataTable';
 import { RowActions } from '@/components/atom/RowActions';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
@@ -23,6 +23,8 @@ import { formatFechaHora } from '@/lib/format/date';
 import { MANUAL_INPUT_CLASS, MANUAL_SELECT_CLASS } from './manual-field-styles';
 import { ManualStatusBadge } from './ManualStatusBadge';
 import { ManualReviewDetailModal } from './ManualReviewDetailModal';
+import { useCopiarEnlaceManual } from './CopiarEnlaceManual';
+import { puedeCopiarEnlaceManual } from '@/lib/identity/manual-flow';
 
 /**
  * Pestaña «Validaciones manuales» de Validaciones (Épica #13202, HU-C5). Solo Super Admin: quien la monta
@@ -143,6 +145,7 @@ export function ValidacionesManuales({
 
   const recargar = useCallback(() => setReloadKey((k) => k + 1), []);
   const hayFiltros = Boolean(status || origin || q);
+  const { copiar, region: regionCopiar } = useCopiarEnlaceManual(recargar);
 
   const columns: DataTableColumn<ManualListItem>[] = [
     {
@@ -169,6 +172,16 @@ export function ValidacionesManuales({
               tone: 'primary',
               onClick: () => setDetalleId(r.id),
             },
+            // HU #14306: solo si espera captura del cliente (no aprobada ni con captura enviada).
+            ...(puedeCopiarEnlaceManual(r.status)
+              ? [
+                  {
+                    icon: Link2,
+                    label: `Copiar enlace de ${r.fullName}`,
+                    onClick: () => void copiar(r.id),
+                  },
+                ]
+              : []),
           ]}
         />
       ),
@@ -259,6 +272,8 @@ export function ValidacionesManuales({
           </button>
         </div>
       )}
+
+      {regionCopiar}
 
       <p className="sr-only" role="status" aria-live="polite">
         {carga === 'loading' ? 'Cargando validaciones manuales…' : `${total} validaciones manuales`}
