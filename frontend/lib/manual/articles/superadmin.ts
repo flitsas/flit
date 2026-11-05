@@ -762,4 +762,57 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
       },
     ],
   },
+  {
+    slug: "4-superadmin/10-fotos-captura-manual",
+    title: "Fotos de la captura manual: cuáles se revisan y qué significa «No verificada»",
+    audience: "Super Admin",
+    sectionId: "superadmin",
+    keywords: [
+      "no verificada",
+      "foto no verificada",
+      "fotos captura manual",
+      "validar fotos",
+      "continuar sin verificar",
+      "lado del documento",
+      "revision manual fotos",
+    ],
+    summary:
+      "Qué revisa la página de captura en cada foto, cuándo la persona puede continuar sin verificar y cómo leer el aviso «No verificada» en la revisión.",
+    blocks: [
+      {
+        id: "que-revisa",
+        title: "1. Qué se revisa en cada foto",
+        paragraphs: [
+          "Al tomar cada foto, la página de captura la revisa en el mismo celular de la persona. Para esta revisión, la imagen no se envía a ningún servicio externo.",
+        ],
+        bullets: [
+          "Selfie: debe aparecer un solo rostro dentro del óvalo.",
+          "Anverso: debe verse un documento con un rostro.",
+          "Reverso: debe verse un documento con código de barras o QR.",
+          "Pasaporte: se revisa que sea un documento, pero no el lado. La persona toma igual las tres fotos.",
+        ],
+      },
+      {
+        id: "repetir",
+        title: "2. Si la foto no pasa",
+        paragraphs: [
+          "La persona ve el motivo y repite la foto. Tras tres fotos rechazadas de un mismo lado, si la siguiente tampoco pasa, puede elegir «Continuar sin verificar». También puede continuar si su celular no logra hacer la revisión.",
+        ],
+      },
+      {
+        id: "no-verificada",
+        title: "3. Qué hacer con una foto «No verificada»",
+        paragraphs: [
+          "En el detalle de revisión, esas fotos muestran «No verificada» y el motivo. Es información para que las mires con más cuidado: no impide aprobar ni rechazar.",
+          "Una foto verificada tampoco es una aprobación. La revisión no comprueba si la persona está presente ni si el rostro coincide con el del documento: esa decisión sigue siendo tuya.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Las capturas enviadas antes de esta revisión no muestran este aviso.",
+          },
+        ],
+      },
+    ],
+  },
 ];
