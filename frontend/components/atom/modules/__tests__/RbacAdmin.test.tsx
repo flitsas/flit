@@ -8,6 +8,7 @@ import userEvent from "@testing-library/user-event";
 import { RbacAdmin } from "../RbacAdmin";
 import { chooseRowAction, findRowAction, rowActionNames } from "@/components/atom/__tests__/rowActionsMenu.helpers";
 import { superadminClient } from "@/lib/api/superadmin-client";
+import { getAccessibleModules } from "@/lib/api/security";
 
 const companyRole = {
   id: "role-company-1",
@@ -71,6 +72,9 @@ beforeEach(() => {
   listRoles.mockImplementation((type: string) =>
     Promise.resolve(type === "COMPANY" ? [companyRole] : [otRole]),
   );
+  vi.mocked(getAccessibleModules).mockResolvedValue([
+    { id: "mod-1", code: "tramites", name: "Trámites", sortOrder: 1, actions: [{ id: "perm-1", slug: "tramites.read", name: "Leer trámites" }] },
+  ]);
 });
 
 describe("RbacAdmin — pestaña Roles del sistema (HU #10509)", () => {
@@ -234,5 +238,37 @@ describe("RbacAdmin — pestaña Roles del sistema (HU #10509)", () => {
     await user.click(screen.getByRole("button", { name: /guardar permisos/i }));
 
     await waitFor(() => expect(setRolePermissions).toHaveBeenCalledWith("role-company-1", ["perm-1"]));
+  });
+
+  it("Bug #14010 H-11: el rol de plataforma muestra Usuarios y Permisos y Validaciones de identidad", async () => {
+    const user = userEvent.setup();
+    listRoles.mockImplementation((type: string) =>
+      Promise.resolve(type === "COMPANY"
+        ? [{
+            ...companyRole,
+            id: "role-admin-company",
+            code: "AdminCompany",
+            name: "Administrador de Compañía",
+            productCode: "plataforma",
+          }]
+        : []),
+    );
+    vi.mocked(getAccessibleModules).mockImplementation(async (product?: string) =>
+      product === "plataforma"
+        ? [
+            { id: "mod-u", code: "usuarios", name: "Usuarios y Permisos", sortOrder: 1, productCode: "plataforma", actions: [{ id: "p-reset", slug: "security.users.reset_password", name: "Restablecer contraseña" }] },
+            { id: "mod-v", code: "validaciones-identidad-admin", name: "Validaciones de identidad (administración)", sortOrder: 2, productCode: "plataforma", actions: [{ id: "p-vencer", slug: "identidad.validaciones.vencer", name: "Vencer una identidad aprobada" }] },
+          ]
+        : [],
+    );
+    getRole.mockResolvedValue({ permissions: [] });
+    await openRolesTab();
+
+    const row = (await screen.findByText("Administrador de Compañía")).closest("tr") as HTMLElement;
+    await chooseRowAction(user, "Administrador de Compañía", /editar permisos de/i, within(row));
+
+    expect(await screen.findByText("Usuarios y Permisos")).toBeVisible();
+    expect(screen.getByText("Validaciones de identidad (administración)")).toBeVisible();
+    expect(getAccessibleModules).toHaveBeenCalledWith("plataforma");
   });
 });

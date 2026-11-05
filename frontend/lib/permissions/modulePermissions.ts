@@ -135,13 +135,51 @@ export function outOfCapOverrideIds(
 
 // ── HU #13655: ficha del Admin OT ──────────────────────────────────────────────────────────────────────
 
+const OT_EXTRA_MODULE_CODES = new Set(["consolidado-masivo", "admin-tramites-avanzado"]);
+
 /**
- * Módulos que el Admin OT configura en sus usuarios: los del organismo (`ot-*`) y la descarga masiva de consolidados, que
- * se usa desde la bandeja del organismo. Los permisos de compañía y los Ver/Crear por familia de trámites no aplican al OT.
+ * Módulos que el Admin OT configura en sus usuarios: los del organismo (`ot-*`), la descarga masiva y
+ * «Reenviar validación de identidad» (`admin-tramites-avanzado`). El API lo incluye en `/grantable`;
+ * ocultarlo dejaba un permiso otorgable fuera de la pantalla (Bug #14010 H-04).
+ * Los permisos de compañía y los Ver/Crear por familia de trámites no aplican al OT.
  */
 export function isOtModuleCode(moduleCode: string | null | undefined): boolean {
   const code = (moduleCode ?? "").trim().toLowerCase();
-  return code.startsWith("ot-") || code === "consolidado-masivo";
+  return code.startsWith("ot-") || OT_EXTRA_MODULE_CODES.has(code);
+}
+
+const GRANTABLE_MODULE_NAMES: Record<string, string> = {
+  "admin-tramites-avanzado": "Gestión avanzada de trámites",
+};
+
+/**
+ * Bug #14010 H-04: un permiso que `/grantable` deja otorgar puede no venir en el catálogo de módulos
+ * de quien consulta. Se agrega a su módulo para que la pantalla coincida con lo que la API permite.
+ */
+export function withGrantableActions(
+  modules: AccessibleModule[],
+  grantable: GrantablePermissionItem[],
+): AccessibleModule[] {
+  const known = new Set(modules.flatMap((m) => m.actions.map((a) => a.id)));
+  const extra = grantable.filter((g) => !known.has(g.id) && g.moduleCode);
+  if (extra.length === 0) return modules;
+  const result = modules.map((m) => ({ ...m, actions: [...m.actions] }));
+  for (const g of extra) {
+    let target = result.find((m) => m.code === g.moduleCode);
+    if (!target) {
+      target = {
+        id: g.moduleCode,
+        code: g.moduleCode,
+        name: GRANTABLE_MODULE_NAMES[g.moduleCode] ?? g.name,
+        sortOrder: Number.MAX_SAFE_INTEGER,
+        actions: [],
+        productCode: g.productCode,
+      };
+      result.push(target);
+    }
+    target.actions.push({ id: g.id, slug: g.slug, name: g.name });
+  }
+  return result;
 }
 
 // ── HU #13656 (FD2-4): administradores en solo lectura ───────────────────────────────────────────────────

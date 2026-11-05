@@ -67,32 +67,49 @@ public sealed class OidcPrincipalFactory(IAuthUserRepository users, IProductAcce
         else
         {
             var grant = await access.ResolveAsync(user.UserId, user.TenantId, product, ct).ConfigureAwait(false);
+            // Bug #14010 H-13: «Usuarios y roles» vive en las pantallas de Trámites, pero no exige el producto.
+            // Si Trámites está apagado y la persona administra la plataforma, el token lleva solo esos permisos.
+            var soloPlataforma = false;
             if (!grant.ProductEnabled)
-                return OidcGrant.Denied(ProductNotEnabled);
-
-            // El hub (plataforma) no exige rol: todo usuario entra a ver sus productos. Los demás productos sí.
-            if (grant.Roles.Count == 0 && product != ProductCodes.Plataforma)
-                return OidcGrant.Denied(ProductRoleRequired);
-
-            roles = grant.Roles;
-            permissions = grant.Permissions;
-
-            // Transitorio hasta B-12: la administración de plataforma (compañía, usuarios, roles) todavía vive en las
-            // pantallas de Trámites, así que el token de un producto lleva también los roles y permisos de plataforma
-            // del usuario (AdminCompany). Sin esto, el administrador de la empresa pierde esas pantallas con la sesión
-            // nueva. Cuando esas pantallas vivan en el hub, este bloque se retira.
-            if (product != ProductCodes.Plataforma)
             {
+                if (product != ProductCodes.Tramites)
+                    return OidcGrant.Denied(ProductNotEnabled);
+
                 var platform = await access.ResolveAsync(user.UserId, user.TenantId, ProductCodes.Plataforma, ct).ConfigureAwait(false);
-                roles = roles.Concat(platform.Roles.Where(p => roles.All(r => r.Id != p.Id))).ToList();
-                permissions = permissions.Union(platform.Permissions, StringComparer.Ordinal).ToList();
+                if (platform.Roles.Count == 0)
+                    return OidcGrant.Denied(ProductNotEnabled);
+
+                roles = platform.Roles;
+                permissions = platform.Permissions;
+                soloPlataforma = true;
+            }
+            else
+            {
+                // El hub (plataforma) no exige rol: todo usuario entra a ver sus productos. Los demás productos sí.
+                if (grant.Roles.Count == 0 && product != ProductCodes.Plataforma)
+                    return OidcGrant.Denied(ProductRoleRequired);
+
+                roles = grant.Roles;
+                permissions = grant.Permissions;
+
+                // Transitorio hasta B-12: la administración de plataforma (compañía, usuarios, roles) todavía vive en las
+                // pantallas de Trámites, así que el token de un producto lleva también los roles y permisos de plataforma
+                // del usuario (AdminCompany). Sin esto, el administrador de la empresa pierde esas pantallas con la sesión
+                // nueva. Cuando esas pantallas vivan en el hub, este bloque se retira.
+                if (product != ProductCodes.Plataforma)
+                {
+                    var platform = await access.ResolveAsync(user.UserId, user.TenantId, ProductCodes.Plataforma, ct).ConfigureAwait(false);
+                    roles = roles.Concat(platform.Roles.Where(p => roles.All(r => r.Id != p.Id))).ToList();
+                    permissions = permissions.Union(platform.Permissions, StringComparer.Ordinal).ToList();
+                }
             }
 
             // HU #13643 — permisos individuales del tenant del token, con el mismo calculador del JWT heredado:
-            // producto > usuario > rol. Aquí el producto del token ya se verificó encendido y plataforma siempre lo
-            // está; un allow de cualquier otro producto no entra en este token.
+            // producto > usuario > rol. Un allow de otro producto no entra en este token.
             permissions = EffectivePermissionsCalculator.Compute(
-                permissions, user.PermissionOverrides, p => p == ProductCodes.Plataforma || p == product);
+                permissions,
+                user.PermissionOverrides,
+                p => p == ProductCodes.Plataforma || (!soloPlataforma && p == product));
         }
 
         var identity = NewIdentity();
