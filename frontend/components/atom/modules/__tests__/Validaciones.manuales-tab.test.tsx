@@ -12,6 +12,11 @@ const mocks = vi.hoisted(() => ({
   listCompanies: vi.fn(),
 }));
 
+vi.mock('@/components/admin/Toast', () => ({
+  useToast: () => ({ show: vi.fn() }),
+  ToastProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 vi.mock('@/hooks/useNetworkScope', () => ({
   useNetworkScope: () => ({
     isGroupParent: false,
