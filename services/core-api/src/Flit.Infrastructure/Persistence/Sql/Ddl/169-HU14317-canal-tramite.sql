@@ -47,6 +47,7 @@ ALTER TABLE tramites.procedure_instances VALIDATE CONSTRAINT ck_procedure_instan
 ALTER TABLE tramites.procedure_instances VALIDATE CONSTRAINT fk_procedure_instances_channel_transit_office;
 
 -- Cubre la FK (RESTRICT al borrar un organismo) y el filtro «OT del punto». Parcial: casi todas las filas son NULL.
+-- Excepción al checklist A11: no empieza por tenant_id porque debe cubrir la FK (A9); el filtro del reporte ya va acotado por tenant y fechas.
 CREATE INDEX IF NOT EXISTS ix_procedure_instances_channel_transit_office_id
     ON tramites.procedure_instances (channel_transit_office_id)
     WHERE channel_transit_office_id IS NOT NULL;
