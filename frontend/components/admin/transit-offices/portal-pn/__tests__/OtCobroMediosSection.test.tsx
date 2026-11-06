@@ -66,12 +66,14 @@ describe("OtCobroMediosSection", () => {
       screen.getByRole("switch", { name: /Valor del trámite, Pasarela de pago, Traspaso/ }),
     ).toBeChecked();
     expect(screen.getAllByText("Se ofrece").length).toBeGreaterThan(0);
-    await userEvent.click(screen.getByRole("tab", { name: /PIN en caja/ }));
-    expect(await sw(/^PIN en caja$/)).toBeChecked();
+    expect(screen.getByRole("switch", { name: /^PIN en caja$/ })).toBeChecked();
     expect(
       screen.getByRole("switch", { name: /Valor de la gestión, PIN en caja, Traspaso/ }),
     ).toBeInTheDocument();
-    expect(screen.getAllByText(/245\.000/).length).toBeGreaterThan(0);
+    // El monto es del trámite: se ve una sola vez aunque haya dos medios de pago.
+    expect(screen.getAllByText(/245\.000/)).toHaveLength(1);
+    expect(screen.getAllByText(/30\.000/)).toHaveLength(1);
+    expect(screen.getAllByText(/275\.000/)).toHaveLength(2);
     expect(screen.getAllByText("Activado").length).toBeGreaterThan(0);
   });
 
@@ -107,7 +109,6 @@ describe("OtCobroMediosSection", () => {
   it("guarda la bandera del medio", async () => {
     const a = api(datos());
     montar(a);
-    await userEvent.click(await screen.findByRole("tab", { name: /PIN en caja/ }));
     await userEvent.click(await sw(/^PIN en caja$/));
     await waitFor(() =>
       expect(a.guardarMedio).toHaveBeenCalledWith({ method: "PIN", enabled: false }),
@@ -173,7 +174,7 @@ describe("OtCobroMediosSection", () => {
     await sw(/^Pasarela de pago$/);
     expect(screen.getByRole("button", { name: "Ir a Tarifas" })).toBeInTheDocument();
     expect(screen.getByText("No se cobra")).toBeInTheDocument();
-    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: /PIN en caja/ })).not.toBeInTheDocument();
   });
 
   it("sin trámites muestra el vacío", async () => {
