@@ -155,7 +155,19 @@ export const ETIQUETA_CAMPO: Record<string, string> = {
   tipo_vehiculo: "Tipo de vehículo",
 };
 
-export const TIPOS_DOCUMENTO = ["CC", "CE", "NIT", "TI", "PA", "CD", "RC", "CV"];
+export const TIPOS_DOCUMENTO = ["CC", "CE", "NIT", "TI", "PA", "CD", "RC", "CV"] as const;
+
+/** Etiquetas amigables del selector de tipo de documento (OCR infractor). */
+export const ETIQUETA_TIPO_DOCUMENTO: Record<(typeof TIPOS_DOCUMENTO)[number], string> = {
+  CC: "CC",
+  CE: "CE",
+  NIT: "NIT (Persona jurídica)",
+  TI: "TI",
+  PA: "PA",
+  CD: "CD",
+  RC: "RC",
+  CV: "CV",
+};
 
 /** Cómo se edita cada campo en el formulario de revisión. */
 export function tipoEntrada(campo: string): "fecha" | "hora" | "documento" | "booleano" | "texto" {
