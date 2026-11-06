@@ -90,6 +90,9 @@ describe("HU #14357 AC6 — manual sin convenio de Compañías", () => {
       const abierto = parrafos().find((p) => p.includes("Con «Abierto (sin mandatario)»"));
       expect(abierto).toContain("nombre, documento y firma quedan en líneas en blanco");
       expect(abierto).toContain("en el cuerpo y en el recuadro");
+      // Con datos institucionales del organismo, el recuadro sale con su razón social y Bello la nombra en el cuerpo.
+      expect(abierto).toContain("si el organismo tiene datos institucionales, pueden aparecer en el contrato");
+      expect(abierto).toContain("El recuadro también lleva la marca «Sin firmar».");
       expect(abierto).not.toBe(blanco);
     });
   });
