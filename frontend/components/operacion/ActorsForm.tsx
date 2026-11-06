@@ -1583,9 +1583,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
    * validación que aplica `save()` (`validateActors`), no una segunda regla en paralelo: si
    * divergieran, el botón podría habilitarse para un guardado que va a fallar.
    */
+  const ownershipSharesOk = validateOwnershipShares(actors).valid;
   useEffect(() => {
-    onCamposRequeridosGateChange?.(validation.valid);
-  }, [validation.valid, onCamposRequeridosGateChange]);
+    // HU #14192 — Continuar también exige porcentajes válidos (suma 100, cada uno en (0, 100]).
+    onCamposRequeridosGateChange?.(validation.valid && ownershipSharesOk);
+  }, [validation.valid, ownershipSharesOk, onCamposRequeridosGateChange]);
 
   useEffect(() => {
     onCamaraComercioGateChange?.(camaraGateOk);
@@ -1727,9 +1729,38 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     setTouchedContact((prev) => shift(prev));
   };
 
+  /**
+   * HU #14192 — ¿Se puede agregar otro propietario en este lado? Exige que TODOS los ya
+   * presentes tengan campos obligatorios OK y consulta de identidad lista (secuencia).
+   */
+  const canAddOwner = (rol: ActorRol): { ok: boolean; reason?: string } => {
+    const idxs = indicesForRol(actors, rol);
+    if (idxs.length >= MAX_OWNERS_PER_SIDE) {
+      return { ok: false, reason: 'Máximo 4 propietarios permitidos por trámite.' };
+    }
+    for (const i of idxs) {
+      if (Object.keys(validation.byActor[i] ?? {}).length > 0) {
+        return {
+          ok: false,
+          reason:
+            'Completa todos los datos del propietario actual antes de agregar otro.',
+        };
+      }
+      if (!consultaLista(i)) {
+        return {
+          ok: false,
+          reason:
+            'Consulta el documento del propietario actual (RUNT/RUES) antes de agregar otro.',
+        };
+      }
+    }
+    return { ok: true };
+  };
+
   /** Agrega un copropietario al final del grupo de `rol` (máximo 4 — ADR-0053). */
   const addOwner = (rol: ActorRol) => {
     if (readOnly) return;
+    if (!canAddOwner(rol).ok) return;
     const idxs = indicesForRol(actors, rol);
     if (idxs.length >= MAX_OWNERS_PER_SIDE) return;
     const insertAt = idxs.length ? idxs[idxs.length - 1] + 1 : actors.length;
@@ -1779,7 +1810,10 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     if (readOnly) return;
     const rol = actors[index]?.rol;
     if (!rol) return;
-    const value = round2(Number.isFinite(rawValue) ? Math.max(0, rawValue) : 0);
+    // Mientras se teclea se permiten 0 / >100 / vacío→0 (si no, el input controlado no deja
+    // escribir "30" tras un clear). El clamp duro vive en absorción/redistribución y en blur;
+    // validateOwnershipShares + backend rechazan el guardado fuera de (0, 100].
+    const value = Number.isFinite(rawValue) ? round2(rawValue) : 0;
     markDirty();
     if (isFirstOfRol(actors, index)) {
       setSolidarioManuallyEdited((prev) => (prev.has(rol) ? prev : new Set(prev).add(rol)));
@@ -3378,6 +3412,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               onAdd={() => addOwner(actor.rol)}
               onRemove={removeOwner}
               maxReached={ownershipItems.length >= MAX_OWNERS_PER_SIDE}
+              addBlocked={!canAddOwner(actor.rol).ok && ownershipItems.length < MAX_OWNERS_PER_SIDE}
+              addBlockedReason={canAddOwner(actor.rol).reason}
               readOnly={readOnly}
               idPrefix={`actor-${actor.rol}-single`}
               sideLabel={rotuloDelActor(actor.rol)}
@@ -3945,6 +3981,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   onAdd={() => addOwner(actor.rol)}
                   onRemove={removeOwner}
                   maxReached={ownershipItems.length >= MAX_OWNERS_PER_SIDE}
+                  addBlocked={!canAddOwner(actor.rol).ok && ownershipItems.length < MAX_OWNERS_PER_SIDE}
+                  addBlockedReason={canAddOwner(actor.rol).reason}
                   readOnly={readOnly}
                   idPrefix={`actor-${actor.rol}`}
                   sideLabel={rotuloDelActor(actor.rol)}

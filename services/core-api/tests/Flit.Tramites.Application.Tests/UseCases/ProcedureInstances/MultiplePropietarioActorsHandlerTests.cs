@@ -169,6 +169,24 @@ public sealed class MultiplePropietarioActorsHandlerTests
     }
 
     [Fact]
+    public async Task Put_ActorConPorcentajeMayorA100_ReturnsPorcentajeEnCero()
+    {
+        // HU #14192 — cuotas en (0, 100]; un valor > 100 reutiliza el mismo código de conflicto.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(Instance(id, tenant));
+
+        var (result, error) = await _put.HandleAsync(id, tenant, new PutActorsRequest([
+            Comprador(doc: "1", ordinal: 1, porcentaje: 150m),
+            Comprador(doc: "2", ordinal: 2, porcentaje: 50m),
+        ]), ct);
+
+        error.Should().Be("porcentaje_en_cero");
+        result.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Put_ActorSinPorcentaje_ConDosActores_ReturnsPorcentajeEnCero()
     {
         var ct = TestContext.Current.CancellationToken;
