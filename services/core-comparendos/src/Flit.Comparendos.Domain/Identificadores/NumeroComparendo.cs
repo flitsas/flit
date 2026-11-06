@@ -1,4 +1,4 @@
-﻿namespace Flit.Comparendos.Domain.Identificadores;
+namespace Flit.Comparendos.Domain.Identificadores;
 
 /// <summary>
 /// Llave de unicidad del comparendo por empresa (RN-021; GDC ID12 / HU #14367): sin espacios ni guiones.
@@ -25,5 +25,17 @@ public static class NumeroComparendo
             return alfanum[i..];
 
         return alfanum;
+    }
+
+    /// <summary>
+    /// HU #13829 (hallazgo B12-4): el OCR a veces lee un dígito de más o de menos en los números nacionales de 20. Se
+    /// avisa solo con 19 o 21 dígitos: hay números reales de 13 (formato viejo de Bogotá) y con letras de prefijo.
+    /// </summary>
+    public static string? AvisoDeLectura(string? texto)
+    {
+        var digitos = texto?.Count(char.IsAsciiDigit) ?? 0;
+        return digitos is 19 or 21
+            ? $"El número tiene {digitos} dígitos y los comparendos nacionales tienen 20: compáralo con el documento."
+            : null;
     }
 }
