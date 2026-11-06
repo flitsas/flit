@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Copy, Download, QrCode } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Modal } from "@/components/atom/Modal";
-import { getPortalDominio } from "@/lib/api/admin-ot-portal-dominio";
+import { getPortalDominios, principalActivo } from "@/lib/api/admin-ot-portal-dominio";
 import { direccionConDominio, origenPublicoCanal } from "@/lib/plataforma/direccion-canal";
 import { PN_FIELD_ERROR_CLS, PN_INPUT_CLS } from "./pn-ui";
 import { PnButton } from "./pn-componentes";
@@ -24,20 +24,28 @@ export function EnlaceQrDialog({
 }) {
   const origen = origenPublicoCanal();
   const [hostActivo, setHostActivo] = useState<string | null>(null);
+  const [otrosActivos, setOtrosActivos] = useState<string[]>([]);
   const [buscandoDominio, setBuscandoDominio] = useState(Boolean(transitOfficeId));
   const direccion = direccionConDominio(codigo, origen, hostActivo);
 
-  // Solo un dominio ACTIVO manda; pendiente, verificado, fallido, sin dominio o cualquier falla de la consulta dejan la
-  // dirección del punto de siempre.
+  // Manda el dominio PRINCIPAL y ACTIVO. Sin él (pendientes, fallidos, ninguno o una falla de la consulta) queda la
+  // dirección del punto de siempre: no se inventa otro dominio. Los demás activos se listan aparte, solo como texto.
   useEffect(() => {
     if (!transitOfficeId) return;
     let vigente = true;
-    getPortalDominio({ transitOfficeId })
-      .then((d) => {
-        if (vigente) setHostActivo(d?.estado === "activo" ? d.host : null);
+    getPortalDominios({ transitOfficeId })
+      .then((lista) => {
+        if (!vigente) return;
+        const principal = principalActivo(lista);
+        setHostActivo(principal?.host ?? null);
+        setOtrosActivos(
+          lista.filter((d) => d.estado === "activo" && d !== principal).map((d) => d.host),
+        );
       })
       .catch(() => {
-        if (vigente) setHostActivo(null);
+        if (!vigente) return;
+        setHostActivo(null);
+        setOtrosActivos([]);
       })
       .finally(() => {
         if (vigente) setBuscandoDominio(false);
@@ -149,6 +157,16 @@ export function EnlaceQrDialog({
             Copiar enlace
           </PnButton>
         </div>
+        {otrosActivos.length > 0 && (
+          <div className="text-xs">
+            <p className="font-semibold">Otras direcciones activas del organismo</p>
+            <ul className="list-disc pl-5">
+              {otrosActivos.map((host) => (
+                <li key={host}>https://{host}</li>
+              ))}
+            </ul>
+          </div>
+        )}
         <p role="status" aria-live="polite" className="min-h-5 text-xs">
           {copiado ? "Enlace copiado." : avisoCopia}
         </p>
