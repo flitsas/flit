@@ -6,7 +6,7 @@ import { ApiError } from "@/lib/api/types";
 
 const OVERRIDES: Record<string, string> = {
   tarifa_solapada:
-    "Ya hay una tarifa para este trámite y organismo que empieza ese mismo día o después. Elige una fecha de inicio posterior.",
+    "Ya hay una tarifa para este trámite y organismo que se cruza con esa fecha. Elige otra fecha de inicio.",
   fecha_inicio_pasada: "La fecha de inicio no puede ser anterior a hoy.",
   tipo_no_elegible:
     "Este trámite todavía no está listo para ofrecerse en el portal: su asistente debe estar activo y publicado en FLIT 2.",
