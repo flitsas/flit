@@ -710,57 +710,6 @@ namespace Flit.Infrastructure.Migrations
                         });
                 });
 
-            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.CompanyTransitOfficeAgreement", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("uuidv7()");
-
-                    b.Property<Guid>("CompanyTenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("company_tenant_id");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("created_by");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true)
-                        .HasColumnName("is_active");
-
-                    b.Property<Guid>("TransitOfficeId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("transit_office_id");
-
-                    b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<Guid?>("UpdatedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("updated_by");
-
-                    b.HasKey("Id")
-                        .HasName("pk_company_transit_office_agreements");
-
-                    b.HasIndex("CompanyTenantId", "TransitOfficeId")
-                        .IsUnique()
-                        .HasDatabaseName("uq_company_transit_office_agreements");
-
-                    b.ToTable("company_transit_office_agreements", "admin", t =>
-                        {
-                            t.ExcludeFromMigrations();
-                        });
-                });
-
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.ImprontaGenerationEntity", b =>
                 {
                     b.Property<Guid>("Id")
