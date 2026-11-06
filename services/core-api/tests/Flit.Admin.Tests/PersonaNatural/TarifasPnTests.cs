@@ -446,6 +446,8 @@ public sealed class TarifasPnTests(WebApplicationFactory<Program> factory) : ICl
         public int Llamadas { get; private set; }
         public DateOnly HoyColombia() => DateOnly.FromDateTime(DateTime.UtcNow.AddHours(-5));
         public Task<IReadOnlyList<TarifaPnView>> ListarAsync(TarifaPnFiltro filtro, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<TarifaPnView>>([]);
+        public Task<IReadOnlyList<TarifaPnView>> ListarDelOrganismoAsync(Guid organismoId, Guid? tipoId, string? concepto, bool soloVigentes, DateOnly? fecha, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<TarifaPnView>>([]);
+        public Task<IReadOnlyList<TipoTarifaPnView>> ListarTiposDelPortalAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<TipoTarifaPnView>>([]);
         public Task<TarifaPnView?> ObtenerAsync(Guid id, CancellationToken ct = default) => Task.FromResult<TarifaPnView?>(null);
         public Task<IReadOnlyList<TarifaPnView>?> HistorialAsync(Guid id, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<TarifaPnView>?>(null);
         public Task<bool> TipoExisteAsync(Guid tipoId, CancellationToken ct = default) => Task.FromResult(true);

@@ -13519,6 +13519,117 @@ paths:
         "401": { description: Sin sesión. }
         "403": { description: No es Super Admin. }
         "404": { description: tarifa_no_encontrada. }
+  /api/v1/admin/ot/portal-tarifas:
+    get:
+      operationId: adminOtPortalTarifasList
+      tags: [Admin · OT · Precios del portal]
+      summary: Precios del portal del organismo — HU #14388, Feature #14387, Épica #14297
+      description: >
+        Tarifas del organismo y los valores generales (organismo nulo) que le aplican. `editable` es falso en los valores
+        generales y en los conceptos que el usuario no puede cambiar. El `ot_admin` trabaja con el organismo de su token y
+        debe enviar `tipoTramiteId`; el SuperAdmin envía `transitOfficeId`. Si un `ot_admin` envía el identificador de otro
+        organismo, responde 403. Rol `ot_admin` o SuperAdmin, sin permiso nuevo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, description: Solo SuperAdmin (obligatorio). Para ot_admin solo se acepta el propio., schema: { type: string, format: uuid } }
+        - { name: soloVigentes, in: query, schema: { type: boolean, default: false } }
+        - { name: tipoTramiteId, in: query, description: Obligatorio para ot_admin., schema: { type: string, format: uuid } }
+        - name: concepto
+          in: query
+          schema: { type: string, enum: [DERECHOS_TRANSITO, SERVICIO_FLIT, CAMBIO_COLOR, CONVERSION_COMBUSTIBLE, CAMBIO_CARROCERIA, ENVIO_DOCUMENTO] }
+        - { name: fecha, in: query, schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: Versiones de tarifa.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TarifaOt" }
+        "400": { description: "PORTAL_TARIFAS_TIPO_OBLIGATORIO | PORTAL_TARIFAS_ORGANISMO_REQUERIDO (cuerpo `{ code, message }`)." }
+        "401": { description: Sin sesión. }
+        "403": { description: "Otro rol, PORTAL_TARIFAS_OTRO_ORGANISMO o PORTAL_TARIFAS_SIN_ORGANISMO." }
+    post:
+      operationId: adminOtPortalTarifasVersionar
+      tags: [Admin · OT · Precios del portal]
+      summary: Registrar una versión de precio del organismo — HU #14388 y #14389, Épica #14297
+      description: >
+        Registra una versión por cada concepto de `valores` para el organismo (tomado del token del `ot_admin`; del
+        `transitOfficeId` en el SuperAdmin). El `ot_admin` solo escribe `DERECHOS_TRANSITO`, `CAMBIO_COLOR`,
+        `CONVERSION_COMBUSTIBLE` y `CAMBIO_CARROCERIA`; `SERVICIO_FLIT` y `ENVIO_DOCUMENTO` responden 403 y no cambia nada.
+        Un valor con el mismo `vigenteDesde` que una versión del mismo ámbito la reemplaza (la fila reemplazada se conserva
+        por las cotizaciones que la congelaron); los dos valores quedan en la auditoría con autor y hora.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, description: Solo SuperAdmin (obligatorio)., schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VersionarTarifasOtRequest" }
+      responses:
+        "201":
+          description: Versiones creadas.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TarifaOt" }
+        "400": { description: "Validación del valor o la fecha, PORTAL_TARIFAS_TIPO_OBLIGATORIO o PORTAL_TARIFAS_ORGANISMO_REQUERIDO (cuerpo `{ code, message }`)." }
+        "401": { description: Sin sesión. }
+        "403": { description: "PORTAL_TARIFAS_CONCEPTO_AJENO, PORTAL_TARIFAS_OTRO_ORGANISMO o PORTAL_TARIFAS_SIN_ORGANISMO." }
+        "404": { description: tipo_no_existe | organismo_no_existe. }
+        "409": { description: tarifa_solapada (la vigencia se cruza con otra versión de un día distinto). }
+  /api/v1/admin/ot/portal-tarifas/tipos:
+    get:
+      operationId: adminOtPortalTarifasTipos
+      tags: [Admin · OT · Precios del portal]
+      summary: Tipos de trámite del portal para el formulario de precios — HU #14388
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, description: Solo SuperAdmin (obligatorio)., schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Tipos habilitados para el portal, por nombre.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string, format: uuid }
+                    codigo: { type: string }
+                    nombre: { type: string }
+                  required: [id, codigo, nombre]
+        "400": { description: PORTAL_TARIFAS_ORGANISMO_REQUERIDO. }
+        "401": { description: Sin sesión. }
+        "403": { description: Otro rol. }
+  /api/v1/admin/ot/portal-tarifas/{id}/historial:
+    get:
+      operationId: adminOtPortalTarifasHistorial
+      tags: [Admin · OT · Precios del portal]
+      summary: Historial de un precio, con quién hizo cada cambio — HU #14388
+      description: Versiones del mismo ámbito, de la más reciente a la más antigua. No incluye las versiones reemplazadas el mismo día (quedan en la auditoría).
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: transitOfficeId, in: query, description: Solo SuperAdmin (obligatorio)., schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Versiones del ámbito.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TarifaOt" }
+        "401": { description: Sin sesión. }
+        "403": { description: La tarifa es de otro organismo (PORTAL_TARIFAS_OTRO_ORGANISMO). }
+        "404": { description: tarifa_no_encontrada. }
   /api/v1/admin/plataforma/persona-natural/configuracion/parametros:
     get:
       operationId: adminPnParametrosGet
@@ -20753,6 +20864,7 @@ components:
         creadaPor: { type: string, format: uuid, nullable: true }
         actualizadaEn: { type: string, format: date-time, nullable: true }
         actualizadaPor: { type: string, format: uuid, nullable: true }
+        creadaPorNombre: { type: string, nullable: true, description: Nombre de quien creó la versión (HU 14388). }
       required: [id, concepto, valorCop, vigenteDesde, estado]
     PersonaNaturalVersionarTarifasRequest:
       type: object
@@ -20760,6 +20872,30 @@ components:
         tipoTramiteId: { type: string, format: uuid, nullable: true, description: Obligatorio con DERECHOS_TRANSITO o SERVICIO_FLIT. }
         organismoId: { type: string, format: uuid, nullable: true, description: Nulo = valor general; con valor = excepción de ese organismo. }
         vigenteDesde: { type: string, format: date, description: No anterior a hoy (hora de Colombia). }
+        valores:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            properties:
+              concepto: { type: string, enum: [DERECHOS_TRANSITO, SERVICIO_FLIT, CAMBIO_COLOR, CONVERSION_COMBUSTIBLE, CAMBIO_CARROCERIA, ENVIO_DOCUMENTO] }
+              valorCop: { type: integer, format: int64, minimum: 0, maximum: 1000000000 }
+            required: [concepto, valorCop]
+      required: [vigenteDesde, valores]
+    TarifaOt:
+      description: Una versión de tarifa (PersonaNaturalTarifa) más si quien consulta puede cambiarla.
+      allOf:
+        - $ref: "#/components/schemas/PersonaNaturalTarifa"
+        - type: object
+          properties:
+            editable: { type: boolean, description: Falso en los valores generales y en los conceptos que el usuario no puede cambiar. }
+          required: [editable]
+    VersionarTarifasOtRequest:
+      type: object
+      properties:
+        tipoTramiteId: { type: string, format: uuid, description: Obligatorio para ot_admin. }
+        vigenteDesde: { type: string, format: date, description: No anterior a hoy (hora de Colombia). Igual al de una versión existente del ámbito = la reemplaza. }
+        organismoId: { type: string, format: uuid, nullable: true, description: Opcional; un ot_admin que envía otro organismo recibe 403. }
         valores:
           type: array
           minItems: 1

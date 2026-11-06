@@ -22,10 +22,11 @@ internal sealed class PersonaNaturalTarifaRepository(FlitDbContext db, PersonaNa
         var filas = await db.Database.SqlQuery<TarifaFila>($"""
             SELECT t.id, t.concept, t.procedure_type_id, p.code AS procedure_type_code, p.name AS procedure_type_name,
                    t.transit_office_id, o.code AS transit_office_code, o.name AS transit_office_name,
-                   t.amount_cop, t.valid_from, t.valid_to, t.created_at, t.created_by, t.updated_at, t.updated_by
+                   t.amount_cop, t.valid_from, t.valid_to, t.created_at, t.created_by, t.updated_at, t.updated_by, u.display_name AS created_by_name
               FROM admin.persona_natural_tariffs t
               LEFT JOIN tramites.procedure_types p ON p.id = t.procedure_type_id
               LEFT JOIN catalogs.transit_offices o ON o.id = t.transit_office_id
+              LEFT JOIN identity.users u ON u.id = t.created_by
              WHERE t.superseded_at IS NULL
                AND ({filtro.TipoTramiteId}::uuid IS NULL OR t.procedure_type_id = {filtro.TipoTramiteId}::uuid)
                AND ({filtro.OrganismoId}::uuid IS NULL OR t.transit_office_id = {filtro.OrganismoId}::uuid)
@@ -40,6 +41,44 @@ internal sealed class PersonaNaturalTarifaRepository(FlitDbContext db, PersonaNa
             .Select(f => ToView(f, fecha))
             .ToList();
     }
+
+    public async Task<IReadOnlyList<TarifaPnView>> ListarDelOrganismoAsync(
+        Guid organismoId, Guid? tipoId, string? concepto, bool soloVigentes, DateOnly? fecha, CancellationToken ct = default)
+    {
+        var dia = fecha ?? HoyColombia();
+        var filas = await db.Database.SqlQuery<TarifaFila>($"""
+            SELECT t.id, t.concept, t.procedure_type_id, p.code AS procedure_type_code, p.name AS procedure_type_name,
+                   t.transit_office_id, o.code AS transit_office_code, o.name AS transit_office_name,
+                   t.amount_cop, t.valid_from, t.valid_to, t.created_at, t.created_by, t.updated_at, t.updated_by, u.display_name AS created_by_name
+              FROM admin.persona_natural_tariffs t
+              LEFT JOIN tramites.procedure_types p ON p.id = t.procedure_type_id
+              LEFT JOIN catalogs.transit_offices o ON o.id = t.transit_office_id
+              LEFT JOIN identity.users u ON u.id = t.created_by
+             WHERE t.superseded_at IS NULL
+               AND (t.transit_office_id = {organismoId} OR t.transit_office_id IS NULL)
+               AND ({tipoId}::uuid IS NULL OR t.procedure_type_id = {tipoId}::uuid OR t.procedure_type_id IS NULL)
+               AND ({concepto}::text IS NULL OR t.concept = {concepto}::text)
+               AND (NOT {soloVigentes} OR (t.valid_from <= {dia} AND (t.valid_to IS NULL OR t.valid_to >= {dia})))
+            """).ToListAsync(ct).ConfigureAwait(false);
+        return filas
+            .OrderBy(f => f.ProcedureTypeName ?? string.Empty, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(f => f.Concept, StringComparer.Ordinal)
+            .ThenBy(f => f.TransitOfficeId is null ? 1 : 0)
+            .ThenByDescending(f => f.ValidFrom)
+            .Select(f => ToView(f, dia))
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<TipoTarifaPnView>> ListarTiposDelPortalAsync(CancellationToken ct = default) =>
+        (await db.Database.SqlQuery<TipoFila>($"""
+            SELECT p.id, p.code, p.name
+              FROM admin.persona_natural_enabled_types e
+              JOIN tramites.procedure_types p ON p.id = e.procedure_type_id
+             WHERE e.is_enabled AND p.is_active
+            """).ToListAsync(ct).ConfigureAwait(false))
+        .OrderBy(t => t.Name, StringComparer.CurrentCultureIgnoreCase)
+        .Select(t => new TipoTarifaPnView(t.Id, t.Code, t.Name))
+        .ToList();
 
     public async Task<TarifaPnView?> ObtenerAsync(Guid id, CancellationToken ct = default)
     {
@@ -56,10 +95,11 @@ internal sealed class PersonaNaturalTarifaRepository(FlitDbContext db, PersonaNa
         var versiones = await db.Database.SqlQuery<TarifaFila>($"""
             SELECT t.id, t.concept, t.procedure_type_id, p.code AS procedure_type_code, p.name AS procedure_type_name,
                    t.transit_office_id, o.code AS transit_office_code, o.name AS transit_office_name,
-                   t.amount_cop, t.valid_from, t.valid_to, t.created_at, t.created_by, t.updated_at, t.updated_by
+                   t.amount_cop, t.valid_from, t.valid_to, t.created_at, t.created_by, t.updated_at, t.updated_by, u.display_name AS created_by_name
               FROM admin.persona_natural_tariffs t
               LEFT JOIN tramites.procedure_types p ON p.id = t.procedure_type_id
               LEFT JOIN catalogs.transit_offices o ON o.id = t.transit_office_id
+              LEFT JOIN identity.users u ON u.id = t.created_by
              WHERE t.superseded_at IS NULL
                AND t.concept = {fila.Concept}
                AND t.procedure_type_id IS NOT DISTINCT FROM {fila.ProcedureTypeId}::uuid
@@ -150,10 +190,11 @@ internal sealed class PersonaNaturalTarifaRepository(FlitDbContext db, PersonaNa
         (await db.Database.SqlQuery<TarifaFila>($"""
             SELECT t.id, t.concept, t.procedure_type_id, p.code AS procedure_type_code, p.name AS procedure_type_name,
                    t.transit_office_id, o.code AS transit_office_code, o.name AS transit_office_name,
-                   t.amount_cop, t.valid_from, t.valid_to, t.created_at, t.created_by, t.updated_at, t.updated_by
+                   t.amount_cop, t.valid_from, t.valid_to, t.created_at, t.created_by, t.updated_at, t.updated_by, u.display_name AS created_by_name
               FROM admin.persona_natural_tariffs t
               LEFT JOIN tramites.procedure_types p ON p.id = t.procedure_type_id
               LEFT JOIN catalogs.transit_offices o ON o.id = t.transit_office_id
+              LEFT JOIN identity.users u ON u.id = t.created_by
              WHERE t.id = {id}
             """).ToListAsync(ct).ConfigureAwait(false)).FirstOrDefault();
 
@@ -164,7 +205,14 @@ internal sealed class PersonaNaturalTarifaRepository(FlitDbContext db, PersonaNa
             : f.ValidTo is { } fin && fin < fecha ? EstadosTarifaPn.Cerrada : EstadosTarifaPn.Vigente;
         return new TarifaPnView(
             f.Id, f.Concept, f.ProcedureTypeId, f.ProcedureTypeCode, f.ProcedureTypeName, f.TransitOfficeId, f.TransitOfficeCode,
-            f.TransitOfficeName, f.AmountCop, f.ValidFrom, f.ValidTo, estado, f.CreatedAt, f.CreatedBy, f.UpdatedAt, f.UpdatedBy);
+            f.TransitOfficeName, f.AmountCop, f.ValidFrom, f.ValidTo, estado, f.CreatedAt, f.CreatedBy, f.UpdatedAt, f.UpdatedBy, f.CreatedByName);
+    }
+
+    private sealed class TipoFila
+    {
+        public Guid Id { get; set; }
+        public string Code { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
     }
 
     /// <summary>Forma de la fila leída por SQL (snake_case del DbContext = nombre de propiedad).</summary>
@@ -185,5 +233,6 @@ internal sealed class PersonaNaturalTarifaRepository(FlitDbContext db, PersonaNa
         public Guid? CreatedBy { get; set; }
         public DateTimeOffset? UpdatedAt { get; set; }
         public Guid? UpdatedBy { get; set; }
+        public string? CreatedByName { get; set; }
     }
 }
