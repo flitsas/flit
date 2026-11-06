@@ -813,17 +813,51 @@ public static class BiometricRules
     /// para un trámite nuevo o en borrador sigue usando <see cref="EsAprobadaVigente"/>.
     /// </summary>
     public static bool EsAprobadaVigenteParaTramite(
-        ProcedureInstanceBiometricValidation validation, string? tramiteStatus, DateTimeOffset now)
+        ProcedureInstanceBiometricValidation validation, string? tramiteStatus, DateTimeOffset now,
+        DateTimeOffset? salidaDeBorradorAt = null)
     {
         ArgumentNullException.ThrowIfNull(validation);
         if (EsAprobadaVigente(validation, now))
             return true;
         if (validation.Status != BiometricEstados.Aprobado || validation.ExpiredManuallyAt is null)
             return false;
-        if (string.Equals(tramiteStatus, Flit.Tramites.Domain.Tramites.Estados.TramiteEstado.Borrador, StringComparison.OrdinalIgnoreCase))
+        if (!ConservaFirmaTrasVencimientoManual(
+                tramiteStatus, salidaDeBorradorAt, validation.ValidatedAt, validation.ExpiredManuallyAt))
             return false;
         return validation.ValidUntilPrevious is not { } previa || now < previa;
     }
+
+    /// <summary>
+    /// ÚNICA regla de «salió con esa firma» (HU #13824): una identidad vencida a mano solo se sigue honrando si el
+    /// trámite salió de borrador cuando ESA identidad ya estaba aprobada y todavía no la habían vencido
+    /// (<c>validadaAt &lt;= salidaDeBorradorAt &lt;= expiredManuallyAt</c>). Un trámite en borrador nunca la conserva. Si
+    /// salió ANTES de que se aprobara (p. ej. una matrícula sin placa exenta de firma que el comprador valida después) o
+    /// DESPUÉS de vencerla, nunca salió con esa firma. Sin fila de salida en el historial
+    /// (<paramref name="salidaDeBorradorAt"/> nulo: legado o migrados) se conserva el comportamiento previo (protegida) y
+    /// sin fecha de aprobación (<paramref name="validadaAt"/> nula, solo fixtures) solo se compara contra el vencimiento.
+    /// Un trámite no vuelve a borrador (la máquina de estados no lo permite), así que la salida es única.
+    /// </summary>
+    public static bool ConservaFirmaTrasVencimientoManual(
+        string? tramiteStatus, DateTimeOffset? salidaDeBorradorAt, DateTimeOffset? validadaAt, DateTimeOffset? expiredManuallyAt)
+    {
+        if (string.Equals(tramiteStatus, Flit.Tramites.Domain.Tramites.Estados.TramiteEstado.Borrador, StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (salidaDeBorradorAt is not { } salida)
+            return true;
+        if (validadaAt is { } aprobada && salida < aprobada)
+            return false;
+        return expiredManuallyAt is not { } vencidaA || salida <= vencidaA;
+    }
+
+    /// <summary>
+    /// ¿Alguna de las identidades vencidas a mano de la persona (<paramref name="identidades"/>) es la firma con la que el
+    /// trámite salió de borrador? Es la misma regla que <see cref="EsAprobadaVigenteParaTramite"/>, sobre los datos
+    /// agregados que usa el listado (basta que CUALQUIERA cumpla).
+    /// </summary>
+    public static bool ConservaFirmaTrasVencimientoManual(
+        string? tramiteStatus, DateTimeOffset? salidaDeBorradorAt, IReadOnlyList<IdentidadVencidaManual>? identidades) =>
+        identidades is not null
+        && identidades.Any(i => ConservaFirmaTrasVencimientoManual(tramiteStatus, salidaDeBorradorAt, i.ValidadaAt, i.VencidaAt));
 
     /// <summary>
     /// ¿La validación está APROBADA y VIGENTE en la fecha <paramref name="now"/>? Vigente ⟺ el DÍA
@@ -1000,3 +1034,11 @@ public static class IdentityVigenciaClassifier
         };
     }
 }
+
+/// <summary>
+/// Identidad vencida a mano de una persona, reducida a lo que el listado necesita para decidir si un trámite «salió con esa
+/// firma» (<see cref="BiometricRules.ConservaFirmaTrasVencimientoManual(string?, DateTimeOffset?, IReadOnlyList{IdentidadVencidaManual}?)"/>).
+/// </summary>
+/// <param name="ValidadaAt">Cuándo se aprobó (<c>validated_at</c>); nula solo en fixtures.</param>
+/// <param name="VencidaAt">Cuándo la venció a mano un Super Admin (<c>expired_manually_at</c>).</param>
+public readonly record struct IdentidadVencidaManual(DateTimeOffset? ValidadaAt, DateTimeOffset VencidaAt);

@@ -513,7 +513,8 @@ public sealed class VencerIdentidadHandlerTests
             .Returns(new HashSet<string>());
         _repo.ListProtegidasPorVencimientoManualKeysAsync(
                 Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
-            .Returns(new HashSet<string>(protegidas ?? []));
+            .Returns((protegidas ?? []).ToDictionary(
+                k => k, k => (IReadOnlyList<IdentidadVencidaManual>)[new IdentidadVencidaManual(null, Now)], StringComparer.Ordinal));
         _repo.ListFirmaBaulVigenciaKeysAsync(
                 Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateOnly>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<string, bool>(StringComparer.Ordinal));

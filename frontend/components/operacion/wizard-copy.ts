@@ -125,6 +125,10 @@ const REASON_COPY: Record<string, string> = {
     'Medida correctiva RNMC registrada (informativa, no bloquea el envío)',
 };
 
+/** Matrícula por preasignación sin placa: el envío no exige la firma (la decide el backend). */
+export const FIRMA_EXENTA_AVISO =
+  'Puedes enviar sin la firma. Se pedirá cuando el organismo asigne la placa.';
+
 /** Bloqueos que impiden enviar/finalizar el trámite. */
 const BLOCKER_COPY: Record<string, string> = {
   preflight_red: 'Hay bloqueos críticos en la verificación del vehículo',
