@@ -11,7 +11,7 @@ const FLIT = "https://tramites.flitsas.com";
 const RED = "https://tramites.cliente.com";
 
 function stubNetwork(body: unknown, ok = true) {
-  const fetchMock = vi.fn((_url: string, _init?: RequestInit) => Promise.resolve(Response.json(body, { status: ok ? 200 : 500 })));
+  const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(Response.json(body, { status: ok ? 200 : 500 })));
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
@@ -86,6 +86,15 @@ describe("middleware del hub", () => {
 
     expect(response.status).toBe(308);
     expect(response.headers.get("location")).toBe(`${RED}/?m=usuarios`);
+  });
+
+  it("si la API falla, el 308 a TRAMITES_URL no queda guardado en el navegador", async () => {
+    stubNetwork({}, false);
+
+    const response = await middleware(request("/admin/companies", "consola.cliente.com"));
+
+    expect(response.headers.get("location")).toBe(`${FLIT}/admin/companies`);
+    expect(response.headers.get("cache-control")).toBe("no-store");
   });
 
   it("en el dominio de FLIT siguen yendo a TRAMITES_URL", async () => {
