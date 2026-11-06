@@ -68,24 +68,25 @@ beforeEach(() => {
 async function abrirDiseno(data: PortalMarca = marca()) {
   vi.mocked(getPortalMarca).mockResolvedValue(data);
   const user = userEvent.setup({ applyAccept: false });
-  render(<PortalPnTabs transitOfficeId="ot-1" />);
+  render(<PortalPnTabs transitOfficeId="ot-1" initialTab="diseno" />);
   await screen.findByLabelText("Nombre en el portal");
   return user;
 }
 
 describe("AC1 — entrada: subpestañas del portal", () => {
-  it("muestra Cobro y Diseño (y no Reportes, que llega con otra HU)", async () => {
+  it("muestra Reportes (la primera), Cobro y Diseño, y entra en Reportes", async () => {
     vi.mocked(getPortalMarca).mockResolvedValue(marca());
     render(<PortalPnTabs transitOfficeId="ot-1" />);
 
     const tabs = within(screen.getByRole("tablist", { name: "Secciones del portal Persona Natural" })).getAllByRole("tab");
-    expect(tabs.map((t) => t.textContent)).toEqual(["Cobro", "Diseño"]);
+    expect(tabs.map((t) => t.textContent)).toEqual(["Reportes", "Cobro", "Diseño"]);
+    expect(screen.getByRole("tab", { name: "Reportes" })).toHaveAttribute("aria-selected", "true");
     await screen.findByLabelText("Nombre en el portal");
   });
 
-  it("el slot de Cobro se muestra cuando se conecta; sin él, entra en Diseño", async () => {
+  it("el slot de Cobro se muestra cuando se conecta", async () => {
     vi.mocked(getPortalMarca).mockResolvedValue(marca());
-    render(<PortalPnTabs transitOfficeId="ot-1" cobro={<p>Precios del organismo</p>} />);
+    render(<PortalPnTabs transitOfficeId="ot-1" initialTab="cobro" cobro={<p>Precios del organismo</p>} />);
     expect(screen.getByRole("tab", { name: "Cobro" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("Precios del organismo")).toBeVisible();
     await screen.findByLabelText("Nombre en el portal");
@@ -93,7 +94,7 @@ describe("AC1 — entrada: subpestañas del portal", () => {
 
   it("la marca se pide con el organismo de la ruta y la sección de dominio queda como espacio opcional", async () => {
     vi.mocked(getPortalMarca).mockResolvedValue(marca());
-    render(<PortalPnTabs transitOfficeId="ot-1" domain={<section aria-label="Dominio">Dominio aquí</section>} />);
+    render(<PortalPnTabs transitOfficeId="ot-1" initialTab="diseno" domain={<section aria-label="Dominio">Dominio aquí</section>} />);
     await screen.findByLabelText("Nombre en el portal");
     expect(getPortalMarca).toHaveBeenCalledWith(SCOPE, expect.anything());
     expect(screen.getByRole("region", { name: "Dominio" })).toBeInTheDocument();
@@ -278,7 +279,7 @@ describe("AC5 — estados de la pantalla", () => {
   it("cargando muestra «Armando el administrador…»", async () => {
     let resolver: (m: PortalMarca) => void = () => undefined;
     vi.mocked(getPortalMarca).mockReturnValue(new Promise<PortalMarca>((r) => (resolver = r)));
-    render(<PortalPnTabs transitOfficeId="ot-1" />);
+    render(<PortalPnTabs transitOfficeId="ot-1" initialTab="diseno" />);
     expect(await screen.findByText("Armando el administrador…")).toBeInTheDocument();
     await act(async () => resolver(marca()));
     expect(await screen.findByLabelText("Nombre en el portal")).toBeInTheDocument();
@@ -289,7 +290,7 @@ describe("AC5 — estados de la pantalla", () => {
     vi.mocked(getPortalMarca).mockRejectedValueOnce(new ApiError(403, "Tu usuario no pertenece a este organismo."));
     vi.mocked(getPortalMarca).mockResolvedValueOnce(marca());
     const user = userEvent.setup({ applyAccept: false });
-    render(<PortalPnTabs transitOfficeId="ot-1" />);
+    render(<PortalPnTabs transitOfficeId="ot-1" initialTab="diseno" />);
 
     expect(await screen.findByText("Tu usuario no pertenece a este organismo.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Reintentar/i }));

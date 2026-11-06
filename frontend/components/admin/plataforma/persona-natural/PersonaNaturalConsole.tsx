@@ -9,12 +9,13 @@ import { SectionTabs, type SectionTab } from "@/components/atom/SectionTabs";
 import { ContenidoTab } from "./contenido/ContenidoTab";
 import { OrganismosTab } from "./OrganismosTab";
 import { ParametrosTab } from "./ParametrosTab";
+import { ReportesTab } from "./ReportesTab";
 import { PnEstadoConfiguracion, usePnResumen, type PasoConfiguracion } from "./PnEstadoConfiguracion";
 import { CobroWebSection } from "./CobroWebSection";
 import { TarifasTab } from "./TarifasTab";
 import { TramitesTab } from "./TramitesTab";
 
-type TabId = "tramites" | "organismos" | "tarifas" | "parametros" | "contenido";
+type TabId = "tramites" | "organismos" | "tarifas" | "parametros" | "contenido" | "reportes";
 
 const PASO_A_PESTANA: Record<PasoConfiguracion, { tab: TabId; ancla: string }> = {
   tipos: { tab: "tramites", ancla: "pn-tipos-titulo" },
@@ -83,6 +84,12 @@ export function PersonaNaturalConsole() {
       label: "Contenido",
       title: "Preguntas, banners y enlaces que lee el ciudadano",
       render: () => <ContenidoTab />,
+    },
+    {
+      id: "reportes",
+      label: "Reportes",
+      title: "Trámites que llegan por el portal y la aplicación",
+      render: () => <ReportesTab />,
     },
   ];
 
