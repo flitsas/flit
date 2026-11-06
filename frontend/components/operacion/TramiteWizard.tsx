@@ -63,7 +63,12 @@ import { SubsanacionPanel } from './SubsanacionPanel';
 import type { WizardStepFormHandle } from './wizard-step-form';
 import { BiometricStep } from './BiometricStep';
 import { FirmaFurStep } from './FirmaFurStep';
-import { blockerCopy, identidadAutomaticaCopy, stepLabelCopy } from './wizard-copy';
+import {
+  blockerCopy,
+  FIRMA_EXENTA_AVISO,
+  identidadAutomaticaCopy,
+  stepLabelCopy,
+} from './wizard-copy';
 import {
   MANDATARIO_ALERTA_ID,
   MandatarioFirmaIndicator,
@@ -985,8 +990,12 @@ export function TramiteWizard(props: Props) {
   // complete; traspaso → el paso 'fur' (que envuelve la biométrica) ya no reporta pendiente_biometria.
   // canRadicar gobierna el botón "Preparar" (N 03: borrador→preparado): el gate RF03 exige identidad,
   // mientras que canSubmit (matrícula) trata la identidad como diferida → no basta canSubmit.
+  // Excepción: matrícula inicial por preasignación sin placa (`firmaExentaPorPreasignacion`, la decide
+  // el backend): se envía sin la firma y esta se pide cuando el organismo asigna la placa.
   const identityApproved = isIdentityApproved(steps);
-  const canRadicar = canSubmit && identityApproved;
+  const firmaExenta = wizard?.firmaExentaPorPreasignacion === true;
+  const canRadicar = canSubmit && (identityApproved || firmaExenta);
+  const avisoFirmaExenta = firmaExenta && !identityApproved;
 
   // ADR-0050 — capacidades del tipo. Sustituyen a `modalidad === 'traspaso'` como discriminante:
   // con dos modalidades las dos ramas agotaban el catálogo, con veintiún tipos ya no. Un blindaje
@@ -2039,6 +2048,7 @@ export function TramiteWizard(props: Props) {
                 onIrAActores={irAPasoActor}
                 identityOperable={draftFinalized}
                 identityApproved={identityApproved}
+                firmaExenta={firmaExenta}
                 vaultCoveredPartes={vaultCoveredPartes}
                 rnmcEnabled={wizard?.rnmcEnabled ?? false}
                 esMigrado={wizard?.esMigrado ?? false}
@@ -2122,6 +2132,12 @@ export function TramiteWizard(props: Props) {
                   <li key={b}>• {blockerCopy(b)}</li>
                 ))}
               </ul>
+            </InlineAlert>
+          )}
+
+          {isDecisionStep && !fullReadOnly && !inSubsanacion && avisoFirmaExenta && (
+            <InlineAlert tone="info" className="mt-6" id="aviso-firma-exenta">
+              <p>{FIRMA_EXENTA_AVISO}</p>
             </InlineAlert>
           )}
 
@@ -4719,6 +4735,7 @@ function StepBody({
   onIrAActores,
   identityOperable = false,
   identityApproved = false,
+  firmaExenta = false,
   vaultCoveredPartes = [],
   rnmcEnabled = false,
   esMigrado = false,
@@ -4816,6 +4833,8 @@ function StepBody({
   /** Identidad aprobada (deriva del estado server-driven). Con identidad pendiente, el paso FUR
    * informa que el FUR/firma se generarán automáticamente, en vez de empujar la generación manual. */
   identityApproved?: boolean;
+  /** Matrícula por preasignación sin placa: el trámite se envía sin firma (lo decide el backend). */
+  firmaExenta?: boolean;
   /** HU #10646 — partes (NIT) cubiertas por la firma electrónica del baúl (señal capturada del outcome
    * `firma_baul` de ensureIdentity). BiometricStep pinta el estado "cubierto por el baúl" para ellas. */
   vaultCoveredPartes?: BiometricParte[];
@@ -5333,9 +5352,18 @@ function StepBody({
                 <span className="font-semibold" style={{ color: 'var(--color-flit-brand)' }}>
                   El FUR y la firma se generarán automáticamente
                 </span>{' '}
-                cuando el cliente valide su identidad. No necesitas generarlos a mano: completa los datos
-                y pulsa <span className="font-semibold">Finalizar</span> para dejar el trámite a la espera
-                de la validación.
+                cuando el cliente valide su identidad. No necesitas generarlos a mano
+                {firmaExenta ? (
+                  <>
+                    : envía el trámite con{' '}
+                    <span className="font-semibold">Finalizar y enviar trámite</span>.
+                  </>
+                ) : (
+                  <>
+                    : completa los datos y pulsa <span className="font-semibold">Finalizar</span> para
+                    dejar el trámite a la espera de la validación.
+                  </>
+                )}
               </span>
             </div>
           )}

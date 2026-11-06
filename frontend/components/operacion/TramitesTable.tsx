@@ -677,7 +677,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
       }
     } catch (err) {
       // Bug #13194 (P4) — gate de firma: en asignado el asistente ya no es editable, así que el
-      // mensaje no remite al paso 4 sino a la prevalidación del módulo Identidad o al baúl del RL.
+      // mensaje no remite al paso 4: dice quién falta por firmar y qué sigue.
       if (esErrorFirmaPendiente(err)) {
         setProcessError(
           mensajeFirmaPendiente((err as { problem?: Record<string, unknown> | null }).problem, 'asignado'),

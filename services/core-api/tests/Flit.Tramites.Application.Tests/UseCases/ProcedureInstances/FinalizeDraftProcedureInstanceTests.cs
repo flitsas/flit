@@ -231,6 +231,8 @@ public sealed class FinalizeDraftProcedureInstanceTests
         // Borrador finalizado con docs+fur+organismo pero SIN biométrica aprobada.
         var instance = FinalizeReady(id, tenant);
         instance.DraftFinalizedAt = DateTimeOffset.UtcNow;
+        // Con placa asignada la firma es obligatoria (sin placa se exime por preasignación).
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
         instance.Attachments.Add(new ProcedureInstanceAttachment
         {
             Id = Guid.NewGuid(),

@@ -275,7 +275,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         id: "que-es",
         title: "1. Qué es la prevalidación",
         paragraphs: [
-          "Es la verificación de identidad de las partes del trámite (propietario, comprador, mandatario, etc.) mediante proveedor biométrico (Kyverum). Algunos tipos de trámite la exigen como puerta antes de radicar.",
+          "Es la verificación de identidad de las partes del trámite (propietario, comprador, mandatario, etc.) mediante proveedor biométrico (Kyverum). Algunos tipos de trámite la exigen como puerta antes de radicar. La excepción es la matrícula inicial que se radica directamente ante el organismo de tránsito y todavía no tiene placa: esa se puede enviar sin la firma, y la firma se exige cuando el trámite ya tiene placa. No aplica si el organismo recibe los trámites por Quipux ni en los demás tipos de trámite.",
         ],
       },
       {
@@ -583,8 +583,8 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         title: "2. Estados de la ruta larga",
         paragraphs: [],
         bullets: [
-          "Preasignación: radicaste sin placa. El organismo tiene el trámite en su cola de «asignar placa». Tú esperas.",
-          "Asignado: el organismo asignó la placa (recibes correo). Gestiona SOAT e impuestos y, desde la fila del listado o el detalle, pulsa «Enviar al OT» confirmando los checks. Si la compañía permite continuar sin SOAT vigente, verás una advertencia pero el envío procede.",
+          "Preasignación: radicaste sin placa. Puedes enviar el trámite aunque el actor aún no haya firmado; el correo de validación de identidad le llega igual. El organismo tiene el trámite en su cola de «asignar placa». Tú esperas.",
+          "Asignado: el organismo asignó la placa (recibes correo). Desde aquí la firma es obligatoria: si falta, «Enviar al OT» no deja continuar y se le notifica a la persona. Gestiona SOAT e impuestos y, desde la fila del listado o el detalle, pulsa «Enviar al OT» confirmando los checks. Si la compañía permite continuar sin SOAT vigente, verás una advertencia pero el envío procede.",
           "Entregado: ya está en la cola de decisión del organismo, como cualquier otro trámite.",
           "Rechazado con distintivo «Rechazado preasignación»: el organismo rechazó antes de asignar placa; el motivo está en el detalle. Puedes filtrar estos casos con el atajo «Rechazado desde preasignación» de la búsqueda rápida.",
         ],
@@ -663,7 +663,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           {
             variant: "warning",
             title: "Qué pasa al vencer una identidad",
-            text: "Los trámites en borrador que usaban esa identidad quedan sin firmar para esa persona: hasta que apruebe la validación nueva no se pueden radicar. Los trámites que ya salieron de borrador conservan la firma con la que salieron. Si ningún trámite en borrador la necesita, se vence sin enviar enlace y el aviso lo dice. Si tu compañía necesita vencer una identidad, pídeselo al equipo FLIT.",
+            text: "Los trámites en borrador que usaban esa identidad quedan sin firmar para esa persona: hasta que apruebe la validación nueva no se pueden radicar, salvo la matrícula inicial radicada directamente ante el organismo que todavía no tiene placa. Los trámites que ya salieron de borrador conservan la firma con la que salieron. Si ningún trámite en borrador la necesita, se vence sin enviar enlace y el aviso lo dice. Si tu compañía necesita vencer una identidad, pídeselo al equipo FLIT.",
           },
         ],
       },
