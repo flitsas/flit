@@ -14701,6 +14701,143 @@ paths:
         "404": { description: PORTAL_DOMINIO_NO_REGISTRADO. }
 
   # ── Admin OT · Marca del portal Persona Natural (Feature #14374, Épica #14297) ────────────
+  /api/v1/admin/plataforma/persona-natural/marca-web:
+    get:
+      tags: ["Admin · Plataforma · Persona Natural · Marca web"]
+      summary: Marca de la web de persona natural (borrador, publicado y versión)
+      operationId: AdminPlataformaPnMarcaWebGet
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Marca de la web.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "401": { description: Sin sesión. }
+        "403": { description: Solo SuperAdmin. }
+    put:
+      tags: ["Admin · Plataforma · Persona Natural · Marca web"]
+      summary: Guarda el borrador de la marca web con control de versión
+      operationId: AdminPlataformaPnMarcaWebPut
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GuardarPortalMarcaRequest" }
+      responses:
+        "200":
+          description: Marca con el borrador guardado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "400": { description: PORTAL_MARCA_DATOS_INVALIDOS. }
+        "409": { description: PORTAL_MARCA_CONFLICTO. }
+        "401": { description: Sin sesión. }
+        "403": { description: Solo SuperAdmin. }
+  /api/v1/admin/plataforma/persona-natural/marca-web/publish:
+    post:
+      tags: ["Admin · Plataforma · Persona Natural · Marca web"]
+      summary: Publica el borrador de la marca web
+      operationId: AdminPlataformaPnMarcaWebPublish
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VersionPortalMarcaRequest" }
+      responses:
+        "200":
+          description: Marca publicada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "409": { description: PORTAL_MARCA_CONFLICTO. }
+        "422": { description: PORTAL_MARCA_INCOMPLETA o PORTAL_MARCA_CONTRASTE con el motivo exacto. }
+        "401": { description: Sin sesión. }
+        "403": { description: Solo SuperAdmin. }
+  /api/v1/admin/plataforma/persona-natural/marca-web/retire:
+    post:
+      tags: ["Admin · Plataforma · Persona Natural · Marca web"]
+      summary: Retira la marca web publicada y conserva el borrador
+      operationId: AdminPlataformaPnMarcaWebRetire
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VersionPortalMarcaRequest" }
+      responses:
+        "200":
+          description: Marca sin publicado (la web usa la marca FLIT).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "409": { description: PORTAL_MARCA_CONFLICTO. }
+        "401": { description: Sin sesión. }
+        "403": { description: Solo SuperAdmin. }
+  /api/v1/admin/plataforma/persona-natural/marca-web/logo:
+    post:
+      tags: ["Admin · Plataforma · Persona Natural · Marca web"]
+      summary: Carga el logo de la marca web (PNG, JPEG o WebP, hasta 512 KB)
+      operationId: AdminPlataformaPnMarcaWebLogoPost
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "200":
+          description: Marca con el logo en el borrador.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "400": { description: PORTAL_MARCA_ARCHIVO_INVALIDO. }
+        "401": { description: Sin sesión. }
+        "403": { description: Solo SuperAdmin. }
+    delete:
+      tags: ["Admin · Plataforma · Persona Natural · Marca web"]
+      summary: Quita el logo del borrador de la marca web
+      operationId: AdminPlataformaPnMarcaWebLogoDelete
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Marca sin logo en el borrador.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "401": { description: Sin sesión. }
+        "403": { description: Solo SuperAdmin. }
+  /api/v1/admin/plataforma/persona-natural/marca-web/imagenes/{id}:
+    get:
+      tags: ["Admin · Plataforma · Persona Natural · Marca web"]
+      summary: Imagen de la marca web, también de borrador (solo con sesión)
+      operationId: AdminPlataformaPnMarcaWebImagen
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Binario de la imagen.
+          content:
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        "404": { description: PORTAL_MARCA_NO_ENCONTRADA. }
+        "401": { description: Sin sesión. }
+        "403": { description: Solo SuperAdmin. }
   /api/v1/admin/ot/portal-marca:
     get:
       tags: ["Admin · OT · Portal Persona Natural · Marca"]
