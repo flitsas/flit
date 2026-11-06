@@ -68,6 +68,9 @@ service PersonaNaturalService {
   // Marca publicada de la web de persona natural (HU #14401). Misma respuesta que ObtenerMarcaPunto con origen = web; sin marca
   // publicada o ante una falla responde origen = flit (nunca un error). Sin banner. Sus imágenes salen por ObtenerImagenMarcaPunto.
   rpc ObtenerMarcaWeb(ObtenerMarcaWebRequest) returns (ObtenerMarcaPuntoResponse);
+  // Dominio activo del portal de un organismo (HU #14383). Con host: el codigo del organismo si ese dominio esta activo. Con codigo:
+  // el dominio activo del organismo (para enlace, QR y correos). Sin cache. Pendiente, fallido, retirado, desconocido o falla: activo = false.
+  rpc ObtenerDominioPunto(ObtenerDominioPuntoRequest) returns (ObtenerDominioPuntoResponse);
 
   // HU 10 — organismos operables en FLIT 2 donde se puede trasladar una cuenta (cualquier organismo operable, no solo los
   // del grant del portal). Sin datos sensibles; con `id` valida un destino concreto.
@@ -406,6 +409,16 @@ message ObtenerMarcaPuntoResponse {
   string logo_id = 6;                // vacío = imagen de FLIT
   string banner_id = 7;              // vacío = imagen de FLIT
   int32 version = 8;                 // versión publicada; 0 si origen = flit
+}
+
+message ObtenerDominioPuntoRequest {
+  string host = 1;                   // se resuelve por host si viene; si no, por codigo
+  string codigo = 2;
+}
+message ObtenerDominioPuntoResponse {
+  bool activo = 1;
+  string codigo = 2;                 // codigo del organismo; vacio si activo = false
+  string host = 3;                   // dominio activo; vacio si activo = false
 }
 
 message ObtenerImagenMarcaPuntoRequest {

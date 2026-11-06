@@ -376,7 +376,7 @@ export function OrganismosSection({ onIrATarifas, onCambio }: OrganismosSectionP
         </PnConfirmDialog>
       )}
 
-      {enlace && <EnlaceQrDialog codigo={enlace.codigo} nombre={enlace.nombre} onClose={() => setEnlace(null)} />}
+      {enlace && <EnlaceQrDialog codigo={enlace.codigo} nombre={enlace.nombre} transitOfficeId={enlace.id} onClose={() => setEnlace(null)} />}
     </section>
   );
 }

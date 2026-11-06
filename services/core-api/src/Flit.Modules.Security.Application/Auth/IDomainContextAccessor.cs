@@ -12,6 +12,9 @@ public enum DomainKind
 
     /// <summary>Dominio dedicado de una red MARCA_BLANCA activa.</summary>
     Network,
+
+    /// <summary>Dominio activo del portal publico de un organismo (HU #14383): sin login y sin red; no acota el acceso de ninguna.</summary>
+    Portal,
 }
 
 /// <summary>
@@ -37,4 +40,7 @@ public interface IDomainContextAccessor
     /// Sin dato, <c>plataforma</c>.
     /// </summary>
     string ProductCode => Products.ProductCodes.Plataforma;
+
+    /// <summary><see cref="DomainKind.Portal"/> => organismo duenio del dominio del portal (HU #14383); en cualquier otro caso <c>null</c>.</summary>
+    Guid? TransitOfficeId => null;
 }

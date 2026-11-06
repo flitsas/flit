@@ -1,5 +1,6 @@
 using Flit.Admin.Application.Companies.Domains;
 using Flit.Admin.Domain.Companies.Domains;
+using Flit.Admin.Domain.Companies.TransitOffices.PortalDominio;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 
@@ -19,7 +20,8 @@ namespace Flit.Infrastructure.Domains;
 internal sealed class CachedTenantDomainResolver(
     ITenantDomainRepository repository,
     IMemoryCache cache,
-    ILogger<CachedTenantDomainResolver> logger) : ITenantDomainResolver
+    ILogger<CachedTenantDomainResolver> logger,
+    IPortalDominioRepository? portales = null) : ITenantDomainResolver
 {
     private static readonly TimeSpan Ttl = TimeSpan.FromSeconds(60);
     private const string ResolveCacheKeyPrefix = "flit:domain-resolve:";
@@ -60,7 +62,10 @@ internal sealed class CachedTenantDomainResolver(
             }
             else
             {
-                resolution = NetworkResolution.None;
+                // HU #14383: si no es de una red, puede ser el dominio activo del portal de un organismo.
+                // Eso NO es una red: no abre el login de FLIT ni acota el acceso de ninguna.
+                var organismo = portales is null ? null : await portales.ObtenerOrganismoActivoPorHostAsync(normalizedHost, cancellationToken).ConfigureAwait(false);
+                resolution = organismo is { } o ? NetworkResolution.Portal(o.TransitOfficeId) : NetworkResolution.None;
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -85,6 +90,12 @@ internal sealed class CachedTenantDomainResolver(
         try
         {
             hosts = await _repository.ListActiveHostsAsync(cancellationToken).ConfigureAwait(false);
+            if (portales is not null)
+            {
+                // HU #14383: los dominios activos de portales tambien son origenes validos para el Gateway.
+                var delPortal = await portales.ListarHostsActivosAsync(cancellationToken).ConfigureAwait(false);
+                hosts = [.. hosts, .. delPortal];
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

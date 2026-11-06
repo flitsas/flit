@@ -3,7 +3,13 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "@/components/admin/Toast";
 import { OrganismosSection } from "../OrganismosSection";
-import { establecerCanalPuntoPn, establecerOrganismoPn, fetchOrganismosPn, type OrganismoPn } from "@/lib/api/admin-pn-config";
+import { getPortalDominio, type DominioPortal } from "@/lib/api/admin-ot-portal-dominio";
+import {
+  establecerCanalPuntoPn,
+  establecerOrganismoPn,
+  fetchOrganismosPn,
+  type OrganismoPn,
+} from "@/lib/api/admin-pn-config";
 
 vi.mock("@/lib/api/admin-pn-config", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/api/admin-pn-config")>();
@@ -14,6 +20,8 @@ vi.mock("@/lib/api/admin-pn-config", async (importOriginal) => {
     establecerCanalPuntoPn: vi.fn(),
   };
 });
+
+vi.mock("@/lib/api/admin-ot-portal-dominio", () => ({ getPortalDominio: vi.fn() }));
 
 const organismo = (over: Partial<OrganismoPn>): OrganismoPn => ({
   id: "o1",
@@ -55,6 +63,7 @@ describe("canal del punto en organismos (#14217)", () => {
         tiposConTarifaVigente: 0,
       }),
     ]);
+    vi.mocked(getPortalDominio).mockResolvedValue(null);
     vi.mocked(establecerOrganismoPn).mockResolvedValue(undefined);
     vi.mocked(establecerCanalPuntoPn).mockResolvedValue(undefined);
   });
@@ -76,11 +85,20 @@ describe("canal del punto en organismos (#14217)", () => {
     renderSeccion();
     const tabla = await screen.findByRole("table", { name: /organismos del portal/i });
     const bogota = within(tabla).getByRole("row", { name: /secretaría de movilidad de bogotá/i });
-    await ue.click(within(bogota).getByRole("button", { name: /enlace y qr de secretaría de movilidad de bogotá/i }));
+    await ue.click(
+      within(bogota).getByRole("button", {
+        name: /enlace y qr de secretaría de movilidad de bogotá/i,
+      }),
+    );
 
     const dialogo = await screen.findByRole("dialog", { name: "Enlace y QR" });
+    await waitFor(() =>
+      expect(within(dialogo).getByRole("button", { name: "Copiar enlace" })).toBeEnabled(),
+    );
     expect(within(dialogo).getByLabelText("Dirección del canal")).toHaveValue(DIRECCION);
-    expect(within(dialogo).getByRole("img", { name: `Código QR de ${DIRECCION}` })).toBeInTheDocument();
+    expect(
+      within(dialogo).getByRole("img", { name: `Código QR de ${DIRECCION}` }),
+    ).toBeInTheDocument();
     expect(DIRECCION).not.toMatch(/placa|documento|\?/);
     expect(within(dialogo).getByRole("button", { name: "Descargar QR" })).toBeInTheDocument();
 
@@ -90,12 +108,75 @@ describe("canal del punto en organismos (#14217)", () => {
     expect(within(dialogo).getByRole("status")).toHaveTextContent("Enlace copiado.");
   });
 
+  const dominio = (over: Partial<DominioPortal>): DominioPortal => ({
+    host: "tramites.bogota.gov.co",
+    estado: "activo",
+    motivo: null,
+    dns: [],
+    rowVersion: 1,
+    ...over,
+  });
+
+  async function abrirEnlace() {
+    const ue = userEvent.setup();
+    renderSeccion();
+    const tabla = await screen.findByRole("table", { name: /organismos del portal/i });
+    const bogota = within(tabla).getByRole("row", { name: /secretaría de movilidad de bogotá/i });
+    await ue.click(
+      within(bogota).getByRole("button", {
+        name: /enlace y qr de secretaría de movilidad de bogotá/i,
+      }),
+    );
+    return screen.findByRole("dialog", { name: "Enlace y QR" });
+  }
+
+  it("con dominio activo, el texto, el QR y el botón Copiar usan el dominio", async () => {
+    vi.mocked(getPortalDominio).mockResolvedValue(dominio({}));
+    const dialogo = await abrirEnlace();
+    const direccion = "https://tramites.bogota.gov.co";
+    await waitFor(() =>
+      expect(within(dialogo).getByLabelText("Dirección del canal")).toHaveValue(direccion),
+    );
+    expect(getPortalDominio).toHaveBeenCalledWith({ transitOfficeId: "o1" });
+    expect(
+      within(dialogo).getByRole("img", { name: `Código QR de ${direccion}` }),
+    ).toBeInTheDocument();
+    const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
+    await userEvent.setup().click(within(dialogo).getByRole("button", { name: "Copiar enlace" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(direccion));
+  });
+
+  it.each([["pendiente"], ["verificado"], ["fallido"]] as const)(
+    "con el dominio %s sigue la dirección del punto",
+    async (estado) => {
+      vi.mocked(getPortalDominio).mockResolvedValue(dominio({ estado }));
+      const dialogo = await abrirEnlace();
+      await waitFor(() =>
+        expect(within(dialogo).getByRole("button", { name: "Copiar enlace" })).toBeEnabled(),
+      );
+      expect(within(dialogo).getByLabelText("Dirección del canal")).toHaveValue(DIRECCION);
+    },
+  );
+
+  it("si la consulta del dominio falla, sigue la dirección del punto", async () => {
+    vi.mocked(getPortalDominio).mockRejectedValue(new Error("x"));
+    const dialogo = await abrirEnlace();
+    await waitFor(() =>
+      expect(within(dialogo).getByRole("button", { name: "Copiar enlace" })).toBeEnabled(),
+    );
+    expect(within(dialogo).getByLabelText("Dirección del canal")).toHaveValue(DIRECCION);
+  });
+
   it("encender el canal llama al servicio y entonces aparece Enlace y QR", async () => {
     const ue = userEvent.setup();
     renderSeccion();
     const tabla = await screen.findByRole("table", { name: /organismos del portal/i });
     const cali = () => within(tabla).getByRole("row", { name: /movilidad de cali/i });
-    await ue.click(within(cali()).getByRole("switch", { name: /encender el canal del punto de movilidad de cali/i }));
+    await ue.click(
+      within(cali()).getByRole("switch", {
+        name: /encender el canal del punto de movilidad de cali/i,
+      }),
+    );
     await waitFor(() => expect(establecerCanalPuntoPn).toHaveBeenCalledWith("o3", true));
     expect(await within(cali()).findByRole("button", { name: /enlace y qr/i })).toBeInTheDocument();
   });

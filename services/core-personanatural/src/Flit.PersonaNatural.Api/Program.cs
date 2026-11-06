@@ -94,6 +94,7 @@ public static class Program
         // HU #14216: canal del punto (cookie del organismo). La fachada gRPC la registra AddCotizacionesPortal.
         builder.Services.AddPuntoPortal();
         builder.Services.AddMarcaPunto(); // HU #14378: marca publicada del organismo para el portal del punto
+        builder.Services.AddDominioPunto(); // HU #14383: dominio activo del portal del organismo
 
         // Interruptor de pruebas locales (apagado por defecto; solo Development).
         Flit.PersonaNatural.Api.Pruebas.PruebasPortal.AddPruebasPortal(builder.Services, builder.Configuration, builder.Environment);
@@ -146,6 +147,7 @@ public static class Program
         app.MapConsultasEndpoints();
         app.MapPuntoEndpoints();
         app.MapMarcaPuntoEndpoints();
+        app.MapDominioPuntoEndpoints();
 
         app.MapCotizacionesEndpoints();
         app.MapIdentidadEndpoints();
