@@ -153,6 +153,29 @@ public sealed class PersonaNaturalPortalReader(FlitDbContext db, TimeProvider? r
             .ToList();
     }
 
+    /// <summary>Un tipo se ofrece en un organismo solo si los dos renglones base tienen tarifa vigente (propia o general).</summary>
+    public static bool TieneTarifaBase(Guid tipoId, Guid organismoId, IReadOnlyCollection<TarifaVigente> tarifas)
+    {
+        ArgumentNullException.ThrowIfNull(tarifas);
+        return CotizadorPersonaNatural.Resolver(ConceptosTarifa.DerechosTransito, tipoId, organismoId, tarifas) is not null
+            && CotizadorPersonaNatural.Resolver(ConceptosTarifa.ServicioFlit, tipoId, organismoId, tarifas) is not null;
+    }
+
+    /// <summary>
+    /// HU #14391 — de los organismos habilitados, deja los que ofrecen al menos un tipo (elegible, ya con la lista blanca
+    /// aplicada) con precio base vigente. Es el mismo criterio con que se listan los tipos de un organismo, así que un
+    /// organismo sin ningún tipo que ofrecer no aparece.
+    /// </summary>
+    public static IReadOnlyList<OrganismoHabilitadoPn> ConOferta(
+        IReadOnlyList<OrganismoHabilitadoPn> organismos, IReadOnlyList<TipoPersonaNatural> tipos, IReadOnlyCollection<TarifaVigente> tarifas)
+    {
+        ArgumentNullException.ThrowIfNull(organismos);
+        ArgumentNullException.ThrowIfNull(tipos);
+        ArgumentNullException.ThrowIfNull(tarifas);
+        var elegibles = tipos.Where(t => t.Elegibilidad.Elegible).ToList();
+        return organismos.Where(o => elegibles.Any(t => TieneTarifaBase(t.Id, o.Id, tarifas))).ToList();
+    }
+
     /// <summary>Forma de la fila leída por SQL (alias = nombre de propiedad).</summary>
     public sealed class TarifaFila
     {

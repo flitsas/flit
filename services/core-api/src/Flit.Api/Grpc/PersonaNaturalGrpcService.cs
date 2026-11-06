@@ -119,12 +119,24 @@ public sealed class PersonaNaturalGrpcService(
     /// <summary>
     /// Organismos ofrecidos a Persona Natural: los que tienen grant habilitado para su empresa. Sin ninguno devuelve lista
     /// vacía, no un error. El enlace de tarifas del organismo no existe todavía como dato (HU J): viaja vacío.
+    /// HU #14391: solo los que ofrecen al menos un tipo con precio (propio o general) vigente hoy; uno sin ningún precio no
+    /// se ofrece. Se calcula en cada llamada: un precio recién registrado o cerrado se refleja en la siguiente consulta.
     /// </summary>
     public override async Task<ListarOrganismosResponse> ListarOrganismos(ListarOrganismosRequest request, ServerCallContext context)
     {
         ArgumentNullException.ThrowIfNull(request);
         Verificar(context);
-        var organismos = await portal.ListarOrganismosAsync(context.CancellationToken).ConfigureAwait(false);
+        var ct = context.CancellationToken;
+        var organismos = await portal.ListarOrganismosAsync(ct).ConfigureAwait(false);
+        if (organismos.Count > 0)
+        {
+            var tipos = PersonaNaturalPortalReader.AplicarListaBlanca(
+                await tiposReader.ListarAsync(ct).ConfigureAwait(false),
+                await portal.TiposHabilitadosAsync(ct).ConfigureAwait(false));
+            var tarifas = await portal.TarifasVigentesAsync(portal.HoyColombia(), ct).ConfigureAwait(false);
+            organismos = PersonaNaturalPortalReader.ConOferta(organismos, tipos, tarifas);
+        }
+
         var respuesta = new ListarOrganismosResponse();
         respuesta.Organismos.AddRange(organismos.Select(o => new OrganismoPortal
         {
@@ -350,8 +362,7 @@ public sealed class PersonaNaturalGrpcService(
 
     /// <summary>Un tipo se ofrece en un organismo solo si los dos renglones base tienen tarifa vigente.</summary>
     private static bool TieneTarifaBase(Guid tipoId, Guid organismoId, IReadOnlyCollection<TarifaVigente> tarifas) =>
-        CotizadorPersonaNatural.Resolver(ConceptosTarifa.DerechosTransito, tipoId, organismoId, tarifas) is not null
-        && CotizadorPersonaNatural.Resolver(ConceptosTarifa.ServicioFlit, tipoId, organismoId, tarifas) is not null;
+        PersonaNaturalPortalReader.TieneTarifaBase(tipoId, organismoId, tarifas);
 
 
     // ── Pendientes de su HU: contrato publicado, sin implementación ─────────────────────────────────────────────────
