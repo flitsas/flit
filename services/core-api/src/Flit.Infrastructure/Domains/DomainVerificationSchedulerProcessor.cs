@@ -100,7 +100,7 @@ internal sealed class DomainVerificationSchedulerProcessor(
         var dnsResolver = services.GetRequiredService<IDnsTxtResolver>();
         var repository = services.GetRequiredService<ITenantDomainRepository>();
 
-        var domain = await repository.GetByTenantIdAsync(claim.TenantId, ct).ConfigureAwait(false);
+        var domain = await repository.GetByTenantIdAsync(claim.TenantId, claim.Purpose, ct).ConfigureAwait(false);
         if (domain is null)
         {
             return; // retirado entre el claim y el proceso — nada que hacer.
@@ -130,6 +130,7 @@ internal sealed class DomainVerificationSchedulerProcessor(
             now,
             changedByUserId: null,
             changedByJob: JobActor,
+            claim.Purpose,
             ct).ConfigureAwait(false);
     }
 

@@ -29,6 +29,7 @@ import {
 
 function domain(overrides: Partial<TenantDomainResponse> = {}): TenantDomainResponse {
   return {
+    purpose: "HUB",
     host: "app.movilidadandina.com",
     status: "pending",
     statusReason: null,
@@ -36,8 +37,8 @@ function domain(overrides: Partial<TenantDomainResponse> = {}): TenantDomainResp
     verification: {
       txtName: "_flit-verify.app.movilidadandina.com",
       txtValue: "flit-verify=abc123",
-      cnameName: "app.movilidadandina.com",
-      cnameTarget: "edge.flitsas.online",
+      aName: "app.movilidadandina.com",
+      aValue: "203.0.113.10",
     },
     verifiedAt: null,
     activatedAt: null,
@@ -150,15 +151,56 @@ describe("DomainStatusPanel — estado con icono + texto, motivo y fecha (AC1/AC
 });
 
 describe("DomainStatusPanel — instrucciones DNS copiables (AC2)", () => {
-  it("pending: muestra registros TXT y CNAME exactos con botón Copiar", async () => {
+  it("pending: muestra registros TXT y A exactos con botón Copiar", async () => {
     vi.mocked(getAdminDomain).mockResolvedValue(domain());
     render(<DomainStatusPanel mode="admin" tenantId="tenant-1" />);
 
     await screen.findByTestId("domain-host");
     expect(screen.getByText("_flit-verify.app.movilidadandina.com")).toBeInTheDocument();
     expect(screen.getByText("flit-verify=abc123")).toBeInTheDocument();
-    expect(screen.getByText("edge.flitsas.online")).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "A" })).toBeInTheDocument();
+    expect(screen.getByText("203.0.113.10")).toBeInTheDocument();
+    expect(screen.queryByText("CNAME")).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /copiar valor del registro/i })).toHaveLength(2);
+  });
+
+  it("sin IP del borde configurada: avisa en lugar de mostrar un registro A vacío", async () => {
+    const pending = domain();
+    vi.mocked(getAdminDomain).mockResolvedValue({ ...pending, verification: { ...pending.verification, aValue: "" } });
+    render(<DomainStatusPanel mode="admin" tenantId="tenant-1" />);
+
+    expect(await screen.findByText(/no tiene configurada la IP del borde/)).toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "A" })).not.toBeInTheDocument();
+  });
+
+  it("comprobado sin certificado: sigue mostrando el registro A e indica que se está emitiendo", async () => {
+    vi.mocked(getAdminDomain).mockResolvedValue(domain({ status: "verified" }));
+    render(<DomainStatusPanel mode="admin" tenantId="tenant-1" />);
+
+    expect(await screen.findByText(/Emitiendo el certificado/)).toBeInTheDocument();
+    expect(screen.getByText("203.0.113.10")).toBeInTheDocument();
+  });
+
+  it("comprobado con certificado: listo para activar y sin instrucciones DNS", async () => {
+    vi.mocked(getAdminDomain).mockResolvedValue(
+      domain({ status: "verified", certificate: { issuedAt: "2026-11-05T15:00:00Z", expiresAt: "2027-02-03T15:00:00Z" } }),
+    );
+    render(<DomainStatusPanel mode="admin" tenantId="tenant-1" />);
+
+    expect(await screen.findByText("Listo para activar.")).toBeInTheDocument();
+    expect(screen.queryByText("203.0.113.10")).not.toBeInTheDocument();
+  });
+
+  it("con producto: lee y comprueba el dominio de ese producto", async () => {
+    vi.mocked(getAdminDomain).mockResolvedValue(domain());
+    vi.mocked(verifyAdminDomain).mockResolvedValue(domain({ status: "verified" }));
+    const user = userEvent.setup();
+    render(<DomainStatusPanel mode="admin" tenantId="tenant-1" purpose="tramites" />);
+
+    await user.click(await screen.findByRole("button", { name: /comprobar ahora/i }));
+
+    expect(getAdminDomain).toHaveBeenCalledWith("tenant-1", "tramites");
+    await waitFor(() => expect(verifyAdminDomain).toHaveBeenCalledWith("tenant-1", "tramites"));
   });
 
   it("active: NO muestra la tabla de instrucciones DNS", async () => {
@@ -194,7 +236,7 @@ describe("DomainStatusPanel — Comprobar ahora (AC2)", () => {
 
     await user.click(screen.getByRole("button", { name: /comprobar ahora/i }));
 
-    await waitFor(() => expect(verifyAdminDomain).toHaveBeenCalledWith("tenant-1"));
+    await waitFor(() => expect(verifyAdminDomain).toHaveBeenCalledWith("tenant-1", undefined));
     expect(await screen.findByText(/^comprobado$/i)).toBeInTheDocument();
     expect(screen.getByText(/comprobación exitosa/i)).toBeInTheDocument();
   });

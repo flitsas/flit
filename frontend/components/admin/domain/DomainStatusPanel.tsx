@@ -48,6 +48,8 @@ export interface DomainStatusPanelProps {
   mode: DomainPanelMode;
   /** Requerido cuando `mode === "admin"`. */
   tenantId?: string;
+  /** Producto del dominio (solo `mode === "admin"`). Sin él, el dominio principal de la red. */
+  purpose?: string;
   /**
    * Se llama con el dominio vigente en cada carga o comprobación exitosas (o `null` si la red no
    * tiene dominio). `DomainRegisterForm` lo usa para conocer el `rowVersion` vigente sin duplicar
@@ -104,6 +106,7 @@ function formatDateTime(iso: string | null): string | null {
 export function DomainStatusPanel({
   mode,
   tenantId,
+  purpose,
   onLoaded,
   reloadToken,
   client,
@@ -127,7 +130,7 @@ export function DomainStatusPanel({
         const data = client
           ? await client.get()
           : mode === "admin" && tenantId
-            ? await getAdminDomain(tenantId)
+            ? await getAdminDomain(tenantId, purpose)
             : await getCompanyDomain();
         if (signal?.aborted) return;
         setDomain(data);
@@ -137,7 +140,7 @@ export function DomainStatusPanel({
         if (!signal?.aborted) setStatus("error");
       }
     },
-    [mode, tenantId, onLoaded, client],
+    [mode, tenantId, purpose, onLoaded, client],
   );
 
   useEffect(() => {
@@ -175,7 +178,7 @@ export function DomainStatusPanel({
       const result = client
         ? await client.verify()
         : mode === "admin" && tenantId
-          ? await verifyAdminDomain(tenantId)
+          ? await verifyAdminDomain(tenantId, purpose)
           : await verifyCompanyDomain();
       setDomain(result);
       onLoaded?.(result);
@@ -211,9 +214,7 @@ export function DomainStatusPanel({
       >
         {domain && <DomainStatusBody domain={domain} reasonVerbatim={reasonVerbatim} />}
 
-        {domain && (domain.status === "pending" || domain.status === "failed") && (
-          <DnsInstructions verification={domain.verification} />
-        )}
+        {domain && needsDnsInstructions(domain) && <DnsInstructions verification={domain.verification} />}
 
         {domain && (
           <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -249,6 +250,11 @@ export function DomainStatusPanel({
   );
 }
 
+/** El registro A también hace falta tras comprobar el TXT: sin él, el certificado no se puede emitir. */
+function needsDnsInstructions(domain: TenantDomainResponse): boolean {
+  return domain.status === "pending" || domain.status === "failed" || (domain.status === "verified" && !domain.certificate.issuedAt);
+}
+
 function DomainStatusBody({ domain, reasonVerbatim }: { domain: TenantDomainResponse; reasonVerbatim: boolean }) {
   const meta = STATUS_META[domain.status];
   const Icon = meta.Icon;
@@ -282,6 +288,12 @@ function DomainStatusBody({ domain, reasonVerbatim }: { domain: TenantDomainResp
         </p>
       )}
 
+      {domain.status === "verified" && (
+        <p className="mt-2 text-xs font-medium" role="note">
+          {issuedAt ? "Listo para activar." : "Emitiendo el certificado. Si tarda, revisa el registro A."}
+        </p>
+      )}
+
       {issuedAt && (
         <p className="mt-2 text-[11px] opacity-70">
           Certificado emitido el {issuedAt}
@@ -302,7 +314,7 @@ function DnsInstructions({
       <h3 className="mb-2 text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }}>
         Registros DNS que debes crear
       </h3>
-      {/* HU #13918 — mismo diseño que la tabla de trámites. Son dos registros FIJOS (TXT y CNAME, o TXT y A en el portal del OT), no una
+      {/* HU #13918 — mismo diseño que la tabla de trámites. Son dos registros FIJOS (TXT y A), no una
           colección: solo recibe el diseño, sin paginación. */}
       <div className="overflow-x-auto">
         <table
@@ -321,14 +333,15 @@ function DnsInstructions({
           </thead>
           <tbody className={TABLA_MOVIL_TBODY_CLS}>
             <DnsRow type="TXT" name={verification.txtName} value={verification.txtValue} />
-            {verification.aName !== undefined ? (
-              verification.aValue ? <DnsRow type="A" name={verification.aName} value={verification.aValue} /> : null
-            ) : (
-              <DnsRow type="CNAME" name={verification.cnameName} value={verification.cnameTarget} />
-            )}
+            {verification.aValue && <DnsRow type="A" name={verification.aName} value={verification.aValue} />}
           </tbody>
         </table>
       </div>
+      {!verification.aValue && (
+        <p role="alert" className="mt-2 text-xs font-medium" style={{ color: "var(--badge-warning-fg)" }}>
+          Falta el registro A de {verification.aName}: este ambiente no tiene configurada la IP del borde.
+        </p>
+      )}
     </div>
   );
 }
