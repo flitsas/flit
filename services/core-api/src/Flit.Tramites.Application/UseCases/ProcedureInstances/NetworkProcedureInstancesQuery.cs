@@ -1,5 +1,6 @@
 using Flit.Queries.Domain;
 using Flit.Queries.Domain.Tenancy;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 
@@ -14,7 +15,8 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// <see cref="ListProcedureInstancesHandler.MaxItems"/>.
 /// </summary>
 public sealed class NetworkListProcedureInstancesHandler(
-    IProcedureInstanceRepository repo, BusquedaRapidaResolver? busquedaRapida = null)
+    IProcedureInstanceRepository repo, BusquedaRapidaResolver? busquedaRapida = null,
+    ITransitOfficeQuipuxCanalReader? quipuxCanalReader = null)
 {
     public async Task<(IReadOnlyList<InstanceSummaryDto> Items, int Total, string? Error)> HandleAsync(
         TenantScope? scope,
@@ -39,7 +41,7 @@ public sealed class NetworkListProcedureInstancesHandler(
         var (instances, total) = await repo.ListWithSummaryGraphFilteredAsync(
             effective!, Math.Max(0, request.Skip), take, filter, sortBy, direction, ct);
 
-        var items = await ListProcedureInstancesFilteredHandler.ToSummariesAsync(repo, instances, ct);
+        var items = await ListProcedureInstancesFilteredHandler.ToSummariesAsync(repo, instances, ct, quipuxCanalReader);
         return (items, total, null);
     }
 

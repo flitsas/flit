@@ -156,6 +156,36 @@ function listaDel(partes: string[]): string {
 }
 
 /**
+ * «Enviar al OT» desde Asignado: dice quién falta por firmar y qué sigue, sin explicar el mecanismo.
+ * Si el enlace no salió, remite a «Reenviar validación», del mismo menú de la fila.
+ */
+function mensajeFirmaPendienteAsignado(partes: ParteFirmaPendiente[]): string {
+  if (partes.length === 0) {
+    return 'Falta una firma. Cuando la persona firme, podrás enviar el trámite.';
+  }
+
+  const nombres = partes.map((x) => `el ${PARTE_LABEL[x.parte]}`);
+  const quienes =
+    nombres.length === 1 ? nombres[0] : `${nombres.slice(0, -1).join(', ')} y ${nombres[nombres.length - 1]}`;
+  const inicio = quienes.charAt(0).toUpperCase() + quienes.slice(1);
+  const unaSola = partes.length === 1;
+  const frases = [`${inicio} aún no ${unaSola ? 'ha' : 'han'} firmado.`];
+
+  const sinEnlace = partes.filter((x) => x.notificacion === 'fallida' || x.notificacion === 'no_configurada');
+  if (sinEnlace.length > 0) {
+    const a = sinEnlace.map((x) => `al ${PARTE_LABEL[x.parte]}`).join(' y ');
+    frases.push(`No pudimos enviar el enlace ${a}: usa «Reenviar validación».`);
+  } else if (unaSola && partes[0].notificacion === 'enviada') {
+    frases.push('Le enviamos el enlace a su correo.');
+  } else if (unaSola && partes[0].notificacion === 'ya_en_curso') {
+    frases.push('Ya tiene el enlace para firmar.');
+  }
+
+  frases.push(`Cuando ${unaSola ? 'firme' : 'firmen'}, podrás enviar el trámite.`);
+  return frases.join(' ');
+}
+
+/**
  * Texto de UI del 409 `firma_pendiente`. Nunca devuelve vacío: sin partes ni notificación cae al
  * genérico.
  */
@@ -164,6 +194,8 @@ export function mensajeFirmaPendiente(
   contexto: FirmaPendienteContexto = 'wizard',
 ): string {
   const partes = partesFirmaPendiente(problem);
+  if (contexto === 'asignado') return mensajeFirmaPendienteAsignado(partes);
+
   const frases: string[] = [];
 
   if (partes.length === 0) {
@@ -198,14 +230,7 @@ export function mensajeFirmaPendiente(
     }
   }
 
-  if (contexto === 'asignado') {
-    frases.push(
-      'El trámite ya no es editable: completa la identidad con la prevalidación del módulo Identidad o renovando el baúl de firmas del representante legal.',
-    );
-    if (!hayNotificacion) {
-      frases.push('Si falta una validación de identidad, el enlace se envía automáticamente al correo de la parte.');
-    }
-  } else if (!hayNotificacion) {
+  if (!hayNotificacion) {
     frases.push('Complétala en el paso 4 «Validación de Identidad» y vuelve a intentarlo.');
   }
 
