@@ -15008,6 +15008,7 @@ paths:
         "403": { description: "PORTAL_COBRO_GESTION_AJENA (ot_admin sobre GESTION) o sin alcance sobre el organismo." }
         "404": { description: PORTAL_COBRO_TIPO_NO_EXISTE o PORTAL_COBRO_ORGANISMO_NO_EXISTE. }
   /api/v1/admin/ot/portal-reportes:
+    get:
       operationId: adminOtPortalReportesList
       tags: [Admin · OT · Reportes del portal]
       summary: Trámites del portal que cayeron a FLIT 2.0 en el organismo — HU #14397, Feature #14396, Épica #14297
@@ -15016,6 +15017,9 @@ paths:
         misma vista. Nunca aparecen los trámites del gestor, de integración ni los rechazados al crearse. `canal`, `tipoTramiteId`
         y `transitOfficeId` aceptan listas separadas por comas; si un `ot_admin` incluye un organismo ajeno, responde 403 sin datos.
         Orden: del más reciente al más antiguo. Rol `ot_admin` o SuperAdmin, sin permiso nuevo.
+      security:
+        - bearerAuth: []
+      parameters:
         - { name: canal, in: query, description: "Lista separada por comas de pn_web, pn_punto (aplicacion no trae filas aquí).", schema: { type: string } }
         - { name: tipoTramiteId, in: query, description: Lista de GUID separada por comas., schema: { type: string } }
         - { name: transitOfficeId, in: query, description: "Lista de GUID separada por comas. ot_admin: solo el propio. SuperAdmin: uno.", schema: { type: string } }
@@ -15023,11 +15027,17 @@ paths:
         - { name: hasta, in: query, description: Día de Bogotá, incluido., schema: { type: string, format: date } }
         - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
         - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        "200":
           description: Página del reporte.
+          content:
+            application/json:
               schema: { $ref: "#/components/schemas/PaginaReportePortal" }
         "400": { description: "PORTAL_REPORTES_ORGANISMO_REQUERIDO, _CANAL_INVALIDO, _RANGO_INVALIDO, _PAGINA_INVALIDA o _FILTRO_INVALIDO (cuerpo `{ code, message }`)." }
+        "401": { description: Sin sesión. }
         "403": { description: "Otro rol, PORTAL_REPORTES_OTRO_ORGANISMO o PORTAL_REPORTES_SIN_ORGANISMO." }
   /api/v1/admin/ot/portal-reportes/export:
+    get:
       operationId: adminOtPortalReportesExport
       tags: [Admin · OT · Reportes del portal]
       summary: Excel del reporte del organismo — HU #14398, Feature #14396, Épica #14297
@@ -15035,6 +15045,9 @@ paths:
         Mismos parámetros, alcance y orden que el listado. Sin `page` ni `pageSize` exporta todo el conjunto filtrado; con
         ellos, solo esa página. Columnas: Canal, Organismo, Tipo de trámite, Radicado, Estado, Fecha en que cayó, Modalidad de
         cobro, Valor del trámite, Valor de la gestión. Sin filas, el archivo trae solo la cabecera.
+      security:
+        - bearerAuth: []
+      parameters:
         - { name: canal, in: query, schema: { type: string } }
         - { name: tipoTramiteId, in: query, schema: { type: string } }
         - { name: transitOfficeId, in: query, schema: { type: string } }
@@ -15042,17 +15055,25 @@ paths:
         - { name: hasta, in: query, schema: { type: string, format: date } }
         - { name: page, in: query, schema: { type: integer, minimum: 1 } }
         - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        "200":
           description: Libro de Excel.
+          content:
             application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: { schema: { type: string, format: binary } }
         "400": { description: Igual que el listado. }
+        "401": { description: Sin sesión. }
         "403": { description: Igual que el listado. }
   /api/v1/admin/plataforma/persona-natural/reportes:
+    get:
       operationId: adminPnReportesList
       tags: [Admin · Plataforma · Persona Natural]
       summary: Trámites del portal que cayeron a FLIT 2.0, de todos los organismos — HU #14397, Épica #14297
       description: >
         SuperAdmin con el permiso de administración del portal. Ve pn_web, pn_punto y aplicacion de todos los organismos;
         `transitOfficeId` (lista separada por comas) solo filtra. Mismos filtros y respuesta que la vista del organismo.
+      security:
+        - bearerAuth: []
+      parameters:
         - { name: canal, in: query, description: "Lista separada por comas de pn_web, pn_punto, aplicacion.", schema: { type: string } }
         - { name: tipoTramiteId, in: query, schema: { type: string } }
         - { name: transitOfficeId, in: query, schema: { type: string } }
@@ -15060,15 +15081,24 @@ paths:
         - { name: hasta, in: query, schema: { type: string, format: date } }
         - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
         - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        "200":
           description: Página del reporte.
+          content:
+            application/json:
               schema: { $ref: "#/components/schemas/PaginaReportePortal" }
         "400": { description: Códigos PORTAL_REPORTES_* de validación. }
+        "401": { description: Sin sesión. }
         "403": { description: Otro rol o sin el permiso. }
   /api/v1/admin/plataforma/persona-natural/reportes/export:
+    get:
       operationId: adminPnReportesExport
       tags: [Admin · Plataforma · Persona Natural]
       summary: Excel del reporte del portal — HU #14398, Épica #14297
       description: Mismos parámetros y conjunto que el listado de Plataforma; sin `page` exporta todo lo filtrado.
+      security:
+        - bearerAuth: []
+      parameters:
         - { name: canal, in: query, schema: { type: string } }
         - { name: tipoTramiteId, in: query, schema: { type: string } }
         - { name: transitOfficeId, in: query, schema: { type: string } }
@@ -15076,9 +15106,13 @@ paths:
         - { name: hasta, in: query, schema: { type: string, format: date } }
         - { name: page, in: query, schema: { type: integer, minimum: 1 } }
         - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        "200":
           description: Libro de Excel.
+          content:
             application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: { schema: { type: string, format: binary } }
         "400": { description: Igual que el listado. }
+        "401": { description: Sin sesión. }
         "403": { description: Otro rol o sin el permiso. }
 
 components:
@@ -15307,8 +15341,10 @@ components:
         charge: { type: string, enum: [TRAMITE, GESTION] }
         enabled: { type: boolean }
     FilaReportePortal:
+      type: object
       description: Un trámite del portal que cayó a FLIT 2.0 (HU #14397). Modalidad y valores son nulos mientras no exista el pago.
       required: [canal, tipo, estado, fechaCaida]
+      properties:
         canal: { type: string, enum: [pn_web, pn_punto, aplicacion] }
         organismo: { type: string, nullable: true, description: "pn_punto: organismo del punto (fijo). pn_web y aplicacion: organismo del trámite." }
         tipo: { type: string }
@@ -15319,7 +15355,9 @@ components:
         valorTramite: { type: integer, format: int64, nullable: true }
         valorGestion: { type: integer, format: int64, nullable: true }
     PaginaReportePortal:
+      type: object
       required: [items, totalCount, page, pageSize]
+      properties:
         items: { type: array, items: { $ref: "#/components/schemas/FilaReportePortal" } }
         totalCount: { type: integer }
         page: { type: integer }

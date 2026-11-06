@@ -205,17 +205,20 @@ public sealed class PersonaNaturalGrpcService(
         BannerId = m.BannerId?.ToString() ?? string.Empty,
         Version = m.Version,
     };
-
     /// <summary>
     /// HU #14383 — dominio activo del portal de un organismo, sin caché. Con <c>host</c> devuelve el código del organismo solo si ese
     /// dominio está activo; con <c>codigo</c>, el dominio activo del organismo. Cualquier otro caso (o una falla) responde
     /// <c>activo = false</c>.
     /// </summary>
     public override async Task<ObtenerDominioPuntoResponse> ObtenerDominioPunto(ObtenerDominioPuntoRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Verificar(context);
         var d = string.IsNullOrWhiteSpace(request.Host)
             ? await dominioPunto.PorCodigoAsync(request.Codigo, context.CancellationToken).ConfigureAwait(false)
             : await dominioPunto.PorHostAsync(request.Host, context.CancellationToken).ConfigureAwait(false);
         return new ObtenerDominioPuntoResponse { Activo = d.Activo, Codigo = d.Codigo ?? string.Empty, Host = d.Host ?? string.Empty };
+    }
 
     /// <summary>HU #14378 — imagen de marca PUBLICADA. Una de borrador, retirada o inexistente responde <c>encontrado = false</c>.</summary>
     public override async Task<ObtenerImagenMarcaPuntoResponse> ObtenerImagenMarcaPunto(ObtenerImagenMarcaPuntoRequest request, ServerCallContext context)

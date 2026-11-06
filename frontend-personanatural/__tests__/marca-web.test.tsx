@@ -31,7 +31,7 @@ const conQuery = (ui: React.ReactElement) => (
 async function raizHtml() {
   const { default: Inicio } = await import("@/app/page");
   // MarcaWeb es un componente de servidor asíncrono: se resuelve a mano, como hace Next.
-  const raiz = Inicio() as React.ReactElement<{ children: React.ReactNode }>;
+  const raiz = (await Inicio()) as React.ReactElement<{ children: React.ReactNode }>;
   const { MarcaWeb } = await import("@/components/marca/MarcaWeb");
   return renderToString(conQuery(await MarcaWeb(raiz.props)));
 }
