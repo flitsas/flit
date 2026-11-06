@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ToastProvider } from "@/components/admin/Toast";
 import { OtHubLayout } from "@/components/admin/transit-offices/OtHubLayout";
@@ -30,6 +31,12 @@ function OtPortalPersonaNaturalPageInner() {
       surface="panel"
     >
       <PortalPnAccess>
+        <nav aria-label="Miga de pan" className="mb-3 text-xs" style={{ color: "#162744" }}>
+          <Link href="/" className="hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF]">
+            Inicio
+          </Link>{" "}
+          &gt; <span aria-current="page" className="font-semibold">Portal Persona Natural</span>
+        </nav>
         <PortalPnTabs transitOfficeId={params.id} cobro={<OtPreciosSection transitOfficeId={params.id} />} />
       </PortalPnAccess>
     </OtHubLayout>

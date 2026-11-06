@@ -28,6 +28,8 @@ export interface BrandingLogoUploaderProps<T = BrandLogoResponse> {
   imageAlt?: string;
   /** Clases del recuadro de vista previa (por defecto, cuadrado de 64 px). */
   previewClassName?: string;
+  /** Feature #14374 (portal del OT): también admite arrastrar el archivo. Sin él, solo el botón de marca blanca. */
+  dropzone?: boolean;
 }
 
 /** HU #12414 AC2 — carga del logotipo con validación en cliente y en servidor (mismo texto). */
@@ -46,17 +48,28 @@ export function BrandingLogoUploader<T = BrandLogoResponse>({
   inputAriaLabel = "Cargar logotipo de marca",
   imageAlt = "Logotipo de la marca",
   previewClassName = "h-16 w-16",
+  dropzone = false,
 }: BrandingLogoUploaderProps<T>) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [localPreview, setLocalPreview] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
-    if (!file) return;
+    if (file) await handleFile(file);
+  }
 
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file && !disabled && !uploading) void handleFile(file);
+  }
+
+  async function handleFile(file: File) {
     setError(null);
     if (validate) {
       const reason = await validate(file);
@@ -100,7 +113,21 @@ export function BrandingLogoUploader<T = BrandLogoResponse>({
       <span className="text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }}>
         {label}
       </span>
-      <div className="flex items-center gap-4">
+      <div
+        className={dropzone ? "flex items-center gap-4 rounded-xl border border-dashed p-3" : "flex items-center gap-4"}
+        style={dropzone ? { borderColor: dragging ? "#557EFF" : "#A9C9FC", background: dragging ? "#EEF5FF" : undefined } : undefined}
+        data-testid={dropzone ? "zona-carga" : undefined}
+        onDragOver={
+          dropzone
+            ? (e) => {
+                e.preventDefault();
+                setDragging(true);
+              }
+            : undefined
+        }
+        onDragLeave={dropzone ? () => setDragging(false) : undefined}
+        onDrop={dropzone ? handleDrop : undefined}
+      >
         <div
           className={`flex ${previewClassName} shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-white`}
           style={{ borderColor: "#DFE5ED" }}
@@ -128,6 +155,7 @@ export function BrandingLogoUploader<T = BrandLogoResponse>({
               buttonLabel
             )}
           </button>
+          {dropzone && <p className="text-xs opacity-70">O arrastra el archivo aquí.</p>}
           <p className="text-[11px] opacity-60">{hint ?? logoDimensionsHint()}</p>
         </div>
       </div>

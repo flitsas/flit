@@ -61,7 +61,7 @@ export function PortalPnPreview({ colors, platformName, logoSrc, bannerSrc }: Po
           <img src={bannerSrc} alt="Banner del organismo" className="h-20 w-full rounded-xl border bg-white object-contain" style={{ borderColor: "#DFE5ED" }} />
         ) : (
           <p className="rounded-xl border border-dashed px-3 py-2 text-center text-xs opacity-70" style={{ borderColor: "#DFE5ED" }}>
-            Sin banner: el portal no muestra banner.
+            Sin banner propio: el portal usa el de FLIT.
           </p>
         )}
 
@@ -88,7 +88,7 @@ export function PortalPnPreview({ colors, platformName, logoSrc, bannerSrc }: Po
         </div>
       </div>
       <figcaption className="border-t px-3 py-1.5 text-xs opacity-70" style={{ borderColor: "#DFE5ED" }}>
-        Sin logo propio, el portal usa el de FLIT. Sin banner, no muestra ninguno.
+        Sin logo o banner propios, el portal usa los de FLIT.
       </figcaption>
     </figure>
   );

@@ -130,7 +130,7 @@ describe("AC2 — vista previa antes de publicar", () => {
   it("sin logo ni banner la vista previa lo dice y el portal usará los de FLIT", async () => {
     await abrirDiseno(marca({ logoUrl: null, bannerUrl: null, draft: { ...marca().draft, logoId: null, bannerId: null } }));
     expect(screen.getByText("FLIT")).toBeInTheDocument();
-    expect(screen.getByText("Sin banner: el portal no muestra banner.")).toBeInTheDocument();
+    expect(screen.getByText("Sin banner propio: el portal usa el de FLIT.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Quitar logo" })).not.toBeInTheDocument();
   });
 

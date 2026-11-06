@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Rocket, Save, Trash2, Undo2 } from "lucide-react";
+import { Check, Rocket, Save, Trash2, Undo2 } from "lucide-react";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { BrandingColorPicker } from "@/components/admin/branding/BrandingColorPicker";
 import { BrandingLogoUploader } from "@/components/admin/branding/BrandingLogoUploader";
@@ -303,7 +303,6 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
                   <ImageField
                     kind="logo"
                     label="Logo"
-                    buttonLabel="Cambiar logo"
                     currentSrc={logoSrc}
                     hasImage={Boolean(marca.logoUrl)}
                     previewClassName="h-16 w-16"
@@ -316,7 +315,6 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
                   <ImageField
                     kind="banner"
                     label="Banner"
-                    buttonLabel="Cambiar banner"
                     currentSrc={bannerSrc}
                     hasImage={Boolean(marca.bannerUrl)}
                     previewClassName="h-16 w-40"
@@ -352,14 +350,14 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
               )}
 
               {formError && (
-                <div role="alert" className="flex flex-wrap items-center gap-3 text-xs" style={{ color: "#C2410C" }}>
+                <div role="alert" className="flex flex-wrap items-center gap-3 text-xs" style={{ color: "#C10000" }}>
                   <span>{formError.message}</span>
                   {formError.conflict && (
                     <button
                       type="button"
                       onClick={() => void load()}
                       className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] rounded-lg border px-3 py-1 font-semibold"
-                      style={{ borderColor: "#C2410C" }}
+                      style={{ borderColor: "#C10000" }}
                     >
                       Recargar la marca
                     </button>
@@ -367,7 +365,8 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
                 </div>
               )}
               {successMessage && (
-                <p role="status" className="text-xs font-medium" style={{ color: "#4F7A12" }}>
+                <p role="status" className="flex items-center gap-1.5 text-xs font-medium" style={{ color: "#4F7A12" }}>
+                  <Check className="h-4 w-4 shrink-0" style={{ color: "#8CC63F" }} aria-hidden />
                   {successMessage}
                 </p>
               )}
@@ -377,8 +376,8 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
                   type="button"
                   onClick={() => void handleSaveDraft()}
                   disabled={busy}
-                  className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-                  style={{ borderColor: "var(--color-flit-brand)", color: "var(--color-flit-brand)" }}
+                  className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  style={{ background: "#162744" }}
                 >
                   <Save className="h-3.5 w-3.5" aria-hidden /> {saving ? "Guardando…" : "Guardar borrador"}
                 </button>
@@ -387,7 +386,7 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
                   onClick={() => setPublishOpen(true)}
                   disabled={!canPublish || busy}
                   className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                  style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+                  style={{ background: "#557EFF" }}
                 >
                   <Rocket className="h-3.5 w-3.5" aria-hidden /> Publicar
                 </button>
@@ -397,7 +396,7 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
                     onClick={() => setRetireOpen(true)}
                     disabled={busy}
                     className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] ml-auto inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-                    style={{ borderColor: "#C2410C", color: "#C2410C" }}
+                    style={{ borderColor: "#C10000", color: "#C10000" }}
                   >
                     <Undo2 className="h-3.5 w-3.5" aria-hidden /> Retirar marca publicada
                   </button>
@@ -414,7 +413,7 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
           onConfirm={() => void handleConfirmPublish()}
           title="Publicar la marca del portal"
           description="Al publicar, el enlace del punto de este organismo muestra el nombre, los colores, el logo y el banner de inmediato, desde la siguiente carga."
-          note="Sin logo propio, el portal usa el de FLIT. Sin banner, no muestra ninguno."
+          note="Sin logo o banner propios, el portal usa los de FLIT."
         />
 
         <Modal
@@ -443,7 +442,7 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
               onClick={() => void handleRetire()}
               disabled={retiring}
               className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] flex-1 rounded-full py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-              style={{ background: "#C2410C" }}
+              style={{ background: "#C10000" }}
             >
               {retiring ? "Retirando…" : "Retirar"}
             </button>
@@ -459,7 +458,6 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
 interface ImageFieldProps {
   kind: PortalImageKind;
   label: string;
-  buttonLabel: string;
   currentSrc: string | null;
   hasImage: boolean;
   previewClassName: string;
@@ -474,7 +472,6 @@ interface ImageFieldProps {
 function ImageField({
   kind,
   label,
-  buttonLabel,
   currentSrc,
   hasImage,
   previewClassName,
@@ -487,15 +484,17 @@ function ImageField({
   return (
     <div className="flex flex-col gap-2">
       <BrandingLogoUploader<PortalMarca>
+        key={hasImage ? "con-imagen" : "sin-imagen"}
         currentLogoUrl={currentSrc}
         disabled={disabled}
         upload={onUpload}
         onUploaded={onUploaded}
         validate={async (file) => validatePortalImage(file, kind)}
         label={label}
-        buttonLabel={buttonLabel}
+        buttonLabel={hasImage ? (kind === "logo" ? "Reemplazar logo" : "Reemplazar banner") : kind === "logo" ? "Seleccionar logo" : "Seleccionar banner"}
+        dropzone
         hint={`${portalImageHint(kind)} · ${
-          kind === "logo" ? "Opcional: sin logo, el portal usa el de FLIT." : "Opcional: sin banner, el portal no muestra uno."
+          kind === "logo" ? "Opcional: sin logo, el portal usa el de FLIT." : "Opcional: sin banner, el portal usa el de FLIT."
         }`}
         accept={PORTAL_IMAGE_ACCEPT}
         inputAriaLabel={`Cargar ${kind === "logo" ? "logo" : "banner"} del portal`}
@@ -508,7 +507,7 @@ function ImageField({
           onClick={onRemove}
           disabled={disabled}
           className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] inline-flex w-fit items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-          style={{ borderColor: "#C2410C", color: "#C2410C" }}
+          style={{ borderColor: "#C10000", color: "#C10000" }}
         >
           <Trash2 className="h-3.5 w-3.5" aria-hidden />
           {removing ? "Quitando…" : `Quitar ${kind === "logo" ? "logo" : "banner"}`}
