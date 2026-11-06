@@ -65,15 +65,16 @@ export function PortalPnPreview({ colors, platformName, logoSrc, bannerSrc }: Po
           </p>
         )}
 
-        <p className="text-sm font-bold" style={{ color: "var(--pv-primary)" }}>
-          Iniciar mi trámite
-        </p>
-        <div className="rounded-xl p-3" style={{ background: "var(--pv-action)", color: "var(--pv-on)" }}>
+        <div className="rounded-xl p-3 text-center" style={{ background: "var(--pv-action)", color: "var(--pv-on)" }}>
+          <p className="text-sm font-bold">Iniciar mi trámite</p>
           <p className="text-xs">Placa, documento y tipo de trámite.</p>
           <span className="mt-2 inline-block rounded-full bg-white px-3 py-1 text-xs font-semibold" style={{ color: "var(--pv-primary)" }}>
             Iniciar trámite
           </span>
         </div>
+        <p className="text-sm font-bold" style={{ color: "var(--pv-primary)" }}>
+          Trámite de Traspaso
+        </p>
         <div className="flex items-center gap-2">
           <span
             className="rounded-full px-3 py-1.5 text-xs font-semibold"
@@ -87,7 +88,7 @@ export function PortalPnPreview({ colors, platformName, logoSrc, bannerSrc }: Po
         </div>
       </div>
       <figcaption className="border-t px-3 py-1.5 text-xs opacity-70" style={{ borderColor: "#DFE5ED" }}>
-        Sin logo o banner propios, el portal usa los de FLIT.
+        Sin logo propio, el portal usa el de FLIT. Sin banner, no muestra ninguno.
       </figcaption>
     </figure>
   );

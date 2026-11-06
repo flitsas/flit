@@ -24,7 +24,13 @@ import {
   type PortalMarcaScope,
 } from "@/lib/api/admin-ot-portal-marca";
 import type { BrandColors } from "@/lib/api/branding";
-import { brandContrastPairs, isValidHexColor } from "@/lib/brand/contrast";
+import { isValidHexColor } from "@/lib/brand/contrast";
+import {
+  ajustarColoresPortal,
+  coloresPortalLegibles,
+  MENSAJE_COLORES_ILEGIBLES,
+  parTitulos,
+} from "@/lib/brand/portal-contrast";
 import { formatFechaHora } from "@/lib/format/date";
 import {
   PORTAL_IMAGE_ACCEPT,
@@ -47,7 +53,14 @@ const FIELD_COPY = {
 };
 
 const CONTRAST_MESSAGE =
-  "Con estos colores el texto no se leería bien (contraste menor a 4,5:1). Usa «Ajustar automáticamente» o elige otros colores.";
+  "Con estos colores el portal no se leería bien (contraste menor al mínimo). Usa «Ajustar automáticamente» o elige otros colores.";
+
+const REGLAS_COLOR = {
+  readable: coloresPortalLegibles,
+  fix: ajustarColoresPortal,
+  message: MENSAJE_COLORES_ILEGIBLES,
+  extraPairs: (colors: BrandColors) => [parTitulos(colors)],
+};
 
 type Status = "loading" | "error" | "ready";
 
@@ -114,7 +127,7 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
   }, [load]);
 
   const colorsValid = [draftColors.primary, draftColors.secondary, draftColors.onPrimary].every(isValidHexColor);
-  const contrastOk = useMemo(() => brandContrastPairs(draftColors).every((pair) => pair.ok), [draftColors]);
+  const contrastOk = useMemo(() => coloresPortalLegibles(draftColors), [draftColors]);
 
   const missing = useMemo(() => {
     const list: string[] = [];
@@ -278,7 +291,14 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
 
               <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,340px)] lg:items-start">
                 <div className="flex flex-col gap-5">
-                  <BrandingColorPicker colors={draftColors} onChange={setDraftColors} fieldCopy={FIELD_COPY} disabled={busy} />
+                  <BrandingColorPicker
+                    colors={draftColors}
+                    onChange={setDraftColors}
+                    fieldCopy={FIELD_COPY}
+                    primaryFirst
+                    rules={REGLAS_COLOR}
+                    disabled={busy}
+                  />
 
                   <ImageField
                     kind="logo"
@@ -394,7 +414,7 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
           onConfirm={() => void handleConfirmPublish()}
           title="Publicar la marca del portal"
           description="Al publicar, el enlace del punto de este organismo muestra el nombre, los colores, el logo y el banner de inmediato, desde la siguiente carga."
-          note="Sin logo o banner propios, el portal usa los de FLIT."
+          note="Sin logo propio, el portal usa el de FLIT. Sin banner, no muestra ninguno."
         />
 
         <Modal

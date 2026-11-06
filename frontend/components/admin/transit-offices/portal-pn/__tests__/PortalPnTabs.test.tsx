@@ -185,12 +185,12 @@ describe("AC3 — contraste insuficiente", () => {
   it("avisa, ofrece corregir y no deja publicar ni guardar hasta resolverlo", async () => {
     const user = await abrirDiseno(POCO_CONTRASTE);
 
-    expect(screen.getByText(/no se leería bien/)).toBeInTheDocument();
+    expect(screen.getByText(/no se leerían bien/)).toBeInTheDocument();
     const publicar = screen.getByRole("button", { name: /^Publicar$/ });
     expect(publicar).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: "Guardar borrador" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(/contraste menor a 4,5:1/);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/contraste menor al mínimo/);
     expect(savePortalMarcaDraft).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Ajustar automáticamente" }));
