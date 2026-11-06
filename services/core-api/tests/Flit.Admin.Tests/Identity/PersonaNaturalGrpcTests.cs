@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Flit.Api.Grpc;
 using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Platform.Sdk;
 using Flit.Platform.Sdk.Grpc;
 using Flit.Tramites.Domain.Entities;
@@ -319,13 +320,21 @@ public sealed class PersonaNaturalGrpcTests(WebApplicationFactory<Program> facto
         var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
         var tipo = db.ProcedureTypes.Where(t => !t.Code.StartsWith("PN_")).OrderBy(t => t.Code).First();
         var tenant = empresa ?? db.Tenants.Where(t => t.Id != PlatformTenants.PersonaNatural).OrderBy(t => t.Code).Select(t => t.Id).First();
+        // Usuario propio: tomar uno existente podía caer en el temporal de otra prueba en paralelo, que luego no lograba borrarlo.
+        var usuario = Guid.NewGuid();
+        db.Users.Add(new User
+        {
+            Id = usuario, Email = $"pn-grpc-{usuario:N}@flit.local", DisplayName = "Usuario portal PN", Status = "active",
+            HomeTenantId = tenant, CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync(ct);
         var instancia = new ProcedureInstance
         {
             Id = Guid.NewGuid(),
             TenantId = tenant,
             ProcedureTypeId = tipo.Id,
             TransitOfficeId = null, // sin organismo: otras pruebas en paralelo crean y borran organismos y una base limpia no trae catálogo
-            CreatedByUserId = db.Users.OrderBy(u => u.Email).Select(u => u.Id).First(),
+            CreatedByUserId = usuario,
             Status = "entregado",
             ExternalRef = referenciaExterna,
             Origin = "persona_natural",
