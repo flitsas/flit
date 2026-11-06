@@ -2,12 +2,16 @@ namespace Flit.Comparendos.Domain.Identificadores;
 
 /// <summary>
 /// Llave de unicidad del comparendo por empresa (RN-021; GDC ID12 / HU #14367): sin espacios ni guiones.
-/// Los prefijos alfabéticos iniciales («D-», «A-») se descartan y queda la secuencia numérica
-/// («d-123 456» → «123456»).
+/// Prefijos alfabéticos («D-», «A-») se descartan solo cuando el resto es una secuencia numérica de longitud
+/// de comparendo real (≥ <see cref="DigitosMinimosParaQuitarPrefijo"/>), p. ej. «d-1100…5678» → dígitos.
+/// Identificadores cortos de prueba o mixtos («AV3», «OCRRENTING1») conservan las letras.
 /// </summary>
 public static class NumeroComparendo
 {
     public const int LargoMaximo = 40;
+
+    /// <summary>Umbral GDC ID12: números municipales/nacionales reales (≥10); evita vaciar claves sintéticas cortas.</summary>
+    public const int DigitosMinimosParaQuitarPrefijo = 10;
 
     public static string? Normalizar(string? texto)
     {
@@ -21,7 +25,8 @@ public static class NumeroComparendo
         var i = 0;
         while (i < alfanum.Length && char.IsAsciiLetter(alfanum[i]))
             i++;
-        if (i > 0 && i < alfanum.Length && alfanum.Skip(i).All(char.IsAsciiDigit))
+        if (i > 0 && i < alfanum.Length && alfanum.Length - i >= DigitosMinimosParaQuitarPrefijo
+            && alfanum.Skip(i).All(char.IsAsciiDigit))
             return alfanum[i..];
 
         return alfanum;
