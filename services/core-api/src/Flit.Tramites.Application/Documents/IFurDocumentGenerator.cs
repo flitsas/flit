@@ -268,7 +268,10 @@ public sealed record MandatarioFirmante(
     FirmaBaulMetadata? FirmaBaulMetadatos = null,
     // Rúbrica de Kyverum de su validación de identidad propia: sin baúl, se estampa sobre el sello de
     // identidad, igual que la del mandante.
-    byte[]? FirmaIdentidadImagen = null);
+    byte[]? FirmaIdentidadImagen = null,
+    // HU #14413 — modelo del mandatario (natural | juridica | formato_blanco). Con «juridica» el contrato
+    // lo identifica con razón social y NIT. Sin dato se trata como Persona natural.
+    string? Modelo = null);
 
 /// <summary>
 /// Datos para el <b>Contrato Privado de Mandato</b> (ADR-0036, HU #10915). El MANDANTE es la parte que
@@ -298,8 +301,7 @@ public sealed record MandatoData(
     IReadOnlyList<string>? Transformaciones = null,
     /// <summary>
     /// Qué hacer con el bloque de firma del MANDATARIO. Se resuelve fuera del generador porque depende
-    /// del convenio comercial compañía↔organismo y de la marca de firma física del mandatario, datos que
-    /// viven en Admin.
+    /// del tipo de mandato y de si el mandatario tiene estampa (ver <c>MandatoFirmaModoResolver</c>).
     /// </summary>
     MandatarioFirmaModo ModoFirmaMandatario = MandatarioFirmaModo.Estampada,
     /// <summary>none | pdf | editor — plantilla propia del OT.</summary>
@@ -337,8 +339,8 @@ public enum MandatarioFirmaModo
     Manual,
 
     /// <summary>
-    /// Sin bloque de mandatario: el recuadro de firmas solo lleva al MANDANTE. Lo activa el convenio
-    /// comercial entre la compañía y el organismo.
+    /// Sin bloque de mandatario: el recuadro de firmas solo lleva al MANDANTE. Lo activa el tipo de
+    /// mandato Persona jurídica.
     /// </summary>
     SinBloque,
 }

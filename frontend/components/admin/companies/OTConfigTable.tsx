@@ -12,7 +12,7 @@ import { SwitchToggle } from "@/components/ui/SwitchToggle";
 import type { TransitOffice } from "@/lib/api/types";
 import { ApiValidationError } from "@/lib/api/types";
 import {
-  columnasFiltroOtConfig,
+  COLUMNAS_FILTRO_OT_CONFIG,
   filtrarOrganismosOtConfig,
 } from "@/lib/companies/ot-config-filtros";
 import { useTablaFiltros, type TablaFiltrosEstado } from "@/lib/tablas/useTablaFiltros";
@@ -39,13 +39,6 @@ export interface OTConfigTableProps {
   operationalById?: Record<string, OtOperationalInfo>;
   /** Persiste el cambio de grant (POST si enabled, DELETE si !enabled). */
   onToggleGrant: (officeId: string, enabled: boolean) => Promise<void>;
-  /**
-   * Ids de OT con los que la compañía tiene CONVENIO comercial. Distinto de `grantedIds`: aquel
-   * habilita la radicación, este decide si el contrato de mandato lleva bloque de firma del mandatario.
-   */
-  agreementIds?: string[];
-  /** Persiste el cambio de convenio. Sin este callback la columna no se pinta. */
-  onToggleAgreement?: (officeId: string, active: boolean) => Promise<void>;
   /** Abre el modal unificado de configuración (bloqueos + restricciones) scoped a ese OT. */
   onOpenConfig: (office: TransitOffice) => void;
   /** Notificación opcional de error de persistencia (toast). */
@@ -62,7 +55,7 @@ export interface OTConfigTableProps {
   /**
    * Filtros por columna controlados por el contenedor (HU #14003): embudo en el encabezado de cada
    * columna. Mismo criterio: el contenedor filtra ANTES de paginar. Sin esta prop la tabla filtra
-   * sobre `offices` con su propio estado. Columnas: `columnasFiltroOtConfig`.
+   * sobre `offices` con su propio estado. Columnas: `COLUMNAS_FILTRO_OT_CONFIG`.
    */
   filtros?: TablaFiltrosEstado;
 }
@@ -106,8 +99,6 @@ function operability(info: OtOperationalInfo | undefined): {
 export function OTConfigTable({
   offices,
   grantedIds,
-  agreementIds = [],
-  onToggleAgreement,
   operationalById,
   onToggleGrant,
   onOpenConfig,
@@ -121,12 +112,8 @@ export function OTConfigTable({
   // controlados el contenedor (OTConfigTablePanel) ya filtra y corta la página, con su propia clave.
   const pg = usePaginacion("companies.OTConfigTable");
   const filtrosControlados = filtrosProp !== undefined;
-  const columnasFiltro = useMemo(
-    () => columnasFiltroOtConfig(onToggleAgreement !== undefined),
-    [onToggleAgreement],
-  );
   const filtrosPropios = useTablaFiltros({
-    columnas: columnasFiltro,
+    columnas: COLUMNAS_FILTRO_OT_CONFIG,
     onCambio: () => pg.setPage(1),
   });
   const filtros = filtrosProp ?? filtrosPropios;
@@ -150,38 +137,6 @@ export function OTConfigTable({
   const [pending, setPending] = useState<Set<string>>(() => new Set());
   // IDs con confirmación "Guardado" visible unos segundos tras persistir con éxito.
   const [justSaved, setJustSaved] = useState<Set<string>>(() => new Set());
-  const [agreements, setAgreements] = useState<Set<string>>(() => new Set(agreementIds));
-  const [pendingAgreement, setPendingAgreement] = useState<Set<string>>(() => new Set());
-
-  /** Conmuta el convenio con UI optimista y rollback, igual que el grant. */
-  const handleToggleAgreement = async (office: TransitOffice) => {
-    const activar = !agreements.has(office.id);
-    setAgreements((current) => {
-      const next = new Set(current);
-      if (activar) next.add(office.id);
-      else next.delete(office.id);
-      return next;
-    });
-    setPendingAgreement((current) => new Set(current).add(office.id));
-
-    try {
-      await onToggleAgreement!(office.id, activar);
-    } catch {
-      setAgreements((current) => {
-        const next = new Set(current);
-        if (activar) next.delete(office.id);
-        else next.add(office.id);
-        return next;
-      });
-      onError?.(`No se pudo ${activar ? "marcar" : "quitar"} el convenio con ${office.name}.`);
-    } finally {
-      setPendingAgreement((current) => {
-        const next = new Set(current);
-        next.delete(office.id);
-        return next;
-      });
-    }
-  };
 
   const filtered = useMemo(() => {
     const base = readOnly ? offices.filter((o) => granted.has(o.id)) : offices;
@@ -194,17 +149,8 @@ export function OTConfigTable({
       filtros.condicionesTotales,
       "",
       granted,
-      agreements,
     );
-  }, [
-    offices,
-    search,
-    filtros.condicionesTotales,
-    paginaControlada,
-    readOnly,
-    granted,
-    agreements,
-  ]);
+  }, [offices, search, filtros.condicionesTotales, paginaControlada, readOnly, granted]);
 
   const handleToggleGrant = async (office: TransitOffice) => {
     const enable = !granted.has(office.id);
@@ -332,35 +278,6 @@ export function OTConfigTable({
         );
       },
     },
-    // El convenio solo se ofrece si el contenedor sabe persistirlo. No depende del grant: son cosas
-    // distintas y una compañía puede tener acuerdo comercial sin estar habilitada para radicar todavía.
-    ...(onToggleAgreement
-      ? [
-          {
-            key: "convenio",
-            header: (
-              <EncabezadoFiltrable filtros={filtros} columnaId="convenio">
-                Convenio
-              </EncabezadoFiltrable>
-            ),
-            render: (office: TransitOffice) => {
-              const checked = agreements.has(office.id);
-              const isPending = pendingAgreement.has(office.id);
-              return (
-                <div className="flex flex-wrap items-center gap-2">
-                  <SwitchToggle
-                    checked={checked}
-                    disabled={isPending}
-                    onChange={() => void handleToggleAgreement(office)}
-                    label={`${checked ? "Quitar" : "Marcar"} convenio con ${office.name}`}
-                  />
-                  {isPending && <span className="text-xs opacity-60">Guardando…</span>}
-                </div>
-              );
-            },
-          } satisfies DataTableColumn<TransitOffice>,
-        ]
-      : []),
     ...(readOnly
       ? []
       : [

@@ -137,9 +137,6 @@ public static class AdminInfrastructureExtensions
         // HU #10192 — grants de organismos de tránsito + catálogo OT desde BD.
         services.AddScoped<ITransitOfficeCatalog, DbTransitOfficeCatalog>();
         services.AddScoped<ITransitGrantRepository, TransitGrantRepository>();
-        // Convenio comercial compañía↔OT. Distinto del grant de arriba: aquel habilita la radicación,
-        // este decide si el contrato de mandato lleva bloque de firma del mandatario.
-        services.AddScoped<ICompanyAgreementRepository, CompanyAgreementRepository>();
         services.AddScoped<ITenantAuditLogRepository, TenantAuditLogRepository>();
 
         // HU #10759 — restricciones de consulta (RNMC, comparendos) por OT de la compañía.
@@ -236,11 +233,6 @@ public static class AdminInfrastructureExtensions
         // core-notificaciones (HU #13359).
         services.AddScoped<Flit.Admin.Application.Plataforma.Notificaciones.INotificationTestSendAdminService,
             Flit.Infrastructure.Notifications.Admin.NotificationTestSendAdminService>();
-
-        // Convenio comercial compañía↔organismo + firma física del mandatario: deciden si el contrato de
-        // mandato lleva bloque de firma del mandatario y de qué forma.
-        services.AddScoped<Flit.Tramites.Domain.Integration.IMandatoFirmaPolicy,
-            Flit.Infrastructure.OtRules.MandatoFirmaPolicy>();
 
         // HU #10916 (ADR-0036 §D9) — directorio de mandatarios por OT/compañía: resuelve el firmante del
         // mandato al aprobar y rellena su nombre/documento en el PDF regenerado.
