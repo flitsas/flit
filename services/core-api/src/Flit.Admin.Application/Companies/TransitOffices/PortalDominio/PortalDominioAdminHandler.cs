@@ -8,17 +8,19 @@ using Flit.Admin.Domain.Companies.TransitOffices.PortalDominio;
 namespace Flit.Admin.Application.Companies.TransitOffices.PortalDominio;
 
 /// <summary>
-/// HU #14381/#14382 — leer, registrar, verificar y retirar el dominio del portal de un organismo. El alcance (organismo propio o
-/// SuperAdmin) lo resuelve el endpoint; aquí solo hay reglas de negocio. Un dominio por organismo; el host no se repite en toda la
-/// plataforma (otro organismo o una red de marca blanca) ni puede ser uno reservado.
+/// HU #14381/#14382 — listar, registrar, verificar, cambiar el principal y retirar los dominios del portal de un organismo. El
+/// alcance (organismo propio o SuperAdmin) lo resuelve el endpoint; aquí además un <c>id</c> de otro organismo da 403. Un organismo
+/// tiene varios dominios (hasta <see cref="DomainOptions.PortalMaxPorOrganismo"/>), cada uno con su propio estado; el host no se
+/// repite en toda la plataforma (otro organismo o una red de marca blanca) ni puede ser uno reservado.
 /// </summary>
 public sealed class PortalDominioAdminHandler(
     IPortalDominioRepository repo, PortalDominioVerificador verificador, DomainOptions opciones, IAdminAuditWriter audit)
 {
-    public async Task<PortalDominioResultado<PortalDominioDto>> ObtenerAsync(Guid transitOfficeId, CancellationToken ct = default) =>
-        await repo.ObtenerAsync(transitOfficeId, ct).ConfigureAwait(false) is { } d
-            ? PortalDominioResultado<PortalDominioDto>.De(PortalDominioEstados.ADto(d, opciones.EdgeIp))
-            : Falla(PortalDominioErrores.SinDominio());
+    private int Maximo => Math.Max(1, opciones.PortalMaxPorOrganismo);
+
+    /// <summary>Lista vacía (no un error) si el organismo no tiene dominios.</summary>
+    public async Task<IReadOnlyList<PortalDominioDto>> ListarAsync(Guid transitOfficeId, CancellationToken ct = default) =>
+        (await repo.ListarAsync(transitOfficeId, ct).ConfigureAwait(false)).Select(d => PortalDominioEstados.ADto(d, opciones.EdgeIp)).ToList();
 
     public async Task<PortalDominioResultado<PortalDominioDto>> RegistrarAsync(
         Guid transitOfficeId, RegistrarPortalDominioRequest request, Guid actor, CancellationToken ct = default)
@@ -29,23 +31,24 @@ public sealed class PortalDominioAdminHandler(
         if (ReservedHosts.IsReserved(host, opciones.Reserved, opciones.Allowed))
             return Falla(PortalDominioErrores.DominioReservado(host));
 
-        var registro = await repo.RegistrarAsync(transitOfficeId, host, NuevoToken(), actor, ct).ConfigureAwait(false);
+        var registro = await repo.RegistrarAsync(transitOfficeId, host, NuevoToken(), actor, Maximo, ct).ConfigureAwait(false);
         if (registro.Fallo == PortalDominioRegistroFallo.HostEnUso)
             return Falla(PortalDominioErrores.DominioEnUso(host));
-        if (registro.Fallo == PortalDominioRegistroFallo.OrganismoYaTiene)
-        {
-            var actual = await repo.ObtenerAsync(transitOfficeId, ct).ConfigureAwait(false);
-            return Falla(PortalDominioErrores.YaTieneDominio(actual?.Host ?? host));
-        }
+        if (registro.Fallo == PortalDominioRegistroFallo.LimiteAlcanzado)
+            return Falla(PortalDominioErrores.LimiteAlcanzado(Maximo));
 
         var dominio = registro.Dominio!;
         await EscribirAuditoriaAsync(actor, transitOfficeId, AuditVocabulary.Operations.Create, null, host, ct).ConfigureAwait(false);
         return PortalDominioResultado<PortalDominioDto>.De(PortalDominioEstados.ADto(dominio, opciones.EdgeIp));
     }
 
-    public async Task<PortalDominioResultado<PortalDominioDto>> VerificarAsync(Guid transitOfficeId, Guid actor, CancellationToken ct = default)
+    public async Task<PortalDominioResultado<PortalDominioDto>> VerificarAsync(Guid transitOfficeId, Guid id, Guid actor, CancellationToken ct = default)
     {
-        var (dominio, esperar) = await verificador.VerificarAhoraAsync(transitOfficeId, actor, ct).ConfigureAwait(false);
+        var (propio, error) = await PropioAsync(transitOfficeId, id, ct).ConfigureAwait(false);
+        if (error is not null)
+            return Falla(error);
+
+        var (dominio, esperar) = await verificador.VerificarAhoraAsync(propio!.Id, actor, ct).ConfigureAwait(false);
         if (dominio is null)
             return Falla(PortalDominioErrores.SinDominio());
         return esperar > 0
@@ -53,13 +56,42 @@ public sealed class PortalDominioAdminHandler(
             : PortalDominioResultado<PortalDominioDto>.De(PortalDominioEstados.ADto(dominio, opciones.EdgeIp));
     }
 
-    public async Task<PortalDominioResultado<PortalDominioDto>> RetirarAsync(Guid transitOfficeId, Guid actor, CancellationToken ct = default)
+    /// <summary>Solo un dominio activo puede ser el principal; si no, el motivo exacto. Repetir sobre el principal es idempotente.</summary>
+    public async Task<PortalDominioResultado<PortalDominioDto>> PrincipalAsync(Guid transitOfficeId, Guid id, Guid actor, CancellationToken ct = default)
     {
-        if (await repo.RetirarAsync(transitOfficeId, actor, ct).ConfigureAwait(false) is not { } retirado)
+        var (propio, error) = await PropioAsync(transitOfficeId, id, ct).ConfigureAwait(false);
+        if (error is not null)
+            return Falla(error);
+        if (propio!.Status != TenantDomainStatus.Active)
+            return Falla(PortalDominioErrores.NoActivoParaPrincipal(propio.Host, PortalDominioEstados.Contrato(propio.Status)));
+
+        var principal = await repo.EstablecerPrincipalAsync(id, actor, ct).ConfigureAwait(false);
+        if (principal is null)
+            return Falla(PortalDominioErrores.NoActivoParaPrincipal(propio.Host, "no activo"));
+
+        if (!propio.IsPrimary)
+            await EscribirAuditoriaAsync(actor, transitOfficeId, AuditVocabulary.Operations.Update, null, principal.Host, ct).ConfigureAwait(false);
+        return PortalDominioResultado<PortalDominioDto>.De(PortalDominioEstados.ADto(principal, opciones.EdgeIp));
+    }
+
+    public async Task<PortalDominioResultado<PortalDominioDto>> RetirarAsync(Guid transitOfficeId, Guid id, Guid actor, CancellationToken ct = default)
+    {
+        var (_, error) = await PropioAsync(transitOfficeId, id, ct).ConfigureAwait(false);
+        if (error is not null)
+            return Falla(error);
+        if (await repo.RetirarAsync(id, actor, ct).ConfigureAwait(false) is not { } retirado)
             return Falla(PortalDominioErrores.SinDominio());
 
         await EscribirAuditoriaAsync(actor, transitOfficeId, AuditVocabulary.Operations.Delete, retirado.Host, null, ct).ConfigureAwait(false);
         return PortalDominioResultado<PortalDominioDto>.De(PortalDominioEstados.ADto(retirado, opciones.EdgeIp));
+    }
+
+    /// <summary>Un id inexistente es 404; el de otro organismo es 403 y no revela nada más.</summary>
+    private async Task<(DominioDePortal? Dominio, PortalDominioError? Error)> PropioAsync(Guid transitOfficeId, Guid id, CancellationToken ct)
+    {
+        if (await repo.ObtenerPorIdAsync(id, ct).ConfigureAwait(false) is not { } dominio)
+            return (null, PortalDominioErrores.SinDominio());
+        return dominio.TransitOfficeId == transitOfficeId ? (dominio, null) : (null, PortalDominioErrores.DominioAjeno());
     }
 
     private static PortalDominioResultado<PortalDominioDto> Falla(PortalDominioError e) => PortalDominioResultado<PortalDominioDto>.Falla(e);

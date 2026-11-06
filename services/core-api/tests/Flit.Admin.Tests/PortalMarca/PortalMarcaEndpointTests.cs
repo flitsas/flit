@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using Flit.Admin.Application.Auditing;
 using NSubstitute.ClearExtensions;
+using Flit.Admin.Domain.Companies.TransitOffices.PortalDominio;
 using Flit.Admin.Domain.Companies.TransitOffices.PortalMarca;
 using Flit.Admin.Domain.OtClientProcedures;
 using FluentAssertions;
@@ -307,6 +308,7 @@ public sealed partial class PortalMarcaEndpointTests : IClassFixture<PortalMarca
         public AlmacenImagenEnMemoria Almacen { get; private set; } = new();
         public AuditoriaEnMemoria Auditoria { get; private set; } = new();
         public IOtClientProcedureRepository Bandeja { get; } = Substitute.For<IOtClientProcedureRepository>();
+        public IPortalDominioRepository Dominios { get; } = Substitute.For<IPortalDominioRepository>();
 
         public MarcaFactory() => Reiniciar();
 
@@ -319,6 +321,7 @@ public sealed partial class PortalMarcaEndpointTests : IClassFixture<PortalMarca
             Repo.Organismos.Add(OrganismoA);
             Repo.Organismos.Add(OrganismoB);
             Bandeja.ClearSubstitute();
+            Dominios.ClearSubstitute();
             Bandeja.ResolveTransitOfficeIdAsync(TenantA, Arg.Any<Guid?>(), Arg.Any<CancellationToken>()).Returns(OrganismoA);
             Bandeja.ResolveTransitOfficeIdAsync(TenantB, Arg.Any<Guid?>(), Arg.Any<CancellationToken>()).Returns(OrganismoB);
         }
@@ -338,6 +341,8 @@ public sealed partial class PortalMarcaEndpointTests : IClassFixture<PortalMarca
                 services.AddScoped<IAdminAuditWriter>(_ => Auditoria);
                 services.RemoveAll<IOtClientProcedureRepository>();
                 services.AddScoped(_ => Bandeja);
+                services.RemoveAll<IPortalDominioRepository>();
+                services.AddScoped(_ => Dominios);
 
             });
         }

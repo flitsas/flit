@@ -14580,14 +14580,15 @@ paths:
         "403": { description: No es Super Admin. }
         "404": { description: no_encontrado. }
 
-  # ── Admin OT · Dominio del portal Persona Natural (Feature #14380, Épica #14297) ──────────
+  # ── Admin OT · Dominios del portal Persona Natural (Feature #14380, Epica #14297) ─────────
   /api/v1/admin/ot/portal-dominio:
     get:
       tags: ["Admin · OT · Portal Persona Natural · Dominio"]
-      summary: Dominio del portal del organismo (estado, motivo e instrucciones de DNS)
+      summary: Dominios del portal del organismo (estado, motivo, principal e instrucciones de DNS)
       description: >-
-        Rol ot_admin o SuperAdmin. El ot_admin trabaja siempre con el organismo de su perfil (id de catalogs.transit_offices) y si nombra
-        otro recibe 403. El SuperAdmin envía transitOfficeId. Sin dominio registrado responde 404 PORTAL_DOMINIO_NO_REGISTRADO.
+        Rol ot_admin o SuperAdmin. Un organismo tiene varios dominios (hasta Domains:PortalMaxPorOrganismo, por defecto 10), cada uno con su
+        propio estado, verificación y certificado. El principal va primero. Sin dominios responde 200 con lista vacía. El ot_admin trabaja
+        siempre con el organismo de su perfil (id de catalogs.transit_offices) y si nombra otro recibe 403. El SuperAdmin envía transitOfficeId.
       operationId: AdminOtPortalDominioGet
       security:
         - bearerAuth: []
@@ -14595,21 +14596,23 @@ paths:
         - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
       responses:
         "200":
-          description: Dominio del organismo.
+          description: Lista de dominios del organismo (puede ser vacía).
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/DominioPortal" }
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/DominioPortal" }
         "400": { description: "PORTAL_MARCA_ORGANISMO_REQUERIDO (SuperAdmin sin transitOfficeId)." }
         "401": { description: Sin sesión. }
         "403": { description: No es ot_admin ni SuperAdmin, o el organismo no es el propio. }
-        "404": { description: PORTAL_DOMINIO_NO_REGISTRADO o PORTAL_MARCA_ORGANISMO_NO_EXISTE. }
+        "404": { description: PORTAL_MARCA_ORGANISMO_NO_EXISTE. }
     post:
       tags: ["Admin · OT · Portal Persona Natural · Dominio"]
-      summary: Registra el dominio del portal (queda pendiente con su token de verificación)
+      summary: Registra un dominio del portal (queda pendiente con su token de verificación)
       description: >-
-        Un dominio vigente por organismo. Se rechaza con el motivo exacto un host inválido (400 PORTAL_DOMINIO_INVALIDO), reservado
-        (409 PORTAL_DOMINIO_RESERVADO), ya registrado por otro organismo o red de marca blanca (409 PORTAL_DOMINIO_EN_USO) o un
-        organismo que ya tiene otro dominio (409 PORTAL_DOMINIO_ORGANISMO_YA_TIENE). Repetir el mismo host es idempotente.
+        Se rechaza con el motivo exacto un host inválido (400 PORTAL_DOMINIO_INVALIDO), reservado (409 PORTAL_DOMINIO_RESERVADO), ya
+        registrado por otro organismo o red de marca blanca (409 PORTAL_DOMINIO_EN_USO) o un organismo que ya llegó al tope
+        (409 PORTAL_DOMINIO_LIMITE). Repetir un host propio es idempotente.
       operationId: AdminOtPortalDominioPost
       security:
         - bearerAuth: []
@@ -14633,32 +14636,20 @@ paths:
         "400": { description: PORTAL_DOMINIO_INVALIDO. }
         "401": { description: Sin sesión. }
         "403": { description: No es ot_admin ni SuperAdmin, o el organismo no es el propio. }
-        "409": { description: PORTAL_DOMINIO_RESERVADO, PORTAL_DOMINIO_EN_USO o PORTAL_DOMINIO_ORGANISMO_YA_TIENE. }
-    delete:
-      tags: ["Admin · OT · Portal Persona Natural · Dominio"]
-      summary: Retira el dominio; el portal sigue en el enlace del punto
-      operationId: AdminOtPortalDominioDelete
-      security:
-        - bearerAuth: []
-      parameters:
-        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
-      responses:
-        "204": { description: Dominio retirado, sin cuerpo. }
-        "401": { description: Sin sesión. }
-        "403": { description: No es ot_admin ni SuperAdmin, o el organismo no es el propio. }
-        "404": { description: PORTAL_DOMINIO_NO_REGISTRADO. }
-  /api/v1/admin/ot/portal-dominio/verificar:
+        "409": { description: PORTAL_DOMINIO_RESERVADO, PORTAL_DOMINIO_EN_USO o PORTAL_DOMINIO_LIMITE. }
+  /api/v1/admin/ot/portal-dominio/{id}/verificar:
     post:
       tags: ["Admin · OT · Portal Persona Natural · Dominio"]
-      summary: Comprueba ahora el TXT de DNS del dominio
+      summary: Comprueba ahora el TXT de DNS de ese dominio
       description: >-
-        Con el TXT correcto pasa a verificado; si falta o no coincide queda fallido con el motivo y el portal sigue en su enlace del
-        punto. El certificado emitido lo pasa a activo (sin activación manual). 429 PORTAL_DOMINIO_VERIFICACION_ESPERAR con Retry-After
-        si se pide antes del enfriamiento.
+        Solo afecta a ese dominio. Con el TXT correcto pasa a verificado; si falta o no coincide queda fallido con el motivo. El certificado
+        emitido lo pasa a activo (sin activación manual); el primero en activarse queda como principal. 429 PORTAL_DOMINIO_VERIFICACION_ESPERAR
+        con Retry-After si se pide antes del enfriamiento. Un id de otro organismo da 403.
       operationId: AdminOtPortalDominioVerificar
       security:
         - bearerAuth: []
       parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
         - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
       responses:
         "200":
@@ -14667,9 +14658,47 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/DominioPortal" }
         "401": { description: Sin sesión. }
-        "403": { description: No es ot_admin ni SuperAdmin, o el organismo no es el propio. }
-        "404": { description: PORTAL_DOMINIO_NO_REGISTRADO. }
+        "403": { description: Rol ajeno, organismo ajeno o dominio de otro organismo. }
+        "404": { description: PORTAL_DOMINIO_NO_REGISTRADO (el id no existe o fue retirado). }
         "429": { description: PORTAL_DOMINIO_VERIFICACION_ESPERAR. }
+  /api/v1/admin/ot/portal-dominio/{id}/principal:
+    put:
+      tags: ["Admin · OT · Portal Persona Natural · Dominio"]
+      summary: Hace principal a un dominio activo (enlace, QR y correos)
+      description: >-
+        Solo un dominio activo puede ser el principal; si no, 409 PORTAL_DOMINIO_PRINCIPAL_NO_ACTIVO con el estado actual. Repetir sobre el
+        principal es idempotente. Un id de otro organismo da 403.
+      operationId: AdminOtPortalDominioPrincipal
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      responses:
+        "200":
+          description: Dominio principal.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DominioPortal" }
+        "401": { description: Sin sesión. }
+        "403": { description: Rol ajeno, organismo ajeno o dominio de otro organismo. }
+        "404": { description: PORTAL_DOMINIO_NO_REGISTRADO. }
+        "409": { description: PORTAL_DOMINIO_PRINCIPAL_NO_ACTIVO. }
+  /api/v1/admin/ot/portal-dominio/{id}:
+    delete:
+      tags: ["Admin · OT · Portal Persona Natural · Dominio"]
+      summary: Retira el dominio; si era el principal lo releva el activo más antiguo
+      operationId: AdminOtPortalDominioDelete
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      responses:
+        "204": { description: Dominio retirado, sin cuerpo. }
+        "401": { description: Sin sesión. }
+        "403": { description: Rol ajeno, organismo ajeno o dominio de otro organismo. }
+        "404": { description: PORTAL_DOMINIO_NO_REGISTRADO. }
 
   # ── Admin OT · Marca del portal Persona Natural (Feature #14374, Épica #14297) ────────────
   /api/v1/admin/ot/portal-marca:
@@ -15380,9 +15409,11 @@ components:
         bannerId: { type: string, format: uuid, nullable: true }
     DominioPortal:
       type: object
-      required: [host, estado, motivo, dns, rowVersion]
+      required: [id, host, principal, estado, motivo, dns, rowVersion]
       properties:
+        id: { type: string, format: uuid }
         host: { type: string }
+        principal: { type: boolean, description: "Dominio que usan el enlace, el QR y los correos. A lo más uno por organismo; solo un activo." }
         estado: { type: string, enum: [pendiente, verificado, activo, fallido] }
         motivo: { type: string, nullable: true, description: "Motivo exacto en español cuando el estado es fallido." }
         dns:

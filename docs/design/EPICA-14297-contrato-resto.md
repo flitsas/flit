@@ -50,16 +50,17 @@ Decisión propuesta en ADR-0081, en `Propuesto`: alternativa B.
 
 - Tabla `admin.transit_office_domains`, sin tocar `admin.tenant_domains` ni sus disparadores. Reutiliza `DomainStateMachine`, verificación TXT, `Domains:Reserved` y el sello `X-Flit-Domain`.
 - Unicidad de `host` entre las dos tablas, en base de datos, con disparador en ambas. Un host de marca blanca sigue funcionando igual.
-- Un dominio vigente por organismo.
+- Varios dominios por organismo, hasta 10 (`Domains:PortalMaxPorOrganismo`). Todos llevan al mismo portal. El host sigue siendo único en toda la plataforma.
+- Un dominio principal por organismo: el primero que se activa, y el organismo puede cambiarlo. Si se retira, pasa a serlo el activo más antiguo. Enlace, QR y enlaces de correo usan el principal activo; sin ninguno activo, la dirección del punto.
 - Sin `purpose` ni `TenantProductFlags`. No aplica la activación manual de red: con TXT correcto y certificado emitido pasa a `active`.
 - `DomainContext`: resultado nuevo `Portal(transitOfficeId)`. El login de FLIT no se abre por ese host, y no acota a ninguna red.
 - Provisioning: `/internal/domains/provisioning` incluye estos dominios, sin cambiar lo que entrega de marca blanca, y el borde enruta el host al portal.
 
-Rutas `/api/v1/admin/ot/portal-dominio`: `GET`, `POST { host }`, `POST /verificar`, `DELETE`.
+Rutas `/api/v1/admin/ot/portal-dominio`: `GET` devuelve la lista; `POST { host }`; `POST /{id}/verificar`; `PUT /{id}/principal`; `DELETE /{id}`.
 
 ```ts
 interface DominioPortal {
-  host: string; estado: "pendiente" | "verificado" | "activo" | "fallido";
+  id: string; host: string; principal: boolean; estado: "pendiente" | "verificado" | "activo" | "fallido";
   motivo: string | null; dns: { tipo: string; nombre: string; valor: string }[];
   rowVersion: number;
 }

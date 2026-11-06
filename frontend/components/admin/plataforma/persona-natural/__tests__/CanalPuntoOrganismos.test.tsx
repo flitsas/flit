@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "@/components/admin/Toast";
 import { OrganismosSection } from "../OrganismosSection";
-import { getPortalDominio, type DominioPortal } from "@/lib/api/admin-ot-portal-dominio";
+import { getPortalDominios, type DominioPortal } from "@/lib/api/admin-ot-portal-dominio";
 import {
   establecerCanalPuntoPn,
   establecerOrganismoPn,
@@ -21,7 +21,10 @@ vi.mock("@/lib/api/admin-pn-config", async (importOriginal) => {
   };
 });
 
-vi.mock("@/lib/api/admin-ot-portal-dominio", () => ({ getPortalDominio: vi.fn() }));
+vi.mock("@/lib/api/admin-ot-portal-dominio", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/admin-ot-portal-dominio")>()),
+  getPortalDominios: vi.fn(),
+}));
 
 const organismo = (over: Partial<OrganismoPn>): OrganismoPn => ({
   id: "o1",
@@ -63,7 +66,7 @@ describe("canal del punto en organismos (#14217)", () => {
         tiposConTarifaVigente: 0,
       }),
     ]);
-    vi.mocked(getPortalDominio).mockResolvedValue(null);
+    vi.mocked(getPortalDominios).mockResolvedValue([]);
     vi.mocked(establecerOrganismoPn).mockResolvedValue(undefined);
     vi.mocked(establecerCanalPuntoPn).mockResolvedValue(undefined);
   });
@@ -109,6 +112,8 @@ describe("canal del punto en organismos (#14217)", () => {
   });
 
   const dominio = (over: Partial<DominioPortal>): DominioPortal => ({
+    id: "d1",
+    principal: true,
     host: "tramites.bogota.gov.co",
     estado: "activo",
     motivo: null,
@@ -131,13 +136,13 @@ describe("canal del punto en organismos (#14217)", () => {
   }
 
   it("con dominio activo, el texto, el QR y el botón Copiar usan el dominio", async () => {
-    vi.mocked(getPortalDominio).mockResolvedValue(dominio({}));
+    vi.mocked(getPortalDominios).mockResolvedValue([dominio({})]);
     const dialogo = await abrirEnlace();
     const direccion = "https://tramites.bogota.gov.co";
     await waitFor(() =>
       expect(within(dialogo).getByLabelText("Dirección del canal")).toHaveValue(direccion),
     );
-    expect(getPortalDominio).toHaveBeenCalledWith({ transitOfficeId: "o1" });
+    expect(getPortalDominios).toHaveBeenCalledWith({ transitOfficeId: "o1" });
     expect(
       within(dialogo).getByRole("img", { name: `Código QR de ${direccion}` }),
     ).toBeInTheDocument();
@@ -149,7 +154,7 @@ describe("canal del punto en organismos (#14217)", () => {
   it.each([["pendiente"], ["verificado"], ["fallido"]] as const)(
     "con el dominio %s sigue la dirección del punto",
     async (estado) => {
-      vi.mocked(getPortalDominio).mockResolvedValue(dominio({ estado }));
+      vi.mocked(getPortalDominios).mockResolvedValue([dominio({ estado })]);
       const dialogo = await abrirEnlace();
       await waitFor(() =>
         expect(within(dialogo).getByRole("button", { name: "Copiar enlace" })).toBeEnabled(),
@@ -159,12 +164,46 @@ describe("canal del punto en organismos (#14217)", () => {
   );
 
   it("si la consulta del dominio falla, sigue la dirección del punto", async () => {
-    vi.mocked(getPortalDominio).mockRejectedValue(new Error("x"));
+    vi.mocked(getPortalDominios).mockRejectedValue(new Error("x"));
     const dialogo = await abrirEnlace();
     await waitFor(() =>
       expect(within(dialogo).getByRole("button", { name: "Copiar enlace" })).toBeEnabled(),
     );
     expect(within(dialogo).getByLabelText("Dirección del canal")).toHaveValue(DIRECCION);
+  });
+
+  it("con varios dominios, el enlace y el QR usan el principal activo y las otras activas van en texto", async () => {
+    vi.mocked(getPortalDominios).mockResolvedValue([
+      dominio({ id: "a", host: "otro.bogota.gov.co", principal: false }),
+      dominio({ id: "b", host: "principal.bogota.gov.co", principal: true }),
+      dominio({ id: "c", host: "pendiente.bogota.gov.co", principal: false, estado: "pendiente" }),
+    ]);
+    const dialogo = await abrirEnlace();
+    const direccion = "https://principal.bogota.gov.co";
+    await waitFor(() =>
+      expect(within(dialogo).getByLabelText("Dirección del canal")).toHaveValue(direccion),
+    );
+    expect(
+      within(dialogo).getByRole("img", { name: `Código QR de ${direccion}` }),
+    ).toBeInTheDocument();
+    expect(
+      within(dialogo).getByText("Otras direcciones activas del organismo"),
+    ).toBeInTheDocument();
+    expect(within(dialogo).getByText("https://otro.bogota.gov.co")).toBeInTheDocument();
+    expect(within(dialogo).queryByText(/pendiente.bogota/)).not.toBeInTheDocument();
+  });
+
+  it("sin principal activo no se inventa otro: queda la dirección del punto", async () => {
+    vi.mocked(getPortalDominios).mockResolvedValue([
+      dominio({ id: "a", host: "otro.bogota.gov.co", principal: false }),
+      dominio({ id: "b", host: "principal.bogota.gov.co", principal: true, estado: "pendiente" }),
+    ]);
+    const dialogo = await abrirEnlace();
+    await waitFor(() =>
+      expect(within(dialogo).getByRole("button", { name: "Copiar enlace" })).toBeEnabled(),
+    );
+    expect(within(dialogo).getByLabelText("Dirección del canal")).toHaveValue(DIRECCION);
+    expect(within(dialogo).getByText("https://otro.bogota.gov.co")).toBeInTheDocument();
   });
 
   it("encender el canal llama al servicio y entonces aparece Enlace y QR", async () => {

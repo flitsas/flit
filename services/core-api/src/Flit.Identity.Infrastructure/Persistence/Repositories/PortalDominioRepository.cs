@@ -22,15 +22,24 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 internal sealed class PortalDominioRepository(IIdentityDb db, IMemoryCache? cache = null) : IPortalDominioRepository
 {
     private const string Columnas = """
-        transit_office_id, host, status, failure_reason, verification_token, verified_at, activated_at,
+        id, transit_office_id, host, status, failure_reason, verification_token, verified_at, activated_at,
         certificate_issued_at, certificate_expires_at, last_checked_at, next_check_at, check_attempts, grace_until,
-        updated_at, row_version
+        updated_at, row_version, is_primary
         """;
 
-    public async Task<DominioDePortal?> ObtenerAsync(Guid transitOfficeId, CancellationToken ct = default) =>
+    public async Task<IReadOnlyList<DominioDePortal>> ListarAsync(Guid transitOfficeId, CancellationToken ct = default) =>
+        await ConsultarAsync(
+            $"""
+            SELECT {Columnas} FROM admin.transit_office_domains
+             WHERE transit_office_id = @office AND deleted_at IS NULL
+             ORDER BY is_primary DESC, created_at, id
+            """,
+            Mapear, ct, P("office", transitOfficeId)).ConfigureAwait(false);
+
+    public async Task<DominioDePortal?> ObtenerPorIdAsync(Guid id, CancellationToken ct = default) =>
         (await ConsultarAsync(
-            $"SELECT {Columnas} FROM admin.transit_office_domains WHERE transit_office_id = @office AND deleted_at IS NULL",
-            Mapear, ct, P("office", transitOfficeId)).ConfigureAwait(false)).FirstOrDefault();
+            $"SELECT {Columnas} FROM admin.transit_office_domains WHERE id = @id AND deleted_at IS NULL",
+            Mapear, ct, P("id", id)).ConfigureAwait(false)).FirstOrDefault();
 
     public async Task<DominioDePortal?> ObtenerPorHostAsync(string host, CancellationToken ct = default) =>
         (await ConsultarAsync(
@@ -38,15 +47,16 @@ internal sealed class PortalDominioRepository(IIdentityDb db, IMemoryCache? cach
             Mapear, ct, P("host", host)).ConfigureAwait(false)).FirstOrDefault();
 
     public async Task<PortalDominioRegistro> RegistrarAsync(
-        Guid transitOfficeId, string host, string verificationToken, Guid? actor, CancellationToken ct = default)
+        Guid transitOfficeId, string host, string verificationToken, Guid? actor, int maximo, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(host);
         ArgumentException.ThrowIfNullOrWhiteSpace(verificationToken);
 
-        if (await ObtenerAsync(transitOfficeId, ct).ConfigureAwait(false) is { } actual)
-            return string.Equals(actual.Host, host, StringComparison.Ordinal)
-                ? PortalDominioRegistro.Ok(actual)
-                : PortalDominioRegistro.Falla(PortalDominioRegistroFallo.OrganismoYaTiene);
+        var vigentes = await ListarAsync(transitOfficeId, ct).ConfigureAwait(false);
+        if (vigentes.FirstOrDefault(d => string.Equals(d.Host, host, StringComparison.Ordinal)) is { } existente)
+            return PortalDominioRegistro.Ok(existente);
+        if (vigentes.Count >= maximo)
+            return PortalDominioRegistro.Falla(PortalDominioRegistroFallo.LimiteAlcanzado);
 
         try
         {
@@ -63,32 +73,61 @@ internal sealed class PortalDominioRepository(IIdentityDb db, IMemoryCache? cach
         {
             return PortalDominioRegistro.Falla(PortalDominioRegistroFallo.HostEnUso);
         }
-        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation
-            && ex.ConstraintName == "uq_transit_office_domains_office")
-        {
-            return PortalDominioRegistro.Falla(PortalDominioRegistroFallo.OrganismoYaTiene);
-        }
 
-        return PortalDominioRegistro.Ok((await ObtenerAsync(transitOfficeId, ct).ConfigureAwait(false))!);
+        return PortalDominioRegistro.Ok((await ObtenerPorHostAsync(host, ct).ConfigureAwait(false))!);
     }
 
-    public async Task<DominioDePortal?> RetirarAsync(Guid transitOfficeId, Guid? actor, CancellationToken ct = default)
+    public async Task<DominioDePortal?> RetirarAsync(Guid id, Guid? actor, CancellationToken ct = default)
     {
         var retirado = (await ConsultarAsync(
             $"""
             UPDATE admin.transit_office_domains
-               SET deleted_at = now(), deleted_by = @actor, updated_at = now(), updated_by = @actor, next_check_at = NULL
-             WHERE transit_office_id = @office AND deleted_at IS NULL
+               SET deleted_at = now(), deleted_by = @actor, updated_at = now(), updated_by = @actor, next_check_at = NULL, is_primary = false
+             WHERE id = @id AND deleted_at IS NULL
             RETURNING {Columnas}
             """,
-            Mapear, ct, P("office", transitOfficeId), P("actor", actor)).ConfigureAwait(false)).FirstOrDefault();
+            Mapear, ct, P("id", id), P("actor", actor)).ConfigureAwait(false)).FirstOrDefault();
 
         if (retirado is null)
             return null;
 
+        await AsegurarPrincipalAsync(retirado.TransitOfficeId, ct).ConfigureAwait(false);
         Invalidar(retirado.Host);
         return retirado;
     }
+
+    public async Task<DominioDePortal?> EstablecerPrincipalAsync(Guid id, Guid? actor, CancellationToken ct = default)
+    {
+        if (await ObtenerPorIdAsync(id, ct).ConfigureAwait(false) is not { Status: "active" } dominio)
+            return null;
+        if (dominio.IsPrimary)
+            return dominio;
+
+        // Dos sentencias en un solo comando (transacción implícita): primero cae el principal anterior, luego sube el nuevo.
+        await EjecutarAsync(
+            """
+            UPDATE admin.transit_office_domains SET is_primary = false, updated_at = now()
+             WHERE transit_office_id = @office AND deleted_at IS NULL AND is_primary AND id <> @id;
+            UPDATE admin.transit_office_domains SET is_primary = true, updated_at = now(), updated_by = @actor
+             WHERE id = @id AND deleted_at IS NULL;
+            """,
+            ct, P("id", id), P("office", dominio.TransitOfficeId), P("actor", actor)).ConfigureAwait(false);
+        return await ObtenerPorIdAsync(id, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Si el organismo no tiene principal, lo es el dominio activo más antiguo. No hace nada si ya hay uno o no hay activos.</summary>
+    private Task AsegurarPrincipalAsync(Guid transitOfficeId, CancellationToken ct) =>
+        EjecutarAsync(
+            """
+            UPDATE admin.transit_office_domains
+               SET is_primary = true, updated_at = now()
+             WHERE id = (SELECT c.id FROM admin.transit_office_domains c
+                          WHERE c.transit_office_id = @office AND c.status = 'active' AND c.deleted_at IS NULL
+                          ORDER BY c.activated_at, c.created_at, c.id LIMIT 1)
+               AND NOT EXISTS (SELECT 1 FROM admin.transit_office_domains p
+                                WHERE p.transit_office_id = @office AND p.is_primary AND p.deleted_at IS NULL)
+            """,
+            ct, P("office", transitOfficeId));
 
     public async Task<PortalDominioOrganismo?> ObtenerOrganismoActivoPorHostAsync(string host, CancellationToken ct = default) =>
         (await ConsultarAsync(
@@ -103,10 +142,12 @@ internal sealed class PortalDominioRepository(IIdentityDb db, IMemoryCache? cach
     public async Task<string?> ObtenerHostActivoPorCodigoAsync(string codigo, CancellationToken ct = default) =>
         (await ConsultarAsync(
             """
-            SELECT v.host
-              FROM admin.v_active_portal_domains v
-              JOIN catalogs.transit_offices o ON o.id = v.transit_office_id
-             WHERE upper(o.code) = upper(@codigo)
+            SELECT d.host
+              FROM admin.transit_office_domains d
+              JOIN catalogs.transit_offices o ON o.id = d.transit_office_id
+             WHERE upper(o.code) = upper(@codigo) AND d.status = 'active' AND d.deleted_at IS NULL AND o.is_active
+             ORDER BY d.is_primary DESC, d.activated_at, d.id
+             LIMIT 1
             """,
             r => r.GetString(0), ct, P("codigo", codigo)).ConfigureAwait(false)).FirstOrDefault();
 
@@ -155,17 +196,17 @@ internal sealed class PortalDominioRepository(IIdentityDb db, IMemoryCache? cach
                     ORDER BY next_check_at
                     LIMIT @lote
                     FOR UPDATE SKIP LOCKED)
-            RETURNING transit_office_id, host
+            RETURNING id, transit_office_id, host
             """,
-            r => new PortalDominioReclamo(r.GetGuid(0), r.GetString(1)), ct,
+            r => new PortalDominioReclamo(r.GetGuid(0), r.GetGuid(1), r.GetString(2)), ct,
             P("hasta", ahora + arriendo), P("ahora", ahora), P("lote", lote)).ConfigureAwait(false);
     }
 
     public async Task<DominioDePortal?> AplicarComprobacionAsync(
-        Guid transitOfficeId, string nuevoEstado, string? motivo, DateTimeOffset? verificadoEn, DateTimeOffset? graciaHasta, int intentos,
+        Guid id, string nuevoEstado, string? motivo, DateTimeOffset? verificadoEn, DateTimeOffset? graciaHasta, int intentos,
         DateTimeOffset? proximaComprobacion, DateTimeOffset ahora, Guid? actor, string? trabajo, CancellationToken ct = default)
     {
-        var anterior = await ObtenerAsync(transitOfficeId, ct).ConfigureAwait(false);
+        var anterior = await ObtenerPorIdAsync(id, ct).ConfigureAwait(false);
         if (anterior is null)
             return null;
 
@@ -177,18 +218,19 @@ internal sealed class PortalDominioRepository(IIdentityDb db, IMemoryCache? cach
                    failed_at = CASE WHEN @estado = 'failed' THEN @ahora ELSE failed_at END,
                    verified_at = COALESCE(@verificado, verified_at),
                    grace_until = @gracia, check_attempts = @intentos, last_checked_at = @ahora, next_check_at = @proxima,
-                   updated_at = @ahora, updated_by = @actor
-             WHERE transit_office_id = @office AND deleted_at IS NULL
+                   is_primary = (is_primary AND @estado = 'active'), updated_at = @ahora, updated_by = @actor
+             WHERE id = @id AND deleted_at IS NULL
             RETURNING {Columnas}
             """,
             Mapear, ct,
-            P("office", transitOfficeId), P("estado", nuevoEstado), P("motivo", motivo), P("ahora", ahora), P("verificado", verificadoEn),
+            P("id", id), P("estado", nuevoEstado), P("motivo", motivo), P("ahora", ahora), P("verificado", verificadoEn),
             P("gracia", graciaHasta), P("intentos", intentos), P("proxima", proximaComprobacion), P("actor", actor)).ConfigureAwait(false)).FirstOrDefault();
 
         if (actualizado is null)
             return null;
 
-        await AuditarEstadoAsync(transitOfficeId, anterior.Status, nuevoEstado, motivo, actor, trabajo, ahora, ct).ConfigureAwait(false);
+        await AuditarEstadoAsync(anterior.TransitOfficeId, anterior.Status, nuevoEstado, motivo, actor, trabajo, ahora, ct).ConfigureAwait(false);
+        await AsegurarPrincipalAsync(anterior.TransitOfficeId, ct).ConfigureAwait(false);
         InvalidarSiCambiaActivo(actualizado.Host, anterior.Status, nuevoEstado);
         return actualizado;
     }
@@ -222,6 +264,7 @@ internal sealed class PortalDominioRepository(IIdentityDb db, IMemoryCache? cach
 
         if (!string.Equals(anterior.Status, nuevoEstado, StringComparison.Ordinal))
             await AuditarEstadoAsync(anterior.TransitOfficeId, anterior.Status, nuevoEstado, null, null, trabajo, DateTimeOffset.UtcNow, ct).ConfigureAwait(false);
+        await AsegurarPrincipalAsync(anterior.TransitOfficeId, ct).ConfigureAwait(false);
         InvalidarSiCambiaActivo(host, anterior.Status, nuevoEstado);
         return actualizado;
     }
@@ -295,9 +338,9 @@ internal sealed class PortalDominioRepository(IIdentityDb db, IMemoryCache? cach
     private static DateTimeOffset? Fecha(DbDataReader r, int i) => r.IsDBNull(i) ? null : r.GetFieldValue<DateTimeOffset>(i);
 
     private static DominioDePortal Mapear(DbDataReader r) => new(
-        r.GetGuid(0), r.GetString(1), r.GetString(2), r.IsDBNull(3) ? null : r.GetString(3), r.GetString(4),
-        Fecha(r, 5), Fecha(r, 6), Fecha(r, 7), Fecha(r, 8), Fecha(r, 9), Fecha(r, 10), r.GetInt32(11), Fecha(r, 12),
-        r.GetFieldValue<DateTimeOffset>(13), r.GetInt64(14));
+        r.GetGuid(0), r.GetGuid(1), r.GetString(2), r.GetString(3), r.IsDBNull(4) ? null : r.GetString(4), r.GetString(5),
+        Fecha(r, 6), Fecha(r, 7), Fecha(r, 8), Fecha(r, 9), Fecha(r, 10), Fecha(r, 11), r.GetInt32(12), Fecha(r, 13),
+        r.GetFieldValue<DateTimeOffset>(14), r.GetInt64(15), r.GetBoolean(16));
 
     private async Task<List<T>> ConsultarAsync<T>(string sql, Func<DbDataReader, T> mapear, CancellationToken ct, params NpgsqlParameter[] parametros)
     {
