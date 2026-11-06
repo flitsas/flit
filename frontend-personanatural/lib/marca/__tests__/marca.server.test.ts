@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { obtenerMarcaPunto } from "../marca.server";
+import { obtenerMarcaPunto, obtenerMarcaWeb } from "../marca.server";
 
 const ORIGEN = "http://gateway:4002";
 const PUBLICADA = {
@@ -48,5 +48,26 @@ describe("obtenerMarcaPunto (HU #14379)", () => {
     expect(await obtenerMarcaPunto("", { apiOrigin: ORIGEN, fetchImpl })).toBeNull();
     expect(await obtenerMarcaPunto("x".repeat(65), { apiOrigin: ORIGEN, fetchImpl })).toBeNull();
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+});
+
+describe("obtenerMarcaWeb (HU #14403)", () => {
+  it("pide /marca/web sin caché y con la IP real", async () => {
+    const fetchImpl = responder({ ...PUBLICADA, nombre: "Portal Ciudadano" });
+    const marca = await obtenerMarcaWeb({ apiOrigin: ORIGEN, ipCliente: "190.1.2.3", fetchImpl });
+
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe(`${ORIGEN}/api/v1/persona-natural/marca/web`);
+    expect(init.cache).toBe("no-store");
+    expect((init.headers as Headers).get("x-forwarded-for")).toBe("190.1.2.3");
+    expect(marca?.nombre).toBe("Portal Ciudadano");
+  });
+
+  it.each([
+    ["origen flit", responder({ origen: "flit", nombre: null, colores: null, logoUrl: null, bannerUrl: null, version: 0 })],
+    ["500", responder({}, 500)],
+    ["red caída", vi.fn(async () => Promise.reject(new TypeError("fetch failed")))],
+  ])("%s → null", async (_n, fetchImpl) => {
+    expect(await obtenerMarcaWeb({ apiOrigin: ORIGEN, fetchImpl: fetchImpl as unknown as typeof fetch })).toBeNull();
   });
 });

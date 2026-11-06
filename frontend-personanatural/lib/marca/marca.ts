@@ -51,10 +51,10 @@ export function nombreSeguro(valor: unknown): string | null {
  * Valida lo que respondió el BFF. Devuelve `null` (marca FLIT, el portal queda como hoy) si el origen no es `organismo`,
  * si falta algún color o si alguno no es #RRGGBB: una marca a medias no se aplica.
  */
-export function marcaAplicable(crudo: unknown): MarcaAplicable | null {
+export function marcaAplicable(crudo: unknown, origenes: readonly string[] = ["organismo"]): MarcaAplicable | null {
   if (crudo === null || typeof crudo !== "object") return null;
   const m = crudo as Record<string, unknown>;
-  if (m.origen !== "organismo") return null;
+  if (typeof m.origen !== "string" || !origenes.includes(m.origen)) return null;
   const c = m.colores;
   if (c === null || typeof c !== "object") return null;
   const { primario, secundario, sobrePrimario } = c as Record<string, unknown>;
