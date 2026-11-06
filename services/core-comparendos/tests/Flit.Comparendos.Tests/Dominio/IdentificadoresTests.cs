@@ -40,14 +40,17 @@ public sealed class IdentificadoresTests
 public sealed class NumeroComparendoTests
 {
     [Theory]
-    [InlineData(" d-123 456 ", "123456")]
-    [InlineData("A-98765", "98765")]
+    [InlineData(" d-11001000000012345678 ", "11001000000012345678")]
+    [InlineData("A-05001000000054280231", "05001000000054280231")]
+    [InlineData("A-98765", "A98765")]
+    [InlineData("AV3", "AV3")]
+    [InlineData("OCR-RENTING-1", "OCRRENTING1")]
     [InlineData("11001000000012345678", "11001000000012345678")]
     [InlineData("OCR-A", "OCRA")]
     [InlineData("  ", null)]
     [InlineData("---", null)]
     [InlineData("ABC", "ABC")]
-    public void Normalizar_quita_prefijo_alfabetico_inicial(string texto, string? esperado) =>
+    public void Normalizar_quita_prefijo_alfabetico_solo_en_numeros_largos(string texto, string? esperado) =>
         NumeroComparendo.Normalizar(texto).Should().Be(esperado);
 
     [Theory]

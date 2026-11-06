@@ -1,3 +1,4 @@
+import { describe, expect, it } from "vitest";
 import { digitoVerificacion, errorNit, nitValido, separarNit } from "../nit";
 
 describe("nit", () => {
