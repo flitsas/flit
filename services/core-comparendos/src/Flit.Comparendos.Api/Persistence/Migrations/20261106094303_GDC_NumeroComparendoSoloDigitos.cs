@@ -5,7 +5,7 @@
 namespace Flit.Comparendos.Api.Persistence.Migrations;
 
 /// <summary>
-/// HU #14367 / GDC ID12: alinea <c>numero_normalizado</c> a solo dígitos (sin prefijos D-/A-).
+/// HU #14367 / GDC ID12: alinea <c>numero_normalizado</c> quitando prefijos D-/A- cuando quedan ≥10 dígitos.
 /// Filas con colisión de índice único (tenant_id, numero_normalizado) se dejan sin cambiar para revisión manual.
 /// </summary>
 public partial class GDC_NumeroComparendoSoloDigitos : Migration
@@ -13,13 +13,13 @@ public partial class GDC_NumeroComparendoSoloDigitos : Migration
     /// <inheritdoc />
     protected override void Up(MigrationBuilder migrationBuilder)
     {
-        // Solo filas con prefijo alfabético + resto numérico (p. ej. D123456 → 123456). No toca identificadores mixtos.
+        // Prefijo + ≥10 dígitos (comparendo real). No toca claves cortas/sintéticas (AV3, OCRRENTING1).
         migrationBuilder.Sql("""
             WITH candidatos AS (
                 SELECT id, tenant_id, numero_normalizado,
                        regexp_replace(numero_normalizado, '^[A-Za-z]+', '') AS limpio
                 FROM comparendos.comparendo
-                WHERE numero_normalizado ~ '^[A-Za-z]+[0-9]+$'
+                WHERE numero_normalizado ~ '^[A-Za-z]+[0-9]{10,}$'
             ),
             sin_colision AS (
                 SELECT c.id, c.limpio
@@ -43,7 +43,7 @@ public partial class GDC_NumeroComparendoSoloDigitos : Migration
 
             UPDATE comparendos.documento_ocr
             SET numero_normalizado = regexp_replace(numero_normalizado, '^[A-Za-z]+', '')
-            WHERE numero_normalizado ~ '^[A-Za-z]+[0-9]+$';
+            WHERE numero_normalizado ~ '^[A-Za-z]+[0-9]{10,}$';
             """);
     }
 
