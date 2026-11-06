@@ -70,7 +70,7 @@ public sealed class LeerCobroPnHandler(IPersonaNaturalCobroRepository cobro, IPe
 }
 
 /// <summary>HU #14393 AC1/AC5 — enciende o apaga la bandera de un medio en el ámbito del llamante; no toca otros portales.</summary>
-public sealed class GuardarMedioCobroPnHandler(IPersonaNaturalCobroRepository cobro, IAdminAuditWriter audit)
+public sealed class GuardarMedioCobroPnHandler(IPersonaNaturalCobroRepository cobro, IPersonaNaturalTarifaRepository tarifas, IAdminAuditWriter audit)
 {
     public async Task<string?> HandleAsync(AlcanceCobroPn alcance, string? medio, bool enabled, Guid actor, CancellationToken ct = default)
     {
@@ -80,6 +80,8 @@ public sealed class GuardarMedioCobroPnHandler(IPersonaNaturalCobroRepository co
             return CobroPnErrores.MedioInvalido;
         if (alcance.Web && m == MediosPagoPn.Pin)
             return CobroPnErrores.PinEnWeb;
+        if (alcance.OrganismoId is { } org && !await tarifas.OrganismoExisteAsync(org, ct).ConfigureAwait(false))
+            return CobroPnErrores.OrganismoNoExiste;
 
         var anterior = await cobro.GuardarMedioAsync(alcance.OrganismoId, m, enabled, actor, ct).ConfigureAwait(false);
         await PersonaNaturalAuditoria.EscribirAsync(
