@@ -268,7 +268,10 @@ public sealed record MandatarioFirmante(
     FirmaBaulMetadata? FirmaBaulMetadatos = null,
     // Rúbrica de Kyverum de su validación de identidad propia: sin baúl, se estampa sobre el sello de
     // identidad, igual que la del mandante.
-    byte[]? FirmaIdentidadImagen = null);
+    byte[]? FirmaIdentidadImagen = null,
+    // HU #14413 — modelo del mandatario (natural | juridica | formato_blanco). Con «juridica» el contrato
+    // lo identifica con razón social y NIT. Sin dato se trata como Persona natural.
+    string? Modelo = null);
 
 /// <summary>
 /// Datos para el <b>Contrato Privado de Mandato</b> (ADR-0036, HU #10915). El MANDANTE es la parte que

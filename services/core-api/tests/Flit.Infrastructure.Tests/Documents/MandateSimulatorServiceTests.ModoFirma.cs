@@ -45,7 +45,10 @@ public sealed partial class MandateSimulatorServiceTests
         (await ModoEnElTramiteAsync(tipo, directorio)).Should().Be(capturing.Captured.ModoFirmaMandatario);
     }
 
-    private static async Task<MandatarioFirmaModo> ModoEnElTramiteAsync(string? tipo, IMandateSignerDirectory directorio)
+    private static async Task<MandatarioFirmaModo> ModoEnElTramiteAsync(string? tipo, IMandateSignerDirectory directorio) =>
+        (await MandatoEnElTramiteAsync(tipo, directorio)).ModoFirmaMandatario;
+
+    private static async Task<MandatoData> MandatoEnElTramiteAsync(string? tipo, IMandateSignerDirectory directorio)
     {
         var instanceId = Guid.NewGuid();
         var policy = Substitute.For<IMandateRequirementPolicy>();
@@ -102,7 +105,7 @@ public sealed partial class MandateSimulatorServiceTests
         var (_, error) = await handler.HandleAsync(instanceId, Compania, Ct);
 
         error.Should().BeNull();
-        return generador.Captured!.ModoFirmaMandatario;
+        return generador.Captured!;
     }
 
     private sealed class DirectorioFijo(MandateSignerCandidate candidato) : IMandateSignerDirectory

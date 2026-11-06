@@ -4,6 +4,7 @@ using Flit.Infrastructure.Documents.Fur;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Domain.Documents;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using QuestPDF;
 using QuestPDF.Fluent;
@@ -463,11 +464,11 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         MandatoData data, DocumentParte? parte, bool esJuridica,
         string nombreTramite, string placa, string ot, string ciudad, string fecha)
     {
-        var mandatario = MandatarioTexto(MandatarioEnCuerpo(data));
         var intro = Parrafo(
             ComparecenciaMandante(data, parte, esJuridica, conEscrituraCamara: true),
-            Frag($"Y de {mandatario.Nombre} identificado con la cédula de ciudadanía No {mandatario.Documento}, "),
-            Frag($"quien para los efectos del presente contrato se denominará {"EL MANDATARIO"}, hemos acordado suscribir "),
+            Frag($"Y de "),
+            ComparecenciaMandatario(MandatarioEnCuerpo(data)),
+            Frag($", quien para los efectos del presente contrato se denominará {"EL MANDATARIO"}, hemos acordado suscribir "),
             Frag($"{Plano(ResolucionesCc())}"));
 
         return
@@ -540,11 +541,20 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     {
         var inst = InstNombre(data, MabNombre, MandatoSystemOfficeTemplates.BelloOfficeCode);
         var nit = InstNit(data, MabNit, MandatoSystemOfficeTemplates.BelloOfficeCode);
-        var mandatario = MandatarioTexto(MandatarioEnCuerpo(data));
+        var mandatario = MandatarioEnCuerpo(data);
+        var comparecencia = ComparecenciaMandatario(mandatario);
         var nombraUt = inst != "___";
         var introMandatario = nombraUt
-            ? Frag($"Y de la otra parte, {mandatario.Nombre} identificado con la cédula de ciudadanía No {mandatario.Documento}, Representante Legal de {inst}, con NIT No. {nit}, quien para efectos del presente contrato se denominará {"EL MANDATARIO"}, hemos acordado suscribir el siguiente contrato de mandato mediante el cual el mandatario se hace cargo de la gestión de realizar el trámite según las siguientes cláusulas.")
-            : Frag($"Y de {mandatario.Nombre} identificado con la cédula de ciudadanía No {mandatario.Documento}, quien para los efectos del presente contrato se denominará {"EL MANDATARIO"}, hemos acordado suscribir el siguiente contrato de mandato mediante el cual el mandatario se hace cargo de la gestión de realizar el trámite según las siguientes cláusulas.");
+            ? Parrafo(
+                Frag($"Y de la otra parte, "),
+                comparecencia,
+                // La persona jurídica es ella misma el mandatario: no representa legalmente a la unión temporal.
+                EsPersonaJuridica(mandatario) ? Frag($"") : Frag($", Representante Legal de {inst}, con NIT No. {nit}"),
+                Frag($", quien para efectos del presente contrato se denominará {"EL MANDATARIO"}, hemos acordado suscribir el siguiente contrato de mandato mediante el cual el mandatario se hace cargo de la gestión de realizar el trámite según las siguientes cláusulas."))
+            : Parrafo(
+                Frag($"Y de "),
+                comparecencia,
+                Frag($", quien para los efectos del presente contrato se denominará {"EL MANDATARIO"}, hemos acordado suscribir el siguiente contrato de mandato mediante el cual el mandatario se hace cargo de la gestión de realizar el trámite según las siguientes cláusulas."));
         var intro = FurCompraventaCopropiedad.EsMultiple(OtorgantesEnCuerpo(data))
             ? Parrafo(ComparecenciaMandante(data, parte, esJuridica, conEscrituraCamara: true), introMandatario)
             : esJuridica
@@ -581,10 +591,10 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
         MandatoData data, DocumentParte? parte, bool esJuridica,
         string nombreTramite, string placa, string ciudad, string fecha)
     {
-        var mandatario = MandatarioTexto(MandatarioEnCuerpo(data));
         var yMandatario = Parrafo(
-            Frag($"Y de {mandatario.Nombre} identificado con la cédula de ciudadanía No {mandatario.Documento}, "),
-            Frag($"quien para los efectos del presente contrato se denominará {"EL MANDATARIO"}, hemos acordado "),
+            Frag($"Y de "),
+            ComparecenciaMandatario(MandatarioEnCuerpo(data)),
+            Frag($", quien para los efectos del presente contrato se denominará {"EL MANDATARIO"}, hemos acordado "),
             Frag($"suscribir el siguiente contrato de mandato mediante el cual el mandatario se hace cargo de la "),
             Frag($"radicación y reclamación del trámite de {nombreTramite} vehículo de placa: {placa}, por "),
             Frag($"cuenta y riesgo del mandante."));
@@ -953,8 +963,8 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     }
 
     /// <summary>
-    /// Identificación del MANDATARIO bajo su firma. Es siempre una persona natural (el firmante del OT),
-    /// así que no lleva empresa ni NIT. Se etiquetan los campos igual que en el bloque del mandante
+    /// Identificación del MANDATARIO bajo su firma. El firmante del OT es una persona natural, salvo que su
+    /// modelo sea Persona jurídica (HU #14413): entonces lleva razón social y NIT. Se etiquetan los campos igual que en el bloque del mandante
     /// (HU #11047), porque ambos van uno al lado del otro en la misma fila del documento.
     /// <para>El contacto del mandatario NO se imprime: <c>MandatarioFirmante</c> no lo transporta, y el
     /// dato de contacto que el organismo necesita es el del mandante (quien otorga el poder).</para>
@@ -962,6 +972,18 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
     internal static IEnumerable<string> MandatarioIdentificacion(
         MandatarioFirmante? mandatario, MandatoData? data = null)
     {
+        var (nombre, documento) = MandatarioTexto(mandatario);
+
+        // HU #14413 (AC3) — va antes que los datos institucionales: el cuerpo nombra a esta entidad y el
+        // recuadro debe coincidir. Sabaneta queda fuera porque su cuerpo siempre nombra a la unión temporal.
+        if (EsPersonaJuridica(mandatario)
+            && (data is null || MandatoTemplateResolver.Resolve(data.TemplateCode) != MandatoVariante.Sabaneta))
+        {
+            yield return $"RAZÓN SOCIAL: {nombre}";
+            yield return $"NIT: {documento}";
+            yield break;
+        }
+
         // HU #11205 (AC2) — con empresa relacionada, quien firma a mano es la empresa: bajo la línea va
         // su razón social y su NIT. Poner ahí la cédula de la persona firmante haría que el documento
         // dijera que firmó alguien distinto de quien lo hace.
@@ -973,13 +995,25 @@ public sealed class MandatoPdfGenerator : IMandatoGenerator
             yield break;
         }
 
-        var (nombre, documento) = MandatarioTexto(mandatario);
         yield return $"NOMBRE: {nombre}";
         yield return $"CÉDULA DE CIUDADANÍA: {documento}";
     }
 
     private static (string Nombre, string Documento) MandatarioTexto(MandatarioFirmante? m) =>
         (Val(m?.Nombre, "___"), Val(m?.Documento, "___"));
+
+    // HU #14413 — decide el MODELO del mandatario, no su documento (dictamen de expert-doc-engine).
+    private static bool EsPersonaJuridica(MandatarioFirmante? m) =>
+        m?.Modelo == MandateSignerOrigins.ModeloJuridica;
+
+    /// <summary>Cómo se identifica al MANDATARIO en el cuerpo: único punto que distingue el modelo (HU #14413).</summary>
+    private static List<ParrafoSegmento> ComparecenciaMandatario(MandatarioFirmante? m)
+    {
+        var (nombre, documento) = MandatarioTexto(m);
+        return EsPersonaJuridica(m)
+            ? Frag($"{nombre}, con NIT No. {documento}")
+            : Frag($"{nombre} identificado con la cédula de ciudadanía No {documento}");
+    }
 
     // ---- Accessores del MANDANTE (persona natural / jurídica + su representante legal) ----
     private static string PnNombre(DocumentParte? p) => Val(p?.Nombre, "___");
