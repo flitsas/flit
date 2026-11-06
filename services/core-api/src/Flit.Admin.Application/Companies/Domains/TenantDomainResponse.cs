@@ -2,8 +2,9 @@ using Flit.Admin.Domain.Companies.Domains;
 
 namespace Flit.Admin.Application.Companies.Domains;
 
-/// <summary>Instrucciones DNS del contrato (§3 #12416, #12427): TXT de comprobación (#12425) y registro A hacia el borde.</summary>
-public sealed record DomainVerificationResponse(string TxtName, string TxtValue, string AName, string AValue);
+/// <summary>Instrucciones DNS del contrato (§3 #12416, #12427): TXT de comprobación (#12425) y registro A hacia el borde.
+/// <c>CnameName</c> y <c>CnameTarget</c> son obsoletos: siguen en la v1 del contrato, y el destino va vacío porque no hay CNAME que crear.</summary>
+public sealed record DomainVerificationResponse(string TxtName, string TxtValue, string AName, string AValue, string CnameName, string CnameTarget);
 
 public sealed record DomainCertificateResponse(DateTimeOffset? IssuedAt, DateTimeOffset? ExpiresAt);
 
@@ -37,7 +38,9 @@ public sealed record TenantDomainResponse(
                 $"_flit-verify.{domain.Host}",
                 domain.VerificationToken,
                 domain.Host,
-                edgeIp),
+                edgeIp,
+                domain.Host,
+                string.Empty),
             domain.VerifiedAt,
             domain.ActivatedAt,
             new DomainCertificateResponse(domain.CertificateIssuedAt, domain.CertificateExpiresAt),

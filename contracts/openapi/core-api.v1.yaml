@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Core API
-  version: "1.0.0"
+  version: "1.1.0"
   description: >
     Contrato público de FLIT Core API (services/core-api). Cubre el carril de
     Seguridad/Autenticación (HU #10168 — login email/contraseña y emisión JWT 12h)
@@ -14843,12 +14843,14 @@ components:
         statusChangedAt: { type: string, format: date-time }
         verification:
           type: object
-          required: [txtName, txtValue, aName, aValue]
+          required: [txtName, txtValue, aName, aValue, cnameName, cnameTarget]
           properties:
             txtName: { type: string, description: "_flit-verify.<host>" }
             txtValue: { type: string, description: "Token de comprobación (HU #12425)." }
             aName: { type: string, description: "Nombre del registro A que apunta el dominio al borde." }
             aValue: { type: string, description: "IP pública del borde (Domains:EdgeIp). Vacía si el ambiente no la tiene configurada." }
+            cnameName: { type: string, deprecated: true, description: "Obsoleto: usar aName. Se conserva por compatibilidad del contrato." }
+            cnameTarget: { type: string, deprecated: true, description: "Obsoleto y siempre vacío: el dominio se apunta con un registro A (aValue)." }
         verifiedAt: { type: string, format: date-time, nullable: true }
         activatedAt: { type: string, format: date-time, nullable: true }
         certificate:
