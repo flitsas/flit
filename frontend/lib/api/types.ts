@@ -676,8 +676,9 @@ export type TenantDomainStatusReason = string | null;
 export interface TenantDomainVerificationInstructions {
   txtName: string;
   txtValue: string;
-  cnameName: string;
-  cnameTarget: string;
+  /** Registro A que apunta el dominio al borde de FLIT. `aValue` vacío: el ambiente no tiene la IP configurada. */
+  aName: string;
+  aValue: string;
 }
 
 export interface TenantDomainCertificate {
@@ -686,6 +687,8 @@ export interface TenantDomainCertificate {
 }
 
 export interface TenantDomainResponse {
+  /** `HUB` o el código del producto que sirve el dominio. */
+  purpose: string;
   host: string;
   status: TenantDomainStatus;
   statusReason: TenantDomainStatusReason;
@@ -698,6 +701,14 @@ export interface TenantDomainResponse {
   nextCheckAt: string | null;
   graceUntil: string | null;
   rowVersion: number;
+}
+
+/** `GET /admin/companies/{id}/domains`: los dominios de la red y lo que falta para activarla. */
+export interface NetworkDomainsResponse {
+  domains: TenantDomainResponse[];
+  /** Productos habilitados: cada uno necesita su propio dominio. */
+  products: string[];
+  activation: { ready: boolean; active: boolean; pending: string[] };
 }
 
 // ── Tema de correo por red — HU #12431 (consumido por #12428) ──────────────

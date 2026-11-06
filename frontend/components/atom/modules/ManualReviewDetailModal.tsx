@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Clock, ScanFace, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, Eye, ScanFace, ShieldCheck, XCircle } from 'lucide-react';
 import { Modal } from '@flit/ui/Modal';
 import { UiStateBoundary } from '@flit/ui/UiStateBoundary';
 import { useWizardFocusTrap } from '@/components/operacion/use-wizard-focus-trap';
@@ -12,6 +12,7 @@ import { formatEspera, manualOriginLabel } from '@/lib/identidad/manual-review-m
 import { etiquetaMotivoRechazoManual } from '@/lib/identidad/motivos-rechazo-manual';
 import { formatFechaHora } from '@/lib/format/date';
 import { MANUAL_AVISO, MANUAL_AVISO_BASE, MANUAL_BTN_SECUNDARIO } from './manual-field-styles';
+import { CertificadoIdentidadAccion } from './CertificadoIdentidadAccion';
 import { ManualImageGallery } from './ManualImageGallery';
 import { ManualReviewActions } from './ManualReviewActions';
 import { ManualStatusBadge } from './ManualStatusBadge';
@@ -125,6 +126,86 @@ export function ManualReviewDetailModal({
   );
 }
 
+/** Fotos que no pasaron la revisión en el dispositivo (la firma no se revisa). */
+function contarNoVerificadas(detail: ManualDetail): number {
+  const fotos = detail.validacionFotos;
+  if (!fotos) return 0;
+  return [fotos.rostro, fotos.anverso, fotos.reverso].filter((f) => f?.estado === 'no_verificada').length;
+}
+
+/** Lo primero que lee quien abre el detalle: en qué va el caso y qué sigue. */
+function EstadoDelCaso({ detail, sinCapturas }: { detail: ManualDetail; sinCapturas: boolean }) {
+  if (detail.status === 'aprobado') {
+    return (
+      <div className={`flex flex-wrap items-center justify-between gap-2 rounded-2xl border px-4 py-2.5 text-sm ${MANUAL_AVISO.success}`}>
+        <p className="flex items-center gap-2 font-semibold">
+          <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden /> Identidad aprobada
+        </p>
+        <CertificadoIdentidadAccion
+          validation={{ id: detail.id, status: 'aprobado', provider: 'manual', cartaDisponible: detail.cartaDisponible }}
+        />
+      </div>
+    );
+  }
+  if (detail.status === 'rechazado') {
+    return (
+      <div className={`${MANUAL_AVISO_BASE} ${MANUAL_AVISO.danger}`}>
+        <XCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+        <div className="min-w-0">
+          {detail.rejectionReasonCode && (
+            <>
+              <p className="text-xs">Motivo del rechazo</p>
+              <p className="font-semibold">
+                {etiquetaMotivoRechazoManual(detail.rejectionReasonCode) ?? detail.rejectionReasonCode}
+              </p>
+            </>
+          )}
+          {detail.linkExpiresAt && (
+            <p className="mt-0.5">Se envió un enlace nuevo al cliente. Vence el {formatFechaHora(detail.linkExpiresAt)}</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+  if (sinCapturas) {
+    return (
+      <div role="status" className={`${MANUAL_AVISO_BASE} ${MANUAL_AVISO.info}`}>
+        <Clock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+        <div className="min-w-0">
+          <p className="font-semibold">El cliente aún no ha capturado.</p>
+          {detail.linkExpiresAt && (
+            <p className="mt-0.5">El enlace caduca el {formatFechaHora(detail.linkExpiresAt)}.</p>
+          )}
+          {detail.status === 'manual_activo' && (
+            <p className="mt-0.5">Si no le llegó el correo, copia el enlace desde «Acciones» en la fila.</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+  if (detail.status === 'pendiente_revision_manual') {
+    const noVerificadas = contarNoVerificadas(detail);
+    return (
+      <div className={`${MANUAL_AVISO_BASE} ${noVerificadas > 0 ? MANUAL_AVISO.warning : MANUAL_AVISO.info}`}>
+        {noVerificadas > 0 ? (
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+        ) : (
+          <Eye className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+        )}
+        <div className="min-w-0">
+          <p className="font-semibold">Revisa las fotos y decide</p>
+          <p className="mt-0.5">
+            {noVerificadas > 0
+              ? `${noVerificadas === 1 ? '1 foto no pasó' : `${noVerificadas} fotos no pasaron`} la revisión automática: mírala${noVerificadas === 1 ? '' : 's'} con más cuidado antes de aprobar.`
+              : 'Compara el rostro con el del documento y, al final, aprueba o rechaza.'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
 function DetalleCuerpo({
   id,
   client,
@@ -151,13 +232,13 @@ function DetalleCuerpo({
   onStale: () => void;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
-  useWizardFocusTrap(panelRef, { active: true });
+  useWizardFocusTrap(panelRef, { active: true, initialFocusRef: panelRef });
   // La acción se aplicó pero con una salvedad (p. ej. el correo no salió): tono de advertencia, no de éxito.
   const avisoConProblema = Boolean(mensaje && /no pudo enviarse/i.test(mensaje));
   const sinCapturas = detail ? !detail.images.some((i) => i.available) : false;
 
   return (
-    <div ref={panelRef} tabIndex={-1} className="flex flex-col gap-5 outline-none">
+    <div ref={panelRef} tabIndex={-1} className="flex flex-col gap-4 outline-none">
       <UiStateBoundary
         status={carga === 'ready' && detail ? 'ready' : carga}
         errorMessage="No se pudo cargar el detalle."
@@ -166,80 +247,72 @@ function DetalleCuerpo({
       >
         {detail && (
           <>
-            <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <Dato label="Nombre">{detail.fullName}</Dato>
-              <Dato label="Documento">
-                <span className="font-mono">{detail.documentNumber}</span>
-              </Dato>
-              <Dato label="Compañía">{detail.tenantName}</Dato>
-              <Dato label="Origen">{manualOriginLabel(detail.origin)}</Dato>
-              <Dato label="Estado">
+            <section
+              aria-label="Datos del caso"
+              className="rounded-2xl border border-[#DFE5ED] p-4 dark:border-white/10"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-lg font-bold text-flit-primary dark:text-white">{detail.fullName}</p>
+                  <p className="font-mono text-sm text-[#59677D] dark:text-white/70">{detail.documentNumber}</p>
+                </div>
                 <ManualStatusBadge status={detail.status} />
-              </Dato>
-              <Dato label="Fecha de activación">{formatFechaHora(detail.activatedAt)}</Dato>
-              <Dato label="Tiempo en espera">{formatEspera(detail.waitingMinutes)}</Dato>
-              {detail.status === 'rechazado' && detail.rejectionReasonCode && (
-                <Dato label="Motivo del rechazo">
-                  {etiquetaMotivoRechazoManual(detail.rejectionReasonCode) ?? detail.rejectionReasonCode}
-                </Dato>
-              )}
-            </dl>
+              </div>
+              <dl className="mt-3 grid gap-3 border-t border-[#DFE5ED] pt-3 sm:grid-cols-2 lg:grid-cols-4 dark:border-white/10">
+                <Dato label="Compañía">{detail.tenantName}</Dato>
+                <Dato label="Origen">{manualOriginLabel(detail.origin)}</Dato>
+                <Dato label="Fecha de activación">{formatFechaHora(detail.activatedAt)}</Dato>
+                {detail.waitingMinutes != null && (
+                  <Dato label="Tiempo en espera">{formatEspera(detail.waitingMinutes)}</Dato>
+                )}
+              </dl>
+              <div className="mt-3 flex items-start gap-2 text-sm">
+                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-flit-brand" aria-hidden />
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-[#59677D] dark:text-white/70">Consentimiento de tratamiento de datos</p>
+                  <p className="mt-0.5 font-semibold text-flit-primary dark:text-white">
+                    {detail.consentAt
+                      ? `Aceptado el ${formatFechaHora(detail.consentAt)}${detail.consentTextVersion ? ` · texto ${detail.consentTextVersion}` : ''}`
+                      : 'Sin constancia: el cliente aún no ha aceptado.'}
+                  </p>
+                </div>
+              </div>
+            </section>
 
-            {detail.status === 'rechazado' && detail.linkExpiresAt && (
-              <p role="status" className={`${MANUAL_AVISO_BASE} items-center ${MANUAL_AVISO.info}`}>
-                <Clock className="h-4 w-4 shrink-0" aria-hidden />
-                <span>Se envió un enlace nuevo al cliente. Vence el {formatFechaHora(detail.linkExpiresAt)}</span>
+            {mensaje && (
+              <p
+                role="status"
+                className={`${MANUAL_AVISO_BASE} items-center font-semibold ${avisoConProblema ? MANUAL_AVISO.warning : MANUAL_AVISO.success}`}
+              >
+                {avisoConProblema ? (
+                  <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
+                )}{' '}
+                {mensaje}
               </p>
             )}
 
-            <section aria-labelledby={`${id}-consent`} className="rounded-2xl border border-[#DFE5ED] p-4 dark:border-white/10">
-              <h3 id={`${id}-consent`} className="flex items-center gap-2 text-sm font-bold text-flit-primary dark:text-white">
-                <ShieldCheck className="h-4 w-4 text-flit-brand" aria-hidden /> Consentimiento de tratamiento de datos
-              </h3>
-              <p className="mt-1 text-sm">
-                {detail.consentAt
-                  ? `Aceptado el ${formatFechaHora(detail.consentAt)}${detail.consentTextVersion ? ` · texto ${detail.consentTextVersion}` : ''}`
-                  : 'Sin constancia: el cliente aún no ha aceptado.'}
-              </p>
-            </section>
+            <EstadoDelCaso detail={detail} sinCapturas={sinCapturas} />
 
-            <section aria-labelledby={`${id}-capturas`}>
-              <h3 id={`${id}-capturas`} className="mb-2 text-sm font-bold text-flit-primary dark:text-white">
-                Capturas del cliente
-              </h3>
-              {sinCapturas ? (
-                <div role="status" className={`${MANUAL_AVISO_BASE} ${MANUAL_AVISO.info}`}>
-                  <Clock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-                  <div>
-                    <p className="font-semibold">El cliente aún no ha capturado.</p>
-                    {detail.linkExpiresAt && (
-                      <p className="mt-0.5 text-xs">
-                        El enlace caduca el {formatFechaHora(detail.linkExpiresAt)}.
-                      </p>
-                    )}
-                  </div>
+            {!sinCapturas && (
+              <section aria-labelledby={`${id}-capturas`}>
+                <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+                  <h3 id={`${id}-capturas`} className="text-sm font-bold text-flit-primary dark:text-white">
+                    Capturas del cliente
+                  </h3>
+                  <p className="text-xs text-[#59677D] dark:text-white/70">Toca una foto para verla en grande.</p>
                 </div>
-              ) : (
-                <ManualImageGallery client={client} id={detail.id} images={detail.images} onViewerChange={onViewerChange} />
-              )}
-            </section>
+                <ManualImageGallery client={client} id={detail.id} images={detail.images} onViewerChange={onViewerChange} validacionFotos={detail.validacionFotos} />
+              </section>
+            )}
           </>
         )}
       </UiStateBoundary>
-      {mensaje && (
-        <p
-          role="status"
-          className={`${MANUAL_AVISO_BASE} items-center font-semibold ${avisoConProblema ? MANUAL_AVISO.warning : MANUAL_AVISO.success}`}
-        >
-          {avisoConProblema ? (
-            <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
-          ) : (
-            <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
-          )}{' '}
-          {mensaje}
-        </p>
-      )}
-      <div className="flex flex-wrap items-center justify-end gap-3">
+      <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-[#DFE5ED] bg-white px-1 pb-1 pt-3 dark:border-white/10 dark:bg-[#162744]">
+        <button type="button" onClick={onClose} className={MANUAL_BTN_SECUNDARIO}>
+          Cerrar
+        </button>
         {detail && (
           <ManualReviewActions
             detail={detail}
@@ -255,9 +328,6 @@ function DetalleCuerpo({
             }}
           />
         )}
-        <button type="button" onClick={onClose} className={MANUAL_BTN_SECUNDARIO}>
-          Cerrar
-        </button>
       </div>
     </div>
   );

@@ -40,3 +40,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Motores de validacion de fotos (Feature #14307): se copian desde node_modules con scripts/copiar-motores-fotos.mjs
+/public/captura-manual/vision/
+/public/captura-manual/zxing/

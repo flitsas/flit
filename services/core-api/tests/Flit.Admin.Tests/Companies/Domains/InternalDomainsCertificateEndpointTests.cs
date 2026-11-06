@@ -112,7 +112,7 @@ public sealed class InternalDomainsCertificateEndpointTests
     }
 
     [Fact]
-    public async Task PutCertificate_DominioVerificado_PasaAActivoYResponde200()
+    public async Task PutCertificate_DominioVerificado_GuardaFechasSinActivarYResponde200()
     {
         var now = DateTimeOffset.UtcNow;
         var repo = Substitute.For<ITenantDomainRepository>();
@@ -120,13 +120,13 @@ public sealed class InternalDomainsCertificateEndpointTests
             .Returns(NewDomain(TenantDomainStatus.Verified, verifiedAt: now.AddMinutes(-5)));
         repo.ApplyCertificateAsync(
                 "app.movilidadandina.com",
-                TenantDomainStatus.Active,
+                TenantDomainStatus.Verified,
                 Arg.Any<DateTimeOffset?>(),
                 Arg.Any<DateTimeOffset>(),
                 Arg.Any<DateTimeOffset?>(),
                 ApplyDomainCertificateHandler.JobActor,
                 Arg.Any<CancellationToken>())
-            .Returns(ci => NewDomain(TenantDomainStatus.Active));
+            .Returns(ci => NewDomain(TenantDomainStatus.Verified));
         var handler = new ApplyDomainCertificateHandler(repo);
 
         var result = await InternalDomainsEndpoints.PutCertificateAsync(
@@ -139,7 +139,7 @@ public sealed class InternalDomainsCertificateEndpointTests
 
         GetStatus(result).Should().Be(StatusCodes.Status200OK);
         await repo.Received(1).ApplyCertificateAsync(
-            "app.movilidadandina.com", TenantDomainStatus.Active, Arg.Any<DateTimeOffset?>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset?>(), ApplyDomainCertificateHandler.JobActor, Arg.Any<CancellationToken>());
+            "app.movilidadandina.com", TenantDomainStatus.Verified, Arg.Any<DateTimeOffset?>(), Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset?>(), ApplyDomainCertificateHandler.JobActor, Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -8,6 +8,7 @@ using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Integration;
+using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.PersonaNatural;
 using Flit.Tramites.Domain.Tramites.Services;
@@ -159,10 +160,13 @@ internal sealed class PersonaNaturalCreador(
         if (id is null)
         {
             // El borrador, con origen y referencia externa en el MISMO INSERT.
+            var canal = TramiteCanal.DesdeSolicitudPortal(solicitud.Datos.Canal);
             var (resumen, error) = await crear.HandleAsync(
                 new CreateProcedureInstanceRequest(
                     TenantId: empresa, ProcedureTypeId: null, CreatedByUserId: creador, TransitOfficeId: oficina.Id,
-                    ProcedureTypeCode: solicitud.TipoTramiteCodigo, Origin: PersonaNaturalEventos.Origen, ExternalRef: externalRef),
+                    ProcedureTypeCode: solicitud.TipoTramiteCodigo, Origin: PersonaNaturalEventos.Origen, ExternalRef: externalRef,
+                    // HU #14318 — canal y OT del punto en el mismo INSERT; el reintento (retomar) no pasa por aquí y no los toca.
+                    Channel: canal, ChannelTransitOfficeId: canal == TramiteCanal.PersonaNaturalOt ? oficina.Id : null),
                 ct).ConfigureAwait(false);
             if (error is not null || resumen is null)
                 return Rechazo(error ?? "crear_fallido");
@@ -221,7 +225,7 @@ internal sealed class PersonaNaturalCreador(
 
         // Solo el canal del punto de atención (OT) deja marca; el portal web no cambia. Se anota en la observación existente.
         var observaciones = s.Datos.Observaciones?.Trim();
-        if (string.Equals(s.Datos.Canal, "pn_punto", StringComparison.OrdinalIgnoreCase))
+        if (TramiteCanal.DesdeSolicitudPortal(s.Datos.Canal) == TramiteCanal.PersonaNaturalOt)
             observaciones = string.IsNullOrEmpty(observaciones) ? MarcaCanalPunto : $"{MarcaCanalPunto} {observaciones}";
         if (!string.IsNullOrWhiteSpace(observaciones))
             items.Add(new FieldValueInput(null, "observaciones", observaciones, null));

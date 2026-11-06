@@ -9,7 +9,10 @@ namespace Flit.Admin.Domain.Companies.Domains;
 public interface ITenantDomainRepository
 {
     /// <summary><c>null</c> si la red no tiene dominio vigente (AC1). Solo la fila vigente (<c>deleted_at IS NULL</c>).</summary>
-    Task<TenantDomain?> GetByTenantIdAsync(Guid tenantId, CancellationToken cancellationToken = default);
+    Task<TenantDomain?> GetByTenantIdAsync(Guid tenantId, string purpose, CancellationToken cancellationToken = default);
+
+    /// <summary>Dominios vigentes de la red, de cualquier propósito.</summary>
+    Task<IReadOnlyList<TenantDomain>> ListByTenantIdAsync(Guid tenantId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Registra (si la red no tenía dominio) o CAMBIA el dominio de la red (AC1, AC5): si ya existe uno
@@ -25,10 +28,11 @@ public interface ITenantDomainRepository
         string host,
         string verificationToken,
         Guid? changedBy,
+        string purpose,
         CancellationToken cancellationToken = default);
 
     /// <summary>Retiro lógico (AC5): <c>null</c> si la red no tenía dominio vigente. Audita <c>host</c> → null.</summary>
-    Task<TenantDomain?> RetireAsync(Guid tenantId, Guid? changedBy, CancellationToken cancellationToken = default);
+    Task<TenantDomain?> RetireAsync(Guid tenantId, Guid? changedBy, string purpose, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// El único camino de resolución de red por host (ADR-0060 D2): lee
@@ -91,7 +95,20 @@ public interface ITenantDomainRepository
         DateTimeOffset now,
         Guid? changedByUserId,
         string? changedByJob,
+        string purpose,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Pasa a <c>active</c>, en una sola transacción, los dominios de la red en <c>verified</c> con certificado emitido, y
+    /// devuelve los dominios vigentes de la red. Quien llama ya comprobó que la red está lista.
+    /// </summary>
+    Task<IReadOnlyList<TenantDomain>> ActivateNetworkAsync(Guid tenantId, DateTimeOffset now, Guid? changedBy, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Dominios que el borde debe publicar: de cabezas MARCA_BLANCA activas, comprobados o con certificado ya emitido.
+    /// Consumido por <c>GET /internal/domains/provisioning</c>.
+    /// </summary>
+    Task<IReadOnlyList<DomainProvisioningItem>> ListProvisioningAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Aplica la señal de certificado emitido (#12426 → HU #12425 AC3): <paramref name="newStatus"/> ya
@@ -109,4 +126,7 @@ public interface ITenantDomainRepository
 }
 
 /// <summary>Fila reclamada por el job de comprobación (HU #12425), datos mínimos para decidir la transición sin recargar toda la entidad.</summary>
-public sealed record DomainCheckClaim(Guid TenantId, string Host, string Status, DateTimeOffset? GraceUntil, int CheckAttempts);
+public sealed record DomainCheckClaim(Guid TenantId, string Host, string Status, DateTimeOffset? GraceUntil, int CheckAttempts, string Purpose = TenantDomainPurposes.Hub);
+
+/// <summary>Un dominio que el borde debe publicar, con las fechas de certificado que la plataforma conoce.</summary>
+public sealed record DomainProvisioningItem(string Host, string Purpose, string Status, DateTimeOffset? CertificateIssuedAt, DateTimeOffset? CertificateExpiresAt);
