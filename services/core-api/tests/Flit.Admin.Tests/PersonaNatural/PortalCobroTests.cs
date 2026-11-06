@@ -10,6 +10,7 @@ using Flit.Admin.Domain.Plataforma.PersonaNatural;
 using Flit.Api.Authorization;
 using Flit.Api.Endpoints;
 using Flit.Infrastructure.Persistence;
+using Flit.Tramites.Domain.Tramites.PersonaNatural;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -104,6 +105,31 @@ public sealed class PortalCobroTests(WebApplicationFactory<Program> factory) : I
         r.Should().Be(CobroPnErrores.GestionAjena);
         repo.Guardados.Should().Be(0);
         repo.Consultas.Should().Be(0);
+    }
+
+    [Fact]
+    public void MontoDeReferencia_CoincideConLoQueCobraLaCotizacion()
+    {
+        var tipo = Guid.NewGuid();
+        var otroTipo = Guid.NewGuid();
+        var organismoA = Guid.NewGuid();
+        var organismoB = Guid.NewGuid();
+        const string Concepto = "DERECHOS_TRANSITO";
+        TarifaVigente T(Guid? t, Guid? o, long v) => new(Concepto, t, o, v, Guid.NewGuid());
+
+        // Solo con valor de organismos: la web muestra el mayor; el organismo, el suyo.
+        TarifaVigente[] soloOrganismo = [T(tipo, organismoA, 50_000), T(tipo, organismoB, 70_000), T(otroTipo, organismoA, 90_000)];
+        CotizadorPersonaNatural.MontoDeReferencia(Concepto, tipo, null, soloOrganismo).Should().Be(70_000);
+        CotizadorPersonaNatural.MontoDeReferencia(Concepto, tipo, organismoA, soloOrganismo).Should().Be(50_000);
+
+        // Con valor general, la web usa ese y no el de un organismo.
+        TarifaVigente[] conGeneral = [T(tipo, null, 30_000), T(tipo, organismoB, 70_000)];
+        CotizadorPersonaNatural.MontoDeReferencia(Concepto, tipo, null, conGeneral).Should().Be(30_000);
+
+        // Un valor general de cualquier tipo también cuenta, y sin ningún valor no hay monto.
+        TarifaVigente[] general = [T(null, null, 20_000)];
+        CotizadorPersonaNatural.MontoDeReferencia(Concepto, tipo, null, general).Should().Be(20_000);
+        CotizadorPersonaNatural.MontoDeReferencia(Concepto, tipo, null, []).Should().BeNull();
     }
 
     [Fact]
@@ -357,7 +383,7 @@ public sealed class PortalCobroTests(WebApplicationFactory<Program> factory) : I
             return Task.FromResult(ConfigCobroPn.Vacia(ambitoOrganismoId is null));
         }
 
-        public Task<IReadOnlyDictionary<(Guid TipoId, string Cobro), long>> MontosAsync(Guid? ambitoOrganismoId, CancellationToken ct = default)
+        public Task<IReadOnlyDictionary<(Guid TipoId, string Cobro), long>> MontosAsync(Guid? ambitoOrganismoId, IReadOnlyCollection<Guid> tipos, CancellationToken ct = default)
         {
             Consultas++;
             return Task.FromResult<IReadOnlyDictionary<(Guid TipoId, string Cobro), long>>(Montos);

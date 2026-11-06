@@ -49,8 +49,8 @@ public sealed class LeerCobroPnHandler(IPersonaNaturalCobroRepository cobro, IPe
     {
         ArgumentNullException.ThrowIfNull(alcance);
         var config = await cobro.LeerAsync(alcance.OrganismoId, ct).ConfigureAwait(false);
-        var montos = await cobro.MontosAsync(alcance.OrganismoId, ct).ConfigureAwait(false);
         var tipos = await tarifas.ListarTiposDelPortalAsync(ct).ConfigureAwait(false);
+        var montos = await cobro.MontosAsync(alcance.OrganismoId, [.. tipos.Select(t => t.Id)], ct).ConfigureAwait(false);
         var medios = MediosPagoPn.DelPortal(alcance.Web);
 
         return new CobroPortalView(
@@ -120,7 +120,7 @@ public sealed class GuardarSwitchCobroPnHandler(IPersonaNaturalCobroRepository c
 
         if (enabled)
         {
-            var montos = await cobro.MontosAsync(alcance.OrganismoId, ct).ConfigureAwait(false);
+            var montos = await cobro.MontosAsync(alcance.OrganismoId, [tipo], ct).ConfigureAwait(false);
             if (!montos.TryGetValue((tipo, c), out var monto) || monto <= 0)
                 return CobroPnErrores.SinMonto;
         }

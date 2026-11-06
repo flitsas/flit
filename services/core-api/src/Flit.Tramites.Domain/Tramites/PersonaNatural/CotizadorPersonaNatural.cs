@@ -112,6 +112,23 @@ public static class CotizadorPersonaNatural
     }
 
     /// <summary>
+    /// Monto de referencia del administrador de cobro. Con organismo, el mismo de la cotización. En la web, que no tiene un
+    /// organismo fijo, el valor general; si no lo hay, el mayor por organismo, porque la cotización sí cobrará ese valor a quien
+    /// elija ese organismo y la pantalla no debe decir que no se cobra. <c>null</c> si nadie tiene valor.
+    /// </summary>
+    public static long? MontoDeReferencia(string concepto, Guid tipoId, Guid? ambitoOrganismoId, IReadOnlyCollection<TarifaVigente> tarifas)
+    {
+        var resuelta = Resolver(concepto, tipoId, ambitoOrganismoId ?? Guid.Empty, tarifas)?.ValorCop;
+        if (ambitoOrganismoId is not null || resuelta > 0)
+            return resuelta;
+
+        return tarifas
+            .Where(t => t.Concepto == concepto && t.OrganismoId is not null && (t.TipoId is null || t.TipoId == tipoId))
+            .Select(t => (long?)t.ValorCop)
+            .Max() ?? resuelta;
+    }
+
+    /// <summary>
     /// Precedencia: (tipo, organismo) &gt; (tipo, general) &gt; (cualquier tipo, organismo) &gt; (cualquier tipo, general).
     /// Mismo orden que documenta el DDL 153.
     /// </summary>

@@ -82,10 +82,10 @@ public interface IPersonaNaturalCobroRepository
     Task<ConfigCobroPn> LeerAsync(Guid? ambitoOrganismoId, CancellationToken ct = default);
 
     /// <summary>
-    /// Monto vigente del renglón base de cada concepto de cobro por tipo, con la precedencia de la cotización (tipo+organismo,
-    /// tipo, general). Con ámbito nulo (web) solo cuentan los valores generales. Un tipo sin monto no aparece.
+    /// Monto vigente del renglón base de cada concepto de cobro para los tipos pedidos, con la precedencia de la cotización. Con
+    /// ámbito nulo (web) es el valor general o, si no lo hay, el mayor por organismo. Un tipo sin monto no aparece.
     /// </summary>
-    Task<IReadOnlyDictionary<(Guid TipoId, string Cobro), long>> MontosAsync(Guid? ambitoOrganismoId, CancellationToken ct = default);
+    Task<IReadOnlyDictionary<(Guid TipoId, string Cobro), long>> MontosAsync(Guid? ambitoOrganismoId, IReadOnlyCollection<Guid> tipos, CancellationToken ct = default);
 
     /// <summary>Guarda la bandera y devuelve el valor anterior (nulo si no había fila).</summary>
     Task<bool?> GuardarMedioAsync(Guid? ambitoOrganismoId, string medio, bool enabled, Guid actor, CancellationToken ct = default);

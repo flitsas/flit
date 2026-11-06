@@ -15,18 +15,16 @@ internal sealed class PersonaNaturalCobroRepository(FlitDbContext db, PersonaNat
     public Task<ConfigCobroPn> LeerAsync(Guid? ambitoOrganismoId, CancellationToken ct = default) =>
         portal.ConfigCobroAsync(ambitoOrganismoId, ct);
 
-    public async Task<IReadOnlyDictionary<(Guid TipoId, string Cobro), long>> MontosAsync(Guid? ambitoOrganismoId, CancellationToken ct = default)
+    public async Task<IReadOnlyDictionary<(Guid TipoId, string Cobro), long>> MontosAsync(Guid? ambitoOrganismoId, IReadOnlyCollection<Guid> tipos, CancellationToken ct = default)
     {
         var tarifas = await portal.TarifasVigentesAsync(portal.HoyColombia(), ct).ConfigureAwait(false);
-        // Web: solo valores generales. Un organismo inexistente (Guid.Empty) nunca coincide con una excepción propia.
-        var organismo = ambitoOrganismoId ?? Guid.Empty;
         var montos = new Dictionary<(Guid TipoId, string Cobro), long>();
-        foreach (var tipo in tarifas.Where(t => t.TipoId is not null).Select(t => t.TipoId!.Value).Distinct())
+        foreach (var tipo in tipos)
         {
             foreach (var cobro in CobrosPn.Todos)
             {
-                if (CotizadorPersonaNatural.Resolver(CobrosPn.ConceptoBase(cobro), tipo, organismo, tarifas) is { } t)
-                    montos[(tipo, cobro)] = t.ValorCop;
+                if (CotizadorPersonaNatural.MontoDeReferencia(CobrosPn.ConceptoBase(cobro), tipo, ambitoOrganismoId, tarifas) is { } monto)
+                    montos[(tipo, cobro)] = monto;
             }
         }
 

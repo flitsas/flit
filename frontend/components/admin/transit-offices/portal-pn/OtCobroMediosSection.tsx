@@ -308,6 +308,12 @@ export function OtCobroMediosSection({
         descripcion="Elige qué medios ofrece el portal y qué se cobra en cada uno. El monto se define en Precios; aquí solo se ve."
       />
 
+      {!conPin && (
+        <p className="text-xs text-[#59677D] dark:text-[#AFC2DA]">
+          Si un trámite no tiene valor general, se muestra el mayor valor por organismo.
+        </p>
+      )}
+
       <UiStateBoundary
         status={status}
         emptyMessage="Aún no hay trámites con cobro para configurar. Define sus precios y vuelve aquí."
