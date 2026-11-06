@@ -13526,15 +13526,16 @@ paths:
       summary: Precios del portal del organismo — HU #14388, Feature #14387, Épica #14297
       description: >
         Tarifas del organismo y los valores generales (organismo nulo) que le aplican. `editable` es falso en los valores
-        generales y en los conceptos que el usuario no puede cambiar. El `ot_admin` trabaja con el organismo de su token y
-        debe enviar `tipoTramiteId`; el SuperAdmin envía `transitOfficeId`. Si un `ot_admin` envía el identificador de otro
-        organismo, responde 403. Rol `ot_admin` o SuperAdmin, sin permiso nuevo.
+        generales y en los conceptos que el usuario no puede cambiar. El `ot_admin` trabaja con el organismo de su token; el
+        SuperAdmin envía `transitOfficeId`. Si un `ot_admin` envía el identificador de otro organismo, responde 403. En los
+        valores generales, el `ot_admin` ve «FLIT» como autor y no recibe los ids de quien los fijó. Rol `ot_admin` o
+        SuperAdmin, sin permiso nuevo.
       security:
         - bearerAuth: []
       parameters:
         - { name: transitOfficeId, in: query, description: Solo SuperAdmin (obligatorio). Para ot_admin solo se acepta el propio., schema: { type: string, format: uuid } }
         - { name: soloVigentes, in: query, schema: { type: boolean, default: false } }
-        - { name: tipoTramiteId, in: query, description: Obligatorio para ot_admin., schema: { type: string, format: uuid } }
+        - { name: tipoTramiteId, in: query, description: Filtro opcional., schema: { type: string, format: uuid } }
         - name: concepto
           in: query
           schema: { type: string, enum: [DERECHOS_TRANSITO, SERVICIO_FLIT, CAMBIO_COLOR, CONVERSION_COMBUSTIBLE, CAMBIO_CARROCERIA, ENVIO_DOCUMENTO] }
@@ -13547,7 +13548,7 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/TarifaOt" }
-        "400": { description: "PORTAL_TARIFAS_TIPO_OBLIGATORIO | PORTAL_TARIFAS_ORGANISMO_REQUERIDO (cuerpo `{ code, message }`)." }
+        "400": { description: "PORTAL_TARIFAS_ORGANISMO_REQUERIDO (cuerpo `{ code, message }`)." }
         "401": { description: Sin sesión. }
         "403": { description: "Otro rol, PORTAL_TARIFAS_OTRO_ORGANISMO o PORTAL_TARIFAS_SIN_ORGANISMO." }
     post:
