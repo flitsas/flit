@@ -12,7 +12,7 @@
 -- Sin dependientes: ninguna otra vista/matview/función SQL lee esta vista (CompanyQueryRepository y
 -- AnalyticsFamilyFilter solo la citan en comentarios o por columnas con nombre, que no cambian).
 -- Sin índice nuevo sobre channel: baja cardinalidad (5 valores) y el filtro siempre va acotado por tenant +
--- rango de fechas; el filtro por OT ya tiene el índice parcial del DDL 169.
+-- rango de fechas; el filtro por OT ya tiene el índice parcial del DDL 172.
 -- Idempotente: DROP VIEW IF EXISTS + CREATE OR REPLACE.
 -- =============================================================================
 DROP VIEW IF EXISTS analytics.v_procedure_detail_report;

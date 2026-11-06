@@ -9,7 +9,7 @@ namespace Flit.Infrastructure.Migrations;
 
 /// <summary>
 /// HU #14317 (Feature #14315, Épica #14296) — columnas <c>channel</c> y <c>channel_transit_office_id</c> en
-/// <c>tramites.procedure_instances</c>. DDL: <c>169-HU14317-canal-tramite.sql</c>. Sin backfill (HU #14318).
+/// <c>tramites.procedure_instances</c>. DDL: <c>172-HU14317-canal-tramite.sql</c>. Sin backfill (HU #14318).
 /// Sin Designer: sin los atributos la migración no se descubre.
 /// </summary>
 [DbContext(typeof(FlitDbContext))]
@@ -18,7 +18,7 @@ public partial class HU14317_CanalTramite : Migration
 {
     /// <inheritdoc />
     protected override void Up(MigrationBuilder migrationBuilder) =>
-        migrationBuilder.Sql(EmbeddedDdl.LoadUp("169-HU14317-canal-tramite.sql"));
+        migrationBuilder.Sql(EmbeddedDdl.LoadUp("172-HU14317-canal-tramite.sql"));
 
     /// <inheritdoc />
     protected override void Down(MigrationBuilder migrationBuilder) =>
