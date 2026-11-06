@@ -501,7 +501,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
   },
   {
     slug: "4-superadmin/7-plataforma-persona-natural",
-    title: "Plataforma: Persona Natural (trámites, organismos, tarifas, ajustes y contenido del portal)",
+    title: "Plataforma: Persona Natural (trámites, organismos, tarifas, ajustes, contenido, reportes y diseño web)",
     audience: "Super Admin",
     sectionId: "superadmin",
     keywords: [
@@ -546,9 +546,18 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
       "publicar cambios",
       "cambios sin publicar",
       "publicaciones anteriores",
+      "reportes del portal",
+      "descargar excel portal",
+      "medios de pago",
+      "pasarela de pago",
+      "valor de la gestion",
+      "diseno web",
+      "marca de la web",
+      "logo de la web",
+      "dominio principal",
     ],
     summary:
-      "Cómo el Super Admin deja listo el portal de Persona Natural: qué trámites se ofrecen y en qué organismos, cuánto cuestan, los ajustes del portal y los textos que ve el ciudadano.",
+      "Cómo el Super Admin deja listo el portal de Persona Natural: qué trámites se ofrecen y en qué organismos, cuánto cuestan, los medios de pago, los ajustes, los textos que ve el ciudadano, los reportes y el diseño de la web.",
     blocks: [
       {
         id: "entrada",
@@ -556,7 +565,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         paragraphs: [
           "Plataforma → «Persona Natural». Es la pantalla desde la que el equipo FLIT decide qué trámites puede hacer una persona natural desde el portal público, en qué organismos de tránsito y cuánto cuestan. Solo la ve el Super Admin con el permiso de administrar Persona Natural: los demás perfiles no tienen la entrada en el menú y, si abren la dirección directa, ven el mensaje «No tienes permiso para administrar el portal de Persona Natural.».",
           "Arriba está el «Estado de la configuración». Dice que para ofrecer un trámite al ciudadano necesitas tres cosas, y muestra cada una como «Hecho» o «Pendiente» con un botón que te lleva directo a donde se resuelve: 1. «Un tipo de trámite» (botón «Elegir trámites»), 2. «Un organismo de tránsito» (botón «Elegir organismos») y 3. «Una tarifa vigente» (botón «Configurar tarifas»). Debajo, una frase resume lo que el ciudadano ve hoy, por ejemplo «Hoy el ciudadano puede iniciar 2 tipos de trámite en 5 organismos de tránsito», o qué falta si todavía no puede iniciar ninguno. Si hay organismos habilitados sin tarifa, un aviso lo dice. Cuando los tres pasos están hechos, el panel se reduce a una sola línea («Configuración completa. Hoy el ciudadano puede iniciar…») con el botón «Ver pasos» para expandirlo; si falta algo, se muestra completo. El estado se actualiza solo cuando cambias algo.",
-          "Debajo hay cinco pestañas, en el orden de los pasos: «Trámites» (paso 1), «Organismos» (paso 2), «Tarifas» (paso 3), «Ajustes del portal» y «Contenido». Un trámite que no está listo o un organismo que ya no está activo en FLIT no cuentan como «Hecho». Cada una carga cuando entras en ella y muestra los cuatro estados de siempre: cargando, vacío, error con «Reintentar» y con datos. Para conectar el portal con una compañía se usa, además, la pestaña «Integraciones externas» de la ficha de la compañía (ver «Compañías, organismos de tránsito y causales»).",
+          "Debajo hay siete pestañas, en el orden de los pasos: «Trámites» (paso 1), «Organismos» (paso 2), «Tarifas» (paso 3), «Ajustes del portal», «Contenido», «Reportes» y «Diseño web». Un trámite que no está listo o un organismo que ya no está activo en FLIT no cuentan como «Hecho». Cada una carga cuando entras en ella y muestra los cuatro estados de siempre: cargando, vacío, error con «Reintentar» y con datos. Para conectar el portal con una compañía se usa, además, la pestaña «Integraciones externas» de la ficha de la compañía (ver «Compañías, organismos de tránsito y causales»).",
         ],
       },
       {
@@ -566,7 +575,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
           "Aquí decides qué se ofrece en el portal, en dos pestañas separadas. Una regla manda sobre todo lo demás, y la pestaña «Trámites» la recuerda arriba: un trámite aparece cuando está activado, el organismo está habilitado y existe una tarifa vigente para esa combinación. Si falta algo, el ciudadano no lo ve.",
           "«Trámites» (paso 1, «Trámites que ofrece el portal») lista los trámites activos y publicados en FLIT 2. Solo aparecen los trámites que en FLIT 2 están activos, publicados y con el asistente encendido; si uno deja de cumplirlo, sale de la lista y el portal deja de ofrecerlo. Cada uno muestra su categoría, el interruptor «Ofrecer en el portal», si «Lo ve el ciudadano» (Sí, No o «Falta tarifa») y en cuántos organismos tiene tarifa. La tabla lista solo los trámites habilitados en FLIT 2, y todos se pueden ofrecer: ningún trámite de la lista tiene el interruptor bloqueado. En el portal web y en el punto, cada trámite pide los mismos datos propios que en FLIT 2 (por ejemplo, en un cambio de color se escoge el color nuevo y se adjunta el soporte), y el portal sigue siendo solo para personas naturales.",
           "«Organismos» (paso 2, «Organismos de tránsito») lista solo los organismos de tránsito activos en FLIT. Cada uno muestra su municipio y departamento, el interruptor «Ofrecer en el portal», el interruptor «Canal del punto» y cuántos trámites tiene con tarifa. Si un organismo habilitado deja de estar activo en FLIT, sigue en la lista marcado «Ya no está activo en FLIT» y solo puedes dejar de ofrecerlo. Tiene un buscador por nombre, municipio o departamento y filtros por Organismo, Departamento, «Ofrecer en el portal» y «Canal del punto». Ambas tablas tienen paginación con «Filas por página».",
-          "«Canal del punto» es independiente de «Ofrecer en el portal». Encenderlo no publica el organismo en el portal, y apagar el portal no apaga el punto. Con el canal apagado la fila no muestra «Enlace y QR». Con el canal encendido, «Enlace y QR» abre un cuadro con la dirección de ese organismo, el botón «Copiar enlace» y el código QR de esa misma dirección. «Descargar QR» guarda la imagen para imprimirla. La placa y el documento no van en la dirección: quien atiende en el organismo entrega el enlace o el QR, y la persona los abre en el punto. Ahí ve «Iniciar» y «Consultar» (sin Cotizar), con los mismos trámites que el portal ofrece en ese organismo. Tras Iniciar con placa, documento y tipo, el punto muestra el Diagnóstico: si puede continuar o no, con los motivos, igual que en el portal web. Después de «Actores» sigue «Requisitos», con la misma pantalla del portal web: los documentos que pide FLIT 2.0 para ese tipo y organismo, que la persona carga o reemplaza ahí mismo, y en el traspaso el valor de venta, precargado con el avalúo de Fasecolda y editable. «Continuar» solo pasa a Pago cuando están todos los obligatorios; si falta alguno, la pantalla dice cuáles. Si el canal está apagado, el código no existe o el organismo no está activo en FLIT, la página explica el motivo y no deja entrar. Si el organismo ya no está activo en FLIT, el interruptor del canal queda bloqueado mientras esté apagado.",
+          "«Canal del punto» es independiente de «Ofrecer en el portal». Encenderlo no publica el organismo en el portal, y apagar el portal no apaga el punto. Con el canal apagado la fila no muestra «Enlace y QR». Con el canal encendido, «Enlace y QR» abre un cuadro con la dirección de ese organismo, el botón «Copiar enlace» y el código QR de esa misma dirección. «Descargar QR» guarda la imagen para imprimirla. Si el organismo tiene dominios propios activos, la dirección y el QR usan su dominio principal y el cuadro lista los demás en «Otras direcciones activas del organismo». La placa y el documento no van en la dirección: quien atiende en el organismo entrega el enlace o el QR, y la persona los abre en el punto. Ahí ve «Iniciar» y «Consultar» (sin Cotizar), con los mismos trámites que el portal ofrece en ese organismo. Tras Iniciar con placa, documento y tipo, el punto muestra el Diagnóstico: si puede continuar o no, con los motivos, igual que en el portal web. Después de «Actores» sigue «Requisitos», con la misma pantalla del portal web: los documentos que pide FLIT 2.0 para ese tipo y organismo, que la persona carga o reemplaza ahí mismo, y en el traspaso el valor de venta, precargado con el avalúo de Fasecolda y editable. «Continuar» solo pasa a Pago cuando están todos los obligatorios; si falta alguno, la pantalla dice cuáles. Si el canal está apagado, el código no existe o el organismo no está activo en FLIT, la página explica el motivo y no deja entrar. Si el organismo ya no está activo en FLIT, el interruptor del canal queda bloqueado mientras esté apagado.",
         ],
         bullets: [
           "Ofrecer un trámite u organismo: usa el interruptor de la fila. Verás un aviso como «… ahora se ofrece en el portal.».",
@@ -592,7 +601,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         ],
         bullets: [
           "Crear una tarifa nueva: botón «Nueva tarifa». Elige el trámite y el organismo (o «Todos los organismos (valor general)»), indica desde qué fecha rige («Rige desde»; debajo ves «Desde el … el portal cotiza con estos valores») y escribe el valor en pesos de al menos un cargo; los puntos de miles se acomodan al escribir y también al borrar un dígito. Los Derechos de tránsito y el Servicio digital siempre se registran para un trámite concreto; «Todos los trámites (solo cargos adicionales)» sirve solo para los demás cargos.",
-          "Cambiar los valores de una tarifa: en la fila, el lápiz «Cambiar valores de…». No se edita la tarifa anterior: se registra una nueva con otra fecha. Cada campo muestra el valor de hoy y solo viajan los que cambies. La tarifa anterior deja de regir el día antes del inicio de la nueva. Las tarifas anteriores ya no ofrecen cambiar valores.",
+          "Cambiar los valores de una tarifa: en la fila, el lápiz «Cambiar valores de…». No se edita la tarifa anterior: se registra una nueva con otra fecha. Cada campo muestra el valor de hoy y solo viajan los que cambies. La tarifa anterior deja de regir el día antes del inicio de la nueva; si la nueva empieza la misma fecha, la reemplaza. Las tarifas anteriores ya no ofrecen cambiar valores.",
           "Fecha de inicio: puede ser hoy o una fecha futura; no se admite una fecha pasada.",
           "Ver el historial: ícono de historial en la fila («Ver historial de…»). Muestra, por cargo, los valores anteriores con su vigencia, estado y la fecha en que se registraron.",
         ],
@@ -604,7 +613,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
           {
             variant: "warning",
             title: "Mensajes frecuentes",
-            text: "«La fecha de inicio no puede ser anterior a hoy.» Elige hoy o una fecha futura. «Ya hay una tarifa para este trámite y organismo que empieza ese mismo día o después. Elige una fecha de inicio posterior.» Cambia la fecha de inicio. «Cambia al menos un valor para registrar el cambio.» No modificaste ningún valor. «Los derechos de tránsito y el servicio digital se registran siempre para un trámite concreto: elige el trámite.»",
+            text: "«La fecha de inicio no puede ser anterior a hoy.» Elige hoy o una fecha futura. «Ya hay una tarifa para este trámite y organismo que se cruza con esa fecha. Elige otra fecha de inicio.» Cambia la fecha de inicio. «Cambia al menos un valor para registrar el cambio.» No modificaste ningún valor. «Los derechos de tránsito y el servicio digital se registran siempre para un trámite concreto: elige el trámite.»",
           },
         ],
       },
@@ -651,6 +660,29 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
             alt: "Flujo de publicación del contenido del portal: se editan las preguntas, banners y enlaces, se revisa cómo quedaría, si está bien se publica y el ciudadano lo ve, y si no se vuelve a editar",
             caption: "De los cambios a lo publicado: el ciudadano solo ve lo que se publicó.",
           },
+        ],
+      },
+      {
+        id: "medios-de-pago",
+        title: "6. Medios de pago de la web",
+        paragraphs: [
+          "En la pestaña «Tarifas», encima de la lista, «Medios de pago» define qué se cobra en la web de persona. Por cada trámite hay dos valores, «Valor del trámite» y «Valor de la gestión», y cada uno tiene su interruptor. La web no ofrece «PIN en caja»: ese medio solo existe en el punto de un organismo. El monto se define en las tarifas; aquí solo se ve.",
+          "Si un trámite no tiene valor general, se muestra el mayor valor por organismo, porque a quien elija ese organismo sí se le cobrará. Cada organismo administra lo suyo desde su hub (ver «Portal Persona Natural del organismo: reportes, cobro, diseño y dominios»); el valor de la gestión solo lo mueve el Super Admin.",
+        ],
+      },
+      {
+        id: "reportes",
+        title: "7. Reportes",
+        paragraphs: [
+          "La pestaña «Reportes» lista los trámites que llegaron por la web de persona y por los puntos de los organismos, con su canal, organismo, tipo de trámite, radicado, estado, fecha en que cayó, modalidad, valor del trámite y valor de la gestión. Filtra por los campos de la barra y descarga el resultado en Excel, con las mismas filas y columnas que ves en pantalla.",
+        ],
+      },
+      {
+        id: "diseno-web",
+        title: "8. Diseño web",
+        paragraphs: [
+          "La pestaña «Diseño web» define el nombre, el logo y los colores de la web de persona. Lo que cambias se guarda como borrador y la vista previa muestra cómo quedará. Al publicar, la web muestra los colores y el logo desde la siguiente carga; los portales de los organismos no cambian.",
+          "Sin diseño publicado, la web usa la marca FLIT. Al retirarlo, vuelve a la marca FLIT y tu borrador se conserva para publicarlo otra vez. Si los colores no se leerían bien, un mensaje lo dice y «Ajustar automáticamente» los corrige.",
         ],
       },
     ],

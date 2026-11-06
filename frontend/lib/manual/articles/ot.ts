@@ -740,4 +740,113 @@ export const OT_ARTICLES: ManualArticle[] = [
       },
     ],
   },
+  {
+    slug: "2-ot/14-portal-persona-natural",
+    title: "Portal Persona Natural del organismo: reportes, cobro, diseño y dominios",
+    audience: "Organismo de Tránsito",
+    sectionId: "ot",
+    keywords: [
+      "portal persona natural",
+      "punto de atencion",
+      "marca blanca",
+      "logo del portal",
+      "colores del portal",
+      "banner del portal",
+      "publicar diseno",
+      "retirar diseno",
+      "precios del portal",
+      "medios de pago",
+      "pasarela de pago",
+      "pin en caja",
+      "valor del tramite",
+      "valor de la gestion",
+      "reportes del portal",
+      "descargar excel portal",
+      "dominio propio",
+      "varios dominios",
+      "dominio principal",
+      "comprobar dominio",
+      "registros dns",
+      "enlace y qr",
+    ],
+    summary:
+      "Cómo el organismo administra su portal de Persona Natural: ve los trámites que llegan por él, define qué se cobra, le pone su marca y lo publica en sus propios dominios.",
+    blocks: [
+      {
+        id: "entrada",
+        title: "1. Dónde está",
+        paragraphs: [
+          "En el hub del organismo, la pestaña «Portal Persona Natural» tiene tres secciones: «Reportes», «Cobro» y «Diseño». La ve el administrador del organismo, que solo trabaja con su propio organismo. El Super Admin entra al hub del organismo que necesite y ve lo mismo.",
+          "Los cambios de cobro, de diseño publicado y de dominios llegan al portal sin pasos adicionales: quien lo abra después del cambio ya lo ve. Un trámite ya radicado conserva el valor con el que se radicó.",
+        ],
+      },
+      {
+        id: "reportes",
+        title: "2. Reportes",
+        paragraphs: [
+          "«Trámites del portal Persona Natural» lista los trámites que llegaron por el portal de tu organismo, con su canal, tipo de trámite, radicado, estado, fecha en que cayó, modalidad, valor del trámite y valor de la gestión. Solo ves los de tu organismo.",
+          "Filtra por los campos de la barra y descarga el resultado en Excel: el archivo trae las mismas filas y columnas que ves en pantalla. Si nada coincide, verás «No hay trámites del portal en FLIT 2.0 con esos filtros.».",
+        ],
+      },
+      {
+        id: "cobro",
+        title: "3. Cobro: medios de pago y precios",
+        paragraphs: [
+          "«Medios de pago» define qué medios ofrece tu portal («Pasarela de pago» y «PIN en caja») y qué se cobra en cada uno, por trámite. Cada trámite tiene dos valores: «Valor del trámite» y «Valor de la gestión». El monto se define en Precios; en esta tabla solo se ve.",
+          "«Precios», en la misma sección, muestra lo que paga la persona por cada trámite en tu organismo. Un valor marcado «Valor general» lo define FLIT para todos los organismos y no se edita aquí. Si registras un precio propio, ese tiene prioridad sobre el general.",
+        ],
+        bullets: [
+          "Ofrecer o quitar un medio: usa su interruptor. El estado cambia entre «Se ofrece en el portal» y «No se ofrece en el portal».",
+          "Dejar de cobrar un valor: apaga su interruptor en el trámite y el medio. Si apagas los dos, el aviso dice que ese medio no se ofrecerá para ese trámite.",
+          "Encender un valor sin monto: no se guarda. El mensaje pide definir el valor en Precios y volver a encenderlo.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "El valor de la gestión (servicio FLIT y envío) solo lo cambia el superadministrador de FLIT.",
+          },
+        ],
+      },
+      {
+        id: "diseno",
+        title: "4. Diseño: tu marca en el portal",
+        paragraphs: [
+          "Aquí le pones al portal el nombre, el logo, el banner y los colores de tu organismo. La vista previa muestra cómo quedará. Lo que cambias se guarda como borrador y la persona no lo ve hasta que lo publiques.",
+        ],
+        bullets: [
+          "Colores: elige el principal y el secundario. Si con ellos el portal no se leería bien, un mensaje lo dice y no deja publicar; «Ajustar automáticamente» los corrige por ti.",
+          "Logo y banner: cárgalos desde su recuadro, donde se indican los formatos y el tamaño máximo. Son opcionales.",
+          "Publicar: el portal muestra tu marca desde la siguiente carga.",
+          "Retirar: el portal vuelve a la marca FLIT y tu borrador se conserva para publicarlo otra vez.",
+        ],
+        callouts: [
+          {
+            variant: "warning",
+            title: "Si otra persona editó al mismo tiempo",
+            text: "El borrador no se guarda sobre el cambio de la otra persona. Vuelve a cargar la pantalla y aplica de nuevo tus cambios.",
+          },
+        ],
+      },
+      {
+        id: "dominios",
+        title: "5. Dominios del organismo",
+        paragraphs: [
+          "En «Diseño» también están los dominios: las direcciones web propias por las que se abre tu portal. Un organismo puede tener varios, hasta 10, y todos llevan al mismo portal. Por estas direcciones solo se abre el portal: no hay inicio de sesión de FLIT.",
+          "Cada dominio tiene su propio estado. Si uno falla, los demás siguen funcionando. Uno de los activos es el principal: el enlace y el QR del punto usan ese.",
+        ],
+        bullets: [
+          "Agregar un dominio: escribe la dirección y regístrala. Queda pendiente de comprobación y la pantalla muestra los registros DNS que debes crear con tu proveedor del dominio.",
+          "Comprobar: cuando crees los registros, pulsa «Comprobar ahora». Si no se puede confirmar, verás el motivo y podrás intentarlo de nuevo.",
+          "Principal: el primero que se activa queda como principal. Para cambiarlo, usa «Hacer principal» en otro dominio activo.",
+          "Retirar: pulsa «Retirar» y confirma. El portal sigue en tus otros dominios y en el enlace del punto. Si retiras el principal, otro dominio activo toma su lugar.",
+        ],
+        callouts: [
+          {
+            variant: "tip",
+            text: "Si no tienes ningún dominio activo, el portal sigue disponible en el enlace del punto de atención.",
+          },
+        ],
+      },
+    ],
+  },
 ];
