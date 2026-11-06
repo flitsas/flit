@@ -32,6 +32,10 @@ export interface DomainRegisterFormProps {
   client?: DomainClient;
   /** A quién pertenece el dominio en el texto de retiro. Por defecto «esta red». */
   ownerLabel?: string;
+  /** Feature #14380 (portal del OT): un dominio por organismo. Con dominio vigente solo se puede retirar. */
+  soloRetirar?: boolean;
+  /** Texto de lo que pasa al retirar. Por defecto, el de marca blanca. */
+  notaRetiro?: string;
 }
 
 /**
@@ -39,7 +43,7 @@ export interface DomainRegisterFormProps {
  * (HU #12427 AC3; registrar/cambiar/retirar es siempre `/admin/companies/{tenantId}/domain`,
  * nunca `/company/domain`, que es de solo lectura para la propia cabeza).
  */
-export function DomainRegisterForm({ tenantId, purpose, label = "Dominio de la red", domain, onRegistered, onRemoved, client, ownerLabel = "esta red" }: DomainRegisterFormProps) {
+export function DomainRegisterForm({ tenantId, purpose, label = "Dominio de la red", domain, onRegistered, onRemoved, client, ownerLabel = "esta red", soloRetirar = false, notaRetiro }: DomainRegisterFormProps) {
   const [host, setHost] = useState(domain?.host ?? "");
   const inputId = `domain-host${purpose ? `-${purpose}` : ""}`;
   const [saving, setSaving] = useState(false);
@@ -49,6 +53,7 @@ export function DomainRegisterForm({ tenantId, purpose, label = "Dominio de la r
   const [formError, setFormError] = useState<string | null>(null);
 
   const isChange = Boolean(domain);
+  const mostrarCampo = !(soloRetirar && isChange);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -95,6 +100,7 @@ export function DomainRegisterForm({ tenantId, purpose, label = "Dominio de la r
 
   return (
     <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-3">
+      {mostrarCampo && (
       <div>
         <label htmlFor={inputId} className="mb-1 block text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }}>
           {label}
@@ -122,6 +128,9 @@ export function DomainRegisterForm({ tenantId, purpose, label = "Dominio de la r
           </p>
         )}
       </div>
+      )}
+
+      {!mostrarCampo && <p className="text-xs">Para usar otro dominio, retira primero este.</p>}
 
       {formError && (
         <p role="alert" className="text-xs font-medium" style={{ color: "#FF4E00" }}>
@@ -130,6 +139,7 @@ export function DomainRegisterForm({ tenantId, purpose, label = "Dominio de la r
       )}
 
       <div className="flex flex-wrap gap-3">
+        {mostrarCampo && (
         <button
           type="submit"
           disabled={saving || removing}
@@ -139,6 +149,7 @@ export function DomainRegisterForm({ tenantId, purpose, label = "Dominio de la r
           <Save className="h-3.5 w-3.5" aria-hidden />
           {saving ? "Guardando…" : isChange ? "Cambiar dominio" : "Registrar dominio"}
         </button>
+        )}
 
         {isChange && (
           <button
@@ -161,7 +172,7 @@ export function DomainRegisterForm({ tenantId, purpose, label = "Dominio de la r
           aria-label="Confirmar retiro del dominio"
         >
           <p style={{ color: "var(--color-flit-primary)" }}>
-            ¿Retirar el dominio de {ownerLabel}? Los usuarios volverán a acceder por el dominio de FLIT.
+            ¿Retirar el dominio de {ownerLabel}? {notaRetiro ?? "Los usuarios volverán a acceder por el dominio de FLIT."}
             El registro histórico se conserva.
           </p>
           <div className="mt-2 flex gap-2">
