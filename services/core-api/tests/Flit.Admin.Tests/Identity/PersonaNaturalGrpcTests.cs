@@ -160,6 +160,33 @@ public sealed class PersonaNaturalGrpcTests(WebApplicationFactory<Program> facto
     }
 
     [Fact]
+    public async Task ObtenerMarcaPunto_ConUnCodigoDesconocidoRespondeLaMarcaFlitSinError_YUnaImagenAjenaNoSeEncuentra()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host(habilitada: true);
+        var bueno = await ClienteAsync(host, Portal, PlatformTenants.PersonaNatural, ct);
+        var ajeno = await ClienteAsync(host, Portal, Guid.NewGuid(), ct);
+
+        // HU #14378: nunca un error ni datos internos: código desconocido = marca FLIT.
+        var marca = await bueno.ObtenerMarcaPuntoAsync(new ObtenerMarcaPuntoRequest { Codigo = "NO-EXISTE-14378" }, cancellationToken: ct);
+        marca.Origen.Should().Be("flit");
+        marca.Nombre.Should().BeEmpty();
+        marca.ColorPrimario.Should().BeEmpty();
+        marca.LogoId.Should().BeEmpty();
+        marca.BannerId.Should().BeEmpty();
+        marca.Version.Should().Be(0);
+
+        // Una imagen que no es de un publicado no se entrega.
+        (await bueno.ObtenerImagenMarcaPuntoAsync(new ObtenerImagenMarcaPuntoRequest { ImagenId = Guid.NewGuid().ToString() }, cancellationToken: ct))
+            .Encontrado.Should().BeFalse();
+        (await bueno.ObtenerImagenMarcaPuntoAsync(new ObtenerImagenMarcaPuntoRequest { ImagenId = "no-es-un-id" }, cancellationToken: ct))
+            .Encontrado.Should().BeFalse();
+
+        var conOtraEmpresa = (await ((Func<Task>)(() => ajeno.ObtenerMarcaPuntoAsync(new ObtenerMarcaPuntoRequest { Codigo = "AB1" }, cancellationToken: ct).ResponseAsync)).Should().ThrowAsync<RpcException>()).Which;
+        PlatformRpcErrors.Reason(conOtraEmpresa).Should().Be("invalid_tenant");
+    }
+
+    [Fact]
     public async Task EvaluarRequisitos_ValidaLaEntrada_YUnTipoDesconocidoNoEstaDisponible()
     {
         var ct = TestContext.Current.CancellationToken;

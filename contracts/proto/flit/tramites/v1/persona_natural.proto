@@ -54,6 +54,13 @@ service PersonaNaturalService {
   // altera el grant del portal. estado = ok | codigo_desconocido | organismo_no_operable | canal_apagado.
   rpc ResolverCanalPunto(ResolverCanalPuntoRequest) returns (ResolverCanalPuntoResponse);
 
+  // Marca publicada del organismo para el portal del punto (HU #14378). Sin caché: cada llamada lee lo vigente. Ante código
+  // inválido, organismo sin marca o falla responde origen = flit (nunca un error). Sin borradores ni datos internos.
+  rpc ObtenerMarcaPunto(ObtenerMarcaPuntoRequest) returns (ObtenerMarcaPuntoResponse);
+
+  // Imagen de logo o banner PUBLICADA del organismo (bytes y ETag = sha256). Una de borrador responde encontrado = false.
+  rpc ObtenerImagenMarcaPunto(ObtenerImagenMarcaPuntoRequest) returns (ObtenerImagenMarcaPuntoResponse);
+
   // HU 10 — organismos operables en FLIT 2 donde se puede trasladar una cuenta (cualquier organismo operable, no solo los
   // del grant del portal). Sin datos sensibles; con `id` valida un destino concreto.
   rpc ListarOrganismosDestino(ListarOrganismosDestinoRequest) returns (ListarOrganismosDestinoResponse);
@@ -358,4 +365,28 @@ message ResolverCanalPuntoResponse {
   string organismo_id = 2;
   string codigo = 3;
   string nombre = 4;
+}
+
+message ObtenerMarcaPuntoRequest { string codigo = 1; }
+message ObtenerMarcaPuntoResponse {
+  string origen = 1;                 // organismo | flit
+  string nombre = 2;
+  string color_primario = 3;
+  string color_secundario = 4;
+  string color_sobre_primario = 5;
+  string logo_id = 6;                // vacío = imagen de FLIT
+  string banner_id = 7;              // vacío = imagen de FLIT
+  int32 version = 8;                 // versión publicada; 0 si origen = flit
+}
+
+message ObtenerImagenMarcaPuntoRequest {
+  string imagen_id = 1;
+  string if_none_match = 2;          // sha256 que el cliente ya tiene
+}
+message ObtenerImagenMarcaPuntoResponse {
+  bool encontrado = 1;
+  bool no_modificado = 2;
+  string sha256 = 3;
+  string content_type = 4;
+  bytes contenido = 5;
 }

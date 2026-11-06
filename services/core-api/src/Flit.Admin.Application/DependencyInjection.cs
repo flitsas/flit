@@ -341,6 +341,7 @@ public static class DependencyInjection
         // Feature #14374 (Épica #14297): marca del portal Persona Natural de cada organismo.
         services.AddScoped<Companies.TransitOffices.PortalMarca.PortalMarcaAdminHandler>();
         services.AddScoped<Companies.TransitOffices.PortalMarca.PortalMarcaImagenHandler>();
+        services.AddScoped<Companies.TransitOffices.PortalMarca.PortalMarcaPuntoHandler>();
 
         // Reportes del organismo de tránsito: hasta ahora el módulo de reportes solo existía para
         // la empresa gestora, y el organismo operaba sin ningún instrumento propio.

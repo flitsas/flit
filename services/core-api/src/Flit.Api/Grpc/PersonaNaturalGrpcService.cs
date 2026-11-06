@@ -34,7 +34,8 @@ public sealed class PersonaNaturalGrpcService(
     PersonaNaturalConfiguracionPublicaReader configuracionPublica, Flit.Admin.Application.Banners.Ports.IBannerImageStorage imagenesBanner,
     IPersonaNaturalConfigRepository configuracionPn,
     Flit.Tramites.Domain.Tramites.Catalog.IVehicleColorCatalog catalogoColores,
-    Flit.Tramites.Domain.Tramites.Catalog.IVehicleBodyworkCatalog catalogoCarrocerias)
+    Flit.Tramites.Domain.Tramites.Catalog.IVehicleBodyworkCatalog catalogoCarrocerias,
+    Flit.Admin.Application.Companies.TransitOffices.PortalMarca.PortalMarcaPuntoHandler marcaPunto)
     : PersonaNaturalService.PersonaNaturalServiceBase
 {
     /// <summary>Razón estable de un método que todavía no tiene implementación.</summary>
@@ -157,6 +158,54 @@ public sealed class PersonaNaturalGrpcService(
             Codigo = r.Codigo,
             Nombre = r.Nombre,
         };
+    }
+
+    /// <summary>
+    /// HU #14378 — marca publicada del organismo para el portal del punto. Sin caché por tiempo: cada llamada lee lo vigente, así
+    /// lo recién publicado o retirado se ve en la siguiente. Sin marca, con código inválido o ante una falla responde
+    /// <c>origen = flit</c> y nada más: nunca un error ni datos internos.
+    /// </summary>
+    public override async Task<ObtenerMarcaPuntoResponse> ObtenerMarcaPunto(ObtenerMarcaPuntoRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Verificar(context);
+        var m = await marcaPunto.ObtenerAsync(request.Codigo, context.CancellationToken).ConfigureAwait(false);
+        return new ObtenerMarcaPuntoResponse
+        {
+            Origen = m.Origen,
+            Nombre = m.Nombre ?? string.Empty,
+            ColorPrimario = m.Colores?.Primario ?? string.Empty,
+            ColorSecundario = m.Colores?.Secundario ?? string.Empty,
+            ColorSobrePrimario = m.Colores?.SobrePrimario ?? string.Empty,
+            LogoId = m.LogoId?.ToString() ?? string.Empty,
+            BannerId = m.BannerId?.ToString() ?? string.Empty,
+            Version = m.Version,
+        };
+    }
+
+    /// <summary>HU #14378 — imagen de marca PUBLICADA. Una de borrador, retirada o inexistente responde <c>encontrado = false</c>.</summary>
+    public override async Task<ObtenerImagenMarcaPuntoResponse> ObtenerImagenMarcaPunto(ObtenerImagenMarcaPuntoRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Verificar(context);
+        if (!Guid.TryParse(Texto(request.ImagenId), out var id))
+            return new ObtenerImagenMarcaPuntoResponse { Encontrado = false };
+
+        var imagen = await marcaPunto.ObtenerImagenAsync(id, Texto(request.IfNoneMatch), context.CancellationToken).ConfigureAwait(false);
+        if (!imagen.Encontrada)
+            return new ObtenerImagenMarcaPuntoResponse { Encontrado = false };
+
+        var respuesta = new ObtenerImagenMarcaPuntoResponse
+        {
+            Encontrado = true,
+            NoModificado = imagen.NoModificada,
+            Sha256 = imagen.Sha256,
+            ContentType = imagen.ContentType,
+        };
+        if (imagen.Contenido is { } contenido)
+            await using (contenido.ConfigureAwait(false))
+                respuesta.Contenido = await Google.Protobuf.ByteString.FromStreamAsync(contenido, context.CancellationToken).ConfigureAwait(false);
+        return respuesta;
     }
 
     /// <summary>
