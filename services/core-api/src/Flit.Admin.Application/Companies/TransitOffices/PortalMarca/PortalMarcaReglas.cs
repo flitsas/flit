@@ -21,11 +21,18 @@ public sealed record PortalMarcaResultado<T>(T? Valor, PortalMarcaError? Error)
 
 /// <summary>
 /// Reglas puras de la marca del portal (HU #14375/#14376): nombre y colores, completitud, contraste mínimo 4,5:1 (mismos pares
-/// que <see cref="BrandAssetValidator"/>: texto sobre principal y texto sobre secundario) y archivos de imagen.
+/// que <see cref="BrandAssetValidator"/>: texto sobre principal y texto sobre secundario), el principal legible como título
+/// sobre el fondo del portal (3:1) y archivos de imagen.
 /// </summary>
 public static class PortalMarcaReglas
 {
     public const double ContrasteMinimo = WcagContrast.DefaultMinRatio;
+    /// <summary>WCAG 1.4.3 para títulos: el color principal se usa como texto (nombre, títulos y enlaces) en el portal.</summary>
+    public const double ContrasteTitulos = 3d;
+
+    /// <summary>Fondo de página del portal (<c>--flit-soft</c> de frontend-personanatural) en #RRGGBB.</summary>
+    public const string FondoPortal = "#E6EFFC";
+
     public const int LogoMaxBytes = 512 * 1024;
     public const int BannerMaxBytes = 2 * 1024 * 1024;
 
@@ -92,6 +99,11 @@ public static class PortalMarcaReglas
                 return new PortalMarcaError(StatusCodes422, PortalMarcaErrores.Contraste,
                     $"El contraste entre {etiqueta} es {Decimal(ratio, "0.##")}:1 y el mínimo es {Decimal(ContrasteMinimo, "0.#")}:1. Elija colores con más contraste para publicar.");
         }
+
+        var titulos = WcagContrast.RoundedContrastRatio(c.Primary, FondoPortal);
+        if (!WcagContrast.MeetsMinimum(titulos, ContrasteTitulos))
+            return new PortalMarcaError(StatusCodes422, PortalMarcaErrores.Contraste,
+                $"El contraste entre el color principal y el fondo del portal es {Decimal(titulos, "0.##")}:1 y el mínimo es {Decimal(ContrasteTitulos, "0.#")}:1. El nombre y los títulos no se leerían: elija un color principal más oscuro para publicar.");
 
         return null;
     }

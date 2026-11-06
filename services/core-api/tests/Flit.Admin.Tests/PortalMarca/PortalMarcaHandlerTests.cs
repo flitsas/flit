@@ -103,6 +103,22 @@ public sealed partial class PortalMarcaHandlerTests
     }
 
     [Fact]
+    public async Task AC2_UnPrincipalClaroNoSePublicaAunqueElTextoSeLeaSobreEl()
+    {
+        var actual = await _admin.ObtenerAsync(Organismo, Ct);
+        var g = await _admin.GuardarAsync(
+            Organismo,
+            new GuardarPortalMarcaRequest("Tránsito de prueba", Colores("#FFE066", "#5D96C1", "#162744"), actual.RowVersion),
+            Actor,
+            Ct);
+
+        var r = await _admin.PublicarAsync(Organismo, g.Valor!.RowVersion, Actor, Ct);
+
+        r.Error!.Code.Should().Be(PortalMarcaErrores.Contraste);
+        r.Error.Message.Should().Contain("fondo del portal");
+    }
+
+    [Fact]
     public async Task AC2_UnBorradorIncompletoNoSePublicaYDiceQueFalta()
     {
         var actual = await _admin.ObtenerAsync(Organismo, Ct);
