@@ -62,11 +62,17 @@ public static class CotizacionesEndpoints
         ArgumentNullException.ThrowIfNull(app);
         var grupo = app.MapGroup(Base).AllowAnonymous().RequireRateLimiting(AbusoEndpoints.PoliticaPorIp);
 
-        // El catálogo es de lectura y va cacheado: sin captcha, solo con el límite por IP (la landing lo pide al abrir).
-        grupo.MapGet("/organismos", (CotizacionesService s, CancellationToken ct) => Atender(async () => Results.Ok(await s.OrganismosAsync(ct).ConfigureAwait(false))));
-
-        grupo.MapGet("/tipos-tramite", (string? organismoId, CotizacionesService s, CancellationToken ct) =>
+        // El catálogo es de lectura: sin captcha, solo con el límite por IP (la landing lo pide al abrir). HU #14391: lo que se
+        // ofrece depende de los precios, así que no se cachea (ni aquí ni en el navegador): un precio nuevo se ve de inmediato.
+        grupo.MapGet("/organismos", (HttpContext http, CotizacionesService s, CancellationToken ct) =>
         {
+            http.Response.Headers.CacheControl = "no-store";
+            return Atender(async () => Results.Ok(await s.OrganismosAsync(ct).ConfigureAwait(false)));
+        });
+
+        grupo.MapGet("/tipos-tramite", (string? organismoId, HttpContext http, CotizacionesService s, CancellationToken ct) =>
+        {
+            http.Response.Headers.CacheControl = "no-store";
             if (!string.IsNullOrWhiteSpace(organismoId) && !Guid.TryParse(organismoId, out _))
                 return Task.FromResult(Problema(StatusCodes.Status400BadRequest, "Datos inválidos", "El organismo no es válido.", "datos_invalidos"));
             return Atender(async () => Results.Ok(await s.TiposAsync(string.IsNullOrWhiteSpace(organismoId) ? null : organismoId, ct).ConfigureAwait(false)));

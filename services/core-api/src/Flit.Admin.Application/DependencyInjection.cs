@@ -494,6 +494,11 @@ public static class DependencyInjection
         services.AddScoped<Plataforma.PersonaNatural.HistorialTarifaPnHandler>();
         services.AddScoped<Plataforma.PersonaNatural.TarifaVigentePnHandler>();
         services.AddScoped<Plataforma.PersonaNatural.VersionarTarifasPnHandler>();
+        // HU #14388 (Feature #14387, Épica #14297) — los mismos precios vistos desde el dashboard del organismo.
+        services.AddScoped<Plataforma.PersonaNatural.ListarTarifasOtHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.HistorialTarifaOtHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.TiposTarifaOtHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.VersionarTarifasOtHandler>();
         // HU #14072 — configuración del portal: parámetros, organismos y lista blanca de tipos.
         services.AddScoped<Plataforma.PersonaNatural.ParametrosPnHandler>();
         services.AddScoped<Plataforma.PersonaNatural.OrganismosPnHandler>();

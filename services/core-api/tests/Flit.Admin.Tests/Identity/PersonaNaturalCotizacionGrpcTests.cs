@@ -33,6 +33,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
         var ct = TestContext.Current.CancellationToken;
         using var host = Host();
         await using var e = await Escenario.CrearAsync(host, ct);
+        await e.PrecioBaseAsync(e.TipoElegible, null, ct); // HU #14391: sin un tipo con precio el organismo no se ofrece
         var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
 
         var respuesta = await cliente.ListarOrganismosAsync(new ListarOrganismosRequest(), cancellationToken: ct);
@@ -47,6 +48,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
         var ct = TestContext.Current.CancellationToken;
         using var host = Host();
         await using var e = await Escenario.CrearAsync(host, ct);
+        await e.PrecioBaseAsync(e.TipoElegible, null, ct); // HU #14391: sin un tipo con precio el organismo no se ofrece
         var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
         (await cliente.ListarOrganismosAsync(new ListarOrganismosRequest(), cancellationToken: ct)).Organismos
             .Select(o => o.Id).Should().Contain(e.Organismo.ToString());
@@ -229,6 +231,136 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
         (await cliente.CotizarAsync(Pedir(e.CodigoSinListaBlanca, e.Organismo), cancellationToken: ct)).TotalCop.Should().Be(15_000);
     }
 
+    // ── HU #14391 — no ofrecer trámites ni organismos sin precio ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task HU14391_AC1_UnTipoSinPrecioPropioNiGeneral_NoSeOfrece_AunqueOtroOrganismoLoTenga()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        await using var e = await Escenario.CrearAsync(host, ct);
+        await e.PrecioBaseAsync(e.TipoSinTarifa, e.OrganismoSinGrant, ct); // precio propio de OTRO organismo: a este no le sirve
+        var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
+
+        var enOrganismo = await cliente.ListarTiposDisponiblesAsync(new ListarTiposDisponiblesRequest { OrganismoId = e.Organismo.ToString() }, cancellationToken: ct);
+
+        enOrganismo.Tipos.Select(t => t.Codigo).Should().NotContain(e.CodigoSinTarifa);
+    }
+
+    [Fact]
+    public async Task HU14391_AC4_UnTipoConValorGeneralYSinPrecioPropio_SeOfreceYSeCobraElGeneral()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        await using var e = await Escenario.CrearAsync(host, ct);
+        await e.PrecioBaseAsync(e.TipoElegible, null, ct); // general: derechos 100.000 + servicio 50.000
+        var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
+
+        var tipos = await cliente.ListarTiposDisponiblesAsync(new ListarTiposDisponiblesRequest { OrganismoId = e.Organismo.ToString() }, cancellationToken: ct);
+        var cotizacion = await cliente.CotizarAsync(Pedir(e.CodigoElegible, e.Organismo), cancellationToken: ct);
+
+        tipos.Tipos.Select(t => t.Codigo).Should().Contain(e.CodigoElegible);
+        cotizacion.TotalCop.Should().Be(150_000);
+    }
+
+    [Fact]
+    public async Task HU14391_AC2_UnOrganismoSinNingunTipoConPrecio_NoSeOfrece_YConUnoSi()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        await using var e = await Escenario.CrearAsync(host, ct);
+        // El único precio es de un tipo que el portal no ofrece (apagado) y otro solo con derechos: ningún tipo ofrecible.
+        await e.PrecioBaseAsync(e.TipoApagado, null, ct);
+        await e.TarifaAsync("DERECHOS_TRANSITO", e.TipoElegible, null, 100_000, ct);
+        var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
+
+        (await cliente.ListarOrganismosAsync(new ListarOrganismosRequest(), cancellationToken: ct)).Organismos
+            .Select(o => o.Id).Should().NotContain(e.Organismo.ToString());
+
+        await e.TarifaAsync("SERVICIO_FLIT", e.TipoElegible, null, 50_000, ct);
+
+        (await cliente.ListarOrganismosAsync(new ListarOrganismosRequest(), cancellationToken: ct)).Organismos
+            .Select(o => o.Id).Should().Contain(e.Organismo.ToString());
+    }
+
+    [Fact]
+    public async Task HU14391_AC2_ElPrecioPropioDelOrganismoBasta_SinValorGeneral()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        await using var e = await Escenario.CrearAsync(host, ct);
+        await e.PrecioBaseAsync(e.TipoElegible, e.Organismo, ct);
+        var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
+
+        (await cliente.ListarOrganismosAsync(new ListarOrganismosRequest(), cancellationToken: ct)).Organismos
+            .Select(o => o.Id).Should().Contain(e.Organismo.ToString());
+        (await cliente.ListarTiposDisponiblesAsync(new ListarTiposDisponiblesRequest { OrganismoId = e.Organismo.ToString() }, cancellationToken: ct))
+            .Tipos.Select(t => t.Codigo).Should().Contain(e.CodigoElegible);
+    }
+
+    [Fact]
+    public async Task HU14391_AC5_UnPrecioRecienRegistradoOCerrado_SeReflejaEnLaSiguienteConsulta()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        await using var e = await Escenario.CrearAsync(host, ct);
+        var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
+        var organismos = () => cliente.ListarOrganismosAsync(new ListarOrganismosRequest(), cancellationToken: ct).ResponseAsync;
+        var tipos = () => cliente.ListarTiposDisponiblesAsync(new ListarTiposDisponiblesRequest { OrganismoId = e.Organismo.ToString() }, cancellationToken: ct).ResponseAsync;
+        (await organismos()).Organismos.Select(o => o.Id).Should().NotContain(e.Organismo.ToString());
+        (await tipos()).Tipos.Select(t => t.Codigo).Should().NotContain(e.CodigoElegible);
+
+        await e.PrecioBaseAsync(e.TipoElegible, e.Organismo, ct); // recién registrado
+        (await organismos()).Organismos.Select(o => o.Id).Should().Contain(e.Organismo.ToString());
+        (await tipos()).Tipos.Select(t => t.Codigo).Should().Contain(e.CodigoElegible);
+
+        await e.CerrarPreciosAsync(e.TipoElegible, ct); // recién cerrado
+        (await organismos()).Organismos.Select(o => o.Id).Should().NotContain(e.Organismo.ToString());
+        (await tipos()).Tipos.Select(t => t.Codigo).Should().NotContain(e.CodigoElegible);
+    }
+
+    [Fact]
+    public async Task HU14391_UnPrecioReemplazadoElMismoDia_NoSeOfreceNiSeCobra_ElVigenteEsElNuevo()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        await using var e = await Escenario.CrearAsync(host, ct);
+        await e.PrecioBaseAsync(e.TipoElegible, e.Organismo, ct);
+        await e.ReemplazarDerechosAsync(e.TipoElegible, e.Organismo, 200_000, ct);
+        var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
+
+        var cotizacion = await cliente.CotizarAsync(Pedir(e.CodigoElegible, e.Organismo), cancellationToken: ct);
+
+        cotizacion.TotalCop.Should().Be(250_000, "derechos 200.000 (el reemplazo) + servicio FLIT 50.000");
+    }
+
+    [Fact]
+    public void HU14391_ConOferta_SoloDejaLosOrganismosConAlMenosUnTipoElegibleConPrecioBase()
+    {
+        var conGeneral = new Flit.Infrastructure.PersonaNatural.OrganismoHabilitadoPn(Guid.NewGuid(), "A", "A", string.Empty, string.Empty);
+        var sinPrecio = new Flit.Infrastructure.PersonaNatural.OrganismoHabilitadoPn(Guid.NewGuid(), "B", "B", string.Empty, string.Empty);
+        var tipoOk = Guid.NewGuid();
+        var tipoNoElegible = Guid.NewGuid();
+        var tipos = new[] { Tipo(tipoOk, true), Tipo(tipoNoElegible, false) };
+        var tarifas = new[]
+        {
+            new Flit.Tramites.Domain.Tramites.PersonaNatural.TarifaVigente("DERECHOS_TRANSITO", tipoOk, null, 1, Guid.NewGuid()),
+            new Flit.Tramites.Domain.Tramites.PersonaNatural.TarifaVigente("SERVICIO_FLIT", tipoOk, conGeneral.Id, 1, Guid.NewGuid()),
+            new Flit.Tramites.Domain.Tramites.PersonaNatural.TarifaVigente("DERECHOS_TRANSITO", tipoNoElegible, sinPrecio.Id, 1, Guid.NewGuid()),
+            new Flit.Tramites.Domain.Tramites.PersonaNatural.TarifaVigente("SERVICIO_FLIT", tipoNoElegible, sinPrecio.Id, 1, Guid.NewGuid()),
+        };
+
+        var r = Flit.Infrastructure.PersonaNatural.PersonaNaturalPortalReader.ConOferta([conGeneral, sinPrecio], tipos, tarifas);
+
+        // A: derechos general + servicio propio = ofrece el tipo elegible. B: solo precio de un tipo no elegible = nada que ofrecer.
+        r.Should().ContainSingle().Which.Id.Should().Be(conGeneral.Id);
+    }
+
+    private static Flit.Infrastructure.PersonaNatural.TipoPersonaNatural Tipo(Guid id, bool elegible) =>
+        new(id, "T" + id.ToString("N")[..4], "Tipo", "OTROS", 1,
+            new Flit.Tramites.Domain.Tramites.Services.ProcedureTypeGateProfile(),
+            new Flit.Tramites.Domain.Tramites.PersonaNatural.ResultadoElegibilidad(elegible, elegible ? [] : ["motivo"]));
+
     // ── Soporte ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
     private static CotizarRequest Pedir(string codigo, Guid organismo, params string[] adicionales)
@@ -343,6 +475,24 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
             _db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO admin.persona_natural_tariffs (concept, procedure_type_id, transit_office_id, amount_cop, valid_from)
                 VALUES ({concepto}, {tipo}, {organismo}, {valor}, {Hoy}::date)
+                """, ct);
+
+        /// <summary>Los dos renglones base (derechos 100.000 y servicio FLIT 50.000) de un tipo; general o de un organismo.</summary>
+        public async Task PrecioBaseAsync(Guid tipo, Guid? organismo, CancellationToken ct)
+        {
+            await TarifaAsync("DERECHOS_TRANSITO", tipo, organismo, 100_000, ct);
+            await TarifaAsync("SERVICIO_FLIT", tipo, organismo, 50_000, ct);
+        }
+
+        /// <summary>Cierra (valid_to en el pasado) todos los precios de un tipo: lo único que el trigger permite sobre una versión abierta.</summary>
+        public Task<int> CerrarPreciosAsync(Guid tipo, CancellationToken ct) =>
+            _db.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE admin.persona_natural_tariffs SET valid_to = valid_from WHERE procedure_type_id = {tipo} AND valid_to IS NULL", ct);
+
+        /// <summary>Un valor nuevo de derechos con el mismo inicio: reemplaza al anterior por la función de versionado (HU #14389).</summary>
+        public Task<int> ReemplazarDerechosAsync(Guid tipo, Guid? organismo, long valor, CancellationToken ct) =>
+            _db.Database.ExecuteSqlInterpolatedAsync($"""
+                SELECT admin.persona_natural_tariff_new_version('DERECHOS_TRANSITO', {tipo}::uuid, {organismo}::uuid, {valor}, {Hoy}::date, NULL::uuid)
                 """, ct);
 
         public Task<int> DesactivarEmpresaOtAsync(CancellationToken ct) =>

@@ -19,12 +19,12 @@ import {
   hoyColombiaIso,
   parsePesos,
   textoPesos,
-  registrarTarifasPn,
   type ConceptoTarifa,
   type GrupoTarifa,
   type TarifaPn,
 } from "@/lib/api/admin-pn-tarifas";
-import type { OrganismoPn, TipoPn } from "@/lib/api/admin-pn-config";
+import type { OrganismoPn } from "@/lib/api/admin-pn-config";
+import { TARIFAS_API_PLATAFORMA, type TarifasApi, type TarifasModo, type TipoTarifa } from "./tarifas-api";
 import { PN_FIELD_ERROR_CLS, PN_HINT_CLS, PN_INPUT_CLS, PN_INPUT_ERROR_CLS, PN_LABEL_CLS } from "./pn-ui";
 import { PnButton } from "./pn-componentes";
 import { pnError } from "./pnErrors";
@@ -33,8 +33,12 @@ export type TarifaFormMode = { kind: "create" } | { kind: "version"; grupo: Grup
 
 export interface TarifaFormModalProps {
   mode: TarifaFormMode;
-  tipos: readonly TipoPn[];
+  tipos: readonly TipoTarifa[];
   organismos: readonly OrganismoPn[];
+  /** Cliente de API; por defecto el de Plataforma. */
+  api?: TarifasApi;
+  /** Hub del OT: sin selector de organismo, trámite obligatorio y cargos bloqueados. Por defecto, Plataforma. */
+  modo?: TarifasModo;
   onClose: () => void;
   /** Se invoca con las versiones nuevas que devolvió la API. */
   onSaved: (nuevas: TarifaPn[]) => void;
@@ -42,7 +46,16 @@ export interface TarifaFormModalProps {
 
 type Errores = Partial<Record<ConceptoTarifa | "tipo" | "fecha" | "valores" | "general", string>>;
 
-export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: TarifaFormModalProps) {
+export function TarifaFormModal({
+  mode,
+  tipos,
+  organismos,
+  api = TARIFAS_API_PLATAFORMA,
+  modo,
+  onClose,
+  onSaved,
+}: TarifaFormModalProps) {
+  const fijo = modo?.organismoFijo === true;
   const versionando = mode.kind === "version";
   const grupo = versionando ? mode.grupo : null;
   const hoy = useMemo(() => hoyColombiaIso(), []);
@@ -61,6 +74,10 @@ export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: T
   const [errores, setErrores] = useState<Errores>({});
   const [busy, setBusy] = useState(false);
 
+  /** Un cargo no se puede cambiar si el modo lo bloquea o si el servidor lo marcó como no editable. */
+  const bloqueado = (c: ConceptoTarifa): boolean =>
+    (modo?.conceptosBloqueados?.includes(c) ?? false) || grupo?.porConcepto[c]?.editable === false;
+
   const opcionesOrganismo = useMemo(
     () => organismos.map((o) => ({ value: o.id, label: o.nombre, hint: `${o.municipio} · ${o.departamento}` })),
     [organismos],
@@ -76,7 +93,7 @@ export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: T
 
     for (const concepto of CONCEPTOS_TARIFA) {
       const texto = valores[concepto];
-      if (texto.trim() === "") continue;
+      if (bloqueado(concepto) || texto.trim() === "") continue;
       const r = parsePesos(texto);
       if (!r.ok) {
         nuevos[concepto] = r.mensaje;
@@ -85,8 +102,10 @@ export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: T
       // Al versionar solo viajan los conceptos que cambiaron: repetir el vigente chocaría con su propia vigencia.
       const vigente = grupo?.porConcepto[concepto]?.valorCop;
       if (versionando && vigente === r.valor) continue;
-      if (!tipoId && CONCEPTOS_QUE_EXIGEN_TIPO.includes(concepto)) {
-        nuevos.tipo = "Los derechos de tránsito y el servicio digital se registran siempre para un trámite concreto: elige el trámite.";
+      if (!tipoId && (fijo || CONCEPTOS_QUE_EXIGEN_TIPO.includes(concepto))) {
+        nuevos.tipo = fijo
+          ? "Elige el trámite al que corresponde el precio."
+          : "Los derechos de tránsito y el servicio digital se registran siempre para un trámite concreto: elige el trámite.";
       }
       enviar.push({ concepto, valorCop: r.valor });
     }
@@ -101,9 +120,9 @@ export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: T
 
     setBusy(true);
     try {
-      const nuevas = await registrarTarifasPn({
+      const nuevas = await api.registrar({
         tipoTramiteId: tipoId || null,
-        organismoId: organismoId || null,
+        organismoId: fijo ? undefined : organismoId || null,
         vigenteDesde: fecha,
         valores: enviar,
       });
@@ -132,7 +151,9 @@ export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: T
       title={versionando ? "Cambiar valores de la tarifa" : "Nueva tarifa"}
       description={
         versionando
-          ? `${grupo?.tipoTramiteNombre ?? "Todos los trámites"} · ${grupo?.organismoNombre ?? "Todos los organismos"}`
+          ? fijo
+            ? (grupo?.tipoTramiteNombre ?? "Todos los trámites")
+            : `${grupo?.tipoTramiteNombre ?? "Todos los trámites"} · ${grupo?.organismoNombre ?? "Todos los organismos"}`
           : "Elige el trámite, escribe los valores en pesos y la fecha desde la que rigen."
       }
       icon={ReceiptText}
@@ -166,7 +187,7 @@ export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: T
               aria-invalid={Boolean(errores.tipo)}
               className={`${PN_INPUT_CLS} ${errores.tipo ? PN_INPUT_ERROR_CLS : ""}`}
             >
-              <option value="">Todos los trámites (solo cargos adicionales)</option>
+              <option value="">{fijo ? "Elige el trámite" : "Todos los trámites (solo cargos adicionales)"}</option>
               {tipos.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.nombre}
@@ -180,6 +201,7 @@ export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: T
             )}
           </label>
 
+          {!fijo && (
           <div className={PN_LABEL_CLS}>
             <span id="pn-tarifa-organismo">Organismo</span>
             <SearchableSelect
@@ -194,8 +216,9 @@ export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: T
               className="[&_input]:h-11 [&_input]:rounded-[10px] [&_input]:border-[#DFE5ED] [&_input]:text-sm [&_input]:focus:border-flit-brand [&_input]:focus:ring-2 [&_input]:focus:ring-inset [&_input]:focus:ring-flit-brand"
             />
           </div>
+          )}
         </div>
-        {!versionando && (
+        {!versionando && !fijo && (
           <p className={PN_HINT_CLS}>
             Si el valor es distinto en un organismo, elígelo aquí: su valor tiene prioridad sobre el valor general del trámite.
           </p>
@@ -231,6 +254,7 @@ export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: T
           <div className="grid items-end gap-x-4 gap-y-3 sm:grid-cols-2">
             {CONCEPTOS_TARIFA.map((concepto) => {
               const actual = grupo?.porConcepto[concepto];
+              const sinPermiso = bloqueado(concepto);
               return (
                 <label key={concepto} className={PN_LABEL_CLS}>
                   {CONCEPTO_LABEL[concepto]}
@@ -238,6 +262,7 @@ export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: T
                     inputMode="numeric"
                     autoComplete="off"
                     value={valores[concepto]}
+                    disabled={sinPermiso}
                     onChange={(e) => {
                       const entrada = e.target.value;
                       const cursor = e.target.selectionStart ?? entrada.length;
@@ -251,6 +276,7 @@ export function TarifaFormModal({ mode, tipos, organismos, onClose, onSaved }: T
                     aria-invalid={Boolean(errores[concepto])}
                     className={`${PN_INPUT_CLS} ${errores[concepto] ? PN_INPUT_ERROR_CLS : ""}`}
                   />
+                  {sinPermiso && <span className={PN_HINT_CLS}>Solo lo cambia FLIT.</span>}
                   {actual && versionando && (
                     <span className={PN_HINT_CLS}>Hoy: {formatPesos(actual.valorCop)}</span>
                   )}

@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.Mail;
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 
 namespace Flit.PersonaNatural.Api.Cotizaciones;
@@ -24,7 +23,8 @@ public enum ResultadoEnvioCotizacion
 
 /// <summary>
 /// Catálogo y cotización del portal (HU #14043). La cotización NUNCA se calcula aquí ni se cachea: sale de la fachada de
-/// core-api (único cálculo, también para el paso de pago). El catálogo (organismos y tipos) sí se cachea unos segundos.
+/// core-api (único cálculo, también para el paso de pago). Desde la HU #14391 el catálogo de organismos y tipos tampoco se
+/// cachea: lo que se ofrece depende de los precios y un precio recién registrado o cerrado se ve en la siguiente consulta.
 /// <para>
 /// Habeas Data: el correo solo existe en memoria durante la petición. El límite y la idempotencia usan una huella HMAC
 /// del correo y de la clave, en memoria de la réplica, con vencimiento; el correo nunca se escribe en base ni en logs.
@@ -33,7 +33,6 @@ public enum ResultadoEnvioCotizacion
 public sealed class CotizacionesService(
     IFachadaTramites fachada,
     IEnviadorCotizacion enviador,
-    IMemoryCache cache,
     IOptions<CotizacionesOptions> options,
     IConfiguration configuration,
     TimeProvider reloj)
@@ -44,11 +43,11 @@ public sealed class CotizacionesService(
     private readonly Dictionary<string, Queue<DateTimeOffset>> _envios = [];
     private readonly Dictionary<string, DateTimeOffset> _idempotencia = [];
 
-    public Task<IReadOnlyList<OrganismoDto>> OrganismosAsync(CancellationToken ct) =>
-        EnCache("pn:organismos", () => fachada.ListarOrganismosAsync(ct));
+    /// <summary>HU #14391 — sin caché: un organismo aparece o desaparece apenas cambian sus precios.</summary>
+    public Task<IReadOnlyList<OrganismoDto>> OrganismosAsync(CancellationToken ct) => fachada.ListarOrganismosAsync(ct);
 
-    public Task<IReadOnlyList<TipoTramiteDto>> TiposAsync(string? organismoId, CancellationToken ct) =>
-        EnCache($"pn:tipos:{organismoId}", () => fachada.ListarTiposAsync(organismoId, ct));
+    /// <summary>HU #14391 — sin caché: un tipo con precio nuevo (o sin precio) se refleja en la siguiente consulta.</summary>
+    public Task<IReadOnlyList<TipoTramiteDto>> TiposAsync(string? organismoId, CancellationToken ct) => fachada.ListarTiposAsync(organismoId, ct);
 
     public Task<CotizacionDto> CotizarAsync(string tipoCodigo, string organismoId, IReadOnlyCollection<string> adicionales, CancellationToken ct) =>
         fachada.CotizarAsync(tipoCodigo, organismoId, adicionales, ct);
@@ -122,16 +121,6 @@ public sealed class CotizacionesService(
             return false;
         var limpio = correo.Trim();
         return MailAddress.TryCreate(limpio, out var m) && m.Address == limpio && m.Host.Contains('.', StringComparison.Ordinal);
-    }
-
-    private async Task<IReadOnlyList<T>> EnCache<T>(string clave, Func<Task<IReadOnlyList<T>>> origen)
-    {
-        if (cache.TryGetValue(clave, out IReadOnlyList<T>? existente) && existente is not null)
-            return existente;
-        var lista = await origen().ConfigureAwait(false);
-        if (_o.CacheCatalogoSegundos > 0)
-            cache.Set(clave, lista, TimeSpan.FromSeconds(_o.CacheCatalogoSegundos));
-        return lista;
     }
 
     private void LiberarClave(string huellaClave)

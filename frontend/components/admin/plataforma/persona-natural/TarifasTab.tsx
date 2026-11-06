@@ -23,13 +23,13 @@ import {
   CONCEPTOS_TARIFA,
   CONCEPTO_LABEL,
   agruparTarifas,
-  fetchTarifasPn,
   formatPesos,
   type ConceptoTarifa,
   type GrupoTarifa,
   type TarifaPn,
 } from "@/lib/api/admin-pn-tarifas";
-import { fetchOrganismosPn, fetchTiposPn, type OrganismoPn, type TipoPn } from "@/lib/api/admin-pn-config";
+import type { OrganismoPn } from "@/lib/api/admin-pn-config";
+import { TARIFAS_API_PLATAFORMA, type TarifasApi, type TarifasModo, type TipoTarifa } from "./tarifas-api";
 import { PN_FIELD_ERROR_CLS } from "./pn-ui";
 import { nombrePropio } from "./formato";
 import { PnSeccionHeader } from "./pn-componentes";
@@ -57,11 +57,26 @@ function valorDe(g: GrupoTarifa, concepto: ConceptoTarifa): string {
   return t ? formatPesos(t.valorCop) : "—";
 }
 
-export function TarifasTab({ onCambio }: { onCambio?: () => void } = {}) {
+/** Un grupo es de solo lectura cuando el servidor marca todos sus cargos como no editables (valor general, ajenos). */
+function esSoloLectura(g: GrupoTarifa): boolean {
+  const cargos = Object.values(g.porConcepto);
+  return cargos.length > 0 && cargos.every((t) => t.editable === false);
+}
+
+export interface TarifasTabProps {
+  onCambio?: () => void;
+  /** Cliente de API; por defecto el de Plataforma. Debe ser estable entre renders. */
+  api?: TarifasApi;
+  /** Presentación y restricciones; por defecto Plataforma, sin cambios. */
+  modo?: TarifasModo;
+}
+
+export function TarifasTab({ onCambio, api = TARIFAS_API_PLATAFORMA, modo }: TarifasTabProps = {}) {
+  const fijo = modo?.organismoFijo === true;
   const { show } = useToast();
   const [tarifas, setTarifas] = useState<TarifaPn[]>([]);
   const [status, setStatus] = useState<UiStatus>("loading");
-  const [tipos, setTipos] = useState<TipoPn[]>([]);
+  const [tipos, setTipos] = useState<TipoTarifa[]>([]);
   const [organismos, setOrganismos] = useState<OrganismoPn[]>([]);
   const [catalogoError, setCatalogoError] = useState<string | null>(null);
   const [form, setForm] = useState<TarifaFormMode | null>(null);
@@ -74,14 +89,14 @@ export function TarifasTab({ onCambio }: { onCambio?: () => void } = {}) {
   const load = useCallback(async (signal?: AbortSignal) => {
     setStatus("loading");
     try {
-      const list = await fetchTarifasPn({}, signal);
+      const list = await api.listar({}, signal);
       if (signal?.aborted) return;
       setTarifas(list.map((t) => ({ ...t, organismoNombre: t.organismoNombre ? nombrePropio(t.organismoNombre) : t.organismoNombre })));
       setStatus(list.length === 0 ? "empty" : "ready");
     } catch {
       if (!signal?.aborted) setStatus("error");
     }
-  }, []);
+  }, [api]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -93,8 +108,9 @@ export function TarifasTab({ onCambio }: { onCambio?: () => void } = {}) {
   // Los tipos y organismos solo alimentan el formulario: si fallan, la tabla sigue y el formulario avisa.
   useEffect(() => {
     const controller = new AbortController();
-    Promise.all([fetchTiposPn(controller.signal), fetchOrganismosPn(controller.signal)])
-      .then(([t, o]) => {
+    api
+      .catalogos(controller.signal)
+      .then(({ tipos: t, organismos: o }) => {
         if (controller.signal.aborted) return;
         setTipos(t);
         setOrganismos(
@@ -105,7 +121,7 @@ export function TarifasTab({ onCambio }: { onCambio?: () => void } = {}) {
         if (!controller.signal.aborted) setCatalogoError("No se pudieron cargar los trámites y organismos para el formulario.");
       });
     return () => controller.abort();
-  }, []);
+  }, [api]);
 
   // Por defecto solo se ven las vigentes y próximas; con el filtro de Estado se pueden ver también las anteriores.
   const filtraPorEstado = filtros.condicionDe("estado") !== undefined;
@@ -140,7 +156,7 @@ export function TarifasTab({ onCambio }: { onCambio?: () => void } = {}) {
     const actions: RowAction[] = [
       { icon: History, label: `Ver historial de ${nombre}`, onClick: () => setHistorial(g) },
     ];
-    if (g.estado !== "cerrada") {
+    if (g.estado !== "cerrada" && !esSoloLectura(g)) {
       actions.push({
         icon: PencilLine,
         label: `Cambiar valores de ${nombre}`,
@@ -152,15 +168,26 @@ export function TarifasTab({ onCambio }: { onCambio?: () => void } = {}) {
   }
 
   const columns: DataTableColumn<GrupoTarifa>[] = [
-    {
-      key: "organismo",
-      header: (
-        <EncabezadoFiltrable filtros={filtros} columnaId="organismo">
-          Organismo
-        </EncabezadoFiltrable>
-      ),
-      render: (g) => g.organismoNombre ?? <span className="text-[#59677D] dark:text-white/70">Todos los organismos</span>,
-    },
+    fijo
+      ? {
+          key: "origen",
+          header: "Origen",
+          render: (g) =>
+            g.organismoId === null ? (
+              <StatusBadge label="Valor general" tone="neutral" />
+            ) : (
+              <StatusBadge label="De tu organismo" tone="info" />
+            ),
+        }
+      : {
+          key: "organismo",
+          header: (
+            <EncabezadoFiltrable filtros={filtros} columnaId="organismo">
+              Organismo
+            </EncabezadoFiltrable>
+          ),
+          render: (g) => g.organismoNombre ?? <span className="text-[#59677D] dark:text-white/70">Todos los organismos</span>,
+        },
     {
       key: "tipo",
       header: (
@@ -218,9 +245,12 @@ export function TarifasTab({ onCambio }: { onCambio?: () => void } = {}) {
     <div className="flex flex-col gap-4">
       <PnSeccionHeader
         id="pn-tarifas-titulo"
-        paso={3}
-        titulo="Tarifas del portal"
-        descripcion="Cuánto paga el ciudadano por cada trámite: derechos de tránsito, servicio digital y otros cargos. Si necesitas otro valor, registra un cambio: el anterior queda en el historial y no se edita. Se ven las tarifas vigentes y próximas; para ver las anteriores, filtra por Estado."
+        paso={modo?.sinPaso ? undefined : 3}
+        titulo={modo?.titulo ?? "Tarifas del portal"}
+        descripcion={
+          modo?.descripcion ??
+          "Cuánto paga el ciudadano por cada trámite: derechos de tránsito, servicio digital y otros cargos. Si necesitas otro valor, registra un cambio: el anterior queda en el historial y no se edita. Se ven las tarifas vigentes y próximas; para ver las anteriores, filtra por Estado."
+        }
         accion={
           <CreateButton label="Nueva tarifa" icon={ReceiptText} onClick={() => abrirFormulario({ kind: "create" })} />
         }
@@ -275,6 +305,8 @@ export function TarifasTab({ onCambio }: { onCambio?: () => void } = {}) {
           mode={form}
           tipos={tipos}
           organismos={organismos}
+          api={api}
+          modo={modo}
           onClose={() => setForm(null)}
           onSaved={(nuevas) => {
             setForm(null);
@@ -288,7 +320,7 @@ export function TarifasTab({ onCambio }: { onCambio?: () => void } = {}) {
         />
       )}
 
-      {historial && <TarifaHistorialModal grupo={historial} onClose={() => setHistorial(null)} />}
+      {historial && <TarifaHistorialModal grupo={historial} api={api} onClose={() => setHistorial(null)} />}
     </div>
   );
 }
