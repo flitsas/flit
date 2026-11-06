@@ -290,19 +290,6 @@ public sealed class TenantLeakTests(PostgresDatabaseFixture fixture) : PostgresT
         options.Should().ContainSingle().Which.TenantId.Should().Be(HierarchyScenario.C1);
     }
 
-    /// <summary>Q12 no devuelve filas con tenant: se comprueba el contenido exacto (C1 → Ot1; el resto → Ot1 también, pero cada uno una sola).</summary>
-    [PostgresFact]
-    public async Task Q13_convenios_de_OT_son_exactamente_los_propios()
-    {
-        await HierarchyScenario.SeedAsync(Fixture);
-        await using var ctx = NewContext();
-        var repo = new CompanyAgreementRepository(ctx);
-
-        foreach (var tenant in HierarchyScenario.Clients)
-            (await repo.ListActiveOfficeIdsAsync(tenant)).Should().Equal([HierarchyScenario.Ot1],
-                $"{HierarchyScenario.CodeOf(tenant)} tiene un único convenio propio");
-    }
-
     private static DbTenantScopeResolver NewResolver(Infrastructure.Persistence.FlitDbContext ctx) =>
         new(ctx, new DbHierarchySwitches(ctx, NullLogger<DbHierarchySwitches>.Instance), NullLogger<DbTenantScopeResolver>.Instance);
 }

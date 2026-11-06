@@ -284,7 +284,6 @@ Flit.Admin.Domain.Companies.Settings.ITenantProductFlags => Flit.Infrastructure.
 Flit.Admin.Domain.Companies.Settings.ITenantSettingsRepository => Flit.Infrastructure.Persistence.Repositories.TenantSettingsRepository (Scoped)
 Flit.Admin.Domain.Companies.SignatureVault.ISignatureVaultReader => Flit.Infrastructure.Persistence.Repositories.DbSignatureVaultReader (Scoped)
 Flit.Admin.Domain.Companies.SignatureVault.ISignatureVaultRepository => Flit.Infrastructure.Persistence.Repositories.SignatureVaultRepository (Scoped)
-Flit.Admin.Domain.Companies.TransitOffices.ICompanyAgreementRepository => Flit.Infrastructure.Persistence.Repositories.CompanyAgreementRepository (Scoped)
 Flit.Admin.Domain.Companies.TransitOffices.IEffectiveTransitOfficeListResolver => Flit.Infrastructure.OtRules.EffectiveTransitOfficeListResolver (Scoped)
 Flit.Admin.Domain.Companies.TransitOffices.IOtBlockingPolicyRepository => Flit.Infrastructure.Persistence.Repositories.OtBlockingPolicyRepository (Scoped)
 Flit.Admin.Domain.Companies.TransitOffices.IOtConsultationRestrictionRepository => Flit.Infrastructure.Persistence.Repositories.OtConsultationRestrictionRepository (Scoped)
