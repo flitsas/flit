@@ -694,9 +694,11 @@ internal sealed partial class ProcedureInstanceRepository(
     }
 
     public async Task<ProcedureInstanceBiometricValidation?> FindProtegidaPorVencimientoManualAsync(
-        Guid tenantId, string tipoDoc, string documento, DateTimeOffset now, CancellationToken ct)
+        Guid tenantId, string tipoDoc, string documento, DateTimeOffset now,
+        DateTimeOffset? salidaDeBorradorAt, CancellationToken ct)
     {
-        // HU #13824 — identidad vencida a mano que los trámites fuera de borrador siguen honrando hasta su fin previo.
+        // HU #13824 — identidad vencida a mano que los trámites fuera de borrador siguen honrando hasta su fin previo,
+        // siempre que el trámite haya salido de borrador antes del vencimiento (ConservaFirmaTrasVencimientoManual).
         var candidates = await db.ProcedureInstanceBiometricValidations
             .AsNoTracking()
             .Where(v => v.TenantId == tenantId
@@ -710,13 +712,44 @@ internal sealed partial class ProcedureInstanceRepository(
             .ToListAsync(ct);
 
         // Estado "no borrador" cualquiera: la protección solo depende de que el trámite ya no sea borrador.
-        return candidates.FirstOrDefault(v => BiometricRules.EsAprobadaVigenteParaTramite(v, TramiteEstado.Entregado, now));
+        return candidates.FirstOrDefault(v =>
+            BiometricRules.EsAprobadaVigenteParaTramite(v, TramiteEstado.Entregado, now, salidaDeBorradorAt));
     }
 
-    public async Task<IReadOnlySet<string>> ListProtegidasPorVencimientoManualKeysAsync(
+    public async Task<DateTimeOffset?> GetSalidaDeBorradorAtAsync(Guid instanceId, Guid tenantId, CancellationToken ct)
+    {
+        var salida = await db.ProcedureInstanceStatusHistories
+            .AsNoTracking()
+            .Where(h => h.ProcedureInstanceId == instanceId
+                && h.TenantId == tenantId
+                && h.FromStatus == TramiteEstado.Borrador)
+            .OrderBy(h => h.ChangedAt)
+            .Select(h => (DateTimeOffset?)h.ChangedAt)
+            .FirstOrDefaultAsync(ct);
+        return salida;
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, DateTimeOffset>> ListSalidasDeBorradorAsync(
+        IReadOnlyCollection<Guid> tenantIds, IReadOnlyCollection<Guid> instanceIds, CancellationToken ct)
+    {
+        if (instanceIds.Count == 0 || tenantIds.Count == 0)
+            return new Dictionary<Guid, DateTimeOffset>();
+
+        var filas = await db.ProcedureInstanceStatusHistories
+            .AsNoTracking()
+            .Where(h => tenantIds.Contains(h.TenantId)
+                && instanceIds.Contains(h.ProcedureInstanceId)
+                && h.FromStatus == TramiteEstado.Borrador)
+            .GroupBy(h => h.ProcedureInstanceId)
+            .Select(g => new { Id = g.Key, Salida = g.Min(h => h.ChangedAt) })
+            .ToListAsync(ct);
+        return filas.ToDictionary(f => f.Id, f => f.Salida);
+    }
+
+    public async Task<IReadOnlyDictionary<string, IReadOnlyList<IdentidadVencidaManual>>> ListProtegidasPorVencimientoManualKeysAsync(
         IReadOnlyCollection<Guid> tenantIds, DateTimeOffset now, CancellationToken ct)
     {
-        var keys = new HashSet<string>(StringComparer.Ordinal);
+        var keys = new Dictionary<string, IReadOnlyList<IdentidadVencidaManual>>(StringComparer.Ordinal);
         if (tenantIds.Count == 0)
             return keys;
 
@@ -735,9 +768,17 @@ internal sealed partial class ProcedureInstanceRepository(
                     || (v.ProcedureInstance != null && v.ProcedureInstance.DeletedAt == null)))
             .ToListAsync(ct);
 
+        // Por llave se devuelven TODAS las identidades vencidas a mano (aprobación + vencimiento): el listado compara contra
+        // la salida de borrador de cada trámite y basta con que CUALQUIERA cumpla (misma regla que el gate).
         foreach (var v in candidates)
-            if (BiometricRules.EsAprobadaVigenteParaTramite(v, TramiteEstado.Entregado, now))
-                keys.Add(BiometricRules.IdentidadKey(v.TenantId, v.DocumentType, v.DocumentNumber));
+        {
+            if (!BiometricRules.EsAprobadaVigenteParaTramite(v, TramiteEstado.Entregado, now) || v.ExpiredManuallyAt is not { } vencidaA)
+                continue;
+            var key = BiometricRules.IdentidadKey(v.TenantId, v.DocumentType, v.DocumentNumber);
+            if (!keys.TryGetValue(key, out var lista))
+                keys[key] = lista = new List<IdentidadVencidaManual>();
+            ((List<IdentidadVencidaManual>)lista).Add(new IdentidadVencidaManual(v.ValidatedAt, vencidaA));
+        }
 
         return keys;
     }

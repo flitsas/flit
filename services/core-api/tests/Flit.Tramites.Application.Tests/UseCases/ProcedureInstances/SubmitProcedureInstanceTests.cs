@@ -512,6 +512,8 @@ public sealed class SubmitProcedureInstanceTests
         var tenantId = Guid.NewGuid();
         var instance = FullyGated(id, tenantId);
         instance.BiometricValidations.Clear(); // docs+fur+organismo ok, falta biométrica
+        // Con placa asignada la firma es obligatoria (sin placa se exime por preasignación).
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
         Wire(instance, ct);
 
         var (_, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);

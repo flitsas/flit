@@ -173,6 +173,8 @@ public sealed class ChipIdentidadListadoBaulTests
             ValueText = "1HGCM82633A004352",
             Source = "user",
         });
+        // Con placa asignada la firma es obligatoria (sin placa se exime por preasignación).
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue { FieldKey = "plate", ValueText = "ABC123", Source = "user" });
         instance.PreflightSnapshots.Add(new ProcedureInstancePreflightSnapshot
         {
             Id = Guid.NewGuid(),
