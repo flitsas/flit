@@ -29,8 +29,14 @@ export interface PnErrorInfo {
 export function pnError(err: unknown, fallback = GENERICO): PnErrorInfo {
   if (err instanceof ApiError) {
     const body = (err.body && typeof err.body === "object" ? (err.body as Record<string, unknown>) : null) ?? null;
-    const code = typeof body?.error === "string" ? body.error : null;
+    // Plataforma responde `{ error, message }`; el portal del OT, `{ code, message }`.
+    const codigoOt = typeof body?.code === "string" ? body.code : null;
+    const code = typeof body?.error === "string" ? body.error : codigoOt;
     if (code && OVERRIDES[code]) return { status: err.status, code, message: OVERRIDES[code], body };
+    // En el hub del OT el 403 trae su propio motivo exacto (concepto ajeno, otro organismo): se muestra tal cual.
+    if (err.status === 403 && codigoOt && typeof body?.message === "string" && body.message.trim()) {
+      return { status: 403, code, message: body.message, body };
+    }
     if (err.status === 403) {
       return {
         status: 403,

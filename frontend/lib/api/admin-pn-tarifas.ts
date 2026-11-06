@@ -55,6 +55,10 @@ export interface TarifaPn {
   creadaPor: string | null;
   actualizadaEn: string | null;
   actualizadaPor: string | null;
+  /** Solo en el portal del OT y, aditivo, en el historial: nombre de quien registró la versión. */
+  creadaPorNombre?: string | null;
+  /** Solo en el portal del OT: `false` en valores generales y conceptos ajenos. Ausente = editable. */
+  editable?: boolean;
 }
 
 export interface TarifasFiltro {
