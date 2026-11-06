@@ -1,3 +1,4 @@
+using Flit.Admin.Application.Auditing;
 using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Integration.Tests.Postgres;
@@ -288,6 +289,25 @@ public sealed class TenantLeakTests(PostgresDatabaseFixture fixture) : PostgresT
         LeakAssert.NoForeignRows("Q24 OtMetricsReadRepository.ListClientCompaniesAsync", HierarchyScenario.O,
             new HashSet<Guid> { HierarchyScenario.C1 }, options!, r => r.TenantId, r => r.TenantId);
         options.Should().ContainSingle().Which.TenantId.Should().Be(HierarchyScenario.C1);
+    }
+
+    /// <summary>
+    /// Q12 solo devuelve organismos, sin tenant: el conteo del inventario no detecta una fila ajena que mantenga el total en 1.
+    /// Se comprueba el organismo exacto de la semilla: C1 en Ot1 y el resto en Ot2.
+    /// </summary>
+    [PostgresFact]
+    public async Task Q12_organismos_habilitados_son_exactamente_los_propios()
+    {
+        await HierarchyScenario.SeedAsync(Fixture);
+        await using var ctx = NewContext();
+        var repo = new TransitGrantRepository(ctx, NullAuditContextAccessor.Instance);
+
+        foreach (var tenant in HierarchyScenario.Clients)
+        {
+            var esperado = tenant == HierarchyScenario.C1 ? HierarchyScenario.Ot1 : HierarchyScenario.Ot2;
+            (await repo.ListEnabledOfficeIdsAsync(tenant)).Should().Equal([esperado],
+                $"{HierarchyScenario.CodeOf(tenant)} solo tiene su propio grant");
+        }
     }
 
     private static DbTenantScopeResolver NewResolver(Infrastructure.Persistence.FlitDbContext ctx) =>
