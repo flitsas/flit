@@ -52,3 +52,18 @@ export function formatEspera(minutes: number | null | undefined): string {
   if (h < 24) return `${h} h ${String(m % 60).padStart(2, '0')} min`;
   return `${Math.floor(h / 24)} d ${h % 24} h`;
 }
+
+/** Motivo por el que una foto quedó «No verificada» (HU #14311), en lenguaje para quien revisa. */
+const MOTIVO_FOTO: Record<string, string> = {
+  sin_rostro: 'No se detectó un rostro.',
+  varios_rostros: 'Se detectó más de una persona.',
+  sin_documento: 'No se detectó un documento.',
+  lado_incorrecto: 'Puede ser el lado equivocado del documento.',
+  sin_soporte: 'El dispositivo no pudo validarla.',
+  sin_resultado: 'No llegó el resultado de la validación.',
+};
+
+/** Texto del motivo; uno desconocido no rompe la pantalla. */
+export function etiquetaMotivoFoto(motivo: string | null | undefined): string {
+  return (motivo && MOTIVO_FOTO[motivo]) || 'Sin detalle del motivo.';
+}

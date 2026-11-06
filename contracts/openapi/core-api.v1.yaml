@@ -7739,7 +7739,7 @@ paths:
       tags: [Tramites, Identidad]
       summary: Regenerar el enlace de captura manual (solo Super Admin) — HU #13287, Épica #13202
       description: >
-        Emite un enlace de captura NUEVO de 24 h (token guardado solo como hash SHA-256) para una validación que espera
+        Emite un enlace de captura NUEVO de 24 h (token guardado como hash SHA-256 y, cifrado, para poder copiarlo — HU #14305) para una validación que espera
         captura: `manual_activo`, o `rechazado` tras una revisión manual (HU #13299; sigue `rechazado`); el enlace anterior deja de funcionar (la búsqueda por hash ya no lo encuentra, así que el
         público recibe 404; no se distingue «reemplazado» de «inválido» y el front lo cubre con «enlace inválido o
         reemplazado»). Envía el correo al titular y audita `manual_enlace_regenerado`. Si el correo no sale la
@@ -7767,6 +7767,57 @@ paths:
           description: Validación de identidad no encontrada.
         "409":
           description: "flujo_manual_no_activo (la validación no espera captura: ni manual_activo ni rechazado con motivo)."
+  /api/v1/tramites/biometric-validations/{id}/manual-link/copy:
+    post:
+      operationId: copiarEnlaceManual
+      tags: [Tramites, Identidad]
+      summary: Copiar el enlace de captura manual vigente (solo Super Admin) — HU #14305, Épica #14271
+      description: >
+        Devuelve el enlace de captura completo de una validación que espera captura (`manual_activo`, o `rechazado` tras
+        una revisión manual) y cuyo enlace sigue vigente, SIN regenerarlo: el token y el hash no cambian y no se envía
+        correo. El token se guarda cifrado (Data Protection) además del hash desde la activación, la regeneración o el
+        rechazo, y se borra al enviar la captura. La auditoría registra `manual_enlace_copiado` (quién y cuándo; sin token
+        ni URL). Solo Super Admin; el tenant sale de la fila (NO se usa X-Tenant-Id). La respuesta lleva
+        `Cache-Control: no-store`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Enlace vigente.
+          headers:
+            Cache-Control:
+              schema: { type: string, example: no-store }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url, expiresAt]
+                properties:
+                  url: { type: string, description: Enlace completo de captura (contiene el token). }
+                  expiresAt: { type: string, format: date-time }
+        "401":
+          description: Sin sesión.
+        "403":
+          description: El usuario no es Super Admin.
+        "404":
+          description: Validación de identidad no encontrada (`code` = not_found).
+        "409":
+          description: >
+            `code`: `enlace_vencido` (pasó la vigencia de 24 h), `enlace_no_disponible` (captura ya enviada, enlace emitido
+            antes del cifrado, o token que no se puede descifrar; se regenera) o `flujo_manual_no_activo` (la validación no
+            espera captura).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: string, enum: [enlace_vencido, enlace_no_disponible, flujo_manual_no_activo] }
+                  message: { type: string }
   /api/v1/tramites/biometric-validations/{id}/vencer:
     post:
       operationId: vencerIdentidad
@@ -8119,6 +8170,15 @@ paths:
                 anverso: { type: string, format: binary, description: "Anverso del documento (JPEG, PNG o WebP; máx. 5 MiB)." }
                 reverso: { type: string, format: binary, description: "Reverso del documento (JPEG, PNG o WebP; máx. 5 MiB)." }
                 firma: { type: string, format: binary, description: "Firma trazada (PNG; máx. 2 MiB)." }
+                validacionFotos:
+                  type: string
+                  maxLength: 2048
+                  description: >
+                    HU #14310. Opcional. JSON con el resultado de la validación en el dispositivo de cada foto:
+                    `{"rostro":{"estado":"verificada","motivo":null},"anverso":{"estado":"no_verificada","motivo":"lado_incorrecto"},"reverso":{...}}`.
+                    `estado` ∈ verificada | no_verificada; `motivo` (solo no verificada) ∈ sin_rostro, varios_rostros, sin_documento,
+                    lado_incorrecto, sin_soporte, sin_resultado. Es INFORMATIVO (no es un control de seguridad) y nunca rechaza el envío:
+                    campo ausente, demasiado largo, JSON inválido o valor desconocido dejan esa foto «no_verificada / sin_resultado».
       responses:
         "200":
           description: Captura recibida; la validación queda pendiente de revisión.
@@ -8846,6 +8906,10 @@ paths:
         Kyverum (`GET /v1/validations/{kyverumVerificationId}/certificado`), con el mismo Bearer API key del
         create. Solo aplica a validaciones del proveedor `kyverum` con id de verificación. Keyed por
         `validationId`, sirve para cualquier parte (comprador/vendedor).
+
+        HU #14302 — para una validación **manual** aprobada (`provider=manual`) devuelve la carta de identidad en PDF que
+        emite FLIT, con las mismas reglas de pertenencia y tenant. Si la carta falta se genera en ese momento; si no se
+        puede obtener responde `503` (reintentable), nunca `502` ni `500`.
       security:
         - bearerAuth: []
       parameters:
@@ -8888,7 +8952,55 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "503":
-          description: El proveedor de identidad no está disponible (transitorio).
+          description: >
+            El proveedor de identidad no está disponible (transitorio), o la carta de una validación manual aún no se
+            pudo generar/leer (HU #14302; reintentar).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/tramites/biometric-validations/{id}/certificado:
+    get:
+      operationId: descargarCartaIdentidadPorValidacion
+      tags: [Tramites, Identidad]
+      summary: Descargar la carta de identidad (PDF) de una validación manual aprobada, sin trámite
+      description: >
+        HU #14302 (Épica #14271). Sirve la carta de FLIT de una validación MANUAL aprobada por id, p. ej. una prevalidación
+        sin trámite. Si la carta falta se genera en ese momento. Super Admin: cualquier compañía (el tenant sale de la fila).
+        Demás usuarios: permiso del módulo de identidad (`validaciones.read`/`validaciones.manage` o `tramites.read`, mismo de la
+        bitácora) y solo validaciones de su propio tenant; otro tenant responde 404 para no revelar que existe.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: PDF de la carta.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: Sin sesión.
+        "403":
+          description: Sin permiso del módulo de identidad, o usuario de un organismo de tránsito.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La validación no existe, es de otro tenant, no es manual o no está aprobada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: La carta aún no se pudo generar o leer; reintentar.
           content:
             application/json:
               schema:
@@ -19401,6 +19513,13 @@ components:
             Épica #13202 — código homologado del motivo que eligió el Super Admin al rechazar una validación MANUAL. Solo con
             status=rechazado y provider=manual; `null` en cualquier otro caso (las rechazadas de Kyverum/mock siguen con
             `rejectionReason`). Sin texto libre ni PII.
+        cartaDisponible:
+          type: boolean
+          default: false
+          description: >
+            HU #14302 (Épica #14271) — `true` solo si la validación es MANUAL, está aprobada y su carta de identidad ya fue
+            generada. Cuando es `true`, la carta se descarga por `GET /api/v1/tramites/instances/{id}/biometric/{validationId}/certificado`.
+            No expone la ruta, la serie ni el hash.
     BiometricValidationsResponse:
       type: object
       required: [validations, provider]
@@ -19995,6 +20114,33 @@ components:
             Código del último rechazo. Tras rechazar (HU #13299) el estado es `rechazado` con este campo no nulo hasta que el
             cliente envíe la captura nueva (que lo limpia).
         linkExpiresAt: { type: string, format: date-time, nullable: true, description: Vencimiento del enlace de captura; solo cuando se espera captura (manual_activo o rechazado con motivo). }
+        validacionFotos:
+          type: object
+          nullable: true
+          description: >
+            HU #14310. Resultado informativo de la validación de cada foto en el dispositivo de la persona (no es un control de
+            seguridad; no bloquea aprobar ni rechazar). `null` en capturas anteriores a este cambio: no se muestra aviso.
+          required: [rostro, anverso, reverso]
+          properties:
+            rostro: { $ref: "#/components/schemas/ManualPhotoCheck" }
+            anverso: { $ref: "#/components/schemas/ManualPhotoCheck" }
+            reverso: { $ref: "#/components/schemas/ManualPhotoCheck" }
+        cartaDisponible:
+          type: boolean
+          default: false
+          description: >
+            HU #14302 — `true` solo si la validación es manual, está aprobada y su carta de identidad ya fue generada (misma regla
+            que `BiometricValidationDto.cartaDisponible`). Se descarga por `GET /api/v1/tramites/biometric-validations/{id}/certificado`.
+    ManualPhotoCheck:
+      type: object
+      required: [estado]
+      properties:
+        estado: { type: string, enum: [verificada, no_verificada] }
+        motivo:
+          type: string
+          nullable: true
+          enum: [sin_rostro, varios_rostros, sin_documento, lado_incorrecto, sin_soporte, sin_resultado]
+          description: Solo cuando `estado` es no_verificada.
     ManualCaptureView:
       type: object
       required: [fullName, documentType, documentNumber, expiresAt, consentTextVersion]

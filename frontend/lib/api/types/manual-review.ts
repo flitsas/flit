@@ -14,6 +14,18 @@ export type ManualImageKind = 'rostro' | 'anverso' | 'reverso' | 'firma';
 
 export const MANUAL_IMAGE_KINDS: readonly ManualImageKind[] = ['rostro', 'anverso', 'reverso', 'firma'];
 
+/** Fotos con validación en el dispositivo (la firma no se valida). */
+export type ManualPhotoKind = 'rostro' | 'anverso' | 'reverso';
+
+/** Resultado informativo de la validación de una foto (HU #14310/#14311). No bloquea aprobar ni rechazar. */
+export interface ManualPhotoCheck {
+  estado: 'verificada' | 'no_verificada';
+  /** sin_rostro | varios_rostros | sin_documento | lado_incorrecto | sin_soporte | sin_resultado (o uno nuevo). */
+  motivo?: string | null;
+}
+
+export type ManualPhotoChecks = Record<ManualPhotoKind, ManualPhotoCheck>;
+
 export interface ManualListItem {
   id: string;
   fullName: string;
@@ -57,6 +69,13 @@ export interface ManualDetail extends ManualListItem {
    * (enlace NUEVO para repetir la captura, HU #13299); `null` en los demás. Espejo de `ManualDetail.linkExpiresAt`.
    */
   linkExpiresAt?: string | null;
+  /**
+   * Validación de cada foto en el dispositivo de la persona. `null` o ausente en capturas anteriores a este
+   * cambio: no se muestra ningún aviso.
+   */
+  validacionFotos?: ManualPhotoChecks | null;
+  /** HU #14303 — true si la validación está aprobada y su carta ya se generó. */
+  cartaDisponible?: boolean;
 }
 
 /** Respuesta de `POST .../manual-approve` (espejo de `AprobarValidacionManualResult`). */

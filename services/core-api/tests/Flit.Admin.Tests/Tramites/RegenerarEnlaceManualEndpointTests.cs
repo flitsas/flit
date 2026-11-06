@@ -100,6 +100,10 @@ public sealed class RegenerarEnlaceManualEndpointTests : IClassFixture<Regenerar
         await using var db = NewDb();
         var v = await db.ProcedureInstanceBiometricValidations.AsNoTracking().SingleAsync(x => x.Id == id, Ct);
         v.TokenHash.Should().Be(BiometricToken.Hash(enviado.Token)).And.NotBe(hashViejo);
+        // HU #14305 (AC1): además del hash, la fila guarda el token CIFRADO con el cifrado real, que descifra al token enviado.
+        v.ManualCaptureTokenEncrypted.Should().NotBeNullOrEmpty().And.NotBe(enviado.Token);
+        _factory.Services.GetRequiredService<IManualCaptureTokenProtector>()
+            .TryUnprotect(v.ManualCaptureTokenEncrypted!).Should().Be(enviado.Token);
         (await db.ProcedureInstanceBiometricValidations.AsNoTracking().AnyAsync(x => x.TokenHash == hashViejo, Ct))
             .Should().BeFalse("el token anterior ya no se encuentra por hash: el público recibirá 404");
         v.ExpiresAt.Should().BeCloseTo(DateTimeOffset.UtcNow.AddHours(24), TimeSpan.FromMinutes(2));

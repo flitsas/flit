@@ -1672,6 +1672,11 @@ export interface BiometricValidation {
    * Nunca trae el nombre del revisor.
    */
   approvalOrigin?: 'automatica' | 'manual' | null;
+  /**
+   * HU #14303 — true solo si la validación es manual, está aprobada y su carta ya se generó. Ausente/false en
+   * manual aprobada = «certificado en preparación». No aplica a Kyverum (su certificado no cambia).
+   */
+  cartaDisponible?: boolean;
 }
 
 /**
@@ -1711,6 +1716,12 @@ export interface RegenerarEnlaceManualResult {
   expiresAt: string;
   activatedAt: string;
   emailEnviado: boolean;
+}
+
+/** Respuesta de POST .../biometric-validations/{id}/manual-link/copy (HU #14306). El `url` NO se guarda en ningún estado persistente. */
+export interface CopiarEnlaceManualResult {
+  url: string;
+  expiresAt: string;
 }
 
 /**

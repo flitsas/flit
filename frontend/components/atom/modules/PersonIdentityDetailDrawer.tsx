@@ -22,6 +22,7 @@ import {
 } from '@/components/atom/modules/IdentityCaptureLinkBlock';
 import { IdentityManualFlowActions } from '@/components/atom/modules/IdentityManualFlowActions';
 import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
+import { CertificadoIdentidadAccion } from '@/components/atom/modules/CertificadoIdentidadAccion';
 import { etiquetaMotivoRechazoManual } from '@/lib/identidad/motivos-rechazo-manual';
 import { FLIT } from '@/lib/flit-design-tokens';
 import { ETIQUETA_SOLO_CONSULTA } from '@/lib/tramites/network-scope';
@@ -439,6 +440,11 @@ function ValidationAccordionItem({
           {!soloConsulta && onManualChanged && (
             <IdentityManualFlowActions validation={v} onChanged={onManualChanged} onVerEnManuales={onVerEnManuales} />
           )}
+
+          {/* HU #14303 — carta de la validación manual aprobada; con trámite por instancia, sin trámite por validación. */}
+          {!soloConsulta && v.provider === 'manual' ? (
+            <CertificadoIdentidadAccion validation={v} instanceId={v.procedureInstanceId} />
+          ) : null}
 
           {associated.length > 0 && (
             <AssociatedProceduresList procedures={associated} collapsible linkable={!soloConsulta} />
