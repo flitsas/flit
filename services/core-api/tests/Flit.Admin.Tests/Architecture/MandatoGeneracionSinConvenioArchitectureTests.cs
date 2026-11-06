@@ -13,8 +13,8 @@ namespace Flit.Admin.Tests.Architecture;
 
 /// <summary>
 /// HU #14358 AC9 — generar el contrato no depende del convenio: con la tabla ausente la generación no tiene cómo
-/// fallar, porque nada del camino la consulta. La tabla se borra de verdad en #14359 (su AC5). Los nombres van como
-/// texto para que estas pruebas sigan compilando cuando #14359 retire el repositorio.
+/// fallar, porque nada del camino la consulta. La tabla se borra en #14359, cuyo AC7 exige que ningún
+/// archivo de producción fuera de las migraciones la nombre. Los nombres van como texto porque los tipos ya no existen.
 /// <para>Uso de ejemplo: la dependencia de un servicio del camino hacia <c>IMandatoFirmaPolicy</c> hace fallar el grafo.</para>
 /// </summary>
 public sealed partial class MandatoGeneracionSinConvenioArchitectureTests
@@ -23,15 +23,6 @@ public sealed partial class MandatoGeneracionSinConvenioArchitectureTests
     [
         "IMandatoFirmaPolicy", "MandatoFirmaPolicy", "NullMandatoFirmaPolicy",
         "ICompanyAgreementRepository", "CompanyAgreementRepository",
-    ];
-
-    /// <summary>Únicos archivos de producción que pueden nombrar la tabla: su mapeo y el repositorio, que retira #14359.</summary>
-    private static readonly string[] ArchivosPermitidos =
-    [
-        "Flit.Admin.Domain/Companies/TransitOffices/ICompanyAgreementRepository.cs",
-        "Flit.Infrastructure/AdminInfrastructureExtensions.cs",
-        "Flit.Infrastructure/Persistence/FlitDbContext.cs",
-        "Flit.Infrastructure/Persistence/Repositories/CompanyAgreementRepository.cs",
     ];
 
     [Fact]
@@ -59,7 +50,6 @@ public sealed partial class MandatoGeneracionSinConvenioArchitectureTests
                 && !f.Contains("/obj/", StringComparison.Ordinal)
                 && !f.Contains("/Migrations/", StringComparison.Ordinal))
             .Where(f => UsoDeLaTabla().IsMatch(File.ReadAllText(Path.Combine(src, f))))
-            .Except(ArchivosPermitidos)
             .ToList();
 
         consumidores.Should().BeEmpty();
