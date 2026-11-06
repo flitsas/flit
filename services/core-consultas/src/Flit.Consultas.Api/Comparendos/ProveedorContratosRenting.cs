@@ -190,8 +190,9 @@ internal sealed class ProveedorContratosRenting(IHttpClientFactory http, Renting
 
     private Task<HttpResponseMessage> PedirAsync(string token, string placa, DateOnly fecha, CancellationToken ct)
     {
-        // Mediodía UTC: la fecha del comparendo no cambia de día en ningún huso de Colombia.
-        var instante = fecha.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "T12:00:00.000Z";
+        // HU #14368 / GDC ID19: mediodía con offset Colombia (-05:00) solo en el query a Renting.
+        // No altera timestamptz ni ExportacionBandeja; la fecha calendario del comparendo se conserva.
+        var instante = fecha.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "T12:00:00.000-05:00";
         var ruta = $"{opciones.RutaContratos}?plate={Uri.EscapeDataString(placa.Trim().ToUpperInvariant())}&offenseDate={Uri.EscapeDataString(instante)}";
         var mensaje = Mensaje(HttpMethod.Get, ruta);
         mensaje.Headers.Authorization = new("Bearer", token);

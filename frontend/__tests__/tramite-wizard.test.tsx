@@ -266,7 +266,7 @@ beforeEach(() => {
   mocks.setCurrentStep.mockResolvedValue({ id: 'inst-1', currentStep: null });
   mocks.runPreflight.mockResolvedValue(GREEN_PREFLIGHT);
   mocks.getPreflight.mockResolvedValue(null);
-  // HU #10478 — por defecto Kyverum-first (el wizard oculta el tipo de documento en traspaso).
+  // HU #10478 — por defecto Kyverum-first (selector visible; consult legacy manda CC).
   mocks.getConsultationConfig.mockResolvedValue({
     vehicleVin: 'kyverum_runt',
     vehiclePlate: 'kyverum_runt',
@@ -1766,9 +1766,19 @@ describe('TramiteWizard — datos comerciales dentro de Requisitos', () => {
   });
 });
 
-// HU #10478 — el paso de consulta de traspaso adapta el formulario al proveedor del tenant: con
-// Kyverum RUNT no pide el tipo de documento del propietario (el RUNT lo resuelve); con Verifik sí.
-describe('TramiteWizard — tipo de documento del propietario según proveedor (HU #10478)', () => {
+/**
+ * Hotfix tipo-documento-visible (gap sin HU ADO — QA no certificado):
+ *
+ * AC1 — Given proveedor placa Kyverum, When abro consulta traspaso,
+ *       Then veo selector Tipo documento (default CC) junto a placa y número.
+ * AC2 — Given Kyverum y tipo UI = NIT, When consulto,
+ *       Then el patch/preflight de consulta manda owner_document_type=CC (payload legacy)
+ *       And después persiste owner_document_type=NIT para Actores/RUES.
+ * AC3 — Given Verifik, When consulto con NIT, Then el patch manda NIT (sin legacy CC).
+ * AC4 — Given Kyverum default CC, When consulto, Then el payload incluye owner_document_type=CC
+ *       (fallback Verifik; regresión HU #10478).
+ */
+describe('TramiteWizard — tipo de documento del propietario según proveedor (HU #10478 + hotfix visible)', () => {
   beforeEach(() => {
     mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD);
     mocks.getInstance.mockResolvedValue({ id: 'inst-tr', status: 'borrador', fieldValues: [] });
@@ -1781,16 +1791,18 @@ describe('TramiteWizard — tipo de documento del propietario según proveedor (
     await user.click(consultaTab);
     // Espera a que el form de placa (traspaso) se pinte.
     await screen.findByLabelText('Placa del vehículo');
+    return user;
   }
 
-  it('con Kyverum RUNT (default) NO pide el tipo, pero sí placa y número', async () => {
+  it('con Kyverum RUNT (default) SÍ muestra el tipo, placa y número', async () => {
     await abrirPasoConsulta();
 
     expect(screen.getByLabelText('Placa del vehículo')).toBeInTheDocument();
     expect(screen.getByLabelText('Número documento del propietario')).toBeInTheDocument();
-    await waitFor(() =>
-      expect(screen.queryByLabelText('Tipo documento propietario')).not.toBeInTheDocument(),
-    );
+    expect(
+      await screen.findByLabelText('Tipo documento propietario'),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Tipo documento propietario')).toHaveValue('CC');
   });
 
   it('con Verifik SÍ pide el tipo de documento del propietario', async () => {
@@ -1807,9 +1819,8 @@ describe('TramiteWizard — tipo de documento del propietario según proveedor (
     ).toBeInTheDocument();
   });
 
-  // Regresión: aunque el tipo esté OCULTO (Kyverum), el payload SIGUE enviando owner_document_type
-  // (default 'CC') — el fallback a Verifik lo exige; omitirlo devolvía "requiere documento" (unknown)
-  // y enmascaraba el fallo como pre-vuelo verde.
+  // Regresión HU #10478: el payload de consulta SIEMPRE envía owner_document_type (default CC)
+  // — el fallback a Verifik lo exige; omitirlo devolvía "requiere documento" (unknown).
   it('con Kyverum el payload igual incluye owner_document_type (para el fallback a Verifik)', async () => {
     const user = userEvent.setup();
     render(<TramiteWizard existingInstanceId="inst-tr" onExit={() => {}} />);
@@ -1833,6 +1844,78 @@ describe('TramiteWizard — tipo de documento del propietario según proveedor (
         },
       ]),
     );
+  });
+
+  it('con Kyverum y tipo UI NIT: consulta manda CC y luego persiste NIT', async () => {
+    const user = await abrirPasoConsulta();
+    await screen.findByLabelText('Tipo documento propietario');
+
+    await user.selectOptions(screen.getByLabelText('Tipo documento propietario'), 'NIT');
+    await user.type(screen.getByLabelText(/Placa del vehículo/), 'PWL160');
+    await user.type(screen.getByLabelText(/Número documento del propietario/), '890903938');
+    await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
+
+    // Payload de consulta legacy (CC), aunque la UI tenga NIT.
+    await waitFor(() =>
+      expect(mocks.patchFieldValues).toHaveBeenCalledWith('inst-tr', [
+        { formFieldId: null, fieldKey: 'plate', valueText: 'PWL160', valueJson: null },
+        { formFieldId: null, fieldKey: 'owner_document_type', valueText: 'CC', valueJson: null },
+        {
+          formFieldId: null,
+          fieldKey: 'owner_document_number',
+          valueText: '890903938',
+          valueJson: null,
+        },
+      ]),
+    );
+    // Tras el preflight, persiste el tipo de UI para Actores/RUES.
+    await waitFor(() =>
+      expect(mocks.patchFieldValues).toHaveBeenCalledWith('inst-tr', [
+        {
+          formFieldId: null,
+          fieldKey: 'owner_document_type',
+          valueText: 'NIT',
+          valueJson: null,
+        },
+      ]),
+    );
+  });
+
+  it('con Verifik y tipo UI NIT: la consulta manda NIT (sin legacy CC)', async () => {
+    mocks.getConsultationConfig.mockResolvedValue({
+      vehicleVin: 'kyverum_runt',
+      vehiclePlate: 'verifik',
+      conductor: 'kyverum_runt_conductor',
+    });
+    const user = await abrirPasoConsulta();
+    await screen.findByLabelText('Tipo documento propietario');
+
+    await user.selectOptions(screen.getByLabelText('Tipo documento propietario'), 'NIT');
+    await user.type(screen.getByLabelText(/Placa del vehículo/), 'PWL160');
+    await user.type(screen.getByLabelText(/Número documento del propietario/), '890903938');
+    await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
+
+    await waitFor(() =>
+      expect(mocks.patchFieldValues).toHaveBeenCalledWith('inst-tr', [
+        { formFieldId: null, fieldKey: 'plate', valueText: 'PWL160', valueJson: null },
+        { formFieldId: null, fieldKey: 'owner_document_type', valueText: 'NIT', valueJson: null },
+        {
+          formFieldId: null,
+          fieldKey: 'owner_document_number',
+          valueText: '890903938',
+          valueJson: null,
+        },
+      ]),
+    );
+    // Sin patch post-consulta de solo tipo: tipoUi === tipoConsulta.
+    expect(
+      mocks.patchFieldValues.mock.calls.some(
+        ([, items]) =>
+          Array.isArray(items) &&
+          items.length === 1 &&
+          items[0]?.fieldKey === 'owner_document_type',
+      ),
+    ).toBe(false);
   });
 });
 

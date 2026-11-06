@@ -56,7 +56,7 @@ public sealed class ContratosRentingTests
         renting.Pedidos.Should().OnlyContain(x => x.Llave == Llave, "la llave de suscripción va en el login y en la consulta");
         renting.Pedidos[0].Cuerpo.Should().Be("""{"secretName":"ThirdParties","subject":"CN=prueba"}""");
         var consulta = renting.Pedidos[1];
-        consulta.Url.Should().Be("https://renting.prueba/RentingMaster/ContractPlate/GetContractPlatesInfoByPlate?plate=LZO227&offenseDate=2026-10-18T12%3A00%3A00.000Z");
+        consulta.Url.Should().Be("https://renting.prueba/RentingMaster/ContractPlate/GetContractPlatesInfoByPlate?plate=LZO227&offenseDate=2026-10-18T12%3A00%3A00.000-05%3A00");
         consulta.Bearer.Should().Be("token-1");
     }
 

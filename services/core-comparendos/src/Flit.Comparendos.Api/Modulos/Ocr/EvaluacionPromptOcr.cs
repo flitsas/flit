@@ -47,7 +47,8 @@ public static class CalificacionOcr
             return null;
         string? r = campo switch
         {
-            CamposOcr.Numero or CamposOcr.Placa or CamposOcr.CodigoInfraccion =>
+            CamposOcr.Numero => Domain.Identificadores.NumeroComparendo.Normalizar(s),
+            CamposOcr.Placa or CamposOcr.CodigoInfraccion =>
                 new string([.. s.Where(c => !char.IsWhiteSpace(c) && c is not '-' and not '.')]).ToUpperInvariant(),
             CamposOcr.NumeroDocumento => new string([.. s.Where(char.IsAsciiDigit)]),
             CamposOcr.Valor => Infraestructura.Excel.LectorExcel.Valor(new(s, null))?.ToString("0", CultureInfo.InvariantCulture) ?? s,
