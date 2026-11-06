@@ -104,7 +104,8 @@ type TarifaOt = TarifaPnView & {
 
 - `ot_admin` lista las de su organismo y los valores generales que le aplican. Solo escribe en su organismo.
 - Conceptos del `ot_admin`: `DERECHOS_TRANSITO`, `CAMBIO_COLOR`, `CONVERSION_COMBUSTIBLE`, `CAMBIO_CARROCERIA`. `SERVICIO_FLIT` y `ENVIO_DOCUMENTO` responden 403. El SuperAdmin escribe todos.
-- `tipoTramiteId` es obligatorio para el `ot_admin`.
+- `tipoTramiteId` es obligatorio para el `ot_admin` al registrar un precio. Al listar es un filtro opcional.
+- En los valores generales, el `ot_admin` ve `FLIT` como autor y no recibe los ids de quien los fijó.
 - `creadaPorNombre` también se agrega, sin romper nada, a las respuestas de historial de Plataforma.
 
 ### Mismo día (#14389)
