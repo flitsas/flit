@@ -67,12 +67,14 @@ import { CarLoaderModal } from '@/components/atom/CarLoader';
 import { OwnershipTabsBar, OwnershipPercentagePanel, type OwnershipShareItem } from './OwnershipShareControl';
 import {
   MAX_OWNERS_PER_SIDE,
-  applySolidarioAbsorption,
-  defaultPercentageForNewActor,
+  clampEditableShare,
   duplicateDocumentIndicesWithinSide,
   indicesForRol,
   isFirstOfRol,
+  maxEditableShare,
+  percentageForNewOwner,
   redistributeAfterRemoval,
+  remainingShareForRol,
   round2,
   shiftIndexMapOnInsert,
   shiftIndexMapOnRemove,
@@ -1402,10 +1404,6 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
   // array `actors`: el índice absoluto se resuelve en cada render vía `indicesForRol`, así que este
   // estado sobrevive intacto a que otro lado agregue/quite actores antes de él en el array.
   const [activeTabByRol, setActiveTabByRol] = useState<Partial<Record<ActorRol, number>>>({});
-  // Lados cuyo ordinal=1 el gestor ya editó a mano: deja de absorber el residuo (§4.5 del diseño).
-  const [solidarioManuallyEdited, setSolidarioManuallyEdited] = useState<Set<ActorRol>>(
-    () => new Set(),
-  );
 
   // Rehidrata desde el backend cuando llegan actores cargados, respetando los roles de la
   // modalidad (rellena los faltantes con vacíos). Múltiple Propietario (ADR-0053) — un mismo rol
@@ -1464,13 +1462,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ownerSeed]);
 
-  // Múltiple Propietario (ADR-0053, §4.5) — auto-absorción del residuo: el ordinal=1 de CADA lado
-  // con 2+ actores recalcula su porcentaje como 100 − suma de los demás, mientras ese lado no haya
-  // sido editado a mano. `applySolidarioAbsorption` devuelve la MISMA referencia si no hay nada que
-  // cambiar, así que este efecto no reentra en bucle al no producir un nuevo `actors`.
-  useEffect(() => {
-    setActors((prev) => applySolidarioAbsorption(prev, solidarioManuallyEdited));
-  }, [actors, solidarioManuallyEdited]);
+  // HU #14192 — edición manual de %: sin auto-absorción del solidario. El gestor reparte a mano
+  // hasta exactamente 100%; el tope al editar vive en `updateOwnershipPercentage` / `maxEditableShare`.
 
   // Siembra la fecha de expedición (RNMC) de cada actor desde los field_values persistidos
   // (`{rol}_document_issue_date`, DD/MM/YYYY → input YYYY-MM-DD). Best-effort.
@@ -1765,14 +1758,22 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     if (idxs.length >= MAX_OWNERS_PER_SIDE) return;
     const insertAt = idxs.length ? idxs[idxs.length - 1] + 1 : actors.length;
     const countAfter = idxs.length + 1;
-    const newActor: ProcedureActor = {
-      ...emptyActor(rol),
-      porcentaje: defaultPercentageForNewActor(countAfter),
-    };
     markDirty();
     setActors((prev) => {
       const next = prev.slice();
-      next.splice(insertAt, 0, newActor);
+      // Un solo propietario puede traer porcentaje null: al pasar a 2+ se materializa en 100%.
+      const prevIdxs = indicesForRol(next, rol);
+      if (prevIdxs.length === 1) {
+        const only = prevIdxs[0];
+        if (next[only].porcentaje == null) {
+          next[only] = { ...next[only], porcentaje: 100 };
+        }
+      }
+      const residue = remainingShareForRol(next, rol);
+      next.splice(insertAt, 0, {
+        ...emptyActor(rol),
+        porcentaje: percentageForNewOwner(residue),
+      });
       return next;
     });
     shiftAllPositionalMaps((m) => shiftIndexMapOnInsert(m, insertAt));
@@ -1780,7 +1781,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     setActiveTabByRol((prev) => ({ ...prev, [rol]: countAfter }));
   };
 
-  /** Quita un copropietario (nunca el ordinal=1) y redistribuye su porcentaje entre los que quedan. */
+  /** Quita un copropietario (nunca el ordinal=1); deja residuo libre si quedan 2+. */
   const removeOwner = (index: number) => {
     if (readOnly) return;
     const rol = actors[index]?.rol;
@@ -1793,32 +1794,22 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
       ...prev,
       [rol]: Math.max(1, Math.min(prev[rol] ?? 1, remainingCount)),
     }));
-    // De vuelta a un solo propietario: la próxima vez que se agregue un segundo, el solidario
-    // vuelve a absorber desde cero (decisión de UI — el diseño no fija este caso puntual).
-    if (remainingCount <= 1) {
-      setSolidarioManuallyEdited((prev) => {
-        if (!prev.has(rol)) return prev;
-        const next = new Set(prev);
-        next.delete(rol);
-        return next;
-      });
-    }
   };
 
-  /** Edita el porcentaje del actor de `index`; si es el ordinal=1, deja de absorber el residuo. */
+  /** Edita el % del actor; tope duro = 100 − suma de los demás (nunca supera 100% del lado). */
   const updateOwnershipPercentage = (index: number, rawValue: number) => {
     if (readOnly) return;
     const rol = actors[index]?.rol;
     if (!rol) return;
-    // Mientras se teclea se permiten 0 / >100 / vacío→0 (si no, el input controlado no deja
-    // escribir "30" tras un clear). El clamp duro vive en absorción/redistribución y en blur;
-    // validateOwnershipShares + backend rechazan el guardado fuera de (0, 100].
-    const value = Number.isFinite(rawValue) ? round2(rawValue) : 0;
+    const maxAllowed = maxEditableShare(actors, index);
+    const value = clampEditableShare(
+      Number.isFinite(rawValue) ? rawValue : 0,
+      maxAllowed,
+    );
     markDirty();
-    if (isFirstOfRol(actors, index)) {
-      setSolidarioManuallyEdited((prev) => (prev.has(rol) ? prev : new Set(prev).add(rol)));
-    }
-    setActors((prev) => prev.map((a, i) => (i === index ? { ...a, porcentaje: value } : a)));
+    setActors((prev) =>
+      prev.map((a, i) => (i === index ? { ...a, porcentaje: value } : a)),
+    );
   };
 
   /** Activa la pestaña del actor real `realIndex` dentro del lado `rol` (guarda su ORDINAL). */
