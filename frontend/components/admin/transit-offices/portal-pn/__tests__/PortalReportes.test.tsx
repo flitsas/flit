@@ -152,6 +152,14 @@ describe("estados", () => {
 });
 
 describe("filtros, paginación y exportación", () => {
+  it("al llegar el catálogo de tipos no vuelve a pedir el reporte", async () => {
+    const listar = vi.fn().mockResolvedValue(pagina([fila()]));
+    render(<PortalReportes api={crearApi({ listar })} />);
+    await screen.findByText("RAD-001");
+    await new Promise((r) => setTimeout(r, 50));
+    expect(listar).toHaveBeenCalledTimes(1);
+  });
+
   it("pide la primera página con el tamaño estándar y sin filtros", async () => {
     const api = crearApi();
     render(<PortalReportes api={api} />);
