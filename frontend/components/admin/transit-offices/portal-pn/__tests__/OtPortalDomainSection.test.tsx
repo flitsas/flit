@@ -34,7 +34,11 @@ function dominio(over: Partial<DominioPortal> = {}): DominioPortal {
     estado: "pendiente",
     motivo: null,
     dns: [
-      { tipo: "TXT", nombre: "_flit-verify.tramites.transitodemo.gov.co", valor: "flit-verify=abc" },
+      {
+        tipo: "TXT",
+        nombre: "_flit-verify.tramites.transitodemo.gov.co",
+        valor: "flit-verify=abc",
+      },
       { tipo: "A", nombre: "tramites.transitodemo.gov.co", valor: "203.0.113.10" },
     ],
     rowVersion: 1,
@@ -50,7 +54,9 @@ describe("OtPortalDomainSection", () => {
   it("sin dominio muestra el estado vacío y el formulario para registrar", async () => {
     vi.mocked(getPortalDominio).mockResolvedValue(null);
     render(<OtPortalDomainSection transitOfficeId={ID} />);
-    expect(await screen.findByText("Este organismo aún no tiene un dominio registrado.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Este organismo aún no tiene un dominio registrado."),
+    ).toBeInTheDocument();
     expect(getPortalDominio).toHaveBeenCalledWith({ transitOfficeId: ID });
     expect(screen.getByRole("button", { name: "Registrar dominio" })).toBeInTheDocument();
   });
@@ -66,10 +72,14 @@ describe("OtPortalDomainSection", () => {
     await user.click(screen.getByRole("button", { name: "Registrar dominio" }));
 
     await waitFor(() =>
-      expect(registerPortalDominio).toHaveBeenCalledWith("tramites.transitodemo.gov.co", { transitOfficeId: ID }),
+      expect(registerPortalDominio).toHaveBeenCalledWith("tramites.transitodemo.gov.co", {
+        transitOfficeId: ID,
+      }),
     );
     expect(await screen.findByText("Pendiente de comprobación")).toBeInTheDocument();
-    expect(screen.getByRole("table", { name: "Registros DNS que debes crear" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("table", { name: "Registros DNS que debes crear" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("flit-verify=abc")).toBeInTheDocument();
   });
 
@@ -98,7 +108,9 @@ describe("OtPortalDomainSection", () => {
     await user.type(screen.getByLabelText("Dominio del portal"), "repetido.gov.co");
     await user.click(screen.getByRole("button", { name: "Registrar dominio" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Ese dominio ya lo usa otro organismo de la plataforma.");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Ese dominio ya lo usa otro organismo de la plataforma.",
+    );
   });
 
   it.each([
@@ -112,11 +124,16 @@ describe("OtPortalDomainSection", () => {
 
   it("el estado fallido muestra el motivo exacto, sin traducirlo", async () => {
     vi.mocked(getPortalDominio).mockResolvedValue(
-      dominio({ estado: "fallido", motivo: "No encontramos el registro TXT en tramites.transitodemo.gov.co." }),
+      dominio({
+        estado: "fallido",
+        motivo: "No encontramos el registro TXT en tramites.transitodemo.gov.co.",
+      }),
     );
     render(<OtPortalDomainSection transitOfficeId={ID} />);
     expect(await screen.findByText("Comprobación fallida")).toBeInTheDocument();
-    expect(screen.getByText("No encontramos el registro TXT en tramites.transitodemo.gov.co.")).toBeInTheDocument();
+    expect(
+      screen.getByText("No encontramos el registro TXT en tramites.transitodemo.gov.co."),
+    ).toBeInTheDocument();
   });
 
   it("Comprobar ahora usa el cliente del organismo y refleja el nuevo estado", async () => {
@@ -144,6 +161,8 @@ describe("OtPortalDomainSection", () => {
     expect(screen.getByRole("alertdialog")).toHaveTextContent("este organismo");
     await user.click(screen.getByRole("button", { name: "Retirar" }));
     await waitFor(() => expect(deletePortalDominio).toHaveBeenCalledWith({ transitOfficeId: ID }));
-    expect(await screen.findByText("Este organismo aún no tiene un dominio registrado.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Este organismo aún no tiene un dominio registrado."),
+    ).toBeInTheDocument();
   });
 });

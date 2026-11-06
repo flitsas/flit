@@ -23,3 +23,16 @@ export function direccionCanalPunto(codigo: string, origen: string): string {
   const segmento = encodeURIComponent(codigo.trim());
   return base ? `${base}/o/${segmento}` : `/o/${segmento}`;
 }
+
+/**
+ * Con un dominio activo del organismo, la dirección del canal es la raíz de ese dominio (épica #14297, HU #14386): no
+ * lleva código porque el dominio ya identifica al organismo. Sin dominio activo, la dirección del punto de siempre.
+ */
+export function direccionConDominio(
+  codigo: string,
+  origen: string,
+  hostActivo: string | null | undefined,
+): string {
+  const host = (hostActivo ?? "").trim().toLowerCase();
+  return host ? `https://${host}` : direccionCanalPunto(codigo, origen);
+}

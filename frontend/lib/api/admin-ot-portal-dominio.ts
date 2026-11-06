@@ -33,7 +33,8 @@ const GENERIC = "No se pudo completar la solicitud. Inténtalo de nuevo.";
 function withScope(path: string, scope?: PortalDominioScope): string {
   if (!scope?.transitOfficeId) return path;
   const url = new URL(path, "http://relative.invalid");
-  if (!url.searchParams.has("transitOfficeId")) url.searchParams.set("transitOfficeId", scope.transitOfficeId);
+  if (!url.searchParams.has("transitOfficeId"))
+    url.searchParams.set("transitOfficeId", scope.transitOfficeId);
   return `${url.pathname}${url.search}`;
 }
 
@@ -76,7 +77,10 @@ async function request(
       body: json === undefined ? undefined : JSON.stringify(json),
     });
   } catch {
-    throw new ApiError(0, "No se pudo conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.");
+    throw new ApiError(
+      0,
+      "No se pudo conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.",
+    );
   }
   return response;
 }
@@ -95,7 +99,10 @@ export async function getPortalDominio(scope?: PortalDominioScope): Promise<Domi
 }
 
 /** POST { host } — registra el dominio; queda pendiente con sus instrucciones de DNS. */
-export async function registerPortalDominio(host: string, scope?: PortalDominioScope): Promise<DominioPortal> {
+export async function registerPortalDominio(
+  host: string,
+  scope?: PortalDominioScope,
+): Promise<DominioPortal> {
   return requireDomain(await request("POST", base, scope, { host }));
 }
 
@@ -127,7 +134,12 @@ export function toTenantDomain(dominio: DominioPortal): TenantDomainResponse {
     status: ESTADOS[dominio.estado],
     statusReason: dominio.motivo,
     statusChangedAt: "",
-    verification: { txtName: txt?.nombre ?? "", txtValue: txt?.valor ?? "", aName: a?.nombre ?? dominio.host, aValue: a?.valor ?? "" },
+    verification: {
+      txtName: txt?.nombre ?? "",
+      txtValue: txt?.valor ?? "",
+      aName: a?.nombre ?? dominio.host,
+      aValue: a?.valor ?? "",
+    },
     verifiedAt: null,
     activatedAt: null,
     certificate: { issuedAt: null, expiresAt: null },
