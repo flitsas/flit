@@ -176,7 +176,7 @@ export function TarifasTab({ onCambio, api = TARIFAS_API_PLATAFORMA, modo }: Tar
             g.organismoId === null ? (
               <StatusBadge label="Valor general" tone="neutral" />
             ) : (
-              <StatusBadge label="De tu organismo" tone="info" />
+              <StatusBadge label={modo?.etiquetaPropia ?? "De tu organismo"} tone="info" />
             ),
         }
       : {

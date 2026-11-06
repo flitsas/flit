@@ -174,7 +174,7 @@ export function TarifaFormModal({
       <form id="pn-tarifa-form" onSubmit={handleSubmit} className="flex flex-col gap-3 pb-1" noValidate>
         <InlineAlert tone="info">
           Las cotizaciones ya emitidas no cambian: la tarifa nueva solo aplica desde su fecha de inicio. La tarifa
-          anterior deja de regir el día anterior.
+          anterior deja de regir el día anterior; con la misma fecha de inicio, la reemplaza.
         </InlineAlert>
 
         <div className="grid items-end gap-4 sm:grid-cols-2">

@@ -40,6 +40,8 @@ export const TARIFAS_API_PLATAFORMA: TarifasApi = {
 
 /** Cómo se presenta y qué permite el módulo según quién lo usa. Por defecto: Plataforma, sin restricciones. */
 export interface TarifasModo {
+  /** Etiqueta de las filas del organismo. Por defecto, «De tu organismo». */
+  etiquetaPropia?: string;
   /** Hub del OT: una sola organización, sin selector ni columna de organismo, y con «Origen» (propio o general). */
   organismoFijo?: boolean;
   /** Conceptos que el formulario muestra sin poder activarse (p. ej. servicio FLIT y envío para el `ot_admin`). */

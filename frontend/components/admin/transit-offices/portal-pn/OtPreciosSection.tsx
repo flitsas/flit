@@ -33,7 +33,13 @@ const MODO_OT_ADMIN: TarifasModo = {
     "Cuánto paga la persona por cada trámite de tu organismo. Si un trámite no tiene precio propio, rige el valor general. Un cambio queda en el historial y se ve en el portal de inmediato.",
 };
 
-const MODO_SUPERADMIN: TarifasModo = { ...MODO_OT_ADMIN, conceptosBloqueados: [] };
+const MODO_SUPERADMIN: TarifasModo = {
+  ...MODO_OT_ADMIN,
+  conceptosBloqueados: [],
+  etiquetaPropia: "De este organismo",
+  descripcion:
+    "Cuánto paga la persona por cada trámite de este organismo. Si un trámite no tiene precio propio, rige el valor general. Un cambio queda en el historial y se ve en el portal de inmediato.",
+};
 
 export function OtPreciosSection({ transitOfficeId }: OtPreciosSectionProps) {
   const { isSuperAdmin } = usePermissions();
