@@ -9,7 +9,14 @@ import {
   registerAdminDomain,
   removeAdminDomain,
 } from "@/lib/api/domain-client";
-import type { TenantDomainResponse } from "@/lib/api/types";
+import { ApiError, type TenantDomainResponse } from "@/lib/api/types";
+import type { DomainClient } from "./DomainStatusPanel";
+
+/** Con cliente propio manda el motivo exacto del servidor; sin él, el texto por código de marca blanca. */
+function failureMessage(err: unknown, ownClient: boolean, fallback: string): string {
+  if (ownClient && err instanceof ApiError && err.message.trim()) return err.message;
+  return domainErrorMessage(domainErrorCode(err)) || fallback;
+}
 
 export interface DomainRegisterFormProps {
   tenantId: string;
@@ -21,6 +28,10 @@ export interface DomainRegisterFormProps {
   domain: TenantDomainResponse | null;
   onRegistered: (domain: TenantDomainResponse) => void;
   onRemoved: () => void;
+  /** Cliente propio del dominio (portal del organismo). Sin él, el de marca blanca. */
+  client?: DomainClient;
+  /** A quién pertenece el dominio en el texto de retiro. Por defecto «esta red». */
+  ownerLabel?: string;
 }
 
 /**
@@ -28,7 +39,7 @@ export interface DomainRegisterFormProps {
  * (HU #12427 AC3; registrar/cambiar/retirar es siempre `/admin/companies/{tenantId}/domain`,
  * nunca `/company/domain`, que es de solo lectura para la propia cabeza).
  */
-export function DomainRegisterForm({ tenantId, purpose, label = "Dominio de la red", domain, onRegistered, onRemoved }: DomainRegisterFormProps) {
+export function DomainRegisterForm({ tenantId, purpose, label = "Dominio de la red", domain, onRegistered, onRemoved, client, ownerLabel = "esta red" }: DomainRegisterFormProps) {
   const [host, setHost] = useState(domain?.host ?? "");
   const inputId = `domain-host${purpose ? `-${purpose}` : ""}`;
   const [saving, setSaving] = useState(false);
@@ -56,15 +67,12 @@ export function DomainRegisterForm({ tenantId, purpose, label = "Dominio de la r
 
     setSaving(true);
     try {
-      const updated = await registerAdminDomain(
-        tenantId,
-        { host: trimmed, rowVersion: domain?.rowVersion ?? null },
-        purpose,
-      );
+      const body = { host: trimmed, rowVersion: domain?.rowVersion ?? null };
+      const updated = client ? await client.register(body) : await registerAdminDomain(tenantId, body, purpose);
       setHost(updated.host);
       onRegistered(updated);
     } catch (err) {
-      setFormError(domainErrorMessage(domainErrorCode(err)) || "No se pudo registrar el dominio.");
+      setFormError(failureMessage(err, client !== undefined, "No se pudo registrar el dominio."));
     } finally {
       setSaving(false);
     }
@@ -74,12 +82,12 @@ export function DomainRegisterForm({ tenantId, purpose, label = "Dominio de la r
     setRemoving(true);
     setFormError(null);
     try {
-      await removeAdminDomain(tenantId, purpose);
+      await (client ? client.remove() : removeAdminDomain(tenantId, purpose));
       setHost("");
       setConfirmingRemove(false);
       onRemoved();
     } catch (err) {
-      setFormError(domainErrorMessage(domainErrorCode(err)) || "No se pudo retirar el dominio.");
+      setFormError(failureMessage(err, client !== undefined, "No se pudo retirar el dominio."));
     } finally {
       setRemoving(false);
     }
@@ -153,7 +161,7 @@ export function DomainRegisterForm({ tenantId, purpose, label = "Dominio de la r
           aria-label="Confirmar retiro del dominio"
         >
           <p style={{ color: "var(--color-flit-primary)" }}>
-            ¿Retirar el dominio de esta red? Los usuarios volverán a acceder por el dominio de FLIT.
+            ¿Retirar el dominio de {ownerLabel}? Los usuarios volverán a acceder por el dominio de FLIT.
             El registro histórico se conserva.
           </p>
           <div className="mt-2 flex gap-2">

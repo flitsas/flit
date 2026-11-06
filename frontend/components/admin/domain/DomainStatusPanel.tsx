@@ -24,6 +24,18 @@ import { ApiError, type TenantDomainResponse, type TenantDomainStatus } from "@/
 
 export type DomainPanelMode = "admin" | "company";
 
+/**
+ * Cliente inyectable del dominio. Sin él, los paneles usan el de marca blanca (`domain-client`). Lo usa el portal del
+ * organismo (Épica #14297), cuyo dominio tiene otras rutas pero la misma pantalla. Los errores traen el motivo exacto
+ * del servidor en `message`.
+ */
+export interface DomainClient {
+  get: () => Promise<TenantDomainResponse | null>;
+  register: (body: { host: string; rowVersion: number | null }) => Promise<TenantDomainResponse>;
+  remove: () => Promise<void>;
+  verify: () => Promise<TenantDomainResponse>;
+}
+
 export interface DomainStatusPanelProps {
   mode: DomainPanelMode;
   /** Requerido cuando `mode === "admin"`. */
@@ -38,6 +50,12 @@ export interface DomainStatusPanelProps {
   onLoaded?: (domain: TenantDomainResponse | null) => void;
   /** Incrementar para forzar una recarga externa (p. ej. tras registrar/retirar el dominio). */
   reloadToken?: number;
+  /** Cliente propio del dominio (portal del organismo). Sin él, el de marca blanca. */
+  client?: DomainClient;
+  /** Muestra `statusReason` tal cual lo manda el servidor, sin traducir códigos. */
+  reasonVerbatim?: boolean;
+  /** Texto cuando aún no hay dominio. Por defecto el de la red. */
+  emptyMessage?: string;
 }
 
 const STATUS_META: Record<TenantDomainStatus, { label: string; Icon: typeof Clock; color: string }> = {
@@ -53,8 +71,9 @@ const REASON_MESSAGES: Record<string, string> = {
   DNS_ERROR: "Ocurrió un error al consultar el DNS. Vuelve a intentarlo más tarde.",
 };
 
-function reasonMessage(reason: string | null): string | null {
+function reasonMessage(reason: string | null, verbatim = false): string | null {
   if (!reason) return null;
+  if (verbatim) return reason;
   return REASON_MESSAGES[reason] ?? `Motivo: ${reason}.`;
 }
 
@@ -76,7 +95,16 @@ function formatDateTime(iso: string | null): string | null {
  * `mode="admin"` (SuperAdmin sobre `tenantId`) y `mode="company"` (autogestión de la cabeza)
  * comparten exactamente esta UI — solo cambia qué endpoint de `/verify` se llama (AC3).
  */
-export function DomainStatusPanel({ mode, tenantId, purpose, onLoaded, reloadToken }: DomainStatusPanelProps) {
+export function DomainStatusPanel({
+  mode,
+  tenantId,
+  purpose,
+  onLoaded,
+  reloadToken,
+  client,
+  reasonVerbatim = false,
+  emptyMessage = "Esta red aún no tiene un dominio registrado.",
+}: DomainStatusPanelProps) {
   const [status, setStatus] = useState<UiStatus>("loading");
   const [domain, setDomain] = useState<TenantDomainResponse | null>(null);
   const [verifying, setVerifying] = useState(false);
@@ -91,7 +119,11 @@ export function DomainStatusPanel({ mode, tenantId, purpose, onLoaded, reloadTok
       setVerifyError(null);
       setVerifyMessage(null);
       try {
-        const data = mode === "admin" && tenantId ? await getAdminDomain(tenantId, purpose) : await getCompanyDomain();
+        const data = client
+          ? await client.get()
+          : mode === "admin" && tenantId
+            ? await getAdminDomain(tenantId, purpose)
+            : await getCompanyDomain();
         if (signal?.aborted) return;
         setDomain(data);
         setStatus(data ? "ready" : "empty");
@@ -100,7 +132,7 @@ export function DomainStatusPanel({ mode, tenantId, purpose, onLoaded, reloadTok
         if (!signal?.aborted) setStatus("error");
       }
     },
-    [mode, tenantId, purpose, onLoaded],
+    [mode, tenantId, purpose, onLoaded, client],
   );
 
   useEffect(() => {
@@ -135,7 +167,11 @@ export function DomainStatusPanel({ mode, tenantId, purpose, onLoaded, reloadTok
     setVerifyError(null);
     setVerifyMessage(null);
     try {
-      const result = mode === "admin" && tenantId ? await verifyAdminDomain(tenantId, purpose) : await verifyCompanyDomain();
+      const result = client
+        ? await client.verify()
+        : mode === "admin" && tenantId
+          ? await verifyAdminDomain(tenantId, purpose)
+          : await verifyCompanyDomain();
       setDomain(result);
       onLoaded?.(result);
       setVerifyMessage(
@@ -146,6 +182,8 @@ export function DomainStatusPanel({ mode, tenantId, purpose, onLoaded, reloadTok
     } catch (err) {
       if (err instanceof ApiError && err.status === 429) {
         startCooldown(cooldownSecondsFromError(err) ?? 30);
+        setVerifyError(err.message);
+      } else if (client && err instanceof ApiError && err.message.trim()) {
         setVerifyError(err.message);
       } else {
         setVerifyError(domainErrorMessage(domainErrorCode(err)) || "No se pudo comprobar el dominio.");
@@ -164,9 +202,9 @@ export function DomainStatusPanel({ mode, tenantId, purpose, onLoaded, reloadTok
         status={status}
         onRetry={() => void load()}
         errorMessage="No se pudo cargar el estado del dominio."
-        emptyMessage="Esta red aún no tiene un dominio registrado."
+        emptyMessage={emptyMessage}
       >
-        {domain && <DomainStatusBody domain={domain} />}
+        {domain && <DomainStatusBody domain={domain} reasonVerbatim={reasonVerbatim} />}
 
         {domain && needsDnsInstructions(domain) && <DnsInstructions verification={domain.verification} />}
 
@@ -209,10 +247,10 @@ function needsDnsInstructions(domain: TenantDomainResponse): boolean {
   return domain.status === "pending" || domain.status === "failed" || (domain.status === "verified" && !domain.certificate.issuedAt);
 }
 
-function DomainStatusBody({ domain }: { domain: TenantDomainResponse }) {
+function DomainStatusBody({ domain, reasonVerbatim }: { domain: TenantDomainResponse; reasonVerbatim: boolean }) {
   const meta = STATUS_META[domain.status];
   const Icon = meta.Icon;
-  const reason = reasonMessage(domain.statusReason);
+  const reason = reasonMessage(domain.statusReason, reasonVerbatim);
   const changedAt = formatDateTime(domain.statusChangedAt);
   const graceUntil = formatDateTime(domain.graceUntil);
   const issuedAt = formatDateTime(domain.certificate.issuedAt);
