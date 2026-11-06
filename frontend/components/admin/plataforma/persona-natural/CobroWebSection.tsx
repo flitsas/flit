@@ -8,5 +8,12 @@ import { crearCobroApiPlataforma } from "@/lib/api/admin-ot-portal-cobro";
 const API_COBRO_WEB = crearCobroApiPlataforma();
 
 export function CobroWebSection({ onIrAPrecios }: { onIrAPrecios: () => void }) {
-  return <OtCobroMediosSection api={API_COBRO_WEB} conPin={false} onIrAPrecios={onIrAPrecios} />;
+  return (
+    <OtCobroMediosSection
+      api={API_COBRO_WEB}
+      conPin={false}
+      onIrAPrecios={onIrAPrecios}
+      nombrePrecios="Tarifas"
+    />
+  );
 }
