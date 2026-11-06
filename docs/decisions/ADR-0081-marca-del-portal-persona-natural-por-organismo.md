@@ -139,7 +139,7 @@ Un organismo puede publicar el nombre y el logo que quiera: no hay revisión pre
 - Contras: se crea un tenant artificial con efectos en alcance, usuarios y facturación; acopla organismos a la jerarquía de clientes; hay que mapear tenant a organismo (no se verificó que exista ese vínculo: la entidad `TransitOffice` no expone un `tenant_id`); arrastra el paso de activación de red de develop.
 - Esfuerzo: S a M en dominios, L en consecuencias.
 
-**Decisión pedida al Líder Técnico:** elegir entre A, B y C (u otra), y fijar los puntos 2, 3 y 5 de la lista. Este ADR no los resuelve.
+**Propuesta de implementación (2026-11-06), en `Propuesto`, a confirmar por el Líder Técnico:** alternativa **B**. Es la única que no toca las tablas ni los disparadores de marca blanca. Puntos: (1) `admin.transit_office_domains`; (2) sin `purpose`; (3) no aplica la activación manual de red: con TXT correcto y certificado emitido, el dominio pasa a activo; (4) `DomainContext` con resultado nuevo `Portal(transitOfficeId)`; (5) el provisioning incluye estos dominios sin cambiar lo que entrega de marca blanca; (6) `Domains:Reserved` aplica igual y la unicidad de `host` entre las dos tablas se garantiza en base de datos. Contrato: `docs/design/EPICA-14297-contrato-resto.md`.
 
 ## Archivos relevantes
 
