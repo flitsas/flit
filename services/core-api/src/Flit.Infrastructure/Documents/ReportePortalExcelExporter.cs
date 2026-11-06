@@ -50,13 +50,29 @@ internal sealed class ReportePortalExcelExporter(IReportePortalReadRepository re
         return error;
     }
 
+    /// <summary>El mismo nombre que muestra la tabla (<c>frontend/lib/tramites/estados.ts</c>). Un estado desconocido sale tal cual.</summary>
+    internal static string NombreEstado(string estado) => estado switch
+    {
+        "borrador" => "Borrador",
+        "anulado" => "Anulado",
+        "preparado" => "Preparado",
+        "preasignacion" => "Preasignación",
+        "asignado" => "Asignado",
+        "entregado" => "Entregado",
+        "aprobado" => "Aprobado",
+        "rechazado" => "Rechazado",
+        "revocado" => "Revocado",
+        "subsanacion" => "En subsanación",
+        _ => estado,
+    };
+
     internal static string[] Celdas(FilaReportePortal f) =>
     [
         TramiteCanal.NombreVisible(f.Canal) ?? f.Canal,
         f.Organismo ?? string.Empty,
         f.Tipo,
         f.Radicado ?? string.Empty,
-        f.Estado,
+        NombreEstado(f.Estado),
         FormatoFecha.Instante(f.FechaCaida),
         f.Modalidad ?? string.Empty,
         f.ValorTramite?.ToString(CultureInfo.InvariantCulture) ?? string.Empty,

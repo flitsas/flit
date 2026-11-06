@@ -192,6 +192,22 @@ public sealed class ReportePortalTests
     }
 
     [Fact]
+    public async Task Organismo_TokenSinTenant_NoPuedeElegirOrganismo()
+    {
+        var (db, _) = Sembrar();
+        var (_, error) = await Listar(db, Organismo(Guid.Empty, OficinaA));
+
+        error.Should().Be(ReportePortalErrores.SinOrganismo);
+    }
+
+    [Theory]
+    [InlineData("subsanacion", "En subsanación")]
+    [InlineData("anulado", "Anulado")]
+    [InlineData("otro_estado", "otro_estado")]
+    public void ElExcelMuestraElEstadoConSuNombre(string estado, string esperado) =>
+        Flit.Infrastructure.Documents.ReportePortalExcelExporter.NombreEstado(estado).Should().Be(esperado);
+
+    [Fact]
     public async Task Organismo_SinPerfilDeOrganismo_Da403()
     {
         var (db, _) = Sembrar();

@@ -99,8 +99,11 @@ internal sealed class ReportePortalReadRepository : IReportePortalReadRepository
         }
 
         Guid organismoDelAlcance;
-        if (alcance.OtTenantId is { } otTenant && otTenant != Guid.Empty)
+        if (alcance.OtTenantId is { } otTenant)
         {
+            // Un token sin tenant no es SuperAdmin: no puede caer en la rama de quien elige el organismo.
+            if (otTenant == Guid.Empty)
+                return ReportePortalErrores.SinOrganismo;
             var propio = await _scope.ResolveTransitOfficeIdAsync(otTenant, ct).ConfigureAwait(false);
             if (propio is null)
                 return ReportePortalErrores.SinOrganismo;
