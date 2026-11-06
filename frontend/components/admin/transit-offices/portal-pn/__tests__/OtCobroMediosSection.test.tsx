@@ -62,10 +62,12 @@ describe("OtCobroMediosSection", () => {
   it("AC1: muestra las banderas de pasarela y PIN y los dos switches con su monto por medio", async () => {
     montar(api(datos()));
     expect(await sw(/^Pasarela de pago$/)).toBeChecked();
-    expect(screen.getByRole("switch", { name: /^PIN en caja$/ })).toBeChecked();
     expect(
       screen.getByRole("switch", { name: /Valor del trámite, Pasarela de pago, Traspaso/ }),
     ).toBeChecked();
+    expect(screen.getAllByText("Se ofrece").length).toBeGreaterThan(0);
+    await userEvent.click(screen.getByRole("tab", { name: /PIN en caja/ }));
+    expect(await sw(/^PIN en caja$/)).toBeChecked();
     expect(
       screen.getByRole("switch", { name: /Valor de la gestión, PIN en caja, Traspaso/ }),
     ).toBeInTheDocument();
@@ -105,6 +107,7 @@ describe("OtCobroMediosSection", () => {
   it("guarda la bandera del medio", async () => {
     const a = api(datos());
     montar(a);
+    await userEvent.click(await screen.findByRole("tab", { name: /PIN en caja/ }));
     await userEvent.click(await sw(/^PIN en caja$/));
     await waitFor(() =>
       expect(a.guardarMedio).toHaveBeenCalledWith({ method: "PIN", enabled: false }),
@@ -158,6 +161,19 @@ describe("OtCobroMediosSection", () => {
     const mal = api(datos(), { obtener: vi.fn().mockRejectedValue(new Error("x")) });
     montar(mal);
     expect(await screen.findByText(/No se pudieron cargar los medios de pago/)).toBeInTheDocument();
+  });
+
+  it("en Plataforma el acceso y el motivo nombran Tarifas, y el total suma solo lo que se cobra", async () => {
+    const a = api(datos({ gestionOn: false }));
+    render(
+      <ToastProvider>
+        <OtCobroMediosSection api={a} conPin={false} onIrAPrecios={vi.fn()} nombrePrecios="Tarifas" />
+      </ToastProvider>,
+    );
+    await sw(/^Pasarela de pago$/);
+    expect(screen.getByRole("button", { name: "Ir a Tarifas" })).toBeInTheDocument();
+    expect(screen.getByText("No se cobra")).toBeInTheDocument();
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
   });
 
   it("sin trámites muestra el vacío", async () => {
