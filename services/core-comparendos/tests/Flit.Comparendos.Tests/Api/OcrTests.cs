@@ -491,32 +491,134 @@ public sealed class OcrTests(ApiConOcr api) : IClassFixture<ApiConOcr>
         r.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
         (await r.Content.ReadAsStringAsync(ct)).Should().Contain("roto.tif");
     }
-}
-
-/// <summary>La evaluación del prompt no castiga diferencias de formato que el registro ignora.</summary>
-public sealed class CalificacionOcrTests
-{
-    [Theory]
-    [InlineData(CamposOcr.Numero, "D05001000000054280231", "D 0500-1000.000054280231", true)]
-    [InlineData(CamposOcr.Placa, "ABC123", "abc-123", true)]
-    [InlineData(CamposOcr.NumeroDocumento, "900123456", "900.123.456", true)]
-    [InlineData(CamposOcr.Valor, "604100", "$604.100", true)]
-    [InlineData(CamposOcr.FechaInfraccion, "2026-09-28", "28/09/2026", true)]
-    [InlineData(CamposOcr.TipoDocumento, "NIT", "nit", true)]
-    [InlineData(CamposOcr.Nombre, "JOSÉ PÉREZ GÓMEZ", "Jose Perez Gomes", true)]
-    [InlineData(CamposOcr.Secretaria, "SECRETARIA DE MOVILIDAD DE MEDELLIN", "SECRETARIA DE TRANSITO DE CALI", false)]
-    [InlineData(CamposOcr.Valor, "604100", "302050", false)]
-    [InlineData(CamposOcr.Placa, null, "ABC123", false)]
-    [InlineData(CamposOcr.Placa, "ABC123", null, false)]
-    [InlineData(CamposOcr.Placa, null, "null", true)]
-    public void Acierta(string campo, string? esperado, string? obtenido, bool acierta) =>
-        CalificacionOcr.Acierta(campo, esperado, obtenido).Should().Be(acierta);
 
     [Fact]
-    public void Aprueba_ConMargenDeDosPuntos()
+    public async Task HU13828_Reprocesar_RespetaLoCorregido_ConTope_YEnLote()
     {
-        CalificacionOcr.Aprueba(89, 90, 100).Should().BeTrue();
-        CalificacionOcr.Aprueba(88, 90, 100).Should().BeTrue();
-        CalificacionOcr.Aprueba(87, 90, 100).Should().BeFalse();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (_, cliente) = await EmpresaOcrAsync();
+        // Primera lectura sin valor ni nombre; la segunda los trae, pero con otra placa (que el operador ya había corregido).
+        api.Ocr.Responder("rp", () => OcrDePrueba.Campos("OCR-RP", placa: "AAA111", valor: null, nombre: null), () => OcrDePrueba.Campos("OCR-RP", placa: "ZZZ999"));
+        api.Ocr.Responder("rq", () => OcrDePrueba.Campos("OCR-RQ", valor: null));
+        api.Ocr.Responder("rv", () => new ResultadoOcr(new Dictionary<string, CampoExtraido> { [CamposOcr.Numero] = new(null, null) }, "{}", "m"));
+        var paquete = (await Json(await cliente.PostAsync("/api/v1/comparendos/ocr/paquetes", Paquete("Reprocesos", ("rp.jpg", "rp"), ("rq.jpg", "rq"), ("rv.jpg", "rv")), ct), ct)).GetProperty("id").GetGuid();
+        await api.ProcesarAsync();
+        var docs = await DocumentosAsync(paquete);
+        var rp = docs["rp.jpg"];
+        rp.Estado.Should().Be(EstadoDocumentoOcr.Incompleto);
+        (await cliente.PutAsJsonAsync($"/api/v1/comparendos/ocr/documentos/{rp.Id}/campos",
+            new { campos = new Dictionary<string, string?> { [CamposOcr.Placa] = "BBB222" }, motivo = "Leída del original" }, ct)).EnsureSuccessStatusCode();
+
+        // AC1 + AC3: vuelve a la cola, se lee con la versión publicada y la placa corregida a mano se queda.
+        (await cliente.PostAsync($"/api/v1/comparendos/ocr/documentos/{rp.Id}/reprocesar", null, ct)).StatusCode.Should().Be(HttpStatusCode.Accepted);
+        (await api.EnDbAsync(db => db.PaquetesOcr.SingleAsync(p => p.Id == paquete, ct))).Estado.Should().Be(EstadoPaqueteOcr.EnProcesamiento);
+        await api.ProcesarAsync();
+        rp = (await DocumentosAsync(paquete))["rp.jpg"];
+        var publicada = await api.EnDbAsync(db => db.PromptsOcr.SingleAsync(p => p.Publicada, ct));
+        (rp.Estado, rp.Reprocesos, rp.PromptVersionId).Should().Be((EstadoDocumentoOcr.Completo, (short)1, publicada.Id));
+        var campos = await api.EnDbAsync(db => db.DocumentoOcrCampos.AsNoTracking().Where(c => c.DocumentoOcrId == rp.Id).ToDictionaryAsync(c => c.NombreCampo, ct));
+        (campos[CamposOcr.Placa].ValorExtraido, campos[CamposOcr.Placa].ValorFinal).Should().Be(("ZZZ999", "BBB222"), "lo corregido a mano no se pisa");
+        campos[CamposOcr.Valor].ValorFinal.Should().Be("604100", "lo que nadie tocó toma la nueva lectura");
+
+        // AC5: el detalle dice con qué versión se leyó y cuántas veces se reprocesó; el historial registra el pedido.
+        // La versión del prompt solo la ve el SuperAdmin: para la gestora la lectura es transparente.
+        var detalle = await Json(await cliente.GetAsync($"/api/v1/comparendos/ocr/documentos/{rp.Id}", ct), ct);
+        (detalle.GetProperty("versionPrompt").ValueKind, detalle.GetProperty("reprocesos").GetInt32()).Should().Be((JsonValueKind.Null, 1));
+        detalle.GetProperty("historialIntentos").EnumerateArray().Should().Contain(i => i.GetProperty("resultado").GetString() == "REPROCESO"
+            && i.GetProperty("mensajeError").GetString()!.StartsWith("Reproceso 1 de 3", StringComparison.Ordinal));
+        var flit = await Json(await api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [], SuperAdmin: true)).GetAsync($"/api/v1/comparendos/ocr/documentos/{rp.Id}", ct), ct);
+        flit.GetProperty("versionPrompt").GetInt32().Should().Be(publicada.NumeroVersion);
+
+        // AC4: un completo no se reprocesa, y después del tercer reproceso tampoco.
+        (await cliente.PostAsync($"/api/v1/comparendos/ocr/documentos/{rp.Id}/reprocesar", null, ct)).StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var rv = docs["rv.jpg"];
+        rv.Estado.Should().Be(EstadoDocumentoOcr.Fallido, "ilegible");
+        for (var i = 1; i <= ServicioOcr.MaximoReprocesos; i++)
+        {
+            (await cliente.PostAsync($"/api/v1/comparendos/ocr/documentos/{rv.Id}/reprocesar", null, ct)).StatusCode.Should().Be(HttpStatusCode.Accepted);
+            await api.ProcesarAsync();
+        }
+
+        var tope = await cliente.PostAsync($"/api/v1/comparendos/ocr/documentos/{rv.Id}/reprocesar", null, ct);
+        tope.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await tope.Content.ReadAsStringAsync(ct)).Should().Contain("Ya se reprocesó 3 veces");
+
+        // AC2: en lote se encolan los incompletos que no agotaron sus reprocesos.
+        var lote = await Json(await cliente.PostAsync($"/api/v1/comparendos/ocr/paquetes/{paquete}/reprocesar-incompletos", null, ct), ct);
+        (lote.GetProperty("encolados").GetInt32(), lote.GetProperty("omitidos").GetInt32()).Should().Be((1, 0));
+        (await DocumentosAsync(paquete))["rq.jpg"].Estado.Should().Be(EstadoDocumentoOcr.Pendiente);
+        await api.ProcesarAsync();
     }
-}
+
+    [Fact]
+    public async Task HU13829_NumeroDe19o21Digitos_SeMarcaParaVerificar_SinBloquear()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (_, cliente) = await EmpresaOcrAsync();
+        api.Ocr.Responder("n19", () => OcrDePrueba.Campos("7600100000005652501"));
+        api.Ocr.Responder("n20", () => OcrDePrueba.Campos("76001000000056525017"));
+        var paquete = (await Json(await cliente.PostAsync("/api/v1/comparendos/ocr/paquetes", Paquete("Números", ("n19.jpg", "n19"), ("n20.jpg", "n20")), ct), ct)).GetProperty("id").GetGuid();
+        await api.ProcesarAsync();
+
+        var tabla = await Json(await cliente.GetAsync($"/api/v1/comparendos/ocr/paquetes/{paquete}", ct), ct);
+        var avisos = tabla.GetProperty("documentos").EnumerateArray().ToDictionary(d => d.GetProperty("nombreArchivo").GetString()!, d => d.GetProperty("avisoNumero"));
+        avisos["n19.jpg"].GetString().Should().Contain("19 dígitos");
+        avisos["n20.jpg"].ValueKind.Should().Be(JsonValueKind.Null);
+
+        var n19 = (await DocumentosAsync(paquete))["n19.jpg"];
+        (await Json(await cliente.GetAsync($"/api/v1/comparendos/ocr/documentos/{n19.Id}", ct), ct)).GetProperty("avisoNumero").GetString().Should().Contain("20");
+        (await cliente.PostAsync($"/api/v1/comparendos/ocr/documentos/{n19.Id}/registrar", null, ct)).EnsureSuccessStatusCode();
+    }
+
+    /// <summary>HU #14364 / GDC ID5: al registrar OCR con ApiRenting, la consulta de conductor corre de inmediato.</summary>
+    [Fact]
+    public async Task Registrar_ConApiRenting_ConsultaConductorDeInmediato()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        api.Reloj.Hoy(new DateOnly(2026, 10, 9));
+        var empresa = await EmpresaAsync(api, ocr: true, consulta: true, integracion: "ApiRenting");
+        await ConsultaPorApiDeLosNitsAsync(api, empresa);
+        var cliente = api.Cliente(new UsuarioDePrueba(empresa, Operador));
+
+        api.Ocr.Responder("renting", () => OcrDePrueba.Campos("OCR-RENTING-1", placa: "XYZ124"));
+        var paquete = (await Json(await cliente.PostAsync("/api/v1/comparendos/ocr/paquetes", Paquete("Renting inmediato", ("renting.jpg", "renting")), ct), ct))
+            .GetProperty("id").GetGuid();
+        (await api.ProcesarAsync()).Should().Be(1);
+
+        var doc = (await DocumentosAsync(paquete))["renting.jpg"];
+        doc.Estado.Should().Be(EstadoDocumentoOcr.Completo);
+        (await cliente.PostAsync($"/api/v1/comparendos/ocr/documentos/{doc.Id}/registrar", null, ct)).EnsureSuccessStatusCode();
+
+        var c = await api.EnDbAsync(db => db.Comparendos.Include(x => x.Contraventor)
+            .SingleAsync(x => x.TenantId == empresa && x.NumeroNormalizado == "OCRRENTING1", ct));
+        c.EstadoConsultaContraventor.Should().Be(EstadoConsultaContraventor.Encontrado);
+        c.Contraventor.Should().NotBeNull();
+        c.Contraventor!.Origen.Should().Be(OrigenContraventor.Api);
+    }
+
+    /// <summary>HU #14364: sin NIT marcado para API, el registro OCR no consulta y queda NoAplica.</summary>
+    [Fact]
+    public async Task Registrar_SinNitMarcado_NoConsultaYQuedaNoAplica()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        api.Reloj.Hoy(new DateOnly(2026, 10, 9));
+        var empresa = await EmpresaAsync(api, ocr: true, consulta: true, integracion: "ApiRenting");
+        var cliente = api.Cliente(new UsuarioDePrueba(empresa, Operador));
+
+        api.Ocr.Responder("manual", () => OcrDePrueba.Campos("OCR-RENTING-2", placa: "XYZ124"));
+        var paquete = (await Json(await cliente.PostAsync("/api/v1/comparendos/ocr/paquetes", Paquete("Sin casilla NIT", ("manual.jpg", "manual")), ct), ct))
+            .GetProperty("id").GetGuid();
+        (await api.ProcesarAsync()).Should().Be(1);
+
+        var doc = (await DocumentosAsync(paquete))["manual.jpg"];
+        (await cliente.PostAsync($"/api/v1/comparendos/ocr/documentos/{doc.Id}/registrar", null, ct)).EnsureSuccessStatusCode();
+
+        var c = await api.EnDbAsync(db => db.Comparendos.AsNoTracking()
+            .SingleAsync(x => x.TenantId == empresa && x.NumeroNormalizado == "OCRRENTING2", ct));
+        c.EstadoConsultaContraventor.Should().Be(EstadoConsultaContraventor.NoAplica);
+        c.IntentosConsultaContraventor.Should().Be(0);
+    }

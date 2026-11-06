@@ -40,11 +40,14 @@ public sealed class IdentificadoresTests
 public sealed class NumeroComparendoTests
 {
     [Theory]
-    [InlineData(" d-123 456 ", "D123456")]
+    [InlineData(" d-123 456 ", "123456")]
+    [InlineData("A-98765", "98765")]
     [InlineData("11001000000012345678", "11001000000012345678")]
+    [InlineData("OCR-A", "OCRA")]
     [InlineData("  ", null)]
     [InlineData("---", null)]
-    public void Normalizar_conserva_prefijo_y_quita_separadores(string texto, string? esperado) =>
+    [InlineData("ABC", "ABC")]
+    public void Normalizar_quita_prefijo_alfabetico_inicial(string texto, string? esperado) =>
         NumeroComparendo.Normalizar(texto).Should().Be(esperado);
 }
 
