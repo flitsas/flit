@@ -102,7 +102,7 @@ internal sealed class PersonaNaturalCreador(
     internal const string MarcaCanalPunto = "[Canal: punto de atención (OT)]";
 
     /// <summary>Prefijo del motivo con el que se anula un borrador de una solicitud rechazada; el código va entre corchetes.</summary>
-    internal const string PrefijoAnulacion = "Persona Natural: solicitud rechazada en la creación";
+    internal const string PrefijoAnulacion = Flit.Tramites.Domain.Tramites.PersonaNatural.MotivosAnulacionPortal.RechazoEnCreacion;
 
     /// <summary>Roles de parte que el portal entrega y que FLIT 2 sabe guardar (<c>ParteRol</c>).</summary>
     private static readonly HashSet<string> RolesSoportados = new(StringComparer.Ordinal) { "comprador", "vendedor", "locatario" };

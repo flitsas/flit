@@ -305,6 +305,11 @@ public static class AdminInfrastructureExtensions
         // HU #14072 — configuración del portal (lista blanca de tipos, parámetros y organismos).
         services.AddScoped<Flit.Admin.Domain.Plataforma.PersonaNatural.IPersonaNaturalConfigRepository,
             Flit.Infrastructure.PersonaNatural.PersonaNaturalConfigRepository>();
+            // HU #14397 / #14398 (Feature #14396, Épica #14297) — reporte de los trámites del portal por alcance y su Excel.
+            services.AddScoped<Flit.Admin.Domain.Plataforma.PersonaNatural.IReportePortalReadRepository,
+                Flit.Infrastructure.PersonaNatural.ReportePortalReadRepository>();
+            services.AddScoped<Flit.Admin.Application.Plataforma.PersonaNatural.IReportePortalExcelExporter,
+                Flit.Infrastructure.Documents.ReportePortalExcelExporter>();
         // Feature #14374 (Épica #14297) — marca del portal por organismo (DDL 180), sin tablas de marca blanca.
         services.AddScoped<Flit.Admin.Domain.Companies.TransitOffices.PortalMarca.IPortalMarcaRepository,
             Flit.Infrastructure.PortalMarca.PortalMarcaRepository>();
