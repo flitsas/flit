@@ -26,6 +26,15 @@ public sealed record PortalMarcaSnapshot(string? PlatformName, BrandColors? Colo
     }
 }
 
+/// <summary>
+/// Ámbito de la marca de la web de persona natural (HU #14401). Reutiliza el modelo del organismo con un identificador reservado:
+/// ningún organismo real tiene <see cref="Guid.Empty"/>; el repositorio lo guarda como fila de ámbito web, sin organismo.
+/// </summary>
+public static class PortalMarcaAmbito
+{
+    public static readonly Guid Web = Guid.Empty;
+}
+
 /// <summary>Marca del portal de un organismo: borrador, publicado y versión. Sin fila, es un registro vacío con versión 0.</summary>
 public sealed record PortalMarcaRegistro(
     Guid TransitOfficeId,

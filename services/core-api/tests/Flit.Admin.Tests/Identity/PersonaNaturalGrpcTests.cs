@@ -187,6 +187,23 @@ public sealed class PersonaNaturalGrpcTests(WebApplicationFactory<Program> facto
     }
 
     [Fact]
+    public async Task ObtenerMarcaWeb_NuncaRespondeErrorParaElPortal_YOtraEmpresaNoLaLee()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host(habilitada: true);
+        var bueno = await ClienteAsync(host, Portal, PlatformTenants.PersonaNatural, ct);
+        var ajeno = await ClienteAsync(host, Portal, Guid.NewGuid(), ct);
+
+        // HU #14401: la marca web publicada (si la hay en la base compartida) o la marca FLIT; nunca un error ni el banner.
+        var marca = await bueno.ObtenerMarcaWebAsync(new ObtenerMarcaWebRequest(), cancellationToken: ct);
+        marca.Origen.Should().BeOneOf("flit", "web");
+        marca.BannerId.Should().BeEmpty();
+
+        var conOtraEmpresa = (await ((Func<Task>)(() => ajeno.ObtenerMarcaWebAsync(new ObtenerMarcaWebRequest(), cancellationToken: ct).ResponseAsync)).Should().ThrowAsync<RpcException>()).Which;
+        PlatformRpcErrors.Reason(conOtraEmpresa).Should().Be("invalid_tenant");
+    }
+
+    [Fact]
     public async Task EvaluarRequisitos_ValidaLaEntrada_YUnTipoDesconocidoNoEstaDisponible()
     {
         var ct = TestContext.Current.CancellationToken;

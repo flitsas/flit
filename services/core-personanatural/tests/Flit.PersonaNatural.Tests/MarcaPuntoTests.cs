@@ -132,8 +132,81 @@ public sealed class MarcaPuntoTests
     private static async Task<string?> Origen(HttpResponseMessage r) =>
         JsonDocument.Parse(await r.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("origen").GetString();
 
+    // HU #14401 — marca de la web de persona natural.
+
+    private static MarcaPuntoRespuesta DeLaWeb(int version = 1) => new(
+        MarcaPuntoRespuesta.OrigenWeb, "Portal FLIT Persona", new ColoresMarcaPunto("#0B3D91", "#0F5132", "#FFFFFF"),
+        $"{MarcaPuntoEndpoints.RutaImagenes}{Logo}", null, version);
+
+    [Fact]
+    public async Task Web_ConMarcaPublicadaRecibeLaMismaFormaQueElPuntoSinDatosInternos()
+    {
+        await using var host = new Anfitrion(new FachadaMarca { MarcaWeb = DeLaWeb(2) });
+
+        var r = await host.GetAsync("/marca/web");
+        var json = JsonDocument.Parse(await r.Content.ReadAsStringAsync(Ct)).RootElement;
+
+        r.StatusCode.Should().Be(HttpStatusCode.OK);
+        r.Headers.CacheControl!.NoStore.Should().BeTrue();
+        json.GetProperty("origen").GetString().Should().Be("web");
+        json.GetProperty("nombre").GetString().Should().Be("Portal FLIT Persona");
+        json.GetProperty("colores").GetProperty("sobrePrimario").GetString().Should().Be("#FFFFFF");
+        json.GetProperty("logoUrl").GetString().Should().Be($"/api/v1/persona-natural/marca/imagenes/{Logo}");
+        json.GetProperty("bannerUrl").ValueKind.Should().Be(JsonValueKind.Null);
+        json.GetProperty("version").GetInt32().Should().Be(2);
+        json.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("origen", "nombre", "colores", "logoUrl", "bannerUrl", "version");
+    }
+
+    [Fact]
+    public async Task Web_SinMarcaOAnteUnaFallaRecibeLaMarcaFlitConCodigo200YSinDetalle()
+    {
+        var fachada = new FachadaMarca();
+        await using var host = new Anfitrion(fachada);
+
+        var sinMarca = await host.GetAsync("/marca/web");
+        fachada.Falla = new FachadaException("servicio_no_disponible", "detalle interno secreto", 503);
+        var conFalla = await host.GetAsync("/marca/web");
+        var texto = await conFalla.Content.ReadAsStringAsync(Ct);
+
+        sinMarca.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await Origen(sinMarca)).Should().Be("flit");
+        conFalla.StatusCode.Should().Be(HttpStatusCode.OK);
+        texto.Should().NotContain("secreto");
+        JsonDocument.Parse(texto).RootElement.GetProperty("origen").GetString().Should().Be("flit");
+    }
+
+    [Fact]
+    public async Task Web_NuncaSeGuardaEnCachePorTiempoYNoSeCruzaConLaMarcaDelPunto()
+    {
+        var fachada = new FachadaMarca { MarcaWeb = DeLaWeb(1), Marca = DelOrganismo(7) };
+        await using var host = new Anfitrion(fachada);
+
+        var primera = await host.GetAsync("/marca/web");
+        fachada.MarcaWeb = DeLaWeb(2);
+        var segunda = await host.GetAsync("/marca/web");
+        fachada.MarcaWeb = MarcaPuntoRespuesta.Flit;
+        var tercera = await host.GetAsync("/marca/web");
+        var punto = await host.GetAsync("/punto/marca/AB1");
+
+        (await Version(primera)).Should().Be(1);
+        (await Version(segunda)).Should().Be(2);
+        (await Origen(tercera)).Should().Be("flit", "retirar la web se ve en la siguiente lectura");
+        (await Origen(punto)).Should().Be("organismo");
+        (await Version(punto)).Should().Be(7, "la marca del punto no cambió");
+        fachada.LlamadasWeb.Should().Be(3);
+    }
+
     private sealed class FachadaMarca : IMarcaPunto
     {
+        public MarcaPuntoRespuesta MarcaWeb { get; set; } = MarcaPuntoRespuesta.Flit;
+        public int LlamadasWeb { get; private set; }
+
+        public Task<MarcaPuntoRespuesta> ObtenerWebAsync(CancellationToken ct)
+        {
+            LlamadasWeb++;
+            return Falla is not null ? Task.FromException<MarcaPuntoRespuesta>(Falla) : Task.FromResult(MarcaWeb);
+        }
+
         public MarcaPuntoRespuesta Marca { get; set; } = MarcaPuntoRespuesta.Flit;
         public ImagenMarcaPunto? Imagen { get; set; }
         public Exception? Falla { get; set; }

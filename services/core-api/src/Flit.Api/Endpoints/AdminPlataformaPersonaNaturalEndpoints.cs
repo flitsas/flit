@@ -33,6 +33,7 @@ public static partial class AdminPlataformaPersonaNaturalEndpoints
         MapTarifas(group);
         MapConfiguracion(group);
         MapContenido(group);
+        MapMarcaWeb(group);
         return app;
     }
 

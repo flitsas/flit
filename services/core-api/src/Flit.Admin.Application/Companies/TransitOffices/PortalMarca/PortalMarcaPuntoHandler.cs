@@ -12,6 +12,7 @@ public sealed record MarcaPuntoColoresDto(string Primario, string Secundario, st
 public sealed record MarcaPuntoDto(string Origen, string? Nombre, MarcaPuntoColoresDto? Colores, Guid? LogoId, Guid? BannerId, int Version)
 {
     public const string OrigenOrganismo = "organismo";
+    public const string OrigenWeb = "web";
     public const string OrigenFlit = "flit";
 
     public static readonly MarcaPuntoDto Flit = new(OrigenFlit, null, null, null, null, 0);
@@ -40,18 +41,7 @@ public sealed class PortalMarcaPuntoHandler(IPortalMarcaRepository repo, IPortal
             if (await repo.ResolverOrganismoPorCodigoAsync(buscado, ct).ConfigureAwait(false) is not { } organismo)
                 return MarcaPuntoDto.Flit;
 
-            var marca = await repo.ObtenerAsync(organismo, ct).ConfigureAwait(false);
-            var p = marca.Published;
-            if (p is null || p.MissingFields().Count > 0)
-                return MarcaPuntoDto.Flit;
-
-            return new MarcaPuntoDto(
-                MarcaPuntoDto.OrigenOrganismo,
-                p.PlatformName,
-                new MarcaPuntoColoresDto(p.Colors!.Primary, p.Colors.Secondary, p.Colors.OnPrimary),
-                p.LogoId,
-                p.BannerId,
-                marca.PublishedVersion);
+            return DePublicada(await repo.ObtenerAsync(organismo, ct).ConfigureAwait(false), MarcaPuntoDto.OrigenOrganismo, conBanner: true);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -60,6 +50,40 @@ public sealed class PortalMarcaPuntoHandler(IPortalMarcaRepository repo, IPortal
 #pragma warning restore CA1848
             return MarcaPuntoDto.Flit;
         }
+    }
+
+    /// <summary>
+    /// HU #14401 — marca publicada de la web de persona natural. Mismas garantías que la del punto: sin caché, sin borrador, y ante
+    /// marca sin publicar, incompleta o una falla responde la marca FLIT. Sin banner: los de la web viven en Contenido.
+    /// </summary>
+    public async Task<MarcaPuntoDto> ObtenerWebAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            return DePublicada(await repo.ObtenerAsync(PortalMarcaAmbito.Web, ct).ConfigureAwait(false), MarcaPuntoDto.OrigenWeb, conBanner: false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+#pragma warning disable CA1848 // Mensaje fijo y sin datos internos.
+            logger.LogWarning(ex, "No se pudo leer la marca de la web de persona natural; se entrega la marca FLIT.");
+#pragma warning restore CA1848
+            return MarcaPuntoDto.Flit;
+        }
+    }
+
+    private static MarcaPuntoDto DePublicada(PortalMarcaRegistro marca, string origen, bool conBanner)
+    {
+        var p = marca.Published;
+        if (p is null || p.MissingFields().Count > 0)
+            return MarcaPuntoDto.Flit;
+
+        return new MarcaPuntoDto(
+            origen,
+            p.PlatformName,
+            new MarcaPuntoColoresDto(p.Colors!.Primary, p.Colors.Secondary, p.Colors.OnPrimary),
+            p.LogoId,
+            conBanner ? p.BannerId : null,
+            marca.PublishedVersion);
     }
 
     /// <summary>Solo imágenes del publicado vigente. Una de borrador, de una versión retirada o inexistente es «no encontrada».</summary>
