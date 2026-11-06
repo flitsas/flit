@@ -13,6 +13,7 @@ import {
   serializeDrFlitManualCatalog,
 } from "@/lib/manual/dr-flit-catalog-export";
 import type { ManualArticle } from "@/lib/manual/types";
+import { MANDATO_TIPOS } from "@/lib/plataforma/mandato-templates";
 
 const REPO_ROOT = path.resolve(__dirname, "../../../..");
 
@@ -38,7 +39,7 @@ describe("HU #14357 AC6 — manual sin convenio de Compañías", () => {
 
   it("sigue explicando cómo firma el mandatario con ambas formas y el caso «Sin firmar»", () => {
     const parrafos = mandatarios.blocks.flatMap((b) => b.paragraphs);
-    const firma = parrafos.find((p) => p.includes("«Sin firmar»"));
+    const firma = parrafos.find((p) => p.startsWith("Persona natural:"));
 
     expect(firma).toBeDefined();
     expect(firma).toContain("con Baúl de firmas, la imagen de la firma del baúl");
@@ -47,18 +48,50 @@ describe("HU #14357 AC6 — manual sin convenio de Compañías", () => {
     expect(firma).toMatch(/^Persona natural:/);
   });
 
-  it("Persona jurídica: sin recuadro del mandatario, firma solo el mandante y sus datos siguen en el cuerpo", () => {
-    const parrafos = mandatarios.blocks.find((b) => b.id === "firma-mandatario")!.paragraphs;
+  // Modelo del mandatario (lo elige el Administrador) y tipo de mandato (lo fija Plataforma) son dos ejes:
+  // lo que quita el recuadro es el tipo Institucional, no el modelo Persona jurídica.
+  describe("firma según modelo y tipo de mandato (MandatoFirmaModoResolver)", () => {
+    const parrafos = () => mandatarios.blocks.find((b) => b.id === "firma-mandatario")!.paragraphs;
+    const parrafoDe = (inicio: string) => parrafos().find((p) => p.startsWith(inicio));
 
-    expect(parrafos).toContain(
-      "Persona jurídica: el contrato no lleva recuadro del mandatario y firma solo el mandante; los datos del mandatario siguen en el cuerpo del contrato.",
-    );
-  });
+    it("distingue modelo y tipo con los rótulos reales de Plataforma", () => {
+      const texto = parrafos().join(" ");
+      expect(texto).toContain("el modelo, que eliges al registrar al mandatario");
+      expect(texto).toContain("el tipo de mandato, que fija Plataforma");
+      for (const { label } of MANDATO_TIPOS) {
+        expect(texto).toContain(`«${label}»`);
+      }
+      expect(texto).toContain("salvo que la configuración de mandato del organismo disponga otra cosa");
+    });
 
-  it("Formato en blanco: el recuadro queda con líneas para firmar a mano", () => {
-    const parrafos = mandatarios.blocks.find((b) => b.id === "firma-mandatario")!.paragraphs;
+    it("caso 1, tipo por defecto + Persona natural: firma con Baúl o Validación de identidad, o «Sin firmar»", () => {
+      const natural = parrafoDe("Persona natural:");
+      expect(natural).toContain("con Baúl de firmas, la imagen de la firma del baúl con su vigencia y código hash");
+      expect(natural).toContain("con Validación de identidad, el trazo de la firma");
+      expect(natural).toContain("el recuadro queda «Sin firmar»");
+    });
 
-    expect(parrafos).toContain("Formato en blanco: el recuadro queda con líneas para firmar a mano.");
+    it("caso 2, tipo por defecto + Persona jurídica: SÍ lleva recuadro; «Sin firmar» o la firma del baúl registrada con su NIT", () => {
+      const juridica = parrafoDe("Persona jurídica:");
+      expect(juridica).not.toMatch(/no lleva recuadro|firma solo el mandante/);
+      expect(juridica).toContain("el recuadro sale «Sin firmar», con la línea para firmar a mano");
+      expect(juridica).toContain("una firma vigente registrada con el NIT de la entidad, esa firma se estampa");
+    });
+
+    it("caso 3, tipo Institucional: sin recuadro, firma solo el mandante y el organismo en el cuerpo según el formato", () => {
+      const institucional = parrafos().find((p) => p.includes("Con «Institucional (organismo)»"));
+      expect(institucional).toContain("el contrato no lleva recuadro del mandatario y firma solo el mandante");
+      expect(institucional).toContain("con su nombre y NIT si el formato de contrato los incluye");
+    });
+
+    it("caso 4, Formato en blanco y tipo Abierto no son lo mismo: uno es modelo y el otro tipo", () => {
+      const blanco = parrafoDe("Formato en blanco:");
+      expect(blanco).toContain("el recuadro sale «Sin firmar», con la línea para firmar a mano");
+      const abierto = parrafos().find((p) => p.includes("Con «Abierto (sin mandatario)»"));
+      expect(abierto).toContain("nombre, documento y firma quedan en líneas en blanco");
+      expect(abierto).toContain("en el cuerpo y en el recuadro");
+      expect(abierto).not.toBe(blanco);
+    });
   });
 
   it.each(DR_FLIT_MANUAL_CATALOG_PATHS)("el catálogo %s no trae la sección y coincide con los artículos", (relativa) => {
