@@ -115,10 +115,12 @@ public sealed class OidcNetworkTests(PostgresDatabaseFixture fixture) : MarcaBla
         {
             var body = await NewClient(host).GetFromJsonAsync<JsonElement>("/api/v1/public/network", ct);
             body.GetProperty("hubUrl").GetString().Should().Be($"https://{MarcaBlancaScenario.HostA}", host);
+            body.GetProperty("tramitesUrl").GetString().Should().Be($"https://{TramitesHostA}", host);
         }
 
         var flit = await NewClient(null).GetFromJsonAsync<JsonElement>("/api/v1/public/network", ct);
         flit.GetProperty("hubUrl").ValueKind.Should().Be(JsonValueKind.Null);
+        flit.GetProperty("tramitesUrl").ValueKind.Should().Be(JsonValueKind.Null);
         var unknown = await NewClient("desconocido.example").GetFromJsonAsync<JsonElement>("/api/v1/public/network", ct);
         unknown.GetProperty("hubUrl").ValueKind.Should().Be(JsonValueKind.Null);
     }
