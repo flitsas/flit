@@ -22,4 +22,7 @@ public sealed class DomainOptions
 
     /// <summary>IP pública del borde de este ambiente: el valor del registro A que se le pide crear al cliente.</summary>
     public string EdgeIp { get; set; } = string.Empty;
+
+    /// <summary>Tope de dominios vigentes del portal de un mismo organismo (<c>Domains:PortalMaxPorOrganismo</c>).</summary>
+    public int PortalMaxPorOrganismo { get; set; } = 10;
 }

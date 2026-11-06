@@ -15,6 +15,7 @@ namespace Flit.Admin.Tests.PortalDominio;
 public sealed class PortalDominioHandlerTests
 {
     private static readonly Guid Organismo = Guid.Parse("07000000-0000-4000-8000-000000014381");
+    private static readonly Guid IdDominio = Guid.Parse("d0000000-0000-4000-8000-000000014381");
     private static readonly Guid Actor = Guid.Parse("14381000-0000-4000-8000-000000000001");
     private static readonly DateTimeOffset Ahora = new(2026, 11, 6, 12, 0, 0, TimeSpan.Zero);
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
@@ -29,15 +30,15 @@ public sealed class PortalDominioHandlerTests
         new(_repo, new PortalDominioVerificador(_repo, _dns, _verificacion, reloj), _opciones, _audit);
 
     private static DominioDePortal Dominio(string estado = "pending", string host = "tramites.miorganismo.gov.co", string? motivo = null,
-        DateTimeOffset? ultimaComprobacion = null) =>
-        new(Organismo, host, estado, motivo, "TOKEN-DE-VERIFICACION-0123456789", null, null, null, null, ultimaComprobacion, null, 0, null, Ahora, 3);
+        DateTimeOffset? ultimaComprobacion = null, bool principal = false, Guid? id = null, Guid? organismo = null) =>
+        new(id ?? IdDominio, organismo ?? Organismo, host, estado, motivo, "TOKEN-DE-VERIFICACION-0123456789", null, null, null, null, ultimaComprobacion, null, 0, null, Ahora, 3, principal);
 
     // ── B1 · registrar ───────────────────────────────────────────────────────────────────────────────────────────────
 
     [Fact]
     public async Task AC1_UnHostValidoQuedaPendienteConInstruccionesDeDnsYToken()
     {
-        _repo.RegistrarAsync(Organismo, "tramites.miorganismo.gov.co", Arg.Any<string>(), Actor, Arg.Any<CancellationToken>())
+        _repo.RegistrarAsync(Organismo, "tramites.miorganismo.gov.co", Arg.Any<string>(), Actor, Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(c => PortalDominioRegistro.Ok(Dominio() with { VerificationToken = c.ArgAt<string>(2) }));
 
         var r = await Admin().RegistrarAsync(Organismo, new RegistrarPortalDominioRequest("  Tramites.MiOrganismo.gov.co "), Actor, Ct);
@@ -58,7 +59,7 @@ public sealed class PortalDominioHandlerTests
     public async Task SinIpDeBordeConfiguradaSoloSeEntregaElTxt()
     {
         _opciones.EdgeIp = string.Empty;
-        _repo.RegistrarAsync(Organismo, Arg.Any<string>(), Arg.Any<string>(), Actor, Arg.Any<CancellationToken>()).Returns(PortalDominioRegistro.Ok(Dominio()));
+        _repo.RegistrarAsync(Organismo, Arg.Any<string>(), Arg.Any<string>(), Actor, Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(PortalDominioRegistro.Ok(Dominio()));
 
         var r = await Admin().RegistrarAsync(Organismo, new RegistrarPortalDominioRequest("tramites.miorganismo.gov.co"), Actor, Ct);
 
@@ -76,7 +77,7 @@ public sealed class PortalDominioHandlerTests
 
         r.Error!.Code.Should().Be(PortalDominioErrores.Invalido);
         r.Error.Message.Should().Contain("sin https://");
-        await _repo.DidNotReceiveWithAnyArgs().RegistrarAsync(default, default!, default!, default, Ct);
+        await _repo.DidNotReceiveWithAnyArgs().RegistrarAsync(default, default!, default!, default, default, Ct);
     }
 
     [Fact]
@@ -87,13 +88,13 @@ public sealed class PortalDominioHandlerTests
         r.Error!.Status.Should().Be(409);
         r.Error.Code.Should().Be(PortalDominioErrores.Reservado);
         r.Error.Message.Should().Be("El dominio portal.flitsas.online está reservado para FLIT y no se puede registrar. Use un dominio propio del organismo.");
-        await _repo.DidNotReceiveWithAnyArgs().RegistrarAsync(default, default!, default!, default, Ct);
+        await _repo.DidNotReceiveWithAnyArgs().RegistrarAsync(default, default!, default!, default, default, Ct);
     }
 
     [Fact]
     public async Task AC2_UnHostYaRegistradoPorOtraRedOOrganismoSeRechazaConElMotivoExacto()
     {
-        _repo.RegistrarAsync(Organismo, "tramites.miorganismo.gov.co", Arg.Any<string>(), Actor, Arg.Any<CancellationToken>())
+        _repo.RegistrarAsync(Organismo, "tramites.miorganismo.gov.co", Arg.Any<string>(), Actor, Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(PortalDominioRegistro.Falla(PortalDominioRegistroFallo.HostEnUso));
 
         var r = await Admin().RegistrarAsync(Organismo, new RegistrarPortalDominioRequest("tramites.miorganismo.gov.co"), Actor, Ct);
@@ -104,37 +105,108 @@ public sealed class PortalDominioHandlerTests
     }
 
     [Fact]
-    public async Task AC3_UnOrganismoConDominioVigenteNoPuedeRegistrarOtro()
+    public async Task AC3_UnOrganismoEnElTopeNoPuedeRegistrarOtroYElMotivoNombraElMaximo()
     {
-        _repo.RegistrarAsync(Organismo, "otro.miorganismo.gov.co", Arg.Any<string>(), Actor, Arg.Any<CancellationToken>())
-            .Returns(PortalDominioRegistro.Falla(PortalDominioRegistroFallo.OrganismoYaTiene));
-        _repo.ObtenerAsync(Organismo, Arg.Any<CancellationToken>()).Returns(Dominio());
+        _opciones.PortalMaxPorOrganismo = 3;
+        _repo.RegistrarAsync(Organismo, "otro.miorganismo.gov.co", Arg.Any<string>(), Actor, 3, Arg.Any<CancellationToken>())
+            .Returns(PortalDominioRegistro.Falla(PortalDominioRegistroFallo.LimiteAlcanzado));
 
         var r = await Admin().RegistrarAsync(Organismo, new RegistrarPortalDominioRequest("otro.miorganismo.gov.co"), Actor, Ct);
 
-        r.Error!.Code.Should().Be(PortalDominioErrores.OrganismoYaTiene);
-        r.Error.Message.Should().Be("El organismo ya tiene el dominio tramites.miorganismo.gov.co. Retírelo antes de registrar otro.");
+        r.Error!.Status.Should().Be(409);
+        r.Error.Code.Should().Be(PortalDominioErrores.Limite);
+        r.Error.Message.Should().Be("El organismo ya tiene 3 dominios, el máximo permitido. Retire uno antes de registrar otro.");
     }
 
     [Fact]
-    public async Task SinDominioElGetYElRetiroRespondenNoRegistrado()
+    public async Task ElTopePorDefectoEsDiez()
     {
-        (await Admin().ObtenerAsync(Organismo, Ct)).Error!.Status.Should().Be(404);
-        (await Admin().RetirarAsync(Organismo, Actor, Ct)).Error!.Code.Should().Be(PortalDominioErrores.NoRegistrado);
+        _repo.RegistrarAsync(Organismo, Arg.Any<string>(), Arg.Any<string>(), Actor, 10, Arg.Any<CancellationToken>())
+            .Returns(PortalDominioRegistro.Ok(Dominio()));
+
+        (await Admin().RegistrarAsync(Organismo, new RegistrarPortalDominioRequest("tramites.miorganismo.gov.co"), Actor, Ct)).Error.Should().BeNull();
     }
 
+    [Fact]
+    public async Task SinDominiosElGetResponde200ConListaVaciaYUnIdInexistenteEs404()
+    {
+        _repo.ListarAsync(Organismo, Arg.Any<CancellationToken>()).Returns([]);
+
+        (await Admin().ListarAsync(Organismo, Ct)).Should().BeEmpty();
+        (await Admin().RetirarAsync(Organismo, IdDominio, Actor, Ct)).Error!.Code.Should().Be(PortalDominioErrores.NoRegistrado);
+    }
+
+    [Fact]
+    public async Task ElListadoEntregaIdPrincipalYEstadoDeCadaDominioPorSeparado()
+    {
+        var otro = Guid.Parse("d0000000-0000-4000-8000-0000000143ff");
+        _repo.ListarAsync(Organismo, Arg.Any<CancellationToken>()).Returns([
+            Dominio("active", "a.miorganismo.gov.co", principal: true),
+            Dominio("failed", "b.miorganismo.gov.co", motivo: "TXT_NOT_FOUND", id: otro)]);
+
+        var lista = await Admin().ListarAsync(Organismo, Ct);
+
+        lista.Select(d => (d.Id, d.Host, d.Principal, d.Estado)).Should().Equal(
+            (IdDominio, "a.miorganismo.gov.co", true, "activo"), (otro, "b.miorganismo.gov.co", false, "fallido"));
+        lista[1].Motivo.Should().Contain("No encontramos el registro TXT");
+        lista[0].Motivo.Should().BeNull("un fallo de b no toca a a");
+    }
+
+    // ── Principal ────────────────────────────────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task SoloUnDominioActivoPuedeSerPrincipalYSiNoElMotivoEsExacto()
+    {
+        _repo.ObtenerPorIdAsync(IdDominio, Arg.Any<CancellationToken>()).Returns(Dominio("verified"));
+
+        var r = await Admin().PrincipalAsync(Organismo, IdDominio, Actor, Ct);
+
+        r.Error!.Status.Should().Be(409);
+        r.Error.Code.Should().Be(PortalDominioErrores.PrincipalNoActivo);
+        r.Error.Message.Should().Be("Solo un dominio activo puede ser el principal. El dominio tramites.miorganismo.gov.co está verificado.");
+        await _repo.DidNotReceiveWithAnyArgs().EstablecerPrincipalAsync(default, default, Ct);
+    }
+
+    [Fact]
+    public async Task UnDominioActivoPasaAPrincipalYQuedaAuditado()
+    {
+        _repo.ObtenerPorIdAsync(IdDominio, Arg.Any<CancellationToken>()).Returns(Dominio("active"));
+        _repo.EstablecerPrincipalAsync(IdDominio, Actor, Arg.Any<CancellationToken>()).Returns(Dominio("active", principal: true));
+
+        var r = await Admin().PrincipalAsync(Organismo, IdDominio, Actor, Ct);
+
+        r.Valor!.Principal.Should().BeTrue();
+        await _audit.Received(1).WriteAsync(Arg.Is<AdminAuditEntry>(e => e.EntityName == "PortalDominio" && e.Operation == "update"), Ct);
+    }
+
+    // ── Alcance por id ───────────────────────────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task UnIdDeOtroOrganismoDa403EnVerificarPrincipalYRetirarYNoEscribeNada()
+    {
+        var ajeno = Dominio("active", organismo: Guid.NewGuid());
+        _repo.ObtenerPorIdAsync(IdDominio, Arg.Any<CancellationToken>()).Returns(ajeno);
+
+        (await Admin().VerificarAsync(Organismo, IdDominio, Actor, Ct)).Error!.Status.Should().Be(403);
+        (await Admin().PrincipalAsync(Organismo, IdDominio, Actor, Ct)).Error!.Status.Should().Be(403);
+        (await Admin().RetirarAsync(Organismo, IdDominio, Actor, Ct)).Error!.Status.Should().Be(403);
+
+        await _repo.DidNotReceiveWithAnyArgs().RetirarAsync(default, default, Ct);
+        await _repo.DidNotReceiveWithAnyArgs().EstablecerPrincipalAsync(default, default, Ct);
+        await _dns.DidNotReceiveWithAnyArgs().LookupAsync(default!, Ct);
+    }
     // ── B2 · verificar ───────────────────────────────────────────────────────────────────────────────────────────────
 
     [Fact]
     public async Task AC1_ConElTxtCorrectoElDominioPasaAVerificado()
     {
-        _repo.ObtenerAsync(Organismo, Arg.Any<CancellationToken>()).Returns(Dominio());
+        _repo.ObtenerPorIdAsync(IdDominio, Arg.Any<CancellationToken>()).Returns(Dominio());
         _dns.LookupAsync("tramites.miorganismo.gov.co", Arg.Any<CancellationToken>())
             .Returns(new DnsTxtLookupResult(true, ["flit-verify=TOKEN-DE-VERIFICACION-0123456789"], null));
-        _repo.AplicarComprobacionAsync(Organismo, "verified", Arg.Any<string?>(), Arg.Any<DateTimeOffset?>(), Arg.Any<DateTimeOffset?>(), Arg.Any<int>(), Arg.Any<DateTimeOffset?>(), Arg.Any<DateTimeOffset>(), Arg.Any<Guid?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+        _repo.AplicarComprobacionAsync(IdDominio, "verified", Arg.Any<string?>(), Arg.Any<DateTimeOffset?>(), Arg.Any<DateTimeOffset?>(), Arg.Any<int>(), Arg.Any<DateTimeOffset?>(), Arg.Any<DateTimeOffset>(), Arg.Any<Guid?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(Dominio("verified"));
 
-        var r = await Admin().VerificarAsync(Organismo, Actor, Ct);
+        var r = await Admin().VerificarAsync(Organismo, IdDominio, Actor, Ct);
 
         r.Valor!.Estado.Should().Be("verificado");
     }
@@ -144,13 +216,13 @@ public sealed class PortalDominioHandlerTests
     [InlineData(true, "TXT_MISMATCH", "su valor no coincide")]
     public async Task AC3_UnTxtAusenteOIncorrectoDejaElMotivoYNoActiva(bool hayTxt, string codigo, string fragmento)
     {
-        _repo.ObtenerAsync(Organismo, Arg.Any<CancellationToken>()).Returns(Dominio());
+        _repo.ObtenerPorIdAsync(IdDominio, Arg.Any<CancellationToken>()).Returns(Dominio());
         _dns.LookupAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new DnsTxtLookupResult(hayTxt, hayTxt ? ["otro-valor"] : [], null));
-        _repo.AplicarComprobacionAsync(Organismo, "failed", codigo, Arg.Any<DateTimeOffset?>(), Arg.Any<DateTimeOffset?>(), Arg.Any<int>(), Arg.Any<DateTimeOffset?>(), Arg.Any<DateTimeOffset>(), Arg.Any<Guid?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+        _repo.AplicarComprobacionAsync(IdDominio, "failed", codigo, Arg.Any<DateTimeOffset?>(), Arg.Any<DateTimeOffset?>(), Arg.Any<int>(), Arg.Any<DateTimeOffset?>(), Arg.Any<DateTimeOffset>(), Arg.Any<Guid?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(Dominio("failed", motivo: codigo));
 
-        var r = await Admin().VerificarAsync(Organismo, Actor, Ct);
+        var r = await Admin().VerificarAsync(Organismo, IdDominio, Actor, Ct);
 
         r.Valor!.Estado.Should().Be("fallido");
         r.Valor.Motivo.Should().Contain(fragmento);
@@ -160,9 +232,9 @@ public sealed class PortalDominioHandlerTests
     public async Task UnaVerificacionMuyProntoEsperaYNoConsultaElDns()
     {
         var reloj = new FakeTimeProvider(Ahora);
-        _repo.ObtenerAsync(Organismo, Arg.Any<CancellationToken>()).Returns(Dominio(ultimaComprobacion: Ahora.AddSeconds(-10)));
+        _repo.ObtenerPorIdAsync(IdDominio, Arg.Any<CancellationToken>()).Returns(Dominio(ultimaComprobacion: Ahora.AddSeconds(-10)));
 
-        var r = await Admin(reloj).VerificarAsync(Organismo, Actor, Ct);
+        var r = await Admin(reloj).VerificarAsync(Organismo, IdDominio, Actor, Ct);
 
         r.Error!.Status.Should().Be(429);
         r.Error.EsperarSegundos.Should().Be(20);

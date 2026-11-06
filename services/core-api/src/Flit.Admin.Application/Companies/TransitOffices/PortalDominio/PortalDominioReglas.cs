@@ -22,7 +22,7 @@ public sealed record PortalDominioDnsDto(string Tipo, string Nombre, string Valo
 
 /// <summary>Forma de <c>DominioPortal</c> del contrato de la Épica #14297.</summary>
 public sealed record PortalDominioDto(
-    string Host, string Estado, string? Motivo, IReadOnlyList<PortalDominioDnsDto> Dns, long RowVersion);
+    Guid Id, string Host, bool Principal, string Estado, string? Motivo, IReadOnlyList<PortalDominioDnsDto> Dns, long RowVersion);
 
 public sealed record RegistrarPortalDominioRequest(string? Host);
 
@@ -32,7 +32,9 @@ public static class PortalDominioErrores
     public const string Invalido = "PORTAL_DOMINIO_INVALIDO";
     public const string Reservado = "PORTAL_DOMINIO_RESERVADO";
     public const string EnUso = "PORTAL_DOMINIO_EN_USO";
-    public const string OrganismoYaTiene = "PORTAL_DOMINIO_ORGANISMO_YA_TIENE";
+    public const string Limite = "PORTAL_DOMINIO_LIMITE";
+    public const string PrincipalNoActivo = "PORTAL_DOMINIO_PRINCIPAL_NO_ACTIVO";
+    public const string Prohibido = "PORTAL_MARCA_PROHIBIDO";
     public const string NoRegistrado = "PORTAL_DOMINIO_NO_REGISTRADO";
     public const string Esperar = "PORTAL_DOMINIO_VERIFICACION_ESPERAR";
 
@@ -48,10 +50,15 @@ public static class PortalDominioErrores
     public static PortalDominioError DominioEnUso(string host) => new(409, EnUso,
         $"El dominio {host} ya está registrado por otro organismo o por una red de marca blanca. Use un dominio diferente.");
 
-    public static PortalDominioError YaTieneDominio(string actual) => new(409, OrganismoYaTiene,
-        $"El organismo ya tiene el dominio {actual}. Retírelo antes de registrar otro.");
+    public static PortalDominioError LimiteAlcanzado(int maximo) => new(409, Limite,
+        $"El organismo ya tiene {maximo} dominios, el máximo permitido. Retire uno antes de registrar otro.");
 
-    public static PortalDominioError SinDominio() => new(404, NoRegistrado, "El organismo no tiene un dominio registrado para su portal.");
+    public static PortalDominioError NoActivoParaPrincipal(string host, string estado) => new(409, PrincipalNoActivo,
+        $"Solo un dominio activo puede ser el principal. El dominio {host} está {estado}.");
+
+    public static PortalDominioError DominioAjeno() => new(403, Prohibido, "Solo puede ver y cambiar los dominios del portal de su propio organismo.");
+
+    public static PortalDominioError SinDominio() => new(404, NoRegistrado, "El dominio indicado no existe o ya fue retirado.");
 
     public static PortalDominioError VerificacionReciente(int segundos) => new(429, Esperar,
         $"La verificación se acaba de ejecutar. Espere {segundos} segundos antes de volver a intentarlo.", segundos);
@@ -111,6 +118,6 @@ public static class PortalDominioEstados
             dns.Add(new PortalDominioDnsDto("A", dominio.Host, ipBorde));
 
         var motivo = dominio.Status == TenantDomainStatus.Failed ? PortalDominioErrores.Motivo(dominio.StatusReason, dominio.Host) : null;
-        return new PortalDominioDto(dominio.Host, Contrato(dominio.Status), motivo, dns, dominio.RowVersion);
+        return new PortalDominioDto(dominio.Id, dominio.Host, dominio.IsPrimary, Contrato(dominio.Status), motivo, dns, dominio.RowVersion);
     }
 }

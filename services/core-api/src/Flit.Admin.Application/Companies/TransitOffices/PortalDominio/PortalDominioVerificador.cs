@@ -13,10 +13,10 @@ public sealed class PortalDominioVerificador(
 {
     private readonly TimeProvider _reloj = reloj ?? TimeProvider.System;
 
-    /// <summary>Comprobación a demanda. <c>Dominio</c> nulo si el organismo no tiene dominio; <c>Esperar</c> &gt; 0 si es muy pronto.</summary>
-    public async Task<(DominioDePortal? Dominio, int Esperar)> VerificarAhoraAsync(Guid transitOfficeId, Guid? actor, CancellationToken ct = default)
+    /// <summary>Comprobación a demanda de UN dominio. <c>Dominio</c> nulo si no existe; <c>Esperar</c> &gt; 0 si es muy pronto.</summary>
+    public async Task<(DominioDePortal? Dominio, int Esperar)> VerificarAhoraAsync(Guid id, Guid? actor, CancellationToken ct = default)
     {
-        if (await repo.ObtenerAsync(transitOfficeId, ct).ConfigureAwait(false) is not { } actual)
+        if (await repo.ObtenerPorIdAsync(id, ct).ConfigureAwait(false) is not { } actual)
             return (null, 0);
 
         var ahora = _reloj.GetUtcNow();
@@ -34,7 +34,7 @@ public sealed class PortalDominioVerificador(
     public async Task ProcesarReclamoAsync(PortalDominioReclamo reclamo, string trabajo, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(reclamo);
-        if (await repo.ObtenerAsync(reclamo.TransitOfficeId, ct).ConfigureAwait(false) is not { } actual)
+        if (await repo.ObtenerPorIdAsync(reclamo.Id, ct).ConfigureAwait(false) is not { } actual)
             return; // retirado entre el reclamo y el proceso
 
         await ComprobarAsync(actual, _reloj.GetUtcNow(), null, trabajo, ct).ConfigureAwait(false);
@@ -47,7 +47,7 @@ public sealed class PortalDominioVerificador(
             new DomainCheckContext(actual.Status, actual.GraceUntil, actual.CheckAttempts, resultado, ahora), opciones);
 
         return await repo.AplicarComprobacionAsync(
-            actual.TransitOfficeId, decision.NewStatus, decision.StatusReason, decision.VerifiedAt, decision.GraceUntil,
+            actual.Id, decision.NewStatus, decision.StatusReason, decision.VerifiedAt, decision.GraceUntil,
             decision.CheckAttempts, decision.NextCheckAt, ahora, actor, trabajo, ct).ConfigureAwait(false);
     }
 }

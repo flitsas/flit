@@ -9,10 +9,10 @@ using Microsoft.AspNetCore.Mvc;
 namespace Flit.Api.Endpoints;
 
 /// <summary>
-/// Dominio del portal Persona Natural de cada organismo (Feature #14380, Épica #14297). Rol <c>ot_admin</c> o SuperAdmin
-/// (<see cref="AdminAuthorization.OtAdminOrSuperAdminPolicy"/>, sin permiso nuevo). El <c>ot_admin</c> trabaja SIEMPRE con el
-/// organismo de su perfil y si pide otro recibe 403; el SuperAdmin indica <c>?transitOfficeId=</c>. Errores <c>{ code, message }</c>.
-/// Un organismo sin dominio responde 404 <c>PORTAL_DOMINIO_NO_REGISTRADO</c> en el <c>GET</c>.
+/// Dominios del portal Persona Natural de cada organismo (Feature #14380, Épica #14297). Un organismo tiene varios, con uno principal.
+/// Rol <c>ot_admin</c> o SuperAdmin (<see cref="AdminAuthorization.OtAdminOrSuperAdminPolicy"/>, sin permiso nuevo). El <c>ot_admin</c>
+/// trabaja SIEMPRE con el organismo de su perfil y si pide otro recibe 403; el SuperAdmin indica <c>?transitOfficeId=</c>. Un <c>id</c>
+/// de dominio de otro organismo también da 403. Errores <c>{ code, message }</c>. El <c>GET</c> devuelve la lista (vacía con 200).
 /// </summary>
 public static class AdminOtPortalDominioEndpoints
 {
@@ -25,24 +25,26 @@ public static class AdminOtPortalDominioEndpoints
             .RequireAuthorization(AdminAuthorization.OtAdminOrSuperAdminPolicy)
             .WithTags("Admin · OT · Portal Persona Natural · Dominio");
 
-        group.MapGet(string.Empty, ObtenerAsync).WithName("AdminOtPortalDominioGet")
-            .WithSummary("Dominio del portal del organismo: estado, motivo e instrucciones de DNS");
+        group.MapGet(string.Empty, ListarAsync).WithName("AdminOtPortalDominioGet")
+            .WithSummary("Dominios del portal del organismo: estado, motivo, principal e instrucciones de DNS");
         group.MapPost(string.Empty, RegistrarAsync).WithName("AdminOtPortalDominioPost")
-            .WithSummary("Registra el dominio del portal; queda pendiente con su token de verificación");
-        group.MapPost("/verificar", VerificarAsync).WithName("AdminOtPortalDominioVerificar")
-            .WithSummary("Comprueba ahora el TXT de DNS del dominio");
-        group.MapDelete(string.Empty, RetirarAsync).WithName("AdminOtPortalDominioDelete")
-            .WithSummary("Retira el dominio: el portal sigue en el enlace del punto");
+            .WithSummary("Registra un dominio del portal; queda pendiente con su token de verificación");
+        group.MapPost("/{id:guid}/verificar", VerificarAsync).WithName("AdminOtPortalDominioVerificar")
+            .WithSummary("Comprueba ahora el TXT de DNS de ese dominio");
+        group.MapPut("/{id:guid}/principal", PrincipalAsync).WithName("AdminOtPortalDominioPrincipal")
+            .WithSummary("Hace principal a un dominio activo (enlace, QR y correos)");
+        group.MapDelete("/{id:guid}", RetirarAsync).WithName("AdminOtPortalDominioDelete")
+            .WithSummary("Retira el dominio; si era el principal lo releva el activo más antiguo");
 
         return app;
     }
 
-    private static async Task<IResult> ObtenerAsync(
+    private static async Task<IResult> ListarAsync(
         HttpContext http, [FromQuery] Guid? transitOfficeId, [FromServices] IOtClientProcedureRepository bandeja,
         [FromServices] IPortalMarcaRepository organismos, [FromServices] PortalDominioAdminHandler handler, CancellationToken ct)
     {
         var (organismo, error) = await ResolverAsync(http.User, transitOfficeId, bandeja, organismos, ct).ConfigureAwait(false);
-        return error ?? Resultado(await handler.ObtenerAsync(organismo, ct).ConfigureAwait(false));
+        return error ?? Results.Ok(await handler.ListarAsync(organismo, ct).ConfigureAwait(false));
     }
 
     private static async Task<IResult> RegistrarAsync(
@@ -62,7 +64,7 @@ public static class AdminOtPortalDominioEndpoints
     }
 
     private static async Task<IResult> VerificarAsync(
-        HttpContext http, [FromQuery] Guid? transitOfficeId, [FromServices] IOtClientProcedureRepository bandeja,
+        HttpContext http, Guid id, [FromQuery] Guid? transitOfficeId, [FromServices] IOtClientProcedureRepository bandeja,
         [FromServices] IPortalMarcaRepository organismos, [FromServices] PortalDominioAdminHandler handler, CancellationToken ct)
     {
         var (organismo, error) = await ResolverAsync(http.User, transitOfficeId, bandeja, organismos, ct).ConfigureAwait(false);
@@ -71,14 +73,14 @@ public static class AdminOtPortalDominioEndpoints
         if (Actor(http.User) is not { } actor)
             return Problema(401, "TOKEN_INVALIDO", "Token inválido: falta el identificador del usuario.");
 
-        var resultado = await handler.VerificarAsync(organismo, actor, ct).ConfigureAwait(false);
+        var resultado = await handler.VerificarAsync(organismo, id, actor, ct).ConfigureAwait(false);
         if (resultado.Error is { EsperarSegundos: { } espera })
             http.Response.Headers.RetryAfter = espera.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return Resultado(resultado);
     }
 
-    private static async Task<IResult> RetirarAsync(
-        HttpContext http, [FromQuery] Guid? transitOfficeId, [FromServices] IOtClientProcedureRepository bandeja,
+    private static async Task<IResult> PrincipalAsync(
+        HttpContext http, Guid id, [FromQuery] Guid? transitOfficeId, [FromServices] IOtClientProcedureRepository bandeja,
         [FromServices] IPortalMarcaRepository organismos, [FromServices] PortalDominioAdminHandler handler, CancellationToken ct)
     {
         var (organismo, error) = await ResolverAsync(http.User, transitOfficeId, bandeja, organismos, ct).ConfigureAwait(false);
@@ -87,7 +89,20 @@ public static class AdminOtPortalDominioEndpoints
         if (Actor(http.User) is not { } actor)
             return Problema(401, "TOKEN_INVALIDO", "Token inválido: falta el identificador del usuario.");
 
-        var retirado = await handler.RetirarAsync(organismo, actor, ct).ConfigureAwait(false);
+        return Resultado(await handler.PrincipalAsync(organismo, id, actor, ct).ConfigureAwait(false));
+    }
+
+    private static async Task<IResult> RetirarAsync(
+        HttpContext http, Guid id, [FromQuery] Guid? transitOfficeId, [FromServices] IOtClientProcedureRepository bandeja,
+        [FromServices] IPortalMarcaRepository organismos, [FromServices] PortalDominioAdminHandler handler, CancellationToken ct)
+    {
+        var (organismo, error) = await ResolverAsync(http.User, transitOfficeId, bandeja, organismos, ct).ConfigureAwait(false);
+        if (error is not null)
+            return error;
+        if (Actor(http.User) is not { } actor)
+            return Problema(401, "TOKEN_INVALIDO", "Token inválido: falta el identificador del usuario.");
+
+        var retirado = await handler.RetirarAsync(organismo, id, actor, ct).ConfigureAwait(false);
         return retirado.Error is { } e ? Problema(e.Status, e.Code, e.Message) : Results.NoContent();
     }
 
