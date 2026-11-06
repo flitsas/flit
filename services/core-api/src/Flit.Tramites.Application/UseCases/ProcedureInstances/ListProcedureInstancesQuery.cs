@@ -2,6 +2,8 @@
 using Flit.Tramites.Domain.Entities;
 using Flit.Queries.Domain.Time;
 using Flit.Tramites.Domain.Enums;
+using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -113,7 +115,8 @@ public sealed record InstanceSummaryDto(
 /// Lista las instancias de un tenant (más recientes primero, cap del repo) y las mapea a
 /// <see cref="InstanceSummaryDto"/> para la tabla de operación.
 /// </summary>
-public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository repo)
+public sealed class ListProcedureInstancesHandler(
+    IProcedureInstanceRepository repo, ITransitOfficeQuipuxCanalReader? quipuxCanalReader = null)
 {
     /// <summary>Tope de filas devueltas (la tabla muestra un resumen, no es un export paginado).</summary>
     public const int MaxItems = 200;
@@ -189,6 +192,10 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
         IReadOnlyDictionary<Guid, string> revocacionesActivas = await repo.GetRevocationBadgeStatusesAsync(
             instances.Select(i => i.Id).ToList(), ct) ?? EmptyNames;
 
+        // Excepción de firma (matrícula sin placa, canal gestor/OT): se resuelve en lote con caché de canal por OT
+        // para que `canSubmit` de la fila coincida con el del wizard.
+        var exentas = await ResolverExentasAsync(instances, quipuxCanalReader, ct).ConfigureAwait(false);
+
         return instances
             .Select(e => ToSummary(
                 e,
@@ -198,8 +205,27 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
                 gestores.GetValueOrDefault(e.GestorEfectivoUserId),
                 firmaBaul,
                 conPrenda.Contains(e.Id),
-                revocacionesActivas.GetValueOrDefault(e.Id)))
+                revocacionesActivas.GetValueOrDefault(e.Id),
+                exentas.Contains(e.Id)))
             .ToList();
+    }
+
+    /// <summary>
+    /// Ids de las filas con la firma exenta por preasignación (<see cref="FirmaGate.EximidaPorPreasignacionAsync"/>),
+    /// con UNA lectura de canal Quipux por OT/tipo dentro de la llamada.
+    /// </summary>
+    internal static async Task<IReadOnlySet<Guid>> ResolverExentasAsync(
+        IEnumerable<ProcedureInstance> instances, ITransitOfficeQuipuxCanalReader? reader, CancellationToken ct)
+    {
+        var exentas = new HashSet<Guid>();
+        var cache = new Dictionary<(Guid Ot, string? Refs), bool>();
+        foreach (var e in instances)
+        {
+            if (await FirmaGate.EximidaPorPreasignacionAsync(e, reader, ct, cache).ConfigureAwait(false))
+                exentas.Add(e.Id);
+        }
+
+        return exentas;
     }
 
     private static readonly IReadOnlyDictionary<Guid, string> EmptyNames = new Dictionary<Guid, string>();
@@ -213,7 +239,8 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
         string? gestorNombre = null,
         IReadOnlyDictionary<string, bool>? firmaBaulPorPersona = null,
         bool prendaVigente = false,
-        string? revocationRequestStatus = null)
+        string? revocationRequestStatus = null,
+        bool firmaExenta = false)
     {
         var fv = e.FieldValues.ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
         var buyer = e.Actors.FirstOrDefault(a =>
@@ -235,7 +262,7 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
 
         // Estado server-driven del wizard: misma fuente de verdad que el frontend (canSubmit) y de
         // la que se deriva el progreso (PasoActual/TotalPasos). Se computa una sola vez.
-        var state = GetWizardStateHandler.ComputeState(e, identidadAprobadaPartes);
+        var state = GetWizardStateHandler.ComputeState(e, identidadAprobadaPartes, firmaExenta: firmaExenta);
         var (pasoActual, totalPasos) = ComputeProgress(state, e.Status);
 
         return new InstanceSummaryDto(

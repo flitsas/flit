@@ -1436,6 +1436,12 @@ export interface WizardState {
   totalSteps: number;
   steps: WizardStep[];
   canSubmit: boolean;
+  /**
+   * Matrícula Inicial por preasignación sin placa asignada: el trámite se puede enviar sin la firma
+   * (identidad aprobada y vigente); se pedirá cuando el organismo asigne la placa. Lo decide el
+   * backend; el cliente no recalcula la regla. Ausente ⇒ false.
+   */
+  firmaExentaPorPreasignacion?: boolean;
   /** Códigos de bloqueo de envío (mapeados a copy en la UI). */
   blockers: string[];
   /** N 03 — estado de negocio actual del trámite (borrador|anulado|preparado|entregado|aprobado|rechazado). */

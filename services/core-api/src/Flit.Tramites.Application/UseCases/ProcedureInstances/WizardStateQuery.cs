@@ -7,6 +7,7 @@ using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Enums;
+using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
@@ -122,6 +123,14 @@ public sealed record WizardStateDto(
     /// <c>field_values</c> por su cuenta.
     /// </summary>
     public bool RuntReportaGravamen { get; init; }
+
+    /// <summary>
+    /// <c>true</c> si el trámite es una matrícula por preasignación de placa que aún no tiene placa
+    /// (<see cref="FirmaGate.EximidaPorPreasignacionAsync"/>: solo canal gestor/OT de FLIT 2, no Quipux ni portal PN): puede enviarse aunque falte la firma de las
+    /// partes (el correo de validación se sigue enviando). Con placa asignada vale <c>false</c> y la
+    /// firma es obligatoria. JSON: <c>firmaExentaPorPreasignacion</c>.
+    /// </summary>
+    public bool FirmaExentaPorPreasignacion { get; init; }
 
     /// <summary>
     /// ADR-0050 — identidad del tipo con el que se conformó el expediente, para que el asistente
@@ -300,7 +309,10 @@ public sealed class GetWizardStateHandler(
     IProcedureTypeRepository? typeRepo = null,
     IProcedureInstancePrendaRepository? prendaRepo = null,
     IResolvedChecklistMatrixProvider? checklistMatrixProvider = null,
-    IRepresentanteLegalDirectory? representanteDirectory = null)
+    IRepresentanteLegalDirectory? representanteDirectory = null,
+    // Excepción de firma de la matrícula sin placa: se excluye el canal Quipux (OT efectivo). AL FINAL por
+    // la misma razón que los anteriores. Null ⇒ con OT elegido no hay exención (fail-safe).
+    ITransitOfficeQuipuxCanalReader? quipuxCanalReader = null)
 {
     public const string PendienteBiometria = "pendiente_biometria";
     public const string PendienteFirma = "pendiente_firma";
@@ -381,6 +393,10 @@ public sealed class GetWizardStateHandler(
         const bool identityRequired = true;
         var partesEfectivas = identidadAprobada;
 
+        // Matrícula sin placa por el canal gestor/OT (no Quipux, no portal PN): la falta de firma no veta el envío.
+        var firmaExenta = await FirmaGate
+            .EximidaPorPreasignacionAsync(instance, quipuxCanalReader, ct).ConfigureAwait(false);
+
         // HU #10522 (RF17/RF22) — el gestor manda la completitud documental si tiene matriz.
         var docsCompletos = matrixCompleteness is null
             ? null
@@ -434,7 +450,7 @@ public sealed class GetWizardStateHandler(
             {
                 var dynamicState = await BuildDynamicStateAsync(
                     instance, conformation, partesEfectivas, prendaOtBlocker,
-                    comparendosBloquean, runtExigido, ct);
+                    comparendosBloquean, runtExigido, firmaExenta, ct);
 
                 // HU #10879 — el paso persistido prima como punto de retoma también en el dinámico.
                 return (AnnotateInstanceFlags(
@@ -444,6 +460,7 @@ public sealed class GetWizardStateHandler(
                         RnmcEnabled = rnmcEnabled,
                         PrendaDocumentRequired = prendaDocumentRequired,
                         PrendaOmitAllowed = ResolvePrendaOmitAllowed(dynamicState),
+                        FirmaExentaPorPreasignacion = firmaExenta,
                     },
                     instance), null);
             }
@@ -451,7 +468,7 @@ public sealed class GetWizardStateHandler(
 
         var staticState = ComputeState(
             instance, partesEfectivas, docsCompletos, comparendosBloquean, prendaOtBlocker,
-            runtExigido);
+            runtExigido, firmaExenta);
         var state = AnnotateInstanceFlags(
             staticState with
             {
@@ -459,6 +476,7 @@ public sealed class GetWizardStateHandler(
                 RnmcEnabled = rnmcEnabled,
                 PrendaDocumentRequired = prendaDocumentRequired,
                 PrendaOmitAllowed = ResolvePrendaOmitAllowed(staticState),
+                FirmaExentaPorPreasignacion = firmaExenta,
             },
             instance);
         return (state, null);
@@ -607,6 +625,7 @@ public sealed class GetWizardStateHandler(
         string? prendaOtBlocker,
         bool comparendosBloquean,
         RuntConsultaExigida? runtExigido,
+        bool firmaExenta,
         CancellationToken ct)
     {
         // CFD-06 — requisitos reales del tipo (+ overrides del OT). Con la matriz cargada el gate
@@ -625,7 +644,7 @@ public sealed class GetWizardStateHandler(
 
         return BuildDynamicStateCore(
             instance, conformation, partesEfectivas, prendaOtBlocker, comparendosBloquean,
-            runtExigido, documentRequirements, prendaVigente, revealSellerForm);
+            runtExigido, documentRequirements, prendaVigente, revealSellerForm, firmaExenta);
     }
 
     /// <summary>
@@ -696,7 +715,8 @@ public sealed class GetWizardStateHandler(
         RuntConsultaExigida? runtExigido,
         IReadOnlyList<DocumentRequirementItem> documentRequirements,
         ProcedureInstancePrenda? prendaVigente,
-        bool revealSellerForm = false)
+        bool revealSellerForm = false,
+        bool firmaExenta = false)
     {
         var gateProfile = conformation.GateProfile;
         var steps = conformation.Steps;
@@ -725,6 +745,9 @@ public sealed class GetWizardStateHandler(
             // partesEfectivas y no las aprobadas en crudo: si el OT deshabilita la identidad, las
             // partes cuentan como satisfechas y el paso biométrico no bloquea (HU #10548).
             BiometricsApproved = MapPartiesToEntityCodes(partesEfectivas),
+            // Matrícula sin placa: la falta de firma no veta el envío (el paso de identidad sigue
+            // mostrando su estado real).
+            IdentidadExentaPorPreasignacion = firmaExenta,
             FurGenerado = FurGenerado(instance),
             PlateRequestCompleted = PlateRequestCompleted(fv),
             UploadedDocumentCodes = new HashSet<string>(
@@ -1011,7 +1034,8 @@ public sealed class GetWizardStateHandler(
         bool? documentosCompletosOverride = null,
         bool comparendosBloquean = true,
         string? prendaOtBlocker = null,
-        RuntConsultaExigida? runtExigido = null)
+        RuntConsultaExigida? runtExigido = null,
+        bool firmaExenta = false)
     {
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentNullException.ThrowIfNull(identidadAprobadaPartes);
@@ -1048,7 +1072,8 @@ public sealed class GetWizardStateHandler(
         // usaba antes de todos modos.
         return BuildDynamicStateCore(
             instance, conformation, identidadAprobadaPartes, prendaOtBlocker,
-            comparendosBloquean, runtExigido, documentRequirements: [], prendaVigente: null);
+            comparendosBloquean, runtExigido, documentRequirements: [], prendaVigente: null,
+            firmaExenta: firmaExenta);
     }
 
     /// <summary>
