@@ -580,6 +580,10 @@ public sealed class OcrTests(ApiConOcr api) : IClassFixture<ApiConOcr>
         var ct = TestContext.Current.CancellationToken;
         api.Reloj.Hoy(new DateOnly(2026, 10, 9));
         var empresa = await EmpresaAsync(api, ocr: true, consulta: true, integracion: "ApiRenting");
+        // El OCR trae NIT 900123456: hay que monitorearlo y marcar consulta API (igual que IngresarAsync en ContraventorTests).
+        (await api.Cliente(new UsuarioDePrueba(empresa, [Permisos.MonitoreoGestionar]))
+            .PostAsJsonAsync("/api/v1/comparendos/monitoreo/nits", new { numero = "900123456", nombreTitular = "TITULAR DE PRUEBA S.A.S." }, ct))
+            .EnsureSuccessStatusCode();
         await ConsultaPorApiDeLosNitsAsync(api, empresa);
         var cliente = api.Cliente(new UsuarioDePrueba(empresa, Operador));
 
