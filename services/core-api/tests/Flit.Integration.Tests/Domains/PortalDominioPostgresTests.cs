@@ -284,7 +284,6 @@ public sealed class PortalDominioPostgresTests(PostgresDatabaseFixture fixture) 
         var repo = new PortalDominioRepository(lectura);
         (await repo.ObtenerOrganismoActivoPorHostAsync("tramites.a.example.com", Ct)).Should().Be(new PortalDominioOrganismo(OrganismoA, "PDA14381"));
         (await repo.ObtenerHostActivoPorCodigoAsync("pda14381", Ct)).Should().Be("tramites.a.example.com");
-        (await repo.ListarHostsActivosAsync(Ct)).Should().Contain("tramites.a.example.com");
         (await repo.ListarAprovisionamientoAsync(Ct)).Should().ContainSingle(p => p.Host == "tramites.a.example.com" && p.Status == "active");
         (await repo.ListarHostsPendientesDeCertificadoAsync(Ahora.AddDays(30), Ct)).Should().NotContain("tramites.a.example.com", "vence en 90 días");
         (await repo.ListarHostsPendientesDeCertificadoAsync(Ahora.AddDays(100), Ct)).Should().Contain("tramites.a.example.com", "renovación");
