@@ -15,7 +15,7 @@ public sealed class GetDomainHandlerTests
     public async Task SinDominio_DevuelveNull()
     {
         var repo = Substitute.For<ITenantDomainRepository>();
-        repo.GetByTenantIdAsync(TenantId, Arg.Any<CancellationToken>()).Returns((TenantDomain?)null);
+        repo.GetByTenantIdAsync(TenantId, TenantDomainPurposes.Hub, Arg.Any<CancellationToken>()).Returns((TenantDomain?)null);
 
         var result = await new GetDomainHandler(repo).HandleAsync(TenantId, TestContext.Current.CancellationToken);
 
@@ -36,7 +36,7 @@ public sealed class GetDomainHandlerTests
             RowVersion = 0,
             CheckAttempts = 0,
         };
-        repo.GetByTenantIdAsync(TenantId, Arg.Any<CancellationToken>()).Returns(domain);
+        repo.GetByTenantIdAsync(TenantId, TenantDomainPurposes.Hub, Arg.Any<CancellationToken>()).Returns(domain);
 
         var result = await new GetDomainHandler(repo).HandleAsync(TenantId, TestContext.Current.CancellationToken);
 

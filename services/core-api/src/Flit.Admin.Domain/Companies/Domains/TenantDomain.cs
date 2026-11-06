@@ -12,6 +12,9 @@ public sealed class TenantDomain
 {
     public required Guid TenantId { get; init; }
 
+    /// <summary><see cref="TenantDomainPurposes.Hub"/> o el código del producto que sirve el dominio.</summary>
+    public string Purpose { get; init; } = TenantDomainPurposes.Hub;
+
     /// <summary>Ya normalizado: minúsculas, punycode, sin esquema/puerto/ruta (<see cref="HostNormalizer"/>).</summary>
     public required string Host { get; init; }
 

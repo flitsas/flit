@@ -21,6 +21,7 @@ import { registerAdminDomain, removeAdminDomain } from "@/lib/api/domain-client"
 
 function domain(overrides: Partial<TenantDomainResponse> = {}): TenantDomainResponse {
   return {
+    purpose: "HUB",
     host: "app.movilidadandina.com",
     status: "pending",
     statusReason: null,
@@ -28,8 +29,8 @@ function domain(overrides: Partial<TenantDomainResponse> = {}): TenantDomainResp
     verification: {
       txtName: "_flit-verify.app.movilidadandina.com",
       txtValue: "flit-verify=abc123",
-      cnameName: "app.movilidadandina.com",
-      cnameTarget: "edge.flitsas.online",
+      aName: "app.movilidadandina.com",
+      aValue: "203.0.113.10",
     },
     verifiedAt: null,
     activatedAt: null,
@@ -84,7 +85,7 @@ describe("DomainRegisterForm — registrar / cambiar (PUT)", () => {
       expect(registerAdminDomain).toHaveBeenCalledWith("tenant-1", {
         host: "app.movilidadandina.com",
         rowVersion: null,
-      }),
+      }, undefined),
     );
     expect(onRegistered).toHaveBeenCalledWith(domain());
   });
@@ -100,7 +101,7 @@ describe("DomainRegisterForm — registrar / cambiar (PUT)", () => {
     await user.click(screen.getByRole("button", { name: /cambiar dominio/i }));
 
     await waitFor(() =>
-      expect(registerAdminDomain).toHaveBeenCalledWith("tenant-1", { host: "otro.dominio.com", rowVersion: 5 }),
+      expect(registerAdminDomain).toHaveBeenCalledWith("tenant-1", { host: "otro.dominio.com", rowVersion: 5 }, undefined),
     );
     expect(screen.getByText(/reinicia el ciclo de comprobación/i)).toBeInTheDocument();
   });
@@ -152,7 +153,7 @@ describe("DomainRegisterForm — retirar (DELETE) con confirmación", () => {
 
     await user.click(screen.getByRole("button", { name: /^retirar$/i }));
 
-    await waitFor(() => expect(removeAdminDomain).toHaveBeenCalledWith("tenant-1"));
+    await waitFor(() => expect(removeAdminDomain).toHaveBeenCalledWith("tenant-1", undefined));
     expect(onRemoved).toHaveBeenCalled();
   });
 });

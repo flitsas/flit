@@ -11,7 +11,7 @@ public sealed class RemoveDomainHandler(ITenantDomainRepository repository)
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        var retired = await _repository.RetireAsync(command.TenantId, command.ChangedBy, cancellationToken).ConfigureAwait(false);
+        var retired = await _repository.RetireAsync(command.TenantId, command.ChangedBy, command.Purpose, cancellationToken).ConfigureAwait(false);
         return retired is null ? RemoveDomainResult.NotFound() : RemoveDomainResult.Success(retired);
     }
 }

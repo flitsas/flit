@@ -10,7 +10,7 @@
 //   await registerAdminDomain(tenantId, { host: "app.movilidadandina.com", rowVersion: domain?.rowVersion ?? null });
 //   const result = await verifyAdminDomain(tenantId); // dispara comprobación a demanda
 import { getToken, resolveApiUrl } from "./client";
-import { ApiError, type TenantDomainResponse } from "./types";
+import { ApiError, type NetworkDomainsResponse, type TenantDomainResponse } from "./types";
 
 /** Códigos estables — `Flit.Admin.Domain/Companies/Domains/DomainErrors.cs` (fuente de verdad del backend). */
 export const DOMAIN_ERROR_MESSAGES: Record<string, string> = {
@@ -22,6 +22,9 @@ export const DOMAIN_ERROR_MESSAGES: Record<string, string> = {
   DOMAIN_ALREADY_REGISTERED_FOR_TENANT: "Esta red ya tiene un dominio vigente. Recarga e inténtalo de nuevo.",
   CONCURRENCY_CONFLICT: "Alguien más modificó este dominio. Vuelve a cargarlo e inténtalo de nuevo.",
   DOMAIN_VERIFICATION_COOLDOWN: "Ya se pidió una comprobación hace poco.",
+  DOMAIN_PRODUCT_NOT_ENABLED: "Esta empresa no tiene habilitado ese producto.",
+  DOMAIN_PURPOSE_INVALID: "Ese producto no admite un dominio propio.",
+  DOMAIN_NOT_READY: "Todavía falta un dominio, su comprobación o su certificado.",
 };
 
 const FALLBACK_MESSAGE = "No se pudo completar la solicitud. Inténtalo de nuevo.";
@@ -141,17 +144,43 @@ async function request<T>(
 
 // ── SuperAdmin sobre una cabeza puntual — /api/v1/admin/companies/{tenantId}/domain ────────────
 
+/** Sin `purpose`, el dominio principal de la red (HUB); con `purpose`, el de ese producto. */
+function adminDomainPath(tenantId: string, purpose?: string): string {
+  return purpose
+    ? `/api/v1/admin/companies/${tenantId}/domains/${purpose}`
+    : `/api/v1/admin/companies/${tenantId}/domain`;
+}
+
+/** GET .../domains — los dominios de la red y lo que falta para activarla. */
+export async function listNetworkDomains(tenantId: string): Promise<NetworkDomainsResponse> {
+  const result = await request<NetworkDomainsResponse>(`/api/v1/admin/companies/${tenantId}/domains`, "GET");
+  if (!result) {
+    throw new ApiError(404, domainErrorMessage("DOMAIN_NOT_FOUND"));
+  }
+  return result;
+}
+
+/** POST .../domains/activate — activa la red; sus usuarios dejan de entrar por el hub de FLIT. */
+export async function activateNetwork(tenantId: string): Promise<NetworkDomainsResponse> {
+  const result = await request<NetworkDomainsResponse>(`/api/v1/admin/companies/${tenantId}/domains/activate`, "POST");
+  if (!result) {
+    throw new ApiError(404, domainErrorMessage("DOMAIN_NOT_FOUND"));
+  }
+  return result;
+}
+
 /** GET .../domain (HU #12416 AC1, #12427 AC3). `null` = la red no tiene dominio (404). */
-export async function getAdminDomain(tenantId: string): Promise<TenantDomainResponse | null> {
-  return request<TenantDomainResponse>(`/api/v1/admin/companies/${tenantId}/domain`, "GET");
+export async function getAdminDomain(tenantId: string, purpose?: string): Promise<TenantDomainResponse | null> {
+  return request<TenantDomainResponse>(adminDomainPath(tenantId, purpose), "GET");
 }
 
 /** PUT .../domain — registra o cambia el host (HU #12416 AC1/AC2/AC3/AC5). */
 export async function registerAdminDomain(
   tenantId: string,
   body: RegisterDomainRequest,
+  purpose?: string,
 ): Promise<TenantDomainResponse> {
-  const result = await request<TenantDomainResponse>(`/api/v1/admin/companies/${tenantId}/domain`, "PUT", body);
+  const result = await request<TenantDomainResponse>(adminDomainPath(tenantId, purpose), "PUT", body);
   if (!result) {
     throw new ApiError(404, domainErrorMessage("DOMAIN_NOT_FOUND"));
   }
@@ -159,8 +188,8 @@ export async function registerAdminDomain(
 }
 
 /** DELETE .../domain — retira el dominio vigente (HU #12416 AC5). */
-export async function removeAdminDomain(tenantId: string): Promise<void> {
-  await request<void>(`/api/v1/admin/companies/${tenantId}/domain`, "DELETE");
+export async function removeAdminDomain(tenantId: string, purpose?: string): Promise<void> {
+  await request<void>(adminDomainPath(tenantId, purpose), "DELETE");
 }
 
 /**
@@ -170,8 +199,8 @@ export async function removeAdminDomain(tenantId: string): Promise<void> {
  * supera el cooldown manual — ver supuestos documentados en
  * `.claude/state/marca-blanca/diseno/delta-hechos-post-adr.md`.
  */
-export async function verifyAdminDomain(tenantId: string): Promise<TenantDomainResponse> {
-  const result = await request<TenantDomainResponse>(`/api/v1/admin/companies/${tenantId}/domain/verify`, "POST");
+export async function verifyAdminDomain(tenantId: string, purpose?: string): Promise<TenantDomainResponse> {
+  const result = await request<TenantDomainResponse>(`${adminDomainPath(tenantId, purpose)}/verify`, "POST");
   if (!result) {
     throw new ApiError(404, domainErrorMessage("DOMAIN_NOT_FOUND"));
   }
