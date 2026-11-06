@@ -30,10 +30,11 @@ internal sealed class PortalMarcaRepository(FlitDbContext db) : IPortalMarcaRepo
 
     public async Task<PortalMarcaRegistro> ObtenerAsync(Guid transitOfficeId, CancellationToken ct = default)
     {
+        var oficina = Oficina(transitOfficeId);
         var fila = (await db.Database.SqlQuery<MarcaFila>($"""
             SELECT draft::text AS draft, published::text AS published, published_version, published_at, published_by, row_version
               FROM admin.transit_office_portal_brandings
-             WHERE transit_office_id = {transitOfficeId}
+             WHERE transit_office_id IS NOT DISTINCT FROM CAST({oficina} AS uuid)
             """).ToListAsync(ct).ConfigureAwait(false)).FirstOrDefault();
         return fila is null ? PortalMarcaRegistro.Vacio(transitOfficeId) : Mapear(transitOfficeId, fila);
     }
@@ -42,12 +43,14 @@ internal sealed class PortalMarcaRepository(FlitDbContext db) : IPortalMarcaRepo
         Guid transitOfficeId, string? platformName, BrandColors? colors, long rowVersionEsperada, Guid actor, CancellationToken ct = default)
     {
         var parche = SerializarParche(platformName, colors);
+        var oficina = Oficina(transitOfficeId);
+        var ambito = Ambito(transitOfficeId);
 
         var filas = await db.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE admin.transit_office_portal_brandings
                SET draft = (draft - 'platformName' - 'colors') || CAST({parche} AS jsonb),
                    updated_at = now(), updated_by = {actor}
-             WHERE transit_office_id = {transitOfficeId} AND row_version = {rowVersionEsperada}
+             WHERE transit_office_id IS NOT DISTINCT FROM CAST({oficina} AS uuid) AND row_version = {rowVersionEsperada}
             """, ct).ConfigureAwait(false);
 
         if (filas == 0)
@@ -57,9 +60,9 @@ internal sealed class PortalMarcaRepository(FlitDbContext db) : IPortalMarcaRepo
 
             // Primera vez: la fila nace con row_version 1 para que quien leyó «sin marca» (0) no pise a quien ya la creó.
             filas = await db.Database.ExecuteSqlInterpolatedAsync($"""
-                INSERT INTO admin.transit_office_portal_brandings (transit_office_id, draft, created_by, updated_by, row_version)
-                VALUES ({transitOfficeId}, CAST({parche} AS jsonb) || jsonb_build_object('schemaVersion', 1), {actor}, {actor}, 1)
-                ON CONFLICT (transit_office_id) DO NOTHING
+                INSERT INTO admin.transit_office_portal_brandings (scope, transit_office_id, draft, created_by, updated_by, row_version)
+                VALUES ({ambito}, CAST({oficina} AS uuid), CAST({parche} AS jsonb) || jsonb_build_object('schemaVersion', 1), {actor}, {actor}, 1)
+                ON CONFLICT DO NOTHING
                 """, ct).ConfigureAwait(false);
             if (filas == 0)
                 return null;
@@ -70,21 +73,23 @@ internal sealed class PortalMarcaRepository(FlitDbContext db) : IPortalMarcaRepo
 
     public async Task<PortalMarcaRegistro?> PublicarAsync(Guid transitOfficeId, long rowVersionEsperada, Guid actor, CancellationToken ct = default)
     {
+        var oficina = Oficina(transitOfficeId);
         var filas = await db.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE admin.transit_office_portal_brandings
                SET published = draft, published_version = published_version + 1, published_at = now(), published_by = {actor},
                    updated_at = now(), updated_by = {actor}
-             WHERE transit_office_id = {transitOfficeId} AND row_version = {rowVersionEsperada}
+             WHERE transit_office_id IS NOT DISTINCT FROM CAST({oficina} AS uuid) AND row_version = {rowVersionEsperada}
             """, ct).ConfigureAwait(false);
         return filas == 0 ? null : await ObtenerAsync(transitOfficeId, ct).ConfigureAwait(false);
     }
 
     public async Task<PortalMarcaRegistro?> RetirarAsync(Guid transitOfficeId, long rowVersionEsperada, Guid actor, CancellationToken ct = default)
     {
+        var oficina = Oficina(transitOfficeId);
         var filas = await db.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE admin.transit_office_portal_brandings
                SET published = NULL, published_at = NULL, published_by = NULL, updated_at = now(), updated_by = {actor}
-             WHERE transit_office_id = {transitOfficeId} AND row_version = {rowVersionEsperada}
+             WHERE transit_office_id IS NOT DISTINCT FROM CAST({oficina} AS uuid) AND row_version = {rowVersionEsperada}
             """, ct).ConfigureAwait(false);
         return filas == 0 ? null : await ObtenerAsync(transitOfficeId, ct).ConfigureAwait(false);
     }
@@ -97,6 +102,8 @@ internal sealed class PortalMarcaRepository(FlitDbContext db) : IPortalMarcaRepo
         var id = Guid.CreateVersion7();
         var idTexto = id.ToString();
         var tamano = (int)imagen.SizeBytes;
+        var oficina = Oficina(transitOfficeId);
+        var ambito = Ambito(transitOfficeId);
 
         var estrategia = db.Database.CreateExecutionStrategy();
         await estrategia.ExecuteAsync(async () =>
@@ -104,22 +111,29 @@ internal sealed class PortalMarcaRepository(FlitDbContext db) : IPortalMarcaRepo
             await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO admin.transit_office_portal_brand_images
-                    (id, transit_office_id, kind, version, content_type, storage_path, storage_sha256, size_bytes, created_by)
-                SELECT {id}, {transitOfficeId}, {kind}, COALESCE(MAX(version), 0) + 1, {imagen.ContentType}, {imagen.StoragePath},
+                    (id, scope, transit_office_id, kind, version, content_type, storage_path, storage_sha256, size_bytes, created_by)
+                SELECT {id}, {ambito}, CAST({oficina} AS uuid), {kind}, COALESCE(MAX(version), 0) + 1, {imagen.ContentType}, {imagen.StoragePath},
                        {imagen.Sha256}, {tamano}, {actor}
                   FROM admin.transit_office_portal_brand_images
-                 WHERE transit_office_id = {transitOfficeId} AND kind = {kind}
+                 WHERE transit_office_id IS NOT DISTINCT FROM CAST({oficina} AS uuid) AND kind = {kind}
                 """, ct).ConfigureAwait(false);
 
             // La fila de la marca nace con la imagen del borrador, o se actualiza solo esa referencia (atómico, sin pisar
-            // el nombre ni los colores que otra persona esté guardando).
-            await db.Database.ExecuteSqlInterpolatedAsync($"""
-                INSERT INTO admin.transit_office_portal_brandings (transit_office_id, draft, created_by, updated_by, row_version)
-                VALUES ({transitOfficeId}, jsonb_build_object('schemaVersion', 1, {clave}::text, {idTexto}::text), {actor}, {actor}, 1)
-                ON CONFLICT (transit_office_id) DO UPDATE
-                    SET draft = admin.transit_office_portal_brandings.draft || jsonb_build_object({clave}::text, {idTexto}::text),
-                        updated_at = now(), updated_by = {actor}
-                """, ct).ConfigureAwait(false);
+            // el nombre ni los colores que otra persona esté guardando). La unicidad del organismo y la de la web son índices
+            // distintos y no hay ON CONFLICT con destino común: se actualiza, se crea si falta y, si otra sesión la creó en
+            // medio, se actualiza de nuevo.
+            var actualizar = () => db.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE admin.transit_office_portal_brandings
+                   SET draft = draft || jsonb_build_object({clave}::text, {idTexto}::text), updated_at = now(), updated_by = {actor}
+                 WHERE transit_office_id IS NOT DISTINCT FROM CAST({oficina} AS uuid)
+                """, ct);
+            if (await actualizar().ConfigureAwait(false) == 0
+                && await db.Database.ExecuteSqlInterpolatedAsync($"""
+                    INSERT INTO admin.transit_office_portal_brandings (scope, transit_office_id, draft, created_by, updated_by, row_version)
+                    VALUES ({ambito}, CAST({oficina} AS uuid), jsonb_build_object('schemaVersion', 1, {clave}::text, {idTexto}::text), {actor}, {actor}, 1)
+                    ON CONFLICT DO NOTHING
+                    """, ct).ConfigureAwait(false) == 0)
+                await actualizar().ConfigureAwait(false);
             await tx.CommitAsync(ct).ConfigureAwait(false);
         }).ConfigureAwait(false);
 
@@ -131,10 +145,11 @@ internal sealed class PortalMarcaRepository(FlitDbContext db) : IPortalMarcaRepo
     public async Task<PortalMarcaRegistro> QuitarImagenAsync(Guid transitOfficeId, string kind, Guid actor, CancellationToken ct = default)
     {
         var clave = ClaveJson(kind);
+        var oficina = Oficina(transitOfficeId);
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE admin.transit_office_portal_brandings
                SET draft = draft - {clave}::text, updated_at = now(), updated_by = {actor}
-             WHERE transit_office_id = {transitOfficeId} AND jsonb_exists(draft, {clave}::text)
+             WHERE transit_office_id IS NOT DISTINCT FROM CAST({oficina} AS uuid) AND jsonb_exists(draft, {clave}::text)
             """, ct).ConfigureAwait(false);
         return await ObtenerAsync(transitOfficeId, ct).ConfigureAwait(false);
     }
@@ -148,7 +163,7 @@ internal sealed class PortalMarcaRepository(FlitDbContext db) : IPortalMarcaRepo
             """).ToListAsync(ct).ConfigureAwait(false)).FirstOrDefault();
         return fila is null
             ? null
-            : new PortalMarcaImagen(fila.Id, fila.TransitOfficeId, fila.Kind, fila.Version, fila.ContentType, fila.StoragePath, fila.StorageSha256.Trim(), fila.SizeBytes);
+            : new PortalMarcaImagen(fila.Id, fila.TransitOfficeId ?? PortalMarcaAmbito.Web, fila.Kind, fila.Version, fila.ContentType, fila.StoragePath, fila.StorageSha256.Trim(), fila.SizeBytes);
     }
 
     public async Task<bool> ImagenEstaPublicadaAsync(Guid imagenId, CancellationToken ct = default)
@@ -163,6 +178,11 @@ internal sealed class PortalMarcaRepository(FlitDbContext db) : IPortalMarcaRepo
     }
 
     // ── Soporte ────────────────────────────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>La marca web viaja como <see cref="PortalMarcaAmbito.Web"/> y en la base es una fila sin organismo.</summary>
+    private static Guid? Oficina(Guid transitOfficeId) => transitOfficeId == PortalMarcaAmbito.Web ? null : transitOfficeId;
+
+    private static string Ambito(Guid transitOfficeId) => transitOfficeId == PortalMarcaAmbito.Web ? "web" : "organismo";
 
     private static string ClaveJson(string kind) => kind switch
     {
@@ -237,7 +257,7 @@ internal sealed class PortalMarcaRepository(FlitDbContext db) : IPortalMarcaRepo
     private sealed class ImagenFila
     {
         public Guid Id { get; set; }
-        public Guid TransitOfficeId { get; set; }
+        public Guid? TransitOfficeId { get; set; }
         public string Kind { get; set; } = string.Empty;
         public int Version { get; set; }
         public string ContentType { get; set; } = string.Empty;

@@ -15,6 +15,7 @@ public sealed record MarcaPuntoRespuesta(
 {
     public const string OrigenFlit = "flit";
     public const string OrigenOrganismo = "organismo";
+    public const string OrigenWeb = "web";
 
     /// <summary>Marca FLIT: lo que recibe el portal ante un código inválido, un organismo sin marca o una falla.</summary>
     public static readonly MarcaPuntoRespuesta Flit = new(OrigenFlit, null, null, null, null, 0);
@@ -30,12 +31,17 @@ public interface IMarcaPunto
 {
     Task<MarcaPuntoRespuesta> ObtenerAsync(string codigo, CancellationToken ct);
 
+    /// <summary>Marca publicada de la web de persona natural (HU #14401).</summary>
+    Task<MarcaPuntoRespuesta> ObtenerWebAsync(CancellationToken ct);
+
     Task<ImagenMarcaPunto?> ObtenerImagenAsync(string imagenId, string? ifNoneMatch, CancellationToken ct);
 }
 
 internal sealed class MarcaPuntoNoConfigurada : IMarcaPunto
 {
     public Task<MarcaPuntoRespuesta> ObtenerAsync(string codigo, CancellationToken ct) => Task.FromResult(MarcaPuntoRespuesta.Flit);
+
+    public Task<MarcaPuntoRespuesta> ObtenerWebAsync(CancellationToken ct) => Task.FromResult(MarcaPuntoRespuesta.Flit);
 
     public Task<ImagenMarcaPunto?> ObtenerImagenAsync(string imagenId, string? ifNoneMatch, CancellationToken ct) =>
         Task.FromResult<ImagenMarcaPunto?>(null);
@@ -50,13 +56,26 @@ internal sealed class MarcaPuntoGrpc(PersonaNaturalService.PersonaNaturalService
     {
         var r = await FachadaTramitesGrpc.Llamar(() => cliente.ObtenerMarcaPuntoAsync(
             new ObtenerMarcaPuntoRequest { Codigo = codigo }, Empresa(), cancellationToken: ct).ResponseAsync).ConfigureAwait(false);
-        if (!string.Equals(r.Origen, MarcaPuntoRespuesta.OrigenOrganismo, StringComparison.Ordinal)
+        return ARespuesta(r, MarcaPuntoRespuesta.OrigenOrganismo);
+    }
+
+    public async Task<MarcaPuntoRespuesta> ObtenerWebAsync(CancellationToken ct)
+    {
+        var r = await FachadaTramitesGrpc.Llamar(() => cliente.ObtenerMarcaWebAsync(
+            new ObtenerMarcaWebRequest(), Empresa(), cancellationToken: ct).ResponseAsync).ConfigureAwait(false);
+        return ARespuesta(r, MarcaPuntoRespuesta.OrigenWeb);
+    }
+
+    /// <summary>Solo una marca completa y del origen esperado llega al portal; cualquier otra cosa es la marca FLIT.</summary>
+    private static MarcaPuntoRespuesta ARespuesta(ObtenerMarcaPuntoResponse r, string origenEsperado)
+    {
+        if (!string.Equals(r.Origen, origenEsperado, StringComparison.Ordinal)
             || string.IsNullOrWhiteSpace(r.Nombre)
             || string.IsNullOrWhiteSpace(r.ColorPrimario) || string.IsNullOrWhiteSpace(r.ColorSecundario) || string.IsNullOrWhiteSpace(r.ColorSobrePrimario))
             return MarcaPuntoRespuesta.Flit;
 
         return new MarcaPuntoRespuesta(
-            MarcaPuntoRespuesta.OrigenOrganismo,
+            origenEsperado,
             r.Nombre,
             new ColoresMarcaPunto(r.ColorPrimario, r.ColorSecundario, r.ColorSobrePrimario),
             UrlImagen(r.LogoId),
@@ -118,6 +137,23 @@ public static class MarcaPuntoEndpoints
             {
 #pragma warning disable CA1848 // Mensaje fijo, solo en falla.
                 log.LogWarning(ex, "No se pudo leer la marca del punto; se entrega la marca FLIT.");
+#pragma warning restore CA1848
+                return Results.Ok(MarcaPuntoRespuesta.Flit);
+            }
+        });
+
+        // HU #14401 — marca de la web de persona natural: misma forma y mismas garantías que la del punto.
+        grupo.MapGet("/marca/web", async (IMarcaPunto marca, HttpContext http, ILogger<IMarcaPunto> log, CancellationToken ct) =>
+        {
+            http.Response.Headers.CacheControl = "no-store";
+            try
+            {
+                return Results.Ok(await marca.ObtenerWebAsync(ct).ConfigureAwait(false));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+#pragma warning disable CA1848 // Mensaje fijo, solo en falla.
+                log.LogWarning(ex, "No se pudo leer la marca de la web; se entrega la marca FLIT.");
 #pragma warning restore CA1848
                 return Results.Ok(MarcaPuntoRespuesta.Flit);
             }

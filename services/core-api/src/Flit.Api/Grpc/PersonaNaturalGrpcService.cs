@@ -182,19 +182,28 @@ public sealed class PersonaNaturalGrpcService(
     {
         ArgumentNullException.ThrowIfNull(request);
         Verificar(context);
-        var m = await marcaPunto.ObtenerAsync(request.Codigo, context.CancellationToken).ConfigureAwait(false);
-        return new ObtenerMarcaPuntoResponse
-        {
-            Origen = m.Origen,
-            Nombre = m.Nombre ?? string.Empty,
-            ColorPrimario = m.Colores?.Primario ?? string.Empty,
-            ColorSecundario = m.Colores?.Secundario ?? string.Empty,
-            ColorSobrePrimario = m.Colores?.SobrePrimario ?? string.Empty,
-            LogoId = m.LogoId?.ToString() ?? string.Empty,
-            BannerId = m.BannerId?.ToString() ?? string.Empty,
-            Version = m.Version,
-        };
+        return ARespuestaMarca(await marcaPunto.ObtenerAsync(request.Codigo, context.CancellationToken).ConfigureAwait(false));
     }
+
+    /// <summary>HU #14401 — marca publicada de la web de persona natural. Sin caché; sin marca o ante una falla, <c>origen = flit</c>.</summary>
+    public override async Task<ObtenerMarcaPuntoResponse> ObtenerMarcaWeb(ObtenerMarcaWebRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Verificar(context);
+        return ARespuestaMarca(await marcaPunto.ObtenerWebAsync(context.CancellationToken).ConfigureAwait(false));
+    }
+
+    private static ObtenerMarcaPuntoResponse ARespuestaMarca(Flit.Admin.Application.Companies.TransitOffices.PortalMarca.MarcaPuntoDto m) => new()
+    {
+        Origen = m.Origen,
+        Nombre = m.Nombre ?? string.Empty,
+        ColorPrimario = m.Colores?.Primario ?? string.Empty,
+        ColorSecundario = m.Colores?.Secundario ?? string.Empty,
+        ColorSobrePrimario = m.Colores?.SobrePrimario ?? string.Empty,
+        LogoId = m.LogoId?.ToString() ?? string.Empty,
+        BannerId = m.BannerId?.ToString() ?? string.Empty,
+        Version = m.Version,
+    };
 
     /// <summary>HU #14378 — imagen de marca PUBLICADA. Una de borrador, retirada o inexistente responde <c>encontrado = false</c>.</summary>
     public override async Task<ObtenerImagenMarcaPuntoResponse> ObtenerImagenMarcaPunto(ObtenerImagenMarcaPuntoRequest request, ServerCallContext context)

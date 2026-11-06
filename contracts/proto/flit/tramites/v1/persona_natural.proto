@@ -65,6 +65,10 @@ service PersonaNaturalService {
   // Imagen de logo o banner PUBLICADA del organismo (bytes y ETag = sha256). Una de borrador responde encontrado = false.
   rpc ObtenerImagenMarcaPunto(ObtenerImagenMarcaPuntoRequest) returns (ObtenerImagenMarcaPuntoResponse);
 
+  // Marca publicada de la web de persona natural (HU #14401). Misma respuesta que ObtenerMarcaPunto con origen = web; sin marca
+  // publicada o ante una falla responde origen = flit (nunca un error). Sin banner. Sus imágenes salen por ObtenerImagenMarcaPunto.
+  rpc ObtenerMarcaWeb(ObtenerMarcaWebRequest) returns (ObtenerMarcaPuntoResponse);
+
   // HU 10 — organismos operables en FLIT 2 donde se puede trasladar una cuenta (cualquier organismo operable, no solo los
   // del grant del portal). Sin datos sensibles; con `id` valida un destino concreto.
   rpc ListarOrganismosDestino(ListarOrganismosDestinoRequest) returns (ListarOrganismosDestinoResponse);
@@ -391,6 +395,7 @@ message ResolverCanalPuntoResponse {
   string nombre = 4;
 }
 
+message ObtenerMarcaWebRequest {}
 message ObtenerMarcaPuntoRequest { string codigo = 1; }
 message ObtenerMarcaPuntoResponse {
   string origen = 1;                 // organismo | flit

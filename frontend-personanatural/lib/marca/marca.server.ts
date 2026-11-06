@@ -12,12 +12,11 @@ export interface OpcionesMarca {
   fetchImpl?: typeof fetch;
 }
 
-export async function obtenerMarcaPunto(codigo: string, opciones: OpcionesMarca): Promise<MarcaAplicable | null> {
-  if (!codigo || codigo.length > 64) return null;
+async function leerMarca(ruta: string, opciones: OpcionesMarca, origenes: readonly string[]): Promise<MarcaAplicable | null> {
   const cabeceras = new Headers({ accept: "application/json" });
   if (opciones.ipCliente) cabeceras.set("x-forwarded-for", opciones.ipCliente);
   try {
-    const respuesta = await (opciones.fetchImpl ?? fetch)(`${opciones.apiOrigin}${PREFIJO_BFF}/punto/marca/${encodeURIComponent(codigo)}`, {
+    const respuesta = await (opciones.fetchImpl ?? fetch)(`${opciones.apiOrigin}${PREFIJO_BFF}${ruta}`, {
       method: "GET",
       headers: cabeceras,
       cache: "no-store",
@@ -25,8 +24,21 @@ export async function obtenerMarcaPunto(codigo: string, opciones: OpcionesMarca)
       signal: AbortSignal.timeout(ESPERA_MS),
     });
     if (!respuesta.ok) return null;
-    return marcaAplicable(await respuesta.json());
+    return marcaAplicable(await respuesta.json(), origenes);
   } catch {
     return null;
   }
+}
+
+export async function obtenerMarcaPunto(codigo: string, opciones: OpcionesMarca): Promise<MarcaAplicable | null> {
+  if (!codigo || codigo.length > 64) return null;
+  return leerMarca(`/punto/marca/${encodeURIComponent(codigo)}`, opciones, ["organismo"]);
+}
+
+/**
+ * HU #14403 (Feature #14400) — Marca de la web de persona (`GET /marca/web`), con las mismas garantías: sin caché, sin
+ * lanzar errores y `null` ante cualquier falla o si no hay marca publicada.
+ */
+export async function obtenerMarcaWeb(opciones: OpcionesMarca): Promise<MarcaAplicable | null> {
+  return leerMarca("/marca/web", opciones, ["organismo", "web"]);
 }

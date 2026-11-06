@@ -186,6 +186,6 @@ describe("PersonaNaturalConsole (#14021)", () => {
   it("las pestañas usan nombres de negocio y el orden sigue los pasos", async () => {
     renderConsola();
     const nombres = screen.getAllByRole("tab").map((t) => t.textContent);
-    expect(nombres).toEqual(["Trámites", "Organismos", "Tarifas", "Ajustes del portal", "Contenido", "Reportes"]);
+    expect(nombres).toEqual(["Trámites", "Organismos", "Tarifas", "Ajustes del portal", "Contenido", "Reportes", "Diseño web"]);
   });
 });
