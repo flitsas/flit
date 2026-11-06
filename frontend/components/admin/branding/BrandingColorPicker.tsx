@@ -11,6 +11,8 @@ export interface BrandingColorPickerProps {
   colors: BrandColors;
   onChange: (colors: BrandColors) => void;
   disabled?: boolean;
+  /** Feature #14374 (portal del OT): textos propios de cada color. Sin ellos, los de marca blanca. */
+  fieldCopy?: Partial<Record<"primary" | "secondary", { label: string; hint: string }>>;
 }
 
 /**
@@ -29,7 +31,7 @@ const FIELDS: Array<{ key: "secondary" | "primary"; label: string; hint: string 
  * lee bien, se ofrece corregirla automáticamente. El detalle de contraste (WCAG 4.5:1, el mismo
  * que valida el backend) queda plegado para quien lo quiera ver.
  */
-export function BrandingColorPicker({ colors, onChange, disabled = false }: BrandingColorPickerProps) {
+export function BrandingColorPicker({ colors, onChange, disabled = false, fieldCopy }: BrandingColorPickerProps) {
   const baseId = useId();
   const pairs = useMemo(() => brandContrastPairs(colors), [colors]);
   const valid = [colors.primary, colors.secondary, colors.onPrimary].every(isValidHexColor);
@@ -80,7 +82,8 @@ export function BrandingColorPicker({ colors, onChange, disabled = false }: Bran
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {FIELDS.map((field) => {
+        {FIELDS.map((base) => {
+          const field = { ...base, ...fieldCopy?.[base.key] };
           const inputId = `${baseId}-${field.key}`;
           const value = colors[field.key] ?? "#000000";
           const fieldValid = isValidHexColor(value);
