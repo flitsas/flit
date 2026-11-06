@@ -15,6 +15,7 @@ import {
   TablaFiltrosVacio,
 } from "@/components/atom/TablaFiltrosBar";
 import { usePaginacion } from "@/components/atom/usePaginacion";
+import { estadoLabel } from "@/lib/tramites/estados";
 import { PnButton } from "@/components/admin/plataforma/persona-natural/pn-componentes";
 import { PN_FIELD_ERROR_CLS } from "@/components/admin/plataforma/persona-natural/pn-ui";
 import { formatPesos } from "@/lib/api/admin-pn-tarifas";
@@ -200,7 +201,7 @@ export function PortalReportes({ api, incluirFiltroOrganismo = false }: PortalRe
       render: (f) => f.tipo,
     },
     { key: "radicado", header: "Radicado", render: (f) => texto(f.radicado) },
-    { key: "estado", header: "Estado", render: (f) => f.estado },
+    { key: "estado", header: "Estado", render: (f) => estadoLabel(f.estado) },
     {
       key: "fecha",
       header: (
