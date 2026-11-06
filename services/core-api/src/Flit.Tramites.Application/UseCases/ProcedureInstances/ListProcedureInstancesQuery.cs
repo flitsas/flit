@@ -2,6 +2,8 @@
 using Flit.Tramites.Domain.Entities;
 using Flit.Queries.Domain.Time;
 using Flit.Tramites.Domain.Enums;
+using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -113,7 +115,8 @@ public sealed record InstanceSummaryDto(
 /// Lista las instancias de un tenant (más recientes primero, cap del repo) y las mapea a
 /// <see cref="InstanceSummaryDto"/> para la tabla de operación.
 /// </summary>
-public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository repo)
+public sealed class ListProcedureInstancesHandler(
+    IProcedureInstanceRepository repo, ITransitOfficeQuipuxCanalReader? quipuxCanalReader = null)
 {
     /// <summary>Tope de filas devueltas (la tabla muestra un resumen, no es un export paginado).</summary>
     public const int MaxItems = 200;
@@ -171,8 +174,13 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
 
         // HU #13824 — identidades vencidas a mano por un Super Admin que los trámites fuera de borrador siguen honrando
         // (una consulta en lote sobre el índice parcial de las filas vencidas a mano).
-        IReadOnlySet<string> protegidasKeys = await repo.ListProtegidasPorVencimientoManualKeysAsync(
-            instances.Select(i => i.TenantId).Distinct().ToList(), now, ct) ?? new HashSet<string>();
+        IReadOnlyDictionary<string, IReadOnlyList<IdentidadVencidaManual>> protegidasKeys = await repo.ListProtegidasPorVencimientoManualKeysAsync(
+            instances.Select(i => i.TenantId).Distinct().ToList(), now, ct) ?? EmptyProtegidas;
+
+        // Salida de borrador (en lote, sin N+1) de los tramites a los que importa: una identidad vencida a mano solo
+        // vale para quien salio de borrador ANTES del vencimiento (BiometricRules.ConservaFirmaTrasVencimientoManual).
+        var salidas = await ListProcedureInstancesHandler
+            .ResolverSalidasDeBorradorAsync(repo, instances, protegidasKeys, ct).ConfigureAwait(false);
 
         // Ajuste del PO sobre HU #11056 — las columnas "Firmado" acreditan por identidad O por firma del
         // baúl, y tienen que distinguir «baúl vigente» de «baúl vencido». UNA consulta para todos los
@@ -194,22 +202,74 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
         IReadOnlyDictionary<Guid, string> revocacionesActivas = await repo.GetRevocationBadgeStatusesAsync(
             instances.Select(i => i.Id).ToList(), ct) ?? EmptyNames;
 
+        // Excepción de firma (matrícula sin placa, canal gestor/OT): se resuelve en lote con caché de canal por OT
+        // para que `canSubmit` de la fila coincida con el del wizard.
+        var exentas = await ResolverExentasAsync(instances, quipuxCanalReader, ct).ConfigureAwait(false);
+
         return instances
             .Select(e => ToSummary(
                 e,
-                IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now, firmaBaul, protegidasKeys),
+                IdentityApprovalResolver.ApprovedPartiesFromKeys(
+                    e, identidadKeys, now, firmaBaul, protegidasKeys, salidas.TryGetValue(e.Id, out var salida) ? salida : null),
                 nombres.GetValueOrDefault(e.TenantId),
                 // HU #12162 — mismo id EFECTIVO usado para resolver el lote de arriba.
                 gestores.GetValueOrDefault(e.GestorEfectivoUserId),
                 firmaBaul,
                 conPrenda.Contains(e.Id),
-                revocacionesActivas.GetValueOrDefault(e.Id)))
+                revocacionesActivas.GetValueOrDefault(e.Id),
+                exentas.Contains(e.Id)))
             .ToList();
+    }
+
+    /// <summary>
+    /// Ids de las filas con la firma exenta por preasignación (<see cref="FirmaGate.EximidaPorPreasignacionAsync"/>),
+    /// con UNA lectura de canal Quipux por OT/tipo dentro de la llamada.
+    /// </summary>
+    internal static async Task<IReadOnlySet<Guid>> ResolverExentasAsync(
+        IEnumerable<ProcedureInstance> instances, ITransitOfficeQuipuxCanalReader? reader, CancellationToken ct)
+    {
+        var exentas = new HashSet<Guid>();
+        var cache = new Dictionary<(Guid Ot, string? Refs), bool>();
+        foreach (var e in instances)
+        {
+            if (await FirmaGate.EximidaPorPreasignacionAsync(e, reader, ct, cache).ConfigureAwait(false))
+                exentas.Add(e.Id);
+        }
+
+        return exentas;
     }
 
     private static readonly IReadOnlyDictionary<Guid, string> EmptyNames = new Dictionary<Guid, string>();
 
     private static readonly IReadOnlyDictionary<string, bool> EmptyFirmaBaul = new Dictionary<string, bool>();
+
+    internal static readonly IReadOnlyDictionary<string, IReadOnlyList<IdentidadVencidaManual>> EmptyProtegidas =
+        new Dictionary<string, IReadOnlyList<IdentidadVencidaManual>>();
+
+    /// <summary>
+    /// Salida de borrador (UNA consulta) de las filas a las que les importa: las que ya salieron de borrador y bien hay
+    /// identidades vencidas a mano en su tenant o ellas mismas tienen una fila propia vencida a mano. Sin candidatas no
+    /// se consulta nada.
+    /// </summary>
+    internal static async Task<IReadOnlyDictionary<Guid, DateTimeOffset>> ResolverSalidasDeBorradorAsync(
+        IProcedureInstanceRepository repo,
+        IEnumerable<ProcedureInstance> instances,
+        IReadOnlyDictionary<string, IReadOnlyList<IdentidadVencidaManual>> protegidasKeys,
+        CancellationToken ct)
+    {
+        var candidatas = instances
+            .Where(i => !string.Equals(i.Status, TramiteEstado.Borrador, StringComparison.OrdinalIgnoreCase)
+                        && (protegidasKeys.Count > 0 || IdentityApprovalResolver.TieneVencidaManualLocal(i)))
+            .ToList();
+        if (candidatas.Count == 0)
+            return new Dictionary<Guid, DateTimeOffset>();
+
+        // Filtra por tenant además de por id: la vista de red es multi-tenant.
+        var tenantIds = candidatas.Select(i => i.TenantId).Distinct().ToList();
+        var ids = candidatas.Select(i => i.Id).ToList();
+        return await repo.ListSalidasDeBorradorAsync(tenantIds, ids, ct).ConfigureAwait(false)
+               ?? new Dictionary<Guid, DateTimeOffset>();
+    }
 
     internal static InstanceSummaryDto ToSummary(
         ProcedureInstance e,
@@ -218,7 +278,8 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
         string? gestorNombre = null,
         IReadOnlyDictionary<string, bool>? firmaBaulPorPersona = null,
         bool prendaVigente = false,
-        string? revocationRequestStatus = null)
+        string? revocationRequestStatus = null,
+        bool firmaExenta = false)
     {
         var fv = e.FieldValues.ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
         var buyer = e.Actors.FirstOrDefault(a =>
@@ -240,7 +301,7 @@ public sealed class ListProcedureInstancesHandler(IProcedureInstanceRepository r
 
         // Estado server-driven del wizard: misma fuente de verdad que el frontend (canSubmit) y de
         // la que se deriva el progreso (PasoActual/TotalPasos). Se computa una sola vez.
-        var state = GetWizardStateHandler.ComputeState(e, identidadAprobadaPartes);
+        var state = GetWizardStateHandler.ComputeState(e, identidadAprobadaPartes, firmaExenta: firmaExenta);
         var (pasoActual, totalPasos) = ComputeProgress(state, e.Status);
 
         return new InstanceSummaryDto(

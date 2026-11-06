@@ -1101,6 +1101,86 @@ describe('TramiteWizard — desacople validación identidad async (HU #10350)', 
   });
 });
 
+describe('TramiteWizard — firma exenta por preasignación sin placa', () => {
+  const AVISO = /Puedes enviar sin la firma\. Se pedirá cuando el organismo asigne la placa\./;
+  const baseSteps: WizardState['steps'] = [
+    { index: 0, key: 'consulta_vin', label: 'Consulta VIN', status: 'complete', reasons: [] },
+    { index: 1, key: 'documentos', label: 'Datos y Documentos del Trámite', status: 'complete', reasons: [] },
+    { index: 2, key: 'comprador', label: 'Comprador', status: 'complete', reasons: [] },
+    { index: 3, key: 'identidad', label: 'Identidad', status: 'incomplete', reasons: ['pendiente_biometria'] },
+    { index: 4, key: 'fur', label: 'FUR', status: 'incomplete', reasons: ['fur_pendiente'] },
+  ];
+  const wizardState = (over: Partial<WizardState>, identidadCompleta = false): WizardState => ({
+    modalidad: 'matricula_inicial',
+    tipologiaCodigo: 'matricula_inicial',
+    totalSteps: 5,
+    canSubmit: true,
+    blockers: [],
+    status: 'borrador',
+    allowedTransitions: ['anulado', 'preparado'],
+    steps: identidadCompleta
+      ? baseSteps.map((s) => (s.key === 'identidad' ? { ...s, status: 'complete' as const, reasons: [] } : s))
+      : baseSteps,
+    ...over,
+  });
+  const abrirFur = async (finalizado = false) => {
+    mocks.getInstance.mockResolvedValue({
+      id: 'inst-1',
+      status: 'borrador',
+      draftFinalizedAt: finalizado ? '2026-06-20T10:00:00Z' : null,
+      fieldValues: [],
+      actors: [],
+    });
+    const user = userEvent.setup();
+    render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
+    await screen.findByRole('heading', { level: 2, name: 'Validación de Identidad' });
+    await user.click(screen.getByRole('button', { name: /^Paso 5: Resumen/ }));
+  };
+
+  it('exenta, sin identidad y canSubmit: enviar visible y habilitado, con aviso', async () => {
+    mocks.getWizardState.mockResolvedValue(wizardState({ firmaExentaPorPreasignacion: true }));
+    await abrirFur();
+    expect(await screen.findByRole('button', { name: /^Finalizar y enviar trámite$/ })).toBeEnabled();
+    expect(screen.getByText(AVISO)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Finalizar$/ })).not.toBeInTheDocument();
+  });
+
+  it('exenta con borrador ya finalizado: se puede enviar', async () => {
+    mocks.getWizardState.mockResolvedValue(wizardState({ firmaExentaPorPreasignacion: true }));
+    await abrirFur(true);
+    expect(await screen.findByRole('button', { name: /^Finalizar y enviar trámite$/ })).toBeEnabled();
+  });
+
+  it('no exenta, sin identidad: comportamiento actual (Finalizar, sin enviar ni aviso)', async () => {
+    mocks.getWizardState.mockResolvedValue(wizardState({}));
+    await abrirFur();
+    expect(await screen.findByRole('button', { name: /^Finalizar$/ })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: /Finalizar y enviar trámite/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(AVISO)).not.toBeInTheDocument();
+  });
+
+  it('exenta con canSubmit false: no se puede enviar', async () => {
+    mocks.getWizardState.mockResolvedValue(
+      wizardState({ firmaExentaPorPreasignacion: true, canSubmit: false }),
+    );
+    await abrirFur();
+    await screen.findByRole('heading', { level: 2, name: /Resumen/ });
+    expect(screen.queryByRole('button', { name: /Finalizar y enviar trámite/ })).not.toBeInTheDocument();
+  });
+
+  it('exenta con identidad aprobada: se envía sin aviso', async () => {
+    mocks.getWizardState.mockResolvedValue(
+      wizardState({ firmaExentaPorPreasignacion: true }, true),
+    );
+    mocks.getInstance.mockResolvedValue({ id: 'inst-1', status: 'borrador', draftFinalizedAt: null, fieldValues: [], actors: [] });
+    const user = userEvent.setup();
+    render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
+    await user.click(await screen.findByRole('button', { name: /^Paso 5: Resumen/ }));
+    expect(await screen.findByRole('button', { name: /^Finalizar y enviar trámite$/ })).toBeEnabled();
+    expect(screen.queryByText(AVISO)).not.toBeInTheDocument();
+  });
+});
+
 describe('TramiteWizard — consulta persiste antes de preflight', () => {
   it('persiste el VIN (PATCH field_values) ANTES de runPreflight, y refresca', async () => {
     const user = userEvent.setup();

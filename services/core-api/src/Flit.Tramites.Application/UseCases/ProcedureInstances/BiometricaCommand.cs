@@ -567,11 +567,16 @@ public sealed class ListBiometriaHandler(
                     }
                 }
 
+                // HU #13824 - salida de borrador: una identidad vencida a mano solo vale si el tramite salio ANTES del vencimiento.
+                var salidaDeBorrador = IdentityApprovalResolver.TieneVencidaManualLocal(instance)
+                    ? await repo.GetSalidaDeBorradorAtAsync(instance.Id, instance.TenantId, ct)
+                    : null;
+
                 // Filas PROPIAS de la parte que ya están aprobadas y vigentes para el documento del sujeto:
                 // son las únicas que pueden representar el estado de la parte sin referenciar otro trámite.
                 var vigentesLocales = instance.BiometricValidations
                     .Where(v => string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
-                                && BiometricRules.EsAprobadaVigenteParaTramite(v, instance.Status, now)
+                                && BiometricRules.EsAprobadaVigenteParaTramite(v, instance.Status, now, salidaDeBorrador)
                                 && BiometricRules.DocumentoCoincide(v, subject.TipoDocumento, documentoSujeto))
                     .ToList();
                 if (vigentesLocales.Count > 0)
@@ -590,8 +595,11 @@ public sealed class ListBiometriaHandler(
                 // HU #13824 — fuera de borrador se sigue mostrando la identidad que un Super Admin venció a mano.
                 if (source is null
                     && !string.Equals(instance.Status, TramiteEstado.Borrador, StringComparison.OrdinalIgnoreCase))
+                {
+                    salidaDeBorrador ??= await repo.GetSalidaDeBorradorAtAsync(instance.Id, instance.TenantId, ct);
                     source = await repo.FindProtegidaPorVencimientoManualAsync(
-                        instance.TenantId, subject.TipoDocumento.Trim(), documentoSujeto, now, ct);
+                        instance.TenantId, subject.TipoDocumento.Trim(), documentoSujeto, now, salidaDeBorrador, ct);
+                }
                 if (source is null)
                     continue;
 

@@ -18004,6 +18004,14 @@ components:
             afirmativas, garantías mobiliarias (RNGM) con datos, dato prendario afirmativo o al menos una
             limitación a la propiedad («a favor de»), sea cual sea el proveedor (Kyverum, Verifik o Intempo).
             Es el mismo valor con el que se evalúa la exigencia de decisión de prenda.
+        firmaExentaPorPreasignacion:
+          type: boolean
+          description: >
+            Matrícula inicial (MATRICULA_NUEVA y MATRICULA_LEASING) radicada directamente ante el organismo
+            (canal gestor/OT) que aún no tiene placa: puede enviarse aunque falte la firma de las partes.
+            Con placa asignada vale false y la firma es obligatoria. También vale false cuando el canal
+            Quipux está activo para el organismo del trámite, en los trámites del portal Persona Natural y de
+            la integración con terceros (ICT), en la rematrícula y en cualquier otro tipo de trámite.
 
     ConsolidadoVigencia:
       type: object

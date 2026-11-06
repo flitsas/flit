@@ -1,6 +1,8 @@
 using Flit.Queries.Domain.Time;
 using Flit.Queries.Domain;
 using Flit.Tramites.Domain.Entities;
+using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
+using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
 
@@ -143,7 +145,8 @@ public static class ProcedureInstanceSortFields
 /// dos rutas del listado (histórica y filtrada) muestren exactamente las mismas columnas derivadas.
 /// </summary>
 public sealed class ListProcedureInstancesFilteredHandler(
-    IProcedureInstanceRepository repo, BusquedaRapidaResolver? busquedaRapida = null)
+    IProcedureInstanceRepository repo, BusquedaRapidaResolver? busquedaRapida = null,
+    ITransitOfficeQuipuxCanalReader? quipuxCanalReader = null)
 {
     private static readonly IReadOnlyDictionary<Guid, string> EmptyNames = new Dictionary<Guid, string>();
     private static readonly IReadOnlyDictionary<string, bool> EmptyFirmaBaul = new Dictionary<string, bool>();
@@ -160,7 +163,7 @@ public sealed class ListProcedureInstancesFilteredHandler(
         var (instances, total) = await repo.ListWithSummaryGraphFilteredAsync(
             request.TenantId, Math.Max(0, request.Skip), take, filter, sortBy, direction, ct);
 
-        var items = await ToSummariesAsync(repo, instances, ct);
+        var items = await ToSummariesAsync(repo, instances, ct, quipuxCanalReader);
         return (items, total);
     }
 
@@ -281,7 +284,8 @@ public sealed class ListProcedureInstancesFilteredHandler(
     /// muestre EXACTAMENTE las mismas columnas derivadas que la fila propia.
     /// </summary>
     internal static async Task<IReadOnlyList<InstanceSummaryDto>> ToSummariesAsync(
-        IProcedureInstanceRepository repo, IReadOnlyList<ProcedureInstance> instances, CancellationToken ct)
+        IProcedureInstanceRepository repo, IReadOnlyList<ProcedureInstance> instances, CancellationToken ct,
+        ITransitOfficeQuipuxCanalReader? quipuxCanalReader = null)
     {
         // Mismo enriquecimiento en lote (sin N+1) que ListProcedureInstancesHandler.HandleAsync.
         IReadOnlyDictionary<Guid, string> nombres =
@@ -302,8 +306,13 @@ public sealed class ListProcedureInstancesFilteredHandler(
 
         // HU #13824 — identidades vencidas a mano por un Super Admin que los trámites fuera de borrador siguen honrando
         // (una consulta en lote sobre el índice parcial de las filas vencidas a mano).
-        IReadOnlySet<string> protegidasKeys = await repo.ListProtegidasPorVencimientoManualKeysAsync(
-            instances.Select(i => i.TenantId).Distinct().ToList(), now, ct) ?? new HashSet<string>();
+        IReadOnlyDictionary<string, IReadOnlyList<IdentidadVencidaManual>> protegidasKeys = await repo.ListProtegidasPorVencimientoManualKeysAsync(
+            instances.Select(i => i.TenantId).Distinct().ToList(), now, ct) ?? ListProcedureInstancesHandler.EmptyProtegidas;
+
+        // Salida de borrador (en lote, sin N+1) de los tramites a los que importa: una identidad vencida a mano solo
+        // vale para quien salio de borrador ANTES del vencimiento (BiometricRules.ConservaFirmaTrasVencimientoManual).
+        var salidas = await ListProcedureInstancesHandler
+            .ResolverSalidasDeBorradorAsync(repo, instances, protegidasKeys, ct).ConfigureAwait(false);
 
         var hoy = DateOnly.FromDateTime(now.ToOffset(ColombiaTime.Offset).DateTime);
         IReadOnlyDictionary<string, bool> firmaBaul = await repo.ListFirmaBaulVigenciaKeysAsync(
@@ -320,15 +329,20 @@ public sealed class ListProcedureInstancesFilteredHandler(
         IReadOnlyDictionary<Guid, string> revocacionesActivas = await repo.GetRevocationBadgeStatusesAsync(
             instances.Select(i => i.Id).ToList(), ct) ?? EmptyNames;
 
+        var exentas = await ListProcedureInstancesHandler
+            .ResolverExentasAsync(instances, quipuxCanalReader, ct).ConfigureAwait(false);
+
         var items = instances
             .Select(e => ListProcedureInstancesHandler.ToSummary(
                 e,
-                IdentityApprovalResolver.ApprovedPartiesFromKeys(e, identidadKeys, now, firmaBaul, protegidasKeys),
+                IdentityApprovalResolver.ApprovedPartiesFromKeys(
+                    e, identidadKeys, now, firmaBaul, protegidasKeys, salidas.TryGetValue(e.Id, out var salida) ? salida : null),
                 nombres.GetValueOrDefault(e.TenantId),
                 gestores.GetValueOrDefault(e.GestorEfectivoUserId),
                 firmaBaul,
                 conPrenda.Contains(e.Id),
-                revocacionesActivas.GetValueOrDefault(e.Id)))
+                revocacionesActivas.GetValueOrDefault(e.Id),
+                exentas.Contains(e.Id)))
             .ToList();
 
         return items;
