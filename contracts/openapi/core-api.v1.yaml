@@ -14790,6 +14790,132 @@ paths:
         "403": { description: La imagen es de otro organismo. }
         "404": { description: PORTAL_MARCA_NO_ENCONTRADA. }
 
+  /api/v1/admin/ot/portal-cobro:
+    get:
+      tags: ["Admin · OT · Portal Persona Natural · Cobro"]
+      summary: Banderas de los medios y, por tipo y medio, los switches de trámite y gestión con su monto
+      description: >-
+        Rol ot_admin o SuperAdmin (HU #14393). El ot_admin trabaja con el organismo de su perfil y si nombra otro recibe 403; el SuperAdmin envía transitOfficeId (obligatorio). Sin caché: lo guardado se ve en la siguiente consulta.
+      operationId: AdminOtPortalCobroGet
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Configuración de cobro del portal.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CobroPortal" }
+        "400": { description: "PORTAL_COBRO_ORGANISMO_REQUERIDO (SuperAdmin sin transitOfficeId en la ruta del OT)." }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+  /api/v1/admin/ot/portal-cobro/medios:
+    put:
+      tags: ["Admin · OT · Portal Persona Natural · Cobro"]
+      summary: Habilita o deshabilita un medio de pago en el portal; no toca otros portales
+      operationId: AdminOtPortalCobroPutMedio
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GuardarMedioCobroRequest" }
+      responses:
+        "204": { description: Guardado. }
+        "400": { description: "PORTAL_COBRO_MEDIO_INVALIDO, o PORTAL_COBRO_PIN_EN_WEB (el PIN no existe en la web)." }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+  /api/v1/admin/ot/portal-cobro/switches:
+    put:
+      tags: ["Admin · OT · Portal Persona Natural · Cobro"]
+      summary: Enciende o apaga el cobro del trámite o de la gestión para un tipo y un medio
+      description: >-
+        Encender exige monto mayor que cero para el concepto en el tipo y el organismo (400 PORTAL_COBRO_SIN_MONTO y no
+        guarda). Apagar conserva el monto, que vive en las tarifas. El ot_admin solo mueve TRAMITE: GESTION da 403
+        PORTAL_COBRO_GESTION_AJENA.
+      operationId: AdminOtPortalCobroPutSwitch
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GuardarSwitchCobroRequest" }
+      responses:
+        "204": { description: Guardado. }
+        "400": { description: "PORTAL_COBRO_SIN_MONTO, PORTAL_COBRO_PIN_EN_WEB, PORTAL_COBRO_MEDIO_INVALIDO o PORTAL_COBRO_CONCEPTO_INVALIDO." }
+        "401": { description: Sin sesión. }
+        "403": { description: "PORTAL_COBRO_GESTION_AJENA (ot_admin sobre GESTION) o sin alcance sobre el organismo." }
+        "404": { description: PORTAL_COBRO_TIPO_NO_EXISTE o PORTAL_COBRO_ORGANISMO_NO_EXISTE. }
+  /api/v1/admin/plataforma/persona-natural/cobro:
+    get:
+      tags: ["Admin · Plataforma · Persona Natural · Cobro"]
+      summary: Banderas de los medios y, por tipo y medio, los switches de trámite y gestión con su monto
+      description: >-
+        Solo SuperAdmin (HU #14393). Sin transitOfficeId es la web de persona (no ofrece PIN); con él, el portal de ese organismo. Sin caché: lo guardado se ve en la siguiente consulta.
+      operationId: AdminPlataformaPortalCobroGet
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Configuración de cobro del portal.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CobroPortal" }
+        "400": { description: "PORTAL_COBRO_ORGANISMO_REQUERIDO (SuperAdmin sin transitOfficeId en la ruta del OT)." }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+  /api/v1/admin/plataforma/persona-natural/cobro/medios:
+    put:
+      tags: ["Admin · Plataforma · Persona Natural · Cobro"]
+      summary: Habilita o deshabilita un medio de pago en el portal; no toca otros portales
+      operationId: AdminPlataformaPortalCobroPutMedio
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GuardarMedioCobroRequest" }
+      responses:
+        "204": { description: Guardado. }
+        "400": { description: "PORTAL_COBRO_MEDIO_INVALIDO, o PORTAL_COBRO_PIN_EN_WEB (el PIN no existe en la web)." }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+  /api/v1/admin/plataforma/persona-natural/cobro/switches:
+    put:
+      tags: ["Admin · Plataforma · Persona Natural · Cobro"]
+      summary: Enciende o apaga el cobro del trámite o de la gestión para un tipo y un medio
+      description: >-
+        Encender exige monto mayor que cero para el concepto en el tipo y el organismo (400 PORTAL_COBRO_SIN_MONTO y no
+        guarda). Apagar conserva el monto, que vive en las tarifas. El ot_admin solo mueve TRAMITE: GESTION da 403
+        PORTAL_COBRO_GESTION_AJENA.
+      operationId: AdminPlataformaPortalCobroPutSwitch
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GuardarSwitchCobroRequest" }
+      responses:
+        "204": { description: Guardado. }
+        "400": { description: "PORTAL_COBRO_SIN_MONTO, PORTAL_COBRO_PIN_EN_WEB, PORTAL_COBRO_MEDIO_INVALIDO o PORTAL_COBRO_CONCEPTO_INVALIDO." }
+        "401": { description: Sin sesión. }
+        "403": { description: "PORTAL_COBRO_GESTION_AJENA (ot_admin sobre GESTION) o sin alcance sobre el organismo." }
+        "404": { description: PORTAL_COBRO_TIPO_NO_EXISTE o PORTAL_COBRO_ORGANISMO_NO_EXISTE. }
 components:
   securitySchemes:
     bearerAuth:
@@ -14963,6 +15089,58 @@ components:
       description: Identificador del tenant (compañía) dueño del trámite.
 
   schemas:
+    CobroPortal:
+      type: object
+      required: [medios, tipos]
+      properties:
+        medios:
+          type: array
+          items:
+            type: object
+            required: [method, enabled]
+            properties:
+              method: { type: string, enum: [PASARELA, PIN] }
+              enabled: { type: boolean }
+        tipos:
+          type: array
+          items:
+            type: object
+            required: [tipoTramiteId, nombre, medios]
+            properties:
+              tipoTramiteId: { type: string, format: uuid }
+              nombre: { type: string }
+              medios:
+                type: array
+                items:
+                  type: object
+                  required: [method, ofrecido, conceptos]
+                  properties:
+                    method: { type: string, enum: [PASARELA, PIN] }
+                    ofrecido: { type: boolean, description: Bandera encendida y al menos un concepto encendido. }
+                    conceptos:
+                      type: array
+                      items:
+                        type: object
+                        required: [charge, enabled, montoCop, editable]
+                        properties:
+                          charge: { type: string, enum: [TRAMITE, GESTION] }
+                          enabled: { type: boolean, description: "Sin fila guardada vale encendido si montoCop > 0." }
+                          montoCop: { type: integer, format: int64, description: Monto del renglón base (derechos de tránsito; servicio FLIT). }
+                          editable: { type: boolean }
+    GuardarMedioCobroRequest:
+      type: object
+      required: [method, enabled]
+      properties:
+        method: { type: string, enum: [PASARELA, PIN] }
+        enabled: { type: boolean }
+    GuardarSwitchCobroRequest:
+      type: object
+      required: [tipoTramiteId, method, charge, enabled]
+      properties:
+        tipoTramiteId: { type: string, format: uuid }
+        method: { type: string, enum: [PASARELA, PIN] }
+        charge: { type: string, enum: [TRAMITE, GESTION] }
+        enabled: { type: boolean }
     # ── Admin OT · Marca del portal Persona Natural (Feature #14374, Épica #14297) ────────────
     PortalMarcaSnapshot:
       type: object

@@ -103,3 +103,10 @@ Front: pestaña `Diseño web` en `PersonaNaturalConsole`, con las reglas de `lib
 ## UX de la épica
 
 Botón principal píldora `#557EFF`, secundaria `#162744`. Switch ON `#8CC63F`, OFF `#91A5B5`, con estado también en texto. Texto de éxito `#4F7A12` con icono `#8CC63F`. Errores `#C10000`. Miga de pan, texto de 12 px como mínimo, foco visible. Las tablas siguen el modelo de trámites.
+
+### Medios y switches: lo implementado (HU #14393 y #14395)
+
+- Ámbito: `transit_office_id` nulo = web de persona. Sin fila, la pasarela está encendida y el PIN apagado; el switch vale encendido si el concepto tiene monto mayor que cero. El PIN no existe en la web (CHECK en base y rechazo `PORTAL_COBRO_PIN_EN_WEB`).
+- `montoCop` de cada concepto de cobro es el del renglón base: `TRAMITE` = derechos de tránsito, `GESTION` = servicio FLIT. Las transformaciones siguen el switch de `TRAMITE` y el envío el de `GESTION`.
+- gRPC `PersonaNaturalService`: `Cotizar` gana `medio` y `ambito_organismo_id` (vacío = web; con valor, el organismo del punto); nuevo `ListarMediosPago(tipo, organismo, ambito)` con los medios ofrecidos y su total base. Medio no ofrecido: razón `medio_no_disponible`.
+- BFF: `GET /api/v1/persona-natural/medios-pago?organismoId&tipoCodigo`, `GET /api/v1/persona-natural/punto/medios-pago?tipoCodigo` y `medio` opcional en `POST /cotizaciones`. `POST /solicitudes/{id}/radicar` acepta un cuerpo opcional `{ medio, adicionales, totalCop }`: con `medio` cotiza en ese instante, guarda la cotización en `personanatural.frozen_quote` (una por solicitud, solo inserción) en la misma transacción que encola, y responde 409 `cotizacion_cambio` (con el nuevo `totalCop`) si el total que la persona vio ya cambió.

@@ -112,6 +112,27 @@ public static class PuntoEndpoints
             }
         }).AddEndpointFilter(ConSesionDePunto);
 
+        // HU #14395 — medios de pago del punto: los configurados para el organismo de la cookie (el único portal con PIN de caja).
+        // Sin caché: una bandera o un switch recién guardados se ven en la siguiente consulta.
+        grupo.MapGet("/medios-pago", async (string? tipoCodigo, HttpContext http, CancellationToken ct) =>
+        {
+            // Se resuelve desde RequestServices para que el host de PuntoCanalTests (sin cobro) pueda mapear el grupo.
+            var medios = http.RequestServices.GetRequiredService<IFachadaMediosPago>();
+            var sesion = Sesion(http);
+            http.Response.Headers.CacheControl = "no-store";
+            if (string.IsNullOrWhiteSpace(tipoCodigo) || tipoCodigo.Length > 80)
+                return SesionEndpoints.Problema(StatusCodes.Status400BadRequest, "Datos inválidos", "Elija un tipo de trámite.", "datos_invalidos");
+            try
+            {
+                var organismo = sesion.OrganismoId.ToString();
+                return Results.Json(await medios.ListarMediosPagoAsync(tipoCodigo.Trim(), organismo, organismo, ct).ConfigureAwait(false), Json);
+            }
+            catch (FachadaException ex)
+            {
+                return SesionEndpoints.Problema(ex.EstadoHttp, "No disponible", ex.Message, ex.Codigo);
+            }
+        }).AddEndpointFilter(ConSesionDePunto);
+
         grupo.MapGet("/sesion", (HttpContext http, CookiePunto cookie) =>
         {
             var organismo = cookie.Leer(http);

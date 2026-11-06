@@ -361,6 +361,124 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
             new Flit.Tramites.Domain.Tramites.Services.ProcedureTypeGateProfile(),
             new Flit.Tramites.Domain.Tramites.PersonaNatural.ResultadoElegibilidad(elegible, elegible ? [] : ["motivo"]));
 
+    // ── HU #14395: medios de pago y total por medio ───────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task HU14395_AC4_SinMedio_LaRespuestaEsLaDeSiempre_AunConBanderasYSwitchesApagados()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        await using var e = await Escenario.CrearAsync(host, ct);
+        await e.TarifaAsync("DERECHOS_TRANSITO", e.TipoElegible, null, 185_000, ct);
+        await e.TarifaAsync("SERVICIO_FLIT", e.TipoElegible, null, 181_000, ct);
+        await e.TarifaAsync("CAMBIO_COLOR", null, null, 1_000, ct);
+        var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
+        var pedido = Pedir(e.CodigoElegible, e.Organismo, "CAMBIO_COLOR");
+        var antes = await cliente.CotizarAsync(pedido, cancellationToken: ct);
+
+        await e.MedioAsync(e.Organismo, "PASARELA", false, ct);
+        await e.SwitchAsync(e.Organismo, e.TipoElegible, "PASARELA", "TRAMITE", false, ct);
+        await e.SwitchAsync(e.Organismo, e.TipoElegible, "PASARELA", "GESTION", false, ct);
+        await e.SwitchAsync(null, e.TipoElegible, "PASARELA", "TRAMITE", false, ct);
+        var despues = await cliente.CotizarAsync(pedido, cancellationToken: ct);
+
+        despues.Should().Be(antes, "sin medio nada de lo configurado cambia la cotización");
+        despues.Medio.Should().BeEmpty();
+        despues.TotalCop.Should().Be(185_000 + 181_000 + 1_000);
+    }
+
+    [Fact]
+    public async Task HU14395_AC2_ConMedio_SumaSoloLosConceptosEncendidos_YSinConfiguracionCobraComoHoy()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        await using var e = await Escenario.CrearAsync(host, ct);
+        await e.TarifaAsync("DERECHOS_TRANSITO", e.TipoElegible, null, 185_000, ct);
+        await e.TarifaAsync("SERVICIO_FLIT", e.TipoElegible, null, 181_000, ct);
+        await e.TarifaAsync("CAMBIO_COLOR", null, null, 1_000, ct);
+        await e.TarifaAsync("ENVIO_DOCUMENTO", null, null, 20, ct);
+        var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
+        var sinMedio = await cliente.CotizarAsync(Pedir(e.CodigoElegible, e.Organismo, "CAMBIO_COLOR", "ENVIO_DOCUMENTO"), cancellationToken: ct);
+
+        var sinConfigurar = await cliente.CotizarAsync(Medio(e, "PASARELA", "CAMBIO_COLOR", "ENVIO_DOCUMENTO"), cancellationToken: ct);
+        sinConfigurar.TotalCop.Should().Be(sinMedio.TotalCop, "sin configuración el medio cobra todo, como hoy");
+        sinConfigurar.Lineas.Select(l => l.Codigo).Should().Equal(sinMedio.Lineas.Select(l => l.Codigo));
+        sinConfigurar.VersionTarifa.Should().Be(sinMedio.VersionTarifa);
+        sinConfigurar.Medio.Should().Be("PASARELA");
+
+        await e.SwitchAsync(e.Organismo, e.TipoElegible, "PASARELA", "GESTION", false, ct);
+        var sinGestion = await cliente.CotizarAsync(Medio(e, "PASARELA", "CAMBIO_COLOR", "ENVIO_DOCUMENTO"), cancellationToken: ct);
+        sinGestion.Lineas.Select(l => l.Codigo).Should().Equal("DERECHOS_TRANSITO", "CAMBIO_COLOR");
+        sinGestion.TotalCop.Should().Be(185_000 + 1_000);
+        sinGestion.AdicionalesNoAplicados.Should().Equal("ENVIO_DOCUMENTO");
+        sinGestion.VersionTarifa.Should().NotBe(sinMedio.VersionTarifa, "la versión solo cuenta las tarifas que sumaron");
+    }
+
+    [Fact]
+    public async Task HU14395_AC1_ListarMediosPago_SoloLosConBanderaYAlMenosUnConceptoEncendido()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        await using var e = await Escenario.CrearAsync(host, ct);
+        await e.TarifaAsync("DERECHOS_TRANSITO", e.TipoElegible, null, 185_000, ct);
+        await e.TarifaAsync("SERVICIO_FLIT", e.TipoElegible, null, 181_000, ct);
+        var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
+        var punto = e.Organismo.ToString();
+
+        var web = await cliente.ListarMediosPagoAsync(Listar(e, null), cancellationToken: ct);
+        var inicial = await cliente.ListarMediosPagoAsync(Listar(e, punto), cancellationToken: ct);
+        web.Medios.Select(m => m.Medio).Should().Equal("PASARELA");
+        inicial.Medios.Select(m => m.Medio).Should().Equal("PASARELA");
+        inicial.Medios[0].TotalCop.Should().Be(366_000);
+        inicial.Medios[0].Lineas.Select(l => l.Codigo).Should().Equal("DERECHOS_TRANSITO", "SERVICIO_FLIT");
+
+        await e.MedioAsync(e.Organismo, "PIN", true, ct);
+        (await cliente.ListarMediosPagoAsync(Listar(e, punto), cancellationToken: ct)).Medios.Select(m => m.Medio).Should().Equal("PASARELA", "PIN");
+
+        await e.SwitchAsync(e.Organismo, e.TipoElegible, "PIN", "TRAMITE", false, ct);
+        await e.SwitchAsync(e.Organismo, e.TipoElegible, "PIN", "GESTION", false, ct);
+        (await cliente.ListarMediosPagoAsync(Listar(e, punto), cancellationToken: ct)).Medios.Select(m => m.Medio)
+            .Should().Equal(["PASARELA"], "con los dos switches apagados el PIN no se ofrece");
+
+        await e.MedioAsync(e.Organismo, "PASARELA", false, ct);
+        (await cliente.ListarMediosPagoAsync(Listar(e, punto), cancellationToken: ct)).Medios.Should().BeEmpty("sin bandera ni conceptos no hay medios");
+        (await cliente.ListarMediosPagoAsync(Listar(e, null), cancellationToken: ct)).Medios.Select(m => m.Medio)
+            .Should().Equal(["PASARELA"], "apagar un medio del punto no toca la web");
+    }
+
+    [Fact]
+    public async Task HU14395_AC5_UnaBanderaOUnSwitchRecienGuardados_SeReflejanEnLaSiguienteConsulta()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        await using var e = await Escenario.CrearAsync(host, ct);
+        await e.PrecioBaseAsync(e.TipoElegible, null, ct);
+        var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
+        var punto = e.Organismo.ToString();
+
+        (await cliente.ListarMediosPagoAsync(Listar(e, punto), cancellationToken: ct)).Medios.Single().TotalCop.Should().Be(150_000);
+        await e.SwitchAsync(e.Organismo, e.TipoElegible, "PASARELA", "GESTION", false, ct);
+        (await cliente.ListarMediosPagoAsync(Listar(e, punto), cancellationToken: ct)).Medios.Single().TotalCop.Should().Be(100_000);
+        await e.SwitchAsync(e.Organismo, e.TipoElegible, "PASARELA", "GESTION", true, ct);
+        (await cliente.ListarMediosPagoAsync(Listar(e, punto), cancellationToken: ct)).Medios.Single().TotalCop.Should().Be(150_000);
+    }
+
+    [Fact]
+    public async Task HU14395_UnMedioApagadoOSinConceptos_NoSeCotiza_ConElErrorEstable()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        await using var e = await Escenario.CrearAsync(host, ct);
+        await e.PrecioBaseAsync(e.TipoElegible, null, ct);
+        var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
+
+        PlatformRpcErrors.Reason(await Error(() => cliente.CotizarAsync(Medio(e, "PIN"), cancellationToken: ct).ResponseAsync)).Should().Be("medio_no_disponible");
+        await e.SwitchAsync(e.Organismo, e.TipoElegible, "PASARELA", "TRAMITE", false, ct);
+        await e.SwitchAsync(e.Organismo, e.TipoElegible, "PASARELA", "GESTION", false, ct);
+        PlatformRpcErrors.Reason(await Error(() => cliente.CotizarAsync(Medio(e, "PASARELA"), cancellationToken: ct).ResponseAsync)).Should().Be("medio_no_disponible");
+        (await Error(() => cliente.CotizarAsync(Medio(e, "TRANSFERENCIA"), cancellationToken: ct).ResponseAsync)).StatusCode.Should().Be(StatusCode.InvalidArgument);
+    }
+
     // ── Soporte ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
     private static CotizarRequest Pedir(string codigo, Guid organismo, params string[] adicionales)
@@ -369,6 +487,17 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
         r.Adicionales.AddRange(adicionales);
         return r;
     }
+
+    private static CotizarRequest Medio(Escenario e, string medio, params string[] adicionales)
+    {
+        var r = Pedir(e.CodigoElegible, e.Organismo, adicionales);
+        r.Medio = medio;
+        r.AmbitoOrganismoId = e.Organismo.ToString();
+        return r;
+    }
+
+    private static ListarMediosPagoRequest Listar(Escenario e, string? ambito) =>
+        new() { TipoTramiteCodigo = e.CodigoElegible, OrganismoId = e.Organismo.ToString(), AmbitoOrganismoId = ambito ?? string.Empty };
 
     private static async Task<RpcException> Error(Func<Task> llamada) => (await llamada.Should().ThrowAsync<RpcException>()).Which;
 
@@ -495,6 +624,18 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
                 SELECT admin.persona_natural_tariff_new_version('DERECHOS_TRANSITO', {tipo}::uuid, {organismo}::uuid, {valor}, {Hoy}::date, NULL::uuid)
                 """, ct);
 
+        public Task<int> MedioAsync(Guid? ambito, string medio, bool enabled, CancellationToken ct) =>
+            _db.Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT INTO admin.persona_natural_payment_methods (transit_office_id, method, enabled) VALUES ({ambito}::uuid, {medio}, {enabled})", ct);
+
+        public Task<int> SwitchAsync(Guid? ambito, Guid tipo, string medio, string cobro, bool enabled, CancellationToken ct) =>
+            _db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO admin.persona_natural_charge_switches (transit_office_id, procedure_type_id, method, charge, enabled)
+                VALUES ({ambito}::uuid, {tipo}, {medio}, {cobro}, {enabled})
+                ON CONFLICT (COALESCE(transit_office_id, '00000000-0000-0000-0000-000000000000'::uuid), procedure_type_id, method, charge)
+                DO UPDATE SET enabled = EXCLUDED.enabled
+                """, ct);
+
         public Task<int> DesactivarEmpresaOtAsync(CancellationToken ct) =>
             _db.Database.ExecuteSqlInterpolatedAsync($"UPDATE identity.tenants SET is_active = false WHERE id = {TenantOt}", ct);
 
@@ -511,6 +652,8 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
                 var ids = new[] { TipoElegible, TipoSinTransformaciones, TipoApagado, TipoSinTarifa, TipoSinListaBlanca };
                 await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.persona_natural_enabled_types WHERE procedure_type_id = ANY({ids})");
                 var orgs = new[] { Organismo, OrganismoSinGrant };
+                await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.persona_natural_charge_switches WHERE procedure_type_id = ANY({ids}) OR transit_office_id = ANY({orgs})");
+                await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.persona_natural_payment_methods WHERE transit_office_id = ANY({orgs})");
                 await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.persona_natural_tariffs WHERE procedure_type_id = ANY({ids}) OR transit_office_id = ANY({orgs})");
                 // Las tarifas sin tipo (adicionales generales) de la prueba: las del escenario son de valor único por concepto y ámbito.
                 await _db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.persona_natural_tariffs WHERE procedure_type_id IS NULL AND transit_office_id IS NULL AND valid_from = {Hoy}::date");

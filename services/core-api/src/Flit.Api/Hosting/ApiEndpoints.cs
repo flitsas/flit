@@ -86,6 +86,7 @@ internal static class ApiEndpoints
         app.MapAdminExternalIntegrationsEndpoints(); // HU #14067 (Épica #14021) — integraciones externas por compañía (SuperAdmin)
         app.MapAdminPlataformaPersonaNaturalEndpoints(); // Feature J (Épica #14021) — tarifas, configuración y contenido del portal (SuperAdmin)
         app.MapAdminOtPortalTarifasEndpoints(); // Épica #14297 (Feature #14387) — precios del portal Persona Natural desde el dashboard del OT
+        app.MapAdminPortalCobroEndpoints(); // HU#14393 (Feature #14392, Épica #14297) — medios de pago y switches de cobro del portal
         app.MapAdminRejectionReasonsEndpoints();
         app.MapAdminProcedureDocumentRequirementsEndpoints();
         app.MapAdminDocumentOrderOverridesEndpoints();
