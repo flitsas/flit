@@ -792,12 +792,12 @@ export const OT_ARTICLES: ManualArticle[] = [
         id: "cobro",
         title: "3. Cobro: medios de pago y precios",
         paragraphs: [
-          "«Medios de pago» define qué medios ofrece tu portal («Pasarela de pago» y «PIN en caja») y qué se cobra en cada uno, por trámite. Cada trámite tiene dos valores: «Valor del trámite» y «Valor de la gestión». El monto se define en Precios; en esta tabla solo se ve.",
+          "«Medios de pago» tiene una pestaña por medio: «Pasarela de pago» y «PIN en caja». Cada una muestra una tarjeta con el interruptor del medio y cuántos trámites se ofrecen, y debajo una fila por trámite con «Valor del trámite», «Valor de la gestión», el «Total base» y si «Se ofrece» en el portal. El total base no incluye el envío ni las transformaciones, que se suman cuando aplican. El monto se define en Precios; en esta tabla solo se ve.",
           "«Precios», en la misma sección, muestra lo que paga la persona por cada trámite en tu organismo. Un valor marcado «Valor general» lo define FLIT para todos los organismos y no se edita aquí. Si registras un precio propio, ese tiene prioridad sobre el general.",
         ],
         bullets: [
-          "Ofrecer o quitar un medio: usa su interruptor. El estado cambia entre «Se ofrece en el portal» y «No se ofrece en el portal».",
-          "Dejar de cobrar un valor: apaga su interruptor en el trámite y el medio. Si apagas los dos, el aviso dice que ese medio no se ofrecerá para ese trámite.",
+          "Ofrecer o quitar un medio: usa el interruptor de su tarjeta, que cambia entre «Activado» y «Desactivado». Apagado, la persona no lo ve, y puedes dejar listos sus valores para cuando lo enciendas.",
+          "Dejar de cobrar un valor: apaga su interruptor en la fila del trámite; el valor pasa a «No se cobra». Si apagas los dos, el aviso dice que ese medio no se ofrecerá para ese trámite.",
           "Encender un valor sin monto: no se guarda. El mensaje pide definir el valor en Precios y volver a encenderlo.",
         ],
         callouts: [

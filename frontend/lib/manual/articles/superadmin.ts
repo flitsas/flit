@@ -666,7 +666,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         id: "medios-de-pago",
         title: "6. Medios de pago de la web",
         paragraphs: [
-          "En la pestaña «Tarifas», encima de la lista, «Medios de pago» define qué se cobra en la web de persona. Por cada trámite hay dos valores, «Valor del trámite» y «Valor de la gestión», y cada uno tiene su interruptor. La web no ofrece «PIN en caja»: ese medio solo existe en el punto de un organismo. El monto se define en las tarifas; aquí solo se ve.",
+          "En la pestaña «Tarifas», encima de la lista, «Medios de pago» define qué se cobra en la web de persona. La tarjeta de «Pasarela de pago» enciende o apaga el medio y dice cuántos trámites se ofrecen. Debajo, cada trámite tiene una fila con «Valor del trámite» y «Valor de la gestión», cada uno con su interruptor, el «Total base» y si «Se ofrece» en el portal. El total base no incluye el envío ni las transformaciones, que se suman cuando aplican. La web no ofrece «PIN en caja»: ese medio solo existe en el punto de un organismo. El monto se define en las tarifas; aquí solo se ve.",
           "Si un trámite no tiene valor general, se muestra el mayor valor por organismo, porque a quien elija ese organismo sí se le cobrará. Cada organismo administra lo suyo desde su hub (ver «Portal Persona Natural del organismo: reportes, cobro, diseño y dominios»); el valor de la gestión solo lo mueve el Super Admin.",
         ],
       },
