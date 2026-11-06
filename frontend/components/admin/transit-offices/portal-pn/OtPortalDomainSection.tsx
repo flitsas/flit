@@ -38,7 +38,7 @@ export function OtPortalDomainSection({ transitOfficeId }: { transitOfficeId: st
 
   return (
     <section
-      className="mt-6 rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60"
+      className="mt-6 rounded-2xl border bg-white p-4 dark:bg-[#162744]"
       aria-labelledby="portal-domain-title"
     >
       <div className="mb-3">
@@ -70,6 +70,8 @@ export function OtPortalDomainSection({ transitOfficeId }: { transitOfficeId: st
           purpose="portal"
           label="Dominio del portal"
           ownerLabel="este organismo"
+          soloRetirar
+          notaRetiro="El portal seguirá en el enlace del punto."
           client={client}
           domain={domain}
           onRegistered={(updated) => {
