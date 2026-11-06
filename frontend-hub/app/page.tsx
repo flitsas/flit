@@ -9,6 +9,7 @@ import { HubShell } from "@/components/HubShell";
 import { Landing } from "@/components/landing/Landing";
 import { HUB_PRODUCT } from "@/lib/auth.server";
 import { hubConfig } from "@/lib/config.server";
+import { resolveTramitesUrl } from "@/lib/tramites-url";
 import { toHubUser } from "@/lib/hub-user";
 import { decideHome } from "@/lib/home";
 import { fetchMyAppsOnServer } from "@/lib/me-apps.server";
@@ -29,7 +30,8 @@ export default async function HubRoot({ searchParams }: { searchParams: Promise<
   if (!user && sso !== "0") redirect(silentLogin);
 
   if (user) {
-    const fetched = await fetchMyAppsOnServer(config, (await headers()).get("host"));
+    const host = (await headers()).get("host");
+    const fetched = await fetchMyAppsOnServer(config, host);
     // La API rechazó el token: la sesión se cerró en otro producto. El intento silencioso la renueva si el servidor de
     // login sigue con sesión o, si no, la borra y vuelve a la portada (sin bucle: sin cookie ya no hay `user`).
     if (fetched === "unauthorized") redirect(silentLogin);
@@ -40,9 +42,10 @@ export default async function HubRoot({ searchParams }: { searchParams: Promise<
     }
 
     const hubUser = toHubUser(user);
+    const tramitesUrl = await resolveTramitesUrl(host, config.tramitesUrl);
     return (
-      <HubShell tramitesUrl={config.tramitesUrl} user={hubUser}>
-        <HubHome user={hubUser} tramitesUrl={config.tramitesUrl} apps={apps} />
+      <HubShell tramitesUrl={tramitesUrl} user={hubUser}>
+        <HubHome user={hubUser} tramitesUrl={tramitesUrl} apps={apps} />
       </HubShell>
     );
   }
