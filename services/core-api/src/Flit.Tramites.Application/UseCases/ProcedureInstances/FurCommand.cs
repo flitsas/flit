@@ -1409,7 +1409,7 @@ public sealed class GenerarFurHandler(
                         var (firma, sello, metadatos, firmaIdentidad) =
                             await ResolveMandatarioFirmaAsync(data, signer, ct).ConfigureAwait(false);
                         mandatario = new MandatarioFirmante(
-                            signer.Nombre, signer.Documento, firma, sello, metadatos, firmaIdentidad);
+                            signer.Nombre, signer.Documento, firma, sello, metadatos, firmaIdentidad, signer.SignerModel);
 
                         if (enBorrador)
                             instance.MandateSignerId = signerId;

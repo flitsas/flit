@@ -59,6 +59,18 @@ Es el lugar principal. Aquí la compañía registra a las personas y decide dón
 
 El formulario **bloquea el guardado** si la persona queda sin ninguna forma de firmar en alguno de los organismos marcados, o si elige «Validación de identidad» sin correo. En ese caso muestra una alerta indicando qué hacer: capturarle la firma del baúl o registrar su correo para la validación.
 
+#### Cómo identifica el contrato a un mandatario de modelo Persona jurídica
+
+Con **modelo** Persona jurídica en la ficha, el contrato nombra a la entidad con su razón social y su NIT, y nunca con cédula de ciudadanía. Lo decide el modelo del mandatario, no el documento. No se debe confundir con el **tipo de mandato** Persona jurídica (§3.3 y §3.4), donde actúa el organismo o la unión temporal.
+
+| Dónde | Texto |
+|---|---|
+| Cuerpo: Genérico, Municipio y Bello sin unión temporal | `Y de {razón social}, con NIT No. {nit}, quien para los efectos del presente contrato se denominará EL MANDATARIO,` |
+| Cuerpo: Bello con unión temporal | `Y de la otra parte, {razón social}, con NIT No. {nit}, quien para efectos del presente contrato se denominará EL MANDATARIO,` |
+| Recuadro del mandatario | `RAZÓN SOCIAL: {razón social}` y `NIT: {nit}`, aunque el organismo tenga datos institucionales configurados |
+
+El simulador usa los mismos textos. No cambian la Persona natural, un mandatario sin modelo registrado (se trata como Persona natural), el Formato en blanco, el mandato abierto, el institucional ni el formato Sabaneta, que sigue nombrando a su unión temporal.
+
 #### Alta con validación de identidad automática
 
 Al **crear** un mandatario persona natural con forma de firma «Validación de identidad», el sistema **lanza solo la validación**, con el mismo flujo de un trámite: Kyverum envía un enlace al correo del mandatario, la persona captura su identidad y el resultado vuelve por webhook a la ficha. No hay que ir al módulo Identidad. Pasa igual cuando el alta la hace el Admin del OT desde el hub; la validación queda a nombre de la **compañía** del mandatario.
