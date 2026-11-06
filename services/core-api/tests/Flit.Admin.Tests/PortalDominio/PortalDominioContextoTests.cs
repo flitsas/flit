@@ -60,6 +60,11 @@ public sealed class PortalDominioContextoTests
     [InlineData("/api/v1/auth/forgot-password")]
     [InlineData("/connect/token")]
     [InlineData("/.well-known/openid-configuration")]
+    [InlineData("/auth/token")]
+    [InlineData("/api/v1/platform/issuers")]
+    [InlineData("/api/v1/public/portal/abc")]
+    [InlineData("/api/v1/integrations/ot")]
+    [InlineData("/api/v1/persona-naturalx")]
     public async Task AC3_PorUnDominioDePortalElLoginNoSeAbre(string ruta)
     {
         var (contexto, llamado) = Peticion(ruta, DomainContext.Portal("tramites.miorganismo.gov.co", Organismo));

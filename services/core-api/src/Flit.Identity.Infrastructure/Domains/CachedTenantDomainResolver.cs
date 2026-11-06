@@ -71,8 +71,9 @@ internal sealed class CachedTenantDomainResolver(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // Fail-closed (AC4): un fallo del resolutor nunca produce una red — siempre "sin red".
+            // No se cachea: un fallo pasajero no debe dejar 60 s a un dominio de portal tratado como si no lo fuera.
             DomainResolverLog.ResolveFailed(_logger, normalizedHost, ex);
-            resolution = NetworkResolution.None;
+            return NetworkResolution.None;
         }
 
         _cache.Set(cacheKey, resolution, Ttl);
@@ -90,12 +91,6 @@ internal sealed class CachedTenantDomainResolver(
         try
         {
             hosts = await _repository.ListActiveHostsAsync(cancellationToken).ConfigureAwait(false);
-            if (portales is not null)
-            {
-                // HU #14383: los dominios activos de portales tambien son origenes validos para el Gateway.
-                var delPortal = await portales.ListarHostsActivosAsync(cancellationToken).ConfigureAwait(false);
-                hosts = [.. hosts, .. delPortal];
-            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

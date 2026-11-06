@@ -151,9 +151,6 @@ internal sealed class PortalDominioRepository(IIdentityDb db, IMemoryCache? cach
             """,
             r => r.GetString(0), ct, P("codigo", codigo)).ConfigureAwait(false)).FirstOrDefault();
 
-    public async Task<IReadOnlyList<string>> ListarHostsActivosAsync(CancellationToken ct = default) =>
-        await ConsultarAsync("SELECT host FROM admin.v_active_portal_domains ORDER BY host", r => r.GetString(0), ct).ConfigureAwait(false);
-
     public async Task<IReadOnlyList<string>> ListarHostsPendientesDeCertificadoAsync(DateTimeOffset renovarAntes, CancellationToken ct = default) =>
         await ConsultarAsync(
             """

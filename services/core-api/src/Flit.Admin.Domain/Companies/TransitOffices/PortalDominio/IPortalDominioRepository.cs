@@ -86,8 +86,6 @@ public interface IPortalDominioRepository
     /// <summary>Host <c>active</c> principal del organismo con ese código (sin distinguir mayúsculas), o <c>null</c>. Sin caché.</summary>
     Task<string?> ObtenerHostActivoPorCodigoAsync(string codigo, CancellationToken ct = default);
 
-    Task<IReadOnlyList<string>> ListarHostsActivosAsync(CancellationToken ct = default);
-
     /// <summary><c>verified</c> sin certificado (primera emisión) o <c>active</c> con certificado por vencer antes de <paramref name="renovarAntes"/>.</summary>
     Task<IReadOnlyList<string>> ListarHostsPendientesDeCertificadoAsync(DateTimeOffset renovarAntes, CancellationToken ct = default);
 
