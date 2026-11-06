@@ -3,6 +3,7 @@
 import { useParams } from "next/navigation";
 import { ToastProvider } from "@/components/admin/Toast";
 import { OtHubLayout } from "@/components/admin/transit-offices/OtHubLayout";
+import { OtPreciosSection } from "@/components/admin/transit-offices/portal-pn/OtPreciosSection";
 import { PortalPnAccess } from "@/components/admin/transit-offices/portal-pn/PortalPnAccess";
 import { PortalPnTabs } from "@/components/admin/transit-offices/portal-pn/PortalPnTabs";
 
@@ -29,7 +30,7 @@ function OtPortalPersonaNaturalPageInner() {
       surface="panel"
     >
       <PortalPnAccess>
-        <PortalPnTabs transitOfficeId={params.id} />
+        <PortalPnTabs transitOfficeId={params.id} cobro={<OtPreciosSection transitOfficeId={params.id} />} />
       </PortalPnAccess>
     </OtHubLayout>
   );
