@@ -70,6 +70,50 @@ public sealed class PlatePreassignTests
         plates.Should().Equal("ABC100", "ABC101", "ABC102");
     }
 
+    [Theory]
+    [InlineData("ABC123")]
+    [InlineData("ABC12")]
+    [InlineData("ABC12D")]
+    [InlineData("R12345")]
+    [InlineData("S123456")]
+    [InlineData("MC029554")]
+    public void PlateRangeRules_IsValidPlate_AceptaFormatosUnificados(string plate)
+    {
+        PlateRangeRules.IsValidPlate(plate).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("AB12")]
+    [InlineData("ABCD12")]
+    [InlineData("123ABC")]
+    [InlineData("ABC1")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void PlateRangeRules_IsValidPlate_RechazaInvalidos(string? plate)
+    {
+        PlateRangeRules.IsValidPlate(plate).Should().BeFalse();
+    }
+
+    [Fact]
+    public void PlateRangeRules_ParsePlate_CarroUsaPrefijoYNumero()
+    {
+        PlateRangeRules.ParsePlate("ABC123").Should().Be(("ABC", 123));
+        PlateRangeRules.IsCarPlate("ABC123").Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("ABC12")]
+    [InlineData("ABC12D")]
+    [InlineData("R12345")]
+    [InlineData("S123456")]
+    [InlineData("MC029554")]
+    public void PlateRangeRules_ParsePlate_NoCarroUsaContenedorNsf(string plate)
+    {
+        PlateRangeRules.IsCarPlate(plate).Should().BeFalse();
+        PlateRangeRules.ParsePlate(plate).Should().Be(
+            (PlateRangeRules.NonStandardFormatPrefix, PlateRangeRules.NonStandardFormatNumber));
+    }
+
     // ---------- Repositorio ----------
 
     [Fact]
@@ -398,13 +442,63 @@ public sealed class PlatePreassignTests
     [InlineData("AB12")]
     [InlineData("ABCD12")]
     [InlineData("123ABC")]
-    [InlineData("ABC12")]
+    [InlineData("ABC1")]
     public async Task ReserveOutOfRange_FormatoInvalido_Falla(string plate)
     {
         await using var ctx = NewContext(NewDbName());
         var repo = new PlateRangeRepository(ctx);
         var r = await repo.ReserveOutOfRangePlateAsync(Guid.NewGuid(), Guid.NewGuid(), plate, Guid.NewGuid(), TestContext.Current.CancellationToken);
         r.Success.Should().BeFalse();
+        r.Error.Should().Be(PlateRangeRules.InvalidPlateFormatMessage);
+    }
+
+    [Theory]
+    [InlineData("ABC12D")]
+    [InlineData("R12345")]
+    [InlineData("MC029554")]
+    public async Task ReserveOutOfRange_FormatosAmpliados_CreaContenedorNsfYReserva(string plate)
+    {
+        var db = NewDbName();
+        var company = Guid.NewGuid();
+        var office = Guid.NewGuid();
+        var instance = Guid.NewGuid();
+
+        await using var ctx = NewContext(db);
+        var repo = new PlateRangeRepository(ctx);
+        var r = await repo.ReserveOutOfRangePlateAsync(company, office, plate, instance, TestContext.Current.CancellationToken);
+        r.Success.Should().BeTrue();
+
+        await using var verify = NewContext(db);
+        var detail = await verify.PlateRangeDetails.SingleAsync(d => d.Plate == plate, TestContext.Current.CancellationToken);
+        detail.State.Should().Be(PlateState.Preasignada);
+        detail.ProcedureInstanceId.Should().Be(instance);
+        var range = await verify.PlateRanges.SingleAsync(x => x.Id == detail.PlateRangeId, TestContext.Current.CancellationToken);
+        range.Prefix.Should().Be(PlateRangeRules.NonStandardFormatPrefix);
+        range.RangeFrom.Should().Be(PlateRangeRules.NonStandardFormatNumber);
+        range.RangeTo.Should().Be(PlateRangeRules.NonStandardFormatNumber);
+    }
+
+    [Fact]
+    public async Task ReserveOutOfRange_VariasNoCarro_ReusanMismoContenedorNsf()
+    {
+        var db = NewDbName();
+        var company = Guid.NewGuid();
+        var office = Guid.NewGuid();
+
+        await using var ctx = NewContext(db);
+        var repo = new PlateRangeRepository(ctx);
+        (await repo.ReserveOutOfRangePlateAsync(company, office, "ABC12D", Guid.NewGuid(), TestContext.Current.CancellationToken))
+            .Success.Should().BeTrue();
+        (await repo.ReserveOutOfRangePlateAsync(company, office, "R12345", Guid.NewGuid(), TestContext.Current.CancellationToken))
+            .Success.Should().BeTrue();
+
+        await using var verify = NewContext(db);
+        var ranges = await verify.PlateRanges
+            .Where(r => r.TransitOfficeId == office && r.Prefix == PlateRangeRules.NonStandardFormatPrefix)
+            .ToListAsync(TestContext.Current.CancellationToken);
+        ranges.Should().ContainSingle();
+        (await verify.PlateRangeDetails.CountAsync(d => d.TransitOfficeId == office, TestContext.Current.CancellationToken))
+            .Should().Be(2);
     }
 
     [Fact] // AC3 — la placa ya está registrada (no disponible) → falla con mensaje legible.
