@@ -10,7 +10,6 @@ import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBounda
 import { useToast } from "@/components/admin/Toast";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { InlineAlert } from "@/components/atom/InlineAlert";
-import { SectionTabs } from "@/components/atom/SectionTabs";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import {
@@ -51,6 +50,10 @@ const ICONO_MEDIO: Record<MedioPago, LucideIcon> = {
 const NOMBRE_CONCEPTO: Record<ConceptoCobro, string> = {
   TRAMITE: "Valor del trámite",
   GESTION: "Valor de la gestión",
+};
+const NOMBRE_CORTO: Record<ConceptoCobro, string> = {
+  TRAMITE: "Trámite",
+  GESTION: "Gestión",
 };
 
 const cop = new Intl.NumberFormat("es-CO", {
@@ -121,7 +124,6 @@ export function OtCobroMediosSection({
   nombrePrecios = "Precios",
 }: OtCobroMediosSectionProps) {
   const baseId = useId();
-  const [medioActivo, setMedioActivo] = useState<MedioPago>("PASARELA");
   const { show } = useToast();
   const [cobro, setCobro] = useState<CobroPortal | null>(null);
   const [status, setStatus] = useState<UiStatus>("loading");
@@ -227,26 +229,43 @@ export function OtCobroMediosSection({
     );
   }
 
-  const idNotaGestion = (method: MedioPago) => `${baseId}-gestion-${method}`;
+  const idNotaGestion = `${baseId}-gestion`;
+  const tipos = cobro?.tipos ?? [];
+  const gestionBloqueada = tipos.some((t) =>
+    t.medios.some((m) => m.conceptos.some((c) => c.charge === "GESTION" && !c.editable)),
+  );
 
-  function celdaConcepto(tipo: TipoCobro, method: MedioPago, charge: ConceptoCobro): ReactNode {
-    const medio = tipo.medios.find((m) => m.method === method);
-    const c = medio?.conceptos.find((x) => x.charge === charge);
-    if (!medio || !c) return <span className="text-xs text-[#59677D] dark:text-white/70">No aplica</span>;
-    const clave = `${tipo.tipoTramiteId}|${method}|${charge}`;
-    const nombre = `${NOMBRE_CONCEPTO[charge]}, ${NOMBRE_MEDIO[method]}, ${tipo.nombre}`;
+  /** El monto es del trámite, no del medio: es el mismo en todos los medios. */
+  function celdaMonto(tipo: TipoCobro, charge: ConceptoCobro): ReactNode {
+    const monto = tipo.medios
+      .flatMap((m) => m.conceptos)
+      .find((c) => c.charge === charge)?.montoCop;
+    return monto && monto > 0 ? (
+      <span className="text-sm font-semibold tabular-nums text-flit-primary dark:text-white">
+        {cop.format(monto)}
+      </span>
+    ) : (
+      <span className="text-sm text-[#59677D] dark:text-white/70">Sin monto</span>
+    );
+  }
+
+  function interruptor(tipo: TipoCobro, medio: MedioDeTipo, charge: ConceptoCobro): ReactNode {
+    const c = medio.conceptos.find((x) => x.charge === charge);
+    if (!c) return null;
+    const clave = `${tipo.tipoTramiteId}|${medio.method}|${charge}`;
+    const nombre = `${NOMBRE_CONCEPTO[charge]}, ${NOMBRE_MEDIO[medio.method]}, ${tipo.nombre}`;
     const motivoId = `${baseId}-motivo-${clave.replace(/[^a-zA-Z0-9]/g, "-")}`;
     const soloSuperAdmin = !c.editable && charge === "GESTION";
     const sinPermiso = !c.editable && charge !== "GESTION";
     const avisoFila = aviso?.clave === clave && aviso.conAccesoAPrecios ? aviso : null;
     const describedById = soloSuperAdmin
-      ? idNotaGestion(method)
+      ? idNotaGestion
       : sinPermiso || avisoFila
         ? motivoId
         : undefined;
     return (
       <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <CobroSwitch
             nombre={nombre}
             checked={c.enabled}
@@ -256,23 +275,17 @@ export function OtCobroMediosSection({
             onChange={(next) => moverSwitch(tipo, medio, charge, next)}
           />
           <span className="flex flex-col leading-tight">
-            <span
-              className={
-                c.enabled
-                  ? "text-sm font-semibold tabular-nums text-flit-primary dark:text-white"
-                  : "text-sm tabular-nums text-[#59677D] dark:text-white/70"
-              }
-            >
-              {c.montoCop > 0 ? cop.format(c.montoCop) : "Sin monto"}
-            </span>
-            <span className="flex items-center gap-1 text-xs text-[#59677D] dark:text-white/70">
+            <span className="flex items-center gap-1 text-sm font-semibold text-flit-primary dark:text-white">
+              {NOMBRE_CORTO[charge]}
               {soloSuperAdmin && <Lock className="h-3 w-3" aria-hidden="true" />}
+            </span>
+            <span className="text-xs text-[#59677D] dark:text-white/70">
               {c.enabled ? "Se cobra" : "No se cobra"}
             </span>
           </span>
         </div>
         {(sinPermiso || avisoFila) && (
-          <p id={motivoId} className="max-w-[18rem] text-xs text-[#59677D] dark:text-white/70">
+          <p id={motivoId} className="max-w-[14rem] text-xs text-[#59677D] dark:text-white/70">
             {avisoFila?.mensaje ?? MOTIVO_SIN_PERMISO}
             {avisoFila && (
               <>
@@ -291,131 +304,83 @@ export function OtCobroMediosSection({
     );
   }
 
-  function columnasDe(method: MedioPago): DataTableColumn<TipoCobro>[] {
-    const conceptos = (t: TipoCobro) => t.medios.find((m) => m.method === method)?.conceptos ?? [];
-    return [
-      {
-        key: "tipo",
-        header: "Trámite",
-        render: (t) => (
-          <span className="font-semibold text-flit-primary dark:text-white">{t.nombre}</span>
-        ),
-      },
-      {
-        key: "TRAMITE",
-        header: NOMBRE_CONCEPTO.TRAMITE,
-        render: (t) => celdaConcepto(t, method, "TRAMITE"),
-      },
-      {
-        key: "GESTION",
-        header: NOMBRE_CONCEPTO.GESTION,
-        render: (t) => celdaConcepto(t, method, "GESTION"),
-      },
-      {
-        key: "total",
-        header: "Total base",
-        render: (t) => {
-          const total = conceptos(t)
-            .filter((c) => c.enabled)
-            .reduce((suma, c) => suma + c.montoCop, 0);
-          return total > 0 ? (
-            <span className="text-sm font-semibold tabular-nums text-flit-primary dark:text-white">
-              {cop.format(total)}
-            </span>
-          ) : (
-            <span className="text-sm text-[#59677D] dark:text-white/70">Sin cobro</span>
-          );
-        },
-      },
-      {
-        key: "estado",
-        header: "En el portal",
-        render: (t) => {
-          const medio = t.medios.find((m) => m.method === method);
-          return medio?.ofrecido ? (
+  function celdaMedio(tipo: TipoCobro, method: MedioPago): ReactNode {
+    const medio = tipo.medios.find((m) => m.method === method);
+    if (!medio) return <span className="text-xs text-[#59677D] dark:text-white/70">No aplica</span>;
+    const total = medio.conceptos.filter((c) => c.enabled).reduce((suma, c) => suma + c.montoCop, 0);
+    return (
+      <div className="flex flex-wrap items-start gap-x-5 gap-y-2">
+        {interruptor(tipo, medio, "TRAMITE")}
+        {interruptor(tipo, medio, "GESTION")}
+        <div className="flex flex-col items-start gap-1 leading-tight">
+          <span className="text-sm font-semibold tabular-nums text-flit-primary dark:text-white">
+            {total > 0 ? cop.format(total) : "Sin cobro"}
+          </span>
+          {medio.ofrecido ? (
             <StatusBadge label="Se ofrece" tone="success" />
           ) : (
             <StatusBadge label="No se ofrece" tone="neutral" />
-          );
-        },
-      },
-    ];
+          )}
+        </div>
+      </div>
+    );
   }
 
-  const tipos = cobro?.tipos ?? [];
+  const columnas: DataTableColumn<TipoCobro>[] = [
+    {
+      key: "tipo",
+      header: "Trámite",
+      render: (t) => (
+        <span className="font-semibold text-flit-primary dark:text-white">{t.nombre}</span>
+      ),
+    },
+    { key: "TRAMITE", header: NOMBRE_CONCEPTO.TRAMITE, render: (t) => celdaMonto(t, "TRAMITE") },
+    { key: "GESTION", header: NOMBRE_CONCEPTO.GESTION, render: (t) => celdaMonto(t, "GESTION") },
+    ...medios.map<DataTableColumn<TipoCobro>>((m) => ({
+      key: m.method,
+      header: `Se cobra en ${NOMBRE_MEDIO[m.method]}`,
+      render: (t) => celdaMedio(t, m.method),
+    })),
+  ];
 
-  function panelMedio(m: { method: MedioPago; enabled: boolean }): ReactNode {
+  function tarjetaMedio(m: { method: MedioPago; enabled: boolean }): ReactNode {
     const Icono = ICONO_MEDIO[m.method];
     const ofrecidos = tipos.filter(
       (t) => t.medios.find((x) => x.method === m.method)?.ofrecido,
     ).length;
-    const gestionBloqueada = tipos.some((t) =>
-      t.medios
-        .find((x) => x.method === m.method)
-        ?.conceptos.some((c) => c.charge === "GESTION" && !c.editable),
-    );
     return (
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center gap-4 rounded-[14px] border border-[#DFE5ED] bg-white p-4 dark:border-white/10 dark:bg-[#162744]">
-          <span
-            aria-hidden="true"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#E6EFFC] text-[#557EFF] dark:bg-white/10 dark:text-white"
-          >
-            <Icono className="h-5 w-5" />
-          </span>
-          <div className="min-w-[12rem] flex-1">
-            <p className="text-base font-semibold text-flit-primary dark:text-white">
-              {NOMBRE_MEDIO[m.method]}
-            </p>
-            <p className="text-sm text-[#59677D] dark:text-white/70">{AYUDA_MEDIO[m.method]}</p>
-          </div>
-          <p className="text-sm text-[#59677D] dark:text-white/70">
+      <div
+        key={m.method}
+        className="flex flex-wrap items-center gap-4 rounded-[14px] border border-[#DFE5ED] bg-white p-4 dark:border-white/10 dark:bg-[#162744]"
+      >
+        <span
+          aria-hidden="true"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#E6EFFC] text-[#557EFF] dark:bg-white/10 dark:text-white"
+        >
+          <Icono className="h-5 w-5" />
+        </span>
+        <div className="min-w-[12rem] flex-1">
+          <p className="text-base font-semibold text-flit-primary dark:text-white">
+            {NOMBRE_MEDIO[m.method]}
+          </p>
+          <p className="text-sm text-[#59677D] dark:text-white/70">{AYUDA_MEDIO[m.method]}</p>
+          <p className="text-xs font-semibold text-[#59677D] dark:text-white/70">
             {m.enabled
               ? `${ofrecidos} de ${tipos.length} trámites se ofrecen`
-              : "La persona no ve este medio"}
+              : "La persona no ve este medio. Sus interruptores se aplican cuando lo enciendas."}
           </p>
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-flit-primary dark:text-white">
-              {m.enabled ? "Activado" : "Desactivado"}
-            </span>
-            <CobroSwitch
-              nombre={NOMBRE_MEDIO[m.method]}
-              checked={m.enabled}
-              busy={guardando === `medio|${m.method}`}
-              onChange={(next) => moverMedio(m.method, next)}
-            />
-          </div>
         </div>
-
-        {!m.enabled && (
-          <InlineAlert tone="warning" title="Este medio está apagado">
-            Puedes dejar listos sus valores: se aplican cuando lo enciendas.
-          </InlineAlert>
-        )}
-
-        {gestionBloqueada && (
-          <p
-            id={idNotaGestion(m.method)}
-            className="flex items-center gap-1.5 text-xs text-[#59677D] dark:text-white/70"
-          >
-            <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            {MOTIVO_GESTION_SOLO_SUPERADMIN}
-          </p>
-        )}
-
-        <DataTable<TipoCobro>
-          ariaLabel={`Valores que se cobran por trámite con ${NOMBRE_MEDIO[m.method]}`}
-          columns={columnasDe(m.method)}
-          rows={pg.paginar(tipos)}
-          getRowKey={(t) => t.tipoTramiteId}
-          pagination={{
-            page: pg.page,
-            pageSize: pg.pageSize,
-            totalCount: tipos.length,
-            onPageChange: pg.setPage,
-            onPageSizeChange: pg.setPageSize,
-          }}
-        />
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-flit-primary dark:text-white">
+            {m.enabled ? "Activado" : "Desactivado"}
+          </span>
+          <CobroSwitch
+            nombre={NOMBRE_MEDIO[m.method]}
+            checked={m.enabled}
+            busy={guardando === `medio|${m.method}`}
+            onChange={(next) => moverMedio(m.method, next)}
+          />
+        </div>
       </div>
     );
   }
@@ -425,7 +390,7 @@ export function OtCobroMediosSection({
       <PnSeccionHeader
         id="pn-cobro-medios-titulo"
         titulo="Medios de pago"
-        descripcion={`Enciende lo que se cobra en cada trámite. Los montos se cambian en ${nombrePrecios}.`}
+        descripcion={`Cada valor es uno solo y se cambia en ${nombrePrecios}. Aquí eliges si se cobra en cada medio de pago.`}
         accion={
           <PnLinkButton onClick={onIrAPrecios} ariaLabel={`Ir a ${nombrePrecios}`}>
             Ir a {nombrePrecios}
@@ -443,6 +408,10 @@ export function OtCobroMediosSection({
         }}
       >
         <div className="flex flex-col gap-4">
+          <div className={medios.length > 1 ? "grid gap-4 lg:grid-cols-2" : "grid gap-4"}>
+            {medios.map(tarjetaMedio)}
+          </div>
+
           {aviso && !aviso.conAccesoAPrecios && (
             <InlineAlert tone="warning" title="Medio sin cobro">
               {aviso.mensaje}
@@ -454,23 +423,32 @@ export function OtCobroMediosSection({
             </InlineAlert>
           )}
 
-          {medios.length > 1 ? (
-            <SectionTabs<MedioPago>
-              ariaLabel="Medios de pago del portal"
-              active={medioActivo}
-              onChange={setMedioActivo}
-              tabs={medios.map((m) => ({
-                id: m.method,
-                label: NOMBRE_MEDIO[m.method],
-                content: panelMedio(m),
-              }))}
-            />
-          ) : (
-            medios.map((m) => <div key={m.method}>{panelMedio(m)}</div>)
+          {gestionBloqueada && (
+            <p
+              id={idNotaGestion}
+              className="flex items-center gap-1.5 text-xs text-[#59677D] dark:text-white/70"
+            >
+              <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              {MOTIVO_GESTION_SOLO_SUPERADMIN}
+            </p>
           )}
 
+          <DataTable<TipoCobro>
+            ariaLabel="Valores por trámite y si se cobran en cada medio de pago"
+            columns={columnas}
+            rows={pg.paginar(tipos)}
+            getRowKey={(t) => t.tipoTramiteId}
+            pagination={{
+              page: pg.page,
+              pageSize: pg.pageSize,
+              totalCount: tipos.length,
+              onPageChange: pg.setPage,
+              onPageSizeChange: pg.setPageSize,
+            }}
+          />
+
           <p className="text-xs text-[#59677D] dark:text-white/70">
-            El total base no incluye el envío ni las transformaciones: se suman cuando aplican.
+            El total de cada medio suma lo que se cobra en él. No incluye el envío ni las transformaciones: se suman cuando aplican.
             {!conPin && " Si un trámite no tiene valor general, se muestra el mayor valor por organismo."}
           </p>
         </div>
