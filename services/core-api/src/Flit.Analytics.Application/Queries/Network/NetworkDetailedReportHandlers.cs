@@ -25,6 +25,12 @@ public sealed record NetworkDetailedReportRequest(
 {
     /// <summary>HU #13664 — Ver por familia: códigos visibles (<c>ProcedureFamilyCodes</c>); <c>null</c> = sin restricción.</summary>
     public IReadOnlyList<string>? AllowedFamilies { get; init; }
+
+    /// <summary>HU #14319 — código de <c>TramiteCanal</c> (validado por el endpoint); <c>null</c> = todos.</summary>
+    public string? Channel { get; init; }
+
+    /// <summary>HU #14319 — organismo del canal; <c>null</c> = sin filtro.</summary>
+    public Guid? ChannelTransitOfficeId { get; init; }
 }
 
 /// <summary>
@@ -45,8 +51,30 @@ public static class NetworkDetailedReportScope
         if (error is not null)
             return (null, error);
 
-        return (new NetworkDetailedReportFilter(
-            tenantIds!,
+        return (BuildFilter(tenantIds!, request), null);
+    }
+
+    /// <summary>
+    /// HU #14320 — filtro del modo «todas las compañías» (SuperAdmin): el conjunto de clientes es el universo
+    /// completo que entrega el repositorio y los filtros se normalizan EXACTAMENTE como en <see cref="Resolve"/>.
+    /// Quien llama ya verificó el rol; aquí no hay alcance de red que intersectar (<c>ChildTenantId</c> se ignora).
+    /// Un universo vacío no es «sin filtro»: el repositorio responde vacío sin consultar.
+    /// </summary>
+    public static (NetworkDetailedReportFilter? Filter, string? Error) ResolveAllCompanies(
+        IReadOnlySet<Guid> allTenantIds, NetworkDetailedReportRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(allTenantIds);
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.From > request.To)
+            return (null, NetworkAnalyticsScope.InvalidRange);
+
+        return (BuildFilter(allTenantIds, request), null);
+    }
+
+    private static NetworkDetailedReportFilter BuildFilter(IReadOnlySet<Guid> tenantIds, NetworkDetailedReportRequest request)
+    {
+        return new NetworkDetailedReportFilter(
+            tenantIds,
             request.From,
             request.To,
             request.TransitOfficeId,
@@ -58,7 +86,11 @@ public static class NetworkDetailedReportScope
             Normalize(request.PersonName),
             request.HasTransformation,
             request.IsLeasing)
-        { AllowedFamilies = request.AllowedFamilies }, null);
+        {
+            AllowedFamilies = request.AllowedFamilies,
+            Channel = Normalize(request.Channel),
+            ChannelTransitOfficeId = request.ChannelTransitOfficeId,
+        };
     }
 
     private static string? Normalize(string? value) =>
@@ -93,6 +125,60 @@ public sealed class GetNetworkDetailedProceduresHandler(INetworkDetailedReportRe
 
         var result = await repo.GetNetworkProceduresAsync(filter!, page, pageSize, ct).ConfigureAwait(false);
         return (new NetworkAnalyticsOutcome<NetworkDetailedProceduresPageDto>(result.Items, result.ReachedTenantIds), null);
+    }
+}
+
+/// <summary>
+/// HU #14320 — listado paginado del reporte detallado en modo «todas las compañías». El rol SuperAdmin lo
+/// verifica el endpoint ANTES de invocar este handler (un otro rol recibe 403 sin que se consulte nada).
+/// Reutiliza <see cref="INetworkDetailedReportReadRepository"/> (arreglo de tenants, sin GUC por cliente) y la
+/// misma paginación que el resto del reporte.
+/// </summary>
+public sealed class GetAllCompaniesDetailedProceduresHandler(INetworkDetailedReportReadRepository repo)
+{
+    public async Task<(NetworkAnalyticsOutcome<AllCompaniesDetailedProceduresPageDto>? Result, string? Error)> HandleAsync(
+        NetworkDetailedReportRequest request, int page, int pageSize, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var (filter, error) = await ResolveFilterAsync(repo, request, ct).ConfigureAwait(false);
+        if (error is not null)
+            return (null, error);
+
+        var safePage = page <= 0 ? 1 : page;
+        var safeSize = pageSize <= 0
+            ? GetDetailedProceduresHandler.DefaultPageSize
+            : Math.Min(pageSize, GetDetailedProceduresHandler.MaxPageSize);
+
+        var result = await repo.GetNetworkProceduresAsync(filter!, safePage, safeSize, ct).ConfigureAwait(false);
+        var p = result.Items;
+        return (new NetworkAnalyticsOutcome<AllCompaniesDetailedProceduresPageDto>(
+            new AllCompaniesDetailedProceduresPageDto(p.Items, p.TotalCount, p.Page, p.PageSize, p.Summary),
+            result.ReachedTenantIds), null);
+    }
+
+    /// <summary>Filtro resuelto del modo «todas las compañías», compartido por el listado y la exportación.</summary>
+    internal static async Task<(NetworkDetailedReportFilter? Filter, string? Error)> ResolveFilterAsync(
+        INetworkDetailedReportReadRepository repo, NetworkDetailedReportRequest request, CancellationToken ct)
+    {
+        if (request.From > request.To)
+            return (null, NetworkAnalyticsScope.InvalidRange);
+
+        var all = await repo.ListAllTenantIdsAsync(ct).ConfigureAwait(false);
+        return NetworkDetailedReportScope.ResolveAllCompanies(all, request);
+    }
+}
+
+/// <summary>
+/// HU #14320 — valida y resuelve la exportación en modo «todas las compañías»: el MISMO filtro que el listado
+/// para la misma petición (mismo universo, mismos filtros normalizados, mismas reglas de rango).
+/// </summary>
+public sealed class ExportAllCompaniesDetailedProceduresHandler(INetworkDetailedReportReadRepository repo)
+{
+    public Task<(NetworkDetailedReportFilter? Filter, string? Error)> ResolveAsync(
+        NetworkDetailedReportRequest request, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return GetAllCompaniesDetailedProceduresHandler.ResolveFilterAsync(repo, request, ct);
     }
 }
 

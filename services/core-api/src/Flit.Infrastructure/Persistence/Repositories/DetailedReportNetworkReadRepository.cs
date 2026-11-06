@@ -55,6 +55,8 @@ internal sealed class DetailedReportNetworkReadRepository : INetworkDetailedRepo
           AND (@personName::text IS NULL OR v.person_full_name ILIKE '%' || @personName::text || '%')
           AND (@hasTransformation::boolean IS NULL OR v.has_transformation = @hasTransformation::boolean)
           AND (@isLeasing::boolean IS NULL OR v.is_leasing = @isLeasing::boolean)
+          AND (@channel::text IS NULL OR v.channel = @channel::text)
+          AND (@channelOffice::uuid IS NULL OR v.channel_transit_office_id = @channelOffice::uuid)
           AND {FamilyByDetailView}
         """ + "\n";
 
@@ -63,7 +65,8 @@ internal sealed class DetailedReportNetworkReadRepository : INetworkDetailedRepo
                v.id, v.reference_number, v.procedure_type_name, v.category, v.status,
                v.created_by_display_name, v.submitted_at, v.completed_at,
                v.person_document, v.person_full_name, v.has_transformation,
-               v.transformation_detail, v.is_leasing, v.payment_type, v.transfer_type
+               v.transformation_detail, v.is_leasing, v.payment_type, v.transfer_type,
+               v.channel, v.channel_transit_office_id, v.channel_transit_office_name
         """;
 
     private const string RowOrder = "ORDER BY v.created_at DESC, v.id DESC";
@@ -121,6 +124,28 @@ internal sealed class DetailedReportNetworkReadRepository : INetworkDetailedRepo
         return new NetworkAnalyticsResult<NetworkDetailedProceduresPageDto>(
             new NetworkDetailedProceduresPageDto(items, total, page, pageSize, summary, scope),
             reached);
+    }
+
+    /// <summary>
+    /// HU #14320 — universo de clientes del modo «todas las compañías» (solo SuperAdmin; el rol lo verifica el
+    /// endpoint antes de llegar aquí). Sin parámetros del usuario: no hay nada que inyectar.
+    /// <para>
+    /// RLS: igual que el resto de este repositorio no se fija <c>app.current_tenant_id</c> (no hay un solo cliente).
+    /// Las filas llegan porque la política <c>tenant_isolation</c> de <c>tramites.*</c> no tiene FORCE y la app
+    /// conecta como owner de las tablas (convención vigente, ver DDL 105/113); si algún día se activara FORCE
+    /// habría que fijar <c>app.is_superadmin</c> y ampliar la política, y la ruta de red de las cabezas de
+    /// grupo también se vería afectada. El aislamiento real es el filtro explícito por arreglo y la compuerta de rol.
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlySet<Guid>> ListAllTenantIdsAsync(CancellationToken ct = default)
+    {
+        var conn = await OpenConnectionAsync(ct).ConfigureAwait(false);
+        await using var cmd = CreateCommand(conn, "SELECT id FROM identity.tenants;");
+        var ids = new HashSet<Guid>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        while (await reader.ReadAsync(ct).ConfigureAwait(false))
+            ids.Add(reader.GetGuid(0));
+        return ids;
     }
 
     public async Task<IReadOnlyList<Guid>> ExportNetworkProceduresAsync(
@@ -221,7 +246,10 @@ internal sealed class DetailedReportNetworkReadRepository : INetworkDetailedRepo
             reader.IsDBNull(13) ? null : reader.GetString(13),
             reader.GetBoolean(14),
             reader.GetString(15),
-            reader.IsDBNull(16) ? null : reader.GetString(16));
+            reader.IsDBNull(16) ? null : reader.GetString(16),
+            reader.GetString(17),
+            reader.IsDBNull(18) ? null : reader.GetGuid(18),
+            reader.IsDBNull(19) ? null : reader.GetString(19));
 
     // ── infraestructura ───────────────────────────────────────────────────────────────────────
 
@@ -259,6 +287,8 @@ internal sealed class DetailedReportNetworkReadRepository : INetworkDetailedRepo
         AddParam(cmd, "personName", (object?)filter.PersonName ?? DBNull.Value);
         AddParam(cmd, "hasTransformation", filter.HasTransformation.HasValue ? filter.HasTransformation.Value : DBNull.Value);
         AddParam(cmd, "isLeasing", filter.IsLeasing.HasValue ? filter.IsLeasing.Value : DBNull.Value);
+        AddParam(cmd, "channel", (object?)filter.Channel ?? DBNull.Value);
+        AddParam(cmd, "channelOffice", (object?)filter.ChannelTransitOfficeId ?? DBNull.Value);
         AnalyticsFamilyFilter.AddParam(cmd, filter.AllowedFamilies);
     }
 

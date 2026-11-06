@@ -5,6 +5,7 @@ using Flit.Analytics.Application.Abstractions;
 using Flit.Analytics.Application.Dtos;
 using Flit.Analytics.Application.Queries;
 using Flit.Queries.Domain.Time;
+using Flit.Tramites.Domain.Tramites.Enums;
 
 namespace Flit.Infrastructure.Documents;
 
@@ -28,6 +29,8 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
         "Referencia", "Tipo de trámite", "Categoría", "Estado", "Radicado por",
         "Persona documento", "Persona nombre", "Transformación", "Detalle transformación",
         "Leasing", "Tipo pago", "Tipo traspaso", "Enviado", "Completado",
+        // HU #14319 — al final, para no mover las columnas que ya existían.
+        "Canal", "OT del canal",
     ];
 
     /// <summary>Cabeceras del reporte de red: «Compañía» + las de siempre, en el mismo orden.</summary>
@@ -174,6 +177,9 @@ internal sealed class DetailedReportExcelExporter : IDetailedReportExcelExporter
         r.TransferType ?? string.Empty,
         FormatoFecha.Instante(r.SubmittedAt),
         FormatoFecha.Instante(r.CompletedAt),
+        // HU #14319 — nombre visible del catálogo; un código ajeno al catálogo se muestra tal cual en vez de ocultarse.
+        TramiteCanal.NombreVisible(TramiteCanal.Efectivo(r.Channel)) ?? r.Channel,
+        r.ChannelTransitOfficeName ?? string.Empty,
     ];
 
     /// <summary>«Compañía» + las mismas celdas de siempre (AC1/AC6: ningún enlace ni contenido de documentos).</summary>

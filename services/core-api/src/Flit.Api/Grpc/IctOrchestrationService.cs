@@ -6,6 +6,7 @@ using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
+using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
@@ -136,7 +137,9 @@ public sealed class IctOrchestrationService(
             Modalidad: null,
             ProcedureTypeCode: request.ProcedureTypeCode,
             Origin: string.IsNullOrWhiteSpace(request.Origin) ? "ict" : request.Origin.Trim(),
-            ExternalRef: externalRef);
+            ExternalRef: externalRef,
+            // HU #14318 — la integración siempre deja canal Integración, sea cual sea el origin que mande el RPC.
+            Channel: TramiteCanal.Integracion);
 
         var (summary, error) = await createHandler.HandleAsync(createRequest, context.CancellationToken);
         if (error is not null || summary is null)

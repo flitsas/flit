@@ -206,7 +206,15 @@ public sealed record ProcedureInstanceDetailDto(
     // HU #13402 — parámetro «generar improntas» de la compañía congelado al crear el trámite (JSON
     // improntaGeneracionHabilitada). El wizard (HU #13403) lo usa para ofrecer o no «generar
     // impronta». Default true = comportamiento histórico para consumidores que no lo informen.
-    bool ImprontaGeneracionHabilitada = true);
+    bool ImprontaGeneracionHabilitada = true,
+    // HU #14318 (Épica #14296) — canal por el que entró el trámite (código de TramiteCanal).
+    // Un trámite sin dato (histórico, migrado de V1) se lee como «tramites» (TramiteCanal.Efectivo).
+    // Solo lectura: el canal se fija al crear y no se edita. Aditivo: default para quien no lo informe.
+    string Channel = TramiteCanal.Tramites,
+    // Organismo del punto de atención (solo canal pn_punto) y su nombre, para mostrarlo sin otra consulta.
+    // Distinto del organismo del trámite, que puede cambiar al enviarlo al OT.
+    Guid? ChannelTransitOfficeId = null,
+    string? ChannelTransitOfficeName = null);
 
 public sealed class GetProcedureInstanceHandler(
     IProcedureInstanceRepository repo,
@@ -366,8 +374,17 @@ public sealed class GetProcedureInstanceHandler(
         // HU #12791 — el grafo del detalle no carga adjuntos: UNA lectura lean de los consolidados.
         var sources = await repo.GetConsolidadoSourcesAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false);
         var (wizard, maestro) = ConsolidadoVigenciaProyeccion.Desde(instance, sources);
+        // HU #14318 — nombre del organismo del punto (solo pn_punto): una lectura lean por id, aquí para que
+        // el detalle propio y la vista de red lo traigan igual.
+        string? channelOfficeName = null;
+        if (instance.ChannelTransitOfficeId is { } channelOfficeId)
+        {
+            var officeNames = await repo.GetTransitOfficeNamesAsync([channelOfficeId], ct).ConfigureAwait(false);
+            channelOfficeName = officeNames?.GetValueOrDefault(channelOfficeId);
+        }
+
         return ToDetail(instance, events, actorInfo, revocationEligibility, activeRevocationRequest, lastRevocationDecision)
-            with { ConsolidadoWizard = wizard, ConsolidadoMaestro = maestro };
+            with { ConsolidadoWizard = wizard, ConsolidadoMaestro = maestro, ChannelTransitOfficeName = channelOfficeName };
     }
 
     /// <summary>
@@ -593,7 +610,9 @@ public sealed class GetProcedureInstanceHandler(
             activeRevocationRequest,
             lastRevocationDecision,
             RejectedFrom: e.RejectedFrom,
-            ImprontaGeneracionHabilitada: e.ImprontaGeneracionHabilitada);
+            ImprontaGeneracionHabilitada: e.ImprontaGeneracionHabilitada,
+            Channel: TramiteCanal.Efectivo(e.Channel),
+            ChannelTransitOfficeId: e.ChannelTransitOfficeId);
     }
 
     private static readonly Dictionary<Guid, string> EmptyActorMap = [];

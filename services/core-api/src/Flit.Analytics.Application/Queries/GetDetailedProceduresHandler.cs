@@ -21,6 +21,12 @@ public sealed record GetDetailedProceduresQuery(
 {
     /// <summary>HU #13664 — Ver por familia: códigos visibles (<c>ProcedureFamilyCodes</c>); <c>null</c> = sin restricción.</summary>
     public IReadOnlyList<string>? AllowedFamilies { get; init; }
+
+    /// <summary>HU #14319 — código de <c>TramiteCanal</c> (validado por el endpoint); <c>null</c> = todos.</summary>
+    public string? Channel { get; init; }
+
+    /// <summary>HU #14319 — organismo del canal; <c>null</c> = sin filtro.</summary>
+    public Guid? ChannelTransitOfficeId { get; init; }
 }
 
 /// <summary>Consulta paginada del reporte detallado (HU #10815).</summary>
@@ -52,7 +58,11 @@ public sealed class GetDetailedProceduresHandler(IDetailedReportReadRepository r
             Normalize(query.PersonName),
             query.HasTransformation,
             query.IsLeasing)
-        { AllowedFamilies = query.AllowedFamilies };
+        {
+            AllowedFamilies = query.AllowedFamilies,
+            Channel = Normalize(query.Channel),
+            ChannelTransitOfficeId = query.ChannelTransitOfficeId,
+        };
 
         var result = await repo.GetProceduresAsync(filter, page, pageSize, ct).ConfigureAwait(false);
         return (result, null);
