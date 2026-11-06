@@ -162,14 +162,14 @@ public sealed class ImprontaGeneracionCongeladaTests
     [Fact]
     public void SubmitGate_ConGeneracionDeshabilitada_ExigeImprontaIgualQueConHabilitada()
     {
-        // AC7 — la exigencia de la impronta al radicar no depende del flag congelado: sin adjunto
-        // sigue pidiéndose (impronta_requerida) y con un adjunto subido a mano se satisface.
+        // AC7 — el flag congelado no cambia el gate. En el catálogo la impronta es opcional, así que
+        // sin adjunto no aparece impronta_requerida ni con la generación prendida ni apagada.
         var partes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         var habilitada = Matricula(true);
         var deshabilitada = Matricula(false);
 
-        SubmitGate.Evaluate(deshabilitada, partes).Should().Contain(SubmitGate.ImprontaRequerida);
+        SubmitGate.Evaluate(deshabilitada, partes).Should().NotContain(SubmitGate.ImprontaRequerida);
         SubmitGate.Evaluate(deshabilitada, partes)
             .Should().BeEquivalentTo(SubmitGate.Evaluate(habilitada, partes));
 

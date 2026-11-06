@@ -99,7 +99,7 @@ internal static class PermissionOverridesEndpoints
             Guid userId, ClaimsPrincipal caller, [FromQuery] Guid? tenantId, [FromQuery] string? productCode, [FromQuery] Guid? roleId,
             ManageUserPermissionOverridesHandler handler, [FromServices] IUserRoleAssignmentRepository roles, CancellationToken ct) =>
             Run(caller, tenantId, async (tenant, actor) =>
-                // roleId: lo que purgaría asignar ese rol (producto nuevo + productos de los roles que se cierran), como AssignRoleHandler.
+                // roleId: lo que purgaría asignar ese rol (solo el producto de ese rol), como AssignRoleHandler.
                 Results.Ok(new
                 {
                     count = roleId is { } r

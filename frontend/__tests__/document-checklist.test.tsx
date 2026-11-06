@@ -247,6 +247,27 @@ describe('DocumentChecklist — upload', () => {
     expect(msg.textContent).not.toMatch(/20 MB/);
   });
 
+  it('si el archivo ya no se puede leer, explica qué hacer y no lo sube', async () => {
+    render(<DocumentChecklist instanceId={INSTANCE} />);
+
+    await screen.findByText(/Cédula del comprador/);
+    const input = screen.getByLabelText(/Subir Cédula del comprador/) as HTMLInputElement;
+    const file = pngFile('impronta.png');
+    vi.spyOn(file, 'arrayBuffer').mockRejectedValue(
+      new DOMException(
+        'The requested file could not be read, typically due to permission problems that have occurred after a reference to a file was acquired.',
+        'NotReadableError',
+      ),
+    );
+    fireEvent.change(input, { target: { files: [file] } });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/No se pudo leer el archivo/);
+    expect(screen.getByRole('alert')).toHaveTextContent(/otro navegador/);
+    expect(screen.getByRole('alert')).toHaveTextContent(/antivirus/);
+    expect(mocks.uploadAttachment).not.toHaveBeenCalled();
+    expect(mocks.analyzeDocument).not.toHaveBeenCalled();
+  });
+
   it('rechaza por mime no permitido sin llamar al cliente', async () => {
     render(<DocumentChecklist instanceId={INSTANCE} />);
 

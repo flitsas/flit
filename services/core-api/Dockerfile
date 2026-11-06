@@ -49,18 +49,24 @@ COPY core-consultas/src/Flit.Consultas.Grpc.Contracts/ /services/core-consultas/
 COPY core-consultas/src/Flit.Consultas.Grpc.Mapping/ /services/core-consultas/src/Flit.Consultas.Grpc.Mapping/
 COPY core-notificaciones/Directory.Build.props core-notificaciones/Directory.Packages.props /services/core-notificaciones/
 COPY core-notificaciones/src/Flit.Notificaciones.Grpc.Contracts/ /services/core-notificaciones/src/Flit.Notificaciones.Grpc.Contracts/
+# HU #14050 (Épica #14021): cliente gRPC de core-personanatural (lectura por pull de la solicitud radicada).
+COPY core-personanatural/Directory.Build.props core-personanatural/Directory.Packages.props /services/core-personanatural/
+COPY core-personanatural/src/Flit.PersonaNatural.Grpc.Contracts/ /services/core-personanatural/src/Flit.PersonaNatural.Grpc.Contracts/
 COPY --from=contracts . /contracts/proto/
 # Framework-dependent (JIT): desactivar AOT y sus analizadores (IsAotCompatible),
 # que estan en true por defecto en Directory.Build.props y rompen el publish con
 # TreatWarningsAsErrors (IL2026/IL3050) al no ser un build AOT real.
-RUN dotnet publish src/Flit.Api/Flit.Api.csproj \
-    -c Release -o /app/api /p:PublishAot=false /p:IsAotCompatible=false
-RUN dotnet publish src/Flit.Gateway/Flit.Gateway.csproj \
-    -c Release -o /app/gateway /p:PublishAot=false /p:IsAotCompatible=false
-RUN dotnet publish tools/Flit.DataMigration.V1/Flit.DataMigration.V1.csproj \
-    -c Release -o /app/migrador /p:PublishAot=false /p:IsAotCompatible=false
-RUN dotnet publish tools/Flit.DataMigration.Api/Flit.DataMigration.Api.csproj \
-    -c Release -o /app/migracion-api /p:PublishAot=false /p:IsAotCompatible=false
+# Los 4 publish en UNA capa: los proyectos comunes se compilan con el de Flit.Api y los demas
+# reutilizan obj/ (incremental). Los paquetes NuGet van en una cache de BuildKit: en los runners
+# propios (driver docker) sobrevive entre builds; en GitHub el builder es efimero y no cambia nada.
+RUN --mount=type=cache,id=nuget-core-api,target=/root/.nuget/packages \
+    set -e; \
+    for p in src/Flit.Api/Flit.Api.csproj:api \
+             src/Flit.Gateway/Flit.Gateway.csproj:gateway \
+             tools/Flit.DataMigration.V1/Flit.DataMigration.V1.csproj:migrador \
+             tools/Flit.DataMigration.Api/Flit.DataMigration.Api.csproj:migracion-api; do \
+      dotnet publish "${p%%:*}" -c Release -o "/app/${p##*:}" /p:PublishAot=false /p:IsAotCompatible=false; \
+    done
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
 WORKDIR /app
@@ -68,6 +74,8 @@ COPY --from=build /app/api ./api
 COPY --from=build /app/gateway ./gateway
 COPY --from=build /app/migrador ./migrador
 COPY --from=build /app/migracion-api ./migracion-api
+# HU #14312 / ADR-0076 — PDFtoImage trae libpdfium + Skia nativos; en Alpine/musl si no cargan,
+# EnsureImportable degrada al placeholder (#14240). Validar en smoke de consolidado hostil.
 # Puerto interno por defecto (Flit.Api). El gateway lo sobreescribe via ASPNETCORE_URLS.
 EXPOSE 8081
 ENV ASPNETCORE_URLS=http://+:8081

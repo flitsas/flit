@@ -7,7 +7,7 @@ using Xunit;
 
 namespace Flit.Modules.Security.Application.Tests.UserRoles;
 
-/// <summary>HU #13646 (FB-15): el cambio de rol purga los permisos individuales del producto del rol nuevo y de los roles que cierra, atómicamente.</summary>
+/// <summary>HU #13646 (FB-15) y Bug #14010 H-10: el cambio de rol purga solo los permisos individuales del producto del rol nuevo.</summary>
 public sealed class AssignRoleHandlerPurgeTests
 {
     private static readonly Guid TenantId = Guid.NewGuid();
@@ -45,10 +45,10 @@ public sealed class AssignRoleHandlerPurgeTests
         await _repo.Received(1).CreateAssignmentAsync(Arg.Any<AssignRoleData>(), Arg.Any<CancellationToken>());
     }
 
-    // Hallazgo de la prueba funcional: Radicador (tramites) → AdminCompany (plataforma). El reemplazo cierra el rol de tramites,
-    // así que sus permisos individuales también se purgan, no solo los del producto del rol nuevo.
+    // Bug #14010 H-10: Radicador (tramites) → AdminCompany (plataforma). Se purga plataforma (el rol que se asigna)
+    // y se conservan los permisos individuales de tramites.
     [Fact]
-    public async Task Cambio_a_un_rol_de_otro_producto_purga_tambien_el_producto_del_rol_que_se_cierra()
+    public async Task Cambio_a_un_rol_de_otro_producto_conserva_los_permisos_individuales_del_producto_anterior()
     {
         var rolAnterior = Guid.NewGuid();
         _repo.GetActiveRoleAsync(RoleId, Arg.Any<CancellationToken>())
@@ -60,7 +60,7 @@ public sealed class AssignRoleHandlerPurgeTests
         await _handler.HandleAsync(Command(), CancellationToken.None);
 
         await _purger.Received(1).PurgeAsync(TenantId, UserId, "plataforma", CallerId, Arg.Any<CancellationToken>());
-        await _purger.Received(1).PurgeAsync(TenantId, UserId, "tramites", CallerId, Arg.Any<CancellationToken>());
+        await _purger.DidNotReceive().PurgeAsync(TenantId, UserId, "tramites", CallerId, Arg.Any<CancellationToken>());
         await _purger.Received(1).RunAtomicallyAsync(Arg.Any<Func<Task>>(), Arg.Any<CancellationToken>());
     }
 

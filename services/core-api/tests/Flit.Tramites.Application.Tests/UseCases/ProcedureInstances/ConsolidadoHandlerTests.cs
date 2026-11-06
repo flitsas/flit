@@ -7,6 +7,7 @@ using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Catalog;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
@@ -909,8 +910,9 @@ public sealed class ConsolidadoHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_SinImpronta_LaGeneraCuandoHayUsuario()
+    public async Task HandleAsync_SinImpronta_OpcionalEnCatalogo_NoLaGeneraAunqueHayaUsuario()
     {
+        // El catálogo de matrícula deja la impronta opcional: el consolidado no llama a Kyverum.
         var id = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
         var instance = MatriculaInstance(id, tenantId);
@@ -921,6 +923,34 @@ public sealed class ConsolidadoHandlerTests
         _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
         var impronta = new FakeImprontaGenerator();
         var handler = new GenerarConsolidadoHandler(_repo, _merger, _storage, null, null, impronta);
+
+        var (_, error) = await handler.HandleAsync(id, tenantId, Guid.NewGuid(), CancellationToken.None);
+
+        error.Should().BeNull();
+        impronta.Calls.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task HandleAsync_SinImpronta_ObligatoriaEnMatriz_LaGeneraCuandoHayUsuario()
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var instance = MatriculaInstance(id, tenantId);
+        instance.Attachments.Remove(instance.Attachments.First(a => a.Tipo == "impronta"));
+        foreach (var att in instance.Attachments)
+            _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
+
+        _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        var company = Substitute.For<IChecklistCompanyParamsProvider>();
+        company.GetForTenantAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<CompanyDocumentParam>>([]));
+        var matrix = Substitute.For<IResolvedChecklistMatrixProvider>();
+        matrix.GetForAsync(Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<ResolvedChecklistDoc>>(
+                [new ResolvedChecklistDoc("impronta", "Impronta", true, 10)]));
+        var completeness = new ChecklistMatrixCompleteness(company, matrix);
+        var impronta = new FakeImprontaGenerator();
+        var handler = new GenerarConsolidadoHandler(_repo, _merger, _storage, completeness, null, impronta);
 
         var (_, error) = await handler.HandleAsync(id, tenantId, Guid.NewGuid(), CancellationToken.None);
 
@@ -1078,9 +1108,16 @@ public sealed class ConsolidadoHandlerTests
             _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
         _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
 
+        var company = Substitute.For<IChecklistCompanyParamsProvider>();
+        company.GetForTenantAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<CompanyDocumentParam>>([]));
+        var matrix = Substitute.For<IResolvedChecklistMatrixProvider>();
+        matrix.GetForAsync(Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<ResolvedChecklistDoc>>(
+                [new ResolvedChecklistDoc("impronta", "Impronta", true, 10)]));
         var impronta = new FailingImprontaGenerator("provider_unavailable");
         var handler = new GenerarConsolidadoHandler(
-            _repo, _merger, _storage, null, null, impronta);
+            _repo, _merger, _storage, new ChecklistMatrixCompleteness(company, matrix), null, impronta);
 
         var (result, error) = await handler.HandleAsync(
             id, tenantId, Guid.NewGuid(), TestContext.Current.CancellationToken);
