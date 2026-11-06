@@ -2026,7 +2026,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
                 className={`mt-1 uppercase ${OT_INPUT_CLS}`}
               />
               <span className="mt-1 block text-[11px] font-normal opacity-70">
-                Formato ABC123. Se validará que no esté registrada y quedará en el inventario de la compañía.
+                Formatos: ABC123 (carro), ABC12D (moto), R12345 (remolque), S12345 (semirremolque) o MC029554 (maquinaria). Se validará que no esté registrada y quedará en el inventario de la compañía.
               </span>
             </label>
             <div className="mt-5 flex gap-3">

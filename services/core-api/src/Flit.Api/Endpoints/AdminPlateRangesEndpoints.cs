@@ -124,7 +124,7 @@ public static class AdminPlateRangesEndpoints
         if (!PlateRangeRules.IsValidPlate(request.Plate.Trim().ToUpperInvariant()))
         {
             return Results.Problem(statusCode: 422, title: "Unprocessable",
-                detail: "La placa debe tener el formato de matrícula (3 letras + 3 dígitos, ej. ABC123).");
+                detail: PlateRangeRules.InvalidPlateFormatMessage);
         }
 
         PlateAssignmentOutcome outcome;
@@ -307,7 +307,7 @@ public static class AdminPlateRangesEndpoints
         if (!PlateRangeRules.IsValidPlate(request.Plate.Trim().ToUpperInvariant()))
         {
             return Results.Problem(statusCode: 422, title: "Unprocessable",
-                detail: "La placa debe tener el formato de matrícula (3 letras + 3 dígitos, ej. ABC123).");
+                detail: PlateRangeRules.InvalidPlateFormatMessage);
         }
 
         PlateAssignmentOutcome outcome;
