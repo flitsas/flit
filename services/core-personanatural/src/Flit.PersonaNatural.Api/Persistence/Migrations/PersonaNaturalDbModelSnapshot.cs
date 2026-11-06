@@ -293,6 +293,56 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.CotizacionCongelada", b =>
+                {
+                    b.Property<Guid>("SolicitudId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("procedure_request_id");
+
+                    b.Property<Guid?>("AmbitoOrganismoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("scope_transit_office_id");
+
+                    b.Property<DateTimeOffset>("CongeladaEn")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("frozen_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("Lineas")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("lines");
+
+                    b.Property<string>("Medio")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("method");
+
+                    b.Property<long>("TotalCop")
+                        .HasColumnType("bigint")
+                        .HasColumnName("total_cop");
+
+                    b.Property<string>("VersionTarifa")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("tariff_version");
+
+                    b.HasKey("SolicitudId")
+                        .HasName("pk_frozen_quote");
+
+                    b.ToTable("frozen_quote", "personanatural", t =>
+                        {
+                            t.HasComment("Cotización congelada al radicar (medio, líneas, total y versión de tarifa). Solo inserción: un cambio posterior de precio o de switch no altera el trámite. Sin datos personales.");
+
+                            t.HasCheckConstraint("ck_frozen_quote_method", "method IN ('PASARELA', 'PIN')");
+
+                            t.HasCheckConstraint("ck_frozen_quote_total", "total_cop >= 0");
+                        });
+                });
+
             modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.CuotaConsulta", b =>
                 {
                     b.Property<string>("Clave")
@@ -839,6 +889,16 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .HasForeignKey("SolicitudId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_consent_procedure_request");
+                });
+
+            modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.CotizacionCongelada", b =>
+                {
+                    b.HasOne("Flit.PersonaNatural.Api.Persistence.SolicitudTramite", null)
+                        .WithOne()
+                        .HasForeignKey("Flit.PersonaNatural.Api.Persistence.CotizacionCongelada", "SolicitudId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_frozen_quote_procedure_request");
                 });
 
             modelBuilder.Entity("Flit.PersonaNatural.Api.Persistence.HistorialEstado", b =>

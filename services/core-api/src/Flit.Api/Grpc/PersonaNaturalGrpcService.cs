@@ -351,7 +351,82 @@ public sealed class PersonaNaturalGrpcService(
         if (request.Adicionales.Count > ConceptosTarifa.Adicionales.Count)
             throw Invalido("Demasiados conceptos adicionales.");
 
+        // HU #14395: sin medio la respuesta es la de siempre; con medio, solo suman los conceptos con el switch encendido.
+        var medio = Texto(request.Medio)?.ToUpperInvariant();
+        if (medio is not null && !MediosPagoPn.Todos.Contains(medio))
+            throw Invalido("medio debe ser PASARELA o PIN.");
+        var ambito = AmbitoCobro(request.AmbitoOrganismoId);
+
         var ct = context.CancellationToken;
+        var (tipo, tarifas) = await ResolverCotizableAsync(codigo, organismo, ct).ConfigureAwait(false);
+        Func<string, bool>? cobrado = null;
+        if (medio is not null)
+        {
+            var config = await portal.ConfigCobroAsync(ambito, ct).ConfigureAwait(false);
+            if (!config.MedioHabilitado(medio))
+                throw PlatformRpcErrors.ToRpcException(MedioNoDisponible, "El medio de pago no está disponible.", StatusCode.FailedPrecondition);
+            cobrado = PersonaNaturalPortalReader.ConceptosCobrados(config, tipo.Id, organismo, medio, tarifas);
+        }
+
+        var resultado = CotizadorPersonaNatural.Calcular(
+            tipo.Id, organismo, tipo.Perfil.ComplementaryTransformationsAllowed(tipo.Familia), request.Adicionales, tarifas, cobrado);
+        if (resultado.Cotizacion is not { } cotizacion)
+            throw PlatformRpcErrors.ToRpcException(CotizadorPersonaNatural.TarifaNoVigente, "No hay tarifa vigente para este organismo y tipo de trámite.", StatusCode.FailedPrecondition);
+        if (medio is not null && cotizacion.Lineas.Count == 0)
+            throw PlatformRpcErrors.ToRpcException(MedioNoDisponible, "El medio de pago no está disponible.", StatusCode.FailedPrecondition);
+
+        var respuesta = new CotizarResponse { TotalCop = cotizacion.TotalCop, VersionTarifa = cotizacion.VersionTarifa, Medio = medio ?? string.Empty };
+        respuesta.Lineas.AddRange(cotizacion.Lineas.Select(l => new LineaCobro { Codigo = l.Codigo, Nombre = l.Nombre, Subtitulo = l.Subtitulo, ValorCop = l.ValorCop }));
+        respuesta.AdicionalesNoAplicados.AddRange(cotizacion.AdicionalesNoAplicados);
+        return respuesta;
+    }
+
+    /// <summary>
+    /// HU #14395 — medios de pago que el portal ofrece para un tipo y un organismo: bandera encendida y al menos un concepto
+    /// encendido. Lee la configuración en cada llamada (sin caché): lo recién guardado se refleja de inmediato. Cada medio trae
+    /// el total base (derechos de tránsito y servicio FLIT encendidos), sin adicionales.
+    /// </summary>
+    public override async Task<ListarMediosPagoResponse> ListarMediosPago(ListarMediosPagoRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Verificar(context);
+        var codigo = Texto(request.TipoTramiteCodigo) ?? throw Invalido("tipo_tramite_codigo es obligatorio.");
+        if (!Guid.TryParse(Texto(request.OrganismoId), out var organismo))
+            throw Invalido("organismo_id es obligatorio y debe ser un identificador válido.");
+        var ambito = AmbitoCobro(request.AmbitoOrganismoId);
+
+        var ct = context.CancellationToken;
+        var (tipo, tarifas) = await ResolverCotizableAsync(codigo, organismo, ct).ConfigureAwait(false);
+        var config = await portal.ConfigCobroAsync(ambito, ct).ConfigureAwait(false);
+        var respuesta = new ListarMediosPagoResponse();
+        foreach (var medio in MediosPagoPn.DelPortal(ambito is null))
+        {
+            if (!config.MedioHabilitado(medio))
+                continue;
+            var resultado = CotizadorPersonaNatural.Calcular(
+                tipo.Id, organismo, false, [], tarifas, PersonaNaturalPortalReader.ConceptosCobrados(config, tipo.Id, organismo, medio, tarifas));
+            if (resultado.Cotizacion is not { Lineas.Count: > 0 } cotizacion)
+                continue;
+            var item = new MedioPago { Medio = medio, TotalCop = cotizacion.TotalCop };
+            item.Lineas.AddRange(cotizacion.Lineas.Select(l => new LineaCobro { Codigo = l.Codigo, Nombre = l.Nombre, Subtitulo = l.Subtitulo, ValorCop = l.ValorCop }));
+            respuesta.Medios.Add(item);
+        }
+
+        return respuesta;
+    }
+
+    /// <summary>Error estable cuando el medio pedido no se ofrece (bandera apagada o sin conceptos encendidos).</summary>
+    public const string MedioNoDisponible = "medio_no_disponible";
+
+    private static Guid? AmbitoCobro(string? valor) =>
+        Texto(valor) is not { } texto ? null : Guid.TryParse(texto, out var id) ? id : throw Invalido("ambito_organismo_id no es un identificador válido.");
+
+    /// <summary>
+    /// Validaciones comunes de cotizar y de listar medios: el tipo existe y está habilitado, el organismo está habilitado y
+    /// hay tarifas vigentes. Errores estables: tipo_no_disponible, organismo_no_habilitado, tipo_no_habilitado.
+    /// </summary>
+    private async Task<(TipoPersonaNatural Tipo, IReadOnlyList<TarifaVigente> Tarifas)> ResolverCotizableAsync(string codigo, Guid organismo, CancellationToken ct)
+    {
         var tipos = await tiposReader.ListarAsync(ct, codigo).ConfigureAwait(false);
         if (tipos.Count == 0)
             throw PlatformRpcErrors.ToRpcException("tipo_no_disponible", "El tipo de trámite no está disponible.", StatusCode.NotFound);
@@ -362,16 +437,7 @@ public sealed class PersonaNaturalGrpcService(
         if (!tipo.Elegibilidad.Elegible)
             throw PlatformRpcErrors.ToRpcException("tipo_no_habilitado", "El tipo de trámite no está habilitado para Persona Natural en este organismo.", StatusCode.FailedPrecondition);
 
-        var tarifas = await portal.TarifasVigentesAsync(portal.HoyColombia(), ct).ConfigureAwait(false);
-        var resultado = CotizadorPersonaNatural.Calcular(
-            tipo.Id, organismo, tipo.Perfil.ComplementaryTransformationsAllowed(tipo.Familia), request.Adicionales, tarifas);
-        if (resultado.Cotizacion is not { } cotizacion)
-            throw PlatformRpcErrors.ToRpcException(CotizadorPersonaNatural.TarifaNoVigente, "No hay tarifa vigente para este organismo y tipo de trámite.", StatusCode.FailedPrecondition);
-
-        var respuesta = new CotizarResponse { TotalCop = cotizacion.TotalCop, VersionTarifa = cotizacion.VersionTarifa };
-        respuesta.Lineas.AddRange(cotizacion.Lineas.Select(l => new LineaCobro { Codigo = l.Codigo, Nombre = l.Nombre, Subtitulo = l.Subtitulo, ValorCop = l.ValorCop }));
-        respuesta.AdicionalesNoAplicados.AddRange(cotizacion.AdicionalesNoAplicados);
-        return respuesta;
+        return (tipo, await portal.TarifasVigentesAsync(portal.HoyColombia(), ct).ConfigureAwait(false));
     }
 
     /// <summary>

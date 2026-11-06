@@ -44,6 +44,8 @@ public static class CotizacionesEndpoints
             services.TryAddSingleton<IFachadaTramites, FachadaTramitesNoConfigurada>();
         }
 
+        MediosPagoRegistro.Registrar(services, coreApi is not null);
+
         if (Uri.TryCreate(opciones.NotificacionesAddress, UriKind.Absolute, out var notificaciones))
         {
             services.AddFlitGrpcClient<NotificacionesService.NotificacionesServiceClient>(configuration, notificaciones, EnviadorCotizacionGrpc.Scope);
@@ -78,10 +80,29 @@ public static class CotizacionesEndpoints
             return Atender(async () => Results.Ok(await s.TiposAsync(string.IsNullOrWhiteSpace(organismoId) ? null : organismoId, ct).ConfigureAwait(false)));
         });
 
-        grupo.MapPost("/cotizaciones", (CotizarSolicitud body, CotizacionesService s, CancellationToken ct) =>
+        // HU #14395: medios de pago que la web ofrece para un tipo y un organismo (sin PIN: es del punto). Sin caché, como el catálogo:
+        // una bandera o un switch recién guardados se ven en la siguiente consulta.
+        grupo.MapGet("/medios-pago", (string? organismoId, string? tipoCodigo, HttpContext http, IFachadaMediosPago medios, CancellationToken ct) =>
+        {
+            http.Response.Headers.CacheControl = "no-store";
+            if (!Validar(organismoId, tipoCodigo, null, out var detalle))
+                return Task.FromResult(Problema(StatusCodes.Status400BadRequest, "Datos inválidos", detalle, "datos_invalidos"));
+            return Atender(async () => Results.Ok(await medios.ListarMediosPagoAsync(tipoCodigo!.Trim(), organismoId!.Trim(), null, ct).ConfigureAwait(false)));
+        });
+
+        grupo.MapPost("/cotizaciones", (CotizarSolicitud body, CotizacionesService s, IFachadaMediosPago medios, CancellationToken ct) =>
         {
             if (!Validar(body?.OrganismoId, body?.TipoCodigo, body?.Adicionales, out var detalle))
                 return Task.FromResult(Problema(StatusCodes.Status400BadRequest, "Datos inválidos", detalle, "datos_invalidos"));
+            // HU #14395: con medio se cotizan solo los conceptos encendidos en él; sin medio, la respuesta es la de siempre.
+            if (body!.Medio is { } medio)
+            {
+                var m = medio.Trim().ToUpperInvariant();
+                if (m is not ("PASARELA" or "PIN"))
+                    return Task.FromResult(Problema(StatusCodes.Status400BadRequest, "Datos inválidos", "El medio de pago no es válido.", "datos_invalidos"));
+                return Atender(async () => Results.Ok(await medios.CotizarConMedioAsync(body.TipoCodigo!.Trim(), body.OrganismoId!.Trim(), body.Adicionales ?? [], m, null, ct).ConfigureAwait(false)));
+            }
+
             return Atender(async () => Results.Ok(await s.CotizarAsync(body!.TipoCodigo!.Trim(), body.OrganismoId!.Trim(), body.Adicionales ?? [], ct).ConfigureAwait(false)));
         }).ConCaptcha();
 
@@ -145,7 +166,7 @@ public static class CotizacionesEndpoints
     private static IResult Problema(int estado, string titulo, string detalle, string codigo) => SesionEndpoints.Problema(estado, titulo, detalle, codigo);
 }
 
-public sealed record CotizarSolicitud(string? OrganismoId, string? TipoCodigo, string[]? Adicionales);
+public sealed record CotizarSolicitud(string? OrganismoId, string? TipoCodigo, string[]? Adicionales, string? Medio = null);
 
 public sealed record EnviarCotizacionSolicitud(string? OrganismoId, string? TipoCodigo, string[]? Adicionales, string? Correo);
 

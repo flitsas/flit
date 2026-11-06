@@ -612,7 +612,7 @@ public sealed partial class SolicitudesService(
     internal static ReglaDeNegocioException TipoNoDisponible() =>
         new(StatusCodes.Status409Conflict, CodigoTipoNoDisponible, "Trámite no disponible", "Este tipo de trámite ya no está disponible en el portal.");
 
-    private static bool EsCanalPunto(string? datosJson)
+    internal static bool EsCanalPunto(string? datosJson)
     {
         try
         {
