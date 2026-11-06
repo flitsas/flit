@@ -226,7 +226,9 @@ public sealed class CreateProcedureInstanceFromConsultaHandler(
                 // En Ruta Corta manda el organismo del RUNT, no el que envíe el cliente.
                 secretaria?.Id ?? request.TransitOfficeId,
                 Modalidad: request.Modalidad,
-                ProcedureTypeCode: procedureType?.Code),
+                ProcedureTypeCode: procedureType?.Code,
+                // HU #14318 — alta del gestor (asistente, consulta y carga masiva): canal Trámites, sin OT del canal.
+                Channel: TramiteCanal.Tramites),
             ct);
 
         if (createError is not null || summary is null)

@@ -172,6 +172,88 @@ public sealed class PersonaNaturalRadicacionPostgresTests(WebApplicationFactory<
         primera.Estado.Should().Be("borrador", "el resultado «creada» lleva el estado real del trámite: borrador");
     }
 
+    // ── HU #14318 · canal del trámite ─────────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("web")]
+    [InlineData("")]
+    public async Task AC2_SolicitudSinCanalDePunto_CreaElTramiteConCanalPnWebYSinOt(string? canal)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        await using var e = await Escenario.CrearAsync(host, ct);
+        var solicitud = e.Solicitud(partes: [e.Parte("comprador", "1000000010"), e.Parte("vendedor", "1000000011")], canal: canal);
+        await e.SembrarValidacionesAsync(solicitud, ct);
+
+        var resultado = await e.ProcesarAsync(new PortalFalso(solicitud), e.Evento(), ct);
+
+        resultado.Creada.Should().BeTrue(resultado.Codigo);
+        var tramite = (await e.TramitesAsync(ct)).Should().ContainSingle().Which;
+        tramite.Channel.Should().Be("pn_web");
+        tramite.ChannelTransitOfficeId.Should().BeNull();
+        (await e.ObservacionesAsync(tramite.Id, ct)).Should().BeNull("el portal web no deja marca");
+    }
+
+    [Theory]
+    [InlineData("pn_punto")]
+    [InlineData("PN_PUNTO")]
+    public async Task AC3_SolicitudDelPunto_CreaElTramiteConCanalPnPuntoYElOrganismoDeLaSolicitud(string canal)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        await using var e = await Escenario.CrearAsync(host, ct);
+        var solicitud = e.Solicitud(partes: [e.Parte("comprador", "1000000012"), e.Parte("vendedor", "1000000013")], canal: canal);
+        await e.SembrarValidacionesAsync(solicitud, ct);
+
+        var resultado = await e.ProcesarAsync(new PortalFalso(solicitud), e.Evento(), ct);
+
+        resultado.Creada.Should().BeTrue(resultado.Codigo);
+        var tramite = (await e.TramitesAsync(ct)).Should().ContainSingle().Which;
+        tramite.Channel.Should().Be("pn_punto");
+        tramite.ChannelTransitOfficeId.Should().Be(e.Organismo, "el OT del canal es el organismo de la solicitud");
+        (await e.ObservacionesAsync(tramite.Id, ct)).Should().Be(PersonaNaturalCreador.MarcaCanalPunto, "la marca visible no cambia");
+    }
+
+    [Fact]
+    public async Task AC7_ElReintentoSobreElBorradorExistente_NoCambiaElCanalNiElOtDelCanal()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        await using var e = await Escenario.CrearAsync(host, ct);
+        var partes = new[] { e.Parte("comprador", "1000000014"), e.Parte("vendedor", "1000000015") };
+        var primera = e.Solicitud(partes: partes, canal: "pn_punto");
+        await e.SembrarValidacionesAsync(primera, ct);
+        var creada = await e.ProcesarAsync(new PortalFalso(primera), e.Evento(), ct);
+        creada.Creada.Should().BeTrue(creada.Codigo);
+
+        // El reintento (otro mensaje del mismo evento) llega con otro canal en la solicitud: el borrador se retoma tal cual.
+        var reintento = await e.ProcesarAsync(new PortalFalso(e.Solicitud(partes: partes, canal: null)), e.Evento(), ct);
+
+        reintento.ProcedureInstanceId.Should().Be(creada.ProcedureInstanceId);
+        var tramite = (await e.TramitesAsync(ct)).Should().ContainSingle().Which;
+        tramite.Channel.Should().Be("pn_punto");
+        tramite.ChannelTransitOfficeId.Should().Be(e.Organismo);
+    }
+
+    [Fact]
+    public async Task AC7_UnBorradorAnteriorSinCanal_SeRetomaSinAsignarleCanal()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var host = Host();
+        await using var e = await Escenario.CrearAsync(host, ct);
+        await e.SembrarTramiteAsync(origen: "persona_natural", externalRef: e.SolicitudId.ToString(), empresa: PlatformTenants.PersonaNatural, ct, estado: "borrador");
+        var solicitud = e.Solicitud(partes: [e.Parte("comprador", "1000000016"), e.Parte("vendedor", "1000000017")], canal: "pn_punto");
+        await e.SembrarValidacionesAsync(solicitud, ct);
+
+        var resultado = await e.ProcesarAsync(new PortalFalso(solicitud), e.Evento(), ct);
+
+        resultado.Creada.Should().BeTrue(resultado.Codigo);
+        var tramite = (await e.TramitesAsync(ct)).Should().ContainSingle().Which;
+        tramite.Channel.Should().BeNull("el reintento no toca el canal: el backfill es quien lo asigna a los anteriores");
+        tramite.ChannelTransitOfficeId.Should().BeNull();
+    }
+
     [Fact]
     public async Task LaValidacionDeOtraSolicitud_NuncaSeLigaAlTramite_NiSeBuscaPorDocumento()
     {
@@ -248,9 +330,20 @@ public sealed class PersonaNaturalRadicacionPostgresTests(WebApplicationFactory<
         public RadicacionSolicitadaDatos Evento(string? tipo = null, Guid? organismo = null) =>
             new(SolicitudId, "PN-2026-000001", tipo ?? Codigo, 1, "huella", organismo ?? Organismo, [], null, "llave-" + SolicitudId, Guid.NewGuid());
 
-        public SolicitudPortal Solicitud(IReadOnlyList<ParteSolicitudPortal>? partes = null) =>
+        public SolicitudPortal Solicitud(IReadOnlyList<ParteSolicitudPortal>? partes = null, string? canal = null) =>
             new(SolicitudId, "PN-2026-000001", Codigo, 1, "huella", Organismo, "Organismo", null, null,
-                new Dictionary<string, string>(), DatosSolicitudPortal.Vacios, partes ?? [], [], "llave-" + SolicitudId, Guid.NewGuid().ToString());
+                new Dictionary<string, string>(), canal is null ? DatosSolicitudPortal.Vacios : new DatosSolicitudPortal(null, null, null, canal),
+                partes ?? [], [], "llave-" + SolicitudId, Guid.NewGuid().ToString());
+
+        /// <summary>Texto de la observación guardada en el trámite (<c>field_key = observaciones</c>), o null si no hay.</summary>
+        public async Task<string?> ObservacionesAsync(Guid tramite, CancellationToken ct)
+        {
+            Db.ChangeTracker.Clear();
+            return await Db.Set<ProcedureInstanceFieldValue>().AsNoTracking()
+                .Where(f => f.ProcedureInstanceId == tramite && f.FieldKey == "observaciones")
+                .Select(f => f.ValueText)
+                .FirstOrDefaultAsync(ct);
+        }
 
         public ParteSolicitudPortal Parte(string rol, string documento, string tipoDocumento = "CC", string estado = "aprobada") =>
             new(rol, 1, tipoDocumento, documento, "Persona de prueba", $"p{documento}@correo.test", "3001112233", "Calle 1", Guid.NewGuid(), estado);

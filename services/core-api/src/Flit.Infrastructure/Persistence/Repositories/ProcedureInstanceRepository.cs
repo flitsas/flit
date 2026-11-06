@@ -472,6 +472,22 @@ internal sealed partial class ProcedureInstanceRepository(
         return rows.ToDictionary(r => r.Id, r => r.LegalName);
     }
 
+    public async Task<IReadOnlyDictionary<Guid, string>> GetTransitOfficeNamesAsync(
+        IReadOnlyCollection<Guid> transitOfficeIds, CancellationToken ct)
+    {
+        if (transitOfficeIds.Count == 0)
+            return new Dictionary<Guid, string>();
+
+        var distinct = transitOfficeIds.Distinct().ToList();
+        var rows = await db.TransitOffices
+            .AsNoTracking()
+            .Where(o => distinct.Contains(o.Id))
+            .Select(o => new { o.Id, o.Name })
+            .ToListAsync(ct);
+
+        return rows.ToDictionary(r => r.Id, r => r.Name);
+    }
+
     public async Task<IReadOnlyDictionary<Guid, string>> GetUserDisplayNamesAsync(
         IReadOnlyCollection<Guid> userIds, CancellationToken ct)
     {

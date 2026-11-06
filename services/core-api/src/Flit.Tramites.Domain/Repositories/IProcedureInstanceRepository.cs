@@ -133,6 +133,13 @@ public interface IProcedureInstanceRepository
         IReadOnlyCollection<Guid> tenantIds, CancellationToken ct = default);
 
     /// <summary>
+    /// HU #14318 — nombre de cada organismo de tránsito indicado (<c>catalogs.transit_offices</c>), para
+    /// mostrar el OT del canal en el detalle. Mapa id→nombre en una consulta; ids sin organismo se omiten.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> GetTransitOfficeNamesAsync(
+        IReadOnlyCollection<Guid> transitOfficeIds, CancellationToken ct = default);
+
+    /// <summary>
     /// HU #11056 — resuelve el nombre visible de cada usuario indicado, para la columna "Gestor" del
     /// listado (la persona que radica, <c>created_by_user_id</c>). Devuelve un mapa id→nombre en UNA
     /// consulta (<c>WHERE id IN …</c>): la columna no debe costar una petición por fila. Los ids sin

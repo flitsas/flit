@@ -9516,6 +9516,15 @@ namespace Flit.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("assigned_to_user_id");
 
+                    b.Property<string>("Channel")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("channel");
+
+                    b.Property<Guid?>("ChannelTransitOfficeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("channel_transit_office_id");
+
                     b.Property<string>("ChecklistEstado")
                         .IsRequired()
                         .ValueGeneratedOnAdd()

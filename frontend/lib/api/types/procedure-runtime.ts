@@ -377,6 +377,13 @@ export interface InstanceSummary {
 export type TramiteFuente = 'dashboard' | 'integracion' | 'migrado';
 
 /**
+ * Épica #14296 — canal por el que entró el trámite (código del contrato). Distinto de `fuente`: la
+ * fuente es la columna del listado de trámites; el canal es el eje de Reportes Detallados y del
+ * detalle.
+ */
+export type TramiteCanal = 'tramites' | 'pn_web' | 'pn_punto' | 'integracion' | 'aplicacion';
+
+/**
  * Cómo queda acreditada una parte en el listado. Son los ÚNICOS tres estados válidos:
  * - `pendiente`: la validación de identidad no se ha realizado (y no hay firma del baúl).
  * - `firmado`: identidad validada y aprobada, o firma del baúl vigente.
@@ -548,6 +555,14 @@ export interface Actor {
 export interface ProcedureInstanceDetail {
   id: string;
   referenceNumber: string;
+  /**
+   * HU #14322 (Épica #14296) — canal de entrada. Ausente en un backend anterior al campo o en un
+   * trámite histórico: la pantalla lo muestra como «Trámites».
+   */
+  channel?: TramiteCanal | null;
+  /** Solo con canal `pn_punto`: el OT del punto. */
+  channelTransitOfficeId?: string | null;
+  channelTransitOfficeName?: string | null;
   status: InstanceStatus;
   /** ADR-0059 — origen del último rechazo; `preasignacion` pinta «Rechazado preasignación». */
   rejectedFrom?: RejectedFrom | null;
