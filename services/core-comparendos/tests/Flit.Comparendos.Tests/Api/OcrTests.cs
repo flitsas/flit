@@ -571,13 +571,64 @@ public sealed class OcrTests(ApiConOcr api) : IClassFixture<ApiConOcr>
         (await Json(await cliente.GetAsync($"/api/v1/comparendos/ocr/documentos/{n19.Id}", ct), ct)).GetProperty("avisoNumero").GetString().Should().Contain("20");
         (await cliente.PostAsync($"/api/v1/comparendos/ocr/documentos/{n19.Id}/registrar", null, ct)).EnsureSuccessStatusCode();
     }
+
+    /// <summary>HU #14364 / GDC ID5: al registrar OCR con ApiRenting, la consulta de conductor corre de inmediato.</summary>
+    [Fact]
+    public async Task Registrar_ConApiRenting_ConsultaConductorDeInmediato()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        api.Reloj.Hoy(new DateOnly(2026, 10, 9));
+        var empresa = await EmpresaAsync(api, ocr: true, consulta: true, integracion: "ApiRenting");
+        await ConsultaPorApiDeLosNitsAsync(api, empresa);
+        var cliente = api.Cliente(new UsuarioDePrueba(empresa, Operador));
+
+        api.Ocr.Responder("renting", () => OcrDePrueba.Campos("OCR-RENTING-1", placa: "XYZ124"));
+        var paquete = (await Json(await cliente.PostAsync("/api/v1/comparendos/ocr/paquetes", Paquete("Renting inmediato", ("renting.jpg", "renting")), ct), ct))
+            .GetProperty("id").GetGuid();
+        (await api.ProcesarAsync()).Should().Be(1);
+
+        var doc = (await DocumentosAsync(paquete))["renting.jpg"];
+        doc.Estado.Should().Be(EstadoDocumentoOcr.Completo);
+        (await cliente.PostAsync($"/api/v1/comparendos/ocr/documentos/{doc.Id}/registrar", null, ct)).EnsureSuccessStatusCode();
+
+        var c = await api.EnDbAsync(db => db.Comparendos.Include(x => x.Contraventor)
+            .SingleAsync(x => x.TenantId == empresa && x.NumeroNormalizado == "OCRRENTING1", ct));
+        c.EstadoConsultaContraventor.Should().Be(EstadoConsultaContraventor.Encontrado);
+        c.Contraventor.Should().NotBeNull();
+        c.Contraventor!.Origen.Should().Be(OrigenContraventor.Api);
+    }
+
+    /// <summary>HU #14364: sin NIT marcado para API, el registro OCR no consulta y queda NoAplica.</summary>
+    [Fact]
+    public async Task Registrar_SinNitMarcado_NoConsultaYQuedaNoAplica()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        api.Reloj.Hoy(new DateOnly(2026, 10, 9));
+        var empresa = await EmpresaAsync(api, ocr: true, consulta: true, integracion: "ApiRenting");
+        var cliente = api.Cliente(new UsuarioDePrueba(empresa, Operador));
+
+        api.Ocr.Responder("manual", () => OcrDePrueba.Campos("OCR-RENTING-2", placa: "XYZ124"));
+        var paquete = (await Json(await cliente.PostAsync("/api/v1/comparendos/ocr/paquetes", Paquete("Sin casilla NIT", ("manual.jpg", "manual")), ct), ct))
+            .GetProperty("id").GetGuid();
+        (await api.ProcesarAsync()).Should().Be(1);
+
+        var doc = (await DocumentosAsync(paquete))["manual.jpg"];
+        (await cliente.PostAsync($"/api/v1/comparendos/ocr/documentos/{doc.Id}/registrar", null, ct)).EnsureSuccessStatusCode();
+
+        var c = await api.EnDbAsync(db => db.Comparendos.AsNoTracking()
+            .SingleAsync(x => x.TenantId == empresa && x.NumeroNormalizado == "OCRRENTING2", ct));
+        c.EstadoConsultaContraventor.Should().Be(EstadoConsultaContraventor.NoAplica);
+        c.IntentosConsultaContraventor.Should().Be(0);
+    }
 }
 
 /// <summary>La evaluación del prompt no castiga diferencias de formato que el registro ignora.</summary>
 public sealed class CalificacionOcrTests
 {
     [Theory]
-    [InlineData(CamposOcr.Numero, "D05001000000054280231", "D 0500-1000.000054280231", true)]
+    [InlineData(CamposOcr.Numero, "05001000000054280231", "D 0500-1000.000054280231", true)] // prefijo D- se descarta
     [InlineData(CamposOcr.Placa, "ABC123", "abc-123", true)]
     [InlineData(CamposOcr.NumeroDocumento, "900123456", "900.123.456", true)]
     [InlineData(CamposOcr.Valor, "604100", "$604.100", true)]
