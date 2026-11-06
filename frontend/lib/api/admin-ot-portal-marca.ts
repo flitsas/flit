@@ -83,7 +83,8 @@ async function toApiError(response: Response): Promise<ApiError> {
   return new ApiError(response.status, message, body);
 }
 
-async function request<T>(
+/** Petición JSON/multipart con sesión y errores `{ code, message }`; la comparte la marca de la web de persona. */
+export async function solicitudMarca<T>(
   method: "GET" | "PUT" | "POST" | "DELETE",
   path: string,
   scope: PortalMarcaScope | undefined,
@@ -112,12 +113,12 @@ async function request<T>(
 
 /** GET — marca del organismo (borrador, publicada y faltantes). */
 export function getPortalMarca(scope?: PortalMarcaScope, signal?: AbortSignal): Promise<PortalMarca> {
-  return request<PortalMarca>("GET", base, scope, { signal });
+  return solicitudMarca<PortalMarca>("GET", base, scope, { signal });
 }
 
 /** PUT — guarda el borrador (nombre y colores). `rowVersion` evita pisar un cambio ajeno (409 `PORTAL_MARCA_CONFLICTO`). */
 export function savePortalMarcaDraft(body: SavePortalMarcaDraftRequest, scope?: PortalMarcaScope): Promise<PortalMarca> {
-  return request<PortalMarca>("PUT", base, scope, { json: body });
+  return solicitudMarca<PortalMarca>("PUT", base, scope, { json: body });
 }
 
 function imageForm(file: File): FormData {
@@ -128,32 +129,32 @@ function imageForm(file: File): FormData {
 
 /** POST /logo — multipart; el logo queda en el borrador. */
 export function uploadPortalMarcaLogo(file: File, scope?: PortalMarcaScope): Promise<PortalMarca> {
-  return request<PortalMarca>("POST", `${base}/logo`, scope, { form: imageForm(file) });
+  return solicitudMarca<PortalMarca>("POST", `${base}/logo`, scope, { form: imageForm(file) });
 }
 
 /** DELETE /logo — el portal usa el logo FLIT cuando se publique. */
 export function deletePortalMarcaLogo(scope?: PortalMarcaScope): Promise<PortalMarca> {
-  return request<PortalMarca>("DELETE", `${base}/logo`, scope);
+  return solicitudMarca<PortalMarca>("DELETE", `${base}/logo`, scope);
 }
 
 /** POST /banner — multipart; el banner queda en el borrador. */
 export function uploadPortalMarcaBanner(file: File, scope?: PortalMarcaScope): Promise<PortalMarca> {
-  return request<PortalMarca>("POST", `${base}/banner`, scope, { form: imageForm(file) });
+  return solicitudMarca<PortalMarca>("POST", `${base}/banner`, scope, { form: imageForm(file) });
 }
 
 /** DELETE /banner — el portal usa el banner FLIT cuando se publique. */
 export function deletePortalMarcaBanner(scope?: PortalMarcaScope): Promise<PortalMarca> {
-  return request<PortalMarca>("DELETE", `${base}/banner`, scope);
+  return solicitudMarca<PortalMarca>("DELETE", `${base}/banner`, scope);
 }
 
 /** POST /publish — el servidor revalida nombre, colores y contraste 4,5:1. */
 export function publishPortalMarca(rowVersion: number, scope?: PortalMarcaScope): Promise<PortalMarca> {
-  return request<PortalMarca>("POST", `${base}/publish`, scope, { json: { rowVersion } });
+  return solicitudMarca<PortalMarca>("POST", `${base}/publish`, scope, { json: { rowVersion } });
 }
 
 /** POST /retire — el organismo vuelve a la marca FLIT; el borrador se conserva. */
 export function retirePortalMarca(rowVersion: number, scope?: PortalMarcaScope): Promise<PortalMarca> {
-  return request<PortalMarca>("POST", `${base}/retire`, scope, { json: { rowVersion } });
+  return solicitudMarca<PortalMarca>("POST", `${base}/retire`, scope, { json: { rowVersion } });
 }
 
 /** Código del contrato de un error (`PORTAL_MARCA_*`), si lo trae. */

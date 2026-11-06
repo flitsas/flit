@@ -10,18 +10,9 @@ import { BRAND_COLOR_PRESETS } from "@/components/admin/branding/brand-color-pre
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { Modal } from "@/components/atom/Modal";
 import {
-  deletePortalMarcaBanner,
-  deletePortalMarcaLogo,
-  getPortalMarca,
   portalMarcaErrorCode,
   portalMarcaErrorMessage,
-  publishPortalMarca,
-  retirePortalMarca,
-  savePortalMarcaDraft,
-  uploadPortalMarcaBanner,
-  uploadPortalMarcaLogo,
   type PortalMarca,
-  type PortalMarcaScope,
 } from "@/lib/api/admin-ot-portal-marca";
 import type { BrandColors } from "@/lib/api/branding";
 import { isValidHexColor } from "@/lib/brand/contrast";
@@ -38,7 +29,14 @@ import {
   validatePortalImage,
   type PortalImageKind,
 } from "@/lib/brand/validate-portal-image";
+import { clienteMarcaOt, type ClienteMarcaPortal } from "./cliente-marca";
 import { PortalPnPreview } from "./PortalPnPreview";
+import {
+  TEXTOS_DISENO_OT,
+  TEXTOS_VISTA_PREVIA_OT,
+  type TextosDiseno,
+  type TextosVistaPrevia,
+} from "./textos-diseno";
 import { useAuthedImage } from "./useAuthedImage";
 
 const DEFAULT_COLORS: BrandColors = {
@@ -46,14 +44,6 @@ const DEFAULT_COLORS: BrandColors = {
   secondary: BRAND_COLOR_PRESETS[0].secondary,
   onPrimary: "#FFFFFF",
 };
-
-const FIELD_COPY = {
-  primary: { label: "Color principal", hint: "Títulos, botones y pasos del portal." },
-  secondary: { label: "Color secundario", hint: "Tarjeta de acciones del punto." },
-};
-
-const CONTRAST_MESSAGE =
-  "Con estos colores el portal no se leería bien (contraste menor al mínimo). Usa «Ajustar automáticamente» o elige otros colores.";
 
 const REGLAS_COLOR = {
   readable: coloresPortalLegibles,
@@ -65,7 +55,15 @@ const REGLAS_COLOR = {
 type Status = "loading" | "error" | "ready";
 
 export interface PortalPnDesignSectionProps {
-  transitOfficeId: string;
+  /** Organismo al que pertenece la marca. Sin `cliente`, la sección trabaja con la marca de ese organismo. */
+  transitOfficeId?: string;
+  /** API de marca propia (p. ej. la de la web de persona). Debe ser estable entre renders. */
+  cliente?: ClienteMarcaPortal;
+  /** Textos propios. Sin ellos, los del portal del organismo. */
+  textos?: TextosDiseno;
+  textosVistaPrevia?: TextosVistaPrevia;
+  /** Ocupa el lugar del banner cuando la marca no lo lleva (el cliente no trae `banner`): p. ej. un acceso a Contenido. */
+  accesoBanner?: ReactNode;
   /**
    * Espacio para la sección de dominio del portal (llega con otra HU). Se pinta debajo de la marca, con su propio
    * encabezado; sin él, la vista de Diseño es solo la marca.
@@ -78,8 +76,25 @@ export interface PortalPnDesignSectionProps {
  * borrador, vista previa, publicar y retirar. Compone las piezas de marca blanca (selector de colores, carga de imagen,
  * confirmación de publicar) con el cliente de `/api/v1/admin/ot/portal-marca`.
  */
-export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesignSectionProps) {
-  const scope = useMemo<PortalMarcaScope>(() => ({ transitOfficeId }), [transitOfficeId]);
+export function PortalPnDesignSection({
+  transitOfficeId,
+  cliente: clienteInyectado,
+  textos = TEXTOS_DISENO_OT,
+  textosVistaPrevia = TEXTOS_VISTA_PREVIA_OT,
+  accesoBanner,
+  domain,
+}: PortalPnDesignSectionProps) {
+  const cliente = useMemo<ClienteMarcaPortal>(
+    () => clienteInyectado ?? clienteMarcaOt({ transitOfficeId }),
+    [clienteInyectado, transitOfficeId],
+  );
+  const fieldCopy = useMemo(
+    () => ({
+      primary: { label: "Color principal", hint: textos.principalAyuda },
+      secondary: { label: "Color secundario", hint: textos.secundarioAyuda },
+    }),
+    [textos],
+  );
 
   const [status, setStatus] = useState<Status>("loading");
   const [loadError, setLoadError] = useState("");
@@ -96,15 +111,18 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
   const [formError, setFormError] = useState<{ message: string; conflict: boolean } | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const logoSrc = useAuthedImage(marca?.logoUrl ?? null, scope);
-  const bannerSrc = useAuthedImage(marca?.bannerUrl ?? null, scope);
+  const logoSrc = useAuthedImage(marca?.logoUrl ?? null, cliente.imagen);
+  const bannerSrc = useAuthedImage(
+    cliente.banner ? (marca?.bannerUrl ?? null) : null,
+    cliente.imagen,
+  );
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
       setStatus("loading");
       setFormError(null);
       try {
-        const data = await getPortalMarca(scope, signal);
+        const data = await cliente.obtener(signal);
         if (signal?.aborted) return;
         setMarca(data);
         setDraftName(data.draft.platformName ?? "");
@@ -112,11 +130,11 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
         setStatus("ready");
       } catch (err) {
         if (signal?.aborted) return;
-        setLoadError(portalMarcaErrorMessage(err, "No se pudo cargar la marca del portal."));
+        setLoadError(portalMarcaErrorMessage(err, textos.errorCarga));
         setStatus("error");
       }
     },
-    [scope],
+    [cliente, textos.errorCarga],
   );
 
   useEffect(() => {
@@ -126,15 +144,17 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
     return () => controller.abort();
   }, [load]);
 
-  const colorsValid = [draftColors.primary, draftColors.secondary, draftColors.onPrimary].every(isValidHexColor);
+  const colorsValid = [draftColors.primary, draftColors.secondary, draftColors.onPrimary].every(
+    isValidHexColor,
+  );
   const contrastOk = useMemo(() => coloresPortalLegibles(draftColors), [draftColors]);
 
   const missing = useMemo(() => {
     const list: string[] = [];
-    if (!draftName.trim()) list.push("nombre");
+    if (textos.nombreObligatorio && !draftName.trim()) list.push("nombre");
     if (!colorsValid) list.push("colores");
     return list;
-  }, [draftName, colorsValid]);
+  }, [draftName, colorsValid, textos.nombreObligatorio]);
 
   const canPublish = missing.length === 0 && contrastOk;
   const busy = saving || publishing || retiring || removing !== null;
@@ -149,15 +169,16 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
   /** Mismas reglas que el servidor: se avisa con el motivo y no se envía nada. */
   function blockedReason(): string | null {
     if (!colorsValid) return "Escribe los colores con el formato #RRGGBB, por ejemplo #2563EB.";
-    if (!contrastOk) return CONTRAST_MESSAGE;
+    if (!contrastOk) return textos.contrasteMensaje;
     return null;
   }
 
   async function persistDraft(): Promise<PortalMarca> {
-    const saved = await savePortalMarcaDraft(
-      { platformName: draftName.trim() || null, colors: draftColors, rowVersion: marca?.rowVersion ?? 0 },
-      scope,
-    );
+    const saved = await cliente.guardarBorrador({
+      platformName: draftName.trim() || null,
+      colors: draftColors,
+      rowVersion: marca?.rowVersion ?? 0,
+    });
     setMarca(saved);
     return saved;
   }
@@ -173,7 +194,7 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
     setSaving(true);
     try {
       await persistDraft();
-      setSuccessMessage("Borrador guardado. Todavía no se ve en el portal.");
+      setSuccessMessage(textos.guardado);
     } catch (err) {
       fail(err, "No se pudo guardar el borrador.");
     } finally {
@@ -187,10 +208,10 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
     setPublishing(true);
     try {
       const saved = await persistDraft();
-      const published = await publishPortalMarca(saved.rowVersion, scope);
+      const published = await cliente.publicar(saved.rowVersion);
       setMarca(published);
       setPublishOpen(false);
-      setSuccessMessage("Marca publicada. El portal la muestra desde la siguiente carga.");
+      setSuccessMessage(textos.publicado);
     } catch (err) {
       setPublishOpen(false);
       fail(err, "No se pudo publicar la marca.");
@@ -205,10 +226,10 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
     setFormError(null);
     setRetiring(true);
     try {
-      const updated = await retirePortalMarca(marca.rowVersion, scope);
+      const updated = await cliente.retirar(marca.rowVersion);
       setMarca(updated);
       setRetireOpen(false);
-      setSuccessMessage("Marca retirada. El portal vuelve a la marca FLIT; tu borrador se conserva.");
+      setSuccessMessage(textos.retirado);
     } catch (err) {
       setRetireOpen(false);
       fail(err, "No se pudo retirar la marca.");
@@ -222,13 +243,10 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
     setFormError(null);
     setRemoving(kind);
     try {
-      const updated = await (kind === "logo" ? deletePortalMarcaLogo(scope) : deletePortalMarcaBanner(scope));
+      const banner = cliente.banner;
+      const updated = await (kind === "logo" || !banner ? cliente.quitarLogo() : banner.quitar());
       setMarca(updated);
-      setSuccessMessage(
-        kind === "logo"
-          ? "Logo quitado del borrador. Al publicar, el portal usa el logo FLIT."
-          : "Banner quitado del borrador. Al publicar, el portal no muestra banner.",
-      );
+      setSuccessMessage((kind === "logo" ? textos.logoQuitado : textos.bannerQuitado) ?? "");
     } catch (err) {
       fail(err, kind === "logo" ? "No se pudo quitar el logo." : "No se pudo quitar el banner.");
     } finally {
@@ -251,13 +269,14 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
         aria-labelledby="portal-pn-design-title"
       >
         <div className="mb-3">
-          <h2 id="portal-pn-design-title" className="text-sm font-bold" style={{ color: "var(--color-flit-primary)" }}>
-            Diseño del portal
+          <h2
+            id="portal-pn-design-title"
+            className="text-sm font-bold"
+            style={{ color: "var(--color-flit-primary)" }}
+          >
+            {textos.titulo}
           </h2>
-          <p className="text-xs opacity-70">
-            Elige el nombre, los colores, el logo y el banner que verá la persona en el enlace del punto. Guarda un
-            borrador, revísalo en la vista previa y publícalo cuando esté listo.
-          </p>
+          <p className="text-xs opacity-70">{textos.descripcion}</p>
         </div>
 
         {status === "loading" && <CarLoaderModal label="Armando el administrador…" />}
@@ -269,32 +288,34 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
         >
           {status === "ready" && marca && (
             <div className="flex flex-col gap-5">
-              <div className="flex flex-col gap-1">
-                <label
-                  htmlFor="portal-pn-name"
-                  className="text-xs font-semibold"
-                  style={{ color: "var(--color-flit-primary)" }}
-                >
-                  Nombre en el portal
-                </label>
-                <input
-                  id="portal-pn-name"
-                  type="text"
-                  value={draftName}
-                  onChange={(e) => setDraftName(e.target.value)}
-                  maxLength={40}
-                  placeholder="Nombre que verá la persona"
-                  className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] w-full max-w-md rounded-lg border px-3 py-2 text-sm"
-                  style={{ borderColor: "#DFE5ED" }}
-                />
-              </div>
+              {textos.nombreEtiqueta && (
+                <div className="flex flex-col gap-1">
+                  <label
+                    htmlFor="portal-pn-name"
+                    className="text-xs font-semibold"
+                    style={{ color: "var(--color-flit-primary)" }}
+                  >
+                    {textos.nombreEtiqueta}
+                  </label>
+                  <input
+                    id="portal-pn-name"
+                    type="text"
+                    value={draftName}
+                    onChange={(e) => setDraftName(e.target.value)}
+                    maxLength={40}
+                    placeholder={textos.nombrePlaceholder}
+                    className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] w-full max-w-md rounded-lg border px-3 py-2 text-sm"
+                    style={{ borderColor: "#DFE5ED" }}
+                  />
+                </div>
+              )}
 
               <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,340px)] lg:items-start">
                 <div className="flex flex-col gap-5">
                   <BrandingColorPicker
                     colors={draftColors}
                     onChange={setDraftColors}
-                    fieldCopy={FIELD_COPY}
+                    fieldCopy={fieldCopy}
                     primaryFirst
                     rules={REGLAS_COLOR}
                     disabled={busy}
@@ -303,40 +324,57 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
                   <ImageField
                     kind="logo"
                     label="Logo"
+                    textos={textos}
                     currentSrc={logoSrc}
                     hasImage={Boolean(marca.logoUrl)}
                     previewClassName="h-16 w-16"
                     disabled={busy}
                     removing={removing === "logo"}
-                    onUpload={(file) => uploadPortalMarcaLogo(file, scope)}
+                    onUpload={(file) => cliente.subirLogo(file)}
                     onUploaded={handleImageUploaded}
                     onRemove={() => void handleRemove("logo")}
                   />
-                  <ImageField
-                    kind="banner"
-                    label="Banner"
-                    currentSrc={bannerSrc}
-                    hasImage={Boolean(marca.bannerUrl)}
-                    previewClassName="h-16 w-40"
-                    disabled={busy}
-                    removing={removing === "banner"}
-                    onUpload={(file) => uploadPortalMarcaBanner(file, scope)}
-                    onUploaded={handleImageUploaded}
-                    onRemove={() => void handleRemove("banner")}
-                  />
+                  {cliente.banner ? (
+                    <ImageField
+                      kind="banner"
+                      label="Banner"
+                      textos={textos}
+                      currentSrc={bannerSrc}
+                      hasImage={Boolean(marca.bannerUrl)}
+                      previewClassName="h-16 w-40"
+                      disabled={busy}
+                      removing={removing === "banner"}
+                      onUpload={(file) => cliente.banner!.subir(file)}
+                      onUploaded={handleImageUploaded}
+                      onRemove={() => void handleRemove("banner")}
+                    />
+                  ) : (
+                    accesoBanner
+                  )}
                 </div>
                 <div className="lg:sticky lg:top-4">
-                  <PortalPnPreview colors={draftColors} platformName={draftName} logoSrc={logoSrc} bannerSrc={bannerSrc} />
+                  <PortalPnPreview
+                    colors={draftColors}
+                    platformName={draftName}
+                    logoSrc={logoSrc}
+                    bannerSrc={bannerSrc}
+                    textos={textosVistaPrevia}
+                    conBanner={Boolean(cliente.banner)}
+                  />
                 </div>
               </div>
 
-              <div className="rounded-xl border px-3 py-2 text-xs" style={{ borderColor: "#DFE5ED" }}>
+              <div
+                className="rounded-xl border px-3 py-2 text-xs"
+                style={{ borderColor: "#DFE5ED" }}
+              >
                 {marca.published && marca.publishedAt ? (
                   <p style={{ color: "var(--color-flit-primary)" }}>
-                    Publicada (versión {marca.publishedVersion}) el {formatFechaHora(marca.publishedAt)}.
+                    Publicada (versión {marca.publishedVersion}) el{" "}
+                    {formatFechaHora(marca.publishedAt)}.
                   </p>
                 ) : (
-                  <p className="opacity-70">Sin marca publicada: el portal usa la marca FLIT.</p>
+                  <p className="opacity-70">{textos.sinMarca}</p>
                 )}
                 {marca.hasUnpublishedChanges && (
                   <p className="mt-1 font-semibold" style={{ color: "#B45309" }}>
@@ -350,7 +388,11 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
               )}
 
               {formError && (
-                <div role="alert" className="flex flex-wrap items-center gap-3 text-xs" style={{ color: "#C10000" }}>
+                <div
+                  role="alert"
+                  className="flex flex-wrap items-center gap-3 text-xs"
+                  style={{ color: "#C10000" }}
+                >
                   <span>{formError.message}</span>
                   {formError.conflict && (
                     <button
@@ -365,7 +407,11 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
                 </div>
               )}
               {successMessage && (
-                <p role="status" className="flex items-center gap-1.5 text-xs font-medium" style={{ color: "#4F7A12" }}>
+                <p
+                  role="status"
+                  className="flex items-center gap-1.5 text-xs font-medium"
+                  style={{ color: "#4F7A12" }}
+                >
                   <Check className="h-4 w-4 shrink-0" style={{ color: "#8CC63F" }} aria-hidden />
                   {successMessage}
                 </p>
@@ -379,7 +425,8 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
                   className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#557EFF] inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                   style={{ background: "#162744" }}
                 >
-                  <Save className="h-3.5 w-3.5" aria-hidden /> {saving ? "Guardando…" : "Guardar borrador"}
+                  <Save className="h-3.5 w-3.5" aria-hidden />{" "}
+                  {saving ? "Guardando…" : "Guardar borrador"}
                 </button>
                 <button
                   type="button"
@@ -411,9 +458,9 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
           busy={publishing}
           onClose={() => setPublishOpen(false)}
           onConfirm={() => void handleConfirmPublish()}
-          title="Publicar la marca del portal"
-          description="Al publicar, el enlace del punto de este organismo muestra el nombre, los colores, el logo y el banner de inmediato, desde la siguiente carga."
-          note="Sin logo o banner propios, el portal usa los de FLIT."
+          title={textos.publicarTitulo}
+          description={textos.publicarDescripcion}
+          note={textos.publicarNota}
         />
 
         <Modal
@@ -424,10 +471,7 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
           icon={Undo2}
           title="Retirar la marca publicada"
         >
-          <p className="text-sm opacity-80">
-            El portal del punto vuelve a la marca FLIT desde la siguiente carga. Tu borrador se conserva para volver a
-            publicarlo.
-          </p>
+          <p className="text-sm opacity-80">{textos.retirarDescripcion}</p>
           <div className="mt-5 flex gap-3">
             <button
               type="button"
@@ -458,6 +502,7 @@ export function PortalPnDesignSection({ transitOfficeId, domain }: PortalPnDesig
 interface ImageFieldProps {
   kind: PortalImageKind;
   label: string;
+  textos: TextosDiseno;
   currentSrc: string | null;
   hasImage: boolean;
   previewClassName: string;
@@ -472,6 +517,7 @@ interface ImageFieldProps {
 function ImageField({
   kind,
   label,
+  textos,
   currentSrc,
   hasImage,
   previewClassName,
@@ -491,14 +537,22 @@ function ImageField({
         onUploaded={onUploaded}
         validate={async (file) => validatePortalImage(file, kind)}
         label={label}
-        buttonLabel={hasImage ? (kind === "logo" ? "Reemplazar logo" : "Reemplazar banner") : kind === "logo" ? "Seleccionar logo" : "Seleccionar banner"}
+        buttonLabel={
+          hasImage
+            ? kind === "logo"
+              ? "Reemplazar logo"
+              : "Reemplazar banner"
+            : kind === "logo"
+              ? "Seleccionar logo"
+              : "Seleccionar banner"
+        }
         dropzone
         hint={`${portalImageHint(kind)} · ${
-          kind === "logo" ? "Opcional: sin logo, el portal usa el de FLIT." : "Opcional: sin banner, el portal usa el de FLIT."
+          kind === "logo" ? textos.logoSinImagen : "Opcional: sin banner, el portal usa el de FLIT."
         }`}
         accept={PORTAL_IMAGE_ACCEPT}
-        inputAriaLabel={`Cargar ${kind === "logo" ? "logo" : "banner"} del portal`}
-        imageAlt={kind === "logo" ? "Logo del portal" : "Banner del portal"}
+        inputAriaLabel={kind === "logo" ? textos.logoInput : "Cargar banner del portal"}
+        imageAlt={kind === "logo" ? textos.logoAlt : "Banner del portal"}
         previewClassName={previewClassName}
       />
       {hasImage && (
