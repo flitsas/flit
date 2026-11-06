@@ -42,7 +42,15 @@ public static class InternalDomainsEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .AllowAnonymous();
 
-        // HU #12425 (AC3) — señal de certificado emitido en el borde (#12426): verified → active.
+        // Dominios que el borde debe publicar (Ingress y certificado). Lo consume el sincronizador del clúster.
+        app.MapGet("/api/v1/internal/domains/provisioning", GetProvisioningDomainsAsync)
+            .WithName("InternalProvisioningDomains")
+            .WithTags("Internal")
+            .Produces<ProvisioningDomainsResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .AllowAnonymous();
+
+        // HU #12425 (AC3) — señal de certificado emitido en el borde (#12426): registra las fechas, sin activar.
         app.MapPut("/api/v1/internal/domains/{host}/certificate", PutCertificateAsync)
             .WithName("InternalDomainCertificate")
             .WithTags("Internal")
@@ -89,6 +97,22 @@ public static class InternalDomainsEndpoints
         // HU #14384: los dominios de portal siguen el mismo proceso de certificados que los de marca blanca.
         IReadOnlyList<string> delPortal = portales is null ? [] : await portales.ListarHostsPendientesDeCertificadoAsync(renewBefore, cancellationToken).ConfigureAwait(false);
         return Results.Ok(new ActiveDomainsResponse([.. hosts, .. delPortal]));
+    }
+
+    internal static async Task<IResult> GetProvisioningDomainsAsync(
+        HttpRequest request,
+        [FromServices] ITenantDomainRepository repository,
+        [FromServices] IConfiguration configuration,
+        CancellationToken cancellationToken)
+    {
+        var expectedKey = configuration[ConfigKey];
+        if (string.IsNullOrEmpty(expectedKey) || !HasValidKey(request, expectedKey))
+        {
+            return Results.Unauthorized();
+        }
+
+        var domains = await repository.ListProvisioningAsync(cancellationToken).ConfigureAwait(false);
+        return Results.Ok(new ProvisioningDomainsResponse(domains));
     }
 
     internal static async Task<IResult> PutCertificateAsync(
@@ -199,6 +223,9 @@ public static class InternalDomainsEndpoints
 
 /// <summary>Forma de <c>GET /api/v1/internal/domains/active</c> (HU #12417 AC3).</summary>
 public sealed record ActiveDomainsResponse(IReadOnlyList<string> Hosts);
+
+/// <summary>Forma de <c>GET /api/v1/internal/domains/provisioning</c>.</summary>
+public sealed record ProvisioningDomainsResponse(IReadOnlyList<DomainProvisioningItem> Domains);
 
 /// <summary>Cuerpo de <c>PUT /api/v1/internal/domains/{host}/certificate</c> (HU #12425 AC3, #12426).</summary>
 public sealed record DomainCertificateRequestBody(DateTimeOffset IssuedAt, DateTimeOffset? ExpiresAt);
