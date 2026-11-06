@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { AlertCircle, Blocks, Building2, FileClock, FileText, Network, Palette, Save, Stamp, UserCheck, UserCog, Users } from "lucide-react";
+import { AlertCircle, Blocks, Building2, FileClock, Network, Palette, Save, Stamp, UserCheck, UserCog, Users } from "lucide-react";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import type { TenantSettings, TenantSettingsUpdate } from "@/lib/api/types";
 import { diffSettings, formFromSettings, formToUpdate, type SettingsForm } from "./settingsForm";
@@ -22,7 +22,6 @@ type TabId =
   | "productos"
   | "tramites"
   | "config"
-  | "documentos"
   | "representantes"
   | "mandatarios"
   | "usuarios"
@@ -59,8 +58,6 @@ const TABS: TabDef[] = [
   { id: "productos", label: "Productos", icon: Blocks, isConfig: false },
   { id: "tramites", label: "Trámites", icon: Stamp, isConfig: true },
   { id: "config", label: "Configuración Empresa", icon: Building2, isConfig: true },
-  // HU #10523 (RF31) — parámetros documentales por gestora (no forma parte del PUT de settings).
-  { id: "documentos", label: "Documentos", icon: FileText, isConfig: false },
   // HU #10904 (Feature #10852) — directorio de representantes legales de las compañías representadas.
   // Escrituras y firma/identidad se gestionan desde la ficha de cada representante (no hay baúl
   // suelto ni sección hermana de escrituras en esta pestaña).
@@ -88,7 +85,6 @@ export interface CompanyConfigTabsProps {
    *  atómico de settings). */
   otSlot?: ReactNode;
   auditSlot?: ReactNode;
-  documentosSlot?: ReactNode;
   /**
    * HU #10904 — pestaña de representantes legales (directorio). Firma e identidad
    * viven en la ficha de cada persona; las escrituras bajo cada NIT del acordeón.
@@ -131,7 +127,6 @@ export function CompanyConfigTabs({
   whitelistSlot,
   otSlot,
   auditSlot,
-  documentosSlot,
   legalRepresentativesSlot,
   mandatariosSlot,
   usuariosSlot,
@@ -376,7 +371,6 @@ export function CompanyConfigTabs({
             fieldErrors={fieldErrors}
           />
         )}
-        {activeTabId === "documentos" && documentosSlot}
         {activeTabId === "representantes" && legalRepresentativesSlot}
         {activeTabId === "mandatarios" && mandatariosSlot}
         {activeTabId === "usuarios" && usuariosSlot}

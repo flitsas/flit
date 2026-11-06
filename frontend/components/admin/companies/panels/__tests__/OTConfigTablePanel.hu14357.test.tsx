@@ -217,7 +217,6 @@ describe("HU #14357 AC3 — habilitar y configurar no cambian", () => {
       "Productos",
       "Trámites",
       "Configuración Empresa",
-      "Documentos",
       "Representantes legales",
       "Mandatarios",
       "Historial de Cambios",

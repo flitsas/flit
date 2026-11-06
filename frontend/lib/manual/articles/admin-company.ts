@@ -40,7 +40,7 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
         id: "entrar",
         title: "1. Qué ves al entrar",
         paragraphs: [
-          "Píldora «Administración» del dock (solo Administrador de compañía). Hoy se abre directo en dos pestañas: Representantes legales y Mandatarios. Es un cambio a propósito: antes veías la ficha completa de tu compañía (Trámites, Configuración Empresa, Documentos, Usuarios, Historial de Cambios); esas secciones ahora las gestiona el equipo FLIT para proteger cambios sensibles.",
+          "Píldora «Administración» del dock (solo Administrador de compañía). Hoy se abre directo en dos pestañas: Representantes legales y Mandatarios. Es un cambio a propósito: antes veías la ficha completa de tu compañía (Trámites, Configuración Empresa, Usuarios, Historial de Cambios); esas secciones ahora las gestiona el equipo FLIT para proteger cambios sensibles.",
           "Si administras una compañía hija desde el panel «Red de clientes» (solo cabezas de Concesión o Marca Blanca) y abres su ficha, ves una tercera pestaña, Usuarios, propia de esa hija: ahí resetas contraseñas y suspendes o desactivas sus usuarios. La tabla tiene buscador, selectores de perfil, rol y estado, y un embudo en cada columna (Nombre, Correo, Perfil, Rol, Estado, Fecha).",
         ],
         callouts: [
@@ -70,7 +70,7 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
         bullets: [
           "Trámites: qué familias puede radicar tu compañía (matrículas, traspasos, otros) y sus restricciones («Solo vehículos propios», validar SOAT ante el RUNT, etc.).",
           "Configuración Empresa: proveedores de consulta y de avalúo, a quién avisar al aprobar o rechazar un trámite, la lista blanca de correos para invitaciones, y los organismos de tránsito habilitados para tu compañía.",
-          "Documentos: plantillas y documentos personalizados que se generan dentro de los trámites.",
+          "Plantillas y documentos personalizados: los que se generan dentro de los trámites.",
           "Placas preasignadas: consulta de las placas que los organismos te han asignado.",
           "Historial de Cambios: quién cambió qué configuración de tu compañía y cuándo.",
         ],
