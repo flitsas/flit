@@ -50,6 +50,7 @@ internal static class ApiEndpoints
         app.MapAdminCompanyChildrenInvitationsEndpoints();
         app.MapAdminOtEndpoints();
         app.MapAdminOtMetricsEndpoints();
+        app.MapAdminOtPortalMarcaEndpoints();
         app.MapAdminOtQueriesEndpoints();
         app.MapAdminPlateRangesEndpoints();
         app.MapOtIntegrationEndpoints();

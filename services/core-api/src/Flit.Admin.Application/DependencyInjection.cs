@@ -338,6 +338,9 @@ public static class DependencyInjection
         services.AddScoped<UpdateRejectionReasonHandler>();
         services.AddScoped<SetRejectionReasonActiveHandler>();
 
+        // Feature #14374 (Épica #14297): marca del portal Persona Natural de cada organismo.
+        services.AddScoped<Companies.TransitOffices.PortalMarca.PortalMarcaAdminHandler>();
+
         // Reportes del organismo de tránsito: hasta ahora el módulo de reportes solo existía para
         // la empresa gestora, y el organismo operaba sin ningún instrumento propio.
         services.AddScoped<OtMetrics.GetOtOperationalPanelHandler>();

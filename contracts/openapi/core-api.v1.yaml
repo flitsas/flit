@@ -14050,6 +14050,107 @@ paths:
         "403": { description: No es Super Admin. }
         "404": { description: no_encontrado. }
 
+  # ── Admin OT · Marca del portal Persona Natural (Feature #14374, Épica #14297) ────────────
+  /api/v1/admin/ot/portal-marca:
+    get:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Marca del portal del organismo (borrador, publicado y versión)
+      description: >-
+        Rol ot_admin o SuperAdmin. El ot_admin trabaja siempre con el organismo de su perfil y si nombra otro recibe 403.
+        El SuperAdmin envía transitOfficeId (obligatorio). Sin fila devuelve un registro vacío con rowVersion 0.
+      operationId: AdminOtPortalMarcaGet
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      responses:
+        "200":
+          description: Marca del organismo.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "400": { description: "PORTAL_MARCA_ORGANISMO_REQUERIDO (SuperAdmin sin transitOfficeId)." }
+        "401": { description: Sin sesión. }
+        "403": { description: No es ot_admin ni SuperAdmin, o el organismo no es el propio. }
+        "404": { description: PORTAL_MARCA_ORGANISMO_NO_EXISTE. }
+    put:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Guarda el borrador (nombre y colores) con control de versión
+      description: >-
+        No toca logo ni banner. El contraste (4,5:1) se exige al publicar, no al guardar. Si rowVersion no coincide,
+        409 PORTAL_MARCA_CONFLICTO. Con rowVersion 0 crea la marca si nadie la creó antes.
+      operationId: AdminOtPortalMarcaPut
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GuardarPortalMarcaRequest" }
+      responses:
+        "200":
+          description: Marca con el borrador guardado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "400": { description: "PORTAL_MARCA_DATOS_INVALIDOS (nombre o color con formato inválido)." }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+        "409": { description: PORTAL_MARCA_CONFLICTO (la versión cambió). }
+  /api/v1/admin/ot/portal-marca/publish:
+    post:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Publica el borrador
+      description: >-
+        Exige nombre y los tres colores (PORTAL_MARCA_INCOMPLETA) y contraste mínimo 4,5:1 entre el texto sobre el principal
+        y el principal y el secundario (PORTAL_MARCA_CONTRASTE, con el motivo exacto). Logo y banner son opcionales.
+        Sube publishedVersion y deja auditoría con quién y qué cambió.
+      operationId: AdminOtPortalMarcaPublish
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VersionPortalMarcaRequest" }
+      responses:
+        "200":
+          description: Marca publicada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+        "409": { description: PORTAL_MARCA_CONFLICTO. }
+        "422": { description: PORTAL_MARCA_INCOMPLETA o PORTAL_MARCA_CONTRASTE con el motivo exacto. }
+  /api/v1/admin/ot/portal-marca/retire:
+    post:
+      tags: ["Admin · OT · Portal Persona Natural · Marca"]
+      summary: Retira la marca publicada y conserva el borrador
+      operationId: AdminOtPortalMarcaRetire
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VersionPortalMarcaRequest" }
+      responses:
+        "200":
+          description: Marca sin publicado (el portal usa la marca FLIT).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalMarca" }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo. }
+        "409": { description: PORTAL_MARCA_CONFLICTO. }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -14073,6 +14174,12 @@ components:
             error: SESSION_DOMAIN_MISMATCH
 
   parameters:
+    PortalMarcaTransitOfficeId:
+      name: transitOfficeId
+      in: query
+      required: false
+      description: Organismo (obligatorio para SuperAdmin; el ot_admin usa el de su perfil y si nombra otro recibe 403).
+      schema: { type: string, format: uuid }
     AiToolCodePath:
       name: toolCode
       in: path
@@ -14193,6 +14300,69 @@ components:
       description: Identificador del tenant (compañía) dueño del trámite.
 
   schemas:
+    # ── Admin OT · Marca del portal Persona Natural (Feature #14374, Épica #14297) ────────────
+    PortalMarcaSnapshot:
+      type: object
+      required: [platformName, colors, logoId, bannerId]
+      properties:
+        platformName: { type: string, nullable: true }
+        colors:
+          nullable: true
+          type: object
+          required: [primary, secondary, onPrimary]
+          properties:
+            primary: { type: string, example: "#0B3D91" }
+            secondary: { type: string, example: "#0F5132" }
+            onPrimary: { type: string, example: "#FFFFFF" }
+        logoId: { type: string, format: uuid, nullable: true }
+        bannerId: { type: string, format: uuid, nullable: true }
+    PortalMarca:
+      type: object
+      required: [transitOfficeId, draft, published, publishedVersion, publishedAt, publishedBy, hasUnpublishedChanges, logoUrl, bannerUrl, completeness, rowVersion]
+      properties:
+        transitOfficeId: { type: string, format: uuid }
+        draft: { $ref: "#/components/schemas/PortalMarcaSnapshot" }
+        published:
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/PortalMarcaSnapshot" }]
+        publishedVersion: { type: integer, description: Sube en cada publicación y no baja al retirar. }
+        publishedAt: { type: string, format: date-time, nullable: true }
+        publishedBy:
+          nullable: true
+          type: object
+          required: [userId]
+          properties:
+            userId: { type: string, format: uuid }
+        hasUnpublishedChanges: { type: boolean }
+        logoUrl: { type: string, nullable: true, description: Ruta de la imagen del borrador (solo con sesión). }
+        bannerUrl: { type: string, nullable: true }
+        completeness:
+          type: object
+          required: [isComplete, missing]
+          properties:
+            isComplete: { type: boolean }
+            missing:
+              type: array
+              items: { type: string, enum: [platformName, colors.primary, colors.secondary, colors.onPrimary] }
+        rowVersion: { type: integer, format: int64 }
+    GuardarPortalMarcaRequest:
+      type: object
+      required: [platformName, colors, rowVersion]
+      properties:
+        platformName: { type: string, minLength: 2, maxLength: 40 }
+        colors:
+          type: object
+          required: [primary, secondary, onPrimary]
+          properties:
+            primary: { type: string, pattern: "^#[0-9A-Fa-f]{6}$" }
+            secondary: { type: string, pattern: "^#[0-9A-Fa-f]{6}$" }
+            onPrimary: { type: string, pattern: "^#[0-9A-Fa-f]{6}$" }
+        rowVersion: { type: integer, format: int64 }
+    VersionPortalMarcaRequest:
+      type: object
+      required: [rowVersion]
+      properties:
+        rowVersion: { type: integer, format: int64 }
     # ── Admin · Integraciones externas por compañía (HU #14067, Épica #14021, ADR-0075) ────
     ExternalIntegration:
       type: object
