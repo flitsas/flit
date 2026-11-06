@@ -63,7 +63,7 @@ internal sealed class MarcaPuntoGrpc(PersonaNaturalService.PersonaNaturalService
     {
         var r = await FachadaTramitesGrpc.Llamar(() => cliente.ObtenerMarcaWebAsync(
             new ObtenerMarcaWebRequest(), Empresa(), cancellationToken: ct).ResponseAsync).ConfigureAwait(false);
-        return ARespuesta(r, MarcaPuntoRespuesta.OrigenWeb);
+        return ARespuesta(r.Marca ?? new ObtenerMarcaPuntoResponse(), MarcaPuntoRespuesta.OrigenWeb);
     }
 
     /// <summary>Solo una marca completa y del origen esperado llega al portal; cualquier otra cosa es la marca FLIT.</summary>

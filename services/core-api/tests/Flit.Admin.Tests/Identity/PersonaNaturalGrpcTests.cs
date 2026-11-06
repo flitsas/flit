@@ -196,8 +196,8 @@ public sealed class PersonaNaturalGrpcTests(WebApplicationFactory<Program> facto
 
         // HU #14401: la marca web publicada (si la hay en la base compartida) o la marca FLIT; nunca un error ni el banner.
         var marca = await bueno.ObtenerMarcaWebAsync(new ObtenerMarcaWebRequest(), cancellationToken: ct);
-        marca.Origen.Should().BeOneOf("flit", "web");
-        marca.BannerId.Should().BeEmpty();
+        marca.Marca.Origen.Should().BeOneOf("flit", "web");
+        marca.Marca.BannerId.Should().BeEmpty();
 
         var conOtraEmpresa = (await ((Func<Task>)(() => ajeno.ObtenerMarcaWebAsync(new ObtenerMarcaWebRequest(), cancellationToken: ct).ResponseAsync)).Should().ThrowAsync<RpcException>()).Which;
         PlatformRpcErrors.Reason(conOtraEmpresa).Should().Be("invalid_tenant");

@@ -14604,7 +14604,7 @@ paths:
                 items: { $ref: "#/components/schemas/DominioPortal" }
         "400": { description: "PORTAL_MARCA_ORGANISMO_REQUERIDO (SuperAdmin sin transitOfficeId)." }
         "401": { description: Sin sesión. }
-        "403": { description: No es ot_admin ni SuperAdmin, o el organismo no es el propio. }
+        "403": { description: "No es ot_admin ni SuperAdmin, o el organismo no es el propio." }
         "404": { description: PORTAL_MARCA_ORGANISMO_NO_EXISTE. }
     post:
       tags: ["Admin · OT · Portal Persona Natural · Dominio"]
@@ -14635,8 +14635,8 @@ paths:
               schema: { $ref: "#/components/schemas/DominioPortal" }
         "400": { description: PORTAL_DOMINIO_INVALIDO. }
         "401": { description: Sin sesión. }
-        "403": { description: No es ot_admin ni SuperAdmin, o el organismo no es el propio. }
-        "409": { description: PORTAL_DOMINIO_RESERVADO, PORTAL_DOMINIO_EN_USO o PORTAL_DOMINIO_LIMITE. }
+        "403": { description: "No es ot_admin ni SuperAdmin, o el organismo no es el propio." }
+        "409": { description: "PORTAL_DOMINIO_RESERVADO, PORTAL_DOMINIO_EN_USO o PORTAL_DOMINIO_LIMITE." }
   /api/v1/admin/ot/portal-dominio/{id}/verificar:
     post:
       tags: ["Admin · OT · Portal Persona Natural · Dominio"]
@@ -14658,7 +14658,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/DominioPortal" }
         "401": { description: Sin sesión. }
-        "403": { description: Rol ajeno, organismo ajeno o dominio de otro organismo. }
+        "403": { description: "Rol ajeno, organismo ajeno o dominio de otro organismo." }
         "404": { description: PORTAL_DOMINIO_NO_REGISTRADO (el id no existe o fue retirado). }
         "429": { description: PORTAL_DOMINIO_VERIFICACION_ESPERAR. }
   /api/v1/admin/ot/portal-dominio/{id}/principal:
@@ -14681,7 +14681,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/DominioPortal" }
         "401": { description: Sin sesión. }
-        "403": { description: Rol ajeno, organismo ajeno o dominio de otro organismo. }
+        "403": { description: "Rol ajeno, organismo ajeno o dominio de otro organismo." }
         "404": { description: PORTAL_DOMINIO_NO_REGISTRADO. }
         "409": { description: PORTAL_DOMINIO_PRINCIPAL_NO_ACTIVO. }
   /api/v1/admin/ot/portal-dominio/{id}:
@@ -14695,9 +14695,9 @@ paths:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
         - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
       responses:
-        "204": { description: Dominio retirado, sin cuerpo. }
+        "204": { description: "Dominio retirado, sin cuerpo." }
         "401": { description: Sin sesión. }
-        "403": { description: Rol ajeno, organismo ajeno o dominio de otro organismo. }
+        "403": { description: "Rol ajeno, organismo ajeno o dominio de otro organismo." }
         "404": { description: PORTAL_DOMINIO_NO_REGISTRADO. }
 
   # ── Admin OT · Marca del portal Persona Natural (Feature #14374, Épica #14297) ────────────
@@ -14858,7 +14858,7 @@ paths:
               schema: { $ref: "#/components/schemas/PortalMarca" }
         "400": { description: "PORTAL_MARCA_ORGANISMO_REQUERIDO (SuperAdmin sin transitOfficeId)." }
         "401": { description: Sin sesión. }
-        "403": { description: No es ot_admin ni SuperAdmin, o el organismo no es el propio. }
+        "403": { description: "No es ot_admin ni SuperAdmin, o el organismo no es el propio." }
         "404": { description: PORTAL_MARCA_ORGANISMO_NO_EXISTE. }
     put:
       tags: ["Admin · OT · Portal Persona Natural · Marca"]
@@ -15189,8 +15189,8 @@ paths:
         - { name: canal, in: query, description: "Lista separada por comas de pn_web, pn_punto (aplicacion no trae filas aquí).", schema: { type: string } }
         - { name: tipoTramiteId, in: query, description: Lista de GUID separada por comas., schema: { type: string } }
         - { name: transitOfficeId, in: query, description: "Lista de GUID separada por comas. ot_admin: solo el propio. SuperAdmin: uno.", schema: { type: string } }
-        - { name: desde, in: query, description: Día de Bogotá, incluido., schema: { type: string, format: date } }
-        - { name: hasta, in: query, description: Día de Bogotá, incluido., schema: { type: string, format: date } }
+        - { name: desde, in: query, description: "Día de Bogotá, incluido.", schema: { type: string, format: date } }
+        - { name: hasta, in: query, description: "Día de Bogotá, incluido.", schema: { type: string, format: date } }
         - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
         - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
       responses:
@@ -15570,6 +15570,7 @@ components:
         transitOfficeId: { type: string, format: uuid }
         draft: { $ref: "#/components/schemas/PortalMarcaSnapshot" }
         published:
+          type: object
           nullable: true
           allOf: [{ $ref: "#/components/schemas/PortalMarcaSnapshot" }]
         publishedVersion: { type: integer, description: Sube en cada publicación y no baja al retirar. }

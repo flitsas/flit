@@ -187,11 +187,11 @@ public sealed class PersonaNaturalGrpcService(
     }
 
     /// <summary>HU #14401 — marca publicada de la web de persona natural. Sin caché; sin marca o ante una falla, <c>origen = flit</c>.</summary>
-    public override async Task<ObtenerMarcaPuntoResponse> ObtenerMarcaWeb(ObtenerMarcaWebRequest request, ServerCallContext context)
+    public override async Task<ObtenerMarcaWebResponse> ObtenerMarcaWeb(ObtenerMarcaWebRequest request, ServerCallContext context)
     {
         ArgumentNullException.ThrowIfNull(request);
         Verificar(context);
-        return ARespuestaMarca(await marcaPunto.ObtenerWebAsync(context.CancellationToken).ConfigureAwait(false));
+        return new ObtenerMarcaWebResponse { Marca = ARespuestaMarca(await marcaPunto.ObtenerWebAsync(context.CancellationToken).ConfigureAwait(false)) };
     }
 
     private static ObtenerMarcaPuntoResponse ARespuestaMarca(Flit.Admin.Application.Companies.TransitOffices.PortalMarca.MarcaPuntoDto m) => new()
