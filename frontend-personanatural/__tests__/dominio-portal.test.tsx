@@ -7,6 +7,7 @@ import { marcaAplicable } from "@/lib/marca/marca";
 const resolverDominioPortal = vi.fn();
 const obtenerMarcaPunto = vi.fn();
 let host: string | null = "tramites.cali.gov.co";
+vi.mock("@/components/marca/MarcaWeb", () => ({ MarcaWeb: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock("@/lib/punto/dominio.server", () => ({
   resolverDominioPortal: (...a: unknown[]) => resolverDominioPortal(...a),
 }));

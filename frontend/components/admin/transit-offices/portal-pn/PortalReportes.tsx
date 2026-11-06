@@ -114,6 +114,9 @@ export function PortalReportes({ api, incluirFiltroOrganismo = false }: PortalRe
     [filtros.condicionesTotales, columnasFiltro],
   );
 
+  // Se compara por valor: al llegar los catálogos cambian las columnas, pero no lo que se pide al servidor.
+  const claveFiltro = JSON.stringify(filtroServidor);
+
   // Catálogos de los filtros: si fallan, el reporte sigue y solo queda sin opciones ese filtro.
   useEffect(() => {
     const controller = new AbortController();
@@ -135,7 +138,7 @@ export function PortalReportes({ api, incluirFiltroOrganismo = false }: PortalRe
     // eslint-disable-next-line react-hooks/set-state-in-effect -- consulta del servidor: el estado de carga es intencional
     setStatus("loading");
     api
-      .listar({ ...filtroServidor, page: pg.page, pageSize: pg.pageSize }, controller.signal)
+      .listar({ ...(JSON.parse(claveFiltro) as FiltroReportePortal), page: pg.page, pageSize: pg.pageSize }, controller.signal)
       .then((res) => {
         if (controller.signal.aborted) return;
         setPagina(res);
@@ -147,7 +150,7 @@ export function PortalReportes({ api, incluirFiltroOrganismo = false }: PortalRe
         setStatus("error");
       });
     return () => controller.abort();
-  }, [api, filtroServidor, pg.page, pg.pageSize, recarga]);
+  }, [api, claveFiltro, pg.page, pg.pageSize, recarga]);
 
   async function exportar() {
     setExportando(true);
