@@ -121,6 +121,13 @@ public static class AdminInfrastructureExtensions
         // se registra siempre para que encender/apagar por configuración no requiera reiniciar el DI.
         services.AddHostedService<Flit.Infrastructure.Domains.DomainVerificationSchedulerProcessor>();
 
+        // Feature #14380 (Epica #14297) - dominio del portal de cada organismo: mismo ciclo, sobre su tabla propia (DDL 183).
+        services.AddScoped<Flit.Admin.Application.Companies.TransitOffices.PortalDominio.PortalDominioVerificador>();
+        services.AddScoped<Flit.Admin.Application.Companies.TransitOffices.PortalDominio.PortalDominioAdminHandler>();
+        services.AddScoped<Flit.Admin.Application.Companies.TransitOffices.PortalDominio.PortalDominioPuntoHandler>();
+        services.AddScoped<Flit.Admin.Application.Companies.TransitOffices.PortalDominio.PortalDominioCertificadoHandler>();
+        services.AddHostedService<Flit.Infrastructure.Domains.PortalDomainVerificationSchedulerProcessor>();
+
         // HU #12321 (Feature #12254) — alcance de lectura tipado por jerarquía de clientes; fail-closed
         // (Single ante cualquier fallo, nunca All). Scoped, sin caché: una consulta por petición.
         services.AddScoped<ITenantScopeResolver, DbTenantScopeResolver>();

@@ -14580,6 +14580,97 @@ paths:
         "403": { description: No es Super Admin. }
         "404": { description: no_encontrado. }
 
+  # ── Admin OT · Dominio del portal Persona Natural (Feature #14380, Épica #14297) ──────────
+  /api/v1/admin/ot/portal-dominio:
+    get:
+      tags: ["Admin · OT · Portal Persona Natural · Dominio"]
+      summary: Dominio del portal del organismo (estado, motivo e instrucciones de DNS)
+      description: >-
+        Rol ot_admin o SuperAdmin. El ot_admin trabaja siempre con el organismo de su perfil (id de catalogs.transit_offices) y si nombra
+        otro recibe 403. El SuperAdmin envía transitOfficeId. Sin dominio registrado responde 404 PORTAL_DOMINIO_NO_REGISTRADO.
+      operationId: AdminOtPortalDominioGet
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      responses:
+        "200":
+          description: Dominio del organismo.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DominioPortal" }
+        "400": { description: "PORTAL_MARCA_ORGANISMO_REQUERIDO (SuperAdmin sin transitOfficeId)." }
+        "401": { description: Sin sesión. }
+        "403": { description: No es ot_admin ni SuperAdmin, o el organismo no es el propio. }
+        "404": { description: PORTAL_DOMINIO_NO_REGISTRADO o PORTAL_MARCA_ORGANISMO_NO_EXISTE. }
+    post:
+      tags: ["Admin · OT · Portal Persona Natural · Dominio"]
+      summary: Registra el dominio del portal (queda pendiente con su token de verificación)
+      description: >-
+        Un dominio vigente por organismo. Se rechaza con el motivo exacto un host inválido (400 PORTAL_DOMINIO_INVALIDO), reservado
+        (409 PORTAL_DOMINIO_RESERVADO), ya registrado por otro organismo o red de marca blanca (409 PORTAL_DOMINIO_EN_USO) o un
+        organismo que ya tiene otro dominio (409 PORTAL_DOMINIO_ORGANISMO_YA_TIENE). Repetir el mismo host es idempotente.
+      operationId: AdminOtPortalDominioPost
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [host]
+              properties:
+                host: { type: string, description: "Nombre de dominio sin esquema, puerto ni ruta." }
+      responses:
+        "200":
+          description: Dominio pendiente con sus instrucciones de DNS.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DominioPortal" }
+        "400": { description: PORTAL_DOMINIO_INVALIDO. }
+        "401": { description: Sin sesión. }
+        "403": { description: No es ot_admin ni SuperAdmin, o el organismo no es el propio. }
+        "409": { description: PORTAL_DOMINIO_RESERVADO, PORTAL_DOMINIO_EN_USO o PORTAL_DOMINIO_ORGANISMO_YA_TIENE. }
+    delete:
+      tags: ["Admin · OT · Portal Persona Natural · Dominio"]
+      summary: Retira el dominio; el portal sigue en el enlace del punto
+      operationId: AdminOtPortalDominioDelete
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      responses:
+        "204": { description: Dominio retirado, sin cuerpo. }
+        "401": { description: Sin sesión. }
+        "403": { description: No es ot_admin ni SuperAdmin, o el organismo no es el propio. }
+        "404": { description: PORTAL_DOMINIO_NO_REGISTRADO. }
+  /api/v1/admin/ot/portal-dominio/verificar:
+    post:
+      tags: ["Admin · OT · Portal Persona Natural · Dominio"]
+      summary: Comprueba ahora el TXT de DNS del dominio
+      description: >-
+        Con el TXT correcto pasa a verificado; si falta o no coincide queda fallido con el motivo y el portal sigue en su enlace del
+        punto. El certificado emitido lo pasa a activo (sin activación manual). 429 PORTAL_DOMINIO_VERIFICACION_ESPERAR con Retry-After
+        si se pide antes del enfriamiento.
+      operationId: AdminOtPortalDominioVerificar
+      security:
+        - bearerAuth: []
+      parameters:
+        - { $ref: "#/components/parameters/PortalMarcaTransitOfficeId" }
+      responses:
+        "200":
+          description: Dominio con su estado actual.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DominioPortal" }
+        "401": { description: Sin sesión. }
+        "403": { description: No es ot_admin ni SuperAdmin, o el organismo no es el propio. }
+        "404": { description: PORTAL_DOMINIO_NO_REGISTRADO. }
+        "429": { description: PORTAL_DOMINIO_VERIFICACION_ESPERAR. }
+
   # ── Admin OT · Marca del portal Persona Natural (Feature #14374, Épica #14297) ────────────
   /api/v1/admin/ot/portal-marca:
     get:
@@ -14979,6 +15070,23 @@ components:
             onPrimary: { type: string, example: "#FFFFFF" }
         logoId: { type: string, format: uuid, nullable: true }
         bannerId: { type: string, format: uuid, nullable: true }
+    DominioPortal:
+      type: object
+      required: [host, estado, motivo, dns, rowVersion]
+      properties:
+        host: { type: string }
+        estado: { type: string, enum: [pendiente, verificado, activo, fallido] }
+        motivo: { type: string, nullable: true, description: "Motivo exacto en español cuando el estado es fallido." }
+        dns:
+          type: array
+          items:
+            type: object
+            required: [tipo, nombre, valor]
+            properties:
+              tipo: { type: string, enum: [TXT, A], description: "El A solo viene si el ambiente tiene Domains:EdgeIp." }
+              nombre: { type: string }
+              valor: { type: string }
+        rowVersion: { type: integer, format: int64 }
     PortalMarca:
       type: object
       required: [transitOfficeId, draft, published, publishedVersion, publishedAt, publishedBy, hasUnpublishedChanges, logoUrl, bannerUrl, completeness, rowVersion]
