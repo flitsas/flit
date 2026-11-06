@@ -106,7 +106,7 @@ public sealed class OtPermissionEnforcementTests : IClassFixture<OtPermissionEnf
         var delPortal = registradas.Where(r => EsDelPortal(r.Firma)).ToList();
         delPortal.Should().NotBeEmpty();
         delPortal.Should().OnlyContain(r => r.Endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>().Any(a => a.Policy == AdminAuthorization.OtAdminOrSuperAdminPolicy));
-        OtPermissionMap.BySignature.Keys.Should().NotContain(EsDelPortal);
+        OtPermissionMap.BySignature.Keys.Where(EsDelPortal).Should().BeEmpty();
 
         var conPolicyOt = registradas
             .Where(r => !EsDelPortal(r.Firma))
