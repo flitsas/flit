@@ -48,11 +48,17 @@ public sealed record TarifaOtView(
         ArgumentNullException.ThrowIfNull(t);
         ArgumentNullException.ThrowIfNull(alcance);
         var editable = t.OrganismoId == alcance.OrganismoId && (alcance.EsSuperAdmin || ConceptosTarifaPn.EditablePorOrganismo(t.Concepto));
+        // Un valor general lo fija FLIT: al organismo no se le entrega el nombre ni el id de la persona (Ley 1581).
+        var ocultarAutor = !alcance.EsSuperAdmin && t.OrganismoId is null;
         return new TarifaOtView(
             t.Id, t.Concepto, t.TipoTramiteId, t.TipoTramiteCodigo, t.TipoTramiteNombre, t.OrganismoId, t.OrganismoCodigo,
-            t.OrganismoNombre, t.ValorCop, t.VigenteDesde, t.VigenteHasta, t.Estado, t.CreadaEn, t.CreadaPor, t.ActualizadaEn,
-            t.ActualizadaPor, t.CreadaPorNombre, editable);
+            t.OrganismoNombre, t.ValorCop, t.VigenteDesde, t.VigenteHasta, t.Estado, t.CreadaEn,
+            ocultarAutor ? null : t.CreadaPor, t.ActualizadaEn, ocultarAutor ? null : t.ActualizadaPor,
+            ocultarAutor ? AutorGeneral : t.CreadaPorNombre, editable);
     }
+
+    /// <summary>Lo que el organismo ve como autor de un valor general.</summary>
+    public const string AutorGeneral = "FLIT";
 }
 
 public sealed record TarifasOtResult(IReadOnlyList<TarifaOtView>? Tarifas, string? Error);
@@ -64,9 +70,6 @@ public sealed class ListarTarifasOtHandler(IPersonaNaturalTarifaRepository tarif
         AlcanceTarifasOt alcance, bool soloVigentes, Guid? tipoTramiteId, string? concepto, DateOnly? fecha, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(alcance);
-        if (!alcance.EsSuperAdmin && tipoTramiteId is null)
-            return new TarifasOtResult(null, TarifaOtErrores.TipoObligatorio);
-
         var filas = await tarifas.ListarDelOrganismoAsync(
             alcance.OrganismoId, tipoTramiteId, string.IsNullOrWhiteSpace(concepto) ? null : concepto.Trim().ToUpperInvariant(),
             soloVigentes, fecha, ct).ConfigureAwait(false);

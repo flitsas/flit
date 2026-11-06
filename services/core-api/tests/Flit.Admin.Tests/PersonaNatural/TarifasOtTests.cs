@@ -99,16 +99,37 @@ public sealed class TarifasOtTests(WebApplicationFactory<Program> factory) : ICl
     }
 
     [Fact]
-    public async Task AC4_ElAdministradorDelOrganismoDebeIndicarElTipo_ElSuperAdminNo()
+    public async Task AC4_ListarNoExigeTipo_RegistrarSiSeLoExigeAlAdministradorDelOrganismo()
     {
         var repo = new RepoContador();
         var listar = new ListarTarifasOtHandler(repo);
         var versionar = new VersionarTarifasOtHandler(new VersionarTarifasPnHandler(repo, new AuditoriaFalsa()));
 
-        (await listar.HandleAsync(new AlcanceTarifasOt(Guid.NewGuid(), false), false, null, null, null, Ct)).Error.Should().Be(TarifaOtErrores.TipoObligatorio);
+        (await listar.HandleAsync(new AlcanceTarifasOt(Guid.NewGuid(), false), false, null, null, null, Ct)).Error.Should().BeNull();
         (await listar.HandleAsync(new AlcanceTarifasOt(Guid.NewGuid(), true), false, null, null, null, Ct)).Error.Should().BeNull();
         (await versionar.HandleAsync(
             new AlcanceTarifasOt(Guid.NewGuid(), false), null, [new TarifaPnValor("CAMBIO_COLOR", 5)], Hoy(), Guid.NewGuid(), Ct)).Error.Should().Be(TarifaOtErrores.TipoObligatorio);
+    }
+
+    [Fact]
+    public void ElOrganismoNoRecibeElNombreDeQuienFijoUnValorGeneral_ElSuperAdminSi()
+    {
+        var org = Guid.NewGuid();
+        var autor = Guid.NewGuid();
+        TarifaPnView Con(Guid? organismo) => Vista("DERECHOS_TRANSITO", organismo) with { CreadaPor = autor, ActualizadaPor = autor, CreadaPorNombre = "Persona FLIT" };
+
+        var general = TarifaOtView.De(Con(null), new AlcanceTarifasOt(org, false));
+        general.CreadaPorNombre.Should().Be(TarifaOtView.AutorGeneral);
+        general.CreadaPor.Should().BeNull();
+        general.ActualizadaPor.Should().BeNull();
+
+        var propia = TarifaOtView.De(Con(org), new AlcanceTarifasOt(org, false));
+        propia.CreadaPorNombre.Should().Be("Persona FLIT");
+        propia.CreadaPor.Should().Be(autor);
+
+        var delSuperAdmin = TarifaOtView.De(Con(null), new AlcanceTarifasOt(org, true));
+        delSuperAdmin.CreadaPorNombre.Should().Be("Persona FLIT");
+        delSuperAdmin.CreadaPor.Should().Be(autor);
     }
 
     [Fact]
@@ -277,14 +298,24 @@ public sealed class TarifasOtTests(WebApplicationFactory<Program> factory) : ICl
     }
 
     [Fact]
-    public async Task AC4_SinTipo_ElAdminDelOrganismoRecibeBadRequest()
+    public async Task AC4_SinTipo_ElAdminDelOrganismoVeSusPreciosYLosGenerales_SinElNombreDeQuienFijoLosGenerales()
     {
         await using var e = await EscenarioOt.CrearAsync(factory, Ct);
+        var hoy = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(-5));
+        await e.SembrarAsync("DERECHOS_TRANSITO", e.Tipo, null, 100_000, hoy, Ct);
+        await e.SembrarAsync("DERECHOS_TRANSITO", e.Tipo, e.Organismo, 130_000, hoy, Ct);
+        await e.SembrarAsync("DERECHOS_TRANSITO", e.Tipo, e.OtroOrganismo, 999_999, hoy, Ct);
 
+        // Es la consulta que hace la pantalla al abrir la subpestaña Cobro: sin filtros.
         var r = await e.ClienteOt().GetAsync(Base, Ct);
 
-        r.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await r.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("code").GetString().Should().Be(TarifaOtErrores.TipoObligatorio);
+        r.StatusCode.Should().Be(HttpStatusCode.OK);
+        var filas = (await r.Content.ReadFromJsonAsync<JsonElement>(Ct)).EnumerateArray().ToList();
+        filas.Should().NotContain(f => f.GetProperty("valorCop").GetInt64() == 999_999, "el valor de otro organismo no se ve");
+        filas.Should().Contain(f => f.GetProperty("valorCop").GetInt64() == 130_000 && f.GetProperty("editable").GetBoolean());
+        var general = filas.Single(f => f.GetProperty("valorCop").GetInt64() == 100_000);
+        general.GetProperty("editable").GetBoolean().Should().BeFalse();
+        general.GetProperty("creadaPorNombre").GetString().Should().Be(TarifaOtView.AutorGeneral);
     }
 
     [Fact]
