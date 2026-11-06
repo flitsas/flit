@@ -112,7 +112,8 @@ public sealed class PersonaNaturalGrpcService(
         respuesta.Requisitos.AddRange(resultado.Checks.Select(c => new Requisito
         {
             Codigo = c.Key,
-            Descripcion = c.Label,
+            // Sin servicio de consultas la etiqueta es solo «Consulta»: la persona necesita el motivo.
+            Descripcion = c.Key == "provider" && !string.IsNullOrWhiteSpace(c.Message) ? c.Message : c.Label,
             Estado = EstadoRequisito(c.Status),
         }));
         return respuesta;

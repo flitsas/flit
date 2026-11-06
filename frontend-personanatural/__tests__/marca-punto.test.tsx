@@ -2,8 +2,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { renderToString } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ProveedorMarca } from "@/components/marca/MarcaPunto";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ProveedorMarca, LogoInicio } from "@/components/marca/MarcaPunto";
 import { CanalPunto } from "@/components/punto/CanalPunto";
 import { crearCliente } from "@/lib/api/cliente";
 import { marcaAplicable } from "@/lib/marca/marca";
@@ -207,5 +207,34 @@ describe("HU #14379 AC4: sin cruce con la web de persona ni con otros organismos
   it("la web de persona (layout y landing) no lee ni lleva la hoja de marca", () => {
     const fuentes = readFileSync("app/layout.tsx", "utf8") + readFileSync("app/page.tsx", "utf8");
     expect(fuentes).not.toMatch(/EstiloMarca|marca\.server|ProveedorMarca/);
+  });
+});
+
+describe("logo con enlace al inicio", () => {
+  const conRuta = async (ruta: string, marca: Parameters<typeof ProveedorMarca>[0]["marca"]) => {
+    (globalThis as { __pathname?: string }).__pathname = ruta;
+    const { render, screen } = await import("@testing-library/react");
+    render(
+      <ProveedorMarca marca={marca}>
+        <LogoInicio alt="FLIT" etiqueta="FLIT — Ir al inicio del portal" />
+      </ProveedorMarca>,
+    );
+    return screen.getByRole("link");
+  };
+
+  afterEach(() => {
+    delete (globalThis as { __pathname?: string }).__pathname;
+  });
+
+  it("en el punto vuelve al inicio del punto y se nombra con la marca", async () => {
+    const enlace = await conRuta("/o/5631000/algo", { nombre: "Tránsito X", logoUrl: null, bannerUrl: null, version: 1, colores: { primario: "#123456", secundario: "#123456", sobrePrimario: "#FFFFFF" } });
+    expect(enlace).toHaveAttribute("href", "/o/5631000");
+    expect(enlace).toHaveAccessibleName("Tránsito X — Ir al inicio del punto");
+  });
+
+  it("en la web sigue yendo a la raíz", async () => {
+    const enlace = await conRuta("/tramite/1", null);
+    expect(enlace).toHaveAttribute("href", "/");
+    expect(enlace).toHaveAccessibleName("FLIT — Ir al inicio del portal");
   });
 });

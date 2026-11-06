@@ -95,3 +95,10 @@ describe("cssDeMarca: sin inyección de CSS", () => {
     expect(cssDeMarca(m)).toContain("--marca-texto-boton:#162744");
   });
 });
+
+describe("título de la tarjeta de acción con marca", () => {
+  it("usa el texto calculado, no el blanco fijo, para que se lea sobre el color secundario", () => {
+    const css = cssDeMarca({ nombre: "X", logoUrl: null, bannerUrl: null, version: 1, colores: { primario: "#123456", secundario: "#5D96C1", sobrePrimario: "#162744" } });
+    expect(css).toContain(".dashboard-institutional-card .dashboard-title{color:var(--primary-foreground)}");
+  });
+});

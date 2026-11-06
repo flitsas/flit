@@ -16,7 +16,7 @@ import { MENSAJE_SIN_TARIFA, ValorTramite } from "@/components/tramite/ValorTram
 import type { ClientePortal, DefinicionTipo, Organismo, Solicitud } from "@/lib/api/cliente";
 import { ApiError, mensajeDe } from "@/lib/api/errores";
 import { organismoElegido } from "@/lib/tramite/diagnostico";
-import { LogoPortal } from "@/components/marca/MarcaPunto";
+import { LogoInicio } from "@/components/marca/MarcaPunto";
 import { conservarPersonas } from "@/lib/tramite/actores";
 import { crearGuardadorSerial } from "@/lib/tramite/guardadoSerial";
 import type { ContextoTramite } from "@/lib/tramite/contexto";
@@ -237,9 +237,7 @@ export function Cascaron({ cliente, definicion, solicitud, pasos, registro, cont
     <ProveedorWizard value={api}>
       <div className="min-h-screen bg-background font-sans text-foreground">
         <header className="wizard-header flex items-center justify-between border-b border-border bg-background py-3">
-          <Link href="/" aria-label="FLIT 2.0 — Ir al Dashboard">
-            <LogoPortal alt="FLIT 2.0" />
-          </Link>
+          <LogoInicio alt="FLIT 2.0" etiqueta="FLIT 2.0 — Ir al Dashboard" />
           <div className="hidden items-center gap-6 text-sm md:flex">
             {solicitante && (
               <span>

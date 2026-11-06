@@ -96,5 +96,6 @@ export function cssDeMarca(marca: MarcaAplicable): string {
     `html:root{--primary:${primario};--primary-foreground:${sobrePrimario};--ring:${primario};--sidebar-primary:${primario};--sidebar-ring:${primario};`,
     `--dashboard-action-background:${secundario};--gradient-flit:${degradado};--gradient-enterprise:${degradado};--marca-texto-boton:${textoSobreBlanco(marca.colores)}}`,
     `html:root .dashboard-institutional-card .dashboard-submit{color:var(--marca-texto-boton)}`,
+    `html:root .dashboard-institutional-card .dashboard-title{color:var(--primary-foreground)}`,
   ].join("");
 }

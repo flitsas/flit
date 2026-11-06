@@ -2,6 +2,8 @@
 
 // HU #14379 — La marca del organismo llega por contexto a todo el flujo del punto (entrada, wizard y cierre). Fuera de
 // un `ProveedorMarca` (web de persona, otros flujos) no hay marca y todo se dibuja con la imagen FLIT.
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { createContext, useContext, type ReactNode } from "react";
 import { ASSETS } from "@/lib/assets";
 import type { MarcaAplicable } from "@/lib/marca/marca";
@@ -28,6 +30,21 @@ export function LogoPortal({ alt, className = "h-9 w-auto" }: { alt: string; cla
         </span>
       )}
     </span>
+  );
+}
+
+/**
+ * Logo con enlace al inicio. En el enlace del punto (`/o/{codigo}`) vuelve a ese punto, para no sacar a la persona de su
+ * organismo; en la web de persona sigue yendo a la raíz.
+ */
+export function LogoInicio({ alt, etiqueta }: { alt: string; etiqueta: string }) {
+  const marca = useMarca();
+  const punto = /^\/o\/[^/]+/.exec(usePathname() ?? "")?.[0];
+  const ariaLabel = punto ? `${marca?.nombre ?? alt} — Ir al inicio del punto` : etiqueta;
+  return (
+    <Link href={punto ?? "/"} aria-label={ariaLabel}>
+      <LogoPortal alt={alt} />
+    </Link>
   );
 }
 

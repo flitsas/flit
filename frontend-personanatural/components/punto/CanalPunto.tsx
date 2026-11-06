@@ -2,7 +2,6 @@
 
 // HU #14218 / #14222 — Al entrar a /o/{codigo} se abre el canal. Consultar = mismo modal/diseño del portal web.
 // Tras arranque OK el landing se oculta y el cascarón del wizard (DiagnosticoPunto) ocupa la página.
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { MobilityLoader } from "@/components/MobilityLoader";
 import { AvisoModal, type Aviso, type TonoAviso } from "@/components/landing/AvisoModal";
@@ -10,7 +9,7 @@ import { Pie } from "@/components/landing/Pie";
 import { boton } from "@/components/landing/estilos";
 import { useTiposTramite } from "@/components/landing/useCatalogos";
 import { ConsultarModal } from "@/components/modales/ConsultarModal";
-import { BannerMarca, LogoPortal } from "@/components/marca/MarcaPunto";
+import { BannerMarca, LogoInicio } from "@/components/marca/MarcaPunto";
 import { portal, type ClientePortal, type EntradaPunto } from "@/lib/api/cliente";
 import { mensajeDeFallo } from "@/lib/api/errores";
 import { AccionesPunto } from "./AccionesPunto";
@@ -54,9 +53,7 @@ export function CanalPunto({ codigo, cliente = portal }: { codigo: string; clien
     <div className={enWizard ? "bg-background font-sans text-foreground" : "dashboard-shell bg-background font-sans text-foreground"}>
       {!enWizard && (
         <header className="dashboard-header flex min-h-16 flex-wrap py-2 shrink-0 items-center justify-between gap-4 border-b border-border">
-          <Link href="/" aria-label="FLIT — Ir al inicio del portal">
-            <LogoPortal alt="FLIT" />
-          </Link>
+          <LogoInicio alt="FLIT" etiqueta="FLIT — Ir al inicio del portal" />
           {punto && (
             <p className="max-w-md truncate text-sm font-medium text-foreground/80" title={punto.nombre}>
               Punto de atención · {punto.nombre}
