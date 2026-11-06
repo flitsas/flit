@@ -58,12 +58,13 @@ export function DetailedReportPanel({ embedded = false }: DetailedReportPanelPro
   const [procedureTypes, setProcedureTypes] = useState<ProcedureTypeSummary[]>([]);
   const [transitOffices, setTransitOffices] = useState<TransitOfficeOption[]>([]);
   const [exporting, setExporting] = useState(false);
-  // Épica #14296 — catálogo global de OT (activos) para «OT del punto» con «Todas las compañías».
+  // Épica #14296 — catálogo global de OT (activos) para «OT del punto». Solo SuperAdmin (el endpoint
+  // exige SuperAdmin u ot_admin): se pide UNA vez y sirve con una compañía elegida o con todas, porque
+  // el trámite de un punto puede ser de un OT no habilitado para esa compañía.
   const [catalogOffices, setCatalogOffices] = useState<TransitOfficeOption[]>([]);
-  const allCompaniesSelected = isSuper && Boolean(filters.allCompanies);
 
   useEffect(() => {
-    if (!allCompaniesSelected) return;
+    if (!isSuper) return;
     // GET /api/v1/admin/transit-offices: catálogo completo de OT activos, sin paginación ni tope
     // (el backend solo filtra por `search`, que aquí no se envía), así que no se trunca nada.
     const controller = new AbortController();
@@ -77,7 +78,7 @@ export function DetailedReportPanel({ embedded = false }: DetailedReportPanelPro
         if (!controller.signal.aborted) setCatalogOffices([]);
       });
     return () => controller.abort();
-  }, [allCompaniesSelected]);
+  }, [isSuper]);
 
   useEffect(() => {
     if (!isSuper) return;
@@ -225,7 +226,7 @@ export function DetailedReportPanel({ embedded = false }: DetailedReportPanelPro
         companies={companies}
         procedureTypes={procedureTypes}
         transitOffices={transitOffices}
-        channelTransitOffices={allCompaniesSelected ? catalogOffices : transitOffices}
+        channelTransitOffices={isSuper && catalogOffices.length > 0 ? catalogOffices : transitOffices}
         compact={embedded}
         networkScopeSelector={
           net.isGroupParent ? (

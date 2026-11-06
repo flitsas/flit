@@ -374,15 +374,31 @@ describe("HU #14321 AC5 — Todas las compañías (SuperAdmin)", () => {
     expect(ultimaConsulta().channel).toBe("pn_punto");
   });
 
-  it("con una compañía concreta no se usa el catálogo global: sigue listTransitOffices", async () => {
+  it("con una compañía concreta, «OT del punto» sigue usando el catálogo completo (un OT no habilitado para la compañía aparece) y no lo pide de nuevo al cambiar de compañía", async () => {
     comoSuper();
     const user = userEvent.setup();
     render(<DetailedReportPanel />);
     await user.click(screen.getByRole("combobox", { name: /Compañía/ }));
     await user.click(await screen.findByRole("option", { name: /Empresa Uno SAS/ }));
     await user.selectOptions(screen.getByLabelText("Canal"), "pn_punto");
+
+    // La compañía solo tiene habilitado OT01; el catálogo trae además OT02.
     await waitFor(() => expect(mocks.listTransitOffices).toHaveBeenCalledWith(EMPRESA));
-    expect(mocks.fetchTransitOffices).not.toHaveBeenCalled();
+    const ot = screen.getByLabelText("OT del punto");
+    await waitFor(() =>
+      expect(within(ot).getAllByRole("option").map((o) => o.textContent)).toEqual([
+        "Todos los OT",
+        "OT01 — Tránsito de Envigado",
+        "OT02 — Tránsito de Cali",
+      ]),
+    );
+    // El filtro «Organismo de tránsito» sigue con los organismos de la compañía.
+    const organismos = within(screen.getByLabelText("Organismo de tránsito")).getAllByRole("option");
+    expect(organismos.map((o) => o.textContent)).toEqual(["Todos los organismos", "OT01 — Tránsito de Envigado"]);
+
+    await user.click(screen.getByRole("combobox", { name: /Compañía/ }));
+    await user.click(await screen.findByRole("option", { name: "Todas las compañías" }));
+    expect(mocks.fetchTransitOffices).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -396,6 +412,21 @@ describe("HU #14321 AC6 — usuario de empresa", () => {
     expect(screen.queryByRole("combobox", { name: /Compañía/ })).not.toBeInTheDocument();
     expect(screen.queryByText("Todas las compañías")).not.toBeInTheDocument();
     expect(ultimaConsulta().allCompanies).toBeUndefined();
+    // El catálogo global exige SuperAdmin u ot_admin: estos roles no lo piden (evita el 403).
+    expect(mocks.fetchTransitOffices).not.toHaveBeenCalled();
+  });
+
+  it("AdminCompany con Persona Natural OT lista solo los organismos de su compañía, sin llamar al catálogo", async () => {
+    permisos({ isAdminCompany: true });
+    const user = await abrir();
+    await user.selectOptions(screen.getByLabelText("Canal"), "pn_punto");
+    const ot = screen.getByLabelText("OT del punto");
+    await waitFor(() => expect(ot).toBeEnabled());
+    expect(within(ot).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Todos los OT",
+      "OT01 — Tránsito de Envigado",
+    ]);
+    expect(mocks.fetchTransitOffices).not.toHaveBeenCalled();
   });
 });
 
