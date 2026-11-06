@@ -338,7 +338,7 @@ export function OtCobroMediosSection({
     { key: "GESTION", header: NOMBRE_CONCEPTO.GESTION, render: (t) => celdaMonto(t, "GESTION") },
     ...medios.map<DataTableColumn<TipoCobro>>((m) => ({
       key: m.method,
-      header: `Se cobra en ${NOMBRE_MEDIO[m.method]}`,
+      header: NOMBRE_MEDIO[m.method],
       render: (t) => celdaMedio(t, m.method),
     })),
   ];
