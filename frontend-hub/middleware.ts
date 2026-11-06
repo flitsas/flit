@@ -15,7 +15,11 @@ export async function middleware(request: NextRequest) {
   if (!legacyTramitesRedirect(request.nextUrl, tramitesUrl)) return NextResponse.next();
 
   const target = await resolveTramitesUrl(request.headers.get("host"), tramitesUrl);
-  return NextResponse.redirect(legacyTramitesRedirect(request.nextUrl, target)!, 308);
+  const response = NextResponse.redirect(legacyTramitesRedirect(request.nextUrl, target)!, 308);
+  // El destino depende de que la API responda: guardado en el navegador, un fallo pasajero dejaría a ese usuario de la red
+  // yendo al Trámites de FLIT, donde no puede entrar, aunque la API ya se haya recuperado.
+  response.headers.set("Cache-Control", "no-store");
+  return response;
 }
 
 export const config = {
