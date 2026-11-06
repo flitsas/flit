@@ -10,7 +10,7 @@ import { Pie } from "@/components/landing/Pie";
 import { boton } from "@/components/landing/estilos";
 import { useTiposTramite } from "@/components/landing/useCatalogos";
 import { ConsultarModal } from "@/components/modales/ConsultarModal";
-import { ASSETS } from "@/lib/assets";
+import { BannerMarca, LogoPortal } from "@/components/marca/MarcaPunto";
 import { portal, type ClientePortal, type EntradaPunto } from "@/lib/api/cliente";
 import { mensajeDeFallo } from "@/lib/api/errores";
 import { AccionesPunto } from "./AccionesPunto";
@@ -55,8 +55,7 @@ export function CanalPunto({ codigo, cliente = portal }: { codigo: string; clien
       {!enWizard && (
         <header className="dashboard-header flex min-h-16 flex-wrap py-2 shrink-0 items-center justify-between gap-4 border-b border-border">
           <Link href="/" aria-label="FLIT — Ir al inicio del portal">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={ASSETS.logo} alt="FLIT" className="h-9 w-auto" />
+            <LogoPortal alt="FLIT" />
           </Link>
           {punto && (
             <p className="max-w-md truncate text-sm font-medium text-foreground/80" title={punto.nombre}>
@@ -68,6 +67,7 @@ export function CanalPunto({ codigo, cliente = portal }: { codigo: string; clien
 
       <div className={enWizard ? undefined : "dashboard-layout"}>
         <main className={enWizard ? undefined : "dashboard-main"}>
+          {!enWizard && <BannerMarca />}
           {fase === "cargando" && (
             <div className="fixed inset-0 z-50 grid place-items-center bg-background/80 backdrop-blur-sm">
               <MobilityLoader />
