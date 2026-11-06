@@ -3,7 +3,7 @@ namespace Flit.Tramites.Domain.Tramites.Enums;
 /// <summary>
 /// HU #14317 (Feature #14315, Épica #14296) — canal por el que entró el trámite. Es la fuente de códigos y
 /// nombres visibles en el backend; los mismos cinco códigos viven en el CHECK
-/// <c>ck_procedure_instances_channel</c> (169-HU14317) y en el enum <c>TramiteCanal</c> de
+/// <c>ck_procedure_instances_channel</c> (172-HU14317) y en el enum <c>TramiteCanal</c> de
 /// <c>contracts/openapi/core-api.v1.yaml</c> (una prueba los compara).
 /// <para>
 /// <b>Aplicación</b> está en el catálogo pero hoy ningún flujo la asigna. Una fila sin canal (<c>null</c>)

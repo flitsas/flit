@@ -1,6 +1,6 @@
 -- =============================================================================
 -- HU #14318 (Feature #14315, Épica #14296) — backfill del canal de los trámites ya creados.
--- Migración: 20261105130000_HU14318_BackfillCanalTramite. Depende del DDL 169 (columnas channel y
+-- Migración: 20261105130000_HU14318_BackfillCanalTramite. Depende del DDL 172 (columnas channel y
 -- channel_transit_office_id).
 --
 -- Solo toca filas con channel IS NULL y is_migrated = false. Los migrados de FLIT 1.0 (is_migrated) y los
