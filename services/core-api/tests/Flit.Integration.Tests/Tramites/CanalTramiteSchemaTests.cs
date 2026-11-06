@@ -8,7 +8,7 @@ namespace Flit.Integration.Tests.Tramites;
 
 /// <summary>
 /// HU #14317 (Feature #14315, Épica #14296) AC1 a AC4, contra PostgreSQL real: <c>tramites.procedure_instances.channel</c> y
-/// <c>channel_transit_office_id</c> (DDL 169) aceptan el catálogo de cinco códigos, rechazan lo que no pertenece a él, exigen
+/// <c>channel_transit_office_id</c> (DDL 172) aceptan el catálogo de cinco códigos, rechazan lo que no pertenece a él, exigen
 /// el OT si y solo si el canal es <c>pn_punto</c> y dejan en NULL a los trámites anteriores.
 /// <para>Uso de ejemplo: <c>InsertarAsync(id, "pn_punto", OficinaId)</c> pasa; <c>InsertarAsync(id, "pn_web", OficinaId)</c> viola
 /// <c>ck_procedure_instances_channel_office</c> (23514).</para>
