@@ -474,25 +474,38 @@
       '<div><section class="card">' + vehiculo() + '</section><section class="card">' + cuerpo + pie + "</section></div></div>";
   }
   function vehiculo() {
-    return '<div class="vehiculo">' + ilus("traspaso") + '<div class="vehiculo__datos"><h3>KLM 482 · Mazda CX-30</h3><div class="vehiculo__estado">' + badge({ a: ["SOAT vigente", "ok"] }, "a") + badge({ a: ["Revisión vigente", "ok"] }, "a") + badge({ a: ["Sin multas", "ok"] }, "a") + badge({ a: ["Firma del comprador pendiente", "warn"] }, "a") + "</div></div></div>";
+    return '<div class="vehiculo"><span class="placa placa--grande">KLM 482</span><div class="vehiculo__datos"><p class="antetitulo">Vehículo</p><h2 class="vehiculo__nombre">Mazda CX-30 Touring</h2><p class="vehiculo__meta">Modelo 2022 · Particular · Gris cerámica</p><div class="vehiculo__estado">' +
+      badge({ a: ["SOAT vigente", "ok"] }, "a") + badge({ a: ["Revisión vigente", "ok"] }, "a") + badge({ a: ["Sin multas", "ok"] }, "a") + "</div></div></div>";
   }
 
-  // Detalle y seguimiento del trámite (página 12 del prototipo)
+  // Seguimiento del trámite: qué falta arriba, vehículo y datos del trámite, avance, documentos, partes y actividad.
   function vTramite() {
     var linea = [["Creado", "28 oct", 1], ["Documentos", "29 oct", 1], ["Identidad", "Hoy", 1], ["Firmas", "En curso", 2], ["Radicado", "", 0], ["Finalizado", "", 0]];
-    var docs = [["Improntas", "validada"], ["Paz y salvo", "validada"], ["SOAT", "validada"], ["Documento del vendedor", "validada"], ["Documento del comprador", "pendiente"], ["Contrato de compraventa", "generado"]];
+    var docs = [["Improntas", "validada", "Validado por Sofía Cardona · 29 oct"], ["Paz y salvo", "validada", "Validado por Sofía Cardona · 29 oct"], ["SOAT", "validada", "Leído del documento · vence el 14 mar 2027"], ["Documento del vendedor", "validada", "Identidad confirmada · hoy"], ["Documento del comprador", "pendiente", "Lo carga María Fernanda Ruiz"], ["Contrato de compraventa", "generado", "Listo para firmar · 29 oct"]];
     var ED = { validada: ["Validado", "ok"], pendiente: ["Por cargar", "warn"], generado: ["Generado por FLIT", "info"] };
-    return cabecera({ il: "traspaso", ante: "Seguimiento", titulo: "Traspaso KLM 482", texto: "Creado por Sofía Cardona, Concesionario Andino. Organismo: Secretaría de Movilidad de Medellín.", volver: ["tramites", "Trámites"], acciones: [["Continuar el trámite", "#traspaso"], ["Descargar expediente", "descargar:expediente-KLM482.pdf"]] }) +
-      '<section class="card">' + vehiculo() + '<ol class="linea" aria-label="Avance del trámite">' + linea.map(function (l) {
+    var datos = [["Organismo de tránsito", "Secretaría de Movilidad de Medellín"], ["Compañía", "Concesionario Andino"], ["Creado por", "Sofía Cardona · 28 oct"], ["Radicado", "Cuando estén las dos firmas"]];
+    var partes = [["Andrés Rojas", "Vendedor · CC 71 845 210", ["Firmó hoy, 09:58", "ok"], ""], ["María Fernanda Ruiz", "Compradora · CC 1036 548 902", ["Firma pendiente", "warn"], '<button class="btn sm" type="button" data-hacer="aviso:Enlace de firma reenviado a María Fernanda Ruiz">Reenviar enlace</button>']];
+    var actividad = [["Hoy, 09:58", "Andrés Rojas firmó el contrato."], ["Hoy, 09:40", "Se confirmó la identidad del vendedor y de la compradora."], ["29 oct, 16:12", "Sofía Cardona cargó las improntas y el paz y salvo."], ["29 oct, 15:30", "La plataforma generó el contrato de compraventa."], ["28 oct, 11:05", "Sofía Cardona creó el trámite."]];
+    var iniciales = function (n) { return n.split(" ").slice(0, 2).map(function (x) { return x.charAt(0); }).join(""); };
+    var hechos = linea.filter(function (l) { return l[2] === 1; }).length;
+    return cabecera({ il: "traspaso", ante: "Seguimiento", titulo: "Traspaso KLM 482", texto: "De Andrés Rojas a María Fernanda Ruiz.", volver: ["tramites", "Trámites"], acciones: [["Continuar el trámite", "#traspaso"], ["Descargar expediente", "descargar:expediente-KLM482.pdf"]] }) +
+      '<div class="barra-accion"><p><strong>Faltan 2 cosas para radicar:</strong> la firma de María Fernanda Ruiz y su documento de identidad.</p><button class="btn sm" type="button" data-hacer="aviso:Le recordamos a María Fernanda Ruiz la firma y el documento">Recordarle a la compradora</button></div>' +
+      '<section class="card"><div class="tramite-resumen">' + vehiculo() + '<dl class="dl detalle__fichas">' + datos.map(function (d) { return "<div><dt>" + d[0] + "</dt><dd>" + d[1] + "</dd></div>"; }).join("") + "</dl></div>" +
+      '<div class="tramite-avance"><div class="card__cabeza"><div><h2>Avance</h2><p>Paso ' + (hechos + 1) + " de " + linea.length + ": firmas.</p></div></div>" +
+      '<ol class="linea" aria-label="Avance del trámite">' + linea.map(function (l) {
         return '<li class="linea__paso' + (l[2] === 1 ? " linea__paso--hecho" : l[2] === 2 ? " linea__paso--actual" : "") + '"' + (l[2] === 2 ? ' aria-current="step"' : "") + '><span class="linea__punto" aria-hidden="true"></span><strong>' + l[0] + "</strong><small>" + (l[1] || "Pendiente") + "</small></li>";
-      }).join("") + "</ol></section>" +
-      '<div class="rejilla rejilla--2"><section class="card"><div class="card__cabeza"><div><h2>Documentos</h2><p>5 de 6 listos.</p></div></div><ul class="firmantes">' +
-      docs.map(function (d) { return "<li><div><strong>" + d[0] + "</strong></div>" + badge(ED, d[1]) + (d[1] === "pendiente" ? '<button class="btn sm" type="button" data-hacer="aviso:Le pedimos el documento al comprador">Pedirlo</button>' : '<button class="btn sm ghost" type="button" data-hacer="descargar:' + d[0] + '.pdf">Ver</button>') + "</li>"; }).join("") +
-      '</ul></section><section class="card"><div class="card__cabeza"><div><h2>Partes y firmas</h2><p>Falta la firma del comprador.</p></div></div><ul class="firmantes">' +
-      '<li><div><strong>Andrés Rojas</strong><small>Vendedor · CC 71 845 210</small></div>' + badge({ a: ["Firmó hoy, 09:58", "ok"] }, "a") + "</li>" +
-      '<li><div><strong>María Fernanda Ruiz</strong><small>Compradora · CC 1036 548 902</small></div>' + badge({ a: ["Firma pendiente", "warn"] }, "a") + '<button class="btn sm" type="button" data-hacer="aviso:Enlace de firma reenviado a María Fernanda Ruiz">Reenviar enlace</button></li>' +
-      "</ul></section></div>";
+      }).join("") + "</ol></div></section>" +
+      '<div class="rejilla rejilla--2 rejilla--arriba"><section class="card"><div class="card__cabeza"><div><h2>Documentos</h2><p>5 de 6 listos.</p></div></div><ul class="lista-fila">' +
+      docs.map(function (d) {
+        return '<li><div class="lista-fila__texto"><strong>' + d[0] + "</strong><small>" + d[2] + "</small></div>" + badge(ED, d[1]) +
+          (d[1] === "pendiente" ? '<button class="btn sm" type="button" data-hacer="aviso:Le pedimos el documento a la compradora">Pedirlo</button>' : '<button class="btn sm ghost" type="button" data-hacer="descargar:' + d[0] + '.pdf" aria-label="Ver ' + d[0] + '">Ver</button>') + "</li>";
+      }).join("") + "</ul></section>" +
+      '<div><section class="card"><div class="card__cabeza"><div><h2>Partes y firmas</h2><p>Falta la firma de la compradora.</p></div></div><ul class="lista-fila">' +
+      partes.map(function (x) { return '<li><span class="persona__avatar" aria-hidden="true">' + iniciales(x[0]) + '</span><div class="lista-fila__texto"><strong>' + x[0] + "</strong><small>" + x[1] + "</small></div>" + badge({ a: x[2] }, "a") + x[3] + "</li>"; }).join("") + "</ul></section>" +
+      '<section class="card"><div class="card__cabeza"><div><h2>Actividad</h2><p>Lo último que pasó con este trámite.</p></div><a class="btn sm secondary" href="#auditoria">Ver auditoría</a></div><ol class="actividad-linea">' +
+      actividad.map(function (x) { return "<li><time>" + x[0] + "</time><span>" + x[1] + "</span></li>"; }).join("") + "</ol></section></div></div>";
   }
+
 
   function vReportes(q) {
     var actual = D.REPORTES.filter(function (r) { return r[0] === q.tab; })[0] || D.REPORTES[0];
