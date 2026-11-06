@@ -33,8 +33,8 @@ public sealed class RegisterDomainHandlerTests
     public async Task AC1_PrimerPut_RegistraElDominioNormalizado()
     {
         var repo = Substitute.For<ITenantDomainRepository>();
-        repo.GetByTenantIdAsync(TenantId, Arg.Any<CancellationToken>()).Returns((TenantDomain?)null);
-        repo.RegisterOrReplaceAsync(TenantId, "red.example.com", Arg.Any<string>(), Operator, Arg.Any<CancellationToken>())
+        repo.GetByTenantIdAsync(TenantId, TenantDomainPurposes.Hub, Arg.Any<CancellationToken>()).Returns((TenantDomain?)null);
+        repo.RegisterOrReplaceAsync(TenantId, "red.example.com", Arg.Any<string>(), Operator, TenantDomainPurposes.Hub, Arg.Any<CancellationToken>())
             .Returns(ci => NewDomain(ci.ArgAt<string>(1)));
 
         var handler = new RegisterDomainHandler(repo, new DomainOptions());
@@ -47,7 +47,7 @@ public sealed class RegisterDomainHandlerTests
 
         result.Outcome.Should().Be(RegisterDomainOutcome.Registered);
         result.Domain!.Host.Should().Be("red.example.com");
-        await repo.Received(1).RegisterOrReplaceAsync(TenantId, "red.example.com", Arg.Any<string>(), Operator, Arg.Any<CancellationToken>());
+        await repo.Received(1).RegisterOrReplaceAsync(TenantId, "red.example.com", Arg.Any<string>(), Operator, TenantDomainPurposes.Hub, Arg.Any<CancellationToken>());
     }
 
     [Theory]
@@ -68,7 +68,7 @@ public sealed class RegisterDomainHandlerTests
 
         result.Outcome.Should().Be(RegisterDomainOutcome.Invalid);
         result.ErrorCode.Should().Be(DomainErrors.HostInvalid);
-        await repo.DidNotReceiveWithAnyArgs().RegisterOrReplaceAsync(default, default!, default!, default, default);
+        await repo.DidNotReceiveWithAnyArgs().RegisterOrReplaceAsync(default, default!, default!, default, TenantDomainPurposes.Hub, default);
     }
 
     [Fact]
@@ -86,7 +86,7 @@ public sealed class RegisterDomainHandlerTests
 
         result.Outcome.Should().Be(RegisterDomainOutcome.Invalid);
         result.ErrorCode.Should().Be(DomainErrors.HostReserved);
-        await repo.DidNotReceiveWithAnyArgs().RegisterOrReplaceAsync(default, default!, default!, default, default);
+        await repo.DidNotReceiveWithAnyArgs().RegisterOrReplaceAsync(default, default!, default!, default, TenantDomainPurposes.Hub, default);
     }
 
     /// <summary>HU #12761 — el host de prueba exceptuado atraviesa la validación de reservados y se registra.</summary>
@@ -94,8 +94,8 @@ public sealed class RegisterDomainHandlerTests
     public async Task AC1_HostDePruebaPermitido_SeRegistraPeseAEstarEnLaZonaReservada()
     {
         var repo = Substitute.For<ITenantDomainRepository>();
-        repo.GetByTenantIdAsync(TenantId, Arg.Any<CancellationToken>()).Returns((TenantDomain?)null);
-        repo.RegisterOrReplaceAsync(TenantId, "marcablancadev.flitsas.online", Arg.Any<string>(), Operator, Arg.Any<CancellationToken>())
+        repo.GetByTenantIdAsync(TenantId, TenantDomainPurposes.Hub, Arg.Any<CancellationToken>()).Returns((TenantDomain?)null);
+        repo.RegisterOrReplaceAsync(TenantId, "marcablancadev.flitsas.online", Arg.Any<string>(), Operator, TenantDomainPurposes.Hub, Arg.Any<CancellationToken>())
             .Returns(ci => NewDomain(ci.ArgAt<string>(1)));
 
         var options = new DomainOptions
@@ -114,7 +114,7 @@ public sealed class RegisterDomainHandlerTests
 
         result.Outcome.Should().Be(RegisterDomainOutcome.Registered);
         result.Domain!.Host.Should().Be("marcablancadev.flitsas.online");
-        await repo.Received(1).RegisterOrReplaceAsync(TenantId, "marcablancadev.flitsas.online", Arg.Any<string>(), Operator, Arg.Any<CancellationToken>());
+        await repo.Received(1).RegisterOrReplaceAsync(TenantId, "marcablancadev.flitsas.online", Arg.Any<string>(), Operator, TenantDomainPurposes.Hub, Arg.Any<CancellationToken>());
     }
 
     /// <summary>HU #12761 — la excepción es exacta: un subdominio del host de prueba sigue reservado.</summary>
@@ -137,15 +137,15 @@ public sealed class RegisterDomainHandlerTests
 
         result.Outcome.Should().Be(RegisterDomainOutcome.Invalid);
         result.ErrorCode.Should().Be(DomainErrors.HostReserved);
-        await repo.DidNotReceiveWithAnyArgs().RegisterOrReplaceAsync(default, default!, default!, default, default);
+        await repo.DidNotReceiveWithAnyArgs().RegisterOrReplaceAsync(default, default!, default!, default, TenantDomainPurposes.Hub, default);
     }
 
     [Fact]
     public async Task AC2_TenantNoMarcaBlanca_RepositorioRechaza_SeTraduce()
     {
         var repo = Substitute.For<ITenantDomainRepository>();
-        repo.GetByTenantIdAsync(TenantId, Arg.Any<CancellationToken>()).Returns((TenantDomain?)null);
-        repo.RegisterOrReplaceAsync(TenantId, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+        repo.GetByTenantIdAsync(TenantId, TenantDomainPurposes.Hub, Arg.Any<CancellationToken>()).Returns((TenantDomain?)null);
+        repo.RegisterOrReplaceAsync(TenantId, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<Guid?>(), TenantDomainPurposes.Hub, Arg.Any<CancellationToken>())
             .Returns<TenantDomain>(_ => throw new DomainTenantNotMarcaBlancaException(TenantId));
 
         var handler = new RegisterDomainHandler(repo, new DomainOptions());
@@ -162,8 +162,8 @@ public sealed class RegisterDomainHandlerTests
     public async Task AC1_HostYaRegistradoPorOtraRed_RepositorioRechaza_SeTraduce()
     {
         var repo = Substitute.For<ITenantDomainRepository>();
-        repo.GetByTenantIdAsync(TenantId, Arg.Any<CancellationToken>()).Returns((TenantDomain?)null);
-        repo.RegisterOrReplaceAsync(TenantId, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+        repo.GetByTenantIdAsync(TenantId, TenantDomainPurposes.Hub, Arg.Any<CancellationToken>()).Returns((TenantDomain?)null);
+        repo.RegisterOrReplaceAsync(TenantId, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<Guid?>(), TenantDomainPurposes.Hub, Arg.Any<CancellationToken>())
             .Returns<TenantDomain>(_ => throw new DomainHostAlreadyRegisteredException("red.example.com"));
 
         var handler = new RegisterDomainHandler(repo, new DomainOptions());
@@ -180,7 +180,7 @@ public sealed class RegisterDomainHandlerTests
     public async Task AC5_RowVersionDesactualizada_Conflicto_NoLlamaAlRepositorioDeEscritura()
     {
         var repo = Substitute.For<ITenantDomainRepository>();
-        repo.GetByTenantIdAsync(TenantId, Arg.Any<CancellationToken>()).Returns(NewDomain("red.example.com", rowVersion: 5));
+        repo.GetByTenantIdAsync(TenantId, TenantDomainPurposes.Hub, Arg.Any<CancellationToken>()).Returns(NewDomain("red.example.com", rowVersion: 5));
 
         var handler = new RegisterDomainHandler(repo, new DomainOptions());
         var result = await handler.HandleAsync(new RegisterDomainCommand
@@ -192,16 +192,16 @@ public sealed class RegisterDomainHandlerTests
 
         result.Outcome.Should().Be(RegisterDomainOutcome.Conflict);
         result.ErrorCode.Should().Be(DomainErrors.ConcurrencyConflict);
-        await repo.DidNotReceiveWithAnyArgs().RegisterOrReplaceAsync(default, default!, default!, default, default);
+        await repo.DidNotReceiveWithAnyArgs().RegisterOrReplaceAsync(default, default!, default!, default, TenantDomainPurposes.Hub, default);
     }
 
     [Fact]
     public async Task AC5_CambioDeHost_GeneraUnTokenDeVerificacionNuevoValido()
     {
         var repo = Substitute.For<ITenantDomainRepository>();
-        repo.GetByTenantIdAsync(TenantId, Arg.Any<CancellationToken>()).Returns(NewDomain("vieja.example.com", rowVersion: 1));
+        repo.GetByTenantIdAsync(TenantId, TenantDomainPurposes.Hub, Arg.Any<CancellationToken>()).Returns(NewDomain("vieja.example.com", rowVersion: 1));
         string? capturedToken = null;
-        repo.RegisterOrReplaceAsync(TenantId, "nueva.example.com", Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+        repo.RegisterOrReplaceAsync(TenantId, "nueva.example.com", Arg.Any<string>(), Arg.Any<Guid?>(), TenantDomainPurposes.Hub, Arg.Any<CancellationToken>())
             .Returns(ci =>
             {
                 capturedToken = ci.ArgAt<string>(2);

@@ -5,6 +5,9 @@ public sealed class RegisterDomainCommand
 {
     public required Guid TenantId { get; init; }
 
+    /// <summary><c>HUB</c> o el código del producto que servirá el dominio.</summary>
+    public string Purpose { get; init; } = Flit.Admin.Domain.Companies.Domains.TenantDomainPurposes.Hub;
+
     public string? Host { get; init; }
 
     public long? RowVersion { get; init; }

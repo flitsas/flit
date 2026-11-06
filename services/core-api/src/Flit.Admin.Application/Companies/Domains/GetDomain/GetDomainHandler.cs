@@ -11,6 +11,9 @@ public sealed class GetDomainHandler(ITenantDomainRepository repository)
 {
     private readonly ITenantDomainRepository _repository = repository ?? throw new ArgumentNullException(nameof(repository));
 
-    public async Task<TenantDomain?> HandleAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
-        await _repository.GetByTenantIdAsync(tenantId, cancellationToken).ConfigureAwait(false);
+    public Task<TenantDomain?> HandleAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
+        HandleAsync(tenantId, TenantDomainPurposes.Hub, cancellationToken);
+
+    public async Task<TenantDomain?> HandleAsync(Guid tenantId, string purpose, CancellationToken cancellationToken = default) =>
+        await _repository.GetByTenantIdAsync(tenantId, purpose, cancellationToken).ConfigureAwait(false);
 }

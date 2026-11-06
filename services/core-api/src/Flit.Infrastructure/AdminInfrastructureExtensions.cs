@@ -49,7 +49,7 @@ public static class AdminInfrastructureExtensions
     /// <summary>
     /// <paramref name="configuration"/> es opcional (retrocompatible con el único call site anterior,
     /// <c>Program.cs</c>): HU #12416 la necesita para ligar <c>DomainOptions</c> (sección
-    /// <c>Domains</c>); sin ella, los dominios reservados quedan vacíos y <c>EdgeTarget</c> en blanco
+    /// <c>Domains</c>); sin ella, los dominios reservados quedan vacíos y <c>EdgeIp</c> en blanco
     /// (falla cerrado: nada queda "reservado" por omisión, así que en ese caso el SuperAdmin debe
     /// tener presente que la lista de reservados no está poblada).
     /// </summary>
@@ -96,6 +96,7 @@ public static class AdminInfrastructureExtensions
         services.AddScoped<Flit.Admin.Application.Companies.Domains.RegisterDomain.RegisterDomainHandler>();
         services.AddScoped<Flit.Admin.Application.Companies.Domains.GetDomain.GetDomainHandler>();
         services.AddScoped<Flit.Admin.Application.Companies.Domains.RemoveDomain.RemoveDomainHandler>();
+        services.AddScoped<Flit.Admin.Application.Companies.Domains.Activation.ActivateNetworkHandler>();
 
         // HU #12425 (Feature #12370, Épica #12237) — comprobación de titularidad por TXT DNS y ciclo
         // de estados pending → verified → active. Mismo patrón que DomainOptions: Application consume
